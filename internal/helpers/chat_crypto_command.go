@@ -13,7 +13,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/messagecrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/spf13/cobra"
 )
 
@@ -59,64 +59,15 @@ func (r chatCryptoRuntime) DryRun() bool {
 }
 
 func newChatCryptoCommand() *cobra.Command {
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "crypto",
-		Short: "消息三方加解密",
-		Long:  "按服务端管理员策略执行消息三方加解密。Ding 层通过 IM MCP server 在服务端完成，DWS 只执行本地 SafeChat 层。",
+		Short: "消息三方解密",
+		Long:  "解密消息三方密文。Ding 层通过 IM MCP server 在服务端完成，DWS 只执行本地 SafeChat 层。",
 		RunE:  groupRunE,
-	}
-	encryptCmd := newChatCryptoEncryptCommand()
-	decryptCmd := newChatCryptoDecryptCommand()
-	root.AddCommand(encryptCmd, decryptCmd)
-	return root
-}
-
-func newChatCryptoEncryptCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "encrypt",
-		Short: "按服务端策略加密一条消息内容",
-		Args:  cobra.NoArgs,
-		RunE:  runChatCryptoEncrypt,
-	}
-	addChatCryptoTextInputFlags(cmd)
-	cmd.Flags().String("chat-id", "", "群 openConversationId")
-	cmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId")
-	cmd.Flags().String("msg-type", "text", "消息类型: text|markdown")
-	cmd.Flags().Bool("require-policy", false, "要求服务端策略必须开启三方加密")
-	DeclareLeafMetadata(cmd, LeafSpec{
-		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
-		Contract: LeafContract{
-			Identity: contract.ToolIdentitySpec{
-				ProductID:      "chat",
-				Name:           "chat_crypto_encrypt",
-				CanonicalPath:  "chat.chat_crypto_encrypt",
-				CLIPath:        "chat crypto encrypt",
-				PrimaryCLIPath: "chat crypto encrypt",
-			},
-			Description: "按 IM MCP 服务端策略执行 Ding 层和 SafeChat 层组合加密",
-			Interface: &contract.InterfaceSpec{
-				Mode:         "composite",
-				Availability: "available",
-				Reason:       "DWS composite command: policy and Ding AES are handled by IM MCP server, while DWS performs the local SafeChat layer.",
-			},
-			Selection: contract.SelectionSpec{
-				AgentSummary: "按服务端策略加密一条消息内容",
-				UseWhen:      []string{"需要诊断或预处理一条将以当前用户身份发送的三方加密消息内容时"},
-				AvoidWhen:    []string{"实际发送消息优先使用 chat +messages-send，让发送链路自动按服务端策略处理"},
-				Examples:     []string{"dws chat crypto encrypt --chat-id <openConversationId> --text \"hello\" --format json"},
-			},
-			Parameters: []contract.ParamDecl{
-				{Name: "chat-id", Property: "openConversationId"},
-				{Name: "file", Property: "plaintextContent"},
-				{Name: "msg-type", Property: "msgType", Enum: []string{"text", "markdown"}},
-				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId"},
-				{Name: "require-policy", Property: "requirePolicy"},
-				{Name: "text", Property: "plaintextContent"},
-			},
-			DryRun: &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: true},
-		},
 	})
-	return cmd
+	decryptCmd := newChatCryptoDecryptCommand()
+	root.AddCommand(decryptCmd)
+	return root
 }
 
 func newChatCryptoDecryptCommand() *cobra.Command {
@@ -158,39 +109,6 @@ func newChatCryptoDecryptCommand() *cobra.Command {
 		},
 	})
 	return cmd
-}
-
-func runChatCryptoEncrypt(cmd *cobra.Command, _ []string) error {
-	if err := validateChatCryptoTarget(cmd); err != nil {
-		return err
-	}
-	plaintext, err := readChatCryptoInput(cmd)
-	if err != nil {
-		return err
-	}
-	msgType, _ := cmd.Flags().GetString("msg-type")
-	requirePolicy, _ := cmd.Flags().GetBool("require-policy")
-	result, err := chatCryptoClient.EncryptOutbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{
-		Identity:           "user",
-		MsgType:            strings.TrimSpace(msgType),
-		OpenConversationID: mustGetFlag(cmd, "chat-id"),
-		ReceiverOpenTalkID: mustGetFlag(cmd, "open-dingtalk-id"),
-		PlaintextContent:   string(plaintext),
-		RequireEncryption:  requirePolicy,
-	})
-	if err != nil {
-		return err
-	}
-	return writeCommandPayload(cmd, map[string]any{
-		"ok":                true,
-		"encrypted":         result.Encrypted,
-		"policyMode":        result.Policy.Mode,
-		"policyReason":      result.Policy.Reason,
-		"ciphertext":        result.Ciphertext,
-		"safeChatCipherLen": result.SafeChatCipherLen,
-		"dingAlgorithm":     result.DingAlgorithm,
-		"dingKeyVersion":    result.DingKeyVersion,
-	})
 }
 
 func runChatCryptoDecrypt(cmd *cobra.Command, _ []string) error {
@@ -253,19 +171,6 @@ func readChatCryptoInput(cmd *cobra.Command) ([]byte, error) {
 		return nil, apperrors.NewValidation("输入内容为空")
 	}
 	return raw, nil
-}
-
-func validateChatCryptoTarget(cmd *cobra.Command) error {
-	chatID := strings.TrimSpace(mustGetFlag(cmd, "chat-id"))
-	openID := strings.TrimSpace(mustGetFlag(cmd, "open-dingtalk-id"))
-	if (chatID == "") == (openID == "") {
-		return apperrors.NewValidation("--chat-id 与 --open-dingtalk-id 必须且只能指定一个")
-	}
-	msgType, _ := cmd.Flags().GetString("msg-type")
-	if msgType != "text" && msgType != "markdown" {
-		return apperrors.NewValidation("--msg-type 仅支持 text/markdown")
-	}
-	return nil
 }
 
 func parseChatCryptoMCPData(tool, text string, err error) (map[string]any, error) {

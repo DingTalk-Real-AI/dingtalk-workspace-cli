@@ -54,13 +54,10 @@ func TestCrossPlatformCoverageMessagesSendResolvesNaturalUserAndChatTargets(t *t
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
-			if len(fake.calls) != 3 {
-				t.Fatalf("calls = %#v, want resolve + policy + send", fake.calls)
+			if len(fake.calls) != 2 {
+				t.Fatalf("calls = %#v, want resolve + send", fake.calls)
 			}
-			if fake.calls[1].product != "im" || fake.calls[1].tool != "get_message_crypto_policy" {
-				t.Fatalf("policy = %#v", fake.calls[1])
-			}
-			send := fake.calls[2]
+			send := fake.calls[1]
 			if send.product != "chat" || send.tool != "send_personal_message" {
 				t.Fatalf("send = %#v", send)
 			}
@@ -113,12 +110,11 @@ func TestCrossPlatformCoverageMessagesSendChatQueryResolvesAllPagesBeforeWrite(t
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 4 || fake.calls[0].tool != "search_groups" ||
-		fake.calls[1].tool != "search_groups" || fake.calls[2].tool != "get_message_crypto_policy" ||
-		fake.calls[3].tool != "send_personal_message" {
-		t.Fatalf("calls = %#v, want two resolution pages then policy then one write", fake.calls)
+	if len(fake.calls) != 3 || fake.calls[0].tool != "search_groups" ||
+		fake.calls[1].tool != "search_groups" || fake.calls[2].tool != "send_personal_message" {
+		t.Fatalf("calls = %#v, want two resolution pages then one write", fake.calls)
 	}
-	if fake.calls[1].args["cursor"] != "page-2" || fake.calls[3].args["openConversationId"] != "active" {
+	if fake.calls[1].args["cursor"] != "page-2" || fake.calls[2].args["openConversationId"] != "active" {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
 }
@@ -156,14 +152,11 @@ func TestCrossPlatformCoverageMessagesSendDryRunUsesRealNaturalTargetResolution(
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 2 {
-		t.Fatalf("dry-run calls = %#v, want resolution + policy read", fake.calls)
+	if len(fake.calls) != 1 {
+		t.Fatalf("dry-run calls = %#v, want one read-only resolution", fake.calls)
 	}
 	if fake.calls[0].product != "im" || fake.calls[0].tool != "search_groups" {
 		t.Fatalf("dry-run resolution = %#v", fake.calls[0])
-	}
-	if fake.calls[1].product != "im" || fake.calls[1].tool != "get_message_crypto_policy" {
-		t.Fatalf("dry-run policy = %#v", fake.calls[1])
 	}
 }
 

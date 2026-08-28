@@ -15,10 +15,13 @@ package app
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 )
 
 func newSafeChatSelfTestForTest() (*bytes.Buffer, func(...string) error) {
@@ -124,3 +127,100 @@ func TestSafeChatDecryptReportsUnavailableBackend(t *testing.T) {
 		t.Fatalf("JSON output should carry available=false, got: %s", out.String())
 	}
 }
+
+func TestCrossPlatformCoverageSafeChatStubAndMessageCryptoWiring(t *testing.T) {
+	t.Run("selftest_requires_key_server", TestSafeChatSelfTestRequiresKeyServer)
+	t.Run("selftest_unavailable", TestSafeChatSelfTestReportsUnavailableBackend)
+	t.Run("decrypt_requires_input", TestSafeChatDecryptRequiresInput)
+	t.Run("decrypt_rejects_multiple_inputs", TestSafeChatDecryptRejectsMultipleInputs)
+	t.Run("decrypt_unavailable", TestSafeChatDecryptReportsUnavailableBackend)
+	t.Run("safechat_command_excluded", func(t *testing.T) {
+		if got := newSafeChatCommand(); got != nil {
+			t.Fatalf("newSafeChatCommand() = %#v, want nil", got)
+		}
+	})
+	t.Run("app_crypto_client_defaults", func(t *testing.T) {
+		oldIdentity := appMessageCryptoCurrentIdentity
+		oldOpen := appMessageCryptoOpenSession
+		oldAvailable := appMessageCryptoAvailable
+		t.Cleanup(func() {
+			appMessageCryptoCurrentIdentity = oldIdentity
+			appMessageCryptoOpenSession = oldOpen
+			appMessageCryptoAvailable = oldAvailable
+		})
+		appMessageCryptoCurrentIdentity = func(context.Context, string) (msgcrypto.Identity, error) {
+			return msgcrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		}
+		appMessageCryptoOpenSession = func(context.Context, msgcrypto.SessionOptions) (*msgcrypto.Session, error) {
+			return &msgcrypto.Session{Cipher: appSafeChatFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		}
+		appMessageCryptoAvailable = func() bool { return true }
+		client := newAppMessageCryptoClient()
+		if client == nil || client.PolicyCache == nil {
+			t.Fatalf("client = %#v", client)
+		}
+		if !client.BackendReady() {
+			t.Fatal("BackendReady() = false")
+		}
+		_, _ = client.Identity(context.Background(), t.TempDir())
+		session, err := client.OpenSession(context.Background(), messagecrypto.SessionOptions{
+			ConfigDir:           t.TempDir(),
+			KeyServer:           " https://key.example.test ",
+			AllowedRedirectHost: " redirect.example.test ",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if session.CorpID != "corp-1" || session.StaffID != "staff-1" || session.Cipher == nil {
+			t.Fatalf("session = %#v", session)
+		}
+	})
+	t.Run("app_crypto_client_open_error", func(t *testing.T) {
+		oldOpen := appMessageCryptoOpenSession
+		t.Cleanup(func() { appMessageCryptoOpenSession = oldOpen })
+		appMessageCryptoOpenSession = func(context.Context, msgcrypto.SessionOptions) (*msgcrypto.Session, error) {
+			return nil, errors.New("open failed")
+		}
+		client := newAppMessageCryptoClient()
+		if _, err := client.OpenSession(context.Background(), messagecrypto.SessionOptions{}); err == nil || !strings.Contains(err.Error(), "open failed") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("first_non_empty", func(t *testing.T) {
+		if got := firstNonEmptyAppCrypto("", "  cli-version  ", "fallback"); got != "cli-version" {
+			t.Fatalf("firstNonEmptyAppCrypto() = %q", got)
+		}
+		if got := firstNonEmptyAppCrypto("", " "); got != "" {
+			t.Fatalf("firstNonEmptyAppCrypto(empty) = %q", got)
+		}
+	})
+	t.Run("emit_plain_error", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := newSafeChatDecryptCommand()
+		cmd.SetOut(&out)
+		err := emitUnavailableSafeChatError(cmd, false, "plain unavailable")
+		if !errors.Is(err, errors.New("plain unavailable")) && !strings.Contains(err.Error(), "plain unavailable") {
+			t.Fatalf("err = %v", err)
+		}
+		if !strings.Contains(out.String(), "plain unavailable") {
+			t.Fatalf("output = %q", out.String())
+		}
+	})
+	t.Run("validate_decrypt_file_source", func(t *testing.T) {
+		if err := validateSafeChatDecryptInput(nil, "cipher.txt", ""); err != nil {
+			t.Fatalf("file-only input should be accepted: %v", err)
+		}
+	})
+}
+
+type appSafeChatFakeCipher struct{}
+
+func (appSafeChatFakeCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (appSafeChatFakeCipher) DecryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (appSafeChatFakeCipher) Close() error { return nil }

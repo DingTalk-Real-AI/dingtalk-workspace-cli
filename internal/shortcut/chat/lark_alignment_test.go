@@ -325,19 +325,10 @@ func TestCrossPlatformCoverageMessagesSendRoutesIdentitySpecificTransports(t *te
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
-			wantCalls := 1
-			callIndex := 0
-			if tt.name == "user" {
-				wantCalls = 2
-				callIndex = 1
-				if fake.calls[0].product != "im" || fake.calls[0].tool != "get_message_crypto_policy" {
-					t.Fatalf("policy call = %#v", fake.calls[0])
-				}
-			}
-			if len(fake.calls) != wantCalls {
+			if len(fake.calls) != 1 {
 				t.Fatalf("calls = %#v", fake.calls)
 			}
-			call := fake.calls[callIndex]
+			call := fake.calls[0]
 			if call.product != tt.product || call.tool != tt.tool {
 				t.Fatalf("call = %#v", call)
 			}

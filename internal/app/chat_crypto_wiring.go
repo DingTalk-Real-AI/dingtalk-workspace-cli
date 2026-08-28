@@ -10,22 +10,28 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/messagecrypto"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 )
 
 func init() {
 	helpers.SetChatCryptoClient(newAppMessageCryptoClient())
 }
 
+var (
+	appMessageCryptoCurrentIdentity = msgcrypto.CurrentIdentity
+	appMessageCryptoOpenSession     = msgcrypto.OpenSession
+	appMessageCryptoAvailable       = msgcrypto.Available
+)
+
 func newAppMessageCryptoClient() *messagecrypto.Client {
 	return &messagecrypto.Client{
 		Identity: func(ctx context.Context, configDir string) (messagecrypto.Identity, error) {
-			identity, err := msgcrypto.CurrentIdentity(ctx, configDir)
+			identity, err := appMessageCryptoCurrentIdentity(ctx, configDir)
 			return messagecrypto.Identity{CorpID: identity.CorpID, StaffID: identity.StaffID}, err
 		},
 		OpenSession: func(ctx context.Context, opts messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
-			session, err := msgcrypto.OpenSession(ctx, msgcrypto.SessionOptions{
+			session, err := appMessageCryptoOpenSession(ctx, msgcrypto.SessionOptions{
 				ConfigDir:           opts.ConfigDir,
 				CLIVersion:          firstNonEmptyAppCrypto(opts.CLIVersion, RawVersion()),
 				KeyServer:           firstNonEmptyAppCrypto(opts.KeyServer, msgcrypto.DefaultSafeChatKeyServer),
@@ -42,7 +48,7 @@ func newAppMessageCryptoClient() *messagecrypto.Client {
 				Close:   session.Close,
 			}, nil
 		},
-		BackendReady: msgcrypto.Available,
+		BackendReady: appMessageCryptoAvailable,
 		PolicyCache:  messagecrypto.NewPolicyCache(time.Now),
 	}
 }

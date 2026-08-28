@@ -21,7 +21,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/messagecrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -299,6 +299,8 @@ func firstNonEmptyLiteral(values ...string) string {
 		}
 	}
 	return ""
+}
+
 func sendPersonalMessageForCommand(cmd *cobra.Command, params map[string]any) error {
 	if !output.UsesUnifiedResult(cmd) {
 		return callMCPTool("send_personal_message", params)
@@ -2153,6 +2155,14 @@ func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
 	return toolArgs, nil
 }
 
+func runChatCrossOrgDataAuth(cmd *cobra.Command) error {
+	toolArgs, err := buildChatCrossOrgDataAuthArgs(cmd)
+	if err != nil {
+		return err
+	}
+	return callMCPToolOnServer("im", "chat_permission_grant", toolArgs)
+}
+
 func buildChatGroupShareInviteArgs(cmd *cobra.Command) (map[string]any, error) {
 	if err := validateRequiredFlags(cmd, "source"); err != nil {
 		return nil, err
@@ -2695,11 +2705,7 @@ func newChatCommand() *cobra.Command {
   dws chat data-auth cross-org --all --grant-type timed --ttl 24h`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs, err := buildChatCrossOrgDataAuthArgs(cmd)
-			if err != nil {
-				return err
-			}
-			return callMCPToolOnServer("im", "chat_permission_grant", toolArgs)
+			return runChatCrossOrgDataAuth(cmd)
 		},
 	}
 	chatDataAuthCrossOrgCmd.Flags().String("target-org-id", "", "目标组织 ID（与 --all 二选一）")

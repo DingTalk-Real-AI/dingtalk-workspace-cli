@@ -55,12 +55,25 @@ type SessionOptions struct {
 	Logf                func(format string, args ...any)
 }
 
+var (
+	sessionAvailable        = Available
+	sessionOpenBackend      = Open
+	sessionCurrentIdentity  = CurrentIdentity
+	sessionNewOAuthProvider = func(configDir string) tokenSnapshotProvider {
+		return auth.NewOAuthProvider(configDir, nil)
+	}
+)
+
+type tokenSnapshotProvider interface {
+	GetTokenSnapshot(context.Context) (*auth.TokenData, error)
+}
+
 // CurrentIdentity reads the current login snapshot without opening SafeChat.
 func CurrentIdentity(ctx context.Context, configDir string) (Identity, error) {
 	if strings.TrimSpace(configDir) == "" {
 		configDir = config.DefaultConfigDir()
 	}
-	snap, err := auth.NewOAuthProvider(configDir, nil).GetTokenSnapshot(ctx)
+	snap, err := sessionNewOAuthProvider(configDir).GetTokenSnapshot(ctx)
 	if err != nil {
 		return Identity{}, fmt.Errorf("读取登录态失败（先 dws auth login）: %w", err)
 	}
@@ -77,10 +90,10 @@ func CurrentIdentity(ctx context.Context, configDir string) (Identity, error) {
 
 // OpenSession opens a SafeChat cipher for the current login organization.
 func OpenSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	if !Available() {
+	if !sessionAvailable() {
 		return nil, ErrUnavailable
 	}
-	identity, err := CurrentIdentity(ctx, opts.ConfigDir)
+	identity, err := sessionCurrentIdentity(ctx, opts.ConfigDir)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +113,7 @@ func OpenSession(ctx context.Context, opts SessionOptions) (*Session, error) {
 		Debug:               opts.Debug,
 		Logf:                opts.Logf,
 	}
-	cipher, err := Open(ctx, cfg)
+	cipher, err := sessionOpenBackend(ctx, cfg)
 	if err != nil {
 		if errors.Is(err, ErrUnavailable) {
 			return nil, err

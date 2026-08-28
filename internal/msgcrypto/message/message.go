@@ -2,12 +2,10 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-package messagecrypto
+package message
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -58,8 +56,6 @@ type Options struct {
 	MsgType             string
 	OpenConversationID  string
 	ReceiverOpenTalkID  string
-	PlaintextContent    string
-	RequireEncryption   bool
 	RequirePolicy       bool
 	Layer               string
 	Ciphertext          string
@@ -79,15 +75,6 @@ type Policy struct {
 	StaffIDTransform    string
 	TTL                 time.Duration
 	Reason              string
-}
-
-type EncryptResult struct {
-	Encrypted         bool
-	Policy            Policy
-	Ciphertext        string
-	DingAlgorithm     string
-	DingKeyVersion    int
-	SafeChatCipherLen int
 }
 
 type DecryptResult struct {
@@ -136,66 +123,6 @@ func DefaultClient() *Client {
 	}
 }
 
-func (c *Client) ShouldConsultPolicy(requireEncryption bool) bool {
-	if requireEncryption {
-		return true
-	}
-	return c != nil
-}
-
-func (c *Client) EncryptOutbound(ctx context.Context, rt Runtime, opts Options) (EncryptResult, error) {
-	if err := validateOutbound(opts); err != nil {
-		return EncryptResult{}, err
-	}
-	identity, err := c.currentIdentity(ctx, opts.ConfigDir)
-	if err != nil {
-		return EncryptResult{}, err
-	}
-	policy, err := c.policy(ctx, rt, identity.CorpID, opts)
-	if err != nil {
-		return EncryptResult{}, err
-	}
-	if !policyRequiresEncryption(policy.Mode) {
-		if opts.RequireEncryption {
-			return EncryptResult{}, fmt.Errorf("--require-encryption 要求加密，但服务端策略为 %s: %s", policy.Mode, policy.Reason)
-		}
-		return EncryptResult{Policy: policy}, nil
-	}
-	if rt.DryRun() {
-		return EncryptResult{Encrypted: true, Policy: policy}, nil
-	}
-	ding, err := rt.CallMCPWriteDataStrict("im", "ding_encrypt_message", map[string]any{
-		"openConversationId":     strings.TrimSpace(opts.OpenConversationID),
-		"receiverOpenDingTalkId": strings.TrimSpace(opts.ReceiverOpenTalkID),
-		"msgType":                strings.TrimSpace(opts.MsgType),
-		"plaintextContent":       opts.PlaintextContent,
-	})
-	if err != nil {
-		return EncryptResult{}, err
-	}
-	dingCiphertext := stringField(ding, "dingCiphertext")
-	if dingCiphertext == "" {
-		return EncryptResult{}, fmt.Errorf("im/ding_encrypt_message 未返回 dingCiphertext")
-	}
-	session, err := c.openSession(ctx, opts, policy)
-	if err != nil {
-		return EncryptResult{}, err
-	}
-	defer closeSession(session)
-	safe, err := session.Cipher.EncryptMessage(ctx, session.CorpID, safeChatStaffID(session.StaffID, policy), []byte(dingCiphertext))
-	if err != nil {
-		return EncryptResult{}, err
-	}
-	return EncryptResult{
-		Encrypted:         true,
-		Policy:            policy,
-		Ciphertext:        string(safe),
-		DingAlgorithm:     stringField(ding, "algorithm"),
-		DingKeyVersion:    intField(ding, "keyVersion"),
-		SafeChatCipherLen: len(safe),
-	}, nil
-}
-
 func (c *Client) PolicyDecision(ctx context.Context, rt Runtime, opts Options) (PolicyDecision, error) {
 	identity, err := c.currentIdentity(ctx, opts.ConfigDir)
 	if err != nil {
@@ -232,17 +159,28 @@ func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (
 			return DecryptResult{Layer: layer, Plaintext: dingCiphertext, DingCiphertext: dingCiphertext}, nil
 		}
 	}
-	data, err := rt.CallMCPWriteDataStrict("im", "ding_decrypt_message", map[string]any{
-		"dingCiphertext": dingCiphertext,
+	data, err := rt.CallMCPWriteDataStrict("im", "batch_ding_decrypt_messages", map[string]any{
+		"items": []map[string]any{{
+			"messageId":      "manual",
+			"dingCiphertext": dingCiphertext,
+		}},
 	})
 	if err != nil {
 		return DecryptResult{}, err
 	}
-	plaintext := stringField(data, "plaintextContent")
-	if plaintext == "" {
-		return DecryptResult{}, fmt.Errorf("im/ding_decrypt_message 未返回 plaintextContent")
+	items := parseBatchDecryptResults(data)
+	if len(items) == 0 {
+		return DecryptResult{}, fmt.Errorf("im/batch_ding_decrypt_messages 未返回 plaintextContent")
 	}
-	return DecryptResult{Layer: layer, Plaintext: plaintext, DingCiphertext: dingCiphertext, KeyVersion: intField(data, "keyVersion")}, nil
+	item := items[0]
+	if item.Status != "" && item.Status != "success" {
+		return DecryptResult{}, fmt.Errorf("im/batch_ding_decrypt_messages 解密失败: %s", item.Reason)
+	}
+	plaintext := strings.TrimSpace(item.PlaintextContent)
+	if plaintext == "" {
+		return DecryptResult{}, fmt.Errorf("im/batch_ding_decrypt_messages 未返回 plaintextContent")
+	}
+	return DecryptResult{Layer: layer, Plaintext: plaintext, DingCiphertext: dingCiphertext, KeyVersion: item.KeyVersion}, nil
 }
 
 func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Options, items []BatchDecryptItem) (BatchDecryptResult, error) {
@@ -291,12 +229,12 @@ func (c *Client) currentIdentity(ctx context.Context, configDir string) (Identit
 	if c != nil && c.Identity != nil {
 		return c.Identity(ctx, configDir)
 	}
-	return Identity{}, fmt.Errorf("messagecrypto: identity provider is not configured")
+	return Identity{}, fmt.Errorf("msgcrypto/message: identity provider is not configured")
 }
 
 func (c *Client) openSession(ctx context.Context, opts Options, policy Policy) (*Session, error) {
 	if c == nil || c.OpenSession == nil {
-		return nil, fmt.Errorf("messagecrypto: SafeChat session provider is not configured")
+		return nil, fmt.Errorf("msgcrypto/message: SafeChat session provider is not configured")
 	}
 	keyServer := firstNonEmpty(policy.KeyServer, opts.KeyServer)
 	redirectHost := firstNonEmpty(policy.AllowedRedirectHost, opts.AllowedRedirectHost)
@@ -402,19 +340,6 @@ func parsePolicy(data map[string]any) (Policy, error) {
 	}, nil
 }
 
-func validateOutbound(opts Options) error {
-	if strings.TrimSpace(opts.Identity) != "user" {
-		return fmt.Errorf("消息加密首期仅支持 identity=user")
-	}
-	if opts.MsgType != "text" && opts.MsgType != "markdown" {
-		return fmt.Errorf("消息加密首期仅支持 text/markdown")
-	}
-	if strings.TrimSpace(opts.PlaintextContent) == "" {
-		return fmt.Errorf("待加密内容为空")
-	}
-	return nil
-}
-
 func policyRequiresEncryption(mode string) bool {
 	return mode == ModeRequired || mode == ModeThirdParty
 }
@@ -471,14 +396,6 @@ func parseBatchDecryptResults(data map[string]any) []BatchDecryptItemResult {
 
 func policyCacheKey(corpID string, opts Options) string {
 	return strings.Join([]string{corpID, opts.OpenConversationID, opts.ReceiverOpenTalkID, opts.Identity, opts.MsgType}, "\x00")
-}
-
-func safeChatStaffID(staffID string, policy Policy) string {
-	if strings.EqualFold(policy.StaffIDTransform, "md5") {
-		sum := md5.Sum([]byte(staffID))
-		return hex.EncodeToString(sum[:])
-	}
-	return staffID
 }
 
 func stringField(data map[string]any, names ...string) string {

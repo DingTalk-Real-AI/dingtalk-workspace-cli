@@ -20,8 +20,6 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/messagecrypto"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -106,7 +104,6 @@ var MessagesSend = shortcut.Shortcut{
 		{Name: "at-user-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId（bot/webhook）"},
 		{Name: "at-mobiles", Type: shortcut.FlagStringSlice, Desc: "@ 的手机号（webhook）"},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@所有人"},
-		{Name: "require-encryption", Type: shortcut.FlagBool, Desc: "能力矩阵：仅 user text/markdown 支持；要求本次按服务端策略完成三方加密，只能更严格，不能关闭管理员要求"},
 		shortcut.AIMessageTagFlag(),
 	},
 	Constraints: []shortcut.Constraint{
@@ -118,7 +115,7 @@ var MessagesSend = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"uuid", "idempotency-key"}},
 		{
 			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"identity", "as", "group", "chat-id", "groups", "groups-file", "chat-query", "user", "user-query", "open-dingtalk-id", "users", "open-dingtalk-ids", "robot-code", "webhook-token", "uuid", "idempotency-key", "require-encryption"},
+			Flags:       []string{"identity", "as", "group", "chat-id", "groups", "groups-file", "chat-query", "user", "user-query", "open-dingtalk-id", "users", "open-dingtalk-ids", "robot-code", "webhook-token", "uuid", "idempotency-key"},
 			Description: "目标、凭据和幂等参数受发送身份能力矩阵约束：user 必须指定一个群聊或单聊目标；bot 必须指定 robot-code 和一类目标，多群最多 100 个并逐项返回 ledger；webhook 必须指定 webhook-token；幂等键仅 user 支持",
 		},
 	},
@@ -222,9 +219,6 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		if !messageIdentitySupportsContent(identity, contentType) {
 			return apperrors.NewValidation("--identity bot 当前下层只支持 text/markdown")
 		}
-		if rt.Bool("require-encryption") {
-			return apperrors.NewValidation("--require-encryption 首期仅支持 --identity user 的 text/markdown")
-		}
 	case "webhook":
 		if chatQuery != "" || userQuery != "" {
 			return apperrors.NewValidation("--identity webhook 的目标由 token 所在群决定，不接受 --chat-query 或 --user-query")
@@ -244,12 +238,6 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		if !messageIdentitySupportsContent(identity, contentType) {
 			return apperrors.NewValidation("--identity webhook 当前下层只支持 text/markdown")
 		}
-		if rt.Bool("require-encryption") {
-			return apperrors.NewValidation("--require-encryption 首期仅支持 --identity user 的 text/markdown")
-		}
-	}
-	if rt.Bool("require-encryption") && contentType != "text" && contentType != "markdown" {
-		return apperrors.NewValidation("--require-encryption 首期仅支持 text/markdown")
 	}
 	return nil
 }
@@ -373,9 +361,6 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 			GroupID:        group,
 			OpenDingTalkID: openID,
 		}, title, body, uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")), rt.Bool("at-all"), messagesSendIdempotencyKey(rt))
-		if err := applyMessagesSendEncryption(rt, params, contentType, group, openID); err != nil {
-			return err
-		}
 		return executeUnifiedMessageWrite(rt, "chat", "send_personal_message", params)
 	case "bot":
 		body = helpers.NormalizeMessageMentions(
@@ -500,76 +485,6 @@ func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool strin
 		payload["sendReceipt"] = chatmsg.ProjectMessageSendReceipt(data)
 	}
 	return rt.Output(payload)
-}
-
-var messagesSendCryptoClient = newMessagesSendCryptoClient()
-
-func newMessagesSendCryptoClient() *messagecrypto.Client {
-	return &messagecrypto.Client{
-		Identity: func(ctx context.Context, configDir string) (messagecrypto.Identity, error) {
-			identity, err := msgcrypto.CurrentIdentity(ctx, configDir)
-			return messagecrypto.Identity{CorpID: identity.CorpID, StaffID: identity.StaffID}, err
-		},
-		OpenSession: func(ctx context.Context, opts messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
-			session, err := msgcrypto.OpenSession(ctx, msgcrypto.SessionOptions{
-				ConfigDir:           opts.ConfigDir,
-				CLIVersion:          opts.CLIVersion,
-				KeyServer:           firstNonEmptyShortcutString(opts.KeyServer, msgcrypto.DefaultSafeChatKeyServer),
-				AllowedRedirectHost: firstNonEmptyShortcutString(opts.AllowedRedirectHost, msgcrypto.DefaultSafeChatRedirectHost),
-				KeystoreDir:         opts.KeystoreDir,
-			})
-			if err != nil {
-				return nil, err
-			}
-			return &messagecrypto.Session{
-				Cipher:  session.Cipher,
-				CorpID:  session.CorpID,
-				StaffID: session.StaffID,
-				Close:   session.Close,
-			}, nil
-		},
-		BackendReady: msgcrypto.Available,
-		PolicyCache:  messagecrypto.NewPolicyCache(time.Now),
-	}
-}
-
-func applyMessagesSendEncryption(
-	rt *shortcut.RuntimeContext,
-	params map[string]any,
-	contentType, group, openID string,
-) error {
-	requireEncryption := rt.Bool("require-encryption")
-	if !messagesSendCryptoClient.ShouldConsultPolicy(requireEncryption) {
-		return nil
-	}
-	content, _ := params["content"].(string)
-	result, err := messagesSendCryptoClient.EncryptOutbound(rt.Command().Context(), rt, messagecrypto.Options{
-		Identity:           "user",
-		MsgType:            contentType,
-		OpenConversationID: group,
-		ReceiverOpenTalkID: openID,
-		PlaintextContent:   content,
-		RequireEncryption:  requireEncryption,
-	})
-	if err != nil {
-		return err
-	}
-	params["encryptionPolicyMode"] = result.Policy.Mode
-	if result.Policy.Reason != "" {
-		params["encryptionPolicyReason"] = result.Policy.Reason
-	}
-	if !result.Encrypted {
-		return nil
-	}
-	params["content"] = result.Ciphertext
-	params["contentEncrypted"] = true
-	params["cryptoProvider"] = "safechat"
-	params["cryptoLayer"] = "ding+safechat"
-	params["cryptoVersion"] = "third_party_message.v1"
-	if result.DingKeyVersion > 0 {
-		params["dingKeyVersion"] = result.DingKeyVersion
-	}
-	return nil
 }
 
 func messagesSendIdentity(rt *shortcut.RuntimeContext) string {
@@ -848,15 +763,6 @@ func nonEmptyStringCount(values ...string) int {
 		}
 	}
 	return count
-}
-
-func firstNonEmptyShortcutString(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func messagesSendIdempotencyKey(rt *shortcut.RuntimeContext) string {
