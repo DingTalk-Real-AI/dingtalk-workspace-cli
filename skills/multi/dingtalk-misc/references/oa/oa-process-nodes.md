@@ -2,6 +2,16 @@
 
 本文档描述钉钉 OA 审批的流程节点类型、审批模式、条件分支和审批人选择规则，用于理解审批模板结构和正确填写 `create-instance` 的节点参数。
 
+## 目录
+
+- [流程结构概览](#流程结构概览)
+- [7 种节点类型](#7-种节点类型)
+- [多人审批模式](#多人审批模式)
+- [10 种审批人选择规则](#10-种审批人选择规则actionerrules)
+- [条件分支详解](#条件分支详解)
+- [create-instance 节点参数映射](#create-instance-中的节点参数映射)
+- [组装优先级](#组装优先级)
+
 ---
 
 ## 流程结构概览
@@ -371,4 +381,4 @@
 4. 如果用户要求覆盖默认流程，使用 `directAppointedApprovers`
 5. **所有 userId 必须通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取，严禁填姓名；多结果须消歧**
 
-> **交互优化：** 若用户在 `forecast-process` 前已指定审批人/抄送人姓名，`forecast-process` 返回自选节点后应自动映射，仅对未覆盖的自选节点追问，不要重复询问。详见 [oa.md](../oa.md) 交互优化原则。
+> **交互优化：** 若用户在 `forecast-process` 前已指定审批人/抄送人姓名，`forecast-process` 返回自选节点后应自动映射，仅对未覆盖的自选节点追问，不要重复询问。详见 [oa-create.md](../oa-create.md) 的“流程预测与选人”。

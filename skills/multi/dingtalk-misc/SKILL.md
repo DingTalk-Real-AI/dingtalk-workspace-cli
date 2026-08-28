@@ -21,7 +21,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 
 | 触发关键词 | 一句话范围 | 命令前缀 | 详细参考 |
 |---|---|---|---|
-| OA / 审批 / 待处理审批 / 同意 / 拒绝 / 撤销 / 已发起审批 | OA 审批：待处理/详情/同意/拒绝/撤销/已发起/批量审批 | `dws oa` | [oa.md](references/oa.md) |
+| OA / 审批 / 待处理审批 / 同意 / 拒绝 / 撤销 / 已发起审批 / 发起审批 / 审批附件 | OA 审批查询与处理；创建和附件按需加载专项说明 | `dws oa` | 先读核心 [oa.md](references/oa.md)；发起审批再读 [oa-create.md](references/oa-create.md)；附件操作再读 [oa-attachments.md](references/oa-attachments.md) |
 | 考勤 / 打卡 / 班次 / 考勤组 / 排班 / 考勤报表 / 假期余额 | 考勤记录、规则与配置、排班、报表、假期 | `dws attendance` | 日常查询/规则/设置：[attendance.md](references/attendance.md)；排班导入或排班表导出：[attendance-schedule.md](references/attendance-schedule.md)；考勤 Excel/报表导出：[attendance-report.md](references/attendance-report.md)；假期/余额：[attendance-vacation.md](references/attendance-vacation.md) |
 | 直播 / 我的直播 / 直播列表 | 直播列表与直播记录查询 | `dws live` | [live.md](references/live.md) |
 | DING / 紧急通知 / 电话DING / 短信DING / 必达消息 | DING 紧急消息（应用内/短信/电话），个人DING | `dws ding` | [ding.md](references/ding.md) |
@@ -50,6 +50,6 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 - 各产品之间跨产品协作若指向本包内的其它产品，已在对应 `references/<product>.md` 里写成"见本包 references/X.md"，无需切换 skill；若指向 top10 独立产品（如 `chat`/`aisearch`/`doc`），仍按 `dingtalk-<product>` 切换 skill。
 - `scripts/` 下 yida / finance / `aiapp_create_and_poll.py` 等见 [unsupported-scripts.md](references/unsupported-scripts.md)；默认不要当正式能力调用。
 - 开放平台应用的命令组细文档在 [references/dev/](references/dev/)；命中后先读 [devapp.md](references/devapp.md)，再按需加载对应子文件。
-- 查询、同意、拒绝、转交或撤销审批走 [oa.md](references/oa.md)；要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
+- OA 任务先读核心 [oa.md](references/oa.md)。只有进入真实提单阶段才增量读取 [oa-create.md](references/oa-create.md)，只有处理审批附件才增量读取 [oa-attachments.md](references/oa-attachments.md)；不要为普通查询预读创建、控件、节点和附件全集。要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
 - 原生 `.md` 与在线富文本 `adoc`、通用文件存储的边界见 [markdown.md](references/markdown.md)；跨组织 / profile 规则见 [profile.md](references/profile.md)。
 - PAT 行为授权不是开放平台应用权限；后者见 [devapp.md](references/devapp.md)。
