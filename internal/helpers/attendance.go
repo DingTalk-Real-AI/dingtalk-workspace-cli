@@ -563,18 +563,83 @@ func newAttendanceCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "attendance",
 		Short: "考勤打卡 / 排班 / 统计",
-		Long: `管理钉钉考勤：查询打卡结果与流水、排班管理、获取考勤统计摘要、管理考勤组与规则。
+		Long: `管理钉钉考勤：查询个人考勤详情、班次查询、排班管理、获取考勤统计摘要、查询考勤组与规则。
 
 子命令:
+  record   考勤记录（个人考勤详情）
   check    打卡查询（打卡结果、打卡流水）
   approve  审批单查询（请假、加班、出差、补卡）
+  shift    班次查询（员工当天打卡安排）
   schedule 排班管理（排班制考勤组排班记录导入与查询）
   class    班次规则（查询班次定义列表）
   summary      获取考勤统计摘要
+  rules        查询考勤组与考勤规则
   selfsetting    个人规则设置项（get 查询，save 更新，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知）
   globalsetting  全局规则设置项（get 查询，save 更新，仅管理员可调用，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知）
   vacation       查询当前用户假期规则列表、查询员工假期余额、查询假期余额变更记录`,
 		RunE: groupRunE,
+	})
+
+	// ── record ───────────────────────────────────────────────
+
+	attendanceRecordCmd := newGroupCommand(&cobra.Command{Use: "record", Short: "考勤记录", RunE: groupRunE})
+
+	attendanceRecordGetCmd := &cobra.Command{
+		Use:     "get",
+		Short:   "查询个人考勤详情",
+		Example: `  dws attendance record get --user USER_ID --date 2026-03-08  # 查询 userId: dws contact user search --query "姓名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "user", "date"); err != nil {
+				return err
+			}
+			dateStr := mustGetFlag(cmd, "date")
+			t, err := time.ParseInLocation("2006-01-02", dateStr, time.Local)
+			if err != nil {
+				return fmt.Errorf("invalid date format, use YYYY-MM-DD (e.g. 2026-03-08): %w", err)
+			}
+			workDate := t.UnixMilli()
+			return callMCPTool("get_user_attendance_record", map[string]any{
+				"userId":   mustGetFlag(cmd, "user"),
+				"workDate": workDate,
+			})
+		},
+	}
+	DeclareLeafMetadata(attendanceRecordGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "get_user_attendance_record",
+				CanonicalPath:  "attendance.get_user_attendance_record",
+				CLIPath:        "attendance record get",
+				PrimaryCLIPath: "attendance record get",
+			},
+			Description: "查询个人考勤详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "attendance", RPCName: "get_user_attendance_record"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询个人考勤详情",
+				UseWhen:      []string{"需要查询指定用户某一天的考勤详情（打卡、班次、考勤组、工时、加班等，受权限限制）时"},
+				AvoidWhen: []string{
+					"要统计摘要时改用 summary",
+					"要改打卡结果时改用 boss-check",
+				},
+				Examples: []string{
+					"dws attendance record get --user 011769261608 --date 2026-03-08",
+					"dws attendance record get --user USER_ID --date 2026-03-08",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "user", Property: "userId", Required: boolPtr(true)},
+				{Name: "date", Property: "workDate", Required: boolPtr(true)},
+			},
+		},
 	})
 
 	// ── check ────────────────────────────────────────────────
@@ -739,6 +804,7 @@ func newAttendanceCommand() *cobra.Command {
 				AgentSummary: "查询打卡记录",
 				UseWhen:      []string{"查询员工打卡流水或打卡记录"},
 				AvoidWhen: []string{
+					"查询考勤详情时使用 attendance record get",
 					"查询考勤统计摘要时使用 attendance summary",
 					"修改打卡结果时使用 attendance boss-check",
 				},
@@ -879,7 +945,7 @@ func newAttendanceCommand() *cobra.Command {
 				UseWhen:      []string{"查询补卡、加班、请假、出差外出等考勤审批记录"},
 				AvoidWhen: []string{
 					"需要获取可提交审批的模板/跳转链接时使用 attendance approve templates",
-					"查询实际打卡记录时使用 attendance check record",
+					"查询实际打卡记录时使用 attendance record get 或 attendance check record",
 					"查询假期余额时使用 attendance vacation balance",
 				},
 				Examples: []string{
@@ -945,13 +1011,89 @@ func newAttendanceCommand() *cobra.Command {
 				UseWhen:      []string{"用户要发起补卡、请假、加班、外出或出差审批前查询可用模板"},
 				AvoidWhen: []string{
 					"查看已存在审批单记录时使用 attendance approve list",
-					"查询考勤统计时使用 attendance summary",
+					"查询考勤记录/统计时使用 attendance record get 或 attendance summary",
 					"配置考勤规则时使用 attendance group/globalsetting/class 相关命令",
 				},
 				Examples: []string{
 					"dws attendance approve templates --type leave",
 					"dws attendance approve templates --type REPAIR_CHECK",
 				},
+			},
+		},
+	})
+
+	// ── shift ────────────────────────────────────────────────
+
+	attendanceShiftCmd := newGroupCommand(&cobra.Command{
+		Use:   "shift",
+		Short: "班次查询",
+		Long: `查询员工班次信息（班次 = 员工当天的打卡安排）。
+返回每条记录含：用户 ID、工作日期、打卡类型（OnDuty/OffDuty）、计划打卡时间、是否休息日。`,
+		RunE: groupRunE,
+	})
+
+	// MCP tool: batch_get_employee_shifts
+	attendanceShiftListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "批量查询员工班次信息",
+		Long: `批量查询多个员工在指定日期的考勤班次信息。
+返回每条记录含：用户 ID、工作日期、打卡类型（OnDuty/OffDuty）、
+计划打卡时间、是否休息日。间隔不超过 7 天，最多 50 人。`,
+		Example: `  dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07  # 查询 userId: dws contact user search --query "姓名"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "users", "start", "end"); err != nil {
+				return err
+			}
+			startStr, endStr := mustGetFlag(cmd, "start"), mustGetFlag(cmd, "end")
+			startT, err := time.ParseInLocation("2006-01-02", startStr, time.Local)
+			if err != nil {
+				return fmt.Errorf("invalid --start date format, use YYYY-MM-DD: %w", err)
+			}
+			endT, err := time.ParseInLocation("2006-01-02", endStr, time.Local)
+			if err != nil {
+				return fmt.Errorf("invalid --end date format, use YYYY-MM-DD: %w", err)
+			}
+			userIds := parseUserList(mustGetFlag(cmd, "users"))
+			return callMCPTool("batch_get_employee_shifts", map[string]any{
+				"userIds":      userIds,
+				"fromDateTime": startT.UnixMilli(),
+				"toDateTime":   endT.UnixMilli(),
+			})
+		},
+	}
+	DeclareLeafMetadata(attendanceShiftListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "batch_get_employee_shifts",
+				CanonicalPath:  "attendance.batch_get_employee_shifts",
+				CLIPath:        "attendance shift list",
+				PrimaryCLIPath: "attendance shift list",
+			},
+			Description: "批量查询员工班次信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "attendance", RPCName: "batch_get_employee_shifts"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "批量查询员工班次信息",
+				UseWhen:      []string{"需要批量查询多个员工在日期范围内的考勤班次（userId/workDate/checkType/planCheckTime/isRest）时"},
+				AvoidWhen: []string{
+					"要查实际排班记录时改用 schedule get",
+					"要查班次定义时改用 class search/get",
+					"要查考勤组规则时改用 rules",
+				},
+				Examples: []string{"dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "users", Property: "userIds", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "start", Property: "fromDateTime", Required: boolPtr(true)},
+				{Name: "end", Property: "toDateTime", Required: boolPtr(true)},
 			},
 		},
 	})
@@ -1414,7 +1556,7 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 				AvoidWhen: []string{
 					"已知道补卡规则ID并要看详情时使用 attendance adjustment get",
 					"查询加班规则时使用 attendance overtime search",
-					"查询员工打卡记录时使用 attendance check record",
+					"查询员工打卡/考勤记录时使用 attendance record get 或 attendance check record",
 				},
 				Examples: []string{
 					"dws attendance adjustment search --page 1 --limit 20",
@@ -1474,6 +1616,7 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 				AvoidWhen: []string{
 					"不知道加班规则ID时先用 attendance overtime search",
 					"查询补卡规则详情时使用 attendance adjustment get",
+					"查询员工班次时使用 attendance shift list",
 				},
 				Examples: []string{
 					"dws attendance overtime get --overtime-id 12345",
@@ -2380,6 +2523,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				AgentSummary: "查询个人考勤统计摘要",
 				UseWhen:      []string{"需要查看员工出勤/异常/请假等考勤统计摘要时"},
 				AvoidWhen: []string{
+					"要看单日明细时改用 record get",
 					"要看打卡流水时改用 check record",
 				},
 				Examples: []string{
@@ -2391,6 +2535,72 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				{Name: "user", Required: boolPtr(true)},
 				{Name: "date", Required: boolPtr(true)},
 				{Name: "stats-type", Required: boolPtr(true)},
+			},
+		},
+	})
+
+	// ── rules ────────────────────────────────────────────────
+
+	// MCP tool: query_attendance_group_or_rules
+	attendanceRulesCmd := &cobra.Command{
+		Use:   "rules",
+		Short: "查询考勤组与考勤规则",
+		Long: `调用 MCP 工具 query_attendance_group_or_rules 查询考勤组/考勤规则。
+例如：我属于哪个考勤组、打卡范围是什么、弹性工时怎么算。`,
+		Example: `  dws attendance rules --date 2026-03-14
+  dws attendance rules --date "2026-03-14 09:00:00"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "date"); err != nil {
+				return err
+			}
+			dateStr := mustGetFlag(cmd, "date")
+			// 支持 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss，统一转为 yyyy-MM-dd HH:mm:ss
+			var dateFormatted string
+			if t, err := time.ParseInLocation("2006-01-02 15:04:05", dateStr, time.Local); err == nil {
+				dateFormatted = t.Format("2006-01-02 15:04:05")
+			} else if t, err := time.ParseInLocation("2006-01-02", dateStr, time.Local); err == nil {
+				dateFormatted = t.Format("2006-01-02 15:04:05")
+			} else {
+				return fmt.Errorf("invalid --date format, use YYYY-MM-DD or yyyy-MM-dd HH:mm:ss (e.g. 2026-03-14 or 2026-03-14 09:00:00)")
+			}
+			return callMCPTool("query_attendance_group_or_rules", map[string]any{
+				"date": dateFormatted,
+			})
+		},
+	}
+	DeclareLeafMetadata(attendanceRulesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "query_attendance_group_or_rules",
+				CanonicalPath:  "attendance.query_attendance_group_or_rules",
+				CLIPath:        "attendance rules",
+				PrimaryCLIPath: "attendance rules",
+			},
+			Description: "查询考勤组与考勤规则",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "attendance", RPCName: "query_attendance_group_or_rules"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤组与考勤规则",
+				UseWhen:      []string{"需要回答「我属于哪个考勤组/打卡范围/弹性工时怎么算」等规则概览问题时"},
+				AvoidWhen: []string{
+					"要完整考勤组配置时改用 group get",
+					"要补卡/加班规则列表时改用 adjustment/overtime search",
+				},
+				Examples: []string{
+					"dws attendance rules --date <今天日期> --format json",
+					"dws attendance rules --date 2026-03-14",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "date", Required: boolPtr(true)},
 			},
 		},
 	})
@@ -2531,6 +2741,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 					"目标是其他员工时不可用；管理员也不能代查，且不要改查当前用户或使用 globalsetting 代替",
 					"修改个人设置时使用 attendance selfsetting save",
 					"查询企业全局设置时使用 attendance globalsetting get",
+					"查询个人考勤记录时使用 attendance record get",
 				},
 				Examples: []string{
 					"dws attendance selfsetting get --setting-scene checkRemind --user <CURRENT_USER_ID> --format json",
@@ -2643,6 +2854,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 					"目标是其他员工时不可用；管理员也不能代改，且不要改写当前用户或使用 globalsetting 代替",
 					"只查看个人设置时使用 attendance selfsetting get",
 					"修改企业全局设置时使用 attendance globalsetting save",
+					"查询考勤记录时使用 attendance record get",
 				},
 				Examples: []string{
 					"dws attendance selfsetting save --setting-scene checkResultNotify --user <CURRENT_USER_ID> --check-result-msg 1 --format json",
@@ -2721,7 +2933,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				AvoidWhen: []string{
 					"修改全局设置时使用 attendance globalsetting save",
 					"查看个人设置时使用 attendance selfsetting get",
-					"查看考勤组规则时使用 attendance group get",
+					"查看考勤组规则时使用 attendance group get/rules",
 				},
 				Examples: []string{
 					"dws attendance globalsetting get --scope 企业 --setting-scene checkRemind --format json",
@@ -2873,6 +3085,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				AvoidWhen: []string{
 					"查询报表数据时使用 attendance report query-data",
 					"查询假期数据时使用 attendance report query-leave",
+					"查询个人考勤明细时使用 attendance record get",
 				},
 				Examples: []string{"dws attendance report columns"},
 			},
@@ -2952,6 +3165,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				AvoidWhen: []string{
 					"查询可用字段时先用 attendance report columns",
 					"查询假期数据时使用 attendance report query-leave",
+					"查询个人单日明细时使用 attendance record get",
 				},
 				Examples: []string{
 					"dws attendance report query-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\"",
@@ -3548,6 +3762,11 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 		},
 	})
 
+	// record
+	attendanceRecordGetCmd.Flags().String("user", "", "钉钉用户 ID (必填)")
+	attendanceRecordGetCmd.Flags().String("date", "", "查询日期，格式 YYYY-MM-DD (必填)")
+	attendanceRecordCmd.AddCommand(attendanceRecordGetCmd)
+
 	// check result (query_check_result)
 	attendanceCheckResultCmd.Flags().String("users", "", "用户 ID 列表，逗号分隔，最多 100 个 (必填)")
 	attendanceCheckResultCmd.Flags().String("start", "", "起始日期，格式 YYYY-MM-DD (必填)")
@@ -3584,6 +3803,12 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	// approve templates (query_at_approve_template)
 	attendanceApproveTemplatesCmd.Flags().String("type", "", "审批类型：repair-check/patch/补卡、leave/请假、overtime/加班，或 REPAIR_CHECK/LEAVE/OVERTIME（必填）")
 	attendanceApproveCmd.AddCommand(attendanceApproveTemplatesCmd)
+
+	// shift list (batch_get_employee_shifts)
+	attendanceShiftListCmd.Flags().String("users", "", "用户 ID 列表，逗号分隔，最多 50 个 (必填)")
+	attendanceShiftListCmd.Flags().String("start", "", "开始日期，格式 YYYY-MM-DD (必填)")
+	attendanceShiftListCmd.Flags().String("end", "", "结束日期，格式 YYYY-MM-DD (必填)")
+	attendanceShiftCmd.AddCommand(attendanceShiftListCmd)
 
 	// ── schedule ──────────────────────────────────────────────
 
@@ -3695,7 +3920,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				AgentSummary: "导入排班制考勤组排班记录",
 				UseWhen:      []string{"需要向排班制考勤组批量导入或覆盖员工排班，且 groupId 与 scheduleVOS 已确认时"},
 				AvoidWhen: []string{
-					"仅查看排班时使用 attendance schedule get",
+					"仅查看排班时使用 attendance schedule get 或 attendance shift list",
 					"查询班次定义时使用 attendance class search/get",
 					"不确定 groupId/classId/workDate 时先查询考勤组和班次",
 				},
@@ -3794,6 +4019,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				UseWhen:      []string{"查询指定员工在日期范围内的排班记录"},
 				AvoidWhen: []string{
 					"查询班次定义时使用 attendance class get/search",
+					"批量查询员工班次结果时使用 attendance shift list",
 					"导入或修改排班时使用 attendance schedule import",
 				},
 				Examples: []string{"dws attendance schedule get --users 03642229451220076 --start 2026-05-13 --end 2026-05-13 --format json"},
@@ -3944,13 +4170,16 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	attendanceGroupCreateCmd.Flags().Bool("yes", false, "跳过确认提示")
 	attendanceGroupCmd.AddCommand(attendanceGroupCreateCmd)
 
-	// summary (attendance-wukong/get_user_attendance_summary)
+	// summary (get_attendance_summary)
 	attendanceSummaryCmd.Flags().String("user", "", "钉钉用户 ID（必填）")
 	attendanceSummaryCmd.Flags().String("date", "", "查询日期，格式 YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss（必填）")
 	attendanceSummaryCmd.Flags().String("stats-type", "", "统计类型：week（周统计）/ month（月统计）（必填）")
 	attendanceSummaryCmd.Flags().String("tag-name", "", "旧版兼容参数（已废弃，不参与考勤摘要查询）")
 	_ = attendanceSummaryCmd.Flags().MarkDeprecated("tag-name", "--tag-name 不再参与 attendance summary 查询，请移除该参数")
 	_ = attendanceSummaryCmd.Flags().MarkHidden("tag-name")
+
+	// rules (query_attendance_group_or_rules)
+	attendanceRulesCmd.Flags().String("date", "", "考勤日期，格式 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss (必填)")
 
 	// selfsetting get (query_self_setting)
 	attendanceSelfSettingGetCmd.Flags().String("setting-scene", "", "查询设置项：checkRemind/fastCheck/checkResultNotify/lackRemind/personalAttendStatNotify/bossAttendStatNotify（必填）")
@@ -4121,7 +4350,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				UseWhen:      []string{"查询员工打卡流水、定位或打卡时间记录"},
 				AvoidWhen: []string{
 					"查询考勤汇总时使用 attendance summary",
-					"查询排班时使用 attendance schedule get",
+					"查询班次/排班时使用 attendance shift list 或 schedule get",
 					"修改打卡记录时使用 attendance boss-check",
 				},
 				Examples: []string{
@@ -4154,7 +4383,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
                    示例：id: 948964045503 表示某天下班打卡的排班记录ID
 
   --result-id      打卡结果ID（与 --plan-id 二选一，优先使用）
-                   来源：暂不支持，建议使用 --plan-id
+                   来源：暂不支持（record get 未返回此字段），建议使用 --plan-id
 
   --time           新打卡时间，格式 yyyy-MM-dd HH:mm（可选）
   --result         打卡结果：Normal/TimesResultA/TimesResultB/TimesResultC/TimesResultD/TimesResultE/TimesResultF（可选）
@@ -4271,14 +4500,17 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	bossCheckCmd.Flags().Bool("user-say-yes", false, "用户已确认，跳过交互式确认提示")
 
 	root.AddCommand(
+		attendanceRecordCmd,
 		attendanceCheckCmd,
 		attendanceApproveCmd,
+		attendanceShiftCmd,
 		attendanceScheduleCmd,
 		attendanceClassCmd,
 		attendanceAdjustmentCmd,
 		attendanceOvertimeCmd,
 		attendanceGroupCmd,
 		attendanceSummaryCmd,
+		attendanceRulesCmd,
 		attendanceSelfSettingCmd,
 		attendanceGlobalSettingCmd,
 		attendanceReportCmd,

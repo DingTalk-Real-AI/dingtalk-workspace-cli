@@ -1,6 +1,36 @@
 # 考勤 (attendance) 命令参考
 
-> **【命令可用性提示】** 当前 dws 已注册以下考勤子命令组（`check` / `approve` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`）。查询与写操作大多可直接调用后端，不要以"开源版不支持"为由拒答。个别命令返回受账号权限和组织数据影响：`report` 系列仅管理员可用；非管理员或数据为空时可能返回空列表或权限错误。执行前可用 `dws <cmd> --help` 或 `--dry-run` 验证参数。
+## 考勤接口调用范围与禁止回退规则
+
+Agent 选择考勤接口时，仅允许使用绑定到新版考勤服务 `attendance-wukong` 的已配置入口。旧版“考勤打卡-MCP”（连接器 `G-CONN-1035987AEE07213DD10F000T`，服务 ID 为 `attendance`）下的全部九个工具及其 CLI 封装均禁止调用。
+
+本规则适用于本文件及其引用的工作流和脚本。旧入口即使仍存在于代码、Help、Schema 或历史文档中，也不属于允许调用的范围；不得因其他资料推荐旧入口而执行。既有参数校验、权限限制和写操作确认要求继续生效。
+
+### 禁止调用的旧版入口
+
+下表仅用于识别禁用项，不是执行示例。禁用范围不限于这三个 CLI 封装，而是覆盖上述旧版连接器的全部工具。
+
+| 旧版 CLI 入口（禁止执行） | 旧版 MCP 工具 |
+|---|---|
+| `dws attendance record get` | `get_user_attendance_record` |
+| `dws attendance shift list` | `batch_get_employee_shifts` |
+| `dws attendance rules` | `query_attendance_group_or_rules` |
+
+`attendance_my_record.py` 和 `attendance_team_shift.py` 依赖旧版入口，单体版、拆分版中的这些脚本均不得执行。禁止通过其他脚本间接调用、通用 MCP 调用或直接访问旧服务绕过本规则。
+
+### 新版失败时的处理
+
+无论新版入口是否可用，均不得回退到旧版。新版命令不存在、调用报错或超时时，只能在新版路径内按既有规则纠正参数或有限重试；权限不足时应说明所需权限。新版返回空结果、数据不完整或业务校验失败，也不得通过旧版补查、对照或补齐数据。
+
+无法在新版路径内完成请求时，必须停止当前业务流程，向用户说明实际错误或能力限制，并建议联系管理员或通过钉钉客户端处理。不得伪造成功结果，不得以旧版数据替代新版返回。
+
+### 新旧入口的识别边界
+
+CLI 前缀 `attendance` 是业务命名，不等于旧版服务 ID。应按实际接口绑定识别新旧；无法确认服务归属时停止调用，不得试用旧入口。现有 `dws attendance summary` 实际调用 `attendance-wukong/get_user_attendance_summary`，属于新版入口，保留使用。
+
+查询打卡流水使用新版 `check record` / `+check-record`；排班记录按现有工作流使用新版 `schedule get`。查询考勤组时，已知组 ID 使用 `group get`，仅知组名先用 `group search` 确认唯一目标；缺少组信息时向用户或管理员确认，不得通过旧版 `rules` 自动获取。这些新版入口应按各自语义和返回结构使用，不得假定它们与旧版完全等价。引用的工作流如包含旧版步骤，应按本节处理；无法满足其前置条件时停止执行。
+
+> **【新版命令参考】** 以下参考覆盖新版考勤入口（`check` / `approve` / `schedule` / `class` / `adjustment` / `overtime` / `group` / `summary` / `selfsetting` / `globalsetting` / `vacation` / `checkin` / `report` / `boss-check`），调用前须遵守上述服务范围与禁止回退规则。返回结果受账号权限和组织数据影响：`report` 系列仅管理员可用；非管理员或数据为空时可能返回空列表或权限错误。参数不明确时可查看精确命令的 Help；只有明确支持预览的命令才使用 `--dry-run`。
 
 > **【必读】日期范围严格计算规则 — 所有含 --start/--end 或 --from/--to 的命令均适用**
 >
