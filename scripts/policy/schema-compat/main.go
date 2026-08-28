@@ -104,6 +104,12 @@ var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityExceptio
 	"wiki/wiki.remove_member": {
 		{Field: "confirmation", Old: "not_required", New: "user_required"},
 	},
+	// PR #1193: personal mail contact batch deletion bypasses interactive CLI
+	// confirmation, so its published Agent contract must require the same
+	// explicit user approval enforced by the runtime guard.
+	"mail/mail.batch_delete_user_mail_contacts": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
 	// PR #1097 (issue #1096): 6 commands that affect other users and are
 	// irreversible were incorrectly marked not_required / medium. Tightened
 	// to user_required / high; calendar event delete and minutes replace-text

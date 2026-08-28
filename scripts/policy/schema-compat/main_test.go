@@ -423,6 +423,7 @@ func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testin
 	for _, toolPath := range []string{
 		"doc/doc.remove_permission",
 		"drive/drive.permission_remove",
+		"mail/mail.batch_delete_user_mail_contacts",
 		"wiki/wiki.remove_member",
 	} {
 		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
