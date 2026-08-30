@@ -210,7 +210,18 @@ func findRestoredDriveNode(rt *shortcut.RuntimeContext, recycleItem map[string]a
 			return "", driveResponseError("drive/restore_recycle_item", "restored_node_ambiguous", "服务端已接受恢复，但按原名称找到多个节点，无法唯一确认恢复终态；请用 +list 核对")
 		}
 	}
-	return "", driveResponseError("drive/restore_recycle_item", "restored_node_not_found", "服务端已接受恢复，但没有返回节点 ID，且在有界等待后仍按原名称搜索不到恢复后的节点；远端效果未知，请先用 +list 确认")
+	return "", driveResponseErrorWithDetails(
+		"drive/restore_recycle_item",
+		"restored_node_not_found",
+		"服务端已接受恢复，但没有返回节点 ID，且在有界等待后仍按原名称搜索不到恢复后的节点；远端效果未知，请先用 +list 确认",
+		map[string]any{"resource": map[string]any{
+			"resourceType":  "recycle_item",
+			"recycleItemId": nestedString(recycleItem, "recycleItemId", "id"),
+			"originalName":  name, "originalPath": originalPath,
+			"accepted": true, "readbackComplete": false,
+			"ownership": "known_target",
+		}},
+	)
 }
 
 func findRestoredDriveNodeAtOriginalPath(rt *shortcut.RuntimeContext, originalPath, name string) (string, bool, error) {

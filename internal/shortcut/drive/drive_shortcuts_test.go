@@ -511,8 +511,17 @@ func TestCrossPlatformCoverageDriveCreateRestoreCopyMoveRename(t *testing.T) {
 		"restore_recycle_item": {`{"success":true}`},
 		"search_files":         {`{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`},
 	}}
-	if err := runDriveCoverage(t, RecycleRestore, missingRestore, "--id", "recycle-1", "--yes"); err == nil {
+	err := runDriveCoverage(t, RecycleRestore, missingRestore, "--id", "recycle-1", "--yes")
+	if err == nil {
 		t.Fatal("restore without read-back evidence accepted")
+	}
+	var restoreErr *apperrors.Error
+	if !errors.As(err, &restoreErr) {
+		t.Fatalf("restore error = %T, want structured error", err)
+	}
+	resource, _ := restoreErr.Details["resource"].(map[string]any)
+	if resource["recycleItemId"] != "recycle-1" || resource["accepted"] != true || resource["readbackComplete"] != false {
+		t.Fatalf("restore receipt = %#v", resource)
 	}
 
 	copyCaller := &driveCoverageCaller{responses: map[string][]string{
