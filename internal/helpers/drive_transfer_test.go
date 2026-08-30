@@ -2743,7 +2743,7 @@ func TestCrossPlatformCoverageDriveUploadRefetchLambda(t *testing.T) {
 		{text: `{}`},
 	}}
 
-	err := executeDriveEdge(t, caller, "upload", "--file", file, "--folder", "folder-1")
+	err := executeDriveEdge(t, caller, "upload", "--file", file, "--folder", "folder-1", "--yes")
 	if err != nil {
 		t.Fatalf("upload with refetch 应成功: %v", err)
 	}

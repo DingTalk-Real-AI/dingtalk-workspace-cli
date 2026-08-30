@@ -53,6 +53,13 @@ func TestDrivePublishGetSafetyReachesFinalSchema(t *testing.T) {
 	}})
 }
 
+func TestDriveUploadSafetyReachesFinalSchema(t *testing.T) {
+	assertFinalSchemaSafety(t, []finalSchemaSafetyWant{{
+		canonical: "drive.upload", effect: "write", risk: "medium",
+		confirmation: "user_required", idempotency: "unknown",
+	}})
+}
+
 func TestMinutesP0ConfirmationPolicyReachesFinalSchema(t *testing.T) {
 	wants := []finalSchemaSafetyWant{
 		{canonical: "minutes.update_minutes_title", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},

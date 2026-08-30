@@ -308,31 +308,28 @@ func TestDriveUploadOverwriteRoutesAndConfirms(t *testing.T) {
 		path := writeMarkdownDriveFixture(t, "payload.md", "body")
 		err := executeMarkdownDriveCommand(t, newDriveCommand(), strings.NewReader("no\n"),
 			"drive", "upload", "--file", path, "--node", "file-1")
-		if err != nil {
-			t.Fatal(err)
+		if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+			t.Fatalf("declined upload error = %v, want 用户取消了操作", err)
 		}
 		if len(caller.calls) != 0 {
 			t.Fatalf("cancelled overwrite made calls: %#v", caller.calls)
 		}
-		if text := stderr.String(); !strings.Contains(text, "overwrite drive file") || strings.Contains(strings.ToLower(text), "delete") {
+		if text := stderr.String(); strings.Contains(strings.ToLower(text), "delete") {
 			t.Fatalf("unexpected confirmation text: %q", text)
 		}
 	})
 
 	t.Run("negative document confirmation prevents all writes", func(t *testing.T) {
 		caller := &markdownDriveCaller{format: "json"}
-		_, stderr := installMarkdownDriveDeps(t, caller)
+		installMarkdownDriveDeps(t, caller)
 		path := writeMarkdownDriveFixture(t, "payload.md", "body")
 		err := executeMarkdownDriveCommand(t, newDriveCommand(), strings.NewReader("no\n"),
 			"drive", "upload", "--file", path, "--node", "node-1", "--workspace", "workspace-1")
-		if err != nil {
-			t.Fatal(err)
+		if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+			t.Fatalf("declined document upload error = %v, want 用户取消了操作", err)
 		}
 		if len(caller.calls) != 0 {
 			t.Fatalf("cancelled document overwrite made calls: %#v", caller.calls)
-		}
-		if text := stderr.String(); !strings.Contains(text, "overwrite document-space file") {
-			t.Fatalf("unexpected confirmation text: %q", text)
 		}
 	})
 }
