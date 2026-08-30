@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "service": "report",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+inbox-list": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、result.report_list、稳定 reportId 与 hasMore/cursor；current HEAD exact 与 owning atomic 同场景已知页均为 20 项、稳定身份集合和 next cursor 一致，独立未来范围均为 0 且明确终止。终止页回显 cursor 只作已验证收据且不发布 next_token。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+outbox-list": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证发件箱集合、稳定 reportId 和分页终止证据；current HEAD exact 与 owning atomic 同场景已知页均为 1 项且身份一致，独立未来范围均为 0 并明确终止。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+template-search": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "在严格验证完整可用模板集合、稳定 templateId 与名称后执行本地不区分大小写搜索；current HEAD exact 与 owning atomic 完整集合过滤的已知结果均为 1 且身份一致，随机 UUID 查询均为 0。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+report-latest": {
+      "disposition": "primary_smart",
+      "semantic_delta": "完整验证默认最近 20 天或显式不超过 20 天的发件箱；current HEAD exact 所选稳定 reportId 与 owning atomic 候选和精确详情身份一致，严格详情字段计数双层均为 3。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    }
+  }
+}

@@ -260,11 +260,16 @@ func firstInt64(data map[string]any, keys ...string) (int64, bool) {
 }
 
 func driveResponseError(operation, reason, message string) error {
+	return driveResponseErrorWithDetails(operation, reason, message, nil)
+}
+
+func driveResponseErrorWithDetails(operation, reason, message string, details map[string]any) error {
 	return apperrors.NewAPI(message,
 		apperrors.WithOperation(operation),
 		apperrors.WithOrigin("mcp"),
 		apperrors.WithFailureStage("response_validation"),
 		apperrors.WithRetryable(false),
 		apperrors.WithReason(reason),
+		apperrors.WithDetails(details),
 	)
 }

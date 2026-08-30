@@ -488,5 +488,7 @@ dws todo task list-sub --task-id <taskId> --format json
 | 脚本 | 场景 | 用法 |
 |------|------|------|
 | [todo_daily_summary.py](../../scripts/todo_daily_summary.py) | 查看今天/明天/本周未完成待办汇总 | `python todo_daily_summary.py today` |
-| [todo_batch_create.py](../../scripts/todo_batch_create.py) | 从 JSON 文件批量创建待办 | `python todo_batch_create.py todos.json` |
+| [todo_batch_create.py](../../scripts/todo_batch_create.py) | 从 JSON 文件批量创建待办 | `python todo_batch_create.py todos.json --dry-run` |
 | [todo_overdue_check.py](../../scripts/todo_overdue_check.py) | 扫描逾期待办输出逾期清单 | `python todo_overdue_check.py` |
+
+批量创建必须先预览精确批次和 `planDigest`；用户明确确认该摘要后，执行时同时提交 `--confirm-digest <PLAN_DIGEST>` 与 `--yes`。脚本会重新规范化输入并核对摘要，内容变化会在首次 `dws` 调用前拒绝。

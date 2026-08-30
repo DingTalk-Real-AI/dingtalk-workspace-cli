@@ -98,6 +98,7 @@ func TestBooleanSyntaxPreservesDefaultsRequiredAndChangedContracts(t *testing.T)
 		{name: "root mock default false", path: "chat bot find", flag: "mock", value: "true", wantDefault: "false", wantValue: "true"},
 		{name: "local force default false", path: "upgrade", flag: "force", value: "false", wantDefault: "false", wantValue: "false"},
 		{name: "local default true", path: "sheet find", flag: "match-case", value: "false", wantDefault: "true", wantValue: "false"},
+		{name: "csv auto convert explicit false", path: "sheet csv-put", flag: "auto-convert", value: "false", wantDefault: "true", wantValue: "false"},
 		{name: "required explicit false", path: "contact dept create", flag: "create-dept-group", value: "false", wantDefault: "false", wantValue: "false"},
 		{name: "changed false remains explicit", path: "sheet csv-put", flag: "allow-overwrite", value: "false", wantDefault: "false", wantValue: "false"},
 	}

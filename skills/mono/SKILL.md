@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM 事件或 OA 审批事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成，以及审批任务创建/完成/转交时使用。
+description: 管理钉钉产品能力(AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批或待办事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交，以及待办创建/更新/删除时使用。
 cli_version: ">=1.0.15"
 ---
 
@@ -12,7 +12,7 @@ cli_version: ">=1.0.15"
 > **命令可用性以当前 dws 二进制为准**。本文档随内置 skill 发布，可能滞后于二进制；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。`--help` 决定 Cobra 实际接受的 flags；公开基础命令和内建 `+` shortcut 的 leaf Schema（常规用 `--compact`）决定 Agent 选择、参数/约束和安全确认语义。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 ## 严格禁止 (NEVER DO)
-- 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
+- 不要使用 dws 命令以外的方式操作钉钉业务数据（禁止 curl 或自行拼 HTTP）；唯一例外是按 [openapi-explorer.md](./references/products/openapi-explorer.md) 读取官方 `open.dingtalk.com/llms.txt` 文档并生成受限的 `dws api` 调用
 - 不要编造 UUID、ID 等标识符，必须从命令返回中提取
 - 不要猜测字段名/参数值，操作前必须先查询确认
 
@@ -22,7 +22,7 @@ cli_version: ">=1.0.15"
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
 - **脚本只用于明确覆盖的复合任务**：[scripts/](./scripts/) 下的脚本可封装 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等流程；当公开 `+` Shortcut 已提供目标唯一解析、分页/部分失败 ledger 和确认语义时，优先 Shortcut。Chat 历史导出与机器人广播已完全下沉 Runtime，不再发布兼容脚本
-- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史或审批列表
+- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、Todo、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史、审批列表或待办列表
 
 ## Shortcut 与原子命令的使用原则
 
@@ -43,21 +43,25 @@ cli_version: ">=1.0.15"
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
-| `aitable` | 93 | `dingtalk-aitable` |
+| `agoal` | 5 | `—` |
+| `aisearch` | 1 | `—` |
+| `aitable` | 100 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 98 | `dingtalk-chat` |
-| `contact` | 14 | `dingtalk-contact` |
-| `devapp` | 19 | `dingtalk-misc` |
-| `ding` | 4 | `dingtalk-misc` |
+| `contact` | 13 | `dingtalk-contact` |
+| `devapp` | 25 | `dingtalk-misc` |
+| `ding` | 1 | `dingtalk-misc` |
 | `doc` | 45 | `dingtalk-doc` |
 | `drive` | 28 | `dingtalk-drive` |
 | `mail` | 8 | `dingtalk-mail` |
-| `minutes` | 27 | `dingtalk-minutes` |
-| `oa` | 7 | `dingtalk-misc` |
-| `report` | 2 | `dingtalk-misc` |
+| `minutes` | 29 | `dingtalk-minutes` |
+| `oa` | 1 | `dingtalk-misc` |
+| `pat` | 1 | `dingtalk-misc` |
+| `report` | 4 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
 | `todo` | 21 | `dingtalk-todo` |
+| `whiteboard` | 2 | `dingtalk-misc` |
 | `wiki` | 20 | `dingtalk-wiki` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
@@ -75,6 +79,7 @@ cli_version: ">=1.0.15"
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
 | `aisearch`        | AI搜问（通用找人首选）：按姓名/部门/职位/职责/上级/下级/手机号/工号维度找人，"谁负责 XX/XX 的负责人/某事项/某项目的人"统一走本产品；不含人才池/绩效/职业历程等专项 HR 场景（那些去 `hrbrain`） | [aisearch.md](./references/products/aisearch.md)               |
 | `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索            | [aitable.md](./references/products/aitable.md)                 |
+| `api`             | OpenAPI 逃生舱：官方 llms.txt 分层发现，仅执行企业内部应用 App Token 服务端 API | [openapi-explorer.md](./references/products/openapi-explorer.md) |
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
 | `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/消息收藏/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索 | [chat.md](./references/products/chat.md)                       |
@@ -82,9 +87,9 @@ cli_version: ">=1.0.15"
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
-| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)                        | [drive.md](./references/products/drive.md)                     |
+| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
-| `markdown`        | 原生 Markdown 文件：读取/创建/全量覆盖/字面量或 RE2 局部替换              | [markdown.md](./references/products/markdown.md)               |
+| `markdown`        | 原生 Markdown 文件：读取/创建/对比/全量覆盖/局部替换/评论列表           | [markdown.md](./references/products/markdown.md)               |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
 | `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
@@ -95,7 +100,7 @@ cli_version: ">=1.0.15"
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
 | `whiteboard`      | 文档内嵌白板：读取 OpenNodes、追加节点、整页重建                           | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
-| `event`           | 个人 IM/OA 事件：监听消息、群生命周期、审批任务与审批实例事件，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
+| `event`           | 个人 IM/OA/Todo 事件：监听消息、群生命周期、审批任务/实例与待办变化，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
 
@@ -108,11 +113,12 @@ cli_version: ">=1.0.15"
 用户提到"群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知" → `chat`
 用户提到"通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/基础员工档案(学历/家庭/银行卡/紧急联系人/合同)/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人/创建企业/企业账号/邀请员工/新员工入职" → `contact`（不含职业历程/绩效/人才池；那些去 `hrbrain`）
 用户提到"开发/API/调用错误 文档" → `devdoc`
+用户提到"未封装 OpenAPI/llms.txt/dws api/Raw API/API 逃生舱" → `dws api`（先查现有产品命令，再读官方 llms.txt）
 用户提到"DING/紧急消息/电话提醒" → `ding`
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
-用户提到"云盘/文件存储/文件上传下载/文件夹" → `drive`
+用户提到"云盘/文件存储/文件上传下载/文件夹/互联网公开/分享链接密码/公开有效期" → `drive`
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）
-用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown" → `markdown`
+用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown/Markdown 评论" → `markdown`
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
@@ -125,6 +131,7 @@ cli_version: ">=1.0.15"
 用户提到"招聘/职位/JD/在招职位/创建职位/职位详情" → `recruit`
 用户提到"监听有人@我/监听单聊或群消息/监听所有单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/订阅个人 IM 事件/实时接收钉钉事件/监听并自动回复消息/驱动 Agent 处理消息" → `event +listen-im`；群成员加入/退出、群改名/解散或明确原始 EventKey/Filter DSL → `event consume`
 用户提到"监听待我审批的任务/监听审批任务创建、完成或转交/监听审批单发起或终止/监听我发起的审批完成/监听审批实例完成/订阅 OA 事件/event consume user_oa_approval_*" → `event consume`
+用户提到"监听待办创建/更新/删除/监听指派给我的待办/订阅 Todo 事件/event consume user_todo_task_*" → `event consume`，按角色使用 `--role-types`
 
 普通消息、reaction、已读、撤回监听优先由一个 `dws event +listen-im` 进程表达目标；不同用户、不同群或不同过滤条件拆成独立进程。只有高级事件控制才生成 `dws event consume <event_key> [event_key...] --flatten`。
 
@@ -135,6 +142,7 @@ cli_version: ">=1.0.15"
 关键区分: contact(基础通讯录档案：学历/家庭/银行卡/紧急联系人/合同/部门角色) vs aisearch person(通用语义找人：谁负责/上级/下级/多维度模糊搜索) vs hrbrain(人才池/员工档案专项模块数据/职业历程/绩效/结构化高级人才搜索)
 关键区分: oa tasks(审批 taskId，审批/拒绝用) vs oa list-pending(收件箱 processInstanceId，查看用)
 关键区分: oa(查询或操作审批) vs event user_oa_approval_*(当前用户审批事件长连接监听)
+关键区分: todo(查询或操作待办) vs event user_todo_task_*(当前用户待办事件长连接监听)
 
 
 > 更多易混淆场景见 [intent-guide.md](./references/intent-guide.md)

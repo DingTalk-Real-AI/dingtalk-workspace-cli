@@ -301,7 +301,7 @@ func TestDeliveryCatalogDocReadParamDeclsMatchMergeBaseContract(t *testing.T) {
 		t.Fatalf("doc read --content-format required = %#v, want false", contentFormat["required"])
 	}
 
-	for _, flagName := range []string{"scope", "tags", "max-depth", "start-block-id", "end-block-id"} {
+	for _, flagName := range []string{"scope", "tags", "max-depth", "start-block-id", "end-block-id", "version", "password"} {
 		if parameters[flagName]["required"] != false {
 			t.Fatalf("doc read --%s required = %#v, want false", flagName, parameters[flagName]["required"])
 		}
@@ -314,6 +314,15 @@ func TestDeliveryCatalogDocReadParamDeclsMatchMergeBaseContract(t *testing.T) {
 	}
 	if parameters["max-depth"]["type"] != "integer" {
 		t.Fatalf("doc read --max-depth type = %#v, want integer", parameters["max-depth"]["type"])
+	}
+	if got := parameters["version"]["property"]; got != "historyVersion" {
+		t.Fatalf("doc read --version property = %#v, want historyVersion", got)
+	}
+	if parameters["version"]["type"] != "integer" {
+		t.Fatalf("doc read --version type = %#v, want integer", parameters["version"]["type"])
+	}
+	if got := parameters["password"]["property"]; got != "password" {
+		t.Fatalf("doc read --password property = %#v, want password", got)
 	}
 }
 
@@ -1237,6 +1246,80 @@ func TestDeliveryCatalogContactParamDeclsMatchMergeBaseContract(t *testing.T) {
 				"create-dept-group": {property: "createDeptGroup", required: true},
 			},
 			absent: []string{"dept-name", "super-dept", "super-dept-id"},
+		},
+		{
+			path: "contact label create",
+			params: map[string]wantParam{
+				"name":      {property: "labelModel.name", required: true},
+				"type":      {property: "type", required: true},
+				"parent-id": {property: "parentId", required: false, interfaceType: "integer"},
+			},
+			absent: []string{"label-name", "create-type", "label-type", "parentId", "parent", "label-parent-id", "labelParentId"},
+		},
+		{
+			path: "contact label update",
+			params: map[string]wantParam{
+				"id":   {property: "labelId", required: true, interfaceType: "integer"},
+				"name": {property: "label.name", required: true},
+			},
+			absent: []string{"label-id", "role-id", "labelName"},
+		},
+		{
+			path: "contact label delete",
+			params: map[string]wantParam{
+				"id": {property: "id", required: true, interfaceType: "integer"},
+			},
+			absent: []string{"label-id", "role-id"},
+		},
+		{
+			path: "contact label add-members",
+			params: map[string]wantParam{
+				"id":    {property: "labelIds", required: true, interfaceType: "array"},
+				"users": {property: "staffIds", required: true, interfaceType: "array"},
+			},
+			absent: []string{"label-id", "role-id", "user-ids", "userIds", "staff-ids", "staffIds"},
+		},
+		{
+			path: "contact label remove-members",
+			params: map[string]wantParam{
+				"id":    {property: "labelIds", required: true, interfaceType: "array"},
+				"users": {property: "staffIds", required: true, interfaceType: "array"},
+			},
+			absent: []string{"label-id", "role-id", "user-ids", "userIds", "staff-ids", "staffIds"},
+		},
+		{
+			path: "contact label update-member-scope",
+			params: map[string]wantParam{
+				"user":  {property: "staffId", required: true},
+				"id":    {property: "labelId", required: true, interfaceType: "integer"},
+				"depts": {property: "deptIds", required: true, interfaceType: "array"},
+			},
+			absent: []string{"staff-id", "staffId", "user-id", "userId", "label-id", "role-id", "dept-ids", "deptIds"},
+		},
+		{
+			path: "contact ext-field create",
+			params: map[string]wantParam{
+				"name": {property: "orgEmpAttrModels[0].name", required: true},
+			},
+			absent: []string{"field-name", "fieldName"},
+		},
+		{
+			path: "contact ext-field update",
+			params: map[string]wantParam{
+				"code":           {property: "orgEmpAttrModels[0].code", required: true},
+				"org-self-tag":   {property: "orgEmpAttrModels[0].orgSelfTag", required: false, interfaceType: "integer"},
+				"client-display": {property: "orgEmpAttrModels[0].clientDisplay", required: true},
+				"is-search":      {property: "orgEmpAttrModels[0].isSearch", required: true},
+			},
+			absent: []string{"field-code", "fieldCode", "field-type", "fieldType", "clientDisplay", "isSearch"},
+		},
+		{
+			path: "contact ext-field delete",
+			params: map[string]wantParam{
+				"code":         {property: "orgEmpAttrModels[0].code", required: true},
+				"org-self-tag": {property: "orgEmpAttrModels[0].orgSelfTag", required: false, interfaceType: "integer"},
+			},
+			absent: []string{"field-code", "fieldCode", "field-type", "fieldType"},
 		},
 		{
 			path: "contact dept update",

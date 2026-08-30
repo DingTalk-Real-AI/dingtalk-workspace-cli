@@ -144,17 +144,25 @@ func TestSheetCellInfosDirectPassthroughPreservesCompletionMetadata(t *testing.T
 // Large-CP failure is not a pageable success. Both the raw csv-get path and
 // both get_cell_infos paths must retain the backend code and safe user message
 // exactly, matching the generic get_all_sheets error-classification path.
+//
+// 两条路径的 Message 形态不同：csv-get / cell-infos-direct 走终端展示路径
+// （callMCPToolInternalOptsContext），业务错误展示为提取的 errorMessage 加
+// "(code: ...)" 后缀——后端错误码必须保持可见；range read 走数据编排路径
+// （parseMCPToolTextResult），下游（如 drive list --depth 的限流重试）需要
+// 从 Message 反解析 errorCode，因此必须保留原始 JSON payload。
 func TestSheetReadPreservesWorkbookSizeOverLimitError(t *testing.T) {
 	const response = `{"success":false,"errorCode":"forbidden.document.sizeOverLimit","errorMessage":"The workbook data is too large to process. Use a smaller copy or split the workbook, then try again."}`
+	const wantDisplay = "The workbook data is too large to process. Use a smaller copy or split the workbook, then try again. (code: forbidden.document.sizeOverLimit)"
 	tests := []struct {
 		name   string
 		args   []string
 		tool   string
 		direct bool
+		want   string
 	}{
-		{name: "csv-get", args: []string{"csv-get", "--node", "NODE"}, tool: "get_range_as_csv"},
-		{name: "range-read", args: []string{"range", "read", "--node", "NODE"}, tool: "get_cell_infos"},
-		{name: "cell-infos-direct", tool: "get_cell_infos", direct: true},
+		{name: "csv-get", args: []string{"csv-get", "--node", "NODE"}, tool: "get_range_as_csv", want: wantDisplay},
+		{name: "range-read", args: []string{"range", "read", "--node", "NODE"}, tool: "get_cell_infos", want: response},
+		{name: "cell-infos-direct", tool: "get_cell_infos", direct: true, want: wantDisplay},
 	}
 
 	for _, test := range tests {
@@ -180,8 +188,8 @@ func TestSheetReadPreservesWorkbookSizeOverLimitError(t *testing.T) {
 			if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
 				t.Fatalf("error = %T %v, want MCP tool error", err, err)
 			}
-			if cliErr.Message != response {
-				t.Fatalf("backend error payload changed:\n got: %s\nwant: %s", cliErr.Message, response)
+			if cliErr.Message != test.want {
+				t.Fatalf("backend error payload changed:\n got: %s\nwant: %s", cliErr.Message, test.want)
 			}
 			for _, want := range []string{
 				"forbidden.document.sizeOverLimit",

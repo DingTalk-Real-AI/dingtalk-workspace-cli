@@ -128,6 +128,22 @@ func TestCrossPlatformCoverageRecordUpsertByKeyUpdateE2E(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRecordUpsertByKeyLoadsTypesOnlyForSelectProjectionE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"records":[]}`},
+		{text: `{"createdRecords":[{"recordId":"r1"}]}`},
+		{text: `{"records":[{"recordId":"r1","cells":{"fldKey":"TASK-1","fldStatus":{"id":"opt-1","name":"进行中"}}}]}`},
+		{text: `{"fields":[{"fieldId":"fldKey","type":"text"},{"fieldId":"fldStatus","type":"singleSelect"}]}`},
+	}}
+	out, err := runUpsertByKeyCLI(t, caller)
+	if err != nil || !bytes.Contains([]byte(out), []byte(`"status": "verified"`)) {
+		t.Fatalf("select projection upsert = output:%q err:%v", out, err)
+	}
+	if len(caller.calls) != 4 || caller.calls[3].tool != "get_fields" {
+		t.Fatalf("select projection call flow = %#v", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageRecordUpsertByKeyAmbiguousStopsBeforeWriteE2E(t *testing.T) {
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"records":[
 		{"recordId":"r1","cells":{"fldKey":"TASK-1"}},

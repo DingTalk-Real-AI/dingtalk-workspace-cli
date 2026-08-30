@@ -253,6 +253,41 @@ func TestEmitResultHumanFailureRedactsBeforeShortcutRendering(t *testing.T) {
 	}
 }
 
+func TestEmitResultHumanFailureRendersRecoveryGuidance(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("format", "table", "")
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	_, err := EmitResult(cmd, Failure(&ErrorInfo{
+		Type:         "auth",
+		Message:      "token expired",
+		Hint:         "check login status",
+		FriendlyHint: "renew the affected credential",
+		ActionURL:    "https://example.com/auth/recovery",
+		Actions:      []string{"", "dws auth status", "dws doctor --json"},
+	}))
+	if err != nil {
+		t.Fatalf("EmitResult: %v", err)
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"Error: token expired",
+		"Hint: check login status",
+		"Hint: renew the affected credential",
+		"Action: 处理入口: https://example.com/auth/recovery",
+		"Action: dws auth status",
+		"Action: dws doctor\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("human failure output = %q, want %q", got, want)
+		}
+	}
+	if strings.Contains(got, "dws doctor --json") {
+		t.Fatalf("human failure output exposed machine doctor mode: %q", got)
+	}
+}
+
 func TestAdaptMCPPreservesBusinessData(t *testing.T) {
 	data := map[string]any{
 		"authorization": "mcp-auth-canary",

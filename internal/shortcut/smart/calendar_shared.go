@@ -23,6 +23,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendarcompat"
 )
 
 const calendarSmartMaxPages = 20
@@ -215,6 +216,7 @@ func calendarSmartEventPage(data map[string]any) ([]map[string]any, bool, string
 	if !hasMore && next != "" {
 		return nil, false, "", calendarSmartError("calendar/list_calendar_events", "inconsistent_pagination", "服务端返回 hasMore=false 但 nextCursor 非空")
 	}
+	list, _ = calendarcompat.NormalizeTerminalEmptyEvents(list, result)
 	events := make([]map[string]any, 0, len(list))
 	for index, item := range list {
 		event, ok := item.(map[string]any)

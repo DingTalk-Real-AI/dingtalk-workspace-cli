@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -28,30 +28,6 @@ func TestCrossPlatformCoveragePureScalarAndCommandHelpersCoverage(t *testing.T) 
 	}
 	for _, value := range []string{"", "12", " 34 ", "1a"} {
 		_ = isNumericUserID(value)
-	}
-
-	root := &cobra.Command{Use: "calendar"}
-	known := &cobra.Command{Use: "event", Aliases: []string{"e"}}
-	hidden := &cobra.Command{Use: "hidden", Hidden: true}
-	root.AddCommand(known, hidden)
-	for _, args := range [][]string{{"--x"}, {"event"}, {"e"}, {"missing"}} {
-		_ = findUnknownVerb(root, args)
-	}
-	printUnknownSubcmdError(root, "evnt")
-	for _, depth := range []int{0, 1, 3} {
-		_ = stripCommandPrefix([]string{"calendar", "event", "--x"}, depth)
-	}
-	oldArgs := os.Args
-	t.Cleanup(func() { os.Args = oldArgs })
-	root.Flags().StringP("known", "k", "", "")
-	for _, args := range [][]string{
-		{"dws", "calendar", "--known=x"},
-		{"dws", "calendar", "--unknown"},
-		{"dws", "calendar", "-z"},
-		{"dws", "calendar", "--", "--ignored"},
-	} {
-		os.Args = args
-		_ = findUnknownFlag(root)
 	}
 
 	for _, event := range []any{
@@ -284,7 +260,7 @@ func TestCrossPlatformCoverageSmallHandlerAndFormatterCoverage(t *testing.T) {
 	group := &cobra.Command{Use: "range"}
 	group.AddCommand(&cobra.Command{Use: "read"})
 	parent.AddCommand(group)
-	_ = deepSuggestSubcommand(parent, "read")
-	_ = deepSuggestSubcommand(parent, "missing")
+	_ = cmdutil.SuggestDescendantSubcommands(parent, "read")
+	_ = cmdutil.SuggestDescendantSubcommands(parent, "missing")
 	_ = time.Now()
 }

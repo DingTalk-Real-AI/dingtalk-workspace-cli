@@ -80,6 +80,7 @@ type personalConsumeOptions struct {
 	UserID           string
 	OpenDingTalkID   string
 	GroupID          string
+	RoleTypes        []string
 	ControlBaseURL   string
 	StreamTicketMode string
 	StreamTicketURL  string
@@ -221,7 +222,7 @@ func newEventSchemaCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM 或 OA event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				UseWhen:      []string{"已知任一公开个人 IM、OA 或 Todo event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
@@ -285,7 +286,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalSubscriptionValidationError(err)
 	}
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	rawFormat := ""
@@ -756,7 +757,7 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 		if !def.Public {
 			return nil, personal.PublicAvailabilityError(eventKey)
 		}
-		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		if err := validatePersonalBusinessEventOptions(eventKey, opts); err != nil {
 			return nil, err
 		}
 		switch def.RuleType {
@@ -833,7 +834,10 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 	consume.PrintDryRun(w, preview)
 	for i, plan := range plans {
 		ruleType, ruleParam, _ := personal.BuildRuleParam(plan.EventKey, personal.RuleOptions{
-			UserID: plan.UserID, OpenDingTalkID: plan.OpenDingTalkID, GroupID: plan.GroupID,
+			UserID:         plan.UserID,
+			OpenDingTalkID: plan.OpenDingTalkID,
+			GroupID:        plan.GroupID,
+			RoleTypes:      plan.RoleTypes,
 		})
 		_, filter, _ := personal.BuildFilter(plan.FilterJSON, plan.QueryCSV)
 		ruleJSON, _ := personal.CanonicalJSON(ruleParam)
@@ -885,7 +889,7 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 }
 
 func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return err
 	}
 	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -893,11 +897,19 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 		UserID:         opts.UserID,
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
+		RoleTypes:      opts.RoleTypes,
 	}); err != nil {
 		return err
 	}
 	_, _, err := personal.BuildFilter(opts.FilterJSON, opts.QueryCSV)
 	return err
+}
+
+func validatePersonalBusinessEventOptions(eventKey string, opts personalConsumeOptions) error {
+	if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		return err
+	}
+	return validatePersonalTodoOptions(eventKey, opts)
 }
 
 func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) error {
@@ -913,6 +925,40 @@ func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) err
 }
 
 func personalOAOptionNames(opts personalConsumeOptions) []string {
+	var changed []string
+	for _, item := range []struct {
+		name  string
+		value string
+	}{
+		{name: "--user", value: opts.UserID},
+		{name: "--open-dingtalk-id", value: opts.OpenDingTalkID},
+		{name: "--group", value: opts.GroupID},
+		{name: "--query", value: opts.QueryCSV},
+		{name: "--filter-json", value: opts.FilterJSON},
+	} {
+		if strings.TrimSpace(item.value) != "" {
+			changed = append(changed, item.name)
+		}
+	}
+	if len(opts.RoleTypes) > 0 {
+		changed = append(changed, "--role-types")
+	}
+	return changed
+}
+
+func validatePersonalTodoOptions(eventKey string, opts personalConsumeOptions) error {
+	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
+	if !ok || def.Category != "todo" {
+		return nil
+	}
+	changed := personalTodoUnsupportedOptionNames(opts)
+	if len(changed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for Todo event %s", strings.Join(changed, ", "), eventKey)
+}
+
+func personalTodoUnsupportedOptionNames(opts personalConsumeOptions) []string {
 	var changed []string
 	for _, item := range []struct {
 		name  string
@@ -944,7 +990,7 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalPreparedSubscription{}, err
 	}
-	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+	if err := validatePersonalBusinessEventOptions(opts.EventKey, opts); err != nil {
 		return personalPreparedSubscription{}, err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -952,6 +998,7 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 		UserID:         opts.UserID,
 		OpenDingTalkID: opts.OpenDingTalkID,
 		GroupID:        opts.GroupID,
+		RoleTypes:      opts.RoleTypes,
 	})
 	if err != nil {
 		return personalPreparedSubscription{}, err
@@ -1016,7 +1063,10 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if err := ensurePublicPersonalEvent(eventKey); err != nil {
 			return nil, "", "", err
 		}
-		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+		if len(opts.RoleTypes) > 0 {
+			return nil, "", "", fmt.Errorf("--role-types is not supported when reusing --subscribe-id")
+		}
+		if err := validatePersonalBusinessEventOptions(eventKey, opts); err != nil {
 			return nil, "", "", err
 		}
 		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)
@@ -1295,6 +1345,17 @@ func interruptPersonalConsumers(ipcEndpoint string, subscribeIDs []string) error
 }
 
 func stopPersonalConsumers(w io.Writer, ipcEndpoint string, subscribeIDs []string) error {
+	hasTarget := false
+	for _, id := range subscribeIDs {
+		if strings.TrimSpace(id) != "" {
+			hasTarget = true
+			break
+		}
+	}
+	if !hasTarget {
+		return nil
+	}
+
 	if _, err := personalStopConsumers(ipcEndpoint, subscribeIDs); err == nil {
 		return nil
 	} else if !errors.Is(err, busctl.ErrConsumerStopUnsupported) {

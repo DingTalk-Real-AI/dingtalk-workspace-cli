@@ -103,7 +103,8 @@
 | "给机器人发单聊/给机器人发消息/跟机器人聊天" | 给机器人发单聊消息 | `chat bot find` → `chat message send --open-dingtalk-id` | `chat bot search` | 必须先用 find 拿 openDingTalkId（search 没有此字段），再用 send --open-dingtalk-id 发单聊 |
 | "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人" | 搜索我创建的机器人 | `chat bot search` | `chat bot find` | search 仅返回当前用户自己创建的机器人（返回 robotCode + robotName，无 openDingTalkId）；find 返回全部可用机器人 |
 | "合并转发/批量转发/合并转发多条消息" | 合并转发多条消息 | `chat message combine-forward` | `chat message forward` | combine-forward 合并多条为一条转发；forward 转发单条消息 |
-| "转发话题/转发话题消息/话题转发到另一个群" | 转发话题消息 | `chat message forward-topic` | `chat message forward` | forward-topic 专用于转发话题消息（需要话题ID）；forward 转发普通单条消息 |
+| "把群里这条已有消息转成 Thread/升级成群内话题" | 消息升级为 Thread | `chat thread promote` | `chat thread send` | promote 转换已有普通群消息；send 发布一条全新的 Thread |
+| "转发话题/转发话题消息/话题转发到另一个群" | 转发 Thread | `chat thread forward` | `chat message forward` | thread forward 转发整条 Thread 并保留上下文；message forward 只转发普通单条消息 |
 | "发卡片消息/推送流式卡片" | 创建并推送流式卡片 | `chat message send-card` | `chat message send` | send-card 发流式卡片；send 发普通文本/Markdown 消息 |
 | "更新卡片/流式更新卡片" | 流式更新卡片内容 | `chat message update-card` | `chat message send-card` | update-card 更新已有卡片；send-card 创建新卡片 |
 | "钉住消息/Pin消息/置顶消息到会话" | 钉住消息 | `chat message set-pin-msg` | `chat set-top` | set-pin-msg 钉住单条消息（Pin）；set-top 置顶整个会话 |

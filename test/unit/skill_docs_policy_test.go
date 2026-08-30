@@ -281,6 +281,7 @@ func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 			"群成员退出",
 			"审批任务创建/完成/转交",
 			"审批实例发起/抄送/终止/完成",
+			"待办创建/更新/删除",
 		} {
 			if !strings.Contains(frontmatter, required) {
 				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
@@ -305,8 +306,9 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"../dingtalk-shared/SKILL.md",
 		"<!-- dws-intent: event.listen.im -->",
 		"<!-- dws-intent: event.listen.oa -->",
+		"<!-- dws-intent: event.listen.todo -->",
 		"16 个 EventKey",
-		"23 个公开个人 EventKey",
+		"26 个公开个人 EventKey",
 	} {
 		if !strings.Contains(string(skillContent), required) {
 			t.Errorf("%s missing standalone event contract %q", skillPath, required)
@@ -320,6 +322,7 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"event-im-output.md",
 		"event-im.md",
 		"event-oa.md",
+		"event-todo.md",
 	}
 	var combined strings.Builder
 	combined.Write(skillContent)
@@ -363,6 +366,9 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"user_oa_approval_instance_cc",
 		"user_oa_approval_instance_terminated",
 		"user_oa_approval_instance_finished",
+		"user_todo_task_create",
+		"user_todo_task_update",
+		"user_todo_task_delete",
 	}
 	for _, eventKey := range allEventKeys {
 		if !strings.Contains(combined.String(), eventKey) {

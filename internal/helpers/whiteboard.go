@@ -39,13 +39,19 @@ var compactWhiteboardJSON = json.Compact
 func newWhiteboardCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "whiteboard",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("白板深度指南", "dingtalk-misc", "references/whiteboard.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "读取和更新钉钉在线文档中的内嵌白板",
 			UseWhen:      []string{"操作已有文档内嵌白板的 OpenNodes 内容时"},
 			AvoidWhen:    []string{"普通文档正文和块使用 doc；创建白板卡片先用 doc whiteboard insert"},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "whiteboard",
 		Short: "钉钉文档内嵌白板管理",
 		Long: `读取或更新钉钉在线文档中已经存在的内嵌白板。
@@ -53,7 +59,7 @@ func newWhiteboardCommand() *cobra.Command {
 当前仅支持单页白板。每次操作都必须同时提供文档 ID 或 URL 和白板 part ID；
 本命令不负责创建白板（请使用 dws doc whiteboard insert），也不支持通过已有节点 ID 做局部修改。`,
 		RunE: groupRunE,
-	}
+	})
 
 	queryCmd := &cobra.Command{
 		Use:     "query",

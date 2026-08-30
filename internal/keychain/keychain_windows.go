@@ -288,3 +288,39 @@ func registryRemoveAuthTokenEntries(service string) error {
 	}
 	return nil
 }
+
+func registryRemoveAccountEntriesWithPrefixes(service string, prefixes []string) error {
+	keyPath := registryPathForService(service)
+	k, err := registryOpenDeleteKey(keyPath, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+			return nil
+		}
+		return fmt.Errorf("registry open for account cleanup failed: %w", err)
+	}
+	defer k.Close()
+	names, err := k.ReadValueNames(-1)
+	if err != nil {
+		return fmt.Errorf("registry list values failed: %w", err)
+	}
+	for _, name := range names {
+		accountBytes, decodeErr := base64.RawURLEncoding.DecodeString(name)
+		if decodeErr != nil {
+			continue
+		}
+		account := string(accountBytes)
+		matched := false
+		for _, prefix := range prefixes {
+			if prefix != "" && strings.HasPrefix(account, prefix) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			if err := k.DeleteValue(name); err != nil {
+				return fmt.Errorf("registry delete credential value failed: %w", err)
+			}
+		}
+	}
+	return nil
+}

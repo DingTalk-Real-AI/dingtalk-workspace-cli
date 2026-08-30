@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -121,8 +122,12 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 		}
 		root.SetArgs(tc.args)
 		err = root.ExecuteContext(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
-			t.Fatalf("chat %s with legacy flags error = %v, want migration hint %q", tc.path, err, tc.hint)
+		var structured *apperrors.Error
+		if !errors.As(err, &structured) {
+			t.Fatalf("chat %s with legacy flags error = %T %v, want structured validation", tc.path, err, err)
+		}
+		if structured.Category != apperrors.CategoryValidation || structured.Reason != "unknown_subcommand" || !strings.Contains(structured.Hint, tc.hint) {
+			t.Fatalf("chat %s with legacy flags error = %#v, want migration hint %q", tc.path, structured, tc.hint)
 		}
 	}
 }
@@ -738,8 +743,23 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	for _, step := range []scriptedToolStep{{text: `{}`}, {text: `not-json`}, {text: `{"errcode":1,"errmsg":"bad"}`}, {err: errors.New("webhook")}} {
 		_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{step}}, "message", "send-by-webhook", "--token=t", "--title=title", "--text=text")
 	}
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=D1", "--text=reply", "--ai-tag", "--uuid=u")
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply")
+	directReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"result":{"openConversationId":"cid","convThreadEnabled":false}}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, directReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender", helperCurrentDOpenID, "--text=reply", "--ai-tag", "--uuid=u"); err != nil {
+		t.Fatal(err)
+	}
+	resolvedReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"result":{"openConversationId":"cid","convThreadEnabled":false}}`},
+		{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, resolvedReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply"); err != nil {
+		t.Fatal(err)
+	}
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--open-dingtalk-id=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--user=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "conversation-info", "--user=u1")

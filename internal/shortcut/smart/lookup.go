@@ -65,18 +65,27 @@ var Lookup = shortcut.Shortcut{
 	Tips: []string{`dws contact +lookup --name 张三`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — resolve the name to a unique userId.
-		user, err := resolveUser(rt, rt.Str("name"))
+		user, err := strictResolveContactUser(rt, rt.Str("name"))
 		if err != nil {
 			return err
 		}
 
 		// Step 2 — fetch and print the full profile of the resolved user.
-		return rt.CallMCP("get_user_info_by_user_ids", map[string]any{
+		data, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
 			"user_id_list": []string{user.userID},
 		})
+		if err != nil {
+			return err
+		}
+		profile, err := strictUserDetail(data, user.userID, "contact/get_user_info_by_user_ids")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"profile": profile})
 	},
 }
 
 func init() {
+	finalizeContactSmart(&Lookup)
 	shortcut.Register(Lookup)
 }

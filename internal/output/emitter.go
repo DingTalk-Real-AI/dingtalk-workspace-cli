@@ -19,6 +19,7 @@ import (
 	"io"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -107,6 +108,27 @@ func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 		}
 		var buf bytes.Buffer
 		_, _ = fmt.Fprintln(&buf, "Error: "+message)
+		if env.Error != nil {
+			if hint := strings.TrimSpace(env.Error.Hint); hint != "" {
+				_, _ = fmt.Fprintln(&buf, "Hint: "+hint)
+			}
+			if hint := strings.TrimSpace(env.Error.FriendlyHint); hint != "" {
+				_, _ = fmt.Fprintln(&buf, "Hint: "+hint)
+			}
+			if actionURL := strings.TrimSpace(env.Error.ActionURL); actionURL != "" {
+				_, _ = fmt.Fprintln(&buf, "Action: 处理入口: "+actionURL)
+			}
+			for _, action := range env.Error.Actions {
+				action = strings.TrimSpace(action)
+				if action == "" {
+					continue
+				}
+				if action == apperrors.DoctorCommand {
+					action = apperrors.DoctorHumanCommand
+				}
+				_, _ = fmt.Fprintln(&buf, "Action: "+action)
+			}
+		}
 		n, err := writeAllCount(stderr, buf.Bytes())
 		if err != nil {
 			return exitCodeInternal, n > 0, err

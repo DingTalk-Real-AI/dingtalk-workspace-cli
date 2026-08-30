@@ -46,6 +46,9 @@ const (
 	EventOAApprovalInstanceCC         = "user_oa_approval_instance_cc"
 	EventOAApprovalInstanceTerminated = "user_oa_approval_instance_terminated"
 	EventOAApprovalInstanceFinished   = "user_oa_approval_instance_finished"
+	EventTodoTaskCreated              = "user_todo_task_create"
+	EventTodoTaskUpdated              = "user_todo_task_update"
+	EventTodoTaskDeleted              = "user_todo_task_delete"
 )
 
 const (
@@ -88,6 +91,7 @@ type RuleOptions struct {
 	UserID         string
 	OpenDingTalkID string
 	GroupID        string
+	RoleTypes      []string
 }
 
 type SchemaPendingError struct {
@@ -357,6 +361,39 @@ var definitions = []Definition{
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
+	{
+		EventKey:       EventTodoTaskCreated,
+		DisplayName:    "待办创建",
+		Description:    "当前用户作为创建者、执行者或参与者的待办被创建",
+		Category:       "todo",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventTodoTaskUpdated,
+		DisplayName:    "待办更新",
+		Description:    "当前用户作为创建者、执行者或参与者的待办被更新",
+		Category:       "todo",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventTodoTaskDeleted,
+		DisplayName:    "待办删除",
+		Description:    "当前用户作为创建者、执行者或参与者的待办被删除",
+		Category:       "todo",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
 }
 
 func targetUIDConstraints() *ParameterConstraints {
@@ -487,6 +524,25 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	userID := strings.TrimSpace(opts.UserID)
 	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
 	groupID := strings.TrimSpace(opts.GroupID)
+	if def.Category == "todo" {
+		if userID != "" {
+			return "", nil, fmt.Errorf("--user is not supported for %s; use --role-types", eventKey)
+		}
+		if openDingTalkID != "" {
+			return "", nil, fmt.Errorf("--open-dingtalk-id is not supported for %s; use --role-types", eventKey)
+		}
+		if groupID != "" {
+			return "", nil, fmt.Errorf("--group is not supported for %s; use --role-types", eventKey)
+		}
+		roleTypes, roleErr := normalizeTodoRoleTypes(opts.RoleTypes)
+		if roleErr != nil {
+			return "", nil, fmt.Errorf("%s: %w", eventKey, roleErr)
+		}
+		return def.RuleType, map[string]any{"roleTypes": roleTypes}, nil
+	}
+	if len(opts.RoleTypes) > 0 {
+		return "", nil, fmt.Errorf("--role-types is not supported for %s", eventKey)
+	}
 	switch def.RuleType {
 	case "at", "all":
 		if userID != "" {
@@ -519,6 +575,37 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	default:
 		return "", nil, &SchemaPendingError{EventKey: eventKey}
 	}
+}
+
+func normalizeTodoRoleTypes(values []string) ([]string, error) {
+	selected := make(map[string]bool, 3)
+	for _, value := range values {
+		for _, roleType := range strings.Split(value, ",") {
+			roleType = strings.TrimSpace(roleType)
+			if roleType == "" {
+				continue
+			}
+			switch roleType {
+			case "creator", "executor", "participant":
+			default:
+				return nil, fmt.Errorf("--role-types contains unsupported role %q; allowed values: creator, executor, participant", roleType)
+			}
+			if selected[roleType] {
+				return nil, fmt.Errorf("--role-types contains duplicate role %q", roleType)
+			}
+			selected[roleType] = true
+		}
+	}
+	if len(selected) == 0 {
+		return []string{"creator", "executor", "participant"}, nil
+	}
+	roles := make([]string, 0, len(selected))
+	for _, roleType := range []string{"creator", "executor", "participant"} {
+		if selected[roleType] {
+			roles = append(roles, roleType)
+		}
+	}
+	return roles, nil
 }
 
 func buildTargetUIDRuleParam(ruleType, eventKey, userID, openDingTalkID, groupID string) (string, map[string]any, error) {

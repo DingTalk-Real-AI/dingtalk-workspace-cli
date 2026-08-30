@@ -18,6 +18,12 @@ func newMinutesCommand() *cobra.Command {
 	// products.minutes). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "minutes",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-minutes"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI 听记深度指南", "dingtalk-minutes", "references/minutes.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询和维护钉钉听记的转写、摘要、待办、权限、录音、标签、说话人总结、语音备忘及文件上传会话。",
 			UseWhen: []string{
@@ -28,7 +34,7 @@ func newMinutesCommand() *cobra.Command {
 			},
 		},
 	})
-	minutesListCmd := &cobra.Command{Use: "list", Short: "听记列表", RunE: groupRunE}
+	minutesListCmd := newGroupCommand(&cobra.Command{Use: "list", Short: "听记列表", RunE: groupRunE})
 
 	minutesListMineCmd := &cobra.Command{
 		Use:   "mine",
@@ -173,7 +179,7 @@ func newMinutesCommand() *cobra.Command {
 		},
 	})
 
-	minutesGetCmd := &cobra.Command{Use: "get", Short: "获取听记内容", RunE: groupRunE}
+	minutesGetCmd := newGroupCommand(&cobra.Command{Use: "get", Short: "获取听记内容", RunE: groupRunE})
 
 	minutesGetInfoCmd := &cobra.Command{
 		Use:   "info",
@@ -544,7 +550,7 @@ func newMinutesCommand() *cobra.Command {
 		},
 	})
 
-	minutesUpdateCmd := &cobra.Command{Use: "update", Short: "更新听记信息", RunE: groupRunE}
+	minutesUpdateCmd := newGroupCommand(&cobra.Command{Use: "update", Short: "更新听记信息", RunE: groupRunE})
 
 	minutesUpdateTitleCmd := &cobra.Command{
 		Use:     "title",
@@ -659,7 +665,7 @@ func newMinutesCommand() *cobra.Command {
 	// 单个工具通过 cmd 参数覆盖 create/pause/resume/end 四种指令。
 	const listeningNoteCmdTool = "执行听记指令-发起AI听记录音"
 
-	minutesRecordCmd := &cobra.Command{Use: "record", Short: "控制听记录音", RunE: groupRunE}
+	minutesRecordCmd := newGroupCommand(&cobra.Command{Use: "record", Short: "控制听记录音", RunE: groupRunE})
 
 	minutesRecordStartCmd := &cobra.Command{
 		Use:   "start",
@@ -687,15 +693,15 @@ func newMinutesCommand() *cobra.Command {
 				CLIPath:        "minutes record start",
 				PrimaryCLIPath: "minutes record start",
 			},
-			Description: "发起听记并开始录音。",
+			Description: "发起听记并开始录音；网关可能只确认受理而不返回 taskUuid。",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "发起听记并开始录音。",
-				UseWhen:      []string{"需要发起听记并开始录音，取得 taskUuid 时"},
+				AgentSummary: "发起听记并开始录音；只有回执明确返回 taskUuid 时才可继续控制。",
+				UseWhen:      []string{"需要发起听记并开始录音时；若回执未返回 taskUuid，停止并报告未绑定，不得通过最新听记猜测"},
 				AvoidWhen:    []string{"已有进行中的录音只需 pause/resume/stop 时不要重复 start"},
 				Examples: []string{
 					"dws minutes record start",
@@ -942,7 +948,7 @@ func newMinutesCommand() *cobra.Command {
 	minutesUpdateCmd.AddCommand(minutesUpdateTitleCmd, minutesUpdateSummaryCmd)
 
 	// ── mind-graph 子组 ─────────────────────────────────────────
-	mindGraphCmd := &cobra.Command{Use: "mind-graph", Short: "思维导图管理", RunE: groupRunE}
+	mindGraphCmd := newGroupCommand(&cobra.Command{Use: "mind-graph", Short: "思维导图管理", RunE: groupRunE})
 
 	mindGraphCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1059,7 +1065,7 @@ func newMinutesCommand() *cobra.Command {
 	mindGraphCmd.AddCommand(mindGraphCreateCmd, mindGraphStatusCmd)
 
 	// ── speaker 子组 ────────────────────────────────────────────
-	speakerCmd := &cobra.Command{Use: "speaker", Short: "发言人管理", RunE: groupRunE}
+	speakerCmd := newGroupCommand(&cobra.Command{Use: "speaker", Short: "发言人管理", RunE: groupRunE})
 
 	speakerReplaceCmd := &cobra.Command{
 		Use:   "replace",
@@ -1127,7 +1133,7 @@ func newMinutesCommand() *cobra.Command {
 	// 对应 MCP 工具 create_speaker_summary / get_speaker_summary
 	// 批量按听记维度汇总每位发言人的段落总结
 
-	speakerSummaryCmd := &cobra.Command{Use: "summary", Short: "发言人段落总结", RunE: groupRunE}
+	speakerSummaryCmd := newGroupCommand(&cobra.Command{Use: "summary", Short: "发言人段落总结", RunE: groupRunE})
 
 	speakerSummaryCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1243,7 +1249,7 @@ func newMinutesCommand() *cobra.Command {
 	speakerCmd.AddCommand(speakerReplaceCmd, speakerSummaryCmd)
 
 	// ── hot-word 子组 ───────────────────────────────────────────
-	hotWordCmd := &cobra.Command{Use: "hot-word", Short: "个人热词管理", RunE: groupRunE}
+	hotWordCmd := newGroupCommand(&cobra.Command{Use: "hot-word", Short: "个人热词管理", RunE: groupRunE})
 
 	hotWordAddCmd := &cobra.Command{
 		Use:   "add",
@@ -1462,11 +1468,12 @@ func newMinutesCommand() *cobra.Command {
 	// 完整流程：create → HTTP PUT → complete，或 create → cancel 取消。
 	// 注意：upload 子组的所有命令均使用 callMCPToolUnescaped 输出 JSON，
 	// 避免 presignedUrl 中的 & 被 Go 标准库转义为 \u0026。
-	uploadCmd := &cobra.Command{Use: "upload", Short: "文件上传管理", RunE: groupRunE}
+	uploadCmd := newGroupCommand(&cobra.Command{Use: "upload", Short: "文件上传管理", RunE: groupRunE})
 
 	// upload create — 对应 MCP 工具 create_upload_session
 	// 必填参数：fileName(--file-name), fileSize(--file-size)
-	// 可选参数：title(--title), minutesOption 嵌套对象(--template-id, --input-language, --enable-message-card)
+	// 可选参数：title(--title), minutesOption 嵌套对象(--template-id, --input-language)。
+	// 消息卡片副作用拆到 create-and-notify，旧 flag 仅保留隐藏迁移错误。
 	// 返回值包含 sessionId（后续 complete/cancel 使用）和 presignedUrl（HTTP PUT 上传目标）
 	uploadCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1478,48 +1485,9 @@ func newMinutesCommand() *cobra.Command {
   2. HTTP PUT 预签名上传 URL 上传文件（不带 HEADER）
   3. 调用 complete 传入会话 ID`,
 		Example: `  dws minutes upload create --file-name "meeting.mp4" --file-size 102400
-  dws minutes upload create --file-name "meeting.mp4" --file-size 102400 --title "周会录音"
-  dws minutes upload create --file-name "meeting.mp4" --file-size 102400 --input-language "zh" --enable-message-card`,
+  dws minutes upload create --file-name "meeting.mp4" --file-size 102400 --title "周会录音"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// 校验必填参数 --file-name
-			if err := validateRequiredFlags(cmd, "file-name"); err != nil {
-				return err
-			}
-			// 校验必填参数 --file-size，必须为正整数
-			fileSize, _ := cmd.Flags().GetInt64("file-size")
-			if fileSize <= 0 {
-				return fmt.Errorf("flag --file-size is required and must be a positive integer")
-			}
-
-			// 构建 MCP 工具调用参数
-			toolArgs := map[string]any{
-				"fileName": mustGetFlag(cmd, "file-name"),
-				"fileSize": fileSize,
-			}
-			// 可选：听记标题，不传时服务端默认使用文件名去掉后缀
-			if v, _ := cmd.Flags().GetString("title"); v != "" {
-				toolArgs["title"] = v
-			}
-
-			// 构建可选的嵌套对象 minutesOption，仅在有子字段时才传入
-			minutesOption := map[string]any{}
-			if v, _ := cmd.Flags().GetString("template-id"); v != "" {
-				minutesOption["templateId"] = v
-			}
-			if v, _ := cmd.Flags().GetString("input-language"); v != "" {
-				minutesOption["inputLanguage"] = v
-			}
-			// enable-message-card 是 bool 类型，仅在用户显式传入时才加入参数
-			if cmd.Flags().Changed("enable-message-card") {
-				enableCard, _ := cmd.Flags().GetBool("enable-message-card")
-				minutesOption["enableMessageCard"] = enableCard
-			}
-			if len(minutesOption) > 0 {
-				toolArgs["minutesOption"] = minutesOption
-			}
-
-			// 使用 Unescaped 版本输出，保证 presignedUrl 中的 & 不被转义
-			return callMCPToolUnescaped("create_upload_session", toolArgs)
+			return runMinutesUploadCreate(cmd, false)
 		},
 	}
 	DeclareLeafMetadata(uploadCreateCmd, LeafSpec{
@@ -1562,7 +1530,56 @@ func newMinutesCommand() *cobra.Command {
 	uploadCreateCmd.Flags().String("title", "", "听记标题，不传时默认使用文件名去掉后缀 (可选)")
 	uploadCreateCmd.Flags().String("template-id", "", "纪要生成使用的模板 ID (可选)")
 	uploadCreateCmd.Flags().String("input-language", "", "ASR 识别的源语言 (可选)")
-	uploadCreateCmd.Flags().Bool("enable-message-card", false, "是否推送闪记卡片消息 (可选)")
+	uploadCreateCmd.Flags().Bool("enable-message-card", false, "[兼容提示] 已迁移，请使用 upload create-and-notify")
+
+	uploadCreateAndNotifyCmd := &cobra.Command{
+		Use:   "create-and-notify",
+		Short: "创建上传会话并在生成后推送闪记卡片",
+		Example: `  dws minutes upload create-and-notify --file-name "meeting.mp4" --file-size 102400
+  dws minutes upload create-and-notify --file-name "meeting.mp4" --file-size 102400 --title "周会录音"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runMinutesUploadCreate(cmd, true)
+		},
+	}
+	DeclareLeafMetadata(uploadCreateAndNotifyCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "minutes",
+				Name:           "create_upload_session_and_notify",
+				CanonicalPath:  "minutes.create_upload_session_and_notify",
+				CLIPath:        "minutes upload create-and-notify",
+				PrimaryCLIPath: "minutes upload create-and-notify",
+			},
+			Description: "创建文件上传会话，并在听记生成后向用户推送闪记卡片消息。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "minutes", RPCName: "create_upload_session"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建文件上传会话，并在听记生成后推送闪记卡片消息。",
+				UseWhen:      []string{"用户明确要求上传音视频创建听记，并希望额外收到闪记卡片通知时"},
+				AvoidWhen:    []string{"只需要创建上传会话、不需要通知时使用 upload create"},
+				Examples: []string{
+					"dws minutes upload create-and-notify --file-name \"meeting.mp4\" --file-size 102400",
+					"dws minutes upload create-and-notify --file-name \"meeting.mp4\" --file-size 102400 --title \"周会录音\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "input-language", Property: "minutesOption.inputLanguage"},
+				{Name: "template-id", Property: "minutesOption.templateId"},
+			},
+		},
+	})
+	uploadCreateAndNotifyCmd.Flags().String("file-name", "", "文件名（含后缀），如 meeting.mp4 (必填)")
+	uploadCreateAndNotifyCmd.Flags().Int64("file-size", 0, "文件大小（字节）(必填)")
+	uploadCreateAndNotifyCmd.Flags().String("title", "", "听记标题，不传时默认使用文件名去掉后缀 (可选)")
+	uploadCreateAndNotifyCmd.Flags().String("template-id", "", "纪要生成使用的模板 ID (可选)")
+	uploadCreateAndNotifyCmd.Flags().String("input-language", "", "ASR 识别的源语言 (可选)")
 
 	// upload complete — 对应 MCP 工具 complete_upload_session
 	// 必填参数：sessionId(--session-id)，来自 create 返回值
@@ -1675,13 +1692,13 @@ func newMinutesCommand() *cobra.Command {
 	})
 	uploadCancelCmd.Flags().String("session-id", "", "要取消的会话 sessionId (必填)")
 
-	// 注册 upload 子命令：create / complete / cancel
-	uploadCmd.AddCommand(uploadCreateCmd, uploadCompleteCmd, uploadCancelCmd)
+	// 注册 upload 子命令：纯创建与带通知创建使用不同的确认策略。
+	uploadCmd.AddCommand(uploadCreateCmd, uploadCreateAndNotifyCmd, uploadCompleteCmd, uploadCancelCmd)
 
 	// ── permission 子组 ─────────────────────────────────────────
 	// 听记成员权限管理：批量添加/移除成员及其权限、为当前用户申请权限。
 	// 对应 MCP 工具 add_member_permission / remove_member_permission / apply_minutes_permission。
-	permissionCmd := &cobra.Command{Use: "permission", Short: "听记成员权限管理", RunE: groupRunE}
+	permissionCmd := newGroupCommand(&cobra.Command{Use: "permission", Short: "听记成员权限管理", RunE: groupRunE})
 
 	// permission add — 对应 MCP 工具 add_member_permission
 	// 批量给多个听记增加成员，并设置成员的权限。
@@ -1710,17 +1727,7 @@ func newMinutesCommand() *cobra.Command {
   dws minutes permission add --ids <uuid> --member-uids 123456 --policy 3 --sub-resources "OrigContent,Summary"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v := flagOrFallback(cmd, "ids", "uuids", "task-uuids")
-			if v == "" {
-				return fmt.Errorf("flag --ids (or --uuids / --task-uuids) is required")
-			}
-			if err := validateRequiredFlags(cmd, "member-uids", "policy"); err != nil {
-				return err
-			}
-
-			policyID, err := strconv.ParseInt(mustGetFlag(cmd, "policy"), 10, 64)
-			if err != nil || policyID < 0 || policyID > 4 {
-				return fmt.Errorf("flag --policy must be an integer between 0 and 4 (0=管理员, 1=所有者, 2=可编辑, 3=可查看/下载, 4=仅查看)")
-			}
+			policyID, _ := strconv.ParseInt(mustGetFlag(cmd, "policy"), 10, 64)
 
 			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
 
@@ -1785,6 +1792,7 @@ func newMinutesCommand() *cobra.Command {
 				{Name: "sub-resources", Property: "roleSubResourceIds"},
 			},
 		},
+		Validate: validateMinutesPermissionAdd,
 	})
 	permissionAddCmd.Flags().String("ids", "", "听记 taskUuid 列表，逗号分隔 (必填)")
 	permissionAddCmd.Flags().String("uuids", "", "--ids 的别名")
@@ -1807,13 +1815,6 @@ func newMinutesCommand() *cobra.Command {
   dws minutes permission remove --ids <uuid> --member-uids 123456`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v := flagOrFallback(cmd, "ids", "uuids", "task-uuids")
-			if v == "" {
-				return fmt.Errorf("flag --ids (or --uuids / --task-uuids) is required")
-			}
-			if err := validateRequiredFlags(cmd, "member-uids"); err != nil {
-				return err
-			}
-
 			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
 
 			return callMCPTool("remove_member_permission", map[string]any{
@@ -1858,6 +1859,7 @@ func newMinutesCommand() *cobra.Command {
 				{Name: "ids", Property: "uuids"},
 			},
 		},
+		Validate: validateMinutesPermissionRemove,
 	})
 	permissionRemoveCmd.Flags().String("ids", "", "听记 taskUuid 列表，逗号分隔 (必填)")
 	permissionRemoveCmd.Flags().String("uuids", "", "--ids 的别名")
@@ -1880,18 +1882,7 @@ func newMinutesCommand() *cobra.Command {
 		Example: `  dws minutes permission apply --id <taskUuid> --policy 4
   dws minutes permission apply --id <taskUuid> --policy 2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "id", "url", "task-uuid", "uuid"); err != nil {
-				return err
-			}
-			// 手动校验必填参数（避免 validateRequiredFlags 对 Int 的误判）
-			if !cmd.Flags().Changed("policy") {
-				return fmt.Errorf("missing required flag --policy")
-			}
-
-			policyID, err := cmd.Flags().GetInt("policy")
-			if err != nil || policyID < 2 || policyID > 4 {
-				return fmt.Errorf("flag --policy must be an integer between 2 and 4 (2=可编辑, 3=可查看/下载, 4=仅查看)")
-			}
+			policyID, _ := cmd.Flags().GetInt("policy")
 
 			return callMCPTool("apply_minutes_permission", map[string]any{
 				"taskUuid": flagOrFallback(cmd, "id", "url", "task-uuid", "uuid"),
@@ -1935,6 +1926,7 @@ func newMinutesCommand() *cobra.Command {
 				{Name: "policy", Property: "policyId"},
 			},
 		},
+		Validate: validateMinutesPermissionApply,
 	})
 	permissionApplyCmd.Flags().String("id", "", "听记 taskUuid (必填)")
 	permissionApplyCmd.Flags().String("url", "", "--id 的别名")
@@ -1951,7 +1943,7 @@ func newMinutesCommand() *cobra.Command {
 	// 听记标签/分组管理：查询用户标签列表、按标签查询听记。
 	// 对应 MCP 工具 query_user_tag_list / query_minutes_by_tag_id。
 	// 标签/分组由用户在听记页面手动创建，此处仅提供查询能力。
-	tagCmd := &cobra.Command{Use: "tag", Short: "听记标签/分组管理", RunE: groupRunE}
+	tagCmd := newGroupCommand(&cobra.Command{Use: "tag", Short: "听记标签/分组管理", RunE: groupRunE})
 
 	// tag list — 对应 MCP 工具 query_user_tag_list
 	// 无需传入参数，系统自动识别当前用户身份。
@@ -2075,7 +2067,7 @@ func newMinutesCommand() *cobra.Command {
 	// 用户身份由网关按登录态注入 uid，agent/CLI 无需传入。
 	// 返回值 items[].audioUrl 为带签名的音频 URL（含 &），因此使用
 	// callMCPToolUnescaped 输出，避免 & 被转义为 \u0026（与 upload 一致）。
-	audioMemoCmd := &cobra.Command{Use: "audio-memo", Short: "语音备忘查询", RunE: groupRunE}
+	audioMemoCmd := newGroupCommand(&cobra.Command{Use: "audio-memo", Short: "语音备忘查询", RunE: groupRunE})
 
 	audioMemoListCmd := &cobra.Command{
 		Use:   "list",
@@ -2179,14 +2171,83 @@ func newMinutesCommand() *cobra.Command {
 	audioMemoListCmd.Flags().String("end", "", "结束时间 ISO-8601 (可选)")
 	audioMemoCmd.AddCommand(audioMemoListCmd)
 
-	minutesCmd := &cobra.Command{
+	minutesCmd := newGroupCommand(&cobra.Command{
 		Use:   "minutes",
 		Short: "AI 听记 / 会议纪要",
 		Long:  `管理钉钉AI听记：查询列表、获取详情、摘要、转写、待办、关键字、音频地址、思维导图、发言人管理、文件上传、成员权限管理、语音备忘查询，以及修改标题和纪要内容。`,
 		RunE:  groupRunE,
-	}
+	})
 	minutesCmd.AddCommand(minutesListCmd, minutesGetCmd, minutesUpdateCmd, minutesRecordCmd, mindGraphCmd, speakerCmd, hotWordCmd, replaceTextCmd, audioMemoCmd, uploadCmd, permissionCmd, tagCmd)
 	return minutesCmd
+}
+
+func runMinutesUploadCreate(cmd *cobra.Command, enableMessageCard bool) error {
+	if !enableMessageCard && cmd.Flags().Changed("enable-message-card") {
+		return fmt.Errorf("--enable-message-card 已迁移：需要通知时请使用 dws minutes upload create-and-notify")
+	}
+	if err := validateRequiredFlags(cmd, "file-name"); err != nil {
+		return err
+	}
+	fileSize, _ := cmd.Flags().GetInt64("file-size")
+	if fileSize <= 0 {
+		return fmt.Errorf("flag --file-size is required and must be a positive integer")
+	}
+	toolArgs := map[string]any{
+		"fileName": mustGetFlag(cmd, "file-name"),
+		"fileSize": fileSize,
+	}
+	if value, _ := cmd.Flags().GetString("title"); value != "" {
+		toolArgs["title"] = value
+	}
+	minutesOption := map[string]any{}
+	if value, _ := cmd.Flags().GetString("template-id"); value != "" {
+		minutesOption["templateId"] = value
+	}
+	if value, _ := cmd.Flags().GetString("input-language"); value != "" {
+		minutesOption["inputLanguage"] = value
+	}
+	if enableMessageCard {
+		minutesOption["enableMessageCard"] = true
+	}
+	if len(minutesOption) > 0 {
+		toolArgs["minutesOption"] = minutesOption
+	}
+	return callMCPToolUnescaped("create_upload_session", toolArgs)
+}
+
+func validateMinutesPermissionAdd(cmd *cobra.Command, _ []string) error {
+	if flagOrFallback(cmd, "ids", "uuids", "task-uuids") == "" {
+		return fmt.Errorf("flag --ids (or --uuids / --task-uuids) is required")
+	}
+	if err := validateRequiredFlags(cmd, "member-uids", "policy"); err != nil {
+		return err
+	}
+	policyID, err := strconv.ParseInt(mustGetFlag(cmd, "policy"), 10, 64)
+	if err != nil || policyID < 0 || policyID > 4 {
+		return fmt.Errorf("flag --policy must be an integer between 0 and 4 (0=管理员, 1=所有者, 2=可编辑, 3=可查看/下载, 4=仅查看)")
+	}
+	return nil
+}
+
+func validateMinutesPermissionRemove(cmd *cobra.Command, _ []string) error {
+	if flagOrFallback(cmd, "ids", "uuids", "task-uuids") == "" {
+		return fmt.Errorf("flag --ids (or --uuids / --task-uuids) is required")
+	}
+	return validateRequiredFlags(cmd, "member-uids")
+}
+
+func validateMinutesPermissionApply(cmd *cobra.Command, _ []string) error {
+	if err := validateRequiredFlagWithAliases(cmd, "id", "url", "task-uuid", "uuid"); err != nil {
+		return err
+	}
+	if !cmd.Flags().Changed("policy") {
+		return fmt.Errorf("missing required flag --policy")
+	}
+	policyID, err := cmd.Flags().GetInt("policy")
+	if err != nil || policyID < 2 || policyID > 4 {
+		return fmt.Errorf("flag --policy must be an integer between 2 and 4 (2=可编辑, 3=可查看/下载, 4=仅查看)")
+	}
+	return nil
 }
 
 // callListByKeywordRange 调用 list_by_keyword_and_time_range，

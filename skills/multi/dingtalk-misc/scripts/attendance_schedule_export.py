@@ -123,7 +123,7 @@ def build_class_name_map(records: list[dict]) -> dict[int, str]:
     if missing_ids:
         log(f"🔍 {len(missing_ids)} 个班次缺名称，从 class search 补全 ...")
         try:
-            result = run_dws(["attendance", "class", "search", "--page-size", "200"])
+            result = run_dws(["attendance", "class", "search", "--limit", "200"])
             for cls in (extract_records(result) if result else []):
                 cid_raw = cls.get("id") or cls.get("classId")
                 cname = cls.get("name") or cls.get("className")

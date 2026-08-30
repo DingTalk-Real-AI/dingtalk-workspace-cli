@@ -66,6 +66,16 @@ func openSupplementServers() []ServerInfo {
 			Endpoint: "https://mcp-gw.dingtalk.com/server/f69b54ada16c57b603c0e5e1c36f464ba73dcee28d64bb701ff2682c259c0cff",
 			Prefixes: []string{"recruit", "job"},
 		},
+		{
+			ID:       "drive-internal",
+			Name:     "钉钉知识管理-内部",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02",
+		},
+		{
+			ID:       "dingtalk-file",
+			Name:     "钉钉文件服务",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/d48b09ddafc89bf921b777ff428f8fc88b14805ccdd9680e02b7be318e7ed4b4",
+		},
 	}
 }
 

@@ -30,6 +30,20 @@ type stubHandler struct {
 	callSeq *[]string
 }
 
+type stubProtectionResolver struct {
+	*stubHandler
+	command    string
+	flag       string
+	protection FlagProtection
+}
+
+func (h *stubProtectionResolver) ResolveFlagProtection(command, flag string) (FlagProtection, bool) {
+	if command == h.command && flag == h.flag {
+		return h.protection, true
+	}
+	return "", false
+}
+
 func (h *stubHandler) Name() string { return h.name }
 func (h *stubHandler) Phase() Phase { return h.phase }
 func (h *stubHandler) Handle(ctx *Context) error {
@@ -76,6 +90,41 @@ func TestCrossPlatformCoverageCommandPathFallbackLookupHandlesNilEngine(t *testi
 	engine = NewEngine()
 	if entry, ok := engine.lookupCommandPathFallback("chat +bad"); ok || !reflect.DeepEqual(entry, CommandPathFallback{}) {
 		t.Fatalf("unset engine lookup = %#v, %v", entry, ok)
+	}
+}
+
+func TestCrossPlatformCoverageEngineResolvesReviewedFlagProtection(t *testing.T) {
+	var nilEngine *Engine
+	if protection, ok := nilEngine.resolveFlagProtection("dws demo", "types"); ok || protection != "" {
+		t.Fatalf("nil engine protection = %q, %t", protection, ok)
+	}
+
+	engine := NewEngine()
+	engine.Register(newStub("ordinary", PreParse, nil))
+	engine.Register(&stubProtectionResolver{
+		stubHandler: newStub("protection", PreParse, nil),
+		command:     "dws demo",
+		flag:        "types",
+		protection:  FlagProtectionBlocked,
+	})
+	for _, test := range []struct {
+		name      string
+		command   string
+		flag      string
+		want      FlagProtection
+		protected bool
+	}{
+		{name: "empty command", flag: "types"},
+		{name: "empty flag", command: "dws demo"},
+		{name: "unreviewed", command: "dws demo", flag: "other"},
+		{name: "protected", command: "dws demo", flag: "types", want: FlagProtectionBlocked, protected: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := engine.resolveFlagProtection(test.command, test.flag)
+			if got != test.want || ok != test.protected {
+				t.Fatalf("resolveFlagProtection(%q, %q) = %q, %t; want %q, %t", test.command, test.flag, got, ok, test.want, test.protected)
+			}
+		})
 	}
 }
 

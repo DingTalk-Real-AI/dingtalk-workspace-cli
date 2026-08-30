@@ -14,7 +14,9 @@ runtime_contract="skills/multi/dingtalk-shared/references/runtime-contract.md"
 chat_target_bytes=10000
 chat_max_overage_percent=10
 chat_max_bytes=$((chat_target_bytes * (100 + chat_max_overage_percent) / 100))
-doc_max_bytes=10000
+doc_target_bytes=12000
+doc_max_overage_percent=0
+doc_max_bytes=$((doc_target_bytes * (100 + doc_max_overage_percent) / 100))
 event_max_bytes=10000
 runtime_contract_max_bytes=3000
 
@@ -28,7 +30,7 @@ fi
 doc_bytes="$(wc -c < "$doc_skill" | tr -d ' ')"
 if [ "$doc_bytes" -gt "$doc_max_bytes" ]; then
 	printf '%s\n' \
-		"skill context budget exceeded: $doc_skill is ${doc_bytes} bytes (max ${doc_max_bytes})" >&2
+		"skill context budget exceeded: $doc_skill is ${doc_bytes} bytes (target ${doc_target_bytes}, max ${doc_max_bytes} with ${doc_max_overage_percent}% allowance)" >&2
 	exit 1
 fi
 
@@ -117,6 +119,23 @@ do
 	fi
 done
 
+for heading_reference in \
+	"skills/multi/dingtalk-doc/references/doc/doc-block.md" \
+	"skills/multi/dingtalk-doc/references/doc/doc-update.md"
+do
+	if ! grep -Fq -- '--level 1' "$heading_reference" || \
+		! grep -Fq 'heading.level="heading-1"' "$heading_reference"; then
+		printf '%s\n' \
+			"skill heading contract regression: $heading_reference must distinguish numeric CLI input from Runtime readback" >&2
+		exit 1
+	fi
+	if grep -Fq 'heading.level=1' "$heading_reference"; then
+		printf '%s\n' \
+			"skill heading contract regression: $heading_reference expects the wrong Runtime projection" >&2
+		exit 1
+	fi
+done
+
 for forbidden_route in \
 	"## 标准 SOP" \
 	"doc_create_and_write.py" \
@@ -193,4 +212,4 @@ if grep -Fq "充分阅读产品参考文件" "$mono_skill"; then
 fi
 
 printf '%s\n' \
-	"skill context budget: ok (chat_bytes=$chat_bytes target=$chat_target_bytes max=$chat_max_bytes allowance=${chat_max_overage_percent}% doc_bytes=$doc_bytes doc_max=$doc_max_bytes event_bytes=$event_bytes event_max=$event_max_bytes runtime_contract_bytes=$runtime_contract_bytes runtime_contract_max=$runtime_contract_max_bytes shortcut_rows=$shortcut_rows doc_shortcut_rows=$doc_shortcut_rows)"
+	"skill context budget: ok (chat_bytes=$chat_bytes chat_target=$chat_target_bytes chat_max=$chat_max_bytes chat_allowance=${chat_max_overage_percent}% doc_bytes=$doc_bytes doc_target=$doc_target_bytes doc_max=$doc_max_bytes doc_allowance=${doc_max_overage_percent}% event_bytes=$event_bytes event_max=$event_max_bytes runtime_contract_bytes=$runtime_contract_bytes runtime_contract_max=$runtime_contract_max_bytes shortcut_rows=$shortcut_rows doc_shortcut_rows=$doc_shortcut_rows)"

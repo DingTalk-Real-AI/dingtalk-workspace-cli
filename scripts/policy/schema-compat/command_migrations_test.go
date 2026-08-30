@@ -13,6 +13,79 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot"
 )
 
+func TestCrossPlatformCoverageSchemaAvailabilityMigrationNormalizesOnlyAvailability(t *testing.T) {
+	baseline := baselineContract()
+	current := cloneContract(baseline)
+	mutateTool(&current, func(tool *toolSchema) { tool.Availability = "unavailable" })
+	migration := interfacesnapshot.CommandMigration{
+		Kind: interfacesnapshot.CommandMigrationAvailability,
+		Legacy: interfacesnapshot.CommandMigrationSide{
+			Command: "dws doc create",
+			Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+			After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+		},
+		Schema: interfacesnapshot.CommandMigrationSchema{
+			ProductID:    "doc",
+			SourceToolID: "doc.create",
+			Parameters:   []interfacesnapshot.CommandParameterMigration{},
+			Availability: &interfacesnapshot.CommandAvailabilityChange{Before: "available", After: "unavailable"},
+		},
+		State:  interfacesnapshot.CommandMigrationPending,
+		Reason: "Reviewed fail-closed availability hardening.",
+	}
+
+	normalized, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Products["doc"].Tools["doc.create"].Availability; got != "unavailable" {
+		t.Fatalf("normalized availability = %q", got)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("availability hardening failures = %v", failures)
+	}
+
+	unrelated := cloneContract(current)
+	mutateTool(&unrelated, func(tool *toolSchema) { tool.Risk = "high" })
+	normalized, err = normalizeSchemaCommandMigrations(baseline, unrelated, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, unrelated), "\n"); !strings.Contains(failures, "changed risk") {
+		t.Fatalf("unrelated risk drift was hidden: %q", failures)
+	}
+
+	alreadyAfter := cloneContract(current)
+	if _, err := normalizeSchemaCommandMigrations(alreadyAfter, current, []interfacesnapshot.CommandMigration{migration}); err != nil {
+		t.Fatalf("consumed merge-base availability should remain inert: %v", err)
+	}
+	wrongPath := cloneContract(current)
+	mutateTool(&wrongPath, func(tool *toolSchema) { tool.PrimaryCLIPath = "doc other" })
+	normalized, err = normalizeSchemaCommandMigrations(baseline, wrongPath, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Products["doc"].Tools["doc.create"].Availability; got != "available" {
+		t.Fatalf("wrong-path migration changed availability to %q", got)
+	}
+	wrong := cloneContract(current)
+	mutateTool(&wrong, func(tool *toolSchema) { tool.Availability = "available" })
+	if _, err := normalizeSchemaCommandMigrations(baseline, wrong, []interfacesnapshot.CommandMigration{migration}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("wrong availability error = %v", err)
+	}
+
+	compatibilityVisible := migration
+	compatibilityVisible.Legacy.After = compatibilityVisible.Legacy.Before
+	if _, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{compatibilityVisible}); err != nil {
+		t.Fatalf("compatibility-visible availability hardening must authorize the exact Schema transition: %v", err)
+	}
+	if _, err := normalizeSchemaCommandMigrations(baseline, baseline, []interfacesnapshot.CommandMigration{compatibilityVisible}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("compatibility-visible receipt must not authorize unchanged Schema availability: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjection(t *testing.T) {
 	baseline := schemaCommandMigrationContract(false)
 	current := schemaCommandMigrationContract(true)
@@ -37,6 +110,44 @@ func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjectio
 	}
 	if failures := strings.Join(checkCompatibility(normalized, unrelated), "\n"); !strings.Contains(failures, `lost parameter "keep"`) {
 		t.Fatalf("unrelated parameter removal was hidden: %s", failures)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaConsumedFlagExtractionAfterBaseline(t *testing.T) {
+	before := schemaCommandMigrationContract(false)
+	after := schemaCommandMigrationContract(true)
+	for _, contract := range []*schemaContract{&before, &after} {
+		product := contract.Products["chat"]
+		delete(product.Tools, "chat.move")
+		contract.Products["chat"] = product
+	}
+	migration := schemaCommandMigrationAuthorizations()[1]
+	migration.State = interfacesnapshot.CommandMigrationConsumed
+
+	normalized, err := normalizeSchemaCommandMigrations(after, after, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("consumed extraction should be inert for an after-state baseline: %v", err)
+	}
+	if failures := checkCompatibility(normalized, after); len(failures) != 0 {
+		t.Fatalf("after-state extraction remained incompatible: %v", failures)
+	}
+
+	normalized, err = normalizeSchemaCommandMigrations(before, after, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("consumed extraction should still normalize a stable before-state baseline: %v", err)
+	}
+	if failures := checkCompatibility(normalized, after); len(failures) != 0 {
+		t.Fatalf("stable before-state extraction remained incompatible: %v", failures)
+	}
+
+	republished := cloneContract(after)
+	product := republished.Products["chat"]
+	tool := product.Tools["chat.create_group"]
+	tool.Parameters["thread"] = before.Products["chat"].Tools["chat.create_group"].Parameters["thread"]
+	product.Tools["chat.create_group"] = tool
+	republished.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(after, republished, []interfacesnapshot.CommandMigration{migration}); err == nil {
+		t.Fatal("consumed extraction accepted a current Schema that republished the extracted parameter")
 	}
 }
 
@@ -1078,6 +1189,29 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLineagePreservesOrdinaryChec
 	}
 	if failures := strings.Join(checkCompatibility(normalized, current), "\n"); !strings.Contains(failures, "changed positionals") {
 		t.Fatalf("lineage hid positional drift: %s", failures)
+	}
+
+	requiredness := interfacesnapshot.FlagMigration{
+		Kind:    interfacesnapshot.FlagMigrationRequirednessChange,
+		Command: "dws report cli-only",
+		Flag: &interfacesnapshot.FlagMigrationSide{
+			Name:   "recipient",
+			Before: interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Scope: "local"},
+			After:  interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"},
+		},
+		State:  interfacesnapshot.FlagMigrationConsumed,
+		Reason: "Exercise requiredness receipts beside command lineage without treating them as renames.",
+	}
+	flagsWithRequiredness := append([]interfacesnapshot.FlagMigration(nil), schemaCommandLineageFlagManifest().Migrations...)
+	flagsWithRequiredness = append(flagsWithRequiredness, requiredness)
+	if _, err := normalizeSchemaCommandMigrationLineage(
+		stable,
+		base,
+		current,
+		flagsWithRequiredness,
+		schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations,
+	); err != nil {
+		t.Fatalf("requiredness receipt interfered with command lineage: %v", err)
 	}
 
 	// Multiple historical names may converge only when every predecessor carries

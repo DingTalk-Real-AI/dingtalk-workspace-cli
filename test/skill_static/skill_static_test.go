@@ -45,6 +45,8 @@ var (
 	// Sub-paths intentionally referenced as anti-pattern examples
 	// (kept in docs to guide LLMs away from common hallucinations).
 	antiPatternAllowlist = map[string]bool{
+		"dws api describe":          true, // OpenAPI escape-hatch docs explicitly say this subcommand does not exist.
+		"dws api search":            true, // Discovery uses the official llms.txt hierarchy, not a local API catalog.
 		"dws calendar list":         true, // calendar.md: "CLI doesn't have this; do not invent it"
 		"dws minutes detail":        true, // minutes.md anti-pattern table
 		"dws minutes info":          true, // (top-level, not under `get`)

@@ -54,6 +54,12 @@ func recruitCursorPagination() *contract.PaginationSpec {
 func newRecruitCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "recruit",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("招聘深度指南", "dingtalk-misc", "references/recruit.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询和创建钉钉招聘职位",
 			UseWhen:      []string{"需要查询招聘职位列表、查看职位详情或创建职位时"},
@@ -61,17 +67,17 @@ func newRecruitCommand() *cobra.Command {
 		},
 	})
 
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "recruit",
 		Short: "钉钉招聘",
 		Long:  "查询和创建钉钉招聘中的职位信息。",
 		RunE:  groupRunE,
-	}
-	job := &cobra.Command{
+	})
+	job := newGroupCommand(&cobra.Command{
 		Use:   "job",
 		Short: "招聘职位管理",
 		RunE:  groupRunE,
-	}
+	})
 	job.AddCommand(
 		newRecruitJobListCommand(),
 		newRecruitJobGetCommand(),

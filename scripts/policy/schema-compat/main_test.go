@@ -415,6 +415,135 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	}
 }
 
+func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	newTool := oldTool
+	newTool.Confirmation = "user_required"
+
+	for _, toolPath := range []string{
+		"doc/doc.remove_permission",
+		"drive/drive.permission_remove",
+		"wiki/wiki.remove_member",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("reviewed confirmation hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+	if failures := checkToolCompatibility("doc/doc.other_remove", oldTool, newTool); len(failures) == 0 {
+		t.Fatal("unreviewed confirmation hardening unexpectedly passed")
+	}
+
+	// A reviewed tool is only exempt for the exact reviewed transition: an
+	// unrelated field drift on the same tool must still be reported.
+	riskTool := oldTool
+	riskTool.Risk = "high"
+	if failures := checkToolCompatibility("doc/doc.remove_permission", oldTool, riskTool); len(failures) == 0 {
+		t.Fatal("reviewed tool risk drift unexpectedly passed")
+	}
+
+	oldTool.Confirmation = "user_required"
+	newTool.Confirmation = "not_required"
+	if failures := checkToolCompatibility("doc/doc.remove_permission", oldTool, newTool); len(failures) == 0 {
+		t.Fatal("reviewed tool confirmation weakening unexpectedly passed")
+	}
+}
+
+func TestSchemaCompatibilityAcceptsMultiFieldConfirmationHardening(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Confirmation = "not_required"
+	oldTool.Risk = "medium"
+	oldTool.Effect = "write"
+
+	// Multi-field tightening: confirmation + risk together.
+	newTool := oldTool
+	newTool.Confirmation = "user_required"
+	newTool.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"calendar/calendar.delete_meeting_room",
+		"chat/chat.remove_group_member",
+		"doc/doc.update_permission",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("reviewed multi-field hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+
+	// Multi-field tightening: confirmation + risk + effect together.
+	destructiveTool := oldTool
+	destructiveTool.Confirmation = "user_required"
+	destructiveTool.Risk = "high"
+	destructiveTool.Effect = "destructive"
+	for _, toolPath := range []string{
+		"calendar/calendar.delete_calendar_event",
+		"minutes/minutes.replace_minutes_text",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, destructiveTool); len(failures) != 0 {
+			t.Fatalf("reviewed destructive hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+
+	// An unreviewed tool with the same transitions must still fail.
+	if failures := checkToolCompatibility("calendar/calendar.other_delete", oldTool, destructiveTool); len(failures) == 0 {
+		t.Fatal("unreviewed multi-field hardening unexpectedly passed")
+	}
+
+	// A reviewed tool with an extra unreviewed field drift must still fail.
+	idempotencyTool := oldTool
+	idempotencyTool.Confirmation = "user_required"
+	idempotencyTool.Risk = "high"
+	idempotencyTool.Idempotency = "idempotent"
+	if failures := checkToolCompatibility("chat/chat.remove_group_member", oldTool, idempotencyTool); len(failures) == 0 {
+		t.Fatal("reviewed tool with unreviewed idempotency drift unexpectedly passed")
+	}
+}
+
+func TestSchemaCompatibilityRejectsPartialMultiFieldMigration(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Confirmation = "not_required"
+	oldTool.Risk = "medium"
+	oldTool.Effect = "write"
+
+	// Only risk tightened, confirmation unchanged: partial migration must fail
+	// for a tool whose reviewed set requires confirmation + risk together.
+	partialRisk := oldTool
+	partialRisk.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"chat/chat.remove_group_member",
+		"doc/doc.update_permission",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialRisk); len(failures) == 0 {
+			t.Fatalf("partial migration (risk only) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	// Only confirmation tightened, risk unchanged: also partial.
+	partialConfirmation := oldTool
+	partialConfirmation.Confirmation = "user_required"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"chat/chat.remove_group_member",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialConfirmation); len(failures) == 0 {
+			t.Fatalf("partial migration (confirmation only) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	// For a 3-field tool (confirmation + risk + effect), only 2 of 3 must fail.
+	partialDestructive := oldTool
+	partialDestructive.Confirmation = "user_required"
+	partialDestructive.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.delete_calendar_event",
+		"minutes/minutes.replace_minutes_text",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialDestructive); len(failures) == 0 {
+			t.Fatalf("partial migration (confirmation+risk without effect) for %s unexpectedly passed", toolPath)
+		}
+	}
+}
+
 func TestMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)
@@ -959,6 +1088,70 @@ func TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition(t *testin
 			}
 		})
 	}
+
+	const sheetToolPath = "sheet/sheet.create_float_image"
+	const sheetTarget = `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`
+	sheetOldTool := toolSchema{}
+	sheetNewTool := sheetOldTool
+	sheetNewTool.Constraints = sheetTarget
+
+	if !compatibleReviewedConstraintTransition(sheetToolPath, sheetOldTool, sheetNewTool) {
+		t.Fatal("reviewed float-image local-file transition must be accepted")
+	}
+	if failures := checkToolCompatibility(sheetToolPath, sheetOldTool, sheetNewTool); len(failures) != 0 {
+		t.Fatalf("reviewed float-image local-file transition failed: %v", failures)
+	}
+
+	for _, test := range []struct {
+		name string
+		path string
+		old  string
+		new  string
+	}{
+		{name: "float image unlisted tool", path: "sheet/sheet.other", new: sheetTarget},
+		{name: "float image unlisted source", path: sheetToolPath, old: `{"require_one_of":[["src"]]}`, new: sheetTarget},
+		{name: "float image unlisted target", path: sheetToolPath, new: `{"require_one_of":[["file","src"]]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if compatibleReviewedConstraintTransition(test.path, toolSchema{Constraints: test.old}, toolSchema{Constraints: test.new}) {
+				t.Fatal("unreviewed float-image constraint transition unexpectedly passed")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{
+			path: "todo/todo.shortcut_update",
+			want: `{"require_one_of":[["title","due","priority"]]}`,
+		},
+		{
+			path: "todo/todo.shortcut_reminder",
+			want: `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			oldTool := toolSchema{}
+			newTool := toolSchema{Constraints: test.want}
+			if !compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("reviewed Todo runtime constraint transition must be accepted")
+			}
+			if failures := checkToolCompatibility(test.path, oldTool, newTool); len(failures) != 0 {
+				t.Fatalf("reviewed Todo constraint transition failed: %v", failures)
+			}
+
+			newTool.Constraints = `{}`
+			if compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("unlisted Todo constraint target unexpectedly passed")
+			}
+		})
+	}
 }
 
 // Clearing a property through the reviewed mapping exclusion table is the one
@@ -1227,6 +1420,144 @@ func TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename(t *testin
 	if tool.Constraints != current.Products["chat"].Tools["chat.edit_message"].Constraints {
 		t.Fatalf("constraints were not normalized: %s", tool.Constraints)
 	}
+}
+
+func TestCrossPlatformCoverageSchemaFlagRequirednessMigration(t *testing.T) {
+	baseline := schemaContract{
+		Version: schemaContractVersion,
+		Products: map[string]productSchema{
+			"report": {
+				Tools: map[string]toolSchema{
+					"report.entry_submit": {
+						PrimaryCLIPath: "report entry submit",
+						Parameters: map[string]parameterSchema{
+							"to-user-ids": {Type: `"string"`, Property: "toUserIds", InterfaceType: "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	current := cloneContract(baseline)
+	product := current.Products["report"]
+	tool := product.Tools["report.entry_submit"]
+	parameter := tool.Parameters["to-user-ids"]
+	parameter.Required = true
+	parameter.CLIRequired = true
+	tool.Parameters["to-user-ids"] = parameter
+	product.Tools["report.entry_submit"] = tool
+	current.Products["report"] = product
+
+	migration := interfacesnapshot.FlagMigration{
+		Kind:    interfacesnapshot.FlagMigrationRequirednessChange,
+		Command: "dws report entry submit",
+		Flag: &interfacesnapshot.FlagMigrationSide{
+			Name:   "to-user-ids",
+			Before: interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Scope: "local"},
+			After:  interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"},
+		},
+		State:  interfacesnapshot.FlagMigrationConsumed,
+		Reason: "Reject report submissions that have no visible recipient.",
+	}
+	normalized, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("exact requiredness migration should pass after normalization: %v", failures)
+	}
+
+	t.Run("non-requiredness drift remains blocked", func(t *testing.T) {
+		drifted := cloneContract(current)
+		product := drifted.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		parameter := tool.Parameters["to-user-ids"]
+		parameter.Type = `"array"`
+		tool.Parameters["to-user-ids"] = parameter
+		product.Tools["report.entry_submit"] = tool
+		drifted.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(baseline, drifted, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, drifted), "\n"); !strings.Contains(failures, "changed type") {
+			t.Fatalf("requiredness migration hid type drift: %s", failures)
+		}
+	})
+
+	t.Run("partial Schema projection fails closed", func(t *testing.T) {
+		partial := cloneContract(current)
+		product := partial.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		parameter := tool.Parameters["to-user-ids"]
+		parameter.CLIRequired = false
+		tool.Parameters["to-user-ids"] = parameter
+		product.Tools["report.entry_submit"] = tool
+		partial.Products["report"] = product
+		if _, err := normalizeSchemaFlagMigrations(baseline, partial, []interfacesnapshot.FlagMigration{migration}); err == nil || !strings.Contains(err.Error(), "required and cli_required") {
+			t.Fatalf("partial requiredness projection error = %v", err)
+		}
+	})
+
+	t.Run("CLI-only migration does not manufacture Schema", func(t *testing.T) {
+		cliOnly := migration
+		cliOnly.Command = "dws report cli-only"
+		normalized, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{cliOnly})
+		if err != nil || !reflect.DeepEqual(normalized, baseline) {
+			t.Fatalf("CLI-only requiredness migration = %#v, %v", normalized, err)
+		}
+	})
+
+	t.Run("duplicate historical path fails closed", func(t *testing.T) {
+		duplicate := cloneContract(baseline)
+		product := duplicate.Products["report"]
+		product.Tools["report.duplicate"] = product.Tools["report.entry_submit"]
+		duplicate.Products["report"] = product
+		if _, err := normalizeSchemaFlagMigrations(duplicate, current, []interfacesnapshot.FlagMigration{migration}); err == nil || !strings.Contains(err.Error(), "matches 2") {
+			t.Fatalf("duplicate requiredness Schema path error = %v", err)
+		}
+	})
+
+	t.Run("missing historical parameter is not authority", func(t *testing.T) {
+		missing := cloneContract(baseline)
+		product := missing.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		delete(tool.Parameters, "to-user-ids")
+		product.Tools["report.entry_submit"] = tool
+		missing.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(missing, current, []interfacesnapshot.FlagMigration{migration})
+		if err != nil || !reflect.DeepEqual(normalized, missing) {
+			t.Fatalf("missing historical requiredness parameter = %#v, %v", normalized, err)
+		}
+	})
+
+	t.Run("missing current tool stays visible to ordinary checker", func(t *testing.T) {
+		missing := cloneContract(current)
+		delete(missing.Products, "report")
+		normalized, err := normalizeSchemaFlagMigrations(baseline, missing, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := checkCompatibility(normalized, missing); len(failures) == 0 {
+			t.Fatal("requiredness migration hid missing current Schema tool")
+		}
+	})
+
+	t.Run("missing current parameter stays visible to ordinary checker", func(t *testing.T) {
+		missing := cloneContract(current)
+		product := missing.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		delete(tool.Parameters, "to-user-ids")
+		product.Tools["report.entry_submit"] = tool
+		missing.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(baseline, missing, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, missing), "\n"); !strings.Contains(failures, "lost parameter") {
+			t.Fatalf("requiredness migration hid missing current parameter: %s", failures)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift(t *testing.T) {
@@ -1739,11 +2070,12 @@ func TestCrossPlatformCoverageSchemaConsumedReceiptIsNoOpForAfterBaseline(t *tes
 		t.Fatalf("consumed receipt did not preserve compatibility: %v", failures)
 	}
 
-	// Once stable also reaches after, retaining the consumed receipt is stale;
-	// deleting it yields no authorization and the already-after Schema passes.
+	// Once stable also reaches after, retaining or deleting the consumed receipt
+	// yields no authorization and the already-after Schema passes.
 	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaFlagMigrationSnapshot(true))
-	if _, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath); err == nil || !strings.Contains(err.Error(), "stale after all references reached the after state") {
-		t.Fatalf("stale consumed receipt error = %v", err)
+	migrations, err = authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath)
+	if err != nil || len(migrations) != 0 {
+		t.Fatalf("retained consumed receipt authorizations = %#v, %v", migrations, err)
 	}
 	emptyManifest := interfacesnapshot.FlagMigrationManifest{
 		Version:    interfacesnapshot.FlagMigrationManifestVersion,

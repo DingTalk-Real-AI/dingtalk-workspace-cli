@@ -156,6 +156,7 @@ func newSheetImportCmdWithConfig(cfg importFlowConfig) *cobra.Command {
 	})
 	importGetCmd.Flags().String("task-id", "", "导入任务 ID (必填)")
 	importCmd.AddCommand(importCreateCmd, importGetCmd)
+	newHybridGroupCommand(importCmd)
 	return importCmd
 }
 

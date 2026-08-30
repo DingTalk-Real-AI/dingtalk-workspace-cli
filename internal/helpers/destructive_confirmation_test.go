@@ -316,10 +316,10 @@ func TestSheetBatchClearRequiresConfirmationBeforeToolCall(t *testing.T) {
 		toolName:  "batch_update",
 		args: map[string]any{
 			"nodeId": "node-1",
-			"operations": []any{
+			"operationsJson": mustBatchOperationsJSON(t, []any{
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet1", "range": "A1:B3", "type": "all"}},
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet2", "range": "C1:D5", "type": "all"}},
-			},
+			}),
 		},
 	}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
@@ -356,10 +356,10 @@ func TestSheetBatchUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
 		toolName:  "batch_update",
 		args: map[string]any{
 			"nodeId": "node-1",
-			"operations": []any{
+			"operationsJson": mustBatchOperationsJSON(t, []any{
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet1", "range": "A1:B3", "type": "content"}},
-				map[string]any{"toolName": "delete_dimension", "input": map[string]any{"sheetId": "Sheet1", "dimension": "ROWS", "startIndex": 2, "count": 3}},
-			},
+				map[string]any{"toolName": "delete_dimension", "input": map[string]any{"sheetId": "Sheet1", "dimension": "ROWS", "startIndex": 1, "count": 3}},
+			}),
 		},
 	}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
@@ -500,6 +500,150 @@ func TestSheetConfirmationGuardCoversEveryProtectedLeaf(t *testing.T) {
 			}
 			if len(caller.calls) != 0 {
 				t.Fatalf("dry-run tool calls = %#v, want none", caller.calls)
+			}
+		})
+	}
+}
+
+// executeGuardedPermissionRemoveCommand mirrors executeGuardedMutationCommand
+// but additionally rewrites os.Args so resolveProductID routes doc/wiki
+// auto-routed tools to their real MCP server (doc → doc, wiki → wiki).
+func executeGuardedPermissionRemoveCommand(t *testing.T, caller *guardedMutationCaller, build func() *cobra.Command, args ...string) error {
+	t.Helper()
+	testseam.Protect(t, &os.Args)
+	root := build()
+	os.Args = append([]string{"dws", root.Name()}, args...)
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	if root.PersistentFlags().Lookup("yes") == nil {
+		root.PersistentFlags().Bool("yes", false, "confirm high-risk operation")
+	}
+	if root.PersistentFlags().Lookup("dry-run") == nil {
+		root.PersistentFlags().Bool("dry-run", false, "preview without executing")
+	}
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if root.InOrStdin() == os.Stdin {
+		root.SetIn(strings.NewReader(""))
+	}
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+// TestPermissionMemberRemoveRequiresConfirmationBeforeToolCall pins the
+// destructive confirmation gate on the three batch remove entry points
+// (drive/doc permission remove, wiki member remove). Removing up to 30
+// USER/DEPT/CONVERSATION/TAG members in one call can revoke access for whole
+// departments, chats, or role groups, so every invocation — new --members
+// format and legacy --users alike — must confirm first: without --yes the
+// command fails with the typed confirmation_required error and performs zero
+// MCP calls; with --yes it dispatches exactly one call with the complete,
+// precise tool arguments; --dry-run previews without any call.
+func TestPermissionMemberRemoveRequiresConfirmationBeforeToolCall(t *testing.T) {
+	cases := []struct {
+		name     string
+		build    func() *cobra.Command
+		args     []string
+		product  string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:    "drive permission remove --members",
+			build:   newDriveCommand,
+			args:    []string{"permission", "remove", "--node", "n1", "--members", `[{"type":"CONVERSATION","id":"cid1"},{"type":"TAG","id":"t1","corpId":"c1"}]`},
+			product: "doc",
+			tool:    "remove_permission",
+			wantArgs: map[string]any{
+				"nodeId": "n1",
+				"members": []map[string]any{
+					{"type": "CONVERSATION", "id": "cid1"},
+					{"type": "TAG", "id": "t1", "corpId": "c1"},
+				},
+			},
+		},
+		{
+			name:    "drive permission remove --users",
+			build:   newDriveCommand,
+			args:    []string{"permission", "remove", "--node", "n1", "--users", "uid1,uid2"},
+			product: "doc",
+			tool:    "remove_permission",
+			wantArgs: map[string]any{
+				"nodeId":  "n1",
+				"userIds": []string{"uid1", "uid2"},
+			},
+		},
+		{
+			name:    "doc permission remove --members",
+			build:   newDocCommand,
+			args:    []string{"permission", "remove", "--node", "n1", "--members", `[{"type":"USER","id":"u1","corpId":"c1"}]`},
+			product: "doc",
+			tool:    "remove_permission",
+			wantArgs: map[string]any{
+				"nodeId":  "n1",
+				"members": []map[string]any{{"type": "USER", "id": "u1", "corpId": "c1"}},
+			},
+		},
+		{
+			name:    "wiki member remove --members",
+			build:   newWikiCommand,
+			args:    []string{"member", "remove", "--workspace", "ws1", "--members", `[{"type":"DEPT","id":"d1","corpId":"c1"}]`},
+			product: "wiki",
+			tool:    "remove_member",
+			wantArgs: map[string]any{
+				"workspaceId": "ws1",
+				"members":     []map[string]any{{"type": "DEPT", "id": "d1", "corpId": "c1"}},
+			},
+		},
+		{
+			name:    "wiki member remove --users",
+			build:   newWikiCommand,
+			args:    []string{"member", "remove", "--workspace", "ws1", "--users", "uid1"},
+			product: "wiki",
+			tool:    "remove_member",
+			wantArgs: map[string]any{
+				"workspaceId": "ws1",
+				"userIds":     []string{"uid1"},
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// 1) 未确认：typed confirmation_required 错误 + 零 MCP 调用。
+			caller := &guardedMutationCaller{}
+			err := executeGuardedPermissionRemoveCommand(t, caller, tc.build, tc.args...)
+			requireTypedConfirmationError(t, err)
+			if len(caller.calls) != 0 {
+				t.Fatalf("tool calls before confirmation = %#v, want none", caller.calls)
+			}
+
+			// 2) 明确确认（--yes）：恰好一次调用，参数完整且精确。
+			confirmed := &guardedMutationCaller{}
+			if err := executeGuardedPermissionRemoveCommand(t, confirmed, tc.build, append(append([]string(nil), tc.args...), "--yes")...); err != nil {
+				t.Fatalf("confirmed remove returned error: %v", err)
+			}
+			if len(confirmed.calls) != 1 {
+				t.Fatalf("tool calls = %d, want exactly 1: %+v", len(confirmed.calls), confirmed.calls)
+			}
+			call := confirmed.calls[0]
+			if call.productID != tc.product || call.toolName != tc.tool {
+				t.Fatalf("tool call = %s/%s, want %s/%s", call.productID, call.toolName, tc.product, tc.tool)
+			}
+			if !reflect.DeepEqual(call.args, tc.wantArgs) {
+				t.Fatalf("tool args = %#v, want %#v", call.args, tc.wantArgs)
+			}
+
+			// 3) --dry-run 预览：不触发任何 MCP 调用。
+			dryRun := &guardedMutationCaller{dryRun: true}
+			if err := executeGuardedPermissionRemoveCommand(t, dryRun, tc.build, append(append([]string(nil), tc.args...), "--dry-run")...); err != nil {
+				t.Fatalf("dry-run remove returned error: %v", err)
+			}
+			if len(dryRun.calls) != 0 {
+				t.Fatalf("dry-run tool calls = %#v, want none", dryRun.calls)
 			}
 		})
 	}

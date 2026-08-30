@@ -9,7 +9,7 @@ import (
 )
 
 func newCondFormatCmd() *cobra.Command {
-	condFormatCmd := &cobra.Command{Use: "cond-format", Short: "条件格式管理"}
+	condFormatCmd := newDeepGroupCommand(&cobra.Command{Use: "cond-format", Short: "条件格式管理"})
 
 	condFormatListCmd := &cobra.Command{
 		Use:   "list",
@@ -165,28 +165,30 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			if err := json.Unmarshal([]byte(conditionStr), &condition); err != nil {
 				return fmt.Errorf("--condition JSON 解析失败: %w", err)
 			}
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"ranges":  ranges,
-			}
-			for key, val := range condition {
-				toolArgs[key] = val
+			input := map[string]any{
+				"sheet-id":  mustGetFlag(cmd, "sheet-id"),
+				"ranges":    ranges,
+				"condition": condition,
 			}
 			if cellStyleStr, _ := cmd.Flags().GetString("cell-style"); cellStyleStr != "" {
 				var cellStyle map[string]any
 				if err := json.Unmarshal([]byte(cellStyleStr), &cellStyle); err != nil {
 					return fmt.Errorf("--cell-style JSON 解析失败: %w", err)
 				}
-				toolArgs["cellStyle"] = cellStyle
+				input["cell-style"] = cellStyle
 			}
 			if dataBarStyleStr, _ := cmd.Flags().GetString("data-bar-style"); dataBarStyleStr != "" {
 				var dataBarStyle map[string]any
 				if err := json.Unmarshal([]byte(dataBarStyleStr), &dataBarStyle); err != nil {
 					return fmt.Errorf("--data-bar-style JSON 解析失败: %w", err)
 				}
-				toolArgs["dataBarStyle"] = dataBarStyle
+				input["data-bar-style"] = dataBarStyle
 			}
+			toolArgs, err := BuildBatchCreateCondFormatArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("create_cond_format", toolArgs)
 		},
 	}
@@ -257,10 +259,9 @@ ruleId 可通过 cond-format list 获取。`,
   dws sheet cond-format update --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID \
     --ranges '["A1:F200"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"ruleId":  mustGetFlag(cmd, "rule-id"),
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"),
+				"rule-id":  mustGetFlag(cmd, "rule-id"),
 			}
 			rangesChanged := cmd.Flags().Changed("ranges")
 			conditionChanged := cmd.Flags().Changed("condition")
@@ -275,7 +276,7 @@ ruleId 可通过 cond-format list 获取。`,
 				if err := json.Unmarshal([]byte(rangesStr), &ranges); err != nil {
 					return fmt.Errorf("--ranges JSON 解析失败: %w", err)
 				}
-				toolArgs["ranges"] = ranges
+				input["ranges"] = ranges
 			}
 			if conditionChanged {
 				conditionStr, _ := cmd.Flags().GetString("condition")
@@ -283,9 +284,7 @@ ruleId 可通过 cond-format list 获取。`,
 				if err := json.Unmarshal([]byte(conditionStr), &condition); err != nil {
 					return fmt.Errorf("--condition JSON 解析失败: %w", err)
 				}
-				for key, val := range condition {
-					toolArgs[key] = val
-				}
+				input["condition"] = condition
 			}
 			if cellStyleChanged {
 				cellStyleStr, _ := cmd.Flags().GetString("cell-style")
@@ -293,7 +292,7 @@ ruleId 可通过 cond-format list 获取。`,
 				if err := json.Unmarshal([]byte(cellStyleStr), &cellStyle); err != nil {
 					return fmt.Errorf("--cell-style JSON 解析失败: %w", err)
 				}
-				toolArgs["cellStyle"] = cellStyle
+				input["cell-style"] = cellStyle
 			}
 			if dataBarStyleChanged {
 				dataBarStyleStr, _ := cmd.Flags().GetString("data-bar-style")
@@ -301,8 +300,13 @@ ruleId 可通过 cond-format list 获取。`,
 				if err := json.Unmarshal([]byte(dataBarStyleStr), &dataBarStyle); err != nil {
 					return fmt.Errorf("--data-bar-style JSON 解析失败: %w", err)
 				}
-				toolArgs["dataBarStyle"] = dataBarStyle
+				input["data-bar-style"] = dataBarStyle
 			}
+			toolArgs, err := BuildBatchUpdateCondFormatArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("update_cond_format", toolArgs)
 		},
 	}
@@ -361,11 +365,14 @@ ruleId 可通过 cond-format list 获取。`,
 		Example: `  # 删除条件格式规则（必须加 --yes 确认）
   dws sheet cond-format delete --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPTool("delete_cond_format", map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"ruleId":  mustGetFlag(cmd, "rule-id"),
+			toolArgs, err := BuildBatchDeleteCondFormatArgs(map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "rule-id": mustGetFlag(cmd, "rule-id"),
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("delete_cond_format", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(condFormatDeleteCmd, LeafSpec{

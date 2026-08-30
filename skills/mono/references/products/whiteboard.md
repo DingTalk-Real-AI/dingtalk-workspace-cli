@@ -8,14 +8,27 @@ OpenNodes V1 的完整字段、节点类型、目录枚举和错误语义按需�
 `geometry`、`catalogId` 等枚举值。渐变卡片、Frame 分支、SVG/Vector 等完整
 工作流见 [常用 Recipes](./whiteboard/recipes.md)。
 
+<!-- VISIBLE_SHORTCUTS_START -->
+## Shortcuts（无专用脚本/recipe 时优先）
+
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "whiteboard +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws whiteboard <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service whiteboard --format json` 批量发现。
+
+| Shortcut | 风险 | 适用场景 |
+|---|---|---|
+| `dws whiteboard +query` | read | 严格读取已有文档白板的 OpenNodes 快照 |
+| `dws whiteboard +update` | high-risk-write | 确认后更新白板并按同一稳定目标精确读回 |
+<!-- VISIBLE_SHORTCUTS_END -->
+
 ## 标准流程
 
 1. 从用户输入或真实文档 JSONML 取得 `nodeId` 和 card `metadata.id`（partId）。
-2. `dws whiteboard query --node <DOC_ID> --part-id <PART_ID> --format json` 保存当前内容。
+2. `dws whiteboard +query --node <DOC_ID> --part-id <PART_ID> --format json` 保存并严格校验当前内容。
 3. 生成 OpenNodes V1 文件；不能把 query 响应直接回写。
 4. 向用户展示写入范围并取得确认。
-5. `dws whiteboard update --node <DOC_ID> --part-id <PART_ID> --source <FILE> --yes --format json`。
-6. 再次 query 验证节点、层级和连接关系。
+5. `dws whiteboard +update --node <DOC_ID> --part-id <PART_ID> --source <FILE> --format json`；该 shortcut 会验证终态 receipt，并按同一白板执行独立读回。
+6. 仅在需要人工审阅完整节点细节时，再执行一次 `+query`。
+
+执行层只能在已取得本次写入确认后添加 `--yes`；可复制的存储示例不得预置该参数。
 
 更新文件：
 

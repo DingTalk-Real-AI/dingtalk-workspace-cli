@@ -16,6 +16,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendarcompat"
 )
 
 const calendarCompositeReason = "Reviewed Calendar Shortcut composite: the executable CLI owns strict response validation, truthful pagination, optional multi-step writes, read-back verification, and confirmation; no single MCP interface represents the complete command contract."
@@ -204,6 +205,9 @@ func requireCalendarCollection(data map[string]any, operation string, keys ...st
 			items, ok := value.([]any)
 			if !ok {
 				return nil, nil, calendarResponseError(operation, "malformed_collection", fmt.Sprintf("响应 %s 字段不是数组", key))
+			}
+			if key == "events" {
+				items, _ = calendarcompat.NormalizeTerminalEmptyEvents(items, container)
 			}
 			if err := validateCalendarCollectionItems(items, operation, key); err != nil {
 				return nil, nil, err

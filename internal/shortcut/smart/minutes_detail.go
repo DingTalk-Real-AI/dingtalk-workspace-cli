@@ -86,6 +86,7 @@ var MinutesDetail = shortcut.Shortcut{
 				"dws minutes +detail --ids <uuid1,uuid2> --artifacts summary,transcript --transcript-output file",
 			},
 		},
+		Result: minutesDetailResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "单个听记 taskUuid"},

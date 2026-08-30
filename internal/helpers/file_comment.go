@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -51,16 +52,35 @@ func fileCommentSpaceIDFlag() LeafFlag {
 	return LeafFlag{Name: "space-id", Usage: "钉盘空间 ID；仅数字 dentry ID 必填", Bind: "spaceId", OmitEmpty: true, Trim: true, RequiredWhen: "--node is a numeric dentry ID"}
 }
 
+// driveLegacyDeprecationWriter keeps Cobra's deprecation notice out of the
+// machine-readable stdout contract while retaining ordinary help output.
+type driveLegacyDeprecationWriter struct {
+	cmd *cobra.Command
+}
+
+func (w *driveLegacyDeprecationWriter) Write(p []byte) (int, error) {
+	if bytes.HasPrefix(p, []byte("Command \"")) && bytes.Contains(p, []byte("\" is deprecated, ")) {
+		return w.cmd.Root().ErrOrStderr().Write(p)
+	}
+	return w.cmd.Root().OutOrStdout().Write(p)
+}
+
+func markDriveLegacyCommentDeprecated(cmd *cobra.Command, replacement string) {
+	cmd.Deprecated = "请改用 " + replacement + " 访问新评论体系"
+	cmd.SetOut(&driveLegacyDeprecationWriter{cmd: cmd})
+}
+
 // newDriveFileCommentCmd follows the existing resource-first comment surface:
 // doc comment, sheet comment, and drive comment. The public command belongs to
 // Drive, while the implementation routes to the shared doc-comment MCP server.
 func newDriveFileCommentCmd() *cobra.Command {
-	commentCmd := &cobra.Command{
+	commentCmd := newGroupCommand(&cobra.Command{
 		Use:   "comment",
 		Short: "普通文件评论管理",
-		Long:  "管理钉盘普通预览文件的评论：查询评论列表或创建全文纯文本评论。",
-		RunE:  groupRunE,
-	}
+		Long: `管理钉盘普通预览文件评论。旧 list/create 保持原评论服务契约但已废弃；
+新评论体系使用 list-v2/create-v2 及其余生命周期命令。`,
+		RunE: groupRunE,
+	})
 
 	listCmd := NewLeafCommand(LeafSpec{
 		Use:   "list",
@@ -179,7 +199,10 @@ func newDriveFileCommentCmd() *cobra.Command {
 		Call:     runFileCommentCreate,
 	})
 
+	markDriveLegacyCommentDeprecated(listCmd, "dws drive comment list-v2")
+	markDriveLegacyCommentDeprecated(createCmd, "dws drive comment create-v2")
 	commentCmd.AddCommand(listCmd, createCmd)
+	commentCmd.AddCommand(newDriveCommentLifecycleCommands()...)
 	return commentCmd
 }
 
@@ -562,12 +585,6 @@ func invalidFileCommentResponse(tool, reason string, cause error) error {
 		Operation:  fileCommentServer + "/" + tool,
 		Cause:      cause,
 	}
-}
-
-func nonEmptyStringField(payload map[string]any, key string) (string, bool) {
-	value, ok := payload[key].(string)
-	value = strings.TrimSpace(value)
-	return value, ok && value != ""
 }
 
 func stringArg(args map[string]any, key string) string {

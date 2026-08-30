@@ -222,6 +222,72 @@ type OAApprovalInstanceFinishedOutput struct {
 	EventTime         int64  `json:"event_time" description:"审批实例事件业务时间" format:"timestamp_ms"`
 }
 
+type TodoTaskCreatedOutput struct {
+	Type            string   `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID         string   `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp       int64    `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID     string   `json:"subscribe_id" description:"订阅 ID"`
+	TaskID          string   `json:"task_id" description:"待办任务 ID"`
+	Subject         string   `json:"subject" description:"待办标题"`
+	CreatorID       string   `json:"creator_id" description:"创建者 staffId"`
+	ExecutorIDs     []string `json:"executor_ids" description:"执行者 staffId 列表"`
+	ParticipantIDs  []string `json:"participant_ids" description:"参与者 staffId 列表"`
+	Priority        int64    `json:"priority" description:"待办优先级"`
+	StatusStage     int64    `json:"status_stage" description:"状态阶段：0 未开始、1 进行中、2 正常完成、3 异常完成"`
+	PlanStartDate   *int64   `json:"plan_start_date,omitempty" description:"计划开始时间" format:"timestamp_ms"`
+	PlanFinishDate  *int64   `json:"plan_finish_date,omitempty" description:"计划结束时间" format:"timestamp_ms"`
+	StartDate       *int64   `json:"start_date,omitempty" description:"实际开始时间" format:"timestamp_ms"`
+	FinishDate      *int64   `json:"finish_date,omitempty" description:"实际结束时间" format:"timestamp_ms"`
+	Description     string   `json:"description" description:"待办描述"`
+	Source          string   `json:"source" description:"待办来源"`
+	SourceID        string   `json:"source_id" description:"来源业务 ID"`
+	BizTag          string   `json:"biz_tag" description:"业务标识"`
+	ParentID        *string  `json:"parent_id,omitempty" description:"父任务 ID"`
+	IsMultiExecutor bool     `json:"is_multi_executor" description:"是否多执行者待办"`
+	SceneType       string   `json:"scene_type" description:"待办场景类型"`
+	CreateTime      int64    `json:"create_time" description:"待办创建时间" format:"timestamp_ms"`
+}
+
+type TodoTaskUpdatedOutput struct {
+	Type            string   `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID         string   `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp       int64    `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID     string   `json:"subscribe_id" description:"订阅 ID"`
+	TaskID          string   `json:"task_id" description:"待办任务 ID"`
+	Subject         string   `json:"subject" description:"待办标题"`
+	CreatorID       string   `json:"creator_id" description:"创建者 staffId"`
+	ExecutorIDs     []string `json:"executor_ids" description:"执行者 staffId 列表"`
+	ParticipantIDs  []string `json:"participant_ids" description:"参与者 staffId 列表"`
+	Priority        int64    `json:"priority" description:"待办优先级"`
+	StatusStage     int64    `json:"status_stage" description:"新状态阶段：0 未开始、1 进行中、2 正常完成、3 异常完成"`
+	OldStatusStage  int64    `json:"old_status_stage" description:"更新前状态阶段"`
+	PlanStartDate   *int64   `json:"plan_start_date,omitempty" description:"计划开始时间" format:"timestamp_ms"`
+	PlanFinishDate  *int64   `json:"plan_finish_date,omitempty" description:"计划结束时间" format:"timestamp_ms"`
+	StartDate       *int64   `json:"start_date,omitempty" description:"实际开始时间" format:"timestamp_ms"`
+	FinishDate      *int64   `json:"finish_date,omitempty" description:"实际结束时间" format:"timestamp_ms"`
+	Description     string   `json:"description" description:"待办描述"`
+	Source          string   `json:"source" description:"待办来源"`
+	SourceID        string   `json:"source_id" description:"来源业务 ID"`
+	BizTag          string   `json:"biz_tag" description:"业务标识"`
+	ParentID        *string  `json:"parent_id,omitempty" description:"父任务 ID"`
+	IsMultiExecutor bool     `json:"is_multi_executor" description:"是否多执行者待办"`
+	SceneType       string   `json:"scene_type" description:"待办场景类型"`
+	CreateTime      int64    `json:"create_time" description:"待办创建时间" format:"timestamp_ms"`
+	UpdateTime      int64    `json:"update_time" description:"待办更新时间" format:"timestamp_ms"`
+}
+
+type TodoTaskDeletedOutput struct {
+	Type        string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string `json:"subscribe_id" description:"订阅 ID"`
+	TaskID      string `json:"task_id" description:"待办任务 ID"`
+	Subject     string `json:"subject" description:"被删除的待办标题"`
+	CreatorID   string `json:"creator_id" description:"创建者 staffId"`
+	CreateTime  int64  `json:"create_time" description:"待办创建时间" format:"timestamp_ms"`
+	DeleteTime  int64  `json:"delete_time" description:"待办删除时间" format:"timestamp_ms"`
+}
+
 type GroupMemberEventOutput struct {
 	Type                   string                   `json:"type" description:"事件类型，固定为当前 event_key"`
 	EventID                string                   `json:"event_id" description:"事件 ID，可用于去重"`
@@ -345,6 +411,35 @@ type personalOAApprovalBody struct {
 	Result            string `json:"result"`
 	CreateTime        int64  `json:"createTime"`
 	FinishTime        int64  `json:"finishTime"`
+}
+
+type personalTodoPayload struct {
+	Body personalTodoBody `json:"body"`
+}
+
+type personalTodoBody struct {
+	TaskID          string   `json:"taskId"`
+	Subject         string   `json:"subject"`
+	CreatorID       string   `json:"creatorId"`
+	ExecutorIDs     []string `json:"executorIds"`
+	ParticipantIDs  []string `json:"participantIds"`
+	Priority        int64    `json:"priority"`
+	StatusStage     int64    `json:"statusStage"`
+	OldStatusStage  int64    `json:"oldStatusStage"`
+	PlanStartDate   *int64   `json:"planStartDate"`
+	PlanFinishDate  *int64   `json:"planFinishDate"`
+	StartDate       *int64   `json:"startDate"`
+	FinishDate      *int64   `json:"finishDate"`
+	Description     string   `json:"description"`
+	Source          string   `json:"source"`
+	SourceID        string   `json:"sourceId"`
+	BizTag          string   `json:"bizTag"`
+	ParentID        *string  `json:"parentId"`
+	IsMultiExecutor bool     `json:"isMultiExecutor"`
+	SceneType       string   `json:"sceneType"`
+	CreateTime      int64    `json:"createTime"`
+	UpdateTime      int64    `json:"updateTime"`
+	DeleteTime      int64    `json:"deleteTime"`
 }
 
 func (b *personalReactionBody) UnmarshalJSON(data []byte) error {
@@ -473,8 +568,91 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		}, nil
 	case isOAEvent(eventType):
 		return projectOAApprovalEvent(ev, base, data.Payload)
+	case isTodoEvent(eventType):
+		return projectTodoEvent(ev, base, data.Payload)
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
+	}
+}
+
+func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalTodoPayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return ev, fmt.Errorf("decode personal Todo payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Body.TaskID) == "" {
+		return ev, fmt.Errorf("decode personal Todo payload: taskId is required")
+	}
+
+	switch base.Type {
+	case EventTodoTaskCreated:
+		return TodoTaskCreatedOutput{
+			Type:            base.Type,
+			EventID:         base.EventID,
+			Timestamp:       base.Timestamp,
+			SubscribeID:     base.SubscribeID,
+			TaskID:          payload.Body.TaskID,
+			Subject:         payload.Body.Subject,
+			CreatorID:       payload.Body.CreatorID,
+			ExecutorIDs:     payload.Body.ExecutorIDs,
+			ParticipantIDs:  payload.Body.ParticipantIDs,
+			Priority:        payload.Body.Priority,
+			StatusStage:     payload.Body.StatusStage,
+			PlanStartDate:   payload.Body.PlanStartDate,
+			PlanFinishDate:  payload.Body.PlanFinishDate,
+			StartDate:       payload.Body.StartDate,
+			FinishDate:      payload.Body.FinishDate,
+			Description:     payload.Body.Description,
+			Source:          payload.Body.Source,
+			SourceID:        payload.Body.SourceID,
+			BizTag:          payload.Body.BizTag,
+			ParentID:        payload.Body.ParentID,
+			IsMultiExecutor: payload.Body.IsMultiExecutor,
+			SceneType:       payload.Body.SceneType,
+			CreateTime:      payload.Body.CreateTime,
+		}, nil
+	case EventTodoTaskUpdated:
+		return TodoTaskUpdatedOutput{
+			Type:            base.Type,
+			EventID:         base.EventID,
+			Timestamp:       base.Timestamp,
+			SubscribeID:     base.SubscribeID,
+			TaskID:          payload.Body.TaskID,
+			Subject:         payload.Body.Subject,
+			CreatorID:       payload.Body.CreatorID,
+			ExecutorIDs:     payload.Body.ExecutorIDs,
+			ParticipantIDs:  payload.Body.ParticipantIDs,
+			Priority:        payload.Body.Priority,
+			StatusStage:     payload.Body.StatusStage,
+			OldStatusStage:  payload.Body.OldStatusStage,
+			PlanStartDate:   payload.Body.PlanStartDate,
+			PlanFinishDate:  payload.Body.PlanFinishDate,
+			StartDate:       payload.Body.StartDate,
+			FinishDate:      payload.Body.FinishDate,
+			Description:     payload.Body.Description,
+			Source:          payload.Body.Source,
+			SourceID:        payload.Body.SourceID,
+			BizTag:          payload.Body.BizTag,
+			ParentID:        payload.Body.ParentID,
+			IsMultiExecutor: payload.Body.IsMultiExecutor,
+			SceneType:       payload.Body.SceneType,
+			CreateTime:      payload.Body.CreateTime,
+			UpdateTime:      payload.Body.UpdateTime,
+		}, nil
+	case EventTodoTaskDeleted:
+		return TodoTaskDeletedOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			TaskID:      payload.Body.TaskID,
+			Subject:     payload.Body.Subject,
+			CreatorID:   payload.Body.CreatorID,
+			CreateTime:  payload.Body.CreateTime,
+			DeleteTime:  payload.Body.DeleteTime,
+		}, nil
+	default:
+		return ev, fmt.Errorf("unsupported personal Todo event type %q", base.Type)
 	}
 }
 
@@ -903,6 +1081,12 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(OAApprovalInstanceTerminatedOutput{})
 	case eventKey == EventOAApprovalInstanceFinished:
 		return reflect.TypeOf(OAApprovalInstanceFinishedOutput{})
+	case eventKey == EventTodoTaskCreated:
+		return reflect.TypeOf(TodoTaskCreatedOutput{})
+	case eventKey == EventTodoTaskUpdated:
+		return reflect.TypeOf(TodoTaskUpdatedOutput{})
+	case eventKey == EventTodoTaskDeleted:
+		return reflect.TypeOf(TodoTaskDeletedOutput{})
 	default:
 		return reflect.TypeOf(baseEventOutput{})
 	}
@@ -937,6 +1121,12 @@ func isOAEvent(eventKey string) bool {
 		eventKey == EventOAApprovalInstanceCC ||
 		eventKey == EventOAApprovalInstanceTerminated ||
 		eventKey == EventOAApprovalInstanceFinished
+}
+
+func isTodoEvent(eventKey string) bool {
+	return eventKey == EventTodoTaskCreated ||
+		eventKey == EventTodoTaskUpdated ||
+		eventKey == EventTodoTaskDeleted
 }
 
 func isOAApprovalTaskEvent(eventKey string) bool {

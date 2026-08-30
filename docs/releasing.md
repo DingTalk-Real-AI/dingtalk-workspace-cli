@@ -140,8 +140,13 @@ dws-release v1.2.3 --from-beta v1.2.3-beta.1
 `.changes/<unique-name>.md` 中增加一个独立 fragment；格式和允许的分类见
 [`.changes/README.md`](../.changes/README.md)。预发封板时
 `scripts/release/prepare-changelog.sh prerelease <version>` 会稳定排序并汇总所有未归档
-fragment，写入唯一版本章节后移动到 `.changes/released/<version>/`。因此并发 PR 不会争用
-`CHANGELOG.md`；唯一的 release-seal PR 同时提交生成的章节与归档移动，供审计复核。
+fragment，写入唯一版本章节后移动到 `.changes/released/<version>/`。如果 beta 发布后又有
+带 fragment 的 PR 合入，而维护者决定直接发布 stable，
+`scripts/release/prepare-changelog.sh stable <version> --from-beta <tag>` 会保留 beta 晋级摘要
+模板，并把这些 post-beta fragments 写到明确的 `Changes since <beta>` 边界之后，再移动到
+`.changes/released/<stable-version>/`。没有 active fragment 时，stable 仍只生成原有晋级摘要
+模板。因此并发 PR 不会争用 `CHANGELOG.md`；唯一的 release-seal PR 同时提交生成的章节与
+归档移动，供审计复核。
 
 ## CI/CD 保证
 

@@ -239,14 +239,14 @@
 
 ### DDAttachment（附件控件）
 
-> **[注意] 当前暂不支持通过 CLI 提交附件控件。** 附件控件的 value 需要包含 spaceId、fileName、fileSize、fileType 和 fileId 字段，这些字段需要通过调用钉盘的上传附件接口获取，CLI 尚未封装此流程。包含附件控件的审批模板请在钉钉客户端操作。
+> **[支持] 已支持通过 CLI 提交附件控件。** 采用两步流程：先用 `dws oa approval attachment upload --file <path>` 上传本地文件，获取 spaceId、fileName、fileSize、fileType、fileId；再将这些字段组装为 DDAttachment value（JSON 数组转义字符串）随 `create-instance` 提交。
 
 | 属性 | 说明 |
 |------|------|
 | `componentName` | `DDAttachment` |
 | value 格式 | JSON 数组转义字符串，每个元素包含 spaceId、fileName、fileSize、fileType、fileId |
 | 示例（参考） | `"[{\"spaceId\":\"163xxx\",\"fileName\":\"2644.JPG\",\"fileSize\":\"333\",\"fileType\":\"jpg\",\"fileId\":\"643xxx\"}]"` |
-| 约束 | **当前不支持通过 CLI 提交**；各字段需通过钉盘上传附件接口获取 |
+| 约束 | **支持通过 CLI 提交**；先用 `dws oa approval attachment upload --file <path>` 获取 spaceId、fileName、fileSize、fileType、fileId，再组装为 value 随 `create-instance` 提交 |
 
 ### StarRatingField（评分控件）
 
@@ -328,7 +328,6 @@
 | 流水号 | `SeqNumberField` | 由系统自动生成 |
 | OCR 文本识别 | `OcrTextField` | 需要客户端 OCR 交互 |
 | OCR 身份证识别 | `OcrIdCardField` | 需要客户端 OCR 交互 |
-| 附件控件 | `DDAttachment` | value 需要 spaceId、fileName、fileSize、fileType、fileId，须通过钉盘上传接口获取，CLI 尚未封装 |
 
 > **部分支持的控件：** `DDPhotoField`（图片控件）**支持通过 URL 直接提交**，但不支持本地文件上传（CLI 未封装钉盘 CDN 上传流程）。若用户只有本地文件，需告知在钉钉客户端补充。详见本文 [DDPhotoField](#ddphotofield图片控件) 章节。
 

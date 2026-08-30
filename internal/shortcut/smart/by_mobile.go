@@ -14,23 +14,19 @@
 package smart
 
 import (
-	"fmt"
-	"strconv"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 // ByMobile: find a person by phone number and return their full profile in one
 // step.
 //
-// Steps: look the mobile up via search_user_by_mobile → resolve to a userId
-// (error clearly if nobody is bound to that number) → fetch full detail via
-// get_user_info_by_user_ids. Replaces `contact user search-mobile` (copy the
-// userId) → `contact user get --ids <id>`.
+// Steps: resolve the number through the dedicated exact-mobile interface →
+// fetch the same stable userId's full detail. The detail endpoint does not
+// expose mobile under every permission profile, so identity is bound to the
+// dedicated lookup result rather than inferred from keyword search.
 //
 //	dws contact +by-mobile --mobile 13800138000
 var ByMobile = shortcut.Shortcut{
@@ -67,7 +63,11 @@ var ByMobile = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号", Required: true},
+		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号；--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"mobile"}, Description: "--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactSmartMobile(rt, "contact/by-mobile", "mobile")
 	},
 	Tips: []string{`dws contact +by-mobile --mobile 13800138000`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -76,83 +76,16 @@ var ByMobile = shortcut.Shortcut{
 		}
 		mobile := rt.Str("mobile")
 
-		// Step 1 — look up the userId bound to this mobile number.
-		// search_user_by_mobile takes {mobile} (see helpers.contact
-		// search-mobile). The gateway shape is not guaranteed, so probe common
-		// containers/field names defensively.
-		data, err := rt.CallMCPData("contact", "search_user_by_mobile", map[string]any{
-			"mobile": mobile,
-		})
+		// Step 1 — resolve the mobile through the dedicated exact interface.
+		_, profile, err := strictResolveContactUserByMobile(rt, mobile)
 		if err != nil {
 			return err
 		}
-		userID := byMobileExtractUserID(data)
-		if userID == "" {
-			return apperrors.NewValidation(
-				fmt.Sprintf("没找到绑定手机号 %q 的用户；确认号码正确、且该人在当前组织通讯录中。", mobile))
-		}
-
-		// Step 2 — fetch and print the full profile of the resolved user.
-		// get_user_info_by_user_ids takes {user_id_list} (see helpers.contact
-		// user get).
-		return rt.CallMCP("get_user_info_by_user_ids", map[string]any{
-			"user_id_list": []string{userID},
-		})
+		return rt.Output(map[string]any{"profile": profile})
 	},
 }
 
-// byMobileExtractUserID pulls a single userId out of a search_user_by_mobile
-// response. The exact shape is not contractually fixed, so it probes a few
-// likely containers (top-level, result, data, user) and field names
-// (userId/userid/user_id), tolerating both string and numeric encodings.
-func byMobileExtractUserID(data map[string]any) string {
-	if data == nil {
-		return ""
-	}
-	if id := byMobileUserIDFromMap(data); id != "" {
-		return id
-	}
-	for _, key := range []string{"result", "data", "user", "userInfo"} {
-		switch v := data[key].(type) {
-		case map[string]any:
-			if id := byMobileUserIDFromMap(v); id != "" {
-				return id
-			}
-		case []any:
-			for _, it := range v {
-				if m, ok := it.(map[string]any); ok {
-					if id := byMobileUserIDFromMap(m); id != "" {
-						return id
-					}
-				}
-			}
-		case string:
-			if v != "" {
-				return v
-			}
-		case float64:
-			return strconv.FormatInt(int64(v), 10)
-		}
-	}
-	return ""
-}
-
-func byMobileUserIDFromMap(m map[string]any) string {
-	for _, key := range []string{"userId", "userid", "user_id", "userID", "id"} {
-		switch v := m[key].(type) {
-		case string:
-			if v != "" && v != "0" {
-				return v
-			}
-		case float64:
-			if v != 0 {
-				return strconv.FormatInt(int64(v), 10)
-			}
-		}
-	}
-	return ""
-}
-
 func init() {
+	finalizeContactSmart(&ByMobile)
 	shortcut.Register(ByMobile)
 }
