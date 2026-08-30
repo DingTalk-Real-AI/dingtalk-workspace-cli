@@ -3439,8 +3439,8 @@ func newDriveCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(drivePublishGetCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
