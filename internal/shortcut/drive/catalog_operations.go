@@ -494,7 +494,16 @@ var Upload = shortcut.Shortcut{
 			return driveResponseError("drive/commit_upload", "readback_id_mismatch", fmt.Sprintf("上传后读回文件 ID %q 与提交 ID %q 不一致", remoteID, nodeID))
 		}
 		if remoteName := firstString(verified, "name", "fileName"); !driveReadbackNameMatches(verified, name) {
-			return driveResponseError("drive/commit_upload", "readback_mismatch", fmt.Sprintf("上传后读回名称 %q 与请求 %q 不一致", remoteName, name))
+			return driveResponseErrorWithDetails(
+				"drive/commit_upload",
+				"readback_mismatch",
+				fmt.Sprintf("上传后读回名称 %q 与请求 %q 不一致", remoteName, name),
+				map[string]any{"resource": map[string]any{
+					"resourceType": "file", "nodeId": nodeID,
+					"requestedName": name, "observedName": remoteName,
+					"sizeBytes": info.Size(), "ownership": "owned",
+				}},
+			)
 		}
 		remoteSize, ok := firstInt64(verified, "fileSize", "size", "byteSize", "length")
 		if !ok {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -182,12 +183,13 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 		committedID string
 		readback    string
 		want        string
+		wantReceipt bool
 	}{
-		{"missing remote id", "uploaded-2", `{"success":true,"result":{"name":"input.bin","fileSize":18}}`, "缺少文件 ID"},
-		{"mismatched remote id", "uploaded-3", `{"success":true,"result":{"fileId":"other","name":"input.bin","fileSize":18}}`, "与提交 ID"},
-		{"prefix-only remote name", "uploaded-4", `{"success":true,"result":{"fileId":"uploaded-4","name":"input.bin-old","fileSize":18}}`, "读回名称"},
-		{"missing remote size", "uploaded-5", `{"success":true,"result":{"fileId":"uploaded-5","name":"input.bin"}}`, "缺少有效文件大小"},
-		{"mismatched remote size", "uploaded-6", `{"success":true,"result":{"fileId":"uploaded-6","name":"input.bin","fileSize":17}}`, "与本地文件大小 18 不一致"},
+		{"missing remote id", "uploaded-2", `{"success":true,"result":{"name":"input.bin","fileSize":18}}`, "缺少文件 ID", false},
+		{"mismatched remote id", "uploaded-3", `{"success":true,"result":{"fileId":"other","name":"input.bin","fileSize":18}}`, "与提交 ID", false},
+		{"prefix-only remote name", "uploaded-4", `{"success":true,"result":{"fileId":"uploaded-4","name":"input.bin-old","fileSize":18}}`, "读回名称", true},
+		{"missing remote size", "uploaded-5", `{"success":true,"result":{"fileId":"uploaded-5","name":"input.bin"}}`, "缺少有效文件大小", false},
+		{"mismatched remote size", "uploaded-6", `{"success":true,"result":{"fileId":"uploaded-6","name":"input.bin","fileSize":17}}`, "与本地文件大小 18 不一致", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
@@ -197,6 +199,16 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 			err := runDriveCoverage(t, Upload, caller, "--file", "input.bin", "--yes")
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+			if tc.wantReceipt {
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) {
+					t.Fatalf("error = %T, want structured error", err)
+				}
+				resource, _ := typed.Details["resource"].(map[string]any)
+				if resource["nodeId"] != tc.committedID || resource["ownership"] != "owned" {
+					t.Fatalf("resource receipt = %#v", resource)
+				}
 			}
 		})
 	}
