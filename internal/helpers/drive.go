@@ -3334,8 +3334,8 @@ func newDriveCommand() *cobra.Command {
 			Description: "开启文件的互联网公开发布",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
-				Availability: "available",
-				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+				Availability: "unavailable",
+				Reason:       "Current ordinary-file and online-document fixtures return operation.notSupported; keep CLI compatibility but exclude Agent selection until a reviewed eligible-node set→get→unset canary passes.",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "开启文件的互联网公开发布",

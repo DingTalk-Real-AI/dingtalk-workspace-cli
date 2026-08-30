@@ -388,7 +388,7 @@ func publishMutationShortcut(command string, published bool) shortcut.Shortcut {
 	if published {
 		flags = append(flags, shortcut.Flag{Name: "permission", Type: shortcut.FlagString, Default: "DOWNLOADER", Desc: "公开权限", Enum: []string{"READER", "DOWNLOADER", "EDITOR"}})
 	}
-	return shortcut.Shortcut{
+	result := shortcut.Shortcut{
 		Service: "drive", Command: command, Product: "drive", Description: description, Intent: useWhen,
 		Risk: shortcut.RiskHighWrite, Safety: contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 		Contract: driveContract(command, description, useWhen,
@@ -424,6 +424,11 @@ func publishMutationShortcut(command string, published bool) shortcut.Shortcut {
 			return rt.Output(map[string]any{"success": true, "nodeId": rt.Str("node"), "publish": verified})
 		},
 	}
+	if published {
+		result.Contract.Interface.Availability = contract.InterfaceUnavailable
+		result.Contract.Interface.Reason = "Current ordinary-file and online-document fixtures return operation.notSupported; keep CLI compatibility but exclude Agent selection until a reviewed eligible-node set→get→unset canary passes."
+	}
+	return result
 }
 
 func boolField(data map[string]any, keys ...string) (bool, bool) {
