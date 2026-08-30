@@ -1102,6 +1102,7 @@ func TestCrossPlatformCoverageAtomicThreadQuoteGuardRejectsConversationFailuresA
 		wantReason string
 	}{
 		{name: "invalid response", response: `<html>bad gateway</html>`, wantReason: "topic_quote_guard_unavailable"},
+		{name: "unparseable convThreadEnabled", response: `{"result":{"convThreadEnabled":"maybe"}}`, wantReason: "topic_quote_guard_unavailable"},
 		{name: "topic conversation", response: `{"result":{"convThreadEnabled":true}}`, wantReason: "topic_quote_reply_disabled"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -1123,20 +1124,21 @@ func TestCrossPlatformCoverageAtomicThreadQuoteGuardRejectsConversationFailuresA
 	}
 }
 
-func TestCrossPlatformCoverageAtomicThreadQuoteGuardFailsClosedWithoutConversationState(t *testing.T) {
+func TestCrossPlatformCoverageAtomicThreadQuoteGuardAllowsWhenConversationOmitsTopicState(t *testing.T) {
+	// 网关对普通会话不返回 convThreadEnabled（字段仅话题圈会话才有），
+	// 字段缺失应按非话题放行，否则普通群的引用回复会被整体误拦。
 	caller := &chatThreadCaller{responses: map[string]string{
 		"im/list_messages_by_ids":    `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"cid"}]}}`,
 		"chat/get_conversation_info": `{"result":{"openConversationId":"cid"}}`,
 	}}
-	err := executeAtomicThreadCommand(t, caller,
+	if err := executeAtomicThreadCommand(t, caller,
 		"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "message-1",
-		"--ref-sender", "DAAAAAAAAAAAiE", "--text", "普通引用")
-	var typed *apperrors.Error
-	if err == nil || !errors.As(err, &typed) || typed.Reason != "topic_quote_guard_unavailable" {
-		t.Fatalf("error = %v", err)
+		"--ref-sender", "DAAAAAAAAAAAiE", "--text", "普通引用"); err != nil {
+		t.Fatal(err)
 	}
-	if len(caller.calls) != 2 || caller.calls[1].tool != "get_conversation_info" {
-		t.Fatalf("quote guard reached write: %#v", caller.calls)
+	if len(caller.calls) != 3 || caller.calls[0].tool != "list_messages_by_ids" ||
+		caller.calls[1].tool != "get_conversation_info" || caller.calls[2].tool != "send_personal_message" {
+		t.Fatalf("quote guard calls = %#v", caller.calls)
 	}
 }
 
@@ -1449,6 +1451,9 @@ func TestCrossPlatformCoverageDetectTopicContainerState(t *testing.T) {
 		{name: "nested array", value: []any{map[string]any{"convThreadEnabled": true}}, want: topicContainerTopic},
 		{name: "topic group", value: map[string]any{"topicGroup": "1"}, want: topicContainerTopic},
 		{name: "is topic group false", value: map[string]any{"isTopicGroup": false}, want: topicContainerNonTopic},
+		{name: "no topic fields", value: map[string]any{"openConversationId": "cid"}, want: topicContainerNonTopic},
+		{name: "empty object", value: map[string]any{}, want: topicContainerNonTopic},
+		{name: "nil", value: nil, want: topicContainerNonTopic},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if got := detectTopicContainerState(test.value); got != test.want {

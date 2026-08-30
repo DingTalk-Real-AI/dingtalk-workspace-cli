@@ -1116,7 +1116,7 @@ func guardTopicQuoteReply(cmd *cobra.Command, openConversationID, openMessageID 
 	case topicContainerTopic:
 		return topicQuoteReplyDisabledError()
 	case topicContainerUnknown:
-		return topicQuoteGuardUnavailable("chat/get_conversation_info", "会话信息未明确返回 convThreadEnabled，无法确认引用回复目标是否属于话题圈，已阻止发送")
+		return topicQuoteGuardUnavailable("chat/get_conversation_info", "会话信息返回的 convThreadEnabled 取值无法解析，无法确认引用回复目标是否属于话题圈，已阻止发送")
 	}
 	return nil
 }
@@ -1148,7 +1148,6 @@ const (
 )
 
 func detectTopicContainerState(value any) topicContainerState {
-	sawFalse := false
 	sawInvalid := false
 	var visit func(any) bool
 	visit = func(current any) bool {
@@ -1166,13 +1165,11 @@ func detectTopicContainerState(value any) topicContainerState {
 					if enabled {
 						return true
 					}
-					sawFalse = true
 				case string:
 					switch strings.ToLower(strings.TrimSpace(enabled)) {
 					case "true", "1":
 						return true
 					case "false", "0":
-						sawFalse = true
 					default:
 						sawInvalid = true
 					}
@@ -1192,10 +1189,12 @@ func detectTopicContainerState(value any) topicContainerState {
 	if visit(value) {
 		return topicContainerTopic
 	}
-	if sawFalse && !sawInvalid {
-		return topicContainerNonTopic
+	if sawInvalid {
+		return topicContainerUnknown
 	}
-	return topicContainerUnknown
+	// 网关仅对开启话题圈的会话返回 convThreadEnabled / topicGroup / isTopicGroup，
+	// 普通会话整个字段缺失：缺失按非话题处理，只有取值存在但无法解析时才视为无法判定。
+	return topicContainerNonTopic
 }
 
 func topicQuoteGuardUnavailable(operation, message string) error {
