@@ -74,3 +74,85 @@ func TestOAApprovalDualModeConstraintsReachEmbeddedSchema(t *testing.T) {
 		t.Errorf("create-instance confirmation = %q, want user_required", got)
 	}
 }
+
+func TestOAApprovalListMCPContractsReachEmbeddedSchema(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	common := map[string]string{
+		"page":               "pageNumber",
+		"limit":              "pageSize",
+		"query":              "query",
+		"process-code":       "processCode",
+		"originator-user-id": "originatorUserId",
+		"create-time-from":   "createTimeFrom",
+		"create-time-to":     "createTimeTo",
+		"finish-time-from":   "finishTimeFrom",
+		"finish-time-to":     "finishTimeTo",
+	}
+	tests := []struct {
+		canonical string
+		rpc       string
+		extra     map[string]string
+		retired   []string
+	}{
+		{canonical: "oa.get_todo_tasks", rpc: "get_todo_tasks", extra: map[string]string{"create-before": "createBefore"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.get_done_tasks", rpc: "get_done_tasks", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.get_submitted_instances", rpc: "get_submitted_instances", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.get_noticed_instances", rpc: "get_noticed_instances", extra: map[string]string{"unread-only": "unreadOnly"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_pending", rpc: "get_todo_tasks", extra: map[string]string{"create-before": "createBefore"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_executed", rpc: "get_done_tasks", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_submitted", rpc: "get_submitted_instances", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_cc", rpc: "get_noticed_instances", extra: map[string]string{"unread-only": "unreadOnly"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.canonical, func(t *testing.T) {
+			tool, ok := tools[test.canonical]
+			if !ok {
+				t.Fatalf("missing Schema tool %s", test.canonical)
+			}
+			if !strings.HasPrefix(test.canonical, "oa.shortcut_") {
+				interfaceRef := schemaInterfaceObject(tool["interface_ref"])
+				if got := schemaContractString(interfaceRef["product_id"]); got != "oa" {
+					t.Errorf("interface product_id = %q, want oa", got)
+				}
+				if got := schemaContractString(interfaceRef["rpc_name"]); got != test.rpc {
+					t.Errorf("interface rpc_name = %q, want %q", got, test.rpc)
+				}
+			}
+
+			parameters := schemaContractMap(tool["parameters"])
+			for name, property := range common {
+				if got := schemaContractString(parameters[name]["property"]); got != property {
+					t.Errorf("--%s property = %q, want %q", name, got, property)
+				}
+			}
+			for name, property := range test.extra {
+				if got := schemaContractString(parameters[name]["property"]); got != property {
+					t.Errorf("--%s property = %q, want %q", name, got, property)
+				}
+			}
+			for _, name := range test.retired {
+				if _, exists := parameters[name]; exists {
+					t.Errorf("retired --%s remains in Schema", name)
+				}
+			}
+			for _, name := range []string{"page", "limit"} {
+				if got := schemaContractString(parameters[name]["type"]); got != "integer" {
+					t.Errorf("--%s type = %q, want integer", name, got)
+				}
+			}
+			if test.rpc == "get_noticed_instances" {
+				if got := schemaContractString(parameters["unread-only"]["type"]); got != "boolean" {
+					t.Errorf("--unread-only type = %q, want boolean", got)
+				}
+			}
+		})
+	}
+
+	if _, exists := tools["oa.list_pending_approvals"]; exists {
+		t.Fatal("retired oa.list_pending_approvals remains in embedded Schema")
+	}
+	if NewRootCommand().PersistentFlags().Lookup("profile") == nil {
+		t.Fatal("global --profile flag is no longer registered")
+	}
+}

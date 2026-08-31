@@ -7,19 +7,24 @@
 Usage:
   dws oa approval list-pending [flags]
 Example:
-  dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00"
-  dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --query 关键词
+  dws oa approval list-pending --create-time-from 2026-03-10 --create-time-to 2026-03-31
+  dws oa approval list-pending --query 关键词 --process-code <code> --page 1 --limit 20
 Flags:
-      --end string   结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
-      --page string  分页页码 (可选)
-      --limit string  每页大小 (可选)
-      --start string 开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
-      --query string  关键字搜索 (可选)
-
-**默认时间窗口：** 当用户未指定 --start / --end 时，默认查询最近 30 天的待处理审批。
+      --page int                       分页页码（默认 1）
+      --limit int                      每页大小（默认 20，最大 100）
+      --query string                   关键字搜索
+      --process-code string            审批模板 code
+      --originator-user-id string      审批单发起人 userId
+      --create-time-from string        发起时间起始（yyyy-MM-dd）
+      --create-time-to string          发起时间截止（yyyy-MM-dd，含当日）
+      --finish-time-from string        完成时间起始（yyyy-MM-dd）
+      --finish-time-to string          完成时间截止（yyyy-MM-dd，含当日）
+      --create-before string           创建时间
 
 > **IMPORTANT:** 当 `list-pending` 返回空时，必须明确告知用户"当前暂无待处理审批"，并建议扩大时间范围或检查关键词。
 ```
+
+以上四类个人审批列表均使用当前登录身份；切换账号请使用全局 `--profile`，不支持通过 `--user-id` 覆盖当前用户。
 
 ### 获取审批实例详情
 ```
@@ -637,9 +642,11 @@ Usage:
 Example:
   dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词
 Flags:
-      --page string   分页页码，可选，默认是 1
-      --limit string   分页大小，可选，默认是 20
-      --query string   查询关键词，可选
+      --page int / --limit int / --query string
+      --process-code / --originator-user-id string
+      --process-instance-status string
+      --create-time-from / --create-time-to string（yyyy-MM-dd）
+      --finish-time-from / --finish-time-to string（yyyy-MM-dd）
 ```
 ### 查询我已经提交的审批单
 ```
@@ -648,9 +655,11 @@ Usage:
 Example:
   dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词
 Flags:
-      --page string   分页页码，可选，默认是 1
-      --limit string   分页大小，可选，默认是 20
-      --query string   查询关键词，可选
+      --page int / --limit int / --query string
+      --process-code / --originator-user-id string
+      --process-instance-status string
+      --create-time-from / --create-time-to string（yyyy-MM-dd）
+      --finish-time-from / --finish-time-to string（yyyy-MM-dd）
 ```
 ### 查询抄送我的审批单
 ```
@@ -659,9 +668,11 @@ Usage:
 Example:
   dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词
 Flags:
-      --page string   分页页码，可选，默认是 1
-      --limit string   分页大小，可选，默认是 20
-      --query string   查询关键词，可选
+      --page int / --limit int / --query string
+      --process-code / --originator-user-id string
+      --create-time-from / --create-time-to string（yyyy-MM-dd）
+      --finish-time-from / --finish-time-to string（yyyy-MM-dd）
+      --unread-only bool                仅查询未读抄送审批
 ```
 
 ### 以管理员身份查询审批实例列表
@@ -826,7 +837,7 @@ Flags:
 
 ```bash
 # 1. 查看待我处理的审批 — 提取 processInstanceId
-dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --format json
+dws oa approval list-pending --create-time-from 2026-03-10 --create-time-to 2026-03-10 --format json
 
 # 2. 查看审批详情 — 了解审批内容
 dws oa approval detail --instance-id <processInstanceId> --format json
@@ -938,8 +949,8 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 
 ## 注意事项
 
-- `--start` / `--end` 使用 ISO-8601 格式（如 2026-03-10T00:00:00+08:00）
-- `list-pending` 默认时间窗口为最近 30 天；若用户未指定 `--start` / `--end`，自动使用当前时间往前推 7 天
+- `list-pending` 使用 `--create-time-from/to`、`--finish-time-from/to` 日期筛选，格式为 `yyyy-MM-dd`；不再接受旧 `--start` / `--end`
+- `list-initiated` / `list-by-admin` 的 `--start` / `--end` 仍使用 ISO-8601 格式（如 2026-03-10T00:00:00+08:00）
 - `list-pending` 返回空时必须明确告知用户"当前暂无待处理审批"，不得沉默或跳过
 - `approve` / `reject` / `redirect-task` / `append-task` / `revert-task` 需先通过 `tasks` 获取 `taskId`
 - `redirect-task` 的 `--to-actioner-id` 可通过 `dws aisearch person` 获取目标用户 userId

@@ -687,6 +687,6 @@ var reviewedSchemaParameterBindingRemovals = map[string]schemaParameterBindingRe
 	"contact.get_dept_members_by_deptId --ids":          {Reason: "The public flag was renamed from --ids to the unambiguous --depts spelling; successor binding retired to ParamDecl.Property on the owning leaf (Track 1 Phase 2).", Reviewed: true},
 	"contact.get_sub_depts_by_dept_id --id":             {Reason: "The public flag was renamed from --id to the unambiguous --dept spelling; successor binding retired to ParamDecl.Property on the owning leaf (Track 1 Phase 2).", Reviewed: true},
 	"minutes.query_user_tag_list --limit":               {Reason: "The current helper and pinned interface have no pagination input.", Reviewed: true},
-	"oa.list_pending_approvals --size":                  {Reason: "The public pagination flag was normalized from --size to --limit; successor binding retired to ParamDecl.Property on the owning leaf (Track 1 Phase 2).", Reviewed: true},
+	"oa.get_todo_tasks --size":                          {Reason: "The public pagination flag was normalized from --size to --limit; successor binding retired to ParamDecl.Property on the owning leaf (Track 1 Phase 2).", Reviewed: true},
 	"oa.list_user_visible_process --size":               {Reason: "The public pagination flag was normalized from --size to --limit; successor binding retired to ParamDecl.Property on the owning leaf (Track 1 Phase 2).", Reviewed: true},
 }
