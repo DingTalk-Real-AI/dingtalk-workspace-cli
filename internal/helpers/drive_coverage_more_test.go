@@ -7,9 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +34,13 @@ func executeDriveEdge(t *testing.T, caller *scriptedToolCaller, args ...string) 
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "drive"}, args...)
-	return root.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func TestCrossPlatformCoverageParseDriveUploadInfoRemainingCoverage(t *testing.T) {
@@ -356,5 +364,288 @@ func TestCrossPlatformCoverageDriveSmallHelperEdges(t *testing.T) {
 	}
 	if err := runDriveUpload(cmd, nil); err == nil {
 		t.Fatal("directory upload returned nil")
+	}
+}
+
+// TestCrossPlatformCoverageUploadToDocSpaceStep1Args asserts that
+// uploadToDocSpace unconditionally populates name and fileSize in the
+// get_file_upload_info step1 args, aligning with uploadToDrive and
+// pushUploadWithTransport. This enables delegation-auth strong validation
+// of fileName on the server side.
+func TestCrossPlatformCoverageUploadToDocSpaceStep1Args(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "note.md")
+	if err := os.WriteFile(file, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uploadPayload := `{"resourceUrl":"https://upload.test/obj","uploadKey":"k1"}`
+
+	t.Run("folder mode includes name and fileSize", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: uploadPayload},
+			{text: `{"created":true}`},
+		}}
+		old := httpPutFile
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		t.Cleanup(func() { httpPutFile = old })
+		if err := executeDriveEdge(t, caller, "upload", "--file", file, "--workspace", "ws-1", "--folder", "f1"); err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.argsLog) < 2 {
+			t.Fatalf("expected 2 calls, got %d", len(caller.argsLog))
+		}
+		wantStep1 := map[string]any{
+			"name":        "note.md",
+			"fileSize":    float64(5),
+			"workspaceId": "ws-1",
+			"folderId":    "f1",
+		}
+		if !reflect.DeepEqual(caller.argsLog[0], wantStep1) {
+			t.Fatalf("folder mode step1 args = %#v, want %#v", caller.argsLog[0], wantStep1)
+		}
+	})
+
+	t.Run("overwrite mode includes name and fileSize", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: uploadPayload},
+			{text: `{"updated":true}`},
+		}}
+		old := httpPutFile
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		t.Cleanup(func() { httpPutFile = old })
+		if err := executeDriveEdge(t, caller, "upload", "--file", file, "--workspace", "ws-1", "--node", "n1", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.argsLog) < 2 {
+			t.Fatalf("expected 2 calls, got %d", len(caller.argsLog))
+		}
+		wantStep1 := map[string]any{
+			"name":            "note.md",
+			"fileSize":        float64(5),
+			"workspaceId":     "ws-1",
+			"overwriteNodeId": "n1",
+		}
+		if !reflect.DeepEqual(caller.argsLog[0], wantStep1) {
+			t.Fatalf("overwrite mode step1 args = %#v, want %#v", caller.argsLog[0], wantStep1)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Upload dry-run delegation-precheck coverage — merged from the former
+// drive_upload_delegation_dry_run_test.go (kept here per single-file rule).
+// ---------------------------------------------------------------------------
+
+// The upload leaf commands (drive upload, drive upload --workspace, doc upload)
+// fast-return a dry-run preview before reaching deps.Caller.CallTool, so their
+// dry-run branches used to bypass the delegation-auth decorator — diverging
+// from the real execution which gates every business call through
+// check_capability. These tests verify markdownDryRunDelegationPrecheck now
+// gates every upload dry-run preview on check_capability when
+// --principal-user-id is set, targets the command's real first delegated call
+// carrying uploadActionParam{fileName,fileSize}, and stays a no-op otherwise.
+
+// runUploadDelegation installs a raw dry-run caller then executes the given
+// product group (drive/doc) through cobra so the group's PersistentPreRunE
+// wraps deps.Caller in the delegation-auth decorator exactly as the real CLI.
+func runUploadDelegation(t *testing.T, inner *docDelegationHelpersTestCaller, product *cobra.Command, args ...string) (*bytes.Buffer, error) {
+	t.Helper()
+	out, _ := installHelpersCoreDeps(t, inner)
+	err := executeMarkdownDriveCommand(t, product, nil, args...)
+	return out, err
+}
+
+// assertUploadDelegationCheck verifies check_capability fired once through the
+// dry-run read channel with the expected mcpToolKey and nodeId, carried the
+// uploadActionParam{fileName,fileSize}, and that no business CallTool
+// passthrough happened during dry-run.
+func assertUploadDelegationCheck(t *testing.T, inner *docDelegationHelpersTestCaller, wantToolKey, wantNodeID, wantFileName string, wantFileSize int64) {
+	t.Helper()
+	if len(inner.readCalls) != 1 {
+		t.Fatalf("readCalls = %d, want 1 check_capability via ReadTool", len(inner.readCalls))
+	}
+	rc := inner.readCalls[0]
+	if rc.server != capabilityServerID || rc.tool != checkCapTool {
+		t.Fatalf("check routed to %s.%s, want %s.%s", rc.server, rc.tool, capabilityServerID, checkCapTool)
+	}
+	if rc.args["mcpToolKey"] != wantToolKey {
+		t.Fatalf("mcpToolKey = %v, want %s", rc.args["mcpToolKey"], wantToolKey)
+	}
+	if rc.args["nodeId"] != wantNodeID {
+		t.Fatalf("nodeId = %v, want %s", rc.args["nodeId"], wantNodeID)
+	}
+	options, ok := rc.args["options"].(map[string]any)
+	if !ok {
+		t.Fatalf("options = %#v, want map with uploadActionParam", rc.args["options"])
+	}
+	up, ok := options["uploadActionParam"].(map[string]any)
+	if !ok {
+		t.Fatalf("uploadActionParam = %#v, want map", options["uploadActionParam"])
+	}
+	if up["fileName"] != wantFileName {
+		t.Fatalf("uploadActionParam.fileName = %v, want %s", up["fileName"], wantFileName)
+	}
+	if up["fileSize"] != wantFileSize {
+		t.Fatalf("uploadActionParam.fileSize = %v (%T), want %d", up["fileSize"], up["fileSize"], wantFileSize)
+	}
+	if len(inner.calls) != 0 {
+		t.Fatalf("calls = %d, want 0 (dry-run must not passthrough to CallTool)", len(inner.calls))
+	}
+}
+
+func newUploadDelegationInner(readResult string) *docDelegationHelpersTestCaller {
+	return &docDelegationHelpersTestCaller{
+		checkRes: textToolResult(readResult),
+		readRes:  textToolResult(readResult),
+	}
+}
+
+// TestCrossPlatformCoverageUploadDryRunDelegationAllowed covers both upload
+// paths: drive.get_upload_info and doc.get_file_upload_info (via drive
+// --workspace and via the doc upload compat command). Each should render the
+// preview and fire check_capability carrying uploadActionParam.
+func TestCrossPlatformCoverageUploadDryRunDelegationAllowed(t *testing.T) {
+	const content = "hello" // 5 bytes → fileSize int64(5)
+	file := writeMarkdownDriveFixture(t, "upload_fixture.md", content)
+
+	cases := []struct {
+		name        string
+		product     func() *cobra.Command
+		args        []string
+		toolKey     string
+		wantNode    string
+		wantPreview string
+	}{
+		{
+			name:        "drive upload to folder probes drive.get_upload_info",
+			product:     newDriveCommand,
+			args:        []string{"drive", "upload", "--file", file, "--folder", "f1", "--principal-user-id", "u1"},
+			toolKey:     "drive.get_upload_info",
+			wantNode:    "f1",
+			wantPreview: "dry_run",
+		},
+		{
+			name:        "drive upload --workspace probes doc.get_file_upload_info",
+			product:     newDriveCommand,
+			args:        []string{"drive", "upload", "--file", file, "--workspace", "w1", "--folder", "f1", "--principal-user-id", "u1"},
+			toolKey:     "doc.get_file_upload_info",
+			wantNode:    "f1",
+			wantPreview: "dry_run",
+		},
+		{
+			name:        "doc upload compat command probes doc.get_file_upload_info",
+			product:     newDocCommand,
+			args:        []string{"doc", "upload", "--file", file, "--folder", "f1", "--principal-user-id", "u1"},
+			toolKey:     "doc.get_file_upload_info",
+			wantNode:    "f1",
+			wantPreview: "上传文件到钉钉文档",
+		},
+		{
+			name:        "drive upload with --mime-type still probes drive.get_upload_info",
+			product:     newDriveCommand,
+			args:        []string{"drive", "upload", "--file", file, "--folder", "f1", "--mime-type", "application/pdf", "--principal-user-id", "u1"},
+			toolKey:     "drive.get_upload_info",
+			wantNode:    "f1",
+			wantPreview: "dry_run",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			inner := newUploadDelegationInner(markdownDelegationAllowed)
+			out, err := runUploadDelegation(t, inner, tc.product(), tc.args...)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			assertUploadDelegationCheck(t, inner, tc.toolKey, tc.wantNode, "upload_fixture.md", int64(len(content)))
+			if !strings.Contains(out.String(), tc.wantPreview) {
+				t.Fatalf("output = %q, want preview containing %q", out.String(), tc.wantPreview)
+			}
+		})
+	}
+}
+
+// TestCrossPlatformCoverageUploadDryRunDelegationDenied verifies a denied
+// principal suppresses the preview and surfaces the DELEGATION_AUTH_DENIED
+// error (exit code 1) for both upload paths.
+func TestCrossPlatformCoverageUploadDryRunDelegationDenied(t *testing.T) {
+	file := writeMarkdownDriveFixture(t, "upload_fixture.md", "hello")
+
+	cases := []struct {
+		name        string
+		product     func() *cobra.Command
+		args        []string
+		wantPreview string
+	}{
+		{
+			name:        "drive upload denied",
+			product:     newDriveCommand,
+			args:        []string{"drive", "upload", "--file", file, "--folder", "f1", "--principal-user-id", "u1"},
+			wantPreview: "dry_run",
+		},
+		{
+			name:        "doc upload denied",
+			product:     newDocCommand,
+			args:        []string{"doc", "upload", "--file", file, "--folder", "f1", "--principal-user-id", "u1"},
+			wantPreview: "上传文件到钉钉文档",
+		},
+		{
+			name:        "drive upload --workspace denied",
+			product:     newDriveCommand,
+			args:        []string{"drive", "upload", "--file", file, "--workspace", "w1", "--folder", "f1", "--principal-user-id", "u1"},
+			wantPreview: "上传文件到文档空间",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			inner := newUploadDelegationInner(markdownDelegationDenied)
+			out, err := runUploadDelegation(t, inner, tc.product(), tc.args...)
+			if err == nil || !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+				t.Fatalf("error = %v, want [DELEGATION_AUTH_DENIED] prefix", err)
+			}
+			if strings.Contains(out.String(), tc.wantPreview) {
+				t.Fatalf("output = %q, must not render preview on denial", out.String())
+			}
+		})
+	}
+}
+
+// TestCrossPlatformCoverageUploadDryRunNoPrincipal verifies that without
+// --principal-user-id the caller is never decorated, so no check_capability
+// fires and the preview renders normally for both upload paths.
+func TestCrossPlatformCoverageUploadDryRunNoPrincipal(t *testing.T) {
+	file := writeMarkdownDriveFixture(t, "upload_fixture.md", "hello")
+
+	cases := []struct {
+		name        string
+		product     func() *cobra.Command
+		args        []string
+		wantPreview string
+	}{
+		{
+			name:        "drive upload without principal",
+			product:     newDriveCommand,
+			args:        []string{"drive", "upload", "--file", file, "--folder", "f1"},
+			wantPreview: "dry_run",
+		},
+		{
+			name:        "doc upload without principal",
+			product:     newDocCommand,
+			args:        []string{"doc", "upload", "--file", file, "--folder", "f1"},
+			wantPreview: "上传文件到钉钉文档",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			inner := newUploadDelegationInner(markdownDelegationAllowed)
+			out, err := runUploadDelegation(t, inner, tc.product(), tc.args...)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if len(inner.readCalls) != 0 || len(inner.calls) != 0 {
+				t.Fatalf("readCalls=%d calls=%d, want 0/0 (no delegation without principal)", len(inner.readCalls), len(inner.calls))
+			}
+			if !strings.Contains(out.String(), tc.wantPreview) {
+				t.Fatalf("output = %q, want preview containing %q", out.String(), tc.wantPreview)
+			}
+		})
 	}
 }

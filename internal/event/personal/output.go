@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -222,6 +223,29 @@ type OAApprovalInstanceFinishedOutput struct {
 	EventTime         int64  `json:"event_time" description:"审批实例事件业务时间" format:"timestamp_ms"`
 }
 
+// VoIPCallReceiveInviteOutput is the stable business-facing output emitted
+// when the current user receives a VoIP call invitation. BizID is preserved
+// because it is the business event's retry-stable deduplication key.
+type VoIPCallReceiveInviteOutput struct {
+	Type         string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID      string `json:"event_id" description:"transport 事件 ID，可用于传输层去重"`
+	Timestamp    int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID  string `json:"subscribe_id" description:"订阅 ID"`
+	BizID        string `json:"biz_id" description:"业务事件唯一 ID；同一事件重试时保持不变，可用于业务去重"`
+	CorpID       string `json:"corp_id" description:"事件所属组织的 corpId"`
+	OrgID        int64  `json:"org_id" description:"事件所属组织 ID"`
+	TargetUID    int64  `json:"target_uid" description:"订阅并接收邀请的目标用户 UID"`
+	CallID       string `json:"call_id" description:"通话会话 ID"`
+	CallerUID    string `json:"caller_uid" description:"主叫用户标识，按上游协议保留字符串原值"`
+	CallerCorpID string `json:"caller_corp_id" description:"主叫用户所属组织 corpId"`
+	CalleeUID    string `json:"callee_uid" description:"被叫用户标识，按上游协议保留字符串原值"`
+	CalleeCorpID string `json:"callee_corp_id" description:"被叫用户所属组织 corpId"`
+	CallType     string `json:"call_type" description:"通话类型；值以服务端实际推送为准"`
+	RoomID       string `json:"room_id" description:"会议房间 ID"`
+	CreateTime   int64  `json:"create_time" description:"通话邀请创建时间" format:"timestamp_ms"`
+	EventTime    int64  `json:"event_time" description:"通话邀请事件业务时间" format:"timestamp_ms"`
+}
+
 type TodoTaskCreatedOutput struct {
 	Type            string   `json:"type" description:"事件类型，固定为当前 event_key"`
 	EventID         string   `json:"event_id" description:"事件 ID，可用于去重"`
@@ -311,6 +335,109 @@ type personalEventData struct {
 	OccurredAtMS int64           `json:"occurredAtMs"`
 	SubID        string          `json:"subId"`
 	Payload      json.RawMessage `json:"payload"`
+}
+
+var marshalPersonalTransportData = json.Marshal
+
+// ProjectTransportOutput preserves the transport envelope used by the default
+// non-flatten output mode while removing sensitive VoIP invitation fields.
+// Callers that explicitly opt into raw debugging bypass this projector.
+func ProjectTransportOutput(ev transport.Event) (any, error) {
+	data, err := decodePersonalEventData(ev.Data)
+	if err != nil {
+		if isVoIPEvent(ev.EventType) {
+			return baseEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+			}, fmt.Errorf("decode personal event data for safe transport output: %w", err)
+		}
+		return ev, nil
+	}
+
+	if !isVoIPEvent(ev.EventType) && !isVoIPEvent(data.EventKey) {
+		return ev, nil
+	}
+
+	sanitizedPayload, err := redactVoIPRoomCode(data.Payload)
+	if err != nil {
+		return baseEventOutput{
+			Type:        firstNonEmptyOutput(ev.EventType, data.EventKey),
+			EventID:     firstNonEmptyOutput(data.EventID, ev.EventID),
+			Timestamp:   firstNonZeroOutput(data.OccurredAtMS, ev.EventBornTime),
+			SubscribeID: firstNonEmptyOutput(ev.SubscribeID, data.SubID),
+		}, fmt.Errorf("redact personal VoIP payload for safe transport output: %w", err)
+	}
+	data.Payload = sanitizedPayload
+	encoded, err := marshalPersonalTransportData(data)
+	if err != nil {
+		return baseEventOutput{
+			Type:        firstNonEmptyOutput(ev.EventType, data.EventKey),
+			EventID:     firstNonEmptyOutput(data.EventID, ev.EventID),
+			Timestamp:   firstNonZeroOutput(data.OccurredAtMS, ev.EventBornTime),
+			SubscribeID: firstNonEmptyOutput(ev.SubscribeID, data.SubID),
+		}, fmt.Errorf("encode redacted personal VoIP transport data: %w", err)
+	}
+
+	safe := ev
+	safe.Data = string(encoded)
+	return safe, nil
+}
+
+func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, fmt.Errorf("payload is missing")
+	}
+
+	switch trimmed[0] {
+	case '{':
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &object); err != nil {
+			return nil, err
+		}
+		for key, value := range object {
+			normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
+			if normalized == "roomcode" {
+				delete(object, key)
+				continue
+			}
+			redacted, err := redactVoIPRoomCode(value)
+			if err != nil {
+				return nil, err
+			}
+			object[key] = redacted
+		}
+		return json.Marshal(object)
+	case '[':
+		var values []json.RawMessage
+		if err := json.Unmarshal(trimmed, &values); err != nil {
+			return nil, err
+		}
+		for i, value := range values {
+			redacted, err := redactVoIPRoomCode(value)
+			if err != nil {
+				return nil, err
+			}
+			values[i] = redacted
+		}
+		return json.Marshal(values)
+	default:
+		if !json.Valid(trimmed) {
+			return nil, fmt.Errorf("invalid JSON value")
+		}
+		return append(json.RawMessage(nil), trimmed...), nil
+	}
+}
+
+func firstNonZeroOutput(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 type personalMessagePayload struct {
@@ -413,6 +540,46 @@ type personalOAApprovalBody struct {
 	FinishTime        int64  `json:"finishTime"`
 }
 
+type personalVoIPCallReceiveInvitePayload struct {
+	BizID     string                            `json:"bizid"`
+	EventTime int64                             `json:"event_time"`
+	CorpID    string                            `json:"corpid"`
+	OrgID     int64                             `json:"orgId"`
+	UID       int64                             `json:"uid"`
+	Body      personalVoIPCallReceiveInviteBody `json:"body"`
+}
+
+type personalVoIPCallReceiveInviteBody struct {
+	CallID       string             `json:"callId"`
+	CallerUID    voIPUserIdentifier `json:"callerUid"`
+	CallerCorpID string             `json:"callerCorpId"`
+	CalleeUID    voIPUserIdentifier `json:"calleeUid"`
+	CalleeCorpID string             `json:"calleeCorpId"`
+	CallType     string             `json:"callType"`
+	RoomID       string             `json:"roomId"`
+	CreateTime   int64              `json:"createTime"`
+}
+
+// voIPUserIdentifier preserves the String contract introduced by the VoIP
+// provider while accepting legacy Long payloads during a rolling deployment.
+// The stable flattened output is always a string.
+type voIPUserIdentifier string
+
+func (id *voIPUserIdentifier) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err == nil {
+		*id = voIPUserIdentifier(value)
+		return nil
+	}
+
+	var legacy int64
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return fmt.Errorf("VoIP user identifier must be a string or legacy integer: %w", err)
+	}
+	*id = voIPUserIdentifier(strconv.FormatInt(legacy, 10))
+	return nil
+}
+
 type personalTodoPayload struct {
 	Body personalTodoBody `json:"body"`
 }
@@ -489,11 +656,20 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 }
 
 // ProjectOutput converts the transport envelope into the stable personal
-// event output. On malformed Data it returns the original envelope together
-// with an error; the formatter logs the warning and still emits that envelope.
+// event output. On malformed VoIP data it returns metadata-only output so
+// sensitive invitation fields cannot leak through the projection fallback;
+// legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
 	if err != nil {
+		if isVoIPEvent(ev.EventType) {
+			return baseEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+			}, fmt.Errorf("decode personal event data: %w", err)
+		}
 		return ev, fmt.Errorf("decode personal event data: %w", err)
 	}
 
@@ -568,11 +744,43 @@ func ProjectOutput(ev transport.Event) (any, error) {
 		}, nil
 	case isOAEvent(eventType):
 		return projectOAApprovalEvent(ev, base, data.Payload)
+	case isVoIPEvent(eventType):
+		return projectVoIPCallReceiveInviteEvent(base, data.Payload)
 	case isTodoEvent(eventType):
 		return projectTodoEvent(ev, base, data.Payload)
 	default:
 		return ev, fmt.Errorf("unsupported personal event type %q", eventType)
 	}
+}
+
+func projectVoIPCallReceiveInviteEvent(base baseEventOutput, raw json.RawMessage) (any, error) {
+	var payload personalVoIPCallReceiveInvitePayload
+	if err := decodeRequiredPayload(raw, &payload); err != nil {
+		return base, fmt.Errorf("decode personal VoIP payload: %w", err)
+	}
+	if strings.TrimSpace(payload.BizID) == "" {
+		return base, fmt.Errorf("decode personal VoIP payload: bizid is required")
+	}
+
+	return VoIPCallReceiveInviteOutput{
+		Type:         base.Type,
+		EventID:      base.EventID,
+		Timestamp:    base.Timestamp,
+		SubscribeID:  base.SubscribeID,
+		BizID:        payload.BizID,
+		CorpID:       payload.CorpID,
+		OrgID:        payload.OrgID,
+		TargetUID:    payload.UID,
+		CallID:       payload.Body.CallID,
+		CallerUID:    string(payload.Body.CallerUID),
+		CallerCorpID: payload.Body.CallerCorpID,
+		CalleeUID:    string(payload.Body.CalleeUID),
+		CalleeCorpID: payload.Body.CalleeCorpID,
+		CallType:     payload.Body.CallType,
+		RoomID:       payload.Body.RoomID,
+		CreateTime:   payload.Body.CreateTime,
+		EventTime:    payload.EventTime,
+	}, nil
 }
 
 func projectTodoEvent(ev transport.Event, base baseEventOutput, raw json.RawMessage) (any, error) {
@@ -1081,6 +1289,8 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(OAApprovalInstanceTerminatedOutput{})
 	case eventKey == EventOAApprovalInstanceFinished:
 		return reflect.TypeOf(OAApprovalInstanceFinishedOutput{})
+	case isVoIPEvent(eventKey):
+		return reflect.TypeOf(VoIPCallReceiveInviteOutput{})
 	case eventKey == EventTodoTaskCreated:
 		return reflect.TypeOf(TodoTaskCreatedOutput{})
 	case eventKey == EventTodoTaskUpdated:
@@ -1121,6 +1331,10 @@ func isOAEvent(eventKey string) bool {
 		eventKey == EventOAApprovalInstanceCC ||
 		eventKey == EventOAApprovalInstanceTerminated ||
 		eventKey == EventOAApprovalInstanceFinished
+}
+
+func isVoIPEvent(eventKey string) bool {
+	return eventKey == EventVoIPCallReceiveInvite
 }
 
 func isTodoEvent(eventKey string) bool {

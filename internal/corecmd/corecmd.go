@@ -1107,7 +1107,10 @@ func ValidateRequired(cmd *cobra.Command, flags []FlagSpec) error {
 		}
 	}
 	if err := cmdutil.MissingRequiredFlagsError(cmd, plain...); err != nil {
-		return err
+		return apperrors.NewValidation(
+			err.Error(),
+			apperrors.WithReason("missing_required_flags"),
+		)
 	}
 	for _, flag := range flags {
 		if !flag.Required || flag.ValidationMode == ValidationShortcut ||

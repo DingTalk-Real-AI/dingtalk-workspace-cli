@@ -299,7 +299,11 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}
 	root := NewRootCommand()
 	rootNewCommandRunnerWithFlags = originalRunnerFactory
-	root.SetOut(io.Discard)
+	// Unified-result leaves emit through Cobra's output writer, while legacy
+	// dry-run leaves still write through the process stdout formatter. Point
+	// both surfaces at the same capture file so this protocol-agnostic alias
+	// probe keeps observing the one preview produced by either rollout state.
+	root.SetOut(captureFile)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
 
@@ -320,7 +324,15 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}
 	var preview paramAliasDryRunPreview
 	if executeErr == nil {
-		if err := json.Unmarshal(output, &preview); err != nil {
+		previewJSON := output
+		var envelope struct {
+			OK   *bool           `json:"ok"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(output, &envelope); err == nil && envelope.OK != nil && len(envelope.Data) > 0 {
+			previewJSON = envelope.Data
+		}
+		if err := json.Unmarshal(previewJSON, &preview); err != nil {
 			t.Fatalf("decode dry-run preview: %v\noutput=%s", err, output)
 		}
 	}

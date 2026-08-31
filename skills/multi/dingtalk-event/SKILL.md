@@ -1,6 +1,6 @@
 ---
 name: dingtalk-event
-description: 钉钉个人 IM、OA 审批与待办事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出/群状态变化，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成，或监听待办创建/更新/删除。命令前缀：dws event。
+description: 钉钉个人 IM、OA 审批、VoIP 通话邀请与待办事件长连接监听。Use when 用户说监听消息/@我/某人/某群/全部消息、已读/撤回/reaction、群成员加入/群成员退出/群状态变化，监听审批任务创建/完成/转交、审批实例发起/抄送/终止/完成、VoIP 通话邀请，或监听待办创建/更新/删除。命令前缀：dws event。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -9,13 +9,13 @@ metadata:
       - dws
 ---
 
-# 钉钉个人 IM、OA 审批与待办事件
+# 钉钉个人 IM、OA 审批、VoIP 与待办事件
 
 > **前置：执行 `dws` 前必须完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**Shared references 仅按需加载。
 
-本 Skill 只负责未来个人 IM/OA/Todo 实时事件；发送和历史消息走 `dingtalk-chat`，审批查询与处理走 `dingtalk-misc` 的 OA，待办查询与操作走 `dingtalk-todo`，开放平台应用事件配置走其 DevApp。子 reference 按需加载。
+本 Skill 只负责未来个人 IM/OA/VoIP/Todo 事件；发送和历史消息走 `dingtalk-chat`，审批处理走 `dingtalk-misc`，待办操作走 `dingtalk-todo`。
 
-实时监听必须使用事件长连接，不写轮询脚本，不用历史消息、审批列表或待办列表查询模拟事件。高频 IM 意图优先交给 `dws event +listen-im`；它在 CLI 内解析自然目标、选择 EventKey，并复用现有订阅与 bus 生命周期。OA 审批与 Todo 事件使用显式 `dws event consume`。
+实时监听使用长连接，不用历史消息、审批列表、通话记录或待办列表轮询。IM 优先使用 `dws event +listen-im`；OA、VoIP 与 Todo 使用 `dws event consume`。
 
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回的默认监听入口是 `dws event +listen-im`；
 只有群生命周期、Filter DSL、原始 envelope 或底层订阅控制才使用
@@ -37,6 +37,7 @@ metadata:
 | 群改名、成员进退、群解散 | 读取 [EventKey 索引](references/event-im-keys.md)，使用精确 `event consume` EventKey |
 | OA 审批任务或实例事件 | 读取 [OA 事件参考](references/event-oa.md)，使用精确 `event consume` EventKey |
 | 查看 OA 事件目录 | `dws event list --category oa` |
+| VoIP 通话邀请 | 读取 [VoIP 事件参考](references/event-voip.md)，使用精确 `event consume` EventKey |
 | 待办创建、更新或删除事件 | 读取 [Todo 事件参考](references/event-todo.md)，使用精确 `event consume` EventKey 与 `--role-types` |
 | 查看 Todo 事件目录 | `dws event list --category todo` |
 | 已知 EventKey 或需要底层订阅控制 | `dws event consume`；参数与约束以 leaf Schema 为准 |
@@ -76,7 +77,7 @@ Todo 事件也不进入 `+listen-im`。三个公开 EventKey 使用 `--role-type
 
 - `event stop` 会取消订阅并影响本地 consumer：先 `--dry-run`，用户确认后再加 `--yes`。
 - 多事件属于一次原始操作；任一订阅启动失败时 Runtime 回滚本次已创建项，不拆成新命令绕过重试预算。
-- 这套 `0/2/1` 是 **Agent/host** 编排预算，适用于全部 26 个公开个人 EventKey（16 个 IM + 7 个 OA + 3 个 Todo）：`retryable=false` 对应 `max_additional_attempts=0`；`retryable=true` 对应 `max_additional_attempts=2`；`retryable=unknown` 对应 `max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；每次调用最多创建一次，进程内不会自动重试，CLI 也不持久化或计算跨调用的 Agent/host 尝试次数。
+- 这套 `0/2/1` 是 **Agent/host** 编排预算，适用于全部 27 个公开个人 EventKey（16 个 IM + 7 个 OA + 1 个 VoIP + 3 个 Todo）：`retryable=false` 对应 `max_additional_attempts=0`；`retryable=true` 对应 `max_additional_attempts=2`；`retryable=unknown` 对应 `max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；每次调用最多创建一次，进程内不会自动重试，CLI 也不持久化或计算跨调用的 Agent/host 尝试次数。
 - 重试必须遵守 `retry_after_seconds` / `next_retry_at`。遇到 `in_flight`、`cooldown`、`terminal_hold` 不并发或递归重启同一逻辑订阅，也不换 `subscribe_id` / `trace_id` 绕过保护。
 - 认证、profile、订阅保护状态和 bus 排障按失败类型读取 [订阅运维](references/event-im-operations.md)，不要在正常路径预加载完整运维手册。
 
@@ -101,4 +102,5 @@ Todo 事件也不进入 `+listen-im`。三个公开 EventKey 使用 `--role-type
 | 扁平字段与事件到 Chat 交接 | [event-im-output.md](references/event-im-output.md) | 解析事件或自动回复 |
 | Filter、status/stop、重试与排障 | [event-im-operations.md](references/event-im-operations.md) | 订阅控制或失败恢复 |
 | OA 审批事件 | [event-oa.md](references/event-oa.md) | 选择七个 OA EventKey、组合消费或解析审批字段 |
+| VoIP 通话邀请事件 | [event-voip.md](references/event-voip.md) | 选择 VoIP EventKey、解析邀请字段或检查敏感输出边界 |
 | Todo 待办事件 | [event-todo.md](references/event-todo.md) | 选择三个 Todo EventKey、设置角色范围或解析待办字段 |

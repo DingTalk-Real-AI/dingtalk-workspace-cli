@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -111,6 +113,29 @@ func runDriveUpload(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
+		// dry-run 委托预检：与真实执行 (uploadToDrive→get_upload_info) 一致，
+		// 被拒/校验失败则直接返回错误、不出预览。principal 为空时 helper
+		// 内部短路返回 nil。precheckArgs 复刻真实 step1Args 形态，使
+		// uploadActionParam{fileName,fileSize} 随预检上送。
+		mimeType, _ := cmd.Flags().GetString("mime-type")
+		precheckArgs := map[string]any{
+			"fileName": fileName,
+			"fileSize": float64(fileSize),
+		}
+		if spaceID != "" {
+			precheckArgs["spaceId"] = spaceID
+		}
+		if mimeType != "" {
+			precheckArgs["mimeType"] = mimeType
+		}
+		if overwriteNodeID != "" {
+			precheckArgs["overwriteFileId"] = overwriteNodeID
+		} else if parentID != "" {
+			precheckArgs["parentId"] = parentID
+		}
+		if err := markdownDryRunDelegationPrecheck(cmd, "drive", "get_upload_info", precheckArgs); err != nil {
+			return err
+		}
 		if deps.Caller.Format() == "json" {
 			return deps.Out.PrintJSON(map[string]any{
 				"dry_run":      true,
@@ -166,6 +191,13 @@ func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fil
 	}
 
 	if deps.Caller.DryRun() {
+		// dry-run 委托预检：与真实执行 (uploadToDocSpace→get_file_upload_info)
+		// 一致，被拒/校验失败则直接返回错误、不出预览。precheckArgs 复刻真实
+		// step1Args 形态，使 uploadActionParam{fileName,fileSize} 随预检上送。
+		precheckArgs := docFileUploadInfoArgs(fileName, fileSize, folder, workspaceID, overwriteNodeID)
+		if err := markdownDryRunDelegationPrecheck(cmd, "doc", "get_file_upload_info", precheckArgs); err != nil {
+			return err
+		}
 		if deps.Caller.Format() == "json" {
 			return deps.Out.PrintJSON(map[string]any{
 				"dry_run":      true,
@@ -2180,14 +2212,17 @@ func newDriveCommand() *cobra.Command {
 			switch taskType {
 			case "export", "import", "copy", "move":
 			default:
-				return fmt.Errorf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType)
+				return apperrors.NewValidation(
+					fmt.Sprintf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType),
+					apperrors.WithReason("invalid_enum"),
+				)
 			}
 
 			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "查询异步任务")
-				deps.Out.PrintKeyValue("类型", taskType)
-				deps.Out.PrintKeyValue("ID", taskID)
-				return nil
+				return output.StoreResult(cmd.Context(), output.Success(map[string]any{
+					"id":   taskID,
+					"type": taskType,
+				}, output.WithDryRun()))
 			}
 
 			// query_task 工具注册在 drive (dingpan) MCP server 上，需显式路由。
@@ -2195,12 +2230,13 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return deps.Out.PrintJSON(result)
+			return output.StoreResult(cmd.Context(), output.Success(result))
 		},
 	}
 	taskGetCmd.Flags().String("type", "", "任务类型: export|import|copy|move (必填)")
 	taskGetCmd.Flags().String("id", "", "任务 ID (必填)")
 	DeclareLeafMetadata(taskGetCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -2237,6 +2273,27 @@ func newDriveCommand() *cobra.Command {
 			Parameters: []contract.ParamDecl{
 				{Name: "id", Property: "taskId", Required: boolPtr(true)},
 				{Name: "type", Property: "taskType", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"归一化后的异步任务状态和结果",
+					"properties":{
+						"id":{"type":"string","description":"任务 ID"},
+						"type":{"type":"string","description":"任务类型","enum":["export","import","copy","move"]},
+						"status":{"type":"string","description":"归一化任务状态","enum":["PENDING","PROCESSING","SUCCESS","FAILED","PARTIAL_FAILED","TIMEOUT"]},
+						"resultUrl":{"type":"string","description":"任务产出的下载地址"},
+						"resultName":{"type":"string","description":"任务产出的文件名称"},
+						"message":{"type":"string","description":"任务状态说明或失败原因"},
+						"createTime":{"type":"string","description":"任务创建时间"}
+					},
+					"required":["id","type"],
+					"additionalProperties":false
+				}`),
 			},
 		},
 	})
@@ -4369,16 +4426,10 @@ func uploadToDrive(ctx context.Context, filePath, fileName string, fileSize int6
 // explicit server routing. overwriteNodeID changes both MCP steps to overwrite
 // mode and deliberately excludes folderId.
 func uploadToDocSpace(ctx context.Context, filePath, fileName string, fileSize int64, workspaceID, folderID, overwriteNodeID string, convert bool) error {
-	step1Args := map[string]any{}
-	if workspaceID != "" {
-		step1Args["workspaceId"] = workspaceID
-	}
-	if overwriteNodeID != "" {
-		step1Args["overwriteNodeId"] = overwriteNodeID
-		step1Args["name"] = fileName
-	} else if folderID != "" {
-		step1Args["folderId"] = folderID
-	}
+	// 与 dry-run 预检 (runDriveUpload) 共用 docFileUploadInfoArgs，保证首个
+	// get_file_upload_info 调用即携带 name+fileSize，使 uploadActionParam 在
+	// PUT 之前的首个 capability 检查生效（预检参数 == 真实首个调用参数）。
+	step1Args := docFileUploadInfoArgs(fileName, fileSize, folderID, workspaceID, overwriteNodeID)
 
 	text, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_file_upload_info", step1Args)
 	if err != nil {

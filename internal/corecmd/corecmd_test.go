@@ -294,8 +294,16 @@ func TestCrossPlatformCoverageValidateRequired(t *testing.T) {
 	plain := []FlagSpec{{Name: "content", Usage: "C", Required: true}}
 	cmd := newTestCommand()
 	RegisterFlags(cmd, plain)
-	if err := ValidateRequired(cmd, plain); err == nil || !strings.Contains(err.Error(), "content") {
+	err := ValidateRequired(cmd, plain)
+	if err == nil || !strings.Contains(err.Error(), "content") {
 		t.Fatalf("missing plain required err = %v", err)
+	}
+	if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+		t.Fatalf("missing plain required exit code = %d, want %d", got, apperrors.ExitCodeValidation)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "missing_required_flags" {
+		t.Fatalf("missing plain required error = %#v, want validation/missing_required_flags", err)
 	}
 	_ = cmd.Flags().Set("content", "x")
 	if err := ValidateRequired(cmd, plain); err != nil {

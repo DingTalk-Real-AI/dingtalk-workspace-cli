@@ -297,7 +297,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputMode([]string{opts.EventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
@@ -338,6 +338,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			_, eventKey, _, err := personalEnsureSubscription(ctx, client, identity, opts)
 			if err != nil {
 				return fmt.Errorf("event consume --as user: %w", err)
+			}
+			if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+				return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 			}
 			opts.EventKey = eventKey
 		}
@@ -469,6 +472,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
+	if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
+	}
 	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
 	ownsSubscription := selfCreated || opts.Ephemeral
 	var cleanupOnce sync.Once
@@ -559,7 +565,7 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputMode(opts.EventKeys, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	projector := personalEventProjector(false, opts.Flatten)
@@ -857,18 +863,22 @@ func personalEventProjector(debugRawEvents, flatten bool) consume.Projector {
 	if flatten {
 		return personal.ProjectOutput
 	}
-	return nil
+	return personal.ProjectTransportOutput
 }
 
-func validatePersonalEventOutputMode(flatten, debugRawEvents bool, format consume.Format) error {
-	if !flatten {
-		return nil
-	}
-	if debugRawEvents {
+func validatePersonalEventOutputMode(eventKeys []string, flatten, debugRawEvents bool, format consume.Format) error {
+	if flatten && debugRawEvents {
 		return fmt.Errorf("--flatten and --debug-raw-events are mutually exclusive")
 	}
-	if format == consume.FormatRaw {
+	if flatten && format == consume.FormatRaw {
 		return fmt.Errorf("--flatten and --format raw are mutually exclusive")
+	}
+	if format == consume.FormatRaw && !debugRawEvents {
+		for _, eventKey := range eventKeys {
+			if strings.TrimSpace(eventKey) == personal.EventVoIPCallReceiveInvite {
+				return fmt.Errorf("--format raw for VoIP events requires explicit --debug-raw-events")
+			}
+		}
 	}
 	return nil
 }
@@ -906,25 +916,32 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 }
 
 func validatePersonalBusinessEventOptions(eventKey string, opts personalConsumeOptions) error {
-	if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+	if err := validatePersonalOAOrVoIPOptions(eventKey, opts); err != nil {
 		return err
 	}
 	return validatePersonalTodoOptions(eventKey, opts)
 }
 
-func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) error {
-	changed := personalOAOptionNames(opts)
+func validatePersonalOAOrVoIPOptions(eventKey string, opts personalConsumeOptions) error {
+	changed := personalUnsupportedOptionNames(opts)
 	if len(changed) == 0 {
 		return nil
 	}
 	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
-	if !ok || def.Category != "oa" {
+	if !ok {
 		return nil
 	}
-	return fmt.Errorf("%s not supported for OA event %s", strings.Join(changed, ", "), eventKey)
+	categoryName := map[string]string{
+		"oa":   "OA",
+		"voip": "VoIP",
+	}[def.Category]
+	if categoryName == "" {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for %s event %s", strings.Join(changed, ", "), categoryName, eventKey)
 }
 
-func personalOAOptionNames(opts personalConsumeOptions) []string {
+func personalUnsupportedOptionNames(opts personalConsumeOptions) []string {
 	var changed []string
 	for _, item := range []struct {
 		name  string
