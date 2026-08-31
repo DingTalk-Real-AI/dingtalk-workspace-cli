@@ -10,6 +10,7 @@
 |---|---|
 | 已有稳定成员 ID 创建话题圈 | `dws chat thread create-group --name <名称> --users <userId,...>` |
 | 发布新话题 | `dws chat thread send --conversation-id <openConversationId>` |
+| 将普通群中的已有消息升级为 Thread | `dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>` |
 | 浏览话题主消息 | `dws chat thread list --conversation-id <openConversationId>` |
 | 向具体话题直接追加回复 | `dws chat thread reply --conversation-id <openConvThreadId>` |
 | 分页读取一个话题的回复 | `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>` |
@@ -22,6 +23,8 @@
 ## 发布、回复与读取
 
 `thread send` 的 `--conversation-id` 是承载话题的会话 `openConversationId`，用于发布新的顶层话题。
+
+`thread promote` 用于把普通群中一条已经存在的消息升级为 Thread 根消息；它同时需要消息所属普通群的 `openConversationId` 和该消息的 `openMessageId`，成功后返回新的 `openConvThreadId`。单聊消息不能升级；若要发送全新的 Thread，继续使用 `thread send`。
 
 `thread reply` 沿用原发送命令的 `--conversation-id`，但这里传 Thread 子会话的 `openConvThreadId`。它直接追加回复，不使用消息引用回复，也不创建新的顶层 Thread。
 

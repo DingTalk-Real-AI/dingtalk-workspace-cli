@@ -53,9 +53,35 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
+		EventVoIPCallReceiveInvite,
+		EventTodoTaskCreated,
+		EventTodoTaskUpdated,
+		EventTodoTaskDeleted,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
+	}
+}
+
+func TestTodoEventCatalogDefinitions(t *testing.T) {
+	items := Catalog("todo", true, false)
+	wantKeys := []string{EventTodoTaskCreated, EventTodoTaskUpdated, EventTodoTaskDeleted}
+	if len(items) != len(wantKeys) {
+		t.Fatalf("Catalog(todo) = %#v, want %d events", items, len(wantKeys))
+	}
+	for i, item := range items {
+		if item.EventKey != wantKeys[i] {
+			t.Fatalf("Catalog(todo)[%d].event_key = %q, want %q", i, item.EventKey, wantKeys[i])
+		}
+		if item.Category != "todo" || item.RuleType != "all" || item.Status != StatusEnabled || !item.Public {
+			t.Fatalf("Catalog(todo)[%d] = %#v, want public enabled todo/all event", i, item)
+		}
+		if len(item.RequiredParams) != 0 || item.Constraints != nil {
+			t.Fatalf("Catalog(todo)[%d] parameters = %#v/%#v, want optional role-types", i, item.RequiredParams, item.Constraints)
+		}
+		if item.Auth["identity"] != "user" {
+			t.Fatalf("Catalog(todo)[%d].auth = %#v, want user identity", i, item.Auth)
+		}
 	}
 }
 
@@ -86,6 +112,45 @@ func TestOAEventCatalogDefinitions(t *testing.T) {
 		if item.Auth["identity"] != "user" {
 			t.Fatalf("Catalog(oa)[%d].auth = %#v, want user identity", i, item.Auth)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageVoIPEventCatalogDefinitionAndSchema(t *testing.T) {
+	items := Catalog("voip", true, false)
+	if len(items) != 1 {
+		t.Fatalf("Catalog(voip) = %#v, want one event", items)
+	}
+	item := items[0]
+	if item.EventKey != EventVoIPCallReceiveInvite || item.Category != "voip" || item.RuleType != "all" || item.Status != StatusEnabled || !item.Public {
+		t.Fatalf("Catalog(voip)[0] = %#v, want public enabled voip/all event", item)
+	}
+	if len(item.RequiredParams) != 0 || item.Constraints != nil || item.Auth["identity"] != "user" {
+		t.Fatalf("Catalog(voip)[0] parameters/auth = %#v/%#v/%#v", item.RequiredParams, item.Constraints, item.Auth)
+	}
+
+	doc := BuildSchemaDocumentForMode(item, true)
+	if doc.JQRootPath != "." {
+		t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+	}
+	properties, ok := doc.Schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema.properties = %#v", doc.Schema["properties"])
+	}
+	wantProperties := []string{
+		"type", "event_id", "timestamp", "subscribe_id", "biz_id", "corp_id", "org_id", "target_uid",
+		"call_id", "caller_uid", "caller_corp_id", "callee_uid", "callee_corp_id", "call_type",
+		"room_id", "create_time", "event_time",
+	}
+	if len(properties) != len(wantProperties) {
+		t.Fatalf("schema.properties = %#v, want exactly %d fields", properties, len(wantProperties))
+	}
+	for _, name := range wantProperties {
+		if _, ok := properties[name].(map[string]any); !ok {
+			t.Fatalf("schema.properties.%s = %#v, want object", name, properties[name])
+		}
+	}
+	if _, ok := properties["room_code"]; ok {
+		t.Fatalf("schema.properties unexpectedly exposes sensitive room_code: %#v", properties["room_code"])
 	}
 }
 
@@ -163,6 +228,10 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
+		EventVoIPCallReceiveInvite,
+		EventTodoTaskCreated,
+		EventTodoTaskUpdated,
+		EventTodoTaskDeleted,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
@@ -250,6 +319,49 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 				if _, ok := props[name].(map[string]any); !ok {
 					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
 				}
+			}
+		})
+	}
+}
+
+func TestTodoEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
+	common := []string{
+		"type", "event_id", "timestamp", "subscribe_id", "task_id", "subject", "creator_id",
+		"executor_ids", "participant_ids", "priority", "status_stage", "plan_start_date",
+		"plan_finish_date", "start_date", "finish_date", "description", "source", "source_id",
+		"biz_tag", "parent_id", "is_multi_executor", "scene_type", "create_time",
+	}
+	tests := []struct {
+		eventKey   string
+		properties []string
+	}{
+		{eventKey: EventTodoTaskCreated, properties: common},
+		{eventKey: EventTodoTaskUpdated, properties: append(append([]string(nil), common...), "old_status_stage", "update_time")},
+		{eventKey: EventTodoTaskDeleted, properties: []string{
+			"type", "event_id", "timestamp", "subscribe_id", "task_id", "subject", "creator_id", "create_time", "delete_time",
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.eventKey, func(t *testing.T) {
+			def, ok := Lookup(tt.eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", tt.eventKey)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			if doc.JQRootPath != "." {
+				t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+			}
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok || len(props) != len(tt.properties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", doc.Schema["properties"], len(tt.properties))
+			}
+			for _, name := range tt.properties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			if !reflect.DeepEqual(props["type"].(map[string]any)["enum"], []string{tt.eventKey}) {
+				t.Fatalf("schema.properties.type.enum = %#v, want %q", props["type"], tt.eventKey)
 			}
 		})
 	}
@@ -646,6 +758,7 @@ func TestBuildRuleParamAllEvents(t *testing.T) {
 		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
+		EventVoIPCallReceiveInvite,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			rule, param, err := BuildRuleParam(eventKey, RuleOptions{})
@@ -665,6 +778,55 @@ func TestBuildRuleParamAllEvents(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageBuildRuleParamTodoEvents(t *testing.T) {
+	for _, eventKey := range []string{EventTodoTaskCreated, EventTodoTaskUpdated, EventTodoTaskDeleted} {
+		t.Run(eventKey+"/default", func(t *testing.T) {
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{})
+			if err != nil {
+				t.Fatalf("BuildRuleParam() error = %v", err)
+			}
+			want := map[string]any{"roleTypes": []string{"creator", "executor", "participant"}}
+			if rule != "all" || !reflect.DeepEqual(param, want) {
+				t.Fatalf("rule = %q, param = %#v; want all, %#v", rule, param, want)
+			}
+		})
+		t.Run(eventKey+"/canonical", func(t *testing.T) {
+			_, param, err := BuildRuleParam(eventKey, RuleOptions{RoleTypes: []string{"participant", "creator"}})
+			if err != nil {
+				t.Fatalf("BuildRuleParam() error = %v", err)
+			}
+			want := map[string]any{"roleTypes": []string{"creator", "participant"}}
+			if !reflect.DeepEqual(param, want) {
+				t.Fatalf("param = %#v, want %#v", param, want)
+			}
+		})
+		for name, opts := range map[string]RuleOptions{
+			"invalid-role":     {RoleTypes: []string{"owner"}},
+			"duplicate-role":   {RoleTypes: []string{"creator", "creator"}},
+			"user":             {UserID: "staff-1"},
+			"open-dingtalk-id": {OpenDingTalkID: "open-id-1"},
+			"group":            {GroupID: "cid-1"},
+		} {
+			t.Run(eventKey+"/"+name, func(t *testing.T) {
+				if _, _, err := BuildRuleParam(eventKey, opts); err == nil {
+					t.Fatalf("BuildRuleParam() error = nil, want validation failure")
+				}
+			})
+		}
+	}
+	_, param, err := BuildRuleParam(EventTodoTaskCreated, RuleOptions{RoleTypes: []string{"creator,,participant"}})
+	if err != nil {
+		t.Fatalf("BuildRuleParam() empty role segment error = %v", err)
+	}
+	want := map[string]any{"roleTypes": []string{"creator", "participant"}}
+	if !reflect.DeepEqual(param, want) {
+		t.Fatalf("empty role segment param = %#v, want %#v", param, want)
+	}
+	if _, _, err := BuildRuleParam(EventMention, RuleOptions{RoleTypes: []string{"creator"}}); err == nil || !strings.Contains(err.Error(), "--role-types is not supported") {
+		t.Fatalf("non-Todo role-types error = %v", err)
 	}
 }
 
@@ -859,6 +1021,10 @@ func TestSupportsMessageFilter(t *testing.T) {
 		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
+		EventVoIPCallReceiveInvite,
+		EventTodoTaskCreated,
+		EventTodoTaskUpdated,
+		EventTodoTaskDeleted,
 		"unknown_event",
 	} {
 		if SupportsMessageFilter(eventKey) {

@@ -68,9 +68,9 @@ func TestCrossPlatformCoverageRangeBatchSetStyleDryRunNeverCallsRemote(t *testin
 					t.Fatalf("JSON dry-run tool = %#v, want batch_update", payload["tool"])
 				}
 				args, _ := payload["arguments"].(map[string]any)
-				ops, _ := args["operations"].([]any)
+				ops := decodeBatchOperationsJSON(t, args)
 				if len(ops) != 1 {
-					t.Fatalf("JSON dry-run operations = %#v, want 1 item", args["operations"])
+					t.Fatalf("JSON dry-run operationsJson = %#v, want 1 item", args["operationsJson"])
 				}
 				op, _ := ops[0].(map[string]any)
 				if op["toolName"] != "set_cell_range" {

@@ -150,6 +150,12 @@ func newWikiCommand() *cobra.Command {
 	// products.wiki). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "wiki",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-wiki"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("知识库深度指南", "dingtalk-wiki", "references/wiki.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉钉知识库空间、节点与成员权限",
 			UseWhen: []string{

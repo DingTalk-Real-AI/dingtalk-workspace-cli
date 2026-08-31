@@ -30,6 +30,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // serverMain is the primary aitable MCP server id.
@@ -284,7 +285,15 @@ var BaseSearch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"count": len(bases), "bases": bases})
+		out := map[string]any{"count": len(bases), "bases": bases}
+		nextCursor, hasMore, hasMoreKnown := aitabletarget.Pagination(data)
+		if hasMoreKnown {
+			out["hasMore"] = hasMore
+		}
+		if nextCursor != "" && (!hasMoreKnown || hasMore) {
+			out["nextCursor"] = nextCursor
+		}
+		return rt.Output(out)
 	},
 }
 
@@ -412,10 +421,11 @@ var BaseCopy = shortcut.Shortcut{
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "源 Base ID", Required: true},
-		{Name: "target-folder-id", Type: shortcut.FlagString, Desc: "目标文件夹 dentryUuid", Required: true},
+		{Name: "target-folder-id", Type: shortcut.FlagString, Desc: "目标文件夹 nodeId", Required: true},
 		{Name: "only-struct", Type: shortcut.FlagBool, Desc: "仅复制结构（不含数据），默认 false"},
+		{Name: "new-name", Type: shortcut.FlagString, Desc: "复制后设置的新 Base 名称（1-50 个字符）"},
 	},
-	Tips: []string{`dws aitable +base-copy --base-id BASE_ID --target-folder-id FOLDER_ID`},
+	Tips: []string{`dws aitable +base-copy --base-id BASE_ID --target-folder-id FOLDER_ID --new-name "副本名称"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return executeBaseCopy(rt)
 	},

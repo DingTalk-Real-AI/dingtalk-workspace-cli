@@ -194,6 +194,38 @@ Usage:
 
 返回节点可用的阅读、编辑、评论、点赞、预览或下载等统计维度；不同文件类型返回字段可能不同。本命令只读。
 
+### 普通文件全局评论
+
+Drive 评论只用于 PDF、DOCX、图片、压缩包等普通文件，并且固定为文件级全局评论。在线文档（adoc）的正文/划词评论使用 `dws doc comment`，在线表格（axls）的评论使用 `dws sheet comment`。
+
+> `drive comment list/create` 是旧评论服务的兼容入口，保留原参数与输出但已 deprecated。新任务必须使用 `list-v2/create-v2`；其返回的 `commentKey` 才能用于下面的新生命周期命令。
+
+```text
+# 查询与创建
+dws drive comment list-v2 --node <NODE_ID_OR_URL> [--limit 50] [--cursor <NEXT_TOKEN>] [--resolve-status <resolved|unresolved>]
+dws drive comment create-v2 --node <NODE_ID_OR_URL> --content "评论内容"
+
+# 回复、表态与回复列表
+dws drive comment reply --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> --content "回复内容"
+dws drive comment react-reply --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> --reaction <EMOJI>
+dws drive comment list-replies --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> [--page-size 20] [--page-token <NEXT_TOKEN>]
+
+# 更新、解决、恢复与删除
+dws drive comment update --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> --content "更新后的内容"
+dws drive comment resolve --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY>
+dws drive comment restore --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY>
+dws drive comment delete --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY>
+
+# 批量查询；可重复传入 comment-key
+dws drive comment batch-query --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY_1> --comment-key <COMMENT_KEY_2>
+```
+
+- 完整生命周期使用 `commentKey` 作为评论标识；创建后必须保存返回的 `commentKey`。
+- 新评论列表的 `--limit/--page-size` 范围为 1–50；超过上限会直接报错，不会静默截断。
+- Drive 自动把评论主题固定为 `global`，不要传 `topic-id`、单元格、正文锚点或行内范围。
+- `--cursor` 是不透明字符串，只能原样使用上次响应返回的 `nextToken`。
+- `delete` 是破坏性操作，必须得到用户确认；其余写操作遵循统一写入安全策略。
+
 ### 创建节点快捷方式
 
 ```text
@@ -583,6 +615,7 @@ Flags:
 用户说"搜索钉盘文件/钉盘里找个文件/查找某个钉盘文件/钉盘中搜索" → `search`
 用户说"文件详情/文件信息" → `info`
 用户说"文件阅读量/编辑量/评论数/下载数/节点统计" → `stats`
+用户说"给这个 PDF/附件/普通文件评论、回复评论、解决评论、恢复评论、删除评论" → `comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply`（仅在用户明确要求旧评论兼容行为时使用 deprecated 的 `list/create`）
 用户说"给文件创建快捷方式/放一个链接到目标文件夹" → `shortcut`
 用户说"下载文件" → `download` 指定 `--output` 保存到本地
 用户说"新建文件夹/创建目录" → `mkdir`（钉盘空间）/ `wiki node create --type folder`（文档空间）

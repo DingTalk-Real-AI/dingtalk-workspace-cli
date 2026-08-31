@@ -8,14 +8,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -79,19 +82,49 @@ func runMinutesAlignmentCLI(t *testing.T, caller *minutesE2ECaller, args ...stri
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	err := root.Execute()
+	executed, err := root.ExecuteC()
+	if err == nil && output.UsesUnifiedResult(executed) {
+		code, _, emitErr := output.EmitStoredResult(executed)
+		if emitErr != nil {
+			err = emitErr
+		} else if code != 0 {
+			err = fmt.Errorf("command result exit code %d", code)
+		}
+	}
 	if stdout.Len() == 0 {
 		return nil, "", err
 	}
-	var payload map[string]any
-	if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {
+	var envelope map[string]any
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &envelope); decodeErr != nil {
 		t.Fatalf("decode output %q: %v", stdout.String(), decodeErr)
 	}
-	return payload, stdout.String(), err
+	if payload, ok := envelope["data"].(map[string]any); ok {
+		return payload, stdout.String(), err
+	}
+	return envelope, stdout.String(), err
+}
+
+func minutesPaginationFromOutput(t *testing.T, raw string) map[string]any {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		t.Fatalf("decode pagination envelope %q: %v", raw, err)
+	}
+	meta, ok := envelope["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing meta in envelope: %#v", envelope)
+	}
+	pagination, ok := meta["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing meta.pagination in envelope: %#v", envelope)
+	}
+	return pagination
 }
 
 func TestCrossPlatformCoverageMinutesSearchPaginatesFiltersAndRejectsUnknownE2E(t *testing.T) {
@@ -101,9 +134,13 @@ func TestCrossPlatformCoverageMinutesSearchPaginatesFiltersAndRejectsUnknownE2E(
 			`{"success":true,"result":{"itemList":[{"uuid":"u1","title":"周会 A","startTime":1},{"uuid":"u3","title":"周会 B","startTime":3}],"hasNext":false}}`,
 		},
 	}}
-	payload, _, err := runMinutesAlignmentCLI(t, caller, "minutes", "+search", "--query", "周会", "--page-all")
+	payload, raw, err := runMinutesAlignmentCLI(t, caller, "minutes", "+search", "--query", "周会", "--scope", "mine", "--page-all")
 	if err != nil || payload["count"] != float64(2) || payload["scannedCount"] != float64(3) || payload["pages"] != float64(2) || payload["complete"] != true {
 		t.Fatalf("search payload=%#v err=%v", payload, err)
+	}
+	pagination := minutesPaginationFromOutput(t, raw)
+	if pagination["endpoint_exhausted"] != true || pagination["pages"] != float64(2) || pagination["items"] != float64(2) {
+		t.Fatalf("search pagination=%#v", pagination)
 	}
 	if calls := caller.arguments["minutes/list_by_keyword_and_time_range"]; len(calls) != 2 || calls[1]["nextToken"] != "n2" {
 		t.Fatalf("search calls=%#v", calls)
@@ -112,17 +149,18 @@ func TestCrossPlatformCoverageMinutesSearchPaginatesFiltersAndRejectsUnknownE2E(
 	for _, test := range []struct {
 		scope     string
 		belonging string
+		complete  bool
 	}{
-		{scope: "mine", belonging: "createdByMe"},
-		{scope: "shared", belonging: "sharedToMe"},
-		{scope: "all", belonging: "noLimit"},
+		{scope: "mine", belonging: "created", complete: true},
+		{scope: "shared", belonging: "shared", complete: true},
+		{scope: "all", belonging: "noLimit", complete: false},
 	} {
 		t.Run("scope "+test.scope, func(t *testing.T) {
 			scoped := &minutesE2ECaller{responses: map[string][]string{
 				"minutes/list_by_keyword_and_time_range": {`{"success":true,"result":{"itemList":[],"hasNext":false}}`},
 			}}
 			payload, _, err := runMinutesAlignmentCLI(t, scoped, "minutes", "+search", "--query", "needle", "--scope", test.scope, "--limit", "1")
-			if err != nil || payload["count"] != float64(0) || payload["complete"] != true {
+			if err != nil || payload["count"] != float64(0) || payload["complete"] != test.complete {
 				t.Fatalf("scope %s payload=%#v err=%v", test.scope, payload, err)
 			}
 			calls := scoped.arguments["minutes/list_by_keyword_and_time_range"]
@@ -218,6 +256,40 @@ func TestCrossPlatformCoverageMinutesUploadAndPermissionDryRunDoNotWriteE2E(t *t
 	}
 }
 
+func TestCrossPlatformCoverageMinutesShortcutConfirmationPolicyE2E(t *testing.T) {
+	for _, value := range []shortcut.Shortcut{Upload, UploadAndAnalyze, UploadAndNotify, Mindmap, SpeakerInsights, PrepareASR, SyncASR} {
+		if value.Safety.Confirmation != "user_required" {
+			t.Errorf("%s confirmation=%q, want user_required", value.Command, value.Safety.Confirmation)
+		}
+	}
+
+	file := filepath.Join(t.TempDir(), "notify.wav")
+	if err := os.WriteFile(file, []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "upload", args: []string{"minutes", "+upload", "--file", file}},
+		{name: "upload and analyze", args: []string{"minutes", "+upload-and-analyze", "--file", file}},
+		{name: "upload notify", args: []string{"minutes", "+upload-and-notify", "--file", file}},
+		{name: "sync asr", args: []string{"minutes", "+sync-asr", "--words", "DWS"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &minutesE2ECaller{}
+			_, _, err := runMinutesAlignmentCLI(t, caller, test.args...)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != "confirmation_required" {
+				t.Fatalf("unconfirmed error=%#v", err)
+			}
+			if len(caller.counts) != 0 {
+				t.Fatalf("remote calls before confirmation=%#v", caller.counts)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageMinutesUploadUnknownCompletionPreservesSessionE2E(t *testing.T) {
 	work := t.TempDir()
 	file := filepath.Join(work, "response-loss.wav")
@@ -300,6 +372,14 @@ func TestCrossPlatformCoverageMinutesSpeakerInsightsRequiresTaskAndResultE2E(t *
 }
 
 func TestCrossPlatformCoverageMinutesPrepareASRDiffWritesAndReadbackE2E(t *testing.T) {
+	migrated := &minutesE2ECaller{}
+	if payload, output, err := runMinutesAlignmentCLI(t, migrated, "minutes", "+prepare-asr", "--words", "DWS", "--sync", "--yes"); err == nil || !strings.Contains(err.Error(), "--sync 已迁移") || payload != nil || output != "" {
+		t.Fatalf("legacy --sync was not rejected by validation: payload=%#v output=%q err=%v", payload, output, err)
+	}
+	if len(migrated.counts) != 0 {
+		t.Fatalf("legacy --sync reached MCP before migration error: calls=%#v", migrated.counts)
+	}
+
 	caller := &minutesE2ECaller{responses: map[string][]string{
 		"minutes/list_my_hotwords": {
 			`{"success":true,"result":{"hotWordList":["已有"],"currentCount":1}}`,

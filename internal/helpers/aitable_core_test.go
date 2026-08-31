@@ -158,7 +158,7 @@ func TestCrossPlatformCoverageAitableFlagAndJSONNormalizers(t *testing.T) {
 
 func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	config := map[string]any{
-		"filter": map[string]any{"operator": "and", "operands": []any{}},
+		"filter": map[string]any{"operator": "eq", "operands": []any{"f", "v"}},
 		"sort":   map[string]any{"fieldId": "f"}, "group": []any{},
 		"flags": true, "unknown": true,
 	}
@@ -169,6 +169,35 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 		if reflect.TypeOf(config[key]).Kind() != reflect.Slice {
 			t.Errorf("config %s = %#v", key, config[key])
 		}
+	}
+	if err := normalizeViewConfigBlock(map[string]any{
+		"filter": []any{map[string]any{"operator": "and", "operands": []any{}}},
+	}); err == nil || !strings.Contains(err.Error(), "不接受 and/or") {
+		t.Fatalf("logical view filter wrapper was accepted: %v", err)
+	}
+	if err := normalizeViewConfigBlock(map[string]any{
+		"filter": []any{map[string]any{"operator": "neq", "operands": []any{"f", "v"}}},
+	}); err == nil || !strings.Contains(err.Error(), `did you mean "ne"`) {
+		t.Fatalf("neq view filter hint = %v", err)
+	}
+	for _, tc := range []struct {
+		name   string
+		filter any
+	}{
+		{name: "not an array", filter: "invalid"},
+		{name: "non-object item", filter: []any{"invalid"}},
+		{name: "operands not array", filter: []any{map[string]any{"operator": "eq", "operands": "invalid"}}},
+		{name: "wrong operand count", filter: []any{map[string]any{"operator": "eq", "operands": []any{"f"}}}},
+		{name: "blank field id", filter: []any{map[string]any{"operator": "eq", "operands": []any{" ", "v"}}}},
+	} {
+		t.Run("view filter "+tc.name, func(t *testing.T) {
+			if err := validateViewConfigFilter(tc.filter); err == nil {
+				t.Fatalf("validateViewConfigFilter(%#v) returned nil", tc.filter)
+			}
+		})
+	}
+	if err := validateViewConfigFilter([]any{map[string]any{"operator": "exist", "operands": []any{"f"}}}); err != nil {
+		t.Fatalf("exist view filter: %v", err)
 	}
 	for _, bad := range []map[string]any{{"filter": 1}, {"sort": 1}, {"group": 1}} {
 		if err := normalizeViewConfigBlock(bad); err == nil {
@@ -263,6 +292,46 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitableViewConfigFilterShorthandLeaves(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+		want  []any
+	}{
+		{
+			name:  "array leaf with value",
+			input: []any{map[string]any{"fieldId": "fldText", "operator": "eq", "value": "done"}},
+			want:  []any{map[string]any{"operator": "eq", "operands": []any{"fldText", "done"}}},
+		},
+		{
+			name:  "single object leaf with value",
+			input: map[string]any{"fieldId": "fldCount", "operator": "gt", "value": float64(3)},
+			want:  []any{map[string]any{"operator": "gt", "operands": []any{"fldCount", float64(3)}}},
+		},
+		{
+			name:  "exist leaf without value",
+			input: []any{map[string]any{"fieldId": "fldOwner", "operator": "exist"}},
+			want:  []any{map[string]any{"operator": "exist", "operands": []any{"fldOwner"}}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeViewConfigFilter(tc.input)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("normalizeViewConfigFilter() = %#v, want %#v", got, tc.want)
+			}
+			if err := validateViewConfigFilter(got); err != nil {
+				t.Fatalf("validate normalized filter: %v", err)
+			}
+		})
+	}
+
+	invalid := normalizeViewConfigFilter([]any{map[string]any{"fieldId": "fldText", "operator": "equals", "value": "done"}})
+	if err := validateViewConfigFilter(invalid); err == nil || !strings.Contains(err.Error(), "不支持") {
+		t.Fatalf("invalid shorthand operator must still fail strict validation: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing.T) {
 	caller := &aitableTestCaller{responses: []string{`{"data":{"views":[{"viewId":"v","viewType":"Grid"}]}}`}}
 	installAitableDeps(t, caller)
@@ -315,5 +384,28 @@ func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing
 	installAitableDeps(t, caller)
 	if err := recordQueryFetchAll(map[string]any{}, 1); err == nil {
 		t.Fatal("first-page pagination error should fail")
+	}
+
+	page, err := parseRecordQueryPage(`{"success":true,"status":"success","data":{}}`)
+	if err != nil || page.Records == nil || len(page.Records) != 0 {
+		t.Fatalf("explicit empty query page = %#v, %v", page, err)
+	}
+	for _, tc := range []struct {
+		name     string
+		response map[string]any
+		want     bool
+	}{
+		{name: "nil", response: nil},
+		{name: "data wrong type", response: map[string]any{"success": true, "status": "success", "data": []any{}}},
+		{name: "data not empty", response: map[string]any{"success": true, "status": "success", "data": map[string]any{"records": []any{}}}},
+		{name: "error wrong type", response: map[string]any{"success": true, "status": "success", "data": map[string]any{}, "error": "failed"}},
+		{name: "error not empty", response: map[string]any{"success": true, "status": "success", "data": map[string]any{}, "error": map[string]any{"code": 1}}},
+		{name: "empty error object", response: map[string]any{"success": true, "status": "success", "data": map[string]any{}, "error": map[string]any{}}, want: true},
+	} {
+		t.Run("empty query page "+tc.name, func(t *testing.T) {
+			if got := explicitEmptyRecordQueryPage(tc.response); got != tc.want {
+				t.Fatalf("explicitEmptyRecordQueryPage(%#v) = %v, want %v", tc.response, got, tc.want)
+			}
+		})
 	}
 }

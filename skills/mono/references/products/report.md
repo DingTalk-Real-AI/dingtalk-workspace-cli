@@ -32,6 +32,7 @@
 |----------|----------------|----------|
 | 查我发过的日志 / 我创建的日志 | `dws report outbox list --cursor 0 --size 20 --format json` | 从返回里取 `reportId`，再执行 `dws report entry get --report-id <reportId> --format json` |
 | 查我收到的日志 / 别人发给我的日志 | `dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json` | 必须先按用户时间词补齐完整 ISO 起止时间；取 `reportId` 后调用 `entry get` |
+| 按发件人查我收到的日志 | 先 `dws aisearch person --query "<姓名>" --dimension name --format json`，再 `dws report +inbox-list --start "<ISO>" --end "<ISO>" --sender-user-ids <USER_ID> --cursor 0 --size 20 --format json` | 只过滤当前 profile 的收件箱；人员零命中或多候选时停止并消歧，禁止默认选择第一项或改查他人的发件箱 |
 | 查看某条日志正文 / 日志详情 | `dws report entry get --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
 | 查某条日志统计 / 已读统计 | `dws report entry stats --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
 | 查日志模版 / 有哪些周报模板 | `dws report template list --format json` | 需要字段定义时继续 `dws report template get --name "<模版名>" --format json` |
@@ -405,6 +406,9 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 | 脚本 | 场景 | 用法 |
 |------|------|------|
+| [report_received_today.py](../../scripts/report_received_today.py) | 有界分页列出今天或最近几天收到的日志摘要；失败和不完整结果返回非零状态，不逐篇读取正文 | `python3 scripts/report_received_today.py --days <N>` |
+
+该脚本与 Multi 版本保持完全一致，使用 `dws report +inbox-list`，最多扫描 10 页、200 条并受总超时约束。需要正文时，从摘要中选择明确的 `reportId` 后只调用一次 `entry get`；不得恢复解析 `_internalDetailCommands`、逐条 N+1 读取或把命令失败伪装成空结果的旧流程。
 
 
 

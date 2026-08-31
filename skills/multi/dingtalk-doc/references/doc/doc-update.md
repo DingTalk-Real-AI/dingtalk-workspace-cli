@@ -42,6 +42,18 @@ block ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表，禁止
 
 `--expected-revision` 只允许 `--command overwrite --doc-format jsonml`。Markdown、append 和 block 接口没有服务端原子 revision 契约，禁止用写前读取模拟乐观锁。
 
+## 新增结构化标题
+
+“新增/插入标题”与“修改现有块文字”不是同一动作。`+update block_replace --content "# 标题"` 会替换原块并可能落成普通 paragraph，不能用它冒充 heading。
+
+需要在已有首块前新增标题时，先用 `+fetch --detail with-ids` 取得真实首块 ID，再走结构化插入：
+
+```bash
+dws doc block insert --node <DOC_ID> --heading "发布说明 v1.0" --level 1 --ref-block <FIRST_BLOCK_ID> --where before --format json
+```
+
+插入回执有新 block ID 时定点 `block list --block-id`；只有插入 index 时执行一次完整 `block list --content-format jsonml` 并按 index 验证 `blockType=heading`、回读投影 `heading.level="heading-1"` 和文字。`block list` 没有 `--limit`，禁止通过 Help 猜参数；CLI 写入仍用 `--level 1`。只核对可见文字不算结构验收。已有标题改级别或改文字时使用结构化 `doc block update --heading/--level`；更多块边界见 [`doc-block.md`](doc-block.md)。
+
 ## 最小改写决策
 
 | 已知条件 | 推荐路径 | 成本与成功率理由 |
@@ -50,6 +62,7 @@ block ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表，禁止
 | 已知唯一旧文本与新文本 | 直接 `str_replace --old --new` | 省掉 block 解析；旧文本不唯一时 Runtime 必须失败，不放宽匹配 |
 | 指定章节但没有 block ID | `+fetch outline` → `+fetch section --detail with-ids` → block 动作 | 两个小读取换取稳定锚点，避免全文 token 和误改相邻章节 |
 | 已知真实 block ID | 直接 `block_replace/delete/insert_before/insert_after` | 最小副作用；不改无关 block |
+| 多个待删除 block ID 已全部取得 | 在同一个 fail-fast 工具轮中按顺序执行全部 `block_delete` | 中间不重读 Reference、不重复 fetch；任一失败立即停止并保留未执行清单 |
 | 多处富结构保真修改 | `+fetch --detail full` 后定点 JSONML 更新 | 保留图片、附件、引用、表格和样式；不要从 Markdown 有损重建 |
 | 整篇重要覆盖 | `+checkpoint-update --mode overwrite` | 自动保存恢复点、执行并回读；普通 overwrite 只用于明确不需恢复点的场景 |
 

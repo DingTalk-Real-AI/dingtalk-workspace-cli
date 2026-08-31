@@ -378,12 +378,12 @@ func TestCrossPlatformCoverageDocFinalExecutionFailureBranches(t *testing.T) {
 		testseam.Swap(t, &docDownload, func(context.Context, string, localio.DownloadOptions) (localio.DownloadResult, error) {
 			return localio.DownloadResult{}, nil
 		})
-		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "r")
+		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 	})
 	t.Run("empty download", func(t *testing.T) {
 		testseam.Swap(t, &docDownload, func(context.Context, string, localio.DownloadOptions) (localio.DownloadResult, error) {
 			return localio.DownloadResult{}, nil
 		})
-		_ = runDocCoverage(t, MediaDownload, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "r", "--output", "out")
+		_ = runDocCoverage(t, MediaDownload, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out")
 	})
 }

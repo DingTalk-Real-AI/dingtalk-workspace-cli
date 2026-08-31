@@ -382,20 +382,24 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			if err := validateRequiredFlags(cmd, "node", "sheet-id", "range", "sort-keys"); err != nil {
 				return err
 			}
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"range":   mustGetFlag(cmd, "range"),
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"),
+				"range":    mustGetFlag(cmd, "range"),
 			}
 			sortKeysStr, _ := cmd.Flags().GetString("sort-keys")
 			var sortKeys []any
 			if err := json.Unmarshal([]byte(sortKeysStr), &sortKeys); err != nil {
 				return fmt.Errorf("--sort-keys JSON 解析失败: %w", err)
 			}
-			toolArgs["sortKeys"] = sortKeys
+			input["sort-keys"] = sortKeys
 			if v, _ := cmd.Flags().GetBool("has-header"); v {
-				toolArgs["hasHeader"] = true
+				input["has-header"] = true
 			}
+			toolArgs, err := BuildBatchSortRangeArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("sort_range", toolArgs)
 		},
 	}
@@ -599,15 +603,19 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			if err := validateRequiredFlags(cmd, "node", "sheet-id", "source-range", "target-range"); err != nil {
 				return err
 			}
-			toolArgs := map[string]any{
-				"nodeId":           mustGetFlag(cmd, "node"),
-				"sheetId":          mustGetFlag(cmd, "sheet-id"),
-				"sourceRange":      mustGetFlag(cmd, "source-range"),
-				"destinationRange": mustGetFlag(cmd, "target-range"),
+			input := map[string]any{
+				"sheet-id":     mustGetFlag(cmd, "sheet-id"),
+				"source-range": mustGetFlag(cmd, "source-range"),
+				"target-range": mustGetFlag(cmd, "target-range"),
 			}
 			if v, _ := cmd.Flags().GetString("target-sheet-id"); v != "" {
-				toolArgs["targetSheetId"] = v
+				input["target-sheet-id"] = v
 			}
+			toolArgs, err := BuildBatchMoveRangeArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("move_range", toolArgs)
 		},
 	}

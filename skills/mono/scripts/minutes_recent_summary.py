@@ -13,14 +13,75 @@ import sys
 import json
 import subprocess
 import argparse
-from pathlib import Path
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Tuple
 
-_scripts_dir = Path(__file__).resolve().parent
-if str(_scripts_dir) not in sys.path:
-    sys.path.insert(0, str(_scripts_dir))
 
-from minutes_list_parse import uuid_title_pairs_from_payload
+class DWSCommandError(RuntimeError):
+    """DWS 没有返回可用 JSON；调用方不得把它解释成空业务结果。"""
+
+
+def _unwrap_rows(payload: Any) -> List[Any]:
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    for key in ('result', 'data', 'list'):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            for inner_key in (
+                'itemList', 'items', 'list', 'records', 'minutes',
+            ):
+                inner = value.get(inner_key)
+                if isinstance(inner, list):
+                    return inner
+    return []
+
+
+def uuid_title_pairs_from_payload(
+    payload: Any,
+) -> List[Tuple[str, str]]:
+    """列表项可为对象、JSON 字符串、或纯 taskUuid 字符串。"""
+    out: List[Tuple[str, str]] = []
+    for item in _unwrap_rows(payload):
+        if isinstance(item, dict):
+            uuid = (
+                item.get('taskUuid')
+                or item.get('id')
+                or item.get('task_uuid')
+            )
+            if not uuid:
+                continue
+            title = item.get('title') or item.get('name') or '无标题'
+            if not isinstance(uuid, (str, int, float, bool)):
+                continue
+            if not isinstance(title, (str, int, float, bool)):
+                title = str(title) if isinstance(title, dict) else '无标题'
+            out.append((str(uuid), str(title)))
+        elif isinstance(item, str):
+            text = item.strip()
+            if not text:
+                continue
+            if text.startswith('{'):
+                try:
+                    parsed = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(parsed, dict):
+                    continue
+                uuid = (
+                    parsed.get('taskUuid')
+                    or parsed.get('id')
+                    or parsed.get('task_uuid')
+                )
+                if not uuid:
+                    continue
+                title = parsed.get('title') or parsed.get('name') or '无标题'
+                out.append((str(uuid), str(title)))
+            else:
+                out.append((text, text))
+    return out
 
 
 def run_dws(
@@ -34,14 +95,35 @@ def run_dws(
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=60
         )
-        if result.returncode != 0:
-            print(f"错误：{result.stderr.strip()}", file=sys.stderr)
-            return None
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        raise DWSCommandError(str(exc)) from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"退出码 {result.returncode}"
+        raise DWSCommandError(detail)
+    try:
         return json.loads(result.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError,
-            FileNotFoundError) as e:
-        print(f"错误：{e}", file=sys.stderr)
-        return None
+    except json.JSONDecodeError as exc:
+        raise DWSCommandError(f"DWS 返回的不是合法 JSON：{exc}") from exc
+
+
+def summary_text_from_payload(payload: Any) -> str:
+    """兼容当前 Runtime 的 result.fullSummary 与历史直接字段。"""
+    if isinstance(payload, str):
+        return payload
+    if not isinstance(payload, dict):
+        return ''
+    inner = payload.get('result', payload)
+    if isinstance(inner, str):
+        return inner
+    if not isinstance(inner, dict):
+        return ''
+    value = (inner.get('fullSummary') or inner.get('summary')
+             or inner.get('content'))
+    if isinstance(value, str):
+        return value
+    if value is not None:
+        return json.dumps(value, ensure_ascii=False)
+    return json.dumps(inner, ensure_ascii=False)
 
 
 def main():
@@ -88,22 +170,7 @@ def main():
             'minutes', 'get', 'summary',
             '--id', uuid, '--format', 'json',
         ])
-        summary_text = ''
-        if summary_data:
-            if isinstance(summary_data, str):
-                summary_text = summary_data
-            elif isinstance(summary_data, dict):
-                # 兼容 {result: {fullSummary}} 包裹结构
-                inner = summary_data.get('result')
-                container = (inner if isinstance(inner, dict)
-                             else summary_data)
-                summary_text = (container.get('fullSummary')
-                                or container.get('summary')
-                                or container.get('content')
-                                or (inner if isinstance(inner, str)
-                                    else '')
-                                or json.dumps(container,
-                                              ensure_ascii=False))
+        summary_text = summary_text_from_payload(summary_data)
 
         output_lines.append(f"## {i}. {title}\n")
         if summary_text:
@@ -122,4 +189,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except DWSCommandError as exc:
+        print(f"错误：{exc}", file=sys.stderr)
+        sys.exit(1)

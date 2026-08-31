@@ -114,7 +114,7 @@ func newServerFailureAPIError(
 		apperrors.WithReason(fallbackReason),
 		apperrors.WithServerKey(serverKey),
 		apperrors.WithHint(fallbackHint),
-		apperrors.WithActions("运行 dws doctor 检查登录态、网络和本地环境；持续失败时保留 Trace ID 和 Server Code"),
+		apperrors.WithActions("持续失败时保留 Trace ID 和 Server Code 联系服务端排查"),
 		apperrors.WithServerDiag(diag),
 	}
 	if classified, ok := classifyServerFailure(message, serverKey, tool, diag); ok {

@@ -453,7 +453,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	if typed.Hint != "" {
 		info.Hint = typed.Hint
 	}
-	info.Actions = append([]string(nil), typed.Actions...)
+	info.Actions = apperrors.RecoveryActions(err)
 	info.Retryable = typed.RetryableSet && typed.Retryable
 	info.RetryAfterSeconds = typed.RetryAfterSeconds
 	if typed.RPCCode != 0 {
@@ -1106,7 +1106,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
 	// `dws shortcut stats` and future high-frequency shortcut distillation.
 	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
-	mcpCmd.AddCommand(newMCPURLGroup(patCaller))
+	mcpCmd.AddCommand(
+		newMCPURLGroup(patCaller),
+		newMCPPublishedGroup(patCaller, newAuthenticatedMCPPublishedTransportFactory(runner, flags)),
+	)
 
 	navigationGroup := func(command *cobra.Command) *cobra.Command {
 		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{

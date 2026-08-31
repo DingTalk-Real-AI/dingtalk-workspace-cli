@@ -419,8 +419,8 @@ func multiProfileErrorPayload(err error) map[string]any {
 		if typed.Hint != "" {
 			payload["hint"] = typed.Hint
 		}
-		if len(typed.Actions) > 0 {
-			payload["actions"] = append([]string(nil), typed.Actions...)
+		if actions := apperrors.RecoveryActions(err); len(actions) > 0 {
+			payload["actions"] = actions
 		}
 		if len(typed.Details) > 0 {
 			payload["details"] = typed.Details

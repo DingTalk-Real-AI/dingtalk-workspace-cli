@@ -14,8 +14,8 @@ runtime_contract="skills/multi/dingtalk-shared/references/runtime-contract.md"
 chat_target_bytes=10000
 chat_max_overage_percent=10
 chat_max_bytes=$((chat_target_bytes * (100 + chat_max_overage_percent) / 100))
-doc_target_bytes=10000
-doc_max_overage_percent=2
+doc_target_bytes=12000
+doc_max_overage_percent=0
 doc_max_bytes=$((doc_target_bytes * (100 + doc_max_overage_percent) / 100))
 event_max_bytes=10000
 runtime_contract_max_bytes=3000
@@ -115,6 +115,23 @@ do
 	if ! grep -Fq -- "$required_route" "$doc_skill"; then
 		printf '%s\n' \
 			"skill route regression: $doc_skill is missing $required_route" >&2
+		exit 1
+	fi
+done
+
+for heading_reference in \
+	"skills/multi/dingtalk-doc/references/doc/doc-block.md" \
+	"skills/multi/dingtalk-doc/references/doc/doc-update.md"
+do
+	if ! grep -Fq -- '--level 1' "$heading_reference" || \
+		! grep -Fq 'heading.level="heading-1"' "$heading_reference"; then
+		printf '%s\n' \
+			"skill heading contract regression: $heading_reference must distinguish numeric CLI input from Runtime readback" >&2
+		exit 1
+	fi
+	if grep -Fq 'heading.level=1' "$heading_reference"; then
+		printf '%s\n' \
+			"skill heading contract regression: $heading_reference expects the wrong Runtime projection" >&2
 		exit 1
 	fi
 done

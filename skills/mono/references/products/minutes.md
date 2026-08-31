@@ -2013,7 +2013,8 @@ loop:
 | 脚本 | 场景 | 用法 |
 |------|------|------|
 | [minutes_recent_summary.py](../../scripts/minutes_recent_summary.py) | 获取最近听记的 AI 摘要并合并 | `python minutes_recent_summary.py --max 5` |
-| [minutes_extract_todos.py](../../scripts/minutes_extract_todos.py) | 从听记中提取待办事项汇总 | `python minutes_extract_todos.py --max 5` |
+
+行动项读取不再提供独立脚本：单条用 `dws minutes +action-items --id <taskUuid>`；多条用 `dws minutes +detail --ids <uuid1,uuid2> --artifacts todos`。
 
 ## 反例 / 回归案例
 

@@ -187,6 +187,7 @@ func collectDocPages(
 		"hasMore":         hasMore,
 		"nextCursor":      nextCursor,
 		"stopReason":      stopReason,
+		"failures":        []map[string]any{},
 	}
 	return result, nil
 }

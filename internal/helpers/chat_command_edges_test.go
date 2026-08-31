@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,13 @@ func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...str
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append(append([]string(nil), args...), "--yes"))
-	return root.ExecuteContext(context.Background())
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string) error {
@@ -57,6 +64,20 @@ func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string)
 		flag.Changed = true
 	}
 	return command.RunE(command, nil)
+}
+
+func TestCrossPlatformCoverageChatMessageSendValidationErrorsAreTyped(t *testing.T) {
+	err := runChatCoverageDirect(t, []string{"message", "send"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("missing target error = %v", err)
+	}
+	if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+		t.Fatalf("missing target exit code = %d, want validation/%d", got, apperrors.ExitCodeValidation)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "require_one_of" {
+		t.Fatalf("missing target error = %#v, want validation/require_one_of", err)
+	}
 }
 
 func TestCrossPlatformCoverageEvaluationRegressionChatSearchSpellingsAndNaturalBotTarget(t *testing.T) {

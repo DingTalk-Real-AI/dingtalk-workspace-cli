@@ -4,6 +4,7 @@
 package todo
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -70,6 +72,51 @@ func runTodoCoverage(t *testing.T, declaration shortcut.Shortcut, caller *todoCo
 	return root.Execute()
 }
 
+func runTodoUnifiedCoverage(t *testing.T, declaration shortcut.Shortcut, caller *todoCoverageCaller, args ...string) map[string]any {
+	t.Helper()
+	helpers.InitDepsForTest(t, caller)
+	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
+	service := &cobra.Command{Use: "todo"}
+	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
+	root.AddCommand(service)
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs(append([]string{"todo", declaration.Command}, args...))
+	executed, err := root.ExecuteC()
+	if err != nil {
+		t.Fatalf("execute %s: %v", declaration.Command, err)
+	}
+	if code, emitted, emitErr := output.EmitStoredResult(executed); emitErr != nil || !emitted || code != 0 {
+		t.Fatalf("emit %s: code=%d emitted=%v err=%v", declaration.Command, code, emitted, emitErr)
+	}
+	var envelope struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode %s output: %v\n%s", declaration.Command, err, stdout.String())
+	}
+	return envelope.Data
+}
+
+func normalizedTodoArguments(t *testing.T, value map[string]any) map[string]any {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal(encoded, &normalized); err != nil {
+		t.Fatal(err)
+	}
+	return normalized
+}
+
 func todoRuntimeForTest(t *testing.T, declaration shortcut.Shortcut, values map[string]string) *shortcut.RuntimeContext {
 	t.Helper()
 	cmd := corecmd.New(shortcut.FromShortcut(declaration))
@@ -83,6 +130,18 @@ func todoRuntimeForTest(t *testing.T, declaration shortcut.Shortcut, values map[
 	return shortcut.RuntimeContextForTest(cmd, declaration)
 }
 
+func requireTodoExecutionStartedError(t *testing.T, err error, wantReason string) {
+	t.Helper()
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error type = %T, want *errors.Error", err)
+	}
+	if typed.Reason != wantReason || typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+		!typed.RetryableSet || typed.Retryable || typed.Cause == nil {
+		t.Fatalf("post-write failure = %#v", typed)
+	}
+}
+
 func TestCrossPlatformCoverageTodoCommonStrictBranches(t *testing.T) {
 	for _, response := range []map[string]any{{}, {"success": "yes"}, {"success": false}} {
 		if _, err := requireTodoResponse(response, "todo/test"); err == nil {
@@ -92,7 +151,7 @@ func TestCrossPlatformCoverageTodoCommonStrictBranches(t *testing.T) {
 	if _, err := requireTodoResponse(map[string]any{"result": map[string]any{}}, "todo/test"); err != nil {
 		t.Fatalf("response without optional success rejected: %v", err)
 	}
-	for _, response := range []map[string]any{{}, {"result": map[string]any{}}, {"success": false}} {
+	for _, response := range []map[string]any{{}, {"result": map[string]any{}}, {"success": "yes"}, {"success": false}} {
 		if err := requireTodoWriteReceipt(response, "todo/test"); err == nil {
 			t.Fatalf("bad receipt accepted: %#v", response)
 		}
@@ -248,6 +307,115 @@ func TestCrossPlatformCoverageTodoLifecycleCore(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageTodoDryRunPreviewsExactWriteArguments(t *testing.T) {
+	tests := []struct {
+		name        string
+		declaration shortcut.Shortcut
+		tool        string
+		args        []string
+		responses   map[string][]string
+	}{
+		{
+			name: "create", declaration: Create, tool: "create_personal_todo",
+			args: []string{"--title", "x", "--executors", "u1,u2", "--due", todoCoverageTime, "--priority", "40"},
+			responses: map[string][]string{
+				"create_personal_todo": {`{"success":true,"result":{"taskId":"task-1"}}`},
+				"get_todo_detail":      {`{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"x"}}}`},
+			},
+		},
+		{
+			name: "update", declaration: Update, tool: "update_todo_task",
+			args: []string{"--task-id", "task-1", "--title", "x", "--due", todoCoverageTime, "--priority", "40"},
+			responses: map[string][]string{
+				"update_todo_task": {`{"success":true}`},
+				"get_todo_detail":  {`{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"x","dueTime":1786932000000,"priority":40}}}`},
+			},
+		},
+		{
+			name: "complete", declaration: Complete, tool: "update_todo_done_status",
+			args: []string{"--task-id", "task-1"},
+			responses: map[string][]string{
+				"get_todo_detail":         {`{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","isDone":false}}}`, `{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","isDone":true}}}`},
+				"update_todo_done_status": {`{"success":true}`},
+			},
+		},
+		{
+			name: "reopen", declaration: Reopen, tool: "update_todo_done_status",
+			args: []string{"--task-id", "task-1"},
+			responses: map[string][]string{
+				"get_todo_detail":         {`{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","isDone":true}}}`, `{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","isDone":false}}}`},
+				"update_todo_done_status": {`{"success":true}`},
+			},
+		},
+		{
+			name: "comment", declaration: Comment, tool: "add_todo_comment",
+			args: []string{"--task-id", "task-1", "--content", "body"},
+			responses: map[string][]string{
+				"list_todo_comment": {`{"success":true,"result":{"comments":[],"hasMore":false}}`, `{"success":true,"result":{"comments":[{"commentId":"new","content":"body"}],"hasMore":false}}`},
+				"add_todo_comment":  {`{"success":true}`},
+			},
+		},
+		{
+			name: "reminder-clear", declaration: Reminder, tool: "reset_todo_reminder",
+			args:      []string{"--task-id", "task-1", "--clear"},
+			responses: map[string][]string{"reset_todo_reminder": {`{"success":true}`}},
+		},
+		{
+			name: "reminder-due", declaration: Reminder, tool: "add_todo_reminder",
+			args:      []string{"--task-id", "task-1", "--base-time", "dueTime", "--due-date-offset", "-30"},
+			responses: map[string][]string{"add_todo_reminder": {`{"success":true}`}},
+		},
+		{
+			name: "reminder-custom", declaration: Reminder, tool: "add_todo_reminder",
+			args:      []string{"--task-id", "task-1", "--base-time", "customTime", "--at", todoCoverageTime},
+			responses: map[string][]string{"add_todo_reminder": {`{"success":true}`}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			previewCaller := &todoCoverageCaller{responses: map[string][]string{}}
+			preview := runTodoUnifiedCoverage(t, tc.declaration, previewCaller, append(append([]string{}, tc.args...), "--dry-run")...)
+			if len(previewCaller.history) != 0 {
+				t.Fatalf("dry-run made remote calls: %#v", previewCaller.history)
+			}
+			if preview["tool"] != tc.tool {
+				t.Fatalf("preview tool=%#v want %q", preview["tool"], tc.tool)
+			}
+			previewParams, ok := preview["params"].(map[string]any)
+			if !ok {
+				t.Fatalf("preview params=%#v", preview["params"])
+			}
+
+			confirmedCaller := &todoCoverageCaller{responses: tc.responses}
+			confirmedArgs := append(append([]string{}, tc.args...), "--yes")
+			if err := runTodoCoverage(t, tc.declaration, confirmedCaller, confirmedArgs...); err != nil {
+				t.Fatal(err)
+			}
+			writeIndex := -1
+			for index, tool := range confirmedCaller.history {
+				if tool == tc.tool {
+					writeIndex = index
+					break
+				}
+			}
+			if writeIndex < 0 {
+				t.Fatalf("confirmed calls=%#v, missing %s", confirmedCaller.history, tc.tool)
+			}
+			actual := normalizedTodoArguments(t, confirmedCaller.arguments[writeIndex])
+			if !mapsEqualJSON(previewParams, actual) {
+				t.Fatalf("preview params=%#v\nactual params=%#v", previewParams, actual)
+			}
+		})
+	}
+}
+
+func mapsEqualJSON(left, right map[string]any) bool {
+	leftJSON, leftErr := json.Marshal(left)
+	rightJSON, rightErr := json.Marshal(right)
+	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
+}
+
 func TestCrossPlatformCoverageTodoCreateAndUpdate(t *testing.T) {
 	for name, values := range map[string]map[string]string{
 		"create-required": {"title": "", "executors": ""},
@@ -297,6 +465,12 @@ func TestCrossPlatformCoverageTodoCreateAndUpdate(t *testing.T) {
 	if err := runTodoCoverage(t, Create, createSuccess, "--title", "x", "--executors", "u", "--yes"); err != nil {
 		t.Fatal(err)
 	}
+	createReadFailure := &todoCoverageCaller{responses: map[string][]string{
+		"create_personal_todo": {`{"success":true,"result":{"taskId":"task-1"}}`},
+		"get_todo_detail":      {`{"success":true,"result":{}}`},
+	}}
+	err := runTodoCoverage(t, Create, createReadFailure, "--title", "x", "--executors", "u", "--yes")
+	requireTodoExecutionStartedError(t, err, "missing_detail")
 
 	updateCases := map[string]map[string][]string{
 		"call":       {"update_todo_task": {"__ERROR__"}},
@@ -463,6 +637,12 @@ func TestCrossPlatformCoverageTodoCommentAndReminder(t *testing.T) {
 	if err := runTodoCoverage(t, Comment, commentSuccess, "--task-id", "task-1", "--content", "body", "--yes"); err != nil {
 		t.Fatal(err)
 	}
+	commentReadFailure := &todoCoverageCaller{responses: map[string][]string{
+		"list_todo_comment": {emptyPage, `{"success":true,"result":{}}`},
+		"add_todo_comment":  {`{"success":true}`},
+	}}
+	err := runTodoCoverage(t, Comment, commentReadFailure, "--task-id", "task-1", "--content", "body", "--yes")
+	requireTodoExecutionStartedError(t, err, "missing_collection")
 
 	for name, args := range map[string][]string{
 		"none":         {"--task-id", "task-1", "--yes"},
@@ -474,6 +654,46 @@ func TestCrossPlatformCoverageTodoCommentAndReminder(t *testing.T) {
 		t.Run("reminder-"+name, func(t *testing.T) {
 			if err := runTodoCoverage(t, Reminder, &todoCoverageCaller{responses: map[string][]string{}}, args...); err == nil {
 				t.Fatal("bad reminder arguments accepted")
+			}
+		})
+	}
+	if err := Reminder.Execute(todoRuntimeForTest(t, Reminder, map[string]string{"task-id": "task-1"})); err == nil {
+		t.Fatal("direct reminder execution without an action accepted")
+	}
+	for _, tc := range []struct {
+		name       string
+		args       []string
+		requestKey string
+		ignoredKey string
+	}{
+		{
+			name:       "clear-offset",
+			args:       []string{"--task-id", "task-1", "--clear", "--due-date-offset", "-30", "--dry-run", "--yes"},
+			requestKey: "todoReminderUpdateRequest", ignoredKey: "dueDateOffset",
+		},
+		{
+			name:       "due-at",
+			args:       []string{"--task-id", "task-1", "--base-time", "dueTime", "--due-date-offset", "-30", "--at", todoCoverageTime, "--dry-run", "--yes"},
+			requestKey: "todoReminderAddRequest", ignoredKey: "reminderTimeStamp",
+		},
+		{
+			name:       "custom-offset",
+			args:       []string{"--task-id", "task-1", "--base-time", "customTime", "--at", todoCoverageTime, "--due-date-offset", "-30", "--dry-run", "--yes"},
+			requestKey: "todoReminderAddRequest", ignoredKey: "dueDateOffset",
+		},
+	} {
+		t.Run("reminder-compatible-"+tc.name, func(t *testing.T) {
+			preview := runTodoUnifiedCoverage(t, Reminder, &todoCoverageCaller{responses: map[string][]string{}}, tc.args...)
+			params, ok := preview["params"].(map[string]any)
+			if !ok {
+				t.Fatalf("preview params = %#v", preview["params"])
+			}
+			request, ok := params[tc.requestKey].(map[string]any)
+			if !ok {
+				t.Fatalf("preview request %s = %#v", tc.requestKey, params[tc.requestKey])
+			}
+			if _, exists := request[tc.ignoredKey]; exists {
+				t.Fatalf("historically ignored %s reached request: %#v", tc.ignoredKey, request)
 			}
 		})
 	}
@@ -576,17 +796,21 @@ func TestCrossPlatformCoverageTodoVerificationHelpers(t *testing.T) {
 
 func TestCrossPlatformCoverageTodoGetMyTasksAndListLeaves(t *testing.T) {
 	for name, args := range map[string][]string{
-		"page":     {"--page", "0"},
-		"size":     {"--size", "21"},
-		"priority": {"--priority", "11"},
-		"role":     {"--role-types", "owner"},
-		"max":      {"--all", "--max-pages", "0"},
+		"page":      {"--page", "0"},
+		"size":      {"--size", "21"},
+		"priority":  {"--priority", "11"},
+		"role":      {"--role-types", "owner"},
+		"max":       {"--all", "--max-pages", "0"},
+		"max-alone": {"--max-pages", "1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := runTodoCoverage(t, GetMyTasks, &todoCoverageCaller{responses: map[string][]string{}}, args...); err == nil {
 				t.Fatal("bad list arguments accepted")
 			}
 		})
+	}
+	if err := GetMyTasks.Execute(todoRuntimeForTest(t, GetMyTasks, map[string]string{"max-pages": "1"})); err == nil {
+		t.Fatal("direct list execution with --max-pages but without --all accepted")
 	}
 	for name, response := range map[string]string{
 		"call":       "__ERROR__",

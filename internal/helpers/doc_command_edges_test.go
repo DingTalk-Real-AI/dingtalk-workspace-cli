@@ -119,6 +119,17 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 		}
 	})
 
+	t.Run("attachment download delegates a validated resource id", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"downloadUrl":"https://download.example.test/attachment"}`}}}
+		if err := runDocCoverageCommand(t, caller,
+			"media", "download",
+			"--node", "node",
+			"--resource-id", "123e4567-e89b-12d3-a456-426614174000",
+		); err != nil {
+			t.Fatalf("attachment download returned error: %v", err)
+		}
+	})
+
 	t.Run("upload put failure", func(t *testing.T) {
 		installScriptedCaller(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"resourceUrl":"https://upload","uploadKey":"key"}`}}})
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return errors.New("put") }

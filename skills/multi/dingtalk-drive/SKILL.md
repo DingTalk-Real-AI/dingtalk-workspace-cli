@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层，覆盖钉盘与文档空间）。Use when 用户说 钉盘/文档空间/我的文档中的普通文件或文件夹、查找/上传/下载/复制/移动/重命名/删除/回收站/权限/元信息，或本地与钉盘文件夹比较、拉取、推送、双向同步；也承接在线文档节点的存储管理。文档正文编辑与导出走 dingtalk-doc；明确的知识库空间及空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层，覆盖钉盘与文档空间）。Use when 用户说 钉盘/文档空间/我的文档中的普通文件或文件夹、查找/上传/下载/复制/移动/重命名/删除/回收站/权限/评论/元信息，或本地与钉盘文件夹比较、拉取、推送、双向同步；也承接在线文档节点的存储管理。文档正文编辑与导出走 dingtalk-doc；明确的知识库空间及空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -37,13 +37,14 @@ metadata:
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| 全局按名称或关键词找文件 | `dws drive +search --query <关键词>` | 多候选停止；在线文档正文搜索走 `doc +search` |
+| 全局按名称或关键词找文件 | `dws drive +search --query <关键词>` | 多候选停止；Drive 搜索没有 Doc 的 `--page-all`，按真实 nextCursor 翻页；在线文档正文搜索走 `doc +search` |
 | 浏览根目录或已知文件夹 | `dws drive +list [--folder <dentryUuid>]` | 默认一页，处理 nextCursor |
 | 发现钉盘企业空间或“我的文件”空间 | `dws wiki space list --type <orgSpace\|mySpace> --format json` | Drive 只读前置；orgSpace 按 nextToken 续页，取 spaceId/rootFolderId 后回到 Drive |
 | 查看最近访问/编辑 | `dws drive +recent [--operate-type 1] --limit <N>` | 1=最近编辑；默认最近访问 |
 | 查看节点类型和元数据 | `dws drive +inspect --node <dentryUuid>` | 按需加 stats/publish/cover，不为普通列表强制调用 |
 | 下载普通文件 | `dws drive +download --node <dentryUuid> --output <相对路径>` | 当前 shortcut 接受 ID；在线文档用 `doc +export` |
 | 上传新文件或覆盖普通文件 | `dws drive +upload --file <相对路径>` | 新建可加 folder；覆盖改加 node，二者互斥 |
+| 管理普通文件全局评论 | `dws drive comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply` | 复用 Doc/Sheet 新评论链路；旧 `list/create` 已 deprecated；固定全文 `global`，不支持划词、单元格或 mention |
 | 创建文件夹 | `dws drive +create-folder --name <名称> [--folder <ID>]` | Shortcut 已提交并读回 |
 | 复制在线文档节点 | `dws drive +copy --node <ID> [--folder <目标ID>]` | 普通钉盘文件会被拒绝；Base 结构复制走 AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` |
 | 移动节点 | `dws drive +move --node <ID> --folder <目标ID>` | 破坏性变更，按 Runtime confirmation |
@@ -55,7 +56,7 @@ metadata:
 
 ### 低频入口
 
-- 删除/恢复：`+delete/+recycle-list/+recycle-restore`；版本：`+version-history/+version-get/+version-download/+version-revert`。
+- 删除已确认节点：`dws drive +delete --node <dentryUuid>`；恢复：`+recycle-list/+recycle-restore`；版本：`+version-history/+version-get/+version-download/+version-revert`。
 - 收藏：`+star-*`；公开状态：`+publish-get/+publish-unset`（`+publish-set` 不进入 Agent 路由）；统计/封面用 `+inspect`；快捷方式用 `+create-shortcut`。
 - 目录树只用有界 `+list` 逐层遍历。
 
@@ -68,7 +69,9 @@ metadata:
 - 只有名称：`+search` → 唯一候选的 nodeId → 目标命令；不得自动选择第一项。
 - 只有文件夹层级：从最近的已知 folder ID 开始 `+list`，不要从根目录无界递归。
 - 上传新文件：单条 `+upload`；不要退回 upload-info + 手写 HTTP + commit。
+- 导出后上传：`doc +export` 首次就指定最终本地文件名，直接复用回执 `localPath`，首次正式 `drive +upload` 带已获授权的 `--yes`；禁止上传后再 rename。
 - copy/move/rename/create-folder 已内置写后读取时，不再由 Agent重复执行 `+inspect`。
+- 已知 nodeId 的重命名直接 `+rename`，不先 Catalog、Help 或 search；ALIDOC 的逻辑标题由 shortcut 内部文档读回验证。
 - 文件夹方向已明确时直接 `status/pull/push/sync`，不先 status；写操作先用完全相同参数 dry-run，再正式执行。
 - 搜索结果 `type=able` 后按业务动词重路由：结构复制/删除/Base 内操作走 AITable。结构复制按当前 leaf 提供源 Base ID 和真实 `--target-folder-id`；缺少目标 ID 时停止，不猜根 ID或发明 `--target-root`。
 - `+inspect/+download/+list` 只保证 dentryUuid；只有 URL 时先用 `dws drive info --node <URL> --format json` 解析并核对 nodeId。
@@ -116,7 +119,7 @@ Golden Route 参数足够时禁止读取 reference。其余最多读取一个精
 
 ## 跨产品边界
 
-- 普通文件/文件夹及在线文档节点的存储管理 → Drive；正文/内容分别走 Doc、Sheet、AITable。
+- 普通文件/文件夹及在线文档节点的存储管理 → Drive；把文件作为附件放进某篇文档正文走 Doc `+media-insert`，其他正文/内容分别走 Doc、Sheet、AITable。
 - able 外层移动/重命名走 Drive；结构复制、Base 删除（`+base-delete`）及 Base 内操作走 AITable。
 - 明确知识库 workspace 层级 → Wiki；泛称“文档空间/我的文档”仍走 Drive。
 - 钉盘存储空间发现例外地复用 managed `dws wiki space list --type orgSpace|mySpace`；只取真实 spaceId/rootFolderId 后回到 Drive。spaceId 用于空间参数，rootFolderId 才可作为空间根目录 folder；`orgWikiSpace/myWikiSpace` 返回 workspaceId，不能混入 Drive 参数。

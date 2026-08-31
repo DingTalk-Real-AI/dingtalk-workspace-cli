@@ -1410,8 +1410,12 @@ jobs:
               changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
           )"
           impacted_output="$(
+            # Smoke has no production statements and launches a subprocess;
+            # the always-on non-full-suite focused smoke shard owns it, while
+            # -cover only adds runtime stderr noise.
             ./scripts/ci/changed-test-packages.sh \
-              list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+              list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF" |
+              awk '$0 != "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/smoke"'
           )"
           if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
             printf 'mode: atomic\n' > coverage.txt
@@ -1633,8 +1637,10 @@ jobs:
                 changed "$COVERAGE_BASE_REF" HEAD
             )"
             impacted_output="$(
+              # Keep the baseline plan symmetric with Coverage (current).
               ./scripts/ci/changed-test-packages.sh \
-                list "$COVERAGE_BASE_REF" HEAD
+                list "$COVERAGE_BASE_REF" HEAD |
+                awk '$0 != "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/smoke"'
             )"
           fi
           base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
