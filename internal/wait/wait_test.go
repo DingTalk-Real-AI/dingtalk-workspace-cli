@@ -136,10 +136,11 @@ func TestRunTimesOutAsPendingWhenPollerRespectsDeadline(t *testing.T) {
 }
 
 func TestRunTimesOutBeforeFirstPoll(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	// An already-expired deadline is our own timeout: close as timed-out pending.
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
 	outcome, err := Run(ctx, loopSpec(), func(context.Context) (PollDoc, error) {
-		t.Fatal("poller ran on a pre-cancelled context")
+		t.Fatal("poller ran on an expired context")
 		return nil, nil
 	})
 	if err != nil {
@@ -147,6 +148,55 @@ func TestRunTimesOutBeforeFirstPoll(t *testing.T) {
 	}
 	if !outcome.TimedOut || outcome.Attempts != 0 || outcome.Outcome != contract.ResultOutcomePending {
 		t.Fatalf("timedOut=%v attempts=%d outcome=%s", outcome.TimedOut, outcome.Attempts, outcome.Outcome)
+	}
+}
+
+func TestRunPropagatesParentCancellation(t *testing.T) {
+	// A cancelled parent context (e.g. Ctrl-C) must propagate the cancellation
+	// error, not be swallowed as a timed-out pending success.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := Run(ctx, loopSpec(), func(context.Context) (PollDoc, error) {
+		t.Fatal("poller ran on a cancelled context")
+		return nil, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled", err)
+	}
+}
+
+func TestRunPropagatesParentCancellationDuringWait(t *testing.T) {
+	// Cancellation arriving between polls must propagate, not time out.
+	ctx, cancel := context.WithCancel(context.Background())
+	polls := 0
+	go func() {
+		time.Sleep(3 * time.Millisecond)
+		cancel()
+	}()
+	spec := loopSpec()
+	spec.Interval = time.Hour // force the loop into the wait-between-polls select
+	_, err := Run(ctx, spec, func(context.Context) (PollDoc, error) {
+		polls++
+		return PollDoc{"result": map[string]any{"status": "RUNNING"}}, nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled", err)
+	}
+}
+
+func TestRunEventPropagatesParentCancellation(t *testing.T) {
+	// Event path: a cancelled parent context must propagate, not time out.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	stream := &fakeEventStream{block: true}
+	_, err := RunEvent(ctx, EventLoopSpec{
+		StatusQuery: "status",
+		MatchField:  "id",
+		Terminal:    map[string]contract.ResultOutcome{"DONE": contract.ResultOutcomeSuccess},
+		Pending:     []string{"RUNNING"},
+	}, "res-1", stream)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled", err)
 	}
 }
 

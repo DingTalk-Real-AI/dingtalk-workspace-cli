@@ -107,13 +107,19 @@ func Run(ctx context.Context, spec LoopSpec, poll Poller) (Outcome, error) {
 	attempts := 0
 	lastStatus := ""
 	for {
-		if ctx.Err() != nil {
-			return timedOut(lastStatus, attempts), nil
+		if err := ctx.Err(); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return timedOut(lastStatus, attempts), nil
+			}
+			return Outcome{Attempts: attempts}, err
 		}
 		doc, err := poll(ctx)
 		if err != nil {
-			if ctx.Err() != nil {
-				return timedOut(lastStatus, attempts), nil
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				if errors.Is(ctxErr, context.DeadlineExceeded) {
+					return timedOut(lastStatus, attempts), nil
+				}
+				return Outcome{Attempts: attempts}, ctxErr
 			}
 			return Outcome{Attempts: attempts}, fmt.Errorf("wait: poll failed: %w", err)
 		}
@@ -134,7 +140,10 @@ func Run(ctx context.Context, spec LoopSpec, poll Poller) (Outcome, error) {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return timedOut(status, attempts), nil
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return timedOut(status, attempts), nil
+			}
+			return Outcome{Status: status, Attempts: attempts}, ctx.Err()
 		case <-timer.C:
 		}
 		interval = nextInterval(interval)
@@ -244,8 +253,11 @@ func RunEvent(ctx context.Context, spec EventLoopSpec, resource string, stream E
 	for {
 		doc, err := stream.Recv(ctx)
 		if err != nil {
-			if ctx.Err() != nil {
-				return Outcome{Status: lastStatus, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}, nil
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				if errors.Is(ctxErr, context.DeadlineExceeded) {
+					return Outcome{Status: lastStatus, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}, nil
+				}
+				return Outcome{Status: lastStatus, Attempts: attempts}, ctxErr
 			}
 			// Wrap with ErrEventStreamEnded so auto mode can fall back to
 			// polling while correlated-status failures (unknown status,

@@ -754,12 +754,17 @@ func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.D
 		err = errors.New("subscription returned no stream")
 	}
 	if err != nil {
-		if loopCtx.Err() != nil {
-			// Subscribe blocked until the wait deadline: same contract as a
-			// cancelled poll — close as timed-out pending, do not surface
-			// ctx.Err() as a subscription failure (and do not poll-fallback
-			// in auto mode; the shared deadline is already exhausted).
-			return wait.Outcome{Outcome: contract.ResultOutcomePending, TimedOut: true}, nil
+		if loopCtxErr := loopCtx.Err(); loopCtxErr != nil {
+			if errors.Is(loopCtxErr, context.DeadlineExceeded) {
+				// Subscribe blocked until the wait deadline: same contract as a
+				// cancelled poll — close as timed-out pending, do not surface
+				// ctx.Err() as a subscription failure (and do not poll-fallback
+				// in auto mode; the shared deadline is already exhausted).
+				return wait.Outcome{Outcome: contract.ResultOutcomePending, TimedOut: true}, nil
+			}
+			// Parent context was cancelled (e.g. Ctrl-C): propagate the
+			// cancellation so the interruption exit semantics are preserved.
+			return wait.Outcome{}, loopCtxErr
 		}
 		if mode == contract.WaitModeAuto {
 			// Subscription failed before any event: fall back to polling

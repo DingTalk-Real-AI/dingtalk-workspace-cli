@@ -524,6 +524,34 @@ func TestResultInvokeWaitTimeoutKeepsPending(t *testing.T) {
 	}
 }
 
+func TestResultInvokeWaitParentCancellationPropagates(t *testing.T) {
+	// Ctrl-C (parent context cancellation) during a wait must propagate the
+	// cancellation error, not be swallowed as a timed-out pending with exit 0.
+	ctx, cancel := context.WithCancel(context.Background())
+	polls := 0
+	cmd := New(baseWaitSpec(waitTestDecl(), func(pollCtx context.Context, _ *Ctx) (wait.PollDoc, error) {
+		polls++
+		if polls == 1 {
+			// Cancel the parent context after the first poll to simulate Ctrl-C
+			// arriving during the wait phase.
+			cancel()
+		}
+		return wait.PollDoc{"result": map[string]any{"status": "RUNNING"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait", "--wait-timeout", "60"})
+	storeCtx, _ := output.WithResultStore(ctx)
+	cmd.SetContext(storeCtx)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	err := cmd.Execute()
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled (cancellation must not be swallowed as timeout)", err)
+	}
+	if strings.Contains(stdout.String(), `"outcome": "pending"`) {
+		t.Fatalf("cancellation must not produce a pending envelope; stdout=%s", stdout.String())
+	}
+}
+
 func TestWaitDeclRequiresResultInvokeDispatcher(t *testing.T) {
 	// A declared wait on the legacy Invoke path would observe a failure
 	// terminal while still exiting 0 — construction must reject it.
