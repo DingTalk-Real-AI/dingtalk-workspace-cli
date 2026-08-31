@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
@@ -151,9 +153,12 @@ func FetchAppToken(ctx context.Context, appKey, appSecret string) (token string,
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize+1))
 	if err != nil {
 		return "", 0, fmt.Errorf("reading response: %w", err)
+	}
+	if len(respBody) > config.MaxResponseBodySize {
+		return "", 0, fmt.Errorf("app token 响应超过安全上限 %d 字节", config.MaxResponseBodySize)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -238,5 +243,34 @@ func truncateStr(s string, maxLen int) string {
 
 // appTokenHTTPClient is the default HTTP client for app token operations.
 var appTokenHTTPClient = &http.Client{
-	Timeout: 15 * time.Second,
+	Timeout:       15 * time.Second,
+	CheckRedirect: appTokenRedirectPolicy,
+}
+
+func appTokenRedirectPolicy(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("安全限制: app token 重定向次数超过 10 次")
+	}
+	if len(via) == 0 {
+		return nil
+	}
+	origin := via[0].URL
+	if !sameAppTokenOrigin(origin, req.URL) {
+		return fmt.Errorf("安全限制: 拒绝 app token 跨域或 HTTPS 降级重定向")
+	}
+	return nil
+}
+
+func sameAppTokenOrigin(a, b *url.URL) bool {
+	return a != nil && b != nil && a.User == nil && b.User == nil &&
+		strings.EqualFold(a.Scheme, "https") && strings.EqualFold(b.Scheme, "https") &&
+		strings.EqualFold(a.Hostname(), "api.dingtalk.com") && strings.EqualFold(b.Hostname(), "api.dingtalk.com") &&
+		appTokenPort(a) == appTokenPort(b)
+}
+
+func appTokenPort(u *url.URL) string {
+	if u == nil || u.Port() == "" {
+		return "443"
+	}
+	return u.Port()
 }

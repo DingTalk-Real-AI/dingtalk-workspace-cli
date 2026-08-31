@@ -5,12 +5,21 @@
 ```bash
 dws doc +fetch --node <DOC_ID_OR_URL> --format json
 dws doc +fetch --query "项目周报" --scope keyword --keyword "结论" --format json
+dws doc +fetch --node <PUBLIC_URL> --password <ACCESS_PASSWORD> --format json
+dws doc +fetch --node <DOC_ID> --version <VERSION> --format json
 ```
 
 - 已知 ID 或 URL：传 `--node`。
 - 只知道标题：传 `--query`；跨页解析必须唯一命中，否则停止并要求用户选择。
 - `--node` 与 `--query` 必须且只能提供一个。
 - 默认 `--detail simple --scope full`，适合普通阅读，避免加载不必要的 JSONML。
+
+## 互联网公开文档与历史版本
+
+- **互联网公开文档**：公开链接直接传 `--node`；文档开启了密码保护时，通过 `--password <ACCESS_PASSWORD>` 提供访问密码，普通文档无需传入。密码只进入读取请求，不会回显在读取结果里（`--dry-run` 预览会包含所传参数，注意输出环境）。
+- **历史版本**：`--version <N>` 读取指定历史版本内容；版本号从 `dws doc +version-list` 获取，`0` 表示文档初始版本，需要文档编辑权限（EDITOR 及以上）；缺省读最新版。注意区分：`revision` 是文档编辑版本号（JSONML 读取响应返回、供 `+update --expected-revision` 条件写使用），不是历史版本号，`+fetch` 不支持 `--revision`。
+- **跨组织文档**：非互联网公开的跨组织文档，`+fetch` 整体被组织边界拦截（提示「不支持跨组织访问数据」），最新版与历史版本内容都读不到；互联网公开（含密码）文档的 `+fetch` 不受影响，但 `+version-list` 与写操作仍会被拦截，版本号无法从列表获取。
+- 只要看历史内容、不打算恢复时用 `--version`；要把文档整体恢复到历史版本才用 `+version-revert`（危险操作，需确认）。
 
 ## 局部读取
 

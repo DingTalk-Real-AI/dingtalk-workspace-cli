@@ -14,6 +14,7 @@
 | able 仅复制结构、删除 Base | AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` / `+base-delete --base-id <ID>` | Drive copy/delete | 当前 main 要求真实目标文件夹 ID；缺少时停止，禁止发明 `--target-root`、完整复制后逐表删数据或用 Drive 猜根 ID |
 | Base 内 Table/Dashboard/Section 节点操作 | AITable `+table-*` / `+section-*` | Drive | nsheet 节点不是独立 Drive dentry |
 | 整个 Base 移到普通文件夹、外层存储重命名 | Drive | AITable 表内命令 | 这是 Base 外层存储位置/名称动作 |
+| PDF、DOCX、XLSX 等普通文件的评论查询或生命周期操作 | Drive `comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply` | Doc/Sheet comment | 默认进入新评论体系；普通文件固定使用文件级 global topic，不支持划词或单元格锚点；仅在用户明确要求旧评论兼容行为时使用 deprecated 的 `list/create` |
 | Word/Markdown/Text 转在线文档 | Doc `+import` | Drive upload | import 会创建在线文档；upload 只保留原文件 |
 | “上传文件”但未指定目标 | Drive `+upload` | — | 默认按普通文件上传到钉盘 |
 | “照这个文档做一份同样格式的” | Drive `+copy` + `+rename`，再由 Doc 局部更新副本 | 读取后重建 | 先复制可保留在线文档版式 |

@@ -16,6 +16,7 @@ package shortcut
 import (
 	"sort"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/spf13/cobra"
 )
 
@@ -68,10 +69,7 @@ func build(shortcuts []Shortcut) []*cobra.Command {
 	for _, s := range shortcuts {
 		parent, ok := byService[s.Service]
 		if !ok {
-			parent = &cobra.Command{
-				Use:   s.Service,
-				Short: s.Service + " shortcuts",
-			}
+			parent = cobracmd.NewGroupCommand(s.Service, s.Service+" shortcuts")
 			byService[s.Service] = parent
 			order = append(order, s.Service)
 		}

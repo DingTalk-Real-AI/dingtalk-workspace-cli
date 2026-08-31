@@ -1,6 +1,6 @@
 ---
 name: dingtalk-minutes
-description: 钉钉 AI 听记。Use when 查询听记摘要、转写、关键词、待办或分享。写文档走 dingtalk-doc；日程走 dingtalk-calendar。
+description: 钉钉 AI 听记。Use when 查询或修改听记摘要、完整逐字稿、关键词、行动项、录音、上传、思维导图、发言人洞察或分享权限。写文档走 dingtalk-doc；建待办走 dingtalk-todo；日程走 dingtalk-calendar。命令前缀：dws minutes。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -11,110 +11,106 @@ metadata:
 
 # 钉钉 AI 听记 Skill
 
-## 前置条件 — 执行操作前必读
+<!-- DWS_RUNTIME_CONTRACT_START -->
+## 最小 DWS 执行契约
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
-
-> 命令参考：[minutes.md](references/minutes.md)；剧本：[07-minutes.md](references/07-minutes.md)。
+- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
+- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
+- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
+- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
+- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
+- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
+- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
+- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+<!-- DWS_RUNTIME_CONTRACT_END -->
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcuts（无专用脚本/recipe 时优先）
+## Shortcut 发现（按需）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "minutes +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws minutes <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service minutes --format json` 批量发现。
+`minutes` 当前有 29 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
-| Shortcut | 风险 | 适用场景 |
-|---|---|---|
-| `dws minutes +action-items` | read | 读取指定或我最新一条听记中已抽取的行动项 |
-| `dws minutes +apply-permission` | write | 为当前用户申请语义化的听记访问权限 |
-| `dws minutes +detail` | read | 批量聚合听记基础信息、摘要、关键词、完整逐字稿和行动项，支持安全文件输出 |
-| `dws minutes +download` | read | 批量取得听记音视频地址并安全下载到本地 |
-| `dws minutes +export-pack` | read | 把完整听记产物写入受控目录并生成不含签名 URL 的 manifest |
-| `dws minutes +latest` | read | 取我最新的一条妙记（听记）详情 |
-| `dws minutes +list-all` | read | 查询我有权限访问的所有听记列表 |
-| `dws minutes +list-mine` | read | 查询我创建的听记列表 |
-| `dws minutes +list-shared` | read | 查询他人共享给我的听记列表 |
-| `dws minutes +mindmap` | write | 创建听记思维导图并轮询到明确成功、失败或超时 |
-| `dws minutes +prepare-asr` | write | 读取个人热词、计算差异、按需新增并可显式同步删除后读回验证 |
-| `dws minutes +record-pause` | write | 暂停听记录音 |
-| `dws minutes +record-resume` | write | 恢复听记录音 |
-| `dws minutes +record-start` | write | 发起听记（开始录音） |
-| `dws minutes +record-stop` | write | 结束听记录音 |
-| `dws minutes +record-wrap-up` | write | 停止实时录音并有界等待听记产物，失败时保留恢复句柄 |
-| `dws minutes +replace-batch` | write | 预检并批量执行多组听记文字替换，逐项验证且失败必定非零 |
-| `dws minutes +search` | read | 按范围、标题关键词和时间搜索听记，支持安全全量翻页 |
-| `dws minutes +share` | write | 按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger |
-| `dws minutes +speaker-insights` | write | 创建发言人段落总结并轮询结果，保留异步任务恢复句柄 |
-| `dws minutes +speaker-replace` | write | 预检逐字稿中的发言人昵称，替换后重新读回验证 |
-| `dws minutes +summary` | write | 读取当前纪要、校验图片引用、全量覆盖并读回验证 |
-| `dws minutes +transcript` | read | 读取指定或我最新一条听记的完整逐字稿，并交付分页完整性证据 |
-| `dws minutes +unshare` | write | 按成员逐项移除一个或多个听记权限，输出可审计的部分写入 ledger |
-| `dws minutes +update` | write | 读取现状、预览差异、更新听记标题并读回验证 |
-| `dws minutes +upload` | write | 把本地音视频完整上传并创建听记，失败时取消会话 |
-| `dws minutes +upload-and-analyze` | write | 本地音视频直传听记并等待分析产物，可选思维导图和发言人洞察 |
+仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service minutes --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## 意图表
+## Golden Route
 
-| 用户说 | 命令 |
-|--------|------|
-| "我的听记列表" | `dws minutes list mine [--query "<关键词>"] [--start "<ISO>"] [--end "<ISO>"]` |
-| "查某段时间/最近/本周/上月的听记" | `dws minutes list all --start "<ISO>" --end "<ISO>" [--query "<关键词>"]` |
-| "看一篇听记摘要" | `dws minutes get summary --id <taskUuid>` |
-| "看转写 / 原文" | `dws minutes get transcription --id <taskUuid>` |
-| "下载/导出最近一周听记原文/逐字稿" | `dws minutes list all --start "<ISO>" --end "<ISO>"` → 逐条 `dws minutes get transcription --id <taskUuid>` |
-| "近期听记摘要合并" | `python scripts/minutes_recent_summary.py --max 5` |
-| "提取会议待办" | `python scripts/minutes_extract_todos.py --id <taskUuid>` |
-| "改听记标题" | `dws minutes update title --id <taskUuid> --title "<新标题>"` |
+以下是当前 Minutes Case 支持的核心路径，用于减少 Agent 选路分叉；它不等同于生产使用频率统计。已有 `taskUuid` 直接使用；完整 `shanji.dingtalk.com` URL 先提取其中的真实 ID。只有标题或时间线索时先搜索，零命中停止，多候选或候选差异较大时让用户消歧，不默认取第一条。
 
-## 标准 SOP（必遵流程）
+| 用户意图 | 唯一推荐入口 | 关键边界 |
+|---|---|---|
+| 按标题或时间找听记 | `dws minutes +search --scope all --query "<关键词>" --page-all` | `scope` 可选 `mine/shared/all`；至少提供 query/start/end 之一。`all --page-all` 分别追完 mine/shared 后去重，不把单个 noLimit 端点当完整全集 |
+| 浏览我创建、共享给我或全部可访问听记 | `+list-mine` / `+list-shared` / `+list-all` | 默认是可续拉预览；要声称完整必须加 `--page-all` 并检查 `complete=true`。用户只说“我的听记”不等于明确 `mine`，范围不清时用 `all` |
+| 看我最新创建的一条 | `dws minutes +latest [--keyword <关键词>]` | 只在用户明确说“最新”时用；不能用它替代具名目标搜索，也不能在录音 start 后拿 latest 猜新录音 ID |
+| 读取基础信息、摘要或关键词 | `dws minutes +detail --id <taskUuid> --artifacts basic,summary,keywords` | 已有 taskUuid 且只读取现有产物时直接使用，不要进入上传 workflow；任一产物失败都按 partial/非零处理，不把缺失项说成空内容 |
+| 读取逐字稿 | `dws minutes +transcript --id <taskUuid> [--direction 1] [--single-page]` | 已有 taskUuid 且只读取逐字稿时直接使用，不要借 `+upload-and-analyze --resume-id` 代读。默认正序并追完分页；倒序必须传 `--direction 1`，用户明确只要第一页时传 `--single-page`，不得随后自动续页。交付前检查 `data.direction/data.complete/data.pages` 与 `meta.pagination` |
+| 读取行动项 | `dws minutes +action-items --id <taskUuid>` | 只有受支持字段明确返回空数组才能说“没有待办”；`unsupported_shape`、字段解析失败或工具失败都不是空结果。需要创建钉钉待办时再切 `dingtalk-todo` |
+| 把摘要、关键词、完整逐字稿和行动项归档到本地 | `dws minutes +export-pack --id <taskUuid> --output <新相对目录>` | 要带媒体时加 `--include-media`；必须由 `published/path/manifest/files` 证明落盘，只有建目录、计划或文件名不能称已生成 |
+| 修改或预览标题 | `dws minutes +update --id <taskUuid> --title "<新标题>"` | 真实修改按 Runtime confirmation 执行并读回；用户只要预览时先读 basic，再加 `--dry-run`，展示“当前值 → 目标值”后停止，不追加 `--yes` |
+| 覆盖纪要正文 | `dws minutes +summary --id <taskUuid> --content @<相对文件>` | `content` 是完整目标正文，不是局部 patch；按 Runtime confirmation 执行，并保护图片引用、读回全文 |
+| 上传音视频生成听记 | `dws minutes +upload --file <相对路径>` | 真实执行会上传文件并创建远端听记，必须按 Runtime confirmation；用户明确要闪记卡片时改用 `+upload-and-notify`，需要上传后等待分析产物时用 `+upload-and-analyze` |
+| 真实开始、暂停、继续或停止录音 | `+record-start` / `+record-pause` / `+record-resume` / `+record-stop` | 这组入口会真实执行。start 返回 `accepted=true, bound=false` 或 `controlReady=false` 时，报告“已受理但未绑定”并停止：不得重试 start，也不得用 `+latest`、列表第一条或时间最近项猜 ID。结束并等待产物用 `+record-wrap-up` |
+| 只预览录音请求，不实际执行 | `dws minutes record start --dry-run --format json` | 使用对应的原子 `minutes record start|pause|resume|stop` leaf；start 的 `--session-id` 可选，pause/resume/stop 必须传真实 `--id`。不要把被拒绝的 Shortcut dry-run 描述成预览成功 |
+| 生成或继续思维导图 | `dws minutes +mindmap --id <taskUuid>` | 创建后有界轮询；超时或未知状态保留恢复信息，用 `--resume` 继续，不重复创建 |
+| 生成或继续发言人洞察 | `dws minutes +speaker-insights --id <taskUuid>` | 有界轮询；保留 `taskId`，恢复时用 `--resume [--task-id <ID>]`，不重复创建 |
+| 当前用户申请查看/下载/编辑权限 | `dws minutes +apply-permission --id <taskUuid> --permission view|download|edit` | 这是“我申请访问”，不是所有者给别人授权；按 Runtime confirmation 执行 |
+| 所有者给成员授权或撤权 | `dws minutes +share ...` / `dws minutes +unshare ...` | 先用通讯录把姓名解析为同组织稳定 UID；撤权是破坏性操作。批量结果必须保留逐成员 ledger 和失败项 |
 
-> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 taskUuid。每条命令必须带 `--format json`。锁定目标**必须**按 `taskUuid + title + organizationName + 时间` 精准匹配，**禁止**凭标题相似度乱选。
+### 搜索与列表执行胶囊
 
-### SOP-1 查听记列表（query-minutes）
+用户要求“全部、所有、完整、汇总整个范围”时，首轮直接使用 `--page-all`：
 
-**触发**：查听记/会议记录/某会议的纪要/按关键词或时间找听记。
+```text
+dws minutes +search --query "<关键词>" --scope all --page-all --format json
+dws minutes +search --start "<RFC3339>" --end "<RFC3339>" --scope mine --page-all --format json
+dws minutes +list-mine --page-all --format json
+dws minutes +list-shared --page-all --format json
+dws minutes +list-all --page-all --format json
+```
 
-1. **选 scope（必须·铁律）**：`mine`=我创建/发起的；`shared`=他人共享给我的；`all`=我可访问的全部（含 mine+shared）。用户说"我能访问/可见/所有/我的听记"等覆盖语义**一律 `all`**；只有明确"我创建的/我发起的/我录的"才用 `mine`。
-2. **执行（必须）**：`dws minutes list all|mine|shared --format json`；按关键词加 `--query "<关键词>"`，按时间加 `--start "<ISO>" --end "<ISO>"`，限制条数 `--limit <n>`（`--max` 兼容别名），翻页用 `--cursor <token>`（`--next-token` 兼容别名）。
-3. **解析（必须）**：从 `itemList[]` 取真实 `taskUuid` + `title` + 时间；多候选必须让用户确认，**禁止**默认取第一条。
+只有用户明确要第一页、预览或样本时才省略 `--page-all`，并如实保留 `data.complete=false` 与 `meta.pagination.next_token`。有时间窗必须使用 `+search`，因为 `+list-*` 不接受 `--start/--end`。
 
-**禁止**：把 `mine` 当全量、凭标题相似度锁定、跳过 `--format json`。
+## 目标与完整性
 
-### SOP-2 取听记详情（get-minute-detail）
+- 目标锁定优先级：用户给出的 `taskUuid`/URL > 精确标题 > 标题包含或语义相关候选。相似候选可展示，但候选差异明显或多个候选都合理时必须停下来消歧；分页未完成本身不是目标歧义。
+- 用户说“先确认/核对目标”默认要求用真实 basic 字段完成证据核对，不自动变成等待用户回复的会话门禁。目标唯一、分页完整且后续均为只读时，展示标题、时间、归属等核对证据后在同一轮继续；只有用户明确要求“等我确认后再继续”或仍有多个合理候选时才暂停。
+- 纯能力、规则或错误说明且没有唯一真实目标时直接解释，不猜对象；用户明确要求核对且目标唯一时必须真实读取，不能只展示命令。
+- `mine` 仅表示我创建的，`shared` 仅表示共享给我的；`all` 表示 accessible 聚合目标。不得声称后端单个 noLimit 端点天然等于 `mine + shared`。
+- 列表或逐字稿只有 `data.complete=true` 才能称为“全部/完整”。全量请求遇到 `meta.pagination.next_token` 时继续；只有 token 缺失、cursor 停滞/循环、达到 `page-limit` 或后页失败时才停止，并保留失败信封或不完整证据。
+- 用户要求核对、汇总“这些/每条/全部”命中项时，必须覆盖完整命中集合；可用 `dws minutes +detail --ids <uuid1,uuid2> --artifacts basic --format json` 批量核对，并逐项保留失败。只检查第一条不能代表全体；响应没有逐条归属或组织字段时如实说明不可得，不能用当前 profile 的组织名代替每条听记的归属。
+- 多听记、多来源或跨产品汇总按每个 `taskUuid`/来源 ID 保留 `requested/resolved/missing/artifacts/status`；缺输入或必需产物时整体按 partial，不用已找到项代表全部。
+- 内容归纳必须来自每条真实 `summary/transcript/keywords`；只有 `title/basic` 时只列元数据，不生成摘要、关键词或分类。
+- `partial_success`、异步 `pending`、超时和未知写入结果不是成功。按结果中的恢复句柄继续，不能重放已成功步骤。
 
-**触发**：要摘要/转写原文/关键词/待办/基础信息/音频。
+## 安全边界
 
-1. **前置（必须）**：先按 SOP-1 拿到目标 `taskUuid`。
-2. **执行（必须·按需选一）**：摘要 `dws minutes get summary --id <taskUuid>`；转写原文 `dws minutes get transcription --id <taskUuid>`（返回 `cursor`/`nextToken` 时**必须**继续 `--cursor` 翻页拉全）；关键词 `get keywords`；待办 `get todos`；基础信息 `get info`；音频地址 `get audio`；批量 `get batch --ids <uuid1,uuid2>`。全部带 `--format json`。
-3. **解析（必须）**：`--id`/`--uuid`/`--task-uuid` 三者等价，**推荐统一 `--id`**；转写/摘要按用户需要抽取，**禁止**无差别全文贴出。
+- 是否确认以 leaf Schema 与 Runtime gate 为准，不根据“看起来像写操作”自行推断。推荐 Golden Route 中的 `+update`、`+summary`、`+record-*`、`+share/+unshare/+apply-permission`、`+speaker-replace`、`+replace-batch` 等当前要求确认。
+- 为兼容既有公开 Contract，对应的底层原子命令保留历史 `not_required`；它们只用于 Shortcut 无法表达的明确底层控制，不得为了绕过 Golden Route 的确认门禁而降级调用。
+- `+upload` 与 `+upload-and-analyze` 即使不发送消息，仍会上传本地媒体并创建远端听记，真实执行必须按 Runtime confirmation；`--dry-run` 仍可在零远端调用下预览。上传并发送闪记卡片、精确同步并删除热词、撤权等副作用更大的入口继续单独处理。
+- `+mindmap`、`+speaker-insights` 和 `+prepare-asr` 当前要求确认；`--resume` 仍沿用所在 Shortcut 的命令级门禁。旧 `+upload --enable-message-card` 与 `+upload-and-analyze --enable-message-card` 继续作为可执行兼容入口，并遵循各自 Shortcut 的确认门禁；新调用仍推荐 `+upload-and-notify`。原子 `minutes upload create --enable-message-card` 与旧 `--sync` 只保留为公开迁移提示，不得当作可执行 Golden Route。
+- `--dry-run` 必须返回明确的 dry-run/request 证据且不调用远端；录音预览按上方原子入口执行。任何入口若拒绝 dry-run，必须报告“不支持预览”，不得把拦截或普通执行称为预演成功。
+- 用户明确要求“仅预览/不实际写入”时，任务在真实现状读取、dry-run 计划和差异交付后结束；不得继续请求写入确认，也不得为了验证预览而执行真实写入后再还原。
+- 分享/撤权使用稳定成员 UID，不能把姓名、手机号或跨组织 ID 直接当 UID；同一目标解析、读取、写入和验证必须使用同一 profile。
 
-**禁止**：编造 taskUuid、转写有分页不翻完就总结、跳过 SOP-1 直接猜 ID。
+## 按需加载
 
-### SOP-3 听记转文档 / 待办回写（handoff）
+Golden Route 参数足够时直接执行，不预读 Reference。每个 Case 最多先读取一个最精确的文件；参数事实优先读取 compact leaf Schema，不读取产品级全量 Catalog。
 
-**触发**：把会议纪要转成文档/把听记待办建到待办系统。
+| 触发条件 | Reference |
+|---|---|
+| ASR 热词、上传会话恢复、复杂异步轮询、批量权限 workflow | [复杂流程](references/07-minutes.md) |
+| 发言人替换、批量文本替换、下载媒体、离线导出等低频意图 | [局部意图](references/intent-guide.md) |
+| 必须落到原子命令，或需要 URL/参数/确认事实 | [原子命令](references/minutes.md) |
 
-1. **转文档（必须）**：取 `minutes get summary`/`transcription` 内容 → 切 `dingtalk-doc` 用 `dws doc create --content-file <tmp.md>` 落盘。
-2. **待办回写（必须）**：取 `minutes get todos` 的待办项 → 切 `dingtalk-todo` 按 SOP-1 解析执行者 userId 后 `todo task create`。
+## 错误最短路径
 
-**禁止**：在 minutes 内直接写文档/建待办（应切对应 skill）。
+1. 零命中、多候选或 ID 类型不明：停止并返回候选证据。全量请求分页未完成但有有效 continuation 时继续；只有 token 缺失/停滞/循环、达到页数上限或后页失败时停止并返回 `data.complete`、`meta.pagination` 或失败信封等证据。
+2. 认证、权限、profile 或 confirmation 错误：按 `dingtalk-shared` 对应错误 Reference 处理；不更换 scope、账号或写命令碰运气。
+3. 异步超时或部分成功：保留 `taskUuid/taskId/sessionId/checkpoint`，只恢复未完成阶段；未知写入先读回，不能自动重试。
 
-## 高频硬约束
+## 跨产品边界
 
-- `shanji.dingtalk.com` URL 必须走 `dws minutes`，禁止用浏览器或 `read_file` 打开链接。自动提取 taskUuid 后调用 `get info/summary/transcription/todos`。
-- 用户给了时间线索（今天、本周、上周、上月、最近 N 天、某日期范围）时，必须自行计算 `--start` / `--end`，格式用 ISO-8601，如 `2026-05-11T00:00:00+08:00`。不要反问用户时间范围。
-- 未指定 mine/shared 时，检索型任务默认 `list all`；如果只查"我创建的"才用 `list mine`。
-- 不要全量拉取后本地过滤时间。时间范围和关键词能服务端过滤时必须放进同一条 `list all --start --end --query`。
-- 列表为空时按顺序兜底：同范围 `list all` → 去掉关键词但保留时间范围 → 明确告知无数据。禁止用模板或虚构听记内容继续生成纪要/周报。
-- 生成纪要、文档、待办、周报前，必须先完成 `list` → 选定真实 `taskUuid` → `get summary`；需要原文或行动项时继续 `get transcription` / `get todos`。前置数据没拿到就停止并说明卡点。
-- 用户明确说"下载/导出/文件"且对象是"听记原文/逐字稿/转写/完整记录"时，不能降级为摘要汇总：必须 `list all --start --end` 找到范围内听记；列表为空则明确无数据；列表非空则对每条听记逐一 `get transcription` 并翻页到结束，交付内容必须包含真实转写段落。可附标题、时间等元数据，但不能只给 summary，也不能要求用户再指定某一条。
-- 所有 dws 命令带 `--format json`，不要用 shell 管道、重定向、`head`、`grep`、`jq`。
-
-## 跨产品协作
-
-- 提取的待办批量建任务 → 切到 `dingtalk-todo`，按其批量创建 SOP 执行；批量脚本仅在 `dingtalk-todo` sub-skill 内可用，未切换前不要在当前 skill 运行。
-- 摘要发给同事 → 切到 `dingtalk-chat`
-- 日程 / 会议室 → 切到 `dingtalk-calendar`
-## 局部意图与短流程
-
-- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。
+- 把听记摘要或逐字稿写成文档 → 读取真实内容后切 `dingtalk-doc`。
+- 把听记行动项创建为任务 → 读取行动项后切 `dingtalk-todo`，并按其身份解析规则处理执行人。
+- 把摘要发给同事 → 切 `dingtalk-chat`；`+share` 只管理听记权限，不发送摘要消息。
+- 创建或修改日程、会议室 → `dingtalk-calendar`；Minutes 只处理听记产物和录音控制。

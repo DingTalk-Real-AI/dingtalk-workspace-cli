@@ -18,6 +18,12 @@ func newHrbrainCommand() *cobra.Command {
 	// products.hrbrain). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "hrbrain",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("组织大脑深度指南", "dingtalk-misc", "references/hrbrain.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
 			UseWhen: []string{
@@ -29,7 +35,7 @@ func newHrbrainCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "hrbrain",
 		Short: "组织大脑：人才池、员工档案与人才搜索",
 		Long: `钉钉组织大脑（hrbrain）能力：人才池管理、员工档案查询、人才搜索与标签管理。
@@ -47,11 +53,11 @@ func newHrbrainCommand() *cobra.Command {
   dws hrbrain search employees-structured   使用高级条件搜索人员
   dws hrbrain search fields                 获取高级搜索字段列表`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── talent-pool: 人才池管理 ────────────────────────────────
 
-	talentPoolCmd := &cobra.Command{Use: "talent-pool", Short: "人才池管理", RunE: groupRunE}
+	talentPoolCmd := newGroupCommand(&cobra.Command{Use: "talent-pool", Short: "人才池管理", RunE: groupRunE})
 
 	talentPoolListCmd := &cobra.Command{
 		Use:   "list",
@@ -236,7 +242,7 @@ func newHrbrainCommand() *cobra.Command {
 
 	// ── profile: 员工档案管理 ──────────────────────────────────
 
-	profileCmd := &cobra.Command{Use: "profile", Short: "员工档案管理", RunE: groupRunE}
+	profileCmd := newGroupCommand(&cobra.Command{Use: "profile", Short: "员工档案管理", RunE: groupRunE})
 
 	profileMetadataCmd := &cobra.Command{
 		Use:     "metadata",
@@ -493,7 +499,7 @@ func newHrbrainCommand() *cobra.Command {
 
 	// ── search: 人才搜索 ─────────────────────────────────────
 
-	searchCmd := &cobra.Command{Use: "search", Short: "人才搜索", RunE: groupRunE}
+	searchCmd := newGroupCommand(&cobra.Command{Use: "search", Short: "人才搜索", RunE: groupRunE})
 
 	employeeSearchCmd := &cobra.Command{
 		Use:   "employees",

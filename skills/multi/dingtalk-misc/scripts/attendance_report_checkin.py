@@ -32,32 +32,17 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any
 
-# ── 前置依赖检查（在任何 dws 调用之前就检测，避免查完数据才报错）───────
-_missing_deps: list[str] = []
-try:
-    import openpyxl as _openpyxl_check  # noqa: F401
-except ImportError:
-    _missing_deps.append("openpyxl")
-try:
-    import requests as _requests_check  # noqa: F401
-except ImportError:
-    _missing_deps.append("requests")
-try:
-    from PIL import Image as _pil_check  # noqa: F401
-except ImportError:
-    _missing_deps.append("Pillow")
-
-if _missing_deps:
-    print(
-        f"[ERROR] 缺少以下依赖：{', '.join(_missing_deps)}\n"
-        f"  请先安装：pip install {' '.join(_missing_deps)}\n"
-        "安装后重新执行本脚本。\n"
-        "（签到报表需要 openpyxl 生成 Excel、requests + Pillow 下载并嵌入签到图片）",
-        file=sys.stderr,
-    )
-    sys.exit(2)
-
 import attendance_report_common as cmn
+
+
+def _check_runtime_dependencies() -> bool:
+    """在业务查询前检查必需依赖；--help 不应依赖报表运行时库。"""
+    try:
+        import openpyxl as _openpyxl_check  # noqa: F401
+    except ImportError:
+        cmn.error("缺少 openpyxl 依赖，请手动执行：pip install openpyxl")
+        return False
+    return True
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 自动获取当前认证的 operator 信息
@@ -339,6 +324,9 @@ def transform_records_to_rows(
 
 def main() -> int:
     args = parse_args()
+
+    if not _check_runtime_dependencies():
+        return 2
 
     raw_ids = [u.strip() for u in args.users.split(",") if u.strip()]
     if not raw_ids:

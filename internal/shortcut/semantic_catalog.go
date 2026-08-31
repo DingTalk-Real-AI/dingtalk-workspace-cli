@@ -40,6 +40,45 @@ var attendanceSemanticCatalogJSON []byte
 //go:embed semantic_catalog_mail.json
 var mailSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_aisearch.json
+var aisearchSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_contact.json
+var contactSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_live.json
+var liveSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_oa.json
+var oaSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_ding.json
+var dingSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_report.json
+var reportSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_sheet.json
+var sheetSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_whiteboard.json
+var whiteboardSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_devdoc.json
+var devdocSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_hrbrain.json
+var hrbrainSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_pat.json
+var patSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_devapp.json
+var devAppSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_agoal.json
+var agoalSemanticCatalogJSON []byte
+
 type semanticCatalogFile struct {
 	Version      int                              `json:"version"`
 	Service      string                           `json:"service"`
@@ -69,6 +108,19 @@ var reviewedSemanticCatalog = mustLoadSemanticCatalogs(
 	todoSemanticCatalogJSON,
 	attendanceSemanticCatalogJSON,
 	mailSemanticCatalogJSON,
+	aisearchSemanticCatalogJSON,
+	contactSemanticCatalogJSON,
+	liveSemanticCatalogJSON,
+	oaSemanticCatalogJSON,
+	dingSemanticCatalogJSON,
+	reportSemanticCatalogJSON,
+	sheetSemanticCatalogJSON,
+	whiteboardSemanticCatalogJSON,
+	devdocSemanticCatalogJSON,
+	hrbrainSemanticCatalogJSON,
+	patSemanticCatalogJSON,
+	devAppSemanticCatalogJSON,
+	agoalSemanticCatalogJSON,
 )
 
 func mustLoadSemanticCatalogs(sources ...[]byte) map[string]semanticCatalogRecord {
@@ -130,11 +182,12 @@ func loadSemanticCatalog(raw []byte, out map[string]semanticCatalogRecord) {
 				command, record.Availability))
 		}
 		// A command that was already part of the visible CLI contract cannot be
-		// hidden in the same feature change merely because Agent publication is
-		// withdrawn. This narrow fact preserves historical discovery/argv while
-		// the unavailable Interface and public=false keep it out of Agent routes.
-		if record.CompatibilityVisible && (record.Public || record.Availability != AvailabilityUnavailable) {
-			panic(fmt.Sprintf("semantic catalog command %q can be compatibility-visible only when non-public and unavailable", command))
+		// hidden merely because Agent publication is withdrawn. Compatibility
+		// visibility owns only historical CLI discovery; availability independently
+		// records whether that compatibility path still executes. public=false keeps
+		// both available and unavailable compatibility leaves out of Agent routes.
+		if record.CompatibilityVisible && record.Public {
+			panic(fmt.Sprintf("semantic catalog command %q cannot be both public and compatibility-visible", command))
 		}
 		key := publicCatalogKey(source.Service, command)
 		if _, exists := out[key]; exists {

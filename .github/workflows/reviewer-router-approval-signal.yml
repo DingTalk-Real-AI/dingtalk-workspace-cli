@@ -1,0 +1,19 @@
+name: Reviewer Router approval signal
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+# This workflow only converts an approval-state change into a trusted
+# workflow_run event. It must never read secrets, check out code, or mutate the
+# pull request; the default-branch Reviewer routing workflow owns reconciliation.
+permissions: {}
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Signal approval-state change
+        run: echo "Review state changed; default-branch reconciliation will re-evaluate App-owned merge intents."

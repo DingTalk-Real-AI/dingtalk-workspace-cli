@@ -66,3 +66,5 @@ Bot 多群用 `--groups` 或 `--groups-file`，Runtime 去重后输出
 
 `supported=false` 是执行门禁，不是待猜测字段。只有 lower interface、Runtime、测试、Schema 和
 此页同时升级后，才能改变对外承诺。
+
+话题圈会话仍禁止引用消息回复；向 Thread 追加回复使用 `chat thread reply --conversation-id <openConvThreadId>`。

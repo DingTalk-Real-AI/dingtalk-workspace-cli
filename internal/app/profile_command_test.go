@@ -23,6 +23,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -653,8 +654,11 @@ func TestAuthCommandDoesNotExposeSwitch(t *testing.T) {
 	if err == nil {
 		t.Fatalf("auth switch succeeded, want unknown command error\noutput:\n%s", out.String())
 	}
-	if !strings.Contains(err.Error(), `unknown command "switch" for "dws auth"`) {
-		t.Fatalf("error = %v, want auth switch unknown command", err)
+	var structured *apperrors.Error
+	if !errors.As(err, &structured) || structured.Reason != "unknown_subcommand" ||
+		structured.Message != `unknown subcommand "switch" for "dws auth"` ||
+		structured.Hint != "Run 'dws auth --help' for the full list" {
+		t.Fatalf("error = %#v, want bounded auth subcommand guidance", err)
 	}
 }
 

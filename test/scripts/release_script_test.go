@@ -92,6 +92,15 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 	remote := filepath.Join(base, "remote.git")
 	mustRun(t, base, "git", "init", "--bare", remote)
 	mustRun(t, base, "git", "init", "-b", "main", root)
+	// Git can detach automatic maintenance after a push. If that background
+	// process outlives the test, testing.TempDir may race with writes in the
+	// bare remote and fail cleanup with "directory not empty". These tiny test
+	// repositories never need automatic maintenance, so keep all Git work
+	// synchronous and bounded by the commands below.
+	for _, repo := range []string{remote, root} {
+		mustRun(t, repo, "git", "config", "maintenance.auto", "false")
+		mustRun(t, repo, "git", "config", "gc.auto", "0")
+	}
 	mustRun(t, root, "git", "config", "user.name", "Release Test")
 	mustRun(t, root, "git", "config", "user.email", "release-test@example.com")
 
@@ -1892,6 +1901,85 @@ func TestReleasePrepareChangelogRendersAndArchivesPrereleaseFragments(t *testing
 		if _, err := os.Stat(filepath.Join(r.root, ".changes", "released", "1.0.1-beta.1", name)); err != nil {
 			t.Fatalf("archived release fragment %s missing: %v", name, err)
 		}
+	}
+}
+
+func TestReleasePrepareChangelogRendersAndArchivesStableFragments(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	releaseCopyFile(t, r.lib, filepath.Join(r.root, "scripts", "release", "release-lib.sh"), 0o644)
+	releaseCopyFile(t, r.prepare, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), 0o755)
+	releaseCopyFile(t, r.render, filepath.Join(r.root, "scripts", "release", "render-release-fragments.sh"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, ".changes", "1236-stable-followup.md"), []byte("---\ncategory: Fixed\n---\n\n- **Stable follow-up** (#1236) — includes a change merged after the beta.\n"), 0o644)
+	r.commitAndPush(t, "install stable changelog preparation")
+
+	cmd := exec.Command(
+		"sh",
+		filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"),
+		"stable",
+		"v1.0.1",
+		"--from-beta",
+		"v1.0.1-beta.1",
+	)
+	cmd.Dir = r.root
+	cmd.Env = append(os.Environ(), "DWS_RELEASE_DATE=2026-07-11")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("prepare stable changelog error = %v\noutput:\n%s", err, output)
+	}
+	changelog, err := os.ReadFile(filepath.Join(r.root, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(CHANGELOG.md) error = %v", err)
+	}
+	content := string(changelog)
+	if !strings.Contains(content, "## [1.0.1] - 2026-07-11") ||
+		!strings.Contains(content, "promotes the sealed `v1.0.1-beta.1` contents to stable") ||
+		!strings.Contains(content, "### Changes since `v1.0.1-beta.1`") ||
+		!strings.Contains(content, "### Fixed") ||
+		!strings.Contains(content, "Stable follow-up") {
+		t.Fatalf("prepared stable changelog did not render post-beta fragments:\n%s", changelog)
+	}
+	name := "1236-stable-followup.md"
+	if _, err := os.Stat(filepath.Join(r.root, ".changes", name)); !os.IsNotExist(err) {
+		t.Fatalf("unconsumed stable release fragment %s still present: %v", name, err)
+	}
+	if _, err := os.Stat(filepath.Join(r.root, ".changes", "released", "1.0.1", name)); err != nil {
+		t.Fatalf("archived stable release fragment %s missing: %v", name, err)
+	}
+}
+
+func TestReleasePrepareChangelogStableWithoutFragmentsKeepsTemplate(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	releaseCopyFile(t, r.lib, filepath.Join(r.root, "scripts", "release", "release-lib.sh"), 0o644)
+	releaseCopyFile(t, r.prepare, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), 0o755)
+	releaseCopyFile(t, r.render, filepath.Join(r.root, "scripts", "release", "render-release-fragments.sh"), 0o755)
+	r.commitAndPush(t, "install stable changelog preparation")
+
+	cmd := exec.Command(
+		"sh",
+		filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"),
+		"stable",
+		"v1.0.1",
+		"--from-beta",
+		"v1.0.1-beta.1",
+	)
+	cmd.Dir = r.root
+	cmd.Env = append(os.Environ(), "DWS_RELEASE_DATE=2026-07-11")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("prepare stable changelog without fragments error = %v\noutput:\n%s", err, output)
+	}
+	changelog, err := os.ReadFile(filepath.Join(r.root, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(CHANGELOG.md) error = %v", err)
+	}
+	content := string(changelog)
+	if !strings.Contains(content, "## [1.0.1] - 2026-07-11") ||
+		!strings.Contains(content, "TODO: summarize the complete user-visible release") ||
+		strings.Contains(content, "### Changes since") {
+		t.Fatalf("stable changelog without fragments changed template behavior:\n%s", changelog)
+	}
+	if _, err := os.Stat(filepath.Join(r.root, ".changes", "released", "1.0.1")); !os.IsNotExist(err) {
+		t.Fatalf("stable preparation without fragments created an archive: %v", err)
 	}
 }
 

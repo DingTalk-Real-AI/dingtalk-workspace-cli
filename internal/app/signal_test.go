@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -56,6 +57,20 @@ func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
 	if !errors.Is(interrupted, context.Canceled) || interrupted.ExitCode() != 130 || interrupted.Subtype() != "cancelled_by_user" || !strings.Contains(interrupted.Error(), "interrupt") {
 		t.Fatalf("interruption=%v", interrupted)
 	}
+	detailed := interrupted.withCancellationDetail(fmt.Errorf("resume with dws doc import get: %w", context.Canceled))
+	if detailed == interrupted || !errors.Is(detailed, context.Canceled) || !strings.Contains(detailed.Error(), "dws doc import get") {
+		t.Fatalf("detailed interruption=%v", detailed)
+	}
+	typedDetail := interrupted.withCancellationDetail(apperrors.NewInternal("resume import", apperrors.WithCause(context.Canceled)))
+	if code := apperrors.ExitCode(typedDetail); code != 130 {
+		t.Fatalf("typed cancellation detail changed interruption exit code to %d", code)
+	}
+	if got := interrupted.withCancellationDetail(context.Canceled); got != interrupted {
+		t.Fatalf("plain cancellation changed interruption: %v", got)
+	}
+	if got := interrupted.withCancellationDetail(errors.New("unrelated failure")); got != interrupted {
+		t.Fatalf("unrelated failure changed interruption: %v", got)
+	}
 	terminated := &processInterruption{signal: syscall.SIGTERM}
 	if terminated.ExitCode() != 143 || terminated.Subtype() != "terminated" {
 		t.Fatalf("termination=%v", terminated)
@@ -63,6 +78,13 @@ func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
 	state := &processSignalState{}
 	if !state.record(syscall.SIGINT, nil) || state.record(syscall.SIGTERM, nil) {
 		t.Fatal("signal state did not reject a second interruption")
+	}
+}
+
+func TestCrossPlatformCoverageProcessInterruptionRejectsNestedDetail(t *testing.T) {
+	interrupted := &processInterruption{signal: syscall.SIGINT}
+	if got := interrupted.withCancellationDetail(&processInterruption{signal: syscall.SIGTERM}); got != interrupted {
+		t.Fatalf("nested interruption changed the primary signal error: %v", got)
 	}
 }
 
@@ -134,6 +156,76 @@ func TestCrossPlatformCoverageExecuteSignalEmitsOneTypedUnifiedFailure(t *testin
 			}
 			if bytes.Count(stdout.Bytes(), []byte(`"outcome": "failure"`)) != 1 {
 				t.Fatalf("stdout must contain one failure envelope: %s", stdout.String())
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageExecuteSignalPreservesCancellationRecoveryCommand(t *testing.T) {
+	const recoveryCommand = "dws doc import get --task-id task-1 --workspace my-space"
+	if mode := os.Getenv("DWS_SIGNAL_RECOVERY_HELPER"); mode != "" {
+		installSignalExecuteSeams(t, mode == "json", os.Stdout, os.Stderr)
+		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
+			_, _ = fmt.Fprintln(os.Stderr, "READY")
+			<-cmd.Context().Done()
+			return cmd, fmt.Errorf("导入轮询被取消: %w；任务已经提交，可使用 %s 继续查询", cmd.Context().Err(), recoveryCommand)
+		})
+		os.Exit(Execute())
+	}
+
+	for _, tc := range []struct {
+		mode string
+	}{
+		{mode: "human"},
+		{mode: "json"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoverageExecuteSignalPreservesCancellationRecoveryCommand$")
+			cmd.Env = append(os.Environ(), "DWS_SIGNAL_RECOVERY_HELPER="+tc.mode)
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stderr, err := cmd.StderrPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			stderrReader := bufio.NewReader(stderr)
+			ready, err := stderrReader.ReadString('\n')
+			if err != nil || strings.TrimSpace(ready) != "READY" {
+				t.Fatalf("helper readiness failed: %q, err=%v", ready, err)
+			}
+			if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+				t.Skipf("current platform does not support subprocess signal delivery: %v", err)
+			}
+			stdoutPayload, stdoutErr := io.ReadAll(stdout)
+			stderrPayload, stderrErr := io.ReadAll(stderrReader)
+			if stdoutErr != nil || stderrErr != nil {
+				t.Fatalf("read helper output: stdout=%v stderr=%v", stdoutErr, stderrErr)
+			}
+			waitErr := cmd.Wait()
+			var exitErr *exec.ExitError
+			if !errors.As(waitErr, &exitErr) || exitErr.ExitCode() != 130 {
+				t.Fatalf("wait error=%v, want exit 130", waitErr)
+			}
+
+			if tc.mode == "json" {
+				var env output.Envelope
+				if err := json.Unmarshal(stdoutPayload, &env); err != nil {
+					t.Fatalf("decode envelope: %v; output=%q", err, stdoutPayload)
+				}
+				if env.Error == nil || env.Error.Type != "internal" || env.Error.Subtype != "cancelled_by_user" || env.Error.ExitCode != 130 || !strings.Contains(env.Error.Message, "process interrupted by interrupt") || !strings.Contains(env.Error.Message, recoveryCommand) {
+					t.Fatalf("error=%+v, want cancellation with recovery command", env.Error)
+				}
+				return
+			}
+			if !strings.Contains(string(stderrPayload), "process interrupted by interrupt") || !strings.Contains(string(stderrPayload), recoveryCommand) {
+				t.Fatalf("stderr=%q, want recovery command", stderrPayload)
 			}
 		})
 	}

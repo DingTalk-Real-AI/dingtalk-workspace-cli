@@ -34,6 +34,7 @@ func TestCrossPlatformCoverageServerFailureClassifierBackendMetadataUnavailable(
 		"business_error",
 		"check parameters",
 		"im",
+		"list_conversations",
 		apperrors.ServerDiagnostics{
 			TraceID:         "trace-local",
 			ServerErrorCode: "NETWORK_ERROR",
@@ -58,6 +59,9 @@ func TestCrossPlatformCoverageServerFailureClassifierBackendMetadataUnavailable(
 	if strings.Contains(strings.ToLower(typed.Hint), "parameter") || strings.Contains(typed.Hint, "认证") {
 		t.Fatalf("misleading hint = %q", typed.Hint)
 	}
+	if actions := apperrors.RecoveryActions(err); !strings.Contains(strings.Join(actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("backend dependency error has no doctor entry: %#v", actions)
+	}
 }
 
 func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *testing.T) {
@@ -66,6 +70,7 @@ func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *t
 		"business_error",
 		"check parameters",
 		"chat",
+		"send_message",
 		apperrors.ServerDiagnostics{ServerErrorCode: "1001"},
 	)
 	var typed *apperrors.Error
@@ -80,12 +85,74 @@ func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *t
 	}
 }
 
+func TestCrossPlatformCoverageServerFailureClassifierTodoCreateUpstreamInternalError(t *testing.T) {
+	serverSaysRetryable := true
+	err := newServerFailureAPIError(
+		"[UNCLASSIFIED] system error: java.lang.NullPointerException (operation: todo/create_personal_todo)",
+		"business_error",
+		"The API returned a business-level error. Check required parameters and values.",
+		"todo",
+		"create_personal_todo",
+		apperrors.ServerDiagnostics{
+			TraceID:         "trace-todo-create",
+			ServerErrorCode: "999",
+			ServerRetryable: &serverSaysRetryable,
+		},
+	)
+
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T, want *errors.Error", err)
+	}
+	if typed.Reason != "upstream_internal_error" || typed.Origin != "dingtalk_api" || typed.FailureStage != "upstream_execution" {
+		t.Fatalf("classification = reason %q origin %q stage %q", typed.Reason, typed.Origin, typed.FailureStage)
+	}
+	if typed.Operation != "todo/create_personal_todo" {
+		t.Fatalf("operation = %q, want todo/create_personal_todo", typed.Operation)
+	}
+	if typed.ExecutionStarted != nil {
+		t.Fatalf("execution_started = %v, want unknown", typed.ExecutionStarted)
+	}
+	if !typed.RetryableSet || typed.Retryable {
+		t.Fatalf("retryability = (%v, %v), want explicit false", typed.RetryableSet, typed.Retryable)
+	}
+	if typed.ServerDiag.TraceID != "trace-todo-create" || typed.ServerDiag.ServerErrorCode != "999" {
+		t.Fatalf("diagnostics = %#v", typed.ServerDiag)
+	}
+	if strings.Contains(strings.ToLower(typed.Hint), "parameter") || !strings.Contains(typed.Hint, "创建结果未知") {
+		t.Fatalf("hint = %q", typed.Hint)
+	}
+	for _, action := range typed.Actions {
+		if strings.Contains(action, "dws doctor") || strings.Contains(action, "登录") || strings.Contains(action, "网络") {
+			t.Fatalf("misleading action = %q", action)
+		}
+	}
+
+	payload := multiProfileErrorPayload(err)
+	for key, want := range map[string]any{
+		"reason":            "upstream_internal_error",
+		"origin":            "dingtalk_api",
+		"stage":             "upstream_execution",
+		"retryable":         false,
+		"trace_id":          "trace-todo-create",
+		"server_error_code": "999",
+	} {
+		if got := payload[key]; got != want {
+			t.Errorf("payload[%q] = %#v, want %#v", key, got, want)
+		}
+	}
+	if _, ok := payload["execution_started"]; ok {
+		t.Fatalf("payload must keep execution_started unknown: %#v", payload)
+	}
+}
+
 func TestCrossPlatformCoverageServerFailureClassifierUnknownFallsBack(t *testing.T) {
 	err := newServerFailureAPIError(
 		"business error: success=false",
 		"business_error",
 		"check parameters",
 		"im",
+		"list_conversations",
 		apperrors.ServerDiagnostics{},
 	)
 	var typed *apperrors.Error
@@ -95,8 +162,8 @@ func TestCrossPlatformCoverageServerFailureClassifierUnknownFallsBack(t *testing
 	if typed.Reason != "business_error" || typed.Origin != "" || typed.FailureStage != "" || typed.ExecutionStarted != nil {
 		t.Fatalf("unexpected fallback classification: %#v", typed)
 	}
-	if len(typed.Actions) == 0 || !strings.Contains(typed.Actions[0], "dws doctor") {
-		t.Fatalf("fallback error has no stable troubleshooting entry: %#v", typed.Actions)
+	if len(typed.Actions) == 0 || strings.Contains(strings.Join(apperrors.RecoveryActions(err), "\n"), "dws doctor") {
+		t.Fatalf("fallback business error must keep service recovery without doctor: %#v", typed.Actions)
 	}
 }
 
@@ -106,6 +173,7 @@ func TestCrossPlatformCoverageServerFailureReasonUsesTypedClassification(t *test
 		"business_error",
 		"check parameters",
 		"im",
+		"list_conversations",
 		apperrors.ServerDiagnostics{ServerErrorCode: "NETWORK_ERROR"},
 	)
 	if got := serverFailureReason(err, "business_error"); got != "backend_dependency_unavailable" {
@@ -123,6 +191,7 @@ func TestCrossPlatformCoverageMultiProfileErrorPayloadPreservesFailureSemantics(
 		"business_error",
 		"check parameters",
 		"im",
+		"list_conversations",
 		apperrors.ServerDiagnostics{
 			TraceID:         "trace-multi",
 			ServerErrorCode: "NETWORK_ERROR",
@@ -145,6 +214,10 @@ func TestCrossPlatformCoverageMultiProfileErrorPayloadPreservesFailureSemantics(
 	}
 	if _, ok := payload["execution_started"]; ok {
 		t.Fatalf("payload must not invent execution_started: %#v", payload)
+	}
+	actions, _ := payload["actions"].([]string)
+	if !strings.Contains(strings.Join(actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("multi-profile backend failure has no doctor entry: %#v", payload["actions"])
 	}
 }
 
@@ -222,5 +295,60 @@ func TestCrossPlatformCoverageExecuteInvocationClassifiesObservedMCPMetadataFail
 	}
 	if typed.ExecutionStarted != nil {
 		t.Fatalf("execution_started must remain unknown: %v", typed.ExecutionStarted)
+	}
+}
+
+func TestCrossPlatformCoverageExecuteInvocationClassifiesTodoCreateUpstreamInternalError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result": map[string]any{
+				"structuredContent": map[string]any{
+					"success":  false,
+					"code":     "999",
+					"trace_id": "trace-todo-replay",
+					"errorMsg": "[UNCLASSIFIED] system error: java.lang.NullPointerException (operation: todo/create_personal_todo)",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := transport.NewClient(server.Client())
+	client.TrustedDomains = []string{strings.TrimPrefix(server.URL, "http://")}
+	runner := &runtimeRunner{
+		transport:   client,
+		globalFlags: &GlobalFlags{Token: "local-test-token"},
+	}
+	_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
+		CanonicalProduct: "todo",
+		Tool:             "create_personal_todo",
+		CanonicalPath:    "todo.create_personal_todo",
+		Params: map[string]any{
+			"PersonalTodoCreateVO": map[string]any{
+				"subject":     "fixture",
+				"executorIds": []string{"user-1"},
+			},
+		},
+	})
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("executeInvocation() error = %T %v, want typed API error", err, err)
+	}
+	if typed.Reason != "upstream_internal_error" || typed.Operation != "todo/create_personal_todo" {
+		t.Fatalf("classification = reason %q operation %q", typed.Reason, typed.Operation)
+	}
+	if !typed.RetryableSet || typed.Retryable || typed.ExecutionStarted != nil {
+		t.Fatalf("failure semantics = retryable(%v,%v) execution_started=%v", typed.RetryableSet, typed.Retryable, typed.ExecutionStarted)
+	}
+	if typed.ServerDiag.TraceID != "trace-todo-replay" || typed.ServerDiag.ServerErrorCode != "999" {
+		t.Fatalf("diagnostics = %#v", typed.ServerDiag)
 	}
 }

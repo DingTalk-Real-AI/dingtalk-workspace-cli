@@ -161,9 +161,10 @@ func TestCrossPlatformCoverageAuthCoverageFormsParentAndTargets(t *testing.T) {
 		t.Fatal("manual prompt error should propagate")
 	}
 	authLoginManualCredentialsPrompt = func() (string, string, error) { return "id", "secret", nil }
-	authSaveAppConfig = func(string, *authpkg.AppConfig) error { return errors.New("save") }
-	if err := applyAuthLoginGuideAction(cmd, t.TempDir(), authLoginGuideManualCredentials); err == nil {
-		t.Fatal("app-config save error should propagate")
+	saveCalls := 0
+	authSaveAppConfig = func(string, *authpkg.AppConfig) error { saveCalls++; return errors.New("save") }
+	if err := applyAuthLoginGuideAction(cmd, t.TempDir(), authLoginGuideManualCredentials); err != nil || saveCalls != 0 {
+		t.Fatalf("manual credentials must remain in memory until OAuth succeeds: err=%v saveCalls=%d", err, saveCalls)
 	}
 	authSaveAppConfig = func(string, *authpkg.AppConfig) error { return nil }
 	if err := applyAuthLoginGuideAction(cmd, t.TempDir(), authLoginGuideManualCredentials); err != nil {
@@ -1455,9 +1456,14 @@ func TestCrossPlatformCoverageAuthCoveragePortableExchangeAndReset(t *testing.T)
 	removed := 0
 	authDeleteAllTokenData = func(string) error { return nil }
 	authRemove = func(string) error { removed++; return errors.New("ignored") }
-	authDeleteAppConfig = func(string) error { removed++; return errors.New("ignored") }
+	authDeleteAppConfig = func(string) error { removed++; return errors.New("credential cleanup") }
 	edition.Override(&edition.Hooks{})
-	if err := reset.RunE(reset, nil); err != nil || removed != 4 || !strings.Contains(out.String(), "重新登录") {
+	if err := reset.RunE(reset, nil); err == nil || removed != 4 {
+		t.Fatalf("reset credential cleanup = %q, %v, removed=%d", out.String(), err, removed)
+	}
+	authDeleteAppConfig = func(string) error { return nil }
+	removed = 0
+	if err := reset.RunE(reset, nil); err != nil || removed != 3 || !strings.Contains(out.String(), "重新登录") {
 		t.Fatalf("reset = %q, %v, removed=%d", out.String(), err, removed)
 	}
 	edition.Override(&edition.Hooks{IsEmbedded: true})

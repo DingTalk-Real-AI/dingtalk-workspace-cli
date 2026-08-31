@@ -144,7 +144,7 @@ func TestCrossPlatformCoverageRunDocReadJSONMLCoverage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &scriptedToolCaller{steps: []scriptedToolStep{tc.step}}
 			installScriptedCaller(t, caller)
-			err := runDocReadJsonML(&cobra.Command{}, "node", tc.output)
+			err := runDocReadJsonML("node", tc.output, "", 0, false)
 			if tc.wantFail && err == nil {
 				t.Fatal("expected failure")
 			}

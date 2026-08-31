@@ -1,276 +1,60 @@
-# 数据读取
+# Sheet 读取数据
 
-## 使用场景
+## 读取路径
 
-用户说"读数据/看表格内容":
-- 快速查看纯值数据、批量处理、大表分批读 → `csv-get`（token 消耗低，防爆保护）
-- 需要 dataframe/table 结构（列名、二维 data、pandas-style dtypes、number formats）→ `table-get`
-- 需要结构化信息（值+样式+数据验证+富文本+单元格级超链接）、查看公式或原始值 → `range read`
-- 需要校验公式写入结果 → 先 `range read --value-render-option formula` 回读公式文本，再用 `formula-verify` 聚合扫描错误；需要确认业务数值时用 `raw_value` 抽样对账。完整流程见 [sheet-formula](./sheet-formula.md)
-- 需要查看合并单元格 / 表头合并结构 → `sheet info`，读取返回的 `mergedRanges`；不要在 `csv-get` 或 `range read` 里找合并信息
+| 需求 | 首选 | 结果形态 |
+|---|---|---|
+| Agent 快速查看值、低 token | dws sheet csv-get | CSV 文本加范围/截断元数据 |
+| 必须完整且截断即失败 | dws sheet +read | 严格完整读取 |
+| columns/data/dtypes/formats | dws sheet table-get | typed table/dataframe |
+| 需要公式、富文本、链接、验证等逐格结构 | dws sheet range read | per-cell JSON |
+| 合并、冻结、分组和尺寸 | dws sheet info | 工作表结构 |
 
-## 命令选择
+当前没有 sheetId 时只执行一次 +list-sheets，并把真实 sheetId 传播到后续阶段。不要为不需要 sheetId 的命令额外探活。
 
-| 读取目的 | 推荐命令 | 说明 |
-|---------|---------|------|
-| 快速查看纯值、数据分析、大表分批读取 | `csv-get` | CSV 格式，token 消耗约为 JSON 的 1/3，内置 30,000 单元格和 maxChars 防爆 |
-| 按 table/dataframe 协议读取 | `table-get` | 返回 `columns` / `data` / `dtypes` / `formats`；默认首行为表头 |
-| 查看数据验证配置（下拉/复选框） | `range read` | 返回 per-cell 结构，含 dataValidation |
-| 查看单元格样式（背景色/字体/对齐等） | `range read` | 返回 per-cell 结构，含 cellStyles（仅显式设置的样式） |
-| 查看单元格级超链接 | `range read` | 返回 per-cell 结构，含 hyperlink；富文本片段链接仍在 richText 内 |
-| 查看公式文本 | `range read --value-render-option formula` | value 返回公式 |
-| 公式写后结果校验 | `range read --value-render-option formula` + `formula-verify` + `raw_value` | 先确认公式文本，再聚合扫描错误，最后按需抽样对账业务数值 |
-| 获取原始值（数字/布尔而非格式化字符串） | `range read --value-render-option raw_value` | value 返回原始类型 |
-| 查看合并单元格范围 | `sheet info` | 返回 `mergedRanges`，这是工作表结构信息，不属于单元格值读取 |
+## CSV 快速读取
 
-## 与现有读取能力的区别
+    dws sheet csv-get       --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:H200"       --format json
 
-- `csv-get` 面向快速浏览和大表纯值读取：返回 CSV 文本、真实行号/列号映射和截断标记，token 低；不表达列类型、number format 或 per-cell 元数据
-- `table-get` 面向 dataframe/table 数据交换：返回 `columns` / `data` / `dtypes` / `formats`，适合后续结构化分析、类型保持和 `table-put` 回写；不返回合并单元格、dataValidation、hyperlink、richText、per-cell `cellStyles`
-- `range read` 面向精确单元格读取：返回二维 per-cell 对象，可看公式、原始值、dataValidation、hyperlink、richText、cellStyles；适合少量或中等范围的细节检查，但大范围读取 token 成本更高
+返回契约必须按字段解释：
 
-## 命令详细参考
+- csv 每行带 `[row=N]` 定位前缀，该前缀不是单元格数据；真正 CSV 内容仍按 RFC 4180 解析。
+- `rowIndices[i]` 是第 i 个返回行的真实行号，`colIndices[j]` 是第 j 列的真实列字母。后续定位单元格必须使用这两个映射，禁止通过 CSV 中逗号数量推算列号。
+- `resolvedRange` 是未显式传 range 时服务端解析出的完整目标范围；`returnedRange` 是本次实际完整返回的范围，两者不能混用。
 
-### 以 CSV 格式读取工作表数据（推荐）
-```
-Usage:
-  dws sheet csv-get [flags]
-Example:
-  dws sheet csv-get --node <NODE_ID>
-  dws sheet csv-get --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10"
-  dws sheet csv-get --node <NODE_ID> --range "A1:Z500" --value-render-option raw_value
-  dws sheet csv-get --node <NODE_ID> --range "A1:D10" --max-chars 50000
-Flags:
-      --node string                  表格文档 ID 或 URL (必填)
-      --sheet-id string              工作表 ID 或名称 (不传则默认第一个工作表)
-      --range string                 读取范围，A1 表示法 (不传则读取全部非空数据)
-      --value-render-option string   取值模式: formatted_value(默认) | raw_value | formula
-      --max-chars int                CSV 最大字符数 (默认 200000，超出截断)
-```
+读取成功后必须检查：
 
-**返回字段说明**：
-- `csv` — CSV 文本，每逻辑行前加 `[row=N]` 前缀标注真实表格行号。行号一律从此前缀读取，禁止手算
-- `colIndices` — 列字母映射数组（如 `["A","B","C"]`）。定位列字母用 `colIndices[j]`，禁止手数逗号
-- `rowIndices` — 行号映射数组（如 `[1,2,3]`）
-- `hasMore` — 完整目标范围是否还有未返回数据。`true` 是部分成功，不能宣称已读完
-- `truncationReasons` — 部分返回原因。`max_cells` 表示命中单次 30,000 单元格上限；`max_chars` 表示命中 CSV 字符上限，两者可同时出现
-- `resolvedRange` — 仅在未传 `--range` 时返回，表示底层解析出的完整目标范围
-- `returnedRange` — 本次实际完整返回的精确范围；它不是服务端续读游标
+- returnedRange 是否覆盖请求范围；
+- hasMore 是否为 false；
+- truncationReasons 是否为空；
+- 返回行列数是否符合预期。
 
-`csv-get` 不返回合并单元格结构。若 CSV 中出现合并区域的非左上角单元格为空，不能据此判断该区域"无内容"；需要先用 `dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json` 读取 `mergedRanges`，再结合左上角单元格理解合并区域语义。
+csv-get 单次最多 30000 单元格，并受 maxChars 约束。hasMore=true、范围缩短或出现截断原因时，只能说“当前块已读取”，不能说全量完成；按 returnedRange 的下一行构造下一块，保证无遗漏、无重叠并设置页数/块数上限。`max_cells` 不能靠增大 maxChars 解决。需要失败关闭时直接用 +read，避免由 Agent 手工实现完整性判断。
 
-**取值模式说明**：
-| 模式 | 返回内容 | 适用场景 |
-|------|---------|---------|
-| `formatted_value` | 格式化展示值（如 ¥1,000.00、2025-06-01） | 只看数据 |
-| `raw_value` | 原始值（如 1000、45808） | 数据处理、计算 |
-| `formula` | 公式文本（如 =SUM(A1:A10)），无公式时回退原始值 | 查看/复制公式 |
+`forbidden.document.sizeOverLimit` 表示工作簿整体无法装载，不是范围过大或空结果；缩小 range 不能修复。应建议创建更小副本或拆分工作簿，不得不断缩小范围绕过。
 
-**大表分批读取**：`csv-get` 不会自动发起后续请求。当 `hasMore=true` 时：
-- 显式传了 `--range` 时，该范围是完整目标；未传时，以 `resolvedRange` 为完整目标
-- 根据 `returnedRange` 的结束行，从下一行开始显式构造新的 `--range`；例如目标是 `A1:A30001`、本次返回 `A1:A30000`，则继续读 `A30001:A30001`
-- `max_cells` 不能通过增大 `--max-chars` 解决；`max_chars` 且没有 `returnedRange` 时，增大 `--max-chars` 或缩小列范围
-- 上述完成度协议覆盖未传 `--range` 和显式有限矩形范围；`A:A`、`1:1` 等非有限范围可能不返回完成度字段，建议先用 `sheet info` 的 `nonEmptyRange` 换算成有限范围再读
-- 即使未命中硬上限，单次仍建议控制在 5000 单元格以内，减少超时和 token 消耗
+csv-get 不返回合并单元格结构。合并区域的非左上角为空不能推导“没有内容”，需要 info 的 mergedRanges 配合解释。
 
-**工作簿过大失败与部分成功不同**：收到顶层
-`errorCode=forbidden.document.sizeOverLimit` 和对应 `errorMessage` 时，表示工作簿整体无法装载。应停止读取并提示创建更小副本或拆分工作簿；缩小 `--range` 不能解决这类错误。不要把它当成 `hasMore=true` 的可续读结果。
+## 渲染选项
 
-### 以 table/dataframe 协议读取结构化数据
-```
-Usage:
-  dws sheet table-get [flags]
-Example:
-  dws sheet table-get --node <NODE_ID>
-  dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D20"
-  dws sheet table-get --node <NODE_ID> --sheet-id "Sheet1" --no-header
-  dws sheet table-get --node <NODE_ID> --range "Sheet1!A1:D20"
-Flags:
-      --node string         表格文档 ID 或 URL (必填)
-      --sheet-id string     工作表 ID 或名称；默认不指定
-      --range string        读取范围，A1 表示法；可带 sheet 前缀，如 Sheet1!A1:D10；默认读取非空范围
-      --no-header           首行不作为表头，自动生成 col1/col2/...；默认 false
-```
+- formatted_value：面向展示，可能包含格式化日期、货币或百分比。
+- raw_value：需要计算值或保留数值语义时使用。
+- formula：需要确认写入的公式文本时使用。
 
-**默认行为**：
-- 不传 `--sheet-id` / `--range` 时，读取文档内所有工作表
-- `--range` 带 sheet 前缀时，以 `range` 中的 sheet 为读取目标
-- 不传 `--range` 时，每个目标工作表读取实际非空范围，并裁掉前导全空行/列；显式传 `--range` 时按用户范围原样读取
-- 默认首行作为表头；传 `--no-header` 时不消费表头行，并生成 `col1` / `col2` / ...
-- 大表或多 sheet 文档建议显式传 `--sheet-id` 和 `--range`，避免一次返回所有工作表造成超时或 token 过大
+公式验证通常分两次：先 formula 确认文本，再 raw_value 或 formula-verify 检查计算。不要把展示字符串当作原始数值，也不要把公式字符串当计算结果。
 
-**返回字段说明**：
-- `sheets` — 工作表数组；每项表示一个 table 结果
-- `name` / `sheetId` — 工作表名称与 ID
-- `range` — 实际读取范围，A1 表示法
-- `columns` — 列名数组；默认来自第一行，传 `--no-header` 时生成 `col1` / `col2` / ...
-- `data` — 二维数组；默认不含表头行。空单元格 / 缺失值在 table 语义上是 `null`；部分返回链路中也可能表现为空对象 `{}`，此时 `{}` 只表示空位，不是 JSON object 单元格值
-- `dtypes` — 按列返回 pandas-style dtype，例如 `object` / `float64` / `bool` / `datetime64[ns]`。普通文本列返回 `object`，当前不返回 `string`
-- `formats` — 按列返回 number format code，例如 `@` / `#,##0.00` / `yyyy-mm-dd`
+## typed table 与逐格读取
 
-**适用边界**：
-- 不传 `--range` 时读取实际非空范围；如需控制数据量，请显式传 `--range` 分批读取
-- 首行作为表头时，表头必须非空且不重复；没有稳定表头时传 `--no-header`
-- `data[][]` 中的 `{}` 表示空位 / 空单元格，按 `null` 处理；不要把它理解成可写入的对象值
-- `table-get` 返回的是值级 table 结构，不返回合并单元格、dataValidation、hyperlink、richText 或 per-cell `cellStyles`。这些信息请使用 `sheet info` 或 `range read`
-- `dtypes` / `formats` 是列级推断结果；单列混合类型通常按 `object` 处理。即使 `table-put` 写入时声明 `string`，文本列回读也通常是 `object`
-- 大整数/长数字 ID 如果在 `table-get` 中回读为 `float64`，不要把它当作逐位精确值使用；超过 `9007199254740991` 的整数必须在写入时按文本保存，回读应表现为字符串 / `object`，必要时用 `range read --value-render-option raw_value` 复核
+table-get 用于后续明确需要 columns、data、dtypes、formats 的处理链；普通问答不应为了“结构化”增加 token。默认首行作为表头，确实没有表头时才用 `--no-header`；返回 data 中 `{}` 表示空位，不是待执行的单元格对象。table-get 不返回逐格超链接、验证或样式元数据。
 
-### 读取工作表数据（per-cell 结构化信息）
-```
-Usage:
-  dws sheet range read [flags]     # 别名: dws sheet range get
-Example:
-  dws sheet range read --node <NODE_ID>
-  dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID>
-  dws sheet range read --node <NODE_ID> --sheet-id "Sheet1" --range "A1:D10"
-  dws sheet range read --node <NODE_ID> --range "Sheet1!A1:D10"
-  dws sheet range read --node <NODE_ID> --value-render-option raw_value
-  dws sheet range read --node <NODE_ID> --value-render-option formula
+range read 只在 CSV 无法承载的 per-cell 信息确实需要时调用，并尽量缩小范围和返回配置。其 cells 与 `rowIndices`/`colIndices` 对齐，可返回 value/formula/richText/hyperlink/dataValidation/cellStyles 等逐格结构；不能用它推断 mergedRanges。
 
-  # 使用 get 别名，与 read 等价
-  dws sheet range get --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10"
-Flags:
-      --node string                  表格文档 ID 或 URL (必填)
-      --sheet-id string              工作表 ID 或名称 (不传则默认第一个工作表)
-      --range string                 读取范围，A1 表示法 (如 A1:D10，不传则读取全部数据)
-      --value-render-option string   取值模式: formatted_value(默认) | raw_value | formula
-```
+    dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D100" --format json
 
-**返回字段说明**：
-- `rowIndices` / `colIndices` — 本次返回的真实行号与列字母映射
-- `hasMore` / `truncationReasons` / `resolvedRange` / `returnedRange` — 语义与 `csv-get` 相同；`range read` 的 `truncationReasons` 主要为 `max_cells`
-- `cells` — 二维数组，第一维为行，第二维为列。每个元素为 per-cell 对象，字段如下：
+    dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B5" --format json
 
-| 字段 | 类型 | 是否必有 | 说明 |
-|------|------|---------|------|
-| `value` | string / number / boolean / null | 始终存在 | 单元格值。`formatted_value` 模式为 string；`raw_value` 模式为原始类型（number/boolean/string/null）；`formula` 模式为公式字符串或回退原始值 |
-| `dataValidation` | object | 仅有数据验证时出现，无则省略 | 数据验证配置，见下表 |
-| `hyperlink` | object | 仅有单元格级超链接时出现，无则省略 | 整格超链接，结构为 `{type, link, text?}`，见下表 |
-| `richText` | object | 仅富文本单元格出现 | 富文本结构（含超链接、附件、图片、样式片段等），普通纯文本不含此字段 |
-| `cellStyles` | object | 仅有显式设置的样式时出现；部分返回链路也可能返回全 null 空壳 | cell-level 样式，见下表。读取时只看非 null 字段；全 null 等同不存在 |
+如果命令返回非零、统一 envelope 的 ok=false、JSON 解析失败、条数不一致或分页游标不前进，立即失败。只有明确成功且终止状态成立时，空数组/空 CSV 才代表真实空结果。
 
-`range read` / `range get` 不返回合并单元格结构。要看合并单元格，请先或另行调用 `dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json`，使用其中的 `mergedRanges`。
+## 读取完成条件
 
-**dataValidation 结构**：
-
-| type | 字段 | 说明 |
-|------|------|------|
-| `dropdown` Inline | `sourceType: "inline"` | 静态选项模式 |
-| `dropdown` Inline | `options: [{value: string, color?: string}]` | 下拉选项列表 |
-| `dropdown` Inline | `enableMultiSelect: boolean` | 是否允许多选 |
-| `dropdown` SourceRange | `sourceType: "sourceRange"` | 区域来源模式 |
-| `dropdown` SourceRange | `sourceRange: {sheetId, a1Notation}` | 仅 `sourceRangeStatus:"valid"` 时返回的来源工作表和规范化 A1 区域；`invalid` 时省略 |
-| `dropdown` SourceRange | `sourceRangeStatus: "valid" / "invalid"` | 底层引用是否可解析；无效引用仍返回配置，但不返回 `sourceRange` |
-| `checkbox` | `checked: boolean` | 当前勾选状态 |
-
-SourceRange 模式不动态拉取或展开来源区域的候选值，因此不返回 `options` 或颜色。`invalid` 时只能依赖 `sourceRangeStatus` 判定需要重新选源，不得假定仍能从 `sourceRange` 取回旧坐标。
-
-**hyperlink 结构**：
-
-| type | 字段 | 说明 |
-|------|------|------|
-| `path` | `link` + 可选 `text` | 外部 URL 链接 |
-| `sheet` | `link` + 可选 `text` | 工作表链接，`link` 为工作表 ID 或名称 |
-| `range` | `link` + 可选 `text` | 单元格范围链接，`link` 为 A1 表示法，如 `Sheet1!A4` |
-
-**richText 结构**：
-
-`richText` 表示单元格内的富文本片段，常见结构为 `{type:"richText", texts:[...]}`。`texts` 数组内每个子项代表一个片段：
-
-| 子项 type | 常见字段 | 说明 |
-|-----------|----------|------|
-| `text` | `text` / `style` | 普通文本片段；`style` 是片段级样式 |
-| `link` | `text` / `link` / `subType` / `style` | 富文本片段链接。`subType` 不存在时按 `path` 理解；`path` 表示外部 URL，`sheet` 表示工作表链接，`range` 表示单元格范围链接 |
-| `attachment` | `text` / `resourceId` / `mimeType` / `size` | 附件片段 |
-| `image` | `resourceId` / `resourceUrl` / `width` / `height` | 图片片段 |
-
-`richText.texts[].link.subType` 与 cell-level `hyperlink.type` 含义一致，但作用范围不同：`hyperlink` 是整个单元格可点击，richText `link` 只作用于该文本片段。读取到 `subType:"sheet"` 时，`link` 通常是真实工作表名称；读取到 `subType:"range"` 时，`link` 通常是 A1 范围（如 `Sheet2!A1:B20`）。不要把 richText 片段链接误当成整格 `hyperlink`。
-
-**cellStyles 字段说明**（仅关注显式设置过的非 null 属性；未设置属性不存在或为 null，应忽略）：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `fontWeight` | string | `bold` / `normal` |
-| `fontColor` | string | 字体颜色，`#RRGGBB` |
-| `fontSize` | number | 字号 |
-| `fontStyle` | string | `italic` / `normal` |
-| `backgroundColor` | string | 背景色，`#RRGGBB` |
-| `horizontalAlignment` | string | `left` / `center` / `right` / `general` |
-| `verticalAlignment` | string | `top` / `middle` / `bottom` |
-| `wordWrap` | string | `overflow` / `clip` / `autoWrap` |
-| `numberFormat` | string | 数字格式代码，如 `@`、`#,##0.00`、`yyyy/m/d`；`@` 表示文本 |
-| `textUnderline` | boolean | 下划线 |
-| `textLineThrough` | boolean | 删除线 |
-
-**返回示例**：
-```json
-{
-  "cells": [
-    [
-      {"value": "姓名", "cellStyles": {"fontWeight": "bold", "backgroundColor": "#FFF2CC"}},
-      {"value": "状态", "cellStyles": {"fontWeight": "bold"}, "dataValidation": {"type": "dropdown", "options": [{"value": "进行中"}, {"value": "已完成", "color": "#52C41A"}], "enableMultiSelect": false}}
-    ],
-    [
-      {"value": "张三"},
-      {"value": "钉钉", "hyperlink": {"type": "path", "link": "https://dingtalk.com", "text": "钉钉"}}
-    ]
-  ],
-  "message": "Successfully retrieved cell data.",
-  "success": true
-}
-```
-
-说明：第一行表头有 `cellStyles`（加粗 + 背景色），第二行第二格有单元格级 `hyperlink`。注意：部分返回链路会将未设置的字段填充为 null（如 `"fontStyle": null`），读取时应忽略值为 null 的字段，仅关注非 null 的属性；如果 `cellStyles` 全字段都是 null，视同不存在。`richText` 字段同理——无富文本的普通单元格可能返回 `{"type": null, "texts": null}`，视同不存在。
-
-**取值模式说明**：
-| 模式 | value 返回内容 | 适用场景 |
-|------|---------|---------|
-| `formatted_value` | 格式化展示值（如 ¥1,000.00、2025-06-01） | 只看数据（默认） |
-| `raw_value` | 原始值（如 1000、45808） | 数据处理、计算 |
-| `formula` | 公式文本（如 =SUM(A1:A10)），无公式时回退原始值 | 查看/复制公式 |
-
-**公式校验建议**：写公式后不要只看写入返回结果。先用 `formula` 模式确认公式文本已落表，再运行 `formula-verify` 聚合扫描错误；关键业务数值继续用 `raw_value` 抽样对账。详见 [sheet-formula](./sheet-formula.md)。
-
-**超时处理建议**：读取大范围数据时若出现超时或响应过慢，请主动缩小 `--range` 查询范围，**建议单次读取的单元格数量控制在 5000 个以内**（例如 50 行 × 100 列、100 行 × 50 列）。对于大表可采用分批读取策略，每次都必须检查 `hasMore`：
-- 先通过 `info` 获取 `nonEmptyRange.range`，或用 `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` 确定 A1 边界
-- 按行分批读取，如 `A1:J500`、`A501:J1000`、`A1001:J1500` ……
-- 避免不传 `--range` 直接读取整个大工作表
-
-## 核心工作流
-
-```bash
-# ── 工作流: 读取已有表格数据 ──
-
-# 1. 获取工作表列表
-dws sheet list --node <NODE_ID> --format json
-
-# 2. 查看工作表详情（行列数、最后非空位置、mergedRanges 等）
-dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json
-
-# 3. 读取数据（只有 hasMore=false 才代表目标范围已完整返回）
-dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --format json
-
-# 4. 读取指定区域
-dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10" --format json
-```
-
-## 上下文传递
-
-| 操作 | 从返回中提取 | 用于 |
-|------|-------------|------|
-| `list` | 工作表的 `sheetId` | info / range read 的 --sheet-id |
-| `info` | `rowCount` / `nonEmptyRange.range` / `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn` / `mergedRanges` | 确定数据范围、分页读取边界、识别合并单元格结构 |
-
-## 注意事项
-
-- ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询真实的 `sheetId` / 工作表名称后再调用，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）；用户仅给出工作表名称时，也应通过 `list` 校验该名称是否存在，避免名称大小写或拼写不一致导致失败
-- `range read` 不传 `--range` 时默认读取整个工作表的全部非空数据
-- `range read` 的 `--range` 支持 `Sheet1!A1:D10` 格式直接指定工作表（此时忽略 `--sheet-id`）
-- ★ `csv-get` 和 `range read` 都必须检查 `hasMore`；`true` 时结合目标范围与 `returnedRange` 显式分批，CLI 不会自动续读
-- ★ `forbidden.document.sizeOverLimit` 是工作簿装载失败，不是 30,000 单元格部分成功；缩小 `--range` 不能修复
-- ★ `csv-get` / `range read` / `range get` 不返回合并单元格结构；查看合并范围必须用 `sheet info` 的 `mergedRanges`
-- `table-get` 返回 table/dataframe 结构，适合需要 `columns` / `data` / `dtypes` / `formats` 的场景；它不返回 per-cell 元数据，也不替代 `range read`
-- ★ 大整数和长数字标识符回读校验：精确 ID 应是字符串 / `object`；若看到 `float64`，说明它已经按数值路径处理，超过 `9007199254740991` 时可能已丢精度
-- `range read` 遇到超时或响应过慢时，应缩小 `--range` 查询范围，**单次读取的单元格数量建议控制在 5000 个以内**；数据量较大时通过 `info` 的 `nonEmptyRange.range` 获取 A1 边界后分批读取，避免不传 `--range` 直接读取整个大工作表
-- ★ 当用户要求搜索/查找表格数据时，使用 `find` 命令，不要用 `range read` 读取全量数据后自行过滤——`find` 支持服务端搜索，效率更高、语义更准确
+最终答复前确认：profile 一致；ID 来自当前任务；所有块都已覆盖；无 hasMore、截断、重复块或游标停滞；涉及结构时另有 info/object list 证据。只报告已验证范围，不夸大到整张表。

@@ -8,6 +8,7 @@
 | "帮我建一个项目跟踪表" | 创建数据表格 | `aitable` | `doc` / `sheet` | 涉及结构化数据/行列操作，不是富文本文档或电子表格 |
 | "帮我写个项目周报" | 创建钉钉文档 | `doc` | `aitable` | 富文本内容创作，不是数据表 |
 | "参照这个生成同样的 / 按模板生成 / 复刻 X / 同样的模板 X 月份的" + 已有 alidocs URL | 模板保形生成同形态变体 | `drive copy + drive rename + doc block update` → 见 [best_practices/04-document.md `template-based-generation`](../../dingtalk-doc/references/04-document.md#template-based-generation) | `doc read + doc create`（重写链） | adoc → markdown 是有损投影，read+create 会丢行高/单元格背景色/字号；copy 在 adoc 层保形复制后只在副本上局部修改 |
+| "复制一份这个文档 / 把这篇文档挂到 X 文件夹"（不涉模板变体） | 在线文档节点的存储层复制/移动 | `dws drive +copy --node <ID> [--folder <目标ID>]` / `dws drive +move --node <ID> --folder <目标ID>` | doc 同名 `+copy`/`+move`；`wiki node copy` | 复制/移动属节点存储管理，归 drive；drive 版先 probe 对象类型并拒绝普通文件，doc 裸版对普通文件会生成 `.dlink` 快捷方式而非副本 |
 | "这个 alidocs 表格链接帮我看下"（粘贴原始 URL） | 先 probe 节点类型 | `dws drive info --node` → 按 `extension` 路由 | 直接调 `sheet` | `alidocs/i/nodes/{id}` 可能是文档/axls/able/xlsx 等，禁止凭 URL 猜类型 |
 | "帮我记一下明天要做的事" | 创建个人待办 | `todo` | `doc` | 个人待办提醒，非文档内容 |
 | "在知识库里创建一个文档" | 创建空文件实体 | `wiki node create --type adoc` | `doc create` | 空间内创建节点归 wiki；doc create 是向已有文档写入内容，不是创建文件节点 |

@@ -79,6 +79,63 @@ type parameterSchema struct {
 	Enum             []string `json:"enum,omitempty"`
 }
 
+type reviewedCompatibilityException struct {
+	Field string
+	Old   string
+	New   string
+}
+
+// reviewedCompatibilityExceptions is intentionally exact: safety fixes may
+// need to tighten a historical contract, but that must not turn arbitrary
+// confirmation drift into a compatible change. Each tool may have multiple
+// field transitions (e.g. confirmation + risk + effect tightened together).
+var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
+	// PR #1085: batch permission/member remove is destructive at container
+	// scope — one call can revoke access for up to 30 USER / DEPT /
+	// CONVERSATION / TAG members, and departments, chats, and role groups
+	// can indirectly affect many more users. The review therefore asked for
+	// the same user confirmation gate as other destructive removes.
+	"doc/doc.remove_permission": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	"drive/drive.permission_remove": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	"wiki/wiki.remove_member": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	// PR #1097 (issue #1096): 6 commands that affect other users and are
+	// irreversible were incorrectly marked not_required / medium. Tightened
+	// to user_required / high; calendar event delete and minutes replace-text
+	// additionally escalated to destructive effect.
+	"calendar/calendar.delete_calendar_event": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"calendar/calendar.remove_calendar_participant": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"calendar/calendar.delete_meeting_room": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"chat/chat.remove_group_member": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"minutes/minutes.replace_minutes_text": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"doc/doc.update_permission": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -695,7 +752,7 @@ func checkCompatibility(baseline, current schemaContract) []string {
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
-	for _, field := range []struct {
+	fields := []struct {
 		name string
 		old  string
 		new  string
@@ -707,8 +764,15 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
 		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
-	} {
+	}
+	var actual []toolTransition
+	for _, field := range fields {
 		if field.old != field.new {
+			actual = append(actual, toolTransition{field: field.name, old: field.old, new_: field.new})
+		}
+	}
+	for _, field := range fields {
+		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new, actual) {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
@@ -744,6 +808,49 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	return failures
 }
 
+// toolTransition captures a single field's old→new change for atomic matching.
+type toolTransition struct {
+	field string
+	old   string
+	new_  string
+}
+
+// reviewedExceptionSetFullyMatched reports whether every registered exception
+// for toolPath is present in the actual transitions. The set is atomic: a
+// partial migration (e.g. only risk tightened, confirmation unchanged) must
+// not borrow individual exceptions from a reviewed complete hardening.
+func reviewedExceptionSetFullyMatched(toolPath string, actual []toolTransition) bool {
+	exceptions := reviewedCompatibilityExceptions[toolPath]
+	if len(exceptions) == 0 {
+		return true
+	}
+	for _, ex := range exceptions {
+		found := false
+		for _, tr := range actual {
+			if tr.field == ex.Field && tr.old == ex.Old && tr.new_ == ex.New {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string, actual []toolTransition) bool {
+	if !reviewedExceptionSetFullyMatched(toolPath, actual) {
+		return false
+	}
+	for _, exception := range reviewedCompatibilityExceptions[toolPath] {
+		if exception.Field == field && exception.Old == oldValue && exception.New == newValue {
+			return true
+		}
+	}
+	return false
+}
+
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
 // backend RPC migrations this gate accepts. Schema shape alone cannot prove two
 // RPCs share business semantics, permissions, error behaviour, or side effects,
@@ -777,6 +884,30 @@ var reviewedConstraintTransition = map[string]map[string]string{
 	// historical require_one_of made the documented Golden Route unreachable.
 	"doc/doc.shortcut_import": {
 		`{"require_one_of":[["folder","workspace"]]}`: "",
+	},
+	// PR #1105 adds local --file as an alternative to the historically required
+	// --src input. Every historical --src invocation remains valid; publishing
+	// both groups makes the final Schema express the runtime's exact-one rule.
+	"sheet/sheet.create_float_image": {
+		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
+	},
+	// #85955640 adds local --file-path as an alternative to the historically
+	// required --media-id input. Every historical --media-id invocation remains
+	// valid; publishing both groups makes the final Schema express the
+	// runtime's exact-one rule.
+	"chat/chat.favorite_personal_emotion": {
+		"": `{"mutually_exclusive":[["media-id","file-path"]],"require_one_of":[["media-id","file-path"]]}`,
+	},
+	// PR #1042 publishes the Todo Shortcut constraints already enforced by
+	// runtime validation. The Reminder transition is intentionally limited to
+	// clear/base-time exactly-one; historically accepted extra time arguments
+	// remain compatible and are ignored by the runtime branch that does not use
+	// them.
+	"todo/todo.shortcut_update": {
+		"": `{"require_one_of":[["title","due","priority"]]}`,
+	},
+	"todo/todo.shortcut_reminder": {
+		"": `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
 	},
 }
 
@@ -1261,9 +1392,9 @@ type schemaToolRef struct {
 }
 
 // normalizeSchemaFlagMigrations projects only an already-authorized CLI flag
-// rename onto a cloned historical Schema contract. The ordinary compatibility
-// checker still makes the final decision; this adapter never drops findings by
-// matching their rendered text.
+// rename or requiredness change onto a cloned historical Schema contract. The
+// ordinary compatibility checker still makes the final decision; this adapter
+// never drops findings by matching their rendered text.
 func normalizeSchemaFlagMigrations(
 	baseline schemaContract,
 	current schemaContract,
@@ -1273,6 +1404,14 @@ func normalizeSchemaFlagMigrations(
 	renamesByTool := map[schemaToolRef]map[string]string{}
 
 	for _, migration := range migrations {
+		if migration.EffectiveKind() == interfacesnapshot.FlagMigrationRequirednessChange {
+			var err error
+			normalized, err = normalizeSchemaFlagRequirednessMigration(normalized, baseline, current, migration)
+			if err != nil {
+				return schemaContract{}, err
+			}
+			continue
+		}
 		primaryPath := strings.TrimPrefix(migration.Command, "dws ")
 		matches := schemaToolsByPrimaryPath(baseline, primaryPath)
 		if len(matches) == 0 {
@@ -1394,6 +1533,65 @@ func normalizeSchemaFlagMigrations(
 	return normalized, nil
 }
 
+func normalizeSchemaFlagRequirednessMigration(
+	normalized schemaContract,
+	baseline schemaContract,
+	current schemaContract,
+	migration interfacesnapshot.FlagMigration,
+) (schemaContract, error) {
+	primaryPath := strings.TrimPrefix(migration.Command, "dws ")
+	matches := schemaToolsByPrimaryPath(baseline, primaryPath)
+	if len(matches) == 0 {
+		// A reviewed CLI-only command has no Schema compatibility surface.
+		return normalized, nil
+	}
+	if len(matches) != 1 {
+		return schemaContract{}, fmt.Errorf(
+			"approved flag requiredness migration %q matches %d historical Schema tools",
+			migration.Command,
+			len(matches),
+		)
+	}
+
+	ref := matches[0]
+	oldTool := baseline.Products[ref.productID].Tools[ref.toolID]
+	oldParameter, existed := oldTool.Parameters[migration.Flag.Name]
+	if !existed {
+		// CLI requiredness is not authority to create or mutate an unrelated
+		// historical Schema parameter.
+		return normalized, nil
+	}
+	newProduct, productExists := current.Products[ref.productID]
+	newTool, toolExists := newProduct.Tools[ref.toolID]
+	if !productExists || !toolExists || newTool.PrimaryCLIPath != primaryPath {
+		// Preserve the baseline so the ordinary checker reports the missing tool
+		// or primary path change.
+		return normalized, nil
+	}
+	newParameter, exists := newTool.Parameters[migration.Flag.Name]
+	if !exists {
+		// Preserve the baseline so the ordinary checker reports parameter loss.
+		return normalized, nil
+	}
+	if !newParameter.Required || !newParameter.CLIRequired {
+		return schemaContract{}, fmt.Errorf(
+			"approved flag requiredness migration %q Schema parameter %q must be required and cli_required",
+			migration.Command,
+			migration.Flag.Name,
+		)
+	}
+
+	normalizedProduct := normalized.Products[ref.productID]
+	normalizedTool := normalizedProduct.Tools[ref.toolID]
+	normalizedParameter := oldParameter
+	normalizedParameter.Required = newParameter.Required
+	normalizedParameter.CLIRequired = newParameter.CLIRequired
+	normalizedTool.Parameters[migration.Flag.Name] = normalizedParameter
+	normalizedProduct.Tools[ref.toolID] = normalizedTool
+	normalized.Products[ref.productID] = normalizedProduct
+	return normalized, nil
+}
+
 // normalizeSchemaCommandMigrationLineage composes two independently reviewed
 // migration receipts without inventing a second alias authority. A consumed
 // flag migration may supply the historical predecessor of a command_move
@@ -1482,6 +1680,9 @@ func stageSchemaCommandMigrationPredecessors(
 		for _, parameter := range migration.Schema.Parameters {
 			if _, direct := oldTool.Parameters[parameter.From]; direct {
 				for _, flagMigration := range flagMigrations {
+					if flagMigration.EffectiveKind() != interfacesnapshot.FlagMigrationRename {
+						continue
+					}
 					if flagMigration.Command != migration.Legacy.Command ||
 						flagMigration.Canonical.Name != parameter.From {
 						continue
@@ -1501,6 +1702,9 @@ func stageSchemaCommandMigrationPredecessors(
 
 			predecessors := make([]interfacesnapshot.FlagMigration, 0, 1)
 			for _, flagMigration := range flagMigrations {
+				if flagMigration.EffectiveKind() != interfacesnapshot.FlagMigrationRename {
+					continue
+				}
 				if flagMigration.Command != migration.Legacy.Command ||
 					flagMigration.Canonical.Name != parameter.From {
 					continue
@@ -1742,6 +1946,26 @@ func normalizeSchemaCommandMigrations(
 		}
 		legacyPath := strings.TrimPrefix(migration.Legacy.Command, "dws ")
 		replacementPath := strings.TrimPrefix(migration.Replacement.Command, "dws ")
+		if migration.Kind == interfacesnapshot.CommandMigrationFlagExtraction &&
+			migration.State == interfacesnapshot.CommandMigrationConsumed {
+			_, historicalPublishesLegacy := oldTool.Parameters[migration.LegacyFlag.Name]
+			_, currentPublishesLegacy := newSource.Parameters[migration.LegacyFlag.Name]
+			historicalReplacement, historicalReplacementExists := oldProduct.Tools[migration.Schema.ReplacementToolID]
+			currentReplacement, currentReplacementExists := newProduct.Tools[migration.Schema.ReplacementToolID]
+			if oldTool.PrimaryCLIPath == legacyPath &&
+				newSource.PrimaryCLIPath == legacyPath &&
+				!historicalPublishesLegacy &&
+				!currentPublishesLegacy &&
+				historicalReplacementExists &&
+				historicalReplacement.PrimaryCLIPath == replacementPath &&
+				currentReplacementExists &&
+				currentReplacement.PrimaryCLIPath == replacementPath {
+				// The merge-base has already reached the extraction's after state.
+				// Retain the receipt for older stable baselines without replaying it
+				// against the already-extracted source tool.
+				continue
+			}
+		}
 		if oldTool.PrimaryCLIPath == replacementPath {
 			// A consumed receipt can still be needed for the stable baseline after
 			// main has already reached the after state.
@@ -1759,6 +1983,24 @@ func normalizeSchemaCommandMigrations(
 		normalizedProduct := normalized.Products[migration.Schema.ProductID]
 		normalizedTool := normalizedProduct.Tools[migration.Schema.SourceToolID]
 		switch migration.Kind {
+		case interfacesnapshot.CommandMigrationAvailability:
+			change := migration.Schema.Availability
+			if change != nil && oldTool.Availability == change.After && newSource.Availability == change.After {
+				continue
+			}
+			if change == nil || oldTool.Availability != change.Before || newSource.Availability != change.After {
+				return schemaContract{}, fmt.Errorf(
+					"approved availability hardening %q does not match Schema availability %q -> %q",
+					migration.Legacy.Command,
+					oldTool.Availability,
+					newSource.Availability,
+				)
+			}
+			if newSource.PrimaryCLIPath != legacyPath {
+				continue
+			}
+			normalizedTool.Availability = newSource.Availability
+
 		case interfacesnapshot.CommandMigrationMove:
 			if newSource.PrimaryCLIPath != replacementPath {
 				continue

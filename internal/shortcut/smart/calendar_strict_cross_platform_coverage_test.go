@@ -148,6 +148,18 @@ func TestCrossPlatformCoverageCalendarSmartStrictCollections(t *testing.T) {
 	if err != nil || items == nil || len(items) != 0 || hasMore || next != "" {
 		t.Fatalf("explicit empty page items=%#v hasMore=%v next=%q err=%v", items, hasMore, next, err)
 	}
+	items, hasMore, next, err = calendarSmartEventPage(map[string]any{
+		"success": true,
+		"result": map[string]any{
+			"events": []any{map[string]any{
+				"attendees": nil, "categories": nil, "meetingRooms": nil, "reminders": nil,
+			}},
+			"hasMore": false,
+		},
+	})
+	if err != nil || items == nil || len(items) != 0 || hasMore || next != "" {
+		t.Fatalf("service empty sentinel items=%#v hasMore=%v next=%q err=%v", items, hasMore, next, err)
+	}
 
 	invalidPages := []map[string]any{
 		{},
@@ -157,6 +169,7 @@ func TestCrossPlatformCoverageCalendarSmartStrictCollections(t *testing.T) {
 		{"success": true, "result": map[string]any{"events": []any{}, "hasMore": true}},
 		{"success": true, "result": map[string]any{"events": []any{}, "hasMore": false, "nextCursor": "unexpected"}},
 		{"success": true, "result": map[string]any{"events": []any{map[string]any{"id": "event-placeholder"}}, "hasMore": false}},
+		{"success": true, "result": map[string]any{"events": []any{map[string]any{"summary": nil}}, "hasMore": false}},
 		{"success": true, "result": map[string]any{"events": []any{"bad-item"}, "hasMore": false}},
 	}
 	for index, page := range invalidPages {

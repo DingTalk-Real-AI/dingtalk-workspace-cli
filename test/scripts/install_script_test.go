@@ -590,7 +590,8 @@ $copyPath = Join-Path $root 'published-copy'
 New-Item -ItemType Directory -Path $copySource -Force | Out-Null
 Set-Content -LiteralPath (Join-Path $copySource 'SKILL.md') -Value 'transaction copy'
 Copy-SkillPathLexically -Source $copySource -Destination $copyPath
-$copyRecord = New-PublishedSkillCopyRecord -Path $copyPath -Source $copySource
+$copyRecord = [pscustomobject]@{ Path = $copyPath; Source = $copySource }
+Assert-SkillPathCopy -Source $copySource -Destination $copyPath
 Remove-SkillPathLexically -Path $copyPath
 New-Item -ItemType Directory -Path $copyPath -Force | Out-Null
 Set-Content -LiteralPath (Join-Path $copyPath 'concurrent-copy-data.txt') -Value 'keep'
@@ -4146,6 +4147,127 @@ exit 0
 			}
 			if matches, err := filepath.Glob(filepath.Join(base, ".dws-multi-set-*")); err != nil || len(matches) != 0 {
 				t.Fatalf("PowerShell staging leftovers after %s failure = %v, err=%v", failureKind, matches, err)
+			}
+		})
+	}
+}
+
+// Regression for the Windows multi-Skill install failure (Gitee IK9YBM):
+// Assert-SkillPathCopy used to compare the full Windows SDDL between the staged
+// copy and the destination. The multi/mono staging path copies through
+// Copy-DirRecursive, which does not propagate ACLs, so on a real Windows profile
+// the two trees carry different inherited ACEs and a byte-identical publication
+// was rejected. Recovery then failed too, because the publish loop recorded a
+// published path only after the assertion passed, hiding the already-moved
+// destination from Restore-MultiSkillSet.
+//
+// Get-Acl exists only on Windows, so the fingerprint is injected here and keyed
+// on which tree the path belongs to; $env:OS selects the native-Windows branch.
+// This pins the control flow and the rollback contract, not the SDDL values a
+// real Windows host would compute.
+func TestInstallPowerShellWindowsAclDivergencePublishesAndRollsBack(t *testing.T) {
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		if runtime.GOOS == "windows" {
+			pwsh, err = exec.LookPath("powershell")
+		}
+		if err != nil {
+			t.Skip("PowerShell is not available")
+		}
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(data), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+
+	for _, scenario := range []string{"publish", "rollback"} {
+		scenario := scenario
+		t.Run(scenario, func(t *testing.T) {
+			home := t.TempDir()
+			base := filepath.Join(home, ".agents", "skills")
+			source := filepath.Join(t.TempDir(), "multi")
+			replaced := filepath.Join(base, "dingtalk-aisearch")
+			added := filepath.Join(base, "dingtalk-chat")
+			mustWriteFile(t, filepath.Join(source, "dingtalk-aisearch", "SKILL.md"), []byte("new aisearch\n"), 0o644)
+			mustWriteFile(t, filepath.Join(source, "dingtalk-chat", "SKILL.md"), []byte("new chat\n"), 0o644)
+			// Only dingtalk-aisearch exists up front, so it is the sole entry
+			// with a backup. The ordering defect only strands a Skill that was
+			// backed up, so the failure must be injected on this one.
+			mustWriteFile(t, filepath.Join(replaced, "SKILL.md"), []byte("old aisearch\n"), 0o644)
+			mustWriteFile(t, filepath.Join(replaced, "user-note.txt"), []byte("user data\n"), 0o644)
+
+			prefix := strings.ReplaceAll(string(data[:cut]), "$HOME", "$env:DWS_TEST_HOME")
+			prefix += `
+$env:OS = "Windows_NT"
+function Get-SkillPathPermissionFingerprint {
+    param([string]$Path)
+    if ([System.IO.Path]::GetFullPath($Path).StartsWith($env:DWS_TEST_SOURCE, [System.StringComparison]::Ordinal)) {
+        return "O:BAG:BAD:(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+    }
+    return "O:S-1-5-21-1001G:S-1-5-21-513D:(A;OICI;FA;;;S-1-5-21-1001)"
+}
+$script:OriginalAssertSkillPathCopy = ${function:Assert-SkillPathCopy}
+function Assert-SkillPathCopy {
+    param([string]$Source, [string]$Destination)
+    if ($env:DWS_TEST_SCENARIO -eq "rollback" -and $Destination -eq $env:DWS_TEST_REPLACED) {
+        throw "injected post-publish verification failure"
+    }
+    & $script:OriginalAssertSkillPathCopy -Source $Source -Destination $Destination
+}
+$ok = Install-MultiSkillsToHomes -MultiSrc $env:DWS_TEST_SOURCE -Root $env:DWS_TEST_HOME
+if ($env:DWS_TEST_SCENARIO -eq "publish") {
+    if (!$ok) { exit 2 }
+} elseif ($ok) {
+    exit 3
+}
+exit 0
+`
+			harnessPath := filepath.Join(t.TempDir(), "install-windows-acl-harness.ps1")
+			mustWriteFile(t, harnessPath, []byte(prefix), 0o644)
+
+			cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-File", harnessPath)
+			cmd.Env = append(os.Environ(),
+				"DWS_TEST_HOME="+home,
+				"DWS_TEST_SOURCE="+source,
+				"DWS_TEST_REPLACED="+replaced,
+				"DWS_TEST_SCENARIO="+scenario,
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("PowerShell %s harness failed: %v\n%s", scenario, err, output)
+			}
+
+			if scenario == "publish" {
+				// Divergent ACLs must no longer reject a correct publication.
+				if got, err := os.ReadFile(filepath.Join(replaced, "SKILL.md")); err != nil || string(got) != "new aisearch\n" {
+					t.Fatalf("replaced Skill = %q, err=%v\n%s", got, err, output)
+				}
+				if got, err := os.ReadFile(filepath.Join(added, "SKILL.md")); err != nil || string(got) != "new chat\n" {
+					t.Fatalf("added Skill = %q, err=%v\n%s", got, err, output)
+				}
+			} else {
+				// The published destination is recorded before it is asserted,
+				// so rollback can remove it and move the backup home again.
+				if got, err := os.ReadFile(filepath.Join(replaced, "SKILL.md")); err != nil || string(got) != "old aisearch\n" {
+					t.Fatalf("restored Skill = %q, err=%v\n%s", got, err, output)
+				}
+				if got, err := os.ReadFile(filepath.Join(replaced, "user-note.txt")); err != nil || string(got) != "user data\n" {
+					t.Fatalf("restored user data = %q, err=%v\n%s", got, err, output)
+				}
+				if strings.Contains(string(output), "恢复目标仍存在") {
+					t.Fatalf("rollback still reports an occupied restore target:\n%s", output)
+				}
+			}
+			if matches, err := filepath.Glob(filepath.Join(base, ".dws-multi-set-*")); err != nil || len(matches) != 0 {
+				t.Fatalf("staging leftovers after %s = %v, err=%v", scenario, matches, err)
 			}
 		})
 	}

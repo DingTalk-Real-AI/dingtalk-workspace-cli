@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package corecmd is the shared, dispatch-agnostic base for building leaf
-// commands. It concentrates flag registration, the alias/env/default effective
-// value fallback chain, required validation, cross-flag constraint declaration
-// checks + runtime enforcement, SafetySpec-driven confirmation, toolArgs
-// assembly, and Agent Runtime Schema projection.
+// Package corecmd is the shared, dispatch-agnostic base for building commands.
+// It concentrates typed group policy, flag registration, the alias/env/default
+// effective value fallback chain, required validation, cross-flag constraint
+// declaration checks + runtime enforcement, SafetySpec-driven confirmation,
+// toolArgs assembly, and Agent Runtime Schema projection.
 //
 // Declaration vs execution (framework rule):
 //
@@ -231,7 +231,9 @@ const (
 //     or assemble business params that belong in Flags/ConstParams.
 //
 // Exactly one of RunE / Invoke / ResultInvoke / Orchestrate must be set; New
-// validates this at construction time. corecmd stays dispatch-agnostic and
+// validates this at construction time. Non-leaf commands are declared
+// separately through ApplyGroupPolicy so leaf execution fields can never be
+// configured and then silently ignored. corecmd stays dispatch-agnostic and
 // never calls a backend: the adapters (FromLeafSpec / FromShortcut) supply the
 // body.
 type Spec struct {

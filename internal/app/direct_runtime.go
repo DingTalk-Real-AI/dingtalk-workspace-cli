@@ -46,6 +46,7 @@ const (
 	defaultPATServerID    = "abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374"
 	devappProductID       = "devapp"
 	devappServerPath      = "/server/op-app"
+	recruitProductID      = "recruit"
 )
 
 // devappMCPEndpoint resolves the open-platform app-management MCP endpoint
@@ -400,9 +401,10 @@ func DirectRuntimeProductIDs() map[string]bool {
 	dynamicMu.RLock()
 	defer dynamicMu.RUnlock()
 
-	ids := make(map[string]bool, len(dynamicProducts)+2)
+	ids := make(map[string]bool, len(dynamicProducts)+3)
 	ids[defaultPATProductID] = true
 	ids[devappProductID] = true
+	ids[recruitProductID] = true
 	for key := range dynamicProducts {
 		ids[key] = true
 	}

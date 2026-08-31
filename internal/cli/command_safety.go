@@ -30,15 +30,17 @@ type CommandSafety struct {
 	Effect       string // read / write / destructive
 	Risk         string // low / medium / high
 	Confirmation string // not_required / user_required
-	Idempotency  string // idempotent / non_idempotent
+	Idempotency  string // idempotent / retryable / non_idempotent / unknown
 }
 
-// ShouldRender returns true when the safety metadata warrants a visible
-// annotation in --help. Only commands that need confirmation or carry
-// above-low risk are annotated; read-only low-risk commands stay clean.
+// ShouldRender returns true when any reviewed safety metadata is available.
+// Agent-visible leaves render the full tuple even for read/low operations so
+// absence is never mistaken for an unknown or unsafe command.
 func (s CommandSafety) ShouldRender() bool {
-	return s.Confirmation == "user_required" ||
-		(s.Risk != "" && s.Risk != "low")
+	return strings.TrimSpace(s.Effect) != "" ||
+		strings.TrimSpace(s.Risk) != "" ||
+		strings.TrimSpace(s.Confirmation) != "" ||
+		strings.TrimSpace(s.Idempotency) != ""
 }
 
 // SafetyForCLIPath returns the safety metadata for a command identified by its
@@ -61,13 +63,9 @@ func SafetyForCLIPath(cliPath string) (CommandSafety, bool) {
 	return meta.Safety, true
 }
 
-// RenderSafetyAnnotation writes a "Safety:" line to the command's stdout when
-// the command carries above-low risk or requires user confirmation. This is
-// the shared entry point for ALL help rendering paths (root HelpFunc, product
-// group custom HelpFuncs like calendar's). It avoids the timing issue where a
-// group captures origHelp before configureRootHelp sets the root's custom func.
-// Without a registered Schema source root it is a no-op (unit-test synthetic
-// roots); production NewRootCommand always registers the factory.
+// RenderSafetyAnnotation writes the reviewed Safety tuple to the command's
+// stdout. Prefer RenderHelpAffordances for production Help; this focused entry
+// point remains for compatibility and direct safety tests.
 func RenderSafetyAnnotation(cmd *cobra.Command) {
 	if !SchemaSourceRootRegistered() {
 		return
@@ -77,13 +75,17 @@ func RenderSafetyAnnotation(cmd *cobra.Command) {
 	if !ok || !safety.ShouldRender() {
 		return
 	}
+	renderSafety(cmd, safety)
+}
+
+func renderSafety(cmd *cobra.Command, safety CommandSafety) {
 	w := cmd.OutOrStdout()
 	fmt.Fprintf(w, "\nSafety: effect=%s  risk=%s  confirmation=%s", safety.Effect, safety.Risk, safety.Confirmation)
 	if safety.Idempotency != "" {
 		fmt.Fprintf(w, "  idempotency=%s", safety.Idempotency)
 	}
 	if safety.Confirmation == "user_required" {
-		fmt.Fprint(w, "  (requires --yes)")
+		fmt.Fprint(w, "\n  Do not use --yes until the user explicitly confirms this operation.")
 	}
 	fmt.Fprintln(w)
 }

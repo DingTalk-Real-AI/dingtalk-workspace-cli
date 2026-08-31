@@ -155,6 +155,7 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 		result.Checkpoint = map[string]any{"targetTableId": targetTable, "step": "resolve field mapping"}
 		return compositeError(result, err, false)
 	}
+	recordVerifier := resolvedRecordFieldTypeResolver(targetFields)
 	createdCount := 0
 	for offset := 0; offset < len(sourceRecords); offset += recordBatchSize {
 		end := minInt(offset+recordBatchSize, len(sourceRecords))
@@ -194,7 +195,7 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 		}
 		actual, verifyErr := queryRecordsByIDs(rt, targetBase, targetTable, createdIDs)
 		if verifyErr == nil {
-			verifyErr = matchCreatedCells(batch, actual)
+			verifyErr = matchCreatedCells(batch, actual, recordVerifier)
 		}
 		if verifyErr != nil {
 			result.Status = "partial_success"

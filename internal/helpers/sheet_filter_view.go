@@ -164,7 +164,7 @@ func runFilterViewGetCriteria(cmd *cobra.Command, _ []string) error {
 // ── filter + filter-view 命令定义 ──────────────────────────────────────────────
 
 func newFilterCmd() *cobra.Command {
-	filterCmd := &cobra.Command{Use: "filter", Short: "全局筛选管理"}
+	filterCmd := newDeepGroupCommand(&cobra.Command{Use: "filter", Short: "全局筛选管理"})
 
 	filterGetCmd := &cobra.Command{
 		Use:   "get",
@@ -234,18 +234,22 @@ func newFilterCmd() *cobra.Command {
   dws sheet filter create --node NODE_ID --sheet-id SHEET_ID --range "A1:E100" \
     --criteria '[{"column":2,"filterType":"condition","conditions":[{"operator":"greater","value":"100"}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"range":   mustGetFlag(cmd, "range"),
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"),
+				"range":    mustGetFlag(cmd, "range"),
 			}
 			if v, _ := cmd.Flags().GetString("criteria"); v != "" {
 				var criteria []any
 				if err := json.Unmarshal([]byte(v), &criteria); err != nil {
 					return fmt.Errorf("--criteria JSON 解析失败: %w", err)
 				}
-				toolArgs["criteria"] = criteria
+				input["criteria"] = criteria
 			}
+			toolArgs, err := BuildBatchCreateFilterArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("create_filter", toolArgs)
 		},
 	}
@@ -293,10 +297,12 @@ func newFilterCmd() *cobra.Command {
 工作表没有筛选时调用会报错。`,
 		Example: `  dws sheet filter delete --node NODE_ID --sheet-id SHEET_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPTool("delete_filter", map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-			})
+			toolArgs, err := BuildBatchDeleteFilterArgs(map[string]any{"sheet-id": mustGetFlag(cmd, "sheet-id")})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("delete_filter", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(filterDeleteCmd, LeafSpec{
@@ -358,11 +364,14 @@ func newFilterCmd() *cobra.Command {
 			if err := json.Unmarshal([]byte(criteriaStr), &criteria); err != nil {
 				return fmt.Errorf("--criteria JSON 解析失败: %w", err)
 			}
-			return callMCPTool("update_filter", map[string]any{
-				"nodeId":   mustGetFlag(cmd, "node"),
-				"sheetId":  mustGetFlag(cmd, "sheet-id"),
-				"criteria": criteria,
+			toolArgs, err := BuildUpdateFilterArgs(map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "criteria": criteria,
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("update_filter", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(filterUpdateCmd, LeafSpec{
@@ -523,7 +532,7 @@ func newFilterCmd() *cobra.Command {
 }
 
 func newFilterViewCmd() *cobra.Command {
-	filterViewCmd := &cobra.Command{Use: "filter-view", Short: "筛选视图管理"}
+	filterViewCmd := newDeepGroupCommand(&cobra.Command{Use: "filter-view", Short: "筛选视图管理"})
 
 	filterViewListCmd := &cobra.Command{
 		Use:   "list",
@@ -617,19 +626,23 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
   dws sheet filter-view create --node NODE_ID --sheet-id SHEET_ID --name "高预算" --range "A1:C10" \
     --criteria '[{"column":1,"filterType":"condition","conditions":[{"operator":"greater-equal","value":"200000"}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"name":    mustGetFlag(cmd, "name"),
-				"range":   mustGetFlag(cmd, "range"),
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"),
+				"name":     mustGetFlag(cmd, "name"),
+				"range":    mustGetFlag(cmd, "range"),
 			}
 			if criteriaStr, _ := cmd.Flags().GetString("criteria"); criteriaStr != "" {
 				var criteria []any
 				if err := json.Unmarshal([]byte(criteriaStr), &criteria); err != nil {
 					return fmt.Errorf("--criteria JSON 解析失败: %w", err)
 				}
-				toolArgs["criteria"] = criteria
+				input["criteria"] = criteria
 			}
+			toolArgs, err := BuildBatchCreateFilterViewArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("create_filter_view", toolArgs)
 		},
 	}
@@ -700,10 +713,9 @@ filterViewId 可通过 filter-view list 获取。
   dws sheet filter-view update --node NODE_ID --sheet-id SHEET_ID --filter-view-id FV_ID \
     --criteria '[{"column":1,"filterType":"condition","conditions":[{"operator":"greater","value":"100"}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{
-				"nodeId":       mustGetFlag(cmd, "node"),
-				"sheetId":      mustGetFlag(cmd, "sheet-id"),
-				"filterViewId": mustGetFlag(cmd, "filter-view-id"),
+			input := map[string]any{
+				"sheet-id":       mustGetFlag(cmd, "sheet-id"),
+				"filter-view-id": mustGetFlag(cmd, "filter-view-id"),
 			}
 			nameChanged := cmd.Flags().Changed("name")
 			rangeChanged := cmd.Flags().Changed("range")
@@ -712,10 +724,10 @@ filterViewId 可通过 filter-view list 获取。
 				return fmt.Errorf("--name、--range、--criteria 至少需要传入一个")
 			}
 			if nameChanged {
-				toolArgs["name"], _ = cmd.Flags().GetString("name")
+				input["name"], _ = cmd.Flags().GetString("name")
 			}
 			if rangeChanged {
-				toolArgs["range"], _ = cmd.Flags().GetString("range")
+				input["range"], _ = cmd.Flags().GetString("range")
 			}
 			if criteriaChanged {
 				criteriaStr, _ := cmd.Flags().GetString("criteria")
@@ -723,8 +735,13 @@ filterViewId 可通过 filter-view list 获取。
 				if err := json.Unmarshal([]byte(criteriaStr), &criteria); err != nil {
 					return fmt.Errorf("--criteria JSON 解析失败: %w", err)
 				}
-				toolArgs["criteria"] = criteria
+				input["criteria"] = criteria
 			}
+			toolArgs, err := BuildBatchUpdateFilterViewArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("update_filter_view", toolArgs)
 		},
 	}
@@ -784,11 +801,14 @@ filterViewId 可通过 filter-view list 获取。`,
 		Example: `  # 获得用户确认后删除指定筛选视图
   dws sheet filter-view delete --node NODE_ID --sheet-id SHEET_ID --filter-view-id FV_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPTool("delete_filter_view", map[string]any{
-				"nodeId":       mustGetFlag(cmd, "node"),
-				"sheetId":      mustGetFlag(cmd, "sheet-id"),
-				"filterViewId": mustGetFlag(cmd, "filter-view-id"),
+			toolArgs, err := BuildBatchDeleteFilterViewArgs(map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "filter-view-id": mustGetFlag(cmd, "filter-view-id"),
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("delete_filter_view", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(filterViewDeleteCmd, LeafSpec{

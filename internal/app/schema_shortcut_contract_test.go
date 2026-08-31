@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 422
+	publicShortcutCount = 438
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
-	// including the hidden historical minutes.shortcut_minutes_search contract.
-	schemaPublishedShortcutCount = 447
+	// including reviewed hidden compatibility and unavailable contracts.
+	schemaPublishedShortcutCount = 495
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 422
+	publiclyDeliveredShortcutCount = 438
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -84,6 +84,24 @@ func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *tes
 	}
 }
 
+func TestDeliveryTodoReminderPreservesHistoricalConstraintBoundary(t *testing.T) {
+	tool := executeShortcutSchemaQuery(t, "--cli-path", "todo +reminder")
+	want := map[string][][]string{
+		"require_one_of":     {{"clear", "base-time"}},
+		"mutually_exclusive": {{"clear", "base-time"}},
+	}
+	if got := tool["constraints"]; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("todo +reminder constraints = %s, want %s", mustShortcutJSON(got), mustShortcutJSON(want))
+	}
+	parameters := schemaContractMap(tool["parameters"])
+	for _, name := range []string{"base-time", "due-date-offset", "at"} {
+		description := schemaContractString(parameters[name]["description"])
+		if !strings.Contains(description, "无关时间参数兼容忽略") {
+			t.Fatalf("todo +reminder --%s compatibility boundary missing from final Schema: %q", name, description)
+		}
+	}
+}
+
 func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "chat +messages-read-status")
 	if got, want := schemaContractString(leaf["canonical_path"]), "chat.shortcut_messages_read_status"; got != want {
@@ -114,7 +132,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 220; got != want {
+	if got, want := int(product["count"].(float64)), 233; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -162,6 +180,7 @@ func TestChatPersonalEmotionSchemaDeclaresUnpinnedIMAdapter(t *testing.T) {
 			cliPath: "chat emotion favorite",
 			params: map[string]string{
 				"media-id":               "mediaId",
+				"file-path":              "",
 				"name":                   "name",
 				"source-conversation-id": "sourceConversationId",
 				"source-message-id":      "sourceMessageId",
@@ -271,6 +290,60 @@ func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
 	}
 }
 
+func TestAllShortcutsAITableDatasourceExamplesSourceConfigHasRequiredMembers(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	requiredSourceConfigMembers := []string{"processCode", "name", "iconUrl", "url"}
+	checked := 0
+	for _, declared := range shortcut.All() {
+		if declared.Service != "aitable" || declared.UserDefined || !shortcut.InPublicCatalog(declared.Service, declared.Command) {
+			continue
+		}
+		if !strings.HasPrefix(declared.Command, "+datasource-") {
+			continue
+		}
+		if declared.Command != "+datasource-create" && declared.Command != "+datasource-update" && declared.Command != "+datasource-get-fields" {
+			continue
+		}
+		checked++
+		canonical := shortcutSchemaCanonical(declared)
+		tool := tools[canonical]
+		if tool == nil {
+			t.Fatalf("delivery schema --all is missing %s", canonical)
+		}
+		examples := schemaContractStringSlice(tool["examples"])
+		if len(examples) == 0 {
+			t.Fatalf("%s has no delivered examples", canonical)
+		}
+		for _, example := range examples {
+			if !strings.Contains(example, "--source-config") {
+				continue
+			}
+			argv, err := cli.ParseAgentExampleArgv(example)
+			if err != nil {
+				t.Fatalf("%s example %q is not valid argv: %v", canonical, example, err)
+			}
+			sourceConfig := schemaExampleFlagValue(argv, "source-config")
+			if sourceConfig == "" {
+				t.Errorf("%s example %q contains --source-config but has no value", canonical, example)
+				continue
+			}
+			var cfg map[string]any
+			if err := json.Unmarshal([]byte(sourceConfig), &cfg); err != nil {
+				t.Errorf("%s example %q has invalid source-config JSON: %v", canonical, example, err)
+				continue
+			}
+			for _, member := range requiredSourceConfigMembers {
+				if _, ok := cfg[member]; !ok {
+					t.Errorf("%s example %q source-config is missing required member %q", canonical, example, member)
+				}
+			}
+		}
+	}
+	if checked != 3 {
+		t.Fatalf("checked aitable datasource source-config examples = %d, want 3", checked)
+	}
+}
+
 func schemaExampleHasLongFlag(argv []string, names ...string) bool {
 	for _, argument := range argv {
 		for _, name := range names {
@@ -280,6 +353,25 @@ func schemaExampleHasLongFlag(argv []string, names ...string) bool {
 		}
 	}
 	return false
+}
+
+func schemaExampleFlagValue(argv []string, name string) string {
+	prefix := "--" + name + "="
+	for _, argument := range argv {
+		if argument == "--"+name {
+			continue
+		}
+		if strings.HasPrefix(argument, prefix) {
+			return strings.TrimPrefix(argument, prefix)
+		}
+	}
+	// Value may be in the next argv entry: `--flag value` form.
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == "--"+name {
+			return argv[i+1]
+		}
+	}
+	return ""
 }
 
 func assertSchemaSummarySafety(
@@ -412,7 +504,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 11; got != want {
+	if got, want := len(parameters), 13; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
@@ -423,7 +515,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	}
 	wantProperties := map[string]string{
 		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
-		"block-id": "blockId", "after-block-id": "afterBlockId", "old": "old", "new": "new",
+		"block-id": "blockId", "after-block-id": "afterBlockId", "before-block-id": "beforeBlockId", "heading-level": "headingLevel", "old": "old", "new": "new",
 		"expected-revision": "expectedRevision",
 	}
 	for name, want := range wantProperties {
@@ -431,7 +523,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 			t.Errorf("--%s property = %q, want %q", name, got, want)
 		}
 	}
-	for _, name := range []string{"content", "block-id", "after-block-id", "old", "new"} {
+	for _, name := range []string{"content", "block-id", "after-block-id", "before-block-id", "heading-level", "old", "new"} {
 		parameter := parameters[name]
 		if required, _ := parameter["required"].(bool); required {
 			t.Errorf("--%s required = true, want runtime custom validation", name)
@@ -439,6 +531,9 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		if got := schemaContractString(parameter["required_when"]); got != "" {
 			t.Errorf("--%s required_when = %q, want compatibility-safe custom validation", name, got)
 		}
+	}
+	if got, want := schemaContractStringSlice(parameters["command"]["enum"]), []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}; !schemaContractJSONEqual(got, want) {
+		t.Errorf("--command enum = %#v, want %#v", got, want)
 	}
 	if constraints, exists := leaf["constraints"]; exists && constraints != nil {
 		t.Fatalf("enum-discriminated requirements must not be mispublished as relationship constraints: %#v", constraints)

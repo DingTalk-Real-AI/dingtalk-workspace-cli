@@ -1,17 +1,18 @@
 package helpers
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
 func newSheetCommentCmd() *cobra.Command {
-	commentCmd := &cobra.Command{
+	commentCmd := newGroupCommand(&cobra.Command{
 		Use:   "comment",
 		Short: "表格评论 / 单元格评论管理",
 		Long:  `管理钉钉表格的单元格评论：查询评论列表、创建评论、回复评论、更新评论、删除评论。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	commentListCmd := &cobra.Command{
 		Use:   "list",
@@ -154,6 +155,9 @@ func newSheetCommentCmd() *cobra.Command {
 				"replyCommentKey": mustGetFlag(cmd, "comment-key"),
 			}
 			if v, _ := cmd.Flags().GetBool("emoji"); v {
+				if err := commentreaction.Validate(mustGetFlag(cmd, "content")); err != nil {
+					return err
+				}
 				toolArgs["emoji"] = true
 			}
 			if v, _ := cmd.Flags().GetString("mention"); v != "" {
