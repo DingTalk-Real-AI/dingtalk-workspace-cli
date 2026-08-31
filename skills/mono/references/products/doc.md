@@ -398,7 +398,7 @@ Usage:
 
 ### 内容写入管道（create / update 共用）
 
-> **关键原则**：CLI 内置自动分片。超长内容（>10000 字符）自动按 markdown 结构切分后逐片写入，对调用方透明。写入完成后由调用方自行决定是否回读确认。
+> **关键原则**：CLI 内置自动分片。超长内容（>30000 字符）自动按 markdown 结构切分后逐片写入，每一片都是完整自包含的顶层 block 序列（表格切分会重发表头行）。任何改变渲染结构的切分点都会在 `degradations` 里上报，不会静默降级。写入完成后由调用方自行决定是否回读确认。
 
 #### 输入方式选择
 
@@ -411,14 +411,16 @@ Usage:
 
 #### 自动分片行为
 
-当内容超过 10000 字符时，CLI 自动执行：
-1. **create**: 先创建空文档拿 `nodeId`，再按 markdown 标题边界切分后逐片 append
+当内容超过 30000 字符（rune 数）时，CLI 自动执行：
+1. **create**: 先创建空文档拿 `nodeId`，再切分后逐片 append
 2. **update (overwrite)**: 第一片用 overwrite，后续片用 append
 3. **update (append)**: 所有片段用 append
 
-分片策略按优先级：H1 标题 → H2 标题 → H3 标题 → 空行（段落边界）→ 硬切（保留表格/代码块完整性）
+服务端 `mode=append` 每次插入的都是全新结构，无法延续上一片，所以每一片都必须是完整自包含的顶层 block 序列。切分点严格按对文档的影响分档选择：完全安全（空行、能中断段落的块起始）→ 需注入修复（表格行边界重发表头行与分隔行、代码块行边界补围栏）→ 结构变化（长段落内换行、列表项之间）→ 硬切（仅当单行超限）。同档位内取最靠后的切分点。
 
-如果某片写入超时，自动将分片大小减半重试（最小 5000 字符，低于此值报错）。
+任何改变了渲染结构的切分点都会在 `degradations` 里如实上报，不会静默降级。`--index` 与自动分片互斥（第 2 片的插入位置不可知），超限时带 `--index` 会直接报错。
+
+详细分档规则见 [`./doc/doc-update.md` §自动分片行为](./doc/doc-update.md#自动分片行为)。
 
 #### 输出格式
 
@@ -442,8 +444,8 @@ CLI **不会**自动执行回读验证。**Agent 必须在文档写入完成后�
 3. 如发现内容缺失或异常，使用 `dws doc update --mode append` 补写缺失部分
 
 > **何时回读**：每次 create / update 操作完成后**必须**回读。
-> - 单次写入（≤10000 字符）：写完立即回读一次
-> - 分片写入（>10000 字符）：所有分片写完后回读一次全文，校验关键标题与段落完整性
+> - 单次写入（≤30000 字符）：写完立即回读一次
+> - 分片写入（>30000 字符）：所有分片写完后回读一次全文；先看 `degradations`，为空即表示分片未改变渲染结构
 > - 破坏性 overwrite（`--mode overwrite --yes`）：**必须**回读，确认 overwrite 未被后端静默降级为 append（详见 [best_practices/04-document.md "doc update 回读校验规范"](../best_practices/04-document.md#doc-update-回读校验规范)）
 > - 连续多次编辑同一文档：可在全部编辑完成后统一回读一次
 >
@@ -452,21 +454,23 @@ CLI **不会**自动执行回读验证。**Agent 必须在文档写入完成后�
 #### 进度输出示例
 
 ```
-[INFO] 内容较长 (25000 字符)，自动分片写入...
-[INFO] 已创建空文档 (nodeId=abc123)，开始分片写入...
-[INFO] 写入分片 (1/3)，10000 字符...
-[INFO] 写入分片 (2/3)，10000 字符...
-[INFO] 写入分片 (3/3)，5000 字符...
+[INFO] 内容较长 (72000 字符)，自动分片写入...
+[INFO] [WARN] 内容过长已分片：表格被拆成多个表格，后续分片重复表头行与分隔行（第 1420 行）
+[INFO] 写入分片 (1/3)，29989 字符 (overwrite)...
+[INFO] 写入分片 (2/3)，29994 字符, preview=[| 姓名 | 部门 |...]...
+[INFO] 写入分片 (3/3)，12030 字符, preview=[| 姓名 | 部门 |...]...
 [INFO] 全部 3 个分片写入完成
-{"success": true, "nodeId": "abc123", "chunksWritten": 3}
+{"success": true, "nodeId": "abc123", "chunksWritten": 3, "degradations": [{"kind": "table_split", ...}]}
 ```
 
-#### CONTENT_TRUNCATED 错误
+#### 分片超时（提交状态未知）
 
-当分片写入持续超时且减半到最小阈值仍失败时，返回 `CONTENT_TRUNCATED` 错误码。应对策略：
-1. 检查网络和后端服务状态
-2. 已写入的部分内容可通过 `dws doc read --node <NODE_ID>` 查看
-3. 从断点处手动用 `dws doc update --mode append` 继续追加
+某片写入超时时，服务端是否已提交无法判断。CLI 不会自动重试（重放会重复追加），而是 fail closed 返回 `doc_write_commit_unknown`，`details` 里给出 `chunksWritten` / `chunksTotal` / `failedStage` 与本次的 `degradations`。应对策略：
+1. 先 `dws doc read --node <NODE_ID>` 回读，确认实际写到哪一片
+2. 只有确认服务端未提交时才重新执行
+3. 从断点处用 `dws doc update --mode append` 继续追加；若 `degradations` 含 `table_split`，续写第一片需自带表头行
+
+> 早期版本在此处会把分片大小减半重试并最终返回 `CONTENT_TRUNCATED`。该逻辑已删除，错误码不再出现。
 
 ### 删除文档/文件到回收站
 
@@ -767,6 +771,10 @@ Flags:
 > - 用户没提通知需求 → **不传该 flag**，保持不通知；不要自行补上 `--notify`
 > - `--notify` 仅在 `--members` 新格式下生效；旧格式 `--users` 下传了也不会生效，有通知需求必须改用 `--members`
 > - 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
+
+用户说"设置分享链接密码/公开有效期/互联网公开":
+- **必须走 drive 的 `drive publish set`**（可带 `--password` 访问密码与 `--expire-days` 有效期）
+- `doc permission` 是协作者级权限，不含链接公开属性（访问密码/有效期）
 
 > **关键区分**：
 > - "把**某篇文档**授权给某人" → `doc permission add`（节点级，包括「我的文档」下的文档都支持）
@@ -1128,6 +1136,8 @@ dws doc media upload --node <DOC_ID> --file ./icon.svg \
 `dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
 media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
 Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
+
+白板卡片插入、删除、回查流程详见 [doc/doc-whiteboard.md](./doc/doc-whiteboard.md)。
 
 ## 相关产品
 

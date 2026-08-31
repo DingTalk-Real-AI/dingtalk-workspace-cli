@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -32,6 +33,7 @@ import (
 type apiFlags struct {
 	params    string
 	data      string
+	file      string
 	pageAll   bool
 	pageLimit int
 	pageDelay int
@@ -46,10 +48,11 @@ var newAppTokenProvider = func(configDir, appKey, appSecret string) appTokenGett
 	return &authpkg.AppTokenProvider{ConfigDir: configDir, AppKey: appKey, AppSecret: appSecret}
 }
 
-var (
-	apiClientID     = authpkg.ClientID
-	apiClientSecret = authpkg.ClientSecret
-)
+var newRawAPIClient = apiclient.NewClient
+
+type rawAPICredentials = authpkg.AppCredentialPair
+
+var resolveRawAPICredentials = resolveRawAPICredentialsFromSources
 
 // newAPICommand creates the `dws api` subcommand for raw DingTalk OpenAPI calls.
 func newAPICommand(flags *GlobalFlags) *cobra.Command {
@@ -68,22 +71,24 @@ oapi.dingtalk.com:
   Token 通过 URL 查询参数 (access_token) 传递。
   路径格式: /topapi/v2/xxx 或完整 URL https://oapi.dingtalk.com/topapi/...
 
-仅限使用自有应用凭证（--client-id/--client-secret）登录后使用。
+仅限使用自有应用的完整 Client ID/Client Secret pair。凭证优先级为:
+  完整 --client-id/--client-secret > 完整 DWS_CLIENT_ID/DWS_CLIENT_SECRET > 完整 app config。
+同一来源只提供一项会明确失败，绝不会与其他来源拼接。
+单次 flags/env 不持久化 Client Secret；获取到的 App Token 会按 Client ID 独立缓存。
+成功的 dws auth login 会保存其实际使用的完整凭证对；历史 client-secret 槽位会迁移到 appsecret:<clientID>。
+新旧 Client Secret 槽位值冲突时拒绝调用并要求重新登录，不猜测正确值。
+隐藏 --token 仅临时使用调用方提供的 App Token，不持久化、不自动刷新。
 通过 MCP 默认凭证登录获取的加密 token 不支持 raw API 调用。
 
 示例:
   # === api.dingtalk.com ===
 
-  # 获取当前用户信息
-  dws api GET /v1.0/contact/users/me
+  # 获取企业所有应用列表
+  dws api GET /v1.0/microApp/allApps
 
   # 搜索用户 (POST + JSON body)
   dws api POST /v1.0/contact/users/search \
     --data '{"queryWord":"张三","offset":0,"size":10}'
-
-  # 创建日历事件
-  dws api POST /v1.0/calendar/users/me/calendars/primary/events \
-    --data '{"summary":"Team Meeting","start":{"dateTime":"2026-01-01T10:00:00+08:00"}}'
 
   # === oapi.dingtalk.com ===
 
@@ -98,14 +103,15 @@ oapi.dingtalk.com:
 
   # === 通用功能 ===
 
-  # 分页获取所有结果
-  dws api GET /v1.0/attendance/groups --page-all --page-limit 5
-
   # Dry-run 预览请求
-  dws api GET /v1.0/contact/users/me --dry-run
+  dws api GET /v1.0/microApp/allApps --dry-run
+
+  # 上传媒体文件（旧 OAPI multipart；先 dry-run 核对）
+  dws api POST https://oapi.dingtalk.com/media/upload \
+    --data '{"type":"image"}' --file media=./demo.png --dry-run
 
   # 使用 jq 过滤输出
-  dws api GET /v1.0/contact/users/me --jq '.nick'`,
+  dws api GET /v1.0/microApp/allApps --jq '.appList | length'`,
 		Args:              cobra.ExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,8 +119,9 @@ oapi.dingtalk.com:
 		},
 	}
 
-	cmd.Flags().StringVar(&af.params, "params", "", "查询参数 JSON (支持 - 从 stdin 读取)")
-	cmd.Flags().StringVar(&af.data, "data", "", "请求体 JSON (支持 - 从 stdin 读取)")
+	cmd.Flags().StringVar(&af.params, "params", "", "查询参数 JSON (支持 @file 或 - 从 stdin 读取)")
+	cmd.Flags().StringVar(&af.data, "data", "", "请求体 JSON (支持 @file 或 - 从 stdin 读取)")
+	cmd.Flags().StringVar(&af.file, "file", "", "multipart 文件 [field=]path 或 [field=]-")
 	cmd.Flags().BoolVar(&af.pageAll, "page-all", false, "自动遍历所有分页")
 	cmd.Flags().IntVar(&af.pageLimit, "page-limit", apiclient.DefaultPageLimit, "最大翻页数 (0=不限, 默认10, 硬上限500)")
 	cmd.Flags().IntVar(&af.pageDelay, "page-delay", apiclient.DefaultPageDelay, "分页间隔毫秒")
@@ -160,60 +167,113 @@ func runAPI(cmd *cobra.Command, args []string, gf *GlobalFlags, af *apiFlags) er
 	if err := apiclient.ValidateUserInput(af.data, "--data"); err != nil {
 		return apperrors.NewValidation(err.Error())
 	}
+	if err := apiclient.ValidateUserInput(af.file, "--file"); err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
+	fileUpload, err := apiclient.ParseFileSpec(af.file)
+	if err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
 
 	// 4. Validate mutual exclusion.
-	if err := apiclient.ValidateStdinExclusion(af.params, af.data); err != nil {
+	if err := apiclient.ValidateInputStdinExclusion(af.params, af.data, fileUpload); err != nil {
 		return apperrors.NewValidation(err.Error())
 	}
 	if err := apiclient.ValidateFlagExclusion(gf.Output, af.pageAll); err != nil {
 		return apperrors.NewValidation(err.Error())
 	}
+	if fileUpload != nil && method == "GET" {
+		return apperrors.NewValidation("GET 请求不允许使用 --file；允许的方法为 POST、PUT、PATCH、DELETE")
+	}
+	if fileUpload != nil && strings.TrimSpace(gf.Output) != "" {
+		return apperrors.NewValidation("--file 和 --output 不能同时使用")
+	}
+	if fileUpload != nil && af.pageAll {
+		return apperrors.NewValidation("--file 和 --page-all 不能同时使用")
+	}
+	if strings.Contains(path, "#") {
+		return apperrors.NewValidation("API 路径中不允许 fragment (#...)")
+	}
 
-	// 5. Parse --params.
+	// 5. Normalise and validate the target before touching credentials or files.
+	fullURL := apiclient.NormalisePath(path, af.baseURL)
+	if err := apiclient.ValidateTargetHost(fullURL); err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
+
+	// 6. Dry-run never reads stdin/@file/upload bytes, Keychain, or the network.
+	if gf.DryRun {
+		var params map[string]any
+		var body any
+		if !apiclient.IsDeferredInput(af.params) {
+			params, err = apiclient.ParseJSONMap(af.params, "--params", nil)
+			if err != nil {
+				return apperrors.NewValidation(err.Error())
+			}
+		}
+		if !apiclient.IsDeferredInput(af.data) {
+			body, err = apiclient.ParseOptionalBody(method, af.data, nil)
+			if err != nil {
+				return apperrors.NewValidation(err.Error())
+			}
+			if fileUpload != nil && body != nil {
+				if _, ok := body.(map[string]any); !ok {
+					return apperrors.NewValidation("使用 --file 时 --data 必须是 JSON object")
+				}
+			}
+		}
+		req := apiclient.RawAPIRequest{Method: method, Path: path, Params: params, Data: body, File: fileUpload}
+		if apiclient.IsDeferredInput(af.params) {
+			req.ParamsSource = af.params
+		}
+		if apiclient.IsDeferredInput(af.data) {
+			req.DataSource = af.data
+		}
+		return apiclient.PrintDryRun(cmd.OutOrStdout(), req, af.baseURL, "")
+	}
+
+	// 7. Parse --params.
 	params, err := apiclient.ParseJSONMap(af.params, "--params", os.Stdin)
 	if err != nil {
 		return apperrors.NewValidation(err.Error())
 	}
 
-	// 6. Parse --data.
+	// 8. Parse --data.
 	body, err := apiclient.ParseOptionalBody(method, af.data, os.Stdin)
 	if err != nil {
 		return apperrors.NewValidation(err.Error())
 	}
 
-	// 7. Normalise and validate target URL.
-	fullURL := apiclient.NormalisePath(path, af.baseURL)
-
-	// 7b. Security: validate target host is a trusted DingTalk domain.
-	if err := apiclient.ValidateTargetHost(fullURL); err != nil {
-		return apperrors.NewValidation(err.Error())
+	if fileUpload != nil && body != nil {
+		if _, ok := body.(map[string]any); !ok {
+			return apperrors.NewValidation("使用 --file 时 --data 必须是 JSON object")
+		}
+	}
+	if fileUpload != nil && fileUpload.Path == "-" {
+		fileUpload.Reader = os.Stdin
 	}
 
-	// 8. Resolve app-level token (with timeout).
+	// 9. Resolve app-level token (with timeout).
 	tokenCtx, tokenCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer tokenCancel()
-	token, err := resolveRawAPIToken(tokenCtx, gf.Token)
+	token, err := resolveRawAPIToken(tokenCtx, gf.Token, gf.ClientID, gf.ClientSecret)
 	if err != nil {
 		return err
 	}
 
-	// 9. Build request.
+	// 10. Build request.
 	req := apiclient.RawAPIRequest{
 		Method: method,
 		Path:   path,
 		Params: params,
 		Data:   body,
+		File:   fileUpload,
 	}
 
 	baseURL := af.baseURL
 
-	// 10. Dry-run mode.
-	if gf.DryRun {
-		return apiclient.PrintDryRun(cmd.OutOrStdout(), req, baseURL, token)
-	}
-
 	// 11. Create client with timeout.
-	client := apiclient.NewClient(token, baseURL)
+	client := newRawAPIClient(token, baseURL)
 	if gf.Timeout > 0 {
 		client.HTTPClient.Timeout = time.Duration(gf.Timeout) * time.Second
 	}
@@ -237,7 +297,14 @@ func runAPI(cmd *cobra.Command, args []string, gf *GlobalFlags, af *apiFlags) er
 	if err != nil {
 		return apperrors.NewAPI(fmt.Sprintf("API 请求失败: %v", err))
 	}
-	return apiclient.HandleResponse(resp, respOpts)
+	if err := apiclient.HandleResponse(resp, respOpts); err != nil {
+		var responseErr *apiclient.ResponseError
+		if errors.As(err, &responseErr) {
+			return apperrors.NewAPI(err.Error())
+		}
+		return err
+	}
+	return nil
 }
 
 // runPaginated executes a paginated API request and outputs all results.
@@ -247,7 +314,7 @@ func runPaginated(ctx context.Context, client *apiclient.APIClient, req apiclien
 		PageDelay: af.pageDelay,
 		LogWriter: opts.ErrOut,
 	})
-	if err != nil && len(pages) == 0 {
+	if err != nil {
 		return apperrors.NewAPI(fmt.Sprintf("分页请求失败: %v", err))
 	}
 
@@ -292,40 +359,66 @@ func parseQueryStringToJSON(rawQuery string) string {
 // It uses AppTokenProvider to fetch from the unified POST /v1.0/oauth2/accessToken
 // endpoint. The same token works for both api.dingtalk.com and oapi.dingtalk.com.
 // Tokens are cached in keychain and auto-refreshed when expired.
-func resolveRawAPIToken(ctx context.Context, explicitToken string) (string, error) {
-	// Explicit --token flag takes priority (user knows what they're doing).
+func resolveRawAPIToken(ctx context.Context, explicitToken, flagClientID, flagClientSecret string) (string, error) {
+	// Hidden compatibility flag: the caller supplies a temporary App Token.
+	// It is never persisted and must not be interpreted as an OAuth User Token.
 	if t := strings.TrimSpace(explicitToken); t != "" {
 		return t, nil
 	}
 
-	// Resolve app credentials (clientID/clientSecret).
-	appKey := apiClientID()
-	appSecret := apiClientSecret()
-
-	if appKey == "" || appSecret == "" || strings.HasPrefix(appKey, "<") || strings.HasPrefix(appSecret, "<") {
-		return "", apperrors.NewAuth(
-			"缺少应用凭证。dws api 需要使用自有应用的 AppKey/AppSecret 获取 accessToken。\n\n" +
-				"解决方法:\n" +
-				"  1. 使用自有应用凭证登录:\n" +
-				"     dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>\n\n" +
-				"  2. 或通过环境变量设置:\n" +
-				"     export DWS_CLIENT_ID=<APP_KEY>\n" +
-				"     export DWS_CLIENT_SECRET=<APP_SECRET>\n" +
-				"     dws auth login\n\n" +
-				"说明: 通过 MCP 默认凭证登录的加密 token 无法用于 raw API 调用。",
-		)
+	configDir := defaultConfigDir()
+	credentials, err := resolveRawAPICredentials(flagClientID, flagClientSecret, configDir)
+	if err != nil {
+		return "", err
 	}
 
 	// Use AppTokenProvider for automatic caching and refresh.
-	configDir := defaultConfigDir()
-	provider := newAppTokenProvider(configDir, appKey, appSecret)
+	provider := newAppTokenProvider(configDir, credentials.ClientID, credentials.ClientSecret)
 	token, err := provider.GetToken(ctx)
 	if err != nil {
-		return "", apperrors.NewAuth(fmt.Sprintf("获取应用级访问令牌失败: %v", err))
+		return "", apperrors.NewAuth(fmt.Sprintf("获取应用级访问令牌失败 (凭证来源: %s): %v", credentials.Source, err))
 	}
 	if strings.TrimSpace(token) == "" {
 		return "", apperrors.NewAuth("应用级访问令牌为空，请检查应用凭证是否正确")
 	}
 
 	return strings.TrimSpace(token), nil
+}
+
+func resolveRawAPICredentialsFromSources(flagClientID, flagClientSecret, configDir string) (rawAPICredentials, error) {
+	credentials, err := authpkg.ResolveAppCredentialPair(configDir, flagClientID, flagClientSecret)
+	if err != nil {
+		return rawAPICredentials{}, classifyRawAPIAppConfigError(err)
+	}
+	return credentials, nil
+}
+
+func classifyRawAPIAppConfigError(err error) error {
+	switch {
+	case errors.Is(err, authpkg.ErrFlagCredentialPairIncomplete):
+		return apperrors.NewAuth("--client-id 和 --client-secret 必须同时提供；不会与环境变量或 app config 混用")
+	case errors.Is(err, authpkg.ErrEnvCredentialPairIncomplete):
+		return apperrors.NewAuth("DWS_CLIENT_ID 和 DWS_CLIENT_SECRET 必须同时设置；不会与 app config 混用")
+	case errors.Is(err, authpkg.ErrAppConfigMissing):
+		return apperrors.NewAuth(
+			"缺少应用凭证。dws api 需要完整的 Client ID/Client Secret pair。\n\n" +
+				"可选择以下任一方式:\n" +
+				"  1. 同时传入 --client-id 和 --client-secret\n" +
+				"  2. 同时设置 DWS_CLIENT_ID 和 DWS_CLIENT_SECRET\n" +
+				"  3. 使用自有应用凭证执行 dws auth login\n\n" +
+				"说明: 通过 MCP 默认凭证登录的加密 token 无法用于 raw API 调用。",
+		)
+	case errors.Is(err, authpkg.ErrClientIDEmpty), errors.Is(err, authpkg.ErrClientSecretEmpty):
+		return apperrors.NewAuth("本地应用配置不完整，缺少 Client ID 或 Client Secret；请完整设置环境变量 pair、CLI pair，或重新配置自有应用凭证")
+	case errors.Is(err, authpkg.ErrSecretResolve):
+		return apperrors.NewAuth("无法从 Keychain 解析 Client Secret；请检查 Keychain 状态，或同时设置 DWS_CLIENT_ID 和 DWS_CLIENT_SECRET")
+	case errors.Is(err, authpkg.ErrClientSecretConflict):
+		return apperrors.NewAuth("检测到新旧 Client Secret 存储值冲突；为避免使用错误凭证已拒绝调用。请使用完整 --client-id/--client-secret 重新执行 dws auth login，或执行 dws auth reset 后重新登录")
+	case errors.Is(err, authpkg.ErrClientSecretRefMismatch):
+		return apperrors.NewAuth("本地应用配置中的 Client Secret 引用与 Client ID 不匹配；为避免跨应用混用已拒绝调用，请重新执行 dws auth login")
+	case errors.Is(err, authpkg.ErrCredentialPlaceholders):
+		return apperrors.NewAuth("应用凭证不完整或仍为占位符，Client ID 和 Client Secret 必须同时提供有效值")
+	default:
+		return apperrors.NewAuth(fmt.Sprintf("解析本地应用凭证失败: %v", err))
+	}
 }

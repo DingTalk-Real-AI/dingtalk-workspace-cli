@@ -384,6 +384,15 @@ func TestCrossPlatformCoverageRetryHelperAndTrustEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageHTTPStatusAndDiagnosticsEdges(t *testing.T) {
+	if looksPermissionRPCError(nil) {
+		t.Fatal("nil RPC error classified as permission failure")
+	}
+	if looksPermissionRPCError(&RPCError{Code: -1, Message: "ordinary failure"}) {
+		t.Fatal("ordinary RPC error classified as permission failure")
+	}
+	if !looksPermissionRPCError(&RPCError{Code: -1, Message: "permission denied"}) {
+		t.Fatal("permission RPC message was not classified")
+	}
 	for _, tc := range []struct {
 		method string
 		code   int
@@ -400,8 +409,11 @@ func TestCrossPlatformCoverageHTTPStatusAndDiagnosticsEdges(t *testing.T) {
 	if got := networkActions("snap"); len(got) != 3 {
 		t.Fatalf("network actions = %#v", got)
 	}
-	if got := authActions("snap"); len(got) != 2 {
+	if got := authActions("snap"); len(got) != 3 {
 		t.Fatalf("auth actions = %#v", got)
+	}
+	if got := permissionActions("snap"); len(got) != 2 || strings.Contains(strings.Join(got, "\n"), "dws doctor") {
+		t.Fatalf("permission actions = %#v", got)
 	}
 	if got := runtimeActions("snap"); len(got) != 2 {
 		t.Fatalf("runtime actions = %#v", got)

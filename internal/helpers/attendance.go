@@ -136,6 +136,32 @@ func parseDateToTimestamp(dateStr, paramName string) (int64, error) {
 	return 0, fmt.Errorf("invalid --%s format, use YYYY-MM-DD or YYYY-MM-DD HH:mm:ss (e.g. 2026-04-01)", paramName)
 }
 
+// normalizeScheduleRangeDate validates a schedule range boundary and returns
+// the string representation required by getScheduleByRange. Date-only starts
+// use the beginning of the day, while date-only ends include the whole day.
+func normalizeScheduleRangeDate(dateStr, paramName string) (string, time.Time, error) {
+	return normalizeScheduleRangeDateInLocation(dateStr, paramName, time.Local)
+}
+
+func normalizeScheduleRangeDateInLocation(dateStr, paramName string, loc *time.Location) (string, time.Time, error) {
+	dateStr = strings.TrimSpace(dateStr)
+	const dateTimeLayout = "2006-01-02 15:04:05"
+	if t, err := time.ParseInLocation(dateTimeLayout, dateStr, loc); err == nil {
+		return t.Format("2006-01-02 15:04:05"), t, nil
+	}
+	if day, err := time.ParseInLocation("2006-01-02", dateStr, loc); err == nil {
+		boundary := dateStr + " 00:00:00"
+		hour, minute, second := 0, 0, 0
+		if strings.Contains(strings.ToLower(paramName), "end") {
+			boundary = dateStr + " 23:59:59"
+			hour, minute, second = 23, 59, 59
+		}
+		t := time.Date(day.Year(), day.Month(), day.Day(), hour, minute, second, 0, loc)
+		return boundary, t, nil
+	}
+	return "", time.Time{}, fmt.Errorf("invalid --%s format, use YYYY-MM-DD or YYYY-MM-DD HH:mm:ss (e.g. 2026-04-01)", paramName)
+}
+
 // int64FlagOrFallback reads an int64 flag by primary name; if zero/unchanged,
 // falls back through aliases in order, returning the first non-zero value.
 func int64FlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) int64 {
@@ -518,6 +544,12 @@ func newAttendanceCommand() *cobra.Command {
 	// products.attendance). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "attendance",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("考勤深度指南", "dingtalk-misc", "references/attendance.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询考勤记录、排班、班次、考勤组、审批、报表、个人规则和假期，并执行经确认的考勤配置变更。",
 			UseWhen: []string{
@@ -2589,7 +2621,9 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	attendanceSelfSettingGetCmd := &cobra.Command{
 		Use:   "get",
 		Short: "查询个人规则设置",
-		Long: `查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项。
+		Long: `查询当前登录用户本人的个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项。
+
+能力边界：selfsetting 只支持当前登录用户本人。--user 必须填写当前登录用户本人的 userId；管理员也不能代其他员工查询。目标为其他员工时应停止，不要改查当前用户或使用 globalsetting 代替。
 
 入参字段:
   --setting-scene  查询设置项，枚举值包括：
@@ -2651,8 +2685,8 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
     bossPushStartMin                   日报推送开始时间，单位：分钟；-1 表示关闭日报推送
     bossWeekReportType                 周报通知渠道：0 全关闭，1 工作通知，2 钉邮，3 工作通知和钉邮
     bossMonthReportType                月报通知渠道：0 全关闭，1 工作通知，2 钉邮，3 工作通知和钉邮`,
-		Example: `  dws attendance selfsetting get --setting-scene checkRemind --user USER_ID
-  dws attendance selfsetting get --setting-scene fastCheck --user USER_ID`,
+		Example: `  dws attendance selfsetting get --setting-scene checkRemind --user CURRENT_USER_ID
+  dws attendance selfsetting get --setting-scene fastCheck --user CURRENT_USER_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "setting-scene", "user"); err != nil {
 				return err
@@ -2701,16 +2735,17 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询个人考勤设置",
-				UseWhen:      []string{"查看某个员工的个人打卡提醒、极速打卡、结果通知等设置"},
+				AgentSummary: "查询当前登录用户本人的个人考勤设置",
+				UseWhen:      []string{"查看当前登录用户本人的个人打卡提醒、极速打卡、结果通知等设置"},
 				AvoidWhen: []string{
+					"目标是其他员工时不可用；管理员也不能代查，且不要改查当前用户或使用 globalsetting 代替",
 					"修改个人设置时使用 attendance selfsetting save",
 					"查询企业全局设置时使用 attendance globalsetting get",
 					"查询个人考勤记录时使用 attendance record get",
 				},
 				Examples: []string{
-					"dws attendance selfsetting get --setting-scene checkRemind --user <USER_ID> --format json",
-					"dws attendance selfsetting get --setting-scene fastCheck --user <USER_ID> --format json",
+					"dws attendance selfsetting get --setting-scene checkRemind --user <CURRENT_USER_ID> --format json",
+					"dws attendance selfsetting get --setting-scene fastCheck --user <CURRENT_USER_ID> --format json",
 				},
 			},
 		},
@@ -2720,7 +2755,9 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	attendanceSelfSettingSaveCmd := &cobra.Command{
 		Use:   "save",
 		Short: "更新保存个人规则设置",
-		Long: `更新保存个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项。
+		Long: `更新保存当前登录用户本人的个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项。
+
+能力边界：selfsetting 只支持当前登录用户本人。--user 必须填写当前登录用户本人的 userId；管理员也不能代其他员工更新。目标为其他员工时应停止，不要改写当前用户或使用 globalsetting 代替。
 
 入参字段:
   --setting-scene  必填，枚举值包括 checkRemind、fastCheck、checkResultNotify、lackRemind、personalAttendStatNotify、bossAttendStatNotify
@@ -2760,9 +2797,9 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 说明：corpId 和 opUserId 由当前登录上下文自动补齐，不需要通过 CLI 入参传入。
 返回 ServiceResult，包含 success、code、message、result；result 为 boolean，表示保存是否成功。`,
-		Example: `  dws attendance selfsetting save --setting-scene checkResultNotify --user USER_ID --check-result-msg 1
-  dws attendance selfsetting save --setting-scene fastCheck --user USER_ID --onduty-check-type 3 --voice-remind-switch=true
-  dws attendance selfsetting save --setting-scene checkRemind --user USER_ID --check-remind-user-on-duty=false --check-remind-setting '{"onDutyRemind":{"openRemind":true,"remindMinutes":10}}'`,
+		Example: `  dws attendance selfsetting save --setting-scene checkResultNotify --user CURRENT_USER_ID --check-result-msg 1
+  dws attendance selfsetting save --setting-scene fastCheck --user CURRENT_USER_ID --onduty-check-type 3 --voice-remind-switch=true
+  dws attendance selfsetting save --setting-scene checkRemind --user CURRENT_USER_ID --check-remind-user-on-duty=false --check-remind-setting '{"onDutyRemind":{"openRemind":true,"remindMinutes":10}}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "setting-scene", "user"); err != nil {
 				return err
@@ -2811,16 +2848,17 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "更新个人考勤设置",
-				UseWhen:      []string{"需要修改员工个人打卡提醒、极速打卡或结果通知设置，且 scene 与变更值已确认时"},
+				AgentSummary: "更新当前登录用户本人的个人考勤设置",
+				UseWhen:      []string{"需要修改当前登录用户本人的个人打卡提醒、极速打卡或结果通知设置，且 scene 与变更值已确认时"},
 				AvoidWhen: []string{
+					"目标是其他员工时不可用；管理员也不能代改，且不要改写当前用户或使用 globalsetting 代替",
 					"只查看个人设置时使用 attendance selfsetting get",
 					"修改企业全局设置时使用 attendance globalsetting save",
 					"查询考勤记录时使用 attendance record get",
 				},
 				Examples: []string{
-					"dws attendance selfsetting save --setting-scene checkResultNotify --user <USER_ID> --check-result-msg 1 --format json",
-					"dws attendance selfsetting save --setting-scene fastCheck --user <USER_ID> --onduty-check-type 3 --voice-remind-switch=true --format json",
+					"dws attendance selfsetting save --setting-scene checkResultNotify --user <CURRENT_USER_ID> --check-result-msg 1 --format json",
+					"dws attendance selfsetting save --setting-scene fastCheck --user <CURRENT_USER_ID> --onduty-check-type 3 --voice-remind-switch=true --format json",
 				},
 			},
 		},
@@ -3225,7 +3263,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 子命令:
   types        查询当前用户假期规则列表
-  update-type  更新假期规则（仅支持无额度模式）
+  update-type  更新假期规则（仅支持 leaveStatisticType=freedom）
   balance      查询指定员工假期余额
   save-balance 更新员工假期余额
   records      查询指定员工假期余额变更记录`,
@@ -3425,6 +3463,8 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 --leave-code 必填，指定要更新的假期规则编码。
 其他字段均为可选，仅需传入要修改的字段。
 
+能力边界：仅支持 vacation types 返回 leaveStatisticType=freedom 的假期规则。写前必须读取目标规则的精确 leaveStatisticType；其他统计方式不支持更新，应停止且不要调用写接口、改写枚举或重试。
+
 参数说明：
   --leave-code        假期编码（必填）
   --name              假期名称（可选）
@@ -3602,9 +3642,10 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "更新假期类型规则",
-				UseWhen:      []string{"管理员明确要求修改已有假期规则或假期类型配置，且 leave-code 与变更字段已确认时"},
+				AgentSummary: "更新 freedom 统计方式的假期类型规则",
+				UseWhen:      []string{"管理员明确要求修改已有假期规则，目标规则当前 leaveStatisticType 严格等于 freedom，且 leave-code 与变更字段已确认时"},
 				AvoidWhen: []string{
+					"目标规则的 leaveStatisticType 不是 freedom 时不支持更新；停止且不要调用写接口、改写枚举或重试",
 					"只查询假期类型时使用 attendance vacation types",
 					"调整员工假期余额时使用 attendance vacation save-balance",
 					"查询假期报表时使用 attendance report query-leave",
@@ -3928,24 +3969,28 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			// 解析用户ID列表（优先 --users，兼容 --userIdList）
 			userIds := parseUserList(flagOrFallback(cmd, "users", "userIdList"))
 
-			// 解析日期参数并转换为时间戳（毫秒）
+			// getScheduleByRange requires formatted datetime strings rather than
+			// Unix millisecond timestamps.
 			beginStr := flagOrFallback(cmd, "start", "workDateBegin")
-			beginTs, err := parseDateToTimestamp(beginStr, "start")
+			beginValue, beginTime, err := normalizeScheduleRangeDate(beginStr, "start")
 			if err != nil {
 				return err
 			}
 
 			endStr := flagOrFallback(cmd, "end", "workDateEnd")
-			endTs, err := parseDateToTimestamp(endStr, "end")
+			endValue, endTime, err := normalizeScheduleRangeDate(endStr, "end")
 			if err != nil {
 				return err
+			}
+			if endTime.Before(beginTime) {
+				return fmt.Errorf("--end must not be earlier than --start")
 			}
 
 			return callMCPToolOnServer("attendance-wukong", "getScheduleByRange", map[string]any{
 				"GetScheduleByRangeRequest": map[string]any{
 					"userIdList":    userIds,
-					"workDateBegin": beginTs,
-					"workDateEnd":   endTs,
+					"workDateBegin": beginValue,
+					"workDateEnd":   endValue,
 				},
 			})
 		},
@@ -3977,7 +4022,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 					"批量查询员工班次结果时使用 attendance shift list",
 					"导入或修改排班时使用 attendance schedule import",
 				},
-				Examples: []string{"dws attendance schedule get --userIdList 03642229451220076 --workDateBegin 2026-05-13 --workDateEnd 2026-05-13 -f json"},
+				Examples: []string{"dws attendance schedule get --users 03642229451220076 --start 2026-05-13 --end 2026-05-13 --format json"},
 			},
 		},
 	})
@@ -4138,11 +4183,11 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 	// selfsetting get (query_self_setting)
 	attendanceSelfSettingGetCmd.Flags().String("setting-scene", "", "查询设置项：checkRemind/fastCheck/checkResultNotify/lackRemind/personalAttendStatNotify/bossAttendStatNotify（必填）")
-	attendanceSelfSettingGetCmd.Flags().String("user", "", "查询用户 ID（必填）")
+	attendanceSelfSettingGetCmd.Flags().String("user", "", "当前登录用户本人的 userId（必填；不支持查询其他员工）")
 
 	// selfsetting save (save_self_setting)
 	attendanceSelfSettingSaveCmd.Flags().String("setting-scene", "", "更新设置项：checkRemind/fastCheck/checkResultNotify/lackRemind/personalAttendStatNotify/bossAttendStatNotify（必填）")
-	attendanceSelfSettingSaveCmd.Flags().String("user", "", "更新用户 ID（必填）")
+	attendanceSelfSettingSaveCmd.Flags().String("user", "", "当前登录用户本人的 userId（必填；不支持更新其他员工）")
 	attendanceSelfSettingSaveCmd.Flags().Bool("yes", false, "跳过确认提示")
 	registerSelfSettingSaveFlags(attendanceSelfSettingSaveCmd)
 	attendanceSelfSettingCmd.AddCommand(attendanceSelfSettingGetCmd, attendanceSelfSettingSaveCmd)
@@ -4356,7 +4401,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
   TimesResultF   迟到+缺卡
 
 获取 planId 步骤：
-  1. 查询排班记录：dws attendance schedule get --userIdList USER_ID --workDateBegin DATE --workDateEnd DATE
+  1. 查询排班记录：dws attendance schedule get --users USER_ID --start DATE --end DATE
   2. 从返回结果中找到对应打卡类型（OnDuty=上班，OffDuty=下班）的 id 字段
   3. 使用该 id 作为 --plan-id 参数`,
 		Example: `  # 通过排班ID改签，指定打卡时间

@@ -18,6 +18,10 @@
 | 单条/合并/话题转发 | `+messages-forward` / `+messages-combine-forward` / `+messages-forward-topic` | 复制正文重新发送 |
 | 流式卡片创建或更新 | `+messages-send-card` / `+messages-update-card` | 普通 text/Markdown 发送 |
 
+## Topic 选择
+
+话题与话题圈的创建、发布、已有消息升级、浏览、回复、互动和整条转发统一读取 [thread.md](chat/thread.md)，不从普通消息入口选路。
+
 ## 对象层级
 
 | 用户终点 | 对象 | Reference |

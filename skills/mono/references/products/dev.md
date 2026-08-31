@@ -1,14 +1,37 @@
 # dev — 开放平台开发者命令
 
-`dws dev` 是面向**开发者**的命令组，分三个子树：
+`dws dev` 是面向**开发者**的命令组，分四个子树：
 
 | 子命令 | 职责 |
 |--------|------|
 | `dev app` | 应用生命周期（创建/查询/更新/删除/凭证/权限/成员/安全/网页/机器人/**建号**/版本/事件订阅） |
 | `dev connect` | **建联**：把现成机器人接到当前本地 agent（起 Stream，不建号） |
 | `dev doc` | 开放平台开发文档搜索入口（当前网关未注册该工具键，`dev doc search` 会报「未找到指定工具」不可用；文档搜索一律走 `dws devdoc article search --query <关键词>`） |
+| `dev mcp` | MCP 服务、工具、鉴权、凭证、协作者与 HSF 方法的开发管理 |
 
 > ⚠️ **关键区分**：`dws chat bot search/find` 只查询已有机器人（IM 视角）；**创建/建号**机器人走 `dws dev app robot submit`；**建联**走 `dws dev connect`。"创建机器人"/"建联"一律走 `dev`，禁止走 `chat`。
+
+---
+
+## dev mcp — MCP 开发与发布
+
+`dev mcp` 是固定、可审计的开发命令树，不会把远端 `serverName` 或工具名注入为新的 Cobra 命令。已发布工具统一通过 `dws mcp published tools/invoke` 消费。
+
+```bash
+# 服务与工具
+dws dev mcp service list --format json
+dws dev mcp service create --name 示例服务 --description "示例" --server-name example-service --dry-run --format json
+dws dev mcp tool list --mcp-id <mcpId> --format json
+dws dev mcp tool publish --mcp-id <mcpId> --tool-id <toolId> --dry-run --format json
+
+# 已发布工具：先查 Schema，再 dry-run，最后显式确认
+dws mcp published tools <mcpId> --format json
+dws mcp published invoke <mcpId> <toolName> --params '{}' --dry-run --format json
+```
+
+`published invoke` 无法静态判断远端工具副作用。检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。
+
+详细规则见 multi skill 的 `references/dev/mcp.md`。
 
 ---
 

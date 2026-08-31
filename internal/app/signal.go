@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -44,13 +45,35 @@ func interruptionExitCode(sig os.Signal) int {
 
 type processInterruption struct {
 	signal os.Signal
+	detail error
 }
 
 func (e *processInterruption) Error() string {
-	return fmt.Sprintf("process interrupted by %s", e.signal)
+	message := fmt.Sprintf("process interrupted by %s", e.signal)
+	if e.detail != nil {
+		return fmt.Sprintf("%s: %v", message, e.detail)
+	}
+	return message
 }
 
 func (e *processInterruption) Unwrap() error { return context.Canceled }
+
+// withCancellationDetail keeps the signal as the primary process error while
+// retaining actionable context from a command that stopped because of that
+// signal. Plain context cancellation and nested signal errors add no useful
+// detail, and unrelated command failures must not be relabelled as part of the
+// interruption. The detail is deliberately not exposed through Unwrap so an
+// inner structured error cannot override the signal's exit code or subtype.
+func (e *processInterruption) withCancellationDetail(err error) *processInterruption {
+	if e == nil || err == nil || err == context.Canceled || !errors.Is(err, context.Canceled) {
+		return e
+	}
+	var interrupted *processInterruption
+	if errors.As(err, &interrupted) {
+		return e
+	}
+	return &processInterruption{signal: e.signal, detail: err}
+}
 
 func (e *processInterruption) ExitCode() int {
 	return interruptionExitCode(e.signal)

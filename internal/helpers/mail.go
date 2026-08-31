@@ -102,6 +102,12 @@ func newMailCommand() *cobra.Command {
 	// products.mail). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "mail",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-mail"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("邮箱深度指南", "dingtalk-mail", "references/mail.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理邮箱、邮件、草稿、附件、文件夹、联系人与邮件模板",
 			UseWhen: []string{

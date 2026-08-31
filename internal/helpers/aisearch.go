@@ -187,6 +187,12 @@ func newAisearchCommand() *cobra.Command {
 	// products.aisearch). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "aisearch",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-aisearch"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI 搜问深度指南", "dingtalk-aisearch", "references/aisearch.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "企业内智能搜人、搜知识内容与搜行为记录",
 			UseWhen: []string{

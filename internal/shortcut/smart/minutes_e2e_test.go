@@ -5,31 +5,64 @@ package smart
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
 func runMinutesCLI(t *testing.T, caller *smartCoverageCaller, args ...string) (map[string]any, string, error) {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := newPlatformCoverageRoot()
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs(args)
-	err := root.Execute()
+	executed, err := root.ExecuteC()
+	if err == nil && output.UsesUnifiedResult(executed) {
+		code, _, emitErr := output.EmitStoredResult(executed)
+		if emitErr != nil {
+			err = emitErr
+		} else if code != 0 {
+			err = fmt.Errorf("command result exit code %d", code)
+		}
+	}
 	if stdout.Len() == 0 {
 		return nil, "", err
 	}
-	var payload map[string]any
-	if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {
+	var envelope map[string]any
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &envelope); decodeErr != nil {
 		t.Fatalf("decode output %q: %v", stdout.String(), decodeErr)
 	}
-	return payload, stdout.String(), err
+	if payload, ok := envelope["data"].(map[string]any); ok {
+		return payload, stdout.String(), err
+	}
+	return envelope, stdout.String(), err
+}
+
+func smartMinutesPaginationFromOutput(t *testing.T, raw string) map[string]any {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		t.Fatalf("decode pagination envelope %q: %v", raw, err)
+	}
+	meta, ok := envelope["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing meta in envelope: %#v", envelope)
+	}
+	pagination, ok := meta["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing meta.pagination in envelope: %#v", envelope)
+	}
+	return pagination
 }
 
 func TestCrossPlatformCoverageMinutesDetailPaginatesRealTranscriptShapeE2E(t *testing.T) {
@@ -152,12 +185,16 @@ func TestCrossPlatformCoverageMinutesTranscriptSinglePagePublishesIncompleteCurs
 	caller := &smartCoverageCaller{responses: map[string][]string{
 		"minutes/get_minutes_transcription": {`{"success":true,"result":{"paragraphList":[{"paragraphId":"p1"}],"hasNext":true,"nextToken":"n2"}}`},
 	}}
-	payload, output, err := runMinutesCLI(t, caller, "minutes", "+transcript", "--id", "u1", "--single-page")
-	if err != nil || output == "" || payload["complete"] != false || payload["nextToken"] != "n2" || payload["paragraphCount"] != float64(1) {
-		t.Fatalf("single page = payload:%#v output:%q err:%v", payload, output, err)
+	payload, raw, err := runMinutesCLI(t, caller, "minutes", "+transcript", "--id", "u1", "--single-page")
+	if err != nil || raw == "" || payload["complete"] != false || payload["nextToken"] != nil || payload["paragraphCount"] != float64(1) {
+		t.Fatalf("single page = payload:%#v output:%q err:%v", payload, raw, err)
 	}
-	if strings.Contains(output, `"complete": true`) {
-		t.Fatalf("single page falsely complete: %s", output)
+	pagination := smartMinutesPaginationFromOutput(t, raw)
+	if pagination["endpoint_exhausted"] != false || pagination["next_token"] != "n2" || pagination["pages"] != float64(1) || pagination["items"] != float64(1) {
+		t.Fatalf("single-page pagination=%#v", pagination)
+	}
+	if strings.Contains(raw, `"complete": true`) {
+		t.Fatalf("single page falsely complete: %s", raw)
 	}
 }
 

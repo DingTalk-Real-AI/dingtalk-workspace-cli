@@ -31,6 +31,18 @@ dws drive list --folder <dentryUuid> --type file --start 7d --format json
 - 过滤模式是客户端有界扫描；`truncated=true` 不能声称全量。需要关键词检索时改用 `+search`。
 - `--latest` 遇到截断或目录读取失败会拒绝给出不完整 Top-N，按错误中的目录和恢复命令缩小范围。
 
+## 非落盘下载地址
+
+Agent 沙箱跨文件系统、或外部系统要自行控制下载行为与时机时，用 managed leaf 加 `--url-only` 只换取临时下载地址与签名请求头，不落盘：
+
+```bash
+dws drive download --node <dentryUuid> --url-only --format json
+dws drive download-version --node <dentryUuid> --version 3 --url-only --format json
+```
+
+- `downloadUrl` 为带临时授权签名的链接，应尽快使用；`headers` 为需原样携带的签名请求头（OSS 预签名 URL 场景为空对象，签名已内含在地址里）；`fileName/fileSize/version` 为服务端携带时的辅助字段。
+- `--url-only` 与 `--output/--overwrite/--part-size/--parallel/--no-resume` 互斥；权限控制与现有下载链路一致；要把文件保存到本地路径时改用 `+download`。
+
 ## 回收站
 
 ```bash
@@ -57,6 +69,20 @@ dws drive +recycle-restore --id <recycleItemId>
 - 收藏列表：`+star-list`；收藏/取消：`+star-add` / `+star-remove`。
 - 节点统计和封面优先并入 `+inspect --include-stats` / `--include-cover`；只取单项才用 `+stats` / `+cover`。
 - 收藏是个人状态，不代表共享或权限变化。
+
+## 普通文件评论
+
+普通 PDF、DOCX、XLSX 等本地文件使用 `dws drive comment`，复用 Doc/Sheet 的新评论服务链路。当前固定为文件级全文评论 `topicId=global`，不支持划词、单元格、页码、anchor 或 mention。
+
+旧 `drive comment list/create` 保留旧评论服务的行为和输出，仅作 deprecated 兼容入口。Agent 必须使用下面的 `list-v2/create-v2` 进入新评论体系。
+
+```bash
+dws drive comment list-v2 --node <dentryUuid> --format json
+dws drive comment create-v2 --node <dentryUuid> --content "请补充结论"
+dws drive comment list-replies --node <dentryUuid> --comment-key <commentKey> --format json
+```
+
+完整生命周期包括 `list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply`。分页游标必须原样回传；`list-v2` 每页上限为 50，超过上限直接报错；写操作按 Runtime confirmation 执行，后续操作的 `commentKey` 必须来自真实返回。
 
 ## 公开状态
 

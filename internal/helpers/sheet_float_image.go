@@ -82,8 +82,22 @@ func newFloatImageCmds() []*cobra.Command {
 			if filePath != "" {
 				return runFloatImageFileMode(cmd, "create_float_image", filePath, toolArgs)
 			}
-			toolArgs["src"] = src
-			return callMCPToolContext(cmd.Context(), "create_float_image", toolArgs)
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "src": src,
+				"range": mustGetFlag(cmd, "range"), "width": width, "height": height,
+			}
+			if cmd.Flags().Changed("offset-x") {
+				input["offset-x"] = toolArgs["offsetX"]
+			}
+			if cmd.Flags().Changed("offset-y") {
+				input["offset-y"] = toolArgs["offsetY"]
+			}
+			sharedArgs, err := BuildBatchCreateFloatImageArgs(input)
+			if err != nil {
+				return err
+			}
+			sharedArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPToolContext(cmd.Context(), "create_float_image", sharedArgs)
 		},
 	}
 	DeclareLeafMetadata(createFloatImageCmd, LeafSpec{
@@ -311,7 +325,28 @@ floatImageId 可通过 list-float-images 获取。`,
 			if fileChanged {
 				return runFloatImageFileMode(cmd, "update_float_image", filePath, toolArgs)
 			}
-			return callMCPToolContext(cmd.Context(), "update_float_image", toolArgs)
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "float-image-id": mustGetFlag(cmd, "float-image-id"),
+			}
+			if srcChanged {
+				input["src"] = src
+			}
+			if rangeChanged {
+				input["range"] = toolArgs["range"]
+			}
+			for cliKey, mcpKey := range map[string]string{
+				"width": "width", "height": "height", "offset-x": "offsetX", "offset-y": "offsetY",
+			} {
+				if cmd.Flags().Changed(cliKey) {
+					input[cliKey] = toolArgs[mcpKey]
+				}
+			}
+			sharedArgs, err := BuildBatchUpdateFloatImageArgs(input)
+			if err != nil {
+				return err
+			}
+			sharedArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPToolContext(cmd.Context(), "update_float_image", sharedArgs)
 		},
 	}
 	DeclareLeafMetadata(updateFloatImageCmd, LeafSpec{

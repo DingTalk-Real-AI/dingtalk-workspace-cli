@@ -38,18 +38,23 @@ func TestAllShortcutsTodoSmartContractsAndRelatedAlias(t *testing.T) {
 		name    string
 		rollout output.RolloutState
 		result  bool
+		dryRun  bool
 	}{
-		{"related", RelatedTasks.OutputRollout, RelatedTasks.Contract.Result != nil},
-		{"due-today", DueToday.OutputRollout, DueToday.Contract.Result != nil},
-		{"assign", Assign.OutputRollout, Assign.Contract.Result != nil},
-		{"assign-multi", AssignMulti.OutputRollout, AssignMulti.Contract.Result != nil},
-		{"created", CreatedTodos.OutputRollout, CreatedTodos.Contract.Result != nil},
-		{"overdue", Overdue.OutputRollout, Overdue.Contract.Result != nil},
-		{"todo-done", TodoDone.OutputRollout, TodoDone.Contract.Result != nil},
-		{"remind", Remind.OutputRollout, Remind.Contract.Result != nil},
+		{"related", RelatedTasks.OutputRollout, RelatedTasks.Contract.Result != nil, RelatedTasks.Contract.DryRun != nil},
+		{"due-today", DueToday.OutputRollout, DueToday.Contract.Result != nil, DueToday.Contract.DryRun != nil},
+		{"assign", Assign.OutputRollout, Assign.Contract.Result != nil, Assign.Contract.DryRun != nil},
+		{"assign-multi", AssignMulti.OutputRollout, AssignMulti.Contract.Result != nil, AssignMulti.Contract.DryRun != nil},
+		{"created", CreatedTodos.OutputRollout, CreatedTodos.Contract.Result != nil, CreatedTodos.Contract.DryRun != nil},
+		{"overdue", Overdue.OutputRollout, Overdue.Contract.Result != nil, Overdue.Contract.DryRun != nil},
+		{"todo-done", TodoDone.OutputRollout, TodoDone.Contract.Result != nil, TodoDone.Contract.DryRun != nil},
+		{"remind", Remind.OutputRollout, Remind.Contract.Result != nil, Remind.Contract.DryRun != nil},
 	} {
 		if item.rollout != output.RolloutUnifiedActive || !item.result {
 			t.Errorf("%s missing unified Result contract", item.name)
+		}
+		wantDryRun := item.name == "assign" || item.name == "assign-multi" || item.name == "todo-done" || item.name == "remind"
+		if item.dryRun != wantDryRun {
+			t.Errorf("%s dry-run declaration=%v, want %v", item.name, item.dryRun, wantDryRun)
 		}
 	}
 	if !strings.Contains(Assign.Intent, "创建") {

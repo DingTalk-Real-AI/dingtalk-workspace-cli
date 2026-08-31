@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -35,6 +36,7 @@ const (
 	CodeMissingParam       = "INPUT_MISSING_PARAM"
 	CodeInvalidParam       = "INPUT_INVALID_PARAM"
 	CodeFileNotFound       = "INPUT_FILE_NOT_FOUND"
+	CodeFileAlreadyExists  = "INPUT_FILE_ALREADY_EXISTS"
 	CodeContentTruncated   = "CONTENT_TRUNCATED"
 	CodeMCPServerError     = "MCP_SERVER_ERROR"
 	CodeMCPToolError       = "MCP_TOOL_ERROR"
@@ -70,7 +72,7 @@ func (e *CLIError) ExitCode() int {
 		return ExitAuth
 	case CodeAuthPermission:
 		return ExitPermission
-	case CodeMissingParam, CodeInvalidParam, CodeInvalidJSON, CodeInvalidPath, CodeInputTooLarge, CodeFileNotFound:
+	case CodeMissingParam, CodeInvalidParam, CodeInvalidJSON, CodeInvalidPath, CodeInputTooLarge, CodeFileNotFound, CodeFileAlreadyExists:
 		return ExitValidation
 	case CodeContentTruncated:
 		return ExitAPI
@@ -134,6 +136,14 @@ func WrapErrorWithOperation(err error, operation string) error {
 		return err
 	}
 	if _, ok := err.(*PATError); ok {
+		return err
+	}
+	// Framework-classified errors already carry stable category/reason/actions.
+	// Preserve that contract so helper shortcuts render the same recovery
+	// guidance as their underlying direct leaf commands instead of reclassifying
+	// typed failures from localized message text.
+	var typed *apperrors.Error
+	if errors.As(err, &typed) {
 		return err
 	}
 	// 框架确认门禁错误（deferred ConfirmSafety 从 CallTool 返回）必须原样透传：

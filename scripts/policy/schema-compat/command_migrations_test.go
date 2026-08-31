@@ -113,6 +113,44 @@ func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjectio
 	}
 }
 
+func TestCrossPlatformCoverageSchemaConsumedFlagExtractionAfterBaseline(t *testing.T) {
+	before := schemaCommandMigrationContract(false)
+	after := schemaCommandMigrationContract(true)
+	for _, contract := range []*schemaContract{&before, &after} {
+		product := contract.Products["chat"]
+		delete(product.Tools, "chat.move")
+		contract.Products["chat"] = product
+	}
+	migration := schemaCommandMigrationAuthorizations()[1]
+	migration.State = interfacesnapshot.CommandMigrationConsumed
+
+	normalized, err := normalizeSchemaCommandMigrations(after, after, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("consumed extraction should be inert for an after-state baseline: %v", err)
+	}
+	if failures := checkCompatibility(normalized, after); len(failures) != 0 {
+		t.Fatalf("after-state extraction remained incompatible: %v", failures)
+	}
+
+	normalized, err = normalizeSchemaCommandMigrations(before, after, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("consumed extraction should still normalize a stable before-state baseline: %v", err)
+	}
+	if failures := checkCompatibility(normalized, after); len(failures) != 0 {
+		t.Fatalf("stable before-state extraction remained incompatible: %v", failures)
+	}
+
+	republished := cloneContract(after)
+	product := republished.Products["chat"]
+	tool := product.Tools["chat.create_group"]
+	tool.Parameters["thread"] = before.Products["chat"].Tools["chat.create_group"].Parameters["thread"]
+	product.Tools["chat.create_group"] = tool
+	republished.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(after, republished, []interfacesnapshot.CommandMigration{migration}); err == nil {
+		t.Fatal("consumed extraction accepted a current Schema that republished the extracted parameter")
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCommandMigrationsFailClosedOnDrift(t *testing.T) {
 	baseline := schemaCommandMigrationContract(false)
 	migrations := schemaCommandMigrationAuthorizations()

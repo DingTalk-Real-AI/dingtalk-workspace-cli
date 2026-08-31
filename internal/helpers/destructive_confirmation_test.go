@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -64,7 +65,13 @@ func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, 
 		root.SetIn(strings.NewReader(""))
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func requireTypedConfirmationError(t *testing.T, err error) {
@@ -316,10 +323,10 @@ func TestSheetBatchClearRequiresConfirmationBeforeToolCall(t *testing.T) {
 		toolName:  "batch_update",
 		args: map[string]any{
 			"nodeId": "node-1",
-			"operations": []any{
+			"operationsJson": mustBatchOperationsJSON(t, []any{
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet1", "range": "A1:B3", "type": "all"}},
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet2", "range": "C1:D5", "type": "all"}},
-			},
+			}),
 		},
 	}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
@@ -356,10 +363,10 @@ func TestSheetBatchUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
 		toolName:  "batch_update",
 		args: map[string]any{
 			"nodeId": "node-1",
-			"operations": []any{
+			"operationsJson": mustBatchOperationsJSON(t, []any{
 				map[string]any{"toolName": "clear_range", "input": map[string]any{"sheetId": "Sheet1", "range": "A1:B3", "type": "content"}},
-				map[string]any{"toolName": "delete_dimension", "input": map[string]any{"sheetId": "Sheet1", "dimension": "ROWS", "startIndex": 2, "count": 3}},
-			},
+				map[string]any{"toolName": "delete_dimension", "input": map[string]any{"sheetId": "Sheet1", "dimension": "ROWS", "startIndex": 1, "count": 3}},
+			}),
 		},
 	}
 	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {

@@ -260,7 +260,42 @@ func SetClientIDFromMCP(id string) {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 	runtimeClientID = id
+	// MCP-managed OAuth never owns a caller-supplied Client Secret. Clear any
+	// prior direct-mode value so it cannot later pair with this MCP Client ID.
+	runtimeClientSecret = ""
 	clientIDFromMCP = true
+}
+
+// SetClientCredentials atomically installs one complete direct-mode runtime
+// credential pair. It also clears any stale MCP source marker.
+func SetClientCredentials(id, secret string) {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	runtimeClientID = id
+	runtimeClientSecret = secret
+	clientIDFromMCP = false
+}
+
+// clearMCPRuntimeCredentials discards only a process-local MCP tuple. It is
+// used when env/app config wins resolution so a later provider cannot combine
+// the old MCP Client ID with a historical direct-mode Client Secret.
+func clearMCPRuntimeCredentials() {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	if !clientIDFromMCP {
+		return
+	}
+	runtimeClientID = ""
+	runtimeClientSecret = ""
+	clientIDFromMCP = false
+}
+
+func clearRuntimeCredentials() {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	runtimeClientID = ""
+	runtimeClientSecret = ""
+	clientIDFromMCP = false
 }
 
 // IsClientIDFromMCP returns true if the current clientID was fetched from MCP server.
@@ -323,6 +358,10 @@ func SetClientID(id string) {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 	runtimeClientID = id
+	// SetClientID is the explicit runtime/flag channel. A previous managed MCP
+	// login in the same host process must not force this new complete pair back
+	// through the MCP credential path.
+	clientIDFromMCP = false
 }
 
 // SetClientSecret allows runtime override of the client secret (e.g., from CLI flags).
@@ -398,11 +437,6 @@ func getRuntimeCredentials() (clientID, clientSecret string) {
 	clientMu.RLock()
 	defer clientMu.RUnlock()
 	return runtimeClientID, runtimeClientSecret
-}
-
-func getCompleteRuntimeCredentials() (clientID, clientSecret string, ok bool) {
-	clientID, clientSecret = getRuntimeCredentials()
-	return clientID, clientSecret, strings.TrimSpace(clientID) != "" && strings.TrimSpace(clientSecret) != ""
 }
 
 // getDefaultConfigDir returns the default configuration directory.

@@ -389,6 +389,75 @@ func TestCrossPlatformCoverageCompatibilityVisibleAvailabilityMigrationLifecycle
 	}
 }
 
+func TestCrossPlatformCoveragePendingCommandMigrationRetargetLifecycle(t *testing.T) {
+	approved := commandMigrationManifest(CommandMigrationPending)
+	retargeted := retargetedCommandMigrationManifest(CommandMigrationPending)
+	before := commandMigrationSnapshot(false, false)
+	after := retargetedCommandMigrationSnapshot()
+	references := map[string]Snapshot{"merge-base": before, "stable": before}
+
+	got, err := AuthorizeCommandMigrations(before, references, approved, retargeted)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("pending retarget authorizations=%#v error=%v", got, err)
+	}
+	consumed := retargetedCommandMigrationManifest(CommandMigrationConsumed)
+	got, err = AuthorizeCommandMigrations(after, references, retargeted, consumed)
+	if err != nil || len(got) != len(retargeted.Migrations) {
+		t.Fatalf("retargeted migrations were not consumable: authorizations=%#v error=%v", got, err)
+	}
+
+	forked := CommandMigrationManifest{
+		Version:    CommandMigrationManifestVersion,
+		Migrations: append(append([]CommandMigration(nil), approved.Migrations...), retargeted.Migrations...),
+	}
+	if err := forked.Validate(); err == nil || !strings.Contains(err.Error(), "forks pending migration lineage") {
+		t.Fatalf("parallel pending targets error=%v", err)
+	}
+
+	selfAuthorized := retargetedCommandMigrationSnapshot()
+	if _, err := AuthorizeCommandMigrations(selfAuthorized, references, approved, retargeted); err == nil || !strings.Contains(err.Error(), "not in the exact before state") {
+		t.Fatalf("retarget plus surface change error=%v", err)
+	}
+	stableAfter := map[string]Snapshot{"merge-base": before, "stable": after}
+	if _, err := AuthorizeCommandMigrations(before, stableAfter, approved, retargeted); err == nil || !strings.Contains(err.Error(), "not in the exact before state") {
+		t.Fatalf("retarget after stable rollout error=%v", err)
+	}
+
+	for _, test := range []struct {
+		name   string
+		mutate func(*CommandMigration)
+	}{
+		{"consumed target", func(m *CommandMigration) { m.State = CommandMigrationConsumed }},
+		{"legacy command", func(m *CommandMigration) { m.Legacy.Command = "dws chat message other" }},
+		{"legacy state", func(m *CommandMigration) { m.Legacy.After.Hidden = false }},
+		{"replacement state", func(m *CommandMigration) { m.Replacement.After.Hidden = true }},
+		{"product", func(m *CommandMigration) { m.Schema.ProductID = "other" }},
+		{"source tool", func(m *CommandMigration) {
+			m.Schema.SourceToolID = "chat.other"
+			m.Schema.ReplacementToolID = "chat.other"
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := retargetedCommandMigrationManifest(CommandMigrationPending)
+			test.mutate(&candidate.Migrations[0])
+			if _, err := AuthorizeCommandMigrations(before, references, approved, candidate); err == nil {
+				t.Fatal("invalid pending retarget accepted")
+			}
+		})
+	}
+
+	differentLegacy := cloneCommandMigration(approved.Migrations[0])
+	differentLegacy.Legacy.Command = "dws chat message another"
+	differentLegacy.Replacement.Command = "dws chat thread another"
+	moveFork := CommandMigrationManifest{
+		Version:    CommandMigrationManifestVersion,
+		Migrations: []CommandMigration{approved.Migrations[0], differentLegacy},
+	}
+	if err := moveFork.Validate(); err == nil || !strings.Contains(err.Error(), "forks pending migration lineage") {
+		t.Fatalf("Schema source tool fork error=%v", err)
+	}
+}
+
 func TestCrossPlatformCoverageFlagExtractionRejectsRequiredLegacyFlag(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -832,6 +901,24 @@ func flagExtractionCommandMigrationManifest(state string) CommandMigrationManife
 	return manifest
 }
 
+func retargetedCommandMigrationManifest(state string) CommandMigrationManifest {
+	manifest := commandMigrationManifest(state)
+	manifest.Migrations[0].Replacement.Command = "dws chat thread new"
+	manifest.Migrations[0].Schema.Parameters = []CommandParameterMigration{}
+	manifest.Migrations[0].Reason = "Retarget the unstarted move to the thread command."
+	manifest.Migrations[1].Replacement.Command = "dws chat thread create-group"
+	manifest.Migrations[1].Schema.ReplacementToolID = "chat.create_thread_group"
+	manifest.Migrations[1].Schema.Parameters = []CommandParameterMigration{{
+		From: "thread",
+		ReplacementConstant: &CommandReplacementConstant{
+			Property: "convThreadEnabled",
+			Value:    true,
+		},
+	}}
+	manifest.Migrations[1].Reason = "Retarget the unstarted extraction to the thread command."
+	return manifest
+}
+
 func cloneCommandMigration(source CommandMigration) CommandMigration {
 	cloned := source
 	if source.Schema.Parameters != nil {
@@ -911,6 +998,19 @@ func commandMigrationSnapshot(after, removeUnrelated bool) Snapshot {
 		)
 	}
 	return testSnapshot(commands...)
+}
+
+func retargetedCommandMigrationSnapshot() Snapshot {
+	snapshot := commandMigrationSnapshot(false, false)
+	snapshot.Commands[1].LocalFlags[0].Hidden = true
+	snapshot.Commands[2].Hidden = true
+	threadCreate := testCommand("dws chat thread create-group")
+	threadCreate.BoolConstParams = map[string]bool{"convThreadEnabled": true}
+	snapshot.Commands = append(snapshot.Commands,
+		threadCreate,
+		testCommand("dws chat thread new"),
+	)
+	return snapshot
 }
 
 func withCommandBoolConstParams(snapshot Snapshot, path string, values map[string]bool) Snapshot {

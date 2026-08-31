@@ -141,7 +141,7 @@ func requireSameJSON(t *testing.T, got, want string) {
 	}
 }
 
-func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAndPreservesLegacy(t *testing.T) {
+func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAcrossEnvelopes(t *testing.T) {
 	payload := `{
 		"result": {
 			"messages": [
@@ -207,6 +207,9 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAndPreservesLeg
 	legacyMessages, ok := legacy["messages"].([]any)
 	if !ok || len(legacyMessages) != 2 {
 		t.Fatalf("legacy result.messages = %#v", legacy["messages"])
+	}
+	if !reflect.DeepEqual(legacyMessages, messages) {
+		t.Fatalf("result.messages = %#v, want projected top-level messages %#v", legacyMessages, messages)
 	}
 }
 
