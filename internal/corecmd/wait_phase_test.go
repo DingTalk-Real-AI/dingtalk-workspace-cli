@@ -552,6 +552,36 @@ func TestResultInvokeWaitParentCancellationPropagates(t *testing.T) {
 	}
 }
 
+func TestEventModeSubscriptionFailureWithParentCancellationPropagates(t *testing.T) {
+	// Ctrl-C arriving during a failed event subscription must propagate the
+	// cancellation, not be wrapped as a subscription-failure error.
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := New(Spec{
+		Use:           "wait-sample",
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract:      eventTestDecl(contract.WaitModeEvent),
+		ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+			return output.Pending(map[string]any{"id": "job-1"}, &output.OperationInfo{
+				ID: "job-1", State: "NEW", NextCommand: "dws wait-sample --id job-1",
+			}), nil
+		},
+		WaitEvents: func(context.Context, *Ctx) (wait.EventStream, error) {
+			cancel()
+			return nil, errors.New("subscribe failed")
+		},
+	})
+	cmd.SetArgs([]string{"--wait", "--wait-timeout", "60"})
+	storeCtx, _ := output.WithResultStore(ctx)
+	cmd.SetContext(storeCtx)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	err := cmd.Execute()
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled", err)
+	}
+}
+
 func TestWaitDeclRequiresResultInvokeDispatcher(t *testing.T) {
 	// A declared wait on the legacy Invoke path would observe a failure
 	// terminal while still exiting 0 — construction must reject it.

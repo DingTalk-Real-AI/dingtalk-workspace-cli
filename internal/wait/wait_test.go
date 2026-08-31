@@ -200,6 +200,19 @@ func TestRunEventPropagatesParentCancellation(t *testing.T) {
 	}
 }
 
+func TestRunPropagatesCancellationWhenPollErrors(t *testing.T) {
+	// When poll returns an error and the context was cancelled concurrently,
+	// the cancellation must propagate (not be wrapped as a poll failure).
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err := Run(ctx, loopSpec(), func(context.Context) (PollDoc, error) {
+		cancel()
+		return nil, errors.New("rpc blew up")
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled", err)
+	}
+}
+
 func TestRunFailsClosedOnUnknownStatus(t *testing.T) {
 	_, err := Run(context.Background(), loopSpec(), func(context.Context) (PollDoc, error) {
 		return PollDoc{"result": map[string]any{"status": "Mystery"}}, nil
