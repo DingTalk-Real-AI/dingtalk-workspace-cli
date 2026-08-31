@@ -613,6 +613,44 @@ func TestResultInvokeWithoutWaitFlagSkipsPhase(t *testing.T) {
 	}
 }
 
+func TestWaitTimeoutWithoutWaitFlagIsRejected(t *testing.T) {
+	// --wait-timeout without --wait must be rejected before ResultInvoke,
+	// not silently ignored (which would mislead callers into thinking the
+	// command waited for a terminal state).
+	cmd := New(baseWaitSpec(waitTestDecl(), func(context.Context, *Ctx) (wait.PollDoc, error) {
+		t.Fatal("WaitPoll must not run when flag validation fails")
+		return nil, nil
+	}))
+	cmd.SetArgs([]string{"--wait-timeout", "60"})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --wait-timeout without --wait")
+	}
+	if !strings.Contains(err.Error(), "--wait-timeout requires --wait") {
+		t.Fatalf("err=%v, want flag combination error", err)
+	}
+}
+
+func TestWaitTimeoutWithWaitFlagProceeds(t *testing.T) {
+	// Valid combination: --wait --wait-timeout should proceed normally.
+	polled := false
+	cmd := New(baseWaitSpec(waitTestDecl(), func(context.Context, *Ctx) (wait.PollDoc, error) {
+		polled = true
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait", "--wait-timeout", "60"})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !polled {
+		t.Fatal("wait phase did not poll with valid flag combination")
+	}
+}
+
 func TestAttachContractPanicsOnInvalidWaitDeclaration(t *testing.T) {
 	decl := waitTestDecl()
 	decl.Wait.Mode = "event" // not implemented

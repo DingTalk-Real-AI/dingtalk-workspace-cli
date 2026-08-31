@@ -490,6 +490,9 @@ func New(spec Spec) *cobra.Command {
 			if !output.UsesUnifiedResult(cmd) {
 				return fmt.Errorf("command %q uses ResultInvoke without an active unified-result rollout", cmd.CommandPath())
 			}
+			if err := validateWaitFlagCombination(cmd); err != nil {
+				return err
+			}
 			result, err := spec.ResultInvoke(ctx, toolArgs)
 			if err != nil {
 				return err
@@ -662,6 +665,17 @@ func registerWaitFlags(cmd *cobra.Command, spec Spec) {
 	}
 	cmd.Flags().Int(waitTimeoutFlagName, timeoutDefault,
 		"等待超时秒数；超时以 pending 结束（异步受理不是失败）")
+}
+
+// validateWaitFlagCombination rejects --wait-timeout without --wait.
+// Silently ignoring the timeout would let callers believe the command waited
+// for a terminal state when it actually returned immediately.
+func validateWaitFlagCombination(cmd *cobra.Command) error {
+	if cmd.Flags().Changed(waitTimeoutFlagName) && !BoolFlag(cmd, waitFlagName) {
+		return fmt.Errorf("--%s requires --%s: timeout without wait is silently ignored",
+			waitTimeoutFlagName, waitFlagName)
+	}
+	return nil
 }
 
 // runDeclaredWaitPhase runs the declared wait loop after a successful
