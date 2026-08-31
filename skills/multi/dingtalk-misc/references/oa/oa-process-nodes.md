@@ -381,4 +381,6 @@
 4. 如果用户要求覆盖默认流程，使用 `directAppointedApprovers`
 5. **所有 userId 必须通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取，严禁填姓名；多结果须消歧**
 
+预测出现 `targetSelect: true` 时，只能用高级 `--request` 精确绑定 `actorKey`。简单模式的 `--approvers` / `--cc-list` 是另一种请求语义，不能替代 `targetSelectActioners`，更不能在高级请求失败后作为降级重试。`actorType=approver` 绑定用户指定审批人，`actorType=notifier` 绑定用户指定抄送人；不要按节点顺序猜角色。
+
 > **交互优化：** 若用户在 `forecast-process` 前已指定审批人/抄送人姓名，`forecast-process` 返回自选节点后应自动映射，仅对未覆盖的自选节点追问，不要重复询问。详见 [oa-create.md](../oa-create.md) 的“流程预测与选人”。

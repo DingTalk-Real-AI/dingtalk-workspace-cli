@@ -62,6 +62,14 @@ func TestMultiOASkillProgressiveDisclosurePolicy(t *testing.T) {
 		"DDHolidayField",
 		"不能套用 `DDDateRangeField`",
 		"写后验证",
+		"不可降级与单次写入",
+		"对同一份确认摘要只调用一次 `create-instance`",
+		"不得自行撤销重建",
+		"不得删除整张明细或子字段",
+		"简单模式的 `--approvers` / `--cc-list` 不能替代模板自选节点",
+		"首次即停止",
+		"默认在本地投影控件摘要",
+		"不得用一次缺参调用来发现约束",
 	} {
 		if !strings.Contains(create, required) {
 			t.Errorf("OA create reference missing safety rule %q", required)
