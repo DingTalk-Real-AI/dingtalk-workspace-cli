@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-27T10:19:25.811119",
-  "count": 439,
+  "generated_at": "2026-08-31T19:41:26.085575",
+  "count": 442,
   "results": [
     {
       "suite": "semantic",
@@ -1065,6 +1065,26 @@
     {
       "suite": "semantic",
       "service": "attendance",
+      "command": "+calculate-approve-duration",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把可读日期时间转换为 MCP 毫秒时间戳，校验业务类型、时长模式、起止顺序及半天参数依赖，并完整保留服务端计算明细和提交所需数据。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "attendance",
+      "command": "+check-companion-schedules",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把成对的可读起止时间列表转换为同行人班次校验区间，校验审批类型与时间顺序，并把 valid=false 保留为成功的业务拒绝结果。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "attendance",
       "command": "+check-record",
       "risk": "read",
       "status": "reviewed_available",
@@ -1090,6 +1110,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "把补卡、请假、加班、外出、出差映射为审批模板类型；每项以非空唯一 processCode 作为稳定身份，approveType 精确绑定请求且 submitUrl 必须非空，允许同类型返回多个模板。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "attendance",
+      "command": "+get-complex-overtime-setting",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "校验员工列表并把可选生效日期转换为 MCP 毫秒时间戳，完整返回员工适用的交互单位和复杂加班规则。",
       "availability": "available"
     },
     {

@@ -47,8 +47,13 @@
 |---|---|---|
 | 查已提交的请假/加班/出差外出/补卡记录 | `dws attendance +list-approve` | `--users <ids> --types overtime,trip,leave,patch --start YYYY-MM-DD --end YYYY-MM-DD` |
 | 获取可提交表单入口 | `dws attendance +get-approve-template` | `--type leave\|overtime\|repair-check\|travel\|out`；只返回入口，不代填提交 |
+| 计算考勤审批时长 | `dws attendance +calculate-approve-duration` | `--biz-type 1..8 --duration-mode 1..5 --start <时间> --end <时间>`；半天模式补 `--half-start/--half-end AM\|PM`；只计算，不提交 |
+| 校验出差/外出同行人班次 | `dws attendance +check-companion-schedules` | `--approve-type 1\|2 --starts <时间列表> --ends <时间列表> --duration-unit DAY\|HOUR`；有同行人时传 `--principal-users`；`valid=false` 是业务拒绝 |
+| 查询员工适用的复杂加班规则 | `dws attendance +get-complex-overtime-setting` | `--users <ids> [--work-date <日期>]`；不传日期时由服务端使用当前时间 |
 
 查询接口把出差和外出合并为 `trip`；表单入口必须区分外出 `travel` 与出差 `out`。多个模板全部返回，将名称最匹配者置前，并用 `[表单名称](submitUrl)` 展示，禁止裸露 URL 或只返回一个模板。
+
+审批时长和同行人班次命令接受 `YYYY-MM-DD` 或 `yyyy-MM-dd HH:mm:ss`，由 DWS 转换为 MCP 所需的 13 位毫秒时间戳。同行人校验只判断所选人员的班次兼容性，不检查重复审批单；没有同行人时无需调用。`+calculate-approve-duration` 返回的 `compressedValue`、明细和提示应完整保留给后续审批流程，不自行拼装或改写。
 
 ### 补卡规则、加班规则与班次定义
 
@@ -108,9 +113,12 @@
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
+| `dws attendance +calculate-approve-duration` | read | 计算加班/请假/外出等考勤审批时长 |
+| `dws attendance +check-companion-schedules` | read | 校验出差/外出同行人的班次是否允许一起提交 |
 | `dws attendance +check-record` | read | 查询用户打卡流水（打卡时间/地点/定位方式） |
 | `dws attendance +check-result` | read | 查询用户打卡结果（迟到/早退/缺卡等） |
 | `dws attendance +get-approve-template` | read | 查询补卡/请假/加班/外出/出差审批提交链接 |
+| `dws attendance +get-complex-overtime-setting` | read | 查询员工在指定日期适用的复杂加班规则 |
 | `dws attendance +get-overtime-rule` | read | 根据加班规则主键 ID 查询加班规则详情 |
 | `dws attendance +list-approve` | read | 查询用户考勤审批单（补卡/加班/请假/出差外出） |
 | `dws attendance +search-adjustment-rule` | read | 查询当前用户可管理的补卡规则列表 |
