@@ -15,8 +15,8 @@ import (
 
 func TestCrossPlatformCoverageContractCommandTreeIncludesWukongCommands(t *testing.T) {
 	root := newContractCommand()
-	if !root.Hidden {
-		t.Fatal("contract root must remain hidden")
+	if root.Hidden {
+		t.Fatal("contract root must be visible after Agent Schema exposure")
 	}
 	if err := cobracmd.ValidateGroupTree(root); err != nil {
 		t.Fatalf("contract group declarations: %v", err)

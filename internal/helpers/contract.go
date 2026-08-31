@@ -11,16 +11,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
 // ──────────────────────────────────────────────────────────
-// dws contract — 智能合同（vendor extension，Hidden）
+// dws contract — 智能合同（vendor extension，Agent Schema 内暴露）
 //
-// 整棵子树保持 Hidden：Schema 完整性遍历按 IsAvailableCommand 过滤，
-// 因此这些叶子既不进 Agent Schema，也不需要 reviewed exclusion 条目。
-// 非叶子节点仍必须声明 GroupPolicy（ValidateGroupTree 对全树生效）。
+// ProductDecl 在 newContractCommand 顶部注册，产品 ID 为 "contract"；
+// 每个叶子必须由 declareContractSchema 声明 ContractDecl（Identity /
+// Description / Interface / Selection / Parameters / Safety），否则装配
+// 会拒绝该叶子。非叶子节点由 newGroupCommand 提供 GroupPolicy。
 //
 // MCP: queryContracts, createContract, draft_contract_by_minutes,
 //      queryContractDetails, queryContractQuantityByType,
@@ -40,12 +42,28 @@ import (
 // ──────────────────────────────────────────────────────────
 
 func newContractCommand() *cobra.Command {
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "contract",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "钉钉智能合同：台账查询、批量导入、听记+模版起草、审查、归档、项目、相对方、账款管理",
+			UseWhen: []string{
+				"用户要查合同台账列表、详情或状态统计，创建、批量导入、归档合同",
+				"用户要按 AI 听记和模版起草合同",
+				"用户要发起合同审查（权益、解析、任务、结果）",
+				"用户要管理合同项目、相对方、工商信息或收付款账款",
+			},
+			AvoidWhen: []string{
+				"通用钉盘文件查找、上传、下载走 drive；合同文件的钉盘元数据也从 drive 取",
+				"AI 听记内容查询走 minutes；仅从听记获取 taskUuid 后回本产品调用 draft",
+				"OA 审批实例的查询、同意、拒绝、转交、撤销走 misc，不要与 process-templates 混淆",
+			},
+		},
+	})
 	root := newGroupCommand(&cobra.Command{
-		Use:    "contract",
-		Short:  "智能合同管理",
-		Long:   `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、合同审查（权益、任务、解析、结果）、项目管理、相对方管理。`,
-		Hidden: true,
-		RunE:   groupRunE,
+		Use:   "contract",
+		Short: "智能合同管理",
+		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、合同审查（权益、任务、解析、结果）、项目管理、相对方管理。`,
+		RunE:  groupRunE,
 	})
 
 	// ── record ────────────────────────────────────────────────
@@ -1563,6 +1581,56 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 		projectCmd,
 		subjectCmd,
 	)
+
+	// Attach ContractDecl metadata to all leaf commands so the contract tree
+	// enters the Agent Schema surface (identity, safety, interface, selection,
+	// parameters). Must run after flags are registered and before return.
+	declareContractSchema(&contractSchemaRefs{
+		RecordList:            recordListCmd,
+		RecordGet:             recordGetCmd,
+		RecordQuantityByType:  recordQuantityByTypeCmd,
+		RecordCreate:          recordCreateCmd,
+		ImportBatch:           importBatchCmd,
+		ImportBatchResult:     importBatchResultCmd,
+		ProcessTemplates:      processTemplatesCmd,
+		FileDirectories:       fileDirectoriesCmd,
+		Draft:                 draftCmd,
+		ReviewBenefit:         reviewBenefitCmd,
+		ReviewCreate:          reviewCreateCmd,
+		ReviewAnalysis:        reviewAnalysisCmd,
+		ReviewResult:          reviewResultCmd,
+		AccountCreate:         accountCreateCmd,
+		AccountUpdate:         accountUpdateCmd,
+		AccountGet:            accountGetCmd,
+		AccountList:           accountListCmd,
+		AccountDelete:         accountDeleteCmd,
+		Archive:               archCmd,
+		ProjectAdd:            projectAddCmd,
+		ProjectDelete:         projectDeleteCmd,
+		ProjectUpdate:         projectUpdateCmd,
+		ProjectSetStatus:      projectSetStatusCmd,
+		ProjectList:           projectListCmd,
+		ProjectDigests:        projectDigestsCmd,
+		ProjectDetail:         projectDetailCmd,
+		ProjectExport:         projectExportCmd,
+		ProjectImportTemplate: projectImportTemplateCmd,
+		ProjectImport:         projectImportCmd,
+		ProjectImportResult:   projectImportResultCmd,
+		SubjectAdd:            subjectAddCmd,
+		SubjectList:           subjectListCmd,
+		SubjectDetail:         subjectDetailCmd,
+		SubjectUpdate:         subjectUpdateCmd,
+		SubjectDelete:         subjectDeleteCmd,
+		SubjectBatchDelete:    subjectBatchDeleteCmd,
+		SubjectSort:           subjectSortCmd,
+		SubjectDetectRisk:     subjectRiskCmd,
+		SubjectBaseInfo:       subjectBaseInfoCmd,
+		SubjectAutoFill:       subjectAutoFillCmd,
+		SubjectExport:         subjectExportCmd,
+		SubjectImportTemplate: subjectImportTemplateCmd,
+		SubjectImport:         subjectImportCmd,
+		SubjectImportResult:   subjectImportResultCmd,
+	})
 
 	return root
 }
