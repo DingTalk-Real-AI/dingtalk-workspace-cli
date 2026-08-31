@@ -426,3 +426,56 @@ func TestRunEventTimesOutAsPendingWhileBlocked(t *testing.T) {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 }
+
+// infiniteEventStream keeps returning events from other resources forever,
+// simulating a busy event channel where the target resource never appears.
+type infiniteEventStream struct {
+	count int
+}
+
+func (s *infiniteEventStream) Recv(context.Context) (PollDoc, error) {
+	s.count++
+	// Always return events for a different resource
+	return PollDoc{"process_instance_id": "other-resource", "result": map[string]any{"status": "COMPLETED"}}, nil
+}
+
+func TestRunEventTimesOutDespiteContinuousIrrelevantEvents(t *testing.T) {
+	// Regression: the deadline must be respected even when the stream keeps
+	// returning buffered events (especially irrelevant events from other
+	// resources). Without the per-iteration ctx.Err() check, this would loop
+	// forever because Recv never blocks and never errors.
+	spec := eventLoopSpec()
+	spec.Timeout = 5 * time.Millisecond
+	stream := &infiniteEventStream{}
+	outcome, err := RunEvent(context.Background(), spec, "job-1", stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.TimedOut || outcome.Outcome != contract.ResultOutcomePending {
+		t.Fatalf("outcome=%+v, want timed-out pending", outcome)
+	}
+	if stream.count == 0 {
+		t.Fatal("stream was never polled")
+	}
+}
+
+func TestRunEventPropagatesCancellationOnRecvError(t *testing.T) {
+	// When Recv returns an error and the context was cancelled concurrently,
+	// the cancellation must propagate (not be wrapped as stream-ended).
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &cancelOnRecvStream{cancel: cancel}
+	_, err := RunEvent(ctx, eventLoopSpec(), "job-1", stream)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want context.Canceled", err)
+	}
+}
+
+// cancelOnRecvStream cancels the context and returns an error on Recv.
+type cancelOnRecvStream struct {
+	cancel context.CancelFunc
+}
+
+func (s *cancelOnRecvStream) Recv(context.Context) (PollDoc, error) {
+	s.cancel()
+	return nil, errors.New("transport error")
+}

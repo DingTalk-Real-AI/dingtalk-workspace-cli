@@ -251,6 +251,12 @@ func RunEvent(ctx context.Context, spec EventLoopSpec, resource string, stream E
 	attempts := 0
 	lastStatus := ""
 	for {
+		if err := ctx.Err(); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return Outcome{Status: lastStatus, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}, nil
+			}
+			return Outcome{Status: lastStatus, Attempts: attempts}, err
+		}
 		doc, err := stream.Recv(ctx)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
