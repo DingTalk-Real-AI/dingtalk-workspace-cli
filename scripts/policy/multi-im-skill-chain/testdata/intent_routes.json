@@ -160,6 +160,17 @@
         "skills/multi/dingtalk-event/SKILL.md",
         "skills/multi/dingtalk-event/references/event-oa.md"
       ]
+    },
+    {
+      "id": "event.listen.todo",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-todo.md"
+      ]
     }
   ]
 }

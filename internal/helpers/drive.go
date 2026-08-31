@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -2180,14 +2182,17 @@ func newDriveCommand() *cobra.Command {
 			switch taskType {
 			case "export", "import", "copy", "move":
 			default:
-				return fmt.Errorf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType)
+				return apperrors.NewValidation(
+					fmt.Sprintf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType),
+					apperrors.WithReason("invalid_enum"),
+				)
 			}
 
 			if deps.Caller.DryRun() {
-				deps.Out.PrintKeyValue("操作", "查询异步任务")
-				deps.Out.PrintKeyValue("类型", taskType)
-				deps.Out.PrintKeyValue("ID", taskID)
-				return nil
+				return output.StoreResult(cmd.Context(), output.Success(map[string]any{
+					"id":   taskID,
+					"type": taskType,
+				}, output.WithDryRun()))
 			}
 
 			// query_task 工具注册在 drive (dingpan) MCP server 上，需显式路由。
@@ -2195,12 +2200,13 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return deps.Out.PrintJSON(result)
+			return output.StoreResult(cmd.Context(), output.Success(result))
 		},
 	}
 	taskGetCmd.Flags().String("type", "", "任务类型: export|import|copy|move (必填)")
 	taskGetCmd.Flags().String("id", "", "任务 ID (必填)")
 	DeclareLeafMetadata(taskGetCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -2237,6 +2243,27 @@ func newDriveCommand() *cobra.Command {
 			Parameters: []contract.ParamDecl{
 				{Name: "id", Property: "taskId", Required: boolPtr(true)},
 				{Name: "type", Property: "taskType", Required: boolPtr(true)},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"归一化后的异步任务状态和结果",
+					"properties":{
+						"id":{"type":"string","description":"任务 ID"},
+						"type":{"type":"string","description":"任务类型","enum":["export","import","copy","move"]},
+						"status":{"type":"string","description":"归一化任务状态","enum":["PENDING","PROCESSING","SUCCESS","FAILED","PARTIAL_FAILED","TIMEOUT"]},
+						"resultUrl":{"type":"string","description":"任务产出的下载地址"},
+						"resultName":{"type":"string","description":"任务产出的文件名称"},
+						"message":{"type":"string","description":"任务状态说明或失败原因"},
+						"createTime":{"type":"string","description":"任务创建时间"}
+					},
+					"required":["id","type"],
+					"additionalProperties":false
+				}`),
 			},
 		},
 	})

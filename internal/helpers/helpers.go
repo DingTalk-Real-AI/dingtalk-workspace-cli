@@ -26,18 +26,38 @@ import (
 // avoids a mass-rename while keeping reusable command-resolution and flag
 // utilities in cmdutil.
 var (
-	groupRunE                       = cmdutil.GroupRunE
-	hintSubCmd                      = cmdutil.HintSubCmd
-	mustGetFlag                     = cmdutil.MustGetFlag
-	flagOrFallback                  = cmdutil.FlagOrFallback
-	mustFlagOrFallback              = cmdutil.MustFlagOrFallback
-	validateRequiredFlags           = cmdutil.ValidateRequiredFlags
-	validateRequiredFlagWithAliases = cmdutil.ValidateRequiredFlagWithAliases
-	parseISOTimeToMillis            = cmdutil.ParseISOTimeToMillis
-	validateTimeRange               = cmdutil.ValidateTimeRange
-	helperSleep                     = time.Sleep
-	helperAfter                     = time.After
+	groupRunE            = cmdutil.GroupRunE
+	hintSubCmd           = cmdutil.HintSubCmd
+	mustGetFlag          = cmdutil.MustGetFlag
+	flagOrFallback       = cmdutil.FlagOrFallback
+	mustFlagOrFallback   = cmdutil.MustFlagOrFallback
+	parseISOTimeToMillis = cmdutil.ParseISOTimeToMillis
+	validateTimeRange    = cmdutil.ValidateTimeRange
+	helperSleep          = time.Sleep
+	helperAfter          = time.After
 )
+
+func validateRequiredFlags(cmd *cobra.Command, names ...string) error {
+	err := cmdutil.ValidateRequiredFlags(cmd, names...)
+	if err == nil {
+		return nil
+	}
+	return apperrors.NewValidation(
+		err.Error(),
+		apperrors.WithReason("missing_required_flags"),
+	)
+}
+
+func validateRequiredFlagWithAliases(cmd *cobra.Command, primary string, aliases ...string) error {
+	err := cmdutil.ValidateRequiredFlagWithAliases(cmd, primary, aliases...)
+	if err == nil {
+		return nil
+	}
+	return apperrors.NewValidation(
+		err.Error(),
+		apperrors.WithReason("missing_required_flag"),
+	)
+}
 
 // newGroupCommand declares the ordinary navigation policy used by helper
 // command containers. The unified framework compiles this declaration into

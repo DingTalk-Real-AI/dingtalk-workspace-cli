@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +33,13 @@ func executeDriveEdge(t *testing.T, caller *scriptedToolCaller, args ...string) 
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "drive"}, args...)
-	return root.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func TestCrossPlatformCoverageParseDriveUploadInfoRemainingCoverage(t *testing.T) {
