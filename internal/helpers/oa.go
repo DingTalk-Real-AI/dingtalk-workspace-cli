@@ -713,6 +713,12 @@ func newOaCommand() *cobra.Command {
 	// products.oa). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "oa",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("OA 审批深度指南", "dingtalk-misc", "references/oa.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询和处理 OA 审批实例、任务、记录、抄送、评论与附件授权",
 			UseWhen: []string{

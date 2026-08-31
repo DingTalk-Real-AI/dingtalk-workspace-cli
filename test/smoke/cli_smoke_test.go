@@ -467,7 +467,11 @@ func runCLIWithTimeout(t *testing.T, env []string, timeout time.Duration, args .
 	defer cancel()
 	processArgs := append([]string{"-test.run=^TestCLIHelperProcess$", "--"}, args...)
 	cmd := exec.CommandContext(ctx, os.Args[0], processArgs...)
-	cmd.Env = env
+	// When this package is run with -cover, the helper process is itself a
+	// coverage-instrumented test binary. Give it a writable output directory so
+	// the Go runtime does not append a GOCOVERDIR warning to the CLI's JSON
+	// stderr and make otherwise valid structured errors fail to decode.
+	cmd.Env = append(append([]string(nil), env...), "GOCOVERDIR="+t.TempDir())
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

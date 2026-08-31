@@ -64,7 +64,7 @@ RUNTIME_CONTRACT_END = "<!-- DWS_RUNTIME_CONTRACT_END -->"
 # here only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
-COMPACT_PRODUCT_SERVICES = {"aitable", "chat", "doc", "drive"}
+COMPACT_PRODUCT_SERVICES = {"aitable", "chat", "doc", "drive", "minutes"}
 
 
 def md_escape(value: Any) -> str:
@@ -177,14 +177,20 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
     public_count = sum(1 for item_service, _ in load_public_catalog() if item_service == service)
     if service in {"doc", "drive"}:
         discovery = """已知意图按下方路由。"""
+    elif service == "aitable":
+        discovery = """已知 leaf 直接执行。只有参数不确定时，最多读取一次 `dws schema --cli-path "aitable <leaf>" --compact --format json`；仅当该 compact leaf Schema 与 Cobra 实际不一致时，才读取同一 leaf 的 `dws aitable <leaf> --help`。禁止用父级 Help、产品 Help 或完整 Catalog 探索命令；一个 Case 一旦读取 Reference，就不再读取 Help 或第二个 Reference。"""
     else:
         discovery = """已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。"""
+    if service == "aitable":
+        fallback = """仅当根路由、精确 task reference 和 `references/aitable.md` 的低频原子索引都无法定位能力时，才执行 `dws shortcut list --service aitable --format json` 做最终回退；不要为已知意图加载完整 Shortcut Catalog 或产品级 Schema。"""
+    else:
+        fallback = f"""仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。"""
     return f"""{PRODUCT_START}
 ## Shortcut 发现（按需）
 
 `{md_escape(service)}` 当前有 {public_count} 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。{discovery}
 
-仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
+{fallback}
 {PRODUCT_END}"""
 
 
@@ -211,7 +217,10 @@ def update_runtime_contract(check: bool) -> list[Path]:
     targets = [
         ROOT / "skills" / "multi" / "dingtalk-chat" / "SKILL.md",
         ROOT / "skills" / "multi" / "dingtalk-doc" / "SKILL.md",
+        ROOT / "skills" / "multi" / "dingtalk-minutes" / "SKILL.md",
         SHARED_SKILL,
+        ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "report.md",
+        ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "sheet.md",
     ]
     for path in targets:
         text = path.read_text(encoding="utf-8")

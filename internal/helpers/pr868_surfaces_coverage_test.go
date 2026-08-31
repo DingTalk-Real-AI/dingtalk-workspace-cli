@@ -30,6 +30,12 @@ func executePR868Command(t *testing.T, root *cobra.Command, args ...string) erro
 	return root.Execute()
 }
 
+func newMinutesCommandWithYesForTest() *cobra.Command {
+	cmd := newMinutesCommand()
+	cmd.PersistentFlags().Bool("yes", false, "confirm test write")
+	return cmd
+}
+
 func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
 	t.Run("permission add requires explicit policy", func(t *testing.T) {
 		caller := &scriptedToolCaller{}
@@ -57,7 +63,7 @@ func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
 	t.Run("hot-word delete executes", func(t *testing.T) {
 		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
 		installScriptedCaller(t, caller)
-		if err := executePR868Command(t, newMinutesCommand(), "hot-word", "delete", "--words", "钉钉"); err != nil {
+		if err := executePR868Command(t, newMinutesCommandWithYesForTest(), "hot-word", "delete", "--words", "钉钉", "--yes"); err != nil {
 			t.Fatalf("hot-word delete: %v", err)
 		}
 		if caller.tool != "delete_personal_hotword" {
@@ -74,7 +80,7 @@ func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
 	t.Run("permission apply alias uuid", func(t *testing.T) {
 		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
 		installScriptedCaller(t, caller)
-		if err := executePR868Command(t, newMinutesCommand(), "permission", "apply", "--uuid", "task-2", "--policy", "2"); err != nil {
+		if err := executePR868Command(t, newMinutesCommandWithYesForTest(), "permission", "apply", "--uuid", "task-2", "--policy", "2", "--yes"); err != nil {
 			t.Fatalf("permission apply alias: %v", err)
 		}
 		if caller.tool != "apply_minutes_permission" {
@@ -173,6 +179,85 @@ func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
 		}
 		if err := executePR868Command(t, newMinutesCommand(), "audio-memo", "list", "--end", "bad"); err == nil {
 			t.Fatal("expected bad end")
+		}
+	})
+}
+
+func TestCrossPlatformCoverageMinutesAtomicConfirmationPolicy(t *testing.T) {
+	protected := []struct {
+		name string
+		args []string
+	}{
+		{name: "upload notify", args: []string{"upload", "create-and-notify", "--file-name", "meeting.mp4", "--file-size", "10"}},
+	}
+	for _, test := range protected {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
+			installScriptedCaller(t, caller)
+			err := executePR868Command(t, newMinutesCommand(), test.args...)
+			if err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+				t.Fatalf("unconfirmed error = %v", err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("remote calls before confirmation = %d", caller.calls)
+			}
+		})
+	}
+
+	notRequired := []struct {
+		name string
+		args []string
+	}{
+		{name: "update title", args: []string{"update", "title", "--id", "u1", "--title", "新标题"}},
+		{name: "record start", args: []string{"record", "start"}},
+		{name: "record pause", args: []string{"record", "pause", "--id", "u1"}},
+		{name: "record resume", args: []string{"record", "resume", "--id", "u1"}},
+		{name: "record stop", args: []string{"record", "stop", "--id", "u1"}},
+		{name: "update summary", args: []string{"update", "summary", "--id", "u1", "--content", "新纪要"}},
+		{name: "speaker replace", args: []string{"speaker", "replace", "--id", "u1", "--from", "甲", "--to", "乙"}},
+		{name: "hot-word delete", args: []string{"hot-word", "delete", "--words", "旧词"}},
+		{name: "replace text", args: []string{"replace-text", "--id", "u1", "--search", "旧", "--replace", "新"}},
+		{name: "permission add", args: []string{"permission", "add", "--ids", "u1", "--member-uids", "m1", "--policy", "4"}},
+		{name: "permission remove", args: []string{"permission", "remove", "--ids", "u1", "--member-uids", "m1"}},
+		{name: "permission apply", args: []string{"permission", "apply", "--id", "u1", "--policy", "4"}},
+		{name: "mind graph create", args: []string{"mind-graph", "create", "--id", "u1"}},
+		{name: "speaker summary create", args: []string{"speaker", "summary", "create", "--ids", "u1"}},
+		{name: "hot-word add", args: []string{"hot-word", "add", "--words", "新词"}},
+		{name: "upload create", args: []string{"upload", "create", "--file-name", "meeting.mp4", "--file-size", "10"}},
+		{name: "upload complete", args: []string{"upload", "complete", "--session-id", "s1"}},
+		{name: "upload cancel", args: []string{"upload", "cancel", "--session-id", "s1"}},
+	}
+	for _, test := range notRequired {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
+			installScriptedCaller(t, caller)
+			if err := executePR868Command(t, newMinutesCommand(), test.args...); err != nil {
+				t.Fatalf("not-required command error = %v", err)
+			}
+			if caller.calls != 1 {
+				t.Fatalf("remote calls = %d, want 1", caller.calls)
+			}
+		})
+	}
+
+	t.Run("legacy message flag stops before write", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
+		installScriptedCaller(t, caller)
+		err := executePR868Command(t, newMinutesCommand(), "upload", "create", "--file-name", "meeting.mp4", "--file-size", "10", "--enable-message-card")
+		if err == nil || !strings.Contains(err.Error(), "create-and-notify") || caller.calls != 0 {
+			t.Fatalf("legacy flag err=%v calls=%d", err, caller.calls)
+		}
+	})
+
+	t.Run("notifying upload forces message card after confirmation", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
+		installScriptedCaller(t, caller)
+		if err := executePR868Command(t, newMinutesCommandWithYesForTest(), "upload", "create-and-notify", "--file-name", "meeting.mp4", "--file-size", "10", "--yes"); err != nil {
+			t.Fatalf("confirmed notifying upload: %v", err)
+		}
+		option, _ := caller.args["minutesOption"].(map[string]any)
+		if option["enableMessageCard"] != true {
+			t.Fatalf("notifying upload args=%#v", caller.args)
 		}
 	})
 }

@@ -25,6 +25,12 @@ func newSheetCommand() *cobra.Command {
 	// products.sheet). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "sheet",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("电子表格深度指南", "dingtalk-misc", "references/sheet.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "导入本地 Excel，或创建、读取、编辑、导出和审计钉钉在线电子表格（axls），并管理工作表、区域、历史 revision、筛选、图表、图片与格式。",
 			UseWhen: []string{
@@ -120,6 +126,7 @@ func newSheetCommand() *cobra.Command {
   dws sheet template search                     搜索表格模板
   dws sheet template apply                      应用表格模板创建新表格文档`,
 	})
+	installDocDelegationAuth(root)
 
 	// ── Build commands via factory functions ──────────────────────────
 	workbookCmds := newWorkbookCmds()

@@ -339,10 +339,13 @@ func SaveLoginTokenData(configDir string, data *TokenData) error {
 	if data == nil {
 		return fmt.Errorf("token data is empty")
 	}
+	data.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(configDir, data); err != nil {
+		return fmt.Errorf("local login state cannot be safely updated: %w", err)
+	}
 	if err := prepareLoginPersistence(configDir); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
-	data.FreshAuthorization = true
 	if err := preflightTokenWritePersistence(configDir, data); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}

@@ -10,6 +10,12 @@ func newLiveCommand() *cobra.Command {
 	// products.live). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "live",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("直播深度指南", "dingtalk-misc", "references/live.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询当前用户发起的直播列表",
 			UseWhen: []string{

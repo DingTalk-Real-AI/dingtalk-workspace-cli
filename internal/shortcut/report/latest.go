@@ -4,6 +4,8 @@
 package report
 
 import (
+	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,16 +15,23 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
+const (
+	reportLatestPageSize = 20
+	reportLatestMaxPages = 10
+	reportLatestMaxItems = reportLatestPageSize * reportLatestMaxPages
+	reportLatestTimeout  = 2 * time.Minute
+)
+
 var ReportLatest = shortcut.Shortcut{
 	Service: "report", Command: "+report-latest", Product: "report",
 	Description:   "读取我最近提交的一篇日志详情",
-	Intent:        "只想查看明确 20 天内自己提交的最新日志详情时使用；默认最近 20 天，也可成对指定创建时间窗，完整验证候选后按精确 reportId 读回详情。",
+	Intent:        "只想查看明确 20 天内自己提交的最新日志详情时使用；默认最近 20 天，也可成对指定创建时间窗，有界遍历全部候选页后按精确 reportId 读回详情。",
 	Risk:          shortcut.RiskRead,
 	Safety:        reportReadSafety(),
 	OutputRollout: output.RolloutUnifiedActive,
 	Contract: reportContract(
 		"+report-latest", "读取我最近提交的一篇日志详情",
-		"只想查看明确 20 天内自己提交的最新日志详情时使用；默认最近 20 天，也可成对指定创建时间窗，完整验证候选后按精确 reportId 读回详情。",
+		"只想查看明确 20 天内自己提交的最新日志详情时使用；默认最近 20 天，也可成对指定创建时间窗，有界遍历全部候选页后按精确 reportId 读回详情。",
 		reportLatestResult(), nil,
 		[]contract.ParamDecl{
 			{Name: "keyword", Property: "report_template_name"},
@@ -51,8 +60,21 @@ var ReportLatest = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		const listOperation = "report/get_send_report_list"
+		originalContext := rt.Command().Context()
+		if originalContext == nil {
+			originalContext = context.Background()
+		}
+		boundedContext, cancel := context.WithTimeout(originalContext, reportLatestTimeout)
+		rt.Command().SetContext(boundedContext)
+		defer func() {
+			rt.Command().SetContext(originalContext)
+			cancel()
+		}()
+
 		now := time.Now()
-		end := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+		// 固定在调用开始时刻，避免把未来的“当天结束”放进查询窗。后者会让
+		// 分页期间新提交的日志插入候选集合，造成重复、漏项或游标漂移。
+		end := now
 		start := end.Add(-reportMaximumOutboxDays * 24 * time.Hour)
 		if rt.Changed("start") {
 			startMillis, endMillis, err := reportValidateRange("start", rt.Str("start"), "end", rt.Str("end"), reportMaximumOutboxDays)
@@ -62,25 +84,18 @@ var ReportLatest = shortcut.Shortcut{
 			start, end = time.UnixMilli(startMillis), time.UnixMilli(endMillis)
 		}
 		params := map[string]any{
-			"cursor": 0, "size": 20,
+			"size":      reportLatestPageSize,
 			"startTime": start.UnixMilli(), "endTime": end.UnixMilli(),
 		}
 		if keyword := strings.TrimSpace(rt.Str("keyword")); keyword != "" {
 			params["report_template_name"] = keyword
 		}
-		data, err := rt.CallMCPData("report", "get_send_report_list", params)
+		entries, err := reportCollectLatestCandidates(rt, params, listOperation)
 		if err != nil {
 			return err
-		}
-		entries, page, err := reportProjectEntries(data, listOperation)
-		if err != nil {
-			return err
-		}
-		if page.HasMore {
-			return reportResponseError(listOperation, "incomplete_latest_candidates", "发件箱仍有后续页，不能从不完整集合宣称最新日志")
 		}
 		if len(entries) == 0 {
-			return apperrors.NewValidation("最近 20 天没有可验证的已发送日志", apperrors.WithReason("no_sent_report_fixture"))
+			return apperrors.NewValidation("所选时间窗内没有可验证的已发送日志", apperrors.WithReason("no_sent_report_fixture"))
 		}
 		latestID, err := reportLatestEntryID(entries, listOperation)
 		if err != nil {
@@ -97,6 +112,58 @@ var ReportLatest = shortcut.Shortcut{
 		}
 		return rt.Output(map[string]any{"report": detail})
 	},
+}
+
+func reportCollectLatestCandidates(rt *shortcut.RuntimeContext, baseParams map[string]any, operation string) ([]map[string]any, error) {
+	entries := make([]map[string]any, 0, reportLatestPageSize)
+	seen := make(map[string]int64, reportLatestPageSize)
+	cursor := 0
+	for pageIndex := 0; pageIndex < reportLatestMaxPages; pageIndex++ {
+		params := make(map[string]any, len(baseParams)+1)
+		for key, value := range baseParams {
+			params[key] = value
+		}
+		params["cursor"] = cursor
+		data, err := rt.CallMCPData("report", "get_send_report_list", params)
+		if err != nil {
+			return nil, err
+		}
+		pageEntries, page, err := reportProjectEntries(data, operation)
+		if err != nil {
+			return nil, err
+		}
+		if err := reportValidateContinuation(page, cursor, operation); err != nil {
+			return nil, err
+		}
+		for _, entry := range pageEntries {
+			id, _ := entry["reportId"].(string)
+			created, _ := entry["createTime"].(int64)
+			if previous, duplicate := seen[id]; duplicate {
+				if previous != created {
+					return nil, reportResponseError(operation, "conflicting_duplicate_item", "Report 候选分页中的重复 reportId 具有冲突 createTime")
+				}
+				// 服务端分页边界偶尔会重叠。同一 ID、同一排序键属于可安全
+				// 去重的重复证据，不应让完整读取失败。
+				continue
+			}
+			if len(entries) >= reportLatestMaxItems {
+				return nil, reportResponseError(operation, "latest_item_limit_reached", "最新日志候选超过有界条数上限")
+			}
+			seen[id] = created
+			entries = append(entries, entry)
+		}
+		if !page.HasMore {
+			return entries, nil
+		}
+		// reportProjectEntries 已将 continuation 校验为整数并规范化为十进制字符串。
+		next, _ := strconv.Atoi(page.Next)
+		cursor = next
+	}
+	return nil, reportResponseError(
+		operation,
+		"latest_page_limit_reached",
+		"达到最新日志候选分页上限时服务端仍有后续页；拒绝从不完整集合宣称最新日志",
+	)
 }
 
 func reportLatestEntryID(entries []map[string]any, operation string) (string, error) {

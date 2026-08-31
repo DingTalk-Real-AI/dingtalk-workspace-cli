@@ -25,6 +25,7 @@ import (
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -34,6 +35,16 @@ type chatMessageSearchCall struct {
 	productID string
 	toolName  string
 	args      map[string]any
+}
+
+func chatCallsByTool(calls []chatMessageSearchCall, toolName string) []chatMessageSearchCall {
+	filtered := make([]chatMessageSearchCall, 0, 1)
+	for _, call := range calls {
+		if call.toolName == toolName {
+			filtered = append(filtered, call)
+		}
+	}
+	return filtered
 }
 
 type chatMessageSearchCaller struct {
@@ -56,7 +67,7 @@ func (c *chatMessageSearchCaller) CallTool(_ context.Context, productID, toolNam
 		if c.failPreflight {
 			return nil, errors.New("conversation not found")
 		}
-		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `"}}`
+		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}`
 	}
 	if toolName == "search_messages_by_keyword" || toolName == "search_messages" {
 		if c.searchError != nil {
@@ -683,6 +694,13 @@ type chatChangedContractCaller struct {
 func (c *chatChangedContractCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
 	text := `{}`
+	if toolName == "list_messages_by_ids" {
+		messageID := args["openMsgIds"].([]string)[0]
+		text = `{"result":[{"openMessageId":"` + messageID + `","openConversationId":"cid"}]}`
+	}
+	if toolName == "get_conversation_info" {
+		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}`
+	}
 	if c.resolveUsers && toolName == "get_user_info_by_user_ids" {
 		text = `{"result":[{"userId":"123","openDingTalkId":"open-123"}]}`
 	}
@@ -705,7 +723,13 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(append(append([]string(nil), args...), "--yes"))
-	return cmd.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := cmd.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.T) {
@@ -893,10 +917,11 @@ func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			if got := caller.calls[0].args["clawType"]; got != "qwenwork" {
+			if got := sendCalls[0].args["clawType"]; got != "qwenwork" {
 				t.Fatalf("clawType = %#v, want qwenwork", got)
 			}
 		})
@@ -926,10 +951,11 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			got, present := caller.calls[0].args["clawType"]
+			got, present := sendCalls[0].args["clawType"]
 			if !present || got != "" {
 				t.Fatalf("clawType = %#v, present = %v; want present empty string", got, present)
 			}
@@ -1050,10 +1076,11 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			args := caller.calls[0].args
+			args := sendCalls[0].args
 			gotAtAll, hasAtAll := args["atAll"]
 			if tc.wantAtAll {
 				if !hasAtAll || gotAtAll != true {

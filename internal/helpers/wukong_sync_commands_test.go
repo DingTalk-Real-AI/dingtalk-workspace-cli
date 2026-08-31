@@ -93,7 +93,7 @@ func TestWukongSyncDocCommands(t *testing.T) {
 	requireWukongSyncFlags(t, importCmd, "file", "folder", "workspace", "name", "folder-id", "workspace-id")
 
 	importGetCmd := requireWukongSyncCommand(t, root, "import", "get")
-	requireWukongSyncFlags(t, importGetCmd, "task-id")
+	requireWukongSyncFlags(t, importGetCmd, "task-id", "folder", "workspace")
 }
 
 func TestWukongSyncSheetCommands(t *testing.T) {

@@ -13,6 +13,7 @@
 | 重要更新与恢复点 | `dws doc +checkpoint-update` | [doc-update.md](doc/doc-update.md) |
 | 导出本地文件 | `dws doc +export` | [doc-export.md](doc/doc-export.md) |
 | 导入为在线对象 | `dws doc +import` | [doc-import.md](doc/doc-import.md) |
+| 列出文档空间/文件夹下的文档 | `dws doc +list --workspace <WS_ID>` | 知识库层级管理切 `dingtalk-wiki` |
 | 评论聚合与操作 | `dws doc +review/+comment-*` | [doc-comment.md](doc/doc-comment.md) |
 | 媒体插入、列表、下载 | `dws doc +media-*` | [doc-media.md](doc/doc-media.md) |
 

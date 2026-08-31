@@ -17,12 +17,15 @@ import (
 	"bytes"
 	stderrors "errors"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -76,6 +79,223 @@ func TestRootHelpShowsFeedbackEntry(t *testing.T) {
 	if !strings.Contains(help, "\n    "+feedbackFormURL+"\n") {
 		t.Fatalf("feedback URL must occupy one unwrapped line:\n%s", help)
 	}
+	if !strings.HasSuffix(strings.TrimSpace(help), feedbackFormURL) {
+		t.Fatalf("Feedback must remain the final root Help section:\n%s", help)
+	}
+}
+
+func TestRootHelpShowsAgentQuickstartAndSafetyModel(t *testing.T) {
+	help := executeHelpOutput(t, "--help")
+	for _, want := range []string{
+		"Agent Quickstart:",
+		"dws <service> --help",
+		"dws <path> --help",
+		`dws schema --cli-path "<path>" --compact -f json`,
+		"Prefer structured output",
+		"Use dry-run only when the leaf explicitly supports it",
+		"Never add --yes without explicit user confirmation",
+		"Safety model:",
+		"effect=read|write|destructive",
+		"risk=low|medium|high",
+		"confirmation=not_required|user_required",
+		"idempotency=idempotent|retryable|non_idempotent|unknown",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("root Help missing %q:\n%s", want, help)
+		}
+	}
+	if strings.Index(help, "Agent Quickstart:") > strings.Index(help, "Feedback:") ||
+		strings.Index(help, "Safety model:") > strings.Index(help, "Feedback:") {
+		t.Fatalf("Agent guidance must render before final Feedback section:\n%s", help)
+	}
+}
+
+func TestLeafHelpRendersSelectionSafetyAndReferences(t *testing.T) {
+	for _, tc := range []struct {
+		path         string
+		wantEffect   string
+		wantConfirm  string
+		wantSkill    string
+		wantDocument string
+	}{
+		{path: "dev app list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
+		{path: "chat message send", wantEffect: "write", wantConfirm: "not_required", wantSkill: "dingtalk-chat", wantDocument: "references/chat.md"},
+		{path: "dev app delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
+	} {
+		t.Run(strings.ReplaceAll(tc.path, " ", "_"), func(t *testing.T) {
+			root := NewRootCommand()
+			meta, ok := cli.ResolveMeta(tc.path)
+			if !ok {
+				t.Fatalf("ResolveMeta(%q) missing", tc.path)
+			}
+			out := executeHelpOutputWithRoot(t, root, append(strings.Fields(tc.path), "--help")...)
+			for _, want := range []string{
+				"When to use:", meta.Selection.UseWhen[0],
+				"Avoid when:", meta.Selection.AvoidWhen[0],
+				"Safety: effect=" + tc.wantEffect,
+				"confirmation=" + tc.wantConfirm,
+				"idempotency=" + meta.Safety.Idempotency,
+				"Related skills:", tc.wantSkill,
+				"Documentation:", tc.wantDocument,
+			} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("%s Help missing %q:\n%s", tc.path, want, out)
+				}
+			}
+			for _, once := range []string{"When to use:", "Avoid when:", "Safety:", "Related skills:", "Documentation:"} {
+				if count := strings.Count(out, once); count != 1 {
+					t.Fatalf("%s Help contains %q %d times, want once:\n%s", tc.path, once, count, out)
+				}
+			}
+			if tc.wantConfirm == "user_required" && !strings.Contains(out, "Do not use --yes until the user explicitly confirms") {
+				t.Fatalf("%s Help missing explicit --yes confirmation boundary:\n%s", tc.path, out)
+			}
+		})
+	}
+}
+
+func TestServiceAndHelpCommandRenderReferencesOnce(t *testing.T) {
+	for _, args := range [][]string{
+		{"chat", "--help"},
+		{"im", "--help"},
+		{"help", "chat"},
+		{"chat", "message", "send", "--help"},
+		{"help", "chat", "message", "send"},
+	} {
+		out := executeHelpOutput(t, args...)
+		for _, heading := range []string{"Related skills:", "Documentation:"} {
+			if count := strings.Count(out, heading); count != 1 {
+				t.Fatalf("dws %s contains %q %d times, want once:\n%s", strings.Join(args, " "), heading, count, out)
+			}
+		}
+		if !strings.Contains(out, "dingtalk-chat") || !strings.Contains(out, "references/chat.md") {
+			t.Fatalf("dws %s missing inherited chat references:\n%s", strings.Join(args, " "), out)
+		}
+	}
+}
+
+func TestProgrammaticLeafHelpRendersAffordancesOnce(t *testing.T) {
+	root := NewRootCommand()
+	target, remaining, err := root.Find([]string{"chat", "message", "send"})
+	if err != nil || target == nil || len(remaining) != 0 {
+		t.Fatalf("find chat message send: target=%v remaining=%v err=%v", target, remaining, err)
+	}
+	var out bytes.Buffer
+	root.SetOut(&out)
+	target.SetOut(&out)
+	if err := target.Help(); err != nil {
+		t.Fatalf("programmatic leaf Help: %v", err)
+	}
+	for _, heading := range []string{"When to use:", "Avoid when:", "Safety:", "Related skills:", "Documentation:"} {
+		if count := strings.Count(out.String(), heading); count != 1 {
+			t.Fatalf("programmatic Help contains %q %d times, want once:\n%s", heading, count, out.String())
+		}
+	}
+}
+
+func TestLeafAliasUsesPrimarySelectionAndReferences(t *testing.T) {
+	primary, ok := cli.ResolveMeta("report inbox list")
+	if !ok || len(primary.Selection.UseWhen) == 0 {
+		t.Fatalf("primary report metadata incomplete: %#v", primary)
+	}
+	aliased, ok := cli.ResolveMeta("report list")
+	if !ok || aliased.Identity.Canonical != primary.Identity.Canonical {
+		t.Fatalf("alias metadata = %#v, want canonical %q", aliased, primary.Identity.Canonical)
+	}
+	for _, path := range []string{"report inbox list", "report list"} {
+		out := executeHelpOutput(t, append(strings.Fields(path), "--help")...)
+		for _, want := range []string{primary.Selection.UseWhen[0], "Safety:", "dingtalk-misc", "references/report.md"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s Help missing primary affordance %q:\n%s", path, want, out)
+			}
+		}
+	}
+}
+
+func TestPublicServicesDeclareExistingHelpReferences(t *testing.T) {
+	root := NewRootCommand()
+	repositoryRoot := filepath.Clean(filepath.Join("..", ".."))
+	const documentationPrefix = "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/"
+	for _, service := range visibleMCPRootCommands(root) {
+		decl, ok := contract.LookupProductDecl(service.Name())
+		if !ok {
+			t.Errorf("public service %q has no ProductDecl", service.Name())
+			continue
+		}
+		if len(decl.HelpReferences.RelatedSkills) == 0 || len(decl.HelpReferences.Documentation) == 0 {
+			t.Errorf("public service %q HelpReferences = %#v, want skill and documentation", service.Name(), decl.HelpReferences)
+			continue
+		}
+		for _, skill := range decl.HelpReferences.RelatedSkills {
+			skillPath := filepath.Join(repositoryRoot, "skills", "multi", skill, "SKILL.md")
+			if _, err := os.Stat(skillPath); err != nil {
+				t.Errorf("public service %q related Skill %q does not exist: %v", service.Name(), skill, err)
+			}
+		}
+		for _, document := range decl.HelpReferences.Documentation {
+			parsed, err := url.Parse(document.URL)
+			if err != nil || parsed.Scheme != "https" || !strings.HasPrefix(document.URL, documentationPrefix) {
+				t.Errorf("public service %q documentation URL is not a stable HTTPS repository link: %q", service.Name(), document.URL)
+				continue
+			}
+			relativePath := strings.TrimPrefix(document.URL, documentationPrefix)
+			if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(relativePath))); err != nil {
+				t.Errorf("public service %q documentation %q does not exist: %v", service.Name(), relativePath, err)
+			}
+		}
+	}
+}
+
+func TestAgentVisibleLeavesHaveCompleteRenderableSafetyAndReferences(t *testing.T) {
+	registry, err := cli.AssembleSchemaRegistry(NewSchemaSourceRootCommand())
+	if err != nil {
+		t.Fatalf("assemble Schema registry: %v", err)
+	}
+	validEffect := map[string]bool{"read": true, "write": true, "destructive": true}
+	validRisk := map[string]bool{"low": true, "medium": true, "high": true}
+	validConfirmation := map[string]bool{"not_required": true, "user_required": true}
+	validIdempotency := map[string]bool{"idempotent": true, "retryable": true, "non_idempotent": true, "unknown": true}
+	leaves := 0
+	for _, product := range registry.Products {
+		decl, ok := contract.LookupProductDecl(product.ID)
+		if !ok || len(decl.HelpReferences.RelatedSkills) == 0 || len(decl.HelpReferences.Documentation) == 0 {
+			t.Errorf("Schema product %q has no complete HelpReferences", product.ID)
+		}
+		for _, tool := range product.Tools {
+			leaves++
+			safety := cli.CommandSafety{
+				Effect: tool.Safety.Effect, Risk: tool.Safety.Risk,
+				Confirmation: tool.Safety.Confirmation, Idempotency: tool.Safety.Idempotency,
+			}
+			if !validEffect[safety.Effect] || !validRisk[safety.Risk] ||
+				!validConfirmation[safety.Confirmation] || !validIdempotency[safety.Idempotency] {
+				t.Errorf("leaf %q has incomplete/invalid Safety: %#v", tool.Identity.CLIPath, safety)
+			}
+			if !safety.ShouldRender() {
+				t.Errorf("leaf %q Safety is hidden: %#v", tool.Identity.CLIPath, safety)
+			}
+		}
+	}
+	if leaves == 0 {
+		t.Fatal("assembled Schema contains no Agent-visible leaves")
+	}
+}
+
+func executeHelpOutput(t *testing.T, args ...string) string {
+	t.Helper()
+	return executeHelpOutputWithRoot(t, NewRootCommand(), args...)
+}
+
+func executeHelpOutputWithRoot(t *testing.T, root *cobra.Command, args ...string) string {
+	t.Helper()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("dws %s: %v\n%s", strings.Join(args, " "), err, out.String())
+	}
+	return out.String()
 }
 
 // The feedback entry is deliberately root-only: this CLI is driven mostly by
@@ -296,6 +516,7 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	mustFindCommand(t, root, "contact", "label", "get")
 	mustFindCommand(t, root, "contact", "label", "list")
 	mustFindCommand(t, root, "contact", "label", "list-members")
+	mustFindCommand(t, root, "contact", "label", "create")
 	mustFindCommand(t, root, "contact", "label", "find")
 	mustFindCommand(t, root, "contact", "label", "search")
 	mustFindCommand(t, root, "contact", "label", "info")
@@ -328,6 +549,16 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 			name: "label members",
 			args: []string{"--dry-run", "contact", "label", "list-members", "--id", "123"},
 			want: []string{"get_label_members_by_labelId", "labelId", "123"},
+		},
+		{
+			name: "label create role",
+			args: []string{"--dry-run", "contact", "label", "create", "--name", "管理员", "--type", "role", "--parent-id", "12345", "--yes"},
+			want: []string{"add_label", "parentId", "labelModel", "name", "管理员"},
+		},
+		{
+			name: "label create group",
+			args: []string{"--dry-run", "contact", "label", "create", "--name", "管理层", "--type", "group", "--yes"},
+			want: []string{"add_label", "parentId", "labelModel", "name", "管理层"},
 		},
 		{
 			name: "role shim",
@@ -394,19 +625,33 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	}
 }
 
-func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
+func TestChatConversationFileUploadUsesANewPath(t *testing.T) {
 	root := NewRootCommand()
 	fileCmd := mustFindCommand(t, root, "chat", "file")
 	if !fileCmd.Hidden {
-		t.Fatal("chat file should be hidden after upload_conversation_file_by_url downline")
+		t.Fatal("historical chat file group should remain hidden")
 	}
-	upload := mustFindCommand(t, root, "chat", "file", "upload")
-	if !upload.Hidden {
-		t.Fatal("chat file upload should be hidden after downline")
+	legacyUpload := mustFindCommand(t, root, "chat", "file", "upload")
+	if !legacyUpload.Hidden {
+		t.Fatal("historical chat file upload should remain hidden")
 	}
-	for _, flag := range []string{"group", "url", "file", "file-name"} {
+
+	conversationFileCmd := mustFindCommand(t, root, "chat", "conversation-file")
+	if conversationFileCmd.Hidden {
+		t.Fatal("chat conversation-file should be visible")
+	}
+	upload := mustFindCommand(t, root, "chat", "conversation-file", "upload")
+	if upload.Hidden {
+		t.Fatal("chat conversation-file upload should be visible")
+	}
+	for _, flag := range []string{"conversation-id", "group", "user", "open-dingtalk-id", "file", "file-path", "file-name", "md5", "idempotency-key"} {
 		if upload.Flags().Lookup(flag) == nil {
-			t.Fatalf("chat file upload missing compatibility flag --%s", flag)
+			t.Fatalf("chat conversation-file upload missing flag --%s", flag)
+		}
+	}
+	for _, flag := range []string{"url", "uuid"} {
+		if upload.Flags().Lookup(flag) != nil {
+			t.Fatalf("new chat conversation-file upload must not inherit historical --%s", flag)
 		}
 	}
 
@@ -438,12 +683,12 @@ func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
 		"--file-name", "report.pdf",
 	})
 	if err == nil {
-		t.Fatalf("chat file upload error = nil, want downline error\n%s", got)
+		t.Fatalf("historical chat file upload error = nil, want downline error\n%s", got)
 	}
 	got = got + "\n" + err.Error()
 	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("chat file upload output missing %q:\n%s", want, got)
+			t.Fatalf("historical chat file upload output missing %q:\n%s", want, got)
 		}
 	}
 }

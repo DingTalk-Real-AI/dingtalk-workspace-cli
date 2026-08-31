@@ -302,13 +302,22 @@ func (rt *RuntimeContext) callMCPWriteData(product, tool string, params map[stri
 			apperrors.WithOperation(product+"/"+tool),
 			apperrors.WithOrigin("mcp"),
 			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithExecutionStarted(true),
 			apperrors.WithRetryable(false),
 			apperrors.WithReason("empty_tool_response"),
 		)
 	}
 	var out map[string]any
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", tool, err))
+		return nil, apperrors.NewAPI(fmt.Sprintf("解析 %s 写响应失败；远端效果未知", tool),
+			apperrors.WithOperation(product+"/"+tool),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+			apperrors.WithReason("malformed_tool_response"),
+			apperrors.WithCause(err),
+		)
 	}
 	return out, nil
 }

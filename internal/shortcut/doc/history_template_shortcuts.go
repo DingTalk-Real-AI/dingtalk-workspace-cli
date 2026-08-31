@@ -66,8 +66,8 @@ func canonicalizeHistoryShortcuts() {
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 
-	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板"
-	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用。"
+	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板；默认只读取一页"
+	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用；要求全部模板或完整模板库时必须使用 --page-all。"
 	TemplateList.Contract = templateListContract()
 	TemplateSearch.Description = "按名称或关键词检索文档模板"
 	TemplateSearch.Intent = "当用户已提供明确模板名称或关键词时使用；返回结构化候选和 resolved/not_found/selection_required 状态，零命中或多候选时停止创建。"
@@ -128,10 +128,14 @@ func templateSearchContract() corecmd.ContractDecl {
 }
 
 func templateListContract() corecmd.ContractDecl {
-	decl := docContract("+template-list", TemplateList.Description, TemplateList.Intent, []string{`dws doc +template-list --source PUBLIC`})
+	decl := docContract("+template-list", TemplateList.Description, TemplateList.Intent, []string{
+		`dws doc +template-list --source PUBLIC`,
+		`dws doc +template-list --source PUBLIC --page-all --max-pages 20`,
+	})
 	decl.Selection.AvoidWhen = []string{
 		"已经有明确模板名称或关键词时使用 doc +template-search --query",
 		"已经拿到 templateId 且要创建文档时使用 doc +create-from-template --template-id",
+		"只需要当前页或明确 Top-N 时不要无条件读取完整模板库",
 	}
 	return decl
 }

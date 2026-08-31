@@ -33,6 +33,12 @@ func newCalendarCommand() *cobra.Command {
 	// products.calendar). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "calendar",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-calendar"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("日历与会议室深度指南", "dingtalk-calendar", "references/calendar.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理日历本、日程、参与人、附件、会议室，并查询人员或会议室闲忙状态。",
 			UseWhen: []string{

@@ -327,12 +327,14 @@ func newPivotTableCmd() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "node", "sheet-id", "pivot-table-id"); err != nil {
 				return err
 			}
-			pivotTableID := mustGetFlag(cmd, "pivot-table-id")
-			return callMCPTool("delete_pivot_table", map[string]any{
-				"nodeId":       mustGetFlag(cmd, "node"),
-				"sheetId":      mustGetFlag(cmd, "sheet-id"),
-				"pivotTableId": pivotTableID,
+			toolArgs, err := BuildBatchDeletePivotTableArgs(map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "pivot-table-id": mustGetFlag(cmd, "pivot-table-id"),
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("delete_pivot_table", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(deleteCmd, LeafSpec{

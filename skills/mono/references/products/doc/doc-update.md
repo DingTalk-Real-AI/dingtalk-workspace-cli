@@ -75,7 +75,7 @@ Flags:
 
 ## 内容写入管道（create / update 共用）
 
-> **关键原则**：CLI 内置自动分片。超长内容（>30000 字符）自动按 markdown 结构切分后逐片写入，对调用方透明。写入完成后由调用方自行决定是否回读确认。
+> **关键原则**：CLI 内置自动分片。超长内容（>30000 字符）自动切分后逐片写入，每一片都是完整自包含的顶层 block 序列（表格切分会重发表头行）。任何改变渲染结构的切分点都在 `degradations` 里上报，不会静默降级。写入完成后由调用方自行决定是否回读确认。
 
 ### 输入方式选择
 
@@ -90,13 +90,26 @@ Flags:
 
 当内容超过 30000 字符时，CLI 自动执行：
 
-1. **create**: 先创建空文档拿 `nodeId`，再按 markdown 标题边界切分后逐片 append
+1. **create**: 先创建空文档拿 `nodeId`，再切分后逐片 append
 2. **update (overwrite)**: 第一片用 overwrite，后续片用 append
 3. **update (append)**: 所有片段用 append
 
-分片策略按优先级：H1 标题 → H2 标题 → H3 标题 → 空行（段落边界）→ 硬切（保留表格/代码块完整性）
+服务端 `mode=append` 每次插入的都是**全新结构**，无法延续上一片的结构。因此分片的约束是**每一片都必须是完整、自包含的顶层 block 序列** —— 不能有半张表格、未闭合的代码围栏或半个段落。切分点按「对最终文档的影响」分档，严格从高到低选择：
 
-如果某片写入超时，自动将分片大小减半重试（最小 5000 字符，低于此值报错）。
+| 档位 | 切分点 | 对文档的影响 |
+|------|--------|--------------|
+| 完全安全 | 空行边界；能中断段落的块起始（标题、围栏、引用、`***`、列表首项） | 无，渲染与整篇写入完全一致 |
+| 需注入修复 | 表格行边界（后续片**重发表头行与分隔行**）、代码块行边界（本片补闭合围栏、下一片补开启围栏） | 一张表变成多张表 / 一个代码块变成多个 |
+| 结构变化 | 长段落内部换行、列表项之间、引用块行之间 | 一段变多段 / 一个列表变多个 |
+| 硬切 | 任意字符边界（仅当单行长度就超过上限） | 行被切断，会明确上报 |
+
+同档位内取窗口里**最靠后**的切分点 —— 所有分片最终 append 进同一篇文档，所以完全安全档内部切在哪里对结果没有影响，切早了只是白多几次网络往返。
+
+任何改变了渲染结构的切分点都会在 `degradations` 里如实上报，**不会静默降级**。
+
+**已移除的行为**：早期版本会在分片超时后把分片大小减半重试（最小 5000 字符）。该逻辑已删除 —— 超时时服务端是否已提交未知，重放会重复创建或重复追加，现在改为 fail closed，要求先回读确认。`CONTENT_TRUNCATED` 错误码随之消失。
+
+`--index` 与自动分片互斥：每片产生的 block 数不确定，第 2 片的插入位置不可知，因此内容超过上限且带 `--index` 时会直接报错（`doc_write_index_with_chunking`）。
 
 ### 输出格式
 
@@ -110,6 +123,7 @@ Flags:
 |------|------|
 | `nodeId` | 文档节点 ID，可用于后续读取或追加 |
 | `chunksWritten` | 实际写入的分片数（1 = 单次写入） |
+| `degradations` | 改变了渲染结构的切分点清单；**缺省即表示文档与输入完全一致**。每项含 `kind`（如 `table_split` / `code_block_split` / `paragraph_split`）、`line`、`detail`，以及 `injectedPrefix` / `injectedSuffix`（本次为保持结构而注入的文本，例如重发的表头行） |
 
 ### 内容完整性验证（必读）
 
@@ -124,22 +138,22 @@ CLI **不会**自动执行回读验证。**你必须在文档写入完成后主�
 ### 进度输出示例
 
 ```
-[INFO] 内容较长 (45000 字符)，自动分片写入...
-[INFO] 已创建空文档 (nodeId=abc123)，开始分片写入...
-[INFO] 写入分片 (1/3)，15000 字符...
-[INFO] 写入分片 (2/3)，15000 字符...
-[INFO] 写入分片 (3/3)，15000 字符...
+[INFO] 内容较长 (72000 字符)，自动分片写入...
+[INFO] [WARN] 内容过长已分片：表格被拆成多个表格，后续分片重复表头行与分隔行（第 1420 行）
+[INFO] 写入分片 (1/3)，29987 字符 (overwrite)...
+[INFO] 写入分片 (2/3)，29994 字符, preview=[| 姓名 | 部门 |...]...
+[INFO] 写入分片 (3/3)，12030 字符, preview=[| 姓名 | 部门 |...]...
 [INFO] 全部 3 个分片写入完成
-{"success": true, "nodeId": "abc123", "chunksWritten": 3}
+{"success": true, "nodeId": "abc123", "chunksWritten": 3, "degradations": [{"kind": "table_split", "line": 1420, ...}]}
 ```
 
-### CONTENT_TRUNCATED 错误
+### 分片超时（提交状态未知）
 
-当分片写入持续超时且减半到最小阈值仍失败时，返回 `CONTENT_TRUNCATED` 错误码。应对策略：
+某片写入超时时，服务端是否已提交无法判断。CLI **不会**自动重试（重放会重复追加），而是 fail closed 返回 `doc_write_commit_unknown`，并在 `details` 里给出 `chunksWritten` / `chunksTotal` / `failedStage`，以及该次分片的 `degradations`。应对策略：
 
-1. 检查网络和后端服务状态
-2. 已写入的部分内容可通过 `dws doc read --node <NODE_ID>` 查看
-3. 从断点处手动用 `dws doc update --mode append` 继续追加
+1. 先 `dws doc read --node <NODE_ID>` 回读，确认实际写到哪一片
+2. 只有确认服务端未提交时才重新执行
+3. 从断点处用 `dws doc update --mode append` 继续追加；注意若 `degradations` 里有 `table_split`，续写的第一片需要自己带上表头行
 
 ## 长 Markdown 写入
 
@@ -193,7 +207,7 @@ EOF
 | 从返回中提取 | 用于 |
 |-------------|------|
 | `success` + `chunksWritten` | 判断是否需要回读补救（`chunksWritten > 1` 时重点查章节顺序） |
-| 错误码 `CONTENT_TRUNCATED` | 触发 [`./doc-read.md`](./doc-read.md) 查断点 + 再次 `update --mode append` |
+| `reason` 为 `doc_write_commit_unknown` | 触发 [`./doc-read.md`](./doc-read.md) 查断点，确认未提交后再 `update --mode append` |
 
 ## 常用模板
 

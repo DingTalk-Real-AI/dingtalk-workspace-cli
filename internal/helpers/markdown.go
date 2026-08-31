@@ -36,10 +36,16 @@ func newMarkdownCommand() *cobra.Command {
 	// products.markdown). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "markdown",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("Markdown 深度指南", "dingtalk-misc", "references/markdown.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+			AgentSummary: "跨钉盘与文档空间创建、获取、对比、覆盖、局部修补和读取原生 Markdown 评论列表",
 			UseWhen: []string{
-				"目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时",
+				"目标是原生 .md 文件，需要安全创建、读取、比较版本或本地草稿、覆盖、局部修改内容或查看 Markdown 评论时",
 			},
 			AvoidWhen: []string{
 				"在线文档正文操作使用 doc；普通二进制文件上传下载使用 drive",
@@ -49,15 +55,17 @@ func newMarkdownCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "markdown",
 		Short: "Markdown 文件处理",
-		Long:  "创建、覆盖、修补、对比和获取钉盘或文档空间中的原生 Markdown 文件。",
+		Long:  "创建、覆盖、修补、对比、获取和读取钉盘或文档空间中的原生 Markdown 文件评论。",
 		RunE:  groupRunE,
 	})
+	installDocDelegationAuth(root)
 	root.AddCommand(
 		newMarkdownFetchCmd(),
 		newMarkdownCreateCmd(),
 		newMarkdownDiffCmd(),
 		newMarkdownOverwriteCmd(),
 		newMarkdownPatchCmd(),
+		newMarkdownCommentCmd(),
 	)
 	return root
 }
@@ -139,6 +147,10 @@ func runMarkdownFetch(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
+		dServer, dTool, dArgs := markdownFetchRouteTarget(nodeID, spaceID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation": "fetch",
 			"node_id":   nodeID,
@@ -226,8 +238,9 @@ func newMarkdownCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "创建原生 .md 文件",
 		Long: `创建原生 Markdown 文件。--content 支持字面值、@file 和 -（stdin），
-也可通过 --file 直接上传本地 .md 文件。--space-id 显式走钉盘；
-默认及 --workspace 走文档空间。`,
+也可通过 --file 直接上传本地 .md 文件。--space-id 显式走钉盘，
+--workspace 显式走文档空间；仅传 --folder 时自动识别文件夹所在域。
+不传目标参数时默认创建到文档空间根目录。`,
 		Example: `  dws markdown create --name README.md --content "# Hello"
   dws markdown create --file ./README.md --space-id <spaceId>
   dws markdown create --file ./README.md --workspace <workspaceId>`,
@@ -236,7 +249,7 @@ func newMarkdownCreateCmd() *cobra.Command {
 	cmd.Flags().String("name", "", "文件名，必须以 .md 结尾（--content 模式必填）")
 	cmd.Flags().String("content", "", "Markdown 内容；支持字面值、@file、-（stdin）；与 --file 互斥")
 	cmd.Flags().String("file", "", "本地 .md 文件路径；与 --content 互斥")
-	cmd.Flags().String("folder", "", "父文件夹 ID (可选)")
+	cmd.Flags().String("folder", "", "父文件夹 ID（未指定空间参数时自动识别所在域）")
 	cmd.Flags().String("workspace", "", "文档空间/知识库 ID (可选，与 --space-id 互斥)")
 	cmd.Flags().String("space-id", "", "钉盘空间 ID (可选，与 --workspace 互斥)")
 	RegisterCrossProductAliases(cmd)
@@ -354,6 +367,10 @@ func runMarkdownCreate(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("读取上传文件失败: %w", err)
 	}
 	if deps.Caller.DryRun() {
+		dServer, dTool, dArgs := markdownCreateDelegationTarget(nameFlag, info.Size(), folderID, spaceID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation":    "create",
 			"file_name":    nameFlag,
@@ -366,7 +383,11 @@ func runMarkdownCreate(cmd *cobra.Command, _ []string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	if spaceID != "" {
+	useDocServer, err := resolveMarkdownCreateTarget(ctx, folderID, spaceID, workspaceID)
+	if err != nil {
+		return err
+	}
+	if !useDocServer {
 		return uploadToDrive(ctx, uploadPath, nameFlag, info.Size(), spaceID, folderID, "", "text/markdown")
 	}
 	return uploadToDocSpace(ctx, uploadPath, nameFlag, info.Size(), workspaceID, folderID, "", false)
@@ -402,8 +423,8 @@ func newMarkdownOverwriteCmd() *cobra.Command {
 		Long: `用本地 .md 文件或 --content 覆盖远程原生 Markdown 文件。
 默认需要确认；命令级 --dry-run 会下载当前内容并输出差异。
 根命令的全局 --dry-run 只做无网络参数预览。`,
-		Example: `  dws markdown overwrite --node <id> --file ./updated.md --yes
-  dws markdown overwrite --node <id> --content "# New" --name README.md --dry-run`,
+		Example: `  dws markdown overwrite --node <id> --content "# New" --name README.md --dry-run
+  dws markdown overwrite --node <id> --file ./updated.md`,
 		RunE: runMarkdownOverwrite,
 	}
 	cmd.Flags().String("node", "", "目标文件 ID (必填)")
@@ -471,6 +492,10 @@ func runMarkdownOverwrite(cmd *cobra.Command, _ []string) error {
 	workspaceID := flagOrFallback(cmd, "workspace", "workspace-id")
 
 	if deps.Caller.DryRun() || markdownGlobalDryRun(cmd) {
+		dServer, dTool, dArgs := markdownOverwriteRouteTarget(nodeID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation":    "overwrite",
 			"node_id":      nodeID,
@@ -581,8 +606,8 @@ func newMarkdownPatchCmd() *cobra.Command {
 		Long: `下载远程 Markdown，执行字面量或 RE2 正则替换，再覆盖上传。
 零匹配不会写入，替换后为空会报错；默认需要确认。
 命令级 --dry-run 会显示 before/after 差异，全局 --dry-run 不访问网络。`,
-		Example: `  dws markdown patch --node <id> --pattern old --content new --yes
-  dws markdown patch --node <id> --pattern "v\\d+" --content v2 --regex --dry-run`,
+		Example: `  dws markdown patch --node <id> --pattern old --content new --dry-run
+  dws markdown patch --node <id> --pattern "v\\d+" --content v2 --regex`,
 		RunE: runMarkdownPatch,
 	}
 	cmd.Flags().String("node", "", "目标文件 ID (必填)")
@@ -647,6 +672,10 @@ func runMarkdownPatch(cmd *cobra.Command, _ []string) error {
 	replacementSet := cmd.Flags().Changed("content") || cmd.Flags().Changed("markdown")
 
 	if deps.Caller.DryRun() || markdownGlobalDryRun(cmd) {
+		dServer, dTool, dArgs := markdownFetchRouteTarget(nodeID, spaceID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation":    "patch",
 			"node_id":      nodeID,
@@ -802,6 +831,29 @@ func resolveMarkdownRoute(ctx context.Context, nodeID, spaceID, workspaceID stri
 	}
 }
 
+// resolveMarkdownCreateTarget chooses the upload service without changing the
+// established default destination. Explicit space flags are authoritative;
+// only a standalone --folder requires a read-only cross-domain probe.
+func resolveMarkdownCreateTarget(ctx context.Context, folderID, spaceID, workspaceID string) (bool, error) {
+	if spaceID != "" && workspaceID != "" {
+		return false, fmt.Errorf("--space-id 与 --workspace 互斥，不可同时指定")
+	}
+	switch {
+	case spaceID != "":
+		return false, nil
+	case workspaceID != "":
+		return true, nil
+	case folderID == "":
+		return true, nil
+	}
+
+	domain, err := resolveFileDomain(ctx, folderID)
+	if err != nil {
+		return false, fmt.Errorf("无法根据 --folder %s 自动识别 Markdown 创建目标域: %w", folderID, err)
+	}
+	return domain == "doc", nil
+}
+
 func markdownRemoteName(nodeID string, useDocServer bool) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -900,6 +952,105 @@ func appendMarkdownDiffHead(builder *strings.Builder, prefix string, lines []str
 		}
 		fmt.Fprintf(builder, "%s %s\n", prefix, line)
 	}
+}
+
+// markdownFetchRouteTarget mirrors the first delegated-domain call that
+// runMarkdownFetch and runMarkdownPatch issue on the non-dry-run path
+// (resolveMarkdownRoute -> fetchMarkdownContent); markdown diff also lands here
+// via the auto route (ensureMarkdownDiffType -> drive.get_file_info):
+//   - --space-id  -> drive.download_file {fileId, spaceId}
+//   - --workspace -> doc.download_file   {nodeId}
+//   - auto route  -> drive.get_file_info {fileId}   (resolveFileDomain probe)
+//
+// The node identifier is carried under the key extractNodeId expects so the
+// per-node check_capability is scoped to the same resource the real call hits.
+func markdownFetchRouteTarget(nodeID, spaceID, workspaceID string) (string, string, map[string]any) {
+	switch {
+	case spaceID != "":
+		return "drive", "download_file", map[string]any{"fileId": nodeID, "spaceId": spaceID}
+	case workspaceID != "":
+		return "doc", "download_file", map[string]any{"nodeId": nodeID}
+	default:
+		return "drive", "get_file_info", map[string]any{"fileId": nodeID}
+	}
+}
+
+// markdownOverwriteRouteTarget mirrors runMarkdownOverwrite's first delegated
+// call. Overwrite always calls resolveMarkdownRoute first; on the auto route
+// that issues drive.get_file_info{fileId}, and explicit routes then read the
+// node (auto name resolution) or upload on the resolved domain. The per-node
+// check_capability is scoped by the resolved domain's node-info read:
+//   - --workspace -> doc.get_document_info {nodeId}
+//   - otherwise   -> drive.get_file_info   {fileId}
+func markdownOverwriteRouteTarget(nodeID, workspaceID string) (string, string, map[string]any) {
+	if workspaceID != "" {
+		return "doc", "get_document_info", map[string]any{"nodeId": nodeID}
+	}
+	return "drive", "get_file_info", map[string]any{"fileId": nodeID}
+}
+
+// markdownCreateDelegationTarget mirrors runMarkdownCreate's first delegated
+// call. Explicit routes begin at upload step1, while a standalone --folder
+// first probes Drive before falling back to Doc. Keeping dry-run on that probe
+// target preserves its no-network preview while authorizing the same first
+// capability that a real invocation will use:
+//   - --space-id  -> drive.get_upload_info    {fileName, fileSize, spaceId, mimeType, [parentId]}
+//   - --workspace -> doc.get_file_upload_info {workspaceId, [folderId]}
+//   - --folder    -> drive.get_file_info      {fileId}
+//   - no target   -> doc.get_file_upload_info {}
+//
+// A create with neither space/workspace/folder yields empty doc args, so
+// extractNodeId returns "" and the precheck reports DELEGATION_AUTH_NOT_SUPPORTED
+// - matching the non-dry-run path, where the same empty get_file_upload_info
+// call is gated identically.
+func markdownCreateDelegationTarget(fileName string, fileSize int64, folderID, spaceID, workspaceID string) (string, string, map[string]any) {
+	if spaceID != "" {
+		args := map[string]any{
+			"fileName": fileName,
+			"fileSize": float64(fileSize),
+			"spaceId":  spaceID,
+			"mimeType": "text/markdown",
+		}
+		if folderID != "" {
+			args["parentId"] = folderID
+		}
+		return "drive", "get_upload_info", args
+	}
+	if workspaceID == "" && folderID != "" {
+		return "drive", "get_file_info", map[string]any{"fileId": folderID}
+	}
+	args := map[string]any{}
+	if workspaceID != "" {
+		args["workspaceId"] = workspaceID
+	}
+	if folderID != "" {
+		args["folderId"] = folderID
+	}
+	return "doc", "get_file_upload_info", args
+}
+
+// markdownDryRunDelegationPrecheck runs the delegation-auth gate for markdown
+// leaf commands whose dry-run branches fast-return a preview before reaching
+// deps.Caller.CallTool/CallReadTool. Without it a markdown dry-run combined with
+// --principal-user-id would never trigger check_capability, diverging from
+// doc/drive where the decorator gates every business call. When
+// --principal-user-id is unset the caller is never decorated and principalID is
+// empty, so this returns nil for zero impact; otherwise it type-asserts
+// deps.Caller to the delegation-auth validator and runs ensureDelegationAuth
+// against the real first-call target (serverID/toolName/args), so a denied
+// principal reports the error and the preview is suppressed.
+func markdownDryRunDelegationPrecheck(cmd *cobra.Command, serverID, toolName string, args map[string]any) error {
+	principalID, _ := cmd.Flags().GetString(FlagPrincipalUserID)
+	if strings.TrimSpace(principalID) == "" {
+		return nil
+	}
+	validator, ok := deps.Caller.(dryRunValidator)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return validator.ensureDelegationAuth(ctx, serverID, toolName, args)
 }
 
 func printMarkdownDryRun(details map[string]any, operation, target string) error {

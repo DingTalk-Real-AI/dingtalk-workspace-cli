@@ -14,6 +14,12 @@ func newDevdocCommand() *cobra.Command {
 	// products.devdoc). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "devdoc",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("开放平台文档搜索指南", "dingtalk-misc", "references/devdoc.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "搜索钉钉开放平台开发文档与错误排查资料",
 			UseWhen: []string{

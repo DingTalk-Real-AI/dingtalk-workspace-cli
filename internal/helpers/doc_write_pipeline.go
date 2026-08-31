@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	// initialChunkSize is the first attempted chunk size (rune count).
-	// Server-side OSS delta resolution is now fixed, so large chunks are safe.
-	initialChunkSize = 10000
+	// DefaultMarkdownChunkRunes is the single source of truth for the markdown
+	// append-mode chunk limit (rune count), shared by every write path that
+	// chunks. The splitter budgets any injected repair (a re-emitted table
+	// header, a reopened fence) against this limit, so a repaired chunk is still
+	// guaranteed to be at most this many runes.
+	DefaultMarkdownChunkRunes = 30000
 
 	// longContentWarningThreshold triggers a hint to use --content-file.
 	longContentWarningThreshold = 2048
@@ -49,10 +52,22 @@ func detectContentSource(cmd *cobra.Command) contentInputSource {
 
 // DocWriteResult is the structured output of the write pipeline.
 type DocWriteResult struct {
-	Success        bool            `json:"success"`
-	NodeID         string          `json:"nodeId"`
-	ChunksWritten  int             `json:"chunksWritten"`
-	ServerResponse json.RawMessage `json:"serverResponse,omitempty"`
+	Success       bool   `json:"success"`
+	NodeID        string `json:"nodeId"`
+	ChunksWritten int    `json:"chunksWritten"`
+	// Degradations lists the chunk boundaries that changed the rendered
+	// structure. Empty means the document reads exactly as the input did.
+	Degradations   []MarkdownDegradation `json:"degradations,omitempty"`
+	ServerResponse json.RawMessage       `json:"serverResponse,omitempty"`
+}
+
+// chunkedWriteOutcome is what a chunked write reports back. It is a struct rather
+// than another return value because the tuple was already four wide.
+type chunkedWriteOutcome struct {
+	nodeID       string
+	written      int
+	lastResponse string
+	degradations []MarkdownDegradation
 }
 
 // docWritePipeline is the unified entry point for doc create/update with
@@ -61,7 +76,7 @@ type DocWriteResult struct {
 // Phases:
 //
 //  0. Pre-check: warn if --content literal is long
-//  1. Strategy: single write (≤initialChunkSize) or chunked
+//  1. Strategy: single write (≤DefaultMarkdownChunkRunes) or chunked
 //  2. Write: single call or adaptive chunked writes
 //  3. Output: JSON result
 func docWritePipeline(cmd *cobra.Command, toolName string, toolArgs map[string]any,
@@ -84,25 +99,37 @@ func docWritePipeline(cmd *cobra.Command, toolName string, toolArgs map[string]a
 	defer stop()
 
 	// Phase 1+2: strategy selection and write
-	var nodeID string
-	var chunksWritten int
-	var lastResponse string
+	var outcome chunkedWriteOutcome
 	var writeErr error
 
-	if markdown == "" || runeCount <= initialChunkSize {
+	if markdown == "" || runeCount <= DefaultMarkdownChunkRunes {
 		// Single write path
-		nodeID, lastResponse, writeErr = singleWrite(ctx, toolName, toolArgs)
-		chunksWritten = 1
+		outcome.nodeID, outcome.lastResponse, writeErr = singleWrite(ctx, toolName, toolArgs)
+		outcome.written = 1
 		if writeErr != nil && isTimeoutError(writeErr.Error()) {
 			// The server may have committed the write before the client observed the
 			// timeout. Replaying create/append here can duplicate a document or
 			// content, so fail closed and require inspection before any retry.
-			writeErr = docWriteUnknownStateError(operation, nodeID, "single_write", 0, 1, writeErr)
+			writeErr = docWriteUnknownStateError(operation, outcome.nodeID, "single_write", 0, 1, writeErr, nil)
 		}
 	} else {
-		// Chunked write path
+		// Chunked write path. --index cannot survive chunking: each chunk creates
+		// an unpredictable number of blocks, so the insertion point for chunk 2
+		// is unknowable. Fail closed rather than silently ignore the flag.
+		if _, hasIndex := toolArgs["index"]; hasIndex {
+			return apperrors.NewValidation(
+				fmt.Sprintf("内容长度 %d 字符超过单次写入上限 %d，需要自动分片，而 --index 在分片写入下无法保证插入位置", runeCount, DefaultMarkdownChunkRunes),
+				apperrors.WithOperation(operation),
+				apperrors.WithReason("doc_write_index_with_chunking"),
+				apperrors.WithRetryable(false),
+				apperrors.WithActions(
+					"去掉 --index 追加到文档末尾",
+					"或把内容拆成小于上限的多段，各自带 --index 分别写入",
+				),
+			)
+		}
 		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 内容较长 (%d 字符)，自动分片写入...", runeCount))
-		nodeID, chunksWritten, lastResponse, writeErr = chunkedWrite(ctx, toolName, toolArgs, markdown, operation, initialChunkSize)
+		outcome, writeErr = chunkedWrite(ctx, toolName, toolArgs, markdown, operation, DefaultMarkdownChunkRunes)
 	}
 
 	if writeErr != nil {
@@ -112,11 +139,12 @@ func docWritePipeline(cmd *cobra.Command, toolName string, toolArgs map[string]a
 	// Phase 3: output
 	result := DocWriteResult{
 		Success:       true,
-		NodeID:        nodeID,
-		ChunksWritten: chunksWritten,
+		NodeID:        outcome.nodeID,
+		ChunksWritten: outcome.written,
+		Degradations:  outcome.degradations,
 	}
-	if json.Valid([]byte(lastResponse)) {
-		result.ServerResponse = json.RawMessage(lastResponse)
+	if json.Valid([]byte(outcome.lastResponse)) {
+		result.ServerResponse = json.RawMessage(outcome.lastResponse)
 	}
 	return deps.Out.PrintJSON(result)
 }
@@ -131,18 +159,19 @@ func singleWrite(ctx context.Context, toolName string, toolArgs map[string]any) 
 	return nodeID, resultText, nil
 }
 
-// chunkedWrite performs adaptive chunked writing.
-// For doc create: first chunk creates the document directly (with content), rest append.
-// For doc update with overwrite: first chunk uses overwrite, rest use append.
-// Returns nodeID, chunks written, last server response text, and error.
+// chunkedWrite writes markdown as a sequence of independently valid chunks.
+// For doc create: the first chunk creates the document directly (with content),
+// the rest append. For doc update with overwrite: the first chunk uses overwrite,
+// the rest use append.
 func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
-	markdown string, operation string, startChunkSize int) (string, int, string, error) {
+	markdown string, operation string, chunkSize int) (chunkedWriteOutcome, error) {
 
-	var nodeID string
-	var lastResponse string
-	chunkSize := startChunkSize
-	chunks := splitMarkdownSafe(markdown, chunkSize)
-	writtenCount := 0
+	plan := SplitMarkdownForAppend(markdown, chunkSize)
+	chunks := plan.Chunks
+	out := chunkedWriteOutcome{degradations: plan.Degradations}
+	for _, warning := range plan.Warnings() {
+		deps.Out.PrintInfo("[WARN] " + warning)
+	}
 
 	// --- Write first chunk ---
 	if toolName == "create_document" {
@@ -154,87 +183,101 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 写入分片 (1/%d)，%d 字符 (create)...",
 			len(chunks), utf8.RuneCountInString(chunks[0])))
 		resultText, err := callMCPToolReturnText(ctx, "create_document", createArgs)
+		out.lastResponse = resultText
 		if err != nil {
 			if isTimeoutError(err.Error()) {
-				return "", 0, resultText, docWriteUnknownStateError(operation, "", "chunk_1", 0, len(chunks), err)
+				return out, docWriteUnknownStateError(operation, "", "chunk_1", 0, len(chunks), err, plan.Degradations)
 			}
-			return "", 0, resultText, fmt.Errorf("创建文档失败: %w", err)
+			return out, fmt.Errorf("创建文档失败: %w", err)
 		}
-		nodeID = extractNodeIDFromResult(resultText)
-		if nodeID == "" {
-			return "", 0, resultText, fmt.Errorf("创建文档成功但无法提取 nodeId")
+		out.nodeID = extractNodeIDFromResult(resultText)
+		if out.nodeID == "" {
+			return out, fmt.Errorf("创建文档成功但无法提取 nodeId")
 		}
-		lastResponse = resultText
-		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 文档已创建 (nodeId=%s)", nodeID))
+		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 文档已创建 (nodeId=%s)", out.nodeID))
 	} else {
 		if id, ok := toolArgs["nodeId"].(string); ok {
-			nodeID = id
+			out.nodeID = id
 		}
 		firstMode := "append"
 		if m, ok := toolArgs["mode"].(string); ok {
 			firstMode = m
 		}
 		updateArgs := map[string]any{
-			"nodeId":   nodeID,
+			"nodeId":   out.nodeID,
 			"markdown": chunks[0],
 			"mode":     firstMode,
 		}
 		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 写入分片 (1/%d)，%d 字符 (%s)...",
 			len(chunks), utf8.RuneCountInString(chunks[0]), firstMode))
 		resultText, err := callMCPToolReturnText(ctx, "update_document", updateArgs)
+		out.lastResponse = resultText
 		if err != nil {
 			if isTimeoutError(err.Error()) {
-				return nodeID, 0, resultText, docWriteUnknownStateError(operation, nodeID, "chunk_1", 0, len(chunks), err)
+				return out, docWriteUnknownStateError(operation, out.nodeID, "chunk_1", 0, len(chunks), err, plan.Degradations)
 			}
-			return nodeID, 0, resultText, fmt.Errorf("第 1 片写入失败: %w", err)
+			return out, fmt.Errorf("第 1 片写入失败: %w", err)
 		}
-		lastResponse = resultText
 	}
-	writtenCount = 1
+	out.written = 1
 
 	// --- Write remaining chunks with append ---
 	for i := 1; i < len(chunks); i++ {
 		if ctx.Err() != nil {
-			return nodeID, writtenCount, lastResponse, fmt.Errorf("写入被中断，已完成 %d/%d 片", writtenCount, len(chunks))
+			return out, fmt.Errorf("写入被中断，已完成 %d/%d 片", out.written, len(chunks))
 		}
 
 		chunk := chunks[i]
-		preview := chunk
-		if len(preview) > 80 {
-			preview = preview[:80]
-		}
 		deps.Out.PrintInfo(fmt.Sprintf("[INFO] 写入分片 (%d/%d)，%d 字符, preview=[%s]...",
-			i+1, len(chunks), utf8.RuneCountInString(chunk), preview))
+			i+1, len(chunks), utf8.RuneCountInString(chunk), previewRunes(chunk, 80)))
 
 		updateArgs := map[string]any{
-			"nodeId":   nodeID,
+			"nodeId":   out.nodeID,
 			"markdown": chunk,
 			"mode":     "append",
 		}
 		resultText, err := callMCPToolReturnText(ctx, "update_document", updateArgs)
+		out.lastResponse = resultText
 		if err != nil {
 			if isTimeoutError(err.Error()) {
-				return nodeID, writtenCount, resultText, docWriteUnknownStateError(
-					operation, nodeID, fmt.Sprintf("chunk_%d", i+1), writtenCount, len(chunks), err,
+				return out, docWriteUnknownStateError(
+					operation, out.nodeID, fmt.Sprintf("chunk_%d", i+1), out.written, len(chunks), err, plan.Degradations,
 				)
 			}
-			return nodeID, writtenCount, resultText, fmt.Errorf("分片 %d 写入失败: %w", writtenCount+1, err)
+			return out, fmt.Errorf("分片 %d 写入失败: %w", out.written+1, err)
 		}
-		lastResponse = resultText
-		writtenCount++
+		out.written++
 	}
 
-	deps.Out.PrintInfo(fmt.Sprintf("[INFO] 全部 %d 个分片写入完成", writtenCount))
-	return nodeID, writtenCount, lastResponse, nil
+	deps.Out.PrintInfo(fmt.Sprintf("[INFO] 全部 %d 个分片写入完成", out.written))
+	return out, nil
 }
 
-func docWriteUnknownStateError(operation, nodeID, stage string, written, total int, cause error) error {
+// previewRunes truncates to at most n runes. Slicing by byte would cut a
+// multi-byte character in half and put invalid UTF-8 into the log line.
+func previewRunes(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n])
+}
+
+func docWriteUnknownStateError(operation, nodeID, stage string, written, total int,
+	cause error, degradations []MarkdownDegradation) error {
+
 	details := map[string]any{
 		"status":        "unknown",
 		"nodeId":        nodeID,
 		"chunksWritten": written,
 		"chunksTotal":   total,
 		"failedStage":   stage,
+	}
+	if len(degradations) > 0 {
+		// Resuming safely needs to know which boundaries carried injected repair
+		// text, because a chunk that begins with a repeated table header is not
+		// the same as the raw source at that offset.
+		details["degradations"] = degradations
 	}
 	return apperrors.NewAPI(
 		"文档写入响应超时，服务端提交状态未知；为避免重复创建或重复追加，已停止自动重试",

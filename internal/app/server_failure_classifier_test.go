@@ -59,6 +59,9 @@ func TestCrossPlatformCoverageServerFailureClassifierBackendMetadataUnavailable(
 	if strings.Contains(strings.ToLower(typed.Hint), "parameter") || strings.Contains(typed.Hint, "认证") {
 		t.Fatalf("misleading hint = %q", typed.Hint)
 	}
+	if actions := apperrors.RecoveryActions(err); !strings.Contains(strings.Join(actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("backend dependency error has no doctor entry: %#v", actions)
+	}
 }
 
 func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *testing.T) {
@@ -79,6 +82,102 @@ func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *t
 	}
 	if typed.ExecutionStarted != nil {
 		t.Fatalf("execution_started = %v, want unknown until the backend publishes it", typed.ExecutionStarted)
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierDingRobotNotInOrg(t *testing.T) {
+	for _, tool := range []string{"send_ding_message", "recall_ding_message"} {
+		t.Run(tool, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				"[UNCLASSIFIED] robotCode is in not valid or not in the org; hint: Use --verbose",
+				"business_error",
+				"check parameters",
+				"ding",
+				tool,
+				apperrors.ServerDiagnostics{ServerErrorCode: "400"},
+			)
+
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Reason != "robot_not_in_org" || typed.Origin != "dingtalk_api" || typed.FailureStage != "precondition_rejected" {
+				t.Fatalf("classification = reason %q origin %q stage %q", typed.Reason, typed.Origin, typed.FailureStage)
+			}
+			if typed.Operation != "ding/"+tool {
+				t.Fatalf("operation = %q", typed.Operation)
+			}
+			if !typed.RetryableSet || typed.Retryable {
+				t.Fatalf("retryability = (%v, %v), want explicit false", typed.RetryableSet, typed.Retryable)
+			}
+			if typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+				t.Fatalf("execution_started = %v, want false", typed.ExecutionStarted)
+			}
+			if strings.Contains(strings.ToLower(typed.Message), "verbose") || strings.Contains(strings.ToLower(typed.Hint), "verbose") {
+				t.Fatalf("verbose retry guidance leaked: message=%q hint=%q", typed.Message, typed.Hint)
+			}
+			for _, action := range typed.Actions {
+				if strings.Contains(action, "doctor") {
+					t.Fatalf("generic diagnosis action leaked: %q", action)
+				}
+			}
+			actions := strings.Join(typed.Actions, " ")
+			if !strings.Contains(actions, "禁止尝试或替换为其他机器人") || !strings.Contains(actions, "不要搜索 dev/devapp") {
+				t.Fatalf("terminal robot isolation actions = %#v", typed.Actions)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierDingRobotParameterBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name, message, detail string
+		robotFailure          bool
+	}{
+		{"direct invalid", "robotCode is invalid", "", true},
+		{"prefix invalid", "Invalid robotCode", "", true},
+		{"colon invalid", "robotCode: invalid", "", true},
+		{"organization", "robotCode is not in the organization", "", true},
+		{"technical rejection", "business error", "robotCode is not valid", true},
+		{"invalid recipient", "invalid userId; robotCode=robot-1", "", false},
+		{"valid robot invalid receiver", "robotCode is valid; receiver is invalid", "", false},
+		{"recipient outside org", "robotCode=robot-1; userId not in the org", "", false},
+		{"unrelated technical failure", "robotCode=robot-1", "content is not valid", false},
+		{"split phrase", "robotCode", "is invalid", false},
+		{"negative predicate", "robotCode is not invalid; userId is invalid", "", false},
+		{"different field", "robotCodeStatus is invalid", "", false},
+		{"different word", "robotCode is invalidated after send; receiver invalid", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			retryable := true
+			diag := apperrors.ServerDiagnostics{
+				ServerErrorCode: "PARAM_ERROR", TechnicalDetail: tc.detail, ServerRetryable: &retryable,
+			}
+			err := newServerFailureAPIError(tc.message, "business_error", "check parameters", "ding", "send_ding_message", diag)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("expected typed error: %v", err)
+			}
+			if got := typed.Reason == "robot_not_in_org"; got != tc.robotFailure {
+				t.Fatalf("reason=%q, robot failure=%v", typed.Reason, tc.robotFailure)
+			}
+			if tc.robotFailure {
+				if !typed.RetryableSet || typed.Retryable || typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+					t.Fatalf("robot rejection must be terminal before execution: %#v", typed)
+				}
+			} else if typed.Reason != "invalid_request" || !typed.RetryableSet || !typed.Retryable || typed.ExecutionStarted != nil {
+				t.Fatalf("unrelated parameter failure lost upstream retry/execution semantics: %#v", typed)
+			}
+			if typed.ServerDiag.TechnicalDetail != tc.detail {
+				t.Fatal("classification discarded original diagnostics")
+			}
+		})
+	}
+	for _, target := range [][2]string{{"chat", "send_ding_message"}, {"ding", "send_personal_ding"}} {
+		got, classified := classifyServerFailure("robotCode is invalid", target[0], target[1], apperrors.ServerDiagnostics{})
+		if classified || got.reason == "robot_not_in_org" {
+			t.Errorf("robot rejection leaked to unrelated operation %v: %+v", target, got)
+		}
 	}
 }
 
@@ -159,8 +258,8 @@ func TestCrossPlatformCoverageServerFailureClassifierUnknownFallsBack(t *testing
 	if typed.Reason != "business_error" || typed.Origin != "" || typed.FailureStage != "" || typed.ExecutionStarted != nil {
 		t.Fatalf("unexpected fallback classification: %#v", typed)
 	}
-	if len(typed.Actions) == 0 || !strings.Contains(typed.Actions[0], "dws doctor") {
-		t.Fatalf("fallback error has no stable troubleshooting entry: %#v", typed.Actions)
+	if len(typed.Actions) == 0 || strings.Contains(strings.Join(apperrors.RecoveryActions(err), "\n"), "dws doctor") {
+		t.Fatalf("fallback business error must keep service recovery without doctor: %#v", typed.Actions)
 	}
 }
 
@@ -211,6 +310,10 @@ func TestCrossPlatformCoverageMultiProfileErrorPayloadPreservesFailureSemantics(
 	}
 	if _, ok := payload["execution_started"]; ok {
 		t.Fatalf("payload must not invent execution_started: %#v", payload)
+	}
+	actions, _ := payload["actions"].([]string)
+	if !strings.Contains(strings.Join(actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("multi-profile backend failure has no doctor entry: %#v", payload["actions"])
 	}
 }
 

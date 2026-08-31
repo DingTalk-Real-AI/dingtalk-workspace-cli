@@ -30,7 +30,18 @@ dws chat conversation-info --user <userId> --format json
 dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json
 ```
 
-`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不再依赖调用方读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
+`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不依赖调用方预先读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
+
+### 只上传到会话文件空间
+
+用户明确要求上传文件但不发送消息时使用：
+
+```bash
+dws chat conversation-file upload --conversation-id <openConversationId> --file ./report.pdf --format json
+dws chat conversation-file upload --open-dingtalk-id <openDingTalkId> --file ./report.pdf --format json
+```
+
+命令只执行当前文件消息复用的本地上传链路，返回 `dentryId`、`spaceId`、`fileName`、`fileType` 和 `fileSize`。`--conversation-id`、`--user`、`--open-dingtalk-id` 必须且只能指定一个；文件必须是工作目录内的相对路径。URL 代传不受支持。
 
 ### 会话列表与红点
 
