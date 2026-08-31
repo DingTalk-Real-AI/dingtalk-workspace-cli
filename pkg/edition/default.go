@@ -67,6 +67,11 @@ func openSupplementServers() []ServerInfo {
 			Prefixes: []string{"recruit", "job"},
 		},
 		{
+			ID:       "contract",
+			Name:     "智能合同",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/571e843ffa2f7546207fcae482d0d47a43bb7e5317bc717172998e1e00691710",
+		},
+		{
 			ID:       "edu-contact",
 			Name:     "家校通讯录",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/d24759cc1c6e424e2de4e9901ea0202136e6707991ffc33b473878ec1cd688a2",
