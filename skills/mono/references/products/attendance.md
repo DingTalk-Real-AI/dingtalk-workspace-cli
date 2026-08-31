@@ -16,7 +16,7 @@ Agent 选择考勤接口时，仅允许使用绑定到新版考勤服务 `attend
 | `dws attendance shift list` | `batch_get_employee_shifts` |
 | `dws attendance rules` | `query_attendance_group_or_rules` |
 
-`attendance_my_record.py` 和 `attendance_team_shift.py` 依赖旧版入口，单体版、拆分版中的这些脚本均不得执行。禁止通过其他脚本间接调用、通用 MCP 调用或直接访问旧服务绕过本规则。
+依赖旧版入口的 `attendance_my_record.py` 和 `attendance_team_shift.py` 已从单体版、拆分版交付物中下线，并登记为禁止重新发布的 retired scripts。不得恢复这些脚本，也不得通过其他脚本、通用 MCP 调用或直接访问旧服务绕过本规则。
 
 ### 新版失败时的处理
 

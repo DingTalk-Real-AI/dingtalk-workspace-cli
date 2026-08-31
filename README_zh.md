@@ -446,10 +446,10 @@ multi setup 或 upgrade 后，DWS 会把官方 bundle 快照和统一所有权�
 | 意图指南 | `skills/mono/references/intent-guide.md` | 易混淆场景消歧（如 report vs todo） |
 | 全局参考 | `skills/mono/references/global-reference.md` | 认证、输出格式、全局 flag |
 | 错误码 | `skills/mono/references/error-codes.md` | 错误码 + 调试流程 |
-| 现成脚本 | `skills/mono/scripts/*.py` | 13 个批量操作脚本（见下方） |
+| 现成脚本 | `skills/mono/scripts/*.py` | 11 个批量操作脚本（见下方） |
 
 <details>
-<summary><strong>现成脚本</strong> — 13 个 Python 脚本，覆盖常见多步工作流</summary>
+<summary><strong>现成脚本</strong> — 11 个 Python 脚本，覆盖常见多步工作流</summary>
 
 | 脚本 | 说明 |
 |------|------|
@@ -463,8 +463,6 @@ multi setup 或 upgrade 后，DWS 会把官方 bundle 快照和统一所有权�
 | `todo_daily_summary.py` | 汇总今天/本周未完成的待办 |
 | `todo_overdue_check.py` | 扫描已过截止时间但未完成的待办，输出逾期清单 |
 | `contact_dept_members.py` | 按部门名称搜索并列出所有成员 |
-| `attendance_my_record.py` | 查看我今天/本周/指定日期的考勤记录 |
-| `attendance_team_shift.py` | 查询团队成员本周排班和出勤统计 |
 | `report_inbox_today.py` | 查看今天收到的日志列表及详情 |
 
 </details>
