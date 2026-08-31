@@ -6,6 +6,20 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.61-beta.3] - 2026-08-30
+
+### Added
+
+- **Static MCP development and invocation** — moves MCP authoring under `dws dev mcp` and adds reviewed `dws mcp published` commands for inspecting and invoking published tools without dynamic command injection or credential-bearing endpoint caches.
+
+- **DingTalk task personal lifecycle events** — adds personal Stream subscriptions for task creation, updates, and deletion, with catalog discovery for task events, validated creator/executor/participant role filters, typed flattened payloads, multi-event consumption, and documented DWS-to-task HSF backend routing.
+
+- **VoIP call invite events** — adds `user_voip_call_receive_invite` support to `dws event consume`, including event discovery, Schema, validation, flattened NDJSON output, and mono/multi Skill guidance.
+
+### Fixed
+
+- **AITable routing and composite recovery** — tighten view-filter and reference guidance, recognize reviewed empty-query responses, and make Base copy target validation, rename recovery, and read-back verification deterministic.
+
 ## [1.0.61-beta.2] - 2026-08-28
 
 ### Added
@@ -30,6 +44,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 - **Markdown routing and diff guidance** — makes `markdown create --folder`
   detect the Drive or Doc destination before upload, clarifies `markdown diff`
   parameter validation, and improves mono/multi Agent routing.
+
+- **Chat message list result fields** — keeps `result.messages[]` aligned with the top-level `messages[]`, including the stable `messageId` used by edit and recall, while preserving legacy message fields.
 
 
 ## [1.0.61-beta.1] - 2026-08-28

@@ -9,7 +9,7 @@
 1. `--help` 看命令树（一个组下有哪些子命令、flag），例 `dws dev app --help`
 2. `--help` 看叶子命令参数（flag、默认值、示例），按当前二进制输出构造；不要再依赖已下线的动态 schema
 3. 全部命令带 `--format json`
-4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](./dev/connect.md)）
+4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](./dev/connect.md)；MCP 见 [mcp.md](./dev/mcp.md)）
 5. 写完回读确认（`get` / `robot get` / `version status`）
 6. `clientSecret/appSecret` 不写进回答（脱敏）
 7. `robot result` 只要出现 `completionState=BLOCKED_BY_VERSION_PUBLISH` 或 `mustContinue=true`，必须继续执行 blocking `nextSteps`，不得停在 `dev connect`
@@ -140,6 +140,7 @@
 | 本地建联 | [connect.md](./dev/connect.md) | dev connect（渠道预检 / agent 模型工作目录 / 会话记忆 / AI 卡片） |
 | 版本发布 | [version.md](./dev/version.md) | version create / list / get / check-approval / publish / status |
 | 事件订阅 | [event.md](./dev/event.md) | event list / subscribe / unsubscribe（事件定位走搜索优先） |
+| MCP 开发 | [mcp.md](./dev/mcp.md) | mcp service / tool / auth / credential / member / hsf |
 | 索引 | [dev-index.md](./dev/dev-index.md) | 主题速查表 |
 
 ## Gotchas

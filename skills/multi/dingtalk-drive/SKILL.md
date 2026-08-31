@@ -37,13 +37,13 @@ metadata:
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| 全局按名称或关键词找文件 | `dws drive +search --query <关键词>` | 多候选停止；Drive 搜索没有 Doc 的 `--page-all`，按真实 nextCursor 翻页；在线文档正文搜索走 `doc +search` |
-| 浏览根目录或已知文件夹 | `dws drive +list [--folder <dentryUuid>]` | 默认一页，处理 nextCursor |
+| 全局按名称或关键词找文件 | `dws drive +search --query <关键词> --page-all --max-pages 20 --max-items 500` | 需要完整搜索时自动翻页；只需首批结果时可不加 `--page-all`；多候选停止；在线文档正文搜索走 `doc +search` |
+| 浏览根目录或已知文件夹 | `dws drive +list [--folder <dentryUuid>] --page-all --max-pages 20 --max-items 500` | 需要完整浏览时自动翻页；只需首批结果时可不加 `--page-all` |
 | 发现钉盘企业空间或“我的文件”空间 | `dws wiki space list --type <orgSpace\|mySpace> --format json` | Drive 只读前置；orgSpace 按 nextToken 续页，取 spaceId/rootFolderId 后回到 Drive |
 | 查看最近访问/编辑 | `dws drive +recent [--operate-type 1] --limit <N>` | 1=最近编辑；默认最近访问 |
 | 查看节点类型和元数据 | `dws drive +inspect --node <dentryUuid>` | 按需加 stats/publish/cover，不为普通列表强制调用 |
 | 下载普通文件 | `dws drive +download --node <dentryUuid> --output <相对路径>` | 当前 shortcut 接受 ID；在线文档用 `doc +export` |
-| 上传新文件或覆盖普通文件 | `dws drive +upload --file <相对路径>` | 新建可加 folder；覆盖改加 node，二者互斥 |
+| 上传普通文件到钉盘或知识库 | `dws drive +upload --file <相对路径> [--workspace <ID>]` | 默认进钉盘；指定 workspace 时成为知识库/文档空间中的独立文件节点；folder 与 node、workspace 与 space-id 分别互斥 |
 | 管理普通文件全局评论 | `dws drive comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply` | 复用 Doc/Sheet 新评论链路；旧 `list/create` 已 deprecated；固定全文 `global`，不支持划词、单元格或 mention |
 | 创建文件夹 | `dws drive +create-folder --name <名称> [--folder <ID>]` | Shortcut 已提交并读回 |
 | 复制在线文档节点 | `dws drive +copy --node <ID> [--folder <目标ID>]` | 普通钉盘文件会被拒绝；Base 结构复制走 AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` |
@@ -65,10 +65,11 @@ metadata:
 ## 当前最短路径
 
 - 已知 dentryUuid：直接执行 inspect/download/list/move/rename，禁止先 search；仅确认是受支持的在线文档节点后才执行 copy。
+- 任务若明确要求“在新知识库用本地文件建在线文档，再移到我的文档”，不属于 Drive 根目录整理：禁止预查 `mySpace/rootFolderId`，禁止 `doc +create` 后 `drive +move`；应由 Wiki 创建空间，Doc `+import --workspace <新workspaceId>`，再 Wiki `+move-to-drive --workspace <新workspaceId>`。
 - 目标 Drive 空间未知：先明确企业空间 `orgSpace` 或“我的文件”`mySpace`，用 `dws wiki space list --type <类型> --format json` 发现空间；`orgSpace` 在 `nextToken` 非空时以 `--cursor <nextToken>` 续页，`mySpace` 固定单条且不分页。按后续命令取真实 spaceId 或 rootFolderId 后立即回到 Drive；已知这些 ID 时不做空间发现。
 - 只有名称：`+search` → 唯一候选的 nodeId → 目标命令；不得自动选择第一项。
 - 只有文件夹层级：从最近的已知 folder ID 开始 `+list`，不要从根目录无界递归。
-- 上传新文件：单条 `+upload`；不要退回 upload-info + 手写 HTTP + commit。
+- 上传普通文件：单条 `+upload`；知识库/文档空间目标显式加 `--workspace`，不要退回 upload-info + 手写 HTTP + commit。转换为在线文档走 Doc `+import`，插入正文附件走 Doc `+media-insert`。
 - 导出后上传：`doc +export` 首次就指定最终本地文件名，直接复用回执 `localPath`，首次正式 `drive +upload` 带已获授权的 `--yes`；禁止上传后再 rename。
 - copy/move/rename/create-folder 已内置写后读取时，不再由 Agent重复执行 `+inspect`。
 - 已知 nodeId 的重命名直接 `+rename`，不先 Catalog、Help 或 search；ALIDOC 的逻辑标题由 shortcut 内部文档读回验证。
@@ -80,8 +81,8 @@ metadata:
 
 ## 关键结果语义
 
-- `+list/+search/+recent` 检查集合、hasMore 和 nextCursor；缺少集合不能当空结果，多候选禁止默认第一项。
-- `+download` 验证相对路径存在且 sizeBytes > 0；`+upload` 检查最终 nodeId、名称、类型和大小。只有源端与结果都提供可比哈希时才核对 checksum；缺失时保留现有证据，不虚构端到端校验和。
+- `+list/+search/+recent` 的完整查询统一使用 `--page-all --max-pages <N> --max-items <N>`，并检查集合、完整性和截断状态；只需首批结果时可不加 `--page-all`。缺少集合不能当空结果，多候选禁止默认第一项。
+- `+download` 验证相对路径存在且 sizeBytes > 0；`+upload` 检查最终 nodeId 和完整名称。普通 Drive 目标必须校验读回大小；指定 `--workspace` 时必须验证 workspaceId，并兼容 `doc/get_document_info` 将完整名称拆为 `name + extension` 且不返回大小的真实契约；若返回大小仍必须与本地一致。只有源端与结果都提供可比哈希时才核对 checksum；缺失时保留现有证据，不虚构端到端校验和。
 - copy/move/rename/create-folder 检查 `ok/outcome` 和读回；`partial_success` 不是完成。
 - status 检查分类集合；pull/push/sync 检查 summary 和逐项结果，failed/unknown 必须保留。
 - 分页未结束时返回 continuation；目录树或大列表必须有最大深度、页数和条目数。
@@ -121,6 +122,6 @@ Golden Route 参数足够时禁止读取 reference。其余最多读取一个精
 
 - 普通文件/文件夹及在线文档节点的存储管理 → Drive；把文件作为附件放进某篇文档正文走 Doc `+media-insert`，其他正文/内容分别走 Doc、Sheet、AITable。
 - able 外层移动/重命名走 Drive；结构复制、Base 删除（`+base-delete`）及 Base 内操作走 AITable。
-- 明确知识库 workspace 层级 → Wiki；泛称“文档空间/我的文档”仍走 Drive。
+- 明确知识库 workspace 层级 → Wiki；泛称“文档空间/我的文档”通常走 Drive，但“Wiki 库内节点移出到我的文档”固定由 Wiki `+move-to-drive` 完成，Drive 不预查 `mySpace`、不接管该移动。
 - 钉盘存储空间发现例外地复用 managed `dws wiki space list --type orgSpace|mySpace`；只取真实 spaceId/rootFolderId 后回到 Drive。spaceId 用于空间参数，rootFolderId 才可作为空间根目录 folder；`orgWikiSpace/myWikiSpace` 返回 workspaceId，不能混入 Drive 参数。
 - Word/Markdown/Text 转在线文档用 `doc +import`；Drive upload 只保留原文件。
