@@ -142,6 +142,32 @@ func pageAllMessageIDs(t *testing.T, payload map[string]any) []string {
 	return ids
 }
 
+func TestCrossPlatformCoverageChatMessageListPageAllHelpUsesAuthoritativeCursor(t *testing.T) {
+	chat := newChatCommand()
+	leaf, _, err := chat.Find([]string{"message", "list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"毫秒级 nextCursor",
+		"不会使用只有秒级精度的消息 createTime",
+		"按稳定 messageId 去重",
+		"缺少 hasMore、nextCursor 无效、游标停滞",
+	} {
+		if !strings.Contains(leaf.Long, want) {
+			t.Fatalf("help Long missing %q: %s", want, leaf.Long)
+		}
+	}
+	if strings.Contains(leaf.Long, "边界 createTime 作为下次 --time") {
+		t.Fatalf("help still describes createTime-derived pagination: %s", leaf.Long)
+	}
+	for _, name := range []string{"page-all", "page-limit", "max-items", "page-delay"} {
+		if leaf.Flags().Lookup(name) == nil {
+			t.Fatalf("help missing --%s flag", name)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageChatMessageListPageAllSinglePageUnchanged(t *testing.T) {
 	response := `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":false}}`
 	tests := []struct {

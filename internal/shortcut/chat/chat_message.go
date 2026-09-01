@@ -2101,6 +2101,9 @@ func listPinProject(data map[string]any) []map[string]any {
 		if threadID := chatmsg.ThreadID(m); threadID != nil {
 			row["threadId"] = threadID
 		}
+		if aiSendFlag := chatmsg.MessageAISendFlag(m); aiSendFlag != nil {
+			row["messageAiSendFlag"] = aiSendFlag
+		}
 		if len(row) > 0 {
 			out = append(out, row)
 		}

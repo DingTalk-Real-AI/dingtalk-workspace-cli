@@ -259,19 +259,25 @@ Example:
 Usage:
   dws drive download [flags]
 Example:
+  dws drive download --node <dentryUuid>
   dws drive download --node <dentryUuid> --output ./report.pdf
   dws drive download --node <dentryUuid> --output ~/downloads/
   dws drive download --node <dentryUuid> --output ./big.zip --part-size 32MB --parallel 8
+  dws drive download --node <dentryUuid> --url-only
 Flags:
       --node string       文件 ID (dentryUuid) (必填)
-      --output string     本地保存路径 (必填)，可以是文件路径或目录；如果指定目录，文件名从下载 URL 中自动推断
+      --output string     本地保存路径 (可选，默认当前目录)，可以是文件路径或目录；路径为目录（或未指定）时，文件名优先取返回的 fileName，其次从下载 URL 推断
       --space-id string   文件所属空间 ID (可选)
+      --overwrite         目标文件已存在时允许覆盖 (默认 false 时拒绝并报错)
+      --url-only          只返回带签名的下载地址与请求头，不落盘（与 --output/--overwrite/--part-size/--parallel/--no-resume 互斥）
       --part-size string  分片下载的分片大小，支持 KB/MB/GB 单位，范围 1MB-1GB (默认 16MB)
       --parallel int      分片下载并发数，范围 1-8 (默认 4)
       --no-resume         关闭断点续传，忽略历史下载进度从头下载 (默认开启续传)
 ```
 
-> **注意**：`--output` 是必填参数，不传会报错。
+> **注意**：`--output` 可选，不传时保存到当前目录，文件名自动推断；需要确定的输出路径时显式指定。`download-version` 同样支持缺省 `--output`。**目标文件已存在时默认拒绝覆盖并报错**（含缺省当前目录场景）；确认覆盖需显式传 `--overwrite`（`download-version` 同样支持）。断点续传的 `.dwspart` 中间产物不算冲突。
+>
+> **非落盘模式**：加 `--url-only` 只返回带签名的下载地址与请求头（JSON 字段 `downloadUrl`/`headers`，URL 查询参数分隔符 `&` 原样保留），不下载文件内容；调用方自行执行下载，地址为临时授权应尽快使用。与 `--output`/`--overwrite`/`--part-size`/`--parallel`/`--no-resume` 互斥（显式提供即报错）；`download-version` 同样支持（含 `download --version N --url-only` 兼容路由）。
 
 > **大文件分片下载**：
 > - 大文件自动分片并发下载，小文件整流下载，行为对用户透明，无需任何额外操作。
@@ -617,7 +623,8 @@ Flags:
 用户说"文件阅读量/编辑量/评论数/下载数/节点统计" → `stats`
 用户说"给这个 PDF/附件/普通文件评论、回复评论、解决评论、恢复评论、删除评论" → `comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply`（仅在用户明确要求旧评论兼容行为时使用 deprecated 的 `list/create`）
 用户说"给文件创建快捷方式/放一个链接到目标文件夹" → `shortcut`
-用户说"下载文件" → `download` 指定 `--output` 保存到本地
+用户说"下载文件" → `download`，可用 `--output` 指定保存路径（缺省当前目录，文件名自动推断）；目标文件已存在时需确认后加 `--overwrite`（默认拒绝覆盖）
+用户说"只要下载地址/不要下载到本地/给我下载链接/我自己下载" → `download --url-only`（只返回带签名下载地址与请求头，不落盘；不与落盘/分片参数同用）
 用户说"新建文件夹/创建目录" → `mkdir`（钉盘空间）/ `wiki node create --type folder`（文档空间）
 用户说"上传文件/传文件到钉盘" → `upload`（首选此命令，自动完成三步流程）
 用户说"覆盖/替换钉盘或知识库中的已有文件" → `upload --node <fileId>`（不可逆，先 `--dry-run`，确认后再加 `--yes`）
@@ -906,7 +913,8 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 - `--order-by` 支持: `createTime`、`modifyTime`、`name`
 - **上传文件首选 `dws drive upload` 命令**；手动三步（`upload-info` → HTTP PUT → `commit`）仅用于自定义流式上传等特殊场景。手动三步时 HTTP PUT 必须把 upload-info 返回的 `headers` 全部回传，`Content-Type` 通常要留空；PUT 返回 200 后才能调 `commit`；`uploadId` 有过期时间，过期需重新 `upload-info`；`--folder` 在 upload-info / commit 中要保持一致
 - `--file-name` 必须包含扩展名（如 `report.pdf`）
-- `download` 需要指定 `--output`，CLI 会把文件保存到本地路径或目录
+- `download` 的 `--output` 可选，不传时保存到当前目录并自动推断文件名；指定时可以是文件路径或目录（`download-version` 同样支持缺省）
+- `download`/`download-version` 的 `--url-only` 是非落盘模式：只返回带签名下载地址与请求头，不写本地文件；与 `--output`/`--overwrite`/分片参数互斥，组合会直接报错
 - 文件名规则：头尾不能有空格；不能含 `*`、`"`、`<`、`>`、`|`、制表符；不能以 `.` 结尾
 - `shortcut` 会创建新节点，执行后必须通过 `drive list` 回读确认目标位置；`stats` 为只读命令
 

@@ -766,7 +766,7 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	}
 	directReply := &scriptedToolCaller{steps: []scriptedToolStep{
 		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
-		{text: `{"result":{"openConversationId":"cid","convThreadEnabled":false}}`},
+		{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`},
 		{text: `{}`},
 	}}
 	if err := runChatCoverageCommand(t, directReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender", helperCurrentDOpenID, "--text=reply", "--ai-tag", "--uuid=u"); err != nil {
@@ -774,7 +774,7 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	}
 	resolvedReply := &scriptedToolCaller{steps: []scriptedToolStep{
 		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
-		{text: `{"result":{"openConversationId":"cid","convThreadEnabled":false}}`},
+		{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`},
 		{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`},
 		{text: `{}`},
 	}}

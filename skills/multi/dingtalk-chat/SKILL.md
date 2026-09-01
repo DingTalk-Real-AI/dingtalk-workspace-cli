@@ -79,12 +79,12 @@ metadata:
 - `+messages-send`：文件、Bot、Webhook、复杂 @ 或幂等控制。user 已知 ID 可直接传，也可用 `--user-query` / `--chat-query` 运行同一只读解析链；Bot 多群使用 `--groups/--groups-file`，返回 `im.batch-write.v1`；bot/webhook 只使用下层真实支持的文本/Markdown 能力。
 - 发文件消息用 `+messages-send --file <路径>`；只存会话空间、不发消息才用 `chat conversation-file upload`，返回 `dentryId`/`spaceId`。
 - Webhook 使用 `+messages-send --as webhook --webhook-token <token>`；不要退回原子 Webhook 命令。
-- 流式卡片用 `+messages-send-card`；群聊@传 ID/`--at-all`，Runtime 把 create 返回前缀加到 `--content`；禁写占位符；仅 text。
+- 流式卡片用 `+messages-send-card`；群聊 @ 传 ID/`--at-all`，Runtime 拼接 create 前缀；禁占位符，仅 text。
 
 ## 关键结果语义
 
 - `openTaskId` 是发送任务 ID，不是回复或撤回所需的消息 ID；消息 ID 必须来自真实查询结果。
-- 消息查询默认保留稳定 ID、会话/thread、发送者、文本、时间、reaction、引用、转发和 `resourceRefs`；`--no-reactions` 可关闭 reaction。
+- 消息查询默认保留稳定 ID、会话/thread、发送者、文本、时间、`messageAiSendFlag`、reaction、引用、转发和 `resourceRefs`；`--no-reactions` 可关闭 reaction。
 - 查询结果必须检查 `complete`、`hasMore`、`failures` 和资源下载 ledger；partial result 不得表述为完整成功。
 - 子消息使用自己的 `messageId`；仅缺会话 ID 时继承父消息的 `conversationId`。
 - 下载只允许工作目录内安全相对路径，默认不覆盖并原子落盘；覆盖必须由用户显式传 `--overwrite`。读取和下载不需要 `--yes`。

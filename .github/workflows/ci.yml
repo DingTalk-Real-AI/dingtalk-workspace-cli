@@ -86,6 +86,7 @@ jobs:
                 filename.startsWith('scripts/install') ||
                 filename.startsWith('Formula/') ||
                 filename.startsWith('build/') ||
+                filename.startsWith('third_party/runtimepayload/') ||
                 filename === '.goreleaser.yaml' ||
                 filename === '.github/workflows/release.yml' ||
                 filename === '.github/workflows/withdraw-release.yml'
@@ -95,6 +96,8 @@ jobs:
               (
                 filename.startsWith('internal/auth/') ||
                 filename.startsWith('internal/keychain/') ||
+                filename.startsWith('internal/runtimecontext/') ||
+                filename.startsWith('third_party/runtimepayload/') ||
                 /_(darwin|windows|linux|unix)(?:_[a-z0-9]+)*\.go$/.test(filename) ||
                 filename === '.github/workflows/ci.yml' ||
                 filename ===
@@ -531,6 +534,41 @@ jobs:
         env:
           XDG_CONFIG_HOME: ""
         run: node test/scripts/install_js_smoke.mjs
+
+  runtime-payload:
+    name: Validate Runtime Payload
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.release_sensitive == 'true' || needs.lint.outputs.platform_sensitive == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install runtime inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm binutils file
+
+      - name: Verify runtime payload
+        run: ./scripts/policy/check-runtime-payload.sh
+
+      - name: Compile runtime context targets
+        run: |
+          set -euo pipefail
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            suffix=""
+            if [ "$os" = windows ]; then suffix=.exe; fi
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go test -c ./internal/runtimecontext -o "$RUNNER_TEMP/runtimecontext-${os}-${arch}${suffix}"
+          done
 
   test-focused:
     name: "Test (focused: ${{ matrix.shard }})"

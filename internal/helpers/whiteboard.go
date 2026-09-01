@@ -46,9 +46,9 @@ func newWhiteboardCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "读取和更新钉钉在线文档中的内嵌白板",
-			UseWhen:      []string{"操作已有文档内嵌白板的 OpenNodes 内容时"},
-			AvoidWhen:    []string{"普通文档正文和块使用 doc；创建白板卡片先用 doc whiteboard insert"},
+			AgentSummary: "读取和更新钉钉文档内嵌白板的 OpenNodes 内容",
+			UseWhen:      []string{"用户要读取或写入白板/画布中的 OpenNodes 图形、文本、分组、连接线、Vector 或整页布局时"},
+			AvoidWhen:    []string{"普通文档正文和块使用 doc；只创建或删除白板卡片容器使用 doc whiteboard insert / doc block delete"},
 		},
 	})
 	root := newGroupCommand(&cobra.Command{

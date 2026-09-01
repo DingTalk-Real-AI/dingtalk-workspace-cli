@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "payload_version": "20260825",
+  "ps_file_count": 123,
+  "ps_manifest_sha256": "45ae147697c1f8683df3f232d0ba792b807179bbe22fdac8225a0cf25fc33e7e",
+  "libraries": {
+    "darwin/universal/x7k2m9p4q1w8.dylib": "a6f92e7ea30eadb68ff6e5f425166d7644842003abc72a27ec8186145f36b1f9",
+    "linux/amd64/libx7k2m9p4q1w8.so": "174b59ba2e46195e81dbcbe3aac83dedbf5baaceec41d02a684e623ddaace481",
+    "linux/arm64/libx7k2m9p4q1w8.so": "aa81cd1c19493ead17e54a61b1845acd0e2f28fb61a3a7914e5e6a669bcaa83d",
+    "windows/amd64/x7k2m9p4q1w864.dll": "7a19607bfda0dc827e1005cd3601d297fa380eedd9c8a3f17a15637fc1b6e6bf",
+    "windows/arm64/x7k2m9p4q1w864.dll": "1faf52132bda5e64051610e08bab40c9be4df4c873c4694db6d4489ab5efec9a"
+  }
+}
