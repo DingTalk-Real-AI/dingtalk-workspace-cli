@@ -105,36 +105,78 @@ func TestCrossPlatformCoverageContractRecordListRejectsInvalidInputBeforeCall(t 
 	}
 }
 
-func TestCrossPlatformCoverageContractProjectDeleteMapsIntegerIDs(t *testing.T) {
-	// Without --yes: should fail with typed confirmation_required error and zero MCP calls
-	caller := &contractDefectCaller{}
-	_, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"project", "delete", "--project-ids", "1001, 1002")
-	if err == nil {
-		t.Fatal("project delete without --yes should fail")
+func TestCrossPlatformCoverageContractDeleteCommandsRequireConfirmation(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		tool       string
+		requestKey string
+		wantArgs   map[string]any
+	}{
+		{
+			name:       "project delete",
+			args:       []string{"project", "delete", "--project-ids", "1001, 1002"},
+			tool:       "deleteProject",
+			requestKey: "DeleteProjectOpenRequest",
+			wantArgs:   map[string]any{"projectIds": []int64{1001, 1002}},
+		},
+		{
+			name:       "account delete",
+			args:       []string{"account", "delete", "--account-id", "12345"},
+			tool:       "deleteAccountEntryInfo",
+			requestKey: "DeleteContractAccountEntryRequest",
+			wantArgs:   map[string]any{"accountEntryId": int64(12345)},
+		},
+		{
+			name:       "subject delete",
+			args:       []string{"subject", "delete", "--subject-id", "2001"},
+			tool:       "deleteSubject",
+			requestKey: "DeleteSubjectOpenRequest",
+			wantArgs:   map[string]any{"subjectId": int64(2001)},
+		},
+		{
+			name:       "subject batch-delete",
+			args:       []string{"subject", "batch-delete", "--subject-ids", "2001, 2002, 2003"},
+			tool:       "batchDeleteSubject",
+			requestKey: "BatchDeleteSubjectOpenRequest",
+			wantArgs:   map[string]any{"subjectIdList": []int64{2001, 2002, 2003}},
+		},
 	}
-	var appErr *apperrors.Error
-	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
-		t.Fatalf("expected typed confirmation_required error, got: %v", err)
-	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("expected zero MCP calls without confirmation, got %d: %+v", len(caller.calls), caller.calls)
-	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// 1) Without --yes: typed confirmation_required error and zero MCP calls.
+			caller := &contractDefectCaller{}
+			_, err := executeContractDefectCommand(t, caller, newContractCommand, tc.args...)
+			if err == nil {
+				t.Fatal("delete without --yes should fail")
+			}
+			var appErr *apperrors.Error
+			if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
+				t.Fatalf("expected typed confirmation_required error, got: %v", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("expected zero MCP calls without confirmation, got %d: %+v", len(caller.calls), caller.calls)
+			}
 
-	// With --yes: should succeed with exactly one call and correct parameters
-	confirmedCaller := &contractDefectCaller{}
-	_, err = executeContractDefectCommand(t, confirmedCaller, newContractCommand,
-		"project", "delete", "--project-ids", "1001, 1002", "--yes")
-	if err != nil {
-		t.Fatalf("project delete with --yes: %v", err)
-	}
-	call := onlyContractCall(t, confirmedCaller)
-	request, ok := call.args["DeleteProjectOpenRequest"].(map[string]any)
-	if !ok {
-		t.Fatalf("DeleteProjectOpenRequest = %#v", call.args["DeleteProjectOpenRequest"])
-	}
-	if got := request["projectIds"]; !reflect.DeepEqual(got, []int64{1001, 1002}) {
-		t.Fatalf("projectIds = %#v", got)
+			// 2) With --yes: exactly one call with correct tool and precise arguments.
+			confirmed := &contractDefectCaller{}
+			_, err = executeContractDefectCommand(t, confirmed, newContractCommand, append(append([]string(nil), tc.args...), "--yes")...)
+			if err != nil {
+				t.Fatalf("delete with --yes: %v", err)
+			}
+			call := onlyContractCall(t, confirmed)
+			if call.toolName != tc.tool {
+				t.Fatalf("tool = %q, want %q", call.toolName, tc.tool)
+			}
+			request, ok := call.args[tc.requestKey].(map[string]any)
+			if !ok {
+				t.Fatalf("%s = %#v", tc.requestKey, call.args[tc.requestKey])
+			}
+			if !reflect.DeepEqual(request, tc.wantArgs) {
+				t.Fatalf("request = %#v, want %#v", request, tc.wantArgs)
+			}
+		})
 	}
 }
 

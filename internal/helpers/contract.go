@@ -369,7 +369,7 @@ customReviewRules   自定义审查规则（字符串，可选）`,
 			}
 			var r io.Reader
 			if path == "-" {
-				r = os.Stdin
+				r = cmd.InOrStdin()
 			} else {
 				f, err := os.Open(path)
 				if err != nil {
@@ -426,7 +426,7 @@ source              来源标识（字符串，可选）`,
 			}
 			var r io.Reader
 			if path == "-" {
-				r = os.Stdin
+				r = cmd.InOrStdin()
 			} else {
 				f, err := os.Open(path)
 				if err != nil {
