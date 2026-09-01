@@ -5,11 +5,15 @@
 package helpers
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 )
 
 func runContactUpdateCommand(t *testing.T, input string, args ...string) (*contactEnterpriseCaller, error) {
@@ -56,6 +60,7 @@ func TestCrossPlatformCoverageContactUpdateCommandsExposeExpectedFlags(t *testin
 		{[]string{"label", "add-members"}, []string{"id", "users"}},
 		{[]string{"label", "remove-members"}, []string{"id", "users"}},
 		{[]string{"label", "update-member-scope"}, []string{"user", "id", "depts"}},
+		{[]string{"ext-field", "list"}, []string{}},
 		{[]string{"ext-field", "create"}, []string{"name"}},
 		{[]string{"ext-field", "update"}, []string{"code", "org-self-tag", "client-display", "is-search"}},
 		{[]string{"ext-field", "delete"}, []string{"code", "org-self-tag"}},
@@ -186,6 +191,12 @@ func TestCrossPlatformCoverageContactUpdateCommandsMapMCPArguments(t *testing.T)
 			args:     []string{"label", "update-member-scope", "--user", "u1", "--id", "12345", "--depts", "1,2,3", "--yes"},
 			toolName: "update_label_member_scope",
 			wantArgs: map[string]any{"staffId": "u1", "labelId": int64(12345), "deptIds": []int64{1, 2, 3}},
+		},
+		{
+			name:     "list ext fields",
+			args:     []string{"ext-field", "list"},
+			toolName: "get_org_ext_fields",
+			wantArgs: map[string]any{},
 		},
 		{
 			name:     "create ext field",
@@ -354,4 +365,86 @@ func TestCrossPlatformCoverageContactUpdateCommandsValidateInput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContactExtFieldListRejectsPositionalArgs(t *testing.T) {
+	caller, err := runContactUpdateCommand(t, "", "ext-field", "list", "extra")
+	if err == nil {
+		t.Fatal("expected error for positional args, got nil")
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("expected no tool calls for positional args, got %d", len(caller.calls))
+	}
+}
+
+func TestContactExtFieldListResultContract(t *testing.T) {
+	root := newContactCommand()
+	leaf, _, err := root.Find([]string{"ext-field", "list"})
+	if err != nil || leaf == nil {
+		t.Fatalf("find contact ext-field list: leaf=%v err=%v", leaf, err)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(leaf)
+	if !ok || final.Identity == nil || final.Identity.CanonicalPath != "contact.get_org_ext_fields" {
+		t.Fatalf("contract final identity = %#v", final.Identity)
+	}
+	if final.Result == nil {
+		t.Fatal("expected result spec")
+	}
+	wantOutcomes := []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}
+	if !reflect.DeepEqual(final.Result.Outcomes, wantOutcomes) {
+		t.Fatalf("result outcomes = %#v, want %#v", final.Result.Outcomes, wantOutcomes)
+	}
+
+	properties, err := schemaPropertiesFromRaw(final.Result.DataSchema)
+	if err != nil {
+		t.Fatalf("parse data schema: %v", err)
+	}
+
+	// Top-level response shape.
+	for _, key := range []string{"result", "success", "errorCode", "errorMsg"} {
+		if _, ok := properties[key]; !ok {
+			t.Fatalf("top-level schema missing %q", key)
+		}
+	}
+
+	resultProp, ok := properties["result"].(map[string]any)
+	if !ok || resultProp["type"] != "array" {
+		t.Fatalf("result property = %#v, want array", properties["result"])
+	}
+	items, ok := resultProp["items"].(map[string]any)
+	if !ok || items["type"] != "object" {
+		t.Fatalf("result items = %#v, want object", resultProp["items"])
+	}
+	itemProps, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("result items properties = %#v", items["properties"])
+	}
+
+	// Cover the actual list response shape.
+	wantItemFields := []string{"orgSelfTag", "isSearch", "modifiable", "required", "name", "code", "clientDisplay", "attrType", "multiValue", "deletable", "displayOrder"}
+	for _, key := range wantItemFields {
+		if _, ok := itemProps[key]; !ok {
+			t.Fatalf("result item schema missing %q", key)
+		}
+	}
+
+	orgSelfTag, ok := itemProps["orgSelfTag"].(map[string]any)
+	if !ok {
+		t.Fatalf("orgSelfTag property = %#v", itemProps["orgSelfTag"])
+	}
+	if got := orgSelfTag["type"]; got != "integer" {
+		t.Fatalf("orgSelfTag type = %v, want integer", got)
+	}
+}
+
+func schemaPropertiesFromRaw(raw json.RawMessage) (map[string]any, error) {
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, err
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	return properties, nil
 }
