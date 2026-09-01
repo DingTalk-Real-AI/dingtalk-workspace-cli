@@ -863,6 +863,13 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 // canonicalRawJSON) — not a bare RPC name. Adding an entry is a contract
 // decision and belongs in review, not in a feature change.
 var reviewedInterfaceRefRedirect = map[string]map[string]string{
+	// The public pending-approval command keeps its stable canonical identity,
+	// while the OA backend moved from the legacy list endpoint to the dedicated
+	// current-user todo-task endpoint. The CLI-facing contract remains
+	// compatible; only the audited backing RPC changes.
+	"oa/oa.list_pending_approvals": {
+		`{"product_id":"oa","rpc_name":"list_pending_approvals"}`: `{"product_id":"oa","rpc_name":"get_todo_tasks"}`,
+	},
 	// The style surface moved from update_range (which writes values) to
 	// set_cell_range's cellStyles payload (style-only, preserving values). This
 	// is the only channel that can express italic / underline / strike-through /

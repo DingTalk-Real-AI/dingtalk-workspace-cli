@@ -1259,6 +1259,20 @@ func TestCrossPlatformCoverageReviewedRedirectKeysAreCanonicalJSON(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageOAPendingApprovalRedirectIsReviewed(t *testing.T) {
+	const toolPath = "oa/oa.list_pending_approvals"
+	const oldRef = `{"product_id":"oa","rpc_name":"list_pending_approvals"}`
+	const newRef = `{"product_id":"oa","rpc_name":"get_todo_tasks"}`
+
+	redirects, ok := reviewedInterfaceRefRedirect[toolPath]
+	if !ok {
+		t.Fatalf("missing reviewed interface_ref redirect for %s", toolPath)
+	}
+	if got := redirects[oldRef]; got != newRef {
+		t.Fatalf("reviewed redirect = %q, want %q", got, newRef)
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect(t *testing.T) {
 	// The redirect carve-out only accepts an explicitly reviewed tool + old→new
 	// ref pair. Register the fixture's path for the duration of this test so the
