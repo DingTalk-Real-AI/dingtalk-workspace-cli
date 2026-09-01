@@ -1,5 +1,9 @@
 # field — 字段管理
 
+仅在 AI 字段、关联字段、lookup/filterUp 或其他复杂 config 结构不确定时读取。普通 text/number/date/singleSelect/currency 字段的 create/update/delete 使用根 Skill 次级直达。
+
+本文是字段复杂配置的终点；命令参数已覆盖时，不再读取其他 AITable Reference 或 Help。
+
 ## field get — 获取字段详情
 
 ```
@@ -56,6 +60,14 @@ dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
 # 批量模式
 dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
   --fields '[{"fieldName":"部门","type":"singleSelect","config":{"options":[{"name":"技术部"},{"name":"产品部"}]}}]'
+```
+
+人民币货币字段使用真实 `currency` 枚举和配置，不使用 `select` 或 `config.symbol`：
+
+```bash
+dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
+  --name "预计成交额" --type currency \
+  --config '{"currencyType":"CNY","formatter":"FLOAT_2"}' --format json
 ```
 
 允许部分成功，返回结果逐项标明成功/失败状态。

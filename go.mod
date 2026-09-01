@@ -11,6 +11,7 @@ require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/creack/pty v1.1.24
+	github.com/ebitengine/purego v0.10.2
 	github.com/fatih/color v1.18.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.0
@@ -23,6 +24,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	gitlab.alibaba-inc.com/aes/aem-go-sdk v0.3.0
 	golang.org/x/crypto v0.49.0
+	golang.org/x/image v0.31.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
 )

@@ -863,6 +863,13 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 // canonicalRawJSON) — not a bare RPC name. Adding an entry is a contract
 // decision and belongs in review, not in a feature change.
 var reviewedInterfaceRefRedirect = map[string]map[string]string{
+	// The public pending-approval command keeps its stable canonical identity,
+	// while the OA backend moved from the legacy list endpoint to the dedicated
+	// current-user todo-task endpoint. The CLI-facing contract remains
+	// compatible; only the audited backing RPC changes.
+	"oa/oa.list_pending_approvals": {
+		`{"product_id":"oa","rpc_name":"list_pending_approvals"}`: `{"product_id":"oa","rpc_name":"get_todo_tasks"}`,
+	},
 	// The style surface moved from update_range (which writes values) to
 	// set_cell_range's cellStyles payload (style-only, preserving values). This
 	// is the only channel that can express italic / underline / strike-through /
@@ -900,6 +907,13 @@ var reviewedConstraintTransition = map[string]map[string]string{
 	// both groups makes the final Schema express the runtime's exact-one rule.
 	"sheet/sheet.create_float_image": {
 		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
+	},
+	// #85955640 adds local --file-path as an alternative to the historically
+	// required --media-id input. Every historical --media-id invocation remains
+	// valid; publishing both groups makes the final Schema express the
+	// runtime's exact-one rule.
+	"chat/chat.favorite_personal_emotion": {
+		"": `{"mutually_exclusive":[["media-id","file-path"]],"require_one_of":[["media-id","file-path"]]}`,
 	},
 	// PR #1042 publishes the Todo Shortcut constraints already enforced by
 	// runtime validation. The Reminder transition is intentionally limited to

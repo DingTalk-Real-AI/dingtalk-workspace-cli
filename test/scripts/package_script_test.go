@@ -607,7 +607,11 @@ func seedDistArchive(t *testing.T, path string) {
 	}
 	defer file.Close()
 
-	content := []byte("#!/bin/sh\nexit 0\n")
+	slot, err := os.ReadFile(filepath.Join("..", "..", "internal", "runtimepayload", "assets", "windows-amd64.payload"))
+	if err != nil {
+		t.Fatalf("read runtime payload slot: %v", err)
+	}
+	content := append([]byte("#!/bin/sh\nexit 0\n"), slot...)
 	switch {
 	case strings.HasSuffix(path, ".tar.gz"):
 		gzipWriter := gzip.NewWriter(file)
@@ -2664,6 +2668,10 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"finalized-release-dist",
 		`dws-darwin-${arch}.tar.gz`,
 		"codesign --verify --strict --verbose=4",
+		"runtime-payload materialize",
+		`test "$binary_team" = "$library_team"`,
+		`doctor --json --timeout 2`,
+		`.detail.token_fingerprint | length`,
 	} {
 		if !strings.Contains(verifySection, required) {
 			t.Errorf("Apple verification stage is missing %q", required)

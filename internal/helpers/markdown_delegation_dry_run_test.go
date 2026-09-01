@@ -119,6 +119,7 @@ func TestCrossPlatformCoverageMarkdownCreateDryRunDelegationAllowed(t *testing.T
 	}{
 		{"space route uploads via drive with parentId", []string{"markdown", "create", "--principal-user-id", "u1", "--content", "hi", "--name", "x.md", "--space-id", "s1", "--folder", "f1"}, "drive.get_upload_info", "f1"},
 		{"doc route uploads with workspace and folder", []string{"markdown", "create", "--principal-user-id", "u1", "--content", "hi", "--name", "x.md", "--workspace", "w1", "--folder", "f1"}, "doc.get_file_upload_info", "f1"},
+		{"folder-only route authorizes the domain probe", []string{"markdown", "create", "--principal-user-id", "u1", "--content", "hi", "--name", "x.md", "--folder", "f1"}, "drive.get_file_info", "f1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

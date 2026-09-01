@@ -4,9 +4,11 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +23,17 @@ func TestCrossPlatformCoverageSheetWhiteboardMarkdownRoutes(t *testing.T) {
 
 func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *cobra.Command, tools map[string]map[string]any) {
 	t.Helper()
+	product, ok := contract.LookupProductDecl("markdown")
+	if !ok {
+		t.Fatal("markdown ProductDecl is not registered")
+	}
+	productSelection := product.Selection.AgentSummary + " " + strings.Join(product.Selection.UseWhen, " ")
+	for _, phrase := range []string{"对比", "本地草稿"} {
+		if !strings.Contains(productSelection, phrase) {
+			t.Errorf("markdown ProductDecl selection does not route %q intent: %q", phrase, productSelection)
+		}
+	}
+
 	registered := 0
 	for _, item := range shortcut.All() {
 		if item.Service == "markdown" {
@@ -116,6 +129,18 @@ func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *c
 		}
 		if got := schemaContractString(tool["interface_reason"]); got == "" {
 			t.Errorf("markdown %s is missing the reviewed composite routing reason", name)
+		}
+		if name == "diff" {
+			parameters := schemaContractMap(tool["parameters"])
+			for parameter, phrase := range map[string]string{
+				"version":  "正整数",
+				"version2": "正整数",
+				"context":  "非负整数",
+			} {
+				if description := schemaContractString(parameters[parameter]["description"]); !strings.Contains(description, phrase) {
+					t.Errorf("markdown diff --%s description=%q, want range contract containing %q", parameter, description, phrase)
+				}
+			}
 		}
 	}
 }

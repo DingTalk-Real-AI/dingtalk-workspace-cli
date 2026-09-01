@@ -1038,13 +1038,13 @@ jobs:
 
       - name: Install archive tooling
         run: |
-          if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
+          if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1 && command -v llvm-nm >/dev/null 2>&1; then
             exit 0
           fi
           sudo apt-get update
-          sudo apt-get install -y zip unzip
+          sudo apt-get install -y zip unzip llvm
 
-      - name: Post-release packaging
+      - name: Prepare runtime payload
         run: ./scripts/release/post-goreleaser.sh
         env:
           DWS_PACKAGE_VERSION: ${{ needs.release-contract.outputs.release_version }}
@@ -1087,6 +1087,16 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check out sealed release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-contract.outputs.release_commit }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
       - name: Restore finalized distribution files
         uses: actions/download-artifact@v4
         with:
@@ -1096,6 +1106,11 @@ jobs:
       - name: Verify finalized Darwin signatures with Apple codesign
         run: |
           set -euo pipefail
+          case "$(uname -m)" in
+            arm64) host_arch=arm64 ;;
+            x86_64) host_arch=amd64 ;;
+            *) host_arch=unsupported ;;
+          esac
           for arch in amd64 arm64; do
             archive="dist/dws-darwin-${arch}.tar.gz"
             stage="$RUNNER_TEMP/verify-darwin-${arch}"
@@ -1104,6 +1119,18 @@ jobs:
             test -f "$stage/dws"
             codesign --verify --strict --verbose=4 "$stage/dws"
             codesign -dvvv "$stage/dws"
+            library="$(go run ./scripts/build/runtime-payload materialize \
+              "$stage/dws" "$stage/cache" darwin "$arch")"
+            codesign --verify --strict --verbose=4 "$library"
+            binary_team="$(codesign -dvvv "$stage/dws" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+            library_team="$(codesign -dvvv "$library" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+            test -n "$binary_team"
+            test "$binary_team" = "$library_team"
+            if [ "$arch" = "$host_arch" ]; then
+              HOME="$stage/home" "$stage/dws" doctor --json --timeout 2 > "$stage/doctor.json"
+              jq -e '.checks[] | select(.name == "runtime_context") | .status == "pass" and .detail.token_length > 0 and (.detail.token_fingerprint | length) == 12' \
+                "$stage/doctor.json" >/dev/null
+            fi
           done
 
   publish-release:

@@ -207,6 +207,9 @@ Flags:
 - `result.processDescription` — 表单描述
 - `result.content` — 表单组件 JSON 字符串，包含表单项（items）和标题等配置
 
+请假/补卡发起链路的服务端前置命令（leave-duration / leave-check / supply-plans / supply-check，`dws attendance approve` 组）见 attendance.md 对应章节；发起工作流与纪律见本文「发起请假审批」「发起补卡审批」章节。
+
+
 ### 流程预测
 
 ```
@@ -313,18 +316,23 @@ Flags:
 - **严禁把姓名直接写进 `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。** 必须先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId。
 - **严禁在未得到用户确认前直接执行真实提单。**
 - **严禁猜测控件名称或选项值。** 必须从 `form-schema` 返回中提取。
+- **严禁在发起后的验收环节重复执行写命令。** `create-instance` 成功后，验收只用只读的 `tasks --instance-id` / `detail --instance-id` 核对状态与表单存储；重复执行 `create-instance` 会直接产生重复审批单。
 - **严禁跳过 `forecast-process` 中的自选节点选人。** 若预测返回 `targetSelect: true` 的节点，必须让用户选人后再发起。
+
+#### 模板不支持 CLI 发起时：submitUrl 链接引导
+
+当模板不支持 CLI 发起（含不支持必填控件、请假套件特例哺乳假/需上传证明材料、补卡模板含需上传证据的图片控件等）时，引导用户点击 `dws attendance +get-approve-template` 返回的 `submitUrl` 提交。链接展示规范：使用 Markdown 可点击链接格式 `[formName](submitUrl)`（如 `[员工请假](https://...)`）；如存在更匹配的模板可放在列表前面，但不要只返回推荐模板，必须同时返回其它可用模板供用户选择，且每个模板都应是用户可直接点击的 Markdown 链接。
 
 #### 最小判断表
 
 | 你手上有什么 | 下一步 |
 |---|---|
-| 只有口语需求，比如"帮我发起请假审批" | 先 `search-forms --query 请假` |
+| 只有口语需求，比如"帮我发起请假审批" | 请假/补卡走 `dws attendance +get-approve-template`（--type leave / repair-check）定位模板（见「发起请假审批」「发起补卡审批」章节）；其他审批先 `search-forms --query <关键词>` |
 | 已拿到 `processCode` | 直接 `form-schema --process-code <code>` |
 | 已拿到 Schema | 向用户展示控件列表，收集表单值 |
 | 已收集表单值 | `forecast-process` 预测流程走向 |
 | 预测返回有 `targetSelect: true` 节点 | 让用户为自选节点选人（`dws aisearch person --query "<姓名>" --dimension name --format json` 解析姓名） |
-| 预测完成，自选节点已选人 | 汇总确认后 `create-instance --yes` |
+| 预测完成，自选节点已选人 | 汇总确认后 `create-instance` |
 | 用户明确说"不走模板流程，直接指定审批人" | 使用 `directAppointedApprovers`（高级模式） |
 
 #### 工作流
@@ -336,7 +344,7 @@ Flags:
 4. 收集表单值                       → 向用户展示控件列表，收集用户填写的表单值
 5. forecast-process                  → 根据表单值预测流程走向，识别自选节点
 6. 自选节点选人                       → 若预测返回 targetSelect=true 的节点，让用户选人（用 dws aisearch person --query "<姓名>" --dimension name --format json 解析姓名）
-7. 汇总确认后 create-instance --yes  → 展示完整信息（表单值 + 流程路径 + 审批人），用户确认后执行发起
+7. 汇总确认后 create-instance → 展示完整信息（表单值 + 流程路径 + 审批人），用户确认后执行发起
 ```
 
 > **IMPORTANT：每次发起实例前都必须重新调用 `form-schema` 查询模板。** 即使用户之前查询过同一个 processCode，模板可能已被修改（控件增减、选项变更、必填属性调整等），不得复用旧的 Schema 结果。
@@ -369,13 +377,13 @@ Usage:
   dws oa approval create-instance [flags]
 Example:
   # 简单发起（Agent 在汇总确认后需加 --yes）
-  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试内容"}' --yes
+  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试内容"}'
   # 指定审批人（OR=或签，AND=会签，NONE=单人）
-  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR --yes
+  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR
   # 指定抄送人
-  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试"}' --cc-list "userId1" --cc-position START --yes
+  dws oa approval create-instance --process-code PROC-xxx --form-values '{"单行输入框":"测试"}' --cc-list "userId1" --cc-position START
   # 高级用法：传入完整 JSON（支持 directAppointedApprovers、targetSelectActioners 等全部字段）
-  dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[{"name":"单行输入框","value":"测试"}]}' --yes
+  dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[{"name":"单行输入框","value":"测试"}]}'
 Flags:
       --process-code string              审批模板 processCode（简单模式必填）
       --form-values string               表单值 JSON，格式 '{"控件名称":"值"}'（简单模式必填）
@@ -510,7 +518,7 @@ Flags:
 ]
 ```
 - `actionerKey`：自选节点的规则 key，可通过获取审批单流程节点信息接口获取 `actorKey`
-- `actionerStaffIds`：操作人 userId 列表
+- `actionerStaffIds`：操作人 **userId** 列表（userId 即员工工号，**不是员工 uid**——传 uid 短号会导致审批人节点异常，实测；姓名解析 userId 见上方执行摘要）
 
 **审批类型（approvers actionType）说明：**
 
@@ -551,6 +559,108 @@ Flags:
 ```
 
 后续可用该 processInstanceId 执行 `detail`、`tasks`、`records`、`revoke` 等操作。
+
+### 发起请假审批（请假套件 DDHolidayField）
+
+> **触发：** 用户说"请假/请X天假/请年假/请事假/请病假/提交请假"等请假意图时，走本节工作流（**不走 search-forms**）；补卡走下方「发起补卡审批」章节；加班/外出/出差仍按 attendance 域 `+get-approve-template` 的提交链接引导。
+
+#### 工作流（步骤 1-8 请假特有；9-10 复用「发起审批实例」第 5-7 步）
+
+```
+1.【模板定位】dws attendance +get-approve-template --type leave
+   → 请假模板列表（formName / processCode / submitUrl）
+   · 单模板直接选定；多模板时必须交由用户选择，Agent 不得自行选定（按用户假期词匹配 formName 排序仅影响展示顺序，不改变选择权）；交互组件选项数上限 < 模板总数时改用纯文本/表格列出全量后由用户回复模板名
+   · 返回空 → 告知用户企业未配置可发起的请假模板
+   · submitUrl 仅作兜底（CLI 不支持的模板引导客户端提交）
+2.【模板详情】dws oa approval form-schema --process-code <code>
+   → 识别 DDHolidayField（componentName）+ props.options（leaveCode/unit/name）+ 其余控件（请假事由等）
+   · 无 DDHolidayField → 降级普通表单流程（简单模式 --form-values 发起，无需步骤 5/6）
+3.【先类型】dws attendance approve leave-types（--user 可选，缺省当前用户；代提交用其 userId）
+   · 自动匹配：用户已明确类型词时匹配返回的 leaveName，唯一命中直接用
+   · 无类型词、未命中或含糊 → 展示全部可用类型供选择，不预筛子集；选项格式：【类型名称】 (剩余 X 天/小时)，X 取 balance.remainQuota，单位取 quotaUnit 中文映射（day/halfDay→天、hour→小时）；无余额对象或 balanceHidden=true 时不追加括号（不展示“余额不可见”类文案）；选中后剩余≤0 → 提示「你的XX余额已用完」并终止，按 X 计（X 取 leaveViewUnit 中文映射）；面向用户的展示一律用中文文案，不得出现 hour/halfDay/day 等英文枚举；「全部」是硬约束：宿主交互组件选项数上限 < 类型总数时，禁止挑“代表性子集”，必须放弃该组件改用纯文本/表格列出全量后由用户回复类型名；选项主标识必须是【类型名称】原文，不得截断、省略或被余额/状态描述取代
+   · 类型一经确定，leaveCode 取自同一条目（与 leaveName 同源）
+   · 哺乳假判定：类型条目 bizType === "breastfeeding_leave_new" → 明确拒绝并引导客户端（用步骤 1 的 submitUrl）；bizType 缺失时回退名称含「哺乳」；证明材料判定：leaveCertificate（enable/unit/duration/promptInformation）在 leave-types 响应中直接返回；enable=true 时步骤 5 拿到时长后**双向换算为小时**比较——阈值：leaveCertificate.unit=day → duration×24、hour → duration 原值；用户时长：unit ∈ {hour,halfHour,limitHour} → durationInHour 原值（**不乘 24**）、day/halfDay → durationInDay×24；时长 ≥ 阈值则同样拒绝并引导客户端
+4.【再时间 + 事由】按选定类型的 leaveViewUnit 格式化起止时间；同时收集请假事由（按 form-schema 的 required 判定：必填则缺失必问，非必填未提供可跳过）
+5.【后时长】dws attendance approve leave-duration --leave-code <leaveCode> --start <T1> --end <T2>
+   → durationInHour / durationInDay / detailList / compressedValue / corpId （服务端权威，禁止本地估算）
+   → 粒度校验：unit=halfHour → durationInHour 须为 0.5 的倍数、unit=limitHour → 须为整数，不满足则提示「时长不符合单位要求」并终止
+6.【提交前校验】dws attendance approve leave-check --leave-code … --process-code … --start <T1'> --end <T2'> --duration-day <D> --duration-hour <H>
+   · D/H 必须取自步骤 5 输出；T1'/T2' 为时刻转换后的值（day：起 00:00/止 23:59；halfDay 上午：起 00:00/止 12:00，下午：起 12:00/止 23:59；hour/halfHour/limitHour 原样）
+   · success=false → 原样转告 errorMsg 并终止，不得跳过重试
+7.【组装 value】value = [T1, T2, duration, unit, leaveName, attendTypeLabel]（JSON 数组字符串）
+   · unit / leaveName = 步骤 3 选定类型的 leaveViewUnit / leaveName 原始值（中文映射不写入）
+   · duration = unit ∈ {hour, halfHour, limitHour} ? durationInHour : durationInDay
+   · attendTypeLabel = 套件 props.attendTypeLabel，无则取 props.push.pushTag + "类型"，均无为 ""
+8.【组装条目】套件条目 {"id": props.id, "name": JSON.stringify(label 数组)（如 "[\"开始时间\",\"结束时间\"]"）, "value": 六元数组字符串, "extValue": extendValue字符串}
+   + 其余控件条目（如 {"name":"请假事由","value":"…"}）
+   · extendValue = JSON.stringify({...步骤5响应, key: leaveCode, leaveParams: [corpId, leaveCode, T1, T2, staffId]})
+   · corpId 取步骤 5 响应回显；本人发起 staffId=null
+9.【流程预演（可选）】forecast-process --request（高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
+10.【选人 + 确认 + 发起】复用「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）
+    → 汇总确认（表单值 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
+```
+
+时间格式（与模板 unit 硬绑定）：
+
+| unit | T1/T2 格式 | duration 取值 |
+|---|---|---|
+| hour / halfHour / limitHour | yyyy-MM-dd HH:mm | durationInHour |
+| day | yyyy-MM-dd | durationInDay |
+| halfDay | yyyy-MM-dd 上午/下午 | durationInDay（0.5 粒度） |
+
+> **IMPORTANT：** 时长、detailList、compressedValue 一律以 `leave-duration` 服务端计算为准，严禁本地估算或手改（不支持 customDuration）；简单模式 `--form-values` 无法承载套件条目（value 为数组、含 extValue），步骤 9/10 必须走 `--request` 高级模式。
+
+模板不支持 CLI 发起（哺乳假、需上传证明材料等）时的 `submitUrl` 兜底与链接展示规范，见「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
+
+字段级规范（id/name/value/extValue 组装细则与不支持边界）见 [oa-form-components.md](oa/oa-form-components.md) 的 DDHolidayField 章节。
+
+### 发起补卡审批（补卡套件 DDBizSuite · attendance.supply）
+
+> **触发：** 用户说"补卡/忘打卡/补打卡/帮我补上次的卡"等补卡意图时，走本节工作流（**不走 search-forms**）；加班/外出/出差仍按 attendance 域 `+get-approve-template` 的提交链接引导。
+
+#### 工作流（步骤 1-7 补卡特有；8-9 复用「发起审批实例」第 5-7 步）
+
+```
+1.【模板定位】dws attendance +get-approve-template --type repair-check
+   → 补卡模板列表（formName / processCode / submitUrl）
+   · 单模板直接选定；多模板时必须交由用户选择，Agent 不得自行选定（名称与“补卡”最匹配的通用模板排前仅影响展示顺序，不改变选择权）；交互组件选项数上限 < 模板总数时改用纯文本/表格列出全量后由用户回复模板名
+   · 返回空 → 告知用户企业未配置可发起的补卡模板
+   · submitUrl 仅作兜底（CLI 不支持的模板引导客户端提交）
+2.【模板详情】dws oa approval form-schema --process-code <code>
+   → 下钻 DDBizSuite（bizType=="attendance.supply"）的 children 取子控件
+     DDDateField（bizAlias=="userCheckTime"：id/format/label，format 默认 yyyy-MM-dd HH:mm）
+   → 确认补卡理由控件（TextareaField，是否必收以 form-schema 的 required 为准）；图片控件（DDPhotoField）一期跳过并提示客户端补充
+3.【定位缺卡（可选）】用户未给时间 → dws attendance record get --user <userId> --date <某日>
+   （单日粒度，近 N 天按日循环查询）辅助定位缺卡时间
+4.【班次匹配】dws attendance approve supply-plans --time "<yyyy-MM-dd HH:mm>"
+   · plans 空 → 转告"该时间无异常班次"并终止，不重试
+   · 单班次 → 展示 planTip 确认
+   · 多班次 → 列出 planTip 供用户选择；推荐项排序：① 意图词匹配（用户所说日期+上午/下午/上班/下班与候选 workDate/checkType 对应）② 异常班次就近（先过滤查询时刻落在 timeRange 内的候选，再取其中非 freeCheck 且 timeResult≠Normal 者按 |查询时刻−checkDateTime| 最小）③ 其余
+   · 意图词唯一命中时可自动选定，但选定 planTip 必须并入后续表单值/汇总确认显式展示供否决；无意图词、意图匹配不唯一、或 freeCheck 候选无 checkDateTime 可就近 → 必须手选（不得默认取首个）
+   · 话术硬约束：面向用户的班次澄清/确认一律只含意图词命中依据与最终补卡时刻（如「意图词（08-20 + 下午→下班）唯一命中；最终补卡时刻 08-20 18:00」），选项标签用 planTip 原文；planId、workDate、checkType、timeResult、freeCheck、timeRange 夹取等技术字段与英文枚举不得进入用户话术（交互组件描述同理）
+   · 硬底线：create-instance 前用户至少见过一次选定班次的 planTip——推荐排序只优化问的顺序，选定权始终在用户
+   · 选定班次的 supplyDate 越出其 timeRange[0]/[1] 时，夹取到最近边界作为最终补卡时刻，并告知用户修正后的时刻
+5.【收集理由】按 form-schema 的 required 判定：必填则缺失必问，非必填未提供可跳过
+6.【提交前校验】dws attendance approve supply-check --timestamp <最终补卡时刻>
+   · 最终补卡时刻 = 选定班次 supplyDate；越出 timeRange 时用步骤 4 的夹取值
+   · 多班次须选定后再校验：各候选 supplyDate 由服务端按班次微调、可能不同，校验值依赖选择结果（候选 supplyDate 全相同时校验结果才与选择无关）
+   · qualify=false → 原样转告 title/desc 并终止，不得跳过重试
+7.【组装条目】套件子控件条目 {"id": 子控件props.id, "name": 子控件label,
+   "value": 按子控件 format 格式化最终补卡时刻, "extValue": JSON字符串}
+   · extValue = {planId?, planTip, planText, workDate, timeStamp(=workDate), userCheckTime(=最终补卡时刻)}
+     （timeZoneInfo 不本地拼接：可选字段，服务端 supply-plans 响应不含时区数据）
+   · bizAlias 不组装（MCP 通道无此字段，服务端按 id 匹配）；不构造 repairCheckTime（服务端回填）
+   + 理由条目 {"id": 理由控件id, "name": "补卡理由", "value": "<用户输入>"}
+8.【流程预演（可选）】forecast-process --request（高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
+9.【选人 + 确认 + 发起】复用「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）
+   → 汇总确认（表单值 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
+```
+
+> **IMPORTANT：** 班次匹配与资格判定一律以服务端（supply-plans / supply-check）为准；value 必须按子控件 `format` 格式化（禁硬编码）；步骤 9 必须走 `--request` 高级模式。流程与选人无补卡特有逻辑，一律按「发起审批实例」第 5-7 步及其执行摘要执行。
+
+模板不支持 CLI 发起（含图片控件需上传证据等）时的 `submitUrl` 兜底与链接展示规范，见「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
+
+字段级规范见 [oa-form-components.md](oa/oa-form-components.md) 的 DDBizSuite（补卡套件）章节。
 ### 获取审批任务的被催办人 userId
 
 > **催办必须两步串联：** ① `ding-info` 获取被催办人 `userId` → ② `ding message send` 发送催办消息。禁止跳过第一步直接猜测 userId。
@@ -784,12 +894,15 @@ Flags:
   - 在 `form-schema` 之后、`create-instance` 之前调用
   - 返回的 `workflowActivityRuleVOs` 中 `targetSelect: true` 的节点需要用户自选审批人
   - 自选结果组装为 `targetSelectActioners` 传入 `create-instance`
-用户说"发起审批/提交审批/帮我发起XX审批/新建审批单/提一个XX审批/帮我提XX申请" → 五步流程：① `search-forms --query XX` 获取 processCode → ② `form-schema --process-code <code>` 获取表单字段定义 → ③ 阅读 [oa-form-components.md](oa/oa-form-components.md) 和 [oa-process-nodes.md](oa/oa-process-nodes.md) 后组装表单值 → ④ `forecast-process` 预测流程走向并识别自选节点 → ⑤ 若有自选节点让用户选人，确认后 `create-instance --yes` 发起
+用户说"请假/请X天假/请年假/请事假/请病假/提交请假/帮我请假" → 请假套件发起流程（见「发起请假审批」章节）：① `dws attendance +get-approve-template --type leave` 定位请假模板（不走 search-forms）→ ② `form-schema` 识别 DDHolidayField → ③ `attendance approve leave-types` 选定假期类型 → ④ 收集起止时间与请假事由 → ⑤ `leave-duration` 计算时长 → ⑥ `leave-check` 提交前校验 → ⑦ 组装套件条目（id/value/extValue）→ ⑧ 复用发起审批实例第 5-7 步（forecast → 选人 → `create-instance --request`）
+
+用户说"补卡/忘打卡/补打卡/帮我补上次的卡" → 补卡套件发起流程（见「发起补卡审批」章节）：① `dws attendance +get-approve-template --type repair-check` 定位补卡模板（不走 search-forms）→ ② `form-schema` 下钻 DDBizSuite(attendance.supply) 子控件 → ③（可选）`attendance record get` 定位缺卡 → ④ `supply-plans` 匹配异常班次（空则终止；多班次用户选）→ ⑤ 收集补卡理由（按 form-schema required）→ ⑥ `supply-check` 资格校验 → ⑦ 组装子控件条目（id/format value/extValue 班次数据）→ ⑧ 复用发起审批实例第 5-7 步（forecast → 选人 → `create-instance --request`）
+用户说"发起审批/提交审批/帮我发起XX审批/新建审批单/提一个XX审批/帮我提XX申请" → 五步流程：① `search-forms --query XX` 获取 processCode（请假除外，见上一条）→ ② `form-schema --process-code <code>` 获取表单字段定义 → ③ 阅读 [oa-form-components.md](oa/oa-form-components.md) 和 [oa-process-nodes.md](oa/oa-process-nodes.md) 后组装表单值 → ④ `forecast-process` 预测流程走向并识别自选节点 → ⑤ 若有自选节点让用户选人，确认后 `create-instance` 发起
   - 如果用户已知 processCode，可跳过第①步
   - `--form-values` 的 key 必须与 `form-schema` 返回的控件 label 一致
   - `forecast-process` 返回自选节点时必须让用户选人，不得跳过
   - 执行前**必须向用户确认**表单内容、流程预测结果、审批人和抄送人
-  - 示例："帮我发起一个AI审批单" → ① `search-forms --query AI` → ② `form-schema --process-code <code>` → ③ 组装表单值 → ④ `forecast-process` → ⑤ 向用户确认流程走向和自选审批人后 `create-instance --yes`
+  - 示例："帮我发起一个AI审批单" → ① `search-forms --query AI` → ② `form-schema --process-code <code>` → ③ 组装表单值 → ④ `forecast-process` → ⑤ 向用户确认流程走向和自选审批人后 `create-instance`
 用户说"我有哪些待审的任务" → `approval tasks`
 用户说"我发起的审批单" -> `approval list-submitted`
 用户说"我审批/处理过的审批单" -> `approval list-executed`
@@ -868,11 +981,42 @@ dws oa approval form-schema --process-code <code> --format json
 dws oa approval forecast-process --process-code <code> --dept-id -1 --form-values '{"单行输入框":"测试内容"}' --format json
 # 18e. 若 forecast 返回 targetSelect=true 的节点，用 dws aisearch person --query "<姓名>" --dimension name --format json 帮用户选人
 # 18f. 发起审批实例（form-values 的 key 须与 Schema 中控件 label 一致）
-dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试内容"}' --yes --format json
+dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试内容"}' --format json
 # 18g. 发起并指定审批人和抄送人
-dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR --cc-list "userId3" --cc-position START --yes --format json
+dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试"}' --approvers "userId1,userId2" --approvers-action-type OR --cc-list "userId3" --cc-position START --format json
 # 18h. 发起并使用 forecast 自选审批人结果（高级模式）
-dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[{"name":"单行输入框","value":"测试"}],"targetSelectActioners":[{"actionerKey":"manual_33ff_89cb_da91_e3aa","actionerStaffIds":["userId_选人A"]}]}' --yes --format json
+dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1,"formComponentValues":[{"name":"单行输入框","value":"测试"}],"targetSelectActioners":[{"actionerKey":"manual_33ff_89cb_da91_e3aa","actionerStaffIds":["userId_选人A"]}]}' --format json
+
+# 19. 发起请假（请假套件 DDHolidayField；步骤 1-8 特有，9-10 复用 #18 的 forecast → 选人 → 发起）
+# 19a. 定位请假模板（approveType=LEAVE 精确返回，不走 search-forms）
+dws attendance +get-approve-template --type leave --format json
+# 19b. 识别请假套件与 options（leaveCode/unit/name）+ 其余控件（请假事由）
+dws oa approval form-schema --process-code <code> --format json
+# 19c. 可用假期类型及余额（--user 可选，缺省当前用户）
+dws attendance approve leave-types --format json
+# 19d. 服务端权威时长（unit=hour 示例；day/halfDay 用日期格式）
+dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00" --format json
+# 19e. 提交前校验（duration-day/hour 取自 19d 输出；success=false → 转告 errorMsg 并终止）
+dws attendance approve leave-check --leave-code <leaveCode> --process-code <code> --start "2026-08-13 09:00" --end "2026-08-14 18:00" --duration-day 1.65 --duration-hour 14.87 --format json
+# 19f. 组装 payload（套件条目 {id, name, value六元数组, extValue} + 请假事由等其余控件条目；
+#     extValue = JSON.stringify({...19d响应, key: leaveCode, leaveParams: [corpId, leaveCode, T1, T2, staffId]})）
+# 19g. 复用 #18d-18h：forecast-process --request 预演 → 自选节点选人 → 汇总确认后发起
+dws oa approval create-instance --request '<步骤 19f 组装后的完整 JSON>' --format json
+
+# 20. 发起补卡（补卡套件 DDBizSuite·attendance.supply；步骤 1-7 特有，8-9 复用 #18 的 forecast → 选人 → 发起）
+# 20a. 定位补卡模板（approveType=REPAIR_CHECK 精确返回，不走 search-forms）
+dws attendance +get-approve-template --type repair-check --format json
+# 20b. 下钻 DDBizSuite(bizType=attendance.supply) 子控件（DDDateField bizAlias=userCheckTime：id/format/label）
+dws oa approval form-schema --process-code <code> --format json
+# 20c.（可选）定位缺卡时间（用户未给时间时；单日粒度，近 N 天按日循环查询）
+dws attendance record get --user <userId> --date 2026-08-10 --format json
+# 20d. 匹配异常班次（plans 空 → 转告终止；多班次 → 用户按 planTip 选择）
+dws attendance approve supply-plans --time "2026-08-10 09:00" --format json
+# 20e. 提交前校验（--timestamp 取最终补卡时刻：选定班次 supplyDate，越界用 timeRange 夹取值；qualify=false → 转告 title/desc 并终止）
+dws attendance approve supply-check --timestamp <supplyDate> --format json
+# 20f. 组装 payload（套件子控件条目 {"id","name":子控件label,"value":按 format 格式化的时间,"extValue":班次数据 JSON} + 补卡理由条目（是否必收按 form-schema required））
+# 20g. 复用 #18d-18h：forecast-process --request 预演 → 自选节点选人 → 汇总确认后发起
+dws oa approval create-instance --request '<步骤 20f 组装后的完整 JSON>' --format json
 ```
 
 ## 上下文传递表

@@ -84,6 +84,24 @@ func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *tes
 	}
 }
 
+func TestDeliveryTodoReminderPreservesHistoricalConstraintBoundary(t *testing.T) {
+	tool := executeShortcutSchemaQuery(t, "--cli-path", "todo +reminder")
+	want := map[string][][]string{
+		"require_one_of":     {{"clear", "base-time"}},
+		"mutually_exclusive": {{"clear", "base-time"}},
+	}
+	if got := tool["constraints"]; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("todo +reminder constraints = %s, want %s", mustShortcutJSON(got), mustShortcutJSON(want))
+	}
+	parameters := schemaContractMap(tool["parameters"])
+	for _, name := range []string{"base-time", "due-date-offset", "at"} {
+		description := schemaContractString(parameters[name]["description"])
+		if !strings.Contains(description, "无关时间参数兼容忽略") {
+			t.Fatalf("todo +reminder --%s compatibility boundary missing from final Schema: %q", name, description)
+		}
+	}
+}
+
 func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "chat +messages-read-status")
 	if got, want := schemaContractString(leaf["canonical_path"]), "chat.shortcut_messages_read_status"; got != want {
@@ -114,7 +132,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 232; got != want {
+	if got, want := int(product["count"].(float64)), 233; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -162,6 +180,7 @@ func TestChatPersonalEmotionSchemaDeclaresUnpinnedIMAdapter(t *testing.T) {
 			cliPath: "chat emotion favorite",
 			params: map[string]string{
 				"media-id":               "mediaId",
+				"file-path":              "",
 				"name":                   "name",
 				"source-conversation-id": "sourceConversationId",
 				"source-message-id":      "sourceMessageId",
@@ -230,6 +249,24 @@ func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
 		if got := schemaContractString(parameter["property"]); got != want {
 			t.Fatalf("wiki +space-search --%s property = %q, want compatibility value %q", name, got, want)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiSpaceCreatePublishesVerifiedTypeResult(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-create")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "partial_failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, property := range []string{"success", "workspaceId", "space", "spaceType", "spaceTypeVerified", "spaceTypeEvidence"} {
+		if properties[property] == nil {
+			t.Errorf("wiki +space-create Result data_schema is missing %q", property)
+		}
+	}
+	if got, want := schemaContractStringSlice(properties["spaceType"]["enum"]), []string{"orgWikiSpace", "myWikiSpace"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create spaceType enum = %#v, want %#v", got, want)
 	}
 }
 

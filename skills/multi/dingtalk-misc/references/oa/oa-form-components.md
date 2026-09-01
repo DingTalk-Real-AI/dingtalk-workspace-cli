@@ -315,6 +315,132 @@
 }
 ```
 
+### DDHolidayField（请假套件）
+
+> **支持通过 leave-duration / leave-check 命令链发起**，完整工作流见 [oa.md](../oa.md) 的「发起请假审批」章节。识别特征：`componentName == "DDHolidayField"`，`props.label` 为数组（如 `["开始时间","结束时间"]`），`props.options` 为假期类型选项列表。
+
+模板 Schema 结构（从 `form-schema` 获取，关键字段）：
+```json
+{
+  "componentName": "DDHolidayField",
+  "props": {
+    "label": ["开始时间", "结束时间"],
+    "id": "DDHolidayField-J2BWEN12",
+    "attendTypeLabel": "请假类型",
+    "options": [
+      { "unit": "hour", "name": "事假", "leaveCode": "885dc798-xxx", "displayUnit": "按小时请假" }
+    ]
+  }
+}
+```
+
+提交条目结构（**必须走 `create-instance --request` 高级模式**，简单模式无法承载）：
+```json
+{
+  "id": "DDHolidayField-J2BWEN12",
+  "name": "[\"开始时间\",\"结束时间\"]",
+  "value": "[\"2026-08-13 12:08\",\"2026-08-14 18:08\",14.87,\"hour\",\"事假\",\"请假类型\"]",
+  "extValue": "{\"durationInHour\":14.87,...,\"key\":\"<leaveCode>\",\"leaveParams\":[\"<corpId>\",\"<leaveCode>\",\"<T1>\",\"<T2>\",null]}"
+}
+```
+
+| 字段 | 取值规则 |
+|------|---------|
+| `id` | 套件 `props.id`（服务端按 id 精确匹配控件） |
+| `name` | `JSON.stringify(套件 props.label 数组)`（如 `"[\"开始时间\",\"结束时间\"]"`；label 为数组时整体序列化，不取首元素；id 主通道时的回退匹配） |
+| `value` | 六元数组 JSON 字符串：`[T1, T2, duration, unit, leaveName, attendTypeLabel]` |
+| `extValue` | extendValue JSON 字符串（见下方组装规则，≤65535 字符） |
+
+value 六元数组逐项规则：
+
+| 索引 | 字段 | 取值 |
+|---|---|---|
+| [0] / [1] | 起止时间 | 用户输入，格式随 unit（见下表） |
+| [2] | 时长（number，非字符串） | `unit ∈ {hour, halfHour, limitHour}` → `leave-duration 响应.durationInHour`，否则 → `durationInDay`，**必须服务端计算** |
+| [3] | 单位 | 选定类型的 `leaveViewUnit` 原始值（vacation types 返回；hour / halfHour / limitHour / day / halfDay，小写；展示用中文映射不写入） |
+| [4] | 类型名 | 选定类型的 `leaveName`（与 leaveCode 同取自 vacation types 同一条目，如「事假」） |
+| [5] | 子类型标签 | 套件 `props.attendTypeLabel`，无则取 `props.push.pushTag + "类型"`，均无为 `""` |
+
+时间格式（与 unit 硬绑定）：
+
+| unit | T1/T2 格式 | 示例 |
+|---|---|---|
+| hour / halfHour / limitHour | yyyy-MM-dd HH:mm | 2026-08-13 12:08 |
+| day | yyyy-MM-dd | 2026-08-13 |
+| halfDay | yyyy-MM-dd 上午/下午 | 2026-08-13 上午 |
+
+extValue 组装规则：
+
+```
+extValue = JSON.stringify({
+  ...leave-duration 工具响应,   // durationInHour/Day, detailList, compressedValue, corpId, unit, pushTag... 原样合并，禁止裁剪
+  key: leaveCode,               // = options[i].leaveCode
+  leaveParams: [corpId, leaveCode, T1, T2, staffId]   // corpId 取工具响应回显；本人发起 staffId=null
+})
+```
+
+> **IMPORTANT：**
+> - 时长、detailList、compressedValue 一律取自 `dws attendance approve leave-duration` 的服务端计算结果，严禁本地构造或估算；不支持手动改时长（customDuration）。
+> - 发起前必须先跑 `dws attendance approve leave-check` 提交前校验（--duration-day / --duration-hour 取自 leave-duration 输出）；success=false 时转告 errorMsg 并终止。
+> - 哺乳假模板（类型条目 bizType === "breastfeeding_leave_new"；bizType 缺失时回退名称含「哺乳」）与需上传证明材料的请假类型（类型条目 leaveCertificate.enable=true 且时长双向换算小时后 ≥ 阈值，换算规则见 oa.md「发起请假审批」步骤 3）**不支持 CLI 发起**，引导用户在客户端提交。
+
+### DDBizSuite · attendance.supply（补卡套件）
+
+> **支持通过 supply-plans / supply-check 命令链发起**，完整工作流见 [oa.md](../oa.md) 的「发起补卡审批」章节。识别特征：`componentName == "DDBizSuite"` 且 `props.bizType == "attendance.supply"`；补卡时间子控件在 `children` 内（`DDDateField`，`bizAlias == "userCheckTime"`）。
+
+模板 Schema 结构（从 `form-schema` 获取，需下钻 children）：
+```json
+{
+  "componentName": "DDBizSuite",
+  "props": { "bizType": "attendance.supply", "bizAlias": "supply", "id": "DDBizSuite-JYNRW2R9" },
+  "children": [{
+    "componentName": "DDDateField",
+    "props": { "bizAlias": "userCheckTime", "format": "yyyy-MM-dd HH:mm", "id": "DDDateField-JYNRW51O", "label": "补卡时间", "required": true }
+  }]
+}
+```
+
+提交条目结构（**必须走 `create-instance --request` 高级模式**）——注意条目是**子控件**而非 DDBizSuite 容器：
+```json
+{
+  "id": "DDDateField-JYNRW51O",
+  "name": "补卡时间",
+  "value": "2026-08-05 04:00",
+  "extValue": "{\"timeStamp\":1785772800000,\"workDate\":1785772800000,\"planText\":\"2026-08-05 10:39\",\"userCheckTime\":1785873600000,\"planTip\":\"周二 ( 08.04 下班) 补卡\"}"
+}
+```
+
+| 字段 | 取值规则 |
+|------|---------|
+| `id` | 子控件 `children[].props.id`（服务端按 id 精确匹配） |
+| `name` | 子控件 `props.label`（如「补卡时间」；id 主通道时的回退匹配） |
+| `value` | 按**子控件 props.format** 格式化最终补卡时刻毫秒值（默认 `yyyy-MM-dd HH:mm`，禁硬编码格式） |
+| `extValue` | 班次数据 JSON 字符串（见下方组装规则） |
+
+extValue 组装规则（素材全部来自 `dws attendance approve supply-plans` 选定班次）：
+
+```
+extValue = JSON.stringify({
+  planId:      plans.planId,        // 可选（自由工时排班可为空）
+  planTip:     plans.planTip,       // 带状态卡点文案，原样透传不解析
+  planText:    plans.planText,
+  workDate:    plans.workDate,
+  timeStamp:   plans.workDate,      // 恒等于 workDate
+  userCheckTime: 最终补卡时刻        // plans.supplyDate；越出 timeRange 时用夹取值，必须与 value 同一时刻
+})
+// clamp 规则：supplyDate < timeRange[0] → 取 timeRange[0]；
+// supplyDate > timeRange[1] → 取 timeRange[1]；夹取值同时用于 supply-check --timestamp、userCheckTime 与 value
+// timeZoneInfo 不本地拼接（可选字段）：服务端 supply-plans 响应不含时区数据，
+// PC 真实数据不含亦可成功；仅 multiTimeZoneV2 灰度企业需要，一期不支持
+```
+
+> **IMPORTANT：**
+> - `bizAlias` 不组装（MCP formComponentValues 无此字段，服务端按 id 匹配）；**不构造 `repairCheckTime` 条目**（服务端回填字段，PC 提交数据无此字段名）。
+> - 班次匹配与资格判定一律以服务端为准：`supply-plans` 空 → 转告终止；多班次 → 用户按 planTip 选择；`supply-check` qualify=false → 转告 title/desc 终止。
+> - 补卡理由控件（TextareaField）是否必收以 form-schema 的 required 为准（控件必填性由模板配置决定）；图片控件（DDPhotoField）一期跳过并提示客户端补充。
+> - 模板流程不固定（自选审批人只是常见配置之一，管理员可自由改为主管链/条件分支等）：forecast 返回 `workflowActivityRuleVOs[].targetSelect=true` 且 `workflowActor.required=true` 的节点时**必须选人**并组装 `targetSelectActioners`（actionerKey=`workflowActor.actorKey`，漏选会创建成功但流转挂起）；无自选节点则不需要选人，一切以 forecast 返回为准。
+> - `timeZoneInfo` **不本地拼接**（可选字段）：服务端 `supply-plans` 响应不含时区数据，PC 真实数据不含亦可成功。多时区 V2 灰度（multiTimeZoneV2）与补卡次数 trial（enableSupplyTimes）一期不支持。
+
 ---
 
 ## API 不支持的控件
@@ -331,7 +457,7 @@
 
 > **部分支持的控件：** `DDPhotoField`（图片控件）**支持通过 URL 直接提交**，但不支持本地文件上传（CLI 未封装钉盘 CDN 上传流程）。若用户只有本地文件，需告知在钉钉客户端补充。详见本文 [DDPhotoField](#ddphotofield图片控件) 章节。
 
-> **套件类控件（暂不支持）** — `InvoiceField`（发票）、`RecipientAccountField`（收款账户）等业务套件控件当前暂不支持通过 CLI 发起，包含这些控件的审批模板请直接在钉钉客户端操作。
+> **套件类控件（大部分暂不支持）** — `InvoiceField`（发票）、`RecipientAccountField`（收款账户）等业务套件控件当前暂不支持通过 CLI 发起，包含这些控件的审批模板请直接在钉钉客户端操作。**例外：`DDHolidayField`（请假套件）与 `DDBizSuite · attendance.supply`（补卡套件）已支持**，按上方章节与 [oa.md](../oa.md)「发起请假审批」/「发起补卡审批」工作流发起。
 
 ---
 

@@ -16,6 +16,7 @@ package smart
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -59,6 +60,7 @@ var Remind = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +remind",
 		},
 		Description: "给自己创建一条带可选截止时间的待办",
+		DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false},
 		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"已验证的自用待办","properties":{"taskId":{"type":"string","description":"新待办稳定 taskId"},"subject":{"type":"string","description":"待办标题"},"verified":{"type":"boolean","description":"是否完成详情读回核验"}},"required":["taskId","subject","verified"],"additionalProperties":false}`)},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
@@ -77,10 +79,28 @@ var Remind = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "task", Type: shortcut.FlagString, Desc: "待办标题/内容", Required: true},
-		{Name: "at", Type: shortcut.FlagString, Desc: "截止时间（ISO8601，可选，不是提醒时间；如 2026-03-10T18:00:00+08:00）"},
+		{Name: "at", Type: shortcut.FlagString, Desc: "截止时间（ISO8601，可选，写入 dueTime，不是提醒时间）"},
 	},
 	Tips: []string{`dws todo +remind --task "交周报" --at 2026-03-10T18:00:00+08:00`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		task := strings.TrimSpace(rt.Str("task"))
+		var dueMillis int64
+		atProvided := rt.Changed("at")
+		if atProvided {
+			var err error
+			dueMillis, err = shortcutRemindParseMillis("at", rt.Str("at"))
+			if err != nil {
+				return err
+			}
+		}
+		if rt.DryRun() {
+			preview := map[string]any{"dryRun": true, "executed": false, "preview_kind": "plan", "subject": task, "executor": "current_user"}
+			if atProvided {
+				preview["dueTime"] = dueMillis
+			}
+			return rt.Output(preview)
+		}
+
 		profile, err := rt.CallMCPData("contact", "get_current_user_profile", nil)
 		if err != nil {
 			return err
@@ -91,36 +111,29 @@ var Remind = shortcut.Shortcut{
 		}
 
 		vo := map[string]any{
-			"subject":     rt.Str("task"),
+			"subject":     task,
 			"executorIds": []string{userID},
 		}
 
 		// Optional due time. The todo helper feeds --due through
 		// parseISOTimeToMillis and stores dueTime as epoch milliseconds (int64),
 		// so we do the same here rather than passing a raw string.
-		if rt.Changed("at") {
-			ms, err := shortcutRemindParseMillis("at", rt.Str("at"))
-			if err != nil {
-				return err
-			}
-			vo["dueTime"] = ms
+		if atProvided {
+			vo["dueTime"] = dueMillis
 		}
 
 		params := map[string]any{
 			"PersonalTodoCreateVO": vo,
 		}
-		if rt.DryRun() {
-			return rt.Output(map[string]any{"dryRun": true, "executed": false, "subject": rt.Str("task")})
-		}
 		data, err := rt.CallMCPWriteDataStrict("todo", "create_personal_todo", params)
 		if err != nil {
 			return err
 		}
-		taskID, _, err := todoshortcut.VerifyCreatedTodo(rt, data, "todo/create_personal_todo", rt.Str("task"))
+		taskID, _, err := todoshortcut.VerifyCreatedTodo(rt, data, "todo/create_personal_todo", task)
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"taskId": taskID, "subject": rt.Str("task"), "verified": true})
+		return rt.Output(map[string]any{"taskId": taskID, "subject": task, "verified": true})
 	},
 }
 

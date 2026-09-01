@@ -40,16 +40,17 @@ metadata:
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| 按名称解析唯一知识库 | `+space-list --type <orgWikiSpace\|myWikiSpace> --limit 50 --page-all` 后精确匹配名称 | 先明确组织/个人范围；仅 `autoPageComplete=true` 且全量中恰好一个同名项时取 workspaceId |
+| 按名称解析唯一知识库 | `+space-list --type <orgWikiSpace\|myWikiSpace> --limit 50 --page-all` 后精确匹配名称 | 先明确组织/个人范围；结果的 requestedType 必须等于请求范围；仅 `autoPageComplete=true` 且全量中恰好一个同名项时取 workspaceId |
 | 搜索或列出知识库 | `+space-search --query <关键词>` / `+space-list [--type orgWikiSpace\|myWikiSpace]` | 用户要求全部时加 `--page-all`；个人知识库必须明确语义 |
 | 为 Drive 发现钉盘存储空间 | `dws wiki space list --type <orgSpace\|mySpace> --format json` | managed 只读前置；返回 spaceId/rootFolderId 后切回 Drive，不进入 Wiki node/member 路由 |
 | 已知 workspace 查看详情 | `dws wiki +space-get --workspace <ID或URL>` | 已知 ID 不重复搜索 |
-| 创建或删除知识库 | `+space-create --name <名称>` / `+delete-space --workspace <ID>` | 创建会读回；删除整个空间是高风险操作 |
-| 浏览或搜索库内节点 | `+node-list --workspace <ID> [--folder <ID>]` / `+node-search --workspace <ID> --query <词>` | 列目录与关键词搜索分开；全量列表加 `--page-all` |
+| 创建或删除知识库 | `+space-create --name <名称>` / `+delete-space --workspace <ID>` | 创建会读回并验证空间类型；仅 `spaceTypeVerified=true` 时可断言类型。删除整个空间是高风险操作 |
+| 浏览或搜索库内节点 | `+node-list --workspace <ID> [--folder <ID>]` / `+node-search --workspace <ID> --query <词>` | 列目录与关键词搜索分开；需要完整列表或完整搜索结果都加 `--page-all` |
 | 查看节点元数据 | `dws wiki +node-get --node <ID或URL>` | 正文读写随后切 Doc |
-| 已知 workspace 创建节点 | `+node-create --workspace <ID> --name <名称> [--type <类型>]` | 支持 adoc/axls/able/appt/adraw/amind/folder；创建后读回 |
+| 已知 workspace 创建节点 | `+node-create --workspace <ID> --name <名称> [--type <类型>]` | 支持 adoc/axls/able/appt/adraw/amind/folder；创建后验证 ID、workspace、名称、类型及显式父文件夹 |
 | 只有知识库名称时新建空文档 | 先按全量 `+space-list` 唯一解析，再 `+node-create --workspace <ID> --name <标题> --type adoc` | 不用单页 `+wiki-new-doc` 猜空间；正文另走 Doc |
-| 复制、移入知识库或移出到我的文档 | `+node-copy` / `+move` / `+move-to-drive` | 使用真实 nodeId/workspaceId/folderId；按 Runtime confirmation |
+| 用本地文件在新知识库建文档后移到“我的文档” | `+space-create` → `doc +import --file <相对路径> --workspace <新workspaceId>` → `+move-to-drive --workspace <新workspaceId> --node <导入nodeId>` | 必须先把文档真实导入新知识库再移出；禁止先查 `mySpace`、禁止 `doc +create` 在个人域创建后用 `drive +move` 冒充该流程 |
+| 复制、移入知识库或将 Wiki 在线节点移出到“我的文档” | `+node-copy` / `+move` / `+move-to-drive` | “Wiki 节点 → 我的文档”固定使用 `+move-to-drive`，已知来源 workspace 时可传 `--workspace` 作写前归属断言；不可改用 mySpace/rootFolderId + `drive +move` |
 | 删除库内节点 | `+node-delete --workspace <ID> --node <ID>` | 删除前核对归属并确认 |
 | 列出或修改知识库成员 | `+member-list` / `+member-add` / `+member-update` / `+member-remove` | userId 1-30 个；角色必须显式 |
 | 查看知识库动态 | `+feed-list --workspace <ID>` | 要全部动态加 `--page-all`，否则只是一页 |
@@ -61,16 +62,21 @@ metadata:
 - `+space-search` 只用于快速浏览候选；当前 `+resolve-space/+wiki-new-doc` 不暴露名称搜索的分页完成证据，不作为权威唯一解析或写入 Golden Route。
 - 已知 nodeId/URL：元数据直接 `+node-get`；正文直接切 Doc，不先 list/search。
 - 创建节点后返回的 nodeId 直接传给 Doc；不通过同名搜索重新定位。
+- “本地文件 → 新知识库 → 我的文档”是有序跨产品流程：创建空间返回 workspaceId 后，必须 `doc +import --workspace` 取得库内 nodeId，再 `wiki +move-to-drive --workspace`；任何一步都不得在个人域提前创建或用 Drive 根目录移动替代。
 - move/copy/delete 已含预检或读回时，不由 Agent 重复拼装原子命令。
-- 普通“文档空间/我的文档”的文件操作按存储意图走 Drive；仅当缺少 Drive spaceId/rootFolderId、需要发现 `orgSpace/mySpace` 时调用 managed `wiki space list`。`orgSpace` 以返回的 nextToken 续页，`mySpace` 不分页；取 ID 后立即回到 Drive。
+- 普通“文档空间/我的文档”的文件操作按存储意图走 Drive；但源对象已确定是 Wiki workspace 中的在线节点、目标是移出到“我的文档”时是明确例外，直接用 `wiki +move-to-drive`，不查询 `mySpace`、不调用 `drive +move`。仅普通 Drive 节点缺少 spaceId/rootFolderId 时才用 managed `wiki space list --type orgSpace|mySpace` 发现空间。
 
 ## 关键结果语义
 
-- `+space-list/+node-list/+feed-list` 默认单页；全量请求显式加 `--page-all`，并检查 `autoPageComplete/autoPageStopReason/pagesFetched` 与分页元数据。
+- `+space-list/+node-list/+node-search/+feed-list` 默认单页；全量请求显式加 `--page-all`，并检查 `autoPageComplete/autoPageStopReason/pagesFetched` 与分页元数据。
+- `+space-list` 顶层 `requestedType` 是本次服务端查询的类型范围；条目级 `spaceType` 只在服务端真实返回时出现，不能用请求值伪造。用列表缺席证明空间不存在前，必须同时满足范围正确和 `autoPageComplete=true`。
+- `+space-create` 只有返回 `spaceTypeVerified=true` 时才能使用 `spaceType`；类型验证失败会保留已创建的 workspaceId，禁止重试创建或按名称猜类型。
 - `+space-search/+node-search` 缺少业务数组不是零命中；只有显式空数组才可报告空结果。
 - 名称解析只有在 scoped `+space-list` 返回 `autoPageComplete=true` 且全量中恰好一个精确同名项时才成立；0 条、多条或分页未完成都停止。
 - `+space-search`、`+resolve-space` 的单页结果不能证明全局唯一；不得把首页唯一候选直接用于写入。
-- 创建空间/节点和复制节点必须取得新 ID 并读回；移动必须验证 workspace/folder；删除必须有 `success=true`。
+- `+node-list/+node-search/+node-get` 会保留服务端 `extension/type/hasChildren` 并规范化 `parentFolderId`；字段缺席表示服务端未提供，不能靠名称推断类型或层级。
+- 创建节点必须验证新 ID、workspace、名称、类型和显式父文件夹；复制必须先读源节点，再证明新 ID 与源 ID 不同且副本进入目标 workspace/folder。
+- `+move/+move-to-drive` 返回 `source/target`、前后 workspace 和目标域；移到我的文档还会用 `myWikiSpace` 范围列表验证目标 workspace。删除必须有 `success=true`。
 - 成员列表服务端没有续页游标且最多 50，不能把上限内结果宣称为全量；成员写只具备终态响应证据，不虚构精确读回。
 - `partial_failure`、分页未完成或写入效果未知都不是成功。
 
@@ -106,6 +112,6 @@ Golden Route 参数足够时不读 reference；否则最多读取一个：
 
 - 明确知识库容器、成员、库内层级与动态 → Wiki。
 - 锁定库内 adoc 节点后的正文读写/导出 → Doc；axls 内容 → Sheet；able 记录/字段 → AITable。
-- 普通文件、文件夹、“我的文档/文档空间”的存储搜索、传输和整理 → Drive。
+- 普通文件、文件夹、“我的文档/文档空间”的存储搜索、传输和整理 → Drive；已知源是 Wiki 在线节点且动作是“移出到我的文档”则走 Wiki `+move-to-drive`。
 - Drive 存储空间发现可复用 managed `wiki space list --type orgSpace|mySpace`；结果是 spaceId/rootFolderId，不能交给 Wiki node/member。知识库 `orgWikiSpace/myWikiSpace` 仍返回 workspaceId。
 - Wiki 节点移入/移出使用 `+move/+move-to-drive`；不要把 workspaceId 当普通 Drive folderId。

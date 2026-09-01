@@ -141,14 +141,111 @@ Flags:
       --type string      审批类型：repair-check/patch/补卡、leave/请假、overtime/加班、travel/外出、out/trip/出差，或 REPAIR_CHECK/LEAVE/OVERTIME/TRAVEL/OUT（必填）
 ```
 
-当用户提到需要提交补卡、请假、加班、外出或出差时，优先使用该命令查询考勤审批表单模板提交链接，并引导用户点击返回的 `submitUrl` 提交。
+**加班/外出/出差**需要提交时，使用该命令查询考勤审批模板提交链接，并引导用户点击返回的 `submitUrl` 提交。**请假与补卡的提交意图路由到 oa**（发起工作流见 oa.md「发起请假审批」/「发起补卡审批」章节，不在此引导链接）。
 `corpId` 和 `opUserId` 由系统参数自动注入，无需通过命令参数传入。
 审批类型映射：补卡=`REPAIR_CHECK`，请假=`LEAVE`，加班=`OVERTIME`，外出=`TRAVEL`，出差=`OUT`（`trip` / `business_trip` / `business-trip` 亦映射为 `OUT`）。返回结果为列表，每条记录包含 `approveType`、`formName`、`processCode`、`submitUrl`。
 #### 引导用户自主选择合适的表单模板流程
 如果返回多个表单模板，必须将多个可用模板都返回给用户，并引导用户根据实际场景自主选择合适的模板提交：
 - 请假场景：可根据 `formName` 将与用户请假类型更匹配的模板放在前面展示。例如用户明确说年假、事假、病假、调休时，将名称中包含对应假期类型的模板靠前；如果用户只泛化表达“请假”，将名称最通用的请假模板靠前，例如“请假”“员工请假”“通用请假”等，避免把专项或特殊场景模板放在最前。
+- 请假模板定位说明：进入 oa 域请假工作流时选定模板即可，无需向用户展示 submitUrl 链接列表（仅不支持 CLI 发起的请假模板才需要链接引导）；补卡同理（进入 oa 域补卡工作流时选定模板，仅含图片证据等不支持场景才需要链接引导）。
 - 补卡/加班场景：可将名称与“补卡”或“加班”最直接匹配的模板放在前面展示。
 - 回复用户时不要直接裸露任何 `submitUrl`，所有返回的表单模板都必须使用 Markdown 可点击链接格式展示：`[formName](submitUrl)`，例如 `[员工请假](https://...)`。如存在更匹配的模板，可以放在列表前面，但不要只返回推荐模板，必须同时返回其它可用模板供用户选择，且每个模板都应是用户可直接点击的 Markdown 链接。
+
+### 查询可用假期类型及余额（只读，不发起审批）
+
+```
+Usage:
+  dws attendance approve leave-types [flags]
+Example:
+  dws attendance approve leave-types
+  dws attendance approve leave-types --user userId1
+Flags:
+      --user string  目标员工 userId；不传时查询当前用户（查询他人需具备权限）
+```
+
+调用 `query_leave_types_with_balance`。不传 `--user` 时查询当前用户；有权限时可按 `staffId` 查询指定员工。返回假期编码、名称、业务类型、额度单位、展示单位、说明和余额；无余额或企业隐藏余额时 `balance` 为空，`balanceHidden=true` 表示余额被隐藏。`corpId`、`opUserId` 由系统注入。
+
+### 计算请假时长（请假套件发起链路）
+
+> 只读。返回服务端口径的请假时长与每日明细，用于组装请假套件（DDHolidayField）的 extValue。**时长禁止本地估算**。发起工作流见 oa.md「发起请假审批」章节。
+
+```
+Usage:
+  dws attendance approve leave-duration [flags]
+Example:
+  dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00"
+  dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13" --end "2026-08-14" --user <userId>
+Flags:
+      --leave-code string  假期类型编码（form-schema 套件 options[i].leaveCode）(必填)
+      --start string       开始时间（格式随模板 unit：hour/halfHour/limitHour → yyyy-MM-dd HH:mm；day → yyyy-MM-dd；halfDay → yyyy-MM-dd 上午/下午）(必填)
+      --end string         结束时间（格式同 --start）(必填)
+      --user string        发起人 userId（代他人提交时必填；缺省为当前登录用户）
+```
+
+返回 `durationInHour` / `durationInDay` / `detailList` / `compressedValue` / `corpId`（回显，用于组装 extendValue.leaveParams[0]）等，原样透传不裁剪。
+
+### 提交前校验请假资格（请假套件发起链路）
+
+> 只读。发起请假前校验时间段冲突、可撤销实例与额度。**--duration-day / --duration-hour 必须取自 `leave-duration` 的输出**。发起工作流见 oa.md「发起请假审批」章节。
+
+```
+Usage:
+  dws attendance approve leave-check [flags]
+Example:
+  dws attendance approve leave-check --leave-code <leaveCode> --process-code <processCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00" --duration-day 1.65 --duration-hour 14.87
+Flags:
+      --leave-code string    假期类型编码 (必填)
+      --process-code string  审批模板 processCode (必填)
+      --start string         开始时间（unit=hour 原样；day/halfDay 需转换为具体时刻，见下方转换表）(必填)
+      --end string           结束时间（转换规则同 --start）(必填)
+      --duration-day float   时长（天），取自 leave-duration 输出的 durationInDay (必填)
+      --duration-hour float  时长（小时），取自 leave-duration 输出的 durationInHour (必填)
+      --user string          发起人 userId（代他人提交时必填；缺省为当前登录用户）
+      --proc-inst-id string  修改已有实例场景的原实例 ID（新发起不传）
+```
+
+校验通过返回 `{"success":true}`；不通过时命令**非零退出**并原样输出服务端 `errorMsg`（如时间段冲突、额度不足）——此时必须把 errorMsg 转告用户并**终止本次发起**，不得跳过重试。
+`--start` / `--end` 传参转换（Agent 侧执行；CLI 保持纯透传）：
+
+| unit | --start | --end |
+|---|---|---|
+| hour / halfHour / limitHour | 原样 yyyy-MM-dd HH:mm | 原样 |
+| day | 日期 + " 00:00" | 日期 + " 23:59" |
+| halfDay 上午 | 日期 + " 00:00" | 日期 + " 12:00" |
+| halfDay 下午 | 日期 + " 12:00" | 日期 + " 23:59" |
+
+### 匹配补卡目标异常班次（补卡套件发起链路）
+
+> 只读。按补卡时间点返回服务端匹配的异常班次列表（planTip/planText/workDate/supplyDate），用于组装补卡套件（DDBizSuite · attendance.supply）子控件的 extValue。**班次匹配禁止本地估算**。发起工作流见 oa.md「发起补卡审批」章节。
+
+```
+Usage:
+  dws attendance approve supply-plans [flags]
+Example:
+  dws attendance approve supply-plans --time "2026-08-05 04:00"
+  dws attendance approve supply-plans --time "2026-08-05 04:00" --user <userId>
+Flags:
+      --time string  补卡时间点 yyyy-MM-dd HH:mm（对齐补卡模板 DDDateField 子控件 format）(必填)
+      --user string  补卡人 userId（代他人提交时必填；缺省为当前登录用户）
+```
+
+返回 `plans` 数组：**空数组属正常业务结果**（该时间无异常班次，转告用户终止）；单班次展示 planTip 确认；多班次必须列出 planTip 供用户选择（不得默认取首个）。
+
+### 提交前校验补卡资格（补卡套件发起链路）
+
+> 只读。发起补卡前校验期限/次数/状态资格。**--timestamp 必须取自 `supply-plans` 输出的 supplyDate**（与 supply-plans --time 刻意异名，避免同名异义错传）。发起工作流见 oa.md「发起补卡审批」章节。
+
+```
+Usage:
+  dws attendance approve supply-check [flags]
+Example:
+  dws attendance approve supply-check --timestamp 1785873600000
+Flags:
+      --timestamp int   选定班次的补卡时刻（毫秒时间戳，取自 supply-plans 输出的 supplyDate）(必填)
+      --user string     补卡人 userId（代他人提交时必填；缺省为当前登录用户）
+```
+
+校验通过返回 `qualify=true`；不通过（qualify=false）时命令**非零退出**并原样输出服务端 `title`/`desc`——此时必须转告用户并**终止本次发起**，不得跳过重试。
 
 ### 导入排班记录（排班 = 为员工安排工作日期和班次, 写场景接口，必须走二次确认流程）
 ```
@@ -853,7 +950,7 @@ Flags:
   无
 ```
 
-调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表。例如：年假、事假、病假等假期类型及对应规则。请求体封装在 McpLeaveTypeRequest 中，认证信息（corpId、opUserId）由系统自动注入，无需手动传入。
+调用 MCP 工具 get_leave_types 查询当前用户可用的假期规则列表。例如：年假、事假、病假等假期类型及对应规则。请求体封装在 McpLeaveTypeRequest 中，认证信息（corpId 、opUserId）由系统自动注入，无需手动传入。
 
 ### 查询指定员工假期余额
 ```

@@ -173,6 +173,12 @@ func runDocUpload(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
+		// dry-run 委托预检：与真实执行首个 get_file_upload_info 调用共用
+		// docFileUploadInfoArgs，被拒/校验失败则直接返回错误、不出预览。
+		precheckArgs := docFileUploadInfoArgs(name, fileSize, folder, workspace, "")
+		if err := markdownDryRunDelegationPrecheck(cmd, "doc", "get_file_upload_info", precheckArgs); err != nil {
+			return err
+		}
 		deps.Out.PrintKeyValue("操作", "上传文件到钉钉文档")
 		deps.Out.PrintKeyValue("文件", filePath)
 		deps.Out.PrintKeyValue("名称", name)
@@ -183,14 +189,10 @@ func runDocUpload(cmd *cobra.Command, _ []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// Step 1: get upload credentials
-	step1Args := map[string]any{}
-	if folder != "" {
-		step1Args["folderId"] = folder
-	}
-	if workspace != "" {
-		step1Args["workspaceId"] = workspace
-	}
+	// Step 1: get upload credentials。与 dry-run 预检共用 docFileUploadInfoArgs，
+	// 保证首个 get_file_upload_info 调用即携带 name+fileSize，使操作级 options 在
+	// PUT 之前的首个 capability 检查生效（预检参数 == 真实首个调用参数）。
+	step1Args := docFileUploadInfoArgs(name, fileSize, folder, workspace, "")
 
 	text, err := callMCPToolReturnText(ctx, "get_file_upload_info", step1Args)
 	if err != nil {
@@ -229,13 +231,7 @@ func runDocUpload(cmd *cobra.Command, _ []string) error {
 // 与 runDocUpload 的区别：不打印输出、不携带 doc upload 的 --workspace
 // 兼容告警，调用方负责结果投影。
 func docSpaceUploadCommitText(ctx context.Context, filePath, fileName string, fileSize int64, folder, workspace string) (string, error) {
-	step1Args := map[string]any{}
-	if folder != "" {
-		step1Args["folderId"] = folder
-	}
-	if workspace != "" {
-		step1Args["workspaceId"] = workspace
-	}
+	step1Args := docFileUploadInfoArgs(fileName, fileSize, folder, workspace, "")
 	text, err := callMCPToolReturnText(ctx, "get_file_upload_info", step1Args)
 	if err != nil {
 		return "", err
@@ -259,6 +255,29 @@ func docSpaceUploadCommitText(ctx context.Context, filePath, fileName string, fi
 		commitArgs["workspaceId"] = workspace
 	}
 	return callMCPToolReturnText(ctx, "commit_uploaded_file", commitArgs)
+}
+
+// docFileUploadInfoArgs 构造钉钉文档空间 get_file_upload_info 的 step-1 参数，
+// 供 dry-run 委托预检与真实执行的首个调用共用，确保「预检参数 == 真实首个调用
+// 参数」、消除手写漂移。形态对齐 drive.go 的 uploadToDocSpace（Task0）：fileSize
+// 无条件携带（专属存储建议必传），name/workspaceId 非空才设，overwriteNodeId 优先
+// 于 folderId（覆盖上传指定目标节点，二者互斥）。携带 name+fileSize 使
+// buildDelegationOptions 能在 PUT 前的首个 capability 检查即注入
+// uploadActionParam{fileName,fileSize} 做精确授权，拒绝发生在上传数据之前。
+func docFileUploadInfoArgs(name string, fileSize int64, folder, workspace, overwriteNodeID string) map[string]any {
+	args := map[string]any{"fileSize": float64(fileSize)}
+	if name != "" {
+		args["name"] = name
+	}
+	if workspace != "" {
+		args["workspaceId"] = workspace
+	}
+	if overwriteNodeID != "" {
+		args["overwriteNodeId"] = overwriteNodeID
+	} else if folder != "" {
+		args["folderId"] = folder
+	}
+	return args
 }
 
 // parseUploadInfo extracts resourceUrl, uploadKey and headers from the MCP tool response.
@@ -4331,8 +4350,8 @@ CLI 内部自动完成全部流程:
 通常不需要手动调用，dws doc import 会自动完成轮询。
 仅在导入命令超时或中断后，用于手动查询任务状态。建议直接复制导入结果
 中的完整 next_command；其中携带的原目标（--folder 或 --workspace）用于在
-completed 后回读验证真实落点。只传 taskId 仍可查询 processing/failed，
-但 completed 时会返回未验证错误，不会误报成功。
+completed 后回读验证真实落点。只传 taskId 也可查询全部状态；completed 时
+保留服务端成功终态和 nodeId，但返回 verified=false，表示未验证真实落点。
 
 任务状态:
   processing  转换中
