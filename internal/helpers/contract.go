@@ -44,6 +44,12 @@ import (
 func newContractCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "contract",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-contract"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("智能合同命令参考", "dingtalk-contract", "references/contract.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "钉钉智能合同：台账查询、批量导入、听记+模版起草、审查、归档、项目、相对方、账款管理",
 			UseWhen: []string{

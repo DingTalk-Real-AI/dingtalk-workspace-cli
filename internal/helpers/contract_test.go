@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func TestCrossPlatformCoverageContractCommandTreeIncludesWukongCommands(t *testing.T) {
@@ -104,13 +106,29 @@ func TestCrossPlatformCoverageContractRecordListRejectsInvalidInputBeforeCall(t 
 }
 
 func TestCrossPlatformCoverageContractProjectDeleteMapsIntegerIDs(t *testing.T) {
+	// Without --yes: should fail with typed confirmation_required error and zero MCP calls
 	caller := &contractDefectCaller{}
 	_, err := executeContractDefectCommand(t, caller, newContractCommand,
 		"project", "delete", "--project-ids", "1001, 1002")
-	if err != nil {
-		t.Fatalf("project delete: %v", err)
+	if err == nil {
+		t.Fatal("project delete without --yes should fail")
 	}
-	call := onlyContractCall(t, caller)
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
+		t.Fatalf("expected typed confirmation_required error, got: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("expected zero MCP calls without confirmation, got %d: %+v", len(caller.calls), caller.calls)
+	}
+
+	// With --yes: should succeed with exactly one call and correct parameters
+	confirmedCaller := &contractDefectCaller{}
+	_, err = executeContractDefectCommand(t, confirmedCaller, newContractCommand,
+		"project", "delete", "--project-ids", "1001, 1002", "--yes")
+	if err != nil {
+		t.Fatalf("project delete with --yes: %v", err)
+	}
+	call := onlyContractCall(t, confirmedCaller)
 	request, ok := call.args["DeleteProjectOpenRequest"].(map[string]any)
 	if !ok {
 		t.Fatalf("DeleteProjectOpenRequest = %#v", call.args["DeleteProjectOpenRequest"])

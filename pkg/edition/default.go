@@ -72,12 +72,6 @@ func openSupplementServers() []ServerInfo {
 			Endpoint: "https://mcp-gw.dingtalk.com/server/571e843ffa2f7546207fcae482d0d47a43bb7e5317bc717172998e1e00691710",
 		},
 		{
-			ID:       "edu-contact",
-			Name:     "家校通讯录",
-			Endpoint: "https://mcp-gw.dingtalk.com/server/d24759cc1c6e424e2de4e9901ea0202136e6707991ffc33b473878ec1cd688a2",
-			Prefixes: []string{"edu-contact", "edu"},
-		},
-		{
 			ID:       "drive-internal",
 			Name:     "钉钉知识管理-内部",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02",

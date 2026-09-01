@@ -80,7 +80,7 @@ var contractCompositeIface = &contract.InterfaceSpec{
 var (
 	safetyRead        = contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}
 	safetyWrite       = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
-	safetyDestructive = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "not_required", Idempotency: "unknown"}
+	safetyDestructive = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"}
 )
 
 // declareContractSchema attaches ContractDecl metadata to all 44 contract
