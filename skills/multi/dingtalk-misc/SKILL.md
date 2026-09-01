@@ -1,6 +1,6 @@
 ---
 name: dingtalk-misc
-description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/考勤/直播/DING紧急消息/开放平台应用管理/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，或查待审批/同意拒绝转交撤销审批/打卡/排班/OKR/日报周报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/PAT授权/切换组织/跨组织/profile 等相关操作。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
+description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/考勤/直播/DING紧急消息/开放平台应用管理/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -26,7 +26,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 直播 / 我的直播 / 直播列表 | 直播列表与直播记录查询 | `dws live` | [live.md](references/live.md) |
 | DING / 紧急通知 / 电话DING / 短信DING / 必达消息 | DING 紧急消息（应用内/短信/电话），个人DING | `dws ding` | [ding.md](references/ding.md) |
 | 开放平台应用 / 企业内部应用 / 应用成员 / 应用权限 / 应用版本 / agentId / clientId / 机器人配置 / 版本发布 / connect / MCP 服务开发 / MCP 工具发布 / MCP 凭证 | 开放平台企业内部应用，以及 MCP 服务、工具、鉴权、凭证和协作者的开发管理 | `dws dev` / `dws devapp` / `dws dev mcp` | [devapp.md](references/devapp.md)，MCP 细节见 [dev/mcp.md](references/dev/mcp.md) |
-| 目标管理 / 战略解码 / 经营合约 / 计分卡 / OKR / 周月报统计 | Agoal 目标管理与经营目标跟进 | `dws agoal` | [agoal.md](references/agoal.md) |
+| 目标管理 / 战略解码 / 经营合约字段 / 计分卡 / OKR / 目标规则周期 / 个人目标 / 目标模板 / 周月报规则统计 / 按时迟交未提交 / 跟催 | Agoal 目标管理与经营目标跟进 | `dws agoal` | [agoal.md](references/agoal.md) |
 | 日报 / 周报 / 月报 / 写日志 / 收件箱日志 / 发件箱日志 | 日志（日报/周报/月报）查询与按模版提交 | `dws report`（别名 `dws log`） | [report.md](references/report.md) |
 | 电子表格 / 工作表 / 单元格读写 / 公式 / 超链接 / 浮动图片 | 电子表格创建/读写/公式/超链接/浮动图片/导出 | `dws sheet` | [sheet.md](references/sheet.md) |
 | 开放平台文档 / API文档 / 接口文档 / 接口报错 | 开放平台开发文档搜索 | `dws devdoc` | [devdoc.md](references/devdoc.md) |
@@ -43,6 +43,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 ## 说明
 
 - 命中产品后必须读取其 `references/<product>.md`，不要只凭索引推测命令。Report 只读 [report.md](references/report.md)；Sheet 常见闭环只读 [sheet.md](references/sheet.md)，复杂任务按进入阶段顺序加载子 reference，每阶段最多一份、常规任务最多三份，禁止批量预读或重复读取。
+- **Agoal / Report 边界**：填写、提交或查询普通日报/周报/月报正文走 Report；规则级提交统计、按时/迟交/未提交人数、人员清单和跟催走 Agoal。出现“月报”不能单独判给 Report，必须结合“规则/统计/迟交/未提交/跟催”等业务词判断。
 - **考勤例外**：按索引表直接读取一份最匹配的 `attendance*.md`；不要先读 `attendance.md` 再读排班、报表或假期专项 Reference。只有一个任务确实跨两个独立考勤域时，才加载第二份。
 - 考勤性能优化只允许减少重复的 shared/Reference/Help/Schema 加载和重复远程查询；禁止为节省 token 省略用户要求的记录、业务字段、分页、失败项、warning 或写后验证。需要“全部/完整”结论时必须保留并检查 endpoint exhaustion/总数等完整性证据。
 - 考勤命令路径、flag、约束和返回声明以当前 live Cobra/Contract/精确 leaf Schema 为权威；attendance Reference 只维护业务路由、能力边界和工作流。已知命令直接执行，确有不确定性时最多读取一次精确 compact leaf，避免复制命令全集造成信息漂移。
