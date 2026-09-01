@@ -1237,7 +1237,9 @@ jobs:
       - name: Publish or reuse immutable GitHub Release
         id: publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the job-scoped token so this REST client receives the
+          # contents: write permission declared by publish-release.
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
         run: |
           set -eu
@@ -1485,7 +1487,7 @@ jobs:
 
       - name: Require immutable published GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.publish.outputs.release_id }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
         run: |

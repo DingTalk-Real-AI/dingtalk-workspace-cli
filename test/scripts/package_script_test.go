@@ -2252,6 +2252,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 
 	for _, required := range []string{
 		"id: publish",
+		`GITHUB_TOKEN: ${{ github.token }}`,
 		`"repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION"`,
 		`"repos/$GITHUB_REPOSITORY/releases"`,
 		"find_recovery_draft_release_id()",
@@ -2317,6 +2318,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 
 	terminalStep := publishJob[strings.Index(publishJob, "      - name: Require immutable published GitHub Release\n"):]
 	for _, required := range []string{
+		`GITHUB_TOKEN: ${{ github.token }}`,
 		`RELEASE_ID: ${{ steps.publish.outputs.release_id }}`,
 		`RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}`,
 		`"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"`,
