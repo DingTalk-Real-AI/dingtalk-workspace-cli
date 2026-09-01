@@ -5,6 +5,8 @@
 package oa
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ const oaApprovalListDateLayout = "2006-01-02"
 
 type oaApprovalListOptions struct {
 	includeCreateBefore bool
+	includeLegacyRange  bool
 	includeUnreadOnly   bool
 	includeStatus       bool
 }
@@ -37,8 +40,8 @@ var oaApprovalListStringProperties = []struct {
 
 func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDecl {
 	params := []contract.ParamDecl{
-		{Name: "page", Property: "pageNumber"},
-		{Name: "limit", Property: "pageSize"},
+		{Name: "page"},
+		{Name: "limit"},
 	}
 	for _, binding := range oaApprovalListStringProperties {
 		params = append(params, contract.ParamDecl{Name: binding.flag, Property: binding.property})
@@ -49,6 +52,12 @@ func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDec
 	if options.includeCreateBefore {
 		params = append(params, contract.ParamDecl{Name: "create-before", Property: "createBefore"})
 	}
+	if options.includeLegacyRange {
+		params = append(params,
+			contract.ParamDecl{Name: "start"},
+			contract.ParamDecl{Name: "end"},
+		)
+	}
 	if options.includeUnreadOnly {
 		params = append(params, contract.ParamDecl{Name: "unread-only", Property: "unreadOnly"})
 	}
@@ -56,9 +65,13 @@ func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDec
 }
 
 func oaApprovalListFlags(options oaApprovalListOptions) []shortcut.Flag {
+	pageDefault, limitDefault := "1", "20"
+	if options.includeLegacyRange {
+		pageDefault, limitDefault = "", ""
+	}
 	flags := []shortcut.Flag{
-		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "分页页码；必须大于 0"},
-		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页大小；必须在 1-100"},
+		{Name: "page", Type: shortcut.FlagString, Default: pageDefault, Desc: "分页页码；必须大于 0"},
+		{Name: "limit", Type: shortcut.FlagString, Default: limitDefault, Desc: "每页大小；必须在 1-100"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "关键字搜索"},
 		{Name: "process-code", Type: shortcut.FlagString, Desc: "审批模板 code"},
 		{Name: "originator-user-id", Type: shortcut.FlagString, Desc: "审批单发起人 userId"},
@@ -73,15 +86,44 @@ func oaApprovalListFlags(options oaApprovalListOptions) []shortcut.Flag {
 	if options.includeCreateBefore {
 		flags = append(flags, shortcut.Flag{Name: "create-before", Type: shortcut.FlagString, Desc: "创建时间"})
 	}
+	if options.includeLegacyRange {
+		flags = append(flags,
+			shortcut.Flag{Name: "start", Type: shortcut.FlagInt, Desc: "兼容参数：发起时间起始（epoch 毫秒）", Required: true},
+			shortcut.Flag{Name: "end", Type: shortcut.FlagInt, Desc: "兼容参数：发起时间截止（epoch 毫秒）", Required: true},
+		)
+	}
 	if options.includeUnreadOnly {
 		flags = append(flags, shortcut.Flag{Name: "unread-only", Type: shortcut.FlagBool, Desc: "仅查询未读抄送审批"})
 	}
 	return flags
 }
 
-func validateOAApprovalList(rt *shortcut.RuntimeContext) error {
-	if err := validateOAPage(rt.Int("page"), rt.Int("limit")); err != nil {
+func parseOAApprovalListPage(rt *shortcut.RuntimeContext, name string, fallback int) (int, error) {
+	raw := strings.TrimSpace(rt.Str(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, apperrors.NewValidation(fmt.Sprintf("--%s 必须是整数", name))
+	}
+	return value, nil
+}
+
+func validateOAApprovalList(rt *shortcut.RuntimeContext, options oaApprovalListOptions) error {
+	page, err := parseOAApprovalListPage(rt, "page", 1)
+	if err != nil {
 		return err
+	}
+	limit, err := parseOAApprovalListPage(rt, "limit", 20)
+	if err != nil {
+		return err
+	}
+	if err := validateOAPage(page, limit); err != nil {
+		return err
+	}
+	if options.includeLegacyRange && (rt.Int("start") <= 0 || rt.Int("end") <= rt.Int("start")) {
+		return apperrors.NewValidation("--start/--end 必须是递增的正整数 epoch 毫秒范围")
 	}
 	for _, flag := range []string{"create-time-from", "create-time-to", "finish-time-from", "finish-time-to"} {
 		value := strings.TrimSpace(rt.Str(flag))
@@ -108,7 +150,9 @@ func validateOAApprovalList(rt *shortcut.RuntimeContext) error {
 }
 
 func oaApprovalListParams(rt *shortcut.RuntimeContext, options oaApprovalListOptions) map[string]any {
-	params := map[string]any{"pageNumber": rt.Int("page"), "pageSize": rt.Int("limit")}
+	page, _ := parseOAApprovalListPage(rt, "page", 1)
+	limit, _ := parseOAApprovalListPage(rt, "limit", 20)
+	params := map[string]any{"pageNumber": page, "pageSize": limit}
 	for _, binding := range oaApprovalListStringProperties {
 		if value := strings.TrimSpace(rt.Str(binding.flag)); value != "" {
 			params[binding.property] = value
@@ -122,6 +166,18 @@ func oaApprovalListParams(rt *shortcut.RuntimeContext, options oaApprovalListOpt
 	if options.includeCreateBefore {
 		if value := strings.TrimSpace(rt.Str("create-before")); value != "" {
 			params["createBefore"] = value
+		}
+	}
+	if options.includeLegacyRange {
+		legacyZone := time.FixedZone("Asia/Shanghai", 8*3600)
+		for _, binding := range []struct {
+			flag     string
+			property string
+		}{{flag: "start", property: "createTimeFrom"}, {flag: "end", property: "createTimeTo"}} {
+			if _, exists := params[binding.property]; exists {
+				continue
+			}
+			params[binding.property] = time.UnixMilli(int64(rt.Int(binding.flag))).In(legacyZone).Format(oaApprovalListDateLayout)
 		}
 	}
 	if options.includeUnreadOnly && rt.Changed("unread-only") {
@@ -162,15 +218,18 @@ var ListPending = shortcut.Shortcut{
 		true,
 		oaCollectionResult("instances", "严格验证的待处理审批实例页"),
 		oaPagePagination("page"),
-		oaApprovalListParamDecls(oaApprovalListOptions{includeCreateBefore: true}),
-		"dws oa +list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31 --page 1 --limit 20",
+		oaApprovalListParamDecls(oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true}),
+		"dws oa +list-pending --start 1785513600000 --end 1788191999000 --page 1 --limit 20",
 	),
-	Flags:       oaApprovalListFlags(oaApprovalListOptions{includeCreateBefore: true}),
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"page", "limit", "create-time-from", "create-time-to", "finish-time-from", "finish-time-to"}, Description: "--page 必须大于 0；--limit 必须在 1-100；日期筛选必须为 yyyy-MM-dd 且起始不晚于截止"}},
-	Tips:        []string{`dws oa +list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31 --page 1 --limit 20`},
-	Validate:    validateOAApprovalList,
+	Flags:       oaApprovalListFlags(oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true}),
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end", "page", "limit", "create-time-from", "create-time-to", "finish-time-from", "finish-time-to"}, Description: "--start/--end 必须是递增的正整数 epoch 毫秒；--page 必须大于 0；--limit 必须在 1-100；日期筛选必须为 yyyy-MM-dd 且起始不晚于截止"}},
+	Tips:        []string{`dws oa +list-pending --start 1785513600000 --end 1788191999000 --page 1 --limit 20`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateOAApprovalList(rt, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true})
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return oaInstancePage(rt, "get_todo_tasks", oaApprovalListParams(rt, oaApprovalListOptions{includeCreateBefore: true}), rt.Int("page"))
+		page, _ := parseOAApprovalListPage(rt, "page", 1)
+		return oaInstancePage(rt, "get_todo_tasks", oaApprovalListParams(rt, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true}), page)
 	},
 }
 
@@ -277,9 +336,12 @@ func oaNumberedInstanceShortcut(command, tool, description, intent string, optio
 		},
 		Tips: []string{"dws oa " + command + " --page 1 --limit 20"},
 	}
-	declaration.Validate = validateOAApprovalList
+	declaration.Validate = func(rt *shortcut.RuntimeContext) error {
+		return validateOAApprovalList(rt, options)
+	}
 	declaration.Execute = func(rt *shortcut.RuntimeContext) error {
-		return oaInstancePage(rt, tool, oaApprovalListParams(rt, options), rt.Int("page"))
+		page, _ := parseOAApprovalListPage(rt, "page", 1)
+		return oaInstancePage(rt, tool, oaApprovalListParams(rt, options), page)
 	}
 	return declaration
 }

@@ -712,6 +712,7 @@ const oaApprovalListDateLayout = "2006-01-02"
 
 type oaApprovalListOptions struct {
 	includeCreateBefore bool
+	includeLegacyRange  bool
 	includeUnreadOnly   bool
 	includeSizeAlias    bool
 	includeStatus       bool
@@ -731,8 +732,12 @@ var oaApprovalListStringProperties = []struct {
 }
 
 func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDecl {
+	pageProperty := "pageNumber"
+	if options.includeLegacyRange {
+		pageProperty = ""
+	}
 	params := []contract.ParamDecl{
-		{Name: "page", Property: "pageNumber"},
+		{Name: "page", Property: pageProperty},
 		{Name: "limit", Property: "pageSize"},
 	}
 	for _, binding := range oaApprovalListStringProperties {
@@ -744,6 +749,12 @@ func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDec
 	if options.includeCreateBefore {
 		params = append(params, contract.ParamDecl{Name: "create-before", Property: "createBefore"})
 	}
+	if options.includeLegacyRange {
+		params = append(params,
+			contract.ParamDecl{Name: "start"},
+			contract.ParamDecl{Name: "end"},
+		)
+	}
 	if options.includeUnreadOnly {
 		params = append(params, contract.ParamDecl{Name: "unread-only", Property: "unreadOnly"})
 	}
@@ -751,10 +762,19 @@ func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDec
 }
 
 func oaApprovalListArgs(cmd *cobra.Command, options oaApprovalListOptions) (map[string]any, error) {
-	page, _ := cmd.Flags().GetInt("page")
-	limit, _ := cmd.Flags().GetInt("limit")
+	page, err := oaApprovalListIntFlag(cmd, "page", 1)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := oaApprovalListIntFlag(cmd, "limit", 20)
+	if err != nil {
+		return nil, err
+	}
 	if options.includeSizeAlias && cmd.Flags().Changed("size") {
-		limit, _ = cmd.Flags().GetInt("size")
+		limit, err = oaApprovalListIntFlag(cmd, "size", 20)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if page <= 0 {
 		return nil, apperrors.NewValidation("--page 必须大于 0")
@@ -782,6 +802,32 @@ func oaApprovalListArgs(cmd *cobra.Command, options oaApprovalListOptions) (map[
 			args["processInstanceStatus"] = strings.TrimSpace(value)
 		}
 	}
+	if options.includeCreateBefore {
+		value, _ := cmd.Flags().GetString("create-before")
+		if value = strings.TrimSpace(value); value != "" {
+			args["createBefore"] = value
+		}
+	}
+	if options.includeLegacyRange {
+		for _, binding := range []struct {
+			flag     string
+			property string
+		}{{flag: "start", property: "createTimeFrom"}, {flag: "end", property: "createTimeTo"}} {
+			value, _ := cmd.Flags().GetString(binding.flag)
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, exists := args[binding.property]; exists {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 不能与对应的 yyyy-MM-dd 日期参数同时使用")
+			}
+			parsed, parseErr := time.Parse(time.RFC3339, value)
+			if parseErr != nil {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 必须是 ISO-8601 格式")
+			}
+			args[binding.property] = parsed.Format(oaApprovalListDateLayout)
+		}
+	}
 	for _, pair := range [][2]string{{"createTimeFrom", "createTimeTo"}, {"finishTimeFrom", "finishTimeTo"}} {
 		fromRaw, fromOK := args[pair[0]].(string)
 		toRaw, toOK := args[pair[1]].(string)
@@ -794,12 +840,6 @@ func oaApprovalListArgs(cmd *cobra.Command, options oaApprovalListOptions) (map[
 			return nil, apperrors.NewValidation(pair[0] + " 不能晚于 " + pair[1])
 		}
 	}
-	if options.includeCreateBefore {
-		value, _ := cmd.Flags().GetString("create-before")
-		if value = strings.TrimSpace(value); value != "" {
-			args["createBefore"] = value
-		}
-	}
 	if options.includeUnreadOnly && cmd.Flags().Changed("unread-only") {
 		value, _ := cmd.Flags().GetBool("unread-only")
 		args["unreadOnly"] = value
@@ -807,11 +847,28 @@ func oaApprovalListArgs(cmd *cobra.Command, options oaApprovalListOptions) (map[
 	return args, nil
 }
 
+func oaApprovalListIntFlag(cmd *cobra.Command, name string, fallback int) (int, error) {
+	raw, _ := cmd.Flags().GetString(name)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, apperrors.NewValidation("--" + name + " 必须是整数")
+	}
+	return value, nil
+}
+
 func addOAApprovalListFlags(cmd *cobra.Command, options oaApprovalListOptions) {
-	cmd.Flags().Int("page", 1, "分页页码（默认 1）")
-	cmd.Flags().Int("limit", 20, "每页大小（默认 20，最大 100）")
+	pageDefault, limitDefault := "1", "20"
+	if options.includeLegacyRange {
+		pageDefault, limitDefault = "", ""
+	}
+	cmd.Flags().String("page", pageDefault, "分页页码（默认 1）")
+	cmd.Flags().String("limit", limitDefault, "每页大小（默认 20，最大 100）")
 	if options.includeSizeAlias {
-		cmd.Flags().Int("size", 0, "每页大小（兼容别名）")
+		cmd.Flags().String("size", "", "每页大小（兼容别名）")
 		cmd.Flags().Lookup("size").Hidden = true
 	}
 	cmd.Flags().String("query", "", "关键字搜索（可选）")
@@ -826,6 +883,10 @@ func addOAApprovalListFlags(cmd *cobra.Command, options oaApprovalListOptions) {
 	cmd.Flags().String("finish-time-to", "", "审批完成时间截止，格式 yyyy-MM-dd，含当日（可选）")
 	if options.includeCreateBefore {
 		cmd.Flags().String("create-before", "", "创建时间（可选）")
+	}
+	if options.includeLegacyRange {
+		cmd.Flags().String("start", "", "兼容参数：发起时间起始，ISO-8601 格式（建议使用 --create-time-from）")
+		cmd.Flags().String("end", "", "兼容参数：发起时间截止，ISO-8601 格式（建议使用 --create-time-to）")
 	}
 	if options.includeUnreadOnly {
 		cmd.Flags().Bool("unread-only", false, "仅查询未读抄送审批（可选）")
@@ -868,7 +929,7 @@ func newOaCommand() *cobra.Command {
 		Short:   "查询待我处理的审批",
 		Example: `  dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeCreateBefore: true, includeSizeAlias: true})
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true})
 			if err != nil {
 				return err
 			}
@@ -883,8 +944,8 @@ func newOaCommand() *cobra.Command {
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "oa",
-				Name:           "get_todo_tasks",
-				CanonicalPath:  "oa.get_todo_tasks",
+				Name:           "list_pending_approvals",
+				CanonicalPath:  "oa.list_pending_approvals",
 				CLIPath:        "oa approval list-pending",
 				PrimaryCLIPath: "oa approval list-pending",
 			},
@@ -906,7 +967,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-pending --query 关键词 --page 1 --limit 20",
 				},
 			},
-			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeCreateBefore: true, includeSizeAlias: true}),
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true}),
 		},
 	})
 
@@ -2097,7 +2158,7 @@ func newOaCommand() *cobra.Command {
 		},
 	})
 
-	addOAApprovalListFlags(approvalListPendingCmd, oaApprovalListOptions{includeCreateBefore: true, includeSizeAlias: true})
+	addOAApprovalListFlags(approvalListPendingCmd, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true})
 
 	approvalDetailCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
 	approvalApproveCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")

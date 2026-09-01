@@ -71,6 +71,48 @@ func TestCrossPlatformCoverageOAApprovalListCommandsForwardCurrentMCPFilters(t *
 	}
 }
 
+func TestCrossPlatformCoverageOAApprovalListPendingPreservesHistoricalCLIInputs(t *testing.T) {
+	root := newOaCommand()
+	leaf, _, err := root.Find([]string{"approval", "list-pending"})
+	if err != nil {
+		t.Fatalf("find list-pending: %v", err)
+	}
+	for _, name := range []string{"page", "limit", "size"} {
+		flag := leaf.Flags().Lookup(name)
+		if flag == nil {
+			t.Fatalf("missing historical --%s", name)
+		}
+		if flag.Value.Type() != "string" {
+			t.Errorf("--%s type = %q, want string", name, flag.Value.Type())
+		}
+	}
+	for _, name := range []string{"start", "end"} {
+		flag := leaf.Flags().Lookup(name)
+		if flag == nil || flag.Hidden {
+			t.Errorf("historical --%s must remain visible and supported", name)
+		}
+	}
+
+	caller := &scriptedToolCaller{}
+	if err := executeOACommand(t, caller,
+		"approval", "list-pending",
+		"--start", "2026-08-01T00:00:00+08:00",
+		"--end", "2026-08-31T23:59:59+08:00",
+		"--page", "2", "--size", "3",
+	); err != nil {
+		t.Fatalf("execute historical list-pending argv: %v", err)
+	}
+	want := map[string]any{
+		"pageNumber":     2,
+		"pageSize":       3,
+		"createTimeFrom": "2026-08-01",
+		"createTimeTo":   "2026-08-31",
+	}
+	if caller.tool != "get_todo_tasks" || !reflect.DeepEqual(caller.args, want) {
+		t.Fatalf("call = %s %#v, want get_todo_tasks %#v", caller.tool, caller.args, want)
+	}
+}
+
 func TestCrossPlatformCoverageOAApprovalListCommandsRejectRetiredCurrentUserAndStatusResultFlags(t *testing.T) {
 	retired := map[string][]string{
 		"list-pending":   {"user-id", "process-instance-status", "process-instance-result"},

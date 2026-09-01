@@ -449,6 +449,7 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 	}
 
 	validPage := `{"success":true,"result":{"hasMore":false,"values":[{"processInstanceId":"i","title":"fixture"}]}}`
+	legacyPendingRange := []string{"--start", "1785513600000", "--end", "1788191999000"}
 	for name, args := range map[string][]string{
 		"bad create date":     {"--create-time-from", "bad"},
 		"bad create interval": {"--create-time-from", "2026-08-02", "--create-time-to", "2026-08-01"},
@@ -458,6 +459,7 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 		"zero page":           {"--page", "0"},
 	} {
 		t.Run("list-pending validate "+name, func(t *testing.T) {
+			args = append(append([]string{}, legacyPendingRange...), args...)
 			caller := expectError(t, ListPending, map[string][]string{}, args...)
 			if len(caller.history) != 0 {
 				t.Fatalf("validation made calls: %v", caller.history)
@@ -465,20 +467,20 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 		})
 	}
 	t.Run("list-pending call failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {"__ERROR__"}})
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {"__ERROR__"}}, legacyPendingRange...)
 	})
 	t.Run("list-pending projection failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"hasMore":false}}`}})
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"hasMore":false}}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending null result fails closed", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":null}`}})
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":null}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending pagination failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[]}}`}})
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[]}}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending full params", func(t *testing.T) {
 		caller := expectSuccess(t, ListPending, map[string][]string{"get_todo_tasks": {validPage}},
-			"--create-time-from", "2026-08-01", "--create-time-to", "2026-08-02", "--page", "2", "--limit", "3", "--query", "fixture")
+			"--start", "1785513600000", "--end", "1788191999000", "--create-time-from", "2026-08-01", "--create-time-to", "2026-08-02", "--page", "2", "--limit", "3", "--query", "fixture")
 		want := map[string]any{"createTimeFrom": "2026-08-01", "createTimeTo": "2026-08-02", "pageNumber": 2, "pageSize": 3, "query": "fixture"}
 		if !reflect.DeepEqual(caller.arguments[0], want) {
 			t.Fatalf("list pending params=%#v want=%#v", caller.arguments[0], want)

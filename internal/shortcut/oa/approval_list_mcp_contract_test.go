@@ -47,7 +47,7 @@ func TestCrossPlatformCoverageOAApprovalListsForwardCurrentMCPFilters(t *testing
 			name:        "pending",
 			declaration: ListPending,
 			tool:        "get_todo_tasks",
-			extraArgs:   []string{"--create-before", "2026-08-28"},
+			extraArgs:   []string{"--start", "1785513600000", "--end", "1788191999000", "--create-before", "2026-08-28"},
 			extraWant:   map[string]any{"createBefore": "2026-08-28"},
 		},
 		{name: "executed", declaration: ListExecuted, tool: "get_done_tasks", extraArgs: []string{"--process-instance-status", "COMPLETED"}, extraWant: map[string]any{"processInstanceStatus": "COMPLETED"}},
@@ -82,6 +82,41 @@ func TestCrossPlatformCoverageOAApprovalListsForwardCurrentMCPFilters(t *testing
 				t.Fatalf("arguments = %#v, want %#v", caller.arguments[0], want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageOAPendingShortcutPreservesHistoricalCLIInputs(t *testing.T) {
+	flags := make(map[string]shortcut.Flag, len(ListPending.Flags))
+	for _, flag := range ListPending.Flags {
+		flags[flag.Name] = flag
+	}
+	for _, name := range []string{"page", "limit"} {
+		if got := flags[name].Type; got != shortcut.FlagString {
+			t.Errorf("--%s type = %q, want string", name, got)
+		}
+	}
+	for _, name := range []string{"start", "end"} {
+		if flag, ok := flags[name]; !ok || flag.Type != shortcut.FlagInt || !flag.Required {
+			t.Errorf("historical --%s = %#v, want required int", name, flag)
+		}
+	}
+
+	caller := &oaCoverageCaller{responses: map[string][]string{
+		"get_todo_tasks": {`{"success":"true","result":{"hasMore":false,"values":[]}}`},
+	}}
+	if _, err := runOACoverage(t, ListPending, caller,
+		"--start", "1785513600000", "--end", "1788191999000", "--page", "2", "--limit", "3",
+	); err != nil {
+		t.Fatalf("execute historical pending shortcut argv: %v", err)
+	}
+	want := map[string]any{
+		"pageNumber":     2,
+		"pageSize":       3,
+		"createTimeFrom": "2026-08-01",
+		"createTimeTo":   "2026-08-31",
+	}
+	if !reflect.DeepEqual(caller.arguments[0], want) {
+		t.Fatalf("arguments = %#v, want %#v", caller.arguments[0], want)
 	}
 }
 
@@ -121,7 +156,9 @@ func TestCrossPlatformCoverageOATodoTasksFailureEnvelopeFailsClosed(t *testing.T
 	caller := &oaCoverageCaller{responses: map[string][]string{
 		"get_todo_tasks": {`{"error_message":"参数错误","result":{},"success":"false","error_code":"400002"}`},
 	}}
-	if _, err := runOACoverage(t, ListPending, caller); err == nil {
+	if _, err := runOACoverage(t, ListPending, caller,
+		"--start", "1785513600000", "--end", "1788191999000",
+	); err == nil {
 		t.Fatal("get_todo_tasks business failure unexpectedly succeeded")
 	}
 	if !reflect.DeepEqual(caller.history, []string{"get_todo_tasks"}) {
@@ -129,14 +166,14 @@ func TestCrossPlatformCoverageOATodoTasksFailureEnvelopeFailsClosed(t *testing.T
 	}
 }
 
-func TestCrossPlatformCoverageOACompatibilityListSchemaUsesMCPProperties(t *testing.T) {
+func TestCrossPlatformCoverageOACompatibilityListSchemaPreservesPublishedProperties(t *testing.T) {
 	tests := []struct {
 		declaration shortcut.Shortcut
 		want        map[string]string
 	}{
-		{declaration: PendingApprovals, want: map[string]string{"limit": "pageSize"}},
-		{declaration: DoneApprovals, want: map[string]string{"limit": "pageSize"}},
-		{declaration: MyInitiated, want: map[string]string{"query": "query", "page": "pageNumber", "limit": "pageSize"}},
+		{declaration: PendingApprovals, want: map[string]string{"limit": ""}},
+		{declaration: DoneApprovals, want: map[string]string{"limit": ""}},
+		{declaration: MyInitiated, want: map[string]string{"query": "query", "page": "", "limit": ""}},
 	}
 	for _, test := range tests {
 		got := make(map[string]string, len(test.declaration.Contract.Parameters))
