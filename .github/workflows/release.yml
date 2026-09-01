@@ -1234,12 +1234,20 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
+      - name: Mint repository-scoped Release publisher token
+        id: release-publisher-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REVIEWER_ROUTER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEWER_ROUTER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
       - name: Publish or reuse immutable GitHub Release
         id: publish
         env:
-          # Use the job-scoped token so this REST client receives the
-          # contents: write permission declared by publish-release.
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
         run: |
           set -eu
@@ -1487,7 +1495,7 @@ jobs:
 
       - name: Require immutable published GitHub Release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}
           RELEASE_ID: ${{ steps.publish.outputs.release_id }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
         run: |

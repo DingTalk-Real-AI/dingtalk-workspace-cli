@@ -2243,6 +2243,36 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
 	publishJob := releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n")
+	tokenStep := releaseWorkflowSection(
+		t,
+		publishJob,
+		"      - name: Mint repository-scoped Release publisher token\n",
+		"\n      - name: Publish or reuse immutable GitHub Release\n",
+	)
+	for _, required := range []string{
+		"id: release-publisher-token",
+		"actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+		`client-id: ${{ vars.REVIEWER_ROUTER_APP_CLIENT_ID }}`,
+		`private-key: ${{ secrets.REVIEWER_ROUTER_APP_PRIVATE_KEY }}`,
+		`owner: ${{ github.repository_owner }}`,
+		`repositories: ${{ github.event.repository.name }}`,
+		"permission-contents: write",
+	} {
+		if !strings.Contains(tokenStep, required) {
+			t.Errorf("Release publisher token step is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"permission-actions:",
+		"permission-administration:",
+		"permission-checks:",
+		"permission-pull-requests:",
+		"skip-token-revoke:",
+	} {
+		if strings.Contains(tokenStep, forbidden) {
+			t.Errorf("Release publisher token must stay repository-scoped and contents-only: found %q", forbidden)
+		}
+	}
 	publishStep := releaseWorkflowSection(
 		t,
 		publishJob,
@@ -2252,7 +2282,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 
 	for _, required := range []string{
 		"id: publish",
-		`GITHUB_TOKEN: ${{ github.token }}`,
+		`GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}`,
 		`"repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION"`,
 		`"repos/$GITHUB_REPOSITORY/releases"`,
 		"find_recovery_draft_release_id()",
@@ -2318,7 +2348,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 
 	terminalStep := publishJob[strings.Index(publishJob, "      - name: Require immutable published GitHub Release\n"):]
 	for _, required := range []string{
-		`GITHUB_TOKEN: ${{ github.token }}`,
+		`GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}`,
 		`RELEASE_ID: ${{ steps.publish.outputs.release_id }}`,
 		`RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}`,
 		`"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"`,
