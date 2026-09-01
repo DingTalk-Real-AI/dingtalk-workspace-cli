@@ -9,4 +9,5 @@
 | 长连接 | [`connect.md`](./connect.md) |
 | 事件订阅 | [`event.md`](./event.md) |
 | 成员管理 | [`member.md`](./member.md) |
+| MCP 服务与工具开发 | [`mcp.md`](./mcp.md) |
 | 最佳实践 | [`recipes.md`](./recipes.md) |

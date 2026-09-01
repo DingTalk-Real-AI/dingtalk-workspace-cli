@@ -42,7 +42,7 @@ reference，不要加载全部长尾产品文档。
 - `calendar`：日历事件、参会人和会议室；视频会议（conference）当前 CLI 不支持，请在钉钉客户端操作；
   `minutes`：会后听记内容。
 - `report`：钉钉日志系统中的日报/周报；`doc`：普通文档创作；`todo`：个人任务。
-- `chat`：发送消息、读取历史消息和主动群操作；独立的 `event`：未来个人 IM/OA 事件长连接监听；
+- `chat`：发送消息、读取历史消息和主动群操作；独立的 `event`：未来个人 IM/OA/Todo 事件长连接监听；
   `ding`：强提醒，位于 `dingtalk-misc`。
 - `hrbrain` / `markdown` / `pat` / `profile` 均位于 `dingtalk-misc`。
 - 请假、加班、外出、出差、补卡等考勤业务审批优先走 `attendance`；其他通用审批查询、同意、

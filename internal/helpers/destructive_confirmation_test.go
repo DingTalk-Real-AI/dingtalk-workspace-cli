@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -64,7 +65,13 @@ func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, 
 		root.SetIn(strings.NewReader(""))
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func requireTypedConfirmationError(t *testing.T, err error) {

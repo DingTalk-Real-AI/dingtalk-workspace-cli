@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM 事件或 OA 审批事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成，以及审批任务创建/完成/转交时使用。
+description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请或待办事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请，以及待办创建/更新/删除时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.15"
 ---
 
@@ -22,7 +22,7 @@ cli_version: ">=1.0.15"
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
 - **脚本只用于明确覆盖的复合任务**：[scripts/](./scripts/) 下的脚本可封装 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等流程；当公开 `+` Shortcut 已提供目标唯一解析、分页/部分失败 ledger 和确认语义时，优先 Shortcut。Chat 历史导出与机器人广播已完全下沉 Runtime，不再发布兼容脚本
-- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史或审批列表
+- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、VoIP 通话邀请、Todo、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史、审批列表、通话记录或待办列表
 
 ## Shortcut 与原子命令的使用原则
 
@@ -77,6 +77,7 @@ cli_version: ">=1.0.15"
 
 | 产品                | 用途                                                   | 参考文件                                                           |
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
+| `agoal`           | 目标管理：战略解码、经营合约、计分卡、目标规则周期、个人目标、目标模板、周月报规则提交统计与跟催 | [agoal.md](./references/products/agoal.md)                       |
 | `aisearch`        | AI搜问（通用找人首选）：按姓名/部门/职位/职责/上级/下级/手机号/工号维度找人，"谁负责 XX/XX 的负责人/某事项/某项目的人"统一走本产品；不含人才池/绩效/职业历程等专项 HR 场景（那些去 `hrbrain`） | [aisearch.md](./references/products/aisearch.md)               |
 | `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索            | [aitable.md](./references/products/aitable.md)                 |
 | `api`             | OpenAPI 逃生舱：官方 llms.txt 分层发现，仅执行企业内部应用 App Token 服务端 API | [openapi-explorer.md](./references/products/openapi-explorer.md) |
@@ -100,12 +101,12 @@ cli_version: ">=1.0.15"
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
 | `whiteboard`      | 文档内嵌白板：读取 OpenNodes、追加节点、整页重建                           | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
-| `event`           | 个人 IM/OA 事件：监听消息、群生命周期、审批任务与审批实例事件，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
+| `event`           | 个人 IM/OA/VoIP/Todo 事件：监听消息、群生命周期、审批任务/实例、通话邀请与待办变化，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
 
 用户提到"AI应用/创建应用/生成系统/做工具/管理后台/低代码/宜搭" → **当前无稳定产品参考**（勿猜 `aiapp` 命令）；向用户说明能力未以产品文档发布，multi 布局见 `dingtalk-misc` 的 `unsupported-scripts.md`
-用户提到"目标管理/Agoal/战略解码/经营合约/计分卡/目标模板/周月报提交统计" → `agoal`
+用户提到"目标管理/Agoal/战略解码/经营合约或字段配置/计分卡/目标规则周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催" → `agoal`；只填写、提交或查询日报周报月报正文时才走 `report`
 用户提到"找人/搜人/谁负责 XX/某事项的负责人/某项目的人/团队成员/上级/下级/按工号找人/按手机号找人" → `aisearch`（通用语义找人；若明确涉及人才池/绩效/职业历程/结构化高级条件，去 `hrbrain`）
 用户提到"表格/多维表/AI表格/记录/数据/视图/图表/仪表盘" → `aitable`
 用户提到"考勤/打卡/排班" → `attendance`
@@ -131,6 +132,8 @@ cli_version: ">=1.0.15"
 用户提到"招聘/职位/JD/在招职位/创建职位/职位详情" → `recruit`
 用户提到"监听有人@我/监听单聊或群消息/监听所有单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/订阅个人 IM 事件/实时接收钉钉事件/监听并自动回复消息/驱动 Agent 处理消息" → `event +listen-im`；群成员加入/退出、群改名/解散或明确原始 EventKey/Filter DSL → `event consume`
 用户提到"监听待我审批的任务/监听审批任务创建、完成或转交/监听审批单发起或终止/监听我发起的审批完成/监听审批实例完成/订阅 OA 事件/event consume user_oa_approval_*" → `event consume`
+用户提到"收到语音通话邀请时通知我/监听 VoIP 来电/订阅 user_voip_call_receive_invite" → `event consume`
+用户提到"监听待办创建/更新/删除/监听指派给我的待办/订阅 Todo 事件/event consume user_todo_task_*" → `event consume`，按角色使用 `--role-types`
 
 普通消息、reaction、已读、撤回监听优先由一个 `dws event +listen-im` 进程表达目标；不同用户、不同群或不同过滤条件拆成独立进程。只有高级事件控制才生成 `dws event consume <event_key> [event_key...] --flatten`。
 
@@ -141,6 +144,7 @@ cli_version: ">=1.0.15"
 关键区分: contact(基础通讯录档案：学历/家庭/银行卡/紧急联系人/合同/部门角色) vs aisearch person(通用语义找人：谁负责/上级/下级/多维度模糊搜索) vs hrbrain(人才池/员工档案专项模块数据/职业历程/绩效/结构化高级人才搜索)
 关键区分: oa tasks(审批 taskId，审批/拒绝用) vs oa list-pending(收件箱 processInstanceId，查看用)
 关键区分: oa(查询或操作审批) vs event user_oa_approval_*(当前用户审批事件长连接监听)
+关键区分: todo(查询或操作待办) vs event user_todo_task_*(当前用户待办事件长连接监听)
 
 
 > 更多易混淆场景见 [intent-guide.md](./references/intent-guide.md)

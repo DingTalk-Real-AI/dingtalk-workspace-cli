@@ -1038,13 +1038,13 @@ jobs:
 
       - name: Install archive tooling
         run: |
-          if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1; then
+          if command -v zip >/dev/null 2>&1 && command -v unzip >/dev/null 2>&1 && command -v llvm-nm >/dev/null 2>&1; then
             exit 0
           fi
           sudo apt-get update
-          sudo apt-get install -y zip unzip
+          sudo apt-get install -y zip unzip llvm
 
-      - name: Post-release packaging
+      - name: Prepare runtime payload
         run: ./scripts/release/post-goreleaser.sh
         env:
           DWS_PACKAGE_VERSION: ${{ needs.release-contract.outputs.release_version }}

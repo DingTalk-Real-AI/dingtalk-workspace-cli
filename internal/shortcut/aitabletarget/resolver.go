@@ -218,7 +218,7 @@ func ResolveBaseName(reader Reader, name string, allowFuzzy bool) (Resolution, e
 			}
 			all = append(all, Candidate{ID: id, Name: candidateName})
 		}
-		next, hasMore, hasMoreKnown := pagination(data)
+		next, hasMore, hasMoreKnown := Pagination(data)
 		if hasMoreKnown && !hasMore {
 			return selectCandidate("base", query, dedupe(all), allowFuzzy)
 		}
@@ -349,7 +349,11 @@ func firstString(values map[string]any, keys ...string) string {
 	return ""
 }
 
-func pagination(data map[string]any) (cursor string, hasMore bool, hasMoreKnown bool) {
+// Pagination returns the paging facts published by an MCP response. Callers
+// must prefer an explicit hasMore=false over a stale cursor echoed by the
+// service: a completed page is terminal even when the payload retains the
+// request cursor.
+func Pagination(data map[string]any) (cursor string, hasMore bool, hasMoreKnown bool) {
 	if data == nil {
 		return "", false, false
 	}
@@ -364,7 +368,7 @@ func pagination(data map[string]any) (cursor string, hasMore bool, hasMoreKnown 
 	}
 	for _, key := range []string{"data", "result", "page", "pagination", "meta"} {
 		if nested, ok := data[key].(map[string]any); ok {
-			next, more, known := pagination(nested)
+			next, more, known := Pagination(nested)
 			if cursor == "" {
 				cursor = next
 			}

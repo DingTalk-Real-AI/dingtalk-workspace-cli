@@ -94,7 +94,7 @@ Ownership-based cleanup:
 
 ### 5. Subscription-create retry orchestration and local guard
 
-This policy covers all 16 public personal-event keys and every logical
+This policy covers all 26 public personal-event keys (16 IM, 7 OA, and 3 Todo) and every logical
 subscription in a multi-event command. It applies only before the ready
 marker; reconnecting an established Stream remains a separate mechanism.
 

@@ -556,6 +556,7 @@ Flags:
     - --open-dingtalk-id 传 openDingTalkId（三方应用或跨组织场景常用，无法获取 userId 时使用）
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
+  - 自动翻页：显式加 `--page-all` 后 CLI 按边界时间连续拉取全部页并按消息 ID 去重，`--page-limit` 控制最多请求页数（默认 50，范围 1-500），`--max-items` 控制最多输出条数（默认 0 不限制，精确截断并置 `truncatedByResultLimit=true`），`--page-delay` 控制页间等待毫秒数（默认 200，0 表示不等待）；只传这些分页控制参数但不传 `--page-all` 时仍保持原单页调用
   - 处理引用回复时读取 quotedMessage，不要只看回复正文；合并转发与图片引用的原消息内容也在该上下文中
   - 话题圈是群会话容器，使用 `openConversationId`；群内一条 Thread 使用 `openConvThreadId`。把普通群已有消息升级为 Thread 使用 `dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`；浏览主话题使用 `dws chat thread list --conversation-id <openConversationId>`；需要逐条查看回复正文或核实具体回复是否仍存在时，使用 `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`。
 ```
@@ -638,22 +639,23 @@ Flags:
   - 发送文字 + 文件时，先发送 `--msg-type file --file` 文件消息，再补一条文本或 Markdown 说明；这是两条独立消息
 ```
 
-### file (会话文件上传，已下线)
+### conversation-file（会话文件空间上传）
 
-#### chat file upload 已下线
+#### chat conversation-file upload
 
-`dws chat file upload` 已隐藏下线，不再调用 `chat/upload_conversation_file_by_url`，URL 文件服务端代传当前不可用。
-
-发送本地文件消息仍然支持，统一使用：
+把工作目录内的本地文件上传到指定群聊或单聊的会话文件空间，只返回文件标识，不发送聊天消息：
 ```
-dws chat message send --conversation-id <openConversationId> --msg-type file --file ./report.pdf --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file ./report.pdf --format json
+dws chat conversation-file upload --conversation-id <openConversationId> --file ./report.pdf --format json
+dws chat conversation-file upload --open-dingtalk-id <openDingTalkId> --file ./report.pdf --format json
 ```
 
-注意:
-  - 不要再构造 `dws chat file upload --url ...`，该路径会直接返回下线提示
-  - 常规发图/发文件/发音视频都走 `chat message send --msg-type file --file <本地路径>`
-  - 若需要“文字 + 文件”双消息，先发送文件消息，再补一条文本或 Markdown 消息说明
+成功结果返回 `dentryId`、`spaceId`、`fileName`、`fileType` 和 `fileSize`，可供后续需要会话文件标识的操作使用。
+
+注意：
+  - URL 文件代传不受支持；先把文件下载到工作目录，再传相对路径
+  - 需要真正发送文件消息时，使用 `chat message send --msg-type file --file <本地路径>` 或 `chat +messages-send --file <本地路径>`
+  - `--conversation-id`、`--user`、`--open-dingtalk-id` 必须且只能指定一个
+  - 历史 `chat file upload` 仍保持隐藏下线，不要用于新调用
 
 #### 查询消息发送状态 — 查询以当前用户身份发送的消息的发送状态
 
@@ -2254,6 +2256,7 @@ Flags:
 - `chat thread list-replies` — 使用父会话 `openConversationId` 与 Thread `openConvThreadId` 拉取回复；只有需要按主消息自动解析、全量翻页、排序或下载资源时才使用现有的 `chat +thread-replies`
 - `chat message list-focused` — 拉取特别关注人的消息，cursor 分页
 - `chat list-top-conversations` — 拉取置顶会话列表（用户询问"置顶会话"或"置顶消息"时路由到此），cursor 分页
+- `chat conversation-file upload` — 只把工作目录内的本地文件上传到指定会话文件空间，返回 `dentryId`/`spaceId`，不发送消息；URL 代传不受支持
 - `chat message send` — 以当前用户身份发消息（群聊或单聊），正文可用 `--content` 或位置参数；本地图片/文件/音视频统一用 `--msg-type file --file`，其中图片显示为可下载附件而非内联图片；`--msg-type image --media-id` 只用于上游已经提供有效 mediaId 的场景，DWS CLI 不能从本地文件生成 mediaId
 - `chat message search` — 按关键词搜索消息内容（跨所有会话，可选指定群）
 - `chat search-common` — 搜索共同群，查询指定人共同所在的群聊（AND=所有人都在，OR=任一人在）
@@ -2283,7 +2286,7 @@ Flags:
 - `chat clear-messages` — 清空当前用户视角下指定会话的聊天记录（不影响其他成员）
 - `chat group list-all` — 分页拉取当前用户加入的所有群（list-my-groups 仅返回群主/管理员的群）
 - `chat group list-join-validations` / `chat group audit-join-validation` — 拉取入群验证记录 / 审批入群验证（通过/拒绝/删除/忽略/拉黑）
-- `chat file upload` — 已下线；不要调用 `chat/upload_conversation_file_by_url`，本地文件发送改用 `chat message send --msg-type file --file`
+- `chat file upload` — 已下线；不要调用 `chat/upload_conversation_file_by_url`，只上传本地文件改用 `chat conversation-file upload`
 - `chat group transfer-owner` — 转让群主
 - `chat group upgrade-to-external` — 将普通群不可逆升级为外部群（仅群主，需确认）
 - `chat group update-nick` — 设置群昵称；省略 `--nick` 时清除
@@ -2524,7 +2527,8 @@ Flags:
 | `chat message search-advanced` | `nextCursor` | 下次 message search-advanced 的 --cursor |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
 | `chat conversation-info` | `newCSpaceIdIM` | 独立钉盘存储流程的共享空间 ID；不是发送本地聊天附件的前置条件 |
-| `chat file upload` | 无（已下线） | 不要调用；常规发图/发文件用 `chat message send --msg-type file --file` |
+| `chat conversation-file upload` | `dentryId` + `spaceId` | 后续需要引用已上传的会话文件标识；该命令本身不发送消息 |
+| `chat file upload` | 无（已下线） | 不要调用；只上传本地文件改用 `chat conversation-file upload`，发文件消息用 `chat message send --msg-type file --file` |
 | `chat message list` | `openMsgId` | message read-status 的 --message-id |
 | `chat group-role list` | `openRoleId` | group-role update/remove/set-user 的 --role-id；remove-user 的 --role-ids |
 | `chat message create-text-emotion` | `emotionId` | add-text-emotion 的 --emotion-id |

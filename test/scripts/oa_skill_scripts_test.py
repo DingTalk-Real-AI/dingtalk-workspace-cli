@@ -96,15 +96,75 @@ class OAFormProjectionTest(unittest.TestCase):
         self.assertEqual("金额", projected["fields"][1]["children"][0]["name"])
         self.assertEqual("decimal_string", projected["fields"][1]["children"][0]["valueKind"])
         self.assertEqual(
-            ["CascadeField", "DDHolidayField"],
+            ["CascadeField"],
             [blocker["componentName"] for blocker in projected["blockers"]],
         )
+        holiday = projected["fields"][2]
+        self.assertEqual("supported", holiday["support"])
+        self.assertEqual("holiday_suite_request", holiday["valueKind"])
         self.assertTrue(projected["needsComponentReference"])
         encoded = json.dumps(projected, ensure_ascii=False)
         self.assertNotIn("largeUnusedMetadata", encoded)
         self.assertNotIn("系统金额", encoded)
         self.assertNotIn("提示", encoded)
         self.assertLess(len(encoded), 2_500)
+
+    def test_attendance_suite_projection_keeps_required_request_fields(self):
+        payload = {
+            "success": True,
+            "result": {
+                "content": {
+                    "items": [
+                        {
+                            "componentName": "DDHolidayField",
+                            "props": {
+                                "id": "holiday-1",
+                                "label": ["开始时间", "结束时间"],
+                                "required": True,
+                                "attendTypeLabel": "请假类型",
+                                "options": [
+                                    {
+                                        "name": "年假",
+                                        "leaveCode": "leave-1",
+                                        "unit": "day",
+                                        "bizType": "annual_leave",
+                                    }
+                                ],
+                            },
+                        },
+                        {
+                            "componentName": "DDBizSuite",
+                            "props": {
+                                "id": "suite-1",
+                                "bizType": "attendance.supply",
+                            },
+                            "children": [
+                                {
+                                    "componentName": "DDDateField",
+                                    "props": {
+                                        "id": "date-1",
+                                        "label": "补卡时间",
+                                        "required": True,
+                                        "format": "yyyy-MM-dd HH:mm",
+                                        "bizAlias": "userCheckTime",
+                                    },
+                                }
+                            ],
+                        },
+                    ]
+                }
+            },
+        }
+
+        projected = PREFLIGHT.project_form_schema(payload)
+
+        self.assertEqual([], projected["blockers"])
+        holiday, supply = projected["fields"]
+        self.assertEqual("leave-1", holiday["options"][0]["leaveCode"])
+        self.assertEqual("请假类型", holiday["attendTypeLabel"])
+        self.assertEqual("supply_suite_request", supply["valueKind"])
+        self.assertEqual("补卡时间", supply["children"][0]["name"])
+        self.assertEqual("userCheckTime", supply["children"][0]["bizAlias"])
 
     def test_date_range_uses_first_label_and_preserves_labels(self):
         payload = {

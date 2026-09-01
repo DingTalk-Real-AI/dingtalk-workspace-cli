@@ -36,6 +36,12 @@ sha256_file() {
   shasum -a 256 "$target" | awk '{print $1}'
 }
 
+file_url() {
+  path="$1"
+  encoded_path="$(printf '%s' "$path" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/#/%23/g')"
+  printf 'file://%s\n' "$encoded_path"
+}
+
 detect_os() {
   os="$(uname -s)"
   case "$os" in
@@ -181,8 +187,8 @@ stage_homebrew_formula() {
 
   render_homebrew_formula \
     "DingtalkWorkspaceCliLocal" \
-    "file://$archive_path" \
-    "file://$DIST_DIR/dws-skills.zip" \
+    "$(file_url "$archive_path")" \
+    "$(file_url "$DIST_DIR/dws-skills.zip")" \
     "$archive_sha" \
     "$skills_sha" \
     '  keg_only "Local verification formula to avoid linking conflicts"' \
@@ -241,10 +247,105 @@ create_skills_zip() {
 
   (
     cd "$staging"
-    env -u LC_ALL -u LC_CTYPE LANG=C LC_ALL=C LC_CTYPE=C zip -qr "$skills_zip" .
+    find . -exec touch -t 202001010000 {} +
+    find . -type f | LC_ALL=C sort \
+      | env -u LC_ALL -u LC_CTYPE LANG=C LC_ALL=C LC_CTYPE=C zip -X -q "$skills_zip" -@
   )
 
   rm -rf "$staging"
+}
+
+# ---------- runtime payload ----------
+
+repack_platform_archive() {
+  stage="$1"
+  archive="$2"
+  new_archive="$archive.new"
+  case "$archive" in
+    *.tar.gz)
+      deterministic_tar=""
+      if command -v gtar >/dev/null 2>&1; then
+        deterministic_tar=gtar
+      elif tar --version 2>/dev/null | grep -q 'GNU tar'; then
+        deterministic_tar=tar
+      fi
+      if [ -n "$deterministic_tar" ]; then
+        (
+          cd "$stage" \
+            && "$deterministic_tar" --sort=name --owner=0 --group=0 --numeric-owner \
+                  --mtime='2020-01-01 00:00Z' \
+                  -czf "$archive.new" .
+        )
+      else
+        (
+          cd "$stage"
+          find . -exec touch -t 202001010000 {} +
+          find . -print | LC_ALL=C sort \
+            | COPYFILE_DISABLE=1 tar --no-recursion \
+                --uid 0 --gid 0 --uname root --gname root \
+                --options gzip:!timestamp -czf "$archive.new" -T -
+        )
+      fi
+      ;;
+    *.zip)
+      new_archive="${archive%.zip}.new.zip"
+      (
+        cd "$stage"
+        find . -exec touch -t 202001010000 {} +
+        find . -type f | LC_ALL=C sort \
+          | env -u LC_ALL -u LC_CTYPE LANG=C LC_ALL=C LC_CTYPE=C zip -X -q "$new_archive" -@
+      )
+      ;;
+    *) err "unsupported platform archive: $archive" ;;
+  esac
+  mv "$new_archive" "$archive"
+}
+
+write_runtime_manifest() {
+  runtime_root="$1"
+  target_os="$2"
+  target_arch="$3"
+  library_name="$4"
+  library_sha="$(sha256_file "$runtime_root/$library_name")"
+  cat > "$runtime_root/manifest.json" <<EOF
+{
+  "format_version": 1,
+  "payload_version": "20260825",
+  "target": "$target_os/$target_arch",
+  "library": "$library_name",
+  "library_sha256": "$library_sha",
+  "ps_file_count": 123,
+  "ps_manifest_sha256": "45ae147697c1f8683df3f232d0ba792b807179bbe22fdac8225a0cf25fc33e7e"
+}
+EOF
+}
+
+prepare_runtime_archives() {
+  "$ROOT/scripts/policy/check-runtime-payload.sh" --allow-unsupported-tools
+  work="$(mktemp -d)"
+  found_any=0
+  for archive in "$DIST_DIR"/dws-darwin-*.tar.gz "$DIST_DIR"/dws-linux-*.tar.gz "$DIST_DIR"/dws-windows-*.zip; do
+    [ -f "$archive" ] || continue
+    found_any=1
+    name="$(basename "$archive")"
+    target="${name#dws-}"
+    target="${target%.tar.gz}"
+    target="${target%.zip}"
+    target_os="${target%-*}"
+    target_arch="${target##*-}"
+    stage="$work/$target"
+    rm -rf "$stage"
+    mkdir -p "$stage"
+    case "$archive" in
+      *.tar.gz) tar -xzf "$archive" -C "$stage" ;;
+      *.zip) unzip -q "$archive" -d "$stage" ;;
+    esac
+    "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
+    repack_platform_archive "$stage" "$archive"
+    update_checksum_entry "$name" "$(sha256_file "$archive")"
+  done
+  rm -rf "$work"
+  [ "$found_any" -eq 1 ] || err "no platform archives found for runtime payload preparation"
 }
 
 # ---------- darwin signing ----------
@@ -252,7 +353,8 @@ create_skills_zip() {
 # Unsigned arm64 binaries are SIGKILL'd by amfid on Apple Silicon (macOS 11+).
 # Official releases use an Apple Developer ID certificate loaded from GitHub
 # Secrets. Fork/local builds retain ad-hoc signing so they remain runnable.
-# We unpack each dws-darwin-*.tar.gz, sign the dws binary, repack deterministically,
+# We unpack each dws-darwin-*.tar.gz, sign the runtime library and dws binary,
+# repack deterministically,
 # and rewrite the corresponding line in checksums.txt.
 
 configure_darwin_signing() {
@@ -279,21 +381,21 @@ configure_darwin_signing() {
 }
 
 sign_one_darwin_binary() {
-  bin="$1"
+  sign_target="$1"
   if [ "$DARWIN_SIGNING_MODE" = "developer-id" ]; then
     rcodesign sign \
       --p12-file "$APPLE_CERTIFICATE_P12" \
       --p12-password-file "$APPLE_CERTIFICATE_PASSWORD_FILE" \
       --for-notarization \
-      "$bin"
+      "$sign_target"
     return
   fi
   if command -v codesign >/dev/null 2>&1; then
-    codesign --force --sign - "$bin"
+    codesign --force --sign - "$sign_target"
     return
   fi
   if command -v rcodesign >/dev/null 2>&1; then
-    rcodesign sign "$bin"
+    rcodesign sign "$sign_target"
     return
   fi
   err "neither codesign nor rcodesign found — install rcodesign (cargo install apple-codesign) to ad-hoc sign darwin builds"
@@ -328,25 +430,16 @@ sign_darwin_archives() {
     if [ ! -f "$bin" ]; then
       err "dws binary not found inside $name after extraction"
     fi
+    runtime_root="$stage/.dws-runtime/20260825"
+    runtime_library="$runtime_root/x7k2m9p4q1w8.dylib"
+    [ -f "$runtime_library" ] || err "runtime library not found inside $name after extraction"
+    sign_one_darwin_binary "$runtime_library"
+    target_arch="${name#dws-darwin-}"
+    target_arch="${target_arch%.tar.gz}"
+    write_runtime_manifest "$runtime_root" darwin "$target_arch" x7k2m9p4q1w8.dylib
     sign_one_darwin_binary "$bin"
 
-    # Repack deterministically when GNU tar is available. macOS ships BSD tar,
-    # which lacks --sort/--mtime/--owner; fall back to a portable archive there
-    # so local package builds still complete.
-    if command -v gtar >/dev/null 2>&1; then
-      (
-        cd "$stage" \
-          && gtar --sort=name --owner=0 --group=0 --numeric-owner \
-                --mtime='2020-01-01 00:00Z' \
-                -czf "$archive.new" .
-      )
-    else
-      (
-        cd "$stage" \
-          && COPYFILE_DISABLE=1 tar -czf "$archive.new" .
-      )
-    fi
-    mv "$archive.new" "$archive"
+    repack_platform_archive "$stage" "$archive"
 
     update_checksum_entry "$name" "$(sha256_file "$archive")"
   done
@@ -368,10 +461,13 @@ write_checksums() {
 version="$(resolve_version)"
 configure_darwin_signing
 
+say "==> Preparing runtime payload"
+prepare_runtime_archives
+
 if [ "$DARWIN_SIGNING_MODE" = "developer-id" ]; then
-  say "==> Developer ID signing darwin binaries"
+  say "==> Developer ID signing darwin runtime and binaries"
 else
-  say "==> Ad-hoc signing darwin binaries"
+  say "==> Ad-hoc signing darwin runtime and binaries"
 fi
 sign_darwin_archives
 

@@ -122,14 +122,14 @@ func TestDevSchemaAllDumpToolsParseable(t *testing.T) {
 }
 
 // TestDevSchemaAllDumpCountStable 是队列 B192 的补充观察断言：dev 子树装配 dump
-// 的 tool 数量稳定（当前 37；统一框架已收编三条原 exclusion），作为回归基线快照。数量变化提示 dev 命令表面
-// 变更，需复核装配。
+// 的 tool 数量稳定（当前 66；包含 29 条静态 dev mcp 开发命令），作为回归
+// 基线快照。数量变化提示 dev 命令表面变更，需复核装配。
 func TestDevSchemaAllDumpCountStable(t *testing.T) {
 	dump := assembleDevSchemaAllDump(t)
 	for _, p := range dump.Products {
 		if p.ID == "dev" {
-			if len(p.Tools) != 37 {
-				t.Fatalf("dev schema --all tool count = %d, want 37 (baseline)", len(p.Tools))
+			if len(p.Tools) != 66 {
+				t.Fatalf("dev schema --all tool count = %d, want 66 (baseline)", len(p.Tools))
 			}
 			return
 		}

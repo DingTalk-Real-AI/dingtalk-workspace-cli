@@ -43,9 +43,10 @@ func NewMCPCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "解析和管理当前身份可用的 MCP 服务连接信息",
+			AgentSummary: "解析当前身份可用的 MCP 服务连接信息，并静态查看或调用已发布工具",
 			UseWhen: []string{
 				"需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端",
+				"已知 mcpId，需要查看或调用当前身份可用的已发布 MCP 工具",
 			},
 			AvoidWhen: []string{
 				"查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp",
@@ -56,8 +57,8 @@ func NewMCPCommand() *cobra.Command {
 	// reviewed static MCP helpers as subcommands of this command.
 	cmd := &cobra.Command{
 		Use:               "mcp",
-		Short:             "管理 MCP 服务连接信息",
-		Long:              "管理经过审核并纳入 Schema 的 MCP 服务连接辅助能力。",
+		Short:             "管理和调用已发布 MCP 服务",
+		Long:              "管理经过审核并纳入 Schema 的 MCP 服务连接辅助能力，并通过静态 published 子命令查看或调用已发布工具。",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

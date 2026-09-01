@@ -73,13 +73,41 @@ def _option_values(raw: Any) -> Optional[List[str]]:
     return values or None
 
 
-def _support(component_name: str) -> tuple[str, Optional[str]]:
+def _holiday_options(raw: Any) -> Optional[List[Dict[str, str]]]:
+    if not isinstance(raw, list):
+        return None
+    options = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        option = {
+            key: str(item[key])
+            for key in (
+                "name",
+                "value",
+                "leaveCode",
+                "unit",
+                "displayUnit",
+                "bizType",
+            )
+            if item.get(key) is not None
+        }
+        if option:
+            options.append(option)
+    return options or None
+
+
+def _support(
+    component_name: str, props: Dict[str, Any]
+) -> tuple[str, Optional[str]]:
     if component_name in VALUE_KINDS:
         return "supported", VALUE_KINDS[component_name]
     if component_name in AUTOMATIC_COMPONENTS:
         return "automatic", AUTOMATIC_COMPONENTS[component_name]
     if component_name == "DDHolidayField":
-        return "unknown", None
+        return "supported", "holiday_suite_request"
+    if component_name == "DDBizSuite" and props.get("bizType") == "attendance.supply":
+        return "supported", "supply_suite_request"
     if component_name in CLIENT_ONLY_COMPONENTS:
         return "client_only", None
     return "unknown", None
@@ -99,11 +127,17 @@ def _project_component(component: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     name, labels = _label(props)
+    if (
+        not name
+        and component_name == "DDBizSuite"
+        and props.get("bizType") == "attendance.supply"
+    ):
+        name = "attendance.supply"
     if not name:
         return None
 
     required = _truthy(props.get("required"))
-    support, value_kind = _support(component_name)
+    support, value_kind = _support(component_name, props)
     hidden = _is_hidden(props)
     if hidden or support == "automatic":
         return None
@@ -118,9 +152,17 @@ def _project_component(component: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         ("id", props.get("id")),
         ("labels", labels),
         ("valueKind", value_kind),
-        ("options", _option_values(props.get("options"))),
+        (
+            "options",
+            _holiday_options(props.get("options"))
+            if component_name == "DDHolidayField"
+            else _option_values(props.get("options")),
+        ),
         ("unit", props.get("unit")),
         ("format", props.get("format")),
+        ("bizType", props.get("bizType")),
+        ("bizAlias", props.get("bizAlias")),
+        ("attendTypeLabel", props.get("attendTypeLabel")),
         ("multiple", props.get("multiple")),
         ("choice", props.get("choice")),
         ("needDetail", props.get("needDetail")),
@@ -128,7 +170,7 @@ def _project_component(component: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if value is not None and value != [] and value != "":
             projected[key] = value
 
-    if component_name == "TableField":
+    if component_name in {"TableField", "DDBizSuite"}:
         children = []
         for child in component.get("children") or []:
             if isinstance(child, dict):
@@ -146,7 +188,7 @@ def _walk_components(items: Iterable[Any]) -> Iterable[Dict[str, Any]]:
         projected = _project_component(item)
         if projected is not None:
             yield projected
-        if item.get("componentName") != "TableField":
+        if item.get("componentName") not in {"TableField", "DDBizSuite"}:
             children = item.get("children") or []
             if isinstance(children, list):
                 yield from _walk_components(children)

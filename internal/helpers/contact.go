@@ -133,6 +133,49 @@ func contactParseInt64WithAliases(cmd *cobra.Command, primary string, aliases ..
 	return v, nil
 }
 
+// contactParseInt64Slice 将逗号分隔的整数字符串解析为 []int64，用于角色 ID / 部门 ID 列表。
+func contactParseInt64Slice(raw string) ([]int64, error) {
+	parts := parseCSVValues(raw)
+	if len(parts) == 0 {
+		return nil, errors.New("至少需要一个有效整数值")
+	}
+	out := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		v, err := strconv.ParseInt(p, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("%q 不是有效整数: %w", p, err)
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// contactParseInt64SliceWithAliases 从主 flag 或别名中读取逗号分隔整数列表。
+func contactParseInt64SliceWithAliases(cmd *cobra.Command, primary string, aliases ...string) ([]int64, error) {
+	if err := validateRequiredFlagWithAliases(cmd, primary, aliases...); err != nil {
+		return nil, err
+	}
+	raw := strings.TrimSpace(flagOrFallback(cmd, primary, aliases...))
+	out, err := contactParseInt64Slice(raw)
+	if err != nil {
+		return nil, fmt.Errorf("--%s %w", contactFirstSetFlagName(cmd, append([]string{primary}, aliases...)...), err)
+	}
+	return out, nil
+}
+
+// contactParseBoolWithAliases 从主 flag 或别名中读取布尔值。
+func contactParseBoolWithAliases(cmd *cobra.Command, primary string, aliases ...string) (bool, error) {
+	if err := validateRequiredFlagWithAliases(cmd, primary, aliases...); err != nil {
+		return false, err
+	}
+	raw := strings.TrimSpace(flagOrFallback(cmd, primary, aliases...))
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("--%s 必须是 boolean: %w", contactFirstSetFlagName(cmd, append([]string{primary}, aliases...)...), err)
+	}
+	return v, nil
+}
+
 func newContactDeptCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -178,6 +221,440 @@ func newContactDeptCreateCommand() *cobra.Command {
 	_ = cmd.Flags().MarkHidden("super-dept")
 	cmd.Flags().Bool("create-dept-group", false, "是否创建部门群 (必填，需显式传 true 或 false)")
 	cli.AnnotateRuntimeRequiredFlags(cmd, "name", "create-dept-group")
+	return cmd
+}
+
+func newContactLabelCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建角色或角色组",
+		Long: `创建通讯录角色（标签）或角色组，通过 --type 显式确认创建类型。
+
+--type role  创建角色：必须通过 --parent-id 指定所属角色组 ID（可用 label list 查询）。
+--type group 创建角色组：无需 --parent-id，服务端固定挂在根层级（parentId=-1）。
+parentId 不接受 0；-1 仅表示根层级角色组，创建角色时必须传真实角色组 ID。
+
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label create --name "管理员" --type role --parent-id 12345
+  dws contact label create --name "管理层" --type group`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "name", "label-name", "labelName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "label-name", "labelName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "label-name", "labelName"))
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "type", "create-type", "label-type", "createType", "labelType"); err != nil {
+				return err
+			}
+			createType := strings.TrimSpace(flagOrFallback(cmd, "type", "create-type", "label-type", "createType", "labelType"))
+			switch createType {
+			case "role", "group":
+			default:
+				return fmt.Errorf("--type 仅支持 role（角色）或 group（角色组），当前值 %q", createType)
+			}
+			parentIDSupplied := contactAnyFlagChanged(cmd, "parent-id", "parentId", "parent", "label-parent-id", "labelParentId")
+			var parentID int64
+			if createType == "role" {
+				if !parentIDSupplied {
+					return fmt.Errorf("创建角色（--type role）必须通过 --parent-id 指定所属角色组 ID；若要创建角色组请改用 --type group")
+				}
+				parentIDRaw := strings.TrimSpace(flagOrFallback(cmd, "parent-id", "parentId", "parent", "label-parent-id", "labelParentId"))
+				var err error
+				parentID, err = strconv.ParseInt(parentIDRaw, 10, 64)
+				if err != nil {
+					return fmt.Errorf("--%s must be an integer: %w", contactFirstSetFlagName(cmd, "parent-id", "parentId", "parent", "label-parent-id", "labelParentId"), err)
+				}
+				if parentID <= 0 {
+					return fmt.Errorf("--parent-id 必须是有效的角色组 ID（正整数）；创建角色组请改用 --type group（无需 --parent-id）")
+				}
+			} else if parentIDSupplied {
+				return fmt.Errorf("创建角色组（--type group）无需 --parent-id，服务端固定挂在根层级；若要在指定组下创建角色请改用 --type role")
+			}
+			if createType == "group" {
+				parentID = -1
+			}
+			return callMCPTool("add_label", map[string]any{
+				"parentId": parentID,
+				"labelModel": map[string]any{
+					"name": name,
+				},
+			})
+		},
+	}
+	cmd.Flags().String("name", "", "角色或角色组名称 (必填)")
+	cmd.Flags().String("label-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("label-name")
+	cmd.Flags().String("type", "", "创建类型 (必填)：role 角色（需 --parent-id 指定所属角色组），group 角色组（挂在根层级）")
+	cmd.Flags().String("create-type", "", "--type 的别名")
+	cmd.Flags().String("label-type", "", "--type 的别名")
+	_ = cmd.Flags().MarkHidden("create-type")
+	_ = cmd.Flags().MarkHidden("label-type")
+	cmd.Flags().String("parent-id", "", "所属角色组 ID（--type role 时必填，正整数）")
+	cmd.Flags().String("parentId", "", "--parent-id 的别名")
+	cmd.Flags().String("parent", "", "--parent-id 的别名")
+	cmd.Flags().String("label-parent-id", "", "--parent-id 的别名")
+	cmd.Flags().String("labelParentId", "", "--parent-id 的别名")
+	_ = cmd.Flags().MarkHidden("parentId")
+	_ = cmd.Flags().MarkHidden("parent")
+	_ = cmd.Flags().MarkHidden("label-parent-id")
+	_ = cmd.Flags().MarkHidden("labelParentId")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "name", "type")
+	return cmd
+}
+
+func newContactLabelUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "修改角色名称",
+		Long:    `修改指定角色（标签）的名称。该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label update --id 12345 --name "新名称"`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			labelID, err := contactParseInt64WithAliases(cmd, "id", "label-id", "labelId", "role-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "name", "label-name", "labelName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "label-name", "labelName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "label-name", "labelName"))
+			}
+			return callMCPTool("update_label", map[string]any{
+				"labelId": labelID,
+				"label": map[string]any{
+					"name": name,
+				},
+			})
+		},
+	}
+	cmd.Flags().String("id", "", "角色 ID (必填)")
+	cmd.Flags().String("label-id", "", "--id 的别名")
+	cmd.Flags().String("role-id", "", "--id 的别名")
+	_ = cmd.Flags().MarkHidden("label-id")
+	_ = cmd.Flags().MarkHidden("role-id")
+	cmd.Flags().String("name", "", "角色新名称 (必填)")
+	cmd.Flags().String("label-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("label-name")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "id", "name")
+	return cmd
+}
+
+func newContactLabelDeleteCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "delete",
+		Aliases: []string{"remove", "rm"},
+		Short:   "删除角色或角色组",
+		Long: `根据 ID 删除通讯录中的角色（标签）或角色组。删除角色组时会同时删除组下所有角色。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label delete --id 12345`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			id, err := contactParseInt64WithAliases(cmd, "id", "label-id", "labelId", "role-id")
+			if err != nil {
+				return err
+			}
+			return callMCPTool("delete_label", map[string]any{
+				"id": id,
+			})
+		},
+	}
+	cmd.Flags().String("id", "", "要删除的角色或角色组 ID (必填)")
+	cmd.Flags().String("label-id", "", "--id 的别名")
+	cmd.Flags().String("role-id", "", "--id 的别名")
+	_ = cmd.Flags().MarkHidden("label-id")
+	_ = cmd.Flags().MarkHidden("role-id")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "id")
+	return cmd
+}
+
+func newContactLabelAddMembersCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "add-members",
+		Short: "给成员添加角色",
+		Long: `为指定成员批量添加角色（标签）。--id 为角色 ID，支持逗号分隔多个角色。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label add-members --id 12345 --users user1,user2`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			labelIDs, err := contactParseInt64SliceWithAliases(cmd, "id", "label-id", "labelId", "role-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "users", "user-ids", "userIds", "staff-ids", "staffIds"); err != nil {
+				return err
+			}
+			staffIDs := parseCSVValues(flagOrFallback(cmd, "users", "user-ids", "userIds", "staff-ids", "staffIds"))
+			if len(staffIDs) == 0 {
+				return fmt.Errorf("--users 至少需要一个成员 ID")
+			}
+			return callMCPTool("add_label_members", map[string]any{
+				"labelIds": labelIDs,
+				"staffIds": staffIDs,
+			})
+		},
+	}
+	cmd.Flags().String("id", "", "角色 ID 列表，逗号分隔 (必填)")
+	cmd.Flags().String("label-id", "", "--id 的别名")
+	cmd.Flags().String("role-id", "", "--id 的别名")
+	_ = cmd.Flags().MarkHidden("label-id")
+	_ = cmd.Flags().MarkHidden("role-id")
+	cmd.Flags().String("users", "", "成员 userId 列表，逗号分隔 (必填)")
+	cmd.Flags().String("user-ids", "", "--users 的别名")
+	cmd.Flags().String("userIds", "", "--users 的别名")
+	cmd.Flags().String("staff-ids", "", "--users 的别名")
+	cmd.Flags().String("staffIds", "", "--users 的别名")
+	_ = cmd.Flags().MarkHidden("user-ids")
+	_ = cmd.Flags().MarkHidden("userIds")
+	_ = cmd.Flags().MarkHidden("staff-ids")
+	_ = cmd.Flags().MarkHidden("staffIds")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "id", "users")
+	return cmd
+}
+
+func newContactLabelRemoveMembersCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "remove-members",
+		Aliases: []string{"delete-members"},
+		Short:   "移除成员角色",
+		Long: `从指定成员身上批量移除角色（标签）。--id 为角色 ID，支持逗号分隔多个角色。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label remove-members --id 12345 --users user1,user2`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			labelIDs, err := contactParseInt64SliceWithAliases(cmd, "id", "label-id", "labelId", "role-id")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "users", "user-ids", "userIds", "staff-ids", "staffIds"); err != nil {
+				return err
+			}
+			staffIDs := parseCSVValues(flagOrFallback(cmd, "users", "user-ids", "userIds", "staff-ids", "staffIds"))
+			if len(staffIDs) == 0 {
+				return fmt.Errorf("--users 至少需要一个成员 ID")
+			}
+			return callMCPTool("remove_label_members", map[string]any{
+				"labelIds": labelIDs,
+				"staffIds": staffIDs,
+			})
+		},
+	}
+	cmd.Flags().String("id", "", "角色 ID 列表，逗号分隔 (必填)")
+	cmd.Flags().String("label-id", "", "--id 的别名")
+	cmd.Flags().String("role-id", "", "--id 的别名")
+	_ = cmd.Flags().MarkHidden("label-id")
+	_ = cmd.Flags().MarkHidden("role-id")
+	cmd.Flags().String("users", "", "成员 userId 列表，逗号分隔 (必填)")
+	cmd.Flags().String("user-ids", "", "--users 的别名")
+	cmd.Flags().String("userIds", "", "--users 的别名")
+	cmd.Flags().String("staff-ids", "", "--users 的别名")
+	cmd.Flags().String("staffIds", "", "--users 的别名")
+	_ = cmd.Flags().MarkHidden("user-ids")
+	_ = cmd.Flags().MarkHidden("userIds")
+	_ = cmd.Flags().MarkHidden("staff-ids")
+	_ = cmd.Flags().MarkHidden("staffIds")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "id", "users")
+	return cmd
+}
+
+func newContactLabelUpdateMemberScopeCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update-member-scope",
+		Aliases: []string{"set-member-scope"},
+		Short:   "修改角色管理范围",
+		Long: `修改指定成员在某个角色下的管理范围（部门列表）。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label update-member-scope --user user1 --id 12345 --depts 1,2`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "user", "staff-id", "staffId", "user-id", "userId"); err != nil {
+				return err
+			}
+			staffID := strings.TrimSpace(flagOrFallback(cmd, "user", "staff-id", "staffId", "user-id", "userId"))
+			if staffID == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "user", "staff-id", "staffId", "user-id", "userId"))
+			}
+			labelID, err := contactParseInt64WithAliases(cmd, "id", "label-id", "labelId", "role-id")
+			if err != nil {
+				return err
+			}
+			deptIDs, err := contactParseInt64SliceWithAliases(cmd, "depts", "dept-ids", "deptIds")
+			if err != nil {
+				return err
+			}
+			return callMCPTool("update_label_member_scope", map[string]any{
+				"staffId": staffID,
+				"labelId": labelID,
+				"deptIds": deptIDs,
+			})
+		},
+	}
+	cmd.Flags().String("user", "", "成员 staffId / userId (必填)")
+	cmd.Flags().String("staff-id", "", "--user 的别名")
+	cmd.Flags().String("staffId", "", "--user 的别名")
+	cmd.Flags().String("user-id", "", "--user 的别名")
+	cmd.Flags().String("userId", "", "--user 的别名")
+	_ = cmd.Flags().MarkHidden("staff-id")
+	_ = cmd.Flags().MarkHidden("staffId")
+	_ = cmd.Flags().MarkHidden("user-id")
+	_ = cmd.Flags().MarkHidden("userId")
+	cmd.Flags().String("id", "", "角色 ID (必填)")
+	cmd.Flags().String("label-id", "", "--id 的别名")
+	cmd.Flags().String("role-id", "", "--id 的别名")
+	_ = cmd.Flags().MarkHidden("label-id")
+	_ = cmd.Flags().MarkHidden("role-id")
+	cmd.Flags().String("depts", "", "可管理部门 ID 列表，逗号分隔 (必填)")
+	cmd.Flags().String("dept-ids", "", "--depts 的别名")
+	cmd.Flags().String("deptIds", "", "--depts 的别名")
+	_ = cmd.Flags().MarkHidden("dept-ids")
+	_ = cmd.Flags().MarkHidden("deptIds")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "user", "id", "depts")
+	return cmd
+}
+
+func newContactExtFieldCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建自定义字段",
+		Long: `在通讯录中创建新的自定义成员字段。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact ext-field create --name "职级"`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "name", "field-name", "fieldName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "field-name", "fieldName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "field-name", "fieldName"))
+			}
+			return callMCPTool("add_org_ext_attrs", map[string]any{
+				"orgEmpAttrModels": []map[string]any{
+					{"name": name, "orgSelfTag": int64(1), "newAdd": true},
+				},
+			})
+		},
+	}
+	cmd.Flags().String("name", "", "自定义字段显示名称 (必填)")
+	cmd.Flags().String("field-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("field-name")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "name")
+	return cmd
+}
+
+func newContactExtFieldUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "更新自定义字段设置",
+		Long: `更新指定自定义字段的属性设置，如 clientDisplay（是否在 profile 展示）、isSearch（是否支持搜索）等。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact ext-field update --code "rank" --client-display true --is-search false`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "code", "field-code", "fieldCode"); err != nil {
+				return err
+			}
+			code := strings.TrimSpace(flagOrFallback(cmd, "code", "field-code", "fieldCode"))
+			if code == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "code", "field-code", "fieldCode"))
+			}
+			orgSelfTagRaw := strings.TrimSpace(flagOrFallback(cmd, "org-self-tag", "field-type", "fieldType"))
+			var orgSelfTag int64
+			if orgSelfTagRaw != "" {
+				var err error
+				orgSelfTag, err = strconv.ParseInt(orgSelfTagRaw, 10, 64)
+				if err != nil {
+					return fmt.Errorf("--%s 必须是整数: %w", contactFirstSetFlagName(cmd, "org-self-tag", "field-type", "fieldType"), err)
+				}
+			} else {
+				orgSelfTag = 1
+			}
+			clientDisplay, err := contactParseBoolWithAliases(cmd, "client-display", "clientDisplay")
+			if err != nil {
+				return err
+			}
+			isSearch, err := contactParseBoolWithAliases(cmd, "is-search", "isSearch")
+			if err != nil {
+				return err
+			}
+			return callMCPTool("update_org_ext_attrs", map[string]any{
+				"orgEmpAttrModels": []map[string]any{
+					{"code": code, "orgSelfTag": orgSelfTag, "clientDisplay": clientDisplay, "isSearch": isSearch},
+				},
+			})
+		},
+	}
+	cmd.Flags().String("code", "", "自定义字段编码 (必填)")
+	cmd.Flags().String("field-code", "", "--code 的别名")
+	cmd.Flags().String("fieldCode", "", "--code 的别名")
+	_ = cmd.Flags().MarkHidden("field-code")
+	_ = cmd.Flags().MarkHidden("fieldCode")
+	cmd.Flags().String("org-self-tag", "1", "字段类型：1 企业个性化字段，0 默认扩展字段")
+	cmd.Flags().String("field-type", "", "--org-self-tag 的别名")
+	cmd.Flags().String("fieldType", "", "--org-self-tag 的别名")
+	_ = cmd.Flags().MarkHidden("field-type")
+	_ = cmd.Flags().MarkHidden("fieldType")
+	cmd.Flags().String("client-display", "", "是否在客户端展示：true / false (必填)")
+	cmd.Flags().String("clientDisplay", "", "--client-display 的别名")
+	_ = cmd.Flags().MarkHidden("clientDisplay")
+	cmd.Flags().String("is-search", "", "是否支持搜索：true / false (必填)")
+	cmd.Flags().String("isSearch", "", "--is-search 的别名")
+	_ = cmd.Flags().MarkHidden("isSearch")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "code", "client-display", "is-search")
+	return cmd
+}
+
+func newContactExtFieldDeleteCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "delete",
+		Aliases: []string{"remove", "rm"},
+		Short:   "删除自定义字段",
+		Long:    `删除指定的自定义成员字段。该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact ext-field delete --code "rank"`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "code", "field-code", "fieldCode"); err != nil {
+				return err
+			}
+			code := strings.TrimSpace(flagOrFallback(cmd, "code", "field-code", "fieldCode"))
+			if code == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "code", "field-code", "fieldCode"))
+			}
+			orgSelfTagRaw := strings.TrimSpace(flagOrFallback(cmd, "org-self-tag", "field-type", "fieldType"))
+			var orgSelfTag int64
+			if orgSelfTagRaw != "" {
+				var err error
+				orgSelfTag, err = strconv.ParseInt(orgSelfTagRaw, 10, 64)
+				if err != nil {
+					return fmt.Errorf("--%s 必须是整数: %w", contactFirstSetFlagName(cmd, "org-self-tag", "field-type", "fieldType"), err)
+				}
+			} else {
+				orgSelfTag = 1
+			}
+			return callMCPTool("remove_org_ext_attrs", map[string]any{
+				"orgEmpAttrModels": []map[string]any{
+					{"code": code, "orgSelfTag": orgSelfTag, "toDelete": true},
+				},
+			})
+		},
+	}
+	cmd.Flags().String("code", "", "自定义字段编码 (必填)")
+	cmd.Flags().String("field-code", "", "--code 的别名")
+	cmd.Flags().String("fieldCode", "", "--code 的别名")
+	_ = cmd.Flags().MarkHidden("field-code")
+	_ = cmd.Flags().MarkHidden("fieldCode")
+	cmd.Flags().String("org-self-tag", "1", "字段类型：1 企业个性化字段，0 默认扩展字段")
+	cmd.Flags().String("field-type", "", "--org-self-tag 的别名")
+	cmd.Flags().String("fieldType", "", "--org-self-tag 的别名")
+	_ = cmd.Flags().MarkHidden("field-type")
+	_ = cmd.Flags().MarkHidden("fieldType")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "code")
 	return cmd
 }
 
@@ -437,6 +914,7 @@ func newContactCommand() *cobra.Command {
   - contact user get-self/search/search-mobile/get: 通讯录用户查询
   - contact user invite/update/update-self/update-ownness: 邀请与更新员工
   - contact dept search/get-info/list-children/list-members/create/update: 部门查询与管理
+  - contact label create/list/get/list-members: 角色创建与查询
   - contact relation list-my-followings: 特别关注人查询
 
 企业管理功能：
@@ -713,11 +1191,17 @@ func newContactCommand() *cobra.Command {
 	contactLabelCmd := newGroupCommand(&cobra.Command{
 		Use:     "label",
 		Aliases: []string{"role"},
-		Short:   "角色查询",
-		Long: `角色查询：获取企业所有角色列表、根据角色名称查询角色ID、根据角色ID查询角色下的成员。
+		Short:   "角色查询与管理",
+		Long: `角色查询与管理：创建/修改/删除角色、管理角色成员与成员在角色下的管理范围、查询角色列表与成员。
 
 【何时用哪个命令】
-  - 获取企业所有角色列表           → contact label list
+  - 创建角色/角色组             → contact label create
+  - 修改角色名称                 → contact label update
+  - 删除角色/角色组             → contact label delete
+  - 为成员批量添加角色           → contact label add-members
+  - 从成员批量移除角色           → contact label remove-members
+  - 修改成员在角色下的管理范围   → contact label update-member-scope
+  - 获取企业所有角色列表         → contact label list
   - 根据角色名称查询角色ID       → contact label get
   - 根据角色ID查询角色下的成员   → contact label list-members
 
@@ -800,7 +1284,242 @@ func newContactCommand() *cobra.Command {
 		RunE:    runContactLabelList,
 	}
 
-	contactLabelCmd.AddCommand(contactLabelListAllCmd, contactLabelGetCmd, contactLabelListMembersCmd)
+	contactLabelCreateCmd := newContactLabelCreateCommand()
+	DeclareLeafMetadata(contactLabelCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "add_label",
+				CanonicalPath:  "contact.add_label",
+				CLIPath:        "contact label create",
+				PrimaryCLIPath: "contact label create",
+			},
+			Description: "创建通讯录角色（标签）或角色组：--type role 在指定角色组下创建角色，--type group 创建根层级角色组",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"标签创建结果","properties":{"result":{"type":"object","description":"调用结果","properties":{"id":{"type":"integer","description":"新建角色或角色组的标签 ID"}},"required":["id"]},"success":{"type":"boolean","description":"是否创建成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "The executable CLI composes the add_label MCP tool call manually: label creation requires type-dependent parentId semantics (role requires a real group id, group passes -1) that the flag mapping layer owns.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建通讯录角色（标签）或角色组",
+				UseWhen:      []string{"用户明确要求新建角色（--type role，需角色组 ID）或新建角色组（--type group，挂在根层级）"},
+				AvoidWhen:    []string{"修改已有角色名称应使用 contact label update；仅查找角色应使用 contact label get 或 contact label list"},
+				Examples: []string{
+					"dws contact label create --name \"管理员\" --type role --parent-id 12345",
+					"dws contact label create --name \"管理层\" --type group",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "name", Property: "labelModel.name", Required: boolPtr(true)},
+				{Name: "type", Required: boolPtr(true), Enum: []string{"role", "group"}, Description: "创建类型：role 角色（--parent-id 必填），group 角色组（固定根层级 parentId=-1）"},
+				{Name: "parent-id", Property: "parentId", Required: boolPtr(false), InterfaceType: "integer", RequiredWhen: "type=role", Description: "所属角色组 ID（正整数）；--type group 时禁止传"},
+			},
+		},
+	})
+	contactLabelUpdateCmd := newContactLabelUpdateCommand()
+	DeclareLeafMetadata(contactLabelUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "update_label",
+				CanonicalPath:  "contact.update_label",
+				CLIPath:        "contact label update",
+				PrimaryCLIPath: "contact label update",
+			},
+			Description: "修改通讯录中指定角色（标签）的名称，其他属性保持原值",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"角色名称更新结果","properties":{"result":{"type":"object","description":"调用结果","properties":{"id":{"type":"integer","description":"角色 ID"},"name":{"type":"string","description":"角色新名称"}},"required":["id","name"]},"success":{"type":"boolean","description":"是否更新成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "The executable CLI composes the update_label MCP tool call manually: the label.name field must be wrapped in a label object matching the service signature.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "修改通讯录角色（标签）名称",
+				UseWhen:      []string{"用户明确要求修改已有角色的名称时"},
+				AvoidWhen:    []string{"创建新角色应使用 contact label create；删除角色应使用 contact label delete"},
+				Examples:     []string{`dws contact label update --id 12345 --name "新名称"`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "labelId", Required: boolPtr(true), InterfaceType: "integer", Description: "要修改的角色 ID"},
+				{Name: "name", Property: "label.name", Required: boolPtr(true), Description: "角色新名称"},
+			},
+		},
+	})
+
+	contactLabelDeleteCmd := newContactLabelDeleteCommand()
+	DeclareLeafMetadata(contactLabelDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "delete_label",
+				CanonicalPath:  "contact.delete_label",
+				CLIPath:        "contact label delete",
+				PrimaryCLIPath: "contact label delete",
+			},
+			Description: "根据 ID 删除通讯录中的角色（标签）或角色组；删除角色组会同时删除组下所有角色",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"角色删除结果","properties":{"result":{"type":"object","description":"调用结果"},"success":{"type":"boolean","description":"是否删除成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "delete_label"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除通讯录角色（标签）或角色组",
+				UseWhen:      []string{"用户明确要求删除某个角色或角色组时"},
+				AvoidWhen:    []string{"修改角色名称应使用 contact label update；删除组成员关系应使用 contact label remove-members"},
+				Examples:     []string{`dws contact label delete --id 12345`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "id", Required: boolPtr(true), InterfaceType: "integer", Description: "要删除的角色或角色组 ID"},
+			},
+		},
+	})
+
+	contactLabelAddMembersCmd := newContactLabelAddMembersCommand()
+	DeclareLeafMetadata(contactLabelAddMembersCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "add_label_members",
+				CanonicalPath:  "contact.add_label_members",
+				CLIPath:        "contact label add-members",
+				PrimaryCLIPath: "contact label add-members",
+			},
+			Description: "为指定成员批量添加角色（标签）",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"批量添加角色成员结果","properties":{"result":{"type":"object","description":"调用结果"},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "add_label_members"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为成员批量添加角色（标签）",
+				UseWhen:      []string{"需要把一批成员加入一个或多个角色时"},
+				AvoidWhen:    []string{"创建新角色应使用 contact label create；移除成员角色应使用 contact label remove-members"},
+				Examples:     []string{`dws contact label add-members --id 12345 --users user1,user2`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "labelIds", Required: boolPtr(true), InterfaceType: "array", Description: "角色 ID 列表，逗号分隔"},
+				{Name: "users", Property: "staffIds", Required: boolPtr(true), InterfaceType: "array", Description: "成员 userId 列表，逗号分隔"},
+			},
+		},
+	})
+
+	contactLabelRemoveMembersCmd := newContactLabelRemoveMembersCommand()
+	DeclareLeafMetadata(contactLabelRemoveMembersCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "remove_label_members",
+				CanonicalPath:  "contact.remove_label_members",
+				CLIPath:        "contact label remove-members",
+				PrimaryCLIPath: "contact label remove-members",
+			},
+			Description: "从指定成员身上批量移除角色（标签）",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"批量移除角色成员结果","properties":{"result":{"type":"object","description":"调用结果"},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "remove_label_members"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "从成员身上批量移除角色（标签）",
+				UseWhen:      []string{"需要把一批成员从一个或多个角色中移除时"},
+				AvoidWhen:    []string{"删除角色本身应使用 contact label delete；添加成员角色应使用 contact label add-members"},
+				Examples:     []string{`dws contact label remove-members --id 12345 --users user1,user2`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "labelIds", Required: boolPtr(true), InterfaceType: "array", Description: "角色 ID 列表，逗号分隔"},
+				{Name: "users", Property: "staffIds", Required: boolPtr(true), InterfaceType: "array", Description: "成员 userId 列表，逗号分隔"},
+			},
+		},
+	})
+
+	contactLabelUpdateMemberScopeCmd := newContactLabelUpdateMemberScopeCommand()
+	DeclareLeafMetadata(contactLabelUpdateMemberScopeCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "update_label_member_scope",
+				CanonicalPath:  "contact.update_label_member_scope",
+				CLIPath:        "contact label update-member-scope",
+				PrimaryCLIPath: "contact label update-member-scope",
+			},
+			Description: "修改指定成员在某个角色下的管理范围（部门列表）",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"修改角色管理范围结果","properties":{"result":{"type":"object","description":"调用结果"},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "update_label_member_scope"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "修改成员在某个角色下的管理范围",
+				UseWhen:      []string{"需要设置某成员在角色下可管理的部门范围时"},
+				AvoidWhen:    []string{"添加/移除成员角色应使用 contact label add-members / remove-members"},
+				Examples:     []string{`dws contact label update-member-scope --user user1 --id 12345 --depts 1,2,3`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "user", Property: "staffId", Required: boolPtr(true), Description: "成员 staffId / userId"},
+				{Name: "id", Property: "labelId", Required: boolPtr(true), InterfaceType: "integer", Description: "角色 ID"},
+				{Name: "depts", Property: "deptIds", Required: boolPtr(true), InterfaceType: "array", Description: "可管理部门 ID 列表，逗号分隔"},
+			},
+		},
+	})
+
+	contactLabelCmd.AddCommand(
+		contactLabelCreateCmd,
+		contactLabelUpdateCmd,
+		contactLabelDeleteCmd,
+		contactLabelAddMembersCmd,
+		contactLabelRemoveMembersCmd,
+		contactLabelUpdateMemberScopeCmd,
+		contactLabelListAllCmd,
+		contactLabelGetCmd,
+		contactLabelListMembersCmd,
+	)
 
 	contactDeptCmd := newGroupCommand(&cobra.Command{Use: "dept", Short: "部门查询", RunE: groupRunE})
 
@@ -1781,7 +2500,136 @@ contact user profile fields 获取可用字段列表。
 	contactAccountCmd.AddCommand(contactAccountCreateCmd, contactAccountUpdateCmd)
 
 	relationCmd.AddCommand(contactRelationListMyFollowingsCmd)
-	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, relationCmd, contactOrgCmd, contactAccountCmd)
+
+	// ── ext-field 自定义成员字段 ──────────────────────────────────────────────────
+	contactExtFieldCmd := newGroupCommand(&cobra.Command{
+		Use:     "ext-field",
+		Aliases: []string{"org-field", "custom-field"},
+		Short:   "自定义成员字段管理",
+		Long: `自定义成员字段管理：创建、更新属性、删除企业自定义字段。
+
+【何时用哪个命令】
+  - contact ext-field create   创建新的自定义成员字段
+  - contact ext-field update   更新字段属性（clientDisplay / isSearch 等）
+  - contact ext-field delete   删除自定义字段`,
+		RunE: groupRunE,
+	})
+
+	contactExtFieldCreateCmd := newContactExtFieldCreateCommand()
+	DeclareLeafMetadata(contactExtFieldCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "add_org_ext_attrs",
+				CanonicalPath:  "contact.add_org_ext_attrs",
+				CLIPath:        "contact ext-field create",
+				PrimaryCLIPath: "contact ext-field create",
+			},
+			Description: "在通讯录中创建新的自定义成员字段",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"创建自定义字段结果","properties":{"result":{"type":"object","description":"调用结果","properties":{"code":{"type":"string","description":"字段编码"},"name":{"type":"string","description":"字段名称"},"clientDisplay":{"type":"boolean","description":"是否在客户端展示"},"isSearch":{"type":"boolean","description":"是否可搜索"},"orgSelfTag":{"type":"integer","description":"字段类型"}},"required":["code","name"]},"success":{"type":"boolean","description":"是否创建成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "The executable CLI composes the add_org_ext_attrs MCP tool call manually: the orgEmpAttrModels wrapper array and fixed orgSelfTag/newAdd fields are CLI-side conventions.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建通讯录自定义成员字段",
+				UseWhen:      []string{"需要为企业新增自定义成员字段（如职级、员工类型）时"},
+				AvoidWhen:    []string{"更新或删除已有字段应使用 contact ext-field update / delete"},
+				Examples:     []string{`dws contact ext-field create --name "职级"`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "name", Property: "orgEmpAttrModels[0].name", Required: boolPtr(true), Description: "自定义字段显示名称"},
+			},
+		},
+	})
+
+	contactExtFieldUpdateCmd := newContactExtFieldUpdateCommand()
+	DeclareLeafMetadata(contactExtFieldUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "update_org_ext_attrs",
+				CanonicalPath:  "contact.update_org_ext_attrs",
+				CLIPath:        "contact ext-field update",
+				PrimaryCLIPath: "contact ext-field update",
+			},
+			Description: "更新指定自定义字段的属性设置，如 clientDisplay（是否在 profile 展示）、isSearch（是否支持搜索）等",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"更新自定义字段结果","properties":{"result":{"type":"object","description":"调用结果","properties":{"code":{"type":"string","description":"字段编码"},"name":{"type":"string","description":"字段名称"},"clientDisplay":{"type":"boolean","description":"是否在客户端展示"},"isSearch":{"type":"boolean","description":"是否可搜索"},"orgSelfTag":{"type":"integer","description":"字段类型"}},"required":["code"]},"success":{"type":"boolean","description":"是否更新成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "The executable CLI composes the update_org_ext_attrs MCP tool call manually: the orgEmpAttrModels wrapper array is a CLI-side convention.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新自定义字段属性设置",
+				UseWhen:      []string{"需要修改已有自定义字段的展示/搜索等属性时"},
+				AvoidWhen:    []string{"创建新字段应使用 contact ext-field create；删除字段应使用 contact ext-field delete"},
+				Examples:     []string{`dws contact ext-field update --code "rank" --client-display true --is-search false`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "code", Property: "orgEmpAttrModels[0].code", Required: boolPtr(true), Description: "自定义字段编码"},
+				{Name: "org-self-tag", Property: "orgEmpAttrModels[0].orgSelfTag", Required: boolPtr(false), InterfaceType: "integer", Description: "字段类型：1 企业个性化字段，0 默认扩展字段"},
+				{Name: "client-display", Property: "orgEmpAttrModels[0].clientDisplay", Required: boolPtr(true), Description: "是否在客户端展示：true / false"},
+				{Name: "is-search", Property: "orgEmpAttrModels[0].isSearch", Required: boolPtr(true), Description: "是否支持搜索：true / false"},
+			},
+		},
+	})
+
+	contactExtFieldDeleteCmd := newContactExtFieldDeleteCommand()
+	DeclareLeafMetadata(contactExtFieldDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "remove_org_ext_attrs",
+				CanonicalPath:  "contact.remove_org_ext_attrs",
+				CLIPath:        "contact ext-field delete",
+				PrimaryCLIPath: "contact ext-field delete",
+			},
+			Description: "删除指定的自定义成员字段",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"删除自定义字段结果","properties":{"result":{"type":"object","description":"调用结果","properties":{"code":{"type":"string","description":"字段编码"},"name":{"type":"string","description":"字段名称"},"clientDisplay":{"type":"boolean","description":"是否在客户端展示"},"isSearch":{"type":"boolean","description":"是否可搜索"},"orgSelfTag":{"type":"integer","description":"字段类型"}},"required":["code"]},"success":{"type":"boolean","description":"是否删除成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "The executable CLI composes the remove_org_ext_attrs MCP tool call manually: the orgEmpAttrModels wrapper array and fixed toDelete field are CLI-side conventions.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除通讯录自定义成员字段",
+				UseWhen:      []string{"需要删除企业自定义成员字段时"},
+				AvoidWhen:    []string{"创建新字段应使用 contact ext-field create；更新属性应使用 contact ext-field update"},
+				Examples:     []string{`dws contact ext-field delete --code "rank"`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "code", Property: "orgEmpAttrModels[0].code", Required: boolPtr(true), Description: "自定义字段编码"},
+				{Name: "org-self-tag", Property: "orgEmpAttrModels[0].orgSelfTag", Required: boolPtr(false), InterfaceType: "integer", Description: "字段类型：1 企业个性化字段，0 默认扩展字段"},
+			},
+		},
+	})
+
+	contactExtFieldCmd.AddCommand(contactExtFieldCreateCmd, contactExtFieldUpdateCmd, contactExtFieldDeleteCmd)
+
+	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, contactExtFieldCmd, relationCmd, contactOrgCmd, contactAccountCmd)
 
 	addQueryFlags := func(cmd *cobra.Command) {
 		cmd.Flags().String("query", "", "搜索关键词 (必填)")

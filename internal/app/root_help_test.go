@@ -516,6 +516,7 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	mustFindCommand(t, root, "contact", "label", "get")
 	mustFindCommand(t, root, "contact", "label", "list")
 	mustFindCommand(t, root, "contact", "label", "list-members")
+	mustFindCommand(t, root, "contact", "label", "create")
 	mustFindCommand(t, root, "contact", "label", "find")
 	mustFindCommand(t, root, "contact", "label", "search")
 	mustFindCommand(t, root, "contact", "label", "info")
@@ -548,6 +549,16 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 			name: "label members",
 			args: []string{"--dry-run", "contact", "label", "list-members", "--id", "123"},
 			want: []string{"get_label_members_by_labelId", "labelId", "123"},
+		},
+		{
+			name: "label create role",
+			args: []string{"--dry-run", "contact", "label", "create", "--name", "管理员", "--type", "role", "--parent-id", "12345", "--yes"},
+			want: []string{"add_label", "parentId", "labelModel", "name", "管理员"},
+		},
+		{
+			name: "label create group",
+			args: []string{"--dry-run", "contact", "label", "create", "--name", "管理层", "--type", "group", "--yes"},
+			want: []string{"add_label", "parentId", "labelModel", "name", "管理层"},
 		},
 		{
 			name: "role shim",
@@ -614,19 +625,33 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	}
 }
 
-func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
+func TestChatConversationFileUploadUsesANewPath(t *testing.T) {
 	root := NewRootCommand()
 	fileCmd := mustFindCommand(t, root, "chat", "file")
 	if !fileCmd.Hidden {
-		t.Fatal("chat file should be hidden after upload_conversation_file_by_url downline")
+		t.Fatal("historical chat file group should remain hidden")
 	}
-	upload := mustFindCommand(t, root, "chat", "file", "upload")
-	if !upload.Hidden {
-		t.Fatal("chat file upload should be hidden after downline")
+	legacyUpload := mustFindCommand(t, root, "chat", "file", "upload")
+	if !legacyUpload.Hidden {
+		t.Fatal("historical chat file upload should remain hidden")
 	}
-	for _, flag := range []string{"group", "url", "file", "file-name"} {
+
+	conversationFileCmd := mustFindCommand(t, root, "chat", "conversation-file")
+	if conversationFileCmd.Hidden {
+		t.Fatal("chat conversation-file should be visible")
+	}
+	upload := mustFindCommand(t, root, "chat", "conversation-file", "upload")
+	if upload.Hidden {
+		t.Fatal("chat conversation-file upload should be visible")
+	}
+	for _, flag := range []string{"conversation-id", "group", "user", "open-dingtalk-id", "file", "file-path", "file-name", "md5", "idempotency-key"} {
 		if upload.Flags().Lookup(flag) == nil {
-			t.Fatalf("chat file upload missing compatibility flag --%s", flag)
+			t.Fatalf("chat conversation-file upload missing flag --%s", flag)
+		}
+	}
+	for _, flag := range []string{"url", "uuid"} {
+		if upload.Flags().Lookup(flag) != nil {
+			t.Fatalf("new chat conversation-file upload must not inherit historical --%s", flag)
 		}
 	}
 
@@ -658,12 +683,12 @@ func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
 		"--file-name", "report.pdf",
 	})
 	if err == nil {
-		t.Fatalf("chat file upload error = nil, want downline error\n%s", got)
+		t.Fatalf("historical chat file upload error = nil, want downline error\n%s", got)
 	}
 	got = got + "\n" + err.Error()
 	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("chat file upload output missing %q:\n%s", want, got)
+			t.Fatalf("historical chat file upload output missing %q:\n%s", want, got)
 		}
 	}
 }
