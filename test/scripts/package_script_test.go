@@ -2253,9 +2253,13 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	for _, required := range []string{
 		"id: publish",
 		`"repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION"`,
-		`"repos/$GITHUB_REPOSITORY/releases?per_page=100"`,
+		`"repos/$GITHUB_REPOSITORY/releases"`,
 		"find_recovery_draft_release_id()",
-		"Expected exactly one draft GitHub Release for this recovery run",
+		`select(.draft == true and .tag_name == \"$RELEASE_VERSION\"`,
+		`release_id="$(find_recovery_draft_release_id)"`,
+		`if [ "$find_status" -ne 2 ]; then`,
+		"Expected at most one draft GitHub Release for this recovery run",
+		"gh api --method POST",
 		`"repos/$GITHUB_REPOSITORY/releases/$release_id"`,
 		`uploaded_release_state="$(`,
 		`test "$uploaded_release_state" = "$(printf '%s\\t%s' "$release_id" "$RELEASE_VERSION")"`,
@@ -2284,7 +2288,14 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	}
 
 	tagGuard := strings.Index(publishStep, "Draft GitHub Release ID $release_id targets")
-	draftPatch := strings.Index(publishStep, "-F draft=true")
+	recoveryLookup := strings.Index(publishStep, "find_recovery_draft_release_id()")
+	recoveryReuse := strings.Index(publishStep, `release_id="$(find_recovery_draft_release_id)"`)
+	recoveryNotFound := strings.Index(publishStep, `if [ "$find_status" -ne 2 ]; then`)
+	recoveryCreate := -1
+	if recoveryNotFound != -1 {
+		recoveryCreate = strings.Index(publishStep[recoveryNotFound:], "gh api --method POST")
+	}
+	draftPatch := strings.LastIndex(publishStep, "-F draft=true")
 	bodyVerify := strings.Index(publishStep, "Draft GitHub Release notes differ from the sealed CHANGELOG.")
 	markerVerify := strings.Index(publishStep, "Draft GitHub Release is not bound to this exact recovery run.")
 	upload := strings.Index(publishStep, `gh release upload "$RELEASE_VERSION"`)
@@ -2293,6 +2304,10 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	download := strings.LastIndex(publishStep, "tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh")
 	byteCompare := strings.Index(publishStep, `cmp -s "$local_asset" "$remote_asset"`)
 	publish := strings.Index(publishStep, "-F draft=false")
+	if recoveryLookup == -1 || recoveryReuse == -1 || recoveryNotFound == -1 || recoveryCreate == -1 ||
+		!(recoveryLookup < recoveryReuse && recoveryReuse < recoveryNotFound) {
+		t.Fatal("recovery must reuse its uniquely marker-bound draft before creating a replacement")
+	}
 	if tagGuard == -1 || draftPatch == -1 || bodyVerify == -1 || markerVerify == -1 ||
 		upload == -1 || idRecheck == -1 || verify == -1 || download == -1 || byteCompare == -1 || publish == -1 ||
 		!(tagGuard < draftPatch && draftPatch < bodyVerify && bodyVerify < markerVerify && markerVerify < upload &&

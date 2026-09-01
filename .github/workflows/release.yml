@@ -1242,10 +1242,8 @@ jobs:
         run: |
           set -eu
           expected_prerelease=false
-          prerelease_flag=""
           if [ "$RELEASE_CHANNEL" = "prerelease" ]; then
             expected_prerelease=true
-            prerelease_flag="--prerelease"
           fi
 
           release_id=""
@@ -1257,14 +1255,21 @@ jobs:
             candidate_ids="$(
               gh api --paginate -H 'X-GitHub-Api-Version: 2026-03-10' \
                 "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-                --jq ".[] | select(.tag_name == \"$RELEASE_VERSION\" and (.body | contains(\"$recovery_marker\"))) | .id"
+                --jq ".[] | select(.draft == true and .tag_name == \"$RELEASE_VERSION\" and (.body | contains(\"$recovery_marker\"))) | .id"
             )"
             candidate_count="$(printf '%s\\n' "$candidate_ids" | sed '/^$/d' | wc -l | tr -d ' ')"
-            test "$candidate_count" = "1" || {
-              echo "Expected exactly one draft GitHub Release for this recovery run; found $candidate_count." >&2
-              return 1
-            }
-            printf '%s\\n' "$candidate_ids"
+            case "$candidate_count" in
+              0)
+                return 2
+                ;;
+              1)
+                printf '%s\\n' "$candidate_ids"
+                ;;
+              *)
+                echo "Expected at most one draft GitHub Release for this recovery run; found $candidate_count." >&2
+                return 1
+                ;;
+            esac
           }
           if release_id="$(
             gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
@@ -1349,22 +1354,40 @@ jobs:
               echo "Published GitHub Release is immutable and verified; reusing its exact assets."
               exit 0
             fi
-          elif [ "$IS_RECOVERY" = "true" ] && release_id="$(find_recovery_draft_release_id 2>/dev/null)"; then
-            :
-          else
-            # shellcheck disable=SC2086
-            gh release create "$RELEASE_VERSION" \
-              --verify-tag \
-              --draft \
-              --title "$RELEASE_VERSION" \
-              --notes-file "$RUNNER_TEMP/release-notes.md" \
-              $prerelease_flag
-            if [ "$IS_RECOVERY" = "true" ]; then
-              release_id="$(find_recovery_draft_release_id)"
+          elif [ "$IS_RECOVERY" = "true" ]; then
+            if release_id="$(find_recovery_draft_release_id)"; then
+              :
             else
-              echo "GitHub cannot resolve a draft release by tag; retry through the controlled recovery path." >&2
-              exit 1
+              find_status=$?
+              if [ "$find_status" -ne 2 ]; then
+                exit "$find_status"
+              fi
+              release_id="$(
+                gh api --method POST \
+                  -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/$GITHUB_REPOSITORY/releases" \
+                  -f tag_name="$RELEASE_VERSION" \
+                  -f target_commitish="$RELEASE_COMMIT" \
+                  -f name="$RELEASE_VERSION" \
+                  -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+                  -F draft=true \
+                  -F prerelease="$expected_prerelease" \
+                  --jq .id
+              )"
             fi
+          else
+            release_id="$(
+              gh api --method POST \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases" \
+                -f tag_name="$RELEASE_VERSION" \
+                -f target_commitish="$RELEASE_COMMIT" \
+                -f name="$RELEASE_VERSION" \
+                -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+                -F draft=true \
+                -F prerelease="$expected_prerelease" \
+                --jq .id
+            )"
           fi
           printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$' || {
             echo "Draft GitHub Release has an invalid database ID: $release_id" >&2
