@@ -78,8 +78,6 @@ func TestOAApprovalDualModeConstraintsReachEmbeddedSchema(t *testing.T) {
 func TestOAApprovalListMCPContractsReachEmbeddedSchema(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
 	common := map[string]string{
-		"page":               "pageNumber",
-		"limit":              "pageSize",
 		"query":              "query",
 		"process-code":       "processCode",
 		"originator-user-id": "originatorUserId",
@@ -92,16 +90,17 @@ func TestOAApprovalListMCPContractsReachEmbeddedSchema(t *testing.T) {
 		canonical string
 		rpc       string
 		extra     map[string]string
+		unmapped  []string
 		retired   []string
 	}{
-		{canonical: "oa.get_todo_tasks", rpc: "get_todo_tasks", extra: map[string]string{"create-before": "createBefore"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
-		{canonical: "oa.get_done_tasks", rpc: "get_done_tasks", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
-		{canonical: "oa.get_submitted_instances", rpc: "get_submitted_instances", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
-		{canonical: "oa.get_noticed_instances", rpc: "get_noticed_instances", extra: map[string]string{"unread-only": "unreadOnly"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
-		{canonical: "oa.shortcut_list_pending", rpc: "get_todo_tasks", extra: map[string]string{"create-before": "createBefore"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
-		{canonical: "oa.shortcut_list_executed", rpc: "get_done_tasks", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
-		{canonical: "oa.shortcut_list_submitted", rpc: "get_submitted_instances", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
-		{canonical: "oa.shortcut_list_cc", rpc: "get_noticed_instances", extra: map[string]string{"unread-only": "unreadOnly"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.list_pending_approvals", rpc: "get_todo_tasks", extra: map[string]string{"limit": "pageSize", "create-before": "createBefore"}, unmapped: []string{"page", "start", "end"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.get_done_tasks", rpc: "get_done_tasks", extra: map[string]string{"page": "pageNumber", "limit": "pageSize", "process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.get_submitted_instances", rpc: "get_submitted_instances", extra: map[string]string{"page": "pageNumber", "limit": "pageSize", "process-instance-status": "processInstanceStatus"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.get_noticed_instances", rpc: "get_noticed_instances", extra: map[string]string{"page": "pageNumber", "limit": "pageSize", "unread-only": "unreadOnly"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_pending", rpc: "get_todo_tasks", extra: map[string]string{"create-before": "createBefore"}, unmapped: []string{"page", "limit", "start", "end"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_executed", rpc: "get_done_tasks", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, unmapped: []string{"page", "limit"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_submitted", rpc: "get_submitted_instances", extra: map[string]string{"process-instance-status": "processInstanceStatus"}, unmapped: []string{"page", "limit"}, retired: []string{"user-id", "process-instance-result"}},
+		{canonical: "oa.shortcut_list_cc", rpc: "get_noticed_instances", extra: map[string]string{"unread-only": "unreadOnly"}, unmapped: []string{"page", "limit"}, retired: []string{"user-id", "process-instance-status", "process-instance-result"}},
 	}
 
 	for _, test := range tests {
@@ -131,14 +130,26 @@ func TestOAApprovalListMCPContractsReachEmbeddedSchema(t *testing.T) {
 					t.Errorf("--%s property = %q, want %q", name, got, property)
 				}
 			}
+			for _, name := range test.unmapped {
+				if got := schemaContractString(parameters[name]["property"]); got != "" {
+					t.Errorf("--%s property = %q, want empty for runtime-transformed compatibility input", name, got)
+				}
+				propertyProvenance := schemaContractMap(parameters[name]["field_provenance"])["property"]
+				if got := schemaContractString(propertyProvenance["source"]); got != "reviewed_mapping_exclusion" {
+					t.Errorf("--%s property_source = %q, want reviewed_mapping_exclusion", name, got)
+				}
+			}
 			for _, name := range test.retired {
 				if _, exists := parameters[name]; exists {
 					t.Errorf("retired --%s remains in Schema", name)
 				}
 			}
 			for _, name := range []string{"page", "limit"} {
-				if got := schemaContractString(parameters[name]["type"]); got != "integer" {
-					t.Errorf("--%s type = %q, want integer", name, got)
+				if got := schemaContractString(parameters[name]["type"]); got != "string" {
+					t.Errorf("--%s type = %q, want string for historical argv compatibility", name, got)
+				}
+				if got := schemaContractString(parameters[name]["interface_type"]); got != "" {
+					t.Errorf("--%s interface_type = %q, want empty to preserve the historical CLI contract", name, got)
 				}
 			}
 			if test.rpc == "get_noticed_instances" {
@@ -149,8 +160,8 @@ func TestOAApprovalListMCPContractsReachEmbeddedSchema(t *testing.T) {
 		})
 	}
 
-	if _, exists := tools["oa.list_pending_approvals"]; exists {
-		t.Fatal("retired oa.list_pending_approvals remains in embedded Schema")
+	if _, exists := tools["oa.get_todo_tasks"]; exists {
+		t.Fatal("MCP RPC name oa.get_todo_tasks must not replace the stable oa.list_pending_approvals canonical identity")
 	}
 	if NewRootCommand().PersistentFlags().Lookup("profile") == nil {
 		t.Fatal("global --profile flag is no longer registered")

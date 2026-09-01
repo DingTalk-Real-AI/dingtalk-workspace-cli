@@ -9429,7 +9429,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"take":         "limit",
 			"top":          "limit",
 		},
-		Blocked: []string{"count", "cursor", "end", "name", "offset", "page-index", "page-token", "start", "subject", "text", "title"},
+		Blocked: []string{"count", "cursor", "name", "offset", "page-index", "page-token", "subject", "text", "title"},
 	},
 	{
 		CLIPath: "oa +list-submitted",
