@@ -1239,7 +1239,7 @@ func newOaCommand() *cobra.Command {
 
 	approvalListInitiatedCmd := &cobra.Command{
 		Use:     "list-initiated",
-		Short:   "查询审批模板下已发起的审批记录",
+		Short:   "查询当前用户在指定审批模板下发起的审批实例列表",
 		Example: `  dws oa approval list-initiated --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --limit 20  # processCode 来自管理后台配置`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "process-code"); err != nil {
@@ -1280,14 +1280,14 @@ func newOaCommand() *cobra.Command {
 				CLIPath:        "oa approval list-initiated",
 				PrimaryCLIPath: "oa approval list-initiated",
 			},
-			Description: "查询当前用户已发起的审批实例列表",
+			Description: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_initiated_instances"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前用户已发起的审批实例列表",
+				AgentSummary: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表，需提供 processCode、起止时间",
 				UseWhen:      []string{"已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"},
 				AvoidWhen: []string{
 					"不知道 processCode 时先用 dws oa approval list-forms",

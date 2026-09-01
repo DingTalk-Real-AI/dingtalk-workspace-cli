@@ -154,7 +154,7 @@ Flags:
       --instance-id string   审批实例 ID (必填)
 ```
 
-### 查询我已发起的审批实例记录
+### 查询当前用户在指定审批模板下发起的审批实例记录
 ```
 Usage:
   dws oa approval list-initiated [flags]
