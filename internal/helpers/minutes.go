@@ -1802,8 +1802,8 @@ func newMinutesCommand() *cobra.Command {
 			Parameters: []contract.ParamDecl{
 				{Name: "cover", Property: "coverPermission"},
 				{Name: "ids", Property: "uuids", Required: boolPtr(true)},
-				{Name: "member-staff-ids", Property: "memberStaffIds", InterfaceType: "array", RequiredWhen: "member-uids is not provided"},
-				{Name: "member-uids", Property: "memberUids", InterfaceType: "array", RequiredWhen: "member-staff-ids is not provided"},
+				{Name: "member-staff-ids", Property: "memberStaffIds", InterfaceType: "array"},
+				{Name: "member-uids", Property: "memberUids"},
 				{Name: "policy", Property: "policyId", Required: boolPtr(true)},
 				{Name: "sub-resources", Property: "roleSubResourceIds"},
 			},

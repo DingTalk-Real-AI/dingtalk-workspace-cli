@@ -614,6 +614,8 @@ func executeMinutesExportPack(rt *shortcut.RuntimeContext) error {
 }
 
 func minutesShareFlags(includePermission bool) []shortcut.Flag {
+	// +share accepts either UID or staffId, while +unshare has no staffId
+	// route and therefore keeps member-uids required.
 	flags := []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "单个听记 taskUuid"},
 		{Name: "ids", Type: shortcut.FlagStringSlice, Desc: "多个听记 taskUuid，最多 50 个"},

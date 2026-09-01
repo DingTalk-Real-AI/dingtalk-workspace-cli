@@ -76,7 +76,7 @@ func withMinutesDryRun(decl corecmd.ContractDecl, kind string, remoteReads bool)
 
 func withMinutesShareParameters(decl corecmd.ContractDecl) corecmd.ContractDecl {
 	decl.Parameters = append(decl.Parameters,
-		contract.ParamDecl{Name: "member-uids", Property: "memberUids", InterfaceType: "array", Description: "真实成员钉钉 UID，最多 50 个"},
+		contract.ParamDecl{Name: "member-uids", Property: "memberUids", Description: "真实成员钉钉 UID，最多 50 个"},
 		contract.ParamDecl{Name: "member-staff-ids", Property: "memberStaffIds", InterfaceType: "array", Description: "组织内成员 staffId，最多 50 个并保留前导零"},
 	)
 	return decl

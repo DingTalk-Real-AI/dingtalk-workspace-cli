@@ -1154,6 +1154,56 @@ func TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions(t *t
 	}
 }
 
+func TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions(t *testing.T) {
+	tests := []struct {
+		path          string
+		parameterType string
+		old           string
+		want          string
+	}{
+		{
+			path:          "minutes/minutes.add_member_permission",
+			parameterType: `"string"`,
+			want:          `{"mutually_exclusive":[["member-uids","member-staff-ids"]],"require_one_of":[["member-uids","member-staff-ids"]]}`,
+		},
+		{
+			path:          "minutes/minutes.shortcut_share",
+			parameterType: `"array"`,
+			old:           `{"mutually_exclusive":[["id","ids"]],"require_one_of":[["id","ids"]]}`,
+			want:          `{"mutually_exclusive":[["id","ids"],["member-uids","member-staff-ids"]],"require_one_of":[["id","ids"],["member-uids","member-staff-ids"]]}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			oldTool := toolSchema{
+				Constraints: test.old,
+				Parameters: map[string]parameterSchema{
+					"member-uids": {Type: test.parameterType, Property: "memberUids", Required: true},
+				},
+			}
+			newTool := toolSchema{
+				Constraints: test.want,
+				Parameters: map[string]parameterSchema{
+					"member-uids":      {Type: test.parameterType, Property: "memberUids"},
+					"member-staff-ids": {Type: test.parameterType, Property: "memberStaffIds"},
+				},
+			}
+			if !compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("reviewed Minutes member identifier transition must be accepted")
+			}
+			if failures := checkToolCompatibility(test.path, oldTool, newTool); len(failures) != 0 {
+				t.Fatalf("reviewed Minutes constraint transition failed: %v", failures)
+			}
+
+			newTool.Constraints = `{}`
+			if compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("unlisted Minutes constraint target unexpectedly passed")
+			}
+		})
+	}
+}
+
 // Clearing a property through the reviewed mapping exclusion table is the one
 // accepted shape, mirroring the interface_type retirement allowance. A leaf
 // whose backing RPC moved to a nested payload has no honest flat property to

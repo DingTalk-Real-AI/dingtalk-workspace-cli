@@ -879,6 +879,16 @@ var reviewedInterfaceRefRedirect = map[string]map[string]string{
 // business semantics. Keep this narrow: removing a constraint can expose a new
 // runtime route, so arbitrary removals must not pass as harmless drift.
 var reviewedConstraintTransition = map[string]map[string]string{
+	// PR #1236 adds an explicit staffId alternative to the historically required
+	// member-uids input. Every historical UID invocation remains valid; the new
+	// exact-one group prevents ambiguous mixed-identifier requests while making
+	// the additive staffId route visible to Schema consumers.
+	"minutes/minutes.add_member_permission": {
+		"": `{"mutually_exclusive":[["member-uids","member-staff-ids"]],"require_one_of":[["member-uids","member-staff-ids"]]}`,
+	},
+	"minutes/minutes.shortcut_share": {
+		`{"mutually_exclusive":[["id","ids"]],"require_one_of":[["id","ids"]]}`: `{"mutually_exclusive":[["id","ids"],["member-uids","member-staff-ids"]],"require_one_of":[["id","ids"],["member-uids","member-staff-ids"]]}`,
+	},
 	// PR #933 aligned the Shortcut and Schema with the existing doc import
 	// runtime: omitting both targets imports into the default root. Keeping the
 	// historical require_one_of made the documented Golden Route unreachable.
