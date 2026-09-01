@@ -610,6 +610,24 @@ func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChange(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageChatUpdateCardFlowStatusTypeReviewIsExact(t *testing.T) {
+	baseline := parameterSchema{
+		Type:     `"integer"`,
+		Property: "flowStatus",
+		Required: true,
+	}
+	current := baseline
+	current.Type = `"string"`
+	if !compatibleReviewedParameterTypeChange("chat/chat.update_streaming_card", "flow-status", baseline, current) {
+		t.Fatal("reviewed update-card flow-status type migration should pass")
+	}
+
+	current.InterfaceType = "integer"
+	if compatibleReviewedParameterTypeChange("chat/chat.update_streaming_card", "flow-status", baseline, current) {
+		t.Fatal("reviewed type migration must reject a bundled interface_type change")
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeIsDirectionSensitive(t *testing.T) {
 	registerReviewedParameterTypeFixture(t, reviewedFormatTypeFixture())
 

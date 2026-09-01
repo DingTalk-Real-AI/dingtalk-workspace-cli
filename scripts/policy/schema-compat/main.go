@@ -1228,6 +1228,20 @@ type parameterTypeChange struct {
 // every other published field of the parameter is identical — not merely free
 // of compatibility failures. See compatibleReviewedParameterTypeChange.
 var reviewedParameterTypeChanges = map[parameterTypeChange]struct{}{
+	// "dws chat message update-card --flow-status" moves from a native Int
+	// flag to String while retaining the same numeric [1,5] domain. CLI argv is
+	// text in both declarations, and RunE parses the String value with base 0,
+	// preserving every spelling accepted by pflag Int (including 0x3) before
+	// sending the same integer flowStatus property to update_streaming_card.
+	// The dedicated A2UI update leaf owns its enum-name and 1-9 contract; this
+	// entry approves only the streaming leaf's CLI type projection.
+	{
+		ToolPath:  "chat/chat.update_streaming_card",
+		Parameter: "flow-status",
+		From:      `"integer"`,
+		To:        `"string"`,
+	}: {},
+
 	// "dws minutes permission apply --policy" moved from a String flag to a
 	// native Int flag, so the published type follows it from "string" to
 	// "integer". A parameter's type is projected from the Cobra flag type
