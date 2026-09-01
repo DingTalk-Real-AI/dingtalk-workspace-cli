@@ -98,6 +98,67 @@ verify_binary_version() {
     printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
     return 1
   }
+
+  runtime_root="$extract_dir/.dws-runtime/20260825"
+  [ -f "$runtime_root/manifest.json" ] || {
+    printf '%s does not contain the runtime manifest\n' "$asset" >&2
+    return 1
+  }
+  ps_count="$(find "$runtime_root/ps" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$ps_count" = 123 ] || {
+    printf '%s contains %s ps files; expected 123\n' "$asset" "$ps_count" >&2
+    return 1
+  }
+  case "$asset" in
+    dws-darwin-amd64*) target=darwin/amd64; library="$runtime_root/x7k2m9p4q1w8.dylib" ;;
+    dws-darwin-arm64*) target=darwin/arm64; library="$runtime_root/x7k2m9p4q1w8.dylib" ;;
+    dws-linux-amd64*) target=linux/amd64; library="$runtime_root/libx7k2m9p4q1w8.so" ;;
+    dws-linux-arm64*) target=linux/arm64; library="$runtime_root/libx7k2m9p4q1w8.so" ;;
+    dws-windows-amd64*) target=windows/amd64; library="$runtime_root/x7k2m9p4q1w864.dll" ;;
+    dws-windows-arm64*) target=windows/arm64; library="$runtime_root/x7k2m9p4q1w864.dll" ;;
+  esac
+  [ -f "$library" ] || {
+    printf '%s does not contain its target runtime library\n' "$asset" >&2
+    return 1
+  }
+  manifest_library_sha="$(sed -n 's/.*"library_sha256": "\([0-9a-f]*\)".*/\1/p' "$runtime_root/manifest.json")"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual_library_sha="$(sha256sum "$library" | awk '{print $1}')"
+  else
+    actual_library_sha="$(shasum -a 256 "$library" | awk '{print $1}')"
+  fi
+  [ "$manifest_library_sha" = "$actual_library_sha" ] || {
+    printf '%s runtime library checksum does not match its manifest\n' "$asset" >&2
+    return 1
+  }
+  grep -Fq "\"target\": \"$target\"" "$runtime_root/manifest.json" || {
+    printf '%s runtime target does not match its manifest\n' "$asset" >&2
+    return 1
+  }
+  library_count="$(find "$runtime_root" -maxdepth 1 -type f \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) | wc -l | tr -d ' ')"
+  [ "$library_count" = 1 ] || {
+    printf '%s contains %s runtime libraries; expected exactly one\n' "$asset" "$library_count" >&2
+    return 1
+  }
+  ps_digest="$({
+    find "$runtime_root/ps" -type f | LC_ALL=C sort | while IFS= read -r path; do
+      if command -v sha256sum >/dev/null 2>&1; then
+        file_sha="$(sha256sum "$path" | awk '{print $1}')"
+      else
+        file_sha="$(shasum -a 256 "$path" | awk '{print $1}')"
+      fi
+      printf '%s  ps/%s\n' "$file_sha" "$(basename "$path")"
+    done
+  } | if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}')"
+  manifest_ps_digest="$(sed -n 's/.*"ps_manifest_sha256": "\([0-9a-f]*\)".*/\1/p' "$runtime_root/manifest.json")"
+  [ "${#manifest_ps_digest}" -eq 64 ] || {
+    printf '%s runtime manifest has an invalid ps checksum\n' "$asset" >&2
+    return 1
+  }
+  [ "$ps_digest" = "$manifest_ps_digest" ] || {
+    printf '%s ps payload checksum mismatch\n' "$asset" >&2
+    return 1
+  }
 }
 
 for asset in $EXPECTED_PLATFORM_ASSETS; do

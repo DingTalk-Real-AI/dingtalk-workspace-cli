@@ -31,11 +31,58 @@ func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 		binary = "dws.exe"
 	}
 	mustWriteFile(t, filepath.Join(stage, binary), []byte("fake release binary\n"+version+"\n"), 0o755)
+	writeReleaseRuntimeFixture(t, stage, asset)
 	if strings.HasSuffix(asset, ".zip") {
-		mustRun(t, stage, "zip", "-q", filepath.Join(dist, asset), binary)
+		mustRun(t, stage, "zip", "-qr", filepath.Join(dist, asset), binary, ".dws-runtime")
 		return
 	}
-	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, asset), binary)
+	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, asset), binary, ".dws-runtime")
+}
+
+func writeReleaseRuntimeFixture(t *testing.T, stage, asset string) {
+	t.Helper()
+	var target, library string
+	switch {
+	case strings.HasPrefix(asset, "dws-darwin-amd64"):
+		target, library = "darwin/amd64", "x7k2m9p4q1w8.dylib"
+	case strings.HasPrefix(asset, "dws-darwin-arm64"):
+		target, library = "darwin/arm64", "x7k2m9p4q1w8.dylib"
+	case strings.HasPrefix(asset, "dws-linux-amd64"):
+		target, library = "linux/amd64", "libx7k2m9p4q1w8.so"
+	case strings.HasPrefix(asset, "dws-linux-arm64"):
+		target, library = "linux/arm64", "libx7k2m9p4q1w8.so"
+	case strings.HasPrefix(asset, "dws-windows-amd64"):
+		target, library = "windows/amd64", "x7k2m9p4q1w864.dll"
+	case strings.HasPrefix(asset, "dws-windows-arm64"):
+		target, library = "windows/arm64", "x7k2m9p4q1w864.dll"
+	default:
+		t.Fatalf("unsupported release fixture asset %q", asset)
+	}
+	writeRuntimePayloadFixture(t, filepath.Join(stage, ".dws-runtime", "20260825"), target, library)
+}
+
+func writeRuntimePayloadFixture(t *testing.T, root, target, library string) {
+	t.Helper()
+	libraryData := []byte("fake runtime library for " + target + "\n")
+	librarySum := sha256.Sum256(libraryData)
+	mustWriteFile(t, filepath.Join(root, library), libraryData, 0o755)
+
+	var psManifest strings.Builder
+	for i := 0; i < 123; i++ {
+		name := fmt.Sprintf("%032x", i)
+		data := []byte(fmt.Sprintf("runtime fixture %03d\n", i))
+		sum := sha256.Sum256(data)
+		fmt.Fprintf(&psManifest, "%x  ps/%s\n", sum, name)
+		mustWriteFile(t, filepath.Join(root, "ps", name), data, 0o644)
+	}
+	psSum := sha256.Sum256([]byte(psManifest.String()))
+	manifest := fmt.Sprintf(
+		"{\n  \"payload_version\": \"20260825\",\n  \"target\": %q,\n  \"library_sha256\": \"%x\",\n  \"ps_file_count\": 123,\n  \"ps_manifest_sha256\": \"%x\"\n}\n",
+		target,
+		librarySum,
+		psSum,
+	)
+	mustWriteFile(t, filepath.Join(root, "manifest.json"), []byte(manifest), 0o644)
 }
 
 func writeReleaseChecksums(t *testing.T, dist string, includeSkills bool) {
