@@ -1287,8 +1287,8 @@ func newOaCommand() *cobra.Command {
 				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_initiated_instances"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表，需提供 processCode、起止时间",
-				UseWhen:      []string{"已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"},
+				AgentSummary: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表，需提供 processCode、起止时间，单次查询时间跨度不超过120天",
+				UseWhen:      []string{"已知 processCode，需要按起止时间(跨度≤120天)查询自己发起的审批实例基础信息时"},
 				AvoidWhen: []string{
 					"不知道 processCode 时先用 dws oa approval list-forms",
 					"要撤销实例时先确认 instanceId 再改用 revoke",
@@ -2179,8 +2179,8 @@ func newOaCommand() *cobra.Command {
 	approvalRevokeCmd.Flags().String("remark", "", "撤销说明 (可选)")
 	approvalRecordsCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
 	approvalListInitiatedCmd.Flags().String("process-code", "", "表单 processCode (必填)")
-	approvalListInitiatedCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
-	approvalListInitiatedCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
+	approvalListInitiatedCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)，与 end 间隔不超过120天 (必填)")
+	approvalListInitiatedCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)，与 start 间隔不超过120天 (必填)")
 	approvalListInitiatedCmd.Flags().String("cursor", "0", "分页游标，首次传 0")
 	approvalListInitiatedCmd.Flags().String("next-token", "0", "分页游标，首次传 0")
 	approvalListInitiatedCmd.Flags().Lookup("next-token").Hidden = true

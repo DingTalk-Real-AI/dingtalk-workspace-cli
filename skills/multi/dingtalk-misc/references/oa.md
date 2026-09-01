@@ -163,11 +163,11 @@ Usage:
 Example:
   dws oa approval list-initiated --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --limit 20
 Flags:
-      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)
+      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)，与 start 间隔不超过120天 (必填)
       --limit string    每页大小，最大 20 (必填)
       --cursor string     分页游标，首次传 0 (必填)
       --process-code string   表单 processCode (必填)
-      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)
+      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)，与 end 间隔不超过120天 (必填)
 ```
 
 ### 获取当前用户可见的审批表单列表
