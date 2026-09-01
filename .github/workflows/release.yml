@@ -1251,6 +1251,26 @@ jobs:
           if [ "$IS_RECOVERY" = "true" ]; then
             recovery_marker="<!-- dws-release-recovery run=$GITHUB_RUN_ID tag-object=$RELEASE_TAG_OBJECT commit=$RELEASE_COMMIT -->"
           fi
+          find_recovery_draft_release_id() {
+            candidate_ids="$(
+              gh api --paginate -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                --jq ".[] | select(.draft == true and .tag_name == \"$RELEASE_VERSION\" and (.body | contains(\"$recovery_marker\"))) | .id"
+            )"
+            candidate_count="$(printf '%s\\n' "$candidate_ids" | sed '/^$/d' | wc -l | tr -d ' ')"
+            case "$candidate_count" in
+              0)
+                return 2
+                ;;
+              1)
+                printf '%s\\n' "$candidate_ids"
+                ;;
+              *)
+                echo "Expected at most one draft GitHub Release for this recovery run; found $candidate_count." >&2
+                return 1
+                ;;
+            esac
+          }
           if release_id="$(
             gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
               "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
@@ -1333,6 +1353,27 @@ jobs:
               echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
               echo "Published GitHub Release is immutable and verified; reusing its exact assets."
               exit 0
+            fi
+          elif [ "$IS_RECOVERY" = "true" ]; then
+            if release_id="$(find_recovery_draft_release_id)"; then
+              :
+            else
+              find_status=$?
+              if [ "$find_status" -ne 2 ]; then
+                exit "$find_status"
+              fi
+              release_id="$(
+                gh api --method POST \
+                  -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/$GITHUB_REPOSITORY/releases" \
+                  -f tag_name="$RELEASE_VERSION" \
+                  -f target_commitish="$RELEASE_COMMIT" \
+                  -f name="$RELEASE_VERSION" \
+                  -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+                  -F draft=true \
+                  -F prerelease="$expected_prerelease" \
+                  --jq .id
+              )"
             fi
           else
             release_id="$(
