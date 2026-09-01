@@ -1703,12 +1703,14 @@ func newMinutesCommand() *cobra.Command {
 	// permission add — 对应 MCP 工具 add_member_permission
 	// 批量给多个听记增加成员，并设置成员的权限。
 	// 权限类型(--policy): 0=管理员, 1=所有者, 2=可编辑, 3=可查看/下载, 4=仅查看
-	// 必填参数：--ids（听记 taskUuid 列表）、--member-uids（成员钉钉 UID 列表）、--policy（权限类型）
+	// 必填参数：--ids（听记 taskUuid 列表）、--member-uids/--member-staff-ids（二选一）、--policy（权限类型）
 	// 可选参数：--cover（是否覆盖已有权限）、--sub-resources（权限子模块列表）
-	permissionAddCmd := &cobra.Command{
+	permissionAddCmd := NewLeafCommand(LeafSpec{
 		Use:   "add",
 		Short: "批量添加听记成员并设置权限",
 		Long: `批量给多个听记增加成员，并设置成员的权限。
+
+成员标识必须且只能选择一种：--member-uids 传真实钉钉 UID；--member-staff-ids 传组织内 staffId，并保留前导零。
 
 权限类型 (--policy):
   0 = 管理员
@@ -1722,19 +1724,37 @@ func newMinutesCommand() *cobra.Command {
   Summary     = 纪要
   Analysis    = 分析
   Note        = 笔记`,
-		Example: `  dws minutes permission add --ids <uuid1,uuid2> --member-uids 123456,789012 --policy 3
-  dws minutes permission add --ids <uuid> --member-uids 123456 --policy 2 --cover
-  dws minutes permission add --ids <uuid> --member-uids 123456 --policy 3 --sub-resources "OrigContent,Summary"`,
+		Example: `  dws minutes permission add --ids <uuid1,uuid2> --member-uids 1156610563,5908034181 --policy 3
+  dws minutes permission add --ids <uuid> --member-staff-ids "074360" --policy 4 --cover`,
+		Flags: []LeafFlag{
+			{Name: "ids", Usage: "听记 taskUuid 列表，逗号分隔 (必填)", Bind: "uuids", Aliases: []string{"uuids", "task-uuids"}},
+			{Name: "member-uids", Usage: "真实成员钉钉 UID 列表，逗号分隔；与 --member-staff-ids 二选一", Bind: "memberUids"},
+			{Name: "member-staff-ids", Usage: "组织内成员 staffId 列表，逗号分隔并保留前导零；与 --member-uids 二选一", Bind: "memberStaffIds"},
+			{Name: "policy", Usage: "权限类型: 0=管理员, 1=所有者, 2=可编辑, 3=可查看/下载, 4=仅查看 (必填)", Bind: "policyId"},
+			{Name: "cover", Usage: "是否覆盖已有权限 (可选，默认 false)", Kind: LeafBool, Bind: "coverPermission"},
+			{Name: "sub-resources", Usage: "权限子模块，逗号分隔: OrigContent/Summary/Analysis/Note (可选)", Bind: "roleSubResourceIds"},
+		},
+		Constraints: []LeafConstraint{{
+			Kind:        LeafExactlyOne,
+			Flags:       []string{"member-uids", "member-staff-ids"},
+			Description: "--member-uids 与 --member-staff-ids 必须且只能提供一个",
+		}},
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v := flagOrFallback(cmd, "ids", "uuids", "task-uuids")
 			policyID, _ := strconv.ParseInt(mustGetFlag(cmd, "policy"), 10, 64)
 
-			memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids"))
-
 			toolArgs := map[string]any{
-				"uuids":      parseCSVValues(v),
-				"policyId":   float64(policyID),
-				"memberUids": memberUids,
+				"uuids":    parseCSVValues(v),
+				"policyId": float64(policyID),
+			}
+			if memberUids := parseCSVValues(mustGetFlag(cmd, "member-uids")); len(memberUids) > 0 {
+				toolArgs["memberUids"] = memberUids
+			} else {
+				toolArgs["memberStaffIds"] = parseCSVValues(mustGetFlag(cmd, "member-staff-ids"))
 			}
 
 			if cmd.Flags().Changed("cover") {
@@ -1752,12 +1772,6 @@ func newMinutesCommand() *cobra.Command {
 
 			return callMCPTool("add_member_permission", toolArgs)
 		},
-	}
-	DeclareLeafMetadata(permissionAddCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
-		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "minutes",
@@ -1773,36 +1787,29 @@ func newMinutesCommand() *cobra.Command {
 				Ref:          &contract.InterfaceRefSpec{ProductID: "minutes", RPCName: "add_member_permission"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "批量给多个听记增加成员，并设置成员的权限。",
-				UseWhen:      []string{"已知听记 uuid，需要批量给听记增加成员并设置权限（policy 0管理员/1所有者/2可编辑/3可查看下载/4仅查看）时"},
+				AgentSummary: "使用明确的钉钉 UID 或组织 staffId 批量添加听记成员并设置权限。",
+				UseWhen:      []string{"已知听记 uuid，且已明确成员标识是钉钉 UID 还是组织 staffId，需要批量设置权限（policy 0管理员/1所有者/2可编辑/3可查看下载/4仅查看）时"},
 				AvoidWhen: []string{
 					"要移除成员权限时改用 dws minutes permission remove",
 					"当前用户自己申请访问权限时改用 dws minutes permission apply",
-					"成员、权限策略或听记 id 未确认时不要添加",
+					"成员标识类型、权限策略或听记 id 未确认时不要添加",
 				},
 				Examples: []string{
-					"dws minutes permission add --ids <uuid1,uuid2> --member-uids 123456,789012 --policy 3",
-					"dws minutes permission add --ids <uuid> --member-uids 123456 --policy 2 --cover",
+					"dws minutes permission add --ids <uuid1,uuid2> --member-uids 1156610563,5908034181 --policy 3",
+					"dws minutes permission add --ids <uuid> --member-staff-ids 074360 --policy 4 --cover",
 				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "cover", Property: "coverPermission"},
-				{Name: "ids", Property: "uuids"},
-				{Name: "policy", Property: "policyId"},
+				{Name: "ids", Property: "uuids", Required: boolPtr(true)},
+				{Name: "member-staff-ids", Property: "memberStaffIds", InterfaceType: "array", RequiredWhen: "member-uids is not provided"},
+				{Name: "member-uids", Property: "memberUids", InterfaceType: "array", RequiredWhen: "member-staff-ids is not provided"},
+				{Name: "policy", Property: "policyId", Required: boolPtr(true)},
 				{Name: "sub-resources", Property: "roleSubResourceIds"},
 			},
 		},
 		Validate: validateMinutesPermissionAdd,
 	})
-	permissionAddCmd.Flags().String("ids", "", "听记 taskUuid 列表，逗号分隔 (必填)")
-	permissionAddCmd.Flags().String("uuids", "", "--ids 的别名")
-	_ = permissionAddCmd.Flags().MarkHidden("uuids")
-	permissionAddCmd.Flags().String("task-uuids", "", "--ids 的别名")
-	_ = permissionAddCmd.Flags().MarkHidden("task-uuids")
-	permissionAddCmd.Flags().String("member-uids", "", "成员钉钉 UID 列表，逗号分隔 (必填)")
-	permissionAddCmd.Flags().String("policy", "", "权限类型: 0=管理员, 1=所有者, 2=可编辑, 3=可查看/下载, 4=仅查看 (必填)")
-	permissionAddCmd.Flags().Bool("cover", false, "是否覆盖已有权限 (可选，默认 false)")
-	permissionAddCmd.Flags().String("sub-resources", "", "权限子模块，逗号分隔: OrigContent/Summary/Analysis/Note (可选)")
 
 	// permission remove — 对应 MCP 工具 remove_member_permission
 	// 批量移除多个听记的成员权限。
@@ -2219,7 +2226,7 @@ func validateMinutesPermissionAdd(cmd *cobra.Command, _ []string) error {
 	if flagOrFallback(cmd, "ids", "uuids", "task-uuids") == "" {
 		return fmt.Errorf("flag --ids (or --uuids / --task-uuids) is required")
 	}
-	if err := validateRequiredFlags(cmd, "member-uids", "policy"); err != nil {
+	if err := validateRequiredFlags(cmd, "policy"); err != nil {
 		return err
 	}
 	policyID, err := strconv.ParseInt(mustGetFlag(cmd, "policy"), 10, 64)
