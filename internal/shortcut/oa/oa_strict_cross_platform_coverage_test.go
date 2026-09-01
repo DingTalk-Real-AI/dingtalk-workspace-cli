@@ -450,6 +450,13 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 
 	validPage := `{"success":true,"result":{"hasMore":false,"values":[{"processInstanceId":"i","title":"fixture"}]}}`
 	legacyPendingRange := []string{"--start", "1785513600000", "--end", "1788191999000"}
+	t.Run("list-pending validate bad legacy interval", func(t *testing.T) {
+		caller := expectError(t, ListPending, map[string][]string{},
+			"--start", "1788191999000", "--end", "1785513600000")
+		if len(caller.history) != 0 {
+			t.Fatalf("validation made calls: %v", caller.history)
+		}
+	})
 	for name, args := range map[string][]string{
 		"bad create date":     {"--create-time-from", "bad"},
 		"bad create interval": {"--create-time-from", "2026-08-02", "--create-time-to", "2026-08-01"},

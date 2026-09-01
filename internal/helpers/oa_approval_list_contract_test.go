@@ -113,6 +113,22 @@ func TestCrossPlatformCoverageOAApprovalListPendingPreservesHistoricalCLIInputs(
 	}
 }
 
+func TestCrossPlatformCoverageOAApprovalListPendingRejectsMixedLegacyAndDateRanges(t *testing.T) {
+	caller := &scriptedToolCaller{}
+	err := executeOACommand(t, caller,
+		"approval", "list-pending",
+		"--start", "2026-08-01T00:00:00+08:00",
+		"--end", "2026-08-31T23:59:59+08:00",
+		"--create-time-from", "2026-08-01",
+	)
+	if err == nil || !strings.Contains(err.Error(), "--start 不能与对应的 yyyy-MM-dd 日期参数同时使用") {
+		t.Fatalf("mixed legacy/date range error = %v, want start conflict", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("mixed legacy/date range made %d MCP calls", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageOAApprovalListCommandsRejectRetiredCurrentUserAndStatusResultFlags(t *testing.T) {
 	retired := map[string][]string{
 		"list-pending":   {"user-id", "process-instance-status", "process-instance-result"},
