@@ -46,6 +46,8 @@ func TestMultiOASkillProgressiveDisclosurePolicy(t *testing.T) {
 	for _, required := range []string{
 		"角色来源是对象身份的一部分",
 		"不得静默切换来源",
+		"不得改查 `list-submitted` 或 `list-initiated`",
+		"字段定义就是交付结果",
 		"没有固定“最多两次查询”的机械限制",
 		"[oa-create.md](oa-create.md)",
 		"[oa-attachments.md](oa-attachments.md)",
@@ -70,6 +72,13 @@ func TestMultiOASkillProgressiveDisclosurePolicy(t *testing.T) {
 		"首次即停止",
 		"默认在本地投影控件摘要",
 		"不得用一次缺参调用来发现约束",
+		"任一值变化后重新预测",
+		"不能将失败归因于 API",
+		"oa_create_preflight.py form-schema",
+		"禁止临时编写 `jq`/Python 解析器",
+		"常见 `targetSelect: true` 直接使用紧凑输出",
+		"只有 `needsNodeReference=true`",
+		"禁止按模板名称、`processCode`",
 	} {
 		if !strings.Contains(create, required) {
 			t.Errorf("OA create reference missing safety rule %q", required)

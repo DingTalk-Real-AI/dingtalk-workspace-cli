@@ -17,11 +17,12 @@
 
 | 阶段 | 必读内容 |
 |---|---|
-| 解析并组装表单控件 | [oa-form-components.md](oa/oa-form-components.md) |
-| `forecast-process` 返回自选节点，或用户要求覆盖模板审批路径 | [oa-process-nodes.md](oa/oa-process-nodes.md) |
+| 常规表单与自选审批节点 | 只使用本文件与 `scripts/oa_create_preflight.py` 的紧凑输出，不再加载控件/节点全集 |
+| 紧凑表单输出出现 `needsComponentReference=true` | 只在 [oa-form-components.md](oa/oa-form-components.md) 中定位对应 `componentName` 小节 |
+| 紧凑预测输出出现 `needsNodeReference=true`，或用户明确要求覆盖模板默认流程 | 只读取 [oa-process-nodes.md](oa/oa-process-nodes.md) 的对应节点或参数映射小节 |
 | 表单包含本地附件 | [oa-attachments.md](oa-attachments.md) |
 
-不要默认同时加载控件、节点和附件全集。先读 Schema，再根据真实控件和预测结果选择依赖。
+不要默认同时加载控件、节点和附件全集。先运行投影脚本，再根据其显式布尔字段选择一份精确依赖；禁止为常见 `TextField`、`TableField`、`target_select` 预读完整 reference。需要定位控件时先用 `rg -n '<componentName>|^### ' references/oa/oa-form-components.md` 找到小节，只读取命中范围；零命中即按未知控件边界处理，不打开全文。
 
 ## 不可降级与单次写入
 
@@ -40,40 +41,44 @@
 ## 创建闭环
 
 1. 用 `search-forms` 获取真实模板；已有 `processCode` 时可跳过搜索。
-2. 每次创建前重新调用 `form-schema`，不得复用旧 Schema；默认在本地投影控件摘要，避免把完整模板元数据带入后续每轮上下文。
-3. 递归解析可写控件、必填项、选项和明细子控件；读取控件 reference 后一次性组装 payload。
+2. 每次创建前重新调用 `form-schema`，不得复用旧 Schema；默认在本地投影控件摘要，且必须通过 `oa_create_preflight.py form-schema` 完成，禁止临时编写 `jq`/Python 解析器或先读取原始 Schema。
+3. 按投影中的 `valueKind`、必填项、选项和明细子控件一次性组装 payload；只有 `needsComponentReference=true` 才定位控件 reference 的对应小节。
 4. 对人员姓名使用 `dws aisearch person` 解析并消歧真实 userId。
-5. 在本地检查 JSON、必填字段、用户核心字段和模板选项；将用户明确要求的字段标记为不可删除，不用真实写接口试探。
+5. 在本地检查 JSON、`blockers`、必填字段、用户核心字段和模板选项；`blockers` 会递归包含 `TableField` 的必填子控件，非空时停止创建。将用户明确要求的字段标记为不可删除，不用真实写接口试探。
 6. 调用 `forecast-process`，展示审批路径并处理自选节点。
 7. 一次性展示创建摘要；`create-instance` 的最终 Schema 要求用户确认，确认后才追加 `--yes`。
 8. 创建成功后从真实返回取得 `processInstanceId`，再用 `detail` 和必要的 `tasks/records` 回读。
 
 顺序是硬约束：`form-schema → 本地完整 payload → forecast-process → 一次 create-instance → 回读`。不得在 `forecast-process` 前创建；不得在失败后回退到缺字段 payload。
 
+`forecast-process` 必须使用已核验的真实 `deptId` 和准备提交的最终 `form-values`，任一值变化后重新预测；缺少的必填业务值必须追问，不得自行补齐。否则前置未满足，不能将失败归因于 API。
+
 ```bash
 dws oa approval search-forms --query "<模板关键词>" --format json
 dws oa approval form-schema --process-code <processCode> --format json \
-  | jq -c 'if .error then . else (.result.content | fromjson) as $s | {processCode:.result.processCode,title:$s.title,components:[$s | .. | objects | select(.componentName? != null) | {componentName,label:.props.label,id:.props.id,required:(.props.required // false),options:.props.options,componentOptions,unit:.props.unit,format:.props.format}]} end'
+  | python3 scripts/oa_create_preflight.py form-schema --process-code <processCode>
 dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --format json \
-  | jq -c 'if .error then . else {forecastSuccess:.result.forecastSuccess,processCode:.result.processCode,userId:.result.userId,nodes:[.result.workflowActivityRuleVOs[]? | {activityName,activityType,targetSelect,actioners:[.activityActioners[]? | {name,emplId}],actorKey:.workflowActor.actorKey,actorType:.workflowActor.actorType,required:.workflowActor.required,allowedMulti:.workflowActor.allowedMulti}]} end'
+  | python3 scripts/oa_create_preflight.py forecast
 dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --yes --format json
 dws oa approval detail --instance-id <processInstanceId> --format json
 ```
 
-本地环境没有 `jq` 或投影缺少完成当前控件所需的属性时，才读取一次原始 JSON。不要同时执行投影版和原始版。投影只压缩读取结果，不改变业务字段；返回错误时保留完整错误对象。
+脚本只做只读投影，不调用 `create-instance`，并保留完整错误对象。只有脚本明确返回 `projection_error` 时才读取一次原始 JSON；不要同时执行投影版和原始版，也不要用临时解析器替代脚本。投影只压缩读取结果，不改变业务字段。
+
+投影和阻断必须按 `componentName`、`required` 与节点 `actorType` 判断，适用于所有模板。禁止按模板名称、`processCode` 或某个业务字段 label 写日常报销、用车、物品领用等特例；新增控件能力时更新通用映射并补跨模板回归测试。
 
 搜索返回多个相近模板时，展示真实名称和 `processCode` 让用户选择。不得因为模板名称近似而改用另一个模板。
 
 ## 表单值与能力边界
 
-`form-schema.result.content` 是控件定义，不是可以直接提交的 payload。解析时至少保留：
+`form-schema.result.content` 是控件定义，不是可以直接提交的 payload。投影脚本保留：
 
 - `componentName`；
 - `props.label`、`props.required`、`props.options`；
 - `TableField.children`；
 - 控件是否只读、隐藏或由系统计算。
 
-提交简单模式时，`--form-values` 是 JSON 对象，key 必须与可写控件 label 完全一致。人员、部门、选项、明细和附件必须按 [oa-form-components.md](oa/oa-form-components.md) 的明确格式组装。
+提交简单模式时，`--form-values` 是 JSON 对象，key 必须与可写控件 label 完全一致。优先按紧凑输出的 `valueKind` 组装；`support=client_only|unknown` 的必填字段进入 `blockers` 并停止，非必填字段进入 `optionalUnavailable` 并在摘要中明确跳过。只有 `needsComponentReference=true` 时才定位 [oa-form-components.md](oa/oa-form-components.md) 的对应小节。
 
 ### 未知控件的硬边界
 
@@ -103,7 +108,9 @@ dws oa approval forecast-process --process-code <processCode> --dept-id <deptId>
 检查 `workflowActivityRuleVOs`：
 
 - 展示节点名称、类型和已确定处理人。
-- 发现 `targetSelect: true` 时，读取 [oa-process-nodes.md](oa/oa-process-nodes.md)，使用 `workflowActor.actorKey` 组装 `targetSelectActioners`。
+- 常见 `targetSelect: true` 直接使用紧凑输出的 `targetSelections`：`actorType=approver` 绑定用户指定审批人，`actorType=notifier` 绑定用户指定抄送人；`required=false` 的 `bizHandler` 只有用户明确指定时才填写。
+- 将 `targetSelections[].actorKey` 作为 `targetSelectActioners[].actionerKey`，人员 userId 放入 `actionerStaffIds`；不得按节点顺序猜角色。
+- 只有 `needsNodeReference=true` 或用户明确要求覆盖模板默认流程时，才定位 [oa-process-nodes.md](oa/oa-process-nodes.md) 的对应小节。
 - 用户已经指定人员时，先映射到对应节点；只追问仍未覆盖的节点，不重复询问。
 - 多个自选节点一次性收集选人结果。
 - 只要预测中存在 `targetSelect: true`，就必须使用高级 `--request`；简单模式的 `--approvers` / `--cc-list` 不能替代模板自选节点，也不得作为失败后的降级路径。
