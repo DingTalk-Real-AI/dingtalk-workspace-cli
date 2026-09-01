@@ -1242,10 +1242,8 @@ jobs:
         run: |
           set -eu
           expected_prerelease=false
-          prerelease_flag=""
           if [ "$RELEASE_CHANNEL" = "prerelease" ]; then
             expected_prerelease=true
-            prerelease_flag="--prerelease"
           fi
 
           release_id=""
