@@ -300,6 +300,7 @@ verify_npm_install() {
     npm install -g "$tarball_path" >/dev/null
 
   [ -x "$npm_prefix/bin/dws" ] || err "npm install did not expose dws in $npm_prefix/bin"
+  need_file "$npm_prefix/lib/node_modules/dingtalk-workspace-cli/vendor/.dws-runtime/20260825/manifest.json"
   with_isolated_agent_env "$npm_home" "$npm_prefix/bin/dws" --help >/dev/null
   if [ -n "$EXPECTED_VERSION" ]; then
     vendor_bin="$npm_prefix/lib/node_modules/dingtalk-workspace-cli/vendor/dws"
@@ -369,6 +370,9 @@ verify_brew() {
       brew --prefix dingtalk-workspace-cli-local
   )"
   [ -x "$prefix/bin/dws" ] || err "brew install did not create $prefix/bin/dws"
+  need_file "$prefix/libexec/.dws-runtime/20260825/manifest.json"
+  runtime_ps_count="$(find "$prefix/libexec/.dws-runtime/20260825/ps" -type f | wc -l | tr -d ' ')"
+  [ "$runtime_ps_count" = 123 ] || err "Homebrew runtime payload contains $runtime_ps_count ps files; expected 123"
   "$prefix/bin/dws" --help >/dev/null
   if [ -n "$EXPECTED_VERSION" ]; then
     LC_ALL=C grep -aFq "v$EXPECTED_VERSION" "$prefix/bin/dws" || \
