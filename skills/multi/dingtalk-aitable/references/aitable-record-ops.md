@@ -42,7 +42,7 @@ dws aitable record create --base-id <B> --table-id <T> --parent-record-id <PAREN
 
 - 子记录模式单次最多 100 条；`cells` 无需手写层级字段，服务端自动注入指向父记录的关联。
 - 表尚未配置层级字段时，服务端会自动创建 association 字段对并更新视图配置（首次调用会改变表结构）。
-- `--view-id` 可选：指定从哪个视图读取层级配置；`--client-token` 可选：UUID v4 幂等 token，重试时复用同一值防重复创建。两者仅在子记录模式下有效，单独使用会被 CLI 拒绝。
+- `--view-id` 可选：指定从哪个视图读取层级配置；仅在子记录模式下有效，单独使用会被 CLI 拒绝。
 - 返回 `data.recordIds[]`（子记录 ID）、`data.hierarchyFieldId` 与 `data.parentRecordId`。
 
 ## 更新、同步与批量修改

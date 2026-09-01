@@ -33,7 +33,6 @@ func TestCrossPlatformCoverageRecordCreateSubRecordDispatch(t *testing.T) {
 		"--parent-record-id", "recP",
 		"--records", `[{"cells":{"fldText":"child"}}]`,
 		"--view-id", "viewH",
-		"--client-token", "11111111-2222-4333-8444-555555555555",
 	)
 	if err != nil {
 		t.Fatalf("record create --parent-record-id returned error: %v", err)
@@ -50,7 +49,6 @@ func TestCrossPlatformCoverageRecordCreateSubRecordDispatch(t *testing.T) {
 		"tableId":        "table-sub",
 		"parentRecordId": "recP",
 		"viewId":         "viewH",
-		"clientToken":    "11111111-2222-4333-8444-555555555555",
 	} {
 		if got := call.args[key]; got != want {
 			t.Fatalf("%s = %#v, want %#v", key, got, want)
@@ -75,7 +73,7 @@ func TestCrossPlatformCoverageRecordCreatePlainModeUnchanged(t *testing.T) {
 	if call.tool != "create_records" {
 		t.Fatalf("tool = %q, want create_records", call.tool)
 	}
-	for _, key := range []string{"parentRecordId", "viewId", "clientToken"} {
+	for _, key := range []string{"parentRecordId", "viewId"} {
 		if got, present := call.args[key]; present {
 			t.Fatalf("plain mode must not send %s, got %#v", key, got)
 		}
@@ -100,9 +98,9 @@ func TestCrossPlatformCoverageRecordCreateSubRecordCellsShortcut(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageRecordCreateSubRecordModeGuards(t *testing.T) {
-	// --view-id / --client-token without --parent-record-id must fail before
-	// any MCP call instead of silently creating flat records.
-	for _, flag := range []string{"view-id", "client-token"} {
+	// --view-id without --parent-record-id must fail before any MCP call
+	// instead of silently creating flat records.
+	for _, flag := range []string{"view-id"} {
 		caller := &aitableTestCaller{}
 		_, err := runRecordCreateCLI(t, caller, "--records", `[{"cells":{}}]`, "--"+flag, "v1")
 		if err == nil || !strings.Contains(err.Error(), "--"+flag+" requires --parent-record-id") {

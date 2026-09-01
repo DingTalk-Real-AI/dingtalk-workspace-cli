@@ -90,12 +90,12 @@ func resolveRecordsFlag(cmd *cobra.Command) (string, error) {
 	return "", fmt.Errorf("missing required flag(s): --records (example: --records '[{\"cells\":{\"fldTextId\":\"文本内容\"}}]')\n  hint: for large payloads or Windows, use --records-file ./path/to/records.json")
 }
 
-// validateSubRecordModeFlags rejects sub-record-only flags (--view-id /
-// --client-token) when --parent-record-id is absent, so users get an
-// actionable error instead of silently creating flat records.
+// validateSubRecordModeFlags rejects sub-record-only flags (--view-id) when
+// --parent-record-id is absent, so users get an actionable error instead of
+// silently creating flat records.
 func validateSubRecordModeFlags(cmd *cobra.Command) error {
 	parentRecordID, _ := cmd.Flags().GetString("parent-record-id")
-	for _, name := range []string{"view-id", "client-token"} {
+	for _, name := range []string{"view-id"} {
 		if v, _ := cmd.Flags().GetString(name); v != "" && parentRecordID == "" {
 			return fmt.Errorf("--%s requires --parent-record-id\n  hint: it only applies to sub-record (hierarchy) creation via record create", name)
 		}
@@ -131,14 +131,9 @@ func dispatchRecordCreate(cmd *cobra.Command, records []any) error {
 		"parentRecordId": parentRecordID,
 		"records":        records,
 	}
-	// Optional pass-throughs: viewId selects the view carrying hierarchyConfig,
-	// clientToken is a caller-owned idempotency token (UUID v4) — the CLI never
-	// auto-generates it so a retry can reuse the same token.
+	// Optional pass-through: viewId selects the view carrying hierarchyConfig.
 	if viewID, _ := cmd.Flags().GetString("view-id"); viewID != "" {
 		args["viewId"] = viewID
-	}
-	if clientToken, _ := cmd.Flags().GetString("client-token"); clientToken != "" {
-		args["clientToken"] = clientToken
 	}
 	return callMCPTool("create_sub_records", args)
 }
@@ -3078,7 +3073,6 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   - 无需手动写 hierarchy 字段值，服务端自动注入指向父记录的关联
   - 表未配置层级字段时，服务端会自动创建 association 字段对并更新视图配置
   - --view-id 可选：指定从哪个视图读取 hierarchyConfig；缺省自动找第一个配置了它的 Grid 视图
-  - --client-token 可选：UUID v4 幂等 token，重试时复用同一值可防止重复创建
   - 子记录模式单次最多 100 条
 
 Windows 用户注意：如果 --records JSON 很长（超过命令行长度限制），请使用 --records-file 参数指定一个 JSON 文件路径，
@@ -8055,8 +8049,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordCreateCmd.Flags().String("cells", "", "单条记录的 cells JSON 对象（自动构造 --records '[{\"cells\":...}]'）")
 	_ = recordCreateCmd.Flags().MarkHidden("cells")
 	recordCreateCmd.Flags().String("parent-record-id", "", "父记录 ID；传入后新记录将作为它的子记录创建（create_sub_records，单次最多 100 条）")
-	recordCreateCmd.Flags().String("view-id", "", "子记录模式可选：从该视图读取 hierarchyConfig；缺省自动找第一个配置了它的 Grid 视图（仅与 --parent-record-id 同时使用）")
-	recordCreateCmd.Flags().String("client-token", "", "子记录模式可选：幂等 token（UUID v4），重试时复用同一值可防止重复创建（仅与 --parent-record-id 同时使用）")
+	recordCreateCmd.Flags().String("view-id", "", "子记录模式可选：从该视图 读取 hierarchyConfig；缺省自动找第一个配置了它的 Grid 视图（仅与 --parent-record-id 同时使用）")
 	recordUpdateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordUpdateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordUpdateCmd.Flags().String("records", "", "待更新的记录内容列表 JSON 数组，单次最多 100 条 (必填)")
