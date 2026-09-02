@@ -122,6 +122,23 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 		}
 	})
 
+	t.Run("group name to role list", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/search_groups":           `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+			"im/list_custom_group_roles": `{"result":{"roles":[]}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-role-list", "--group", "项目群"})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.calls) != 2 || fake.calls[1].tool != "list_custom_group_roles" ||
+			fake.calls[1].args["openConversationId"] != "cid-project" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+	})
+
 	t.Run("group query to invite url", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
