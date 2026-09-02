@@ -1,56 +1,30 @@
-# 权限管理
+# 应用权限管理
 
-> 权限点 scopeValue 是授权单元，一个权限点授权一组 OpenAPI；requiredApproval=true 的变更走版本通道生效（见 [devapp.md](../devapp.md) 生效模型）。
+权限点以 `scopeValue` 为稳定标识。查询、申请和取消都走 `dws dev app permission`。
 
-查询、申请、取消开放平台应用的 APP 应用权限和 SNS 个人权限。参数用对应命令的 `--help` 查询。
+## 最短命令路径
 
-## 权限列表
+```bash
+# 按名称/API/权限点定位；单权限可直接用 --scope-value
+dws dev app permission list --unified-app-id <id> --keyword <关键词> --page-size 50 --format json
+dws dev app permission list --unified-app-id <id> --scope-value <scopeValue> --format json
 
-`--scope-value` 传入即进单权限详情模式；`--scope-type` 取 `APP`/`SNS`，留空返回两者；一个应用可能 150+ 权限点，游标分页续翻、`--page-size` 不超过 50。
-
-`--auth-status` 是查询过滤条件：
-
-| authStatus | 含义 |
-|------------|------|
-| `ALL` | 不按授权状态过滤 |
-| `AUTHED` | 只看已授权/已开通 |
-| `UNAUTHED` | 只看未授权/未开通 |
-
-单个权限项的状态看这几个字段：
-
-- `authed`（布尔）：是否已授权/已开通。true=已开通，不要重复申请。
-- `allowedActions`（数组）：本权限点当前允许的动作，如 `["view","detail","apply"]`。含 `apply` 才能申请，含 `remove` 才能取消。
-- `authedStatusDesc`（中文文案）：状态的中文说明，如"已开通"/"未开通"，直接展示给用户。
-- `apiStatus`：权限点本身的开放状态，如 `FULLY_OPEN`。
-- `requiredApproval`（布尔）：申请是否需审批。true 的变更走版本通道，审批在版本发布时处理。
-- `displayMessage`（中文文案）：服务端给的提示语，能否申请的原因看它。
-
-list 默认同时返回 APP 和 SNS 权限；列表模式和 `--scope-value` 详情模式，权限项里的 API 信息字段都叫 `apiPreview`。`permission search` 是 `list` 的别名。
-
-scopeValue 选择顺序：
-1. 用户给了 `scopeValue`，精确匹配
-2. 给了 API 名，用 `keyword` 搜，匹配 `apiPreview.name`
-3. 给了权限名，匹配 `scopeName/scopeDesc`
-4. 多个候选，展示列表让用户选，不自动取第一条
-
-## 申请权限
-
-`--scope-values` 传 `scopeValue`，多个逗号分隔，必须来自 `permission list` 返回。已开通跳过、不可编辑拒绝。`requiredApproval=true` 允许申请——写入版本变更，审批在版本发布时处理。不在此处选审批人。
-
-## 取消权限
-
-`--scope-values` 多个逗号分隔。返回：`removed`（布尔，整体成败）、`removedScopeValues`（成功取消的）、`rejectedScopeValues`（被拒的）、`message`。逐条看 `removedScopeValues`/`rejectedScopeValues` 判断每个权限点的结果。
-
-## 发现命令
-
-调用任何方法前先查清楚再敲：
-
-```
-# 浏览命令组下的子命令与 flag
-dws dev app permission --help
-
-# 查某方法的必填参数、类型、默认值
-dws dev <command-path> --help
+dws dev app permission add --unified-app-id <id> --scope-values <scope1,scope2> --dry-run --format json
+dws dev app permission remove --unified-app-id <id> --scope-values <scope1,scope2> --dry-run --format json
 ```
 
-按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。
+用户已明确要求具体权限变更时，dry-run 核对后用同一参数加 `--yes --format json` 正式执行；写后只回读目标 `scopeValue`。
+
+分页只有 `--cursor`：读取 `meta.pagination`，`endpoint_exhausted=false` 时把原样 `next_token` 传给下一次 `--cursor`，直到 true。CLI 不支持 `--page` 或 `--page-num`；权限记录在 `data.items[]`。
+
+## 选择与状态
+
+- 选择顺序：用户给的 `scopeValue` → API 名匹配 `apiPreview.name` → 权限名匹配 `scopeName/scopeDesc`。多候选时让用户选，不取第一条。
+- `authed=true` 已开通，跳过重复 add；`allowedActions` 含 `apply/remove` 才能执行对应动作。
+- `requiredApproval=true` 的变更会进入版本通道；权限写入成功后按 [`version.md`](./version.md) 创建并发布版本。
+- remove 逐条核对 `removedScopeValues/rejectedScopeValues`，不要只看整体布尔值。
+- 用户只说“去掉一个多余权限”却未给唯一标识时，不得为了猜目标拉取 150+ 全量：仅当本轮上下文已给出候选名称/scope 时做一次关键词定向查询，否则直接请求一个名称或 `scopeValue`。暂停 remove，但继续其它独立查询和可安全步骤；不要自行猜测并删除。
+- 目标 add 已是 `authed=true` 时说明无需重复申请。没有任何权限写入成功时，不创建/发布版本；缺少 remove 选择也不能用发布空版本替代业务变更。
+- 仅用户要求全部权限时才翻到 `meta.pagination.endpoint_exhausted=true`；普通关键词查询不要拉取 150+ 全量。最终给匹配数和相关项，避免整段 JSON。
+
+已知路径不跑 group help；只有 flag 确有疑问时查一次精确 leaf compact Schema，Schema 不可用才查一次 leaf help。

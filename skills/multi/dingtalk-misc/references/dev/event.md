@@ -1,47 +1,25 @@
-# 事件订阅
+# 应用事件订阅
 
-> 把应用关心的事件推到回调地址；见 [devapp.md](../devapp.md) 概念地图。
+事件配置走 `dws dev app event`；它不等于个人 IM/OA 实时监听。
 
-`dws dev app event list/subscribe/unsubscribe`，按 `--unified-app-id` 定位，订阅/退订用 `--event-codes`（逗号分隔，一次多个）。参数用对应命令的 `--help` 查询。
+## 最短命令路径
 
-规则：
-- 写操作先 `--dry-run` 预览，确认后 `--yes`。
-- 一次可订阅多个事件码，共用同一回调。
-- **事件码定位优先用 `event list --keyword <关键词>` 搜索**（按事件码或事件名称模糊匹配）；只有用户明确要「全部事件」时才不带 `--keyword` 翻全量。
-- 可订阅的事件码通过 `event list` 查询：返回 `events[]` 列出 `eventCode/eventName/subscribed`，不用查文档。
-- 退订前先 `event list` 确认当前订阅，避免退不存在的。
-- 翻全量时用 `--cursor/--page-size` 逐页处理；返回 `events/hasMore/nextCursor/pageSize`，翻页继续传 `nextCursor`。
-- 批量或全量订阅前，先把候选 `eventCode` 列给用户确认，再 `--dry-run` → `--yes`。
-- 返回看 `events[].subscribed` 和 `pushType=STREAM`（事件走 Stream 长连推送；connect 与事件订阅的关系见下方「Stream 长连」）。
-- `subscribe/unsubscribe` 的 `--event-codes` 必填，返回 `success/operation/unifiedAppId/eventCodes/needsPublish/versionRequiredAction`；失败时补 `errorCode/errorMsg/reason/retryable/action`。
-- `subscribe/unsubscribe` 返回 `needsPublish=true` 或非空 `versionRequiredAction` 时，按 [version.md](version.md) 继续 `version create → check-approval → publish → status`；进入 `RELEASE` 后重新 `event list`，确认目标 `events[].subscribed` 与本次操作一致。进入审核态则报告待审批；需要选择审批人时停下让用户选择。
-- 如果订阅失败、返回提示长链接未在线（是泛化错误：`reason=business_error`、`message` 含「长链接未在线」、`server_error_code=-1`；没有 STREAM_NOT_CONNECTED 这类结构化错误码，也没有 action 字段），先执行 `dev connect` 建联，再重试订阅。
+```bash
+# 按事件名称或事件码搜候选；只有用户要求全部时才翻全量
+dws dev app event list --unified-app-id <id> --keyword <关键词> --page-size 50 --format json
 
-## Stream 长连：connect 与事件订阅的关系
-
-钉钉一个应用就一条 Stream 长连（WebSocket），上面同时承载机器人消息、事件、卡片回调等多种 topic。connect 和 event 在这条长连上分工不同：
-
-- `dev connect`：用应用凭证把这条长连建起来并保活，但只注册了机器人消息处理（收 @机器人 → 转发本地 agent），**不消费事件**。
-- `event subscribe/unsubscribe`：只是**配置**操作（配应用订阅哪些事件码），自己不建长连、不收事件；服务端要求应用的 Stream 长连已在线，否则报错「长链接未在线」（泛化 business_error，不是结构化错误码）。
-- 两者唯一关联：先 `dev connect` 把长连建在线，`event subscribe` 才能成功——connect 负责「让长连在线」，subscribe 负责「配置订阅」。
-- 当前限制：connect 的长连不处理事件，dws 也没有「收/消费事件」的运行时命令，event 只到「配置订阅」为止。订阅成功后真正的事件推送 dws 暂不消费——要消费得用注册了事件 handler 的 SDK 自接（事件结构走 `dws devdoc article search --query` 查）。
-
-## Stream 长连怎么建的
-
-`dev connect` 内部用 dingtalk-stream-sdk-go，凭 `clientId/clientSecret` 建一条 WebSocket 长连并保活——底层网关握手、ticket、加解密都由 SDK 封装，agent 跑 `dev connect` 即可，不用碰这些。
-
-dws 当前只消费机器人消息、不消费事件。要自己写事件消费程序补这个 gap 时，SDK 用法以官方文档为准（走 `dws devdoc article search --query`，或看 github.com/open-dingtalk/dingtalk-stream-sdk-go）——注意事件用 `RegisterAllEventHandler`、connect 用的机器人是 `RegisterChatBotCallbackRouter`，两套别混；版本/接口会变，不在这里固化。
-
-## 发现命令
-
-调用任何方法前先查清楚再敲：
-
-```
-# 浏览命令组下的子命令与 flag
-dws dev app event --help
-
-# 查某方法的必填参数、类型、默认值
-dws dev <command-path> --help
+dws dev app event subscribe --unified-app-id <id> --event-codes <code1,code2> --dry-run --format json
+dws dev app event unsubscribe --unified-app-id <id> --event-codes <code1,code2> --dry-run --format json
 ```
 
-按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。
+## 闭环规则
+
+1. 从 `event list` 实际返回的 `data.events[]` 中读取 `eventCode/eventName/subscribed`，名称多匹配时让用户确认；不要按 Schema 的通用列表描述猜成 `items[]`，也不要查 help 或文档猜事件码。
+2. 退订前确认目标当前 `subscribed=true`。用户明确指定事件后，dry-run 核对无误即用同一参数加 `--yes --format json` 执行。
+3. 每种不同动作（subscribe 与 unsubscribe）各只做一次 dry-run 和至多一次正式执行；一次动作失败不阻止另一项独立动作按相同预算尝试。看正式写结果的 `success/needsPublish/versionRequiredAction`；只有写入明确成功且要求发布，或回读已证明配置改变时，才按 [`version.md`](./version.md) 做版本闭环。
+4. 到 `RELEASE` 后只回读目标事件，确认 `subscribed` 与请求一致；进入审批态就如实报告待审批，不重复发布。
+5. 全量列表读取 `meta.pagination`：`endpoint_exhausted=false` 时把原样 `next_token` 传给下一次 `--cursor`，到 true 停止；CLI 不支持 `--page/--page-num`。普通关键词查询不要翻无关事件。最终给匹配数和相关事件，不倾倒整个列表。
+
+正式写入若返回 `66117` 或泛化 `BUSINESS_ERROR`，做一次目标事件回读；`subscribed` 未变化就原样报告并停止该动作，不重复正式写入。此类错误本身不证明连接器异常：不得因此读取 connect/security/permission/recipes/openapi、重启连接器、搜索文档或创建/发布版本。只有服务端文本明确指出“长链接未在线”时，才按 [`connect.md`](./connect.md) 查询一次；实例存在且 down 才重启一次，并以一次新状态为证决定是否重试。没有记录则说明需先建立连接，不扫描本机进程或目录。
+
+已知路径直接执行；仅 flag 确有疑问时查一次精确 leaf compact Schema，Schema 不可用才查一次 leaf help。

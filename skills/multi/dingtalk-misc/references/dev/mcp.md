@@ -9,12 +9,13 @@
 
 ## MUST DO
 
-1. 先用对应分组或叶子的 `--help` 确认当前参数。
+1. 下列已知 leaf 直接执行，不先读分组 help。只有创建/更新等复杂字段或确认语义确有不确定性时，读取一次 `dws schema --cli-path "dev mcp <leaf>" --compact --format json`；Schema 与 Cobra 不一致时才读取同一 leaf 的一次 help。
 2. 开发写操作先 `--dry-run --format json`，检查 invocation，再改为 `--yes`。
 3. 发布前执行 `tool get` 和 `tool debug`，核对输入、输出与映射。
 4. 调用已发布工具前先执行 `mcp published tools <mcpId>`，按返回的 `inputSchema` 构造 `--params`。
 5. `mcp published invoke` 无法静态判断远端工具副作用，真实调用一律需要 `--yes`；未明确影响时只做 dry-run。
 6. MCP URL、凭证内容、token 和密钥不得写入回答、日志、文档或代码仓库。
+7. 若真实命令返回 `endpoint_not_resolved`，表示当前 CLI 的 `mcpdev` 运行端点不可用，不是 flag 错误；立即报告并停止，不用 help、改参数、Raw API 或 dry-run 冒充业务完成。
 
 ## 服务
 
@@ -65,8 +66,8 @@ HTTP `tool update` 是全量提交：先 `tool get` 读回现状，再在完整�
 
 ```bash
 dws dev mcp hsf method-list --interface-name <fully.qualified.Interface> --format json
-dws dev mcp tool create-hsf --help
-dws dev mcp tool update-hsf --help
+dws schema --cli-path "dev mcp tool create-hsf" --compact --format json
+# 更新时同理，只在本次确需 update-hsf 且字段不确定时读取它的 compact leaf Schema
 ```
 
 HSF 的 `apiInputs/apiOutputs` 由服务端按方法 Schema 生成。映射 target 使用 `$.<DTO简名>.<字段>`；输出 source 使用 `$.node_service_activator.<字段>`，不带 HTTP 的 `.Body`。
@@ -83,7 +84,7 @@ dws dev mcp credential bind --mcp-id <mcpId> --credential-id <credentialId> --dr
 dws dev mcp credential unbind --mcp-id <mcpId> --dry-run --format json
 ```
 
-敏感内容优先用 `--content-file` 或 stdin，不要放进 shell history。`credential debug` 会真实访问下游；`tool debug` 必须明确二选一：`--credential-id` 或 `--no-credential`。
+敏感内容优先用 `--content-file <path>`；需要 stdin 时精确写成 `--content-file -`，不要把 JSON 放进 shell history。`credential debug` 会真实访问下游；`tool debug` 必须明确二选一：`--credential-id` 或 `--no-credential`。
 
 ## 协作者
 

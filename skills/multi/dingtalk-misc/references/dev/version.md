@@ -1,99 +1,42 @@
-# 版本发布
+# 应用版本创建与发布
 
-> 版本是配置变更生效的唯一通道——改配置不等于上线，发布到 RELEASE 才生效（见 [devapp.md](../devapp.md) 生效模型）。
+配置写入不等于上线；版本进入 `RELEASE` 才表示已发布生效。版本始终用 `unifiedAppId + versionId` 定位。
 
-管理应用版本：基于当前配置建版本、查列表/详情、预检审批、发布、查状态。参数用对应命令的 `--help` 查询。版本用 `--unified-app-id` 定位，单个版本再加 `--version-id`；`corpId`/`userId` 系统注入，CLI 不传。
+## 标准闭环
 
-## 典型流程
-
-```text
-permission add（requiredApproval=true 写入版本变更）
-  → version create        创建版本
-  → version check-approval 预检是否需审批 / 审批人
-  → version publish        发布（含高敏权限需 --confirmed-sensitive）
-  → version status         轮询发布/审批状态
+```bash
+dws dev app version list --unified-app-id <id> --page-size 50 --format json
+dws dev app version create --unified-app-id <id> --desc <描述> --dry-run --format json
+dws dev app version check-approval --unified-app-id <id> --version-id <create返回的versionId> --format json
+dws dev app version publish --unified-app-id <id> --version-id <versionId> --dry-run --format json
+dws dev app version status --unified-app-id <id> --version-id <versionId> --format json
+dws dev app version get --unified-app-id <id> --version-id <versionId> --format json
 ```
 
-新应用如果 `version list` 返回空，先 `version create`，用返回的 `versionId` 继续 check-approval/publish；不要因列表空误判无可发布内容。
+用户明确要求创建/发布时，create 或 publish 的 dry-run 参数正确后改为 `--yes --format json` 正式执行。dry-run 不是业务完成。create 成功后只使用它返回的 `versionId`，不要再 list 猜“最新”；没返回 ID 就停止。默认不传 `--version`，服务端自动递增；用户明确指定时才传。
 
-## 创建版本
+`version list` 只有游标分页：`meta.pagination.endpoint_exhausted=false` 时把原样 `next_token` 传给下一次 `--cursor`，到 true 停止；不要使用 `--page/--page-num`，版本记录在 `data.items[]`。
 
-默认不要传 `--version`，不传时服务端基于最新已发布版本自动递增。只有用户明确要指定时才填 `--version`，且必须大于最新 `RELEASE` 版本，否则服务端返回 `62018`（版本号需高于上个版本号）。
+查询“发过哪些版本/全部版本历史”时翻到 endpoint exhaustion，再按真实状态汇总。查询“最新待发布版本”时只在完整列表的 `versionStatus=INIT` 中按 `gmtCreate` 选择最新一条；若没有 INIT，明确回答“暂无待发布版本”，不要对 RELEASE 版本调用 `check-approval`，也不要为了制造待发布项擅自 `version create`。
 
-创建成功后，后续 `get`/`check-approval`/`publish` 必须用 `create` 返回的 `versionId`；不要通过 `list` 猜最新版本。如果创建没返回 `versionId`，停止并报错。
+## 审批决策
 
-## check-approval 与 publish
+- `requiresApproval=false && publishable=true`：可以正式 publish。
+- `approvalMode=SELECT_APPROVER`：原样展示 `approvalPromptText` 或 `approvalOptions[].label`，等待用户选人；不默认第一个。
+- `approvalMode=ENTERPRISE_SELF_BUILT`：不传 approver，publish 后进入企业审批。
+- 高敏权限错误明确要求确认时，只改变一次参数，加 `--confirmed-sensitive` 后重试；这属于有新证据的单次修复。
 
-`check-approval` 只查审批要求和候选审批人，不发布。`publish` 是真实发布；含高敏权限要加 `--confirmed-sensitive`，灰度选人模式用 `--approver-user-id` 指定审批人。
+## 完成态与止损
 
-区分两个"预检"：`--dry-run` 是 CLI 层的预览不调上游；`check-approval` 是服务端查审批要求不发布。发布前建议先 `check-approval`。
+| `versionStatus` | 结论 |
+|---|---|
+| `INIT` | 已创建但未发布，仍未生效 |
+| `AUDIT` | 已提交审核；报告待审批，不重复 publish |
+| `RELEASE` | 已发布生效 |
+| `GRAY` | 灰度中，不等于全量发布 |
 
-发布/预检不返回动作枚举 `result`，看结构化字段判断下一步：
+`processStatus=UNDER_REVIEW` 同样是等待外部审批；`FAIL/WITHDRAW/CANCEL/PUBLISH_FAILED` 原样报告真实状态与错误。未列出的状态不猜。
 
-| 字段 | 含义 | 下一步 |
-|------|------|--------|
-| `requiresApproval=false` + `publishable=true` | 不需审批，`check-approval` 通过 | 可以执行 `version publish` |
-| `requiresApproval=true` + `approvalMode=SELECT_APPROVER` | 需从候选人里选审批人 | 展示 `approvalOptions[].label`，让用户选后再 `publish --approver-user-id` |
-| `requiresApproval=true` + `approvalMode=ENTERPRISE_SELF_BUILT` | 企业自建审核 | 不传 `--approver-user-id`，直接 `publish` 提交审批 |
-| `published=true` | 本次 `publish` 已直接发布 | 回读 `version status/get` 验证 `versionStatus=RELEASE` |
-| `approvalSubmitted=true` | 本次 `publish` 已提交审批 | 保存 `processId`，轮询 `version status` |
+发布失败时最多做一次 `version get/status` 获取新状态；若错误含义仍不清楚，可用错误码做一次精确 `dws devdoc article search --query`。只有新证据改变 flag 或状态时才重试一次；同一 `errorCode` 下禁止追加 debug/verbose、重复 help、反复搜索或重复 publish。无法达到 `RELEASE/AUDIT` 时明确报告阻塞和已完成步骤，仍需回答用户要求的版本列表、应用状态等其它交付项。没有实际配置变更成功时不创建空版本；`version list` 为空时明确写“暂无版本”。
 
-`SELECT_APPROVER` 时 CLI 会把原始 `approvalCandidates` 增强为更容易展示的字段：
-
-- `approvalPromptText`：预渲染的成品选择文案（带 `A.`/`B.` 序号 + `姓名（userId: xxx）`）；agent 原样展示这一段即可，无需自己遍历结构。
-- `approvalOptions[]`：结构化选项数组，字段包括 `label/name/userId/mainAdmin/index/key`，供需要结构化数据时使用。
-- `completionState=WAITING_FOR_APPROVER_SELECTION`、`actionRequired=select_approver`、`mustAskUser=true`：必须等待用户选择，不能默认取第一个。
-
-展示审批人时，优先原样展示 `approvalPromptText`；需结构化时用 `approvalOptions[].label`（格式 `姓名（userId: xxx）`，`mainAdmin=true` 时标注“主管理员”，仅 `name` 为空才退回 `userId: xxx`）。发布时把用户选中的 `userId` 传给 `--approver-user-id`。
-
-审批模式 `approvalMode`：
-
-| approvalMode | 含义 | 下一步 |
-|--------------|------|--------|
-| `SELECT_APPROVER` | 灰度选人，需在候选审批人里选一个 | 展示候选，不自动取第一个 |
-| `ENTERPRISE_SELF_BUILT` | 企业自建审核 | 不传 `--approver-user-id`，按企业自建流程等待 |
-
-## 版本状态
-
-`version create/list/get/status` 统一返回 `versionStatus`：
-
-| versionStatus | 含义 | 下一步 |
-|---------------|------|--------|
-| `INIT` | 已创建或有待发布变更，未发布 | 可 `check-approval`/`publish` |
-| `AUDIT` | 发布审核中 | 不要重复发布；即使没返回 `processStatus` 也按审核中处理 |
-| `RELEASE` | 已发布生效 | 完成，可验证权限/机器人/网页等能力 |
-| `GRAY` | 灰度 | 按灰度流程，不要当全量已发布 |
-
-`version status` 的 `processStatus` 只在存在审批流程且后端透出时有值。`versionStatus=AUDIT` 但没 `processStatus/processInstanceId` 时不要判失败，仍是审核中。
-
-| processStatus | 含义 | 下一步 |
-|---------------|------|--------|
-| `UNDER_REVIEW` | 审批中 | 等待，必要时把 `processInstanceId` 给用户去钉钉客户端看 |
-| `PASS` | 审批通过 | 继续回读，确认是否进 `RELEASE` |
-| `FAIL` | 审批拒绝 | 展示 `processComment`，改后重新建/发版本 |
-| `WITHDRAW` / `CANCEL` | 撤回或取消 | 回到发布前，重新 `check-approval`/`publish` |
-| `PUBLISH_FAILED` | 审批后发布失败 | 展示错误，重查版本状态和后端错误 |
-
-遇到未列出的状态值，不要猜语义；原样展示，回读 `version get/status` 或查文档/后台。
-
-## 错误处理
-
-| 情况 | 处理 |
-|------|------|
-| `check-approval` 提示需审批 | 按返回选审批人，再 `publish --approver-user-id` |
-| 发布报高敏权限未确认 | 加 `--confirmed-sensitive` 重新发布 |
-| `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |
-
-## 发现命令
-
-调用任何方法前先查清楚再敲：
-
-```
-# 浏览命令组下的子命令与 flag
-dws dev app version --help
-
-# 查某方法的必填参数、类型、默认值
-dws dev <command-path> --help
-```
-
-按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。
+已知路径不调用 group help；仅 flag 确有疑问时查一次精确 leaf compact Schema，Schema 不可用才查一次 leaf help。

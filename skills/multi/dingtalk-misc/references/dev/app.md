@@ -1,42 +1,39 @@
 # 应用基础操作
 
-> 操作的是「应用」容器本体（见 [devapp.md](../devapp.md) 概念地图）；启停/删除改的是应用 appStatus，不是版本 versionStatus。
+管理应用容器本体：列表、详情、创建、更新、启停和删除。应用状态 `appStatus` 与版本状态 `versionStatus` 是两套状态，不要混用。
 
-应用列表查询、详情、创建、修改、生命周期启停和删除。参数用对应命令的 `--help` 查询。
+## 最短命令路径
 
-## 应用定位
+```bash
+# 按名称定位；唯一命中后保存 unifiedAppId，后续全部复用
+dws dev app list --name <应用名> --format json
+dws dev app get --unified-app-id <id> --format json
 
-写操作与多数单应用命令统一用 `--unified-app-id`（全树主键）定位。`dev app get` 额外支持只读按 `--app-key`（=clientId）查详情；`--name` 仍只在 `dev app list` 作列表过滤。拿到 appKey 时可先 `app get --app-key` 核验并拿回 `unifiedAppId`；写操作必须由用户或上游结果提供明确 `unifiedAppId`。
+# 已知 AppKey/clientId 时可直接查详情并取得 unifiedAppId
+dws dev app get --app-key <appKey> --format json
 
-## 应用状态 appStatus
-
-`app get` 的 `appStatus` 是字符串，取值如 `normal`、`published`。`app list` 不回这个字段（恒 `null`），看应用状态以 `app get` 为准。应用状态 `appStatus` 和版本状态 `versionStatus` 是两套，别混。遇到没见过的 `appStatus` 值原样展示。
-
-`app create`、`app update` 不返回状态字段；版本状态由 `version create` 返回的 `status`（值如 INIT）表达，见 version.md。
-
-## 要点
-
-- `get` 主要用于定位核验；若返回里带 `appSecret`，脱敏处理，不复制到回答；主动读凭证走 `credentials get`。
-- `disable/enable` 成功返回 `{disabled:true}` / `{enabled:true}` + `message`，不回 `appStatus`；以这个布尔判操作成败。要确认最终生效态再 `get` 看 `appStatus` 字符串值。
-- `delete` 前必须展示应用摘要；删除是异步，成功后延迟从列表消失。
-
-## 错误处理
-
-| 情况 | 处理 |
-|------|------|
-| 多应用命中 | 展示候选，停止写操作 |
-| `ServiceResult.success=false` | 透传 `errorCode/errorMsg` |
-
-## 发现命令
-
-调用任何方法前先查清楚再敲：
-
-```
-# 浏览命令组下的子命令与 flag
-dws dev app --help
-
-# 查某方法的必填参数、类型、默认值
-dws dev <command-path> --help
+# 写操作：同一条命令先预检，再正式执行
+dws dev app create --name <名称> --desc <描述> --dry-run --format json
+dws dev app update --unified-app-id <id> --desc <描述> --dry-run --format json
+dws dev app disable --unified-app-id <id> --dry-run --format json
+dws dev app enable --unified-app-id <id> --dry-run --format json
+dws dev app delete --unified-app-id <id> --confirm-name <应用名> --dry-run --format json
 ```
 
-按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。
+用户已经明确要求该写操作时，dry-run 参数核对无误后把同一条命令改为 `--yes --format json` 执行，不要把 dry-run 当完成。创建后用返回的 `unifiedAppId`；更新/启停后回读一次 `app get`。删除前展示或核对名称与 ID，删除放在全部依赖步骤之后；成功只按真实返回说明，未回读到消失时不要声称已删除。
+
+应用只有 `list/get/create/update/disable/enable/delete` 及下属能力组；按名称查找使用 `app list --name`，不存在 `dev app search`。列表续页只传返回的 `meta.pagination.next_token` 到 `--cursor`；`endpoint_exhausted=true` 才是到底，禁止使用 `--page/--page-num`。
+
+## 状态与结果
+
+- `app list` 用于定位，不能用其空的 `appStatus` 判断状态；状态以 `app get` 为准。
+- `app get` 若带 `appSecret`，只内部使用并脱敏，不写入回答。
+- `disable/enable` 先看返回的 `disabled/enabled`，需要最终状态时再看 `app get.appStatus`。
+- 创建结果可能没有版本状态，更新结果可能带 `versionStatus`；两者都不等于已上线。需要上线时继续走 [`version.md`](./version.md)，不要仅凭某次写结果推断已发布。
+- 多应用命中时列出候选并停止写操作；`ServiceResult.success=false` 原样报告 `errorCode/errorMsg`。
+
+## 多步骤顺序
+
+若一句话同时要求“创建、配置/发布、最后删除”，依赖顺序固定为：创建 → 配置 → 版本生效或明确阻塞 → 收集用户要求的状态/详情 → 删除。中文位置不改变依赖关系，不要因“办完后删除”出现在中间就提前删除或停下来反问。
+
+已知上述路径时直接执行；仅 flag 确有疑问时查一次该 leaf compact Schema，Schema 不可用才查一次精确 leaf help。
