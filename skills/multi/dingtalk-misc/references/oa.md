@@ -28,6 +28,8 @@
 
 实例可被 `detail` 访问只证明“可访问”，不证明它属于用户指定的角色关系。主来源无目标时，不得静默切换来源寻找相似对象；管理员权限失败时也不得用个人列表冒充管理员结果。
 
+四类个人审批列表使用当前登录身份；切换组织或账号使用全局 `--profile`，不通过 `--user-id` 覆盖当前用户。
+
 `list-pending` 明确为空时，结论仅限“当前无待处理”；除非用户另行要求，不得改查 `list-submitted` 或 `list-initiated`。
 
 ## 查询收敛与分页
@@ -66,13 +68,13 @@
 ### 待处理审批及完整上下文
 
 ```bash
-dws oa approval list-pending --start "<ISO-8601>" --end "<ISO-8601>" --query "<可选关键词>" --format json
+dws oa approval list-pending --create-time-from "<yyyy-MM-dd>" --create-time-to "<yyyy-MM-dd>" --query "<可选关键词>" --page 1 --limit 20 --format json
 dws oa approval detail --instance-id <processInstanceId> --format json
 dws oa approval tasks --instance-id <processInstanceId> --format json
 dws oa approval records --instance-id <processInstanceId> --format json
 ```
 
-先从 `list-pending` 选定真实实例，再读取详情、当前任务和处理记录。需要排序时转换毫秒时间戳为当前时区后比较。
+`list-pending` 的创建/完成时间筛选使用 `yyyy-MM-dd`，不再接受旧的 `--start/--end`；还可按 `--process-code` 或 `--originator-user-id` 收窄。先选定真实实例，再读取详情、当前任务和处理记录。需要排序时转换毫秒时间戳为当前时区后比较。
 
 ### 个人审批全景
 
@@ -82,7 +84,7 @@ dws oa approval list-executed --page 1 --limit 20 --query "<可选关键词>" --
 dws oa approval list-cc --page 1 --limit 20 --query "<可选关键词>" --format json
 ```
 
-三类来源必须分别执行，不能用 `&&` 合成一次大输出；可以并行，但须分栏保留来源标签。某一来源返回 `hasMore=true` 且用户要求完整范围或分组统计时，只对该来源递增 `--page` 直到 `hasMore=false`；分页途中只保留实例 ID、标题、状态和创建时间等列表字段。用户要求每类最新一条时，对完整候选集按真实时间排序，只对非空类别分别读取 `detail` 和 `records`；只有读到该来源的空结果才能说该类别为空。
+三类来源必须分别执行，不能用 `&&` 合成一次大输出；可以并行，但须分栏保留来源标签。它们支持 `--process-code`、`--originator-user-id` 和 `yyyy-MM-dd` 创建/完成时间筛选；submitted/executed 还支持流程状态，cc 支持 `--unread-only`。某一来源返回 `hasMore=true` 且用户要求完整范围或分组统计时，只对该来源递增 `--page` 直到 `hasMore=false`；分页途中只保留实例 ID、标题、状态和创建时间等列表字段。用户要求每类最新一条时，对完整候选集按真实时间排序，只对非空类别分别读取 `detail` 和 `records`；只有读到该来源的空结果才能说该类别为空。
 
 ### 表单与我发起的实例
 
@@ -96,6 +98,8 @@ dws oa approval list-initiated --process-code <processCode> --start "<ISO-8601>"
 已知关键词优先使用公开 shortcut `oa +search-forms`；名称搜索为空时，可去掉口语中的“流程/审批/申请”等通用后缀做一次有依据的放宽。放宽后已有候选就停止继续拆词或搜索其它同义词。只有用户要求枚举可见表单时使用 `list-forms` 并检查分页。多个相近模板时保留搜索响应中的 `(processName, processCode)` 绑定；只读链路逐项读取并分组交付，真正创建时再要求选定唯一模板，不根据近似名称擅自创建。
 
 用户询问模板字段时，`form-schema` 的字段定义就是交付结果：最终答复至少列出字段名、是否必填及可见的类型或选项，不得只报告“已查到 Schema”。
+
+`list-initiated` 的 `--start/--end` 保持 ISO-8601，时间跨度不得超过 120 天。
 
 ### 管理员模板实例
 
