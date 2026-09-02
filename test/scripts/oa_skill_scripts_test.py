@@ -228,6 +228,58 @@ class OAFormProjectionTest(unittest.TestCase):
         self.assertEqual([], projected["optionalUnavailable"])
         self.assertTrue(projected["needsComponentReference"])
 
+    def test_required_unlabelled_controls_fail_closed(self):
+        payload = {
+            "result": {
+                "content": {
+                    "items": [
+                        {
+                            "componentName": "TenantWidget",
+                            "props": {"required": True},
+                        },
+                        {
+                            "componentName": "SignatureField",
+                            "props": {"id": "signature-1", "required": True},
+                        },
+                        {
+                            "componentName": "TextField",
+                            "props": {"id": "text-1", "required": True},
+                        },
+                        {
+                            "componentName": "HiddenTenantWidget",
+                            "props": {"id": "hidden-1", "required": True, "hidden": True},
+                        },
+                        {
+                            "componentName": "CalculateField",
+                            "props": {"id": "calculated-1", "required": True},
+                        },
+                    ]
+                }
+            }
+        }
+
+        projected = PREFLIGHT.project_form_schema(payload)
+
+        self.assertEqual(
+            ["TenantWidget", "signature-1", "text-1"],
+            [field["name"] for field in projected["fields"]],
+        )
+        self.assertEqual(
+            ["unknown", "client_only", "supported"],
+            [field["support"] for field in projected["fields"]],
+        )
+        self.assertTrue(
+            all(field["missingLabel"] for field in projected["fields"])
+        )
+        self.assertEqual(
+            ["TenantWidget", "signature-1", "text-1"],
+            [blocker["name"] for blocker in projected["blockers"]],
+        )
+        self.assertTrue(
+            all(blocker["missingLabel"] for blocker in projected["blockers"])
+        )
+        self.assertTrue(projected["needsComponentReference"])
+
     def test_template_agnostic_vehicle_and_item_forms(self):
         templates = {
             "用车申请": [

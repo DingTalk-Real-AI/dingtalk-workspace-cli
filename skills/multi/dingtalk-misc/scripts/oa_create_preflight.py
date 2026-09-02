@@ -133,22 +133,24 @@ def _project_component(component: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(component_name, str) or not isinstance(props, dict):
         return None
 
-    name, labels = _label(props)
-    if not name and component_name == "DDBizSuite":
-        name = str(
-            props.get("bizType")
-            or props.get("bizAlias")
-            or props.get("id")
-            or "DDBizSuite"
-        )
-    if not name:
-        return None
-
     required = _truthy(props.get("required"))
     support, value_kind = _support(component_name, props)
     hidden = _is_hidden(props)
     if hidden or support == "automatic":
         return None
+
+    name, labels = _label(props)
+    missing_label = not name
+    if missing_label:
+        if component_name == "DDBizSuite":
+            name = str(
+                props.get("bizType")
+                or props.get("bizAlias")
+                or props.get("id")
+                or "DDBizSuite"
+            )
+        else:
+            name = str(props.get("id") or component_name)
 
     projected: Dict[str, Any] = {
         "name": name,
@@ -156,6 +158,8 @@ def _project_component(component: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "required": required,
         "support": support,
     }
+    if missing_label:
+        projected["missingLabel"] = True
     for key, value in (
         ("id", props.get("id")),
         ("labels", labels),
@@ -231,20 +235,30 @@ def project_form_schema(payload: Dict[str, Any], process_code: str = "") -> Dict
 
     fields = list(_walk_components(items))
     all_fields = list(_flatten_fields(fields))
-    blockers = [
-        {
+    blockers = []
+    for field in all_fields:
+        if not (
+            (
+                field["required"]
+                and (
+                    field["support"] != "supported"
+                    or field.get("missingLabel")
+                )
+            )
+            or (
+                field["componentName"] == "DDBizSuite"
+                and field["support"] == "unknown"
+            )
+        ):
+            continue
+        blocker = {
             "name": field["name"],
             "componentName": field["componentName"],
             "support": field["support"],
         }
-        for field in all_fields
-        if (
-            field["required"] and field["support"] != "supported"
-        ) or (
-            field["componentName"] == "DDBizSuite"
-            and field["support"] == "unknown"
-        )
-    ]
+        if field.get("missingLabel"):
+            blocker["missingLabel"] = True
+        blockers.append(blocker)
     optional_unavailable = [
         {
             "name": field["name"],
@@ -269,7 +283,8 @@ def project_form_schema(payload: Dict[str, Any], process_code: str = "") -> Dict
         "blockers": blockers,
         "optionalUnavailable": optional_unavailable,
         "needsComponentReference": any(
-            field["support"] == "unknown" for field in all_fields
+            field["support"] == "unknown" or field.get("missingLabel")
+            for field in all_fields
         ),
         "fieldCount": len(all_fields),
     }
