@@ -222,7 +222,7 @@ func TestCrossPlatformCoverageOAApproveConfirmationAndReadback(t *testing.T) {
 	}
 
 	confirmed := &oaCoverageCaller{responses: map[string][]string{
-		"list_pending_approvals": {`{"success":true,"result":{"hasMore":false,"values":[{"processInstanceId":"instance-1","title":"fixture"}]}}`},
+		"get_todo_tasks": {`{"success":true,"result":{"hasMore":false,"values":[{"processInstanceId":"instance-1","title":"fixture"}]}}`},
 		"list_pending_tasks": {
 			`{"success":true,"result":{"taskIdList":[{"taskId":1}]}}`,
 			`{"success":true,"result":{"taskIdList":[]}}`,
@@ -245,7 +245,7 @@ func TestCrossPlatformCoverageOAApproveConfirmationAndReadback(t *testing.T) {
 	if err := confirmedRoot.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(confirmed.history, ","); got != "list_pending_approvals,list_pending_tasks,approve_processInstance,list_pending_tasks" {
+	if got := strings.Join(confirmed.history, ","); got != "get_todo_tasks,list_pending_tasks,approve_processInstance,list_pending_tasks" {
 		t.Fatalf("call history=%s", got)
 	}
 	if len(confirmed.arguments) != 4 || confirmed.arguments[2]["processInstanceId"] != "instance-1" || confirmed.arguments[3]["processInstanceId"] != "instance-1" {
@@ -449,13 +449,24 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 	}
 
 	validPage := `{"success":true,"result":{"hasMore":false,"values":[{"processInstanceId":"i","title":"fixture"}]}}`
+	legacyPendingRange := []string{"--start", "1785513600000", "--end", "1788191999000"}
+	t.Run("list-pending validate bad legacy interval", func(t *testing.T) {
+		caller := expectError(t, ListPending, map[string][]string{},
+			"--start", "1788191999000", "--end", "1785513600000")
+		if len(caller.history) != 0 {
+			t.Fatalf("validation made calls: %v", caller.history)
+		}
+	})
 	for name, args := range map[string][]string{
-		"bad interval": {"--start", "2", "--end", "1"},
-		"bad page":     {"--start", "1", "--end", "2", "--page", "bad"},
-		"bad limit":    {"--start", "1", "--end", "2", "--limit", "bad"},
-		"zero page":    {"--start", "1", "--end", "2", "--page", "0"},
+		"bad create date":     {"--create-time-from", "bad"},
+		"bad create interval": {"--create-time-from", "2026-08-02", "--create-time-to", "2026-08-01"},
+		"bad finish date":     {"--finish-time-to", "bad"},
+		"bad page":            {"--page", "bad"},
+		"bad limit":           {"--limit", "bad"},
+		"zero page":           {"--page", "0"},
 	} {
 		t.Run("list-pending validate "+name, func(t *testing.T) {
+			args = append(append([]string{}, legacyPendingRange...), args...)
 			caller := expectError(t, ListPending, map[string][]string{}, args...)
 			if len(caller.history) != 0 {
 				t.Fatalf("validation made calls: %v", caller.history)
@@ -463,21 +474,21 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 		})
 	}
 	t.Run("list-pending call failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"list_pending_approvals": {"__ERROR__"}}, "--start", "1", "--end", "2")
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {"__ERROR__"}}, legacyPendingRange...)
 	})
 	t.Run("list-pending projection failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"list_pending_approvals": {`{"success":true,"result":{"hasMore":false}}`}}, "--start", "1", "--end", "2")
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"hasMore":false}}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending null result fails closed", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"list_pending_approvals": {`{"success":true,"result":null}`}}, "--start", "1", "--end", "2")
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":null}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending pagination failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"list_pending_approvals": {`{"success":true,"result":{"values":[]}}`}}, "--start", "1", "--end", "2")
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[]}}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending full params", func(t *testing.T) {
-		caller := expectSuccess(t, ListPending, map[string][]string{"list_pending_approvals": {validPage}},
-			"--start", "1", "--end", "2", "--page", "2", "--limit", "3", "--query", "fixture")
-		want := map[string]any{"starTime": 1, "endTime": 2, "pageNum": "2", "pageSize": "3", "query": "fixture"}
+		caller := expectSuccess(t, ListPending, map[string][]string{"get_todo_tasks": {validPage}},
+			"--start", "1785513600000", "--end", "1788191999000", "--create-time-from", "2026-08-01", "--create-time-to", "2026-08-02", "--page", "2", "--limit", "3", "--query", "fixture")
+		want := map[string]any{"createTimeFrom": "2026-08-01", "createTimeTo": "2026-08-02", "pageNumber": 2, "pageSize": 3, "query": "fixture"}
 		if !reflect.DeepEqual(caller.arguments[0], want) {
 			t.Fatalf("list pending params=%#v want=%#v", caller.arguments[0], want)
 		}
@@ -544,7 +555,7 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 		})
 		t.Run(declaration.Command+" full params", func(t *testing.T) {
 			caller := expectSuccess(t, declaration, map[string][]string{tool: {validPage}}, "--page", "2", "--limit", "3", "--query", " fixture ")
-			want := map[string]any{"pageNumber": "2", "pageSize": "3", "query": "fixture"}
+			want := map[string]any{"pageNumber": 2, "pageSize": 3, "query": "fixture"}
 			if !reflect.DeepEqual(caller.arguments[0], want) {
 				t.Fatalf("params=%#v want=%#v", caller.arguments[0], want)
 			}
@@ -573,7 +584,7 @@ func TestCrossPlatformCoverageOACompatibilityReadBranches(t *testing.T) {
 
 	for _, declaration := range []shortcut.Shortcut{PendingApprovals, DoneApprovals} {
 		declaration := declaration
-		tool := map[string]string{"+pending": "list_pending_approvals", "+done-approvals": "get_done_tasks"}[declaration.Command]
+		tool := map[string]string{"+pending": "get_todo_tasks", "+done-approvals": "get_done_tasks"}[declaration.Command]
 		t.Run(declaration.Command+" invalid limit", func(t *testing.T) {
 			caller := expectError(t, declaration, map[string][]string{}, "--limit", "0")
 			if len(caller.history) != 0 {
@@ -600,7 +611,7 @@ func TestCrossPlatformCoverageOACompatibilityReadBranches(t *testing.T) {
 		})
 		t.Run(declaration.Command+" explicit limit", func(t *testing.T) {
 			caller := expectSuccess(t, declaration, map[string][]string{tool: {terminal}}, "--limit", "3")
-			if caller.arguments[0]["pageSize"] != float64(3) {
+			if caller.arguments[0]["pageSize"] != 3 {
 				t.Fatalf("explicit limit params=%#v", caller.arguments[0])
 			}
 		})
@@ -675,23 +686,23 @@ func TestCrossPlatformCoverageOAApproveFailureLedger(t *testing.T) {
 		name      string
 		responses map[string][]string
 	}{
-		{name: "pending call failure", responses: map[string][]string{"list_pending_approvals": {"__ERROR__"}}},
-		{name: "pending projection failure", responses: map[string][]string{"list_pending_approvals": {`{"success":true,"result":{"hasMore":false}}`}}},
-		{name: "pending null result", responses: map[string][]string{"list_pending_approvals": {`{"success":true,"result":null}`}}},
-		{name: "pending pagination failure", responses: map[string][]string{"list_pending_approvals": {`{"success":true,"result":{"values":[]}}`}}},
-		{name: "pending is incomplete", responses: map[string][]string{"list_pending_approvals": {pending(`[{"processInstanceId":"instance-1","title":"fixture"}]`, true)}}},
-		{name: "zero matches", responses: map[string][]string{"list_pending_approvals": {pending(`[{"processInstanceId":"instance-1","title":"other"}]`, false)}}},
-		{name: "task call failure", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {"__ERROR__"}}},
-		{name: "task projection failure", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {`{"success":true,"result":{}}`}}},
-		{name: "task count is not one", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {tasks(`[]`)}}},
-		{name: "task identity is not numeric", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {tasks(`[{"taskId":"not-numeric"}]`)}}},
-		{name: "write call failure", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {"__ERROR__"}}},
-		{name: "write business failure", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {`{"success":false}`}}},
-		{name: "write missing success", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {`{"result":{"accepted":true}}`}}},
-		{name: "write null success", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {`{"success":null}`}}},
-		{name: "readback call failure", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks, "__ERROR__"}, "approve_processInstance": {`{"success":true}`}}},
-		{name: "readback malformed", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks, `{"success":true,"result":{}}`}, "approve_processInstance": {`{"success":true}`}}},
-		{name: "write not observed", responses: map[string][]string{"list_pending_approvals": {validPending}, "list_pending_tasks": {validTasks, validTasks}, "approve_processInstance": {`{"success":true}`}}},
+		{name: "pending call failure", responses: map[string][]string{"get_todo_tasks": {"__ERROR__"}}},
+		{name: "pending projection failure", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"hasMore":false}}`}}},
+		{name: "pending null result", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":null}`}}},
+		{name: "pending pagination failure", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[]}}`}}},
+		{name: "pending is incomplete", responses: map[string][]string{"get_todo_tasks": {pending(`[{"processInstanceId":"instance-1","title":"fixture"}]`, true)}}},
+		{name: "zero matches", responses: map[string][]string{"get_todo_tasks": {pending(`[{"processInstanceId":"instance-1","title":"other"}]`, false)}}},
+		{name: "task call failure", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {"__ERROR__"}}},
+		{name: "task projection failure", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {`{"success":true,"result":{}}`}}},
+		{name: "task count is not one", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {tasks(`[]`)}}},
+		{name: "task identity is not numeric", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {tasks(`[{"taskId":"not-numeric"}]`)}}},
+		{name: "write call failure", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {"__ERROR__"}}},
+		{name: "write business failure", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {`{"success":false}`}}},
+		{name: "write missing success", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {`{"result":{"accepted":true}}`}}},
+		{name: "write null success", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks}, "approve_processInstance": {`{"success":null}`}}},
+		{name: "readback call failure", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks, "__ERROR__"}, "approve_processInstance": {`{"success":true}`}}},
+		{name: "readback malformed", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks, `{"success":true,"result":{}}`}, "approve_processInstance": {`{"success":true}`}}},
+		{name: "write not observed", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {validTasks, validTasks}, "approve_processInstance": {`{"success":true}`}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -714,7 +725,7 @@ func TestCrossPlatformCoverageOAApproveFailureLedger(t *testing.T) {
 
 	t.Run("comment is sent only after confirmation", func(t *testing.T) {
 		caller := &oaCoverageCaller{responses: map[string][]string{
-			"list_pending_approvals":  {validPending},
+			"get_todo_tasks":          {validPending},
 			"list_pending_tasks":      {validTasks, tasks(`[]`)},
 			"approve_processInstance": {`{"success":true}`},
 		}}
