@@ -578,7 +578,7 @@ func TestCrossPlatformCoverageMarkdownCreateFolderAutoRouting(t *testing.T) {
 
 func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProbe(t *testing.T) {
 	t.Run("conflicting explicit routes fail closed", func(t *testing.T) {
-		got, err := resolveMarkdownCreateTarget(context.Background(), "folder", "space", "workspace")
+		got, err := resolveTextCreateTarget(context.Background(), markdownTextFileSpec, "folder", "space", "workspace")
 		if err == nil || got {
 			t.Fatalf("useDoc=%v err=%v, want false with an error", got, err)
 		}
@@ -599,7 +599,7 @@ func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProb
 		t.Run(test.name, func(t *testing.T) {
 			caller := &markdownDriveCaller{format: "json"}
 			installMarkdownDriveDeps(t, caller)
-			got, err := resolveMarkdownCreateTarget(context.Background(), test.folderID, test.spaceID, test.workspaceID)
+			got, err := resolveTextCreateTarget(context.Background(), markdownTextFileSpec, test.folderID, test.spaceID, test.workspaceID)
 			if err != nil || got != test.wantDoc {
 				t.Fatalf("useDoc=%v err=%v, want useDoc=%v", got, err, test.wantDoc)
 			}
