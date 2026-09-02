@@ -2095,7 +2095,8 @@ exists=false 时不要猜测 nodeId，可调用 record primary-doc-create 创建
 				PrimaryCLIPath: "aitable base get-primary-doc-id",
 			},
 			Description: "查询某记录的主键文档是否存在，并在已创建时返回文档 ID。",
-			Interface:   aitableMCPInterface("get_cell_doc"),
+			Interface: aitableCompositeInterface(
+				"The CLI prefers aitable/get_cell_doc and conditionally falls back to aitable/get_base_primary_doc_id when the preferred tool is unavailable."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询某记录的主键文档是否存在，并在已创建时返回文档 ID。",
 				UseWhen:      []string{"已知 base/table/record，需要确认 primaryDoc 是否已创建或获取文档 ID 时"},
@@ -4207,7 +4208,8 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 				PrimaryCLIPath: "aitable record primary-doc-get",
 			},
 			Description: "查询记录主键文档 nodeId。",
-			Interface:   aitableMCPInterface("get_cell_doc"),
+			Interface: aitableCompositeInterface(
+				"The CLI prefers aitable/get_cell_doc and conditionally falls back to aitable/get_base_primary_doc_id when the preferred tool is unavailable."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询记录主键文档 nodeId。",
 				UseWhen:      []string{"需要打开记录关联的主键文档时"},
@@ -6733,7 +6735,8 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				PrimaryCLIPath: "aitable workflow edit-example",
 			},
 			Description: "获取 AI 表格工作流编辑文档与 workflow-dsl/v1 示例。",
-			Interface:   aitableMCPInterface("get_workflow_dsl_docs"),
+			Interface: aitableCompositeInterface(
+				"The CLI prefers aitable/get_workflow_dsl_docs and conditionally falls back to aitable/edit_workflow_example when the preferred tool is unavailable."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取 AI 表格工作流编辑文档与 workflow-dsl/v1 示例。",
 				UseWhen:      []string{"创建或更新工作流前需要服务端提供的编辑文档与 workflow-dsl/v1 示例时"},

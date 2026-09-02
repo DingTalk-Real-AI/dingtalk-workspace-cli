@@ -17,6 +17,21 @@ func TestReviewedRoutedInterfacesReachFinalSchema(t *testing.T) {
 	}
 	tests := []interfaceCase{
 		{
+			canonical: "aitable.base_get_primary_doc_id",
+			mode:      "composite",
+			reason:    "The CLI prefers aitable/get_cell_doc and conditionally falls back to aitable/get_base_primary_doc_id when the preferred tool is unavailable.",
+		},
+		{
+			canonical: "aitable.record_primary_doc_get",
+			mode:      "composite",
+			reason:    "The CLI prefers aitable/get_cell_doc and conditionally falls back to aitable/get_base_primary_doc_id when the preferred tool is unavailable.",
+		},
+		{
+			canonical: "aitable.workflow_edit_example",
+			mode:      "composite",
+			reason:    "The CLI prefers aitable/get_workflow_dsl_docs and conditionally falls back to aitable/edit_workflow_example when the preferred tool is unavailable.",
+		},
+		{
 			canonical: "attendance.get_attendance_summary",
 			mode:      "composite",
 			reason:    "Reviewed unpinned remote adapter: the CLI calls attendance-wukong/get_user_attendance_summary, which is absent from the pinned MCP metadata snapshot; the incompatible attendance/get_attendance_summary contract must not be advertised.",
