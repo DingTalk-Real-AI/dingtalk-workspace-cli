@@ -29,6 +29,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -237,8 +238,8 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAcrossEnvelopes
 	if err := json.Unmarshal([]byte(got), &result); err != nil {
 		t.Fatalf("decode command output: %v\noutput: %s", err, got)
 	}
-	if _, exists := result["contractVersion"]; exists {
-		t.Fatalf("typed list added an out-of-scope contract envelope: %#v", result)
+	if result["contractVersion"] != chatmsg.MessageListContractVersion || result["complete"] != true || result["paginationKnown"] != true || result["stopReason"] != "source_complete" {
+		t.Fatalf("single-page contract/pagination ledger = %#v", result)
 	}
 	messages, ok := result["messages"].([]any)
 	if !ok || len(messages) != 2 {
@@ -1093,8 +1094,8 @@ func TestCrossPlatformCoverageChatMessageListPreservesTopLevelMessageFields(t *t
 	if result["count"] != float64(99) || result["partial"] != true || result["failedCount"] != float64(1) {
 		t.Fatalf("legacy top-level envelope fields = %#v", result)
 	}
-	if _, exists := result["contractVersion"]; exists {
-		t.Fatalf("typed list added an out-of-scope contract envelope: %#v", result)
+	if result["contractVersion"] != chatmsg.MessageListContractVersion || result["complete"] != true || result["paginationKnown"] != true || result["stopReason"] != "source_complete" {
+		t.Fatalf("single-page contract/pagination ledger = %#v", result)
 	}
 	failures, ok := result["failures"].([]any)
 	if !ok || len(failures) != 1 || failures[0].(map[string]any)["stage"] != "legacy" {

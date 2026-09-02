@@ -130,11 +130,11 @@ func promoteLegacyChatString(cmd *cobra.Command, canonical, legacy string) error
 	return cmd.Flags().Set(canonical, value)
 }
 
-func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
-	return callProjectedMessagesOnServer(cmd, "chat", toolName, args, search)
+func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool, paginationDirection string) error {
+	return callProjectedMessagesOnServer(cmd, "chat", toolName, args, search, paginationDirection)
 }
 
-func callProjectedMessagesOnServer(cmd *cobra.Command, serverID, toolName string, args map[string]any, search bool) error {
+func callProjectedMessagesOnServer(cmd *cobra.Command, serverID, toolName string, args map[string]any, search bool, paginationDirection string) error {
 	if deps.Caller.DryRun() {
 		return callMCPToolOnServer(serverID, toolName, args)
 	}
@@ -144,7 +144,9 @@ func callProjectedMessagesOnServer(cmd *cobra.Command, serverID, toolName string
 		return withProjectedChatOperation(operation, err)
 	}
 	return writeProjectedChatPayload(cmd, operation, text, func(data map[string]any) map[string]any {
-		return projectChatMessagesPayloadForCommand(cmd, data, search)
+		payload := projectChatMessagesPayloadForCommand(cmd, data, search)
+		applyProjectedChatPagination(payload, data, paginationDirection)
+		return payload
 	})
 }
 
@@ -159,6 +161,34 @@ func callProjectedAtomicChatMessages(cmd *cobra.Command, toolName string, args m
 	return writeProjectedChatPayload(cmd, "chat/"+toolName, text, func(data map[string]any) map[string]any {
 		return projectExistingChatMessageCollectionsForCommand(cmd, data, search)
 	})
+}
+
+func applyProjectedChatPagination(payload, source map[string]any, paginationDirection string) {
+	if paginationDirection == "" {
+		return
+	}
+	messages, _ := payload["messages"].([]map[string]any)
+	preserved := make(map[string]any)
+	for _, key := range []string{"count", "enrichedCount", "failedCount", "failures", "partial", "truncated"} {
+		if value, exists := payload[key]; exists {
+			preserved[key] = value
+		}
+	}
+	for key, value := range chatmsg.NewMessageListPayload(messages) {
+		if _, exists := payload[key]; !exists {
+			payload[key] = value
+		}
+	}
+	delete(payload, "nextPage")
+	chatmsg.ApplyMessagePagination(payload, source, messages, paginationDirection)
+	for key, value := range preserved {
+		payload[key] = value
+	}
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
 }
 
 func callProjectedAtomicIMMessages(cmd *cobra.Command, toolName string, args map[string]any) error {
@@ -1555,7 +1585,7 @@ func pagedChatConversationMessagesConfig(toolName string, build func(*cobra.Comm
 func pagedProjectedChatSearchConfig(cmd *cobra.Command, toolName string, build func(*cobra.Command) (map[string]any, error)) PagedMCPCommandConfig {
 	cfg := pagedChatConversationMessagesConfig(toolName, build)
 	cfg.Fallback = func(args map[string]any) error {
-		return callProjectedChatMessages(cmd, toolName, args, true)
+		return callProjectedChatMessages(cmd, toolName, args, true, "")
 	}
 	cfg.ProjectResult = func(payload map[string]any) map[string]any {
 		return projectChatMessagesPayloadForCommand(cmd, payload, true)
@@ -3522,6 +3552,10 @@ func newChatCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			paginationDirection := "older"
+			if forward {
+				paginationDirection = "newer"
+			}
 			if groupID != "" {
 				toolArgs := map[string]any{
 					"openconversation_id": groupID,
@@ -3531,7 +3565,7 @@ func newChatCommand() *cobra.Command {
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
 				}
-				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false)
+				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false, paginationDirection)
 			}
 			toolArgs := map[string]any{
 				"time":    timeVal,
@@ -3545,7 +3579,7 @@ func newChatCommand() *cobra.Command {
 			if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
+			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false, paginationDirection)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListCmd, LeafSpec{
