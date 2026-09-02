@@ -15,6 +15,24 @@
 
 package msgcrypto
 
+import (
+	"fmt"
+	"io/fs"
+	"os"
+)
+
 // runtimeSupportsPOSIXPerm reports that the keystore directory's permission
 // bits are meaningful here, so prepareKeystore enforces owner-only access.
 const runtimeSupportsPOSIXPerm = true
+
+func restrictKeystorePermissions(dir string, info fs.FileInfo) error {
+	if info.Mode().Perm() == keystoreDirPerm {
+		return nil
+	}
+	if err := chmodKeystore(dir, keystoreDirPerm); err != nil {
+		return fmt.Errorf("msgcrypto: restrict keystore dir permissions: %w", err)
+	}
+	return nil
+}
+
+var chmodKeystore = os.Chmod

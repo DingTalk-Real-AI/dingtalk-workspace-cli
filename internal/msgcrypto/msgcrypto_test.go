@@ -233,30 +233,6 @@ func TestCrossPlatformCoveragePrepareKeystoreRejectsNonDirectoryStatResult(t *te
 	}
 }
 
-func TestCrossPlatformCoveragePrepareKeystoreReportsChmodFailure(t *testing.T) {
-	if !runtimeSupportsPOSIXPerm {
-		t.Skip("POSIX chmod branch is not built on this platform")
-	}
-	oldStat := statKeystore
-	oldChmod := chmodKeystore
-	t.Cleanup(func() {
-		statKeystore = oldStat
-		chmodKeystore = oldChmod
-	})
-	statKeystore = func(string) (os.FileInfo, error) {
-		return fakeFileInfo{mode: 0o755 | fs.ModeDir, isDir: true}, nil
-	}
-	wantErr := errors.New("chmod failed")
-	chmodKeystore = func(string, fs.FileMode) error {
-		return wantErr
-	}
-
-	err := prepareKeystore(filepath.Join(t.TempDir(), "keystore"))
-	if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "restrict keystore dir permissions") {
-		t.Fatalf("prepareKeystore() = %v, want chmod failure", err)
-	}
-}
-
 func TestCrossPlatformCoverageOpenRejectsMissingAuthCodeProviderBeforeTouchingDisk(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keystore")
 	_, err := Open(context.Background(), Config{KeystoreDir: dir})

@@ -15,7 +15,13 @@
 
 package msgcrypto
 
+import "io/fs"
+
 // runtimeSupportsPOSIXPerm reports that Windows does not model POSIX
 // permission bits, so prepareKeystore leaves the directory mode alone and
 // relies on the user profile ACL instead.
 const runtimeSupportsPOSIXPerm = false
+
+func restrictKeystorePermissions(string, fs.FileInfo) error {
+	return nil
+}

@@ -191,13 +191,7 @@ func prepareKeystore(dir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("msgcrypto: keystore path %s is not a directory", dir)
 	}
-	// Windows does not model POSIX bits, so only tighten where they apply.
-	if runtimeSupportsPOSIXPerm && info.Mode().Perm() != keystoreDirPerm {
-		if err := chmodKeystore(dir, keystoreDirPerm); err != nil {
-			return fmt.Errorf("msgcrypto: restrict keystore dir permissions: %w", err)
-		}
-	}
-	return nil
+	return restrictKeystorePermissions(dir, info)
 }
 
 // process holds the single-instance guard. The vendor C library keeps global
@@ -211,7 +205,6 @@ var (
 	backendAvailable = Available
 	openBackend      = newBackend
 	statKeystore     = os.Stat
-	chmodKeystore    = os.Chmod
 )
 
 // Open validates cfg, prepares the keystore and starts the backend.
