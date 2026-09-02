@@ -28,7 +28,7 @@ func captureLogf(lines *[]string) func(string, ...any) {
 	}
 }
 
-func TestNewRedactingLoggerReturnsNilWhenSinkIsNil(t *testing.T) {
+func TestCrossPlatformCoverageNewRedactingLoggerReturnsNilWhenSinkIsNil(t *testing.T) {
 	// A nil logger makes the vendor SDK skip logging entirely, which is the
 	// safe default because it logs the authCode at debug level.
 	if got := newRedactingLogger(nil); got != nil {
@@ -36,7 +36,7 @@ func TestNewRedactingLoggerReturnsNilWhenSinkIsNil(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerHidesAuthCode(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerHidesAuthCode(t *testing.T) {
 	var lines []string
 	logger := newRedactingLogger(captureLogf(&lines))
 
@@ -55,7 +55,7 @@ func TestRedactingLoggerHidesAuthCode(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerHidesKeyServerResponseBody(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerHidesKeyServerResponseBody(t *testing.T) {
 	var lines []string
 	logger := newRedactingLogger(captureLogf(&lines))
 
@@ -67,7 +67,7 @@ func TestRedactingLoggerHidesKeyServerResponseBody(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerHidesByteSlices(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerHidesByteSlices(t *testing.T) {
 	var lines []string
 	logger := newRedactingLogger(captureLogf(&lines))
 
@@ -78,7 +78,7 @@ func TestRedactingLoggerHidesByteSlices(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerHidesErrorText(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerHidesErrorText(t *testing.T) {
 	var lines []string
 	logger := newRedactingLogger(captureLogf(&lines))
 
@@ -90,7 +90,7 @@ func TestRedactingLoggerHidesErrorText(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerKeepsDiagnosticNumbers(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerKeepsDiagnosticNumbers(t *testing.T) {
 	var lines []string
 	logger := newRedactingLogger(captureLogf(&lines))
 
@@ -104,7 +104,7 @@ func TestRedactingLoggerKeepsDiagnosticNumbers(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerLabelsLevel(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerLabelsLevel(t *testing.T) {
 	var lines []string
 	logger := newRedactingLogger(captureLogf(&lines))
 
@@ -122,19 +122,19 @@ func TestRedactingLoggerLabelsLevel(t *testing.T) {
 	}
 }
 
-func TestRedactingLoggerToleratesNilSinkAtEmit(t *testing.T) {
+func TestCrossPlatformCoverageRedactingLoggerToleratesNilSinkAtEmit(t *testing.T) {
 	// Guard against a partially constructed logger being used.
 	var logger *redactingLogger
 	logger.Debug("must not panic %s", "value")
 }
 
-func TestRedactArgKeepsDurations(t *testing.T) {
+func TestCrossPlatformCoverageRedactArgKeepsDurations(t *testing.T) {
 	if got := redactArg(2 * time.Second); got != "2s" {
 		t.Fatalf("redactArg(2s) = %v, want 2s", got)
 	}
 }
 
-func TestRedactArgElidesStrings(t *testing.T) {
+func TestCrossPlatformCoverageRedactArgElidesStrings(t *testing.T) {
 	got, ok := redactArg("secret").(string)
 	if !ok {
 		t.Fatalf("redactArg returned %T, want string", got)
@@ -147,11 +147,25 @@ func TestRedactArgElidesStrings(t *testing.T) {
 	}
 }
 
-func TestRedactArgPassesThroughNumbers(t *testing.T) {
+func TestCrossPlatformCoverageRedactArgPassesThroughNumbers(t *testing.T) {
 	if got := redactArg(42); got != 42 {
 		t.Fatalf("redactArg(42) = %v, want 42", got)
 	}
 	if got := redactArg(true); got != true {
 		t.Fatalf("redactArg(true) = %v, want true", got)
+	}
+}
+
+type secretStringer string
+
+func (s secretStringer) String() string { return string(s) }
+
+func TestCrossPlatformCoverageRedactArgElidesStringerPayloads(t *testing.T) {
+	got, ok := redactArg(secretStringer("stringer-secret")).(string)
+	if !ok {
+		t.Fatalf("redactArg returned %T, want string", got)
+	}
+	if strings.Contains(got, "stringer-secret") || !strings.Contains(got, "len=15") {
+		t.Fatalf("redactArg stringer = %q", got)
 	}
 }

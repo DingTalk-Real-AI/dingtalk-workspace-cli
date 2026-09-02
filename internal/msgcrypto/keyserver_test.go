@@ -18,31 +18,31 @@ import (
 	"testing"
 )
 
-func TestValidateKeyServerAcceptsHTTPS(t *testing.T) {
+func TestCrossPlatformCoverageValidateKeyServerAcceptsHTTPS(t *testing.T) {
 	if err := validateKeyServer("https://key.example.test/v1"); err != nil {
 		t.Fatalf("validateKeyServer() = %v, want nil", err)
 	}
 }
 
-func TestValidateKeyServerRejectsEmpty(t *testing.T) {
+func TestCrossPlatformCoverageValidateKeyServerRejectsEmpty(t *testing.T) {
 	if err := validateKeyServer("  "); !errors.Is(err, ErrNoKeyServer) {
 		t.Fatalf("validateKeyServer() = %v, want ErrNoKeyServer", err)
 	}
 }
 
-func TestValidateKeyServerRejectsHTTP(t *testing.T) {
+func TestCrossPlatformCoverageValidateKeyServerRejectsHTTP(t *testing.T) {
 	if err := validateKeyServer("http://key.example.test"); !errors.Is(err, ErrKeyServerNotHTTPS) {
 		t.Fatalf("validateKeyServer() = %v, want ErrKeyServerNotHTTPS", err)
 	}
 }
 
-func TestValidateKeyServerRejectsBareHost(t *testing.T) {
+func TestCrossPlatformCoverageValidateKeyServerRejectsBareHost(t *testing.T) {
 	if err := validateKeyServer("key.example.test"); !errors.Is(err, ErrInvalidKeyServer) {
 		t.Fatalf("validateKeyServer() = %v, want ErrInvalidKeyServer", err)
 	}
 }
 
-func TestMatchRedirectHostComparesHostOnly(t *testing.T) {
+func TestCrossPlatformCoverageMatchRedirectHostComparesHostOnly(t *testing.T) {
 	if err := matchRedirectHost("https://sso.anhei.test:443/login", "https://sso.anhei.test/path"); err != nil {
 		t.Fatalf("matchRedirectHost() = %v, want nil", err)
 	}
@@ -51,7 +51,7 @@ func TestMatchRedirectHostComparesHostOnly(t *testing.T) {
 	}
 }
 
-func TestMatchRedirectHostSkipsWhenEitherSideEmpty(t *testing.T) {
+func TestCrossPlatformCoverageMatchRedirectHostSkipsWhenEitherSideEmpty(t *testing.T) {
 	if err := matchRedirectHost("", "https://sso.anhei.test"); err != nil {
 		t.Fatalf("empty domain = %v, want nil", err)
 	}
@@ -60,18 +60,30 @@ func TestMatchRedirectHostSkipsWhenEitherSideEmpty(t *testing.T) {
 	}
 }
 
-func TestMatchRedirectHostRejectsMismatch(t *testing.T) {
+func TestCrossPlatformCoverageMatchRedirectHostRejectsMismatch(t *testing.T) {
 	err := matchRedirectHost("evil.example.test", "https://sso.anhei.test")
 	if !errors.Is(err, ErrRedirectHostMismatch) {
 		t.Fatalf("matchRedirectHost() = %v, want ErrRedirectHostMismatch", err)
 	}
 }
 
-func TestHostnameOfStripsPortAndPath(t *testing.T) {
+func TestCrossPlatformCoverageHostnameOfStripsPortAndPath(t *testing.T) {
 	if got := hostnameOf("https://SSO.Example.TEST:8443/login?x=1"); got != "sso.example.test" {
 		t.Fatalf("hostnameOf(url) = %q", got)
 	}
 	if got := hostnameOf("SSO.Example.TEST:8443/login"); got != "sso.example.test" {
 		t.Fatalf("hostnameOf(hostport) = %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageKeyServerRemainingEdges(t *testing.T) {
+	if err := validateKeyServer("https://:443"); !errors.Is(err, ErrInvalidKeyServer) {
+		t.Fatalf("empty hostname key server = %v, want ErrInvalidKeyServer", err)
+	}
+	if got := hostnameOf(" "); got != "" {
+		t.Fatalf("hostnameOf(blank) = %q", got)
+	}
+	if got := hostnameOf("https://"); got != "https" {
+		t.Fatalf("hostnameOf(malformed fallback) = %q", got)
 	}
 }

@@ -184,7 +184,7 @@ func prepareKeystore(dir string) error {
 	if err := os.MkdirAll(dir, keystoreDirPerm); err != nil {
 		return fmt.Errorf("msgcrypto: create keystore dir: %w", err)
 	}
-	info, err := os.Stat(dir)
+	info, err := statKeystore(dir)
 	if err != nil {
 		return fmt.Errorf("msgcrypto: stat keystore dir: %w", err)
 	}
@@ -193,7 +193,7 @@ func prepareKeystore(dir string) error {
 	}
 	// Windows does not model POSIX bits, so only tighten where they apply.
 	if runtimeSupportsPOSIXPerm && info.Mode().Perm() != keystoreDirPerm {
-		if err := os.Chmod(dir, keystoreDirPerm); err != nil {
+		if err := chmodKeystore(dir, keystoreDirPerm); err != nil {
 			return fmt.Errorf("msgcrypto: restrict keystore dir permissions: %w", err)
 		}
 	}
@@ -207,6 +207,13 @@ var process struct {
 	open bool
 }
 
+var (
+	backendAvailable = Available
+	openBackend      = newBackend
+	statKeystore     = os.Stat
+	chmodKeystore    = os.Chmod
+)
+
 // Open validates cfg, prepares the keystore and starts the backend.
 //
 // It returns ErrUnavailable when the backend was not compiled in, so callers
@@ -217,7 +224,7 @@ func Open(ctx context.Context, cfg Config) (Cipher, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	if !Available() {
+	if !backendAvailable() {
 		return nil, ErrUnavailable
 	}
 	if err := prepareKeystore(cfg.KeystoreDir); err != nil {
@@ -229,7 +236,7 @@ func Open(ctx context.Context, cfg Config) (Cipher, error) {
 	if process.open {
 		return nil, ErrAlreadyOpen
 	}
-	backend, err := newBackend(ctx, cfg)
+	backend, err := openBackend(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

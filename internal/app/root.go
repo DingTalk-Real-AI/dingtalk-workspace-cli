@@ -1148,10 +1148,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		schemaCmd,
 		navigationGroup(mcpCmd),
 	}
-	// Add safechat command only when built with safechat tag
-	if safeChatCmd := newSafeChatCommand(); safeChatCmd != nil {
-		utilityCommands = append(utilityCommands, safeChatCmd)
-	}
+	utilityCommands = appendOptionalCommand(utilityCommands, newSafeChatCommand())
 	root.AddCommand(utilityCommands...)
 
 	if declarationOnly {
@@ -1193,6 +1190,13 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	root.SetContext(rootCtx)
 
 	return root
+}
+
+func appendOptionalCommand(commands []*cobra.Command, cmd *cobra.Command) []*cobra.Command {
+	if cmd == nil {
+		return commands
+	}
+	return append(commands, cmd)
 }
 
 // installReviewedFlagProtectionHandlers makes reviewed blocked/ambiguous

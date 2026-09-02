@@ -50,7 +50,7 @@ func (p *countingProvider) callCount() int {
 	return p.calls
 }
 
-func TestAuthCodeFuncAdaptsFunction(t *testing.T) {
+func TestCrossPlatformCoverageAuthCodeFuncAdaptsFunction(t *testing.T) {
 	provider := AuthCodeFunc(func(context.Context) (string, error) { return "abc", nil })
 	code, err := provider.AuthCode(context.Background())
 	if err != nil || code != "abc" {
@@ -58,21 +58,21 @@ func TestAuthCodeFuncAdaptsFunction(t *testing.T) {
 	}
 }
 
-func TestStaticAuthCodeReturnsCode(t *testing.T) {
+func TestCrossPlatformCoverageStaticAuthCodeReturnsCode(t *testing.T) {
 	code, err := StaticAuthCode("fixed").AuthCode(context.Background())
 	if err != nil || code != "fixed" {
 		t.Fatalf("AuthCode() = %q, %v; want fixed, nil", code, err)
 	}
 }
 
-func TestStaticAuthCodeRejectsEmptyCode(t *testing.T) {
+func TestCrossPlatformCoverageStaticAuthCodeRejectsEmptyCode(t *testing.T) {
 	_, err := StaticAuthCode("").AuthCode(context.Background())
 	if !errors.Is(err, ErrNoAuthCode) {
 		t.Fatalf("AuthCode() = %v, want ErrNoAuthCode", err)
 	}
 }
 
-func TestCachedAuthCodeReusesCodeWithinTTL(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeReusesCodeWithinTTL(t *testing.T) {
 	provider := &countingProvider{code: "same"}
 	cache := NewCachedAuthCode(provider, time.Minute)
 
@@ -90,7 +90,7 @@ func TestCachedAuthCodeReusesCodeWithinTTL(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeRefetchesAfterTTL(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeRefetchesAfterTTL(t *testing.T) {
 	provider := &countingProvider{}
 	cache := NewCachedAuthCode(provider, time.Minute)
 
@@ -118,7 +118,7 @@ func TestCachedAuthCodeRefetchesAfterTTL(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeDefaultTTLIsUnderServerWindow(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeDefaultTTLIsUnderServerWindow(t *testing.T) {
 	// Portal vendorAuthCode expiresIn is 120s and the code is one-shot.
 	// The unconsumed-cache window must stay under that server lifetime.
 	if DefaultAuthCodeTTL >= 120*time.Second {
@@ -130,14 +130,14 @@ func TestCachedAuthCodeDefaultTTLIsUnderServerWindow(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeNegativeTTLFallsBackToDefault(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeNegativeTTLFallsBackToDefault(t *testing.T) {
 	cache := NewCachedAuthCode(&countingProvider{}, -time.Second)
 	if cache.ttl != DefaultAuthCodeTTL {
 		t.Fatalf("ttl = %v, want DefaultAuthCodeTTL %v", cache.ttl, DefaultAuthCodeTTL)
 	}
 }
 
-func TestCachedAuthCodePropagatesUpstreamError(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodePropagatesUpstreamError(t *testing.T) {
 	wantErr := errors.New("token service down")
 	cache := NewCachedAuthCode(&countingProvider{err: wantErr}, time.Minute)
 
@@ -147,7 +147,7 @@ func TestCachedAuthCodePropagatesUpstreamError(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeDoesNotCacheFailures(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeDoesNotCacheFailures(t *testing.T) {
 	provider := &countingProvider{err: errors.New("transient")}
 	cache := NewCachedAuthCode(provider, time.Minute)
 
@@ -169,7 +169,7 @@ func TestCachedAuthCodeDoesNotCacheFailures(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeRejectsEmptyUpstreamCode(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeRejectsEmptyUpstreamCode(t *testing.T) {
 	// A provider that reports success with no code is a bug upstream; the
 	// cache must surface it instead of caching an unusable value.
 	cache := NewCachedAuthCode(AuthCodeFunc(func(context.Context) (string, error) {
@@ -181,7 +181,7 @@ func TestCachedAuthCodeRejectsEmptyUpstreamCode(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeInvalidateForcesRefetch(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeInvalidateForcesRefetch(t *testing.T) {
 	provider := &countingProvider{}
 	cache := NewCachedAuthCode(provider, time.Hour)
 
@@ -197,14 +197,14 @@ func TestCachedAuthCodeInvalidateForcesRefetch(t *testing.T) {
 	}
 }
 
-func TestCachedAuthCodeWithoutProviderReportsMissingProvider(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeWithoutProviderReportsMissingProvider(t *testing.T) {
 	cache := NewCachedAuthCode(nil, time.Minute)
 	if _, err := cache.AuthCode(context.Background()); !errors.Is(err, ErrNoAuthCodeProvider) {
 		t.Fatalf("AuthCode() = %v, want ErrNoAuthCodeProvider", err)
 	}
 }
 
-func TestCachedAuthCodeIsSafeForConcurrentUse(t *testing.T) {
+func TestCrossPlatformCoverageCachedAuthCodeIsSafeForConcurrentUse(t *testing.T) {
 	// The backend may ask for a code from a CGO callback while another
 	// operation is in flight, so concurrent access must not race.
 	provider := &countingProvider{code: "shared"}

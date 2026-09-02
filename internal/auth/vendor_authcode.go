@@ -116,13 +116,10 @@ func FetchVendorAuthCode(ctx context.Context, in VendorAuthCodeInput) (*VendorAu
 	}
 	endpoint := base + MCPVendorAuthCodePath
 
-	payload, err := json.Marshal(struct {
+	payload, _ := json.Marshal(struct {
 		Vendor string `json:"vendor"`
 		CorpID string `json:"corpId"`
 	}{Vendor: vendor, CorpID: corpID})
-	if err != nil {
-		return nil, fmt.Errorf("marshaling vendorAuthCode request: %w", err)
-	}
 
 	req, err := oauthNewRequest(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {

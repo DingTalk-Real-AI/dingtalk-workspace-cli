@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeCipher stands in for a backend so the wrapper logic can be tested on
@@ -34,6 +35,18 @@ type fakeCipher struct {
 	closeCount int
 	closeErr   error
 }
+
+type fakeFileInfo struct {
+	mode  fs.FileMode
+	isDir bool
+}
+
+func (f fakeFileInfo) Name() string       { return "fake" }
+func (f fakeFileInfo) Size() int64        { return 0 }
+func (f fakeFileInfo) Mode() fs.FileMode  { return f.mode }
+func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeFileInfo) IsDir() bool        { return f.isDir }
+func (f fakeFileInfo) Sys() any           { return nil }
 
 func (f *fakeCipher) EncryptMessage(_ context.Context, _, _ string, plaintext []byte) ([]byte, error) {
 	f.mu.Lock()
@@ -71,7 +84,7 @@ func newTrackedForTest(t *testing.T, backend Cipher) *trackedCipher {
 	return &trackedCipher{backend: backend}
 }
 
-func TestConfigWithDefaultsFillsKeystoreDir(t *testing.T) {
+func TestCrossPlatformCoverageConfigWithDefaultsFillsKeystoreDir(t *testing.T) {
 	cfg := Config{}.withDefaults()
 	if cfg.KeystoreDir == "" {
 		t.Fatal("withDefaults left KeystoreDir empty")
@@ -81,14 +94,14 @@ func TestConfigWithDefaultsFillsKeystoreDir(t *testing.T) {
 	}
 }
 
-func TestConfigWithDefaultsKeepsExplicitKeystoreDir(t *testing.T) {
+func TestCrossPlatformCoverageConfigWithDefaultsKeepsExplicitKeystoreDir(t *testing.T) {
 	cfg := Config{KeystoreDir: "/custom/keys"}.withDefaults()
 	if cfg.KeystoreDir != "/custom/keys" {
 		t.Fatalf("KeystoreDir = %q, want /custom/keys", cfg.KeystoreDir)
 	}
 }
 
-func TestDefaultKeystoreDirHonoursConfigDirOverride(t *testing.T) {
+func TestCrossPlatformCoverageDefaultKeystoreDirHonoursConfigDirOverride(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	got := DefaultKeystoreDir()
 	if !strings.HasSuffix(got, filepath.Join("safechat", "keystore")) {
@@ -99,14 +112,21 @@ func TestDefaultKeystoreDirHonoursConfigDirOverride(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRequiresAuthCodeProvider(t *testing.T) {
+func TestCrossPlatformCoverageConfigValidateRequiresAuthCodeProvider(t *testing.T) {
 	err := Config{KeystoreDir: "/tmp/keys"}.validate()
 	if !errors.Is(err, ErrNoAuthCodeProvider) {
 		t.Fatalf("validate() = %v, want ErrNoAuthCodeProvider", err)
 	}
 }
 
-func TestConfigValidateAcceptsCompleteConfig(t *testing.T) {
+func TestCrossPlatformCoverageConfigValidateRequiresResolvedKeystoreDir(t *testing.T) {
+	err := Config{KeystoreDir: "", AuthCode: StaticAuthCode("code"), KeyServer: "https://key.example.test"}.validate()
+	if err == nil || !strings.Contains(err.Error(), "KeystoreDir") {
+		t.Fatalf("validate() = %v, want empty KeystoreDir error", err)
+	}
+}
+
+func TestCrossPlatformCoverageConfigValidateAcceptsCompleteConfig(t *testing.T) {
 	cfg := Config{
 		KeystoreDir: "/tmp/keys",
 		AuthCode:    StaticAuthCode("code"),
@@ -117,14 +137,14 @@ func TestConfigValidateAcceptsCompleteConfig(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRequiresKeyServer(t *testing.T) {
+func TestCrossPlatformCoverageConfigValidateRequiresKeyServer(t *testing.T) {
 	err := Config{KeystoreDir: "/tmp/keys", AuthCode: StaticAuthCode("code")}.validate()
 	if !errors.Is(err, ErrNoKeyServer) {
 		t.Fatalf("validate() = %v, want ErrNoKeyServer", err)
 	}
 }
 
-func TestConfigValidateRejectsHTTPKeyServer(t *testing.T) {
+func TestCrossPlatformCoverageConfigValidateRejectsHTTPKeyServer(t *testing.T) {
 	err := Config{
 		KeystoreDir: "/tmp/keys",
 		AuthCode:    StaticAuthCode("code"),
@@ -135,7 +155,7 @@ func TestConfigValidateRejectsHTTPKeyServer(t *testing.T) {
 	}
 }
 
-func TestPrepareKeystoreCreatesOwnerOnlyDir(t *testing.T) {
+func TestCrossPlatformCoveragePrepareKeystoreCreatesOwnerOnlyDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "keystore")
 	if err := prepareKeystore(dir); err != nil {
 		t.Fatalf("prepareKeystore() = %v", err)
@@ -155,7 +175,7 @@ func TestPrepareKeystoreCreatesOwnerOnlyDir(t *testing.T) {
 	}
 }
 
-func TestPrepareKeystoreTightensLoosePermissions(t *testing.T) {
+func TestCrossPlatformCoveragePrepareKeystoreTightensLoosePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permission bits are not modelled on Windows")
 	}
@@ -175,7 +195,7 @@ func TestPrepareKeystoreTightensLoosePermissions(t *testing.T) {
 	}
 }
 
-func TestPrepareKeystoreRejectsFilePath(t *testing.T) {
+func TestCrossPlatformCoveragePrepareKeystoreRejectsFilePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keystore")
 	if err := os.WriteFile(path, []byte("not a dir"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
@@ -186,7 +206,58 @@ func TestPrepareKeystoreRejectsFilePath(t *testing.T) {
 	}
 }
 
-func TestOpenRejectsMissingAuthCodeProviderBeforeTouchingDisk(t *testing.T) {
+func TestCrossPlatformCoveragePrepareKeystoreReportsStatFailure(t *testing.T) {
+	oldStat := statKeystore
+	t.Cleanup(func() { statKeystore = oldStat })
+	wantErr := errors.New("stat failed")
+	statKeystore = func(string) (os.FileInfo, error) {
+		return nil, wantErr
+	}
+
+	err := prepareKeystore(filepath.Join(t.TempDir(), "keystore"))
+	if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "stat keystore dir") {
+		t.Fatalf("prepareKeystore() = %v, want stat failure", err)
+	}
+}
+
+func TestCrossPlatformCoveragePrepareKeystoreRejectsNonDirectoryStatResult(t *testing.T) {
+	oldStat := statKeystore
+	t.Cleanup(func() { statKeystore = oldStat })
+	statKeystore = func(string) (os.FileInfo, error) {
+		return fakeFileInfo{mode: 0o600, isDir: false}, nil
+	}
+
+	err := prepareKeystore(filepath.Join(t.TempDir(), "keystore"))
+	if err == nil || !strings.Contains(err.Error(), "is not a directory") {
+		t.Fatalf("prepareKeystore() = %v, want non-directory error", err)
+	}
+}
+
+func TestCrossPlatformCoveragePrepareKeystoreReportsChmodFailure(t *testing.T) {
+	if !runtimeSupportsPOSIXPerm {
+		t.Skip("POSIX chmod branch is not built on this platform")
+	}
+	oldStat := statKeystore
+	oldChmod := chmodKeystore
+	t.Cleanup(func() {
+		statKeystore = oldStat
+		chmodKeystore = oldChmod
+	})
+	statKeystore = func(string) (os.FileInfo, error) {
+		return fakeFileInfo{mode: 0o755 | fs.ModeDir, isDir: true}, nil
+	}
+	wantErr := errors.New("chmod failed")
+	chmodKeystore = func(string, fs.FileMode) error {
+		return wantErr
+	}
+
+	err := prepareKeystore(filepath.Join(t.TempDir(), "keystore"))
+	if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "restrict keystore dir permissions") {
+		t.Fatalf("prepareKeystore() = %v, want chmod failure", err)
+	}
+}
+
+func TestCrossPlatformCoverageOpenRejectsMissingAuthCodeProviderBeforeTouchingDisk(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keystore")
 	_, err := Open(context.Background(), Config{KeystoreDir: dir})
 	if !errors.Is(err, ErrNoAuthCodeProvider) {
@@ -197,7 +268,7 @@ func TestOpenRejectsMissingAuthCodeProviderBeforeTouchingDisk(t *testing.T) {
 	}
 }
 
-func TestOpenRejectsMissingKeyServerBeforeTouchingDisk(t *testing.T) {
+func TestCrossPlatformCoverageOpenRejectsMissingKeyServerBeforeTouchingDisk(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keystore")
 	_, err := Open(context.Background(), Config{
 		KeystoreDir: dir,
@@ -211,7 +282,7 @@ func TestOpenRejectsMissingKeyServerBeforeTouchingDisk(t *testing.T) {
 	}
 }
 
-func TestOpenWithoutBackendReportsUnavailable(t *testing.T) {
+func TestCrossPlatformCoverageOpenWithoutBackendReportsUnavailable(t *testing.T) {
 	if Available() {
 		t.Skip("this binary has the safechat backend compiled in")
 	}
@@ -225,13 +296,90 @@ func TestOpenWithoutBackendReportsUnavailable(t *testing.T) {
 	}
 }
 
-func TestAvailableAgreesWithBackendVersion(t *testing.T) {
+func TestCrossPlatformCoverageOpenBackendSeamEdges(t *testing.T) {
+	oldAvailable := backendAvailable
+	oldBackend := openBackend
+	t.Cleanup(func() {
+		backendAvailable = oldAvailable
+		openBackend = oldBackend
+		process.mu.Lock()
+		process.open = false
+		process.mu.Unlock()
+	})
+
+	backendAvailable = func() bool { return true }
+	wantErr := errors.New("backend failed")
+	openBackend = func(context.Context, Config) (Cipher, error) {
+		return nil, wantErr
+	}
+	_, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Open() backend error = %v, want %v", err, wantErr)
+	}
+
+	backend := &fakeCipher{}
+	openBackend = func(context.Context, Config) (Cipher, error) {
+		return backend, nil
+	}
+	cipher, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	})
+	if err != nil {
+		t.Fatalf("Open() success = %v", err)
+	}
+	if _, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	}); !errors.Is(err, ErrAlreadyOpen) {
+		t.Fatalf("second Open() = %v, want ErrAlreadyOpen", err)
+	}
+	if err := cipher.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageOpenReportsKeystorePrepareFailure(t *testing.T) {
+	oldAvailable := backendAvailable
+	oldBackend := openBackend
+	t.Cleanup(func() {
+		backendAvailable = oldAvailable
+		openBackend = oldBackend
+	})
+
+	backendAvailable = func() bool { return true }
+	openBackend = func(context.Context, Config) (Cipher, error) {
+		t.Fatal("backend should not be opened after keystore preparation fails")
+		return nil, nil
+	}
+
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(file, "child"),
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	})
+	if err == nil || !strings.Contains(err.Error(), "create keystore dir") {
+		t.Fatalf("Open() = %v, want keystore preparation error", err)
+	}
+}
+
+func TestCrossPlatformCoverageAvailableAgreesWithBackendVersion(t *testing.T) {
 	if Available() != (BackendVersion != "") {
 		t.Fatalf("Available() = %v but BackendVersion = %q; they must agree", Available(), BackendVersion)
 	}
 }
 
-func TestTrackedCipherRoundTripsThroughBackend(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherRoundTripsThroughBackend(t *testing.T) {
 	backend := &fakeCipher{}
 	cipher := newTrackedForTest(t, backend)
 
@@ -248,7 +396,7 @@ func TestTrackedCipherRoundTripsThroughBackend(t *testing.T) {
 	}
 }
 
-func TestTrackedCipherRejectsEmptyCorpID(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherRejectsEmptyCorpID(t *testing.T) {
 	cipher := newTrackedForTest(t, &fakeCipher{})
 	if _, err := cipher.EncryptMessage(context.Background(), "", "staff", []byte("x")); !errors.Is(err, ErrNoCorpID) {
 		t.Fatalf("EncryptMessage() = %v, want ErrNoCorpID", err)
@@ -258,7 +406,7 @@ func TestTrackedCipherRejectsEmptyCorpID(t *testing.T) {
 	}
 }
 
-func TestTrackedCipherRejectsEmptyPayload(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherRejectsEmptyPayload(t *testing.T) {
 	cipher := newTrackedForTest(t, &fakeCipher{})
 	if _, err := cipher.EncryptMessage(context.Background(), "corp", "staff", nil); !errors.Is(err, ErrEmptyPayload) {
 		t.Fatalf("EncryptMessage() = %v, want ErrEmptyPayload", err)
@@ -268,7 +416,7 @@ func TestTrackedCipherRejectsEmptyPayload(t *testing.T) {
 	}
 }
 
-func TestTrackedCipherRejectsUseAfterClose(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherRejectsUseAfterClose(t *testing.T) {
 	backend := &fakeCipher{}
 	cipher := newTrackedForTest(t, backend)
 	if err := cipher.Close(); err != nil {
@@ -279,7 +427,7 @@ func TestTrackedCipherRejectsUseAfterClose(t *testing.T) {
 	}
 }
 
-func TestTrackedCipherCloseIsIdempotentAndClosesBackendOnce(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherCloseIsIdempotentAndClosesBackendOnce(t *testing.T) {
 	backend := &fakeCipher{}
 	cipher := newTrackedForTest(t, backend)
 	for i := 0; i < 3; i++ {
@@ -292,7 +440,7 @@ func TestTrackedCipherCloseIsIdempotentAndClosesBackendOnce(t *testing.T) {
 	}
 }
 
-func TestTrackedCipherCloseReleasesProcessSlot(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherCloseReleasesProcessSlot(t *testing.T) {
 	cipher := newTrackedForTest(t, &fakeCipher{})
 	if err := cipher.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
@@ -305,7 +453,7 @@ func TestTrackedCipherCloseReleasesProcessSlot(t *testing.T) {
 	}
 }
 
-func TestTrackedCipherClosePropagatesBackendError(t *testing.T) {
+func TestCrossPlatformCoverageTrackedCipherClosePropagatesBackendError(t *testing.T) {
 	wantErr := errors.New("backend close failed")
 	cipher := newTrackedForTest(t, &fakeCipher{closeErr: wantErr})
 	if err := cipher.Close(); !errors.Is(err, wantErr) {
@@ -319,9 +467,16 @@ func TestTrackedCipherClosePropagatesBackendError(t *testing.T) {
 	}
 }
 
-func TestOpenRefusesSecondCipherWhileOneIsOpen(t *testing.T) {
-	// The vendor C library keeps global state, so a second concurrent
-	// cipher must be refused rather than silently corrupt it.
+func TestCrossPlatformCoverageOpenRefusesSecondCipherWhileOneIsOpen(t *testing.T) {
+	oldAvailable := backendAvailable
+	oldBackend := openBackend
+	t.Cleanup(func() {
+		backendAvailable = oldAvailable
+		openBackend = oldBackend
+	})
+	backendAvailable = func() bool { return true }
+	openBackend = func(context.Context, Config) (Cipher, error) { return &fakeCipher{}, nil }
+
 	process.mu.Lock()
 	process.open = true
 	process.mu.Unlock()
@@ -330,10 +485,6 @@ func TestOpenRefusesSecondCipherWhileOneIsOpen(t *testing.T) {
 		process.open = false
 		process.mu.Unlock()
 	})
-
-	if !Available() {
-		t.Skip("Open reports ErrUnavailable before reaching the single-instance guard")
-	}
 	_, err := Open(context.Background(), Config{
 		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
 		AuthCode:    StaticAuthCode("code"),

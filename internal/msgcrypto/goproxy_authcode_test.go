@@ -16,6 +16,7 @@ package msgcrypto
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func (p *corpCountingProvider) AuthCodeForCorp(_ context.Context, corpID string)
 	return "code-for-" + corpID, nil
 }
 
-func TestMintAuthCodeForProxyUsesCorpProvider(t *testing.T) {
+func TestCrossPlatformCoverageMintAuthCodeForProxyUsesCorpProvider(t *testing.T) {
 	inner := &corpCountingProvider{}
 	code, err := mintAuthCodeForProxy(inner, "sso.anhei.test", "ding_corp", "https://sso.anhei.test/login")
 	if err != nil || code != "code-for-ding_corp" {
@@ -56,7 +57,7 @@ func TestMintAuthCodeForProxyUsesCorpProvider(t *testing.T) {
 	}
 }
 
-func TestMintAuthCodeForProxyInvalidatesUnconsumedCache(t *testing.T) {
+func TestCrossPlatformCoverageMintAuthCodeForProxyInvalidatesUnconsumedCache(t *testing.T) {
 	inner := &countingProvider{code: "once"}
 	cache := NewCachedAuthCode(inner, time.Hour)
 
@@ -81,7 +82,7 @@ func TestMintAuthCodeForProxyInvalidatesUnconsumedCache(t *testing.T) {
 	}
 }
 
-func TestMintAuthCodeForProxyRejectsDomainMismatchWithoutFetching(t *testing.T) {
+func TestCrossPlatformCoverageMintAuthCodeForProxyRejectsDomainMismatchWithoutFetching(t *testing.T) {
 	inner := &corpCountingProvider{code: "once"}
 	_, err := mintAuthCodeForProxy(inner, "sso.anhei.test", "ding_corp", "evil.example.test")
 	if !errors.Is(err, ErrRedirectHostMismatch) {
@@ -92,8 +93,33 @@ func TestMintAuthCodeForProxyRejectsDomainMismatchWithoutFetching(t *testing.T) 
 	}
 }
 
-func TestMintAuthCodeForProxyRequiresProvider(t *testing.T) {
+func TestCrossPlatformCoverageMintAuthCodeForProxyRequiresProvider(t *testing.T) {
 	if _, err := mintAuthCodeForProxy(nil, "", "ding_corp", ""); !errors.Is(err, ErrNoAuthCodeProvider) {
 		t.Fatalf("mint = %v, want ErrNoAuthCodeProvider", err)
+	}
+}
+
+func TestCrossPlatformCoverageMintAuthCodeForProxyInvalidatesOnFailure(t *testing.T) {
+	inner := &countingProvider{err: errors.New("boom")}
+	cache := NewCachedAuthCode(inner, time.Hour)
+	if _, err := mintAuthCodeForProxy(cache, "", "ding_corp", ""); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("provider error = %v", err)
+	}
+	inner.mu.Lock()
+	inner.err = nil
+	inner.code = ""
+	inner.mu.Unlock()
+	if code, err := mintAuthCodeForProxy(cache, "", "ding_corp", ""); err != nil || code == "" {
+		t.Fatalf("post-error mint = %q, %v", code, err)
+	}
+
+	empty := &corpCountingProvider{code: ""}
+	if _, err := mintAuthCodeForProxy(AuthCodeFunc(func(context.Context) (string, error) {
+		return "", nil
+	}), "", "ding_corp", ""); !errors.Is(err, ErrNoAuthCode) {
+		t.Fatalf("empty provider err = %v", err)
+	}
+	if code, err := mintAuthCodeForProxy(empty, "", "ding_corp", ""); err != nil || code != "code-for-ding_corp" {
+		t.Fatalf("corp provider sanity = %q, %v", code, err)
 	}
 }

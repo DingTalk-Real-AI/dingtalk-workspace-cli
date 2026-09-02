@@ -22,6 +22,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/spf13/cobra"
 )
 
 func newSafeChatSelfTestForTest() (*bytes.Buffer, func(...string) error) {
@@ -137,6 +138,16 @@ func TestCrossPlatformCoverageSafeChatStubAndMessageCryptoWiring(t *testing.T) {
 	t.Run("safechat_command_excluded", func(t *testing.T) {
 		if got := newSafeChatCommand(); got != nil {
 			t.Fatalf("newSafeChatCommand() = %#v, want nil", got)
+		}
+		base := []*cobra.Command{{Use: "base"}}
+		if got := appendOptionalCommand(base, nil); len(got) != 1 || got[0].Name() != "base" {
+			t.Fatalf("append nil = %#v", got)
+		}
+		if got := appendOptionalCommand(base, &cobra.Command{Use: "extra"}); len(got) != 2 || got[1].Name() != "extra" {
+			t.Fatalf("append command = %#v", got)
+		}
+		if cmd, _, err := NewRootCommand(context.Background()).Find([]string{"safechat"}); err == nil && cmd != nil && cmd.Name() == "safechat" {
+			t.Fatalf("safechat command should be excluded from default root: %#v", cmd)
 		}
 	})
 	t.Run("app_crypto_client_defaults", func(t *testing.T) {

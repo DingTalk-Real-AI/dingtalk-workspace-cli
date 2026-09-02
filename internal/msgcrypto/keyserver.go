@@ -34,7 +34,7 @@ func validateKeyServer(raw string) error {
 	if !strings.EqualFold(u.Scheme, "https") {
 		return fmt.Errorf("%w: %q", ErrKeyServerNotHTTPS, raw)
 	}
-	if hostnameOf(raw) == "" {
+	if u.Hostname() == "" {
 		return fmt.Errorf("%w: %q", ErrInvalidKeyServer, raw)
 	}
 	return nil

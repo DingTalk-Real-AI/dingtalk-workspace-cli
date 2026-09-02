@@ -31,7 +31,7 @@ import (
 // an authCode is only spent when a key is actually fetched, and asserting that
 // encryption fails without one is exactly the behaviour we want pinned.
 
-func TestBackendIsReportedAvailable(t *testing.T) {
+func TestCrossPlatformCoverageBackendIsReportedAvailable(t *testing.T) {
 	if !Available() {
 		t.Fatal("Available() = false in a safechat build")
 	}
@@ -43,7 +43,7 @@ func TestBackendIsReportedAvailable(t *testing.T) {
 	}
 }
 
-func TestOpenInitialisesCLibraryAndClosesCleanly(t *testing.T) {
+func TestCrossPlatformCoverageOpenInitialisesCLibraryAndClosesCleanly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keystore")
 
 	cipher, err := Open(context.Background(), Config{
@@ -78,7 +78,7 @@ func TestOpenInitialisesCLibraryAndClosesCleanly(t *testing.T) {
 	}
 }
 
-func TestOpenRefusesConcurrentSecondCipher(t *testing.T) {
+func TestCrossPlatformCoverageOpenRefusesConcurrentSecondCipher(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "keystore")
 	first, err := Open(context.Background(), Config{
 		KeystoreDir: dir,
@@ -100,7 +100,7 @@ func TestOpenRefusesConcurrentSecondCipher(t *testing.T) {
 	}
 }
 
-func TestOpenHonoursCancelledContext(t *testing.T) {
+func TestCrossPlatformCoverageOpenHonoursCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -114,7 +114,7 @@ func TestOpenHonoursCancelledContext(t *testing.T) {
 	}
 }
 
-func TestEncryptWithoutUsableKeyReportsAuthCodeCause(t *testing.T) {
+func TestCrossPlatformCoverageEncryptWithoutUsableKeyReportsAuthCodeCause(t *testing.T) {
 	// A cold keystore forces a key request. With no reachable key server the
 	// operation must fail with a message that names the auth code, rather
 	// than a bare vendor return code.
@@ -139,7 +139,7 @@ func TestEncryptWithoutUsableKeyReportsAuthCodeCause(t *testing.T) {
 	}
 }
 
-func TestCipherRejectsBadArgumentsBeforeCallingC(t *testing.T) {
+func TestCrossPlatformCoverageCipherRejectsBadArgumentsBeforeCallingC(t *testing.T) {
 	cipher, err := Open(context.Background(), Config{
 		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
 		AuthCode:    StaticAuthCode("placeholder-code"),

@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,7 @@ import (
 	"testing"
 )
 
-func TestFetchVendorAuthCodeSuccessEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageFetchVendorAuthCodeSuccessEnvelope(t *testing.T) {
 	var gotBody map[string]string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != MCPVendorAuthCodePath {
@@ -76,7 +77,7 @@ func TestFetchVendorAuthCodeSuccessEnvelope(t *testing.T) {
 	}
 }
 
-func TestFetchVendorAuthCodeParsesAlways200ServiceResult(t *testing.T) {
+func TestCrossPlatformCoverageFetchVendorAuthCodeParsesAlways200ServiceResult(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, `{"success":false,"errorCode":"VENDOR_NOT_ENABLED","errorMsg":"not installed"}`)
@@ -100,7 +101,7 @@ func TestFetchVendorAuthCodeParsesAlways200ServiceResult(t *testing.T) {
 	}
 }
 
-func TestFetchVendorAuthCodeRequiresLocalFields(t *testing.T) {
+func TestCrossPlatformCoverageFetchVendorAuthCodeRequiresLocalFields(t *testing.T) {
 	_, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{Vendor: "safechat", CorpID: "ding"})
 	var verr *VendorAuthCodeError
 	if !errors.As(err, &verr) || verr.Code != VendorAuthCodeParamError {
@@ -108,7 +109,7 @@ func TestFetchVendorAuthCodeRequiresLocalFields(t *testing.T) {
 	}
 }
 
-func TestFetchVendorAuthCodeKeepsHTTPStatusOnNon200(t *testing.T) {
+func TestCrossPlatformCoverageFetchVendorAuthCodeKeepsHTTPStatusOnNon200(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "oops", http.StatusBadGateway)
 	}))
@@ -128,7 +129,7 @@ func TestFetchVendorAuthCodeKeepsHTTPStatusOnNon200(t *testing.T) {
 	}
 }
 
-func TestParseVendorAuthCodeResponseDefaultsExpiresIn(t *testing.T) {
+func TestCrossPlatformCoverageParseVendorAuthCodeResponseDefaultsExpiresIn(t *testing.T) {
 	got, err := parseVendorAuthCodeResponse([]byte(`{"authCode":"x"}`))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -138,7 +139,7 @@ func TestParseVendorAuthCodeResponseDefaultsExpiresIn(t *testing.T) {
 	}
 }
 
-func TestVendorAuthCodeErrorRetryable(t *testing.T) {
+func TestCrossPlatformCoverageVendorAuthCodeErrorRetryable(t *testing.T) {
 	for _, code := range []string{VendorAuthCodeTokenInvalid, VendorAuthCodeRateLimited, VendorAuthCodeInternalError} {
 		if !(&VendorAuthCodeError{Code: code}).Retryable() {
 			t.Fatalf("%s should be retryable", code)
@@ -149,7 +150,7 @@ func TestVendorAuthCodeErrorRetryable(t *testing.T) {
 	}
 }
 
-func TestFetchVendorAuthCodeDoesNotSendBlankCLIVersionHeader(t *testing.T) {
+func TestCrossPlatformCoverageFetchVendorAuthCodeDoesNotSendBlankCLIVersionHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("x-dws-cli-version"); got != "" {
 			t.Fatalf("x-dws-cli-version = %q, want empty", got)
@@ -174,5 +175,119 @@ func TestFetchVendorAuthCodeDoesNotSendBlankCLIVersionHeader(t *testing.T) {
 	}
 	if strings.Contains(got.AuthCode, "redirect") {
 		t.Fatalf("unexpected code %q", got.AuthCode)
+	}
+}
+
+type failingReadCloser struct{}
+
+func (failingReadCloser) Read([]byte) (int, error) { return 0, fmt.Errorf("read failed") }
+func (failingReadCloser) Close() error             { return nil }
+
+type vendorRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f vendorRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestCrossPlatformCoverageVendorAuthCodeRemainingEdges(t *testing.T) {
+	if got := (*VendorAuthCodeError)(nil).Error(); got != "vendorAuthCode failed" {
+		t.Fatalf("nil error string = %q", got)
+	}
+	if (*VendorAuthCodeError)(nil).Retryable() {
+		t.Fatal("nil vendorAuthCode error should not be retryable")
+	}
+	if got := (&VendorAuthCodeError{Code: VendorAuthCodeInternalError}).Error(); got != "vendorAuthCode INTERNAL_ERROR" {
+		t.Fatalf("code-only error string = %q", got)
+	}
+	if _, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{
+		AccessToken: "token",
+		ClientID:    "client",
+		Vendor:      "safechat",
+		CorpID:      "corp",
+		BaseURL:     "://bad",
+	}); err == nil || !strings.Contains(err.Error(), "creating vendorAuthCode request") {
+		t.Fatalf("bad request URL err = %v", err)
+	}
+	if _, err := parseVendorAuthCodeResponse([]byte("{")); err == nil || !strings.Contains(err.Error(), "parsing vendorAuthCode response") {
+		t.Fatalf("parse error = %v", err)
+	}
+	if _, err := parseVendorAuthCodeResponse([]byte(`{"success":false,"errorMsg":"failed"}`)); err == nil || !strings.Contains(err.Error(), VendorAuthCodeInternalError) {
+		t.Fatalf("missing-code service error = %v", err)
+	}
+	if _, err := parseVendorAuthCodeResponse([]byte(`{"authCode":" "}`)); err == nil || !strings.Contains(err.Error(), "missing authCode") {
+		t.Fatalf("missing authCode error = %v", err)
+	}
+
+	readFailClient := &http.Client{Transport: vendorRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: failingReadCloser{}, Header: http.Header{}, Request: req}, nil
+	})}
+	if _, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{
+		AccessToken: "token",
+		ClientID:    "client",
+		Vendor:      "safechat",
+		CorpID:      "corp",
+		HTTPClient:  readFailClient,
+		BaseURL:     "https://portal.example.test",
+	}); err == nil || !strings.Contains(err.Error(), "reading vendorAuthCode response") {
+		t.Fatalf("read error = %v", err)
+	}
+
+	sendFailClient := &http.Client{Transport: vendorRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("send failed")
+	})}
+	if _, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{
+		AccessToken: "token",
+		ClientID:    "client",
+		Vendor:      "safechat",
+		CorpID:      "corp",
+		HTTPClient:  sendFailClient,
+		BaseURL:     "https://portal.example.test",
+	}); err == nil || !strings.Contains(err.Error(), "sending vendorAuthCode request") {
+		t.Fatalf("send error = %v", err)
+	}
+
+	non200ReadFailClient := &http.Client{Transport: vendorRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusBadGateway, Body: failingReadCloser{}, Header: http.Header{}, Request: req}, nil
+	})}
+	var statusErr *HTTPStatusError
+	_, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{
+		AccessToken: "token",
+		ClientID:    "client",
+		Vendor:      "safechat",
+		CorpID:      "corp",
+		HTTPClient:  non200ReadFailClient,
+		BaseURL:     "https://portal.example.test",
+	})
+	if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusBadGateway {
+		t.Fatalf("non-200 read error = %v", err)
+	}
+
+	defaultBaseClient := &http.Client{Transport: vendorRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(req.URL.Path, MCPVendorAuthCodePath) {
+			t.Fatalf("default base path = %s", req.URL.String())
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"authCode":"code"}`)), Header: http.Header{}, Request: req}, nil
+	})}
+	if _, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{
+		AccessToken: "token",
+		ClientID:    "client",
+		Vendor:      "safechat",
+		CorpID:      "corp",
+		HTTPClient:  defaultBaseClient,
+	}); err != nil {
+		t.Fatalf("default base fetch = %v", err)
+	}
+
+	oldClient := oauthHTTPClient
+	oauthHTTPClient = defaultBaseClient
+	t.Cleanup(func() { oauthHTTPClient = oldClient })
+	if _, err := FetchVendorAuthCode(context.Background(), VendorAuthCodeInput{
+		AccessToken: "token",
+		ClientID:    "client",
+		Vendor:      "safechat",
+		CorpID:      "corp",
+		BaseURL:     "https://portal.example.test",
+	}); err != nil {
+		t.Fatalf("default http client fetch = %v", err)
 	}
 }

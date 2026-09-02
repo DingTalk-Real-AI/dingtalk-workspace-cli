@@ -128,7 +128,7 @@ func (p *PortalAuthCode) loadSnapshot(ctx context.Context) (*auth.TokenData, err
 func (p *PortalAuthCode) fetchOnce(ctx context.Context, snap *auth.TokenData, token, corpID string) (*auth.VendorAuthCodeResult, error) {
 	fetch := p.fetch
 	if fetch == nil {
-		fetch = auth.FetchVendorAuthCode
+		return nil, fmt.Errorf("msgcrypto: portal authCode fetcher is not configured")
 	}
 	vendor := strings.TrimSpace(p.Vendor)
 	if vendor == "" {
