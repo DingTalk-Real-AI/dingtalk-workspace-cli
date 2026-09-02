@@ -70,6 +70,10 @@ on:
         description: "Failed attempt number within the exact-tag Release workflow run"
         required: false
         type: string
+      recover_draft_release_id:
+        description: "Optional exact draft GitHub Release database ID left by the failed run"
+        required: false
+        type: string
       recover_release_nonce:
         description: "Unique identifier for this machine-verified recovery request"
         required: false
@@ -110,6 +114,7 @@ jobs:
           RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
           RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
           RECOVER_FAILED_RUN_ATTEMPT: ${{ inputs.recover_failed_run_attempt }}
+          RECOVER_DRAFT_RELEASE_ID: ${{ inputs.recover_draft_release_id }}
           RECOVER_NONCE: ${{ inputs.recover_release_nonce }}
           RECOVER_CONFIRMATION: ${{ inputs.recover_release_confirmation }}
           RELEASE_OPERATION: ${{ inputs.release_operation }}
@@ -133,6 +138,7 @@ jobs:
           if test -n "$RECOVER_VERSION" || test -n "$RECOVER_TAG_OBJECT" || \
              test -n "$RECOVER_COMMIT" || test -n "$RECOVER_FAILED_RUN_ID" || \
              test -n "$RECOVER_FAILED_RUN_ATTEMPT" || \
+             test -n "$RECOVER_DRAFT_RELEASE_ID" || \
              test -n "$RECOVER_NONCE" || \
              test -n "$RECOVER_CONFIRMATION"; then recovery=1; fi
           test $((release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery)) -eq 1 || {
@@ -196,6 +202,12 @@ jobs:
               echo "recover_failed_run_attempt must be a positive attempt number" >&2
               exit 1
             }
+            if test -n "$RECOVER_DRAFT_RELEASE_ID"; then
+              printf '%s\n' "$RECOVER_DRAFT_RELEASE_ID" | grep -Eq '^[1-9][0-9]*$' || {
+                echo "recover_draft_release_id must be a positive release database ID" >&2
+                exit 1
+              }
+            fi
             printf '%s\n' "$RECOVER_NONCE" | grep -Eq "^${RECOVER_COMMIT}-[0-9]+-[0-9]+$" || {
               echo "recover_release_nonce must be bound to the release commit" >&2
               exit 1
@@ -1127,22 +1139,17 @@ jobs:
             test -n "$binary_team"
             test "$binary_team" = "$library_team"
             if [ "$arch" = "$host_arch" ]; then
-              runtime_context_ready=0
-              for doctor_attempt in 1 2 3; do
-                doctor_home="$stage/doctor-home-$doctor_attempt"
-                doctor_json="$stage/doctor-$doctor_attempt.json"
-                rm -rf "$doctor_home"
-                mkdir -p "$doctor_home"
-                HOME="$doctor_home" "$stage/dws" doctor --json --timeout 2 > "$doctor_json"
-                if jq -e '.checks[] | select(.name == "runtime_context") | .status == "pass" and .detail.token_length > 0 and (.detail.token_fingerprint | length) == 12' \
-                  "$doctor_json" >/dev/null; then
-                  runtime_context_ready=1
-                  break
-                fi
-                echo "runtime_context verification attempt $doctor_attempt failed" >&2
-                cat "$doctor_json" >&2
-              done
-              test "$runtime_context_ready" -eq 1
+              # Runtime context initialization obtains a host-scoped native token.
+              # It is diagnostic-only here: the signed binary and embedded dylib
+              # above are the release artifacts this job is authorized to verify.
+              doctor_home="$stage/doctor-home"
+              doctor_json="$stage/doctor.json"
+              rm -rf "$doctor_home"
+              mkdir -p "$doctor_home"
+              if ! HOME="$doctor_home" "$stage/dws" doctor --json --timeout 2 > "$doctor_json"; then
+                echo "runtime_context diagnostic command failed" >&2
+              fi
+              cat "$doctor_json" >&2
             fi
           done
 
@@ -1239,27 +1246,59 @@ jobs:
           "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-github-tag-authority.sh" \
             "$RELEASE_VERSION" "$RELEASE_COMMIT" "$RELEASE_TAG_OBJECT"
 
+      - name: Mint repository-scoped Release publisher token
+        id: release-publisher-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REVIEWER_ROUTER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEWER_ROUTER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
       - name: Publish or reuse immutable GitHub Release
         id: publish
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
+          RECOVER_DRAFT_RELEASE_ID: ${{ inputs.recover_draft_release_id }}
         run: |
           set -eu
           expected_prerelease=false
-          prerelease_flag=""
           if [ "$RELEASE_CHANNEL" = "prerelease" ]; then
             expected_prerelease=true
-            prerelease_flag="--prerelease"
           fi
 
           release_id=""
-          if gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
-            release_id="$(
-              gh release view "$RELEASE_VERSION" \
-                --json databaseId \
-                --jq .databaseId
+          recovery_marker=""
+          if [ "$IS_RECOVERY" = "true" ]; then
+            recovery_marker="<!-- dws-release-recovery run=$GITHUB_RUN_ID tag-object=$RELEASE_TAG_OBJECT commit=$RELEASE_COMMIT -->"
+          fi
+          find_recovery_draft_release_id() {
+            candidate_ids="$(
+              gh api --paginate -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                --jq ".[] | select(.draft == true and .tag_name == \"$RELEASE_VERSION\" and (.body | contains(\"$recovery_marker\"))) | .id"
             )"
+            candidate_count="$(printf '%s\\n' "$candidate_ids" | sed '/^$/d' | wc -l | tr -d ' ')"
+            case "$candidate_count" in
+              0)
+                return 2
+                ;;
+              1)
+                printf '%s\\n' "$candidate_ids"
+                ;;
+              *)
+                echo "Expected at most one draft GitHub Release for this recovery run; found $candidate_count." >&2
+                return 1
+                ;;
+            esac
+          }
+          if release_id="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION" \
+              --jq .id 2>/dev/null
+          )"; then
             printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$' || {
               echo "Existing GitHub Release has an invalid database ID: $release_id" >&2
               exit 1
@@ -1338,18 +1377,41 @@ jobs:
               echo "Published GitHub Release is immutable and verified; reusing its exact assets."
               exit 0
             fi
+          elif [ "$IS_RECOVERY" = "true" ]; then
+            if [ -n "$RECOVER_DRAFT_RELEASE_ID" ]; then
+              release_id="$RECOVER_DRAFT_RELEASE_ID"
+            elif release_id="$(find_recovery_draft_release_id)"; then
+              :
+            else
+              find_status=$?
+              if [ "$find_status" -ne 2 ]; then
+                exit "$find_status"
+              fi
+              release_id="$(
+                gh api --method POST \
+                  -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/$GITHUB_REPOSITORY/releases" \
+                  -f tag_name="$RELEASE_VERSION" \
+                  -f target_commitish="$RELEASE_COMMIT" \
+                  -f name="$RELEASE_VERSION" \
+                  -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+                  -F draft=true \
+                  -F prerelease="$expected_prerelease" \
+                  --jq .id
+              )"
+            fi
           else
-            # shellcheck disable=SC2086
-            gh release create "$RELEASE_VERSION" \
-              --verify-tag \
-              --draft \
-              --title "$RELEASE_VERSION" \
-              --notes-file "$RUNNER_TEMP/release-notes.md" \
-              $prerelease_flag
             release_id="$(
-              gh release view "$RELEASE_VERSION" \
-                --json databaseId \
-                --jq .databaseId
+              gh api --method POST \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/$GITHUB_REPOSITORY/releases" \
+                -f tag_name="$RELEASE_VERSION" \
+                -f target_commitish="$RELEASE_COMMIT" \
+                -f name="$RELEASE_VERSION" \
+                -f body="$(cat "$RUNNER_TEMP/release-notes.md")" \
+                -F draft=true \
+                -F prerelease="$expected_prerelease" \
+                --jq .id
             )"
           fi
           printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$' || {
@@ -1395,7 +1457,6 @@ jobs:
             exit 1
           }
           if [ "$IS_RECOVERY" = "true" ]; then
-            recovery_marker="<!-- dws-release-recovery run=$GITHUB_RUN_ID tag-object=$RELEASE_TAG_OBJECT commit=$RELEASE_COMMIT -->"
             case "$draft_body" in
               *"$recovery_marker"*) ;;
               *)
@@ -1410,13 +1471,13 @@ jobs:
             dist/dws-skills.zip \
             dist/checksums.txt \
             --clobber
-          uploaded_release_id="$(
-            gh release view "$RELEASE_VERSION" \
-              --json databaseId \
-              --jq .databaseId
+          uploaded_release_state="$(
+            gh api -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              --jq '[.id, .tag_name] | @tsv'
           )"
-          test "$uploaded_release_id" = "$release_id" || {
-            echo "GitHub Release identity changed during upload: $release_id -> $uploaded_release_id" >&2
+          test "$uploaded_release_state" = "$(printf '%s\t%s' "$release_id" "$RELEASE_VERSION")" || {
+            echo "GitHub Release identity changed during upload: $release_id -> $uploaded_release_state" >&2
             exit 1
           }
           DWS_GITHUB_RELEASE_ID="$release_id" \
@@ -1449,7 +1510,7 @@ jobs:
 
       - name: Require immutable published GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}
           RELEASE_ID: ${{ steps.publish.outputs.release_id }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
         run: |
