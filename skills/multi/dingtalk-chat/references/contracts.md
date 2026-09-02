@@ -11,7 +11,7 @@
 
 <!-- DWS_MESSAGE_RESULT_CONTRACT_START -->
 - `version`: `im.message-list.v1`
-- `message_fields`: `messageId`, `conversationId`, `threadId`, `sender`, `senderId`, `senderType`, `messageType`, `text`, `createTime`, `updateTime`, `reactions`, `quotedMessage`, `forwarded`, `resourceRefs`
+- `message_fields`: `messageId`, `conversationId`, `threadId`, `sender`, `senderId`, `senderType`, `messageType`, `messageAiSendFlag`, `text`, `createTime`, `updateTime`, `reactions`, `quotedMessage`, `forwarded`, `resourceRefs`
 - `envelope_fields`: `contractVersion`, `messages`, `count`, `resolvedFilters`, `queryRange`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncated`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `scope`, `resourceDownloads`
 <!-- DWS_MESSAGE_RESULT_CONTRACT_END -->
 
