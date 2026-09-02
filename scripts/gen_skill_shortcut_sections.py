@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import gen_shortcut_comparison as shortcut_source  # noqa: E402
 
 CATALOG_PATH = ROOT / "docs" / "shortcut-public-catalog.json"
+CHAT_SEMANTIC_CATALOG = ROOT / "internal" / "shortcut" / "semantic_catalog.json"
 MONO_SKILL = ROOT / "skills" / "mono" / "SKILL.md"
 SHARED_SKILL = ROOT / "skills" / "multi" / "dingtalk-shared" / "SKILL.md"
 RUNTIME_CONTRACT_SOURCE = (
@@ -175,6 +176,36 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
     # to recover every runtime-normalized declaration. The reviewed public
     # catalog is the count authority for this non-enumerating overview.
     public_count = sum(1 for item_service, _ in load_public_catalog() if item_service == service)
+    if service == "chat":
+        source = json.loads(CHAT_SEMANTIC_CATALOG.read_text(encoding="utf-8"))
+        shortcuts = source.get("shortcuts", {})
+        default_availability = source.get("default_availability", "available")
+        featured = set(source.get("featured_shortcuts", []))
+        canonical = {
+            command
+            for command, record in shortcuts.items()
+            if record.get("public", False)
+            and record.get("availability", default_availability) == "available"
+            and record.get("disposition") != "alias_internal"
+        }
+        catalog_count = len(canonical - featured)
+        compatibility_count = sum(
+            1
+            for record in shortcuts.values()
+            if record.get("disposition") == "alias_internal"
+        )
+        unavailable_count = sum(
+            1
+            for record in shortcuts.values()
+            if record.get("availability", default_availability) == "unavailable"
+        )
+        return f"""{PRODUCT_START}
+## Shortcut 发现（Shortcut-first）
+
+`chat` 有 {len(canonical)} 条 canonical Shortcut：根 Help 展示 {len(featured)} 条 Featured，另 {catalog_count} 条在 Catalog、Schema 和精确 Help；{compatibility_count} 条兼容、{unavailable_count} 条 unavailable 不参与默认选路。
+
+优先按 Golden Route、意图表或 reference 选 Shortcut；仅在所需底层参数或原始响应未覆盖时使用 atomic。低频发现用 `dws shortcut list --service chat --format json`；参数/安全查 compact leaf Schema，flags 查所选 Shortcut 的精确 Help。
+{PRODUCT_END}"""
     if service in {"doc", "drive"}:
         discovery = """已知意图按下方路由。"""
     elif service == "aitable":

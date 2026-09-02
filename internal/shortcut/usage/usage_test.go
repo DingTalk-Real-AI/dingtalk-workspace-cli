@@ -52,6 +52,11 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 		Command:              "+compatibility-visible",
 		CompatibilityVisible: true,
 	})
+	shortcut.Register(shortcut.Shortcut{
+		Service:  "coverage-usage",
+		Command:  "+compatibility-tier",
+		HelpTier: shortcut.HelpTierCompatibility,
+	})
 
 	execute := func(args ...string) map[string]any {
 		t.Helper()
@@ -71,7 +76,7 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 
 	publicRows := execute("--service", "coverage-usage")
 	allRows := execute("--service", "coverage-usage", "--all")
-	if publicRows["count"].(float64) != 0 || allRows["count"].(float64) != 2 {
+	if publicRows["count"].(float64) != 0 || allRows["count"].(float64) != 3 {
 		t.Fatalf("hidden shortcuts were not filtered: public=%v all=%v", publicRows["count"], allRows["count"])
 	}
 	rows := allRows["shortcuts"].([]any)
@@ -85,6 +90,16 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 	if !foundCompatibilityVisible {
 		t.Fatalf("compatibility-visible shortcut row lost its non-public marker: %#v", rows)
 	}
+	foundCompatibilityTier := false
+	for _, value := range rows {
+		row := value.(map[string]any)
+		if row["command"] == "+compatibility-tier" {
+			foundCompatibilityTier = row["help_tier"] == "compatibility"
+		}
+	}
+	if !foundCompatibilityTier {
+		t.Fatalf("compatibility help tier was not published: %#v", rows)
+	}
 	missing := execute("--service", "__missing__")
 	if missing["count"].(float64) != 0 {
 		t.Fatalf("missing service returned shortcuts: %#v", missing)
@@ -93,8 +108,9 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 
 func TestCrossPlatformCoverageShortcutListRowPublishesCompleteContract(t *testing.T) {
 	row := newShortcutListRow(shortcut.Shortcut{
-		Service: "chat",
-		Command: "+messages",
+		Service:  "chat",
+		Command:  "+messages",
+		HelpTier: shortcut.HelpTierCatalog,
 		Flags: []shortcut.Flag{
 			{Name: "group", Required: true},
 			{Name: "internal", Hidden: true},
@@ -118,6 +134,9 @@ func TestCrossPlatformCoverageShortcutListRowPublishesCompleteContract(t *testin
 	}
 	if len(row.Constraints) != 1 || row.Constraints[0].Kind != shortcut.ConstraintExactlyOne {
 		t.Fatalf("constraints = %#v", row.Constraints)
+	}
+	if row.HelpTier != "catalog" {
+		t.Fatalf("help tier = %q, want catalog", row.HelpTier)
 	}
 }
 

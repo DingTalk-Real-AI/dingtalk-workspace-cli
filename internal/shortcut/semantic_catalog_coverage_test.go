@@ -136,6 +136,28 @@ func TestCrossPlatformCoverageSemanticCatalogRejectsInvalidRecords(t *testing.T)
 				}
 			}
 		}`,
+		"featured lacks prefix": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["messages"],"shortcuts":{}
+		}`,
+		"featured duplicate": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+messages","+messages"],"shortcuts":{}
+		}`,
+		"featured missing": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+missing"],"shortcuts":{}
+		}`,
+		"featured nonpublic": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+messages"],
+			"shortcuts":{"+messages":{"disposition":"semantic_adapter","semantic_delta":"reviewed","risk":"read","public":false,"reviewed":true}}
+		}`,
+		"featured alias": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+messages"],
+			"shortcuts":{"+messages":{"disposition":"alias_internal","semantic_delta":"reviewed","risk":"read","primary":"+primary","public":true,"reviewed":true}}
+		}`,
 	}
 	original := semanticCatalogJSON
 	t.Cleanup(func() { semanticCatalogJSON = original })
@@ -185,6 +207,47 @@ func TestCrossPlatformCoveragePublicCatalogSemanticAndGeneratedLookups(t *testin
 	if InPublicCatalog("unknown", "+missing") {
 		t.Fatal("unknown shortcut is public")
 	}
+	if owner, ok := PreferredShortcutForCLIPath("chat mute"); !ok || owner != "chat +conversation-mute" {
+		t.Fatalf("chat mute preferred owner = %q, %v", owner, ok)
+	}
+	if _, ok := PreferredShortcutForCLIPath("chat unknown"); ok {
+		t.Fatal("unknown atomic path has a preferred Shortcut")
+	}
+}
+
+func TestCrossPlatformCoverageAtomicOwnerCatalogRejectsInvalidRecords(t *testing.T) {
+	publicRecord := semanticCatalogRecord{
+		Disposition:  DispositionSemanticAdapter,
+		Public:       true,
+		Availability: AvailabilityAvailable,
+	}
+	records := map[string]semanticCatalogRecord{
+		publicCatalogKey("chat", "+owner"): publicRecord,
+	}
+	cases := map[string]string{
+		"bad path":      `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"mute":"+owner"},"shortcuts":{}}`,
+		"bad owner":     `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"owner"},"shortcuts":{}}`,
+		"missing owner": `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+missing"},"shortcuts":{}}`,
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("invalid atomic owner catalog did not panic")
+				}
+			}()
+			_ = mustLoadAtomicShortcutOwners(records, []byte(payload))
+		})
+	}
+
+	duplicateA := []byte(`{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+owner"},"shortcuts":{}}`)
+	duplicateB := []byte(`{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+owner"},"shortcuts":{}}`)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("duplicate atomic owner path did not panic")
+		}
+	}()
+	_ = mustLoadAtomicShortcutOwners(records, duplicateA, duplicateB)
 }
 
 func TestCrossPlatformCoverageCompatibilityVisibleStaysNonPublic(t *testing.T) {
