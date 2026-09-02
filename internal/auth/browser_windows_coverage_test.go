@@ -62,6 +62,9 @@ func TestCrossPlatformCoverageWindowsBrowserCoverageEdges(t *testing.T) {
 		t.Fatalf("default browser start hook = %v", err)
 	}
 	time.Sleep(20 * time.Millisecond)
+	if err := oldStart(exec.Command("dws-browser-command-that-should-not-exist")); err == nil {
+		t.Fatal("default browser start hook unexpectedly started a missing command")
+	}
 }
 
 func TestCrossPlatformCoverageWindowsBrowserHelperProcess(t *testing.T) {}
