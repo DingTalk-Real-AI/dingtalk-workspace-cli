@@ -28,7 +28,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（Shortcut-first）
 
-`chat` 有 93 条 canonical Shortcut：根 Help 展示 26 条 Featured，另 67 条在 Catalog、Schema 和精确 Help；5 条兼容、2 条 unavailable 不参与默认选路。
+`chat` 有 93 条 canonical Shortcut：根 Help 展示 26 条 Featured，另 67 条在 Catalog、Schema 和精确 Help；5 条 public 兼容入口从根 Help 省略，2 条 unavailable 不参与默认选路。
 
 优先按 Golden Route、意图表或 reference 选 Shortcut；仅在所需底层参数或原始响应未覆盖时使用 atomic。低频发现用 `dws shortcut list --service chat --format json`；参数/安全查 compact leaf Schema，flags 查所选 Shortcut 的精确 Help。
 <!-- VISIBLE_SHORTCUTS_END -->

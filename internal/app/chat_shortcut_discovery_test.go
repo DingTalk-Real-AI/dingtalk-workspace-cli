@@ -4,10 +4,12 @@
 package app
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageChatAtomicOwnersResolveToPublicShortcuts(t *testing.T) {
@@ -29,5 +31,21 @@ func TestCrossPlatformCoverageChatAtomicOwnersResolveToPublicShortcuts(t *testin
 		if err != nil || owner == nil || len(remaining) != 0 || owner.Hidden || !owner.Runnable() {
 			t.Errorf("preferred Shortcut %q is not public runnable: command=%v remaining=%v err=%v", ownerPath, owner, remaining, err)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageChatDiscoveryDefensiveBranches(t *testing.T) {
+	chat := &cobra.Command{Use: "chat"}
+	mute := &cobra.Command{Use: "mute", Run: func(*cobra.Command, []string) {}}
+	chat.AddCommand(mute)
+	annotatePreferredShortcutOwners([]*cobra.Command{nil, chat})
+	if got := mute.Annotations[preferredShortcutCLIPathAnnotation]; got != "chat +conversation-mute" {
+		t.Fatalf("chat mute preferred Shortcut = %q", got)
+	}
+
+	var output bytes.Buffer
+	renderChatHelpCommandSection(&output, "Empty:", nil)
+	if output.Len() != 0 {
+		t.Fatalf("empty Help command section rendered output: %q", output.String())
 	}
 }

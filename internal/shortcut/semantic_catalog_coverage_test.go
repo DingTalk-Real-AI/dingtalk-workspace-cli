@@ -140,6 +140,10 @@ func TestCrossPlatformCoverageSemanticCatalogRejectsInvalidRecords(t *testing.T)
 			"version":1,"service":"chat","default_availability":"available",
 			"featured_shortcuts":["messages"],"shortcuts":{}
 		}`,
+		"featured whitespace": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":[" +messages"],"shortcuts":{}
+		}`,
 		"featured duplicate": `{
 			"version":1,"service":"chat","default_availability":"available",
 			"featured_shortcuts":["+messages","+messages"],"shortcuts":{}
@@ -225,9 +229,11 @@ func TestCrossPlatformCoverageAtomicOwnerCatalogRejectsInvalidRecords(t *testing
 		publicCatalogKey("chat", "+owner"): publicRecord,
 	}
 	cases := map[string]string{
-		"bad path":      `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"mute":"+owner"},"shortcuts":{}}`,
-		"bad owner":     `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"owner"},"shortcuts":{}}`,
-		"missing owner": `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+missing"},"shortcuts":{}}`,
+		"json":            `{`,
+		"bad path":        `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"mute":"+owner"},"shortcuts":{}}`,
+		"path whitespace": `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{" chat mute":"+owner"},"shortcuts":{}}`,
+		"bad owner":       `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"owner"},"shortcuts":{}}`,
+		"missing owner":   `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+missing"},"shortcuts":{}}`,
 	}
 	for name, payload := range cases {
 		t.Run(name, func(t *testing.T) {

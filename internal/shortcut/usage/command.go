@@ -56,7 +56,7 @@ func newListCommand() *cobra.Command {
 				if svc != "" && s.Service != svc {
 					continue
 				}
-				if (s.Hidden || s.CompatibilityVisible || s.HelpTier == shortcut.HelpTierCompatibility) && !includeHidden {
+				if (s.Hidden || s.CompatibilityVisible) && !includeHidden {
 					continue
 				}
 				rows = append(rows, newShortcutListRow(s))

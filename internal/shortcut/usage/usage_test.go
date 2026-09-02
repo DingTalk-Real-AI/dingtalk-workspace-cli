@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
 )
 
 func TestCrossPlatformCoverageShortcutListDeclaresRuntimeSchemaDelivery(t *testing.T) {
@@ -103,6 +104,39 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 	missing := execute("--service", "__missing__")
 	if missing["count"].(float64) != 0 {
 		t.Fatalf("missing service returned shortcuts: %#v", missing)
+	}
+}
+
+func TestCrossPlatformCoverageChatCompatibilityHelpTierKeepsPublicCatalogSemantics(t *testing.T) {
+	cmd := newListCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--service", "chat"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Count     int               `json:"count"`
+		Shortcuts []shortcutListRow `json:"shortcuts"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Count != 98 || len(payload.Shortcuts) != 98 {
+		t.Fatalf("default Chat public Catalog = count:%d rows:%d, want 98/98", payload.Count, len(payload.Shortcuts))
+	}
+	compatibility := 0
+	for _, row := range payload.Shortcuts {
+		if row.HelpTier != string(shortcut.HelpTierCompatibility) {
+			continue
+		}
+		compatibility++
+		if !row.Public || row.CompatibilityVisible {
+			t.Errorf("Chat compatibility Help tier row must remain public until a reviewed Catalog migration: %#v", row)
+		}
+	}
+	if compatibility != 5 {
+		t.Fatalf("default Chat public Catalog compatibility Help tiers = %d, want 5", compatibility)
 	}
 }
 
