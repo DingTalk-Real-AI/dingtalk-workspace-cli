@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestCrossPlatformCoverageQuotedResourcesAndScalarVariants(t *testing.T) {
@@ -169,6 +170,17 @@ func TestCrossPlatformCoveragePaginationVariants(t *testing.T) {
 	}})
 	if page["hasMore"] != true || page["nextCursor"] != int64(8) {
 		t.Fatalf("page = %#v", page)
+	}
+	numberPayload := map[string]any{}
+	ApplyMessagePagination(numberPayload, map[string]any{
+		"hasMore": true, "nextCursor": json.Number("1787000000123"),
+	}, []map[string]any{{"openMessageId": "m1"}}, "older")
+	if numberPayload["failedCount"] != 0 {
+		t.Fatalf("json.Number cursor failed pagination: %#v", numberPayload)
+	}
+	nextPage, ok := numberPayload["nextPage"].(map[string]any)
+	if !ok || nextPage["time"] != time.UnixMilli(1787000000123).UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("json.Number nextPage = %#v", numberPayload["nextPage"])
 	}
 	for _, tc := range []struct {
 		value any
