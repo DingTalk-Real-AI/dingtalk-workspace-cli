@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -287,5 +288,97 @@ func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *t
 		if caller.calls != 0 {
 			t.Fatalf("invalid args %v made %d MCP calls", args, caller.calls)
 		}
+	}
+}
+
+func TestCreateInstanceDenialMessage(t *testing.T) {
+	if msg := createInstanceDenialMessage(nil); msg != "" {
+		t.Fatalf("nil error → %q, want empty", msg)
+	}
+	if msg := createInstanceDenialMessage(errors.New("其他服务端错误")); msg != "" {
+		t.Fatalf("unmatched error → %q, want empty", msg)
+	}
+	denial := &CLIError{
+		Code:    CodeUnclassified,
+		Message: "the supply check point has already been bound to an approval. Please do not submit again",
+	}
+	const want = "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	if msg := createInstanceDenialMessage(denial); msg != want {
+		t.Fatalf("matched error → %q, want %q", msg, want)
+	}
+}
+
+func TestCrossPlatformCoverageOAApprovalCreateInstanceTranslatesSupplyPointDenial(t *testing.T) {
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{
+		err: &CLIError{
+			Code:    CodeUnclassified,
+			Message: "the supply check point has already been bound to an approval. Please do not submit again",
+		},
+	}}}
+	err := executeOACommand(t, caller,
+		"approval", "create-instance",
+		"--process-code", "PROC",
+		"--form-values", `{"事由":"测试"}`,
+		"--yes",
+	)
+	if err == nil {
+		t.Fatalf("create-instance should fail with the denial error")
+	}
+	const want = "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+	if caller.calls != 1 {
+		t.Fatalf("calls = %d, want 1", caller.calls)
+	}
+}
+
+// U-gate: create-instance 未确认（无 --yes）时拒绝执行且不发起 MCP 调用；
+// 用户确认后（--yes）才产生唯一的 start_process_instance 精确调用。
+func TestCrossPlatformCoverageOAApprovalCreateInstanceConfirmationGate(t *testing.T) {
+	unconfirmed := &scriptedToolCaller{}
+	err := executeOACommand(t, unconfirmed,
+		"approval", "create-instance",
+		"--process-code", "PROC-1",
+		"--form-values", `{"单行输入框":"测试"}`,
+	)
+	if err == nil {
+		t.Fatal("create-instance without --yes returned nil")
+	}
+	if !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("error = %q, want confirmation guidance mentioning --yes", err.Error())
+	}
+	if unconfirmed.calls != 0 {
+		t.Fatalf("unconfirmed create-instance made %d MCP calls", unconfirmed.calls)
+	}
+
+	confirmed := &scriptedToolCaller{}
+	if err := executeOACommand(t, confirmed,
+		"approval", "create-instance",
+		"--process-code", "PROC-1",
+		"--form-values", `{"单行输入框":"测试"}`,
+		"--yes",
+	); err != nil {
+		t.Fatalf("confirmed create-instance: %v", err)
+	}
+	if confirmed.server != "oa" || confirmed.tool != "start_process_instance" {
+		t.Fatalf("called %s/%s, want oa/start_process_instance", confirmed.server, confirmed.tool)
+	}
+	if confirmed.calls != 1 {
+		t.Fatalf("calls = %d, want exactly one confirmed call", confirmed.calls)
+	}
+	if len(confirmed.args) != 1 {
+		t.Fatalf("args = %#v, want only ProcessInstanceCreationPopRequest", confirmed.args)
+	}
+	inner, ok := confirmed.args["ProcessInstanceCreationPopRequest"].(map[string]any)
+	if !ok {
+		t.Fatalf("args = %#v, want ProcessInstanceCreationPopRequest object", confirmed.args)
+	}
+	if inner["processCode"] != "PROC-1" {
+		t.Fatalf("processCode = %#v", inner["processCode"])
+	}
+	values, ok := inner["formComponentValues"].([]map[string]string)
+	if !ok || len(values) != 1 || values[0]["name"] != "单行输入框" || values[0]["value"] != "测试" {
+		t.Fatalf("formComponentValues = %#v", inner["formComponentValues"])
 	}
 }

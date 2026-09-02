@@ -1988,7 +1988,15 @@ func newOaCommand() *cobra.Command {
 					request["ccPosition"] = position
 				}
 			}
-			return callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request})
+			if err := callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request}); err != nil {
+				// 已知的服务端业务拒绝（如补卡卡点已绑定审批单）翻译为中文文案；
+				// 未命中时保留原始错误。
+				if msg := createInstanceDenialMessage(err); msg != "" {
+					return errors.New(msg)
+				}
+				return err
+			}
+			return nil
 		},
 	}
 	DeclareLeafMetadata(approvalCreateCmd, LeafSpec{
@@ -2188,4 +2196,19 @@ func newOaCommand() *cobra.Command {
 	root.AddCommand(approvalCmd)
 
 	return root
+}
+
+// createInstanceDenialMessage 将 start_process_instance 已知的服务端业务拒绝
+// （错误文本子串匹配）翻译为面向用户的中文文案；未命中已知拒绝时返回
+// 空串，调用方回退原始错误。
+func createInstanceDenialMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "the supply check point has already been bound to an approval"):
+		return "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	}
+	return ""
 }

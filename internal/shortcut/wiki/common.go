@@ -45,6 +45,48 @@ func wikiCollectionResult(collection, description string) *contract.ResultSpec {
 		description, collection, description, collection))}
 }
 
+func wikiSpaceListResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema: json.RawMessage(`{"type":"object","description":"带请求范围和分页完成证据的知识库列表","properties":{"count":{"type":"integer","description":"有效空间数量"},"requestedType":{"type":"string","description":"本次服务端查询使用的知识库类型范围","enum":["orgWikiSpace","myWikiSpace"]},"spaces":{"type":"array","description":"请求类型范围内的知识库条目","items":{"type":"object","description":"Wiki 空间条目","properties":{"workspaceId":{"type":"string","description":"知识库 workspaceId"},"name":{"type":"string","description":"知识库名称"},"spaceType":{"type":"string","description":"服务端实际返回的空间类型"}},"additionalProperties":true}},"nextCursor":{"type":"string","description":"下一页游标"},"hasMore":{"type":"boolean","description":"服务端是否仍有下一页"},"autoPageComplete":{"type":"boolean","description":"自动分页是否已取完当前类型范围"},"pagesFetched":{"type":"integer","description":"本次累计请求页数"}},"required":["count","requestedType","spaces"],"additionalProperties":true}`),
+	}
+}
+
+func wikiSpaceCreateResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomePartialFailure},
+		DataSchema: json.RawMessage(`{"type":"object","description":"创建、读回并验证空间类型的知识库","properties":{"success":{"type":"boolean","description":"创建与读回是否成功"},"workspaceId":{"type":"string","description":"新知识库 workspaceId"},"space":{"type":"object","description":"创建后读回的知识库元数据","additionalProperties":true},"spaceType":{"type":"string","description":"经服务端详情或类型范围列表验证的知识库类型","enum":["orgWikiSpace","myWikiSpace"]},"spaceTypeVerified":{"type":"boolean","description":"空间类型是否具有服务端可复核证据"},"spaceTypeEvidence":{"type":"string","description":"空间类型证据来源"}},"required":["success","workspaceId","space","spaceType","spaceTypeVerified","spaceTypeEvidence"],"additionalProperties":true}`),
+	}
+}
+
+func wikiNodeCollectionResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema: json.RawMessage(`{"type":"object","description":"带类型、层级和分页证据的 Wiki 节点集合","properties":{"count":{"type":"integer","description":"有效节点数量"},"nodes":{"type":"array","description":"服务端返回的 Wiki 节点","items":{"type":"object","description":"带稳定节点身份和层级字段的 Wiki 节点","properties":{"nodeId":{"type":"string","description":"稳定节点 ID"},"name":{"type":"string","description":"节点名称"},"type":{"type":"string","description":"服务端节点种类"},"extension":{"type":"string","description":"文件或在线文档扩展类型"},"contentType":{"type":"string","description":"服务端内容类型"},"hasChildren":{"type":"boolean","description":"服务端是否报告存在子节点"},"workspaceId":{"type":"string","description":"节点所属 workspaceId"},"folderId":{"type":"string","description":"服务端父文件夹 ID"},"parentFolderId":{"type":"string","description":"规范化父文件夹 ID"},"url":{"type":"string","description":"节点访问地址"}},"additionalProperties":true}},"nextCursor":{"type":"string","description":"下一页游标"},"hasMore":{"type":"boolean","description":"服务端是否仍有下一页"},"autoPageComplete":{"type":"boolean","description":"自动分页是否已完成"},"pagesFetched":{"type":"integer","description":"本次累计请求页数"}},"required":["count","nodes"],"additionalProperties":true}`),
+	}
+}
+
+func wikiNodeCreateResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema: json.RawMessage(`{"type":"object","description":"创建后读回验证的 Wiki 节点","properties":{"success":{"type":"boolean","description":"节点是否通过创建后验证"},"nodeId":{"type":"string","description":"新节点 ID"},"workspaceId":{"type":"string","description":"已验证的目标 workspaceId"},"requestedType":{"type":"string","description":"请求创建的节点类型"},"node":{"type":"object","description":"创建后读回的节点元数据","additionalProperties":true}},"required":["success","nodeId","workspaceId","requestedType","node"],"additionalProperties":true}`),
+	}
+}
+
+func wikiNodeCopyResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema: json.RawMessage(`{"type":"object","description":"源节点预检与副本读回组成的复制证据","properties":{"success":{"type":"boolean","description":"复制是否通过完整验证"},"sourceNodeId":{"type":"string","description":"源节点 ID"},"nodeId":{"type":"string","description":"新副本节点 ID"},"sourceWorkspaceId":{"type":"string","description":"源节点所属 workspaceId"},"targetWorkspaceId":{"type":"string","description":"已验证的副本 workspaceId"},"targetFolderId":{"type":"string","description":"副本读回的父文件夹 ID"},"source":{"type":"object","description":"复制前源节点元数据","additionalProperties":true},"copy":{"type":"object","description":"复制后副本元数据","additionalProperties":true}},"required":["success","sourceNodeId","nodeId","targetWorkspaceId","source","copy"],"additionalProperties":true}`),
+	}
+}
+
+func wikiNodeMoveResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema: json.RawMessage(`{"type":"object","description":"移动前后读回和目标域验证证据","properties":{"success":{"type":"boolean","description":"移动是否通过完整验证"},"nodeId":{"type":"string","description":"被移动节点 ID"},"targetDomain":{"type":"string","description":"已请求并验证的目标域"},"sourceWorkspaceId":{"type":"string","description":"移动前 workspaceId"},"targetWorkspaceId":{"type":"string","description":"移动后 workspaceId"},"targetFolderId":{"type":"string","description":"移动后父文件夹 ID"},"source":{"type":"object","description":"移动前节点元数据","additionalProperties":true},"target":{"type":"object","description":"移动后节点元数据","additionalProperties":true},"node":{"type":"object","description":"兼容字段，等同 target","additionalProperties":true},"targetSpace":{"type":"object","description":"我的文档目标空间的服务端证据","additionalProperties":true}},"required":["success","nodeId","targetDomain","sourceWorkspaceId","targetWorkspaceId","source","target","node"],"additionalProperties":true}`),
+	}
+}
+
 func wikiCursorPagination() *contract.PaginationSpec {
 	return &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor", MetaPath: contract.PaginationMetaPath, EndpointExhaustedPath: contract.PaginationExhaustedPath, NextTokenPath: contract.PaginationNextTokenPath}
 }
@@ -209,6 +251,114 @@ func nestedWikiString(data map[string]any, keys ...string) string {
 	return ""
 }
 
+func verifyWikiSpaceType(rt *shortcut.RuntimeContext, workspaceID string, space map[string]any) (string, string, error) {
+	directTypes := make(map[string]string, 1)
+	for _, key := range []string{"spaceType", "wikiSpaceType", "type"} {
+		value := firstWikiString(space, key)
+		if value == "orgWikiSpace" || value == "myWikiSpace" {
+			directTypes[value] = "get_wikiSpace." + key
+		}
+	}
+	if len(directTypes) == 1 {
+		for spaceType, evidence := range directTypes {
+			return spaceType, evidence, nil
+		}
+	}
+	if len(directTypes) > 1 {
+		return "", "", wikiResponseError("wiki/get_wikiSpace", "space_type_conflict", "空间详情同时返回互相冲突的组织和个人知识库类型")
+	}
+
+	matches := make([]string, 0, 1)
+	for _, spaceType := range []string{"orgWikiSpace", "myWikiSpace"} {
+		found, err := wikiSpaceExistsInType(rt, workspaceID, spaceType)
+		if err != nil {
+			return "", "", err
+		}
+		if found {
+			matches = append(matches, spaceType)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], "list_wikiSpaces." + matches[0] + ".workspaceId_match", nil
+	}
+	if len(matches) > 1 {
+		return "", "", wikiResponseError("wiki/list_wikiSpaces", "space_type_conflict", "同一 workspaceId 同时出现在组织和个人知识库范围，无法确定空间类型")
+	}
+	return "", "", wikiResponseError("wiki/list_wikiSpaces", "space_type_not_found", "已完整查询组织和个人知识库范围，但都未找到新建 workspaceId")
+}
+
+func wikiSpaceExistsInType(rt *shortcut.RuntimeContext, workspaceID, spaceType string) (bool, error) {
+	const pageLimit = 20
+	cursor := ""
+	seen := map[string]struct{}{}
+	for pageNumber := 1; pageNumber <= pageLimit; pageNumber++ {
+		params := map[string]any{"wikiSpaceType": spaceType, "pageSize": 50}
+		if cursor != "" {
+			params["pageToken"] = cursor
+		}
+		data, err := rt.CallMCPData("wiki", "list_wikiSpaces", params)
+		if err != nil {
+			return false, err
+		}
+		items, page, err := requireWikiCollection(data, "wiki/list_wikiSpaces", "wikiSpaces", "spaces")
+		if err != nil {
+			return false, err
+		}
+		for _, item := range items {
+			candidate := item.(map[string]any)
+			if firstWikiString(candidate, "workspaceId", "spaceId", "id") == workspaceID {
+				return true, nil
+			}
+		}
+		hasMore, present := page["hasMore"]
+		if !present {
+			return false, wikiResponseError("wiki/list_wikiSpaces", "missing_has_more", "空间类型验证要求每页响应提供 hasMore 布尔值")
+		}
+		more, ok := hasMore.(bool)
+		if !ok {
+			return false, wikiResponseError("wiki/list_wikiSpaces", "malformed_has_more", "空间类型验证响应的 hasMore 不是布尔值")
+		}
+		if !more {
+			return false, nil
+		}
+		next := firstWikiString(page, "nextCursor", "nextToken", "nextPageToken", "pageToken")
+		if next == "" {
+			return false, wikiResponseError("wiki/list_wikiSpaces", "missing_next_cursor", "空间类型验证仍有下一页但响应缺少游标")
+		}
+		if next == cursor {
+			return false, wikiResponseError("wiki/list_wikiSpaces", "stalled_cursor", "空间类型验证的下一页游标未变化")
+		}
+		if _, exists := seen[next]; exists {
+			return false, wikiResponseError("wiki/list_wikiSpaces", "cyclic_cursor", "空间类型验证的分页游标形成循环")
+		}
+		seen[next] = struct{}{}
+		cursor = next
+	}
+	return false, wikiResponseError("wiki/list_wikiSpaces", "page_limit_reached", "空间类型验证超过 20 页安全上限")
+}
+
+func wikiSpaceTypeVerificationError(workspaceID string, space map[string]any, cause error) error {
+	return apperrors.NewAPI(
+		"知识库已经创建并读回，但空间类型验证未完成；为避免重复创建，请使用 workspaceId 继续核查",
+		apperrors.WithOperation("wiki/create_wikiSpace"),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("verify_space_type"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason("space_type_unverified"),
+		apperrors.WithActions("不要重复创建知识库", "使用 workspaceId 分别查询 orgWikiSpace 和 myWikiSpace 范围"),
+		apperrors.WithDetails(map[string]any{
+			"status":              "partial_success",
+			"workspaceId":         workspaceID,
+			"space":               space,
+			"spaceTypeVerified":   false,
+			"spaceTypeEvidence":   "unverified",
+			"verificationFailure": cause.Error(),
+		}),
+		apperrors.WithCause(cause),
+	)
+}
+
 func wikiStringInt(rt *shortcut.RuntimeContext, name string, fallback, min, max int) (int, error) {
 	raw := rt.Str(name)
 	if raw == "" {
@@ -236,6 +386,27 @@ func wikiStringSliceFirst(rt *shortcut.RuntimeContext, primary string, aliases .
 
 func wikiResponseError(operation, reason, message string) error {
 	return apperrors.NewAPI(message, apperrors.WithOperation(operation), apperrors.WithOrigin("mcp"), apperrors.WithFailureStage("response_validation"), apperrors.WithRetryable(false), apperrors.WithReason(reason))
+}
+
+func wikiPageLimitError(operation string, pagesFetched int, items []any, nextCursor string) error {
+	return apperrors.NewAPI(
+		"达到 --page-limit 时服务端仍有下一页；已保留当前结果和 nextCursor，可从该游标继续读取",
+		apperrors.WithOperation(operation),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason("page_limit_reached"),
+		apperrors.WithActions("使用 details.nextCursor 继续读取", "提高 --page-limit 后重新执行"),
+		apperrors.WithDetails(map[string]any{
+			"status":       "partial_success",
+			"complete":     false,
+			"pagesFetched": pagesFetched,
+			"itemsFetched": len(items),
+			"items":        items,
+			"nextCursor":   nextCursor,
+		}),
+	)
 }
 
 func wikiReadSafety() contract.SafetySpec {
@@ -283,6 +454,10 @@ func collectWikiPages(rt *shortcut.RuntimeContext, operation string, pageSize in
 	}
 	all := make([]any, 0)
 	cursor := rt.StrFirst("cursor", "page-token")
+	seenCursors := make(map[string]struct{})
+	if cursor != "" {
+		seenCursors[cursor] = struct{}{}
+	}
 	lastPage := map[string]any{}
 	for pageNumber := 1; pageNumber <= rt.Int("page-limit"); pageNumber++ {
 		requestSize := shortcut.AutoPageRequestSize(rt, pageSize, len(all))
@@ -329,6 +504,13 @@ func collectWikiPages(rt *shortcut.RuntimeContext, operation string, pageSize in
 		if next == cursor {
 			return nil, nil, wikiResponseError(operation, "stalled_cursor", "下一页游标未变化，已停止以避免死循环")
 		}
+		if _, seen := seenCursors[next]; seen {
+			return nil, nil, wikiResponseError(operation, "cyclic_cursor", "下一页游标形成循环，已停止以避免重复请求")
+		}
+		if pageNumber == rt.Int("page-limit") {
+			return nil, nil, wikiPageLimitError(operation, pageNumber, all, next)
+		}
+		seenCursors[next] = struct{}{}
 		cursor = next
 		if err := shortcut.WaitAutoPageDelay(rt); err != nil {
 			return nil, nil, err

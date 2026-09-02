@@ -168,8 +168,14 @@ paired_files:
         multi: "../../dingtalk-shared/references/url-patterns.md"
       - mono: "../intent-guide.md"
         multi: "sheet-intent-guide.md"
-  - mono: references/products/whiteboard/recipes.md
-    multi: dingtalk-misc/references/whiteboard/recipes.md
+  - mono: references/products/whiteboard/compose.md
+    multi: dingtalk-misc/references/whiteboard/compose.md
+    mode: identical
+  - mono: references/products/whiteboard/vector.md
+    multi: dingtalk-misc/references/whiteboard/vector.md
+    mode: identical
+  - mono: references/products/whiteboard/replace.md
+    multi: dingtalk-misc/references/whiteboard/replace.md
     mode: identical
 
 # Directory pairs whose relative file sets and contents must stay byte-identical.

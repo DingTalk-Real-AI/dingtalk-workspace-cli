@@ -252,6 +252,24 @@ func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageWikiSpaceCreatePublishesVerifiedTypeResult(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-create")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "partial_failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, property := range []string{"success", "workspaceId", "space", "spaceType", "spaceTypeVerified", "spaceTypeEvidence"} {
+		if properties[property] == nil {
+			t.Errorf("wiki +space-create Result data_schema is missing %q", property)
+		}
+	}
+	if got, want := schemaContractStringSlice(properties["spaceType"]["enum"]), []string{"orgWikiSpace", "myWikiSpace"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create spaceType enum = %#v, want %#v", got, want)
+	}
+}
+
 func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
 	checked := 0

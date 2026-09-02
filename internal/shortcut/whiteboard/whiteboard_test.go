@@ -4,11 +4,13 @@
 package whiteboard
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -50,6 +52,12 @@ func (*whiteboardCoverageCaller) JQ() string          { return "" }
 
 func runWhiteboardCoverage(t *testing.T, declaration shortcut.Shortcut, caller *whiteboardCoverageCaller, stdin string, args ...string) error {
 	t.Helper()
+	_, err := runWhiteboardCoverageOutput(t, declaration, caller, stdin, args...)
+	return err
+}
+
+func runWhiteboardCoverageOutput(t *testing.T, declaration shortcut.Shortcut, caller *whiteboardCoverageCaller, stdin string, args ...string) ([]byte, error) {
+	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
@@ -58,13 +66,19 @@ func runWhiteboardCoverage(t *testing.T, declaration shortcut.Shortcut, caller *
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
 	root.SetIn(strings.NewReader(stdin))
-	root.SetOut(io.Discard)
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	service := &cobra.Command{Use: "whiteboard"}
-	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
+	leaf := corecmd.New(shortcut.FromShortcut(declaration))
+	service.AddCommand(leaf)
 	root.AddCommand(service)
 	root.SetArgs(append([]string{"whiteboard", declaration.Command}, args...))
-	return root.Execute()
+	if err := root.Execute(); err != nil {
+		return nil, err
+	}
+	_, _, err := output.EmitStoredResult(leaf)
+	return stdout.Bytes(), err
 }
 
 func directWhiteboardRuntime(t *testing.T, declaration shortcut.Shortcut, caller *whiteboardCoverageCaller, args ...string) *shortcut.RuntimeContext {
@@ -242,6 +256,40 @@ func TestCrossPlatformCoverageWhiteboardSourceValidationFailsClosed(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageWhiteboardConnectorValidationStopsBeforeRPC(t *testing.T) {
+	valid := `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"right","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"},"anchor":{"mode":"fixed","side":"right"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"right"},"anchor":{"mode":"fixed","side":"left"},"marker":{"catalogId":"arrow.filled"}},"routing":"straight"}]}}`
+	if _, err := parseWhiteboardSource(valid); err != nil {
+		t.Fatalf("valid connector source rejected: %v", err)
+	}
+
+	invalid := map[string]string{
+		"document scoped reference":  `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"right","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"document","id":"left"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"right"}},"routing":"straight"}]}}`,
+		"reference outside request":  `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"missing"}},"routing":"straight"}]}}`,
+		"reference connector":        `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"line"}},"routing":"straight"}]}}`,
+		"reference hidden node":      `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"right","type":"shape","hidden":true},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"right"}},"routing":"straight"}]}}`,
+		"self loop":                  `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"left"}},"routing":"straight"}]}}`,
+		"connector geometry":         `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"line","type":"connector","x":1,"start":{"type":"point","point":{"x":0,"y":0}},"end":{"type":"point","point":{"x":1,"y":1}},"routing":"straight"}]}}`,
+		"query-only resolved point":  `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"right","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"},"resolvedPoint":{"x":0,"y":0}},"end":{"type":"node","nodeRef":{"scope":"request","id":"right"}},"routing":"straight"}]}}`,
+		"invalid anchor":             `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"right","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"},"anchor":{"mode":"fixed","side":"center"}},"end":{"type":"node","nodeRef":{"scope":"request","id":"right"}},"routing":"straight"}]}}`,
+		"query-only anchor position": `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"left","type":"shape"},{"id":"right","type":"shape"},{"id":"line","type":"connector","start":{"type":"node","nodeRef":{"scope":"request","id":"left"},"anchor":{"mode":"auto","position":0.5}},"end":{"type":"node","nodeRef":{"scope":"request","id":"right"}},"routing":"straight"}]}}`,
+		"invalid marker":             `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"line","type":"connector","start":{"type":"point","point":{"x":0,"y":0}},"end":{"type":"point","point":{"x":1,"y":1},"marker":{"catalogId":"triangle"}},"routing":"straight"}]}}`,
+		"straight waypoints":         `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"line","type":"connector","start":{"type":"point","point":{"x":0,"y":0}},"end":{"type":"point","point":{"x":1,"y":1}},"routing":"straight","waypoints":[]}]}}`,
+		"polyline without waypoint":  `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"line","type":"connector","start":{"type":"point","point":{"x":0,"y":0}},"end":{"type":"point","point":{"x":1,"y":1}},"routing":"polyline"}]}}`,
+		"non-finite point":           `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"line","type":"connector","start":{"type":"point","point":{"x":"NaN","y":0}},"end":{"type":"point","point":{"x":1,"y":1}},"routing":"curve"}]}}`,
+	}
+	for name, source := range invalid {
+		t.Run(name, func(t *testing.T) {
+			caller := &whiteboardCoverageCaller{responses: map[string][]string{}}
+			if err := runWhiteboardCoverage(t, Update, caller, "", "--node", "doc", "--part-id", "part", "--source", source, "--yes"); err == nil {
+				t.Fatal("invalid connector unexpectedly succeeded")
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid connector crossed RPC boundary: %#v", caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageWhiteboardExactToolsConfirmationAndReadback(t *testing.T) {
 	queryCaller := &whiteboardCoverageCaller{responses: map[string][]string{
 		"read_whiteboard_content": {validWhiteboardQueryResponse(`[{"id":"n1","type":"text"}]`)},
@@ -390,6 +438,157 @@ func TestCrossPlatformCoverageWhiteboardPublicContractsStayStrictAndUnified(t *t
 	}
 	if Update.Safety.Confirmation != "user_required" || Update.Safety.Effect != "write" {
 		t.Errorf("update safety=%+v", Update.Safety)
+	}
+	var schema struct {
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal(Update.Contract.Result.DataSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range schema.Required {
+		if field == "source" {
+			t.Fatal("successful update contract still requires the full source snapshot")
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardUpdateSuccessOmitsFullSnapshot(t *testing.T) {
+	parsed := &parsedUpdate{Nodes: []map[string]any{{"id": "request-node", "type": "shape"}}}
+	projected := map[string]any{
+		"source":  map[string]any{"pages": []any{map[string]any{"id": "page", "nodes": []any{map[string]any{"id": "real-node"}}}}},
+		"summary": map[string]any{"nodeCount": 1, "pageCount": 1, "resultSha256": "hash"},
+	}
+	receipt := &verifiedUpdateReceipt{
+		Message: "completed", CreatedNodeIDs: []string{"real-node"},
+		IDMap: map[string]string{"request-node": "real-node"}, DeletedNodeCount: 0,
+	}
+	result := projectWhiteboardUpdateSuccess(
+		map[string]any{"nodeId": "doc", "partId": "part"}, "append", parsed, projected, receipt,
+	)
+	if _, exists := result["source"]; exists {
+		t.Fatalf("successful update leaked full source snapshot: %#v", result["source"])
+	}
+	if _, exists := result["pages"]; exists {
+		t.Fatalf("successful update leaked pages at top level: %#v", result["pages"])
+	}
+	if result["verified"] != true || result["verifiedNodeCount"] != 1 || result["summary"] == nil {
+		t.Fatalf("successful update lost verification evidence: %#v", result)
+	}
+	compactReceipt, ok := result["receipt"].(map[string]any)
+	if !ok || compactReceipt["message"] != "completed" || compactReceipt["deletedNodeCount"] != 0 {
+		t.Fatalf("successful update receipt is incomplete: %#v", result["receipt"])
+	}
+	if _, exists := compactReceipt["resultJson"]; exists {
+		t.Fatalf("successful update leaked raw resultJson: %#v", compactReceipt)
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardUpdateReceiptSchemaAndRuntimeBranches(t *testing.T) {
+	var schema map[string]any
+	if err := json.Unmarshal(Update.Contract.Result.DataSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	properties := schema["properties"].(map[string]any)
+	receiptSchema := properties["receipt"].(map[string]any)
+	branches, ok := receiptSchema["oneOf"].([]any)
+	if !ok || len(branches) != 2 {
+		t.Fatal("receipt must declare mutually exclusive execution and preview branches")
+	}
+	branchRequired := [][]any{
+		{"message", "createdNodeIds", "idMap", "deletedNodeCount"},
+		{"dryRun", "executed"},
+	}
+	for index, raw := range branches {
+		branch := raw.(map[string]any)
+		if !reflect.DeepEqual(branch["required"], branchRequired[index]) || branch["additionalProperties"] != false {
+			t.Fatalf("receipt branch %d permits empty, partial or mixed receipts: %#v", index, branch)
+		}
+	}
+	previewProps := branches[1].(map[string]any)["properties"].(map[string]any)
+	for field, want := range map[string]bool{"dryRun": true, "executed": false} {
+		if got, exists := previewProps[field].(map[string]any)["const"]; !exists || got != want {
+			t.Fatalf("preview %s const=%#v, want %v", field, got, want)
+		}
+	}
+	states, ok := schema["oneOf"].([]any)
+	if !ok || len(states) != 2 {
+		t.Fatal("result must bind verified/source to the receipt branch")
+	}
+	for index, raw := range states {
+		state := raw.(map[string]any)
+		props := state["properties"].(map[string]any)
+		if props["verified"].(map[string]any)["const"] != (index == 0) {
+			t.Fatalf("verified discriminator missing from state %d", index)
+		}
+		wantReceipt := []any{"message"}
+		if index == 1 {
+			wantReceipt = []any{"dryRun", "executed"}
+			if !reflect.DeepEqual(state["required"], []any{"source"}) || props["verifiedNodeCount"].(map[string]any)["const"] != float64(0) {
+				t.Fatal("preview must carry source and zero verified nodes")
+			}
+		} else if !reflect.DeepEqual(state["not"], map[string]any{"required": []any{"source"}}) {
+			t.Fatal("executed result must not contain a full source snapshot")
+		}
+		if !reflect.DeepEqual(props["receipt"].(map[string]any)["required"], wantReceipt) {
+			t.Fatalf("state %d is not bound to its receipt kind", index)
+		}
+	}
+
+	for _, tc := range []struct {
+		name, source, mode, nodes string
+		requestIDs, realIDs       []string
+		dry                       bool
+	}{
+		{"append", `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`, "append", `[{"id":"real-1","type":"text"}]`, []string{"n1"}, []string{"real-1"}, false},
+		{"clear", `{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`, "overwrite", `[]`, nil, nil, false},
+		{"preview", `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`, "append", "", nil, nil, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &whiteboardCoverageCaller{dry: tc.dry, responses: map[string][]string{}}
+			if !tc.dry {
+				caller.responses[toolUpdate] = []string{validWhiteboardUpdateResponse(tc.mode, tc.requestIDs, tc.realIDs, 0)}
+				caller.responses[toolQuery] = []string{validWhiteboardQueryResponse(tc.nodes)}
+			}
+			args := []string{"--node", "doc", "--part-id", "part", "--source", tc.source, "--yes"}
+			if tc.dry {
+				args = append(args, "--dry-run")
+			}
+			encoded, err := runWhiteboardCoverageOutput(t, Update, caller, "", args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var envelope struct {
+				Data map[string]any `json:"data"`
+			}
+			if err := json.Unmarshal(encoded, &envelope); err != nil {
+				t.Fatalf("decode emitted result: %v: %s", err, encoded)
+			}
+			data := envelope.Data
+			receipt, ok := data["receipt"].(map[string]any)
+			index := 0
+			if tc.dry {
+				index = 1
+			}
+			if !ok || len(receipt) != len(branchRequired[index]) {
+				t.Fatalf("runtime receipt does not match branch %d: %#v", index, receipt)
+			}
+			for _, key := range branchRequired[index] {
+				if value, exists := receipt[key.(string)]; !exists || value == nil {
+					t.Errorf("receipt field %s missing or null: %#v", key, receipt)
+				}
+			}
+			_, hasSource := data["source"]
+			if data["verified"] != !tc.dry || hasSource != tc.dry {
+				t.Fatalf("runtime verified/source conflicts with receipt: %#v", data)
+			}
+			if tc.dry {
+				if receipt["dryRun"] != true || receipt["executed"] != false || len(caller.calls) != 0 {
+					t.Fatalf("dry-run executed or lost its markers: %#v calls=%#v", receipt, caller.calls)
+				}
+			} else if created, ok := receipt["createdNodeIds"].([]any); !ok || len(created) != len(tc.realIDs) || len(caller.calls) != 2 {
+				t.Fatalf("success must emit a real array (including clear) after write/readback: %#v", receipt)
+			}
+		})
 	}
 }
 
@@ -577,13 +776,20 @@ func TestCrossPlatformCoverageWhiteboardReadbackComparatorAndScalarMatrices(t *t
 		{"number wrong type", json.Number("1"), "1", true},
 		{"number mismatch", json.Number("1"), float64(2), true},
 		{"number equal cross type", json.Number("1"), int(1), false},
+		{"coordinate normalization within tolerance", json.Number("40"), json.Number("40.5"), false},
+		{"coordinate normalization over tolerance", json.Number("40"), json.Number("40.5001"), true},
+		{"non coordinate stays exact", json.Number("40"), json.Number("40.5"), true},
 		{"large adjacent JSON integers mismatch", json.Number("9007199254740992"), json.Number("9007199254740993"), true},
 		{"large JSON integer equal", json.Number("9007199254740993"), json.Number("9007199254740993"), false},
 		{"scalar mismatch", "one", "two", true},
 		{"scalar equal", "same", "same", false},
 	}
 	for _, test := range comparisons {
-		err := requireRequestedValue(test.expected, test.actual, test.name)
+		path := test.name
+		if test.name == "coordinate normalization within tolerance" || test.name == "coordinate normalization over tolerance" {
+			path = "node fixture.x"
+		}
+		err := requireRequestedValue(test.expected, test.actual, path)
 		if (err != nil) != test.wantErr {
 			t.Errorf("%s err=%v wantErr=%t", test.name, err, test.wantErr)
 		}

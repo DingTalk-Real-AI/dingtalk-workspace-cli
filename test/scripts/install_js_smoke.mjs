@@ -435,6 +435,18 @@ function stagePkg(zipEntries, emptyDirs = []) {
 
   const binStage = path.join(tmp, "bin-stage");
   writeFile(path.join(binStage, "dws"), "#!/bin/sh\necho fake-dws\n", 0o755);
+  writeFile(
+    path.join(binStage, ".dws-runtime", "20260825", "manifest.json"),
+    '{"payload_version":"20260825"}\n',
+  );
+  writeFile(
+    path.join(binStage, ".dws-runtime", "20260825", "x7k2m9p4q1w8.dylib"),
+    "fake-runtime\n",
+  );
+  writeFile(
+    path.join(binStage, ".dws-runtime", "20260825", "ps", "fixture"),
+    "fixture\n",
+  );
   sh("tar", ["-czf", path.join(assets, assetName), "-C", binStage, "."]);
 
   const zipStage = path.join(tmp, "zip-stage");
@@ -504,6 +516,10 @@ scenario("multi install lays out sibling skills and caches", () => {
     assert.ok(fs.existsSync(path.join(home, ".dws", "skills", "multi", "dingtalk-test", "SKILL.md")), "multi cache filled");
     assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "mono", "SKILL.md"), "utf8"), "# mono fixture\n", "mono cache from mono/ tree");
     assert.ok(fs.existsSync(path.join(pkg, "vendor", "dws")), "binary installed into vendor/");
+    assert.ok(
+      fs.existsSync(path.join(pkg, "vendor", ".dws-runtime", "20260825", "manifest.json")),
+      "runtime payload installed into vendor/",
+    );
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

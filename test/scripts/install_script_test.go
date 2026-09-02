@@ -71,6 +71,18 @@ func newInstallSourceFixture(t *testing.T) *installSourceFixture {
 	mustWriteFile(t, filepath.Join(root, "skills", "mono", "SKILL.md"), []byte("# Test skill\n"), 0o644)
 	mustWriteFile(t, filepath.Join(root, "skills", "multi", "dingtalk-test", "SKILL.md"), []byte("# Test split skill\n"), 0o644)
 	mustWriteFile(t, filepath.Join(root, "skills", "multi", "dws-shared", "SKILL.md"), []byte("# Test shared skill\n"), 0o644)
+	library := "libx7k2m9p4q1w8.so"
+	if runtime.GOOS == "darwin" {
+		library = "x7k2m9p4q1w8.dylib"
+	} else if runtime.GOOS == "windows" {
+		library = "x7k2m9p4q1w864.dll"
+	}
+	writeRuntimePayloadFixture(
+		t,
+		filepath.Join(root, ".dws-runtime", "20260825"),
+		runtime.GOOS+"/"+runtime.GOARCH,
+		library,
+	)
 
 	stubRoot := filepath.Join(root, "stubs")
 	makeStub := `#!/bin/sh
@@ -159,6 +171,104 @@ func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
 	}
 	if string(binaryData) != "fake-binary\n" {
 		t.Fatalf("installed binary content = %q, want fake-binary", string(binaryData))
+	}
+	if _, err := os.Stat(filepath.Join(installDir, ".dws-runtime", "20260825", "manifest.json")); err != nil {
+		t.Fatalf("installed runtime manifest: %v", err)
+	}
+}
+
+func TestInstallScriptRemoteModeAllowsArchiveWithoutRuntimePayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "legacy-release.tar.gz")
+	writeTarGz(t, archivePath, map[string]string{"dws": "legacy-binary\n"})
+	harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+resolve_version() { VERSION=v0.0.0-legacy; }
+asset_url() { printf '%s\n' fixture; }
+download() { cp "$DWS_TEST_ARCHIVE" "$2"; }
+verify_release_asset_checksum() { :; }
+install_binary
+`
+	harnessPath := filepath.Join(root, "install-legacy-harness.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	installDir := filepath.Join(root, "bin")
+	cmd := exec.Command("sh", harnessPath)
+	cmd.Env = append(os.Environ(),
+		"HOME="+filepath.Join(root, "home"),
+		"DWS_INSTALL_DIR="+installDir,
+		"DWS_INSTALL_NAME=dws-test",
+		"DWS_TEST_ARCHIVE="+archivePath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install legacy archive: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "Runtime payload is not included in this archive; continuing with binary-only installation.") {
+		t.Fatalf("legacy archive notice missing:\n%s", output)
+	}
+	installed, err := os.ReadFile(filepath.Join(installDir, "dws-test"))
+	if err != nil || string(installed) != "legacy-binary\n" {
+		t.Fatalf("installed legacy binary = %q, %v", installed, err)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, ".dws-runtime")); !os.IsNotExist(err) {
+		t.Fatalf("legacy archive unexpectedly published a runtime payload: %v", err)
+	}
+}
+
+func TestInstallPowerShellAllowsArchiveWithoutRuntimePayload(t *testing.T) {
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		if runtime.GOOS == "windows" {
+			pwsh, err = exec.LookPath("powershell")
+		}
+		if err != nil {
+			t.Skip("PowerShell is not available")
+		}
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	harness := string(scriptData[:cut]) + `
+Publish-RuntimePayloadIfPresent -Source $env:DWS_TEST_MISSING_PAYLOAD
+exit 0
+`
+	harnessPath := filepath.Join(t.TempDir(), "install-legacy-harness.ps1")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o644)
+	cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-File", harnessPath)
+	cmd.Env = append(os.Environ(), "DWS_TEST_MISSING_PAYLOAD="+filepath.Join(t.TempDir(), "missing"))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("PowerShell legacy archive check: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "Runtime payload is not included in this archive; continuing with binary-only installation.") {
+		t.Fatalf("PowerShell legacy archive notice missing:\n%s", output)
 	}
 }
 

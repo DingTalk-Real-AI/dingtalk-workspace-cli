@@ -47,8 +47,15 @@
 |---|---|---|
 | 查已提交的请假/加班/出差外出/补卡记录 | `dws attendance +list-approve` | `--users <ids> --types overtime,trip,leave,patch --start YYYY-MM-DD --end YYYY-MM-DD` |
 | 获取可提交表单入口 | `dws attendance +get-approve-template` | `--type leave\|overtime\|repair-check\|travel\|out`；只返回入口，不代填提交 |
+| 查可用假期类型与余额（请假套件前置） | `dws attendance approve leave-types` | `--user <userId>` 可选；返回 `leaveCode`/`leaveViewUnit`/余额；`bizType` 不可靠，哺乳假等自定义类型按 `leaveName` 识别 |
+| 计算请假时长（服务端口径） | `dws attendance approve leave-duration` | `--leave-code --start --end` 必填；时长禁止本地估算 |
+| 请假提交前资格校验 | `dws attendance approve leave-check` | 时长必须取自 leave-duration 输出；`success=false` 非零退出并转告 `errorMsg` 后终止 |
+| 匹配补卡目标异常班次 | `dws attendance approve supply-plans` | `--time "YYYY-MM-DD HH:mm"` 必填；`plans` 空数组属正常结果；多班次须用户选择 |
+| 补卡提交前资格校验 | `dws attendance approve supply-check` | `--timestamp` 必须取自 supply-plans 输出的 `supplyDate`；`qualify=false` 非零退出并转告 `title`/`desc` 后终止 |
 
 查询接口把出差和外出合并为 `trip`；表单入口必须区分外出 `travel` 与出差 `out`。多个模板全部返回，将名称最匹配者置前，并用 `[表单名称](submitUrl)` 展示，禁止裸露 URL 或只返回一个模板。
+
+请假与补卡的**提交**意图路由到 oa 域套件工作流（见 [oa.md](oa.md)「发起请假审批」/「发起补卡审批」章节）；上表 `approve` 命令为其前置只读查询/校验。`+get-approve-template` 的 `submitUrl` 入口用于加班/外出/出差，以及不支持 CLI 发起的请假/补卡模板场景。
 
 ### 补卡规则、加班规则与班次定义
 

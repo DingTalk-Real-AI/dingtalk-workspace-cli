@@ -887,6 +887,37 @@ resolve_skill_mode() {
   SKILL_MODE="multi"
 }
 
+publish_runtime_payload() {
+  _prp_source="$1"
+  [ -f "$_prp_source/manifest.json" ] || err "Runtime payload manifest is missing."
+  _prp_count="$(find "$_prp_source/ps" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$_prp_count" = 123 ] || err "Runtime payload is incomplete (expected 123 ps files)."
+
+  mkdir -p "$INSTALL_DIR/.dws-runtime"
+  _prp_stage="$INSTALL_DIR/.dws-runtime/.20260825.tmp.$$"
+  _prp_target="$INSTALL_DIR/.dws-runtime/20260825"
+  _prp_backup="$INSTALL_DIR/.dws-runtime/.20260825.old.$$"
+  mkdir -p "$_prp_stage"
+  cp -R "$_prp_source/." "$_prp_stage/"
+  if [ -d "$_prp_target" ]; then
+    mv "$_prp_target" "$_prp_backup"
+  fi
+  if ! mv "$_prp_stage" "$_prp_target"; then
+    [ ! -d "$_prp_backup" ] || mv "$_prp_backup" "$_prp_target"
+    err "Could not publish the runtime payload."
+  fi
+  [ ! -d "$_prp_backup" ] || rm -rf "$_prp_backup"
+}
+
+publish_runtime_payload_if_present() {
+  _prpip_source="$1"
+  if [ ! -d "$_prpip_source" ]; then
+    say "Runtime payload is not included in this archive; continuing with binary-only installation."
+    return 0
+  fi
+  publish_runtime_payload "$_prpip_source"
+}
+
 install_binary_from_source() {
   root="$1"
 
@@ -905,8 +936,12 @@ install_binary_from_source() {
   fi
 
   mkdir -p "$INSTALL_DIR"
-  cp "$built_bin" "$INSTALL_DIR/$INSTALL_NAME"
-  chmod +x "$INSTALL_DIR/$INSTALL_NAME"
+  built_payload="$root/.dws-runtime/20260825"
+  publish_runtime_payload "$built_payload"
+  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
+  cp "$built_bin" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
 
   say "✅ Binary installed:"
   say "   → ${INSTALL_DIR}/${INSTALL_NAME}"
@@ -1564,22 +1599,22 @@ install_binary() {
 
   mkdir -p "$INSTALL_DIR"
 
-  # The archive may contain a top-level directory or just the binary
+  # The archive may contain a top-level directory or just the binary.
   if [ -f "$tmpdir/$BIN_NAME" ]; then
-    cp "$tmpdir/$BIN_NAME" "$INSTALL_DIR/$INSTALL_NAME"
+    found="$tmpdir/$BIN_NAME"
   elif [ -f "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" ]; then
-    cp "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" "$INSTALL_DIR/$INSTALL_NAME"
+    found="$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME"
   else
-    # Search for the binary
     found="$(find "$tmpdir" -name "$BIN_NAME" -type f | head -1)"
-    if [ -n "$found" ]; then
-      cp "$found" "$INSTALL_DIR/$INSTALL_NAME"
-    else
-      err "Could not find the ${BIN_NAME} binary in the downloaded archive."
-    fi
+    [ -n "$found" ] || err "Could not find the ${BIN_NAME} binary in the downloaded archive."
   fi
 
-  chmod +x "$INSTALL_DIR/$INSTALL_NAME"
+  payload_source="$(dirname "$found")/.dws-runtime/20260825"
+  publish_runtime_payload_if_present "$payload_source"
+  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
+  cp "$found" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
 
   say "✅ Binary installed: ${INSTALL_DIR}/${INSTALL_NAME}"
 

@@ -36,7 +36,7 @@ dws wiki +feed-list --workspace <ID> --page-all --format json
 - `--page-all` 才启用自动翻页；`--page-limit/--max-items/--page-delay` 不能单独使用。
 - `autoPageComplete=true` 且 endpoint exhausted 才表示端点取完；达到 page/items 上限必须保留 continuation/stop reason。
 - 游标缺失、停滞、循环或后续页失败均不能返回“全部”。
-- `+node-search` 当前保留服务端单页 cursor；需要续页时使用真实 `nextCursor`，不手工猜 token。
+- `+node-search` 默认保留服务端单页 cursor；需要完整命中集时加 `--page-all`，由 Shortcut 沿真实 cursor 自动续页。游标缺失、停滞、循环或后续页失败均不能报告完整结果。
 
 ## 空间创建与删除
 
