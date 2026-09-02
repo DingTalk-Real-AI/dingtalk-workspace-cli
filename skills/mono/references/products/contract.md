@@ -1,8 +1,71 @@
 # 智能合同命令参考
 
-命令前缀统一为 `dws contract`。所有调用追加 `--format json`；当前命令树不发布到 Agent Schema，执行前如有参数疑问，读取精确叶子的 `--help`。
+命令前缀统一为 `dws contract`。所有调用追加 `--format json`。命令树已发布到 Agent Schema；参数、约束或确认语义不确定时，优先读取精确 compact leaf Schema，仅在 Schema 不可用或与 Cobra 实际行为发生漂移时读取同一 leaf 的 `--help`。不要使用旧的 dingtalk 二级入口，不要直接调用 MCP、HTTP API 或自行猜测工具名。
 
-## 目录
+## 能力范围与边界
+
+Use when：用户要查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同，或管理合同项目、相对方与收付款账款。
+
+Avoid when：
+
+- 查询、同意、拒绝、转交或撤销已有合同 OA 审批实例走 `dws oa`，不要与合同审批模板 `process-templates` 混淆。
+- 经营合约、目标、计分卡和 OKR 跟进走 `dws agoal`。
+- 合同文件的搜索、上传、下载及钉盘元数据走 `dws drive`；合同台账、审查和归档仍走 `dws contract`。
+- AI 听记内容查询走 `dws minutes`；取得真实 `taskUuid` 后再调用 `dws contract draft`。
+- 花名册中的劳动合同等员工基础字段走 `dws contact`。
+
+## 意图路由
+
+| 用户意图 | 命令族 |
+|---|---|
+| 查合同列表、详情、状态数量、创建台账 | `dws contract record ...` |
+| 从钉盘模板批量导入合同、查导入结果 | `dws contract import ...` |
+| 查审批模板或台账分类 | `dws contract process-templates` / `dws contract file-directories` |
+| 根据 AI 听记和模板起草合同 | `dws contract draft` |
+| 解析合同、创建审查任务、查审查结果或权益 | `dws contract review ...` |
+| 管理合同项目、导入导出项目 | `dws contract project ...` |
+| 管理相对方、工商信息、风险、导入导出 | `dws contract subject ...` |
+| 管理合同收付款账款 | `dws contract account ...` |
+| 将合同文件归档 | `dws contract archive` |
+
+## 执行规则
+
+1. 先定位真实对象。更新、删除、导出、归档前，先通过对应 `list` / `get` / `detail` 获取真实 ID 和当前状态；禁止根据名称猜 ID。
+2. 复杂请求只通过 `--file <json>` 或 `--file -` 传递。提交前检查 JSON 是对象，字段名、必填项和枚举符合本文及当前 leaf Schema；不要把整个请求 JSON 拼成未声明的 flags。
+3. 时间单位不得混用：台账与项目的筛选日期使用 ISO-8601；账款 `executionDate`、账款筛选 `--exec-start` / `--exec-end`、归档 `archiveTime` 使用 Unix 毫秒时间戳。
+4. 异步操作保存创建响应中的真实 `taskId`，再调用配套结果命令。结果未完成时只报告处理中；仅在返回明确可重试状态时轮询，并遵守服务端重试间隔。
+5. 删除项目、相对方、账款以及归档等不可逆或高影响操作，在执行前说明对象和影响并获得用户确认；确认后才在 Runtime gate 要求时添加 `--yes`。
+6. 创建或更新后优先使用详情查询回读。没有对应详情接口时，保留原始回执并明确说明未能独立回读验证。
+7. 列表存在分页参数时按返回继续翻页，直到满足用户范围或服务端表明结束；不要把第一页当成完整结果。
+
+## 标准流程
+
+### 查询合同
+
+1. 用 `record list` 按时间、状态或查询维度缩小范围。
+2. 零结果直接说明；多候选先列出名称、状态和合同 ID，让用户消歧。
+3. 需要完整字段时，用真实 `contractId` 调用 `record get`。
+
+### 创建台账或归档
+
+1. 查 `file-directories`、`process-templates` 或钉盘文件信息，取得真实目录、模板和文件 ID。
+2. 按本文构造 JSON 文件，向用户确认提交对象与关键字段。
+3. 创建使用 `record create`；归档使用 `archive`。执行后根据返回的真实 ID 回读或报告状态。
+
+### 合同审查
+
+1. 可先执行 `review benefit` 确认权益。
+2. 不确定审查类型或推荐模型时，先用 `review analysis` 解析文件。
+3. 用 `review create` 创建任务，保存真实 `taskId` 和 `reviewType`。
+4. 用 `review result` 查询结果；未完成不得宣称审查已完成。
+
+### 批量导入
+
+1. 从模板命令或已有钉盘文件取得真实 `fileId` / `spaceId`。
+2. 创建导入任务并保存真实 `taskId`。
+3. 使用同一命令族的 `*-result` 查询结果，逐项报告成功、失败和处理中状态。
+
+## 命令目录
 
 - [台账](#台账)
 - [批量导入](#批量导入)

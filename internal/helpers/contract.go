@@ -45,9 +45,9 @@ func newContractCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "contract",
 		HelpReferences: contract.HelpReferences{
-			RelatedSkills: []string{"dingtalk-contract"},
+			RelatedSkills: []string{"dingtalk-misc"},
 			Documentation: []contract.HelpDocumentation{
-				contract.SkillDocumentation("智能合同命令参考", "dingtalk-contract", "references/contract.md"),
+				contract.SkillDocumentation("智能合同命令参考", "dingtalk-misc", "references/contract.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{

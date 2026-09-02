@@ -1169,10 +1169,17 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	for _, rel := range []string{
 		filepath.Join("multi", "dingtalk-event", "SKILL.md"),
 		filepath.Join("multi", "dingtalk-event", "references", "event-oa.md"),
+		filepath.Join("mono", "references", "products", "contract.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "contract.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(extractDir, rel)); err != nil {
 			t.Fatalf("zip missing %s: %v", rel, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, "multi", "dingtalk-contract")); err == nil {
+		t.Fatal("zip unexpectedly ships smart contract as a standalone multi skill")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("Stat(multi/dingtalk-contract) error = %v", err)
 	}
 	for _, rel := range []string{
 		filepath.Join("multi", "dingtalk-misc", "references", "event.md"),
