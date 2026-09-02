@@ -607,7 +607,11 @@ func seedDistArchive(t *testing.T, path string) {
 	}
 	defer file.Close()
 
-	content := []byte("#!/bin/sh\nexit 0\n")
+	slot, err := os.ReadFile(filepath.Join("..", "..", "internal", "runtimepayload", "assets", "windows-amd64.payload"))
+	if err != nil {
+		t.Fatalf("read runtime payload slot: %v", err)
+	}
+	content := append([]byte("#!/bin/sh\nexit 0\n"), slot...)
 	switch {
 	case strings.HasSuffix(path, ".tar.gz"):
 		gzipWriter := gzip.NewWriter(file)
@@ -2239,6 +2243,36 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	t.Parallel()
 	workflow := readReleaseWorkflow(t)
 	publishJob := releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n")
+	tokenStep := releaseWorkflowSection(
+		t,
+		publishJob,
+		"      - name: Mint repository-scoped Release publisher token\n",
+		"\n      - name: Publish or reuse immutable GitHub Release\n",
+	)
+	for _, required := range []string{
+		"id: release-publisher-token",
+		"actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+		`client-id: ${{ vars.REVIEWER_ROUTER_APP_CLIENT_ID }}`,
+		`private-key: ${{ secrets.REVIEWER_ROUTER_APP_PRIVATE_KEY }}`,
+		`owner: ${{ github.repository_owner }}`,
+		`repositories: ${{ github.event.repository.name }}`,
+		"permission-contents: write",
+	} {
+		if !strings.Contains(tokenStep, required) {
+			t.Errorf("Release publisher token step is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"permission-actions:",
+		"permission-administration:",
+		"permission-checks:",
+		"permission-pull-requests:",
+		"skip-token-revoke:",
+	} {
+		if strings.Contains(tokenStep, forbidden) {
+			t.Errorf("Release publisher token must stay repository-scoped and contents-only: found %q", forbidden)
+		}
+	}
 	publishStep := releaseWorkflowSection(
 		t,
 		publishJob,
@@ -2248,10 +2282,18 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 
 	for _, required := range []string{
 		"id: publish",
-		"--json databaseId",
+		`GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}`,
+		`"repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION"`,
+		`"repos/$GITHUB_REPOSITORY/releases"`,
+		"find_recovery_draft_release_id()",
+		`select(.draft == true and .tag_name == \"$RELEASE_VERSION\"`,
+		`release_id="$(find_recovery_draft_release_id)"`,
+		`if [ "$find_status" -ne 2 ]; then`,
+		"Expected at most one draft GitHub Release for this recovery run",
+		"gh api --method POST",
 		`"repos/$GITHUB_REPOSITORY/releases/$release_id"`,
-		`uploaded_release_id="$(`,
-		`test "$uploaded_release_id" = "$release_id"`,
+		`uploaded_release_state="$(`,
+		`test "$uploaded_release_state" = "$(printf '%s\\t%s' "$release_id" "$RELEASE_VERSION")"`,
 		"Draft GitHub Release ID $release_id targets",
 		"Draft GitHub Release notes differ from the sealed CHANGELOG.",
 		"Draft GitHub Release is not bound to this exact recovery run.",
@@ -2269,7 +2311,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	for _, forbidden := range []string{
 		`gh release download "$RELEASE_VERSION"`,
 		`gh release edit "$RELEASE_VERSION" --draft=false`,
-		`"repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_VERSION"`,
+		`gh release view "$RELEASE_VERSION"`,
 	} {
 		if strings.Contains(publishStep, forbidden) {
 			t.Errorf("Draft release lifecycle must not switch back from the locked release ID via %q", forbidden)
@@ -2277,15 +2319,26 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	}
 
 	tagGuard := strings.Index(publishStep, "Draft GitHub Release ID $release_id targets")
-	draftPatch := strings.Index(publishStep, "-F draft=true")
+	recoveryLookup := strings.Index(publishStep, "find_recovery_draft_release_id()")
+	recoveryReuse := strings.Index(publishStep, `release_id="$(find_recovery_draft_release_id)"`)
+	recoveryNotFound := strings.Index(publishStep, `if [ "$find_status" -ne 2 ]; then`)
+	recoveryCreate := -1
+	if recoveryNotFound != -1 {
+		recoveryCreate = strings.Index(publishStep[recoveryNotFound:], "gh api --method POST")
+	}
+	draftPatch := strings.LastIndex(publishStep, "-F draft=true")
 	bodyVerify := strings.Index(publishStep, "Draft GitHub Release notes differ from the sealed CHANGELOG.")
 	markerVerify := strings.Index(publishStep, "Draft GitHub Release is not bound to this exact recovery run.")
 	upload := strings.Index(publishStep, `gh release upload "$RELEASE_VERSION"`)
-	idRecheck := strings.Index(publishStep, `test "$uploaded_release_id" = "$release_id"`)
+	idRecheck := strings.Index(publishStep, `test "$uploaded_release_state" = "$(printf '%s\\t%s' "$release_id" "$RELEASE_VERSION")"`)
 	verify := strings.Index(publishStep, "tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh")
 	download := strings.LastIndex(publishStep, "tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh")
 	byteCompare := strings.Index(publishStep, `cmp -s "$local_asset" "$remote_asset"`)
 	publish := strings.Index(publishStep, "-F draft=false")
+	if recoveryLookup == -1 || recoveryReuse == -1 || recoveryNotFound == -1 || recoveryCreate == -1 ||
+		!(recoveryLookup < recoveryReuse && recoveryReuse < recoveryNotFound) {
+		t.Fatal("recovery must reuse its uniquely marker-bound draft before creating a replacement")
+	}
 	if tagGuard == -1 || draftPatch == -1 || bodyVerify == -1 || markerVerify == -1 ||
 		upload == -1 || idRecheck == -1 || verify == -1 || download == -1 || byteCompare == -1 || publish == -1 ||
 		!(tagGuard < draftPatch && draftPatch < bodyVerify && bodyVerify < markerVerify && markerVerify < upload &&
@@ -2295,6 +2348,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 
 	terminalStep := publishJob[strings.Index(publishJob, "      - name: Require immutable published GitHub Release\n"):]
 	for _, required := range []string{
+		`GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}`,
 		`RELEASE_ID: ${{ steps.publish.outputs.release_id }}`,
 		`RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}`,
 		`"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"`,
@@ -2664,6 +2718,12 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"finalized-release-dist",
 		`dws-darwin-${arch}.tar.gz`,
 		"codesign --verify --strict --verbose=4",
+		"runtime-payload materialize",
+		`test "$binary_team" = "$library_team"`,
+		`doctor --json --timeout 2`,
+		`doctor-home`,
+		`doctor.json`,
+		"runtime_context diagnostic command failed",
 	} {
 		if !strings.Contains(verifySection, required) {
 			t.Errorf("Apple verification stage is missing %q", required)

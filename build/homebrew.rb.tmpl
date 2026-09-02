@@ -16,11 +16,7 @@ __KEG_ONLY_LINE__
     binary = File.join(root, "dws")
     raise "binary not found: #{binary}" unless File.exist?(binary)
 
-    runtime = File.join(root, ".dws-runtime")
-    raise "runtime payload not found: #{runtime}" unless File.exist?(runtime)
-
     libexec.install binary => "dws"
-    libexec.install runtime
     bin.install_symlink libexec/"dws"
 
     %w[LICENSE NOTICE README.md CHANGELOG.md].each do |name|
