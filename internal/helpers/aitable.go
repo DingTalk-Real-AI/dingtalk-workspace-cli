@@ -923,10 +923,10 @@ func normalizeViewConfigBlock(cfgMap map[string]any) error {
 		switch filterVal.(type) {
 		case []any, map[string]any:
 			normalized := normalizeViewConfigFilter(filterVal)
-			filters, ok := normalized.([]any)
-			if !ok {
-				return fmt.Errorf("invalid config.filter: normalized value must be a JSON array")
-			}
+			// The guarded input types are exactly the two cases normalized to an
+			// array; keeping an unreachable fallback here only obscures that
+			// invariant and makes the protocol branch impossible to exercise.
+			filters := normalized.([]any)
 			if err := validateViewConfigFilter(filters); err != nil {
 				return err
 			}

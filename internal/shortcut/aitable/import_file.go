@@ -23,6 +23,8 @@ var importHTTPDo = (&http.Client{CheckRedirect: func(*http.Request, []*http.Requ
 	return http.ErrUseLastResponse
 }}).Do
 
+var importNewRequestWithContext = http.NewRequestWithContext
+
 var ImportFile = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+import-file",
@@ -145,7 +147,7 @@ func executeImportFile(rt *shortcut.RuntimeContext) error {
 		return compositeError(result, err, false)
 	}
 
-	request, err := http.NewRequestWithContext(rt.Command().Context(), http.MethodPut, uploadURL, file)
+	request, err := importNewRequestWithContext(rt.Command().Context(), http.MethodPut, uploadURL, file)
 	if err != nil {
 		result.Status = "partial_success"
 		return compositeError(result, fmt.Errorf("cannot construct import HTTP PUT request"), false)

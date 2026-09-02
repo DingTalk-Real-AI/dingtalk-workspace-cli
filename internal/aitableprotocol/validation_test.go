@@ -5,6 +5,7 @@ package aitableprotocol
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 )
@@ -28,6 +29,9 @@ func TestCrossPlatformCoverageFieldNameUsesUTF16Length(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageClientTokenRequiresUUIDV4(t *testing.T) {
+	if err := ValidateClientToken(""); err != nil {
+		t.Fatalf("empty optional token: %v", err)
+	}
 	if err := ValidateClientToken("9e438eda-66a9-4f4a-99f5-f2f1912442f7"); err != nil {
 		t.Fatalf("valid UUID v4: %v", err)
 	}
@@ -110,5 +114,111 @@ func TestCrossPlatformCoverageRootChartLayoutValidation(t *testing.T) {
 				t.Fatalf("ValidateRootChartLayout() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestDashboardPersistentMetadataValidation(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		value   map[string]any
+		wantErr bool
+	}{
+		{name: "empty", value: map[string]any{}},
+		{name: "non object meta", value: map[string]any{"meta": "legacy"}},
+		{name: "writable meta", value: map[string]any{"meta": map[string]any{"title": "ok"}}},
+		{name: "top level schema version", value: map[string]any{"schemaVersion": 2}, wantErr: true},
+		{name: "top level app mode", value: map[string]any{"isAppMode": true}, wantErr: true},
+		{name: "nested schema version", value: map[string]any{"meta": map[string]any{"schemaVersion": 2}}, wantErr: true},
+		{name: "nested app mode", value: map[string]any{"meta": map[string]any{"isAppMode": true}}, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateDashboardPersistentMetadata("chart", test.value)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("ValidateDashboardPersistentMetadata() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestDashboardRootColumnsRejectsMalformedIdentityAndMetadata(t *testing.T) {
+	for _, payload := range []map[string]any{
+		{"data": "bad"},
+		{"data": map[string]any{"baseId": 1, "dashboardId": "dashboard"}},
+		{"data": map[string]any{"baseId": "base", "dashboardId": 1}},
+		{"data": map[string]any{"baseId": "base", "dashboardId": "dashboard"}},
+		{"data": map[string]any{"baseId": "base", "dashboardId": "dashboard", "meta": map[string]any{"schemaVersionTypeVerified": "true"}}},
+	} {
+		if _, err := ResolveDashboardRootColumns(payload, "base", "dashboard", false); err == nil {
+			t.Fatalf("ResolveDashboardRootColumns(%#v) succeeded, want error", payload)
+		}
+	}
+}
+
+func TestDashboardNumericSchemaVersionVariants(t *testing.T) {
+	for _, value := range []any{
+		json.Number("2"), float64(2), float32(2), int(2), int8(2), int16(2), int32(2), int64(2),
+		uint(2), uint8(2), uint16(2), uint32(2), uint64(2),
+	} {
+		if !isJSONNumberTwo(value) {
+			t.Errorf("isJSONNumberTwo(%T(%v)) = false", value, value)
+		}
+	}
+	for _, value := range []any{json.Number("bad"), float64(3), float32(3), int(3), "2", nil} {
+		if isJSONNumberTwo(value) {
+			t.Errorf("isJSONNumberTwo(%T(%v)) = true", value, value)
+		}
+	}
+}
+
+func TestRootChartLayoutCoversAllCoordinateValidation(t *testing.T) {
+	base := func() map[string]any {
+		return map[string]any{"x": 0, "y": 0, "w": 1, "h": 1}
+	}
+	mutate := func(key string, value any) map[string]any {
+		layout := base()
+		if value == nil {
+			delete(layout, key)
+		} else {
+			layout[key] = value
+		}
+		return layout
+	}
+	for _, test := range []struct {
+		name    string
+		layout  map[string]any
+		columns int
+		wantErr bool
+	}{
+		{name: "unsupported columns", layout: base(), columns: 24, wantErr: true},
+		{name: "non string parent", layout: mutate("parentId", 1), columns: 12, wantErr: true},
+		{name: "empty parent", layout: mutate("parentId", ""), columns: 12},
+		{name: "nil parent", layout: mutate("parentId", nil), columns: 12},
+		{name: "missing x", layout: mutate("x", nil), columns: 12, wantErr: true},
+		{name: "missing y", layout: mutate("y", nil), columns: 12, wantErr: true},
+		{name: "missing w", layout: mutate("w", nil), columns: 12, wantErr: true},
+		{name: "negative x", layout: mutate("x", -1), columns: 12, wantErr: true},
+		{name: "negative y", layout: mutate("y", int32(-1)), columns: 12, wantErr: true},
+		{name: "zero height", layout: mutate("h", int64(0)), columns: 12, wantErr: true},
+		{name: "json integer", layout: mutate("x", json.Number("2")), columns: 12},
+		{name: "json fraction", layout: mutate("x", json.Number("2.5")), columns: 12, wantErr: true},
+		{name: "nan", layout: mutate("x", math.NaN()), columns: 12, wantErr: true},
+		{name: "infinity", layout: mutate("x", math.Inf(1)), columns: 12, wantErr: true},
+		{name: "wrong type", layout: mutate("x", "0"), columns: 12, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateRootChartLayout(test.layout, test.columns)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("ValidateRootChartLayout() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+
+	originalBounds := layoutIntegerBounds
+	t.Cleanup(func() { layoutIntegerBounds = originalBounds })
+	layoutIntegerBounds = func() (int64, int64) { return math.MinInt32, math.MaxInt32 }
+	for _, value := range []any{int64(math.MaxInt64), json.Number("9223372036854775807"), float64(math.MaxInt64)} {
+		if _, err := requiredLayoutInteger(map[string]any{"x": value}, "x"); err == nil {
+			t.Fatalf("simulated 32-bit out-of-range value %T(%v) succeeded", value, value)
+		}
 	}
 }

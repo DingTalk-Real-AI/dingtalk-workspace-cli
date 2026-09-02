@@ -212,6 +212,18 @@ func TestCrossPlatformCoverageGanttPresetTimebarVerificationSafetyE2E(t *testing
 			t.Fatalf("mismatched timebar recovery data = %#v", typed.Details)
 		}
 	})
+
+	t.Run("write error plus persistent mismatch retains warning", func(t *testing.T) {
+		steps := append([]upsertByKeyStep{}, baseSteps...)
+		steps = append(steps, upsertByKeyStep{err: errors.New("timeout")})
+		for range viewPresetReadbackAttempts {
+			steps = append(steps, upsertByKeyStep{text: `{"views":[{"viewId":"g1","viewName":"计划","viewType":"Gantt","ganttTimebar":{"startField":"other"}}]}`})
+		}
+		caller := &upsertByKeyCaller{steps: steps}
+		if _, err := runAITableCompositeCLI(t, caller, "+view-preset-apply", args...); err == nil {
+			t.Fatal("write error plus mismatch succeeded")
+		}
+	})
 }
 
 func TestCrossPlatformCoverageGanttPresetRejectsEmbeddedOrInvalidTimebarE2E(t *testing.T) {

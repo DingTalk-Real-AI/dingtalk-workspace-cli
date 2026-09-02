@@ -17,6 +17,11 @@ const (
 	RootResponsiveLayoutParent = "root-responsive-layout"
 )
 
+var layoutIntegerBounds = func() (int64, int64) {
+	maxInt := int64(^uint(0) >> 1)
+	return -maxInt - 1, maxInt
+}
+
 // ValidateDashboardPersistentMetadata rejects read-only protocol evidence from
 // Dashboard/Chart write objects. isAppMode belongs to caller context and
 // schemaVersion belongs to storage metadata; neither may be persisted by CLI
@@ -170,8 +175,7 @@ func requiredLayoutInteger(layout map[string]any, key string) (int, error) {
 	}
 	switch number := value.(type) {
 	case float64:
-		maxInt := int(^uint(0) >> 1)
-		minInt := -maxInt - 1
+		minInt, maxInt := layoutIntegerBounds()
 		if math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number ||
 			number > float64(maxInt) || number < float64(minInt) {
 			return 0, fmt.Errorf("layout.%s 必须是整数", key)
@@ -179,7 +183,8 @@ func requiredLayoutInteger(layout map[string]any, key string) (int, error) {
 		return int(number), nil
 	case json.Number:
 		parsed, err := strconv.ParseInt(number.String(), 10, 64)
-		if err != nil || int64(int(parsed)) != parsed {
+		minInt, maxInt := layoutIntegerBounds()
+		if err != nil || parsed < minInt || parsed > maxInt {
 			return 0, fmt.Errorf("layout.%s 必须是整数", key)
 		}
 		return int(parsed), nil
@@ -188,7 +193,8 @@ func requiredLayoutInteger(layout map[string]any, key string) (int, error) {
 	case int32:
 		return int(number), nil
 	case int64:
-		if int64(int(number)) != number {
+		minInt, maxInt := layoutIntegerBounds()
+		if number < minInt || number > maxInt {
 			return 0, fmt.Errorf("layout.%s 超出整数范围", key)
 		}
 		return int(number), nil

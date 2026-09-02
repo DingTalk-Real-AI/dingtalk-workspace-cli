@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
@@ -468,6 +470,69 @@ func TestCrossPlatformCoverageRecordBatchPureHelpers(t *testing.T) {
 	}
 	if !selectionProjectionShapes("value", map[string]any{"id": "option-id", "name": "value"}) {
 		t.Fatal("selectionProjectionShapes missed scalar read-back for an object write")
+	}
+}
+
+func TestRecordReadbackPendingAndWaitBranches(t *testing.T) {
+	if pendingRecordReadback(nil) != nil {
+		t.Fatal("nil cause must stay nil")
+	}
+	cause := errors.New("pending")
+	pending := pendingRecordReadback(cause)
+	if pending.Error() != "pending" || !errors.Is(pending, cause) || !isPendingRecordReadback(pending) || isPendingRecordReadback(cause) {
+		t.Fatalf("pending wrapper = %#v", pending)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := recordReadbackWait(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait = %v", err)
+	}
+	if err := recordReadbackWait(context.Background(), 0); err != nil {
+		t.Fatalf("zero wait = %v", err)
+	}
+
+	testseam.Swap(t, &recordReadbackWait, func(context.Context, time.Duration) error { return context.DeadlineExceeded })
+	verify := func(*shortcut.RuntimeContext, string, string, []map[string]any, map[string]any) (map[string]any, error) {
+		return nil, pendingRecordReadback(errors.New("not visible"))
+	}
+	if _, err := verifyRecordBatchEventually(nil, "record_upsert", "b", "t", nil, nil, verify); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("retry wait error = %v", err)
+	}
+	if got := uniqueStrings([]string{"", " a ", "a", "b"}); strings.Join(got, ",") != "a,b" {
+		t.Fatalf("uniqueStrings() = %#v", got)
+	}
+}
+
+func TestRecordQueryDateFilterValidationBranches(t *testing.T) {
+	for _, filter := range []map[string]any{
+		{"operator": "and", "operands": []any{map[string]any{"operator": "before", "operands": []any{"f", map[string]any{"type": "relative"}}}}},
+		{"operator": "before", "operands": []any{"f"}},
+		{"operator": "before", "operands": []any{"f", "2026-01-01"}},
+		{"operator": "after", "operands": []any{"f", float64(1)}},
+		{"operator": "after", "operands": []any{"f", math.NaN()}},
+		{"operator": "eq", "operands": []any{"f", "v"}},
+	} {
+		_ = validateRecordQueryDateFilterValues(filter)
+	}
+}
+
+func TestRecordUpsertPendingMismatchRetryBranches(t *testing.T) {
+	disableRecordReadbackWait(t)
+	records := []map[string]any{{"recordId": "r1", "cells": map[string]any{"f": "new"}}}
+	for name, response := range map[string]string{
+		"missing":  `{"records":[]}`,
+		"mismatch": `{"records":[{"recordId":"r1","cells":{"f":"old"}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+				{text: `{"createdRecords":[],"updatedCount":1}`},
+				{text: response}, {text: response}, {text: response},
+			}}
+			if _, err := runRecordBatchCLI(t, caller, "+record-upsert", records); err == nil {
+				t.Fatal("permanent readback mismatch succeeded")
+			}
+		})
 	}
 }
 

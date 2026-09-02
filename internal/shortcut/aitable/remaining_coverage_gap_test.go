@@ -449,3 +449,48 @@ func TestCrossPlatformCoverageWorkflowPureResponseHelpers(t *testing.T) {
 		t.Fatal("running workflow must not be stopped")
 	}
 }
+
+func TestWorkflowCreateStopVerificationBranches(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []upsertByKeyStep
+	}{
+		{name: "initial list error", steps: []upsertByKeyStep{
+			{text: `{"valid":true,"flowId":"w"}`}, {text: `{"flowId":"w","flowSchema":{}}`}, {err: errors.New("list failed")},
+		}},
+		{name: "disable response error recovered", steps: []upsertByKeyStep{
+			{text: `{"valid":true,"flowId":"w"}`},
+			{text: `{"flowId":"w","flowSchema":{}}`},
+			{text: `{"list":[{"flowId":"w","status":"RUNNING"}]}`},
+			{err: errors.New("disable response failed")},
+			{text: `{"list":[{"flowId":"w","status":"STOP"}]}`},
+		}},
+		{name: "disable not proven", steps: []upsertByKeyStep{
+			{text: `{"valid":true,"flowId":"w"}`},
+			{text: `{"flowId":"w","flowSchema":{}}`},
+			{text: `{"list":[{"flowId":"w","status":"RUNNING"}]}`},
+			{text: `{"disabled":true}`},
+			{text: `{"list":[{"flowId":"w","status":"RUNNING"}]}`},
+		}},
+		{name: "unknown initial state", steps: []upsertByKeyStep{
+			{text: `{"valid":true,"flowId":"w"}`},
+			{text: `{"flowId":"w","flowSchema":{}}`},
+			{text: `{"list":[{"flowId":"w","name":"Workflow"}]}`},
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: test.steps}, "+workflow-deploy",
+				"--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+			if test.name == "disable response error recovered" {
+				if err != nil || !strings.Contains(out, `"status": "recovered"`) {
+					t.Fatalf("recovery = output:%q err:%v", out, err)
+				}
+				return
+			}
+			if err == nil || out != "" {
+				t.Fatalf("failure = output:%q err:%v", out, err)
+			}
+		})
+	}
+}
