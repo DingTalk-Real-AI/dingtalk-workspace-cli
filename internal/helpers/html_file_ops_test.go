@@ -170,6 +170,38 @@ func TestCrossPlatformCoverageHTMLFetchOutputPathFallback(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageHTMLFetchRejectsSymlinkOutput(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "page.html")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	if _, err := resolveTextOutputPath(link, "remote.html", htmlTextFileSpec); err == nil ||
+		!strings.Contains(err.Error(), "符号链接") {
+		t.Fatalf("resolveTextOutputPath error = %v, want symlink rejection", err)
+	}
+
+	caller := &markdownDriveCaller{
+		format: "json",
+		steps:  []markdownDriveStep{{text: `{"downloadUrl":"https://download.test/current.html","fileName":"current.html"}`}},
+	}
+	installMarkdownDriveDeps(t, caller)
+	installMarkdownHTTPGet(t, "untrusted html")
+	err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+		"html", "fetch", "--node", "file-1", "--space-id", "space-1", "--output", link)
+	if err == nil || !strings.Contains(err.Error(), "符号链接") {
+		t.Fatalf("fetch through symlink output error = %v, want symlink rejection", err)
+	}
+	if data, readErr := os.ReadFile(target); readErr != nil || string(data) != "original" {
+		t.Fatalf("symlink target was overwritten: data=%q err=%v", data, readErr)
+	}
+}
+
 func TestCrossPlatformCoverageHTMLOverwriteWrites(t *testing.T) {
 	caller := &markdownDriveCaller{
 		format: "json",

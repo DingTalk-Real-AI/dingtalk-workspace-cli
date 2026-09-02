@@ -316,6 +316,8 @@ func runTextFileFetch(cmd *cobra.Command, spec textFileSpec) error {
 // resolveTextOutputPath resolves the --output target for fetch: an existing
 // directory keeps the sanitized remote name (or the product default download
 // name when the remote name is unusable); any other path is used verbatim.
+// The final output path must never be a symbolic link, so an explicit symlink
+// file is rejected up front instead of being followed by the write.
 func resolveTextOutputPath(outputPath, remoteName string, spec textFileSpec) (string, error) {
 	info, err := os.Stat(outputPath)
 	if err != nil && !os.IsNotExist(err) {
@@ -328,7 +330,11 @@ func resolveTextOutputPath(outputPath, remoteName string, spec textFileSpec) (st
 		}
 		return resolveTextDirectoryOutputPath(outputPath, name)
 	}
-	return filepath.Clean(outputPath), nil
+	final := filepath.Clean(outputPath)
+	if finalInfo, statErr := os.Lstat(final); statErr == nil && finalInfo.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("输出文件 %s 是符号链接，已拒绝覆盖", final)
+	}
+	return final, nil
 }
 
 func resolveTextDirectoryOutputPath(outputPath, name string) (string, error) {
