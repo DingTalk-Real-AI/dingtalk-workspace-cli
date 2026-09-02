@@ -141,6 +141,18 @@ type ToolDescriptor struct {
 	Sensitive    bool           `json:"sensitive,omitempty"`
 }
 
+func (t *ToolDescriptor) UnmarshalJSON(data []byte) error {
+	type toolDescriptor ToolDescriptor
+	var decoded toolDescriptor
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&decoded); err != nil {
+		return err
+	}
+	*t = ToolDescriptor(decoded)
+	return nil
+}
+
 type ToolsListResult struct {
 	Tools      []ToolDescriptor `json:"tools"`
 	NextCursor string           `json:"nextCursor,omitempty"`

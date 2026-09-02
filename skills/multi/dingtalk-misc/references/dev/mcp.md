@@ -122,6 +122,6 @@ dws mcp published invoke <mcpId> <toolName> \
 
 展示 dry-run 的准确对象、参数和潜在影响后，只有用户对该预览明确同意本次真实调用，调用方才可在执行时把同一命令仅由 `--dry-run` 换成确认标志；最初请求不算该确认，参数变化需重新预检。不要把确认标志固化进模板、脚本或可复制示例。
 
-`tools` 返回当前身份看到的实时工具列表。真实 `invoke` 会再次执行 `tools/list`，拒绝不存在的工具、缺失 `inputSchema` 的工具以及不符合 required/type/enum/properties/items 核心约束的参数，然后才执行 `tools/call`。成功输出以 `inputSchemaValidation=core` 说明本次门禁范围。它不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
+`tools` 返回当前身份看到的实时工具列表。真实 `invoke` 会再次执行 `tools/list`，拒绝不存在的工具、缺失 `inputSchema` 的工具、不符合 required/type/enum/properties/items 核心约束的参数，以及包含当前校验器无法完整解释之约束的 Schema，然后才执行 `tools/call`。成功输出以 `inputSchemaValidation=core` 说明本次门禁范围。它不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
 
 当前内置调用面适用于可直接接受 JSON-RPC `tools/list`/`tools/call` 的服务，不宣称覆盖必须显式 initialize、SSE 或 `Mcp-Session-Id` 的严格会话型端点。异常处理见 [故障定位](mcp/troubleshooting.md)。

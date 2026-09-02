@@ -27,6 +27,7 @@
 | published tools 为空 | 当前身份看不到工具，或服务没有已发布工具；不要尝试猜工具名调用 |
 | published invoke 提示工具不存在 | 工具列表在本次调用前已实时刷新；重新执行 tools，使用当前返回的精确名称 |
 | published invoke 提示 input schema validation failed | `--params` 缺 required 字段、类型/枚举错误，或包含被 `additionalProperties: false` 禁止的未声明字段；按实时 `inputSchema` 修正 |
+| published invoke 提示 unsupported JSON Schema keyword | 实时 Schema 含 oneOf/anyOf/allOf/$ref/pattern/范围等当前核心校验器不能完整执行的约束；为避免带着错误安全保证调用未知副作用工具，CLI 会失败关闭，不发送 `tools/call` |
 
 ## HTTP 映射检查
 

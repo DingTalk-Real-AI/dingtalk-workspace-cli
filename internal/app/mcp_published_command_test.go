@@ -231,6 +231,48 @@ func TestMCPPublishedInvokeRejectsUnknownLiveToolBeforeCall(t *testing.T) {
 	}
 }
 
+func TestMCPPublishedInvokeMatchesExactLiveToolName(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{
+			{Name: " search ", InputSchema: map[string]any{"type": "object"}},
+			publishedSearchTool(),
+		}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "search", "--params", `{}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), "$.query is required") {
+		t.Fatalf("error = %v, want exact-name schema validation error", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("exact-name schema mismatch called endpoint %q", client.callEndpoint)
+	}
+}
+
+func TestMCPPublishedInvokeRejectsDuplicateLiveToolNames(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{
+			publishedSearchTool(),
+			publishedSearchTool(),
+		}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "search", "--params", `{"query":"example"}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), "同名工具") {
+		t.Fatalf("error = %v, want duplicate live tool error", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("duplicate live tool called endpoint %q", client.callEndpoint)
+	}
+}
+
 func TestMCPPublishedInvokeRejectsMissingLiveInputSchemaBeforeCall(t *testing.T) {
 	client := &mcpPublishedTestTransport{
 		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{{Name: "search"}}},
@@ -246,6 +288,70 @@ func TestMCPPublishedInvokeRejectsMissingLiveInputSchemaBeforeCall(t *testing.T)
 	}
 	if client.callEndpoint != "" {
 		t.Fatalf("schema-less tool called endpoint %q", client.callEndpoint)
+	}
+}
+
+func TestMCPPublishedInvokeRejectsUnsupportedLiveSchemaBeforeCall(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{{
+			Name: "search",
+			InputSchema: map[string]any{
+				"oneOf": []any{
+					map[string]any{"required": []any{"id"}},
+					map[string]any{"required": []any{"name"}},
+				},
+			},
+		}}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "search", "--params", `{}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), `unsupported JSON Schema keyword "oneOf"`) {
+		t.Fatalf("error = %v, want unsupported live schema error", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("unsupported live schema called endpoint %q", client.callEndpoint)
+	}
+}
+
+func TestMCPPublishedInvokePreservesLargeIntegerEnumPrecision(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{{
+			Name: "search",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "integer", "enum": []any{json.Number("9007199254740992")}},
+				},
+			},
+		}}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "search", "--params", `{"id":9007199254740993}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), "must be one of") {
+		t.Fatalf("error = %v, want exact numeric enum rejection", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("precision-mismatched enum called endpoint %q", client.callEndpoint)
+	}
+}
+
+func TestMCPPublishedInvokeRejectsTrailingParamsJSON(t *testing.T) {
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		&mcpPublishedTestTransport{},
+		"published", "invoke", "2480", "search", "--params", `{} {}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), "--params 必须是 JSON 对象") {
+		t.Fatalf("error = %v, want trailing params validation", err)
 	}
 }
 

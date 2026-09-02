@@ -157,7 +157,12 @@ func TestListToolsRetriesOnServerError(t *testing.T) {
 						"name":        "create_document",
 						"title":       "创建文档",
 						"description": "创建文档",
-						"inputSchema": map[string]any{"type": "object"},
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"id": map[string]any{"enum": []any{json.Number("9007199254740993")}},
+							},
+						},
 					},
 				},
 			},
@@ -175,6 +180,47 @@ func TestListToolsRetriesOnServerError(t *testing.T) {
 	}
 	if len(result.Tools) != 1 {
 		t.Fatalf("ListTools() len = %d, want 1", len(result.Tools))
+	}
+	enum := result.Tools[0].InputSchema["properties"].(map[string]any)["id"].(map[string]any)["enum"].([]any)
+	if value, ok := enum[0].(json.Number); !ok || value.String() != "9007199254740993" {
+		t.Fatalf("schema enum = %#v, want exact json.Number", enum[0])
+	}
+}
+
+func TestToolDescriptorRejectsMalformedJSON(t *testing.T) {
+	t.Parallel()
+
+	var tool ToolDescriptor
+	if err := json.Unmarshal([]byte(`[]`), &tool); err == nil {
+		t.Fatal("UnmarshalJSON() error = nil, want malformed descriptor error")
+	}
+}
+
+func TestListToolsPageSendsOpaqueCursor(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID     int               `json:"id"`
+			Params map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if got := request.Params["cursor"]; got != " page-2 " {
+			t.Errorf("cursor = %q, want opaque cursor unchanged", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result":  map[string]any{"tools": []map[string]any{}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.Client())
+	if _, err := client.ListToolsPage(context.Background(), server.URL, " page-2 "); err != nil {
+		t.Fatalf("ListToolsPage() error = %v", err)
 	}
 }
 

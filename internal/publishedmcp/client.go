@@ -45,16 +45,20 @@ func New(base *transport.Client, token string, headers map[string]string) *Clien
 }
 
 func (c *Client) Tools(ctx context.Context, endpoint string) (transport.ToolsListResult, error) {
+	return c.tools(ctx, endpoint, maxToolListPages, maxToolListPayloadBytes)
+}
+
+func (c *Client) tools(ctx context.Context, endpoint string, maxPages, maxPayloadBytes int) (transport.ToolsListResult, error) {
 	var aggregate transport.ToolsListResult
 	cursor := ""
 	seenCursors := map[[sha256.Size]byte]struct{}{}
 	aggregateBytes := 0
-	for page := 1; page <= maxToolListPages; page++ {
+	for page := 1; page <= maxPages; page++ {
 		result, err := c.transport.ListToolsPage(ctx, endpoint, cursor)
 		if err != nil {
 			return transport.ToolsListResult{}, err
 		}
-		aggregateBytes, err = appendToolPage(&aggregate, result.Tools, aggregateBytes, maxToolListPayloadBytes)
+		aggregateBytes, err = appendToolPage(&aggregate, result.Tools, aggregateBytes, maxPayloadBytes)
 		if err != nil {
 			return transport.ToolsListResult{}, err
 		}
@@ -72,7 +76,7 @@ func (c *Client) Tools(ctx context.Context, endpoint string) (transport.ToolsLis
 		cursor = nextCursor
 	}
 	return transport.ToolsListResult{}, apperrors.NewDiscovery(
-		fmt.Sprintf("tools/list exceeded the %d-page safety limit", maxToolListPages),
+		fmt.Sprintf("tools/list exceeded the %d-page safety limit", maxPages),
 	)
 }
 

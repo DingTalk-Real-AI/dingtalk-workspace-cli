@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
@@ -165,10 +166,6 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 				ProductID: "mcp", Name: "published_invoke", CanonicalPath: "mcp.published_invoke",
 				CLIPath: "mcp published invoke", PrimaryCLIPath: "mcp published invoke",
 			},
-			Parameters: []contract.ParamDecl{{
-				Name: "params", InterfaceType: "object",
-				Description: "传给实时发现工具的 JSON 对象；真实调用前按该工具当前 inputSchema 校验",
-			}},
 			Description: "经确认后按 mcpId 和工具名调用当前身份可用的已发布 MCP 工具",
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation, RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
@@ -215,12 +212,19 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 		if err != nil {
 			return fmt.Errorf("发现已发布 MCP 工具: %w", err)
 		}
-		inputSchema, ok := publishedMCPToolInputSchema(tools, tool)
-		if !ok {
+		inputSchema, matches := publishedMCPToolInputSchema(tools, tool)
+		if matches == 0 {
 			return apperrors.NewValidation(
 				fmt.Sprintf("已发布 MCP 中不存在工具 %q", tool),
 				apperrors.WithReason("published_mcp_tool_not_found"),
 				apperrors.WithHint("先执行 dws mcp published tools "+mcpID+" --format json 获取当前身份可用的实时工具列表"),
+			)
+		}
+		if matches > 1 {
+			return apperrors.NewValidation(
+				fmt.Sprintf("已发布 MCP 返回了 %d 个同名工具 %q，无法唯一确定实时 inputSchema", matches, tool),
+				apperrors.WithReason("published_mcp_tool_ambiguous"),
+				apperrors.WithHint("停止调用并检查 MCP 服务的已发布工具定义，确保工具名唯一"),
 			)
 		}
 		if len(inputSchema) == 0 {
@@ -253,14 +257,16 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 	}
 }
 
-func publishedMCPToolInputSchema(tools transport.ToolsListResult, toolName string) (map[string]any, bool) {
-	toolName = strings.TrimSpace(toolName)
+func publishedMCPToolInputSchema(tools transport.ToolsListResult, toolName string) (map[string]any, int) {
+	var inputSchema map[string]any
+	matches := 0
 	for _, tool := range tools.Tools {
-		if strings.TrimSpace(tool.Name) == toolName {
-			return tool.InputSchema, true
+		if tool.Name == toolName {
+			inputSchema = tool.InputSchema
+			matches++
 		}
 	}
-	return nil, false
+	return inputSchema, matches
 }
 
 func parseMCPPublishedInvoke(cmd *cobra.Command, args []string) (string, string, map[string]any, error) {
@@ -280,7 +286,12 @@ func parseMCPPublishedInvoke(cmd *cobra.Command, args []string) (string, string,
 		return "", "", nil, err
 	}
 	var params map[string]any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &params); err != nil || params == nil {
+	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&params); err != nil || params == nil {
+		return "", "", nil, apperrors.NewValidation("--params 必须是 JSON 对象")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return "", "", nil, apperrors.NewValidation("--params 必须是 JSON 对象")
 	}
 	return mcpID, tool, params, nil

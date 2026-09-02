@@ -15,6 +15,7 @@ package publishedmcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -167,6 +168,53 @@ func TestAppendToolPageRejectsAggregateLimit(t *testing.T) {
 	}
 	if len(aggregate.Tools) != 0 {
 		t.Fatalf("appendToolPage() retained tools after rejection: %#v", aggregate.Tools)
+	}
+}
+
+func TestAppendToolPageRejectsUnmeasurableMetadata(t *testing.T) {
+	aggregate := transport.ToolsListResult{}
+	tools := []transport.ToolDescriptor{{
+		Name:        "search",
+		InputSchema: map[string]any{"invalid": func() {}},
+	}}
+
+	if _, err := appendToolPage(&aggregate, tools, 0, 1024); err == nil || !strings.Contains(err.Error(), "could not be measured") {
+		t.Fatalf("appendToolPage() error = %v, want measurement error", err)
+	}
+}
+
+func TestClientToolsRejectsPageAndAggregateLimits(t *testing.T) {
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      2,
+			"result": map[string]any{
+				"tools":      []map[string]any{},
+				"nextCursor": fmt.Sprintf("cursor-%d", requests),
+			},
+		})
+	}))
+	defer server.Close()
+
+	base := transport.NewClient(server.Client())
+	base.TrustedDomains = []string{"127.0.0.1"}
+	client := New(base, "", nil)
+	if _, err := client.tools(t.Context(), server.URL, 1, 1024); err == nil || !strings.Contains(err.Error(), "1-page safety limit") {
+		t.Fatalf("tools() error = %v, want page safety limit", err)
+	}
+	if _, err := client.tools(t.Context(), server.URL, 2, 1); err == nil || !strings.Contains(err.Error(), "aggregate safety limit") {
+		t.Fatalf("tools() error = %v, want aggregate safety limit", err)
+	}
+}
+
+func TestClientToolsReturnsTransportFailure(t *testing.T) {
+	client := New(transport.NewClient(nil), "", nil)
+	if _, err := client.tools(t.Context(), "://invalid", 1, 1024); err == nil {
+		t.Fatal("tools() error = nil, want transport failure")
 	}
 }
 

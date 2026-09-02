@@ -16,8 +16,9 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"math"
+	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -32,7 +33,151 @@ func ValidateInputSchema(params map[string]any, schema map[string]any) error {
 // ValidateMCPInputSchema validates a remote MCP tool input schema while
 // preserving JSON Schema's default additionalProperties=true behavior.
 func ValidateMCPInputSchema(params map[string]any, schema map[string]any) error {
+	if err := validateMCPInputSchemaSupport("$", schema); err != nil {
+		return apperrors.NewValidation(fmt.Sprintf("input schema validation failed: %v", err))
+	}
 	return validateInputSchema(params, schema, false)
+}
+
+func validateMCPInputSchemaSupport(path string, schema map[string]any) error {
+	for keyword, raw := range schema {
+		switch keyword {
+		case "$schema":
+			dialect, valid := raw.(string)
+			if !valid {
+				return fmt.Errorf("%s.$schema must be a supported dialect URI", path)
+			}
+			if _, supported := mcpSupportedSchemaDialects[dialect]; !supported {
+				return fmt.Errorf("%s.$schema uses unsupported dialect %q", path, dialect)
+			}
+		case "$id", "$anchor", "$comment", "title", "description", "default", "examples", "deprecated", "readOnly", "writeOnly":
+			continue
+		case "type":
+			types, valid := mcpSchemaStringList(raw, true)
+			if !valid || len(types) == 0 {
+				return fmt.Errorf("%s.type is not a supported non-empty string or string array", path)
+			}
+			for _, schemaType := range types {
+				if _, supported := mcpSupportedSchemaTypes[schemaType]; !supported {
+					return fmt.Errorf("%s.type contains unsupported type %q", path, schemaType)
+				}
+			}
+		case "enum":
+			if !mcpSchemaValidEnum(raw) {
+				return fmt.Errorf("%s.enum must be a non-empty array of unique values", path)
+			}
+		case "required":
+			if _, valid := mcpSchemaStringList(raw, false); !valid {
+				return fmt.Errorf("%s.required must be an array of non-empty strings", path)
+			}
+		case "properties":
+			properties, valid := raw.(map[string]any)
+			if !valid {
+				return fmt.Errorf("%s.properties must be an object", path)
+			}
+			for name, childRaw := range properties {
+				child, valid := childRaw.(map[string]any)
+				if !valid {
+					return fmt.Errorf("%s.properties[%q] uses an unsupported boolean or malformed schema", path, name)
+				}
+				if err := validateMCPInputSchemaSupport(fmt.Sprintf("%s.properties[%q]", path, name), child); err != nil {
+					return err
+				}
+			}
+		case "items":
+			items, valid := raw.(map[string]any)
+			if !valid {
+				return fmt.Errorf("%s.items uses an unsupported boolean, tuple, or malformed schema", path)
+			}
+			if err := validateMCPInputSchemaSupport(path+".items", items); err != nil {
+				return err
+			}
+		case "additionalProperties":
+			if _, valid := raw.(bool); valid {
+				continue
+			}
+			additional, valid := raw.(map[string]any)
+			if !valid {
+				return fmt.Errorf("%s.additionalProperties must be a boolean or object schema", path)
+			}
+			if err := validateMCPInputSchemaSupport(path+".additionalProperties", additional); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("%s uses unsupported JSON Schema keyword %q", path, keyword)
+		}
+	}
+	return nil
+}
+
+var mcpSupportedSchemaTypes = map[string]struct{}{
+	"array": {}, "boolean": {}, "integer": {}, "null": {}, "number": {}, "object": {}, "string": {},
+}
+
+var mcpSupportedSchemaDialects = map[string]struct{}{
+	"http://json-schema.org/draft-06/schema#":      {},
+	"http://json-schema.org/draft-07/schema#":      {},
+	"https://json-schema.org/draft/2019-09/schema": {},
+	"https://json-schema.org/draft/2020-12/schema": {},
+}
+
+func mcpSchemaStringList(raw any, allowSingle bool) ([]string, bool) {
+	if value, valid := raw.(string); valid {
+		return []string{value}, allowSingle && value != ""
+	}
+	var values []string
+	switch typed := raw.(type) {
+	case []string:
+		values = typed
+	case []any:
+		values = make([]string, 0, len(typed))
+		for _, rawValue := range typed {
+			value, valid := rawValue.(string)
+			if !valid {
+				return nil, false
+			}
+			values = append(values, value)
+		}
+	default:
+		return nil, false
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" {
+			return nil, false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return nil, false
+		}
+		seen[value] = struct{}{}
+	}
+	return values, true
+}
+
+func mcpSchemaValidEnum(raw any) bool {
+	var values []any
+	switch typed := raw.(type) {
+	case []any:
+		values = typed
+	case []string:
+		values = make([]any, 0, len(typed))
+		for _, value := range typed {
+			values = append(values, value)
+		}
+	default:
+		return false
+	}
+	if len(values) == 0 {
+		return false
+	}
+	for i, value := range values {
+		for _, previous := range values[:i] {
+			if valuesEqual(value, previous) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func validateInputSchema(params map[string]any, schema map[string]any, rejectUnknownByDefault bool) error {
@@ -74,7 +219,8 @@ func validateSchemaValueWithPolicy(path string, value any, schema map[string]any
 
 	properties := schemaProperties(schema)
 	required := schemaRequired(schema)
-	if object, ok := value.(map[string]any); ok && (len(required) > 0 || len(properties) > 0 || hasType(expectedTypes, "object")) {
+	_, additionalPropertiesDeclared := schema["additionalProperties"]
+	if object, ok := value.(map[string]any); ok && (len(required) > 0 || len(properties) > 0 || hasType(expectedTypes, "object") || additionalPropertiesDeclared) {
 		for _, field := range required {
 			if _, exists := object[field]; !exists {
 				return fmt.Errorf("%s.%s is required", path, field)
@@ -82,8 +228,7 @@ func validateSchemaValueWithPolicy(path string, value any, schema map[string]any
 		}
 
 		allowUnknown, additionalSchema, hasAdditionalSchema := additionalProperties(schema)
-		_, additionalPropertiesDeclared := schema["additionalProperties"]
-		strictUnknown := len(properties) > 0 && !allowUnknown && !hasAdditionalSchema && (rejectUnknownByDefault || additionalPropertiesDeclared)
+		strictUnknown := !allowUnknown && !hasAdditionalSchema && (additionalPropertiesDeclared || rejectUnknownByDefault && len(properties) > 0)
 
 		for key, raw := range object {
 			childPath := path + "." + key
@@ -187,7 +332,7 @@ func matchesType(value any, expected string) bool {
 		if !ok {
 			return false
 		}
-		return math.Trunc(n) == n
+		return n.IsInt()
 	case "null":
 		return value == nil
 	default:
@@ -223,46 +368,45 @@ func valuesEqual(left, right any) bool {
 	lNum, lOK := numberValue(left)
 	rNum, rOK := numberValue(right)
 	if lOK && rOK {
-		return lNum == rNum
+		return lNum.Cmp(rNum) == 0
 	}
 	return reflect.DeepEqual(left, right)
 }
 
-func numberValue(value any) (float64, bool) {
+func numberValue(value any) (*big.Rat, bool) {
+	var text string
 	switch typed := value.(type) {
 	case float64:
-		return typed, true
+		text = strconv.FormatFloat(typed, 'g', -1, 64)
 	case float32:
-		return float64(typed), true
+		text = strconv.FormatFloat(float64(typed), 'g', -1, 32)
 	case int:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int8:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int16:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int32:
-		return float64(typed), true
+		text = strconv.FormatInt(int64(typed), 10)
 	case int64:
-		return float64(typed), true
+		text = strconv.FormatInt(typed, 10)
 	case uint:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint8:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint16:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint32:
-		return float64(typed), true
+		text = strconv.FormatUint(uint64(typed), 10)
 	case uint64:
-		return float64(typed), true
+		text = strconv.FormatUint(typed, 10)
 	case json.Number:
-		parsed, err := typed.Float64()
-		if err != nil {
-			return 0, false
-		}
-		return parsed, true
+		text = typed.String()
 	default:
-		return 0, false
+		return nil, false
 	}
+	parsed, ok := new(big.Rat).SetString(text)
+	return parsed, ok
 }
 
 func schemaProperties(schema map[string]any) map[string]map[string]any {
@@ -290,7 +434,7 @@ func schemaRequired(schema map[string]any) []string {
 		out := make([]string, 0, len(typed))
 		for _, value := range typed {
 			text, ok := value.(string)
-			if ok && strings.TrimSpace(text) != "" {
+			if ok && text != "" {
 				out = append(out, text)
 			}
 		}
