@@ -34,9 +34,9 @@ func executeOACommand(t *testing.T, caller *scriptedToolCaller, args ...string) 
 func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {
 	installScriptedCaller(t, &scriptedToolCaller{dry: true})
 	for _, args := range [][]string{
-		{"approval", "list-pending", "--start", "bad", "--end", "2030-01-01T10:00:00+08:00"},
-		{"approval", "list-pending", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
-		{"approval", "list-pending", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
+		{"approval", "list-pending", "--create-time-from", "bad"},
+		{"approval", "list-pending", "--create-time-from", "2030-01-02", "--create-time-to", "2030-01-01"},
+		{"approval", "list-pending", "--finish-time-to", "bad"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "bad", "--end", "2030-01-01T10:00:00+08:00"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
@@ -48,7 +48,7 @@ func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {
 
 	if err := executeFilterCoverage(t, newOaCommand(),
 		"approval", "list-pending",
-		"--start", "2030-01-01T09:00:00+08:00", "--end", "2030-01-01T10:00:00+08:00",
+		"--create-time-from", "2030-01-01", "--create-time-to", "2030-01-02",
 		"--page", "2", "--size", "20", "--query", "travel",
 	); err != nil {
 		t.Fatalf("pending options: %v", err)
