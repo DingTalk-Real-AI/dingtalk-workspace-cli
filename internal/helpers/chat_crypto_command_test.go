@@ -27,6 +27,13 @@ func TestCrossPlatformCoverageChatCryptoCommand(t *testing.T) {
 			t.Fatalf("chatCryptoClient = %#v", chatCryptoClient)
 		}
 	})
+	t.Run("encrypt_command_is_not_registered", func(t *testing.T) {
+		root := newChatCryptoCommand()
+		cmd, _, err := root.Find([]string{"encrypt"})
+		if err == nil && cmd != nil && cmd.Name() == "encrypt" {
+			t.Fatalf("unexpected encrypt command registered: %#v", cmd)
+		}
+	})
 	t.Run("decrypt_command_safechat_layer", func(t *testing.T) {
 		SetChatCryptoClient(&messagecrypto.Client{
 			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
