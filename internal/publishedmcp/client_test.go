@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -113,5 +114,87 @@ func TestNewCreatesDefaultTransport(t *testing.T) {
 	client := New(nil, "", nil)
 	if client == nil || client.transport == nil {
 		t.Fatal("New(nil, ...) returned an incomplete client")
+	}
+}
+
+func TestClientToolsAggregatesPages(t *testing.T) {
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+
+	var cursors []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID     int               `json:"id"`
+			Params map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		cursor := request.Params["cursor"]
+		cursors = append(cursors, cursor)
+		result := map[string]any{
+			"tools":      []map[string]any{{"name": "first", "inputSchema": map[string]any{"type": "object"}}},
+			"nextCursor": " page-2 ",
+		}
+		if cursor == " page-2 " {
+			result = map[string]any{
+				"tools": []map[string]any{{"name": "second", "inputSchema": map[string]any{"type": "object"}}},
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result})
+	}))
+	defer server.Close()
+
+	base := transport.NewClient(server.Client())
+	base.TrustedDomains = []string{"127.0.0.1"}
+	result, err := New(base, "", nil).Tools(t.Context(), server.URL)
+	if err != nil {
+		t.Fatalf("Tools() error = %v", err)
+	}
+	if len(result.Tools) != 2 || result.Tools[0].Name != "first" || result.Tools[1].Name != "second" {
+		t.Fatalf("Tools() = %#v", result.Tools)
+	}
+	if len(cursors) != 2 || cursors[0] != "" || cursors[1] != " page-2 " {
+		t.Fatalf("tools/list cursors = %#v", cursors)
+	}
+}
+
+func TestAppendToolPageRejectsAggregateLimit(t *testing.T) {
+	aggregate := transport.ToolsListResult{}
+	tools := []transport.ToolDescriptor{{Name: "search", Description: "large"}}
+
+	if _, err := appendToolPage(&aggregate, tools, 0, 1); err == nil || !strings.Contains(err.Error(), "aggregate safety limit") {
+		t.Fatalf("appendToolPage() error = %v, want aggregate safety limit", err)
+	}
+	if len(aggregate.Tools) != 0 {
+		t.Fatalf("appendToolPage() retained tools after rejection: %#v", aggregate.Tools)
+	}
+}
+
+func TestClientToolsRejectsRepeatedCursor(t *testing.T) {
+	t.Setenv("DWS_ALLOW_HTTP_ENDPOINTS", "1")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result": map[string]any{
+				"tools":      []map[string]any{},
+				"nextCursor": "same",
+			},
+		})
+	}))
+	defer server.Close()
+
+	base := transport.NewClient(server.Client())
+	base.TrustedDomains = []string{"127.0.0.1"}
+	_, err := New(base, "", nil).Tools(t.Context(), server.URL)
+	if err == nil || !strings.Contains(err.Error(), "repeated cursor") {
+		t.Fatalf("Tools() error = %v, want repeated cursor error", err)
 	}
 }

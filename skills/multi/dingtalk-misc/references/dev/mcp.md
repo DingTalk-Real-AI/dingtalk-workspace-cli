@@ -7,12 +7,26 @@
 
 远端 `serverName` 和工具名不会注册成新的顶层命令，也不写入跨身份缓存。消费端每次按当前登录 profile、用户和组织身份解析服务地址；输出只展示脱敏地址。
 
+## 渐进参考
+
+先使用本页确定阶段，只在进入对应步骤时加载一份深层参考：
+
+| 任务阶段 | 参考 |
+|---|---|
+| OpenAPI/Swagger/Postman/curl/接口文档转工具 | [API 材料转工具](mcp/api-to-tool.md) |
+| 编写 input/output mappings | [字段与映射规则](mcp/mapping-rules.md) |
+| 配置 API key、token、签名或凭证 | [鉴权与凭证](mcp/auth-and-credentials.md) |
+| 使用复杂 express 变换 | [7 组 82 个表达式函数](mcp/expression-functions.md) |
+| debug、发布或调用异常 | [故障定位](mcp/troubleshooting.md) |
+
+不要在普通服务查询或已发布工具调用时预读全部参考。
+
 ## MUST DO
 
 1. 下列已知 leaf 直接执行，不先读分组 help。只有创建/更新等复杂字段或确认语义确有不确定性时，读取一次 `dws schema --cli-path "dev mcp <leaf>" --compact --format json`；Schema 与 Cobra 不一致时才读取同一 leaf 的一次 help。
 2. 开发写操作的最初请求只允许 `--dry-run --format json`。展示 invocation 中的准确对象、动作、业务参数和影响，等用户对该预览明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；目标或业务参数变化就重新预检并确认，确认前不得真实写入。
 3. 发布前执行 `tool get` 和 `tool debug`，核对输入、输出与映射。
-4. 调用已发布工具前先执行 `mcp published tools <mcpId>`，按返回的 `inputSchema` 构造 `--params`。
+4. 调用已发布工具前先执行 `mcp published tools <mcpId>`，按返回的 `inputSchema` 构造 `--params`；真实 invoke 还会在本次调用中重新发现工具并按实时 Schema 校验。
 5. `mcp published invoke` 无法静态判断远端工具副作用，真实调用一律需要 `--yes`；未明确影响时只做 dry-run。
 6. MCP URL、凭证内容、token 和密钥不得写入回答、日志、文档或代码仓库。
 7. 若真实命令返回 `endpoint_not_resolved`，表示当前 CLI 的 `mcpdev` 运行端点不可用，不是 flag 错误；立即报告并停止，不用 help、改参数、Raw API 或 dry-run 冒充业务完成。
@@ -34,6 +48,8 @@ dws dev mcp service delete --mcp-id <mcpId> --dry-run --format json
 `server-name` 使用 kebab-case，作为服务的稳定语义标识；它不再生成 DWS 顶层命令。
 
 ## HTTP 工具
+
+用户给 API 材料要求转换为 MCP 时，先按 [API 材料转工具](mcp/api-to-tool.md) 完成业务拆分和设计评审，再执行创建命令。任何 input/output mapping 写入前必须读取 [字段与映射规则](mcp/mapping-rules.md)。
 
 创建和更新前先准备：
 
@@ -74,6 +90,8 @@ HSF 的 `apiInputs/apiOutputs` 由服务端按方法 Schema 生成。映射 targ
 
 ## 鉴权与凭证
 
+鉴权类型选择、静态 API key 和动态 token 模板见 [鉴权与凭证](mcp/auth-and-credentials.md)。
+
 ```bash
 dws dev mcp auth get --mcp-id <mcpId> --format json
 dws dev mcp auth save --mcp-id <mcpId> --auth-type NO_AUTH --dry-run --format json
@@ -104,4 +122,6 @@ dws mcp published invoke <mcpId> <toolName> \
 
 展示 dry-run 的准确对象、参数和潜在影响后，只有用户对该预览明确同意本次真实调用，调用方才可在执行时把同一命令仅由 `--dry-run` 换成确认标志；最初请求不算该确认，参数变化需重新预检。不要把确认标志固化进模板、脚本或可复制示例。
 
-`tools` 返回当前身份看到的实时工具列表。`invoke` 不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
+`tools` 返回当前身份看到的实时工具列表。真实 `invoke` 会再次执行 `tools/list`，拒绝不存在的工具、缺失 `inputSchema` 的工具以及不符合 required/type/enum/properties/items 核心约束的参数，然后才执行 `tools/call`。成功输出以 `inputSchemaValidation=core` 说明本次门禁范围。它不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
+
+当前内置调用面适用于可直接接受 JSON-RPC `tools/list`/`tools/call` 的服务，不宣称覆盖必须显式 initialize、SSE 或 `Mcp-Session-Id` 的严格会话型端点。异常处理见 [故障定位](mcp/troubleshooting.md)。

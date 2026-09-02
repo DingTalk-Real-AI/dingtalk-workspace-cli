@@ -17,6 +17,8 @@
 
 `dev mcp` 是固定、可审计的开发命令树，不会把远端 `serverName` 或工具名注入为新的 Cobra 命令。已发布工具统一通过 `dws mcp published tools/invoke` 消费。
 
+用户提供 OpenAPI/Swagger、Postman、curl 或接口文档并要求“做成 MCP / 给 Agent 用”时，也路由到本节。先完成接口拆分、三段式字段树、映射和鉴权设计，再执行 dry-run。当前不会创建动态命令缓存，也不得持久化 endpoint、工具名与含 `?key=` 的 URL。
+
 ```bash
 # 服务与工具
 dws dev mcp service list --format json
@@ -29,9 +31,9 @@ dws mcp published tools <mcpId> --format json
 dws mcp published invoke <mcpId> <toolName> --params '{}' --dry-run --format json
 ```
 
-`published invoke` 无法静态判断远端工具副作用。检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。
+`published invoke` 无法静态判断远端工具副作用。检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。真实调用会重新执行 `tools/list`，按当前工具 `inputSchema` 校验参数后才发出 `tools/call`。
 
-详细规则见 multi skill 的 `references/dev/mcp.md`。
+完整生命周期和按阶段加载的 API 转换、Mapping、鉴权、82 个表达式函数、故障定位参考见 multi skill 的 `references/dev/mcp.md`。
 
 ---
 

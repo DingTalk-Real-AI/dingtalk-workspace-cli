@@ -165,6 +165,10 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 				ProductID: "mcp", Name: "published_invoke", CanonicalPath: "mcp.published_invoke",
 				CLIPath: "mcp published invoke", PrimaryCLIPath: "mcp published invoke",
 			},
+			Parameters: []contract.ParamDecl{{
+				Name: "params", InterfaceType: "object",
+				Description: "传给实时发现工具的 JSON 对象；真实调用前按该工具当前 inputSchema 校验",
+			}},
 			Description: "经确认后按 mcpId 和工具名调用当前身份可用的已发布 MCP 工具",
 			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation, RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
@@ -207,6 +211,28 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 		if err != nil {
 			return err
 		}
+		tools, err := client.Tools(cmd.Context(), endpoint)
+		if err != nil {
+			return fmt.Errorf("发现已发布 MCP 工具: %w", err)
+		}
+		inputSchema, ok := publishedMCPToolInputSchema(tools, tool)
+		if !ok {
+			return apperrors.NewValidation(
+				fmt.Sprintf("已发布 MCP 中不存在工具 %q", tool),
+				apperrors.WithReason("published_mcp_tool_not_found"),
+				apperrors.WithHint("先执行 dws mcp published tools "+mcpID+" --format json 获取当前身份可用的实时工具列表"),
+			)
+		}
+		if len(inputSchema) == 0 {
+			return apperrors.NewValidation(
+				fmt.Sprintf("已发布 MCP 工具 %q 未提供 inputSchema，无法安全校验参数", tool),
+				apperrors.WithReason("published_mcp_input_schema_unavailable"),
+				apperrors.WithHint("先执行 dws mcp published tools "+mcpID+" --format json 核对服务返回的工具 Schema"),
+			)
+		}
+		if err := cli.ValidateMCPInputSchema(params, inputSchema); err != nil {
+			return err
+		}
 		result, err := client.Invoke(cmd.Context(), endpoint, tool, params)
 		if err != nil {
 			return fmt.Errorf("调用已发布 MCP 工具: %w", err)
@@ -218,12 +244,23 @@ func runMCPPublishedInvoke(caller edition.ToolCaller, factory mcpPublishedTransp
 			)
 		}
 		return output.WriteCommandPayload(cmd, map[string]any{
-			"mcpId":    mcpID,
-			"tool":     tool,
-			"endpoint": transport.RedactURL(endpoint),
-			"result":   result,
+			"mcpId":                 mcpID,
+			"tool":                  tool,
+			"endpoint":              transport.RedactURL(endpoint),
+			"inputSchemaValidation": "core",
+			"result":                result,
 		}, output.FormatJSON)
 	}
+}
+
+func publishedMCPToolInputSchema(tools transport.ToolsListResult, toolName string) (map[string]any, bool) {
+	toolName = strings.TrimSpace(toolName)
+	for _, tool := range tools.Tools {
+		if strings.TrimSpace(tool.Name) == toolName {
+			return tool.InputSchema, true
+		}
+	}
+	return nil, false
 }
 
 func parseMCPPublishedInvoke(cmd *cobra.Command, args []string) (string, string, map[string]any, error) {

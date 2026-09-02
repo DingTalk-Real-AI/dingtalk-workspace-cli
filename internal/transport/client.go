@@ -142,7 +142,8 @@ type ToolDescriptor struct {
 }
 
 type ToolsListResult struct {
-	Tools []ToolDescriptor `json:"tools"`
+	Tools      []ToolDescriptor `json:"tools"`
+	NextCursor string           `json:"nextCursor,omitempty"`
 }
 
 type ContentBlock struct {
@@ -382,11 +383,20 @@ func (c *Client) NotifyInitialized(ctx context.Context, endpoint string) error {
 }
 
 func (c *Client) ListTools(ctx context.Context, endpoint string) (ToolsListResult, error) {
+	return c.ListToolsPage(ctx, endpoint, "")
+}
+
+func (c *Client) ListToolsPage(ctx context.Context, endpoint, cursor string) (ToolsListResult, error) {
+	var params map[string]any
+	if cursor != "" {
+		params = map[string]any{"cursor": cursor}
+	}
 	var payload ToolsListResult
 	if err := c.callJSONRPC(ctx, endpoint, requestEnvelope{
 		JSONRPC: "2.0",
 		ID:      2,
 		Method:  "tools/list",
+		Params:  params,
 	}, true, &payload); err != nil {
 		return ToolsListResult{}, err
 	}

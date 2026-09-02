@@ -65,6 +65,28 @@ func TestValidateInputSchemaRejectsUnknownProperty(t *testing.T) {
 	}
 }
 
+func TestValidateMCPInputSchemaUsesJSONSchemaAdditionalPropertiesDefault(t *testing.T) {
+	t.Parallel()
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"title": map[string]any{"type": "string"},
+		},
+	}
+	params := map[string]any{"title": "Quarterly Report", "extension": true}
+
+	if err := ValidateMCPInputSchema(params, schema); err != nil {
+		t.Fatalf("ValidateMCPInputSchema() error = %v, want nil", err)
+	}
+
+	schema["additionalProperties"] = false
+	err := ValidateMCPInputSchema(params, schema)
+	if err == nil || !strings.Contains(err.Error(), "$.extension is not allowed") {
+		t.Fatalf("ValidateMCPInputSchema() error = %v, want explicit additionalProperties rejection", err)
+	}
+}
+
 func TestValidateInputSchemaRejectsMissingRequired(t *testing.T) {
 	t.Parallel()
 

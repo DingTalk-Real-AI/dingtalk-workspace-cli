@@ -82,6 +82,19 @@ func publishedURLCaller() *mcpURLTestCaller {
 	}
 }
 
+func publishedSearchTool() transport.ToolDescriptor {
+	return transport.ToolDescriptor{
+		Name: "search",
+		InputSchema: map[string]any{
+			"type":     "object",
+			"required": []any{"query"},
+			"properties": map[string]any{
+				"query": map[string]any{"type": "string"},
+			},
+		},
+	}
+}
+
 func TestMCPPublishedToolsResolvesIdentityEndpointAndRedactsOutput(t *testing.T) {
 	client := &mcpPublishedTestTransport{
 		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{{
@@ -121,6 +134,9 @@ func TestMCPPublishedInvokeDryRunDoesNotResolveOrCall(t *testing.T) {
 	if client.callEndpoint != "" {
 		t.Fatalf("dry-run called endpoint %q", client.callEndpoint)
 	}
+	if client.listEndpoint != "" {
+		t.Fatalf("dry-run discovered endpoint %q", client.listEndpoint)
+	}
 	if !strings.Contains(out, `"dry_run": true`) || !strings.Contains(out, `"executed": false`) {
 		t.Fatalf("dry-run output missing evidence: %s", out)
 	}
@@ -140,10 +156,14 @@ func TestMCPPublishedInvokeRequiresConfirmationBeforeResolution(t *testing.T) {
 	if client.callEndpoint != "" {
 		t.Fatalf("unconfirmed invocation called endpoint %q", client.callEndpoint)
 	}
+	if client.listEndpoint != "" {
+		t.Fatalf("unconfirmed invocation discovered endpoint %q", client.listEndpoint)
+	}
 }
 
 func TestMCPPublishedInvokeConfirmedCallsSelectedTool(t *testing.T) {
 	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{publishedSearchTool()}},
 		callResult: transport.ToolCallResult{
 			StructuredContent: map[string]any{"items": []any{"one"}},
 		},
@@ -160,12 +180,72 @@ func TestMCPPublishedInvokeConfirmedCallsSelectedTool(t *testing.T) {
 	if client.callTool != "search" || client.callArgs["query"] != "example" {
 		t.Fatalf("call = tool %q args %#v", client.callTool, client.callArgs)
 	}
+	if client.listEndpoint == "" || client.listEndpoint != client.callEndpoint {
+		t.Fatalf("discovery endpoint = %q, call endpoint = %q", client.listEndpoint, client.callEndpoint)
+	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("output is not JSON: %v\n%s", err, out)
 	}
 	if payload["tool"] != "search" {
 		t.Fatalf("output tool = %#v", payload["tool"])
+	}
+	if payload["inputSchemaValidation"] != "core" {
+		t.Fatalf("schema validation evidence = %#v", payload["inputSchemaValidation"])
+	}
+}
+
+func TestMCPPublishedInvokeValidatesLiveToolSchemaBeforeCall(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{publishedSearchTool()}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "search", "--params", `{}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), "$.query is required") {
+		t.Fatalf("error = %v, want live schema validation error", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("invalid arguments called endpoint %q", client.callEndpoint)
+	}
+}
+
+func TestMCPPublishedInvokeRejectsUnknownLiveToolBeforeCall(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{publishedSearchTool()}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "missing", "--params", `{}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), `不存在工具 "missing"`) {
+		t.Fatalf("error = %v, want unknown live tool error", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("unknown tool called endpoint %q", client.callEndpoint)
+	}
+}
+
+func TestMCPPublishedInvokeRejectsMissingLiveInputSchemaBeforeCall(t *testing.T) {
+	client := &mcpPublishedTestTransport{
+		listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{{Name: "search"}}},
+	}
+	_, err := executeMCPPublishedCommand(
+		t,
+		publishedURLCaller(),
+		client,
+		"--yes", "published", "invoke", "2480", "search", "--params", `{}`,
+	)
+	if err == nil || !strings.Contains(err.Error(), "未提供 inputSchema") {
+		t.Fatalf("error = %v, want missing live input schema error", err)
+	}
+	if client.callEndpoint != "" {
+		t.Fatalf("schema-less tool called endpoint %q", client.callEndpoint)
 	}
 }
 
@@ -294,6 +374,7 @@ func TestMCPPublishedInvokeErrorPaths(t *testing.T) {
 		caller     edition.ToolCaller
 		factory    mcpPublishedTransportFactory
 		callResult transport.ToolCallResult
+		listErr    error
 		callErr    error
 		wantErr    string
 	}{
@@ -308,6 +389,12 @@ func TestMCPPublishedInvokeErrorPaths(t *testing.T) {
 				return nil, errors.New("factory failed")
 			},
 			wantErr: "factory failed",
+		},
+		{
+			name:    "discovery",
+			caller:  publishedURLCaller(),
+			listErr: errors.New("list failed"),
+			wantErr: "发现已发布 MCP 工具: list failed",
 		},
 		{
 			name:    "transport",
@@ -330,7 +417,14 @@ func TestMCPPublishedInvokeErrorPaths(t *testing.T) {
 			factory := tt.factory
 			if factory == nil {
 				factory = func(context.Context) (mcpPublishedTransport, error) {
-					return &mcpPublishedTestTransport{callResult: tt.callResult, callErr: tt.callErr}, nil
+					return &mcpPublishedTestTransport{
+						listResult: transport.ToolsListResult{Tools: []transport.ToolDescriptor{{
+							Name: "search", InputSchema: map[string]any{"type": "object"},
+						}}},
+						listErr:    tt.listErr,
+						callResult: tt.callResult,
+						callErr:    tt.callErr,
+					}, nil
 				}
 			}
 			root := &cobra.Command{Use: "mcp", SilenceErrors: true, SilenceUsage: true}
