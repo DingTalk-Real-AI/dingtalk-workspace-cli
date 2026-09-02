@@ -2122,12 +2122,14 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 		"recover_release_commit:",
 		"recover_failed_run_id:",
 		"recover_failed_run_attempt:",
+		"recover_draft_release_id:",
 		"recover_release_nonce:",
 		"recover_release_confirmation:",
 		`format('Release recovery {0} at {1} {2}', inputs.recover_release_version, inputs.recover_release_commit, inputs.recover_release_nonce)`,
 		"workflow_dispatch must select exactly one release mode",
 		"release recovery confirmation must equal the exact version",
 		"recover_release_nonce must be bound to the release commit",
+		"recover_draft_release_id must be a positive release database ID",
 		`run.path !== ".github/workflows/release.yml"`,
 		`const expectedEvent = failedByCloud ? "workflow_dispatch" : "push"`,
 		`run.event !== expectedEvent`,
@@ -2288,12 +2290,14 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 		"find_recovery_draft_release_id()",
 		`select(.draft == true and .tag_name == \"$RELEASE_VERSION\"`,
 		`release_id="$(find_recovery_draft_release_id)"`,
+		`RECOVER_DRAFT_RELEASE_ID: ${{ inputs.recover_draft_release_id }}`,
+		`release_id="$RECOVER_DRAFT_RELEASE_ID"`,
 		`if [ "$find_status" -ne 2 ]; then`,
 		"Expected at most one draft GitHub Release for this recovery run",
 		"gh api --method POST",
 		`"repos/$GITHUB_REPOSITORY/releases/$release_id"`,
 		`uploaded_release_state="$(`,
-		`test "$uploaded_release_state" = "$(printf '%s\\t%s' "$release_id" "$RELEASE_VERSION")"`,
+		`test "$uploaded_release_state" = "$(printf '%s\t%s' "$release_id" "$RELEASE_VERSION")"`,
 		"Draft GitHub Release ID $release_id targets",
 		"Draft GitHub Release notes differ from the sealed CHANGELOG.",
 		"Draft GitHub Release is not bound to this exact recovery run.",
@@ -2330,7 +2334,7 @@ func TestReleaseWorkflowDraftLifecycleUsesOneReleaseID(t *testing.T) {
 	bodyVerify := strings.Index(publishStep, "Draft GitHub Release notes differ from the sealed CHANGELOG.")
 	markerVerify := strings.Index(publishStep, "Draft GitHub Release is not bound to this exact recovery run.")
 	upload := strings.Index(publishStep, `gh release upload "$RELEASE_VERSION"`)
-	idRecheck := strings.Index(publishStep, `test "$uploaded_release_state" = "$(printf '%s\\t%s' "$release_id" "$RELEASE_VERSION")"`)
+	idRecheck := strings.Index(publishStep, `test "$uploaded_release_state" = "$(printf '%s\t%s' "$release_id" "$RELEASE_VERSION")"`)
 	verify := strings.Index(publishStep, "tmp/trusted-release-tooling/scripts/release/verify-github-release-assets.sh")
 	download := strings.LastIndex(publishStep, "tmp/trusted-release-tooling/scripts/release/download-github-release-assets.sh")
 	byteCompare := strings.Index(publishStep, `cmp -s "$local_asset" "$remote_asset"`)
@@ -2391,6 +2395,7 @@ func TestRecoverReleaseBindsOneFailedRunAttempt(t *testing.T) {
 
 	for _, required := range []string{
 		"--failed-attempt <attempt>",
+		"--draft-release-id <release-id>",
 		"--failed-attempt requires --failed-run",
 		"find_latest_failed_attempt",
 		`while [ "$find_attempt" -ge 1 ]`,
@@ -2404,6 +2409,7 @@ func TestRecoverReleaseBindsOneFailedRunAttempt(t *testing.T) {
 		`is not bound by the cloud seal`,
 		"actions/runs/%s/attempts/%s",
 		`-f "recover_failed_run_attempt=$FAILED_RUN_ATTEMPT"`,
+		`-f "recover_draft_release_id=$DRAFT_RELEASE_ID"`,
 	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("release recovery script is missing attempt binding %q", required)
