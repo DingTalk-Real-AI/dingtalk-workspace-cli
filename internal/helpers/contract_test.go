@@ -180,6 +180,57 @@ func TestCrossPlatformCoverageContractDeleteCommandsRequireConfirmation(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageContractRequiredPaginationRejectsNegativeValuesBeforeCall(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "project list current-page",
+			args:    []string{"project", "list", "--current-page", "-1", "--page-size", "20", "--scope", "all"},
+			wantErr: "--current-page 必须为正整数",
+		},
+		{
+			name:    "project list page-size",
+			args:    []string{"project", "list", "--current-page", "1", "--page-size", "-20", "--scope", "all"},
+			wantErr: "--page-size 必须为正整数",
+		},
+		{
+			name:    "project digests current-page",
+			args:    []string{"project", "digests", "--current-page", "-1", "--page-size", "20", "--scope", "all"},
+			wantErr: "--current-page 必须为正整数",
+		},
+		{
+			name:    "project digests page-size",
+			args:    []string{"project", "digests", "--current-page", "1", "--page-size", "-20", "--scope", "all"},
+			wantErr: "--page-size 必须为正整数",
+		},
+		{
+			name:    "subject list current-page",
+			args:    []string{"subject", "list", "--current-page", "-1", "--page-size", "20"},
+			wantErr: "--current-page 必须为正整数",
+		},
+		{
+			name:    "subject list page-size",
+			args:    []string{"subject", "list", "--current-page", "1", "--page-size", "-20"},
+			wantErr: "--page-size 必须为正整数",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &contractDefectCaller{}
+			_, err := executeContractDefectCommand(t, caller, newContractCommand, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want containing %q", err, tc.wantErr)
+			}
+			if len(caller.calls)+len(caller.readCalls) != 0 {
+				t.Fatalf("calls after pagination validation failure: mutation=%#v read=%#v", caller.calls, caller.readCalls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageContractArchiveRequiresConfirmation(t *testing.T) {
 	path := writeTempJSON(t, "archive.json", `{"bizId":"contract-1","archiveTime":1700000000000,"archiveFiles":[{"spaceId":"space-1","fileId":"file-1","fileName":"合同.pdf"}],"archiveCode":"ARCH-1"}`)
 	args := []string{"archive", "--file", path}

@@ -902,12 +902,12 @@ fileDirectoryId   归档目录 ID（数字，可选）`,
   dws contract project list --current-page 1 --page-size 10 --scope self --name "采购" --status active --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			currentPage, err := cmd.Flags().GetInt64("current-page")
-			if err != nil || currentPage == 0 {
-				return fmt.Errorf("--current-page 为必填参数（正整数）")
+			if err != nil || currentPage <= 0 {
+				return fmt.Errorf("--current-page 必须为正整数")
 			}
 			pageSize, err := cmd.Flags().GetInt64("page-size")
-			if err != nil || pageSize == 0 {
-				return fmt.Errorf("--page-size 为必填参数（正整数）")
+			if err != nil || pageSize <= 0 {
+				return fmt.Errorf("--page-size 必须为正整数")
 			}
 			scope := strings.TrimSpace(MustGetStringFlag(cmd, "scope"))
 			if scope == "" {
@@ -956,12 +956,12 @@ fileDirectoryId   归档目录 ID（数字，可选）`,
 		Example: `  dws contract project digests --current-page 1 --page-size 20 --scope all --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			currentPage, err := cmd.Flags().GetInt64("current-page")
-			if err != nil || currentPage == 0 {
-				return fmt.Errorf("--current-page 为必填参数（正整数）")
+			if err != nil || currentPage <= 0 {
+				return fmt.Errorf("--current-page 必须为正整数")
 			}
 			pageSize, err := cmd.Flags().GetInt64("page-size")
-			if err != nil || pageSize == 0 {
-				return fmt.Errorf("--page-size 为必填参数（正整数）")
+			if err != nil || pageSize <= 0 {
+				return fmt.Errorf("--page-size 必须为正整数")
 			}
 			scope := strings.TrimSpace(MustGetStringFlag(cmd, "scope"))
 			if scope == "" {
@@ -1131,8 +1131,8 @@ fileDirectoryId   归档目录 ID（数字，可选）`,
 	projectSetStatusCmd.Flags().Int64("project-id", 0, "项目 ID（必填）")
 	projectSetStatusCmd.Flags().String("status", "", "项目状态（必填）")
 
-	projectListCmd.Flags().Int64("current-page", 0, "当前页码（必填）")
-	projectListCmd.Flags().Int64("page-size", 0, "每页条数（必填）")
+	projectListCmd.Flags().Int64("current-page", 0, "当前页码（必填，正整数）")
+	projectListCmd.Flags().Int64("page-size", 0, "每页条数（必填，正整数）")
 	projectListCmd.Flags().String("scope", "", "查询范围：self(我负责的)/all(所有项目)（必填）")
 	projectListCmd.Flags().String("name", "", "项目名称（模糊搜索）")
 	projectListCmd.Flags().String("code", "", "项目编码")
@@ -1143,8 +1143,8 @@ fileDirectoryId   归档目录 ID（数字，可选）`,
 	projectListCmd.Flags().String("end-date-left", "", "结束日期左区间（ISO-8601）")
 	projectListCmd.Flags().String("end-date-right", "", "结束日期右区间（ISO-8601）")
 
-	projectDigestsCmd.Flags().Int64("current-page", 0, "当前页码（必填）")
-	projectDigestsCmd.Flags().Int64("page-size", 0, "每页条数（必填）")
+	projectDigestsCmd.Flags().Int64("current-page", 0, "当前页码（必填，正整数）")
+	projectDigestsCmd.Flags().Int64("page-size", 0, "每页条数（必填，正整数）")
 	projectDigestsCmd.Flags().String("scope", "", "查询范围：self/all（必填）")
 	projectDigestsCmd.Flags().String("name", "", "项目名称（模糊搜索）")
 	projectDigestsCmd.Flags().String("code", "", "项目编码")
@@ -1224,12 +1224,12 @@ source: contract(智能合同), oa(OA审批)`,
   dws contract subject list --current-page 1 --page-size 10 --party-type other --name "科技" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			currentPage, err := cmd.Flags().GetInt64("current-page")
-			if err != nil || currentPage == 0 {
-				return fmt.Errorf("--current-page 为必填参数（正整数）")
+			if err != nil || currentPage <= 0 {
+				return fmt.Errorf("--current-page 必须为正整数")
 			}
 			pageSize, err := cmd.Flags().GetInt64("page-size")
-			if err != nil || pageSize == 0 {
-				return fmt.Errorf("--page-size 为必填参数（正整数）")
+			if err != nil || pageSize <= 0 {
+				return fmt.Errorf("--page-size 必须为正整数")
 			}
 			req := map[string]any{
 				"currentPage": currentPage,
@@ -1524,8 +1524,8 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 	subjectAddCmd.Flags().String("file", "", "AddSubjectOpenRequest JSON 文件路径，\"-\" 表示 stdin（必填）")
 	subjectUpdateCmd.Flags().String("file", "", "UpdateSubjectOpenRequest JSON 文件路径，\"-\" 表示 stdin（必填）")
 
-	subjectListCmd.Flags().Int64("current-page", 0, "当前页码（必填）")
-	subjectListCmd.Flags().Int64("page-size", 0, "每页条数（必填）")
+	subjectListCmd.Flags().Int64("current-page", 0, "当前页码（必填，正整数）")
+	subjectListCmd.Flags().Int64("page-size", 0, "每页条数（必填，正整数）")
 	subjectListCmd.Flags().String("party-type", "", "相对方类型：other(对方)/our(己方)")
 	subjectListCmd.Flags().String("name", "", "相对方名称（模糊匹配）")
 	subjectListCmd.Flags().String("code", "", "主体编号")
