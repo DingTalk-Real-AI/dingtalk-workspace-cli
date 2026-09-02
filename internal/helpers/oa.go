@@ -1360,6 +1360,7 @@ func newOaCommand() *cobra.Command {
 	approvalListFormsCmd := &cobra.Command{
 		Use:     "list-forms",
 		Short:   "获取当前用户可见的审批表单列表",
+		Long:    "获取当前用户可见的审批表单列表，每次只返回单页。响应中的 result.hasMore 表示是否还有下一页；当其为 true 时，将 result.nextCursor 作为下一次调用的 --cursor。命令不会自动翻页。",
 		Example: `  dws oa approval list-forms --cursor 0 --limit 100`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cursor, _ := strconv.ParseFloat(mustGetFlag(cmd, "cursor"), 64)
