@@ -12,20 +12,20 @@ VALUE_KINDS = {
     "TextareaField": "text",
     "NumberField": "number_string",
     "DDSelectField": "option_text",
-    "DDMultiSelectField": "option_text_json_array",
+    "DDMultiSelectField": "option_text_json_array_string",
     "DDDateField": "date_yyyy_mm_dd",
-    "DDDateRangeField": "date_range_json_array",
+    "DDDateRangeField": "date_range_json_array_string",
     "PhoneField": "phone_string",
     "IdCardField": "id_card_string",
     "MoneyField": "decimal_string",
     "InnerContactField": "user_id_or_json_array",
     "DepartmentField": "dept_id_or_json_array",
-    "AddressField": "address_json_array",
-    "DDPhotoField": "url_json_array",
-    "DDAttachment": "attachment_json_array",
+    "AddressField": "address_json_array_string",
+    "DDPhotoField": "url_json_array_string",
+    "DDAttachment": "attachment_json_array_string",
     "StarRatingField": "number_string",
     "RelateField": "process_instance_id",
-    "TableField": "table_rows_json",
+    "TableField": "table_rows_json_string",
 }
 
 AUTOMATIC_COMPONENTS = {
@@ -116,7 +116,14 @@ def _support(
 def _is_hidden(props: Dict[str, Any]) -> bool:
     return any(
         _truthy(props.get(key))
-        for key in ("hideInDesigner", "hidden", "hide", "disabled", "readOnly")
+        for key in (
+            "hideInDesigner",
+            "hidden",
+            "hide",
+            "invisible",
+            "disabled",
+            "readOnly",
+        )
     )
 
 
@@ -127,12 +134,13 @@ def _project_component(component: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     name, labels = _label(props)
-    if (
-        not name
-        and component_name == "DDBizSuite"
-        and props.get("bizType") == "attendance.supply"
-    ):
-        name = "attendance.supply"
+    if not name and component_name == "DDBizSuite":
+        name = str(
+            props.get("bizType")
+            or props.get("bizAlias")
+            or props.get("id")
+            or "DDBizSuite"
+        )
     if not name:
         return None
 
@@ -230,7 +238,12 @@ def project_form_schema(payload: Dict[str, Any], process_code: str = "") -> Dict
             "support": field["support"],
         }
         for field in all_fields
-        if field["required"] and field["support"] != "supported"
+        if (
+            field["required"] and field["support"] != "supported"
+        ) or (
+            field["componentName"] == "DDBizSuite"
+            and field["support"] == "unknown"
+        )
     ]
     optional_unavailable = [
         {
@@ -239,7 +252,14 @@ def project_form_schema(payload: Dict[str, Any], process_code: str = "") -> Dict
             "support": field["support"],
         }
         for field in all_fields
-        if not field["required"] and field["support"] != "supported"
+        if (
+            not field["required"]
+            and field["support"] != "supported"
+            and not (
+                field["componentName"] == "DDBizSuite"
+                and field["support"] == "unknown"
+            )
+        )
     ]
     return {
         "success": payload.get("success", True),

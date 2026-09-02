@@ -43,7 +43,7 @@
 
 ## 创建闭环
 
-1. 常规审批用 `search-forms` 获取真实模板；已有 `processCode` 时可跳过搜索。请假、补卡改用对应的 `attendance +get-approve-template` 精确定位，不走 `search-forms`。
+1. 常规审批用 `dws oa +search-forms` 获取真实模板；已有 `processCode` 时可跳过搜索。请假、补卡改用对应的 `attendance +get-approve-template` 精确定位。
 2. 每次创建前重新调用 `form-schema`，不得复用旧 Schema；默认在本地投影控件摘要，且必须通过 `oa_create_preflight.py form-schema` 完成，禁止临时编写 `jq`/Python 解析器或先读取原始 Schema。
 3. 按投影中的 `valueKind`、必填项、选项和明细子控件一次性组装 payload；只有 `needsComponentReference=true` 才定位控件 reference 的对应小节。
 4. 对人员姓名使用 `dws aisearch person` 解析并消歧真实 userId。
@@ -54,10 +54,10 @@
 
 顺序是硬约束：`form-schema → 本地完整 payload → forecast-process → 一次 create-instance → 回读`。不得在 `forecast-process` 前创建；不得在失败后回退到缺字段 payload。
 
-`forecast-process` 必须使用已核验的真实 `deptId` 和准备提交的最终 `form-values`，任一值变化后重新预测；缺少的必填业务值必须追问，不得自行补齐。否则前置未满足，不能将失败归因于 API。
+`forecast-process` 必须使用已核验的真实 `deptId` 和准备提交的最终表单值，任一值变化后重新预测；缺少的必填业务值必须追问，不得自行补齐。否则前置未满足，不能将失败归因于 API。
 
 ```bash
-dws oa approval search-forms --query "<模板关键词>" --format json
+dws oa +search-forms --query "<模板关键词>" --format json
 dws oa approval form-schema --process-code <processCode> --format json \
   | python3 scripts/oa_create_preflight.py form-schema --process-code <processCode>
 dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --format json \
@@ -81,7 +81,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 - `TableField.children`；
 - 控件是否只读、隐藏或由系统计算。
 
-提交简单模式时，`--form-values` 是 JSON 对象，key 必须与可写控件 label 完全一致。优先按紧凑输出的 `valueKind` 组装；`support=client_only|unknown` 的必填字段进入 `blockers` 并停止，非必填字段进入 `optionalUnavailable` 并在摘要中明确跳过。只有 `needsComponentReference=true` 时才定位 [oa-form-components.md](oa/oa-form-components.md) 的对应小节。
+提交简单模式时，`--form-values` 是“字段名到字符串值”的 JSON 对象，key 必须与可写控件 label 完全一致；`TableField`、多选和日期范围的数组仍要序列化成 JSON 字符串，不能直接传数组。优先按紧凑输出的 `valueKind` 组装；`support=client_only|unknown` 的必填字段进入 `blockers` 并停止，非必填字段进入 `optionalUnavailable` 并在摘要中明确跳过。只有 `needsComponentReference=true` 时才定位 [oa-form-components.md](oa/oa-form-components.md) 的对应小节。
 
 ### 未知控件的硬边界
 
@@ -90,7 +90,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 - 必填：停止并说明当前 Skill 无法安全自动提交，请用户改用钉钉客户端或等待能力补齐。
 - 非必填：取得用户同意后才可跳过，并在创建摘要中显式列出。
 
-`DDHolidayField` 和 `DDBizSuite · attendance.supply` 只按下方考勤套件闭环提交，必须走高级 `--request`；不能套用 `DDDateRangeField` 或普通 `DDDateField` 的简单模式。
+`DDHolidayField` 和 `DDBizSuite · attendance.supply` 只按下方考勤套件闭环提交，必须走高级 `--request`；不能套用 `DDDateRangeField` 或普通日期控件。其他 `DDBizSuite` 没有 CLI 已公开的稳定容器契约，停止创建；不能把套件子控件当普通顶层字段提交。
 
 ### 明细与核心字段
 
@@ -144,11 +144,14 @@ dws oa approval forecast-process --process-code <processCode> --dept-id <deptId>
 - 多个自选节点一次性收集选人结果。
 - 只要预测中存在 `targetSelect: true`，就必须使用高级 `--request`；简单模式的 `--approvers` / `--cc-list` 不能替代模板自选节点，也不得作为失败后的降级路径。
 
-需要 `targetSelectActioners`、`directAppointedApprovers` 或其他高级字段时使用 `--request`，不要同时传简单模式 flags：
+需要 `targetSelectActioners` 或同时表达普通审批人与自选节点时使用 `--request`，不要同时传简单模式 flags。高级模式字段必须沿用 CLI 的公开结构：创建请求的 `formComponentValues` 是一维数组，预测请求的是二维数组；不存在 `formValues` 字段，`deptId` 为整数。
 
 ```bash
-dws oa approval create-instance --request '<完整请求JSON>' --yes --format json
+dws oa approval forecast-process --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[[{"name":"事由","value":"测试"}]]}' --format json
+dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[{"name":"事由","value":"测试"}],"approvers":[{"actionType":"OR","userIds":["approver-user-id"]}],"targetSelectActioners":[{"actionerKey":"manual-node","actionerStaffIds":["selected-user-id"]}]}' --yes --format json
 ```
+
+`approvers` 与简单模式 `--approvers` 的 CLI 映射一致；仅在用户指定审批人且预测没有对应的自选审批节点时放入高级请求。预测已有固定审批人且用户没有要求覆盖时，不额外传 `approvers`。
 
 若不需要高级字段，优先使用 `--process-code`、`--form-values` 和可选 `--approvers`、`--cc-list`，减少手写请求结构。
 

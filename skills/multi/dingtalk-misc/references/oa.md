@@ -7,7 +7,7 @@
 | 当前任务 | 读取范围 |
 |---|---|
 | 查询表单、待处理、我发起、我处理、抄送、详情、任务、记录、管理员列表 | 只读本文件 |
-| 同意、拒绝、转交、加签、退回、评论、追加抄送、撤销 | 本文件足够；遇到错误再按 shared 契约读取对应错误 reference |
+| 同意、拒绝、转交、评论、追加抄送、撤销 | 本文件足够；遇到错误再按 shared 契约读取对应错误 reference |
 | 发起审批、预测流程、组装表单字段 | 继续读 [oa-create.md](oa-create.md)；按其中条件加载控件和节点 reference |
 | 下载链接、下载/预览授权、上传审批附件 | 继续读 [oa-attachments.md](oa-attachments.md) |
 
@@ -42,7 +42,7 @@
 
 ## 目标绑定与写操作闭环
 
-任何审批决定、转交、加签、退回、评论、追加抄送或附件操作前，核对并保存：
+任何审批决定、转交、评论、追加抄送或附件操作前，核对并保存：
 
 - 角色来源和 profile；
 - 流程名称/`processCode`、发起人、状态；
@@ -81,13 +81,13 @@ dws oa approval list-cc --query "<可选关键词>" --format json
 ### 表单与我发起的实例
 
 ```bash
-dws oa approval search-forms --query "<关键词>" --format json
+dws oa +search-forms --query "<关键词>" --format json
 dws oa approval list-forms --cursor 0 --limit 100 --format json
 dws oa approval form-schema --process-code <processCode> --format json
 dws oa approval list-initiated --process-code <processCode> --start "<ISO-8601>" --end "<ISO-8601>" --cursor 0 --limit 20 --format json
 ```
 
-已知关键词优先 `search-forms`；只有用户要求枚举可见表单时使用 `list-forms` 并检查分页。多个相近模板时展示真实名称和 `processCode` 让用户消歧，不根据近似名称擅自选模板。
+已知关键词优先使用公开 shortcut `oa +search-forms`；名称搜索为空时，可去掉口语中的“流程/审批/申请”等通用后缀做一次有依据的放宽，不枚举无关同义词。只有用户要求枚举可见表单时使用 `list-forms` 并检查分页。多个相近模板时展示真实名称和 `processCode` 让用户消歧；读取字段时可逐项交付候选 Schema，真正创建时再要求选定唯一模板，不根据近似名称擅自创建。
 
 用户询问模板字段时，`form-schema` 的字段定义就是交付结果：最终答复至少列出字段名、是否必填及可见的类型或选项，不得只报告“已查到 Schema”。
 
@@ -106,21 +106,11 @@ dws oa approval list-by-admin --process-code <processCode> --start "<ISO-8601>" 
 | 同意 | `list-pending → detail/tasks/records` | `dws oa approval approve --instance-id <id> --task-id <taskId> --remark "<意见>" --format json` | `detail` + `records` + 必要时 `list-executed` |
 | 拒绝 | 同上 | `dws oa approval reject --instance-id <id> --task-id <taskId> --remark "<原因>" --format json` | `detail` + `records` + 必要时 `list-executed` |
 | 转交 | 当前 `taskId` + 真实目标 userId | `dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --remark "<说明>" --format json` | `tasks` + `records` |
-| 加签 | 当前实例/任务 + 真实被加签人 userId | `dws oa approval append-task --instance-id <id> --task-id <taskId> --type <before|after|Parallel> --appender-user-ids <ids> --activate-type <ALL|ONE_BY_ONE> --agree-all <true|false> --format json` | `tasks` + `records` |
-| 退回 | 先查可退节点 | `dws oa approval revert-task --instance-id <id> --task-id <taskId> --target-activity-id <activityId> --action <revertAction> --remark "<说明>" --format json` | `tasks` + `records` |
 | 撤销我发起的审批 | 从 submitted/initiated 核对为本人发起 | `dws oa approval revoke --instance-id <id> --remark "<说明>" --format json` | `detail` + `records` |
 | 评论 | 核对实例及来源 | `dws oa approval oa-comments --instance-id <id> --content "<评论>" --format json` | 用能展示评论的真实返回/读取结果验证；无法独立回读时明确说明 |
 | 追加抄送 | 核对实例 + 真实 userId | `dws oa approval oa-cc-noticer --instance-id <id> --users <userId1,userId2> --format json` | `detail` 或对应真实返回验证 |
 
 姓名先用 `dws aisearch person --query "<姓名>" --dimension name --format json` 解析并消歧，禁止把姓名直接当 userId。
-
-### 退回的强制前置
-
-```bash
-dws oa approval revert-activities --task-id <taskId> --format json
-```
-
-从真实返回选择 `activityId` 和 `revertAction`。无可退节点时立即停止；不得编造 `target-activity-id` 或把固定的 `sid-startevent` 用于非“退回发起人”场景。
 
 ## 发起审批路由
 
@@ -138,17 +128,6 @@ dws oa approval revert-activities --task-id <taskId> --format json
 | 上传本地审批附件 | `dws oa approval attachment upload` | 返回附件元数据，供创建审批字段使用 |
 
 附件实例也必须来自用户指定的角色来源。生成下载链接成功不能证明下载授权成功，反之亦然。
-
-## 催办
-
-先从当前审批任务获取被催办人，再按 DING 规则发送，禁止猜 userId：
-
-```bash
-dws oa approval ding-info --task-id <taskId> --format json
-dws ding message send --robot-code <robotCode> --users <userIds> --content "<催办内容>" --format json
-```
-
-短信或电话 DING 有成本，按 DING Skill 和最终 Schema 的确认规则执行。
 
 ## 错误与最终交付
 

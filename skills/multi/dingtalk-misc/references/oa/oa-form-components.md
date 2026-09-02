@@ -459,6 +459,10 @@ extValue = JSON.stringify({
 
 | 控件 | componentName | 处理 |
 |---|---|---|
+| 未专项支持的业务套件 | `DDBizSuite` | 容器提交契约未知；即使套件本身非必填也停止，不把 children 当普通顶层字段提交 |
+| 级联选择 | `CascadeField` | Schema 未给出真实选项或 CLI 未公开稳定值时停止，不用显示文本猜 value |
+| 开放数据 | `OpenDataField` | 数据源选择结果没有 CLI 已公开的稳定值契约时停止 |
+
 遇到其他未列出的 `componentName` 也按同一规则处理。只有本文件明确给出 value 格式时，才自动组装该控件。
 
 ---

@@ -3,6 +3,7 @@
 
 import importlib.util
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -12,18 +13,21 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "skills" / "multi" / "dingtalk-misc" / "scripts" / "oa_create_preflight.py"
+PENDING_SCRIPT = ROOT / "skills" / "multi" / "dingtalk-misc" / "scripts" / "oa_pending_review.py"
+OA_ROOT = ROOT / "skills" / "multi" / "dingtalk-misc" / "references"
 
 
-def load_script():
-    spec = importlib.util.spec_from_file_location("oa_create_preflight", SCRIPT)
+def load_script(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {SCRIPT}")
+        raise RuntimeError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-PREFLIGHT = load_script()
+PREFLIGHT = load_script("oa_create_preflight", SCRIPT)
+PENDING = load_script("oa_pending_review", PENDING_SCRIPT)
 
 
 class OAFormProjectionTest(unittest.TestCase):
@@ -92,7 +96,7 @@ class OAFormProjectionTest(unittest.TestCase):
             field["name"] for field in projected["fields"]
         ])
         self.assertEqual(["交通费", "住宿费"], projected["fields"][0]["options"])
-        self.assertEqual("table_rows_json", projected["fields"][1]["valueKind"])
+        self.assertEqual("table_rows_json_string", projected["fields"][1]["valueKind"])
         self.assertEqual("金额", projected["fields"][1]["children"][0]["name"])
         self.assertEqual("decimal_string", projected["fields"][1]["children"][0]["valueKind"])
         self.assertEqual(
@@ -185,7 +189,42 @@ class OAFormProjectionTest(unittest.TestCase):
         field = PREFLIGHT.project_form_schema(payload)["fields"][0]
         self.assertEqual("开始时间", field["name"])
         self.assertEqual(["开始时间", "结束时间"], field["labels"])
-        self.assertEqual("date_range_json_array", field["valueKind"])
+        self.assertEqual("date_range_json_array_string", field["valueKind"])
+
+    def test_unknown_unlabelled_business_suite_is_a_blocker(self):
+        payload = {
+            "result": {
+                "content": {
+                    "items": [
+                        {
+                            "componentName": "DDBizSuite",
+                            "props": {
+                                "id": "suite-1",
+                                "bizType": "alitrip.business",
+                                "required": False,
+                            },
+                            "children": [
+                                {
+                                    "componentName": "TextField",
+                                    "props": {"label": "出发城市"},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+
+        projected = PREFLIGHT.project_form_schema(payload)
+
+        self.assertEqual("alitrip.business", projected["fields"][0]["name"])
+        self.assertEqual("unknown", projected["fields"][0]["support"])
+        self.assertEqual(
+            ["DDBizSuite"],
+            [blocker["componentName"] for blocker in projected["blockers"]],
+        )
+        self.assertEqual([], projected["optionalUnavailable"])
+        self.assertTrue(projected["needsComponentReference"])
 
     def test_template_agnostic_vehicle_and_item_forms(self):
         templates = {
@@ -291,6 +330,46 @@ class OAForecastProjectionTest(unittest.TestCase):
         payload = {"error": {"reason": "business_error", "message": "系统错误"}}
         self.assertIs(payload, PREFLIGHT.project_forecast(payload))
         self.assertIs(payload, PREFLIGHT.project_form_schema(payload))
+
+
+class OAPendingReviewTest(unittest.TestCase):
+    def test_unwraps_detail_result(self):
+        detail = {"result": {"formComponentValues": [{"name": "金额"}]}}
+        self.assertEqual(
+            [{"name": "金额"}],
+            PENDING.unwrap_result(detail)["formComponentValues"],
+        )
+
+    def test_dry_run_passes_query_to_list_pending(self):
+        result = subprocess.run(
+            [sys.executable, str(PENDING_SCRIPT), "--dry-run", "--query", "补卡"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("--query 补卡 --format json", result.stdout)
+
+
+class OAReferenceContractTest(unittest.TestCase):
+    def test_references_only_use_schema_visible_form_search(self):
+        text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in [
+                OA_ROOT / "oa.md",
+                OA_ROOT / "oa-create.md",
+                OA_ROOT / "oa" / "oa-process-nodes.md",
+            ]
+        )
+        for unsupported in [
+            "dws oa approval search-forms",
+            "dws oa approval append-task",
+            "dws oa approval ding-info",
+            "dws oa approval revert-activities",
+            "dws oa approval revert-task",
+            "directAppointedApprovers",
+        ]:
+            self.assertNotIn(unsupported, text)
+        self.assertIn("dws oa +search-forms", text)
 
 
 if __name__ == "__main__":

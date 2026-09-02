@@ -138,7 +138,7 @@
 ```
 
 - `workNo` 必须通过 `dws aisearch person --query "<工号>" --dimension jobNumber --format json` 获取，**严禁编造**
-- 在 `create-instance` 中对应 `directAppointedApprovers` 的 `staffIds`
+- 用户显式指定普通审批人时，对应 `create-instance` 请求中的 `approvers[].userIds`
 
 ### 2. 直属主管（target_formula / reportLineManager）
 
@@ -329,17 +329,16 @@
 
 ## create-instance 中的节点参数映射
 
-### directAppointedApprovers（指定审批人覆盖模板流程）
+### approvers（指定普通审批人）
 
-当需要**不使用模板默认流程、直接指定审批人**时使用。
+当用户指定审批人，但预测没有对应的自选审批节点时，沿用 CLI 简单模式 `--approvers` 的请求结构。
 
 ```json
 {
-  "directAppointedApprovers": [
+  "approvers": [
     {
-      "staffIds": ["userId1", "userId2"],
-      "taskActionType": "NONE",
-      "staffId": ""
+      "actionType": "OR",
+      "userIds": ["userId1", "userId2"]
     }
   ]
 }
@@ -347,9 +346,8 @@
 
 | 字段 | 说明 |
 |------|------|
-| `staffIds` | 审批人 userId 列表（通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取；多结果须消歧） |
-| `taskActionType` | `NONE`（单人）/ `AND`（会签）/ `OR`（或签） |
-| `staffId` | 留空字符串 |
+| `userIds` | 审批人 userId 列表（通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取；多结果须消歧） |
+| `actionType` | `NONE`（单人）/ `AND`（会签）/ `OR`（或签） |
 
 ### targetSelectActioners（自选审批人）
 
@@ -376,9 +374,9 @@
 ## 组装优先级
 
 1. 先用 `forecast-process` 获取模板的流程节点结构（`workflowActivityRuleVOs`）
-2. 根据节点中的 `activityType` 和 `targetSelect` 判断是否需要传入 `directAppointedApprovers` 或 `targetSelectActioners`
+2. 根据节点中的 `activityType` 和 `targetSelect` 判断是否需要传入 `approvers` 或 `targetSelectActioners`
 3. 如果预测返回 `targetSelect: true` 的自选节点，`targetSelectActioners` 必填
-4. 如果用户要求覆盖默认流程，使用 `directAppointedApprovers`
+4. 用户指定审批人但预测没有自选审批节点时，使用 `approvers`
 5. **所有 userId 必须通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取，严禁填姓名；多结果须消歧**
 
 预测出现 `targetSelect: true` 时，只能用高级 `--request` 精确绑定 `actorKey`。简单模式的 `--approvers` / `--cc-list` 是另一种请求语义，不能替代 `targetSelectActioners`，更不能在高级请求失败后作为降级重试。`actorType=approver` 绑定用户指定审批人，`actorType=notifier` 绑定用户指定抄送人；不要按节点顺序猜角色。
