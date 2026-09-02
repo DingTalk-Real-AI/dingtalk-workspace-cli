@@ -42,6 +42,20 @@ CLIENT_ONLY_COMPONENTS = {
     "RecipientAccountField",
 }
 
+DIAGNOSTIC_KEYS = (
+    "dingOpenErrcode",
+    "errorCode",
+    "errorMsg",
+    "errorMessage",
+    "message",
+    "msg",
+    "hint",
+    "failedReason",
+    "failureReason",
+    "failureMessage",
+    "requestId",
+)
+
 
 def _truthy(value: Any) -> bool:
     if isinstance(value, str):
@@ -222,10 +236,49 @@ def _decode_schema_content(content: Any) -> Dict[str, Any]:
     return content
 
 
+def _failure_projection(
+    payload: Dict[str, Any],
+    result: Any,
+    reason: str,
+    message: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    server = {}
+    sources = [("response", payload)]
+    if isinstance(result, dict):
+        sources.append(("result", result))
+    for scope, source in sources:
+        details = {
+            key: source[key]
+            for key in DIAGNOSTIC_KEYS
+            if key in source and source[key] not in (None, "", [], {})
+        }
+        if details:
+            server[scope] = details
+    error = {"reason": reason, "message": message}
+    if server:
+        error["server"] = server
+    projected = {"success": False, "error": error}
+    if extra:
+        projected.update(extra)
+    return projected
+
+
 def project_form_schema(payload: Dict[str, Any], process_code: str = "") -> Dict[str, Any]:
     if "error" in payload:
         return payload
     result = payload.get("result")
+    if payload.get("success") is not True:
+        return _failure_projection(
+            payload,
+            result,
+            "form_schema_failed",
+            "表单 Schema 获取未成功；不得继续创建审批单",
+            {
+                "processCode": process_code
+                or (result.get("processCode") if isinstance(result, dict) else None)
+            },
+        )
     if not isinstance(result, dict):
         raise ValueError("form-schema response is missing result")
     schema = _decode_schema_content(result.get("content"))
@@ -294,44 +347,35 @@ def project_forecast(payload: Dict[str, Any]) -> Dict[str, Any]:
     if "error" in payload:
         return payload
     result = payload.get("result")
+    if payload.get("success") is not True:
+        return _failure_projection(
+            payload,
+            result,
+            "forecast_failed",
+            "流程预测未成功；不得继续创建审批单",
+            {
+                "forecastSuccess": (
+                    result.get("forecastSuccess") if isinstance(result, dict) else None
+                ),
+                "processCode": (
+                    result.get("processCode") if isinstance(result, dict) else None
+                ),
+            },
+        )
     if not isinstance(result, dict):
         raise ValueError("forecast response is missing result")
 
     if result.get("forecastSuccess") is not True:
-        diagnostic_keys = (
-            "dingOpenErrcode",
-            "errorCode",
-            "errorMsg",
-            "errorMessage",
-            "message",
-            "msg",
-            "hint",
-            "failedReason",
-            "failureReason",
-            "failureMessage",
-            "requestId",
+        return _failure_projection(
+            payload,
+            result,
+            "forecast_failed",
+            "流程预测未成功；不得继续创建审批单",
+            {
+                "forecastSuccess": result.get("forecastSuccess"),
+                "processCode": result.get("processCode"),
+            },
         )
-        server = {}
-        for scope, source in (("response", payload), ("result", result)):
-            details = {
-                key: source[key]
-                for key in diagnostic_keys
-                if key in source and source[key] not in (None, "", [], {})
-            }
-            if details:
-                server[scope] = details
-        error = {
-            "reason": "forecast_failed",
-            "message": "流程预测未成功；不得继续创建审批单",
-        }
-        if server:
-            error["server"] = server
-        return {
-            "success": False,
-            "forecastSuccess": result.get("forecastSuccess"),
-            "processCode": result.get("processCode"),
-            "error": error,
-        }
 
     nodes = []
     selections = []

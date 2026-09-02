@@ -174,6 +174,7 @@ class OAFormProjectionTest(unittest.TestCase):
 
     def test_date_range_uses_first_label_and_preserves_labels(self):
         payload = {
+            "success": True,
             "result": {
                 "content": {
                     "items": [
@@ -195,6 +196,7 @@ class OAFormProjectionTest(unittest.TestCase):
 
     def test_unknown_unlabelled_business_suite_is_a_blocker(self):
         payload = {
+            "success": True,
             "result": {
                 "content": {
                     "items": [
@@ -230,6 +232,7 @@ class OAFormProjectionTest(unittest.TestCase):
 
     def test_required_unlabelled_controls_fail_closed(self):
         payload = {
+            "success": True,
             "result": {
                 "content": {
                     "items": [
@@ -323,6 +326,7 @@ class OAFormProjectionTest(unittest.TestCase):
         for title, items in templates.items():
             with self.subTest(title=title):
                 payload = {
+                    "success": True,
                     "result": {
                         "content": json.dumps({"title": title, "items": items})
                     }
@@ -332,6 +336,42 @@ class OAFormProjectionTest(unittest.TestCase):
                 self.assertEqual([], projected["blockers"])
                 self.assertFalse(projected["needsComponentReference"])
                 self.assertNotIn(title, SCRIPT.read_text(encoding="utf-8"))
+
+    def test_failed_schema_exits_nonzero_and_cannot_continue_to_create(self):
+        payload = {
+            "success": False,
+            "errorMsg": "schema unavailable",
+            "requestId": "schema-request-1",
+            "result": {
+                "processCode": "PROC-PARTIAL",
+                "errorCode": "SCHEMA_READ_FAILED",
+                "errorMessage": "模板读取失败",
+                "content": {"title": "缓存模板", "items": []},
+            },
+        }
+
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "form-schema"],
+            input=json.dumps(payload, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        projected = json.loads(completed.stdout)
+
+        self.assertNotEqual(0, completed.returncode)
+        self.assertFalse(projected["success"])
+        self.assertEqual("form_schema_failed", projected["error"]["reason"])
+        self.assertEqual(
+            "模板读取失败",
+            projected["error"]["server"]["result"]["errorMessage"],
+        )
+        self.assertEqual(
+            "schema-request-1",
+            projected["error"]["server"]["response"]["requestId"],
+        )
+        self.assertNotIn("fields", projected)
+        self.assertNotIn("blockers", projected)
 
 
 class OAForecastProjectionTest(unittest.TestCase):
