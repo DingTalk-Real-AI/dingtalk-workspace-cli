@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -209,6 +210,33 @@ func TestMCPPublishedGroupHelpAndDefaultFactory(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "tools") || !strings.Contains(out.String(), "invoke") {
 		t.Fatalf("group help missing commands:\n%s", out.String())
+	}
+}
+
+func TestCrossPlatformCoverageMCPPublishedPositionalsAreValidationErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "tools missing mcp id", args: []string{"published", "tools"}},
+		{name: "tools extra argument", args: []string{"published", "tools", "2480", "extra"}},
+		{name: "invoke missing tool", args: []string{"published", "invoke", "2480"}},
+		{name: "invoke extra argument", args: []string{"published", "invoke", "2480", "search", "extra"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := executeMCPPublishedCommand(t, nil, &mcpPublishedTestTransport{}, tt.args...)
+			if err == nil {
+				t.Fatal("expected positional validation error")
+			}
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error type = %T, want *errors.Error: %v", err, err)
+			}
+			if typed.Category != apperrors.CategoryValidation || typed.ExitCode() != apperrors.ExitCodeValidation || typed.Reason != "invalid_positionals" {
+				t.Fatalf("classification = category %q, code %d, reason %q", typed.Category, typed.ExitCode(), typed.Reason)
+			}
+		})
 	}
 }
 
