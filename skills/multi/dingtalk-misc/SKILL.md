@@ -1,6 +1,6 @@
 ---
 name: dingtalk-misc
-description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/考勤/直播/DING紧急消息/开放平台应用管理/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
+description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/考勤/直播/DING紧急消息/开放平台应用管理/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -15,13 +15,15 @@ metadata:
 
 本文件只负责产品路由。先由下表确定唯一产品：单一、清晰的 Attendance、Report、Sheet 或 Dev 任务直接读取对应 reference（内含该任务所需的最小执行契约）；其它产品先读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)，再读取唯一产品 reference。仅在实际触发认证、profile、确认或错误恢复时补读一份精确 shared reference，不做冷启动预读。
 
+同一请求同时出现日报、周报或简报名称与审批人、抄送人、审批路径、审批单等审批意图时，审批意图优先，统一路由 OA 并读取 `oa.md`；本次任务不得执行 `dws report`。OA 中没有同名模板也不能降级提交 Report，只能交付 OA 搜索结果或请求消歧。只有用户明确要求提交钉钉日志，且没有审批流语义时，才路由 Report。
+
 Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`，不要重复预读 `dingtalk-shared`。只有出现跨产品编排、profile/认证问题、未知全局错误或 Reference 明确指向 shared 时，才按需读取 shared 对应内容。
 
 ## 产品索引表
 
 | 触发关键词 | 一句话范围 | 命令前缀 | 详细参考 |
 |---|---|---|---|
-| OA / 审批 / 待处理审批 / 同意 / 拒绝 / 撤销 / 已发起审批 | OA 审批：待处理/详情/同意/拒绝/撤销/已发起/批量审批 | `dws oa` | [oa.md](references/oa.md) |
+| OA / 审批 / 待处理审批 / 同意 / 拒绝 / 撤销 / 已发起审批 / 发起审批 / 审批附件 | OA 审批查询与处理；创建和附件按需加载专项说明 | `dws oa` | 先读核心 [oa.md](references/oa.md)；发起审批再读 [oa-create.md](references/oa-create.md)；附件操作再读 [oa-attachments.md](references/oa-attachments.md) |
 | 考勤 / 打卡 / 班次 / 考勤组 / 排班 / 考勤报表 / 假期余额 | 考勤记录、规则与配置、排班、报表、假期 | `dws attendance` | 日常查询/规则/设置：[attendance.md](references/attendance.md)；排班导入或排班表导出：[attendance-schedule.md](references/attendance-schedule.md)；考勤 Excel/报表导出：[attendance-report.md](references/attendance-report.md)；假期/余额：[attendance-vacation.md](references/attendance-vacation.md) |
 | 直播 / 我的直播 / 直播列表 | 直播列表与直播记录查询 | `dws live` | [live.md](references/live.md) |
 | DING / 紧急通知 / 电话DING / 短信DING / 必达消息 | DING 紧急消息（应用内/短信/电话），个人DING | `dws ding` | [ding.md](references/ding.md) |
@@ -55,6 +57,6 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 - **Dev JSON 与分页**：所有命令带 `--format json`；`connect list/status` 还必须带它们自己的 `--json`，否则实际输出是表格。`app list`、`permission list`、`event list`、`version list` 只接受游标分页：读取返回的 `meta.pagination.endpoint_exhausted/next_token`，续页传 `--cursor <next_token>`；禁止猜 `--page`、`--page-num`，也不要从 `data` 中找旧版 `hasMore/nextCursor`。
 - **Dev 完成纪律**：执行前记下用户要求的每个交付项；按依赖顺序执行，删除/停用等清理放到最后。用户最初请求写操作只授权 dry-run，不是看过预检后的正式确认。必须先展示 dry-run 的准确对象、动作、业务参数和影响，再取得用户对该预览的明确确认；随后只把同一命令的 `--dry-run` 换成 `--yes`，目标或业务参数有任何变化都重新 dry-run、展示并确认。确认前不得发出非 dry-run 写调用；`--dry-run` 不是完成。写后只做一次必要回读。相同业务错误且参数、状态均未改变时不要重试；仅在新证据实际改变命令、参数或状态后重试一次。最终逐项回答，空列表也明确写“暂无”，不要用大段原始 JSON 挤掉其它结果。
 - **DevDoc 搜索预算**：开放平台文档任务对每个用户主题先用原短语精确搜索一次；某主题无结果时最多再用一个由结果证据支持的同义词，随后如实报告未命中。禁止用 10 轮以上近义词、help 或跨产品搜索碰运气。
-- 查询、同意、拒绝、转交或撤销审批走 [oa.md](references/oa.md)；要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
+- OA 任务先读核心 [oa.md](references/oa.md)。只有进入真实提单阶段才增量读取 [oa-create.md](references/oa-create.md)，只有处理审批附件才增量读取 [oa-attachments.md](references/oa-attachments.md)；不要为普通查询预读创建、控件、节点和附件全集。要求未来审批任务或实例发生变化时实时通知，切换独立的 [`dingtalk-event`](../dingtalk-event/SKILL.md)。开放平台应用事件配置仍属于 DevApp，按 [dev/event.md](references/dev/event.md) 执行，不要与个人实时事件混淆。
 - 原生 `.md` 与在线富文本 `adoc`、通用文件存储的边界见 [markdown.md](references/markdown.md)；跨组织 / profile 规则见 [profile.md](references/profile.md)。
 - PAT 行为授权不是开放平台应用权限；后者见 [dev/permission.md](references/dev/permission.md)。
