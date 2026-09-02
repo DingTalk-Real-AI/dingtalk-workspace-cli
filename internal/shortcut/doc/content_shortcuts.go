@@ -1186,6 +1186,27 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 	return false
 }
 
+// The document service rewrites the private mention protocol into a DingTalk
+// profile link while committing markdown, so the authored destination never
+// survives a readback. Verification compares such links by position and label
+// instead of destination; the resolved identity is the service's contract, not
+// something a write-readback can prove locally (openDingTalkId and the
+// rewritten staff_id are different values).
+const (
+	docMentionLinkPrefix = "alidocs-mcp://doc/mention"
+	docProfileLinkPrefix = "dingtalk://dingtalkclient/page/profile"
+	docMentionLinkToken  = "link:mention"
+)
+
+func docContentHasMentionLink(source string) bool {
+	return strings.Contains(source, docMentionLinkPrefix)
+}
+
+func docMentionLinkDestination(destination string) bool {
+	return strings.HasPrefix(destination, docMentionLinkPrefix) ||
+		strings.HasPrefix(destination, docProfileLinkPrefix)
+}
+
 func markdownSemanticallyEquivalent(left, right string) bool {
 	leftFingerprint, leftOK := markdownSemanticFingerprint(left)
 	rightFingerprint, rightOK := markdownSemanticFingerprint(right)
@@ -1194,6 +1215,14 @@ func markdownSemanticallyEquivalent(left, right string) bool {
 	}
 	leftFingerprint, leftOK = markdownServiceSemanticFingerprint(left)
 	rightFingerprint, rightOK = markdownServiceSemanticFingerprint(right)
+	if leftOK && rightOK && leftFingerprint == rightFingerprint {
+		return true
+	}
+	if !docContentHasMentionLink(right) {
+		return false
+	}
+	leftFingerprint, leftOK = markdownMentionCanonicalFingerprint(left)
+	rightFingerprint, rightOK = markdownMentionCanonicalFingerprint(right)
 	return leftOK && rightOK && leftFingerprint == rightFingerprint
 }
 
@@ -1205,6 +1234,14 @@ func markdownSemanticallyEndsWith(content, suffix string) bool {
 	}
 	contentFingerprint, contentOK = markdownServiceSemanticFingerprint(content)
 	suffixFingerprint, suffixOK = markdownServiceSemanticFingerprint(suffix)
+	if contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint) {
+		return true
+	}
+	if !docContentHasMentionLink(suffix) {
+		return false
+	}
+	contentFingerprint, contentOK = markdownMentionCanonicalFingerprint(content)
+	suffixFingerprint, suffixOK = markdownMentionCanonicalFingerprint(suffix)
 	return contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint)
 }
 
@@ -1224,6 +1261,19 @@ func markdownSemanticFingerprint(source string) (string, bool) {
 // service, such as hard/soft line breaks, list tightness, and insignificant
 // whitespace. Exact rendered HTML remains the first comparison path above.
 func markdownServiceSemanticFingerprint(source string) (string, bool) {
+	return markdownStructuralFingerprint(source, false)
+}
+
+// markdownMentionCanonicalFingerprint additionally collapses mention links to a
+// destination-agnostic token, so an authored private mention protocol and the
+// profile link the service rewrites it into produce the same fingerprint. Label
+// text and node order stay in the fingerprint, so a dropped or reordered
+// mention is still caught.
+func markdownMentionCanonicalFingerprint(source string) (string, bool) {
+	return markdownStructuralFingerprint(source, true)
+}
+
+func markdownStructuralFingerprint(source string, canonicalizeMentionLinks bool) (string, bool) {
 	if len(source) > docMarkdownVerifyMax {
 		return "", false
 	}
@@ -1288,7 +1338,12 @@ func markdownServiceSemanticFingerprint(source string) (string, bool) {
 		case *goldmarkast.Emphasis:
 			builder.token("open", fmt.Sprintf("emphasis:%d", typed.Level))
 		case *goldmarkast.Link:
-			builder.token("open", "link:"+string(typed.Destination)+"\x00"+string(typed.Title))
+			destination := string(typed.Destination)
+			if canonicalizeMentionLinks && docMentionLinkDestination(destination) {
+				builder.token("open", docMentionLinkToken)
+				return goldmarkast.WalkContinue, nil
+			}
+			builder.token("open", "link:"+destination+"\x00"+string(typed.Title))
 		case *goldmarkast.Image:
 			builder.token("open", "image:"+string(typed.Destination)+"\x00"+string(typed.Title))
 		case *extensionast.Table:

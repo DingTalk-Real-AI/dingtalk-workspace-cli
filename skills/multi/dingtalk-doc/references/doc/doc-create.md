@@ -49,7 +49,7 @@ dws doc +create --name "<文档名>" --content @body.json --doc-format jsonml --
 
 ## @人（markdown mention）
 
-markdown 里可写 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)`，服务端会改写为该用户的钉钉个人资料链接；`openDingTalkId` 取自 `dws aisearch +search-person` 的 `openDingTalkId`。完整说明见 doc-update.md 的「@人」小节。
+markdown 里可写 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)`，服务端会改写为该用户的钉钉个人资料链接；`openDingTalkId` 取自 `dws aisearch +search-person` 的 `openDingTalkId`。仅 markdown 生效，`--doc-format jsonml` 不改写。完整说明见 doc-update.md 的「@人」小节。
 
 ## 高级通道
 
