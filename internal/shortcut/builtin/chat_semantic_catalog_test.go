@@ -17,6 +17,7 @@ type chatSemanticCatalogFixture struct {
 	Service           string                `json:"service"`
 	Availability      shortcut.Availability `json:"default_availability"`
 	FeaturedShortcuts []string              `json:"featured_shortcuts"`
+	AtomicOwners      map[string]string     `json:"atomic_owners"`
 	Shortcuts         map[string]struct {
 		Disposition          shortcut.SemanticDisposition `json:"disposition"`
 		SemanticDelta        string                       `json:"semantic_delta"`
@@ -27,6 +28,42 @@ type chatSemanticCatalogFixture struct {
 		CompatibilityVisible bool                         `json:"compatibility_visible"`
 		Reviewed             bool                         `json:"reviewed"`
 	} `json:"shortcuts"`
+}
+
+func TestCrossPlatformCoverageChatGoldenRoutePrefersReviewedShortcutOwners(t *testing.T) {
+	raw, err := os.ReadFile("../semantic_catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source chatSemanticCatalogFixture
+	if err := json.Unmarshal(raw, &source); err != nil {
+		t.Fatal(err)
+	}
+
+	skillRaw, err := os.ReadFile("../../../skills/multi/dingtalk-chat/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(skillRaw)
+	start := strings.Index(skill, "## Golden Route")
+	if start < 0 {
+		t.Fatal("chat Skill lacks Golden Route section")
+	}
+	endOffset := strings.Index(skill[start:], "\n以下次级入口")
+	if endOffset < 0 {
+		t.Fatal("chat Skill lacks primary Golden Route terminator")
+	}
+	primaryRoutes := skill[start : start+endOffset]
+	codeSpans := strings.Split(primaryRoutes, "`")
+	for atomicPath, owner := range source.AtomicOwners {
+		invocation := "dws " + atomicPath
+		for index := 1; index < len(codeSpans); index += 2 {
+			code := strings.TrimSpace(codeSpans[index])
+			if code == invocation || strings.HasPrefix(code, invocation+" ") {
+				t.Errorf("Golden Route uses reviewed atomic path %q; use owner dws %s", atomicPath, owner)
+			}
+		}
+	}
 }
 
 func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
