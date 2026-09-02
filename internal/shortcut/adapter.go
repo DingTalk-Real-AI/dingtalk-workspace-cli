@@ -85,10 +85,16 @@ func fromShortcutPostMount(s Shortcut) func(*cobra.Command) {
 			break
 		}
 	}
-	if len(s.Aliases) == 0 && strings.TrimSpace(s.SinglePositionalAliasFor) == "" && !hasVisibleFlagAliases {
+	if len(s.Aliases) == 0 && strings.TrimSpace(s.SinglePositionalAliasFor) == "" && !hasVisibleFlagAliases && s.HelpTier == "" {
 		return nil
 	}
 	return func(cmd *cobra.Command) {
+		if s.HelpTier != "" {
+			if cmd.Annotations == nil {
+				cmd.Annotations = map[string]string{}
+			}
+			cmd.Annotations[HelpTierAnnotation] = string(s.HelpTier)
+		}
 		cmd.Aliases = append([]string(nil), s.Aliases...)
 		for _, flag := range s.Flags {
 			if !flag.AliasesVisible {
