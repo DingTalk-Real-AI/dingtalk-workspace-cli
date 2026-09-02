@@ -41,8 +41,8 @@ func TestCrossPlatformCoverageRecordCreateSubRecordDispatch(t *testing.T) {
 		t.Fatalf("tool calls = %d, want 1", len(caller.calls))
 	}
 	call := caller.calls[0]
-	if call.tool != "create_sub_records" {
-		t.Fatalf("tool = %q, want create_sub_records", call.tool)
+	if call.tool != "create_records" {
+		t.Fatalf("tool = %q, want create_records", call.tool)
 	}
 	for key, want := range map[string]any{
 		"baseId":         "base-sub",
@@ -89,8 +89,8 @@ func TestCrossPlatformCoverageRecordCreateSubRecordCellsShortcut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record create --cells returned error: %v", err)
 	}
-	if len(caller.calls) != 1 || caller.calls[0].tool != "create_sub_records" {
-		t.Fatalf("calls = %#v, want single create_sub_records", caller.calls)
+	if len(caller.calls) != 1 || caller.calls[0].tool != "create_records" {
+		t.Fatalf("calls = %#v, want single create_records", caller.calls)
 	}
 	if caller.calls[0].args["parentRecordId"] != "recP" {
 		t.Fatalf("parentRecordId = %#v", caller.calls[0].args["parentRecordId"])

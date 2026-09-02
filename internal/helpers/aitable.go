@@ -103,39 +103,36 @@ func validateSubRecordModeFlags(cmd *cobra.Command) error {
 	return nil
 }
 
-// dispatchRecordCreate sends the create request for `record create`. With
-// --parent-record-id it targets create_sub_records (hierarchical records);
-// otherwise it stays on the classic create_records. Both paths use
-// callMCPTool (no automatic retry) because retried creates would duplicate rows.
+// dispatchRecordCreate sends the create request for `record create`. It always
+// projects onto the single pinned aitable/create_records RPC: passing
+// --parent-record-id simply adds the optional parentRecordId/viewId properties,
+// and the MCP server routes to hierarchy (sub-record) creation internally. The
+// CLI therefore stays a parameter-equivalent projection onto one RPC and never
+// selects a different tool at the command layer. Uses callMCPTool (no automatic
+// retry) because retried creates would duplicate rows.
 func dispatchRecordCreate(cmd *cobra.Command, records []any) error {
 	baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
 	if err != nil {
 		return err
 	}
-	parentRecordID, _ := cmd.Flags().GetString("parent-record-id")
-	if parentRecordID == "" {
-		return callMCPTool("create_records", map[string]any{
-			"baseId":  baseID,
-			"tableId": mustGetFlag(cmd, "table-id"),
-			"records": records,
-		})
-	}
-	// Sub-record mode: the MCP tool caps a single call at 100 records; fail
-	// client-side with an actionable message instead of a server round-trip.
-	if len(records) > 100 {
-		return fmt.Errorf("--records exceeds sub-record limit: got %d, max 100\n  hint: split into multiple record create --parent-record-id calls", len(records))
-	}
 	args := map[string]any{
-		"baseId":         baseID,
-		"tableId":        mustGetFlag(cmd, "table-id"),
-		"parentRecordId": parentRecordID,
-		"records":        records,
+		"baseId":  baseID,
+		"tableId": mustGetFlag(cmd, "table-id"),
+		"records": records,
 	}
-	// Optional pass-through: viewId selects the view carrying hierarchyConfig.
-	if viewID, _ := cmd.Flags().GetString("view-id"); viewID != "" {
-		args["viewId"] = viewID
+	if parentRecordID, _ := cmd.Flags().GetString("parent-record-id"); parentRecordID != "" {
+		// Sub-record mode caps a single call at 100 records; fail client-side with
+		// an actionable message instead of a server round-trip.
+		if len(records) > 100 {
+			return fmt.Errorf("--records exceeds sub-record limit: got %d, max 100\n  hint: split into multiple record create --parent-record-id calls", len(records))
+		}
+		args["parentRecordId"] = parentRecordID
+		// Optional pass-through: viewId selects the view carrying hierarchyConfig.
+		if viewID, _ := cmd.Flags().GetString("view-id"); viewID != "" {
+			args["viewId"] = viewID
+		}
 	}
-	return callMCPTool("create_sub_records", args)
+	return callMCPTool("create_records", args)
 }
 
 // resolveWorkflowDSL reads --dsl from inline JSON, @file, or stdin (-), then
@@ -3069,10 +3066,10 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   unidirectionalLink/bidirectionalLink → {"linkedRecordIds":["recXXX","recYYY"]}
   creator/lastModifier/createdTime/lastModifiedTime → 系统自动回填，不建议手动写入
 
-子记录模式：传入 --parent-record-id 时，新记录将作为该父记录的子记录创建（调用 create_sub_records）。
+子记录模式：传入 --parent-record-id 时，新记录将作为该父记录的子记录创建（仍调用 create_records，服务端按 hierarchy 子记录语义内部处理）。
   - 无需手动写 hierarchy 字段值，服务端自动注入指向父记录的关联
   - 表未配置层级字段时，服务端会自动创建 association 字段对并更新视图配置
-  - --view-id 可选：指定从哪个视图读取 hierarchyConfig；缺省自动找第一个配置了它的 Grid 视图
+  - --view-id 可选：指定视图优先读取 hierarchyConfig；该视图未配置时自动回退到第一个已配置的 Grid 视图
   - 子记录模式单次最多 100 条
 
 Windows 用户注意：如果 --records JSON 很长（超过命令行长度限制），请使用 --records-file 参数指定一个 JSON 文件路径，
@@ -3124,7 +3121,7 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 				PrimaryCLIPath: "aitable record create",
 			},
 			Description: "新增记录（cells 的 key 必须是 fieldId）；传 --parent-record-id 时在父记录下创建子记录。",
-			Interface:   aitableCompositeInterface("Reviewed composite wrapper: without --parent-record-id the CLI projects directly onto pinned aitable/create_records; with --parent-record-id it dispatches to aitable/create_sub_records (hierarchy creation), so the command is no longer a single pinned RPC projection."),
+			Interface:   aitableMCPInterface("create_records"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "新增记录（cells 的 key 必须是 fieldId）；传 --parent-record-id 时在父记录下创建子记录。",
 				UseWhen:      []string{"需要插入新行数据时", "需要在某条父记录下创建层级子记录时（--parent-record-id）"},
@@ -8048,8 +8045,8 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	_ = recordCreateCmd.Flags().MarkHidden("fields")
 	recordCreateCmd.Flags().String("cells", "", "单条记录的 cells JSON 对象（自动构造 --records '[{\"cells\":...}]'）")
 	_ = recordCreateCmd.Flags().MarkHidden("cells")
-	recordCreateCmd.Flags().String("parent-record-id", "", "父记录 ID；传入后新记录将作为它的子记录创建（create_sub_records，单次最多 100 条）")
-	recordCreateCmd.Flags().String("view-id", "", "子记录模式可选：从该视图 读取 hierarchyConfig；缺省自动找第一个配置了它的 Grid 视图（仅与 --parent-record-id 同时使用）")
+	recordCreateCmd.Flags().String("parent-record-id", "", "父记录 ID；传入后新记录将作为它的子记录创建（仍走 create_records，服务端内部按 hierarchy 处理，单次最多 100 条）")
+	recordCreateCmd.Flags().String("view-id", "", "子记录模式可选：指定视图优先读取 hierarchyConfig，该视图未配置时自动回退到第一个已配置的 Grid 视图（仅与 --parent-record-id 同时使用）")
 	recordUpdateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordUpdateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordUpdateCmd.Flags().String("records", "", "待更新的记录内容列表 JSON 数组，单次最多 100 条 (必填)")
