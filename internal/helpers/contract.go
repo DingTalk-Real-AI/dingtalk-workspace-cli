@@ -615,12 +615,12 @@ remark            账款备注（String(64)，可选）`,
 --contract-code   合同代码
 --contract-name   合同名称
 --transaction-no  单据号
---exec-start      执行开始时间（毫秒时间戳）
---exec-end        执行结束时间（毫秒时间戳）
+--exec-start      执行开始时间（ISO-8601 时间字符串；CLI 转换为 MCP 所需的 Unix 毫秒时间戳）
+--exec-end        执行结束时间（ISO-8601 时间字符串；CLI 转换为 MCP 所需的 Unix 毫秒时间戳）
 --page            当前页码（默认 1）
 --page-size       每页条数`,
 		Example: `  dws contract account list --scope self --format json
-  dws contract account list --scope all --query-status pay --exec-start 1700000000000 --format json`,
+  dws contract account list --scope all --query-status pay --exec-start 2026-01-01T00:00:00+08:00 --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := map[string]any{}
 			if v, _ := cmd.Flags().GetString("scope"); strings.TrimSpace(v) != "" {
@@ -672,8 +672,8 @@ remark            账款备注（String(64)，可选）`,
 	accountListCmd.Flags().String("contract-code", "", "合同代码")
 	accountListCmd.Flags().String("contract-name", "", "合同名称")
 	accountListCmd.Flags().String("transaction-no", "", "单据号")
-	accountListCmd.Flags().String("exec-start", "", "执行开始时间（毫秒时间戳）")
-	accountListCmd.Flags().String("exec-end", "", "执行结束时间（毫秒时间戳）")
+	accountListCmd.Flags().String("exec-start", "", "执行开始时间（ISO-8601 时间字符串；CLI 转换为 MCP 所需的 Unix 毫秒时间戳）")
+	accountListCmd.Flags().String("exec-end", "", "执行结束时间（ISO-8601 时间字符串；CLI 转换为 MCP 所需的 Unix 毫秒时间戳）")
 	accountListCmd.Flags().Int("page", 0, "当前页码")
 	accountListCmd.Flags().Int("page-size", 0, "每页条数")
 

@@ -32,7 +32,7 @@ Avoid when：
 
 1. 先定位真实对象。更新、删除、导出、归档前，先通过对应 `list` / `get` / `detail` 获取真实 ID 和当前状态；禁止根据名称猜 ID。
 2. 复杂请求只通过 `--file <json>` 或 `--file -` 传递。提交前检查 JSON 是对象，字段名、必填项和枚举符合本文及当前 leaf Schema；不要把整个请求 JSON 拼成未声明的 flags。
-3. 时间单位不得混用：台账与项目的筛选日期使用 ISO-8601；账款 `executionDate`、账款筛选 `--exec-start` / `--exec-end`、归档 `archiveTime` 使用 Unix 毫秒时间戳。
+3. 时间单位不得混用：台账、项目及账款列表的筛选日期使用 ISO-8601；账款 JSON 的 `executionDate` 与归档 JSON 的 `archiveTime` 使用 Unix 毫秒时间戳。
 4. 异步操作保存创建响应中的真实 `taskId`，再调用配套结果命令。结果未完成时只报告处理中；仅在返回明确可重试状态时轮询，并遵守服务端重试间隔。
 5. 删除项目、相对方、账款以及归档等不可逆或高影响操作，在执行前说明对象和影响并获得用户确认；确认后才在 Runtime gate 要求时添加 `--yes`。
 6. 创建或更新后优先使用详情查询回读。没有对应详情接口时，保留原始回执并明确说明未能独立回读验证。
@@ -290,7 +290,7 @@ dws contract subject import-result --task-id <TASK_ID> --format json
 - `--query-status`：`all`、`pay`、`receive`。
 - `--amount-type`：`payment_party_other`、`payment_party_our`、`none`。
 - 其他筛选：`--status`、`--source`、`--contract-code`、`--contract-name`、`--transaction-no`。
-- `--exec-start` / `--exec-end`：Unix 毫秒时间戳，不是 ISO-8601。
+- `--exec-start` / `--exec-end`：ISO-8601 时间字符串；CLI 转换为 MCP 所需的 Unix 毫秒时间戳。
 - 分页：`--page`、`--page-size`。
 
 ```bash

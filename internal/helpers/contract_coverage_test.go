@@ -338,7 +338,7 @@ func TestCrossPlatformCoverageContractMiscCommands(t *testing.T) {
 	archivePath := writeTempJSON(t, "archive.json", `{"bizId":"abc","archiveTime":1700000000000}`)
 	caller = &contractDefectCaller{}
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"archive", "--file", archivePath); err != nil {
+		"archive", "--file", archivePath, "--yes"); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
 	call = onlyContractCall(t, caller)
@@ -353,7 +353,7 @@ func TestCrossPlatformCoverageContractMiscCommands(t *testing.T) {
 	// archive: readContractJSONPayload error (missing --file)
 	caller = &contractDefectCaller{}
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"archive"); err == nil {
+		"archive", "--yes"); err == nil {
 		t.Fatal("archive without --file should fail")
 	}
 }

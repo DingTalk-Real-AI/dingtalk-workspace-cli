@@ -485,7 +485,7 @@ func declareContractSchema(r *contractSchemaRefs) {
 
 	// ── archive ─────────────────────────────────────────────
 	DeclareLeafMetadata(r.Archive, LeafSpec{
-		Safety: safetyWrite,
+		Safety: safetyDestructive,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID: "contract", Name: "archive", CanonicalPath: "contract.archive",

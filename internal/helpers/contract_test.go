@@ -180,6 +180,43 @@ func TestCrossPlatformCoverageContractDeleteCommandsRequireConfirmation(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageContractArchiveRequiresConfirmation(t *testing.T) {
+	path := writeTempJSON(t, "archive.json", `{"bizId":"contract-1","archiveTime":1700000000000,"archiveFiles":[{"spaceId":"space-1","fileId":"file-1","fileName":"合同.pdf"}],"archiveCode":"ARCH-1"}`)
+	args := []string{"archive", "--file", path}
+
+	caller := &contractDefectCaller{}
+	_, err := executeContractDefectCommand(t, caller, newContractCommand, args...)
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls)+len(caller.readCalls) != 0 {
+		t.Fatalf("archive reached MCP before confirmation: mutation=%#v read=%#v", caller.calls, caller.readCalls)
+	}
+
+	confirmed := &contractDefectCaller{}
+	_, err = executeContractDefectCommand(t, confirmed, newContractCommand, append(args, "--yes")...)
+	if err != nil {
+		t.Fatalf("archive with --yes: %v", err)
+	}
+	call := onlyContractCall(t, confirmed)
+	if call.toolName != "contractOpenArchive" {
+		t.Fatalf("tool = %q, want contractOpenArchive", call.toolName)
+	}
+	request, ok := call.args["ContractOpenArchiveRequest"].(map[string]any)
+	if !ok {
+		t.Fatalf("ContractOpenArchiveRequest = %#v", call.args["ContractOpenArchiveRequest"])
+	}
+	want := map[string]any{
+		"bizId":       "contract-1",
+		"archiveTime": float64(1700000000000),
+		"archiveFiles": []any{map[string]any{
+			"spaceId": "space-1", "fileId": "file-1", "fileName": "合同.pdf",
+		}},
+		"archiveCode": "ARCH-1",
+	}
+	if !reflect.DeepEqual(request, want) {
+		t.Fatalf("request = %#v, want %#v", request, want)
+	}
+}
+
 func TestCrossPlatformCoverageContractBatchDeleteRejectsInvalidIDListsAfterConfirmation(t *testing.T) {
 	cases := []struct {
 		name    string
