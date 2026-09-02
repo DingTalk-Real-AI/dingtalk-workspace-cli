@@ -182,6 +182,16 @@ func TestCrossPlatformCoveragePaginationVariants(t *testing.T) {
 	if !ok || nextPage["time"] != time.UnixMilli(1787000000123).UTC().Format(time.RFC3339Nano) {
 		t.Fatalf("json.Number nextPage = %#v", numberPayload["nextPage"])
 	}
+	invalidNumberPayload := map[string]any{}
+	ApplyMessagePagination(invalidNumberPayload, map[string]any{
+		"hasMore": true, "nextCursor": json.Number("not-a-cursor"),
+	}, []map[string]any{{"openMessageId": "m1"}}, "older")
+	if invalidNumberPayload["failedCount"] != 1 {
+		t.Fatalf("invalid json.Number cursor was accepted: %#v", invalidNumberPayload)
+	}
+	if _, ok := invalidNumberPayload["nextPage"]; ok {
+		t.Fatalf("invalid json.Number cursor produced nextPage: %#v", invalidNumberPayload)
+	}
 	for _, tc := range []struct {
 		value any
 		want  bool
