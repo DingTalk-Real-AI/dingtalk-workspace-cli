@@ -1297,6 +1297,10 @@ func TestDeliveryCatalogContactParamDeclsMatchMergeBaseContract(t *testing.T) {
 			absent: []string{"staff-id", "staffId", "user-id", "userId", "label-id", "role-id", "dept-ids", "deptIds"},
 		},
 		{
+			path:   "contact ext-field list",
+			params: map[string]wantParam{},
+		},
+		{
 			path: "contact ext-field create",
 			params: map[string]wantParam{
 				"name": {property: "orgEmpAttrModels[0].name", required: true},
