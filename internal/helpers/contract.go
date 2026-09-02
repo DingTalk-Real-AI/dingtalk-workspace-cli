@@ -1331,6 +1331,9 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 			if err != nil {
 				return fmt.Errorf("--subject-ids 须为逗号分隔的整数: %w", err)
 			}
+			if len(ids) > 1000 {
+				return fmt.Errorf("--subject-ids 最多允许 1000 个，收到 %d 个", len(ids))
+			}
 			return callMCPToolOnServer("contract", "batchDeleteSubject", map[string]any{
 				"BatchDeleteSubjectOpenRequest": map[string]any{
 					"subjectIdList": ids,
@@ -1717,6 +1720,9 @@ func parseContractInt64CSV(raw string) ([]int64, error) {
 			return nil, fmt.Errorf("无法解析 %q 为整数: %w", v, err)
 		}
 		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("至少须包含一个整数 ID")
 	}
 	return out, nil
 }

@@ -180,6 +180,42 @@ func TestCrossPlatformCoverageContractDeleteCommandsRequireConfirmation(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageContractBatchDeleteRejectsInvalidIDListsAfterConfirmation(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "project delete empty IDs",
+			args:    []string{"project", "delete", "--project-ids", ",,", "--yes"},
+			wantErr: "至少须包含一个整数 ID",
+		},
+		{
+			name:    "subject batch-delete empty IDs",
+			args:    []string{"subject", "batch-delete", "--subject-ids", ",,", "--yes"},
+			wantErr: "至少须包含一个整数 ID",
+		},
+		{
+			name:    "subject batch-delete exceeds service limit",
+			args:    []string{"subject", "batch-delete", "--subject-ids", strings.Repeat("1,", 1000) + "1", "--yes"},
+			wantErr: "最多允许 1000 个",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &contractDefectCaller{}
+			_, err := executeContractDefectCommand(t, caller, newContractCommand, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want containing %q", err, tc.wantErr)
+			}
+			if len(caller.calls)+len(caller.readCalls) != 0 {
+				t.Fatalf("calls after validation failure: mutation=%#v read=%#v", caller.calls, caller.readCalls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageContractSubjectAddWrapsJSONPayload(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "subject.json")
