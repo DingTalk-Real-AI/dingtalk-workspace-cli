@@ -191,7 +191,7 @@ dws oa approval create-instance \
 dws oa approval detail --instance-id <processInstanceId> --format json
 ```
 
-回读核对模板、核心表单值、发起人和状态；用户指定了审批人或抄送人时，再用 `tasks` / `records` 或详情中的节点信息验证真实绑定。回读不一致、部分成功或未知状态必须如实保留，且在用户决定前不得自动撤销或重建。
+回读核对模板、核心表单值、发起人和状态；用户指定了审批人或抄送人时，再用 `tasks` / `records` 或详情中的节点信息验证真实绑定。验证遵循 [oa.md](oa.md#证据绑定)：请求 payload 不能替代回读，只有 `taskId` 不能证明具体审批人。回读不一致、部分成功或未知状态必须如实保留，且在用户决定前不得自动撤销或重建。
 
 ## 错误收敛
 

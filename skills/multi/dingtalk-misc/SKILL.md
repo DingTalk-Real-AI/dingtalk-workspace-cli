@@ -15,7 +15,7 @@ metadata:
 
 本文件只负责产品路由。先由下表确定唯一产品：单一、清晰的 Attendance 任务以及 Report/Sheet 任务直接读取对应 reference（内含该任务所需的最小执行契约）；其它产品先读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)，再读取唯一产品 reference。仅在实际触发认证、profile、确认或错误恢复时补读一份精确 shared reference，不做冷启动预读。
 
-同一请求同时出现日报、周报或简报名称与审批人、抄送人、审批路径、审批单等审批意图时，审批意图优先，统一路由 OA 并读取 `oa.md`；不要仅凭模板名称路由到 Report。只有用户明确要求提交钉钉日志，且没有审批流语义时，才路由 Report。
+同一请求同时出现日报、周报或简报名称与审批人、抄送人、审批路径、审批单等审批意图时，审批意图优先，统一路由 OA 并读取 `oa.md`；本次任务不得执行 `dws report`。OA 中没有同名模板也不能降级提交 Report，只能交付 OA 搜索结果或请求消歧。只有用户明确要求提交钉钉日志，且没有审批流语义时，才路由 Report。
 
 Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`，不要重复预读 `dingtalk-shared`。只有出现跨产品编排、profile/认证问题、未知全局错误或 Reference 明确指向 shared 时，才按需读取 shared 对应内容。
 

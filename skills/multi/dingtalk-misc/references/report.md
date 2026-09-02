@@ -2,6 +2,8 @@
 
 > 本文件是 Report 已知任务的唯一必读 reference，覆盖模板、收件箱、发件箱、详情、统计、提交与验证。不要再预读 `dingtalk-shared`、Report intent/lite/conventions 或父级 Help。
 
+> **审批边界**：请求中出现审批人、抄送人、审批路径或审批单时，立即停止 Report 路径并改读 [oa.md](oa.md)，不得执行任何 `dws report` 命令。Report 的 `--to-user-ids` 表示日志收件人，不是审批人或抄送人；OA 没有同名模板也不能用 Report 替代。
+
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
 

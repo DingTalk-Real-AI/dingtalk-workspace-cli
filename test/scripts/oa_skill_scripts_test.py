@@ -371,6 +371,29 @@ class OAReferenceContractTest(unittest.TestCase):
             self.assertNotIn(unsupported, text)
         self.assertIn("dws oa +search-forms", text)
 
+    def test_personal_overview_uses_real_page_flags_and_separate_calls(self):
+        text = (OA_ROOT / "oa.md").read_text(encoding="utf-8")
+        for source in ["list-submitted", "list-executed", "list-cc"]:
+            self.assertIn(f"{source} --page 1 --limit 20", text)
+        self.assertIn("不能用 `&&` 合成一次大输出", text)
+        self.assertIn("`hasMore=true`", text)
+
+    def test_approval_semantics_cannot_fall_back_to_report(self):
+        skill = (OA_ROOT.parent / "SKILL.md").read_text(encoding="utf-8")
+        report = (OA_ROOT / "report.md").read_text(encoding="utf-8")
+        self.assertIn("本次任务不得执行 `dws report`", skill)
+        self.assertIn("`--to-user-ids` 表示日志收件人", report)
+        self.assertIn("OA 没有同名模板也不能用 Report 替代", report)
+
+    def test_readback_evidence_boundaries_are_explicit(self):
+        oa = (OA_ROOT / "oa.md").read_text(encoding="utf-8")
+        create = (OA_ROOT / "oa-create.md").read_text(encoding="utf-8")
+        attachments = (OA_ROOT / "oa-attachments.md").read_text(encoding="utf-8")
+        self.assertIn("同一响应中的二元组", oa)
+        self.assertIn("只有 `taskId` 也不能证明", oa)
+        self.assertIn("请求 payload 不能替代回读", create)
+        self.assertIn("附件未验证", attachments)
+
 
 if __name__ == "__main__":
     unittest.main()

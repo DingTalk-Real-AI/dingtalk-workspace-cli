@@ -33,10 +33,10 @@
 ## 查询收敛与分页
 
 1. 先按用户给出的角色、时间范围和关键词查询。
-2. 若返回明确空结果，只在有业务依据时放宽一个条件，例如去掉关键词或扩大到用户允许的时间范围；说明放宽内容，不穷举同义词、页码和时间窗口。
+2. 若返回明确空结果，只在有业务依据时放宽一个条件，例如去掉关键词或扩大到用户允许的时间范围；说明放宽内容。放宽后已有候选就停止继续拆词或枚举同义词。
 3. 若响应给出 `hasMore`、`nextCursor`、总数或其他未读完证据，按用户要求继续分页。用户要求“全部/完整”时必须读到 endpoint exhaustion；没有分页证据时不要盲翻页。
 4. 合理放宽后仍明确为空，立即交付“指定来源内无匹配”，不要切换角色来源。空结果可以是正确业务结果。
-5. 候选定位阶段只保留必要字段；选中后再调用 `detail`、`tasks`、`records`，不要为每个候选读取完整详情。
+5. 候选定位阶段只保留必要字段；选中后再调用 `detail`、`tasks`、`records`，不要为无关候选读取完整详情。只读任务要求字段或后续查询时，少量近似候选不应成为停点：逐个执行所需读取并按候选分组交付；只有写操作必须先选定唯一模板或实例。
 
 这里没有固定“最多两次查询”的机械限制；每次扩展都必须有新证据或明确业务理由。
 
@@ -52,6 +52,12 @@
 缺少或不匹配任何一项都停止。用户说“就是这条”只确认此前摘要中的同一实例；重新搜索到的相似对象必须重新核对。业务前提检查失败时，不得在审批意见里宣称该前提已满足。
 
 写操作的确认要求以精确 leaf Schema 的最终 `confirmation` 为准。需要确认时先展示对象、动作和影响，得到明确同意后才追加 `--yes`。写后按真实返回和对应读取命令验证，不得仅凭退出码、对象可访问或另一种附件能力宣称成功。
+
+## 证据绑定
+
+- 流程名称和 `processCode` 必须保存为同一响应中的二元组；后续 Schema、实例和最终答复都不得把不同候选的名称与标识拼接。
+- 请求、预测或提交 payload 只证明“计划发送”，不证明服务端已保存；只有详情、任务或记录中实际回读到的值才能标为“已验证”。
+- 回读字段缺失、为空、值为字符串 `"[]"` 或输出被截断时，标为“未验证”，不得用请求值补齐。只有 `taskId` 也不能证明具体审批人已绑定。
 
 ## 高频读取闭环
 
@@ -71,12 +77,12 @@ dws oa approval records --instance-id <processInstanceId> --format json
 ### 个人审批全景
 
 ```bash
-dws oa approval list-submitted --query "<可选关键词>" --format json
-dws oa approval list-executed --query "<可选关键词>" --format json
-dws oa approval list-cc --query "<可选关键词>" --format json
+dws oa approval list-submitted --page 1 --limit 20 --query "<可选关键词>" --format json
+dws oa approval list-executed --page 1 --limit 20 --query "<可选关键词>" --format json
+dws oa approval list-cc --page 1 --limit 20 --query "<可选关键词>" --format json
 ```
 
-三类来源可以并行读取，但必须分栏保留来源标签。用户要求每类最新一条时，只对非空类别分别读取 `detail` 和 `records`；空类别如实说明。
+三类来源必须分别执行，不能用 `&&` 合成一次大输出；可以并行，但须分栏保留来源标签。某一来源返回 `hasMore=true` 且用户要求完整范围或分组统计时，只对该来源递增 `--page` 直到 `hasMore=false`；分页途中只保留实例 ID、标题、状态和创建时间等列表字段。用户要求每类最新一条时，对完整候选集按真实时间排序，只对非空类别分别读取 `detail` 和 `records`；只有读到该来源的空结果才能说该类别为空。
 
 ### 表单与我发起的实例
 
@@ -87,7 +93,7 @@ dws oa approval form-schema --process-code <processCode> --format json
 dws oa approval list-initiated --process-code <processCode> --start "<ISO-8601>" --end "<ISO-8601>" --cursor 0 --limit 20 --format json
 ```
 
-已知关键词优先使用公开 shortcut `oa +search-forms`；名称搜索为空时，可去掉口语中的“流程/审批/申请”等通用后缀做一次有依据的放宽，不枚举无关同义词。只有用户要求枚举可见表单时使用 `list-forms` 并检查分页。多个相近模板时展示真实名称和 `processCode` 让用户消歧；读取字段时可逐项交付候选 Schema，真正创建时再要求选定唯一模板，不根据近似名称擅自创建。
+已知关键词优先使用公开 shortcut `oa +search-forms`；名称搜索为空时，可去掉口语中的“流程/审批/申请”等通用后缀做一次有依据的放宽。放宽后已有候选就停止继续拆词或搜索其它同义词。只有用户要求枚举可见表单时使用 `list-forms` 并检查分页。多个相近模板时保留搜索响应中的 `(processName, processCode)` 绑定；只读链路逐项读取并分组交付，真正创建时再要求选定唯一模板，不根据近似名称擅自创建。
 
 用户询问模板字段时，`form-schema` 的字段定义就是交付结果：最终答复至少列出字段名、是否必填及可见的类型或选项，不得只报告“已查到 Schema”。
 

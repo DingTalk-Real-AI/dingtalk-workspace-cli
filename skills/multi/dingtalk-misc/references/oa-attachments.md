@@ -91,4 +91,5 @@ dws oa approval attachment upload --file <本地路径> --format json
 - 业务错误只有明确 `retryable=true` 才按服务端节奏重试；更换 `spaceId/fileId` 组合不能重置预算。
 - `authorize-download` 返回失败后，不得用成功的 `download-url` 冒充授权成功。
 - 没有目标来源证明时停止，不跨角色列表寻找可访问附件。
+- 创建后只有详情中的 `DDAttachment` 实际回读到文件名、`fileId` 等附件值，才能说附件已验证；字段为空、`"[]"` 或缺失时只能说实例已创建、附件未验证。
 - 最终答复分别说明：目标实例、附件名称、执行的确切能力、成功字段或真实错误，以及是否完成用户要求。
