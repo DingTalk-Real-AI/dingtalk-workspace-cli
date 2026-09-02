@@ -107,22 +107,23 @@ dws minutes +record-wrap-up --id <taskUuid> --artifacts summary,transcript
 | 用户意图 | 推荐入口 | 目标身份 |
 |---|---|---|
 | “我打不开，帮我申请查看/下载/编辑” | `+apply-permission --id <taskUuid> --permission view|download|edit` | 当前登录用户 |
-| “把这条听记分享给张三” | `+share --id <taskUuid> --member-uids <UID> --permission view|download|edit` | 所有者给指定成员授权 |
+| “把这条听记分享给张三” | `+share --id <taskUuid> (--member-uids <UID> | --member-staff-ids <staffId>) --permission view|download|edit` | 所有者按真实 UID 或组织 staffId 给指定成员授权 |
 | “撤销张三对这条听记的权限” | `+unshare --id <taskUuid> --member-uids <UID>` | 所有者移除指定成员权限 |
 
 ### 4.1 成员解析
 
-1. 用户已给稳定成员 UID：直接复用，但必须保持同一 profile/组织。
-2. 只有姓名、手机号或部门线索：切 `dingtalk-contact`/`dingtalk-aisearch` 解析；零或多候选时停止。
-3. 不把姓名、手机号、userId、openId 或跨组织 UID 互相猜测转换。
+1. 用户已给真实成员 UID：通过 `--member-uids` 直接复用。
+2. 用户已给当前组织内的稳定 staffId：通过 `--member-staff-ids` 原样传入，必须保留前导零并保持同一 profile/组织。
+3. 只有姓名、手机号或部门线索：切 `dingtalk-contact`/`dingtalk-aisearch` 解析；零或多候选时停止。
+4. 不把姓名、手机号、userId、staffId、openId 或跨组织 UID 互相猜测转换。
 
 ### 4.2 批量执行
 
-`+share` 的精确业务参数是 `--id|--ids`、`--member-uids`、必填的 `--permission view|download|edit`，以及可选的 `--cover`、`--sub-resources OrigContent|Summary|Analysis|Note`、`--failure-policy stop|continue`：
+`+share` 的精确业务参数是 `--id|--ids`、必须且只能选择一个的 `--member-uids|--member-staff-ids`、必填的 `--permission view|download|edit`，以及可选的 `--cover`、`--sub-resources OrigContent|Summary|Analysis|Note`、`--failure-policy stop|continue`。`--member-uids` 只接收真实钉钉 UID，`--member-staff-ids` 接收组织内 staffId 并保留前导零：
 
 ```text
 dws minutes +share --id <taskUuid> --member-uids <uid1,uid2> --permission view --failure-policy stop --format json
-dws minutes +share --ids <uuid1,uuid2> --member-uids <uid> --permission edit --cover --sub-resources OrigContent,Summary --failure-policy continue --format json
+dws minutes +share --ids <uuid1,uuid2> --member-staff-ids "074360" --permission edit --cover --sub-resources OrigContent,Summary --failure-policy continue --format json
 ```
 
 `+unshare` 的精确业务参数是 `--id|--ids`、`--member-uids` 和可选的 `--failure-policy stop|continue`；它没有 `--permission`、`--cover` 或 `--sub-resources`：

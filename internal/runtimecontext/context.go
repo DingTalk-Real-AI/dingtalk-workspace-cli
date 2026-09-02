@@ -30,11 +30,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimepayload"
 )
 
 const (
 	HeaderName     = requestmeta.DingTalkExtHeader
-	PayloadVersion = "20260825"
+	PayloadVersion = runtimepayload.PayloadVersion
 	Environment    = "online"
 
 	initializationEnvironment int32 = 0
@@ -240,8 +241,12 @@ func validateToken(raw []byte) (string, error) {
 }
 
 var (
-	osExecutable  = os.Executable
-	evalSymlinks  = filepath.EvalSymlinks
+	osExecutable              = os.Executable
+	evalSymlinks              = filepath.EvalSymlinks
+	userCacheDir              = os.UserCacheDir
+	materializeRuntimePayload = func(cacheDir, goos, goarch string) (string, error) {
+		return runtimepayload.Materialize(runtimepayload.Embedded(), cacheDir, goos, goarch)
+	}
 	currentGOOS   = runtime.GOOS
 	currentGOARCH = runtime.GOARCH
 )
@@ -255,14 +260,21 @@ func resolveLibraryPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("executable path: %w", err)
 	}
-	candidates := []string{filepath.Dir(executable)}
+	executables := []string{executable}
 	if resolved, resolveErr := evalSymlinks(executable); resolveErr == nil {
-		resolvedDir := filepath.Dir(resolved)
-		if resolvedDir != candidates[0] {
-			candidates = append(candidates, resolvedDir)
+		if resolved != executables[0] {
+			executables = append(executables, resolved)
 		}
 	}
-	for _, executableDir := range candidates {
+	if cacheDir, cacheErr := userCacheDir(); cacheErr == nil {
+		if path, materializeErr := materializeRuntimePayload(cacheDir, currentGOOS, currentGOARCH); materializeErr == nil {
+			return path, nil
+		}
+	}
+	// Retain sidecar discovery as a compatibility fallback for older installs
+	// and direct development fixtures. New packages carry the payload in dws.
+	for _, candidate := range executables {
+		executableDir := filepath.Dir(candidate)
 		root := filepath.Join(executableDir, ".dws-runtime", PayloadVersion)
 		path := filepath.Join(root, name)
 		if regularFile(path) && directory(filepath.Join(root, "ps")) && regularFile(filepath.Join(root, "manifest.json")) {
@@ -273,16 +285,7 @@ func resolveLibraryPath() (string, error) {
 }
 
 func libraryName(goos, goarch string) (string, error) {
-	switch goos + "/" + goarch {
-	case "darwin/amd64", "darwin/arm64":
-		return "x7k2m9p4q1w8.dylib", nil
-	case "linux/amd64", "linux/arm64":
-		return "libx7k2m9p4q1w8.so", nil
-	case "windows/amd64", "windows/arm64":
-		return "x7k2m9p4q1w864.dll", nil
-	default:
-		return "", fmt.Errorf("unsupported runtime platform %s/%s", goos, goarch)
-	}
+	return runtimepayload.LibraryName(goos, goarch)
 }
 
 func regularFile(path string) bool {

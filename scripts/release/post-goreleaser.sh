@@ -320,6 +320,12 @@ write_runtime_manifest() {
 EOF
 }
 
+attach_runtime_payload() {
+  binary="$1"
+  runtime_root="$2"
+  (cd "$ROOT" && go run ./scripts/build/runtime-payload inject "$binary" "$runtime_root")
+}
+
 prepare_runtime_archives() {
   "$ROOT/scripts/policy/check-runtime-payload.sh" --allow-unsupported-tools
   work="$(mktemp -d)"
@@ -341,6 +347,15 @@ prepare_runtime_archives() {
       *.zip) unzip -q "$archive" -d "$stage" ;;
     esac
     "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
+    if [ "$target_os" != darwin ]; then
+      case "$target_os" in
+        windows) binary="$stage/dws.exe" ;;
+        *) binary="$stage/dws" ;;
+      esac
+      [ -f "$binary" ] || err "dws binary not found inside $name after extraction"
+      attach_runtime_payload "$binary" "$stage/.dws-runtime/20260825"
+      rm -rf "$stage/.dws-runtime"
+    fi
     repack_platform_archive "$stage" "$archive"
     update_checksum_entry "$name" "$(sha256_file "$archive")"
   done
@@ -353,8 +368,8 @@ prepare_runtime_archives() {
 # Unsigned arm64 binaries are SIGKILL'd by amfid on Apple Silicon (macOS 11+).
 # Official releases use an Apple Developer ID certificate loaded from GitHub
 # Secrets. Fork/local builds retain ad-hoc signing so they remain runnable.
-# We unpack each dws-darwin-*.tar.gz, sign the runtime library and dws binary,
-# repack deterministically,
+# We unpack each dws-darwin-*.tar.gz, sign the runtime library, attach it to the
+# executable, sign the finalized dws binary, repack deterministically,
 # and rewrite the corresponding line in checksums.txt.
 
 configure_darwin_signing() {
@@ -437,6 +452,8 @@ sign_darwin_archives() {
     target_arch="${name#dws-darwin-}"
     target_arch="${target_arch%.tar.gz}"
     write_runtime_manifest "$runtime_root" darwin "$target_arch" x7k2m9p4q1w8.dylib
+    attach_runtime_payload "$bin" "$runtime_root"
+    rm -rf "$stage/.dws-runtime"
     sign_one_darwin_binary "$bin"
 
     repack_platform_archive "$stage" "$archive"

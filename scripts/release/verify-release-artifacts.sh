@@ -99,9 +99,23 @@ verify_binary_version() {
     return 1
   }
 
-  runtime_root="$extract_dir/.dws-runtime/20260825"
+  case "$asset" in
+    dws-darwin-amd64*) target_os=darwin; target_arch=amd64 ;;
+    dws-darwin-arm64*) target_os=darwin; target_arch=arm64 ;;
+    dws-linux-amd64*) target_os=linux; target_arch=amd64 ;;
+    dws-linux-arm64*) target_os=linux; target_arch=arm64 ;;
+    dws-windows-amd64*) target_os=windows; target_arch=amd64 ;;
+    dws-windows-arm64*) target_os=windows; target_arch=arm64 ;;
+  esac
+  if [ -e "$extract_dir/.dws-runtime" ]; then
+    printf '%s contains a legacy sidecar runtime payload\n' "$asset" >&2
+    return 1
+  fi
+  library="$(cd "$ROOT" && go run ./scripts/build/runtime-payload materialize \
+    "$binary" "$extract_dir/cache" "$target_os" "$target_arch")" || return 1
+  runtime_root="$(dirname "$library")"
   [ -f "$runtime_root/manifest.json" ] || {
-    printf '%s does not contain the runtime manifest\n' "$asset" >&2
+    printf '%s does not contain an embedded runtime manifest\n' "$asset" >&2
     return 1
   }
   ps_count="$(find "$runtime_root/ps" -type f 2>/dev/null | wc -l | tr -d ' ')"
@@ -109,14 +123,7 @@ verify_binary_version() {
     printf '%s contains %s ps files; expected 123\n' "$asset" "$ps_count" >&2
     return 1
   }
-  case "$asset" in
-    dws-darwin-amd64*) target=darwin/amd64; library="$runtime_root/x7k2m9p4q1w8.dylib" ;;
-    dws-darwin-arm64*) target=darwin/arm64; library="$runtime_root/x7k2m9p4q1w8.dylib" ;;
-    dws-linux-amd64*) target=linux/amd64; library="$runtime_root/libx7k2m9p4q1w8.so" ;;
-    dws-linux-arm64*) target=linux/arm64; library="$runtime_root/libx7k2m9p4q1w8.so" ;;
-    dws-windows-amd64*) target=windows/amd64; library="$runtime_root/x7k2m9p4q1w864.dll" ;;
-    dws-windows-arm64*) target=windows/arm64; library="$runtime_root/x7k2m9p4q1w864.dll" ;;
-  esac
+  target="$target_os/$target_arch"
   [ -f "$library" ] || {
     printf '%s does not contain its target runtime library\n' "$asset" >&2
     return 1
