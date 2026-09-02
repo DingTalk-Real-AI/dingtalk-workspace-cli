@@ -23,7 +23,7 @@
 | 应用 | `app list --name <name>`；详情/更新/删除复用 `--unified-app-id` |
 | 成员 | `app member list/add/remove --unified-app-id <id>` |
 | 权限 | `app permission list/add/remove --unified-app-id <id>` |
-| 安全/网页 | `app security get/config`；`app webapp get/config --unified-app-id <id>` |
+| 安全/网页 | `app security config --unified-app-id <id>`；`app webapp get/config --unified-app-id <id>`；安全配置无 get 命令 |
 | 机器人/事件 | `app robot get/config/enable`；`app event list/subscribe/unsubscribe --unified-app-id <id>` |
 | 版本 | `app version create/check-approval/publish/status --unified-app-id <id>`；后续命令复用 create 返回的 `versionId` |
 | 本机连接器 | `dev connect list/status/restart`；list/status 另带 `--json`，不扫描系统进程 |
@@ -36,7 +36,7 @@
 - **权限治理**：按关键词 `permission list` → `add/remove` → 成功结果要求发布时才走版本闭环 → 回读目标权限。未指定“多余权限”时不拉全量猜目标，只暂停 remove，其它安全步骤继续完成。
 - **机器人**：`app create/list` → `robot config/enable` → 版本闭环；用户另要本地调试时再 `connect`。建联和线上发布是两项独立状态。
 - **事件订阅**：按关键词一次 `event list` → subscribe/unsubscribe 各至多一次正式执行 → 只有写成功且要求发布才走版本闭环 → 一次目标回读。
-- **安全 + 网页**：先 `app get` 保存初始状态 → `security config` → `webapp config` → 一次版本闭环 → 分别回读。
+- **安全 + 网页**：先 `app get` 保存应用初始状态，并用 `webapp get` 保存网页配置。安全配置没有读取命令；需要保留旧安全项但没有上游可信的完整旧值时，说明整组覆盖风险并暂停 `security config`，继续不依赖它的网页步骤。用户提供完整目标列表或明确接受覆盖后，才执行 `security config` → `webapp config` → 一次版本闭环 → 回读可读取的应用/网页/版本结果。
 - **成员临时变更**：解析唯一 userId → add → `member list` 保存名单 → remove → 回读；若还要删除应用，删除最后做。
 
 ## 轮次与失败预算
