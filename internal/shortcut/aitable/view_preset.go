@@ -185,7 +185,7 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 				break
 			}
 			if timebarVerifyErr == nil {
-				timebarVerifyErr = fmt.Errorf("Gantt timebar read-back does not match the requested configuration")
+				timebarVerifyErr = fmt.Errorf("gantt timebar read-back does not match the requested configuration")
 			}
 		}
 		if timebarVerifyErr != nil {
