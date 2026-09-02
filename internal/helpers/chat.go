@@ -131,6 +131,24 @@ func promoteLegacyChatString(cmd *cobra.Command, canonical, legacy string) error
 }
 
 func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
+	return callProjectedMessagesOnServer(cmd, "chat", toolName, args, search)
+}
+
+func callProjectedMessagesOnServer(cmd *cobra.Command, serverID, toolName string, args map[string]any, search bool) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer(serverID, toolName, args)
+	}
+	operation := serverID + "/" + toolName
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), serverID, toolName, args)
+	if err != nil {
+		return withProjectedChatOperation(operation, err)
+	}
+	return writeProjectedChatPayload(cmd, operation, text, func(data map[string]any) map[string]any {
+		return projectChatMessagesPayloadForCommand(cmd, data, search)
+	})
+}
+
+func callProjectedAtomicChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
 	if deps.Caller.DryRun() {
 		return callMCPToolOnServer("chat", toolName, args)
 	}
@@ -139,19 +157,8 @@ func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[str
 		return withProjectedChatOperation("chat/"+toolName, err)
 	}
 	return writeProjectedChatPayload(cmd, "chat/"+toolName, text, func(data map[string]any) map[string]any {
-		return projectChatMessagesPayloadForCommand(cmd, data, search)
+		return projectExistingChatMessageCollectionsForCommand(cmd, data, search)
 	})
-}
-
-func callProjectedAtomicChatMessages(cmd *cobra.Command, toolName string, args map[string]any) error {
-	if deps.Caller.DryRun() {
-		return callMCPToolOnServer("chat", toolName, args)
-	}
-	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "chat", toolName, args)
-	if err != nil {
-		return withProjectedChatOperation("chat/"+toolName, err)
-	}
-	return writeProjectedChatPayload(cmd, "chat/"+toolName, text, projectExistingChatMessageCollections)
 }
 
 func callProjectedAtomicIMMessages(cmd *cobra.Command, toolName string, args map[string]any) error {
@@ -162,7 +169,9 @@ func callProjectedAtomicIMMessages(cmd *cobra.Command, toolName string, args map
 	if err != nil {
 		return withProjectedChatOperation("im/"+toolName, err)
 	}
-	return writeProjectedChatPayload(cmd, "im/"+toolName, text, projectExistingChatMessageCollections)
+	return writeProjectedChatPayload(cmd, "im/"+toolName, text, func(data map[string]any) map[string]any {
+		return projectExistingChatMessageCollectionsForCommand(cmd, data, true)
+	})
 }
 
 func callProjectedIMMessageSendStatus(cmd *cobra.Command, openTaskID string) error {
@@ -224,6 +233,19 @@ func projectChatMessagesPayloadForCommand(cmd *cobra.Command, data map[string]an
 	}
 	ledger := decryptProjectedChatMessagesByPolicy(cmd, items)
 	return projectChatMessagesPayloadWithLedger(data, search, ledger)
+}
+
+func projectExistingChatMessageCollectionsForCommand(cmd *cobra.Command, data map[string]any, search bool) map[string]any {
+	items := chatmsg.ListMessageItems(data)
+	if search {
+		items = chatmsg.SearchItems(data)
+	}
+	ledger := decryptProjectedChatMessagesByPolicy(cmd, items)
+	payload := projectExistingChatMessageCollections(data)
+	for key, value := range ledger {
+		payload[key] = value
+	}
+	return payload
 }
 
 func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledger map[string]any) map[string]any {
@@ -1543,7 +1565,7 @@ func pagedProjectedChatSearchConfig(cmd *cobra.Command, toolName string, build f
 
 func pagedProjectedAtomicChatMessagesConfig(cmd *cobra.Command, cfg PagedMCPCommandConfig) PagedMCPCommandConfig {
 	cfg.Fallback = func(args map[string]any) error {
-		return callProjectedAtomicChatMessages(cmd, cfg.ToolName, args)
+		return callProjectedAtomicChatMessages(cmd, cfg.ToolName, args, true)
 	}
 	cfg.ProjectResult = projectExistingChatMessageCollections
 	return cfg
@@ -3609,7 +3631,7 @@ func newChatCommand() *cobra.Command {
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
+			return callProjectedAtomicChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListDirectCmd, LeafSpec{
@@ -4797,8 +4819,20 @@ func newChatCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conversationIDs := parseCSVValues(flagOrFallback(cmd, "conversation-ids", "groups", "group"))
 			cfg := pagedChatConversationMessagesOnServerConfig("im", "search_messages", chatMessageSearchAdvancedArgs)
+			cfg.Fallback = func(args map[string]any) error {
+				if deps.Caller.DryRun() {
+					return callMCPToolOnServer("im", "search_messages", args)
+				}
+				text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", "search_messages", args)
+				if err != nil {
+					return withProjectedChatOperation("im/search_messages", err)
+				}
+				return writeProjectedChatPayload(cmd, "im/search_messages", text, func(data map[string]any) map[string]any {
+					return projectExistingChatMessageCollectionsForCommand(cmd, data, true)
+				})
+			}
 			cfg.ProjectResult = func(payload map[string]any) map[string]any {
-				return projectChatMessagesPayloadForCommand(cmd, payload, true)
+				return projectExistingChatMessageCollectionsForCommand(cmd, payload, true)
 			}
 			return runConversationScopedPagedMessageSearch(
 				cmd,
