@@ -517,6 +517,21 @@ func newContactLabelUpdateMemberScopeCommand() *cobra.Command {
 	return cmd
 }
 
+func newContactExtFieldListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "列出企业自定义成员字段",
+		Long: `列出企业内所有自定义成员字段（包括系统预置字段和企业自定义字段）及其属性。
+认证信息（corpId、optUserId）由系统自动注入，无需手动传入。`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return callMCPTool("get_org_ext_fields", map[string]any{})
+		},
+	}
+	return cmd
+}
+
 func newContactExtFieldCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -2506,13 +2521,48 @@ contact user profile fields 获取可用字段列表。
 		Use:     "ext-field",
 		Aliases: []string{"org-field", "custom-field"},
 		Short:   "自定义成员字段管理",
-		Long: `自定义成员字段管理：创建、更新属性、删除企业自定义字段。
+		Long: `自定义成员字段管理：列出、创建、更新属性、删除企业自定义字段。
 
 【何时用哪个命令】
+  - contact ext-field list     列出企业所有自定义成员字段
   - contact ext-field create   创建新的自定义成员字段
   - contact ext-field update   更新字段属性（clientDisplay / isSearch 等）
   - contact ext-field delete   删除自定义字段`,
 		RunE: groupRunE,
+	})
+
+	contactExtFieldListCmd := newContactExtFieldListCommand()
+	DeclareLeafMetadata(contactExtFieldListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_org_ext_fields",
+				CanonicalPath:  "contact.get_org_ext_fields",
+				CLIPath:        "contact ext-field list",
+				PrimaryCLIPath: "contact ext-field list",
+			},
+			Description: "列出企业内所有自定义成员字段（包括系统预置字段和企业自定义字段）及其属性",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"自定义字段列表查询结果","properties":{"result":{"type":"array","description":"字段列表","items":{"type":"object","properties":{"orgSelfTag":{"type":"boolean","description":"是否企业自定义字段，系统预置字段为false，企业自定义字段为true"},"isSearch":{"type":"boolean","description":"是否可被搜索"},"modifiable":{"type":"boolean","description":"是否可修改"},"required":{"type":"boolean","description":"是否必填"},"name":{"type":"string","description":"字段名称"},"code":{"type":"string","description":"字段编码"},"clientDisplay":{"type":"boolean","description":"是否在客户端展示"},"attrType":{"type":"string","description":"字段类型"},"multiValue":{"type":"boolean","description":"是否支持多值"},"deletable":{"type":"boolean","description":"是否可删除"},"displayOrder":{"type":"number","description":"展示排序"},"i18nEditable":{"type":"boolean","description":"是否可国际化"},"i18nName":{"type":"object","description":"字段名称的国际化值"},"desensitizeShow":{"type":"boolean","description":"是否以脱敏方式展示"},"newVersion":{"type":"boolean","description":"是否新版字段"}}}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "The executable CLI composes the get_org_ext_fields MCP tool call manually.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出企业自定义成员字段",
+				UseWhen:      []string{"需要查询企业内有哪些自定义成员字段时"},
+				AvoidWhen:    []string{"需要读取某位员工的具体字段值时应使用 contact user profile get"},
+				Examples:     []string{`dws contact ext-field list`},
+			},
+			Parameters: []contract.ParamDecl{},
+		},
 	})
 
 	contactExtFieldCreateCmd := newContactExtFieldCreateCommand()
@@ -2627,7 +2677,7 @@ contact user profile fields 获取可用字段列表。
 		},
 	})
 
-	contactExtFieldCmd.AddCommand(contactExtFieldCreateCmd, contactExtFieldUpdateCmd, contactExtFieldDeleteCmd)
+	contactExtFieldCmd.AddCommand(contactExtFieldListCmd, contactExtFieldCreateCmd, contactExtFieldUpdateCmd, contactExtFieldDeleteCmd)
 
 	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, contactExtFieldCmd, relationCmd, contactOrgCmd, contactAccountCmd)
 
