@@ -121,3 +121,6 @@ file "$PAYLOAD/windows/amd64/x7k2m9p4q1w864.dll" | grep -Eiq 'PE32\+.*x86-64' ||
 file "$PAYLOAD/windows/arm64/x7k2m9p4q1w864.dll" | grep -Eiq 'PE32\+.*Aarch64' || fail "invalid Windows arm64 library architecture"
 
 printf 'Runtime payload verified: 5 libraries, 6 targets, 123 ps files.\n'
+if [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 0 ]; then
+  "$ROOT/scripts/build/generate-runtime-payload-assets.sh" --check
+fi

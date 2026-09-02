@@ -1282,55 +1282,6 @@ function Resolve-SkillMode {
 
 # ── Install Binary ───────────────────────────────────────────────────────────
 
-function Publish-RuntimePayload {
-    param([string]$Source)
-
-    if (!(Test-Path -LiteralPath (Join-Path $Source "manifest.json") -PathType Leaf)) {
-        Write-Err "Runtime payload manifest is missing."
-    }
-    $psPath = Join-Path $Source "ps"
-    $psCount = @(Get-ChildItem -LiteralPath $psPath -File -Recurse -ErrorAction SilentlyContinue).Count
-    if ($psCount -ne 123) {
-        Write-Err "Runtime payload is incomplete (expected 123 ps files, found $psCount)."
-    }
-    $libraryCount = @(Get-ChildItem -LiteralPath $Source -File -Filter "*.dll" -ErrorAction SilentlyContinue).Count
-    if ($libraryCount -ne 1) {
-        Write-Err "Runtime payload must contain exactly one target library."
-    }
-
-    $payloadParent = Join-Path $InstallDir ".dws-runtime"
-    New-Item -ItemType Directory -Path $payloadParent -Force | Out-Null
-    $payloadStage = Join-Path $payloadParent ".20260825.tmp-$PID"
-    $payloadTarget = Join-Path $payloadParent "20260825"
-    $payloadBackup = Join-Path $payloadParent ".20260825.old-$PID"
-    Remove-Item -LiteralPath $payloadStage -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $payloadBackup -Recurse -Force -ErrorAction SilentlyContinue
-    Copy-Item -LiteralPath $Source -Destination $payloadStage -Recurse -Force
-
-    if (Test-Path -LiteralPath $payloadTarget) {
-        Move-Item -LiteralPath $payloadTarget -Destination $payloadBackup -Force
-    }
-    try {
-        Move-Item -LiteralPath $payloadStage -Destination $payloadTarget -Force
-    } catch {
-        if (Test-Path -LiteralPath $payloadBackup) {
-            Move-Item -LiteralPath $payloadBackup -Destination $payloadTarget -Force
-        }
-        throw
-    }
-    Remove-Item -LiteralPath $payloadBackup -Recurse -Force -ErrorAction SilentlyContinue
-}
-
-function Publish-RuntimePayloadIfPresent {
-    param([string]$Source)
-
-    if (!(Test-Path -LiteralPath $Source -PathType Container)) {
-        Write-Say "Runtime payload is not included in this archive; continuing with binary-only installation."
-        return
-    }
-    Publish-RuntimePayload -Source $Source
-}
-
 function Install-Binary {
     $arch = Get-Arch
     Resolve-LatestVersion
@@ -1363,9 +1314,6 @@ function Install-Binary {
         if ($null -eq $binFile) {
             Write-Err "Could not find ${BinName}.exe in the downloaded archive."
         }
-
-        $payloadSource = Join-Path $binFile.Directory.FullName ".dws-runtime\20260825"
-        Publish-RuntimePayloadIfPresent -Source $payloadSource
 
         $destBin = Join-Path $InstallDir "${BinName}.exe"
         $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"
@@ -1780,8 +1728,19 @@ function Install-BinaryFromSource {
             ps_file_count = 123
             ps_manifest_sha256 = "45ae147697c1f8683df3f232d0ba792b807179bbe22fdac8225a0cf25fc33e7e"
         }
-        $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $preparedPayload "manifest.json") -Encoding UTF8
-        Publish-RuntimePayload -Source $preparedPayload
+        $manifestJson = $manifest | ConvertTo-Json
+        [System.IO.File]::WriteAllText(
+            (Join-Path $preparedPayload "manifest.json"),
+            $manifestJson,
+            (New-Object System.Text.UTF8Encoding($false))
+        )
+        Push-Location $Root
+        try {
+            & go run ./scripts/build/runtime-payload inject $tmpBin $preparedPayload
+            if ($LASTEXITCODE -ne 0) { throw "runtime payload attachment failed with exit code $LASTEXITCODE" }
+        } finally {
+            Pop-Location
+        }
 
         $destBin = Join-Path $InstallDir "${BinName}.exe"
         $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"

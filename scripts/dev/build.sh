@@ -17,4 +17,4 @@ case "$(uname -m)" in
   *) printf 'Runtime payload is unavailable for this architecture.\n'; exit 0 ;;
 esac
 
-"$(dirname "$0")/../build/prepare-runtime-payload.sh" "$runtime_os" "$runtime_arch" .
+"$(dirname "$0")/../build/attach-runtime-payload.sh" "$runtime_os" "$runtime_arch" dws

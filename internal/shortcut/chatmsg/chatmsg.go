@@ -66,6 +66,7 @@ var messageResultContractV1 = MessageResultContract{
 		"senderId",
 		"senderType",
 		"messageType",
+		"messageAiSendFlag",
 		"text",
 		"createTime",
 		"updateTime",
@@ -300,6 +301,14 @@ func MessageType(m map[string]any) any {
 	return firstMessageValue(m, "msgType", "messageType", "message_type", "type")
 }
 
+// MessageAISendFlag preserves the lower IM marker that identifies a message
+// sent through an AI client. The service currently publishes the exact
+// messageAiSendFlag field (for example "DWS"); readers must not infer it from
+// sender type, robot status, clawType request metadata, or message content.
+func MessageAISendFlag(m map[string]any) any {
+	return firstMessageValue(m, "messageAiSendFlag")
+}
+
 // SenderID preserves the stable sender identity without replacing the legacy
 // scalar sender display field. Nested sender records and both userId families
 // are accepted because list/search/mget currently expose different shapes.
@@ -359,6 +368,9 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	}
 	if value := MessageType(m); value != nil {
 		row["messageType"] = value
+	}
+	if value := MessageAISendFlag(m); value != nil {
+		row["messageAiSendFlag"] = value
 	}
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
@@ -420,6 +432,9 @@ func QuotedMessage(m map[string]any) map[string]any {
 	}
 	if value := MessageType(quoted); value != nil {
 		out["messageType"] = value
+	}
+	if value := MessageAISendFlag(quoted); value != nil {
+		out["messageAiSendFlag"] = value
 	}
 	if len(resources) > 0 {
 		out["resourceRefs"] = resources
