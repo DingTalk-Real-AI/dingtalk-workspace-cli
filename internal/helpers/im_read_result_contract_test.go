@@ -431,7 +431,7 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 		caller := &imReadResultCaller{responses: map[string]string{"get_message_crypto_policy": `{"result":{"mode":"off"}}`}}
 		InitDeps(caller)
 		ledger := decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{{"openMessageId": "m", "content": encrypted}})
-		if ledger["decryptCandidateCount"] != 0 || ledger["decryptFailedCount"] != 0 {
+		if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
 			t.Fatalf("policy-off ledger = %#v", ledger)
 		}
 		if got := projectChatMessagesPayload(map[string]any{"result": map[string]any{"messages": []any{}}}, false); got["messages"] == nil {
@@ -524,7 +524,7 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 		ledger := decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{
 			{"messageId": "m", "conversationId": "cid", "content": encrypted},
 		})
-		if ledger["decryptCandidateCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
+		if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
 			t.Fatalf("policy failure ledger = %#v", ledger)
 		}
 

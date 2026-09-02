@@ -139,7 +139,7 @@ func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[str
 		return withProjectedChatOperation("chat/"+toolName, err)
 	}
 	return writeProjectedChatPayload(cmd, "chat/"+toolName, text, func(data map[string]any) map[string]any {
-		return projectChatMessagesPayload(data, search)
+		return projectChatMessagesPayloadForCommand(cmd, data, search)
 	})
 }
 
@@ -210,7 +210,7 @@ func writeProjectedChatPayload(
 		return nil
 	}
 
-	return writeCommandPayload(cmd, projectChatMessagesPayloadForCommand(cmd, data, search))
+	return writeCommandPayload(cmd, project(data))
 }
 
 func projectChatMessagesPayload(data map[string]any, search bool) map[string]any {
@@ -227,11 +227,6 @@ func projectChatMessagesPayloadForCommand(cmd *cobra.Command, data map[string]an
 }
 
 func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledger map[string]any) map[string]any {
-	items := chatmsg.ListMessageItems(data)
-	return writeCommandPayload(cmd, project(data))
-}
-
-func projectChatMessagesPayload(data map[string]any, search bool) map[string]any {
 	payload := projectExistingChatMessageCollections(data)
 	items := chatmsg.ListMessageItems(payload)
 	if search {
@@ -252,6 +247,9 @@ func projectChatMessagesPayload(data map[string]any, search bool) map[string]any
 			projectedResult["messages"] = messages
 			payload["result"] = projectedResult
 		}
+	}
+	for key, value := range ledger {
+		payload[key] = value
 	}
 	return payload
 }
@@ -279,9 +277,11 @@ func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string
 			})
 		}
 	}
+	decryptCandidateCount := len(batchItems)
 	batchItems, policyFailures := filterProjectedDecryptItemsByPolicy(cmd, batchItems)
 	ledger := map[string]any{
-		"decryptCandidateCount": len(batchItems),
+		"decryptCandidateCount": decryptCandidateCount,
+		"decryptAllowedCount":   len(batchItems),
 		"decryptedCount":        0,
 		"decryptFailedCount":    len(policyFailures),
 	}
@@ -355,9 +355,11 @@ func filterProjectedDecryptItemsByPolicy(cmd *cobra.Command, items []messagecryp
 			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
 			continue
 		}
-		if decision.Enabled {
-			filtered = append(filtered, item)
+		if !decision.Enabled {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
+			continue
 		}
+		filtered = append(filtered, item)
 	}
 	return filtered, failures
 }
@@ -390,6 +392,8 @@ func firstNonEmptyLiteral(values ...string) string {
 		}
 	}
 	return ""
+}
+
 func projectExistingChatMessageCollections(data map[string]any) map[string]any {
 	payload := cloneStringAnyMap(data)
 	if messages, exists := payload["messages"]; exists {
@@ -4799,8 +4803,7 @@ func newChatCommand() *cobra.Command {
 			return runConversationScopedPagedMessageSearch(
 				cmd,
 				cfg,
-				pagedProjectedAtomicIMMessagesConfig(cmd,
-					pagedChatConversationMessagesOnServerConfig("im", "search_messages", chatMessageSearchAdvancedArgs)),
+				"openConversationIds",
 				conversationIDs,
 			)
 		},
