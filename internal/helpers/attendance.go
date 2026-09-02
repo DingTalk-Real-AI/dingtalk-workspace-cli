@@ -3,7 +3,9 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1018,6 +1020,416 @@ func newAttendanceCommand() *cobra.Command {
 					"dws attendance approve templates --type leave",
 					"dws attendance approve templates --type REPAIR_CHECK",
 				},
+			},
+		},
+	})
+
+	// ── 请假 / 补卡套件发起支持（attendance-wukong 数据域只读工具） ──
+	// 以下四个命令封装 attendance-wukong 的假期 / 补卡数据域只读工具
+	//（get_leave_time / can_leave_check / match_plans_for_supply /
+	// check_supply_qualification），服务于请假 / 补卡审批发起链路：
+	// form-schema 识别套件 → 选定类型 / 班次 → 时长计算 / 班次匹配 → 提交前
+	// 校验 → 组装 value/extValue → oa approval create-instance 发起。时长、
+	// detailList、compressedValue、班次匹配与资格判定一律以服务端为准，
+	// CLI 不做本地近似。
+
+	// query_leave_types_with_balance 是新增的第五个只读工具，用于查询可用假期类型及余额。
+	attendanceApproveLeaveTypesCmd := &cobra.Command{
+		Use:   "leave-types",
+		Short: "查询可用假期类型及余额",
+		Long: `调用 attendance-wukong 的 query_leave_types_with_balance 工具，查询当前用户可见的假期类型及对应余额；
+有权限时可通过 --user 查询指定员工。返回假期编码、名称、业务类型、额度单位、展示单位、说明及余额信息。
+无余额或企业隐藏余额时 balance 为空；balanceHidden=true 表示余额被隐藏。本命令只查询，不发起审批。`,
+		Example: `  dws attendance approve leave-types
+  dws attendance approve leave-types --user <userId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			req := map[string]any{}
+			if user := mustGetFlag(cmd, "user"); user != "" {
+				req["staffId"] = user
+			}
+			return callMCPToolOnServer("attendance-wukong", "query_leave_types_with_balance", req)
+		},
+	}
+	DeclareLeafMetadata(attendanceApproveLeaveTypesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "leave_types_with_balance",
+				CanonicalPath:  "attendance.leave_types_with_balance",
+				CLIPath:        "attendance approve leave-types",
+				PrimaryCLIPath: "attendance approve leave-types",
+			},
+			Description: "查询可用假期类型及余额",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"query_leave_types_with_balance 原样透传：服务端返回员工可见的假期类型及余额；每项包含 leaveCode、leaveName、bizType、leaveUnit、leaveViewUnit、description、balanceHidden 与 balance。无余额或隐藏余额时 balance 为空","additionalProperties":true}`),
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前用户或有权限查看的指定员工可用假期类型及余额",
+				UseWhen: []string{
+					"发起请假审批前，需要让用户按名称、单位和可见余额选择假期类型（leaveCode）时",
+					"只读查询当前用户或有权限查看的指定员工可见假期类型及对应余额时",
+				},
+				AvoidWhen: []string{
+					"查询多名员工的指定假期余额时使用 attendance vacation balance",
+					"已选定 leaveCode 并需要计算请假时长时使用 attendance approve leave-duration",
+				},
+				Examples: []string{
+					"dws attendance approve leave-types",
+					"dws attendance approve leave-types --user <userId> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "user", Property: "staffId"},
+			},
+		},
+	})
+
+	attendanceApproveLeaveDurationCmd := &cobra.Command{
+		Use:   "leave-duration",
+		Short: "计算请假时长（服务端口径，与客户端发起页一致）",
+		Long: `调用 attendance-wukong 的 get_leave_time 工具，按假期类型与起止时间返回服务端计算的请假时长、
+每日明细（detailList）与压缩数据（compressedValue），用于组装请假套件（DDHolidayField）的 extValue。
+时间格式随模板 unit：hour/halfHour/limitHour → yyyy-MM-dd HH:mm；day → yyyy-MM-dd；halfDay → yyyy-MM-dd 上午/下午。`,
+		Example: `  dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00"
+  dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13" --end "2026-08-14" --user <userId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "leave-code", "start", "end"); err != nil {
+				return err
+			}
+			start, end := mustGetFlag(cmd, "start"), mustGetFlag(cmd, "end")
+			if err := validateLeaveTimePrefix("start", start); err != nil {
+				return err
+			}
+			if err := validateLeaveTimePrefix("end", end); err != nil {
+				return err
+			}
+			req := map[string]any{
+				"leaveCode": mustGetFlag(cmd, "leave-code"),
+				"fromDate":  start,
+				"toDate":    end,
+			}
+			if user := mustGetFlag(cmd, "user"); user != "" {
+				req["staffId"] = user
+			}
+			return callMCPToolOnServer("attendance-wukong", "get_leave_time", req)
+		},
+	}
+	DeclareLeafMetadata(attendanceApproveLeaveDurationCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "leave_duration",
+				CanonicalPath:  "attendance.leave_duration",
+				CLIPath:        "attendance approve leave-duration",
+				PrimaryCLIPath: "attendance approve leave-duration",
+			},
+			Description: "计算请假时长（服务端口径，与客户端发起页一致）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"get_leave_time 原样透传：服务端计算的请假时长与每日明细，用于组装请假套件 extValue","properties":{"durationInHour":{"type":"number","description":"请假时长（小时），经服务端班次/休息日规则微调"},"durationInDay":{"type":"number","description":"请假时长（天）"},"detailList":{"type":"array","description":"每日明细（approveInfo/classInfo/isRest/workTimeMinutes/workDate 等），仅服务端可生成"},"compressedValue":{"type":"string","description":"gzip 压缩数据（hex，1f8b 开头），仅服务端可生成"},"corpId":{"type":"string","description":"企业 ID 回显，用于组装 extendValue.leaveParams[0]"},"unit":{"type":"string","description":"模板时长单位（如 HOUR/DAY）"}},"required":["durationInHour","durationInDay","detailList","compressedValue"],"additionalProperties":true}`),
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "计算请假时长与每日明细（服务端权威口径），用于组装请假套件发起数据",
+				UseWhen: []string{
+					"发起请假审批（DDHolidayField 套件）时：已用 form-schema 识别套件并选定假期类型（leaveCode）、收集起止时间后，需要服务端计算的时长、detailList 与 compressedValue 来组装 extValue 时",
+				},
+				AvoidWhen: []string{
+					"仅查询假期类型或余额时使用 attendance vacation types / balance",
+					"未选定假期类型（leaveCode）前不要调用；本命令不发起审批，发起用 oa approval create-instance",
+				},
+				Examples: []string{
+					`dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00"`,
+					`dws attendance approve leave-duration --leave-code <leaveCode> --start "2026-08-13" --end "2026-08-14" --format json`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "leave-code", Property: "leaveCode", Required: boolPtr(true)},
+				{Name: "start", Property: "fromDate", Required: boolPtr(true)},
+				{Name: "end", Property: "toDate", Required: boolPtr(true)},
+				{Name: "user", Property: "staffId"},
+			},
+		},
+	})
+
+	attendanceApproveLeaveCheckCmd := &cobra.Command{
+		Use:   "leave-check",
+		Short: "提交前校验请假资格（时间冲突 / 可撤销单 / 额度）",
+		Long: `调用 attendance-wukong 的 can_leave_check 工具，在发起请假前校验时间段冲突、可撤销实例与额度。
+--duration-day / --duration-hour 必须取自 dws attendance approve leave-duration 的输出（与 PC 端 getLeaveTime → canLeaveWithRevoke 链式调用一致）。
+校验不通过（success=false）时命令以非零退出码结束，并原样输出服务端返回的失败原因；此时应终止本次发起，不得跳过重试。`,
+		Example: `  dws attendance approve leave-check --leave-code <leaveCode> --process-code <processCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00" --duration-day 1.65 --duration-hour 14.87`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "leave-code", "process-code", "start", "end"); err != nil {
+				return err
+			}
+			var missingNums []string
+			for _, name := range []string{"duration-day", "duration-hour"} {
+				if !cmd.Flags().Changed(name) {
+					missingNums = append(missingNums, name)
+				}
+			}
+			if err := missingRequiredFlagsError(cmd, missingNums...); err != nil {
+				return err
+			}
+			start, end := mustGetFlag(cmd, "start"), mustGetFlag(cmd, "end")
+			if err := validateLeaveTimePrefix("start", start); err != nil {
+				return err
+			}
+			if err := validateLeaveTimePrefix("end", end); err != nil {
+				return err
+			}
+			durationDay, _ := cmd.Flags().GetFloat64("duration-day")
+			durationHour, _ := cmd.Flags().GetFloat64("duration-hour")
+			req := map[string]any{
+				"leaveCode":      mustGetFlag(cmd, "leave-code"),
+				"processCode":    mustGetFlag(cmd, "process-code"),
+				"startTime":      start,
+				"endTime":        end,
+				"durationInDay":  durationDay,
+				"durationInHour": durationHour,
+			}
+			if user := mustGetFlag(cmd, "user"); user != "" {
+				req["staffId"] = user
+			}
+			if procInstID := mustGetFlag(cmd, "proc-inst-id"); procInstID != "" {
+				req["procInstId"] = procInstID
+			}
+			if deps.Caller.DryRun() {
+				// dry-run 预览走标准打印路径，不实际调用 MCP。
+				return callMCPToolOnServer("attendance-wukong", "can_leave_check", req)
+			}
+			text, err := callMCPToolReturnTextOnServer(context.Background(), "attendance-wukong", "can_leave_check", req)
+			if err != nil {
+				// success=false 属业务校验结果，会被统一错误分类拦截为 MCP 业务错误；
+				// 此处还原 errorMsg 原样返回（不包装），供 Agent 向用户解释后终止发起。
+				if msg := leaveCheckErrorMessage(err); msg != "" {
+					return errors.New(msg)
+				}
+				return err
+			}
+			if msg := leaveCheckFailureMessage(text); msg != "" {
+				return errors.New(msg)
+			}
+			return renderLegacyMCPText("can_leave_check", text, false)
+		},
+	}
+	DeclareLeafMetadata(attendanceApproveLeaveCheckCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "leave_check",
+				CanonicalPath:  "attendance.leave_check",
+				CLIPath:        "attendance approve leave-check",
+				PrimaryCLIPath: "attendance approve leave-check",
+			},
+			Description: "提交前校验请假资格（时间冲突 / 可撤销单 / 额度）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"can_leave_check 原样透传：请假提交前校验结果；success=false 时命令以非零退出码结束并原样输出 errorMsg","properties":{"success":{"type":"boolean","description":"true = 校验通过；false = 业务校验不通过（时间冲突 / 存在可撤销单 / 额度不足等）"},"errorCode":{"type":"string","description":"失败原因码（success=false 时返回）"},"errorMsg":{"type":"string","description":"用户可读的失败原因（success=false 时返回）"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "发起请假前的提交前校验（时间冲突 / 可撤销单 / 额度）",
+				UseWhen: []string{
+					"发起请假审批时：拿到 leave-duration 的时长结果后、oa approval create-instance 发起前，校验时间段冲突、可撤销实例与额度时",
+				},
+				AvoidWhen: []string{
+					"--duration-day / --duration-hour 必须取自 leave-duration 输出，不要手工估算",
+					"success=false 时必须将 errorMsg 原样转告用户并终止本次发起，不得跳过重试",
+				},
+				Examples: []string{
+					`dws attendance approve leave-check --leave-code <leaveCode> --process-code <processCode> --start "2026-08-13 09:00" --end "2026-08-14 18:00" --duration-day 1.65 --duration-hour 14.87`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "leave-code", Property: "leaveCode", Required: boolPtr(true)},
+				{Name: "process-code", Property: "processCode", Required: boolPtr(true)},
+				{Name: "start", Property: "startTime", Required: boolPtr(true)},
+				{Name: "end", Property: "endTime", Required: boolPtr(true)},
+				{Name: "duration-day", Property: "durationInDay", Required: boolPtr(true)},
+				{Name: "duration-hour", Property: "durationInHour", Required: boolPtr(true)},
+				{Name: "user", Property: "staffId"},
+				{Name: "proc-inst-id", Property: "procInstId"},
+			},
+		},
+	})
+
+	attendanceApproveSupplyPlansCmd := &cobra.Command{
+		Use:   "supply-plans",
+		Short: "匹配补卡目标异常班次（服务端口径，与客户端发起页一致）",
+		Long: `调用 attendance-wukong 的 match_plans_for_supply 工具，按补卡时间点（毫秒时间戳）返回可匹配的异常班次列表
+（planId/planTip/planText/workDate/supplyDate），用于组装补卡套件（DDBizSuite · attendance.supply）
+子控件的 extValue。plans 为空属正常业务结果（该时间无异常班次）；多班次时需用户按 planTip 选择。`,
+		Example: `  dws attendance approve supply-plans --time "2026-08-05 04:00"
+  dws attendance approve supply-plans --time "2026-08-05 04:00" --user <userId>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "time"); err != nil {
+				return err
+			}
+			date := mustGetFlag(cmd, "time")
+			if err := validateSupplyTime("time", date); err != nil {
+				return err
+			}
+			ts, err := parseSupplyTimeMillis(date)
+			if err != nil {
+				return err
+			}
+			req := map[string]any{"supplyTimestampMs": ts}
+			if user := mustGetFlag(cmd, "user"); user != "" {
+				req["userId"] = user
+			}
+			return callMCPToolOnServer("attendance-wukong", "match_plans_for_supply", req)
+		},
+	}
+	DeclareLeafMetadata(attendanceApproveSupplyPlansCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "supply_plans",
+				CanonicalPath:  "attendance.supply_plans",
+				CLIPath:        "attendance approve supply-plans",
+				PrimaryCLIPath: "attendance approve supply-plans",
+			},
+			Description: "匹配补卡目标异常班次（服务端口径，与客户端发起页一致）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"match_plans_for_supply 原样透传：补卡目标异常班次列表，用于组装补卡套件 extValue","properties":{"plans":{"type":"array","description":"可匹配的异常班次；空数组 = 该时间无异常班次（正常业务结果，应转告用户终止）","items":{"type":"object","properties":{"planId":{"type":["string","null"],"description":"班次 id（自由工时排班可为 null）"},"planTip":{"type":"string","description":"带状态的卡点文案，用户选择班次的直接依据"},"planText":{"type":"string","description":"班次描述 → extValue.planText"},"workDate":{"type":"integer","description":"班次工作日毫秒 → extValue.workDate/timeStamp"},"supplyDate":{"type":"integer","description":"建议补卡时刻毫秒 → extValue.userCheckTime 与 supply-check --timestamp"},"checkType":{"type":"string","description":"打卡点类型（OnDuty/OffDuty 等）→ 意图词（上班/下班）匹配依据"},"checkDateTime":{"type":"integer","description":"打卡点时刻毫秒 → 异常班次就近排序依据（freeCheck 自由工时可能缺失）"},"timeResult":{"type":"string","description":"打卡结果（Normal/Late/Early 等）；≠Normal 即异常班次"},"freeCheck":{"type":"boolean","description":"true = 自由工时班次（无固定打卡点，不可参与就近排序）"},"timeRange":{"type":"array","description":"可选的可补卡时间窗（毫秒二元组，越界修正）"}}}}},"required":["plans"],"additionalProperties":true}`),
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "匹配补卡目标异常班次（服务端权威口径），用于组装补卡套件 extValue",
+				UseWhen: []string{
+					"发起补卡审批（DDBizSuite attendance.supply 套件）时：已用 form-schema 识别补卡时间子控件并收集到补卡时间后，需要服务端匹配异常班次（planId/planTip/planText/workDate/supplyDate）来组装 extValue 时",
+				},
+				AvoidWhen: []string{
+					"plans 为空属正常业务结果（该时间无异常班次），应转告用户并终止，不要重试",
+					"多班次时必须请用户按 planTip 选择，不得默认取首个；本命令不发起审批，发起用 oa approval create-instance",
+				},
+				Examples: []string{
+					`dws attendance approve supply-plans --time "2026-08-05 04:00"`,
+					`dws attendance approve supply-plans --time "2026-08-05 04:00" --user <userId> --format json`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "time", Property: "supplyTimestampMs", Required: boolPtr(true)},
+				{Name: "user", Property: "userId"},
+			},
+		},
+	})
+
+	attendanceApproveSupplyCheckCmd := &cobra.Command{
+		Use:   "supply-check",
+		Short: "提交前校验补卡资格（期限 / 次数 / 状态）",
+		Long: `调用 attendance-wukong 的 check_supply_qualification 工具，在发起补卡前校验该用户在该时刻是否可补卡。
+--timestamp 必须取自 dws attendance approve supply-plans 输出的 supplyDate（与 PC 端
+matchPlansForSupplyByDate → qualifyForAdjustmentWithUserId 链式调用一致）。
+校验不通过（qualify=false）时命令以非零退出码结束，并原样输出服务端返回的 title/desc；
+此时应终止本次发起，不得跳过重试。`,
+		Example: `  dws attendance approve supply-check --timestamp 1785873600000`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// timestamp 是 Int64 flag，validateRequiredFlags 仅支持 string 值
+			// 判定，这里对齐 leave-check 数值 flags 的 Changed 检查模式。
+			if !cmd.Flags().Changed("timestamp") {
+				return missingRequiredFlagsError(cmd, "timestamp")
+			}
+			ts, _ := cmd.Flags().GetInt64("timestamp")
+			req := map[string]any{"supplyTimestampMs": ts}
+			if user := mustGetFlag(cmd, "user"); user != "" {
+				req["userId"] = user
+			}
+			if deps.Caller.DryRun() {
+				// dry-run 预览走标准打印路径，不实际调用 MCP。
+				return callMCPToolOnServer("attendance-wukong", "check_supply_qualification", req)
+			}
+			text, err := callMCPToolReturnTextOnServer(context.Background(), "attendance-wukong", "check_supply_qualification", req)
+			if err != nil {
+				// 工具级业务失败（success=false）会被统一错误分类拦截为 MCP 业务错误；
+				// 此处还原 errorMsg 原样返回（不包装），供 Agent 向用户解释后终止发起。
+				if msg := leaveCheckErrorMessage(err); msg != "" {
+					return errors.New(msg)
+				}
+				return err
+			}
+			if msg := supplyCheckFailureMessage(text); msg != "" {
+				return errors.New(msg)
+			}
+			return renderLegacyMCPText("check_supply_qualification", text, false)
+		},
+	}
+	DeclareLeafMetadata(attendanceApproveSupplyCheckCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "supply_check",
+				CanonicalPath:  "attendance.supply_check",
+				CLIPath:        "attendance approve supply-check",
+				PrimaryCLIPath: "attendance approve supply-check",
+			},
+			Description: "提交前校验补卡资格（期限 / 次数 / 状态）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"check_supply_qualification 原样透传：补卡提交前资格校验结果；qualify=false 时命令以非零退出码结束并原样输出 title/desc","properties":{"qualify":{"type":"boolean","description":"true = 可补卡；false = 资格校验不通过（期限 / 次数 / 状态等）"},"title":{"type":"string","description":"失败标题（qualify=false 时返回）"},"desc":{"type":"string","description":"用户可读的失败原因（qualify=false 时返回）"}},"required":["qualify"],"additionalProperties":true}`),
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "发起补卡前的提交前资格校验（期限 / 次数 / 状态）",
+				UseWhen: []string{
+					"发起补卡审批时：用户选定班次（supply-plans 的 supplyDate）后、oa approval create-instance 发起前，校验该用户在该时刻是否可补卡时",
+				},
+				AvoidWhen: []string{
+					"--timestamp 必须取自 supply-plans 输出的 supplyDate，不要手工构造",
+					"qualify=false 时必须将 title/desc 原样转告用户并终止本次发起，不得跳过重试",
+				},
+				Examples: []string{
+					`dws attendance approve supply-check --timestamp 1785873600000`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "timestamp", Property: "supplyTimestampMs", Required: boolPtr(true)},
+				{Name: "user", Property: "userId"},
 			},
 		},
 	})
@@ -3804,6 +4216,36 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	attendanceApproveTemplatesCmd.Flags().String("type", "", "审批类型：repair-check/patch/补卡、leave/请假、overtime/加班，或 REPAIR_CHECK/LEAVE/OVERTIME（必填）")
 	attendanceApproveCmd.AddCommand(attendanceApproveTemplatesCmd)
 
+	// approve leave-types（query_leave_types_with_balance）
+	attendanceApproveLeaveTypesCmd.Flags().String("user", "", "目标员工 userId；不传时查询当前用户（查询他人需具备权限）")
+	attendanceApproveCmd.AddCommand(attendanceApproveLeaveTypesCmd)
+
+	// approve leave-duration / leave-check（get_leave_time / can_leave_check）
+	attendanceApproveLeaveDurationCmd.Flags().String("leave-code", "", "假期类型编码（form-schema 套件 options[i].leaveCode）(必填)")
+	attendanceApproveLeaveDurationCmd.Flags().String("start", "", "开始时间（格式随模板 unit：hour/halfHour/limitHour → yyyy-MM-dd HH:mm；day → yyyy-MM-dd；halfDay → yyyy-MM-dd 上午/下午）(必填)")
+	attendanceApproveLeaveDurationCmd.Flags().String("end", "", "结束时间（格式同 --start）(必填)")
+	attendanceApproveLeaveDurationCmd.Flags().String("user", "", "发起人 userId（代他人提交时必填；缺省为当前登录用户）")
+	attendanceApproveCmd.AddCommand(attendanceApproveLeaveDurationCmd)
+
+	attendanceApproveLeaveCheckCmd.Flags().String("leave-code", "", "假期类型编码 (必填)")
+	attendanceApproveLeaveCheckCmd.Flags().String("process-code", "", "审批模板 processCode (必填)")
+	attendanceApproveLeaveCheckCmd.Flags().String("start", "", "开始时间（对齐 PC 端校验接口传参：hour 原样 yyyy-MM-dd HH:mm；day 传 日期+ 00:00；halfDay 上午传 00:00、下午传 12:00）(必填)")
+	attendanceApproveLeaveCheckCmd.Flags().String("end", "", "结束时间（hour 原样；day 传 日期+ 23:59；halfDay 上午传 12:00、下午传 23:59）(必填)")
+	attendanceApproveLeaveCheckCmd.Flags().Float64("duration-day", 0, "时长（天），取自 leave-duration 输出的 durationInDay (必填)")
+	attendanceApproveLeaveCheckCmd.Flags().Float64("duration-hour", 0, "时长（小时），取自 leave-duration 输出的 durationInHour (必填)")
+	attendanceApproveLeaveCheckCmd.Flags().String("user", "", "发起人 userId（代他人提交时必填；缺省为当前登录用户）")
+	attendanceApproveLeaveCheckCmd.Flags().String("proc-inst-id", "", "修改已有实例场景的原实例 ID（新发起不传）")
+	attendanceApproveCmd.AddCommand(attendanceApproveLeaveCheckCmd)
+
+	// approve supply-plans / supply-check（match_plans_for_supply / check_supply_qualification）
+	attendanceApproveSupplyPlansCmd.Flags().String("time", "", "补卡时间点 yyyy-MM-dd HH:mm（对齐补卡模板 DDDateField 子控件 format）(必填)")
+	attendanceApproveSupplyPlansCmd.Flags().String("user", "", "补卡人 userId（代他人提交时必填；缺省为当前登录用户）")
+	attendanceApproveCmd.AddCommand(attendanceApproveSupplyPlansCmd)
+
+	attendanceApproveSupplyCheckCmd.Flags().Int64("timestamp", 0, "选定班次的补卡时刻（毫秒时间戳，取自 supply-plans 输出的 supplyDate）(必填)")
+	attendanceApproveSupplyCheckCmd.Flags().String("user", "", "补卡人 userId（代他人提交时必填；缺省为当前登录用户）")
+	attendanceApproveCmd.AddCommand(attendanceApproveSupplyCheckCmd)
+
 	// shift list (batch_get_employee_shifts)
 	attendanceShiftListCmd.Flags().String("users", "", "用户 ID 列表，逗号分隔，最多 50 个 (必填)")
 	attendanceShiftListCmd.Flags().String("start", "", "开始日期，格式 YYYY-MM-DD (必填)")
@@ -4519,4 +4961,108 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 		bossCheckCmd,
 	)
 	return root
+}
+
+// ── 请假 / 补卡套件发起支持辅助 ─────────────────────────────
+
+// leaveTimePrefixPattern 是请假时间参数的基本格式预检（yyyy-MM-dd 开头）；
+// unit 联动的完整格式校验由服务端负责（详见方案 §3.5 错误语义）。
+var leaveTimePrefixPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
+
+func validateLeaveTimePrefix(flagName, value string) error {
+	if !leaveTimePrefixPattern.MatchString(strings.TrimSpace(value)) {
+		return fmt.Errorf("--%s 时间格式不正确，须以 yyyy-MM-dd 开头（hour/halfHour/limitHour → yyyy-MM-dd HH:mm；day → yyyy-MM-dd；halfDay → yyyy-MM-dd 上午/下午）: %q", flagName, value)
+	}
+	return nil
+}
+
+// leaveCheckFailureMessage 解析 can_leave_check 响应文本；success=false 时
+// 返回 errorMsg 原样（供调用方以非零退出码终止发起）。支持顶层与 result
+// 嵌套两种响应形态。返回空串表示校验通过或无法识别失败语义。
+func leaveCheckFailureMessage(text string) string {
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return ""
+	}
+	return leaveCheckFailureIn(body)
+}
+
+func leaveCheckFailureIn(body map[string]any) string {
+	if success, ok := body["success"].(bool); ok && !success {
+		if msg, ok := body["errorMsg"].(string); ok && strings.TrimSpace(msg) != "" {
+			return msg
+		}
+		return "请假校验未通过（服务端未返回具体原因）"
+	}
+	if result, ok := body["result"].(map[string]any); ok {
+		return leaveCheckFailureIn(result)
+	}
+	return ""
+}
+
+// leaveCheckErrorMessage 从统一错误分类拦截的业务错误（success=false 会被
+// isBusinessError 拦截为 CLIError）中还原 errorMsg 原样返回。
+func leaveCheckErrorMessage(err error) string {
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
+		return ""
+	}
+	return leaveCheckFailureMessage(cliErr.Message)
+}
+
+// supplyTimePattern 是补卡时间参数的严格格式预检（yyyy-MM-dd HH:mm，
+// 对齐补卡模板 DDBizSuite 子控件 DDDateField 的 format 声明）。
+var supplyTimePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$`)
+
+func validateSupplyTime(flagName, value string) error {
+	if !supplyTimePattern.MatchString(strings.TrimSpace(value)) {
+		return fmt.Errorf("--%s 时间格式不正确，应为 yyyy-MM-dd HH:mm: %q", flagName, value)
+	}
+	return nil
+}
+
+// supplyTimeZone 是补卡时间字符串 → 毫秒时间戳换算使用的固定时区（一期口径：
+// 钉钉考勤的 Asia/Shanghai 墙上时间；extValue 不本地拼接 timeZoneInfo）。
+var supplyTimeZone = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+// parseSupplyTimeMillis 将 yyyy-MM-dd HH:mm 的补卡时间点换算为 13 位毫秒
+// 时间戳，对齐 attendance-wukong match_plans_for_supply 的 supplyTimestampMs
+// 入参（服务端按绝对时刻匹配班次）。
+func parseSupplyTimeMillis(value string) (int64, error) {
+	t, err := time.ParseInLocation("2006-01-02 15:04", strings.TrimSpace(value), supplyTimeZone)
+	if err != nil {
+		return 0, fmt.Errorf("--time 时间格式不正确，应为 yyyy-MM-dd HH:mm: %q", value)
+	}
+	return t.UnixMilli(), nil
+}
+
+// supplyCheckFailureMessage 解析 check_supply_qualification 响应文本；qualify=false 时
+// 返回 title/desc 原样（供调用方以非零退出码终止发起）。支持顶层与 result
+// 嵌套两种响应形态。返回空串表示校验通过或无法识别失败语义。
+func supplyCheckFailureMessage(text string) string {
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text), &body); err != nil {
+		return ""
+	}
+	return supplyCheckFailureIn(body)
+}
+
+func supplyCheckFailureIn(body map[string]any) string {
+	if qualify, ok := body["qualify"].(bool); ok && !qualify {
+		title, _ := body["title"].(string)
+		desc, _ := body["desc"].(string)
+		switch {
+		case title != "" && desc != "":
+			return title + ": " + desc
+		case desc != "":
+			return desc
+		case title != "":
+			return title
+		}
+		return "补卡资格校验未通过（服务端未返回具体原因）"
+	}
+	if result, ok := body["result"].(map[string]any); ok {
+		return supplyCheckFailureIn(result)
+	}
+	return ""
 }

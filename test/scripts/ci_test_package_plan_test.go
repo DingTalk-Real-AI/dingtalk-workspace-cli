@@ -23,7 +23,12 @@ func TestCICoveragePackagePlanRoutesFullSuiteScope(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	remaining := strings.Fields(runTestPackagePlan(t, root, "list-coverage", "remaining"))
 
-	for _, suffix := range []string{"/cmd", "/internal/output", "/skills"} {
+	for _, suffix := range []string{
+		"/cmd",
+		"/internal/output",
+		"/skills",
+		"/scripts/build/runtime-payload",
+	} {
 		if !containsPackageSuffix(remaining, suffix) {
 			t.Errorf("coverage remaining shard does not contain package ending in %q", suffix)
 		}

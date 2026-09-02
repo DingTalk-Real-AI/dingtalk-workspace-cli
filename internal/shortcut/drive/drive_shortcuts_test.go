@@ -4,6 +4,7 @@
 package drive
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -31,12 +33,19 @@ type driveCoverageCaller struct {
 	mu        sync.Mutex
 	responses map[string][]string
 	history   []string
+	calls     []driveCoverageCall
 }
 
-func (caller *driveCoverageCaller) CallTool(_ context.Context, _, tool string, _ map[string]any) (*edition.ToolResult, error) {
+type driveCoverageCall struct {
+	tool string
+	args map[string]any
+}
+
+func (caller *driveCoverageCaller) CallTool(_ context.Context, _, tool string, args map[string]any) (*edition.ToolResult, error) {
 	caller.mu.Lock()
 	defer caller.mu.Unlock()
 	caller.history = append(caller.history, tool)
+	caller.calls = append(caller.calls, driveCoverageCall{tool: tool, args: cloneDriveMap(args)})
 	queue := caller.responses[tool]
 	if len(queue) == 0 {
 		return nil, errors.New("missing fake response for " + tool)
@@ -60,8 +69,19 @@ func driveJSON(value any) string {
 
 func runDriveCoverage(t *testing.T, declaration shortcut.Shortcut, caller *driveCoverageCaller, args ...string) error {
 	t.Helper()
+	return runDriveCoverageTo(t, declaration, caller, io.Discard, args...)
+}
+
+func runDriveCoverageRaw(t *testing.T, declaration shortcut.Shortcut, caller *driveCoverageCaller, args ...string) (string, error) {
+	t.Helper()
+	var stdout bytes.Buffer
+	err := runDriveCoverageTo(t, declaration, caller, &stdout, args...)
+	return stdout.String(), err
+}
+
+func runDriveCoverageTo(t *testing.T, declaration shortcut.Shortcut, caller *driveCoverageCaller, writer io.Writer, args ...string) error {
+	t.Helper()
 	helpers.InitDeps(caller)
-	declaration.OutputRollout = output.RolloutLegacyOnly
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
 	root.PersistentFlags().Bool("dry-run", false, "")
@@ -69,10 +89,23 @@ func runDriveCoverage(t *testing.T, declaration shortcut.Shortcut, caller *drive
 	service := &cobra.Command{Use: "drive"}
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
 	root.AddCommand(service)
-	root.SetOut(io.Discard)
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
+	root.SetOut(writer)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"drive", declaration.Command}, args...))
-	return root.Execute()
+	executed, err := root.ExecuteC()
+	if err != nil || !output.UsesUnifiedResult(executed) {
+		return err
+	}
+	code, _, emitErr := output.EmitStoredResult(executed)
+	if emitErr != nil {
+		return emitErr
+	}
+	if code != 0 {
+		return fmt.Errorf("command result exit code %d", code)
+	}
+	return nil
 }
 
 func TestCrossPlatformCoverageDriveCollectionsRejectFalseEmptySuccess(t *testing.T) {
@@ -136,6 +169,17 @@ func TestCrossPlatformCoverageDriveCreateAndInspectReadback(t *testing.T) {
 	}}
 	if err := runDriveCoverage(t, CreateFolder, mismatch, "--name", "wanted"); err == nil || !strings.Contains(err.Error(), "读回名称") {
 		t.Fatalf("readback mismatch error = %v", err)
+	} else {
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) {
+			t.Fatalf("readback mismatch type = %T", err)
+		}
+		if typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable || typed.Reason != "readback_mismatch" {
+			t.Fatalf("readback mismatch metadata = %#v", typed)
+		}
+		if typed.Details["nodeId"] != "folder-2" || typed.Details["retrySafe"] != false {
+			t.Fatalf("readback mismatch details = %#v", typed.Details)
+		}
 	}
 
 	partial := &driveCoverageCaller{responses: map[string][]string{
@@ -146,6 +190,520 @@ func TestCrossPlatformCoverageDriveCreateAndInspectReadback(t *testing.T) {
 	err := runDriveCoverage(t, Inspect, partial, "--node", "n1", "--include-stats", "--include-publish")
 	if err == nil || !strings.Contains(err.Error(), "部分读取") {
 		t.Fatalf("inspect partial error = %v", err)
+	}
+
+	metadataOnlyStats := &driveCoverageCaller{responses: map[string][]string{
+		"get_file_info":  {`{"success":true,"result":{"fileId":"n2","name":"x"}}`},
+		"get_node_stats": {`{"success":true,"contentType":"document","name":"x","message":"no statistics"}`},
+	}}
+	err = runDriveCoverage(t, Inspect, metadataOnlyStats, "--node", "n2", "--include-stats")
+	if err == nil || !strings.Contains(err.Error(), "部分读取") {
+		t.Fatalf("metadata-only stats error = %v", err)
+	}
+
+	nestedStats := &driveCoverageCaller{responses: map[string][]string{
+		"get_file_info":  {`{"success":true,"result":{"fileId":"n3","name":"x"}}`},
+		"get_node_stats": {`{"success":true,"stats":{"views":1}}`},
+	}}
+	if err := runDriveCoverage(t, Inspect, nestedStats, "--node", "n3", "--include-stats"); err != nil {
+		t.Fatalf("nested stats error = %v", err)
+	}
+
+	invalidStats := &driveCoverageCaller{responses: map[string][]string{
+		"get_file_info":  {`{"success":true,"result":{"fileId":"n4","name":"x"}}`},
+		"get_node_stats": {`{"success":true}`},
+	}}
+	err = runDriveCoverage(t, Inspect, invalidStats, "--node", "n4", "--include-stats")
+	if err == nil || !strings.Contains(err.Error(), "部分读取") {
+		t.Fatalf("invalid stats error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDriveBoundedAutoPagination(t *testing.T) {
+	tests := []struct {
+		name        string
+		declaration shortcut.Shortcut
+		tool        string
+		args        []string
+		responses   []string
+		cursorParam string
+		sizeParam   string
+	}{
+		{
+			name: "list", declaration: List, tool: "list_files",
+			args: []string{"--limit", "2", "--page-all", "--max-pages", "3", "--max-items", "3"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"n1"},{"fileId":"n2"}],"hasMore":true,"nextToken":"c2"}`,
+				`{"success":true,"items":[{"fileId":"n2"},{"fileId":"n3"}],"hasMore":false}`,
+			},
+			cursorParam: "nextToken", sizeParam: "maxResults",
+		},
+		{
+			name: "search", declaration: Search, tool: "search_files",
+			args: []string{"--query", "x", "--limit", "2", "--page-all", "--max-pages", "3", "--max-items", "3"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"n1"},{"fileId":"n2"}],"hasMore":true,"nextPageToken":"c2"}`,
+				`{"success":true,"items":[{"fileId":"n3"}],"hasMore":false}`,
+			},
+			cursorParam: "pageToken", sizeParam: "pageSize",
+		},
+		{
+			name: "recent", declaration: Recent, tool: "get_recent_list",
+			args: []string{"--limit", "2", "--page-all", "--max-pages", "3", "--max-items", "3"},
+			responses: []string{
+				`{"success":true,"recentItems":[{"nodeId":"n1"},{"nodeId":"n2"}],"hasMore":true,"nextCursor":"c2"}`,
+				`{"success":true,"recentItems":[{"nodeId":"n3"}],"hasMore":false}`,
+			},
+			cursorParam: "nextToken", sizeParam: "maxResults",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &driveCoverageCaller{responses: map[string][]string{tc.tool: tc.responses}}
+			if err := runDriveCoverage(t, tc.declaration, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 2 {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			if caller.calls[0].args[tc.sizeParam] != 2 || caller.calls[1].args[tc.sizeParam] != 1 {
+				t.Fatalf("page sizes = %#v, %#v", caller.calls[0].args, caller.calls[1].args)
+			}
+			if caller.calls[1].args[tc.cursorParam] != "c2" {
+				t.Fatalf("second page args = %#v", caller.calls[1].args)
+			}
+		})
+	}
+
+	stalled := &driveCoverageCaller{responses: map[string][]string{
+		"list_files": {
+			`{"success":true,"items":[{"fileId":"n1"}],"hasMore":true,"nextToken":"same"}`,
+			`{"success":true,"items":[{"fileId":"n2"}],"hasMore":true,"nextToken":"same"}`,
+		},
+	}}
+	err := runDriveCoverage(t, List, stalled, "--limit", "1", "--page-all", "--cursor", "start")
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "drive_pagination_stalled_cursor" {
+		t.Fatalf("stalled cursor error = %#v", err)
+	}
+	if typed.Details["nextCursor"] != nil || typed.Details["retryCursor"] != nil || typed.Details["requestCursor"] != "same" {
+		t.Fatalf("stalled cursor exposed an unsafe continuation: details=%#v", typed.Details)
+	}
+	if strings.Contains(strings.Join(typed.Actions, " "), "nextCursor") {
+		t.Fatalf("stalled cursor actions recommend an unsafe continuation: %#v", typed.Actions)
+	}
+
+	maxPages := &driveCoverageCaller{responses: map[string][]string{
+		"list_files": {
+			`{"success":true,"items":[{"fileId":"n1"}],"hasMore":true,"nextToken":"c2"}`,
+			`{"success":true,"items":[{"fileId":"n2"}],"hasMore":true,"nextToken":"c3"}`,
+		},
+	}}
+	if err := runDriveCoverage(t, List, maxPages, "--limit", "1", "--page-all", "--max-pages", "2", "--max-items", "10"); err != nil {
+		t.Fatal(err)
+	}
+	if len(maxPages.calls) != 2 {
+		t.Fatalf("max-pages calls = %#v", maxPages.calls)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		responses []string
+		want      string
+	}{
+		{
+			name: "server exceeds requested page size",
+			args: []string{"--limit", "2", "--page-all", "--max-items", "1"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"n1"},{"fileId":"n2"}],"hasMore":false}`,
+			},
+			want: "drive_pagination_page_size_exceeded",
+		},
+		{
+			name: "pagination cannot be proven",
+			args: []string{"--limit", "1", "--page-all"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"n1"}]}`,
+			},
+			want: "drive_pagination_pagination_unproven",
+		},
+		{
+			name: "max items returns a bounded partial result",
+			args: []string{"--limit", "1", "--page-all", "--max-items", "1"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"n1"}],"hasMore":true,"nextToken":"c2"}`,
+			},
+		},
+		{
+			name: "missing continuation cursor",
+			args: []string{"--limit", "1", "--page-all"},
+			responses: []string{
+				`{"success":true,"items":[],"hasMore":true}`,
+			},
+			want: "drive_pagination_missing_next_cursor",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &driveCoverageCaller{responses: map[string][]string{"list_files": tc.responses}}
+			err := runDriveCoverage(t, List, caller, tc.args...)
+			if tc.want == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.want != "" {
+				var typed *apperrors.Error
+				if err == nil || !errors.As(err, &typed) || typed.Reason != tc.want {
+					t.Fatalf("error = %#v, want reason %q", err, tc.want)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDriveUnifiedPaginationContract(t *testing.T) {
+	tests := []struct {
+		name        string
+		declaration shortcut.Shortcut
+		tool        string
+		args        []string
+		outputKey   string
+		responses   []string
+	}{
+		{
+			name: "list", declaration: List, tool: "list_files", outputKey: "files",
+			args: []string{"--limit", "1", "--page-all"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"list-1"}],"hasMore":true,"nextToken":"list-c2"}`,
+				`{"success":true,"items":[{"fileId":"list-2"}],"hasMore":false}`,
+			},
+		},
+		{
+			name: "search", declaration: Search, tool: "search_files", outputKey: "files",
+			args: []string{"--query", "synthetic", "--limit", "1", "--page-all"},
+			responses: []string{
+				`{"success":true,"items":[{"fileId":"search-1"}],"hasMore":true,"nextPageToken":"search-c2"}`,
+				`{"success":true,"items":[{"fileId":"search-2"}],"hasMore":false}`,
+			},
+		},
+		{
+			name: "recent", declaration: Recent, tool: "get_recent_list", outputKey: "items",
+			args: []string{"--limit", "1", "--page-all"},
+			responses: []string{
+				`{"success":true,"recentItems":[{"nodeId":"recent-1"}],"hasMore":true,"nextCursor":"recent-c2"}`,
+				`{"success":true,"recentItems":[{"nodeId":"recent-2"}],"hasMore":false}`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &driveCoverageCaller{responses: map[string][]string{tc.tool: tc.responses}}
+			raw, err := runDriveCoverageRaw(t, tc.declaration, caller, tc.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var envelope map[string]any
+			if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+				t.Fatalf("decode output %q: %v", raw, err)
+			}
+			data, _ := envelope["data"].(map[string]any)
+			rows, _ := data[tc.outputKey].([]any)
+			if len(rows) != 2 {
+				t.Fatalf("business data=%#v", data)
+			}
+			if data["count"] != float64(2) || data["hasMore"] != false || data["nextCursor"] != nil {
+				t.Fatalf("legacy data paths=%#v", data)
+			}
+			for _, leaked := range []string{"pagesRead", "complete", "truncated", "stopReason"} {
+				if _, found := data[leaked]; found {
+					t.Fatalf("business data leaked pagination field %q: %#v", leaked, data)
+				}
+			}
+			meta, _ := envelope["meta"].(map[string]any)
+			pagination, _ := meta["pagination"].(map[string]any)
+			if meta["count"] != float64(2) || pagination["endpoint_exhausted"] != true || pagination["pages"] != float64(2) || pagination["items"] != float64(2) || pagination["next_token"] != nil {
+				t.Fatalf("meta=%#v", meta)
+			}
+		})
+	}
+
+	limited := &driveCoverageCaller{responses: map[string][]string{
+		"list_files": {`{"success":true,"items":[{"fileId":"limited-1"}],"hasMore":true,"nextToken":"limited-c2"}`},
+	}}
+	raw, err := runDriveCoverageRaw(t, List, limited, "--limit", "1", "--page-all", "--max-pages", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	meta, _ := envelope["meta"].(map[string]any)
+	pagination, _ := meta["pagination"].(map[string]any)
+	if pagination["endpoint_exhausted"] != false || pagination["next_token"] != "limited-c2" {
+		t.Fatalf("bounded pagination=%#v", pagination)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	if data["count"] != float64(1) || data["hasMore"] != true || data["nextCursor"] != pagination["next_token"] {
+		t.Fatalf("bounded legacy data paths=%#v", data)
+	}
+}
+
+func TestCrossPlatformCoverageDriveCollectionWireCompatibility(t *testing.T) {
+	for _, tc := range []struct {
+		declaration shortcut.Shortcut
+		tool        string
+		inputKey    string
+		outputKey   string
+		args        []string
+		autoPage    bool
+	}{
+		{List, "list_files", "items", "files", nil, true},
+		{Search, "search_files", "items", "files", []string{"--query", "synthetic"}, true},
+		{Recent, "get_recent_list", "recentItems", "items", nil, true},
+		{RecycleList, "list_recycle_items", "recycleItems", "items", nil, false},
+		{StarList, "get_star_list", "starList", "items", nil, false},
+		{VersionHistory, "list_file_versions", "versions", "versions", []string{"--node", "test-node"}, false},
+		{SearchDocs, "search_documents", "documents", "docs", []string{"--query", "synthetic"}, false},
+	} {
+		t.Run(tc.declaration.Command, func(t *testing.T) {
+			var schema struct {
+				Properties           map[string]json.RawMessage `json:"properties"`
+				Required             []string                   `json:"required"`
+				AdditionalProperties bool                       `json:"additionalProperties"`
+			}
+			if err := json.Unmarshal(tc.declaration.Contract.Result.DataSchema, &schema); err != nil {
+				t.Fatal(err)
+			}
+			if !schema.AdditionalProperties || fmt.Sprint(schema.Required) != fmt.Sprint([]string{"count", tc.outputKey}) {
+				t.Fatalf("shared schema narrowed the legacy contract: %#v", schema)
+			}
+			for _, field := range []string{"count", tc.outputKey, "hasMore", "nextCursor"} {
+				if _, ok := schema.Properties[field]; !ok {
+					t.Fatalf("schema lost legacy property %q", field)
+				}
+			}
+			modes := []string{"single-page"}
+			if tc.autoPage {
+				modes = append(modes, "bounded-auto-page")
+			}
+			for _, mode := range modes {
+				t.Run(mode, func(t *testing.T) {
+					for _, hasMore := range []bool{false, true} {
+						payload := map[string]any{"success": true, tc.inputKey: []any{}, "hasMore": hasMore}
+						if hasMore {
+							payload["nextCursor"] = "test-next-page"
+						}
+						caller := &driveCoverageCaller{responses: map[string][]string{tc.tool: {driveJSON(payload)}}}
+						args := append([]string{}, tc.args...)
+						if mode == "bounded-auto-page" {
+							args = append(args, "--page-all", "--max-pages", "1")
+						}
+						raw, err := runDriveCoverageRaw(t, tc.declaration, caller, args...)
+						if err != nil {
+							t.Fatal(err)
+						}
+						var envelope map[string]any
+						if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+							t.Fatal(err)
+						}
+						data, _ := envelope["data"].(map[string]any)
+						if data["count"] != float64(0) || data["hasMore"] != hasMore || data[tc.outputKey] == nil || len(caller.calls) != 1 {
+							t.Fatalf("legacy output/call count drift: data=%#v calls=%#v", data, caller.calls)
+						}
+						if hasMore && data["nextCursor"] != "test-next-page" || !hasMore && data["nextCursor"] != nil {
+							t.Fatalf("legacy cursor drift: %#v", data)
+						}
+						if tc.autoPage {
+							meta, _ := envelope["meta"].(map[string]any)
+							pagination, _ := meta["pagination"].(map[string]any)
+							if meta["count"] != data["count"] || pagination["endpoint_exhausted"] != !hasMore || pagination["next_token"] != data["nextCursor"] {
+								t.Fatalf("data/meta disagree: %#v", envelope)
+							}
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDrivePaginationErrorOperation(t *testing.T) {
+	for _, tc := range []struct {
+		declaration shortcut.Shortcut
+		server      string
+		tool        string
+		inputKey    string
+		args        []string
+	}{
+		{List, "drive", "list_files", "items", nil},
+		{Search, "drive", "search_files", "items", []string{"--query", "synthetic"}},
+		{Recent, "doc", "get_recent_list", "recentItems", nil},
+	} {
+		t.Run(tc.declaration.Command, func(t *testing.T) {
+			for _, payload := range []string{"__ERROR__", driveJSON(map[string]any{"success": true, tc.inputKey: []any{}, "hasMore": true})} {
+				caller := &driveCoverageCaller{responses: map[string][]string{tc.tool: {payload}}}
+				err := runDriveCoverage(t, tc.declaration, caller, tc.args...)
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.Operation != tc.server+"/"+tc.tool {
+					t.Fatalf("pagination error operation: %#v", err)
+				}
+				for _, field := range []string{"contractVersion", "contract_version"} {
+					if _, found := typed.Details[field]; found {
+						t.Fatalf("pagination error published undeclared protocol %q: %#v", field, typed.Details)
+					}
+				}
+				if typed.FailureStage != "pagination" || !strings.HasPrefix(typed.Reason, "drive_pagination_") {
+					t.Fatalf("pagination error lost recovery facts: %#v", typed)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDrivePaginationValidationAndSchema(t *testing.T) {
+	for _, declaration := range []shortcut.Shortcut{List, Search, Recent} {
+		if declaration.OutputRollout != output.RolloutUnifiedActive || declaration.Contract.Pagination == nil || declaration.Validate == nil || len(declaration.Constraints) != 1 {
+			t.Fatalf("%s pagination declaration is incomplete: rollout=%q pagination=%v validate=%v constraints=%#v", declaration.Command, declaration.OutputRollout, declaration.Contract.Pagination != nil, declaration.Validate != nil, declaration.Constraints)
+		}
+		dataSchema := string(declaration.Contract.Result.DataSchema)
+		for _, leaked := range []string{`"pagesRead"`, `"complete"`, `"truncated"`, `"stopReason"`} {
+			if strings.Contains(dataSchema, leaked) {
+				t.Fatalf("%s data_schema leaked pagination field %s: %s", declaration.Command, leaked, dataSchema)
+			}
+		}
+
+		baseArgs := []string{}
+		if declaration.Command == "+search" {
+			baseArgs = []string{"--query", "synthetic"}
+		}
+		for _, invalid := range [][]string{
+			{"--max-pages", "2"},
+			{"--max-items", "2"},
+			{"--page-all", "--max-pages", "0"},
+			{"--page-all", "--max-pages", "-1"},
+			{"--page-all", "--max-items", "0"},
+			{"--page-all", "--max-items", "-1"},
+		} {
+			caller := &driveCoverageCaller{}
+			args := append(append([]string{}, baseArgs...), invalid...)
+			if err := runDriveCoverage(t, declaration, caller, args...); err == nil || len(caller.history) != 0 {
+				t.Fatalf("%s accepted invalid pagination args %v: err=%v calls=%#v", declaration.Command, args, err, caller.history)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDrivePaginationDefensiveDefaultsAndRecentFilters(t *testing.T) {
+	caller := &driveCoverageCaller{responses: map[string][]string{
+		"list_files": {`{"success":true,"items":[{"name":"anonymous"}],"hasMore":false}`},
+	}}
+	helpers.InitDeps(caller)
+	cmd := &cobra.Command{Use: "list"}
+	result, err := collectDrivePages(shortcut.RuntimeContextForTest(cmd, List), nil, drivePageOptions{
+		PageSize:      1,
+		MaxPages:      0,
+		MaxItems:      0,
+		Server:        "drive",
+		Tool:          "list_files",
+		OutputKey:     "files",
+		PageSizeParam: "maxResults",
+		CursorParam:   "nextToken",
+		CollectionKeys: []string{
+			"items",
+		},
+		Project: func(items []any) []map[string]any {
+			return projectDriveRows(items, map[string][]string{"name": {"name"}})
+		},
+	})
+	if err != nil || result.Items != 1 || !result.EndpointExhausted {
+		t.Fatalf("defensive defaults result=%#v err=%v", result, err)
+	}
+	if key := drivePageItemKey(map[string]any{"name": "anonymous"}); key != "" {
+		t.Fatalf("anonymous item key=%q", key)
+	}
+
+	recent := &driveCoverageCaller{responses: map[string][]string{
+		"get_recent_list": {`{"success":true,"recentItems":[],"hasMore":false}`},
+	}}
+	if err := runDriveCoverage(t, Recent, recent, "--operate-type", "1", "--creator-type", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recent.calls) != 1 || fmt.Sprint(recent.calls[0].args["operateTypes"]) != "[1]" || recent.calls[0].args["creatorType"] != 2 {
+		t.Fatalf("recent filter params=%#v", recent.calls)
+	}
+}
+
+func TestCrossPlatformCoverageDrivePaginationRejectsContradictionsWithoutUnsafeCursor(t *testing.T) {
+	contradictory := &driveCoverageCaller{responses: map[string][]string{
+		"list_files": {`{"success":true,"items":[],"hasMore":false,"nextToken":"stale"}`},
+	}}
+	err := runDriveCoverage(t, List, contradictory, "--page-all")
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "drive_pagination_inconsistent_state" {
+		t.Fatalf("contradictory pagination error=%#v", err)
+	}
+	if typed.Details["nextCursor"] != nil || strings.Contains(strings.Join(typed.Actions, " "), "nextCursor") {
+		t.Fatalf("contradictory pagination exposed unsafe continuation: details=%#v actions=%#v", typed.Details, typed.Actions)
+	}
+
+	failedSecondPage := &driveCoverageCaller{responses: map[string][]string{
+		"list_files": {
+			`{"success":true,"items":[{"fileId":"first"}],"hasMore":true,"nextToken":"retry-c2"}`,
+			`__ERROR__`,
+		},
+	}}
+	err = runDriveCoverage(t, List, failedSecondPage, "--limit", "1", "--page-all")
+	typed = nil
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "drive_pagination_page_read_failed" {
+		t.Fatalf("second page failure=%#v", err)
+	}
+	if typed.Details["retryCursor"] != "retry-c2" || typed.Details["nextCursor"] != nil || !strings.Contains(strings.Join(typed.Actions, " "), "retryCursor") {
+		t.Fatalf("retry cursor semantics=%#v actions=%#v", typed.Details, typed.Actions)
+	}
+	if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("pagination failure execution state=%#v", typed.ExecutionStarted)
+	}
+
+	cmd := &cobra.Command{Use: "unified"}
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+	rt := shortcut.RuntimeContextForTest(cmd, List)
+	if err := outputDrivePageResult(rt, drivePageResult{Business: map[string]any{"files": []any{}}, EndpointExhausted: true, NextToken: "contradictory"}); err == nil {
+		t.Fatal("output accepted exhausted pagination with a continuation token")
+	}
+}
+
+func TestCrossPlatformCoverageDrivePaginationPreservesImplicitPageSizes(t *testing.T) {
+	tests := []struct {
+		name        string
+		declaration shortcut.Shortcut
+		tool        string
+		args        []string
+		sizeParam   string
+		wantSize    int
+	}{
+		{name: "search", declaration: Search, tool: "search_files", args: []string{"--query", "x"}, sizeParam: "pageSize", wantSize: 10},
+		{name: "recent", declaration: Recent, tool: "get_recent_list", sizeParam: "maxResults", wantSize: 20},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, flag := range tc.declaration.Flags {
+				if flag.Name == "limit" && flag.Default != "" {
+					t.Fatalf("limit default = %q, want existing implicit default", flag.Default)
+				}
+			}
+			caller := &driveCoverageCaller{responses: map[string][]string{
+				tc.tool: {`{"success":true,"items":[],"recentItems":[],"hasMore":false}`},
+			}}
+			if err := runDriveCoverage(t, tc.declaration, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].args[tc.sizeParam] != tc.wantSize {
+				t.Fatalf("calls = %#v, want %s=%d", caller.calls, tc.sizeParam, tc.wantSize)
+			}
+		})
 	}
 }
 
@@ -165,15 +723,39 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 	if err := os.WriteFile("input.bin", []byte("actual-drive-bytes"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
+	var uploadRequest helpers.DriveUploadRequest
+	testseam.Swap(t, &uploadDriveFile, func(_ context.Context, got helpers.DriveUploadRequest) (map[string]any, error) {
+		uploadRequest = got
 		return map[string]any{"success": true, "result": map[string]any{"fileId": "uploaded-1"}}, nil
 	})
 	uploadCaller := &driveCoverageCaller{responses: map[string][]string{
 		"get_file_info": {`{"success":true,"result":{"fileId":"uploaded-1","name":"input.bin","fileSize":18}}`},
 	}}
-	if err := runDriveCoverage(t, Upload, uploadCaller, "--file", "input.bin", "--yes"); err != nil {
+	if err := runDriveCoverage(t, Upload, uploadCaller, "--file", "input.bin", "--space-id", "drive-1", "--mime-type", "application/octet-stream", "--yes"); err != nil {
 		t.Fatal(err)
 	}
+	if uploadRequest.SpaceID != "drive-1" || uploadRequest.MIMEType != "application/octet-stream" {
+		t.Fatalf("drive upload request = %#v, want explicit space and MIME type", uploadRequest)
+	}
+
+	t.Run("drive dry run reports explicit mime type", func(t *testing.T) {
+		caller := &driveCoverageCaller{responses: map[string][]string{}}
+		var stdout strings.Builder
+		if err := runDriveCoverageTo(t, Upload, caller, &stdout, "--file", "input.bin", "--mime-type", "application/octet-stream", "--dry-run"); err != nil {
+			t.Fatal(err)
+		}
+		var preview map[string]any
+		if err := json.Unmarshal([]byte(stdout.String()), &preview); err != nil {
+			t.Fatalf("decode drive dry-run output %q: %v", stdout.String(), err)
+		}
+		data, ok := preview["data"].(map[string]any)
+		if !ok || preview["ok"] != true || preview["outcome"] != "success" || data["mimeType"] != "application/octet-stream" || data["executed"] != false {
+			t.Fatalf("drive dry-run output = %#v, want a successful non-executing envelope with explicit MIME type", preview)
+		}
+		if len(caller.history) != 0 {
+			t.Fatalf("drive dry-run reached MCP: %v", caller.history)
+		}
+	})
 	if _, _, err := resolveDriveUploadInput("../escape.bin"); err == nil {
 		t.Fatal("upload path escape was accepted")
 	}
@@ -197,6 +779,18 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 			err := runDriveCoverage(t, Upload, caller, "--file", "input.bin", "--yes")
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+			if tc.name == "prefix-only remote name" {
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
+					t.Fatalf("upload mismatch metadata = %#v", err)
+				}
+				if typed.Operation != "drive/commit_upload" || typed.FailureStage != "readback_verification" {
+					t.Fatalf("drive upload mismatch operation/stage = %q/%q", typed.Operation, typed.FailureStage)
+				}
+				if typed.Details["nodeId"] != "uploaded-4" || typed.Details["requestedName"] != "input.bin" {
+					t.Fatalf("upload mismatch details = %#v", typed.Details)
+				}
 			}
 		})
 	}
@@ -233,6 +827,187 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 	}}
 	if err := runDriveCoverage(t, Download, emptyArtifact, "--node", "uploaded-1", "--output", "empty.bin"); err == nil || !strings.Contains(err.Error(), "0 字节") {
 		t.Fatalf("empty artifact error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDriveUploadRoutesWorkspaceToDocSpace(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("notes.txt", []byte("workspace-file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("workspace upload uses doc transaction and readback", func(t *testing.T) {
+		var request helpers.DocSpaceUploadRequest
+		testseam.Swap(t, &uploadDocSpaceFile, func(_ context.Context, got helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			request = got
+			return map[string]any{"dentryUuid": "doc-file-1"}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_document_info": {`{"success":true,"result":{"nodeId":"doc-file-1","workspaceId":"wiki-1","name":"notes","extension":"txt"}}`},
+		}}
+		if err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+		if request.WorkspaceID != "wiki-1" || request.FileName != "notes.txt" || request.FileSize != 14 {
+			t.Fatalf("doc-space request = %#v", request)
+		}
+		if strings.Join(caller.history, ",") != "get_document_info" {
+			t.Fatalf("readback history = %v, want doc/get_document_info only", caller.history)
+		}
+	})
+
+	t.Run("workspace name mismatch preserves committed write evidence", func(t *testing.T) {
+		uploadCalls := 0
+		testseam.Swap(t, &uploadDocSpaceFile, func(context.Context, helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			uploadCalls++
+			return map[string]any{"dentryUuid": "doc-file-mismatch"}, nil
+		})
+		testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
+			t.Fatal("workspace upload must not use the Drive transaction")
+			return nil, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_document_info": {`{"nodeId":"doc-file-mismatch","workspaceId":"wiki-1","name":"wrong","extension":"txt"}`},
+		}}
+		err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--yes")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) {
+			t.Fatalf("workspace name mismatch must return a structured error: %v", err)
+		}
+		if typed.Operation != "doc/commit_uploaded_file" || typed.Reason != "readback_mismatch" || typed.FailureStage != "readback_verification" {
+			t.Fatalf("workspace mismatch error identity = %#v", typed)
+		}
+		if typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
+			t.Fatalf("workspace mismatch must record committed, non-retryable execution: %#v", typed)
+		}
+		if typed.Details["status"] != "partial_success" || typed.Details["complete"] != false || typed.Details["retrySafe"] != false || typed.Details["nodeId"] != "doc-file-mismatch" || typed.Details["requestedName"] != "notes.txt" || typed.Details["actualName"] != "wrong" {
+			t.Fatalf("workspace mismatch lost repair evidence: %#v", typed.Details)
+		}
+		resource, ok := typed.Details["resource"].(map[string]any)
+		if !ok || resource["workspaceId"] != "wiki-1" || resource["extension"] != "txt" || !strings.Contains(typed.Hint, "禁止盲目重试") {
+			t.Fatalf("workspace mismatch lost readback or retry guidance: %#v", typed)
+		}
+		if uploadCalls != 1 || strings.Join(caller.history, ",") != "get_document_info" {
+			t.Fatalf("workspace mismatch repeated a write or used the wrong readback: uploads=%d history=%v", uploadCalls, caller.history)
+		}
+	})
+
+	t.Run("workspace upload rejects a returned size mismatch", func(t *testing.T) {
+		testseam.Swap(t, &uploadDocSpaceFile, func(context.Context, helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			return map[string]any{"success": true, "nodeId": "doc-file-size"}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_document_info": {`{"nodeId":"doc-file-size","workspaceId":"wiki-1","name":"notes","extension":"txt","fileSize":13}`},
+		}}
+		err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "与本地文件大小 14 不一致") {
+			t.Fatalf("workspace size mismatch error = %v", err)
+		}
+	})
+
+	t.Run("custom doc-space name inherits local extension", func(t *testing.T) {
+		var request helpers.DocSpaceUploadRequest
+		testseam.Swap(t, &uploadDocSpaceFile, func(_ context.Context, got helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			request = got
+			return map[string]any{"result": map[string]any{"nodeId": "doc-file-2"}}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_document_info": {`{"nodeId":"doc-file-2","workspaceId":"wiki-1","name":"renamed.txt","fileSize":14}`},
+		}}
+		if err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--file-name", "renamed", "--workspace", "wiki-1", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+		if request.FileName != "renamed.txt" {
+			t.Fatalf("doc-space file name = %q, want extension-preserving name", request.FileName)
+		}
+	})
+
+	t.Run("workspace dry run reports doc operation and target", func(t *testing.T) {
+		caller := &driveCoverageCaller{responses: map[string][]string{}}
+		if err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--folder", "folder-1", "--dry-run", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.history) != 0 {
+			t.Fatalf("workspace dry-run reached MCP: %v", caller.history)
+		}
+	})
+
+	t.Run("workspace rejects mime type before upload", func(t *testing.T) {
+		uploadCalled := false
+		testseam.Swap(t, &uploadDocSpaceFile, func(context.Context, helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			uploadCalled = true
+			return map[string]any{"nodeId": "unexpected"}, nil
+		})
+		for _, args := range [][]string{
+			{"--file", "notes.txt", "--workspace", "wiki-1", "--mime-type", "text/plain", "--yes"},
+			{"--file", "notes.txt", "--workspace", "wiki-1", "--mime-type", "text/plain", "--dry-run"},
+		} {
+			uploadCalled = false
+			caller := &driveCoverageCaller{responses: map[string][]string{}}
+			err := runDriveCoverage(t, Upload, caller, args...)
+			if err == nil || !strings.Contains(err.Error(), "--workspace") || !strings.Contains(err.Error(), "--mime-type") {
+				t.Fatalf("workspace MIME conflict error = %v, want both flag names", err)
+			}
+			if uploadCalled || len(caller.history) != 0 {
+				t.Fatalf("workspace MIME conflict reached upload: helper=%v history=%v", uploadCalled, caller.history)
+			}
+		}
+	})
+
+	t.Run("workspace readback is required", func(t *testing.T) {
+		testseam.Swap(t, &uploadDocSpaceFile, func(context.Context, helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			return map[string]any{"success": true, "nodeId": "doc-file-3"}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_document_info": {`{"nodeId":"doc-file-3","name":"notes.txt","fileSize":14}`},
+		}}
+		err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "缺少 workspaceId") {
+			t.Fatalf("missing workspace readback error = %v", err)
+		}
+	})
+
+	t.Run("workspace readback must match requested workspace", func(t *testing.T) {
+		testseam.Swap(t, &uploadDocSpaceFile, func(context.Context, helpers.DocSpaceUploadRequest) (map[string]any, error) {
+			return map[string]any{"success": true, "nodeId": "doc-file-4"}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_document_info": {`{"nodeId":"doc-file-4","workspaceId":"wiki-other","name":"notes.txt","fileSize":14}`},
+		}}
+		err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "与请求 \"wiki-1\" 不一致") {
+			t.Fatalf("workspace mismatch error = %v", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name    string
+		receipt map[string]any
+		want    string
+	}{
+		{name: "workspace upload preserves explicit failure", receipt: map[string]any{"success": false, "message": "rejected"}, want: "rejected"},
+		{name: "workspace upload requires a stable receipt ID", receipt: map[string]any{"result": map[string]any{"name": "notes.txt"}}, want: "没有返回文件 ID"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testseam.Swap(t, &uploadDocSpaceFile, func(context.Context, helpers.DocSpaceUploadRequest) (map[string]any, error) {
+				return tc.receipt, nil
+			})
+			caller := &driveCoverageCaller{responses: map[string][]string{}}
+			err := runDriveCoverage(t, Upload, caller, "--file", "notes.txt", "--workspace", "wiki-1", "--yes")
+			if err == nil || !strings.Contains(err.Error(), tc.want) || len(caller.history) != 0 {
+				t.Fatalf("workspace receipt error=%v history=%v, want %q before readback", err, caller.history, tc.want)
+			}
+		})
+	}
+
+	for _, args := range [][]string{
+		{"--file", "notes.txt", "--workspace", "wiki-1", "--space-id", "drive-1", "--yes"},
+		{"--file", "notes.txt", "--workspace", "wiki-1", "--folder", "f1", "--node", "n1", "--yes"},
+	} {
+		caller := &driveCoverageCaller{responses: map[string][]string{}}
+		if err := runDriveCoverage(t, Upload, caller, args...); err == nil || len(caller.history) != 0 {
+			t.Fatalf("conflicting upload args accepted: args=%v err=%v history=%v", args, err, caller.history)
+		}
 	}
 }
 
@@ -832,6 +1607,17 @@ func TestCrossPlatformCoverageDriveUploadInputAndExecutionEdges(t *testing.T) {
 	if err := runDriveCoverage(t, Upload, dry, "--file", "input.bin", "--file-name", "remote.bin", "--dry-run", "--yes"); err != nil {
 		t.Fatal(err)
 	}
+	t.Run("successful drive upload preserves explicit space id", func(t *testing.T) {
+		testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
+			return map[string]any{"success": true, "nodeId": "n-space"}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_file_info": {`{"fileId":"n-space","name":"remote.bin","fileSize":5}`},
+		}}
+		if err := runDriveCoverage(t, Upload, caller, "--file", "input.bin", "--file-name", "remote.bin", "--space-id", "space-1", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+	})
 	t.Run("missing committed id", func(t *testing.T) {
 		testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
 			return map[string]any{"success": true}, nil

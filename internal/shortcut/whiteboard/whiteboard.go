@@ -9,6 +9,7 @@ package whiteboard
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -31,6 +32,8 @@ const (
 )
 
 var whiteboardMarshalNodes = json.Marshal
+
+var whiteboardCoordinateTolerance = big.NewRat(1, 2)
 
 type updateFile struct {
 	Overwrite bool        `json:"overwrite"`
@@ -88,21 +91,61 @@ func updateResultSpec() *contract.ResultSpec {
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(`{
 			"type":"object",
-			"description":"白板更新回执与同一稳定目标的精确读回验证",
+			"description":"白板更新的精简回执与同一稳定目标的精确读回证据；成功结果不重复返回完整白板快照",
 			"properties":{
 				"nodeId":{"type":"string","description":"承载白板的稳定文档身份"},
 				"partId":{"type":"string","description":"文档内白板的稳定 part 身份"},
 				"mode":{"type":"string","description":"实际执行的 append 或 overwrite 模式"},
 				"verified":{"type":"boolean","description":"远端更新成功并完成独立读回时为 true；dry-run 请求预览为 false"},
 				"verifiedNodeCount":{"type":"integer","description":"按请求稳定节点身份读回验证的节点数"},
-				"source":{"type":"object","description":"更新后的严格 OpenNodes V1 快照","additionalProperties":true},
-				"summary":{"type":"object","description":"更新后快照的完整性计数与摘要证据","additionalProperties":true},
-				"receipt":{"type":"object","description":"显式 success=true 的下游写回执；最终成功仍以独立读回为准","additionalProperties":true}
+				"source":{"type":"object","description":"仅 dry-run 返回的请求预览；真实更新成功时省略，避免重复完整白板快照","additionalProperties":true},
+				"summary":{"type":"object","description":"内部完整读回校验后的节点数、页数、字节数与摘要证据","additionalProperties":true},
+				"receipt":{
+					"type":"object",
+					"description":"真实终态回执或未执行的 dry-run 预览标记，二者互斥",
+					"oneOf":[
+						{
+							"properties":{
+								"message":{"type":"string","minLength":1,"description":"服务端终态说明"},
+								"createdNodeIds":{"type":"array","description":"按请求节点顺序返回的真实节点身份；清空时为空数组","items":{"type":"string","minLength":1}},
+								"idMap":{"type":"object","description":"请求临时节点身份到真实节点身份的映射；清空时为空对象","additionalProperties":{"type":"string","minLength":1}},
+								"deletedNodeCount":{"type":"integer","minimum":0,"description":"本次 overwrite 删除的页面自有节点数；append 为零"}
+							},
+							"required":["message","createdNodeIds","idMap","deletedNodeCount"],
+							"additionalProperties":false
+						},
+						{
+							"properties":{
+								"dryRun":{"type":"boolean","const":true,"description":"未执行远端写入的请求预览标记"},
+								"executed":{"type":"boolean","const":false,"description":"dry-run 未执行远端写入"}
+							},
+							"required":["dryRun","executed"],
+							"additionalProperties":false
+						}
+					]
+				}
 			},
-			"required":["nodeId","partId","mode","verified","verifiedNodeCount","source","summary","receipt"],
+			"required":["nodeId","partId","mode","verified","verifiedNodeCount","summary","receipt"],
+			"oneOf":[
+				{
+					"properties":{
+						"verified":{"const":true,"description":"实际更新已完成独立读回校验"},
+						"receipt":{"required":["message"],"description":"真实终态写回执"}
+					},
+					"not":{"required":["source"]}
+				},
+				{
+					"properties":{
+						"verified":{"const":false,"description":"预览未执行远端更新或读回"},
+						"verifiedNodeCount":{"const":0,"description":"预览没有读回验证节点"},
+						"receipt":{"required":["dryRun","executed"],"description":"未执行的 dry-run 预览标记"}
+					},
+					"required":["source"]
+				}
+			],
 			"additionalProperties":false
 		}`),
-		SensitivePaths: []string{"nodeId", "partId", "source.pages.nodes.id", "receipt.resultJson.createdNodeIds", "receipt.resultJson.idMap"},
+		SensitivePaths: []string{"nodeId", "partId", "source.nodes.id", "receipt.createdNodeIds", "receipt.idMap"},
 	}
 }
 
@@ -212,7 +255,7 @@ var Update = shortcut.Shortcut{
 		{
 			Kind:        shortcut.ConstraintCustom,
 			Flags:       []string{"source"},
-			Description: "--source 不能为空且必须是单一 OpenNodes V1 对象；source.nodes 是含稳定唯一 id 和非空 type 的显式数组，append 模式至少一个节点",
+			Description: "--source 不能为空且必须是单一 OpenNodes V1 对象；source.nodes 是含稳定唯一 id 和非空 type 的显式数组，append 模式至少一个节点；connector 仅引用同一请求中的可写节点并满足端点与 routing/waypoints 约束",
 		},
 	},
 	Tips: []string{"dws whiteboard +update --node <DOC_ID> --part-id <WHITEBOARD_PART_ID> --source @whiteboard.json"},
@@ -241,7 +284,7 @@ var Update = shortcut.Shortcut{
 			return rt.Output(map[string]any{
 				"nodeId": target["nodeId"], "partId": target["partId"], "mode": mode,
 				"verified": false, "verifiedNodeCount": 0,
-				"source":  map[string]any{"schemaVersion": "1.0", "catalogVersion": "dml-v1", "nodes": parsed.Nodes, "pages": []any{}},
+				"source":  map[string]any{"schemaVersion": "1.0", "catalogVersion": "dml-v1", "nodes": parsed.Nodes},
 				"summary": map[string]any{"preview": true}, "receipt": map[string]any{"dryRun": true, "executed": false},
 			})
 		}
@@ -256,20 +299,16 @@ var Update = shortcut.Shortcut{
 		}
 		readback, err := rt.CallMCPData(serverWhiteboard, toolQuery, target)
 		if err != nil {
-			return err
+			return whiteboardCommittedVerificationError(err, target, mode, receipt)
 		}
 		projected, err := projectWhiteboardQuery(readback, rt.Str("node"), rt.Str("part-id"))
 		if err != nil {
-			return err
+			return whiteboardCommittedVerificationError(err, target, mode, receipt)
 		}
 		if err := verifyWhiteboardUpdate(parsed, projected, receipt.IDMap); err != nil {
-			return err
+			return whiteboardCommittedVerificationError(err, target, mode, receipt)
 		}
-		return rt.Output(map[string]any{
-			"nodeId": target["nodeId"], "partId": target["partId"], "mode": mode,
-			"verified": true, "verifiedNodeCount": len(parsed.Nodes),
-			"source": projected["source"], "summary": projected["summary"], "receipt": receipt.Envelope,
-		})
+		return rt.Output(projectWhiteboardUpdateSuccess(target, mode, parsed, projected, receipt))
 	},
 }
 
@@ -312,6 +351,9 @@ func parseWhiteboardSource(raw string) (*parsedUpdate, error) {
 	}
 	nodes, err := decodeNodeArray(input.Source.Nodes, "--source source.nodes")
 	if err != nil {
+		return nil, err
+	}
+	if err := validateWhiteboardConnectors(nodes); err != nil {
 		return nil, err
 	}
 	if !input.Overwrite && len(nodes) == 0 {
@@ -358,6 +400,190 @@ func decodeNodeArray(raw json.RawMessage, field string) ([]map[string]any, error
 		nodes[index] = node
 	}
 	return nodes, nil
+}
+
+func validateWhiteboardConnectors(nodes []map[string]any) error {
+	byID := make(map[string]map[string]any, len(nodes))
+	for _, node := range nodes {
+		id, _ := nonEmptyString(node["id"])
+		byID[id] = node
+	}
+	for index, node := range nodes {
+		nodeType, _ := nonEmptyString(node["type"])
+		if nodeType != "connector" {
+			continue
+		}
+		path := fmt.Sprintf("--source source.nodes[%d] connector", index)
+		for _, field := range []string{"x", "y", "width", "height", "angle", "parentId", "absoluteBounds", "resolvedPath"} {
+			if _, present := node[field]; present {
+				return apperrors.NewValidation(fmt.Sprintf("%s 不能包含 query-only 或服务端推导字段 %q", path, field))
+			}
+		}
+
+		startRef, err := validateWhiteboardConnectorEndpoint(node["start"], path+".start", byID)
+		if err != nil {
+			return err
+		}
+		endRef, err := validateWhiteboardConnectorEndpoint(node["end"], path+".end", byID)
+		if err != nil {
+			return err
+		}
+		if startRef != "" && startRef == endRef {
+			return apperrors.NewValidation(path + " 的 start/end 不能引用同一个节点")
+		}
+
+		routing, ok := nonEmptyString(node["routing"])
+		if !ok || !containsString([]string{"straight", "polyline", "curve", "orthogonal"}, routing) {
+			return apperrors.NewValidation(path + ".routing 必须是 straight、polyline、curve 或 orthogonal")
+		}
+		waypointsValue, hasWaypoints := node["waypoints"]
+		if routing == "straight" && hasWaypoints {
+			return apperrors.NewValidation(path + ".waypoints 在 straight routing 下禁止提供，包括空数组")
+		}
+		if routing == "polyline" && !hasWaypoints {
+			return apperrors.NewValidation(path + ".waypoints 在 polyline routing 下至少需要一个点")
+		}
+		if hasWaypoints {
+			waypoints, ok := waypointsValue.([]any)
+			if !ok || (routing == "polyline" && len(waypoints) == 0) {
+				return apperrors.NewValidation(path + ".waypoints 必须是符合 routing 约束的显式点数组")
+			}
+			for waypointIndex, waypoint := range waypoints {
+				if err := validateWhiteboardPoint(waypoint, fmt.Sprintf("%s.waypoints[%d]", path, waypointIndex)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateWhiteboardConnectorEndpoint(value any, path string, nodes map[string]map[string]any) (string, error) {
+	endpoint, ok := value.(map[string]any)
+	if !ok || len(endpoint) == 0 {
+		return "", apperrors.NewValidation(path + " 必须是非空端点对象")
+	}
+	endpointType, ok := nonEmptyString(endpoint["type"])
+	if !ok {
+		return "", apperrors.NewValidation(path + ".type 必须是 point 或 node")
+	}
+	if err := validateWhiteboardConnectorMarker(endpoint["marker"], path+".marker"); err != nil {
+		return "", err
+	}
+	switch endpointType {
+	case "point":
+		if _, present := endpoint["nodeRef"]; present {
+			return "", apperrors.NewValidation(path + " 的 point 端点不能包含 nodeRef")
+		}
+		if _, present := endpoint["anchor"]; present {
+			return "", apperrors.NewValidation(path + " 的 point 端点不能包含 anchor")
+		}
+		if err := validateWhiteboardPoint(endpoint["point"], path+".point"); err != nil {
+			return "", err
+		}
+		return "", nil
+	case "node":
+		if _, present := endpoint["point"]; present {
+			return "", apperrors.NewValidation(path + " 的 node 端点不能包含 point")
+		}
+		if _, present := endpoint["resolvedPoint"]; present {
+			return "", apperrors.NewValidation(path + ".resolvedPoint 是 query-only 字段，不能回写")
+		}
+		nodeRef, ok := endpoint["nodeRef"].(map[string]any)
+		if !ok || len(nodeRef) == 0 {
+			return "", apperrors.NewValidation(path + ".nodeRef 必须是非空对象")
+		}
+		scope, scopeOK := nonEmptyString(nodeRef["scope"])
+		requestID, idOK := nonEmptyString(nodeRef["id"])
+		if !scopeOK || scope != "request" || !idOK {
+			return "", apperrors.NewValidation(path + `.nodeRef 必须使用 {"scope":"request","id":"<同一请求节点ID>"}`)
+		}
+		target := nodes[requestID]
+		if target == nil {
+			return "", apperrors.NewValidation(path + ".nodeRef.id 必须引用同一 source.nodes 请求中的节点")
+		}
+		targetType, _ := nonEmptyString(target["type"])
+		if !containsString([]string{"shape", "text", "stickyNote", "frame", "group", "path"}, targetType) {
+			return "", apperrors.NewValidation(path + ".nodeRef 只能引用同一请求中的 shape、text、stickyNote、frame、group 或 path")
+		}
+		if hidden, _ := target["hidden"].(bool); hidden {
+			return "", apperrors.NewValidation(path + ".nodeRef 不能引用 hidden 节点")
+		}
+		if anchorValue, present := endpoint["anchor"]; present {
+			if err := validateWhiteboardConnectorAnchor(anchorValue, path+".anchor"); err != nil {
+				return "", err
+			}
+		}
+		return requestID, nil
+	default:
+		return "", apperrors.NewValidation(path + ".type 必须是 point 或 node")
+	}
+}
+
+func validateWhiteboardConnectorAnchor(value any, path string) error {
+	anchor, ok := value.(map[string]any)
+	if !ok || len(anchor) == 0 {
+		return apperrors.NewValidation(path + " 必须是非空对象")
+	}
+	if _, present := anchor["position"]; present {
+		return apperrors.NewValidation(path + ".position 是 query-only 字段，不能回写")
+	}
+	mode, ok := nonEmptyString(anchor["mode"])
+	if !ok {
+		return apperrors.NewValidation(path + ".mode 必须是 auto 或 fixed")
+	}
+	switch mode {
+	case "auto":
+		if _, present := anchor["side"]; present {
+			return apperrors.NewValidation(path + ".side 在 auto 模式下禁止提供")
+		}
+		return nil
+	case "fixed":
+		side, ok := nonEmptyString(anchor["side"])
+		if !ok || !containsString([]string{"top", "right", "bottom", "left"}, side) {
+			return apperrors.NewValidation(path + ".side 在 fixed 模式下必须是 top、right、bottom 或 left")
+		}
+		return nil
+	default:
+		return apperrors.NewValidation(path + ".mode 必须是 auto 或 fixed")
+	}
+}
+
+func validateWhiteboardConnectorMarker(value any, path string) error {
+	if value == nil {
+		return nil
+	}
+	marker, ok := value.(map[string]any)
+	if !ok || len(marker) == 0 {
+		return apperrors.NewValidation(path + " 必须是非空对象")
+	}
+	catalogID, ok := nonEmptyString(marker["catalogId"])
+	if !ok || !containsString([]string{"none", "arrow.open", "arrow.filled"}, catalogID) {
+		return apperrors.NewValidation(path + ".catalogId 必须是 none、arrow.open 或 arrow.filled")
+	}
+	return nil
+}
+
+func validateWhiteboardPoint(value any, path string) error {
+	point, ok := value.(map[string]any)
+	if !ok || len(point) == 0 {
+		return apperrors.NewValidation(path + " 必须是包含有限 x/y 的点对象")
+	}
+	for _, axis := range []string{"x", "y"} {
+		if _, ok := numericValue(point[axis]); !ok {
+			return apperrors.NewValidation(path + "." + axis + " 必须是有限数值")
+		}
+	}
+	return nil
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func projectWhiteboardQuery(data map[string]any, nodeID, partID string) (map[string]any, error) {
@@ -427,9 +653,10 @@ func requireWhiteboardSuccess(data map[string]any, tool string) (map[string]any,
 }
 
 type verifiedUpdateReceipt struct {
-	Envelope map[string]any
-	Result   map[string]any
-	IDMap    map[string]string
+	Message          string
+	CreatedNodeIDs   []string
+	IDMap            map[string]string
+	DeletedNodeCount int
 }
 
 func requireWhiteboardUpdateReceipt(data, target map[string]any, mode string, expected *parsedUpdate) (*verifiedUpdateReceipt, error) {
@@ -494,8 +721,79 @@ func requireWhiteboardUpdateReceipt(data, target map[string]any, mode string, ex
 	if !ok || (!expected.Overwrite && deleted != 0) {
 		return nil, responsecheck.Error(serverWhiteboard+"/"+toolUpdate, "malformed_deleted_count", "deletedNodeCount 必须是非负整数，append 时必须为 0")
 	}
-	receipt["resultJson"] = result
-	return &verifiedUpdateReceipt{Envelope: receipt, Result: result, IDMap: idMap}, nil
+	return &verifiedUpdateReceipt{
+		Message:          message,
+		CreatedNodeIDs:   created,
+		IDMap:            idMap,
+		DeletedNodeCount: deleted,
+	}, nil
+}
+
+func projectWhiteboardUpdateSuccess(target map[string]any, mode string, parsed *parsedUpdate, projected map[string]any, receipt *verifiedUpdateReceipt) map[string]any {
+	return map[string]any{
+		"nodeId":            target["nodeId"],
+		"partId":            target["partId"],
+		"mode":              mode,
+		"verified":          true,
+		"verifiedNodeCount": len(parsed.Nodes),
+		"summary":           projected["summary"],
+		"receipt":           projectWhiteboardUpdateReceipt(receipt),
+	}
+}
+
+func projectWhiteboardUpdateReceipt(receipt *verifiedUpdateReceipt) map[string]any {
+	return map[string]any{
+		"message":          receipt.Message,
+		"createdNodeIds":   append([]string{}, receipt.CreatedNodeIDs...),
+		"idMap":            cloneStringMap(receipt.IDMap),
+		"deletedNodeCount": receipt.DeletedNodeCount,
+	}
+}
+
+// A validated terminal receipt proves the write committed, even when the
+// subsequent read fails or disagrees. Preserve that evidence without a full
+// board snapshot so callers cannot mistake verification failure for no commit.
+func whiteboardCommittedVerificationError(cause error, target map[string]any, mode string, receipt *verifiedUpdateReceipt) error {
+	failure := apperrors.Error{
+		Category: apperrors.CategoryAPI, Operation: serverWhiteboard + "/" + toolUpdate,
+		Origin: "mcp", FailureStage: "verification", Reason: "readback_failed",
+	}
+	var typed *apperrors.Error
+	if errors.As(cause, &typed) {
+		failure = *typed
+	}
+	details := make(map[string]any, len(failure.Details)+6)
+	for key, value := range failure.Details {
+		details[key] = value
+	}
+	details["nodeId"] = target["nodeId"]
+	details["partId"] = target["partId"]
+	details["mode"] = mode
+	details["commitState"] = "committed"
+	details["verified"] = false
+	details["receipt"] = projectWhiteboardUpdateReceipt(receipt)
+	failure.Message = "白板写入已有成功回执，但读回校验失败：" + cause.Error()
+	failure.Cause = cause
+	failure.Details = details
+	apperrors.WithExecutionStarted(true)(&failure)
+	apperrors.WithRetryable(false)(&failure)
+	// Read-side retry advice must never become permission to replay the write.
+	failure.RetryAfterSeconds = nil
+	failure.NextRetryAt = nil
+	failure.Hint = "已提交，停止重提并只读对账；append 会创建新节点，不会修正已有节点，改成 frame 再提交也会重复创建。"
+	failure.Actions = []string{
+		"保留 details 中的 nodeId/partId、receipt 和原始 Payload；如需核实，仅再 query 同一白板一次，按 idMap/createdNodeIds 对账；暂未读到节点不代表未提交",
+		"报告已提交但未验证及读回差异；不得自动重发 append、overwrite 或删除节点；布局修复须另行确认范围和授权",
+	}
+	return &failure
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	cloned := make(map[string]string, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func decodeResultJSON(value any) (map[string]any, error) {
@@ -758,7 +1056,10 @@ func requireRequestedValue(expected, actual any, path string) error {
 	}
 	if expectedNumber, expectedOK := numericValue(expected); expectedOK {
 		actualNumber, actualOK := numericValue(actual)
-		if !actualOK || expectedNumber.Cmp(actualNumber) != 0 {
+		if !actualOK || !whiteboardNumbersEquivalent(path, expectedNumber, actualNumber) {
+			if isWhiteboardCoordinatePath(path) {
+				return whiteboardCoordinateMismatch(path)
+			}
 			return responsecheck.Error(serverWhiteboard+"/"+toolUpdate, "readback_field_mismatch", fmt.Sprintf("%s 数值读回不一致", path))
 		}
 		return nil
@@ -767,6 +1068,34 @@ func requireRequestedValue(expected, actual any, path string) error {
 		return responsecheck.Error(serverWhiteboard+"/"+toolUpdate, "readback_field_mismatch", fmt.Sprintf("%s 读回值不一致", path))
 	}
 	return nil
+}
+
+func whiteboardNumbersEquivalent(path string, expected, actual *big.Rat) bool {
+	if expected.Cmp(actual) == 0 {
+		return true
+	}
+	if !isWhiteboardCoordinatePath(path) {
+		return false
+	}
+	delta := new(big.Rat).Sub(expected, actual)
+	delta.Abs(delta)
+	return delta.Cmp(whiteboardCoordinateTolerance) <= 0
+}
+
+func isWhiteboardCoordinatePath(path string) bool {
+	return strings.HasSuffix(path, ".x") || strings.HasSuffix(path, ".y")
+}
+
+func whiteboardCoordinateMismatch(path string) error {
+	return apperrors.NewAPI(fmt.Sprintf("%s 坐标读回超出 0.5 像素容差", path),
+		apperrors.WithOperation(serverWhiteboard+"/"+toolUpdate),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("response_validation"),
+		apperrors.WithReason("readback_field_mismatch"),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("坐标 mismatch 不代表未提交；停止重提并只读对账，禁止改成 frame 后再次 append。"),
+		apperrors.WithActions("保留成功回执、真实节点 ID 和坐标差异；报告已提交但未验证，布局修复须另行确认范围和授权"),
+	)
 }
 
 func numericValue(value any) (*big.Rat, bool) {

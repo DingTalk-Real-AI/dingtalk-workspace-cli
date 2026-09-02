@@ -31,6 +31,18 @@ dws drive list --folder <dentryUuid> --type file --start 7d --format json
 - 过滤模式是客户端有界扫描；`truncated=true` 不能声称全量。需要关键词检索时改用 `+search`。
 - `--latest` 遇到截断或目录读取失败会拒绝给出不完整 Top-N，按错误中的目录和恢复命令缩小范围。
 
+## 非落盘下载地址
+
+Agent 沙箱跨文件系统、或外部系统要自行控制下载行为与时机时，用 managed leaf 加 `--url-only` 只换取临时下载地址与签名请求头，不落盘：
+
+```bash
+dws drive download --node <dentryUuid> --url-only --format json
+dws drive download-version --node <dentryUuid> --version 3 --url-only --format json
+```
+
+- `downloadUrl` 为带临时授权签名的链接，应尽快使用；`headers` 为需原样携带的签名请求头（OSS 预签名 URL 场景为空对象，签名已内含在地址里）；`fileName/fileSize/version` 为服务端携带时的辅助字段。
+- `--url-only` 与 `--output/--overwrite/--part-size/--parallel/--no-resume` 互斥；权限控制与现有下载链路一致；要把文件保存到本地路径时改用 `+download`。
+
 ## 回收站
 
 ```bash

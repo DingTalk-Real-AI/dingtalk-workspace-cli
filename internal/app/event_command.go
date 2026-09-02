@@ -87,9 +87,9 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "实时监听当前用户相关的个人 IM 与 OA 审批事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批与待办事件，并管理订阅生命周期",
 			UseWhen: []string{
-				"需要实时监听未来发生的个人消息、消息动作、群生命周期或 OA 审批任务/实例事件，或管理个人事件订阅生命周期",
+				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例或待办创建/更新/删除事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
 				"查历史聊天或主动发消息用 chat；查询或处理审批实例/任务用 oa；配置开放平台应用事件回调用 dev app event",
@@ -224,6 +224,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				"user",
 				"open-dingtalk-id",
 				"group",
+				"role-types",
 				"personal-event-base-url",
 			); err != nil {
 				return fmt.Errorf("event consume: %w", err)
@@ -368,6 +369,8 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 		"单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）")
 	f.StringVar(&personalOpts.GroupID, "group", "",
 		"group 规则：openConversationId")
+	f.StringSliceVar(&personalOpts.RoleTypes, "role-types", nil,
+		"待办事件角色范围：creator,executor,participant；省略时订阅全部三种角色")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",
 		"个人事件控制面 base URL；默认由 MCP base 派生 /dws")
 	f.BoolVar(&personalOpts.DebugRawEvents, "debug-raw-events", false,
@@ -407,9 +410,10 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				Reason:       "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "消费 OA、群生命周期或需要底层控制的个人事件流；Agent 通常使用 --flatten 输出 NDJSON",
+				AgentSummary: "消费 OA、待办、群生命周期或需要底层控制的个人事件流；Agent 通常使用 --flatten 输出 NDJSON",
 				UseWhen: []string{
 					"需要监听七个公开 OA 审批任务/实例 EventKey 中的一个或多个事件",
+					"需要按 creator、executor 或 participant 角色监听待办创建、更新或删除事件",
 					"需要监听指定群的标题变更、成员进退群或群解散事件",
 					"用户显式给出原始 EventKey、Filter DSL、subscribe_id，要求原始 transport envelope，或需要普通 IM facade 不提供的高级多事件控制",
 				},
@@ -422,6 +426,14 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				Examples: []string{
 					"dws event consume user_oa_approval_task_created user_oa_approval_instance_finished --flatten --duration 10m --format ndjson",
 					"dws event consume user_im_group_member_added --group cid-example --flatten --max-events 1 --format ndjson",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{
+					Name:        "role-types",
+					Property:    "roleTypes",
+					Description: "待办事件角色范围：creator,executor,participant；省略时订阅全部三种角色",
+					Enum:        []string{"creator", "executor", "participant"},
 				},
 			},
 		},

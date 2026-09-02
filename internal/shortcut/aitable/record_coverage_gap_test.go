@@ -372,9 +372,13 @@ func TestCrossPlatformCoverageRecordBatchPureHelpers(t *testing.T) {
 	); err != nil {
 		t.Fatalf("ordered created cells = %v", err)
 	}
-	ids := createdRecordIDs(map[string]any{"createdIds": []any{" r1 ", "r1", map[string]any{"record_id": "r2"}}})
+	ids := createdRecordIDs(map[string]any{"data": map[string]any{"newRecordIds": []any{" r1 ", "r1", "r2"}}})
 	if strings.Join(ids, ",") != "r1,r2" {
 		t.Fatalf("created IDs = %#v", ids)
+	}
+	legacyIDs := createdRecordIDs(map[string]any{"createdIds": []any{"r3", map[string]any{"record_id": "r4"}}})
+	if strings.Join(legacyIDs, ",") != "r3,r4" {
+		t.Fatalf("legacy created IDs = %#v", legacyIDs)
 	}
 	if got := stringSlice("bad"); got != nil {
 		t.Fatalf("stringSlice = %#v", got)
