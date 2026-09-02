@@ -20,7 +20,7 @@ dws dev app enable --unified-app-id <id> --dry-run --format json
 dws dev app delete --unified-app-id <id> --confirm-name <应用名> --dry-run --format json
 ```
 
-用户已经明确要求该写操作时，dry-run 参数核对无误后把同一条命令改为 `--yes --format json` 执行，不要把 dry-run 当完成。创建后用返回的 `unifiedAppId`；更新/启停后回读一次 `app get`。删除前展示或核对名称与 ID，删除放在全部依赖步骤之后；成功只按真实返回说明，未回读到消失时不要声称已删除。
+最初请求只允许执行 dry-run，不能代替预检后的确认。展示 dry-run 返回的准确应用名称/ID、动作、业务参数和影响，等用户对该预览明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；定位符或业务参数变化就重新预检并确认，确认前不得发出真实写调用。创建后用返回的 `unifiedAppId`；更新/启停后回读一次 `app get`。删除前还必须核对名称与 ID，删除放在全部依赖步骤之后；成功只按真实返回说明，未回读到消失时不要声称已删除。
 
 应用只有 `list/get/create/update/disable/enable/delete` 及下属能力组；按名称查找使用 `app list --name`，不存在 `dev app search`。列表续页只传返回的 `meta.pagination.next_token` 到 `--cursor`；`endpoint_exhausted=true` 才是到底，禁止使用 `--page/--page-num`。
 

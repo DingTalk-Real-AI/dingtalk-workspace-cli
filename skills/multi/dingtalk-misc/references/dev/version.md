@@ -13,7 +13,7 @@ dws dev app version status --unified-app-id <id> --version-id <versionId> --form
 dws dev app version get --unified-app-id <id> --version-id <versionId> --format json
 ```
 
-用户明确要求创建/发布时，create 或 publish 的 dry-run 参数正确后改为 `--yes --format json` 正式执行。dry-run 不是业务完成。create 成功后只使用它返回的 `versionId`，不要再 list 猜“最新”；没返回 ID 就停止。默认不传 `--version`，服务端自动递增；用户明确指定时才传。
+最初请求只允许执行 create/publish 的 dry-run，不能代替预检后的确认。每一步都先展示预检返回的应用 ID、动作、版本/审批参数及影响，等用户对该预览明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；目标或业务参数变化就重新预检并确认，确认前不得真实创建或发布。dry-run 不是业务完成。create 成功后只使用它返回的 `versionId`，不要再 list 猜“最新”；没返回 ID 就停止。默认不传 `--version`，服务端自动递增；用户明确指定时才传。
 
 `version list` 只有游标分页：`meta.pagination.endpoint_exhausted=false` 时把原样 `next_token` 传给下一次 `--cursor`，到 true 停止；不要使用 `--page/--page-num`，版本记录在 `data.items[]`。
 

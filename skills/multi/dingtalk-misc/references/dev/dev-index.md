@@ -22,6 +22,6 @@
 1. 先列交付项，再按依赖顺序做；删除、停用等清理最后执行。
 2. 应用名先用一次 `app list --name` 定位，再始终复用同一个 `unifiedAppId`，不要反复查找。
 3. 应用定位没有 `dev app search`；连接器没有 `dev app connect`，只能走顶层 `dev connect`。已知命令直接调用；flag 不确定时只查一次精确 leaf compact Schema，Schema 不可用才查一次 leaf help。
-4. 写操作的 dry-run、正式执行、回读按专题 Reference 完成；相同业务错误无状态变化时停止，不用 debug/verbose/help 循环重试。
+4. 最初请求只允许写操作 dry-run；展示准确对象、动作、业务参数和影响并取得预览后的明确确认，才把同一命令仅由 `--dry-run` 换成 `--yes`。参数变化就重新预检并确认；确认前不得真实写入。回读按专题 Reference 完成；相同业务错误无状态变化时停止，不用 debug/verbose/help 循环重试。
 5. Dev 的应用、权限、事件、版本列表使用 `--cursor`，没有 `--page/--page-num`。以 `meta.pagination.endpoint_exhausted=true` 为翻完；为 false 时只把原样 `next_token` 传给下一次 `--cursor`。
 6. 最终逐项覆盖用户要求；列表很大时给总数、相关项和分页完整性，空结果明确说明。

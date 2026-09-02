@@ -11,7 +11,7 @@ dws dev app robot enable --unified-app-id <id> --dry-run --format json
 dws dev app robot disable --unified-app-id <id> --dry-run --format json
 ```
 
-`config` 是 upsert，至少传一个实际要改的字段；国际化字段传 JSON。用户明确要求后，dry-run 核对正确即用同一参数加 `--yes --format json`。写后只回读一次 `robot get`：`UNCONFIGURED` 未配置，`OFFLINE` 已配置未启用，`ONLINE` 已启用。ONLINE 只代表机器人能力开启，不代表版本已发布或本地连接已建立。
+`config` 是 upsert，至少传一个实际要改的字段；国际化字段传 JSON。最初请求只允许 dry-run；展示预检返回的应用/机器人、动作、业务参数和影响并取得用户对该预览的明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`。参数变化就重新预检并确认，确认前不得真实配置、启停或提交。写后只回读一次 `robot get`：`UNCONFIGURED` 未配置，`OFFLINE` 已配置未启用，`ONLINE` 已启用。ONLINE 只代表机器人能力开启，不代表版本已发布或本地连接已建立。
 
 按应用名称审计机器人时先 `dev app list --name` 取得唯一 `unifiedAppId`，随后直接 `dev app robot get`；不存在 `dev app search`，也不要切到 `dws chat bot` 猜命令。
 

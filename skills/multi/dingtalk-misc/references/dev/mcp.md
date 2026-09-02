@@ -10,7 +10,7 @@
 ## MUST DO
 
 1. 下列已知 leaf 直接执行，不先读分组 help。只有创建/更新等复杂字段或确认语义确有不确定性时，读取一次 `dws schema --cli-path "dev mcp <leaf>" --compact --format json`；Schema 与 Cobra 不一致时才读取同一 leaf 的一次 help。
-2. 开发写操作先 `--dry-run --format json`，检查 invocation，再改为 `--yes`。
+2. 开发写操作的最初请求只允许 `--dry-run --format json`。展示 invocation 中的准确对象、动作、业务参数和影响，等用户对该预览明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；目标或业务参数变化就重新预检并确认，确认前不得真实写入。
 3. 发布前执行 `tool get` 和 `tool debug`，核对输入、输出与映射。
 4. 调用已发布工具前先执行 `mcp published tools <mcpId>`，按返回的 `inputSchema` 构造 `--params`。
 5. `mcp published invoke` 无法静态判断远端工具副作用，真实调用一律需要 `--yes`；未明确影响时只做 dry-run。
@@ -102,6 +102,6 @@ dws mcp published invoke <mcpId> <toolName> \
   --params '{"query":"example"}' --dry-run --format json
 ```
 
-检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。
+展示 dry-run 的准确对象、参数和潜在影响后，只有用户对该预览明确同意本次真实调用，调用方才可在执行时把同一命令仅由 `--dry-run` 换成确认标志；最初请求不算该确认，参数变化需重新预检。不要把确认标志固化进模板、脚本或可复制示例。
 
 `tools` 返回当前身份看到的实时工具列表。`invoke` 不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。

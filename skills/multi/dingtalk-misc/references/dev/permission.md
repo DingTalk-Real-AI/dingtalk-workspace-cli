@@ -13,7 +13,7 @@ dws dev app permission add --unified-app-id <id> --scope-values <scope1,scope2> 
 dws dev app permission remove --unified-app-id <id> --scope-values <scope1,scope2> --dry-run --format json
 ```
 
-用户已明确要求具体权限变更时，dry-run 核对后用同一参数加 `--yes --format json` 正式执行；写后只回读目标 `scopeValue`。
+最初请求只允许执行 dry-run。展示预检返回的应用 ID、add/remove 动作、完整 `scopeValue` 列表及影响，等用户对该预览明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；目标或权限列表变化就重新预检并确认，确认前不得真实增删权限。写后只回读目标 `scopeValue`。
 
 分页只有 `--cursor`：读取 `meta.pagination`，`endpoint_exhausted=false` 时把原样 `next_token` 传给下一次 `--cursor`，直到 true。CLI 不支持 `--page` 或 `--page-num`；权限记录在 `data.items[]`。
 
