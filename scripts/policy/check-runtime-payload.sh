@@ -36,6 +36,51 @@ check_hash() {
   [ "$actual" = "$expected" ] || fail "checksum mismatch for $relative"
 }
 
+# Windows architecture assertion. The file(1) description of a PE32+ image
+# depends on the magic database: older databases emit only
+# "PE32+ executable for MS Windows (DLL)" with no architecture token, which
+# rejects a valid DLL. Byte integrity is already pinned by the SHA-256 checks
+# below, so probe the architecture with objdump first (the Windows export
+# inspection already depends on the same tool) and keep file(1) as the
+# fallback. When neither can decide, degrade through
+# --allow-unsupported-tools exactly like the export inspection does.
+check_pe_arch() {
+  pe_relative="$1"
+  pe_objdump_pattern="$2"
+  pe_file_pattern="$3"
+  pe_label="$4"
+  pe_path="$PAYLOAD/$pe_relative"
+
+  pe_probe="$(objdump -f "$pe_path" 2>/dev/null || true)"
+  if [ -z "$pe_probe" ] && command -v llvm-objdump >/dev/null 2>&1; then
+    pe_probe="$(llvm-objdump -f "$pe_path" 2>/dev/null || true)"
+  fi
+  # Keep only the architecture line: the probe echoes the file path first, and
+  # the amd64/arm64 token in that path is not architecture evidence.
+  pe_arch_line="$(printf '%s\n' "$pe_probe" | grep -i '^architecture:' || true)"
+  if [ -n "$pe_arch_line" ]; then
+    printf '%s\n' "$pe_arch_line" | grep -Eiq "$pe_objdump_pattern" || fail "invalid $pe_label library architecture"
+    return 0
+  fi
+
+  # Likewise file(1) prints "<path>: <description>"; keep the description.
+  pe_probe="$(file "$pe_path" 2>/dev/null || true)"
+  pe_desc="${pe_probe#*: }"
+  if printf '%s\n' "$pe_desc" | grep -Eiq "$pe_file_pattern"; then
+    return 0
+  fi
+  # A different architecture token means the database can decide and the
+  # architecture is genuinely wrong, so fail hard. No architecture token at all
+  # means this database cannot decide PE architecture: treat it as unavailable
+  # tooling.
+  if printf '%s\n' "$pe_desc" | grep -Eiq 'x86[_-]64|aarch64|arm64|i386|80386|armv[0-9]'; then
+    fail "invalid $pe_label library architecture"
+  fi
+
+  [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 1 ] || fail "cannot inspect $pe_label library architecture"
+  printf 'Skipping %s library architecture inspection: compatible tooling is unavailable.\n' "$pe_label"
+}
+
 check_hash darwin/universal/x7k2m9p4q1w8.dylib a6f92e7ea30eadb68ff6e5f425166d7644842003abc72a27ec8186145f36b1f9
 check_hash linux/amd64/libx7k2m9p4q1w8.so 174b59ba2e46195e81dbcbe3aac83dedbf5baaceec41d02a684e623ddaace481
 check_hash linux/arm64/libx7k2m9p4q1w8.so aa81cd1c19493ead17e54a61b1845acd0e2f28fb61a3a7914e5e6a669bcaa83d
@@ -117,8 +162,8 @@ done
 file "$PAYLOAD/darwin/universal/x7k2m9p4q1w8.dylib" | grep -Eiq 'universal|arm64.*x86_64|x86_64.*arm64' || fail "invalid macOS library architecture"
 file "$PAYLOAD/linux/amd64/libx7k2m9p4q1w8.so" | grep -Eiq 'ELF 64-bit.*x86-64' || fail "invalid Linux amd64 library architecture"
 file "$PAYLOAD/linux/arm64/libx7k2m9p4q1w8.so" | grep -Eiq 'ELF 64-bit.*(ARM aarch64|ARM64)' || fail "invalid Linux arm64 library architecture"
-file "$PAYLOAD/windows/amd64/x7k2m9p4q1w864.dll" | grep -Eiq 'PE32\+.*x86-64' || fail "invalid Windows amd64 library architecture"
-file "$PAYLOAD/windows/arm64/x7k2m9p4q1w864.dll" | grep -Eiq 'PE32\+.*Aarch64' || fail "invalid Windows arm64 library architecture"
+check_pe_arch windows/amd64/x7k2m9p4q1w864.dll 'x86[_-]64' 'PE32\+.*x86-64' 'Windows amd64'
+check_pe_arch windows/arm64/x7k2m9p4q1w864.dll 'aarch64|arm64' 'PE32\+.*Aarch64' 'Windows arm64'
 
 printf 'Runtime payload verified: 5 libraries, 6 targets, 123 ps files.\n'
 if [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 0 ]; then
