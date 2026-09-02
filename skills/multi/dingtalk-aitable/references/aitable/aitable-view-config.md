@@ -108,6 +108,34 @@ dws aitable view update sort --base-id BASE_ID --table-id TABLE_ID --view-id VIE
 dws aitable view update group --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'
 ```
 
+日期筛选使用 View 专用结构化 Scheme，不使用 `record query` 的日期字符串写法：
+
+```json
+[{"operator":"and","operands":[
+  {"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":0}]},
+  {"operator":"from_now","operands":["fldDate",{"type":"relative","period":"day","offset":"-30"}]}
+]}]
+```
+
+`date_eq.relative.offset` 和 `date_eq.exact.timestamp` 必须是 JSON number 整数；`from_now.offset` 必须是 JSON string。完整规则与指定日期示例见 [aitable-filter-sort.md](./aitable-filter-sort.md#view-日期-scheme仅-view-update-filter)。
+
+人员、部门、群组筛选必须使用稳定身份；只有显示名称时，也可以显式传 `entityName`，CLI 会先调用 `search_entities`，仅在唯一精确匹配且候选分页完整时执行更新：
+
+```bash
+# 只搜索候选，不更新 View
+dws aitable entity search --entity-type PERSON --keyword "张三" --format json
+dws aitable entity search --entity-type DEPARTMENT --keyword "客户成功部" --format json
+dws aitable entity search --entity-type GROUP --keyword "项目群" --format json
+
+# 已知稳定身份直接写；只有名称时让 CLI 先解析
+dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldOwner",{"userId":"staff1","corpId":"dingCorp"}]}]'
+dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldDept",{"entityName":"客户成功部"}]}]'
+```
+
+稳定身份分别是：人员 `{"userId":"...","corpId":"..."}` 或 `{"userRef":"..."}`，部门 `{"departmentId":"..."}`，群组 `{"cid":"..."}` 或 `{"openConversationId":"..."}`（二选一）。DWS 原样传递群组标识，MCP 负责将 `openConversationId` 转成持久化的 `cid`；不要传裸名称字符串，也不要同时传两种群组标识。零命中、重名、模糊命中或候选分页不完整时停止，不执行 `update_view`。
+
+人员身份写入后，旧服务可能只回读内部人员 key，CLI 无法把它与外部稳定身份安全比较。此时返回 `reason=view_filter_verification_unknown`、`execution_started=true`、`details.status=unknown` 和 `details.verified=false`；这表示更新已经提交但未证实最终状态，禁止自动重放，应先读取当前 View 再决定后续动作。
+
 > filter/sort/group 入参格式与 `record query --filters`（对象格式）**不同**：view config 这边外层必须是数组。传对象 CLI 会自动 wrap，建议直接用数组。详见 [aitable-filter-sort.md](./aitable-filter-sort.md)。
 
 ### view update name（重命名）

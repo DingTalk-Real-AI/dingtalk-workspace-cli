@@ -118,3 +118,9 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 - `form list` 返回 `data.formViews[]`，**每条含** `viewId/name`（+ `createdAt`）；**新建表单没有 `title` 字段且 `createdAt=0`**，只有在 `form update` 碰过之后才会出现 `title` 和真实 `createdAt`。`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
 - `form get` 的 `data` **就是命中的那一条表单对象**（如 `{viewId, name, createdAt, title?, shareFormUuid?}`），不是 `formViews` 数组。Agent 直接读 `data.viewId` / `data.name` 即可，**不要**再取 `data.formViews[0]`。服务端的 viewIds 过滤参数当前不生效，CLI 在客户端按 viewId 精确筛出单条；传了不存在的 viewId 会返回 `form view <id> not found in table` 错误。
 - `form field list` 仅返回**未隐藏**的字段；`hidden=true` 的字段不在此返回，如需查看全部字段请用 `field get`。
+
+## MCP 交互注意事项
+
+- `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
+- 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；当前 leaf Schema 没有暴露 `anonymousSubmit` 或访问范围参数时，只能把页面开关列为人工设置和验证项，不得宣称已开通匿名提交。
+- 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。

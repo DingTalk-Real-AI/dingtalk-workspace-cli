@@ -438,4 +438,14 @@ func TestCrossPlatformCoverageWorkflowPureResponseHelpers(t *testing.T) {
 	if running, known := workflowRunningState(map[string]any{"name": "unknown"}); running || known {
 		t.Fatalf("unknown workflow state = running:%v known:%v", running, known)
 	}
+	for _, workflow := range []map[string]any{
+		{"status": "STOP"}, {"state": "disabled"}, {"isEnabled": false},
+	} {
+		if !workflowIsStopped(workflow) {
+			t.Fatalf("workflow should be stopped: %#v", workflow)
+		}
+	}
+	if workflowIsStopped(map[string]any{"status": "RUNNING", "enabled": true}) {
+		t.Fatal("running workflow must not be stopped")
+	}
 }

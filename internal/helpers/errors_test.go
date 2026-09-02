@@ -66,6 +66,22 @@ func TestCrossPlatformCoverageWrapErrorClassifiesEveryErrorFamily(t *testing.T) 
 	if WrapError(pat) != pat {
 		t.Fatal("WrapError changed an existing PATError")
 	}
+	structured := apperrors.NewAPI("business failure", apperrors.WithReason("business_error"))
+	if WrapError(structured) != structured {
+		t.Fatal("WrapError downgraded a structured repository error")
+	}
+	genericOperation := apperrors.NewAPI("tool failure",
+		apperrors.WithOperation("tools/call"),
+		apperrors.WithReason("mcp_tool_error"),
+		apperrors.WithDetails(map[string]any{"preserved": true}),
+	)
+	if got := WrapErrorWithOperation(genericOperation, "aitable/query_records"); got != genericOperation {
+		t.Fatalf("structured placeholder operation was replaced: %#v", got)
+	}
+	meaningfulOperation := apperrors.NewAPI("pagination failure", apperrors.WithOperation("aitable.query_records.all"))
+	if got := WrapErrorWithOperation(meaningfulOperation, "aitable/query_records"); got != meaningfulOperation {
+		t.Fatalf("meaningful structured operation was replaced: %#v", got)
+	}
 
 	tests := []struct {
 		message string
@@ -112,6 +128,11 @@ func TestCrossPlatformCoverageWrapErrorClassifiesEveryErrorFamily(t *testing.T) 
 				t.Fatalf("operation = %q, want %q", cli.Operation, tc.op)
 			}
 		})
+	}
+
+	unknown := WrapError(errors.New("opaque failure")).(*CLIError)
+	if unknown.Suggestion != "" {
+		t.Fatalf("unclassified error advertises unavailable diagnostics: %#v", unknown)
 	}
 
 	if !IsAuthError(&CLIError{Code: CodeAuthTokenExpired}) || IsAuthError(errors.New("AUTH_TOKEN_EXPIRED")) || IsAuthError(&CLIError{Code: CodeAuthPermission}) {

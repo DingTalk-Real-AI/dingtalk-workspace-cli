@@ -51,6 +51,40 @@ func aitableTableBootstrapResultSpec() *contract.ResultSpec {
 	}
 }
 
+func aitableImportFileResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomePending,
+			contract.ResultOutcomePartialFailure,
+			contract.ResultOutcomeFailure,
+		},
+		DataSchema: json.RawMessage(`{
+			"type":"object",
+			"description":"本地文件导入的执行计划、importId、任务状态和恢复检查点",
+			"properties":{
+				"contractVersion":{"type":"string","description":"复合操作业务回执版本","const":"aitable.composite.v1"},
+				"operation":{"type":"string","description":"复合操作标识","const":"import_file"},
+				"status":{"type":"string","description":"导入闭环当前状态","enum":["success","planned","pending","partial_success","unknown"]},
+				"executed":{"type":"boolean","description":"是否已开始执行远端操作"},
+				"retryable":{"type":"boolean","description":"当前状态是否允许直接重试"},
+				"completedCount":{"type":"integer","description":"已完成步骤数量","minimum":0},
+				"resolved":{"type":"object","description":"已解析的文件、Base 和 importId","additionalProperties":true},
+				"plan":{"type":"array","description":"有序导入步骤","items":{"type":"object","description":"一个导入步骤","additionalProperties":true}},
+				"verification":{"type":"object","description":"服务端确认的导入状态","additionalProperties":true},
+				"checkpoint":{"type":"object","description":"pending 或未知状态的恢复检查点","additionalProperties":true},
+				"nextCommand":{"type":"string","description":"只续等同一 importId 的建议命令"},
+				"knownSideEffects":{"type":"array","description":"已确认的申请或上传副作用","items":{"type":"object","description":"一个已确认副作用","additionalProperties":true}},
+				"warnings":{"type":"array","description":"不阻断结果的警告","items":{"type":"string"}},
+				"result":{"type":"object","description":"脱敏后的导入任务结果","additionalProperties":true}
+			},
+			"required":["contractVersion","operation","status","executed","retryable"],
+			"additionalProperties":false
+		}`),
+		SensitivePaths: []string{"result.response.uploadUrl", "result.response.authorization"},
+	}
+}
+
 func aitableCompositeContract(command, description, useWhen, avoidWhen, example string) corecmd.ContractDecl {
 	name := strings.TrimPrefix(command, "+")
 	name = strings.ReplaceAll(name, "-", "_")

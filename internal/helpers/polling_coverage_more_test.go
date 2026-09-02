@@ -267,9 +267,9 @@ func TestCrossPlatformCoverageAitableRetryAndPaginationCoverage(t *testing.T) {
 	} {
 		caller := &scriptedToolCaller{steps: steps, format: "json"}
 		installScriptedCaller(t, caller)
-		_ = callAitableTool("tool", nil)
+		_ = callAitableTool("get_base", nil)
 		caller.index = 0
-		_ = callAitableHelperTool("tool", nil)
+		_ = callAitableHelperTool("list_workflows", nil)
 	}
 
 	for _, steps := range [][]scriptedToolStep{

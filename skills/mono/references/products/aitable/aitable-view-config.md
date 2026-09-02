@@ -134,6 +134,10 @@ dws aitable view update sort   --view-id VIEW_ID --json '[{"fieldId":"fldX","dir
 dws aitable view update group  --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'
 ```
 
+日期筛选使用 View 专用 relative/exact Scheme。例如本月的 `date_eq.relative.offset` 必须是 JSON number `0`，过去 30 天的 `from_now.offset` 必须是 JSON string `"-30"`；指定日期使用 `date_eq.exact.timestamp` 毫秒 JSON number。完整结构见 [aitable-filter-sort.md](./aitable-filter-sort.md#view-日期-scheme仅-view-update-filter)。
+
+群组筛选可传 `{"cid":"..."}` 或 `{"openConversationId":"..."}`，每项二选一。DWS 原样传递，MCP 负责把 `openConversationId` 转换并持久化为内部 `cid`；写后校验使用 MCP 响应中的归一化 filter。
+
 > filter/sort/group 入参格式与 `record query --filters`（对象格式）**不同**：view config 这边外层必须是数组。传对象 CLI 会自动 wrap，建议直接用数组。详见 [aitable-filter-sort.md](./aitable-filter-sort.md)。
 
 ### view update name（重命名）

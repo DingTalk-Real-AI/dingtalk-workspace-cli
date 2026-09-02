@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-27T10:19:25.811119",
-  "count": 439,
+  "generated_at": "2026-09-01T20:04:21.353890",
+  "count": 440,
   "results": [
     {
       "suite": "semantic",
@@ -540,6 +540,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "统一将已上传文件导入新表或追加到已有表的目标语义。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+import-file",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在 DWS 内完成本地文件上传准备、签名 URL 直传和同一 importId 导入或续等闭环；不向调用方暴露签名 URL。",
       "availability": "available"
     },
     {

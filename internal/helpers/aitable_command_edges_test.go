@@ -2,13 +2,16 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -93,25 +96,51 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 	retryable := fmt.Errorf("timeout: retryable: true")
 	caller := &aitableTestCaller{errors: []error{retryable, retryable, retryable, retryable}}
 	installAitableDeps(t, caller)
-	if err := callAitableTool("retry", nil); err == nil {
+	if err := callAitableTool("get_base", nil); err == nil {
 		t.Fatal("exhausted aitable retries returned nil")
 	}
 
 	caller = &aitableTestCaller{errors: []error{retryable, retryable}}
 	installAitableDeps(t, caller)
-	if err := callAitableHelperTool("retry", nil); err != nil {
+	if err := callAitableHelperTool("list_workflows", nil); err != nil {
 		t.Fatalf("helper retry did not recover: %v", err)
 	}
 
 	caller = &aitableTestCaller{errors: []error{retryable, retryable, retryable, retryable}}
 	installAitableDeps(t, caller)
-	if err := callAitableHelperTool("retry", nil); err == nil {
+	if err := callAitableHelperTool("list_workflows", nil); err == nil {
 		t.Fatal("exhausted helper retries returned nil")
+	}
+
+	for _, tc := range []struct {
+		name   string
+		tool   string
+		helper bool
+	}{
+		{name: "main write", tool: "create_records"},
+		{name: "helper write", tool: "record_upsert", helper: true},
+	} {
+		t.Run(tc.name+" is never replayed", func(t *testing.T) {
+			writeCaller := &aitableTestCaller{errors: []error{retryable}}
+			installAitableDeps(t, writeCaller)
+			var err error
+			if tc.helper {
+				err = callAitableHelperTool(tc.tool, nil)
+			} else {
+				err = callAitableTool(tc.tool, nil)
+			}
+			if err == nil {
+				t.Fatal("write timeout should remain unknown to the caller")
+			}
+			if got := len(writeCaller.calls); got != 1 {
+				t.Fatalf("write call count = %d, want 1", got)
+			}
+		})
 	}
 
 	caller = &aitableTestCaller{}
 	installAitableDeps(t, caller)
-	if err := callAitableToolContext(nil, "nil-context", nil); err != nil {
+	if err := callAitableToolContext(nil, "get_base", nil); err != nil {
 		t.Fatalf("nil context was not normalized: %v", err)
 	}
 
@@ -123,7 +152,7 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 		cancel()
 		return backoffPending
 	})
-	if err := callAitableToolContext(ctx, "cancel-during-backoff", nil); err != context.Canceled {
+	if err := callAitableToolContext(ctx, "get_base", nil); err != context.Canceled {
 		t.Fatalf("cancel during retry backoff = %v, want %v", err, context.Canceled)
 	}
 }
@@ -253,6 +282,229 @@ func TestCrossPlatformCoverageAitableCommandValidationEdges(t *testing.T) {
 	_ = runAitableCoverageCommand(t, caller, formGet...)
 }
 
+func TestCrossPlatformCoverageAitableFormBooleanFlagsStayTyped(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		tool     string
+		argName  string
+		wantBool bool
+	}{
+		{name: "field required", args: []string{"form", "field", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--field-id=f", "--required=false"}, tool: "update_form_field", argName: "required", wantBool: false},
+		{name: "field hidden", args: []string{"form", "field", "hide", "--base-id=b", "--table-id=t", "--view-id=v", "--field-id=f", "--hidden=true"}, tool: "update_form_field_hidden", argName: "hidden", wantBool: true},
+		{name: "share enabled", args: []string{"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=false"}, tool: "update_share_form", argName: "enabled", wantBool: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].tool != tc.tool {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			got, ok := caller.calls[0].args[tc.argName].(bool)
+			if !ok || got != tc.wantBool {
+				t.Fatalf("%s = %#v (%T), want bool %v", tc.argName, caller.calls[0].args[tc.argName], caller.calls[0].args[tc.argName], tc.wantBool)
+			}
+		})
+	}
+
+	for _, args := range [][]string{
+		{"form", "field", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--field-id=f", "--required=1"},
+		{"form", "field", "hide", "--base-id=b", "--table-id=t", "--view-id=v", "--field-id=f", "--hidden=invalid"},
+		{"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=yes"},
+	} {
+		caller := &aitableTestCaller{}
+		if err := runAitableCoverageCommand(t, caller, args...); err == nil || len(caller.calls) != 0 {
+			t.Fatalf("invalid boolean must fail before MCP call: err=%v calls=%#v", err, caller.calls)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAitableChartConfigStaysTyped(t *testing.T) {
+	caller := &aitableTestCaller{responses: []string{
+		`{"status":"success","data":{"baseId":"b","dashboardId":"d","meta":{"schemaVersion":2,"schemaVersionTypeVerified":true}}}`,
+		`{"status":"success","data":{"chartId":"chart"}}`,
+	}}
+	config := `{"name":"趋势","chartType":"LINE","sheet":"tbl","smooth":true,"digits":2}`
+	layout := `{"x":0,"y":0,"w":12,"h":4}`
+	if err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d", "--config="+config, "--layout="+layout); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 2 || caller.calls[0].tool != "get_dashboard" || caller.calls[1].tool != "create_chart" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	got := caller.calls[1].args["config"].(map[string]any)
+	if _, ok := got["smooth"].(bool); !ok {
+		t.Fatalf("smooth type = %T", got["smooth"])
+	}
+	if _, ok := got["digits"].(float64); !ok {
+		t.Fatalf("digits type = %T", got["digits"])
+	}
+
+	for _, args := range [][]string{
+		{"chart", "create", "--base-id=b", "--dashboard-id=d", "--config={}", "--layout=" + layout},
+		{"chart", "create", "--base-id=b", "--dashboard-id=d", "--config=[]", "--layout=" + layout},
+		{"chart", "update", "--base-id=b", "--dashboard-id=d", "--chart-id=c", "--config=" + config, "--layout=[]"},
+	} {
+		invalidCaller := &aitableTestCaller{}
+		err := runAitableCoverageCommand(t, invalidCaller, args...)
+		var structured *apperrors.Error
+		if err == nil || !errors.As(err, &structured) || structured.Category != apperrors.CategoryValidation || len(invalidCaller.calls) != 0 {
+			t.Fatalf("invalid chart JSON must fail before MCP call: err=%v calls=%#v", err, invalidCaller.calls)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAitableChartLayoutPreflight(t *testing.T) {
+	config := `{"name":"趋势","chartType":"LINE","sheet":"tbl"}`
+	dashboard := func(version string, verified bool) string {
+		return fmt.Sprintf(`{"status":"success","data":{"baseId":"b","dashboardId":"d","meta":{"schemaVersion":%s,"schemaVersionTypeVerified":%t}}}`, version, verified)
+	}
+
+	t.Run("numeric version two accepts 48 columns", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{dashboard("2", true), `{"status":"success"}`}}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":48,"h":12}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 2 || caller.calls[0].tool != "get_dashboard" || caller.calls[1].tool != "create_chart" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("string version two stays on 12 columns", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{dashboard(`"2"`, true)}}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":13,"h":4}`)
+		if err == nil || !strings.Contains(err.Error(), "totalColumns=12") {
+			t.Fatalf("error = %v", err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard" {
+			t.Fatalf("write must not run: %#v", caller.calls)
+		}
+	})
+
+	t.Run("unverified metadata fails closed", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{dashboard("2", false)}}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":12,"h":4}`)
+		if err == nil || !strings.Contains(err.Error(), "schemaVersionTypeVerified") || len(caller.calls) != 1 {
+			t.Fatalf("error = %v calls = %#v", err, caller.calls)
+		}
+	})
+
+	t.Run("confirmed app mode forces 48 without persisting context", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{`{"status":"success","data":{"baseId":"b","dashboardId":"d"}}`, `{"status":"success"}`}}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":48,"h":12}`, "--is-app-mode=true")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 2 || caller.calls[1].tool != "create_chart" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+		if _, exists := caller.calls[1].args["isAppMode"]; exists {
+			t.Fatalf("read-only context leaked into create_chart: %#v", caller.calls[1].args)
+		}
+	})
+
+	t.Run("target identity mismatch fails before write", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{
+			`{"status":"success","data":{"baseId":"b","dashboardId":"other"}}`,
+		}}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":48,"h":12}`, "--is-app-mode=true")
+		var structured *apperrors.Error
+		if err == nil || !errors.As(err, &structured) || structured.Category != apperrors.CategoryAPI ||
+			structured.FailureStage != "response_validation" || len(caller.calls) != 1 {
+			t.Fatalf("identity mismatch must be an API response error before write: err=%v calls=%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("transient dashboard read retries before one write", func(t *testing.T) {
+		testseam.Swap(t, &helperAfter, func(time.Duration) <-chan time.Time {
+			ready := make(chan time.Time, 1)
+			ready <- time.Time{}
+			return ready
+		})
+		caller := &aitableTestCaller{
+			errors:    []error{fmt.Errorf("timeout: retryable: true")},
+			responses: []string{"", dashboard("2", true), `{"status":"success"}`},
+		}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":48,"h":12}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 3 || caller.calls[0].tool != "get_dashboard" ||
+			caller.calls[1].tool != "get_dashboard" || caller.calls[2].tool != "create_chart" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("dry run reads protocol but does not write", func(t *testing.T) {
+		caller := &aitableTestCaller{
+			dryRun:    true,
+			responses: []string{dashboard("2", true)},
+		}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":48,"h":12}`, "--dry-run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard" {
+			t.Fatalf("dry-run calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("non-root layout stops before write", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{dashboard("2", true)}}
+		err := runAitableCoverageCommand(t, caller, "chart", "create", "--base-id=b", "--dashboard-id=d",
+			"--config="+config, `--layout={"x":0,"y":0,"w":12,"h":4,"parentId":"tab-1"}`)
+		if err == nil || !strings.Contains(err.Error(), "独立容器坐标系") || len(caller.calls) != 1 {
+			t.Fatalf("error = %v calls = %#v", err, caller.calls)
+		}
+	})
+
+	t.Run("config-only update avoids dashboard read", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{`{"status":"success"}`}}
+		err := runAitableCoverageCommand(t, caller, "chart", "update", "--base-id=b", "--dashboard-id=d", "--chart-id=c", "--config="+config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "update_chart" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("layout update reads before writing", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{dashboard("1", true), `{"status":"success"}`}}
+		err := runAitableCoverageCommand(t, caller, "chart", "update", "--base-id=b", "--dashboard-id=d", "--chart-id=c",
+			"--config="+config, `--layout={"x":6,"y":0,"w":6,"h":4}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 2 || caller.calls[0].tool != "get_dashboard" || caller.calls[1].tool != "update_chart" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageAitableQueryValidationIsStructured(t *testing.T) {
+	caller := &aitableTestCaller{}
+	err := runAitableCoverageCommand(t, caller,
+		"record", "query", "--base-id=b", "--table-id=t",
+		`--filters={"operator":"and","operands":[{"operator":"or","operands":"bad"}]}`,
+	)
+	var structured *apperrors.Error
+	if err == nil || !errors.As(err, &structured) || structured.Category != apperrors.CategoryValidation || len(caller.calls) != 0 {
+		t.Fatalf("invalid query filters must be structured validation before MCP: err=%v calls=%#v", err, caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageAitableViewCommandEdges(t *testing.T) {
 	oldDeps, oldArgs, oldSleep := deps, os.Args, helperSleep
 	t.Cleanup(func() { deps, os.Args, helperSleep = oldDeps, oldArgs, oldSleep })
@@ -368,7 +620,7 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 	t.Cleanup(func() { os.Args = oldArgs })
 	os.Args = []string{"dws", "aitable"}
 	filter := `[{"operator":"eq","operands":["fldA","x"]},{"operator":"any_of","operands":["fldMulti","A"]}]`
-	fields := `{"data":{"fields":[{"fieldId":"fldA","type":"text"},{"fieldId":"fldB","type":"text"},{"fieldId":"fldMulti","type":"multipleSelect"}]}}`
+	fields := `{"data":{"fields":[{"fieldId":"fldA","type":"text"},{"fieldId":"fldB","type":"text"},{"fieldId":"fldMulti","type":"multipleSelect"},{"fieldId":"fldDate","type":"date"}]}}`
 	readBack := `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":[{"operator":"eq","operands":["fldA","x"]},{"operator":"any_of","operands":["fldMulti","A"]}]}]}}`
 
 	t.Run("flat leaf filters are written then exactly verified", func(t *testing.T) {
@@ -383,11 +635,55 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 		}
 	})
 
-	t.Run("logical groups fail closed before write", func(t *testing.T) {
-		caller := &aitableTestCaller{responses: []string{fields}}
-		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", `--json=[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`)
-		if err == nil || !strings.Contains(err.Error(), "不接受 and/or") || len(caller.calls) != 0 {
-			t.Fatalf("logical filter group fail-closed = err:%v calls:%#v", err, caller.calls)
+	t.Run("explicit logical root is preserved and verified", func(t *testing.T) {
+		input := `[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`
+		readBack := `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}}]}}`
+		caller := &aitableTestCaller{responses: []string{fields, `{"success":true}`, readBack}}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json="+input)
+		if err != nil || len(caller.calls) != 3 || caller.calls[1].tool != "update_view" || caller.calls[2].tool != "get_views" {
+			t.Fatalf("logical filter root = err:%v calls:%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("group open conversation id uses normalized update response for verification", func(t *testing.T) {
+		groupFields := `{"data":{"fields":[{"fieldId":"fldGroup","type":"group"}]}}`
+		input := `[{"operator":"eq","operands":["fldGroup",{"openConversationId":"open-cid-1"}]}]`
+		updateResponse := `{"status":"success","data":{"viewId":"view","filter":{"operator":"and","operands":[{"operator":"eq","operands":["fldGroup","cid-1"]}]}}}`
+		readBack := `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":{"operator":"and","operands":[{"operator":"eq","operands":["fldGroup","cid-1"]}]}}]}}`
+		caller := &aitableTestCaller{responses: []string{groupFields, updateResponse, readBack}}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json="+input)
+		if err != nil || len(caller.calls) != 3 {
+			t.Fatalf("group filter = err:%v calls:%#v", err, caller.calls)
+		}
+		config := caller.calls[1].args["config"].(map[string]any)
+		leaf := config["filter"].([]any)[0].(map[string]any)
+		if got := leaf["operands"].([]any)[1]; !reflect.DeepEqual(got, map[string]any{"openConversationId": "open-cid-1"}) {
+			t.Fatalf("DWS converted group identifier before MCP: %#v", got)
+		}
+	})
+
+	t.Run("date Scheme preserves operator-specific JSON scalar types", func(t *testing.T) {
+		input := `[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":-1}]},{"operator":"from_now","operands":["fldDate",{"type":"relative","period":"day","offset":"-30"}]},{"operator":"date_eq","operands":["fldDate",{"type":"exact","timestamp":1786896000000}]}]}]`
+		readBack := `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":-1}]},{"operator":"from_now","operands":["fldDate",{"type":"relative","period":"day","offset":"-30"}]},{"operator":"date_eq","operands":["fldDate",{"type":"exact","timestamp":1786896000000}]}]}}]}}`
+		caller := &aitableTestCaller{responses: []string{fields, `{"success":true}`, readBack}}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json="+input)
+		if err != nil || len(caller.calls) != 3 {
+			t.Fatalf("date Scheme = err:%v calls:%#v", err, caller.calls)
+		}
+		config := caller.calls[1].args["config"].(map[string]any)
+		root := config["filter"].([]any)[0].(map[string]any)
+		conditions := root["operands"].([]any)
+		relative := conditions[0].(map[string]any)["operands"].([]any)[1].(map[string]any)
+		fromNow := conditions[1].(map[string]any)["operands"].([]any)[1].(map[string]any)
+		exact := conditions[2].(map[string]any)["operands"].([]any)[1].(map[string]any)
+		if _, ok := relative["offset"].(float64); !ok {
+			t.Fatalf("date_eq relative offset type = %T, want JSON number", relative["offset"])
+		}
+		if _, ok := fromNow["offset"].(string); !ok {
+			t.Fatalf("from_now offset type = %T, want JSON string", fromNow["offset"])
+		}
+		if _, ok := exact["timestamp"].(float64); !ok {
+			t.Fatalf("date_eq exact timestamp type = %T, want JSON number", exact["timestamp"])
 		}
 	})
 
@@ -439,7 +735,7 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 	t.Run("date and system-time fields require date operators", func(t *testing.T) {
 		fieldTypes := map[string]string{"date": "date", "created": "createdTime", "modified": "lastModifiedTime"}
 		for fieldID := range fieldTypes {
-			valid := []any{map[string]any{"operator": "date_eq", "operands": []any{fieldID, "2026-08-18"}}}
+			valid := []any{map[string]any{"operator": "date_eq", "operands": []any{fieldID, map[string]any{"type": "exact", "timestamp": int64(1786982400000)}}}}
 			if err := validateAitableViewFilter(valid, fieldTypes); err != nil {
 				t.Fatalf("date_eq for %s: %v", fieldID, err)
 			}
@@ -468,6 +764,31 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 		if err == nil || !strings.Contains(err.Error(), "read-back mismatch") || len(caller.calls) != 2+aitableViewFilterReadbackAttempts {
 			t.Fatalf("mismatched filter readback = err:%v calls:%#v", err, caller.calls)
 		}
+		requireViewFilterVerificationUnknown(t, err)
+	})
+
+	t.Run("person internal key is reported as executed verification unknown", func(t *testing.T) {
+		personFields := `{"data":{"fields":[{"fieldId":"fldOwner","type":"user"}]}}`
+		personFilter := `[{"operator":"eq","operands":["fldOwner",{"userId":"staff1","corpId":"ding1"}]}]`
+		responses := []string{personFields, `{"success":true}`}
+		for range aitableViewFilterReadbackAttempts {
+			responses = append(responses, `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":{"operator":"and","operands":[{"operator":"eq","operands":["fldOwner","12345"]}]}}]}}`)
+		}
+		caller := &aitableTestCaller{responses: responses}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json="+personFilter)
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "view_filter_verification_unknown" {
+			t.Fatalf("person readback error = %#v", err)
+		}
+		if typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable || len(caller.calls) != 2+aitableViewFilterReadbackAttempts {
+			t.Fatalf("person readback metadata = %#v, calls=%d", typed, len(caller.calls))
+		}
+		if typed.Details["status"] != "unknown" || typed.Details["executed"] != true || typed.Details["verified"] != false {
+			t.Fatalf("person readback details = %#v", typed.Details)
+		}
+		if strings.Contains(fmt.Sprintf("%#v", typed.Details), "12345") {
+			t.Fatalf("internal person key leaked in error details: %#v", typed.Details)
+		}
 	})
 }
 
@@ -492,9 +813,11 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 			errs = append(errs, context.DeadlineExceeded)
 		}
 		caller := &aitableTestCaller{responses: []string{fields, `{"success":true}`}, errors: errs}
-		if err := runAitableCoverageCommand(t, caller, args...); err == nil || len(caller.calls) != 2+aitableViewFilterReadbackAttempts {
+		err := runAitableCoverageCommand(t, caller, args...)
+		if err == nil || len(caller.calls) != 2+aitableViewFilterReadbackAttempts {
 			t.Fatalf("readback errors = %v, calls=%d", err, len(caller.calls))
 		}
+		requireViewFilterVerificationUnknown(t, err)
 	})
 
 	t.Run("readback wrong identity exhausts", func(t *testing.T) {
@@ -503,9 +826,11 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 			responses = append(responses, `{"data":{"views":[{"viewId":"other","filter":[]}]}}`)
 		}
 		caller := &aitableTestCaller{responses: responses}
-		if err := runAitableCoverageCommand(t, caller, args...); err == nil || !strings.Contains(err.Error(), "returned viewId") {
+		err := runAitableCoverageCommand(t, caller, args...)
+		if err == nil || !strings.Contains(err.Error(), "returned viewId") {
 			t.Fatalf("wrong readback identity = %v", err)
 		}
+		requireViewFilterVerificationUnknown(t, err)
 	})
 
 	loadCases := []struct {
@@ -560,13 +885,21 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 		{filter: []any{"bad"}, want: "must be an object"},
 		{filter: []any{map[string]any{"operator": "bogus", "operands": []any{}}}, want: "unsupported operator"},
 		{filter: []any{map[string]any{"operator": "eq", "operands": "bad"}}, want: "requires an operands array"},
-		{filter: []any{map[string]any{"operator": "and", "operands": []any{}}}, want: "logical operator"},
+		{filter: []any{map[string]any{"operator": "and", "operands": []any{}}}, want: "at least one condition"},
+		{filter: []any{map[string]any{"operator": "and", "operands": []any{map[string]any{"operator": "or", "operands": []any{map[string]any{"operator": "eq", "operands": []any{"f", "x"}}}}}}}, want: "nested boolean"},
+		{filter: []any{map[string]any{"operator": "or", "operands": []any{map[string]any{"operator": "eq", "operands": []any{"f", "x"}}}}, map[string]any{"operator": "eq", "operands": []any{"f", "y"}}}, want: "single top-level"},
 		{filter: []any{map[string]any{"operator": "exist", "operands": []any{"f", "extra"}}}, want: "requires 1 operands"},
 		{filter: []any{map[string]any{"operator": "eq", "operands": []any{1, "x"}}}, want: "requires a fieldId"},
 		{filter: []any{map[string]any{"operator": "any_of", "operands": []any{"multi", 1}}}, want: "one option-name string"},
+		{filter: []any{map[string]any{"operator": "date_eq", "operands": []any{"date", "2026-08-18"}}}, want: "structured date Scheme"},
+		{filter: []any{map[string]any{"operator": "date_eq", "operands": []any{"date", map[string]any{"type": "relative", "period": "month", "offset": "-1"}}}}, want: "JSON integer number"},
+		{filter: []any{map[string]any{"operator": "date_eq", "operands": []any{"date", map[string]any{"type": "exact", "timestamp": "1786982400000"}}}}, want: "Unix-millisecond JSON integer"},
+		{filter: []any{map[string]any{"operator": "from_now", "operands": []any{"date", map[string]any{"type": "relative", "period": "day", "offset": -30}}}}, want: "JSON string"},
+		{filter: []any{map[string]any{"operator": "from_now", "operands": []any{"date", map[string]any{"type": "relative", "period": "month", "offset": "-1"}}}}, want: "period must be day"},
+		{filter: []any{map[string]any{"operator": "date_eq", "operands": []any{"f", map[string]any{"type": "relative", "period": "day", "offset": 0}}}}, want: "requires a date"},
 	}
 	for _, tc := range invalidFilters {
-		if err := validateAitableViewFilter(tc.filter, map[string]string{"f": "text", "multi": "multipleSelect"}); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if err := validateAitableViewFilter(tc.filter, map[string]string{"f": "text", "multi": "multipleSelect", "date": "date"}); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("validate filter %#v = %v, want %q", tc.filter, err, tc.want)
 		}
 	}
@@ -584,5 +917,287 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 	}
 	if persistedViewFilterMatches("bad", nil) || persistedViewFilterMatches(map[string]any{"operator": "or"}, nil) {
 		t.Fatal("invalid persisted wrapper must not match")
+	}
+	explicit := []any{map[string]any{"operator": "or", "operands": []any{map[string]any{"operator": "eq", "operands": []any{"f", "x"}}}}}
+	if !persistedViewFilterMatches(explicit[0], explicit) {
+		t.Fatal("explicit persisted logical root should match its singleton-array request")
+	}
+}
+
+func requireViewFilterVerificationUnknown(t *testing.T, err error) {
+	t.Helper()
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "view_filter_verification_unknown" || typed.Retryable {
+		t.Fatalf("view filter verification error = %#v", err)
+	}
+	if typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Details["status"] != "unknown" || typed.Details["verified"] != false {
+		t.Fatalf("view filter verification metadata = %#v", typed)
+	}
+}
+
+func TestCrossPlatformCoverageAitableSnapshotThinCommands(t *testing.T) {
+	testseam.Swap(t, &deps, nil)
+	const token = "123e4567-e89b-42d3-a456-426614174000"
+	tests := []struct {
+		name  string
+		tool  string
+		args  []string
+		check func(*testing.T, map[string]any)
+	}{
+		{
+			name: "run ai field", tool: "run_ai_field",
+			args: []string{"field", "run-ai", "--base-id=b", "--table-id=t", "--field-ids=f1,f2", "--record-ids=r1,r2"},
+			check: func(t *testing.T, args map[string]any) {
+				if got := args["fieldIds"].([]string); len(got) != 2 || got[1] != "f2" {
+					t.Fatalf("fieldIds = %#v", got)
+				}
+			},
+		},
+		{
+			name: "query record ids", tool: "query_record_ids",
+			args: []string{"record", "ids", "--base-id=b", "--table-id=t", "--limit=25", "--cursor=next"},
+			check: func(t *testing.T, args map[string]any) {
+				if args["limit"] != 25 || args["cursor"] != "next" {
+					t.Fatalf("paging args = %#v", args)
+				}
+			},
+		},
+		{
+			name: "create sub records", tool: "create_sub_records",
+			args: []string{"record", "create-sub", "--base-id=b", "--table-id=t", "--parent-record-id=parent", `--records=[{"cells":{"f":"v"}}]`, "--view-id=v", "--client-token=" + token},
+			check: func(t *testing.T, args map[string]any) {
+				if args["parentRecordId"] != "parent" || args["viewId"] != "v" || args["clientToken"] != token {
+					t.Fatalf("create-sub args = %#v", args)
+				}
+			},
+		},
+		{
+			name: "submit form", tool: "submit_form",
+			args: []string{"form", "submit", "--base-id=b", "--table-id=t", "--view-id=v", `--value={"f":"v"}`},
+			check: func(t *testing.T, args map[string]any) {
+				if value, ok := args["value"].(string); !ok || value != `{"f":"v"}` {
+					t.Fatalf("form value = %#v", args["value"])
+				}
+			},
+		},
+		{
+			name: "remove attachments", tool: "remove_attachments",
+			args: []string{"attachment", "remove", "--base-id=b", "--table-id=t", "--record-id=r", "--field-id=f", "--resource-ids=res1,res2", "--yes"},
+			check: func(t *testing.T, args map[string]any) {
+				if _, exists := args["confirm"]; exists {
+					t.Fatalf("remove_attachments snapshot has no confirm property: %#v", args)
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, caller, tc.args...); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			call := caller.calls[0]
+			if call.server == "aitable-helper" || call.tool != tc.tool {
+				t.Fatalf("call = %#v, want public aitable/%s", call, tc.tool)
+			}
+			tc.check(t, call.args)
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableSnapshotThinCommandsFailClosed(t *testing.T) {
+	testseam.Swap(t, &deps, nil)
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "invalid create token", args: []string{"record", "create", "--base-id=b", "--table-id=t", `--records=[{"cells":{}}]`, "--client-token=not-a-uuid"}},
+		{name: "table field name exceeds utf16 limit", args: []string{"table", "create", "--base-id=b", "--name=t", `--fields=[{"fieldName":"` + strings.Repeat("😀", 76) + `","type":"text"}]`}},
+		{name: "field update rejects blank name", args: []string{"field", "update", "--base-id=b", "--table-id=t", "--field-id=f", "--name= "}},
+		{name: "invalid sub record cells", args: []string{"record", "create-sub", "--base-id=b", "--table-id=t", "--parent-record-id=p", `--records=[{}]`}},
+		{name: "attachment scope required", args: []string{"attachment", "remove", "--base-id=b", "--table-id=t", "--record-id=r", "--yes"}},
+		{name: "form value object required", args: []string{"form", "submit", "--base-id=b", "--table-id=t", "--view-id=v", `--value=[]`}},
+		{name: "record ids max limit", args: []string{"record", "ids", "--base-id=b", "--table-id=t", "--limit=101"}},
+		{name: "nested view filter", args: []string{"view", "create", "--base-id=b", "--table-id=t", "--view-type=Grid", `--config={"filter":{"operator":"and","operands":[{"operator":"or","operands":[{"operator":"eq","operands":["f","x"]}]}]}}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, caller, tc.args...); err == nil {
+				t.Fatal("expected validation error")
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid input reached MCP: %#v", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableAtomicDeletesPassServiceConfirmation(t *testing.T) {
+	testseam.Swap(t, &deps, nil)
+	tests := []struct {
+		tool string
+		args []string
+	}{
+		{tool: "delete_base", args: []string{"base", "delete", "--base-id=b", "--yes"}},
+		{tool: "delete_table", args: []string{"table", "delete", "--base-id=b", "--table-id=t", "--yes"}},
+		{tool: "delete_field", args: []string{"field", "delete", "--base-id=b", "--table-id=t", "--field-id=f", "--yes"}},
+		{tool: "delete_records", args: []string{"record", "delete", "--base-id=b", "--table-id=t", "--record-ids=r", "--yes"}},
+		{tool: "delete_view", args: []string{"view", "delete", "--base-id=b", "--table-id=t", "--view-id=v", "--yes"}},
+		{tool: "delete_dashboard", args: []string{"dashboard", "delete", "--base-id=b", "--dashboard-id=d", "--yes"}},
+		{tool: "delete_chart", args: []string{"chart", "delete", "--base-id=b", "--dashboard-id=d", "--chart-id=c", "--yes"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.tool, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, caller, tc.args...); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].tool != tc.tool {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			if confirm, ok := caller.calls[0].args["confirm"].(bool); !ok || !confirm {
+				t.Fatalf("%s confirm = %#v", tc.tool, caller.calls[0].args["confirm"])
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableHistoricalHelperRouting(t *testing.T) {
+	caller := &aitableTestCaller{}
+	installAitableDeps(t, caller)
+	if err := callAitableHelperTool("list_form_views", map[string]any{"baseId": "b", "tableId": "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := callAitableHelperTool("get_cell_doc", map[string]any{"baseId": "b", "tableId": "t", "recordId": "r"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := callAitableHelperTool("create_cell_doc", map[string]any{"baseId": "b", "tableId": "t", "fieldId": "f", "recordId": "r"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 3 || caller.calls[0].server != "aitable" || caller.calls[1].server != "aitable" || caller.calls[2].server != "aitable" {
+		t.Fatalf("routing calls = %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAitableStrictJSONFailsBeforeMCP(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "record sort", args: []string{"record", "query", "--base-id=b", "--table-id=t", "--sort={"}},
+		{name: "record sort null", args: []string{"record", "query", "--base-id=b", "--table-id=t", "--sort=null"}},
+		{name: "field config", args: []string{"field", "update", "--base-id=b", "--table-id=t", "--field-id=f", "--config=[]"}},
+		{name: "field ai config", args: []string{"field", "update", "--base-id=b", "--table-id=t", "--field-id=f", "--ai-config={"}},
+		{name: "view description", args: []string{"view", "create", "--base-id=b", "--table-id=t", "--view-type=Grid", "--desc=[]"}},
+		{name: "dashboard config", args: []string{"dashboard", "update", "--base-id=b", "--dashboard-id=d", "--config=[]"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, caller, tc.args...); err == nil {
+				t.Fatal("invalid JSON unexpectedly succeeded")
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid JSON made MCP calls: %#v", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitablePublicFormAndViewTools(t *testing.T) {
+	t.Run("create form uses dedicated public tool", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		err := runAitableCoverageCommand(t, caller,
+			"form", "create", "--base-id=b", "--table-id=t", "--name=问卷",
+			"--description=说明", "--allow-many-times=false", "--submit-message=已提交")
+		if err != nil {
+			t.Fatalf("form create: %v", err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "create_form_view" {
+			t.Fatalf("form create calls = %#v", caller.calls)
+		}
+		args := caller.calls[0].args
+		if args["name"] != "问卷" || args["description"] != "说明" || args["allowManyTimes"] != false || args["submitMessage"] != "已提交" {
+			t.Fatalf("form create args = %#v", args)
+		}
+		if _, exists := args["viewType"]; exists {
+			t.Fatalf("form create leaked create_view args = %#v", args)
+		}
+	})
+
+	t.Run("hidden fields uses public projection", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		if err := runAitableCoverageCommand(t, caller, "view", "get", "hidden-fields", "--base-id=b", "--table-id=t", "--view-id=v"); err != nil {
+			t.Fatalf("hidden fields: %v", err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "get_hidden_fields_of_view" || caller.calls[0].args["viewId"] != "v" {
+			t.Fatalf("hidden fields calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("primary doc create uses public tool and optional parameters", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		if err := runAitableCoverageCommand(t, caller, "record", "primary-doc-create", "--base-id=b", "--table-id=t", "--field-id=f", "--record-id=r", "--doc-name=文档", "--template-doc-id=tpl"); err != nil {
+			t.Fatalf("primary doc create: %v", err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "create_cell_doc" || caller.calls[0].args["docName"] != "文档" || caller.calls[0].args["templateDocId"] != "tpl" {
+			t.Fatalf("primary doc create calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("notification channels may use downstream defaults", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		if err := runAitableCoverageCommand(t, caller, "form", "share", "notify", "--base-id=b", "--table-id=t", "--view-id=v", "--recipients=u", "--yes"); err != nil {
+			t.Fatalf("form notify with default channels: %v", err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "notify_share_form_recipients" {
+			t.Fatalf("form notify calls = %#v", caller.calls)
+		}
+		for _, key := range []string{"enableSendChat", "enableSendCardByDingDoc", "enableSendTodoTask", "enableSendWorkNotice"} {
+			if _, exists := caller.calls[0].args[key]; exists {
+				t.Fatalf("default channel %s should be omitted: %#v", key, caller.calls[0].args)
+			}
+		}
+	})
+}
+
+func TestCrossPlatformCoverageAitableDestructiveAndNotificationGates(t *testing.T) {
+	tests := []struct {
+		name string
+		tool string
+		args []string
+	}{
+		{name: "section delete", tool: "delete_section", args: []string{"section", "delete", "--base-id=b", "--section-id=s"}},
+		{name: "form question delete", tool: "delete_field", args: []string{"form", "questions", "delete", "--base-id=b", "--table-id=t", "--field-id=f"}},
+		{name: "form notification", tool: "notify_share_form_recipients", args: []string{"form", "share", "notify", "--base-id=b", "--table-id=t", "--view-id=v", "--recipients=u1,u1,u2", "--send-chat=true"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			withoutYes := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, withoutYes, tc.args...); err == nil {
+				t.Fatal("command without --yes unexpectedly succeeded")
+			}
+			if len(withoutYes.calls) != 0 {
+				t.Fatalf("command without --yes made calls: %#v", withoutYes.calls)
+			}
+
+			withYes := &aitableTestCaller{}
+			args := append(append([]string(nil), tc.args...), "--yes")
+			if err := runAitableCoverageCommand(t, withYes, args...); err != nil {
+				t.Fatalf("command with --yes: %v", err)
+			}
+			if len(withYes.calls) != 1 || withYes.calls[0].tool != tc.tool {
+				t.Fatalf("command calls = %#v", withYes.calls)
+			}
+			if tc.tool == "notify_share_form_recipients" {
+				recipients, ok := withYes.calls[0].args["recipients"].([]string)
+				if !ok || len(recipients) != 2 || recipients[0] != "u1" || recipients[1] != "u2" {
+					t.Fatalf("deduplicated recipients = %#v", withYes.calls[0].args["recipients"])
+				}
+			}
+		})
 	}
 }

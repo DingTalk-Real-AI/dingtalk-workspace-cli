@@ -115,3 +115,78 @@ func TestCrossPlatformCoverageImportUploadRequiresPositiveFileSize(t *testing.T)
 		})
 	}
 }
+
+func TestCrossPlatformCoverageAitableShortcutDeleteConfirmationMatchesSnapshot(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+	tests := []struct {
+		tool string
+		args []string
+	}{
+		{tool: "delete_base", args: []string{"aitable", "+base-delete", "--base-id=b", "--yes"}},
+		{tool: "delete_table", args: []string{"aitable", "+table-delete", "--base-id=b", "--table-id=t", "--yes"}},
+		{tool: "delete_field", args: []string{"aitable", "+field-delete", "--base-id=b", "--table-id=t", "--field-id=f", "--yes"}},
+		{tool: "delete_view", args: []string{"aitable", "+view-delete", "--base-id=b", "--table-id=t", "--view-id=v", "--yes"}},
+		{tool: "delete_dashboard", args: []string{"aitable", "+dashboard-delete", "--base-id=b", "--dashboard-id=d", "--yes"}},
+		{tool: "delete_chart", args: []string{"aitable", "+chart-delete", "--base-id=b", "--dashboard-id=d", "--chart-id=c", "--yes"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.tool, func(t *testing.T) {
+			fake.reset()
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if !fake.called || fake.product != "aitable" || fake.tool != tc.tool {
+				t.Fatalf("call = called:%v %s/%s %#v", fake.called, fake.product, fake.tool, fake.args)
+			}
+			if confirm, ok := fake.args["confirm"].(bool); !ok || !confirm {
+				t.Fatalf("confirm = %#v", fake.args["confirm"])
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableShortcutUpdatesDoNotSendDeleteConfirmation(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+	for _, tc := range []struct {
+		tool string
+		args []string
+	}{
+		{tool: "update_table", args: []string{"aitable", "+table-update", "--base-id=b", "--table-id=t", "--name=n", "--yes"}},
+		{tool: "update_chart", args: []string{"aitable", "+chart-update", "--base-id=b", "--dashboard-id=d", "--chart-id=c", `--config={"chartName":"n"}`, "--yes"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			fake.reset()
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if !fake.called || fake.tool != tc.tool {
+				t.Fatalf("call = called:%v %s/%s %#v", fake.called, fake.product, fake.tool, fake.args)
+			}
+			if _, exists := fake.args["confirm"]; exists {
+				t.Fatalf("update must not send delete-only confirm: %#v", fake.args)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableShortcutFieldNameFailsBeforeMCP(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"aitable", "+field-update", "--base-id=b", "--table-id=t", "--field-id=f",
+		"--name=" + strings.Repeat("😀", 76),
+	})
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected UTF-16 field-name validation error")
+	}
+	if fake.called {
+		t.Fatalf("invalid field name reached MCP: %s/%s %#v", fake.product, fake.tool, fake.args)
+	}
+}

@@ -71,12 +71,12 @@ func TestCrossPlatformCoverageAitableRecordsStatsForwardsValidatedContract(t *te
 
 func TestCrossPlatformCoverageAitableGroupStatsForwardsStringDSL(t *testing.T) {
 	group := `[{"fieldId":"fldRegion","direction":"ASC","fieldConfig":null,"arraySplitMode":true}]`
-	sortDSL := `[{"fieldId":"fldAmount","direction":"DESC"}]`
+	sortDSL := `[{"fieldId":"fldRegion","direction":"DESC"}]`
 	caller, err := runAitableStatsCLI(t,
 		"record", "group-stats",
 		"--base-id", "base-stats",
 		"--table-id", "table-stats",
-		"--stats", `[{"fieldId":"fldStore","statsType":"distinct"},{"fieldId":"fldAmount","statsType":"avg"}]`,
+		"--stats", `[{"fieldId":"fldStore","statsType":"DISTINCT"},{"fieldId":"fldAmount","statsType":"AVG"}]`,
 		"--filters", `{"operator":"OR","operands":[{"operator":"not_before","operands":["fldDate","2026-01-01"]}]}`,
 		"--group", group,
 		"--sort", sortDSL,
@@ -97,7 +97,7 @@ func TestCrossPlatformCoverageAitableGroupStatsForwardsStringDSL(t *testing.T) {
 		t.Fatalf("forwarded args = %#v", call.args)
 	}
 	stats := call.args["stats"].([]map[string]any)
-	if len(stats) != 2 || stats[0]["statsType"] != "distinct" || stats[1]["statsType"] != "avg" {
+	if len(stats) != 2 || stats[0]["statsType"] != "DISTINCT" || stats[1]["statsType"] != "AVG" {
 		t.Fatalf("stats = %#v", stats)
 	}
 }
@@ -151,18 +151,18 @@ func TestCrossPlatformCoverageAitableStatsRejectsInvalidInputsBeforeCallingMCP(t
 			wantErr: "重复",
 		},
 		{
-			name:    "group stats require lowercase",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`},
-			wantErr: "小写",
+			name:    "group stats require uppercase",
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`},
+			wantErr: "大写",
 		},
 		{
 			name:    "group must be array DSL",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`, "--group", `{}`},
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--group", `{}`},
 			wantErr: "JSON 数组",
 		},
 		{
 			name:    "group limit capped",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`, "--limit", "1001"},
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--limit", "1001"},
 			wantErr: "[1, 1000]",
 		},
 		{
@@ -217,23 +217,33 @@ func TestCrossPlatformCoverageAitableStatsRejectsInvalidInputsBeforeCallingMCP(t
 		},
 		{
 			name:    "group filters reject malformed JSON",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`, "--filters", `{`},
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--filters", `{`},
 			wantErr: "必须是 JSON 对象",
 		},
 		{
 			name:    "group filters require logical root",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`, "--filters", `{"operator":"eq","operands":[]}`},
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--filters", `{"operator":"eq","operands":[]}`},
 			wantErr: `root "operator" must be "and" or "or"`,
 		},
 		{
 			name:    "group filters reject silently unsupported operators",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`, "--filters", `{"operator":"and","operands":[{"operator":"date_between","operands":["fldDate",[1,2]]}]}`},
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--filters", `{"operator":"and","operands":[{"operator":"date_between","operands":["fldDate",[1,2]]}]}`},
 			wantErr: `unsupported filter operator "date_between"`,
 		},
 		{
 			name:    "group sort rejects invalid DSL",
-			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"count"}]`, "--sort", `{}`},
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--sort", `{}`},
 			wantErr: "JSON 数组",
+		},
+		{
+			name:    "group sort requires group",
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--sort", `[{"fieldId":"fldRegion","direction":"ASC"}]`},
+			wantErr: "同时传入 --group",
+		},
+		{
+			name:    "group sort field must be grouped",
+			args:    []string{"record", "group-stats", "--base-id", "b", "--table-id", "t", "--stats", `[{"fieldId":"f","statsType":"COUNT"}]`, "--group", `[{"fieldId":"fldRegion","direction":"ASC"}]`, "--sort", `[{"fieldId":"fldAmount","direction":"DESC"}]`},
+			wantErr: "必须同时出现在 --group",
 		},
 	}
 	for _, test := range tests {

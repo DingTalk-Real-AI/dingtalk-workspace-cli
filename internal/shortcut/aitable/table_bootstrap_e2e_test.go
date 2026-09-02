@@ -143,6 +143,35 @@ func TestCrossPlatformCoverageTableBootstrapRejectsDuplicateFieldsBeforeMCP(t *t
 	}
 }
 
+func TestCrossPlatformCoverageTableBootstrapRejectsUnknownFieldPropertiesBeforeMCP(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields string
+		want   string
+	}{
+		{
+			name:   "unknown property",
+			fields: `[{"fieldName":"标题","type":"text","property":{"foo":"bar"}}]`,
+			want:   `未知属性 "property"`,
+		},
+		{
+			name:   "undeclared name alias",
+			fields: `[{"name":"标题","type":"text"}]`,
+			want:   `未知属性 "name"`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{}
+			out, err := runAITableCompositeCLI(t, caller, "+table-bootstrap",
+				"--base-id", "base", "--name", "任务", "--fields", tc.fields, "--yes")
+			if out != "" || err == nil || !strings.Contains(err.Error(), tc.want) || len(caller.calls) != 0 {
+				t.Fatalf("strict field validation = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageTableBootstrapVerifiesTypeAndDeclaredConfig(t *testing.T) {
 	fields := []any{map[string]any{
 		"fieldName": "状态",

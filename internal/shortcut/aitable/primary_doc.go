@@ -64,7 +64,7 @@ func executeRecordPrimaryDocGet(rt *shortcut.RuntimeContext) error {
 			"status": "no_primary_doc_field", "exists": false, "recordId": requestedRecordID, "nodeId": nil,
 		})
 	}
-	data, err := rt.CallMCPData(serverHelper, "get_primary_doc", map[string]any{
+	data, err := callCompatibleAITableReadData(rt, "get_cell_doc", "get_base_primary_doc_id", map[string]any{
 		"baseId": baseID, "tableId": tableID, "recordId": requestedRecordID,
 	})
 	if err != nil {
@@ -82,13 +82,29 @@ func executeRecordPrimaryDocGet(rt *shortcut.RuntimeContext) error {
 				"status": "unassociated", "exists": false, "recordId": requestedRecordID, "fieldIds": primaryFieldIDs, "nodeId": nil,
 			})
 		}
-		return apperrors.NewAPI("get_primary_doc response is missing nodeId",
-			apperrors.WithOperation("aitable-helper/get_primary_doc"), apperrors.WithReason("target_invalid_response"),
+		return apperrors.NewAPI("get_cell_doc response is missing nodeId",
+			apperrors.WithOperation("aitable/get_cell_doc"), apperrors.WithReason("target_invalid_response"),
 			apperrors.WithFailureStage("response_validation"), apperrors.WithExecutionStarted(false))
 	}
 	return rt.Output(map[string]any{
 		"status": "associated", "exists": true, "recordId": requestedRecordID, "fieldIds": primaryFieldIDs, "nodeId": nodeID,
 	})
+}
+
+func callCompatibleAITableRead(rt *shortcut.RuntimeContext, preferred, legacy string, args map[string]any) error {
+	err := rt.CallMCP(preferred, args)
+	if !apperrors.IsMCPToolNotFound(err) {
+		return err
+	}
+	return rt.CallMCP(legacy, args)
+}
+
+func callCompatibleAITableReadData(rt *shortcut.RuntimeContext, preferred, legacy string, args map[string]any) (map[string]any, error) {
+	data, err := rt.CallMCPData(serverMain, preferred, args)
+	if !apperrors.IsMCPToolNotFound(err) {
+		return data, err
+	}
+	return rt.CallMCPData(serverMain, legacy, args)
 }
 
 func knownPrimaryDocUnassociatedError(err error) bool {

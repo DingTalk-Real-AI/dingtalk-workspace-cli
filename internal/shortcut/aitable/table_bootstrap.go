@@ -5,8 +5,10 @@ package aitable
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -51,6 +53,45 @@ type createdTableStructure struct {
 	Warnings []string
 }
 
+var bootstrapFieldAllowedKeys = map[string]bool{
+	"fieldName": true,
+	"type":      true,
+	"config":    true,
+}
+
+func validateBootstrapField(raw any, path string) (string, error) {
+	field, ok := raw.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("%s 必须是 JSON 对象", path)
+	}
+	unknown := make([]string, 0)
+	for key := range field {
+		if !bootstrapFieldAllowedKeys[key] {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return "", fmt.Errorf("%s 包含未知属性 %q；只允许 fieldName、type、config", path, unknown[0])
+	}
+
+	name, ok := field["fieldName"].(string)
+	name = strings.TrimSpace(name)
+	fieldType, typeOK := field["type"].(string)
+	if !ok || name == "" || !typeOK || strings.TrimSpace(fieldType) == "" {
+		return "", fmt.Errorf("%s 必须包含非空字符串 fieldName 和 type", path)
+	}
+	if err := aitableprotocol.ValidateFieldName(field["fieldName"].(string)); err != nil {
+		return "", fmt.Errorf("%s.fieldName: %w", path, err)
+	}
+	if config, exists := field["config"]; exists {
+		if _, ok := config.(map[string]any); !ok {
+			return "", fmt.Errorf("%s.config 必须是 JSON 对象", path)
+		}
+	}
+	return name, nil
+}
+
 func parseBootstrapFields(raw string) ([]any, error) {
 	value, err := parseJSONAny("fields", raw)
 	if err != nil {
@@ -65,20 +106,14 @@ func parseBootstrapFields(raw string) ([]any, error) {
 	}
 	seen := map[string]bool{}
 	for index, rawField := range fields {
-		field, ok := rawField.(map[string]any)
-		name := strings.TrimSpace(stringValue(field, "fieldName", "name"))
-		if !ok || name == "" || strings.TrimSpace(stringValue(field, "type")) == "" {
-			return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d] 必须包含 fieldName 和 type", index))
+		name, err := validateBootstrapField(rawField, fmt.Sprintf("--fields[%d]", index))
+		if err != nil {
+			return nil, tableBootstrapValidation(err.Error())
 		}
 		if seen[name] {
 			return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d].fieldName %q 不能重复", index, name))
 		}
 		seen[name] = true
-		if config, exists := field["config"]; exists {
-			if _, ok := config.(map[string]any); !ok {
-				return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d].config 必须是 JSON 对象", index))
-			}
-		}
 	}
 	return fields, nil
 }

@@ -105,20 +105,14 @@ func parseBootstrapTables(raw string) ([]bootstrapTable, error) {
 		}
 		fieldNames := map[string]bool{}
 		for fieldIndex, field := range fields {
-			object, ok := field.(map[string]any)
-			fieldName := strings.TrimSpace(stringValue(object, "fieldName", "name"))
-			if !ok || fieldName == "" || strings.TrimSpace(stringValue(object, "type")) == "" {
-				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d] 必须包含 fieldName 和 type", index, fieldIndex))
+			fieldName, err := validateBootstrapField(field, fmt.Sprintf("--tables[%d].fields[%d]", index, fieldIndex))
+			if err != nil {
+				return nil, baseBootstrapValidation(err.Error())
 			}
 			if fieldNames[fieldName] {
 				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d].fieldName %q 不能重复", index, fieldIndex, fieldName))
 			}
 			fieldNames[fieldName] = true
-			if config, exists := object["config"]; exists {
-				if _, ok := config.(map[string]any); !ok {
-					return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d].config 必须是 JSON 对象", index, fieldIndex))
-				}
-			}
 		}
 		out = append(out, bootstrapTable{Name: name, Fields: fields})
 	}

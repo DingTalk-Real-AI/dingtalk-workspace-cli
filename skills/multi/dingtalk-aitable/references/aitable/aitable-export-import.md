@@ -22,11 +22,26 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 | `table` | 必须 `--table-id` |
 | `view` | 必须 `--table-id` + `--view-id` |
 
-## 导入文件（三步流程）
+## 导入文件（DWS 闭环）
 
 当用户要求将 Excel（`.xlsx`）或 CSV 文件完整导入 AI 表格时，**不需要自己解析文件内容**，直接使用文件级导入。
 
 > **无需手动解析 CSV/Excel 再逐条 record create**，效率极低且容易出错。
+
+先展示来源、目标、字段映射、异常处理和回退方式，获得这次迁移的专门确认。使用 `+import-file`，由 DWS 在进程内完成申请、PUT 和触发，不向调用方暴露签名 URL：
+
+```bash
+dws aitable +import-file --base-id <BASE_ID> --file ./data.xlsx
+
+# 追加到已有表并指定映射
+dws aitable +import-file --base-id <BASE_ID> --file ./data.xlsx \
+  --table-id <TABLE_ID> --field-mapping '{"目标字段名":"源列名"}'
+
+# 终态未知时，先检查目标数据；需要继续等待时只能复用同一 importId
+dws aitable +import-file --resume-import-id <IMPORT_ID> --timeout 30
+```
+
+`+import-file` 只接受 CSV/XLS/XLSX，自动校验本地普通文件并隐藏上传地址和凭据。导入触发后超时会保留 `importId` 并返回 `unknown`；必须先查目标表真实状态，不得重新申请上传地址、重复 PUT 或更换 importId。续等模式只允许 `--resume-import-id` 和可选 `--timeout`，不能改变目标表、表头、源 Sheet 或字段映射。下方手动命令仅用于诊断三段协议。
 
 ```bash
 # 第 1 步：申请上传凭证
@@ -52,7 +67,7 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 |------|------|------|
 | 申请上传凭证 | `import upload --base-id <ID> --file-name <名称> --file-size <字节>` | `--file-size` 必须与实际文件大小一致 |
 | 上传文件 | HTTP PUT（curl 等） | **必须** 带 `-H "Content-Type:"` 将 Content-Type 设为空，否则 OSS 返回 403 |
-| 触发导入 | `import data --import-id <ID> [--table-id <TABLE_ID>]` | 同步等待，大多一次调用即返回结果；超时可用相同 importId 重试 |
+| 触发导入 | `import data --import-id <ID> [--table-id <TABLE_ID>]` | 同步等待；超时先查真实状态，仅在当前契约允许时用相同 importId 续等，不重新提交 |
 
 ### import data 参数
 

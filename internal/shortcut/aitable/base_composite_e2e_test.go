@@ -23,6 +23,9 @@ import (
 func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command string, args ...string) (string, error) {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	helpers.GetFormatter().SetWriters(stdout, stderr)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
 	root.PersistentFlags().Bool("dry-run", false, "")
@@ -30,9 +33,8 @@ func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command str
 	root.AddCommand(shortcut.Commands()...)
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
-	stdout := &bytes.Buffer{}
 	root.SetOut(stdout)
-	root.SetErr(&bytes.Buffer{})
+	root.SetErr(stderr)
 	root.SetArgs(append([]string{"aitable", command}, args...))
 	executed, err := root.ExecuteC()
 	if err == nil && output.UsesUnifiedResult(executed) {
@@ -479,6 +481,17 @@ func TestCrossPlatformCoverageBaseBootstrapExecuteRejectsInvalidTablesE2E(t *tes
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || len(typed.Actions) != 1 || len(typed.AvailableFlags) != 4 {
 		t.Fatalf("invalid bootstrap recovery = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageBaseBootstrapRejectsUnknownFieldPropertiesBeforeMCP(t *testing.T) {
+	caller := &upsertByKeyCaller{}
+	out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap",
+		"--name", "Project",
+		"--tables", `[{"name":"任务","fields":[{"fieldName":"标题","type":"text","property":{}}]}]`,
+		"--yes")
+	if out != "" || err == nil || !strings.Contains(err.Error(), `未知属性 "property"`) || len(caller.calls) != 0 {
+		t.Fatalf("strict nested field validation = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 }
 

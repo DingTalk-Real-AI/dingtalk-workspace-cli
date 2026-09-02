@@ -33,15 +33,15 @@ dws aitable record group-stats \
   --base-id <BASE_ID> \
   --table-id <TABLE_ID> \
   --group '[{"fieldId":"<GROUP_FIELD_ID>","direction":"ASC","fieldConfig":null,"arraySplitMode":true}]' \
-  --stats '[{"fieldId":"<VALUE_FIELD_ID>","statsType":"avg"}]' \
+  --stats '[{"fieldId":"<VALUE_FIELD_ID>","statsType":"AVG"}]' \
   --limit 1000 \
   --format json
 ```
 
-- `statsType` 必须小写；基础类型为 `sum`、`avg`、`count`、`max`、`min`，后端还可能支持 `median`、`distinct`、`distinct_ratio` 等高级类型。
-- `--group` 和 `--sort` 都是 JSON 数组编码后的字符串，CLI 会原样映射到 MCP 的 `group` / `sortDsl`。
-- 分组结果最多 1000 行。不要依赖服务端 limit 选择 Top N；应在基数不超过 1000 时取完整分组结果后排序。
-- 条件唯一实体计数不传 `--group`，对实体字段使用 `distinct`。
+- `statsType` 与 `record stats` 统一使用大写枚举，支持 `SUM`、`AVG`、`COUNT`、`MEDIAN`、`DISTINCT`、`DISTINCT_RATIO` 等类型。
+- `--group` 和 `--sort` 都是 JSON 数组编码后的字符串；`--sort` 的 fieldId 必须同时出现在 `--group` 中。
+- 分组结果最多 1000 行；省略 `--limit` 时使用服务端默认上限 1000，服务端在聚合和排序完成后应用限制。
+- 条件唯一实体计数不传 `--group`，对实体字段使用 `DISTINCT`。
 
 ## 过滤条件
 

@@ -125,6 +125,12 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 
 ## 返回结构补充
 
-- `form list` 返回 `data.formViews[]`，**每条仅含** `viewId/name/title/createdAt`；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
-- `form get` 返回结构与 `form list` 完全一致（`data.formViews[]`），仅含一条记录（与请求 viewId 一致）。Agent 提取时仍走 `data.formViews[0]`。
+- `form list` 返回 `data.formViews[]`，**每条含** `viewId/name`（以及服务端当前可用的 `title/createdAt`）；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
+- `form get` 的 `data` 是客户端按 `viewId` 精确筛出的单个表单对象，不是 `formViews` 数组。Agent 直接读取 `data.viewId` / `data.name`；不存在的 `viewId` 会明确失败。
 - `form field list` 仅返回**未隐藏**的字段；`hidden=true` 的字段不在此返回，如需查看全部字段请用 `field get`。
+
+## MCP 交互注意事项
+
+- `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
+- 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；当前 leaf Schema 没有暴露 `anonymousSubmit` 或访问范围参数时，只能把页面开关列为人工设置和验证项，不得宣称已开通匿名提交。
+- 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。

@@ -240,3 +240,25 @@ func TestSafePath_Empty(t *testing.T) {
 		t.Fatal("expected error for empty path")
 	}
 }
+
+func TestIsMCPToolNotFound(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "plain message", err: fmt.Errorf("unknown tool get_cell_doc"), want: true},
+		{name: "structured server code", err: NewAPI("call failed", WithServerDiag(ServerDiagnostics{ServerErrorCode: "TOOL_NOT_FOUND"})), want: true},
+		{name: "ordinary failure", err: NewAPI("permission denied", WithReason("forbidden")), want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsMCPToolNotFound(tc.err); got != tc.want {
+				t.Fatalf("IsMCPToolNotFound(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

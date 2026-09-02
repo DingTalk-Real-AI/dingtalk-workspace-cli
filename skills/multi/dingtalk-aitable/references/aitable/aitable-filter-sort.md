@@ -80,6 +80,32 @@ dws aitable record query --base-id X --table-id Y \
   --filters '{"operator":"and","operands":[{"operator":"not_before","operands":["fldDate","2026-05-01"]},{"operator":"not_after","operands":["fldDate","2026-05-31"]}]}'
 ```
 
+### View 日期 Scheme（仅 `view update filter`）
+
+持久化 View 使用经过真实写入、读回和 UI 验证的结构化日期 Scheme，不能与上面的 `record query --filters` 日期字符串协议混用。最外层是数组，内部保留显式 `and/or` 根节点。
+
+| UI 语义 | operator / value | JSON 类型要求 |
+|---|---|---|
+| 今天/本周/本月/今年及前后周期 | `date_eq` + `{"type":"relative","period":"day|week|month|year","offset":N}` | `offset` 必须是 JSON number 整数 |
+| 过去/未来 X 天 | `from_now` + `{"type":"relative","period":"day","offset":"N"}` | `offset` 必须是 JSON string；过去为负、未来为正 |
+| 指定日期 | `date_eq` + `{"type":"exact","timestamp":TIMESTAMP_MS}` | `timestamp` 必须是目标时区当天 00:00 的 Unix 毫秒 JSON number 整数 |
+
+```bash
+# 本月
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":0}]}]}]'
+
+# 过去 30 天；注意 offset 是字符串
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"from_now","operands":["fldDate",{"type":"relative","period":"day","offset":"-30"}]}]}]'
+
+# 指定日期；timestamp 是毫秒数字，不是字符串
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"exact","timestamp":1786896000000}]}]}]'
+```
+
+写入成功后仍要执行 `view get filter`。`date_eq.offset` 被保存为字符串、`from_now.offset` 被保存为数字、`timestamp` 被字符串化，或页面出现 `[object Object]` / `Invalid Date`，都不能判为成功。明确日期范围不从上述等值 Scheme 推测；在当前 Runtime Schema 没有真实可验证结构时停止。
+
 ### 常见错误拼写（CLI 会自动提示纠正）
 
 | 错误写法 | 正确写法 | 说明 |

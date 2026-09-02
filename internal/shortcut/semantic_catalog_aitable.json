@@ -85,6 +85,7 @@
     "+chart-share-update": {"disposition":"semantic_adapter","semantic_delta":"统一开启、关闭和设置图表分享类型。","risk":"write","public":true,"reviewed":true},
 
     "+export-data": {"disposition":"primary_smart","semantic_delta":"统一创建导出任务与按 taskId 续等，直到得到可下载的导出结果或明确失败。","risk":"read","public":true,"reviewed":true},
+    "+import-file": {"disposition":"primary_smart","semantic_delta":"在 DWS 内完成本地文件上传准备、签名 URL 直传和同一 importId 导入或续等闭环；不向调用方暴露签名 URL。","risk":"write","public":true,"reviewed":true},
     "+import-upload": {"disposition":"schema_leaf","semantic_delta":"申请导入 OSS 直传地址和 importId；只负责上传准备，不伪造导入完成。","risk":"write","public":true,"reviewed":true},
     "+import-data": {"disposition":"semantic_adapter","semantic_delta":"统一将已上传文件导入新表或追加到已有表的目标语义。","risk":"write","public":true,"reviewed":true},
 

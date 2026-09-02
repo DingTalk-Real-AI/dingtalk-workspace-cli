@@ -16,16 +16,16 @@ var WorkflowDeploy = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+workflow-deploy",
 	Product:     serverMain,
-	Description: "创建或更新完整 workflow-dsl/v1，强制检查 valid/flowId，并可启用后验证 RUNNING 状态",
-	Intent:      "当你要一次发布并验证自动化工作流时使用；workflow-id 为空则创建，提供则更新，--enable 还会检查 list 中最终运行状态。",
+	Description: "创建或更新完整 workflow-dsl/v1，检查 valid/flowId；新建默认验证 STOP，--enable 验证 RUNNING",
+	Intent:      "当你要一次发布并验证自动化工作流时使用；workflow-id 为空则创建并安全交付 STOP，提供则更新但不改变已有状态，--enable 会检查最终 RUNNING。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
 	},
 	Contract: aitableCompositeContract(
 		"+workflow-deploy",
-		"创建或更新完整 workflow-dsl/v1，强制检查 valid/flowId，并可启用后验证 RUNNING 状态",
-		"当你要一次发布并验证自动化工作流时使用；workflow-id 为空则创建，提供则更新，--enable 还会检查 list 中最终运行状态。",
+		"创建或更新完整 workflow-dsl/v1，检查 valid/flowId；新建默认验证 STOP，--enable 验证 RUNNING",
+		"当你要一次发布并验证自动化工作流时使用；workflow-id 为空则创建并安全交付 STOP，提供则更新但不改变已有状态，--enable 会检查最终 RUNNING。",
 		"只查看定义用 workflow get；只启停已有流程用 enable/disable；创建回包不确定时不要盲目重试",
 		`dws aitable +workflow-deploy --base-id B --dsl '{"version":"workflow-dsl/v1","name":"提醒","nodes":[]}' --enable`,
 	),
@@ -74,6 +74,8 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 	result.Plan = []compositeStep{{Index: 1, Name: action + " workflow", Tool: tool, Status: "planned"}}
 	if enableRequested {
 		result.Plan = append(result.Plan, compositeStep{Index: 2, Name: "enable and verify workflow", Tool: "enable_workflow", Status: "planned"})
+	} else if action == "create" {
+		result.Plan = append(result.Plan, compositeStep{Index: 2, Name: "verify STOP; disable only if unexpectedly running", Tool: "list_workflows/disable_workflow", Status: "planned"})
 	}
 	if rt.DryRun() {
 		result.Status = "planned"
@@ -109,6 +111,7 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 		result.Checkpoint = map[string]any{"workflowId": workflowID, "nextStep": "verify published workflow"}
 		return compositeError(result, verifyErr, action == "update")
 	}
+	verification := map[string]any{"status": "verified", "valid": true, "workflowId": workflowID}
 	if enableRequested {
 		enableData, enableErr := rt.CallMCPWriteDataStrict(serverHelper, "enable_workflow", map[string]any{"baseId": baseID, "workflowId": workflowID})
 		if enableErr != nil {
@@ -126,20 +129,53 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 			return compositeError(result, listErr, action == "update")
 		}
 		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 2, Name: "enable and verify workflow", Tool: "enable_workflow", Status: "completed", Result: workflow})
-		result.Verification = workflowVerification(workflowID, workflow, true)
+		verification = workflowVerification(workflowID, workflow, true)
+		verification["deliveryStatus"] = "RUNNING"
+	} else if action == "create" {
+		workflow, listErr := readWorkflowFromList(rt, baseID, workflowID)
+		if listErr != nil {
+			result.Status = "partial_success"
+			result.Checkpoint = map[string]any{"workflowId": workflowID, "nextStep": "inspect workflow status and disable it if running"}
+			return compositeError(result, listErr, false)
+		}
+		running, runningKnown := workflowRunningState(workflow)
+		if runningKnown && running {
+			disableData, disableErr := rt.CallMCPWriteDataStrict(serverHelper, "disable_workflow", map[string]any{"baseId": baseID, "workflowId": workflowID})
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "disable_workflow", "workflowId": workflowID, "response": disableData})
+			if disableErr != nil {
+				result.Warnings = append(result.Warnings, "disable response error: "+disableErr.Error())
+			}
+			workflow, listErr = readWorkflowFromList(rt, baseID, workflowID)
+			if listErr != nil || !workflowIsStopped(workflow) {
+				if listErr == nil {
+					listErr = fmt.Errorf("workflow list does not show %s as STOP after disable", workflowID)
+				}
+				result.Status = "partial_success"
+				result.Checkpoint = map[string]any{"workflowId": workflowID, "nextStep": "inspect and disable workflow"}
+				return compositeError(result, listErr, false)
+			}
+			if disableErr != nil {
+				result.Status = "recovered"
+			}
+		} else if !runningKnown || !workflowIsStopped(workflow) {
+			result.Status = "partial_success"
+			result.Checkpoint = map[string]any{"workflowId": workflowID, "nextStep": "inspect workflow status and disable it if running"}
+			return compositeError(result, fmt.Errorf("workflow list does not expose a verifiable RUNNING or STOP state for %s", workflowID), false)
+		}
+		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 2, Name: "verify workflow STOP", Tool: "list_workflows/disable_workflow", Status: "completed", Result: workflow})
+		verification["running"] = false
+		verification["deliveryStatus"] = "STOP"
 	} else {
 		workflow, listErr := readWorkflowFromList(rt, baseID, workflowID)
 		if listErr != nil {
 			result.Warnings = append(result.Warnings, "workflow status could not be read from list: "+listErr.Error())
 		} else if _, known := workflowRunningState(workflow); known {
-			result.Verification = workflowVerification(workflowID, workflow, true)
+			verification = workflowVerification(workflowID, workflow, true)
 		}
 	}
-	result.CompletedCount = 1
 	result.CompletedSteps = append([]compositeStep{{Index: 1, Name: action + " workflow", Tool: tool, Status: "completed", Result: writeData}}, result.CompletedSteps...)
-	if result.Verification == nil {
-		result.Verification = map[string]any{"status": "verified", "valid": true, "workflowId": workflowID}
-	}
+	result.CompletedCount = len(result.CompletedSteps)
+	result.Verification = verification
 	result.Result = map[string]any{"action": action, "workflowId": workflowID, "valid": true, "enableRequested": enableRequested}
 	if running, exists := result.Verification["running"]; exists {
 		result.Result["running"] = running
@@ -324,4 +360,13 @@ func workflowRunningState(workflow map[string]any) (bool, bool) {
 	}
 	enabled, found := findBoolByKeys(workflow, "enabled", "isEnabled")
 	return enabled, found
+}
+
+func workflowIsStopped(workflow map[string]any) bool {
+	status := strings.ToUpper(stringValue(workflow, "status", "state"))
+	if status == "STOP" || status == "STOPPED" || status == "DISABLED" || status == "INACTIVE" {
+		return true
+	}
+	enabled, found := findBoolByKeys(workflow, "enabled", "isEnabled")
+	return found && !enabled
 }

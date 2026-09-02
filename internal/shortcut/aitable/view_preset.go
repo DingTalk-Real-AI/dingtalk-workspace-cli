@@ -22,16 +22,16 @@ var ViewPresetApply = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+view-preset-apply",
 	Product:     serverMain,
-	Description: "按视图精确名称幂等创建或更新预设，并读回校验类型和 config",
-	Intent:      "当你要把 Grid/Kanban/Gantt/Calendar/Gallery 的固定筛选、排序、分组或可见列预设部署到一张表时使用；同名唯一则更新，无同名则创建。",
+	Description: "按视图精确名称幂等创建或更新预设；Gantt 可用独立 timebar 完成专用两步写入",
+	Intent:      "当你要部署 Grid/Kanban/Gantt/Calendar/Gallery 预设时使用；同名唯一则更新，无同名则创建，Gantt 传 --timebar 时另行写入并回读时间条。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent",
 	},
 	Contract: aitableCompositeContract(
 		"+view-preset-apply",
-		"按视图精确名称幂等创建或更新预设，并读回校验类型和 config",
-		"当你要把 Grid/Kanban/Gantt/Calendar/Gallery 的固定筛选、排序、分组或可见列预设部署到一张表时使用；同名唯一则更新，无同名则创建。",
+		"按视图精确名称幂等创建或更新预设；Gantt 可用独立 timebar 完成专用两步写入",
+		"当你要部署 Grid/Kanban/Gantt/Calendar/Gallery 预设时使用；同名唯一则更新，无同名则创建，Gantt 传 --timebar 时另行写入并回读时间条。",
 		"只做一次性新建可用 view create；同名视图不唯一或现有视图类型不同必须人工处理",
 		`dws aitable +view-preset-apply --base-id B --table-id T --name "待处理" --view-type Grid --config '{"visibleFieldIds":["fld1"]}'`,
 	),
@@ -41,6 +41,7 @@ var ViewPresetApply = shortcut.Shortcut{
 		{Name: "name", Type: shortcut.FlagString, Desc: "预设视图精确名称", Required: true},
 		{Name: "view-type", Type: shortcut.FlagString, Desc: "视图类型", Required: true, Enum: []string{"Grid", "Kanban", "Gantt", "Calendar", "Gallery"}},
 		{Name: "config", Type: shortcut.FlagString, Desc: "目标 config JSON 对象", Required: true},
+		{Name: "timebar", Type: shortcut.FlagString, Desc: "Gantt 专用 ganttTimebar JSON 对象；与通用 config 分两步写入"},
 	},
 	Tips: []string{`dws aitable +view-preset-apply --base-id B --table-id T --name "待处理" --view-type Grid --config '{"visibleFieldIds":["fld1"]}'`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -56,8 +57,24 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	if len(config) == 0 {
 		return apperrors.NewValidation("--config 必须是非空 JSON 对象")
 	}
+	if _, exists := config["ganttTimebar"]; exists {
+		return apperrors.NewValidation("ganttTimebar 不能放入通用 --config；Gantt 请使用独立 --timebar")
+	}
 	baseID, tableID := rt.Str("base-id"), rt.Str("table-id")
 	name, viewType := strings.TrimSpace(rt.Str("name")), rt.Str("view-type")
+	var timebar map[string]any
+	if rt.Changed("timebar") {
+		if viewType != "Gantt" {
+			return apperrors.NewValidation("--timebar 仅适用于 --view-type Gantt")
+		}
+		timebar, err = parseJSONObject("timebar", rt.Str("timebar"))
+		if err != nil {
+			return err
+		}
+		if len(timebar) == 0 || strings.TrimSpace(stringValue(timebar, "startField")) == "" {
+			return apperrors.NewValidation("--timebar 必须是包含非空 startField 的 JSON 对象")
+		}
+	}
 	preflight, err := rt.CallMCPData(serverMain, "get_views", map[string]any{"baseId": baseID, "tableId": tableID})
 	if err != nil {
 		return err
@@ -84,7 +101,7 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 			return apperrors.NewValidation(fmt.Sprintf("同名视图类型为 %s，不能原地改为 %s", actualType, viewType), apperrors.WithReason("target_type_conflict"), apperrors.WithExecutionStarted(false))
 		}
 		params = map[string]any{"baseId": baseID, "tableId": tableID, "viewId": viewID, "newViewName": name, "config": config}
-		if presetViewMatches(matches[0], viewType, config) {
+		if presetViewMatches(matches[0], viewType, config) && (timebar == nil || viewTimebarMatches(matches[0], timebar)) {
 			result := newCompositeResult("view_preset_apply")
 			result.Status = "unchanged"
 			result.Executed = false
@@ -96,6 +113,9 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	result := newCompositeResult("view_preset_apply")
 	result.Resolved = map[string]any{"action": action, "name": name, "viewId": viewID}
 	result.Plan = []compositeStep{{Index: 1, Name: action + " view preset", Tool: tool, Status: "planned", Arguments: params}}
+	if timebar != nil {
+		result.Plan = append(result.Plan, compositeStep{Index: 2, Name: "update and verify Gantt timebar", Tool: "update_view", Status: "planned", Arguments: map[string]any{"ganttTimebar": timebar}})
+	}
 	if rt.DryRun() {
 		result.Status = "planned"
 		result.Executed = false
@@ -111,20 +131,8 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	var verifiedMatches []map[string]any
 	var verifyErr error
 	for attempt := 0; attempt < viewPresetReadbackAttempts; attempt++ {
-		if attempt > 0 {
-			backoff := time.Duration(1<<(attempt-1)) * time.Second
-			if backoff > 12*time.Second {
-				backoff = 12 * time.Second
-			}
-			viewPresetSleep(backoff)
-		}
-		readBack, readErr := rt.CallMCPData(serverMain, "get_views", map[string]any{"baseId": baseID, "tableId": tableID})
-		verifyErr = readErr
-		verifiedViews, found := findNamedObjectList(readBack, "views", "viewList")
-		if verifyErr == nil && !found {
-			verifyErr = fmt.Errorf("get_views read-back is missing the views collection")
-		}
-		verifiedMatches = viewsByExactName(verifiedViews, name)
+		waitViewPresetReadback(attempt)
+		verifiedMatches, verifyErr = readBackViewPreset(rt, baseID, tableID, name)
 		if verifyErr == nil && len(verifiedMatches) != 1 {
 			verifyErr = fmt.Errorf("view read-back matched %d exact-name views, want 1", len(verifiedMatches))
 			if len(verifiedMatches) > 1 {
@@ -160,14 +168,76 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 		return compositeError(result, verifyErr, action == "update")
 	}
 	result.Resolved["viewId"] = viewID
-	result.CompletedCount = 1
-	result.Verification = map[string]any{"status": "verified", "viewId": viewID, "viewType": viewType}
+	result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 1, Name: action + " view preset", Tool: tool, Status: "completed", Result: verifiedMatches[0]})
+	if timebar != nil {
+		// ganttTimebar is a separate live MCP mutation. Once it is called, an
+		// unresolved read-back must not make the whole preset blindly retryable.
+		_, timebarWriteErr := rt.CallMCPWriteDataStrict(serverMain, "update_view", map[string]any{
+			"baseId": baseID, "tableId": tableID, "viewId": viewID,
+			"config": map[string]any{"ganttTimebar": timebar},
+		})
+		var timebarVerifyErr error
+		for attempt := 0; attempt < viewPresetReadbackAttempts; attempt++ {
+			waitViewPresetReadback(attempt)
+			verifiedMatches, timebarVerifyErr = readBackViewPreset(rt, baseID, tableID, name)
+			if timebarVerifyErr == nil && len(verifiedMatches) == 1 && stringValue(verifiedMatches[0], "viewId", "id") == viewID && viewTimebarMatches(verifiedMatches[0], timebar) {
+				timebarVerifyErr = nil
+				break
+			}
+			if timebarVerifyErr == nil {
+				timebarVerifyErr = fmt.Errorf("Gantt timebar read-back does not match the requested configuration")
+			}
+		}
+		if timebarVerifyErr != nil {
+			result.Status = "partial_success"
+			if timebarWriteErr == nil {
+				result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "update_view", "viewId": viewID, "configKey": "ganttTimebar"})
+			}
+			if timebarWriteErr != nil {
+				result.Warnings = append(result.Warnings, "timebar write response error: "+timebarWriteErr.Error())
+			}
+			result.Checkpoint = map[string]any{"viewId": viewID, "nextStep": "read and verify Gantt timebar before retrying"}
+			return compositeError(result, timebarVerifyErr, false)
+		}
+		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 2, Name: "update and verify Gantt timebar", Tool: "update_view", Status: "completed", Result: timebar})
+		if timebarWriteErr != nil {
+			result.Status = "recovered"
+			result.Warnings = append(result.Warnings, "timebar write response was an error, but the requested timebar was proven by read-back")
+		}
+	}
+	result.CompletedCount = len(result.CompletedSteps)
+	result.Verification = map[string]any{"status": "verified", "viewId": viewID, "viewType": viewType, "timebarVerified": timebar != nil}
 	result.Result = map[string]any{"action": action, "viewId": viewID, "view": verifiedMatches[0]}
 	if writeErr != nil {
 		result.Status = "recovered"
 		result.Warnings = append(result.Warnings, "write response was an error, but the exact view preset was proven by read-back")
 	}
 	return rt.Output(result)
+}
+
+// waitViewPresetReadback applies the bounded delay shared by both verification phases.
+func waitViewPresetReadback(attempt int) {
+	if attempt <= 0 {
+		return
+	}
+	backoff := time.Duration(1<<(attempt-1)) * time.Second
+	if backoff > 12*time.Second {
+		backoff = 12 * time.Second
+	}
+	viewPresetSleep(backoff)
+}
+
+// readBackViewPreset loads the current views and returns exact-name matches.
+func readBackViewPreset(rt *shortcut.RuntimeContext, baseID, tableID, name string) ([]map[string]any, error) {
+	readBack, err := rt.CallMCPData(serverMain, "get_views", map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return nil, err
+	}
+	views, found := findNamedObjectList(readBack, "views", "viewList")
+	if !found {
+		return nil, fmt.Errorf("get_views read-back is missing the views collection")
+	}
+	return viewsByExactName(views, name), nil
 }
 
 func viewsByExactName(views []map[string]any, name string) []map[string]any {
@@ -266,6 +336,20 @@ func emptyPresetViewConfigValue(key string, value any) bool {
 	default:
 		return false
 	}
+}
+
+func viewTimebarMatches(view map[string]any, expected map[string]any) bool {
+	for _, container := range []map[string]any{view, objectValue(view, "config"), objectValue(view, "custom")} {
+		if actual, ok := container["ganttTimebar"].(map[string]any); ok && mapContains(actual, expected) {
+			return true
+		}
+	}
+	return false
+}
+
+func objectValue(value map[string]any, key string) map[string]any {
+	object, _ := value[key].(map[string]any)
+	return object
 }
 
 // get_views projects visible fields as columns plus hiddenFields instead of

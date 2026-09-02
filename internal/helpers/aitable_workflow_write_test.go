@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -26,11 +27,15 @@ type aitableWorkflowCaller struct {
 	calls    []aitableWorkflowCall
 	response string
 	err      error
+	errs     []error
 	dryRun   bool
 }
 
 func (c *aitableWorkflowCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, aitableWorkflowCall{productID: productID, toolName: toolName, args: args})
+	if index := len(c.calls) - 1; index < len(c.errs) && c.errs[index] != nil {
+		return nil, c.errs[index]
+	}
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -176,11 +181,24 @@ func TestAitableWorkflowEditExampleMapsEmptyArguments(t *testing.T) {
 		t.Fatalf("tool call count = %d, want 1", len(caller.calls))
 	}
 	call := caller.calls[0]
-	if call.productID != "aitable" || call.toolName != "edit_workflow_example" {
-		t.Fatalf("tool call = %s/%s, want aitable/edit_workflow_example", call.productID, call.toolName)
+	if call.productID != "aitable" || call.toolName != "get_workflow_dsl_docs" {
+		t.Fatalf("tool call = %s/%s, want aitable/get_workflow_dsl_docs", call.productID, call.toolName)
 	}
 	if len(call.args) != 0 {
 		t.Fatalf("tool args = %#v, want empty arguments", call.args)
+	}
+}
+
+func TestAitableWorkflowEditExampleFallsBackForMissingPreferredTool(t *testing.T) {
+	caller := &aitableWorkflowCaller{errs: []error{
+		apperrors.NewAPI("tool call failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "TOOL_NOT_FOUND"})),
+	}}
+	err := runAitableWorkflowCommandWithCaller(t, caller, nil, "edit-example")
+	if err != nil {
+		t.Fatalf("workflow edit-example fallback returned error: %v", err)
+	}
+	if len(caller.calls) != 2 || caller.calls[0].toolName != "get_workflow_dsl_docs" || caller.calls[1].toolName != "edit_workflow_example" {
+		t.Fatalf("fallback calls = %#v", caller.calls)
 	}
 }
 
