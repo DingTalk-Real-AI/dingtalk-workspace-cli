@@ -75,7 +75,7 @@ Report 查询优先使用下方严格 Shortcut；它们会校验响应、稳定 
 
 ## 模板列表与比较
 
-- 用户要查看当前全部模板时，调用一次 `template list`，优先加 `--jq '[.result[] | {name: .report_template_name, templateId: .report_template_id}]'` 仅保留名称和 ID，降低输出体积。
+- 用户要查看当前全部模板时，调用一次 `template list`，优先加 `--jq '[.items[] | {name: .report_template_name, templateId: .report_template_id}]'` 仅保留名称和 ID，降低输出体积。
 - 如果输出被截断、分页状态未知或工具没有给出完整性证据，不得声称“共 N 个且已全部列出”；应说明已取得的范围并继续取得完整结果。
 - 比较两个模板字段时：模板列表只取一次；确认两个精确名称后，两次 `template get` 可并行；最终按字段名、字段类型、必填/选项（若响应提供）比较。
 - `template get` 没返回的属性就是未知，不自行推断“必填”“默认值”或提交格式。

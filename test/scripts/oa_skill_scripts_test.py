@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "skills" / "multi" / "dingtalk-misc" / "scripts" / "oa_create_preflight.py"
 PENDING_SCRIPT = ROOT / "skills" / "multi" / "dingtalk-misc" / "scripts" / "oa_pending_review.py"
 OA_ROOT = ROOT / "skills" / "multi" / "dingtalk-misc" / "references"
+REPORT_REFERENCE = OA_ROOT / "report.md"
 
 
 def load_script(name, path):
@@ -352,6 +353,11 @@ class OAPendingReviewTest(unittest.TestCase):
 
 
 class OAReferenceContractTest(unittest.TestCase):
+    def test_report_template_projection_matches_cli_envelope(self):
+        text = REPORT_REFERENCE.read_text(encoding="utf-8")
+        self.assertIn("[.items[] |", text)
+        self.assertNotIn("[.result[] |", text)
+
     def test_create_examples_do_not_embed_confirmation_bypass(self):
         text = (OA_ROOT / "oa-create.md").read_text(encoding="utf-8")
         shell_fences = re.findall(r"```bash\n(.*?)```", text, flags=re.DOTALL)
