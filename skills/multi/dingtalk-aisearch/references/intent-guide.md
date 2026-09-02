@@ -1,15 +1,14 @@
-# aisearch 局部意图消歧
+# AISearch 局部意图消歧
 
-本文件从单 Skill `intent-guide.md` 拆分而来，仅保留与本产品相关的跨产品消歧规则。
+仅当“定位记录”与“操作已知对象”的边界仍不明确时读取。
 
-| 用户说... | 真实意图 | 应该用 | 不要用 | 理由 |
-|---|---|---|---|---|
-| "张三在哪个部门/张三的工号是多少" | 搜人后查通讯录详情 | `aisearch person` → `contact user get` | 直接 `contact user search` | 姓名或工号先由 aisearch 获取 userId，再由 contact 补部门、工号等详情 |
-| "找一下张三/搜同事/找人" | 人员语义搜索 | `aisearch person` | `contact user search` | 姓名模糊搜索、工号、部门、职责和上下级走 aisearch；contact 在拿到 userId 后补详情 |
-| "五道的上级是谁/谁负责XX/XX的下属有谁" | AI语义搜人 | `aisearch person` | `contact` | 涉及上下级、职责、负责人等语义维度搜索，用 aisearch |
-| "222020这个工号是谁/查工号" | 按工号搜人 | `aisearch person --dimension jobNumber` | `contact` | 工号查人走 aisearch，dimension=jobNumber |
-| "13800138000是谁/完整手机号反查" | 精确手机号反查 | `contact user search-mobile` | `contact user search` | 完整手机号精确匹配使用 search-mobile |
-| "按手机号线索找人" | 手机号语义搜人 | `aisearch person --dimension phone` | `contact user search` | 非精确手机号匹配走 aisearch 的 phone 维度 |
-| "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息" | 搜企业知识内容 | `aisearch enterprise` | `doc search` / `mail search` / `chat message search` | 跨文档、消息、日程、听记、邮件等企业内容语义检索走 enterprise；具体 `queries/types/time-range` 抽槽见 `aisearch.md` |
-| "我发给某人的消息/邮件/文档/今天我干了什么" | 搜行为记录 | `aisearch behavior` | `chat` / `mail` / `doc` / `report` | 关注“谁对什么做过什么”，走 behavior；具体 `behavior-type/direction/chat-scope` 抽槽见 `aisearch.md` |
-| "把这段文字翻译成英文/translate this" | 通用文本翻译 | `chat text translate` | `doc` / `aisearch` | 纯文本翻译，不是文档编辑或语义搜索 |
+| 用户目标 | 应该用 | 不要用 |
+|---|---|---|
+| 按姓名、工号、部门、职位、职责或上下级找人 | `aisearch person` | 用 Contact 做姓名模糊搜索 |
+| 完整手机号精确反查；已知 userId 查详情 | `contact` | `aisearch person` |
+| 按主题找文档、消息、邮件、待办、听记等记录 | `aisearch enterprise` | 分别加载各产品做搜索 |
+| 找我/某人发送、收到、创建、编辑、分享过的记录 | `aisearch behavior` | 用 Chat/Mail/Doc recent 拼接行为结论 |
+| 已有唯一稳定 ID，要求读取正文、逐字稿或详情 | 对应产品 Skill | 用 AISearch snippet 冒充原文 |
+| 已有唯一稳定 ID，要求修改、发送或删除 | 对应产品 Skill | 继续用 AISearch |
+
+判断口诀：**未知对象先定位，行为问题走 behavior；已知对象再读取或操作。**只点名一种来源不改变“按主题定位”的 AISearch 归属。

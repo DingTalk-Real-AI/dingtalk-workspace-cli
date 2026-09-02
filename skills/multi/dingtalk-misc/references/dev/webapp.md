@@ -1,22 +1,18 @@
 # 网页应用配置
 
-> 网页应用=应用的能力扩展之一，钉钉内打开的 H5；见 [devapp.md](../devapp.md) 概念地图。
-
-`dws dev app webapp get` 查配置，`webapp config` 配移动端/PC 首页和管理后台地址。参数用 `dws dev app webapp get --help` 和 `dws dev app webapp config --help` 查询；config 至少给一个配置字段。
-
-- 未配置网页应用前，`get` 返回空对象 `{}`。拿到 `{}` 就是还没配过，走 `webapp config` 首次配置。
-- `h5PageType` 未显式传入时不要假设固定默认值；配置后以 `webapp get` 回读为准。
-
-## 发现命令
-
-调用任何方法前先查清楚再敲：
-
-```
-# 浏览命令组下的子命令与 flag
-dws dev app webapp --help
-
-# 查某方法的必填参数、类型、默认值
-dws dev <command-path> --help
+```bash
+dws dev app webapp get --unified-app-id <id> --format json
+dws dev app webapp config --unified-app-id <id> \
+  --homepage-url <移动端主页> \
+  --pc-homepage-url <PC端主页> \
+  --omp-url <管理后台地址> \
+  --h5-page-type <类型> \
+  --dry-run --format json
 ```
 
-按 `--help` 输出构造 flag；不要凭旧 schema 名称猜参数。
+- `config` 至少传一个需要修改的字段，未要求的字段不要猜。
+- 以 `get` 实际返回的 `data.configured` 和 URL 字段为准；`configured=false` 或 URL 缺失表示尚未配置，不是命令错误。不要依赖旧版“空对象 `{}`”判断。
+- 最初请求只允许 dry-run。展示预检返回的应用 ID、完整 URL/页面类型参数及影响并取得用户对该预览的明确确认后，才把同一命令仅由 `--dry-run` 换成 `--yes`；参数变化就重新预检并确认，确认前不得真实配置。随后只回读一次 `webapp get`，以实际 URL 与 `h5PageType` 为准。
+- 需要上线生效时继续走 [`version.md`](./version.md)。
+
+已知路径不调用 group help；仅 flag 确有疑问时查一次精确 leaf compact Schema，Schema 不可用才查一次 leaf help。

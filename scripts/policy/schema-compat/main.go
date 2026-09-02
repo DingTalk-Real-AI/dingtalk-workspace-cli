@@ -863,6 +863,13 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 // canonicalRawJSON) — not a bare RPC name. Adding an entry is a contract
 // decision and belongs in review, not in a feature change.
 var reviewedInterfaceRefRedirect = map[string]map[string]string{
+	// The public pending-approval command keeps its stable canonical identity,
+	// while the OA backend moved from the legacy list endpoint to the dedicated
+	// current-user todo-task endpoint. The CLI-facing contract remains
+	// compatible; only the audited backing RPC changes.
+	"oa/oa.list_pending_approvals": {
+		`{"product_id":"oa","rpc_name":"list_pending_approvals"}`: `{"product_id":"oa","rpc_name":"get_todo_tasks"}`,
+	},
 	// The style surface moved from update_range (which writes values) to
 	// set_cell_range's cellStyles payload (style-only, preserving values). This
 	// is the only channel that can express italic / underline / strike-through /
@@ -879,6 +886,16 @@ var reviewedInterfaceRefRedirect = map[string]map[string]string{
 // business semantics. Keep this narrow: removing a constraint can expose a new
 // runtime route, so arbitrary removals must not pass as harmless drift.
 var reviewedConstraintTransition = map[string]map[string]string{
+	// PR #1236 adds an explicit staffId alternative to the historically required
+	// member-uids input. Every historical UID invocation remains valid; the new
+	// exact-one group prevents ambiguous mixed-identifier requests while making
+	// the additive staffId route visible to Schema consumers.
+	"minutes/minutes.add_member_permission": {
+		"": `{"mutually_exclusive":[["member-uids","member-staff-ids"]],"require_one_of":[["member-uids","member-staff-ids"]]}`,
+	},
+	"minutes/minutes.shortcut_share": {
+		`{"mutually_exclusive":[["id","ids"]],"require_one_of":[["id","ids"]]}`: `{"mutually_exclusive":[["id","ids"],["member-uids","member-staff-ids"]],"require_one_of":[["id","ids"],["member-uids","member-staff-ids"]]}`,
+	},
 	// PR #933 aligned the Shortcut and Schema with the existing doc import
 	// runtime: omitting both targets imports into the default root. Keeping the
 	// historical require_one_of made the documented Golden Route unreachable.
@@ -1211,6 +1228,20 @@ type parameterTypeChange struct {
 // every other published field of the parameter is identical — not merely free
 // of compatibility failures. See compatibleReviewedParameterTypeChange.
 var reviewedParameterTypeChanges = map[parameterTypeChange]struct{}{
+	// "dws chat message update-card --flow-status" moves from a native Int
+	// flag to String while retaining the same numeric [1,5] domain. CLI argv is
+	// text in both declarations, and RunE parses the String value with base 0,
+	// preserving every spelling accepted by pflag Int (including 0x3) before
+	// sending the same integer flowStatus property to update_streaming_card.
+	// The dedicated A2UI update leaf owns its enum-name and 1-9 contract; this
+	// entry approves only the streaming leaf's CLI type projection.
+	{
+		ToolPath:  "chat/chat.update_streaming_card",
+		Parameter: "flow-status",
+		From:      `"integer"`,
+		To:        `"string"`,
+	}: {},
+
 	// "dws minutes permission apply --policy" moved from a String flag to a
 	// native Int flag, so the published type follows it from "string" to
 	// "integer". A parameter's type is projected from the Cobra flag type

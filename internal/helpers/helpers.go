@@ -26,15 +26,16 @@ import (
 // avoids a mass-rename while keeping reusable command-resolution and flag
 // utilities in cmdutil.
 var (
-	groupRunE            = cmdutil.GroupRunE
-	hintSubCmd           = cmdutil.HintSubCmd
-	mustGetFlag          = cmdutil.MustGetFlag
-	flagOrFallback       = cmdutil.FlagOrFallback
-	mustFlagOrFallback   = cmdutil.MustFlagOrFallback
-	parseISOTimeToMillis = cmdutil.ParseISOTimeToMillis
-	validateTimeRange    = cmdutil.ValidateTimeRange
-	helperSleep          = time.Sleep
-	helperAfter          = time.After
+	groupRunE                 = cmdutil.GroupRunE
+	hintSubCmd                = cmdutil.HintSubCmd
+	mustGetFlag               = cmdutil.MustGetFlag
+	flagOrFallback            = cmdutil.FlagOrFallback
+	mustFlagOrFallback        = cmdutil.MustFlagOrFallback
+	missingRequiredFlagsError = cmdutil.MissingRequiredFlagsError
+	parseISOTimeToMillis      = cmdutil.ParseISOTimeToMillis
+	validateTimeRange         = cmdutil.ValidateTimeRange
+	helperSleep               = time.Sleep
+	helperAfter               = time.After
 )
 
 func validateRequiredFlags(cmd *cobra.Command, names ...string) error {

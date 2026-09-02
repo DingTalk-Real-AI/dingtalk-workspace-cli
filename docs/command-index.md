@@ -310,7 +310,7 @@ _OA approval workflows: inspect forms, forecast routes, create instances, approv
 | `dws oa approval form-schema` | Retrieve the form Schema for an approval template by processCode. | Before collecting or validating values for a new approval instance. |
 | `dws oa approval forecast-process` | Forecast the approval route for a template and its proposed form values. | Before creating an instance, especially when the route contains user-selectable approver or notifier nodes. |
 | `dws oa approval list-forms` | List approval process templates (forms) the current user is allowed to initiate. | When the agent needs to pick the right approval form before submitting a new request. |
-| `dws oa approval list-initiated` | List approval process instances the current user has initiated. | When the agent reviews the status of approvals the user submitted. |
+| `dws oa approval list-initiated` | List approval instances the current user has initiated under a specified approval template (processCode). | When the agent reviews the status of approvals the user submitted. |
 | `dws oa approval list-pending` | List approval process instances currently awaiting action from the current user. | When the agent surfaces "needs your approval" items in the user's inbox. |
 | `dws oa approval records` | Retrieve the operation history (who approved/commented/transferred, when) of an approval instance. | When the agent explains an approval's progression or audits who handled it. |
 | `dws oa approval reject` | Reject a pending approval process instance as the current user. | When the agent declines an approval on behalf of the user, optionally with a reason. |
