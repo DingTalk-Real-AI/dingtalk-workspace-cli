@@ -49,7 +49,7 @@
 4. 对人员姓名使用 `dws aisearch person` 解析并消歧真实 userId。
 5. 在本地检查 JSON、`blockers`、必填字段、用户核心字段和模板选项；`blockers` 会递归包含 `TableField` 的必填子控件，非空时停止创建。将用户明确要求的字段标记为不可删除，不用真实写接口试探。
 6. 调用 `forecast-process`，展示审批路径并处理自选节点。
-7. 一次性展示创建摘要；`create-instance` 的最终 Schema 要求用户确认，确认后才追加 `--yes`。
+7. 一次性展示创建摘要并停止；确认前禁止调用 `create-instance`。只有用户对当前完整摘要明确确认，且待提交参数未变化时，才执行同一条调用并动态追加一个 `--yes`。
 8. 创建成功后从真实返回取得 `processInstanceId`，再用 `detail` 和必要的 `tasks/records` 回读。
 
 顺序是硬约束：`form-schema → 本地完整 payload → forecast-process → 一次 create-instance → 回读`。不得在 `forecast-process` 前创建；不得在失败后回退到缺字段 payload。
@@ -62,7 +62,7 @@ dws oa approval form-schema --process-code <processCode> --format json \
   | python3 scripts/oa_create_preflight.py form-schema --process-code <processCode>
 dws oa approval forecast-process --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --format json \
   | python3 scripts/oa_create_preflight.py forecast
-dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --yes --format json
+dws oa approval create-instance --process-code <processCode> --dept-id <deptId> --form-values '<JSON对象>' --format json
 dws oa approval detail --instance-id <processInstanceId> --format json
 ```
 
@@ -111,7 +111,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 3. `dws attendance approve leave-types --format json` 获取真实 `leaveCode`、类型名、展示单位和余额。用户没有唯一明确类型时全量展示并让其选择；余额已用完则停止。哺乳假或达到 `leaveCertificate` 证明材料阈值时改用 `submitUrl`。
 4. 收集起止时间及 Schema 要求的其他字段；调用 `leave-duration` 获取服务端权威的 `durationInHour/durationInDay/detailList/compressedValue/corpId`，再把这些真实值传给 `leave-check`。校验失败时原样交付 `errorMsg` 并停止。
 5. 按 [DDHolidayField](oa/oa-form-components.md#ddholidayfield请假套件) 组装包含 `id/name/value/extValue` 的完整请求。`value` 使用 `[T1,T2,duration,unit,leaveName,attendTypeLabel]`；`extValue` 基于 `leave-duration` 返回值补 `key` 和 `leaveParams`，不得本地估算时长。
-6. 用最终 `--request` 调用 `forecast-process`，处理所有自选节点；摘要确认后只调用一次 `create-instance --request '<完整JSON>' --yes`。
+6. 用最终 `--request` 调用 `forecast-process`，处理所有自选节点；展示摘要后停止，得到对当前摘要的明确确认才执行同一条创建调用，并在执行时动态追加确认参数。
 
 时间格式必须跟随类型单位：`hour/halfHour/limitHour` 用 `yyyy-MM-dd HH:mm`，`day` 用 `yyyy-MM-dd`，`halfDay` 用 `yyyy-MM-dd 上午/下午`。`leave-check` 的日/半日起止时刻按当前 CLI Help 转为 00:00、12:00 或 23:59。
 
@@ -122,7 +122,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 3. 用户未给具体缺卡时间时，可按日调用 `dws attendance record get` 辅助定位；随后调用 `dws attendance approve supply-plans --time '<yyyy-MM-dd HH:mm>' --format json`。`plans` 为空即停止，多班次必须展示全部 `planTip` 让用户选择，不默认取第一条。
 4. 选定班次后，把真实 `supplyDate` 传给 `dws attendance approve supply-check --timestamp <毫秒时间戳> --format json`；`qualify=false` 时原样交付 `title/desc` 并停止。
 5. 按 [补卡套件](oa/oa-form-components.md#ddbizsuite--attendancesupply补卡套件) 组装子控件 `id/name/value/extValue`。`value` 按 Schema 的 format 格式化；`extValue` 使用选定计划的 `planId/planTip/planText/workDate/supplyDate`，不得猜测班次数据。
-6. 用最终 `--request` 重新预测，处理自选节点；摘要确认后只调用一次 `create-instance --request '<完整JSON>' --yes`。
+6. 用最终 `--request` 重新预测，处理自选节点；展示摘要后停止，得到对当前摘要的明确确认才执行同一条创建调用，并在执行时动态追加确认参数。
 
 请假、补卡任一最终字段、部门或人员发生变化，都必须重新 `forecast-process`。写成功后的验收只读 `detail/tasks/records`，不能再次创建。
 
@@ -148,7 +148,7 @@ dws oa approval forecast-process --process-code <processCode> --dept-id <deptId>
 
 ```bash
 dws oa approval forecast-process --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[[{"name":"事由","value":"测试"}]]}' --format json
-dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[{"name":"事由","value":"测试"}],"approvers":[{"actionType":"OR","userIds":["approver-user-id"]}],"targetSelectActioners":[{"actionerKey":"manual-node","actionerStaffIds":["selected-user-id"]}]}' --yes --format json
+dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":123,"formComponentValues":[{"name":"事由","value":"测试"}],"approvers":[{"actionType":"OR","userIds":["approver-user-id"]}],"targetSelectActioners":[{"actionerKey":"manual-node","actionerStaffIds":["selected-user-id"]}]}' --format json
 ```
 
 `approvers` 与简单模式 `--approvers` 的 CLI 映射一致；仅在用户指定审批人且预测没有对应的自选审批节点时放入高级请求。预测已有固定审批人且用户没有要求覆盖时，不额外传 `approvers`。
@@ -169,6 +169,11 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":12
 
 用户先前说“我确认提交”时，只有当随后解析出的模板、字段、人员和流程与其描述完全一致，才能视为对该精确摘要的确认；发现新增选项、未知控件或对象歧义时必须重新确认。
 
+确认是两阶段门禁：
+
+- **确认前**：只保留准备好的精确调用并向用户展示摘要，然后停止；不得调用 `create-instance`，存储示例和待确认调用都不得预置 `--yes`。
+- **确认后**：仅当用户明确确认的仍是当前摘要，且模板、部门、表单值、审批人、抄送人、附件和预测路径均未变化时，执行器才可在同一条精确调用中动态追加一个 `--yes` 并执行一次。任一参数变化都回到确认前，不得沿用旧确认。
+
 ## 创建与写后验证
 
 简单模式示例：
@@ -182,7 +187,7 @@ dws oa approval create-instance \
   --approvers-action-type OR \
   --cc-list "<userId3>" \
   --cc-position START \
-  --yes --format json
+  --format json
 ```
 
 只有返回明确成功并包含真实 `processInstanceId` 才能宣称接口已创建。此时禁止再次调用 `create-instance`，随后至少执行：

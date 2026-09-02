@@ -3,6 +3,7 @@
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -351,6 +352,25 @@ class OAPendingReviewTest(unittest.TestCase):
 
 
 class OAReferenceContractTest(unittest.TestCase):
+    def test_create_examples_do_not_embed_confirmation_bypass(self):
+        text = (OA_ROOT / "oa-create.md").read_text(encoding="utf-8")
+        shell_fences = re.findall(r"```bash\n(.*?)```", text, flags=re.DOTALL)
+        create_examples = [fence for fence in shell_fences if "create-instance" in fence]
+
+        self.assertTrue(create_examples)
+        for command in create_examples:
+            self.assertNotIn("--yes", command)
+
+    def test_create_confirmation_is_an_exact_two_phase_gate(self):
+        text = (OA_ROOT / "oa-create.md").read_text(encoding="utf-8")
+        for required in [
+            "确认前禁止调用 `create-instance`",
+            "存储示例和待确认调用都不得预置 `--yes`",
+            "同一条精确调用中动态追加一个 `--yes` 并执行一次",
+            "任一参数变化都回到确认前，不得沿用旧确认",
+        ]:
+            self.assertIn(required, text)
+
     def test_references_only_use_schema_visible_form_search(self):
         text = "\n".join(
             path.read_text(encoding="utf-8")
