@@ -380,6 +380,45 @@ class OAForecastProjectionTest(unittest.TestCase):
         )
         self.assertNotIn("largeUnusedMetadata", json.dumps(projected))
 
+    def test_failed_forecast_exits_nonzero_and_cannot_continue_to_create(self):
+        payload = {
+            "success": True,
+            "dingOpenErrcode": 0,
+            "errorMsg": "ok",
+            "requestId": "request-1",
+            "result": {
+                "forecastSuccess": False,
+                "processCode": "PROC-FAILED",
+                "errorCode": "FORM_VALUE_INVALID",
+                "errorMessage": "金额字段不完整",
+                "workflowActivityRuleVOs": [],
+            },
+        }
+
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "forecast"],
+            input=json.dumps(payload, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        projected = json.loads(completed.stdout)
+
+        self.assertNotEqual(0, completed.returncode)
+        self.assertFalse(projected["success"])
+        self.assertFalse(projected["forecastSuccess"])
+        self.assertEqual("forecast_failed", projected["error"]["reason"])
+        self.assertEqual(
+            "金额字段不完整",
+            projected["error"]["server"]["result"]["errorMessage"],
+        )
+        self.assertEqual(
+            "request-1",
+            projected["error"]["server"]["response"]["requestId"],
+        )
+        self.assertNotIn("nodes", projected)
+        self.assertNotIn("targetSelections", projected)
+
     def test_preserves_error_envelope(self):
         payload = {"error": {"reason": "business_error", "message": "系统错误"}}
         self.assertIs(payload, PREFLIGHT.project_forecast(payload))

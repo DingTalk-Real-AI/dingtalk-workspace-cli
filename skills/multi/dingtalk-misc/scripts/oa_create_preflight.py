@@ -297,6 +297,42 @@ def project_forecast(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(result, dict):
         raise ValueError("forecast response is missing result")
 
+    if result.get("forecastSuccess") is not True:
+        diagnostic_keys = (
+            "dingOpenErrcode",
+            "errorCode",
+            "errorMsg",
+            "errorMessage",
+            "message",
+            "msg",
+            "hint",
+            "failedReason",
+            "failureReason",
+            "failureMessage",
+            "requestId",
+        )
+        server = {}
+        for scope, source in (("response", payload), ("result", result)):
+            details = {
+                key: source[key]
+                for key in diagnostic_keys
+                if key in source and source[key] not in (None, "", [], {})
+            }
+            if details:
+                server[scope] = details
+        error = {
+            "reason": "forecast_failed",
+            "message": "流程预测未成功；不得继续创建审批单",
+        }
+        if server:
+            error["server"] = server
+        return {
+            "success": False,
+            "forecastSuccess": result.get("forecastSuccess"),
+            "processCode": result.get("processCode"),
+            "error": error,
+        }
+
     nodes = []
     selections = []
     unusual_actor = False
