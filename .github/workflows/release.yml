@@ -70,6 +70,10 @@ on:
         description: "Failed attempt number within the exact-tag Release workflow run"
         required: false
         type: string
+      recover_draft_release_id:
+        description: "Optional exact draft GitHub Release database ID left by the failed run"
+        required: false
+        type: string
       recover_release_nonce:
         description: "Unique identifier for this machine-verified recovery request"
         required: false
@@ -110,6 +114,7 @@ jobs:
           RECOVER_COMMIT: ${{ inputs.recover_release_commit }}
           RECOVER_FAILED_RUN_ID: ${{ inputs.recover_failed_run_id }}
           RECOVER_FAILED_RUN_ATTEMPT: ${{ inputs.recover_failed_run_attempt }}
+          RECOVER_DRAFT_RELEASE_ID: ${{ inputs.recover_draft_release_id }}
           RECOVER_NONCE: ${{ inputs.recover_release_nonce }}
           RECOVER_CONFIRMATION: ${{ inputs.recover_release_confirmation }}
           RELEASE_OPERATION: ${{ inputs.release_operation }}
@@ -133,6 +138,7 @@ jobs:
           if test -n "$RECOVER_VERSION" || test -n "$RECOVER_TAG_OBJECT" || \
              test -n "$RECOVER_COMMIT" || test -n "$RECOVER_FAILED_RUN_ID" || \
              test -n "$RECOVER_FAILED_RUN_ATTEMPT" || \
+             test -n "$RECOVER_DRAFT_RELEASE_ID" || \
              test -n "$RECOVER_NONCE" || \
              test -n "$RECOVER_CONFIRMATION"; then recovery=1; fi
           test $((release_flow + npm_repair + gitee_repair + oss_repair + governance + recovery)) -eq 1 || {
@@ -196,6 +202,12 @@ jobs:
               echo "recover_failed_run_attempt must be a positive attempt number" >&2
               exit 1
             }
+            if test -n "$RECOVER_DRAFT_RELEASE_ID"; then
+              printf '%s\n' "$RECOVER_DRAFT_RELEASE_ID" | grep -Eq '^[1-9][0-9]*$' || {
+                echo "recover_draft_release_id must be a positive release database ID" >&2
+                exit 1
+              }
+            fi
             printf '%s\n' "$RECOVER_NONCE" | grep -Eq "^${RECOVER_COMMIT}-[0-9]+-[0-9]+$" || {
               echo "recover_release_nonce must be bound to the release commit" >&2
               exit 1
@@ -1249,6 +1261,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.release-publisher-token.outputs.token }}
           RELEASE_CHANNEL: ${{ needs.release-contract.outputs.channel }}
+          RECOVER_DRAFT_RELEASE_ID: ${{ inputs.recover_draft_release_id }}
         run: |
           set -eu
           expected_prerelease=false
@@ -1365,7 +1378,9 @@ jobs:
               exit 0
             fi
           elif [ "$IS_RECOVERY" = "true" ]; then
-            if release_id="$(find_recovery_draft_release_id)"; then
+            if [ -n "$RECOVER_DRAFT_RELEASE_ID" ]; then
+              release_id="$RECOVER_DRAFT_RELEASE_ID"
+            elif release_id="$(find_recovery_draft_release_id)"; then
               :
             else
               find_status=$?
@@ -1461,7 +1476,7 @@ jobs:
               "repos/$GITHUB_REPOSITORY/releases/$release_id" \
               --jq '[.id, .tag_name] | @tsv'
           )"
-          test "$uploaded_release_state" = "$(printf '%s\\t%s' "$release_id" "$RELEASE_VERSION")" || {
+          test "$uploaded_release_state" = "$(printf '%s\t%s' "$release_id" "$RELEASE_VERSION")" || {
             echo "GitHub Release identity changed during upload: $release_id -> $uploaded_release_state" >&2
             exit 1
           }
