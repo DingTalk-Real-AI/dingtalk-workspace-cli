@@ -421,7 +421,7 @@ func TestContactExtFieldListResultContract(t *testing.T) {
 	}
 
 	// Cover the actual list response shape.
-	wantItemFields := []string{"orgSelfTag", "isSearch", "modifiable", "required", "name", "code", "clientDisplay", "attrType", "multiValue", "deletable", "displayOrder"}
+	wantItemFields := []string{"orgSelfTag", "isSearch", "modifiable", "required", "name", "code", "clientDisplay", "attrType", "desensitizeShow"}
 	for _, key := range wantItemFields {
 		if _, ok := itemProps[key]; !ok {
 			t.Fatalf("result item schema missing %q", key)
@@ -432,8 +432,11 @@ func TestContactExtFieldListResultContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("orgSelfTag property = %#v", itemProps["orgSelfTag"])
 	}
-	if got := orgSelfTag["type"]; got != "integer" {
-		t.Fatalf("orgSelfTag type = %v, want integer", got)
+	// Runtime evidence: get_org_ext_fields returns orgSelfTag as boolean (false for system
+	// preset fields, true for org custom fields), unlike the integer 0/1 used in
+	// create/update/delete request payloads.
+	if got := orgSelfTag["type"]; got != "boolean" {
+		t.Fatalf("orgSelfTag type = %v, want boolean", got)
 	}
 }
 
