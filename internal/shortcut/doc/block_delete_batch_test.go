@@ -2,63 +2,11 @@ package doc
 
 import (
 	"errors"
-	"fmt"
-	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-func TestNormalizeShortcutBlockIDs(t *testing.T) {
-	got, err := normalizeShortcutBlockIDs(" a , b ,a, ")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if strings.Join(got, ",") != "a,b" {
-		t.Fatalf("got %v, want [a b]", got)
-	}
-}
-
-func TestNormalizeShortcutBlockIDsRejectsEmpty(t *testing.T) {
-	if _, err := normalizeShortcutBlockIDs(" , "); err == nil {
-		t.Fatal("blank block-id must be rejected")
-	}
-}
-
-func TestNormalizeShortcutBlockIDsRejectsTooMany(t *testing.T) {
-	ids := make([]string, 0, maxShortcutBlockIDsPerDelete+1)
-	for i := 0; i <= maxShortcutBlockIDsPerDelete; i++ {
-		ids = append(ids, fmt.Sprintf("block%d", i))
-	}
-	_, err := normalizeShortcutBlockIDs(strings.Join(ids, ","))
-	if err == nil {
-		t.Fatalf("%d block ids must be rejected", len(ids))
-	}
-	var appErr *apperrors.Error
-	if !errors.As(err, &appErr) || appErr.Reason != "block_id_too_many" {
-		t.Fatalf("must fail with block_id_too_many, got %#v", err)
-	}
-}
-
-func TestNormalizeShortcutBlockIDsAcceptsExactlyMax(t *testing.T) {
-	ids := make([]string, 0, maxShortcutBlockIDsPerDelete)
-	for i := 0; i < maxShortcutBlockIDsPerDelete; i++ {
-		ids = append(ids, fmt.Sprintf("block%d", i))
-	}
-	got, err := normalizeShortcutBlockIDs(strings.Join(ids, ","))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(got) != maxShortcutBlockIDsPerDelete {
-		t.Fatalf("got %d ids, want %d", len(got), maxShortcutBlockIDsPerDelete)
-	}
-}
-
-// TestUpdateBlockDeleteRejectsInvalidBlockID drives the Update shortcut through
-// executeUpdate's block_delete branch so the guard after
-// normalizeShortcutBlockIDs is exercised. A comma-only --block-id clears the
-// non-empty preflight check but normalizes to zero ids, so the shortcut must
-// return that validation error rather than attempting the delete.
 func TestUpdateBlockDeleteRejectsInvalidBlockID(t *testing.T) {
 	caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
 	err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", ",", "--yes")
@@ -69,4 +17,74 @@ func TestUpdateBlockDeleteRejectsInvalidBlockID(t *testing.T) {
 	if !errors.As(err, &appErr) || appErr.Reason != "block_id_empty" {
 		t.Fatalf("must fail with block_id_empty, got %#v", err)
 	}
+}
+
+func TestUpdateBlockDeleteBatchDeletesAndVerifies(t *testing.T) {
+	remainingBlocks := func(ids ...string) map[string]any {
+		blocks := make([]any, 0, len(ids))
+		for _, id := range ids {
+			blocks = append(blocks, map[string]any{
+				"element": map[string]any{
+					"id":        id,
+					"paragraph": map[string]any{"text": id},
+				},
+			})
+		}
+		return map[string]any{"blocks": blocks}
+	}
+
+	t.Run("success", func(t *testing.T) {
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_document_blocks": {remainingBlocks()},
+		}}
+		if err := runDocCoverage(t, Update, caller,
+			"--node", "n", "--command", "block_delete", "--block-id", "a,b", "--yes"); err != nil {
+			t.Fatalf("batch block delete must succeed: %v", err)
+		}
+		var deleteCalls int
+		for _, call := range caller.history {
+			if call.tool != "delete_document_block" {
+				continue
+			}
+			deleteCalls++
+			if call.params["nodeId"] != "n" {
+				t.Fatalf("unexpected nodeId: %v", call.params["nodeId"])
+			}
+			if call.params["blockId"] != "a,b" {
+				t.Fatalf("unexpected blockId payload: %v", call.params["blockId"])
+			}
+		}
+		if deleteCalls != 1 {
+			t.Fatalf("expected exactly one delete_document_block call, got %d", deleteCalls)
+		}
+	})
+
+	t.Run("verification failure when block remains", func(t *testing.T) {
+		attempts := len(docVerifyDelays) + 1
+		responses := make([]map[string]any, attempts)
+		for i := range responses {
+			responses[i] = remainingBlocks("a")
+		}
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_document_blocks": responses,
+		}}
+		err := runDocCoverage(t, Update, caller,
+			"--node", "n", "--command", "block_delete", "--block-id", "a,b", "--yes")
+		if err == nil {
+			t.Fatal("command must fail when a target block remains after delete")
+		}
+		var appErr *apperrors.Error
+		if !errors.As(err, &appErr) || appErr.Reason != "doc_write_verification_failed" {
+			t.Fatalf("must fail with doc_write_verification_failed, got %#v", err)
+		}
+		var deleteCalls int
+		for _, call := range caller.history {
+			if call.tool == "delete_document_block" {
+				deleteCalls++
+			}
+		}
+		if deleteCalls != 1 {
+			t.Fatalf("expected exactly one delete_document_block call, got %d", deleteCalls)
+		}
+	})
 }

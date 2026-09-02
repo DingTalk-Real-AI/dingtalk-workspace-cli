@@ -2409,7 +2409,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 			if err := validateRequiredFlags(cmd, "block-id"); err != nil {
 				return err
 			}
-			blockIDs, err := normalizeBlockIDs(mustGetFlag(cmd, "block-id"))
+			blockIDs, err := NormalizeBlockIDs(mustGetFlag(cmd, "block-id"))
 			if err != nil {
 				return err
 			}

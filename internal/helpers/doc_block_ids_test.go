@@ -23,7 +23,7 @@ func TestNormalizeBlockIDs(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := normalizeBlockIDs(tc.raw)
+			got, err := NormalizeBlockIDs(tc.raw)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -36,7 +36,7 @@ func TestNormalizeBlockIDs(t *testing.T) {
 
 func TestNormalizeBlockIDsRejectsEmpty(t *testing.T) {
 	for _, raw := range []string{"", "   ", ",,", " , , "} {
-		got, err := normalizeBlockIDs(raw)
+		got, err := NormalizeBlockIDs(raw)
 		if err == nil {
 			t.Fatalf("raw %q must be rejected, got %v", raw, got)
 		}
@@ -48,11 +48,11 @@ func TestNormalizeBlockIDsRejectsEmpty(t *testing.T) {
 }
 
 func TestNormalizeBlockIDsRejectsTooMany(t *testing.T) {
-	ids := make([]string, 0, maxBlockIDsPerDelete+1)
-	for i := 0; i <= maxBlockIDsPerDelete; i++ {
+	ids := make([]string, 0, MaxBlockIDsPerDelete+1)
+	for i := 0; i <= MaxBlockIDsPerDelete; i++ {
 		ids = append(ids, fmt.Sprintf("block%d", i))
 	}
-	_, err := normalizeBlockIDs(strings.Join(ids, ","))
+	_, err := NormalizeBlockIDs(strings.Join(ids, ","))
 	if err == nil {
 		t.Fatalf("%d block ids must be rejected", len(ids))
 	}
@@ -63,21 +63,21 @@ func TestNormalizeBlockIDsRejectsTooMany(t *testing.T) {
 }
 
 func TestNormalizeBlockIDsAcceptsExactlyMax(t *testing.T) {
-	ids := make([]string, 0, maxBlockIDsPerDelete)
-	for i := 0; i < maxBlockIDsPerDelete; i++ {
+	ids := make([]string, 0, MaxBlockIDsPerDelete)
+	for i := 0; i < MaxBlockIDsPerDelete; i++ {
 		ids = append(ids, fmt.Sprintf("block%d", i))
 	}
-	got, err := normalizeBlockIDs(strings.Join(ids, ","))
+	got, err := NormalizeBlockIDs(strings.Join(ids, ","))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != maxBlockIDsPerDelete {
-		t.Fatalf("got %d ids, want %d", len(got), maxBlockIDsPerDelete)
+	if len(got) != MaxBlockIDsPerDelete {
+		t.Fatalf("got %d ids, want %d", len(got), MaxBlockIDsPerDelete)
 	}
 }
 
 // TestDocBlockDeleteCommandRejectsInvalidBlockID drives the `doc block delete`
-// RunE so the guard after normalizeBlockIDs is exercised end to end. A
+// RunE so the guard after NormalizeBlockIDs is exercised end to end. A
 // comma-only value is non-empty, so it clears validateRequiredFlags, but
 // normalizes to zero ids — the command must return that validation error
 // instead of calling delete_document_block.
