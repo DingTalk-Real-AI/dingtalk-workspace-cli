@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -135,6 +138,15 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 	if writeErr != nil {
 		writeStep.Status = "unknown"
 		writeStep.Error = writeErr.Error()
+	}
+	// Match batch updates: a definite input rejection must not be recovered
+	// from an old row that happens to already contain the requested values.
+	if isRecordWriteInputRejection(writeErr) {
+		writeStep.Status = "failed"
+		result.CompletedSteps = append(result.CompletedSteps, writeStep)
+		result.Status = "failed"
+		result.FailedCount = 1
+		return compositeError(result, writeErr, false)
 	}
 	result.CompletedSteps = append(result.CompletedSteps, writeStep)
 
@@ -326,13 +338,21 @@ func verifyRecordCells(record map[string]any, expected map[string]any, fieldType
 	return nil
 }
 
-// recordCellValueEqual accepts typed projections only for fields proven to be
-// selects. Comparison is intentionally asymmetric: a scalar write may read
+// recordCellValueEqual accepts scalar projections only for proven field types.
+// Comparison is intentionally asymmetric: a scalar write may read
 // back as {id,name}, but an object write must never be verified by a scalar
 // response that dropped the requested ID or other identity fields.
 func recordCellValueEqual(got, want any, fieldType string) bool {
 	if reflect.DeepEqual(got, want) {
 		return true
+	}
+	switch strings.ToLower(fieldType) {
+	case "number", "currency", "progress", "rating":
+		actual, actualOK := recordNumericValue(got)
+		expected, expectedOK := recordNumericValue(want)
+		return actualOK && expectedOK && actual.Cmp(expected) == 0
+	case "date":
+		return recordDateValueEqual(got, want)
 	}
 	if strings.EqualFold(fieldType, "singleSelect") {
 		return selectionObjectMatchesScalar(got, want)
@@ -363,18 +383,88 @@ func recordCellValueEqual(got, want any, fieldType string) bool {
 	return true
 }
 
-func recordCellsMayNeedSelectionTypes(record map[string]any, expected map[string]any) bool {
+// recordNumericValue compares JSON decimal representations without float64
+// rounding. Objects, booleans, NaN and non-JSON numeric strings are not numbers.
+func recordNumericValue(value any) (*big.Rat, bool) {
+	raw, err := json.Marshal(value)
+	if text, ok := value.(string); ok {
+		raw = []byte(text)
+	}
+	if err != nil {
+		return nil, false
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var decoded any
+	if !json.Valid(raw) || decoder.Decode(&decoded) != nil {
+		return nil, false
+	}
+	number, ok := decoded.(json.Number)
+	if !ok {
+		return nil, false
+	}
+	text := string(number)
+	// Verification must not allocate huge integers for an untrusted exponent.
+	// Outside this conservative range, leave the value unverified.
+	if len(text) > 128 {
+		return nil, false
+	}
+	if i := strings.IndexAny(text, "eE"); i >= 0 {
+		exponent, err := strconv.Atoi(text[i+1:])
+		if err != nil || exponent < -1000 || exponent > 1000 {
+			return nil, false
+		}
+	}
+	return new(big.Rat).SetString(text)
+}
+
+// Date-only writes read back at local midnight. Preserve the returned calendar
+// date; timestamp writes must match the full instant, not merely the same day.
+func recordDateValueEqual(got, want any) bool {
+	actual, actualOK := got.(string)
+	expected, expectedOK := want.(string)
+	if !actualOK || !expectedOK {
+		return false
+	}
+	readTime, err := time.Parse(time.RFC3339Nano, actual)
+	if err != nil {
+		return false
+	}
+	if _, err := time.Parse("2006-01-02", expected); err == nil {
+		return readTime.Format("2006-01-02") == expected && readTime.Hour() == 0 &&
+			readTime.Minute() == 0 && readTime.Second() == 0 && readTime.Nanosecond() == 0
+	}
+	writeTime, err := time.Parse(time.RFC3339Nano, expected)
+	return err == nil && readTime.Equal(writeTime)
+}
+
+func recordCellsMayNeedFieldTypes(record map[string]any, expected map[string]any) bool {
 	actual, ok := record["cells"].(map[string]any)
 	if !ok {
 		return false
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if exists && !reflect.DeepEqual(got, want) && selectionProjectionShapes(got, want) {
+		if exists && !reflect.DeepEqual(got, want) && (selectionProjectionShapes(got, want) || scalarProjectionShapes(got, want)) {
 			return true
 		}
 	}
 	return false
+}
+
+// Limit schema reads to scalar pairs that could be number/date projections.
+func scalarProjectionShapes(got, want any) bool {
+	actual, ok := got.(string)
+	if !ok {
+		return false
+	}
+	if _, ok := recordNumericValue(got); ok {
+		_, numeric := recordNumericValue(want)
+		return numeric
+	}
+	_, err := time.Parse(time.RFC3339Nano, actual)
+	_, text := want.(string)
+	return err == nil && text
 }
 
 func selectionProjectionShapes(got, want any) bool {
@@ -409,12 +499,12 @@ func resolvedRecordFieldTypeResolver(fields []map[string]any) *recordFieldTypeRe
 
 func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[string]any) error {
 	exactErr := verifyRecordCells(record, expected, nil)
-	if exactErr == nil || !recordCellsMayNeedSelectionTypes(record, expected) {
+	if exactErr == nil || !recordCellsMayNeedFieldTypes(record, expected) {
 		return exactErr
 	}
 	fieldTypes, err := r.resolve()
 	if err != nil {
-		return fmt.Errorf("%v; cannot load field types for select verification: %w", exactErr, err)
+		return fmt.Errorf("%v; cannot load field types for record verification: %w", exactErr, err)
 	}
 	return verifyRecordCells(record, expected, fieldTypes)
 }

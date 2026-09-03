@@ -23,6 +23,9 @@ import (
 func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command string, args ...string) (string, error) {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	helpers.GetFormatter().SetWriters(stdout, stderr)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
 	root.PersistentFlags().Bool("dry-run", false, "")
@@ -30,9 +33,8 @@ func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command str
 	root.AddCommand(shortcut.Commands()...)
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
-	stdout := &bytes.Buffer{}
 	root.SetOut(stdout)
-	root.SetErr(&bytes.Buffer{})
+	root.SetErr(stderr)
 	root.SetArgs(append([]string{"aitable", command}, args...))
 	executed, err := root.ExecuteC()
 	if err == nil && output.UsesUnifiedResult(executed) {
@@ -80,49 +82,87 @@ func TestCrossPlatformCoverageBaseSchemaSnapshotE2E(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testing.T) {
-	t.Run("verified copy from real baseId response and nodeId target", func(t *testing.T) {
+	t.Run("source identity is never renamed for ID or URL inputs", func(t *testing.T) {
+		for _, source := range []string{"source", "https://alidocs.dingtalk.com/i/nodes/source", "https://alidocs.dingtalk.com/i/nodes/%73ource/?utm_source=test"} {
+			for _, response := range []string{`{"newBaseId":"source"}`, `{"data":{"baseId":"source"}}`, `{"baseId":"source"}`} {
+				caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: response}}}
+				_, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", source, "--new-name", "copy", "--yes")
+				if err == nil || len(caller.calls) != 1 || caller.calls[0].tool != "copy_base" {
+					t.Fatalf("source=%q response=%s err=%v calls=%#v", source, response, err, caller.calls)
+				}
+			}
+		}
+	})
+
+	t.Run("verified copy delegates nodeId target to aitable", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
 			{text: `{"data":{"baseId":"new-base"}}`},
 			{text: `{"data":{"baseId":"new-base","tables":[]}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		if err != nil || !strings.Contains(out, `"newBaseId": "new-base"`) || len(caller.calls) != 3 || caller.calls[0].product != "drive" || caller.calls[0].tool != "get_file_info" || caller.calls[2].tool != "get_base" {
+		if err != nil || !strings.Contains(out, `"newBaseId": "new-base"`) || len(caller.calls) != 2 || caller.calls[0].product != "aitable" || caller.calls[0].tool != "copy_base" || caller.calls[1].tool != "get_base" {
 			t.Fatalf("base copy = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		if got := caller.calls[0].args["targetFolderId"]; got != "folder" {
+			t.Fatalf("targetFolderId = %#v", got)
+		}
+	})
+
+	t.Run("omitted target uses source workspace root", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"baseId":"new-base"}}`},
+			{text: `{"data":{"baseId":"new-base","tables":[]}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--yes")
+		if err != nil || !strings.Contains(out, `"target": "source_workspace_root"`) || len(caller.calls) != 2 {
+			t.Fatalf("root copy = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		if _, exists := caller.calls[0].args["targetFolderId"]; exists {
+			t.Fatalf("omitted target leaked into copy_base: %#v", caller.calls[0].args)
+		}
+	})
+
+	t.Run("base and target URLs pass through unchanged", func(t *testing.T) {
+		const baseURL = "https://alidocs.dingtalk.com/i/nodes/source"
+		const folderURL = "https://alidocs.dingtalk.com/i/desktop/folders/folder"
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"baseId":"new-base"}}`},
+			{text: `{"data":{"baseId":"new-base","tables":[]}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", baseURL, "--target-folder-id", folderURL, "--yes")
+		if err != nil || out == "" || len(caller.calls) != 2 || caller.calls[0].args["baseId"] != baseURL || caller.calls[0].args["targetFolderId"] != folderURL {
+			t.Fatalf("URL copy = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
 	})
 
 	t.Run("verified copy with one-step rename", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
 			{text: `{"data":{"baseId":"new-base"}}`},
 			{text: `{"success":true}`},
 			{text: `{"data":{"baseId":"new-base","baseName":"副本名称","tables":[]}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--only-struct", "--new-name", "副本名称", "--yes")
-		if err != nil || !strings.Contains(out, `"baseName": "副本名称"`) || len(caller.calls) != 4 || caller.calls[2].tool != "update_base" || caller.calls[3].tool != "get_base" {
+		if err != nil || !strings.Contains(out, `"baseName": "副本名称"`) || len(caller.calls) != 3 || caller.calls[1].tool != "update_base" || caller.calls[2].tool != "get_base" {
 			t.Fatalf("base copy rename = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
-		if got := caller.calls[2].args["newBaseName"]; got != "副本名称" {
+		if got := caller.calls[1].args["newBaseName"]; got != "副本名称" {
 			t.Fatalf("rename newBaseName = %#v", got)
 		}
 	})
 
 	t.Run("verified copy accepts top-level baseId", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
 			{text: `{"baseId":"new-base"}`},
 			{text: `{"data":{"baseId":"new-base","tables":[]}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		if err != nil || !strings.Contains(out, `"newBaseId": "new-base"`) || len(caller.calls) != 3 {
+		if err != nil || !strings.Contains(out, `"newBaseId": "new-base"`) || len(caller.calls) != 2 {
 			t.Fatalf("top-level baseId copy = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
 	})
 
 	t.Run("rename error recovered by exact read-back", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
 			{text: `{"data":{"baseId":"new-base"}}`},
 			{err: errors.New("rename response lost")},
 			{text: `{"data":{"baseId":"new-base","baseName":"副本名称","tables":[]}}`},
@@ -134,86 +174,29 @@ func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testin
 	})
 
 	t.Run("missing new ID is unknown without read-back", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"fileId":"folder","type":"folder"}}`},
-			{text: `{"success":true}`},
-		}}
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"success":true}`}}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
 		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 2 || !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" || typed.Retryable {
+		if err == nil || out != "" || len(caller.calls) != 1 || !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" || typed.Retryable {
 			t.Fatalf("missing newBaseId = output:%q err:%#v calls:%#v", out, err, caller.calls)
 		}
 	})
 
-	t.Run("explicit downstream target rejection is stable and not retryable", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"fileId":"folder","type":"folder"}}`},
-			{err: errors.New("Invalid target folder ID")},
-		}}
+	t.Run("downstream target rejection remains non-retryable unknown", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{err: errors.New("Invalid target folder ID")}}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
 		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 2 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable || typed.Details["terminal"] != true || typed.Details["nextAction"] != "report_unsupported" {
+		if err == nil || out != "" || len(caller.calls) != 1 || !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" || typed.Retryable {
 			t.Fatalf("rejected target = output:%q err:%#v calls:%#v", out, err, caller.calls)
 		}
 	})
-
-	t.Run("rejects a non-folder target before write", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"fileId":"file-1","type":"FILE"}}`}}}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "file-1", "--yes")
-		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 1 || !errors.As(err, &typed) || typed.Reason != "target_wrong_type" || typed.Retryable || typed.ExecutionStarted == nil || *typed.ExecutionStarted {
-			t.Fatalf("wrong target type = output:%q err:%#v calls:%#v", out, err, caller.calls)
-		}
-	})
-
-	t.Run("rejects target metadata without a supported type", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"fileId":"folder"}}`}}}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 1 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable {
-			t.Fatalf("unsupported target metadata = output:%q err:%#v calls:%#v", out, err, caller.calls)
-		}
-	})
-
-	t.Run("rejects target metadata for a different node", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"nodeId":"other-folder","type":"folder"}}`}}}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 1 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable {
-			t.Fatalf("different target metadata = output:%q err:%#v calls:%#v", out, err, caller.calls)
-		}
-	})
-
-	t.Run("rejects URL target before transport", func(t *testing.T) {
-		caller := &upsertByKeyCaller{}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "https://example.test/folder", "--yes")
-		if err == nil || out != "" || len(caller.calls) != 0 {
-			t.Fatalf("URL target = output:%q err:%v calls:%#v", out, err, caller.calls)
-		}
-	})
-
-	t.Run("rejects pure numeric dentryId before transport", func(t *testing.T) {
-		caller := &upsertByKeyCaller{}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "123456789", "--yes")
-		if err == nil || out != "" || len(caller.calls) != 0 {
-			t.Fatalf("numeric target = output:%q err:%v calls:%#v", out, err, caller.calls)
-		}
-	})
-
 }
 
 func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
-	t.Run("invalid source", func(t *testing.T) {
-		out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{}, "+base-copy", "--base-id", "bad/id", "--target-folder-id", "folder", "--yes")
-		if err == nil || out != "" {
-			t.Fatalf("invalid source = output:%q err:%v", out, err)
-		}
-	})
-
 	t.Run("dry run", func(t *testing.T) {
 		caller := &upsertByKeyCaller{dryRun: true}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--dry-run")
-		if err != nil || len(caller.calls) != 0 || !strings.Contains(out, `"status": "planned"`) {
+		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--dry-run")
+		if err != nil || len(caller.calls) != 0 || !strings.Contains(out, `"status": "planned"`) || strings.Contains(out, "get_file_info") {
 			t.Fatalf("dry run = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
 	})
@@ -228,21 +211,10 @@ func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
 		})
 	}
 
-	t.Run("target lookup error", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{err: context.Canceled}}}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		if err == nil || !strings.Contains(err.Error(), context.Canceled.Error()) || out != "" || len(caller.calls) != 1 {
-			t.Fatalf("target error = output:%q err:%v calls:%#v", out, err, caller.calls)
-		}
-	})
-
 	t.Run("generic copy error is unknown", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"fileId":"folder","type":"folder"}}`},
-			{err: errors.New("transport failed")},
-		}}
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{err: errors.New("transport failed")}}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		if err == nil || out != "" || len(caller.calls) != 2 {
+		if err == nil || out != "" || len(caller.calls) != 1 {
 			t.Fatalf("copy error = output:%q err:%v", out, err)
 		}
 	})
@@ -258,12 +230,11 @@ func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
 	for _, tc := range readBackCases {
 		t.Run("readback "+tc.name, func(t *testing.T) {
 			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-				{text: `{"data":{"fileId":"folder","type":"folder"}}`},
 				{text: `{"newBaseId":"new-base"}`},
 				tc.step,
 			}}
 			out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-			if err == nil || out != "" || len(caller.calls) != 3 {
+			if err == nil || out != "" || len(caller.calls) != 2 {
 				t.Fatalf("readback %s = output:%q err:%v", tc.name, out, err)
 			}
 		})
@@ -278,14 +249,13 @@ func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-				{text: `{"data":{"fileId":"folder","type":"folder"}}`},
 				{text: `{"newBaseId":"new-base"}`},
 				{err: errors.New("rename failed")},
 				{text: tc.readBack},
 			}}
 			out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--new-name", "expected", "--yes")
 			var typed *apperrors.Error
-			if err == nil || out != "" || len(caller.calls) != 4 || !errors.As(err, &typed) {
+			if err == nil || out != "" || len(caller.calls) != 3 || !errors.As(err, &typed) {
 				t.Fatalf("%s = output:%q err:%v calls:%#v", tc.name, out, err, caller.calls)
 			}
 			result, ok := typed.Details["result"].(compositeResult)
@@ -299,9 +269,6 @@ func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
 		if validCompositeOpaqueID(value) {
 			t.Errorf("validCompositeOpaqueID(%q) = true", value)
 		}
-	}
-	if pureNumericID("") || pureNumericID("123a") || !pureNumericID("123") {
-		t.Fatal("pureNumericID edge mismatch")
 	}
 }
 
@@ -479,6 +446,17 @@ func TestCrossPlatformCoverageBaseBootstrapExecuteRejectsInvalidTablesE2E(t *tes
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || len(typed.Actions) != 1 || len(typed.AvailableFlags) != 4 {
 		t.Fatalf("invalid bootstrap recovery = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageBaseBootstrapRejectsUnknownFieldPropertiesBeforeMCP(t *testing.T) {
+	caller := &upsertByKeyCaller{}
+	out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap",
+		"--name", "Project",
+		"--tables", `[{"name":"任务","fields":[{"fieldName":"标题","type":"text","property":{}}]}]`,
+		"--yes")
+	if out != "" || err == nil || !strings.Contains(err.Error(), `未知属性 "property"`) || len(caller.calls) != 0 {
+		t.Fatalf("strict nested field validation = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 }
 

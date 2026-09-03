@@ -423,6 +423,12 @@ func TestCrossPlatformCoverageRecordQueryDryRunRejectsInvalidLocalPlanE2E(t *tes
 			extra: []string{"--record-ids", strings.Join(recordIDFixtures(recordBatchSize+1), ","), "--dry-run"},
 			want:  "at most 100 unique IDs",
 		},
+		{
+			name:  "view date Scheme is not a record query filter",
+			limit: 100,
+			extra: []string{"--filters", `{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":0}]}]}`, "--dry-run"},
+			want:  "relative/exact objects belong to view update filter",
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			caller := &upsertByKeyCaller{}
@@ -865,6 +871,84 @@ func TestCrossPlatformCoverageRecordUpsertRequiresCreatedIDsAndReadBackE2E(t *te
 	}
 }
 
+func TestCrossPlatformCoverageRecordUpsertWaitsForEventuallyConsistentReadBackE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
+	records := []map[string]any{{"cells": map[string]any{"fldKey": "new"}}}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"createdRecords":[{"recordId":"created"}]}}`},
+		{text: `{"data":{"records":[]}}`},
+		{text: recordListJSON(t, []map[string]any{{"recordId": "created", "cells": map[string]any{"fldKey": "new"}}})},
+	}}
+
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", records)
+	if err != nil || !bytes.Contains([]byte(out), []byte(`"verifiedCount": 1`)) {
+		t.Fatalf("eventually consistent upsert = output:%q err:%v", out, err)
+	}
+	if len(caller.calls) != 3 || caller.calls[0].tool != "record_upsert" || caller.calls[1].tool != "query_records" || caller.calls[2].tool != "query_records" {
+		t.Fatalf("eventually consistent call sequence = %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertPendingReadBackNeverReplaysWriteE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
+	caller := &upsertByKeyCaller{}
+	caller.callFn = func(_ int, _, tool string, _ map[string]any) (string, error) {
+		if tool == "record_upsert" {
+			return `{"data":{"createdRecords":[{"recordId":"created"}]}}`, nil
+		}
+		return `{"data":{"records":[]}}`, nil
+	}
+
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", []map[string]any{{"cells": map[string]any{"fldKey": "new"}}})
+	if err == nil || out != "" {
+		t.Fatalf("pending read-back = output:%q err:%v", out, err)
+	}
+	writeCalls, readCalls := 0, 0
+	for _, call := range caller.calls {
+		switch call.tool {
+		case "record_upsert":
+			writeCalls++
+		case "query_records":
+			readCalls++
+		}
+	}
+	if writeCalls != 1 || readCalls != 1+len(recordUpsertReadbackDelays) {
+		t.Fatalf("pending read-back calls = writes:%d reads:%d all:%#v", writeCalls, readCalls, caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Retryable || typed.Reason != "aitable_composite_unknown" {
+		t.Fatalf("pending read-back error = %#v", err)
+	}
+	result := typed.Details["result"].(compositeResult)
+	if result.Verification["status"] != "pending" || result.NextCommand == "" || len(result.KnownEffects) != 1 {
+		t.Fatalf("pending read-back result = %#v", result)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertPermanentReadErrorDoesNotBecomePendingE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"createdRecords":[{"recordId":"created"}]}}`},
+		{err: apperrors.NewAuth("token expired", apperrors.WithReason("token_expired"))},
+	}}
+
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", []map[string]any{{"cells": map[string]any{"fldKey": "new"}}})
+	if err == nil || out != "" {
+		t.Fatalf("permanent read error = output:%q err:%v", out, err)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("permanent read error was retried as eventual consistency: %#v", caller.calls)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("permanent read error lost structured envelope: %#v", err)
+	}
+	result := typed.Details["result"].(compositeResult)
+	if result.Verification["status"] != "failed" {
+		t.Fatalf("permanent read error verification = %#v, want failed", result.Verification)
+	}
+}
+
 func TestCrossPlatformCoverageRecordBatchDryRunPlansWithoutWritesE2E(t *testing.T) {
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{dryRun: true}
@@ -931,6 +1015,11 @@ func TestCrossPlatformCoverageRecordDeleteAutoChunksAndProvesAbsenceE2E(t *testi
 	}
 	if len(caller.calls) != 14 || caller.calls[0].tool != "query_records" || caller.calls[6].tool != "delete_records" || caller.calls[12].tool != "delete_records" {
 		t.Fatalf("delete call sequence = %#v", caller.calls)
+	}
+	for _, index := range []int{6, 12} {
+		if confirm, ok := caller.calls[index].args["confirm"].(bool); !ok || !confirm {
+			t.Fatalf("delete batch %d confirm = %#v", index, caller.calls[index].args["confirm"])
+		}
 	}
 }
 

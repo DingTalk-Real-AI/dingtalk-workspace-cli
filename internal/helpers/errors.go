@@ -139,18 +139,10 @@ func WrapErrorWithOperation(err error, operation string) error {
 		return err
 	}
 	// Framework-classified errors already carry stable category/reason/actions.
-	// Preserve that contract so helper shortcuts render the same recovery
-	// guidance as their underlying direct leaf commands instead of reclassifying
-	// typed failures from localized message text.
-	var typed *apperrors.Error
-	if errors.As(err, &typed) {
-		return err
-	}
-	// 框架确认门禁错误（deferred ConfirmSafety 从 CallTool 返回）必须原样透传：
-	// “加 --yes 重试”的语义只能由 reason=confirmation_required 表达，文本分类会
-	// 误路由（commandPath 含 "permission" 的命令会被判成 AUTH_PERMISSION_DENIED，
-	// 其余则丢失 reason 退化为 UNCLASSIFIED）。
-	if apperrors.IsConfirmationRequired(err) {
+	// Preserve the original value and wrapper chain so errors.Is/As semantics
+	// remain intact. Concrete operations must be attached where errors originate.
+	var appErr *apperrors.Error
+	if errors.As(err, &appErr) {
 		return err
 	}
 	msg := err.Error()
@@ -390,11 +382,10 @@ func WrapErrorWithOperation(err error, operation string) error {
 	}
 
 	return &CLIError{
-		Code:       CodeUnclassified,
-		Message:    msg,
-		Suggestion: "Use --verbose for detailed error logs",
-		Operation:  operation,
-		Cause:      err,
+		Code:      CodeUnclassified,
+		Message:   msg,
+		Operation: operation,
+		Cause:     err,
 	}
 }
 

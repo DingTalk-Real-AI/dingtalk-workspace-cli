@@ -60,6 +60,7 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"aitable\u0000+form-share-update":               {},
 		"aitable\u0000+form-update":                     {},
 		"aitable\u0000+import-data":                     {},
+		"aitable\u0000+import-file":                     {},
 		"aitable\u0000+import-upload":                   {},
 		"aitable\u0000+list-tables":                     {},
 		"aitable\u0000+record-bulk-patch":               {},

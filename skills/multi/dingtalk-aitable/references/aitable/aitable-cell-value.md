@@ -194,12 +194,13 @@
 
 ### group（群组）
 
-**写入**：对象数组，每项含 `cid`
+**写入**：对象数组，每项含 `cid` 或 `openConversationId`，二选一
 ```json
 {"fldGroupId": [{"cid": "74577067501"}]}
+{"fldGroupId": [{"openConversationId": "cidxxxxxxxx"}]}
 ```
 
-> ⚠️ key 是 **`cid`**，不是 `openConversationId`
+> MCP 会把 `openConversationId` 转换为内部 `cid`；不要在同一项中同时提供两者。
 
 **读取**：对象数组
 ```json
@@ -341,6 +342,6 @@
 | progress 写入 `75` | 写入 `0.75`（范围 0~1） |
 | attachment 直接传文件路径或图片 URL | 必须先 `attachment upload` 获取 fileToken，再用 fileToken 写入（直传 URL 会超时） |
 | user 字段传用户名字符串 | 传对象数组 `[{"userId":"...", "corpId":"..."}]` |
-| group 字段用 `openConversationId` | 用 `cid` |
+| group 字段同时传 `cid` 和 `openConversationId` | 每项只传其中一个，转换由 MCP 负责 |
 | singleSelect 传 option id 字符串 | 传 name 字符串或 `{"id":"...", "name":"..."}` 对象 |
 | 对只读字段写入值 | 不传该字段，由系统自动填充 |

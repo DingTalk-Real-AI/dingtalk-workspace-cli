@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-27T10:19:25.811119",
-  "count": 439,
+  "generated_at": "2026-09-03T19:26:14.014263",
+  "count": 440,
   "results": [
     {
       "suite": "semantic",
@@ -129,7 +129,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "统一完整复制与仅结构复制意图，并把目标目录映射为可执行参数。",
+      "semantic_delta": "统一完整复制与仅结构复制意图；目标目录可省略，也可将节点或文件夹 URL 原样交给 MCP 解析。",
       "availability": "available"
     },
     {
@@ -389,7 +389,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "schema_leaf",
-      "semantic_delta": "批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。",
+      "semantic_delta": "批量查询数据源同步任务状态；仅 RUNNING 继续轮询，并逐项处理失败、未找到和未知状态。",
       "availability": "available"
     },
     {
@@ -519,7 +519,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "统一开启或关闭指定视图的分享表单。",
+      "semantic_delta": "将分享开关、授权范围、有效期、提交限制和通知配置转换为类型正确的部分更新。",
       "availability": "available"
     },
     {
@@ -540,6 +540,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "统一将已上传文件导入新表或追加到已有表的目标语义。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+import-file",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在 DWS 内完成本地文件上传准备、签名 URL 直传和同一 importId 导入或续等闭环；不向调用方暴露签名 URL。",
       "availability": "available"
     },
     {

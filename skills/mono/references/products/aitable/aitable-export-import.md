@@ -30,6 +30,17 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 > **无需手动解析 CSV/Excel 再逐条 record create**，效率极低且容易出错。
 
+先展示来源、目标、字段映射、异常处理和回退方式，获得这次迁移的专门确认。使用 `+import-file`，由 DWS 在进程内完成申请、PUT 和触发，不向调用方暴露签名 URL：
+
+```bash
+dws aitable +import-file --base-id <BASE_ID> --file data.xlsx --yes
+
+# 只在当前 Runtime Schema/Help 明确允许同 importId 续等时使用
+dws aitable +import-file --resume-import-id <IMPORT_ID> --timeout 30 --yes
+```
+
+`+import-file` 兼容统一 `ok/outcome`、旧 `status` 和 boolean `success` 信封，对嵌套错误中的上传地址和凭据递归脱敏。超时保留 `importId` 并返回 `unknown`；必须先查目标表真实状态，不得重新申请上传地址、重复 PUT 或更换 importId。下方手动命令仅用于诊断三段协议。
+
 ```bash
 # 第 1 步：申请上传凭证
 dws aitable import upload --base-id <BASE_ID> \
@@ -54,7 +65,7 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 |------|------|------|
 | 申请上传凭证 | `import upload --base-id <ID> --file-name <名称> --file-size <字节>` | `--file-size` 必须与实际文件大小一致 |
 | 上传文件 | HTTP PUT（curl 等） | **必须** 带 `-H "Content-Type:"` 将 Content-Type 设为空，否则 OSS 返回 403 |
-| 触发导入 | `import data --import-id <ID> [--table-id <TABLE_ID>]` | 同步等待，大多一次调用即返回结果；超时可用相同 importId 重试 |
+| 触发导入 | `import data --import-id <ID> [--table-id <TABLE_ID>]` | 同步等待；超时先查真实状态，仅在当前契约允许时用相同 importId 续等，不重新提交 |
 
 ### import data 参数
 
@@ -120,24 +131,24 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 
 用户给文件让导入 AI 表格时，路径选择决定成败：
 
-> ⚠️ **`import upload` 没有 `--file` flag**（传了会报 unknown flag）。它只申请上传凭证，必填 `--file-name` + `--file-size`，拿到 `uploadUrl` 后要**自己 curl PUT 上传文件**（Content-Type 留空，见上文三步流程），再 `import data`。想省事直接用 `aitable_import_via_task.py` 脚本，它把这三步包好了。
+> ⚠️ **`import upload` 没有 `--file` flag**（传了会报 unknown flag）。它只申请上传凭证，必填 `--file-name` + `--file-size`，拿到 `uploadUrl` 后要**自己 curl PUT 上传文件**（Content-Type 留空，见上文三步流程），再 `import data`。推荐在获得迁移专门确认后使用 `dws aitable +import-file --base-id <baseId> --file <file> --yes`，由 DWS 完成这三步。
 
 | 用户原话 | 链路 | 命令 / 脚本 | 行为 |
 |---------|------|------------|------|
-| "把这个 Excel 导入到 AI 表格"（无指定目标表） | **文件导入任务** | `python scripts/aitable_import_via_task.py <baseId> <file>`（推荐）或手动三步 `import upload --file-name x.xlsx --file-size <字节>` → curl PUT → `import data --import-id <ID>` | 服务端解析文件，**新建数据表**，自动识别表头 |
+| "把这个 Excel 导入到 AI 表格"（无指定目标表） | **文件导入任务** | 获得迁移专门确认后执行 `dws aitable +import-file --base-id <baseId> --file <file> --yes`（推荐）；手动三步仅用于诊断 | 服务端解析文件，**新建数据表**，自动识别表头 |
 | "把这个 Excel 导入新表 / 自动建表" | 同上 | 同上 | 同上 |
 | "把这批记录追加到已有的『成员表』里" | **记录批量写入** | `python scripts/import_records.py <baseId> <tableId> <file>` | 走 `record create`，**写入已有 tableId**，需要字段名匹配 |
 | "Excel 列名和表字段对不上但要追加" | 文件导入 + 追加 + 字段映射 | 三步导入后 `import data --import-id <ID> --table-id <TBL> --field-mapping '{"目标":"源"}'` | 服务端按映射追加 |
 
 ## 大表 / 长任务超时续等
 
-单次等待窗口很短：`export data` 只有 `--timeout-ms`（默认且**上限 30000 = 30 秒**，没有 `--timeout-sec`，传了会报 unknown flag）；`import data` 用 `--timeout`（秒，默认且推荐最大值 30）。窗口内没跑完，命令会返回 `taskId` / `importId`，用同命令带 ID 反复续等即可：
+单次等待窗口很短：`export data` 只有 `--timeout-ms`（默认且**上限 30000 = 30 秒**，没有 `--timeout-sec`，传了会报 unknown flag）；`import data` 用 `--timeout`（秒，默认且推荐最大值 30）。窗口内没跑完，命令会返回 `taskId` / `importId`。此时先查询目标任务的真实状态；仅当当前 Runtime Schema / Help 明确把“带原 ID 再调用”定义为续等时，才复用原 ID 继续等待，不要重新 prepare、重复 PUT 或更换 ID：
 
 ```bash
 # 续等导出：拿到 downloadUrl 后再 curl 下载（见下方警告）
 dws aitable export data --base-id <B> --task-id <ID> --timeout-ms 30000
 
-# 续等导入
+# 确认当前运行时支持续等后，才使用原 importId
 dws aitable import data --import-id <ID>
 ```
 

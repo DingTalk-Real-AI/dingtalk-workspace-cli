@@ -7,12 +7,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
+
+func disableRecordReadbackWait(t *testing.T) {
+	t.Helper()
+	testseam.Swap(t, &recordReadbackWait, func(context.Context, time.Duration) error { return nil })
+}
 
 func TestCrossPlatformCoverageRecordObjectAndIDValidation(t *testing.T) {
 	tooMany := make([]any, maxCompositeRecordRun+1)
@@ -181,12 +190,12 @@ func TestCrossPlatformCoverageRecordPrimaryDocPreflightAndNormalizationE2E(t *te
 			{text: `{"data":{"nodeId":null}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
-		if err != nil || !strings.Contains(out, `"status": "unassociated"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_primary_doc" {
+		if err != nil || !strings.Contains(out, `"status": "unassociated"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_cell_doc" {
 			t.Fatalf("unassociated primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
 	})
 
-	t.Run("known helper no-record error is unassociated", func(t *testing.T) {
+	t.Run("known public tool no-record error is unassociated", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
 			{text: `{"records":[{"recordId":"r1","cells":{}}]}`},
@@ -198,15 +207,68 @@ func TestCrossPlatformCoverageRecordPrimaryDocPreflightAndNormalizationE2E(t *te
 		}
 	})
 
-	t.Run("associated doc is resolved through helper", func(t *testing.T) {
+	t.Run("associated doc is resolved through public tool", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
 			{text: `{"records":[{"recordId":"r1","cells":{"primary":{"associated":true}}}]}`},
 			{text: `{"data":{"nodeId":"node-1"}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
-		if err != nil || !strings.Contains(out, `"nodeId": "node-1"`) || !strings.Contains(out, `"exists": true`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_primary_doc" {
+		if err != nil || !strings.Contains(out, `"nodeId": "node-1"`) || !strings.Contains(out, `"exists": true`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_cell_doc" {
 			t.Fatalf("associated primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("missing preferred tool falls back to production alias", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{"primary":{"associated":true}}}]}`},
+			{err: apperrors.NewAPI("tool call failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "TOOL_NOT_FOUND"}))},
+			{text: `{"data":{"dentryUuid":"node-production"}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"nodeId": "node-production"`) || len(caller.calls) != 4 {
+			t.Fatalf("primary doc fallback = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		if caller.calls[2].tool != "get_cell_doc" || caller.calls[3].tool != "get_base_primary_doc_id" {
+			t.Fatalf("primary doc fallback tools = %#v", caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoveragePublicCellDocAndViewFilterRoutingE2E(t *testing.T) {
+	t.Run("base primary doc compatibility command uses public tool", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"exists":false}}`}}}
+		_, err := runAITableCompositeCLI(t, caller, "+base-get-primary-doc-id", "--base-id", "base", "--table-id", "table", "--record-id", "record")
+		if err != nil || len(caller.calls) != 1 || caller.calls[0].product != "aitable" || caller.calls[0].tool != "get_cell_doc" {
+			t.Fatalf("base primary doc = err:%v calls:%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("base primary doc command falls back to production alias", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{err: errors.New("unknown tool get_cell_doc")},
+			{text: `{"data":{"dentryUuid":"node"}}`},
+		}}
+		_, err := runAITableCompositeCLI(t, caller, "+base-get-primary-doc-id", "--base-id", "base", "--table-id", "table", "--record-id", "record")
+		if err != nil || len(caller.calls) != 2 || caller.calls[1].tool != "get_base_primary_doc_id" {
+			t.Fatalf("base primary doc fallback = err:%v calls:%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("record primary doc create uses public tool", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"nodeId":"node"}}`}}}
+		_, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-create", "--base-id", "base", "--table-id", "table", "--field-id", "field", "--record-id", "record", "--doc-name", "文档", "--template-doc-id", "template", "--yes")
+		if err != nil || len(caller.calls) != 1 || caller.calls[0].product != "aitable" || caller.calls[0].tool != "create_cell_doc" || caller.calls[0].args["docName"] != "文档" || caller.calls[0].args["templateDocId"] != "template" {
+			t.Fatalf("record primary doc create = err:%v calls:%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("generic view update rejects filter before MCP", func(t *testing.T) {
+		caller := &upsertByKeyCaller{}
+		_, err := runAITableCompositeCLI(t, caller, "+view-update", "--base-id", "base", "--table-id", "table", "--view-id", "view", "--config", `{"filter":"bad"}`, "--yes")
+		if err == nil || !strings.Contains(err.Error(), "view update filter") || len(caller.calls) != 0 {
+			t.Fatalf("generic filter route = err:%v calls:%#v", err, caller.calls)
 		}
 	})
 }
@@ -221,8 +283,8 @@ func TestCrossPlatformCoverageRecordPrimaryDocFailureAndShapeEdgesE2E(t *testing
 		{name: "primary field missing id", steps: []upsertByKeyStep{{text: `{"fields":[{"type":"primaryDoc"}]}`}}},
 		{name: "record query error", steps: []upsertByKeyStep{{text: `{"fields":[]}`}, {err: context.DeadlineExceeded}}},
 		{name: "wrong record identity", steps: []upsertByKeyStep{{text: `{"fields":[]}`}, {text: `{"records":[{"recordId":"other"}]}`}}},
-		{name: "helper unknown error", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {err: errors.New("permission denied")}}},
-		{name: "helper missing node", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {text: `{"data":{"message":"ok"}}`}}},
+		{name: "public tool unknown error", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {err: errors.New("permission denied")}}},
+		{name: "public tool missing node", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {text: `{"data":{"message":"ok"}}`}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -282,6 +344,7 @@ func TestCrossPlatformCoverageRecordDeleteRejectsMalformedPreflightRecordsE2E(t 
 }
 
 func TestCrossPlatformCoverageRecordBatchVerificationEdgesE2E(t *testing.T) {
+	disableRecordReadbackWait(t)
 	record := []map[string]any{{"recordId": "r1", "cells": map[string]any{"f": "new"}}}
 
 	t.Run("read-back query error", func(t *testing.T) {
@@ -402,11 +465,74 @@ func TestCrossPlatformCoverageRecordBatchPureHelpers(t *testing.T) {
 	if recordCellValueEqual([]any{"one"}, []any{"one", "two"}, "multipleSelect") {
 		t.Fatal("recordCellValueEqual matched selection lists with different lengths")
 	}
-	if recordCellsMayNeedSelectionTypes(map[string]any{}, map[string]any{"f": "value"}) {
-		t.Fatal("recordCellsMayNeedSelectionTypes accepted a record without cells")
+	if recordCellsMayNeedFieldTypes(map[string]any{}, map[string]any{"f": "value"}) {
+		t.Fatal("recordCellsMayNeedFieldTypes accepted a record without cells")
 	}
 	if !selectionProjectionShapes("value", map[string]any{"id": "option-id", "name": "value"}) {
 		t.Fatal("selectionProjectionShapes missed scalar read-back for an object write")
+	}
+}
+
+func TestCrossPlatformCoverageRecordReadbackPendingAndWaitBranches(t *testing.T) {
+	if pendingRecordReadback(nil) != nil {
+		t.Fatal("nil cause must stay nil")
+	}
+	cause := errors.New("pending")
+	pending := pendingRecordReadback(cause)
+	if pending.Error() != "pending" || !errors.Is(pending, cause) || !isPendingRecordReadback(pending) || isPendingRecordReadback(cause) {
+		t.Fatalf("pending wrapper = %#v", pending)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := recordReadbackWait(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait = %v", err)
+	}
+	if err := recordReadbackWait(context.Background(), 0); err != nil {
+		t.Fatalf("zero wait = %v", err)
+	}
+
+	testseam.Swap(t, &recordReadbackWait, func(context.Context, time.Duration) error { return context.DeadlineExceeded })
+	verify := func(*shortcut.RuntimeContext, string, string, []map[string]any, map[string]any) (map[string]any, error) {
+		return nil, pendingRecordReadback(errors.New("not visible"))
+	}
+	if _, err := verifyRecordBatchEventually(nil, "record_upsert", "b", "t", nil, nil, verify); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("retry wait error = %v", err)
+	}
+	if got := uniqueStrings([]string{"", " a ", "a", "b"}); strings.Join(got, ",") != "a,b" {
+		t.Fatalf("uniqueStrings() = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryDateFilterValidationBranches(t *testing.T) {
+	for _, filter := range []map[string]any{
+		{"operator": "and", "operands": []any{map[string]any{"operator": "before", "operands": []any{"f", map[string]any{"type": "relative"}}}}},
+		{"operator": "before", "operands": []any{"f"}},
+		{"operator": "before", "operands": []any{"f", "2026-01-01"}},
+		{"operator": "after", "operands": []any{"f", float64(1)}},
+		{"operator": "after", "operands": []any{"f", math.NaN()}},
+		{"operator": "eq", "operands": []any{"f", "v"}},
+	} {
+		_ = validateRecordQueryDateFilterValues(filter)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertPendingMismatchRetryBranches(t *testing.T) {
+	disableRecordReadbackWait(t)
+	records := []map[string]any{{"recordId": "r1", "cells": map[string]any{"f": "new"}}}
+	for name, response := range map[string]string{
+		"missing":  `{"records":[]}`,
+		"mismatch": `{"records":[{"recordId":"r1","cells":{"f":"old"}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+				{text: `{"createdRecords":[],"updatedCount":1}`},
+				{text: response}, {text: response}, {text: response},
+			}}
+			if _, err := runRecordBatchCLI(t, caller, "+record-upsert", records); err == nil {
+				t.Fatal("permanent readback mismatch succeeded")
+			}
+		})
 	}
 }
 
@@ -431,6 +557,8 @@ func TestCrossPlatformCoverageRecordBulkPatchValidationAndSelectorsE2E(t *testin
 		{name: "blank filter field", args: []string{"--filters", `{"operator":"and","operands":[{"operator":"eq","operands":[" ","x"]}]}`, "--patch", `{"f":1}`}},
 		{name: "unknown filter operator", args: []string{"--filters", `{"operator":"and","operands":[{"operator":"unknown","operands":["fld","x"]}]}`, "--patch", `{"f":1}`}},
 		{name: "missing comparison value", args: []string{"--filters", `{"operator":"and","operands":[{"operator":"eq","operands":["fld"]}]}`, "--patch", `{"f":1}`}},
+		{name: "view date Scheme", args: []string{"--filters", `{"operator":"and","operands":[{"operator":"date_eq","operands":["fld",{"type":"exact","timestamp":1786896000000}]}]}`, "--patch", `{"f":1}`}},
+		{name: "fractional date milliseconds", args: []string{"--filters", `{"operator":"and","operands":[{"operator":"date_eq","operands":["fld",1786896000000.5]}]}`, "--patch", `{"f":1}`}},
 		{name: "blank query", args: []string{"--query", ` `, "--patch", `{"f":1}`}},
 		{name: "empty record IDs", args: []string{"--record-ids", ` `, "--patch", `{"f":1}`}},
 	}

@@ -5,8 +5,10 @@ package aitable
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -35,7 +37,7 @@ var TableBootstrap = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新数据表名称", Required: true},
-		{Name: "fields", Type: shortcut.FlagString, Desc: "字段结构 JSON 数组；字段对象使用 fieldName/type/config", Required: true},
+		{Name: "fields", Type: shortcut.FlagString, Desc: "字段结构 JSON 数组；字段对象使用 fieldName/type/config，可选 description", Required: true},
 	},
 	Tips: []string{
 		`dws aitable +table-bootstrap --base-id BASE_ID --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'`,
@@ -49,6 +51,51 @@ type createdTableStructure struct {
 	TableID  string
 	Fields   []map[string]any
 	Warnings []string
+}
+
+var bootstrapFieldAllowedKeys = map[string]bool{
+	"fieldName":   true,
+	"type":        true,
+	"config":      true,
+	"description": true,
+}
+
+func validateBootstrapField(raw any, path string) (string, error) {
+	field, ok := raw.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("%s 必须是 JSON 对象", path)
+	}
+	unknown := make([]string, 0)
+	for key := range field {
+		if !bootstrapFieldAllowedKeys[key] {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return "", fmt.Errorf("%s 包含未知属性 %q；只允许 fieldName、type、config、description", path, unknown[0])
+	}
+
+	name, ok := field["fieldName"].(string)
+	name = strings.TrimSpace(name)
+	fieldType, typeOK := field["type"].(string)
+	if !ok || name == "" || !typeOK || strings.TrimSpace(fieldType) == "" {
+		return "", fmt.Errorf("%s 必须包含非空字符串 fieldName 和 type", path)
+	}
+	if err := aitableprotocol.ValidateFieldName(field["fieldName"].(string)); err != nil {
+		return "", fmt.Errorf("%s.fieldName: %w", path, err)
+	}
+	if config, exists := field["config"]; exists {
+		if _, ok := config.(map[string]any); !ok {
+			return "", fmt.Errorf("%s.config 必须是 JSON 对象", path)
+		}
+	}
+	if description, exists := field["description"]; exists {
+		if _, ok := description.(string); !ok {
+			return "", fmt.Errorf("%s.description 必须是字符串", path)
+		}
+	}
+	return name, nil
 }
 
 func parseBootstrapFields(raw string) ([]any, error) {
@@ -65,27 +112,21 @@ func parseBootstrapFields(raw string) ([]any, error) {
 	}
 	seen := map[string]bool{}
 	for index, rawField := range fields {
-		field, ok := rawField.(map[string]any)
-		name := strings.TrimSpace(stringValue(field, "fieldName", "name"))
-		if !ok || name == "" || strings.TrimSpace(stringValue(field, "type")) == "" {
-			return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d] 必须包含 fieldName 和 type", index))
+		name, err := validateBootstrapField(rawField, fmt.Sprintf("--fields[%d]", index))
+		if err != nil {
+			return nil, tableBootstrapValidation(err.Error())
 		}
 		if seen[name] {
 			return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d].fieldName %q 不能重复", index, name))
 		}
 		seen[name] = true
-		if config, exists := field["config"]; exists {
-			if _, ok := config.(map[string]any); !ok {
-				return nil, tableBootstrapValidation(fmt.Sprintf("--fields[%d].config 必须是 JSON 对象", index))
-			}
-		}
 	}
 	return fields, nil
 }
 
 func tableBootstrapValidation(message string) error {
 	return apperrors.NewValidation(message,
-		apperrors.WithHint("字段对象使用 fieldName/type/config；已知参数时直接执行，不需要先调用 --help"),
+		apperrors.WithHint("字段对象使用 fieldName/type/config，可选 description；已知参数时直接执行，不需要先调用 --help"),
 		apperrors.WithActions(`dws aitable +table-bootstrap --base-id BASE_ID --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'`),
 		apperrors.WithAvailableFlags("base-id", "name", "fields"),
 	)
