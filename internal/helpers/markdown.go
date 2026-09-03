@@ -440,10 +440,6 @@ func resolveMarkdownRoute(ctx context.Context, nodeID, spaceID, workspaceID stri
 	}
 }
 
-func markdownRemoteName(nodeID string, useDocServer bool) (string, error) {
-	return textRemoteName(nodeID, useDocServer, markdownTextFileSpec)
-}
-
 func markdownRemoteNameWithContext(ctx context.Context, nodeID string, useDocServer bool) (string, error) {
 	return textRemoteNameWithContext(ctx, nodeID, useDocServer, markdownTextFileSpec)
 }
