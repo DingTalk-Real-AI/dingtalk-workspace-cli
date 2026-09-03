@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -1055,9 +1056,17 @@ func authLoginFormatExpiry(t time.Time) string {
 		return i18n.T("已过期")
 	}
 	if remaining > 24*time.Hour {
-		return i18n.Tf("%.0f 天后", remaining.Hours()/24)
+		days := math.Round(remaining.Hours() / 24)
+		if days == 1 {
+			return i18n.T("1 天后")
+		}
+		return i18n.Tf("%.0f 天后", days)
 	}
-	return i18n.Tf("%.0f 小时后", remaining.Hours())
+	hours := math.Round(remaining.Hours())
+	if hours == 1 {
+		return i18n.T("1 小时后")
+	}
+	return i18n.Tf("%.0f 小时后", hours)
 }
 
 // authLoginDisplayExpiry 返回用于显示的有效期（优先显示 refresh token 有效期）

@@ -441,6 +441,16 @@ func TestCrossPlatformCoverageBuildAuthURLForInternationalRegion(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageOAuthLoginLanguageUsesChineseLocale(t *testing.T) {
+	previous := i18n.Lang()
+	i18n.SetLang("zh")
+	t.Cleanup(func() { i18n.SetLang(previous) })
+
+	if got := oauthLoginLanguage(); got != "zh-CN" {
+		t.Fatalf("OAuth login language = %q, want zh-CN", got)
+	}
+}
+
 func TestCrossPlatformCoverageRenderSuccessHTMLUsesActiveLanguage(t *testing.T) {
 	page := renderSuccessHTML()
 	wants := []string{

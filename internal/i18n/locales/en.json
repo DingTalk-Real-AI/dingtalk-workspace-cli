@@ -205,6 +205,8 @@
   "页码 (必填)": "page number (required)",
   "%.0f 天后": "in %.0f days",
   "%.0f 小时后": "in %.0f hours",
+  "1 天后": "in 1 day",
+  "1 小时后": "in 1 hour",
   "Token 将自动刷新，无需重复登录": "The token will refresh automatically; no need to log in again",
   "企业": "Organization",
   "企业 ID": "Organization ID",
