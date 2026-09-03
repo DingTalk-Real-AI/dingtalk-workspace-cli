@@ -440,6 +440,45 @@ func TestCrossPlatformCoverageNotEnabledHTMLUsesRegionAwareAuthorizeURL(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageCLIAuthDisabledCopy(t *testing.T) {
+	if !strings.Contains(notEnabledHTML, "您暂无 CLI 数据访问权限") {
+		t.Fatal("not-enabled page missing the new title copy")
+	}
+	if !strings.Contains(notEnabledHTML, "当前组织未授权您通过 CLI 访问个人数据。") {
+		t.Fatal("not-enabled page missing the new body copy")
+	}
+	if !strings.Contains(notEnabledHTML, "status.hasDwsApply") {
+		t.Fatal("not-enabled page must read the server-side hasDwsApply from the status API")
+	}
+	if !strings.Contains(notEnabledHTML, `location.href = "/applyPending"`) {
+		t.Fatal("not-enabled page must navigate to the dedicated apply-pending page")
+	}
+	if !strings.Contains(notEnabledHTML, "let applying = false;") {
+		t.Fatal("not-enabled page missing the duplicate-submit guard")
+	}
+	if !strings.Contains(notEnabledHTML, `"DWS_USE_APPLY_DUPLICATE"`) {
+		t.Fatal("not-enabled page must land on the pending page when the server reports an existing application")
+	}
+	if !strings.Contains(applyPendingHTML, "访问权限申请中") {
+		t.Fatal("apply-pending page missing the pending title copy")
+	}
+	if !strings.Contains(applyPendingHTML, "已向管理员发送权限申请，正在等待审核") {
+		t.Fatal("apply-pending page missing the awaiting review copy")
+	}
+	if !strings.Contains(applyPendingHTML, "审核通过后，将在工作通知中提示") {
+		t.Fatal("apply-pending page missing the notification copy")
+	}
+	if !strings.Contains(applyPendingHTML, `fetch("/api/cliAuthEnabled")`) {
+		t.Fatal("apply-pending page must poll the CLI auth status")
+	}
+	if !strings.Contains(accessDeniedHTML, "该组织尚未开启CLI数据访问权限") {
+		t.Fatal("user-denied page missing the new title copy")
+	}
+	if !strings.Contains(accessDeniedHTML, "你所在组织的管理员尚未开启") {
+		t.Fatal("user-denied page missing the new body copy")
+	}
+}
+
 func TestCrossPlatformCoverageLoginRegionEndpointDefaults(t *testing.T) {
 	if got := AuthorizeURLForLoginRegion(LoginRegionDefault); got != AuthorizeURL {
 		t.Fatalf("default authorize URL = %q, want %q", got, AuthorizeURL)
