@@ -19,6 +19,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -395,6 +396,70 @@ func TestCrossPlatformCoverageHTMLOverwriteConfirmationGate(t *testing.T) {
 	}
 }
 
+// TestCrossPlatformCoverageHTMLOverwritePromptYesExecutesExactCalls pins the
+// deferred-confirm release path: an interactive "yes" answer (no --yes) must
+// let the exact overwrite call sequence through with the html MIME and drive
+// overwrite args, proving the gate neither blocks confirmed writes nor retargets
+// them.
+func TestCrossPlatformCoverageHTMLOverwritePromptYesExecutesExactCalls(t *testing.T) {
+	caller := &markdownDriveCaller{
+		format: "json",
+		steps: []markdownDriveStep{
+			{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
+			{text: `{"updated":true}`},
+		},
+	}
+	stdout, _ := installMarkdownDriveDeps(t, caller)
+	var uploaded string
+	httpPutFile = func(_ context.Context, _ string, _ map[string]string, path string, _ int64) error {
+		data, err := os.ReadFile(path)
+		uploaded = string(data)
+		return err
+	}
+	err := executeMarkdownDriveCommand(t, newHTMLCommand(), strings.NewReader("yes\n"),
+		"html", "overwrite", "--node", "file-1", "--content", "<h1>changed</h1>",
+		"--name", "index.html", "--space-id", "space-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uploaded != "<h1>changed</h1>" {
+		t.Fatalf("uploaded content = %q", uploaded)
+	}
+	if len(caller.calls) != 2 {
+		t.Fatalf("prompt-confirmed overwrite calls = %#v", caller.calls)
+	}
+	if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_upload_info" {
+		t.Fatalf("first call = %#v, want drive get_upload_info", caller.calls[0])
+	}
+	if caller.calls[1].server != "drive" || caller.calls[1].tool != "commit_upload" {
+		t.Fatalf("second call = %#v, want drive commit_upload", caller.calls[1])
+	}
+	wantUploadArgs := map[string]any{
+		"fileName":        "index.html",
+		"fileSize":        float64(len("<h1>changed</h1>")),
+		"mimeType":        "text/html",
+		"overwriteFileId": "file-1",
+		"spaceId":         "space-1",
+	}
+	if !reflect.DeepEqual(caller.calls[0].args, wantUploadArgs) {
+		t.Fatalf("get_upload_info args = %#v, want %#v", caller.calls[0].args, wantUploadArgs)
+	}
+	wantCommitArgs := map[string]any{
+		"fileName":        "index.html",
+		"fileSize":        float64(len("<h1>changed</h1>")),
+		"uploadId":        "upload-1",
+		"overwriteFileId": "file-1",
+		"spaceId":         "space-1",
+	}
+	if !reflect.DeepEqual(caller.calls[1].args, wantCommitArgs) {
+		t.Fatalf("commit_upload args = %#v, want %#v", caller.calls[1].args, wantCommitArgs)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil || payload["updated"] != true {
+		t.Fatalf("prompt-confirmed overwrite output: err=%v output=%q", err, stdout.String())
+	}
+}
+
 func TestCrossPlatformCoverageHTMLPatchWrites(t *testing.T) {
 	caller := &markdownDriveCaller{
 		format: "json",
@@ -608,6 +673,77 @@ func TestCrossPlatformCoverageHTMLPatchCancellationStopsBeforeUploadMetadata(t *
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("cancelled patch calls = %#v, want none before ConfirmSafety decline", caller.calls)
+	}
+}
+
+// TestCrossPlatformCoverageHTMLPatchPromptYesExecutesExactCalls pins the
+// deferred-confirm release path for patch: an interactive "yes" answer (no
+// --yes) must gate only the first download call and then let the full doc-space
+// patch sequence through with exact tools and arguments.
+func TestCrossPlatformCoverageHTMLPatchPromptYesExecutesExactCalls(t *testing.T) {
+	caller := &markdownDriveCaller{
+		format: "json",
+		steps: []markdownDriveStep{
+			{text: `{"resourceUrl":"https://download.test/current.html","fileName":"internal.file"}`},
+			{text: `{"name":"remote","extension":"html"}`},
+			{text: `{"resourceUrl":"https://upload.test/doc","uploadKey":"key-1"}`},
+			{text: `{"patched":true}`},
+		},
+	}
+	stdout, _ := installMarkdownDriveDeps(t, caller)
+	installMarkdownHTTPGet(t, "v1 v2")
+	var uploaded string
+	httpPutFile = func(_ context.Context, _ string, _ map[string]string, path string, _ int64) error {
+		data, err := os.ReadFile(path)
+		uploaded = string(data)
+		return err
+	}
+	err := executeMarkdownDriveCommand(t, newHTMLCommand(), strings.NewReader("yes\n"),
+		"html", "patch", "--node", "node-1", "--pattern", `v\d`, "--content", "$1",
+		"--regex", "--workspace", "workspace-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uploaded != "$1 $1" {
+		t.Fatalf("prompt-confirmed patch uploaded = %q", uploaded)
+	}
+	type wantCall struct {
+		server string
+		tool   string
+		args   map[string]any
+	}
+	wantCalls := []wantCall{
+		{"doc", "download_file", map[string]any{"nodeId": "node-1"}},
+		{"doc", "get_document_info", map[string]any{"nodeId": "node-1"}},
+		{"doc", "get_file_upload_info", map[string]any{
+			"fileSize":        float64(len("$1 $1")),
+			"name":            "remote.html",
+			"overwriteNodeId": "node-1",
+			"workspaceId":     "workspace-1",
+		}},
+		{"doc", "commit_uploaded_file", map[string]any{
+			"fileSize":        float64(len("$1 $1")),
+			"name":            "remote.html",
+			"overwriteNodeId": "node-1",
+			"uploadKey":       "key-1",
+			"workspaceId":     "workspace-1",
+		}},
+	}
+	if len(caller.calls) != len(wantCalls) {
+		t.Fatalf("prompt-confirmed patch calls = %#v", caller.calls)
+	}
+	for i, want := range wantCalls {
+		got := caller.calls[i]
+		if got.server != want.server || got.tool != want.tool {
+			t.Fatalf("call %d = %s/%s, want %s/%s", i, got.server, got.tool, want.server, want.tool)
+		}
+		if !reflect.DeepEqual(got.args, want.args) {
+			t.Fatalf("call %d (%s) args = %#v, want %#v", i, got.tool, got.args, want.args)
+		}
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil || payload["patched"] != true {
+		t.Fatalf("prompt-confirmed patch output: err=%v output=%q", err, stdout.String())
 	}
 }
 
