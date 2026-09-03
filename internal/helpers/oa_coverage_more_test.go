@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -34,9 +35,9 @@ func executeOACommand(t *testing.T, caller *scriptedToolCaller, args ...string) 
 func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {
 	installScriptedCaller(t, &scriptedToolCaller{dry: true})
 	for _, args := range [][]string{
-		{"approval", "list-pending", "--start", "bad", "--end", "2030-01-01T10:00:00+08:00"},
-		{"approval", "list-pending", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
-		{"approval", "list-pending", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
+		{"approval", "list-pending", "--create-time-from", "bad"},
+		{"approval", "list-pending", "--create-time-from", "2030-01-02", "--create-time-to", "2030-01-01"},
+		{"approval", "list-pending", "--finish-time-to", "bad"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "bad", "--end", "2030-01-01T10:00:00+08:00"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
@@ -48,7 +49,7 @@ func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {
 
 	if err := executeFilterCoverage(t, newOaCommand(),
 		"approval", "list-pending",
-		"--start", "2030-01-01T09:00:00+08:00", "--end", "2030-01-01T10:00:00+08:00",
+		"--create-time-from", "2030-01-01", "--create-time-to", "2030-01-02",
 		"--page", "2", "--size", "20", "--query", "travel",
 	); err != nil {
 		t.Fatalf("pending options: %v", err)
@@ -336,29 +337,34 @@ func TestCrossPlatformCoverageOAApprovalCreateInstanceTranslatesSupplyPointDenia
 // U-gate: create-instance 未确认（无 --yes）时拒绝执行且不发起 MCP 调用；
 // 用户确认后（--yes）才产生唯一的 start_process_instance 精确调用。
 func TestCrossPlatformCoverageOAApprovalCreateInstanceConfirmationGate(t *testing.T) {
-	unconfirmed := &scriptedToolCaller{}
-	err := executeOACommand(t, unconfirmed,
+	args := []string{
 		"approval", "create-instance",
 		"--process-code", "PROC-1",
-		"--form-values", `{"单行输入框":"测试"}`,
-	)
+		"--dept-id", "123",
+		"--form-values", `{"事由":"客户拜访"}`,
+		"--originator-user-id", "originator-1",
+		"--approvers", "approver-1,approver-2",
+		"--approvers-action-type", "AND",
+		"--cc-list", "cc-1,cc-2",
+		"--cc-position", "START_FINISH",
+	}
+
+	unconfirmed := &scriptedToolCaller{}
+	err := executeOACommand(t, unconfirmed, args...)
 	if err == nil {
 		t.Fatal("create-instance without --yes returned nil")
 	}
-	if !strings.Contains(err.Error(), "--yes") {
-		t.Fatalf("error = %q, want confirmation guidance mentioning --yes", err.Error())
+	const wantConfirmation = "发起审批实例会创建真实业务数据；请先核对参数，然后添加 --yes 确认执行"
+	if err.Error() != wantConfirmation {
+		t.Fatalf("error = %q, want %q", err.Error(), wantConfirmation)
 	}
 	if unconfirmed.calls != 0 {
 		t.Fatalf("unconfirmed create-instance made %d MCP calls", unconfirmed.calls)
 	}
 
 	confirmed := &scriptedToolCaller{}
-	if err := executeOACommand(t, confirmed,
-		"approval", "create-instance",
-		"--process-code", "PROC-1",
-		"--form-values", `{"单行输入框":"测试"}`,
-		"--yes",
-	); err != nil {
+	confirmedArgs := append(append([]string(nil), args...), "--yes")
+	if err := executeOACommand(t, confirmed, confirmedArgs...); err != nil {
 		t.Fatalf("confirmed create-instance: %v", err)
 	}
 	if confirmed.server != "oa" || confirmed.tool != "start_process_instance" {
@@ -370,15 +376,22 @@ func TestCrossPlatformCoverageOAApprovalCreateInstanceConfirmationGate(t *testin
 	if len(confirmed.args) != 1 {
 		t.Fatalf("args = %#v, want only ProcessInstanceCreationPopRequest", confirmed.args)
 	}
-	inner, ok := confirmed.args["ProcessInstanceCreationPopRequest"].(map[string]any)
-	if !ok {
-		t.Fatalf("args = %#v, want ProcessInstanceCreationPopRequest object", confirmed.args)
+	wantRequest := map[string]any{
+		"processCode": "PROC-1",
+		"deptId":      int64(123),
+		"formComponentValues": []map[string]string{
+			{"name": "事由", "value": "客户拜访"},
+		},
+		"originatorUserId": "originator-1",
+		"approvers": []map[string]any{{
+			"actionType": "AND",
+			"userIds":    []string{"approver-1", "approver-2"},
+		}},
+		"ccList":     []string{"cc-1", "cc-2"},
+		"ccPosition": "START_FINISH",
 	}
-	if inner["processCode"] != "PROC-1" {
-		t.Fatalf("processCode = %#v", inner["processCode"])
-	}
-	values, ok := inner["formComponentValues"].([]map[string]string)
-	if !ok || len(values) != 1 || values[0]["name"] != "单行输入框" || values[0]["value"] != "测试" {
-		t.Fatalf("formComponentValues = %#v", inner["formComponentValues"])
+	wantArgs := map[string]any{"ProcessInstanceCreationPopRequest": wantRequest}
+	if !reflect.DeepEqual(confirmed.args, wantArgs) {
+		t.Fatalf("confirmed args = %#v, want %#v", confirmed.args, wantArgs)
 	}
 }

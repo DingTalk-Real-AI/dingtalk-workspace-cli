@@ -1098,6 +1098,12 @@ func messagePaginationCursorBoundary(value any) (string, string, error) {
 			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
 		}
 		millis = int64(typed)
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
 	case string:
 		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
 		if err != nil {

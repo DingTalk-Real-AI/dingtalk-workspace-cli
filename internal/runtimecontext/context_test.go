@@ -293,6 +293,9 @@ func TestCrossPlatformCoverageCopyCString(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageResolveLibraryPathUsesResolvedExecutable(t *testing.T) {
+	testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) {
+		return "", errors.New("embedded payload disabled for sidecar test")
+	})
 	root := t.TempDir()
 	realDir := filepath.Join(root, "real")
 	payloadDir := filepath.Join(realDir, ".dws-runtime", PayloadVersion)
@@ -336,6 +339,20 @@ func TestCrossPlatformCoverageResolveLibraryPathUsesResolvedExecutable(t *testin
 			t.Fatalf("resolveLibraryPath error = %v", err)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageResolveLibraryPathUsesEmbeddedPayload(t *testing.T) {
+	if _, err := materializeRuntimePayload(t.TempDir(), runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(t.TempDir(), "library")
+	testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) {
+		return expected, nil
+	})
+	testseam.Swap(t, &userCacheDir, func() (string, error) { return t.TempDir(), nil })
+	if path, err := resolveLibraryPath(); err != nil || path != expected {
+		t.Fatalf("resolveLibraryPath = %q, %v", path, err)
+	}
 }
 
 func successfulLocator() (string, error) { return "/payload/library", nil }
