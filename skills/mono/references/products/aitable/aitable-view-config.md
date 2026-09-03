@@ -137,7 +137,11 @@ dws aitable view update sort   --view-id VIEW_ID --json '[{"fieldId":"fldX","dir
 dws aitable view update group  --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'
 ```
 
-> filter/sort/group 入参格式与 `record query --filters`（根对象格式）**不同**：view config 写入时外层必须是数组。平铺 filter 表示 AND；数组中唯一的 `and`/`or` 根节点表示显式逻辑。当前只支持一层统一 AND 或 OR，拒绝混合嵌套；`[]` 清空筛选。传单个对象时 CLI 会自动 wrap。
+日期筛选使用 View 专用 relative/exact Scheme。例如本月的 `date_eq.relative.offset` 必须是 JSON number `0`，过去 30 天的 `from_now.offset` 必须是 JSON string `"-30"`；指定日期使用 `date_eq.exact.timestamp` 毫秒 JSON number。完整结构见 [aitable-filter-sort.md](./aitable-filter-sort.md#view-日期-scheme仅-view-update-filter)。
+
+群组筛选可传 `{"cid":"..."}` 或 `{"openConversationId":"..."}`，每项二选一。DWS 原样传递，MCP 负责把 `openConversationId` 转换并持久化为内部 `cid`；写后校验使用 MCP 响应中的归一化 filter。
+
+> filter/sort/group 入参格式与 `record query --filters`（根对象格式）**不同**：view config 写入时外层必须是数组。平铺 filter 表示 AND；数组中唯一的 `and`/`or` 根节点表示显式逻辑。当前只支持一层统一 AND 或 OR，拒绝混合嵌套；`[]` 清空筛选。传单个对象时 CLI 会自动 wrap，建议直接使用数组。详见 [aitable-filter-sort.md](./aitable-filter-sort.md)。
 
 ### view update name（重命名）
 

@@ -1,5 +1,7 @@
 # filters & sort — 筛选排序语法参考
 
+> `record query --filters` 与持久化 View filter 是两套日期值协议：前者使用日期字符串/毫秒数，后者使用保留 JSON 类型的 relative/exact Scheme。不要混用。
+
 ## filters 结构规范
 
 ### 强制规则
@@ -50,10 +52,45 @@ CLI 同时兼容两种子条件写法（推荐格式 A）：
 | `any_of` / `none_of` / `all_of` | 包含任一 / 不包含任一 / 全包含（多选字段） | `["fieldId", "optionName"]` |
 | `date_eq` / `before` / `after` | 日期等于 / 早于 / 晚于 | `["fieldId", "dateStr"]` |
 | `not_before` / `not_after` | 不早于 / 不晚于 | `["fieldId", "dateStr"]` |
-| `from_now` | 从现在起 N 天内 | `["fieldId", "天数"]` |
-| `date_between` | 日期区间 | `["fieldId", "[startTs, endTs]"]` |
 
 > **操作符拼写必须严格匹配上表**，CLI 会在调用前校验，错误拼写会被拒绝。
+>
+> `record query` 不支持 `from_now` / `date_between`。日期范围使用 `not_before` + `not_after`；相对日期请先计算绝对日期。View 的 relative/exact 对象不能传给本命令。
+
+### record query 日期字段过滤
+
+日期类字段只能使用 `date_eq` / `before` / `after` / `not_before` / `not_after` / `exist` / `un_exist`，比较值使用日期字符串、RFC3339 或毫秒时间戳。通用 `eq/gte/lte/contain` 对日期字段可能静默返回 0 条。
+
+```bash
+dws aitable record query --base-id X --table-id Y \
+  --filters '{"operator":"and","operands":[{"operator":"not_before","operands":["fldDate","2026-05-01"]},{"operator":"not_after","operands":["fldDate","2026-05-31"]}]}'
+```
+
+### View 日期 Scheme（仅 `view update filter`）
+
+以下结构已经过真实写入、读回和 UI 验证。最外层是数组，内部保留显式 `and/or` 根节点。
+
+| UI 语义 | operator / value | JSON 类型要求 |
+|---|---|---|
+| 今天/本周/本月/今年及前后周期 | `date_eq` + `{"type":"relative","period":"day|week|month|year","offset":N}` | `offset` 必须是 JSON number 整数 |
+| 过去/未来 X 天 | `from_now` + `{"type":"relative","period":"day","offset":"N"}` | `offset` 必须是 JSON string；过去为负、未来为正 |
+| 指定日期 | `date_eq` + `{"type":"exact","timestamp":TIMESTAMP_MS}` | `timestamp` 必须是目标时区当天 00:00 的 Unix 毫秒 JSON number 整数 |
+
+```bash
+# 本月
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"relative","period":"month","offset":0}]}]}]'
+
+# 过去 30 天；offset 是字符串
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"from_now","operands":["fldDate",{"type":"relative","period":"day","offset":"-30"}]}]}]'
+
+# 指定日期；timestamp 是毫秒数字
+dws aitable view update filter --base-id X --table-id Y --view-id Z \
+  --json '[{"operator":"and","operands":[{"operator":"date_eq","operands":["fldDate",{"type":"exact","timestamp":1786896000000}]}]}]'
+```
+
+写入后必须执行 `view get filter`，核对 operator、period、offset/timestamp 的值和 JSON 类型。`[object Object]`、`Invalid Date` 或类型被字符串化均不能判为成功。明确日期范围不得从等值 Scheme 猜测。
 
 ### 常见错误拼写（CLI 会自动提示纠正）
 

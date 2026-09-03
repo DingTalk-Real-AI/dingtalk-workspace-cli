@@ -35,6 +35,10 @@ dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \
   --records '[{"recordId":"<RECORD_ID>","cells":{"<FIELD_ID>":"新值"}}]' --format json
 ```
 
+## 附件更新边界
+
+同一批 `update_records` 不能同时包含附件清空（值为 `[]` 或 `null`）与附件新增/替换。有这两类变更时必须拆成两次 `record update` 调用，每次分别回读；DWS 不会根据 cell 形状猜测字段类型并自动拆批。
+
 ## 引号转义提示
 
 - Linux/macOS：外层用单引号 `'[...]'`，内部 JSON 用双引号即可

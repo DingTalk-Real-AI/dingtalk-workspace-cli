@@ -62,7 +62,7 @@ create 和 update 都必须同时满足 `status=success`、`data.valid=true`、`
 dws aitable workflow edit-example --format json
 ```
 
-该命令无业务参数，调用 `aitable/edit_workflow_example` 返回服务端提供的工作流编辑文档和示例。创建或更新复杂工作流前优先调用它，避免依赖可能过期的本地 DSL 结构。
+该命令无业务参数，优先调用 `aitable/get_workflow_dsl_docs`；若当前 MCP 仅注册了历史名称，则在明确收到 `TOOL_NOT_FOUND` 后回退到 `aitable/edit_workflow_example`。创建或更新复杂工作流前优先调用它，避免依赖可能过期的本地 DSL 结构。
 
 ### workflow create — 创建并发布工作流
 
@@ -304,8 +304,12 @@ done
 - `--workflow-id` 接受的就是 `list` 返回里的 `flowId`（同值，CLI 屏蔽了服务端字段名差异）。
 - create / update 的 `--dsl` 必须是 JSON object，不能传数组、二次字符串化 JSON 或 `flowSchema`。
 - `status=success` 且 `data.valid=false` 仍是 DSL 校验失败；`issues` 才是下一步修复依据。
-- create 不自动重试；update 仅对网络、5xx、`retryable:true` 等瞬态错误自动重试。
+- create / update 都不在原子调用层自动重试；结果不确定时先用 `workflow list/get` 检查真实状态，不重放已发布的定义。
 - enable / disable 出参里的 `enabled` / `disabled` 是 **动作确认 flag**，不是当前状态字段。要确认真生效请走 `workflow list` 查 `status`。
 - `workflow get` 的 `flowSchema` 结构随触发器/动作类型变化，不要假设固定字段。
 - `workflow run` 不自动重试；结果不确定时用 `workflow history` 按 executionId / instanceId 核对。
 - 删除工作流当前仍未开放。
+- 每个任务只读一次 `workflow edit-example` 和当前 leaf Schema，从真实示例构造 DSL；不凭记忆复用旧结构。
+- DSL 中的 boolean（如 `onceClick`）必须保持 JSON boolean。读回为 `"True"/"False"` 或 `"true"/"false"` 字符串时判定为 MCP 类型污染，停止该分支；不用字符串或删除语义规避。
+- `ConditionBranch` 的每个 `to` 必须指向当前 DSL 中真实节点，不使用 `to:null` 表示结束。业务需要空分支但 Schema 没有合法表达时停止，不改写成其他触发语义。
+- 本次新建且未经用户专门确认启用的工作流，最终必须用 `workflow list` 证明为 `STOP`。如创建后意外为 `RUNNING`，立即停止依赖步骤，执行 `disable --yes` 并再读回 `STOP`，同时如实说明曾短暂启用和可能副作用。
