@@ -710,6 +710,142 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 	}
 }
 
+func TestRootKeepsContactOrgInviteApplyAdminCommands(t *testing.T) {
+	root := NewRootCommand()
+
+	// 命令树结构：exclusive-account 新组、org 组 9 个新子命令、dept 组 invite-audit。
+	mustFindCommand(t, root, "contact", "exclusive-account")
+	mustFindCommand(t, root, "contact", "exclusive-account", "disable")
+	mustFindCommand(t, root, "contact", "exclusive-account", "enable")
+	mustFindCommand(t, root, "contact", "org", "invite-switch")
+	mustFindCommand(t, root, "contact", "org", "invite-audit")
+	mustFindCommand(t, root, "contact", "org", "invite-info")
+	mustFindCommand(t, root, "contact", "org", "invite-list")
+	mustFindCommand(t, root, "contact", "org", "apply-list")
+	mustFindCommand(t, root, "contact", "org", "apply-approve")
+	mustFindCommand(t, root, "contact", "org", "apply-reject")
+	mustFindCommand(t, root, "contact", "org", "apply-block")
+	mustFindCommand(t, root, "contact", "org", "apply-remove")
+	mustFindCommand(t, root, "contact", "dept", "invite-audit")
+
+	approve := mustFindCommand(t, root, "contact", "org", "apply-approve")
+	if !containsString(approve.Aliases, "approve") {
+		t.Fatal("contact org apply-approve missing approve alias")
+	}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "exclusive account disable",
+			args: []string{"--dry-run", "contact", "exclusive-account", "disable", "--staff-id", "user001"},
+			want: []string{"exclusive_account_set_status", "uesrId", "user001", "disable"},
+		},
+		{
+			name: "exclusive account enable",
+			args: []string{"--dry-run", "contact", "exclusive-account", "enable", "--staff-id", "user001"},
+			want: []string{"exclusive_account_set_status", "uesrId", "user001", "enable"},
+		},
+		{
+			name: "org invite switch",
+			args: []string{"--dry-run", "contact", "org", "invite-switch", "--open", "true", "--search-invite", "false"},
+			want: []string{"set_org_invite_switch", `"open": true`, `"searchInviteSwitch": false`},
+		},
+		{
+			name: "org invite audit open",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit"},
+			want: []string{"set_org_apply_audit", `"auditType": 0`},
+		},
+		{
+			name: "org invite audit close",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit=false"},
+			want: []string{"set_org_apply_audit", `"auditType": 1`},
+		},
+		{
+			name: "org invite info",
+			args: []string{"--dry-run", "contact", "org", "invite-info"},
+			want: []string{"get_org_invite_info"},
+		},
+		{
+			name: "org invite list defaults",
+			args: []string{"--dry-run", "contact", "org", "invite-list"},
+			want: []string{"list_team_invite", `"status": 1`, `"size": 20`},
+		},
+		{
+			name: "org invite list paging",
+			args: []string{"--dry-run", "contact", "org", "invite-list", "--status", "2", "--cursor", "33", "--size", "50"},
+			want: []string{"list_team_invite", `"status": 2`, `"cursor": 33`, `"size": 50`},
+		},
+		{
+			name: "org apply list all",
+			args: []string{"--dry-run", "contact", "org", "apply-list", "--status", "0"},
+			want: []string{"query_org_apply_list", `"status": 0`},
+		},
+		{
+			name: "org apply approve",
+			args: []string{"--dry-run", "contact", "org", "apply-approve", "--id", "123"},
+			want: []string{"approve_org_apply", `"id": 123`},
+		},
+		{
+			name: "org apply reject",
+			args: []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123", "--reason", "不符合入职条件"},
+			want: []string{"reject_org_apply", `"id": 123`, "reason", "不符合入职条件"},
+		},
+		{
+			name: "org apply block",
+			args: []string{"--dry-run", "contact", "org", "apply-block", "--id", "123", "--reason", "恶意重复申请"},
+			want: []string{"block_org_apply", `"id": 123`, "reason", "恶意重复申请"},
+		},
+		{
+			name: "org apply remove",
+			args: []string{"--dry-run", "contact", "org", "apply-remove", "--id", "123"},
+			want: []string{"remove_org_apply", `"id": 123`},
+		},
+		{
+			name: "dept invite audit",
+			args: []string{"--dry-run", "contact", "dept", "invite-audit", "--dept", "12345", "--no-audit"},
+			want: []string{"set_dept_apply_audit", `"deptId": 12345`, `"auditType": 0`},
+		},
+		{
+			name: "dept invite audit emp apply join",
+			args: []string{"--dry-run", "contact", "dept", "invite-audit", "--dept", "12345", "--no-audit", "--emp-apply-join-dept", "true"},
+			want: []string{"set_dept_apply_audit", `"deptId": 12345`, `"auditType": 0`, `"empApplyJoinDept": true`},
+		},
+		{
+			// pflag 布尔 flag 不吞并后置值：--no-audit true 中的 "true" 是位置参数，
+			// contactNoAuditArgs 需将其归并回 flag 值而不是拒绝。
+			name: "org invite audit positional bool tolerance",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit", "false"},
+			want: []string{"set_org_apply_audit", `"auditType": 1`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := executeRootCaptureStdout(t, tc.args)
+			if err != nil {
+				t.Fatalf("Execute(%v) error = %v\n%s", tc.args, err, got)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("Execute(%v) output missing %q:\n%s", tc.args, want, got)
+				}
+			}
+		})
+	}
+
+	// 负例：--no-audit 必须显式传值（dry-run 已绕过确认 gate，能命中参数校验）。
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "invite-audit"}); err == nil || !strings.Contains(err.Error(), "--no-audit") {
+		t.Fatalf("org invite-audit without --no-audit should fail with a no-audit hint, got err = %v\n%s", err, got)
+	}
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "invite-list", "--status", "9"}); err == nil || !strings.Contains(err.Error(), "--status") {
+		t.Fatalf("org invite-list --status 9 should fail with a status hint, got err = %v\n%s", err, got)
+	}
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123"}); err == nil || !strings.Contains(err.Error(), "--reason") {
+		t.Fatalf("org apply-reject without --reason should fail with a reason hint, got err = %v\n%s", err, got)
+	}
+}
+
 func TestChatConversationFileUploadUsesANewPath(t *testing.T) {
 	root := NewRootCommand()
 	fileCmd := mustFindCommand(t, root, "chat", "file")
