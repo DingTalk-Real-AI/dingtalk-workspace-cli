@@ -1695,6 +1695,7 @@ jobs:
               coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
               go test -count=1 \
                 -p 1 \
+                -timeout=10m \
                 -coverpkg="$coverpkg" \
                 -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
                 -covermode=atomic \
