@@ -1402,7 +1402,8 @@ func devMCPValidateMappingsFlag(flag string, mappings []any) error {
 				return apperrors.NewValidation(path + ".expression 不适用于 reference/fixed；取值只能放 source 字段")
 			}
 		case "express":
-			if stringValue(mapping["expression"]) == "" {
+			expression, valid := mapping["expression"].(string)
+			if !valid || strings.TrimSpace(expression) == "" {
 				return apperrors.NewValidation(path + ".expression 为必填；express 表达式必须放 expression 字段，不能放 source")
 			}
 			if stringValue(mapping["source"]) != "" {

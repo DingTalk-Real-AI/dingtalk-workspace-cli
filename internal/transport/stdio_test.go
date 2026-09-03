@@ -79,6 +79,8 @@ func TestCrossPlatformCoverageReadBoundedStdioLine(t *testing.T) {
 func TestCrossPlatformCoverageStdioRejectsDuplicateAndTypeInvalidEnvelopes(t *testing.T) {
 	for _, response := range []string{
 		`{"jsonrpc":"2.0","id":1,"result":null,"result":{}}` + "\n",
+		`{"jsonrpc":"2.0","id":99,"result":null,"ID":1}` + "\n",
+		`{"jsonrpc":"2.0","id":1,"result":null,"Result":{}}` + "\n",
 		`[]` + "\n",
 	} {
 		client := &StdioClient{

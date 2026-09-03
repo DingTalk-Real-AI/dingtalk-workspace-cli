@@ -16,6 +16,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -317,6 +318,7 @@ func TestCrossPlatformCoverageDevMCPValidationEdges(t *testing.T) {
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "fixed"}}), ".source 为必填")
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "reference", "source": "$.node_start.x", "expression": "GET('x',{})"}}), ".expression 不适用于 reference/fixed")
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "source": "GET('x',{})"}}), ".expression 为必填")
+	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "expression": json.Number("123")}}), ".expression 为必填")
 	requireMCPError(t, devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "source": "GET('x',{})", "expression": "GET('x',{})"}}), ".source 不适用于 express")
 	if err := devMCPValidateMappingsFlag("mappings", []any{map[string]any{"target": "$", "type": "express", "expression": "GET('x',{})"}}); err != nil {
 		t.Fatalf("valid express mapping: %v", err)

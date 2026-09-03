@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 )
 
 const (
@@ -70,6 +71,23 @@ func RejectDuplicateObjectKeys(data []byte) error {
 			return fmt.Errorf("unexpected trailing JSON value")
 		}
 		return err
+	}
+	return nil
+}
+
+// RejectNonCanonicalObjectKeys rejects case-insensitive spellings of known
+// protocol fields while leaving unrelated, case-sensitive business keys alone.
+func RejectNonCanonicalObjectKeys(data []byte, canonical ...string) error {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(data, &object); err != nil || object == nil {
+		return fmt.Errorf("expected JSON object")
+	}
+	for key := range object {
+		for _, expected := range canonical {
+			if key != expected && strings.EqualFold(key, expected) {
+				return fmt.Errorf("non-canonical JSON object key %q; expected %q", key, expected)
+			}
+		}
 	}
 	return nil
 }

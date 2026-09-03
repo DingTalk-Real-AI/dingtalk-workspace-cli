@@ -127,6 +127,19 @@ type RPCError struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+func (e *RPCError) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "code", "message", "data"); err != nil {
+		return fmt.Errorf("invalid JSON-RPC error: %w", err)
+	}
+	type rpcError RPCError
+	var decoded rpcError
+	if err := unmarshalJSONUseNumber(data, &decoded); err != nil {
+		return err
+	}
+	*e = RPCError(decoded)
+	return nil
+}
+
 type InitializeResult struct {
 	RequestedProtocolVersion string         `json:"requested_protocol_version"`
 	ProtocolVersion          string         `json:"protocol_version"`
@@ -147,6 +160,9 @@ func (t *ToolDescriptor) UnmarshalJSON(data []byte) error {
 	if err := jsonutil.RejectDuplicateObjectKeys(data); err != nil {
 		return fmt.Errorf("invalid tool descriptor: %w", err)
 	}
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "name", "title", "description", "inputSchema", "outputSchema", "sensitive"); err != nil {
+		return fmt.Errorf("invalid tool descriptor: %w", err)
+	}
 	type toolDescriptor ToolDescriptor
 	var decoded toolDescriptor
 	if err := unmarshalJSONUseNumber(data, &decoded); err != nil {
@@ -164,6 +180,9 @@ type ToolsListResult struct {
 }
 
 func (r *ToolsListResult) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "tools", "nextCursor"); err != nil {
+		return fmt.Errorf("invalid tools/list result: %w", err)
+	}
 	var raw struct {
 		Tools      json.RawMessage `json:"tools"`
 		NextCursor string          `json:"nextCursor"`
@@ -283,6 +302,19 @@ type ContentBlock struct {
 	Text string `json:"text,omitempty"`
 }
 
+func (b *ContentBlock) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "type", "text"); err != nil {
+		return fmt.Errorf("invalid content block: %w", err)
+	}
+	type contentBlock ContentBlock
+	var decoded contentBlock
+	if err := unmarshalJSONUseNumber(data, &decoded); err != nil {
+		return err
+	}
+	*b = ContentBlock(decoded)
+	return nil
+}
+
 type ToolCallResult struct {
 	Content           map[string]any  `json:"-"`
 	StructuredContent map[string]any  `json:"structuredContent,omitempty"`
@@ -303,6 +335,9 @@ func (r *ToolCallResult) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("tools/call result must be a non-null object")
 	}
 	if err := jsonutil.RejectDuplicateObjectKeys(trimmed); err != nil {
+		return fmt.Errorf("invalid tools/call result: %w", err)
+	}
+	if err := jsonutil.RejectNonCanonicalObjectKeys(trimmed, "content", "structuredContent", "isError"); err != nil {
 		return fmt.Errorf("invalid tools/call result: %w", err)
 	}
 	var raw rawResult
@@ -740,6 +775,16 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			apperrors.WithTraceID(headerTraceID),
 		)
 	}
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "jsonrpc", "id", "result", "error"); err != nil {
+		return apperrors.NewDiscovery(
+			fmt.Sprintf("unexpected protocol response from %s", RedactURL(endpoint)),
+			apperrors.WithOperation(request.Method),
+			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
+			apperrors.WithHint(i18n.T("MCP 服务返回了字段大小写不规范的协议响应。")),
+			apperrors.WithSnapshot(snapshotPath),
+			apperrors.WithTraceID(headerTraceID),
+		)
+	}
 	var envelope responseEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return apperrors.NewDiscovery(
@@ -748,6 +793,16 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
 			apperrors.WithHint(i18n.T("MCP 服务返回了无法解析的协议响应；检查服务版本或上游代理。")),
 			apperrors.WithActions(discoveryActions(snapshotPath)...),
+			apperrors.WithSnapshot(snapshotPath),
+			apperrors.WithTraceID(headerTraceID),
+		)
+	}
+	if envelope.JSONRPC != "2.0" || envelope.ID != request.ID {
+		return apperrors.NewDiscovery(
+			fmt.Sprintf("JSON-RPC %s response does not match request id %d", request.Method, request.ID),
+			apperrors.WithOperation(request.Method),
+			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
+			apperrors.WithHint(i18n.T("MCP 服务返回了不匹配的协议版本或请求 ID；不要使用该响应。")),
 			apperrors.WithSnapshot(snapshotPath),
 			apperrors.WithTraceID(headerTraceID),
 		)
@@ -1082,6 +1137,9 @@ func (c *Client) isEndpointTrusted(endpoint string) bool {
 		return false
 	}
 	if !strings.EqualFold(parsed.Scheme, "https") {
+		if !strings.EqualFold(parsed.Scheme, "http") {
+			return false
+		}
 		if os.Getenv("DWS_ALLOW_HTTP_ENDPOINTS") != "1" {
 			return false
 		}

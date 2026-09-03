@@ -92,3 +92,22 @@ func TestCrossPlatformCoverageDuplicateScannerBudgets(t *testing.T) {
 		}
 	}
 }
+
+func TestCrossPlatformCoverageRejectNonCanonicalObjectKeys(t *testing.T) {
+	if err := RejectNonCanonicalObjectKeys([]byte(`{"inputSchema":{},"businessKey":1}`), "inputSchema"); err != nil {
+		t.Fatalf("canonical object rejected: %v", err)
+	}
+	for _, input := range []string{
+		`{"InputSchema":{}}`,
+		`{"inputSchema":{},"INPUTSCHEMA":{}}`,
+	} {
+		if err := RejectNonCanonicalObjectKeys([]byte(input), "inputSchema"); err == nil || !strings.Contains(err.Error(), "non-canonical") {
+			t.Fatalf("RejectNonCanonicalObjectKeys(%s) error = %v", input, err)
+		}
+	}
+	for _, input := range []string{`[]`, `{`} {
+		if err := RejectNonCanonicalObjectKeys([]byte(input), "inputSchema"); err == nil || !strings.Contains(err.Error(), "expected JSON object") {
+			t.Fatalf("RejectNonCanonicalObjectKeys(%s) error = %v", input, err)
+		}
+	}
+}

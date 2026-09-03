@@ -140,8 +140,10 @@ func TestCrossPlatformCoverageToolCallResultUnmarshalEdges(t *testing.T) {
 		`{"content":null}`,
 		`{"content":42}`,
 		`{"content":{},"content":[]}`,
+		`{"content":{},"isError":true,"IsError":false}`,
 		`{"content":{},"isError":"yes"}`,
 		`{"content":{},"structuredContent":[]}`,
+		`{"content":[{"type":"text","Text":"shadow"}]}`,
 	} {
 		var result ToolCallResult
 		if err := json.Unmarshal([]byte(raw), &result); err == nil {
@@ -178,6 +180,32 @@ func TestCrossPlatformCoverageJSONDecodingAndMarshalEdges(t *testing.T) {
 	if err := json.Unmarshal([]byte(duplicateDescriptor), &result); err == nil {
 		t.Fatalf("invalid tools/list result %q succeeded", duplicateDescriptor)
 	}
+	for _, raw := range []string{
+		`{"tools":[],"Tools":[]}`,
+		`{"tools":[{"name":"target","inputSchema":{"type":"object"},"InputSchema":{"type":"object"}}]}`,
+	} {
+		if err := json.Unmarshal([]byte(raw), &result); err == nil {
+			t.Fatalf("non-canonical tools/list result %q succeeded", raw)
+		}
+	}
+	var rpcError RPCError
+	if err := json.Unmarshal([]byte(`{"code":-32602,"Code":-32603,"message":"invalid"}`), &rpcError); err == nil {
+		t.Fatal("non-canonical JSON-RPC error succeeded")
+	}
+	for name, test := range map[string]func() error{
+		"RPC error type": func() error { return json.Unmarshal([]byte(`{"code":"bad"}`), &RPCError{}) },
+		"tool descriptor type": func() error {
+			return json.Unmarshal([]byte(`{"name":0}`), &ToolDescriptor{})
+		},
+		"tools result type": func() error {
+			return json.Unmarshal([]byte(`{"nextCursor":0}`), &ToolsListResult{})
+		},
+		"content block type": func() error { return json.Unmarshal([]byte(`{"type":0}`), &ContentBlock{}) },
+	} {
+		if err := test(); err == nil {
+			t.Fatalf("%s mismatch succeeded", name)
+		}
+	}
 	for _, raw := range []string{`[`, `[{"key":]`} {
 		if err := rejectOversizedToolsArray([]byte(raw), maxToolsPerListPage); err == nil {
 			t.Fatalf("rejectOversizedToolsArray(%q) succeeded", raw)
@@ -211,6 +239,23 @@ func TestCrossPlatformCoverageJSONDecodingAndMarshalEdges(t *testing.T) {
 	empty, err := json.Marshal(ToolCallResult{})
 	if err != nil || string(empty) != `{}` {
 		t.Fatalf("empty fallback marshal = %s, %v", empty, err)
+	}
+}
+
+func TestCrossPlatformCoverageHTTPResponseMustMatchRequest(t *testing.T) {
+	request := requestEnvelope{JSONRPC: "2.0", ID: 7, Method: "tools/list"}
+	for _, body := range []string{
+		`{"jsonrpc":"2.0","id":8,"result":{"tools":[]}}`,
+		`{"jsonrpc":"1.0","id":7,"result":{"tools":[]}}`,
+		`{"jsonrpc":"2.0","id":7,"result":{},"Result":{"tools":[]}}`,
+	} {
+		client := edgeClient(func(*http.Request) (*http.Response, error) {
+			return edgeResponse(http.StatusOK, body), nil
+		})
+		var result ToolsListResult
+		if err := client.callJSONRPC(context.Background(), "https://x.test", request, true, &result); err == nil {
+			t.Fatalf("mismatched response %s succeeded", body)
+		}
 	}
 }
 
@@ -315,7 +360,7 @@ func TestCrossPlatformCoverageCallJSONRPCEdges(t *testing.T) {
 	c = edgeClient(func(*http.Request) (*http.Response, error) {
 		return edgeResponse(http.StatusOK, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`), nil
 	})
-	if err := c.callJSONRPC(context.Background(), "https://x.test", requestEnvelope{Method: "x"}, true, nil); err != nil {
+	if err := c.callJSONRPC(context.Background(), "https://x.test", requestEnvelope{JSONRPC: "2.0", ID: 1, Method: "x"}, true, nil); err != nil {
 		t.Fatalf("nil output: %v", err)
 	}
 	if err := c.callJSONRPC(context.Background(), "https://x.test", requestEnvelope{Method: "notify"}, false, nil); err != nil {

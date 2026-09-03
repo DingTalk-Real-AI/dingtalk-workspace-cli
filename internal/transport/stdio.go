@@ -270,6 +270,9 @@ func (s *StdioClient) call(ctx context.Context, method string, params any, resul
 		if err := jsonutil.RejectDuplicateObjectKeys(rr.line); err != nil {
 			return fmt.Errorf("stdio: invalid response: %w", err)
 		}
+		if err := jsonutil.RejectNonCanonicalObjectKeys(rr.line, "jsonrpc", "id", "result", "error"); err != nil {
+			return fmt.Errorf("stdio: invalid response: %w", err)
+		}
 		var resp responseEnvelope
 		if err := json.Unmarshal(rr.line, &resp); err != nil {
 			return fmt.Errorf("stdio: unmarshal response: %w", err)

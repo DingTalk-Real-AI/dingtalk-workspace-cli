@@ -97,6 +97,7 @@ func TestCrossPlatformCoverageValidateTrustedEndpoint(t *testing.T) {
 	for _, endpoint := range []string{
 		"https://evil.example/mcp",
 		"https://user:password@mcp-gw.dingtalk.com/mcp",
+		"ftp://localhost/mcp",
 		"://invalid",
 	} {
 		if err := client.ValidateTrustedEndpoint(endpoint); err == nil {
