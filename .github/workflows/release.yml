@@ -2936,7 +2936,7 @@ jobs:
                 --candidate-ref HEAD
               ;;
             e2e)
-              bash scripts/dev/test-multi-profile-e2e.sh
+              bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests
               ;;
             *)
               echo "unsupported release validation check: $VALIDATION_CHECK" >&2

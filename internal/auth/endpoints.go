@@ -113,9 +113,10 @@ const (
 	ClientIDPath            = "/cli/clientId"
 
 	// MCP OAuth endpoints (used when clientId is fetched from MCP).
-	MCPOAuthTokenPath   = "/oauth2/getToken"
-	MCPRefreshTokenPath = "/oauth2/refreshToken"
-	MCPRevokeTokenPath  = "/oauth2/revokeToken"
+	MCPOAuthTokenPath     = "/oauth2/getToken"
+	MCPRefreshTokenPath   = "/oauth2/refreshToken"
+	MCPRevokeTokenPath    = "/oauth2/revokeToken"
+	MCPVendorAuthCodePath = "/oauth2/vendorAuthCode"
 
 	// App-level access token endpoints (for dws api raw calls).
 

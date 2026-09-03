@@ -29,6 +29,10 @@ coverage:
       - references/chat-emoji-list.md
   - mono: contact
     multi_skill: dingtalk-contact
+  - mono: contract
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/contract.md
   - mono: dev
     multi_skill: dingtalk-misc
     multi_refs:
@@ -54,6 +58,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/hrbrain.md
+  - mono: html
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/html.md
   - mono: mail
     multi_skill: dingtalk-mail
   - mono: markdown
@@ -160,6 +168,9 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: references/products/contract.md
+    multi: dingtalk-misc/references/contract.md
+    mode: identical
   - mono: scripts/report_received_today.py
     multi: dingtalk-misc/scripts/report_received_today.py
     mode: identical
