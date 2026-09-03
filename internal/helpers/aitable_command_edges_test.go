@@ -499,6 +499,46 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 	filter := `[{"operator":"eq","operands":["fldA","x"]}]`
 	args := []string{"view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json=" + filter}
 
+	t.Run("logical root shape validation", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			input any
+			want  string
+		}{
+			{name: "non-object condition", input: []any{"bad"}, want: "每项必须"},
+			{name: "root is not sole element", input: []any{
+				map[string]any{"operator": "or", "operands": []any{}},
+				map[string]any{"operator": "eq", "operands": []any{"fldA", "x"}},
+			}, want: "唯一元素"},
+			{name: "root operands are not an array", input: []any{
+				map[string]any{"operator": "or", "operands": "bad"},
+			}, want: "必须是叶子条件数组"},
+			{name: "root operand is not an object", input: []any{
+				map[string]any{"operator": "or", "operands": []any{"bad"}},
+			}, want: "必须是叶子条件对象"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				if _, _, err := normalizeAitableViewUpdateFilter(tc.input); err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("normalize filter error = %v, want %q", err, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("canonical single leaf object uses implicit AND", func(t *testing.T) {
+		leaf := map[string]any{"operator": "eq", "operands": []any{"fldA", "x"}}
+		root, ok := canonicalViewFilter(leaf)
+		operands, operandsOK := root["operands"].([]any)
+		if !ok || root["operator"] != "and" || !operandsOK || len(operands) != 1 {
+			t.Fatalf("canonical leaf = %#v, %v", root, ok)
+		}
+		wrappedLeaf, wrappedOK := operands[0].(map[string]any)
+		if !wrappedOK || wrappedLeaf["operator"] != "eq" {
+			t.Fatalf("canonical wrapped leaf = %#v", operands[0])
+		}
+	})
+
 	t.Run("update transport error", func(t *testing.T) {
 		caller := &aitableTestCaller{responses: []string{fields}, errors: []error{nil, context.Canceled}}
 		if err := runAitableCoverageCommand(t, caller, args...); err == nil || !strings.Contains(err.Error(), context.Canceled.Error()) || len(caller.calls) != 2 {
