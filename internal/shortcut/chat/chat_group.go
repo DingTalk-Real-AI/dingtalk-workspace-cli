@@ -1892,6 +1892,23 @@ var ChatRoleRemove = shortcut.Shortcut{
 	},
 }
 
+func validateChatRoleIDs(values []string) error {
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return apperrors.NewValidation("--role-ids 不能包含空值或仅含空白的群身份 openRoleId")
+		}
+	}
+	return nil
+}
+
+func normalizeChatRoleIDs(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized = append(normalized, strings.TrimSpace(value))
+	}
+	return normalized
+}
+
 // ChatRoleSetUser overwrites a user's group roles (set_custom_user_roles, im).
 var ChatRoleSetUser = shortcut.Shortcut{
 	Service:     "chat",
@@ -1930,8 +1947,15 @@ var ChatRoleSetUser = shortcut.Shortcut{
 		{Name: "user", Type: shortcut.FlagString, Desc: "用户 userId 或 openDingTalkId", Required: true},
 		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要整体设置的群身份 openRoleId 列表，至少一个", Required: true},
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"role-ids"}, Description: "必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素"},
+	},
 	Tips: []string{`dws chat +chat-role-set-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateChatRoleIDs(rt.StrSlice("role-ids"))
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		roleIDs := normalizeChatRoleIDs(rt.StrSlice("role-ids"))
 		groupID, err := resolveStableOrNamedChat(rt)
 		if err != nil {
 			return err
@@ -1939,7 +1963,7 @@ var ChatRoleSetUser = shortcut.Shortcut{
 		user := rt.Str("user")
 		params := map[string]any{
 			"openConversationId": groupID,
-			"openRoleIds":        rt.StrSlice("role-ids"),
+			"openRoleIds":        roleIDs,
 		}
 		if isOpenID(user) {
 			params["openDingTalkId"] = user
