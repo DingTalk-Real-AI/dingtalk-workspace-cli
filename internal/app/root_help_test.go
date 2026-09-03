@@ -121,6 +121,8 @@ func TestLeafHelpRendersSelectionSafetyAndReferences(t *testing.T) {
 		{path: "dev app list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
 		{path: "chat message send", wantEffect: "write", wantConfirm: "not_required", wantSkill: "dingtalk-chat", wantDocument: "references/chat.md"},
 		{path: "dev app delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
+		{path: "contract record list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/contract.md"},
+		{path: "contract subject delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/contract.md"},
 	} {
 		t.Run(strings.ReplaceAll(tc.path, " ", "_"), func(t *testing.T) {
 			root := NewRootCommand()
