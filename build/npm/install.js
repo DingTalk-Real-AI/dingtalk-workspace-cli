@@ -845,14 +845,9 @@ function extractArchive(archivePath, destDir) {
     }
 
     ensureCleanDir(destDir);
-    const runtimeSource = path.join(path.dirname(binaryPath), ".dws-runtime");
-    if (!fs.existsSync(path.join(runtimeSource, "20260825", "manifest.json"))) {
-      throw new Error(`runtime payload not found in archive ${archivePath}`);
-    }
     const targetName = process.platform === "win32" ? "dws.exe" : "dws";
     const targetPath = path.join(destDir, targetName);
     fs.copyFileSync(binaryPath, targetPath);
-    fs.cpSync(runtimeSource, path.join(destDir, ".dws-runtime"), { recursive: true, force: true });
     if (process.platform !== "win32") {
       fs.chmodSync(targetPath, 0o755);
     }

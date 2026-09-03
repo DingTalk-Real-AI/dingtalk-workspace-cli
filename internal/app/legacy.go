@@ -24,6 +24,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -70,7 +71,34 @@ func mountLegacyPublicCommands(runner executor.Runner, loadUserShortcuts bool) [
 	} else {
 		commands = append(commands, builtin.BaseCommands()...)
 	}
-	return mergeTopLevelCommands(commands)
+	merged := mergeTopLevelCommands(commands)
+	annotatePreferredShortcutOwners(merged)
+	return merged
+}
+
+const preferredShortcutCLIPathAnnotation = "dws.preferred-shortcut.cli-path"
+
+func annotatePreferredShortcutOwners(commands []*cobra.Command) {
+	var walk func(*cobra.Command, []string)
+	walk = func(command *cobra.Command, parents []string) {
+		if command == nil {
+			return
+		}
+		pathParts := append(append([]string(nil), parents...), command.Name())
+		cliPath := strings.Join(pathParts, " ")
+		if owner, ok := shortcut.PreferredShortcutForCLIPath(cliPath); ok {
+			if command.Annotations == nil {
+				command.Annotations = map[string]string{}
+			}
+			command.Annotations[preferredShortcutCLIPathAnnotation] = owner
+		}
+		for _, child := range command.Commands() {
+			walk(child, pathParts)
+		}
+	}
+	for _, command := range commands {
+		walk(command, nil)
+	}
 }
 
 // newLegacyPublicCommands is the executable CLI path: inject static MCP

@@ -26,11 +26,11 @@ metadata:
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcut 发现（按需）
+## Shortcut 发现（Shortcut-first）
 
-`chat` 当前有 98 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`chat` 有 93 条 canonical Shortcut：根 Help 展示 26 条 Featured，另 67 条在 Catalog、Schema 和精确 Help；5 条 public 兼容入口从根 Help 省略，2 条 unavailable 不参与默认选路。
 
-仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service chat --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
+优先按 Golden Route、意图表或 reference 选 Shortcut；仅在所需底层参数或原始响应未覆盖时使用 atomic。低频发现用 `dws shortcut list --service chat --format json`；参数/安全查 compact leaf Schema，flags 查所选 Shortcut 的精确 Help。
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## Golden Route
@@ -48,7 +48,7 @@ metadata:
 | 获取群邀请链接 | `dws chat +chat-invite-url --group <群名或ID>` | 多候选时停止 |
 | 查看群机器人 | `dws chat +chat-bots --group <群名或ID>` | 返回稳定 `bots[]` |
 | 个人收藏表情列表/发送/收藏 | `dws chat emotion list/send/favorite` | 约束见 leaf Schema |
-| 修改群名称 | `dws chat group rename --id <openConversationId> --name <新名称>` | 只知群名时先用 `+chat-search --query <群名>` 唯一解析 ID；不猜 `+chat-rename` |
+| 修改群名称 | `dws chat +chat-update --group <群名或openConversationId> --name <新名称>` | Shortcut 内统一解析群名或稳定 ID；多候选时停止，不直接调用 atomic `group rename` |
 | 查看指定群内 @我的消息 | `dws chat +at-me --group <群名> --page-all` | 检查 `complete`；空结果仍返回数组 |
 | 查看全部会话 | `dws chat +conversation-list --page-all` | 检查 `complete` / `failures` |
 | 读取并下载消息资源 | 查询命令加 `--download-resources` | 不另起手工下载循环；下载失败项保留在结果中 |

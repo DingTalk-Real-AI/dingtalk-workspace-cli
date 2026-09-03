@@ -39,6 +39,19 @@ type mcpPublishedTransport interface {
 
 type mcpPublishedTransportFactory func(context.Context) (mcpPublishedTransport, error)
 
+func mcpPublishedExactArgs(count int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := cobra.ExactArgs(count)(cmd, args); err != nil {
+			return apperrors.NewValidation(
+				err.Error(),
+				apperrors.WithReason("invalid_positionals"),
+				apperrors.WithHint("Usage: "+cmd.UseLine()),
+			)
+		}
+		return nil
+	}
+}
+
 func newMCPPublishedGroup(caller edition.ToolCaller, factory mcpPublishedTransportFactory) *cobra.Command {
 	group := &cobra.Command{
 		Use:               "published",
@@ -66,7 +79,7 @@ func newMCPPublishedToolsCommand(caller edition.ToolCaller, factory mcpPublished
 		Use:               "tools <mcpId>",
 		Short:             "列出当前身份可用的已发布 MCP 工具",
 		Example:           "  dws mcp published tools 2480 --format json",
-		Args:              cobra.ExactArgs(1),
+		Args:              mcpPublishedExactArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mcpID := strings.TrimSpace(args[0])
@@ -125,7 +138,7 @@ func newMCPPublishedInvokeCommand(caller edition.ToolCaller, factory mcpPublishe
 		Short:             "调用当前身份可用的已发布 MCP 工具",
 		Long:              "调用指定 mcpId 下的已发布工具。由于远端工具的副作用无法由静态 CLI Contract 判断，真实调用一律需要显式确认。",
 		Example:           `  dws mcp published invoke 2480 search --params '{"query":"example"}' --dry-run --format json`,
-		Args:              cobra.ExactArgs(2),
+		Args:              mcpPublishedExactArgs(2),
 		DisableAutoGenTag: true,
 		RunE:              runMCPPublishedInvoke(caller, factory),
 	}
