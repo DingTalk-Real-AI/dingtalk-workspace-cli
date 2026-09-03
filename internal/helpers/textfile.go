@@ -254,7 +254,9 @@ func textFileCreateDelegationTarget(spec textFileSpec, fileName string, fileSize
 // downloads the remote native text file and prints the content, mirroring the
 // historical markdown fetch path: --space-id routes to Drive, --workspace to
 // Doc space, both unset auto-probes the file domain, and --output optionally
-// stages the payload through a sanitized local path.
+// stages the payload through a sanitized local path. The downloaded remote
+// name must carry the product extension; any other target type is refused
+// before the content is printed or staged locally.
 func runTextFileFetch(cmd *cobra.Command, spec textFileSpec) error {
 	nodeID := flagOrFallback(cmd, "node", "id", "node-id", "file-id", "doc-id")
 	if nodeID == "" {
@@ -288,6 +290,13 @@ func runTextFileFetch(cmd *cobra.Command, spec textFileSpec) error {
 	content, filename, err := fetchMarkdownContent(ctx, nodeID, spaceID, useDocServer)
 	if err != nil {
 		return err
+	}
+	// Fail closed on the remote target type before any stdout output or
+	// --output write: fetch is scoped to the product's native text files, so
+	// a node pointing at any other file type (including the unnameable
+	// download fallback) must be refused rather than printed or staged.
+	if !spec.hasExtension(filename) {
+		return fmt.Errorf("远程文件不是 %s 文件，当前文件名: %s", spec.ExtLabel, filename)
 	}
 
 	savedTo := ""

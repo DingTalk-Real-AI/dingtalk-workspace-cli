@@ -203,6 +203,80 @@ func TestCrossPlatformCoverageHTMLFetchRejectsSymlinkOutput(t *testing.T) {
 	}
 }
 
+// Regression for the fetch product-type boundary: the shared engine must
+// validate the downloaded remote name against the spec before any output or
+// local write, so a node pointing at a non-HTML file is refused on every
+// routing path and --output is never touched.
+func TestCrossPlatformCoverageHTMLFetchRejectsNonHTMLRemoteFile(t *testing.T) {
+	t.Run("explicit space route refuses and keeps output untouched", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"downloadUrl":"https://download.test/report.pdf","fileName":"report.pdf"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
+		installMarkdownHTTPGet(t, "not html")
+		output := filepath.Join(t.TempDir(), "out.html")
+		err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+			"html", "fetch", "--node", "file-1", "--space-id", "space-1", "--output", output)
+		if err == nil || !strings.Contains(err.Error(), "远程文件不是 .html/.htm 文件，当前文件名: report.pdf") {
+			t.Fatalf("error = %v", err)
+		}
+		if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
+			t.Fatalf("rejected fetch wrote local output: statErr=%v", statErr)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("explicit workspace route refuses and keeps output untouched", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"resourceUrl":"https://download.test/report.pdf","fileName":"report.pdf"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
+		installMarkdownHTTPGet(t, "not html")
+		output := filepath.Join(t.TempDir(), "out.html")
+		err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+			"html", "fetch", "--node", "node-1", "--workspace", "workspace-1", "--output", output)
+		if err == nil || !strings.Contains(err.Error(), "远程文件不是 .html/.htm 文件，当前文件名: report.pdf") {
+			t.Fatalf("error = %v", err)
+		}
+		if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
+			t.Fatalf("rejected fetch wrote local output: statErr=%v", statErr)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
+			t.Fatalf("calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("auto route refuses and never stages into an output directory", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps: []markdownDriveStep{
+				{err: errors.New("not found in drive")},
+				{text: `{"name":"doc"}`},
+				{text: `{"resourceUrl":"https://download.test/report.pdf","fileName":"report.pdf"}`},
+			},
+		}
+		installMarkdownDriveDeps(t, caller)
+		installMarkdownHTTPGet(t, "not html")
+		outputDir := t.TempDir()
+		err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+			"html", "fetch", "--node", "node-1", "--output", outputDir)
+		if err == nil || !strings.Contains(err.Error(), "远程文件不是 .html/.htm 文件，当前文件名: report.pdf") {
+			t.Fatalf("error = %v", err)
+		}
+		entries, readErr := os.ReadDir(outputDir)
+		if readErr != nil || len(entries) != 0 {
+			t.Fatalf("rejected fetch wrote into output dir: entries=%v err=%v", entries, readErr)
+		}
+		if len(caller.calls) != 3 {
+			t.Fatalf("auto-route probe calls = %#v", caller.calls)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageHTMLOverwriteWrites(t *testing.T) {
 	caller := &markdownDriveCaller{
 		format: "json",
@@ -343,6 +417,58 @@ func TestCrossPlatformCoverageHTMLOverwriteValidation(t *testing.T) {
 			t.Fatalf("error = %v", err)
 		}
 	})
+}
+
+// An omitted --name inherits the validated remote name, so the remote-type
+// probe stays the only source of the default upload name and the upload
+// itself carries the html extension without any explicit --name.
+func TestCrossPlatformCoverageHTMLOverwriteInheritsRemoteName(t *testing.T) {
+	caller := &markdownDriveCaller{
+		format: "json",
+		steps: []markdownDriveStep{
+			{text: `{"fileName":"current.html"}`},
+			{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
+			{text: `{"updated":true}`},
+		},
+	}
+	installMarkdownDriveDeps(t, caller)
+	httpPutFile = func(context.Context, string, map[string]string, string, int64) error {
+		return nil
+	}
+	err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+		"html", "overwrite", "--node", "file-1", "--content", "<h1>changed</h1>",
+		"--space-id", "space-1", "--yes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 3 {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	if caller.calls[1].args["fileName"] != "current.html" || caller.calls[2].args["fileName"] != "current.html" {
+		t.Fatalf("inherited upload name = %#v", caller.calls[1].args)
+	}
+}
+
+// The command-level --dry-run preview surfaces a failed current-content
+// download instead of silently rendering a one-sided diff.
+func TestCrossPlatformCoverageHTMLOverwritePreviewFetchFailure(t *testing.T) {
+	caller := &markdownDriveCaller{
+		format: "json",
+		steps: []markdownDriveStep{
+			{text: `{"fileName":"current.html"}`},
+			{err: errors.New("download failed")},
+		},
+	}
+	installMarkdownDriveDeps(t, caller)
+	err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+		"html", "overwrite", "--node", "file-1", "--content", "<h1>new</h1>",
+		"--space-id", "space-1", "--dry-run")
+	if err == nil || !strings.Contains(err.Error(), "dry-run 读取当前内容失败") {
+		t.Fatalf("error = %v", err)
+	}
+	if len(caller.calls) != 2 || caller.calls[1].tool != "download_file" {
+		t.Fatalf("preview fetch calls = %#v", caller.calls)
+	}
 }
 
 func TestCrossPlatformCoverageHTMLOverwritePreviews(t *testing.T) {
