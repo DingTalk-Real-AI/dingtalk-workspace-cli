@@ -15,7 +15,9 @@ package helpers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -53,6 +55,34 @@ func devAppFamilyRawContentRunner(content map[string]any) *devAppResponseRunner 
 	runner := devAppFamilyContentRunner(content)
 	runner.preserveMissingPagination = true
 	return runner
+}
+
+type devAppConfirmationRunner struct {
+	calls []executor.Invocation
+}
+
+func (r *devAppConfirmationRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.calls = append(r.calls, invocation)
+	invocation.Implemented = true
+	return executor.Result{
+		Invocation: invocation,
+		Response: map[string]any{
+			"content": map[string]any{
+				"success": true,
+				"result":  map[string]any{"name": "DemoApp"},
+			},
+		},
+	}, nil
+}
+
+func devAppRealCalls(calls []executor.Invocation, tool string) []executor.Invocation {
+	var got []executor.Invocation
+	for _, call := range calls {
+		if call.Tool == tool && !call.DryRun {
+			got = append(got, call)
+		}
+	}
+	return got
 }
 
 // TestDevAppFamilyReadLeavesDualFormat 是队列 B64/B68/B71/B80/B83/B87/B95/B102
@@ -166,6 +196,59 @@ func TestDevAppFamilyWriteLeavesDryRunEnvelope(t *testing.T) {
 			// dry-run 不投影分页 meta。
 			if strings.Contains(out.String(), `"pagination"`) {
 				t.Fatalf("dry-run must not carry pagination meta: %s", out.String())
+			}
+		})
+	}
+}
+
+// TestDevAppDestructiveWritesRequirePostPreviewConfirmation models the Agent
+// contract as three distinct turns: preview, an unconfirmed real attempt, and
+// the user-confirmed execution. Before --yes no destructive tool is called;
+// after --yes the real call carries exactly the business params previewed by
+// dry-run. Any changed params therefore require a new preview and confirmation.
+func TestDevAppDestructiveWritesRequirePostPreviewConfirmation(t *testing.T) {
+	cases := []struct {
+		name string
+		tool string
+		args []string
+	}{
+		{"app delete", devAppDeleteTool, []string{"dev", "app", "delete", "--unified-app-id", "u-delete", "--confirm-name", "DemoApp"}},
+		{"app disable", devAppDisableTool, []string{"dev", "app", "disable", "--unified-app-id", "u-disable"}},
+		{"permission remove", devAppPermissionRmTool, []string{"dev", "app", "permission", "remove", "--unified-app-id", "u-permission", "--scope-values", "scope.a,scope.b"}},
+		{"member remove", devAppMemberRemoveTool, []string{"dev", "app", "member", "remove", "--unified-app-id", "u-member", "--user-ids", "user-a,user-b", "--member-type", "DEVELOPER"}},
+		{"version publish", devAppVersionPublishTool, []string{"dev", "app", "version", "publish", "--unified-app-id", "u-version", "--version-id", "v-7"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &devAppConfirmationRunner{}
+
+			previewArgs := append(append([]string{}, tc.args...), "--dry-run")
+			if _, _, err := runDevAppFamily(t, runner, previewArgs...); err != nil {
+				t.Fatalf("dry-run error = %v", err)
+			}
+			if len(runner.calls) != 1 || !runner.calls[0].DryRun || runner.calls[0].Tool != tc.tool {
+				t.Fatalf("dry-run calls = %#v, want one preview for %s", runner.calls, tc.tool)
+			}
+			previewParams := runner.calls[0].Params
+
+			if _, _, err := runDevAppFamily(t, runner, tc.args...); err == nil {
+				t.Fatal("real execution without post-preview --yes must fail")
+			}
+			if got := devAppRealCalls(runner.calls, tc.tool); len(got) != 0 {
+				t.Fatalf("unconfirmed real calls = %#v, want none", got)
+			}
+
+			confirmedArgs := append(append([]string{}, tc.args...), "--yes")
+			if _, _, err := runDevAppFamily(t, runner, confirmedArgs...); err != nil {
+				t.Fatalf("confirmed execution error = %v", err)
+			}
+			realCalls := devAppRealCalls(runner.calls, tc.tool)
+			if len(realCalls) != 1 {
+				t.Fatalf("confirmed real calls = %#v, want exactly one", realCalls)
+			}
+			if !reflect.DeepEqual(realCalls[0].Params, previewParams) {
+				t.Fatalf("confirmed params = %#v, preview params = %#v", realCalls[0].Params, previewParams)
 			}
 		})
 	}

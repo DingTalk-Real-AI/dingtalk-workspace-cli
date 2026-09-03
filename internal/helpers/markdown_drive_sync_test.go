@@ -292,7 +292,7 @@ func TestDriveUploadOverwriteRoutesAndConfirms(t *testing.T) {
 		if len(caller.calls) != 2 {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		wantStep1 := map[string]any{"workspaceId": "workspace-1", "overwriteNodeId": "node-1", "name": "renamed.md"}
+		wantStep1 := map[string]any{"workspaceId": "workspace-1", "overwriteNodeId": "node-1", "name": "renamed.md", "fileSize": float64(4)}
 		if !reflect.DeepEqual(caller.calls[0].args, wantStep1) {
 			t.Fatalf("step1 args = %#v, want %#v", caller.calls[0].args, wantStep1)
 		}

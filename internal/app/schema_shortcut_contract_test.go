@@ -132,7 +132,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 232; got != want {
+	if got, want := int(product["count"].(float64)), 235; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -249,6 +249,24 @@ func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
 		if got := schemaContractString(parameter["property"]); got != want {
 			t.Fatalf("wiki +space-search --%s property = %q, want compatibility value %q", name, got, want)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiSpaceCreatePublishesVerifiedTypeResult(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-create")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "partial_failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, property := range []string{"success", "workspaceId", "space", "spaceType", "spaceTypeVerified", "spaceTypeEvidence"} {
+		if properties[property] == nil {
+			t.Errorf("wiki +space-create Result data_schema is missing %q", property)
+		}
+	}
+	if got, want := schemaContractStringSlice(properties["spaceType"]["enum"]), []string{"orgWikiSpace", "myWikiSpace"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create spaceType enum = %#v, want %#v", got, want)
 	}
 }
 

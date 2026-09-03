@@ -14,9 +14,11 @@ import (
 )
 
 type chatSemanticCatalogFixture struct {
-	Service      string                `json:"service"`
-	Availability shortcut.Availability `json:"default_availability"`
-	Shortcuts    map[string]struct {
+	Service           string                `json:"service"`
+	Availability      shortcut.Availability `json:"default_availability"`
+	FeaturedShortcuts []string              `json:"featured_shortcuts"`
+	AtomicOwners      map[string]string     `json:"atomic_owners"`
+	Shortcuts         map[string]struct {
 		Disposition          shortcut.SemanticDisposition `json:"disposition"`
 		SemanticDelta        string                       `json:"semantic_delta"`
 		Risk                 shortcut.Risk                `json:"risk"`
@@ -26,6 +28,42 @@ type chatSemanticCatalogFixture struct {
 		CompatibilityVisible bool                         `json:"compatibility_visible"`
 		Reviewed             bool                         `json:"reviewed"`
 	} `json:"shortcuts"`
+}
+
+func TestCrossPlatformCoverageChatGoldenRoutePrefersReviewedShortcutOwners(t *testing.T) {
+	raw, err := os.ReadFile("../semantic_catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source chatSemanticCatalogFixture
+	if err := json.Unmarshal(raw, &source); err != nil {
+		t.Fatal(err)
+	}
+
+	skillRaw, err := os.ReadFile("../../../skills/multi/dingtalk-chat/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(skillRaw)
+	start := strings.Index(skill, "## Golden Route")
+	if start < 0 {
+		t.Fatal("chat Skill lacks Golden Route section")
+	}
+	endOffset := strings.Index(skill[start:], "\n以下次级入口")
+	if endOffset < 0 {
+		t.Fatal("chat Skill lacks primary Golden Route terminator")
+	}
+	primaryRoutes := skill[start : start+endOffset]
+	codeSpans := strings.Split(primaryRoutes, "`")
+	for atomicPath, owner := range source.AtomicOwners {
+		invocation := "dws " + atomicPath
+		for index := 1; index < len(codeSpans); index += 2 {
+			code := strings.TrimSpace(codeSpans[index])
+			if code == invocation || strings.HasPrefix(code, invocation+" ") {
+				t.Errorf("Golden Route uses reviewed atomic path %q; use owner dws %s", atomicPath, owner)
+			}
+		}
+	}
 }
 
 func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
@@ -42,6 +80,7 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 	}
 
 	registered := make(map[string]shortcut.Shortcut)
+	helpTierCounts := map[shortcut.HelpTier]int{}
 	for _, item := range shortcut.All() {
 		if item.Service != "chat" {
 			continue
@@ -50,12 +89,26 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 			t.Fatalf("duplicate registered Chat Shortcut %s", item.Command)
 		}
 		registered[item.Command] = item
+		helpTierCounts[item.HelpTier]++
 	}
 	if got, want := len(registered), 100; got != want {
 		t.Fatalf("registered Chat Shortcuts = %d, want %d", got, want)
 	}
 	if got, want := len(source.Shortcuts), 100; got != want {
 		t.Fatalf("reviewed Chat Shortcut records = %d, want %d", got, want)
+	}
+	if got, want := len(source.FeaturedShortcuts), 26; got != want {
+		t.Fatalf("reviewed Chat featured Shortcuts = %d, want %d", got, want)
+	}
+	for tier, want := range map[shortcut.HelpTier]int{
+		shortcut.HelpTierFeatured:      26,
+		shortcut.HelpTierCatalog:       67,
+		shortcut.HelpTierCompatibility: 5,
+		shortcut.HelpTierUnavailable:   2,
+	} {
+		if got := helpTierCounts[tier]; got != want {
+			t.Errorf("Chat help tier %q = %d, want %d", tier, got, want)
+		}
 	}
 
 	var missing, stale []string
@@ -104,11 +157,16 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 		if got := shortcut.InPublicCatalog("chat", command); got != record.Public {
 			t.Errorf("%s: InPublicCatalog = %v, want %v", command, got, record.Public)
 		}
-		if record.Public != !item.Hidden {
-			t.Errorf("%s: delivered public = %v, catalog public = %v", command, !item.Hidden, record.Public)
+		if record.Public != shortcut.InPublicCatalog("chat", command) {
+			t.Errorf("%s: delivered public catalog membership differs from record", command)
 		}
-		if reviewedAvailability == shortcut.AvailabilityAvailable && (!record.Public || item.Hidden) {
-			t.Errorf("%s: available reviewed Chat Shortcut must be public", command)
+		if record.CompatibilityVisible {
+			if item.Hidden || !item.CompatibilityVisible || record.Public || reviewedAvailability != shortcut.AvailabilityAvailable {
+				t.Errorf("%s: compatibility-visible delivery = hidden:%v compatibility:%v public:%v availability:%s",
+					command, item.Hidden, item.CompatibilityVisible, record.Public, reviewedAvailability)
+			}
+		} else if reviewedAvailability == shortcut.AvailabilityAvailable && (!record.Public || item.Hidden) {
+			t.Errorf("%s: available reviewed Chat Shortcut must be public or compatibility-visible", command)
 		}
 		if reviewedAvailability != shortcut.AvailabilityAvailable && (record.Public || !item.Hidden) {
 			t.Errorf("%s: %s reviewed Chat Shortcut must be hidden", command, reviewedAvailability)

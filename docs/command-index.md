@@ -33,7 +33,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws aitable` — AI Tables](#dws-aitable) · 41 commands
 - [`dws attendance` — Attendance](#dws-attendance) · 4 commands
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
-- [`dws chat` — Group Chat / IM](#dws-chat) · 38 commands
+- [`dws chat` — Group Chat / IM](#dws-chat) · 39 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
 - [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
@@ -134,7 +134,7 @@ _Calendar events, participants, meeting rooms, and busy-status queries._
 
 _Group chats, conversations, messages, and robot/webhook integrations._
 
-**38 commands**
+**39 commands**
 
 | Command | Description | When to use |
 |---|---|---|
@@ -143,6 +143,7 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 | `dws chat emotion favorite` | Add a media ID or a local image (jpg/jpeg/png/gif/webp/bmp, ≤10MB) to the current user's personal favorite emotions. | When the agent needs to save an available mediaId or a local image file as a reusable personal emotion; local images are uploaded through dingtalk-file/upload_media (bizType=chat_emoticon) first, optionally preserving source message context. |
 | `dws chat emotion list` | List the current user's personal favorite emotions. | When the agent needs to inspect available personal emotions or resolve an emotionId/mediaId before sending. |
 | `dws chat emotion send` | Send a personal favorite emotion to a group or direct chat as the authenticated user. | When the agent needs to send a known personal emotion mediaId to exactly one group, userId, or openDingTalkId target. |
+| `dws chat conversation-file upload` | Upload a local file to a conversation file space without sending a message, returning reusable file identifiers. | When the agent explicitly needs conversation-file identifiers without posting a chat message. |
 | `dws chat group create` | Create a new internal group chat with a set of initial members. | When the agent needs to spin up a dedicated group for a new project, incident, or discussion thread. |
 | `dws chat group members` | List members of a group chat; can also be used against the current user to enumerate their groups' members. | When the agent needs the roster of a group before mentioning, removing, or auditing members. |
 | `dws chat group members add` | Add one or more users to an existing group chat. | When the agent expands a group to include additional participants. |
@@ -309,7 +310,7 @@ _OA approval workflows: inspect forms, forecast routes, create instances, approv
 | `dws oa approval form-schema` | Retrieve the form Schema for an approval template by processCode. | Before collecting or validating values for a new approval instance. |
 | `dws oa approval forecast-process` | Forecast the approval route for a template and its proposed form values. | Before creating an instance, especially when the route contains user-selectable approver or notifier nodes. |
 | `dws oa approval list-forms` | List approval process templates (forms) the current user is allowed to initiate. | When the agent needs to pick the right approval form before submitting a new request. |
-| `dws oa approval list-initiated` | List approval process instances the current user has initiated. | When the agent reviews the status of approvals the user submitted. |
+| `dws oa approval list-initiated` | List approval instances the current user has initiated under a specified approval template (processCode). | When the agent reviews the status of approvals the user submitted. |
 | `dws oa approval list-pending` | List approval process instances currently awaiting action from the current user. | When the agent surfaces "needs your approval" items in the user's inbox. |
 | `dws oa approval records` | Retrieve the operation history (who approved/commented/transferred, when) of an approval instance. | When the agent explains an approval's progression or audits who handled it. |
 | `dws oa approval reject` | Reject a pending approval process instance as the current user. | When the agent declines an approval on behalf of the user, optionally with a reason. |

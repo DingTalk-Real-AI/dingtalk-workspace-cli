@@ -277,7 +277,7 @@ func TestCrossPlatformCoverageAitableViewCommandEdges(t *testing.T) {
 		{"get timebar", "Gantt", with([]string{"view", "get", "timebar"})},
 		{"get filter", "Grid", with([]string{"view", "get", "filter"})},
 		{"update invalid config", "Grid", with([]string{"view", "update"}, `--config={"filter":1}`)},
-		{"update normalized config", "Grid", with([]string{"view", "update"}, `--config={"filter":{"operator":"and","operands":[]}}`)},
+		{"update normalized config", "Grid", with([]string{"view", "update"}, `--config={"filter":{"operator":"eq","operands":["f","v"]}}`)},
 		{"card conflict", "Kanban", with([]string{"view", "update", "card"}, "--no-cover", "--cover-field-id=f")},
 		{"card unsupported", "Grid", with([]string{"view", "update", "card"}, "--no-cover")},
 		{"card no cover", "Kanban", with([]string{"view", "update", "card"}, "--no-cover", "--hidden-field-title", "--display-field-name")},
@@ -300,7 +300,7 @@ func TestCrossPlatformCoverageAitableViewCommandEdges(t *testing.T) {
 		{"filter missing json", "Grid", with([]string{"view", "update", "filter"})},
 		{"filter invalid json", "Grid", with([]string{"view", "update", "filter"}, "--json={")},
 		{"filter invalid shape", "Grid", with([]string{"view", "update", "filter"}, "--json=1")},
-		{"filter valid object", "Grid", with([]string{"view", "update", "filter"}, `--json={"operator":"and","operands":[]}`)},
+		{"filter valid object", "Grid", with([]string{"view", "update", "filter"}, `--json={"operator":"eq","operands":["f","v"]}`)},
 		{"sort valid", "Grid", with([]string{"view", "update", "sort"}, `--json=[{"fieldId":"f","direction":"asc"}]`)},
 		{"group valid", "Grid", with([]string{"view", "update", "group"}, `--json=[{"fieldId":"f","direction":"asc"}]`)},
 		{"name missing base", "Grid", []string{"view", "update", "name", "--table-id=t", "--view-id=view", "--name=n"}},
@@ -386,7 +386,7 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 	t.Run("logical groups fail closed before write", func(t *testing.T) {
 		caller := &aitableTestCaller{responses: []string{fields}}
 		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", `--json=[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`)
-		if err == nil || !strings.Contains(err.Error(), "persisted view protocol") || len(caller.calls) != 1 || caller.calls[0].tool != "get_fields" {
+		if err == nil || !strings.Contains(err.Error(), "不接受 and/or") || len(caller.calls) != 0 {
 			t.Fatalf("logical filter group fail-closed = err:%v calls:%#v", err, caller.calls)
 		}
 	})

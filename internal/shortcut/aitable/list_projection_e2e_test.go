@@ -33,6 +33,20 @@ func TestCrossPlatformCoverageAITableListProjectionExplicitEmptyIsSuccessE2E(t *
 	}
 }
 
+func TestCrossPlatformCoverageAITableBaseSearchPreservesPaginationFactsE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"bases":[],"hasMore":true,"nextCursor":"next-page"}}`}}}
+	out, err := runAITableCompositeCLI(t, caller, "+base-search", "--query", "none")
+	if err != nil || !strings.Contains(out, `"hasMore": true`) || !strings.Contains(out, `"nextCursor": "next-page"`) {
+		t.Fatalf("base search pagination = output:%q err:%v", out, err)
+	}
+
+	caller = &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"bases":[],"hasMore":false,"nextCursor":"stale"}}`}}}
+	out, err = runAITableCompositeCLI(t, caller, "+base-search", "--query", "none")
+	if err != nil || !strings.Contains(out, `"hasMore": false`) || strings.Contains(out, `"nextCursor"`) {
+		t.Fatalf("base search terminal pagination = output:%q err:%v", out, err)
+	}
+}
+
 func TestCrossPlatformCoverageAITableListProjectionUnknownIsNotEmptySuccessE2E(t *testing.T) {
 	commands := []struct {
 		name    string

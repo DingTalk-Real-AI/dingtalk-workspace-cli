@@ -17,9 +17,9 @@ const redactedValue = "[REDACTED]"
 var (
 	urlCredentialsPattern = regexp.MustCompile(`(?i)\b(https?://)[^/@\s]+@`)
 	urlQueryValuePattern  = regexp.MustCompile(`(?i)[?&][^=&#\s]+=[^&#\s"'<>]+`)
-	headerSecretPattern   = regexp.MustCompile(`(?im)\b(authorization|cookie|set-cookie)(\s*:\s*)[^\r\n]+`)
-	jsonSecretPattern     = regexp.MustCompile(`(?i)("(?:authorization|token|access_token|refresh_token|client_secret|cookie|set-cookie|password)"\s*:\s*)("(?:\\.|[^"\\])*"|[^,}\s]+)`)
-	assignedSecretPattern = regexp.MustCompile(`(?i)\b(authorization|token|access_token|refresh_token|client_secret|cookie|set-cookie|password)(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)`)
+	headerSecretPattern   = regexp.MustCompile(`(?im)\b(authorization|cookie|set-cookie|x-dws-agent-ext|x-dingtalk-ext)(\s*:\s*)[^\r\n]+`)
+	jsonSecretPattern     = regexp.MustCompile(`(?i)("(?:authorization|token|access_token|refresh_token|client_secret|cookie|set-cookie|password|umid|x-dws-agent-ext|x-dingtalk-ext)"\s*:\s*)("(?:\\.|[^"\\])*"|[^,}\s]+)`)
+	assignedSecretPattern = regexp.MustCompile(`(?i)\b(authorization|token|access_token|refresh_token|client_secret|cookie|set-cookie|password|umid|x-dws-agent-ext|x-dingtalk-ext)(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)`)
 )
 
 // redactEnvelope is the single pre-render boundary for framework-owned

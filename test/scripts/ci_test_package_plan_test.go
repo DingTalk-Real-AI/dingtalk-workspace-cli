@@ -23,7 +23,12 @@ func TestCICoveragePackagePlanRoutesFullSuiteScope(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	remaining := strings.Fields(runTestPackagePlan(t, root, "list-coverage", "remaining"))
 
-	for _, suffix := range []string{"/cmd", "/internal/output", "/skills"} {
+	for _, suffix := range []string{
+		"/cmd",
+		"/internal/output",
+		"/skills",
+		"/scripts/build/runtime-payload",
+	} {
 		if !containsPackageSuffix(remaining, suffix) {
 			t.Errorf("coverage remaining shard does not contain package ending in %q", suffix)
 		}
@@ -163,6 +168,124 @@ func TestCIAppRacePartitionMatrixMatchesHelper(t *testing.T) {
 			if !matched {
 				t.Errorf("%s matrix shard %q has no matching helper partition", job.name, shard)
 			}
+		}
+	}
+}
+
+func TestCIMergeCoverageProfilesUnionsDuplicateBlocks(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	workdir := t.TempDir()
+	first := filepath.Join(workdir, "first.txt")
+	second := filepath.Join(workdir, "second.txt")
+	output := filepath.Join(workdir, "merged.txt")
+
+	const blockA = "example.com/project/a.go:10.2,12.3 2"
+	const blockB = "example.com/project/b.go:20.1,20.8 1"
+	if err := os.WriteFile(first, []byte("mode: atomic\n"+blockA+" 0\n"+blockB+" 3\n"), 0o600); err != nil {
+		t.Fatalf("write first coverage profile: %v", err)
+	}
+	if err := os.WriteFile(second, []byte("mode: atomic\n"+blockA+" 7\n"+blockB+" 1\n"), 0o600); err != nil {
+		t.Fatalf("write second coverage profile: %v", err)
+	}
+
+	script := filepath.Join(root, "scripts", "ci", "merge-coverage-profiles.sh")
+	cmd := exec.Command("sh", script, output, first, second)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "TMPDIR="+t.TempDir())
+	combined, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("merge coverage profiles failed: %v\n%s", err, combined)
+	}
+	merged, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read merged coverage profile: %v", err)
+	}
+	want := "mode: atomic\n" + blockA + " 7\n" + blockB + " 3\n"
+	if string(merged) != want {
+		t.Fatalf("merged profile = %q, want %q", merged, want)
+	}
+}
+
+func TestCIFullCoverageRunnerKeepsOneJobAndPartitionsApp(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "scripts", "ci", "run-full-coverage.sh"))
+	if err != nil {
+		t.Fatalf("read full coverage runner: %v", err)
+	}
+	script := string(data)
+	for _, want := range []string{
+		"for shard in app cli generators helpers remaining; do",
+		`"$TOOLS_ROOT/scripts/ci/run-coverage-shard.sh" run "$shard" "$profile"`,
+		`"$TOOLS_ROOT/scripts/ci/merge-coverage-profiles.sh"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("full coverage runner missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"xargs -P", "parallel "} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("full coverage runner unexpectedly adds in-job fan-out %q", forbidden)
+		}
+	}
+}
+
+func TestCICoverageShardRunnerBoundsPackageParallelism(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "scripts", "ci", "run-coverage-shard.sh"))
+	if err != nil {
+		t.Fatalf("read coverage shard runner: %v", err)
+	}
+	script := string(data)
+	for _, want := range []string{
+		"package_parallelism=1",
+		`if [ "$shard" = remaining ]; then`,
+		"package_parallelism=2",
+		`go test -count=1 -p "$package_parallelism"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("coverage shard runner missing bounded parallelism contract %q", want)
+		}
+	}
+}
+
+func TestCICoverageShardsOwnEveryAppPartitionExactlyOnce(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	appScript := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
+	list := exec.Command("sh", appScript, "list-partitions")
+	list.Dir = root
+	output, err := list.CombinedOutput()
+	if err != nil {
+		t.Fatalf("list app partitions failed: %v\n%s", err, output)
+	}
+	want := strings.Fields(string(output))
+	if len(want) == 0 {
+		t.Fatal("app partition list is empty")
+	}
+
+	shardScript := filepath.Join(root, "scripts", "ci", "run-coverage-shard.sh")
+	counts := map[string]int{}
+	for _, shard := range []string{"app", "cli", "generators", "helpers", "remaining"} {
+		cmd := exec.Command("sh", shardScript, "list-app-partitions", shard)
+		cmd.Dir = root
+		shardOutput, runErr := cmd.CombinedOutput()
+		if runErr != nil {
+			t.Fatalf("list app partitions for %s failed: %v\n%s", shard, runErr, shardOutput)
+		}
+		for _, partition := range strings.Fields(string(shardOutput)) {
+			counts[partition]++
+		}
+	}
+
+	wanted := map[string]bool{}
+	for _, partition := range want {
+		wanted[partition] = true
+		if counts[partition] != 1 {
+			t.Errorf("app partition %q assigned %d times, want exactly once", partition, counts[partition])
+		}
+	}
+	for partition := range counts {
+		if !wanted[partition] {
+			t.Errorf("coverage shard owns unknown app partition %q", partition)
 		}
 	}
 }

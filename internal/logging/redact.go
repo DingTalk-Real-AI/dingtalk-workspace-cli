@@ -20,24 +20,28 @@ import (
 	"net/http"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 )
 
 // sensitiveKeys are header/field names whose values must be redacted in logs.
 var sensitiveKeys = map[string]bool{
-	"authorization":       true,
-	"x-user-access-token": true,
-	"dws_agent_ext":       true,
-	"x-dws-agent-ext":     true,
-	"client_secret":       true,
-	"client-secret":       true,
-	"token":               true,
-	"secret":              true,
-	"password":            true,
-	"cookie":              true,
-	"api_key":             true,
-	"api-key":             true,
-	"access_token":        true,
-	"credential":          true,
+	"authorization":               true,
+	"x-user-access-token":         true,
+	"dws_agent_ext":               true,
+	"x-dws-agent-ext":             true,
+	requestmeta.DingTalkExtHeader: true,
+	"umid":                        true,
+	"client_secret":               true,
+	"client-secret":               true,
+	"token":                       true,
+	"secret":                      true,
+	"password":                    true,
+	"cookie":                      true,
+	"api_key":                     true,
+	"api-key":                     true,
+	"access_token":                true,
+	"credential":                  true,
 }
 
 // sensitiveSubstrings are substrings that mark a key as sensitive.

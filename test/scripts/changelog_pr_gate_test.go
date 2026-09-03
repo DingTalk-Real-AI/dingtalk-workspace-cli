@@ -1336,6 +1336,9 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing focused test job boundaries")
 	}
 	focusedJob := admission[focusedStart:focusedEnd]
+	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
+		t.Error("focused test shards must run for every non-doc, non-full-suite revision")
+	}
 	if !strings.Contains(focusedJob, "timeout-minutes: 20") {
 		t.Error("focused test job must allow the scoped race suite up to 20 minutes")
 	}
@@ -1362,6 +1365,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
 		"timeout_budget=15m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
+		"- smoke",
 		"- release-scripts",
 	} {
 		if !strings.Contains(focusedJob, want) {
@@ -1505,10 +1509,22 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if !strings.Contains(integration, "include-hidden-files: true") {
 		t.Error("main integration must upload diagnostics stored below the hidden .tmp-bin directory")
 	}
+	const focusedIntegrationCommand = "bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests --keep-workdir"
+	if count := strings.Count(integration, focusedIntegrationCommand); count != 2 {
+		t.Errorf("main integration must execute and report the focused E2E command exactly twice, got %d", count)
+	}
 
 	integrationScript := readWorkflow("scripts/dev/test-multi-profile-e2e.sh")
+	for _, want := range []string{
+		"--skip-go-tests)",
+		"RUN_GO_TESTS=0",
+	} {
+		if !strings.Contains(integrationScript, want) {
+			t.Errorf("multi-profile E2E script missing focused-CI boundary %q", want)
+		}
+	}
 	if !strings.Contains(integrationScript, `GO_TEST_TIMEOUT="${MULTI_PROFILE_GO_TEST_TIMEOUT:-10m}"`) {
-		t.Error("multi-profile E2E must allow enough time for the complete internal/app regression suite")
+		t.Error("multi-profile E2E must allow enough time when complete Go regressions are explicitly requested")
 	}
 	if strings.Contains(integrationScript, "go test -timeout 180s") {
 		t.Error("multi-profile E2E must not retain the obsolete three-minute Go test budget")

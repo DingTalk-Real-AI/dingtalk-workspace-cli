@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 // ── NormalizeStatus 枚举映射 ──
@@ -362,8 +364,12 @@ func TestCrossPlatformCoverageRunNodeTransferWithAsyncPoll(t *testing.T) {
 
 func TestCrossPlatformCoverageDriveTaskGetCommand(t *testing.T) {
 	t.Run("missing required flags", func(t *testing.T) {
-		if err := executeDriveEdge(t, &scriptedToolCaller{}, "task", "get"); err == nil {
+		err := executeDriveEdge(t, &scriptedToolCaller{}, "task", "get")
+		if err == nil {
 			t.Fatal("missing flags returned nil")
+		}
+		if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+			t.Fatalf("exit code = %d, want validation/%d: %v", got, apperrors.ExitCodeValidation, err)
 		}
 	})
 
@@ -371,6 +377,9 @@ func TestCrossPlatformCoverageDriveTaskGetCommand(t *testing.T) {
 		err := executeDriveEdge(t, &scriptedToolCaller{}, "task", "get", "--type", "sync", "--id", "t1")
 		if err == nil || !strings.Contains(err.Error(), "不支持的任务类型") {
 			t.Fatalf("error = %v", err)
+		}
+		if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+			t.Fatalf("exit code = %d, want validation/%d", got, apperrors.ExitCodeValidation)
 		}
 	})
 

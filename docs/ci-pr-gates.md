@@ -147,7 +147,12 @@ Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
 an explicit manual dispatch). A failing downstream run remains a real
 regression and must be repaired, but it must not be represented by a synthetic
-successful PR check.
+successful PR check. The workflow executes the isolated profile storage,
+routing, migration, and aggregation chain without repeating the complete
+`internal/auth`, `internal/app`, and `test/cli` package suites. Those Go
+regressions remain owned by the protected-main test and coverage shards. The
+release E2E validation uses the same boundary so release verification does not
+duplicate an already admitted commit's complete Go suite.
 
 ```mermaid
 flowchart TB
@@ -348,11 +353,22 @@ base_ref=$(git merge-base HEAD origin/main)
 standard PR, CI derives changed packages and their reverse-dependency test
 closure, then generates candidate and merge-base profiles with the same test
 scope and `coverpkg`. High-risk and protected-main runs use the complete
-profiles. The complete candidate profile is produced by disjoint per-shard
-helper jobs (`scripts/ci/test-packages.sh list-coverage`, kept serial with
-`-p 1` inside each shard; `verify` proves the shard union equals the
-full-suite scope exactly once) and concatenated in the aggregate job before
-enforcement. The complete merge-base profile is restored from an exact-key
+profiles. The complete candidate profile is produced by five fixed per-shard
+helper jobs (`scripts/ci/test-packages.sh list-coverage`; `verify`
+proves the shard union equals the full-suite scope exactly once). Packages
+remain serial within each runner except for the large `remaining` shard, which
+uses fixed package parallelism `-p 2` to overlap its two independent long tails
+without requesting another runner. The `internal/app` package is handled
+separately: it reuses the existing reviewed test-name partitions and balances
+them across the same five coverage jobs, so each partition gets a fresh Go test
+process and releases process-global command registries. The assignment is
+validated in both directions and reduces the long tail without requesting
+another hosted runner. The partition and final shard profiles are
+deterministically unioned by source block before enforcement. This does not add
+matrix jobs. The same bounded in-job runner owns every trusted cold full-profile
+fallback, so PR baseline, metadata promotion, Formula promotion, and repair do
+not reintroduce the long-lived app process. The complete merge-base profile is
+restored from an exact-key
 cache written by the last green `main` push of that same commit (key:
 merge-base SHA plus resolved Go version); any miss falls back to recomputing
 it in a merge-base worktree. The trusted `main` producer and PR consumer use

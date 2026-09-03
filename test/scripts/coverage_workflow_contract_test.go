@@ -173,6 +173,17 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	}
 
 	fullJob := admission[fullStart:supportingStart]
+	const exactCoverageMatrix = `      matrix:
+        shard:
+          - app
+          - cli
+          - generators
+          - helpers
+          - remaining
+    steps:`
+	if !strings.Contains(fullJob, exactCoverageMatrix) {
+		t.Error("coverage-current-full must retain exactly five hosted-runner shards")
+	}
 	for _, want := range []string{
 		"needs.lint.outputs.full_suite == 'true'",
 		"fail-fast: false",
@@ -181,15 +192,16 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"          - generators",
 		"          - helpers",
 		"          - remaining",
-		`./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD"`,
-		"go test -count=1 -p 1",
-		`-coverprofile="coverage-shard-$COVERAGE_SHARD.txt"`,
-		"-covermode=atomic",
+		`./scripts/ci/run-coverage-shard.sh run \`,
+		`"$COVERAGE_SHARD" "coverage-shard-$COVERAGE_SHARD.txt"`,
 		"name: coverage-current-shard-${{ matrix.shard }}",
 	} {
 		if !strings.Contains(fullJob, want) {
 			t.Errorf("coverage-current-full missing shard contract %q", want)
 		}
+	}
+	if strings.Contains(fullJob, "go test -count=1 -p 1") {
+		t.Error("coverage-current-full must delegate app partition balancing to the shared shard runner")
 	}
 
 	baselineJob := admission[baselineStart:metadataStart]
@@ -220,6 +232,13 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	if strings.Contains(baselineJob, "restore-keys") {
 		t.Error("coverage baseline cache must stay exact-key; prefix restore-keys can resurrect a wrong-commit baseline")
 	}
+	if !strings.Contains(baselineJob, `"$GITHUB_WORKSPACE/scripts/ci/run-full-coverage.sh"`) ||
+		!strings.Contains(baselineJob, `"$GITHUB_WORKSPACE/coverage-base.txt"`) {
+		t.Error("coverage-baseline cold fallback must reuse the bounded in-job partition runner")
+	}
+	if strings.Contains(baselineJob, "./ ./cmd/... ./internal/... ./skills/...") {
+		t.Error("coverage-baseline must not retain one long-lived full-suite go test process")
+	}
 
 	metadataJob := admission[metadataStart:gateStart]
 	for _, want := range []string{
@@ -239,8 +258,7 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"id: metadata-current-cache",
 		"id: metadata-source-cache",
 		"key: dws-coverage-full-v2-${{ env.COVERAGE_SOURCE_REF }}-go${{ steps.setup-go-metadata.outputs.go-version }}",
-		"go test -count=1 -p 1",
-		"./ ./cmd/... ./internal/... ./skills/...",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
 		"key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go-metadata.outputs.go-version }}",
 		"id: metadata-target-cache-verification",
 		"lookup-only: true",
@@ -270,6 +288,7 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"for shard in app cli generators helpers remaining; do",
 		"test ! -f coverage.txt",
 		`test "$(head -n 1 "$profile")" = "mode: atomic"`,
+		`./scripts/ci/merge-coverage-profiles.sh coverage.txt "${profiles[@]}"`,
 		"github.event_name == 'push'",
 		"cp coverage.txt coverage-cache.txt",
 		"path: " + cachePath,
@@ -342,8 +361,7 @@ func TestFormulaCoverageBaselinePromotionContract(t *testing.T) {
 		"id: target-cache",
 		"id: parent-cache",
 		"key: dws-coverage-full-v2-${{ steps.validate-target.outputs.parent_sha }}-go${{ steps.setup-go.outputs.go-version }}",
-		"go test -count=1 -p 1",
-		"./ ./cmd/... ./internal/... ./skills/...",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
 		"key: dws-coverage-full-v2-${{ steps.validate-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}",
 		"lookup-only: true",
 		"fail-on-cache-miss: true",
@@ -693,8 +711,7 @@ func TestCoverageBaselineRepairContract(t *testing.T) {
 		"id: target-cache",
 		"actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
 		"key: dws-coverage-full-v2-${{ steps.resolve-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}",
-		"go test -count=1 -p 1",
-		"./ ./cmd/... ./internal/... ./skills/...",
+		"./scripts/ci/run-full-coverage.sh coverage-cache.txt",
 		"actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830",
 		"id: target-cache-verification",
 		"lookup-only: true",

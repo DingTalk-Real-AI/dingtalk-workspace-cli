@@ -30,7 +30,18 @@ dws chat conversation-info --user <userId> --format json
 dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json
 ```
 
-`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不再依赖调用方读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
+`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不依赖调用方预先读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
+
+### 只上传到会话文件空间
+
+用户明确要求上传文件但不发送消息时使用：
+
+```bash
+dws chat conversation-file upload --conversation-id <openConversationId> --file ./report.pdf --format json
+dws chat conversation-file upload --open-dingtalk-id <openDingTalkId> --file ./report.pdf --format json
+```
+
+命令只执行当前文件消息复用的本地上传链路，返回 `dentryId`、`spaceId`、`fileName`、`fileType` 和 `fileSize`。`--conversation-id`、`--user`、`--open-dingtalk-id` 必须且只能指定一个；文件必须是工作目录内的相对路径。URL 代传不受支持。
 
 ### 会话列表与红点
 
@@ -85,29 +96,29 @@ dws chat clear-messages --conversation-id <openConversationId>
 
 ### 会话分组
 
+会话分组是当前用户的分类容器，不是聊天群。删除分类不会删除其中的真实会话。高频生命周期统一使用 Shortcut：
+
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
-| `category list` | 获取用户自定义会话分组 | 无 |
-| `category list-conversations` | 拉取指定分组下会话 | `--category-id`，可选 `--exclude-muted` |
-| `category list-by-conv` | 拉取指定会话所属的用户自定义会话分组 | `--group` |
-| `category batch-info` | 批量拉取用户自定义会话分组信息 | `--category-ids` |
-| `category create` | 创建会话分组 | `--title` |
-| `category create-smart` | 创建智能会话分组，可按群名称关键词和群内成员匹配 | `--name`，可选 `--keywords` `--members` |
-| `category delete` | 删除会话分组 | `--category-id` |
-| `category rename` | 修改分组名称 | `--category-id` `--title` |
-| `category add-conv` | 将会话加入分组 | `--group` `--category-ids` |
-| `category remove-conv` | 将会话移出分组 | `--group` `--category-ids` |
+| `+category-list` | 获取用户自定义会话分组 | 无 |
+| `+category-create` | 创建会话分组 | `--title` |
+| `+category-add-conversation` | 将会话加入分组 | `--group` `--category-ids` |
+| `+category-list-conversations` | 拉取指定分组下会话 | `--category-id`，可选 `--exclude-muted` |
+| `+category-remove-conversation` | 将会话移出分组 | `--group` `--category-ids` |
+| `+category-rename` | 修改分组名称 | `--category-id` `--title` |
+| `+category-delete` | 删除会话分组 | `--category-id` |
 
 ```bash
-dws chat category list
-dws chat category list-by-conv --group <openConversationId>
-dws chat category batch-info --category-ids 123,456
-dws chat category create --title "工作群"
-dws chat category create-smart --name "重点群" --keywords "重点,项目" --members openDingTalkId1,openDingTalkId2
-dws chat category add-conv --group <openConversationId> --category-ids 123,456
+dws chat +category-create --title "工作群" --format json
+dws chat +category-add-conversation --group <openConversationId> --category-ids 123,456 --format json
+dws chat +category-list-conversations --category-id 123 --format json
+dws chat +category-delete --category-id 123 --format json
 ```
 
-`create-smart` 中 `--keywords` 是群名称关键词列表，`--members` 是群内成员 openDingTalkId 列表；两者可单独使用，也可组合使用。
+只有 Shortcut 尚未覆盖的低频查询和智能规则才使用原子 `category list-by-conv`、
+`category batch-info`、`category create-smart`。`create-smart --keywords` 是群名关键词列表，
+`--members` 是群成员 openDingTalkId 列表，两者可单独或组合使用。写操作在首次调用前按
+Runtime gate 完成确认；上述示例不代表可以绕过确认。
 
 ## 常见工作流
 
@@ -129,11 +140,12 @@ dws chat +chat-messages --group <openConversationId> --time "2026-03-10 00:00:00
 ### 会话分组
 
 ```bash
-dws chat category create --title "重点项目" --format json
-dws chat category add-conv --group <openConversationId> --category-ids <categoryId> --format json
+dws chat +category-create --title "重点项目" --format json
+dws chat +category-add-conversation --group <openConversationId> --category-ids <categoryId> --format json
+dws chat +category-list-conversations --category-id <categoryId> --format json
 dws chat category list-by-conv --group <openConversationId> --format json
 dws chat category batch-info --category-ids <categoryId> --format json
-dws chat category list-conversations --category-id <categoryId> --format json
+dws chat +category-delete --category-id <categoryId> --format json
 ```
 
 ### 智能会话分组
