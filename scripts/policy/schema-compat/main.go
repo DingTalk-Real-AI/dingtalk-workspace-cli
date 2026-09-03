@@ -134,6 +134,26 @@ var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityExceptio
 		{Field: "confirmation", Old: "not_required", New: "user_required"},
 		{Field: "risk", Old: "medium", New: "high"},
 	},
+	// AITable contract corrections reviewed before the product migration:
+	// create_form_view is non-idempotent; create_cell_doc returns the existing
+	// primary document when one is already bound; deleting a form question or
+	// a navigation section is destructive, and section deletion must cross the
+	// runtime confirmation gate. Keep each multi-field hardening atomic.
+	"aitable/aitable.form_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.form_questions_delete": {
+		{Field: "effect", Old: "write", New: "destructive"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"aitable/aitable.record_primary_doc_create": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.section_delete": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "effect", Old: "write", New: "destructive"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
 }
 
 func main() {
@@ -758,7 +778,6 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		new  string
 	}{
 		{name: "primary_cli_path", old: oldTool.PrimaryCLIPath, new: newTool.PrimaryCLIPath},
-		{name: "interface_mode", old: oldTool.InterfaceMode, new: newTool.InterfaceMode},
 		{name: "availability", old: oldTool.Availability, new: newTool.Availability},
 		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
@@ -798,10 +817,17 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		failures = append(failures, checkParameterCompatibility(toolPath, parameter, oldParameter, newParameter)...)
 	}
 
-	// interface_ref is evaluated last, because the redirect carve-out below is
-	// conditional on every other check for this tool having passed.
+	// Interface metadata is evaluated last because both reviewed mechanisms are
+	// conditional on every other check for this tool having passed. A mode
+	// transition is an exact old(mode, ref) -> new(mode, ref) migration; a ref
+	// redirect is the narrower mcp -> mcp case.
+	reviewedInterfaceTransition := compatibleReviewedInterfaceTransition(toolPath, oldTool, newTool, failures)
+	reviewedRefRedirect := compatibleInterfaceRefRedirect(toolPath, oldTool, newTool, failures)
+	if oldTool.InterfaceMode != newTool.InterfaceMode && !reviewedInterfaceTransition {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed interface_mode", toolPath))
+	}
 	if oldTool.InterfaceRef != newTool.InterfaceRef &&
-		!compatibleInterfaceRefRedirect(toolPath, oldTool, newTool, failures) {
+		!reviewedInterfaceTransition && !reviewedRefRedirect {
 		failures = append(failures, fmt.Sprintf("schema tool %q changed interface_ref", toolPath))
 	}
 	sort.Strings(failures)
@@ -851,6 +877,103 @@ func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string
 	return false
 }
 
+// interfaceTransition identifies one reviewed change in interface kind and
+// pins both sides of the migration. A composite leaf has an empty ref; an mcp
+// leaf must carry the canonicalized ref emitted by parseTool.
+type interfaceTransition struct {
+	OldMode string
+	OldRef  string
+	NewMode string
+	NewRef  string
+}
+
+// reviewedInterfaceTransitions enumerates exact changes between a single-RPC
+// leaf and an orchestrated/composite leaf. Schema shape cannot prove that the
+// declared kind matches runtime execution, so every tool and both complete
+// interface tuples must be reviewed before the product change lands.
+//
+// The table does not approve any CLI, parameter, availability, or safety drift.
+// compatibleReviewedInterfaceTransition requires every other compatibility
+// check for the tool to pass before this exception can apply. Adding an entry
+// is a contract decision and belongs in a governance review, not in the product
+// feature change that consumes it.
+var reviewedInterfaceTransitions = map[string]interfaceTransition{
+	// Chart writes now perform a reviewed Dashboard metadata read and root-grid
+	// validation before the write RPC. The complete command is no longer a
+	// single create_chart/update_chart projection.
+	"aitable/aitable.chart_create": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable","rpc_name":"create_chart"}`,
+		NewMode: "composite",
+	},
+	"aitable/aitable.chart_update": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable","rpc_name":"update_chart"}`,
+		NewMode: "composite",
+	},
+	// Primary-document reads prefer the public get_cell_doc RPC but retain an
+	// explicit legacy fallback for older deployments. That conditional two-RPC
+	// route cannot truthfully publish one interface_ref.
+	"aitable/aitable.base_get_primary_doc_id": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable","rpc_name":"get_base_primary_doc_id"}`,
+		NewMode: "composite",
+	},
+	"aitable/aitable.record_primary_doc_get": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable-helper","rpc_name":"get_primary_doc"}`,
+		NewMode: "composite",
+	},
+	// These form helpers were historically unpinned composites because their
+	// helper RPCs were absent from the public snapshot. They are now direct,
+	// single-RPC commands in the public aitable snapshot.
+	"aitable/aitable.form_create": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"create_form_view"}`,
+	},
+	"aitable/aitable.form_delete": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"delete_form_view"}`,
+	},
+	"aitable/aitable.form_field_hide": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_field_hidden"}`,
+	},
+	"aitable/aitable.form_field_list": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"list_form_fields"}`,
+	},
+	"aitable/aitable.form_field_update": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_field"}`,
+	},
+	"aitable/aitable.form_list": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"list_form_views"}`,
+	},
+	"aitable/aitable.form_share_get": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"get_share_form_config"}`,
+	},
+	"aitable/aitable.form_share_update": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_share_form"}`,
+	},
+	"aitable/aitable.form_update": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_info"}`,
+	},
+}
+
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
 // backend RPC migrations this gate accepts. Schema shape alone cannot prove two
 // RPCs share business semantics, permissions, error behaviour, or side effects,
@@ -878,6 +1001,102 @@ var reviewedInterfaceRefRedirect = map[string]map[string]string{
 	// separately as reviewed mapping exclusions.
 	"sheet/sheet.range_set_style": {
 		`{"product_id":"sheet","rpc_name":"update_range"}`: `{"product_id":"sheet","rpc_name":"set_cell_range"}`,
+	},
+	// The reviewed AITable helper surface is now published by the public
+	// aitable snapshot. These entries are intentionally per leaf even when two
+	// leaves share one RPC, so a future helper command cannot inherit approval.
+	"aitable/aitable.advperm_disable": {
+		`{"product_id":"aitable-helper","rpc_name":"set_advanced_permission"}`: `{"product_id":"aitable","rpc_name":"set_advanced_permission"}`,
+	},
+	"aitable/aitable.advperm_enable": {
+		`{"product_id":"aitable-helper","rpc_name":"set_advanced_permission"}`: `{"product_id":"aitable","rpc_name":"set_advanced_permission"}`,
+	},
+	"aitable/aitable.advperm_role_create": {
+		`{"product_id":"aitable-helper","rpc_name":"create_role"}`: `{"product_id":"aitable","rpc_name":"create_role"}`,
+	},
+	"aitable/aitable.advperm_role_delete": {
+		`{"product_id":"aitable-helper","rpc_name":"delete_role"}`: `{"product_id":"aitable","rpc_name":"delete_role"}`,
+	},
+	"aitable/aitable.advperm_role_get": {
+		`{"product_id":"aitable-helper","rpc_name":"get_role"}`: `{"product_id":"aitable","rpc_name":"get_role"}`,
+	},
+	"aitable/aitable.advperm_role_list": {
+		`{"product_id":"aitable-helper","rpc_name":"list_roles"}`: `{"product_id":"aitable","rpc_name":"list_roles"}`,
+	},
+	"aitable/aitable.advperm_role_update": {
+		`{"product_id":"aitable-helper","rpc_name":"patch_role"}`: `{"product_id":"aitable","rpc_name":"patch_role"}`,
+	},
+	"aitable/aitable.dashboard_arrange": {
+		`{"product_id":"aitable-helper","rpc_name":"align_dashboard"}`: `{"product_id":"aitable","rpc_name":"align_dashboard"}`,
+	},
+	"aitable/aitable.record_history_list": {
+		`{"product_id":"aitable-helper","rpc_name":"query_record_history"}`: `{"product_id":"aitable","rpc_name":"query_record_history"}`,
+	},
+	"aitable/aitable.record_primary_doc_create": {
+		`{"product_id":"aitable-helper","rpc_name":"create_primary_doc"}`: `{"product_id":"aitable","rpc_name":"create_cell_doc"}`,
+	},
+	"aitable/aitable.record_query_empty": {
+		`{"product_id":"aitable-helper","rpc_name":"query_empty_records"}`: `{"product_id":"aitable","rpc_name":"query_empty_records"}`,
+	},
+	"aitable/aitable.record_share_url": {
+		`{"product_id":"aitable-helper","rpc_name":"get_record_share_url"}`: `{"product_id":"aitable","rpc_name":"get_record_share_url"}`,
+	},
+	"aitable/aitable.record_upsert": {
+		`{"product_id":"aitable-helper","rpc_name":"record_upsert"}`: `{"product_id":"aitable","rpc_name":"record_upsert"}`,
+	},
+	"aitable/aitable.section_create": {
+		`{"product_id":"aitable-helper","rpc_name":"create_section"}`: `{"product_id":"aitable","rpc_name":"create_section"}`,
+	},
+	"aitable/aitable.section_delete": {
+		`{"product_id":"aitable-helper","rpc_name":"delete_section"}`: `{"product_id":"aitable","rpc_name":"delete_section"}`,
+	},
+	"aitable/aitable.section_list_empty": {
+		`{"product_id":"aitable-helper","rpc_name":"list_empty_sections"}`: `{"product_id":"aitable","rpc_name":"list_empty_sections"}`,
+	},
+	"aitable/aitable.section_list_nodes": {
+		`{"product_id":"aitable-helper","rpc_name":"list_nsheet_nodes"}`: `{"product_id":"aitable","rpc_name":"list_nsheet_nodes"}`,
+	},
+	"aitable/aitable.section_move_node": {
+		`{"product_id":"aitable-helper","rpc_name":"move_nsheet_node"}`: `{"product_id":"aitable","rpc_name":"move_nsheet_node"}`,
+	},
+	"aitable/aitable.section_rename": {
+		`{"product_id":"aitable-helper","rpc_name":"rename_section"}`: `{"product_id":"aitable","rpc_name":"rename_section"}`,
+	},
+	"aitable/aitable.section_reorder": {
+		`{"product_id":"aitable-helper","rpc_name":"reorder_section"}`: `{"product_id":"aitable","rpc_name":"reorder_section"}`,
+	},
+	"aitable/aitable.view_duplicate": {
+		`{"product_id":"aitable-helper","rpc_name":"duplicate_view"}`: `{"product_id":"aitable","rpc_name":"duplicate_view"}`,
+	},
+	"aitable/aitable.view_get_frozen_cols": {
+		`{"product_id":"aitable-helper","rpc_name":"get_frozen_columns_of_view"}`: `{"product_id":"aitable","rpc_name":"get_frozen_columns_of_view"}`,
+	},
+	"aitable/aitable.view_get_lock": {
+		`{"product_id":"aitable-helper","rpc_name":"get_view_lock_status"}`: `{"product_id":"aitable","rpc_name":"get_view_lock_status"}`,
+	},
+	"aitable/aitable.view_get_row_height": {
+		`{"product_id":"aitable-helper","rpc_name":"get_cell_height_of_view"}`: `{"product_id":"aitable","rpc_name":"get_cell_height_of_view"}`,
+	},
+	"aitable/aitable.view_lock": {
+		`{"product_id":"aitable-helper","rpc_name":"lock_or_unlock_view"}`: `{"product_id":"aitable","rpc_name":"lock_or_unlock_view"}`,
+	},
+	"aitable/aitable.view_update_frozen_cols": {
+		`{"product_id":"aitable-helper","rpc_name":"set_frozen_columns_of_view"}`: `{"product_id":"aitable","rpc_name":"set_frozen_columns_of_view"}`,
+	},
+	"aitable/aitable.view_update_row_height": {
+		`{"product_id":"aitable-helper","rpc_name":"set_cell_height_of_view"}`: `{"product_id":"aitable","rpc_name":"set_cell_height_of_view"}`,
+	},
+	"aitable/aitable.workflow_disable": {
+		`{"product_id":"aitable-helper","rpc_name":"disable_workflow"}`: `{"product_id":"aitable","rpc_name":"disable_workflow"}`,
+	},
+	"aitable/aitable.workflow_enable": {
+		`{"product_id":"aitable-helper","rpc_name":"enable_workflow"}`: `{"product_id":"aitable","rpc_name":"enable_workflow"}`,
+	},
+	"aitable/aitable.workflow_get": {
+		`{"product_id":"aitable-helper","rpc_name":"get_workflow"}`: `{"product_id":"aitable","rpc_name":"get_workflow"}`,
+	},
+	"aitable/aitable.workflow_list": {
+		`{"product_id":"aitable-helper","rpc_name":"list_workflows"}`: `{"product_id":"aitable","rpc_name":"list_workflows"}`,
 	},
 }
 
@@ -940,10 +1159,25 @@ func compatibleReviewedConstraintTransition(toolPath string, oldTool, newTool to
 	return want == newTool.Constraints
 }
 
+// compatibleReviewedInterfaceTransition accepts a change in interface kind
+// only when the complete old/new mode+ref tuple is registered and no other
+// compatibility failure remains. Safety corrections may be independently
+// reviewed above; arbitrary parameter or command drift remains blocking.
+func compatibleReviewedInterfaceTransition(toolPath string, oldTool, newTool toolSchema, otherFailures []string) bool {
+	transition, ok := reviewedInterfaceTransitions[toolPath]
+	if !ok || len(otherFailures) != 0 {
+		return false
+	}
+	return transition.OldMode == oldTool.InterfaceMode &&
+		transition.OldRef == oldTool.InterfaceRef &&
+		transition.NewMode == newTool.InterfaceMode &&
+		transition.NewRef == newTool.InterfaceRef
+}
+
 // compatibleInterfaceRefRedirect accepts repointing a tool at a different
 // backing RPC when the migration is an explicitly reviewed entry in
-// reviewedInterfaceRefRedirect **and** the CLI-facing contract is provably
-// unchanged.
+// reviewedInterfaceRefRedirect **and** no unreviewed CLI-facing contract change
+// accompanies it.
 //
 // interface_ref is audit and traceability metadata: it records which RPC backs a
 // leaf. Nothing reads it at runtime — the tool a leaf invokes is decided in the
@@ -960,17 +1194,19 @@ func compatibleReviewedConstraintTransition(toolPath string, oldTool, newTool to
 //   - interface_mode is unchanged and stays "mcp". A move to or from
 //     "composite" is a change in kind, not a redirect, and is still reported.
 //   - both refs are non-empty. Removing a ref is not a redirect.
-//   - no other compatibility failure was recorded for this tool. This is the
-//     operative meaning of "the CLI contract is unchanged": no parameter was
-//     lost, none became required, no type / default / format / enum moved, no
-//     constraint tightened, no positional or dry_run change. Any one of those
-//     re-reports the redirect, so the exemption cannot smuggle a surface change
-//     in behind a backend move.
+//   - no other compatibility failure was recorded for this tool. No parameter
+//     may be lost or become required, no unreviewed type / default / format /
+//     enum, constraint, positional, dry_run, availability, or safety change may
+//     accompany the redirect. Any one of those re-reports the redirect, so the
+//     exemption cannot smuggle an unreviewed surface change in behind a backend
+//     move.
 //
 // A cleared property that resolved through a reviewed mapping exclusion is
 // already accepted by checkParameterCompatibility and so does not block this;
 // that pairing is expected, since a leaf moving to a nested payload loses its
-// flat property names in the same change.
+// flat property names in the same change. Exact safety corrections registered
+// in reviewedCompatibilityExceptions are likewise independently reviewed and
+// may accompany the redirect; the combined AITable cases have regression tests.
 func compatibleInterfaceRefRedirect(toolPath string, oldTool, newTool toolSchema, otherFailures []string) bool {
 	if oldTool.InterfaceMode != newTool.InterfaceMode || newTool.InterfaceMode != interfaceModeMCP {
 		return false
