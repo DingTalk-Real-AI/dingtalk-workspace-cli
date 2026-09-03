@@ -174,6 +174,89 @@ func TestServiceAndHelpCommandRenderReferencesOnce(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageChatHelpUsesShortcutFirstTiers(t *testing.T) {
+	help := executeHelpOutput(t, "chat", "--help")
+	for _, want := range []string{
+		"选择顺序：",
+		"优先使用 +shortcut 完成用户任务",
+		"Featured Shortcuts:",
+		"Atomic API Resources:",
+		"More Chat Shortcuts:",
+		"当前有 93 个 canonical Shortcut",
+		"本页展示 26 个高频入口",
+		"另有 67 个低频正式入口",
+		"dws shortcut list --service chat --format json",
+		`dws schema --cli-path "chat +<command>" --compact -f json`,
+		"+dm",
+		"+chat-search",
+		"+chat-update",
+		"+flag-list",
+		"+messages-send",
+		"group",
+		"message",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("chat shortcut-first Help missing %q:\n%s", want, help)
+		}
+	}
+	for _, hiddenFromRoot := range []string{
+		"+conversation-mute ",
+		"+category-create ",
+		"+chat-list-all ",
+		"  mute                    ",
+		"  conversation-info       ",
+	} {
+		if strings.Contains(help, hiddenFromRoot) {
+			t.Fatalf("chat root Help unexpectedly lists non-featured %q:\n%s", hiddenFromRoot, help)
+		}
+	}
+
+	leafHelp := executeHelpOutput(t, "chat", "+conversation-mute", "--help")
+	if !strings.Contains(leafHelp, "dws chat +conversation-mute") ||
+		!strings.Contains(leafHelp, "Safety:") {
+		t.Fatalf("catalog Shortcut exact Help must remain available:\n%s", leafHelp)
+	}
+}
+
+func TestCrossPlatformCoverageAtomicHelpPointsToPreferredShortcut(t *testing.T) {
+	for _, tc := range []struct {
+		path  string
+		owner string
+	}{
+		{path: "chat mute", owner: "chat +conversation-mute"},
+		{path: "chat category create", owner: "chat +category-create"},
+		{path: "chat message send", owner: "chat +messages-send"},
+		{path: "im group rename", owner: "chat +chat-update"},
+	} {
+		out := executeHelpOutput(t, append(strings.Fields(tc.path), "--help")...)
+		for _, want := range []string{
+			"Preferred Shortcut:",
+			"dws " + tc.owner,
+			"默认使用 Shortcut",
+			"只有需要 Shortcut 未公开的底层参数或原始响应",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%s atomic Help missing %q:\n%s", tc.path, want, out)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatHelpGuidanceSurvivesAliasAndHelpCommand(t *testing.T) {
+	for _, args := range [][]string{{"im", "--help"}, {"help", "chat"}} {
+		out := executeHelpOutput(t, args...)
+		for _, want := range []string{
+			"优先使用 +shortcut 完成用户任务",
+			"Featured Shortcuts:",
+			"dws shortcut list --service chat --format json",
+		} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("dws %s missing Shortcut-first guidance %q:\n%s", strings.Join(args, " "), want, out)
+			}
+		}
+	}
+}
+
 func TestProgrammaticLeafHelpRendersAffordancesOnce(t *testing.T) {
 	root := NewRootCommand()
 	target, remaining, err := root.Find([]string{"chat", "message", "send"})
