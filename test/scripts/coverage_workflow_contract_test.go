@@ -119,31 +119,6 @@ esac
 	})
 }
 
-func assertCoverageGoTestsAreVerbose(t *testing.T, name, job string) {
-	t.Helper()
-
-	lines := strings.Split(job, "\n")
-	commandCount := 0
-	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
-		command := strings.TrimSpace(lines[lineIndex])
-		if !strings.HasPrefix(command, "go test ") {
-			continue
-		}
-
-		commandCount++
-		for strings.HasSuffix(command, "\\") && lineIndex+1 < len(lines) {
-			lineIndex++
-			command += " " + strings.TrimSpace(lines[lineIndex])
-		}
-		if !strings.Contains(" "+command+" ", " -v ") {
-			t.Errorf("%s coverage command can exceed the runner quiet window without -v: %q", name, command)
-		}
-	}
-	if commandCount == 0 {
-		t.Errorf("%s has no go test coverage command", name)
-	}
-}
-
 // TestCoverageWorkflowShardsAndBaselineCache pins the full-suite coverage
 // architecture: the candidate profile is produced by disjoint per-shard
 // helper jobs and reassembled before enforcement, and the merge-base profile
@@ -198,7 +173,6 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	}
 
 	fullJob := admission[fullStart:supportingStart]
-	supportingJob := admission[supportingStart:baselineStart]
 	for _, want := range []string{
 		"needs.lint.outputs.full_suite == 'true'",
 		"fail-fast: false",
@@ -248,18 +222,6 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	}
 
 	metadataJob := admission[metadataStart:gateStart]
-	for _, coverageJob := range []struct {
-		name string
-		body string
-	}{
-		{name: "coverage-current", body: currentJob},
-		{name: "coverage-current-full", body: fullJob},
-		{name: "coverage-supporting", body: supportingJob},
-		{name: "coverage-baseline", body: baselineJob},
-		{name: "coverage-main-metadata", body: metadataJob},
-	} {
-		assertCoverageGoTestsAreVerbose(t, coverageJob.name, coverageJob.body)
-	}
 	for _, want := range []string{
 		"github.event_name == 'push'",
 		"needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true'",
@@ -340,7 +302,6 @@ func TestFormulaCoverageBaselinePromotionContract(t *testing.T) {
 		t.Fatalf("ReadFile(coverage-baseline-promotion.yml) error = %v", err)
 	}
 	promotion := string(promotionData)
-	assertCoverageGoTestsAreVerbose(t, "coverage-baseline-promotion", promotion)
 	for _, want := range []string{
 		"repository_dispatch:",
 		"types: [coverage-baseline-promote]",

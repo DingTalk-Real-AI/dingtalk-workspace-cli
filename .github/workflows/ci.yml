@@ -1463,10 +1463,7 @@ jobs:
             mapfile -t changed_packages <<< "$changed_output"
             mapfile -t impacted_packages <<< "$impacted_output"
             coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
-            # internal/app can run past the runner's quiet-process window.
-            # Keep verbose output enabled without changing the coverage profile.
             go test -count=1 -p 1 \
-              -v \
               -coverpkg="$coverpkg" \
               -coverprofile=coverage.txt \
               -covermode=atomic \
@@ -1537,7 +1534,6 @@ jobs:
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
           go test -count=1 -p 1 \
-            -v \
             -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
             -covermode=atomic \
             "${packages[@]}"
@@ -1578,9 +1574,8 @@ jobs:
 
       - name: Run policy and shortcut coverage
         run: |
-          go test -v -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
+          go test -count=1 -coverprofile=coverage-policy.txt -covermode=atomic ./pkg/... ./scripts/policy/...
           go test -count=1 \
-            -v \
             -run '^(TestAllShortcuts|TestCrossPlatformCoverage)' \
             -coverpkg=./internal/app,./internal/helpers,./internal/shortcut/... \
             -coverprofile=coverage-shortcut.txt \
@@ -1698,7 +1693,6 @@ jobs:
             if [ "$FULL_SUITE" = true ]; then
               go test -count=1 \
                 -p 1 \
-                -v \
                 -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
                 -covermode=atomic \
                 ./ ./cmd/... ./internal/... ./skills/...
@@ -1710,7 +1704,6 @@ jobs:
               coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
               go test -count=1 \
                 -p 1 \
-                -v \
                 -coverpkg="$coverpkg" \
                 -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
                 -covermode=atomic \
@@ -1848,7 +1841,6 @@ jobs:
         run: |
           set -euo pipefail
           go test -count=1 -p 1 \
-            -v \
             -coverprofile=coverage-cache.txt \
             -covermode=atomic \
             ./ ./cmd/... ./internal/... ./skills/...
