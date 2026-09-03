@@ -359,6 +359,11 @@ func TestCrossPlatformCoverageHTMLOverwritePreviews(t *testing.T) {
 			!strings.Contains(text, "No write performed") {
 			t.Fatalf("human diff = %q", text)
 		}
+		// The destructive preview must not coach the next call toward the
+		// confirmation bypass flag; explicit user confirmation is required.
+		if strings.Contains(text, "--yes") {
+			t.Fatalf("human overwrite diff suggests --yes: %q", text)
+		}
 	})
 
 	t.Run("global dry run stays offline", func(t *testing.T) {
@@ -626,6 +631,11 @@ func TestCrossPlatformCoverageHTMLPatchEdges(t *testing.T) {
 		if !strings.Contains(text, "[dry-run] dws html patch --node file-1") ||
 			!strings.Contains(text, "匹配数: 1") || !strings.Contains(text, "No write performed") {
 			t.Fatalf("human patch diff = %q", text)
+		}
+		// The destructive preview must not coach the next call toward the
+		// confirmation bypass flag; explicit user confirmation is required.
+		if strings.Contains(text, "--yes") {
+			t.Fatalf("human patch diff suggests --yes: %q", text)
 		}
 	})
 

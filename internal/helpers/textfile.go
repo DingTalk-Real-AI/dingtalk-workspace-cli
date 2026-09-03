@@ -501,7 +501,7 @@ func renderTextOverwriteDiff(nodeID, before, after string, spec textFileSpec) st
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "[dry-run] dws %s overwrite --node %s\n", spec.Product, nodeID)
 	appendMarkdownDiff(&builder, "current", "incoming", before, after)
-	fmt.Fprintln(&builder, "\nNo write performed. Rerun without --dry-run and add --yes to apply.")
+	fmt.Fprintln(&builder, "\nNo write performed. Ask the user to confirm the change explicitly, then rerun without --dry-run.")
 	return builder.String()
 }
 
@@ -644,7 +644,7 @@ func printTextPatchDiff(nodeID, before, after string, matchCount int, spec textF
 	fmt.Fprintf(&builder, "[dry-run] dws %s patch --node %s\n", spec.Product, nodeID)
 	fmt.Fprintf(&builder, "匹配数: %d\n", matchCount)
 	appendMarkdownDiff(&builder, "before patch", "after patch", before, after)
-	fmt.Fprintln(&builder, "\nNo write performed. Rerun without --dry-run and add --yes to apply.")
+	fmt.Fprintln(&builder, "\nNo write performed. Ask the user to confirm the change explicitly, then rerun without --dry-run.")
 	deps.Out.PrintRaw(builder.String())
 	return nil
 }
