@@ -1060,7 +1060,7 @@ func addDevMCPToolUpsertFlags(cmd *cobra.Command, includeToolID bool) {
 	cmd.Flags().String("api-outputs", "", "必填。接口真实出参 JSON 对象：{headers,body} 两组，字段结构同 --api-inputs；⚠️出参按此 schema 精确裁剪——声明什么字段就返回什么，未声明的被过滤（漏声明=业务数据被整段吞掉）；结构未知时先按材料尽力声明→debug 取样→update 修正")
 	cmd.Flags().String("tool-inputs", "", "必填。暴露给 LLM 的入参字段树 JSON 数组（array 型 children 固定一项 key=items）；每字段必须写自包含 description：含义+取值格式+示例，可对 api-inputs 裁剪/改名/加防呆")
 	cmd.Flags().String("tool-outputs", "", "必填。暴露给 LLM 的出参字段树 JSON 数组；不做出参精修时显式传 '[]'（配整体透传=返回按 --api-outputs 裁剪后的完整响应体）；精修时与 --output-mappings 配套（裁字段/改名/补语义）")
-	cmd.Flags().String("input-mappings", "", "必填。入参映射 JSON 数组，每项 {target,type,source}，type=reference/fixed/express；⚠️target 位置名必须 Pascal（$.Body./$.Query./$.Head./$.Path.），全小写/全大写会静默失效不报错")
+	cmd.Flags().String("input-mappings", "", "必填。入参映射 JSON 数组；reference/fixed 使用 {target,type,source}，express 使用 {target,type,expression,displayText}；target 位置名必须 Pascal（$.Body./$.Query./$.Head./$.Path.）")
 	cmd.Flags().String("output-mappings", "", "必填。出参映射 JSON 数组：整体透传 [{\"target\":\"$\",\"type\":\"reference\",\"source\":\"$.node_service_activator.Body\"}] 或字段级精修（配合 --tool-outputs 裁剪/改名，详见 skill mapping-rules）；⚠️必须与 --api-outputs 同批提交并静态互验（source 引用的字段必须已声明，红线#13）；⚠️省略或传 []＝草稿仍建成但运行时多包一层 Body 且 publish 被拦，需先 update 补齐")
 	addDevMCPTimeoutOOKFlags(cmd, includeToolID)
 }
@@ -1393,8 +1393,22 @@ func devMCPValidateMappingsFlag(flag string, mappings []any) error {
 		if typ != "reference" && typ != "fixed" && typ != "express" {
 			return apperrors.NewValidation(path + ".type 只支持 reference/fixed/express")
 		}
-		if _, ok := mapping["source"]; !ok {
-			return apperrors.NewValidation(path + ".source 为必填")
+		switch typ {
+		case "reference", "fixed":
+			if stringValue(mapping["source"]) == "" {
+				return apperrors.NewValidation(path + ".source 为必填")
+			}
+			if stringValue(mapping["expression"]) != "" {
+				return apperrors.NewValidation(path + ".expression 不适用于 reference/fixed；取值只能放 source 字段")
+			}
+		case "express":
+			expression, valid := mapping["expression"].(string)
+			if !valid || strings.TrimSpace(expression) == "" {
+				return apperrors.NewValidation(path + ".expression 为必填；express 表达式必须放 expression 字段，不能放 source")
+			}
+			if stringValue(mapping["source"]) != "" {
+				return apperrors.NewValidation(path + ".source 不适用于 express；表达式只能放 expression 字段")
+			}
 		}
 	}
 	return nil
