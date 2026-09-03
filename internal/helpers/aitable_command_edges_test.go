@@ -383,11 +383,31 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 		}
 	})
 
-	t.Run("logical groups fail closed before write", func(t *testing.T) {
-		caller := &aitableTestCaller{responses: []string{fields}}
-		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", `--json=[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`)
-		if err == nil || !strings.Contains(err.Error(), "不接受 and/or") || len(caller.calls) != 0 {
-			t.Fatalf("logical filter group fail-closed = err:%v calls:%#v", err, caller.calls)
+	t.Run("OR root is written then verified from canonical read-back", func(t *testing.T) {
+		input := `[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`
+		readBack := `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}}]}}`
+		caller := &aitableTestCaller{responses: []string{fields, `{"success":true}`, readBack}}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json="+input)
+		if err != nil || len(caller.calls) != 3 || caller.calls[1].tool != "update_view" || caller.calls[2].tool != "get_views" {
+			t.Fatalf("OR filter verified = err:%v calls:%#v", err, caller.calls)
+		}
+		config, _ := caller.calls[1].args["config"].(map[string]any)
+		filter, ok := config["filter"].([]any)
+		if !ok || len(filter) != 1 {
+			t.Fatalf("update_view OR encoding = %#v", caller.calls[1].args)
+		}
+		root, ok := filter[0].(map[string]any)
+		operands, operandsOK := root["operands"].([]any)
+		if !ok || root["operator"] != "or" || !operandsOK || len(operands) != 2 {
+			t.Fatalf("update_view OR root = %#v", filter[0])
+		}
+	})
+
+	t.Run("mixed nested logical groups fail closed before write", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", `--json=[{"operator":"and","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"or","operands":[{"operator":"eq","operands":["fldB","y"]}]}]}]`)
+		if err == nil || !strings.Contains(err.Error(), "不支持嵌套逻辑组") || len(caller.calls) != 0 {
+			t.Fatalf("nested logical filter fail-closed = err:%v calls:%#v", err, caller.calls)
 		}
 	})
 
