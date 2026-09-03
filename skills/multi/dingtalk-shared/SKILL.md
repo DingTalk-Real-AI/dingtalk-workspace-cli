@@ -38,7 +38,8 @@ metadata:
 | 已明确单一产品 | 对应 `../dingtalk-*/SKILL.md`；不读路由 reference |
 | 泛称 DWS、需要选择产品 | [routing.md](references/routing.md) |
 | 跨产品、多步骤、汇总或报告 | [workflow-routing.md](references/workflow-routing.md) |
-| 输入含 alidocs、shanji 等钉钉 URL 且类型不明 | [url-patterns.md](references/url-patterns.md) |
+| 输入含用户直接提供的 alidocs `/i/nodes/` URL 或来源未验证的 nodeId（即使产品意图明确） | [url-patterns.md](references/url-patterns.md)；先规范化 dlink 再进入目标产品 |
+| 输入含其他 alidocs、shanji 等钉钉 URL 且类型不明 | [url-patterns.md](references/url-patterns.md) |
 | 产品边界仍然难以判断 | [intent-guide.md](references/intent-guide.md) 的相关章节 |
 | 认证、全局 flag 或输出格式问题 | [global-reference.md](references/global-reference.md) |
 | 命令已经返回错误 | [error-codes.md](references/error-codes.md)；只查错误对应章节 |
@@ -52,8 +53,10 @@ metadata:
 
 ## 本 skill 作为入口时的路由顺序
 
-1. 先识别明确的产品内容意图；明确意图直接进入对应产品。仅当输入包含钉钉 URL
-   且类型不明确或意图与链接类型可能冲突时，读取 `url-patterns.md` 识别节点类型。
+1. 先识别明确的产品内容意图；明确意图直接选择对应产品。用户直接提供的 alidocs
+   `/i/nodes/` URL 或来源未验证的 nodeId 仍须读取 `url-patterns.md`：先执行节点类型
+   探测，`extension=dlink` 时逐跳解析目标，再把最终目标 ID 交给候选产品。当前调用链
+   已返回真实类型的稳定 ID 可直接复用。
 2. 请求包含多个时序步骤、跨产品数据传递或汇总报告：即使 URL 已识别，也要读取
    `workflow-routing.md`，按行动指南组合需要的产品 skill；当前发布包不包含独立
    scenario skill。

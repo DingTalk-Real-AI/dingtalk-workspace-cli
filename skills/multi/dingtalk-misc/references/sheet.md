@@ -29,9 +29,9 @@ Sheet 操作先读必要范围、做最小修改，再用匹配读命令回读�
 | Drive 中的 xlsx/xls，用户要转换为在线表格 | 先用 `dws drive download` 下载到本地相对路径，再执行 `dws sheet import create`；不要把二进制节点传给工作表命令 |
 | 只做本地分析，或文件是 xlsm/csv | 留在本地处理；当前 `sheet import` 不支持 xlsm/csv |
 
-`sheet` 仅支持在线电子表格（`contentType=ALIDOC`、`extension=axls`）。只有用户给出未知类型 URL/ID 时才调用一次 `dws drive info --node <URL_OR_ID> --format json` 探测；刚由 `sheet create` 返回的资源无需再次 probe。`spreadsheetv2` URL 原样传入 `--node`，不要截短。
+`sheet` 仅支持在线电子表格（`contentType=ALIDOC`、`extension=axls`）。用户直接提供的 `/i/nodes/` URL 或来源未验证的 nodeId，先执行 `dws drive info --node <URL_OR_ID> --format json`。若返回 `extension=dlink`，再用 `dws doc info --node <快捷方式nodeId> --format json` 读取目标 `linkSourceInfo`；目标仍为 dlink 时逐跳解析并记录已访问 ID。只有最终目标 `extension=axls` 时才继续 Sheet 操作，并将 `linkSourceInfo.nodeId` 作为后续 `--node`。解析失败、目标字段缺失、ID 重复或最终类型不是 axls 时停止，禁止把快捷方式入口当作表格或普通文件。刚由 `sheet create` 返回且类型已知的资源无需再次 probe；`spreadsheetv2` URL 原样传入 `--node`，不要截短。
 
-只有运行时仍无法识别 URL 形态时才按需查看 [链接规范](../../dingtalk-shared/references/url-patterns.md)；只有上表无法判定的低频产品歧义才查看 [局部意图消歧](sheet-intent-guide.md)。这两份都不是冷启动必读项。
+dlink 的完整递归、异常和“入口管理仍用顶层 nodeId”边界，以及运行时无法识别的 URL 形态，见 [链接规范](../../dingtalk-shared/references/url-patterns.md)；只有上表无法判定的低频产品歧义才查看 [局部意图消歧](sheet-intent-guide.md)。普通已确认 axls 任务不需要加载这两份 reference。
 
 ## 常用闭环
 

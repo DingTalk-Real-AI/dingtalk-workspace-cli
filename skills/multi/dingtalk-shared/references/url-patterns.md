@@ -1,21 +1,22 @@
 # URL 格式与处理规范
 
-## 路由第 0 步：意图直达（优先级高于 URL 探测）
+## 路由第 0 步：意图选路与节点规范化
 
-用户已经明确表达某产品的内容意图时，直接进入对应产品场域，不要先做 URL 类型
-探测。尤其：
+用户已经明确表达某产品的内容意图时，可直接选择对应产品场域，不再做通用产品
+消歧；但用户直接提供的 `/i/nodes/` URL 或来源未验证的 nodeId 仍必须先规范化。
+产品意图不能替代节点类型证据，也不能跳过 dlink 目标解析。尤其：
 
 - 明确提到 Markdown / `.md` 文件的读取或修改，按普通文件走 `drive` 场域：
   先 `dws drive download` 下载到本地处理，再用 `dws drive upload` 回传。
-- 明确“读这篇文档 / 编辑文档正文”进入 `doc`；明确“看这个在线表格数据”进入
-  `sheet`。
+- 明确“读这篇文档 / 编辑文档正文”选择 `doc`；明确“看这个在线表格数据”选择
+  `sheet`，随后仍按本文件探测原始 `/i/nodes/` 节点。
 
-仅当用户只粘贴 URL、没有明确产品意图，或意图与链接类型可能冲突时，才执行下方
-类型探测。
+当前调用链刚创建、搜索或读取并已返回真实类型的稳定 ID 可以复用，不重复探测。
+除此之外，原始 `/i/nodes/` URL 或来源未验证的 nodeId 均执行下方类型探测。
 
-## alidocs URL 分流决策（意图不明确时执行）
+## alidocs URL 分流决策
 
-收到 `alidocs.dingtalk.com` URL 且无法从指令判断产品时，必须按以下顺序判断：
+收到 `alidocs.dingtalk.com` URL 时，必须按以下顺序判断其路径形态：
 
 1. URL 路径含 `/i/p/` → **分享短链**，禁止调用 `dws doc` 任何子命令 → 按下方 [分享短链处理](#分享短链处理) 执行
 2. URL 路径含 `/i/nodes/` → **节点链接**，需探测类型 → 按下方 [alidocs URL 类型探测流程](#alidocs-url-类型探测流程) 执行
@@ -95,7 +96,8 @@ dws doc read --node "https://alidocs.dingtalk.com/i/p/Y7kmbokZp3pgGLq2/docs/AY39
 ```
 Step 1 → dws drive info --node "<URL>" --format json
 Step 2 → 从返回中提取 extension、nodeType 字段
-Step 3 → 按下方路由规则映射到对应产品
+Step 3 → 若 extension=dlink，调用 dws doc info --node "<快捷方式nodeId>" --format json，取 linkSourceInfo
+Step 4 → 按最终目标的 extension、nodeType 映射到对应产品
 ```
 
 > 路由依据是 `extension`，不是 `contentType`。`drive info` 检测到
@@ -105,6 +107,7 @@ Step 3 → 按下方路由规则映射到对应产品
 
 | 条件 | 路由到产品 | 后续操作 |
 |------|-----------|---------|
+| `extension=dlink` | — | 不把快捷方式当普通文件；按下方“快捷方式解析边界”解析目标后重新匹配本表 |
 | `extension=adoc` | `doc` | 加载 `dingtalk-doc` 操作内容 |
 | `extension=axls` | `sheet` | 加载 `dingtalk-misc` 的 `references/sheet.md` 操作（仅 `axls` 在线电子表格） |
 | `extension=able` | `aitable` | 将 nodeId 作为 baseId，加载 `dingtalk-aitable` 操作 |
@@ -112,6 +115,12 @@ Step 3 → 按下方路由规则映射到对应产品
 | `nodeType=file`（非在线文档扩展名，含 `md`） | `drive` | 下载用 `dws drive download --node <ID> --output <PATH> --format json`；上传/覆盖用 `dws drive upload` |
 | `nodeType=folder` | `drive` / `wiki` | 调用 `dws drive list --workspace <WS_ID>` 或 `dws wiki node list` 列出子节点 |
 | 以上均不匹配 | — | 告知用户当前暂不支持该类型 |
+
+### 快捷方式解析边界
+
+- `linkSourceInfo` 的字段名沿用服务端定义，实际语义是快捷方式的**目标节点**。内容读取、编辑、导出和类型路由使用 `linkSourceInfo.nodeId`，并以其中的 `contentType`、`extension`、`nodeType` 重新匹配上表。
+- 若目标的 `extension` 仍为 `dlink`，以目标 `nodeId` 再调用一次 `dws doc info`，逐跳解析并记录所有已访问 nodeId。请求失败、`linkSourceInfo`/目标 nodeId 缺失或 nodeId 重复时立即停止，不把 dlink 降级成普通文件。
+- 用户明确要移动、重命名或删除**快捷方式入口本身**时，使用最初 `drive info` 返回的顶层 nodeId；不要把这类入口管理操作改到目标节点。
 
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
@@ -127,6 +136,9 @@ dws drive info --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format jso
 # 返回 extension=axls → 在线电子表格，路由到 sheet
 dws sheet list --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format json
 
+# 返回 extension=dlink → 解析目标；内容操作后续改用 linkSourceInfo.nodeId
+dws doc info --node "https://alidocs.dingtalk.com/i/nodes/shortcut123" --format json
+
 # 返回 extension=xlsx/xls/csv → 本地表格文件，必须下载处理（禁止走 sheet）
 dws drive download --node "https://alidocs.dingtalk.com/i/nodes/xlsx456" --output <PATH> --format json
 
@@ -139,6 +151,6 @@ dws drive list --workspace <WS_ID> --format json
 
 ### 何时可跳过探测
 
-当用户指令中已明确指定产品（如"帮我读这个文档"、"看下这个表格的数据"），可结合用户意图**跳过探测**直接路由。仅在以下情况**必须执行探测**：
-- 用户只粘贴 URL，无其他上下文
-- 用户指令与 URL 实际类型可能不一致（如说"文档"但实际是表格）
+只有 nodeId 来自当前调用链中已验证类型的创建、搜索或读取结果时，才能跳过探测并复用。用户明确说“文档”“表格”只决定候选产品，不能作为跳过原始 `/i/nodes/` URL 或来源未验证 nodeId 规范化的理由。
+
+任何阶段一旦得到 `extension=dlink`，都必须按“快捷方式解析边界”处理；禁止将快捷方式入口 ID 直接传给内容读取、编辑、导出或目标产品命令。
