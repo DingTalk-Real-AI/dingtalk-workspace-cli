@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+DEFAULT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+ROOT="${DWS_TEST_PACKAGES_ROOT:-$DEFAULT_ROOT}"
 MODULE="$(cd "$ROOT" && go list -m)"
 
 usage() {

@@ -7,6 +7,7 @@ usage() {
 	printf '%s\n' \
 		"usage: $0 verify <app-package>" \
 		"       $0 run <app-package> [partition]" \
+		"       $0 coverage <app-package> <output-profile> [partition]" \
 		"       $0 list-partitions" >&2
 	exit 2
 }
@@ -18,6 +19,7 @@ APP_PARTITIONS='schema a-b c-a-l c-m-o c-p-r c-s-z c-other d-r s-z-example-fuzz'
 
 mode="${1:-}"
 partition=""
+coverage_output=""
 case "$mode" in
 	list-partitions)
 		[ "$#" -eq 1 ] || usage
@@ -35,6 +37,15 @@ case "$mode" in
 		app_package="$2"
 		partition="${3:-}"
 		;;
+	coverage)
+		[ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
+		app_package="$2"
+		case "$3" in
+			/*) coverage_output="$3" ;;
+			*) coverage_output="$(pwd)/$3" ;;
+		esac
+		partition="${4:-}"
+		;;
 	*) usage ;;
 esac
 
@@ -45,6 +56,7 @@ tests="$workdir/tests"
 duplicates="$workdir/duplicates"
 list_output="$workdir/list-output"
 
+ROOT="${DWS_APP_TEST_ROOT:-$ROOT}"
 cd "$ROOT"
 if ! go test "$app_package" -list '^(Test|Example|Fuzz)' > "$list_output"; then
 	printf 'app race partition discovery failed for %s\n' "$app_package" >&2
@@ -175,6 +187,12 @@ run_partition() {
 			;;
 	esac
 
+	coverage_profile=""
+	if [ "$mode" = coverage ]; then
+		instrumentation=no-race
+		coverage_profile="$workdir/coverage-app-$name.txt"
+	fi
+
 	printf 'running internal/app %s partition %s\n' "$instrumentation" "$name"
 	set -- -v -count=1 -timeout=15m -run "$run_pattern"
 	if [ -n "$skip_pattern" ]; then
@@ -182,6 +200,9 @@ run_partition() {
 	fi
 	if [ "$instrumentation" = race ]; then
 		set -- -race "$@"
+	fi
+	if [ -n "$coverage_profile" ]; then
+		set -- "$@" -coverprofile="$coverage_profile" -covermode=atomic
 	fi
 	go test "$@" "$app_package"
 }
@@ -228,6 +249,20 @@ run_named_partition() {
 
 if [ -n "$partition" ]; then
 	run_named_partition "$partition"
+	if [ "$mode" = coverage ]; then
+		"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/merge-coverage-profiles.sh" \
+			"$coverage_output" "$workdir/coverage-app-$partition.txt"
+	fi
+	exit 0
+fi
+
+if [ "$mode" = coverage ]; then
+	for name in $APP_PARTITIONS; do
+		run_named_partition "$name"
+	done
+	# shellcheck disable=SC2086
+	"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/merge-coverage-profiles.sh" \
+		"$coverage_output" "$workdir"/coverage-app-*.txt
 	exit 0
 fi
 
