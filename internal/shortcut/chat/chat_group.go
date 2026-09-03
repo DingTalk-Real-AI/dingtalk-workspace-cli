@@ -1945,7 +1945,7 @@ var ChatRoleSetUser = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "用户 userId 或 openDingTalkId", Required: true},
-		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要整体设置的群身份 openRoleId 列表，至少一个", Required: true},
+		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要整体设置的群身份 openRoleId 列表；必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素", Required: true},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"role-ids"}, Description: "必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素"},
