@@ -25,5 +25,10 @@ import "embed"
 // prefix keeps underscore-prefixed directories (for example,
 // mono/references/best_practices/_common) that plain embed patterns would skip.
 //
+// `npx skills add` discovers SKILL.md under skills/ up to three levels.
+// skills/multi/<name>/SKILL.md is the default public set. skills/mono is
+// still embedded for `dws skill setup --mode mono` but is marked
+// metadata.internal: true so the public installer does not also ship `dws`.
+//
 //go:embed all:mono all:multi
 var FS embed.FS
