@@ -76,8 +76,8 @@ metadata:
 - 已知 nodeId 的重命名直接 `+rename`，不先 Catalog、Help 或 search；ALIDOC 的逻辑标题由 shortcut 内部文档读回验证。
 - 文件夹方向已明确时直接 `status/pull/push/sync`，不先 status；写操作先用完全相同参数 dry-run，再正式执行。
 - 搜索结果 `type=able` 后按业务动词重路由：结构复制/删除/Base 内操作走 AITable。结构复制按当前 leaf 提供源 Base ID 和真实 `--target-folder-id`；缺少目标 ID 时停止，不猜根 ID或发明 `--target-root`。
-- `+inspect/+download/+list` 只保证 dentryUuid；只有 URL 时先用 `dws drive info --node <URL> --format json` 解析并核对 nodeId。
-- `drive info` 返回 `extension=dlink` 时，先用 `dws doc info --node <快捷方式nodeId> --format json` 读取 `linkSourceInfo`。内容读取、编辑、导出和类型路由改用目标 `linkSourceInfo.nodeId`；目标仍为 dlink 时逐跳解析并记录已访问 ID，解析失败、字段缺失或 ID 重复即停。用户明确移动、重命名或删除快捷方式入口本身时仍使用顶层 nodeId。
+- `+inspect/+download/+list` 只保证 dentryUuid；只有 URL 时先用 `dws drive info --node <URL> --format json` 解析并核对 `result.fileId`（即 dentryUuid）。
+- `drive info` 返回 `extension=dlink` 时，将 `result.fileId` 保存为快捷方式入口 ID，先用 `dws doc info --node <result.fileId> --format json` 读取 `linkSourceInfo`。内容读取、编辑、导出和类型路由改用目标 `linkSourceInfo.nodeId`；目标仍为 dlink 时逐跳解析并记录已访问 ID，解析失败、字段缺失或 ID 重复即停。用户明确移动、重命名或删除快捷方式入口本身时仍使用最初的 `result.fileId`。
 
 最短路径不省略类型检查、确认、传输验证或写后校验。
 

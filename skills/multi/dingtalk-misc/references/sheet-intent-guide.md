@@ -7,6 +7,6 @@
 | "帮我建一个项目跟踪表" | 创建数据表格 | `aitable` | `doc` / `sheet` | 涉及结构化数据/行列操作，不是富文本文档或电子表格 |
 | "创建一个电子表格" | 创建表格文档 | `sheet` | `aitable` | Excel 式表格/单元格操作，不是多维表记录 |
 | "帮我读一下表格 A1:D10 的数据" | 读取单元格数据 | `sheet` | `aitable` | 按单元格区域读写，不是按记录查询 |
-| "这个 alidocs 表格链接帮我看下"（粘贴原始 URL） | 先 probe 并规范化节点 | `dws drive info --node`；`extension=dlink` 时用 `dws doc info` 逐跳读取目标 `linkSourceInfo`，再按最终 `extension` 路由 | 直接调 `sheet` 或把快捷方式入口当 axls | `alidocs/i/nodes/{id}` 可能是文档/dlink/axls/able/xlsx 等，只有最终目标为 axls 才能进入 Sheet |
+| "这个 alidocs 表格链接帮我看下"（粘贴原始 URL） | 先 probe 并规范化节点 | `dws drive info --node`；`extension=dlink` 时将 `result.fileId` 传给 `dws doc info`，逐跳读取目标 `linkSourceInfo`，再按最终 `extension` 路由 | 直接调 `sheet` 或把快捷方式入口当 axls | `alidocs/i/nodes/{id}` 可能是文档/dlink/axls/able/xlsx 等，只有最终目标为 axls 才能进入 Sheet |
 | "读一下这个 xlsx 的数据" / xlsx 节点链接 | 下载本地表格文件 | `dws drive download --node` | `sheet range read` | xlsx / xls / xlsm / csv 是上传的本地文件（`contentType=DOCUMENT`），sheet 命令只支持在线表格，必须下载后本地解析 |
 | "把这个在线表格导出为 xlsx 文件" | 在线表格格式转换 | `dws sheet export` | `dws drive download` | `export` 是 axls → xlsx 的导出转换；`download` 只能下载已有的 xlsx 节点 |

@@ -55,8 +55,9 @@ metadata:
 
 1. 先识别明确的产品内容意图；明确意图直接选择对应产品。用户直接提供的 alidocs
    `/i/nodes/` URL 或来源未验证的 nodeId 仍须读取 `url-patterns.md`：先执行节点类型
-   探测，`extension=dlink` 时逐跳解析目标，再把最终目标 ID 交给候选产品。当前调用链
-   已返回真实类型的稳定 ID 可直接复用。
+   探测，`extension=dlink` 时将 `drive info` 的 `result.fileId` 保存为入口 ID 并传给
+   `dws doc info`，再按 `linkSourceInfo.nodeId` 逐跳解析目标，把最终目标 ID 交给候选
+   产品。当前调用链已返回真实类型的稳定 ID 可直接复用。
 2. 请求包含多个时序步骤、跨产品数据传递或汇总报告：即使 URL 已识别，也要读取
    `workflow-routing.md`，按行动指南组合需要的产品 skill；当前发布包不包含独立
    scenario skill。

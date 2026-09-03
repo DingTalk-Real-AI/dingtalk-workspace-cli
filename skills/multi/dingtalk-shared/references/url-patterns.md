@@ -95,8 +95,8 @@ dws doc read --node "https://alidocs.dingtalk.com/i/p/Y7kmbokZp3pgGLq2/docs/AY39
 
 ```
 Step 1 → dws drive info --node "<URL>" --format json
-Step 2 → 从返回中提取 extension、nodeType 字段
-Step 3 → 若 extension=dlink，调用 dws doc info --node "<快捷方式nodeId>" --format json，取 linkSourceInfo
+Step 2 → 从 result 提取 extension、nodeType，并将 result.fileId 保存为 entryFileId（语义为 dentryUuid）
+Step 3 → 若 extension=dlink，调用 dws doc info --node "<entryFileId>" --format json，取 linkSourceInfo
 Step 4 → 按最终目标的 extension、nodeType 映射到对应产品
 ```
 
@@ -120,7 +120,7 @@ Step 4 → 按最终目标的 extension、nodeType 映射到对应产品
 
 - `linkSourceInfo` 的字段名沿用服务端定义，实际语义是快捷方式的**目标节点**。内容读取、编辑、导出和类型路由使用 `linkSourceInfo.nodeId`，并以其中的 `contentType`、`extension`、`nodeType` 重新匹配上表。
 - 若目标的 `extension` 仍为 `dlink`，以目标 `nodeId` 再调用一次 `dws doc info`，逐跳解析并记录所有已访问 nodeId。请求失败、`linkSourceInfo`/目标 nodeId 缺失或 nodeId 重复时立即停止，不把 dlink 降级成普通文件。
-- 用户明确要移动、重命名或删除**快捷方式入口本身**时，使用最初 `drive info` 返回的顶层 nodeId；不要把这类入口管理操作改到目标节点。
+- 用户明确要移动、重命名或删除**快捷方式入口本身**时，使用最初 `drive info` 的 `result.fileId`（即 `entryFileId`）；不要把这类入口管理操作改到目标节点。
 
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
@@ -136,8 +136,9 @@ dws drive info --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format jso
 # 返回 extension=axls → 在线电子表格，路由到 sheet
 dws sheet list --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format json
 
-# 返回 extension=dlink → 解析目标；内容操作后续改用 linkSourceInfo.nodeId
-dws doc info --node "https://alidocs.dingtalk.com/i/nodes/shortcut123" --format json
+# 返回 extension=dlink → 保存 result.fileId 为 entryFileId，再解析目标
+# 内容操作后续改用 linkSourceInfo.nodeId
+dws doc info --node "<entryFileId>" --format json
 
 # 返回 extension=xlsx/xls/csv → 本地表格文件，必须下载处理（禁止走 sheet）
 dws drive download --node "https://alidocs.dingtalk.com/i/nodes/xlsx456" --output <PATH> --format json

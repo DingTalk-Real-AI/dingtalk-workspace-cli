@@ -23,7 +23,8 @@ func TestDLinkSkillRoutingContract(t *testing.T) {
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-shared", "SKILL.md"),
 			required: []string{
-				"来源未验证的 nodeId", "extension=dlink", "逐跳解析目标", "最终目标 ID",
+				"来源未验证的 nodeId", "extension=dlink", "result.fileId",
+				"linkSourceInfo.nodeId", "最终目标 ID",
 			},
 		},
 		{
@@ -34,51 +35,62 @@ func TestDLinkSkillRoutingContract(t *testing.T) {
 			},
 		},
 		{
+			path: filepath.Join("skills", "multi", "dingtalk-doc", "references", "intent-guide.md"),
+			required: []string{
+				"extension=dlink", "result.fileId", "dws doc info", "linkSourceInfo",
+			},
+			forbidden: []string{"快捷方式nodeId"},
+		},
+		{
 			path: filepath.Join("skills", "multi", "dingtalk-drive", "SKILL.md"),
 			required: []string{
-				"extension=dlink", "dws doc info", "linkSourceInfo.nodeId", "逐跳",
-				"移动、重命名或删除快捷方式入口", "顶层 nodeId",
+				"extension=dlink", "result.fileId", "dws doc info", "linkSourceInfo.nodeId", "逐跳",
+				"移动、重命名或删除快捷方式入口", "最初的 `result.fileId`",
 			},
+			forbidden: []string{"快捷方式nodeId", "顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-shared", "references", "url-patterns.md"),
 			required: []string{
-				"产品意图不能替代节点类型证据", "快捷方式解析边界", "linkSourceInfo.nodeId",
-				"请求失败", "nodeId 重复", "快捷方式入口本身", "顶层 nodeId",
+				"产品意图不能替代节点类型证据", "快捷方式解析边界", "result.fileId",
+				"entryFileId", "linkSourceInfo.nodeId", "请求失败", "nodeId 重复", "快捷方式入口本身",
 			},
-			forbidden: []string{"当用户指令中已明确指定产品"},
+			forbidden: []string{"当用户指令中已明确指定产品", "快捷方式nodeId", "返回的顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-shared", "references", "intent-guide.md"),
 			required: []string{
-				"来源未验证的 nodeId", "extension=dlink", "目标 `linkSourceInfo`",
-				"入口自身移动/重命名/删除仍用顶层 nodeId",
+				"来源未验证的 nodeId", "extension=dlink", "result.fileId",
+				"目标 `linkSourceInfo`", "入口自身移动/重命名/删除仍用最初的 `result.fileId`",
 			},
+			forbidden: []string{"快捷方式nodeId", "仍用顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-misc", "references", "sheet.md"),
 			required: []string{
-				"extension=dlink", "linkSourceInfo.nodeId", "最终目标 `extension=axls`",
-				"ID 重复", "快捷方式入口",
+				"extension=dlink", "result.fileId", "linkSourceInfo.nodeId",
+				"最终目标 `extension=axls`", "ID 重复", "快捷方式入口",
 			},
+			forbidden: []string{"快捷方式nodeId", "入口管理仍用顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-misc", "references", "sheet-intent-guide.md"),
 			required: []string{
-				"extension=dlink", "逐跳读取目标 `linkSourceInfo`", "最终目标为 axls",
+				"extension=dlink", "result.fileId", "逐跳读取目标 `linkSourceInfo`", "最终目标为 axls",
 			},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-aitable", "SKILL.md"),
 			required: []string{
-				"来源未验证的 nodeId", "extension=dlink", "linkSourceInfo.nodeId",
-				"最终类型不是 able", "快捷方式入口本身", "顶层 nodeId", "不远程解析 dlink",
+				"来源未验证的 nodeId", "extension=dlink", "result.fileId", "linkSourceInfo.nodeId",
+				"最终类型不是 able", "快捷方式入口本身", "最初的 `result.fileId`", "不远程解析 dlink",
 			},
+			forbidden: []string{"快捷方式nodeId", "顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-aitable", "references", "intent-guide.md"),
 			required: []string{
-				"extension=dlink", "不能把入口 ID 当 baseId", "最终目标 `extension=able`",
+				"extension=dlink", "result.fileId", "不能把入口 ID 当 baseId", "最终目标 `extension=able`",
 			},
 			forbidden: []string{"先用 `+url-resolve` 取稳定 ID"},
 		},
@@ -86,17 +98,17 @@ func TestDLinkSkillRoutingContract(t *testing.T) {
 			path: filepath.Join("skills", "multi", "dingtalk-aitable", "references", "url-patterns.md"),
 			required: []string{
 				"完整且权威", "产品意图不能替代节点类型证据", "extension=dlink",
-				"linkSourceInfo.nodeId", "快捷方式入口 ID",
+				"result.fileId", "entryFileId", "linkSourceInfo.nodeId", "快捷方式入口 ID",
 			},
-			forbidden: []string{"当用户指令中已明确指定产品"},
+			forbidden: []string{"当用户指令中已明确指定产品", "快捷方式nodeId", "返回的顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "multi", "dingtalk-misc", "references", "url-patterns.md"),
 			required: []string{
 				"完整且权威", "产品意图不能替代节点类型证据", "extension=dlink",
-				"linkSourceInfo.nodeId", "快捷方式入口 ID",
+				"result.fileId", "entryFileId", "linkSourceInfo.nodeId", "快捷方式入口 ID",
 			},
-			forbidden: []string{"当用户指令中已明确指定产品"},
+			forbidden: []string{"当用户指令中已明确指定产品", "快捷方式nodeId", "返回的顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "mono", "references", "url-patterns.md"),
@@ -123,9 +135,10 @@ func TestDLinkSkillRoutingContract(t *testing.T) {
 		{
 			path: filepath.Join("skills", "mono", "references", "products", "sheet.md"),
 			required: []string{
-				"extension=dlink", "linkSourceInfo.nodeId", "最终目标 `extension=axls`",
-				"ID 重复", "快捷方式入口",
+				"extension=dlink", "result.fileId", "linkSourceInfo.nodeId",
+				"最终目标 `extension=axls`", "ID 重复", "快捷方式入口",
 			},
+			forbidden: []string{"快捷方式nodeId", "入口管理仍用顶层 nodeId"},
 		},
 		{
 			path: filepath.Join("skills", "mono", "references", "products", "aitable.md"),

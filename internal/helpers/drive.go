@@ -733,7 +733,12 @@ func newDriveCommand() *cobra.Command {
 		Long: `获取钉盘文件/文件夹的元数据信息。
 
 如果目标文件属于钉钉文档（在线文档/表格/脑图等），会自动跟进调用
-钉钉文档接口获取更准确的文档信息（如真实文档名称），并合并输出。`,
+钉钉文档接口获取更准确的文档信息（如真实文档名称），并合并输出。
+
+返回 extension=dlink 时，result.fileId 是快捷方式入口 ID（语义为 dentryUuid）。
+内容读取、编辑、导出或类型路由需用该 ID 调用 dws doc info，再按
+linkSourceInfo.nodeId 逐跳解析目标；移动、重命名或删除入口本身仍使用最初的
+result.fileId。`,
 		Example: `  dws drive info --node <dentryUuid>  # 查询 fileId: dws drive list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fileID := flagOrFallback(cmd, "node", "file-id")
@@ -760,17 +765,19 @@ func newDriveCommand() *cobra.Command {
 				CLIPath:        "drive info",
 				PrimaryCLIPath: "drive info",
 			},
-			Description: "获取文件元数据信息",
+			Description: "获取文件元数据信息；dlink 使用 result.fileId 解析目标",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "get_file_info"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "获取文件元数据信息",
+				AgentSummary: "获取文件元数据信息；dlink 使用 result.fileId 调用 doc info 解析真实目标",
 				UseWhen: []string{
 					"用户要查看钉盘文件/文件夹元信息（名称、类型、大小、路径、时间）时",
 					"准备读内容前需先判断 extension/是否在线文档，再路由到 doc read / sheet / download 时",
+					"extension=dlink 时，取返回的 result.fileId 作为快捷方式入口 ID 调用 dws doc info，并按 linkSourceInfo.nodeId 逐跳解析目标",
+					"明确移动、重命名或删除快捷方式入口本身时，保留最初 drive info 的 result.fileId；内容操作不得使用入口 ID",
 				},
 				AvoidWhen: []string{
 					"要读在线文档正文改用 dws doc read（先本命令或 doc info 确认类型）",

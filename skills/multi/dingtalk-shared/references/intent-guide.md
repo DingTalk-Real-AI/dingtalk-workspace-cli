@@ -188,7 +188,7 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 
 判断关键：
 - 用户直接提供的 alidocs `/i/nodes/` URL 或来源未验证的 nodeId → 必须先 `dws drive info --node <URL_OR_ID> --format json` 探测 `extension`
-- `extension=dlink` → 用 `dws doc info --node <快捷方式nodeId> --format json` 读取目标 `linkSourceInfo`；逐跳解析，内容操作按最终目标重新路由，入口自身移动/重命名/删除仍用顶层 nodeId
+- `extension=dlink` → 保存 `drive info` 的 `result.fileId` 为入口 ID，用 `dws doc info --node <result.fileId> --format json` 读取目标 `linkSourceInfo`；逐跳解析，内容操作按最终目标重新路由，入口自身移动/重命名/删除仍用最初的 `result.fileId`
 - `extension=axls` → `sheet`
 - `extension=xlsx` / `xls` / `xlsm` / `csv` → `dws drive download`
 - 用户说"把在线表格导出为 xlsx 文件" → `dws sheet export`（axls → xlsx 的格式转换，不是读取 xlsx）
