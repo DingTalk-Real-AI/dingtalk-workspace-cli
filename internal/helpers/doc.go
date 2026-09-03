@@ -1401,7 +1401,8 @@ func newDocCommand() *cobra.Command {
 	infoCmd := &cobra.Command{
 		Use:   "info",
 		Short: "获取文档元信息",
-		Long:  `获取文档标题、类型、创建者、创建时间、权限等元信息 (不含内容)。`,
+		Long: `获取文档标题、类型、创建者、创建时间、权限等元信息 (不含内容)。
+节点为快捷方式 (extension=dlink) 时，响应额外返回一跳目标的 linkSourceInfo；字段名沿用服务端定义，语义是链接目标。`,
 		Example: `  dws doc info --node DOC_ID
   dws doc info --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1425,17 +1426,18 @@ func newDocCommand() *cobra.Command {
 				CLIPath:        "doc info",
 				PrimaryCLIPath: "doc info",
 			},
-			Description: "获取文档元信息（标题/类型/创建者/权限等）",
+			Description: "获取节点元信息；dlink 快捷方式额外返回一跳目标 linkSourceInfo",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "get_document_info"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "获取文档元信息（标题/类型/创建者/权限等）",
+				AgentSummary: "获取节点元信息；dlink 快捷方式额外返回一跳目标 linkSourceInfo，供内容类型路由",
 				UseWhen: []string{
 					"用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
-					"准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时",
+					"准备内容读取、编辑、导出或类型路由，需先看 contentType/extension；extension=dlink 时改用 linkSourceInfo.nodeId 继续解析时",
+					"需要区分快捷方式入口与目标时：内容操作使用 linkSourceInfo.nodeId，明确移动/重命名/删除快捷方式入口本身仍使用顶层 nodeId",
 				},
 				AvoidWhen: []string{
 					"已确认是 adoc 且只要正文改用 dws doc read",

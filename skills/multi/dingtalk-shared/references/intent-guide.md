@@ -187,13 +187,14 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 - sheet 命令直接调用会报错，必须先 `dws drive download --node <URL>` 下载到本地再解析处理
 
 判断关键：
-- 未知 alidocs URL → 必须先 `dws drive info --node <URL> --format json` 探测 `extension`
+- 用户直接提供的 alidocs `/i/nodes/` URL 或来源未验证的 nodeId → 必须先 `dws drive info --node <URL_OR_ID> --format json` 探测 `extension`
+- `extension=dlink` → 保存 `drive info` 的 `result.fileId` 为入口 ID，用 `dws doc info --node <result.fileId> --format json` 读取目标 `linkSourceInfo`；逐跳解析，内容操作按最终目标重新路由，入口自身移动/重命名/删除仍用最初的 `result.fileId`
 - `extension=axls` → `sheet`
 - `extension=xlsx` / `xls` / `xlsm` / `csv` → `dws drive download`
 - 用户说"把在线表格导出为 xlsx 文件" → `dws sheet export`（axls → xlsx 的格式转换，不是读取 xlsx）
 
 易误判场景：
-- 用户粘贴一个 alidocs 链接说"读一下这个表格" — 不能直接调 `sheet range read`，必须先 probe 再按 `extension` 路由
+- 用户粘贴一个 alidocs 链接说"读一下这个表格" — 不能直接调 `sheet range read`，必须先 probe；若为 dlink，按 `linkSourceInfo` 目标继续解析后再按最终 `extension` 路由
 - 用户说"读一下这个 xlsx 文件里的数据" — 走 `dws drive download` 下载后本地解析，不要走 `sheet`
 - 用户说"把这个在线表格导出为 xlsx" — 走 `dws sheet export`，不要走 `dws drive download`（后者只能下载已有的 xlsx 节点，无法从 axls 生成）
 
