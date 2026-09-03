@@ -186,6 +186,32 @@ func TestCrossPlatformCoverageAITableViewFilterReadBackPrefersCompleteExternalPr
 	}
 }
 
+func TestAITableViewFilterReadBackDoesNotMaskCompleteExternalMismatch(t *testing.T) {
+	expected := []any{map[string]any{
+		"operator": "eq",
+		"operands": []any{"fldOwner", map[string]any{"userId": "staff1", "corpId": "ding1"}},
+	}}
+	view := map[string]any{
+		"filter":                 expected,
+		"filterExternal":         []any{map[string]any{"operator": "eq", "operands": []any{"fldOwner", map[string]any{"userId": "other", "corpId": "ding1"}}}},
+		"filterExternalComplete": true,
+	}
+
+	matched, unknown, actual := compareAitableViewFilterReadBack(
+		view, expected, expected, map[string]string{"fldOwner": "user"})
+	if matched || unknown || actual == nil {
+		t.Fatalf("complete external mismatch matched=%v unknown=%v actual=%#v", matched, unknown, actual)
+	}
+}
+
+func TestAITableViewFilterReadBackTreatsMissingCompleteProjectionAsUnknown(t *testing.T) {
+	matched, unknown, actual := compareAitableViewFilterReadBack(
+		map[string]any{"filterExternalComplete": true}, []any{}, []any{}, nil)
+	if matched || !unknown || actual != nil {
+		t.Fatalf("missing complete projection matched=%v unknown=%v actual=%#v", matched, unknown, actual)
+	}
+}
+
 func TestCrossPlatformCoverageAITableViewFilterReadBackKeepsLegacyPersonIdentityUnknown(t *testing.T) {
 	expected := []any{map[string]any{
 		"operator": "eq",

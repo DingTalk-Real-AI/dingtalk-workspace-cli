@@ -367,14 +367,17 @@ func compareAitableViewFilterReadBack(
 	fieldTypes map[string]string,
 ) (matched bool, unknown bool, actual any) {
 	if complete, ok := view["filterExternalComplete"].(bool); ok && complete {
-		actual = view["filterExternal"]
+		var exists bool
+		actual, exists = view["filterExternal"]
+		if !exists || actual == nil {
+			return false, true, actual
+		}
 		if persistedViewFilterMatches(actual, requested) || persistedViewFilterMatches(actual, normalizedExpected) {
 			return true, false, actual
 		}
+		return false, false, actual
 	}
-	if actual == nil {
-		actual = walkViewPath(view, "filter")
-	}
+	actual = walkViewPath(view, "filter")
 	// A current MCP response already uses the same normalized internal value
 	// that get_views returns, so prefer that exact comparison before applying
 	// legacy external-identity projection for older responses.

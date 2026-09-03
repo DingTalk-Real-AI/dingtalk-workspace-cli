@@ -62,6 +62,9 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	}
 	baseID, tableID := rt.Str("base-id"), rt.Str("table-id")
 	name, viewType := strings.TrimSpace(rt.Str("name")), rt.Str("view-type")
+	if name == "" {
+		return apperrors.NewValidation("--name 不能为空")
+	}
 	var timebar map[string]any
 	if rt.Changed("timebar") {
 		if viewType != "Gantt" {

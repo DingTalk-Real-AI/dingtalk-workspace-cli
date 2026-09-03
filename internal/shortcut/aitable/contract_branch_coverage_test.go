@@ -48,4 +48,9 @@ func TestBootstrapAndViewPresetValidationBranches(t *testing.T) {
 		"--config", `{"visibleFieldIds":[]}`, "--timebar", `{`, "--yes"); err == nil {
 		t.Fatal("invalid Gantt timebar JSON succeeded")
 	}
+	if _, err := runAITableCompositeCLI(t, &upsertByKeyCaller{}, "+view-preset-apply",
+		"--base-id", "b", "--table-id", "t", "--name", "   ", "--view-type", "Grid",
+		"--config", `{"visibleFieldIds":[]}`, "--yes"); err == nil {
+		t.Fatal("blank view name succeeded")
+	}
 }
