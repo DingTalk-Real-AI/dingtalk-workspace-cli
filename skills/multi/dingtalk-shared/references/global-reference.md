@@ -19,11 +19,17 @@ dws profile list --format json
 dws auth login --recommend --format json
 dws auth login --device --recommend --format json
 
+# 国际版 / 海外版（.io）登录必须加 --intl；无头环境再加 --device
+dws auth login --intl --recommend --format json
+dws auth login --intl --device --recommend --format json
+
 # 只指定本次组织/账号，不持久切换默认 profile
 dws auth status --profile <corpId>:<userId> --format json
 ```
 
 - 同一条 IM 链路的目标解析、读取与写入必须使用同一 `--profile`。
+- 用户明确国际版、海外版或 `.io` 登录意图时必须加 `--intl`，不得回退到国内 `.com`。
+  `--intl` 只用于 `auth login`；后续业务命令根据当前或 `--profile` 指定的账号自动路由。
 - `profile list` 本身不刷新 token；`auth status --profile ...` 只检查/刷新选中的 token
   slot，不修改 `currentProfile`。
 - `auth logout` 默认退出全部账号；传 `--profile` 才缩小范围。`auth reset` 会清除本地

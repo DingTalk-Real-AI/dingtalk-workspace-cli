@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 )
 
 // ─── endpoints.go ──────────────────────────────────────────────────────
@@ -428,6 +431,31 @@ func TestCrossPlatformCoverageBuildAuthURLForInternationalRegion(t *testing.T) {
 	authURL := buildAuthURLForRegion("client-id", "http://127.0.0.1:1234/callback", "", LoginRegionInternational)
 	if !strings.HasPrefix(authURL, InternationalAuthorizeURL+"?") {
 		t.Fatalf("auth URL = %s, want international authorize host", authURL)
+	}
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	if got := parsed.Query().Get("lang"); got != oauthLoginLanguage() {
+		t.Fatalf("auth URL lang = %q, want %q", got, oauthLoginLanguage())
+	}
+}
+
+func TestCrossPlatformCoverageRenderSuccessHTMLUsesActiveLanguage(t *testing.T) {
+	page := renderSuccessHTML()
+	wants := []string{
+		`<html lang="` + i18n.Lang() + `">`,
+		"<title>" + i18n.T("钉钉 CLI") + "</title>",
+		"<h1>" + i18n.T("授权成功") + "</h1>",
+		"<p>" + i18n.T("请返回终端继续操作。此页面可以关闭。") + "</p>",
+	}
+	for _, want := range wants {
+		if !strings.Contains(page, want) {
+			t.Errorf("success page missing %q", want)
+		}
+	}
+	if strings.Contains(page, "__") {
+		t.Fatalf("success page contains an unresolved template marker: %q", page)
 	}
 }
 

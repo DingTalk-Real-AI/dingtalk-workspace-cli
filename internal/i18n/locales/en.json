@@ -202,5 +202,18 @@
   "附件工作流": "Attachment workflow",
   "静态端点/协商失败；请检查网络、服务版本或升级到包含最新静态端点的 dws 版本。": "Static endpoint/negotiation failed; check network, service version, or upgrade to a dws version with the latest static endpoints.",
   "页码 (必填)": "page number (required)",
+  "%.0f 天后": "in %.0f days",
+  "%.0f 小时后": "in %.0f hours",
+  "Token 将自动刷新，无需重复登录": "The token will refresh automatically; no need to log in again",
+  "企业": "Organization",
+  "企业 ID": "Organization ID",
+  "推荐权限已全部授权或没有可授权项": "Recommended permissions are already granted, or none are available",
+  "有效期": "Expires",
+  "用户": "User",
+  "登录成功！": "Login successful!",
+  "已过期": "Expired",
+  "授权成功": "Authorization successful",
+  "请返回终端继续操作。此页面可以关闭。": "Return to the terminal to continue. You may close this page.",
+  "钉钉 CLI": "DingTalk CLI",
   "🔐 登录钉钉": "🔐 Login to DingTalk"
 }

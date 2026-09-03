@@ -640,11 +640,16 @@ mkdir -p "$MONO_HOME" "$MULTI_HOME"
 capture "$OUT_DIR/skill-mono-setup.txt" env HOME="$MONO_HOME" "$BIN" skill setup --mode mono --target codex --source "$ROOT" --yes
 expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "corpId:userId"
 expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
+expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "dws auth login --intl"
 expect_contains "$MONO_HOME/.codex/skills/dws/references/global-reference.md" "userId/userName"
+expect_contains "$MONO_HOME/.codex/skills/dws/references/global-reference.md" "dws auth login --intl"
 capture "$OUT_DIR/skill-multi-setup.txt" env HOME="$MULTI_HOME" "$BIN" skill setup --mode multi --target codex --source "$ROOT" --yes
 expect_contains "$MULTI_HOME/.codex/skills/dingtalk-shared/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-shared/SKILL.md" "dws auth login --intl"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-shared/references/global-reference.md" "dws auth login --intl"
 expect_contains "$MULTI_HOME/.codex/skills/dingtalk-misc/references/profile.md" "corpId:userId"
 expect_contains "$MULTI_HOME/.codex/skills/dingtalk-misc/references/profile.md" "isOrgCurrent"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-misc/references/profile.md" "dws auth login --intl"
 
 log "verifying empty profile list"
 capture "$OUT_DIR/list-empty.json" "$BIN" profile list --format json

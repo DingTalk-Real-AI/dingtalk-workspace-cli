@@ -75,3 +75,42 @@ func TestCrossPlatformCoverageLoadCatalogHandlesValidAndInvalidResources(t *test
 		t.Fatalf("blank language = %q", Lang())
 	}
 }
+
+func TestAuthLoginSummaryTranslations(t *testing.T) {
+	previous := Lang()
+	t.Cleanup(func() { SetLang(previous) })
+
+	SetLang("en")
+	english := map[string]string{
+		"推荐权限已全部授权或没有可授权项": "Recommended permissions are already granted, or none are available",
+		"登录成功！": "Login successful!",
+		"企业":    "Organization",
+		"企业 ID": "Organization ID",
+		"用户":    "User",
+		"有效期":   "Expires",
+		"Token 将自动刷新，无需重复登录": "The token will refresh automatically; no need to log in again",
+		"已过期":  "Expired",
+		"授权成功": "Authorization successful",
+		"请返回终端继续操作。此页面可以关闭。": "Return to the terminal to continue. You may close this page.",
+		"钉钉 CLI": "DingTalk CLI",
+	}
+	for key, want := range english {
+		if got := T(key); got != want {
+			t.Errorf("T(%q) = %q, want %q", key, got, want)
+		}
+	}
+	if got := Tf("%.0f 天后", 30.0); got != "in 30 days" {
+		t.Errorf("English day expiry = %q", got)
+	}
+	if got := Tf("%.0f 小时后", 2.0); got != "in 2 hours" {
+		t.Errorf("English hour expiry = %q", got)
+	}
+
+	SetLang("zh")
+	if got := T("登录成功！"); got != "登录成功！" {
+		t.Errorf("Chinese login success = %q", got)
+	}
+	if got := Tf("%.0f 天后", 30.0); got != "30 天后" {
+		t.Errorf("Chinese day expiry = %q", got)
+	}
+}
