@@ -26,12 +26,19 @@ Flags:
 
 | contentType | extension | 操作 | 命令 |
 |-------------|-----------|------|------|
+| 任意 | dlink | 解析快捷方式目标后重新路由 | 从 `linkSourceInfo` 取目标；目标仍为 dlink 时再次执行 `dws doc info --node <目标nodeId>` |
 | ALIDOC | adoc | 在线获取 Markdown 内容 | `dws doc read --node <ID>` |
 | ALIDOC | axls | 在线读取表格数据 | `dws sheet list` → `dws sheet range read` |
 | ALIDOC | able | 在线查询多维表格记录 | `dws aitable table list` → `dws aitable record query` |
 | 非 ALIDOC | — | **不支持在线分析** | 告知用户需下载到本地后查看 |
 
-**关键规则**：非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
+**关键规则**：先处理 `extension=dlink`，再判断目标是否为 ALIDOC。非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
+
+### 快捷方式解析边界
+
+- `linkSourceInfo` 的字段名沿用服务端定义，实际语义是快捷方式的**目标节点**。内容读取、编辑、导出和类型路由改用 `linkSourceInfo.nodeId`，并消费目标的 `contentType`、`extension`、`nodeType`。
+- `doc info` 只返回一跳目标。目标 `extension` 仍为 `dlink` 时，以目标 nodeId 再调用 `doc info`，逐跳记录已访问 nodeId；请求失败、字段/目标 nodeId 缺失或 nodeId 重复时停止，禁止把 dlink 当普通文件继续。
+- 顶层 `nodeId` / `docUrl` 仍代表快捷方式入口。只有用户明确移动、重命名或删除入口本身时使用顶层 nodeId；不要把入口管理误路由到目标节点。
 
 ## URL 识别与 DOC_ID 提取
 
@@ -110,8 +117,9 @@ dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=749936706
 
 | 从返回中提取 | 用于 |
 |-------------|------|
-| `contentType` + `extension` | 选择 [`./doc-read.md`](./doc-read.md) / `dws sheet ...` / `dws aitable ...` / `dws drive download`（非 ALIDOC 走存储层下载） |
-| `nodeId` / `docUrl` | 后续所有 `--node` 入参 |
+| 顶层 `contentType` + `extension` | 非 dlink 时选择 [`./doc-read.md`](./doc-read.md) / `dws sheet ...` / `dws aitable ...` / `dws drive download` |
+| `linkSourceInfo.nodeId` + 目标类型字段 | dlink 的内容读取、编辑、导出和类型路由；目标仍为 dlink 时继续 `doc info` |
+| 顶层 `nodeId` / `docUrl` | 普通节点的后续 `--node`；dlink 仅用于明确移动、重命名或删除快捷方式入口本身 |
 
 ## 常用模板
 

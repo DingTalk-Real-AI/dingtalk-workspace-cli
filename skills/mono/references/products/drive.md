@@ -246,10 +246,13 @@ Example:
 
 | extension | 文件类型 | 操作 | 命令 |
 |-----------|---------|------|------|
+| dlink | 快捷方式 | 解析目标后重新路由 | `dws doc info --node <快捷方式nodeId>`，内容操作使用 `linkSourceInfo.nodeId` |
 | adoc | 在线文档 | 在线获取 Markdown 内容 | `dws doc read --node <nodeId>` |
 | axls | 在线表格 | 在线读取表格数据 | `dws sheet list` → `dws sheet range read` |
 | able | 多维表格 | 在线查询记录 | `dws aitable base get` → `dws aitable record query` |
 | 其他（pdf/docx/txt/png 等） | 普通文件 | **不支持在线分析**，需用户主动下载后本地查看 | `dws drive download --node <nodeId> --output <path>` |
+
+`dlink` 不能按普通文件下载。目标仍为 dlink 时逐跳 `doc info` 并记录已访问 nodeId；解析失败、`linkSourceInfo`/目标 nodeId 缺失或 nodeId 重复即停。内容读取、编辑、导出和类型路由走目标；明确移动、重命名或删除快捷方式入口本身仍使用最初的顶层 nodeId。
 
 ### 下载钉盘文件到本地
 
