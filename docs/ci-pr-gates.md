@@ -336,6 +336,26 @@ candidate SHA。
 `check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
 flag 迁移。
 
+The race suite keeps nine reviewed `internal/app` test-name partitions but
+dispatches them through three balanced physical lanes. Each partition remains
+an independent Go test process, so process-global command registries are
+released between partitions; the lane is only the hosted-runner scheduling
+unit. `scripts/ci/run-app-race-tests.sh` owns both the partition set and the
+lane map, and the workflow contract proves that each focused/full-suite matrix
+contains exactly those three lanes and that their union contains every
+partition exactly once.
+
+The initial lane balance is evidence-based rather than alphabetical by job.
+Across 11 successful full-suite runs sampled on 2026-09-03, replaying the
+recorded partition step durations produced a slowest-lane median of 8m53s,
+p90 of 9m02s, and maximum of 9m08s. The 20-minute job timeout remains unchanged
+as regression headroom. The scheduling model predicts 33 to 27 successful jobs
+per ordinary full-suite PR and about 40-50 seconds lower completion time for the
+last PR when two to four full suites arrive two minutes apart. These are rollout
+targets, not post-change measurements; maintainers must validate them against
+live overlapping runs and rebalance the helper-owned lane map if the slowest
+lane p95 exceeds 12 minutes.
+
 Schema compatibility 使用同一组 base、stable、candidate refs，以及 base-owned flag
 与 command migration ledgers。merge-base-owned checker 分别规范化 merge-base 与
 stable 的完整 Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过

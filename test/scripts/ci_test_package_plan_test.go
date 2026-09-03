@@ -104,24 +104,51 @@ func TestCIAppRacePartitionsCoverTopLevelTestsExactlyOnce(t *testing.T) {
 	}
 }
 
-// TestCIAppRacePartitionMatrixMatchesHelper pins the workflow's app partition
-// shards to the partition set the helper actually runs. The partitions are
-// separate CI jobs now, so the helper's own "covered exactly once" check can no
-// longer prove the whole package ran: a partition the helper knows about but no
-// matrix shard dispatches would silently stop running while every job stays
-// green. Both directions are asserted so a stale matrix shard fails too.
-func TestCIAppRacePartitionMatrixMatchesHelper(t *testing.T) {
+// TestCIAppRaceLaneMatrixMatchesHelper pins both workflow matrices to the three
+// physical lanes declared by the helper and proves that those lanes contain
+// every logical partition exactly once. A stale lane, dropped partition, or
+// duplicate assignment must fail rather than silently weakening the race suite.
+func TestCIAppRaceLaneMatrixMatchesHelper(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	script := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
-	cmd := exec.Command("sh", script, "list-partitions")
-	cmd.Dir = root
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s list-partitions failed: %v\n%s", script, err, output)
-	}
-	partitions := strings.Fields(string(output))
+	partitionsOutput := runAppRaceHelper(t, root, script, "list-partitions")
+	partitions := strings.Fields(partitionsOutput)
 	if len(partitions) == 0 {
-		t.Fatalf("list-partitions returned no partitions: %q", output)
+		t.Fatalf("list-partitions returned no partitions: %q", partitionsOutput)
+	}
+	partitionSet := make(map[string]struct{}, len(partitions))
+	for _, partition := range partitions {
+		partitionSet[partition] = struct{}{}
+	}
+
+	lanesOutput := runAppRaceHelper(t, root, script, "list-lanes")
+	lanes := strings.Fields(lanesOutput)
+	if len(lanes) != 3 {
+		t.Fatalf("list-lanes returned %d lanes, want 3: %q", len(lanes), lanesOutput)
+	}
+	assigned := make(map[string]string, len(partitions))
+	for _, lane := range lanes {
+		laneOutput := runAppRaceHelper(t, root, script, "list-lane-partitions", lane)
+		lanePartitions := strings.Fields(laneOutput)
+		if len(lanePartitions) == 0 {
+			t.Fatalf("lane %q returned no partitions", lane)
+		}
+		for _, partition := range lanePartitions {
+			if _, ok := partitionSet[partition]; !ok {
+				t.Errorf("lane %q contains unknown partition %q", lane, partition)
+				continue
+			}
+			if previous, ok := assigned[partition]; ok {
+				t.Errorf("partition %q appears in lanes %q and %q", partition, previous, lane)
+				continue
+			}
+			assigned[partition] = lane
+		}
+	}
+	for _, partition := range partitions {
+		if _, ok := assigned[partition]; !ok {
+			t.Errorf("partition %q is not assigned to an app race lane", partition)
+		}
 	}
 
 	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
@@ -145,10 +172,10 @@ func TestCIAppRacePartitionMatrixMatchesHelper(t *testing.T) {
 		}
 		body := admission[start:end]
 
-		for _, partition := range partitions {
-			want := "- app-" + partition
+		for _, lane := range lanes {
+			want := "- app-" + lane
 			if !strings.Contains(body, want) {
-				t.Errorf("%s matrix is missing shard %q for a partition the helper runs", job.name, want)
+				t.Errorf("%s matrix is missing helper lane shard %q", job.name, want)
 			}
 		}
 
@@ -159,17 +186,84 @@ func TestCIAppRacePartitionMatrixMatchesHelper(t *testing.T) {
 			}
 			name := strings.TrimPrefix(shard, "- app-")
 			matched := false
-			for _, partition := range partitions {
-				if partition == name {
+			for _, lane := range lanes {
+				if lane == name {
 					matched = true
 					break
 				}
 			}
 			if !matched {
-				t.Errorf("%s matrix shard %q has no matching helper partition", job.name, shard)
+				t.Errorf("%s matrix shard %q has no matching helper lane", job.name, shard)
 			}
 		}
 	}
+}
+
+func TestCIAppRaceLaneRunsEachPartitionInFreshGoTestProcess(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	fakeBin := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "go-test.log")
+	fakeGo := filepath.Join(fakeBin, "go")
+	const fakeGoScript = `#!/bin/sh
+case " $* " in
+  *" -list "*)
+    printf '%s\n' \
+      TestAgentSchema \
+      TestAlpha \
+      TestCrossPlatformCoverageApple \
+      TestCrossPlatformCoverageMail \
+      TestCrossPlatformCoveragePolicy \
+      TestCrossPlatformCoverageSheet \
+      TestCreate \
+      TestDownload \
+      TestSend
+    exit 0
+    ;;
+esac
+printf '%s\n' "$*" >> "$FAKE_GO_LOG"
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatalf("write fake go: %v", err)
+	}
+
+	script := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
+	cmd := exec.Command("sh", script, "run-lane", "./internal/app", "lane-2")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"FAKE_GO_LOG="+logPath,
+		"TMPDIR="+t.TempDir(),
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run lane-2 failed: %v\n%s", err, output)
+	}
+	for _, partition := range []string{"c-p-r", "c-m-o", "c-s-z"} {
+		want := "running internal/app race partition " + partition
+		if !strings.Contains(string(output), want) {
+			t.Errorf("run-lane output missing %q:\n%s", want, output)
+		}
+	}
+
+	invocations, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read fake go invocation log: %v", err)
+	}
+	lines := strings.FieldsFunc(strings.TrimSpace(string(invocations)), func(r rune) bool { return r == '\n' })
+	if len(lines) != 3 {
+		t.Fatalf("lane-2 launched %d go test processes, want 3:\n%s", len(lines), invocations)
+	}
+}
+
+func runAppRaceHelper(t *testing.T, root, script string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("sh", append([]string{script}, args...)...)
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %s failed: %v\n%s", script, strings.Join(args, " "), err, output)
+	}
+	return string(output)
 }
 
 func TestCIMergeCoverageProfilesUnionsDuplicateBlocks(t *testing.T) {

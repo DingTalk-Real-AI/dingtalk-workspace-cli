@@ -7,18 +7,70 @@ usage() {
 	printf '%s\n' \
 		"usage: $0 verify <app-package>" \
 		"       $0 run <app-package> [partition]" \
+		"       $0 run-lane <app-package> <lane>" \
 		"       $0 coverage <app-package> <output-profile> [partition]" \
-		"       $0 list-partitions" >&2
+		"       $0 list-partitions" \
+		"       $0 list-lanes" \
+		"       $0 list-lane-partitions <lane>" >&2
 	exit 2
 }
 
-# Single source of truth for the partition set. CI runs one job per partition and
-# pins its shard names to this list, so a name that appears here without a
-# dispatch entry below fails closed rather than silently skipping tests.
+# Single source of truth for the logical partition set. CI keeps each partition
+# in a fresh Go test process, but balances them across three physical jobs so a
+# full-suite PR does not reserve nine hosted-runner slots for internal/app.
 APP_PARTITIONS='schema a-b c-a-l c-m-o c-p-r c-s-z c-other d-r s-z-example-fuzz'
+APP_LANES='lane-1 lane-2 lane-3'
+
+app_lane_partitions() {
+	case "$1" in
+		lane-1) printf '%s\n' 'c-a-l schema' ;;
+		lane-2) printf '%s\n' 'c-p-r c-m-o c-s-z' ;;
+		lane-3) printf '%s\n' 'd-r a-b c-other s-z-example-fuzz' ;;
+		*)
+			printf 'unknown app race lane: %s\n' "$1" >&2
+			return 1
+			;;
+	esac
+}
+
+# Fail closed if the lane map drops, duplicates, or invents a logical
+# partition. The Go workflow contract independently pins both matrices to the
+# same lane list.
+assigned_lane_partitions=''
+for lane_name in $APP_LANES; do
+	for lane_partition in $(app_lane_partitions "$lane_name"); do
+		case " $APP_PARTITIONS " in
+			*" $lane_partition "*) ;;
+			*)
+				printf 'app race lane %s references unknown partition %s\n' \
+					"$lane_name" "$lane_partition" >&2
+				exit 1
+				;;
+		esac
+		case " $assigned_lane_partitions " in
+			*" $lane_partition "*)
+				printf 'app race partition %s is assigned to more than one lane\n' \
+					"$lane_partition" >&2
+				exit 1
+				;;
+		esac
+		assigned_lane_partitions="$assigned_lane_partitions $lane_partition"
+	done
+done
+for lane_partition in $APP_PARTITIONS; do
+	case " $assigned_lane_partitions " in
+		*" $lane_partition "*) ;;
+		*)
+			printf 'app race partition %s is not assigned to a lane\n' \
+				"$lane_partition" >&2
+			exit 1
+			;;
+	esac
+done
 
 mode="${1:-}"
 partition=""
+lane=""
 coverage_output=""
 case "$mode" in
 	list-partitions)
@@ -26,6 +78,18 @@ case "$mode" in
 		for name in $APP_PARTITIONS; do
 			printf '%s\n' "$name"
 		done
+		exit 0
+		;;
+	list-lanes)
+		[ "$#" -eq 1 ] || usage
+		for name in $APP_LANES; do
+			printf '%s\n' "$name"
+		done
+		exit 0
+		;;
+	list-lane-partitions)
+		[ "$#" -eq 2 ] || usage
+		app_lane_partitions "$2"
 		exit 0
 		;;
 	verify)
@@ -36,6 +100,11 @@ case "$mode" in
 		[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || usage
 		app_package="$2"
 		partition="${3:-}"
+		;;
+	run-lane)
+		[ "$#" -eq 3 ] || usage
+		app_package="$2"
+		lane="$3"
 		;;
 	coverage)
 		[ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
@@ -223,10 +292,11 @@ run_partition() {
 # (26s -> 291s locally, 357s in CI) without being able to report anything.
 schema_pattern='^Test.*Schema'
 
-# Dispatch table for the partition set declared in APP_PARTITIONS. CI passes one
-# partition per job so they run concurrently; running without a partition keeps
-# the original end-to-end behaviour for local use and for any caller that wants
-# the whole package in one invocation.
+# Dispatch table for the partition set declared in APP_PARTITIONS. Every call
+# starts a fresh Go test process. CI runs several calls sequentially inside one
+# balanced lane, preserving process isolation while bounding physical fan-out.
+# Running without a partition keeps the original end-to-end behaviour for local
+# use and for any caller that wants the whole package in one invocation.
 run_named_partition() {
 	case "$1" in
 		schema) run_partition schema no-race "$schema_pattern" ;;
@@ -253,6 +323,13 @@ if [ -n "$partition" ]; then
 		"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/merge-coverage-profiles.sh" \
 			"$coverage_output" "$workdir/coverage-app-$partition.txt"
 	fi
+	exit 0
+fi
+
+if [ -n "$lane" ]; then
+	for name in $(app_lane_partitions "$lane"); do
+		run_named_partition "$name"
+	done
 	exit 0
 fi
 
