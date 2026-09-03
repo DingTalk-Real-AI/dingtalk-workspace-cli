@@ -4,6 +4,16 @@
 
 > **核心原则：** `formComponentValues[].name` 必须与审批模板中控件的 `props.label` **完全一致**，`value` 为字符串类型（最大 65535 字符）。
 
+## 目录
+
+- [通用约束](#通用约束)
+- [基础控件](#基础控件)
+- [增强控件](#增强控件)
+- [复合控件](#复合控件)
+- [未定义稳定格式的控件](#未定义稳定格式的控件)
+- [API 不支持的控件](#api-不支持的控件)
+- [组装优先级](#组装优先级)
+
 ---
 
 ## 通用约束
@@ -317,7 +327,7 @@
 
 ### DDHolidayField（请假套件）
 
-> **支持通过 leave-duration / leave-check 命令链发起**，完整工作流见 [oa.md](../oa.md) 的「发起请假审批」章节。识别特征：`componentName == "DDHolidayField"`，`props.label` 为数组（如 `["开始时间","结束时间"]`），`props.options` 为假期类型选项列表。
+> **支持通过 leave-duration / leave-check 命令链发起**，完整工作流见 [oa-create.md](../oa-create.md) 的“请假：DDHolidayField”。识别特征：`componentName == "DDHolidayField"`，`props.label` 为数组（如 `["开始时间","结束时间"]`），`props.options` 为假期类型选项列表。
 
 模板 Schema 结构（从 `form-schema` 获取，关键字段）：
 ```json
@@ -382,11 +392,11 @@ extValue = JSON.stringify({
 > **IMPORTANT：**
 > - 时长、detailList、compressedValue 一律取自 `dws attendance approve leave-duration` 的服务端计算结果，严禁本地构造或估算；不支持手动改时长（customDuration）。
 > - 发起前必须先跑 `dws attendance approve leave-check` 提交前校验（--duration-day / --duration-hour 取自 leave-duration 输出）；success=false 时转告 errorMsg 并终止。
-> - 哺乳假模板（类型条目 bizType === "breastfeeding_leave_new"；bizType 缺失时回退名称含「哺乳」）与需上传证明材料的请假类型（类型条目 leaveCertificate.enable=true 且时长双向换算小时后 ≥ 阈值，换算规则见 oa.md「发起请假审批」步骤 3）**不支持 CLI 发起**，引导用户在客户端提交。
+> - 哺乳假模板（类型条目 bizType === "breastfeeding_leave_new"；bizType 缺失时回退名称含「哺乳」）与需上传证明材料的请假类型（类型条目 leaveCertificate.enable=true 且时长达到阈值）**不支持 CLI 发起**，按 oa-create.md 的请假闭环引导用户在客户端提交。
 
 ### DDBizSuite · attendance.supply（补卡套件）
 
-> **支持通过 supply-plans / supply-check 命令链发起**，完整工作流见 [oa.md](../oa.md) 的「发起补卡审批」章节。识别特征：`componentName == "DDBizSuite"` 且 `props.bizType == "attendance.supply"`；补卡时间子控件在 `children` 内（`DDDateField`，`bizAlias == "userCheckTime"`）。
+> **支持通过 supply-plans / supply-check 命令链发起**，完整工作流见 [oa-create.md](../oa-create.md) 的“补卡：DDBizSuite · attendance.supply”。识别特征：`componentName == "DDBizSuite"` 且 `props.bizType == "attendance.supply"`；补卡时间子控件在 `children` 内（`DDDateField`，`bizAlias == "userCheckTime"`）。
 
 模板 Schema 结构（从 `form-schema` 获取，需下钻 children）：
 ```json
@@ -443,6 +453,20 @@ extValue = JSON.stringify({
 
 ---
 
+## 未定义稳定格式的控件
+
+以下控件可能出现在 `form-schema` 中，但当前 DWS Skill、CLI Schema 和可检索的官方开放平台资料没有提供经验证的稳定 value 契约。不要套用相似控件格式或用真实审批试探：
+
+| 控件 | componentName | 处理 |
+|---|---|---|
+| 未专项支持的业务套件 | `DDBizSuite` | 容器提交契约未知；即使套件本身非必填也停止，不把 children 当普通顶层字段提交 |
+| 级联选择 | `CascadeField` | Schema 未给出真实选项或 CLI 未公开稳定值时停止，不用显示文本猜 value |
+| 开放数据 | `OpenDataField` | 数据源选择结果没有 CLI 已公开的稳定值契约时停止 |
+
+遇到其他未列出的 `componentName` 也按同一规则处理。只有本文件明确给出 value 格式时，才自动组装该控件。
+
+---
+
 ## API 不支持的控件
 
 以下控件**不支持**通过创建实例 API 提交，遇到时应告知用户需在钉钉客户端补充：
@@ -457,7 +481,7 @@ extValue = JSON.stringify({
 
 > **部分支持的控件：** `DDPhotoField`（图片控件）**支持通过 URL 直接提交**，但不支持本地文件上传（CLI 未封装钉盘 CDN 上传流程）。若用户只有本地文件，需告知在钉钉客户端补充。详见本文 [DDPhotoField](#ddphotofield图片控件) 章节。
 
-> **套件类控件（大部分暂不支持）** — `InvoiceField`（发票）、`RecipientAccountField`（收款账户）等业务套件控件当前暂不支持通过 CLI 发起，包含这些控件的审批模板请直接在钉钉客户端操作。**例外：`DDHolidayField`（请假套件）与 `DDBizSuite · attendance.supply`（补卡套件）已支持**，按上方章节与 [oa.md](../oa.md)「发起请假审批」/「发起补卡审批」工作流发起。
+> **套件类控件（大部分暂不支持）** — `InvoiceField`（发票）、`RecipientAccountField`（收款账户）等业务套件控件当前暂不支持通过 CLI 发起，包含这些控件的审批模板请直接在钉钉客户端操作。**例外：`DDHolidayField`（请假套件）与 `DDBizSuite · attendance.supply`（补卡套件）已支持**，按上方章节与 [oa-create.md](../oa-create.md) 的考勤审批套件闭环发起。
 
 ---
 
@@ -465,7 +489,7 @@ extValue = JSON.stringify({
 
 1. **每次发起前都重新调用 `form-schema`**，不得复用旧结果（模板可能已被修改）
 2. 先读 `form-schema` 返回的 `content`，识别所有控件的 `label`、`componentName`、`options`、`props.required`
-3. **检查是否存在不支持控件且为必填项（`props.required: true`）**，若有则直接告知用户该模板不支持通过 CLI 发起，请在钉钉客户端操作
+3. **检查是否存在未知控件、未定义稳定格式的控件或不支持控件，且为必填项（`props.required: true`）**；若有则直接告知用户该模板不支持安全自动发起，请在钉钉客户端操作
 4. 按本文档中每种控件的 value 格式组装 `formComponentValues`
 5. **不要把 `form-schema` 的 `content` 当成可直接提交的模板**
 6. 遇到 API 不支持的控件（非必填），跳过并告知用户
