@@ -60,7 +60,11 @@ func TestCrossPlatformCoverageMarkdownUploadStatFailures(t *testing.T) {
 	})
 
 	t.Run("overwrite", func(t *testing.T) {
-		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"fileName":"current.md"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
 		installMarkdownCITempFileDisappearance(t)
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
@@ -280,7 +284,11 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 	})
 
 	t.Run("temporary directory failure", func(t *testing.T) {
-		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"fileName":"current.md"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
 		setMarkdownCIMissingTempDir(t, filepath.Join(t.TempDir(), "missing"))
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
@@ -291,7 +299,11 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 	})
 
 	t.Run("temporary file write failure", func(t *testing.T) {
-		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"fileName":"current.md"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
 		name := strings.Repeat("x", 300) + ".md"
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
@@ -302,7 +314,11 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 	})
 
 	t.Run("temporary file disappears before stat", func(t *testing.T) {
-		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"fileName":"current.md"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
 		installMarkdownCITempFileDisappearance(t)
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
@@ -325,7 +341,11 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 	})
 
 	t.Run("local preview read failure", func(t *testing.T) {
-		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"fileName":"current.md"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
 		path := writeMarkdownDriveFixture(t, "source.md", "body")
 		// chmod-based unreadability is not portable (Windows ignores the
 		// read-only attribute for reads); force the failure at the seam.
@@ -395,6 +415,7 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"source.md"}`},
 				{text: `{"resourceUrl":"https://upload.test/doc","uploadKey":"key-1"}`},
 				{text: `{"ok":true}`},
 			},

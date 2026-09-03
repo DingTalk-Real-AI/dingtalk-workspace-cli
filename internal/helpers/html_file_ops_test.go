@@ -207,6 +207,7 @@ func TestCrossPlatformCoverageHTMLOverwriteWrites(t *testing.T) {
 	caller := &markdownDriveCaller{
 		format: "json",
 		steps: []markdownDriveStep{
+			{text: `{"fileName":"current.html"}`},
 			{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
 			{text: `{"updated":true}`},
 		},
@@ -227,16 +228,21 @@ func TestCrossPlatformCoverageHTMLOverwriteWrites(t *testing.T) {
 	if uploaded != "<h1>changed</h1>" {
 		t.Fatalf("uploaded content = %q", uploaded)
 	}
-	if len(caller.calls) != 2 {
+	if len(caller.calls) != 3 {
 		t.Fatalf("calls = %#v", caller.calls)
 	}
-	for _, call := range caller.calls {
+	// The remote target type is probed even with an explicit --name; the
+	// probe must precede the upload and must not carry overwrite args.
+	if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" {
+		t.Fatalf("target probe call = %#v", caller.calls[0])
+	}
+	for _, call := range caller.calls[1:] {
 		if call.server != "drive" || call.args["overwriteFileId"] != "file-1" {
 			t.Fatalf("overwrite call = %#v", call)
 		}
 	}
-	if caller.calls[0].args["mimeType"] != "text/html" || caller.calls[0].args["fileName"] != "index.html" {
-		t.Fatalf("drive overwrite upload args = %#v", caller.calls[0].args)
+	if caller.calls[1].args["mimeType"] != "text/html" || caller.calls[1].args["fileName"] != "index.html" {
+		t.Fatalf("drive overwrite upload args = %#v", caller.calls[1].args)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil || payload["updated"] != true {
@@ -304,6 +310,31 @@ func TestCrossPlatformCoverageHTMLOverwriteValidation(t *testing.T) {
 		}
 	})
 
+	// Regression for the P1 bypass: an explicit --name renames the upload
+	// only; it must never skip reading and validating the remote target type.
+	// A wrong nodeId pointing at a non-HTML file must be refused before any
+	// upload is attempted.
+	t.Run("explicit name still rejects non-html remote target", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps:  []markdownDriveStep{{text: `{"fileName":"contract.pdf"}`}},
+		}
+		installMarkdownDriveDeps(t, caller)
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error {
+			t.Fatal("non-html target overwrite attempted upload")
+			return nil
+		}
+		err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
+			"html", "overwrite", "--node", "file-1", "--space-id", "space-1",
+			"--content", "body", "--name", "index.html", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "远程文件不是 .html/.htm 文件，当前文件名: contract.pdf") {
+			t.Fatalf("error = %v", err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].tool != "get_file_info" {
+			t.Fatalf("target probe calls = %#v", caller.calls)
+		}
+	})
+
 	t.Run("missing node reaches runtime validation", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
 		err := executeMarkdownDriveCommand(t, newHTMLCommand(), nil,
@@ -318,7 +349,10 @@ func TestCrossPlatformCoverageHTMLOverwritePreviews(t *testing.T) {
 	t.Run("local dry run downloads and renders json diff", func(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
-			steps:  []markdownDriveStep{{text: `{"downloadUrl":"https://download.test/current.html","fileName":"current.html"}`}},
+			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.html"}`},
+				{text: `{"downloadUrl":"https://download.test/current.html","fileName":"current.html"}`},
+			},
 		}
 		stdout, _ := installMarkdownDriveDeps(t, caller)
 		installMarkdownHTTPGet(t, "old body")
@@ -328,7 +362,8 @@ func TestCrossPlatformCoverageHTMLOverwritePreviews(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
+		if len(caller.calls) != 2 || caller.calls[0].tool != "get_file_info" ||
+			caller.calls[1].tool != "download_file" {
 			t.Fatalf("local preview calls = %#v", caller.calls)
 		}
 		var payload map[string]any
@@ -344,7 +379,10 @@ func TestCrossPlatformCoverageHTMLOverwritePreviews(t *testing.T) {
 	t.Run("local dry run renders human diff with html echo line", func(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "raw",
-			steps:  []markdownDriveStep{{text: `{"downloadUrl":"https://download.test/current.html","fileName":"current.html"}`}},
+			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.html"}`},
+				{text: `{"downloadUrl":"https://download.test/current.html","fileName":"current.html"}`},
+			},
 		}
 		stdout, _ := installMarkdownDriveDeps(t, caller)
 		installMarkdownHTTPGet(t, "old body")
@@ -410,6 +448,7 @@ func TestCrossPlatformCoverageHTMLOverwritePromptYesExecutesExactCalls(t *testin
 	caller := &markdownDriveCaller{
 		format: "json",
 		steps: []markdownDriveStep{
+			{text: `{"fileName":"current.html"}`},
 			{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
 			{text: `{"updated":true}`},
 		},
@@ -430,14 +469,19 @@ func TestCrossPlatformCoverageHTMLOverwritePromptYesExecutesExactCalls(t *testin
 	if uploaded != "<h1>changed</h1>" {
 		t.Fatalf("uploaded content = %q", uploaded)
 	}
-	if len(caller.calls) != 2 {
+	if len(caller.calls) != 3 {
 		t.Fatalf("prompt-confirmed overwrite calls = %#v", caller.calls)
 	}
-	if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_upload_info" {
-		t.Fatalf("first call = %#v, want drive get_upload_info", caller.calls[0])
+	// The deferred-confirm gate releases the target probe first; the probe
+	// must not carry any overwrite or upload arguments.
+	if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" {
+		t.Fatalf("first call = %#v, want drive get_file_info", caller.calls[0])
 	}
-	if caller.calls[1].server != "drive" || caller.calls[1].tool != "commit_upload" {
-		t.Fatalf("second call = %#v, want drive commit_upload", caller.calls[1])
+	if caller.calls[1].server != "drive" || caller.calls[1].tool != "get_upload_info" {
+		t.Fatalf("second call = %#v, want drive get_upload_info", caller.calls[1])
+	}
+	if caller.calls[2].server != "drive" || caller.calls[2].tool != "commit_upload" {
+		t.Fatalf("third call = %#v, want drive commit_upload", caller.calls[2])
 	}
 	wantUploadArgs := map[string]any{
 		"fileName":        "index.html",
@@ -446,8 +490,8 @@ func TestCrossPlatformCoverageHTMLOverwritePromptYesExecutesExactCalls(t *testin
 		"overwriteFileId": "file-1",
 		"spaceId":         "space-1",
 	}
-	if !reflect.DeepEqual(caller.calls[0].args, wantUploadArgs) {
-		t.Fatalf("get_upload_info args = %#v, want %#v", caller.calls[0].args, wantUploadArgs)
+	if !reflect.DeepEqual(caller.calls[1].args, wantUploadArgs) {
+		t.Fatalf("get_upload_info args = %#v, want %#v", caller.calls[1].args, wantUploadArgs)
 	}
 	wantCommitArgs := map[string]any{
 		"fileName":        "index.html",
@@ -456,8 +500,8 @@ func TestCrossPlatformCoverageHTMLOverwritePromptYesExecutesExactCalls(t *testin
 		"overwriteFileId": "file-1",
 		"spaceId":         "space-1",
 	}
-	if !reflect.DeepEqual(caller.calls[1].args, wantCommitArgs) {
-		t.Fatalf("commit_upload args = %#v, want %#v", caller.calls[1].args, wantCommitArgs)
+	if !reflect.DeepEqual(caller.calls[2].args, wantCommitArgs) {
+		t.Fatalf("commit_upload args = %#v, want %#v", caller.calls[2].args, wantCommitArgs)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil || payload["updated"] != true {

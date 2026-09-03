@@ -364,7 +364,10 @@ func resolveTextDirectoryOutputPath(outputPath, name string) (string, error) {
 // overwrite. It mirrors the historical markdown overwrite path: the global
 // dry-run fast-returns a no-network plan, the command-level --dry-run
 // downloads the current content and prints a before/after diff, and the real
-// path uploads through the resolved domain with the product MIME.
+// path uploads through the resolved domain with the product MIME. The remote
+// target name/type is always resolved and validated before any upload: --name
+// only renames the upload and must never bypass the target type check, so a
+// wrong nodeId cannot overwrite a non-native file.
 func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 	nodeID := flagOrFallback(cmd, "node", "node-id", "file-id", "doc-id")
 	contentFlag := flagOrFallback(cmd, "content", "markdown")
@@ -400,6 +403,13 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 	if spaceID != "" && workspaceID != "" {
 		return fmt.Errorf("--space-id 与 --workspace 互斥，不可同时指定")
 	}
+	// Fail fast on a locally checkable bad --name before any network call.
+	if nameFlag != "" {
+		nameFlag = sanitizeFileName(nameFlag)
+		if !spec.hasExtension(nameFlag) {
+			return fmt.Errorf("--name 必须以 %s 结尾，当前: %s", spec.ExtLabel, nameFlag)
+		}
+	}
 
 	routeCtx, routeCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	useDocServer, err := resolveMarkdownRoute(routeCtx, nodeID, spaceID, workspaceID)
@@ -408,8 +418,8 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 		return err
 	}
 
+	var content string
 	uploadPath := fileFlag
-	var cleanup func()
 	if fileFlag != "" {
 		info, err := os.Stat(fileFlag)
 		if err != nil {
@@ -422,17 +432,26 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 			return fmt.Errorf("--file 指定的文件必须以 %s 结尾，当前: %s", spec.ExtLabel, filepath.Base(fileFlag))
 		}
 	} else {
-		content, err := resolveMarkdownContentSource(cmd, contentFlag)
+		content, err = resolveMarkdownContentSource(cmd, contentFlag)
 		if err != nil {
 			return err
 		}
-		if nameFlag == "" {
-			nameFlag, err = textRemoteName(nodeID, useDocServer, spec)
-			if err != nil {
-				return err
-			}
-		}
-		nameFlag = sanitizeFileName(nameFlag)
+	}
+
+	// Always resolve and validate the remote target type before uploading:
+	// an explicit --name only renames the upload and must never let a wrong
+	// nodeId overwrite a non-native file.
+	remoteName, err := textRemoteName(nodeID, useDocServer, spec)
+	if err != nil {
+		return err
+	}
+	if nameFlag == "" {
+		nameFlag = remoteName
+	}
+	nameFlag = sanitizeFileName(nameFlag)
+
+	var cleanup func()
+	if fileFlag == "" {
 		tmpDir, err := os.MkdirTemp("", spec.tmpPrefix("overwrite")+"*")
 		if err != nil {
 			return fmt.Errorf("创建临时目录失败: %w", err)
@@ -446,16 +465,6 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 	}
 	if cleanup != nil {
 		defer cleanup()
-	}
-	if nameFlag == "" {
-		nameFlag, err = textRemoteName(nodeID, useDocServer, spec)
-		if err != nil {
-			return err
-		}
-	}
-	nameFlag = sanitizeFileName(nameFlag)
-	if !spec.hasExtension(nameFlag) {
-		return fmt.Errorf("--name 必须以 %s 结尾，当前: %s", spec.ExtLabel, nameFlag)
 	}
 	info, err := markdownUploadStat(uploadPath)
 	if err != nil {
@@ -673,7 +682,7 @@ func textRemoteNameWithContext(ctx context.Context, nodeID string, useDocServer 
 	}
 	name = sanitizeFileName(name)
 	if name == "unnamed" || name == "" {
-		return "", fmt.Errorf("无法自动获取原文件名，请通过 --name 显式指定")
+		return "", fmt.Errorf("无法自动获取原文件名，无法校验远程文件类型，已拒绝写入")
 	}
 	if !spec.hasExtension(name) {
 		return "", fmt.Errorf("远程文件不是 %s 文件，当前文件名: %s", spec.ExtLabel, name)

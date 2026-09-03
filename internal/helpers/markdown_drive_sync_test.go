@@ -388,6 +388,7 @@ func TestMarkdownGlobalAndLocalDryRunAreDistinct(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.md"}`},
 				{text: `{"downloadUrl":"https://download.test/current.md","fileName":"current.md"}`},
 			},
 		}
@@ -400,7 +401,8 @@ func TestMarkdownGlobalAndLocalDryRunAreDistinct(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
+		if len(caller.calls) != 2 || caller.calls[0].tool != "get_file_info" ||
+			caller.calls[1].tool != "download_file" {
 			t.Fatalf("local preview calls = %#v", caller.calls)
 		}
 		var payload map[string]any
@@ -718,6 +720,7 @@ func TestMarkdownOverwriteAndPatchWrites(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.md"}`},
 				{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
 				{text: `{"updated":true}`},
 			},
@@ -738,10 +741,14 @@ func TestMarkdownOverwriteAndPatchWrites(t *testing.T) {
 		if uploaded != "# changed" {
 			t.Fatalf("uploaded content = %q", uploaded)
 		}
-		if len(caller.calls) != 2 {
+		if len(caller.calls) != 3 {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		for _, call := range caller.calls {
+		// The remote target type is probed even with an explicit --name.
+		if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" {
+			t.Fatalf("target probe call = %#v", caller.calls[0])
+		}
+		for _, call := range caller.calls[1:] {
 			if call.server != "drive" || call.args["overwriteFileId"] != "file-1" {
 				t.Fatalf("overwrite call = %#v", call)
 			}
