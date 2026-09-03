@@ -183,6 +183,10 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 }
 
 func TestCrossPlatformCoverageChatRoleSetUserRejectsEmptyRolesBeforeAnyCall(t *testing.T) {
+	if err := validateChatRoleIDs(nil); err == nil {
+		t.Fatal("zero-length role IDs unexpectedly accepted")
+	}
+
 	tests := []struct {
 		name    string
 		roleIDs string

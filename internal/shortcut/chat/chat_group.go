@@ -1893,6 +1893,9 @@ var ChatRoleRemove = shortcut.Shortcut{
 }
 
 func validateChatRoleIDs(values []string) error {
+	if len(values) == 0 {
+		return apperrors.NewValidation("--role-ids 必须包含至少一个非空的群身份 openRoleId")
+	}
 	for _, value := range values {
 		if strings.TrimSpace(value) == "" {
 			return apperrors.NewValidation("--role-ids 不能包含空值或仅含空白的群身份 openRoleId")
