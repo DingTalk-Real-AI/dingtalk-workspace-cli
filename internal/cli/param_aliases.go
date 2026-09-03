@@ -177,6 +177,7 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 	aliasMap := make(map[string]string)
 	blockedSet := make(map[string]bool)
 	excludedSet := make(map[string]bool)
+	claimedRealSet := make(map[string]bool)
 	pendingReview := ov.Confirm || ov.Investigate
 
 	for boundFlag, conceptID := range ov.Bind {
@@ -217,6 +218,14 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 		}
 		if len(candidates) == 0 {
 			continue
+		}
+		for m := range eff {
+			if _, isReal := realByMorph[m]; isReal {
+				claimedRealSet[m] = true
+			}
+		}
+		for _, exclude := range concept.Excludes {
+			excludedSet[cmdutil.Morph(exclude)] = true
 		}
 		visible := distinctRealNames(candidates, true)
 		var canon string
@@ -267,21 +276,18 @@ func reduceLeafParamAliases(path string, realByMorph map[string][]realFlag, conc
 			}
 			aliasMap[m] = canon
 		}
-		// Excludes are not passive prose: once this concept is active on a
-		// reviewed command, a non-real excluded spelling is protected from
-		// downstream fuzzy correction. A real flag is left alone because it
-		// already has an independently valid command-local meaning.
-		for _, exclude := range concept.Excludes {
-			morphed := cmdutil.Morph(exclude)
-			if _, isReal := realByMorph[morphed]; !isReal {
-				excludedSet[morphed] = true
-			}
-		}
 	}
 	for excluded := range excludedSet {
-		if _, isAlias := aliasMap[excluded]; !isAlias {
-			blockedSet[excluded] = true
+		if _, isAlias := aliasMap[excluded]; isAlias {
+			continue
 		}
+		if claimedRealSet[excluded] {
+			continue
+		}
+		if _, isReal := realByMorph[excluded]; isReal {
+			continue
+		}
+		blockedSet[excluded] = true
 	}
 
 	// (b) Command scoped aliases override concept reductions.

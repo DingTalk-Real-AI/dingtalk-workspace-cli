@@ -421,6 +421,29 @@ func TestCrossPlatformCoverageDrivePushFinalDefaultOpenedPUTAndCommit(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageDrivePushOpenedPUTKeepsCallerOwnedHandle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		_, _ = io.Copy(io.Discard, request.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	path := filepath.Join(t.TempDir(), "payload")
+	mustWrite(t, path, "payload")
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	if err := defaultPushPutOpenedFile(context.Background(), server.URL, nil, file, 7); err != nil {
+		t.Fatalf("PUT failed: %v", err)
+	}
+	if _, err := file.Stat(); err != nil {
+		t.Fatalf("HTTP PUT closed its caller-owned file handle: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageDriveSyncFinalPreflightAndKeepBothErrors(t *testing.T) {
 	t.Run("local target preflight lstat error and directory", func(t *testing.T) {
 		_, root, _ := openDriveFinalCoverageRoot(t)

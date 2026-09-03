@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -23,22 +24,77 @@ import (
 // agree on the install footprint.
 var skillSetupAgentHomes = []string{
 	".agents/skills",
+	".config/agents/skills",
+	".gemini/antigravity/skills",
+	".gemini/antigravity-cli/skills",
+	".deepagents/agent/skills",
+	".firebender/skills",
+	".copilot/skills",
+	".config/opencode/skills",
+	".aider-desk/skills",
+	".astrbot/data/skills",
+	".autohand/skills",
+	".augment/skills",
+	".bob/skills",
 	".claude/skills",
-	".cursor/skills",
+	".openclaw/skills",
+	".codeartsdoer/skills",
+	".codebuddy/skills",
+	".codemaker/skills",
+	".codestudio/skills",
+	".commandcode/skills",
+	".continue/skills",
+	".snowflake/cortex/skills",
+	".config/crush/skills",
+	".config/devin/skills",
+	".factory/skills",
+	".forge/skills",
+	".config/goose/skills",
+	".grok/skills",
+	".hermes/skills",
+	".inferencesh/skills",
+	".jazz/skills",
+	".junie/skills",
+	".iflow/skills",
+	".kilocode/skills",
+	".config/kimchi/harness/skills",
+	".kiro/skills",
+	".kode/skills",
+	".lingma/skills",
+	".mcpjam/skills",
+	".minimax/skills",
+	".vibe/skills",
+	".moxby/skills",
+	".mux/skills",
+	".openhands/skills",
+	".ona/skills",
+	".pi/agent/skills",
 	".qoder/skills",
+	".qoder-cn/skills",
+	".qwen/skills",
+	".reasonix/skills",
+	".rovodev/skills",
+	".roo/skills",
+	".tabnine/agent/skills",
+	".terramind/skills",
+	".tinycloud/skills",
+	".trae/skills",
+	".trae-cn/skills",
+	".codeium/windsurf/skills",
+	".zcode/skills",
+	".zencoder/skills",
+	".neovate/skills",
+	".pochi/skills",
+	".adal/skills",
 	".qoderwork/skills",
+	// beta.6 compatibility roots: cleanup only.
+	".cursor/skills",
 	".gemini/skills",
 	".codex/skills",
-	".zcode/skills",
 	".github/skills",
 	".windsurf/skills",
-	".augment/skills",
 	".cline/skills",
 	".amp/skills",
-	".kiro/skills",
-	".trae/skills",
-	".openclaw/skills",
-	".hermes/skills",
 }
 
 const (
@@ -65,15 +121,20 @@ var (
 	skillSetupInteractive     = isInteractiveTerminal
 	skillSetupReadDir         = os.ReadDir
 	skillSetupStat            = os.Stat
+	skillSetupLstat           = os.Lstat
+	skillSetupGetenv          = os.Getenv
+	skillSetupSymlink         = os.Symlink
 	skillSetupExecutable      = os.Executable
 	skillSetupGetwd           = os.Getwd
 	skillSetupUserHomeDir     = os.UserHomeDir
 	skillSetupRemoveAll       = os.RemoveAll
 	skillSetupBackupAndRemove = upgrade.BackupAndRemoveSkillDir
+	skillSetupRestoreBackup   = upgrade.RestoreSkillPath
 	skillSetupMkdirAll        = os.MkdirAll
 	skillSetupWalk            = filepath.Walk
 	skillSetupRel             = filepath.Rel
 	skillSetupReadlink        = os.Readlink
+	skillSetupEvalSymlinks    = filepath.EvalSymlinks
 	skillSetupOpen            = os.Open
 	skillSetupOpenFile        = os.OpenFile
 	skillSetupWriteFile       = os.WriteFile
@@ -82,7 +143,10 @@ var (
 	skillSetupReadState       = skillstate.Read
 	skillSetupWriteState      = skillstate.Write
 	skillSetupRemoveState     = skillstate.Remove
+	skillSetupPublishPath     = upgrade.PublishSkillPathNoReplace
+	skillSetupRollbackPaths   = upgrade.RollbackSkillPathPublications
 	skillSetupNow             = time.Now
+	skillSetupFoldPathCase    = runtime.GOOS == "windows"
 )
 
 type skillSetupBackup struct {
@@ -91,9 +155,11 @@ type skillSetupBackup struct {
 }
 
 type skillSetupTargetPlan struct {
-	Destination string
-	Backups     []skillSetupBackup
-	CleanupOnly bool
+	Destination   string
+	CanonicalBase string
+	Backups       []skillSetupBackup
+	CleanupOnly   bool
+	LinkCanonical bool
 }
 
 type skillSetupPlan struct {
@@ -149,8 +215,9 @@ multi 模式支持按产品挑选：
     备份失败时保留原目录并跳过该目标，绝不静默删除。
   · 所有将被移除的目录都会在确认前逐条列出。
 
-不带 --mode 时进入交互式询问；不带 --target 时铺到检测到的具体 Agent 目录；
-未检测到具体 Agent 时才回退到 ~/.agents/skills，避免同一 Agent 扫描两份 Skill。
+不带 --mode 时进入交互式询问；Skill 统一安装到 ~/.agents/skills。
+DWS 会自动适配本机上检测到的 Agent；共享安装方式不可用时会自动改用兼容安装，
+无需用户手动处理，也不会让同一个 Skill 重复出现。
 skill 源默认取二进制内嵌的版本（升级二进制即升级 skill）；--source / DWS_SKILL_SOURCE 可显式覆盖。`,
 		Example: `  dws skill setup --mode multi --target claude --dry-run
   dws skill setup --mode multi --target claude`,
@@ -243,7 +310,6 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 			}
 		}
 	}
-
 	// filtered 决定 multi 安装的清理语义：带 -s/--skill 或 -x/--exclude
 	// 时保持 additive（不动未列出的 sibling）；全量安装与 install.sh /
 	// install.js 对齐，清掉不在 bundle 内且有明确 DWS 所有权记录的过期 Skill。
@@ -316,6 +382,17 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if mode == skillSetupModeMulti && len(migrateEventMiscTargets) > 0 {
+		retiredNames := append([]string(nil), multiSkillNames...)
+		if installsEventMiscCompanion && !containsSkillName(retiredNames, multiMiscSkill) {
+			retiredNames = append(retiredNames, multiMiscSkill)
+		}
+		if retireErr := retireMigratedUniversalSkills(migrateEventMiscTargets, retiredNames, out); retireErr != nil {
+			// Retiring an obsolete universal copy installs nothing; report it and
+			// keep the successful installation rather than failing the run.
+			fmt.Fprintf(errOut, "  ⚠️  %v\n", retireErr)
+		}
+	}
 	if skipped > 0 {
 		return fmt.Errorf(
 			"Skill 安装不完整（mode=%s, installed=%d, skipped=%d）；修复失败原因后请重试 setup，或运行普通 upgrade 全量刷新预制 Skill",
@@ -350,7 +427,9 @@ func runSkillSetup(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	fmt.Fprintf(out, "\n✅ Skill 安装完成（mode=%s, installed=%d, skipped=%d）\n", mode, installed, skipped)
-	fmt.Fprintln(out, "ℹ️  若 Agent 会话已打开，请重启 Agent 或重新加载 Skills 后再验证路由。")
+	fmt.Fprintln(out, "   统一安装位置：~/.agents/skills")
+	fmt.Fprintln(out, "   已自动适配本机上检测到的 Agent")
+	fmt.Fprintln(out, "ℹ️  下一步：请重启已打开的 Agent，使新 Skills 生效。")
 	return nil
 }
 
@@ -910,8 +989,9 @@ func isSkillSourceRoot(path, mode string) bool {
 }
 
 // resolveSkillSetupTargets returns the list of absolute Agent home destinations.
-// If target == "all", returns every agent home whose parent directory exists.
-// Otherwise returns the single matching home (whether or not it currently exists).
+// The canonical ~/.agents/skills destination is always first. If target ==
+// "all", detected concrete Agent roots follow it. A specific target follows
+// canonical as well so unknown/future Agents retain the universal copy.
 //
 // 末段约定：
 //   - mono  → <agent-home>/dws   （单 skill，整个 src 拷成一个 dws 目录）
@@ -923,15 +1003,88 @@ func resolveSkillSetupTargets(target, mode string) ([]string, error) {
 	}
 
 	target = strings.ToLower(strings.TrimSpace(target))
+	canonical := agentHomeForMode(filepath.Join(home, skillSetupAgentHomes[0]), mode)
 	if target == "" || target == "all" {
 		return detectExistingAgentHomes(home, mode), nil
 	}
 
-	rel, ok := agentSkillPaths[target]
+	if reason, unsupported := unsupportedGlobalAgentTargets[target]; unsupported {
+		return nil, errors.New(reason)
+	}
+	_, ok := agentSkillPaths[target]
 	if !ok {
 		return nil, fmt.Errorf("不支持的 --target 值: %s（可选 all, %s）", target, supportedTargets())
 	}
-	return []string{agentHomeForMode(filepath.Join(home, rel), mode)}, nil
+	dest := agentHomeForMode(resolveSkillSetupBase(home, target), mode)
+	if sameSkillSetupPath(dest, canonical) {
+		return []string{canonical}, nil
+	}
+	return []string{canonical, dest}, nil
+}
+
+func resolveOpenClawSetupBase(home string) string {
+	for _, name := range []string{".openclaw", ".clawdbot", ".moltbot"} {
+		base := filepath.Join(home, name)
+		if info, err := skillSetupStat(base); err == nil && info.IsDir() {
+			return filepath.Join(base, "skills")
+		}
+	}
+	return filepath.Join(home, ".openclaw", "skills")
+}
+
+func resolveSkillSetupBase(home, target string) string {
+	switch target {
+	case "claude", "claude-code":
+		if custom := strings.TrimSpace(skillSetupGetenv("CLAUDE_CONFIG_DIR")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "codex":
+		if custom := strings.TrimSpace(skillSetupGetenv("CODEX_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "hermes", "hermes-agent":
+		if custom := strings.TrimSpace(skillSetupGetenv("HERMES_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "autohand-code":
+		if custom := strings.TrimSpace(skillSetupGetenv("AUTOHAND_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "grok":
+		if custom := strings.TrimSpace(skillSetupGetenv("GROK_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "mistral-vibe":
+		if custom := strings.TrimSpace(skillSetupGetenv("VIBE_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "openclaw":
+		return resolveOpenClawSetupBase(home)
+	case "opencode", "amp", "replit", "universal", "crush", "devin", "goose", "kimchi":
+		configHome := strings.TrimSpace(skillSetupGetenv("XDG_CONFIG_HOME"))
+		if configHome == "" {
+			configHome = filepath.Join(home, ".config")
+		}
+		switch target {
+		case "opencode":
+			return filepath.Join(configHome, "opencode", "skills")
+		case "amp", "replit", "universal":
+			return filepath.Join(configHome, "agents", "skills")
+		case "crush":
+			return filepath.Join(configHome, "crush", "skills")
+		case "devin":
+			return filepath.Join(configHome, "devin", "skills")
+		case "goose":
+			return filepath.Join(configHome, "goose", "skills")
+		case "kimchi":
+			return filepath.Join(configHome, "kimchi", "harness", "skills")
+		}
+	case "github", "github-copilot":
+		return filepath.Join(home, ".copilot", "skills")
+	case "windsurf":
+		return filepath.Join(home, ".codeium", "windsurf", "skills")
+	}
+	return filepath.Join(home, agentSkillPaths[target])
 }
 
 // agentHomeForMode appends the mode-specific tail segment to an agent home base.
@@ -943,79 +1096,141 @@ func agentHomeForMode(base, mode string) string {
 }
 
 func detectExistingAgentHomes(home, mode string) []string {
-	var specific []string
+	canonical := agentHomeForMode(filepath.Join(home, skillSetupAgentHomes[0]), mode)
+	dests := []string{canonical}
+	canonicalKey := skillSetupPathKey(canonical)
+	seen := map[string]bool{canonicalKey: true}
+	addDetected := func(rel, base string) {
+		detectedDir := filepath.Dir(base)
+		switch filepath.ToSlash(filepath.Clean(rel)) {
+		case ".config/kimchi/harness/skills", ".tabnine/agent/skills":
+			detectedDir = filepath.Dir(filepath.Dir(base))
+		case ".zcode/skills":
+			// Application bundles are machine-scoped detection signals. Keep this
+			// independent of HOME so setup matches npm, Shell, and PowerShell.
+			if info, err := skillSetupStat(filepath.Join(string(filepath.Separator), "Applications", "ZCode.app")); err == nil && info.IsDir() {
+				detectedDir = ""
+			}
+		case ".minimax/skills":
+			if info, err := skillSetupStat(filepath.Join(string(filepath.Separator), "Applications", "MiniMax Code.app")); err == nil && info.IsDir() {
+				detectedDir = ""
+			}
+		}
+		if detectedDir != "" {
+			if info, err := skillSetupStat(detectedDir); err != nil || !info.IsDir() {
+				return
+			}
+		}
+		dest := agentHomeForMode(base, mode)
+		key := skillSetupPathKey(dest)
+		if !seen[key] {
+			seen[key] = true
+			dests = append(dests, dest)
+		}
+	}
 	for i, rel := range skillSetupAgentHomes {
 		if i == 0 {
 			continue
 		}
 		base := filepath.Join(home, rel)
-		parent := filepath.Dir(base)
-		if info, err := skillSetupStat(parent); err != nil || !info.IsDir() {
-			continue
+		switch filepath.ToSlash(filepath.Clean(rel)) {
+		case ".claude/skills":
+			base = resolveSkillSetupBase(home, "claude-code")
+		case ".codex/skills":
+			base = resolveSkillSetupBase(home, "codex")
+		case ".hermes/skills":
+			base = resolveSkillSetupBase(home, "hermes-agent")
+		case ".autohand/skills":
+			base = resolveSkillSetupBase(home, "autohand-code")
+		case ".grok/skills":
+			base = resolveSkillSetupBase(home, "grok")
+		case ".vibe/skills":
+			base = resolveSkillSetupBase(home, "mistral-vibe")
+		case ".openclaw/skills":
+			base = resolveSkillSetupBase(home, "openclaw")
+		case ".config/opencode/skills":
+			base = resolveSkillSetupBase(home, "opencode")
+		case ".config/agents/skills":
+			base = resolveSkillSetupBase(home, "amp")
+		case ".config/crush/skills":
+			base = resolveSkillSetupBase(home, "crush")
+		case ".config/devin/skills":
+			base = resolveSkillSetupBase(home, "devin")
+		case ".config/goose/skills":
+			base = resolveSkillSetupBase(home, "goose")
+		case ".config/kimchi/harness/skills":
+			base = resolveSkillSetupBase(home, "kimchi")
 		}
-		specific = append(specific, agentHomeForMode(base, mode))
+		addDetected(rel, base)
 	}
-	if len(specific) > 0 {
-		return specific
+	for _, target := range []string{"github-copilot", "windsurf"} {
+		addDetected(agentSkillPaths[target], resolveSkillSetupBase(home, target))
 	}
-	return []string{agentHomeForMode(filepath.Join(home, skillSetupAgentHomes[0]), mode)}
+	return dests
 }
 
-func genericSkillCleanupTarget(dests []string, managed map[string]bool) (*skillSetupTargetPlan, error) {
-	// Derive HOME from a concrete Agent destination instead of resolving it a
-	// second time. The destinations were already resolved from HOME by the
-	// caller, and a later/transient UserHomeDir failure must not turn an
-	// otherwise valid setup plan into an error. Direct/custom destinations that
-	// do not match a known concrete Agent root have no generic-root migration.
-	home := ""
-	for _, dest := range dests {
-		base := dest
-		if filepath.Base(dest) == "dws" {
-			base = filepath.Dir(dest)
-		}
-		base = filepath.Clean(base)
-		for i, rel := range skillSetupAgentHomes {
-			if i == 0 {
-				continue
-			}
-			suffix := filepath.Clean(filepath.FromSlash(rel))
-			needle := string(filepath.Separator) + suffix
-			if strings.HasSuffix(base, needle) {
-				home = strings.TrimSuffix(base, needle)
-				break
-			}
-		}
-		if home != "" {
-			break
-		}
+func skillSetupBaseForMode(dest, mode string) string {
+	if mode == skillSetupModeMono {
+		return filepath.Dir(dest)
 	}
-	if home == "" {
-		return nil, nil
-	}
-	genericBase := filepath.Join(home, ".agents", "skills")
+	return dest
+}
 
-	target := &skillSetupTargetPlan{Destination: genericBase, CleanupOnly: true}
-	add := func(path, reason string) {
-		if info, statErr := skillSetupStat(path); statErr == nil && info.IsDir() {
-			target.Backups = append(target.Backups, skillSetupBackup{Path: path, Reason: reason})
+func isUniversalSkillSetupBase(base string) bool {
+	cleanBase := filepath.Clean(base)
+	if custom := strings.TrimSpace(skillSetupGetenv("CODEX_HOME")); custom != "" && sameSkillSetupPath(cleanBase, filepath.Join(custom, "skills")) {
+		return true
+	}
+	if custom := strings.TrimSpace(skillSetupGetenv("XDG_CONFIG_HOME")); custom != "" {
+		if sameSkillSetupPath(cleanBase, filepath.Join(custom, "agents", "skills")) ||
+			sameSkillSetupPath(cleanBase, filepath.Join(custom, "opencode", "skills")) {
+			return true
 		}
 	}
-	add(filepath.Join(genericBase, "dws"), skillSetupBackupMutual)
-	entries, readErr := skillSetupReadDir(genericBase)
-	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-		return nil, fmt.Errorf("扫描通用 Skill 根目录失败 %s: %w", genericBase, readErr)
-	}
-	for _, entry := range entries {
-		path := filepath.Join(genericBase, entry.Name())
-		if entry.IsDir() && isManagedDWSMultiSkillDir(path, managed) {
-			target.Backups = append(target.Backups, skillSetupBackup{Path: path, Reason: skillSetupBackupStale})
+	base = filepath.ToSlash(cleanBase)
+	for rel := range map[string]bool{
+		".config/agents/skills": true, ".gemini/antigravity/skills": true,
+		".gemini/antigravity-cli/skills": true, ".codex/skills": true,
+		".cursor/skills": true, ".deepagents/agent/skills": true,
+		".firebender/skills": true, ".gemini/skills": true,
+		".copilot/skills": true, ".config/opencode/skills": true,
+		// beta.6 compatibility roots are cleanup-only.
+		".github/skills": true, ".windsurf/skills": true,
+		".cline/skills": true, ".amp/skills": true,
+	} {
+		if strings.HasSuffix(base, "/"+rel) {
+			return true
 		}
 	}
-	if len(target.Backups) == 0 {
-		return nil, nil
+	return false
+}
+
+func sameSkillSetupPath(left, right string) bool {
+	return skillSetupPathKey(left) == skillSetupPathKey(right)
+}
+
+func skillSetupPathKey(path string) string {
+	clean := filepath.Clean(path)
+	if skillSetupFoldPathCase {
+		clean = strings.ToLower(clean)
 	}
-	sort.Slice(target.Backups, func(i, j int) bool { return target.Backups[i].Path < target.Backups[j].Path })
-	return target, nil
+	return clean
+}
+
+func canonicalSkillSetupBase(dests []string, mode string) string {
+	for _, dest := range dests {
+		base := filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(dest, mode)))
+		if strings.HasSuffix(base, "/.agents/skills") {
+			return skillSetupBaseForMode(dest, mode)
+		}
+	}
+	return ""
+}
+
+func samePhysicalSkillSetupPath(left, right string) bool {
+	leftReal, leftErr := skillSetupEvalSymlinks(left)
+	rightReal, rightErr := skillSetupEvalSymlinks(right)
+	return leftErr == nil && rightErr == nil && sameSkillSetupPath(leftReal, rightReal)
 }
 
 func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filtered bool) (*skillSetupPlan, error) {
@@ -1030,10 +1245,26 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 	}
 	sort.Strings(plan.MultiSkillNames)
 	sortedDests := append([]string(nil), dests...)
-	sort.Strings(sortedDests)
+	sort.Slice(sortedDests, func(i, j int) bool {
+		leftCanonical := strings.HasSuffix(filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(sortedDests[i], mode))), "/.agents/skills")
+		rightCanonical := strings.HasSuffix(filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(sortedDests[j], mode))), "/.agents/skills")
+		if leftCanonical != rightCanonical {
+			return leftCanonical
+		}
+		return sortedDests[i] < sortedDests[j]
+	})
 	managedNames := currentManagedSkillNames()
+	canonicalBase := canonicalSkillSetupBase(sortedDests, mode)
 	for _, dest := range sortedDests {
-		target := skillSetupTargetPlan{Destination: dest}
+		base := skillSetupBaseForMode(dest, mode)
+		target := skillSetupTargetPlan{Destination: dest, CanonicalBase: canonicalBase}
+		if canonicalBase != "" && filepath.Clean(base) != filepath.Clean(canonicalBase) {
+			if isUniversalSkillSetupBase(base) {
+				target.CleanupOnly = true
+			} else {
+				target.LinkCanonical = true
+			}
+		}
 		seen := map[string]bool{}
 		add := func(path, reason string) {
 			if seen[path] {
@@ -1077,26 +1308,22 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 			}
 		}
 		for _, path := range replacements {
-			info, statErr := skillSetupStat(path)
+			if target.LinkCanonical && samePhysicalSkillSetupPath(path, filepath.Join(target.CanonicalBase, filepath.Base(path))) {
+				continue
+			}
+			_, statErr := skillSetupLstat(path)
 			if statErr != nil {
 				if errors.Is(statErr, os.ErrNotExist) {
 					continue
 				}
 				return nil, fmt.Errorf("检查将被替换的 Skill 失败 %s: %w", path, statErr)
 			}
-			if info.IsDir() {
-				add(path, skillSetupBackupReplace)
-			}
+			add(path, skillSetupBackupReplace)
 		}
 		sort.Slice(target.Backups, func(i, j int) bool { return target.Backups[i].Path < target.Backups[j].Path })
-		plan.Targets = append(plan.Targets, target)
-	}
-	cleanupTarget, cleanupErr := genericSkillCleanupTarget(sortedDests, managedNames)
-	if cleanupErr != nil {
-		return nil, cleanupErr
-	}
-	if cleanupTarget != nil {
-		plan.Targets = append(plan.Targets, *cleanupTarget)
+		if !target.CleanupOnly || len(target.Backups) > 0 {
+			plan.Targets = append(plan.Targets, target)
+		}
 	}
 	return plan, nil
 }
@@ -1140,6 +1367,33 @@ func configureEventMiscMigrationPlan(plan *skillSetupPlan, targets []string, ins
 	}
 }
 
+func retireMigratedUniversalSkills(targets, names []string, out io.Writer) error {
+	home, err := skillSetupUserHomeDir()
+	if err != nil {
+		return fmt.Errorf("无法解析 HOME 以退役 universal Agent 旧副本: %w", err)
+	}
+	seen := map[string]bool{}
+	var victims []skillSetupBackup
+	for _, target := range targets {
+		if !isUniversalSkillSetupBase(target) {
+			continue
+		}
+		for _, name := range names {
+			path := filepath.Join(target, name)
+			if seen[path] {
+				continue
+			}
+			seen[path] = true
+			victims = append(victims, skillSetupBackup{Path: path, Reason: skillSetupBackupReplace})
+		}
+	}
+	sort.Slice(victims, func(i, j int) bool { return victims[i].Path < victims[j].Path })
+	if _, err := backupSkillSetupTarget(home, victims, out); err != nil {
+		return fmt.Errorf("退役 universal Agent Event/misc 旧副本失败，已回滚: %w", err)
+	}
+	return nil
+}
+
 func renderSkillSetupPlan(out io.Writer, plan *skillSetupPlan) {
 	fmt.Fprintf(out, "📦 将安装 skill：\n  mode: %s\n  source: %s\n", plan.Mode, plan.Source)
 	if plan.Mode == skillSetupModeMulti {
@@ -1148,12 +1402,14 @@ func renderSkillSetupPlan(out io.Writer, plan *skillSetupPlan) {
 			fmt.Fprintf(out, "    · %s\n", name)
 		}
 	}
-	fmt.Fprintln(out, "  destinations:")
+	fmt.Fprintln(out, "  安装与适配位置:")
 	for _, target := range plan.Targets {
 		if target.CleanupOnly {
-			fmt.Fprintf(out, "    - %s (仅迁移旧的通用 DWS 副本)\n", target.Destination)
+			fmt.Fprintf(out, "    - %s（移除该 Agent 中的旧版 DWS Skills，改用统一安装位置）\n", target.Destination)
+		} else if target.LinkCanonical {
+			fmt.Fprintf(out, "    - %s（自动配置此 Agent 使用统一安装位置）\n", target.Destination)
 		} else {
-			fmt.Fprintf(out, "    - %s\n", target.Destination)
+			fmt.Fprintf(out, "    - %s（统一安装位置）\n", target.Destination)
 		}
 	}
 	fmt.Fprintln(out, "  将备份并移除（先保存到 ~/.dws/skill-backups/）：")
@@ -1324,8 +1580,12 @@ func installMultiSkillsWithEventMigration(
 	}
 
 	migrationSet := make(map[string]struct{}, len(migrationTargets))
+	physicalMigrationTargets := make([]string, 0, len(migrationTargets))
 	for _, dest := range migrationTargets {
 		migrationSet[dest] = struct{}{}
+		if !isUniversalSkillSetupBase(dest) {
+			physicalMigrationTargets = append(physicalMigrationTargets, dest)
+		}
 	}
 	var ordinaryTargets []string
 	for _, dest := range dests {
@@ -1334,23 +1594,47 @@ func installMultiSkillsWithEventMigration(
 		}
 	}
 
-	if len(ordinaryTargets) > 0 {
+	var canonicalTargets, otherOrdinaryTargets []string
+	for _, dest := range ordinaryTargets {
+		base := filepath.ToSlash(filepath.Clean(skillSetupBaseForMode(dest, skillSetupModeMulti)))
+		if strings.HasSuffix(base, "/.agents/skills") {
+			canonicalTargets = append(canonicalTargets, dest)
+		} else {
+			otherOrdinaryTargets = append(otherOrdinaryTargets, dest)
+		}
+	}
+	installOrdinary := func(names, targets []string) error {
+		if len(targets) == 0 {
+			return nil
+		}
 		var n, nSkipped int
-		n, nSkipped, err = skillSetupInstallMulti(src, skillNames, ordinaryTargets, out, errOut, filtered)
+		n, nSkipped, err = skillSetupInstallMulti(src, names, targets, out, errOut, filtered)
 		installed += n
 		skipped += nSkipped
 		if err != nil {
-			return installed, skipped, err
+			return err
 		}
 		if nSkipped > 0 {
-			return installed, skipped, fmt.Errorf("multi Skill 安装不完整（skipped=%d）；已保留折叠版 Event/misc，未执行迁移", nSkipped)
+			return fmt.Errorf("multi Skill 安装不完整（skipped=%d）；已保留折叠版 Event/misc，未执行迁移", nSkipped)
 		}
+		return nil
+	}
+	canonicalNames := append([]string(nil), skillNames...)
+	if !containsSkillName(canonicalNames, multiMiscSkill) {
+		canonicalNames = append(canonicalNames, multiMiscSkill)
+		sort.Strings(canonicalNames)
+	}
+	if err := installOrdinary(canonicalNames, canonicalTargets); err != nil {
+		return installed, skipped, err
+	}
+	if err := installOrdinary(skillNames, otherOrdinaryTargets); err != nil {
+		return installed, skipped, err
 	}
 
 	// The folded pair is excluded from the ordinary best-effort installer. All
 	// other selected skills (especially dingtalk-shared) must succeed before the
 	// old Event route is touched.
-	for _, dest := range migrationTargets {
+	for _, dest := range physicalMigrationTargets {
 		if cleanupErr := cleanupMutualExclusion(dest, skillSetupModeMulti, out, errOut); cleanupErr != nil {
 			return installed, skipped + len(skillNames), cleanupErr
 		}
@@ -1361,9 +1645,9 @@ func installMultiSkillsWithEventMigration(
 			prerequisiteNames = append(prerequisiteNames, name)
 		}
 	}
-	if len(prerequisiteNames) > 0 {
+	if len(prerequisiteNames) > 0 && len(physicalMigrationTargets) > 0 {
 		var n, nSkipped int
-		n, nSkipped, err = skillSetupInstallMulti(src, prerequisiteNames, migrationTargets, out, errOut, true)
+		n, nSkipped, err = skillSetupInstallMulti(src, prerequisiteNames, physicalMigrationTargets, out, errOut, true)
 		installed += n
 		skipped += nSkipped
 		if err != nil {
@@ -1374,7 +1658,7 @@ func installMultiSkillsWithEventMigration(
 		}
 	}
 
-	migrated, migrationErr := migrateEventMiscAtomically(src, migrationTargets, out, errOut)
+	migrated, migrationErr := migrateEventMiscAtomically(src, physicalMigrationTargets, out, errOut)
 	installed += migrated
 	if migrationErr != nil {
 		return installed, skipped, migrationErr
@@ -1646,9 +1930,32 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 			err = errors.Join(err, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
 		}
 	}()
+	realStageParent, realParentErr := skillSetupEvalSymlinks(stageParent)
+	if realParentErr != nil {
+		return stageRoot, nil, fmt.Errorf("解析 Agent Skill 物理目录失败 %s: %w", stageParent, realParentErr)
+	}
 
 	stageOne := func(src, dest string) error {
 		stagedDir := filepath.Join(stageRoot, filepath.Base(dest))
+		if target.LinkCanonical {
+			canonicalTarget := filepath.Join(target.CanonicalBase, filepath.Base(dest))
+			if samePhysicalSkillSetupPath(dest, canonicalTarget) {
+				return nil
+			}
+			realCanonicalTarget, realTargetErr := skillSetupEvalSymlinks(canonicalTarget)
+			if realTargetErr != nil {
+				return fmt.Errorf("解析 canonical Skill 失败 %s: %w", canonicalTarget, realTargetErr)
+			}
+			relTarget, relErr := skillSetupRel(realStageParent, realCanonicalTarget)
+			if relErr != nil {
+				return fmt.Errorf("计算 Skill 相对链接失败 %s: %w", canonicalTarget, relErr)
+			}
+			if linkErr := skillSetupSymlink(relTarget, stagedDir); linkErr != nil {
+				return fmt.Errorf("创建 Skill 链接失败 %s -> %s: %w", stagedDir, relTarget, linkErr)
+			}
+			staged = append(staged, skillSetupStagedDir{staged: stagedDir, dest: dest})
+			return nil
+		}
 		if err := skillSetupMkdirAll(stagedDir, 0o755); err != nil {
 			return fmt.Errorf("创建 Skill staging 目录失败 %s: %w", stagedDir, err)
 		}
@@ -1675,16 +1982,11 @@ func stageSkillSetupTarget(plan *skillSetupPlan, target skillSetupTargetPlan) (s
 
 // restoreSkillSetupTarget removes a partially published replacement and
 // restores every original directory from its exact backup path.
-func restoreSkillSetupTarget(published []string, backups []skillSetupBackedUpDir) error {
-	var restoreErr error
-	for i := len(published) - 1; i >= 0; i-- {
-		if err := skillSetupRemoveAll(published[i]); err != nil {
-			restoreErr = errors.Join(restoreErr, fmt.Errorf("移除失败发布目录 %s: %w", published[i], err))
-		}
-	}
+func restoreSkillSetupTarget(published []upgrade.SkillPathPublication, backups []skillSetupBackedUpDir) error {
+	restoreErr := skillSetupRollbackPaths(published)
 	for i := len(backups) - 1; i >= 0; i-- {
 		item := backups[i]
-		if _, err := skillSetupStat(item.original); err == nil {
+		if _, err := skillSetupLstat(item.original); err == nil {
 			restoreErr = errors.Join(restoreErr, fmt.Errorf("恢复目标仍存在 %s；备份保留于 %s", item.original, item.backup))
 			continue
 		} else if !errors.Is(err, os.ErrNotExist) {
@@ -1695,7 +1997,7 @@ func restoreSkillSetupTarget(published []string, backups []skillSetupBackedUpDir
 			restoreErr = errors.Join(restoreErr, fmt.Errorf("创建 Skill 恢复目录失败 %s: %w；备份保留于 %s", filepath.Dir(item.original), err, item.backup))
 			continue
 		}
-		if err := skillSetupPublishRename(item.backup, item.original); err != nil {
+		if err := skillSetupRestoreBackup(item.backup, item.original); err != nil {
 			restoreErr = errors.Join(restoreErr, fmt.Errorf("恢复原 Skill 失败 %s: %w；备份保留于 %s", item.original, err, item.backup))
 		}
 	}
@@ -1728,45 +2030,53 @@ func backupSkillSetupTarget(home string, planned []skillSetupBackup, out io.Writ
 }
 
 func publishSkillSetupTarget(staged []skillSetupStagedDir, backups []skillSetupBackedUpDir) error {
-	published := make([]string, 0, len(staged))
+	published := make([]upgrade.SkillPathPublication, 0, len(staged))
 	for _, item := range staged {
-		// Record before rename so rollback also removes a destination created by
-		// a platform-specific partial failure.
-		published = append(published, item.dest)
-		if err := skillSetupPublishRename(item.staged, item.dest); err != nil {
+		publication, err := skillSetupPublishPath(item.staged, item.dest)
+		if err != nil {
 			publishErr := fmt.Errorf("发布 Skill 失败 %s: %w", item.dest, err)
 			if restoreErr := restoreSkillSetupTarget(published, backups); restoreErr != nil {
 				return errors.Join(publishErr, fmt.Errorf("Skill setup 回滚不完整: %w", restoreErr))
 			}
 			return publishErr
 		}
+		published = append(published, publication)
 	}
 	return nil
 }
 
 func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (installed, skipped int, err error) {
 	home, homeErr := skillSetupUserHomeDir()
-	perTarget := 1
-	if plan.Mode == skillSetupModeMulti {
-		perTarget = len(plan.MultiSkillNames)
+	hasCanonicalDependents := false
+	for _, candidate := range plan.Targets {
+		if candidate.CanonicalBase != "" && !sameSkillSetupPath(skillSetupBaseForMode(candidate.Destination, plan.Mode), candidate.CanonicalBase) {
+			hasCanonicalDependents = true
+			break
+		}
 	}
 	for _, target := range plan.Targets {
+		perTarget := 1
+		if plan.Mode == skillSetupModeMulti {
+			perTarget = len(plan.MultiSkillNames)
+		}
+		isCanonical := target.CanonicalBase != "" && sameSkillSetupPath(skillSetupBaseForMode(target.Destination, plan.Mode), target.CanonicalBase)
 		if target.CleanupOnly {
-			if skipped > 0 {
-				continue
-			}
+			// Nothing is installed below a universal root, so a stale copy that
+			// resists retirement must not count as a skipped install: any skipped
+			// count fails the whole setup, even when every real target succeeded.
 			if homeErr != nil {
-				fmt.Fprintf(errOut, "  ✗ 无法解析 HOME，保留通用 Skill 副本 %s: %v\n", target.Destination, homeErr)
-				skipped++
+				fmt.Fprintf(errOut, "  ⚠️  无法解析 HOME，保留 universal Agent 旧副本 %s: %v\n", target.Destination, homeErr)
 				continue
 			}
 			if _, cleanupErr := backupSkillSetupTarget(home, target.Backups, out); cleanupErr != nil {
-				fmt.Fprintf(errOut, "  ✗ 通用 Skill 副本迁移失败，已回滚 %s: %v\n", target.Destination, cleanupErr)
-				skipped++
+				fmt.Fprintf(errOut, "  ⚠️  universal Agent 旧副本迁移失败，已回滚，可手动删除 %s: %v\n", target.Destination, cleanupErr)
 			}
 			continue
 		}
 		if len(target.Backups) > 0 && homeErr != nil {
+			if isCanonical && hasCanonicalDependents {
+				return installed, skipped + perTarget, fmt.Errorf("无法解析 HOME，canonical Skill 刷新中止 %s: %w", target.Destination, homeErr)
+			}
 			if plan.Mode == skillSetupModeMono {
 				fmt.Fprintf(errOut, "  ✗ 无法解析 HOME，跳过刷新（保留原目录） %s: %v\n", target.Destination, homeErr)
 			} else {
@@ -1777,7 +2087,16 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 		}
 
 		stageRoot, staged, stageErr := stageSkillSetupTarget(plan, target)
+		if stageErr != nil && target.LinkCanonical {
+			fmt.Fprintf(errOut, "  ℹ️  %s 无法使用共享安装方式，正在自动改用兼容安装\n", target.Destination)
+			fallback := target
+			fallback.LinkCanonical = false
+			stageRoot, staged, stageErr = stageSkillSetupTarget(plan, fallback)
+		}
 		if stageErr != nil {
+			if isCanonical && hasCanonicalDependents {
+				return installed, skipped + perTarget, fmt.Errorf("canonical Skill staging 失败 %s: %w", target.Destination, stageErr)
+			}
 			fmt.Fprintf(errOut, "  ✗ Skill staging 失败，保留原集合 %s: %v\n", target.Destination, stageErr)
 			skipped += perTarget
 			continue
@@ -1786,6 +2105,9 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 		if backupErr != nil {
 			if cleanupErr := skillSetupRemoveAll(stageRoot); cleanupErr != nil {
 				backupErr = errors.Join(backupErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
+			}
+			if isCanonical && hasCanonicalDependents {
+				return installed, skipped + perTarget, fmt.Errorf("canonical Skill 备份失败，已执行回滚 %s: %w", target.Destination, backupErr)
 			}
 			fmt.Fprintf(errOut, "  ✗ Skill 备份失败，已执行回滚，跳过整个 Agent 目标 %s: %v\n", target.Destination, backupErr)
 			skipped += perTarget
@@ -1797,7 +2119,19 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 			if cleanupErr != nil {
 				publishErr = errors.Join(publishErr, fmt.Errorf("清理 Skill staging 失败 %s: %w", stageRoot, cleanupErr))
 			}
-			fmt.Fprintf(errOut, "  ✗ Skill 发布失败，已执行回滚，跳过整个 Agent 目标 %s: %v\n", target.Destination, publishErr)
+			if isCanonical && hasCanonicalDependents {
+				if errors.Is(publishErr, upgrade.ErrSkillPathPublicationUncertain) {
+					return installed, skipped + perTarget, fmt.Errorf("canonical Skill 发布状态不确定，目标可能属于并发写入并已保留 %s: %w", target.Destination, publishErr)
+				}
+				return installed, skipped + perTarget, fmt.Errorf("canonical Skill 发布失败，已执行回滚 %s: %w", target.Destination, publishErr)
+			}
+			if errors.Is(publishErr, upgrade.ErrSkillPathPublicationUncertain) {
+				// The destination may belong to a concurrent writer and was
+				// deliberately retained; the rollback refuses to displace it.
+				fmt.Fprintf(errOut, "  ✗ Skill 发布状态不确定，目标可能属于并发写入并已保留 %s: %v\n", target.Destination, publishErr)
+			} else {
+				fmt.Fprintf(errOut, "  ✗ Skill 发布失败，已执行回滚，跳过整个 Agent 目标 %s: %v\n", target.Destination, publishErr)
+			}
 			skipped += perTarget
 			continue
 		}
@@ -1836,7 +2170,7 @@ func staleMultiSkillVictimsWithError(dest string, keep []string, managed ...map[
 	}
 	var victims []string
 	for _, e := range entries {
-		if !e.IsDir() || keepSet[e.Name()] {
+		if (!e.IsDir() && e.Type()&os.ModeSymlink == 0) || keepSet[e.Name()] {
 			continue
 		}
 		if !isManagedDWSMultiSkillDir(filepath.Join(dest, e.Name()), managed...) {

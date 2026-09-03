@@ -14,10 +14,14 @@
 package smart
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -46,16 +50,33 @@ import (
 //
 //	dws todo +related-tasks
 var RelatedTasks = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+related-tasks",
-	Product:     "todo",
-	Description: "一次性列出与我相关的全部待办（我作为创建人/执行人/参与人三种角色的并集，按 taskId 去重）",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+get-related-tasks",
+	Aliases:       []string{"+related-tasks"},
+	Product:       "todo",
+	Description:   "一次性列出与我相关的全部待办（我作为创建人/执行人/参与人三种角色的并集，按 taskId 去重）",
 	Intent: "当你想一次看清『所有和我有关的待办』——不管是我创建(creator)的、指派给我执行(executor)的、还是我作为参与人(participant)协作的——时使用；" +
 		"内部默认拉取你当前组织下 roleTypes=[\"creator\",\"executor\",\"participant\"] 三种角色的待办并集（这三个值正是待办列表支持的角色枚举），" +
 		"再在本地按任务 ID(taskId) 去重（同一条待办可能因多角色重复出现），把每条投影成标题、状态、优先级、创建人、计划完成时间和 taskId 打印出来。" +
 		"可用 --role-types 以逗号分隔覆盖默认角色（取值 creator/executor/participant），可用 --status 透传 todoStatus 过滤状态。" +
 		"这是纯只读操作，只做列表、去重与投影，不会创建或修改任何待办；若没有与你相关的待办则返回空列表。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity:    contract.ToolIdentitySpec{ProductID: "todo", Name: "shortcut_get_related_tasks", CanonicalPath: "todo.shortcut_get_related_tasks", CLIPath: "todo +get-related-tasks", PrimaryCLIPath: "todo +get-related-tasks", Aliases: []string{"todo +related-tasks"}},
+		Description: "一次性列出与我相关的全部待办（创建人/执行人/参与人并集）",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "Reviewed Todo composite: strict full pagination, role union, deduplication and projection are owned by the executable shortcut."},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出与我相关的全部待办",
+			UseWhen:      []string{"需要查看我作为创建人、执行人或参与人的全部待办并集时"},
+			AvoidWhen:    []string{"只需默认执行人视角列表时使用 todo +get-my-tasks"},
+			Examples:     []string{"dws todo +get-related-tasks"},
+		},
+		Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"与当前用户相关的待办并集","properties":{"count":{"type":"integer","description":"去重后的任务数量"},"tasks":{"type":"array","description":"按 taskId 去重的任务","items":{"type":"object","description":"待办条目","additionalProperties":true}}},"required":["count","tasks"],"additionalProperties":false}`)},
+	},
 	Flags: []shortcut.Flag{
 		{
 			Name: "role-types",
@@ -69,9 +90,9 @@ var RelatedTasks = shortcut.Shortcut{
 		},
 	},
 	Tips: []string{
-		`dws todo +related-tasks`,
-		`dws todo +related-tasks --role-types creator,executor`,
-		`dws todo +related-tasks --status TODO`,
+		`dws todo +get-related-tasks`,
+		`dws todo +get-related-tasks --role-types creator,executor`,
+		`dws todo +get-related-tasks --status TODO`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — build params. roleTypes defaults to the three-role union;
@@ -115,10 +136,6 @@ var RelatedTasks = shortcut.Shortcut{
 				seen[taskID] = true
 			}
 			results = append(results, shortcutRelatedProject(m, taskID))
-		}
-
-		if len(results) == 0 {
-			return apperrors.NewValidation("没有与你相关的待办（creator/executor/participant 三种角色下均为空）")
 		}
 
 		// Step 3 — print the deduped, projected list.
@@ -203,5 +220,7 @@ func shortcutRelatedStr(m map[string]any, keys ...string) string {
 }
 
 func init() {
+	RelatedTasks.Contract.Selection.AgentSummary = RelatedTasks.Description
+	RelatedTasks.Contract.Selection.UseWhen = []string{RelatedTasks.Intent}
 	shortcut.Register(RelatedTasks)
 }

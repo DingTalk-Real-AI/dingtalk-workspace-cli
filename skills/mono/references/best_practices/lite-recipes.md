@@ -11,7 +11,7 @@
 
 ### create-todo
 
-1. 确定执行者：指定姓名 → `aisearch person --keyword "<姓名>" --dimension name` → `userId`；未指定 → `contact user get-self` → `userId`；多人 → 逐个搜索逗号拼接。
+1. 确定执行者：指定姓名 → `aisearch person --query "<姓名>" --dimension name` → `userId`；未指定 → `contact user get-self` → `userId`；多人 → 逐个搜索逗号拼接。
 2. 创建：`todo task create --title "<标题>" --executors <userId>[,<userId2>...]`（可选 `--due "<截止ISO>"`）→ `todoTaskId`
 
 ### todo-query-ops
@@ -32,7 +32,7 @@
 
 查询多人在某时段内的闲忙（**busy**，不是用 `event list` 扫日程）：
 
-1. 解析用户：对每个姓名执行 `aisearch person --keyword "<姓名>" --dimension name` → `userId`；多人将 `userId` 用英文逗号拼接（无空格或按 [calendar.md](../products/calendar.md) `busy search` 要求）。
+1. 解析用户：对每个姓名执行 `aisearch person --query "<姓名>" --dimension name` → `userId`；多人将 `userId` 用英文逗号拼接（无空格或按 [calendar.md](../products/calendar.md) `busy search` 要求）。
 2. 确认时段：用户须给出或可收敛为明确的 `--start` / `--end`（ISO-8601）；若未给出，**先追问**起止时间，禁止用任意默认全天窗口代替用户意图。
 3. 执行：`dws calendar busy search --users <userId1,userId2,...> --start "<ISO>" --end "<ISO>" --format json`
 
@@ -213,7 +213,7 @@ query 未提"听记"但任务产出依赖会议讨论内容时（报告/总结/�
 **搜人首选入口**。凡是“找人/搜人/找同事/谁负责/上级/下级/负责人/团队成员”均优先用 `aisearch person`：
 
 1. 从用户问题中提取 keyword（人名/业务关键词）和 dimension（维度），规则见 `aisearch`（开源版未引入，悟空内部产品）。
-2. `aisearch person --keyword "<关键词>" --dimension <维度>`
+2. `aisearch person --query "<关键词>" --dimension <维度>`
 3. 结果中提取 `userId` 和 `title`（姓名）展示给用户。
 4. 若需要 userId 做后续操作（发消息/建待办），可直接使用结果中的 `userId`。
 5. **重名消歧**：多人同名时禁止默认选第一个，须追加 `contact user get --ids` 获取部门/职位后请用户确认，详见 [08-directory.md](./08-directory.md)「多命中」。
@@ -225,7 +225,7 @@ query 未提"听记"但任务产出依赖会议讨论内容时（报告/总结/�
 - 需要获取 userId 给其他产品使用（发消息/建待办/约日程）
 - 已有 userId 需查完整详情（`contact user get --ids`）
 
-1. `aisearch person --keyword "<姓名>" --dimension name` → `userId`；**多命中须列出候选请用户确认**。
+1. `aisearch person --query "<姓名>" --dimension name` → `userId`；**多命中须列出候选请用户确认**。
 2. **重名消歧**：多人同名时禁止默认选第一个，须追加 `contact user get --ids` 获取部门/职位后请用户确认，详见 [08-directory.md](./08-directory.md)「多命中」。
 3. 需详情时：`contact user get --ids <userId>`（多人可 `--ids id1,id2,...`）
 

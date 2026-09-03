@@ -108,7 +108,7 @@ Usage:
   dws todo task delete [flags]
 Example:
   dws todo task delete --task-id <taskId>
-  dws todo task delete --task-id <taskId> --yes
+  dws todo task delete --task-id <taskId>
 Flags:
       --task-id string   待办任务 ID (必填)
 ```
@@ -146,7 +146,7 @@ Usage:
   dws todo comment delete [flags]
 Example:
   dws todo comment delete --task-id <taskId> --comment-id <commentId>
-  dws todo comment delete --task-id <taskId> --comment-id <commentId> --yes
+  dws todo comment delete --task-id <taskId> --comment-id <commentId>
 Flags:
       --task-id string      待办任务 ID (必填)
       --comment-id string   评论 ID (必填)
@@ -212,9 +212,9 @@ Flags:
 Usage:
   dws todo task add-attachment [flags]
 Example:
-  dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf
+  dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf
 Flags:
-      --file-path string   本地文件路径 (必填)
+      --file string        本地文件路径 (必填)
       --task-id string     待办任务 ID (必填)
 ```
 
@@ -237,7 +237,7 @@ Usage:
   dws todo task remove-attachment [flags]
 Example:
   dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId>
-  dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes
+  dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId>
 Flags:
       --attachment-id string   待办附件 ID (必填)
       --task-id string         待办任务 ID (必填)
@@ -314,7 +314,7 @@ Usage:
   dws todo tag delete [flags]
 Example:
   dws todo tag delete --tag-codes code1,code2
-  dws todo tag delete --tag-codes code1,code2 --yes
+  dws todo tag delete --tag-codes code1,code2
 Flags:
       --tag-codes string   要删除的标签编码列表,逗号分隔 (必填)
       --yes                跳过交互确认，直接执行删除
@@ -410,7 +410,7 @@ dws todo task update --task-id <taskId> --title "新标题" --priority 40 --form
 dws todo task done --task-id <taskId> --status true --format json
 
 # 6. 删除待办
-dws todo task delete --task-id <taskId> --yes --format json
+dws todo task delete --task-id <taskId> --format json
 
 # 7. 给待办新增评论
 dws todo comment add --task-id <taskId> --content "已开始处理" --format json
@@ -419,7 +419,7 @@ dws todo comment add --task-id <taskId> --content "已开始处理" --format jso
 dws todo comment list --task-id <taskId> --page 1 --size 20 --format json
 
 # 9. 删除待办评论
-dws todo comment delete --task-id <taskId> --comment-id <commentId> --yes --format json
+dws todo comment delete --task-id <taskId> --comment-id <commentId> --format json
 
 # 10. 添加待办执行人
 dws todo task add-executor --task-id <taskId> --executors userId1,userId2 --format json
@@ -442,11 +442,11 @@ dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules
 # 18. 查询子待办列表
 dws todo task list-sub --task-id <taskId> --format json
 # 19. 上传待办附件
-dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
+dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf --format json
 # 20. 查询待办附件列表
 dws todo task list-attachment --task-id <taskId> --format json
 # 21. 删除待办附件
-dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --yes --format json
+dws todo task remove-attachment --task-id <taskId> --attachment-id <attachmentId> --format json
 
 # 22. 查询待办标签列表
 dws todo tag list --format json
@@ -457,7 +457,7 @@ dws todo tag add --task-id <taskId> --tag-codes code1,code2 --format json
 # 25. 更新待办标签
 dws todo tag update --user-tags '[{"tagCode":"code1","name":"新名称"}]' --format json
 # 26. 删除待办标签
-dws todo tag delete --tag-codes code1,code2 --yes --format json
+dws todo tag delete --tag-codes code1,code2 --format json
 ```
 
 ## 上下文传递表
@@ -476,9 +476,10 @@ dws todo tag delete --tag-codes code1,code2 --yes --format json
 
 - 优先级值: 10=低, 20=普通, 30=较高, 40=紧急
 - `--due` 是截止时间 dueTime，不是提醒时间；使用 ISO-8601 格式（如 2026-03-10T18:00:00+08:00）
-- 当前不支持单独的 `reminder` / `remind-at` 精确提醒能力；不要把 `--due` 解释成“几点提醒”
+- `--due` 与 `todo +remind --at` 都只写截止时间 dueTime，不要解释成“几点提醒”
 - `--recurrence`：仅在与 `--due` 同时设置时有效；当前仅支持按天循环。字符串内需含换行，示例：`DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1`（DTSTART 表示首次截止时间，需与业务约定一致）
-- 若用户的真实诉求是“到点提醒我”，需要先说明能力边界；当前 CLI 只能表达 deadline / recurrence，不能表达独立 reminder schedule
+- 独立精确提醒使用 `todo +reminder --base-time customTime --at <ISO>`，或原子命令 `task add-reminder --base-time customTime --reminder-time-stamp <ISO>`
+- 基于截止时间的提前提醒使用 `todo +reminder --base-time dueTime --due-date-offset <分钟>`；待办必须已有截止时间
 - `task list` 的 `--status` 对应 MCP `get_user_todos_in_current_org` 的 `todoStatus` 参数
 - `task list` 的 `--priority` 支持逗号分隔多个优先级值（如 `40,30,10`），用于同时筛选多个优先级
 - `task list` 的 `--role-types` 支持 `creator`/`executor`/`participant`，可在一次调用中同时传入多个角色用逗号分隔（如 `--role-types creator,executor`），无需分多次查询；不传时默认按 `executor` 查询
@@ -486,7 +487,7 @@ dws todo tag delete --tag-codes code1,code2 --yes --format json
 - todo 是个人待办管理产品
 - `task update` 可同时修改标题/优先级/截止时间/完成状态
 - `task done` 专用于修改执行者的完成状态，与 `task update --done` 作用不同
-- `task delete` 为不可逆操作，建议加 `--yes` 并与用户确认
+- `task delete` 为不可逆操作；先与用户确认，再由运行时确认门执行
 - `comment delete` 同样为不可逆操作，执行前需用户确认；`--comment-id` 可通过 `comment list` 获取
 - `task add-executor` / `task remove-executor` 用于管理待办的执行人，`--executors` 支持逗号分隔的多个 userId
 - `task add-participant` / `task remove-participant` 用于管理待办的参与人，`--participants` 支持逗号分隔的多个 userId
@@ -494,14 +495,14 @@ dws todo tag delete --tag-codes code1,code2 --yes --format json
 - `task add-reminder` 用于为待办添加提醒，`--base-time` 支持 `dueTime`（基于截止时间偏移，待办必须有截止时间）和 `customTime`（自定义时间戳）两种模式
 - `task reset-reminder` 用于重置待办提醒规则，不传 `--reminder-rules` 则清除所有提醒
 - `task list-sub` 用于查询指定待办的子待办列表，需通过 `task list` 或 `task create` 获取父待办 ID
-- `task add-attachment` 用于上传本地文件作为待办附件，`--file-path` 为本地文件绝对路径；该操作不可逆，调用前必须确认待办存在
+- `task add-attachment` 用于上传本地文件作为待办附件，`--file` 为本地文件绝对路径；该操作不可逆，调用前必须确认待办存在
 - `task list-attachment` 用于查询指定待办的附件列表
 - `task remove-attachment` 用于删除待办附件，为不可逆操作，执行前需用户确认；`--attachment-id` 可通过 `task list-attachment` 获取
 - `tag list` 用于查询当前用户已有的标签列表，返回的 `tagCode` 可用于 `tag add` / `tag update` / `tag delete`
 - `tag add` 用于给指定待办打标签，`--task-id` 可通过 `task list` 或 `task create` 获取；`--tag-codes` 可通过 `tag list` 获取
 - `tag create` 用于创建新标签，`--name` 为标签名称 (必填)
 - `tag update` 用于更新已有标签信息，`--user-tags` 格式同 `tag create`
-- `tag delete` 用于删除标签定义，为不可逆操作，执行前需用户确认；传 `--yes` 可跳过交互提示，建议加 `--yes` 并与用户确认
+- `tag delete` 用于删除标签定义，为不可逆操作，执行前需用户确认
 - `tag add`（给待办打标签）与 `tag delete`（删除标签定义）作用不同：前者是关联关系，后者是删除标签本身
 
 
@@ -510,5 +511,7 @@ dws todo tag delete --tag-codes code1,code2 --yes --format json
 | 脚本 | 场景 | 用法 |
 |------|------|------|
 | [todo_daily_summary.py](../scripts/todo_daily_summary.py) | 查看今天/明天/本周未完成待办汇总 | `python todo_daily_summary.py today` |
-| [todo_batch_create.py](../scripts/todo_batch_create.py) | 从 JSON 文件批量创建待办 | `python todo_batch_create.py todos.json` |
+| [todo_batch_create.py](../scripts/todo_batch_create.py) | 从 JSON 文件批量创建待办 | `python todo_batch_create.py todos.json --dry-run` |
 | [todo_overdue_check.py](../scripts/todo_overdue_check.py) | 扫描逾期待办输出逾期清单 | `python todo_overdue_check.py` |
+
+批量创建必须先预览精确批次和 `planDigest`；用户明确确认该摘要后，执行时同时提交 `--confirm-digest <PLAN_DIGEST>` 与 `--yes`。脚本会重新规范化输入并核对摘要：任何实际写入内容变化都会在首次 `dws` 调用前拒绝。

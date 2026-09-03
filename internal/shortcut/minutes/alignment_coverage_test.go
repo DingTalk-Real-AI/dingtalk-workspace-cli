@@ -19,6 +19,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -36,10 +37,23 @@ func runMinutesAlignmentCLIWithWriter(t *testing.T, caller *minutesE2ECaller, wr
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(writer)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	return root.Execute()
+	executed, err := root.ExecuteC()
+	if err != nil || !output.UsesUnifiedResult(executed) {
+		return err
+	}
+	code, _, emitErr := output.EmitStoredResult(executed)
+	if emitErr != nil {
+		return emitErr
+	}
+	if code != 0 {
+		return fmt.Errorf("command result exit code %d", code)
+	}
+	return nil
 }
 
 func TestCrossPlatformCoverageMinutesAlignmentValidationAndHelpers(t *testing.T) {
@@ -133,12 +147,15 @@ func TestCrossPlatformCoverageMinutesSearchFailureAndCursorBranchesE2E(t *testin
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			payload, _, err := runMinutesAlignmentCLI(t, test.caller, test.args...)
+			payload, raw, err := runMinutesAlignmentCLI(t, test.caller, test.args...)
 			if (err != nil) != test.wantError {
 				t.Fatalf("payload=%#v err=%v", payload, err)
 			}
-			if test.wantNext != "" && payload["nextToken"] != test.wantNext {
-				t.Fatalf("payload=%#v", payload)
+			if test.wantNext != "" {
+				pagination := minutesPaginationFromOutput(t, raw)
+				if pagination["next_token"] != test.wantNext || pagination["endpoint_exhausted"] != false {
+					t.Fatalf("pagination=%#v payload=%#v", pagination, payload)
+				}
 			}
 		})
 	}
@@ -198,6 +215,10 @@ func TestCrossPlatformCoverageMinutesUploadFailureAndSuccessBranchesE2E(t *testi
 	if err := os.WriteFile(file, []byte("audio"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	invalidTiming := &minutesE2ECaller{}
+	if _, _, err := runMinutesAlignmentCLI(t, invalidTiming, "minutes", "+upload-and-notify", "--file", file, "--complete-timeout", "0", "--yes"); err == nil || len(invalidTiming.counts) != 0 {
+		t.Fatalf("invalid upload timing accepted: err=%v calls=%#v", err, invalidTiming.counts)
+	}
 	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+upload", "--file", t.TempDir(), "--yes"); err == nil || payload != nil || output != "" {
 		t.Fatalf("directory upload accepted: %#v %q %v", payload, output, err)
 	}
@@ -246,9 +267,31 @@ func TestCrossPlatformCoverageMinutesUploadFailureAndSuccessBranchesE2E(t *testi
 		"minutes/get_minutes_basic_info":  {`{"success":true,"result":{"taskUuid":"u1","title":"ok"}}`},
 	}
 	success := &minutesE2ECaller{responses: base}
-	payload, _, err := runMinutesAlignmentCLI(t, success, "minutes", "+upload", "--file", file, "--title", "T", "--template-id", "tpl", "--input-language", "zh", "--enable-message-card", "--yes")
+	payload, _, err := runMinutesAlignmentCLI(t, success, "minutes", "+upload", "--file", file, "--title", "T", "--template-id", "tpl", "--input-language", "zh", "--yes")
 	if err != nil || payload["complete"] != true || payload["verified"] != true {
 		t.Fatalf("upload payload=%#v err=%v", payload, err)
+	}
+	createArgs := success.arguments["minutes/create_upload_session"][0]
+	if option, _ := createArgs["minutesOption"].(map[string]any); option["enableMessageCard"] != nil {
+		t.Fatalf("pure upload enabled message card: %#v", createArgs)
+	}
+	notify := &minutesE2ECaller{responses: base}
+	payload, _, err = runMinutesAlignmentCLI(t, notify, "minutes", "+upload-and-notify", "--file", file, "--title", "T", "--yes")
+	if err != nil || payload["complete"] != true {
+		t.Fatalf("upload-and-notify payload=%#v err=%v", payload, err)
+	}
+	notifyArgs := notify.arguments["minutes/create_upload_session"][0]
+	if option, _ := notifyArgs["minutesOption"].(map[string]any); option["enableMessageCard"] != true {
+		t.Fatalf("notifying upload args=%#v", notifyArgs)
+	}
+	legacy := &minutesE2ECaller{responses: base}
+	payload, _, err = runMinutesAlignmentCLI(t, legacy, "minutes", "+upload", "--file", file, "--enable-message-card", "--yes")
+	if err != nil || payload["complete"] != true {
+		t.Fatalf("legacy message flag payload=%#v err=%v", payload, err)
+	}
+	legacyArgs := legacy.arguments["minutes/create_upload_session"][0]
+	if option, _ := legacyArgs["minutesOption"].(map[string]any); option["enableMessageCard"] != true {
+		t.Fatalf("legacy message flag args=%#v", legacyArgs)
 	}
 
 	cases := []struct {
@@ -497,10 +540,30 @@ func TestCrossPlatformCoverageMinutesLegacyListsAndRecordCommandsE2E(t *testing.
 			if err != nil || payload["accepted"] != true || payload["command"] != test.cmd {
 				t.Fatalf("payload=%#v err=%v", payload, err)
 			}
+			if test.cmd == "create" {
+				if payload["bound"] != false || payload["controlReady"] != false || payload["reason"] != "gateway_did_not_return_task_uuid" {
+					t.Fatalf("unbound create payload=%#v", payload)
+				}
+				if _, exists := payload["taskUuid"]; exists {
+					t.Fatalf("unbound create invented taskUuid: %#v", payload)
+				}
+			} else if payload["bound"] != true || payload["controlReady"] != true || payload["taskUuid"] != test.id {
+				t.Fatalf("bound control payload=%#v", payload)
+			}
 			if caller.arguments["minutes/"+listeningNoteCmdTool][0]["sessionId"] != "session" {
 				t.Fatalf("args=%#v", caller.arguments)
 			}
 		})
+	}
+	boundStart := &minutesE2ECaller{responses: map[string][]string{
+		"minutes/" + listeningNoteCmdTool: {`{"success":true,"result":{"cmd":"create","taskUuid":"new-u1"}}`},
+	}}
+	boundPayload, _, err := runMinutesAlignmentCLI(t, boundStart, "minutes", "+record-start", "--yes")
+	if err != nil || boundPayload["bound"] != true || boundPayload["controlReady"] != true || boundPayload["taskUuid"] != "new-u1" {
+		t.Fatalf("bound start payload=%#v err=%v", boundPayload, err)
+	}
+	if len(boundStart.arguments) != 1 || len(boundStart.arguments["minutes/"+listeningNoteCmdTool]) != 1 {
+		t.Fatalf("record start made unexpected fallback calls: %#v", boundStart.arguments)
 	}
 	recordCall := &minutesE2ECaller{failAt: map[string]int{"minutes/" + listeningNoteCmdTool: 1}}
 	if _, _, err := runMinutesAlignmentCLI(t, recordCall, "minutes", "+record-start", "--yes"); err == nil {

@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,7 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...string) error {
@@ -27,21 +31,53 @@ func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...str
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append(append([]string(nil), args...), "--yes"))
-	return root.ExecuteContext(context.Background())
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string) error {
 	t.Helper()
-	command, _, err := newChatCommand().Find(path)
+	InitDeps(&scriptedToolCaller{})
+	deps.Out.w = io.Discard
+	deps.Out.errW = io.Discard
+	root := newChatCommand()
+	installExampleGlobalFlags(root)
+	root.PersistentFlags().Bool("debug", false, "")
+	root.PersistentFlags().Bool("verbose", false, "")
+	command, _, err := root.Find(path)
 	if err != nil {
 		return err
 	}
 	for name, value := range flags {
-		if err := command.Flags().Set(name, value); err != nil {
+		flag := command.Flag(name)
+		if flag == nil {
+			return fmt.Errorf("no such flag -%s", name)
+		}
+		if err := flag.Value.Set(value); err != nil {
 			return err
 		}
+		flag.Changed = true
 	}
 	return command.RunE(command, nil)
+}
+
+func TestCrossPlatformCoverageChatMessageSendValidationErrorsAreTyped(t *testing.T) {
+	err := runChatCoverageDirect(t, []string{"message", "send"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("missing target error = %v", err)
+	}
+	if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+		t.Fatalf("missing target exit code = %d, want validation/%d", got, apperrors.ExitCodeValidation)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "require_one_of" {
+		t.Fatalf("missing target error = %#v, want validation/require_one_of", err)
+	}
 }
 
 func TestCrossPlatformCoverageEvaluationRegressionChatSearchSpellingsAndNaturalBotTarget(t *testing.T) {
@@ -93,7 +129,7 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 		hint string
 	}{
 		{path: "send", args: []string{"send", "--group", "cid-stable", "--text", "hello"}, hint: "dws chat message send"},
-		{path: "history", args: []string{"history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"},
+		{path: "history", args: []string{"history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --conversation-id <GROUP_OPEN_CONVERSATION_ID>"},
 	} {
 		command, remaining, err := root.Find([]string{tc.path})
 		if err != nil {
@@ -107,9 +143,87 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 		}
 		root.SetArgs(tc.args)
 		err = root.ExecuteContext(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
-			t.Fatalf("chat %s with legacy flags error = %v, want migration hint %q", tc.path, err, tc.hint)
+		var structured *apperrors.Error
+		if !errors.As(err, &structured) {
+			t.Fatalf("chat %s with legacy flags error = %T %v, want structured validation", tc.path, err, err)
 		}
+		if structured.Category != apperrors.CategoryValidation || structured.Reason != "unknown_subcommand" || !strings.Contains(structured.Hint, tc.hint) {
+			t.Fatalf("chat %s with legacy flags error = %#v, want migration hint %q", tc.path, structured, tc.hint)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatAliasInstallerRemainingEdges(t *testing.T) {
+	restoreChatManifestExternalVisibleFlags(nil)
+
+	mismatchedRoot := &cobra.Command{Use: "chat"}
+	mismatchedRoot.AddCommand(&cobra.Command{Use: "other"})
+	restoreChatManifestExternalVisibleFlags(mismatchedRoot)
+
+	missingPrimary := &cobra.Command{Use: "leaf"}
+	installChatFlagAliases(missingPrimary, "conversation-id", []string{"group"}, requireChatConversationID)
+	if flag := missingPrimary.Flags().Lookup("group"); flag != nil {
+		t.Fatalf("alias registered without canonical flag: %#v", flag)
+	}
+
+	skipGroup := &cobra.Command{Use: "leaf", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
+	skipGroup.Flags().String("conversation-id", "", "")
+	skipGroup.Flags().String("group-name", "", "")
+	installChatFlagAliases(skipGroup, "conversation-id", []string{"group", "chat"}, requireChatConversationID)
+	if flag := skipGroup.Flags().Lookup("group"); flag != nil {
+		t.Fatalf("group alias registered beside group-name: %#v", flag)
+	}
+	if flag := skipGroup.Flags().Lookup("chat"); flag == nil {
+		t.Fatal("non-group alias was not registered")
+	}
+
+	preRunCalled := false
+	withPreRun := &cobra.Command{
+		Use: "leaf",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			preRunCalled = true
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	}
+	withPreRun.Flags().String("conversation-id", "", "")
+	installChatFlagAliases(withPreRun, "conversation-id", []string{"group"}, requireChatConversationID)
+	withPreRun.SetArgs([]string{"--group", "cid"})
+	if err := withPreRun.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("execute with alias and previous PreRunE: %v", err)
+	}
+	if !preRunCalled {
+		t.Fatal("previous PreRunE was not called")
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageForwardRequiresMessageID(t *testing.T) {
+	caller := &productExampleCaller{}
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	deps.Out.errW = io.Discard
+	root := newChatCommand()
+	command, _, err := root.Find([]string{"message", "forward"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"message-id", "msg-id"} {
+		if flag := command.Flags().Lookup(name); flag != nil && flag.Annotations != nil {
+			delete(flag.Annotations, cobra.BashCompOneRequiredFlag)
+		}
+	}
+	if err := command.Flags().Set("src-conversation-id", "src"); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Flags().Set("dest-conversation-id", "dest"); err != nil {
+		t.Fatal(err)
+	}
+	err = command.RunE(command, nil)
+	if err == nil || !strings.Contains(err.Error(), "missing required flag: --message-id") {
+		t.Fatalf("forward missing message id error = %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
 	}
 }
 
@@ -153,6 +267,155 @@ func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.
 	if caller.calls != 0 {
 		t.Fatalf("tool calls = %d, want 0", caller.calls)
 	}
+}
+
+func TestChatGroupRoleSetUserAcceptsSingleRoleIDAndLegacyRoleIDs(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "public single role id",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1"},
+			want: []string{"r1"},
+		},
+		{
+			name: "hidden legacy role ids",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids=r1,r2"},
+			want: []string{"r1", "r2"},
+		},
+		{
+			name: "hidden legacy empty role ids",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids="},
+			want: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			if err := runChatCoverageCommand(t, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if caller.calls != 1 {
+				t.Fatalf("tool calls = %d, want 1", caller.calls)
+			}
+			if got := caller.args["openRoleIds"]; !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("openRoleIds = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestChatGroupRoleSetUserRejectsConflictingRoleFlags(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &scriptedToolCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1", "--role-ids=r2")
+	if err == nil {
+		t.Fatal("set-user accepted --role-id with --role-ids, want validation error")
+	}
+	if !strings.Contains(err.Error(), "--role-id 与 --role-ids 不能同时指定") {
+		t.Fatalf("error = %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
+func TestChatGroupRoleSetUserRejectsMultiplePublicRoleIDs(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &scriptedToolCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1,r2")
+	if err == nil {
+		t.Fatal("set-user accepted multiple --role-id values, want validation error")
+	}
+	if !strings.Contains(err.Error(), "--role-id 只允许指定一个群身份") {
+		t.Fatalf("error = %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
+func TestChatGroupRoleSetUserRejectsMissingOrEmptyPublicRoleID(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "missing public role id",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1"},
+			want: "role-id",
+		},
+		{
+			name: "empty public role id",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-id="},
+			want: "--role-id 不能为空",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller, tc.args...)
+			if err == nil {
+				t.Fatal("set-user accepted a missing or empty --role-id, want validation error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("tool calls = %d, want 0", caller.calls)
+			}
+		})
+	}
+}
+
+func TestChatGroupRoleSetUserRoleIDResolverDefensiveBranches(t *testing.T) {
+	newCommand := func(t *testing.T) *cobra.Command {
+		t.Helper()
+		cmd := &cobra.Command{}
+		cmd.Flags().String("role-id", "", "")
+		cmd.Flags().String("role-ids", "", "")
+		return cmd
+	}
+
+	t.Run("legacy flag without pre-run promotion", func(t *testing.T) {
+		cmd := newCommand(t)
+		if err := cmd.Flags().Set("role-ids", "r1,r2"); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveChatGroupRoleSetUserRoleIDs(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"r1", "r2"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("role IDs = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("no role flag", func(t *testing.T) {
+		_, err := resolveChatGroupRoleSetUserRoleIDs(newCommand(t))
+		if err == nil || !strings.Contains(err.Error(), "缺少必填参数 --role-id") {
+			t.Fatalf("error = %v, want missing --role-id validation", err)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageChatCommandValidationAndSuccessEdges(t *testing.T) {
@@ -199,12 +462,13 @@ func TestCrossPlatformCoverageChatCommandValidationAndSuccessEdges(t *testing.T)
 		{"category", "remove-conv", "--group=cid", "--category-ids=1,2"},
 		{"message", "list-by-ids", "--msg-ids=" + strings.Repeat("id,", 51) + "last"},
 		{"group", "transfer-owner", "--group=cid", "--new-owner=D-owner"},
+		{"group", "transfer-owner", "--group=cid", "--new-owner=DAAAAAAAAAAAiE"},
 		{"group", "update-icon", "--group=cid", "--icon-media-id=@valid"},
 		{"group", "set-history", "--group=cid", "--option=ALL"},
-		{"group", "audit-join-validation", "--group=cid", "--record-id=1", "--applicant=D1", "--inviter=D2", "--status=AuditApprove", "--description=ok"},
+		{"group", "audit-join-validation", "--conversation-id=cid", "--record-id=1", "--applicant=D1", "--inviter=D2", "--status=AuditApprove", "--description=ok"},
 		{"mark-read", "--conversation-id=cid", "--message-id=mid"},
 		{"text", "translate", "--query=hello", "--to=zh_CN"},
-		{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids=r1"},
+		{"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1"},
 		{"group-role", "remove-user", "--group=cid", "--user=D1", "--role-ids=r1"},
 		{"group-role", "query-user", "--group=cid", "--user=D1"},
 		{"group", "set-admin", "--group=cid", "--users=u1,D1"},
@@ -293,7 +557,7 @@ func TestCrossPlatformCoverageChatNativeSendCardMentions(t *testing.T) {
 		caller := &scriptedToolCaller{}
 		err := runChatCoverageCommand(t, caller,
 			"message", "send-card",
-			"--group=cid",
+			"--conversation-id=cid",
 			"--at-open-dingtalk-ids=D1,D2,D1",
 			"--at-all",
 		)
@@ -314,17 +578,307 @@ func TestCrossPlatformCoverageChatNativeSendCardMentions(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "member mention rejects direct message", args: []string{"--receiver=D1", "--at-open-dingtalk-ids=D2"}},
-		{name: "at all rejects direct message", args: []string{"--receiver=D1", "--at-all"}},
+		{name: "member mention rejects direct message", args: []string{"--open-dingtalk-id=D1", "--at-open-dingtalk-ids=D2"}},
+		{name: "at all rejects direct message", args: []string{"--open-dingtalk-id=D1", "--at-all"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &scriptedToolCaller{}
 			err := runChatCoverageCommand(t, caller, append([]string{"message", "send-card"}, tc.args...)...)
-			if err == nil || !strings.Contains(err.Error(), "only supported with --group") {
+			if err == nil || !strings.Contains(err.Error(), "only supported with --conversation-id") {
 				t.Fatalf("error = %v, want group-only mention validation", err)
 			}
 			if caller.calls != 0 {
 				t.Fatalf("invalid direct-message mentions made %d tool calls", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatSendCardHiddenAliasesMapToCanonicalPayload(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want map[string]any
+	}{
+		{
+			name: "group alias",
+			args: []string{"--group=cid"},
+			want: map[string]any{"openConversationId": "cid"},
+		},
+		{
+			name: "receiver alias",
+			args: []string{"--receiver=DAAAAAAAAAAAiE"},
+			want: map[string]any{"receiverOpenDingTalkId": "DAAAAAAAAAAAiE"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller, append([]string{"message", "send-card"}, tc.args...)...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if caller.calls != 1 || caller.server != "im" || caller.tool != "create_and_send_card" || !reflect.DeepEqual(caller.args, tc.want) {
+				t.Fatalf("call = count:%d server:%q tool:%q args:%#v, want %#v", caller.calls, caller.server, caller.tool, caller.args, tc.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatNativeSendCardA2UIEngine(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	t.Run("group payload uses a2ui card tool", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"message1\",\"message2\"]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.server != "im" || caller.tool != "create_and_send_a2ui_card" {
+			t.Fatalf("call = count:%d server:%q tool:%q args:%#v", caller.calls, caller.server, caller.tool, caller.args)
+		}
+		if caller.args["openConversationId"] != "cid" {
+			t.Fatalf("openConversationId = %#v", caller.args["openConversationId"])
+		}
+		messages, ok := caller.args["a2uiMessages"].([]string)
+		if !ok || !reflect.DeepEqual(messages, []string{"message1", "message2"}) {
+			t.Fatalf("a2uiMessages = %#v", caller.args["a2uiMessages"])
+		}
+		if caller.args["summary"] != "message1\nmessage2" || caller.args["protocolVersion"] != "1.0" || caller.args["flowStatus"] != "PROCESSING" {
+			t.Fatalf("args = %#v", caller.args)
+		}
+		if caller.args["requestId"] == "" || caller.args["bizCardId"] == "" {
+			t.Fatalf("missing generated ids: %#v", caller.args)
+		}
+	})
+
+	t.Run("direct message passes through D-form receiver", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=DAAAAAAAAAAAiE",
+			"--content=[\"message\"]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.tool != "create_and_send_a2ui_card" || caller.args["receiverOpenDingTalkId"] != "DAAAAAAAAAAAiE" {
+			t.Fatalf("call = count:%d tool:%q args:%#v", caller.calls, caller.tool, caller.args)
+		}
+	})
+
+	t.Run("direct message resolves userId receiver like streaming path", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"userId":"u1","openDingTalkId":"DAAAAAAAAAAAiE"}]}`},
+			{text: `{}`},
+		}}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=u1",
+			"--content=[\"message\"]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.argsLog) != 2 {
+			t.Fatalf("expected 2 calls, got %d: %#v", len(caller.argsLog), caller.argsLog)
+		}
+		last := caller.argsLog[len(caller.argsLog)-1]
+		if caller.toolLog[len(caller.toolLog)-1] != "create_and_send_a2ui_card" || last["receiverOpenDingTalkId"] != "DAAAAAAAAAAAiE" {
+			t.Fatalf("last call tool:%q args:%#v", caller.toolLog[len(caller.toolLog)-1], last)
+		}
+	})
+
+	t.Run("direct message userId resolution failure aborts a2ui send", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{err: errors.New("contact lookup unavailable")},
+		}}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=u1",
+			"--content=[\"message\"]",
+		)
+		if err == nil {
+			t.Fatal("expected userId resolution failure to propagate to caller")
+		}
+		if len(caller.toolLog) == 0 {
+			t.Fatal("expected contact resolution attempts before failure")
+		}
+		for _, tool := range caller.toolLog {
+			if tool == "create_and_send_a2ui_card" {
+				t.Fatalf("a2ui send executed despite resolution failure: %#v", caller.toolLog)
+			}
+		}
+	})
+
+	t.Run("a2ui rejects mention flags", func(t *testing.T) {
+		for _, tc := range []string{"--at-open-dingtalk-ids=DAAAAAAAAAAAiE", "--at-all"} {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"message", "send-a2ui-card",
+				"--conversation-id=cid",
+				"--content=[\"message\"]",
+				tc,
+			)
+			if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+				t.Fatalf("flag %s: err = %v, want a2ui mention rejection", tc, err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("flag %s made %d calls", tc, caller.calls)
+			}
+		}
+	})
+
+	t.Run("invalid a2ui content makes no call", func(t *testing.T) {
+		for _, content := range []string{"", "plain text", "{\"message\":\"x\"}", "[1]", "[]"} {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"message", "send-a2ui-card",
+				"--conversation-id=cid",
+				"--content="+content,
+			)
+			if err == nil {
+				t.Fatalf("content %q unexpectedly succeeded", content)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("content %q made %d calls", content, caller.calls)
+			}
+		}
+	})
+}
+
+func TestCrossPlatformCoverageChatGroupAuditJoinValidationUsesCanonicalAndAliasPayload(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	for _, tc := range []struct {
+		name string
+		flag string
+	}{
+		{name: "canonical conversation-id", flag: "--conversation-id=cid"},
+		{name: "hidden group alias", flag: "--group=cid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"group", "audit-join-validation",
+				tc.flag,
+				"--record-id=123",
+				"--applicant=D-applicant",
+				"--inviter=D-inviter",
+				"--status=AuditDelete",
+				"--description=deny",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]any{
+				"openConversationId": "cid",
+				"applyRecordId":      int64(123),
+				"applicantUid":       "D-applicant",
+				"inviterUid":         "D-inviter",
+				"status":             "AuditDelete",
+				"auditDescription":   "deny",
+			}
+			if caller.calls != 1 || caller.server != "im" || caller.tool != "audit_join_group" || !reflect.DeepEqual(caller.args, want) {
+				t.Fatalf("call = count:%d server:%q tool:%q args:%#v, want %#v", caller.calls, caller.server, caller.tool, caller.args, want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatIMIDMigrationRequiredFlagErrors(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	tests := []struct {
+		name string
+		path []string
+		flag map[string]string
+		want string
+	}{
+		{name: "message list mutually exclusive targets", path: []string{"message", "list"}, flag: map[string]string{"conversation-id": "cid", "user": "u1", "time": "2026-01-01"}, want: "mutually exclusive"},
+		{name: "message list missing target", path: []string{"message", "list"}, flag: map[string]string{"time": "2026-01-01"}, want: "--conversation-id, --user or --open-dingtalk-id is required"},
+		{name: "topic replies missing conversation", path: []string{"message", "list-topic-replies"}, flag: map[string]string{"topic-id": "t1"}, want: "conversation-id"},
+		{name: "read status missing conversation", path: []string{"message", "read-status"}, flag: map[string]string{"message-id": "m1"}, want: "conversation-id"},
+		{name: "read status conflicting aliases", path: []string{"message", "read-status"}, flag: map[string]string{"conversation-id": "cid1", "group": "cid2", "message-id": "m1"}, want: "conflicts"},
+		{name: "read status missing message", path: []string{"message", "read-status"}, flag: map[string]string{"conversation-id": "cid"}, want: "message-id"},
+		{name: "update text emotion missing message", path: []string{"message", "update-text-emotion"}, flag: map[string]string{"conversation-id": "cid", "old-emotion-id": "e1", "emotion-id": "e2", "emotion-name": "n", "text": "t", "background-id": "b"}, want: "message-id"},
+		{name: "update text emotion missing detail flag", path: []string{"message", "update-text-emotion"}, flag: map[string]string{"conversation-id": "cid", "message-id": "m1", "old-emotion-id": "e1", "emotion-id": "e2", "emotion-name": "n", "text": "t"}, want: "background-id"},
+		{name: "transfer owner missing conversation", path: []string{"group", "transfer-owner"}, flag: map[string]string{"new-owner": "D1"}, want: "conversation-id"},
+		{name: "invite url missing conversation", path: []string{"group", "invite-url"}, want: "conversation-id"},
+		{name: "quit missing conversation", path: []string{"group", "quit"}, want: "conversation-id"},
+		{name: "update icon missing conversation", path: []string{"group", "update-icon"}, flag: map[string]string{"icon-media-id": "@media"}, want: "conversation-id"},
+		{name: "update settings missing conversation", path: []string{"group", "update-settings"}, flag: map[string]string{"setting-key": "searchable"}, want: "conversation-id"},
+		{name: "set admin missing conversation", path: []string{"group", "set-admin"}, flag: map[string]string{"users": "D1"}, want: "conversation-id"},
+		{name: "role list missing conversation", path: []string{"group-role", "list"}, want: "group"},
+		{name: "role add missing conversation", path: []string{"group-role", "add"}, flag: map[string]string{"name": "role"}, want: "conversation-id"},
+		{name: "role update missing conversation", path: []string{"group-role", "update"}, flag: map[string]string{"role-id": "r1", "name": "role"}, want: "conversation-id"},
+		{name: "role remove missing conversation", path: []string{"group-role", "remove"}, flag: map[string]string{"role-id": "r1"}, want: "conversation-id"},
+		{name: "role set user missing conversation", path: []string{"group-role", "set-user"}, flag: map[string]string{"user": "D1", "role-id": "r1"}, want: "conversation-id"},
+		{name: "role remove user missing conversation", path: []string{"group-role", "remove-user"}, flag: map[string]string{"user": "D1", "role-ids": "r1"}, want: "conversation-id"},
+		{name: "role query user missing conversation", path: []string{"group-role", "query-user"}, flag: map[string]string{"user": "D1"}, want: "conversation-id"},
+		{name: "bots missing legacy group", path: []string{"group", "bots"}, want: "group"},
+		{name: "bots rejects migrated conversation id", path: []string{"group", "bots"}, flag: map[string]string{"conversation-id": "cid"}, want: "no such flag"},
+		{name: "dismiss missing conversation", path: []string{"group", "dismiss"}, flag: map[string]string{"yes": "true"}, want: "conversation-id"},
+		{name: "set history missing conversation", path: []string{"group", "set-history"}, flag: map[string]string{"option": "ALL"}, want: "conversation-id"},
+		{name: "set pin missing message", path: []string{"message", "set-pin-msg"}, flag: map[string]string{"open-conversation-id": "cid"}, want: "message-id"},
+		{name: "unset pin missing message", path: []string{"message", "unset-pin-msg"}, flag: map[string]string{"open-conversation-id": "cid"}, want: "message-id"},
+		{name: "audit join missing conversation", path: []string{"group", "audit-join-validation"}, flag: map[string]string{"record-id": "1", "applicant": "D1", "inviter": "D2", "status": "AuditApprove"}, want: "conversation-id"},
+		{name: "set top missing message", path: []string{"message", "set-top-msg"}, flag: map[string]string{"open-conversation-id": "cid"}, want: "message-id"},
+		{name: "unset top missing message", path: []string{"message", "unset-top-msg"}, flag: map[string]string{"open-conversation-id": "cid"}, want: "message-id"},
+		{name: "update alias missing conversation", path: []string{"group", "update-alias"}, flag: map[string]string{"alias-title": "alias"}, want: "conversation-id"},
+		{name: "notice create missing conversation", path: []string{"group", "notice", "create"}, flag: map[string]string{"content": "hello"}, want: "conversation-id"},
+		{name: "notice edit missing conversation", path: []string{"group", "notice", "edit"}, flag: map[string]string{"notice-id": "n1", "content": "hello"}, want: "conversation-id"},
+		{name: "notice get missing conversation", path: []string{"group", "notice", "get"}, flag: map[string]string{"notice-id": "n1"}, want: "conversation-id"},
+		{name: "notice list missing conversation", path: []string{"group", "notice", "list"}, want: "conversation-id"},
+	}
+
+	probe := newChatCommand()
+	messageList, _, err := probe.Find([]string{"message", "list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := chatConversationID(messageList); err != nil || got != "" {
+		t.Fatalf("empty chatConversationID = %q, %v", got, err)
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runChatCoverageDirect(t, tc.path, tc.flag)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageReadStatusConversationAliasesExecute(t *testing.T) {
+	for _, alias := range []string{"group", "id", "chat", "open-conversation-id"} {
+		t.Run(alias, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			if err := runChatCoverageCommand(t, caller, "message", "read-status", "--"+alias, "cid-1", "--message-id", "msg-1"); err != nil {
+				t.Fatal(err)
+			}
+			if caller.server != "im" || caller.tool != "query_msg_read_status" {
+				t.Fatalf("call = %s/%s, want im/query_msg_read_status", caller.server, caller.tool)
+			}
+			if got := caller.args["openConversationId"]; got != "cid-1" {
+				t.Fatalf("openConversationId = %#v, want cid-1", got)
+			}
+			if got := caller.args["openMessageId"]; got != "msg-1" {
+				t.Fatalf("openMessageId = %#v, want msg-1", got)
 			}
 		})
 	}
@@ -338,11 +892,27 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	for _, step := range []scriptedToolStep{{text: `{}`}, {text: `not-json`}, {text: `{"errcode":1,"errmsg":"bad"}`}, {err: errors.New("webhook")}} {
 		_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{step}}, "message", "send-by-webhook", "--token=t", "--title=title", "--text=text")
 	}
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=D1", "--text=reply", "--ai-tag", "--uuid=u")
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply")
+	directReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, directReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender", helperCurrentDOpenID, "--text=reply", "--ai-tag", "--uuid=u"); err != nil {
+		t.Fatal(err)
+	}
+	resolvedReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`},
+		{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, resolvedReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply"); err != nil {
+		t.Fatal(err)
+	}
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--open-dingtalk-id=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--user=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "conversation-info", "--user=u1")
+	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "message", "send-card", "--open-dingtalk-id=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "message", "send-card", "--receiver=D1")
 
 	oldGet := httpGetFile

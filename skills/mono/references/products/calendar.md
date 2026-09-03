@@ -26,7 +26,7 @@
 日程实例（event instance）：日程的具体时间实例，可以通过event list指令查询时间段内的所有实例。1个普通日程和对应1个Instance，而1个重复性日程(SeriesMaster)对应N个Instance（同属一个日程序列）。
   - 同一个日程序列具有相同的iCalUid，并且重复性日程，其eventId和iCalUid的值相同。因此可以通过重复性日程实例的iCalUid得到重复性日程(SeriesMaster)的eventId
 重复规则（recurrence rule）：定义重复性日程的重复规则。
-参会人（attendee）：日程的参与者。按姓名统一使用 `dws aisearch person --keyword "姓名" --dimension name --format json` 查询 userId。
+参会人（attendee）：日程的参与者。按姓名统一使用 `dws aisearch person --query "姓名" --dimension name --format json` 查询 userId。
 响应状态（response）：参会人对日程的回应，包括：未响应、接受、待定、拒绝。
 忙闲时间（busy）：查询用户在指定时间段的忙闲状态，查询会议室在指定时间段的预定状态，用于会议时间协调。
 会议室（room）：room是 会议室 ，room可视为日程的资源类参会人，需要加入日程完成预订。注意和location区分，location只是地点，和room不同。
@@ -44,6 +44,8 @@ dws calendar event [create|update|get|delete|respond] [flags]
 dws calendar event list [flags]
 # 查询循环日程的实例列表（按时间范围展开重复日程）
 dws calendar event instances [flags]
+# 获取日程的分享信息（日程主题、组织人、地点、入会信息等，用于向他人分享日程）
+dws calendar event share-info [flags]
 # 对于非明确时间或一段时间范围的约会场景，可基于所有参会人的忙闲状态，推荐多个可用的时间块方案
 dws calendar event suggest [flags]
 ```
@@ -159,6 +161,22 @@ Flags:
 > **说明**：用于按时间范围展开重复日程（SeriesMaster）的每一个实例。**此接口只能查询重复性日程；若传入普通非循环日程，将查不到任何实例信息。**`--id` 必须是重复性日程的 eventId，可通过 `event list` 获取。
 > **默认行为**：不传 `--start` / `--end` 时，默认返回今天的实例（00:00:00 ~ 23:59:59）。
 > **分页**：单次最多返回 `--limit` 指定的条数（默认/最大 100）；当结果超过 limit 时，返回体包含 `nextCursor` 字段。
+
+### 获取日程分享信息
+```
+Usage:
+  dws calendar event share-info [flags]
+Example:
+  dws calendar event share-info --id <EVENT_ID>
+  dws calendar event share-info --id <EVENT_ID> --language zh-CN
+  dws calendar event share-info --id <EVENT_ID> --calendar-id primary
+Flags:
+      --id string            日程 ID (必填)
+      --calendar-id string   日历 ID (可选，默认 primary 主日历)
+      --language string      语言代码 (可选，如 zh-CN)
+```
+
+> **说明**：根据日程 ID 获取日程的分享信息，展示日程主题、组织人、地点、入会信息等，用于向他人分享日程（如发送到群聊、邮件）。中文内容建议传 `--language zh-CN`。
 
 ### 创建日程
 ```
@@ -585,6 +603,7 @@ Flags:
 - 推荐时间/什么时候有空/协调时间 → `event suggest`
 - 接受/拒绝/暂定日程 → `event respond`
 - 查询循环日程/重复日程的每次实例/展开循环日程 → `event instances`
+- 分享日程/把日程发给别人/获取日程分享信息或入会信息 → `event share-info`
 
 用户说"参会人/与会者":
 - 查看 → `attendee list`
@@ -691,6 +710,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 | `event suggest` | 推荐的时间段 | event create 的 --start/--end |
 | `event respond` | 响应结果 | — |
 | `event instances` | `result.events[].id`, `nextCursor` | event get/update/delete/respond 的 --id；下一页 --cursor |
+| `event share-info` | 日程分享信息（主题、组织人、地点、入会信息等） | 分享给他人（如 chat/mail 发送） |
 | `room search` | `rooms[].roomId` | room add 的 --rooms 或 event create 的 --rooms |
 | `room list-groups` | `groups[].groupId` | room search 的 --group-id |
 | `book list` | `id`（如 `primary`） | event list/get 的 --calendar-id, book get/update 的 --id |
@@ -718,6 +738,7 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 - **日历本**：`book list` 返回的 `id` 才是合法 `calendarId`；如无明确说明，`event list` / `event get` 都不要带 `--calendar-id`，让接口默认走 primary 主日历
 - **分页查询**：`event list` / `event instances` 均支持 `--limit`（控制每页条数，默认/最大 100）和 `--cursor`（翻页游标）；**首次查询无需传 `--cursor`**，仅当返回体中包含 `nextCursor` 时，将其作为 `--cursor` 传入可获取下一页
 - **循环日程实例**：`event instances` 用于按时间范围展开重复日程（SeriesMaster）的每一个实例；**普通非循环日程调用该命令将查不到任何实例信息**
+- **日程分享**：`event share-info` 获取日程的分享信息（主题、组织人、地点、入会信息等）；`--language` 控制文案语言（中文场景传 zh-CN）
 - **日程提醒**：`event create` 支持 `--remind-minutes` 设置开始前提醒，逗号分隔多个分钟数（如 `--remind-minutes 5,10,15`），不传则默认15分钟提醒
 - **会议室分页**：`room search` 支持 `--limit`（每页条数，默认100，最大100）和 `--page`（分页起始位置，默认0），与 `room list-groups` 分页风格一致
 

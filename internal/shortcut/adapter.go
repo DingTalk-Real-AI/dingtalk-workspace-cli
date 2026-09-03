@@ -85,10 +85,16 @@ func fromShortcutPostMount(s Shortcut) func(*cobra.Command) {
 			break
 		}
 	}
-	if len(s.Aliases) == 0 && strings.TrimSpace(s.SinglePositionalAliasFor) == "" && !hasVisibleFlagAliases {
+	if len(s.Aliases) == 0 && strings.TrimSpace(s.SinglePositionalAliasFor) == "" && !hasVisibleFlagAliases && s.HelpTier == "" {
 		return nil
 	}
 	return func(cmd *cobra.Command) {
+		if s.HelpTier != "" {
+			if cmd.Annotations == nil {
+				cmd.Annotations = map[string]string{}
+			}
+			cmd.Annotations[HelpTierAnnotation] = string(s.HelpTier)
+		}
 		cmd.Aliases = append([]string(nil), s.Aliases...)
 		for _, flag := range s.Flags {
 			if !flag.AliasesVisible {
@@ -217,6 +223,7 @@ func fromShortcutFlags(flags []Flag) []corecmd.FlagSpec {
 			RequiredError:  fmt.Sprintf("缺少必填参数 --%s：%s", f.Name, f.Desc),
 			Enum:           append([]string(nil), f.Enum...),
 			Aliases:        append([]string(nil), f.Aliases...),
+			Input:          append([]string(nil), f.Input...),
 		})
 	}
 	return out

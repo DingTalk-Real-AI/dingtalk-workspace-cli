@@ -79,6 +79,83 @@ type parameterSchema struct {
 	Enum             []string `json:"enum,omitempty"`
 }
 
+type reviewedCompatibilityException struct {
+	Field string
+	Old   string
+	New   string
+}
+
+// reviewedCompatibilityExceptions is intentionally exact: safety fixes may
+// need to tighten a historical contract, but that must not turn arbitrary
+// confirmation drift into a compatible change. Each tool may have multiple
+// field transitions (e.g. confirmation + risk + effect tightened together).
+var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
+	// PR #1085: batch permission/member remove is destructive at container
+	// scope — one call can revoke access for up to 30 USER / DEPT /
+	// CONVERSATION / TAG members, and departments, chats, and role groups
+	// can indirectly affect many more users. The review therefore asked for
+	// the same user confirmation gate as other destructive removes.
+	"doc/doc.remove_permission": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	"drive/drive.permission_remove": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	"wiki/wiki.remove_member": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	// PR #1097 (issue #1096): 6 commands that affect other users and are
+	// irreversible were incorrectly marked not_required / medium. Tightened
+	// to user_required / high; calendar event delete and minutes replace-text
+	// additionally escalated to destructive effect.
+	"calendar/calendar.delete_calendar_event": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"calendar/calendar.remove_calendar_participant": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"calendar/calendar.delete_meeting_room": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"chat/chat.remove_group_member": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"minutes/minutes.replace_minutes_text": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"doc/doc.update_permission": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	// AITable contract corrections reviewed before the product migration:
+	// create_form_view is non-idempotent; create_cell_doc returns the existing
+	// primary document when one is already bound; deleting a form question or
+	// a navigation section is destructive, and section deletion must cross the
+	// runtime confirmation gate. Keep each multi-field hardening atomic.
+	"aitable/aitable.form_create": {
+		{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+	},
+	"aitable/aitable.form_questions_delete": {
+		{Field: "effect", Old: "write", New: "destructive"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"aitable/aitable.record_primary_doc_create": {
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"aitable/aitable.section_delete": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "effect", Old: "write", New: "destructive"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -86,6 +163,8 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
 	var approvedFlagMigrationsPath, candidateFlagMigrationsPath string
+	var approvedCommandMigrationsPath, candidateCommandMigrationsPath string
+	var migrationBaseSchemaPath string
 	var migrationCurrentSnapshotPath, migrationBaseSnapshotPath, migrationStableSnapshotPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -95,6 +174,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&currentPath, "current", "", "raw current complete Schema response")
 	flags.StringVar(&approvedFlagMigrationsPath, "approved-flag-migrations", "", "base-owned approved flag migration manifest")
 	flags.StringVar(&candidateFlagMigrationsPath, "candidate-flag-migrations", "", "detached candidate flag migration manifest")
+	flags.StringVar(&approvedCommandMigrationsPath, "approved-command-migrations", "", "base-owned approved command migration manifest")
+	flags.StringVar(&candidateCommandMigrationsPath, "candidate-command-migrations", "", "detached candidate command migration manifest")
+	flags.StringVar(&migrationBaseSchemaPath, "migration-base-schema", "", "normalized merge-base Schema contract used to verify cross-migration lineage")
 	flags.StringVar(&migrationCurrentSnapshotPath, "migration-current-snapshot", "", "current interface snapshot used for migration authorization")
 	flags.StringVar(&migrationBaseSnapshotPath, "migration-base-snapshot", "", "merge-base interface snapshot used for migration authorization")
 	flags.StringVar(&migrationStableSnapshotPath, "migration-stable-snapshot", "", "stable interface snapshot used for migration authorization")
@@ -112,25 +194,46 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "exactly one of --normalize, --check, or --merge is required")
 		return 2
 	}
-	migrationInputs := []string{
-		approvedFlagMigrationsPath,
-		candidateFlagMigrationsPath,
+	flagMigrationPair := approvedFlagMigrationsPath != "" || candidateFlagMigrationsPath != ""
+	commandMigrationPair := approvedCommandMigrationsPath != "" || candidateCommandMigrationsPath != ""
+	if flagMigrationPair && (approvedFlagMigrationsPath == "" || candidateFlagMigrationsPath == "") {
+		fmt.Fprintln(stderr, "Schema flag migration authorization requires both flag manifests")
+		return 2
+	}
+	if commandMigrationPair && (approvedCommandMigrationsPath == "" || candidateCommandMigrationsPath == "") {
+		fmt.Fprintln(stderr, "Schema command migration authorization requires both command manifests")
+		return 2
+	}
+	migrationSnapshots := []string{
 		migrationCurrentSnapshotPath,
 		migrationBaseSnapshotPath,
 		migrationStableSnapshotPath,
 	}
-	migrationInputCount := 0
-	for _, path := range migrationInputs {
+	migrationSnapshotCount := 0
+	for _, path := range migrationSnapshots {
 		if path != "" {
-			migrationInputCount++
+			migrationSnapshotCount++
 		}
 	}
-	if migrationInputCount != 0 && migrationInputCount != len(migrationInputs) {
-		fmt.Fprintln(stderr, "Schema flag migration authorization requires all five migration inputs")
+	migrationsEnabled := flagMigrationPair || commandMigrationPair
+	if migrationsEnabled && migrationSnapshotCount != len(migrationSnapshots) {
+		fmt.Fprintln(stderr, "Schema migration authorization requires all three interface snapshots")
 		return 2
 	}
-	if migrationInputCount != 0 && checkPath == "" {
-		fmt.Fprintln(stderr, "Schema flag migration authorization is only valid with --check")
+	if !migrationsEnabled && migrationSnapshotCount != 0 {
+		fmt.Fprintln(stderr, "Schema migration snapshots require a flag or command migration manifest pair")
+		return 2
+	}
+	if migrationsEnabled && checkPath == "" {
+		fmt.Fprintln(stderr, "Schema migration authorization is only valid with --check")
+		return 2
+	}
+	if flagMigrationPair && commandMigrationPair && migrationBaseSchemaPath == "" {
+		fmt.Fprintln(stderr, "combined Schema flag and command migration authorization requires --migration-base-schema")
+		return 2
+	}
+	if migrationBaseSchemaPath != "" && (!flagMigrationPair || !commandMigrationPair) {
+		fmt.Fprintln(stderr, "--migration-base-schema requires both flag and command migration manifest pairs")
 		return 2
 	}
 
@@ -159,8 +262,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
 			return 2
 		}
-		if migrationInputCount != 0 {
-			migrations, err := authorizeSchemaFlagMigrations(
+		var flagMigrations []interfacesnapshot.FlagMigration
+		if flagMigrationPair {
+			flagMigrations, err = authorizeSchemaFlagMigrations(
 				approvedFlagMigrationsPath,
 				candidateFlagMigrationsPath,
 				migrationCurrentSnapshotPath,
@@ -171,7 +275,41 @@ func run(args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "authorize Schema flag migrations: %v\n", err)
 				return 2
 			}
-			baseline, err = normalizeSchemaFlagMigrations(baseline, current, migrations)
+		}
+		if commandMigrationPair {
+			commandMigrations, err := authorizeSchemaCommandMigrations(
+				approvedCommandMigrationsPath,
+				candidateCommandMigrationsPath,
+				migrationCurrentSnapshotPath,
+				migrationBaseSnapshotPath,
+				migrationStableSnapshotPath,
+			)
+			if err != nil {
+				fmt.Fprintf(stderr, "authorize Schema command migrations: %v\n", err)
+				return 2
+			}
+			if flagMigrationPair {
+				migrationBase, readErr := readContract(migrationBaseSchemaPath)
+				if readErr != nil {
+					fmt.Fprintf(stderr, "read migration merge-base Schema contract: %v\n", readErr)
+					return 2
+				}
+				baseline, err = normalizeSchemaCommandMigrationLineage(
+					baseline,
+					migrationBase,
+					current,
+					flagMigrations,
+					commandMigrations,
+				)
+			} else {
+				baseline, err = normalizeSchemaCommandMigrations(baseline, current, commandMigrations)
+			}
+			if err != nil {
+				fmt.Fprintf(stderr, "normalize approved Schema command migrations: %v\n", err)
+				return 2
+			}
+		} else if flagMigrationPair {
+			baseline, err = normalizeSchemaFlagMigrations(baseline, current, flagMigrations)
 			if err != nil {
 				fmt.Fprintf(stderr, "normalize approved Schema flag migrations: %v\n", err)
 				return 2
@@ -249,6 +387,49 @@ func readFlagMigrationManifestFile(path string) (interfacesnapshot.FlagMigration
 		return interfacesnapshot.FlagMigrationManifest{}, err
 	}
 	return interfacesnapshot.ReadFlagMigrationManifest(bytes.NewReader(data))
+}
+
+func authorizeSchemaCommandMigrations(
+	approvedManifestPath string,
+	candidateManifestPath string,
+	currentSnapshotPath string,
+	baseSnapshotPath string,
+	stableSnapshotPath string,
+) ([]interfacesnapshot.CommandMigration, error) {
+	approved, err := readCommandMigrationManifestFile(approvedManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read approved command migrations: %w", err)
+	}
+	candidate, err := readCommandMigrationManifestFile(candidateManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read candidate command migrations: %w", err)
+	}
+	current, err := readInterfaceSnapshotFile(currentSnapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read migration current snapshot: %w", err)
+	}
+	base, err := readInterfaceSnapshotFile(baseSnapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read migration base snapshot: %w", err)
+	}
+	stable, err := readInterfaceSnapshotFile(stableSnapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read migration stable snapshot: %w", err)
+	}
+	return interfacesnapshot.AuthorizeCommandMigrations(
+		current,
+		map[string]interfacesnapshot.Snapshot{"merge-base": base, "stable": stable},
+		approved,
+		candidate,
+	)
+}
+
+func readCommandMigrationManifestFile(path string) (interfacesnapshot.CommandMigrationManifest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return interfacesnapshot.CommandMigrationManifest{}, err
+	}
+	return interfacesnapshot.ReadCommandMigrationManifest(bytes.NewReader(data))
 }
 
 func readInterfaceSnapshotFile(path string) (interfacesnapshot.Snapshot, error) {
@@ -591,20 +772,26 @@ func checkCompatibility(baseline, current schemaContract) []string {
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
-	for _, field := range []struct {
+	fields := []struct {
 		name string
 		old  string
 		new  string
 	}{
 		{name: "primary_cli_path", old: oldTool.PrimaryCLIPath, new: newTool.PrimaryCLIPath},
-		{name: "interface_mode", old: oldTool.InterfaceMode, new: newTool.InterfaceMode},
 		{name: "availability", old: oldTool.Availability, new: newTool.Availability},
 		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
 		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
-	} {
+	}
+	var actual []toolTransition
+	for _, field := range fields {
 		if field.old != field.new {
+			actual = append(actual, toolTransition{field: field.name, old: field.old, new_: field.new})
+		}
+	}
+	for _, field := range fields {
+		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new, actual) {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
@@ -630,14 +817,161 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		failures = append(failures, checkParameterCompatibility(toolPath, parameter, oldParameter, newParameter)...)
 	}
 
-	// interface_ref is evaluated last, because the redirect carve-out below is
-	// conditional on every other check for this tool having passed.
+	// Interface metadata is evaluated last because both reviewed mechanisms are
+	// conditional on every other check for this tool having passed. A mode
+	// transition is an exact old(mode, ref) -> new(mode, ref) migration; a ref
+	// redirect is the narrower mcp -> mcp case.
+	reviewedInterfaceTransition := compatibleReviewedInterfaceTransition(toolPath, oldTool, newTool, failures)
+	reviewedRefRedirect := compatibleInterfaceRefRedirect(toolPath, oldTool, newTool, failures)
+	if oldTool.InterfaceMode != newTool.InterfaceMode && !reviewedInterfaceTransition {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed interface_mode", toolPath))
+	}
 	if oldTool.InterfaceRef != newTool.InterfaceRef &&
-		!compatibleInterfaceRefRedirect(toolPath, oldTool, newTool, failures) {
+		!reviewedInterfaceTransition && !reviewedRefRedirect {
 		failures = append(failures, fmt.Sprintf("schema tool %q changed interface_ref", toolPath))
 	}
 	sort.Strings(failures)
 	return failures
+}
+
+// toolTransition captures a single field's old→new change for atomic matching.
+type toolTransition struct {
+	field string
+	old   string
+	new_  string
+}
+
+// reviewedExceptionSetFullyMatched reports whether every registered exception
+// for toolPath is present in the actual transitions. The set is atomic: a
+// partial migration (e.g. only risk tightened, confirmation unchanged) must
+// not borrow individual exceptions from a reviewed complete hardening.
+func reviewedExceptionSetFullyMatched(toolPath string, actual []toolTransition) bool {
+	exceptions := reviewedCompatibilityExceptions[toolPath]
+	if len(exceptions) == 0 {
+		return true
+	}
+	for _, ex := range exceptions {
+		found := false
+		for _, tr := range actual {
+			if tr.field == ex.Field && tr.old == ex.Old && tr.new_ == ex.New {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string, actual []toolTransition) bool {
+	if !reviewedExceptionSetFullyMatched(toolPath, actual) {
+		return false
+	}
+	for _, exception := range reviewedCompatibilityExceptions[toolPath] {
+		if exception.Field == field && exception.Old == oldValue && exception.New == newValue {
+			return true
+		}
+	}
+	return false
+}
+
+// interfaceTransition identifies one reviewed change in interface kind and
+// pins both sides of the migration. A composite leaf has an empty ref; an mcp
+// leaf must carry the canonicalized ref emitted by parseTool.
+type interfaceTransition struct {
+	OldMode string
+	OldRef  string
+	NewMode string
+	NewRef  string
+}
+
+// reviewedInterfaceTransitions enumerates exact changes between a single-RPC
+// leaf and an orchestrated/composite leaf. Schema shape cannot prove that the
+// declared kind matches runtime execution, so every tool and both complete
+// interface tuples must be reviewed before the product change lands.
+//
+// The table does not approve any CLI, parameter, availability, or safety drift.
+// compatibleReviewedInterfaceTransition requires every other compatibility
+// check for the tool to pass before this exception can apply. Adding an entry
+// is a contract decision and belongs in a governance review, not in the product
+// feature change that consumes it.
+var reviewedInterfaceTransitions = map[string]interfaceTransition{
+	// Chart writes now perform a reviewed Dashboard metadata read and root-grid
+	// validation before the write RPC. The complete command is no longer a
+	// single create_chart/update_chart projection.
+	"aitable/aitable.chart_create": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable","rpc_name":"create_chart"}`,
+		NewMode: "composite",
+	},
+	"aitable/aitable.chart_update": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable","rpc_name":"update_chart"}`,
+		NewMode: "composite",
+	},
+	// Primary-document reads prefer the public get_cell_doc RPC but retain an
+	// explicit legacy fallback for older deployments. That conditional two-RPC
+	// route cannot truthfully publish one interface_ref.
+	"aitable/aitable.base_get_primary_doc_id": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable","rpc_name":"get_base_primary_doc_id"}`,
+		NewMode: "composite",
+	},
+	"aitable/aitable.record_primary_doc_get": {
+		OldMode: "mcp",
+		OldRef:  `{"product_id":"aitable-helper","rpc_name":"get_primary_doc"}`,
+		NewMode: "composite",
+	},
+	// These form helpers were historically unpinned composites because their
+	// helper RPCs were absent from the public snapshot. They are now direct,
+	// single-RPC commands in the public aitable snapshot.
+	"aitable/aitable.form_create": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"create_form_view"}`,
+	},
+	"aitable/aitable.form_delete": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"delete_form_view"}`,
+	},
+	"aitable/aitable.form_field_hide": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_field_hidden"}`,
+	},
+	"aitable/aitable.form_field_list": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"list_form_fields"}`,
+	},
+	"aitable/aitable.form_field_update": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_field"}`,
+	},
+	"aitable/aitable.form_list": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"list_form_views"}`,
+	},
+	"aitable/aitable.form_share_get": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"get_share_form_config"}`,
+	},
+	"aitable/aitable.form_share_update": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_share_form"}`,
+	},
+	"aitable/aitable.form_update": {
+		OldMode: "composite",
+		NewMode: "mcp",
+		NewRef:  `{"product_id":"aitable","rpc_name":"update_form_info"}`,
+	},
 }
 
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
@@ -652,6 +986,13 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 // canonicalRawJSON) — not a bare RPC name. Adding an entry is a contract
 // decision and belongs in review, not in a feature change.
 var reviewedInterfaceRefRedirect = map[string]map[string]string{
+	// The public pending-approval command keeps its stable canonical identity,
+	// while the OA backend moved from the legacy list endpoint to the dedicated
+	// current-user todo-task endpoint. The CLI-facing contract remains
+	// compatible; only the audited backing RPC changes.
+	"oa/oa.list_pending_approvals": {
+		`{"product_id":"oa","rpc_name":"list_pending_approvals"}`: `{"product_id":"oa","rpc_name":"get_todo_tasks"}`,
+	},
 	// The style surface moved from update_range (which writes values) to
 	// set_cell_range's cellStyles payload (style-only, preserving values). This
 	// is the only channel that can express italic / underline / strike-through /
@@ -661,6 +1002,102 @@ var reviewedInterfaceRefRedirect = map[string]map[string]string{
 	"sheet/sheet.range_set_style": {
 		`{"product_id":"sheet","rpc_name":"update_range"}`: `{"product_id":"sheet","rpc_name":"set_cell_range"}`,
 	},
+	// The reviewed AITable helper surface is now published by the public
+	// aitable snapshot. These entries are intentionally per leaf even when two
+	// leaves share one RPC, so a future helper command cannot inherit approval.
+	"aitable/aitable.advperm_disable": {
+		`{"product_id":"aitable-helper","rpc_name":"set_advanced_permission"}`: `{"product_id":"aitable","rpc_name":"set_advanced_permission"}`,
+	},
+	"aitable/aitable.advperm_enable": {
+		`{"product_id":"aitable-helper","rpc_name":"set_advanced_permission"}`: `{"product_id":"aitable","rpc_name":"set_advanced_permission"}`,
+	},
+	"aitable/aitable.advperm_role_create": {
+		`{"product_id":"aitable-helper","rpc_name":"create_role"}`: `{"product_id":"aitable","rpc_name":"create_role"}`,
+	},
+	"aitable/aitable.advperm_role_delete": {
+		`{"product_id":"aitable-helper","rpc_name":"delete_role"}`: `{"product_id":"aitable","rpc_name":"delete_role"}`,
+	},
+	"aitable/aitable.advperm_role_get": {
+		`{"product_id":"aitable-helper","rpc_name":"get_role"}`: `{"product_id":"aitable","rpc_name":"get_role"}`,
+	},
+	"aitable/aitable.advperm_role_list": {
+		`{"product_id":"aitable-helper","rpc_name":"list_roles"}`: `{"product_id":"aitable","rpc_name":"list_roles"}`,
+	},
+	"aitable/aitable.advperm_role_update": {
+		`{"product_id":"aitable-helper","rpc_name":"patch_role"}`: `{"product_id":"aitable","rpc_name":"patch_role"}`,
+	},
+	"aitable/aitable.dashboard_arrange": {
+		`{"product_id":"aitable-helper","rpc_name":"align_dashboard"}`: `{"product_id":"aitable","rpc_name":"align_dashboard"}`,
+	},
+	"aitable/aitable.record_history_list": {
+		`{"product_id":"aitable-helper","rpc_name":"query_record_history"}`: `{"product_id":"aitable","rpc_name":"query_record_history"}`,
+	},
+	"aitable/aitable.record_primary_doc_create": {
+		`{"product_id":"aitable-helper","rpc_name":"create_primary_doc"}`: `{"product_id":"aitable","rpc_name":"create_cell_doc"}`,
+	},
+	"aitable/aitable.record_query_empty": {
+		`{"product_id":"aitable-helper","rpc_name":"query_empty_records"}`: `{"product_id":"aitable","rpc_name":"query_empty_records"}`,
+	},
+	"aitable/aitable.record_share_url": {
+		`{"product_id":"aitable-helper","rpc_name":"get_record_share_url"}`: `{"product_id":"aitable","rpc_name":"get_record_share_url"}`,
+	},
+	"aitable/aitable.record_upsert": {
+		`{"product_id":"aitable-helper","rpc_name":"record_upsert"}`: `{"product_id":"aitable","rpc_name":"record_upsert"}`,
+	},
+	"aitable/aitable.section_create": {
+		`{"product_id":"aitable-helper","rpc_name":"create_section"}`: `{"product_id":"aitable","rpc_name":"create_section"}`,
+	},
+	"aitable/aitable.section_delete": {
+		`{"product_id":"aitable-helper","rpc_name":"delete_section"}`: `{"product_id":"aitable","rpc_name":"delete_section"}`,
+	},
+	"aitable/aitable.section_list_empty": {
+		`{"product_id":"aitable-helper","rpc_name":"list_empty_sections"}`: `{"product_id":"aitable","rpc_name":"list_empty_sections"}`,
+	},
+	"aitable/aitable.section_list_nodes": {
+		`{"product_id":"aitable-helper","rpc_name":"list_nsheet_nodes"}`: `{"product_id":"aitable","rpc_name":"list_nsheet_nodes"}`,
+	},
+	"aitable/aitable.section_move_node": {
+		`{"product_id":"aitable-helper","rpc_name":"move_nsheet_node"}`: `{"product_id":"aitable","rpc_name":"move_nsheet_node"}`,
+	},
+	"aitable/aitable.section_rename": {
+		`{"product_id":"aitable-helper","rpc_name":"rename_section"}`: `{"product_id":"aitable","rpc_name":"rename_section"}`,
+	},
+	"aitable/aitable.section_reorder": {
+		`{"product_id":"aitable-helper","rpc_name":"reorder_section"}`: `{"product_id":"aitable","rpc_name":"reorder_section"}`,
+	},
+	"aitable/aitable.view_duplicate": {
+		`{"product_id":"aitable-helper","rpc_name":"duplicate_view"}`: `{"product_id":"aitable","rpc_name":"duplicate_view"}`,
+	},
+	"aitable/aitable.view_get_frozen_cols": {
+		`{"product_id":"aitable-helper","rpc_name":"get_frozen_columns_of_view"}`: `{"product_id":"aitable","rpc_name":"get_frozen_columns_of_view"}`,
+	},
+	"aitable/aitable.view_get_lock": {
+		`{"product_id":"aitable-helper","rpc_name":"get_view_lock_status"}`: `{"product_id":"aitable","rpc_name":"get_view_lock_status"}`,
+	},
+	"aitable/aitable.view_get_row_height": {
+		`{"product_id":"aitable-helper","rpc_name":"get_cell_height_of_view"}`: `{"product_id":"aitable","rpc_name":"get_cell_height_of_view"}`,
+	},
+	"aitable/aitable.view_lock": {
+		`{"product_id":"aitable-helper","rpc_name":"lock_or_unlock_view"}`: `{"product_id":"aitable","rpc_name":"lock_or_unlock_view"}`,
+	},
+	"aitable/aitable.view_update_frozen_cols": {
+		`{"product_id":"aitable-helper","rpc_name":"set_frozen_columns_of_view"}`: `{"product_id":"aitable","rpc_name":"set_frozen_columns_of_view"}`,
+	},
+	"aitable/aitable.view_update_row_height": {
+		`{"product_id":"aitable-helper","rpc_name":"set_cell_height_of_view"}`: `{"product_id":"aitable","rpc_name":"set_cell_height_of_view"}`,
+	},
+	"aitable/aitable.workflow_disable": {
+		`{"product_id":"aitable-helper","rpc_name":"disable_workflow"}`: `{"product_id":"aitable","rpc_name":"disable_workflow"}`,
+	},
+	"aitable/aitable.workflow_enable": {
+		`{"product_id":"aitable-helper","rpc_name":"enable_workflow"}`: `{"product_id":"aitable","rpc_name":"enable_workflow"}`,
+	},
+	"aitable/aitable.workflow_get": {
+		`{"product_id":"aitable-helper","rpc_name":"get_workflow"}`: `{"product_id":"aitable","rpc_name":"get_workflow"}`,
+	},
+	"aitable/aitable.workflow_list": {
+		`{"product_id":"aitable-helper","rpc_name":"list_workflows"}`: `{"product_id":"aitable","rpc_name":"list_workflows"}`,
+	},
 }
 
 // reviewedConstraintTransition enumerates exact constraint changes that were
@@ -668,11 +1105,45 @@ var reviewedInterfaceRefRedirect = map[string]map[string]string{
 // business semantics. Keep this narrow: removing a constraint can expose a new
 // runtime route, so arbitrary removals must not pass as harmless drift.
 var reviewedConstraintTransition = map[string]map[string]string{
+	// PR #1236 adds an explicit staffId alternative to the historically required
+	// member-uids input. Every historical UID invocation remains valid; the new
+	// exact-one group prevents ambiguous mixed-identifier requests while making
+	// the additive staffId route visible to Schema consumers.
+	"minutes/minutes.add_member_permission": {
+		"": `{"mutually_exclusive":[["member-uids","member-staff-ids"]],"require_one_of":[["member-uids","member-staff-ids"]]}`,
+	},
+	"minutes/minutes.shortcut_share": {
+		`{"mutually_exclusive":[["id","ids"]],"require_one_of":[["id","ids"]]}`: `{"mutually_exclusive":[["id","ids"],["member-uids","member-staff-ids"]],"require_one_of":[["id","ids"],["member-uids","member-staff-ids"]]}`,
+	},
 	// PR #933 aligned the Shortcut and Schema with the existing doc import
 	// runtime: omitting both targets imports into the default root. Keeping the
 	// historical require_one_of made the documented Golden Route unreachable.
 	"doc/doc.shortcut_import": {
 		`{"require_one_of":[["folder","workspace"]]}`: "",
+	},
+	// PR #1105 adds local --file as an alternative to the historically required
+	// --src input. Every historical --src invocation remains valid; publishing
+	// both groups makes the final Schema express the runtime's exact-one rule.
+	"sheet/sheet.create_float_image": {
+		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
+	},
+	// #85955640 adds local --file-path as an alternative to the historically
+	// required --media-id input. Every historical --media-id invocation remains
+	// valid; publishing both groups makes the final Schema express the
+	// runtime's exact-one rule.
+	"chat/chat.favorite_personal_emotion": {
+		"": `{"mutually_exclusive":[["media-id","file-path"]],"require_one_of":[["media-id","file-path"]]}`,
+	},
+	// PR #1042 publishes the Todo Shortcut constraints already enforced by
+	// runtime validation. The Reminder transition is intentionally limited to
+	// clear/base-time exactly-one; historically accepted extra time arguments
+	// remain compatible and are ignored by the runtime branch that does not use
+	// them.
+	"todo/todo.shortcut_update": {
+		"": `{"require_one_of":[["title","due","priority"]]}`,
+	},
+	"todo/todo.shortcut_reminder": {
+		"": `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
 	},
 }
 
@@ -688,10 +1159,25 @@ func compatibleReviewedConstraintTransition(toolPath string, oldTool, newTool to
 	return want == newTool.Constraints
 }
 
+// compatibleReviewedInterfaceTransition accepts a change in interface kind
+// only when the complete old/new mode+ref tuple is registered and no other
+// compatibility failure remains. Safety corrections may be independently
+// reviewed above; arbitrary parameter or command drift remains blocking.
+func compatibleReviewedInterfaceTransition(toolPath string, oldTool, newTool toolSchema, otherFailures []string) bool {
+	transition, ok := reviewedInterfaceTransitions[toolPath]
+	if !ok || len(otherFailures) != 0 {
+		return false
+	}
+	return transition.OldMode == oldTool.InterfaceMode &&
+		transition.OldRef == oldTool.InterfaceRef &&
+		transition.NewMode == newTool.InterfaceMode &&
+		transition.NewRef == newTool.InterfaceRef
+}
+
 // compatibleInterfaceRefRedirect accepts repointing a tool at a different
 // backing RPC when the migration is an explicitly reviewed entry in
-// reviewedInterfaceRefRedirect **and** the CLI-facing contract is provably
-// unchanged.
+// reviewedInterfaceRefRedirect **and** no unreviewed CLI-facing contract change
+// accompanies it.
 //
 // interface_ref is audit and traceability metadata: it records which RPC backs a
 // leaf. Nothing reads it at runtime — the tool a leaf invokes is decided in the
@@ -708,17 +1194,19 @@ func compatibleReviewedConstraintTransition(toolPath string, oldTool, newTool to
 //   - interface_mode is unchanged and stays "mcp". A move to or from
 //     "composite" is a change in kind, not a redirect, and is still reported.
 //   - both refs are non-empty. Removing a ref is not a redirect.
-//   - no other compatibility failure was recorded for this tool. This is the
-//     operative meaning of "the CLI contract is unchanged": no parameter was
-//     lost, none became required, no type / default / format / enum moved, no
-//     constraint tightened, no positional or dry_run change. Any one of those
-//     re-reports the redirect, so the exemption cannot smuggle a surface change
-//     in behind a backend move.
+//   - no other compatibility failure was recorded for this tool. No parameter
+//     may be lost or become required, no unreviewed type / default / format /
+//     enum, constraint, positional, dry_run, availability, or safety change may
+//     accompany the redirect. Any one of those re-reports the redirect, so the
+//     exemption cannot smuggle an unreviewed surface change in behind a backend
+//     move.
 //
 // A cleared property that resolved through a reviewed mapping exclusion is
 // already accepted by checkParameterCompatibility and so does not block this;
 // that pairing is expected, since a leaf moving to a nested payload loses its
-// flat property names in the same change.
+// flat property names in the same change. Exact safety corrections registered
+// in reviewedCompatibilityExceptions are likewise independently reviewed and
+// may accompany the redirect; the combined AITable cases have regression tests.
 func compatibleInterfaceRefRedirect(toolPath string, oldTool, newTool toolSchema, otherFailures []string) bool {
 	if oldTool.InterfaceMode != newTool.InterfaceMode || newTool.InterfaceMode != interfaceModeMCP {
 		return false
@@ -976,6 +1464,20 @@ type parameterTypeChange struct {
 // every other published field of the parameter is identical — not merely free
 // of compatibility failures. See compatibleReviewedParameterTypeChange.
 var reviewedParameterTypeChanges = map[parameterTypeChange]struct{}{
+	// "dws chat message update-card --flow-status" moves from a native Int
+	// flag to String while retaining the same numeric [1,5] domain. CLI argv is
+	// text in both declarations, and RunE parses the String value with base 0,
+	// preserving every spelling accepted by pflag Int (including 0x3) before
+	// sending the same integer flowStatus property to update_streaming_card.
+	// The dedicated A2UI update leaf owns its enum-name and 1-9 contract; this
+	// entry approves only the streaming leaf's CLI type projection.
+	{
+		ToolPath:  "chat/chat.update_streaming_card",
+		Parameter: "flow-status",
+		From:      `"integer"`,
+		To:        `"string"`,
+	}: {},
+
 	// "dws minutes permission apply --policy" moved from a String flag to a
 	// native Int flag, so the published type follows it from "string" to
 	// "integer". A parameter's type is projected from the Cobra flag type
@@ -1157,9 +1659,9 @@ type schemaToolRef struct {
 }
 
 // normalizeSchemaFlagMigrations projects only an already-authorized CLI flag
-// rename onto a cloned historical Schema contract. The ordinary compatibility
-// checker still makes the final decision; this adapter never drops findings by
-// matching their rendered text.
+// rename or requiredness change onto a cloned historical Schema contract. The
+// ordinary compatibility checker still makes the final decision; this adapter
+// never drops findings by matching their rendered text.
 func normalizeSchemaFlagMigrations(
 	baseline schemaContract,
 	current schemaContract,
@@ -1169,6 +1671,14 @@ func normalizeSchemaFlagMigrations(
 	renamesByTool := map[schemaToolRef]map[string]string{}
 
 	for _, migration := range migrations {
+		if migration.EffectiveKind() == interfacesnapshot.FlagMigrationRequirednessChange {
+			var err error
+			normalized, err = normalizeSchemaFlagRequirednessMigration(normalized, baseline, current, migration)
+			if err != nil {
+				return schemaContract{}, err
+			}
+			continue
+		}
 		primaryPath := strings.TrimPrefix(migration.Command, "dws ")
 		matches := schemaToolsByPrimaryPath(baseline, primaryPath)
 		if len(matches) == 0 {
@@ -1290,6 +1800,915 @@ func normalizeSchemaFlagMigrations(
 	return normalized, nil
 }
 
+func normalizeSchemaFlagRequirednessMigration(
+	normalized schemaContract,
+	baseline schemaContract,
+	current schemaContract,
+	migration interfacesnapshot.FlagMigration,
+) (schemaContract, error) {
+	primaryPath := strings.TrimPrefix(migration.Command, "dws ")
+	matches := schemaToolsByPrimaryPath(baseline, primaryPath)
+	if len(matches) == 0 {
+		// A reviewed CLI-only command has no Schema compatibility surface.
+		return normalized, nil
+	}
+	if len(matches) != 1 {
+		return schemaContract{}, fmt.Errorf(
+			"approved flag requiredness migration %q matches %d historical Schema tools",
+			migration.Command,
+			len(matches),
+		)
+	}
+
+	ref := matches[0]
+	oldTool := baseline.Products[ref.productID].Tools[ref.toolID]
+	oldParameter, existed := oldTool.Parameters[migration.Flag.Name]
+	if !existed {
+		// CLI requiredness is not authority to create or mutate an unrelated
+		// historical Schema parameter.
+		return normalized, nil
+	}
+	newProduct, productExists := current.Products[ref.productID]
+	newTool, toolExists := newProduct.Tools[ref.toolID]
+	if !productExists || !toolExists || newTool.PrimaryCLIPath != primaryPath {
+		// Preserve the baseline so the ordinary checker reports the missing tool
+		// or primary path change.
+		return normalized, nil
+	}
+	newParameter, exists := newTool.Parameters[migration.Flag.Name]
+	if !exists {
+		// Preserve the baseline so the ordinary checker reports parameter loss.
+		return normalized, nil
+	}
+	if !newParameter.Required || !newParameter.CLIRequired {
+		return schemaContract{}, fmt.Errorf(
+			"approved flag requiredness migration %q Schema parameter %q must be required and cli_required",
+			migration.Command,
+			migration.Flag.Name,
+		)
+	}
+
+	normalizedProduct := normalized.Products[ref.productID]
+	normalizedTool := normalizedProduct.Tools[ref.toolID]
+	normalizedParameter := oldParameter
+	normalizedParameter.Required = newParameter.Required
+	normalizedParameter.CLIRequired = newParameter.CLIRequired
+	normalizedTool.Parameters[migration.Flag.Name] = normalizedParameter
+	normalizedProduct.Tools[ref.toolID] = normalizedTool
+	normalized.Products[ref.productID] = normalizedProduct
+	return normalized, nil
+}
+
+// normalizeSchemaCommandMigrationLineage composes two independently reviewed
+// migration receipts without inventing a second alias authority. A consumed
+// flag migration may supply the historical predecessor of a command_move
+// parameter, but only after the merge-base Schema or a retained consumed
+// command receipt proves the corresponding next hop.
+func normalizeSchemaCommandMigrationLineage(
+	historical schemaContract,
+	mergeBase schemaContract,
+	current schemaContract,
+	flagMigrations []interfacesnapshot.FlagMigration,
+	commandMigrations []interfacesnapshot.CommandMigration,
+) (schemaContract, error) {
+	normalized, err := normalizeSchemaFlagMigrations(historical, current, flagMigrations)
+	if err != nil {
+		return schemaContract{}, fmt.Errorf("normalize ordinary flag migrations: %w", err)
+	}
+	staged, err := stageSchemaCommandMigrationPredecessors(
+		normalized,
+		mergeBase,
+		current,
+		flagMigrations,
+		commandMigrations,
+	)
+	if err != nil {
+		return schemaContract{}, err
+	}
+	return normalizeSchemaCommandMigrations(staged, current, commandMigrations)
+}
+
+// stageSchemaCommandMigrationPredecessors replays only the name-changing edge
+// recorded by a base-owned consumed flag migration. It leaves interface,
+// safety, dry-run, and positional facts untouched so the ordinary checker
+// remains authoritative for every non-name change.
+func stageSchemaCommandMigrationPredecessors(
+	historical schemaContract,
+	mergeBase schemaContract,
+	current schemaContract,
+	flagMigrations []interfacesnapshot.FlagMigration,
+	commandMigrations []interfacesnapshot.CommandMigration,
+) (schemaContract, error) {
+	staged := cloneContract(historical)
+	moveBySource := map[schemaToolRef]string{}
+	for _, migration := range commandMigrations {
+		if migration.Kind != interfacesnapshot.CommandMigrationMove {
+			continue
+		}
+		ref := schemaToolRef{productID: migration.Schema.ProductID, toolID: migration.Schema.SourceToolID}
+		if previous, exists := moveBySource[ref]; exists {
+			return schemaContract{}, fmt.Errorf(
+				"approved command migrations fork Schema source tool %q between %q and %q",
+				migration.Schema.SourceToolID,
+				previous,
+				migration.Legacy.Command,
+			)
+		}
+		moveBySource[ref] = migration.Legacy.Command
+	}
+
+	for _, migration := range commandMigrations {
+		if migration.Kind != interfacesnapshot.CommandMigrationMove {
+			continue
+		}
+		oldProduct, productExists := historical.Products[migration.Schema.ProductID]
+		oldTool, toolExists := oldProduct.Tools[migration.Schema.SourceToolID]
+		if !productExists || !toolExists {
+			continue
+		}
+		legacyPath := strings.TrimPrefix(migration.Legacy.Command, "dws ")
+		replacementPath := strings.TrimPrefix(migration.Replacement.Command, "dws ")
+		if oldTool.PrimaryCLIPath == replacementPath {
+			continue
+		}
+		if oldTool.PrimaryCLIPath != legacyPath {
+			// Preserve the existing command normalizer's deterministic path error.
+			continue
+		}
+
+		baseProduct, baseProductExists := mergeBase.Products[migration.Schema.ProductID]
+		baseTool, baseToolExists := baseProduct.Tools[migration.Schema.SourceToolID]
+		currentProduct, currentProductExists := current.Products[migration.Schema.ProductID]
+		currentTool, currentToolExists := currentProduct.Tools[migration.Schema.SourceToolID]
+		firstHopRenames := map[string]string{}
+		composedRenames := map[string]string{}
+		lineageApplied := false
+
+		for _, parameter := range migration.Schema.Parameters {
+			if _, direct := oldTool.Parameters[parameter.From]; direct {
+				for _, flagMigration := range flagMigrations {
+					if flagMigration.EffectiveKind() != interfacesnapshot.FlagMigrationRename {
+						continue
+					}
+					if flagMigration.Command != migration.Legacy.Command ||
+						flagMigration.Canonical.Name != parameter.From {
+						continue
+					}
+					if _, legacyAlsoPublished := oldTool.Parameters[flagMigration.Legacy.Name]; legacyAlsoPublished {
+						return schemaContract{}, fmt.Errorf(
+							"approved command migration %q historical Schema tool publishes both predecessor %q and intermediate %q",
+							migration.Legacy.Command,
+							flagMigration.Legacy.Name,
+							parameter.From,
+						)
+					}
+				}
+				composedRenames[parameter.From] = parameter.To
+				continue
+			}
+
+			predecessors := make([]interfacesnapshot.FlagMigration, 0, 1)
+			for _, flagMigration := range flagMigrations {
+				if flagMigration.EffectiveKind() != interfacesnapshot.FlagMigrationRename {
+					continue
+				}
+				if flagMigration.Command != migration.Legacy.Command ||
+					flagMigration.Canonical.Name != parameter.From {
+					continue
+				}
+				if flagMigration.State != interfacesnapshot.FlagMigrationConsumed {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q Schema predecessor %q -> %q requires a consumed flag migration receipt",
+						migration.Legacy.Command,
+						flagMigration.Legacy.Name,
+						parameter.From,
+					)
+				}
+				if _, published := oldTool.Parameters[flagMigration.Legacy.Name]; published {
+					predecessors = append(predecessors, flagMigration)
+				}
+			}
+			if len(predecessors) == 0 {
+				continue
+			}
+
+			lineageApplied = true
+			if !baseProductExists || !baseToolExists {
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q merge-base Schema lacks source tool %q",
+					migration.Legacy.Command,
+					migration.Schema.SourceToolID,
+				)
+			}
+			var stagedParameter parameterSchema
+			switch migration.State {
+			case interfacesnapshot.CommandMigrationPending:
+				if baseTool.PrimaryCLIPath != legacyPath {
+					return schemaContract{}, fmt.Errorf(
+						"pending command migration %q merge-base Schema source tool has primary_cli_path %q",
+						migration.Legacy.Command,
+						baseTool.PrimaryCLIPath,
+					)
+				}
+				intermediate, exists := baseTool.Parameters[parameter.From]
+				if !exists {
+					return schemaContract{}, fmt.Errorf(
+						"pending command migration %q merge-base Schema lacks intermediate parameter %q",
+						migration.Legacy.Command,
+						parameter.From,
+					)
+				}
+				if _, exists := baseTool.Parameters[parameter.To]; exists {
+					return schemaContract{}, fmt.Errorf(
+						"pending command migration %q merge-base Schema already publishes final parameter %q",
+						migration.Legacy.Command,
+						parameter.To,
+					)
+				}
+				stagedParameter = intermediate
+			case interfacesnapshot.CommandMigrationConsumed:
+				if baseTool.PrimaryCLIPath != replacementPath {
+					return schemaContract{}, fmt.Errorf(
+						"consumed command migration %q merge-base Schema source tool has primary_cli_path %q",
+						migration.Legacy.Command,
+						baseTool.PrimaryCLIPath,
+					)
+				}
+				finalParameter, exists := baseTool.Parameters[parameter.To]
+				if !exists {
+					return schemaContract{}, fmt.Errorf(
+						"consumed command migration %q merge-base Schema lacks final parameter %q",
+						migration.Legacy.Command,
+						parameter.To,
+					)
+				}
+				if _, exists := baseTool.Parameters[parameter.From]; exists {
+					return schemaContract{}, fmt.Errorf(
+						"consumed command migration %q merge-base Schema still publishes intermediate parameter %q",
+						migration.Legacy.Command,
+						parameter.From,
+					)
+				}
+				stagedParameter = oldTool.Parameters[predecessors[0].Legacy.Name]
+				for _, predecessor := range predecessors {
+					oldParameter := oldTool.Parameters[predecessor.Legacy.Name]
+					composite := interfacesnapshot.CommandParameterMigration{From: predecessor.Legacy.Name, To: parameter.To}
+					if err := validateEquivalentCommandSchemaParameter(migration, composite, oldParameter, finalParameter); err != nil {
+						return schemaContract{}, err
+					}
+				}
+			default:
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q has unsupported lineage state %q",
+					migration.Legacy.Command,
+					migration.State,
+				)
+			}
+
+			stagedProduct := staged.Products[migration.Schema.ProductID]
+			stagedTool := stagedProduct.Tools[migration.Schema.SourceToolID]
+			for _, predecessor := range predecessors {
+				if predecessor.Legacy.Name == parameter.To {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q forms a Schema parameter lineage cycle through %q",
+						migration.Legacy.Command,
+						parameter.To,
+					)
+				}
+				if existing, claimed := firstHopRenames[predecessor.Legacy.Name]; claimed && existing != parameter.From {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q forks Schema predecessor %q to both %q and %q",
+						migration.Legacy.Command,
+						predecessor.Legacy.Name,
+						existing,
+						parameter.From,
+					)
+				}
+				oldParameter := oldTool.Parameters[predecessor.Legacy.Name]
+				if migration.State == interfacesnapshot.CommandMigrationPending {
+					if err := validateRenamedSchemaParameter(predecessor, oldParameter, stagedParameter); err != nil {
+						return schemaContract{}, err
+					}
+				}
+				if _, exists := baseTool.Parameters[predecessor.Legacy.Name]; exists {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q merge-base Schema still publishes predecessor parameter %q",
+						migration.Legacy.Command,
+						predecessor.Legacy.Name,
+					)
+				}
+				if currentProductExists && currentToolExists {
+					if _, exists := currentTool.Parameters[predecessor.Legacy.Name]; exists {
+						return schemaContract{}, fmt.Errorf(
+							"approved command migration %q current Schema still publishes predecessor parameter %q",
+							migration.Legacy.Command,
+							predecessor.Legacy.Name,
+						)
+					}
+				}
+				delete(stagedTool.Parameters, predecessor.Legacy.Name)
+				firstHopRenames[predecessor.Legacy.Name] = parameter.From
+				composedRenames[predecessor.Legacy.Name] = parameter.To
+			}
+			stagedTool.Parameters[parameter.From] = stagedParameter
+			stagedProduct.Tools[migration.Schema.SourceToolID] = stagedTool
+			staged.Products[migration.Schema.ProductID] = stagedProduct
+		}
+
+		if !lineageApplied {
+			continue
+		}
+		matches := schemaToolsByPrimaryPath(historical, legacyPath)
+		wantRef := schemaToolRef{productID: migration.Schema.ProductID, toolID: migration.Schema.SourceToolID}
+		if len(matches) != 1 || matches[0] != wantRef {
+			return schemaContract{}, fmt.Errorf(
+				"approved command migration %q predecessor lineage requires one exact historical Schema tool, got %#v",
+				migration.Legacy.Command,
+				matches,
+			)
+		}
+		if currentProductExists && currentToolExists {
+			if source, found := migratedConstraintSourceParameter(currentTool.Constraints, firstHopRenames); found {
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q current Schema constraints still reference predecessor parameter %q",
+					migration.Legacy.Command,
+					source,
+				)
+			}
+		}
+		for _, finalTarget := range composedRenames {
+			if _, cycle := firstHopRenames[finalTarget]; cycle {
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q forms a Schema parameter lineage cycle through %q",
+					migration.Legacy.Command,
+					finalTarget,
+				)
+			}
+		}
+
+		firstHopConstraints, firstHopOK := canonicalizeMigratedConstraints(oldTool.Constraints, firstHopRenames)
+		if !firstHopOK {
+			return schemaContract{}, fmt.Errorf(
+				"approved command migration %q historical Schema constraints are not canonicalizable",
+				migration.Legacy.Command,
+			)
+		}
+		baseConstraints, baseOK := canonicalizeMigratedConstraints(baseTool.Constraints, nil)
+		if !baseOK {
+			return schemaContract{}, fmt.Errorf(
+				"approved command migration %q merge-base Schema constraints are not canonicalizable",
+				migration.Legacy.Command,
+			)
+		}
+		stagedProduct := staged.Products[migration.Schema.ProductID]
+		stagedTool := stagedProduct.Tools[migration.Schema.SourceToolID]
+		switch migration.State {
+		case interfacesnapshot.CommandMigrationPending:
+			if firstHopConstraints != baseConstraints {
+				return schemaContract{}, fmt.Errorf(
+					"pending command migration %q predecessor lineage changed merge-base Schema constraints",
+					migration.Legacy.Command,
+				)
+			}
+			stagedTool.Constraints = baseTool.Constraints
+		case interfacesnapshot.CommandMigrationConsumed:
+			composedConstraints, composedOK := canonicalizeMigratedConstraints(oldTool.Constraints, composedRenames)
+			if !composedOK || composedConstraints != baseConstraints {
+				return schemaContract{}, fmt.Errorf(
+					"consumed command migration %q predecessor lineage changed merge-base Schema constraints",
+					migration.Legacy.Command,
+				)
+			}
+			stagedTool.Constraints = firstHopConstraints
+		}
+		stagedProduct.Tools[migration.Schema.SourceToolID] = stagedTool
+		staged.Products[migration.Schema.ProductID] = stagedProduct
+	}
+	return staged, nil
+}
+
+// normalizeSchemaCommandMigrations projects only the Schema consequences that
+// are coupled to an already-authorized CLI command migration. It rewrites a
+// cloned historical contract; the ordinary checker still rejects every field
+// not proven equivalent here.
+func normalizeSchemaCommandMigrations(
+	baseline schemaContract,
+	current schemaContract,
+	migrations []interfacesnapshot.CommandMigration,
+) (schemaContract, error) {
+	normalized := cloneContract(baseline)
+	for _, migration := range migrations {
+		oldProduct, productExists := baseline.Products[migration.Schema.ProductID]
+		oldTool, toolExists := oldProduct.Tools[migration.Schema.SourceToolID]
+		if !productExists || !toolExists {
+			// The historical baseline predates this Schema tool, so it has no
+			// compatibility surface for this migration.
+			continue
+		}
+		newProduct, productExists := current.Products[migration.Schema.ProductID]
+		newSource, sourceExists := newProduct.Tools[migration.Schema.SourceToolID]
+		if !productExists || !sourceExists {
+			// Preserve the baseline so the ordinary checker reports the removal.
+			continue
+		}
+		legacyPath := strings.TrimPrefix(migration.Legacy.Command, "dws ")
+		replacementPath := strings.TrimPrefix(migration.Replacement.Command, "dws ")
+		if migration.Kind == interfacesnapshot.CommandMigrationFlagExtraction &&
+			migration.State == interfacesnapshot.CommandMigrationConsumed {
+			_, historicalPublishesLegacy := oldTool.Parameters[migration.LegacyFlag.Name]
+			_, currentPublishesLegacy := newSource.Parameters[migration.LegacyFlag.Name]
+			historicalReplacement, historicalReplacementExists := oldProduct.Tools[migration.Schema.ReplacementToolID]
+			currentReplacement, currentReplacementExists := newProduct.Tools[migration.Schema.ReplacementToolID]
+			if oldTool.PrimaryCLIPath == legacyPath &&
+				newSource.PrimaryCLIPath == legacyPath &&
+				!historicalPublishesLegacy &&
+				!currentPublishesLegacy &&
+				historicalReplacementExists &&
+				historicalReplacement.PrimaryCLIPath == replacementPath &&
+				currentReplacementExists &&
+				currentReplacement.PrimaryCLIPath == replacementPath {
+				// The merge-base has already reached the extraction's after state.
+				// Retain the receipt for older stable baselines without replaying it
+				// against the already-extracted source tool.
+				continue
+			}
+		}
+		if oldTool.PrimaryCLIPath == replacementPath {
+			// A consumed receipt can still be needed for the stable baseline after
+			// main has already reached the after state.
+			continue
+		}
+		if oldTool.PrimaryCLIPath != legacyPath {
+			return schemaContract{}, fmt.Errorf(
+				"approved command migration %s historical Schema tool %q has primary_cli_path %q",
+				migration.Kind,
+				migration.Schema.SourceToolID,
+				oldTool.PrimaryCLIPath,
+			)
+		}
+
+		normalizedProduct := normalized.Products[migration.Schema.ProductID]
+		normalizedTool := normalizedProduct.Tools[migration.Schema.SourceToolID]
+		switch migration.Kind {
+		case interfacesnapshot.CommandMigrationAvailability:
+			change := migration.Schema.Availability
+			if change != nil && oldTool.Availability == change.After && newSource.Availability == change.After {
+				continue
+			}
+			if change == nil || oldTool.Availability != change.Before || newSource.Availability != change.After {
+				return schemaContract{}, fmt.Errorf(
+					"approved availability hardening %q does not match Schema availability %q -> %q",
+					migration.Legacy.Command,
+					oldTool.Availability,
+					newSource.Availability,
+				)
+			}
+			if newSource.PrimaryCLIPath != legacyPath {
+				continue
+			}
+			normalizedTool.Availability = newSource.Availability
+
+		case interfacesnapshot.CommandMigrationMove:
+			if newSource.PrimaryCLIPath != replacementPath {
+				continue
+			}
+			renames := make(map[string]string, len(migration.Schema.Parameters))
+			renameTargets := make(map[string]struct{}, len(migration.Schema.Parameters))
+			for _, parameter := range migration.Schema.Parameters {
+				oldParameter, existed := oldTool.Parameters[parameter.From]
+				if !existed {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q historical Schema tool lacks parameter %q",
+						migration.Legacy.Command,
+						parameter.From,
+					)
+				}
+				if _, exists := oldTool.Parameters[parameter.To]; exists {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q Schema parameter target %q already exists in historical Schema tool %q",
+						migration.Legacy.Command,
+						parameter.To,
+						migration.Schema.SourceToolID,
+					)
+				}
+				if _, exists := newSource.Parameters[parameter.From]; exists {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q still publishes legacy Schema parameter %q",
+						migration.Legacy.Command,
+						parameter.From,
+					)
+				}
+				newParameter, exists := newSource.Parameters[parameter.To]
+				if !exists {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q does not publish replacement Schema parameter %q",
+						migration.Replacement.Command,
+						parameter.To,
+					)
+				}
+				if err := validateEquivalentCommandSchemaParameter(migration, parameter, oldParameter, newParameter); err != nil {
+					return schemaContract{}, err
+				}
+				delete(normalizedTool.Parameters, parameter.From)
+				normalizedTool.Parameters[parameter.To] = newParameter
+				renames[parameter.From] = parameter.To
+				renameTargets[parameter.To] = struct{}{}
+			}
+			parameterNames := make([]string, 0, len(newSource.Parameters))
+			for name := range newSource.Parameters {
+				parameterNames = append(parameterNames, name)
+			}
+			sort.Strings(parameterNames)
+			for _, name := range parameterNames {
+				parameter := newSource.Parameters[name]
+				if _, existed := oldTool.Parameters[name]; existed {
+					continue
+				}
+				if _, approvedRename := renameTargets[name]; approvedRename {
+					continue
+				}
+				if parameter.Required || parameter.CLIRequired || parameter.RequiredWhen != "" {
+					return schemaContract{}, fmt.Errorf(
+						"approved command migration %q replacement Schema tool %q introduced unregistered required Schema parameter %q",
+						migration.Legacy.Command,
+						migration.Schema.SourceToolID,
+						name,
+					)
+				}
+			}
+			oldConstraints, oldOK := canonicalizeMigratedConstraints(oldTool.Constraints, renames)
+			if !oldOK {
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q historical Schema constraints are not canonicalizable",
+					migration.Legacy.Command,
+				)
+			}
+			newConstraints, newOK := canonicalizeMigratedConstraints(newSource.Constraints, nil)
+			if !newOK {
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q current Schema constraints are not canonicalizable",
+					migration.Legacy.Command,
+				)
+			}
+			if source, found := migratedConstraintSourceParameter(newSource.Constraints, renames); found {
+				return schemaContract{}, fmt.Errorf(
+					"approved command migration %q current constraints still reference legacy Schema constraint parameter %q",
+					migration.Legacy.Command,
+					source,
+				)
+			}
+			normalizedTool.Constraints = oldConstraints
+			if oldConstraints == newConstraints {
+				normalizedTool.Constraints = newSource.Constraints
+			}
+			normalizedTool.PrimaryCLIPath = replacementPath
+
+		case interfacesnapshot.CommandMigrationFlagExtraction:
+			if newSource.PrimaryCLIPath != legacyPath {
+				continue
+			}
+			replacement, exists := newProduct.Tools[migration.Schema.ReplacementToolID]
+			if !exists || replacement.PrimaryCLIPath != replacementPath {
+				return schemaContract{}, fmt.Errorf(
+					"approved flag extraction %q lacks replacement Schema tool %q at %q",
+					migration.Legacy.Command,
+					migration.Schema.ReplacementToolID,
+					replacementPath,
+				)
+			}
+			if oldTool.InterfaceMode != replacement.InterfaceMode ||
+				oldTool.InterfaceRef != replacement.InterfaceRef ||
+				oldTool.Availability != replacement.Availability ||
+				oldTool.Effect != replacement.Effect ||
+				oldTool.Risk != replacement.Risk ||
+				oldTool.Confirmation != replacement.Confirmation ||
+				oldTool.Idempotency != replacement.Idempotency {
+				return schemaContract{}, fmt.Errorf(
+					"approved flag extraction %q replacement Schema tool changed interface or safety identity",
+					migration.Legacy.Command,
+				)
+			}
+			if oldTool.DryRun != "" && oldTool.DryRun != replacement.DryRun {
+				return schemaContract{}, fmt.Errorf(
+					"approved flag extraction %q replacement Schema tool changed or removed dry_run",
+					migration.Legacy.Command,
+				)
+			}
+			var err error
+			normalizedTool, err = normalizeFlagExtractionSchemaMigration(
+				migration,
+				oldTool,
+				newSource,
+				replacement,
+				normalizedTool,
+			)
+			if err != nil {
+				return schemaContract{}, err
+			}
+		}
+		normalizedProduct.Tools[migration.Schema.SourceToolID] = normalizedTool
+		normalized.Products[migration.Schema.ProductID] = normalizedProduct
+	}
+	return normalized, nil
+}
+
+func normalizeFlagExtractionSchemaMigration(
+	migration interfacesnapshot.CommandMigration,
+	oldTool toolSchema,
+	newSource toolSchema,
+	replacement toolSchema,
+	normalizedSource toolSchema,
+) (toolSchema, error) {
+	mappingsBySource := make(map[string]interfacesnapshot.CommandParameterMigration, len(migration.Schema.Parameters))
+	for _, mapping := range migration.Schema.Parameters {
+		if _, duplicate := mappingsBySource[mapping.From]; duplicate {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q maps historical Schema parameter %q more than once",
+				migration.Legacy.Command,
+				mapping.From,
+			)
+		}
+		if _, exists := oldTool.Parameters[mapping.From]; !exists {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q historical Schema tool lacks parameter %q",
+				migration.Legacy.Command,
+				mapping.From,
+			)
+		}
+		mappingsBySource[mapping.From] = mapping
+	}
+
+	historicalNames := make([]string, 0, len(oldTool.Parameters))
+	for name := range oldTool.Parameters {
+		historicalNames = append(historicalNames, name)
+	}
+	sort.Strings(historicalNames)
+	for _, name := range historicalNames {
+		if _, mapped := mappingsBySource[name]; !mapped {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q does not map historical Schema parameter %q",
+				migration.Legacy.Command,
+				name,
+			)
+		}
+	}
+
+	legacyName := migration.LegacyFlag.Name
+	legacyMapping, mapped := mappingsBySource[legacyName]
+	if !mapped || legacyMapping.To != "" || legacyMapping.ReplacementConstant == nil {
+		return toolSchema{}, fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q must map to one replacement constant",
+			migration.Legacy.Command,
+			legacyName,
+		)
+	}
+	legacyParameter := oldTool.Parameters[legacyName]
+	if err := validateFlagExtractionBooleanConstant(migration, legacyParameter, legacyMapping.ReplacementConstant); err != nil {
+		return toolSchema{}, err
+	}
+	constantProperty := legacyMapping.ReplacementConstant.Property
+	if _, exists := newSource.Parameters[legacyName]; exists {
+		return toolSchema{}, fmt.Errorf(
+			"approved flag extraction %q still publishes extracted Schema parameter %q",
+			migration.Legacy.Command,
+			legacyName,
+		)
+	}
+	sourceNames := make([]string, 0, len(newSource.Parameters))
+	for name := range newSource.Parameters {
+		sourceNames = append(sourceNames, name)
+	}
+	sort.Strings(sourceNames)
+	for _, name := range sourceNames {
+		if newSource.Parameters[name].Property == constantProperty {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q source Schema tool still publishes replacement constant property %q through parameter %q on %q",
+				migration.Legacy.Command,
+				constantProperty,
+				name,
+				migration.Schema.SourceToolID,
+			)
+		}
+	}
+
+	replacementNames := make([]string, 0, len(replacement.Parameters))
+	for name := range replacement.Parameters {
+		replacementNames = append(replacementNames, name)
+	}
+	sort.Strings(replacementNames)
+	for _, name := range replacementNames {
+		if replacement.Parameters[name].Property == constantProperty {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q replacement Schema tool %q still publishes replacement constant property %q through parameter %q",
+				migration.Legacy.Command,
+				migration.Schema.ReplacementToolID,
+				constantProperty,
+				name,
+			)
+		}
+	}
+
+	replacementTargets := make(map[string]string, len(historicalNames)-1)
+	renames := make(map[string]string, len(historicalNames)-1)
+	for _, sourceName := range historicalNames {
+		if sourceName == legacyName {
+			continue
+		}
+		mapping := mappingsBySource[sourceName]
+		if mapping.To == "" || mapping.ReplacementConstant != nil {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q shared Schema parameter %q must map to one replacement parameter",
+				migration.Legacy.Command,
+				sourceName,
+			)
+		}
+		if previous, duplicate := replacementTargets[mapping.To]; duplicate {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q replacement Schema parameter %q is mapped from both %q and %q",
+				migration.Legacy.Command,
+				mapping.To,
+				previous,
+				sourceName,
+			)
+		}
+		replacementParameter, exists := replacement.Parameters[mapping.To]
+		if !exists {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q replacement Schema tool %q does not publish mapped Schema parameter %q",
+				migration.Legacy.Command,
+				migration.Schema.ReplacementToolID,
+				mapping.To,
+			)
+		}
+		if err := validateEquivalentCommandSchemaParameter(migration, mapping, oldTool.Parameters[sourceName], replacementParameter); err != nil {
+			return toolSchema{}, err
+		}
+		replacementTargets[mapping.To] = sourceName
+		renames[sourceName] = mapping.To
+	}
+	for _, name := range replacementNames {
+		if _, mapped := replacementTargets[name]; !mapped {
+			return toolSchema{}, fmt.Errorf(
+				"approved flag extraction %q replacement Schema tool %q publishes unmapped Schema parameter %q",
+				migration.Legacy.Command,
+				migration.Schema.ReplacementToolID,
+				name,
+			)
+		}
+	}
+
+	oldConstraints, oldConstraintsOK := canonicalizeMigratedConstraints(oldTool.Constraints, renames)
+	replacementConstraints, replacementConstraintsOK := canonicalizeMigratedConstraints(replacement.Constraints, nil)
+	if !oldConstraintsOK || !replacementConstraintsOK || oldConstraints != replacementConstraints {
+		return toolSchema{}, fmt.Errorf(
+			"approved flag extraction %q replacement Schema tool changed constraints",
+			migration.Legacy.Command,
+		)
+	}
+	if !equivalentMigratedPositionals(oldTool.Positionals, replacement.Positionals, renames) {
+		return toolSchema{}, fmt.Errorf(
+			"approved flag extraction %q replacement Schema tool changed positionals",
+			migration.Legacy.Command,
+		)
+	}
+
+	delete(normalizedSource.Parameters, legacyName)
+	return normalizedSource, nil
+}
+
+func validateFlagExtractionBooleanConstant(
+	migration interfacesnapshot.CommandMigration,
+	parameter parameterSchema,
+	constant *interfacesnapshot.CommandReplacementConstant,
+) error {
+	if strings.TrimSpace(constant.Property) == "" || parameter.Property != constant.Property {
+		return fmt.Errorf(
+			"approved flag extraction %q replacement constant property %q does not match historical Schema property %q",
+			migration.Legacy.Command,
+			constant.Property,
+			parameter.Property,
+		)
+	}
+	if !constant.Value {
+		return fmt.Errorf(
+			"approved flag extraction %q replacement constant for Schema property %q must be constant true",
+			migration.Legacy.Command,
+			constant.Property,
+		)
+	}
+	if parameter.Type != `"boolean"` {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q must have boolean type",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if parameter.Required || parameter.CLIRequired {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q must remain optional",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if parameter.RequiredWhen != "" {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q must not declare required_when",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if parameter.Default != "" && parameter.Default != "false" {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q default must be absent or false",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if parameter.InterfaceDefault != "" && parameter.InterfaceDefault != "false" {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q interface_default must be absent or false",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if parameter.InterfaceType != "" && parameter.InterfaceType != "boolean" {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q interface_type must be empty or boolean",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if parameter.Format != "" {
+		return fmt.Errorf(
+			"approved flag extraction %q legacy Schema parameter %q format must be empty",
+			migration.Legacy.Command,
+			migration.LegacyFlag.Name,
+		)
+	}
+	if len(parameter.Enum) > 0 {
+		allowsTrue := false
+		for _, value := range parameter.Enum {
+			if value == "true" {
+				allowsTrue = true
+				break
+			}
+		}
+		if !allowsTrue {
+			return fmt.Errorf(
+				"approved flag extraction %q legacy Schema parameter %q enum must allow true",
+				migration.Legacy.Command,
+				migration.LegacyFlag.Name,
+			)
+		}
+	}
+	return nil
+}
+
+func equivalentMigratedPositionals(
+	historical []positionalSchema,
+	replacement []positionalSchema,
+	renames map[string]string,
+) bool {
+	if len(historical) != len(replacement) {
+		return false
+	}
+	for index, positional := range historical {
+		if renamed := renames[positional.Name]; renamed != "" {
+			positional.Name = renamed
+		}
+		if positional != replacement[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func validateEquivalentCommandSchemaParameter(
+	migration interfacesnapshot.CommandMigration,
+	parameter interfacesnapshot.CommandParameterMigration,
+	oldParameter parameterSchema,
+	newParameter parameterSchema,
+) error {
+	if oldParameter.Type != newParameter.Type ||
+		oldParameter.Property != newParameter.Property ||
+		oldParameter.InterfaceType != newParameter.InterfaceType ||
+		oldParameter.Required != newParameter.Required ||
+		oldParameter.CLIRequired != newParameter.CLIRequired ||
+		oldParameter.RequiredWhen != newParameter.RequiredWhen ||
+		oldParameter.Default != newParameter.Default ||
+		oldParameter.InterfaceDefault != newParameter.InterfaceDefault ||
+		oldParameter.Format != newParameter.Format ||
+		!equalStringSlices(oldParameter.Enum, newParameter.Enum) {
+		return fmt.Errorf(
+			"approved command migration %q Schema parameter %q -> %q changed a non-name field",
+			migration.Legacy.Command,
+			parameter.From,
+			parameter.To,
+		)
+	}
+	return nil
+}
+
 func schemaToolsByPrimaryPath(contract schemaContract, primaryPath string) []schemaToolRef {
 	var matches []schemaToolRef
 	for productID, product := range contract.Products {
@@ -1393,6 +2812,23 @@ func canonicalizeMigratedConstraints(raw string, renames map[string]string) (str
 	}
 	encoded, err := json.Marshal(normalized)
 	return string(encoded), err == nil
+}
+
+func migratedConstraintSourceParameter(raw string, renames map[string]string) (string, bool) {
+	groups, ok := parseMigrationConstraintsStrict(raw)
+	if !ok {
+		return "", false
+	}
+	for _, kind := range []string{"mutually_exclusive", "require_one_of", "require_together"} {
+		for _, group := range groups[kind] {
+			for _, member := range group {
+				if _, renamed := renames[member]; renamed {
+					return member, true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 func parseMigrationConstraintsStrict(raw string) (map[string][][]string, bool) {

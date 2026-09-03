@@ -51,6 +51,8 @@ func main() {
 		base := flags.String("base", "", "base snapshot")
 		stable := flags.String("stable", "", "stable snapshot")
 		_ = flags.String("approved-flag-migrations", "", "approved manifest")
+		_ = flags.String("approved-command-migrations", "", "approved command manifest")
+		_ = flags.String("candidate-command-migrations", "", "candidate command manifest")
 		_ = flags.Parse(os.Args[2:])
 		for _, path := range []string{*current, *base, *stable} {
 			content, err := os.ReadFile(path)
@@ -97,6 +99,27 @@ var (
 func AuthorityMarker() string { return "BASE" }
 `
 
+const commandGovernedSnapshotSource = `package interfacesnapshot
+
+import (
+	"example.com/dws-command-compat-authority-test/internal/corecmd"
+	"example.com/dws-command-compat-authority-test/internal/corecmd/runtimeannotate"
+)
+
+var (
+	_ = runtimeannotate.AnnotationFlagAliasOf
+	_ = runtimeannotate.AnnotationFlagAliasOrigin
+	_ = runtimeannotate.FlagAliasOriginCorecmdV1
+)
+
+func AuthorityMarker() string {
+	if corecmd.InterfaceBoolConstParams() != "BASE" {
+		return "UNTRUSTED_CONST_PARAMS"
+	}
+	return "BASE"
+}
+`
+
 const baseSnapshotSource = `package interfacesnapshot
 
 func AuthorityMarker() string { return "BASE" }
@@ -121,6 +144,54 @@ const (
 )
 `
 
+func constParamsRegistrySource(marker string) string {
+	return fmt.Sprintf(`package corecmd
+
+type constParamsRegistry struct{}
+
+func (constParamsRegistry) Store(any, any) {}
+
+var interfaceBoolConstParamsRegistry constParamsRegistry
+
+func attachInterfaceBoolConstParams() {}
+
+func InterfaceBoolConstParams() string { return %q }
+`, marker)
+}
+
+const baseCorecmdBridgeSource = `package corecmd
+
+func boolConstParams(map[string]any) map[string]bool {
+	return map[string]bool{"convThreadEnabled": true}
+}
+
+func installConstParamsEvidence() { attachInterfaceBoolConstParams() }
+`
+
+const forgedCorecmdBridgeSource = `package corecmd
+
+func boolConstParams(map[string]any) map[string]bool {
+	return map[string]bool{"convThreadEnabled": false}
+}
+
+func installConstParamsEvidence() { attachInterfaceBoolConstParams() }
+`
+
+const baseLeafAdapterSource = `package helpers
+
+func forwardToolArgs(toolArgs map[string]any) map[string]any {
+	return toolArgs
+}
+`
+
+const forgedLeafAdapterSource = `package helpers
+
+func forwardToolArgs(toolArgs map[string]any) map[string]any {
+	delete(toolArgs, "convThreadEnabled")
+	return toolArgs
+}
+`
+
 const candidateNoopSource = `package main
 
 import "fmt"
@@ -131,11 +202,13 @@ func main() {
 `
 
 type authorityScenario struct {
-	name                  string
-	baseGovernance        string
-	candidateMutation     string
-	want                  string
-	wantAuthorityDecision bool
+	name                   string
+	baseGovernance         string
+	commandGovernance      string
+	commandManifestChanged bool
+	candidateMutation      string
+	want                   string
+	wantAuthorityDecision  bool
 }
 
 func TestCrossPlatformCoverageCommandCompatibilityUsesBaseOwnedAuthority(t *testing.T) {
@@ -148,6 +221,85 @@ func TestCrossPlatformCoverageCommandCompatibilityUsesBaseOwnedAuthority(t *test
 		{
 			name:                  "bootstrap uses old base helper",
 			baseGovernance:        "none",
+			wantAuthorityDecision: true,
+		},
+		{
+			name:                  "command governed base owns bool ConstParams registry",
+			baseGovernance:        "complete",
+			commandGovernance:     "complete",
+			candidateMutation:     "change-const-params-protocol",
+			wantAuthorityDecision: true,
+		},
+		{
+			name:                  "command governance bootstrap preserves candidate bool ConstParams registry",
+			baseGovernance:        "complete",
+			commandGovernance:     "bootstrap",
+			wantAuthorityDecision: true,
+		},
+		{
+			name:              "command governed candidate cannot delete bool ConstParams registry",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "delete-const-params-contract",
+			want:              "must preserve the complete command migration governance artifact set",
+		},
+		{
+			name:              "same package candidate cannot call private ConstParams writer",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-const-params-token",
+			want:              "may not access framework-owned bool ConstParams registry",
+		},
+		{
+			name:              "candidate cannot reopen private ConstParams reader",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-const-params-reader",
+			want:              "may not access framework-owned bool ConstParams registry",
+		},
+		{
+			name:              "same package candidate cannot store directly in ConstParams registry",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-const-params-registry-store",
+			want:              "may not access framework-owned bool ConstParams registry",
+		},
+		{
+			name:                   "changed command manifest rejects forged corecmd bool ConstParams bridge",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			candidateMutation:      "forge-corecmd-bool-const-params",
+			want:                   "candidate command migration manifest differs from base; protected bridge must preserve the base Git blob: internal/corecmd/corecmd.go",
+		},
+		{
+			name:                   "changed command manifest rejects tampered ConstParams protocol",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			candidateMutation:      "change-const-params-protocol",
+			want:                   "candidate command migration manifest differs from base; protected bridge must preserve the base Git blob: internal/corecmd/interface_const_params.go",
+		},
+		{
+			name:                   "changed command manifest rejects tampered leaf adapter",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			candidateMutation:      "forge-leaf-adapter",
+			want:                   "candidate command migration manifest differs from base; protected bridge must preserve the base Git blob: internal/helpers/leaf.go",
+		},
+		{
+			name:                   "changed command manifest allows base identical bridges",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			wantAuthorityDecision:  true,
+		},
+		{
+			name:                  "unchanged command manifest allows independent corecmd change",
+			baseGovernance:        "complete",
+			commandGovernance:     "complete",
+			candidateMutation:     "forge-corecmd-bool-const-params",
 			wantAuthorityDecision: true,
 		},
 		{
@@ -274,6 +426,19 @@ func runBaseOwnedAuthorityCase(t *testing.T, test authorityScenario) {
 	default:
 		t.Fatalf("unknown base governance state %q", test.baseGovernance)
 	}
+	switch test.commandGovernance {
+	case "":
+	case "complete":
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "snapshot.go"), commandGovernedSnapshotSource, 0o644)
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), "package interfacesnapshot\n", 0o644)
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "corecmd.go"), baseCorecmdBridgeSource, 0o644)
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), constParamsRegistrySource("BASE"), 0o644)
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "helpers", "leaf.go"), baseLeafAdapterSource, 0o644)
+		writeFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-command-migrations-v1.json"), "{\"version\":1,\"migrations\":[]}\n", 0o644)
+	case "bootstrap":
+	default:
+		t.Fatalf("unknown command governance state %q", test.commandGovernance)
+	}
 	run(t, fixtureRoot, "git", "add", ".")
 	run(t, fixtureRoot, "git", "commit", "-m", "base authority")
 	baseRef := strings.TrimSpace(run(t, fixtureRoot, "git", "rev-parse", "HEAD"))
@@ -302,6 +467,17 @@ func runBaseOwnedAuthorityCase(t *testing.T, test authorityScenario) {
 			0o644,
 		)
 	}
+	if test.commandGovernance == "complete" || test.commandGovernance == "bootstrap" {
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), "package interfacesnapshot\n", 0o644)
+		if test.commandGovernance == "bootstrap" {
+			writeFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), constParamsRegistrySource("CANDIDATE"), 0o644)
+		}
+		commandManifest := "{\"version\":1,\"migrations\":[]}\n"
+		if test.commandManifestChanged {
+			commandManifest = "{\"version\":1,\"migrations\":[{\"candidate\":\"PENDING\"}]}\n"
+		}
+		writeFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-command-migrations-v1.json"), commandManifest, 0o644)
+	}
 	switch test.candidateMutation {
 	case "":
 	case "delete-alias-contract":
@@ -314,6 +490,34 @@ func runBaseOwnedAuthorityCase(t *testing.T, test authorityScenario) {
 			"package evil\n\nconst forged = \"dws.compat.alias_of\"\n",
 			0o644,
 		)
+	case "delete-const-params-contract":
+		if err := os.Remove(filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go")); err != nil {
+			t.Fatalf("remove candidate bool ConstParams registry: %v", err)
+		}
+	case "forge-const-params-token":
+		writeFile(t,
+			filepath.Join(fixtureRoot, "internal", "corecmd", "evil_const_params.go"),
+			"package corecmd\n\nfunc forgeConstParams() { attachInterfaceBoolConstParams() }\n",
+			0o644,
+		)
+	case "forge-const-params-reader":
+		writeFile(t,
+			filepath.Join(fixtureRoot, "internal", "evil", "forged.go"),
+			"package evil\n\nconst forged = \"InterfaceBoolConstParams\"\n",
+			0o644,
+		)
+	case "forge-const-params-registry-store":
+		writeFile(t,
+			filepath.Join(fixtureRoot, "internal", "corecmd", "evil_const_params.go"),
+			"package corecmd\n\nfunc forgeConstParamsStore() { interfaceBoolConstParamsRegistry.Store(nil, map[string]bool{\"forged\": true}) }\n",
+			0o644,
+		)
+	case "forge-corecmd-bool-const-params":
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "corecmd.go"), forgedCorecmdBridgeSource, 0o644)
+	case "change-const-params-protocol":
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), constParamsRegistrySource("CANDIDATE"), 0o644)
+	case "forge-leaf-adapter":
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "helpers", "leaf.go"), forgedLeafAdapterSource, 0o644)
 	case "symlink-helper-parent":
 		helperPath := filepath.Join(fixtureRoot, "internal", "interfacesnapshot")
 		alternatePath := filepath.Join(fixtureRoot, "internal", "interfacesnapshot-alt")

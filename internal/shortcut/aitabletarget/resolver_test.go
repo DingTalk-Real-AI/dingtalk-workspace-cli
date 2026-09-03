@@ -125,6 +125,24 @@ func TestCrossPlatformCoverageResolveBaseNameExactPaginationE2E(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageResolveBaseStopsOnAuthoritativeTerminalCursor(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{
+		{data: map[string]any{"bases": []any{}, "hasMore": true, "nextCursor": "next"}},
+		{data: map[string]any{
+			"bases":      []any{map[string]any{"baseId": "b1", "baseName": "项目管理"}},
+			"hasMore":    false,
+			"nextCursor": "next",
+		}},
+	}}
+	got, err := ResolveBaseName(reader, "项目管理", false)
+	if err != nil || got.Selected.ID != "b1" {
+		t.Fatalf("terminal cursor resolution = %#v, %v", got, err)
+	}
+	if len(reader.calls) != 2 {
+		t.Fatalf("terminal hasMore=false made %d calls, want 2", len(reader.calls))
+	}
+}
+
 func TestCrossPlatformCoverageResolveNameFuzzyIsExplicitAndAmbiguityFails(t *testing.T) {
 	data := map[string]any{"bases": []any{
 		map[string]any{"baseId": "b1", "baseName": "项目管理归档"},

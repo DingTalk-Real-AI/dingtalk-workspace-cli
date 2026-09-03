@@ -23,7 +23,6 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -119,6 +118,12 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 	// products.devapp). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "devapp",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("开放平台应用深度指南", "dingtalk-misc", "references/devapp.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉钉开放平台企业内部应用、成员、权限、机器人、事件与版本",
 			UseWhen: []string{
@@ -140,7 +145,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(root)
+	newGroupCommand(root)
 
 	webapp := &cobra.Command{
 		Use:               "webapp",
@@ -152,7 +157,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(webapp)
+	newGroupCommand(webapp)
 	webapp.AddCommand(
 		newDevAppWebappGetCommand(runner),
 		newDevAppWebappConfigCommand(runner),
@@ -168,7 +173,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(permission)
+	newGroupCommand(permission)
 	permission.AddCommand(
 		newDevAppPermissionListCommand(runner),
 		newDevAppPermissionAddCommand(runner),
@@ -185,7 +190,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(credentials)
+	newGroupCommand(credentials)
 	credentials.AddCommand(newDevAppCredentialsGetCommand(runner))
 
 	member := &cobra.Command{
@@ -198,7 +203,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(member)
+	newGroupCommand(member)
 	member.AddCommand(
 		newDevAppMemberListCommand(runner),
 		newDevAppMemberAddCommand(runner),
@@ -215,7 +220,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(security)
+	newGroupCommand(security)
 	security.AddCommand(newDevAppSecurityConfigCommand(runner))
 
 	robot := &cobra.Command{
@@ -228,7 +233,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(robot)
+	newGroupCommand(robot)
 	robot.AddCommand(
 		newDevAppRobotSubmitCommand(runner),
 		newDevAppRobotResultCommand(runner),
@@ -248,7 +253,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(version)
+	newGroupCommand(version)
 	version.AddCommand(
 		newDevAppVersionCreateCommand(runner),
 		newDevAppVersionListCommand(runner),
@@ -268,7 +273,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmdutil.MarkGroup(event)
+	newGroupCommand(event)
 	event.AddCommand(
 		newDevAppEventListCommand(runner),
 		newDevAppEventSubscribeCommand(runner),

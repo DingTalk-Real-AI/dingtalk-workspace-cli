@@ -8,7 +8,7 @@ dws doc +export --node <DOC_ID_OR_URL> --export-format markdown --output ./docum
 dws doc +export --node <DOC_ID_OR_URL> --export-format pdf --output ./document.pdf --format json
 ```
 
-`+export` 一次完成提交、轮询和原子下载。输出路径必须位于工作目录内，默认 no-clobber；只有用户明确允许覆盖时使用 `--overwrite`。
+`+export` 一次完成提交、轮询和原子下载。输出路径必须位于工作目录内，默认 no-clobber；目标已存在时返回 `LOCAL_FILE_EXISTS`，更换 `--output` 路径重试，没有覆盖用 flag。
 
 `--export-format` 必填；全局 `--format json` 只控制 CLI 输出，不能代替业务导出格式。禁止依赖默认 docx，也不要猜测 `--type`。
 

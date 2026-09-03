@@ -4,11 +4,14 @@
 package aitable
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func TestCrossPlatformCoverageRecordObjectAndIDValidation(t *testing.T) {
@@ -66,6 +69,63 @@ func TestCrossPlatformCoverageRecordBatchEntryValidationE2E(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRecordUpdateAcceptsSelectReadBackProjectionE2E(t *testing.T) {
+	records := []map[string]any{{
+		"recordId": "r1",
+		"cells":    map[string]any{"status": "跟进中"},
+	}}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"updatedCount":1}`},
+		{text: `{"records":[{"recordId":"r1","cells":{"status":{"id":"opt-1","name":"跟进中"}}}]}`},
+		{text: `{"fields":[{"fieldId":"status","type":"singleSelect"}]}`},
+	}}
+	out, err := runRecordBatchCLI(t, caller, "+record-update", records)
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_fields" {
+		t.Fatalf("select update read-back = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageRecordUpsertCreateAcceptsSelectReadBackProjectionE2E(t *testing.T) {
+	records := []map[string]any{{"cells": map[string]any{"status": "跟进中"}}}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"createdRecords":[{"recordId":"r1"}]}`},
+		{text: `{"records":[{"recordId":"r1","cells":{"status":{"id":"opt-1","name":"跟进中"}}}]}`},
+		{text: `{"fields":[{"fieldId":"status","type":"singleSelect"}]}`},
+	}}
+	out, err := runRecordBatchCLI(t, caller, "+record-upsert", records)
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_fields" {
+		t.Fatalf("select create read-back = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageRecordSelectTypeLoadFailuresE2E(t *testing.T) {
+	records := []map[string]any{{
+		"recordId": "r1",
+		"cells":    map[string]any{"status": "跟进中"},
+	}}
+	cases := []struct {
+		name      string
+		fieldStep upsertByKeyStep
+	}{
+		{name: "tool error", fieldStep: upsertByKeyStep{err: errors.New("get fields failed")}},
+		{name: "missing collection", fieldStep: upsertByKeyStep{text: `{}`}},
+		{name: "no usable field types", fieldStep: upsertByKeyStep{text: `{"fields":[{"fieldId":"","type":""}]}`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+				{text: `{"updatedCount":1}`},
+				{text: `{"records":[{"recordId":"r1","cells":{"status":{"id":"opt-1","name":"跟进中"}}}]}`},
+				tc.fieldStep,
+			}}
+			out, err := runRecordBatchCLI(t, caller, "+record-update", records)
+			if err == nil || out != "" || len(caller.calls) != 3 || caller.calls[2].tool != "get_fields" {
+				t.Fatalf("select field type failure = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageRecordDeleteDryRunAndDualFailureE2E(t *testing.T) {
 	caller := &upsertByKeyCaller{dryRun: true}
 	out, err := runRecordDeleteCLI(t, caller, []string{"r1"}, "--dry-run")
@@ -87,6 +147,137 @@ func TestCrossPlatformCoverageRecordDeleteDryRunAndDualFailureE2E(t *testing.T) 
 	out, err = runRecordDeleteCLI(t, &upsertByKeyCaller{}, recordIDFixtures(maxCompositeRecordRun+1))
 	if err == nil || out != "" {
 		t.Fatalf("delete excessive IDs = output:%q err:%v", out, err)
+	}
+}
+
+func TestCrossPlatformCoverageRecordPrimaryDocPreflightAndNormalizationE2E(t *testing.T) {
+	t.Run("record not found is classified", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "missing")
+		var typed *apperrors.Error
+		if err == nil || out != "" || !errors.As(err, &typed) || typed.Reason != "RESOURCE_NOT_FOUND" {
+			t.Fatalf("missing primary-doc record = output:%q err:%#v", out, err)
+		}
+	})
+
+	t.Run("table without primary doc field is normalized", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"text","type":"text"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{"text":"x"}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"status": "no_primary_doc_field"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 2 {
+			t.Fatalf("no primary field = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("empty primary doc cell is unassociated", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{}}]}`},
+			{text: `{"data":{"nodeId":null}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"status": "unassociated"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_primary_doc" {
+			t.Fatalf("unassociated primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("known helper no-record error is unassociated", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{}}]}`},
+			{err: errors.New("no record")},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"status": "unassociated"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 3 {
+			t.Fatalf("no-record primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("associated doc is resolved through helper", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{"primary":{"associated":true}}}]}`},
+			{text: `{"data":{"nodeId":"node-1"}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"nodeId": "node-1"`) || !strings.Contains(out, `"exists": true`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_primary_doc" {
+			t.Fatalf("associated primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageRecordPrimaryDocFailureAndShapeEdgesE2E(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []upsertByKeyStep
+	}{
+		{name: "fields transport", steps: []upsertByKeyStep{{err: context.Canceled}}},
+		{name: "missing fields collection", steps: []upsertByKeyStep{{text: `{}`}}},
+		{name: "primary field missing id", steps: []upsertByKeyStep{{text: `{"fields":[{"type":"primaryDoc"}]}`}}},
+		{name: "record query error", steps: []upsertByKeyStep{{text: `{"fields":[]}`}, {err: context.DeadlineExceeded}}},
+		{name: "wrong record identity", steps: []upsertByKeyStep{{text: `{"fields":[]}`}, {text: `{"records":[{"recordId":"other"}]}`}}},
+		{name: "helper unknown error", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {err: errors.New("permission denied")}}},
+		{name: "helper missing node", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {text: `{"data":{"message":"ok"}}`}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: tc.steps}, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+			if err == nil || out != "" {
+				t.Fatalf("primary doc failure = output:%q err:%v", out, err)
+			}
+		})
+	}
+
+	for _, value := range []any{
+		map[string]any{"exists": false},
+		map[string]any{"dentryUuid": ""},
+		map[string]any{"status": "NO_RECORD"},
+		map[string]any{"data": map[string]any{"result": map[string]any{"status": "unassociated"}}},
+	} {
+		if !knownPrimaryDocUnassociatedData(value) {
+			t.Errorf("known unassociated shape not recognized: %#v", value)
+		}
+	}
+	if knownPrimaryDocUnassociatedData([]any{"unrelated"}) || knownPrimaryDocUnassociatedData(nil) {
+		t.Fatal("unrelated shapes must not be unassociated")
+	}
+	for _, value := range []any{
+		map[string]any{"metadata": map[string]any{"exists": false}},
+		map[string]any{"items": []any{map[string]any{"nodeId": nil}}},
+	} {
+		if knownPrimaryDocUnassociatedData(value) {
+			t.Errorf("unrelated nested marker must not be unassociated: %#v", value)
+		}
+	}
+	if got := primaryDocNodeID(map[string]any{"metadata": map[string]any{"nodeId": "wrong"}}); got != "" {
+		t.Fatalf("unrelated nested nodeId = %q, want empty", got)
+	}
+	if got := primaryDocNodeID(map[string]any{"data": map[string]any{"response": map[string]any{"dentryUuid": " node-1 "}}}); got != "node-1" {
+		t.Fatalf("known envelope nodeId = %q, want node-1", got)
+	}
+}
+
+func TestCrossPlatformCoverageRecordDeleteRejectsMalformedPreflightRecordsE2E(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		records string
+	}{
+		{name: "missing id", records: `[{"cells":{}}]`},
+		{name: "unexpected id", records: `[{"recordId":"other"}]`},
+		{name: "duplicate id", records: `[{"recordId":"r1"},{"recordId":"r1"}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"records":` + tc.records + `}`}}}
+			out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
+			if err == nil || out != "" || len(caller.calls) != 1 {
+				t.Fatalf("delete malformed preflight = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
 	}
 }
 
@@ -158,24 +349,64 @@ func TestCrossPlatformCoverageRecordBatchVerificationEdgesE2E(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageRecordBatchPureHelpers(t *testing.T) {
-	if err := matchCreatedCells([]map[string]any{{"cells": map[string]any{"f": 1}}}, nil); err == nil {
+	if err := matchCreatedCells([]map[string]any{{"cells": map[string]any{"f": 1}}}, nil, nil); err == nil {
 		t.Fatal("created result count mismatch must fail")
 	}
 	if err := matchCreatedCells(
 		[]map[string]any{{"cells": map[string]any{"f": 1}}},
 		[]map[string]any{{"recordId": "r", "cells": map[string]any{"f": 2}}},
+		nil,
 	); err == nil {
 		t.Fatal("unmatched created cells must fail")
 	}
-	ids := createdRecordIDs(map[string]any{"createdIds": []any{" r1 ", "r1", map[string]any{"record_id": "r2"}}})
+	if err := matchCreatedCells(
+		[]map[string]any{
+			{"cells": map[string]any{"f": 1}},
+			{"cells": map[string]any{"f": 2}},
+		},
+		[]map[string]any{
+			{"recordId": "r1", "cells": map[string]any{"f": 1}},
+			{"recordId": "r2", "cells": map[string]any{"f": 2}},
+		},
+		nil,
+	); err != nil {
+		t.Fatalf("ordered created cells = %v", err)
+	}
+	ids := createdRecordIDs(map[string]any{"data": map[string]any{"newRecordIds": []any{" r1 ", "r1", "r2"}}})
 	if strings.Join(ids, ",") != "r1,r2" {
 		t.Fatalf("created IDs = %#v", ids)
+	}
+	legacyIDs := createdRecordIDs(map[string]any{"createdIds": []any{"r3", map[string]any{"record_id": "r4"}}})
+	if strings.Join(legacyIDs, ",") != "r3,r4" {
+		t.Fatalf("legacy created IDs = %#v", legacyIDs)
 	}
 	if got := stringSlice("bad"); got != nil {
 		t.Fatalf("stringSlice = %#v", got)
 	}
 	if minInt(1, 2) != 1 || minInt(2, 1) != 1 {
 		t.Fatal("minInt branch mismatch")
+	}
+	if selectionObjectMatchesScalar("not-an-object", "value") || selectionObjectMatchesScalar(map[string]any{"name": "value"}, 1) {
+		t.Fatal("selectionObjectMatchesScalar accepted incompatible values")
+	}
+	if selectionLikeList([]any{map[string]any{}}) || selectionLikeList([]any{1}) {
+		t.Fatal("selectionLikeList accepted unsupported values")
+	}
+	if recordCellValueEqual(
+		[]any{map[string]any{"id": "left"}},
+		[]any{map[string]any{"id": "right"}},
+		"multipleSelect",
+	) {
+		t.Fatal("recordCellValueEqual matched different selection lists")
+	}
+	if recordCellValueEqual([]any{"one"}, []any{"one", "two"}, "multipleSelect") {
+		t.Fatal("recordCellValueEqual matched selection lists with different lengths")
+	}
+	if recordCellsMayNeedSelectionTypes(map[string]any{}, map[string]any{"f": "value"}) {
+		t.Fatal("recordCellsMayNeedSelectionTypes accepted a record without cells")
+	}
+	if !selectionProjectionShapes("value", map[string]any{"id": "option-id", "name": "value"}) {
+		t.Fatal("selectionProjectionShapes missed scalar read-back for an object write")
 	}
 }
 
@@ -358,8 +589,52 @@ func TestCrossPlatformCoverageRecordShapeHelpers(t *testing.T) {
 	if responseHasMore(nil) || !responseHasMore(map[string]any{"cursor": "next"}) || !responseHasMore(map[string]any{"pagination": map[string]any{"hasMore": true}}) {
 		t.Fatal("responseHasMore shape mismatch")
 	}
-	if err := verifyRecordCells(map[string]any{"recordId": "r"}, map[string]any{"f": 1}); err == nil {
+	if err := verifyRecordCells(map[string]any{"recordId": "r"}, map[string]any{"f": 1}, nil); err == nil {
 		t.Fatal("missing cells must fail")
+	}
+	selectRecord := map[string]any{"recordId": "r", "cells": map[string]any{
+		"singleByName": map[string]any{"id": "opt-1", "name": "跟进中"},
+		"singleByID":   map[string]any{"id": "opt-2", "name": "已完成"},
+		"multi": []any{
+			map[string]any{"id": "opt-a", "name": "A"},
+			map[string]any{"id": "opt-b", "name": "B"},
+		},
+	}}
+	fieldTypes := map[string]string{
+		"singleByName": "singleSelect",
+		"singleByID":   "singleSelect",
+		"multi":        "multipleSelect",
+	}
+	if err := verifyRecordCells(selectRecord, map[string]any{
+		"singleByName": "跟进中",
+		"singleByID":   "opt-2",
+		"multi":        []any{"B", "A"},
+	}, fieldTypes); err != nil {
+		t.Fatalf("select semantic read-back must match: %v", err)
+	}
+	if err := verifyRecordCells(selectRecord, map[string]any{"singleByName": "未开始"}, fieldTypes); err == nil {
+		t.Fatal("different select option must fail")
+	}
+	if err := verifyRecordCells(
+		map[string]any{"recordId": "r", "cells": map[string]any{"text": map[string]any{"name": "A"}}},
+		map[string]any{"text": "A"},
+		map[string]string{"text": "text"},
+	); err == nil {
+		t.Fatal("non-select object projection must not match a scalar")
+	}
+	if err := verifyRecordCells(
+		map[string]any{"recordId": "r", "cells": map[string]any{"select": "A"}},
+		map[string]any{"select": map[string]any{"id": "opt-1", "name": "A"}},
+		map[string]string{"select": "singleSelect"},
+	); err == nil {
+		t.Fatal("scalar read-back must not verify an object select write")
+	}
+	if err := verifyRecordCells(
+		map[string]any{"recordId": "r", "cells": map[string]any{"select": map[string]any{"id": "opt-2", "name": "A"}}},
+		map[string]any{"select": map[string]any{"id": "opt-1", "name": "A"}},
+		map[string]string{"select": "singleSelect"},
+	); err == nil {
+		t.Fatal("same-name selections with different IDs must not match")
 	}
 	if responseCursor(nil) != "" || responseCursor(map[string]any{"data": map[string]any{"next_cursor": " next "}}) != "next" ||
 		responseCursor(map[string]any{"result": map[string]any{"cursor": " legacy "}}) != "legacy" {

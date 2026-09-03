@@ -56,6 +56,24 @@ const (
 	DispositionAliasInternal   SemanticDisposition = "alias_internal"
 )
 
+// HelpTier controls only product-root help presentation. It is deliberately
+// independent from Hidden/public Schema membership: a catalog Shortcut remains
+// Agent-visible and directly executable even when the product root shows only
+// the smaller featured set.
+type HelpTier string
+
+const (
+	HelpTierFeatured      HelpTier = "featured"
+	HelpTierCatalog       HelpTier = "catalog"
+	HelpTierCompatibility HelpTier = "compatibility"
+	HelpTierUnavailable   HelpTier = "unavailable"
+)
+
+// HelpTierAnnotation is embedded on mounted Shortcut leaves so the assembled
+// product help can select the reviewed featured subset without inferring from
+// command names or descriptions.
+const HelpTierAnnotation = "dws.shortcut.help-tier"
+
 // Availability is independent from live-account evidence. A missing fixture or
 // permission does not make an implemented command unavailable.
 type Availability string
@@ -107,6 +125,12 @@ type Flag struct {
 	// compatibility escape hatch for aliases that were historically public.
 	Aliases        []string `json:"-"`
 	AliasesVisible bool     `json:"-"`
+	// Input declares extra input sources for a string flag beyond the literal
+	// command-line value: "file" enables @path (value replaced by the file
+	// content), "stdin" enables - (value replaced by stdin). "@@value" escapes
+	// to the literal "@value". Resolution happens before Required/Enum/Validate
+	// checks. Empty = flag value only.
+	Input []string `json:"input,omitempty"`
 }
 
 // ConstraintKind is a machine-readable cross-parameter or custom validation
@@ -189,12 +213,21 @@ type Shortcut struct {
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.
 	Hidden bool
+	// CompatibilityVisible preserves a historically visible CLI command while
+	// keeping it out of the Agent/public Shortcut catalog. Such a command is
+	// shown only by `dws shortcut list --all`; Availability independently says
+	// whether the historical execution path remains callable.
+	CompatibilityVisible bool
 	// Disposition is the reviewed semantic relation to the Runtime Schema leaf
 	// surface. It determines default Agent discovery independently from live
 	// fixture evidence.
 	Disposition SemanticDisposition
 	// SemanticDelta explains the concrete value added beyond renaming a leaf.
 	SemanticDelta string
+	// HelpTier controls whether this public Shortcut is featured on the product
+	// root help or remains discoverable through Schema/shortcut list/exact help.
+	// Compatibility and unavailable tiers are never shown on the product root.
+	HelpTier HelpTier
 	// Availability describes whether the implementation is shipped and
 	// callable; it does not encode the current account's permissions.
 	Availability Availability

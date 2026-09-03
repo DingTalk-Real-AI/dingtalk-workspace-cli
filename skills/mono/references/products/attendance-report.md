@@ -126,7 +126,7 @@ Agent 解析用户意图（报表类型、人员范围、时间范围、关注�
 
 **场景 A — 指定员工姓名**:
 ```bash
-dws aisearch person --keyword "<员工姓名>" --dimension name --format json
+dws aisearch person --query "<员工姓名>" --dimension name --format json
 ```
 
 **场景 B — 按部门查询**:

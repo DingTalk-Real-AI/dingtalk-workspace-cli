@@ -14,14 +14,72 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
+
+type runtimeContextKey struct{}
+
+type runtimeContextCaller struct {
+	value any
+}
+
+func (c *runtimeContextCaller) CallTool(ctx context.Context, _ string, _ string, _ map[string]any) (*edition.ToolResult, error) {
+	c.value = ctx.Value(runtimeContextKey{})
+	return nil, errors.New("stop after context capture")
+}
+
+func (*runtimeContextCaller) Format() string { return "json" }
+func (*runtimeContextCaller) DryRun() bool   { return false }
+func (*runtimeContextCaller) Fields() string { return "" }
+func (*runtimeContextCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageRuntimeContextForTest(t *testing.T) {
 	cmd := &cobra.Command{Use: "run"}
 	rt := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "run"})
 	if rt == nil || rt.cmd != cmd || rt.shortcut.Service != "sample" {
 		t.Fatalf("RuntimeContextForTest = %#v", rt)
+	}
+}
+
+func TestCrossPlatformCoverageRuntimeMCPCallsPreserveCommandContext(t *testing.T) {
+	caller := &runtimeContextCaller{}
+	old := helpers.GetCaller()
+	t.Cleanup(func() { helpers.InitDeps(old) })
+	helpers.InitDeps(caller)
+
+	ctx := context.WithValue(context.Background(), runtimeContextKey{}, "command-context")
+	cmd := &cobra.Command{Use: "+write"}
+	cmd.SetContext(ctx)
+	output.SetCommandRollout(cmd, output.RolloutDualValidate)
+	rt := RuntimeContextForTest(cmd, Shortcut{Service: "aitable", Command: "+write"})
+	if err := rt.CallMCP("update_records", map[string]any{"id": "r1"}); err == nil {
+		t.Fatal("dual-validate context capture unexpectedly succeeded")
+	}
+	if caller.value != "command-context" {
+		t.Fatalf("dual-validate caller context value = %#v", caller.value)
+	}
+	if _, err := rt.CallMCPWriteDataStrict("aitable", "update_records", map[string]any{"id": "r1"}); err == nil {
+		t.Fatal("capture caller unexpectedly succeeded")
+	}
+	if caller.value != "command-context" {
+		t.Fatalf("caller context value = %#v", caller.value)
+	}
+
+	dryCaller := &dualValidateCaller{format: "json", dryRun: true}
+	helpers.InitDeps(dryCaller)
+	dryCmd := &cobra.Command{Use: "+read"}
+	dryCmd.Flags().Bool("dry-run", true, "")
+	output.SetCommandRollout(dryCmd, output.RolloutDualValidate)
+	var dryOut bytes.Buffer
+	helpers.GetFormatter().SetWriters(&dryOut, &dryOut)
+	dryRT := RuntimeContextForTest(dryCmd, Shortcut{Service: "aitable", Command: "+read"})
+	if err := dryRT.CallMCP("get_fields", map[string]any{"baseId": "b"}); err != nil {
+		t.Fatalf("dual-validate dry-run call = %v", err)
+	}
+	if !strings.Contains(dryOut.String(), `"dry_run": true`) {
+		t.Fatalf("dual-validate dry-run output = %q", dryOut.String())
 	}
 }
 
@@ -66,8 +124,15 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 	t.Cleanup(func() { helpers.InitDeps(old) })
 	helpers.InitDeps(caller)
 	rt := &RuntimeContext{}
-	if _, err := rt.callMCPWriteData("aitable", "update_records", nil); err == nil || !strings.Contains(err.Error(), "解析") {
-		t.Fatalf("invalid write JSON = %v", err)
+	if _, err := rt.callMCPWriteData("aitable", "update_records", nil); err == nil {
+		t.Fatal("invalid write JSON was accepted")
+	} else {
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "malformed_tool_response" ||
+			typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+			!typed.RetryableSet || typed.Retryable || typed.Cause == nil {
+			t.Fatalf("invalid write JSON error = %#v", err)
+		}
 	}
 	if caller.args == nil {
 		t.Fatal("nil write parameters were not normalized")
@@ -82,7 +147,9 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 		t.Fatal("strict empty acknowledgement was accepted")
 	} else {
 		var typed *apperrors.Error
-		if !errors.As(err, &typed) || typed.Reason != "empty_tool_response" || !typed.RetryableSet || typed.Retryable {
+		if !errors.As(err, &typed) || typed.Reason != "empty_tool_response" ||
+			typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+			!typed.RetryableSet || typed.Retryable {
 			t.Fatalf("strict empty acknowledgement error = %#v", err)
 		}
 	}
@@ -173,4 +240,54 @@ func TestFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
 	if got := devRT.resultForPayload("get_dev_app", map[string]any{"success": true}); got.Outcome() != output.OutcomeSuccess {
 		t.Fatalf("devapp result=%s", got.Outcome())
 	}
+}
+
+func TestCrossPlatformCoverageRuntimeOutputForToolRollouts(t *testing.T) {
+	t.Run("unified", func(t *testing.T) {
+		ctx, _ := output.WithResultStore(context.Background())
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(ctx)
+		output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "devapp", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get_dev_app", map[string]any{"success": true, "result": map[string]any{"unifiedAppId": "app"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("dual validate", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(context.Background())
+		cmd.SetOut(&bytes.Buffer{})
+		output.SetCommandRollout(cmd, output.RolloutDualValidate)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "devapp", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get_dev_app", map[string]any{"success": true, "result": map[string]any{"unifiedAppId": "app"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("dual validate failure", func(t *testing.T) {
+		testseam.Swap(t, &validateShadowResult, func(output.CommandResult) error { return context.Canceled })
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(context.Background())
+		output.SetCommandRollout(cmd, output.RolloutDualValidate)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "devapp", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get_dev_app", map[string]any{"success": true}); !errors.Is(err, context.Canceled) {
+			t.Fatalf("dual validation error=%v", err)
+		}
+	})
+
+	t.Run("legacy", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(context.Background())
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		output.SetCommandRollout(cmd, output.RolloutLegacyOnly)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get", map[string]any{"id": "item"}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stdout.String(), `"id"`) {
+			t.Fatalf("legacy output=%q", stdout.String())
+		}
+	})
 }

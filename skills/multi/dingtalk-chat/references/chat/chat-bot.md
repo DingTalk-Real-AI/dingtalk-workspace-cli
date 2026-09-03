@@ -16,6 +16,7 @@
 - `chat bot search` 只返回我创建的机器人，没有 `openDingTalkId`；给机器人发单聊必须用 `chat bot find`。
 - 机器人发群消息前需确认机器人已在群中；报“机器人不存在”时先 `group members add-bot`。
 - `send-by-bot` 支持 Markdown、图片 URL 和文件，具体参数见下方消息类型路由。
+- 机器人在群聊中引用回复已有消息时，使用原子命令 `send-by-bot --reply --ref-sender`；该能力仅支持 Markdown，不走 `+messages-reply` 的当前用户身份。
 - 公网图片 URL 使用 `--msg-type image --image-url`，按图片消息发送。
 - 本地图片和其他本地文件一样使用 `--msg-type file --file-path`，由 CLI 上传并按文件附件发送。
 - 群聊传 `--group`；单聊可传 `--users`、`--open-dingtalk-ids` 或两者组合。
@@ -63,9 +64,10 @@ dws chat +messages-send --as bot --robot-code <robot-code> \
 
 ```bash
 # 群聊
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成\n\n- 事项 A\n\n- 事项 B"
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --msg-type image --image-url "https://example.com/image.png"
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --msg-type file --file-path ./report.pdf
+dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openConversationId> --title "日报" --text "## 今日完成\n\n- 事项 A\n\n- 事项 B"
+dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openConversationId> --reply <openMessageId> --ref-sender <senderOpenDingTalkId> --text "收到"
+dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openConversationId> --msg-type image --image-url "https://example.com/image.png"
+dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openConversationId> --msg-type file --file-path ./report.pdf
 
 # 单聊 userId
 dws chat message send-by-bot --robot-code <robot-code> --users userId1,userId2 --title "提醒" --text "请提交周报"
@@ -84,16 +86,20 @@ dws chat message send-by-bot --robot-code <robot-code> --group <openConversation
 | Flag | 说明 |
 |------|------|
 | `--robot-code` | 机器人 Code，必填 |
-| `--group` | 群聊 openConversationId |
+| `--conversation-id` | 群聊 openConversationId；`--group` 为兼容别名 |
 | `--users` | 单聊 userId 列表，逗号分隔，最多 20 个 |
 | `--open-dingtalk-ids` | 单聊 openDingTalkId 列表 |
 | `--msg-type` | `markdown`、`image` 或 `file`；省略时为 Markdown；公网图片使用 `image --image-url`，本地图片和文件使用 `file --file-path` |
 | `--text` | Markdown 消息内容，Markdown 模式必填；换行用空行，转义表示为 `\n\n` |
-| `--title` | Markdown 消息标题，Markdown 模式必填 |
+| `--title` | 普通 Markdown 消息标题；引用回复省略时由 CLI 从正文生成 |
 | `--image-url` | 公网图片 URL，`--msg-type image` 时必填 |
 | `--file-path` | 本地图片或文件路径，`--msg-type file` 时由 CLI 上传并按文件附件发送 |
 | `--at-user-ids` / `--at-open-dingtalk-ids` | 群聊 @ 指定成员，正文需含对应 `@id` 文本 |
 | `--at-all` | 群聊 @所有人 |
+| `--reply` | 被引用消息的 `openMessageId`；仅群聊 Markdown，必须与 `--ref-sender` 同时使用 |
+| `--ref-sender` | 被引用消息发送者的 `openDingTalkId`；仅群聊 Markdown，必须与 `--reply` 同时使用 |
+
+引用回复不会设置 `msgType=reply`；CLI 在普通群消息参数顶层透传 `referenceOpenMessageId` 和 `srcMsgSendOpenDingTalkId`。只传其中一个参数、用于单聊或用于图片/文件消息都会在本地失败。
 
 #### `dws chat message recall-by-bot`
 
@@ -115,15 +121,15 @@ dws chat +messages-send --as webhook --webhook-token <webhook-token> --title "�
 以下是底层 fallback，不作为默认选路：
 
 ```bash
-dws chat message send-by-webhook --token <webhook-token> --title "告警" --text "CPU 超 90% @10" --at-all
-dws chat message send-by-webhook --token <webhook-token> --title "test" --text "hi @118785" --at-users 118785
+dws chat message send-by-webhook --token <webhook-token> --title "告警" --content "CPU 超 90% @10" --at-all
+dws chat message send-by-webhook --token <webhook-token> --title "test" --content "hi @118785" --at-users 118785
 ```
 
 关键规则：
 
-- `--token`、`--title`、`--text` 必填。
-- `--at-all` 时 `--text` 中需包含 `@10`。
-- `--at-users` 或 `--at-mobiles` 时，`--text` 中需包含对应 `@userId` 或 `@手机号`，否则 @ 不生效。
+- `--token`、`--title`、`--content` 必填。
+- `--at-all` 时 `--content` 中需包含 `@10`。
+- `--at-users` 或 `--at-mobiles` 时，`--content` 中需包含对应 `@userId` 或 `@手机号`，否则 @ 不生效。
 
 ### 机器人进群
 
@@ -161,13 +167,13 @@ dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversa
 
 ```bash
 dws chat bot find --query "玉澜" --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --text "你好" --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --content "你好" --format json
 ```
 
 ### 机器人 @ 指定人
 
 ```bash
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversationId> --at-user-ids userId1 --title "提醒" --text "@userId1 请查收" --format json
 ```
 
@@ -176,5 +182,6 @@ dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversa
 - 机器人单聊没有 openDingTalkId：改用 `chat bot find`，不要用 `bot search`。
 - 机器人发群消息报“机器人不存在”：先 `group members add-bot`。
 - 撤回失败：确认使用 `processQueryKey`，不是 `openMessageId`。
+- 机器人引用回复失败：确认目标是群聊 Markdown，且 `--reply` 来自被引用消息的 `openMessageId`、`--ref-sender` 来自同一消息的发送者 `openDingTalkId`。
 - @ 不生效：检查正文是否包含 `@userId` / `@openDingTalkId` / `@10`。
 - 需要 Bot 图片/文件/音视频：停止并说明当前身份矩阵不支持；只有用户明确同意改为当前用户身份时，才重新确认目标和内容。

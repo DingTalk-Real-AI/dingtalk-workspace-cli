@@ -224,6 +224,33 @@ func TestCrossPlatformCoverageMinutesWorkflowCompletion(t *testing.T) {
 	if err := RequireWriteAcknowledgement("write", map[string]any{"result": map[string]any{"updated": true}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := RequirePermissionMutationAcknowledgement("unshare", []string{"u1"}, []string{"202397"}, map[string]any{
+		"success": true,
+		"result":  map[string]any{"resultMap": map[string]any{"u1": []any{float64(202397)}}},
+	}); err != nil {
+		t.Fatalf("valid permission acknowledgement rejected: %v", err)
+	}
+	for _, data := range []map[string]any{
+		{"success": false, "errorMsg": "denied"},
+		{"success": "yes"},
+		{"success": true, "result": "bad"},
+		{"success": true, "result": map[string]any{}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{}}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{"other": []any{"202397"}}}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{"u1": "bad"}}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{"u1": []any{nil}}}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{"u1": []any{"other"}}}},
+	} {
+		if err := RequirePermissionMutationAcknowledgement("unshare", []string{"u1"}, []string{"202397"}, data); err == nil {
+			t.Fatalf("invalid permission acknowledgement accepted: %#v", data)
+		}
+	}
+	if err := RequirePermissionMutationAcknowledgement("unshare", []string{"u1"}, []string{"202397", "other"}, map[string]any{
+		"success": true,
+		"result":  map[string]any{"resultMap": map[string]any{"u1": []any{"202397"}}},
+	}); err == nil {
+		t.Fatal("incomplete member coverage accepted")
+	}
 	for _, tc := range []struct {
 		cmd, id string
 		data    map[string]any

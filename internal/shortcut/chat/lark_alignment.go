@@ -200,11 +200,11 @@ var MessagesReply = shortcut.Shortcut{
 	Intent:      "当你要以当前用户身份对一条已有消息发送纯文本引用回复时使用；传会话和原消息 ID，CLI 会先读取原发送者，也可显式传 --ref-sender。成功结果在保留下层响应的同时增量返回 messageId（下层提供时）、conversationId、threadId（适用时）、deliveryStatus、idempotencyKey 和 referencedMessage 来源上下文。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true, Aliases: []string{"conversation-id"}},
 		{Name: "ref-msg-id", Type: shortcut.FlagString, Desc: "被引用消息 openMessageId"},
 		{Name: "message-id", Type: shortcut.FlagString, Desc: "--ref-msg-id 的 lark-cli 对齐别名"},
 		{Name: "ref-sender", Type: shortcut.FlagString, Desc: "原消息发送者 openDingTalkId/userId（userId 通过通讯录搜索精确匹配；不传则自动读取）"},
-		{Name: "text", Type: shortcut.FlagString, Desc: "纯文本回复内容", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "纯文本回复内容", Required: true, Aliases: []string{"text"}},
 		{Name: "uuid", Type: shortcut.FlagString, Desc: "幂等键（可选）"},
 		{Name: "idempotency-key", Type: shortcut.FlagString, Desc: "--uuid 的 lark-cli 对齐别名"},
 		shortcut.AIMessageTagFlag(),
@@ -213,7 +213,7 @@ var MessagesReply = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"ref-msg-id", "message-id"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"uuid", "idempotency-key"}},
 	},
-	Tips: []string{`dws chat +messages-reply --conversation-id <openConversationId> --message-id <openMessageId> --text "收到" --idempotency-key <key>`},
+	Tips: []string{`dws chat +messages-reply --group <openConversationId> --message-id <openMessageId> --content "收到" --idempotency-key <key>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		refSender, err := resolveReplySender(rt)
 		if err != nil {
@@ -223,10 +223,10 @@ var MessagesReply = shortcut.Shortcut{
 			"referenceOpenMessageId":   replyMessageID(rt),
 			"srcMsgSendOpenDingTalkId": refSender,
 			"replyMsgType":             "text",
-			"content":                  rt.Str("text"),
+			"content":                  rt.StrFirst("text", "content"),
 		})
 		params := rt.AddAIMessageTag(map[string]any{
-			"openConversationId": rt.Str("conversation-id"),
+			"openConversationId": replyConversationID(rt),
 			"msgType":            "reply",
 			"content":            string(content),
 		})
@@ -240,7 +240,7 @@ var MessagesReply = shortcut.Shortcut{
 				"willSend":        false,
 				"transport":       "chat/send_personal_message",
 				"arguments":       params,
-				"conversationId":  rt.Str("conversation-id"),
+				"conversationId":  replyConversationID(rt),
 				"referencedMessage": map[string]any{
 					"messageId":            replyMessageID(rt),
 					"senderOpenDingTalkId": refSender,
@@ -256,9 +256,13 @@ var MessagesReply = shortcut.Shortcut{
 	},
 }
 
+func replyConversationID(rt *shortcut.RuntimeContext) string {
+	return rt.StrFirst("conversation-id", "group")
+}
+
 func enrichReplyResult(data map[string]any, rt *shortcut.RuntimeContext, refSender string) {
 	data["contractVersion"] = "im.message-reply.v1"
-	data["conversationId"] = rt.Str("conversation-id")
+	data["conversationId"] = replyConversationID(rt)
 	data["referencedMessage"] = map[string]any{
 		"messageId":            replyMessageID(rt),
 		"senderOpenDingTalkId": refSender,

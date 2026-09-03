@@ -58,10 +58,10 @@ Flags:
 Usage:
   dws doc block insert [flags]
 Example:
-  dws doc block insert --node <DOC_ID> --text "这是一段文字"
+  dws doc block insert --node <DOC_ID> --content "这是一段文字"
   dws doc block insert --node <DOC_ID> --heading "二级标题" --level 2
   dws doc block insert --node <DOC_ID> --element '{"blockType":"paragraph","paragraph":{"text":"内容"}}'
-  dws doc block insert --node <DOC_ID> --text "在此处之前插入" --ref-block <BLOCK_ID> --where before
+  dws doc block insert --node <DOC_ID> --content "在此处之前插入" --ref-block <BLOCK_ID> --where before
   dws doc block insert --node <DOC_ID> --content-format jsonml --element '["p",{"uuid":"..."},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"新段落"]]]'
 
   # 插入引用块(blockquote)
@@ -83,7 +83,7 @@ Example:
   dws doc update --node <DOC_ID> --content "---" --mode append
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --text string        快捷: 段落文本内容
+      --content string     快捷: 段落文本内容
       --heading string     快捷: 标题文本
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)；content-format=jsonml 时为 JSONML 数组字符串
@@ -104,13 +104,13 @@ Flags:
 Usage:
   dws doc block update [flags]
 Example:
-  dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text "新内容"
+  dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "新内容"
   dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --element '{"blockType":"heading","heading":{"text":"新标题","level":1}}'
   dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content-format jsonml --element '["h1",{"uuid":"<BLOCK_ID>"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"新标题"]]]'
 Flags:
       --node string        文档 ID 或 URL (必填)
       --block-id string    目标块 ID (必填)
-      --text string        快捷: 段落文本内容
+      --content string     快捷: 段落文本内容
       --heading string     快捷: 标题文本
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)；content-format=jsonml 时为 JSONML 数组字符串
@@ -172,7 +172,7 @@ dws doc block delete --node DOC_ID --block-id UUID
 ## 关键说明
 
 - **块类型**：paragraph、heading、blockquote、callout、columns、orderedList、unorderedList、table、sheet、attachment、slot。
-- **快捷 vs --element**：`block insert` 优先使用 `--text` 或 `--heading` 快捷方式；复杂块类型（table、callout、columns 等）使用 `--element` JSON 或 `--content-format jsonml`。
+- **快捷 vs --element**：`block insert` 优先使用 `--content` 或 `--heading` 快捷方式；复杂块类型（table、callout、columns 等）使用 `--element` JSON 或 `--content-format jsonml`。
 - **简单内容追加**：建议用 [`./doc-update.md`](./doc-update.md) `--mode append`，不必走 block insert。
 - **JSONML validator**（写入端默认行为）：
   - 裸字符串、缺 uuid 等结构错误会被 validator 抦下并返回带 path 的错误（如 `$[2][2]: paragraph child must be span wrapper, got raw string.`）。
@@ -195,7 +195,7 @@ dws doc block delete --node DOC_ID --block-id UUID
 # ── element JSON 形态（次选，老接口）──
 
 # 文本段落
-dws doc block insert --node <DOC_ID> --text "这是段落文字" --content-format element
+dws doc block insert --node <DOC_ID> --content "这是段落文字" --content-format element
 
 # 标题（level 1-6）
 dws doc block insert --node <DOC_ID> --heading "二级标题" --level 2 --content-format element
@@ -217,10 +217,10 @@ dws doc block insert --node <DOC_ID> --content-format element \
   --element '{"blockType":"callout","callout":{"emoji":"⚠️","bgColor":"#FDE2E0","content":[{"text":"高风险操作，先备份"}]}}'
 
 # 在指定 block 之前插入
-dws doc block insert --node <DOC_ID> --text "在此之前" --ref-block <BLOCK_ID> --where before --content-format element
+dws doc block insert --node <DOC_ID> --content "在此之前" --ref-block <BLOCK_ID> --where before --content-format element
 
 # 修改某块文本
-dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text "修改后" --content-format element
+dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "修改后" --content-format element
 
 # 修改标题
 dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content-format element \

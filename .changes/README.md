@@ -25,7 +25,9 @@ category: Added
 
 发布 beta 时，`scripts/release/prepare-changelog.sh` 会按分类和文件名稳定排序，
 将未归档 fragments 汇总为唯一的版本章节，并移动到
-`.changes/released/<version>/`。因此 release-seal PR 是唯一会修改
+`.changes/released/<version>/`。beta 发布后若有新 fragments 合入并直接准备 stable，
+stable 封板会把它们追加到明确的 post-beta 小节，并归档到正式版本目录；没有新
+fragments 时仍只生成原有 beta 晋级模板。因此 release-seal PR 是唯一会修改
 `CHANGELOG.md` 的 PR；它同时归档已消费的 fragments，供审计追溯。
 归档只能在同一个 release-seal PR 中以原样移动完成；CI 会拒绝直接修改、
 删除或重写已归档文件。

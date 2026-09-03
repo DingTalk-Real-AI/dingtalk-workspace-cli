@@ -43,11 +43,11 @@ func defaultHooks() *Hooks {
 	}
 }
 
-// openSupplementServers returns helper-only MCP endpoints owned by the open
-// CLI. They are callable by explicit server ID but are deliberately excluded
-// from VisibleProducts, so no top-level product command is generated. They
-// stay separate from syncdata.StaticServers because only explicitly wired CLI
-// helpers may call them; they are not public MCP product surfaces.
+// openSupplementServers returns explicitly wired MCP endpoints owned by the
+// open CLI. They are callable by explicit server ID but are deliberately
+// excluded from VisibleProducts, so this hook never generates a top-level
+// product command. A public command using one of these endpoints must register
+// its Cobra tree explicitly via helpers.RegisterPublic.
 func openSupplementServers() []ServerInfo {
 	return []ServerInfo{
 		{
@@ -59,6 +59,27 @@ func openSupplementServers() []ServerInfo {
 			ID:       "whiteboard",
 			Name:     "钉钉白板",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/whiteboard",
+		},
+		{
+			ID:       "recruit",
+			Name:     "钉钉招聘",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/f69b54ada16c57b603c0e5e1c36f464ba73dcee28d64bb701ff2682c259c0cff",
+			Prefixes: []string{"recruit", "job"},
+		},
+		{
+			ID:       "contract",
+			Name:     "智能合同",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/571e843ffa2f7546207fcae482d0d47a43bb7e5317bc717172998e1e00691710",
+		},
+		{
+			ID:       "drive-internal",
+			Name:     "钉钉知识管理-内部",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02",
+		},
+		{
+			ID:       "dingtalk-file",
+			Name:     "钉钉文件服务",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/d48b09ddafc89bf921b777ff428f8fc88b14805ccdd9680e02b7be318e7ed4b4",
 		},
 	}
 }

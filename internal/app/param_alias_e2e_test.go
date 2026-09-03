@@ -51,21 +51,90 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string {
 	switch tool {
 	case "list_calendar_events":
-		return `{"result":{"events":[]}}`
+		return `{"success":true,"result":{"events":[],"hasMore":false,"nextCursor":""}}`
+	case "get_calendar_detail":
+		return c.paramAliasCalendarDetailResponse()
+	case "get_calendar_participants":
+		return `{"success":true,"result":{"participants":[{"userId":"fixture-user","displayName":"Fixture User"},{"userId":"user-2","displayName":"User Two"}]}}`
+	case "search_calendar":
+		return `{"success":true,"result":{"calendars":[]}}`
+	case "search_rooms":
+		return `{"success":true,"result":{"rooms":[]}}`
+	case "query_available_meeting_room":
+		return `{"success":true,"result":{"rooms":[],"hasMore":false}}`
+	case "list_meeting_room_groups":
+		return `{"success":true,"result":{"groups":[]}}`
+	case "query_busy_status":
+		return `{"success":true,"result":[]}`
+	case "list_suggested_event_times":
+		return `{"success":true,"result":{"recommendEventTimes":[]}}`
+	case "list_by_keyword_and_time_range":
+		return `{"success":true,"result":{"itemList":[{"taskUuid":"u1","startTime":1}]}}`
+	case "get_minutes_basic_info":
+		return `{"success":true,"result":{"taskUuid":"u1","title":"Fixture Minutes"}}`
+	case "get_minutes_transcription":
+		return `{"success":true,"result":{"paragraphList":[],"hasNext":false}}`
+	case "create_personal_todo":
+		return `{"success":true,"result":{"taskId":"task-1"}}`
+	case "get_todo_detail":
+		return `{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"Fixture Todo","isDone":false}}}`
+	case "get_user_todos_in_current_org":
+		return `{"success":true,"result":{"todoCards":[],"hasMore":false}}`
+	case "add_todo_reminder":
+		return `{"success":true}`
+	case "copy_document":
+		return `{"success":true,"nodeId":"copy-1"}`
+	case "move_document", "add_member", "update_member", "remove_member":
+		return `{"success":true}`
+	case "get_document_info":
+		if len(c.calls) > 1 {
+			switch c.calls[len(c.calls)-2].tool {
+			case "copy_document":
+				return `{"success":true,"nodeId":"copy-1","workspaceId":"workspace-1","folderId":"folder-1"}`
+			case "move_document":
+				return `{"success":true,"nodeId":"node-1","workspaceId":"drive-1","folderId":"folder-1"}`
+			}
+		}
+		return `{"success":true,"nodeId":"node-1","workspaceId":"source-1","folderId":"source-folder"}`
+	case "list_wikiSpaces":
+		return `{"success":true,"wikiSpaces":[{"workspaceId":"drive-1","name":"我的文档"}],"hasMore":false}`
+	case "create_calendar_event":
+		return `{"success":true,"result":{"eventId":"event-1"}}`
+	case "update_calendar_event", "delete_calendar_event", "add_calendar_participant", "remove_calendar_participant":
+		return `{"success":true}`
+	case "respond":
+		status := "accepted"
+		if call := c.lastParamAliasCall(); call != nil {
+			if value, ok := call.args["responseStatus"].(string); ok && value != "" {
+				status = value
+			}
+		}
+		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"responseStatus": status}})
+		return string(encoded)
+	case "get_current_user_profile":
+		return `{"success":true,"result":{"userId":"user-1","name":"Fixture Current User"}}`
+	case "query_records":
+		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
 		return `{"users":[{"name":"Fixture User","email":"fixture@example.com","id":"fixture-user"}]}`
 	case "search_dept_by_keyword":
 		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
 	case "search_groups":
 		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	case "list_messages_by_ids":
+		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","content":"fixture message"}]}}`
+	case "get_conversation_info":
+		return `{"result":{"openConversationId":"fixture-conversation","convThreadEnabled":false}}`
 	case "search_contact_by_key_word":
 		return `{"result":[{"name":"Fixture User","userId":"fixture-user","openDingTalkId":"D-fixture-user"}]}`
 	case "list_doc_versions":
 		return `{"result":{"items":[{"version":3}]}}`
 	case "revert_doc_version":
-		return `{"version":3}`
+		return `{"revertedToVersion":3}`
 	case "search_doc_templates":
 		return `{"result":[{"templateId":"fixture-template-id"}]}`
+	case "list_workflows":
+		return `{"workflows":[]}`
 	case "create_document":
 		return `{"nodeId":"fixture-node"}`
 	case "list_files":
@@ -95,8 +164,10 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		}
 		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"fileId": "node-1", "name": name}})
 		return string(encoded)
-	case "get_cover", "get_node_stats":
+	case "get_cover":
 		return `{"success":true,"result":{"nodeId":"node-1"}}`
+	case "get_node_stats":
+		return `{"success":true,"result":{"nodeId":"node-1","views":1}}`
 	case "get_file_publish_status":
 		return `{"success":true,"result":{"fileId":"node-1","published":false}}`
 	case "create_folder", "create_shortcut":
@@ -121,6 +192,41 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	default:
 		return `{}`
 	}
+}
+
+func (c *paramAliasCaptureCaller) lastParamAliasCall() *paramAliasToolCall {
+	if len(c.calls) == 0 {
+		return nil
+	}
+	return &c.calls[len(c.calls)-1]
+}
+
+func (c *paramAliasCaptureCaller) paramAliasCalendarDetailResponse() string {
+	event := map[string]any{
+		"eventId":       "event-1",
+		"summary":       "Fixture Meeting",
+		"description":   "fixture description",
+		"startDateTime": "2026-03-10T09:00:00+08:00",
+		"endDateTime":   "2026-03-10T10:00:00+08:00",
+	}
+	for _, call := range c.calls {
+		switch call.tool {
+		case "create_calendar_event", "update_calendar_event":
+			for _, key := range []string{"eventId", "summary", "description", "startDateTime", "endDateTime", "timeZone", "location", "freeBusy"} {
+				if value, ok := call.args[key]; ok {
+					event[key] = value
+				}
+			}
+		case "respond":
+			if value, ok := call.args["responseStatus"]; ok {
+				event["responseStatus"] = value
+			}
+		case "delete_calendar_event":
+			event["status"] = "cancelled"
+		}
+	}
+	encoded, _ := json.Marshal(map[string]any{"success": true, "result": event})
+	return string(encoded)
 }
 
 func (*paramAliasCaptureCaller) Format() string { return "json" }
@@ -197,7 +303,11 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}
 	root := NewRootCommand()
 	rootNewCommandRunnerWithFlags = originalRunnerFactory
-	root.SetOut(io.Discard)
+	// Unified-result leaves emit through Cobra's output writer, while legacy
+	// dry-run leaves still write through the process stdout formatter. Point
+	// both surfaces at the same capture file so this protocol-agnostic alias
+	// probe keeps observing the one preview produced by either rollout state.
+	root.SetOut(captureFile)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
 
@@ -218,7 +328,15 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}
 	var preview paramAliasDryRunPreview
 	if executeErr == nil {
-		if err := json.Unmarshal(output, &preview); err != nil {
+		previewJSON := output
+		var envelope struct {
+			OK   *bool           `json:"ok"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(output, &envelope); err == nil && envelope.OK != nil && len(envelope.Data) > 0 {
+			previewJSON = envelope.Data
+		}
+		if err := json.Unmarshal(previewJSON, &preview); err != nil {
 			t.Fatalf("decode dry-run preview: %v\noutput=%s", err, output)
 		}
 	}
@@ -479,7 +597,11 @@ func TestCrossPlatformCoverageChatReactionConversationAliasesReachCanonicalPaylo
 					if err != nil {
 						t.Fatalf("alias execution failed: %v", err)
 					}
-					if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
+					if alias == "open-conversation-id" {
+						if ctx == nil || len(ctx.Corrections) != 0 {
+							t.Fatalf("alias corrections = %#v", ctx)
+						}
+					} else if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
 						t.Fatalf("alias corrections = %#v", ctx)
 					}
 					if !reflect.DeepEqual(aliasCaller.calls, canonicalCaller.calls) {

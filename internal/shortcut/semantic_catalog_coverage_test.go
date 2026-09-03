@@ -121,6 +121,47 @@ func TestCrossPlatformCoverageSemanticCatalogRejectsInvalidRecords(t *testing.T)
 				}
 			}
 		}`,
+		"compatibility-visible public": `{
+			"version": 1,
+			"service": "chat",
+			"default_availability": "available",
+			"shortcuts": {
+				"+messages": {
+					"disposition": "semantic_adapter",
+					"semantic_delta": "reviewed",
+					"risk": "read",
+					"public": true,
+					"compatibility_visible": true,
+					"reviewed": true
+				}
+			}
+		}`,
+		"featured lacks prefix": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["messages"],"shortcuts":{}
+		}`,
+		"featured whitespace": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":[" +messages"],"shortcuts":{}
+		}`,
+		"featured duplicate": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+messages","+messages"],"shortcuts":{}
+		}`,
+		"featured missing": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+missing"],"shortcuts":{}
+		}`,
+		"featured nonpublic": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+messages"],
+			"shortcuts":{"+messages":{"disposition":"semantic_adapter","semantic_delta":"reviewed","risk":"read","public":false,"reviewed":true}}
+		}`,
+		"featured alias": `{
+			"version":1,"service":"chat","default_availability":"available",
+			"featured_shortcuts":["+messages"],
+			"shortcuts":{"+messages":{"disposition":"alias_internal","semantic_delta":"reviewed","risk":"read","primary":"+primary","public":true,"reviewed":true}}
+		}`,
 	}
 	original := semanticCatalogJSON
 	t.Cleanup(func() { semanticCatalogJSON = original })
@@ -169,6 +210,81 @@ func TestCrossPlatformCoveragePublicCatalogSemanticAndGeneratedLookups(t *testin
 	}
 	if InPublicCatalog("unknown", "+missing") {
 		t.Fatal("unknown shortcut is public")
+	}
+	if owner, ok := PreferredShortcutForCLIPath("chat mute"); !ok || owner != "chat +conversation-mute" {
+		t.Fatalf("chat mute preferred owner = %q, %v", owner, ok)
+	}
+	if _, ok := PreferredShortcutForCLIPath("chat unknown"); ok {
+		t.Fatal("unknown atomic path has a preferred Shortcut")
+	}
+}
+
+func TestCrossPlatformCoverageAtomicOwnerCatalogRejectsInvalidRecords(t *testing.T) {
+	publicRecord := semanticCatalogRecord{
+		Disposition:  DispositionSemanticAdapter,
+		Public:       true,
+		Availability: AvailabilityAvailable,
+	}
+	records := map[string]semanticCatalogRecord{
+		publicCatalogKey("chat", "+owner"): publicRecord,
+	}
+	cases := map[string]string{
+		"json":            `{`,
+		"bad path":        `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"mute":"+owner"},"shortcuts":{}}`,
+		"path whitespace": `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{" chat mute":"+owner"},"shortcuts":{}}`,
+		"bad owner":       `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"owner"},"shortcuts":{}}`,
+		"missing owner":   `{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+missing"},"shortcuts":{}}`,
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("invalid atomic owner catalog did not panic")
+				}
+			}()
+			_ = mustLoadAtomicShortcutOwners(records, []byte(payload))
+		})
+	}
+
+	duplicateA := []byte(`{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+owner"},"shortcuts":{}}`)
+	duplicateB := []byte(`{"version":1,"service":"chat","default_availability":"available","atomic_owners":{"chat mute":"+owner"},"shortcuts":{}}`)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("duplicate atomic owner path did not panic")
+		}
+	}()
+	_ = mustLoadAtomicShortcutOwners(records, duplicateA, duplicateB)
+}
+
+func TestCrossPlatformCoverageCompatibilityVisibleStaysNonPublic(t *testing.T) {
+	item, ok := applyReviewedSemanticCatalog(Shortcut{Service: "attendance", Command: "+get-summary"})
+	if !ok || item.Hidden || !item.CompatibilityVisible || item.Availability != AvailabilityUnavailable {
+		t.Fatalf("compatibility-visible semantic item = %#v, found=%v", item, ok)
+	}
+	if InPublicCatalog(item.Service, item.Command) {
+		t.Fatal("compatibility-visible unavailable shortcut entered the public catalog")
+	}
+
+	available := map[string]semanticCatalogRecord{}
+	loadSemanticCatalog([]byte(`{
+		"version":1,
+		"service":"compatibility-test",
+		"default_availability":"unavailable",
+		"shortcuts":{
+			"+legacy":{
+				"disposition":"semantic_adapter",
+				"semantic_delta":"historical CLI path remains executable but is not Agent-public",
+				"risk":"write",
+				"availability":"available",
+				"public":false,
+				"compatibility_visible":true,
+				"reviewed":true
+			}
+		}
+	}`), available)
+	record := available[publicCatalogKey("compatibility-test", "+legacy")]
+	if record.Public || !record.CompatibilityVisible || record.Availability != AvailabilityAvailable {
+		t.Fatalf("available compatibility record = %#v", record)
 	}
 }
 

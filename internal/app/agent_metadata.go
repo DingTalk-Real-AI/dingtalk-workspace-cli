@@ -25,6 +25,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 )
@@ -219,6 +220,7 @@ func resolveMCPRequestHeadersWithSnapshot(snapshot agentMetadataSnapshot) map[st
 // Agent metadata must not cross that boundary.
 func resolveMCPRequestHeadersForInvocation(invocation executor.Invocation, snapshots ...agentMetadataSnapshot) map[string]string {
 	headers := resolveIdentityHeaders()
+	removeRuntimeContextHeader(headers)
 	if strings.EqualFold(strings.TrimSpace(invocation.CanonicalProduct), mcpMetaServerID) {
 		return headers
 	}
@@ -226,7 +228,31 @@ func resolveMCPRequestHeadersForInvocation(invocation executor.Invocation, snaps
 	if len(snapshots) > 0 {
 		snapshot = snapshots[0]
 	}
-	return applyAgentMetadataSnapshot(headers, snapshot)
+	headers = applyAgentMetadataSnapshot(headers, snapshot)
+	return applyRuntimeContextHeader(headers, runtimeContextResolve())
+}
+
+var runtimeContextResolve = runtimecontext.Resolve
+
+func applyRuntimeContextHeader(headers map[string]string, result runtimecontext.Result) map[string]string {
+	removeRuntimeContextHeader(headers)
+	value, ok := result.HeaderValue()
+	if !ok {
+		return headers
+	}
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	headers[runtimecontext.HeaderName] = value
+	return headers
+}
+
+func removeRuntimeContextHeader(headers map[string]string) {
+	for key := range headers {
+		if strings.EqualFold(key, runtimecontext.HeaderName) {
+			delete(headers, key)
+		}
+	}
 }
 
 // pluginRequestHeaders returns a private, sanitized copy of plugin-owned
@@ -241,6 +267,7 @@ func pluginRequestHeaders(pluginAuth *PluginAuth) map[string]string {
 		headers[key] = value
 	}
 	removeAgentMetadataHeaders(headers)
+	removeRuntimeContextHeader(headers)
 	if len(headers) == 0 {
 		return nil
 	}

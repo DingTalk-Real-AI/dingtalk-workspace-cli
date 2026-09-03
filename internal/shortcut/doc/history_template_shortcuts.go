@@ -66,8 +66,8 @@ func canonicalizeHistoryShortcuts() {
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 
-	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板"
-	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用。"
+	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板；默认只读取一页"
+	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用；要求全部模板或完整模板库时必须使用 --page-all。"
 	TemplateList.Contract = templateListContract()
 	TemplateSearch.Description = "按名称或关键词检索文档模板"
 	TemplateSearch.Intent = "当用户已提供明确模板名称或关键词时使用；返回结构化候选和 resolved/not_found/selection_required 状态，零命中或多候选时停止创建。"
@@ -128,10 +128,14 @@ func templateSearchContract() corecmd.ContractDecl {
 }
 
 func templateListContract() corecmd.ContractDecl {
-	decl := docContract("+template-list", TemplateList.Description, TemplateList.Intent, []string{`dws doc +template-list --source PUBLIC`})
+	decl := docContract("+template-list", TemplateList.Description, TemplateList.Intent, []string{
+		`dws doc +template-list --source PUBLIC`,
+		`dws doc +template-list --source PUBLIC --page-all --max-pages 20`,
+	})
 	decl.Selection.AvoidWhen = []string{
 		"已经有明确模板名称或关键词时使用 doc +template-search --query",
 		"已经拿到 templateId 且要创建文档时使用 doc +create-from-template --template-id",
+		"只需要当前页或明确 Top-N 时不要无条件读取完整模板库",
 	}
 	return decl
 }
@@ -178,13 +182,49 @@ func executeHistoryRevert(rt *shortcut.RuntimeContext) error {
 			map[string]any{"available": false, "reason": "the requested revert completed; verify the current document before any further write"},
 		)
 	}
+	verified := !revertResponseHasExplicitFailure(reverted) &&
+		(revertResultMatchesVersion(reverted, target) || currentDocumentMatchesRestoredVersion(current, target))
+	if !verified {
+		return docPartialWriteError(
+			"doc.history_revert", "doc_history_revert_target_unproven", "verify",
+			fmt.Sprintf("版本 %d 的回滚请求已执行且文档可读，但响应没有提供目标版本证据；不要直接重试回滚", target),
+			fmt.Errorf("回读缺少目标版本 %d 的明确证据", target),
+			map[string]any{
+				"nodeId": nodeID, "version": target, "reverted": true, "verified": false,
+				"revertResult": reverted, "current": current,
+			},
+			[]map[string]any{
+				{"name": "preflight", "status": "success"},
+				{"name": "revert", "status": "success"},
+				{"name": "verify", "status": "failed"},
+			},
+			map[string]any{"available": false, "reason": "the revert may have completed; inspect version history before any further revert"},
+		)
+	}
 	return rt.Output(docEnvelope("doc.history_revert", map[string]any{
 		"version": target, "revertResult": reverted, "current": current, "verified": true,
-		"verification": "revert_acknowledged_and_document_readable",
+		"verification": "target_version_proven",
 	},
 		map[string]any{"name": "preflight", "status": "success"},
 		map[string]any{"name": "revert", "status": "success"},
 		map[string]any{"name": "verify", "status": "success"}))
+}
+
+func revertResultMatchesVersion(value map[string]any, target int) bool {
+	if revertResponseHasExplicitFailure(value) {
+		return false
+	}
+	return versionEvidenceMatches(value, target, map[string]bool{
+		"targetversion": true, "appliedversion": true,
+		"restoredversion": true, "revertedversion": true, "revertedtoversion": true, "sourceversion": true,
+	})
+}
+
+func currentDocumentMatchesRestoredVersion(value map[string]any, target int) bool {
+	return versionEvidenceMatches(value, target, map[string]bool{
+		"restoredfromversion": true, "revertedfromversion": true,
+		"sourceversion": true, "appliedversion": true, "targetversion": true,
+	})
 }
 
 func findHistoryVersion(rt *shortcut.RuntimeContext, nodeID string, target int) (bool, error) {
@@ -240,6 +280,9 @@ func versionEvidenceMatches(value any, target int, acceptedKeys map[string]bool)
 	case map[string]any:
 		for key, child := range typed {
 			normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+			if versionEvidenceRequestEchoKeys[normalized] {
+				continue
+			}
 			if acceptedKeys[normalized] {
 				if versionNumberMatches(child, target) {
 					return true
@@ -257,6 +300,87 @@ func versionEvidenceMatches(value any, target int, acceptedKeys map[string]bool)
 		}
 	}
 	return false
+}
+
+var versionEvidenceRequestEchoKeys = map[string]bool{
+	"args": true, "arguments": true, "input": true, "inputs": true,
+	"params": true, "parameters": true, "request": true, "requestbody": true,
+	"requestparams": true, "toolargs": true, "toolarguments": true,
+}
+
+func revertResponseHasExplicitFailure(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+			if versionEvidenceRequestEchoKeys[normalized] {
+				continue
+			}
+			if normalized == "success" || normalized == "ok" {
+				if success, ok := child.(bool); ok && !success {
+					return true
+				}
+				if success, ok := child.(string); ok && strings.EqualFold(strings.TrimSpace(success), "false") {
+					return true
+				}
+			}
+			if (normalized == "status" || normalized == "state") && revertStatusIsFailure(child) {
+				return true
+			}
+			if normalized == "errorcode" || normalized == "code" {
+				if revertErrorCodeIsFailure(child) {
+					return true
+				}
+			}
+			if revertResponseHasExplicitFailure(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if revertResponseHasExplicitFailure(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func revertStatusIsFailure(value any) bool {
+	status, ok := value.(string)
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "fail", "failed", "failure", "error", "errored", "reject", "rejected", "deny", "denied", "cancel", "cancelled", "canceled", "abort", "aborted":
+		return true
+	default:
+		return false
+	}
+}
+
+func revertErrorCodeIsFailure(value any) bool {
+	switch typed := value.(type) {
+	case string:
+		normalized := strings.ToLower(strings.TrimSpace(typed))
+		switch normalized {
+		case "", "ok", "success", "succeed", "succeeded":
+			return false
+		}
+		if parsed, err := strconv.Atoi(normalized); err == nil {
+			return parsed != 0 && (parsed < 200 || parsed >= 300)
+		}
+		return true
+	case float64:
+		return typed != 0 && (typed < 200 || typed >= 300)
+	case json.Number:
+		parsed, err := typed.Int64()
+		return err != nil || (parsed != 0 && (parsed < 200 || parsed >= 300))
+	case int:
+		return typed != 0 && (typed < 200 || typed >= 300)
+	default:
+		return false
+	}
 }
 
 func versionNumberMatches(value any, target int) bool {

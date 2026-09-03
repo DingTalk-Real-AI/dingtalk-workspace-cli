@@ -292,7 +292,7 @@ func TestDriveUploadOverwriteRoutesAndConfirms(t *testing.T) {
 		if len(caller.calls) != 2 {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		wantStep1 := map[string]any{"workspaceId": "workspace-1", "overwriteNodeId": "node-1", "name": "renamed.md"}
+		wantStep1 := map[string]any{"workspaceId": "workspace-1", "overwriteNodeId": "node-1", "name": "renamed.md", "fileSize": float64(4)}
 		if !reflect.DeepEqual(caller.calls[0].args, wantStep1) {
 			t.Fatalf("step1 args = %#v, want %#v", caller.calls[0].args, wantStep1)
 		}
@@ -467,6 +467,144 @@ func TestMarkdownCreateDriveAndDocRouting(t *testing.T) {
 			}
 			if len(caller.calls) != 2 || caller.calls[0].server != test.wantServer || caller.calls[0].tool != test.wantTool {
 				t.Fatalf("calls = %#v", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMarkdownCreateFolderAutoRouting(t *testing.T) {
+	t.Run("drive folder selects drive upload", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps: []markdownDriveStep{
+				{text: `{"result":{"type":"folder","fileName":"drive-folder"}}`},
+				{text: `{"uploadId":"drive-key","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
+				{text: `{"created":true}`},
+			},
+		}
+		installMarkdownDriveDeps(t, caller)
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "create", "--name", "README.md", "--content", "# hello", "--folder", "drive-folder")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 3 ||
+			caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" ||
+			caller.calls[1].server != "drive" || caller.calls[1].tool != "get_upload_info" ||
+			caller.calls[2].server != "drive" || caller.calls[2].tool != "commit_upload" {
+			t.Fatalf("auto-routed calls = %#v", caller.calls)
+		}
+		if caller.calls[1].args["parentId"] != "drive-folder" || caller.calls[2].args["parentId"] != "drive-folder" {
+			t.Fatalf("drive folder was not preserved across upload: %#v", caller.calls)
+		}
+	})
+
+	t.Run("doc folder selects doc upload", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps: []markdownDriveStep{
+				{err: errors.New("not found in drive")},
+				{text: `{"result":{"nodeType":"folder","name":"doc-folder"}}`},
+				{text: `{"resourceUrl":"https://upload.test/doc","uploadKey":"doc-key"}`},
+				{text: `{"created":true}`},
+			},
+		}
+		installMarkdownDriveDeps(t, caller)
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "create", "--name", "README.md", "--content", "# hello", "--folder", "doc-folder")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 4 ||
+			caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" ||
+			caller.calls[1].server != "doc" || caller.calls[1].tool != "get_document_info" ||
+			caller.calls[2].server != "doc" || caller.calls[2].tool != "get_file_upload_info" ||
+			caller.calls[3].server != "doc" || caller.calls[3].tool != "commit_uploaded_file" {
+			t.Fatalf("auto-routed calls = %#v", caller.calls)
+		}
+		if caller.calls[2].args["folderId"] != "doc-folder" || caller.calls[3].args["folderId"] != "doc-folder" {
+			t.Fatalf("doc folder was not preserved across upload: %#v", caller.calls)
+		}
+	})
+
+	t.Run("folder probe failure stops before upload", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps: []markdownDriveStep{
+				{err: errors.New("not found in drive")},
+				{err: errors.New("not found in doc")},
+			},
+		}
+		installMarkdownDriveDeps(t, caller)
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error {
+			t.Fatal("folder probe failure attempted upload")
+			return nil
+		}
+
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "create", "--name", "README.md", "--content", "# hello", "--folder", "missing-folder")
+		if err == nil || !strings.Contains(err.Error(), "无法根据 --folder missing-folder 自动识别") {
+			t.Fatalf("error = %v", err)
+		}
+		if len(caller.calls) != 2 {
+			t.Fatalf("probe failure calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("dry run keeps folder resolution offline", func(t *testing.T) {
+		caller := &markdownDriveCaller{format: "json", dryRun: true}
+		stdout, _ := installMarkdownDriveDeps(t, caller)
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "create", "--name", "README.md", "--content", "# hello", "--folder", "unknown-offline")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("dry run made MCP calls: %#v", caller.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+			t.Fatalf("dry-run output is not JSON: %v\n%s", err, stdout.String())
+		}
+		if payload["folder_id"] != "unknown-offline" || payload["dry_run"] != true {
+			t.Fatalf("dry-run payload = %#v", payload)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProbe(t *testing.T) {
+	t.Run("conflicting explicit routes fail closed", func(t *testing.T) {
+		got, err := resolveMarkdownCreateTarget(context.Background(), "folder", "space", "workspace")
+		if err == nil || got {
+			t.Fatalf("useDoc=%v err=%v, want false with an error", got, err)
+		}
+	})
+
+	tests := []struct {
+		name        string
+		folderID    string
+		spaceID     string
+		workspaceID string
+		wantDoc     bool
+	}{
+		{name: "drive space", folderID: "folder", spaceID: "space", wantDoc: false},
+		{name: "doc workspace", folderID: "folder", workspaceID: "workspace", wantDoc: true},
+		{name: "legacy default", wantDoc: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &markdownDriveCaller{format: "json"}
+			installMarkdownDriveDeps(t, caller)
+			got, err := resolveMarkdownCreateTarget(context.Background(), test.folderID, test.spaceID, test.workspaceID)
+			if err != nil || got != test.wantDoc {
+				t.Fatalf("useDoc=%v err=%v, want useDoc=%v", got, err, test.wantDoc)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("explicit/default route probed folder: %#v", caller.calls)
 			}
 		})
 	}

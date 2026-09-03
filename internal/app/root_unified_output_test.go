@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestExecuteEmitsStoredUnifiedResultAtSingleRootExit(t *testing.T) {
+func TestCrossPlatformCoverageExecuteEmitsStoredUnifiedResultAtSingleRootExit(t *testing.T) {
 	oldNormalize := rootNormalizeProcessProfileArgs
 	oldExecute := rootExecuteCommand
 	oldNewRoot := rootNewRootCommandWithEngine
@@ -96,7 +96,7 @@ func TestRootExecutionErrorToStderrOnly(t *testing.T) {
 	if stdout.Len() != 0 {
 		t.Fatalf("failure must keep stdout empty, got %q", stdout.String())
 	}
-	want := "{\n  \"error\": {\n    \"category\": \"auth\",\n    \"code\": 2,\n    \"message\": \"token expired\"\n  }\n}\n"
+	want := "{\n  \"error\": {\n    \"actions\": [\n      \"dws doctor --json\"\n    ],\n    \"category\": \"auth\",\n    \"code\": 2,\n    \"message\": \"token expired\"\n  }\n}\n"
 	if got := stderr.String(); got != want {
 		t.Fatalf("legacy root error wire changed\n got: %q\nwant: %q", got, want)
 	}
@@ -120,6 +120,44 @@ func TestRootHumanErrorToStderrOnly(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "Error:") {
 		t.Fatalf("expected human error on stderr, got %q", stderr.String())
+	}
+}
+
+func TestRootHumanAuthErrorUsesReadableDoctorMode(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().String("format", "table", "")
+	_ = root.PersistentFlags().Set("format", "table")
+
+	var stdout, stderr bytes.Buffer
+	if err := printExecutionError(root, &stdout, &stderr, apperrors.NewAuth("token expired")); err != nil {
+		t.Fatalf("printExecutionError() error = %v", err)
+	}
+	if got := stderr.String(); !strings.Contains(got, "Action: dws doctor") || strings.Contains(got, "dws doctor --json") {
+		t.Fatalf("human auth error must use readable doctor mode: %q", got)
+	}
+}
+
+func TestErrorInfoFromExecutionErrorRoutesDoctorSelectively(t *testing.T) {
+	t.Parallel()
+
+	auth := errorInfoFromExecutionError(apperrors.NewAuth(
+		"token expired",
+		apperrors.WithReason("auth_refresh_failed"),
+		apperrors.WithActions("dws auth login"),
+	))
+	if !strings.Contains(strings.Join(auth.Actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("auth actions = %#v, want doctor entry", auth.Actions)
+	}
+
+	permission := errorInfoFromExecutionError(apperrors.NewAuth(
+		"permission denied",
+		apperrors.WithReason("http_403"),
+		apperrors.WithActions("检查资源权限"),
+	))
+	if strings.Contains(strings.Join(permission.Actions, "\n"), "dws doctor") {
+		t.Fatalf("permission actions must not contain doctor: %#v", permission.Actions)
 	}
 }
 

@@ -114,6 +114,47 @@ func ReadHolderPID(path string) int {
 	return parsePID(b)
 }
 
+// ValidateHolderOwnership reports whether pid still owns the exclusive lock at
+// path. If the lock can be acquired, no daemon owns it: the PID payload is
+// stale and is cleared while the probe holds the lock. The PID is read again
+// after a busy result so a daemon replacement cannot be mistaken for the
+// original owner.
+//
+// Callers use this immediately before sending a process-level termination
+// fallback. A live PID by itself is not proof of ownership because operating
+// systems may reuse PIDs after an unclean daemon exit.
+func ValidateHolderOwnership(path string, pid int) (bool, error) {
+	if pid <= 0 || ReadHolderPID(path) != pid {
+		return false, nil
+	}
+
+	probe, err := busTryAcquire(path)
+	if err != nil {
+		if errors.Is(err, ErrBusy) {
+			return ReadHolderPID(path) == pid, nil
+		}
+		return false, fmt.Errorf("bus: verify lock owner: %w", err)
+	}
+	defer probe.Close()
+
+	// We own the lock, so the recorded PID cannot own it. Clear only the PID
+	// we validated above; a changed payload is left untouched defensively.
+	f := probe.File()
+	if _, err := busSeek(f, 0, io.SeekStart); err != nil {
+		return false, fmt.Errorf("bus: seek stale lock: %w", err)
+	}
+	current, err := busReadAll(f)
+	if err != nil {
+		return false, fmt.Errorf("bus: read stale lock: %w", err)
+	}
+	if parsePID(current) == pid {
+		if err := truncateAndWritePID(f, 0); err != nil {
+			return false, fmt.Errorf("bus: clear stale PID: %w", err)
+		}
+	}
+	return false, nil
+}
+
 // Close releases the flock and best-effort blanks the PID body so a stale
 // reader (e.g. `event status` racing our shutdown) does not see our
 // long-dead PID and try to signal it. The lock file itself is NOT removed

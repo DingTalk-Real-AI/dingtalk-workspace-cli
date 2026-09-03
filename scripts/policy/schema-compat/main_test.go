@@ -415,6 +415,177 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	}
 }
 
+func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	newTool := oldTool
+	newTool.Confirmation = "user_required"
+
+	for _, toolPath := range []string{
+		"doc/doc.remove_permission",
+		"drive/drive.permission_remove",
+		"wiki/wiki.remove_member",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("reviewed confirmation hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+	if failures := checkToolCompatibility("doc/doc.other_remove", oldTool, newTool); len(failures) == 0 {
+		t.Fatal("unreviewed confirmation hardening unexpectedly passed")
+	}
+
+	// A reviewed tool is only exempt for the exact reviewed transition: an
+	// unrelated field drift on the same tool must still be reported.
+	riskTool := oldTool
+	riskTool.Risk = "high"
+	if failures := checkToolCompatibility("doc/doc.remove_permission", oldTool, riskTool); len(failures) == 0 {
+		t.Fatal("reviewed tool risk drift unexpectedly passed")
+	}
+
+	oldTool.Confirmation = "user_required"
+	newTool.Confirmation = "not_required"
+	if failures := checkToolCompatibility("doc/doc.remove_permission", oldTool, newTool); len(failures) == 0 {
+		t.Fatal("reviewed tool confirmation weakening unexpectedly passed")
+	}
+}
+
+func TestSchemaCompatibilityAcceptsMultiFieldConfirmationHardening(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Confirmation = "not_required"
+	oldTool.Risk = "medium"
+	oldTool.Effect = "write"
+
+	// Multi-field tightening: confirmation + risk together.
+	newTool := oldTool
+	newTool.Confirmation = "user_required"
+	newTool.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"calendar/calendar.delete_meeting_room",
+		"chat/chat.remove_group_member",
+		"doc/doc.update_permission",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("reviewed multi-field hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+
+	// Multi-field tightening: confirmation + risk + effect together.
+	destructiveTool := oldTool
+	destructiveTool.Confirmation = "user_required"
+	destructiveTool.Risk = "high"
+	destructiveTool.Effect = "destructive"
+	for _, toolPath := range []string{
+		"calendar/calendar.delete_calendar_event",
+		"minutes/minutes.replace_minutes_text",
+		"aitable/aitable.section_delete",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, destructiveTool); len(failures) != 0 {
+			t.Fatalf("reviewed destructive hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+
+	// form questions delete already required confirmation; the correction only
+	// aligns effect and risk with its inherited field-delete runtime.
+	questionDeleteOld := oldTool
+	questionDeleteOld.Confirmation = "user_required"
+	questionDelete := questionDeleteOld
+	questionDelete.Risk = "high"
+	questionDelete.Effect = "destructive"
+	if failures := checkToolCompatibility("aitable/aitable.form_questions_delete", questionDeleteOld, questionDelete); len(failures) != 0 {
+		t.Fatalf("reviewed AITable question-delete hardening failures = %v", failures)
+	}
+
+	// An unreviewed tool with the same transitions must still fail.
+	if failures := checkToolCompatibility("calendar/calendar.other_delete", oldTool, destructiveTool); len(failures) == 0 {
+		t.Fatal("unreviewed multi-field hardening unexpectedly passed")
+	}
+
+	// A reviewed tool with an extra unreviewed field drift must still fail.
+	idempotencyTool := oldTool
+	idempotencyTool.Confirmation = "user_required"
+	idempotencyTool.Risk = "high"
+	idempotencyTool.Idempotency = "idempotent"
+	if failures := checkToolCompatibility("chat/chat.remove_group_member", oldTool, idempotencyTool); len(failures) == 0 {
+		t.Fatal("reviewed tool with unreviewed idempotency drift unexpectedly passed")
+	}
+}
+
+func TestSchemaCompatibilityRejectsPartialMultiFieldMigration(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Confirmation = "not_required"
+	oldTool.Risk = "medium"
+	oldTool.Effect = "write"
+
+	// Only risk tightened, confirmation unchanged: partial migration must fail
+	// for a tool whose reviewed set requires confirmation + risk together.
+	partialRisk := oldTool
+	partialRisk.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"chat/chat.remove_group_member",
+		"doc/doc.update_permission",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialRisk); len(failures) == 0 {
+			t.Fatalf("partial migration (risk only) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	// Only confirmation tightened, risk unchanged: also partial.
+	partialConfirmation := oldTool
+	partialConfirmation.Confirmation = "user_required"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"chat/chat.remove_group_member",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialConfirmation); len(failures) == 0 {
+			t.Fatalf("partial migration (confirmation only) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	// For a 3-field tool (confirmation + risk + effect), only 2 of 3 must fail.
+	partialDestructive := oldTool
+	partialDestructive.Confirmation = "user_required"
+	partialDestructive.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.delete_calendar_event",
+		"minutes/minutes.replace_minutes_text",
+		"aitable/aitable.section_delete",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialDestructive); len(failures) == 0 {
+			t.Fatalf("partial migration (confirmation+risk without effect) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	questionDeleteOld := oldTool
+	questionDeleteOld.Confirmation = "user_required"
+	partialQuestionDelete := questionDeleteOld
+	partialQuestionDelete.Risk = "high"
+	if failures := checkToolCompatibility("aitable/aitable.form_questions_delete", questionDeleteOld, partialQuestionDelete); len(failures) == 0 {
+		t.Fatal("partial AITable question-delete hardening unexpectedly passed")
+	}
+}
+
+func TestSchemaCompatibilityAcceptsReviewedAITableIdempotencyCorrections(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Idempotency = "unknown"
+
+	formCreate := oldTool
+	formCreate.Idempotency = "non_idempotent"
+	if failures := checkToolCompatibility("aitable/aitable.form_create", oldTool, formCreate); len(failures) != 0 {
+		t.Fatalf("reviewed form-create idempotency correction failures = %v", failures)
+	}
+
+	primaryDocCreate := oldTool
+	primaryDocCreate.Idempotency = "idempotent"
+	if failures := checkToolCompatibility("aitable/aitable.record_primary_doc_create", oldTool, primaryDocCreate); len(failures) != 0 {
+		t.Fatalf("reviewed primary-doc idempotency correction failures = %v", failures)
+	}
+
+	if failures := checkToolCompatibility("aitable/aitable.unreviewed_create", oldTool, primaryDocCreate); len(failures) == 0 {
+		t.Fatal("unreviewed idempotency correction unexpectedly passed")
+	}
+}
+
 func TestMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)
@@ -478,6 +649,24 @@ func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChange(t *testing
 	registerReviewedParameterTypeFixture(t, reviewedFormatTypeFixture())
 	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
 		t.Fatalf("a reviewed parameter type migration should pass: %v", failures)
+	}
+}
+
+func TestCrossPlatformCoverageChatUpdateCardFlowStatusTypeReviewIsExact(t *testing.T) {
+	baseline := parameterSchema{
+		Type:     `"integer"`,
+		Property: "flowStatus",
+		Required: true,
+	}
+	current := baseline
+	current.Type = `"string"`
+	if !compatibleReviewedParameterTypeChange("chat/chat.update_streaming_card", "flow-status", baseline, current) {
+		t.Fatal("reviewed update-card flow-status type migration should pass")
+	}
+
+	current.InterfaceType = "integer"
+	if compatibleReviewedParameterTypeChange("chat/chat.update_streaming_card", "flow-status", baseline, current) {
+		t.Fatal("reviewed type migration must reject a bundled interface_type change")
 	}
 }
 
@@ -959,6 +1148,120 @@ func TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition(t *testin
 			}
 		})
 	}
+
+	const sheetToolPath = "sheet/sheet.create_float_image"
+	const sheetTarget = `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`
+	sheetOldTool := toolSchema{}
+	sheetNewTool := sheetOldTool
+	sheetNewTool.Constraints = sheetTarget
+
+	if !compatibleReviewedConstraintTransition(sheetToolPath, sheetOldTool, sheetNewTool) {
+		t.Fatal("reviewed float-image local-file transition must be accepted")
+	}
+	if failures := checkToolCompatibility(sheetToolPath, sheetOldTool, sheetNewTool); len(failures) != 0 {
+		t.Fatalf("reviewed float-image local-file transition failed: %v", failures)
+	}
+
+	for _, test := range []struct {
+		name string
+		path string
+		old  string
+		new  string
+	}{
+		{name: "float image unlisted tool", path: "sheet/sheet.other", new: sheetTarget},
+		{name: "float image unlisted source", path: sheetToolPath, old: `{"require_one_of":[["src"]]}`, new: sheetTarget},
+		{name: "float image unlisted target", path: sheetToolPath, new: `{"require_one_of":[["file","src"]]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if compatibleReviewedConstraintTransition(test.path, toolSchema{Constraints: test.old}, toolSchema{Constraints: test.new}) {
+				t.Fatal("unreviewed float-image constraint transition unexpectedly passed")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{
+			path: "todo/todo.shortcut_update",
+			want: `{"require_one_of":[["title","due","priority"]]}`,
+		},
+		{
+			path: "todo/todo.shortcut_reminder",
+			want: `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			oldTool := toolSchema{}
+			newTool := toolSchema{Constraints: test.want}
+			if !compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("reviewed Todo runtime constraint transition must be accepted")
+			}
+			if failures := checkToolCompatibility(test.path, oldTool, newTool); len(failures) != 0 {
+				t.Fatalf("reviewed Todo constraint transition failed: %v", failures)
+			}
+
+			newTool.Constraints = `{}`
+			if compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("unlisted Todo constraint target unexpectedly passed")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedMinutesIdentifierConstraintTransitions(t *testing.T) {
+	tests := []struct {
+		path          string
+		parameterType string
+		old           string
+		want          string
+	}{
+		{
+			path:          "minutes/minutes.add_member_permission",
+			parameterType: `"string"`,
+			want:          `{"mutually_exclusive":[["member-uids","member-staff-ids"]],"require_one_of":[["member-uids","member-staff-ids"]]}`,
+		},
+		{
+			path:          "minutes/minutes.shortcut_share",
+			parameterType: `"array"`,
+			old:           `{"mutually_exclusive":[["id","ids"]],"require_one_of":[["id","ids"]]}`,
+			want:          `{"mutually_exclusive":[["id","ids"],["member-uids","member-staff-ids"]],"require_one_of":[["id","ids"],["member-uids","member-staff-ids"]]}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			oldTool := toolSchema{
+				Constraints: test.old,
+				Parameters: map[string]parameterSchema{
+					"member-uids": {Type: test.parameterType, Property: "memberUids", Required: true},
+				},
+			}
+			newTool := toolSchema{
+				Constraints: test.want,
+				Parameters: map[string]parameterSchema{
+					"member-uids":      {Type: test.parameterType, Property: "memberUids"},
+					"member-staff-ids": {Type: test.parameterType, Property: "memberStaffIds"},
+				},
+			}
+			if !compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("reviewed Minutes member identifier transition must be accepted")
+			}
+			if failures := checkToolCompatibility(test.path, oldTool, newTool); len(failures) != 0 {
+				t.Fatalf("reviewed Minutes constraint transition failed: %v", failures)
+			}
+
+			newTool.Constraints = `{}`
+			if compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("unlisted Minutes constraint target unexpectedly passed")
+			}
+		})
+	}
 }
 
 // Clearing a property through the reviewed mapping exclusion table is the one
@@ -1063,6 +1366,326 @@ func TestCrossPlatformCoverageReviewedRedirectKeysAreCanonicalJSON(t *testing.T)
 				t.Errorf("%s: old 与 new 相同，不构成 redirect", toolPath)
 			}
 		}
+	}
+}
+
+func TestCrossPlatformCoverageReviewedInterfaceTransitionsAreCanonical(t *testing.T) {
+	if len(reviewedInterfaceTransitions) == 0 {
+		t.Fatal("interface transition allowlist is empty")
+	}
+	for toolPath, transition := range reviewedInterfaceTransitions {
+		if strings.Count(toolPath, "/") != 1 ||
+			strings.HasPrefix(toolPath, "/") || strings.HasSuffix(toolPath, "/") {
+			t.Errorf("tool path %q is not <product id>/<tool id>", toolPath)
+		}
+		if transition.OldMode == transition.NewMode {
+			t.Errorf("%s: interface_mode did not change", toolPath)
+		}
+		for _, side := range []struct {
+			name string
+			mode string
+			ref  string
+		}{
+			{name: "old", mode: transition.OldMode, ref: transition.OldRef},
+			{name: "new", mode: transition.NewMode, ref: transition.NewRef},
+		} {
+			switch side.mode {
+			case interfaceModeMCP:
+				if side.ref == "" {
+					t.Errorf("%s: %s mcp interface has no ref", toolPath, side.name)
+					continue
+				}
+				got, err := canonicalRawJSON(json.RawMessage(side.ref))
+				if err != nil {
+					t.Errorf("%s: %s ref is invalid JSON: %v", toolPath, side.name, err)
+				} else if got != side.ref {
+					t.Errorf("%s: %s ref is not canonical\n  registered: %s\n  canonical: %s", toolPath, side.name, side.ref, got)
+				}
+			case "composite":
+				if side.ref != "" {
+					t.Errorf("%s: %s composite interface unexpectedly has ref %s", toolPath, side.name, side.ref)
+				}
+			default:
+				t.Errorf("%s: %s mode %q is not a reviewed mcp/composite transition", toolPath, side.name, side.mode)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatInterfaceModeTransition(t *testing.T) {
+	const toolPath = "aitable/aitable.chart_create"
+	transition, ok := reviewedInterfaceTransitions[toolPath]
+	if !ok {
+		t.Fatalf("missing reviewed interface transition for %s", toolPath)
+	}
+	fixture := func(mode, ref string) toolSchema {
+		return toolSchema{
+			PrimaryCLIPath: "aitable chart create",
+			InterfaceMode:  mode,
+			InterfaceRef:   ref,
+			Availability:   "available",
+			Parameters:     map[string]parameterSchema{},
+			Effect:         "write",
+			Risk:           "medium",
+			Confirmation:   "not_required",
+			Idempotency:    "unknown",
+		}
+	}
+	baseline := fixture(transition.OldMode, transition.OldRef)
+	current := fixture(transition.NewMode, transition.NewRef)
+	if failures := checkToolCompatibility(toolPath, baseline, current); len(failures) != 0 {
+		t.Fatalf("reviewed interface transition should pass: %v", failures)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		toolPath string
+		mutate   func(*toolSchema)
+	}{
+		{
+			name:     "same tuple on an unlisted tool",
+			toolPath: "aitable/aitable.unlisted",
+		},
+		{
+			name:     "unreviewed target mode",
+			toolPath: toolPath,
+			mutate: func(tool *toolSchema) {
+				tool.InterfaceMode = "local"
+			},
+		},
+		{
+			name:     "unrelated safety drift",
+			toolPath: toolPath,
+			mutate: func(tool *toolSchema) {
+				tool.Risk = "high"
+			},
+		},
+		{
+			name:     "unrelated parameter removal",
+			toolPath: toolPath,
+			mutate: func(tool *toolSchema) {
+				delete(tool.Parameters, "title")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldTool := baseline
+			newTool := current
+			oldTool.Parameters = map[string]parameterSchema{"title": {Type: `"string"`}}
+			newTool.Parameters = map[string]parameterSchema{"title": {Type: `"string"`}}
+			if tc.mutate != nil {
+				tc.mutate(&newTool)
+			}
+			failures := checkToolCompatibility(tc.toolPath, oldTool, newTool)
+			if len(failures) == 0 {
+				t.Fatal("unreviewed or bundled transition must remain incompatible")
+			}
+			if oldTool.InterfaceMode != newTool.InterfaceMode {
+				assertSchemaFailureContains(t, failures, "changed interface_mode")
+			}
+			if oldTool.InterfaceRef != newTool.InterfaceRef {
+				assertSchemaFailureContains(t, failures, "changed interface_ref")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAITableGovernanceScopeIsExact(t *testing.T) {
+	wantInterfaceTransitions := []string{
+		"aitable/aitable.base_get_primary_doc_id",
+		"aitable/aitable.chart_create",
+		"aitable/aitable.chart_update",
+		"aitable/aitable.form_create",
+		"aitable/aitable.form_delete",
+		"aitable/aitable.form_field_hide",
+		"aitable/aitable.form_field_list",
+		"aitable/aitable.form_field_update",
+		"aitable/aitable.form_list",
+		"aitable/aitable.form_share_get",
+		"aitable/aitable.form_share_update",
+		"aitable/aitable.form_update",
+		"aitable/aitable.record_primary_doc_get",
+	}
+	wantRedirects := []string{
+		"aitable/aitable.advperm_disable",
+		"aitable/aitable.advperm_enable",
+		"aitable/aitable.advperm_role_create",
+		"aitable/aitable.advperm_role_delete",
+		"aitable/aitable.advperm_role_get",
+		"aitable/aitable.advperm_role_list",
+		"aitable/aitable.advperm_role_update",
+		"aitable/aitable.dashboard_arrange",
+		"aitable/aitable.record_history_list",
+		"aitable/aitable.record_primary_doc_create",
+		"aitable/aitable.record_query_empty",
+		"aitable/aitable.record_share_url",
+		"aitable/aitable.record_upsert",
+		"aitable/aitable.section_create",
+		"aitable/aitable.section_delete",
+		"aitable/aitable.section_list_empty",
+		"aitable/aitable.section_list_nodes",
+		"aitable/aitable.section_move_node",
+		"aitable/aitable.section_rename",
+		"aitable/aitable.section_reorder",
+		"aitable/aitable.view_duplicate",
+		"aitable/aitable.view_get_frozen_cols",
+		"aitable/aitable.view_get_lock",
+		"aitable/aitable.view_get_row_height",
+		"aitable/aitable.view_lock",
+		"aitable/aitable.view_update_frozen_cols",
+		"aitable/aitable.view_update_row_height",
+		"aitable/aitable.workflow_disable",
+		"aitable/aitable.workflow_enable",
+		"aitable/aitable.workflow_get",
+		"aitable/aitable.workflow_list",
+	}
+
+	var gotInterfaceTransitions, gotRedirects []string
+	for toolPath := range reviewedInterfaceTransitions {
+		if strings.HasPrefix(toolPath, "aitable/") {
+			gotInterfaceTransitions = append(gotInterfaceTransitions, toolPath)
+		}
+	}
+	for toolPath := range reviewedInterfaceRefRedirect {
+		if strings.HasPrefix(toolPath, "aitable/") {
+			gotRedirects = append(gotRedirects, toolPath)
+		}
+	}
+	sort.Strings(wantInterfaceTransitions)
+	sort.Strings(wantRedirects)
+	sort.Strings(gotInterfaceTransitions)
+	sort.Strings(gotRedirects)
+	if !reflect.DeepEqual(gotInterfaceTransitions, wantInterfaceTransitions) {
+		t.Fatalf("AITable interface transition scope = %v, want %v", gotInterfaceTransitions, wantInterfaceTransitions)
+	}
+	if !reflect.DeepEqual(gotRedirects, wantRedirects) {
+		t.Fatalf("AITable redirect scope = %v, want %v", gotRedirects, wantRedirects)
+	}
+	if _, ok := reviewedInterfaceTransitions["aitable/aitable.workflow_edit_example"]; ok {
+		t.Fatal("workflow_edit_example retains an RPC fallback and must stay composite")
+	}
+	for _, toolPath := range []string{
+		"aitable/aitable.base_get_primary_doc_id",
+		"aitable/aitable.record_primary_doc_get",
+	} {
+		if _, ok := reviewedInterfaceRefRedirect[toolPath]; ok {
+			t.Fatalf("%s retains an RPC fallback and must not be approved as a single-ref redirect", toolPath)
+		}
+	}
+
+	type interfaceRef struct {
+		ProductID string `json:"product_id"`
+		RPCName   string `json:"rpc_name"`
+	}
+	for _, toolPath := range gotRedirects {
+		pairs := reviewedInterfaceRefRedirect[toolPath]
+		if len(pairs) != 1 {
+			t.Fatalf("%s has %d redirect pairs, want exactly 1", toolPath, len(pairs))
+		}
+		for oldRaw, newRaw := range pairs {
+			var oldRef, newRef interfaceRef
+			if err := json.Unmarshal([]byte(oldRaw), &oldRef); err != nil {
+				t.Fatalf("decode old ref for %s: %v", toolPath, err)
+			}
+			if err := json.Unmarshal([]byte(newRaw), &newRef); err != nil {
+				t.Fatalf("decode new ref for %s: %v", toolPath, err)
+			}
+			if oldRef.ProductID != "aitable-helper" || newRef.ProductID != "aitable" {
+				t.Errorf("%s product migration = %s -> %s", toolPath, oldRef.ProductID, newRef.ProductID)
+			}
+			if toolPath == "aitable/aitable.record_primary_doc_create" {
+				if oldRef.RPCName != "create_primary_doc" || newRef.RPCName != "create_cell_doc" {
+					t.Errorf("%s RPC migration = %s -> %s", toolPath, oldRef.RPCName, newRef.RPCName)
+				}
+			} else if oldRef.RPCName != newRef.RPCName {
+				t.Errorf("%s unexpectedly changes RPC name %s -> %s", toolPath, oldRef.RPCName, newRef.RPCName)
+			}
+		}
+	}
+
+	wantSafety := map[string][]reviewedCompatibilityException{
+		"aitable/aitable.form_create": {
+			{Field: "idempotency", Old: "unknown", New: "non_idempotent"},
+		},
+		"aitable/aitable.form_questions_delete": {
+			{Field: "effect", Old: "write", New: "destructive"},
+			{Field: "risk", Old: "medium", New: "high"},
+		},
+		"aitable/aitable.record_primary_doc_create": {
+			{Field: "idempotency", Old: "unknown", New: "idempotent"},
+		},
+		"aitable/aitable.section_delete": {
+			{Field: "confirmation", Old: "not_required", New: "user_required"},
+			{Field: "effect", Old: "write", New: "destructive"},
+			{Field: "risk", Old: "medium", New: "high"},
+		},
+	}
+	gotSafety := make(map[string][]reviewedCompatibilityException)
+	for toolPath, exceptions := range reviewedCompatibilityExceptions {
+		if strings.HasPrefix(toolPath, "aitable/") {
+			gotSafety[toolPath] = exceptions
+		}
+	}
+	if !reflect.DeepEqual(gotSafety, wantSafety) {
+		t.Fatalf("AITable safety governance = %#v, want %#v", gotSafety, wantSafety)
+	}
+}
+
+func TestCrossPlatformCoverageAITableCombinedGovernanceTransitions(t *testing.T) {
+	fixture := func(mode, ref string) toolSchema {
+		return toolSchema{
+			PrimaryCLIPath: "aitable fixture",
+			InterfaceMode:  mode,
+			InterfaceRef:   ref,
+			Availability:   "available",
+			Parameters:     map[string]parameterSchema{},
+			Effect:         "write",
+			Risk:           "medium",
+			Confirmation:   "not_required",
+			Idempotency:    "unknown",
+		}
+	}
+
+	formCreateTransition := reviewedInterfaceTransitions["aitable/aitable.form_create"]
+	formCreateOld := fixture(formCreateTransition.OldMode, formCreateTransition.OldRef)
+	formCreateNew := fixture(formCreateTransition.NewMode, formCreateTransition.NewRef)
+	formCreateNew.Idempotency = "non_idempotent"
+	if failures := checkToolCompatibility("aitable/aitable.form_create", formCreateOld, formCreateNew); len(failures) != 0 {
+		t.Fatalf("combined form-create governance failures = %v", failures)
+	}
+
+	const primaryDocOldRef = `{"product_id":"aitable-helper","rpc_name":"create_primary_doc"}`
+	const primaryDocNewRef = `{"product_id":"aitable","rpc_name":"create_cell_doc"}`
+	primaryDocOld := fixture(interfaceModeMCP, primaryDocOldRef)
+	primaryDocNew := fixture(interfaceModeMCP, primaryDocNewRef)
+	primaryDocNew.Idempotency = "idempotent"
+	if failures := checkToolCompatibility("aitable/aitable.record_primary_doc_create", primaryDocOld, primaryDocNew); len(failures) != 0 {
+		t.Fatalf("combined primary-doc-create governance failures = %v", failures)
+	}
+
+	const sectionOldRef = `{"product_id":"aitable-helper","rpc_name":"delete_section"}`
+	const sectionNewRef = `{"product_id":"aitable","rpc_name":"delete_section"}`
+	sectionOld := fixture(interfaceModeMCP, sectionOldRef)
+	sectionNew := fixture(interfaceModeMCP, sectionNewRef)
+	sectionNew.Effect = "destructive"
+	sectionNew.Risk = "high"
+	sectionNew.Confirmation = "user_required"
+	if failures := checkToolCompatibility("aitable/aitable.section_delete", sectionOld, sectionNew); len(failures) != 0 {
+		t.Fatalf("combined section-delete governance failures = %v", failures)
+	}
+}
+
+func TestCrossPlatformCoverageOAPendingApprovalRedirectIsReviewed(t *testing.T) {
+	const toolPath = "oa/oa.list_pending_approvals"
+	const oldRef = `{"product_id":"oa","rpc_name":"list_pending_approvals"}`
+	const newRef = `{"product_id":"oa","rpc_name":"get_todo_tasks"}`
+
+	redirects, ok := reviewedInterfaceRefRedirect[toolPath]
+	if !ok {
+		t.Fatalf("missing reviewed interface_ref redirect for %s", toolPath)
+	}
+	if got := redirects[oldRef]; got != newRef {
+		t.Fatalf("reviewed redirect = %q, want %q", got, newRef)
 	}
 }
 
@@ -1227,6 +1850,144 @@ func TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename(t *testin
 	if tool.Constraints != current.Products["chat"].Tools["chat.edit_message"].Constraints {
 		t.Fatalf("constraints were not normalized: %s", tool.Constraints)
 	}
+}
+
+func TestCrossPlatformCoverageSchemaFlagRequirednessMigration(t *testing.T) {
+	baseline := schemaContract{
+		Version: schemaContractVersion,
+		Products: map[string]productSchema{
+			"report": {
+				Tools: map[string]toolSchema{
+					"report.entry_submit": {
+						PrimaryCLIPath: "report entry submit",
+						Parameters: map[string]parameterSchema{
+							"to-user-ids": {Type: `"string"`, Property: "toUserIds", InterfaceType: "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	current := cloneContract(baseline)
+	product := current.Products["report"]
+	tool := product.Tools["report.entry_submit"]
+	parameter := tool.Parameters["to-user-ids"]
+	parameter.Required = true
+	parameter.CLIRequired = true
+	tool.Parameters["to-user-ids"] = parameter
+	product.Tools["report.entry_submit"] = tool
+	current.Products["report"] = product
+
+	migration := interfacesnapshot.FlagMigration{
+		Kind:    interfacesnapshot.FlagMigrationRequirednessChange,
+		Command: "dws report entry submit",
+		Flag: &interfacesnapshot.FlagMigrationSide{
+			Name:   "to-user-ids",
+			Before: interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Scope: "local"},
+			After:  interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"},
+		},
+		State:  interfacesnapshot.FlagMigrationConsumed,
+		Reason: "Reject report submissions that have no visible recipient.",
+	}
+	normalized, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("exact requiredness migration should pass after normalization: %v", failures)
+	}
+
+	t.Run("non-requiredness drift remains blocked", func(t *testing.T) {
+		drifted := cloneContract(current)
+		product := drifted.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		parameter := tool.Parameters["to-user-ids"]
+		parameter.Type = `"array"`
+		tool.Parameters["to-user-ids"] = parameter
+		product.Tools["report.entry_submit"] = tool
+		drifted.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(baseline, drifted, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, drifted), "\n"); !strings.Contains(failures, "changed type") {
+			t.Fatalf("requiredness migration hid type drift: %s", failures)
+		}
+	})
+
+	t.Run("partial Schema projection fails closed", func(t *testing.T) {
+		partial := cloneContract(current)
+		product := partial.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		parameter := tool.Parameters["to-user-ids"]
+		parameter.CLIRequired = false
+		tool.Parameters["to-user-ids"] = parameter
+		product.Tools["report.entry_submit"] = tool
+		partial.Products["report"] = product
+		if _, err := normalizeSchemaFlagMigrations(baseline, partial, []interfacesnapshot.FlagMigration{migration}); err == nil || !strings.Contains(err.Error(), "required and cli_required") {
+			t.Fatalf("partial requiredness projection error = %v", err)
+		}
+	})
+
+	t.Run("CLI-only migration does not manufacture Schema", func(t *testing.T) {
+		cliOnly := migration
+		cliOnly.Command = "dws report cli-only"
+		normalized, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{cliOnly})
+		if err != nil || !reflect.DeepEqual(normalized, baseline) {
+			t.Fatalf("CLI-only requiredness migration = %#v, %v", normalized, err)
+		}
+	})
+
+	t.Run("duplicate historical path fails closed", func(t *testing.T) {
+		duplicate := cloneContract(baseline)
+		product := duplicate.Products["report"]
+		product.Tools["report.duplicate"] = product.Tools["report.entry_submit"]
+		duplicate.Products["report"] = product
+		if _, err := normalizeSchemaFlagMigrations(duplicate, current, []interfacesnapshot.FlagMigration{migration}); err == nil || !strings.Contains(err.Error(), "matches 2") {
+			t.Fatalf("duplicate requiredness Schema path error = %v", err)
+		}
+	})
+
+	t.Run("missing historical parameter is not authority", func(t *testing.T) {
+		missing := cloneContract(baseline)
+		product := missing.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		delete(tool.Parameters, "to-user-ids")
+		product.Tools["report.entry_submit"] = tool
+		missing.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(missing, current, []interfacesnapshot.FlagMigration{migration})
+		if err != nil || !reflect.DeepEqual(normalized, missing) {
+			t.Fatalf("missing historical requiredness parameter = %#v, %v", normalized, err)
+		}
+	})
+
+	t.Run("missing current tool stays visible to ordinary checker", func(t *testing.T) {
+		missing := cloneContract(current)
+		delete(missing.Products, "report")
+		normalized, err := normalizeSchemaFlagMigrations(baseline, missing, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := checkCompatibility(normalized, missing); len(failures) == 0 {
+			t.Fatal("requiredness migration hid missing current Schema tool")
+		}
+	})
+
+	t.Run("missing current parameter stays visible to ordinary checker", func(t *testing.T) {
+		missing := cloneContract(current)
+		product := missing.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		delete(tool.Parameters, "to-user-ids")
+		product.Tools["report.entry_submit"] = tool
+		missing.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(baseline, missing, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, missing), "\n"); !strings.Contains(failures, "lost parameter") {
+			t.Fatalf("requiredness migration hid missing current parameter: %s", failures)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift(t *testing.T) {
@@ -1589,7 +2350,7 @@ func TestCrossPlatformCoverageSchemaMigrationCLIRequiresCompleteCheckInputs(t *t
 		"--migration-stable-snapshot", "stable.json",
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "all five") {
+	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "both flag manifests") {
 		t.Fatalf("partial migration inputs code=%d stderr=%q", code, stderr.String())
 	}
 
@@ -1739,11 +2500,12 @@ func TestCrossPlatformCoverageSchemaConsumedReceiptIsNoOpForAfterBaseline(t *tes
 		t.Fatalf("consumed receipt did not preserve compatibility: %v", failures)
 	}
 
-	// Once stable also reaches after, retaining the consumed receipt is stale;
-	// deleting it yields no authorization and the already-after Schema passes.
+	// Once stable also reaches after, retaining or deleting the consumed receipt
+	// yields no authorization and the already-after Schema passes.
 	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaFlagMigrationSnapshot(true))
-	if _, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath); err == nil || !strings.Contains(err.Error(), "stale after all references reached the after state") {
-		t.Fatalf("stale consumed receipt error = %v", err)
+	migrations, err = authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath)
+	if err != nil || len(migrations) != 0 {
+		t.Fatalf("retained consumed receipt authorizations = %#v, %v", migrations, err)
 	}
 	emptyManifest := interfacesnapshot.FlagMigrationManifest{
 		Version:    interfacesnapshot.FlagMigrationManifestVersion,

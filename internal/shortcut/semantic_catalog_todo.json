@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "service": "todo",
+  "default_availability": "available",
+  "shortcuts": {
+    "+get-my-tasks": {"disposition":"semantic_adapter","semantic_delta":"严格识别 todoCards/hasMore/page/size；显式空数组才是空结果，并支持有界全量分页。","risk":"read","public":true,"reviewed":true},
+    "+list-sub": {"disposition":"semantic_adapter","semantic_delta":"严格校验子待办容器、对象元素和稳定 taskId。","risk":"read","public":true,"reviewed":true},
+    "+get": {"disposition":"semantic_adapter","semantic_delta":"严格绑定 todoDetailModel.taskId，缺失或错绑均失败。","risk":"read","public":true,"reviewed":true},
+    "+list-attachment": {"disposition":"semantic_adapter","semantic_delta":"严格区分显式空附件与缺失容器，并要求每项稳定附件 ID。","risk":"read","public":true,"reviewed":true},
+    "+list-comment": {"disposition":"semantic_adapter","semantic_delta":"严格区分显式空评论与缺失容器，并要求每项稳定 commentId。","risk":"read","public":true,"reviewed":true},
+    "+create": {"disposition":"primary_smart","semantic_delta":"创建后要求稳定 taskId，并读取 todoDetailModel 验证标题。","risk":"write","public":true,"reviewed":true},
+    "+update": {"disposition":"primary_smart","semantic_delta":"更新指定字段后读取详情逐字段核验。","risk":"write","public":true,"reviewed":true},
+    "+complete": {"disposition":"primary_smart","semantic_delta":"先读当前状态避免重复写，必要时完成后再读回核验。","risk":"write","public":true,"reviewed":true},
+    "+reopen": {"disposition":"primary_smart","semantic_delta":"先读当前状态避免重复写，必要时重开后再读回核验。","risk":"write","public":true,"reviewed":true},
+    "+search": {"disposition":"primary_smart","semantic_delta":"遍历全部 hasMore 分页并按标题匹配；达到页上限仍未耗尽时失败。","risk":"read","public":true,"reviewed":true},
+    "+comment": {"disposition":"primary_smart","semantic_delta":"新增评论必须取得稳定 commentId，并分页读回验证内容。","risk":"write","public":true,"reviewed":true},
+    "+upload-attachment": {"disposition":"primary_smart","semantic_delta":"路由到现有原子上传事务；Shortcut 层不复制凭证和带头 OSS PUT 实现。","risk":"write","availability":"unavailable","public":false,"reviewed":true},
+    "+reminder": {"disposition":"semantic_adapter","semantic_delta":"严格验证提醒参数和 success=true 终端回执；上游不能读回规则，固定 verified=false。","risk":"write","public":true,"reviewed":true},
+    "+get-related-tasks": {"disposition":"primary_smart","semantic_delta":"遍历与我相关三种角色的全部分页并按 taskId 去重。","risk":"read","public":true,"reviewed":true},
+    "+related-tasks": {"disposition":"alias_internal","semantic_delta":"保留旧命令拼写，新的 Agent 路由统一使用 +get-related-tasks。","risk":"read","primary":"+get-related-tasks","public":true,"reviewed":true},
+    "+due-today": {"disposition":"primary_smart","semantic_delta":"按本地日历日构造服务端截止窗口并遍历全部分页。","risk":"read","public":true,"reviewed":true},
+    "+assign": {"disposition":"primary_smart","semantic_delta":"保留历史按姓名解析后创建并指派的新任务语义，避免同名破坏性变更。","risk":"write","public":true,"reviewed":true},
+    "+assign-multi": {"disposition":"primary_smart","semantic_delta":"全部姓名唯一解析后才创建一次，并以单一统一结果输出稳定 taskId。","risk":"write","public":true,"reviewed":true},
+    "+created-todos": {"disposition":"primary_smart","semantic_delta":"遍历创建者角色的全部分页后投影。","risk":"read","public":true,"reviewed":true},
+    "+overdue": {"disposition":"primary_smart","semantic_delta":"遍历执行者角色的全部分页并按当前时间筛选逾期项。","risk":"read","public":true,"reviewed":true},
+    "+remind": {"disposition":"primary_smart","semantic_delta":"解析当前用户后创建给自己的待办；该命令不是独立提醒规则。","risk":"write","public":true,"reviewed":true},
+    "+todo-done": {"disposition":"primary_smart","semantic_delta":"跨全部分页按标题唯一定位后完成任务。","risk":"write","public":true,"reviewed":true}
+  }
+}

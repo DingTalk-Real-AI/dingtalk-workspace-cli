@@ -18,8 +18,11 @@
 package mail
 
 import (
+	"strings"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -64,6 +67,13 @@ var ThreadList = shortcut.Shortcut{
 			PrimaryCLIPath: "mail +thread-list",
 		},
 		Description: "列出指定邮箱文件夹下的邮件会话（thread）",
+		Parameters: []contract.ParamDecl{
+			{Name: "folder", Property: "folder"},
+			{Name: "limit", Property: "limit"},
+			{Name: "start", Property: "start"},
+			{Name: "end", Property: "end"},
+			{Name: "ascending", Property: "ascending"},
+		},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -84,6 +94,13 @@ var ThreadList = shortcut.Shortcut{
 		{Name: "start", Type: shortcut.FlagString, Desc: "开始 UTC 时间，如 2024-01-01T00:00:00Z"},
 		{Name: "end", Type: shortcut.FlagString, Desc: "结束 UTC 时间，如 2024-12-31T23:59:59Z"},
 		{Name: "ascending", Type: shortcut.FlagBool, Desc: "是否按时间升序"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-100 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "--start/--end 必须是 UTC RFC3339 时间，且 end 不能早于 start"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return mailValidateThreadList(rt)
 	},
 	Tips: []string{
 		`dws mail +thread-list --email user@company.com --folder 104 --limit 20`,
@@ -110,74 +127,18 @@ var ThreadList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		threads := threadListProject(data)
-		return rt.Output(map[string]any{"count": len(threads), "threads": threads})
+		threads, err := mailProjectCollection(data, "mail/list_mailbox_threads", "result.conversations", []string{"id"}, map[string][]string{
+			"conversationId": {"id"}, "subject": {"subject"}, "lastUpdated": {"lastModifiedDateTime"}, "isRead": {"isRead"},
+		})
+		if err != nil {
+			return err
+		}
+		complete, next, err := mailPage(data, "mail/list_mailbox_threads", "result", rt.Str("cursor"))
+		if err != nil {
+			return err
+		}
+		return mailOutputPage(rt, "threads", threads, complete, next)
 	},
-}
-
-// threadListProject reshapes the raw list_mailbox_threads response into a clean
-// {conversationId, subject, lastUpdated, isRead} thread list —
-// clean output projection. Both the list container and per-item
-// field names are probed defensively across candidate keys, so an empty/unknown
-// shape yields an empty list rather than a crash or fabricated data.
-func threadListProject(data map[string]any) []map[string]any {
-	raw := threadListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := threadListFirst(m, "conversationId", "conversation_id", "id", "threadId"); ok {
-			row["conversationId"] = v
-		}
-		if v, ok := threadListFirst(m, "subject", "title", "topic"); ok {
-			row["subject"] = v
-		}
-		if v, ok := threadListFirst(m, "lastUpdated", "last_updated", "lastModifiedDateTime", "updateTime", "modifiedTime", "sentDateTime"); ok {
-			row["lastUpdated"] = v
-		}
-		if v, ok := threadListFirst(m, "isRead", "is_read", "read", "unread"); ok {
-			row["isRead"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// threadListResolveList locates the list payload inside the response, tolerating
-// a bare top-level array container or nesting one level deeper.
-func threadListResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "threads", "conversations"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "threads", "conversations", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// threadListFirst returns the first present candidate key's value.
-func threadListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // Thread 根据会话 ID 获取会话详情。
@@ -208,6 +169,7 @@ var FolderList = shortcut.Shortcut{
 			PrimaryCLIPath: "mail +folder-list",
 		},
 		Description: "列出顶层文件夹或指定父文件夹下的子文件夹",
+		Parameters:  []contract.ParamDecl{{Name: "folder", Property: "folder"}},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -221,8 +183,12 @@ var FolderList = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "email", Type: shortcut.FlagString, Desc: "邮件所属邮箱地址", Required: true},
+		{Name: "email", Type: shortcut.FlagString, Desc: "邮件所属邮箱地址，不能为空", Required: true},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "父文件夹 ID，不传则返回顶层文件夹"},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"email"}, Description: "不能为空"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return mailValidateRequiredText(rt, "email")
 	},
 	Tips: []string{
 		`dws mail +folder-list --email user@company.com`,
@@ -238,71 +204,14 @@ var FolderList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		folders := folderListProject(data)
-		return rt.Output(map[string]any{"count": len(folders), "folders": folders})
+		folders, err := mailProjectCollection(data, "mail/list_folders", "folders", []string{"id"}, map[string][]string{
+			"id": {"id"}, "name": {"displayName"}, "parentId": {"parentFolderId"},
+		})
+		if err != nil {
+			return err
+		}
+		return rt.Output(mailBusinessCollectionPayload("folders", folders))
 	},
-}
-
-// folderListProject reshapes the raw list_folders response into a clean
-// {id, name, parentId} folder list — clean output projection. Both
-// the list container and per-item field names are probed defensively across
-// candidate keys, so an empty/unknown shape yields an empty list rather than a
-// crash or fabricated data.
-func folderListProject(data map[string]any) []map[string]any {
-	raw := folderListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := folderListFirst(m, "id", "folderId", "folder_id"); ok {
-			row["id"] = v
-		}
-		if v, ok := folderListFirst(m, "name", "folderName", "folder_name", "displayName"); ok {
-			row["name"] = v
-		}
-		if v, ok := folderListFirst(m, "parentId", "parent_id", "parentFolderId"); ok {
-			row["parentId"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// folderListResolveList locates the list payload inside the response, tolerating
-// a bare top-level array container or nesting one level deeper.
-func folderListResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "folders"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "folders", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// folderListFirst returns the first present candidate key's value.
-func folderListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // FolderCreate 创建邮件文件夹。
@@ -356,71 +265,14 @@ var TagList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		tags := tagListProject(data)
-		return rt.Output(map[string]any{"count": len(tags), "tags": tags})
+		tags, err := mailProjectCollection(data, "mail/list_tags", "tags", []string{"id"}, map[string][]string{
+			"id": {"id"}, "name": {"name"}, "parentId": {"parentId"},
+		})
+		if err != nil {
+			return err
+		}
+		return rt.Output(mailBusinessCollectionPayload("tags", tags))
 	},
-}
-
-// tagListProject reshapes the raw list_tags response into a clean
-// {id, name, parentId} tag list — clean output projection. Both the
-// list container and per-item field names are probed defensively across
-// candidate keys, so an empty/unknown shape yields an empty list rather than a
-// crash or fabricated data.
-func tagListProject(data map[string]any) []map[string]any {
-	raw := tagListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := tagListFirst(m, "id", "tagId", "tag_id"); ok {
-			row["id"] = v
-		}
-		if v, ok := tagListFirst(m, "name", "tagName", "tag_name", "displayName"); ok {
-			row["name"] = v
-		}
-		if v, ok := tagListFirst(m, "parentId", "parent_id"); ok {
-			row["parentId"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// tagListResolveList locates the list payload inside the response, tolerating a
-// bare top-level array container or nesting one level deeper.
-func tagListResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "tags"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "tags", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// tagListFirst returns the first present candidate key's value.
-func tagListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // TagCreate 创建邮件标签。
@@ -449,6 +301,10 @@ var UserSearch = shortcut.Shortcut{
 			PrimaryCLIPath: "mail +user-search",
 		},
 		Description: "按关键词或工号搜索邮箱用户（仅企业邮箱）",
+		Parameters: []contract.ParamDecl{
+			{Name: "employee-no", Property: "employeeNo"},
+			{Name: "limit", Property: "limit"},
+		},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -465,20 +321,40 @@ var UserSearch = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "keyword", Type: shortcut.FlagString, Desc: "搜索关键词（未提供 --employee-no 时为必填）"},
-		{Name: "employee-no", Type: shortcut.FlagString, Desc: "按工号精确搜索"},
+		{Name: "keyword", Type: shortcut.FlagString, Desc: "搜索关键词；显式提供时不能为空（未提供 --employee-no 时为必填）"},
+		{Name: "employee-no", Type: shortcut.FlagString, Desc: "按工号精确搜索；显式提供时不能为空"},
 		{Name: "email", Type: shortcut.FlagString, Desc: "搜索目标邮箱地址"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自响应中的 nextCursor"},
-		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量"},
+		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量，必须是 1-100 之间的整数"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"keyword", "employee-no"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"keyword", "employee-no"}, Description: "不能为空"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "1-100"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := mailValidateStringPageSize(rt, "limit", false); err != nil {
+			return err
+		}
+		for _, name := range []string{"keyword", "employee-no"} {
+			if rt.Changed(name) && strings.TrimSpace(rt.Str(name)) == "" {
+				return apperrors.NewValidation("--" + name + " 显式提供时不能为空")
+			}
+		}
+		if strings.TrimSpace(rt.Str("keyword")) == "" && strings.TrimSpace(rt.Str("employee-no")) == "" {
+			return apperrors.NewValidation("--keyword 和 --employee-no 至少需要一个非空值")
+		}
+		return nil
 	},
 	Tips: []string{
 		`dws mail +user-search --keyword "张三"`,
 		`dws mail +user-search --email user@company.com --employee-no "E123456"`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		size, err := mailStringPageSize(rt, "limit", false)
+		if err != nil {
+			return err
+		}
 		params := map[string]any{}
 		if rt.Str("keyword") != "" {
 			params["keyword"] = rt.Str("keyword")
@@ -493,80 +369,24 @@ var UserSearch = shortcut.Shortcut{
 			params["cursor"] = rt.Str("cursor")
 		}
 		if rt.Changed("limit") {
-			params["size"] = rt.Str("limit")
+			params["size"] = size
 		}
 		data, err := rt.CallMCPData("mail", "search_mail_users", params)
 		if err != nil {
 			return err
 		}
-		users := userSearchProject(data)
-		return rt.Output(map[string]any{"count": len(users), "users": users})
+		users, err := mailProjectCollection(data, "mail/search_mail_users", "users", []string{"id", "email"}, map[string][]string{
+			"name": {"name"}, "email": {"email"}, "employeeNo": {"employeeNo"}, "userId": {"id"},
+		})
+		if err != nil {
+			return err
+		}
+		complete, next, err := mailPage(data, "mail/search_mail_users", "", rt.Str("cursor"))
+		if err != nil {
+			return err
+		}
+		return mailOutputPage(rt, "users", users, complete, next)
 	},
-}
-
-// userSearchProject reshapes the raw search_mail_users response into a clean
-// {name, email, employeeNo, userId} user list — clean output projection.
-// Both the list container and per-item field names are probed defensively
-// across candidate keys, so an empty/unknown shape yields an empty list rather
-// than a crash or fabricated data.
-func userSearchProject(data map[string]any) []map[string]any {
-	raw := userSearchResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := userSearchFirst(m, "name", "userName", "displayName", "nickName"); ok {
-			row["name"] = v
-		}
-		if v, ok := userSearchFirst(m, "email", "mail", "emailAddress"); ok {
-			row["email"] = v
-		}
-		if v, ok := userSearchFirst(m, "employeeNo", "employee_no", "employeeNumber", "jobNumber"); ok {
-			row["employeeNo"] = v
-		}
-		if v, ok := userSearchFirst(m, "userId", "user_id", "id"); ok {
-			row["userId"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// userSearchResolveList locates the list payload inside the response, tolerating
-// a bare top-level array container or nesting one level deeper.
-func userSearchResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "users"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "users", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// userSearchFirst returns the first present candidate key's value.
-func userSearchFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // ── attachment ─────────────────────────────────────────────
@@ -596,6 +416,7 @@ var TemplateList = shortcut.Shortcut{
 			PrimaryCLIPath: "mail +template-list",
 		},
 		Description: "列出指定邮箱的所有邮件模板",
+		Parameters:  []contract.ParamDecl{{Name: "limit", Property: "limit"}},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -610,16 +431,24 @@ var TemplateList = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "用户邮箱地址", Required: true},
-		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量", Required: true},
+		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量，必须是 1-100 之间的整数", Required: true},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自响应中的 nextCursor"},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-100 之间"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return mailValidateStringPageSize(rt, "limit", true)
 	},
 	Tips: []string{
 		`dws mail +template-list --email user@company.com --limit 20`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		size, err := mailStringPageSize(rt, "limit", true)
+		if err != nil {
+			return err
+		}
 		params := map[string]any{
 			"email": rt.Str("email"),
-			"size":  rt.Str("limit"),
+			"size":  size,
 		}
 		if rt.Changed("cursor") {
 			params["cursor"] = rt.Str("cursor")
@@ -628,71 +457,18 @@ var TemplateList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		templates := templateListProject(data)
-		return rt.Output(map[string]any{"count": len(templates), "templates": templates})
+		templates, err := mailProjectCollection(data, "mail/list_user_message_templates", "templates", []string{"id"}, map[string][]string{
+			"id": {"id"}, "name": {"name"}, "subject": {"subject"},
+		})
+		if err != nil {
+			return err
+		}
+		complete, next, err := mailPage(data, "mail/list_user_message_templates", "", rt.Str("cursor"))
+		if err != nil {
+			return err
+		}
+		return mailOutputPage(rt, "templates", templates, complete, next)
 	},
-}
-
-// templateListProject reshapes the raw list_user_message_templates response into
-// a clean {id, name, subject} template list — clean output projection.
-// Both the list container and per-item field names are probed defensively
-// across candidate keys, so an empty/unknown shape yields an empty list rather
-// than a crash or fabricated data.
-func templateListProject(data map[string]any) []map[string]any {
-	raw := templateListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := templateListFirst(m, "id", "templateId", "template_id"); ok {
-			row["id"] = v
-		}
-		if v, ok := templateListFirst(m, "name", "templateName", "template_name", "displayName"); ok {
-			row["name"] = v
-		}
-		if v, ok := templateListFirst(m, "subject", "title"); ok {
-			row["subject"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// templateListResolveList locates the list payload inside the response,
-// tolerating a bare top-level array container or nesting one level deeper.
-func templateListResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "templates"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "templates", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// templateListFirst returns the first present candidate key's value.
-func templateListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // TemplateGet 获取邮件模板详情。
@@ -722,6 +498,7 @@ var ContactList = shortcut.Shortcut{
 			PrimaryCLIPath: "mail +contact-list",
 		},
 		Description: "列出指定邮箱的所有邮件联系人",
+		Parameters:  []contract.ParamDecl{{Name: "limit", Property: "limit"}},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -736,16 +513,24 @@ var ContactList = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "用户邮箱地址", Required: true},
-		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量", Required: true},
+		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量，必须是 1-100 之间的整数", Required: true},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自响应中的 nextCursor"},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-100 之间"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return mailValidateStringPageSize(rt, "limit", true)
 	},
 	Tips: []string{
 		`dws mail +contact-list --email user@company.com --limit 20`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		size, err := mailStringPageSize(rt, "limit", true)
+		if err != nil {
+			return err
+		}
 		params := map[string]any{
 			"email": rt.Str("email"),
-			"size":  rt.Str("limit"),
+			"size":  size,
 		}
 		if rt.Changed("cursor") {
 			params["cursor"] = rt.Str("cursor")
@@ -754,71 +539,18 @@ var ContactList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		contacts := contactListProject(data)
-		return rt.Output(map[string]any{"count": len(contacts), "contacts": contacts})
+		contacts, err := mailProjectCollection(data, "mail/list_user_mail_contacts", "contacts", []string{"id"}, map[string][]string{
+			"id": {"id"}, "contactEmail": {"contactEmail", "email"}, "displayName": {"displayName", "name"},
+		})
+		if err != nil {
+			return err
+		}
+		complete, next, err := mailPage(data, "mail/list_user_mail_contacts", "", rt.Str("cursor"))
+		if err != nil {
+			return err
+		}
+		return mailOutputPage(rt, "contacts", contacts, complete, next)
 	},
-}
-
-// contactListProject reshapes the raw list_user_mail_contacts response into a
-// clean {id, contactEmail, displayName} contact list — output-projection
-// clean output projection. Both the list container and per-item field names are probed
-// defensively across candidate keys, so an empty/unknown shape yields an empty
-// list rather than a crash or fabricated data.
-func contactListProject(data map[string]any) []map[string]any {
-	raw := contactListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := contactListFirst(m, "id", "contactId", "contact_id"); ok {
-			row["id"] = v
-		}
-		if v, ok := contactListFirst(m, "contactEmail", "contact_email", "email"); ok {
-			row["contactEmail"] = v
-		}
-		if v, ok := contactListFirst(m, "displayName", "display_name", "name"); ok {
-			row["displayName"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// contactListResolveList locates the list payload inside the response,
-// tolerating a bare top-level array container or nesting one level deeper.
-func contactListResolveList(data map[string]any) []any {
-	for _, key := range []string{"result", "data", "list", "items", "contacts"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "contacts", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// contactListFirst returns the first present candidate key's value.
-func contactListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
 }
 
 // ContactUpdate 更新邮件联系人。
@@ -834,6 +566,7 @@ func contactListFirst(m map[string]any, keys ...string) (any, bool) {
 // RuleDelete 删除个人收信规则。
 // RuleAdjust 调整收信规则排序。
 func init() {
+	hardenPublicMailContracts()
 	shortcut.Register(
 		ThreadList,
 		FolderList,

@@ -16,6 +16,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
@@ -26,15 +27,16 @@ var (
 )
 
 var Search = shortcut.Shortcut{
-	Service: "minutes", Command: "+search", Product: "minutes",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "minutes", Command: "+search", Product: "minutes",
 	Description: "按范围、标题关键词和时间搜索听记，支持安全全量翻页",
 	Intent:      "需要按标题关键词或时间范围搜索自己创建、他人共享或全部可访问听记时使用；对后端返回再做确定性标题匹配，返回稳定 taskUuid 投影与完整性信息。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
-	Contract: minutesContract("+search", "按范围、标题关键词和时间搜索听记，支持安全全量翻页",
+	Contract: withMinutesListResult(minutesContract("+search", "按范围、标题关键词和时间搜索听记，支持安全全量翻页",
 		"需要按标题关键词或时间范围搜索自己创建、他人共享或全部可访问听记，并拿到可继续操作的 taskUuid 时使用",
 		[]string{"只想无条件浏览一页时可用 +list-mine/+list-shared/+list-all", "DWS 后端不支持 owner/participant 精确过滤，不要伪造该条件"},
-		[]string{`dws minutes +search --query "周会" --scope all`, `dws minutes +search --start "2026-08-01T00:00:00+08:00" --scope mine --page-all`}),
+		[]string{`dws minutes +search --query "周会" --scope all`, `dws minutes +search --start "2026-08-01T00:00:00+08:00" --scope mine --page-all`})),
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "标题关键词；shortcut 会对后端结果再次精确包含过滤"},
 		{Name: "scope", Type: shortcut.FlagString, Default: "all", Desc: "搜索范围", Enum: []string{"mine", "shared", "all"}},
@@ -103,23 +105,15 @@ var Download = shortcut.Shortcut{
 
 var Upload = shortcut.Shortcut{
 	Service: "minutes", Command: "+upload", Product: "minutes",
-	Description: "把本地音视频完整上传并创建听记，失败时取消会话",
-	Intent:      "需要从本地音视频直接创建听记时使用；完成 create、预签名 PUT、complete 和最终详情读回，不需要中转 Drive。",
+	Description: "把本地音视频完整上传并创建听记，不发送额外消息",
+	Intent:      "需要从本地音视频直接创建听记时使用；完成 create、预签名 PUT、complete 和最终详情读回，不需要中转 Drive，也不会推送闪记卡片。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(minutesContract("+upload", "把本地音视频完整上传并创建听记，失败时取消会话",
-		"用户有本地音视频，希望直接上传生成听记并取得可读回的 taskUuid 时使用",
-		[]string{"只需要管理已有 upload session 时使用原子 upload create/complete/cancel", "文件为空、过大或不希望创建远端听记时不要执行"},
+	Contract: withMinutesDryRun(minutesContract("+upload", "把本地音视频完整上传并创建听记，不发送额外消息",
+		"用户有本地音视频，希望直接上传生成听记并取得可读回的 taskUuid，且不需要额外消息通知时使用",
+		[]string{"需要推送闪记卡片时使用 +upload-and-notify", "只需要管理已有 upload session 时使用原子 upload create/complete/cancel", "文件为空、过大或不希望创建远端听记时不要执行"},
 		[]string{`dws minutes +upload --file ./meeting.mp3 --title "项目周会"`, `dws minutes +upload --file ./meeting.mp4 --input-language zh`}), contract.DryRunPreviewPlan, false),
-	Flags: []shortcut.Flag{
-		{Name: "file", Type: shortcut.FlagString, Desc: "本地音视频文件", Required: true},
-		{Name: "title", Type: shortcut.FlagString, Desc: "听记标题"},
-		{Name: "template-id", Type: shortcut.FlagString, Desc: "纪要模板 ID"},
-		{Name: "input-language", Type: shortcut.FlagString, Desc: "ASR 输入语言"},
-		{Name: "enable-message-card", Type: shortcut.FlagBool, Desc: "生成后推送闪记卡片"},
-		{Name: "complete-timeout", Type: shortcut.FlagInt, Default: "90", Desc: "等待服务端确认上传完成的秒数"},
-		{Name: "poll-interval", Type: shortcut.FlagInt, Default: "2", Desc: "complete 重试间隔秒数"},
-	},
+	Flags:       minutesUploadFlags(true),
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"complete-timeout", "poll-interval"}, Description: "--complete-timeout 和 --poll-interval 必须大于 0"}},
 	Tips:        []string{`dws minutes +upload --file ./meeting.mp3 --title "项目周会"`, `dws minutes +upload --file ./meeting.mp4 --input-language zh`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
@@ -129,6 +123,43 @@ var Upload = shortcut.Shortcut{
 		return nil
 	},
 	Execute: executeMinutesUpload,
+}
+
+var UploadAndNotify = shortcut.Shortcut{
+	Service: "minutes", Command: "+upload-and-notify", Product: "minutes",
+	Description: "上传本地音视频创建听记，并在生成后推送闪记卡片",
+	Intent:      "用户明确要求从本地媒体创建听记且额外收到闪记卡片通知时使用；通知副作用与普通上传分开确认。",
+	Risk:        shortcut.RiskWrite,
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Contract: withMinutesDryRun(minutesContract("+upload-and-notify", "上传本地音视频创建听记，并在生成后推送闪记卡片",
+		"用户明确要求上传音视频创建听记，并希望额外收到闪记卡片通知时使用",
+		[]string{"不需要消息通知时使用 +upload", "只需要管理已有 upload session 时使用原子 upload create-and-notify/complete/cancel"},
+		[]string{`dws minutes +upload-and-notify --file ./meeting.mp3 --title "项目周会"`}), contract.DryRunPreviewPlan, false),
+	Flags:       minutesUploadFlags(false),
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"complete-timeout", "poll-interval"}, Description: "--complete-timeout 和 --poll-interval 必须大于 0"}},
+	Tips:        []string{`dws minutes +upload-and-notify --file ./meeting.mp3 --title "项目周会"`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("complete-timeout") <= 0 || rt.Int("poll-interval") <= 0 {
+			return apperrors.NewValidation("--complete-timeout 和 --poll-interval 必须大于 0")
+		}
+		return nil
+	},
+	Execute: executeMinutesUploadAndNotify,
+}
+
+func minutesUploadFlags(includeLegacyMessageFlag bool) []shortcut.Flag {
+	flags := []shortcut.Flag{
+		{Name: "file", Type: shortcut.FlagString, Desc: "本地音视频文件", Required: true},
+		{Name: "title", Type: shortcut.FlagString, Desc: "听记标题"},
+		{Name: "template-id", Type: shortcut.FlagString, Desc: "纪要模板 ID"},
+		{Name: "input-language", Type: shortcut.FlagString, Desc: "ASR 输入语言"},
+		{Name: "complete-timeout", Type: shortcut.FlagInt, Default: "90", Desc: "等待服务端确认上传完成的秒数"},
+		{Name: "poll-interval", Type: shortcut.FlagInt, Default: "2", Desc: "complete 重试间隔秒数"},
+	}
+	if includeLegacyMessageFlag {
+		flags = append(flags, shortcut.Flag{Name: "enable-message-card", Type: shortcut.FlagBool, Desc: "兼容入口：上传后推送闪记卡片；新调用推荐 +upload-and-notify"})
+	}
+	return flags
 }
 
 var Update = shortcut.Shortcut{
@@ -224,66 +255,33 @@ func executeMinutesSearch(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	belonging := map[string]string{"mine": "createdByMe", "shared": "sharedToMe", "all": "noLimit"}[rt.Str("scope")]
-	token := rt.Str("cursor")
-	seenTokens := map[string]bool{}
-	seenIDs := map[string]bool{}
-	rows := make([]map[string]any, 0)
-	pages := 0
-	complete := false
-	nextToken := ""
-	for {
-		if seenTokens[token] {
-			return fmt.Errorf("minutes search cursor stalled or cycled")
-		}
-		seenTokens[token] = true
-		params := map[string]any{"belongingConditionId": belonging, "maxResults": rt.Int("limit")}
+	base := map[string]any{}
+	if start != 0 {
+		base["createTimeStart"] = float64(start)
+	}
+	if end != 0 {
+		base["createTimeEnd"] = float64(end)
+	}
+	scope := rt.Str("scope")
+	var result minutesListCollection
+	var ledger []map[string]any
+	var readErr error
+	if scope == "all" && rt.Bool("page-all") {
+		result, ledger, readErr = collectAccessibleMinutes(rt, base)
+	} else {
+		base["belongingConditionId"] = map[string]string{"mine": "created", "shared": "shared", "all": "noLimit"}[scope]
+		base["maxResults"] = rt.Int("limit")
 		if query := strings.TrimSpace(rt.Str("query")); query != "" {
-			params["keyword"] = query
+			base["keyword"] = query
 		}
-		if start != 0 {
-			params["createTimeStart"] = float64(start)
+		result, readErr = collectMinutesListScope(rt, base, rt.Str("cursor"), rt.Bool("page-all"), rt.Int("page-limit"))
+		if scope == "all" {
+			result.Complete = false
 		}
-		if end != 0 {
-			params["createTimeEnd"] = float64(end)
-		}
-		if token != "" {
-			params["nextToken"] = token
-		}
-		data, err := rt.CallMCPData("minutes", "list_by_keyword_and_time_range", params)
-		if err != nil {
-			return err
-		}
-		page, err := minutesdata.ParseListPage(data)
-		if err != nil {
-			return err
-		}
-		projected, err := minutesdata.ProjectList(page)
-		if err != nil {
-			return err
-		}
-		for _, row := range projected {
-			id := row["taskUuid"].(string)
-			if seenIDs[id] {
-				continue
-			}
-			seenIDs[id] = true
-			rows = append(rows, row)
-		}
-		pages++
-		nextToken = page.NextToken
-		if !page.HasMore {
-			complete = true
-			nextToken = ""
-			break
-		}
-		if !rt.Bool("page-all") {
-			break
-		}
-		if pages >= rt.Int("page-limit") {
-			return fmt.Errorf("minutes search exceeded page safety limit %d", rt.Int("page-limit"))
-		}
-		token = page.NextToken
+	}
+	rows := result.Rows
+	if readErr != nil && result.Pages == 0 {
+		return readErr
 	}
 	scanned := len(rows)
 	if query := strings.TrimSpace(rt.Str("query")); query != "" {
@@ -297,11 +295,19 @@ func executeMinutesSearch(rt *shortcut.RuntimeContext) error {
 		}
 		rows = filtered
 	}
-	payload := map[string]any{"count": len(rows), "scannedCount": scanned, "minutes": rows, "pages": pages, "complete": complete}
-	if nextToken != "" {
-		payload["nextToken"] = nextToken
+	result.Rows = rows
+	payload := minutesListPayload(scope, result)
+	payload["scannedCount"] = scanned
+	if len(ledger) > 0 {
+		payload["scopeLedger"] = ledger
 	}
-	return rt.Output(payload)
+	if scope == "all" && !rt.Bool("page-all") {
+		payload["nextAction"] = "rerun with --page-all to prove accessible completeness"
+	}
+	if readErr != nil {
+		payload["nextAction"] = "resume the incomplete scope from its reported nextToken"
+	}
+	return outputMinutesListResult(rt, payload, result, readErr)
 }
 
 func executeMinutesDownload(rt *shortcut.RuntimeContext) error {
@@ -349,19 +355,29 @@ func executeMinutesDownload(rt *shortcut.RuntimeContext) error {
 }
 
 func executeMinutesUpload(rt *shortcut.RuntimeContext) error {
-	payload, err := performMinutesUpload(rt)
+	payload, err := performMinutesUpload(rt, false)
 	if err != nil {
 		return err
 	}
 	return rt.Output(payload)
 }
 
-func performMinutesUpload(rt *shortcut.RuntimeContext) (map[string]any, error) {
+func executeMinutesUploadAndNotify(rt *shortcut.RuntimeContext) error {
+	payload, err := performMinutesUpload(rt, true)
+	if err != nil {
+		return err
+	}
+	return rt.Output(payload)
+}
+
+func performMinutesUpload(rt *shortcut.RuntimeContext, enableMessageCard bool) (map[string]any, error) {
 	info, err := os.Stat(rt.Str("file"))
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
 		return nil, apperrors.NewValidation("--file 必须是非空普通文件")
 	}
-	plan := map[string]any{"operation": "minutes.upload", "fileName": info.Name(), "sizeBytes": info.Size(), "title": rt.Str("title")}
+	messageCardSet := enableMessageCard || rt.Changed("enable-message-card")
+	messageCardValue := enableMessageCard || rt.Bool("enable-message-card")
+	plan := map[string]any{"operation": "minutes.upload", "fileName": info.Name(), "sizeBytes": info.Size(), "title": rt.Str("title"), "messageCard": messageCardValue}
 	if rt.DryRun() {
 		return minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes.upload", plan), nil
 	}
@@ -376,8 +392,8 @@ func performMinutesUpload(rt *shortcut.RuntimeContext) (map[string]any, error) {
 	if value := strings.TrimSpace(rt.Str("input-language")); value != "" {
 		option["inputLanguage"] = value
 	}
-	if rt.Changed("enable-message-card") {
-		option["enableMessageCard"] = rt.Bool("enable-message-card")
+	if messageCardSet {
+		option["enableMessageCard"] = messageCardValue
 	}
 	if len(option) > 0 {
 		params["minutesOption"] = option
@@ -618,15 +634,11 @@ func completeMinutesUpload(rt *shortcut.RuntimeContext, sessionID string, timeou
 		}
 		message := strings.ToLower(err.Error())
 		retryable := strings.Contains(message, "still uploading") || strings.Contains(message, "wait and retry") || strings.Contains(message, "正在上传")
-		if !retryable || time.Now().Add(interval).After(deadline) {
+		if !retryable || minutesPollDeadlineReached(deadline, interval) {
 			return nil, attempts, err
 		}
-		timer := time.NewTimer(interval)
-		select {
-		case <-rt.Command().Context().Done():
-			timer.Stop()
-			return nil, attempts, rt.Command().Context().Err()
-		case <-timer.C:
+		if err := waitMinutesInterval(rt, interval); err != nil {
+			return nil, attempts, err
 		}
 	}
 }
@@ -754,5 +766,5 @@ func speakerCounts(paragraphs []map[string]any) map[string]int {
 }
 
 func init() {
-	shortcut.Register(finalizeMinutesShortcuts(Search, Download, Upload, Update, ApplyPermission, Summary, SpeakerReplace)...)
+	shortcut.Register(finalizeMinutesShortcuts(Search, Download, Upload, UploadAndNotify, Update, ApplyPermission, Summary, SpeakerReplace)...)
 }

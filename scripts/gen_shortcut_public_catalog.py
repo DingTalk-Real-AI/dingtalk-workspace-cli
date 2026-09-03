@@ -24,6 +24,24 @@ SEMANTIC_PATHS = [
     ROOT / "internal" / "shortcut" / "semantic_catalog_aitable.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_minutes.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_drive.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_wiki.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_calendar.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_todo.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_attendance.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_mail.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_aisearch.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_contact.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_live.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_oa.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_ding.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_report.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_sheet.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_whiteboard.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_devdoc.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_hrbrain.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_pat.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_devapp.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_agoal.json",
 ]
 
 
@@ -71,6 +89,10 @@ def collect() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     evidence_public: list[dict[str, Any]] = []
     followups: list[dict[str, Any]] = []
     evidence_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    semantics = [load(path) for path in SEMANTIC_PATHS]
+    semantic_services = {semantic.get("service") or "" for semantic in semantics}
+    if "" in semantic_services or len(semantic_services) != len(semantics):
+        raise ValueError(f"invalid or duplicate semantic catalog services: {semantic_services!r}")
     result_paths = [
         (suite, path)
         for suite, path in (("read", READ_PATH), ("write", WRITE_PATH))
@@ -99,24 +121,25 @@ def collect() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             })
 
     # The raw real-run captures can be intentionally absent because they may
-    # contain account-specific business data. In that case retain the committed
-    # non-Chat evidence/follow-ups and only rebuild the reviewed Chat surface.
+    # contain account-specific business data. In that case retain committed
+    # non-semantic evidence/follow-ups and rebuild each reviewed semantic
+    # product surface from its current catalog.
     if not result_paths:
         for row in load(CATALOG_PATH).get("results", []):
             item = dict(row)
             evidence_public.append(item)
-            evidence_by_key[(item.get("service") or "", item.get("command") or "")] = item
+            # A previously generated semantic row is reviewed metadata, not a
+            # fresh real-run observation. Rebuild it from the current semantic
+            # catalog without treating its old risk as immutable evidence.
+            if (item.get("service") or "") not in semantic_services:
+                evidence_by_key[(item.get("service") or "", item.get("command") or "")] = item
         if FOLLOWUP_JSON_PATH.exists():
             followups = load(FOLLOWUP_JSON_PATH).get("results", [])
 
-    # Chat visibility is a reviewed semantic decision, not a side effect of
-    # whether the current account happened to have a fixture for a real run.
-    # Keep the real-run rows as evidence/follow-ups, but publish Chat entries
-    # exclusively from the reviewed semantic catalog.
-    semantics = [load(path) for path in SEMANTIC_PATHS]
-    semantic_services = {semantic.get("service") or "" for semantic in semantics}
-    if "" in semantic_services or len(semantic_services) != len(semantics):
-        raise ValueError(f"invalid or duplicate semantic catalog services: {semantic_services!r}")
+    # Visibility for semantic-catalog products is a reviewed decision, not a
+    # side effect of whether the current account had a fixture for a real run.
+    # Keep real-run rows as evidence/follow-ups, but publish these products
+    # exclusively from their reviewed semantic catalogs.
     public = [row for row in evidence_public if row["service"] not in semantic_services]
     for semantic in semantics:
         service = semantic["service"]

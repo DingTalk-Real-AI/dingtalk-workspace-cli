@@ -49,12 +49,12 @@ var MessagesSendByBot = shortcut.Shortcut{
 		{Name: "robot-code", Type: shortcut.FlagString, Desc: "机器人 Code", Required: true},
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true, Aliases: []string{"text"}},
 		{Name: "at-user-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId 列表"},
 		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 openDingTalkId 列表"},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@ 所有人"},
 	},
-	Tips: []string{`dws chat +messages-send-by-bot --robot-code <robotCode> --group <openConversationId> --title "日报" --text "## 今日完成"`},
+	Tips: []string{`dws chat +messages-send-by-bot --robot-code <robotCode> --group <openConversationId> --title "日报" --content "## 今日完成"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", rt.StrSlice("at-open-dingtalk-ids")); err != nil {
 			return err
@@ -63,7 +63,7 @@ var MessagesSendByBot = shortcut.Shortcut{
 			"robotCode":          rt.Str("robot-code"),
 			"openConversationId": rt.Str("group"),
 			"title":              rt.Str("title"),
-			"markdown":           rt.Str("text"),
+			"markdown":           rt.StrFirst("text", "content"),
 		}
 		if v := rt.StrSlice("at-user-ids"); len(v) > 0 {
 			params["atUserIds"] = v
@@ -90,12 +90,12 @@ var MessagesBatchSendByBot = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "robot-code", Type: shortcut.FlagString, Desc: "机器人 Code", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true, Aliases: []string{"text"}},
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "接收人 userId 列表"},
 		{Name: "open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "接收人 openDingTalkId 列表"},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@ 所有人"},
 	},
-	Tips: []string{`dws chat +messages-batch-send-by-bot --robot-code <robotCode> --users userId1,userId2 --title "提醒" --text "请提交周报"`},
+	Tips: []string{`dws chat +messages-batch-send-by-bot --robot-code <robotCode> --users userId1,userId2 --title "提醒" --content "请提交周报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := validateExplicitOpenIDs("--open-dingtalk-ids", rt.StrSlice("open-dingtalk-ids")); err != nil {
 			return err
@@ -103,7 +103,7 @@ var MessagesBatchSendByBot = shortcut.Shortcut{
 		params := map[string]any{
 			"robotCode": rt.Str("robot-code"),
 			"title":     rt.Str("title"),
-			"markdown":  rt.Str("text"),
+			"markdown":  rt.StrFirst("text", "content"),
 		}
 		if v := rt.StrSlice("users"); len(v) > 0 {
 			params["userIds"] = v
@@ -148,23 +148,23 @@ var MessagesSendByWebhook = shortcut.Shortcut{
 			AgentSummary: "兼容旧入口的自定义机器人 Webhook 群消息发送",
 			UseWhen:      []string{"只有既有自动化明确依赖 +messages-send-by-webhook 兼容路径、暂时不能迁移统一身份入口时使用"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws chat +messages-send-by-webhook --token <token> --title \"告警\" --text \"CPU 超 90%\" --at-all"},
+			Examples:     []string{"dws chat +messages-send-by-webhook --token <token> --title \"告警\" --content \"CPU 超 90%\" --at-all"},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "token", Type: shortcut.FlagString, Desc: "Webhook token", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "消息正文", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "消息正文", Required: true, Aliases: []string{"text"}},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@ 所有人"},
 		{Name: "at-mobiles", Type: shortcut.FlagStringSlice, Desc: "@ 的手机号列表"},
 		{Name: "at-users", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId 列表"},
 	},
-	Tips: []string{`dws chat +messages-send-by-webhook --token <token> --title "告警" --text "CPU 超 90%" --at-all`},
+	Tips: []string{`dws chat +messages-send-by-webhook --token <token> --title "告警" --content "CPU 超 90%" --at-all`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"robotToken": rt.Str("token"),
 			"title":      rt.Str("title"),
-			"text":       rt.Str("text"),
+			"text":       rt.StrFirst("text", "content"),
 		}
 		if rt.Bool("at-all") {
 			params["isAtAll"] = true
@@ -1644,13 +1644,20 @@ var MessagesSendCard = shortcut.Shortcut{
 		if err != nil {
 			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新失败: %w", bizID, err)
 		}
-		if _, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated); err != nil {
+		verification, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		if err != nil {
 			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新结果不可信: %w", bizID, cardUpdateVerificationError(bizID, err))
 		}
 		payload := chatmsg.ProjectStreamingCardReceipt(created, bizID)
 		payload["bizId"] = bizID
 		payload["flowStatus"] = status
 		payload["updated"] = updated
+		payload["updateAccepted"] = verification.Accepted
+		payload["updateVerified"] = verification.Verified
+		payload["updateVerificationEvidence"] = verification.Evidence
+		if verification.Accepted && !verification.Verified {
+			payload["updateWarning"] = "服务端已接受卡片更新请求，但未返回可独立证明可见内容已更新的字段；不要重复执行相同更新"
+		}
 		return rt.Output(payload)
 	},
 }
@@ -1793,11 +1800,11 @@ var MessagesUpdateCard = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		proof, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		verification, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
 		if err != nil {
 			return cardUpdateVerificationError(bizID, err)
 		}
-		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, proof))
+		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, verification))
 	},
 }
 
@@ -2093,6 +2100,9 @@ func listPinProject(data map[string]any) []map[string]any {
 		}
 		if threadID := chatmsg.ThreadID(m); threadID != nil {
 			row["threadId"] = threadID
+		}
+		if aiSendFlag := chatmsg.MessageAISendFlag(m); aiSendFlag != nil {
+			row["messageAiSendFlag"] = aiSendFlag
 		}
 		if len(row) > 0 {
 			out = append(out, row)

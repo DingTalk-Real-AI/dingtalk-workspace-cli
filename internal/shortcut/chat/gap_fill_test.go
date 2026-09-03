@@ -585,6 +585,119 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileFlow(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageMessagesSendCurrentUserDirectLocalFileUsesTransportSpecificTargets(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("direct.bin", []byte("direct-file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("upload method = %s", r.Method)
+		}
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Error(err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(uploadServer.Close)
+
+	tests := []struct {
+		name            string
+		targetArgs      []string
+		requestedType   string
+		wantOpenID      string
+		wantUserResolve bool
+	}{
+		{
+			name:          "explicit open id file",
+			targetArgs:    []string{"--open-dingtalk-id", fixtureCurrentDOpenID},
+			requestedType: "file",
+			wantOpenID:    fixtureCurrentDOpenID,
+		},
+		{
+			name:            "resolved user audio",
+			targetArgs:      []string{"--user", "user-id"},
+			requestedType:   "audio",
+			wantOpenID:      "D-resolved",
+			wantUserResolve: true,
+		},
+		{
+			name:          "explicit open id video",
+			targetArgs:    []string{"--open-dingtalk-id", fixtureCurrentDOpenID2},
+			requestedType: "video",
+			wantOpenID:    fixtureCurrentDOpenID2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{responses: map[string]string{
+				"im/init_conversation_file_upload":   `{"resourceUrl":"` + uploadServer.URL + `","uploadKey":"upload-key"}`,
+				"im/commit_conversation_file_upload": `{"result":{"dentryId":31,"spaceId":41}}`,
+				"chat/send_personal_message":         `{"result":{"openMessageId":"sent-direct-file"}}`,
+			}}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			var output bytes.Buffer
+			root.SetOut(&output)
+			args := []string{
+				"chat", "+messages-send", "--identity", "user",
+				"--msg-type", tt.requestedType,
+				"--file", "./direct.bin",
+				"--idempotency-key", "direct-" + tt.requestedType,
+				"--yes",
+			}
+			args = append(args, tt.targetArgs...)
+			root.SetArgs(args)
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+
+			callOffset := 0
+			if tt.wantUserResolve {
+				if len(fake.calls) == 0 || fake.calls[0].product != "contact" ||
+					fake.calls[0].tool != "search_contact_by_key_word" {
+					t.Fatalf("resolution call = %#v", fake.calls)
+				}
+				callOffset = 1
+			}
+			if len(fake.calls) != callOffset+3 {
+				t.Fatalf("calls = %#v, want resolution plus init, commit, send", fake.calls)
+			}
+			initCall := fake.calls[callOffset]
+			commitCall := fake.calls[callOffset+1]
+			sendCall := fake.calls[callOffset+2]
+			for _, call := range []larkAlignmentCall{initCall, commitCall} {
+				if call.product != "im" || call.args["openDingTalkId"] != tt.wantOpenID {
+					t.Fatalf("upload call = %#v, want openDingTalkId %q", call, tt.wantOpenID)
+				}
+				if _, exists := call.args["receiverOpenDingTalkId"]; exists {
+					t.Fatalf("send-only receiver field leaked into upload call: %#v", call.args)
+				}
+			}
+			if initCall.tool != "init_conversation_file_upload" ||
+				commitCall.tool != "commit_conversation_file_upload" {
+				t.Fatalf("upload calls = %#v, %#v", initCall, commitCall)
+			}
+			if sendCall.product != "chat" || sendCall.tool != "send_personal_message" ||
+				sendCall.args["receiverOpenDingTalkId"] != tt.wantOpenID {
+				t.Fatalf("send call = %#v, want receiverOpenDingTalkId %q", sendCall, tt.wantOpenID)
+			}
+			if _, exists := sendCall.args["openDingTalkId"]; exists {
+				t.Fatalf("upload-only target field leaked into send call: %#v", sendCall.args)
+			}
+
+			var payload map[string]any
+			if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["requestedMessageType"] != tt.requestedType ||
+				payload["effectiveMessageType"] != "file" {
+				t.Fatalf("output = %#v", payload)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.WriteFile("fixture.bin", []byte("x"), 0o600); err != nil {
@@ -1049,6 +1162,14 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			},
 			wantError: "biz-preserved",
 		},
+		{
+			name: "unverified update preserves id",
+			fake: &larkAlignmentCaller{responses: map[string]string{
+				"im/create_and_send_card":  `{"bizId":"biz-unverified"}`,
+				"im/update_streaming_card": `{"result":{"updated":false}}`,
+			}},
+			wantError: "biz-unverified",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			helpers.InitDeps(tc.fake)
@@ -1073,6 +1194,8 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		}}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
 		root.SetArgs([]string{
 			"chat", "+messages-send-card",
 			"--group", "cid",
@@ -1084,6 +1207,13 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "update_streaming_card" {
 			t.Fatalf("calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["updateAccepted"] != true || payload["updateVerified"] != false || payload["updateWarning"] == "" {
+			t.Fatalf("card payload = %#v", payload)
 		}
 	})
 
@@ -1157,12 +1287,14 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 		}
 	})
 
-	t.Run("success acknowledgement is verified", func(t *testing.T) {
+	t.Run("success acknowledgement is accepted but unverified", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/update_streaming_card": `{"success":true,"errorCode":null}`,
 		}}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
 		root.SetArgs([]string{
 			"chat", "+messages-update-card",
 			"--biz-id", "中文乱串",
@@ -1175,6 +1307,13 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "update_streaming_card" {
 			t.Fatalf("calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["accepted"] != true || payload["verified"] != false || payload["warning"] == "" {
+			t.Fatalf("payload = %#v", payload)
 		}
 	})
 

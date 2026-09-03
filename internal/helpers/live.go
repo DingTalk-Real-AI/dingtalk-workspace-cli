@@ -10,6 +10,12 @@ func newLiveCommand() *cobra.Command {
 	// products.live). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "live",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("直播深度指南", "dingtalk-misc", "references/live.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询当前用户发起的直播列表",
 			UseWhen: []string{
@@ -20,14 +26,14 @@ func newLiveCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "live",
 		Short: "直播列表 / 信息",
 		Long:  `查看钉钉直播：列出我的直播记录。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	streamCmd := &cobra.Command{Use: "stream", Short: "直播流管理", RunE: groupRunE}
+	streamCmd := newGroupCommand(&cobra.Command{Use: "stream", Short: "直播流管理", RunE: groupRunE})
 
 	streamListCmd := &cobra.Command{
 		Use:     "list",

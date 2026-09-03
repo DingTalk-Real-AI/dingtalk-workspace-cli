@@ -55,6 +55,8 @@ Example:
   dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
   dws doc read --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
   dws doc read --node <DOC_ID> --content-format jsonml --scope outline
+  dws doc read --node <PUBLIC_URL> --password <ACCESS_PASSWORD>
+  dws doc read --node <DOC_ID> --version 3
 Flags:
       --node string             文档 ID 或 URL (必填)
       --content-format string   输出格式: markdown / jsonml
@@ -63,9 +65,11 @@ Flags:
       --max-depth int           筛选遍历最大深度，0 表示不限
       --start-block-id string   range / section 起始块 UUID
       --end-block-id string     range 结束块 UUID
+      --password string         互联网公开文档密码保护时的访问密码
+      --version int             读取指定历史版本（版本号从 doc version list 获取，0 表示初始版本）；缺省读最新版
 ```
 
-`--scope` 只适用于 `--content-format jsonml`，用于按大纲、块区间、单块子树或自定义 tag 局部读取。筛选结果是虚拟 JSONML fragment，只能剥壳后消费 children，不得把 fragment 容器整体写回。完整规则见 [`doc-read.md`](./doc/doc-read.md)。
+`--scope` 只适用于 `--content-format jsonml`，用于按大纲、块区间、单块子树或自定义 tag 局部读取。筛选结果是虚拟 JSONML fragment，只能剥壳后消费 children，不得把 fragment 容器整体写回。互联网公开文档（含密码保护）用 `--password`；读取历史版本内容用 `--version`（版本号来自 `dws doc version list`，0 表示初始版本，需要编辑权限）。完整规则见 [`doc-read.md`](./doc/doc-read.md)。
 
 ### 创建文档
 ```
@@ -232,13 +236,13 @@ Flags:
 Usage:
   dws doc block insert [flags]
 Example:
-  dws doc block insert --node <DOC_ID> --text "这是一段文字"
+  dws doc block insert --node <DOC_ID> --content "这是一段文字"
   dws doc block insert --node <DOC_ID> --heading "二级标题" --level 2
   dws doc block insert --node <DOC_ID> --element '{"blockType":"paragraph","paragraph":{"text":"内容"}}'
-  dws doc block insert --node <DOC_ID> --text "在此处之前插入" --ref-block <BLOCK_ID> --where before
+  dws doc block insert --node <DOC_ID> --content "在此处之前插入" --ref-block <BLOCK_ID> --where before
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --text string        快捷: 段落文本内容
+      --content string     快捷: 段落文本内容
       --heading string     快捷: 标题文本
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)
@@ -252,12 +256,12 @@ Flags:
 Usage:
   dws doc block update [flags]
 Example:
-  dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text "新内容"
+  dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "新内容"
   dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --element '{"blockType":"heading","heading":{"text":"新标题","level":1}}'
 Flags:
       --node string        文档 ID 或 URL (必填)
       --block-id string    目标块 ID (必填)
-      --text string        快捷: 段落文本内容
+      --content string     快捷: 段落文本内容
       --heading string     快捷: 标题文本
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)
@@ -394,7 +398,7 @@ Usage:
 
 ### 内容写入管道（create / update 共用）
 
-> **关键原则**：CLI 内置自动分片。超长内容（>10000 字符）自动按 markdown 结构切分后逐片写入，对调用方透明。写入完成后由调用方自行决定是否回读确认。
+> **关键原则**：CLI 内置自动分片。超长内容（>30000 字符）自动按 markdown 结构切分后逐片写入，每一片都是完整自包含的顶层 block 序列（表格切分会重发表头行）。任何改变渲染结构的切分点都会在 `degradations` 里上报，不会静默降级。写入完成后由调用方自行决定是否回读确认。
 
 #### 输入方式选择
 
@@ -407,14 +411,16 @@ Usage:
 
 #### 自动分片行为
 
-当内容超过 10000 字符时，CLI 自动执行：
-1. **create**: 先创建空文档拿 `nodeId`，再按 markdown 标题边界切分后逐片 append
+当内容超过 30000 字符（rune 数）时，CLI 自动执行：
+1. **create**: 先创建空文档拿 `nodeId`，再切分后逐片 append
 2. **update (overwrite)**: 第一片用 overwrite，后续片用 append
 3. **update (append)**: 所有片段用 append
 
-分片策略按优先级：H1 标题 → H2 标题 → H3 标题 → 空行（段落边界）→ 硬切（保留表格/代码块完整性）
+服务端 `mode=append` 每次插入的都是全新结构，无法延续上一片，所以每一片都必须是完整自包含的顶层 block 序列。切分点严格按对文档的影响分档选择：完全安全（空行、能中断段落的块起始）→ 需注入修复（表格行边界重发表头行与分隔行、代码块行边界补围栏）→ 结构变化（长段落内换行、列表项之间）→ 硬切（仅当单行超限）。同档位内取最靠后的切分点。
 
-如果某片写入超时，自动将分片大小减半重试（最小 5000 字符，低于此值报错）。
+任何改变了渲染结构的切分点都会在 `degradations` 里如实上报，不会静默降级。`--index` 与自动分片互斥（第 2 片的插入位置不可知），超限时带 `--index` 会直接报错。
+
+详细分档规则见 [`./doc/doc-update.md` §自动分片行为](./doc/doc-update.md#自动分片行为)。
 
 #### 输出格式
 
@@ -438,8 +444,8 @@ CLI **不会**自动执行回读验证。**Agent 必须在文档写入完成后�
 3. 如发现内容缺失或异常，使用 `dws doc update --mode append` 补写缺失部分
 
 > **何时回读**：每次 create / update 操作完成后**必须**回读。
-> - 单次写入（≤10000 字符）：写完立即回读一次
-> - 分片写入（>10000 字符）：所有分片写完后回读一次全文，校验关键标题与段落完整性
+> - 单次写入（≤30000 字符）：写完立即回读一次
+> - 分片写入（>30000 字符）：所有分片写完后回读一次全文；先看 `degradations`，为空即表示分片未改变渲染结构
 > - 破坏性 overwrite（`--mode overwrite --yes`）：**必须**回读，确认 overwrite 未被后端静默降级为 append（详见 [best_practices/04-document.md "doc update 回读校验规范"](../best_practices/04-document.md#doc-update-回读校验规范)）
 > - 连续多次编辑同一文档：可在全部编辑完成后统一回读一次
 >
@@ -448,21 +454,23 @@ CLI **不会**自动执行回读验证。**Agent 必须在文档写入完成后�
 #### 进度输出示例
 
 ```
-[INFO] 内容较长 (25000 字符)，自动分片写入...
-[INFO] 已创建空文档 (nodeId=abc123)，开始分片写入...
-[INFO] 写入分片 (1/3)，10000 字符...
-[INFO] 写入分片 (2/3)，10000 字符...
-[INFO] 写入分片 (3/3)，5000 字符...
+[INFO] 内容较长 (72000 字符)，自动分片写入...
+[INFO] [WARN] 内容过长已分片：表格被拆成多个表格，后续分片重复表头行与分隔行（第 1420 行）
+[INFO] 写入分片 (1/3)，29989 字符 (overwrite)...
+[INFO] 写入分片 (2/3)，29994 字符, preview=[| 姓名 | 部门 |...]...
+[INFO] 写入分片 (3/3)，12030 字符, preview=[| 姓名 | 部门 |...]...
 [INFO] 全部 3 个分片写入完成
-{"success": true, "nodeId": "abc123", "chunksWritten": 3}
+{"success": true, "nodeId": "abc123", "chunksWritten": 3, "degradations": [{"kind": "table_split", ...}]}
 ```
 
-#### CONTENT_TRUNCATED 错误
+#### 分片超时（提交状态未知）
 
-当分片写入持续超时且减半到最小阈值仍失败时，返回 `CONTENT_TRUNCATED` 错误码。应对策略：
-1. 检查网络和后端服务状态
-2. 已写入的部分内容可通过 `dws doc read --node <NODE_ID>` 查看
-3. 从断点处手动用 `dws doc update --mode append` 继续追加
+某片写入超时时，服务端是否已提交无法判断。CLI 不会自动重试（重放会重复追加），而是 fail closed 返回 `doc_write_commit_unknown`，`details` 里给出 `chunksWritten` / `chunksTotal` / `failedStage` 与本次的 `degradations`。应对策略：
+1. 先 `dws doc read --node <NODE_ID>` 回读，确认实际写到哪一片
+2. 只有确认服务端未提交时才重新执行
+3. 从断点处用 `dws doc update --mode append` 继续追加；若 `degradations` 含 `table_split`，续写第一片需自带表头行
+
+> 早期版本在此处会把分片大小减半重试并最终返回 `CONTENT_TRUNCATED`。该逻辑已删除，错误码不再出现。
 
 ### 删除文档/文件到回收站
 
@@ -517,17 +525,32 @@ Example:
   dws doc permission add --node <DOC_ID> --users uid1 --role READER
   dws doc permission add --node <DOC_ID> --users uid1,uid2 --role EDITOR
   dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --users uid1 --role MANAGER
+  dws doc permission add --node <DOC_ID> --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
+  dws doc permission add --node <DOC_ID> --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]'
 Flags:
       --node string        目标文档/文件夹的 ID 或 URL (必填)
-      --users strings      被授权的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        授予的角色 (必填，大小写敏感，必须全大写): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --users string       被授权的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --role string        授予的角色 (旧格式必填，大小写不敏感): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --members string     成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool        是否通知被添加的成员 (仅 --members 新格式时生效，默认 false)
       --workspace string   所属知识库 ID (选填，仅用于辅助构造返回的 docUrl，业务实际依赖 nodeId)
 ```
 
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，支持 USER/DEPT/CONVERSATION/TAG 四种成员类型，每个成员携带独立 `roleId`
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`（标识用户所属组织）
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`（标识部门所属组织）
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+>
 > **重要约束**：
-> - 仅支持 USER 类型授权。
-> - 角色枚举严格大写：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加）。
-> - 操作者需在该节点具备「可编辑（EDITOR）」及以上角色（OWNER / MANAGER / EDITOR）。
+> - 角色枚举（大小写不敏感）：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加）。
+> - 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - `--notify` 仅在新格式（`--members`）时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false；省略时不会向服务端发送该字段，需要通知请显式传 `--notify`。
 > - 授权对象是文档节点本身，不需要也不应该用 `wiki member add`（那个是知识库容器级授权）。
 
 ### 修改文档权限（节点级）
@@ -537,12 +560,35 @@ Usage:
 Example:
   dws doc permission update --node <DOC_ID> --users uid1 --role EDITOR
   dws doc permission update --node <DOC_ID> --users uid1,uid2 --role READER
+  dws doc permission update --node <DOC_ID> --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws doc permission update --node <DOC_ID> --members '[{"type":"TAG","id":"tagId1","roleId":"READER","corpId":"xxx"}]'
 Flags:
       --node string        目标文档/文件夹的 ID 或 URL (必填)
-      --users strings      目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        新角色 (必填，大小写敏感，必须全大写): MANAGER / EDITOR / DOWNLOADER / READER
+      --users string       被更新的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --role string        新角色 (旧格式必填，大小写不敏感): MANAGER / EDITOR / DOWNLOADER / READER
+      --members string     成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool        是否通知被变更的成员 (仅 --members 新格式时生效，默认 false)
       --workspace string   所属知识库 ID (选填)
 ```
+
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，支持 USER/DEPT/CONVERSATION/TAG 四种成员类型，每个成员携带独立 `roleId`
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`
+>
+> **重要约束**：
+> - OWNER 角色不可通过此接口变更。
+> - 同一成员在同一节点只能拥有一个角色，变更后旧角色自动替换。
+> - 若成员的角色来自父节点的权限继承（PASS_ON），且继承角色高于目标角色，接口会拒绝操作。
+> - 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - `--notify` 仅在新格式（`--members`）时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false。
+> - 仅可更新已存在协作关系的成员，新增协作者请使用 `dws doc permission add`。
 
 ### 列出文档权限（节点级）
 ```
@@ -552,14 +598,16 @@ Example:
   dws doc permission list --node <DOC_ID>
   dws doc permission list --node <DOC_ID> --limit 50
   dws doc permission list --node <DOC_ID> --filter-role EDITOR
+  dws doc permission list --node <DOC_ID> --next-token <上次返回的 nextToken>
 Flags:
       --node string          目标文档/文件夹的 ID 或 URL (必填)
       --workspace string     所属知识库 ID (选填)
-      --limit int             返回数量上限，最大 200 (默认 50)
+      --limit int             返回数量上限，最大 50 (默认 30)
       --filter-role string   按角色过滤: MANAGER / EDITOR / DOWNLOADER / READER (选填)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (选填)
 ```
 
-> 接口不支持游标分页，使用 `--limit` 一次性拉取。
+> 底层一次性返回全量成员后在内存中按 pageSize 分页；当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页。
 
 ### 导出在线文档为 docx（一体化命令）
 ```
@@ -712,9 +760,21 @@ Flags:
 - 删除 → `block delete`
 
 用户说"给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看":
-- 新增权限 → `permission add`（需 `--node` + `--user` + `--role`）
+- 新增权限 → `permission add`（需 `--node` + `--user` + `--role`，或 `--node` + `--members`）
 - 修改权限 → `permission update`
 - 查看谁有权限 → `permission list`
+- 授权后要告知对方（"并通知他/告知一下/提醒对方/让他知道"）→ 走 `--members` 并追加 `--notify`
+
+> **通知意图 → `--notify`**（默认不通知，省略时 CLI 不向服务端发送该字段）：
+> - 用户明确要求“通知 / 告知 / 提醒对方 / 让他知道” → 追加 `--notify`
+> - 用户明确要求“不要通知 / 别提醒 / 悄悄加 / 不要打扰” → 追加 `--notify=false`
+> - 用户没提通知需求 → **不传该 flag**，保持不通知；不要自行补上 `--notify`
+> - `--notify` 仅在 `--members` 新格式下生效；旧格式 `--users` 下传了也不会生效，有通知需求必须改用 `--members`
+> - 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
+
+用户说"设置分享链接密码/公开有效期/互联网公开":
+- **必须走 drive 的 `drive publish set`**（可带 `--password` 访问密码与 `--expire-days` 有效期）
+- `doc permission` 是协作者级权限，不含链接公开属性（访问密码/有效期）
 
 > **关键区分**：
 > - "把**某篇文档**授权给某人" → `doc permission add`（节点级，包括「我的文档」下的文档都支持）
@@ -863,13 +923,13 @@ dws doc media insert --node <DOC_ID> --file ./timeline.xlsx --name "项目时间
 dws doc block list --node <DOC_ID> --format json
 
 # 2. 在文档末尾插入段落
-dws doc block insert --node <DOC_ID> --text "新增内容"
+dws doc block insert --node <DOC_ID> --content "新增内容"
 
 # 3. 在指定块之前插入标题
 dws doc block insert --node <DOC_ID> --heading "新章节" --level 2 --ref-block <BLOCK_ID> --where before
 
 # 4. 更新某个块的内容
-dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text "修改后的内容"
+dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "修改后的内容"
 
 # 5. 删除块
 dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
@@ -1044,7 +1104,7 @@ EOF
 - `create` 不传 `--folder` 和 `--workspace` 时，默认创建在"我的文档"根目录
 - `create` 只能建"文档"（adoc）；要建表格/脑图/白板/多维表/演示，用 `dws wiki node create --workspace <id> --type <type>`（`doc file create` 已弃用）；建普通文件夹用 `dws drive mkdir`
 - `block list/insert/update/delete` 是块级精细编辑，适合结构化修改；简单内容追加建议用 `update --mode append`
-- `block insert` 优先使用 `--text` 或 `--heading` 快捷方式；复杂块类型 (table, callout 等) 使用 `--element` JSON
+- `block insert` 优先使用 `--content` 或 `--heading` 快捷方式；复杂块类型 (table, callout 等) 使用 `--element` JSON
 - `--content` 参数中的换行必须使用**真实换行符**（即实际的换行字符，Unicode `U+000A`），而不是字面量字符串 `\n`（反斜杠加字母 n）。在通过程序或大模型构造此参数时，请确保字符串在发送前已正确反转义。如果传入的是两个字符的字面量 `\n`，所有内容将渲染在同一行，导致标题、段落和表格格式全部错乱。**含多行/表格/长文本时优先用 `--content-file path.md` 或 `--content -`（stdin），不经过 shell escape，换行和表格都保持原样**（详见下方「长 Markdown 写入」）。
 - 块类型包括: paragraph, heading, blockquote, callout, columns, orderedList, unorderedList, table, sheet, attachment, slot
 - 关键区分: doc(文档内容级操作) vs wiki(知识库空间级管理) vs aitable(数据表格操作) vs drive(钉盘文件管理)
@@ -1076,6 +1136,8 @@ dws doc media upload --node <DOC_ID> --file ./icon.svg \
 `dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
 media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
 Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
+
+白板卡片插入、删除、回查流程详见 [doc/doc-whiteboard.md](./doc/doc-whiteboard.md)。
 
 ## 相关产品
 

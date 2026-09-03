@@ -7,8 +7,11 @@ import (
 	"context"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -171,5 +174,158 @@ func TestAttendanceSummaryKeepsHiddenDeprecatedTagNameCompatibility(t *testing.T
 	}
 	if !reflect.DeepEqual(call.args, want) {
 		t.Fatalf("tool args = %#v, want %#v", call.args, want)
+	}
+}
+
+func TestCrossPlatformCoverageAttendanceCapabilityBoundaries(t *testing.T) {
+	root := newAttendanceCommand()
+	for _, tc := range []struct {
+		name      string
+		path      []string
+		wantLong  string
+		wantUse   string
+		wantAvoid string
+		flag      string
+		wantFlag  string
+	}{
+		{
+			name:      "selfsetting get current user only",
+			path:      []string{"selfsetting", "get"},
+			wantLong:  "只支持当前登录用户本人",
+			wantUse:   "当前登录用户本人",
+			wantAvoid: "目标是其他员工时不可用",
+			flag:      "user",
+			wantFlag:  "当前登录用户本人",
+		},
+		{
+			name:      "selfsetting save current user only",
+			path:      []string{"selfsetting", "save"},
+			wantLong:  "只支持当前登录用户本人",
+			wantUse:   "当前登录用户本人",
+			wantAvoid: "目标是其他员工时不可用",
+			flag:      "user",
+			wantFlag:  "当前登录用户本人",
+		},
+		{
+			name:      "vacation update freedom only",
+			path:      []string{"vacation", "update-type"},
+			wantLong:  "leaveStatisticType=freedom",
+			wantUse:   "leaveStatisticType 严格等于 freedom",
+			wantAvoid: "leaveStatisticType 不是 freedom",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			leaf, _, err := root.Find(tc.path)
+			if err != nil {
+				t.Fatalf("find %v: %v", tc.path, err)
+			}
+			if !strings.Contains(leaf.Long, tc.wantLong) {
+				t.Fatalf("%v Long does not contain %q: %q", tc.path, tc.wantLong, leaf.Long)
+			}
+			if tc.flag != "" {
+				flag := leaf.Flags().Lookup(tc.flag)
+				if flag == nil || !strings.Contains(flag.Usage, tc.wantFlag) {
+					t.Fatalf("%v --%s usage = %#v, want %q", tc.path, tc.flag, flag, tc.wantFlag)
+				}
+			}
+			final, ok := contractfinal.RuntimeContractFinal(leaf)
+			if !ok || final.Selection == nil {
+				t.Fatalf("%v missing ContractFinal selection", tc.path)
+			}
+			if got := strings.Join(final.Selection.UseWhen, "\n"); !strings.Contains(got, tc.wantUse) {
+				t.Fatalf("%v use_when = %q, want %q", tc.path, got, tc.wantUse)
+			}
+			if got := strings.Join(final.Selection.AvoidWhen, "\n"); !strings.Contains(got, tc.wantAvoid) {
+				t.Fatalf("%v avoid_when = %q, want %q", tc.path, got, tc.wantAvoid)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAttendanceScheduleGetSerializesDateStrings(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		wantUsers []string
+		wantStart string
+		wantEnd   string
+	}{
+		{
+			name:      "canonical date-only flags cover whole days",
+			args:      []string{"schedule", "get", "--users", "u1, u2", "--start", "2026-04-01", "--end", "2026-04-30"},
+			wantUsers: []string{"u1", "u2"},
+			wantStart: "2026-04-01 00:00:00",
+			wantEnd:   "2026-04-30 23:59:59",
+		},
+		{
+			name:      "legacy aliases preserve explicit datetimes",
+			args:      []string{"schedule", "get", "--userIdList", "u1", "--workDateBegin", "2026-04-01 09:00:00", "--workDateEnd", "2026-04-01 18:00:00"},
+			wantUsers: []string{"u1"},
+			wantStart: "2026-04-01 09:00:00",
+			wantEnd:   "2026-04-01 18:00:00",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller, err := runAttendanceSearchCommand(t, tc.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v, want one", caller.calls)
+			}
+			call := caller.calls[0]
+			if call.server != "attendance-wukong" || call.toolName != "getScheduleByRange" {
+				t.Fatalf("tool = %s/%s, want attendance-wukong/getScheduleByRange", call.server, call.toolName)
+			}
+			request, ok := call.args["GetScheduleByRangeRequest"].(map[string]any)
+			if !ok {
+				t.Fatalf("request = %#v, want map", call.args["GetScheduleByRangeRequest"])
+			}
+			if got, ok := request["workDateBegin"].(string); !ok || got != tc.wantStart {
+				t.Fatalf("workDateBegin = %#v (%T), want string %q", request["workDateBegin"], request["workDateBegin"], tc.wantStart)
+			}
+			if got, ok := request["workDateEnd"].(string); !ok || got != tc.wantEnd {
+				t.Fatalf("workDateEnd = %#v (%T), want string %q", request["workDateEnd"], request["workDateEnd"], tc.wantEnd)
+			}
+			if got := request["userIdList"]; !reflect.DeepEqual(got, tc.wantUsers) {
+				t.Fatalf("userIdList = %#v, want %#v", got, tc.wantUsers)
+			}
+		})
+	}
+
+	caller, err := runAttendanceSearchCommand(t,
+		"schedule", "get", "--users", "u1", "--start", "2026-04-02", "--end", "2026-04-01",
+	)
+	if err == nil || !strings.Contains(err.Error(), "--end must not be earlier than --start") {
+		t.Fatalf("reversed range error = %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("reversed range calls = %#v, want none", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAttendanceScheduleDateOnlyEndPreservesDSTCalendarDay(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("load DST timezone: %v", err)
+	}
+
+	for _, date := range []string{
+		"2026-03-08", // spring forward: 23-hour day
+		"2026-11-01", // fall back: 25-hour day
+	} {
+		t.Run(date, func(t *testing.T) {
+			want := date + " 23:59:59"
+			got, parsed, err := normalizeScheduleRangeDateInLocation(date, "end", loc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("normalized end = %q, want %q", got, want)
+			}
+			if gotParsed := parsed.In(loc).Format("2006-01-02 15:04:05"); gotParsed != want {
+				t.Fatalf("parsed end = %q, want %q", gotParsed, want)
+			}
+		})
 	}
 }

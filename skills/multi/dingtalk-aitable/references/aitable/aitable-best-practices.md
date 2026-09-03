@@ -12,7 +12,7 @@
 
 ## 2. 查询执行契约
 
-1. **不要拉全量后在 context 里手动统计** — 优先用 `--filters` 在服务端过滤
+1. **不要拉全量后在 context 里手动统计** — 标量聚合用 `record stats`，分组/去重用 `record group-stats`
 2. **has_more=true 时不能做全局结论** — 数据可能不完整
 3. **优先用 `--filters` 在服务端过滤** — 不要拉全量后在本地 jq/grep
 4. **fieldId 必须来自 `field get` 真实返回** — 不要猜测 fieldId
@@ -23,7 +23,9 @@
 | 用户诉求 | 优先方案 | 不要误走 |
 |---------|----------|----------|
 | 查看几条数据 | `record query` | 不要用 `--all` |
-| 全量拉取/统计 | `record query --all` | 不要手动循环 cursor |
+| 全量拉取明细 | `record query --all` | 不要手动循环 cursor |
+| 标量统计 | `record stats` | 不要先拉全量再本地计算 |
+| 分组/去重统计 | `record group-stats` | 不要先拉全量再本地 groupby |
 | 全量导出为文件 | `export data` | 不要 `--all` 拉全量再写文件 |
 | 批量写入 | `record create`（分批 100 条） | 不要一次传超过 100 条 |
 | 附件/图片上传 | `attachment upload` 获取 fileToken → `record create/update` 用 fileToken 写入 | **严禁直接传图片 URL 到附件字段**（服务端同步下载会超时） |

@@ -12,7 +12,7 @@ import (
 // (read/update/clear/sort/fill/copy-to/move-to).
 // set-style, batch-set-style, and batch-clear are added by newSheetCommand().
 func newRangeCmd() *cobra.Command {
-	rangeCmd := &cobra.Command{Use: "range", Short: "数据区域操作"}
+	rangeCmd := newDeepGroupCommand(&cobra.Command{Use: "range", Short: "数据区域操作"})
 
 	rangeReadCmd := &cobra.Command{
 		Use:     "read",
@@ -26,6 +26,16 @@ func newRangeCmd() *cobra.Command {
   value           单元格值（内容由 --value-render-option 决定）
   dataValidation  数据验证配置（下拉列表/复选框），无则为 null
   hyperlink       单元格级超链接（path/sheet/range），无则省略
+顶层还会返回 rowIndices / colIndices 与完成度字段：
+  hasMore           目标范围是否还有未返回数据
+  truncationReasons 部分返回原因（max_cells）
+  resolvedRange     未传 --range 时底层解析出的完整目标范围
+  returnedRange     本次实际完整返回的范围
+
+单次最多返回 30,000 个单元格。hasMore=true 是部分成功，本命令
+不会自动续读；请结合目标范围和 returnedRange 从下一行显式传
+--range。收到 forbidden.document.sizeOverLimit 则表示工作簿整体无法装载，
+应创建更小副本或拆分工作簿，缩小 --range 不能解决。
 
 注意：range read/get 不返回合并单元格结构。查看合并范围请使用
 dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 mergedRanges。
@@ -157,7 +167,12 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
   2) {"dataValidation":{"type":"none"}}             → 显式清除该单元格 DV
   3) {"dataValidation":{"type":"dropdown",...}}     → 写新 dropdown（覆盖）
      {"dataValidation":{"type":"checkbox",...}}    → 写新 checkbox（覆盖）
-  dropdown: {"dataValidation":{"type":"dropdown","options":[{"value":"选项1"}],"enableMultiSelect":false}}
+  Inline dropdown:
+    {"dataValidation":{"type":"dropdown","options":[{"value":"选项1"}],"enableMultiSelect":false}}
+  SourceRange dropdown（同一工作簿内可跨工作表；不展开来源 values，不支持 colors）：
+    {"dataValidation":{"type":"dropdown","sourceRange":{"sheetId":"SOURCE_SHEET_ID","a1Notation":"T1:T3"},"enableMultiSelect":false}}
+  dropdown 的 options 与 sourceRange 必须且只能传一个。SourceRange 支持普通区域、整行和整列；
+  a1Notation 不带工作表前缀，来源工作表单独写在 sheetId。
   checkbox: {"dataValidation":{"type":"checkbox","checked":true}}
   可与 text/richText 共存，也可单独使用（如 {dataValidation:{type:"none"}} 仅清除 DV 不写值）
 
@@ -169,6 +184,8 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
   - 只设样式或批量刷整片区域样式请用 dws sheet range set-style；写值同时设置少量 cell 样式可用 cellStyles
   - 目标范围与已有合并区域冲突时，range update 会返回 MERGED_CELLS_CONFLICT；先用 sheet info 查看 mergedRanges，取消合并后写入，必要时再重新合并
   - csv-put 的合并处理不同：目标区域含合并单元格时会打散合并并写入 CSV 值或公式
+  - SourceRange 在已验证的重命名、引用前插入行/列、删除引用前行的场景会自动调整；move-dimension 及其他未覆盖的删除/移动场景后先回读 sourceRangeStatus，仅 invalid 时重新选源写入
+  - 同一 cell 的 value/style 已写入但 SourceRange 校验失败时，服务端可返回 success=true，并通过 message 明确下拉未创建；必须检查 message，必要时重新读取确认
   - 清空整片区域请用 dws sheet range clear`,
 		Example: `  # 写入文本
   dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range "A1:B2" \
@@ -365,20 +382,24 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			if err := validateRequiredFlags(cmd, "node", "sheet-id", "range", "sort-keys"); err != nil {
 				return err
 			}
-			toolArgs := map[string]any{
-				"nodeId":  mustGetFlag(cmd, "node"),
-				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"range":   mustGetFlag(cmd, "range"),
+			input := map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"),
+				"range":    mustGetFlag(cmd, "range"),
 			}
 			sortKeysStr, _ := cmd.Flags().GetString("sort-keys")
 			var sortKeys []any
 			if err := json.Unmarshal([]byte(sortKeysStr), &sortKeys); err != nil {
 				return fmt.Errorf("--sort-keys JSON 解析失败: %w", err)
 			}
-			toolArgs["sortKeys"] = sortKeys
+			input["sort-keys"] = sortKeys
 			if v, _ := cmd.Flags().GetBool("has-header"); v {
-				toolArgs["hasHeader"] = true
+				input["has-header"] = true
 			}
+			toolArgs, err := BuildBatchSortRangeArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("sort_range", toolArgs)
 		},
 	}
@@ -582,15 +603,19 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			if err := validateRequiredFlags(cmd, "node", "sheet-id", "source-range", "target-range"); err != nil {
 				return err
 			}
-			toolArgs := map[string]any{
-				"nodeId":           mustGetFlag(cmd, "node"),
-				"sheetId":          mustGetFlag(cmd, "sheet-id"),
-				"sourceRange":      mustGetFlag(cmd, "source-range"),
-				"destinationRange": mustGetFlag(cmd, "target-range"),
+			input := map[string]any{
+				"sheet-id":     mustGetFlag(cmd, "sheet-id"),
+				"source-range": mustGetFlag(cmd, "source-range"),
+				"target-range": mustGetFlag(cmd, "target-range"),
 			}
 			if v, _ := cmd.Flags().GetString("target-sheet-id"); v != "" {
-				toolArgs["targetSheetId"] = v
+				input["target-sheet-id"] = v
 			}
+			toolArgs, err := BuildBatchMoveRangeArgs(input)
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
 			return callMCPTool("move_range", toolArgs)
 		},
 	}

@@ -11,7 +11,7 @@
 
 ### create-todo
 
-1. 确定执行者：指定姓名 → `aisearch person --keyword "<姓名>" --dimension name` → `userId`；未指定 → `contact user get-self` → `userId`；多人 → 逐个搜索逗号拼接。
+1. 确定执行者：指定姓名 → `aisearch person --query "<姓名>" --dimension name` → `userId`；未指定 → `contact user get-self` → `userId`；多人 → 逐个搜索逗号拼接。
 2. 创建：`todo task create --title "<标题>" --executors <userId>[,<userId2>...] --priority <优先级>`（可选 `--due "<截止ISO>"`）→ `todoTaskId`
 
 ### todo-query-ops
@@ -32,7 +32,7 @@
 
 查询多人在某时段内的闲忙（**busy**，不是用 `event list` 扫日程）：
 
-1. 解析用户：对每个姓名执行 `aisearch person --keyword "<姓名>" --dimension name` → `userId`；多人将 `userId` 用英文逗号拼接（无空格或按 `dingtalk-calendar` `busy search` 要求）。
+1. 解析用户：对每个姓名执行 `aisearch person --query "<姓名>" --dimension name` → `userId`；多人将 `userId` 用英文逗号拼接（无空格或按 `dingtalk-calendar` `busy search` 要求）。
 2. 确认时段：用户须给出或可收敛为明确的 `--start` / `--end`（ISO-8601）；若未给出，**先追问**起止时间，禁止用任意默认全天窗口代替用户意图。
 3. 执行：`dws calendar busy search --users <userId1,userId2,...> --start "<ISO>" --end "<ISO>" --format json`
 
@@ -56,7 +56,7 @@
 
 1. 收到的日志：先把用户时间词转成起止时间，再执行 `report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json`。用户只说“最近/近期/最近收到”时默认最近 7 天。
 2. 我发过/我创建的日志：首条查询必须用 `report outbox list --cursor 0 --size 20 --format json`；如用户指定时间，补 `--start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>"`。
-3. 按发件人过滤收件箱：先 `aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId/staffId`，再加 `--sender-user-ids <id>`；空结果必须说明未找到该发件人的日志，不得改选其他人。
+3. 按发件人过滤收件箱：先 `aisearch person --query "<姓名>" --dimension name --format json` 取 `userId/staffId`，再加 `--sender-user-ids <id>`；空结果必须说明未找到该发件人的日志，不得改选其他人。
 4. 面向用户时必须基于 `result[]` 拼 Markdown 表，表头固定为 `日期 | 标题 | 发送人 | 状态 | 钉钉链接`；每条 `result[]` 都会带这五个中文字段，不要把 `reportId` / `日志ID` 作为主列。
 5. 用户要正文、详情、统计、汇总或总结多篇日志时，必须用内部保留的 `reportId` 逐篇执行 `report entry get --report-id <reportId> --format json` 或 `report entry stats --report-id <reportId> --format json`；选前 5 篇时调用次数应等于实际选中篇数。
 
@@ -137,7 +137,7 @@ dws minutes list shared --query "ROI" --format json
   - 执行前检查特殊字符（引号/书名号/括号等），若包含先提示用户确认去除
   - 替换成功后追问是否加热词：`minutes hot-word add --words "新文字"`
 - **替换发言人**：先统一搜人取得 dingUid → `minutes speaker replace --id <taskUuid> --from "发言人X" --to "姓名" --target-uid <userId>`
-  - 查询 dingUid：`aisearch person --keyword "姓名" --dimension name --format json` → 取 `userId`
+  - 查询 dingUid：`aisearch person --query "姓名" --dimension name --format json` → 取 `userId`
   - 多个匹配 → 列出候选让用户选；无匹配 → 不带 `--target-uid` 执行
 - **修改标题**：`minutes update title --id <taskUuid> --title "新标题"`
 - **修改摘要**：`minutes update summary --id <taskUuid> --content "新内容"`
@@ -158,7 +158,7 @@ dws minutes list shared --query "ROI" --format json
 ### minutes-permission（权限管理）
 
 - 添加成员：`minutes permission add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy 4`
-  - 需先通过 `aisearch person --keyword "<姓名>" --dimension name` 获取目标 userId
+  - 需先通过 `aisearch person --query "<姓名>" --dimension name` 获取目标 userId
   - policy：0=不可见 / 1=仅查看 / 2=查看+下载 / 3=查看+下载+编辑 / 4=全部权限
 - 移除成员：`minutes permission remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>`
 
@@ -216,7 +216,7 @@ query 未提"听记"但任务产出依赖会议讨论内容时（报告/总结/�
 **搜人首选入口**。凡是“找人/搜人/找同事/谁负责/上级/下级/负责人/团队成员”均优先用 `aisearch person`：
 
 1. 从用户问题中提取 keyword（人名/业务关键词）和 dimension（维度），规则见 `dingtalk-aisearch`。
-2. `aisearch person --keyword "<关键词>" --dimension <维度>`
+2. `aisearch person --query "<关键词>" --dimension <维度>`
 3. 结果中提取 `userId` 和 `title`（姓名）展示给用户。
 4. 若需要 userId 做后续操作（发消息/建待办），可直接使用结果中的 `userId`。
 5. **重名消歧**：多人同名时禁止默认选第一个，须追加 `contact user get --ids` 获取部门/职位后请用户确认，详见 `dingtalk-contact/references/08-directory.md`「多命中」。
@@ -228,7 +228,7 @@ query 未提"听记"但任务产出依赖会议讨论内容时（报告/总结/�
 - 需要获取 userId 给其他产品使用（发消息/建待办/约日程）
 - 已有 userId 需查完整详情（`contact user get --ids`）
 
-1. `aisearch person --keyword "<姓名>" --dimension name` → `userId`；**多命中须列出候选请用户确认**。
+1. `aisearch person --query "<姓名>" --dimension name` → `userId`；**多命中须列出候选请用户确认**。
 2. **重名消歧**：多人同名时禁止默认选第一个，须追加 `contact user get --ids` 获取部门/职位后请用户确认，详见 `dingtalk-contact/references/08-directory.md`「多命中」。
 3. 需详情时：`contact user get --ids <userId>`（多人可 `--ids id1,id2,...`）
 

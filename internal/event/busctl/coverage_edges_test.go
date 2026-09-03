@@ -284,11 +284,13 @@ func TestCrossPlatformCoverageQueryStatusAndEntryEdges(t *testing.T) {
 
 func TestCrossPlatformCoverageStopInjectedEdges(t *testing.T) {
 	origRead := stopReadHolderPID
+	origValidateOwner := stopValidateHolderOwner
 	origAlive := stopAlive
 	origFind := stopFindProcess
 	origSignal := stopSignalProcess
 	t.Cleanup(func() {
 		stopReadHolderPID = origRead
+		stopValidateHolderOwner = origValidateOwner
 		stopAlive = origAlive
 		stopFindProcess = origFind
 		stopSignalProcess = origSignal
@@ -307,6 +309,7 @@ func TestCrossPlatformCoverageStopInjectedEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	stopFindProcess = func(int) (*os.Process, error) { return proc, nil }
+	stopValidateHolderOwner = func(string, int) (bool, error) { return true, nil }
 	stopSignalProcess = func(*os.Process, os.Signal) error { return os.ErrProcessDone }
 	if err := Stop(StopConfig{WorkDir: "x"}); err != nil {
 		t.Fatalf("done signal = %v", err)

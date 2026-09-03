@@ -15,6 +15,7 @@
     "+url-resolve": {"disposition":"primary_smart","semantic_delta":"严格解析 alidocs AI 表格 URL 的 base/table/view/record ID，并可通过最深层只读接口验证目标存在。","risk":"read","public":true,"reviewed":true},
 
     "+table-get": {"disposition":"semantic_adapter","semantic_delta":"批量读取表级信息、字段和视图目录，为后续 Schema 与记录操作提供 ID。","risk":"read","public":true,"reviewed":true},
+    "+table-bootstrap": {"disposition":"primary_smart","semantic_delta":"在已有 Base 中声明式创建一张表和字段，字段自动分片，逐层读回验证并发布可恢复检查点。","risk":"write","public":true,"reviewed":true},
     "+table-copy": {"disposition":"primary_smart","semantic_delta":"在没有服务端 table-copy task 的情况下，本地重建安全字段、映射 fieldId，并可分片复制及读回验证全部记录。","risk":"write","public":true,"reviewed":true},
     "+table-update": {"disposition":"schema_leaf","semantic_delta":"统一表名、备注和行命名规则的 PATCH 风格更新。","risk":"write","public":true,"reviewed":true},
     "+table-delete": {"disposition":"schema_leaf","semantic_delta":"不可逆删除数据表的一对一入口，显式发布高风险确认事实。","risk":"high-risk-write","public":true,"reviewed":true},
@@ -23,7 +24,7 @@
     "+field-update": {"disposition":"semantic_adapter","semantic_delta":"统一字段名称、类型配置和 AI 配置的增量更新输入。","risk":"write","public":true,"reviewed":true},
     "+field-delete": {"disposition":"schema_leaf","semantic_delta":"不可逆删除字段的一对一入口，显式发布数据丢失风险。","risk":"high-risk-write","public":true,"reviewed":true},
 
-    "+record-query": {"disposition":"semantic_adapter","semantic_delta":"统一 ID、筛选、关键词和分页查询，并投影稳定的 records/count/cursor 结果。","risk":"read","public":true,"reviewed":true},
+    "+record-query": {"disposition":"semantic_adapter","semantic_delta":"统一 ID、筛选、关键词、字段投影和分页查询；fieldIds 只返回用户要求的列，并投影稳定的 records/count/cursor 结果。","risk":"read","public":true,"reviewed":true},
     "+record-update": {"disposition":"primary_smart","semantic_delta":"自动按 100 条分片更新并逐条读回验证；失败返回可续跑的 nextOffset。","risk":"write","public":true,"reviewed":true},
     "+record-delete": {"disposition":"primary_smart","semantic_delta":"自动按 100 条分片删除；每批仅在所有目标 recordId 读回均不存在时成功，失败提供 nextOffset。","risk":"high-risk-write","public":true,"reviewed":true},
     "+record-query-empty": {"disposition":"semantic_adapter","semantic_delta":"扫描记录并按用户字段为空的语义过滤空行，避免调用方手工判断 cells。","risk":"read","public":true,"reviewed":true},
@@ -107,6 +108,14 @@
     "+list-tables": {"disposition":"semantic_adapter","semantic_delta":"把 Base 目录稳定投影为 tableId/tableName 列表，隐藏非表节点。","risk":"read","public":true,"reviewed":true},
     "+record-share-links": {"disposition":"primary_smart","semantic_delta":"对超过 20 条 recordId 去重分片调用并合并分享链接及逐批结果。","risk":"read","public":true,"reviewed":true},
     "+resolve-base": {"disposition":"primary_smart","semantic_delta":"按名称搜索并要求唯一匹配，0 或多结果时显式失败而不猜 baseId。","risk":"read","public":true,"reviewed":true},
-    "+resolve-table": {"disposition":"primary_smart","semantic_delta":"在 Base 内按名称要求唯一匹配，0 或多结果时显式失败而不猜 tableId。","risk":"read","public":true,"reviewed":true}
+    "+resolve-table": {"disposition":"primary_smart","semantic_delta":"在 Base 内按名称要求唯一匹配，0 或多结果时显式失败而不猜 tableId。","risk":"read","public":true,"reviewed":true},
+
+    "+datasource-create": {"disposition":"schema_leaf","semantic_delta":"为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。","risk":"write","public":true,"reviewed":true},
+    "+datasource-update": {"disposition":"schema_leaf","semantic_delta":"更新已有数据源表的同步配置并触发一次同步；不改配置可只切换 auto 开关或 field-ids。","risk":"write","public":true,"reviewed":true},
+    "+datasource-sync": {"disposition":"schema_leaf","semantic_delta":"对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。","risk":"write","public":true,"reviewed":true},
+    "+datasource-sync-status": {"disposition":"schema_leaf","semantic_delta":"批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。","risk":"read","public":true,"reviewed":true},
+    "+datasource-get-config": {"disposition":"schema_leaf","semantic_delta":"读取已有数据源表的同步配置详情（源配置、字段选择、自动同步状态）的一对一入口。","risk":"read","public":true,"reviewed":true},
+    "+datasource-list-sources": {"disposition":"schema_leaf","semantic_delta":"列出指定 Base 下可用的数据源条目（OA 审批模板等），提取 processCode/name/iconUrl/url 用于 sourceConfig。","risk":"read","public":true,"reviewed":true},
+    "+datasource-get-fields": {"disposition":"schema_leaf","semantic_delta":"获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键），用于决定 field-ids。","risk":"read","public":true,"reviewed":true}
   }
 }

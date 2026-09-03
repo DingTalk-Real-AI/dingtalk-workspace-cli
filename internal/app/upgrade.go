@@ -620,6 +620,9 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		for _, d := range succeeded {
 			fmt.Printf("         %s %s\n", ugDim("→"), ugCyan(shortenHome(d.Dir)))
 		}
+		for _, d := range result.RetireWarnings() {
+			fmt.Printf("       %s %s %s\n", ugYellow("⚠"), shortenHome(d.Dir), ugDim("旧副本未能迁移，可手动删除: "+d.Err.Error()))
+		}
 	} else {
 		fmt.Printf(" %s\n", ugGreen("✓"))
 	}

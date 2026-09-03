@@ -92,10 +92,10 @@ func TestCrossPlatformCoverageMultiUpgradeTransactionPreservesOldSet(t *testing.
 
 	t.Run("backup failure restores earlier victims", func(t *testing.T) {
 		home, base, multiRoot, skills, skillSet := seedMultiUpgradeTarget(t)
-		originalRename := upgradeRename
-		testseam.Swap(t, &upgradeRename, func(src, dest string) error {
+		originalRename := skillPathRenameNoReplace
+		testseam.Swap(t, &skillPathRenameNoReplace, func(src, dest string) (string, error) {
 			if src == filepath.Join(base, "dingtalk-b") {
-				return failure
+				return "", failure
 			}
 			return originalRename(src, dest)
 		})
@@ -107,14 +107,14 @@ func TestCrossPlatformCoverageMultiUpgradeTransactionPreservesOldSet(t *testing.
 
 	t.Run("publish failure rolls back complete set", func(t *testing.T) {
 		home, base, multiRoot, skills, skillSet := seedMultiUpgradeTarget(t)
-		originalRename := upgradeRename
+		originalPublish := upgradePublishSkillPath
 		failed := false
-		testseam.Swap(t, &upgradeRename, func(src, dest string) error {
+		testseam.Swap(t, &upgradePublishSkillPath, func(src, dest string) (SkillPathPublication, error) {
 			if !failed && strings.Contains(src, ".dws-upgrade-multi-") && filepath.Base(dest) == "dingtalk-b" {
 				failed = true
-				return failure
+				return SkillPathPublication{}, failure
 			}
-			return originalRename(src, dest)
+			return originalPublish(src, dest)
 		})
 		if err := publishMultiUpgradeTarget(home, base, multiRoot, skills, skillSet); !errors.Is(err, failure) {
 			t.Fatalf("publish failure = %v, want injected failure", err)
@@ -156,14 +156,14 @@ func TestCrossPlatformCoverageMonoUpgradeTransactionPreservesOldSet(t *testing.T
 
 	t.Run("publish failure rolls back mono and multi", func(t *testing.T) {
 		home, base, monoRoot := seed(t)
-		originalRename := upgradeRename
+		originalPublish := upgradePublishSkillPath
 		failed := false
-		testseam.Swap(t, &upgradeRename, func(src, dest string) error {
+		testseam.Swap(t, &upgradePublishSkillPath, func(src, dest string) (SkillPathPublication, error) {
 			if !failed && strings.Contains(src, ".dws-upgrade-mono-") && filepath.Base(dest) == "dws" {
 				failed = true
-				return failure
+				return SkillPathPublication{}, failure
 			}
-			return originalRename(src, dest)
+			return originalPublish(src, dest)
 		})
 		if err := publishMonoUpgradeTarget(home, base, monoRoot); !errors.Is(err, failure) {
 			t.Fatalf("publish failure = %v, want injected failure", err)
@@ -211,10 +211,10 @@ func TestCrossPlatformCoverageSkillPublishTransactionFailureEdges(t *testing.T) 
 	})
 
 	t.Run("restore reports removal and directory failures", func(t *testing.T) {
-		testseam.Swap(t, &upgradeRemoveAll, func(string) error { return failure })
+		testseam.Swap(t, &upgradeRollbackPublishedSkillPaths, func([]SkillPathPublication) error { return failure })
 		testseam.Swap(t, &upgradeMkdirAll, func(string, os.FileMode) error { return restoreFailure })
 		err := restoreSkillSet(
-			[]string{filepath.Join(t.TempDir(), "published")},
+			[]SkillPathPublication{{Destination: filepath.Join(t.TempDir(), "published")}},
 			[]backedUpSkillDir{{original: filepath.Join(t.TempDir(), "old"), backup: filepath.Join(t.TempDir(), "backup")}},
 		)
 		if !errors.Is(err, failure) || !errors.Is(err, restoreFailure) {
@@ -223,7 +223,7 @@ func TestCrossPlatformCoverageSkillPublishTransactionFailureEdges(t *testing.T) 
 	})
 
 	t.Run("restore reports rename failure", func(t *testing.T) {
-		testseam.Swap(t, &upgradeRename, func(string, string) error { return restoreFailure })
+		testseam.Swap(t, &skillPathRenameNoReplace, func(string, string) (string, error) { return "", restoreFailure })
 		err := restoreSkillSet(nil, []backedUpSkillDir{{original: filepath.Join(t.TempDir(), "old"), backup: filepath.Join(t.TempDir(), "backup")}})
 		if !errors.Is(err, restoreFailure) {
 			t.Fatalf("restore rename error = %v", err)
@@ -236,13 +236,13 @@ func TestCrossPlatformCoverageSkillPublishTransactionFailureEdges(t *testing.T) 
 		second := filepath.Join(home, "second")
 		seedUpgradeSkill(t, first, "first", false)
 		seedUpgradeSkill(t, second, "second", false)
-		originalRename := upgradeRename
-		testseam.Swap(t, &upgradeRename, func(src, dest string) error {
+		originalRename := skillPathRenameNoReplace
+		testseam.Swap(t, &skillPathRenameNoReplace, func(src, dest string) (string, error) {
 			switch {
 			case src == second:
-				return failure
+				return "", failure
 			case strings.Contains(filepath.ToSlash(src), skillBackupSubdir):
-				return restoreFailure
+				return "", restoreFailure
 			default:
 				return originalRename(src, dest)
 			}
@@ -259,16 +259,15 @@ func TestCrossPlatformCoverageSkillPublishTransactionFailureEdges(t *testing.T) 
 		staged := filepath.Join(home, "skills", ".stage", "dws")
 		seedUpgradeSkill(t, old, "old", false)
 		seedUpgradeSkill(t, staged, "new", false)
-		originalRename := upgradeRename
-		testseam.Swap(t, &upgradeRename, func(src, dest string) error {
-			switch {
-			case src == staged:
-				return failure
-			case strings.Contains(filepath.ToSlash(src), skillBackupSubdir):
-				return restoreFailure
-			default:
-				return originalRename(src, dest)
+		testseam.Swap(t, &upgradePublishSkillPath, func(src, dest string) (SkillPathPublication, error) {
+			return SkillPathPublication{}, failure
+		})
+		originalRename := skillPathRenameNoReplace
+		testseam.Swap(t, &skillPathRenameNoReplace, func(src, dest string) (string, error) {
+			if strings.Contains(filepath.ToSlash(src), skillBackupSubdir) {
+				return "", restoreFailure
 			}
+			return originalRename(src, dest)
 		})
 		err := publishStagedSkillSet(home, []stagedSkillDir{{staged: staged, dest: old}}, []string{old})
 		if !errors.Is(err, failure) || !errors.Is(err, restoreFailure) {

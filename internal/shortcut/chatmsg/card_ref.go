@@ -55,11 +55,15 @@ func ProjectStreamingCardReceipt(created map[string]any, bizID string) map[strin
 
 // ProjectStreamingCardUpdate preserves the lower response while making the
 // verified target explicit for downstream consumers.
-func ProjectStreamingCardUpdate(updated map[string]any, bizID, proof string) map[string]any {
+func ProjectStreamingCardUpdate(updated map[string]any, bizID string, verification CardUpdateVerification) map[string]any {
 	payload := cloneSendStatusMap(updated)
 	payload["contractVersion"] = StreamingCardContractVersion
 	payload["cardRef"] = map[string]any{"bizId": strings.TrimSpace(bizID)}
-	payload["verified"] = true
-	payload["verificationEvidence"] = proof
+	payload["accepted"] = verification.Accepted
+	payload["verified"] = verification.Verified
+	payload["verificationEvidence"] = verification.Evidence
+	if verification.Accepted && !verification.Verified {
+		payload["warning"] = "服务端已接受卡片更新请求，但未返回可独立证明可见内容已更新的字段；不要重复执行相同更新"
+	}
 	return payload
 }

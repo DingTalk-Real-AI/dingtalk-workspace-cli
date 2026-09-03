@@ -43,7 +43,8 @@
 | "查看我今天的所有消息" | 全量会话消息 | `chat message list-all` | `chat message list` | 用户未指定具体会话时用 list-all（跨所有会话），指定了具体群或人时用 list |
 | "搜一下消息里的changefree链接" | 消息搜索 | `chat +search-msg` | `chat message search-advanced` | Shortcut 支持关键词、发送者、会话、消息类型、时间窗、全量翻页和批量富化 |
 | "按发送者搜索/指定多个群搜索/多维度搜消息" | 多维度搜索消息 | `chat +search-msg` | `chat message search-advanced` | 需要原子响应结构时才降级 |
-| "查看这条话题的所有回复" | 话题回复 | `chat +thread-replies` | `chat message list-topic-replies` | 已知 threadId/topicId 时自动投影回复人、正文和时间 |
+| "逐条列出这条话题的回复/撤回后具体还剩哪些回复" | 话题回复 | `chat thread list-replies` | `chat +thread-replies --page-all` | 已知父会话 ID 与 openConvThreadId 时直接查询；需要全量翻页、排序或资源下载再用 Shortcut |
+| "把群里这条已有消息转成 Thread/升级成群内话题" | 消息升级为 Thread | `chat thread promote` | `chat thread send` | promote 转换已有普通群消息；send 发布一条全新的 Thread |
 | "把这些消息里的附件下载下来" | 消息资源下载 | 查询 Shortcut 的 `--download-resources` | `resourceRefs.shortcut` 返回的下载命令 | 先用查询结果的 resourceRefs；单资源再执行返回的可运行参数 |
 | "消息发没发成功/查询消息发送状态" | 查询消息发送状态 | `chat message query-send-status` | — | 需要 send 返回的 openTaskId |
 | "编辑/撤回我刚发的消息" | 发后编辑/撤回 | `send` → `query-send-status` → `edit` / `recall` | 按消息内容反查 | 使用 send 返回的 openTaskId 直接获取两个后续 ID |
@@ -92,7 +93,7 @@
 | "给机器人发单聊/给机器人发消息/跟机器人聊天" | 给机器人发单聊消息 | `chat bot find` → `chat message send --open-dingtalk-id` | `chat bot search` | 必须先用 find 拿 openDingTalkId（search 没有此字段），再用 send --open-dingtalk-id 发单聊 |
 | "我创建的机器人/我的机器人/我自己的机器人/查看我的机器人" | 搜索我创建的机器人 | `chat bot search` | `chat bot find` | search 仅返回当前用户自己创建的机器人（返回 robotCode + robotName，无 openDingTalkId）；find 返回全部可用机器人 |
 | "合并转发/批量转发/合并转发多条消息" | 合并转发多条消息 | `chat message combine-forward` | `chat message forward` | combine-forward 合并多条为一条转发；forward 转发单条消息 |
-| "转发话题/转发话题消息/话题转发到另一个群" | 转发话题消息 | `chat message forward-topic` | `chat message forward` | forward-topic 专用于转发话题消息（需要话题ID）；forward 转发普通单条消息 |
+| "转发话题/转发话题消息/话题转发到另一个群" | 转发话题消息 | `chat thread forward` | `chat message forward` | thread forward 专用于转发话题消息（需要话题ID）；message forward 转发普通单条消息 |
 | "发卡片消息/推送流式卡片" | 创建并推送流式卡片 | `chat message send-card` | `chat message send` | send-card 发流式卡片；send 发普通文本/Markdown 消息 |
 | "更新卡片/流式更新卡片" | 流式更新卡片内容 | `chat message update-card` | `chat message send-card` | update-card 更新已有卡片；send-card 创建新卡片 |
 | "钉住消息/Pin消息/置顶消息到会话" | 钉住消息 | `chat message set-pin-msg` | `chat set-top` | set-pin-msg 钉住单条消息（Pin）；set-top 置顶整个会话 |
@@ -215,13 +216,14 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 - "把文件移到另一个文件夹" — 移动文件实体
 - "改一下文件名" — 重命名文件实体
 - "给张三加个编辑权限" — 权限管理
-- 用户提到"钉盘"、"网盘"、"上传"、"下载"、"搜文件"、"找文件"、"复制"、"移动"、"重命名"、"权限"
+- "给这个 PDF/附件加个评论" — 普通文件的文件级全局评论
+- 用户提到"钉盘"、"网盘"、"上传"、"下载"、"搜文件"、"找文件"、"复制"、"移动"、"重命名"、"权限"、"普通文件评论"
 
 **用 `doc`（内容层）的场景**：
 - "读一下这个文档的内容" — 读取文档 Markdown（仅 adoc 有意义）
 - "帮我写入一段话到文档里" — 编辑文档内容（仅 adoc 有意义）
 - "在第三段后面插入一个表格" — 块级编辑（仅 adoc 有意义）
-- "给这段内容加个评论" — 文档评论（仅 adoc 有意义）
+- "给这段内容加个评论" — 在线文档正文/划词评论（仅 adoc 有意义）
 - "把这个文档导出为 docx" — 文档导出（当前仅 adoc 支持）
 - 用户提到"读文档内容"、"写文档"、"编辑文档"、"块级编辑"、"文档评论"、"导出文档"
 
@@ -277,9 +279,9 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
   - 已有 userId 时直接使用 `--user`；已有 openDingTalkId 时使用 `--open-dingtalk-id`
   - `+messages-send --user` 对所有内容类型都会通过通讯录关键词搜索并按 userId 精确匹配 openDingTalkId；无需手动预查，`--dry-run` 也会执行这次只读解析
   - 已持有 openDingTalkId 时优先使用显式 `--open-dingtalk-id`，避免额外解析
-- "发本地图片/文件/语音/视频到群里" — `dws chat message send ... --msg-type file --file-path <本地路径>`，CLI 内部自动上传并发送；png/jpg/pdf/mp4/zip 等任意扩展名都走这条，接收方看到的是可下载的文件附件。图片不会内联渲染，也不会生成 mediaId
+- "发本地图片/文件/语音/视频到群里" — `dws chat message send ... --msg-type file --file <本地路径>`，CLI 内部自动上传并发送；png/jpg/pdf/mp4/zip 等任意扩展名都走这条，接收方看到的是可下载的文件附件。图片不会内联渲染，也不会生成 mediaId
 - "用已有 mediaId 发内联图片" — 仅当上游已经提供有效 mediaId 时，使用 `dws chat message send ... --msg-type image --media-id <mediaId>`；DWS CLI 不能把本地图片转换成 mediaId
-- "发图片+文字说明" — 不要硬塞进一条命令；先发图片/文件消息再补一条 `--text "..."` 即可
+- "发图片+文字说明" — 不要硬塞进一条命令；先发图片/文件消息再补一条 `--content "..."` 即可
 
 ```bash
 dws chat +messages-send --as user --chat-id <openConversationId> --msg-type file --file ./screenshot.png --idempotency-key <key> --format json
@@ -376,6 +378,19 @@ dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type
 - 提交诉求的辅助查询：可用假期余额走 `attendance vacation balance`、历史已提交记录走 `attendance approve list`。
 - 任何场景下都**不要误用 `oa approval` 代替** —— 该命令组只能查/审/撤已存在的审批单，考勤业务审批单走考勤自己的逻辑便于区分。
 
+### 6.2 contract vs oa / agoal / drive / minutes / contact — 智能合同边界
+
+| 用户动作 | 路由 | 原因 |
+|---|---|---|
+| 查询或创建合同台账、起草、审查、归档、管理合同项目/相对方/账款 | `contract` | 法务智能合同正式产品面 |
+| 查询、同意、拒绝、撤销或转交已有合同审批实例 | `oa` | 动作对象是审批任务或实例，不是合同台账 |
+| 管理经营合约、目标、计分卡或 OKR | `agoal` | “经营合约”属于目标管理 |
+| 搜索、上传或下载合同文件 | `drive` | 动作是通用文件存储与传输 |
+| 查询听记内容或取得 `taskUuid` | `minutes` | 取得真实 ID 后才调用 `contract draft` |
+| 查询花名册中的劳动合同等员工基础字段 | `contact` | 动作是通讯录档案查询 |
+
+仅说“合同”或“法务”且没有动作时先询问目标；不要默认落到 OA 或智能合同。
+
 ---
 
 ### 7. 纯通讯录查询 vs 跨产品
@@ -413,7 +428,7 @@ dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type
 
 ```bash
 # 1. 搜人获取 userId（多人同名须 contact user get 消歧，禁止默认选第一个，详见 08-directory.md「多命中」）
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 
 # 2. 用 userId 查详情获取 email
 dws contact user get --ids <userId> --format json
@@ -433,7 +448,7 @@ dws mail message send --from my@company.com --to zhangsan@company.com \
 ```bash
 # 手动流程（脚本不可用时）:
 # 1. 搜人获取 userId（多人同名须 contact user get 消歧，禁止默认选第一个，详见 08-directory.md「多命中」）
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 
 # 2. 创建日程
 dws calendar event create --title "会议" \
@@ -449,7 +464,7 @@ dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID> --format json
 
 ```bash
 # 1. 搜人获取 userId（多人同名须 contact user get 消歧，禁止默认选第一个，详见 08-directory.md「多命中」）
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 
 # 2. 创建待办
 dws todo task create --title "任务内容" --executors <USER_ID> --format json
@@ -465,21 +480,21 @@ dws todo task create --title "任务内容" --executors <USER_ID> --format json
 
 ```bash
 # 群聊
-dws chat message send --group <openConversationId> --msg-type file --file-path <本地路径> --format json
+dws chat message send --conversation-id <openConversationId> --msg-type file --file <本地路径> --format json
 
 # 单聊（推荐 --open-dingtalk-id；--user 也支持）
-dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path <本地路径> --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file <本地路径> --format json
 ```
 
 支持任意扩展名（`.png/.jpg/.gif/.bmp/.webp/.pdf/.doc/.xls/.zip/.mp3/.wav/.mp4/.avi` …），CLI 自动完成上传与发送，不需要任何前置工具调用。图片文件同样作为可下载的 file 附件发送，不会内联渲染，也不会生成 mediaId。
 
 ### 图片/文件 + 文字说明
 
-不要把文字塞进 `--msg-type file` 命令（该命令不读 `--text`）。先发文件再补一条文本消息即可：
+不要把文字塞进 `--msg-type file` 命令（该命令不读 `--content`）。先发文件再补一条文本消息即可：
 
 ```bash
-dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./screenshot.png --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --text "这是本周数据汇总" --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file ./screenshot.png --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --content "这是本周数据汇总" --format json
 ```
 
 ### 上游 mediaId — 仅兼容场景
@@ -487,5 +502,5 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --text "这是本周�
 仅当上游已经提供有效的 `@lQL...` 形式 mediaId 时使用；DWS CLI 不提供本地文件到 mediaId 的转换能力：
 
 ```bash
-dws chat message send --group <openConversationId> --msg-type image --media-id "@lQLPD4JNnliqBq3NBQDNA8Cw" --format json
+dws chat message send --conversation-id <openConversationId> --msg-type image --media-id "@lQLPD4JNnliqBq3NBQDNA8Cw" --format json
 ```

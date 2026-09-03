@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,23 @@ func sizeTypeEnumHint(dimension string) string {
 		return "pixel / standard / auto"
 	}
 	return "pixel / standard"
+}
+
+func validateDropdownSourceRangeInput(sourceSheetID, sourceRange string) error {
+	if strings.TrimSpace(sourceSheetID) == "" {
+		return fmt.Errorf("--source-sheet-id 不能为空")
+	}
+	sourceRange = strings.TrimSpace(sourceRange)
+	if sourceRange == "" {
+		return fmt.Errorf("--source-range 不能为空")
+	}
+	if strings.Contains(sourceRange, "!") {
+		return fmt.Errorf("--source-range 不能包含工作表前缀；请通过 --source-sheet-id 指定来源工作表")
+	}
+	if strings.HasPrefix(sourceRange, "=") || strings.Contains(sourceRange, ",") {
+		return fmt.Errorf("--source-range 必须是单一连续区域，不能是公式、表达式或多区域引用")
+	}
+	return nil
 }
 
 // newDimensionCmds creates dimension-related commands: insert/delete/update/move/add-dimension,
@@ -62,13 +80,17 @@ func newDimensionCmds() []*cobra.Command {
 			if length > 5000 {
 				return fmt.Errorf("--length 最大为 5000，当前值: %d", length)
 			}
-			return callMCPTool("insert_dimension", map[string]any{
-				"nodeId":    mustGetFlag(cmd, "node"),
-				"sheetId":   mustGetFlag(cmd, "sheet-id"),
+			toolArgs, err := BuildBatchInsertDimensionArgs(map[string]any{
+				"sheet-id":  mustGetFlag(cmd, "sheet-id"),
 				"dimension": dimension,
 				"position":  mustGetFlag(cmd, "position"),
 				"length":    length,
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("insert_dimension", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(insertDimensionCmd, LeafSpec{
@@ -775,15 +797,24 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 		Short: "设置下拉列表",
 		Long: `在钉钉表格的指定单元格范围内设置下拉列表。
 
-设置后，用户可以在这些单元格中从预定义的选项列表中选择值。
-支持自定义每个选项的颜色和是否允许多选。
+Inline 模式通过 --options 提供静态选项，支持选项颜色。
+SourceRange 模式通过 --source-sheet-id + --source-range 引用同一工作簿内的来源区域，
+支持跨工作表、整行和整列引用；读取配置时不会展开来源区域的当前值或颜色。
+两种模式都支持 --multi-select，并且 --options 与 --source-range 必须且只能指定一个。
 如果目标范围已存在下拉列表，会被新的配置覆盖。
 
 nodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。
 sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获取。
 
 --options 为 JSON 数组，每个元素包含 value（必填）和 color（可选）。
-选项值不能包含英文逗号。`,
+选项值不能包含英文逗号。
+
+--source-range 只接受不含工作表前缀的 A1 区域，例如 T1:T3、T:T 或 1:3；
+来源工作表由 --source-sheet-id 单独指定。SourceRange 颜色写入暂不支持。
+
+已验证行为：工作表重命名、在引用前插入行/列、删除引用前的行会自动调整引用并保持 valid；
+已验证的 move-dimension 场景会使引用变为 invalid。列删除、删除整个来源区域或来源工作表等未覆盖场景不能预设结果；
+结构操作后应先回读 sourceRangeStatus，只有 invalid 时才重新选择来源并写入。`,
 		Example: `  # 设置单选下拉列表
   dws sheet set-dropdown --node NODE_ID --sheet-id SHEET_ID --range "A2:A100" \
     --options '[{"value":"选项1"},{"value":"选项2"},{"value":"选项3"}]'
@@ -793,32 +824,63 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
     --options '[{"value":"高","color":"#ff0000"},{"value":"中","color":"#ffaa00"},{"value":"低","color":"#00ff00"}]' \
     --multi-select
 
+  # 引用同一工作簿内另一工作表的区域作为候选项来源
+  dws sheet set-dropdown --node NODE_ID --sheet-id TARGET_SHEET_ID --range "C2:C100" \
+    --source-sheet-id SOURCE_SHEET_ID --source-range "T1:T3"
+
   # 使用文档链接 URL
   dws sheet set-dropdown --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" \
     --sheet-id SHEET_ID --range "C1:C10" --options '[{"value":"是"},{"value":"否"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "node", "sheet-id", "range"); err != nil {
+				return err
+			}
 			optionsStr := mustGetFlag(cmd, "options")
-			var options []map[string]any
-			if err := json.Unmarshal([]byte(optionsStr), &options); err != nil {
-				return fmt.Errorf("--options JSON 解析失败: %w", err)
+			sourceSheetID := mustGetFlag(cmd, "source-sheet-id")
+			sourceRange := mustGetFlag(cmd, "source-range")
+			hasOptions := optionsStr != ""
+			hasSourceRange := sourceRange != ""
+			if hasOptions == hasSourceRange {
+				return fmt.Errorf("--options 与 --source-range 必须且只能指定一个")
 			}
-			if len(options) == 0 {
-				return fmt.Errorf("--options 至少包含 1 个选项")
+			if hasSourceRange && sourceSheetID == "" {
+				return fmt.Errorf("使用 --source-range 时必须同时指定 --source-sheet-id")
 			}
-			for i, opt := range options {
-				val, ok := opt["value"].(string)
-				if !ok || val == "" {
-					return fmt.Errorf("--options[%d] 缺少必填的 value 字段或 value 为空", i)
-				}
-				if strings.Contains(val, ",") {
-					return fmt.Errorf("--options[%d].value 不能包含英文逗号: %q", i, val)
-				}
+			if !hasSourceRange && sourceSheetID != "" {
+				return fmt.Errorf("使用 --source-sheet-id 时必须同时指定 --source-range")
 			}
+
 			toolArgs := map[string]any{
 				"nodeId":  mustGetFlag(cmd, "node"),
 				"sheetId": mustGetFlag(cmd, "sheet-id"),
 				"range":   mustGetFlag(cmd, "range"),
-				"options": options,
+			}
+			if hasOptions {
+				var options []map[string]any
+				if err := json.Unmarshal([]byte(optionsStr), &options); err != nil {
+					return fmt.Errorf("--options JSON 解析失败: %w", err)
+				}
+				if len(options) == 0 {
+					return fmt.Errorf("--options 至少包含 1 个选项")
+				}
+				for i, opt := range options {
+					val, ok := opt["value"].(string)
+					if !ok || val == "" {
+						return fmt.Errorf("--options[%d] 缺少必填的 value 字段或 value 为空", i)
+					}
+					if strings.Contains(val, ",") {
+						return fmt.Errorf("--options[%d].value 不能包含英文逗号: %q", i, val)
+					}
+				}
+				toolArgs["options"] = options
+			} else {
+				if err := validateDropdownSourceRangeInput(sourceSheetID, sourceRange); err != nil {
+					return err
+				}
+				toolArgs["sourceRange"] = map[string]any{
+					"sheetId":    sourceSheetID,
+					"a1Notation": sourceRange,
+				}
 			}
 			if multiSelect, _ := cmd.Flags().GetBool("multi-select"); multiSelect {
 				toolArgs["enableMultiSelect"] = true
@@ -839,36 +901,49 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				CLIPath:        "sheet set-dropdown",
 				PrimaryCLIPath: "sheet set-dropdown",
 			},
-			Description: "为指定范围设置下拉列表（可多选、可带颜色）。",
+			Description: "为指定范围设置 Inline 或 SourceRange 下拉列表（可多选；颜色仅 Inline 支持）。",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "set_dropdown_lists"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "为指定范围设置下拉列表（可多选、可带颜色）。",
+				AgentSummary: "为指定范围设置 Inline 或 SourceRange 下拉列表；SourceRange 可跨同一工作簿内的工作表。",
 				UseWhen:      []string{"需要给单元格配置可选值下拉约束时"},
 				AvoidWhen:    []string{"查看已有下拉用 get-dropdown；移除下拉用 delete-dropdown"},
-				Examples:     []string{"dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"}]'"},
+				Examples: []string{
+					"dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"}]'",
+					"dws sheet set-dropdown --node <NODE_ID> --sheet-id <TARGET_SHEET_ID> --range \"B2:B100\" --source-sheet-id <SOURCE_SHEET_ID> --source-range \"T1:T3\"",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "multi-select", Property: "enableMultiSelect"},
 				{Name: "node", Property: "nodeId"},
+				{Name: "source-sheet-id", Property: "sourceRange.sheetId", Required: boolPtr(false), RequiredWhen: "--source-range is provided"},
+				{Name: "source-range", Property: "sourceRange.a1Notation", Required: boolPtr(false), RequiredWhen: "exactly one of --options or --source-range must be provided"},
 			},
 		},
 	})
 	setDropdownCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	setDropdownCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	setDropdownCmd.Flags().String("range", "", "目标单元格范围，A1 表示法，如 A2:A100 (必填)")
-	setDropdownCmd.Flags().String("options", "", `下拉选项 JSON 数组 (必填)，如 '[{"value":"选项1","color":"#ff0000"}]'`)
+	setDropdownCmd.Flags().String("options", "", `Inline 下拉选项 JSON 数组，与 --source-range 二选一，如 '[{"value":"选项1","color":"#ff0000"}]'`)
+	setDropdownCmd.Flags().String("source-sheet-id", "", "SourceRange 来源工作表 ID；使用 --source-range 时必填")
+	setDropdownCmd.Flags().String("source-range", "", "SourceRange 来源区域，与 --options 二选一；不含工作表前缀，如 T1:T3、T:T 或 1:3")
 	setDropdownCmd.Flags().Bool("multi-select", false, "是否允许多选（默认单选）")
+	cli.AnnotateRuntimeFlagFormat(setDropdownCmd, "source-range", "a1-range")
+	setDropdownCmd.MarkFlagsOneRequired("options", "source-range")
+	setDropdownCmd.MarkFlagsMutuallyExclusive("options", "source-range")
+	setDropdownCmd.MarkFlagsRequiredTogether("source-sheet-id", "source-range")
 
 	getDropdownCmd := &cobra.Command{
 		Use:   "get-dropdown",
 		Short: "获取下拉列表配置",
 		Long: `查询钉钉表格指定范围内的下拉列表配置。
 
-返回范围内所有单元格的下拉列表配置信息，包括选项值和颜色。
+Inline 配置返回 conditionValues 和 options；SourceRange 配置返回
+sourceType/sourceRangeStatus/enableMultiSelect，且仅在 sourceRangeStatus="valid" 时返回
+sourceRange。invalid 结果仍保留配置组，但省略 sourceRange；两种状态都不展开来源区域的候选值或颜色。
 如果范围内存在多个不同的下拉列表配置，会分别返回每组配置及其覆盖的单元格列表。
 如果范围内没有设置下拉列表，返回空。
 

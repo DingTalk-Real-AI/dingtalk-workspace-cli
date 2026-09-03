@@ -23,7 +23,7 @@
 
 `plan` 是纯只读操作，不创建 tag、预留版本号或生成包。CHANGELOG 合入期间若另一个发布先占用了该版本，`publish` 会重新分配并因 CHANGELOG 章节不匹配而拒绝，需要重新 plan。`publish` 会先再次确认 dispatch SHA 仍是当前 `main`、Code Admission 和平台治理均通过，再由唯一的 write job 使用 GitHub API 原子创建 annotated tag；同一次 run 随即进入既有的跨平台构建、GitHub/npm、可选 OSS/Gitee 发布和 Homebrew 直交付 DAG。内置 `GITHUB_TOKEN` 创建的 tag 不依赖第二条 workflow 被再次触发。
 
-为缩短封板前后的关键路径，`publish` 的只读版本规划会与平台治理检查并行，seal 仍严格等待二者成功；plan 在 candidate annotated tag 上验证过的 contract 和 stable/beta baseline 会绑定进 seal，并由 seal 后的 tag authority 检查复用。Code Admission 状态与 immutable-releases 治理仍会在 seal 后再次读取，避免 preflight 与发布之间的状态变化被忽略。随后三类只读门禁（release automation、命令兼容性、multi-profile E2E）与 GoReleaser 构建并行；Node/archive 等仅供后处理使用的工具也延后到构建完成后安装。并行和已验证结果复用只改变调度，不降低发布门禁：任何一条验证失败都会阻止 GitHub Release、npm、镜像和 Homebrew 发布，delivery proof 也要求三条验证 job 全部成功。
+为缩短封板前后的关键路径，`publish` 的只读版本规划会与平台治理检查并行，seal 仍严格等待二者成功；plan 在 candidate annotated tag 上验证过的 contract 和 stable/beta baseline 会绑定进 seal，并由 seal 后的 tag authority 检查复用。Code Admission 状态与 immutable-releases 治理仍会在 seal 后再次读取，避免 preflight 与发布之间的状态变化被忽略。随后三类只读门禁（release automation、CLI 与 Schema 兼容性、multi-profile E2E）与 GoReleaser 构建并行；Node/archive 等仅供后处理使用的工具也延后到构建完成后安装。并行和已验证结果复用只改变调度，不降低发布门禁：任何一条验证失败都会阻止 GitHub Release、npm、镜像和 Homebrew 发布，delivery proof 也要求三条验证 job 全部成功。
 
 OSS 镜像默认不参与发布 DAG，适用于尚未创建 Bucket 的仓库。云端封板会把当时的仓库变量 `ENABLE_OSS_MIRROR=true` 记录为不可变 tag 元数据 `OSS-Mirror: enabled`，否则记录为 `deferred`；后续发布和撤回只读取该 sealed policy，不读取变量的当前值。`enabled` 继续对缺失凭据、无效 Bucket、上传、pointer 和撤回失败保持 fail-closed；`deferred` 明确跳过不存在的渠道。为避免补发后撤回遗漏，deferred 版本暂不接受 `repair_oss_version`，启用 OSS 只影响后续新 tag，直到补齐可审计的不可变 repair 证明。
 
@@ -102,7 +102,7 @@ fragments，然后停止。审阅生成内容并通过唯一的 release-seal PR 
 dws-release v1.2.3-beta.1
 ```
 
-预检包含测试、策略检查、旧正式版命令树兼容检查、全平台打包、npm 安装验证，以及 macOS 环境下的 Homebrew 安装验证。它还会从默认分支触发一次无发布权限的 `Release governance preflight`，用正式流水线相同的身份检查该精确 commit 的九个 Code Admission context 和 immutable releases。通过后回到上述 Actions 页面选择 beta 和 `release_operation=publish`；云端会重新绑定当前 `main`，然后直接进入 beta 自动发布，不需要人工审批或输入确认短语。
+预检包含测试、策略检查、旧正式版 CLI 与 Schema 双基线兼容检查、全平台打包、npm 安装验证，以及 macOS 环境下的 Homebrew 安装验证。它还会从默认分支触发一次无发布权限的 `Release governance preflight`，用正式流水线相同的身份检查该精确 commit 的九个 Code Admission context 和 immutable releases。通过后回到上述 Actions 页面选择 beta 和 `release_operation=publish`；云端会重新绑定当前 `main`，然后直接进入 beta 自动发布，不需要人工审批或输入确认短语。
 
 ## 正式发布
 
@@ -140,14 +140,19 @@ dws-release v1.2.3 --from-beta v1.2.3-beta.1
 `.changes/<unique-name>.md` 中增加一个独立 fragment；格式和允许的分类见
 [`.changes/README.md`](../.changes/README.md)。预发封板时
 `scripts/release/prepare-changelog.sh prerelease <version>` 会稳定排序并汇总所有未归档
-fragment，写入唯一版本章节后移动到 `.changes/released/<version>/`。因此并发 PR 不会争用
-`CHANGELOG.md`；唯一的 release-seal PR 同时提交生成的章节与归档移动，供审计复核。
+fragment，写入唯一版本章节后移动到 `.changes/released/<version>/`。如果 beta 发布后又有
+带 fragment 的 PR 合入，而维护者决定直接发布 stable，
+`scripts/release/prepare-changelog.sh stable <version> --from-beta <tag>` 会保留 beta 晋级摘要
+模板，并把这些 post-beta fragments 写到明确的 `Changes since <beta>` 边界之后，再移动到
+`.changes/released/<stable-version>/`。没有 active fragment 时，stable 仍只生成原有晋级摘要
+模板。因此并发 PR 不会争用 `CHANGELOG.md`；唯一的 release-seal PR 同时提交生成的章节与
+归档移动，供审计复核。
 
 ## CI/CD 保证
 
 - 只接受 `vX.Y.Z-beta.N` 和 `vX.Y.Z`，且新版本必须高于上一正式版。这里的“上一正式版”必须同时具备公开非草稿 GitHub Release 和同 tag/commit 的成功 Release workflow；只有 tag、没有交付成功的孤儿版本会阻断后续发布，要求走机器核验恢复补齐。云端 tag 会固定 `Release-Run`、requester、commit 和版本分配指纹，交付验证按该精确 run/attempt 及完整 job graph 取证，不接受任意 `workflow_dispatch`。历史版本若曾通过专用 recovery workflow 完成交付，只能使用仓库内 `delivered-stable-recoveries.json` 中精确到 tag、commit、run、workflow SHA 与 attempt 的 reviewed 证据。
 - tag 必须由云端 seal job 创建为 annotated tag；封板提交必须已通过 PR 合入并包含在远端 `main` 历史中。流水线允许其后 `main` 继续前进，但始终要求封板提交位于 `main` 历史中。
-- 日常 CI 和发布前都会对比“最新已交付正式版”的完整命令树；若长时间预检期间该 baseline 发生变化，会针对新的 baseline 重新比较。
+- 日常 CI 和发布前都会对比“最新已交付正式版”的完整 CLI 与 Schema 契约；若长时间预检期间该 baseline 发生变化，会针对新的 baseline 重新比较。
 - GoReleaser 只构建；Darwin 重签、checksums 重算和 npm 安装验证通过后，才统一上传 GitHub Release 的最终产物。
 - 六个平台归档会逐个解包并核验二进制内嵌版本；公开资产集合、checksums 集合和 npm tarball integrity 都必须精确一致。npm tarball 固定由 npm `10.9.2` 打包，避免重跑时因 runner 自带 npm 漂移产生不同字节。
 - stable 发布到 npm `latest`；prerelease 发布到 npm `beta`。启用 `ENABLE_OSS_MIRROR=true` 后，stable 同步 OSS `latest.txt` 和共享安装脚本，prerelease 只同步 OSS `beta.txt`，不会覆盖稳定入口。

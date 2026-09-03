@@ -34,7 +34,7 @@ import (
 // without aborting delivery to the others. Replaces manually running
 // `chat +dm` once per recipient.
 //
-//	dws chat +broadcast --to "张三,李四,王五" --text "今晚 8 点上线，请留意群公告"
+//	dws chat +broadcast --to "张三,李四,王五" --content "今晚 8 点上线，请留意群公告"
 var Broadcast = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+broadcast",
@@ -66,17 +66,18 @@ var Broadcast = shortcut.Shortcut{
 			AgentSummary: "按姓名逐一给多个人群发同一条单聊消息（自动解析 userId、逐个发送）",
 			UseWhen:      []string{"当你想把同一条通知一次性单聊发给多位同事、但只知道他们的姓名不想逐个查 userId 时使用；内部把姓名列表逐个解析成唯一用户后，用 openDingTalkId 对每个人单独发一条单聊消息，并汇总成功/失败人数。某个姓名匹配不到人或匹配到多人时，会跳过该人并在结尾报出，不影响其他人收到消息。会真实发出多条消息。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws chat +broadcast --to \"张三,李四,王五\" --text \"今晚 8 点上线，请留意\""},
+			Examples:     []string{"dws chat +broadcast --to \"张三,李四,王五\" --content \"今晚 8 点上线，请留意\""},
 		},
+		Parameters: []contract.ParamDecl{renamedRequiredParam("content", "text")},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "to", Type: shortcut.FlagStringSlice, Desc: "收件人姓名/花名，逗号分隔的多个人", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown），所有人收到同一条", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown），所有人收到同一条", Required: true, Aliases: []string{"text"}},
 		shortcut.AIMessageTagFlag(),
 	},
-	Tips: []string{`dws chat +broadcast --to "张三,李四,王五" --text "今晚 8 点上线，请留意"`},
+	Tips: []string{`dws chat +broadcast --to "张三,李四,王五" --content "今晚 8 点上线，请留意"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		text := rt.Str("text")
+		text := rt.StrFirst("text", "content")
 		names := rt.StrSlice("to")
 		if len(names) == 0 {
 			return apperrors.NewValidation("--to 至少要包含一个姓名")

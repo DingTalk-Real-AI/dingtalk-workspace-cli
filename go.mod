@@ -2,12 +2,16 @@ module github.com/DingTalk-Real-AI/dingtalk-workspace-cli
 
 go 1.25.9
 
+replace gitlab.alibaba-inc.com/aes/aem-go-sdk => ./third_party/aem-go-sdk
+
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/RealAlexandreAI/json-repair v0.0.15
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/creack/pty v1.1.24
+	github.com/ebitengine/purego v0.10.2
 	github.com/fatih/color v1.18.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.0
@@ -16,8 +20,11 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
 	github.com/spf13/cobra v1.10.2
+	github.com/yuin/goldmark v1.8.5
 	github.com/zalando/go-keyring v0.2.8
+	gitlab.alibaba-inc.com/aes/aem-go-sdk v0.3.0
 	golang.org/x/crypto v0.49.0
+	golang.org/x/image v0.31.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
 )

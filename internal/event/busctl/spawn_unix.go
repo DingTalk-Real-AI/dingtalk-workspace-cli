@@ -20,6 +20,13 @@ import (
 	"syscall"
 )
 
+// Spawn starts the detached bus and waits for its inherited ready pipe.
+// ExtraFiles is intentionally confined to Unix: Go does not support it on
+// Windows.
+func Spawn(cfg SpawnConfig) (pid int, err error) {
+	return spawnWithReadyPipe(cfg)
+}
+
 // applyDetach configures the child to live past parent death and not share
 // the parent's controlling terminal. Setsid puts the child in a new
 // session, so SIGHUP on the parent's controlling tty (e.g. SSH disconnect)

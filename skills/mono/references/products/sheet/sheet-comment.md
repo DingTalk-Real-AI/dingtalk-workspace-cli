@@ -12,7 +12,7 @@
 - 仅支持钉钉在线电子表格（`extension=axls`）。`xlsx` / `xls` / `csv` 等本地表格不支持评论。
 - 评论锚定在**单元格位置**：`create` / `list` 通过 `--sheet-id`（工作表 ID 或名称）+ `--range`（单元格坐标）定位；`reply` / `update` / `delete` 通过 `--comment-key` 操作，不依赖单元格位置。
 - `create` / `list` 通过单元格位置定位；`reply` / `update` / `delete` 通过前一步返回的 `commentKey` 定位评论线程，不需要重新传单元格位置。
-- 评论正文与单元格位置由服务端关联。Agent 只使用命令返回的 `commentKey` 继续回复、更新或删除，不解析或拼接内部关联字段。
+- Agent 只使用命令返回的 `commentKey` 继续回复、更新或删除，不自行构造评论标识。
 
 ---
 
@@ -111,7 +111,7 @@ Flags:
 
 ## 关键说明
 
-- `--mention` 接受 `userId` 列表（逗号分隔），需要先用 `dws aisearch person --keyword "<姓名>" --dimension name` 拿到 userId。
+- `--mention` 接受 `userId` 列表（逗号分隔），需要先用 `dws aisearch person --query "<姓名>" --dimension name` 拿到 userId。
 - `--comment-key` 是 13 位毫秒时间戳 + 32 位 UUID 的拼接字符串，从 `list` / `create` 返回中提取，用于 `reply` / `update` / `delete`。
 - `create` / `list`（按单元格过滤）的 `--sheet-id` 是工作表 ID 或名称；未知时先 `dws sheet list` 确认，禁止臆测。
 - `reply` 加 `--emoji` 时 `--content` 填表情名称（如 `比心`、`赞`），不是文字内容。
@@ -143,7 +143,7 @@ dws sheet list --node <SHEET_ID> --format json
 dws sheet comment create --node <SHEET_ID> --sheet-id Sheet1 --range A2 --content "这个数字有问题" --format json
 
 # 创建评论 + @人（先 aisearch person 拿 userId）
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws sheet comment create --node <SHEET_ID> --sheet-id Sheet1 --range A2 --content "请确认" --mention <uid1>,<uid2> --format json
 
 # 文字回复

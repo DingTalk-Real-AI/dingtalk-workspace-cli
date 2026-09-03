@@ -15,6 +15,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 )
 
 func useManagedSkillNames(t *testing.T, names ...string) {
@@ -336,12 +337,12 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailuresRestoreOldSet(t *test
 					return originalBackup(homeDir, dir)
 				})
 			} else {
-				originalRename := skillSetupPublishRename
-				testseam.Swap(t, &skillSetupPublishRename, func(oldPath, newPath string) error {
+				originalPublish := skillSetupPublishPath
+				testseam.Swap(t, &skillSetupPublishPath, func(oldPath, newPath string) (upgrade.SkillPathPublication, error) {
 					if newPath == second && strings.HasPrefix(filepath.Base(filepath.Dir(oldPath)), ".dws-setup-set-") {
-						return failure
+						return upgrade.SkillPathPublication{}, failure
 					}
-					return originalRename(oldPath, newPath)
+					return originalPublish(oldPath, newPath)
 				})
 			}
 
@@ -432,8 +433,8 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 
 	t.Run("restore failure aggregation", func(t *testing.T) {
 		t.Run("remove published", func(t *testing.T) {
-			testseam.Swap(t, &skillSetupRemoveAll, func(string) error { return failure })
-			if err := restoreSkillSetupTarget([]string{"published"}, nil); !errors.Is(err, failure) {
+			testseam.Swap(t, &skillSetupRollbackPaths, func([]upgrade.SkillPathPublication) error { return failure })
+			if err := restoreSkillSetupTarget([]upgrade.SkillPathPublication{{Destination: "published"}}, nil); !errors.Is(err, failure) {
 				t.Fatalf("remove published error = %v", err)
 			}
 		})
@@ -445,14 +446,14 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 			}
 		})
 		t.Run("stat", func(t *testing.T) {
-			testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, failure })
+			testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, failure })
 			err := restoreSkillSetupTarget(nil, []skillSetupBackedUpDir{{original: "original", backup: "backup"}})
 			if !errors.Is(err, failure) || !strings.Contains(err.Error(), "检查 Skill 恢复目标失败") {
 				t.Fatalf("restore stat error = %v", err)
 			}
 		})
 		t.Run("mkdir", func(t *testing.T) {
-			testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
+			testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
 			testseam.Swap(t, &skillSetupMkdirAll, func(string, os.FileMode) error { return failure })
 			err := restoreSkillSetupTarget(nil, []skillSetupBackedUpDir{{original: "original", backup: "backup"}})
 			if !errors.Is(err, failure) || !strings.Contains(err.Error(), "创建 Skill 恢复目录失败") {
@@ -460,9 +461,9 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 			}
 		})
 		t.Run("rename", func(t *testing.T) {
-			testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
+			testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
 			testseam.Swap(t, &skillSetupMkdirAll, func(string, os.FileMode) error { return nil })
-			testseam.Swap(t, &skillSetupPublishRename, func(string, string) error { return failure })
+			testseam.Swap(t, &skillSetupRestoreBackup, func(string, string) error { return failure })
 			err := restoreSkillSetupTarget(nil, []skillSetupBackedUpDir{{original: "original", backup: "backup"}})
 			if !errors.Is(err, failure) || !strings.Contains(err.Error(), "恢复原 Skill 失败") {
 				t.Fatalf("restore rename error = %v", err)
@@ -479,10 +480,10 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 			}
 			return "", failure
 		})
-		testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
+		testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
 		testseam.Swap(t, &skillSetupMkdirAll, func(string, os.FileMode) error { return nil })
 		restoreErr := errors.New("restore failure")
-		testseam.Swap(t, &skillSetupPublishRename, func(string, string) error { return restoreErr })
+		testseam.Swap(t, &skillSetupRestoreBackup, func(string, string) error { return restoreErr })
 		_, err := backupSkillSetupTarget("home", []skillSetupBackup{{Path: "first"}, {Path: "second"}}, io.Discard)
 		if !errors.Is(err, failure) || !errors.Is(err, restoreErr) {
 			t.Fatalf("backup rollback error = %v", err)
@@ -490,8 +491,11 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 	})
 
 	t.Run("publish rollback failure", func(t *testing.T) {
-		testseam.Swap(t, &skillSetupPublishRename, func(string, string) error { return failure })
-		testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
+		testseam.Swap(t, &skillSetupPublishPath, func(string, string) (upgrade.SkillPathPublication, error) {
+			return upgrade.SkillPathPublication{}, failure
+		})
+		testseam.Swap(t, &skillSetupRestoreBackup, func(string, string) error { return failure })
+		testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
 		testseam.Swap(t, &skillSetupMkdirAll, func(string, os.FileMode) error { return nil })
 		err := publishSkillSetupTarget(
 			[]skillSetupStagedDir{{staged: "staged", dest: "dest"}},
@@ -530,12 +534,12 @@ func TestCrossPlatformCoverageSkillSetupTransactionFailureEdges(t *testing.T) {
 
 		t.Run("after publish failure", func(t *testing.T) {
 			plan := newPlan(t)
-			originalRename := skillSetupPublishRename
-			testseam.Swap(t, &skillSetupPublishRename, func(oldPath, newPath string) error {
+			originalPublish := skillSetupPublishPath
+			testseam.Swap(t, &skillSetupPublishPath, func(oldPath, newPath string) (upgrade.SkillPathPublication, error) {
 				if strings.HasPrefix(filepath.Base(filepath.Dir(oldPath)), ".dws-setup-set-") {
-					return failure
+					return upgrade.SkillPathPublication{}, failure
 				}
-				return originalRename(oldPath, newPath)
+				return originalPublish(oldPath, newPath)
 			})
 			originalRemoveAll := skillSetupRemoveAll
 			cleanupErr := errors.New("cleanup after publish failure")

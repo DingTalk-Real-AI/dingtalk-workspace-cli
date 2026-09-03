@@ -292,6 +292,12 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			if stage == "install-failed-dir" {
 				return &upgradepkg.SkillUpgradeResult{Results: []upgradepkg.SkillDirResult{{Dir: "/failed", Status: upgradepkg.SkillDirFailed, Err: fail}}}, nil
 			}
+			if stage == "install-retire-warning" {
+				return &upgradepkg.SkillUpgradeResult{Results: []upgradepkg.SkillDirResult{
+					{Dir: "/ok", Status: upgradepkg.SkillDirOK},
+					{Dir: "/stale", Status: upgradepkg.SkillDirRetireWarning, Err: errors.New("retirement refused")},
+				}}, nil
+			}
 			return &upgradepkg.SkillUpgradeResult{Results: []upgradepkg.SkillDirResult{{Dir: "/ok", Status: upgradepkg.SkillDirOK}}}, nil
 		}
 	}
@@ -300,7 +306,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 		"ensure", "tag-error", "latest-error", "not-needed", "cancel", "find-binary", "temp-fallback", "temp-both",
 		"backup", "checksum-download", "checksum-read", "binary-download", "skills-download", "verify-binary", "verify-skills",
 		"extract-binary", "extract-tar", "binary-missing", "validate", "extract-skills", "skill-missing", "replace", "install", "install-failed-dir",
-		"success", "success-no-skills",
+		"success", "success-no-skills", "install-retire-warning",
 	} {
 		t.Run(stage, func(t *testing.T) {
 			configure(stage)
@@ -330,14 +336,14 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 				opts.skipSkills = true
 			}
 			err := runUpgrade(context.Background(), opts)
-			wantError := stage != "not-needed" && stage != "cancel" && stage != "backup" && stage != "checksum-download" && stage != "checksum-read" && stage != "success" && stage != "success-no-skills"
+			wantError := stage != "not-needed" && stage != "cancel" && stage != "backup" && stage != "checksum-download" && stage != "checksum-read" && stage != "success" && stage != "success-no-skills" && stage != "install-retire-warning"
 			if wantError && err == nil {
 				t.Fatalf("stage %s succeeded", stage)
 			}
 			if !wantError && err != nil {
 				t.Fatalf("stage %s failed: %v", stage, err)
 			}
-			if (stage == "success" || stage == "success-no-skills") && !rb.cleaned {
+			if (stage == "success" || stage == "success-no-skills" || stage == "install-retire-warning") && !rb.cleaned {
 				t.Fatal("successful upgrade did not clean backups")
 			}
 			if stage == "success" {

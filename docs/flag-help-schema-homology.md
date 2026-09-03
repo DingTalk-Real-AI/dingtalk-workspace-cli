@@ -92,6 +92,7 @@ command/Leaf 不再写 `dws.schema.risk`；SafetySpec 走类型化 Final 载荷�
 | `Required` / `MarkRequired` | 非空校验 / cobra 硬必填 | 是（`required`） |
 | `RequiredHint`, `Aliases`, `EnvVar` | 校验提示、隐藏别名、环境回退 | 否（执行细节；别名不上主 parameter 表） |
 | `ArgDefault`, `Bind`, `OmitEmpty`, `Trim`, `Transform` | toolArgs 装配语义 | 否（载荷细节；`Bind` 可进 property 映射，但不另造 flag） |
+| `Input` | 额外取值来源：`@path` 读文件 / `-` 读 stdin，在 required/enum/约束/`Validate` 之前原地解析 | 否（今日：能力由作者写进 `Usage` / `SchemaDescription` 文案，是已声明事实而非推断；不另造 flag。目标形态收敛为类型化投影字段，见 RFC §5.3） |
 
 #### 1.2.2 编排 / 执行字段（不算声明）
 

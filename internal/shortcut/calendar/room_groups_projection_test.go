@@ -22,7 +22,7 @@ import (
 // list_meeting_room_groups nests the groups under result.groupList; the resolver
 // must probe "groupList" or +room-groups silently returns empty despite the
 // backend returning meeting-room groups.
-func TestRoomGroupsProjectGroupListShape(t *testing.T) {
+func TestCrossPlatformCoverageRoomGroupsProjectGroupListShape(t *testing.T) {
 	const raw = `{"result":{"groupList":[
 		{"groupId":"g1","groupName":"north rooms"},
 		{"groupId":"g2","groupName":"south rooms"}
@@ -31,7 +31,11 @@ func TestRoomGroupsProjectGroupListShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	if got := roomGroupsProject(data); len(got) != 2 {
+	got, err := roomGroupsProject(data)
+	if err != nil {
+		t.Fatalf("projection: %v", err)
+	}
+	if len(got) != 2 {
 		t.Fatalf("lower/upper mismatch: result.groupList has 2 entries, projection returned %d", len(got))
 	}
 }

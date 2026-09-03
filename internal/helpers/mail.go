@@ -102,6 +102,12 @@ func newMailCommand() *cobra.Command {
 	// products.mail). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "mail",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-mail"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("邮箱深度指南", "dingtalk-mail", "references/mail.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理邮箱、邮件、草稿、附件、文件夹、联系人与邮件模板",
 			UseWhen: []string{
@@ -113,14 +119,14 @@ func newMailCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "mail",
 		Short: "邮箱 / 邮件收发",
 		Long:  `管理钉钉企业邮箱：查询邮箱地址、搜索邮件、查看邮件、发送邮件、获取会话（thread）、列举文件夹、列举标签。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	mailboxCmd := &cobra.Command{Use: "mailbox", Short: "邮箱地址管理", RunE: groupRunE}
+	mailboxCmd := newGroupCommand(&cobra.Command{Use: "mailbox", Short: "邮箱地址管理", RunE: groupRunE})
 
 	mailboxListCmd := &cobra.Command{
 		Use:   "list",
@@ -263,7 +269,7 @@ func newMailCommand() *cobra.Command {
 
 	mailboxCmd.AddCommand(mailboxListCmd, mailboxProfileCmd, mailboxSharedWithMeCmd)
 
-	messageCmd := &cobra.Command{Use: "message", Short: "邮件管理", RunE: groupRunE}
+	messageCmd := newGroupCommand(&cobra.Command{Use: "message", Short: "邮件管理", RunE: groupRunE})
 
 	messageSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -588,7 +594,7 @@ func newMailCommand() *cobra.Command {
 		},
 	})
 
-	folderCmd := &cobra.Command{Use: "folder", Short: "邮件文件夹管理", RunE: groupRunE}
+	folderCmd := newGroupCommand(&cobra.Command{Use: "folder", Short: "邮件文件夹管理", RunE: groupRunE})
 
 	folderListCmd := &cobra.Command{
 		Use:   "list",
@@ -842,7 +848,7 @@ func newMailCommand() *cobra.Command {
 
 	folderCmd.AddCommand(folderListCmd, folderCreateCmd, folderDeleteCmd, folderUpdateCmd)
 
-	tagCmd := &cobra.Command{Use: "tag", Short: "邮件标签管理", RunE: groupRunE}
+	tagCmd := newGroupCommand(&cobra.Command{Use: "tag", Short: "邮件标签管理", RunE: groupRunE})
 
 	tagListCmd := &cobra.Command{
 		Use:   "list",
@@ -995,7 +1001,7 @@ func newMailCommand() *cobra.Command {
 
 	tagCmd.AddCommand(tagListCmd, tagCreateCmd, tagDeleteCmd, tagUpdateCmd)
 
-	threadCmd := &cobra.Command{Use: "thread", Short: "邮件会话管理", RunE: groupRunE}
+	threadCmd := newGroupCommand(&cobra.Command{Use: "thread", Short: "邮件会话管理", RunE: groupRunE})
 
 	threadListCmd := &cobra.Command{
 		Use:   "list",
@@ -1975,7 +1981,7 @@ internetMessageId 来源：message send / draft send / message reply / message r
 		},
 	})
 
-	attachmentCmd := &cobra.Command{Use: "attachment", Short: "邮件附件管理", RunE: groupRunE}
+	attachmentCmd := newGroupCommand(&cobra.Command{Use: "attachment", Short: "邮件附件管理", RunE: groupRunE})
 
 	attachmentListCmd := &cobra.Command{
 		Use:   "list",
@@ -2443,7 +2449,7 @@ internetMessageId 来源：message send / draft send / message reply / message r
 		messageReplyCmd, messageReplyAllCmd, messageForwardCmd,
 		messageBatchMoveCmd, messageBatchDeleteCmd, messageBatchModifyCmd, messageBatchGetCmd, messageVerifyCmd, messageExportCmd, messageShareToChatCmd)
 
-	sentMessageCmd := &cobra.Command{Use: "sent-message", Short: "已发送邮件管理", RunE: groupRunE}
+	sentMessageCmd := newGroupCommand(&cobra.Command{Use: "sent-message", Short: "已发送邮件管理", RunE: groupRunE})
 
 	sentMessageRecallCmd := &cobra.Command{
 		Use:   "recall",
@@ -2600,10 +2606,10 @@ internetMessageId 来源：message send / draft send / message reply / message r
 	_ = draftSendCmd.Flags().MarkHidden("sender")
 	draftSendCmd.Flags().String("id", "", "草稿邮件 ID (必填)")
 
-	draftCmd := &cobra.Command{Use: "draft", Short: "草稿管理", RunE: groupRunE}
+	draftCmd := newGroupCommand(&cobra.Command{Use: "draft", Short: "草稿管理", RunE: groupRunE})
 	draftCmd.AddCommand(draftCreateCmd, draftUpdateCmd, draftSendCmd)
 
-	userCmd := &cobra.Command{Use: "user", Short: "邮箱用户管理", RunE: groupRunE}
+	userCmd := newGroupCommand(&cobra.Command{Use: "user", Short: "邮箱用户管理", RunE: groupRunE})
 
 	userSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -2707,7 +2713,7 @@ user 对象字段：
 
 	// ── template 子命令组 ──────────────────────────────────
 
-	templateCmd := &cobra.Command{Use: "template", Short: "邮件模板管理", RunE: groupRunE}
+	templateCmd := newGroupCommand(&cobra.Command{Use: "template", Short: "邮件模板管理", RunE: groupRunE})
 
 	templateCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -3057,7 +3063,7 @@ user 对象字段：
 
 	// ── contact 子命令组 ──────────────────────────────────
 
-	contactCmd := &cobra.Command{Use: "contact", Short: "邮件联系人管理", RunE: groupRunE}
+	contactCmd := newGroupCommand(&cobra.Command{Use: "contact", Short: "邮件联系人管理", RunE: groupRunE})
 
 	contactCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -3315,7 +3321,7 @@ user 对象字段：
 	contactCmd.AddCommand(contactCreateCmd, contactListCmd, contactUpdateCmd, contactBatchDeleteCmd)
 
 	// ── auto-reply 自动回复 ──────────────────────────────
-	autoReplyCmd := &cobra.Command{Use: "auto-reply", Short: "邮件自动回复管理", RunE: groupRunE}
+	autoReplyCmd := newGroupCommand(&cobra.Command{Use: "auto-reply", Short: "邮件自动回复管理", RunE: groupRunE})
 
 	autoReplyGetCmd := &cobra.Command{
 		Use:   "get",
@@ -3393,7 +3399,7 @@ user 对象字段：
 	autoReplyCmd.AddCommand(autoReplyGetCmd, autoReplyUpdateCmd)
 
 	// ── rule 收信规则 ────────────────────────────────────
-	ruleCmd := &cobra.Command{Use: "rule", Short: "收信规则管理", RunE: groupRunE}
+	ruleCmd := newGroupCommand(&cobra.Command{Use: "rule", Short: "收信规则管理", RunE: groupRunE})
 
 	ruleListCmd := &cobra.Command{
 		Use:   "list",
@@ -3578,7 +3584,7 @@ object 与 operation 合法组合：
 	ruleCmd.AddCommand(ruleListCmd, ruleCreateCmd, ruleUpdateCmd, ruleDeleteCmd, ruleAdjustCmd)
 
 	// ── allow-list 个人收信白名单 ────────────────────────────────
-	allowListCmd := &cobra.Command{Use: "allow-list", Short: "个人收信白名单管理", RunE: groupRunE}
+	allowListCmd := newGroupCommand(&cobra.Command{Use: "allow-list", Short: "个人收信白名单管理", RunE: groupRunE})
 
 	allowListListCmd := &cobra.Command{
 		Use:   "list",
@@ -3646,7 +3652,7 @@ object 与 operation 合法组合：
 	allowListCmd.AddCommand(allowListListCmd, allowListAddCmd, allowListRemoveCmd)
 
 	// ── block-list 个人收信黑名单 ────────────────────────────────
-	blockListCmd := &cobra.Command{Use: "block-list", Short: "个人收信黑名单管理", RunE: groupRunE}
+	blockListCmd := newGroupCommand(&cobra.Command{Use: "block-list", Short: "个人收信黑名单管理", RunE: groupRunE})
 
 	blockListListCmd := &cobra.Command{
 		Use:   "list",
@@ -3713,7 +3719,7 @@ object 与 operation 合法组合：
 	blockListRemoveCmd.Flags().String("entries", "", "逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)")
 	blockListCmd.AddCommand(blockListListCmd, blockListAddCmd, blockListRemoveCmd)
 
-	calendarCmd := &cobra.Command{Use: "calendar", Short: "邮箱日历管理", RunE: groupRunE}
+	calendarCmd := newGroupCommand(&cobra.Command{Use: "calendar", Short: "邮箱日历管理", RunE: groupRunE})
 	calendarListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "列出用户可访问的日历列表",
@@ -3762,7 +3768,7 @@ object 与 operation 合法组合：
 	calendarListCmd.Flags().String("email", "", "用户的邮箱地址 (必填)")
 	calendarCmd.AddCommand(calendarListCmd)
 
-	calendarEventCmd := &cobra.Command{Use: "calendar-event", Short: "邮箱日历日程管理", RunE: groupRunE}
+	calendarEventCmd := newGroupCommand(&cobra.Command{Use: "calendar-event", Short: "邮箱日历日程管理", RunE: groupRunE})
 	calendarEventListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "查询指定日历时间范围内的日程",

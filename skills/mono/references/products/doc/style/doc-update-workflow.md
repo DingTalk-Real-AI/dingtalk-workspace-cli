@@ -143,7 +143,7 @@ dws doc update --node <nodeId> --content-file /tmp/<name>-append.md --mode appen
 dws doc block list --node <nodeId>
 
 # 改一个 block 的文本
-dws doc block update --node <nodeId> --block-id <BLOCK_ID> --text "替换后的内容" --content-format element
+dws doc block update --node <nodeId> --block-id <BLOCK_ID> --content "替换后的内容" --content-format element
 
 # 在某个 block 后插入
 dws doc block insert --node <nodeId> --ref-block <BLOCK_ID> --where after --heading "补充说明" --level 2 --content-format element

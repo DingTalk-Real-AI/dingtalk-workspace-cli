@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
 // Test child mode: when DWS_BUSCTL_TEST_CHILD is set, this test binary
@@ -35,7 +37,8 @@ import (
 // env-marker pattern is what Go's own os/exec tests use and stays
 // confined to this file.
 const (
-	childEnvMarker = "DWS_BUSCTL_TEST_CHILD"
+	childEnvMarker   = "DWS_BUSCTL_TEST_CHILD"
+	childEndpointEnv = "DWS_BUSCTL_TEST_ENDPOINT"
 	// values:
 	//   "ready"        — write 'R' then sleep 30s (parent should see ready)
 	//   "fail"         — write 'E' then exit (parent should see ErrSpawnFailed)
@@ -68,6 +71,26 @@ func TestMain(m *testing.M) {
 		// buffer (captured separately in the test) must NOT see this.
 		_, _ = os.Stdout.Write([]byte("POLLUTION-FROM-CHILD\n"))
 		writeReady('R')
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	case "windows-ready":
+		listener, err := transport.Listen(os.Getenv(childEndpointEnv))
+		if err != nil {
+			os.Exit(3)
+		}
+		defer listener.Close()
+		conn, err := listener.Accept()
+		if err != nil {
+			os.Exit(4)
+		}
+		_ = conn.Close()
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	case "windows-fail":
+		os.Exit(5)
+	case "windows-exit":
+		os.Exit(0)
+	case "windows-stall":
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
 	}

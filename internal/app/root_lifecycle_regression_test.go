@@ -181,7 +181,7 @@ func TestPublicRootDirectExecuteClosesSinkOnHandlerError(t *testing.T) {
 	}
 }
 
-func TestExecutePanicAfterEmissionPreservesSingleResultAndExitCode(t *testing.T) {
+func TestCrossPlatformCoverageExecutePanicAfterEmissionPreservesSingleResultAndExitCode(t *testing.T) {
 	oldNormalize := rootNormalizeProcessProfileArgs
 	oldExecute := rootExecuteCommand
 	oldNewRoot := rootNewRootCommandWithEngine

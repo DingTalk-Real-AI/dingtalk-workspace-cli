@@ -5,6 +5,7 @@ package aitable
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -50,7 +51,7 @@ var BaseBootstrap = shortcut.Shortcut{
 		"+base-bootstrap",
 		"一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用",
 		"当你已有声明式 tables JSON、想一次搭好一套 AI 表格结构时使用；表内字段自动按 15 个拆批，每次创建都读回验证。",
-		"已有 Base 只需新增一张表时用 table create；复制现有 Base 用 base copy；不要对失败请求盲目重试",
+		"已有 Base 只需新增一张表时用 +table-bootstrap；复制现有 Base 用 +base-copy；不要对失败请求盲目重试",
 		`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[]}]'`,
 	),
 	Flags: []shortcut.Flag{
@@ -73,25 +74,25 @@ type bootstrapTable struct {
 func parseBootstrapTables(raw string) ([]bootstrapTable, error) {
 	value, err := parseJSONAny("tables", raw)
 	if err != nil {
-		return nil, err
+		return nil, baseBootstrapValidation(fmt.Sprintf("--tables 不是合法 JSON 数组：%v", err))
 	}
 	items, ok := value.([]any)
 	if !ok || len(items) == 0 {
-		return nil, apperrors.NewValidation("--tables 必须是非空 JSON 数组")
+		return nil, baseBootstrapValidation("--tables 必须是非空 JSON 数组")
 	}
 	if len(items) > 100 {
-		return nil, apperrors.NewValidation("--tables 最多接受 100 张表")
+		return nil, baseBootstrapValidation("--tables 最多接受 100 张表")
 	}
 	seen := map[string]bool{}
 	out := make([]bootstrapTable, 0, len(items))
 	for index, item := range items {
 		object, ok := item.(map[string]any)
 		if !ok {
-			return nil, apperrors.NewValidation(fmt.Sprintf("--tables[%d] 必须是 JSON 对象", index))
+			return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d] 必须是 JSON 对象", index))
 		}
 		name := strings.TrimSpace(stringValue(object, "name"))
 		if name == "" || seen[name] {
-			return nil, apperrors.NewValidation(fmt.Sprintf("--tables[%d].name 必须非空且不能重复", index))
+			return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].name 必须非空且不能重复", index))
 		}
 		seen[name] = true
 		fields := []any{}
@@ -99,18 +100,37 @@ func parseBootstrapTables(raw string) ([]bootstrapTable, error) {
 			var fieldsOK bool
 			fields, fieldsOK = rawFields.([]any)
 			if !fieldsOK {
-				return nil, apperrors.NewValidation(fmt.Sprintf("--tables[%d].fields 必须是 JSON 数组", index))
+				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields 必须是 JSON 数组", index))
 			}
 		}
+		fieldNames := map[string]bool{}
 		for fieldIndex, field := range fields {
 			object, ok := field.(map[string]any)
-			if !ok || strings.TrimSpace(stringValue(object, "fieldName", "name")) == "" || strings.TrimSpace(stringValue(object, "type")) == "" {
-				return nil, apperrors.NewValidation(fmt.Sprintf("--tables[%d].fields[%d] 必须包含 fieldName 和 type", index, fieldIndex))
+			fieldName := strings.TrimSpace(stringValue(object, "fieldName", "name"))
+			if !ok || fieldName == "" || strings.TrimSpace(stringValue(object, "type")) == "" {
+				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d] 必须包含 fieldName 和 type", index, fieldIndex))
+			}
+			if fieldNames[fieldName] {
+				return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d].fieldName %q 不能重复", index, fieldIndex, fieldName))
+			}
+			fieldNames[fieldName] = true
+			if config, exists := object["config"]; exists {
+				if _, ok := config.(map[string]any); !ok {
+					return nil, baseBootstrapValidation(fmt.Sprintf("--tables[%d].fields[%d].config 必须是 JSON 对象", index, fieldIndex))
+				}
 			}
 		}
 		out = append(out, bootstrapTable{Name: name, Fields: fields})
 	}
 	return out, nil
+}
+
+func baseBootstrapValidation(message string) error {
+	return apperrors.NewValidation(message,
+		apperrors.WithHint("tables 使用 [{\"name\":\"任务\",\"fields\":[{\"fieldName\":\"标题\",\"type\":\"text\"}]}]；已知参数时不要先调用 --help"),
+		apperrors.WithActions(`dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[{"fieldName":"标题","type":"text"}]}]'`),
+		apperrors.WithAvailableFlags("name", "folder-id", "template-id", "tables"),
+	)
 }
 
 func executeBaseSchemaSnapshot(rt *shortcut.RuntimeContext) error {
@@ -195,17 +215,20 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		result.Status = "unknown"
 		result.FailedCount = len(tables)
-		result.Checkpoint = map[string]any{"nextStep": "resolve whether base was created before retrying"}
+		result.Checkpoint = map[string]any{"nextStep": "resolve whether base was created before retrying", "name": rt.Str("name")}
+		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+base-search", "--query", rt.Str("name"), "--format", "json")
 		return compositeError(result, err, false)
 	}
 	baseID := findStringByKeys(baseData, "baseId")
 	if baseID == "" {
 		result.Status = "unknown"
 		result.Result = baseData
-		result.Checkpoint = map[string]any{"nextStep": "locate the created Base by exact name before retrying"}
+		result.Checkpoint = map[string]any{"nextStep": "locate the created Base by exact name before retrying", "name": rt.Str("name")}
+		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+base-search", "--query", rt.Str("name"), "--format", "json")
 		return compositeError(result, fmt.Errorf("create_base response is missing baseId"), false)
 	}
 	result.Resolved = map[string]any{"baseId": baseID}
+	result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+base-get", "--base-id", baseID, "--format", "json")
 	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_base", "baseId": baseID})
 	result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 1, Name: "create base", Tool: "create_base", Status: "completed", Result: baseData})
 	baseRead, err := rt.CallMCPData(serverMain, "get_base", map[string]any{"baseId": baseID})
@@ -237,6 +260,7 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 			return compositeError(result, createErr, false)
 		}
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_table", "baseId": baseID, "tableId": tableID, "name": spec.Name})
+		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+table-get", "--base-id", baseID, "--table-id", tableID, "--format", "json")
 		for offset := initialEnd; offset < len(spec.Fields); offset += 15 {
 			end := minInt(offset+15, len(spec.Fields))
 			_, fieldErr := rt.CallMCPWriteDataStrict(serverMain, "create_fields", map[string]any{
@@ -259,10 +283,13 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 		}
 		fieldsData, verifyErr := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
 		fields, found := findNamedObjectList(fieldsData, "fields", "fieldList")
-		if verifyErr != nil || !found || !containsAllFieldNames(fields, spec.Fields) {
-			if verifyErr == nil {
-				verifyErr = fmt.Errorf("field read-back for table %s does not contain the declared field set", tableID)
-			}
+		if verifyErr == nil && !found {
+			verifyErr = fmt.Errorf("field read-back for table %s is missing the fields collection", tableID)
+		}
+		if verifyErr == nil {
+			verifyErr = verifyDeclaredFieldStructures(fields, spec.Fields)
+		}
+		if verifyErr != nil {
 			result.Status = "partial_success"
 			result.CompletedCount = index
 			result.FailedCount = len(tables) - index
@@ -275,6 +302,7 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 	}
 	result.Verification = map[string]any{"status": "verified", "baseId": baseID, "tableCount": len(createdTables)}
 	result.Result = map[string]any{"baseId": baseID, "tables": createdTables}
+	result.NextCommand = ""
 	return rt.Output(result)
 }
 
@@ -378,16 +406,73 @@ func deepContainsString(value any, expected string) bool {
 	return false
 }
 
-func containsAllFieldNames(actual []map[string]any, expected []any) bool {
-	names := map[string]bool{}
+func verifyDeclaredFieldStructures(actual []map[string]any, expected []any) error {
+	actualByName := map[string][]map[string]any{}
 	for _, field := range actual {
-		names[stringValue(field, "fieldName", "name")] = true
-	}
-	for _, raw := range expected {
-		field, _ := raw.(map[string]any)
-		if !names[stringValue(field, "fieldName", "name")] {
-			return false
+		name := strings.TrimSpace(stringValue(field, "fieldName", "name"))
+		if name != "" {
+			actualByName[name] = append(actualByName[name], field)
 		}
 	}
-	return true
+	for index, raw := range expected {
+		field, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("declared field at index %d is not an object", index)
+		}
+		name := strings.TrimSpace(stringValue(field, "fieldName", "name"))
+		matches := actualByName[name]
+		if len(matches) == 0 {
+			return fmt.Errorf("field read-back is missing declared field %q", name)
+		}
+		if len(matches) != 1 {
+			return fmt.Errorf("field read-back contains %d fields named %q", len(matches), name)
+		}
+		actualField := matches[0]
+		expectedType := strings.TrimSpace(stringValue(field, "type"))
+		actualType := strings.TrimSpace(stringValue(actualField, "type", "fieldType"))
+		if actualType != expectedType {
+			return fmt.Errorf("field %q type mismatch: got %q, want %q", name, actualType, expectedType)
+		}
+		for _, key := range []string{"config", "aiConfig"} {
+			expectedConfig, declared := field[key]
+			if !declared {
+				continue
+			}
+			actualConfig, found := actualField[key]
+			if !found || !declaredValueMatches(actualConfig, expectedConfig) {
+				return fmt.Errorf("field %q %s mismatch", name, key)
+			}
+		}
+	}
+	return nil
+}
+
+func declaredValueMatches(actual, expected any) bool {
+	switch expectedValue := expected.(type) {
+	case map[string]any:
+		actualValue, ok := actual.(map[string]any)
+		if !ok {
+			return false
+		}
+		for key, expectedChild := range expectedValue {
+			actualChild, found := actualValue[key]
+			if !found || !declaredValueMatches(actualChild, expectedChild) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		actualValue, ok := actual.([]any)
+		if !ok || len(actualValue) != len(expectedValue) {
+			return false
+		}
+		for index := range expectedValue {
+			if !declaredValueMatches(actualValue[index], expectedValue[index]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return reflect.DeepEqual(actual, expected)
+	}
 }

@@ -88,10 +88,15 @@ func TestCrossPlatformCoverageTableCopySchemaFailureStagesE2E(t *testing.T) {
 		steps []upsertByKeyStep
 	}{
 		{name: "target fields error", steps: []upsertByKeyStep{{text: source}, {text: `{"tableId":"target"}`}, {err: errors.New("target fields failed")}}},
+		{name: "target fields missing collection", steps: []upsertByKeyStep{{text: source}, {text: `{"tableId":"target"}`}, {text: `{}`}}},
 		{name: "target fields mismatch", steps: []upsertByKeyStep{{text: source}, {text: `{"tableId":"target"}`}, {text: `{"fields":[]}`}}},
 		{name: "target mapping duplicate", steps: []upsertByKeyStep{
 			{text: source}, {text: `{"tableId":"target"}`},
 			{text: `{"fields":[{"fieldId":"t1","fieldName":"F0","type":"text"},{"fieldId":"t2","fieldName":"F0","type":"text"}]}`},
+		}},
+		{name: "target mapping missing id", steps: []upsertByKeyStep{
+			{text: source}, {text: `{"tableId":"target"}`},
+			{text: `{"fields":[{"fieldName":"F0","type":"text"}]}`},
 		}},
 	}
 	for _, tc := range cases {

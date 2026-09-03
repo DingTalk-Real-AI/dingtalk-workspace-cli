@@ -5,7 +5,9 @@ package smart
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -31,10 +34,23 @@ func runMinutesCLIWithWriter(t *testing.T, caller *smartCoverageCaller, writer i
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := newPlatformCoverageRoot()
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(writer)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	return root.Execute()
+	executed, err := root.ExecuteC()
+	if err != nil || !output.UsesUnifiedResult(executed) {
+		return err
+	}
+	code, _, emitErr := output.EmitStoredResult(executed)
+	if emitErr != nil {
+		return emitErr
+	}
+	if code != 0 {
+		return fmt.Errorf("command result exit code %d", code)
+	}
+	return nil
 }
 
 func TestCrossPlatformCoverageMinutesSmartContractFinalizer(t *testing.T) {

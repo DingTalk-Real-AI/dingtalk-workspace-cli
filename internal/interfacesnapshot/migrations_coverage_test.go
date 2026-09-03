@@ -602,12 +602,12 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsLifecycleErrors(t *tes
 			wantErr:    "back to pending",
 		},
 		{
-			name:       "consumed receipt becomes stale",
+			name:       "inert consumed receipt cannot revert to pending",
 			current:    after,
 			references: map[string]Snapshot{"merge-base": after, "stable": after},
 			authority:  consumed,
-			candidate:  consumed,
-			wantErr:    "is stale after all references reached the after state",
+			candidate:  pending,
+			wantErr:    "back to pending",
 		},
 		{
 			name:       "candidate-added receipt starts pending",
@@ -857,15 +857,15 @@ func TestCrossPlatformCoverageOptionalFlagMigrationLifecycleRemainsHostile(t *te
 		}
 	})
 
-	t.Run("consumed receipt remains stale after every reference converges", func(t *testing.T) {
-		_, err := CompareAllWithFlagMigrations(
+	t.Run("consumed receipt becomes inert after every reference converges", func(t *testing.T) {
+		report, err := CompareAllWithFlagMigrations(
 			after,
 			map[string]Snapshot{"merge-base": after, "stable": after},
 			consumed,
 			consumed,
 		)
-		if err == nil || !strings.Contains(err.Error(), "stale after all references reached the after state") {
-			t.Fatalf("stale optional migration error = %v", err)
+		if err != nil || !report.Compatible {
+			t.Fatalf("inert optional migration = (%#v, %v), want compatible", report, err)
 		}
 	})
 }

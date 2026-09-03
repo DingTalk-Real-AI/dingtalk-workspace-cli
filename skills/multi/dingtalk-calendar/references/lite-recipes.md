@@ -13,7 +13,7 @@
 
 查询多人在某时段内的闲忙（**busy**，不是用 `event list` 扫日程）：
 
-1. 解析用户：对每个姓名执行 `aisearch person --keyword "<姓名>" --dimension name` → `userId`；多人将 `userId` 用英文逗号拼接（无空格或按 [calendar.md](./calendar.md) `busy search` 要求）。
+1. 解析用户：对每个姓名执行 `aisearch person --query "<姓名>" --dimension name` → `userId`；多人将 `userId` 用英文逗号拼接（无空格或按 [calendar.md](./calendar.md) `busy search` 要求）。
 2. 确认时段：用户须给出或可收敛为明确的 `--start` / `--end`（ISO-8601）；若未给出，**先追问**起止时间，禁止用任意默认全天窗口代替用户意图。
 3. 执行：`dws calendar busy search --users <userId1,userId2,...> --start "<ISO>" --end "<ISO>" --format json`
 

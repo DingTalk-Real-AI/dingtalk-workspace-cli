@@ -32,10 +32,10 @@ import (
 // SetArgs so that Cobra's subsequent ExecuteC uses the corrected
 // values.
 //
-// Explicit +shortcut tokens and annotated group subcommands are validated
-// before flag parsing so an unknown command cannot be misreported as an
-// unknown flag on its nearest parent. Other unresolved paths remain Cobra's
-// responsibility.
+// Explicit +shortcut tokens and groups whose typed GroupPolicy enables
+// recovery are validated before flag parsing so an unknown command cannot be
+// misreported as an unknown flag on its nearest parent. Other unresolved paths
+// remain Cobra's responsibility.
 func RunPreParse(root *cobra.Command, engine *Engine) error {
 	_, err := RunPreParseArgs(root, engine, os.Args[1:])
 	return err
@@ -64,7 +64,7 @@ func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Co
 	// the unrelated root command `event list`. Remove only known root-persistent
 	// flags from the traversal copy; the original argv remains intact for the
 	// handlers and Cobra's real parse.
-	target, remaining, err := root.Traverse(argsForCommandTraversal(root, normalizedArgs))
+	target, remaining, err := root.Traverse(argsForCommandTraversalForEngine(root, engine, normalizedArgs))
 	if err != nil {
 		return nil, nil
 	}
@@ -129,11 +129,20 @@ func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Co
 }
 
 func argsForCommandTraversal(root *cobra.Command, rawArgs []string) []string {
-	args, _ := argsForCommandTraversalWithPositions(root, rawArgs)
+	args, _ := argsForCommandTraversalWithPositionsForEngine(root, nil, rawArgs)
+	return args
+}
+
+func argsForCommandTraversalForEngine(root *cobra.Command, engine *Engine, rawArgs []string) []string {
+	args, _ := argsForCommandTraversalWithPositionsForEngine(root, engine, rawArgs)
 	return args
 }
 
 func argsForCommandTraversalWithPositions(root *cobra.Command, rawArgs []string) ([]string, []int) {
+	return argsForCommandTraversalWithPositionsForEngine(root, nil, rawArgs)
+}
+
+func argsForCommandTraversalWithPositionsForEngine(root *cobra.Command, engine *Engine, rawArgs []string) ([]string, []int) {
 	if root == nil || len(rawArgs) == 0 {
 		positions := make([]int, len(rawArgs))
 		for index := range positions {
@@ -153,6 +162,14 @@ func argsForCommandTraversalWithPositions(root *cobra.Command, rawArgs []string)
 	matcher := newFlagTokenMatcher(flags)
 	out := make([]string, 0, len(rawArgs))
 	positions := make([]int, 0, len(rawArgs))
+	target := root
+	commandPathOpen := true
+	unresolvedCommandToken := ""
+	unresolvedCommandPosition := -1
+	commandTokens := make([]string, 0, len(rawArgs))
+	commandPositions := make([]int, 0, len(rawArgs))
+	commandFlagMatchers := make(map[*cobra.Command]*flagTokenMatcher)
+	commandFlagValueIndex := -1
 	for index := 0; index < len(rawArgs); index++ {
 		argument := rawArgs[index]
 		if argument == "--" {
@@ -162,11 +179,85 @@ func argsForCommandTraversalWithPositions(root *cobra.Command, rawArgs []string)
 			}
 			break
 		}
+		if index == commandFlagValueIndex {
+			out = append(out, argument)
+			positions = append(positions, index)
+			commandFlagValueIndex = -1
+			continue
+		}
 		flag, inlineValue, matched := matcher.matchTraversalToken(argument)
 		if !matched {
 			out = append(out, argument)
 			positions = append(positions, index)
+			if commandPathOpen {
+				if strings.HasPrefix(argument, "-") {
+					commandMatcher := commandFlagMatchers[target]
+					if commandMatcher == nil {
+						commandMatcher = newFlagTokenMatcher(target.Flags(), target.InheritedFlags())
+						commandFlagMatchers[target] = commandMatcher
+					}
+					commandFlag, commandInlineValue, commandMatched := commandMatcher.matchTraversalToken(argument)
+					if commandMatched {
+						if index+1 < len(rawArgs) {
+							if _, ok := separatedBoolValue(argument, rawArgs[index+1], commandFlag, commandInlineValue); ok ||
+								(!commandInlineValue && commandFlag.NoOptDefVal == "") {
+								commandFlagValueIndex = index + 1
+							}
+						}
+						continue
+					}
+				}
+				child := exactTraversalChild(target, argument)
+				if child == nil {
+					commandPathOpen = false
+					if !strings.HasPrefix(argument, "-") {
+						unresolvedCommandToken = argument
+						unresolvedCommandPosition = index
+					}
+				} else {
+					target = child
+					commandTokens = append(commandTokens, argument)
+					commandPositions = append(commandPositions, index)
+				}
+			}
 			continue
+		}
+		// Fuzzy matching is useful for a misspelled root boolean before a
+		// command (`--dry-rnu calendar ...`), but after a product has already
+		// resolved the same spelling may be an unknown local value flag. For
+		// example, `aisearch --types value` is deliberately protected from
+		// alias correction, while root traversal can otherwise fuzz `--types`
+		// to the global boolean `--yes` and expose `value` as a fake command.
+		// Preserve the token when the owning command's reviewed semantic table
+		// protects that spelling. Protection wins even for detached boolean
+		// literals and inline values: treating `--types false` as fuzzy
+		// `--yes false` would otherwise bypass the reviewed parent guard. An
+		// ordinary unprotected fuzzy root boolean such as `group --yess child`
+		// remains traversable.
+		if strings.HasPrefix(argument, "--") && flag != nil && flag.NoOptDefVal != "" &&
+			matcher.matchLongToken(argument).fuzzy && target != root {
+			name := strings.TrimPrefix(argument, "--")
+			if separator := strings.IndexByte(name, '='); separator >= 0 {
+				name = name[:separator]
+			}
+			_, protected := engine.resolveFlagProtection(target.CommandPath(), cmdutil.Morph(name))
+			if protected {
+				// Freeze traversal at the exact command prefix. Passing the
+				// protected unknown flag to Cobra can itself fail (notably when
+				// its value is a boolean literal), while retaining earlier local
+				// flags can let their values masquerade as children. The synthetic
+				// terminator affects only this traversal copy; handlers and Cobra's
+				// real parse still receive the original argv.
+				out = append(out[:0], commandTokens...)
+				positions = append(positions[:0], commandPositions...)
+				if unresolvedCommandToken != "" {
+					out = append(out, unresolvedCommandToken)
+					positions = append(positions, unresolvedCommandPosition)
+				}
+				out = append(out, "--")
+				positions = append(positions, index)
+				break
+			}
 		}
 		if index+1 < len(rawArgs) {
 			if _, ok := separatedBoolValue(argument, rawArgs[index+1], flag, inlineValue); ok {
@@ -179,6 +270,15 @@ func argsForCommandTraversalWithPositions(root *cobra.Command, rawArgs []string)
 		}
 	}
 	return out, positions
+}
+
+func exactTraversalChild(parent *cobra.Command, token string) *cobra.Command {
+	for _, child := range parent.Commands() {
+		if child.Name() == token || child.HasAlias(token) {
+			return child
+		}
+	}
+	return nil
 }
 
 // separatedBoolValue recognises model-friendly `--flag false` and exact
@@ -204,6 +304,7 @@ type longFlagMatch struct {
 	value      string
 	hasValue   bool
 	recognized bool
+	fuzzy      bool
 }
 
 type flagTokenMatcher struct {
@@ -253,6 +354,7 @@ func (m *flagTokenMatcher) matchLongToken(argument string) longFlagMatch {
 		return longFlagMatch{flag: flag, value: value, hasValue: hasValue, recognized: true}
 	}
 
+	fuzzyMatch := false
 	if normalized, ok := NormalizeFlagToken(argument, m.known); ok {
 		canonical = normalized
 	} else if split, ok := SplitStickyFlag(argument, m.specByName); ok {
@@ -260,6 +362,7 @@ func (m *flagTokenMatcher) matchLongToken(argument string) longFlagMatch {
 		return longFlagMatch{flag: m.byName[name], value: split.Value, hasValue: true, recognized: true}
 	} else if fuzzy, ok := FuzzyMatchFlag(argument, m.known, m.candidates); ok {
 		canonical = fuzzy
+		fuzzyMatch = true
 	} else {
 		return longFlagMatch{}
 	}
@@ -267,7 +370,7 @@ func (m *flagTokenMatcher) matchLongToken(argument string) longFlagMatch {
 	body = strings.TrimPrefix(canonical, "--")
 	name, value, hasValue = strings.Cut(body, "=")
 	flag := m.byName[name]
-	return longFlagMatch{flag: flag, value: value, hasValue: hasValue, recognized: flag != nil}
+	return longFlagMatch{flag: flag, value: value, hasValue: hasValue, recognized: flag != nil, fuzzy: fuzzyMatch}
 }
 
 func (m *flagTokenMatcher) matchTraversalToken(argument string) (*pflag.Flag, bool, bool) {

@@ -101,15 +101,46 @@ func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 	if byID["mcp-meta"] {
 		t.Fatal("mcp-meta is helper-only and must not appear in VisibleProducts")
 	}
+	if byID["drive-internal"] {
+		t.Fatal("drive-internal is helper-only and must not appear in VisibleProducts")
+	}
+	if byID["dingtalk-file"] {
+		t.Fatal("dingtalk-file is helper-only and must not appear in VisibleProducts")
+	}
 }
 
 func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	servers := openSupplementServers()
 	foundMCPMeta := false
 	foundWhiteboard := false
+	foundRecruit := false
+	foundDriveInternal := false
+	foundDingTalkFile := false
 	for _, server := range servers {
+		if server.ID == "recruit" {
+			foundRecruit = server.Endpoint == "https://mcp-gw.dingtalk.com/server/f69b54ada16c57b603c0e5e1c36f464ba73dcee28d64bb701ff2682c259c0cff" &&
+				len(server.Prefixes) == 2 && server.Prefixes[0] == "recruit" && server.Prefixes[1] == "job"
+		}
 		if server.ID == "whiteboard" {
 			foundWhiteboard = server.Endpoint == "https://mcp-gw.dingtalk.com/server/whiteboard"
+		}
+		if server.ID == "drive-internal" {
+			foundDriveInternal = true
+			if server.Endpoint != "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02" {
+				t.Fatalf("drive-internal endpoint = %q, want the registered internal capability endpoint", server.Endpoint)
+			}
+			if len(server.Prefixes) != 0 {
+				t.Fatal("drive-internal must remain helper-only without command prefixes")
+			}
+		}
+		if server.ID == "dingtalk-file" {
+			foundDingTalkFile = true
+			if server.Endpoint != "https://mcp-gw.dingtalk.com/server/d48b09ddafc89bf921b777ff428f8fc88b14805ccdd9680e02b7be318e7ed4b4" {
+				t.Fatalf("dingtalk-file endpoint = %q, want the registered file service endpoint", server.Endpoint)
+			}
+			if len(server.Prefixes) != 0 {
+				t.Fatal("dingtalk-file must remain helper-only without command prefixes")
+			}
 		}
 		if server.ID != "mcp-meta" {
 			continue
@@ -127,5 +158,35 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	}
 	if !foundWhiteboard {
 		t.Fatal("openSupplementServers() missing helper-only whiteboard endpoint")
+	}
+	if !foundRecruit {
+		t.Fatal("openSupplementServers() missing explicitly wired recruit endpoint")
+	}
+	if !foundDriveInternal {
+		t.Fatal("openSupplementServers() missing helper-only drive-internal endpoint")
+	}
+	if !foundDingTalkFile {
+		t.Fatal("openSupplementServers() missing helper-only dingtalk-file endpoint")
+	}
+}
+
+func TestCrossPlatformCoverageOpenSupplementServersExcludesRetiredEduEndpoints(t *testing.T) {
+	retiredProducts := map[string]bool{
+		"edu-contact":     true,
+		"edu-group":       true,
+		"edu-app":         true,
+		"edu-familygroup": true,
+		"college-contact": true,
+	}
+
+	for _, server := range openSupplementServers() {
+		if retiredProducts[server.ID] {
+			t.Errorf("openSupplementServers() still exposes retired endpoint %q", server.ID)
+		}
+		for _, prefix := range server.Prefixes {
+			if retiredProducts[prefix] {
+				t.Errorf("openSupplementServers() endpoint %q still routes retired prefix %q", server.ID, prefix)
+			}
+		}
 	}
 }

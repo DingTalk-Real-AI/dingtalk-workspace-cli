@@ -268,7 +268,7 @@ type frameworkFailWriter struct{}
 
 func (frameworkFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
-func TestFrameworkExecutePanicBeforeEmissionUsesUnifiedFailure(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkExecutePanicBeforeEmissionUsesUnifiedFailure(t *testing.T) {
 	for _, failWriter := range []bool{false, true} {
 		t.Run(map[bool]string{false: "emits", true: "fallback"}[failWriter], func(t *testing.T) {
 			testseam.Protect(t, &os.Args)
@@ -466,6 +466,118 @@ func TestCrossPlatformCoverageFrameworkExecuteRareOutcomeBranches(t *testing.T) 
 		}))
 		if _, handled, emitErr := emitOutputPublicationFailure(cmd, newOutputPublicationError("publish", errors.New("rename failed"))); handled || emitErr != nil {
 			t.Fatalf("handled=%v err=%v", handled, emitErr)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageExecuteDeterministicInterruptionBranches(t *testing.T) {
+	install := func(t *testing.T, state *processSignalState, stdout, stderr io.Writer) {
+		t.Helper()
+		testseam.Protect(t, &os.Args)
+		os.Args = []string{"dws"}
+		testseam.Swap(t, &rootNormalizeProcessProfileArgs, func() func() { return func() {} })
+		testseam.Swap(t, &rootStopAllStdioClients, func() {})
+		testseam.Swap(t, &rootInstallProcessSignalContext, func(ctx context.Context, _ *output.ResultStore) (context.Context, *processSignalState, func()) {
+			return ctx, state, func() {}
+		})
+		testseam.Swap(t, &rootNewRootCommandWithEngine, func(ctx context.Context, _ *pipeline.Engine) *cobra.Command {
+			cmd := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+			output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+			cmd.SetContext(ctx)
+			cmd.SetOut(stdout)
+			cmd.SetErr(stderr)
+			return cmd
+		})
+	}
+	interrupted := func(primaryCompleted bool) *processSignalState {
+		return &processSignalState{
+			interruption:             &processInterruption{signal: os.Interrupt},
+			primaryCompletedAtSignal: primaryCompleted,
+		}
+	}
+
+	t.Run("preparse interruption emits unified failure", func(t *testing.T) {
+		var stdout bytes.Buffer
+		install(t, interrupted(false), &stdout, io.Discard)
+		testseam.Swap(t, &rootRunPreParse, func(*cobra.Command, *pipeline.Engine) error { return errors.New("preparse failed") })
+		testseam.Swap(t, &rootExecuteCommand, func(*cobra.Command) (*cobra.Command, error) {
+			t.Fatal("preparse failure reached command execution")
+			return nil, nil
+		})
+		if code, _, summary := ExecuteWithTelemetry(); code != 130 || summary == "" || !strings.Contains(stdout.String(), `"outcome": "failure"`) {
+			t.Fatalf("preparse interruption = code %d summary %q stdout %q", code, summary, stdout.String())
+		}
+	})
+
+	t.Run("interruption before emission becomes primary error", func(t *testing.T) {
+		var stdout bytes.Buffer
+		install(t, interrupted(false), &stdout, io.Discard)
+		testseam.Swap(t, &rootRunPreParse, func(*cobra.Command, *pipeline.Engine) error { return nil })
+		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) { return cmd, nil })
+		if code, _, summary := ExecuteWithTelemetry(); code != 130 || summary == "" || !strings.Contains(stdout.String(), `"outcome": "failure"`) {
+			t.Fatalf("pre-emission interruption = code %d summary %q stdout %q", code, summary, stdout.String())
+		}
+	})
+
+	t.Run("late hook error preserves emitted result", func(t *testing.T) {
+		install(t, interrupted(true), io.Discard, io.Discard)
+		testseam.Swap(t, &rootRunPreParse, func(*cobra.Command, *pipeline.Engine) error { return nil })
+		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
+			if err := output.StoreResult(cmd.Context(), output.Success(map[string]any{"ok": true})); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
+			return cmd, errors.New("late hook failed")
+		})
+		if code, _, summary := ExecuteWithTelemetry(); code != 0 || summary != "late hook failed" {
+			t.Fatalf("late hook result = code %d summary %q", code, summary)
+		}
+	})
+
+	t.Run("interruption after emission preserves emitted result", func(t *testing.T) {
+		install(t, interrupted(false), io.Discard, io.Discard)
+		testseam.Swap(t, &rootRunPreParse, func(*cobra.Command, *pipeline.Engine) error { return nil })
+		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
+			if err := output.StoreResult(cmd.Context(), output.Success(map[string]any{"ok": true})); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
+			return cmd, nil
+		})
+		if code, _, summary := ExecuteWithTelemetry(); code != 0 || summary == "" {
+			t.Fatalf("post-emission interruption = code %d summary %q", code, summary)
+		}
+	})
+
+	t.Run("publication failure replaces unobservable result", func(t *testing.T) {
+		var original bytes.Buffer
+		install(t, interrupted(false), io.Discard, io.Discard)
+		testseam.Swap(t, &rootRunPreParse, func(*cobra.Command, *pipeline.Engine) error { return nil })
+		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
+			if err := output.StoreResult(cmd.Context(), output.Success(map[string]any{"ok": true})); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
+			file, err := os.CreateTemp(t.TempDir(), "finished-output-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = file.Close() })
+			cmd.SetContext(context.WithValue(cmd.Context(), outputFileContextKey{}, &outputSinkState{file: file, original: &original, finished: true}))
+			publicationErr := newOutputPublicationError("publish", errors.New("rename failed"))
+			if _, handled, emitErr := emitOutputPublicationFailure(cmd, publicationErr); !handled || emitErr != nil {
+				t.Fatalf("precondition publication failure = handled %v error %v unified %v state %v", handled, emitErr, output.UsesUnifiedResult(cmd), outputSinkForCommand(cmd) != nil)
+			}
+			return cmd, publicationErr
+		})
+		if code, _, summary := ExecuteWithTelemetry(); code != 5 || summary == "" {
+			t.Fatalf("publication failure = code %d summary %q output %q", code, summary, original.String())
 		}
 	})
 }

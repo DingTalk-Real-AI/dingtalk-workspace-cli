@@ -14,14 +14,18 @@
 package smart
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	todoshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/todo"
 )
 
 // Remind: create a personal todo for YOURSELF with an optional due time,
@@ -35,10 +39,11 @@ import (
 //
 //	dws todo +remind --task "交周报" --at 2026-03-10T18:00:00+08:00
 var Remind = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+remind",
-	Product:     "todo",
-	Description: "给自己创建一条带可选截止时间的待办",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+remind",
+	Product:       "todo",
+	Description:   "给自己创建一条带可选截止时间的待办",
 	Intent: "当你想给自己记一件事、并（可选）设一个截止时间，又不想先查自己的 userId 时使用；" +
 		"内部先解析当前登录用户的 userId，再显式设置 executorIds，--at 只会按 ISO8601 写入截止时间 dueTime，不会创建独立提醒规则。会真实创建待办。",
 	Risk: shortcut.RiskWrite,
@@ -55,6 +60,8 @@ var Remind = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +remind",
 		},
 		Description: "给自己创建一条带可选截止时间的待办",
+		DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false},
+		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"已验证的自用待办","properties":{"taskId":{"type":"string","description":"新待办稳定 taskId"},"subject":{"type":"string","description":"待办标题"},"verified":{"type":"boolean","description":"是否完成详情读回核验"}},"required":["taskId","subject","verified"],"additionalProperties":false}`)},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -72,10 +79,28 @@ var Remind = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "task", Type: shortcut.FlagString, Desc: "待办标题/内容", Required: true},
-		{Name: "at", Type: shortcut.FlagString, Desc: "截止时间（ISO8601，可选，不是提醒时间；如 2026-03-10T18:00:00+08:00）"},
+		{Name: "at", Type: shortcut.FlagString, Desc: "截止时间（ISO8601，可选，写入 dueTime，不是提醒时间）"},
 	},
 	Tips: []string{`dws todo +remind --task "交周报" --at 2026-03-10T18:00:00+08:00`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		task := strings.TrimSpace(rt.Str("task"))
+		var dueMillis int64
+		atProvided := rt.Changed("at")
+		if atProvided {
+			var err error
+			dueMillis, err = shortcutRemindParseMillis("at", rt.Str("at"))
+			if err != nil {
+				return err
+			}
+		}
+		if rt.DryRun() {
+			preview := map[string]any{"dryRun": true, "executed": false, "preview_kind": "plan", "subject": task, "executor": "current_user"}
+			if atProvided {
+				preview["dueTime"] = dueMillis
+			}
+			return rt.Output(preview)
+		}
+
 		profile, err := rt.CallMCPData("contact", "get_current_user_profile", nil)
 		if err != nil {
 			return err
@@ -86,24 +111,29 @@ var Remind = shortcut.Shortcut{
 		}
 
 		vo := map[string]any{
-			"subject":     rt.Str("task"),
+			"subject":     task,
 			"executorIds": []string{userID},
 		}
 
 		// Optional due time. The todo helper feeds --due through
 		// parseISOTimeToMillis and stores dueTime as epoch milliseconds (int64),
 		// so we do the same here rather than passing a raw string.
-		if rt.Changed("at") {
-			ms, err := shortcutRemindParseMillis("at", rt.Str("at"))
-			if err != nil {
-				return err
-			}
-			vo["dueTime"] = ms
+		if atProvided {
+			vo["dueTime"] = dueMillis
 		}
 
-		return rt.CallMCP("create_personal_todo", map[string]any{
+		params := map[string]any{
 			"PersonalTodoCreateVO": vo,
-		})
+		}
+		data, err := rt.CallMCPWriteDataStrict("todo", "create_personal_todo", params)
+		if err != nil {
+			return err
+		}
+		taskID, _, err := todoshortcut.VerifyCreatedTodo(rt, data, "todo/create_personal_todo", task)
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"taskId": taskID, "subject": task, "verified": true})
 	},
 }
 

@@ -1,5 +1,6 @@
 __pycache__/
 dist/
+.dws-runtime/
 .tmp-bin/
 .worktrees/
 .pytest_cache/
@@ -20,6 +21,10 @@ test/cli_compat/testdata/
 .gitignore
 .worktrees/
 .qoder/
+_logs/
+_docs/
+_output/
+vendor/
 
 # Secrets & credentials
 .env

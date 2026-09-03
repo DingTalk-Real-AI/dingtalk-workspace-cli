@@ -28,7 +28,7 @@ func TestCrossPlatformCoverageChatMediaUploadIsDeprecatedCompatibilityStub(t *te
 	if err == nil {
 		t.Fatal("deprecated media upload returned nil error")
 	}
-	for _, want := range []string{"已下线", "chat message send", "--msg-type file", "--file-path", "--media-id"} {
+	for _, want := range []string{"已下线", "chat message send", "--msg-type file", "--file", "--media-id"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("media upload migration error missing %q: %v", want, err)
 		}

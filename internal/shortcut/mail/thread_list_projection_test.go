@@ -21,18 +21,23 @@ import (
 // TestThreadListProjectConversationsShape guards the exact
 // list_mailbox_threads response contract, including lastModifiedDateTime.
 func TestThreadListProjectConversationsShape(t *testing.T) {
-	const raw = `{"result":{"conversations":[{
+	const raw = `{"success":true,"result":{"conversations":[{
 		"id":"thread-1",
 		"subject":"Projection contract",
 		"lastModifiedDateTime":"2026-07-26T10:00:00Z",
 		"isRead":false
-	}]}}`
+	}],"hasMore":false,"nextCursor":""}}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 
-	got := threadListProject(data)
+	got, err := mailProjectCollection(data, "mail/list_mailbox_threads", "result.conversations", []string{"id"}, map[string][]string{
+		"conversationId": {"id"}, "subject": {"subject"}, "lastUpdated": {"lastModifiedDateTime"}, "isRead": {"isRead"},
+	})
+	if err != nil {
+		t.Fatalf("strict projection: %v", err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("lower/upper mismatch: result.conversations has 1 entry, projection returned %d (%v)", len(got), got)
 	}

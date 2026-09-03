@@ -4,6 +4,7 @@
 package minutes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -66,7 +67,7 @@ var UploadAndAnalyze = shortcut.Shortcut{
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: withMinutesDryRun(minutesContract("+upload-and-analyze", "本地音视频直传听记并等待分析产物，可选思维导图和发言人洞察",
 		"有本地音视频且希望一次创建听记、等待基础分析，并可继续生成思维导图或发言人洞察时使用",
-		[]string{"只需上传时使用 +upload；已有 taskUuid 时分别使用 +detail/+mindmap/+speaker-insights"},
+		[]string{"只需上传时使用 +upload；已有 taskUuid 且只读取现有产物时使用 +detail/+transcript；生成思维导图或发言人洞察时分别使用 +mindmap/+speaker-insights", "需要闪记卡片通知时先使用 +upload-and-notify；只有确实需要有界等待时才使用本命令的 --resume-id"},
 		[]string{`dws minutes +upload-and-analyze --file ./meeting.mp3 --title "项目周会"`, `dws minutes +upload-and-analyze --file ./meeting.mp4 --artifacts transcript,summary --mindmap`}), contract.DryRunPreviewPlan, false),
 	Flags: []shortcut.Flag{
 		{Name: "file", Type: shortcut.FlagString, Desc: "本地音视频文件；与 --resume-id 二选一"},
@@ -74,7 +75,7 @@ var UploadAndAnalyze = shortcut.Shortcut{
 		{Name: "title", Type: shortcut.FlagString, Desc: "听记标题"},
 		{Name: "template-id", Type: shortcut.FlagString, Desc: "纪要模板 ID"},
 		{Name: "input-language", Type: shortcut.FlagString, Desc: "ASR 输入语言"},
-		{Name: "enable-message-card", Type: shortcut.FlagBool, Desc: "生成后推送闪记卡片"},
+		{Name: "enable-message-card", Type: shortcut.FlagBool, Desc: "兼容入口：上传后推送闪记卡片；新调用推荐先使用 +upload-and-notify"},
 		{Name: "complete-timeout", Type: shortcut.FlagInt, Default: "90", Desc: "上传 complete 超时秒数"},
 		{Name: "poll-interval", Type: shortcut.FlagInt, Default: "3", Desc: "轮询间隔秒数"},
 		{Name: "wait-timeout", Type: shortcut.FlagInt, Default: "180", Desc: "等待分析产物秒数"},
@@ -144,20 +145,44 @@ var SpeakerInsights = shortcut.Shortcut{
 
 var PrepareASR = shortcut.Shortcut{
 	Service: "minutes", Command: "+prepare-asr", Product: "minutes",
-	Description: "读取个人热词、计算差异、按需新增并可显式同步删除后读回验证",
-	Intent:      "录音/上传前准备 ASR 专有词表；默认只增加缺失热词，只有 --sync 才删除未出现在目标集合中的现有热词。",
+	Description: "读取个人热词、只新增缺失项并读回验证",
+	Intent:      "录音/上传前追加 ASR 专有词表；只增加缺失热词，不删除现有热词。需要精确同步并删除多余热词时改用 +sync-asr。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"},
-	Contract: withMinutesDryRun(minutesContract("+prepare-asr", "按需新增个人热词并可显式同步删除后读回验证；dry-run 不访问远端",
-		"录音或上传前要补充人名、项目名等 ASR 热词，并希望看到差异和最终读回验证时使用",
-		[]string{"只查看现有热词时使用原子 hot-word list；不明确接受删除时不要使用 --sync"},
-		[]string{`dws minutes +prepare-asr --words "DWS,听记"`, `dws minutes +prepare-asr --words "DWS,听记" --sync`}), contract.DryRunPreviewPlan, false),
+	Contract: withMinutesDryRun(minutesContract("+prepare-asr", "只新增缺失的个人热词并读回验证；dry-run 不访问远端",
+		"录音或上传前要追加人名、项目名等 ASR 热词，且不应删除任何现有热词时使用",
+		[]string{"只查看现有热词时使用原子 hot-word list；需要删除多余热词并精确同步时使用 +sync-asr"},
+		[]string{`dws minutes +prepare-asr --words "DWS,听记"`}), contract.DryRunPreviewPlan, false),
 	Flags: []shortcut.Flag{
 		{Name: "words", Type: shortcut.FlagStringSlice, Desc: "目标热词，逗号分隔", Required: true},
-		{Name: "sync", Type: shortcut.FlagBool, Desc: "删除目标集合之外的现有热词"},
+		{Name: "sync", Type: shortcut.FlagBool, Desc: "[兼容提示] 已迁移，请使用 +sync-asr"},
 	},
-	Tips:    []string{`dws minutes +prepare-asr --words "DWS,听记"`, `dws minutes +prepare-asr --words "DWS,听记" --sync`},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"sync"}, Description: "旧 --sync 已迁移；精确同步请使用 +sync-asr"}},
+	Tips:        []string{`dws minutes +prepare-asr --words "DWS,听记"`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("sync") {
+			return apperrors.NewValidation("--sync 已迁移：需要删除多余热词时请使用 +sync-asr")
+		}
+		return nil
+	},
 	Execute: executeMinutesPrepareASR,
+}
+
+var SyncASR = shortcut.Shortcut{
+	Service: "minutes", Command: "+sync-asr", Product: "minutes",
+	Description: "把个人热词精确同步为目标集合，删除多余项后读回验证",
+	Intent:      "用户明确要求个人 ASR 热词与目标集合完全一致时使用；会新增缺失项并删除目标集合外的现有热词。",
+	Risk:        shortcut.RiskHighWrite,
+	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
+	Contract: withMinutesDryRun(minutesContract("+sync-asr", "把个人热词精确同步为目标集合，删除多余项后读回验证",
+		"用户明确接受删除目标集合之外的现有热词，并要求最终热词集合完全一致时使用",
+		[]string{"只需追加缺失热词时使用 +prepare-asr；未确认删除范围时不要同步"},
+		[]string{`dws minutes +sync-asr --words "DWS,听记"`}), contract.DryRunPreviewPlan, false),
+	Flags: []shortcut.Flag{
+		{Name: "words", Type: shortcut.FlagStringSlice, Desc: "同步后的完整目标热词集合，逗号分隔", Required: true},
+	},
+	Tips:    []string{`dws minutes +sync-asr --words "DWS,听记"`},
+	Execute: executeMinutesSyncASR,
 }
 
 var ExportPack = shortcut.Shortcut{
@@ -194,20 +219,21 @@ var ExportPack = shortcut.Shortcut{
 var Share = shortcut.Shortcut{
 	Service: "minutes", Command: "+share", Product: "minutes",
 	Description: "按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger",
-	Intent:      "所有者已确认成员钉钉 UID 和权限，需批量授权时使用；逐成员调用以区分成功/失败，默认首错停止。",
+	Intent:      "所有者已确认成员钉钉 UID 或组织 staffId 和权限，需批量授权时使用；逐成员调用以区分成功/失败，默认首错停止。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(minutesContract("+share", "按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger",
-		"听记所有者已确认稳定 member UID，需要授予 view/download/edit 权限并审计每个成员结果时使用",
-		[]string{"当前用户自己申请权限时使用 +apply-permission；只有姓名而无稳定 UID 时先用 contact 命令消歧"},
-		[]string{`dws minutes +share --ids <uuid1,uuid2> --member-uids <uid1,uid2> --permission view`, `dws minutes +share --id <uuid> --member-uids <uid> --permission edit --cover`}), contract.DryRunPreviewPlan, false),
+	Contract: withMinutesDryRun(withMinutesShareParameters(minutesContract("+share", "按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger",
+		"听记所有者已确认真实 member UID 或组织 staffId，需要授予 view/download/edit 权限并审计每个成员结果时使用",
+		[]string{"当前用户自己申请权限时使用 +apply-permission；只有姓名而无稳定 UID/staffId 时先用 contact 命令消歧"},
+		[]string{`dws minutes +share --ids <uuid1,uuid2> --member-uids <uid1,uid2> --permission view`, `dws minutes +share --id <uuid> --member-staff-ids "074360" --permission edit --cover`})), contract.DryRunPreviewPlan, false),
 	Flags: minutesShareFlags(true),
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"id", "ids"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"member-uids", "member-staff-ids"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"id", "ids"}, Description: "听记去重后必须为 1..50 个"},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"member-uids"}, Description: "成员 UID 去重后必须为 1..50 个"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"member-uids", "member-staff-ids"}, Description: "成员 UID 或 staffId 去重后必须为 1..50 个"},
 	},
-	Tips:     []string{`dws minutes +share --ids <uuid1,uuid2> --member-uids <uid1,uid2> --permission view`, `dws minutes +share --id <uuid> --member-uids <uid> --permission edit --cover`},
+	Tips:     []string{`dws minutes +share --ids <uuid1,uuid2> --member-uids <uid1,uid2> --permission view`, `dws minutes +share --id <uuid> --member-staff-ids "074360" --permission edit --cover`},
 	Validate: validateMinutesShare,
 	Execute:  executeMinutesShare,
 }
@@ -229,7 +255,7 @@ var Unshare = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"member-uids"}, Description: "成员 UID 去重后必须为 1..50 个"},
 	},
 	Tips:     []string{`dws minutes +unshare --ids <uuid1,uuid2> --member-uids <uid1,uid2>`, `dws minutes +unshare --id <uuid> --member-uids <uid> --failure-policy continue`},
-	Validate: validateMinutesShare,
+	Validate: validateMinutesUnshare,
 	Execute:  executeMinutesUnshare,
 }
 
@@ -286,7 +312,7 @@ func executeMinutesUploadAndAnalyze(rt *shortcut.RuntimeContext) error {
 		upload := map[string]any{"operation": "minutes.upload", "resume": rt.Str("resume-id") != "", "taskUuid": rt.Str("resume-id"), "executed": false}
 		if rt.Str("resume-id") == "" {
 			var err error
-			upload, err = performMinutesUpload(rt)
+			upload, err = performMinutesUpload(rt, false)
 			if err != nil {
 				return err
 			}
@@ -297,7 +323,7 @@ func executeMinutesUploadAndAnalyze(rt *shortcut.RuntimeContext) error {
 	upload := map[string]any{"operation": "minutes.upload", "complete": true, "resumed": true, "taskUuid": id, "verified": true}
 	if id == "" {
 		var err error
-		upload, err = performMinutesUpload(rt)
+		upload, err = performMinutesUpload(rt, false)
 		if err != nil {
 			return err
 		}
@@ -372,7 +398,7 @@ func runMinutesMindmap(rt *shortcut.RuntimeContext, id string, timeout, interval
 			payload := map[string]any{"operation": "minutes.mindmap", "complete": false, "taskUuid": id, "taskStatus": status, "attempts": attempts, "result": result, "recovery": map[string]any{"taskUuid": id, "nextAction": "inspect source transcript; do not assume an empty mind map"}}
 			return payload, minutesCompositeError("minutes_mindmap_failed", "poll", payload)
 		}
-		if time.Now().Add(interval).After(deadline) {
+		if minutesPollDeadlineReached(deadline, interval) {
 			payload := map[string]any{"operation": "minutes.mindmap", "complete": false, "taskUuid": id, "taskStatus": status, "attempts": attempts, "recovery": map[string]any{"taskUuid": id, "nextAction": "dws minutes mind-graph status --id <taskUuid>"}}
 			return payload, minutesCompositeError("minutes_mindmap_timeout", "poll", payload)
 		}
@@ -422,7 +448,7 @@ func runMinutesSpeakerInsights(rt *shortcut.RuntimeContext, id string, timeout, 
 			payload := map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts, "stage": "poll", "recovery": map[string]any{"taskUuid": id, "taskId": taskID, "nextAction": "dws minutes speaker summary get --ids <taskUuid>"}}
 			return payload, callErr
 		}
-		if time.Now().Add(interval).After(deadline) {
+		if minutesPollDeadlineReached(deadline, interval) {
 			payload := map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts, "stage": "poll", "recovery": map[string]any{"taskUuid": id, "taskId": taskID, "nextAction": "dws minutes speaker summary get --ids <taskUuid>"}}
 			return payload, minutesCompositeError("minutes_speaker_insights_timeout", "poll", payload)
 		}
@@ -441,10 +467,22 @@ func speakerSummaryPending(err error) bool {
 }
 
 func executeMinutesPrepareASR(rt *shortcut.RuntimeContext) error {
+	return executeMinutesASR(rt, false)
+}
+
+func executeMinutesSyncASR(rt *shortcut.RuntimeContext) error {
+	return executeMinutesASR(rt, true)
+}
+
+func executeMinutesASR(rt *shortcut.RuntimeContext, syncMode bool) error {
 	desired := uniqueStrings(rt.StrSlice("words"))
+	operation := "minutes.prepare_asr"
+	if syncMode {
+		operation = "minutes.sync_asr"
+	}
 	if rt.DryRun() {
-		return rt.Output(minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes.prepare_asr", map[string]any{
-			"desired": desired, "sync": rt.Bool("sync"), "remotePreconditions": []string{"read current hot words", "compute additions and deletions", "apply writes", "read back exact set"},
+		return rt.Output(minutesDryRunPayload(contract.DryRunPreviewPlan, operation, map[string]any{
+			"desired": desired, "sync": syncMode, "remotePreconditions": []string{"read current hot words", "compute additions and deletions", "apply writes", "read back exact set"},
 		}))
 	}
 	currentData, err := rt.CallMCPData("minutes", "list_my_hotwords", map[string]any{})
@@ -457,10 +495,10 @@ func executeMinutesPrepareASR(rt *shortcut.RuntimeContext) error {
 	}
 	toAdd := stringDifference(desired, current)
 	toDelete := []string{}
-	if rt.Bool("sync") {
+	if syncMode {
 		toDelete = stringDifference(current, desired)
 	}
-	plan := map[string]any{"operation": "minutes.prepare_asr", "before": current, "desired": desired, "add": toAdd, "delete": toDelete, "sync": rt.Bool("sync")}
+	plan := map[string]any{"operation": operation, "before": current, "desired": desired, "add": toAdd, "delete": toDelete, "sync": syncMode}
 	stages := []map[string]any{}
 	if len(toAdd) > 0 {
 		data, writeErr := rt.CallMCPWriteDataStrict("minutes", "add_personal_hot_word", map[string]any{"hotWordList": toAdd})
@@ -498,7 +536,7 @@ func executeMinutesPrepareASR(rt *shortcut.RuntimeContext) error {
 	}
 	missing := stringDifference(desired, verified)
 	unexpected := []string{}
-	if rt.Bool("sync") {
+	if syncMode {
 		unexpected = stringDifference(verified, desired)
 	}
 	plan["complete"], plan["verified"], plan["after"], plan["stages"] = len(missing) == 0 && len(unexpected) == 0, len(missing) == 0 && len(unexpected) == 0, verified, stages
@@ -576,13 +614,16 @@ func executeMinutesExportPack(rt *shortcut.RuntimeContext) error {
 }
 
 func minutesShareFlags(includePermission bool) []shortcut.Flag {
+	// +share accepts either UID or staffId, while +unshare has no staffId
+	// route and therefore keeps member-uids required.
 	flags := []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "单个听记 taskUuid"},
 		{Name: "ids", Type: shortcut.FlagStringSlice, Desc: "多个听记 taskUuid，最多 50 个"},
-		{Name: "member-uids", Type: shortcut.FlagStringSlice, Desc: "稳定成员钉钉 UID，最多 50 个", Required: true},
+		{Name: "member-uids", Type: shortcut.FlagStringSlice, Desc: "真实成员钉钉 UID，最多 50 个", Required: !includePermission},
 	}
 	if includePermission {
 		flags = append(flags,
+			shortcut.Flag{Name: "member-staff-ids", Type: shortcut.FlagStringSlice, Desc: "组织内成员 staffId，最多 50 个并保留前导零"},
 			shortcut.Flag{Name: "permission", Type: shortcut.FlagString, Desc: "授予权限", Required: true, Enum: []string{"view", "download", "edit"}},
 			shortcut.Flag{Name: "cover", Type: shortcut.FlagBool, Desc: "覆盖已有权限"},
 			shortcut.Flag{Name: "sub-resources", Type: shortcut.FlagStringSlice, Desc: "可选子资源", Enum: []string{"OrigContent", "Summary", "Analysis", "Note"}},
@@ -592,6 +633,15 @@ func minutesShareFlags(includePermission bool) []shortcut.Flag {
 }
 
 func validateMinutesShare(rt *shortcut.RuntimeContext) error {
+	ids := minutesIDs(rt)
+	members := uniqueStrings(rt.StrSlice(minutesShareMemberFlag(rt)))
+	if len(ids) == 0 || len(ids) > 50 || len(members) == 0 || len(members) > 50 {
+		return apperrors.NewValidation("听记和成员标识数量必须各为 1..50")
+	}
+	return nil
+}
+
+func validateMinutesUnshare(rt *shortcut.RuntimeContext) error {
 	ids, members := minutesIDs(rt), uniqueStrings(rt.StrSlice("member-uids"))
 	if len(ids) == 0 || len(ids) > 50 || len(members) == 0 || len(members) > 50 {
 		return apperrors.NewValidation("听记和成员 UID 数量必须各为 1..50")
@@ -599,10 +649,22 @@ func validateMinutesShare(rt *shortcut.RuntimeContext) error {
 	return nil
 }
 
+func minutesShareMemberFlag(rt *shortcut.RuntimeContext) string {
+	if rt.Changed("member-staff-ids") {
+		return "member-staff-ids"
+	}
+	return "member-uids"
+}
+
 func executeMinutesShare(rt *shortcut.RuntimeContext) error {
 	policy := map[string]float64{"edit": 2, "download": 3, "view": 4}[rt.Str("permission")]
-	return executeMinutesPermissionLedger(rt, "share", "add_member_permission", func(member string) map[string]any {
-		params := map[string]any{"uuids": minutesIDs(rt), "memberUids": []string{member}, "policyId": policy}
+	memberFlag := minutesShareMemberFlag(rt)
+	memberProperty, memberResultKey := "memberUids", "memberUid"
+	if memberFlag == "member-staff-ids" {
+		memberProperty, memberResultKey = "memberStaffIds", "memberStaffId"
+	}
+	return executeMinutesPermissionLedger(rt, "share", "add_member_permission", memberFlag, memberResultKey, func(member string) map[string]any {
+		params := map[string]any{"uuids": minutesIDs(rt), memberProperty: []string{member}, "policyId": policy}
 		if rt.Changed("cover") {
 			params["coverPermission"] = fmt.Sprintf("%t", rt.Bool("cover"))
 		}
@@ -614,13 +676,24 @@ func executeMinutesShare(rt *shortcut.RuntimeContext) error {
 }
 
 func executeMinutesUnshare(rt *shortcut.RuntimeContext) error {
-	return executeMinutesPermissionLedger(rt, "unshare", "remove_member_permission", func(member string) map[string]any {
+	if !rt.DryRun() {
+		for _, id := range minutesIDs(rt) {
+			data, err := rt.CallMCPData("minutes", "get_minutes_basic_info", map[string]any{"taskUuid": id})
+			if err != nil {
+				return fmt.Errorf("minutes unshare preflight for %s: %w", id, err)
+			}
+			if _, err := minutesdata.Basic(id, data); err != nil {
+				return fmt.Errorf("minutes unshare preflight for %s: %w", id, err)
+			}
+		}
+	}
+	return executeMinutesPermissionLedger(rt, "unshare", "remove_member_permission", "member-uids", "memberUid", func(member string) map[string]any {
 		return map[string]any{"uuids": minutesIDs(rt), "memberUids": []string{member}}
 	})
 }
 
-func executeMinutesPermissionLedger(rt *shortcut.RuntimeContext, operation, tool string, params func(string) map[string]any) error {
-	members := uniqueStrings(rt.StrSlice("member-uids"))
+func executeMinutesPermissionLedger(rt *shortcut.RuntimeContext, operation, tool, memberFlag, memberResultKey string, params func(string) map[string]any) error {
+	members := uniqueStrings(rt.StrSlice(memberFlag))
 	plan := map[string]any{"operation": "minutes." + operation, "taskUuids": minutesIDs(rt), "memberCount": len(members), "members": members}
 	if rt.DryRun() {
 		return rt.Output(minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes."+operation, plan))
@@ -631,17 +704,21 @@ func executeMinutesPermissionLedger(rt *shortcut.RuntimeContext, operation, tool
 	for index, member := range members {
 		data, err := rt.CallMCPWriteDataStrict("minutes", tool, params(member))
 		if err == nil {
-			err = minutesdata.RequireWriteAcknowledgement(operation, data)
+			if operation == "unshare" {
+				err = minutesdata.RequirePermissionMutationAcknowledgement(operation, minutesIDs(rt), []string{member}, data)
+			} else {
+				err = minutesdata.RequireWriteAcknowledgement(operation, data)
+			}
 		}
 		if err != nil {
-			failures = append(failures, map[string]any{"memberUid": member, "error": err.Error()})
+			failures = append(failures, map[string]any{memberResultKey: member, "error": err.Error()})
 			if rt.Str("failure-policy") == "stop" {
 				unattempted = append(unattempted, members[index+1:]...)
 				break
 			}
 			continue
 		}
-		results = append(results, map[string]any{"memberUid": member, "complete": true})
+		results = append(results, map[string]any{memberResultKey: member, "complete": true})
 	}
 	plan["complete"], plan["succeeded"], plan["failed"], plan["unattempted"], plan["results"], plan["failures"] = len(failures) == 0, len(results), len(failures), unattempted, results, failures
 	return outputWorkflowResult(rt, plan, len(failures) > 0, "minutes_permission_partial", operation)
@@ -708,7 +785,7 @@ func waitMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []st
 	for {
 		attempts++
 		bundle, failures := collectMinutesArtifactsOnce(rt, id, artifacts, pageLimit)
-		if len(failures) == 0 || time.Now().Add(interval).After(deadline) {
+		if len(failures) == 0 || minutesPollDeadlineReached(deadline, interval) {
 			return bundle, failures, attempts
 		}
 		if err := waitMinutesInterval(rt, interval); err != nil {
@@ -720,12 +797,20 @@ func waitMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []st
 func waitMinutesInterval(rt *shortcut.RuntimeContext, interval time.Duration) error {
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
+	commandContext := rt.Command().Context()
+	if commandContext == nil {
+		commandContext = context.Background()
+	}
 	select {
-	case <-rt.Command().Context().Done():
-		return rt.Command().Context().Err()
+	case <-commandContext.Done():
+		return commandContext.Err()
 	case <-timer.C:
 		return nil
 	}
+}
+
+func minutesPollDeadlineReached(deadline time.Time, interval time.Duration) bool {
+	return !time.Now().Add(interval).Before(deadline)
 }
 
 func outputWorkflowResult(rt *shortcut.RuntimeContext, payload map[string]any, failed bool, reason, stage string) error {
@@ -832,5 +917,5 @@ func writeJSONFile(path string, value any) error {
 }
 
 func init() {
-	shortcut.Register(finalizeMinutesShortcuts(RecordWrapUp, UploadAndAnalyze, Mindmap, SpeakerInsights, PrepareASR, ExportPack, Share, Unshare)...)
+	shortcut.Register(finalizeMinutesShortcuts(RecordWrapUp, UploadAndAnalyze, Mindmap, SpeakerInsights, PrepareASR, SyncASR, ExportPack, Share, Unshare)...)
 }

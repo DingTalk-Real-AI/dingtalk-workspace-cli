@@ -230,11 +230,18 @@ func TestOutputSinkUnifiedPublicationFailureFailsAndLeavesNoFinalFile(t *testing
 	assertNoOutputTemps(t, target)
 }
 
-func TestExecuteUnifiedPublicationFailureEmitsFailureOnOriginalStdout(t *testing.T) {
+func TestCrossPlatformCoverageExecuteUnifiedPublicationFailureEmitsFailureOnOriginalStdout(t *testing.T) {
 	testseam.Protect(t, &os.Args)
 	dir := t.TempDir()
-	target := filepath.Join(dir, "result.json")
+	t.Chdir(dir)
+	// Keep argv portable: an absolute Windows path contains a volume colon,
+	// which the CLI intentionally rejects as unsafe user-supplied output.
+	target := "result.json"
 	if err := os.WriteFile(target, []byte("original"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	originalInfo, err := os.Stat(target)
+	if err != nil {
 		t.Fatal(err)
 	}
 	os.Args = []string{"dws", "atomic-output-unified-publication", "--output", target, "--format", "json"}
@@ -277,7 +284,7 @@ func TestExecuteUnifiedPublicationFailureEmitsFailureOnOriginalStdout(t *testing
 	if got := bytes.Count(stdout.Bytes(), []byte(`"outcome": "success"`)); got != 0 {
 		t.Fatalf("rolled-back success leaked to stdout: %s", stdout.String())
 	}
-	assertOutputFile(t, target, "original", 0o640)
+	assertOutputFile(t, target, "original", originalInfo.Mode().Perm())
 	assertNoOutputTemps(t, target)
 }
 

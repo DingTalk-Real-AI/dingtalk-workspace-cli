@@ -14,18 +14,39 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"sort"
+	"strings"
+	"sync"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
 )
+
+// runtimeDefaultCorpID is the runtimeDefault placeholder key for the current
+// logged-in enterprise corpId. It aliases helpers.RuntimeDefaultCorpID, the
+// single source of truth, so the registration side here and the read side in
+// helpers.resolveCurrentCorpID always share one placeholder key.
+const runtimeDefaultCorpID = helpers.RuntimeDefaultCorpID
+
+// corpIDRuntimeDefaultOnce guards a single $corpId registration per process:
+// RegisterRuntimeDefault panics on duplicate ids, and newLegacyPublicCommands
+// may run more than once within a process (e.g. across test cases).
+var corpIDRuntimeDefaultOnce sync.Once
+
+// resolveProfileMetadata is the indirection for ResolveProfileMetadataReadOnly
+// used by resolveCorpIDRuntimeDefault. Tests swap it to inject specific
+// ProfileMetadata without touching the filesystem.
+var resolveProfileMetadata = authpkg.ResolveProfileMetadataReadOnly
 
 // mountLegacyPublicCommands builds the product + shortcut command tree without
 // mutating process-global MCP deps or dynamic server endpoints. Used by the
@@ -50,15 +71,76 @@ func mountLegacyPublicCommands(runner executor.Runner, loadUserShortcuts bool) [
 	} else {
 		commands = append(commands, builtin.BaseCommands()...)
 	}
-	return mergeTopLevelCommands(commands)
+	merged := mergeTopLevelCommands(commands)
+	annotatePreferredShortcutOwners(merged)
+	return merged
+}
+
+const preferredShortcutCLIPathAnnotation = "dws.preferred-shortcut.cli-path"
+
+func annotatePreferredShortcutOwners(commands []*cobra.Command) {
+	var walk func(*cobra.Command, []string)
+	walk = func(command *cobra.Command, parents []string) {
+		if command == nil {
+			return
+		}
+		pathParts := append(append([]string(nil), parents...), command.Name())
+		cliPath := strings.Join(pathParts, " ")
+		if owner, ok := shortcut.PreferredShortcutForCLIPath(cliPath); ok {
+			if command.Annotations == nil {
+				command.Annotations = map[string]string{}
+			}
+			command.Annotations[preferredShortcutCLIPathAnnotation] = owner
+		}
+		for _, child := range command.Commands() {
+			walk(child, pathParts)
+		}
+	}
+	for _, command := range commands {
+		walk(command, nil)
+	}
 }
 
 // newLegacyPublicCommands is the executable CLI path: inject static MCP
 // endpoints, InitDeps, then mount the public command tree.
 func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
 	injectStaticServers()
+	// Register the $corpId runtimeDefault before the command tree is built so
+	// helpers.resolveCurrentCorpID (delegation-auth options for the legacy
+	// permission format) can resolve the current enterprise at RunE time.
+	ensureCorpIDRuntimeDefault()
 	helpers.InitDeps(caller)
 	return mountLegacyPublicCommands(runner, loadUserShortcuts)
+}
+
+// ensureCorpIDRuntimeDefault registers the $corpId resolver exactly once. The
+// resolver is lazy (invoked at RunE time) and read-only: it never refreshes
+// credentials or mutates local auth state, mirroring ResolveTelemetryIdentity.
+// An existence guard tolerates a pre-registration (e.g. from a test) so the
+// duplicate-id panic in RegisterRuntimeDefault cannot fire.
+func ensureCorpIDRuntimeDefault() {
+	corpIDRuntimeDefaultOnce.Do(func() {
+		if _, exists := helpers.RuntimeDefaultsSnapshot()[runtimeDefaultCorpID]; exists {
+			return
+		}
+		helpers.RegisterRuntimeDefault(runtimeDefaultCorpID, resolveCorpIDRuntimeDefault)
+	})
+}
+
+// resolveCorpIDRuntimeDefault reads the current default profile's corpId from
+// the non-sensitive profiles.json metadata. Resolution is best-effort:
+// missing, invalid, or unreadable auth data returns ("", false) so callers
+// gracefully fall back (the legacy permission format then omits targetMembers).
+func resolveCorpIDRuntimeDefault(_ context.Context) (string, bool) {
+	profile, err := resolveProfileMetadata(defaultConfigDir(), authpkg.RuntimeProfile())
+	if err != nil || profile == nil {
+		return "", false
+	}
+	corpID := strings.TrimSpace(profile.CorpID)
+	if corpID == "" {
+		return "", false
+	}
+	return corpID, true
 }
 
 func injectStaticServers() {

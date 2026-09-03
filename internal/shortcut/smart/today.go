@@ -84,14 +84,16 @@ var Today = shortcut.Shortcut{
 		// Project each event to {title, start, end, location, eventId} via the
 		// shared calendarProjectEvents (same output as +tomorrow/+week) instead
 		// of dumping the raw 17-field event objects.
-		data, err := rt.CallMCPData("calendar", "list_calendar_events", toolArgs)
+		events, err := calendarSmartListAll(rt, toolArgs)
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"events": calendarProjectEvents(data)})
+		projected := calendarProjectEvents(events)
+		return rt.Output(map[string]any{"count": len(projected), "events": projected, "complete": true})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Today, "完整翻页并严格校验的今日日程")
 	shortcut.Register(Today)
 }

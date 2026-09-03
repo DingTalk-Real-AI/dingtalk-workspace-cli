@@ -28,6 +28,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestResolveSkillTargetPath(t *testing.T) {
@@ -57,19 +58,19 @@ func TestResolveSkillTargetPath(t *testing.T) {
 		{
 			name:       "cursor target",
 			target:     "cursor",
-			wantSuffix: filepath.Join(".cursor", "skills"),
+			wantSuffix: filepath.Join(".agents", "skills"),
 			wantErr:    false,
 		},
 		{
 			name:       "codex target",
 			target:     "codex",
-			wantSuffix: filepath.Join(".codex", "skills"),
+			wantSuffix: filepath.Join(".agents", "skills"),
 			wantErr:    false,
 		},
 		{
 			name:       "opencode target",
 			target:     "opencode",
-			wantSuffix: filepath.Join(".config", "opencode", "skills"),
+			wantSuffix: filepath.Join(".agents", "skills"),
 			wantErr:    false,
 		},
 		{
@@ -115,6 +116,37 @@ func TestResolveSkillTargetPath(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageUniversalSkillInstallTargetsUseCanonical(t *testing.T) {
+	home := t.TempDir()
+	testseam.Swap(t, &skillUserHomeDir, func() (string, error) { return home, nil })
+	if isUniversalSkillInstallTarget("missing-agent") {
+		t.Fatal("unknown Agent target classified as universal")
+	}
+	for _, target := range []string{
+		"amp", "antigravity", "antigravity-cli", "cline", "codex", "cursor",
+		"deepagents", "dexto", "firebender", "gemini", "gemini-cli", "github",
+		"github-copilot", "kimi-code-cli", "loaf", "opencode", "replit",
+		"universal", "warp", "zed",
+	} {
+		got, err := resolveSkillTargetPath(target)
+		if err != nil {
+			t.Fatalf("resolve %s: %v", target, err)
+		}
+		if want := filepath.Join(home, ".agents", "skills"); got != want {
+			t.Errorf("resolve %s = %s, want canonical %s", target, got, want)
+		}
+	}
+	for target, want := range map[string]string{
+		"claude": filepath.Join(home, ".claude", "skills"),
+		"qoder":  filepath.Join(home, ".qoder", "skills"),
+		"zcode":  filepath.Join(home, ".zcode", "skills"),
+	} {
+		if got, err := resolveSkillTargetPath(target); err != nil || got != want {
+			t.Errorf("resolve non-universal %s = %s, %v; want %s", target, got, err, want)
+		}
 	}
 }
 
@@ -477,8 +509,12 @@ func TestAgentSkillPathsCoversSetupHomes(t *testing.T) {
 	for _, p := range agentSkillPaths {
 		paths[p] = true
 	}
+	legacyCleanupOnly := map[string]bool{
+		".github/skills": true, ".windsurf/skills": true,
+		".cline/skills": true, ".amp/skills": true,
+	}
 	for _, home := range skillSetupAgentHomes {
-		if !paths[home] {
+		if !paths[home] && !legacyCleanupOnly[home] {
 			t.Errorf("skillSetupAgentHomes entry %q has no matching agentSkillPaths value — "+
 				"add it to agentSkillPaths so users can address it via --target <name>", home)
 		}

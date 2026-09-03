@@ -14,8 +14,11 @@
 package smart
 
 import (
+	"encoding/json"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -39,10 +42,11 @@ import (
 //
 //	dws todo +created-todos
 var CreatedTodos = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+created-todos",
-	Product:     "todo",
-	Description: "列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的）",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+created-todos",
+	Product:       "todo",
+	Description:   "列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的）",
 	Intent: "当你想快速看清『哪些待办是我自己创建/发起的』，而不是别人指派给我执行的待办时使用；" +
 		"内部拉取你当前组织下角色为创建人(creator)的待办列表（roleTypes=[\"creator\"]，" +
 		"creator 是待办列表支持的角色枚举之一），再在本地把每条待办投影成标题(subject)、" +
@@ -62,6 +66,7 @@ var CreatedTodos = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +created-todos",
 		},
 		Description: "列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的）",
+		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"我创建的全部待办","properties":{"created":{"type":"array","description":"创建人角色待办","items":{"type":"object","description":"待办条目","additionalProperties":true}}},"required":["created"],"additionalProperties":false}`)},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",

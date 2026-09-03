@@ -30,6 +30,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -80,10 +81,19 @@ var (
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
 	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
 	rootEmitResult                  = output.EmitResult
+	rootInstallProcessSignalContext = installProcessSignalContext
 )
 
 // Execute runs the root command and returns the process exit code.
-func Execute() (exitCode int) {
+func Execute() int {
+	exitCode, _, _ := ExecuteWithTelemetry()
+	return exitCode
+}
+
+// ExecuteWithTelemetry runs the root command and additionally returns a
+// privacy-safe command path and error summary for the official CLI entrypoint.
+func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage string) {
+	commandPath = "dws"
 	var (
 		root        *cobra.Command
 		executed    *cobra.Command
@@ -91,11 +101,15 @@ func Execute() (exitCode int) {
 	)
 	defer func() {
 		if r := recover(); r != nil {
+			errorMessage = "internal panic"
 			target := executed
 			if target == nil && root != nil {
 				if found, _, err := root.Find(os.Args[1:]); err == nil {
 					target = found
 				}
+			}
+			if target != nil {
+				commandPath = telemetryCommandPath(target)
 			}
 			if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 				exitCode = code
@@ -121,6 +135,7 @@ func Execute() (exitCode int) {
 		CloseFileLogger()
 		if executed != nil {
 			if err := closeOutputSink(executed); err != nil {
+				errorMessage = telemetryErrorSummary(err)
 				if code, handled, emitErr := emitOutputPublicationFailure(executed, err); handled && emitErr == nil {
 					exitCode = code
 				} else {
@@ -144,7 +159,9 @@ func Execute() (exitCode int) {
 	agentMetadata := readAgentMetadataSnapshot()
 	if err := agentMetadata.validationError(); err != nil {
 		emitEarlyAgentMetadataValidationError(err, os.Args[1:])
-		return apperrors.ExitCode(err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = apperrors.ExitCode(err)
+		return
 	}
 
 	timing := NewTimingCollector()
@@ -162,12 +179,13 @@ func Execute() (exitCode int) {
 	ctx, resultStore = output.WithResultStore(ctx)
 	var signalState *processSignalState
 	var stopSignals func()
-	ctx, signalState, stopSignals = installProcessSignalContext(ctx, resultStore)
+	ctx, signalState, stopSignals = rootInstallProcessSignalContext(ctx, resultStore)
 	defer stopSignals()
 
 	initStart := time.Now()
 	engine := newPipelineEngine()
 	root = rootNewRootCommandWithEngine(ctx, engine)
+	commandPath = telemetryCommandPath(root)
 	timing.Record("cmd_init", time.Since(initStart))
 
 	// Run PreParse handlers on raw argv before Cobra parses flags.
@@ -182,15 +200,23 @@ func Execute() (exitCode int) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
 			code, emitErr := output.EmitResult(target, result)
 			if emitErr == nil {
-				return code
+				errorMessage = telemetryErrorSummary(err)
+				exitCode = code
+				return
 			}
 		}
 		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
-		return apperrors.ExitCode(err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = apperrors.ExitCode(err)
+		return
 	}
+	commandPath = telemetryCommandPathForArgs(root, os.Args[1:])
 
 	var err error
 	executed, err = rootExecuteCommand(root)
+	if executed != nil {
+		commandPath = telemetryCommandPath(executed)
+	}
 	// PersistentPostRunE normally commits or aborts the transactional output
 	// sink. Finalize once more at the process boundary so custom execution
 	// seams, embedding callers, or future hook changes cannot leave publication
@@ -222,31 +248,39 @@ func Execute() (exitCode int) {
 				// successfully emitted result into a contradictory 130/143 process
 				// status; likewise, a failed publication must retain its internal
 				// error code instead of being relabelled as cancellation.
-				return code
+				errorMessage = telemetryErrorSummary(interrupted)
+				exitCode = code
+				return
 			}
 		}
 		var publicationErr *outputPublicationError
 		if err == nil || !stderrors.As(err, &publicationErr) {
-			err = interrupted
+			err = interrupted.withCancellationDetail(err)
 		}
 	}
 	if err != nil {
 		if executed == nil {
 			executed = root
+			commandPath = telemetryCommandPath(root)
 		}
 		if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 			var publicationErr *outputPublicationError
 			if stderrors.As(err, &publicationErr) {
+				errorMessage = telemetryErrorSummary(publicationErr)
 				if failureCode, handled, emitErr := emitOutputPublicationFailure(executed, publicationErr); handled {
 					if emitErr == nil {
-						return failureCode
+						exitCode = failureCode
+						return
 					}
 					fmt.Fprintf(executed.ErrOrStderr(), "Warning: emit output publication failure: %v\n", emitErr)
 				}
-				return apperrors.ExitCode(publicationErr)
+				exitCode = apperrors.ExitCode(publicationErr)
+				return
 			}
 			fmt.Fprintf(executed.ErrOrStderr(), "Warning: command hook failed after result emission: %v\n", err)
-			return code
+			errorMessage = telemetryErrorSummary(err)
+			exitCode = code
+			return
 		}
 		err = rewordRequiredFlagError(err)
 		var raw apperrors.RawStderrError
@@ -254,7 +288,9 @@ func Execute() (exitCode int) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
 			code, emitErr := output.EmitResult(executed, result)
 			if emitErr == nil {
-				return code
+				errorMessage = telemetryErrorSummary(err)
+				exitCode = code
+				return
 			}
 			err = apperrors.NewInternal("emit failure result: "+emitErr.Error(), apperrors.WithCause(emitErr))
 		}
@@ -264,12 +300,42 @@ func Execute() (exitCode int) {
 			_, _ = fmt.Fprintln(os.Stderr)
 		}
 		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
-		return apperrors.ExitCode(err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = apperrors.ExitCode(err)
+		return
 	}
 	if code, emitted := output.StoredExitCode(resultStore); emitted {
-		return code
+		exitCode = code
+		return
 	}
-	return 0
+	return
+}
+
+func telemetryCommandPath(command *cobra.Command) string {
+	if command == nil {
+		return "dws"
+	}
+	path := strings.TrimSpace(command.CommandPath())
+	root := command.Root()
+	rootName := strings.TrimSpace(root.Name())
+	if path == rootName {
+		return rootName
+	}
+	if rootName != "" {
+		path = strings.TrimSpace(strings.TrimPrefix(path, rootName+" "))
+	}
+	return path
+}
+
+func telemetryCommandPathForArgs(root *cobra.Command, args []string) string {
+	if root == nil {
+		return "dws"
+	}
+	command, _, err := root.Find(args)
+	if err != nil || command == nil {
+		return telemetryCommandPath(root)
+	}
+	return telemetryCommandPath(command)
 }
 
 // emitEarlyAgentMetadataValidationError preserves each built-in command's
@@ -387,7 +453,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	if typed.Hint != "" {
 		info.Hint = typed.Hint
 	}
-	info.Actions = append([]string(nil), typed.Actions...)
+	info.Actions = apperrors.RecoveryActions(err)
 	info.Retryable = typed.RetryableSet && typed.Retryable
 	info.RetryAfterSeconds = typed.RetryAfterSeconds
 	if typed.RPCCode != 0 {
@@ -511,6 +577,22 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// 无论哪种格式，子串 "--help' for usage." 都可被检索到。
 	tail := fmt.Sprintf("\nSee '%s --help' for usage.", cmd.CommandPath())
 	msgWithTail := errMsg + tail
+	if flag, ok := unknownFlagName(errMsg); ok && flag == "from" {
+		switch cmd.CommandPath() {
+		case "dws chat +search-msg", "dws chat +chat-messages":
+			return apperrors.NewValidation(
+				msgWithTail,
+				apperrors.WithHint("--from 在消息查询中含义不明确：按发送者过滤请使用 --sender <姓名|userId|openDingTalkId>；指定时间起点请使用 --start <RFC3339>"),
+				apperrors.WithReason("ambiguous_flag"),
+				apperrors.WithCause(err),
+				apperrors.WithActions(
+					"Use --sender <姓名|userId|openDingTalkId> to filter by sender",
+					"Use --start <RFC3339> together with --end <RFC3339> to set a time range",
+				),
+				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
+			)
+		}
+	}
 	if flag, protection, ok := reviewedFlagProtection(cmd, errMsg); ok {
 		hint := fmt.Sprintf("Parameter --%s is blocked from automatic normalization on %q; choose an explicit flag from --help.", flag, cmd.CommandPath())
 		reason := "blocked_flag"
@@ -579,14 +661,9 @@ func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline
 	if cmd == nil {
 		return "", "", false
 	}
-	const prefix = "unknown flag: --"
-	idx := strings.Index(errMsg, prefix)
-	if idx < 0 {
+	flag, ok := unknownFlagName(errMsg)
+	if !ok {
 		return "", "", false
-	}
-	flag := strings.TrimSpace(errMsg[idx+len(prefix):])
-	if i := strings.IndexAny(flag, " =\n\t"); i >= 0 {
-		flag = flag[:i]
 	}
 	entry, ok := cli.LookupParamAlias(cmd.CommandPath())
 	if !ok {
@@ -600,6 +677,19 @@ func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline
 		return flag, pipeline.FlagProtectionAmbiguous, true
 	}
 	return "", "", false
+}
+
+func unknownFlagName(errMsg string) (string, bool) {
+	const prefix = "unknown flag: --"
+	idx := strings.Index(errMsg, prefix)
+	if idx < 0 {
+		return "", false
+	}
+	flag := strings.TrimSpace(errMsg[idx+len(prefix):])
+	if i := strings.IndexAny(flag, " =\n\t"); i >= 0 {
+		flag = flag[:i]
+	}
+	return flag, flag != ""
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {
@@ -716,6 +806,133 @@ func newRootPresentationCommand() *cobra.Command {
 	return newRootCommandWithMode(context.Background(), nil, false, true, true)
 }
 
+func consumeCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen *bool) {
+	if root == nil || flags == nil || invocationSeen == nil {
+		return
+	}
+
+	clientIDFlag := root.PersistentFlags().Lookup("client-id")
+	clientSecretFlag := root.PersistentFlags().Lookup("client-secret")
+	clientIDSet := clientIDFlag != nil && clientIDFlag.Changed
+	clientSecretSet := clientSecretFlag != nil && clientSecretFlag.Changed
+
+	clientID := ""
+	if clientIDSet {
+		clientID = flags.ClientID
+	}
+	clientSecret := ""
+	if clientSecretSet {
+		clientSecret = flags.ClientSecret
+	}
+
+	// Keep GlobalFlags scoped to this execution. A flag omitted from the current
+	// invocation must not retain the value pflag parsed for a previous one.
+	flags.ClientID = clientID
+	flags.ClientSecret = clientSecret
+	if clientIDSet || clientSecretSet {
+		authpkg.SetClientCredentials(clientID, clientSecret)
+	} else if *invocationSeen {
+		// Preserve a programmatically supplied runtime pair on the first execution,
+		// but never carry credentials installed by an earlier execution of this root.
+		authpkg.SetClientCredentials("", "")
+	}
+	*invocationSeen = true
+
+	// Changed is execution state in this reusable command tree, not a lifetime
+	// property. The next parse will set it again for flags actually supplied.
+	if clientIDFlag != nil {
+		clientIDFlag.Changed = false
+	}
+	if clientSecretFlag != nil {
+		clientSecretFlag.Changed = false
+	}
+}
+
+func discardCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen bool) {
+	if flags != nil {
+		flags.ClientID = ""
+		flags.ClientSecret = ""
+	}
+	if root != nil {
+		if flag := root.PersistentFlags().Lookup("client-id"); flag != nil {
+			flag.Changed = false
+		}
+		if flag := root.PersistentFlags().Lookup("client-secret"); flag != nil {
+			flag.Changed = false
+		}
+	}
+	if invocationSeen {
+		authpkg.SetClientCredentials("", "")
+	}
+}
+
+func consumeRootVersionInvocationFlag(root *cobra.Command, requested *bool) {
+	if root == nil || requested == nil {
+		return
+	}
+	flag := root.Flags().Lookup("version")
+	*requested = flag != nil && flag.Changed && *requested
+	if flag != nil {
+		flag.Changed = false
+	}
+}
+
+func discardRootVersionInvocationFlag(root *cobra.Command, requested *bool) {
+	if requested != nil {
+		*requested = false
+	}
+	if root != nil {
+		if flag := root.Flags().Lookup("version"); flag != nil {
+			flag.Changed = false
+		}
+	}
+}
+
+func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, credentialInvocationSeen *bool, versionRequested *bool) {
+	if root == nil || credentialInvocationSeen == nil {
+		return
+	}
+	cleanup := func() {
+		discardCredentialInvocationFlags(root, flags, *credentialInvocationSeen)
+		discardRootVersionInvocationFlag(root, versionRequested)
+	}
+
+	// Cobra handles --help before PersistentPreRunE. Wrap the inherited help
+	// renderer once at the root so both flag-based and help-command paths clean
+	// partially parsed invocation state after rendering.
+	previousHelp := root.HelpFunc()
+	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		defer cleanup()
+		previousHelp(cmd, args)
+	})
+
+	// Install leaf handlers before the root handler so inherited handlers are
+	// captured without recursively wrapping an already wrapped parent.
+	var visit func(*cobra.Command)
+	visit = func(cmd *cobra.Command) {
+		for _, child := range cmd.Commands() {
+			visit(child)
+		}
+
+		if previousArgs := cmd.Args; previousArgs != nil {
+			cmd.Args = func(current *cobra.Command, args []string) error {
+				err := previousArgs(current, args)
+				if err != nil {
+					cleanup()
+				}
+				return err
+			}
+		}
+
+		previousFlagError := cmd.FlagErrorFunc()
+		cmd.SetFlagErrorFunc(func(current *cobra.Command, err error) error {
+			cleanup()
+			return previousFlagError(current, err)
+		})
+	}
+	visit(root)
+}
+
 func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
@@ -729,6 +946,9 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		}
 	}
 
+	credentialInvocationSeen := false
+	rootVersionRequested := false
+	rootVersionShortCircuit := false
 	root := &cobra.Command{
 		Use:               "dws",
 		Short:             "DWS CLI",
@@ -737,11 +957,30 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		SilenceErrors:     true,
 		SilenceUsage:      true,
 		DisableAutoGenTag: true,
-		Version:           Version(),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
+		// Cobra's built-in --version path returns before PersistentPreRunE and
+		// cannot participate in reusable-root credential cleanup. Keep the same
+		// public flag and output in RunE so it crosses the normal invocation
+		// boundary instead.
+		Version: "",
+		RunE:    runRootHelp,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			rootVersionShortCircuit = false
+			consumeRootVersionInvocationFlag(cmd.Root(), &rootVersionRequested)
+			if rootVersionRequested && cmd == cmd.Root() {
+				// Preserve Cobra's historical --version behavior: no metadata
+				// validation, edition hook, output lifecycle, or credential mutation.
+				// Only discard credential flags parsed for this non-operational call.
+				discardCredentialInvocationFlags(cmd.Root(), flags, false)
+				rootVersionShortCircuit = true
+				return nil
+			}
+
+			// Cobra command trees can be reused by embedding callers. pflag keeps a
+			// bound flag's value and Changed bit after ExecuteC returns, so consume
+			// credential flags at the execution boundary before any validation or
+			// hook can observe state left by a previous invocation.
+			consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+
 			// A public root may be reused by embedding callers through multiple
 			// ExecuteC invocations. Begin each invocation with an empty result
 			// lifecycle while retaining the store pointer observed by Execute's
@@ -791,13 +1030,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			}
 
 			authpkg.SetRuntimeProfile(flags.Profile)
-			// Apply OAuth credential overrides from CLI flags (highest priority).
-			if flags.ClientID != "" {
-				authpkg.SetClientID(flags.ClientID)
-			}
-			if flags.ClientSecret != "" {
-				authpkg.SetClientSecret(flags.ClientSecret)
-			}
 
 			// Configure global slog level based on --debug / --verbose flags.
 			configureLogLevel(flags)
@@ -811,6 +1043,11 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) (err error) {
+			if rootVersionShortCircuit {
+				rootVersionShortCircuit = false
+				rootVersionRequested = false
+				return nil
+			}
 			defer func() {
 				if r := recover(); r != nil {
 					warnAbortOutputSink(cmd)
@@ -835,6 +1072,31 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 	}
+	root.Flags().BoolVar(&rootVersionRequested, "version", false, "version for dws")
+	corecmd.ApplyGroupPolicy(root, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	rootArgs := root.Args
+	root.Args = func(cmd *cobra.Command, args []string) error {
+		// Cobra's built-in --version returns before Args validation. Preserve
+		// that behavior only when the current parse explicitly selected the
+		// lifecycle-aware replacement; a prior failed writer must not bypass Args.
+		versionFlag := cmd.Flags().Lookup("version")
+		if versionFlag != nil && versionFlag.Changed && rootVersionRequested {
+			return nil
+		}
+		return rootArgs(cmd, args)
+	}
+	rootRunE := root.RunE
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		if rootVersionRequested {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s version %s\n", cmd.Name(), Version())
+			return err
+		}
+		return rootRunE(cmd, args)
+	}
 
 	bindPersistentFlags(root, flags)
 
@@ -844,27 +1106,47 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// usage log (privacy-preserving; see internal/shortcut/usage). Powers
 	// `dws shortcut stats` and future high-frequency shortcut distillation.
 	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
-	mcpCmd.AddCommand(newMCPURLGroup(patCaller))
+	mcpCmd.AddCommand(
+		newMCPURLGroup(patCaller),
+		newMCPPublishedGroup(patCaller, newAuthenticatedMCPPublishedTransportFactory(runner, flags)),
+	)
+
+	navigationGroup := func(command *cobra.Command) *cobra.Command {
+		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+			Mode:        corecmd.GroupNavigationOnly,
+			Positionals: corecmd.PositionalsReject,
+			Recovery:    corecmd.RecoverySibling,
+		})
+		return command
+	}
+	hybridGroup := func(command *cobra.Command) *cobra.Command {
+		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+			Mode:        corecmd.GroupHybrid,
+			Positionals: corecmd.PositionalsReject,
+			Recovery:    corecmd.RecoverySibling,
+		})
+		return command
+	}
 
 	utilityCommands := []*cobra.Command{
-		newAuthCommand(patCaller),
-		newProfileCommand(),
+		navigationGroup(newAuthCommand(patCaller)),
+		navigationGroup(newProfileCommand()),
 		newAPICommand(flags),
-		newSkillCommand(),
-		newCacheCommand(),
+		navigationGroup(newSkillCommand()),
+		hybridGroup(newCacheCommand()),
 		newCatalogCommand(),
-		newConfigCommand(),
+		navigationGroup(newConfigCommand()),
 		newDoctorCommand(),
-		newRecoveryCommand(),
-		newEventCommand(flags),
-		newAuditCommand(),
+		hybridGroup(newRecoveryCommand()),
+		navigationGroup(newEventCommand(flags)),
+		navigationGroup(newAuditCommand()),
 		newCompletionCommand(root),
 		newUpgradeCommand(),
 		newVersionCommand(),
 		newPluginCommand(),
-		usage.NewShortcutCommand(),
+		navigationGroup(usage.NewShortcutCommand()),
 		schemaCmd,
-		mcpCmd,
+		navigationGroup(mcpCmd),
 	}
 	root.AddCommand(utilityCommands...)
 
@@ -900,9 +1182,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		hideNonDirectRuntimeCommands(root)
 	}
 	configureRootHelp(root)
-	// Set custom flag error handler for better UX
+	// Set custom flag error handler for better UX.
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
 	installReviewedFlagProtectionHandlers(root)
+	installInvocationExitHandlers(root, flags, &credentialInvocationSeen, &rootVersionRequested)
 	root.SetContext(rootCtx)
 
 	return root
@@ -935,17 +1218,36 @@ func installReviewedFlagProtectionHandlers(root *cobra.Command) {
 }
 
 func preparseProfileFlag(args []string) string {
+	profile, _, valid := preparseProfileSelection(args)
+	if !valid {
+		return ""
+	}
+	return profile
+}
+
+func preparseProfileSelection(args []string) (profile string, specified, valid bool) {
 	args, _ = normalizeProfileFlagArgs(args)
+	valid = true
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
 		switch {
-		case arg == "--profile" && i+1 < len(args):
-			return strings.TrimSpace(args[i+1])
+		case arg == "--profile":
+			specified = true
+			if i+1 >= len(args) || strings.HasPrefix(strings.TrimSpace(args[i+1]), "-") {
+				profile = ""
+				valid = false
+				continue
+			}
+			profile = strings.TrimSpace(args[i+1])
+			valid = profile != ""
+			i++
 		case strings.HasPrefix(arg, "--profile="):
-			return strings.TrimSpace(strings.TrimPrefix(arg, "--profile="))
+			specified = true
+			profile = strings.TrimSpace(strings.TrimPrefix(arg, "--profile="))
+			valid = profile != ""
 		}
 	}
-	return ""
+	return profile, specified, valid
 }
 
 func normalizeProcessProfileArgs() func() {
@@ -1956,4 +2258,8 @@ func newPipelineEngine() *pipeline.Engine {
 		handlers.PostResponseHandler{},
 	)
 	return engine
+}
+
+func runRootHelp(cmd *cobra.Command, _ []string) error {
+	return cmd.Help()
 }

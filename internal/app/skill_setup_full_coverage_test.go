@@ -523,15 +523,45 @@ func TestCrossPlatformCoverageSkillSetupEventMigrationFailureBranches(t *testing
 		}
 	})
 
-	t.Run("ordinary and prerequisite install errors", func(t *testing.T) {
+	t.Run("ordinary install error", func(t *testing.T) {
+		src := writeMultiSkillSource(t, []string{multiEventSkill, multiMiscSkill})
+		copyCalls := 0
+		testseam.Swap(t, &skillSetupCopyDir, func(string, string) error { copyCalls++; return fail })
+		migration := filepath.Join(t.TempDir(), "migration")
+		ordinary := filepath.Join(t.TempDir(), "ordinary")
+		if _, _, err := installMultiSkillsWithEventMigration(src, []string{multiEventSkill}, []string{migration, ordinary}, []string{migration}, true, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "未执行迁移") {
+			t.Fatalf("ordinary install failure = %v", err)
+		}
+		if copyCalls == 0 {
+			t.Fatal("ordinary staging failure seam was not exercised")
+		}
+	})
+
+	t.Run("canonical ordinary install error", func(t *testing.T) {
+		testseam.Swap(t, &skillSetupInstallMulti, func(string, []string, []string, io.Writer, io.Writer, bool) (int, int, error) {
+			return 0, 0, fail
+		})
+		home := t.TempDir()
+		canonical := filepath.Join(home, ".agents", "skills")
+		universalMigration := filepath.Join(home, ".codex", "skills")
+		if _, _, err := installMultiSkillsWithEventMigration(
+			"src",
+			[]string{multiEventSkill},
+			[]string{canonical, universalMigration},
+			[]string{universalMigration},
+			true,
+			io.Discard,
+			io.Discard,
+		); !errors.Is(err, fail) {
+			t.Fatalf("canonical ordinary install failure = %v, want %v", err, fail)
+		}
+	})
+
+	t.Run("prerequisite install error", func(t *testing.T) {
 		testseam.Swap(t, &skillSetupInstallMulti, func(string, []string, []string, io.Writer, io.Writer, bool) (int, int, error) {
 			return 0, 0, fail
 		})
 		migration := filepath.Join(t.TempDir(), "migration")
-		ordinary := filepath.Join(t.TempDir(), "ordinary")
-		if _, _, err := installMultiSkillsWithEventMigration("src", []string{multiEventSkill}, []string{migration, ordinary}, []string{migration}, true, io.Discard, io.Discard); !errors.Is(err, fail) {
-			t.Fatalf("ordinary install failure = %v", err)
-		}
 		if _, _, err := installMultiSkillsWithEventMigration("src", []string{multiEventSkill, multiMiscSkill, multiSharedSkill}, []string{migration}, []string{migration}, true, io.Discard, io.Discard); !errors.Is(err, fail) {
 			t.Fatalf("prerequisite install failure = %v", err)
 		}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -143,7 +144,7 @@ func TestCrossPlatformCoverageRunDocReadJSONMLCoverage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &scriptedToolCaller{steps: []scriptedToolStep{tc.step}}
 			installScriptedCaller(t, caller)
-			err := runDocReadJsonML(&cobra.Command{}, "node", tc.output)
+			err := runDocReadJsonML("node", tc.output, "", 0, false)
 			if tc.wantFail && err == nil {
 				t.Fatal("expected failure")
 			}
@@ -194,6 +195,7 @@ func TestCrossPlatformCoverageDocDeprecationWrappersCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageRunDocUploadDownloadAndMediaCoverage(t *testing.T) {
+	testseam.Swap(t, &docMediaVerifyWait, func(context.Context, time.Duration) error { return nil })
 	oldArgs := os.Args
 	os.Args = []string{"dws", "doc"}
 	t.Cleanup(func() { os.Args = oldArgs })

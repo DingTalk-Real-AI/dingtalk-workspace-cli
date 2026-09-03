@@ -119,7 +119,7 @@ func TestRenderSafetyAnnotation(t *testing.T) {
 	deleteCmd.SetOut(&out)
 	RenderSafetyAnnotation(deleteCmd)
 	rendered := out.String()
-	if !strings.Contains(rendered, "Safety: effect=destructive") || !strings.Contains(rendered, "(requires --yes)") {
+	if !strings.Contains(rendered, "Safety: effect=destructive") || !strings.Contains(rendered, "Do not use --yes until the user explicitly confirms") {
 		t.Fatalf("rendered = %q, want destructive annotation with confirmation hint", rendered)
 	}
 	if !strings.Contains(rendered, "idempotency=") {

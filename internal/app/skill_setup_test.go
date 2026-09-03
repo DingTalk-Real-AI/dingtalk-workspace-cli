@@ -297,12 +297,12 @@ func TestResolveSkillSetupTargetsSingleAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 dest, got %d", len(got))
+	if len(got) != 2 {
+		t.Fatalf("expected canonical + Claude, got %d", len(got))
 	}
 	want := filepath.Join(home, ".claude", "skills", "dws")
-	if filepath.Clean(got[0]) != filepath.Clean(want) {
-		t.Fatalf("expected %s, got %s", want, got[0])
+	if filepath.Clean(got[1]) != filepath.Clean(want) {
+		t.Fatalf("expected %s, got %s", want, got[1])
 	}
 }
 
@@ -321,12 +321,12 @@ func TestResolveSkillSetupTargetsMultiOmitsDwsTail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 dest, got %d", len(got))
+	if len(got) != 2 {
+		t.Fatalf("expected canonical + Claude, got %d", len(got))
 	}
 	want := filepath.Join(home, ".claude", "skills")
-	if filepath.Clean(got[0]) != filepath.Clean(want) {
-		t.Fatalf("expected %s, got %s", want, got[0])
+	if filepath.Clean(got[1]) != filepath.Clean(want) {
+		t.Fatalf("expected %s, got %s", want, got[1])
 	}
 }
 
@@ -343,8 +343,8 @@ func TestCrossPlatformCoverageResolveSkillSetupTargetsPrefersSpecificAgentRoot(t
 		t.Fatal(err)
 	}
 	want := filepath.Join(home, ".codex", "skills")
-	if len(got) != 1 || filepath.Clean(got[0]) != filepath.Clean(want) {
-		t.Fatalf("targets = %v, want [%s]", got, want)
+	if len(got) != 2 || filepath.Clean(got[1]) != filepath.Clean(want) {
+		t.Fatalf("targets = %v, want canonical + %s", got, want)
 	}
 }
 
@@ -360,8 +360,8 @@ func TestCrossPlatformCoverageResolveSkillSetupTargetsDetectsZCode(t *testing.T)
 		t.Fatal(err)
 	}
 	want := filepath.Join(home, ".zcode", "skills")
-	if len(got) != 1 || filepath.Clean(got[0]) != filepath.Clean(want) {
-		t.Fatalf("targets = %v, want [%s]", got, want)
+	if len(got) != 2 || filepath.Clean(got[1]) != filepath.Clean(want) {
+		t.Fatalf("targets = %v, want canonical + %s", got, want)
 	}
 
 	explicit, err := resolveSkillSetupTargets("zcode", skillSetupModeMono)
@@ -369,8 +369,8 @@ func TestCrossPlatformCoverageResolveSkillSetupTargetsDetectsZCode(t *testing.T)
 		t.Fatal(err)
 	}
 	wantMono := filepath.Join(want, "dws")
-	if len(explicit) != 1 || filepath.Clean(explicit[0]) != filepath.Clean(wantMono) {
-		t.Fatalf("explicit zcode targets = %v, want [%s]", explicit, wantMono)
+	if len(explicit) != 2 || filepath.Clean(explicit[1]) != filepath.Clean(wantMono) {
+		t.Fatalf("explicit zcode targets = %v, want canonical + %s", explicit, wantMono)
 	}
 }
 
@@ -1055,12 +1055,11 @@ func TestCrossPlatformCoverageSkillSetupSelectiveEventMigratesOnlyFoldedTargets(
 	if err := os.WriteFile(filepath.Join(foldedHome, "dingtalk-chat", "SKILL.md"), []byte("keep sibling\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
 	stdout, stderr, err := executeMultiSkillSetupTest(t, src, []string{freshHome, foldedHome}, "--skill", "event", "--yes")
 	if err != nil {
 		t.Fatalf("selective event setup failed: %v\nstderr=%s\nstdout=%s", err, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "重新加载 Skills") {
+	if !strings.Contains(stdout, "请重启已打开的 Agent") {
 		t.Fatalf("completion should tell the user to reload skills: %s", stdout)
 	}
 

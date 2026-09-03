@@ -54,8 +54,8 @@ DWS 对任何外部实现的持续兼容义务。后续设计以 DWS 自身约�
 
 | 模式 | Agent 目录布局 | 选择方式 |
 |---|---|---|
-| multi（默认） | `<agent-home>/dingtalk-*/` 与必选 `dingtalk-shared/` | 默认；`dws skill setup --mode multi` |
-| mono（兼容） | `<agent-home>/dws/` | `dws skill setup --mode mono` 或安装器的 mono opt-in |
+| multi（默认） | canonical `~/.agents/skills/dingtalk-*/`；非 universal Agent 使用链接或复制兼容层 | 默认；`dws skill setup --mode multi` |
+| mono（兼容） | canonical `~/.agents/skills/dws/`；非 universal Agent 使用链接或复制兼容层 | `dws skill setup --mode mono` 或安装器的 mono opt-in |
 
 模式切换通过重新执行 setup 完成。安装 multi 前备份并移除 mono 的 `dws/`；安装
 mono 前只备份并移除能够证明由 DWS 管理的 multi 目录。两个方向都不提供隐式、
@@ -140,16 +140,40 @@ Agent 仍只需以 `SKILL.md` 发现和加载 Skill；统一元数据位于 Agen
 
 ## 8. Upgrade 与恢复语义
 
-升级器对每个 Agent 目标执行：
+升级器始终先发布 `~/.agents/skills` canonical 集合。固定兼容注册表中被分类为
+universal 的 Agent 不再保留 Agent 私有副本；检测到的
+非 universal Agent（如 Claude、OpenClaw、Hermes、Windsurf）使用指向 canonical
+的目录链接：npm 与 PowerShell 安装器在 Windows 上创建 junction，`dws upgrade` /
+`dws skill setup` 创建符号链接（`os.Symlink`）。链接不可用时回退为内容完整的
+直接复制，包括未开启开发者模式、因而无法创建符号链接的 Windows。
+自定义 `CODEX_HOME`、`CLAUDE_CONFIG_DIR`、`HERMES_HOME`、`AUTOHAND_HOME`、
+`GROK_HOME`、`VIBE_HOME`、`XDG_CONFIG_HOME` 与 OpenClaw 历史目录 `.clawdbot`、
+`.moltbot` 必须按 Agent 实际优先级解析。
 
-- 先探测具体 Agent home；只在没有任何具体 Agent 时使用 `~/.agents/skills` 通用 fallback；
-- 具体 Agent 安装成功后，将 `~/.agents/skills` 中旧的 DWS 受管副本可恢复地迁入备份，避免 Codex 等同时扫描两个根目录时重复发现同名 Skill；
+Agent 兼容矩阵以 `vercel-labs/skills` 的 `agents.ts` 与 `installer.ts`（基准提交
+`c6f69c6`）为契约：76 个 ID 必须完整登记，其中 19 个 universal、57 个
+non-universal。`eve`、`promptscript` 没有全局目录，因此全局安装时跳过；多个 Agent
+解析到同一个 XDG 目录时按最终绝对路径去重（Windows 大小写不敏感）。DWS 额外支持
+Qoderwork（按 non-universal Agent 建立兼容链接）；旧版使用的 `.github/skills`、
+`.amp/skills`、`.cline/skills` 与
+`.windsurf/skills` 仅作为可恢复迁移清理目标，不计入上游 Agent 枚举。
+对 universal Agent，上游 installer 的 global 模式明确选择 canonical 并跳过
+Agent 私有 global 目录；注册表中的 `globalSkillsDir` 仍用于识别和退役历史 native
+路径，不作为 universal symlink 模式的发布目标。
 
 1. 只读计算对面布局、过期受管 Skill 和同名官方 Skill；
 2. 在目标文件系统的 staging 中复制完整新集合；
 3. staging 全部成功后，才将旧集合移入备份目录；
 4. 逐项发布 staging；任一发布失败时删除已发布的新目录，并逆序恢复该目标的全部旧目录；
 5. 仅在没有目标失败且至少一个目标成功时更新状态快照。
+
+旧集合可能位于外部卷或自定义 Agent 根，而备份固定写入
+`~/.dws/skill-backups`。因此备份与反向恢复统一采用 rename-first：同卷直接原子
+rename；遇到跨文件系统错误时，在目标所在文件系统创建临时 staging，词法复制并
+保留目录/文件权限、普通文件、符号链接及 dangling symlink，校验路径类型、目录项、
+文件大小与 SHA256、链接目标后，再将 staging 原子 rename 为正式目标。正式目标
+再次校验成功后才删除源路径。复制、校验或发布失败时保留源并清理 staging；源删除
+失败时允许源与正式目标同时存在，但必须返回明确错误，不能报告成功。
 
 Go upgrade 当前提供 **单 Agent 目标级事务恢复**：复制失败发生在旧目录移动前；
 备份中途失败会恢复此前已移动的目录；发布中途失败会恢复该目标的完整旧集合。不同
@@ -159,10 +183,30 @@ Agent 目标仍彼此独立，一个目标失败不会回滚此前已经成功�
 ## 9. 备份合同
 
 - 路径：`~/.dws/skill-backups/<UTC 时间戳>/...`；
-- 主要操作：同一文件系统内使用 rename 移动；
+- 主要操作：同一文件系统内使用 rename 移动；跨文件系统使用目标卷 staging 的
+  copy → verify → publish → remove 回退；
 - 失败语义：备份失败时原目录保持不变，目标安装失败；
+- 恢复语义：反向恢复使用相同回退；若删除备份源失败，原路径和备份可同时存在，
+  但恢复必须失败并明确提示两份均被保留；
 - 可见性：计划和执行日志显示原路径与备份路径；
 - 保留策略：自动修剪，仅保留最近 5 批。
+
+跨卷回退只有 staging → 正式目标的发布 rename 是原子的，整次迁移不是跨文件系统
+原子事务；该边界由“发布前不删源、发布后再次校验、删除失败保留两份”补偿。Shell
+入口继续使用系统 `mv` 的跨文件系统复制/删除能力；Go、npm 与 PowerShell 显式实现
+上述验证和失败合同。
+
+原子 no-replace 发布（Linux `RENAME_NOREPLACE`、Darwin `RENAME_EXCL`）依赖底层文件
+系统支持：`rename(2)` 只列出 ext4、btrfs、tmpfs 与 cifs，因此 NFS、FUSE 与
+overlayfs 家目录会以 `EINVAL` 拒绝该 flag。这些文件系统不得让安装整体失败，而是降级
+为原子占位发布：目录目标用 `mkdir` 认领（已占用即 `EEXIST`，认领期间目标始终被本事务
+持有，源子项逐个移入认领目录，最终以 rename 覆盖仅属于本事务的空认领或直接移入）；
+普通文件目标用硬链接占位（同样以 `EEXIST` 拒绝已占用路径）后删除源。任何一步失败都会
+回迁已移动的子项并只撤销本事务的占位，被并发创建的对象（文件、符号链接或目录）既不会
+被覆盖，也不会被链接进内部。逐子项移动路径不是全量原子可见（降级文件系统上的可接受
+边界），但不覆盖契约在所有平台保持不变。Windows `MoveFile` 本身即拒绝已存在的目标，
+无需降级。npm 与 Shell 安装面遵循同一占位模型：目录用 `mkdir`/子项移动，链接直接在
+目标路径创建（symlink(2) 原子拒绝已占用路径）。
 
 备份是安装安全机制，不等于独立 rollback 产品。需要切回 mono 时重新运行
 `dws skill setup --mode mono`。
@@ -192,6 +236,7 @@ setup 在未显式指定 `--source` 时的本地回退缓存。
 | `scripts/install.ps1` | multi | 任一检测到的目标失败则脚本非零 |
 | `scripts/install-skills.sh` | multi | 任一检测到的目标失败则脚本非零 |
 | npm `install.js` | multi | 任一检测到的目标失败则 postinstall 失败 |
+| `scripts/install-event.sh` / `install-devapp.*` | 产品 multi 子集 | 同样使用 canonical 与 Agent 兼容层 |
 
 Homebrew 不直接向 Agent home 铺设 Skill；安装 CLI 后由 setup 执行相同流程。
 
@@ -209,6 +254,12 @@ Homebrew 不直接向 Agent home 铺设 Skill；安装 CLI 后由 setup 执行�
 - 复制失败不留下 Agent 可见的残缺官方目录；
 - 普通 upgrade 恢复被删除的预制 Skill，并安装新增官方 Skill；
 - Windows、macOS、Linux 的路径和覆盖率门禁；
+- symlinked parent、npm/PowerShell 的 Windows junction、`dws upgrade` /
+  `dws skill setup` 的符号链接、链接失败复制回退与 broken link 修复；
+- Claude/Codex/Hermes 自定义根目录及 OpenClaw 历史目录优先级；
+- `CLAUDE_CONFIG_DIR`、`HERMES_HOME`、`XDG_CONFIG_HOME` 等自定义根跨文件系统时的
+  正向备份、反向恢复、普通链接及 dangling symlink 词法保留；
+- copy、verify、publish、remove 各阶段故障，以及非跨设备权限错误不得进入复制回退；
 - npm、Shell、PowerShell 与包管理器安装冒烟。
 
 ## 13. 后续演进
