@@ -139,8 +139,8 @@ func assertCoverageGoTestsAreVerbose(t *testing.T, name, job string) {
 			t.Errorf("%s coverage command can exceed the runner quiet window without -v: %q", name, command)
 		}
 	}
-	if commandCount == 0 && !strings.Contains(job, "run-full-coverage.sh") {
-		t.Errorf("%s has neither a verbose go test command nor the partitioned full-coverage runner", name)
+	if commandCount == 0 {
+		t.Errorf("%s has no go test coverage command", name)
 	}
 }
 
@@ -202,15 +202,12 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 	for _, want := range []string{
 		"needs.lint.outputs.full_suite == 'true'",
 		"fail-fast: false",
-		"          - app-schema",
-		"          - app-s-z-example-fuzz",
+		"          - app",
 		"          - cli",
 		"          - generators",
 		"          - helpers",
 		"          - remaining",
 		`./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD"`,
-		`./scripts/ci/run-app-race-tests.sh coverage`,
-		`"${COVERAGE_SHARD#app-}"`,
 		"go test -count=1 -p 1",
 		`-coverprofile="coverage-shard-$COVERAGE_SHARD.txt"`,
 		"-covermode=atomic",
@@ -235,8 +232,6 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"if: steps.baseline-cache.outputs.cache-hit != 'true'",
 		"cp coverage-cache.txt coverage-base.txt",
 		"cp coverage-base.txt coverage-cache.txt",
-		`"$GITHUB_WORKSPACE/scripts/ci/run-full-coverage.sh"`,
-		`--root "$base_worktree"`,
 	} {
 		if !strings.Contains(baselineJob, want) {
 			t.Errorf("coverage-baseline missing cache contract %q", want)
@@ -282,7 +277,8 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		"id: metadata-current-cache",
 		"id: metadata-source-cache",
 		"key: dws-coverage-full-v2-${{ env.COVERAGE_SOURCE_REF }}-go${{ steps.setup-go-metadata.outputs.go-version }}",
-		"./scripts/ci/run-full-coverage.sh --output coverage-cache.txt",
+		"go test -count=1 -p 1",
+		"./ ./cmd/... ./internal/... ./skills/...",
 		"key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go-metadata.outputs.go-version }}",
 		"id: metadata-target-cache-verification",
 		"lookup-only: true",
@@ -309,10 +305,7 @@ func TestCoverageWorkflowShardsAndBaselineCache(t *testing.T) {
 		`"main metadata cache:$MAIN_METADATA_RESULT:$main_metadata_expected"`,
 		"pattern: coverage-current-*",
 		"merge-multiple: true",
-		`app_partitions="$(./scripts/ci/run-app-race-tests.sh list-partitions)"`,
-		"for partition in $app_partitions; do",
-		`shards="$shards app-$partition"`,
-		"for shard in $shards cli generators helpers remaining; do",
+		"for shard in app cli generators helpers remaining; do",
 		"test ! -f coverage.txt",
 		`test "$(head -n 1 "$profile")" = "mode: atomic"`,
 		"github.event_name == 'push'",
@@ -388,7 +381,8 @@ func TestFormulaCoverageBaselinePromotionContract(t *testing.T) {
 		"id: target-cache",
 		"id: parent-cache",
 		"key: dws-coverage-full-v2-${{ steps.validate-target.outputs.parent_sha }}-go${{ steps.setup-go.outputs.go-version }}",
-		"./scripts/ci/run-full-coverage.sh --output coverage-cache.txt",
+		"go test -count=1 -p 1",
+		"./ ./cmd/... ./internal/... ./skills/...",
 		"key: dws-coverage-full-v2-${{ steps.validate-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}",
 		"lookup-only: true",
 		"fail-on-cache-miss: true",
@@ -738,7 +732,8 @@ func TestCoverageBaselineRepairContract(t *testing.T) {
 		"id: target-cache",
 		"actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
 		"key: dws-coverage-full-v2-${{ steps.resolve-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}",
-		"./scripts/ci/run-full-coverage.sh --output coverage-cache.txt",
+		"go test -count=1 -p 1",
+		"./ ./cmd/... ./internal/... ./skills/...",
 		"actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830",
 		"id: target-cache-verification",
 		"lookup-only: true",

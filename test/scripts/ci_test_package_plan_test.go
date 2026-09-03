@@ -104,120 +104,13 @@ func TestCIAppRacePartitionsCoverTopLevelTestsExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestCIAppCoverageModeUsesOneNonRacePartition(t *testing.T) {
-	root := testPackagePlanRoot(t)
-	fakeBin := t.TempDir()
-	writeFakeCoverageGo(t, fakeBin)
-	argsLog := filepath.Join(t.TempDir(), "go-args.log")
-	profile := filepath.Join(t.TempDir(), "coverage.txt")
-
-	script := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
-	cmd := exec.Command(
-		"sh",
-		script,
-		"coverage",
-		"example.com/project/internal/app",
-		"a-b",
-		profile,
-	)
-	cmd.Dir = root
-	cmd.Env = []string{
-		"PATH=" + fakeBin + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"TMPDIR=" + t.TempDir(),
-		"DWS_TEST_ROOT=" + root,
-		"GO_ARGS_LOG=" + argsLog,
-	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s coverage failed: %v\n%s", script, err, output)
-	}
-
-	args, err := os.ReadFile(argsLog)
-	if err != nil {
-		t.Fatalf("read fake go args: %v", err)
-	}
-	command := string(args)
-	for _, want := range []string{
-		"-v",
-		"-run ^Test[A-B]",
-		"-skip ^Test.*Schema",
-		"-coverprofile=" + profile,
-		"-covermode=atomic",
-	} {
-		if !strings.Contains(command, want) {
-			t.Errorf("coverage command %q missing %q", command, want)
-		}
-	}
-	if strings.Contains(command, "-race") {
-		t.Errorf("coverage command must not enable race instrumentation: %q", command)
-	}
-}
-
-func TestCIFullCoverageRunnerUsesBoundedAppProcesses(t *testing.T) {
-	root := testPackagePlanRoot(t)
-	targetRoot := t.TempDir()
-	fakeBin := t.TempDir()
-	writeFakeCoverageGo(t, fakeBin)
-	argsLog := filepath.Join(t.TempDir(), "go-args.log")
-	profile := filepath.Join(t.TempDir(), "coverage.txt")
-
-	partitionScript := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
-	partitionCmd := exec.Command("sh", partitionScript, "list-partitions")
-	partitionCmd.Dir = root
-	partitionOutput, err := partitionCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("list app partitions: %v\n%s", err, partitionOutput)
-	}
-	partitions := strings.Fields(string(partitionOutput))
-
-	script := filepath.Join(root, "scripts", "ci", "run-full-coverage.sh")
-	cmd := exec.Command("sh", script, "--root", targetRoot, "--output", profile)
-	cmd.Dir = root
-	cmd.Env = []string{
-		"PATH=" + fakeBin + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"TMPDIR=" + t.TempDir(),
-		"RUNNER_TEMP=" + t.TempDir(),
-		"GO_ARGS_LOG=" + argsLog,
-	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("%s failed: %v\n%s", script, err, output)
-	}
-
-	args, err := os.ReadFile(argsLog)
-	if err != nil {
-		t.Fatalf("read fake go args: %v", err)
-	}
-	commands := strings.FieldsFunc(strings.TrimSpace(string(args)), func(r rune) bool { return r == '\n' })
-	wantCommands := len(partitions) + 4
-	if len(commands) != wantCommands {
-		t.Fatalf("coverage test process count = %d, want %d; commands:\n%s", len(commands), wantCommands, args)
-	}
-	for _, command := range commands {
-		if !strings.Contains(command, "-v") || strings.Contains(command, "-race") {
-			t.Errorf("coverage command must be verbose and non-race: %q", command)
-		}
-	}
-
-	profileData, err := os.ReadFile(profile)
-	if err != nil {
-		t.Fatalf("read merged profile: %v", err)
-	}
-	if got := strings.Count(string(profileData), "mode: atomic"); got != 1 {
-		t.Errorf("merged profile mode headers = %d, want 1", got)
-	}
-	if got := strings.Count(string(profileData), "example.com/project/file.go:"); got != wantCommands {
-		t.Errorf("merged profile blocks = %d, want %d", got, wantCommands)
-	}
-}
-
-// TestCIAppPartitionMatricesMatchHelper pins the workflow's app test and
-// coverage shards to the partition set the helper actually runs. The
-// partitions are separate CI jobs, so the helper's own "covered exactly once"
-// check cannot prove the whole package ran: a partition the helper knows about
-// but no matrix shard dispatches would silently stop running while every job
-// stays green. Both directions are asserted so a stale matrix shard fails too.
-func TestCIAppPartitionMatricesMatchHelper(t *testing.T) {
+// TestCIAppRacePartitionMatrixMatchesHelper pins the workflow's app partition
+// shards to the partition set the helper actually runs. The partitions are
+// separate CI jobs now, so the helper's own "covered exactly once" check can no
+// longer prove the whole package ran: a partition the helper knows about but no
+// matrix shard dispatches would silently stop running while every job stays
+// green. Both directions are asserted so a stale matrix shard fails too.
+func TestCIAppRacePartitionMatrixMatchesHelper(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	script := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
 	cmd := exec.Command("sh", script, "list-partitions")
@@ -244,7 +137,6 @@ func TestCIAppPartitionMatricesMatchHelper(t *testing.T) {
 	}{
 		{"test-focused", "\n  test-focused:\n", "\n  test-race:\n"},
 		{"test-race", "\n  test-race:\n", "\n  test-release-scripts:\n"},
-		{"coverage-current-full", "\n  coverage-current-full:\n", "\n  coverage-supporting:\n"},
 	} {
 		start := strings.Index(admission, job.startMark)
 		end := strings.Index(admission, job.endMark)
@@ -342,85 +234,4 @@ func containsPackageSuffix(packages []string, suffix string) bool {
 		}
 	}
 	return false
-}
-
-func writeFakeCoverageGo(t *testing.T, binDir string) {
-	t.Helper()
-
-	const fakeGo = `#!/bin/sh
-set -eu
-
-case "${1:-}" in
-  list)
-    shift
-    if [ "${1:-}" = "-m" ]; then
-      printf '%s\n' 'example.com/project'
-      exit 0
-    fi
-    case "$*" in
-      './internal/app/...') printf '%s\n' 'example.com/project/internal/app' ;;
-      './internal/cli/...') printf '%s\n' 'example.com/project/internal/cli' ;;
-      './internal/generator/...') printf '%s\n' 'example.com/project/internal/generator' ;;
-      './internal/helpers/...') printf '%s\n' 'example.com/project/internal/helpers' ;;
-      './ ./cmd/... ./internal/... ./skills/... ./scripts/build/runtime-payload')
-        printf '%s\n' \
-          'example.com/project' \
-          'example.com/project/cmd' \
-          'example.com/project/internal/app' \
-          'example.com/project/internal/cli' \
-          'example.com/project/internal/generator' \
-          'example.com/project/internal/helpers' \
-          'example.com/project/skills' \
-          'example.com/project/scripts/build/runtime-payload'
-        ;;
-      *)
-        printf 'unexpected fake go list arguments: %s\n' "$*" >&2
-        exit 2
-        ;;
-    esac
-    ;;
-  test)
-    shift
-    list=false
-    profile=
-    for argument in "$@"; do
-      case "$argument" in
-        -list) list=true ;;
-        -coverprofile=*) profile="${argument#-coverprofile=}" ;;
-      esac
-    done
-    if [ "$list" = true ]; then
-      printf '%s\n' \
-        TestSchemaContract \
-        TestAlpha \
-        TestCrossPlatformCoverageAlpha \
-        TestCrossPlatformCoverageMike \
-        TestCrossPlatformCoveragePapa \
-        TestCrossPlatformCoverageZulu \
-        TestCommand \
-        TestDelta \
-        TestZulu \
-        'ok example.com/project/internal/app'
-      exit 0
-    fi
-    [ -n "$profile" ]
-    printf '%s\n' "$*" >> "${GO_ARGS_LOG:?}"
-    printf '%s\n' \
-      'mode: atomic' \
-      'example.com/project/file.go:1.1,1.2 1 1' > "$profile"
-    ;;
-  tool)
-    [ "${2:-}" = cover ]
-    printf '%s\n' 'total: (statements) 100.0%'
-    ;;
-  *)
-    printf 'unexpected fake go command: %s\n' "${1:-}" >&2
-    exit 2
-    ;;
-esac
-`
-	fakeGoPath := filepath.Join(binDir, "go")
-	if err := os.WriteFile(fakeGoPath, []byte(fakeGo), 0o755); err != nil {
-		t.Fatalf("write fake go: %v", err)
-	}
 }

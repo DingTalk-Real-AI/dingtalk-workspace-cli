@@ -1463,6 +1463,8 @@ jobs:
             mapfile -t changed_packages <<< "$changed_output"
             mapfile -t impacted_packages <<< "$impacted_output"
             coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
+            # internal/app can run past the runner's quiet-process window.
+            # Keep verbose output enabled without changing the coverage profile.
             go test -count=1 -p 1 \
               -v \
               -coverpkg="$coverpkg" \
@@ -1491,15 +1493,7 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - app-schema
-          - app-a-b
-          - app-c-a-l
-          - app-c-m-o
-          - app-c-p-r
-          - app-c-s-z
-          - app-c-other
-          - app-d-r
-          - app-s-z-example-fuzz
+          - app
           - cli
           - generators
           - helpers
@@ -1527,10 +1521,10 @@ jobs:
       - name: Build
         run: make build
 
-      # Non-app shards keep -p 1 inside one instrumented process group. The app
-      # package uses the same bounded test partitions as the race suite so each
-      # process releases its command registries before the runner is reclaimed.
-      # Package scope and app partition completeness are pinned independently.
+      # Each shard keeps -p 1 so the authoritative measurement stays serial
+      # inside one instrumented process group; shards run on isolated runners,
+      # and scripts/ci/test-packages.sh verify proves the shard union equals
+      # the previous single full-suite package set exactly once.
       - name: Run current shard tests with coverage
         shell: bash
         env:
@@ -1538,29 +1532,15 @@ jobs:
           COVERAGE_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          case "$COVERAGE_SHARD" in
-            app-*)
-              package_output="$(./scripts/ci/test-packages.sh list-coverage app)"
-              test -n "$package_output"
-              mapfile -t packages <<< "$package_output"
-              test "${#packages[@]}" -eq 1
-              ./scripts/ci/run-app-race-tests.sh coverage \
-                "${packages[0]}" \
-                "${COVERAGE_SHARD#app-}" \
-                "$GITHUB_WORKSPACE/coverage-shard-$COVERAGE_SHARD.txt"
-              ;;
-            *)
-              package_output="$(./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD")"
-              test -n "$package_output"
-              mapfile -t packages <<< "$package_output"
-              test "${#packages[@]}" -gt 0
-              go test -count=1 -p 1 \
-                -v \
-                -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
-                -covermode=atomic \
-                "${packages[@]}"
-              ;;
-          esac
+          package_output="$(./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD")"
+          test -n "$package_output"
+          mapfile -t packages <<< "$package_output"
+          test "${#packages[@]}" -gt 0
+          go test -count=1 -p 1 \
+            -v \
+            -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
+            -covermode=atomic \
+            "${packages[@]}"
           go tool cover -func="coverage-shard-$COVERAGE_SHARD.txt" | tail -n 1
 
       - name: Upload current shard coverage profile
@@ -1716,9 +1696,12 @@ jobs:
           (
             cd "$base_worktree"
             if [ "$FULL_SUITE" = true ]; then
-              "$GITHUB_WORKSPACE/scripts/ci/run-full-coverage.sh" \
-                --root "$base_worktree" \
-                --output "$GITHUB_WORKSPACE/coverage-base.txt"
+              go test -count=1 \
+                -p 1 \
+                -v \
+                -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
+                -covermode=atomic \
+                ./ ./cmd/... ./internal/... ./skills/...
             elif [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
               printf 'mode: atomic\n' > "$GITHUB_WORKSPACE/coverage-base.txt"
             else
@@ -1864,7 +1847,11 @@ jobs:
           DWS_PACKAGE_VERSION: 0.0.0-test
         run: |
           set -euo pipefail
-          ./scripts/ci/run-full-coverage.sh --output coverage-cache.txt
+          go test -count=1 -p 1 \
+            -v \
+            -coverprofile=coverage-cache.txt \
+            -covermode=atomic \
+            ./ ./cmd/... ./internal/... ./skills/...
           test -s coverage-cache.txt
           test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
 
@@ -2029,9 +2016,8 @@ jobs:
           name: coverage-baseline-profile
           path: .
 
-      # Non-app shards cover disjoint package sets. App test partitions cover
-      # the same package in short processes, so duplicate atomic blocks are
-      # retained and merged by Go's coverage parser and the repository gate.
+      # Shard profiles cover disjoint package sets, so their block-level
+      # concatenation is the same candidate profile one serial run produced.
       # Every expected shard must be present; a missing shard would silently
       # shrink the scope-matched overall comparison.
       - name: Assemble full-suite coverage profile
@@ -2040,19 +2026,13 @@ jobs:
         run: |
           set -euo pipefail
           test ! -f coverage.txt
-          app_partitions="$(./scripts/ci/run-app-race-tests.sh list-partitions)"
-          test -n "$app_partitions"
-          shards=
-          for partition in $app_partitions; do
-            shards="$shards app-$partition"
-          done
-          for shard in $shards cli generators helpers remaining; do
+          for shard in app cli generators helpers remaining; do
             profile="coverage-shard-$shard.txt"
             test -f "$profile"
             test "$(head -n 1 "$profile")" = "mode: atomic"
           done
           printf 'mode: atomic\n' > coverage.txt
-          for shard in $shards cli generators helpers remaining; do
+          for shard in app cli generators helpers remaining; do
             tail -n +2 "coverage-shard-$shard.txt" >> coverage.txt
           done
 

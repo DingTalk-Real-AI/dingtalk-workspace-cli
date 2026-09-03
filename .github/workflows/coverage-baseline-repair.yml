@@ -529,7 +529,10 @@ jobs:
           DWS_PACKAGE_VERSION: 0.0.0-test
         run: |
           set -euo pipefail
-          ./scripts/ci/run-full-coverage.sh --output coverage-cache.txt
+          go test -count=1 -p 1 \
+            -coverprofile=coverage-cache.txt \
+            -covermode=atomic \
+            ./ ./cmd/... ./internal/... ./skills/...
           test -s coverage-cache.txt
           test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
 
