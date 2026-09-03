@@ -1,5 +1,6 @@
 __pycache__/
 dist/
+.dws-runtime/
 .tmp-bin/
 .worktrees/
 .pytest_cache/
@@ -7,12 +8,14 @@ dist/
 var/
 .DS_Store
 .agents/
+.app_assistant/
 /.idea/
 /CLAUDE.md
 /.claude/
 /.idea/vcs.xml
 /.idea/.gitignore
 dws
+artifacts/screenshots/
 test/cli/testdata/
 tmp/
 test/cli_compat/testdata/

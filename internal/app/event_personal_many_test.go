@@ -734,7 +734,7 @@ func TestCrossPlatformCoverageRunPersonalEventConsumeManySetupAndCleanupEdges(t 
 	})
 }
 
-func TestStopPersonalConsumersUsesTargetedRPCAndLegacyFallback(t *testing.T) {
+func TestCrossPlatformCoverageStopPersonalConsumersUsesTargetedRPCAndLegacyFallback(t *testing.T) {
 	oldStop := personalStopConsumers
 	oldQuery := personalQueryStatus
 	oldFind := personalFindProcess
@@ -745,6 +745,18 @@ func TestStopPersonalConsumersUsesTargetedRPCAndLegacyFallback(t *testing.T) {
 		personalFindProcess = oldFind
 		personalSignalProcess = oldSignal
 	}()
+
+	personalStopConsumers = func(string, []string) (transport.ConsumerStopResp, error) {
+		t.Fatal("targeted stop called without a subscribe_id")
+		return transport.ConsumerStopResp{}, nil
+	}
+	personalQueryStatus = func(string) (*transport.StatusResp, error) {
+		t.Fatal("legacy status queried without a subscribe_id")
+		return nil, nil
+	}
+	if err := stopPersonalConsumers(io.Discard, "endpoint", []string{"", "  "}); err != nil {
+		t.Fatalf("empty target stop = %v", err)
+	}
 
 	personalStopConsumers = func(string, []string) (transport.ConsumerStopResp, error) {
 		return transport.ConsumerStopResp{Stopped: []string{"sub-a"}}, nil

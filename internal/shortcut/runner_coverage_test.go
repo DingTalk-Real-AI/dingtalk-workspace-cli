@@ -14,6 +14,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -123,8 +124,15 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 	t.Cleanup(func() { helpers.InitDeps(old) })
 	helpers.InitDeps(caller)
 	rt := &RuntimeContext{}
-	if _, err := rt.callMCPWriteData("aitable", "update_records", nil); err == nil || !strings.Contains(err.Error(), "解析") {
-		t.Fatalf("invalid write JSON = %v", err)
+	if _, err := rt.callMCPWriteData("aitable", "update_records", nil); err == nil {
+		t.Fatal("invalid write JSON was accepted")
+	} else {
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "malformed_tool_response" ||
+			typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+			!typed.RetryableSet || typed.Retryable || typed.Cause == nil {
+			t.Fatalf("invalid write JSON error = %#v", err)
+		}
 	}
 	if caller.args == nil {
 		t.Fatal("nil write parameters were not normalized")
@@ -139,7 +147,9 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 		t.Fatal("strict empty acknowledgement was accepted")
 	} else {
 		var typed *apperrors.Error
-		if !errors.As(err, &typed) || typed.Reason != "empty_tool_response" || !typed.RetryableSet || typed.Retryable {
+		if !errors.As(err, &typed) || typed.Reason != "empty_tool_response" ||
+			typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+			!typed.RetryableSet || typed.Retryable {
 			t.Fatalf("strict empty acknowledgement error = %#v", err)
 		}
 	}
@@ -230,4 +240,54 @@ func TestFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
 	if got := devRT.resultForPayload("get_dev_app", map[string]any{"success": true}); got.Outcome() != output.OutcomeSuccess {
 		t.Fatalf("devapp result=%s", got.Outcome())
 	}
+}
+
+func TestCrossPlatformCoverageRuntimeOutputForToolRollouts(t *testing.T) {
+	t.Run("unified", func(t *testing.T) {
+		ctx, _ := output.WithResultStore(context.Background())
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(ctx)
+		output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "devapp", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get_dev_app", map[string]any{"success": true, "result": map[string]any{"unifiedAppId": "app"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("dual validate", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(context.Background())
+		cmd.SetOut(&bytes.Buffer{})
+		output.SetCommandRollout(cmd, output.RolloutDualValidate)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "devapp", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get_dev_app", map[string]any{"success": true, "result": map[string]any{"unifiedAppId": "app"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("dual validate failure", func(t *testing.T) {
+		testseam.Swap(t, &validateShadowResult, func(output.CommandResult) error { return context.Canceled })
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(context.Background())
+		output.SetCommandRollout(cmd, output.RolloutDualValidate)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "devapp", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get_dev_app", map[string]any{"success": true}); !errors.Is(err, context.Canceled) {
+			t.Fatalf("dual validation error=%v", err)
+		}
+	})
+
+	t.Run("legacy", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+get"}
+		cmd.SetContext(context.Background())
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		output.SetCommandRollout(cmd, output.RolloutLegacyOnly)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "+get", Safety: contract.SafetySpec{Effect: "read"}})
+		if err := rt.OutputForTool("get", map[string]any{"id": "item"}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stdout.String(), `"id"`) {
+			t.Fatalf("legacy output=%q", stdout.String())
+		}
+	})
 }

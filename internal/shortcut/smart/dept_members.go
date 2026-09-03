@@ -98,7 +98,10 @@ var DeptMembers = shortcut.Shortcut{
 
 		// Step 2 — defensively pull the matching departments out of the
 		// response and require exactly one, otherwise disambiguate.
-		depts := deptMembersExtractDepts(data)
+		depts, err := strictDeptCandidates(data, "contact/search_dept_by_keyword")
+		if err != nil {
+			return err
+		}
 		switch {
 		case len(depts) == 0:
 			return apperrors.NewValidation(fmt.Sprintf(
@@ -112,9 +115,17 @@ var DeptMembers = shortcut.Shortcut{
 
 		// Step 3 — list that department's direct members.
 		// get_dept_members_by_deptId expects deptIds as a string list.
-		return rt.CallMCP("get_dept_members_by_deptId", map[string]any{
+		data, err = rt.CallMCPData("contact", "get_dept_members_by_deptId", map[string]any{
 			"deptIds": []string{strconv.FormatInt(depts[0].id, 10)},
 		})
+		if err != nil {
+			return err
+		}
+		members, err := strictContactMembers(data, "contact/get_dept_members_by_deptId")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": len(members), "members": members})
 	},
 }
 
@@ -218,5 +229,6 @@ func deptMembersLabels(depts []deptMembersDept) []string {
 }
 
 func init() {
+	finalizeContactSmart(&DeptMembers)
 	shortcut.Register(DeptMembers)
 }

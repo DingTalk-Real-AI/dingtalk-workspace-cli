@@ -347,6 +347,9 @@ func parseRecordQueryPage(text string) (paging.Page, error) {
 	if response == nil {
 		return paging.Page{}, fmt.Errorf("query_records returned null instead of an object")
 	}
+	if explicitEmptyRecordQueryPage(response) {
+		return paging.Page{Records: []any{}}, nil
+	}
 
 	payload := response
 	if rawData, exists := response["data"]; exists {
@@ -391,6 +394,26 @@ func parseRecordQueryPage(text string) (paging.Page, error) {
 		return paging.Page{}, fmt.Errorf("query_records totalCount: %w", err)
 	}
 	return paging.Page{Records: records, NextCursor: nextCursor, TotalCount: totalCount}, nil
+}
+
+// explicitEmptyRecordQueryPage recognizes the service's reviewed zero-match
+// wire shape. Missing records alone is not enough: only a successful envelope
+// with an empty data object and no error is a terminal empty page.
+func explicitEmptyRecordQueryPage(response map[string]any) bool {
+	if response == nil || response["success"] != true || response["status"] != "success" {
+		return false
+	}
+	payload, ok := response["data"].(map[string]any)
+	if !ok || len(payload) != 0 {
+		return false
+	}
+	if rawError, exists := response["error"]; exists && rawError != nil {
+		errorObject, ok := rawError.(map[string]any)
+		if !ok || len(errorObject) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func firstNonEmptyString(values map[string]any, keys ...string) string {
@@ -450,8 +473,12 @@ func recordQueryIncompleteError(result paging.Result, pageLimit int) error {
 		incomplete["totalCount"] = *result.TotalCount
 	}
 
+	retryable := true
 	hint := "retry the command; the structured error details preserve fetched records and the retry cursor"
-	if result.StopReason == paging.StopPageLimit {
+	if result.StopReason == paging.StopCursorCycle {
+		retryable = false
+		hint = "do not retry the same query; preserve the incomplete records and report the upstream cursor cycle"
+	} else if result.StopReason == paging.StopPageLimit {
 		hint = "rerun with --page-limit 0 to require a complete result, or resume from details.cursor"
 	}
 	message := fmt.Sprintf("record pagination incomplete after %d successful page(s) and %d fetched record(s)", result.Pages, len(result.Records))
@@ -461,7 +488,7 @@ func recordQueryIncompleteError(result paging.Result, pageLimit int) error {
 		apperrors.WithOrigin("mcp"),
 		apperrors.WithFailureStage("pagination"),
 		apperrors.WithExecutionStarted(true),
-		apperrors.WithRetryable(true),
+		apperrors.WithRetryable(retryable),
 		apperrors.WithReason("pagination_"+string(result.StopReason)),
 		apperrors.WithHint(hint),
 		apperrors.WithDetails(map[string]any{
@@ -563,6 +590,17 @@ func normalizeFilters(parsed any) any {
 	if !ok {
 		return parsed
 	}
+	if fieldID, hasFieldID := filterMap["fieldId"]; hasFieldID {
+		// MCP shorthand leaf: {fieldId,operator,value} becomes the persisted
+		// view/record leaf shape before any strict structure validation runs.
+		normalized := map[string]any{"operator": filterMap["operator"]}
+		if value, hasValue := filterMap["value"]; hasValue {
+			normalized["operands"] = []any{fieldID, value}
+		} else {
+			normalized["operands"] = []any{fieldID}
+		}
+		return normalized
+	}
 
 	operands, has := filterMap["operands"]
 	if !has {
@@ -580,28 +618,7 @@ func normalizeFilters(parsed any) any {
 			normalized = append(normalized, item)
 			continue
 		}
-		// 检测是否是 MCP 格式（有 fieldId 字段）
-		fieldID, hasFieldID := cond["fieldId"]
-		if hasFieldID {
-			// MCP 格式：{fieldId, operator, value} → {operator, operands:[fieldId, value]}
-			childOp := cond["operator"]
-			value, hasValue := cond["value"]
-			newCond := map[string]any{
-				"operator": childOp,
-			}
-			if hasValue {
-				newCond["operands"] = []any{fieldID, value}
-			} else {
-				// exist/un_exist 没有 value
-				newCond["operands"] = []any{fieldID}
-			}
-			normalized = append(normalized, newCond)
-		} else if _, hasChildOperands := cond["operands"]; hasChildOperands {
-			// 已经是 operands 格式，递归处理嵌套
-			normalized = append(normalized, normalizeFilters(cond))
-		} else {
-			normalized = append(normalized, cond)
-		}
+		normalized = append(normalized, normalizeFilters(cond))
 	}
 
 	return map[string]any{
@@ -708,9 +725,10 @@ func validateAitableArrayDSL(name, raw string) error {
 
 // normalizeViewConfigFilter 将 view config 中的 filter 字段规范化为服务端要求的数组格式。
 // 服务端 POJO 要求 config.filter 为 []FilterRule（JSON array）。
-// 常见错误格式：
-//   - 传了对象 {"operator":"and","operands":[...]} → 自动 wrap 为 [对象]
-//   - 子条件使用 MCP 简写格式 {fieldId,operator,value} → 自动 normalize 为 operands 格式
+// 兼容输入格式：
+//   - 传入单个叶子对象 {"operator":"eq","operands":[...]} → 自动 wrap 为 [对象]
+//   - 叶子条件使用 MCP 简写格式 {fieldId,operator,value} → 自动 normalize 为 operands 格式
+//   - and/or 逻辑组不属于 view filter 契约，由 validateViewConfigFilter 明确拒绝
 func normalizeViewConfigFilter(filterVal any) any {
 	switch v := filterVal.(type) {
 	case []any:
@@ -758,11 +776,11 @@ var knownViewConfigKeys = map[string]bool{
 // 映射到正确的 dws CLI 子命令路径，便于在 normalizeViewConfigBlock 给精准引导。
 // 当用户错把这类 key 塞进 --config 时，CLI 立即提示替代命令而非让 server 静默忽略。
 var viewConfigKeyToAttrSubcmd = map[string]string{
-	"flags":              "dws aitable view lock [--off]（设置/解除锁定）",
-	"frozenColCount":     "dws aitable view update frozen-cols --count N",
-	"cellHeight":         "dws aitable view update row-height --cell-height N",
-	"rowHeightLevel":     "dws aitable view update row-height --cell-height N（请用像素值，不是 level）",
-	"conditionalFormats": "dws aitable view update fill-color-rule --json '[...]'",
+	"flags":              "dws aitable view lock --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID [--off]（设置/解除锁定）",
+	"frozenColCount":     "dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count N",
+	"cellHeight":         "dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height N",
+	"rowHeightLevel":     "dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height N（请用像素值，不是 level）",
+	"conditionalFormats": "dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[...]'",
 }
 
 // normalizeViewConfigBlock 校验 config map 中的 key 合法性并对 filter/sort/group
@@ -799,11 +817,16 @@ func normalizeViewConfigBlock(cfgMap map[string]any) error {
 	if filterVal, hasFilter := cfgMap["filter"]; hasFilter && filterVal != nil {
 		switch filterVal.(type) {
 		case []any, map[string]any:
-			cfgMap["filter"] = normalizeViewConfigFilter(filterVal)
+			normalized := normalizeViewConfigFilter(filterVal)
+			if err := validateViewConfigFilter(normalized); err != nil {
+				return err
+			}
+			cfgMap["filter"] = normalized
 		default:
-			return fmt.Errorf("invalid config.filter: must be a JSON array or object, got %T\n"+
-				"  hint: view config filter 格式为数组: [{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fieldId\",\"value\"]}]}]\n"+
-				"  注意: 与 record query --filters（对象格式）不同，view config filter 外层必须是数组", filterVal)
+			return apperrors.NewValidation(fmt.Sprintf("invalid config.filter: must be a JSON array or object, got %T\n"+
+				"  hint: view config filter 格式为叶子条件数组: [{\"operator\":\"eq\",\"operands\":[\"fieldId\",\"value\"]}]\n"+
+				"  注意: 与 record query --filters（对象格式）不同，view config filter 外层必须是数组", filterVal),
+				apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
 		}
 	}
 	if sortVal, hasSort := cfgMap["sort"]; hasSort && sortVal != nil {
@@ -822,6 +845,61 @@ func normalizeViewConfigBlock(cfgMap map[string]any) error {
 		default:
 			return fmt.Errorf("invalid config.group: must be a JSON array, got %T\n"+
 				"  hint: group 格式: [{\"fieldId\":\"fldXXX\",\"direction\":\"asc|desc\"}]", groupVal)
+		}
+	}
+	return nil
+}
+
+var validViewFilterOperators = map[string]bool{
+	"eq": true, "ne": true, "gt": true, "lt": true, "gte": true, "lte": true,
+	"contain": true, "exclusive": true, "exist": true, "un_exist": true,
+	"any_of": true, "all_of": true, "none_of": true,
+	"date_eq": true, "before": true, "after": true, "not_before": true, "not_after": true,
+}
+
+// validateViewConfigFilter 校验 update_view.config.filter 的专用结构。
+// 它与 record query --filters 不同：外层数组本身表示 AND，每一项必须是叶子条件，
+// 不能再使用 record filter DSL 的 and/or 逻辑组。
+func validateViewConfigFilter(filterVal any) error {
+	filters, ok := filterVal.([]any)
+	if !ok {
+		return apperrors.NewValidation("invalid config.filter: view filter 必须是 JSON 数组",
+			apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+	}
+	invalid := func(format string, args ...any) error {
+		return apperrors.NewValidation(fmt.Sprintf(format, args...),
+			apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+	}
+	for i, item := range filters {
+		filter, ok := item.(map[string]any)
+		if !ok {
+			return invalid("invalid config.filter[%d]: 每项必须是 {operator,operands} 对象", i)
+		}
+		op, ok := filter["operator"].(string)
+		op = strings.TrimSpace(op)
+		if !ok || op == "" {
+			return invalid("invalid config.filter[%d].operator: 必须使用非空字符串", i)
+		}
+		if op == "and" || op == "or" {
+			return invalid("invalid config.filter[%d].operator %q: view filter 不接受 and/or 包装；外层数组已表示 AND，请直接传叶子条件，例如 [{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]", i, op)
+		}
+		if !validViewFilterOperators[op] {
+			return invalid("invalid config.filter[%d].operator %q: view filter 不支持该操作符；did you mean %q", i, op, suggestOperator(op))
+		}
+		operands, ok := filter["operands"].([]any)
+		if !ok {
+			return invalid("invalid config.filter[%d].operands: 必须是 [fieldId,value] 数组", i)
+		}
+		expected := 2
+		if op == "exist" || op == "un_exist" {
+			expected = 1
+		}
+		if len(operands) != expected {
+			return invalid("invalid config.filter[%d].operands: operator %q 需要 %d 个值，got %d", i, op, expected, len(operands))
+		}
+		fieldID, ok := operands[0].(string)
+		if !ok || strings.TrimSpace(fieldID) == "" {
+			return invalid("invalid config.filter[%d].operands[0]: 必须是非空 fieldId", i)
 		}
 	}
 	return nil
@@ -852,7 +930,7 @@ var unsupportedFilterOperators = map[string]string{
 // operatorAliases 常见错误拼写到正确操作符的映射
 var operatorAliases = map[string]string{
 	"equal": "eq", "equals": "eq", "is": "eq", "==": "eq",
-	"not_equal": "ne", "not_equals": "ne", "is_not": "ne", "!=": "ne",
+	"neq": "ne", "not_eq": "ne", "not_equal": "ne", "not_equals": "ne", "is_not": "ne", "!=": "ne",
 	"like": "contain", "contains": "contain", "include": "contain",
 	"greater_than": "gt", "less_than": "lt",
 	"greater_than_or_equal": "gte", "less_than_or_equal": "lte",
@@ -1563,6 +1641,12 @@ func newAitableCommand() *cobra.Command {
 	// products.aitable). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "aitable",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-aitable"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI 表格深度指南", "dingtalk-aitable", "references/aitable.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
 			UseWhen: []string{
@@ -1573,7 +1657,7 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
 		Long: `管理钉钉 AI 表格：Base 管理、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
@@ -1597,11 +1681,11 @@ func newAitableCommand() *cobra.Command {
   dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理`,
 		RunE:                       groupRunE,
 		SuggestionsMinimumDistance: 2, // Enable "Did you mean ...?" for typos
-	}
+	})
 
 	// ── base: Base 管理 ─────────────────────────────────────────
 
-	baseCmd := &cobra.Command{Use: "base", Short: "Base 管理", RunE: groupRunE}
+	baseCmd := newGroupCommand(&cobra.Command{Use: "base", Short: "Base 管理", RunE: groupRunE})
 
 	baseGetPrimaryDocIdCmd := &cobra.Command{
 		Use:   "get-primary-doc-id",
@@ -1918,13 +2002,12 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 
 权限要求：需要对源 Base 有"阅读"权限，且对目标文件夹有"编辑"权限。
 
-注意：--target-folder-id 参数如果传入的是文档/文件夹 URL（如 https://alidocs.dingtalk.com/i/nodes/xxx），
-需要先调用文档的 dws 命令（如 dws doc info --node URL）获取 dentryUuid，再将 dentryUuid 传入本命令。
-MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错。`,
-		Example: `  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_ID
-  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_ID --only-struct
+注意：--target-folder-id 不接受文档/文件夹 URL。先执行
+dws doc info --node <URL> --format json，读取返回的 nodeId 后传入本命令。`,
+		Example: `  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_NODE_ID
+  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_NODE_ID --only-struct
   # 查询 baseId: dws aitable base list
-  # 查询 folderId: dws doc list --folder PARENT_FOLDER_ID`,
+  # 从文件夹 URL 获取 nodeId: dws doc info --node <URL> --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID := mustGetFlag(cmd, "base-id")
 			targetFolderID := mustGetFlag(cmd, "target-folder-id")
@@ -1953,7 +2036,7 @@ MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错
 				AgentSummary: "复制整个 Base 到目标文件夹（可仅结构）。",
 				UseWhen:      []string{"需要复制 AI 表格到另一文件夹，可选 --only-struct 时"},
 				AvoidWhen:    []string{"新建空白 Base 用 base create"},
-				Examples:     []string{"dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_ID>"},
+				Examples:     []string{"dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_NODE_ID>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "only-struct", Property: "onlyCopyMeta"},
@@ -1963,7 +2046,7 @@ MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错
 
 	// ── table: 数据表管理 ───────────────────────────────────────
 
-	tableCmd := &cobra.Command{Use: "table", Short: "数据表管理", RunE: groupRunE}
+	tableCmd := newGroupCommand(&cobra.Command{Use: "table", Short: "数据表管理", RunE: groupRunE})
 
 	tableGetCmd := &cobra.Command{
 		Use:   "get",
@@ -2234,7 +2317,7 @@ config 结构参考：
 
 	// ── field: 字段管理 ─────────────────────────────────────────
 
-	fieldCmd := &cobra.Command{Use: "field", Short: "字段管理", RunE: groupRunE}
+	fieldCmd := newGroupCommand(&cobra.Command{Use: "field", Short: "字段管理", RunE: groupRunE})
 
 	fieldGetCmd := &cobra.Command{
 		Use:   "get",
@@ -2593,7 +2676,7 @@ newFieldName、config、aiConfig 至少传入一项。
 
 	// ── record: 记录管理 ────────────────────────────────────────
 
-	recordCmd := &cobra.Command{Use: "record", Short: "记录管理", RunE: groupRunE}
+	recordCmd := newGroupCommand(&cobra.Command{Use: "record", Short: "记录管理", RunE: groupRunE})
 
 	recordQueryCmd := &cobra.Command{
 		Use:   "query",
@@ -3575,7 +3658,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 
 	// ── template: 模板搜索 ──────────────────────────────────────
 
-	templateCmd := &cobra.Command{Use: "template", Short: "模板搜索", RunE: groupRunE}
+	templateCmd := newGroupCommand(&cobra.Command{Use: "template", Short: "模板搜索", RunE: groupRunE})
 
 	templateSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -3624,7 +3707,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 
 	// ── attachment: 附件管理 ──────────────────────────────────────
 
-	attachmentCmd := &cobra.Command{Use: "attachment", Short: "附件管理", RunE: groupRunE}
+	attachmentCmd := newGroupCommand(&cobra.Command{Use: "attachment", Short: "附件管理", RunE: groupRunE})
 
 	attachmentUploadCmd := &cobra.Command{
 		Use:   "upload",
@@ -3701,7 +3784,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 
 	// ── view: 视图管理 ───────────────────────────────────────────
 
-	viewCmd := &cobra.Command{Use: "view", Short: "视图管理", RunE: groupRunE}
+	viewCmd := newGroupCommand(&cobra.Command{Use: "view", Short: "视图管理", RunE: groupRunE})
 
 	viewGetCmd := &cobra.Command{
 		Use:   "get",
@@ -3732,6 +3815,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			return callAitableTool("get_views", toolArgs)
 		},
 	}
+	newHybridGroupCommand(viewGetCmd)
 
 	// ─── view get <attr> 子命令：按属性投影 view 响应 ──────────────
 	// card/timebar/aggregate 需要 viewType 校验；filter/sort/group/visible-fields/field-widths 不需要。
@@ -4125,6 +4209,7 @@ fieldWidths 仅支持 Grid 视图。
 			return callAitableTool("update_view", toolArgs)
 		},
 	}
+	newHybridGroupCommand(viewUpdateCmd)
 
 	// ─── view update <attr> 子命令：按属性局部更新 ────────────────────
 
@@ -4136,10 +4221,10 @@ fieldWidths 仅支持 Grid 视图。
   - Kanban → kanbanCard {coverFieldId, coverResizeMode, hiddenFieldTitle}
   - Gallery → galleryCard {coverMode, coverFieldId, coverResizeMode, displayFieldName}
 typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cover-field-id 互斥。`,
-		Example: `  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --cover-field-id fldXXX --cover-resize-mode contain
-  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --no-cover
-  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --cover-mode auto       # Gallery
-  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --json '{"hiddenFieldTitle":true}'`,
+		Example: `  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cover-field-id fldXXX --cover-resize-mode contain
+  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --no-cover
+  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cover-mode auto       # Gallery
+  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"hiddenFieldTitle":true}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// flag 级互斥先校验，避免无效请求触发 preflight GET
 			noCover, _ := cmd.Flags().GetBool("no-cover")
@@ -4187,8 +4272,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 				UseWhen:      []string{"调整卡片封面/标题字段时"},
 				AvoidWhen:    []string{"只读用 get card"},
 				Examples: []string{
-					"dws aitable view update card --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
-					"dws aitable view update card --view-id KANBAN_ID --no-cover",
+					"dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
+					"dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id KANBAN_ID --no-cover",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -4203,8 +4288,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 		Long: `按属性局部更新 Gantt 视图的 ganttTimebar 配置。
 子字段：startField / endField (date 字段) / displayFieldId / timelineScale (year|quarter|month|weeks) /
 colorConfigs (JSON 数组) / officialHoliday (bool)。`,
-		Example: `  dws aitable view update timebar --table-id TABLE_ID --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
-  dws aitable view update timebar --table-id TABLE_ID --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
+		Example: `  dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
+  dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "ganttTimebar", []string{"Gantt"}, false)
 			if err != nil {
@@ -4248,8 +4333,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				UseWhen:      []string{"调整甘特时间条字段时"},
 				AvoidWhen:    []string{"只读用 get timebar"},
 				Examples: []string{
-					"dws aitable view update timebar --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
-					"dws aitable view update timebar --view-id GANTT_ID --official-holiday=true",
+					"dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
+					"dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id GANTT_ID --official-holiday=true",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -4269,9 +4354,9 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Short: "更新视图字段聚合统计（仅 Grid）",
 		Long: `更新 Grid 视图的 aggregate 配置。value 为 map[fieldId]→AggregateAction string，
 传 null 清除单个字段聚合。便捷 flag：--field-id / --action 单字段写入；--clear-field-id 单/多清除。`,
-		Example: `  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --action SUM
-  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --clear-field-id fldX,fldY
-  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
+		Example: `  dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --action SUM
+  dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --clear-field-id fldX,fldY
+  dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "aggregate", []string{"Grid"}, false)
 			if err != nil {
@@ -4315,7 +4400,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图聚合配置",
 				UseWhen:      []string{"需要改聚合指标时"},
 				AvoidWhen:    []string{"只读用 get aggregate"},
-				Examples:     []string{"dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM"},
+				Examples:     []string{"dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --field-id fldX --action SUM"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Required: boolPtr(false)},
@@ -4327,8 +4412,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:   "field-widths",
 		Short: "更新视图字段列宽（仅 Grid）",
 		Long:  `更新 Grid 视图的字段列宽。value 为 map[fieldId]→width(int)，可单字段或批量。`,
-		Example: `  dws aitable view update field-widths --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --width 200
-  dws aitable view update field-widths --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":120,"fldB":200}'`,
+		Example: `  dws aitable view update field-widths --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --width 200
+  dws aitable view update field-widths --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":120,"fldB":200}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "fieldWidths", []string{"Grid"}, false)
 			if err != nil {
@@ -4380,8 +4465,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Short: "更新视图可见字段列表",
 		Long: `按属性更新视图的 visibleFieldIds（即列顺序）。传入的字段 ID 列表
 完全替换原有顺序；首列字段不可隐藏。所有视图类型都支持。`,
-		Example: `  dws aitable view update visible-fields --table-id TABLE_ID --view-id VIEW_ID --field-ids fld1,fld2,fld3
-  dws aitable view update visible-fields --table-id TABLE_ID --view-id VIEW_ID --json '["fld1","fld2"]'`,
+		Example: `  dws aitable view update visible-fields --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-ids fld1,fld2,fld3
+  dws aitable view update visible-fields --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '["fld1","fld2"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, _, err := viewUpdateCommonPreflight(cmd, "visibleFieldIds", nil, false)
 			if err != nil {
@@ -4445,10 +4530,10 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 	viewUpdateFilterCmd := &cobra.Command{
 		Use:   "filter",
 		Short: "更新视图 filter 配置",
-		Long: `按属性更新视图的 filter 数组每项为 {operator,operands} 配置（整组替换）。
-[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]
-若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
-		Example: `  dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]'`,
+		Long: `按属性更新视图的 filter 数组（整组替换）。每项必须是叶子条件 {operator,operands}；外层数组表示 AND，不接受 and/or 逻辑组。
+[{"operator":"eq","operands":["fldX","value"]}]
+若传单个叶子对象会自动 wrap 为数组；neq/not_eq 会明确提示改用 ne；其他非法格式拒绝。`,
+		Example: `  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldX","value"]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateFilter(cmd)
 		},
@@ -4469,7 +4554,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图筛选",
 				UseWhen:      []string{"固化视图筛选条件时"},
 				AvoidWhen:    []string{"一次性查询过滤用 record query --filters"},
-				Examples:     []string{"dws aitable view update filter --view-id VIEW_ID --json '[{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]}]'"},
+				Examples:     []string{"dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.filter"},
@@ -4483,7 +4568,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Long: `按属性更新视图的 sort 数组每项为 {fieldId,direction} 配置（整组替换）。
 [{"fieldId":"fldX","direction":"asc"}]
 若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
-		Example: `  dws aitable view update sort --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
+		Example: `  dws aitable view update sort --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateArray(cmd, "sort")
 		},
@@ -4504,7 +4589,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图排序",
 				UseWhen:      []string{"固化视图排序时"},
 				AvoidWhen:    []string{"一次性查询排序用 record query --sort"},
-				Examples:     []string{"dws aitable view update sort --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
+				Examples:     []string{"dws aitable view update sort --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.sort"},
@@ -4518,7 +4603,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Long: `按属性更新视图的 group 数组每项为 {fieldId,direction} 配置（整组替换）。
 [{"fieldId":"fldX","direction":"asc"}]
 若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
-		Example: `  dws aitable view update group --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
+		Example: `  dws aitable view update group --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateArray(cmd, "group")
 		},
@@ -4539,7 +4624,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图分组",
 				UseWhen:      []string{"设置分组字段时"},
 				AvoidWhen:    []string{"只读用 get group"},
-				Examples:     []string{"dws aitable view update group --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
+				Examples:     []string{"dws aitable view update group --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.group"},
@@ -4551,7 +4636,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:     "name",
 		Short:   "重命名视图（= view update --name 的便捷子命令）",
 		Long:    `重命名指定视图，等价于 dws aitable view update --name X。无 config 参数。`,
-		Example: `  dws aitable view update name --table-id TABLE_ID --view-id VIEW_ID --name "新视图名"`,
+		Example: `  dws aitable view update name --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --name "新视图名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id", "name"); err != nil {
 				return err
@@ -4734,8 +4819,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新视图冻结列数",
 		Long: `设置视图冻结列数。--count N 表示从首列起冻结 N 列；--count 0 表示取消冻结。
 返回 {baseId, tableId, viewId, count}。`,
-		Example: `  dws aitable view update frozen-cols --table-id TABLE_ID --view-id VIEW_ID --count 1
-  dws aitable view update frozen-cols --table-id TABLE_ID --view-id VIEW_ID --count 0`,
+		Example: `  dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count 1
+  dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -4818,8 +4903,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新视图行高（单元格高度）",
 		Long: `设置视图单元格高度，单位为像素。--cell-height 必填，合法档位 32 / 56 / 88 / 128，默认 32。
 返回 {baseId, tableId, viewId, cellHeight}。`,
-		Example: `  dws aitable view update row-height --table-id TABLE_ID --view-id VIEW_ID --cell-height 32
-  dws aitable view update row-height --table-id TABLE_ID --view-id VIEW_ID --cell-height 56`,
+		Example: `  dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height 32
+  dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height 56`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -4904,8 +4989,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 - color 必须用 FORMAT_COLORS 代号（如 firstLine1..firstLine11），不支持 hex
 - symbol 取 GT/LT/GTE/LTE/EQ/NE/CONTAIN/EXCLUSIVE/EXIST/UN_EXIST/ALL_OF/ANY_OF/NONE_OF/BEFORE/AFTER/NOT_BEFORE/NOT_AFTER/DATE_EQ/FROM_NOW/DATE_BETWEEN
 - 传 --json '[]' 清空当前视图所有填色规则`,
-		Example: `  dws aitable view update fill-color-rule --view-id VIEW_ID --json '[]'
-  dws aitable view update fill-color-rule --view-id VIEW_ID --json '[{"type":"cell","formatFieldId":"fldX","format":{"color":"firstLine5"},"filters":[{"fieldId":"fldX","symbol":"GT","value":100}]}]'`,
+		Example: `  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[]'
+  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"type":"cell","formatFieldId":"fldX","format":{"color":"firstLine5"},"filters":[{"fieldId":"fldX","symbol":"GT","value":100}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -4948,7 +5033,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				AgentSummary: "更新填充色规则",
 				UseWhen:      []string{"设置视图条件填色时"},
 				AvoidWhen:    []string{"只读用 get fill-color-rule"},
-				Examples:     []string{"dws aitable view update fill-color-rule --view-id GRID_ID --json '[]'"},
+				Examples:     []string{"dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --json '[]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "conditionalFormats"},
@@ -5069,9 +5154,9 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	// ── form: 表单管理 ──────────────────────────────────────────
 
-	formCmd := &cobra.Command{Use: "form", Short: "表单管理", RunE: groupRunE}
-	formFieldCmd := &cobra.Command{Use: "field", Short: "表单字段管理", RunE: groupRunE}
-	formShareCmd := &cobra.Command{Use: "share", Short: "表单分享管理", RunE: groupRunE}
+	formCmd := newGroupCommand(&cobra.Command{Use: "form", Short: "表单管理", RunE: groupRunE})
+	formFieldCmd := newGroupCommand(&cobra.Command{Use: "field", Short: "表单字段管理", RunE: groupRunE})
+	formShareCmd := newGroupCommand(&cobra.Command{Use: "share", Short: "表单分享管理", RunE: groupRunE})
 
 	formListCmd := &cobra.Command{
 		Use:     "list",
@@ -5323,7 +5408,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	// ── form questions: 表单题目（form 视角的字段管理，等价于 field create / field delete） ──
 
-	formQuestionsCmd := &cobra.Command{Use: "questions", Short: "表单题目管理（等价于 field create / delete）", RunE: groupRunE}
+	formQuestionsCmd := newGroupCommand(&cobra.Command{Use: "questions", Short: "表单题目管理（等价于 field create / delete）", RunE: groupRunE})
 
 	formQuestionsCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -5618,11 +5703,11 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	// ── workflow: 自动化工作流管理 ────────────────────────────────
 
-	workflowCmd := &cobra.Command{
+	workflowCmd := newGroupCommand(&cobra.Command{
 		Use:   "workflow",
 		Short: "自动化工作流管理（创建 / 更新 / 启停 / 执行 / 历史 / 查询）",
 		RunE:  groupRunE,
-	}
+	})
 
 	workflowCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -6077,7 +6162,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 
 	// ── dashboard: 仪表盘管理 ────────────────────────────────────
 
-	dashboardCmd := &cobra.Command{Use: "dashboard", Short: "仪表盘管理", RunE: groupRunE}
+	dashboardCmd := newGroupCommand(&cobra.Command{Use: "dashboard", Short: "仪表盘管理", RunE: groupRunE})
 
 	dashboardConfigExampleCmd := &cobra.Command{
 		Use:   "config-example",
@@ -6372,7 +6457,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── dashboard share: 仪表盘分享管理 ────────────────────────────
 
-	dashboardShareCmd := &cobra.Command{Use: "share", Short: "仪表盘分享管理", RunE: groupRunE}
+	dashboardShareCmd := newGroupCommand(&cobra.Command{Use: "share", Short: "仪表盘分享管理", RunE: groupRunE})
 
 	dashboardShareGetCmd := &cobra.Command{
 		Use:   "get",
@@ -6474,7 +6559,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── chart: 图表管理 ──────────────────────────────────────────
 
-	chartCmd := &cobra.Command{Use: "chart", Short: "图表管理", RunE: groupRunE}
+	chartCmd := newGroupCommand(&cobra.Command{Use: "chart", Short: "图表管理", RunE: groupRunE})
 
 	chartWidgetsExampleCmd := &cobra.Command{
 		Use:   "widgets-example",
@@ -6713,7 +6798,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── chart share: 图表分享管理 ────────────────────────────────
 
-	chartShareCmd := &cobra.Command{Use: "share", Short: "图表分享管理", RunE: groupRunE}
+	chartShareCmd := newGroupCommand(&cobra.Command{Use: "share", Short: "图表分享管理", RunE: groupRunE})
 
 	chartShareGetCmd := &cobra.Command{
 		Use:   "get",
@@ -6817,7 +6902,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── export / import: 数据导入导出 ────────────────────────────
 
-	exportCmd := &cobra.Command{Use: "export", Short: "数据导出", RunE: groupRunE}
+	exportCmd := newGroupCommand(&cobra.Command{Use: "export", Short: "数据导出", RunE: groupRunE})
 
 	exportDataCmd := &cobra.Command{
 		Use:   "data",
@@ -6922,11 +7007,11 @@ export-format 可选值：excel、attachment、excel_and_attachment、excel_with
 		},
 	})
 
-	importCmd := &cobra.Command{Use: "import", Short: "数据导入", RunE: groupRunE}
+	importCmd := newGroupCommand(&cobra.Command{Use: "import", Short: "数据导入", RunE: groupRunE})
 
 	// ── advperm: 高级权限 / 自定义角色 ────────────────────────────
 
-	advpermCmd := &cobra.Command{Use: "advperm", Short: "高级权限管理（开关 / 角色查看与删除）", RunE: groupRunE}
+	advpermCmd := newGroupCommand(&cobra.Command{Use: "advperm", Short: "高级权限管理（开关 / 角色查看与删除）", RunE: groupRunE})
 
 	advpermEnableCmd := &cobra.Command{
 		Use:   "enable",
@@ -7403,7 +7488,7 @@ role-get 自行 merge）。
 
 	// ── section: 文件夹与节点管理（导航树组织） ──────────────────────────────
 
-	sectionCmd := &cobra.Command{Use: "section", Short: "文件夹与节点管理", RunE: groupRunE}
+	sectionCmd := newGroupCommand(&cobra.Command{Use: "section", Short: "文件夹与节点管理", RunE: groupRunE})
 
 	sectionCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -7757,7 +7842,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	baseGetPrimaryDocIdCmd.Flags().String("table-id", "", "Table ID，可通过 list_tables 或 get_base 获取 (必填)")
 	baseGetPrimaryDocIdCmd.Flags().String("record-id", "", "记录 ID (必填)")
 	baseCopyCmd.Flags().String("base-id", "", "源 Base ID (必填)")
-	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 ID (必填, 不传会复制失败)")
+	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 nodeId (必填)")
 	baseCopyCmd.Flags().Bool("only-struct", false, "是否仅复制结构（不含数据），默认 false 表示完整复制")
 	baseCmd.AddCommand(
 		baseListCmd, baseSearchCmd, baseGetCmd,
@@ -8433,6 +8518,416 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		sectionMoveNodeCmd,
 	)
 
+	// ── datasource: 数据源同步管理 ──────────────────────────────
+
+	datasourceCmd := newGroupCommand(&cobra.Command{Use: "datasource", Short: "数据源同步管理", RunE: groupRunE})
+
+	datasourceGetConfigCmd := &cobra.Command{
+		Use:     "get-config",
+		Short:   "获取数据源表同步配置",
+		Example: `  dws aitable datasource get-config --base-id BASE_ID --table-id TABLE_ID`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			return callAitableTool("get_datasource_config", map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceGetConfigCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_get_config",
+				CanonicalPath:  "aitable.datasource_get_config",
+				CLIPath:        "aitable datasource get-config",
+				PrimaryCLIPath: "aitable datasource get-config",
+			},
+			Description: "获取数据源表的同步配置信息。",
+			Interface:   aitableMCPInterface("get_datasource_config"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取数据源表的同步配置信息。",
+				UseWhen:      []string{"查看已有数据源表的配置详情时"},
+				AvoidWhen:    []string{"更新配置用 datasource update；查询同步状态用 datasource sync-status"},
+				Examples:     []string{"dws aitable datasource get-config --base-id <BASE_ID> --table-id <TABLE_ID>"},
+			},
+		},
+	})
+	datasourceGetConfigCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceGetConfigCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
+
+	datasourceListSourcesCmd := &cobra.Command{
+		Use:     "list-sources",
+		Short:   "列出可用数据源来源",
+		Example: `  dws aitable datasource list-sources --base-id BASE_ID --datasource-type OA`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "datasource-type"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			return callAitableTool("list_datasource_sources", map[string]any{
+				"baseId":         baseID,
+				"datasourceType": mustGetFlag(cmd, "datasource-type"),
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceListSourcesCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_list_sources",
+				CanonicalPath:  "aitable.datasource_list_sources",
+				CLIPath:        "aitable datasource list-sources",
+				PrimaryCLIPath: "aitable datasource list-sources",
+			},
+			Description: "列出指定 Base 下可用的数据源条目。",
+			Interface:   aitableMCPInterface("list_datasource_sources"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出指定 Base 下可用的数据源条目（OA 审批模板等）。",
+				UseWhen:      []string{"创建或更新数据源前需要查看可用来源时"},
+				AvoidWhen:    []string{"获取字段结构用 datasource get-fields"},
+				Examples:     []string{"dws aitable datasource list-sources --base-id <BASE_ID> --datasource-type OA"},
+			},
+		},
+	})
+	datasourceListSourcesCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceListSourcesCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
+
+	validateJSONObject := func(flag, raw string) error {
+		var v any
+		if err := json.Unmarshal([]byte(raw), &v); err != nil {
+			return fmt.Errorf("--%s must be a valid JSON object: %w", flag, err)
+		}
+		if _, ok := v.(map[string]any); !ok {
+			return fmt.Errorf("--%s must be a JSON object, got %T", flag, v)
+		}
+		return nil
+	}
+	validateAutoSyncSetting := func(raw string) error {
+		return validateJSONObject("auto-sync-setting", raw)
+	}
+
+	datasourceGetFieldsCmd := &cobra.Command{
+		Use:     "get-fields",
+		Short:   "获取数据源可同步字段列表",
+		Example: `  dws aitable datasource get-fields --base-id BASE_ID --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "datasource-type", "source-config"); err != nil {
+				return err
+			}
+			if err := validateJSONObject("source-config", mustGetFlag(cmd, "source-config")); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			return callAitableTool("get_datasource_fields", map[string]any{
+				"baseId":         baseID,
+				"datasourceType": mustGetFlag(cmd, "datasource-type"),
+				"sourceConfig":   mustGetFlag(cmd, "source-config"),
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceGetFieldsCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_get_fields",
+				CanonicalPath:  "aitable.datasource_get_fields",
+				CLIPath:        "aitable datasource get-fields",
+				PrimaryCLIPath: "aitable datasource get-fields",
+			},
+			Description: "获取指定数据源来源的可同步字段列表。",
+			Interface:   aitableMCPInterface("get_datasource_fields"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键）。",
+				UseWhen:      []string{"创建或更新数据源前需要查看可同步字段以决定 field-ids 时"},
+				AvoidWhen:    []string{"列出可用来源用 datasource list-sources"},
+				Examples:     []string{`dws aitable datasource get-fields --base-id <BASE_ID> --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`},
+			},
+		},
+	})
+	datasourceGetFieldsCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceGetFieldsCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
+	datasourceGetFieldsCmd.Flags().String("source-config", "", "源配置 JSON 字符串，需含 processCode、name、iconUrl、url、dataType 及对应时间字段 (必填)")
+
+	datasourceCreateCmd := &cobra.Command{
+		Use:     "create",
+		Short:   "创建数据源表并触发首次同步",
+		Example: `  dws aitable datasource create --base-id BASE_ID --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "datasource-type", "source-config"); err != nil {
+				return err
+			}
+			if err := validateJSONObject("source-config", mustGetFlag(cmd, "source-config")); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			auto, _ := cmd.Flags().GetBool("auto")
+			toolArgs := map[string]any{
+				"baseId":         baseID,
+				"datasourceType": mustGetFlag(cmd, "datasource-type"),
+				"sourceConfig":   mustGetFlag(cmd, "source-config"),
+				"auto":           auto,
+			}
+			if v, _ := cmd.Flags().GetString("field-ids"); v != "" {
+				toolArgs["fieldIds"] = parseCSVValues(v)
+			}
+			if v, _ := cmd.Flags().GetString("auto-sync-setting"); v != "" {
+				if err := validateAutoSyncSetting(v); err != nil {
+					return err
+				}
+				toolArgs["autoSyncSetting"] = v
+			}
+			return callAitableTool("create_datasource", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(datasourceCreateCmd, LeafSpec{
+		Safety: aitableSafetyWrite(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_create",
+				CanonicalPath:  "aitable.datasource_create",
+				CLIPath:        "aitable datasource create",
+				PrimaryCLIPath: "aitable datasource create",
+			},
+			Description: "为指定 Base 创建数据源表并触发首次全量同步。",
+			Interface:   aitableMCPInterface("create_datasource"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。",
+				UseWhen:      []string{"需要将外部数据源接入 AI 表格、创建新的数据源表时"},
+				AvoidWhen:    []string{"已有数据源表改配置用 datasource update；仅触发同步用 datasource sync"},
+				Examples:     []string{`dws aitable datasource create --base-id <BASE_ID> --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "datasource-type", Property: "datasourceType", Required: boolPtr(true)},
+				{Name: "source-config", Property: "sourceConfig", Required: boolPtr(true)},
+				{Name: "auto", Property: "auto"},
+				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
+				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
+			},
+		},
+	})
+	datasourceCreateCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceCreateCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
+	datasourceCreateCmd.Flags().String("source-config", "", "源配置 JSON 字符串，须从 list-sources 原样透传 processCode/name/iconUrl/url，并设置 dataType 及对应时间字段 (必填)")
+	datasourceCreateCmd.Flags().Bool("auto", false, "是否开启自动同步，默认 false；创建新数据源表时始终下发给下游")
+	datasourceCreateCmd.Flags().String("field-ids", "", "需要同步的字段 ID 列表，逗号分隔；不传时同步全部字段")
+	datasourceCreateCmd.Flags().String("auto-sync-setting", "", "自动同步频率配置 JSON 字符串，仅在 --auto=true 时生效。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
+
+	datasourceUpdateCmd := &cobra.Command{
+		Use:     "update",
+		Short:   "更新数据源表同步配置并触发同步",
+		Example: `  dws aitable datasource update --base-id BASE_ID --table-id TABLE_ID --auto`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+			}
+			if cmd.Flags().Changed("source-config") {
+				if err := validateJSONObject("source-config", mustGetFlag(cmd, "source-config")); err != nil {
+					return err
+				}
+				toolArgs["sourceConfig"] = mustGetFlag(cmd, "source-config")
+			}
+			if cmd.Flags().Changed("auto") {
+				auto, _ := cmd.Flags().GetBool("auto")
+				toolArgs["auto"] = auto
+			}
+			if cmd.Flags().Changed("field-ids") {
+				v := mustGetFlag(cmd, "field-ids")
+				if v == "" {
+					return fmt.Errorf("--field-ids 显式提供时不能为空，如需保持默认请勿传入")
+				}
+				toolArgs["fieldIds"] = parseCSVValues(v)
+			}
+			if cmd.Flags().Changed("auto-sync-setting") {
+				v := mustGetFlag(cmd, "auto-sync-setting")
+				if v == "" {
+					return fmt.Errorf("--auto-sync-setting 显式提供时不能为空，如需保持默认请勿传入")
+				}
+				if err := validateAutoSyncSetting(v); err != nil {
+					return err
+				}
+				toolArgs["autoSyncSetting"] = v
+			}
+			if !cmd.Flags().Changed("source-config") && !cmd.Flags().Changed("auto") && !cmd.Flags().Changed("field-ids") && !cmd.Flags().Changed("auto-sync-setting") {
+				return fmt.Errorf("至少需要一个配置变更：--source-config、--auto、--field-ids 或 --auto-sync-setting；仅触发同步请使用 datasource sync")
+			}
+			return callAitableTool("update_datasource_config", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(datasourceUpdateCmd, LeafSpec{
+		Safety: aitableSafetyWrite(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_update",
+				CanonicalPath:  "aitable.datasource_update",
+				CLIPath:        "aitable datasource update",
+				PrimaryCLIPath: "aitable datasource update",
+			},
+			Description: "更新已有数据源表的同步配置并触发一次同步。",
+			Interface:   aitableMCPInterface("update_datasource_config"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新已有数据源表的同步配置并触发一次同步。",
+				UseWhen:      []string{"需要修改已有数据源表的配置（更换模板、调整字段、开关自动同步）时"},
+				AvoidWhen:    []string{"创建新数据源表用 datasource create；仅触发同步用 datasource sync"},
+				Examples: []string{
+					"dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --auto",
+					`dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --source-config '{"processCode":"PROC-YYYY","name":"出差申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
+				{Name: "source-config", Property: "sourceConfig"},
+				{Name: "auto", Property: "auto"},
+				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
+				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
+			},
+		},
+	})
+	datasourceUpdateCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceUpdateCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
+	datasourceUpdateCmd.Flags().String("source-config", "", "可选。新的源配置 JSON 字符串，不传时保持原配置；传入时整体覆盖，须含 processCode、name、iconUrl、url、dataType 及对应时间字段")
+	datasourceUpdateCmd.Flags().Bool("auto", false, "可选。是否开启自动同步；仅显式设置时下发给下游，省略时保持原设置")
+	datasourceUpdateCmd.Flags().String("field-ids", "", "需要同步的字段 ID 列表，逗号分隔；不传时保持现有配置（创建时默认为全部字段）")
+	datasourceUpdateCmd.Flags().String("auto-sync-setting", "", "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
+
+	datasourceSyncCmd := &cobra.Command{
+		Use:     "sync",
+		Short:   "触发数据源表手动同步",
+		Example: `  dws aitable datasource sync --base-id BASE_ID --table-ids TBL1,TBL2`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-ids"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			tableIDs := parseCSVValues(mustGetFlag(cmd, "table-ids"))
+			if len(tableIDs) < 1 || len(tableIDs) > 5 {
+				return fmt.Errorf("--table-ids requires 1-5 table IDs, got %d", len(tableIDs))
+			}
+			return callAitableTool("run_datasource_sync", map[string]any{
+				"baseId":   baseID,
+				"tableIds": tableIDs,
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceSyncCmd, LeafSpec{
+		Safety: aitableSafetyWrite(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_sync",
+				CanonicalPath:  "aitable.datasource_sync",
+				CLIPath:        "aitable datasource sync",
+				PrimaryCLIPath: "aitable datasource sync",
+			},
+			Description: "对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回。",
+			Interface:   aitableMCPInterface("run_datasource_sync"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。",
+				UseWhen:      []string{"需要手动触发已有数据源表的数据同步时"},
+				AvoidWhen:    []string{"创建新数据源表用 datasource create；更新配置用 datasource update"},
+				Examples:     []string{"dws aitable datasource sync --base-id <BASE_ID> --table-ids TBL1,TBL2"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-ids", Property: "tableIds", Required: boolPtr(true)},
+			},
+		},
+	})
+	datasourceSyncCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceSyncCmd.Flags().String("table-ids", "", "待触发同步的数据源表 ID 列表，逗号分隔，1-5 个 (必填)")
+
+	datasourceSyncStatusCmd := &cobra.Command{
+		Use:     "sync-status",
+		Short:   "按任务 ID 查询数据源同步任务状态",
+		Example: `  dws aitable datasource sync-status --base-id BASE_ID --table-id TABLE_ID --task-ids TASK1,TASK2`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id", "task-ids"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			ids := parseCSVValues(mustGetFlag(cmd, "task-ids"))
+			if len(ids) < 1 || len(ids) > 5 {
+				return fmt.Errorf("--task-ids requires 1-5 task IDs, got %d", len(ids))
+			}
+			toolArgs := map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+				"taskIds": ids,
+			}
+			return callAitableTool("get_datasource_sync_status", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(datasourceSyncStatusCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_sync_status",
+				CanonicalPath:  "aitable.datasource_sync_status",
+				CLIPath:        "aitable datasource sync-status",
+				PrimaryCLIPath: "aitable datasource sync-status",
+			},
+			Description: "按任务 ID 查询数据源同步任务状态（RUNNING/FINISHED/FAILED）。",
+			Interface:   aitableMCPInterface("get_datasource_sync_status"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按任务 ID 批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。",
+				UseWhen:      []string{"触发同步后需要按任务 ID 查询任务是否完成时"},
+				AvoidWhen:    []string{"触发同步用 datasource sync"},
+				Examples:     []string{"dws aitable datasource sync-status --base-id <BASE_ID> --table-id <TABLE_ID> --task-ids TASK1"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
+				{Name: "task-ids", Property: "taskIds", Required: boolPtr(true)},
+			},
+		},
+	})
+	datasourceSyncStatusCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceSyncStatusCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
+	datasourceSyncStatusCmd.Flags().String("task-ids", "", "待查询的同步任务 ID 列表，逗号分隔，1-5 个 (必填)")
+
+	datasourceCmd.AddCommand(
+		datasourceGetConfigCmd, datasourceListSourcesCmd, datasourceGetFieldsCmd,
+		datasourceCreateCmd, datasourceUpdateCmd,
+		datasourceSyncCmd, datasourceSyncStatusCmd,
+	)
+
 	// 组装 aitable 命令树
 	root.AddCommand(
 		baseCmd, tableCmd, fieldCmd,
@@ -8443,6 +8938,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		attachmentCmd, templateCmd,
 		advpermCmd,
 		sectionCmd,
+		datasourceCmd,
 	)
 
 	// 批量注册 --base 作为 --base-id 的隐藏别名

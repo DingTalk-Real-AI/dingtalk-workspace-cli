@@ -32,7 +32,9 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate"
@@ -66,6 +68,7 @@ const (
 	defaultMaxRetries    = 1
 	defaultRetryDelay    = 500 * time.Millisecond
 	defaultRetryMaxDelay = 5 * time.Second
+	maxToolsPerListPage  = 10_000
 
 	// Security headers
 	HeaderSource       = "X-Cli-Source"
@@ -124,6 +127,19 @@ type RPCError struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+func (e *RPCError) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "code", "message", "data"); err != nil {
+		return fmt.Errorf("invalid JSON-RPC error: %w", err)
+	}
+	type rpcError RPCError
+	var decoded rpcError
+	if err := unmarshalJSONUseNumber(data, &decoded); err != nil {
+		return err
+	}
+	*e = RPCError(decoded)
+	return nil
+}
+
 type InitializeResult struct {
 	RequestedProtocolVersion string         `json:"requested_protocol_version"`
 	ProtocolVersion          string         `json:"protocol_version"`
@@ -140,8 +156,145 @@ type ToolDescriptor struct {
 	Sensitive    bool           `json:"sensitive,omitempty"`
 }
 
+func (t *ToolDescriptor) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectDuplicateObjectKeys(data); err != nil {
+		return fmt.Errorf("invalid tool descriptor: %w", err)
+	}
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "name", "title", "description", "inputSchema", "outputSchema", "sensitive"); err != nil {
+		return fmt.Errorf("invalid tool descriptor: %w", err)
+	}
+	type toolDescriptor ToolDescriptor
+	var decoded toolDescriptor
+	if err := unmarshalJSONUseNumber(data, &decoded); err != nil {
+		return err
+	}
+	*t = ToolDescriptor(decoded)
+	return nil
+}
+
 type ToolsListResult struct {
-	Tools []ToolDescriptor `json:"tools"`
+	Tools            []ToolDescriptor `json:"tools"`
+	NextCursor       string           `json:"nextCursor,omitempty"`
+	RawResultBytes   int              `json:"-"`
+	RawResponseBytes int              `json:"-"`
+}
+
+func (r *ToolsListResult) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "tools", "nextCursor"); err != nil {
+		return fmt.Errorf("invalid tools/list result: %w", err)
+	}
+	var raw struct {
+		Tools      json.RawMessage `json:"tools"`
+		NextCursor string          `json:"nextCursor"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	toolsJSON := bytes.TrimSpace(raw.Tools)
+	if len(toolsJSON) == 0 {
+		return errors.New(`tools/list result is missing required "tools" array`)
+	}
+	if bytes.Equal(toolsJSON, []byte("null")) {
+		return errors.New(`tools/list result "tools" must be a non-null array`)
+	}
+	if err := rejectOversizedToolsArray(toolsJSON, maxToolsPerListPage); err != nil {
+		return err
+	}
+
+	var tools []ToolDescriptor
+	if err := json.Unmarshal(toolsJSON, &tools); err != nil {
+		return fmt.Errorf(`tools/list result "tools" must be an array: %w`, err)
+	}
+
+	*r = ToolsListResult{
+		Tools:          tools,
+		NextCursor:     raw.NextCursor,
+		RawResultBytes: len(data),
+	}
+	return nil
+}
+
+func rejectOversizedToolsArray(data []byte, limit int) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('[') {
+		return errors.New(`tools/list result "tools" must be an array`)
+	}
+	count := 0
+	for decoder.More() {
+		count++
+		if count > limit {
+			return fmt.Errorf("tools/list page exceeded the %d-tool safety limit", limit)
+		}
+		if err := skipJSONValue(decoder, 0); err != nil {
+			return fmt.Errorf(`tools/list result "tools" must be an array: %w`, err)
+		}
+	}
+	closing, err := decoder.Token()
+	if err != nil || closing != json.Delim(']') {
+		return errors.New(`tools/list result "tools" must be an array`)
+	}
+	return nil
+}
+
+func skipJSONValue(decoder *json.Decoder, depth int) error {
+	if depth > 256 {
+		return errors.New("JSON nesting exceeds safety limit")
+	}
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, composite := token.(json.Delim)
+	if !composite {
+		return nil
+	}
+	switch delim {
+	case '{':
+		for decoder.More() {
+			if _, err := decoder.Token(); err != nil {
+				return err
+			}
+			if err := skipJSONValue(decoder, depth+1); err != nil {
+				return err
+			}
+		}
+		token, err = decoder.Token()
+		if err != nil || token != json.Delim('}') {
+			return errors.New("invalid JSON object")
+		}
+	case '[':
+		for decoder.More() {
+			if err := skipJSONValue(decoder, depth+1); err != nil {
+				return err
+			}
+		}
+		token, err = decoder.Token()
+		if err != nil || token != json.Delim(']') {
+			return errors.New("invalid JSON array")
+		}
+	default:
+		return errors.New("invalid JSON delimiter")
+	}
+	return nil
+}
+
+func unmarshalJSONUseNumber(data []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("unexpected trailing JSON value")
+		}
+		return err
+	}
+	return nil
 }
 
 type ContentBlock struct {
@@ -149,45 +302,78 @@ type ContentBlock struct {
 	Text string `json:"text,omitempty"`
 }
 
+func (b *ContentBlock) UnmarshalJSON(data []byte) error {
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "type", "text"); err != nil {
+		return fmt.Errorf("invalid content block: %w", err)
+	}
+	type contentBlock ContentBlock
+	var decoded contentBlock
+	if err := unmarshalJSONUseNumber(data, &decoded); err != nil {
+		return err
+	}
+	*b = ContentBlock(decoded)
+	return nil
+}
+
 type ToolCallResult struct {
-	Content           map[string]any `json:"-"`
-	StructuredContent map[string]any `json:"structuredContent,omitempty"`
-	Blocks            []ContentBlock `json:"content,omitempty"`
-	IsError           bool           `json:"isError,omitempty"`
+	Content           map[string]any  `json:"-"`
+	StructuredContent map[string]any  `json:"structuredContent,omitempty"`
+	Blocks            []ContentBlock  `json:"content,omitempty"`
+	IsError           bool            `json:"isError,omitempty"`
+	RawResult         json.RawMessage `json:"-"`
 }
 
 func (r *ToolCallResult) UnmarshalJSON(data []byte) error {
 	type rawResult struct {
 		Content           json.RawMessage `json:"content"`
-		StructuredContent map[string]any  `json:"structuredContent"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
 		IsError           bool            `json:"isError,omitempty"`
 	}
 
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || trimmed[0] != '{' {
+		return fmt.Errorf("tools/call result must be a non-null object")
+	}
+	if err := jsonutil.RejectDuplicateObjectKeys(trimmed); err != nil {
+		return fmt.Errorf("invalid tools/call result: %w", err)
+	}
+	if err := jsonutil.RejectNonCanonicalObjectKeys(trimmed, "content", "structuredContent", "isError"); err != nil {
+		return fmt.Errorf("invalid tools/call result: %w", err)
+	}
 	var raw rawResult
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := unmarshalJSONUseNumber(trimmed, &raw); err != nil {
 		return err
 	}
 
-	r.StructuredContent = cloneAnyMap(raw.StructuredContent)
-	r.IsError = raw.IsError
-
-	if len(bytes.TrimSpace(raw.Content)) == 0 {
-		if len(r.StructuredContent) > 0 {
-			r.Content = cloneAnyMap(r.StructuredContent)
+	*r = ToolCallResult{IsError: raw.IsError, RawResult: append(json.RawMessage(nil), trimmed...)}
+	structuredJSON := bytes.TrimSpace(raw.StructuredContent)
+	if len(structuredJSON) > 0 && !bytes.Equal(structuredJSON, []byte("null")) {
+		var structured map[string]any
+		if err := unmarshalJSONUseNumber(structuredJSON, &structured); err != nil || structured == nil {
+			return fmt.Errorf("tools/call structuredContent must be an object")
 		}
-		return nil
+		r.StructuredContent = structured
+	}
+
+	contentJSON := bytes.TrimSpace(raw.Content)
+	if len(contentJSON) == 0 || bytes.Equal(contentJSON, []byte("null")) {
+		if len(structuredJSON) > 0 && !bytes.Equal(structuredJSON, []byte("null")) {
+			r.Content = cloneAnyMap(r.StructuredContent)
+			return nil
+		}
+		return fmt.Errorf("tools/call result is missing required non-null content")
 	}
 
 	var object map[string]any
-	if err := json.Unmarshal(raw.Content, &object); err == nil {
+	if err := unmarshalJSONUseNumber(contentJSON, &object); err == nil && object != nil {
 		r.Content = object
 		return nil
 	}
 
 	var blocks []ContentBlock
-	if err := json.Unmarshal(raw.Content, &blocks); err == nil {
+	if err := unmarshalJSONUseNumber(contentJSON, &blocks); err == nil && blocks != nil {
 		r.Blocks = blocks
-		if len(r.StructuredContent) > 0 {
+		if len(structuredJSON) > 0 && !bytes.Equal(structuredJSON, []byte("null")) {
 			r.Content = cloneAnyMap(r.StructuredContent)
 			return nil
 		}
@@ -206,6 +392,26 @@ func (r *ToolCallResult) UnmarshalJSON(data []byte) error {
 	}
 
 	return fmt.Errorf("unsupported tools/call content shape")
+}
+
+func (r ToolCallResult) MarshalJSON() ([]byte, error) {
+	if raw := bytes.TrimSpace(r.RawResult); len(raw) > 0 {
+		return append([]byte(nil), raw...), nil
+	}
+	result := map[string]any{}
+	if r.Content != nil {
+		result["content"] = r.Content
+	}
+	if r.Blocks != nil {
+		result["content"] = r.Blocks
+	}
+	if r.StructuredContent != nil {
+		result["structuredContent"] = r.StructuredContent
+	}
+	if r.IsError {
+		result["isError"] = true
+	}
+	return json.Marshal(result)
 }
 
 // defaultTransport returns a tuned http.Transport for MCP JSON-RPC calls.
@@ -268,6 +474,7 @@ func safeRedirectPolicy(req *http.Request, via []*http.Request) error {
 	}
 	if redirectChainLeftInitialOrigin(req, via) {
 		req.Header.Del(HeaderAgentExt)
+		req.Header.Del(requestmeta.DingTalkExtHeader)
 		req.Header.Del("Authorization")
 		req.Header.Del("x-user-access-token")
 	}
@@ -305,14 +512,64 @@ func (c *Client) WithAuth(token string, headers map[string]string) *Client {
 		RetryDelay:       c.RetryDelay,
 		RetryMaxDelay:    c.RetryMaxDelay,
 		AuthToken:        token,
-		ExtraHeaders:     headers,
+		ExtraHeaders:     cloneStringMap(headers),
 		SnapshotRecorder: c.SnapshotRecorder,
-		TrustedDomains:   c.TrustedDomains,
+		TrustedDomains:   append([]string(nil), c.TrustedDomains...),
 		ExecutionId:      c.ExecutionId,
 		FileLogger:       c.FileLogger,
 		sleep:            c.sleep,
 		Stderr:           c.Stderr,
 	}
+}
+
+// WithMaxRetries returns a copy of c with an independent retry limit. It is
+// useful when a caller knows a request cannot be retried safely.
+func (c *Client) WithMaxRetries(maxRetries int) *Client {
+	copy := c.WithAuth(c.AuthToken, c.ExtraHeaders)
+	copy.MaxRetries = maxRetries
+	return copy
+}
+
+// WithHTTPTimeout returns a transport client with an independently cloned HTTP
+// client. A standard transport is cloned too so its response-header deadline
+// cannot end a caller's larger operation timeout early.
+func (c *Client) WithHTTPTimeout(timeout time.Duration) *Client {
+	copy := c.WithAuth(c.AuthToken, c.ExtraHeaders)
+	if c.HTTPClient == nil {
+		transport := defaultTransport()
+		transport.ResponseHeaderTimeout = timeout
+		copy.HTTPClient = &http.Client{
+			Timeout:       timeout,
+			Transport:     transport,
+			CheckRedirect: safeRedirectPolicy,
+		}
+		return copy
+	}
+	httpCopy := *c.HTTPClient
+	httpCopy.Timeout = timeout
+	if transport, ok := c.HTTPClient.Transport.(*http.Transport); ok && transport != nil {
+		transportCopy := transport.Clone()
+		transportCopy.ResponseHeaderTimeout = timeout
+		httpCopy.Transport = transportCopy
+	}
+	copy.HTTPClient = &httpCopy
+	return copy
+}
+
+// WithRedirectsDisabled exposes 3xx responses instead of allowing net/http to
+// replay a POST body at a redirect target.
+func (c *Client) WithRedirectsDisabled() *Client {
+	copy := c.WithAuth(c.AuthToken, c.ExtraHeaders)
+	if c.HTTPClient == nil {
+		copy.HTTPClient = &http.Client{Timeout: defaultHTTPTimeout, Transport: defaultTransport()}
+	} else {
+		httpCopy := *c.HTTPClient
+		copy.HTTPClient = &httpCopy
+	}
+	copy.HTTPClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return copy
 }
 
 // WithExecutionId returns a shallow copy of c with the given execution ID.
@@ -380,11 +637,20 @@ func (c *Client) NotifyInitialized(ctx context.Context, endpoint string) error {
 }
 
 func (c *Client) ListTools(ctx context.Context, endpoint string) (ToolsListResult, error) {
+	return c.ListToolsPage(ctx, endpoint, "")
+}
+
+func (c *Client) ListToolsPage(ctx context.Context, endpoint, cursor string) (ToolsListResult, error) {
+	var params map[string]any
+	if cursor != "" {
+		params = map[string]any{"cursor": cursor}
+	}
 	var payload ToolsListResult
 	if err := c.callJSONRPC(ctx, endpoint, requestEnvelope{
 		JSONRPC: "2.0",
 		ID:      2,
 		Method:  "tools/list",
+		Params:  params,
 	}, true, &payload); err != nil {
 		return ToolsListResult{}, err
 	}
@@ -426,10 +692,26 @@ func cloneAnyMap(src map[string]any) map[string]any {
 	return out
 }
 
+func cloneStringMap(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(src))
+	for key, value := range src {
+		out[key] = value
+	}
+	return out
+}
+
 func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request requestEnvelope, expectResponse bool, out any) error {
 	body, err := json.Marshal(request)
 	if err != nil {
-		return apperrors.NewInternal("failed to encode JSON-RPC request")
+		return apperrors.NewInternal(
+			"failed to encode JSON-RPC request",
+			apperrors.WithOperation(request.Method),
+			apperrors.WithExecutionStarted(false),
+			apperrors.WithRetryable(false),
+		)
 	}
 
 	logging.LogRequest(c.FileLogger, request.Method, endpoint, c.ExecutionId, len(body))
@@ -450,7 +732,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	// Extract trace ID from response headers for correlation.
 	headerTraceID := ExtractTraceIDFromHeaders(resp.Header)
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize+1))
 	logging.LogResponse(c.FileLogger, request.Method, endpoint, c.ExecutionId, resp.StatusCode, len(data), time.Since(callStart), err)
 	if err != nil {
 		return apperrors.NewDiscovery(
@@ -460,6 +742,13 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			apperrors.WithHint(i18n.T("检查服务连通性后重试；如持续失败，请确认 MCP 服务响应正常。")),
 			apperrors.WithActions(discoveryActions("")...),
 			apperrors.WithTraceID(headerTraceID),
+		)
+	}
+	if len(data) > config.MaxResponseBodySize {
+		return apperrors.NewDiscovery(
+			fmt.Sprintf("JSON-RPC %s response exceeds safety limit of %d bytes", request.Method, config.MaxResponseBodySize),
+			apperrors.WithOperation(request.Method),
+			apperrors.WithReason(reasonForMethod(request.Method, "response_too_large")),
 		)
 	}
 	snapshotPath := ""
@@ -476,6 +765,26 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		return nil
 	}
 
+	if err := jsonutil.RejectDuplicateObjectKeys(data); err != nil {
+		return apperrors.NewDiscovery(
+			fmt.Sprintf("unexpected protocol response from %s", RedactURL(endpoint)),
+			apperrors.WithOperation(request.Method),
+			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
+			apperrors.WithHint(i18n.T("MCP 服务返回了包含重复字段或无法解析的协议响应。")),
+			apperrors.WithSnapshot(snapshotPath),
+			apperrors.WithTraceID(headerTraceID),
+		)
+	}
+	if err := jsonutil.RejectNonCanonicalObjectKeys(data, "jsonrpc", "id", "result", "error"); err != nil {
+		return apperrors.NewDiscovery(
+			fmt.Sprintf("unexpected protocol response from %s", RedactURL(endpoint)),
+			apperrors.WithOperation(request.Method),
+			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
+			apperrors.WithHint(i18n.T("MCP 服务返回了字段大小写不规范的协议响应。")),
+			apperrors.WithSnapshot(snapshotPath),
+			apperrors.WithTraceID(headerTraceID),
+		)
+	}
 	var envelope responseEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return apperrors.NewDiscovery(
@@ -484,6 +793,16 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
 			apperrors.WithHint(i18n.T("MCP 服务返回了无法解析的协议响应；检查服务版本或上游代理。")),
 			apperrors.WithActions(discoveryActions(snapshotPath)...),
+			apperrors.WithSnapshot(snapshotPath),
+			apperrors.WithTraceID(headerTraceID),
+		)
+	}
+	if envelope.JSONRPC != "2.0" || envelope.ID != request.ID {
+		return apperrors.NewDiscovery(
+			fmt.Sprintf("JSON-RPC %s response does not match request id %d", request.Method, request.ID),
+			apperrors.WithOperation(request.Method),
+			apperrors.WithReason(reasonForMethod(request.Method, "invalid_response")),
+			apperrors.WithHint(i18n.T("MCP 服务返回了不匹配的协议版本或请求 ID；不要使用该响应。")),
 			apperrors.WithSnapshot(snapshotPath),
 			apperrors.WithTraceID(headerTraceID),
 		)
@@ -515,6 +834,9 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			apperrors.WithSnapshot(snapshotPath),
 		)
 	}
+	if result, ok := out.(*ToolsListResult); ok {
+		result.RawResponseBytes = len(data)
+	}
 	return nil
 }
 
@@ -532,6 +854,8 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 				"failed to create JSON-RPC request",
 				apperrors.WithOperation(operation),
 				apperrors.WithReason("request_build_failed"),
+				apperrors.WithExecutionStarted(false),
+				apperrors.WithRetryable(false),
 				apperrors.WithHint(i18n.T("请检查服务 endpoint 是否为空或格式不合法。")),
 				apperrors.WithCause(&CallError{
 					Stage: CallStageRequest,
@@ -634,6 +958,21 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		return nil, apperrors.NewAPI(message, opts...)
 	}
 	return nil, apperrors.NewDiscovery(message, opts...)
+}
+
+// ValidateTrustedEndpoint rejects network destinations that are outside the
+// configured MCP trust boundary before any request or credential is sent.
+func (c *Client) ValidateTrustedEndpoint(endpoint string) error {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || !c.isEndpointTrusted(endpoint) {
+		return apperrors.NewDiscovery(
+			"refusing to contact an untrusted MCP endpoint",
+			apperrors.WithReason("untrusted_mcp_endpoint"),
+			apperrors.WithExecutionStarted(false),
+			apperrors.WithRetryable(false),
+		)
+	}
+	return nil
 }
 
 func sanitizeJSONRPCEndpoint(endpoint string) string {
@@ -798,6 +1137,9 @@ func (c *Client) isEndpointTrusted(endpoint string) bool {
 		return false
 	}
 	if !strings.EqualFold(parsed.Scheme, "https") {
+		if !strings.EqualFold(parsed.Scheme, "http") {
+			return false
+		}
 		if os.Getenv("DWS_ALLOW_HTTP_ENDPOINTS") != "1" {
 			return false
 		}
@@ -806,6 +1148,7 @@ func (c *Client) isEndpointTrusted(endpoint string) bool {
 		if host != "127.0.0.1" && host != "::1" && host != "localhost" {
 			return false
 		}
+		return true
 	}
 	host := parsed.Hostname()
 	domains := c.trustedDomainsList()
@@ -855,15 +1198,16 @@ func matchDomain(host, pattern string) bool {
 }
 
 func RedactURL(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return raw
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "<invalid-endpoint>"
 	}
-	query := parsed.Query()
-	for key := range query {
-		query.Set(key, "REDACTED")
-	}
-	parsed.RawQuery = query.Encode()
+	parsed.User = nil
+	parsed.Path = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
 	return parsed.String()
 }
 
@@ -906,7 +1250,7 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 	case statusCode == http.StatusForbidden:
 		opts = append(opts,
 			apperrors.WithHint(i18n.T("权限不足；请检查当前身份是否有权限访问该服务或工具。")),
-			apperrors.WithActions(authActions(snapshotPath)...),
+			apperrors.WithActions(permissionActions(snapshotPath)...),
 		)
 		return apperrors.NewAuth(message, opts...)
 	case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
@@ -965,6 +1309,15 @@ func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath, headerT
 		return apperrors.NewValidation(message, opts...)
 	}
 
+	if looksPermissionRPCError(rpcErr) {
+		opts = append(opts,
+			apperrors.WithReason("rpc_forbidden"),
+			apperrors.WithHint(i18n.T("调用被拒绝；请检查当前身份、资源权限或应用授权范围。")),
+			apperrors.WithActions(permissionActions(snapshotPath)...),
+		)
+		return apperrors.NewAuth(message, opts...)
+	}
+
 	if looksAuthRPCError(rpcErr) {
 		opts = append(opts,
 			apperrors.WithHint(i18n.T("调用被拒绝；请检查认证状态、租户身份或访问权限。")),
@@ -1003,6 +1356,22 @@ func looksAuthRPCError(rpcErr *RPCError) bool {
 		return true
 	}
 	return looksAuthRelated(rpcErr.Message)
+}
+
+func looksPermissionRPCError(rpcErr *RPCError) bool {
+	if rpcErr == nil {
+		return false
+	}
+	if rpcErr.Code == http.StatusForbidden {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(rpcErr.Message))
+	for _, marker := range []string{"forbidden", "permission", "insufficient_scope", "access denied"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func jsonrpcCodeLabel(code int) string {
@@ -1064,6 +1433,16 @@ func authActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查登录状态后重试"),
 		i18n.T("运行 dws auth status 确认凭证有效，必要时重新登录"),
+		apperrors.DoctorCommand,
+	}
+	_ = snapshotPath
+	return actions
+}
+
+func permissionActions(snapshotPath string) []string {
+	actions := []string{
+		i18n.T("确认当前 profile 和身份是否正确"),
+		i18n.T("检查目标资源权限与应用授权范围后重试"),
 	}
 	_ = snapshotPath
 	return actions
@@ -1072,7 +1451,7 @@ func authActions(snapshotPath string) []string {
 func runtimeActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查认证、权限和参数后重试原命令"),
-		i18n.T("运行 dws doctor 检查登录态、网络和本地环境；持续失败时保留 Trace ID 和 Server Code"),
+		i18n.T("持续失败时保留 Trace ID 和 Server Code 联系服务端排查"),
 	}
 	_ = snapshotPath
 	return actions
@@ -1082,7 +1461,7 @@ func networkActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查网络、代理和 DNS 配置后重试原命令"),
 		i18n.T("确认 MCP 服务可访问；若持续失败请稍后重试"),
-		i18n.T("运行 dws doctor 获取可共享的环境诊断结果"),
+		apperrors.DoctorCommand,
 	}
 	_ = snapshotPath
 	return actions

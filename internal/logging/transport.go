@@ -16,7 +16,9 @@ package logging
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -178,12 +180,20 @@ func LogCommandEnd(logger *slog.Logger, executionId, product, tool string, succe
 	logger.LogAttrs(context.TODO(), slog.LevelInfo, "command_end", attrs...)
 }
 
-// redactEndpoint removes query parameters from endpoint URLs in logs.
+// redactEndpoint removes every URL component that may carry credentials.
 func redactEndpoint(endpoint string) string {
-	for i := 0; i < len(endpoint); i++ {
-		if endpoint[i] == '?' || endpoint[i] == '#' {
-			return endpoint[:i]
-		}
+	if strings.TrimSpace(endpoint) == "" {
+		return ""
 	}
-	return endpoint
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return "<invalid-endpoint>"
+	}
+	parsed.User = nil
+	parsed.Path = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	return parsed.String()
 }

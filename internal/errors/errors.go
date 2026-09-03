@@ -151,6 +151,24 @@ func WithOperation(operation string) Option {
 	}
 }
 
+// IsConfirmationRequired reports whether err (or any wrapped cause) is a
+// typed framework confirmation-gate failure carrying reason
+// confirmation_required. Downstream classifiers must pass such errors through
+// verbatim: the "re-run with --yes" semantics can only be carried by the
+// machine-readable reason, while message-text classification actively
+// misroutes them (a command path containing "permission" would be reported as
+// an auth failure, and any other wording degrades to an unclassified error).
+func IsConfirmationRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	var typed *Error
+	if stderrors.As(err, &typed) {
+		return strings.TrimSpace(typed.Reason) == "confirmation_required"
+	}
+	return false
+}
+
 // WithServerKey records the server identifier associated with the failure.
 func WithServerKey(serverKey string) Option {
 	return func(err *Error) {
@@ -416,8 +434,8 @@ func PrintJSON(w io.Writer, err error) error {
 		if typed.Hint != "" {
 			errorPayload["hint"] = typed.Hint
 		}
-		if len(typed.Actions) > 0 {
-			errorPayload["actions"] = typed.Actions
+		if actions := RecoveryActions(err); len(actions) > 0 {
+			errorPayload["actions"] = actions
 		}
 		if len(typed.AvailableFlags) > 0 {
 			errorPayload["available_flags"] = typed.AvailableFlags
@@ -519,8 +537,8 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 		}
 	}
 
-	if len(typed.Actions) > 0 {
-		for _, action := range typed.Actions {
+	if actions := HumanRecoveryActions(err); len(actions) > 0 {
+		for _, action := range actions {
 			if strings.TrimSpace(action) == "" {
 				continue
 			}

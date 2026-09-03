@@ -34,6 +34,7 @@ func TestCrossPlatformCoverageMinutesWorkflowValidationAndDefaults(t *testing.T)
 		{"minutes", "+speaker-insights", "--id", "u1", "--interval", "0"},
 		{"minutes", "+export-pack", "--id", "u1", "--output", "pack", "--page-limit", "0"},
 		{"minutes", "+share", "--id", "u1", "--member-uids", strings.Repeat("m,", 51), "--permission", "view"},
+		{"minutes", "+share", "--id", "u1", "--member-staff-ids", strings.Repeat("0m,", 51), "--permission", "view"},
 	}
 	for _, args := range invalid {
 		if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, args...); err == nil || payload != nil || output != "" {
@@ -125,9 +126,13 @@ func TestCrossPlatformCoverageMinutesUploadAndAnalyzeBranchesE2E(t *testing.T) {
 			`{"success":true,"result":{"taskUuid":"u2","title":"uploaded"}}`,
 		},
 	}}
-	payload, _, err = runMinutesAlignmentCLI(t, upload, "minutes", "+upload-and-analyze", "--file", file, "--artifacts", "basic", "--yes")
+	payload, _, err = runMinutesAlignmentCLI(t, upload, "minutes", "+upload-and-analyze", "--file", file, "--artifacts", "basic", "--enable-message-card", "--yes")
 	if err != nil || payload["taskUuid"] != "u2" || payload["complete"] != true {
 		t.Fatalf("fresh upload payload=%#v err=%v", payload, err)
+	}
+	createArgs := upload.arguments["minutes/create_upload_session"][0]
+	if option, _ := createArgs["minutesOption"].(map[string]any); option["enableMessageCard"] != true {
+		t.Fatalf("legacy upload-and-analyze message flag args=%#v", createArgs)
 	}
 }
 
@@ -263,7 +268,7 @@ func TestCrossPlatformCoverageMinutesPrepareASRBranchesE2E(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"minutes", "+prepare-asr", "--words", "a", "--yes"}
 			if strings.HasPrefix(test.name, "delete") {
-				args = []string{"minutes", "+prepare-asr", "--words", "a", "--sync", "--yes"}
+				args = []string{"minutes", "+sync-asr", "--words", "a", "--yes"}
 				test.responses["minutes/add_personal_hot_word"] = []string{`{"success":true,"result":{}}`}
 			}
 			payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{responses: test.responses, failAt: test.failAt}, args...)
@@ -297,7 +302,7 @@ func TestCrossPlatformCoverageMinutesPrepareASRBranchesE2E(t *testing.T) {
 	verifyMismatch := &minutesE2ECaller{responses: map[string][]string{"minutes/list_my_hotwords": {
 		`{"success":true,"result":{"hotWordList":["a","old"]}}`, `{"success":true,"result":{"hotWordList":["old"]}}`,
 	}, "minutes/delete_personal_hotword": {`{"success":true,"result":{}}`}}}
-	payload, output, err = runMinutesAlignmentCLI(t, verifyMismatch, "minutes", "+prepare-asr", "--words", "a", "--sync", "--yes")
+	payload, output, err = runMinutesAlignmentCLI(t, verifyMismatch, "minutes", "+sync-asr", "--words", "a", "--yes")
 	if err == nil || output == "" || payload["verified"] != false {
 		t.Fatalf("ASR mismatch payload=%#v err=%v", payload, err)
 	}
@@ -306,7 +311,7 @@ func TestCrossPlatformCoverageMinutesPrepareASRBranchesE2E(t *testing.T) {
 		"minutes/add_personal_hot_word":   {`{"success":true,"result":{}}`},
 		"minutes/delete_personal_hotword": {`{"success":true,"result":{}}`},
 	}}
-	payload, _, err = runMinutesAlignmentCLI(t, syncSuccess, "minutes", "+prepare-asr", "--words", "a", "--sync", "--yes")
+	payload, _, err = runMinutesAlignmentCLI(t, syncSuccess, "minutes", "+sync-asr", "--words", "a", "--yes")
 	if err != nil || payload["complete"] != true {
 		t.Fatalf("ASR sync payload=%#v err=%v", payload, err)
 	}
@@ -337,8 +342,30 @@ func TestCrossPlatformCoverageMinutesPermissionLedgerBranchesE2E(t *testing.T) {
 		t.Fatalf("share payload=%#v err=%v", payload, err)
 	}
 	args := share.arguments["minutes/add_member_permission"][0]
-	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 {
+	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 || args["memberUids"].([]string)[0] != "m1" {
 		t.Fatalf("share args=%#v", args)
+	}
+	if _, exists := args["memberStaffIds"]; exists {
+		t.Fatalf("UID share unexpectedly sent memberStaffIds: %#v", args)
+	}
+	staffShare := &minutesE2ECaller{responses: map[string][]string{"minutes/add_member_permission": {`{"success":true,"result":{}}`}}}
+	payload, _, err = runMinutesAlignmentCLI(t, staffShare, "minutes", "+share", "--id", "u1", "--member-staff-ids", "074360", "--permission", "view", "--yes")
+	if err != nil || payload["complete"] != true {
+		t.Fatalf("staffId share payload=%#v err=%v", payload, err)
+	}
+	staffArgs := staffShare.arguments["minutes/add_member_permission"][0]
+	staffIDs, ok := staffArgs["memberStaffIds"].([]string)
+	if !ok || len(staffIDs) != 1 || staffIDs[0] != "074360" {
+		t.Fatalf("staffId share lost leading zero: %#v", staffArgs)
+	}
+	if _, exists := staffArgs["memberUids"]; exists {
+		t.Fatalf("staffId share unexpectedly sent memberUids: %#v", staffArgs)
+	}
+	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+share", "--id", "u1", "--member-uids", "m1", "--member-staff-ids", "074360", "--permission", "view", "--yes"); err == nil || payload != nil || output != "" {
+		t.Fatalf("share accepted both member identifier types payload=%#v output=%q err=%v", payload, output, err)
+	}
+	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+share", "--id", "u1", "--permission", "view", "--yes"); err == nil || payload != nil || output != "" {
+		t.Fatalf("share accepted no member identifier payload=%#v output=%q err=%v", payload, output, err)
 	}
 	continueFailure := &minutesE2ECaller{responses: map[string][]string{
 		"minutes/get_minutes_basic_info": {`{"success":true,"result":{"taskUuid":"u1"}}`},

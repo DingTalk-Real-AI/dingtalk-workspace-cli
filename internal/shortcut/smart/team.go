@@ -14,13 +14,11 @@
 package smart
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -77,7 +75,7 @@ var Team = shortcut.Shortcut{
 	Tips: []string{`dws contact +team --name 张三`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — resolve the person's name to a unique userId.
-		user, err := resolveUser(rt, rt.Str("name"))
+		user, err := strictResolveContactUser(rt, rt.Str("name"))
 		if err != nil {
 			return err
 		}
@@ -94,21 +92,31 @@ var Team = shortcut.Shortcut{
 		// Step 3 — defensively pull the primary deptId out of the response
 		// (reuses the same extractor as +org), then list that department's
 		// direct members.
-		deptID, ok := shortcutOrgExtractDeptID(data)
-		if !ok {
-			return apperrors.NewValidation(fmt.Sprintf(
-				"没能从 %s(%s) 的组织信息里解析出所在部门 deptId；"+
-					"TA 可能没有归属部门，或返回结构与预期不符。",
-				user.name, user.userID))
+		profile, err := strictUserDetail(data, user.userID, "contact/get_user_info_by_user_ids")
+		if err != nil {
+			return err
+		}
+		deptID, err := strictPrimaryDeptID(profile, "contact/get_user_info_by_user_ids")
+		if err != nil {
+			return err
 		}
 
 		// get_dept_members_by_deptId expects deptIds as a string list.
-		return rt.CallMCP("get_dept_members_by_deptId", map[string]any{
+		data, err = rt.CallMCPData("contact", "get_dept_members_by_deptId", map[string]any{
 			"deptIds": []string{strconv.FormatInt(deptID, 10)},
 		})
+		if err != nil {
+			return err
+		}
+		members, err := strictContactMembers(data, "contact/get_dept_members_by_deptId")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": len(members), "members": members})
 	},
 }
 
 func init() {
+	finalizeContactSmart(&Team)
 	shortcut.Register(Team)
 }

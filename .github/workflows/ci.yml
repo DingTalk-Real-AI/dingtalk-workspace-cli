@@ -5,23 +5,37 @@ on:
     branches:
       - main
   pull_request:
+    # Auto-merge metadata is governed by the base-owned Reviewer Router. It
+    # does not change the head SHA, so it must not restart this full admission
+    # graph or evict useful in-flight work for the same revision.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Keep only the latest revision of a pull request: a stale run must not
+  # compete with its replacement for hosted runners. A replacement that sees
+  # a cold baseline cache recomputes it authoritatively. Protected-main pushes
+  # remain keyed by exact SHA so every potential merge base has a producer.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('push-{0}', github.sha) }}
   cancel-in-progress: true
 
 jobs:
   lint:
     name: Lint
+    # Draft revisions use the isolated Draft CI workflow. Skip the heavy
+    # admission graph; the base-owned AI Behavior status fails Draft revisions
+    # so these successful skipped checks cannot authorize a merge.
+    if: ${{ github.event_name == 'push' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      actions: read
       checks: read
       contents: read
       pull-requests: read
+      statuses: read
     outputs:
       changelog_only: ${{ steps.classify.outputs.changelog_only }}
       release_seal_only: ${{ steps.classify.outputs.release_seal_only }}
@@ -33,6 +47,11 @@ jobs:
       mcp_sensitive: ${{ steps.classify.outputs.mcp_sensitive }}
       edition_sensitive: ${{ steps.classify.outputs.edition_sensitive }}
       platform_sensitive: ${{ steps.classify.outputs.platform_sensitive }}
+      admitted_merge: ${{ steps.classify.outputs.admitted_merge }}
+      admitted_merge_head_sha: ${{ steps.classify.outputs.admitted_merge_head_sha }}
+      admitted_merge_run_id: ${{ steps.classify.outputs.admitted_merge_run_id }}
+      admitted_merge_artifact_id: ${{ steps.classify.outputs.admitted_merge_artifact_id }}
+      admitted_merge_artifact_digest: ${{ steps.classify.outputs.admitted_merge_artifact_digest }}
     steps:
       - name: Classify revision scope
         id: classify
@@ -49,8 +68,24 @@ jobs:
             let mcpSensitive = context.eventName === 'push';
             let editionSensitive = context.eventName === 'push';
             let platformSensitive = context.eventName === 'push';
+            let admittedMerge = false;
+            let admittedMergeHeadSha = '';
+            let admittedMergeRunId = '';
+            let admittedMergeArtifactId = '';
+            let admittedMergeArtifactDigest = '';
             let files = [];
             let fastPathTrust = 'not evaluated';
+            const requiredContexts = [
+              'Lint',
+              'Test',
+              'Coverage',
+              'Policy',
+              'Edition',
+              'Interface Integrity',
+              'AI Behavior',
+              'CLI Smoke',
+              'Mock MCP',
+            ];
 
             const isDocsOnly = (filename) =>
               typeof filename === 'string' &&
@@ -74,6 +109,7 @@ jobs:
                 filename.startsWith('scripts/install') ||
                 filename.startsWith('Formula/') ||
                 filename.startsWith('build/') ||
+                filename.startsWith('third_party/runtimepayload/') ||
                 filename === '.goreleaser.yaml' ||
                 filename === '.github/workflows/release.yml' ||
                 filename === '.github/workflows/withdraw-release.yml'
@@ -83,6 +119,8 @@ jobs:
               (
                 filename.startsWith('internal/auth/') ||
                 filename.startsWith('internal/keychain/') ||
+                filename.startsWith('internal/runtimecontext/') ||
+                filename.startsWith('third_party/runtimepayload/') ||
                 /_(darwin|windows|linux|unix)(?:_[a-z0-9]+)*\.go$/.test(filename) ||
                 filename === '.github/workflows/ci.yml' ||
                 filename ===
@@ -327,6 +365,17 @@ jobs:
               const expectedAfter = context.payload.after;
               const fullCommit = /^[0-9a-f]{40}$/;
               const zeroCommit = '0'.repeat(40);
+              const requireFullMain = () => {
+                changelogOnly = false;
+                releaseSealOnly = false;
+                docsOnly = false;
+                fullSuite = true;
+                releaseSensitive = true;
+                interfaceSensitive = true;
+                mcpSensitive = true;
+                editionSensitive = true;
+                platformSensitive = true;
+              };
 
               if (
                 context.ref !== 'refs/heads/main' ||
@@ -343,16 +392,35 @@ jobs:
                 fastPathTrust =
                   'push identity is not a non-forced update of the existing main branch';
               } else {
-                const { data: comparison } =
-                  await github.rest.repos.compareCommitsWithBasehead({
+                let comparison = {
+                  status: 'unknown',
+                  merge_base_commit: null,
+                  behind_by: 1,
+                  ahead_by: 0,
+                  total_commits: 0,
+                  files: [],
+                };
+                let comparisonAvailable = false;
+                try {
+                  const response = await github.rest.repos.compareCommitsWithBasehead({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     basehead: `${expectedBefore}...${expectedAfter}`,
                     per_page: 100,
                   });
+                  comparison = response.data;
+                  comparisonAvailable = true;
+                } catch (error) {
+                  fastPathTrust =
+                    `push comparison unavailable; full main suite required: ${error.message}`;
+                  core.warning(fastPathTrust);
+                }
                 files = Array.isArray(comparison.files) ? comparison.files : [];
                 const pushFilesComplete = files.length < 300;
                 classifyFiles(pushFilesComplete);
+                if (!comparisonAvailable) {
+                  requireFullMain();
+                }
                 const linearFromValidatedTip =
                   comparison.status === 'ahead' &&
                   comparison.merge_base_commit?.sha === expectedBefore &&
@@ -368,74 +436,407 @@ jobs:
                   pushFilesComplete && isExactReleaseSeal(files);
 
                 if (linearFromValidatedTip && (exactChangelogDiff || exactReleaseSealDiff)) {
-                  const requiredContexts = [
-                    'Lint',
-                    'Test',
-                    'Coverage',
-                    'Policy',
-                    'Edition',
-                    'Interface Integrity',
-                    'AI Behavior',
-                    'CLI Smoke',
-                    'Mock MCP',
-                  ];
-                  const runs = await github.paginate(
-                    github.rest.checks.listForRef,
-                    {
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      ref: expectedBefore,
-                      filter: 'latest',
-                      per_page: 100,
+                  try {
+                    const runs = await github.paginate(
+                      github.rest.checks.listForRef,
+                      {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        ref: expectedBefore,
+                        filter: 'latest',
+                        per_page: 100,
+                      }
+                    );
+                    const latestByName = new Map();
+                    for (const run of runs) {
+                      if (
+                        run.head_sha !== expectedBefore ||
+                        run.app?.slug !== 'github-actions' ||
+                        !requiredContexts.includes(run.name)
+                      ) {
+                        continue;
+                      }
+                      const current = latestByName.get(run.name);
+                      if (!current || run.id > current.id) {
+                        latestByName.set(run.name, run);
+                      }
                     }
-                  );
-                  const latestByName = new Map();
-                  for (const run of runs) {
-                    if (
-                      run.head_sha !== expectedBefore ||
-                      run.app?.slug !== 'github-actions' ||
-                      !requiredContexts.includes(run.name)
-                    ) {
-                      continue;
-                    }
-                    const current = latestByName.get(run.name);
-                    if (!current || run.id > current.id) {
-                      latestByName.set(run.name, run);
-                    }
-                  }
-                  const missing = requiredContexts.filter(
-                    (name) => !latestByName.has(name)
-                  );
-                  const nonSuccess = requiredContexts.flatMap((name) => {
-                    const run = latestByName.get(name);
-                    if (!run || run.conclusion === 'success') {
-                      return [];
-                    }
-                    return [
-                      `${name}=${run.conclusion || run.status || 'unknown'}`,
-                    ];
-                  });
+                    const missing = requiredContexts.filter(
+                      (name) => !latestByName.has(name)
+                    );
+                    const nonSuccess = requiredContexts.flatMap((name) => {
+                      const run = latestByName.get(name);
+                      if (!run || run.conclusion === 'success') {
+                        return [];
+                      }
+                      return [
+                        `${name}=${run.conclusion || run.status || 'unknown'}`,
+                      ];
+                    });
 
-                  if (missing.length === 0 && nonSuccess.length === 0) {
-                    changelogOnly = true;
-                    releaseSealOnly = exactReleaseSealDiff;
-                    changelogChanged = true;
-                    if (releaseSealOnly) {
-                      fullSuite = false;
+                    if (missing.length === 0 && nonSuccess.length === 0) {
+                      changelogOnly = true;
+                      releaseSealOnly = exactReleaseSealDiff;
+                      changelogChanged = true;
+                      if (releaseSealOnly) {
+                        fullSuite = false;
+                      }
+                      fastPathTrust =
+                        releaseSealOnly
+                          ? `exact release-seal successor of validated ${expectedBefore}`
+                          : `exact CHANGELOG-only successor of validated ${expectedBefore}`;
+                    } else {
+                      requireFullMain();
+                      fastPathTrust =
+                        'predecessor Code Admission is not fully successful; ' +
+                        `missing=${missing.join(',') || 'none'}; ` +
+                        `non-success=${nonSuccess.join(',') || 'none'}`;
+                      core.warning(fastPathTrust);
                     }
+                  } catch (error) {
+                    requireFullMain();
                     fastPathTrust =
-                      releaseSealOnly
-                        ? `exact release-seal successor of validated ${expectedBefore}`
-                        : `exact CHANGELOG-only successor of validated ${expectedBefore}`;
-                  } else {
-                    fastPathTrust =
-                      'predecessor Code Admission is not fully successful; ' +
-                      `missing=${missing.join(',') || 'none'}; ` +
-                      `non-success=${nonSuccess.join(',') || 'none'}`;
+                      `predecessor admission unavailable; full main suite required: ` +
+                      `${error.message}`;
+                    core.warning(fastPathTrust);
                   }
-                } else {
+                } else if (comparisonAvailable) {
                   fastPathTrust =
                     'push is not an exact linear CHANGELOG-only successor';
+                }
+
+                // A normal protected merge may produce a new commit SHA whose
+                // tree is byte-for-byte the already admitted PR head. Reuse is
+                // allowed only after binding the two-parent merge identity,
+                // every required check, the exact run of the base-owned CI
+                // definition, and its immutable coverage artifact. Any
+                // uncertainty falls back to the complete protected-main suite.
+                if (!changelogOnly && linearFromValidatedTip) {
+                  try {
+                    const {data: targetCommit} = await github.rest.repos.getCommit({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: expectedAfter,
+                      per_page: 100,
+                    });
+                    if (
+                      targetCommit.sha !== expectedAfter ||
+                      targetCommit.parents.length !== 2 ||
+                      targetCommit.parents[0]?.sha !== expectedBefore ||
+                      !fullCommit.test(targetCommit.parents[1]?.sha || '')
+                    ) {
+                      throw new Error('target is not an exact two-parent merge from push before');
+                    }
+                    const admittedHeadSha = targetCommit.parents[1].sha;
+                    const associatedPulls = await github.paginate(
+                      github.rest.pulls.listPullRequestsAssociatedWithCommit,
+                      {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        commit_sha: expectedAfter,
+                        per_page: 100,
+                      },
+                    );
+                    const admittedPulls = associatedPulls.filter((pull) =>
+                      pull.state === 'closed' &&
+                      typeof pull.merged_at === 'string' &&
+                      pull.merged_at.length > 0 &&
+                      pull.base?.ref === 'main' &&
+                      pull.base?.sha === expectedBefore &&
+                      pull.base?.repo?.full_name ===
+                        'DingTalk-Real-AI/dingtalk-workspace-cli' &&
+                      pull.merge_commit_sha === expectedAfter &&
+                      pull.head?.sha === admittedHeadSha &&
+                      typeof pull.head?.ref === 'string' &&
+                      pull.head.ref.length > 0 &&
+                      typeof pull.head?.repo?.full_name === 'string' &&
+                      pull.head.repo.full_name.length > 0,
+                    );
+                    if (admittedPulls.length !== 1) {
+                      throw new Error(
+                        `expected one associated merged PR, found ${admittedPulls.length}`,
+                      );
+                    }
+                    const admittedPull = admittedPulls[0];
+                    const admittedMergedAt = Date.parse(admittedPull.merged_at);
+                    if (!Number.isFinite(admittedMergedAt)) {
+                      throw new Error('merged PR has an invalid merged_at timestamp');
+                    }
+                    const completedByMerge = (value) => {
+                      const timestamp = Date.parse(value || '');
+                      return Number.isFinite(timestamp) && timestamp <= admittedMergedAt;
+                    };
+                    const {data: headCommit} = await github.rest.repos.getCommit({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: admittedHeadSha,
+                      per_page: 1,
+                    });
+                    if (
+                      headCommit.sha !== admittedHeadSha ||
+                      !targetCommit.commit?.tree?.sha ||
+                      targetCommit.commit?.tree?.sha !== headCommit.commit?.tree?.sha
+                    ) {
+                      throw new Error('merge commit tree differs from the admitted PR head tree');
+                    }
+
+                    // The PR run must have used the CI definition already
+                    // trusted on main. A PR that changes this workflow must
+                    // receive a fresh post-merge execution before later
+                    // source-only merges may reuse its admission evidence.
+                    const readProtectedWorkflowBlob = async (path, ref) => {
+                      const {data: content} = await github.rest.repos.getContent({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        path,
+                        ref,
+                      });
+                      if (
+                        Array.isArray(content) ||
+                        content.type !== 'file' ||
+                        !/^[0-9a-f]{40}$/.test(content.sha || '')
+                      ) {
+                        throw new Error(`cannot bind ${path} at ${ref}`);
+                      }
+                      return content.sha;
+                    };
+                    for (const protectedWorkflow of [
+                      '.github/workflows/ci.yml',
+                      '.github/workflows/ai-behavior-check.yml',
+                    ]) {
+                      const baseWorkflowBlob =
+                        await readProtectedWorkflowBlob(protectedWorkflow, expectedBefore);
+                      const headWorkflowBlob =
+                        await readProtectedWorkflowBlob(protectedWorkflow, admittedHeadSha);
+                      if (baseWorkflowBlob !== headWorkflowBlob) {
+                        throw new Error(`PR changed protected workflow ${protectedWorkflow}`);
+                      }
+                    }
+
+                    const fullSuiteEvidenceContexts = [
+                      'Coverage (current: app)',
+                      'Coverage (current: cli)',
+                      'Coverage (current: generators)',
+                      'Coverage (current: helpers)',
+                      'Coverage (current: remaining)',
+                      'Coverage (supporting)',
+                    ];
+                    const admissionContextNames = [
+                      ...requiredContexts,
+                      ...fullSuiteEvidenceContexts,
+                    ];
+                    const checkRuns = await github.paginate(
+                      github.rest.checks.listForRef,
+                      {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        ref: admittedHeadSha,
+                        filter: 'latest',
+                        per_page: 100,
+                      },
+                    );
+                    const latestByName = new Map();
+                    for (const run of checkRuns) {
+                      if (
+                        run.head_sha !== admittedHeadSha ||
+                        run.app?.slug !== 'github-actions' ||
+                        !admissionContextNames.includes(run.name)
+                      ) {
+                        continue;
+                      }
+                      const current = latestByName.get(run.name);
+                      if (!current || run.id > current.id) {
+                        latestByName.set(run.name, run);
+                      }
+                    }
+                    const invalidContexts = requiredContexts.filter((name) => {
+                      const run = latestByName.get(name);
+                      return !run ||
+                        run.status !== 'completed' ||
+                        run.conclusion !== 'success' ||
+                        !completedByMerge(run.completed_at);
+                    });
+                    if (invalidContexts.length > 0) {
+                      throw new Error(
+                        `PR head lacks successful Code Admission: ${invalidContexts.join(', ')}`,
+                      );
+                    }
+                    const invalidFullSuiteEvidence = fullSuiteEvidenceContexts.filter(
+                      (name) => {
+                        const run = latestByName.get(name);
+                        return !run ||
+                          run.status !== 'completed' ||
+                          run.conclusion !== 'success' ||
+                          !completedByMerge(run.completed_at);
+                      },
+                    );
+                    if (invalidFullSuiteEvidence.length > 0) {
+                      throw new Error(
+                        `PR head did not execute the complete coverage suite: ` +
+                        `${invalidFullSuiteEvidence.join(', ')}`,
+                      );
+                    }
+
+                    // AI Behavior is emitted by a separate base-owned
+                    // pull_request_target workflow. Bind both its PR-targeted
+                    // commit status and the automatic Actions check run.
+                    const aiBehaviorCheck = latestByName.get('AI Behavior');
+                    const expectedAIStatusTarget =
+                      `https://github.com/DingTalk-Real-AI/` +
+                      `dingtalk-workspace-cli/pull/${admittedPull.number}`;
+                    const aiStatuses = await github.paginate(
+                      github.rest.repos.listCommitStatusesForRef,
+                      {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        ref: admittedHeadSha,
+                        per_page: 100,
+                      },
+                    );
+                    const boundAIStatuses = aiStatuses
+                      .filter((status) =>
+                        status.context === 'AI Behavior' &&
+                        status.target_url === expectedAIStatusTarget,
+                      )
+                      .sort((left, right) => right.id - left.id);
+                    const latestAIStatus = boundAIStatuses[0];
+                    if (
+                      !latestAIStatus ||
+                      latestAIStatus.state !== 'success' ||
+                      !completedByMerge(latestAIStatus.updated_at)
+                    ) {
+                      throw new Error('AI Behavior status is not bound to the admitted PR before merge');
+                    }
+                    const aiDetailsMatch =
+                      /^https:\/\/github\.com\/DingTalk-Real-AI\/dingtalk-workspace-cli\/actions\/runs\/([1-9][0-9]*)\/job\/[1-9][0-9]*$/
+                        .exec(aiBehaviorCheck.details_url || '');
+                    if (!aiDetailsMatch) {
+                      throw new Error('AI Behavior check has an untrusted Actions URL');
+                    }
+                    const aiRunID = Number(aiDetailsMatch[1]);
+                    const {data: aiWorkflowRun} = await github.rest.actions.getWorkflowRun({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      run_id: aiRunID,
+                    });
+                    if (
+                      aiWorkflowRun.id !== aiRunID ||
+                      aiWorkflowRun.name !== 'Code Admission — AI Behavior' ||
+                      aiWorkflowRun.path !== '.github/workflows/ai-behavior-check.yml' ||
+                      aiWorkflowRun.event !== 'pull_request_target' ||
+                      aiWorkflowRun.head_sha !== admittedHeadSha ||
+                      aiWorkflowRun.head_branch !== admittedPull.head.ref ||
+                      aiWorkflowRun.head_repository?.full_name !==
+                        admittedPull.head?.repo?.full_name ||
+                      aiWorkflowRun.repository?.full_name !==
+                        'DingTalk-Real-AI/dingtalk-workspace-cli' ||
+                      aiWorkflowRun.status !== 'completed' ||
+                      aiWorkflowRun.conclusion !== 'success' ||
+                      !completedByMerge(aiWorkflowRun.updated_at)
+                    ) {
+                      throw new Error('AI Behavior workflow run is not bound to the admitted PR head');
+                    }
+
+                    const {data: ciWorkflow} = await github.rest.actions.getWorkflow({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      workflow_id: '.github/workflows/ci.yml',
+                    });
+                    if (
+                      ciWorkflow.name !== 'CI' ||
+                      ciWorkflow.path !== '.github/workflows/ci.yml' ||
+                      ciWorkflow.state !== 'active'
+                    ) {
+                      throw new Error('protected CI workflow identity is not active or exact');
+                    }
+                    const workflowRuns = await github.paginate(
+                      github.rest.actions.listWorkflowRuns,
+                      {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        workflow_id: ciWorkflow.id,
+                        event: 'pull_request',
+                        status: 'success',
+                        head_sha: admittedHeadSha,
+                        per_page: 100,
+                      },
+                    );
+                    const ciContextNames = [
+                      ...requiredContexts.filter((name) => name !== 'AI Behavior'),
+                      ...fullSuiteEvidenceContexts,
+                    ];
+                    const admittedRuns = workflowRuns.filter((run) =>
+                      run.name === 'CI' &&
+                      run.workflow_id === ciWorkflow.id &&
+                      run.path === ciWorkflow.path &&
+                      run.event === 'pull_request' &&
+                      run.head_sha === admittedHeadSha &&
+                      run.head_branch === admittedPull.head.ref &&
+                      run.head_repository?.full_name === admittedPull.head?.repo?.full_name &&
+                      run.repository?.full_name ===
+                        'DingTalk-Real-AI/dingtalk-workspace-cli' &&
+                      run.status === 'completed' &&
+                      run.conclusion === 'success' &&
+                      completedByMerge(run.updated_at) &&
+                      ciContextNames.every((name) =>
+                        latestByName.get(name)?.details_url?.includes(
+                          `/actions/runs/${run.id}/job/`,
+                        ),
+                      ),
+                    );
+                    if (admittedRuns.length !== 1) {
+                      throw new Error(
+                        `expected one exact successful PR CI run, found ${admittedRuns.length}`,
+                      );
+                    }
+                    const admittedRun = admittedRuns[0];
+                    const artifacts = await github.paginate(
+                      github.rest.actions.listWorkflowRunArtifacts,
+                      {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        run_id: admittedRun.id,
+                        per_page: 100,
+                      },
+                    );
+                    const coverageArtifacts = artifacts.filter((artifact) =>
+                      artifact.name === 'coverage-report' &&
+                      artifact.expired === false &&
+                      artifact.size_in_bytes > 0 &&
+                      artifact.size_in_bytes <= 134217728 &&
+                      artifact.workflow_run?.id === admittedRun.id &&
+                      artifact.workflow_run?.head_sha === admittedHeadSha &&
+                      /^sha256:[0-9a-f]{64}$/.test(artifact.digest || '') &&
+                      completedByMerge(artifact.updated_at),
+                    );
+                    if (coverageArtifacts.length !== 1) {
+                      throw new Error(
+                        `expected one immutable coverage artifact, found ${coverageArtifacts.length}`,
+                      );
+                    }
+
+                    const coverageArtifact = coverageArtifacts[0];
+                    admittedMerge = true;
+                    admittedMergeHeadSha = admittedHeadSha;
+                    admittedMergeRunId = String(admittedRun.id);
+                    admittedMergeArtifactId = String(coverageArtifact.id);
+                    admittedMergeArtifactDigest = coverageArtifact.digest;
+                    fullSuite = false;
+                    releaseSensitive = false;
+                    interfaceSensitive = false;
+                    mcpSensitive = false;
+                    editionSensitive = false;
+                    platformSensitive = false;
+                    fastPathTrust =
+                      `merge tree reuses PR #${admittedPull.number} ` +
+                      `CI run ${admittedRun.id} artifact ${coverageArtifact.id}`;
+                  } catch (error) {
+                    requireFullMain();
+                    fastPathTrust =
+                      `admitted-merge reuse unavailable; full main suite required: ` +
+                      `${error.message}`;
+                    core.warning(fastPathTrust);
+                  }
                 }
               }
             }
@@ -450,6 +851,11 @@ jobs:
             core.setOutput('mcp_sensitive', String(mcpSensitive));
             core.setOutput('edition_sensitive', String(editionSensitive));
             core.setOutput('platform_sensitive', String(platformSensitive));
+            core.setOutput('admitted_merge', String(admittedMerge));
+            core.setOutput('admitted_merge_head_sha', admittedMergeHeadSha);
+            core.setOutput('admitted_merge_run_id', admittedMergeRunId);
+            core.setOutput('admitted_merge_artifact_id', admittedMergeArtifactId);
+            core.setOutput('admitted_merge_artifact_digest', admittedMergeArtifactDigest);
             await core.summary
               .addHeading('Code Admission scope')
               .addRaw(`- Event: \`${context.eventName}\`\n`)
@@ -463,6 +869,7 @@ jobs:
               .addRaw(`- MCP-sensitive: \`${mcpSensitive}\`\n`)
               .addRaw(`- Edition-sensitive: \`${editionSensitive}\`\n`)
               .addRaw(`- Native-platform risk paths touched: \`${platformSensitive}\`\n`)
+              .addRaw(`- Admitted merge reuse: \`${admittedMerge}\`\n`)
               .addRaw(`- Changed files: \`${files.length}\`\n`)
               .addRaw(`- Fast-path trust: ${fastPathTrust}\n`)
               .write();
@@ -479,49 +886,95 @@ jobs:
           fi
 
       - name: Record documentation-only fast path
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only == 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only == 'true' && steps.classify.outputs.admitted_merge != 'true'
         run: echo "Lint is satisfied by the non-executable documentation scope." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Record admitted-merge reuse
+        if: steps.classify.outputs.admitted_merge == 'true'
+        env:
+          ADMITTED_HEAD_SHA: ${{ steps.classify.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ steps.classify.outputs.admitted_merge_run_id }}
+        run: |
+          echo "Lint reuses successful Code Admission from PR head $ADMITTED_HEAD_SHA (CI run $ADMITTED_RUN_ID)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check out repository
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Go
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Verify Test Package Plan
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         run: make test-plan
 
       - name: Format Check
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         run: make format-check
 
       - name: Go Vet
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         run: go vet ./...
 
       - name: Check GitHub Actions workflows
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
-      - name: Test reviewer routing policy
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
-        run: node .github/reviewer-routing.test.js
+      - name: Test reviewer routing and merge authority policy
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
+        run: |
+          node .github/reviewer-routing.test.js
+          node .github/reviewer-merge-authority.test.js
 
       - name: Test npm installer smoke (prune, backup, publish)
-        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true' && steps.classify.outputs.admitted_merge != 'true'
         env:
           XDG_CONFIG_HOME: ""
         run: node test/scripts/install_js_smoke.mjs
 
+  runtime-payload:
+    name: Validate Runtime Payload
+    needs: lint
+    if: ${{ needs.lint.outputs.admitted_merge == 'true' || (needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.release_sensitive == 'true' || needs.lint.outputs.platform_sensitive == 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install runtime inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm binutils file
+
+      - name: Verify runtime payload
+        run: ./scripts/policy/check-runtime-payload.sh
+
+      - name: Compile runtime context targets
+        run: |
+          set -euo pipefail
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            suffix=""
+            if [ "$os" = windows ]; then suffix=.exe; fi
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go test -c ./internal/runtimecontext -o "$RUNNER_TEMP/runtimecontext-${os}-${arch}${suffix}"
+          done
+
   test-focused:
     name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
     # Each shard owns one bounded slice of the impacted set, so no single job
     # carries internal/app together with every reverse dependency. The shard
@@ -529,26 +982,19 @@ jobs:
     # shards at full-suite scope; release-scripts is included because its
     # dedicated job only runs at full-suite or release-sensitive scope, and
     # dropping it here would stop testing test/scripts changes entirely.
-    # internal/app is carried by one shard per bounded partition rather than a
-    # single app shard: the partitions used to run end to end inside one job,
-    # where the Schema partition alone owned most of the wall clock. The
-    # app-<partition> names are pinned to the helper's partition set by
-    # TestCIAppRacePartitionMatrixMatchesHelper, so a partition can never lose
-    # its job silently. The CrossPlatformCoverage-heavy C range is split again
-    # to retain headroom on runners reclaimed near the five-minute mark.
+    # internal/app keeps nine process-isolated logical partitions, balanced
+    # across three physical app lanes. The lane names and their exact partition
+    # union are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper.
+    # This preserves memory release between Go test processes while reducing
+    # hosted-runner fan-out by six jobs per focused run.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app-schema
-          - app-a-b
-          - app-c-a-l
-          - app-c-m-r
-          - app-c-s-z
-          - app-c-other
-          - app-d-r
-          - app-s-z-example-fuzz
+          - app-lane-1
+          - app-lane-2
+          - app-lane-3
           - generators
           - helpers
           - cli
@@ -590,12 +1036,12 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          # Every app partition shard tests the same single internal/app
-          # package, so the impacted-package query uses the base shard name and
-          # the partition only selects which tests run.
+          # Every app lane tests the same single internal/app package, so the
+          # impacted-package query uses the base shard name and the lane only
+          # selects which process-isolated test partitions run.
           package_shard="$TEST_SHARD"
           case "$TEST_SHARD" in
-            app-*) package_shard=app ;;
+            app-lane-*) package_shard=app ;;
           esac
           package_output="$(
             ./scripts/ci/changed-test-packages.sh \
@@ -646,15 +1092,13 @@ jobs:
             }
           done
           case "$TEST_SHARD" in
-            app-*)
-              # A single long-lived app test process retains every constructed
-              # command tree in framework registries. Each partition is its own
-              # job, so that state is released when the process exits and the
-              # partitions run concurrently instead of end to end. The helper
-              # still verifies that the partition patterns cover every top-level
-              # test exactly once before running the one it was asked for.
+            app-lane-*)
+              # Each lane invokes several logical partitions sequentially, and
+              # every partition remains a fresh Go test process so framework
+              # registries are released between partitions. The helper verifies
+              # that all lanes cover every logical partition exactly once.
               test "${#packages[@]}" -eq 1
-              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              ./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"
               exit 0
               ;;
           esac
@@ -678,25 +1122,19 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    # internal/app is split across one shard per bounded partition so the
-    # partitions run concurrently and each releases its framework registries
-    # when the process exits; cli/smoke need headroom beyond go test -timeout for
-    # setup + assembly. The app-<partition> names are pinned to the helper's
-    # partition set by TestCIAppRacePartitionMatrixMatchesHelper. The
-    # CrossPlatformCoverage-heavy C range is split again for runner headroom.
+    # internal/app keeps nine process-isolated logical partitions, balanced
+    # across three physical app lanes. The lane names and exact partition union
+    # are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper. This
+    # preserves registry release while reducing hosted-runner fan-out by six
+    # jobs. cli/smoke retain extra timeout headroom for setup + assembly.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app-schema
-          - app-a-b
-          - app-c-a-l
-          - app-c-m-r
-          - app-c-s-z
-          - app-c-other
-          - app-d-r
-          - app-s-z-example-fuzz
+          - app-lane-1
+          - app-lane-2
+          - app-lane-3
           - generators
           - helpers
           - cli
@@ -722,27 +1160,25 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          # Every app partition shard tests the same single internal/app
-          # package, so the package query uses the base shard name and the
-          # partition only selects which tests run.
+          # Every app lane tests the same single internal/app package, so the
+          # package query uses the base shard name and the lane only selects
+          # which process-isolated test partitions run.
           package_shard="$TEST_SHARD"
           case "$TEST_SHARD" in
-            app-*) package_shard=app ;;
+            app-lane-*) package_shard=app ;;
           esac
           package_output="$(./scripts/ci/test-packages.sh list "$package_shard")"
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
           case "$TEST_SHARD" in
-            app-*)
-              # A single long-lived app test process retains every constructed
-              # command tree in framework registries. Each partition is its own
-              # job, so that state is released when the process exits and the
-              # partitions run concurrently instead of end to end. The helper
-              # still verifies that the partition patterns cover every top-level
-              # test exactly once before running the one it was asked for.
+            app-lane-*)
+              # Each lane invokes several logical partitions sequentially, and
+              # every partition remains a fresh Go test process so framework
+              # registries are released between partitions. The helper verifies
+              # that all lanes cover every logical partition exactly once.
               test "${#packages[@]}" -eq 1
-              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              ./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"
               exit 0
               ;;
           esac
@@ -794,7 +1230,7 @@ jobs:
   test-cross-platform:
     name: Test (cross-platform compile)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -835,12 +1271,15 @@ jobs:
     if: ${{ always() && needs.lint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions: {}
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Verify test shards
         env:
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
           DOCS_ONLY: ${{ needs.lint.outputs.docs_only }}
+          ADMITTED_MERGE: ${{ needs.lint.outputs.admitted_merge }}
           FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           RELEASE_SENSITIVE: ${{ needs.lint.outputs.release_sensitive }}
           FOCUSED_RESULT: ${{ needs.test-focused.result }}
@@ -851,7 +1290,9 @@ jobs:
           WINDOWS_RESULT: ${{ needs.test-windows.result }}
         run: |
           failed=0
-          if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
+          if [ "$CHANGELOG_ONLY" = true ] ||
+             [ "$DOCS_ONLY" = true ] ||
+             [ "$ADMITTED_MERGE" = true ]; then
             for shard in \
               "focused shards:$FOCUSED_RESULT" \
               "race shards:$RACE_RESULT" \
@@ -913,6 +1354,296 @@ jobs:
             fi
           done
           test "$failed" -eq 0
+
+      # Null and non-built-in merge identities emit either the protected-main
+      # push or the trusted pull_request_target closed repair. The built-in
+      # Actions identity is the exceptional unsafe path, so its own token must
+      # prove that main-merge-writers never lets it update main.
+      - name: Verify auto-merge identity
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          REVIEWER_ROUTER_APP_SLUG: ${{ vars.REVIEWER_ROUTER_APP_SLUG }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const eventHeadSha = context.payload.pull_request.head.sha;
+            const eventBaseSha = context.payload.pull_request.base.sha;
+            const configuredAppSlug = process.env.REVIEWER_ROUTER_APP_SLUG?.trim();
+            const reviewedForkAppSlug = 'dingtalk-dws-reviewer-router';
+            const pullHeadRepository =
+              context.payload.pull_request.head.repo.full_name?.toLowerCase();
+            const baseRepository = `${owner}/${repo}`.toLowerCase();
+            const isForkPull =
+              Boolean(pullHeadRepository) && pullHeadRepository !== baseRepository;
+            const appSlug =
+              configuredAppSlug || (isForkPull ? reviewedForkAppSlug : '');
+            if (
+              !appSlug ||
+              appSlug !== appSlug.toLowerCase() ||
+              appSlug === 'github-actions'
+            ) {
+              core.setFailed(
+                'Reviewer Router App slug repository variable is missing or unsafe.',
+              );
+              return;
+            }
+            if (!configuredAppSlug) {
+              core.info(
+                `Fork pull request cannot read the repository App slug variable; using the reviewed public slug ${reviewedForkAppSlug}.`,
+              );
+            }
+            const expectedAppOwner = `${appSlug}[bot]`;
+            const writerRulesetName = 'main-merge-writers';
+            const skipWorkflowPattern =
+              /\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]|\bskip-checks\s*:\s*true\b/i;
+            const {data: repository} = await github.rest.repos.get({owner, repo});
+            function classifyMergeDefaults(repository) {
+              if (
+                repository === null ||
+                typeof repository !== 'object' ||
+                Array.isArray(repository)
+              ) {
+                return 'invalid';
+              }
+              const hasTitle = Object.prototype.hasOwnProperty.call(
+                repository,
+                'merge_commit_title',
+              );
+              const hasMessage = Object.prototype.hasOwnProperty.call(
+                repository,
+                'merge_commit_message',
+              );
+              if (!hasTitle && !hasMessage) {
+                return 'omitted';
+              }
+              if (!hasTitle || !hasMessage) {
+                return 'invalid';
+              }
+              if (
+                repository.merge_commit_title === 'MERGE_MESSAGE' &&
+                ['PR_TITLE', 'BLANK'].includes(repository.merge_commit_message)
+              ) {
+                return 'reviewed';
+              }
+              return 'invalid';
+            }
+            const mergeDefaultsProjection = classifyMergeDefaults(repository);
+            if (mergeDefaultsProjection === 'invalid') {
+              core.setFailed(
+                'Repository merge-message defaults are malformed or changed from their reviewed values.',
+              );
+              return;
+            }
+            if (mergeDefaultsProjection === 'omitted') {
+              core.info(
+                'Read-only CI cannot observe repository merge-message defaults; exact validation is delegated to the dedicated App.',
+              );
+            }
+
+            const appliedRules = await github.paginate(
+              'GET /repos/{owner}/{repo}/rules/branches/{branch}',
+              {owner, repo, branch: 'main', per_page: 100},
+            );
+            const repositorySource = `${owner}/${repo}`.toLowerCase();
+            const applicableRulesetIDs = [
+              ...new Set(
+                appliedRules
+                  .filter(rule =>
+                    rule.ruleset_source_type === 'Repository' &&
+                    rule.ruleset_source?.toLowerCase() === repositorySource &&
+                    Number.isSafeInteger(Number(rule.ruleset_id)) &&
+                    Number(rule.ruleset_id) > 0,
+                  )
+                  .map(rule => Number(rule.ruleset_id)),
+              ),
+            ];
+            const activeMainRulesets = [];
+            for (const rulesetID of applicableRulesetIDs) {
+              const {data: ruleset} = await github.request(
+                'GET /repos/{owner}/{repo}/rulesets/{ruleset_id}',
+                {owner, repo, ruleset_id: rulesetID},
+              );
+              if (
+                ruleset.enforcement !== 'active' ||
+                ruleset.target !== 'branch' ||
+                ruleset.source_type !== 'Repository' ||
+                ruleset.source?.toLowerCase() !== repositorySource
+              ) {
+                core.setFailed(
+                  `Applicable repository ruleset ${ruleset.name || rulesetID} is not an active branch ruleset owned by this repository.`,
+                );
+                return;
+              }
+              activeMainRulesets.push(ruleset);
+            }
+
+            const writerRulesets = activeMainRulesets.filter(
+              ruleset => ruleset.name === writerRulesetName,
+            );
+            if (writerRulesets.length !== 1) {
+              core.setFailed(
+                `Expected exactly one active ${writerRulesetName} ruleset on main; found ${writerRulesets.length}.`,
+              );
+              return;
+            }
+            const writerRuleset = writerRulesets[0];
+            const writerIncludes = writerRuleset.conditions?.ref_name?.include || [];
+            const writerExcludes = writerRuleset.conditions?.ref_name?.exclude || [];
+            // GitHub's read projection omits the entire parameters property
+            // when this exception is disabled. Accept only that exact omission
+            // or a one-field object containing exact false.
+            function isStrictUpdateRule(rule) {
+              if (rule?.type !== 'update') {
+                return false;
+              }
+              if (!Object.prototype.hasOwnProperty.call(rule, 'parameters')) {
+                return true;
+              }
+              const parameters = rule.parameters;
+              if (
+                parameters === null ||
+                typeof parameters !== 'object' ||
+                Array.isArray(parameters)
+              ) {
+                return false;
+              }
+              const parameterKeys = Object.keys(parameters);
+              return (
+                parameterKeys.length === 1 &&
+                parameterKeys[0] === 'update_allows_fetch_and_merge' &&
+                parameters.update_allows_fetch_and_merge === false
+              );
+            }
+            function isStrictGraphQLUpdateRule(restRuleset, graphRuleset) {
+              const restRulesetID = Number(restRuleset?.id);
+              const graphRulesetID = Number(graphRuleset?.databaseId);
+              const graphRules = graphRuleset?.rules;
+              const graphRule = graphRules?.nodes?.[0];
+              return (
+                Number.isSafeInteger(restRulesetID) &&
+                restRulesetID > 0 &&
+                graphRulesetID === restRulesetID &&
+                graphRuleset.name === restRuleset.name &&
+                graphRuleset.enforcement === 'ACTIVE' &&
+                graphRuleset.target === 'BRANCH' &&
+                graphRules?.totalCount === 1 &&
+                graphRules.nodes?.length === 1 &&
+                graphRule?.type === 'UPDATE' &&
+                graphRule.parameters?.__typename === 'UpdateParameters' &&
+                graphRule.parameters.updateAllowsFetchAndMerge === false
+              );
+            }
+            if (
+              writerIncludes.length !== 1 ||
+              writerIncludes[0] !== 'refs/heads/main' ||
+              writerExcludes.length !== 0 ||
+              typeof writerRuleset.node_id !== 'string' ||
+              !writerRuleset.node_id ||
+              writerRuleset.rules?.length !== 1 ||
+              !isStrictUpdateRule(writerRuleset.rules[0]) ||
+              writerRuleset.current_user_can_bypass !== 'never'
+            ) {
+              core.setFailed(
+                `${writerRulesetName} must target only refs/heads/main, contain only the strict update rule, and deny this built-in Actions identity any bypass.`,
+              );
+              return;
+            }
+            const {node: graphWriterRuleset} = await github.graphql(
+              `query ReviewerRouterWriterRule($rulesetID: ID!) {
+                node(id: $rulesetID) {
+                  ... on RepositoryRuleset {
+                    databaseId
+                    name
+                    enforcement
+                    target
+                    rules(first: 2) {
+                      totalCount
+                      nodes {
+                        type
+                        parameters {
+                          __typename
+                          ... on UpdateParameters {
+                            updateAllowsFetchAndMerge
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`,
+              {rulesetID: writerRuleset.node_id},
+            );
+            if (!isStrictGraphQLUpdateRule(writerRuleset, graphWriterRuleset)) {
+              core.setFailed(
+                `${writerRulesetName} must expose one strict UPDATE rule with updateAllowsFetchAndMerge=false through GraphQL.`,
+              );
+              return;
+            }
+
+            const maxAttempts = 6;
+            for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+              const {data: currentPull} = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              });
+              if (
+                currentPull.head.sha !== eventHeadSha ||
+                currentPull.base.sha !== eventBaseSha ||
+                currentPull.state !== 'open' ||
+                currentPull.draft ||
+                currentPull.base.ref !== 'main'
+              ) {
+                core.setFailed(
+                  `PR #${pullNumber} state or revision changed before the Test aggregate verified auto-merge identity.`,
+                );
+                return;
+              }
+              const mergeTexts = [
+                currentPull.title,
+                currentPull.auto_merge?.commit_title,
+                currentPull.auto_merge?.commit_message,
+              ].filter(value => typeof value === 'string');
+              if (mergeTexts.some(value => skipWorkflowPattern.test(value))) {
+                core.setFailed(
+                  `PR #${pullNumber} merge metadata contains a GitHub workflow-skip directive.`,
+                );
+                return;
+              }
+              if (!currentPull.auto_merge) {
+                core.info(
+                  `PR #${pullNumber} has no auto-merge request; protected-main push or closed-event repair remains authoritative.`,
+                );
+                return;
+              }
+              const enabledBy = currentPull.auto_merge.enabled_by?.login?.toLowerCase();
+              const safeCommitHeadline = `Merge pull request #${pullNumber}`;
+              const safeCommitBody =
+                `Merged by the dedicated Reviewer Router GitHub App for PR #${pullNumber}.`;
+              if (
+                enabledBy === expectedAppOwner &&
+                currentPull.auto_merge.commit_title === safeCommitHeadline &&
+                currentPull.auto_merge.commit_message === safeCommitBody
+              ) {
+                core.info(
+                  `PR #${pullNumber} auto-merge is owned by the reviewed ${expectedAppOwner} identity with fixed metadata.`,
+                );
+                return;
+              }
+              if (attempt < maxAttempts) {
+                core.info(
+                  `PR #${pullNumber} auto-merge owner or metadata is not the reviewed App value; waiting for Reviewer Router takeover (${attempt}/${maxAttempts}).`,
+                );
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                continue;
+              }
+              core.setFailed(
+                `PR #${pullNumber} auto-merge must be null or owned by ${expectedAppOwner} with the reviewed fixed metadata.`,
+              );
+            }
 
   test-darwin:
     name: Test (macOS auth/keychain)
@@ -995,6 +1726,8 @@ jobs:
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
       - name: Run and enforce macOS changed-code coverage
+        env:
+          COVERAGE_PLATFORM_TIMEOUT: 15m
         run: make coverage-gate-platform BASE_REF="$COVERAGE_BASE_REF" PROFILE=coverage-darwin.txt
 
       - name: Upload macOS coverage artifact
@@ -1053,7 +1786,7 @@ jobs:
   coverage-current:
     name: Coverage (current)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -1100,8 +1833,12 @@ jobs:
               changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
           )"
           impacted_output="$(
+            # Smoke has no production statements and launches a subprocess;
+            # the always-on non-full-suite focused smoke shard owns it, while
+            # -cover only adds runtime stderr noise.
             ./scripts/ci/changed-test-packages.sh \
-              list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+              list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF" |
+              awk '$0 != "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/smoke"'
           )"
           if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
             printf 'mode: atomic\n' > coverage.txt
@@ -1166,10 +1903,9 @@ jobs:
       - name: Build
         run: make build
 
-      # Each shard keeps -p 1 so the authoritative measurement stays serial
-      # inside one instrumented process group; shards run on isolated runners,
-      # and scripts/ci/test-packages.sh verify proves the shard union equals
-      # the previous single full-suite package set exactly once.
+      # Keep the matrix at five hosted runners. The shared runner balances the
+      # existing internal/app test partitions across those jobs, bounds package
+      # parallelism inside each runner, and preserves exact package ownership.
       - name: Run current shard tests with coverage
         shell: bash
         env:
@@ -1177,14 +1913,8 @@ jobs:
           COVERAGE_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD")"
-          test -n "$package_output"
-          mapfile -t packages <<< "$package_output"
-          test "${#packages[@]}" -gt 0
-          go test -count=1 -p 1 \
-            -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
-            -covermode=atomic \
-            "${packages[@]}"
+          ./scripts/ci/run-coverage-shard.sh run \
+            "$COVERAGE_SHARD" "coverage-shard-$COVERAGE_SHARD.txt"
           go tool cover -func="coverage-shard-$COVERAGE_SHARD.txt" | tail -n 1
 
       - name: Upload current shard coverage profile
@@ -1242,9 +1972,9 @@ jobs:
   coverage-baseline:
     name: Coverage (baseline)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1323,8 +2053,10 @@ jobs:
                 changed "$COVERAGE_BASE_REF" HEAD
             )"
             impacted_output="$(
+              # Keep the baseline plan symmetric with Coverage (current).
               ./scripts/ci/changed-test-packages.sh \
-                list "$COVERAGE_BASE_REF" HEAD
+                list "$COVERAGE_BASE_REF" HEAD |
+                awk '$0 != "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/smoke"'
             )"
           fi
           base_worktree="$(mktemp -d "${RUNNER_TEMP}/dws-coverage-base.XXXXXX")"
@@ -1337,11 +2069,9 @@ jobs:
           (
             cd "$base_worktree"
             if [ "$FULL_SUITE" = true ]; then
-              go test -count=1 \
-                -p 1 \
-                -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
-                -covermode=atomic \
-                ./ ./cmd/... ./internal/... ./skills/...
+              DWS_COVERAGE_ROOT="$base_worktree" \
+                "$GITHUB_WORKSPACE/scripts/ci/run-full-coverage.sh" \
+                "$GITHUB_WORKSPACE/coverage-base.txt"
             elif [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
               printf 'mode: atomic\n' > "$GITHUB_WORKSPACE/coverage-base.txt"
             else
@@ -1350,6 +2080,7 @@ jobs:
               coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
               go test -count=1 \
                 -p 1 \
+                -timeout=10m \
                 -coverpkg="$coverpkg" \
                 -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
                 -covermode=atomic \
@@ -1379,6 +2110,224 @@ jobs:
           path: coverage-base.txt
           retention-days: 1
 
+  # Metadata-only pushes promote an exact predecessor profile. A protected
+  # two-parent merge whose final tree exactly equals an already admitted PR
+  # head instead reuses that successful CI run's immutable coverage artifact.
+  # Both paths publish and verify the new main SHA's exact cache key.
+  coverage-main-metadata:
+    name: Coverage (main metadata cache)
+    needs: lint
+    if: ${{ github.event_name == 'push' && (needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || needs.lint.outputs.admitted_merge == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out exact main revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up Go
+        id: setup-go-metadata
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Verify metadata-only main successor
+        if: needs.lint.outputs.admitted_merge != 'true'
+        shell: bash
+        env:
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          full_commit='^[0-9a-f]{40}$'
+          [[ "$PUSH_BEFORE_SHA" =~ $full_commit ]]
+          [[ "$PUSH_AFTER_SHA" =~ $full_commit ]]
+          test "$PUSH_BEFORE_SHA" != 0000000000000000000000000000000000000000
+          test "$PUSH_AFTER_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rev-parse --verify "${PUSH_BEFORE_SHA}^{commit}" >/dev/null
+          git merge-base --is-ancestor "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+
+          changed_count=0
+          while IFS= read -r -d '' path; do
+            changed_count=$((changed_count + 1))
+            case "$path" in
+              CHANGELOG.md|README.md|README_zh.md|CONTRIBUTING.md|SECURITY.md|CODE_OF_CONDUCT.md|LICENSE|NOTICE|.github/PULL_REQUEST_TEMPLATE.md|.github/ISSUE_TEMPLATE/*|docs/*)
+                ;;
+              .changes/*)
+                if [[ "$path" =~ ^\.changes/[a-z0-9][a-z0-9._-]*\.md$ ]] ||
+                   [[ "$path" =~ ^\.changes/released/[0-9]+\.[0-9]+\.[0-9]+(-beta\.[1-9][0-9]*)?/[a-z0-9][a-z0-9._-]*\.md$ ]]; then
+                  continue
+                fi
+                echo "Refusing coverage-cache promotion for unreviewed change-fragment path: $path" >&2
+                exit 1
+                ;;
+              *)
+                echo "Refusing coverage-cache promotion for executable path: $path" >&2
+                exit 1
+                ;;
+            esac
+          done < <(git diff --name-only --no-renames -z "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA")
+          test "$changed_count" -gt 0
+          echo "COVERAGE_SOURCE_REF=$PUSH_BEFORE_SHA" >> "$GITHUB_ENV"
+
+      - name: Restore existing current-SHA coverage profile
+        id: metadata-current-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go-metadata.outputs.go-version }}
+
+      - name: Validate existing current-SHA coverage profile
+        if: steps.metadata-current-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Download admitted PR coverage profile
+        id: admitted-coverage
+        if: needs.lint.outputs.admitted_merge == 'true' && steps.metadata-current-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}
+          ADMITTED_ARTIFACT_ID: ${{ needs.lint.outputs.admitted_merge_artifact_id }}
+          ADMITTED_ARTIFACT_DIGEST: ${{ needs.lint.outputs.admitted_merge_artifact_digest }}
+        run: |
+          if bash -euo pipefail <<'VERIFY'
+          full_commit='^[0-9a-f]{40}$'
+          positive_integer='^[1-9][0-9]*$'
+          artifact_digest='^sha256:[0-9a-f]{64}$'
+          [[ "$ADMITTED_HEAD_SHA" =~ $full_commit ]]
+          [[ "$ADMITTED_RUN_ID" =~ $positive_integer ]]
+          [[ "$ADMITTED_ARTIFACT_ID" =~ $positive_integer ]]
+          [[ "$ADMITTED_ARTIFACT_DIGEST" =~ $artifact_digest ]]
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ADMITTED_ARTIFACT_ID" \
+            > admitted-artifact.json
+          jq -e \
+            --argjson id "$ADMITTED_ARTIFACT_ID" \
+            --argjson run "$ADMITTED_RUN_ID" \
+            --arg head "$ADMITTED_HEAD_SHA" \
+            --arg digest "$ADMITTED_ARTIFACT_DIGEST" \
+            '.id == $id and
+             .name == "coverage-report" and
+             .expired == false and
+             .size_in_bytes > 0 and
+             .size_in_bytes <= 134217728 and
+             .digest == $digest and
+             .workflow_run.id == $run and
+             .workflow_run.head_sha == $head' admitted-artifact.json >/dev/null
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ADMITTED_ARTIFACT_ID/zip" \
+            > admitted-coverage.zip
+          actual_digest="$(sha256sum admitted-coverage.zip | awk '{print $1}')"
+          test "sha256:$actual_digest" = "$ADMITTED_ARTIFACT_DIGEST"
+          mkdir admitted-coverage
+          unzip -q admitted-coverage.zip \
+            coverage.txt coverage-admission.json \
+            -d admitted-coverage
+          test -f admitted-coverage/coverage.txt
+          test ! -L admitted-coverage/coverage.txt
+          test -f admitted-coverage/coverage-admission.json
+          test ! -L admitted-coverage/coverage-admission.json
+          test "$(wc -c < admitted-coverage/coverage-admission.json)" -le 4096
+          test "$(wc -c < admitted-coverage/coverage.txt)" -le 67108864
+          jq -e \
+            --argjson run "$ADMITTED_RUN_ID" \
+            --arg head "$ADMITTED_HEAD_SHA" \
+            '.schema_version == 1 and
+             .workflow_run_id == $run and
+             .head_sha == $head and
+             .coverage_kind == "full"' \
+            admitted-coverage/coverage-admission.json >/dev/null
+          test "$(head -n 1 admitted-coverage/coverage.txt)" = "mode: atomic"
+          test "$(wc -l < admitted-coverage/coverage.txt)" -gt 1
+          cp admitted-coverage/coverage.txt coverage-cache.txt
+          VERIFY
+          then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            rm -f coverage-cache.txt
+            echo "::warning::Admitted coverage artifact verification failed; recomputing the complete profile."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Recompute admitted merge coverage profile
+        if: needs.lint.outputs.admitted_merge == 'true' && steps.metadata-current-cache.outputs.cache-hit != 'true' && steps.admitted-coverage.outputs.valid != 'true'
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: |
+          set -euo pipefail
+          ./scripts/ci/run-full-coverage.sh coverage-cache.txt
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Restore exact predecessor coverage profile
+        id: metadata-source-cache
+        if: needs.lint.outputs.admitted_merge != 'true' && steps.metadata-current-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ env.COVERAGE_SOURCE_REF }}-go${{ steps.setup-go-metadata.outputs.go-version }}
+
+      - name: Validate promoted predecessor coverage profile
+        if: needs.lint.outputs.admitted_merge != 'true' && steps.metadata-current-cache.outputs.cache-hit != 'true' && steps.metadata-source-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Install archive tooling for cold metadata baseline
+        if: needs.lint.outputs.admitted_merge != 'true' && steps.metadata-current-cache.outputs.cache-hit != 'true' && steps.metadata-source-cache.outputs.cache-hit != 'true'
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+
+      - name: Recompute cold metadata baseline
+        if: needs.lint.outputs.admitted_merge != 'true' && steps.metadata-current-cache.outputs.cache-hit != 'true' && steps.metadata-source-cache.outputs.cache-hit != 'true'
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: |
+          set -euo pipefail
+          ./scripts/ci/run-full-coverage.sh coverage-cache.txt
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Save exact main SHA coverage profile
+        if: steps.metadata-current-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go-metadata.outputs.go-version }}
+
+      # actions/cache/save reports upload failures as warnings. Convert an
+      # absent exact target key into a hard producer failure.
+      - name: Verify metadata main SHA coverage cache exists
+        id: metadata-target-cache-verification
+        uses: actions/cache/restore@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go-metadata.outputs.go-version }}
+          lookup-only: true
+          fail-on-cache-miss: true
+
+      - name: Require exact metadata main SHA coverage cache
+        env:
+          EXACT_CACHE_HIT: ${{ steps.metadata-target-cache-verification.outputs.cache-hit }}
+        run: test "$EXACT_CACHE_HIT" = true
+
   coverage:
     name: Coverage
     needs:
@@ -1387,6 +2336,7 @@ jobs:
       - coverage-current-full
       - coverage-supporting
       - coverage-baseline
+      - coverage-main-metadata
       - coverage-darwin
       - coverage-windows
     if: ${{ always() && needs.lint.result == 'success' }}
@@ -1397,12 +2347,14 @@ jobs:
         env:
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
           DOCS_ONLY: ${{ needs.lint.outputs.docs_only }}
+          ADMITTED_MERGE: ${{ needs.lint.outputs.admitted_merge }}
           FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           CURRENT_RESULT: ${{ needs.coverage-current.result }}
           CURRENT_FULL_RESULT: ${{ needs.coverage-current-full.result }}
           SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
           BASELINE_RESULT: ${{ needs.coverage-baseline.result }}
+          MAIN_METADATA_RESULT: ${{ needs.coverage-main-metadata.result }}
           DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
           WINDOWS_RESULT: ${{ needs.coverage-windows.result }}
         run: |
@@ -1411,10 +2363,18 @@ jobs:
           current_full_expected=skipped
           supporting_expected=skipped
           baseline_expected=success
+          main_metadata_expected=skipped
           native_expected=skipped
-          if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
+          if [ "$ADMITTED_MERGE" = true ]; then
             current_expected=skipped
             baseline_expected=skipped
+            main_metadata_expected=success
+          elif [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
+            current_expected=skipped
+            baseline_expected=skipped
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              main_metadata_expected=success
+            fi
           elif [ "$FULL_SUITE" = true ]; then
             current_expected=skipped
             current_full_expected=success
@@ -1430,7 +2390,8 @@ jobs:
             "current:$CURRENT_RESULT:$current_expected" \
             "current shards:$CURRENT_FULL_RESULT:$current_full_expected" \
             "supporting:$SUPPORTING_RESULT:$supporting_expected" \
-            "baseline:$BASELINE_RESULT:$baseline_expected"
+            "baseline:$BASELINE_RESULT:$baseline_expected" \
+            "main metadata cache:$MAIN_METADATA_RESULT:$main_metadata_expected"
           do
             name="${profile%%:*}"
             remainder="${profile#*:}"
@@ -1457,7 +2418,7 @@ jobs:
           test "$failed" -eq 0
 
       - name: Check out repository
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -1465,13 +2426,13 @@ jobs:
 
       - name: Set up Go
         id: setup-go
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
       - name: Resolve authoritative coverage base
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -1489,7 +2450,7 @@ jobs:
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
       - name: Download current coverage profiles
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-current-*
@@ -1497,41 +2458,40 @@ jobs:
           path: .
 
       - name: Download supporting coverage profiles
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite == 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-supporting-profiles
           path: .
 
       - name: Download baseline coverage profile
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-baseline-profile
           path: .
 
-      # Shard profiles cover disjoint package sets, so their block-level
-      # concatenation is the same candidate profile one serial run produced.
-      # Every expected shard must be present; a missing shard would silently
-      # shrink the scope-matched overall comparison.
+      # Each package belongs to one shard, while internal/app test partitions
+      # are balanced across the same five jobs. Union duplicate app source
+      # blocks by their greatest atomic count. Every expected shard must be
+      # present; a missing shard would silently shrink the comparison.
       - name: Assemble full-suite coverage profile
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite == 'true'
         shell: bash
         run: |
           set -euo pipefail
           test ! -f coverage.txt
+          profiles=()
           for shard in app cli generators helpers remaining; do
             profile="coverage-shard-$shard.txt"
             test -f "$profile"
             test "$(head -n 1 "$profile")" = "mode: atomic"
+            profiles+=("$profile")
           done
-          printf 'mode: atomic\n' > coverage.txt
-          for shard in app cli generators helpers remaining; do
-            tail -n +2 "coverage-shard-$shard.txt" >> coverage.txt
-          done
+          ./scripts/ci/merge-coverage-profiles.sh coverage.txt "${profiles[@]}"
 
       - name: Enforce coverage gate
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         env:
           FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           COVERAGE_TARGET: "100"
@@ -1570,8 +2530,24 @@ jobs:
           path: coverage-cache.txt
           key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go.outputs.go-version }}
 
+      - name: Verify push coverage cache exists
+        id: push-cache-verification
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go.outputs.go-version }}
+          lookup-only: true
+          fail-on-cache-miss: true
+
+      - name: Require exact push coverage cache
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        env:
+          EXACT_CACHE_HIT: ${{ steps.push-cache-verification.outputs.cache-hit }}
+        run: test "$EXACT_CACHE_HIT" = true
+
       - name: Generate coverage report
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         run: |
           if [ "$(wc -l < coverage.txt)" -gt 1 ]; then
             go tool cover -html=coverage.txt -o coverage.html
@@ -1580,8 +2556,37 @@ jobs:
               >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Record coverage admission metadata
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
+        shell: bash
+        env:
+          COVERAGE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          COVERAGE_RUN_ID: ${{ github.run_id }}
+          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
+        run: |
+          set -euo pipefail
+          full_commit='^[0-9a-f]{40}$'
+          positive_integer='^[1-9][0-9]*$'
+          [[ "$COVERAGE_HEAD_SHA" =~ $full_commit ]]
+          [[ "$COVERAGE_RUN_ID" =~ $positive_integer ]]
+          case "$FULL_SUITE" in
+            true) coverage_kind=full ;;
+            false) coverage_kind=scoped ;;
+            *) echo "Unknown coverage suite kind: $FULL_SUITE" >&2; exit 1 ;;
+          esac
+          jq -n \
+            --argjson run "$COVERAGE_RUN_ID" \
+            --arg head "$COVERAGE_HEAD_SHA" \
+            --arg kind "$coverage_kind" \
+            '{
+              schema_version: 1,
+              workflow_run_id: $run,
+              head_sha: $head,
+              coverage_kind: $kind
+            }' > coverage-admission.json
+
       - name: Upload coverage artifact
-        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -1591,15 +2596,20 @@ jobs:
             coverage-policy.txt
             coverage-shortcut.txt
             coverage.html
+            coverage-admission.json
           if-no-files-found: error
 
   policy:
     name: Policy
     needs: lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Full policy regenerates and validates the runtime Schema several times.
+    # Keep job-level headroom for large reviewed command-surface additions;
+    # individual policy gates retain their own fail-closed checks.
+    timeout-minutes: 15
     steps:
       - name: Check out repository
+        if: needs.lint.outputs.admitted_merge != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -1706,8 +2716,17 @@ jobs:
               >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Record admitted-merge reuse
+        if: needs.lint.outputs.admitted_merge == 'true'
+        env:
+          ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}
+        run: |
+          echo "Policy reuses successful Code Admission from PR head $ADMITTED_HEAD_SHA (CI run $ADMITTED_RUN_ID)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Validate scoped policy
-        if: ${{ needs.lint.outputs.changelog_only != 'true' && (needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}
+        if: ${{ needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.changelog_only != 'true' && (needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -1815,8 +2834,17 @@ jobs:
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make skill-command-integrity
 
+      - name: Record admitted-merge reuse
+        if: needs.lint.outputs.admitted_merge == 'true'
+        env:
+          ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}
+        run: |
+          echo "Interface Integrity reuses successful Code Admission from PR head $ADMITTED_HEAD_SHA (CI run $ADMITTED_RUN_ID)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record scoped fast path
-        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true') }}
+        if: ${{ needs.lint.outputs.admitted_merge != 'true' && (needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}
         run: echo "Interface Integrity is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
 
   cli-smoke:
@@ -1843,8 +2871,17 @@ jobs:
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make cli-smoke
 
+      - name: Record admitted-merge reuse
+        if: needs.lint.outputs.admitted_merge == 'true'
+        env:
+          ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}
+        run: |
+          echo "CLI Smoke reuses successful Code Admission from PR head $ADMITTED_HEAD_SHA (CI run $ADMITTED_RUN_ID)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record scoped fast path
-        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true') }}
+        if: ${{ needs.lint.outputs.admitted_merge != 'true' && (needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}
         run: echo "CLI Smoke is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
 
   mock-mcp-smoke:
@@ -1867,8 +2904,17 @@ jobs:
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.mcp_sensitive == 'true') }}
         run: make mock-mcp-smoke
 
+      - name: Record admitted-merge reuse
+        if: needs.lint.outputs.admitted_merge == 'true'
+        env:
+          ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}
+        run: |
+          echo "Mock MCP reuses successful Code Admission from PR head $ADMITTED_HEAD_SHA (CI run $ADMITTED_RUN_ID)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record scoped fast path
-        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.mcp_sensitive != 'true') }}
+        if: ${{ needs.lint.outputs.admitted_merge != 'true' && (needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.mcp_sensitive != 'true')) }}
         run: echo "Mock MCP is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
 
   edition-tests:
@@ -1891,6 +2937,15 @@ jobs:
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.edition_sensitive == 'true') }}
         run: go test -v -count=1 ./pkg/editiontest/...
 
+      - name: Record admitted-merge reuse
+        if: needs.lint.outputs.admitted_merge == 'true'
+        env:
+          ADMITTED_HEAD_SHA: ${{ needs.lint.outputs.admitted_merge_head_sha }}
+          ADMITTED_RUN_ID: ${{ needs.lint.outputs.admitted_merge_run_id }}
+        run: |
+          echo "Edition reuses successful Code Admission from PR head $ADMITTED_HEAD_SHA (CI run $ADMITTED_RUN_ID)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record scoped fast path
-        if: ${{ needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.edition_sensitive != 'true') }}
+        if: ${{ needs.lint.outputs.admitted_merge != 'true' && (needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.edition_sensitive != 'true')) }}
         run: echo "Edition is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"

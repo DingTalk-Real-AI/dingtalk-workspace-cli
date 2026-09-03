@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+DEFAULT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+ROOT="${DWS_TEST_PACKAGES_ROOT:-$DEFAULT_ROOT}"
 MODULE="$(cd "$ROOT" && go list -m)"
 
 usage() {
@@ -59,13 +60,14 @@ list_shard() {
 }
 
 # Full-suite coverage measurement shards the same authoritative package set the
-# single serial run used: ./ ./cmd/... ./internal/... ./skills/... (pkg/ and
-# scripts/ belong to the supporting profile; test/ suites carry no production
-# statements for the candidate profile). Shards stay disjoint so their merged
-# profile is block-for-block equivalent to one serial invocation.
+# single serial run used: ./ ./cmd/... ./internal/... ./skills/... plus the
+# runtime payload build helper. Other pkg/ and scripts/ packages belong to the
+# supporting profile; test/ suites carry no production statements for the
+# candidate profile. Shards stay disjoint so their merged profile is
+# block-for-block equivalent to one serial invocation.
 list_coverage_scope() {
   cd "$ROOT"
-  go list ./ ./cmd/... ./internal/... ./skills/...
+  go list ./ ./cmd/... ./internal/... ./skills/... ./scripts/build/runtime-payload
 }
 
 list_coverage_shard() {

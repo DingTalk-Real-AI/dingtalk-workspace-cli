@@ -135,6 +135,7 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 
 注意: SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
+      自有应用的 Client ID/Client Secret 必须完整成对，且仅在授权成功后持久化到 app config/Keychain。
 
 示例:
   dws auth login              # 本机登录并新增/刷新一个组织 profile
@@ -439,14 +440,10 @@ func applyAuthLoginGuideAction(cmd *cobra.Command, configDir string, action auth
 		if err != nil {
 			return err
 		}
-		authpkg.SetClientID(clientID)
-		authpkg.SetClientSecret(clientSecret)
-		if err := authSaveAppConfig(configDir, &authpkg.AppConfig{
-			ClientID:     clientID,
-			ClientSecret: authpkg.PlainSecret(clientSecret),
-		}); err != nil {
-			return apperrors.NewInternal(fmt.Sprintf("failed to persist app credentials: %v", err))
-		}
+		authpkg.SetClientCredentials(clientID, clientSecret)
+		// The provider snapshots this pair before authorization and persists it
+		// only after the login succeeds. A cancelled/failed browser flow must not
+		// overwrite the last known-good application configuration.
 		return nil
 	default:
 		return fmt.Errorf("未知操作: %s", action)
@@ -1029,7 +1026,9 @@ func newAuthResetCommand() *cobra.Command {
 			_ = authRemove(filepath.Join(configDir, "mcp_url"))
 			_ = authRemove(filepath.Join(configDir, config.ManagedMCPURLRegionFileName))
 			_ = authRemove(filepath.Join(configDir, "token"))
-			_ = authDeleteAppConfig(configDir)
+			if err := authDeleteAppConfig(configDir); err != nil {
+				return apperrors.NewInternal(fmt.Sprintf("failed to reset application credentials: %v", err))
+			}
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()

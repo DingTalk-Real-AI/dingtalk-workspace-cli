@@ -2,10 +2,13 @@ package helpers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +20,9 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
+
+// computeFileMD5 is the function used to calculate file MD5. Tests can override via direct assignment.
+var computeFileMD5 = fileMD5Hex
 
 func decodeOARequest(raw string) (map[string]any, error) {
 	dec := json.NewDecoder(bytes.NewBufferString(raw))
@@ -126,7 +132,13 @@ func validateOAPreviewFileIDs(cmd *cobra.Command, _ []string) error {
 }
 
 func callOAAttachmentResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
-	data, err := CallMCPToolDataOnServer(cmd.Context(), "oa", tool, args)
+	return callOAAttachmentResultCtx(cmd.Context(), tool, args)
+}
+
+// callOAAttachmentResultCtx 复用统一结果投影逻辑，但允许调用方传入自定义 context
+// （例如 upload 命令的 10 分钟超时）：调用 oa/<tool>，提取 result 并包装为 output.Success。
+func callOAAttachmentResultCtx(ctx context.Context, tool string, args map[string]any) (output.CommandResult, error) {
+	data, err := CallMCPToolDataOnServer(ctx, "oa", tool, args)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +153,227 @@ func callOAAttachmentResult(cmd *cobra.Command, tool string, args map[string]any
 	return output.Success(result), nil
 }
 
-func newOAAttachmentCommand() *cobra.Command {
-	attachmentCmd := &cobra.Command{
-		Use:   "attachment",
-		Short: "审批附件授权与下载链接",
-		RunE:  groupRunE,
+// validateOAAttachmentCommitResult 校验 commit_attachment_upload_info 的原始 result
+// 包含构造 DDAttachment 所需的全部必需字段，并将 spaceId/fileSize 归一化为声明的 integer
+// 类型（int64），确保输出始终符合 ResultSpec schema。当字段缺失或类型错误时返回 Validation
+// 错误，避免 Agent 拿到空 fileId 后组装无效的审批表单。
+func validateOAAttachmentCommitResult(result any) (map[string]any, error) {
+	resultMap, ok := result.(map[string]any)
+	if !ok || resultMap == nil {
+		return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值 result 不是有效的 JSON 对象")
 	}
+
+	// spaceId — 接受 string 或 number，归一化为 int64
+	switch v := resultMap["spaceId"].(type) {
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值缺少必需字段 spaceId")
+		}
+		parsed, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil {
+			return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值字段 spaceId 不是有效整数")
+		}
+		resultMap["spaceId"] = parsed
+	case float64:
+		// numeric spaceId — keep as-is (already matches JSON number)
+	case json.Number:
+		parsed, err := v.Int64()
+		if err != nil {
+			return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值字段 spaceId 不是有效整数")
+		}
+		resultMap["spaceId"] = parsed
+	default:
+		return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值缺少必需字段 spaceId")
+	}
+
+	// fileName — must be non-empty string
+	if s, ok := resultMap["fileName"].(string); !ok || strings.TrimSpace(s) == "" {
+		return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值缺少必需字段 fileName")
+	}
+
+	// fileSize — must be > 0 (number)，归一化 json.Number → int64
+	switch v := resultMap["fileSize"].(type) {
+	case float64:
+		if v <= 0 {
+			return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值字段 fileSize 必须大于 0")
+		}
+	case json.Number:
+		parsed, err := v.Int64()
+		if err != nil || parsed <= 0 {
+			return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值字段 fileSize 必须大于 0")
+		}
+		resultMap["fileSize"] = parsed
+	default:
+		return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值缺少必需字段 fileSize")
+	}
+
+	// fileId — must be non-empty string
+	if s, ok := resultMap["fileId"].(string); !ok || strings.TrimSpace(s) == "" {
+		return nil, apperrors.NewValidation("oa/commit_attachment_upload_info 返回值缺少必需字段 fileId")
+	}
+
+	return resultMap, nil
+}
+
+// parseOAAttachmentUploadInfo 解析 oa/init_attachment_upload_info 的返回，提取首个上传地址、
+// 签名请求头与 uploadKey。OA 的返回结构为 result.resourceUrls([]string)、result.headers(object)、
+// result.uploadKey(string)，与钉盘 doc 的 resourceUrl（单数）不同，因此单独实现。
+func parseOAAttachmentUploadInfo(text string) (resourceURL string, headers map[string]string, uploadKey string, err error) {
+	var data map[string]any
+	if err = json.Unmarshal([]byte(text), &data); err != nil {
+		return "", nil, "", apperrors.NewInternal(fmt.Sprintf("解析 init_attachment_upload_info 返回失败: %v", err))
+	}
+	result, ok := data["result"].(map[string]any)
+	if !ok {
+		return "", nil, "", apperrors.NewInternal("oa/init_attachment_upload_info 返回值缺少 result")
+	}
+
+	uploadKey, _ = result["uploadKey"].(string)
+	if strings.TrimSpace(uploadKey) == "" {
+		return "", nil, "", apperrors.NewValidation("oa/init_attachment_upload_info 返回值缺少 uploadKey")
+	}
+
+	rawURLs, ok := result["resourceUrls"].([]any)
+	if !ok || len(rawURLs) == 0 {
+		return "", nil, "", apperrors.NewValidation("oa/init_attachment_upload_info 返回值缺少 resourceUrls")
+	}
+	resourceURL, _ = rawURLs[0].(string)
+	if strings.TrimSpace(resourceURL) == "" {
+		return "", nil, "", apperrors.NewValidation("oa/init_attachment_upload_info 首个 resourceUrls 为空")
+	}
+
+	rawHeaders, ok := result["headers"].(map[string]any)
+	if !ok {
+		return "", nil, "", apperrors.NewValidation("oa/init_attachment_upload_info 返回值缺少 headers")
+	}
+	headers = make(map[string]string)
+	for key, value := range rawHeaders {
+		if str, ok := value.(string); ok {
+			headers[key] = str
+		}
+	}
+	if strings.TrimSpace(headers["Authorization"]) == "" || strings.TrimSpace(headers["x-oss-date"]) == "" {
+		return "", nil, "", apperrors.NewValidation("oa/init_attachment_upload_info headers 缺少必需的签名字段 Authorization 或 x-oss-date")
+	}
+	return resourceURL, headers, uploadKey, nil
+}
+
+// runOAAttachmentUpload 端到端上传审批附件：init 获取 OSS 上传凭证 → HTTP PUT 上传文件字节
+// → commit 提交入库，一条命令完成三步。PUT 复用包级 httpPutFile（它会删除 Content-Type 并
+// 写入签名请求头，避免钉钉 OSS SignatureDoesNotMatch），不要在此重复实现。
+func runOAAttachmentUpload(cmd *cobra.Command, _ []string) error {
+	filePath := strings.TrimSpace(mustGetFlag(cmd, "file"))
+	if filePath == "" {
+		return apperrors.NewValidation("--file 不能为空")
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return apperrors.NewValidation(fmt.Sprintf("无法读取文件 %s: %v", filePath, err))
+	}
+	if info.IsDir() {
+		return apperrors.NewValidation(fmt.Sprintf("%s 是目录，不是文件", filePath))
+	}
+	fileSize := info.Size()
+
+	fileName := strings.TrimSpace(mustGetFlag(cmd, "file-name"))
+	if fileName == "" {
+		fileName = filepath.Base(filePath)
+	}
+
+	md5Hex := strings.TrimSpace(mustGetFlag(cmd, "md5"))
+	if md5Hex == "" {
+		md5Hex, err = computeFileMD5(filePath)
+		if err != nil {
+			return apperrors.NewInternal(fmt.Sprintf("计算文件 MD5 失败: %v", err))
+		}
+	}
+
+	// --dry-run：本地只读工作（校验、Stat、大小、文件名、MD5）已完成，
+	// 在任何远程调用（init/PUT/commit）之前 early return，输出 plan 预览。
+	// 本命令是 RolloutUnifiedActive，必须经 output.StoreResult 存入统一结果，
+	// 不能直接 PrintJSON（否则框架报 "returned without a CommandResult"）。
+	// 不伪造 uploadKey/resourceURL/fileId/spaceId——它们只能由远程调用返回。
+	if deps.Caller.DryRun() {
+		return output.StoreResult(cmd.Context(), output.Success(map[string]any{
+			"dry_run":      true,
+			"executed":     false,
+			"preview_kind": "plan",
+			"operation":    "attachment_upload",
+			"source":       "oa",
+			"file":         filePath,
+			"file_name":    fileName,
+			"file_size":    fileSize,
+			"md5":          md5Hex,
+			"steps": []map[string]any{
+				{
+					"tool":   "oa/init_attachment_upload_info",
+					"args":   map[string]any{"fileName": fileName, "fileSize": fileSize, "md5": md5Hex},
+					"status": "planned",
+				},
+				{
+					"tool":   "HTTP PUT",
+					"args":   map[string]any{"file": filePath, "fileSize": fileSize},
+					"status": "planned",
+				},
+				{
+					"tool":     "oa/commit_attachment_upload_info",
+					"args":     map[string]any{"fileName": fileName, "fileSize": fileSize},
+					"requires": []string{"uploadKey from oa/init_attachment_upload_info"},
+					"status":   "planned",
+				},
+			},
+		}, output.WithDryRun()))
+	}
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Minute)
+	defer cancel()
+
+	// Step 1: 初始化上传，拿到 OSS 上传地址、签名头与 uploadKey。
+	initText, err := callMCPToolReturnTextOnServer(ctx, "oa", "init_attachment_upload_info", map[string]any{
+		"fileName": fileName,
+		"fileSize": float64(fileSize),
+		"md5":      md5Hex,
+	})
+	if err != nil {
+		return err
+	}
+	resourceURL, headers, uploadKey, err := parseOAAttachmentUploadInfo(initText)
+	if err != nil {
+		return err
+	}
+
+	// Step 2: HTTP PUT 文件字节到 OSS（复用 httpPutFile，勿重复实现）。
+	if err := httpPutFile(ctx, resourceURL, headers, filePath, fileSize); err != nil {
+		return err
+	}
+
+	// Step 3: 提交上传信息完成入库，校验必需字段后以统一输出渲染 commit 结果。
+	commitData, err := CallMCPToolDataOnServer(ctx, "oa", "commit_attachment_upload_info", map[string]any{
+		"fileName":  fileName,
+		"uploadKey": uploadKey,
+		"fileSize":  float64(fileSize),
+	})
+	if err != nil {
+		return err
+	}
+	commitResp, ok := commitData.(map[string]any)
+	if !ok {
+		return apperrors.NewInternal("oa/commit_attachment_upload_info 返回值不是 JSON 对象")
+	}
+	commitResult, _ := commitResp["result"]
+	normalized, err := validateOAAttachmentCommitResult(commitResult)
+	if err != nil {
+		return err
+	}
+	return output.StoreResult(cmd.Context(), output.Success(normalized))
+}
+
+func newOAAttachmentCommand() *cobra.Command {
+	attachmentCmd := newGroupCommand(&cobra.Command{
+		Use:   "attachment",
+		Short: "审批附件授权、上传、下载与链接管理",
+		RunE:  groupRunE,
+	})
 
 	downloadURLCmd := NewLeafCommand(LeafSpec{
 		Use:           "download-url",
@@ -319,7 +546,64 @@ func newOAAttachmentCommand() *cobra.Command {
 		},
 	})
 
-	attachmentCmd.AddCommand(downloadURLCmd, authorizeDownloadCmd, authorizePreviewCmd)
+	uploadCmd := &cobra.Command{
+		Use:   "upload",
+		Short: "上传本地文件为审批附件（初始化+PUT+提交，一步完成）",
+		Long: `上传本地文件为审批附件（三步自动完成）。
+
+流程:
+  1. 初始化上传信息，获取 OSS 上传地址与凭证 (oa/init_attachment_upload_info)
+  2. HTTP PUT 上传文件二进制到 OSS
+  3. 提交上传信息完成入库 (oa/commit_attachment_upload_info)
+
+--file-name 不传时默认用文件名；--md5 不传时自动计算。`,
+		Example: `  dws oa approval attachment upload --file ./合同.pdf
+  dws oa approval attachment upload --file ./report.xlsx --file-name Q1报表.xlsx
+  dws oa approval attachment upload --file ./data.bin --md5 d41d8cd98f00b204e9800998ecf8427e`,
+		RunE: runOAAttachmentUpload,
+	}
+	DeclareLeafMetadata(uploadCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "low",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "attachment_upload",
+				CanonicalPath:  "oa.attachment_upload",
+				CLIPath:        "oa approval attachment upload",
+				PrimaryCLIPath: "oa approval attachment upload",
+			},
+			Description: "上传本地文件为审批附件，一条命令完成初始化、HTTP PUT 与提交入库",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"审批附件上传提交结果","properties":{"spaceId":{"type":"integer","description":"审批附件所在钉盘空间 ID"},"fileName":{"type":"string","description":"文件名"},"fileSize":{"type":"integer","description":"文件字节数"},"class":{"type":"string","description":"服务端响应类型标识"},"fileType":{"type":"string","description":"文件类型"},"fileId":{"type":"string","description":"文件 ID"}},"required":["spaceId","fileName","fileSize","fileId"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "命令包含多个 RPC（init/commit）与本地 HTTP PUT 步骤，不能绑定为单一 interface_ref",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "上传本地文件为审批附件，自动完成初始化+PUT+提交三步",
+				UseWhen:      []string{"用户要把本地文件作为审批附件上传（首选一条命令自动完成凭证+PUT+提交）时"},
+				AvoidWhen: []string{
+					"仅需为已有附件授权下载或预览时使用 attachment authorize-download / authorize-preview",
+					"仅需获取已有附件临时下载链接时使用 attachment download-url",
+				},
+				Examples: []string{"dws oa approval attachment upload --file ./合同.pdf --format json"},
+			},
+		},
+	})
+	uploadCmd.Flags().String("file", "", "本地文件路径 (必填)")
+	uploadCmd.Flags().String("file-name", "", "完整文件名，例如 合同.pdf (默认使用文件名)")
+	uploadCmd.Flags().String("md5", "", "文件原始字节内容的 MD5，32位十六进制字符串 (可选，不传则自动计算)")
+	_ = uploadCmd.MarkFlagRequired("file")
+
+	attachmentCmd.AddCommand(downloadURLCmd, authorizeDownloadCmd, authorizePreviewCmd, uploadCmd)
 	return attachmentCmd
 }
 
@@ -414,21 +698,212 @@ func validateOARequestTimeRange(request map[string]any) error {
 
 // ──────────────────────────────────────────────────────────
 // dws oa — OA 审批
-// MCP tools（tools/list）: list_pending_approvals, get_processInstance_detail,
+// MCP tools（tools/list）: get_todo_tasks, get_processInstance_detail,
 // approve_processInstance, reject_processInstance, revoke_processInstance,
 // get_processInstance_records, list_initiated_instances, list_pending_tasks,
 // list_user_visible_process, append_task, search_form, oa_ding_user, revert_task,
 // get_inst_revert_activities, get_process_schema, forecast_process,
 // start_process_instance, get_process_instances_by_admin,
 // get_attachment_download_url, auth_download_file,
-// auth_preview_attachment
+// auth_preview_attachment, init_attachment_upload_info, commit_attachment_upload_info
 // ──────────────────────────────────────────────────────────
+
+const oaApprovalListDateLayout = "2006-01-02"
+
+type oaApprovalListOptions struct {
+	includeCreateBefore bool
+	includeLegacyRange  bool
+	includeUnreadOnly   bool
+	includeSizeAlias    bool
+	includeStatus       bool
+}
+
+var oaApprovalListStringProperties = []struct {
+	flag     string
+	property string
+}{
+	{flag: "query", property: "query"},
+	{flag: "process-code", property: "processCode"},
+	{flag: "originator-user-id", property: "originatorUserId"},
+	{flag: "create-time-from", property: "createTimeFrom"},
+	{flag: "create-time-to", property: "createTimeTo"},
+	{flag: "finish-time-from", property: "finishTimeFrom"},
+	{flag: "finish-time-to", property: "finishTimeTo"},
+}
+
+func oaApprovalListParamDecls(options oaApprovalListOptions) []contract.ParamDecl {
+	pageProperty := "pageNumber"
+	if options.includeLegacyRange {
+		pageProperty = ""
+	}
+	params := []contract.ParamDecl{
+		{Name: "page", Property: pageProperty},
+		{Name: "limit", Property: "pageSize"},
+	}
+	for _, binding := range oaApprovalListStringProperties {
+		params = append(params, contract.ParamDecl{Name: binding.flag, Property: binding.property})
+	}
+	if options.includeStatus {
+		params = append(params, contract.ParamDecl{Name: "process-instance-status", Property: "processInstanceStatus"})
+	}
+	if options.includeCreateBefore {
+		params = append(params, contract.ParamDecl{Name: "create-before", Property: "createBefore"})
+	}
+	if options.includeLegacyRange {
+		params = append(params,
+			contract.ParamDecl{Name: "start"},
+			contract.ParamDecl{Name: "end"},
+		)
+	}
+	if options.includeUnreadOnly {
+		params = append(params, contract.ParamDecl{Name: "unread-only", Property: "unreadOnly"})
+	}
+	return params
+}
+
+func oaApprovalListArgs(cmd *cobra.Command, options oaApprovalListOptions) (map[string]any, error) {
+	page, err := oaApprovalListIntFlag(cmd, "page", 1)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := oaApprovalListIntFlag(cmd, "limit", 20)
+	if err != nil {
+		return nil, err
+	}
+	if options.includeSizeAlias && cmd.Flags().Changed("size") {
+		limit, err = oaApprovalListIntFlag(cmd, "size", 20)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if page <= 0 {
+		return nil, apperrors.NewValidation("--page 必须大于 0")
+	}
+	if limit <= 0 || limit > 100 {
+		return nil, apperrors.NewValidation("--limit 必须在 1 到 100 之间")
+	}
+
+	args := map[string]any{"pageNumber": page, "pageSize": limit}
+	for _, binding := range oaApprovalListStringProperties {
+		value, _ := cmd.Flags().GetString(binding.flag)
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(binding.flag, "create-time-") || strings.HasPrefix(binding.flag, "finish-time-") {
+			if _, err := time.Parse(oaApprovalListDateLayout, value); err != nil {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 必须是 yyyy-MM-dd 格式")
+			}
+		}
+		args[binding.property] = value
+	}
+	if options.includeStatus {
+		if value, _ := cmd.Flags().GetString("process-instance-status"); strings.TrimSpace(value) != "" {
+			args["processInstanceStatus"] = strings.TrimSpace(value)
+		}
+	}
+	if options.includeCreateBefore {
+		value, _ := cmd.Flags().GetString("create-before")
+		if value = strings.TrimSpace(value); value != "" {
+			args["createBefore"] = value
+		}
+	}
+	if options.includeLegacyRange {
+		for _, binding := range []struct {
+			flag     string
+			property string
+		}{{flag: "start", property: "createTimeFrom"}, {flag: "end", property: "createTimeTo"}} {
+			value, _ := cmd.Flags().GetString(binding.flag)
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, exists := args[binding.property]; exists {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 不能与对应的 yyyy-MM-dd 日期参数同时使用")
+			}
+			parsed, parseErr := time.Parse(time.RFC3339, value)
+			if parseErr != nil {
+				return nil, apperrors.NewValidation("--" + binding.flag + " 必须是 ISO-8601 格式")
+			}
+			args[binding.property] = parsed.Format(oaApprovalListDateLayout)
+		}
+	}
+	for _, pair := range [][2]string{{"createTimeFrom", "createTimeTo"}, {"finishTimeFrom", "finishTimeTo"}} {
+		fromRaw, fromOK := args[pair[0]].(string)
+		toRaw, toOK := args[pair[1]].(string)
+		if !fromOK || !toOK {
+			continue
+		}
+		from, _ := time.Parse(oaApprovalListDateLayout, fromRaw)
+		to, _ := time.Parse(oaApprovalListDateLayout, toRaw)
+		if from.After(to) {
+			return nil, apperrors.NewValidation(pair[0] + " 不能晚于 " + pair[1])
+		}
+	}
+	if options.includeUnreadOnly && cmd.Flags().Changed("unread-only") {
+		value, _ := cmd.Flags().GetBool("unread-only")
+		args["unreadOnly"] = value
+	}
+	return args, nil
+}
+
+func oaApprovalListIntFlag(cmd *cobra.Command, name string, fallback int) (int, error) {
+	raw, _ := cmd.Flags().GetString(name)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, apperrors.NewValidation("--" + name + " 必须是整数")
+	}
+	return value, nil
+}
+
+func addOAApprovalListFlags(cmd *cobra.Command, options oaApprovalListOptions) {
+	pageDefault, limitDefault := "1", "20"
+	if options.includeLegacyRange {
+		pageDefault, limitDefault = "", ""
+	}
+	cmd.Flags().String("page", pageDefault, "分页页码（默认 1）")
+	cmd.Flags().String("limit", limitDefault, "每页大小（默认 20，最大 100）")
+	if options.includeSizeAlias {
+		cmd.Flags().String("size", "", "每页大小（兼容别名）")
+		cmd.Flags().Lookup("size").Hidden = true
+	}
+	cmd.Flags().String("query", "", "关键字搜索（可选）")
+	cmd.Flags().String("process-code", "", "审批模板 code（可选）")
+	cmd.Flags().String("originator-user-id", "", "审批单发起人 userId（可选）")
+	if options.includeStatus {
+		cmd.Flags().String("process-instance-status", "", "审批状态，如 NEW/RUNNING/COMPLETED/TERMINATED（可选）")
+	}
+	cmd.Flags().String("create-time-from", "", "发起时间起始，格式 yyyy-MM-dd（可选）")
+	cmd.Flags().String("create-time-to", "", "发起时间截止，格式 yyyy-MM-dd，含当日（可选）")
+	cmd.Flags().String("finish-time-from", "", "审批完成时间起始，格式 yyyy-MM-dd（可选）")
+	cmd.Flags().String("finish-time-to", "", "审批完成时间截止，格式 yyyy-MM-dd，含当日（可选）")
+	if options.includeCreateBefore {
+		cmd.Flags().String("create-before", "", "创建时间（可选）")
+	}
+	if options.includeLegacyRange {
+		cmd.Flags().String("start", "", "兼容参数：发起时间起始，ISO-8601 格式（建议使用 --create-time-from）")
+		cmd.Flags().String("end", "", "兼容参数：发起时间截止，ISO-8601 格式（建议使用 --create-time-to）")
+	}
+	if options.includeUnreadOnly {
+		cmd.Flags().Bool("unread-only", false, "仅查询未读抄送审批（可选）")
+	}
+}
 
 func newOaCommand() *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/oa.json
 	// products.oa). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "oa",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("OA 审批深度指南", "dingtalk-misc", "references/oa.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询和处理 OA 审批实例、任务、记录、抄送、评论与附件授权",
 			UseWhen: []string{
@@ -440,49 +915,25 @@ func newOaCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "oa",
 		Short: "OA 审批 / 同意 / 拒绝 / 撤销",
 		Long:  `管理钉钉 OA 审批：待办查询、审批详情、同意、拒绝、撤销、操作记录、已发起列表、表单列表与附件授权。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	approvalCmd := &cobra.Command{Use: "approval", Short: "审批管理", RunE: groupRunE}
+	approvalCmd := newGroupCommand(&cobra.Command{Use: "approval", Short: "审批管理", RunE: groupRunE})
 
 	approvalListPendingCmd := &cobra.Command{
 		Use:     "list-pending",
 		Short:   "查询待我处理的审批",
-		Example: `  dws oa approval list-pending --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --query 关键词`,
+		Example: `  dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true})
 			if err != nil {
 				return err
 			}
-			endMs, err := parseISOTimeToMillis("end", mustGetFlag(cmd, "end"))
-			if err != nil {
-				return err
-			}
-			if err := validateTimeRange(startMs, endMs); err != nil {
-				return err
-			}
-			argsMap := map[string]any{
-				"starTime": float64(startMs),
-				"endTime":  float64(endMs),
-			}
-			if v, _ := cmd.Flags().GetString("page"); v != "" {
-				if n, err := strconv.ParseFloat(v, 64); err == nil {
-					argsMap["pageNum"] = n
-				}
-			}
-			if v := flagOrFallback(cmd, "limit", "size"); v != "" {
-				if n, err := strconv.ParseFloat(v, 64); err == nil {
-					argsMap["pageSize"] = n
-				}
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
-			}
-			return callMCPTool("list_pending_approvals", argsMap)
+			return callMCPTool("get_todo_tasks", argsMap)
 		},
 	}
 	DeclareLeafMetadata(approvalListPendingCmd, LeafSpec{
@@ -498,30 +949,25 @@ func newOaCommand() *cobra.Command {
 				CLIPath:        "oa approval list-pending",
 				PrimaryCLIPath: "oa approval list-pending",
 			},
-			Description: "查询当前用户待处理的审批单列表",
+			Description: "查询当前登录用户待处理的审批任务列表",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_pending_approvals"},
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_todo_tasks"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前用户待处理的审批单列表",
+				AgentSummary: "查询当前登录用户待处理的审批任务列表",
 				UseWhen:      []string{"需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"},
 				AvoidWhen: []string{
 					"已知实例只要 taskId 时改用 dws oa approval tasks",
 					"不要用本命令执行同意/拒绝",
 				},
 				Examples: []string{
-					"dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
-					"dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词",
+					"dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-31",
+					"dws oa approval list-pending --query 关键词 --page 1 --limit 20",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "end", Property: "endTime"},
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNum"},
-				{Name: "start", Property: "starTime"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true}),
 		},
 	})
 
@@ -793,7 +1239,7 @@ func newOaCommand() *cobra.Command {
 
 	approvalListInitiatedCmd := &cobra.Command{
 		Use:     "list-initiated",
-		Short:   "查询审批模板下已发起的审批记录",
+		Short:   "查询当前用户在指定审批模板下发起的审批实例列表",
 		Example: `  dws oa approval list-initiated --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --limit 20  # processCode 来自管理后台配置`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "process-code"); err != nil {
@@ -834,15 +1280,15 @@ func newOaCommand() *cobra.Command {
 				CLIPath:        "oa approval list-initiated",
 				PrimaryCLIPath: "oa approval list-initiated",
 			},
-			Description: "查询当前用户已发起的审批实例列表",
+			Description: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_initiated_instances"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询当前用户已发起的审批实例列表",
-				UseWhen:      []string{"已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"},
+				AgentSummary: "查询当前用户在指定审批模板(processCode)下发起的审批实例列表，需提供 processCode、起止时间，单次查询时间跨度不超过120天",
+				UseWhen:      []string{"已知 processCode，需要按起止时间(跨度≤120天)查询自己发起的审批实例基础信息时"},
 				AvoidWhen: []string{
 					"不知道 processCode 时先用 dws oa approval list-forms",
 					"要撤销实例时先确认 instanceId 再改用 revoke",
@@ -998,14 +1444,9 @@ func newOaCommand() *cobra.Command {
 		Short:   "获取当前用户已经处理过的审批单列表",
 		Example: `  dws oa approval list-executed  --limit 20 --page 1 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
-			pageNumber, _ := strconv.ParseFloat(mustGetFlag(cmd, "page"), 64)
-			argsMap := map[string]any{
-				"pageNumber": pageNumber,
-				"pageSize":   pageSize,
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeStatus: true})
+			if err != nil {
+				return err
 			}
 			return callMCPTool("get_done_tasks", argsMap)
 		},
@@ -1041,10 +1482,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNumber"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeStatus: true}),
 		},
 	})
 	// 已发起
@@ -1053,14 +1491,9 @@ func newOaCommand() *cobra.Command {
 		Short:   "获取当前用户已发起的审批单列表",
 		Example: `  dws oa approval list-submitted --limit 20 --page 1 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
-			pageNumber, _ := strconv.ParseFloat(mustGetFlag(cmd, "page"), 64)
-			argsMap := map[string]any{
-				"pageNumber": pageNumber,
-				"pageSize":   pageSize,
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeStatus: true})
+			if err != nil {
+				return err
 			}
 			return callMCPTool("get_submitted_instances", argsMap)
 		},
@@ -1096,10 +1529,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNumber"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeStatus: true}),
 		},
 	})
 	// 抄送
@@ -1108,14 +1538,9 @@ func newOaCommand() *cobra.Command {
 		Short:   "获取抄送当前用户的审批单列表",
 		Example: `  dws oa approval list-cc --limit 20 --page 1 --query 关键词`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pageSize, _ := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
-			pageNumber, _ := strconv.ParseFloat(mustGetFlag(cmd, "page"), 64)
-			argsMap := map[string]any{
-				"pageNumber": pageNumber,
-				"pageSize":   pageSize,
-			}
-			if v, _ := cmd.Flags().GetString("query"); v != "" {
-				argsMap["query"] = v
+			argsMap, err := oaApprovalListArgs(cmd, oaApprovalListOptions{includeUnreadOnly: true})
+			if err != nil {
+				return err
 			}
 			return callMCPTool("get_noticed_instances", argsMap)
 		},
@@ -1151,10 +1576,7 @@ func newOaCommand() *cobra.Command {
 					"dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
 				},
 			},
-			Parameters: []contract.ParamDecl{
-				{Name: "limit", Property: "pageSize"},
-				{Name: "page", Property: "pageNumber"},
-			},
+			Parameters: oaApprovalListParamDecls(oaApprovalListOptions{includeUnreadOnly: true}),
 		},
 	})
 
@@ -1698,7 +2120,15 @@ func newOaCommand() *cobra.Command {
 					request["ccPosition"] = position
 				}
 			}
-			return callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request})
+			if err := callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request}); err != nil {
+				// 已知的服务端业务拒绝（如补卡卡点已绑定审批单）翻译为中文文案；
+				// 未命中时保留原始错误。
+				if msg := createInstanceDenialMessage(err); msg != "" {
+					return errors.New(msg)
+				}
+				return err
+			}
+			return nil
 		},
 	}
 	DeclareLeafMetadata(approvalCreateCmd, LeafSpec{
@@ -1736,13 +2166,7 @@ func newOaCommand() *cobra.Command {
 		},
 	})
 
-	approvalListPendingCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
-	approvalListPendingCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
-	approvalListPendingCmd.Flags().String("page", "", "分页页码 (可选)")
-	approvalListPendingCmd.Flags().String("limit", "", "每页大小 (可选)")
-	approvalListPendingCmd.Flags().String("size", "", "每页大小 (可选)")
-	approvalListPendingCmd.Flags().Lookup("size").Hidden = true
-	approvalListPendingCmd.Flags().String("query", "", "关键字搜索（可选）")
+	addOAApprovalListFlags(approvalListPendingCmd, oaApprovalListOptions{includeCreateBefore: true, includeLegacyRange: true, includeSizeAlias: true})
 
 	approvalDetailCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
 	approvalApproveCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
@@ -1755,8 +2179,8 @@ func newOaCommand() *cobra.Command {
 	approvalRevokeCmd.Flags().String("remark", "", "撤销说明 (可选)")
 	approvalRecordsCmd.Flags().String("instance-id", "", "审批实例 ID (必填)")
 	approvalListInitiatedCmd.Flags().String("process-code", "", "表单 processCode (必填)")
-	approvalListInitiatedCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
-	approvalListInitiatedCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
+	approvalListInitiatedCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)，与 end 间隔不超过120天 (必填)")
+	approvalListInitiatedCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)，与 start 间隔不超过120天 (必填)")
 	approvalListInitiatedCmd.Flags().String("cursor", "0", "分页游标，首次传 0")
 	approvalListInitiatedCmd.Flags().String("next-token", "0", "分页游标，首次传 0")
 	approvalListInitiatedCmd.Flags().Lookup("next-token").Hidden = true
@@ -1770,15 +2194,9 @@ func newOaCommand() *cobra.Command {
 	approvalListFormsCmd.Flags().Lookup("size").Hidden = true
 	approvalSearchFormsCmd.Flags().String("query", "", "关键字（匹配 processCode 或表单名称）(必填)")
 	approvalDingInfoCmd.Flags().String("task-id", "", "审批任务 ID (必填)")
-	approvalExecutedListCmd.Flags().String("page", "1", "分页页码（可选）")
-	approvalExecutedListCmd.Flags().String("limit", "20", "每页大小（可选）")
-	approvalExecutedListCmd.Flags().String("query", "", "关键字搜索（可选）")
-	approvalSubmittedListCmd.Flags().String("page", "1", "分页页码（可选）")
-	approvalSubmittedListCmd.Flags().String("limit", "20", "每页大小（可选）")
-	approvalSubmittedListCmd.Flags().String("query", "", "关键字搜索（可选）")
-	approvalCcListCmd.Flags().String("page", "1", "分页页码（可选）")
-	approvalCcListCmd.Flags().String("limit", "20", "每页大小（可选）")
-	approvalCcListCmd.Flags().String("query", "", "关键字搜索（可选）")
+	addOAApprovalListFlags(approvalExecutedListCmd, oaApprovalListOptions{includeStatus: true})
+	addOAApprovalListFlags(approvalSubmittedListCmd, oaApprovalListOptions{includeStatus: true})
+	addOAApprovalListFlags(approvalCcListCmd, oaApprovalListOptions{includeUnreadOnly: true})
 	approvalTransferCmd.Flags().String("task-id", "", "审批任务 ID (必填)")
 	approvalTransferCmd.Flags().String("to-actioner-id", "", "转交目标用户 ID (必填)")
 	approvalTransferCmd.Flags().String("remark", "", "转交说明 (可选)")
@@ -1898,4 +2316,19 @@ func newOaCommand() *cobra.Command {
 	root.AddCommand(approvalCmd)
 
 	return root
+}
+
+// createInstanceDenialMessage 将 start_process_instance 已知的服务端业务拒绝
+// （错误文本子串匹配）翻译为面向用户的中文文案；未命中已知拒绝时返回
+// 空串，调用方回退原始错误。
+func createInstanceDenialMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "the supply check point has already been bound to an approval"):
+		return "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	}
+	return ""
 }

@@ -40,6 +40,15 @@ var attendanceSemanticCatalogJSON []byte
 //go:embed semantic_catalog_mail.json
 var mailSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_aisearch.json
+var aisearchSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_contact.json
+var contactSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_live.json
+var liveSemanticCatalogJSON []byte
+
 //go:embed semantic_catalog_oa.json
 var oaSemanticCatalogJSON []byte
 
@@ -49,11 +58,34 @@ var dingSemanticCatalogJSON []byte
 //go:embed semantic_catalog_report.json
 var reportSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_sheet.json
+var sheetSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_whiteboard.json
+var whiteboardSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_devdoc.json
+var devdocSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_hrbrain.json
+var hrbrainSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_pat.json
+var patSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_devapp.json
+var devAppSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_agoal.json
+var agoalSemanticCatalogJSON []byte
+
 type semanticCatalogFile struct {
-	Version      int                              `json:"version"`
-	Service      string                           `json:"service"`
-	Availability Availability                     `json:"default_availability"`
-	Shortcuts    map[string]semanticCatalogRecord `json:"shortcuts"`
+	Version           int                              `json:"version"`
+	Service           string                           `json:"service"`
+	Availability      Availability                     `json:"default_availability"`
+	FeaturedShortcuts []string                         `json:"featured_shortcuts,omitempty"`
+	AtomicOwners      map[string]string                `json:"atomic_owners,omitempty"`
+	Shortcuts         map[string]semanticCatalogRecord `json:"shortcuts"`
 }
 
 type semanticCatalogRecord struct {
@@ -65,23 +97,39 @@ type semanticCatalogRecord struct {
 	Public               bool                `json:"public"`
 	CompatibilityVisible bool                `json:"compatibility_visible,omitempty"`
 	Reviewed             bool                `json:"reviewed"`
+	HelpTier             HelpTier            `json:"-"`
 }
 
-var reviewedSemanticCatalog = mustLoadSemanticCatalogs(
-	semanticCatalogJSON,
-	docSemanticCatalogJSON,
-	aitableSemanticCatalogJSON,
-	minutesSemanticCatalogJSON,
-	driveSemanticCatalogJSON,
-	wikiSemanticCatalogJSON,
-	calendarSemanticCatalogJSON,
-	todoSemanticCatalogJSON,
-	attendanceSemanticCatalogJSON,
-	mailSemanticCatalogJSON,
-	oaSemanticCatalogJSON,
-	dingSemanticCatalogJSON,
-	reportSemanticCatalogJSON,
-)
+func semanticCatalogSources() [][]byte {
+	return [][]byte{
+		semanticCatalogJSON,
+		docSemanticCatalogJSON,
+		aitableSemanticCatalogJSON,
+		minutesSemanticCatalogJSON,
+		driveSemanticCatalogJSON,
+		wikiSemanticCatalogJSON,
+		calendarSemanticCatalogJSON,
+		todoSemanticCatalogJSON,
+		attendanceSemanticCatalogJSON,
+		mailSemanticCatalogJSON,
+		aisearchSemanticCatalogJSON,
+		contactSemanticCatalogJSON,
+		liveSemanticCatalogJSON,
+		oaSemanticCatalogJSON,
+		dingSemanticCatalogJSON,
+		reportSemanticCatalogJSON,
+		sheetSemanticCatalogJSON,
+		whiteboardSemanticCatalogJSON,
+		devdocSemanticCatalogJSON,
+		hrbrainSemanticCatalogJSON,
+		patSemanticCatalogJSON,
+		devAppSemanticCatalogJSON,
+		agoalSemanticCatalogJSON,
+	}
+}
+
+var reviewedSemanticCatalog = mustLoadSemanticCatalogs(semanticCatalogSources()...)
+var reviewedAtomicShortcutOwners = mustLoadAtomicShortcutOwners(reviewedSemanticCatalog, semanticCatalogSources()...)
 
 func mustLoadSemanticCatalogs(sources ...[]byte) map[string]semanticCatalogRecord {
 	out := make(map[string]semanticCatalogRecord)
@@ -98,6 +146,57 @@ func mustLoadSemanticCatalog() map[string]semanticCatalogRecord {
 	return mustLoadSemanticCatalogs(semanticCatalogJSON)
 }
 
+func mustLoadAtomicShortcutOwners(records map[string]semanticCatalogRecord, sources ...[]byte) map[string]string {
+	out := make(map[string]string)
+	for _, raw := range sources {
+		var source semanticCatalogFile
+		if err := json.Unmarshal(raw, &source); err != nil {
+			panic(fmt.Sprintf("invalid shortcut semantic catalog: %v", err))
+		}
+		for rawPath, rawOwner := range source.AtomicOwners {
+			path := strings.TrimSpace(rawPath)
+			owner := strings.TrimSpace(rawOwner)
+			if path != rawPath || owner != rawOwner {
+				panic(fmt.Sprintf("semantic catalog atomic owner %q -> %q must be normalized", rawPath, rawOwner))
+			}
+			if path == "" || !strings.HasPrefix(path, source.Service+" ") || strings.HasPrefix(path, "dws ") {
+				panic(fmt.Sprintf("semantic catalog atomic owner path %q must be an exact %s CLI path without dws prefix", rawPath, source.Service))
+			}
+			if !strings.HasPrefix(owner, "+") {
+				panic(fmt.Sprintf("semantic catalog atomic owner %q for %q lacks + prefix", rawOwner, path))
+			}
+			record, ok := records[publicCatalogKey(source.Service, owner)]
+			if !ok || !record.Public || record.Availability != AvailabilityAvailable ||
+				record.Disposition == DispositionAliasInternal || record.CompatibilityVisible {
+				panic(fmt.Sprintf("semantic catalog atomic owner %q for %q must name one public available canonical Shortcut", owner, path))
+			}
+			if previous, exists := out[path]; exists {
+				panic(fmt.Sprintf("semantic catalog atomic path %q has duplicate owners %q and %q", path, previous, owner))
+			}
+			out[path] = source.Service + " " + owner
+		}
+	}
+	return out
+}
+
+// PreferredShortcutForCLIPath returns the reviewed Shortcut-first owner for
+// one exact atomic CLI path. It is product discovery metadata only; command
+// identity and executability continue to come from ContractFinal and Cobra.
+func PreferredShortcutForCLIPath(cliPath string) (string, bool) {
+	owner, ok := reviewedAtomicShortcutOwners[strings.TrimSpace(cliPath)]
+	return owner, ok
+}
+
+// PreferredShortcutOwnersSnapshot returns a defensive copy for exact-set
+// policy tests that keep Schema exclusions aligned with reviewed discovery.
+func PreferredShortcutOwnersSnapshot() map[string]string {
+	out := make(map[string]string, len(reviewedAtomicShortcutOwners))
+	for path, owner := range reviewedAtomicShortcutOwners {
+		out[path] = owner
+	}
+	return out
+}
+
 func loadSemanticCatalog(raw []byte, out map[string]semanticCatalogRecord) {
 	var source semanticCatalogFile
 	if err := json.Unmarshal(raw, &source); err != nil {
@@ -105,6 +204,20 @@ func loadSemanticCatalog(raw []byte, out map[string]semanticCatalogRecord) {
 	}
 	if source.Version != 1 || strings.TrimSpace(source.Service) == "" {
 		panic("invalid shortcut semantic catalog header")
+	}
+	featured := make(map[string]bool, len(source.FeaturedShortcuts))
+	for _, rawCommand := range source.FeaturedShortcuts {
+		command := strings.TrimSpace(rawCommand)
+		if command != rawCommand {
+			panic(fmt.Sprintf("semantic catalog featured command %q must be normalized", rawCommand))
+		}
+		if !strings.HasPrefix(command, "+") {
+			panic(fmt.Sprintf("semantic catalog featured command %q lacks + prefix", command))
+		}
+		if featured[command] {
+			panic(fmt.Sprintf("semantic catalog featured command %q is duplicated", command))
+		}
+		featured[command] = true
 	}
 	for command, record := range source.Shortcuts {
 		if !strings.HasPrefix(command, "+") {
@@ -149,11 +262,35 @@ func loadSemanticCatalog(raw []byte, out map[string]semanticCatalogRecord) {
 		if record.CompatibilityVisible && record.Public {
 			panic(fmt.Sprintf("semantic catalog command %q cannot be both public and compatibility-visible", command))
 		}
+		switch {
+		case record.Availability != AvailabilityAvailable:
+			record.HelpTier = HelpTierUnavailable
+		case record.CompatibilityVisible || record.Disposition == DispositionAliasInternal:
+			record.HelpTier = HelpTierCompatibility
+		case source.FeaturedShortcuts == nil || featured[command]:
+			record.HelpTier = HelpTierFeatured
+		default:
+			record.HelpTier = HelpTierCatalog
+		}
 		key := publicCatalogKey(source.Service, command)
 		if _, exists := out[key]; exists {
 			panic(fmt.Sprintf("duplicate shortcut semantic catalog entry %s %s", source.Service, command))
 		}
 		out[key] = record
+	}
+	for command := range featured {
+		record, ok := source.Shortcuts[command]
+		if !ok {
+			panic(fmt.Sprintf("semantic catalog featured command %q is not registered", command))
+		}
+		availability := record.Availability
+		if availability == "" {
+			availability = source.Availability
+		}
+		if !record.Public || availability != AvailabilityAvailable ||
+			record.Disposition == DispositionAliasInternal || record.CompatibilityVisible {
+			panic(fmt.Sprintf("semantic catalog featured command %q must be public, available, and canonical", command))
+		}
 	}
 }
 
@@ -164,6 +301,7 @@ func applyReviewedSemanticCatalog(s Shortcut) (Shortcut, bool) {
 	}
 	s.Disposition = record.Disposition
 	s.SemanticDelta = record.SemanticDelta
+	s.HelpTier = record.HelpTier
 	s.Availability = record.Availability
 	s.PrimaryCommand = record.Primary
 	s.SemanticReviewed = record.Reviewed

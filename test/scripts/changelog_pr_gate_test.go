@@ -351,6 +351,79 @@ This release promotes the sealed `+"`v1.0.1-beta.1`"+` contents to stable.
 	}
 }
 
+func TestReleaseFragmentPolicyAcceptsOnlyUntaggedCanonicalBetaAmendments(t *testing.T) {
+	newAmendmentRepo := func(t *testing.T) (*changelogGateRepo, string) {
+		t.Helper()
+		repo := newChangelogGateRepo(t)
+		sealBase := repo.sealFragmentInto(t, "1.0.1-beta.1")
+		if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+			t.Fatalf("release fragment policy rejected initial beta seal: %v\noutput:\n%s", err, output)
+		}
+		changelogGateWrite(t, repo.root, ".changes/1235-sheet.md", "---\ncategory: Added\n---\n\n- Sheet accepts local float image files.\n", 0o644)
+		repo.commit(t, "merge post-seal beta fragment")
+		return repo, strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	}
+
+	stageCanonicalAmendment := func(t *testing.T, repo *changelogGateRepo) {
+		t.Helper()
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", `# Changelog
+
+## [Unreleased]
+
+## [1.0.1-beta.1] - 2026-07-17
+
+### Added
+
+- Chat reply mentions.
+
+- Sheet accepts local float image files.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`, 0o644)
+		archiveDir := filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1")
+		if err := os.Rename(filepath.Join(repo.root, ".changes", "1235-sheet.md"), filepath.Join(archiveDir, "1235-sheet.md")); err != nil {
+			t.Fatalf("Rename beta amendment fragment: %v", err)
+		}
+		repo.commit(t, "amend untagged beta release notes")
+	}
+
+	t.Run("accepts exact pre-tag merge", func(t *testing.T) {
+		repo, amendmentBase := newAmendmentRepo(t)
+		stageCanonicalAmendment(t, repo)
+
+		if output, err := repo.runFragmentPolicy(t, amendmentBase, "HEAD"); err != nil {
+			t.Fatalf("release fragment policy rejected canonical beta amendment: %v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("rejects tagged beta", func(t *testing.T) {
+		repo, amendmentBase := newAmendmentRepo(t)
+		stageCanonicalAmendment(t, repo)
+		changelogGateGit(t, repo.root, "tag", "v1.0.1-beta.1")
+
+		output, err := repo.runFragmentPolicy(t, amendmentBase, "HEAD")
+		if err == nil || !strings.Contains(output, "forbidden after tag v1.0.1-beta.1 exists") {
+			t.Fatalf("tagged beta amendment passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("rejects rewritten sealed prose", func(t *testing.T) {
+		repo, amendmentBase := newAmendmentRepo(t)
+		stageCanonicalAmendment(t, repo)
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", strings.Replace(changelogGateSealedRelease, "Chat reply mentions.", "Rewritten sealed note.", 1), 0o644)
+		repo.commit(t, "rewrite sealed beta prose")
+
+		output, err := repo.runFragmentPolicy(t, amendmentBase, "HEAD")
+		if err == nil || !strings.Contains(output, "does not exactly match") {
+			t.Fatalf("rewritten beta amendment passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+}
+
 func TestReleaseFragmentPolicyRejectsInvalidActiveFragmentAndWrongArchiveVersion(t *testing.T) {
 	t.Run("invalid active fragment", func(t *testing.T) {
 		repo := newChangelogGateRepo(t)
@@ -1106,6 +1179,9 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing Policy job boundaries")
 	}
 	policyJob := admission[policyStart:policyEnd]
+	if !strings.Contains(policyJob, "timeout-minutes: 15") {
+		t.Error("Policy job must retain enough headroom for full Schema policy validation")
+	}
 	requirePolicyEnv := func(step, nextStep string) {
 		t.Helper()
 		start := strings.Index(policyJob, "      - name: "+step+"\n")
@@ -1260,25 +1336,26 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing focused test job boundaries")
 	}
 	focusedJob := admission[focusedStart:focusedEnd]
+	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
+		t.Error("focused test shards must run for every non-doc, non-reused, non-full-suite revision")
+	}
 	if !strings.Contains(focusedJob, "timeout-minutes: 20") {
 		t.Error("focused test job must allow the scoped race suite up to 20 minutes")
 	}
 	// The focused path fans the impacted set across the same shards as test-race
 	// and runs each shard the way test-race runs it, so no single job carries
 	// internal/app together with its reverse dependencies. internal/app is split
-	// further into one shard per bounded partition, which keeps its package-level
-	// headroom through the process-isolating helper instead of one long -timeout
-	// and is strictly stronger than a single app job: every partition process
-	// releases the framework registries it populated, and the partitions run
-	// concurrently rather than end to end. Each partition shard still selects the
-	// same single internal/app package, so the impacted-package query maps the
-	// shard name back to app. release-scripts is asserted because its dedicated
+	// further into three balanced physical lanes. Every logical partition remains
+	// a fresh process, so it releases the framework registries it populated, while
+	// the workflow consumes six fewer hosted-runner slots. Each lane still selects
+	// the same single internal/app package, so the impacted-package query maps the
+	// lane name back to app. release-scripts is asserted because its dedicated
 	// job only runs at full-suite or release-sensitive scope, so losing it here
 	// would silently stop testing test/scripts changes.
 	for _, want := range []string{
-		`app-*) package_shard=app ;;`,
+		`app-lane-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
-		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"`,
+		`./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"`,
 		`if [ "$TEST_SHARD" = "release-scripts" ]; then`,
 		`go test -v -count=1 -timeout=10m "${packages[@]}"`,
 		"timeout_budget=12m",
@@ -1286,6 +1363,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
 		"timeout_budget=15m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
+		"- smoke",
 		"- release-scripts",
 	} {
 		if !strings.Contains(focusedJob, want) {
@@ -1299,16 +1377,15 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing race test job boundaries")
 	}
 	raceJob := admission[raceStart:raceEnd]
-	// internal/app is carried by one shard per bounded partition, so process-global
-	// command registries are released with each partition process and the Schema
-	// assembly peak no longer sits in front of the other partitions. Each
-	// partition shard resolves back to the same single internal/app package.
+	// internal/app is carried by three balanced lanes. Process-global command
+	// registries are still released with each logical partition process, and each
+	// lane resolves back to the same single internal/app package.
 	// Other full race shards retain the dynamic package timeout: default/floor
 	// 12m, with cli/smoke raised to 15m on slower hosted runners.
 	for _, want := range []string{
-		`app-*) package_shard=app ;;`,
+		`app-lane-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
-		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"`,
+		`./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"`,
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
@@ -1429,10 +1506,22 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if !strings.Contains(integration, "include-hidden-files: true") {
 		t.Error("main integration must upload diagnostics stored below the hidden .tmp-bin directory")
 	}
+	const focusedIntegrationCommand = "bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests --keep-workdir"
+	if count := strings.Count(integration, focusedIntegrationCommand); count != 2 {
+		t.Errorf("main integration must execute and report the focused E2E command exactly twice, got %d", count)
+	}
 
 	integrationScript := readWorkflow("scripts/dev/test-multi-profile-e2e.sh")
+	for _, want := range []string{
+		"--skip-go-tests)",
+		"RUN_GO_TESTS=0",
+	} {
+		if !strings.Contains(integrationScript, want) {
+			t.Errorf("multi-profile E2E script missing focused-CI boundary %q", want)
+		}
+	}
 	if !strings.Contains(integrationScript, `GO_TEST_TIMEOUT="${MULTI_PROFILE_GO_TEST_TIMEOUT:-10m}"`) {
-		t.Error("multi-profile E2E must allow enough time for the complete internal/app regression suite")
+		t.Error("multi-profile E2E must allow enough time when complete Go regressions are explicitly requested")
 	}
 	if strings.Contains(integrationScript, "go test -timeout 180s") {
 		t.Error("multi-profile E2E must not retain the obsolete three-minute Go test budget")

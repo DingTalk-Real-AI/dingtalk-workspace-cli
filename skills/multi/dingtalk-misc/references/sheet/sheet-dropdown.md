@@ -66,7 +66,7 @@ Flags:
 查询指定范围内的下拉列表配置信息。
 - **用途**：查看单元格已设置的下拉列表选项和配置。
 - **场景**：在修改下拉列表前先查询现有配置；确认下拉列表是否设置成功。
-- **返回**：`dataValidations` 数组由底层按配置聚合。Inline 组返回 `sourceType:"inline"`、`conditionValues`、`ranges` 和 `options`；SourceRange 组始终返回 `sourceType:"sourceRange"`、`sourceRangeStatus:"valid"/"invalid"`、`enableMultiSelect` 和 `ranges`，仅在 `sourceRangeStatus:"valid"` 时返回 `sourceRange:{sheetId,a1Notation}`。`invalid` 时仍保留配置组，但省略 `sourceRange`，不得依赖旧坐标修复。SourceRange 不会展开候选值，因此不返回 `conditionValues`、`options` 或颜色。范围内无下拉列表时 `hasDropdown` 为 false。
+- **返回**：`dataValidations` 按相同配置分组。Inline 组返回 `sourceType:"inline"`、`conditionValues`、`ranges` 和 `options`；SourceRange 组始终返回 `sourceType:"sourceRange"`、`sourceRangeStatus:"valid"/"invalid"`、`enableMultiSelect` 和 `ranges`，仅在 `sourceRangeStatus:"valid"` 时返回 `sourceRange:{sheetId,a1Notation}`。`invalid` 时仍保留配置组，但省略 `sourceRange`，不得依赖旧坐标修复。SourceRange 不会展开候选值，因此不返回 `conditionValues`、`options` 或颜色。范围内无下拉列表时 `hasDropdown` 为 false。
 
 ### 删除下拉列表
 ```
@@ -99,5 +99,5 @@ Flags:
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - `set-dropdown` 的 Inline 模式使用 `--options`，每个元素包含 `value`（必填）和 `color`（可选，`#RRGGBB`）；SourceRange 模式使用 `--source-sheet-id` + `--source-range`。两种模式均可用 `--multi-select`，并会覆盖目标范围已有下拉
 - SourceRange 在已验证的重命名、引用前插入行/列、删除引用前行的场景会自动调整；已验证的 `move-dimension` 会使其变为 `invalid`。其他未覆盖删除/移动场景后先回读，仅 `invalid` 时重新选源写入；颜色写入暂不支持
-- `get-dropdown` 查询指定范围内的下拉配置，聚合发生在底层服务。SourceRange 即使无效也保留一组并以 `sourceRangeStatus:"invalid"` 表示，但省略 `sourceRange`，不回退展开候选值
+- `get-dropdown` 查询指定范围内的下拉配置，并按相同配置分组。SourceRange 即使无效也保留一组并以 `sourceRangeStatus:"invalid"` 表示，但省略 `sourceRange`，不回退展开候选值
 - `delete-dropdown` 删除指定范围内的下拉列表配置，单元格恢复为普通文本格式。已填写的值不会被清除。目标范围不存在下拉列表时操作仍返回成功

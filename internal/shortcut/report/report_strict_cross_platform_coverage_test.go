@@ -8,9 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -26,11 +28,13 @@ type reportCoverageCall struct {
 }
 
 type reportCoverageCaller struct {
-	responses map[string][]string
-	history   []reportCoverageCall
+	responses   map[string][]string
+	history     []reportCoverageCall
+	hasDeadline bool
 }
 
-func (caller *reportCoverageCaller) CallTool(_ context.Context, _, tool string, args map[string]any) (*edition.ToolResult, error) {
+func (caller *reportCoverageCaller) CallTool(ctx context.Context, _, tool string, args map[string]any) (*edition.ToolResult, error) {
+	_, caller.hasDeadline = ctx.Deadline()
 	caller.history = append(caller.history, reportCoverageCall{tool: tool, args: args})
 	queue := caller.responses[tool]
 	if len(queue) == 0 {
@@ -272,11 +276,20 @@ func TestCrossPlatformCoverageReportLatestRequiresCompleteOrderedListAndExactRea
 		t.Fatalf("missing order err=%v history=%v", err, missingOrder.history)
 	}
 
-	incomplete := &reportCoverageCaller{responses: map[string][]string{
-		"get_send_report_list": {`{"success":true,"result":{"report_list":[{"reportId":"report-1","createTime":1}]},"hasMore":true,"nextCursor":20}`},
+	paginated := &reportCoverageCaller{responses: map[string][]string{
+		"get_send_report_list": {
+			`{"success":true,"result":{"report_list":[{"reportId":"report-1","createTime":1}]},"hasMore":true,"nextCursor":20}`,
+			`{"success":true,"result":{"report_list":[{"reportId":"report-2","createTime":2}]},"hasMore":false}`,
+		},
+		"get_report_entry_details": {`{"success":true,"result":{"report_Id":"report-2","report_content":[]}}`},
 	}}
-	if _, err := runReportCoverage(t, ReportLatest, incomplete); err == nil || len(incomplete.history) != 1 {
-		t.Fatalf("incomplete err=%v history=%v", err, incomplete.history)
+	if _, err := runReportCoverage(t, ReportLatest, paginated); err != nil {
+		t.Fatalf("paginated latest: %v", err)
+	}
+	if len(paginated.history) != 3 || paginated.history[0].args["cursor"] != 0 ||
+		paginated.history[1].args["cursor"] != 20 ||
+		paginated.history[2].args["report_id"] != "report-2" {
+		t.Fatalf("paginated history=%#v", paginated.history)
 	}
 
 	tied := &reportCoverageCaller{responses: map[string][]string{
@@ -566,14 +579,39 @@ func TestCrossPlatformCoverageReportExecutorsSuccessErrorsAndZeroCalls(t *testin
 func TestCrossPlatformCoverageReportLatestExecutorRemainingBranches(t *testing.T) {
 	validList := `{"success":true,"result":{"report_list":[{"reportId":"report-1","createTime":1}]},"hasMore":false}`
 	validDetail := `{"success":true,"result":{"report_Id":"report-1","report_content":[]}}`
+	nilContextCaller := &reportCoverageCaller{responses: map[string][]string{
+		"get_send_report_list": {`{"success":true,"result":{"report_list":[]},"hasMore":false}`},
+	}}
+	helpers.InitDepsForTest(t, nilContextCaller)
+	nilContextCommand := corecmd.New(shortcut.FromShortcut(ReportLatest))
+	nilContextCommand.SetOut(io.Discard)
+	nilContextCommand.SetErr(io.Discard)
+	nilContextRuntime := shortcut.RuntimeContextForTest(nilContextCommand, ReportLatest)
+	if err := ReportLatest.Execute(nilContextRuntime); err == nil {
+		t.Fatal("direct latest without command context returned success for empty candidates")
+	}
+
 	defaultCaller := &reportCoverageCaller{responses: map[string][]string{
 		"get_send_report_list": {validList}, "get_report_entry_details": {validDetail},
 	}}
+	before := time.Now().UnixMilli()
 	if _, err := runReportCoverage(t, ReportLatest, defaultCaller, "--keyword", " Weekly "); err != nil {
 		t.Fatal(err)
 	}
+	after := time.Now().UnixMilli()
 	if defaultCaller.history[0].args["report_template_name"] != "Weekly" {
 		t.Fatalf("latest keyword args=%#v", defaultCaller.history[0].args)
+	}
+	if !defaultCaller.hasDeadline {
+		t.Fatal("report latest calls must inherit a bounded total deadline")
+	}
+	endMillis, ok := defaultCaller.history[0].args["endTime"].(int64)
+	if !ok || endMillis < before || endMillis > after {
+		t.Fatalf("default latest endTime=%v, want invocation snapshot in [%d,%d]", defaultCaller.history[0].args["endTime"], before, after)
+	}
+	startMillis, ok := defaultCaller.history[0].args["startTime"].(int64)
+	if !ok || endMillis-startMillis != int64(reportMaximumOutboxDays*24*time.Hour/time.Millisecond) {
+		t.Fatalf("default latest range=%#v", defaultCaller.history[0].args)
 	}
 
 	for name, caller := range map[string]*reportCoverageCaller{
@@ -602,6 +640,71 @@ func TestCrossPlatformCoverageReportLatestExecutorRemainingBranches(t *testing.T
 	}
 	if _, err := reportLatestEntryID([]map[string]any{{"createTime": int64(1), "reportId": 1}}, "report/latest"); err == nil {
 		t.Fatal("non-string latest report identity returned success")
+	}
+
+	duplicatePages := &reportCoverageCaller{responses: map[string][]string{
+		"get_send_report_list": {
+			`{"success":true,"result":{"report_list":[{"reportId":"same","createTime":1}]},"hasMore":true,"nextCursor":20}`,
+			`{"success":true,"result":{"report_list":[{"reportId":"same","createTime":2}]},"hasMore":false}`,
+		},
+	}}
+	if _, err := runReportCoverage(t, ReportLatest, duplicatePages); err == nil || len(duplicatePages.history) != 2 {
+		t.Fatalf("duplicate pages err=%v history=%#v", err, duplicatePages.history)
+	}
+
+	stalledPagination := &reportCoverageCaller{responses: map[string][]string{
+		"get_send_report_list": {
+			`{"success":true,"result":{"report_list":[{"reportId":"report-1","createTime":1}]},"hasMore":true,"nextCursor":20}`,
+			`{"success":true,"result":{"report_list":[{"reportId":"report-2","createTime":2}]},"hasMore":true,"nextCursor":20}`,
+		},
+	}}
+	if _, err := runReportCoverage(t, ReportLatest, stalledPagination); err == nil || len(stalledPagination.history) != 2 {
+		t.Fatalf("stalled pagination err=%v history=%#v", err, stalledPagination.history)
+	}
+
+	overLimitItems := make([]map[string]any, reportLatestMaxItems+1)
+	for index := range overLimitItems {
+		overLimitItems[index] = map[string]any{"reportId": fmt.Sprintf("report-%d", index), "createTime": index}
+	}
+	overLimitPayload, err := json.Marshal(map[string]any{
+		"success": true,
+		"result":  map[string]any{"report_list": overLimitItems},
+		"hasMore": false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overLimit := &reportCoverageCaller{responses: map[string][]string{
+		"get_send_report_list": {string(overLimitPayload)},
+	}}
+	if _, err := runReportCoverage(t, ReportLatest, overLimit); err == nil || len(overLimit.history) != 1 {
+		t.Fatalf("item limit err=%v history=%#v", err, overLimit.history)
+	}
+
+	overlappingPages := &reportCoverageCaller{responses: map[string][]string{
+		"get_send_report_list": {
+			`{"success":true,"result":{"report_list":[{"reportId":"older","createTime":1},{"reportId":"same","createTime":2}]},"hasMore":true,"nextCursor":20}`,
+			`{"success":true,"result":{"report_list":[{"reportId":"same","createTime":2}]},"hasMore":false}`,
+		},
+		"get_report_entry_details": {`{"success":true,"result":{"report_Id":"same","report_content":[]}}`},
+	}}
+	if _, err := runReportCoverage(t, ReportLatest, overlappingPages); err != nil {
+		t.Fatalf("identical pagination overlap should be deduplicated: %v", err)
+	}
+	if len(overlappingPages.history) != 3 || overlappingPages.history[2].args["report_id"] != "same" {
+		t.Fatalf("overlapping history=%#v", overlappingPages.history)
+	}
+
+	pages := make([]string, 0, reportLatestMaxPages)
+	for index := 0; index < reportLatestMaxPages; index++ {
+		pages = append(pages, fmt.Sprintf(
+			`{"success":true,"result":{"report_list":[{"reportId":"report-%d","createTime":%d}]},"hasMore":true,"nextCursor":%d}`,
+			index, index+1, (index+1)*20,
+		))
+	}
+	bounded := &reportCoverageCaller{responses: map[string][]string{"get_send_report_list": pages}}
+	if _, err := runReportCoverage(t, ReportLatest, bounded); err == nil || len(bounded.history) != reportLatestMaxPages {
+		t.Fatalf("bounded latest err=%v calls=%d", err, len(bounded.history))
 	}
 }
 

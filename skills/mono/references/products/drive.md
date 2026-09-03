@@ -194,6 +194,38 @@ Usage:
 
 返回节点可用的阅读、编辑、评论、点赞、预览或下载等统计维度；不同文件类型返回字段可能不同。本命令只读。
 
+### 普通文件全局评论
+
+Drive 评论只用于 PDF、DOCX、图片、压缩包等普通文件，并且固定为文件级全局评论。在线文档（adoc）的正文/划词评论使用 `dws doc comment`，在线表格（axls）的评论使用 `dws sheet comment`。
+
+> `drive comment list/create` 是旧评论服务的兼容入口，保留原参数与输出但已 deprecated。新任务必须使用 `list-v2/create-v2`；其返回的 `commentKey` 才能用于下面的新生命周期命令。
+
+```text
+# 查询与创建
+dws drive comment list-v2 --node <NODE_ID_OR_URL> [--limit 50] [--cursor <NEXT_TOKEN>] [--resolve-status <resolved|unresolved>]
+dws drive comment create-v2 --node <NODE_ID_OR_URL> --content "评论内容"
+
+# 回复、表态与回复列表
+dws drive comment reply --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> --content "回复内容"
+dws drive comment react-reply --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> --reaction <EMOJI>
+dws drive comment list-replies --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> [--page-size 20] [--page-token <NEXT_TOKEN>]
+
+# 更新、解决、恢复与删除
+dws drive comment update --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY> --content "更新后的内容"
+dws drive comment resolve --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY>
+dws drive comment restore --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY>
+dws drive comment delete --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY>
+
+# 批量查询；可重复传入 comment-key
+dws drive comment batch-query --node <NODE_ID_OR_URL> --comment-key <COMMENT_KEY_1> --comment-key <COMMENT_KEY_2>
+```
+
+- 完整生命周期使用 `commentKey` 作为评论标识；创建后必须保存返回的 `commentKey`。
+- 新评论列表的 `--limit/--page-size` 范围为 1–50；超过上限会直接报错，不会静默截断。
+- Drive 自动把评论主题固定为 `global`，不要传 `topic-id`、单元格、正文锚点或行内范围。
+- `--cursor` 是不透明字符串，只能原样使用上次响应返回的 `nextToken`。
+- `delete` 是破坏性操作，必须得到用户确认；其余写操作遵循统一写入安全策略。
+
 ### 创建节点快捷方式
 
 ```text
@@ -214,10 +246,13 @@ Example:
 
 | extension | 文件类型 | 操作 | 命令 |
 |-----------|---------|------|------|
+| dlink | 快捷方式 | 解析目标后重新路由 | `dws doc info --node <快捷方式nodeId>`，内容操作使用 `linkSourceInfo.nodeId` |
 | adoc | 在线文档 | 在线获取 Markdown 内容 | `dws doc read --node <nodeId>` |
 | axls | 在线表格 | 在线读取表格数据 | `dws sheet list` → `dws sheet range read` |
 | able | 多维表格 | 在线查询记录 | `dws aitable base get` → `dws aitable record query` |
 | 其他（pdf/docx/txt/png 等） | 普通文件 | **不支持在线分析**，需用户主动下载后本地查看 | `dws drive download --node <nodeId> --output <path>` |
+
+`dlink` 不能按普通文件下载。目标仍为 dlink 时逐跳 `doc info` 并记录已访问 nodeId；解析失败、`linkSourceInfo`/目标 nodeId 缺失或 nodeId 重复即停。内容读取、编辑、导出和类型路由走目标；明确移动、重命名或删除快捷方式入口本身仍使用最初的顶层 nodeId。
 
 ### 下载钉盘文件到本地
 
@@ -227,19 +262,25 @@ Example:
 Usage:
   dws drive download [flags]
 Example:
+  dws drive download --node <dentryUuid>
   dws drive download --node <dentryUuid> --output ./report.pdf
   dws drive download --node <dentryUuid> --output ~/downloads/
   dws drive download --node <dentryUuid> --output ./big.zip --part-size 32MB --parallel 8
+  dws drive download --node <dentryUuid> --url-only
 Flags:
       --node string       文件 ID (dentryUuid) (必填)
-      --output string     本地保存路径 (必填)，可以是文件路径或目录；如果指定目录，文件名从下载 URL 中自动推断
+      --output string     本地保存路径 (可选，默认当前目录)，可以是文件路径或目录；路径为目录（或未指定）时，文件名优先取返回的 fileName，其次从下载 URL 推断
       --space-id string   文件所属空间 ID (可选)
+      --overwrite         目标文件已存在时允许覆盖 (默认 false 时拒绝并报错)
+      --url-only          只返回带签名的下载地址与请求头，不落盘（与 --output/--overwrite/--part-size/--parallel/--no-resume 互斥）
       --part-size string  分片下载的分片大小，支持 KB/MB/GB 单位，范围 1MB-1GB (默认 16MB)
       --parallel int      分片下载并发数，范围 1-8 (默认 4)
       --no-resume         关闭断点续传，忽略历史下载进度从头下载 (默认开启续传)
 ```
 
-> **注意**：`--output` 是必填参数，不传会报错。
+> **注意**：`--output` 可选，不传时保存到当前目录，文件名自动推断；需要确定的输出路径时显式指定。`download-version` 同样支持缺省 `--output`。**目标文件已存在时默认拒绝覆盖并报错**（含缺省当前目录场景）；确认覆盖需显式传 `--overwrite`（`download-version` 同样支持）。断点续传的 `.dwspart` 中间产物不算冲突。
+>
+> **非落盘模式**：加 `--url-only` 只返回带签名的下载地址与请求头（JSON 字段 `downloadUrl`/`headers`，URL 查询参数分隔符 `&` 原样保留），不下载文件内容；调用方自行执行下载，地址为临时授权应尽快使用。与 `--output`/`--overwrite`/`--part-size`/`--parallel`/`--no-resume` 互斥（显式提供即报错）；`download-version` 同样支持（含 `download --version N --url-only` 兼容路由）。
 
 > **大文件分片下载**：
 > - 大文件自动分片并发下载，小文件整流下载，行为对用户透明，无需任何额外操作。
@@ -583,8 +624,10 @@ Flags:
 用户说"搜索钉盘文件/钉盘里找个文件/查找某个钉盘文件/钉盘中搜索" → `search`
 用户说"文件详情/文件信息" → `info`
 用户说"文件阅读量/编辑量/评论数/下载数/节点统计" → `stats`
+用户说"给这个 PDF/附件/普通文件评论、回复评论、解决评论、恢复评论、删除评论" → `comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply`（仅在用户明确要求旧评论兼容行为时使用 deprecated 的 `list/create`）
 用户说"给文件创建快捷方式/放一个链接到目标文件夹" → `shortcut`
-用户说"下载文件" → `download` 指定 `--output` 保存到本地
+用户说"下载文件" → `download`，可用 `--output` 指定保存路径（缺省当前目录，文件名自动推断）；目标文件已存在时需确认后加 `--overwrite`（默认拒绝覆盖）
+用户说"只要下载地址/不要下载到本地/给我下载链接/我自己下载" → `download --url-only`（只返回带签名下载地址与请求头，不落盘；不与落盘/分片参数同用）
 用户说"新建文件夹/创建目录" → `mkdir`（钉盘空间）/ `wiki node create --type folder`（文档空间）
 用户说"上传文件/传文件到钉盘" → `upload`（首选此命令，自动完成三步流程）
 用户说"覆盖/替换钉盘或知识库中的已有文件" → `upload --node <fileId>`（不可逆，先 `--dry-run`，确认后再加 `--yes`）
@@ -593,14 +636,19 @@ Flags:
 用户说"删除文件/删除文件夹/移到回收站" → `delete`（危险操作，需确认）
 用户说"回收站/查看回收站/回收站列表/回收站里有什么" → `recycle list`
 用户说"恢复文件/还原删除的文件/从回收站恢复/还原回收站文件" → `recycle restore`
-用户说"给文档授权/分享权限" → `permission add`
-用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问" → `publish set`
+用户说"给文档授权/分享权限" → `permission add`（协作者级授权；链接公开的访问密码/有效期走 `publish set`）
+用户说"授权并通知对方/加权限后告知他/通知一下被授权的人" → `permission add --members ... --notify`（未提通知需求时不传 `--notify`）
+用户说"权限设置/权限模式/分享范围/水印等策略配置" → `permission get-setting`
+用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问/设置访问密码/公开有效期/分享链接密码" → `publish set`
 用户说"关闭公开/取消公开/取消互联网访问" → `publish unset`
 用户说"查看公开状态/是否公开/发布状态" → `publish get`
 用户说"比较本地和云盘/看哪些文件变了/同步差异/diff" → `status`
 用户说"把钉盘文件夹拉到本地/下载整个文件夹/镜像/同步到本地/pull" → `pull`
 用户说"把本地文件夹传到钉盘/推送整个文件夹/上传目录/同步到云端/push" → `push`
 用户说"双向同步/两边同步/本地和云盘互相同步/让两边一致/sync" → `sync`（默认两侧都变更时跳过；要覆盖须显式给 `--on-conflict` 并加 `--yes`）
+用户说"存储容量/企业盘用量/剩余空间/用了多少空间" → `quota`（默认企业级；应用列表用 `quota apps`），完整规则见 [`drive-storage.md`](./drive/drive-storage.md)
+用户说"异步任务/任务状态/任务查询/导出结果查询" → `task get`（统一入口，`--type export|import|copy|move`），完整规则见 [`drive-task.md`](./drive/drive-task.md)
+用户说"导出为 xlsx/pptx"或不确定文档类型 → `export`（通用导出入口，自动识别类型），完整规则见 [`drive-export.md`](./drive/drive-export.md)
 
 关键区分: drive(文件管理) vs doc(文档内容读写) vs wiki(空间管理)
 
@@ -610,9 +658,16 @@ Flags:
 
 **drive permission vs wiki member**: "给某篇文档/文件授权" → `drive permission add`（节点级）；"给某个知识库整体加成员" → `wiki member add`（空间级）
 
+**通知意图 → `--notify`**（默认不通知，省略时 CLI 不向服务端发送该字段）：
+- 用户明确要求“通知 / 告知 / 提醒对方 / 让他知道” → 追加 `--notify`
+- 用户明确要求“不要通知 / 别提醒 / 悄悄加 / 不要打扰” → 追加 `--notify=false`
+- 用户没提通知需求 → **不传该 flag**，保持不通知；不要自行补上 `--notify`
+- `--notify` 仅在 `--members` 新格式下生效；旧格式 `--users` 下传了也不会生效，有通知需求必须改用 `--members`
+- 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
+
 **创建在线文档/表格/脑图**: drive 不支持创建文件，需走 `wiki node create --type <type>`（创建空节点）或 `doc create`（创建并写入内容）。
 
-**导出文档/导出为Word**: 导出是内容层操作，走 `doc export`，不属于 drive。
+**导出文档/导出为Word**: 钉盘在线文档（存储在钉盘里的文档）的导出走 `drive export`；文档内容层操作走 `doc export`。
 
 把图片/文件发到群里一般直接用 `chat message send --msg-type file --file <本地路径>`（见 [chat.md](./chat.md)），无需先经 drive 上传。
 
@@ -693,6 +748,8 @@ Flags:
 
 > **字段选择**：`drive list` 返回中有 `dentryId`（数字格式）和 `fileId`（UUID 格式），**必须使用 `fileId`（UUID 格式）**作为 `--node` 和 `--folder` 参数值。
 
+> **异步任务自动轮询**：服务端返回 `taskId` 时，copy/move 会自动轮询直至终态（渐进式退避：2s×5 → 5s×5 → 10s×10 → 15s×10，上限 30 次约 5 分钟）。轮询可随时 Ctrl-C 中断，服务端任务不会中止；超时或中断后用 `dws drive task get --type copy|move --id <taskId>` 查询兜底，任务状态枚举与查询入口区分详见 [`drive/drive-task.md`](./drive/drive-task.md)。`PARTIAL_FAILED` 时同样可用该命令查明细。
+
 ### 创建文件夹（文档空间）
 
 drive 没有独立的文档空间建文件夹命令，在知识库/文档空间中创建文件夹走：
@@ -710,17 +767,53 @@ dws wiki node create --type folder --name "文件夹名" --workspace <WORKSPACE_
 ```
 Usage:
   dws drive permission add --node <ID> --users uid1,uid2 --role READER
+  dws drive permission add --node <ID> --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
   dws drive permission update --node <ID> --users uid1 --role EDITOR
+  dws drive permission update --node <ID> --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws drive permission update --node <ID> --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"}]'
   dws drive permission list --node <ID>
+  dws drive permission list --node <ID> --limit 50 --next-token <上次返回的 nextToken>
+  dws drive permission get-setting --node <ID>
   dws drive permission remove --node <ID> --users uid1
+  dws drive permission remove --node <ID> --members '[{"type":"USER","id":"uid1","corpId":"xxx"},{"type":"DEPT","id":"deptId1","corpId":"xxx"}]'
 Flags:
-      --node string        目标节点 ID 或 URL (必填)
-      --users string       用户 userId 列表，逗号分隔 (add/update/remove 必填)
-      --role string        角色: MANAGER / EDITOR / DOWNLOADER / READER (add/update 必填)
-      --workspace string   知识库 ID (选填)
-      --limit int          返回成员数上限 (仅 list，默认 30，最大 200)
-      --filter-role string 按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER (仅 list)
+      --node string          目标节点 ID 或 URL (必填)
+      --users string         用户 userId 列表，逗号分隔 (旧格式)
+      --role string          角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填)
+      --members string       成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool          是否通知被添加/变更的成员 (仅 --members 新格式时生效，add / update 均默认 false)
+      --limit int            返回成员数上限 (仅 list，默认 30，最大 50)
+      --filter-role string   按角色过滤 (仅 list)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (仅 list)
+      --workspace string     知识库 ID (选填)
 ```
+
+> **add / update / remove 支持两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，支持 USER/DEPT/CONVERSATION/TAG 四种成员类型，每个 member 携带独立 `roleId`（remove 只需 type 和 id，但 USER/DEPT/TAG 仍需 corpId）
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`（标识用户所属组织）
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`（标识部门所属组织）
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+>
+> **重要约束**：
+> - `--notify` 仅在新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），add / update 均默认 false；省略时不会向服务端发送该字段，需要通知请显式传 `--notify`
+> - 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`
+> - 单次请求最多 30 个成员，超出请分批调用
+> - list 命令底层一次性返回全量成员后在内存中按 pageSize 分页，当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页
+
+`get-setting` 返回节点权限配置（不是成员清单）：`permissionMode`（INHERITED 继承上级 / INDEPENDENT 独立管理）、`shareScope`（可见范围与链接分享设置）、`policies`（水印、组织外分享、添加成员门槛等策略列表）。查询协作者清单仍用 `permission list`。
+
+get-setting 返回字段说明：
+- `permissionMode` — INHERITED（继承上级）/ INDEPENDENT（独立管理），未知时为 null
+- `shareScope` — `visibility`（PRIVATE/ORGANIZATION/PUBLIC）；`partnerIncluded`、`defaultRole`、`canSearch`、`canRecommend` 仅 ORGANIZATION 有意义；`linkShare`（仅开启链接分享时返回）：`requirePassword`（密码明文不返回）、`expireAt`/`expireDays`（未设置为 null）、`forCurrentNode`
+- `policies[]` — 每项含 `code`（策略码）、`name`/`description`（中文名与值语义说明，随行必带）、`value`（当前值）、`disabledValues`（不可设置取值列表）、`allowedValues`（可设置值域，与 disabledValues 互斥）；未下发或不支持的策略不返回；`node_spread_scope` 仅文件夹类节点返回
+- `disabledValues[]` — 每项含 `value`（被禁档位取值，与 value 同一值域）与 `reason`（服务端按请求语言返回的禁用原因文案，仅供展示理解，可为 null）；恒返回，无被禁档位时为空数组；示例：`{"value": "READER_AND_ABOVE", "reason": "企业安全策略要求不可低于可下载角色"}`
+- `value` 按策略分型：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ENABLED/DISABLED；member_invite、comment 为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE（无 NOBODY）；node_spread、online_content_copy 为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE 或 NOBODY（无 READER_AND_ABOVE）；node_spread_scope 为 ALL_NODES（限制对所有文档生效）/ PREVIEWABLE_ONLY（仅对可预览的文档生效）
+- `name`/`description` 示例（文案与产品权限设置页一致）：external_share「添加企业外协作者」：是否允许添加企业外的人为协作者（ENABLED=允许，DISABLED=禁止）；node_spread「谁可以下载、创建副本、打印」：允许哪些角色及以上的用户下载、创建副本、打印；NOBODY=所有人禁止下载、创建副本、打印；node_move_forbidden「禁止移动」：是否禁止移动到其他知识库或团队共享文件夹（ENABLED=禁止移动，DISABLED=允许移动）
+- 方向语义：NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许
 
 ### 文件互联网公开发布
 
@@ -730,21 +823,24 @@ Flags:
 
 ```
 Usage:
-  dws drive publish set --node <fileId> [--permission READER|DOWNLOADER|EDITOR]
+  dws drive publish set --node <fileId> [--permission READER|DOWNLOADER|EDITOR] [--password Ab12] [--expire-days N]
   dws drive publish unset --node <fileId>
   dws drive publish get --node <fileId>
 Example:
   dws drive publish set --node <dentryUuid>
   dws drive publish set --node <dentryUuid> --permission READER
+  dws drive publish set --node <dentryUuid> --password Ab12 --expire-days 7
   dws drive publish get --node <dentryUuid>
   dws drive publish unset --node <dentryUuid>
 Flags:
       --node string         目标文件 ID (dentryUuid) 或 URL (必填)
       --permission string   公开后的权限: READER(仅可查看) / DOWNLOADER(可查看和下载，默认) / EDITOR(可编辑)，仅 set 有效
+      --password string     公开访问密码: 4 位字母或数字 (如 Ab12)，仅 set 有效；显式传空串清除密码保护
+      --expire-days int     公开有效期天数: 正整数=N 天后过期，0=永久有效，仅 set 有效
 ```
 
 子命令说明：
-- `publish set` — [危险] 设置文件为互联网公开，可选指定公开权限
+- `publish set` — [危险] 设置文件为互联网公开，可选指定公开权限、访问密码与有效期
 - `publish unset` — [危险] 关闭文件互联网公开
 - `publish get` — 查询文件当前的公开发布状态
 
@@ -754,7 +850,8 @@ Flags:
 - `pendingApproval` — true=已提交审批待生效，false/null=无需审批或已直接生效
 - `docUrl` — 文件访问链接
 
-> **注意**：`drive export` 不存在。导出仅对自研文档 (adoc) 有意义，属于内容层操作，应使用 `doc export`。
+> **注意**：导出钉盘在线文档到本地可使用 `dws drive export`（通用导出，支持 docx/xlsx/pptx/pdf/markdown），完整规则见 [`drive/drive-export.md`](./drive/drive-export.md)；`doc export` 与 `sheet export` 是分别针对在线文档与在线表格的产品级入口。
+> 导出/复制/移动的自动轮询过程可随时用 Ctrl-C 中断；已提交的服务端任务不会中止，之后可用 `dws drive task get` 查询任务状态。
 
 ### 目标位置参数规则
 
@@ -819,7 +916,8 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 - `--order-by` 支持: `createTime`、`modifyTime`、`name`
 - **上传文件首选 `dws drive upload` 命令**；手动三步（`upload-info` → HTTP PUT → `commit`）仅用于自定义流式上传等特殊场景。手动三步时 HTTP PUT 必须把 upload-info 返回的 `headers` 全部回传，`Content-Type` 通常要留空；PUT 返回 200 后才能调 `commit`；`uploadId` 有过期时间，过期需重新 `upload-info`；`--folder` 在 upload-info / commit 中要保持一致
 - `--file-name` 必须包含扩展名（如 `report.pdf`）
-- `download` 需要指定 `--output`，CLI 会把文件保存到本地路径或目录
+- `download` 的 `--output` 可选，不传时保存到当前目录并自动推断文件名；指定时可以是文件路径或目录（`download-version` 同样支持缺省）
+- `download`/`download-version` 的 `--url-only` 是非落盘模式：只返回带签名下载地址与请求头，不写本地文件；与 `--output`/`--overwrite`/分片参数互斥，组合会直接报错
 - 文件名规则：头尾不能有空格；不能含 `*`、`"`、`<`、`>`、`|`、制表符；不能以 `.` 结尾
 - `shortcut` 会创建新节点，执行后必须通过 `drive list` 回读确认目标位置；`stats` 为只读命令
 

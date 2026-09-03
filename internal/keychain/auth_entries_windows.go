@@ -68,3 +68,7 @@ func platformValidateAuthTokenEntries(service string) error {
 func platformRemoveAuthTokenEntries(service string) error {
 	return registryRemoveAuthTokenEntries(service)
 }
+
+func platformRemoveAccountEntriesWithPrefixes(service string, prefixes []string) error {
+	return registryRemoveAccountEntriesWithPrefixes(service, prefixes)
+}

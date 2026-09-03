@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
@@ -117,16 +119,38 @@ func TestCrossPlatformCoverageWrapErrorClassifiesEveryErrorFamily(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageWrapErrorPreservesFrameworkClassification(t *testing.T) {
+	typed := apperrors.NewAuth(
+		"request rejected",
+		apperrors.WithReason("http_401"),
+		apperrors.WithActions("dws auth status"),
+	)
+	want := fmt.Errorf("shortcut call: %w", typed)
+
+	if got := WrapErrorWithOperation(want, "contact/get_current_user_profile"); got != want {
+		t.Fatalf("WrapErrorWithOperation() = %v, want typed framework error passed through unchanged", got)
+	}
+}
+
 func TestCrossPlatformCoverageBusinessSuggestionsAndResponseClassification(t *testing.T) {
 	suggestions := map[string]string{
 		"搜索内容不能为空":                                    "doc search",
 		"User has no permission to access this email": "mailbox list",
 		"频率超限":                                        "rate limit",
 		"rate limit":                                  "rate limit",
+		"用户不存在":                                       "--members",
+		"不属于当前组织":                                     "--members",
+		"成员不存在":                                       "--members",
 		"未找到指定工具":                                     "未注册",
 		"MCP不存在":                                      "未注册",
 		"参数错误":                                        "input parameters",
 		"param error":                                 "input parameters",
+		// 非文档类权限文本不再给出 drive permission apply 指引。
+		"无权限访问": "Verify your account",
+		"权限不足":  "Verify your account",
+		// 权限关键词叠加文档特征（文档权限码/角色门槛）时保留 apply 指引。
+		"您没有权限访问该文档 (forbidden.no.auth)": "权限申请",
+		"无权限访问：需要您具备 MANAGER 及以上角色":      "权限申请",
 	}
 	for input, want := range suggestions {
 		if got := suggestForBusinessErrorText(input); !strings.Contains(got, want) {
@@ -152,17 +176,76 @@ func TestCrossPlatformCoverageBusinessSuggestionsAndResponseClassification(t *te
 			t.Errorf("PAT key %s classified as %#v", key, err)
 		}
 	}
+	// forbidden.accessDenied（新接口权限不足错误码）应分类为 AUTH_PERMISSION_DENIED
+	// 并携带权限申请指引，而不是被 generic business-error 渲染吞掉。
+	for _, key := range []string{"code", "errorCode", "server_error_code"} {
+		err := ClassifyToolResultContent(map[string]any{key: "forbidden.accessDenied", "success": false, "errorMsg": "需要您具备 MANAGER 及以上角色"})
+		cli, ok := err.(*CLIError)
+		if !ok || cli.Code != CodeAuthPermission {
+			t.Errorf("accessDenied key %s classified as %#v, want AUTH_PERMISSION_DENIED", key, err)
+			continue
+		}
+		if !strings.Contains(cli.Message, "需要您具备") || !strings.Contains(cli.Suggestion, "permission apply") {
+			t.Errorf("accessDenied guidance missing: message=%q suggestion=%q", cli.Message, cli.Suggestion)
+		}
+	}
+	// 带 forbidden.* 域名的权限码是 drive 专属，单独出现即可拿到 apply 指引。
+	for _, code := range []string{"forbidden.no.auth"} {
+		err := ClassifyToolResultContent(map[string]any{"code": code, "success": false, "errorMsg": "no permission"})
+		cli, ok := err.(*CLIError)
+		if !ok || cli.Code != CodeAuthPermission || !strings.Contains(cli.Suggestion, "permission apply") {
+			t.Errorf("document code %s classified as %#v, want AUTH_PERMISSION_DENIED with apply guidance", code, err)
+		}
+	}
+	// 通用码名 NO_PERMISSION 不再单独触发文档 apply 指引（回归测试）：
+	// 考勤 get-self-setting、事件订阅等非文档工具也会返回该码。
+	nonDoc := ClassifyToolResultContent(map[string]any{"code": "NO_PERMISSION", "success": false, "errorMsg": "no permission"})
+	if cli, ok := nonDoc.(*CLIError); !ok || cli.Code != CodeAuthPermission ||
+		!strings.Contains(cli.Suggestion, "Verify your account") || strings.Contains(cli.Suggestion, "permission apply") {
+		t.Errorf("NO_PERMISSION classified as %#v, want product-neutral suggestion without apply guidance", nonDoc)
+	}
+	// NO_PERMISSION 叠加文档特征文本（角色门槛）时仍保留 apply 指引。
+	docCombo := ClassifyToolResultContent(map[string]any{"code": "NO_PERMISSION", "success": false, "errorMsg": "需要您具备 MANAGER 及以上角色"})
+	if cli, ok := docCombo.(*CLIError); !ok || cli.Code != CodeAuthPermission || !strings.Contains(cli.Suggestion, "permission apply") {
+		t.Errorf("NO_PERMISSION with document wording classified as %#v, want apply guidance", docCombo)
+	}
+	// 非文档产品的权限错误保留产品专属建议（邮件）或通用提示，
+	// 不得被改写为 drive 文档权限申请指引。
+	mail := ClassifyToolResultContent(map[string]any{"success": false, "errorMsg": "User has no permission to access this email"})
+	if cli, ok := mail.(*CLIError); !ok || cli.Code != CodeAuthPermission ||
+		!strings.Contains(cli.Suggestion, "mailbox list") || strings.Contains(cli.Suggestion, "permission apply") {
+		t.Errorf("mail permission error classified as %#v, want mailbox hint without apply guidance", mail)
+	}
+	generic := ClassifyToolResultContent(map[string]any{"success": false, "code": "FORBIDDEN", "errorMsg": "群权限不足"})
+	if cli, ok := generic.(*CLIError); !ok || cli.Code != CodeAuthPermission ||
+		!strings.Contains(cli.Suggestion, "Verify your account") || strings.Contains(cli.Suggestion, "permission apply") {
+		t.Errorf("generic permission error classified as %#v, want product-neutral suggestion", generic)
+	}
 
 	for _, tc := range []struct {
-		text string
-		kind string
+		text    string
+		kind    string
+		suggHas string
 	}{
-		{"not-json", "nil"},
-		{`{"errorCode":"USER_TOKEN_ILLEGAL"}`, "cli"},
-		{`{"error":"Missing service_id or access_key"}`, "cli"},
-		{`{"code":"PAT_HIGH_RISK_NO_PERMISSION","extra":{"class":"x","keep":1}}`, "pat"},
-		{`{"success":false,"errorMsg":"rate limit"}`, "cli"},
-		{`{"success":true}`, "nil"},
+		{"not-json", "nil", ""},
+		{"null", "nil", ""},
+		{`{"errorCode":"USER_TOKEN_ILLEGAL"}`, "cli", ""},
+		{`{"error":"Missing service_id or access_key"}`, "cli", ""},
+		{`{"code":"PAT_HIGH_RISK_NO_PERMISSION","extra":{"class":"x","keep":1}}`, "pat", ""},
+		{`{"success":false,"errorMsg":"rate limit"}`, "cli", ""},
+		{`{"success":false,"code":"forbidden.accessDenied","errorMsg":"需要您具备 MANAGER 及以上角色","logId":"abc123"}`, "authperm", "permission apply"},
+		// 非文档产品的权限错误：分类为 AUTH_PERMISSION_DENIED，但建议保持
+		// 产品专属（邮件 mailbox）或通用提示，不带文档 apply 指引。
+		{`{"success":false,"errorMsg":"User has no permission to access this email"}`, "authperm", "mailbox list"},
+		{`{"success":false,"code":"FORBIDDEN","errorMsg":"群权限不足"}`, "authperm", "Verify your account"},
+		{`{"success":false,"code":"FORBIDDEN"}`, "authperm", "Verify your account"},
+		{`{"success":false,"code":"NO_PERMISSION","errorMsg":"no permission"}`, "authperm", "Verify your account"},
+		// 文档/知识库角色门槛文案与文档权限码文本：apply 指引保留。
+		{`{"success":false,"errorMsg":"需要您具备 MANAGER 及以上角色"}`, "authperm", "permission apply"},
+		{`{"success":false,"errorMsg":"forbidden.no.auth: 你无权访问该文档"}`, "authperm", "permission apply"},
+		{`{"success":false,"code":"NO_PERMISSION","errorMsg":"需要您具备 MANAGER 及以上角色"}`, "authperm", "permission apply"},
+		{`{"success":false,"errorMsg":"members[0].id 对应的用户不存在"}`, "cli", ""},
+		{`{"success":true}`, "nil", ""},
 	} {
 		err := ClassifyMCPResponseText(tc.text)
 		switch tc.kind {
@@ -173,6 +256,15 @@ func TestCrossPlatformCoverageBusinessSuggestionsAndResponseClassification(t *te
 		case "cli":
 			if _, ok := err.(*CLIError); !ok {
 				t.Errorf("ClassifyMCPResponseText(%s) = %#v", tc.text, err)
+			}
+		case "authperm":
+			cli, ok := err.(*CLIError)
+			if !ok || cli.Code != CodeAuthPermission {
+				t.Errorf("ClassifyMCPResponseText(%s) = %#v, want AUTH_PERMISSION_DENIED", tc.text, err)
+				continue
+			}
+			if !strings.Contains(cli.Suggestion, tc.suggHas) {
+				t.Errorf("ClassifyMCPResponseText(%s) suggestion = %q, want it to contain %q", tc.text, cli.Suggestion, tc.suggHas)
 			}
 		case "pat":
 			if _, ok := err.(*PATError); !ok {
@@ -233,5 +325,84 @@ func TestCrossPlatformCoveragePATCleanupAndMatchingHelpers(t *testing.T) {
 
 	if got := fmt.Sprint(stripClassFields([]any{map[string]any{"class": "x", "v": 1}})); strings.Contains(got, "class") {
 		t.Fatalf("stripClassFields slice = %s", got)
+	}
+}
+
+// TestCrossPlatformCoverageBusinessErrorMessagePriority 同步自内部 MR 28965577：
+// errorMessage 是新接口返回的用户/成员校验错误的字段，优先级介于 errorMsg 与 message 之间。
+func TestCrossPlatformCoverageBusinessErrorMessagePriority(t *testing.T) {
+	if msg := businessErrorMessage(map[string]any{"errorMsg": "first", "errorMessage": "second", "message": "third", "error": "fourth"}); msg != "first" {
+		t.Errorf("businessErrorMessage = %q, want %q (errorMsg has priority)", msg, "first")
+	}
+	want := "members[0].id 对应的用户不存在"
+	if msg := businessErrorMessage(map[string]any{"errorMessage": want, "message": "third", "error": "fourth"}); msg != want {
+		t.Errorf("businessErrorMessage = %q, want %q (errorMessage fallback)", msg, want)
+	}
+	if msg := businessErrorMessage(map[string]any{"message": "second", "error": "third"}); msg != "second" {
+		t.Errorf("businessErrorMessage = %q, want %q (message fallback)", msg, "second")
+	}
+	if msg := businessErrorMessage(map[string]any{}); msg != "" {
+		t.Errorf("businessErrorMessage(empty) = %q, want empty", msg)
+	}
+}
+
+// TestCrossPlatformCoverageBusinessErrorDisplayMessage 验证 code/logId 附加以便排查。
+func TestCrossPlatformCoverageBusinessErrorDisplayMessage(t *testing.T) {
+	got := businessErrorDisplayMessage(map[string]any{"errorMessage": "权限不足", "logId": "abc123"}, "raw")
+	if got != "权限不足 (logId: abc123)" {
+		t.Errorf("businessErrorDisplayMessage = %q, want logId appended", got)
+	}
+	// errorCode/code 存在时附加在后，保证后端错误码可见
+	got = businessErrorDisplayMessage(map[string]any{"errorMessage": "失败", "errorCode": "forbidden.document.sizeOverLimit"}, "raw")
+	if got != "失败 (code: forbidden.document.sizeOverLimit)" {
+		t.Errorf("businessErrorDisplayMessage = %q, want code appended", got)
+	}
+	got = businessErrorDisplayMessage(map[string]any{"message": "失败", "code": "forbidden.accessDenied", "logId": "l1"}, "raw")
+	if got != "失败 (code: forbidden.accessDenied, logId: l1)" {
+		t.Errorf("businessErrorDisplayMessage = %q, want code+logId appended", got)
+	}
+	// logId 已包含在 message 中时不重复追加
+	got = businessErrorDisplayMessage(map[string]any{"errorMessage": "失败 logId:abc123", "logId": "abc123"}, "raw")
+	if got != "失败 logId:abc123" {
+		t.Errorf("businessErrorDisplayMessage = %q, want no duplicate logId", got)
+	}
+	// 无任何 message 字段时回退 rawText
+	if got := businessErrorDisplayMessage(map[string]any{"success": false}, "raw-fallback"); got != "raw-fallback" {
+		t.Errorf("businessErrorDisplayMessage = %q, want rawText fallback", got)
+	}
+}
+
+// TestCrossPlatformCoverageUserNotInOrgErrors 验证「用户不存在/不属于当前组织/成员不存在」
+// 在 RESOURCE_NOT_FOUND 之前被拦截为 MCP_TOOL_ERROR 并携带 --members corpId 建议。
+func TestCrossPlatformCoverageUserNotInOrgErrors(t *testing.T) {
+	suggestion := suggestForBusinessError(map[string]any{"errorMessage": "members[0].id 对应的用户不存在或不属于当前组织（实际值：209499），请检查后重试。"})
+	if !strings.Contains(suggestion, "--members") {
+		t.Errorf("suggestForBusinessError should mention --members for user/org error, got: %q", suggestion)
+	}
+
+	for _, msg := range []string{
+		"用户不存在",
+		"不属于当前组织",
+		"成员不存在",
+	} {
+		cli, ok := WrapErrorWithOperation(errors.New(msg), "wiki/add_member").(*CLIError)
+		if !ok {
+			t.Fatalf("WrapErrorWithOperation(%q) not a CLIError", msg)
+		}
+		if cli.Code != CodeMCPToolError {
+			t.Errorf("WrapErrorWithOperation(%q).Code = %s, want %s (not RESOURCE_NOT_FOUND)", msg, cli.Code, CodeMCPToolError)
+		}
+		if !strings.Contains(cli.Suggestion, "corpId") {
+			t.Errorf("WrapErrorWithOperation(%q).Suggestion should mention corpId, got: %q", msg, cli.Suggestion)
+		}
+	}
+
+	// JSON 体形式：透传 errorMessage 且附 logId
+	cli, ok := WrapErrorWithOperation(errors.New(`{"errorMessage":"用户不存在","logId":"lid-1"}`), "wiki/add_member").(*CLIError)
+	if !ok {
+		t.Fatal("WrapErrorWithOperation(json) not a CLIError")
+	}
+	if cli.Message != "用户不存在 (logId: lid-1)" {
+		t.Errorf("WrapErrorWithOperation(json).Message = %q, want errorMessage + logId", cli.Message)
 	}
 }

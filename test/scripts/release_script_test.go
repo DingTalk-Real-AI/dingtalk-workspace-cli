@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimepayload"
 )
 
 var releasePlatformAssets = []string{
@@ -30,12 +32,65 @@ func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 	if strings.HasSuffix(asset, ".zip") {
 		binary = "dws.exe"
 	}
-	mustWriteFile(t, filepath.Join(stage, binary), []byte("fake release binary\n"+version+"\n"), 0o755)
+	writeReleaseRuntimeFixture(t, stage, asset)
+	container, err := runtimepayload.BuildContainer(filepath.Join(stage, ".dws-runtime", "20260825"), 12<<20)
+	if err != nil {
+		t.Fatalf("BuildContainer(%s): %v", asset, err)
+	}
+	binaryData := append([]byte("fake release binary\n"+version+"\n"), container...)
+	mustWriteFile(t, filepath.Join(stage, binary), binaryData, 0o755)
 	if strings.HasSuffix(asset, ".zip") {
-		mustRun(t, stage, "zip", "-q", filepath.Join(dist, asset), binary)
+		mustRun(t, stage, "zip", "-qr", filepath.Join(dist, asset), binary)
 		return
 	}
 	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, asset), binary)
+}
+
+func writeReleaseRuntimeFixture(t *testing.T, stage, asset string) {
+	t.Helper()
+	var target, library string
+	switch {
+	case strings.HasPrefix(asset, "dws-darwin-amd64"):
+		target, library = "darwin/amd64", "x7k2m9p4q1w8.dylib"
+	case strings.HasPrefix(asset, "dws-darwin-arm64"):
+		target, library = "darwin/arm64", "x7k2m9p4q1w8.dylib"
+	case strings.HasPrefix(asset, "dws-linux-amd64"):
+		target, library = "linux/amd64", "libx7k2m9p4q1w8.so"
+	case strings.HasPrefix(asset, "dws-linux-arm64"):
+		target, library = "linux/arm64", "libx7k2m9p4q1w8.so"
+	case strings.HasPrefix(asset, "dws-windows-amd64"):
+		target, library = "windows/amd64", "x7k2m9p4q1w864.dll"
+	case strings.HasPrefix(asset, "dws-windows-arm64"):
+		target, library = "windows/arm64", "x7k2m9p4q1w864.dll"
+	default:
+		t.Fatalf("unsupported release fixture asset %q", asset)
+	}
+	writeRuntimePayloadFixture(t, filepath.Join(stage, ".dws-runtime", "20260825"), target, library)
+}
+
+func writeRuntimePayloadFixture(t *testing.T, root, target, library string) {
+	t.Helper()
+	libraryData := []byte("fake runtime library for " + target + "\n")
+	librarySum := sha256.Sum256(libraryData)
+	mustWriteFile(t, filepath.Join(root, library), libraryData, 0o755)
+
+	var psManifest strings.Builder
+	for i := 0; i < 123; i++ {
+		name := fmt.Sprintf("%032x", i)
+		data := []byte(fmt.Sprintf("runtime fixture %03d\n", i))
+		sum := sha256.Sum256(data)
+		fmt.Fprintf(&psManifest, "%x  ps/%s\n", sum, name)
+		mustWriteFile(t, filepath.Join(root, "ps", name), data, 0o644)
+	}
+	psSum := sha256.Sum256([]byte(psManifest.String()))
+	manifest := fmt.Sprintf(
+		"{\n  \"format_version\": 1,\n  \"payload_version\": \"20260825\",\n  \"target\": %q,\n  \"library\": %q,\n  \"library_sha256\": \"%x\",\n  \"ps_file_count\": 123,\n  \"ps_manifest_sha256\": \"%x\"\n}\n",
+		target,
+		library,
+		librarySum,
+		psSum,
+	)
+	mustWriteFile(t, filepath.Join(root, "manifest.json"), []byte(manifest), 0o644)
 }
 
 func writeReleaseChecksums(t *testing.T, dist string, includeSkills bool) {
@@ -92,6 +147,15 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 	remote := filepath.Join(base, "remote.git")
 	mustRun(t, base, "git", "init", "--bare", remote)
 	mustRun(t, base, "git", "init", "-b", "main", root)
+	// Git can detach automatic maintenance after a push. If that background
+	// process outlives the test, testing.TempDir may race with writes in the
+	// bare remote and fail cleanup with "directory not empty". These tiny test
+	// repositories never need automatic maintenance, so keep all Git work
+	// synchronous and bounded by the commands below.
+	for _, repo := range []string{remote, root} {
+		mustRun(t, repo, "git", "config", "maintenance.auto", "false")
+		mustRun(t, repo, "git", "config", "gc.auto", "0")
+	}
 	mustRun(t, root, "git", "config", "user.name", "Release Test")
 	mustRun(t, root, "git", "config", "user.email", "release-test@example.com")
 
@@ -933,6 +997,31 @@ esac
 	}
 	if output, err := run(workflowSHA, "failure"); err == nil || !strings.Contains(output, "missing successful job publish-release") {
 		t.Fatalf("failed recovery delivery job passed: err=%v\noutput:\n%s", err, output)
+	}
+}
+
+func TestReleaseWorkflowDeliveryJobNamesMatchWorkflow(t *testing.T) {
+	t.Parallel()
+
+	const signedRuntimeJob = "Verify Apple Developer ID signatures"
+	workflow := readReleaseWorkflow(t)
+	if got := strings.Count(workflow, "name: "+signedRuntimeJob); got != 1 {
+		t.Fatalf("release workflow contains %d %q jobs, want 1", got, signedRuntimeJob)
+	}
+
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	verifier, err := os.ReadFile(filepath.Join(sourceRoot, "scripts", "release", "verify-release-workflow-delivery.sh"))
+	if err != nil {
+		t.Fatalf("ReadFile(delivery verifier) error = %v", err)
+	}
+	if got := strings.Count(string(verifier), `"`+signedRuntimeJob+`"`); got != 4 {
+		t.Fatalf("delivery verifier contains %d %q requirements, want 4", got, signedRuntimeJob)
+	}
+	if strings.Contains(string(verifier), "Validate signed runtime package") {
+		t.Fatal("delivery verifier contains a renamed signed-runtime job")
 	}
 }
 

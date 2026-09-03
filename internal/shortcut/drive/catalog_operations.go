@@ -17,6 +17,8 @@ import (
 
 var uploadDriveFile = helpers.UploadDriveFileData
 
+var uploadDocSpaceFile = helpers.UploadDocSpaceFileData
+
 var driveRestoreWait = time.Sleep
 
 var (
@@ -426,29 +428,35 @@ func boolField(data map[string]any, keys ...string) (bool, bool) {
 
 var Upload = shortcut.Shortcut{
 	Service: "drive", Command: "+upload", Product: "drive",
-	Description: "从工作目录上传本地文件并读回验证",
-	Intent:      "把工作目录内普通文件上传到钉盘，并要求验证远端文件 ID、名称和大小时使用。",
+	Description: "从工作目录上传普通文件到钉盘或文档空间并读回验证",
+	Intent:      "把工作目录内普通文件上传到钉盘，或用 --workspace 上传为知识库/文档空间中的独立文件节点，并验证远端节点 ID、名称和目标空间；服务端提供大小时同时校验大小。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: driveContract(
-		"+upload", "从工作目录上传本地文件并读回验证",
-		"把工作目录内普通文件上传到钉盘，并要求验证远端文件 ID、名称和大小时使用。",
-		[]string{"在线文档导入转换使用 doc +import；作为正文附件使用 doc +media-insert；覆盖已有文件必须显式 --node"},
-		[]string{`dws drive +upload --file report.pdf`, `dws drive +upload --file report.pdf --folder <dentryUuid>`},
+		"+upload", "从工作目录上传普通文件到钉盘或文档空间并读回验证",
+		"把工作目录内普通文件上传到钉盘，或用 --workspace 上传为知识库/文档空间中的独立文件节点，并验证远端节点 ID、名称和目标空间；服务端提供大小时同时校验大小。",
+		[]string{"在线文档导入转换使用 doc +import；作为在线文档正文附件使用 doc +media-insert；--space-id 与 --workspace 属于不同目标域，不可同时使用；--mime-type 仅适用于钉盘上传，不能与 --workspace 同时使用；覆盖已有文件必须显式 --node"},
+		[]string{`dws drive +upload --file report.pdf`, `dws drive +upload --file notes.txt --workspace <workspaceId>`},
 		driveObjectResult("上传并读回验证后的远端文件"), nil,
+		contract.ParamDecl{Name: "workspace", Property: "workspaceId"},
 		contract.ParamDecl{Name: "folder", Property: "parentId"},
 		contract.ParamDecl{Name: "node", Property: "overwriteFileId"},
 	),
 	Flags: []shortcut.Flag{
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内的相对文件路径", Required: true},
 		{Name: "file-name", Type: shortcut.FlagString, Desc: "远端显示名称，默认使用本地文件名"},
-		{Name: "mime-type", Type: shortcut.FlagString, Desc: "MIME 类型"},
+		{Name: "mime-type", Type: shortcut.FlagString, Desc: "钉盘上传的 MIME 类型；不能与 --workspace 同时使用"},
 		{Name: "space-id", Type: shortcut.FlagString, Desc: "钉盘空间 ID"},
-		{Name: "folder", Type: shortcut.FlagString, Desc: "父文件夹 ID"},
+		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库或文档空间 workspaceId；与 --space-id、--mime-type 互斥"},
+		{Name: "folder", Type: shortcut.FlagString, Desc: "目标域内的父文件夹 ID"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "覆盖目标文件 ID"},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"folder", "node"}}},
-	Tips:        []string{`dws drive +upload --file report.pdf`, `dws drive +upload --file report.pdf --folder <dentryUuid>`},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"folder", "node"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"space-id", "workspace"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"workspace", "mime-type"}},
+	},
+	Tips: []string{`dws drive +upload --file report.pdf`, `dws drive +upload --file notes.txt --workspace <workspaceId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		path, info, err := resolveDriveUploadInput(rt.Str("file"))
 		if err != nil {
@@ -458,16 +466,50 @@ var Upload = shortcut.Shortcut{
 		if name == "" {
 			name = info.Name()
 		}
-		if rt.DryRun() {
-			return rt.Output(map[string]any{"dry_run": true, "executed": false, "operation": "drive.upload", "file": rt.Str("file"), "fileName": name, "sizeBytes": info.Size()})
+		workspaceID := rt.Str("workspace")
+		if workspaceID != "" && filepath.Ext(name) == "" {
+			name += filepath.Ext(path)
 		}
-		committed, err := uploadDriveFile(rt.Command().Context(), helpers.DriveUploadRequest{
-			FilePath: path, FileName: name, FileSize: info.Size(), SpaceID: rt.Str("space-id"), ParentID: rt.Str("folder"), OverwriteFile: rt.Str("node"), MIMEType: rt.Str("mime-type"),
-		})
+		if rt.DryRun() {
+			operation := "drive.upload"
+			if workspaceID != "" {
+				operation = "doc.upload_file"
+			}
+			preview := map[string]any{"dry_run": true, "executed": false, "operation": operation, "file": rt.Str("file"), "fileName": name, "sizeBytes": info.Size()}
+			for key, value := range map[string]string{"spaceId": rt.Str("space-id"), "workspaceId": workspaceID, "folderId": rt.Str("folder"), "nodeId": rt.Str("node")} {
+				if value != "" {
+					preview[key] = value
+				}
+			}
+			if mimeType := rt.Str("mime-type"); mimeType != "" {
+				preview["mimeType"] = mimeType
+			}
+			return rt.Output(preview)
+		}
+		operation := "drive/commit_upload"
+		var committed map[string]any
+		if workspaceID != "" {
+			operation = "doc/commit_uploaded_file"
+			committed, err = uploadDocSpaceFile(rt.Command().Context(), helpers.DocSpaceUploadRequest{
+				FilePath: path, FileName: name, FileSize: info.Size(), WorkspaceID: workspaceID, FolderID: rt.Str("folder"), OverwriteNode: rt.Str("node"),
+			})
+		} else {
+			committed, err = uploadDriveFile(rt.Command().Context(), helpers.DriveUploadRequest{
+				FilePath: path, FileName: name, FileSize: info.Size(), SpaceID: rt.Str("space-id"), ParentID: rt.Str("folder"), OverwriteFile: rt.Str("node"), MIMEType: rt.Str("mime-type"),
+			})
+		}
 		if err != nil {
 			return err
 		}
-		committed, err = requireDriveWrite(committed, "drive/commit_upload")
+		if workspaceID != "" {
+			// commit_uploaded_file returns a business receipt identified by a
+			// flat or result-wrapped node ID; success=true is not part of its
+			// stable contract. Preserve explicit failures, then let the ID and
+			// read-back checks below prove the remote write.
+			committed, err = requireDriveResponse(committed, operation)
+		} else {
+			committed, err = requireDriveWrite(committed, operation)
+		}
 		if err != nil {
 			return err
 		}
@@ -476,34 +518,64 @@ var Upload = shortcut.Shortcut{
 			nodeID = nestedString(committed, "fileId", "dentryUuid", "nodeId", "id")
 		}
 		if nodeID == "" {
-			return driveResponseError("drive/commit_upload", "missing_created_id", "上传提交没有返回文件 ID；远端效果未知")
+			return driveResponseError(operation, "missing_created_id", "上传提交没有返回文件 ID；远端效果未知")
 		}
-		verified, err := rt.CallMCPData("drive", "get_file_info", map[string]any{"fileId": nodeID})
+		readServer, readTool := "drive", "get_file_info"
+		readArgs := map[string]any{"fileId": nodeID}
+		if workspaceID != "" {
+			readServer, readTool = "doc", "get_document_info"
+			readArgs = map[string]any{"nodeId": nodeID}
+		}
+		verified, err := rt.CallMCPData(readServer, readTool, readArgs)
 		if err != nil {
 			return err
 		}
-		verified, err = requireDriveObject(verified, "drive/get_file_info")
+		verified, err = requireDriveObject(verified, readServer+"/"+readTool)
 		if err != nil {
 			return err
 		}
 		remoteID := firstString(verified, "fileId", "dentryUuid", "nodeId", "id")
 		if remoteID == "" {
-			return driveResponseError("drive/commit_upload", "readback_missing_id", "上传后读回缺少文件 ID；无法证明读回的是已提交文件")
+			return driveResponseError(operation, "readback_missing_id", "上传后读回缺少文件 ID；无法证明读回的是已提交文件")
 		}
 		if remoteID != nodeID {
-			return driveResponseError("drive/commit_upload", "readback_id_mismatch", fmt.Sprintf("上传后读回文件 ID %q 与提交 ID %q 不一致", remoteID, nodeID))
+			return driveResponseError(operation, "readback_id_mismatch", fmt.Sprintf("上传后读回文件 ID %q 与提交 ID %q 不一致", remoteID, nodeID))
+		}
+		if workspaceID != "" {
+			remoteWorkspaceID := firstString(verified, "workspaceId", "spaceId")
+			if remoteWorkspaceID == "" {
+				return driveResponseError(operation, "readback_missing_workspace", "上传后读回缺少 workspaceId；无法证明文件进入了请求的知识库或文档空间")
+			}
+			if remoteWorkspaceID != workspaceID {
+				return driveResponseError(operation, "readback_workspace_mismatch", fmt.Sprintf("上传后读回 workspaceId %q 与请求 %q 不一致", remoteWorkspaceID, workspaceID))
+			}
 		}
 		if remoteName := firstString(verified, "name", "fileName"); !driveReadbackNameMatches(verified, name) {
-			return driveResponseError("drive/commit_upload", "readback_mismatch", fmt.Sprintf("上传后读回名称 %q 与请求 %q 不一致", remoteName, name))
+			return driveCommittedWriteMismatch(
+				operation,
+				"readback_mismatch",
+				fmt.Sprintf("上传后读回名称 %q 与请求 %q 不一致", remoteName, name),
+				nodeID,
+				name,
+				remoteName,
+				verified,
+			)
 		}
-		remoteSize, ok := firstInt64(verified, "fileSize", "size", "byteSize", "length")
-		if !ok {
-			return driveResponseError("drive/commit_upload", "readback_missing_size", "上传后读回缺少有效文件大小；无法证明远端文件完整")
+		remoteSize, hasRemoteSize := firstInt64(verified, "fileSize", "size", "byteSize", "length")
+		if !hasRemoteSize && workspaceID == "" {
+			return driveResponseError(operation, "readback_missing_size", "上传后读回缺少有效文件大小；无法证明远端文件完整")
 		}
-		if remoteSize != info.Size() {
-			return driveResponseError("drive/commit_upload", "readback_size_mismatch", fmt.Sprintf("上传后读回大小 %d 与本地文件大小 %d 不一致", remoteSize, info.Size()))
+		if hasRemoteSize && remoteSize != info.Size() {
+			return driveResponseError(operation, "readback_size_mismatch", fmt.Sprintf("上传后读回大小 %d 与本地文件大小 %d 不一致", remoteSize, info.Size()))
 		}
-		return rt.Output(map[string]any{"success": true, "nodeId": nodeID, "sizeBytes": info.Size(), "file": verified})
+		out := map[string]any{"success": true, "nodeId": nodeID, "sizeBytes": info.Size(), "file": verified}
+		if spaceID := rt.Str("space-id"); spaceID != "" {
+			out["spaceId"] = spaceID
+		}
+		if workspaceID != "" {
+			out["workspaceId"] = workspaceID
+		}
+		return rt.Output(out)
 	},
 }
 

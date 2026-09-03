@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +31,13 @@ func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...str
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append(append([]string(nil), args...), "--yes"))
-	return root.ExecuteContext(context.Background())
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string) error {
@@ -56,6 +64,20 @@ func runChatCoverageDirect(t *testing.T, path []string, flags map[string]string)
 		flag.Changed = true
 	}
 	return command.RunE(command, nil)
+}
+
+func TestCrossPlatformCoverageChatMessageSendValidationErrorsAreTyped(t *testing.T) {
+	err := runChatCoverageDirect(t, []string{"message", "send"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("missing target error = %v", err)
+	}
+	if got := apperrors.ExitCode(err); got != apperrors.ExitCodeValidation {
+		t.Fatalf("missing target exit code = %d, want validation/%d", got, apperrors.ExitCodeValidation)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "require_one_of" {
+		t.Fatalf("missing target error = %#v, want validation/require_one_of", err)
+	}
 }
 
 func TestCrossPlatformCoverageEvaluationRegressionChatSearchSpellingsAndNaturalBotTarget(t *testing.T) {
@@ -121,8 +143,12 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 		}
 		root.SetArgs(tc.args)
 		err = root.ExecuteContext(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
-			t.Fatalf("chat %s with legacy flags error = %v, want migration hint %q", tc.path, err, tc.hint)
+		var structured *apperrors.Error
+		if !errors.As(err, &structured) {
+			t.Fatalf("chat %s with legacy flags error = %T %v, want structured validation", tc.path, err, err)
+		}
+		if structured.Category != apperrors.CategoryValidation || structured.Reason != "unknown_subcommand" || !strings.Contains(structured.Hint, tc.hint) {
+			t.Fatalf("chat %s with legacy flags error = %#v, want migration hint %q", tc.path, structured, tc.hint)
 		}
 	}
 }
@@ -602,6 +628,134 @@ func TestCrossPlatformCoverageChatSendCardHiddenAliasesMapToCanonicalPayload(t *
 	}
 }
 
+func TestCrossPlatformCoverageChatNativeSendCardA2UIEngine(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	t.Run("group payload uses a2ui card tool", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--conversation-id=cid",
+			"--content=[\"message1\",\"message2\"]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.server != "im" || caller.tool != "create_and_send_a2ui_card" {
+			t.Fatalf("call = count:%d server:%q tool:%q args:%#v", caller.calls, caller.server, caller.tool, caller.args)
+		}
+		if caller.args["openConversationId"] != "cid" {
+			t.Fatalf("openConversationId = %#v", caller.args["openConversationId"])
+		}
+		messages, ok := caller.args["a2uiMessages"].([]string)
+		if !ok || !reflect.DeepEqual(messages, []string{"message1", "message2"}) {
+			t.Fatalf("a2uiMessages = %#v", caller.args["a2uiMessages"])
+		}
+		if caller.args["summary"] != "message1\nmessage2" || caller.args["protocolVersion"] != "1.0" || caller.args["flowStatus"] != "PROCESSING" {
+			t.Fatalf("args = %#v", caller.args)
+		}
+		if caller.args["requestId"] == "" || caller.args["bizCardId"] == "" {
+			t.Fatalf("missing generated ids: %#v", caller.args)
+		}
+	})
+
+	t.Run("direct message passes through D-form receiver", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=DAAAAAAAAAAAiE",
+			"--content=[\"message\"]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.tool != "create_and_send_a2ui_card" || caller.args["receiverOpenDingTalkId"] != "DAAAAAAAAAAAiE" {
+			t.Fatalf("call = count:%d tool:%q args:%#v", caller.calls, caller.tool, caller.args)
+		}
+	})
+
+	t.Run("direct message resolves userId receiver like streaming path", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"userId":"u1","openDingTalkId":"DAAAAAAAAAAAiE"}]}`},
+			{text: `{}`},
+		}}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=u1",
+			"--content=[\"message\"]",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.argsLog) != 2 {
+			t.Fatalf("expected 2 calls, got %d: %#v", len(caller.argsLog), caller.argsLog)
+		}
+		last := caller.argsLog[len(caller.argsLog)-1]
+		if caller.toolLog[len(caller.toolLog)-1] != "create_and_send_a2ui_card" || last["receiverOpenDingTalkId"] != "DAAAAAAAAAAAiE" {
+			t.Fatalf("last call tool:%q args:%#v", caller.toolLog[len(caller.toolLog)-1], last)
+		}
+	})
+
+	t.Run("direct message userId resolution failure aborts a2ui send", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{err: errors.New("contact lookup unavailable")},
+		}}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-a2ui-card",
+			"--open-dingtalk-id=u1",
+			"--content=[\"message\"]",
+		)
+		if err == nil {
+			t.Fatal("expected userId resolution failure to propagate to caller")
+		}
+		if len(caller.toolLog) == 0 {
+			t.Fatal("expected contact resolution attempts before failure")
+		}
+		for _, tool := range caller.toolLog {
+			if tool == "create_and_send_a2ui_card" {
+				t.Fatalf("a2ui send executed despite resolution failure: %#v", caller.toolLog)
+			}
+		}
+	})
+
+	t.Run("a2ui rejects mention flags", func(t *testing.T) {
+		for _, tc := range []string{"--at-open-dingtalk-ids=DAAAAAAAAAAAiE", "--at-all"} {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"message", "send-a2ui-card",
+				"--conversation-id=cid",
+				"--content=[\"message\"]",
+				tc,
+			)
+			if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+				t.Fatalf("flag %s: err = %v, want a2ui mention rejection", tc, err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("flag %s made %d calls", tc, caller.calls)
+			}
+		}
+	})
+
+	t.Run("invalid a2ui content makes no call", func(t *testing.T) {
+		for _, content := range []string{"", "plain text", "{\"message\":\"x\"}", "[1]", "[]"} {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller,
+				"message", "send-a2ui-card",
+				"--conversation-id=cid",
+				"--content="+content,
+			)
+			if err == nil {
+				t.Fatalf("content %q unexpectedly succeeded", content)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("content %q made %d calls", content, caller.calls)
+			}
+		}
+	})
+}
+
 func TestCrossPlatformCoverageChatGroupAuditJoinValidationUsesCanonicalAndAliasPayload(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}
@@ -738,8 +892,23 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	for _, step := range []scriptedToolStep{{text: `{}`}, {text: `not-json`}, {text: `{"errcode":1,"errmsg":"bad"}`}, {err: errors.New("webhook")}} {
 		_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{step}}, "message", "send-by-webhook", "--token=t", "--title=title", "--text=text")
 	}
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=D1", "--text=reply", "--ai-tag", "--uuid=u")
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply")
+	directReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, directReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender", helperCurrentDOpenID, "--text=reply", "--ai-tag", "--uuid=u"); err != nil {
+		t.Fatal(err)
+	}
+	resolvedReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"cid","convThreadEnabled":false}}}`},
+		{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, resolvedReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply"); err != nil {
+		t.Fatal(err)
+	}
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--open-dingtalk-id=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--user=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "conversation-info", "--user=u1")

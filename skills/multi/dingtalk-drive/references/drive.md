@@ -31,6 +31,18 @@ dws drive list --folder <dentryUuid> --type file --start 7d --format json
 - 过滤模式是客户端有界扫描；`truncated=true` 不能声称全量。需要关键词检索时改用 `+search`。
 - `--latest` 遇到截断或目录读取失败会拒绝给出不完整 Top-N，按错误中的目录和恢复命令缩小范围。
 
+## 非落盘下载地址
+
+Agent 沙箱跨文件系统、或外部系统要自行控制下载行为与时机时，用 managed leaf 加 `--url-only` 只换取临时下载地址与签名请求头，不落盘：
+
+```bash
+dws drive download --node <dentryUuid> --url-only --format json
+dws drive download-version --node <dentryUuid> --version 3 --url-only --format json
+```
+
+- `downloadUrl` 为带临时授权签名的链接，应尽快使用；`headers` 为需原样携带的签名请求头（OSS 预签名 URL 场景为空对象，签名已内含在地址里）；`fileName/fileSize/version` 为服务端携带时的辅助字段。
+- `--url-only` 与 `--output/--overwrite/--part-size/--parallel/--no-resume` 互斥；权限控制与现有下载链路一致；要把文件保存到本地路径时改用 `+download`。
+
 ## 回收站
 
 ```bash
@@ -58,6 +70,20 @@ dws drive +recycle-restore --id <recycleItemId>
 - 节点统计和封面优先并入 `+inspect --include-stats` / `--include-cover`；只取单项才用 `+stats` / `+cover`。
 - 收藏是个人状态，不代表共享或权限变化。
 
+## 普通文件评论
+
+普通 PDF、DOCX、XLSX 等本地文件使用 `dws drive comment`，复用 Doc/Sheet 的新评论服务链路。当前固定为文件级全文评论 `topicId=global`，不支持划词、单元格、页码、anchor 或 mention。
+
+旧 `drive comment list/create` 保留旧评论服务的行为和输出，仅作 deprecated 兼容入口。Agent 必须使用下面的 `list-v2/create-v2` 进入新评论体系。
+
+```bash
+dws drive comment list-v2 --node <dentryUuid> --format json
+dws drive comment create-v2 --node <dentryUuid> --content "请补充结论"
+dws drive comment list-replies --node <dentryUuid> --comment-key <commentKey> --format json
+```
+
+完整生命周期包括 `list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply`。分页游标必须原样回传；`list-v2` 每页上限为 50，超过上限直接报错；写操作按 Runtime confirmation 执行，后续操作的 `commentKey` 必须来自真实返回。
+
 ## 公开状态
 
 ```bash
@@ -72,12 +98,15 @@ dws drive +publish-unset --node <dentryUuid>
 | 意图 | managed leaf |
 |---|---|
 | 查看成员权限 | `drive permission list` |
+| 查询节点权限设置（权限模式/分享范围/策略） | `permission get-setting` |
 | 添加、修改、移除成员 | `permission add` / `update` / `remove` |
 | 转移所有者 | `permission transfer-owner` |
 | 查看可申请权限和审批人 | `permission apply-info` |
 | 发起权限申请 | `permission apply` |
 
 只在意图命中时读取一个精确 leaf Schema。成员变更、转移所有者、发起申请和公开状态变更必须明确节点、用户、角色与影响范围。转移所有者时，在构造最终命令前必须让用户分别明确决定 `--reserve-role <MANAGER|EDITOR|DOWNLOADER|READER|NONE>` 和 `--recursive=<true|false>`；Agent 不得根据默认值、对象类型或便捷性自行选择任一项。两项决策与目标、新所有者均明确后，才按 Runtime confirmation 构造首次正式调用。
+
+`permission get-setting` 返回 `permissionMode`（INHERITED/INDEPENDENT，未知时为 null）、`shareScope`（可见范围与链接分享，密码明文不返回；`partnerIncluded`、`defaultRole` 等仅 ORGANIZATION 有意义，`linkShare` 仅开启链接分享时返回）和 `policies[]`（code/name/description/value/disabledValues/allowedValues；name/description 为中文名与值语义说明，随行必带；未下发的策略不返回，`node_spread_scope` 仅文件夹）。`disabledValues` 为不可设置取值列表（恒返回，无被禁档位时为空数组），每项含 `value`（被禁档位取值，与 value 同一值域）与 `reason`（服务端按请求语言返回的禁用原因文案，仅供展示理解，可为 null），与 allowedValues 互斥；示例：`{"value": "READER_AND_ABOVE", "reason": "企业安全策略要求不可低于可下载角色"}`。`value` 按策略分型：开关型为 ENABLED/DISABLED；member_invite、comment 为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE；node_spread、online_content_copy 为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE 或 NOBODY；node_spread_scope 为 ALL_NODES（限制对所有文档生效）/ PREVIEWABLE_ONLY（仅对可预览的文档生效）。NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许。name/description 示例（文案与产品权限设置页一致）：external_share「添加企业外协作者」：是否允许添加企业外的人为协作者（ENABLED=允许，DISABLED=禁止）；node_spread「谁可以下载、创建副本、打印」：允许哪些角色及以上的用户下载、创建副本、打印；NOBODY=所有人禁止下载、创建副本、打印；node_move_forbidden「禁止移动」：是否禁止移动到其他知识库或团队共享文件夹（ENABLED=禁止移动，DISABLED=允许移动）。
 
 发起权限申请先只读执行 `permission apply-info`。正式 `permission apply` 会通知审批人；调用前必须向用户逐项回显并确认资源、申请角色、审批人和理由。Agent 不得默认选择第一位审批人、最高/最低角色或代写申请理由；用户未明确同意完整申请内容时停在确认环节。
 

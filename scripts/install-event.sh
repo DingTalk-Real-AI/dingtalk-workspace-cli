@@ -4,7 +4,7 @@
 #
 # One-command installer for dws personal events.
 # Downloads the official dws binary and installs:
-#   - multi skill: dingtalk-event (personal IM/OA event routing)
+#   - multi skill: dingtalk-event (personal IM/OA/Todo event routing)
 #   - multi prerequisites: dingtalk-shared + clean dingtalk-misc
 #   - mono skill:  dws
 #

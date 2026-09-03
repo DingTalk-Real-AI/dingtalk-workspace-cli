@@ -1,0 +1,105 @@
+name: Draft CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Draft validation is feedback, not a cache producer. Keep only the newest
+  # revision for one PR so rapid pushes do not compete with admission runs.
+  # A title/body-only edited event gets a unique no-op group, so its skipped
+  # job cannot cancel useful validation already running for the same revision.
+  group: draft-ci-${{ github.event.action == 'edited' && github.event.changes.base == null && format('noop-{0}', github.run_id) || format('pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: true
+
+jobs:
+  draft-fast:
+    name: Draft Fast Gate
+    # An edited event is relevant only when the base branch changed. Title and
+    # body edits must not spend a runner or replace useful feedback.
+    if: >-
+      github.event.pull_request.draft == true &&
+      (github.event.action != 'edited' || github.event.changes.base != null)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out authoritative synthetic merge
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify draft revision identity
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD^1)" = "$PR_BASE_SHA" || {
+            echo "draft merge first parent does not match event base" >&2
+            exit 1
+          }
+          test "$(git rev-parse HEAD^2)" = "$PR_HEAD_SHA" || {
+            echo "draft merge second parent does not match event head" >&2
+            exit 1
+          }
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Verify test package plan
+        run: make test-plan
+
+      - name: Check formatting
+        run: make format-check
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Check GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      - name: Test reviewer routing and merge authority policy
+        run: |
+          node .github/reviewer-routing.test.js
+          node .github/reviewer-merge-authority.test.js
+
+      - name: Test npm installer smoke
+        env:
+          XDG_CONFIG_HOME: ""
+        run: node test/scripts/install_js_smoke.mjs
+
+      - name: Build
+        run: make build
+
+      - name: Validate lightweight repository policy
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          git diff --check "$PR_BASE_SHA" HEAD
+          ./scripts/policy/check-open-source-assets.sh
+          ./scripts/policy/check-release-fragments.sh "$PR_BASE_SHA" HEAD
+          if git diff --quiet "$PR_BASE_SHA" HEAD -- CHANGELOG.md; then
+            exit 0
+          fi
+          ./scripts/policy/check-changelog-pr.sh \
+            --content-only "$PR_BASE_SHA" HEAD
+
+      - name: Test CI workflow contracts
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: >-
+          go test -count=1 ./test/scripts
+          -run '^(TestDraftPRCIWorkflowContract|TestChangelogPRFastPathWorkflowContract)$'
+
+      - name: Record admission boundary
+        run: |
+          printf '%s\n' \
+            'Draft Fast Gate is development feedback, not Code Admission.' \
+            'AI Behavior remains failed until this PR is Ready and fully admitted.' \
+            >> "$GITHUB_STEP_SUMMARY"

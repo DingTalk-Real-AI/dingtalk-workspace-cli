@@ -49,10 +49,12 @@ type CommandIdentity struct {
 
 // CommandSelection is the agent-facing selection metadata.
 type CommandSelection struct {
-	AgentSummary string
-	UseWhen      []string
-	AvoidWhen    []string
-	Examples     []string
+	AgentSummary  string
+	UseWhen       []string
+	AvoidWhen     []string
+	Prerequisites []string
+	Tips          []string
+	Examples      []string
 }
 
 var (
@@ -126,10 +128,12 @@ func buildMetaByCLIPathFromRegistry(registry SchemaRegistry) map[string]CommandM
 					Idempotency:  tool.Safety.Idempotency,
 				},
 				Selection: CommandSelection{
-					AgentSummary: tool.Selection.AgentSummary,
-					UseWhen:      append([]string(nil), tool.Selection.UseWhen...),
-					AvoidWhen:    append([]string(nil), tool.Selection.AvoidWhen...),
-					Examples:     append([]string(nil), tool.Selection.Examples...),
+					AgentSummary:  tool.Selection.AgentSummary,
+					UseWhen:       append([]string(nil), tool.Selection.UseWhen...),
+					AvoidWhen:     append([]string(nil), tool.Selection.AvoidWhen...),
+					Prerequisites: append([]string(nil), tool.Selection.Prerequisites...),
+					Tips:          append([]string(nil), tool.Selection.Tips...),
+					Examples:      append([]string(nil), tool.Selection.Examples...),
 				},
 			}
 			lookup[cliPath] = meta
@@ -165,10 +169,12 @@ func buildMetaByCLIPathFromSnapshotTools(tools map[string]map[string]any) map[st
 				Idempotency:  schemaString(tool["idempotency"]),
 			},
 			Selection: CommandSelection{
-				AgentSummary: schemaString(tool["agent_summary"]),
-				UseWhen:      schemaStringSlice(tool["use_when"]),
-				AvoidWhen:    schemaStringSlice(tool["avoid_when"]),
-				Examples:     schemaStringSlice(tool["examples"]),
+				AgentSummary:  schemaString(tool["agent_summary"]),
+				UseWhen:       schemaStringSlice(tool["use_when"]),
+				AvoidWhen:     schemaStringSlice(tool["avoid_when"]),
+				Prerequisites: schemaStringSlice(tool["prerequisites"]),
+				Tips:          schemaStringSlice(tool["tips"]),
+				Examples:      schemaStringSlice(tool["examples"]),
 			},
 		}
 		lookup[cliPath] = meta

@@ -67,7 +67,7 @@ func TestCrossPlatformCoverageOAAttachmentDeliveryPolicy(t *testing.T) {
 
 	docPaths := []string{
 		filepath.Join(root, "skills", "mono", "references", "products", "oa.md"),
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "oa.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "oa-attachments.md"),
 	}
 	for _, docPath := range docPaths {
 		doc, err := os.ReadFile(docPath)
@@ -78,6 +78,7 @@ func TestCrossPlatformCoverageOAAttachmentDeliveryPolicy(t *testing.T) {
 			"dws oa approval attachment download-url",
 			"dws oa approval attachment authorize-download",
 			"dws oa approval attachment authorize-preview",
+			"dws oa approval attachment upload",
 			"临时下载链接",
 			"最多 10",
 			"最多 20",
@@ -85,6 +86,23 @@ func TestCrossPlatformCoverageOAAttachmentDeliveryPolicy(t *testing.T) {
 			if !strings.Contains(string(doc), required) {
 				t.Errorf("%s missing OA attachment Skill guidance %q", docPath, required)
 			}
+		}
+	}
+
+	multiCorePath := filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "oa.md")
+	multiCore, err := os.ReadFile(multiCorePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", multiCorePath, err)
+	}
+	for _, required := range []string{
+		"[oa-attachments.md](oa-attachments.md)",
+		"dws oa approval attachment download-url",
+		"dws oa approval attachment authorize-download",
+		"dws oa approval attachment authorize-preview",
+		"dws oa approval attachment upload",
+	} {
+		if !strings.Contains(string(multiCore), required) {
+			t.Errorf("%s missing compact OA attachment route %q", multiCorePath, required)
 		}
 	}
 }
