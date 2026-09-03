@@ -27,6 +27,23 @@
 | `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
 | `base delete` | 删除 Base | `--base-id` | 不可逆 |
 
+### app (应用模式管理)
+
+> 应用模式是 AI 表格面向使用者的 App：一个 Base 只有一个 App，App 下按导航顺序组织 Page，Page 中放置 Widget。应用 Page 的 `pageId` 同时是对应 Dashboard ID，但 `appId`、`pageId`、`widgetId` 不能互换。
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `app get` | 获取 App 信息 | `--base-id` | 无 App 时会幂等初始化默认 App，并返回 `created=true` |
+| `app update` | 更新 App 名称、图标、外观、导航或主题 | `--base-id` + 至少一个修改项 | `--icon` 是完整 JSON 对象；主题类字符串按服务端枚举透传 |
+| `app page list/get` | 列出页面 / 获取页面详情 | `--base-id`；get 另需 `--page-id` | list 无 App 时会初始化默认 App；最多 100 个 Page |
+| `app page create` | 创建应用页面及同 ID Dashboard | `--base-id` `--name` | 非幂等，不自动重试；`--before-page-id` 省略时追加到末尾 |
+| `app page update/move` | 更新页面元数据 / 调整导航顺序 | `--base-id` `--page-id` | `--hidden-menu=false` 可明确重新显示；move 省略目标时移到末尾 |
+| `app page delete` | 删除页面及其全部 Widget | `--base-id` `--page-id` `--yes` | 不可逆；保留 App 本体 |
+| `app widget list/get` | 列出 / 获取页面 Widget | `--base-id` `--page-id`；get 另需 `--widget-id` | list 只读已有 App；单页最多返回 1000 个 Widget |
+| `app widget create` | 创建 Widget 并写入页面布局 | `--base-id` `--page-id` `--config` `--layout` | config 需 `chartType`；layout 需 `x/y/w/h`，根布局是 48 列；非幂等，不自动重试 |
+| `app widget update` | 更新 Widget 名称、完整配置或布局 | `--base-id` `--page-id` `--widget-id` + 至少一个修改项 | config/layout 均为全量对象，先 get 再更新 |
+| `app widget delete` | 删除 Widget 及其布局项 | `--base-id` `--page-id` `--widget-id` `--yes` | 不可逆 |
+
 ### table (数据表管理)
 
 | 命令 | 用途 | 必填参数 | 路由提醒 |
@@ -288,6 +305,21 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 - `chart share get` 稳定返回 `success + data`（含 `enabled`），从未分享时 `enabled=false`，不会 404。
 - `dashboard share update` 开 ORG 分享后 `shareType` 回显 `"[1]"`（服务端已知问题）；`chart share update` 正确回显 `ORG`。详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)。
 
+### 应用模式（建议顺序）
+
+```bash
+# 1) 获取或初始化 App，再发现 pageId
+dws aitable app get --base-id <BASE_ID> --format json
+dws aitable app page list --base-id <BASE_ID> --format json
+
+# 2) 读取 Page 和 Widget；修改完整 config/layout 前先读回
+dws aitable app page get --base-id <BASE_ID> --page-id <PAGE_ID> --format json
+dws aitable app widget list --base-id <BASE_ID> --page-id <PAGE_ID> --format json
+dws aitable app widget get --base-id <BASE_ID> --page-id <PAGE_ID> --widget-id <WIDGET_ID> --format json
+```
+
+创建 Widget 的最小形状为 `--config '{"chartType":"AI_ANALYZE"}' --layout '{"x":0,"y":0,"w":48,"h":8}'`。创建 Page/Widget 返回状态不明时先 list/get 回读，不能自动重放；删除 Page 会级联删除其中全部 Widget。
+
 ### 导出数据（两阶段轮询）
 
 `export data` 常见为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
@@ -345,6 +377,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 用户说"查找引用/lookup/filterUp/跨表" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)（§5.4 跨表引用）
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
+
+用户说"应用模式/App 页面/Widget" → `app get` 后按 `app page` / `app widget` 子命令处理；不要混同普通 Base 信息或开放平台应用
 
 用户说"附件/上传文件" → 读 [aitable-attachment.md](./aitable/aitable-attachment.md)
 
