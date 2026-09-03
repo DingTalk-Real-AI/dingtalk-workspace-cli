@@ -35,6 +35,7 @@ func init() {
 		{"doc", newDocCommand},
 		{"drive", newDriveCommand},
 		{"hrbrain", newHrbrainCommand},
+		{"html", newHTMLCommand},
 		{"live", newLiveCommand},
 		{"mail", newMailCommand},
 		{"markdown", newMarkdownCommand},
