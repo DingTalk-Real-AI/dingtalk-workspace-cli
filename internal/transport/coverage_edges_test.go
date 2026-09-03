@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 type edgeWriteCloser struct {
@@ -130,7 +133,16 @@ func TestCrossPlatformCoverageCallErrorAndRedirectEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageToolCallResultUnmarshalEdges(t *testing.T) {
-	for _, raw := range []string{"[]", `{"content":42}`} {
+	for _, raw := range []string{
+		"[]",
+		`{}`,
+		`null`,
+		`{"content":null}`,
+		`{"content":42}`,
+		`{"content":{},"content":[]}`,
+		`{"content":{},"isError":"yes"}`,
+		`{"content":{},"structuredContent":[]}`,
+	} {
 		var result ToolCallResult
 		if err := json.Unmarshal([]byte(raw), &result); err == nil {
 			t.Fatalf("invalid result %q succeeded", raw)
@@ -143,7 +155,6 @@ func TestCrossPlatformCoverageToolCallResultUnmarshalEdges(t *testing.T) {
 		{`{"structuredContent":{"x":1},"isError":true}`, func(r ToolCallResult) bool {
 			return r.IsError && r.Content["x"] != nil && r.StructuredContent["x"] != nil
 		}},
-		{`{}`, func(r ToolCallResult) bool { return r.Content == nil && r.Blocks == nil }},
 		{`{"content":{"x":1}}`, func(r ToolCallResult) bool { return r.Content["x"] != nil }},
 		{`{"content":[{"type":"text","text":"ignored"}],"structuredContent":{"x":1}}`, func(r ToolCallResult) bool { return len(r.Blocks) == 1 && r.Content["x"] != nil }},
 		{`{"content":[{"type":"text","text":" "},{"type":"text","text":"bad"},{"type":"text","text":"{\"x\":1}"}]}`, func(r ToolCallResult) bool { return r.Content["x"] != nil }},
@@ -157,14 +168,87 @@ func TestCrossPlatformCoverageToolCallResultUnmarshalEdges(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageClientProtocolAndValidationEdges(t *testing.T) {
-	original := supportedProtocolVersions
-	supportedProtocolVersions = nil
-	if _, err := edgeClient(func(*http.Request) (*http.Response, error) { return edgeResponse(http.StatusOK, "{}"), nil }).Initialize(context.Background(), "https://x.test"); err == nil {
-		t.Fatal("empty protocol versions succeeded")
+func TestCrossPlatformCoverageJSONDecodingAndMarshalEdges(t *testing.T) {
+	var malformed ToolsListResult
+	if err := malformed.UnmarshalJSON([]byte(`[`)); err == nil {
+		t.Fatal("direct malformed tools/list result succeeded")
 	}
-	supportedProtocolVersions = original
-	t.Cleanup(func() { supportedProtocolVersions = original })
+	duplicateDescriptor := `{"tools":[{"name":"first","name":"second"}]}`
+	var result ToolsListResult
+	if err := json.Unmarshal([]byte(duplicateDescriptor), &result); err == nil {
+		t.Fatalf("invalid tools/list result %q succeeded", duplicateDescriptor)
+	}
+	for _, raw := range []string{`[`, `[{"key":]`} {
+		if err := rejectOversizedToolsArray([]byte(raw), maxToolsPerListPage); err == nil {
+			t.Fatalf("rejectOversizedToolsArray(%q) succeeded", raw)
+		}
+	}
+
+	for _, raw := range []string{"", `{} trailing`, `{} {}`} {
+		var result map[string]any
+		if err := unmarshalJSONUseNumber([]byte(raw), &result); err == nil {
+			t.Fatalf("unmarshalJSONUseNumber(%q) succeeded", raw)
+		}
+	}
+
+	encoded, err := json.Marshal(ToolCallResult{
+		Content:           map[string]any{"ignored": true},
+		Blocks:            []ContentBlock{{Type: "text", Text: "kept"}},
+		StructuredContent: map[string]any{"exact": json.Number("1.2300")},
+		IsError:           true,
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal(%s) error = %v", encoded, err)
+	}
+	if string(decoded["content"]) != `[{"type":"text","text":"kept"}]` || string(decoded["structuredContent"]) != `{"exact":1.2300}` || string(decoded["isError"]) != "true" {
+		t.Fatalf("fallback marshal = %s", encoded)
+	}
+
+	empty, err := json.Marshal(ToolCallResult{})
+	if err != nil || string(empty) != `{}` {
+		t.Fatalf("empty fallback marshal = %s, %v", empty, err)
+	}
+}
+
+func TestCrossPlatformCoverageSkipJSONValueEdges(t *testing.T) {
+	for _, raw := range []string{
+		"",
+		`{`,
+		`{"key":1,`,
+		`{"key":[`,
+		`[1`,
+	} {
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		if err := skipJSONValue(decoder, 0); err == nil {
+			t.Fatalf("skipJSONValue(%q) succeeded", raw)
+		}
+	}
+
+	deep := strings.Repeat("[", 258) + strings.Repeat("]", 258)
+	if err := skipJSONValue(json.NewDecoder(strings.NewReader(deep)), 0); err == nil || !strings.Contains(err.Error(), "nesting") {
+		t.Fatalf("deep skipJSONValue() error = %v", err)
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(`[]`))
+	if _, err := decoder.Token(); err != nil {
+		t.Fatal(err)
+	}
+	if err := skipJSONValue(decoder, 0); err == nil || !strings.Contains(err.Error(), "delimiter") {
+		t.Fatalf("closing delimiter error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageClientProtocolAndValidationEdges(t *testing.T) {
+	t.Run("empty protocol versions", func(t *testing.T) {
+		testseam.Swap(t, &supportedProtocolVersions, []string(nil))
+		if _, err := edgeClient(func(*http.Request) (*http.Response, error) { return edgeResponse(http.StatusOK, "{}"), nil }).Initialize(context.Background(), "https://x.test"); err == nil {
+			t.Fatal("empty protocol versions succeeded")
+		}
+	})
 
 	rpcFailure := edgeClient(func(*http.Request) (*http.Response, error) {
 		return edgeResponse(http.StatusOK, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"unsupported"}}`), nil
@@ -297,6 +381,53 @@ func TestCrossPlatformCoverageRetryAndFailureEdges(t *testing.T) {
 	c.MaxRetries = 3
 	if _, err := c.doWithRetry(context.Background(), "https://x.test", nil, "tools/list"); err == nil {
 		t.Fatal("timeout request succeeded")
+	}
+}
+
+func TestCrossPlatformCoverageNoRetryAndNoRedirectOptions(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	base := edgeClient(func(*http.Request) (*http.Response, error) {
+		attempts++
+		return edgeResponse(http.StatusServiceUnavailable, "busy"), nil
+	})
+	base.MaxRetries = 4
+	noRetry := base.WithMaxRetries(0)
+	resp, err := noRetry.doWithRetry(context.Background(), "https://x.test", nil, "tools/call")
+	if err != nil || resp.StatusCode != http.StatusServiceUnavailable || attempts != 1 {
+		t.Fatalf("no-retry response = %#v, %v; attempts = %d", resp, err, attempts)
+	}
+	_ = resp.Body.Close()
+	if base.MaxRetries != 4 {
+		t.Fatalf("base retries mutated to %d", base.MaxRetries)
+	}
+
+	redirects := 0
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		redirects++
+	}))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	for _, client := range []*Client{
+		(&Client{}).WithRedirectsDisabled(),
+		NewClient(source.Client()).WithRedirectsDisabled(),
+	} {
+		response, err := client.HTTPClient.Post(source.URL, "application/json", strings.NewReader(`{}`))
+		if err != nil {
+			t.Fatalf("redirect request error = %v", err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusTemporaryRedirect {
+			t.Fatalf("redirect status = %d", response.StatusCode)
+		}
+	}
+	if redirects != 0 {
+		t.Fatalf("redirect target received %d requests", redirects)
 	}
 }
 
@@ -521,24 +652,24 @@ func TestCrossPlatformCoverageStdioCallAndStartEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCommand := stdioCommandContext
-	t.Cleanup(func() { stdioCommandContext = oldCommand })
 	for _, stream := range []string{"stdin", "stdout", "stderr"} {
-		stdioCommandContext = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
-			switch stream {
-			case "stdin":
-				cmd.Stdin = strings.NewReader("")
-			case "stdout":
-				cmd.Stdout = io.Discard
-			case "stderr":
-				cmd.Stderr = io.Discard
+		t.Run(stream, func(t *testing.T) {
+			testseam.Swap(t, &stdioCommandContext, func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
+				switch stream {
+				case "stdin":
+					cmd.Stdin = strings.NewReader("")
+				case "stdout":
+					cmd.Stdout = io.Discard
+				case "stderr":
+					cmd.Stderr = io.Discard
+				}
+				return cmd
+			})
+			if err := NewStdioClient("ignored", nil, map[string]string{"EDGE": "1"}).Start(context.Background()); err == nil {
+				t.Fatalf("%s pipe failure succeeded", stream)
 			}
-			return cmd
-		}
-		if err := NewStdioClient("ignored", nil, map[string]string{"EDGE": "1"}).Start(context.Background()); err == nil {
-			t.Fatalf("%s pipe failure succeeded", stream)
-		}
+		})
 	}
 
 	stderr := &StdioClient{command: "edge", stderr: io.NopCloser(strings.NewReader("\nline\n"))}

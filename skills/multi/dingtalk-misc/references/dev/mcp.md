@@ -114,6 +114,14 @@ dws dev mcp member remove --mcp-id <mcpId> --user-ids <staffId> --dry-run --form
 
 ## 调用已发布工具
 
+本 Skill 保持 `cli_version >=1.0.61`，但 stock 1.0.61 不足以证明已安装下面的新门禁。真实调用前先做具体能力检测，不按版本号猜测：
+
+```bash
+dws mcp published invoke --help
+```
+
+确认帮助中包含 `inputSchemaDigest (fresh_core_subset_snapshot)`。若没有，先运行 `dws upgrade` 升级到最新**稳定版**并重新检测。不要安装/建议 beta；能力仍缺失时停止真实调用，只可展示本地 dry-run。
+
 ```bash
 dws mcp published tools <mcpId> --format json
 dws mcp published invoke <mcpId> <toolName> \
@@ -122,6 +130,31 @@ dws mcp published invoke <mcpId> <toolName> \
 
 展示 dry-run 的准确对象、参数和潜在影响后，只有用户对该预览明确同意本次真实调用，调用方才可在执行时把同一命令仅由 `--dry-run` 换成确认标志；最初请求不算该确认，参数变化需重新预检。不要把确认标志固化进模板、脚本或可复制示例。
 
-`tools` 返回当前身份看到的实时工具列表。真实 `invoke` 会再次执行 `tools/list`，拒绝不存在的工具、缺失 `inputSchema` 的工具、不符合 required/type/enum/properties/items 核心约束的参数，以及包含当前校验器无法完整解释之约束的 Schema，然后才执行 `tools/call`。成功输出以 `inputSchemaValidation=core` 说明本次门禁范围。它不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
+### 精确时序
+
+| 路径 | 本地解析/确认 | endpoint 解析 | 发现 | 调用 |
+|---|---|---:|---|---|
+| `mcp published tools` | 校验 mcpId | 1 次 | 在该 endpoint 拉取全部 `tools/list` 分页 | 不调用 |
+| `invoke --dry-run` | 只解析并展示 mcpId、精确工具名和参数 | 0 | 0 | 0 |
+| 未带确认的 invoke | 本地参数 JSON 校验后停在确认门 | 0 | 0 | 0 |
+| 已确认 invoke | 确认完成后开始一个总操作 | 1 次 | 紧邻调用前在该 endpoint 拉取全部分页，精确且唯一匹配工具名，要求非空 `inputSchema` 并校验 | 在同一 endpoint 发出恰好 1 次 `tools/call` |
+
+根 `--timeout` 是 `tools` 或已确认 invoke 的一个**总时限**，覆盖 endpoint 解析、鉴权/客户端构造、所有分页、Schema 校验和调用；它不是每页重新计时。短于或长于默认值的自定义时限同时配置上下文 deadline 和发布端 HTTP client timeout。
+
+发现限制为最多 100 页、累计 20 MiB 完整 JSON-RPC 响应、单 cursor 64 KiB、累计 10000 个工具；重复 cursor 也会失败。发现和调用都拒绝 HTTP 重定向，避免跨 endpoint 校验/执行；`tools/list` 可按传输策略重试，`tools/call` 的幂等性未知，绝不自动重试。若调用发送后出现超时、断连或其他传输失败，服务端可能已经执行，结果必须标记为**未知**；先从业务侧核实，不能自动或盲目重放。
+
+### Schema 快照与 TOCTOU
+
+真实 invoke 拒绝不存在/同名重复的工具、缺失 `inputSchema` 的工具、不符合 `required/type/enum/properties/items/additionalProperties` 核心约束的参数，以及包含客户端不能完整解释之约束的 Schema。命令已声明统一 Result contract 并在兼容阶段影子校验，因此仍使用原有顶层对象而不切换统一 envelope。本安全迁移有意不再返回 endpoint，将 `inputSchemaValidation` 升级为新快照证据，并新增 digest；依赖旧字段集合的消费端需按此调整。
+
+- `inputSchemaValidation=fresh_core_subset_snapshot`：本次参数通过了紧邻调用前新获取快照的受限核心子集校验。
+- `inputSchemaDigest`：该快照确定性 JSON 编码的 SHA-256 十六进制摘要；它绑定收到的数字词法表示，因此 `1`、`1.0` 和 `1e0` 可产生不同摘要。
+- `result`：无损保留的远端 `tools/call` result；不回显 endpoint。
+
+这不是“调用时当前 Schema”的原子保证。即使 endpoint 只解析一次并复用，服务端仍可能在 `tools/list` 返回后、`tools/call` 处理前改 Schema。完整关闭该 TOCTOU 窗口需要服务端提供 Schema revision/etag，并允许 `tools/call` 携带 revision precondition；当前协议端没有该能力时，客户端不能宣称原子固定。
+
+支持的 `$schema` URI 仅用于识别 JSON Schema **解析方言**，不表示接受该 draft 的完整词汇。允许集合比方言窄：当前执行上述核心约束，并只接受明确支持的 `$id`、`$anchor`、`$comment`、`title`、`description`、`default`、`examples`、`deprecated`、`readOnly`、`writeOnly` 元数据形状。其他 assertion 或 annotation，包括 `$ref`、组合、pattern、范围和未识别词汇，一律失败关闭且不发送 `tools/call`。
+
+消费端不接受动态命令别名，不根据工具名猜读写属性，也不持久化含凭据的 endpoint。
 
 当前内置调用面适用于可直接接受 JSON-RPC `tools/list`/`tools/call` 的服务，不宣称覆盖必须显式 initialize、SSE 或 `Mcp-Session-Id` 的严格会话型端点。异常处理见 [故障定位](mcp/troubleshooting.md)。

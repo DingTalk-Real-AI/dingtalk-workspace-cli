@@ -25,9 +25,10 @@
 | 管理台显示“变量已失效” | 映射 source/target 无法在同批 Schema 中解析；不要发布，修正字段树和映射 |
 | publish 后取址成功但无 `mcpUrl` | 空成功不等于可用；回查服务、已发布工具数和凭证绑定时序 |
 | published tools 为空 | 当前身份看不到工具，或服务没有已发布工具；不要尝试猜工具名调用 |
-| published invoke 提示工具不存在 | 工具列表在本次调用前已实时刷新；重新执行 tools，使用当前返回的精确名称 |
-| published invoke 提示 input schema validation failed | `--params` 缺 required 字段、类型/枚举错误，或包含被 `additionalProperties: false` 禁止的未声明字段；按实时 `inputSchema` 修正 |
+| published invoke 提示工具不存在 | 工具列表在本次调用前已刷新全部分页；重新执行 tools，使用当前返回的精确名称 |
+| published invoke 提示 input schema validation failed | `--params` 缺 required 字段、类型/枚举错误，或包含被 `additionalProperties: false` 禁止的未声明字段；按本次发现的 `inputSchema` 快照修正 |
 | published invoke 提示 unsupported JSON Schema keyword | 实时 Schema 含 oneOf/anyOf/allOf/$ref/pattern/范围等当前核心校验器不能完整执行的约束；为避免带着错误安全保证调用未知副作用工具，CLI 会失败关闭，不发送 `tools/call` |
+| published invoke 调用阶段超时或断连 | `tools/call` 不自动重试，但请求可能已经到达服务端；把结果视为未知，先从业务侧核实，不能盲目重放 |
 
 ## HTTP 映射检查
 
@@ -49,6 +50,8 @@
 
 ## 发布后调用边界
 
-`dws mcp published tools/invoke` 在运行期按当前 profile 和组织身份重新解析 endpoint，不缓存含凭据 URL，也不注册动态顶层 Cobra 命令。真实 invoke 会先 `tools/list`，确认工具存在并使用当前 `inputSchema` 的 required/type/enum/properties/items 核心约束校验 JSON 参数，再执行 `tools/call`。
+`dws mcp published tools/invoke` 在运行期按当前 profile 和组织身份重新解析 endpoint，不缓存含凭据 URL，也不注册动态顶层 Cobra 命令。`tools` 和已确认 invoke 都在一个根 `--timeout` 总时限内完成 endpoint 解析及全部分页；dry-run 和未确认 invoke 不解析 endpoint、不发现工具。真实 invoke 在同一 endpoint 上刷新全部 `tools/list` 分页，精确且唯一匹配工具，使用本次 `inputSchema` 快照的 `required/type/enum/properties/items/additionalProperties` 核心约束校验 JSON 参数，再发出恰好一次、不自动重试的 `tools/call`。
+
+成功结果中的 `inputSchemaDigest` 只绑定本次校验的快照。服务端仍可能在 `tools/list` 返回后、`tools/call` 处理前更新工具；没有服务端 revision/etag 与调用 precondition 时，客户端不能宣称快照和执行原子一致。支持的 `$schema` URI 也只标识解析方言，不代表支持该 draft 的全部词汇；未明确支持的 assertion 或 annotation 会失败关闭。
 
 当前内置 published transport 面向可直接接受 JSON-RPC `tools/list`/`tools/call` 的端点。它不宣称覆盖必须显式 `initialize`、SSE 响应或 `Mcp-Session-Id` 的严格会话型服务；这类服务应使用 `dws mcp url get` 获得脱敏处理之外的本地连接配置，并交给完整 MCP 客户端，且不得传播 URL 中的凭据。

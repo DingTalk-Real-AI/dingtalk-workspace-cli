@@ -31,7 +31,26 @@ dws mcp published tools <mcpId> --format json
 dws mcp published invoke <mcpId> <toolName> --params '{}' --dry-run --format json
 ```
 
-`published invoke` 无法静态判断远端工具副作用。检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。真实调用会重新执行 `tools/list`，按当前工具 `inputSchema` 校验参数后才发出 `tools/call`。
+Skill 元数据继续兼容 `cli_version >=1.0.61`，但 stock 1.0.61 不代表一定包含新的调用门禁。依赖该门禁前必须做能力检测，而不是猜版本：
+
+```bash
+dws mcp published invoke --help
+```
+
+确认帮助中包含 `inputSchemaDigest (fresh_core_subset_snapshot)`；检测不到时先执行 `dws upgrade` 升级到最新**稳定版**，再次检测。不要安装或建议 beta，也不要在检测失败时继续真实调用。
+
+`published invoke` 无法静态判断远端工具副作用。检查 dry-run 后，只有用户明确同意本次真实调用，调用方才可在执行时追加确认标志；不要把确认标志固化进模板、脚本或可复制示例。
+
+| 命令路径 | endpoint 解析 | `tools/list` | `tools/call` |
+|---|---:|---:|---:|
+| `published tools` | 1 次 | 全部分页 | 0 |
+| `invoke --dry-run` | 0 | 0 | 0 |
+| 未确认的真实 invoke | 0 | 0 | 0 |
+| 已确认的真实 invoke | 1 次 | 紧邻调用前刷新全部分页 | 同一 endpoint 上 1 次 |
+
+已确认操作在一个根 `--timeout` 总时限内完成 endpoint 解析、鉴权/客户端构造、全部分页、校验和调用。刷新结果必须对工具名精确且唯一匹配，要求非空 `inputSchema`，再按受限核心子集失败关闭校验；最多 100 页、累计 20 MiB 完整 JSON-RPC 响应、64 KiB cursor、10000 个工具。发现和调用都拒绝 HTTP 重定向，避免跨 endpoint 校验/执行；`tools/list` 可重试，`tools/call` 不自动重试。调用传输失败时结果可能已在服务端发生，必须按“结果未知”处理，不能盲目重放。
+
+成功结果中的 `inputSchemaValidation=fresh_core_subset_snapshot` 和 `inputSchemaDigest` 只证明参数通过了紧邻调用前所取快照的核心子集校验。发现与调用复用同一 endpoint，但 Schema 快照没有被服务端原子锁定；彻底关闭 TOCTOU 需要服务端提供 revision/etag 和调用 precondition。支持的 `$schema` URI 只标识解析方言，不表示支持该方言全部词汇；当前只接受 `required/type/enum/properties/items/additionalProperties` 及明确列出的基础元数据，其他 assertion 或 annotation 一律失败关闭。
 
 完整生命周期和按阶段加载的 API 转换、Mapping、鉴权、82 个表达式函数、故障定位参考见 multi skill 的 `references/dev/mcp.md`。
 
