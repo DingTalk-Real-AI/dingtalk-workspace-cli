@@ -136,14 +136,6 @@ func runMarkdownFetch(cmd *cobra.Command, _ []string) error {
 	return runTextFileFetch(cmd, markdownTextFileSpec)
 }
 
-func resolveMarkdownOutputPath(outputPath, remoteName string) (string, error) {
-	return resolveTextOutputPath(outputPath, remoteName, markdownTextFileSpec)
-}
-
-func resolveMarkdownDirectoryOutputPath(outputPath, name string) (string, error) {
-	return resolveTextDirectoryOutputPath(outputPath, name)
-}
-
 func resolveDownloadFilename(responseText, resourceURL string) string {
 	if name := extractFileNameFromResponse(responseText); name != "" {
 		return name
@@ -440,27 +432,11 @@ func resolveMarkdownRoute(ctx context.Context, nodeID, spaceID, workspaceID stri
 	}
 }
 
-func markdownRemoteNameWithContext(ctx context.Context, nodeID string, useDocServer bool) (string, error) {
-	return textRemoteNameWithContext(ctx, nodeID, useDocServer, markdownTextFileSpec)
-}
-
 func fetchMarkdownContent(ctx context.Context, nodeID, spaceID string, useDocServer bool) (string, string, error) {
 	if useDocServer {
 		return downloadFromDoc(ctx, nodeID)
 	}
 	return downloadFromDrive(ctx, nodeID, spaceID)
-}
-
-func previewMarkdownOverwriteDiff(ctx context.Context, nodeID, spaceID string, useDocServer bool, newContent string) error {
-	return previewTextOverwriteDiff(ctx, nodeID, spaceID, useDocServer, newContent, markdownTextFileSpec)
-}
-
-func renderMarkdownOverwriteDiff(nodeID, before, after string) string {
-	return renderTextOverwriteDiff(nodeID, before, after, markdownTextFileSpec)
-}
-
-func printMarkdownPatchDiff(nodeID, before, after string, matchCount int) error {
-	return printTextPatchDiff(nodeID, before, after, matchCount, markdownTextFileSpec)
 }
 
 func appendMarkdownDiff(builder *strings.Builder, beforeLabel, afterLabel, before, after string) {

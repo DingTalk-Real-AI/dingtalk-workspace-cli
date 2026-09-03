@@ -79,7 +79,7 @@ func TestCrossPlatformCoverageMarkdownUploadStatFailures(t *testing.T) {
 	})
 }
 
-func TestMarkdownCICoverageFetchAndOutputPaths(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownFetchAndOutputPaths(t *testing.T) {
 	t.Run("missing node reaches runtime validation", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
 		if err := runMarkdownFetch(newMarkdownFetchCmd(), nil); err == nil || !strings.Contains(err.Error(), "--node") {
@@ -137,12 +137,12 @@ func TestMarkdownCICoverageFetchAndOutputPaths(t *testing.T) {
 
 	t.Run("safe path fallbacks and lstat failure", func(t *testing.T) {
 		dir := t.TempDir()
-		got, err := resolveMarkdownOutputPath(dir, ".")
+		got, err := resolveTextOutputPath(dir, ".", markdownTextFileSpec)
 		if err != nil || got != filepath.Join(dir, "download.md") {
 			t.Fatalf("path = %q, error = %v", got, err)
 		}
 		tooLong := strings.Repeat("x", 300) + ".md"
-		if _, err := resolveMarkdownOutputPath(dir, tooLong); err == nil || !strings.Contains(err.Error(), "检查输出文件") {
+		if _, err := resolveTextOutputPath(dir, tooLong, markdownTextFileSpec); err == nil || !strings.Contains(err.Error(), "检查输出文件") {
 			t.Fatalf("error = %v", err)
 		}
 		if got := resolveDownloadFilename(`{`, "https://download.test/fallback.md?token=redacted"); got != "fallback.md" {
@@ -151,14 +151,27 @@ func TestMarkdownCICoverageFetchAndOutputPaths(t *testing.T) {
 	})
 
 	t.Run("directory traversal defense rejects unsanitized names", func(t *testing.T) {
-		if _, err := resolveMarkdownDirectoryOutputPath(t.TempDir(), "../escape.md"); err == nil ||
+		if _, err := resolveTextDirectoryOutputPath(t.TempDir(), "../escape.md"); err == nil ||
 			!strings.Contains(err.Error(), "越过输出目录") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("directory output rejects symlink", func(t *testing.T) {
+		dir := t.TempDir()
+		target := writeMarkdownDriveFixture(t, "target.md", "keep")
+		link := filepath.Join(dir, "remote.md")
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+		if _, err := resolveTextDirectoryOutputPath(dir, "remote.md"); err == nil ||
+			!strings.Contains(err.Error(), "符号链接") {
 			t.Fatalf("error = %v", err)
 		}
 	})
 }
 
-func TestMarkdownCICoverageCreateEdges(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownCreateEdges(t *testing.T) {
 	t.Run("directory source", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
@@ -230,7 +243,7 @@ func TestMarkdownCICoverageCreateEdges(t *testing.T) {
 	})
 }
 
-func TestMarkdownCICoverageOverwriteEdges(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 	t.Run("content source failure", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
@@ -322,9 +335,76 @@ func TestMarkdownCICoverageOverwriteEdges(t *testing.T) {
 			t.Fatalf("error = %v, want 用户取消了操作", err)
 		}
 	})
+
+	t.Run("content and file are both required", func(t *testing.T) {
+		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "--content 与 --file 必须指定其一") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("content and file are mutually exclusive", func(t *testing.T) {
+		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		path := writeMarkdownDriveFixture(t, "source.md", "body")
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
+			"--name", "a.md", "--content", "body", "--file", path, "--yes")
+		if err == nil || !strings.Contains(err.Error(), "--content 与 --file 互斥") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("space and workspace are mutually exclusive", func(t *testing.T) {
+		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
+			"--workspace", "workspace-1", "--name", "a.md", "--content", "body", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "--space-id 与 --workspace 互斥") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("directory file source", func(t *testing.T) {
+		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
+			"--file", t.TempDir(), "--yes")
+		if err == nil || !strings.Contains(err.Error(), "是目录而非文件") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("doc space upload branch", func(t *testing.T) {
+		caller := &markdownDriveCaller{
+			format: "json",
+			steps: []markdownDriveStep{
+				{text: `{"resourceUrl":"https://upload.test/doc","uploadKey":"key-1"}`},
+				{text: `{"ok":true}`},
+			},
+		}
+		installMarkdownDriveDeps(t, caller)
+		path := writeMarkdownDriveFixture(t, "source.md", "body")
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "overwrite", "--node", "node-1", "--workspace", "workspace-1",
+			"--name", "source.md", "--file", path, "--yes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) == 0 {
+			t.Fatal("doc upload made no MCP calls")
+		}
+		for _, call := range caller.calls {
+			if call.server != "doc" {
+				t.Fatalf("server = %q, want doc", call.server)
+			}
+		}
+	})
 }
 
-func TestMarkdownCICoveragePatchEdges(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownPatchEdges(t *testing.T) {
 	t.Run("global caller dry run", func(t *testing.T) {
 		caller := &markdownDriveCaller{format: "json", dryRun: true}
 		stdout, _ := installMarkdownDriveDeps(t, caller)
@@ -504,9 +584,19 @@ func TestMarkdownCICoveragePatchEdges(t *testing.T) {
 			t.Fatalf("stdout = %q", stdout.String())
 		}
 	})
+
+	t.Run("space and workspace are mutually exclusive", func(t *testing.T) {
+		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
+		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+			"markdown", "patch", "--node", "node-1", "--space-id", "space-1",
+			"--workspace", "workspace-1", "--pattern", "old", "--content", "new", "--yes")
+		if err == nil || !strings.Contains(err.Error(), "--space-id 与 --workspace 互斥") {
+			t.Fatalf("error = %v", err)
+		}
+	})
 }
 
-func TestMarkdownCICoverageGlobalDryRunAndNames(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownGlobalDryRunAndNames(t *testing.T) {
 	t.Run("caller enables helper dry run", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{dryRun: true})
 		if !markdownGlobalDryRun(&cobra.Command{Use: "standalone"}) {
@@ -564,14 +654,14 @@ func TestMarkdownCICoverageGlobalDryRunAndNames(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			installMarkdownDriveDeps(t, &markdownDriveCaller{steps: []markdownDriveStep{test.step}})
-			if _, err := markdownRemoteNameWithContext(context.Background(), "node-1", false); err == nil || !strings.Contains(err.Error(), test.want) {
+			if _, err := textRemoteNameWithContext(context.Background(), "node-1", false, markdownTextFileSpec); err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v", err)
 			}
 		})
 	}
 }
 
-func TestMarkdownCICoverageDiffOutputModes(t *testing.T) {
+func TestCrossPlatformCoverageMarkdownDiffOutputModes(t *testing.T) {
 	t.Run("raw overwrite preview", func(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "raw",
@@ -579,7 +669,7 @@ func TestMarkdownCICoverageDiffOutputModes(t *testing.T) {
 		}
 		stdout, _ := installMarkdownDriveDeps(t, caller)
 		installMarkdownHTTPGet(t, "before")
-		if err := previewMarkdownOverwriteDiff(context.Background(), "node-1", "space-1", false, "after"); err != nil {
+		if err := previewTextOverwriteDiff(context.Background(), "node-1", "space-1", false, "after", markdownTextFileSpec); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(stdout.String(), "markdown overwrite") {
@@ -590,7 +680,7 @@ func TestMarkdownCICoverageDiffOutputModes(t *testing.T) {
 	t.Run("JSON patch preview", func(t *testing.T) {
 		caller := &markdownDriveCaller{format: "json"}
 		stdout, _ := installMarkdownDriveDeps(t, caller)
-		if err := printMarkdownPatchDiff("node-1", "before", "after", 1); err != nil {
+		if err := printTextPatchDiff("node-1", "before", "after", 1, markdownTextFileSpec); err != nil {
 			t.Fatal(err)
 		}
 		var payload map[string]any

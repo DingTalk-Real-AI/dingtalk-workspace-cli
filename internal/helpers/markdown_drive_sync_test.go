@@ -705,7 +705,7 @@ func TestMarkdownOutputPathRejectsRemoteSymlink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
-	if _, err := resolveMarkdownOutputPath(dir, "../../remote.md"); err == nil || !strings.Contains(err.Error(), "符号链接") {
+	if _, err := resolveTextOutputPath(dir, "../../remote.md", markdownTextFileSpec); err == nil || !strings.Contains(err.Error(), "符号链接") {
 		t.Fatalf("expected symlink rejection, got %v", err)
 	}
 	if data, err := os.ReadFile(target); err != nil || string(data) != "keep" {
@@ -1080,11 +1080,11 @@ func TestMarkdownContentSourcesAndHumanDiffs(t *testing.T) {
 
 	longBefore := strings.Repeat("old\n", 25)
 	longAfter := strings.Repeat("new\n", 25)
-	overwriteDiff := renderMarkdownOverwriteDiff("node-1", longBefore, longAfter)
+	overwriteDiff := renderTextOverwriteDiff("node-1", longBefore, longAfter, markdownTextFileSpec)
 	if !strings.Contains(overwriteDiff, "... (") || !strings.Contains(overwriteDiff, "No write performed") {
 		t.Fatalf("overwrite diff did not truncate safely:\n%s", overwriteDiff)
 	}
-	if err := printMarkdownPatchDiff("node-1", "old", "new", 1); err != nil {
+	if err := printTextPatchDiff("node-1", "old", "new", 1, markdownTextFileSpec); err != nil {
 		t.Fatal(err)
 	}
 	if text := stdout.String(); !strings.Contains(text, "markdown patch") || !strings.Contains(text, "- old") || !strings.Contains(text, "+ new") {
