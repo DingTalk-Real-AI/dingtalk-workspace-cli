@@ -142,24 +142,61 @@ func pageAllMessageIDs(t *testing.T, payload map[string]any) []string {
 	return ids
 }
 
-func TestCrossPlatformCoverageChatMessageListPageAllSinglePageUnchanged(t *testing.T) {
-	response := `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":false}}`
+func TestCrossPlatformCoverageChatMessageListPageAllHelpUsesAuthoritativeCursor(t *testing.T) {
+	chat := newChatCommand()
+	leaf, _, err := chat.Find([]string{"message", "list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"毫秒级 nextCursor",
+		"不会使用只有秒级精度的消息 createTime",
+		"按稳定 messageId 去重",
+		"缺少 hasMore、nextCursor 无效、游标停滞",
+	} {
+		if !strings.Contains(leaf.Long, want) {
+			t.Fatalf("help Long missing %q: %s", want, leaf.Long)
+		}
+	}
+	if strings.Contains(leaf.Long, "边界 createTime 作为下次 --time") {
+		t.Fatalf("help still describes createTime-derived pagination: %s", leaf.Long)
+	}
+	for _, name := range []string{"page-all", "page-limit", "max-items", "page-delay"} {
+		if leaf.Flags().Lookup(name) == nil {
+			t.Fatalf("help missing --%s flag", name)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListSinglePagePublishesPaginationLedger(t *testing.T) {
 	tests := []struct {
-		name string
-		args []string
+		name             string
+		args             []string
+		response         string
+		wantComplete     bool
+		wantHasMore      bool
+		wantStopReason   string
+		wantNextPageTime string
 	}{
 		{
-			name: "no paging flags",
-			args: []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older"},
+			name:           "terminal page",
+			args:           []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older"},
+			response:       `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":false}}`,
+			wantComplete:   true,
+			wantStopReason: "source_complete",
 		},
 		{
-			name: "paging flags without page-all stay single page",
-			args: []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older", "--page-limit", "20", "--max-items", "5", "--page-delay", "0"},
+			name:             "continuing page",
+			args:             []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older", "--page-limit", "20", "--max-items", "5", "--page-delay", "0"},
+			response:         `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":true,"nextCursor":1787000000123}}`,
+			wantHasMore:      true,
+			wantStopReason:   "single_page",
+			wantNextPageTime: time.UnixMilli(1787000000123).UTC().Format(time.RFC3339Nano),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caller := &chatMessagePageAllCaller{steps: []scriptedToolStep{{text: response}}}
+			caller := &chatMessagePageAllCaller{steps: []scriptedToolStep{{text: tt.response}}}
 			got, err := executeChatMessagePageAllCommand(t, caller, tt.args...)
 			if err != nil {
 				t.Fatal(err)
@@ -177,10 +214,19 @@ func TestCrossPlatformCoverageChatMessageListPageAllSinglePageUnchanged(t *testi
 			if _, exists := call.args["page-all"]; exists {
 				t.Fatalf("single-page request leaked paging args: %#v", call.args)
 			}
-			for _, key := range []string{"stopReason", "pagesFetched", "truncatedByPageLimit", "truncatedByResultLimit", "paging", "complete"} {
-				if _, exists := got[key]; exists {
-					t.Fatalf("single-page output gained aggregate field %q: %#v", key, got[key])
+			if got["complete"] != tt.wantComplete || got["hasMore"] != tt.wantHasMore || got["paginationKnown"] != true || got["pagesFetched"] != float64(1) || got["stopReason"] != tt.wantStopReason {
+				t.Fatalf("pagination ledger = complete %#v, hasMore %#v, known %#v, pages %#v, stop %#v", got["complete"], got["hasMore"], got["paginationKnown"], got["pagesFetched"], got["stopReason"])
+			}
+			if got["count"] != float64(1) || got["failedCount"] != float64(0) || got["partial"] != false || got["truncated"] != false {
+				t.Fatalf("result ledger = count %#v, failed %#v, partial %#v, truncated %#v", got["count"], got["failedCount"], got["partial"], got["truncated"])
+			}
+			nextPage, hasNextPage := got["nextPage"].(map[string]any)
+			if tt.wantNextPageTime == "" {
+				if hasNextPage {
+					t.Fatalf("nextPage = %#v, want absent", nextPage)
 				}
+			} else if !hasNextPage || nextPage["time"] != tt.wantNextPageTime || nextPage["direction"] != "older" || nextPage["nextCursor"] != float64(1787000000123) {
+				t.Fatalf("nextPage = %#v, want reusable older boundary %q", got["nextPage"], tt.wantNextPageTime)
 			}
 			ids := pageAllMessageIDs(t, got)
 			if len(ids) != 1 || ids[0] != "m1" {

@@ -244,6 +244,89 @@ func TestCrossPlatformCoverageUploadDriveFileDataStrictTransaction(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageUploadDocSpaceFileDataStrictTransaction(t *testing.T) {
+	credential := `{"resourceUrl":"https://upload.invalid/resource","uploadKey":"upload-key","headers":{"x-token":"token"}}`
+	request := DocSpaceUploadRequest{FilePath: "fixture.txt", FileName: "fixture.txt", FileSize: 7, WorkspaceID: "wiki-1", FolderID: "folder-1"}
+
+	t.Run("success preserves doc-space routing and identifiers", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: credential}, {text: `{"success":true,"result":{"nodeId":"n1"}}`}}}
+		installScriptedCaller(t, caller)
+		SetHTTPPutFile(func(_ context.Context, resourceURL string, headers map[string]string, path string, size int64) error {
+			if resourceURL != "https://upload.invalid/resource" || headers["x-token"] != "token" || path != "fixture.txt" || size != 7 {
+				t.Fatalf("PUT args url=%q headers=%v path=%q size=%d", resourceURL, headers, path, size)
+			}
+			return nil
+		})
+		t.Cleanup(func() { SetHTTPPutFile(nil) })
+		result, err := UploadDocSpaceFileData(context.Background(), request)
+		if err != nil || result["success"] != true || caller.calls != 2 {
+			t.Fatalf("result=%v calls=%d error=%v", result, caller.calls, err)
+		}
+		if strings.Join(caller.serverLog, ",") != "doc,doc" || strings.Join(caller.toolLog, ",") != "get_file_upload_info,commit_uploaded_file" {
+			t.Fatalf("route servers=%v tools=%v", caller.serverLog, caller.toolLog)
+		}
+		if caller.argsLog[0]["workspaceId"] != "wiki-1" || caller.argsLog[0]["folderId"] != "folder-1" {
+			t.Fatalf("credential args=%v", caller.argsLog[0])
+		}
+		if caller.argsLog[1]["workspaceId"] != "wiki-1" || caller.argsLog[1]["folderId"] != "folder-1" || caller.argsLog[1]["uploadKey"] != "upload-key" {
+			t.Fatalf("commit args=%v", caller.argsLog[1])
+		}
+	})
+
+	t.Run("overwrite excludes folder and supports conversion", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: credential}, {text: `{"success":true}`}}}
+		installScriptedCaller(t, caller)
+		SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return nil })
+		t.Cleanup(func() { SetHTTPPutFile(nil) })
+		overwrite := request
+		overwrite.FolderID = ""
+		overwrite.OverwriteNode = "existing"
+		overwrite.Convert = true
+		if _, err := UploadDocSpaceFileData(context.Background(), overwrite); err != nil {
+			t.Fatal(err)
+		}
+		for index, args := range caller.argsLog {
+			if args["overwriteNodeId"] != "existing" {
+				t.Fatalf("call[%d] overwrite args=%v", index, args)
+			}
+			if _, exists := args["folderId"]; exists {
+				t.Fatalf("call[%d] leaked folderId in overwrite mode: %v", index, args)
+			}
+		}
+		if caller.argsLog[1]["convertToOnlineDoc"] != true {
+			t.Fatalf("commit conversion args=%v", caller.argsLog[1])
+		}
+	})
+
+	for _, tc := range []struct {
+		name    string
+		request DocSpaceUploadRequest
+		steps   []scriptedToolStep
+		putErr  error
+		want    string
+	}{
+		{name: "invalid request", request: DocSpaceUploadRequest{}, want: "invalid document-space upload request"},
+		{name: "folder overwrite conflict", request: DocSpaceUploadRequest{FilePath: "f", FileName: "f", FileSize: 1, WorkspaceID: "w", FolderID: "folder", OverwriteNode: "node"}, want: "mutually exclusive"},
+		{name: "credential failure", request: request, steps: []scriptedToolStep{{err: errors.New("credentials")}}, want: "credentials"},
+		{name: "credential parse failure", request: request, steps: []scriptedToolStep{{text: `{}`}}, want: "incomplete upload credentials"},
+		{name: "put failure", request: request, steps: []scriptedToolStep{{text: credential}}, putErr: errors.New("put failed"), want: "put failed"},
+		{name: "commit failure", request: request, steps: []scriptedToolStep{{text: credential}, {err: errors.New("commit failed")}}, want: "commit failed"},
+		{name: "empty commit", request: request, steps: []scriptedToolStep{{text: credential}, {text: " "}}, want: "no business result"},
+		{name: "malformed commit", request: request, steps: []scriptedToolStep{{text: credential}, {text: "{"}}, want: "parse commit_uploaded_file response"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: tc.steps}
+			installScriptedCaller(t, caller)
+			SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return tc.putErr })
+			t.Cleanup(func() { SetHTTPPutFile(nil) })
+			_, err := UploadDocSpaceFileData(context.Background(), tc.request)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDriveCommandRemainingEdges(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "fixture.txt")
 	_ = os.WriteFile(file, []byte("fixture"), 0o600)
@@ -267,7 +350,10 @@ func TestCrossPlatformCoverageDriveCommandRemainingEdges(t *testing.T) {
 
 func TestCrossPlatformCoverageDriveDownloadDirectoryCoverage(t *testing.T) {
 	oldGet := httpGetFile
-	httpGetFile = func(context.Context, string, map[string]string, string) error { return nil }
+	// 下载引擎现在先写 <dest>.dwspart 再原子发布；stub 必须履约写入目标路径。
+	httpGetFile = func(_ context.Context, _ string, _ map[string]string, destPath string) error {
+		return os.WriteFile(destPath, []byte("payload"), 0o644)
+	}
 	t.Cleanup(func() { httpGetFile = oldGet })
 	dir := t.TempDir()
 	for _, payload := range []string{

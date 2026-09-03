@@ -67,7 +67,7 @@ func (c *chatMessageSearchCaller) CallTool(_ context.Context, productID, toolNam
 		if c.failPreflight {
 			return nil, errors.New("conversation not found")
 		}
-		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}`
+		text = `{"success":true,"result":{"conversationInfo":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}}`
 	}
 	if toolName == "search_messages_by_keyword" || toolName == "search_messages" {
 		if c.searchError != nil {
@@ -699,7 +699,7 @@ func (c *chatChangedContractCaller) CallTool(_ context.Context, productID, toolN
 		text = `{"result":[{"openMessageId":"` + messageID + `","openConversationId":"cid"}]}`
 	}
 	if toolName == "get_conversation_info" {
-		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}`
+		text = `{"success":true,"result":{"conversationInfo":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}}`
 	}
 	if c.resolveUsers && toolName == "get_user_info_by_user_ids" {
 		text = `{"result":[{"userId":"123","openDingTalkId":"open-123"}]}`

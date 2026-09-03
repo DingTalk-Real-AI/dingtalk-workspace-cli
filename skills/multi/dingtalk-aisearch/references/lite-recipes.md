@@ -1,31 +1,33 @@
-# aisearch Lite Recipe
+# AISearch 多跳短流程
 
-本文件从单 Skill `lite-recipes.md` 拆分而来，仅保留与本产品相关的轻量流程。
+仅在 AISearch 已返回候选，但稳定 ID 域或下一跳衔接仍不明确时读取。每次只推进一跳；前置证据不成立就停止。
 
-## #8 通讯录
+## 精确标题 → 原对象
 
-### get-contact-self
+1. `dws aisearch enterprise --queries "<完整标题>" --types <类型> --format json`。
+2. 只接受标题精确匹配且唯一的候选；0 条、多条或只有近似标题时停止。
+3. 按来源提取稳定 ID：文档 `nodeId`，听记 `taskUuid`；待办优先使用结构化 `taskId`，仅在返回确实只有深链时解析其中的 `taskId`。
+4. 用户要求读取时才加载一个下游 Skill，并把该 ID 原样传入。搜索 `snippet` 不能替代读取结果。
 
-`contact user get-self` → 当前用户 userId、部门、主管等
+## 人员 → 组织详情 → 动态关系
 
-### search-person
+1. `aisearch person` 返回的所有候选必须保留。
+2. 只按用户给定的姓名、昵称或身份关系筛选；条件不满足就停止，不能另搜一个同名或相似人补链。
+3. 将候选的 `userId` 传给 `dws contact user get --ids <userId> --format json`。
+4. 后续需要按主管姓名再搜人时，query 必须来自 Contact 详情的真实主管显示名；下一次 Contact 的 ids 必须来自新一次人员搜索。
 
-**搜人首选入口**。凡是“找人/搜人/找同事/谁负责/上级/下级/负责人/团队成员”均优先用 `aisearch person`：
+人员链接中的 Ding uid 只用于和同域作者标识做身份核对，不能作为 Contact `userId`。
 
-1. 从用户问题中提取 keyword（人名/业务关键词）和 dimension（维度），规则见 [aisearch.md](./aisearch.md)。
-2. `aisearch person --query "<关键词>" --dimension <维度>`
-3. 结果中提取 `userId` 和 `title`（姓名）展示给用户。
-4. 若需要 userId 做后续操作（发消息/建待办），可直接使用结果中的 `userId`。
-5. **重名消歧**：多人同名时禁止默认选第一个，须追加 `contact user get --ids` 获取部门/职位后请用户确认，详见 [08-directory.md](../../dingtalk-contact/references/08-directory.md)「多命中」。
+## 创建记录 → 详情 → 二次搜索
 
-### search-user
+1. 用 `dws aisearch behavior --queries "<完整标题>" --types todo --behavior-type create --format json` 定位目标。
+2. 只从精确标题候选取得 `taskId`；不得使用其他创建记录、列表第一项或历史 ID。
+3. 用 `dws todo +get --task-id <taskId> --format json` 回读标题和业务字段。
+4. 二次 AISearch 必须使用详情确认过的完整标题；多来源可合并到 `--types document,im`。
 
-仅在以下**精确查询**场景使用，搜人请优先用 `search-person`：
+## 完整性与停止条件
 
-- 需要获取 userId 给其他产品使用（发消息/建待办/约日程）
-- 已有 userId 需查完整详情（`contact user get --ids`）
-- 完整手机号精确反查（`contact user search-mobile --mobile`）
-
-1. 完整手机号精确反查：`contact user search-mobile --mobile "<手机号>"`；其他搜人：`aisearch person --query "<关键词>" --dimension <维度>`。
-2. **重名消歧**：多人同名时禁止默认选第一个，须追加 `contact user get --ids` 获取部门/职位后请用户确认，详见 [08-directory.md](../../dingtalk-contact/references/08-directory.md)「多命中」。
-3. 需详情时：`contact user get --ids <userId>`（多人可 `--ids id1,id2,...`）。
+- 标题/昵称/身份不匹配、稳定 ID 缺失、多候选未消歧：停止，不加载下游 Skill。
+- 详情或正文接口失败：只报告该跳失败，不从搜索摘要猜内容。
+- 逐字稿、分页列表或“全部”结果只有明确 `complete=true` 或等价分页完成证据时才能称完整。
+- 用户指定“如果不一致/读取失败就不要继续”时，该条件优先于补交后续内容。

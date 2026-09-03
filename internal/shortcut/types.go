@@ -56,6 +56,24 @@ const (
 	DispositionAliasInternal   SemanticDisposition = "alias_internal"
 )
 
+// HelpTier controls only product-root help presentation. It is deliberately
+// independent from Hidden/public Schema membership: a catalog Shortcut remains
+// Agent-visible and directly executable even when the product root shows only
+// the smaller featured set.
+type HelpTier string
+
+const (
+	HelpTierFeatured      HelpTier = "featured"
+	HelpTierCatalog       HelpTier = "catalog"
+	HelpTierCompatibility HelpTier = "compatibility"
+	HelpTierUnavailable   HelpTier = "unavailable"
+)
+
+// HelpTierAnnotation is embedded on mounted Shortcut leaves so the assembled
+// product help can select the reviewed featured subset without inferring from
+// command names or descriptions.
+const HelpTierAnnotation = "dws.shortcut.help-tier"
+
 // Availability is independent from live-account evidence. A missing fixture or
 // permission does not make an implemented command unavailable.
 type Availability string
@@ -206,6 +224,10 @@ type Shortcut struct {
 	Disposition SemanticDisposition
 	// SemanticDelta explains the concrete value added beyond renaming a leaf.
 	SemanticDelta string
+	// HelpTier controls whether this public Shortcut is featured on the product
+	// root help or remains discoverable through Schema/shortcut list/exact help.
+	// Compatibility and unavailable tiers are never shown on the product root.
+	HelpTier HelpTier
 	// Availability describes whether the implementation is shipped and
 	// callable; it does not encode the current account's permissions.
 	Availability Availability

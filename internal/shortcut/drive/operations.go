@@ -65,7 +65,11 @@ var Inspect = shortcut.Shortcut{
 			}
 			value, callErr := rt.CallMCPReadData("drive", read.tool, read.params)
 			if callErr == nil {
-				value, callErr = requireDriveObject(value, "drive/"+read.tool)
+				if read.tool == "get_node_stats" {
+					value, callErr = requireDriveStats(value, "drive/"+read.tool)
+				} else {
+					value, callErr = requireDriveObject(value, "drive/"+read.tool)
+				}
 			}
 			if callErr != nil {
 				steps = append(steps, map[string]any{"tool": read.tool, "status": "failed"})
@@ -138,18 +142,20 @@ var CreateFolder = shortcut.Shortcut{
 			return err
 		}
 		if name := firstString(verified, "name", "fileName"); name != rt.Str("name") {
-			return driveResponseErrorWithDetails(
+			return driveCommittedWriteMismatch(
 				"drive/create_folder",
 				"readback_mismatch",
 				fmt.Sprintf("创建后读回名称 %q 与请求 %q 不一致", name, rt.Str("name")),
+				nodeID,
+				rt.Str("name"),
+				name,
 				map[string]any{
-					"resource": map[string]any{
-						"resourceType":  "folder",
-						"nodeId":        nodeID,
-						"requestedName": rt.Str("name"),
-						"observedName":  name,
-						"ownership":     "owned",
-					},
+					"resourceType":  "folder",
+					"nodeId":        nodeID,
+					"requestedName": rt.Str("name"),
+					"observedName":  name,
+					"ownership":     "owned",
+					"readback":      verified,
 				},
 			)
 		}

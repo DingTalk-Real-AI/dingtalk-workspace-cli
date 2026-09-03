@@ -60,7 +60,7 @@ func driveCollectionResult(collection, description string) *contract.ResultSpec 
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess},
 		DataSchema: json.RawMessage(fmt.Sprintf(
-			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","description":"本页有效结果数量"},%q:{"type":"array","description":%q,"items":{"type":"object","description":"Drive 资源条目","additionalProperties":true}},"nextCursor":{"type":"string","description":"下一页游标"},"hasMore":{"type":"boolean","description":"服务端是否仍有下一页"}},"required":["count",%q],"additionalProperties":true}`,
+			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","description":"本次有效结果数量"},%q:{"type":"array","description":%q,"items":{"type":"object","description":"Drive 资源条目","additionalProperties":true}},"nextCursor":{"type":"string","description":"下一页游标"},"hasMore":{"type":"boolean","description":"服务端是否仍有下一页"}},"required":["count",%q],"additionalProperties":true}`,
 			description, collection, description, collection,
 		)),
 	}
@@ -119,6 +119,35 @@ func requireDriveObject(data map[string]any, operation string) (map[string]any, 
 		return nil, driveResponseError(operation, "missing_business_result", "响应没有可验证的业务对象")
 	}
 	return data, nil
+}
+
+func requireDriveStats(data map[string]any, operation string) (map[string]any, error) {
+	stats, err := requireDriveObject(data, operation)
+	if err != nil {
+		return nil, err
+	}
+	if hasDriveStatMeasure(stats) {
+		return stats, nil
+	}
+	return nil, driveResponseError(operation, "missing_stats_measures", "统计响应没有任何可验证的统计数值")
+}
+
+func hasDriveStatMeasure(data map[string]any) bool {
+	measureKeys := []string{
+		"views", "viewCount", "visitCount", "visitorCount", "viewerCount",
+		"readCount", "readerCount", "readUserCount", "uniqueViewCount",
+		"editCount", "editorCount", "commentCount", "likeCount",
+		"previewCount", "downloadCount",
+	}
+	if _, ok := firstInt64(data, measureKeys...); ok {
+		return true
+	}
+	for _, wrapper := range []string{"stats", "statistics", "result", "data"} {
+		if nested, ok := data[wrapper].(map[string]any); ok && hasDriveStatMeasure(nested) {
+			return true
+		}
+	}
+	return false
 }
 
 func requireDriveWrite(data map[string]any, operation string) (map[string]any, error) {
@@ -271,5 +300,26 @@ func driveResponseErrorWithDetails(operation, reason, message string, details ma
 		apperrors.WithRetryable(false),
 		apperrors.WithReason(reason),
 		apperrors.WithDetails(details),
+	)
+}
+
+func driveCommittedWriteMismatch(operation, reason, message, nodeID, requestedName, actualName string, resource map[string]any) error {
+	return apperrors.NewAPI(message,
+		apperrors.WithOperation(operation),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("readback_verification"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason(reason),
+		apperrors.WithHint("远端写入已经提交；请根据 error.details 核对或修正资源，禁止盲目重试创建或上传"),
+		apperrors.WithDetails(map[string]any{
+			"status":        "partial_success",
+			"complete":      false,
+			"retrySafe":     false,
+			"nodeId":        nodeID,
+			"requestedName": requestedName,
+			"actualName":    actualName,
+			"resource":      resource,
+		}),
 	)
 }
