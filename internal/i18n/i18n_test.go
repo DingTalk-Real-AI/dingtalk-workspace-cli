@@ -89,10 +89,10 @@ func TestAuthLoginSummaryTranslations(t *testing.T) {
 		"用户":    "User",
 		"有效期":   "Expires",
 		"Token 将自动刷新，无需重复登录": "The token will refresh automatically; no need to log in again",
-		"已过期":  "Expired",
+		"已过期":   "Expired",
 		"1 天后":  "in 1 day",
 		"1 小时后": "in 1 hour",
-		"授权成功": "Authorization successful",
+		"授权成功":  "Authorization successful",
 		"请返回终端继续操作。此页面可以关闭。": "Return to the terminal to continue. You may close this page.",
 		"钉钉 CLI": "DingTalk CLI",
 	}
