@@ -93,6 +93,7 @@ type shortcutListRow struct {
 	Primary              string                `json:"primary,omitempty"`
 	Reviewed             bool                  `json:"reviewed"`
 	CompatibilityVisible bool                  `json:"compatibility_visible,omitempty"`
+	HelpTier             string                `json:"help_tier,omitempty"`
 }
 
 func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
@@ -139,6 +140,7 @@ func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
 		Primary:              s.PrimaryCommand,
 		Reviewed:             s.SemanticReviewed,
 		CompatibilityVisible: s.CompatibilityVisible,
+		HelpTier:             string(s.HelpTier),
 	}
 }
 
