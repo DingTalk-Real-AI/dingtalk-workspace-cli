@@ -25,6 +25,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// textLocalReadFile is the injection seam for the overwrite --dry-run local
+// content read; tests use it to force the read failure portably because
+// chmod-based unreadability does not affect reads on Windows.
+var textLocalReadFile = os.ReadFile
+
 // textFileSpec parameterizes the shared native-text-file engine used by the
 // markdown and html product domains. The engine owns the type-agnostic
 // workflow (content-source resolution, extension validation, dual-domain
@@ -459,7 +464,7 @@ func runTextFileOverwrite(cmd *cobra.Command, spec textFileSpec) error {
 
 	localDryRun, _ := cmd.Flags().GetBool("dry-run")
 	if localDryRun {
-		newContent, err := os.ReadFile(uploadPath)
+		newContent, err := textLocalReadFile(uploadPath)
 		if err != nil {
 			return fmt.Errorf("读取新内容失败: %w", err)
 		}

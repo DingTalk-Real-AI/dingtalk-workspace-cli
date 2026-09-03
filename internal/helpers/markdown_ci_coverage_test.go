@@ -37,6 +37,17 @@ func installMarkdownCITempFileDisappearance(t *testing.T) {
 	t.Cleanup(func() { markdownUploadStat = original })
 }
 
+// setMarkdownCIMissingTempDir points every platform temp-dir environment
+// variable at a nonexistent directory: os.TempDir reads TMPDIR on Unix and
+// TMP/TEMP on Windows, so all three must move together before os.MkdirTemp
+// is expected to fail on both platforms.
+func setMarkdownCIMissingTempDir(t *testing.T, missing string) {
+	t.Helper()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, missing)
+	}
+}
+
 func TestCrossPlatformCoverageMarkdownUploadStatFailures(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
@@ -94,10 +105,13 @@ func TestCrossPlatformCoverageMarkdownFetchAndOutputPaths(t *testing.T) {
 		}
 		installMarkdownDriveDeps(t, caller)
 		installMarkdownHTTPGet(t, "body")
-		parentFile := writeMarkdownDriveFixture(t, "parent", "not a directory")
+		// A child path under a regular file is ENOTDIR on Unix but a plain
+		// not-exist on Windows; an embedded NUL makes os.Stat fail with a
+		// non-IsNotExist error on every platform.
+		output := filepath.Join(t.TempDir(), "child\x00.md")
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "fetch", "--node", "node-1", "--space-id", "space-1",
-			"--output", filepath.Join(parentFile, "child.md"))
+			"--output", output)
 		if err == nil || !strings.Contains(err.Error(), "检查输出路径") {
 			t.Fatalf("error = %v", err)
 		}
@@ -192,7 +206,7 @@ func TestCrossPlatformCoverageMarkdownCreateEdges(t *testing.T) {
 
 	t.Run("temporary directory failure", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
-		t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
+		setMarkdownCIMissingTempDir(t, filepath.Join(t.TempDir(), "missing"))
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "create", "--name", "a.md", "--content", "body")
 		if err == nil || !strings.Contains(err.Error(), "创建临时目录失败") {
@@ -267,7 +281,7 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 
 	t.Run("temporary directory failure", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
-		t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
+		setMarkdownCIMissingTempDir(t, filepath.Join(t.TempDir(), "missing"))
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
 			"--name", "a.md", "--content", "body", "--yes")
@@ -313,10 +327,11 @@ func TestCrossPlatformCoverageMarkdownOverwriteEdges(t *testing.T) {
 	t.Run("local preview read failure", func(t *testing.T) {
 		installMarkdownDriveDeps(t, &markdownDriveCaller{format: "json"})
 		path := writeMarkdownDriveFixture(t, "source.md", "body")
-		if err := os.Chmod(path, 0); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+		// chmod-based unreadability is not portable (Windows ignores the
+		// read-only attribute for reads); force the failure at the seam.
+		testseam.Swap(t, &textLocalReadFile, func(string) ([]byte, error) {
+			return nil, errors.New("forced local read failure")
+		})
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "overwrite", "--node", "node-1", "--space-id", "space-1",
 			"--name", "source.md", "--file", path, "--dry-run")
@@ -482,19 +497,14 @@ func TestCrossPlatformCoverageMarkdownPatchEdges(t *testing.T) {
 		}
 		installMarkdownDriveDeps(t, caller)
 		missingTemp := filepath.Join(t.TempDir(), "missing")
-		previousTemp, hadPreviousTemp := os.LookupEnv("TMPDIR")
-		t.Cleanup(func() {
-			if hadPreviousTemp {
-				_ = os.Setenv("TMPDIR", previousTemp)
-			} else {
-				_ = os.Unsetenv("TMPDIR")
-			}
-		})
 		httpGetFile = func(_ context.Context, _ string, _ map[string]string, destPath string) error {
 			if err := os.WriteFile(destPath, []byte("old value"), 0o600); err != nil {
 				return err
 			}
-			return os.Setenv("TMPDIR", missingTemp)
+			// Flip the temp dir only after the download staged its scratch
+			// file so the patch upload staging is the step that fails.
+			setMarkdownCIMissingTempDir(t, missingTemp)
+			return nil
 		}
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "patch", "--node", "node-1", "--space-id", "space-1",
