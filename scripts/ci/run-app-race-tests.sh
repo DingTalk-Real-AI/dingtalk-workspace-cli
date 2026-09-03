@@ -1,12 +1,14 @@
 #!/bin/sh
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+DEFAULT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+ROOT="$(CDPATH= cd -- "${DWS_TEST_ROOT:-$DEFAULT_ROOT}" && pwd)"
 
 usage() {
 	printf '%s\n' \
 		"usage: $0 verify <app-package>" \
 		"       $0 run <app-package> [partition]" \
+		"       $0 coverage <app-package> <partition> <profile>" \
 		"       $0 list-partitions" >&2
 	exit 2
 }
@@ -18,6 +20,7 @@ APP_PARTITIONS='schema a-b c-a-l c-m-o c-p-r c-s-z c-other d-r s-z-example-fuzz'
 
 mode="${1:-}"
 partition=""
+coverage_profile=""
 case "$mode" in
 	list-partitions)
 		[ "$#" -eq 1 ] || usage
@@ -35,6 +38,12 @@ case "$mode" in
 		app_package="$2"
 		partition="${3:-}"
 		;;
+	coverage)
+		[ "$#" -eq 4 ] || usage
+		app_package="$2"
+		partition="$3"
+		coverage_profile="$4"
+		;;
 	*) usage ;;
 esac
 
@@ -47,19 +56,19 @@ list_output="$workdir/list-output"
 
 cd "$ROOT"
 if ! go test "$app_package" -list '^(Test|Example|Fuzz)' > "$list_output"; then
-	printf 'app race partition discovery failed for %s\n' "$app_package" >&2
+	printf 'app partition discovery failed for %s\n' "$app_package" >&2
 	exit 1
 fi
 awk '/^(Test|Example|Fuzz)/ { print $1 }' "$list_output" > "$tests"
 
 if [ ! -s "$tests" ]; then
-	printf 'app race partition discovery found no tests in %s\n' "$app_package" >&2
+	printf 'app partition discovery found no tests in %s\n' "$app_package" >&2
 	exit 1
 fi
 
 LC_ALL=C sort "$tests" | uniq -d > "$duplicates"
 if [ -s "$duplicates" ]; then
-	printf '%s\n' 'app race partition discovery found duplicate top-level tests:' >&2
+	printf '%s\n' 'app partition discovery found duplicate top-level tests:' >&2
 	sed 's/^/  /' "$duplicates" >&2
 	exit 1
 fi
@@ -116,7 +125,7 @@ do
 	count="${spec#*:}"
 	classified="$classified $name"
 	if [ "$count" -eq 0 ]; then
-		printf 'app race partition %s is empty\n' "$name" >&2
+		printf 'app partition %s is empty\n' "$name" >&2
 		exit 1
 	fi
 done
@@ -147,11 +156,11 @@ done
 total_count="$(wc -l < "$tests" | tr -d ' ')"
 assigned_count=$((schema_count + ab_count + cal_count + cmo_count + cpr_count + csz_count + cother_count + dr_count + sz_count))
 if [ "$assigned_count" -ne "$total_count" ]; then
-	printf 'app race partitions assigned %s tests, want %s\n' "$assigned_count" "$total_count" >&2
+	printf 'app partitions assigned %s tests, want %s\n' "$assigned_count" "$total_count" >&2
 	exit 1
 fi
 
-printf 'app race partitions cover %s top-level tests exactly once: schema=%s a-b=%s c-a-l=%s c-m-o=%s c-p-r=%s c-s-z=%s c-other=%s d-r=%s s-z-example-fuzz=%s\n' \
+printf 'app partitions cover %s top-level tests exactly once: schema=%s a-b=%s c-a-l=%s c-m-o=%s c-p-r=%s c-s-z=%s c-other=%s d-r=%s s-z-example-fuzz=%s\n' \
 	"$total_count" "$schema_count" "$ab_count" "$cal_count" "$cmo_count" "$cpr_count" "$csz_count" "$cother_count" "$dr_count" "$sz_count"
 
 if [ "$mode" = "verify" ]; then
@@ -163,11 +172,14 @@ run_partition() {
 	instrumentation="$2"
 	run_pattern="$3"
 	skip_pattern="${4:-}"
+	if [ -n "$coverage_profile" ]; then
+		instrumentation=coverage
+	fi
 
-	# Fail closed on an unrecognized mode: a typo must not silently drop race
-	# instrumentation from a partition that is supposed to carry it.
+	# Fail closed on an unrecognized mode: a typo must not silently drop the
+	# requested race or coverage instrumentation.
 	case "$instrumentation" in
-		race|no-race) ;;
+		race|no-race|coverage) ;;
 		*)
 			printf 'unknown instrumentation %s for app partition %s\n' \
 				"$instrumentation" "$name" >&2
@@ -180,9 +192,14 @@ run_partition() {
 	if [ -n "$skip_pattern" ]; then
 		set -- "$@" -skip "$skip_pattern"
 	fi
-	if [ "$instrumentation" = race ]; then
-		set -- -race "$@"
-	fi
+	case "$instrumentation" in
+		race) set -- -race "$@" ;;
+		coverage)
+			set -- "$@" \
+				-coverprofile="$coverage_profile" \
+				-covermode=atomic
+			;;
+	esac
 	go test "$@" "$app_package"
 }
 
