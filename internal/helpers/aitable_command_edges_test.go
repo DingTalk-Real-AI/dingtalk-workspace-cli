@@ -140,6 +140,7 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 
 	caller = &aitableTestCaller{}
 	installAitableDeps(t, caller)
+	//lint:ignore SA1012 This regression test verifies that the wrapper normalizes a nil context.
 	if err := callAitableToolContext(nil, "get_base", nil); err != nil {
 		t.Fatalf("nil context was not normalized: %v", err)
 	}
