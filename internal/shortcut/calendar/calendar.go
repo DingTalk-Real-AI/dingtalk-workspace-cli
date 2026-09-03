@@ -749,37 +749,35 @@ var BusySearch = shortcut.Shortcut{
 }
 
 func busySearchProject(data map[string]any) ([]map[string]any, error) {
-	entries, _, err := requireCalendarCollection(data, "calendar/query_busy_status", "busy", "entries")
+	// Use the strict collection extractor because busy/free status is a decision
+	// signal: a malformed response must fail closed rather than be projected to
+	// "free: true". callFilteredBusyStatus only filters individual scheduleItems
+	// that lack a usable status; it never treats a missing scheduleItems array as
+	// an empty/free interval.
+	entries, _, err := requireCalendarCollectionStrict(data, "calendar/query_busy_status", "busy", "entries")
 	if err != nil {
 		return nil, err
 	}
 	out := make([]map[string]any, 0)
 	for entryIndex, rawEntry := range entries {
-		entry, ok := rawEntry.(map[string]any)
-		if !ok {
-			continue
-		}
+		entry := rawEntry.(map[string]any)
 		rawItems, present := entry["scheduleItems"]
 		if !present {
-			// Mirror the atomic command (callFilteredBusyStatus): an entry without
-			// scheduleItems carries no busy evidence and is skipped, not fatal.
-			continue
+			return nil, calendarResponseError("calendar/query_busy_status", "missing_schedule_items", fmt.Sprintf("result[%d] 缺少 scheduleItems", entryIndex))
 		}
 		items, ok := rawItems.([]any)
 		if !ok {
 			return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_items", fmt.Sprintf("result[%d].scheduleItems 不是数组", entryIndex))
 		}
-		for _, rawItem := range items {
+		for itemIndex, rawItem := range items {
 			item, ok := rawItem.(map[string]any)
 			if !ok {
-				continue
+				return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_item", fmt.Sprintf("result[%d].scheduleItems[%d] 不是对象", entryIndex, itemIndex))
 			}
 			start := calendarBusyDateTime(item["start"])
 			end := calendarBusyDateTime(item["end"])
 			if calendarEmptyValue(start) || calendarEmptyValue(end) {
-				// Mirror the atomic command's filtering: items without usable
-				// start/end are dropped instead of failing the whole read.
-				continue
+				return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_time", fmt.Sprintf("result[%d].scheduleItems[%d] 缺少有效起止时间", entryIndex, itemIndex))
 			}
 			out = append(out, map[string]any{"start": start, "end": end})
 		}

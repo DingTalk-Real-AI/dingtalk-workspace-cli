@@ -129,10 +129,12 @@ func TestCrossPlatformCoverageCalendarListRequiresExplicitCollectionAndPaginatio
 }
 
 // TestCrossPlatformCoverageCalendarEmptyCollectionsFilterLikeAtomicCommands pins
-// the alignment with the atomic commands' defensive filtering: any terminal
-// empty-page placeholder variant — not just the exact four-null-field sentinel
-// recognized by calendarcompat.NormalizeTerminalEmptyEvents — must project to
-// an empty collection across every read shortcut, while real rows survive.
+// the alignment with the atomic commands' defensive filtering for list reads:
+// any terminal empty-page placeholder variant — not just the exact
+// four-null-field sentinel recognized by calendarcompat.NormalizeTerminalEmptyEvents
+// — must project to an empty collection, while real rows survive. Busy/free
+// status is excluded here because it is a decision signal: malformed busy
+// evidence must fail closed rather than be silently projected to "free".
 func TestCrossPlatformCoverageCalendarEmptyCollectionsFilterLikeAtomicCommands(t *testing.T) {
 	// Sentinel shape variants the exact-shape normalizer rejects; the generic
 	// item-level filtering must still yield an empty collection.
@@ -196,14 +198,6 @@ func TestCrossPlatformCoverageCalendarEmptyCollectionsFilterLikeAtomicCommands(t
 			}})
 			if err != nil || len(rows) != 0 {
 				t.Fatalf("calendar placeholder not filtered: %#v %v", rows, err)
-			}
-		},
-		"busy": func(t *testing.T) {
-			rows, err := busySearchProject(map[string]any{"success": true, "result": map[string]any{
-				"busy": []any{map[string]any{"scheduleItems": []any{map[string]any{"start": nil, "end": nil}}}},
-			}})
-			if err != nil || len(rows) != 0 {
-				t.Fatalf("busy placeholder not filtered: %#v %v", rows, err)
 			}
 		},
 	} {

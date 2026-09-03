@@ -192,6 +192,20 @@ func calendarOnlyEnvelopeFields(candidate map[string]any) bool {
 }
 
 func requireCalendarCollection(data map[string]any, operation string, keys ...string) ([]any, map[string]any, error) {
+	return requireCalendarCollectionMode(data, operation, false, keys...)
+}
+
+// requireCalendarCollectionStrict is the fail-closed variant used for responses
+// where a malformed item must not be silently projected to an empty result.
+// Busy/free status is the current example: returning "free: true" for a
+// malformed response could lead the user to schedule a conflicting meeting,
+// so every item must be a non-empty object and downstream fields (scheduleItems,
+// start/end) are validated by the caller.
+func requireCalendarCollectionStrict(data map[string]any, operation string, keys ...string) ([]any, map[string]any, error) {
+	return requireCalendarCollectionMode(data, operation, true, keys...)
+}
+
+func requireCalendarCollectionMode(data map[string]any, operation string, strict bool, keys ...string) ([]any, map[string]any, error) {
 	data, err := requireCalendarResponse(data, operation)
 	if err != nil {
 		return nil, nil, err
@@ -209,17 +223,41 @@ func requireCalendarCollection(data map[string]any, operation string, keys ...st
 			if key == "events" {
 				items, _ = calendarcompat.NormalizeTerminalEmptyEvents(items, container)
 			}
-			return filterCalendarCollectionItems(items), container, nil
+			if strict {
+				if err := validateCalendarCollectionItems(items, operation, key); err != nil {
+					return nil, nil, err
+				}
+			} else {
+				items = filterCalendarCollectionItems(items)
+			}
+			return items, container, nil
 		}
 	}
 	for _, wrapper := range []string{"result", "data"} {
 		if value, present := data[wrapper]; present {
 			if items, ok := value.([]any); ok {
-				return filterCalendarCollectionItems(items), data, nil
+				if strict {
+					if err := validateCalendarCollectionItems(items, operation, wrapper); err != nil {
+						return nil, nil, err
+					}
+				} else {
+					items = filterCalendarCollectionItems(items)
+				}
+				return items, data, nil
 			}
 		}
 	}
 	return nil, nil, calendarResponseError(operation, "missing_collection", "响应缺少声明的业务数组；不能把缺字段、内部错误或协议漂移投影成空结果")
+}
+
+func validateCalendarCollectionItems(items []any, operation, key string) error {
+	for index, item := range items {
+		object, ok := item.(map[string]any)
+		if !ok || len(object) == 0 {
+			return calendarResponseError(operation, "malformed_collection_item", fmt.Sprintf("响应 %s[%d] 不是非空对象", key, index))
+		}
+	}
+	return nil
 }
 
 // filterCalendarCollectionItems drops non-object and empty-object entries from

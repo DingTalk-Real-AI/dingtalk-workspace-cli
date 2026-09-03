@@ -550,9 +550,10 @@ func TestCrossPlatformCoverageCalendarLegacyStrictBranches(t *testing.T) {
 			}
 		})
 	}
-	// Busy entries without scheduleItems, non-object items, and items without
-	// usable start/end are skipped like the atomic command
-	// (callFilteredBusyStatus) instead of failing the whole read.
+	// Busy/free status is a decision signal: malformed evidence must fail closed
+	// rather than be projected to "free: true". callFilteredBusyStatus only
+	// filters individual scheduleItems that lack a usable status; it never treats
+	// a missing scheduleItems array or a missing start/end as an empty/free slot.
 	for name, response := range map[string]string{
 		"missing":  `{"success":true,"result":{"busy":[{}]}}`,
 		"bad-item": `{"success":true,"result":{"busy":[{"scheduleItems":["bad"]}]}}`,
@@ -560,8 +561,8 @@ func TestCrossPlatformCoverageCalendarLegacyStrictBranches(t *testing.T) {
 	} {
 		t.Run("busy-"+name, func(t *testing.T) {
 			caller := &calendarCoverageCaller{responses: map[string][]string{"query_busy_status": {response}}}
-			if err := runCalendarCoverage(t, BusySearch, caller, "--users", "u", "--rooms", "r", "--start", calendarCoverageStart, "--end", calendarCoverageEnd); err != nil {
-				t.Fatalf("unusable busy evidence not filtered: %v", err)
+			if err := runCalendarCoverage(t, BusySearch, caller, "--users", "u", "--rooms", "r", "--start", calendarCoverageStart, "--end", calendarCoverageEnd); err == nil {
+				t.Fatal("malformed busy response accepted")
 			}
 		})
 	}
