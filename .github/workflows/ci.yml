@@ -581,27 +581,19 @@ jobs:
     # shards at full-suite scope; release-scripts is included because its
     # dedicated job only runs at full-suite or release-sensitive scope, and
     # dropping it here would stop testing test/scripts changes entirely.
-    # internal/app is carried by one shard per bounded partition rather than a
-    # single app shard: the partitions used to run end to end inside one job,
-    # where the Schema partition alone owned most of the wall clock. The
-    # app-<partition> names are pinned to the helper's partition set by
-    # TestCIAppRacePartitionMatrixMatchesHelper, so a partition can never lose
-    # its job silently. The CrossPlatformCoverage-heavy C range is split again
-    # to retain headroom on runners reclaimed near the five-minute mark.
+    # internal/app keeps nine process-isolated logical partitions, balanced
+    # across three physical app lanes. The lane names and their exact partition
+    # union are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper.
+    # This preserves memory release between Go test processes while reducing
+    # hosted-runner fan-out by six jobs per focused run.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app-schema
-          - app-a-b
-          - app-c-a-l
-          - app-c-m-o
-          - app-c-p-r
-          - app-c-s-z
-          - app-c-other
-          - app-d-r
-          - app-s-z-example-fuzz
+          - app-lane-1
+          - app-lane-2
+          - app-lane-3
           - generators
           - helpers
           - cli
@@ -643,12 +635,12 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          # Every app partition shard tests the same single internal/app
-          # package, so the impacted-package query uses the base shard name and
-          # the partition only selects which tests run.
+          # Every app lane tests the same single internal/app package, so the
+          # impacted-package query uses the base shard name and the lane only
+          # selects which process-isolated test partitions run.
           package_shard="$TEST_SHARD"
           case "$TEST_SHARD" in
-            app-*) package_shard=app ;;
+            app-lane-*) package_shard=app ;;
           esac
           package_output="$(
             ./scripts/ci/changed-test-packages.sh \
@@ -699,15 +691,13 @@ jobs:
             }
           done
           case "$TEST_SHARD" in
-            app-*)
-              # A single long-lived app test process retains every constructed
-              # command tree in framework registries. Each partition is its own
-              # job, so that state is released when the process exits and the
-              # partitions run concurrently instead of end to end. The helper
-              # still verifies that the partition patterns cover every top-level
-              # test exactly once before running the one it was asked for.
+            app-lane-*)
+              # Each lane invokes several logical partitions sequentially, and
+              # every partition remains a fresh Go test process so framework
+              # registries are released between partitions. The helper verifies
+              # that all lanes cover every logical partition exactly once.
               test "${#packages[@]}" -eq 1
-              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              ./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"
               exit 0
               ;;
           esac
@@ -731,26 +721,19 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    # internal/app is split across one shard per bounded partition so the
-    # partitions run concurrently and each releases its framework registries
-    # when the process exits; cli/smoke need headroom beyond go test -timeout for
-    # setup + assembly. The app-<partition> names are pinned to the helper's
-    # partition set by TestCIAppRacePartitionMatrixMatchesHelper. The
-    # CrossPlatformCoverage-heavy C range is split again for runner headroom.
+    # internal/app keeps nine process-isolated logical partitions, balanced
+    # across three physical app lanes. The lane names and exact partition union
+    # are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper. This
+    # preserves registry release while reducing hosted-runner fan-out by six
+    # jobs. cli/smoke retain extra timeout headroom for setup + assembly.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app-schema
-          - app-a-b
-          - app-c-a-l
-          - app-c-m-o
-          - app-c-p-r
-          - app-c-s-z
-          - app-c-other
-          - app-d-r
-          - app-s-z-example-fuzz
+          - app-lane-1
+          - app-lane-2
+          - app-lane-3
           - generators
           - helpers
           - cli
@@ -776,27 +759,25 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          # Every app partition shard tests the same single internal/app
-          # package, so the package query uses the base shard name and the
-          # partition only selects which tests run.
+          # Every app lane tests the same single internal/app package, so the
+          # package query uses the base shard name and the lane only selects
+          # which process-isolated test partitions run.
           package_shard="$TEST_SHARD"
           case "$TEST_SHARD" in
-            app-*) package_shard=app ;;
+            app-lane-*) package_shard=app ;;
           esac
           package_output="$(./scripts/ci/test-packages.sh list "$package_shard")"
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
           case "$TEST_SHARD" in
-            app-*)
-              # A single long-lived app test process retains every constructed
-              # command tree in framework registries. Each partition is its own
-              # job, so that state is released when the process exits and the
-              # partitions run concurrently instead of end to end. The helper
-              # still verifies that the partition patterns cover every top-level
-              # test exactly once before running the one it was asked for.
+            app-lane-*)
+              # Each lane invokes several logical partitions sequentially, and
+              # every partition remains a fresh Go test process so framework
+              # registries are released between partitions. The helper verifies
+              # that all lanes cover every logical partition exactly once.
               test "${#packages[@]}" -eq 1
-              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              ./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"
               exit 0
               ;;
           esac
