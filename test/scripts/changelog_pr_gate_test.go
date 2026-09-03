@@ -1336,8 +1336,8 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing focused test job boundaries")
 	}
 	focusedJob := admission[focusedStart:focusedEnd]
-	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
-		t.Error("focused test shards must run for every non-doc, non-full-suite revision")
+	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
+		t.Error("focused test shards must run for every non-doc, non-reused, non-full-suite revision")
 	}
 	if !strings.Contains(focusedJob, "timeout-minutes: 20") {
 		t.Error("focused test job must allow the scoped race suite up to 20 minutes")
