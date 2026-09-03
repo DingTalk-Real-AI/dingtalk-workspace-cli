@@ -255,6 +255,7 @@ jobs:
         run: |
           set -euo pipefail
           go test -count=1 -p 1 \
+            -v \
             -coverprofile=coverage-cache.txt \
             -covermode=atomic \
             ./ ./cmd/... ./internal/... ./skills/...
