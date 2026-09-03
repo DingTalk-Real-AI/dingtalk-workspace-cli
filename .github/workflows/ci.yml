@@ -1518,10 +1518,9 @@ jobs:
       - name: Build
         run: make build
 
-      # Each shard keeps -p 1 so the authoritative measurement stays serial
-      # inside one instrumented process group; shards run on isolated runners,
-      # and scripts/ci/test-packages.sh verify proves the shard union equals
-      # the previous single full-suite package set exactly once.
+      # Keep the matrix at five hosted runners. The shared runner balances the
+      # existing internal/app test partitions across those jobs, bounds package
+      # parallelism inside each runner, and preserves exact package ownership.
       - name: Run current shard tests with coverage
         shell: bash
         env:
@@ -1529,14 +1528,8 @@ jobs:
           COVERAGE_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD")"
-          test -n "$package_output"
-          mapfile -t packages <<< "$package_output"
-          test "${#packages[@]}" -gt 0
-          go test -count=1 -p 1 \
-            -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
-            -covermode=atomic \
-            "${packages[@]}"
+          ./scripts/ci/run-coverage-shard.sh run \
+            "$COVERAGE_SHARD" "coverage-shard-$COVERAGE_SHARD.txt"
           go tool cover -func="coverage-shard-$COVERAGE_SHARD.txt" | tail -n 1
 
       - name: Upload current shard coverage profile
@@ -1691,14 +1684,9 @@ jobs:
           (
             cd "$base_worktree"
             if [ "$FULL_SUITE" = true ]; then
-              # internal/app full-suite coverage exceeds go test's 10m default
-              # on slower hosted runners; keep the budget inside the 30m job cap.
-              go test -count=1 \
-                -p 1 \
-                -timeout=20m \
-                -coverprofile="$GITHUB_WORKSPACE/coverage-base.txt" \
-                -covermode=atomic \
-                ./ ./cmd/... ./internal/... ./skills/...
+              DWS_COVERAGE_ROOT="$base_worktree" \
+                "$GITHUB_WORKSPACE/scripts/ci/run-full-coverage.sh" \
+                "$GITHUB_WORKSPACE/coverage-base.txt"
             elif [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
               printf 'mode: atomic\n' > "$GITHUB_WORKSPACE/coverage-base.txt"
             else
@@ -1844,10 +1832,7 @@ jobs:
           DWS_PACKAGE_VERSION: 0.0.0-test
         run: |
           set -euo pipefail
-          go test -count=1 -p 1 \
-            -coverprofile=coverage-cache.txt \
-            -covermode=atomic \
-            ./ ./cmd/... ./internal/... ./skills/...
+          ./scripts/ci/run-full-coverage.sh coverage-cache.txt
           test -s coverage-cache.txt
           test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
 
@@ -2012,25 +1997,24 @@ jobs:
           name: coverage-baseline-profile
           path: .
 
-      # Shard profiles cover disjoint package sets, so their block-level
-      # concatenation is the same candidate profile one serial run produced.
-      # Every expected shard must be present; a missing shard would silently
-      # shrink the scope-matched overall comparison.
+      # Each package belongs to one shard, while internal/app test partitions
+      # are balanced across the same five jobs. Union duplicate app source
+      # blocks by their greatest atomic count. Every expected shard must be
+      # present; a missing shard would silently shrink the comparison.
       - name: Assemble full-suite coverage profile
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
         shell: bash
         run: |
           set -euo pipefail
           test ! -f coverage.txt
+          profiles=()
           for shard in app cli generators helpers remaining; do
             profile="coverage-shard-$shard.txt"
             test -f "$profile"
             test "$(head -n 1 "$profile")" = "mode: atomic"
+            profiles+=("$profile")
           done
-          printf 'mode: atomic\n' > coverage.txt
-          for shard in app cli generators helpers remaining; do
-            tail -n +2 "coverage-shard-$shard.txt" >> coverage.txt
-          done
+          ./scripts/ci/merge-coverage-profiles.sh coverage.txt "${profiles[@]}"
 
       - name: Enforce coverage gate
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
