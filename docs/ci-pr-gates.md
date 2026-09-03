@@ -147,7 +147,12 @@ Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
 an explicit manual dispatch). A failing downstream run remains a real
 regression and must be repaired, but it must not be represented by a synthetic
-successful PR check.
+successful PR check. The workflow executes the isolated profile storage,
+routing, migration, and aggregation chain without repeating the complete
+`internal/auth`, `internal/app`, and `test/cli` package suites. Those Go
+regressions remain owned by the protected-main test and coverage shards. The
+release E2E validation uses the same boundary so release verification does not
+duplicate an already admitted commit's complete Go suite.
 
 ```mermaid
 flowchart TB
