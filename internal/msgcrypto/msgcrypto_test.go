@@ -1,0 +1,345 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package msgcrypto
+
+import (
+	"context"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// fakeCipher stands in for a backend so the wrapper logic can be tested on
+// every platform, with or without the safechat tag.
+type fakeCipher struct {
+	mu         sync.Mutex
+	encrypted  [][]byte
+	decrypted  [][]byte
+	closeCount int
+	closeErr   error
+}
+
+func (f *fakeCipher) EncryptMessage(_ context.Context, _, _ string, plaintext []byte) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.encrypted = append(f.encrypted, plaintext)
+	return []byte("cipher:" + string(plaintext)), nil
+}
+
+func (f *fakeCipher) DecryptMessage(_ context.Context, _, _ string, ciphertext []byte) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.decrypted = append(f.decrypted, ciphertext)
+	return []byte(strings.TrimPrefix(string(ciphertext), "cipher:")), nil
+}
+
+func (f *fakeCipher) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closeCount++
+	return f.closeErr
+}
+
+// newTrackedForTest wraps backend and claims the process slot the same way
+// Open does, so slot release can be asserted.
+func newTrackedForTest(t *testing.T, backend Cipher) *trackedCipher {
+	t.Helper()
+	process.mu.Lock()
+	process.open = true
+	process.mu.Unlock()
+	t.Cleanup(func() {
+		process.mu.Lock()
+		process.open = false
+		process.mu.Unlock()
+	})
+	return &trackedCipher{backend: backend}
+}
+
+func TestConfigWithDefaultsFillsKeystoreDir(t *testing.T) {
+	cfg := Config{}.withDefaults()
+	if cfg.KeystoreDir == "" {
+		t.Fatal("withDefaults left KeystoreDir empty")
+	}
+	if want := DefaultKeystoreDir(); cfg.KeystoreDir != want {
+		t.Fatalf("KeystoreDir = %q, want %q", cfg.KeystoreDir, want)
+	}
+}
+
+func TestConfigWithDefaultsKeepsExplicitKeystoreDir(t *testing.T) {
+	cfg := Config{KeystoreDir: "/custom/keys"}.withDefaults()
+	if cfg.KeystoreDir != "/custom/keys" {
+		t.Fatalf("KeystoreDir = %q, want /custom/keys", cfg.KeystoreDir)
+	}
+}
+
+func TestDefaultKeystoreDirHonoursConfigDirOverride(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	got := DefaultKeystoreDir()
+	if !strings.HasSuffix(got, filepath.Join("safechat", "keystore")) {
+		t.Fatalf("DefaultKeystoreDir() = %q, want it to end with safechat/keystore", got)
+	}
+	if !strings.HasPrefix(got, os.Getenv("DWS_CONFIG_DIR")) {
+		t.Fatalf("DefaultKeystoreDir() = %q, want it under DWS_CONFIG_DIR", got)
+	}
+}
+
+func TestConfigValidateRequiresAuthCodeProvider(t *testing.T) {
+	err := Config{KeystoreDir: "/tmp/keys"}.validate()
+	if !errors.Is(err, ErrNoAuthCodeProvider) {
+		t.Fatalf("validate() = %v, want ErrNoAuthCodeProvider", err)
+	}
+}
+
+func TestConfigValidateAcceptsCompleteConfig(t *testing.T) {
+	cfg := Config{
+		KeystoreDir: "/tmp/keys",
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	}
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("validate() = %v, want nil", err)
+	}
+}
+
+func TestConfigValidateRequiresKeyServer(t *testing.T) {
+	err := Config{KeystoreDir: "/tmp/keys", AuthCode: StaticAuthCode("code")}.validate()
+	if !errors.Is(err, ErrNoKeyServer) {
+		t.Fatalf("validate() = %v, want ErrNoKeyServer", err)
+	}
+}
+
+func TestConfigValidateRejectsHTTPKeyServer(t *testing.T) {
+	err := Config{
+		KeystoreDir: "/tmp/keys",
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "http://key.example.test",
+	}.validate()
+	if !errors.Is(err, ErrKeyServerNotHTTPS) {
+		t.Fatalf("validate() = %v, want ErrKeyServerNotHTTPS", err)
+	}
+}
+
+func TestPrepareKeystoreCreatesOwnerOnlyDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nested", "keystore")
+	if err := prepareKeystore(dir); err != nil {
+		t.Fatalf("prepareKeystore() = %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("prepareKeystore did not create a directory")
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if got := info.Mode().Perm(); got != keystoreDirPerm {
+		t.Fatalf("perm = %#o, want %#o", got, keystoreDirPerm)
+	}
+}
+
+func TestPrepareKeystoreTightensLoosePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not modelled on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "keystore")
+	if err := os.MkdirAll(dir, fs.FileMode(0o755)); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := prepareKeystore(dir); err != nil {
+		t.Fatalf("prepareKeystore() = %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != keystoreDirPerm {
+		t.Fatalf("perm = %#o, want %#o (key material must stay owner-only)", got, keystoreDirPerm)
+	}
+}
+
+func TestPrepareKeystoreRejectsFilePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keystore")
+	if err := os.WriteFile(path, []byte("not a dir"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	err := prepareKeystore(path)
+	if err == nil {
+		t.Fatal("prepareKeystore() = nil, want an error for a non-directory path")
+	}
+}
+
+func TestOpenRejectsMissingAuthCodeProviderBeforeTouchingDisk(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "keystore")
+	_, err := Open(context.Background(), Config{KeystoreDir: dir})
+	if !errors.Is(err, ErrNoAuthCodeProvider) {
+		t.Fatalf("Open() = %v, want ErrNoAuthCodeProvider", err)
+	}
+	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+		t.Fatal("Open created the keystore dir despite an invalid config")
+	}
+}
+
+func TestOpenRejectsMissingKeyServerBeforeTouchingDisk(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "keystore")
+	_, err := Open(context.Background(), Config{
+		KeystoreDir: dir,
+		AuthCode:    StaticAuthCode("code"),
+	})
+	if !errors.Is(err, ErrNoKeyServer) {
+		t.Fatalf("Open() = %v, want ErrNoKeyServer", err)
+	}
+	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+		t.Fatal("Open created the keystore dir despite a missing KeyServer")
+	}
+}
+
+func TestOpenWithoutBackendReportsUnavailable(t *testing.T) {
+	if Available() {
+		t.Skip("this binary has the safechat backend compiled in")
+	}
+	_, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Open() = %v, want ErrUnavailable", err)
+	}
+}
+
+func TestAvailableAgreesWithBackendVersion(t *testing.T) {
+	if Available() != (BackendVersion != "") {
+		t.Fatalf("Available() = %v but BackendVersion = %q; they must agree", Available(), BackendVersion)
+	}
+}
+
+func TestTrackedCipherRoundTripsThroughBackend(t *testing.T) {
+	backend := &fakeCipher{}
+	cipher := newTrackedForTest(t, backend)
+
+	ciphertext, err := cipher.EncryptMessage(context.Background(), "corp", "staff", []byte("hello"))
+	if err != nil {
+		t.Fatalf("EncryptMessage() = %v", err)
+	}
+	plaintext, err := cipher.DecryptMessage(context.Background(), "corp", "staff", ciphertext)
+	if err != nil {
+		t.Fatalf("DecryptMessage() = %v", err)
+	}
+	if string(plaintext) != "hello" {
+		t.Fatalf("round trip = %q, want hello", plaintext)
+	}
+}
+
+func TestTrackedCipherRejectsEmptyCorpID(t *testing.T) {
+	cipher := newTrackedForTest(t, &fakeCipher{})
+	if _, err := cipher.EncryptMessage(context.Background(), "", "staff", []byte("x")); !errors.Is(err, ErrNoCorpID) {
+		t.Fatalf("EncryptMessage() = %v, want ErrNoCorpID", err)
+	}
+	if _, err := cipher.DecryptMessage(context.Background(), "", "staff", []byte("x")); !errors.Is(err, ErrNoCorpID) {
+		t.Fatalf("DecryptMessage() = %v, want ErrNoCorpID", err)
+	}
+}
+
+func TestTrackedCipherRejectsEmptyPayload(t *testing.T) {
+	cipher := newTrackedForTest(t, &fakeCipher{})
+	if _, err := cipher.EncryptMessage(context.Background(), "corp", "staff", nil); !errors.Is(err, ErrEmptyPayload) {
+		t.Fatalf("EncryptMessage() = %v, want ErrEmptyPayload", err)
+	}
+	if _, err := cipher.DecryptMessage(context.Background(), "corp", "staff", []byte{}); !errors.Is(err, ErrEmptyPayload) {
+		t.Fatalf("DecryptMessage() = %v, want ErrEmptyPayload", err)
+	}
+}
+
+func TestTrackedCipherRejectsUseAfterClose(t *testing.T) {
+	backend := &fakeCipher{}
+	cipher := newTrackedForTest(t, backend)
+	if err := cipher.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if _, err := cipher.EncryptMessage(context.Background(), "corp", "staff", []byte("x")); !errors.Is(err, ErrClosed) {
+		t.Fatalf("EncryptMessage() after Close = %v, want ErrClosed", err)
+	}
+}
+
+func TestTrackedCipherCloseIsIdempotentAndClosesBackendOnce(t *testing.T) {
+	backend := &fakeCipher{}
+	cipher := newTrackedForTest(t, backend)
+	for i := 0; i < 3; i++ {
+		if err := cipher.Close(); err != nil {
+			t.Fatalf("Close() #%d = %v", i+1, err)
+		}
+	}
+	if backend.closeCount != 1 {
+		t.Fatalf("backend Close called %d times, want exactly 1", backend.closeCount)
+	}
+}
+
+func TestTrackedCipherCloseReleasesProcessSlot(t *testing.T) {
+	cipher := newTrackedForTest(t, &fakeCipher{})
+	if err := cipher.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	process.mu.Lock()
+	open := process.open
+	process.mu.Unlock()
+	if open {
+		t.Fatal("Close did not release the process slot, so a later Open would fail")
+	}
+}
+
+func TestTrackedCipherClosePropagatesBackendError(t *testing.T) {
+	wantErr := errors.New("backend close failed")
+	cipher := newTrackedForTest(t, &fakeCipher{closeErr: wantErr})
+	if err := cipher.Close(); !errors.Is(err, wantErr) {
+		t.Fatalf("Close() = %v, want %v", err, wantErr)
+	}
+	process.mu.Lock()
+	open := process.open
+	process.mu.Unlock()
+	if open {
+		t.Fatal("a failing backend Close must still release the process slot")
+	}
+}
+
+func TestOpenRefusesSecondCipherWhileOneIsOpen(t *testing.T) {
+	// The vendor C library keeps global state, so a second concurrent
+	// cipher must be refused rather than silently corrupt it.
+	process.mu.Lock()
+	process.open = true
+	process.mu.Unlock()
+	t.Cleanup(func() {
+		process.mu.Lock()
+		process.open = false
+		process.mu.Unlock()
+	})
+
+	if !Available() {
+		t.Skip("Open reports ErrUnavailable before reaching the single-instance guard")
+	}
+	_, err := Open(context.Background(), Config{
+		KeystoreDir: filepath.Join(t.TempDir(), "keystore"),
+		AuthCode:    StaticAuthCode("code"),
+		KeyServer:   "https://key.example.test",
+	})
+	if !errors.Is(err, ErrAlreadyOpen) {
+		t.Fatalf("Open() = %v, want ErrAlreadyOpen", err)
+	}
+}

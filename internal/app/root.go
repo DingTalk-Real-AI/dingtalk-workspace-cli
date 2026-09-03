@@ -1148,6 +1148,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		schemaCmd,
 		navigationGroup(mcpCmd),
 	}
+	// Add safechat command only when built with safechat tag
+	if safeChatCmd := newSafeChatCommand(); safeChatCmd != nil {
+		utilityCommands = append(utilityCommands, safeChatCmd)
+	}
 	root.AddCommand(utilityCommands...)
 
 	if declarationOnly {
