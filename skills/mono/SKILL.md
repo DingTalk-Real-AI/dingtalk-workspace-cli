@@ -171,7 +171,7 @@ cli_version: ">=1.0.61"
 | `chat` | `group members remove` | 移除群成员 |
 | `chat` | `message recall-by-bot` | 撤回机器人已发消息 |
 | `doc` | `delete` | **删除整篇文档/文件**到回收站（与 `block delete` 不同，本命令删除整个 node） |
-| `doc` | `block delete` | 删除文档单个块（不可恢复） |
+| `doc` | `block delete` | 删除文档块（不可恢复）；`--block-id` 支持逗号分隔一次删多个 |
 | `doc` | `permission update` | 修改协作者权限（降权可能影响他人访问） |
 | `ding` | `message recall` | 撤回已发 DING 消息 |
 | `oa` | `approval revoke` | 撤销自己发起的审批实例 |

@@ -2,7 +2,7 @@
 
 > 返回入口：[DingTalk AITable Skill](../SKILL.md)
 
-本文件只用于根 Skill 和精确操作 Reference 都未覆盖的低频底层能力。Base/Table 创建、记录 CRUD、筛选排序、视图、导入导出和 Dashboard 等已覆盖能力必须返回根 Skill；本文件不直接导航到其他 AITable Reference。
+本文件只用于根 Skill 和精确操作 Reference 都未覆盖的低频底层能力。Base/Table 创建、应用模式、记录 CRUD、筛选排序、视图、导入导出和 Dashboard 等已覆盖能力必须返回根 Skill；本文件不直接导航到其他 AITable Reference。
 
 ## 使用边界
 
@@ -15,7 +15,7 @@
 
 ## 返回规则
 
-Base、Table、普通 Field、普通 Record、View、Dashboard、筛选排序、导入导出等已覆盖能力全部返回根 Skill；本索引不重复维护高频路由，也不作为 Reference 之间的中转站。
+Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、View、Dashboard、筛选排序、导入导出等已覆盖能力全部返回根 Skill；本索引不重复维护高频路由，也不作为 Reference 之间的中转站。
 
 ## 低频底层命令族
 
@@ -46,8 +46,9 @@ Base、Table、普通 Field、普通 Record、View、Dashboard、筛选排序、
 | `record create` / `+record-query` | 当前 Table 下的 `recordId` |
 | `view create` / `+view-get` | 当前 Table 下的 `viewId` |
 | Dashboard 或 Chart 创建结果 | 当前 Base 下的 `dashboardId` / `chartId` |
+| `app get` / `app page list` / `app widget list` | 当前 Base 下的 `appId` / `pageId` / `widgetId`；应用页面 `pageId` 同时是对应 Dashboard ID |
 
-`baseId` / `tableId` / `fieldId` / `recordId` / `viewId` 是不同类型，不得轮流代入试错。Base 复制目标按根 Skill 的 Golden Route 解析。
+`baseId` / `tableId` / `fieldId` / `recordId` / `viewId` / `appId` / `pageId` / `widgetId` 是不同类型，不得轮流代入试错；唯一例外是应用页面 `pageId` 与其对应 Dashboard ID 同值。Base 复制目标按根 Skill 的 Golden Route 解析。
 
 ## 故障处理
 
