@@ -3046,7 +3046,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3067,7 +3069,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3088,7 +3092,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3109,7 +3115,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3130,7 +3138,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3151,7 +3161,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3172,7 +3184,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3193,7 +3207,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3214,7 +3230,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3235,7 +3253,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3256,7 +3276,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3277,7 +3299,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3298,7 +3322,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3319,7 +3345,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3340,7 +3368,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3361,7 +3391,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3382,7 +3414,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3403,7 +3437,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3424,7 +3460,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi
@@ -3445,7 +3483,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+          # This job deliberately skips checkout, so gh has no git working
+          # directory to infer the repository from; bind it explicitly.
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" 2>&1)"; then
             printf '%s\n' "$cancel_output"
             echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
           fi

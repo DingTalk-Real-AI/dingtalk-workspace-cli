@@ -122,8 +122,8 @@ func TestCIFailFastTripwiresWatchEverySubstantiveJob(t *testing.T) {
 			t.Fatalf("%s steps = %d, want exactly one cancellation step", tripwireID, len(tripwire.Steps))
 		}
 		step := tripwire.Steps[0]
-		if !strings.Contains(step.Run, `gh run cancel "$GITHUB_RUN_ID"`) {
-			t.Errorf("%s step must cancel the current run through gh run cancel", tripwireID)
+		if !strings.Contains(step.Run, `gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY"`) {
+			t.Errorf("%s step must cancel the current run through gh run cancel with an explicit -R repository binding; the job has no checkout, so gh cannot infer the base repo", tripwireID)
 		}
 		if step.Env["GH_TOKEN"] != "${{ github.token }}" {
 			t.Errorf("%s step must authenticate gh with the job GITHUB_TOKEN", tripwireID)
