@@ -1455,7 +1455,7 @@ type CLIAuthResult struct {
 	ChannelScope         string   `json:"channelScope,omitempty"`         // "all" | "specified"
 	AllowedChannels      []string `json:"allowedChannels,omitempty"`      // channelCode list when channelScope="specified"
 	ChannelConfigEnabled bool     `json:"channelConfigEnabled,omitempty"` // whether org has any channel restriction configured
-	HasDwsApply          bool     `json:"hasDwsApply,omitempty"`            // whether the user has already submitted an apply request on DWS
+	HasDwsApply          bool     `json:"hasDwsApply,omitempty"`          // whether the user has already submitted an apply request on DWS
 }
 
 // classifyDenialReason inspects a CLIAuthStatus response and returns a machine-readable
