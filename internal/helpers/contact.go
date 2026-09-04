@@ -3017,9 +3017,12 @@ contact user profile fields 获取可用字段列表。
 	})
 
 	contactOrgApplyListCmd := newContactOrgApplyListCommand()
+	// Safety：查询会把服务端未读申请标记为已读（见 Long 帮助），因此 Effect
+	// 如实声明为 write（对齐 chat mark-read 先例）；副作用仅清除未读标记，
+	// Risk 仍为 low 且无需用户确认，重复查询幂等。
 	DeclareLeafMetadata(contactOrgApplyListCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "read", Risk: "low",
+			Effect: "write", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
@@ -3030,7 +3033,7 @@ contact user profile fields 获取可用字段列表。
 				CLIPath:        "contact org apply-list",
 				PrimaryCLIPath: "contact org apply-list",
 			},
-			Description: "分页查询用户主动申请加入企业的记录（可按状态筛选），返回申请 ID 供后续审批命令使用",
+			Description: "分页查询用户主动申请加入企业的记录（可按状态筛选），返回申请 ID 供后续审批命令使用；查询后服务端会把未读申请标记为已读",
 			Result: &contract.ResultSpec{
 				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 				DataSchema: json.RawMessage(`{"type":"object","description":"加入企业申请列表","properties":{"result":{"type":"object","description":"申请记录列表","properties":{"values":{"type":"array","description":"申请记录","items":{"type":"object","properties":{"id":{"type":"number","description":"申请记录ID，供 apply-approve/reject/block/remove 使用"},"status":{"type":"number","description":"申请状态：1=未处理，2=已通过，3=已拒绝，4=已屏蔽"},"content":{"type":"string","description":"申请人姓名"},"gmtCreate":{"type":"number","description":"申请时间（毫秒时间戳）"},"dept":{"type":"object","description":"申请加入的部门","properties":{"deptId":{"type":"number","description":"部门ID"},"deptName":{"type":"string","description":"部门名称"},"deptPathName":{"type":"string","description":"部门名称全路径"}}},"inviterEmployeeModel":{"type":"object","description":"邀请人信息","properties":{"nick":{"type":"string","description":"邀请人昵称"},"name":{"type":"string","description":"邀请人姓名"}}},"optEmployeeModel":{"type":"object","description":"操作人信息","properties":{"nick":{"type":"string","description":"操作人昵称"},"name":{"type":"string","description":"操作人姓名"}}}}}},"hasMore":{"type":"boolean","description":"是否还有更多数据"},"nextCursor":{"type":"number","description":"下一页游标，hasMore=true 时传回继续翻页"}}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
@@ -3041,9 +3044,9 @@ contact user profile fields 获取可用字段列表。
 				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "query_org_apply_list"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "查询用户申请加入企业的记录列表",
-				UseWhen:      []string{"用户需要查看待处理/已处理的企业加入申请，或需要获取申请 ID 以便审批（同意/拒绝/屏蔽/删除）"},
-				AvoidWhen:    []string{"查询管理员发出的邀请记录用 contact org invite-list；直接审批时仍应先读本命令确认申请人与状态"},
+				AgentSummary: "查询用户申请加入企业的记录列表（查询会把未读申请标记为已读）",
+				UseWhen:      []string{"用户需要查看待处理/已处理的企业加入申请，或需要获取申请 ID 以便审批（同意/拒绝/屏蔽/删除）；注意查询会把服务端未读申请标记为已读，属有副作用的查询"},
+				AvoidWhen:    []string{"查询管理员发出的邀请记录用 contact org invite-list；直接审批时仍应先读本命令确认申请人与状态，注意本命令会清除未读标记"},
 				Examples: []string{
 					"dws contact org apply-list",
 					"dws contact org apply-list --status 0 --size 50",

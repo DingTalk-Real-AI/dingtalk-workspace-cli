@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
 
@@ -142,4 +143,47 @@ func TestContactInviteAdminFlagEdges(t *testing.T) {
 			t.Fatalf("contactRequireNoAuditFlag err = %v, want --no-audit 解析失败", err)
 		}
 	})
+}
+
+// TestContactApplyListSafetyProjectionMatchesBehavior 是 apply-list 安全语义
+// 的包内回归（CI coverage gate 只统计包内覆盖）：查询会把服务端未读申请
+// 标记为已读，最终投影必须声明 Effect=write 而非把有副作用的查询伪装成
+// 纯读取；副作用仅清除未读标记，Confirmation 保持 not_required，运行侧
+// 不带 --yes 也直接调用 query_org_apply_list、不出现确认 gate。
+func TestContactApplyListSafetyProjectionMatchesBehavior(t *testing.T) {
+	root := newContactCommand()
+	applyList := requireWukongSyncCommand(t, root, "org", "apply-list")
+	payload, ok := contractfinal.RuntimeContractFinal(applyList)
+	if !ok {
+		t.Fatal("apply-list has no runtime contract final payload")
+	}
+	if payload.Safety == nil {
+		t.Fatal("apply-list payload has no safety declaration")
+	}
+	if got := payload.Safety; got.Effect != "write" || got.Risk != "low" ||
+		got.Confirmation != "not_required" || got.Idempotency != "idempotent" {
+		t.Fatalf("apply-list safety = %+v, want write/low/not_required/idempotent", got)
+	}
+	if !strings.Contains(payload.Description, "标记为已读") {
+		t.Fatalf("apply-list description %q must disclose the read-marking side effect", payload.Description)
+	}
+	if payload.Selection == nil || !strings.Contains(payload.Selection.AgentSummary, "标记为已读") {
+		t.Fatalf("apply-list selection must disclose the read-marking side effect: %+v", payload.Selection)
+	}
+
+	// 运行行为与声明一致：not_required 不设确认 gate，不带 --yes 直接执行。
+	caller, err := runContactEnterpriseCommand(t, "org", "apply-list")
+	if err != nil {
+		t.Fatalf("apply-list without --yes must not hit the confirmation gate: %v", err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("apply-list want exactly 1 MCP call, got %d: %+v", len(caller.calls), caller.calls)
+	}
+	call := caller.calls[0]
+	if call.productID != "contact" || call.toolName != "query_org_apply_list" {
+		t.Fatalf("apply-list call = %s/%s, want contact/query_org_apply_list", call.productID, call.toolName)
+	}
+	if want := map[string]any{"status": int64(1), "size": int64(20)}; !reflect.DeepEqual(call.args, want) {
+		t.Fatalf("apply-list args = %#v, want %#v", call.args, want)
+	}
 }
