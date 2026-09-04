@@ -3213,12 +3213,15 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
 	}
 
-	for _, relative := range []string{
-		"third_party/safechat-go-sdk/cgo_windows_amd64.go",
-		"third_party/safechat-go-sdk/cgo_windows_arm64.go",
+	windowsCompat := read("third_party/safechat-go-sdk/msvcrt_compat_windows.c")
+	for _, required := range []string{
+		`__asm__("_snprintf")`,
+		`__asm__("_vsnprintf")`,
+		`__asm__("__imp__snprintf")`,
+		`__asm__("__imp__vsnprintf")`,
 	} {
-		if !strings.Contains(read(relative), "-lmsvcrt") {
-			t.Errorf("%s must link the MSVCRT import library required by the vendor archive", relative)
+		if !strings.Contains(windowsCompat, required) {
+			t.Errorf("Windows SafeChat CRT compatibility layer is missing %q", required)
 		}
 	}
 
