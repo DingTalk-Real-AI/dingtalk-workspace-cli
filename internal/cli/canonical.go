@@ -37,13 +37,14 @@ func NewMCPCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "mcp",
 		HelpReferences: contract.HelpReferences{
-			RelatedSkills: []string{"dingtalk-shared"},
+			RelatedSkills: []string{"dingtalk-misc", "dingtalk-shared"},
 			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("MCP 开发与动态调用指南", "dingtalk-misc", "references/dev/mcp.md"),
 				contract.SkillDocumentation("Schema 与 MCP 使用指南", "dingtalk-shared", "references/schema-usage.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "解析当前身份可用的 MCP 服务连接信息，并静态查看或调用已发布工具",
+			AgentSummary: "解析当前身份可用的 MCP 服务连接信息，并动态发现、校验或调用已发布工具",
 			UseWhen: []string{
 				"需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端",
 				"已知 mcpId，需要查看或调用当前身份可用的已发布 MCP 工具",

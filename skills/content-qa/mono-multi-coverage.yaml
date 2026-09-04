@@ -37,6 +37,12 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/devapp.md
+      - references/dev/mcp.md
+      - references/dev/mcp/api-to-tool.md
+      - references/dev/mcp/mapping-rules.md
+      - references/dev/mcp/auth-and-credentials.md
+      - references/dev/mcp/expression-functions.md
+      - references/dev/mcp/troubleshooting.md
   - mono: doc
     multi_skill: dingtalk-doc
     multi_refs:
@@ -52,6 +58,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/hrbrain.md
+  - mono: html
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/html.md
   - mono: mail
     multi_skill: dingtalk-mail
   - mono: markdown
