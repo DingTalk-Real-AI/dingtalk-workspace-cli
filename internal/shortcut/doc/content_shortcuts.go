@@ -401,7 +401,7 @@ var Update = shortcut.Shortcut{
 		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Enum: []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
 		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, Aliases: []string{"text"}, AliasesVisible: true},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
-		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空"},
+		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空；block_delete 支持逗号分隔批量 ID，单次最多 50 个"},
 		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "插入位置参考 block ID；相关动作要求时不能为空"},
 		{Name: "before-block-id", Type: shortcut.FlagString, Desc: "向前插入时的位置参考 block ID；block_insert_before 要求不能为空"},
 		{Name: "heading-level", Type: shortcut.FlagInt, Desc: "将插入内容写为指定级别标题（1-6）；仅支持 Markdown block_insert_before/block_insert_after"},
@@ -689,10 +689,22 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 				return blockContentEquals(data, blockID, content, rt.Str("doc-format"))
 			})
 	case "block_delete":
-		blockID := rt.Str("block-id")
-		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": blockID}, node,
+		blockIDs, err := helpers.NormalizeBlockIDs(rt.Str("block-id"))
+		if err != nil {
+			return err
+		}
+		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": strings.Join(blockIDs, ",")}, node,
 			"list_document_blocks", map[string]any{"nodeId": node, "format": "element", "__allBlocks": true},
-			func(_, data map[string]any) bool { return findBlock(data, blockID) == nil })
+			func(_, data map[string]any) bool {
+				// 尽力而为语义下未找到的块本就不在文档里，逐个断言不存在即可覆盖
+				// 已删除的那些；只要有任一目标块仍在文档中，就说明删除没生效。
+				for _, id := range blockIDs {
+					if findBlock(data, id) != nil {
+						return false
+					}
+				}
+				return true
+			})
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
 	case "block_copy_insert_after":
