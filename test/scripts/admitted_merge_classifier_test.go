@@ -34,6 +34,9 @@ func TestAdmittedMergeClassifierFailsClosed(t *testing.T) {
 		admitted string
 	}{
 		{name: "exact evidence is reused", scenario: "success", admitted: "true"},
+		{name: "association index lag recovers on retry", scenario: "association-index-lag", admitted: "true"},
+		{name: "cold association index recovers via closed-PR discovery", scenario: "association-index-cold", admitted: "true"},
+		{name: "unresolvable merged PR recomputes full suite", scenario: "merged-pr-unresolvable", admitted: "false"},
 		{name: "comparison API failure recomputes full suite", scenario: "compare-error", admitted: "false"},
 		{name: "predecessor checks API failure recomputes full suite", scenario: "predecessor-check-error", admitted: "false"},
 		{name: "failed predecessor admission recomputes full suite", scenario: "predecessor-check-failure", admitted: "false"},
@@ -150,6 +153,11 @@ func runAdmittedMergeClassifier(t *testing.T, node, classifier, scenario string)
 	t.Helper()
 	const harnessPrefix = `
 const scenario = process.argv[2];
+// Keep the production discovery retry loop fast inside the harness; the
+// production defaults stay in the classifier script itself.
+process.env.DWS_ADMITTED_MERGE_RETRY_INTERVAL_MS = '1';
+process.env.DWS_ADMITTED_MERGE_RETRY_ATTEMPTS = '5';
+let associationCalls = 0;
 const before = 'b'.repeat(40);
 const after = 'a'.repeat(40);
 const head = 'c'.repeat(40);
@@ -257,7 +265,17 @@ const endpoints = {
     }]}),
   },
   pulls: {
-    listPullRequestsAssociatedWithCommit: async () => ({data: [pull]}),
+    listPullRequestsAssociatedWithCommit: async () => {
+      if (scenario === 'association-index-lag') {
+        associationCalls += 1;
+        return {data: associationCalls > 2 ? [pull] : []};
+      }
+      if (scenario === 'association-index-cold' || scenario === 'merged-pr-unresolvable') {
+        return {data: []};
+      }
+      return {data: [pull]};
+    },
+    list: async () => ({data: scenario === 'association-index-cold' ? [pull] : []}),
   },
   checks: {
     listForRef: async ({ref}) => {
