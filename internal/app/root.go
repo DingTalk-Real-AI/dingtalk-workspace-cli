@@ -282,7 +282,6 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			exitCode = code
 			return
 		}
-		err = rewordRequiredFlagError(err)
 		var raw apperrors.RawStderrError
 		if output.UsesUnifiedResult(executed) && !stderrors.As(err, &raw) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
@@ -534,36 +533,6 @@ func isUnknownCommandError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown command")
 }
 
-// rewordRequiredFlagError rewrites cobra's default missing-required-flag message
-// (`required flag(s) "email" not set`) into the wukong-aligned form
-// (`missing required flag(s): --email`). cobra's ValidateRequiredFlags returns
-// this error directly (it does not pass through FlagErrorFunc), so it is
-// normalised here. The substring "required flag" is preserved for compatibility
-// with existing assertions; flag names gain the "--" prefix and quotes are
-// dropped so error output matches hardcoded cmdutil.ValidateRequiredFlags.
-func rewordRequiredFlagError(err error) error {
-	if err == nil {
-		return err
-	}
-	const pfx = "required flag(s) "
-	const sfx = " not set"
-	msg := err.Error()
-	if !strings.HasPrefix(msg, pfx) || !strings.HasSuffix(msg, sfx) {
-		return err
-	}
-	mid := strings.TrimSuffix(strings.TrimPrefix(msg, pfx), sfx)
-	var flags []string
-	for _, part := range strings.Split(mid, ", ") {
-		if name := strings.Trim(strings.TrimSpace(part), "\""); name != "" {
-			flags = append(flags, "--"+name)
-		}
-	}
-	if len(flags) == 0 {
-		return err
-	}
-	return apperrors.NewValidation(fmt.Sprintf("missing required flag(s): %s", strings.Join(flags, ", ")))
-}
-
 // flagErrorWithSuggestions provides helpful suggestions for common flag mistakes.
 //
 // 所有 flag 解析错误都会在 message 末尾追加 "See '<CommandPath> --help' for usage."，
@@ -571,6 +540,15 @@ func rewordRequiredFlagError(err error) error {
 // 装在 root 的 FlagErrorFunc 通过 cobra 的 parent fallback 机制覆盖全命令树
 // （cobra.Command.FlagErrorFunc 沿 c.parent 递归向上查找）。
 func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
+	// Explicitly classified and interrupted errors are authoritative even when
+	// their text happens to resemble a known flag typo. Suggestions may enrich
+	// raw parser failures only; they must never relabel an existing contract.
+	var typed *apperrors.Error
+	var exitCoder apperrors.ExitCoder
+	if stderrors.As(err, &typed) || stderrors.As(err, &exitCoder) ||
+		stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	errMsg := err.Error()
 	// 尾部 hint：换行 + See '...' for usage.
 	// JSON 输出时 \n 会被序列化为字面 \n，文本输出时换行；
@@ -654,7 +632,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// Fallback：未命中已知别名 / SuggestFlagFix 未给建议的 flag 解析错误
 	// （missing required / ambiguous / unknown shorthand 等），仍包尾部 hint，
 	// 行为对齐 wukong / docker / kubectl。
-	return fmt.Errorf("%s%s", errMsg, tail)
+	return apperrors.NormalizeValidation(
+		fmt.Errorf("%w%s", err, tail),
+		apperrors.WithReason("invalid_flag"),
+	)
 }
 
 func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline.FlagProtection, bool) {
@@ -1186,6 +1167,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	// Set custom flag error handler for better UX.
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
 	installReviewedFlagProtectionHandlers(root)
+	corecmd.InstallValidationAdapters(root)
 	installInvocationExitHandlers(root, flags, &credentialInvocationSeen, &rootVersionRequested)
 	root.SetContext(rootCtx)
 

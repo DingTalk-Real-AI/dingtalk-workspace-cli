@@ -263,8 +263,7 @@ func TestCrossPlatformCoverageSmallAppRegistryAndRootCoverage(t *testing.T) {
 		t.Fatal("version metadata mismatch")
 	}
 
-	for _, err := range []error{nil, errors.New("plain"), errors.New(`required flag(s) "email", "name" not set`), errors.New("required flag(s)  not set")} {
-		_ = rewordRequiredFlagError(err)
+	for _, err := range []error{nil, errors.New("plain"), errors.New("unknown command child")} {
 		_ = isUnknownCommandError(err)
 	}
 	if !isUnknownCommandError(errors.New("unknown command x")) {

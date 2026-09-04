@@ -415,6 +415,7 @@ func New(spec Spec) *cobra.Command {
 		}
 		cmd.Annotations[ConfirmFirstAnnotation] = "true"
 	}
+	installLocalValidationAdapters(cmd)
 	if spec.RunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			if err := runDeclaredPreflight(cmd, args, spec); err != nil {
@@ -519,7 +520,10 @@ func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
 		return err
 	}
 	if spec.Validate != nil {
-		return spec.Validate(cmd, args)
+		return apperrors.NormalizeValidation(
+			spec.Validate(cmd, args),
+			apperrors.WithReason("invalid_parameters"),
+		)
 	}
 	return nil
 }
@@ -935,7 +939,10 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 		if flag.Kind == KindInt {
 			v, err := integerValue(cmd, flag)
 			if err != nil {
-				return nil, err
+				return nil, apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			// ArgDefault floors values < 1 (cursor page-size: 0/-1 → default).
 			if v < 1 && flag.ArgDefault != "" {
@@ -984,7 +991,10 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 		if flag.Transform != nil {
 			value, err := flag.Transform(effective)
 			if err != nil {
-				return nil, err
+				return nil, apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			// Required is checked on the pre-transform string. A transform that
 			// collapses separator-only input ("," / ";") to nil/empty must still

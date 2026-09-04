@@ -22,6 +22,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -286,7 +287,10 @@ func installContractRunEPipeline(cmd *cobra.Command, rt *contractRuntime) {
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		if rt.validate != nil {
 			if err := rt.validate(c, args); err != nil {
-				return err
+				return apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_parameters"),
+				)
 			}
 		}
 		if !rt.confirm {

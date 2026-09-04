@@ -15,6 +15,7 @@ package helpers
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -24,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -191,6 +193,11 @@ func TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner
 	// Validate failure short-circuits before the inner RunE.
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "flag --id is required") {
 		t.Fatalf("Execute() error = %v, want Validate failure", err)
+	} else {
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.Reason != "invalid_parameters" {
+			t.Fatalf("Execute() error = %T %#v, want typed validation", err, err)
+		}
 	}
 	if ran {
 		t.Fatal("inner RunE must not run when Validate fails")
