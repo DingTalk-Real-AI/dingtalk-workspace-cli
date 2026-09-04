@@ -1329,6 +1329,12 @@ jobs:
               ) {
                 return 'unknown';
               }
+              if (
+                pullRequest.mergeable !== true ||
+                ['blocked', 'dirty', 'draft'].includes(pullRequest.mergeable_state)
+              ) {
+                return 'not_ready';
+              }
               return 'attempt';
             }
 
@@ -1371,14 +1377,18 @@ jobs:
               }
               const baseRepository =
                 latestPull.base?.repo?.full_name?.toLowerCase();
+              const latestMergePreflight = classifyMergePreflight(latestPull);
+              const hasExplicitNotReadyState =
+                latestPull.mergeable === false ||
+                ['blocked', 'dirty', 'draft'].includes(latestPull.mergeable_state);
               if (
                 status === 403 &&
                 errorMessage === 'Resource not accessible by integration' &&
                 latestPull.head.sha === expectedHeadSha &&
                 latestPull.base?.ref === 'main' &&
                 baseRepository === expectedBaseRepository &&
-                latestPull.mergeable === true &&
-                latestPull.mergeable_state === 'behind'
+                (latestMergePreflight === 'behind' ||
+                  (latestMergePreflight === 'not_ready' && hasExplicitNotReadyState))
               ) {
                 return {outcome: 'not_ready'};
               }
@@ -1744,6 +1754,13 @@ jobs:
                   notReady += 1;
                   core.info(
                     `PR #${candidate.number} has unknown mergeability at final synchronous merge preflight; left open for the next event.`,
+                  );
+                  continue;
+                }
+                if (mergePreflight === 'not_ready') {
+                  notReady += 1;
+                  core.info(
+                    `PR #${candidate.number} is not mergeable at final synchronous merge preflight (${finalPull.mergeable_state || 'unavailable'}); left open for the next event.`,
                   );
                   continue;
                 }

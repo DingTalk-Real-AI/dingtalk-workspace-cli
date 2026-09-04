@@ -78,6 +78,12 @@ const mergePreflightHelper = `function classifyMergePreflight(pullRequest) {
   ) {
     return 'unknown';
   }
+  if (
+    pullRequest.mergeable !== true ||
+    ['blocked', 'dirty', 'draft'].includes(pullRequest.mergeable_state)
+  ) {
+    return 'not_ready';
+  }
   return 'attempt';
 }`
 
@@ -120,14 +126,18 @@ const mergeAttemptRecoveryHelper = `function classifyMergeAttemptRecovery(
   }
   const baseRepository =
     latestPull.base?.repo?.full_name?.toLowerCase();
+  const latestMergePreflight = classifyMergePreflight(latestPull);
+  const hasExplicitNotReadyState =
+    latestPull.mergeable === false ||
+    ['blocked', 'dirty', 'draft'].includes(latestPull.mergeable_state);
   if (
     status === 403 &&
     errorMessage === 'Resource not accessible by integration' &&
     latestPull.head.sha === expectedHeadSha &&
     latestPull.base?.ref === 'main' &&
     baseRepository === expectedBaseRepository &&
-    latestPull.mergeable === true &&
-    latestPull.mergeable_state === 'behind'
+    (latestMergePreflight === 'behind' ||
+      (latestMergePreflight === 'not_ready' && hasExplicitNotReadyState))
   ) {
     return {outcome: 'not_ready'};
   }
@@ -265,9 +275,12 @@ for (const [name, pull, expected] of [
   ['behind', {mergeable: true, mergeable_state: 'behind'}, 'behind'],
   ['unknown', {mergeable: null, mergeable_state: 'unknown'}, 'unknown'],
   ['clean', {mergeable: true, mergeable_state: 'clean'}, 'attempt'],
-  ['dirty', {mergeable: false, mergeable_state: 'dirty'}, 'attempt'],
-  ['null blocked', {mergeable: null, mergeable_state: 'blocked'}, 'attempt'],
-  ['missing mergeable', {mergeable_state: 'unknown'}, 'attempt'],
+  ['dirty', {mergeable: false, mergeable_state: 'dirty'}, 'not_ready'],
+  ['blocked', {mergeable: true, mergeable_state: 'blocked'}, 'not_ready'],
+  ['draft', {mergeable: true, mergeable_state: 'draft'}, 'not_ready'],
+  ['null blocked', {mergeable: null, mergeable_state: 'blocked'}, 'not_ready'],
+  ['missing mergeable', {mergeable_state: 'unknown'}, 'not_ready'],
+  ['missing mergeable clean', {mergeable_state: 'clean'}, 'not_ready'],
 ]) {
   const actual = classifyMergePreflight(pull);
   if (actual !== expected) {
@@ -297,17 +310,23 @@ const behind = {
   mergeable: true,
   mergeable_state: 'behind',
 };
-const behindRecovery = classifyMergeAttemptRecovery(
-  403,
-  'Resource not accessible by integration',
-  behind,
-  'head-sha',
-  app,
-  repository,
-  undefined,
-);
-if (behindRecovery.outcome !== 'not_ready') {
-  throw new Error('exact 403 behind-main denial did not remain retriable');
+for (const [name, pull] of [
+  ['behind', behind],
+  ['dirty', {...behind, mergeable: false, mergeable_state: 'dirty'}],
+  ['blocked', {...behind, mergeable_state: 'blocked'}],
+]) {
+  const recovery = classifyMergeAttemptRecovery(
+    403,
+    'Resource not accessible by integration',
+    pull,
+    'head-sha',
+    app,
+    repository,
+    undefined,
+  );
+  if (recovery.outcome !== 'not_ready') {
+    throw new Error('exact 403 ' + name + ' denial did not remain retriable');
+  }
 }
 for (const responseSha of [undefined, 'merge-sha']) {
   const recovery = classifyMergeAttemptRecovery(
@@ -345,6 +364,7 @@ for (const [name, status, message, pull, responseSha] of [
   ['different 403 message', 403, 'API rate limit exceeded', behind, undefined],
   ['clean 403 state', 403, 'Resource not accessible by integration', {...behind, mergeable_state: 'clean'}, undefined],
   ['unknown 403 mergeability', 403, 'Resource not accessible by integration', {...behind, mergeable: null, mergeable_state: 'unknown'}, undefined],
+  ['missing 403 mergeability', 403, 'Resource not accessible by integration', {...behind, mergeable: undefined, mergeable_state: 'clean'}, undefined],
   ['changed 403 head', 403, 'Resource not accessible by integration', {...behind, head: {sha: 'other-head'}}, undefined],
   ['wrong 403 base', 403, 'Resource not accessible by integration', {...behind, base: {...behind.base, ref: 'release'}}, undefined],
 ]) {
