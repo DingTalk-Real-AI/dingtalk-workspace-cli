@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	validationArgsAdapterAnnotation   = "dws.runtime.validation_args_adapter"
-	validationFlagAdapterAnnotation   = "dws.runtime.validation_flag_adapter"
-	validationPreRunAdapterAnnotation = "dws.runtime.validation_pre_run_adapter"
+	validationArgsAdapterAnnotation = "dws.runtime.validation_args_adapter"
+	validationFlagAdapterAnnotation = "dws.runtime.validation_flag_adapter"
+	validationConstraintAnnotation  = "dws.runtime.validation_constraint_adapter"
 )
 
 // InstallValidationAdapters installs typed-error boundaries on the final Cobra
@@ -79,7 +79,7 @@ func installCommandValidationAdapters(cmd *cobra.Command, includeFlagParser bool
 		cmd.Annotations[validationFlagAdapterAnnotation] = "true"
 	}
 
-	if cmd.Annotations[validationPreRunAdapterAnnotation] == "true" {
+	if cmd.Annotations[validationConstraintAnnotation] == "true" {
 		return
 	}
 
@@ -89,10 +89,9 @@ func installCommandValidationAdapters(cmd *cobra.Command, includeFlagParser bool
 	cmd.PreRunE = func(current *cobra.Command, args []string) error {
 		if preRunE != nil {
 			if err := preRunE(current, args); err != nil {
-				return apperrors.NormalizeValidation(
-					err,
-					apperrors.WithReason("invalid_parameters"),
-				)
+				// PreRunE is a general lifecycle hook; only explicit validation
+				// boundaries may change an error's category and exit code.
+				return err
 			}
 		} else if preRun != nil {
 			preRun(current, args)
@@ -105,7 +104,7 @@ func installCommandValidationAdapters(cmd *cobra.Command, includeFlagParser bool
 			apperrors.WithReason("invalid_flag_group"),
 		)
 	}
-	cmd.Annotations[validationPreRunAdapterAnnotation] = "true"
+	cmd.Annotations[validationConstraintAnnotation] = "true"
 }
 
 func normalizeRequiredFlagError(cmd *cobra.Command, err error) error {
