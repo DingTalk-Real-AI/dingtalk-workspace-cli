@@ -1148,6 +1148,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		schemaCmd,
 		navigationGroup(mcpCmd),
 	}
+	utilityCommands = appendOptionalCommand(utilityCommands, newSafeChatCommand())
 	root.AddCommand(utilityCommands...)
 
 	if declarationOnly {
@@ -1189,6 +1190,13 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	root.SetContext(rootCtx)
 
 	return root
+}
+
+func appendOptionalCommand(commands []*cobra.Command, cmd *cobra.Command) []*cobra.Command {
+	if cmd == nil {
+		return commands
+	}
+	return append(commands, cmd)
 }
 
 // installReviewedFlagProtectionHandlers makes reviewed blocked/ambiguous
@@ -1426,10 +1434,10 @@ func commandNameSet(base map[string]bool, extras ...string) map[string]bool {
 
 // staticCommands is the set of built-in commands that stay visible even when
 // they are not backed by a static endpoint product. Asymmetry with
-// reservedCommands is intentional: dev/markdown stay visible but are not
+// reservedCommands is intentional: dev/markdown/html stay visible but are not
 // plugin-reserved, while login/logout are plugin-reserved but are not static
 // top-level commands.
-var staticCommands = commandNameSet(builtinCommandNames, "dev", "markdown")
+var staticCommands = commandNameSet(builtinCommandNames, "dev", "markdown", "html")
 
 // reservedCommands is the set of built-in command names that plugins must
 // not override. This protects core CLI functionality from being hijacked

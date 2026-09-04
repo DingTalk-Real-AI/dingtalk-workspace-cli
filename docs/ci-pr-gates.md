@@ -120,6 +120,66 @@ documentation changes are rejected. It still rejects invalid dates or
 versions, missing bullets, placeholder `TODO`/`TBD`, unmanaged-section
 changes, and unsafe tree modes.
 
+## Exact admitted-merge reuse on main
+
+Pull requests and protected `main` pushes remain separate GitHub trust events,
+so all nine required contexts are still published for both SHAs. For an
+ordinary merge whose final tree is identical to the already admitted PR head,
+the protected-main run may reuse that exact admission only when the PR already
+executed the complete coverage suite. It then avoids executing the same
+expensive suites again. This changes work performed inside the existing jobs;
+it does not add a new job or weaken the branch ruleset.
+
+The classifier fails closed unless it can prove every one of these facts:
+
+- the push is a non-forced update and the workflow SHA equals the event's exact
+  `after` SHA;
+- the new commit is a standard two-parent merge whose first parent is the event
+  `before` SHA and whose second parent is the admitted PR head;
+- exactly one closed PR binds that head, the `main` base, and the merge commit;
+- the merge commit tree and PR-head tree are byte-for-byte identical;
+- `.github/workflows/ci.yml` and
+  `.github/workflows/ai-behavior-check.yml` have the same Git blobs on the
+  previous main tip and the PR head, so a PR cannot redefine a check that
+  authorizes its own reuse;
+- the PR head has successful latest GitHub Actions checks for all nine required
+  Code Admission contexts, all completed before merge;
+- the base-owned `AI Behavior` status targets that exact PR URL, and its
+  `pull_request_target` workflow run binds the same head repository, branch,
+  SHA, and pre-merge completion time;
+- exactly one successful, completed `pull_request` run of the protected `CI`
+  workflow binds the eight CI-owned contexts to that PR head before it merged;
+- all five complete current-coverage shards plus supporting coverage completed
+  successfully in that same run, proving this was not a scoped profile;
+- that run owns exactly one non-expired `coverage-report` artifact with a
+  published SHA-256 digest and the same head SHA; the archive's admission
+  manifest independently binds the run ID, head SHA, and `full` profile kind.
+
+When those facts hold, `Lint` publishes the bound PR head, run, artifact, and
+digest. The existing `coverage-main-metadata` job downloads the artifact by
+numeric ID, revalidates its API identity, verifies the downloaded archive's
+digest before extraction, validates the manifest and `coverage.txt`, and saves
+the profile under the exact merge SHA cache key. A lookup-only restore must
+then observe that exact key. `Test`, `Coverage`, `Policy`, `Edition`,
+`Interface Integrity`, `CLI Smoke`, and `Mock MCP` still report their stable
+required names while explicitly recording or verifying the reused admission;
+base-owned `AI Behavior` remains independent.
+The non-ruleset `Validate Runtime Payload` helper still executes on the merge
+SHA because that protected-main validation is not guaranteed to have run on
+every full-suite PR.
+
+Any missing, duplicate, stale, or mismatched API evidence keeps the existing
+complete protected-main suite. If an already-bound artifact later cannot be
+downloaded or fails its digest, manifest, or profile validation, the existing
+main-cache helper recomputes the complete coverage profile authoritatively
+instead of promoting those bytes. Squash/rebase merges, stale branches whose
+merge tree differs, direct pushes, and PRs that modify the CI workflow are
+therefore ineligible. A standard PR that ran only scoped coverage is also
+ineligible because it cannot populate a complete future merge-base profile.
+In particular, the governance PR that introduces or changes this mechanism
+must itself run the complete post-merge suite; only later eligible source
+merges can use the optimization.
+
 ## Risk tiers and downstream boundaries
 
 `Lint` resolves the complete base/head diff before any helper is skipped.
@@ -129,7 +189,7 @@ Unknown or truncated input fails closed into the high-risk tier.
 |---|---|---|
 | Documentation-only | Only prose/documentation assets; no executable, generated, workflow, packaging, or interface surface | Documentation and repository-asset validation; expensive code helpers skip while every required context still succeeds |
 | Standard | Ordinary code change with a stable package graph | Race tests for changed Go packages and their reverse dependencies; candidate and merge-base coverage over the same impacted scope and `coverpkg`; representative Darwin/Windows compilation |
-| High-risk / protected `main` | Workflow/policy, package add/remove/rename, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure classification | Complete race suite and full native macOS/Windows tests, plus every affected domain gate |
+| High-risk / unproven protected `main` | Workflow/policy, package add/remove/rename, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or a protected-main revision without exact admitted-merge evidence | Complete race suite and full native macOS/Windows tests, plus every affected domain gate |
 
 Domain helpers (`Edition`, `Interface Integrity`, `CLI Smoke`, and `Mock MCP`,
 for example) execute their substantive suites when the diff can affect that
@@ -138,16 +198,22 @@ contexts still report a successful, explicit unaffected result. Release-script
 tests follow the same impact rule. This preserves the ruleset contract without
 charging every developer for unrelated work.
 
-Platform-sensitive changes additionally run native changed-code coverage.
-Protected `main` always runs native tests; generic portable changes are held to
-the Linux changed-code gate rather than being forced to manufacture
-platform-only coverage.
+Platform-sensitive changes additionally run native changed-code coverage. A
+protected-main revision without exact admitted-merge reuse always runs native
+tests; eligible merges retain the native evidence already recorded on the PR
+head. Generic portable changes are held to the Linux changed-code gate rather
+than being forced to manufacture platform-only coverage.
 
 Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
 an explicit manual dispatch). A failing downstream run remains a real
 regression and must be repaired, but it must not be represented by a synthetic
-successful PR check.
+successful PR check. The workflow executes the isolated profile storage,
+routing, migration, and aggregation chain without repeating the complete
+`internal/auth`, `internal/app`, and `test/cli` package suites. Those Go
+regressions remain owned by the protected-main test and coverage shards. The
+release E2E validation uses the same boundary so release verification does not
+duplicate an already admitted commit's complete Go suite.
 
 ```mermaid
 flowchart TB
@@ -162,7 +228,10 @@ flowchart TB
   ADMISSION --> S["CLI Smoke"]
   ADMISSION --> M["Mock MCP"]
   ADMISSION --> MAIN["Protected main"]
-  MAIN --> NATIVE["Full native platform matrix"]
+  MAIN --> REUSE{"Exact full-suite PR evidence?"}
+  REUSE -->|yes| RECORDED["Reuse admission and exact coverage artifact"]
+  REUSE -->|no| NATIVE["Full native platform matrix"]
+  MAIN --> PAYLOAD["Validate Runtime Payload"]
   MAIN --> E2E["Multi-profile E2E"]
   MAIN --> RELEASE["Release delivery"]
 ```
@@ -331,6 +400,26 @@ candidate SHA。
 `check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
 flag 迁移。
 
+The race suite keeps nine reviewed `internal/app` test-name partitions but
+dispatches them through three balanced physical lanes. Each partition remains
+an independent Go test process, so process-global command registries are
+released between partitions; the lane is only the hosted-runner scheduling
+unit. `scripts/ci/run-app-race-tests.sh` owns both the partition set and the
+lane map, and the workflow contract proves that each focused/full-suite matrix
+contains exactly those three lanes and that their union contains every
+partition exactly once.
+
+The initial lane balance is evidence-based rather than alphabetical by job.
+Across 11 successful full-suite runs sampled on 2026-09-03, replaying the
+recorded partition step durations produced a slowest-lane median of 8m53s,
+p90 of 9m02s, and maximum of 9m08s. The 20-minute job timeout remains unchanged
+as regression headroom. The scheduling model predicts 33 to 27 successful jobs
+per ordinary full-suite PR and about 40-50 seconds lower completion time for the
+last PR when two to four full suites arrive two minutes apart. These are rollout
+targets, not post-change measurements; maintainers must validate them against
+live overlapping runs and rebalance the helper-owned lane map if the slowest
+lane p95 exceeds 12 minutes.
+
 Schema compatibility 使用同一组 base、stable、candidate refs，以及 base-owned flag
 与 command migration ledgers。merge-base-owned checker 分别规范化 merge-base 与
 stable 的完整 Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过
@@ -347,12 +436,24 @@ base_ref=$(git merge-base HEAD origin/main)
 `make coverage-gate` is an enforcement step, not a profile generator. For a
 standard PR, CI derives changed packages and their reverse-dependency test
 closure, then generates candidate and merge-base profiles with the same test
-scope and `coverpkg`. High-risk and protected-main runs use the complete
-profiles. The complete candidate profile is produced by disjoint per-shard
-helper jobs (`scripts/ci/test-packages.sh list-coverage`, kept serial with
-`-p 1` inside each shard; `verify` proves the shard union equals the
-full-suite scope exactly once) and concatenated in the aggregate job before
-enforcement. The complete merge-base profile is restored from an exact-key
+scope and `coverpkg`. High-risk and protected-main runs without exact
+admitted-merge reuse use the complete profiles. The complete candidate profile
+is produced by five fixed per-shard
+helper jobs (`scripts/ci/test-packages.sh list-coverage`; `verify`
+proves the shard union equals the full-suite scope exactly once). Packages
+remain serial within each runner except for the large `remaining` shard, which
+uses fixed package parallelism `-p 2` to overlap its two independent long tails
+without requesting another runner. The `internal/app` package is handled
+separately: it reuses the existing reviewed test-name partitions and balances
+them across the same five coverage jobs, so each partition gets a fresh Go test
+process and releases process-global command registries. The assignment is
+validated in both directions and reduces the long tail without requesting
+another hosted runner. The partition and final shard profiles are
+deterministically unioned by source block before enforcement. This does not add
+matrix jobs. The same bounded in-job runner owns every trusted cold full-profile
+fallback, so PR baseline, metadata promotion, Formula promotion, and repair do
+not reintroduce the long-lived app process. The complete merge-base profile is
+restored from an exact-key
 cache written by the last green `main` push of that same commit (key:
 merge-base SHA plus resolved Go version); any miss falls back to recomputing
 it in a merge-base worktree. The trusted `main` producer and PR consumer use
@@ -374,8 +475,10 @@ verifies the live App/writer-ruleset identity contract. Reviewer Router
 additionally binds auto-merge to the exact head OID and writes a fixed safe
 merge headline/body. The sole break-glass publisher must retain a safe final
 message; the release-controlled Formula-only path
-is the sole supported use of `[skip ci]`. A full source push
-saves the assembled profile after the aggregate gate passes. A trusted
+is the sole supported use of `[skip ci]`. A source push that cannot prove exact
+admitted-merge reuse saves the newly assembled profile after the aggregate gate
+passes. An eligible tree-identical merge instead verifies and promotes the
+bound PR run's immutable coverage artifact to the exact merge-SHA key. A trusted
 documentation or release-seal push independently verifies that the complete
 `before...after` diff contains only the reviewed metadata allowlist, restores
 only the exact `before` cache, recomputes the full profile if the chain is
