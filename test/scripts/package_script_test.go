@@ -1668,7 +1668,7 @@ func TestReleaseWorkflowParallelizesSealedValidationWithoutWeakeningPublication(
 		`--base-ref HEAD`,
 		`--stable-ref "$PREVIOUS_STABLE"`,
 		`--candidate-ref HEAD`,
-		"test-multi-profile-e2e.sh",
+		"bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests",
 	} {
 		if !strings.Contains(validation, required) {
 			t.Errorf("parallel release validation is missing %q", required)

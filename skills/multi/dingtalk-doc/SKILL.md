@@ -63,12 +63,13 @@ ID/URL 直用;标题先搜索,唯一命中再执行.顺序:稳定 ID → shortcu
 ## 关键结果语义
 
 - 保留真实 `nodeId`/URL/类型/容器；复用 ID，禁标题/钉盘重搜。
-- 用完整回执；Runtime 回读后不复读；仅局部验收、`partial_success`/commit-unknown 再 `+fetch`。
+- `extension=dlink`：内容用 `linkSourceInfo.nodeId`；嵌套逐跳，失败/缺失/循环即停；入口移动/改名/删除用顶层 ID。
+- 复用 Runtime 回执；仅局部验收、`partial_success`/commit-unknown 再 `+fetch`。
 - 恢复：`partial_success` 只补未完成；`unknown` 先回读、禁重写；`retryable` 仅限明确未开始；权限/参数/认证失败即停。
-- 结果明确且回读匹配才报完成。
+- 回读匹配才报完成。
 - 搜索/列表检查 `complete`/`hasMore`/cursor/失败项；“全部”翻完页，前 N 条须声明范围。
 - `+import` 检查 `success=true`、`verified=true`、`taskId/nodeId/documentUrl`；复用返回 ID，禁 Drive 重找；中断查原任务，禁重导。
-- 跨产品任务“新知识库内导入后再移到我的文档”：先用 Wiki 创建返回的 workspaceId 执行 `doc +import --workspace`，再把导入 nodeId 交给 `wiki +move-to-drive --workspace`；禁止在个人域创建后用 Drive 移动伪造入库步骤。
+- 知识库导入再移到我的文档：`doc +import --workspace <Wiki ID>` → `wiki +move-to-drive`，复用 nodeId；禁先建在个人域。
 - 导出/下载用 cwd 相对路径；`+export` 有 `localPath` 且 `sizeBytes>0` 即终态，禁 `ls/stat`。
 
 ## 参数与安全边界
