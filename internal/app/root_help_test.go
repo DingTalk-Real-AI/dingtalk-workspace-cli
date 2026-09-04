@@ -15,11 +15,13 @@ package app
 
 import (
 	"bytes"
+	"context"
 	stderrors "errors"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -843,6 +846,114 @@ func TestRootKeepsContactOrgInviteApplyAdminCommands(t *testing.T) {
 	}
 	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123"}); err == nil || !strings.Contains(err.Error(), "--reason") {
 		t.Fatalf("org apply-reject without --reason should fail with a reason hint, got err = %v\n%s", err, got)
+	}
+}
+
+// contactWriteOpsCall 记录一次 MCP 写调用的完整入参。
+type contactWriteOpsCall struct {
+	server string
+	tool   string
+	args   map[string]any
+}
+
+// contactWriteOpsRecorder 是记录型 ToolCaller，供确认门禁测试断言
+// 工具名与参数（区别于只验证参数组装的 --dry-run 用例）。
+type contactWriteOpsRecorder struct {
+	calls []contactWriteOpsCall
+}
+
+func (r *contactWriteOpsRecorder) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	r.calls = append(r.calls, contactWriteOpsCall{server: server, tool: tool, args: args})
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true}`}}}, nil
+}
+
+func (*contactWriteOpsRecorder) Format() string { return "json" }
+func (*contactWriteOpsRecorder) DryRun() bool   { return false }
+func (*contactWriteOpsRecorder) Fields() string { return "" }
+func (*contactWriteOpsRecorder) JQ() string     { return "" }
+
+// executeContactWriteOp 走非 dry-run 真实执行路径：os.Args 需含产品名 contact
+// 供 resolveProductID 路由 MCP Server；stdin 传空 reader 模拟非交互环境
+// （EOF 时 ConfirmSafety 失败关闭）。
+func executeContactWriteOp(t *testing.T, recorder *contactWriteOpsRecorder, args []string) error {
+	t.Helper()
+	testseam.Swap(t, &os.Args, append([]string{"dws"}, args...))
+	root := NewRootCommand()
+	helpers.InitDepsForTest(t, recorder)
+	root.SetIn(strings.NewReader(""))
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+// TestContactWriteOpsConfirmationGate 是 user_required 写操作的端到端回归：
+// 上方成功用例全部传 --dry-run（绕过确认 gate），无法证明真实执行路径上
+// 未确认会在 MCP 调用前被拒绝。这里覆盖三类高风险写操作：
+//   - apply-remove：删除申请记录，不可恢复；
+//   - apply-block：屏蔽会拉黑申请人；
+//   - disable：停用企业账号会阻止其登录钉钉。
+func TestContactWriteOpsConfirmationGate(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:     "apply remove is not recoverable",
+			args:     []string{"contact", "org", "apply-remove", "--id", "123"},
+			tool:     "remove_org_apply",
+			wantArgs: map[string]any{"id": int64(123)},
+		},
+		{
+			name:     "apply block blacklists the applicant",
+			args:     []string{"contact", "org", "apply-block", "--id", "123", "--reason", "恶意重复申请"},
+			tool:     "block_org_apply",
+			wantArgs: map[string]any{"id": int64(123), "reason": "恶意重复申请"},
+		},
+		{
+			name: "exclusive account disable blocks sign-in",
+			args: []string{"contact", "exclusive-account", "disable", "--staff-id", "user001"},
+			tool: "exclusive_account_set_status",
+			// uesrId 是 MCP 工具运行时入参的历史字段名（平台 inputMappings 笔误）。
+			wantArgs: map[string]any{"uesrId": "user001", "status": "disable"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("unconfirmed rejects before any MCP call", func(t *testing.T) {
+				recorder := &contactWriteOpsRecorder{}
+				err := executeContactWriteOp(t, recorder, tc.args)
+				if err == nil {
+					t.Fatalf("%s without confirmation must be rejected", tc.name)
+				}
+				if !apperrors.IsConfirmationRequired(err) {
+					t.Fatalf("%s error = %v, want reason confirmation_required", tc.name, err)
+				}
+				if len(recorder.calls) != 0 {
+					t.Fatalf("%s must not reach MCP before confirmation, got calls: %+v", tc.name, recorder.calls)
+				}
+			})
+
+			t.Run("explicit yes executes exactly the expected tool call", func(t *testing.T) {
+				recorder := &contactWriteOpsRecorder{}
+				err := executeContactWriteOp(t, recorder, append(tc.args, "--yes"))
+				if err != nil {
+					t.Fatalf("%s with --yes failed: %v", tc.name, err)
+				}
+				if len(recorder.calls) != 1 {
+					t.Fatalf("%s with --yes want exactly 1 MCP call, got %d: %+v", tc.name, len(recorder.calls), recorder.calls)
+				}
+				call := recorder.calls[0]
+				if call.server != "contact" || call.tool != tc.tool {
+					t.Fatalf("%s call = %s/%s, want contact/%s", tc.name, call.server, call.tool, tc.tool)
+				}
+				if !reflect.DeepEqual(call.args, tc.wantArgs) {
+					t.Fatalf("%s args = %#v, want %#v", tc.name, call.args, tc.wantArgs)
+				}
+			})
+		})
 	}
 }
 
