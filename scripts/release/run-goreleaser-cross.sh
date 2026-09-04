@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
-CROSS_IMAGE="ghcr.io/goreleaser/goreleaser-cross:v1.25.9@sha256:130e6870fec3c6a243746f092017e6b85e03a6ed865e155f5d1bce1a855d93f4"
+CROSS_IMAGE="ghcr.io/goreleaser/goreleaser-cross:v1.26.2@sha256:fadba0d4577866eb2588d46ea6b604c73ef45ee55f044acbc17cc49aa435fd04"
 GORELEASER_VERSION="2.16.0"
 TOOL_CACHE="${DWS_RELEASE_TOOL_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/dws/release-tools}"
 

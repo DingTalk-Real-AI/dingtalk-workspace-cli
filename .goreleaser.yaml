@@ -17,6 +17,7 @@ builds:
     binary: dws
     env:
       - CGO_ENABLED=1
+      - GOTOOLCHAIN=go1.25.9
       - CC_darwin_amd64=o64-clang
       - CXX_darwin_amd64=o64-clang++
       - CC_darwin_arm64=oa64-clang

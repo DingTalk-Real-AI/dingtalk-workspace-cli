@@ -3198,6 +3198,7 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	goreleaser := read(".goreleaser.yaml")
 	for _, required := range []string{
 		"CGO_ENABLED=1",
+		"GOTOOLCHAIN=go1.25.9",
 		"CC_darwin_amd64=o64-clang",
 		"CC_darwin_arm64=oa64-clang",
 		"CC_linux_amd64=x86_64-linux-gnu-gcc",
@@ -3232,7 +3233,7 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 
 	wrapper := read("scripts/release/run-goreleaser-cross.sh")
 	for _, required := range []string{
-		"ghcr.io/goreleaser/goreleaser-cross:v1.25.9@sha256:130e6870fec3c6a243746f092017e6b85e03a6ed865e155f5d1bce1a855d93f4",
+		"ghcr.io/goreleaser/goreleaser-cross:v1.26.2@sha256:fadba0d4577866eb2588d46ea6b604c73ef45ee55f044acbc17cc49aa435fd04",
 		`GORELEASER_VERSION="2.16.0"`,
 		`archive_sha="eaae05b5eba07533bd0f06846b68c808399504784df00c62eb219541fc04e5e2"`,
 		`archive_sha="0102d974373fcdeb77042d1f5897caffa193be36620fdc6c1da43a01ef8e10d3"`,
