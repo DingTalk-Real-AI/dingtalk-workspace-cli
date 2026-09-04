@@ -35,11 +35,11 @@ metadata:
 
 ## Golden Route（高频复合任务）
 
-已有 ID 直接使用；完整 URL 先解析；名称先唯一解析为稳定 ID。零命中或多候选时停止，不默认选第一项。
+已由当前 AITable 调用返回且类型已确认的 ID 直接使用；名称先唯一解析为稳定 ID。用户直接提供的 `/i/nodes/` URL 或来源未验证的 nodeId 先执行 `dws drive info`；若为 `extension=dlink`，将返回的 `result.fileId` 保存为快捷方式入口 ID 并传给 `dws doc info`，再逐跳读取目标 `linkSourceInfo`，最终确认 `extension=able` 后将目标 `linkSourceInfo.nodeId` 作为 baseId。解析失败、字段缺失、ID 重复或最终类型不是 able 时停止；只有明确移动、改名或删除快捷方式入口本身时才保留最初的 `result.fileId` 并切到 Drive。零命中或多候选时也停止，不默认选第一项。
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| 从 URL 解析稳定 ID | `dws aitable +url-resolve --url <URL>` | 只解析 URL 中已有的 baseId/tableId/viewId/recordId，不做远端名称搜索 |
+| 从已确认的 AITable URL 解析稳定 ID | `dws aitable +url-resolve --url <URL>` | 只解析 URL 中已有的 baseId/tableId/viewId/recordId，不远程解析 dlink；原始 `/i/nodes/` URL 必须先按上文规范化，dlink 目标 nodeId 直接作为 baseId |
 | 按名称唯一定位并操作 Base/Table | `dws aitable +resolve-base --name <名称>` → `dws aitable +resolve-table --base <ID> --name <表名>` | 默认精确匹配；只有用户明确接受模糊匹配时才加 `--fuzzy` |
 | 搜索 Base 候选或检查是否存在 | `dws aitable +base-search --query <关键词>` | 用户说“搜索/找一下/候选/如果没有就创建”时直接走本入口，不先调用 `+resolve-base`；返回 `hasMore/nextCursor`，仅 `hasMore=true` 时续页；AITable Base 名称不得路由到 `dws aisearch person` |
 | 浏览 Base 下的数据表 | `dws aitable +list-tables --base <ID>` | 只返回 tableId/tableName，不加载字段 |

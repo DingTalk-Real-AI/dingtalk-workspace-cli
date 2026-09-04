@@ -6,6 +6,77 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.4] - 2026-09-04
+
+### Fixed
+
+- **Release dependency checksums** (#1288) — removes stale module checksum records so release validation remains reproducible after `go mod tidy`.
+
+
+## [1.0.62-beta.3] - 2026-09-04
+
+### Added
+
+- **SafeChat message encryption/decryption** (#1051) — `dws safechat` commands enable AnHeng SafeDing (安恒密盾) message encryption and decryption. Available only in builds with `-tags safechat` (requires CGO and platform-specific static libraries). Commands include `safechat selftest` for end-to-end self-check (real authCode fetch and key retrieval) and `safechat decrypt` to decrypt ciphertext messages. The PR also adds `internal/msgcrypto` package with cipher operations, vendorAuthCode portal integration, and key server client supporting both in-memory and file-based keystores with 0600 permissions on Unix and warning logs on Windows.
+
+- **Chat third-party message decrypt** (#1150) — adds policy-driven Ding + SafeChat message decryption for core chat read paths, explicit `dws chat crypto decrypt` diagnostics, and IM MCP wiring for policy lookup plus Ding batch decrypt. Outbound send encryption and `dws chat crypto encrypt` are intentionally not enabled in this PR.
+
+- **html fetch / create / overwrite / patch** — full native `.html` / `.htm` file support in DingPan or the doc space, mirroring the markdown domain. `create` accepts a literal string, `@file`, stdin (`-`), or an existing local HTML file via `--file`. `fetch` downloads and prints the remote content (optional sanitized `--output`). `overwrite` replaces the whole file with before/after preview on command-level `--dry-run`; `patch` applies literal or RE2 replacements with zero-match never writing and an empty result aborting. Routing matches the markdown leaves: explicit `--space-id` / `--workspace`, auto domain probe, `--folder` read-only probe on create. Drive uploads submit the `text/html` MIME type. Implemented on a shared textfile engine extracted from the markdown leaves (pure refactor, behavior unchanged).
+
+### Changed
+
+- **Bounded CI app race fan-out** (#1278) — keeps all nine reviewed
+  `internal/app` race-test partitions process-isolated while balancing them
+  across three physical jobs, reducing focused and full-suite runner demand by
+  six jobs without weakening partition coverage or increasing the 20-minute
+  job limit.
+
+- **Chat Shortcut-first discovery** — prioritizes Featured Shortcuts in
+  `dws chat --help`, keeps the complete canonical Shortcut catalog discoverable,
+  and points overlapping atomic command help to the reviewed Shortcut owner.
+
+### Fixed
+
+- **`aitable record query --all`** (#1016) — an empty final page that omits the `records` key now ends pagination normally instead of failing with `query_records response is missing records`.
+
+- **Post-merge CI admission reuse** — reuses exact successful full-suite
+  PR evidence for tree-identical protected-main merges and promotes the
+  verified coverage artifact to the merge SHA cache, reducing duplicate runner
+  work without adding jobs or weakening required contexts.
+
+- **Chat role and category routing** — resolves natural group names before group-role operations, aligns role assignment guidance with required non-empty role IDs, and publishes a compact shortcut-first category workflow to reduce Help and Catalog discovery without dropping result, safety, or identity constraints.
+
+- **Contract command safety and Skill routing** — Contract destructive operations (`archive`, `subject delete`, `subject batch-delete`, `project delete`, and `account delete`) now require explicit user confirmation (`--yes`) before executing, with Schema Safety `confirmation=user_required`. Batch project/subject deletion rejects empty parsed ID lists, subject deletion enforces the 1000-ID service limit, and required project/subject pagination rejects non-positive values before calling MCP. Account-list execution-time filters are documented consistently as ISO-8601 CLI inputs converted to MCP milliseconds. Legal smart-contract guidance is delivered through `dingtalk-misc` instead of a standalone first-level Skill, and the retired `edu-contact` endpoint is no longer registered as a supplement server.
+
+- **Coverage baseline reliability** — balances the existing app test
+  partitions across the current coverage runners and reuses the same bounded
+  path for trusted cold-cache recovery, avoiding the long-lived app test
+  process without adding CI matrix jobs.
+
+- **Dlink target routing** — teaches Doc, Drive, Sheet, AITable, shared URL
+  routing, and the `doc info` Schema to resolve shortcut targets through
+  `linkSourceInfo` for content operations while preserving the top-level node
+  for explicit shortcut-entry management.
+
+- **Main integration reliability** — keeps main and release multi-profile E2E
+  validation focused on the isolated profile chain while existing CI shards own
+  the complete Go regressions, avoiding the long-lived runner shutdown window
+  without adding CI jobs.
+
+- **Minutes permission sharing** — adds `--member-staff-ids` to
+  `minutes permission add` and `minutes +share`, preserving leading-zero staff
+  IDs while keeping `--member-uids` for DingTalk UIDs.
+
+- **Reviewer Router reconciliation** — keeps blocked, conflicting, draft, and
+  otherwise unproven merge candidates retriable without letting one expected
+  not-ready PR fail the repository-wide reconciliation batch.
+
+### Security
+
+- **Published MCP invocation** (#1261) - validates fresh bounded input schemas,
+  restricts endpoint trust and redirects, and prevents automatic call replay.
+
+
 ## [1.0.62-beta.2] - 2026-09-02
 
 ### Added

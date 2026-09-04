@@ -10,7 +10,7 @@
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
 > **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
-> 补充：如果 URL 不是来自 `aitable` 命令返回，而是用户直接贴的原始 `alidocs` URL，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe，确认是 `able` 后再按 AI 表格处理。
+> 补充：如果 URL/节点 ID 不是来自当前 `aitable` 调用的已验证返回，而是用户直接提供，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe；`extension=dlink` 时逐跳消费目标 `linkSourceInfo`，确认最终目标为 `able` 后再按 AI 表格处理。
 
 ## 命令索引表
 
@@ -421,15 +421,16 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 | `record query` | `recordId` | record update/delete；按 ID 反查字段值用 `record get` |
 | `template search` | `templateId` | base create --template-id，拼接模板预览 URI |
 
-## URL → baseId 提取
+## URL/节点 ID → baseId 规范化
 
-用户提供 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 链接时：
-1. 提取 `/nodes/` 后的路径段作为 `baseId`
-2. 去掉尾部的查询参数（`?` 及其后内容）
-3. 传入 `--base-id` 参数
+用户提供 `https://alidocs.dingtalk.com/i/nodes/{id}` 或来源未验证的 nodeId 时：
+1. 先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 执行 `dws drive info`
+2. 若为 `extension=dlink`，执行 `dws doc info` 并逐跳消费目标 `linkSourceInfo`；记录已访问 ID，失败、字段缺失或 ID 重复即停
+3. 只有最终目标 `extension=able` 时，才将最终目标 nodeId 作为 `baseId`
+4. 已确认的 AITable URL 如含 table/view 参数，再解析并复用这些稳定 ID
 
 > 如果该 URL 来自 `dws aitable` 返回或已在当前链路 probe 过，可直接复用；
-> 如果是用户直接提供的原始 `alidocs` URL，则先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe，确认 `extension=able` 后再继续。
+> 禁止直接把 dlink 快捷方式入口的路径段当作 baseId。明确移动、重命名或删除快捷方式入口本身时才保留顶层 nodeId，并改走对应的 Drive 入口管理命令。
 
 ## 注意事项
 

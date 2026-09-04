@@ -8,7 +8,7 @@
 
 | 命令 | 用途 |
 |------|------|
-| `markdown fetch` | 下载并读取远程 `.md` 原文 |
+| `markdown fetch` | 读取远程 `.md` 文件内容（默认输出正文，可选 `--output` 保存本地） |
 | `markdown create` | 创建原生 `.md` 文件 |
 | `markdown diff` | 比较远程历史版本，或远程版本与本地草稿 |
 | `markdown overwrite` | 全量覆盖已有 `.md` 文件 |

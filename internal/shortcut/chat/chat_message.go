@@ -14,6 +14,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,12 +28,15 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
 const directMessagesHardPageLimit = 500
+const messageDecryptFailedOriginalContentKey = "_contentDecryptFailedOriginal"
 
 // MessagesSend sends a text/markdown message as the current user
 // (send_personal_message, chat server). Media/file variants are not covered.
@@ -318,8 +322,11 @@ var MessagesList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		rawMessages := listMessagesResolveMaps(data)
+		decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 		payload := map[string]any{"count": len(messages), "messages": messages}
+		applyMessageDecryptLedger(payload, decryptLedger)
 		direction := "older"
 		if rt.Bool("forward") {
 			direction = "newer"
@@ -358,6 +365,16 @@ func listMessagesProjectWithReactions(data map[string]any, includeReactions bool
 	return out
 }
 
+func projectMessageMapsWithReactions(raw []map[string]any, includeReactions bool) []map[string]any {
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if row := listMessageProjectOneWithReactions(item, includeReactions); len(row) > 0 {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // listMessageProjectOne projects a single message into the native
 // {messageId, senderId, msgType, createTime, text(, forwarded)} shape, reused
 // recursively for forwarded chat records.
@@ -367,6 +384,9 @@ func listMessageProjectOne(m map[string]any) map[string]any {
 
 func listMessageProjectOneWithReactions(m map[string]any, includeReactions bool) map[string]any {
 	row := chatmsg.ProjectMessageV1(m, includeReactions)
+	if original, ok := m[messageDecryptFailedOriginalContentKey].(string); ok && strings.TrimSpace(original) != "" {
+		row["text"] = original
+	}
 	// The established mget/list projection omits absent scalar fields; keep
 	// that wire behavior even though the shared chat/search view retains them.
 	for _, key := range []string{"sender", "text", "createTime"} {
@@ -418,6 +438,247 @@ func listMessagesResolveMaps(data map[string]any) []map[string]any {
 		}
 	}
 	return out
+}
+
+type messageDecryptLedger struct {
+	candidateCount int
+	decryptedCount int
+	failures       []map[string]any
+}
+
+var messageReadCryptoClient = newMessageReadCryptoClient()
+
+var (
+	messageReadCurrentIdentity = msgcrypto.CurrentIdentity
+	messageReadOpenSession     = msgcrypto.OpenSession
+	messageReadAvailable       = msgcrypto.Available
+)
+
+func newMessageReadCryptoClient() *messagecrypto.Client {
+	return &messagecrypto.Client{
+		Identity: func(ctx context.Context, configDir string) (messagecrypto.Identity, error) {
+			identity, err := messageReadCurrentIdentity(ctx, configDir)
+			return messagecrypto.Identity{CorpID: identity.CorpID, StaffID: identity.StaffID}, err
+		},
+		OpenSession: func(ctx context.Context, opts messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			session, err := messageReadOpenSession(ctx, msgcrypto.SessionOptions{
+				ConfigDir:           opts.ConfigDir,
+				CLIVersion:          opts.CLIVersion,
+				KeyServer:           firstNonEmptyShortcutString(opts.KeyServer, msgcrypto.DefaultSafeChatKeyServer),
+				AllowedRedirectHost: firstNonEmptyShortcutString(opts.AllowedRedirectHost, msgcrypto.DefaultSafeChatRedirectHost),
+				KeystoreDir:         opts.KeystoreDir,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &messagecrypto.Session{
+				Cipher:  session.Cipher,
+				CorpID:  session.CorpID,
+				StaffID: session.StaffID,
+				Close:   session.Close,
+			}, nil
+		},
+		BackendReady: messageReadAvailable,
+		PolicyCache:  messagecrypto.NewPolicyCache(time.Now),
+	}
+}
+
+func decryptMessageItemsIfRequested(rt *shortcut.RuntimeContext, messages []map[string]any) messageDecryptLedger {
+	if rt.DryRun() {
+		return messageDecryptLedger{}
+	}
+	items := collectEncryptedMessageItems(messages)
+	if len(items) == 0 {
+		return messageDecryptLedger{}
+	}
+	filtered, ledger := filterMessageDecryptItemsByPolicy(rt, items)
+	if len(filtered) == 0 {
+		markMessageDecryptFailures(messages, ledger.failures)
+		return ledger
+	}
+	result, err := messageReadCryptoClient.BatchDecryptInbound(rt.Command().Context(), rt, messagecrypto.Options{}, filtered)
+	if err != nil {
+		for _, item := range filtered {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+		}
+		markMessageDecryptFailures(messages, ledger.failures)
+		return ledger
+	}
+	index := indexMessageMapsByID(messages)
+	for _, item := range result.Items {
+		if item.Status != "" && item.Status != "success" {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+			continue
+		}
+		if strings.TrimSpace(item.PlaintextContent) == "" {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
+			continue
+		}
+		for _, message := range index[item.MessageID] {
+			message["content"] = item.PlaintextContent
+			message["contentDecrypted"] = true
+			message["cryptoLayer"] = "ding+safechat"
+			if item.KeyVersion > 0 {
+				message["dingKeyVersion"] = item.KeyVersion
+			}
+		}
+		ledger.decryptedCount++
+	}
+	for _, item := range result.Failures {
+		ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+	}
+	markMessageDecryptFailures(messages, ledger.failures)
+	return ledger
+}
+
+func filterMessageDecryptItemsByPolicy(
+	rt *shortcut.RuntimeContext,
+	items []messagecrypto.BatchDecryptItem,
+) ([]messagecrypto.BatchDecryptItem, messageDecryptLedger) {
+	filtered := make([]messagecrypto.BatchDecryptItem, 0, len(items))
+	ledger := messageDecryptLedger{candidateCount: len(items)}
+	for _, item := range items {
+		decision, err := messageReadCryptoClient.PolicyDecision(rt.Command().Context(), rt, messagecrypto.Options{
+			Identity:           "user",
+			MsgType:            "text",
+			OpenConversationID: item.ConversationID,
+		})
+		if err != nil {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			continue
+		}
+		if decision.Enabled {
+			filtered = append(filtered, item)
+		}
+	}
+	ledger.candidateCount = len(filtered)
+	return filtered, ledger
+}
+
+func collectEncryptedMessageItems(messages []map[string]any) []messagecrypto.BatchDecryptItem {
+	items := make([]messagecrypto.BatchDecryptItem, 0)
+	var walk func(map[string]any)
+	walk = func(message map[string]any) {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message)))
+		if messageID == "" || messageID == "<nil>" {
+			messageID = strings.TrimSpace(fmt.Sprint(firstMessageDecryptValue(message, "openMessageId", "messageId", "msgId")))
+		}
+		conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
+		if conversationID == "<nil>" {
+			conversationID = ""
+		}
+		content := firstMessageDecryptString(message, "content", "text")
+		if messageID != "" && chatmsg.IsEncrypted(content) {
+			items = append(items, messagecrypto.BatchDecryptItem{
+				MessageID:      messageID,
+				ConversationID: conversationID,
+				Ciphertext:     content,
+			})
+		}
+		if forwarded, ok := message["forwardMessages"].([]any); ok {
+			for _, item := range forwarded {
+				if child, ok := item.(map[string]any); ok {
+					walk(child)
+				}
+			}
+		}
+	}
+	for _, message := range messages {
+		walk(message)
+	}
+	return items
+}
+
+func indexMessageMapsByID(messages []map[string]any) map[string][]map[string]any {
+	index := map[string][]map[string]any{}
+	var walk func(map[string]any)
+	walk = func(message map[string]any) {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message)))
+		if messageID != "" && messageID != "<nil>" {
+			index[messageID] = append(index[messageID], message)
+		}
+		if forwarded, ok := message["forwardMessages"].([]any); ok {
+			for _, item := range forwarded {
+				if child, ok := item.(map[string]any); ok {
+					walk(child)
+				}
+			}
+		}
+	}
+	for _, message := range messages {
+		walk(message)
+	}
+	return index
+}
+
+func markMessageDecryptFailures(messages []map[string]any, failures []map[string]any) {
+	if len(failures) == 0 {
+		return
+	}
+	index := indexMessageMapsByID(messages)
+	for _, failure := range failures {
+		messageID := strings.TrimSpace(fmt.Sprint(failure["messageId"]))
+		if messageID == "" {
+			continue
+		}
+		for _, message := range index[messageID] {
+			content := firstMessageDecryptString(message, "content", "text")
+			if chatmsg.IsEncrypted(content) {
+				message[messageDecryptFailedOriginalContentKey] = content
+			}
+		}
+	}
+}
+
+func applyMessageDecryptLedger(payload map[string]any, ledger messageDecryptLedger) {
+	if ledger.candidateCount == 0 && ledger.decryptedCount == 0 && len(ledger.failures) == 0 {
+		return
+	}
+	payload["decryptCandidateCount"] = ledger.candidateCount
+	payload["decryptedCount"] = ledger.decryptedCount
+	payload["decryptFailedCount"] = len(ledger.failures)
+	if len(ledger.failures) > 0 {
+		payload["decryptFailures"] = ledger.failures
+		payload["partial"] = true
+	}
+}
+
+func messageDecryptFailure(messageID, conversationID, reason string) map[string]any {
+	failure := map[string]any{
+		"stage":     "message-decrypt",
+		"messageId": messageID,
+		"reason":    firstNonEmptyShortcutString(reason, "decrypt_failed"),
+	}
+	if strings.TrimSpace(conversationID) != "" {
+		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func firstNonEmptyShortcutString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func firstMessageDecryptString(message map[string]any, keys ...string) string {
+	value := firstMessageDecryptValue(message, keys...)
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func firstMessageDecryptValue(message map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := message[key]; ok {
+			return value
+		}
+	}
+	return nil
 }
 
 // MessagesListDirect pulls messages of a single chat (list_individual_chat_message, chat server).
@@ -523,8 +784,11 @@ func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+	rawMessages := listMessagesResolveMaps(data)
+	decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+	messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 	payload := map[string]any{"count": len(messages), "messages": messages}
+	applyMessageDecryptLedger(payload, decryptLedger)
 	direction := "older"
 	if rt.Bool("forward") {
 		direction = "newer"
@@ -633,11 +897,10 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 		stopReason = "page_limit"
 	}
 
-	messages := make([]map[string]any, 0, len(allItems))
-	for _, item := range allItems {
-		messages = append(messages, listMessageProjectOneWithReactions(item, !rt.Bool("no-reactions")))
-	}
+	decryptLedger := decryptMessageItemsIfRequested(rt, allItems)
+	messages := projectMessageMapsWithReactions(allItems, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(messages)
+	applyMessageDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = true
 	payload["complete"] = complete && len(failures) == 0
@@ -885,7 +1148,8 @@ var MessagesMget = shortcut.Shortcut{
 			return err
 		}
 		rawMessages := listMessagesResolveMaps(data)
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 		found := map[string]bool{}
 		for _, message := range rawMessages {
 			if id := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message))); id != "" && id != "<nil>" {
@@ -920,6 +1184,7 @@ var MessagesMget = shortcut.Shortcut{
 			"failedCount":        len(failures),
 			"failures":           failures,
 		}
+		applyMessageDecryptLedger(payload, decryptLedger)
 		if rt.Bool("download-resources") {
 			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, rawMessages, ""))
 		}

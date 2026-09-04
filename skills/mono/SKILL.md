@@ -1,7 +1,7 @@
 ---
 name: dws
 description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请或待办事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请，以及待办创建/更新/删除时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
-cli_version: ">=1.0.15"
+cli_version: ">=1.0.61"
 ---
 
 # 钉钉全产品 Skill
@@ -91,6 +91,7 @@ cli_version: ">=1.0.15"
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
+| `html`            | 原生 HTML 文件：读取/创建/全量覆盖/局部替换（.html/.htm，钉盘或文档空间）     | [html.md](./references/products/html.md)                     |
 | `markdown`        | 原生 Markdown 文件：读取/创建/对比/全量覆盖/局部替换/评论列表           | [markdown.md](./references/products/markdown.md)               |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
@@ -121,6 +122,7 @@ cli_version: ">=1.0.15"
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
 用户提到"云盘/文件存储/文件上传下载/文件夹/互联网公开/分享链接密码/公开有效期" → `drive`
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）
+用户提到"原生 HTML 文件/.html 文件/新建 HTML 页面/创建 HTML 文件/读取 HTML 原文/覆盖 HTML/局部替换 HTML" → `html`
 用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown/Markdown 评论" → `markdown`
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
@@ -142,7 +144,7 @@ cli_version: ">=1.0.15"
 关键区分: aitable(数据表格) vs todo(待办任务)
 关键区分: report(钉钉日志/日报周报) vs todo(待办任务)
 关键区分: chat send-by-bot(机器人身份发消息) vs send-by-webhook(自定义机器人Webhook告警)
-关键区分: doc(在线富文本文档/adoc) vs markdown(原生 .md 纯文本文件) vs drive(通用文件存储与传输)
+关键区分: doc(在线富文本文档/adoc) vs markdown(原生 .md 纯文本文件) vs html(原生 .html 文件读写) vs drive(通用文件存储与传输)
 关键区分: contact(基础通讯录档案：学历/家庭/银行卡/紧急联系人/合同/部门角色) vs aisearch person(通用语义找人：谁负责/上级/下级/多维度模糊搜索) vs hrbrain(人才池/员工档案专项模块数据/职业历程/绩效/结构化高级人才搜索)
 关键区分: oa tasks(审批 taskId，审批/拒绝用) vs oa list-pending(收件箱 processInstanceId，查看用)
 关键区分: oa(查询或操作审批) vs event user_oa_approval_*(当前用户审批事件长连接监听)
