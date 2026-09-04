@@ -43,6 +43,12 @@ Schema contract) keep separate authorities — do not merge them with
 
 ## Command framework declaration
 
+- 第三阶段启用 CI 强门禁，禁止新增裸参数错误。参数校验必须使用
+  `internal/errors.NewValidation`，或在权威校验阶段通过
+  `internal/errors.NormalizeValidation` 统一转换；禁止在输出层根据错误文案
+  猜测类别。新增 Cobra `Args`、flag parser、required/group constraint、
+  `corecmd.Spec.Validate` 和 metadata-only `LeafSpec.Validate` 均须保持
+  `validation` / exit code 3，已分类错误及取消/超时错误必须原样透传。
 - Framework definition: `docs/rfc-command-framework-convergence.md` **§5.0**
 - Today (leaf): `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
 - Today (non-leaf): owning Cobra command → complete `corecmd.GroupPolicy{Mode, Positionals, Recovery}` → `corecmd.ApplyGroupPolicy`; the final assembled-tree gate rejects undeclared groups and stale group declarations on leaves

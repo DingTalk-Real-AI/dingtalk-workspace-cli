@@ -14,6 +14,7 @@
 package app
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"strings"
@@ -130,10 +131,12 @@ func TestFlagErrorWithSuggestions_fallbackTailHint(t *testing.T) {
 	cmd := &cobra.Command{Use: "send", Run: func(*cobra.Command, []string) {}}
 	orig := fmt.Errorf("required flag(s) \"to\" not set")
 	err := flagErrorWithSuggestions(cmd, orig)
-	// fallback 路径返回 plain error（非 *apperrors.Error），保持原 exit code 行为
 	var ae *apperrors.Error
-	if stderrors.As(err, &ae) {
-		t.Fatalf("fallback path should return plain error, got *apperrors.Error: %v", err)
+	if !stderrors.As(err, &ae) {
+		t.Fatalf("fallback path should return *apperrors.Error, got %T: %v", err, err)
+	}
+	if ae.Category != apperrors.CategoryValidation || ae.Reason != "invalid_flag" {
+		t.Fatalf("fallback category/reason = %q/%q, want validation/invalid_flag", ae.Category, ae.Reason)
 	}
 	msg := err.Error()
 	if !strings.Contains(msg, orig.Error()) {
@@ -141,6 +144,19 @@ func TestFlagErrorWithSuggestions_fallbackTailHint(t *testing.T) {
 	}
 	if !strings.HasSuffix(msg, "See 'send --help' for usage.") {
 		t.Fatalf("err tail = %q, want suffix See 'send --help' for usage.", msg)
+	}
+}
+
+func TestFlagErrorWithSuggestionsPreservesCancellation(t *testing.T) {
+	t.Parallel()
+	cmd := &cobra.Command{Use: "send", Run: func(*cobra.Command, []string) {}}
+	err := flagErrorWithSuggestions(cmd, fmt.Errorf("unknown flag: --json: %w", context.Canceled))
+	if !stderrors.Is(err, context.Canceled) {
+		t.Fatalf("flag error lost cancellation: %v", err)
+	}
+	var typed *apperrors.Error
+	if stderrors.As(err, &typed) {
+		t.Fatalf("cancellation was relabeled as validation: %#v", typed)
 	}
 }
 
@@ -193,8 +209,8 @@ func TestReviewedFlagProtectionInstallerPreservesLocalHandler(t *testing.T) {
 
 	unreviewed := handler(cmd, fmt.Errorf("unknown flag: --not-reviewed"))
 	var structured *apperrors.Error
-	if stderrors.As(unreviewed, &structured) {
-		t.Fatalf("unreviewed error bypassed the command's local handler: %#v", structured)
+	if !stderrors.As(unreviewed, &structured) || structured.Reason != "invalid_flag" {
+		t.Fatalf("unreviewed error was not normalized after the local handler: %#v", structured)
 	}
 	if !strings.HasSuffix(unreviewed.Error(), "See 'dws contact dept list-children --help' for usage.") {
 		t.Fatalf("local handler output = %q", unreviewed)
