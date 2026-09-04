@@ -109,6 +109,9 @@ jobs:
                 filename.startsWith('scripts/install') ||
                 filename.startsWith('Formula/') ||
                 filename.startsWith('build/') ||
+                filename.startsWith('internal/msgcrypto/') ||
+                filename.startsWith('internal/app/safechat_command') ||
+                filename.startsWith('third_party/safechat-go-sdk/') ||
                 filename.startsWith('third_party/runtimepayload/') ||
                 filename === '.goreleaser.yaml' ||
                 filename === '.github/workflows/release.yml' ||
@@ -1256,7 +1259,7 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.release_sensitive == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -1286,6 +1289,15 @@ jobs:
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
           go test -v -count=1 -timeout=10m "${packages[@]}"
+
+      - name: Compile SafeChat release matrix
+        if: ${{ needs.lint.outputs.release_sensitive == 'true' }}
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GORELEASER_CURRENT_TAG: v0.0.0-test
+        run: ./scripts/release/run-goreleaser-cross.sh build --snapshot --clean --parallelism=2
 
   test-cross-platform:
     name: Test (cross-platform compile)
@@ -1741,6 +1753,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Enable MinGW for SafeChat CGO
+        shell: pwsh
+        run: |
+          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "C:\msys64\mingw64\bin\gcc.exe" --version
+
       - name: Build Windows CLI
         run: go build -o dws.exe ./cmd
 
@@ -1813,6 +1831,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Enable MinGW for SafeChat CGO
+        shell: pwsh
+        run: |
+          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "C:\msys64\mingw64\bin\gcc.exe" --version
 
       - name: Resolve authoritative coverage base
         shell: bash

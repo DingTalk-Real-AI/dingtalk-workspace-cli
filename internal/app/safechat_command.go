@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build safechat && cgo
+//go:build cgo && (darwin || linux || windows) && (amd64 || arm64)
 
 package app
 
@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	"github.com/spf13/cobra"
 )
@@ -41,9 +42,14 @@ func newSafeChatCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "safechat",
 		Short:             "安恒密盾消息加解密",
-		Long:              "安恒密盾（safechat）消息加解密能力：selftest 走端到端自检，decrypt 解密密文消息。仅在带 safechat 构建标签的二进制中可用。",
+		Long:              "安恒密盾（safechat）消息加解密能力：selftest 走端到端自检，decrypt 解密密文消息。官方及默认 CGO 构建已内置后端。",
 		DisableAutoGenTag: true,
 	}
+	corecmd.ApplyGroupPolicy(cmd, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
 	cmd.AddCommand(newSafeChatSelfTestCommand())
 	cmd.AddCommand(newSafeChatDecryptCommand())
 	return cmd
@@ -76,7 +82,7 @@ func startSafeChatSession(cmd *cobra.Command) (*safeChatSession, error) {
 		return nil, errors.New("--key-server 是必填项：密钥服务地址必须显式锁定，不能交给 C 库运行时自选")
 	}
 	if !msgcrypto.Available() {
-		return nil, errors.New("当前二进制未编译 safechat 后端，需要带 safechat 标签的 CGO 构建（参见 Makefile 的 check-safechat/test-safechat）")
+		return nil, errors.New("当前二进制未编译 safechat 后端；请使用官方产物或启用 CGO 重新构建")
 	}
 
 	ctx := cmd.Context()

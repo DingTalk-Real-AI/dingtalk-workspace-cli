@@ -22,7 +22,6 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
-	"github.com/spf13/cobra"
 )
 
 func newSafeChatSelfTestForTest() (*bytes.Buffer, func(...string) error) {
@@ -66,7 +65,7 @@ func TestSafeChatSelfTestReportsUnavailableBackend(t *testing.T) {
 	out, run := newSafeChatSelfTestForTest()
 	err := run("key-server", "https://key.example.test", "json", "true")
 	if !strings.Contains(err.Error(), "safechat") {
-		t.Fatalf("error should explain the build tag, got: %v", err)
+		t.Fatalf("error should explain the unavailable backend, got: %v", err)
 	}
 	if !strings.Contains(out.String(), `"available":false`) {
 		t.Fatalf("JSON output should carry available=false, got: %s", out.String())
@@ -122,7 +121,7 @@ func TestSafeChatDecryptReportsUnavailableBackend(t *testing.T) {
 	out, run, _ := newSafeChatDecryptForTest()
 	err := run("text", "somecipher", "json", "true")
 	if !strings.Contains(err.Error(), "safechat") {
-		t.Fatalf("error should explain the build tag, got: %v", err)
+		t.Fatalf("error should explain the unavailable backend, got: %v", err)
 	}
 	if !strings.Contains(out.String(), `"available":false`) {
 		t.Fatalf("JSON output should carry available=false, got: %s", out.String())
@@ -135,21 +134,6 @@ func TestCrossPlatformCoverageSafeChatStubAndMessageCryptoWiring(t *testing.T) {
 	t.Run("decrypt_requires_input", TestSafeChatDecryptRequiresInput)
 	t.Run("decrypt_rejects_multiple_inputs", TestSafeChatDecryptRejectsMultipleInputs)
 	t.Run("decrypt_unavailable", TestSafeChatDecryptReportsUnavailableBackend)
-	t.Run("safechat_command_excluded", func(t *testing.T) {
-		if got := newSafeChatCommand(); got != nil {
-			t.Fatalf("newSafeChatCommand() = %#v, want nil", got)
-		}
-		base := []*cobra.Command{{Use: "base"}}
-		if got := appendOptionalCommand(base, nil); len(got) != 1 || got[0].Name() != "base" {
-			t.Fatalf("append nil = %#v", got)
-		}
-		if got := appendOptionalCommand(base, &cobra.Command{Use: "extra"}); len(got) != 2 || got[1].Name() != "extra" {
-			t.Fatalf("append command = %#v", got)
-		}
-		if cmd, _, err := NewRootCommand(context.Background()).Find([]string{"safechat"}); err == nil && cmd != nil && cmd.Name() == "safechat" {
-			t.Fatalf("safechat command should be excluded from default root: %#v", cmd)
-		}
-	})
 	t.Run("app_crypto_client_defaults", func(t *testing.T) {
 		oldIdentity := appMessageCryptoCurrentIdentity
 		oldOpen := appMessageCryptoOpenSession
@@ -203,23 +187,6 @@ func TestCrossPlatformCoverageSafeChatStubAndMessageCryptoWiring(t *testing.T) {
 		}
 		if got := firstNonEmptyAppCrypto("", " "); got != "" {
 			t.Fatalf("firstNonEmptyAppCrypto(empty) = %q", got)
-		}
-	})
-	t.Run("emit_plain_error", func(t *testing.T) {
-		var out bytes.Buffer
-		cmd := newSafeChatDecryptCommand()
-		cmd.SetOut(&out)
-		err := emitUnavailableSafeChatError(cmd, false, "plain unavailable")
-		if !errors.Is(err, errors.New("plain unavailable")) && !strings.Contains(err.Error(), "plain unavailable") {
-			t.Fatalf("err = %v", err)
-		}
-		if !strings.Contains(out.String(), "plain unavailable") {
-			t.Fatalf("output = %q", out.String())
-		}
-	})
-	t.Run("validate_decrypt_file_source", func(t *testing.T) {
-		if err := validateSafeChatDecryptInput(nil, "cipher.txt", ""); err != nil {
-			t.Fatalf("file-only input should be accepted: %v", err)
 		}
 	})
 }

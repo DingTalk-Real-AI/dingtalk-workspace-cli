@@ -27,7 +27,7 @@ import (
 )
 
 // fakeCipher stands in for a backend so the wrapper logic can be tested on
-// every platform, with or without the safechat tag.
+// every platform, with or without the native SafeChat backend.
 type fakeCipher struct {
 	mu         sync.Mutex
 	encrypted  [][]byte

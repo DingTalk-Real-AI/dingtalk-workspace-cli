@@ -137,7 +137,11 @@ Static endpoint data is generated from the Wukong baseline and committed in this
 repository under `internal/syncdata`, so source builds do not require a sibling
 data checkout.
 
-> Requires Go 1.25+. Use `make package` to cross-compile for all platforms (macOS / Linux / Windows x amd64 / arm64).
+> Requires Go 1.25+. On supported macOS, Linux, and Windows amd64/arm64 hosts,
+> the default CGO build includes the SafeChat backend without a build tag and
+> therefore requires a working C compiler. Set `CGO_ENABLED=0` only when a stub
+> build is intentional. Use `make package` with Docker to build all six release
+> targets through the repository's pinned cross-compilation toolchain.
 
 </details>
 

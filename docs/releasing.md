@@ -153,8 +153,8 @@ fragment，写入唯一版本章节后移动到 `.changes/released/<version>/`�
 - 只接受 `vX.Y.Z-beta.N` 和 `vX.Y.Z`，且新版本必须高于上一正式版。这里的“上一正式版”必须同时具备公开非草稿 GitHub Release 和同 tag/commit 的成功 Release workflow；只有 tag、没有交付成功的孤儿版本会阻断后续发布，要求走机器核验恢复补齐。云端 tag 会固定 `Release-Run`、requester、commit 和版本分配指纹，交付验证按该精确 run/attempt 及完整 job graph 取证，不接受任意 `workflow_dispatch`。历史版本若曾通过专用 recovery workflow 完成交付，只能使用仓库内 `delivered-stable-recoveries.json` 中精确到 tag、commit、run、workflow SHA 与 attempt 的 reviewed 证据。
 - tag 必须由云端 seal job 创建为 annotated tag；封板提交必须已通过 PR 合入并包含在远端 `main` 历史中。流水线允许其后 `main` 继续前进，但始终要求封板提交位于 `main` 历史中。
 - 日常 CI 和发布前都会对比“最新已交付正式版”的完整 CLI 与 Schema 契约；若长时间预检期间该 baseline 发生变化，会针对新的 baseline 重新比较。
-- GoReleaser 只构建；Darwin 重签、checksums 重算和 npm 安装验证通过后，才统一上传 GitHub Release 的最终产物。
-- 六个平台归档会逐个解包并核验二进制内嵌版本；公开资产集合、checksums 集合和 npm tarball integrity 都必须精确一致。npm tarball 固定由 npm `10.9.2` 打包，避免重跑时因 runner 自带 npm 漂移产生不同字节。
+- GoReleaser 只构建；官方构建固定使用 digest 锁定的 `goreleaser-cross` 镜像和校验过的 GoReleaser `2.16.0`，以 CGO 交叉链接 Darwin、Linux、Windows 的 amd64/arm64 SafeChat 后端。Darwin 重签、checksums 重算和 npm 安装验证通过后，才统一上传 GitHub Release 的最终产物。
+- 六个平台归档会逐个解包并核验二进制内嵌版本、`CGO_ENABLED=1` 和 `safechat-go-sdk` 依赖；公开资产集合、checksums 集合和 npm tarball integrity 都必须精确一致。npm tarball 固定由 npm `10.9.2` 打包，避免重跑时因 runner 自带 npm 漂移产生不同字节。
 - stable 发布到 npm `latest`；prerelease 发布到 npm `beta`。启用 `ENABLE_OSS_MIRROR=true` 后，stable 同步 OSS `latest.txt` 和共享安装脚本，prerelease 只同步 OSS `beta.txt`，不会覆盖稳定入口。
 - Release workflow 使用一个最多容纳 100 个 pending run 的串行 publication queue；版本规划、云端封板、发布、恢复、修复和撤回共享同一发布锁。
 - 云端 seal 创建远端 tag 后，后续发布归同一 run 所有；发布中途失败时先重跑同一 run 的失败 jobs，必须跨 run 时走机器核验恢复，禁止改 tag 指向或复用版本号。只有已经公开版本经过受保护的全渠道撤回并留下永久 `withdrawn/...` 墓碑后，撤回 workflow 才会在最后一步删除原 tag。

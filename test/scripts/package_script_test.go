@@ -3179,6 +3179,111 @@ func TestReleaseStaysDraftUntilFinalizedAssetDigestsMatch(t *testing.T) {
 	}
 }
 
+func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
+	t.Parallel()
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repository root) error = %v", err)
+	}
+	read := func(relative string) string {
+		t.Helper()
+		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if readErr != nil {
+			t.Fatalf("ReadFile(%s) error = %v", relative, readErr)
+		}
+		return string(data)
+	}
+
+	goreleaser := read(".goreleaser.yaml")
+	for _, required := range []string{
+		"CGO_ENABLED=1",
+		"CC_darwin_amd64=o64-clang",
+		"CC_darwin_arm64=oa64-clang",
+		"CC_linux_amd64=x86_64-linux-gnu-gcc",
+		"CC_linux_arm64=aarch64-linux-gnu-gcc",
+		"CC_windows_amd64=x86_64-w64-mingw32-gcc",
+		"CC_windows_arm64=/llvm-mingw/bin/aarch64-w64-mingw32-gcc",
+	} {
+		if !strings.Contains(goreleaser, required) {
+			t.Errorf("SafeChat release build is missing %q", required)
+		}
+	}
+	if strings.Contains(goreleaser, "CGO_ENABLED=0") {
+		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
+	}
+
+	defaultBuild := read("scripts/dev/build.sh")
+	if !strings.Contains(defaultBuild, "CGO_ENABLED=1 go build") || strings.Contains(defaultBuild, "-tags safechat") {
+		t.Fatal("default build must include SafeChat through CGO without a build tag")
+	}
+
+	wrapper := read("scripts/release/run-goreleaser-cross.sh")
+	for _, required := range []string{
+		"ghcr.io/goreleaser/goreleaser-cross:v1.25.9@sha256:130e6870fec3c6a243746f092017e6b85e03a6ed865e155f5d1bce1a855d93f4",
+		`GORELEASER_VERSION="2.16.0"`,
+		`archive_sha="eaae05b5eba07533bd0f06846b68c808399504784df00c62eb219541fc04e5e2"`,
+		`archive_sha="0102d974373fcdeb77042d1f5897caffa193be36620fdc6c1da43a01ef8e10d3"`,
+		"goreleaser_Linux_${archive_arch}.tar.gz",
+		"archive checksum mismatch",
+		`--platform "linux/$docker_arch"`,
+		"--entrypoint /usr/local/bin/goreleaser",
+	} {
+		if !strings.Contains(wrapper, required) {
+			t.Errorf("pinned cross-release wrapper is missing %q", required)
+		}
+	}
+
+	buildAll := read("scripts/dev/build-all.sh")
+	if !strings.Contains(buildAll, "./scripts/release/run-goreleaser-cross.sh") ||
+		strings.Contains(buildAll, "CGO_ENABLED=0") {
+		t.Fatal("local release packaging must use the pinned CGO cross-release wrapper")
+	}
+	testRelease := read("scripts/dev/test-release.sh")
+	if !strings.Contains(testRelease, `make package VERSION="$VERSION"`) ||
+		strings.Contains(testRelease, "\ngoreleaser release") {
+		t.Fatal("release smoke helper must reuse the pinned package entrypoint")
+	}
+
+	workflow := read(".github/workflows/release.yml")
+	buildSection := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: Build release artifacts without publishing\n",
+		"\n      - name: Setup Node.js\n",
+	)
+	if !strings.Contains(buildSection, "./scripts/release/run-goreleaser-cross.sh") {
+		t.Fatal("official release workflow must use the pinned CGO cross-release wrapper")
+	}
+	if strings.Contains(buildSection, "goreleaser/goreleaser-action") {
+		t.Fatal("official release workflow must not bypass the pinned cross toolchain")
+	}
+
+	ciWorkflow := read(".github/workflows/ci.yml")
+	for _, required := range []string{
+		"filename.startsWith('internal/msgcrypto/')",
+		"filename.startsWith('third_party/safechat-go-sdk/')",
+		"- name: Compile SafeChat release matrix",
+		"./scripts/release/run-goreleaser-cross.sh build --snapshot --clean --parallelism=2",
+		`"C:\msys64\mingw64\bin\gcc.exe" --version`,
+	} {
+		if !strings.Contains(ciWorkflow, required) {
+			t.Errorf("CI SafeChat release coverage is missing %q", required)
+		}
+	}
+
+	verifier := read("scripts/release/verify-release-artifacts.sh")
+	for _, required := range []string{
+		`go version -m "$binary"`,
+		"CGO_ENABLED=1",
+		"safechat-go-sdk",
+	} {
+		if !strings.Contains(verifier, required) {
+			t.Errorf("release artifact verifier is missing SafeChat assertion %q", required)
+		}
+	}
+}
+
 func TestFinalizeGitHubReleaseDoesNotPublishAfterUploadFailure(t *testing.T) {
 	t.Parallel()
 

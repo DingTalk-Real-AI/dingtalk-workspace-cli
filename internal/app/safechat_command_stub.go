@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !safechat || !cgo
+//go:build !(cgo && (darwin || linux || windows) && (amd64 || arm64))
 
 package app
 
@@ -29,9 +29,8 @@ const (
 	defaultSafeChatRedirectHost = "server.safeding.com"
 )
 
-// newSafeChatCommand returns nil when safechat build tag is not enabled.
-// The command is excluded from the CLI to keep the default binary small
-// and avoid CGO dependency.
+// newSafeChatCommand returns nil on unsupported or explicitly CGO-disabled
+// builds. Official and default supported-platform builds include the command.
 func newSafeChatCommand() *cobra.Command {
 	return nil
 }
@@ -78,7 +77,7 @@ func runUnavailableSafeChatSelfTest(cmd *cobra.Command, _ []string) error {
 	if strings.TrimSpace(keyServer) == "" {
 		return emitUnavailableSafeChatError(cmd, jsonOut, "--key-server 是必填项：密钥服务地址必须显式锁定，不能交给 C 库运行时自选")
 	}
-	return emitUnavailableSafeChatError(cmd, jsonOut, "当前二进制未编译 safechat 后端，需要带 safechat 标签的 CGO 构建")
+	return emitUnavailableSafeChatError(cmd, jsonOut, "当前二进制未编译 safechat 后端；请使用官方产物或启用 CGO 重新构建")
 }
 
 func runUnavailableSafeChatDecrypt(cmd *cobra.Command, args []string) error {
@@ -88,7 +87,7 @@ func runUnavailableSafeChatDecrypt(cmd *cobra.Command, args []string) error {
 	if err := validateSafeChatDecryptInput(args, filePath, textFlag); err != nil {
 		return emitUnavailableSafeChatError(cmd, jsonOut, err.Error())
 	}
-	return emitUnavailableSafeChatError(cmd, jsonOut, "当前二进制未编译 safechat 后端，需要带 safechat 标签的 CGO 构建")
+	return emitUnavailableSafeChatError(cmd, jsonOut, "当前二进制未编译 safechat 后端；请使用官方产物或启用 CGO 重新构建")
 }
 
 func validateSafeChatDecryptInput(args []string, filePath, textFlag string) error {
