@@ -1025,6 +1025,15 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, "true") {
 			t.Fatalf("apply response = %q", body)
 		}
+		// Revisiting the callback after a successful apply must land on the
+		// dedicated approval-pending page for both the cached-code branch and
+		// the cached-token branch.
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=apply"); !strings.Contains(body, "访问权限申请中") {
+			t.Fatalf("cached pending callback = %q", body)
+		}
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath); !strings.Contains(body, "访问权限申请中") {
+			t.Fatalf("cached pending no-code callback = %q", body)
+		}
 		time.Sleep(20 * time.Millisecond)
 		cancel()
 		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {

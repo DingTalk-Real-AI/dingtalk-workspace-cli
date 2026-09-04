@@ -479,6 +479,18 @@ func TestCrossPlatformCoverageCLIAuthDisabledCopy(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageIsAlreadyAppliedErrorGuard(t *testing.T) {
+	if isAlreadyAppliedError(nil) {
+		t.Fatal("nil send-apply response must not be treated as already applied")
+	}
+	if isAlreadyAppliedError(&SendApplyResponse{Success: true}) {
+		t.Fatal("successful send-apply response must not be treated as already applied")
+	}
+	if !isAlreadyAppliedError(&SendApplyResponse{Success: false, ErrorCode: "dws_use_apply_duplicate"}) {
+		t.Fatal("case-insensitive duplicate error code must match")
+	}
+}
+
 func TestCrossPlatformCoverageLoginRegionEndpointDefaults(t *testing.T) {
 	if got := AuthorizeURLForLoginRegion(LoginRegionDefault); got != AuthorizeURL {
 		t.Fatalf("default authorize URL = %q, want %q", got, AuthorizeURL)
