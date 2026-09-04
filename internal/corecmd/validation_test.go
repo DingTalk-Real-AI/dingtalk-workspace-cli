@@ -87,10 +87,10 @@ func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
 		}
 	})
 
-	t.Run("pre-run-e", func(t *testing.T) {
+	t.Run("pre-run-e preserves ordinary errors", func(t *testing.T) {
 		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 		preRunCalled := false
-		boom := stderrors.New("invalid pre-run value")
+		boom := stderrors.New("pre-run I/O failed")
 		leaf := &cobra.Command{
 			Use: "leaf",
 			PreRunE: func(*cobra.Command, []string) error {
@@ -106,9 +106,8 @@ func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
 		if !preRunCalled {
 			t.Fatal("original PreRunE was not called")
 		}
-		requireValidationError(t, err, "invalid_parameters")
-		if !stderrors.Is(err, boom) {
-			t.Fatal("PreRunE error lost its cause")
+		if err != boom {
+			t.Fatalf("PreRunE error = %T %v, want original error", err, err)
 		}
 	})
 

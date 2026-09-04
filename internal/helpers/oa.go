@@ -1957,17 +1957,23 @@ func newOaCommand() *cobra.Command {
 			request, _ := cmd.Flags().GetString("request")
 			processCode, _ := cmd.Flags().GetString("process-code")
 			if request == "" && processCode == "" {
-				return fmt.Errorf("--request、--process-code 至少指定一个")
+				return apperrors.NewValidation("--request、--process-code 至少指定一个", apperrors.WithReason("invalid_flag_group"))
 			}
 			if request != "" {
 				for _, name := range listByAdminSimpleFlags {
 					if cmd.Flags().Changed(name) {
-						return fmt.Errorf("--request 与 --%s 不能同时指定", name)
+						return apperrors.NewValidation(
+							fmt.Sprintf("--request 与 --%s 不能同时指定", name),
+							apperrors.WithReason("invalid_flag_group"),
+						)
 					}
 				}
 			}
 			if processCode != "" && !cmd.Flags().Changed("start") {
-				return fmt.Errorf("--process-code、--start 必须同时指定（缺少 --start）")
+				return apperrors.NewValidation(
+					"--process-code、--start 必须同时指定（缺少 --start）",
+					apperrors.WithReason("invalid_flag_group"),
+				)
 			}
 			return nil
 		},
