@@ -28,6 +28,8 @@ import (
 	"github.com/spf13/cobra"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -43,6 +45,39 @@ type imReadResultCaller struct {
 	calls     []imReadResultCall
 	args      map[string]any
 	dryRun    bool
+}
+
+type imReadFakeCipher struct{}
+
+func (imReadFakeCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (imReadFakeCipher) DecryptMessage(_ context.Context, _, _ string, ciphertext []byte) ([]byte, error) {
+	return []byte("ding:" + string(ciphertext)), nil
+}
+
+type imReadSelectiveCipher struct{}
+
+func (imReadSelectiveCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (imReadSelectiveCipher) DecryptMessage(_ context.Context, _, _ string, ciphertext []byte) ([]byte, error) {
+	if string(ciphertext) == "safe-fail||2||1||1" {
+		return nil, errors.New("safechat failed")
+	}
+	return []byte("ding:" + string(ciphertext)), nil
+}
+
+type imReadFailingCipher struct{}
+
+func (imReadFailingCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (imReadFailingCipher) DecryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("safechat failed")
 }
 
 func (c *imReadResultCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -93,6 +128,44 @@ func TestCrossPlatformCoverageChatMessageReadsPreserveToolOperationOnCallerError
 	}
 	if got != "" {
 		t.Fatalf("chat message list output = %q, want no success payload", got)
+	}
+
+	caller = &imReadResultCaller{errors: map[string]error{
+		"list_individual_chat_message": errors.New("dial tcp: connection refused"),
+	}}
+	got, err = executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list-direct", "--user", "user-1", "--time", "2026-07-14 00:00:00")
+	if err == nil {
+		t.Fatalf("chat message list-direct unexpectedly succeeded with output %q", got)
+	}
+	if !errors.As(err, &cliErr) || cliErr.Operation != "chat/list_individual_chat_message" {
+		t.Fatalf("chat message list-direct error = %#v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0] != (imReadResultCall{productID: "chat", toolName: "list_individual_chat_message"}) {
+		t.Fatalf("chat message list-direct calls = %#v, want chat/list_individual_chat_message", caller.calls)
+	}
+
+	for _, tt := range []struct {
+		name      string
+		toolName  string
+		arguments []string
+	}{
+		{name: "im message collection", toolName: "list_messages_by_ids", arguments: []string{"message", "list-by-ids", "--msg-ids", "msg-1"}},
+		{name: "im send status", toolName: "query_message_send_status", arguments: []string{"message", "query-send-status", "--open-task-id", "task-1"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &imReadResultCaller{errors: map[string]error{tt.toolName: errors.New("dial tcp: connection refused")}}
+			got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand, tt.arguments...)
+			if err == nil {
+				t.Fatalf("command unexpectedly succeeded with output %q", got)
+			}
+			if !errors.As(err, &cliErr) || cliErr.Operation != "im/"+tt.toolName {
+				t.Fatalf("error = %#v, want operation im/%s", err, tt.toolName)
+			}
+			if len(caller.calls) != 1 || caller.calls[0] != (imReadResultCall{productID: "im", toolName: tt.toolName}) {
+				t.Fatalf("calls = %#v, want im/%s", caller.calls, tt.toolName)
+			}
+		})
 	}
 }
 
@@ -165,8 +238,8 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAcrossEnvelopes
 	if err := json.Unmarshal([]byte(got), &result); err != nil {
 		t.Fatalf("decode command output: %v\noutput: %s", err, got)
 	}
-	if _, exists := result["contractVersion"]; exists {
-		t.Fatalf("typed list added an out-of-scope contract envelope: %#v", result)
+	if result["contractVersion"] != chatmsg.MessageListContractVersion || result["complete"] != true || result["paginationKnown"] != true || result["stopReason"] != "source_complete" {
+		t.Fatalf("single-page contract/pagination ledger = %#v", result)
 	}
 	messages, ok := result["messages"].([]any)
 	if !ok || len(messages) != 2 {
@@ -211,6 +284,311 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAcrossEnvelopes
 	if !reflect.DeepEqual(legacyMessages, messages) {
 		t.Fatalf("result.messages = %#v, want projected top-level messages %#v", legacyMessages, messages)
 	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t *testing.T) {
+	old := chatCryptoClient
+	SetChatCryptoClient(&messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	t.Cleanup(func() { chatCryptoClient = old })
+
+	const cipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	payload := `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid","content":"` + cipher + `"}]}}`
+	caller := &imReadResultCaller{responses: map[string]string{
+		"list_conversation_message_v2": payload,
+		"get_message_crypto_policy":    `{"result":{"mode":"required","reason":"admin-required"}}`,
+		"batch_ding_decrypt_messages":  `{"result":{"items":[{"messageId":"msg-1","status":"success","plaintextContent":"明文","keyVersion":5}]}}`,
+	}}
+	got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list", "--group", "cid", "--time", "2026-07-14 00:00:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(caller.calls, []imReadResultCall{
+		{productID: "chat", toolName: "list_conversation_message_v2"},
+		{productID: "im", toolName: "get_message_crypto_policy"},
+		{productID: "im", toolName: "batch_ding_decrypt_messages"},
+	}) {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(got), &result); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := result["result"].(map[string]any)
+	messages, _ := body["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "明文" || first["content"] != "明文" || first["contentDecrypted"] != true {
+		t.Fatalf("decrypted projection = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testing.T) {
+	old := chatCryptoClient
+	t.Cleanup(func() { chatCryptoClient = old })
+
+	const encrypted = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	t.Run("batch call failure degrades to ledger", func(t *testing.T) {
+		SetChatCryptoClient(&messagecrypto.Client{
+			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+				return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+				return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			PolicyCache: messagecrypto.NewPolicyCache(nil),
+		})
+		caller := &imReadResultCaller{
+			responses: map[string]string{
+				"list_conversation_message_v2": `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid","content":"` + encrypted + `"}]}}`,
+				"get_message_crypto_policy":    `{"result":{"mode":"required"}}`,
+			},
+			errors: map[string]error{"batch_ding_decrypt_messages": errors.New("ding batch failed")},
+		}
+		got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+			"message", "list", "--group", "cid", "--time", "2026-07-14 00:00:00")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(got), &payload); err != nil {
+			t.Fatal(err)
+		}
+		body, _ := payload["result"].(map[string]any)
+		messages, _ := body["messages"].([]any)
+		first, _ := messages[0].(map[string]any)
+		if first["content"] != encrypted || first["contentDecrypted"] == true {
+			t.Fatalf("degraded message = %#v", first)
+		}
+	})
+
+	t.Run("item failures keep partial ledger", func(t *testing.T) {
+		SetChatCryptoClient(&messagecrypto.Client{
+			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+				return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+				return &messagecrypto.Session{Cipher: imReadSelectiveCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			PolicyCache: messagecrypto.NewPolicyCache(nil),
+		})
+		caller := &imReadResultCaller{responses: map[string]string{
+			"list_conversation_message_v2": `{"result":{"messages":[` +
+				`{"openMessageId":"ok","openConversationId":"cid","content":"` + encrypted + `"},` +
+				`{"openMessageId":"failed","openConversationId":"cid","content":"` + encrypted + `"},` +
+				`{"openMessageId":"empty","openConversationId":"cid","content":"` + encrypted + `"},` +
+				`{"openMessageId":"safe","openConversationId":"cid","content":"safe-fail||2||1||1"}` +
+				`]}}`,
+			"get_message_crypto_policy":   `{"result":{"mode":"required"}}`,
+			"batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"ok","status":"success","plaintextContent":"ok text","keyVersion":3},{"messageId":"failed","status":"failed","reason":"bad_key"},{"messageId":"empty","status":"success","plaintextContent":"  "}]}}`,
+		}}
+		got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+			"message", "list", "--group", "cid", "--time", "2026-07-14 00:00:00")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(got), &payload); err != nil {
+			t.Fatal(err)
+		}
+		body, _ := payload["result"].(map[string]any)
+		messages, _ := body["messages"].([]any)
+		first, _ := messages[0].(map[string]any)
+		second, _ := messages[1].(map[string]any)
+		third, _ := messages[2].(map[string]any)
+		fourth, _ := messages[3].(map[string]any)
+		if first["content"] != "ok text" || first["contentDecrypted"] != true {
+			t.Fatalf("decrypted message = %#v", first)
+		}
+		if second["content"] != encrypted || third["content"] != encrypted || fourth["content"] != "safe-fail||2||1||1" {
+			t.Fatalf("degraded messages = %#v", messages)
+		}
+	})
+
+	t.Run("direct helpers", func(t *testing.T) {
+		if got := decryptProjectedChatMessagesByPolicy(nil, nil); got != nil {
+			t.Fatalf("nil command ledger = %#v", got)
+		}
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("dry-run", true, "")
+		if got := decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{{"openMessageId": "m", "content": encrypted}}); got != nil {
+			t.Fatalf("dry-run ledger = %#v", got)
+		}
+		cmd = &cobra.Command{}
+		SetChatCryptoClient(&messagecrypto.Client{
+			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+				return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			PolicyCache: messagecrypto.NewPolicyCache(nil),
+		})
+		caller := &imReadResultCaller{responses: map[string]string{"get_message_crypto_policy": `{"result":{"mode":"off"}}`}}
+		InitDeps(caller)
+		ledger := decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{{"openMessageId": "m", "content": encrypted}})
+		if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
+			t.Fatalf("policy-off ledger = %#v", ledger)
+		}
+		if got := projectChatMessagesPayload(map[string]any{"result": map[string]any{"messages": []any{}}}, false); got["messages"] == nil {
+			t.Fatalf("projected payload = %#v", got)
+		}
+		failure := chatDecryptFailure(" msg ", " cid ", "")
+		if failure["messageId"] != "msg" || failure["conversationId"] != "cid" || failure["reason"] != "decrypt_failed" {
+			t.Fatalf("failure = %#v", failure)
+		}
+		if got := firstNonEmptyLiteral("", " value "); got != "value" {
+			t.Fatalf("firstNonEmptyLiteral = %q", got)
+		}
+		if got := firstNonEmptyLiteral("", " "); got != "" {
+			t.Fatalf("firstNonEmptyLiteral empty = %q", got)
+		}
+	})
+
+	t.Run("legacy flags and policy failure helpers", func(t *testing.T) {
+		cmd := &cobra.Command{}
+		cmd.Flags().String("role-id", "", "")
+		cmd.Flags().String("role-ids", "", "")
+		if _, err := resolveChatGroupRoleSetUserRoleIDs(cmd); err == nil {
+			t.Fatal("missing role id should fail")
+		}
+		if err := cmd.Flags().Set("role-id", ""); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resolveChatGroupRoleSetUserRoleIDs(cmd); err == nil {
+			t.Fatal("empty role id should fail")
+		}
+
+		cmd = &cobra.Command{}
+		cmd.Flags().String("role-id", "", "")
+		cmd.Flags().String("role-ids", "", "")
+		if err := cmd.Flags().Set("role-id", "a,b"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := resolveChatGroupRoleSetUserRoleIDs(cmd); err == nil {
+			t.Fatal("multiple role ids through singular flag should fail")
+		}
+
+		cmd = &cobra.Command{}
+		cmd.Flags().String("role-id", "", "")
+		cmd.Flags().String("role-ids", "", "")
+		if err := cmd.Flags().Set("role-id", "canonical"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Flags().Set("role-ids", "legacy-a,legacy-b"); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveChatGroupRoleSetUserRoleIDs(cmd)
+		if err != nil || len(got) != 2 || got[0] != "legacy-a" || got[1] != "legacy-b" {
+			t.Fatalf("role ids = %#v, %v", got, err)
+		}
+		if err := prepareChatGroupRoleSetUserRoleID(cmd); err == nil {
+			t.Fatal("prepare should reject both role-id spellings")
+		}
+
+		cmd = &cobra.Command{}
+		cmd.Flags().String("role-id", "", "")
+		cmd.Flags().String("role-ids", "", "")
+		if err := cmd.Flags().Set("role-ids", "one,two"); err != nil {
+			t.Fatal(err)
+		}
+		got, err = resolveChatGroupRoleSetUserRoleIDs(cmd)
+		if err != nil || len(got) != 2 || got[0] != "one" || got[1] != "two" {
+			t.Fatalf("role-ids branch = %#v, %v", got, err)
+		}
+
+		cmd = &cobra.Command{}
+		cmd.Flags().String("canonical", "", "")
+		cmd.Flags().Bool("legacy", false, "")
+		if err := cmd.Flags().Set("legacy", "true"); err != nil {
+			t.Fatal(err)
+		}
+		if err := promoteLegacyChatString(cmd, "canonical", "legacy"); err == nil {
+			t.Fatal("promoting non-string legacy flag should fail")
+		}
+
+		old := chatCryptoClient
+		t.Cleanup(func() { chatCryptoClient = old })
+		cmd = &cobra.Command{}
+		cmd.Flags().Bool("dry-run", false, "")
+		SetChatCryptoClient(&messagecrypto.Client{
+			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+				return messagecrypto.Identity{}, errors.New("policy unavailable")
+			},
+			PolicyCache: messagecrypto.NewPolicyCache(nil),
+		})
+		ledger := decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{
+			{"messageId": "m", "conversationId": "cid", "content": encrypted},
+		})
+		if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
+			t.Fatalf("policy failure ledger = %#v", ledger)
+		}
+
+		scopeErr := nativeSearchScopeUnverifiedError([]string{"cid"}, []string{"msg"})
+		if scopeErr == nil || !strings.Contains(scopeErr.Error(), "conversationId") {
+			t.Fatalf("scope error = %v", scopeErr)
+		}
+		userIDs, openIDs := splitChatIDValues([]string{" user-a ", "DAAAAAAAAAAAiE", ""})
+		if len(userIDs) != 1 || userIDs[0] != "user-a" || len(openIDs) != 1 || openIDs[0] != "DAAAAAAAAAAAiE" {
+			t.Fatalf("split = %#v %#v", userIDs, openIDs)
+		}
+	})
+
+	t.Run("safechat failure and string key version branches", func(t *testing.T) {
+		old := chatCryptoClient
+		t.Cleanup(func() { chatCryptoClient = old })
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("dry-run", false, "")
+
+		SetChatCryptoClient(&messagecrypto.Client{
+			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+				return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+				return &messagecrypto.Session{Cipher: imReadFailingCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			PolicyCache: messagecrypto.NewPolicyCache(nil),
+		})
+		caller := &imReadResultCaller{responses: map[string]string{"get_message_crypto_policy": `{"result":{"mode":"required"}}`}}
+		InitDeps(caller)
+		messages := []map[string]any{{"messageId": "m-fail", "conversationId": "cid", "content": encrypted}}
+		ledger := decryptProjectedChatMessagesByPolicy(cmd, messages)
+		if ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
+			t.Fatalf("safechat failure ledger = %#v", ledger)
+		}
+		ledger = decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{
+			{"content": encrypted},
+			{"messageId": "<nil>", "content": encrypted},
+		})
+		if ledger["decryptCandidateCount"] != 0 {
+			t.Fatalf("missing message id ledger = %#v", ledger)
+		}
+
+		SetChatCryptoClient(&messagecrypto.Client{
+			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+				return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+				return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+			},
+			PolicyCache: messagecrypto.NewPolicyCache(nil),
+		})
+		caller = &imReadResultCaller{responses: map[string]string{
+			"get_message_crypto_policy":   `{"result":{"mode":"required"}}`,
+			"batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"m-ok","status":"success","plaintextContent":"plain","keyVersion":"7"}]}}`,
+		}}
+		InitDeps(caller)
+		messages = []map[string]any{{"messageId": "m-ok", "conversationId": "cid", "content": encrypted}}
+		ledger = decryptProjectedChatMessagesByPolicy(cmd, messages)
+		if ledger["decryptedCount"] != 1 || messages[0]["dingKeyVersion"] != 7 {
+			t.Fatalf("key version ledger = %#v message = %#v", ledger, messages[0])
+		}
+	})
 }
 
 func TestCrossPlatformCoverageChatMessageListDefaultsTimeAndOlderDirection(t *testing.T) {
@@ -293,8 +671,198 @@ func TestCrossPlatformCoverageChatMessageSearchProjectsStableFieldsAndPreservesL
 	if !ok || len(legacyGroups) != 1 {
 		t.Fatalf("legacy result.conversationMessagesList = %#v", legacy["conversationMessagesList"])
 	}
+	nestedMessages, ok := legacyGroups[0].(map[string]any)["messages"].([]any)
+	if !ok || len(nestedMessages) != 1 || !reflect.DeepEqual(nestedMessages[0], message) {
+		t.Fatalf("nested search messages = %#v, want projected top-level message %#v", nestedMessages, message)
+	}
 	if legacy["nextCursor"] != "cursor-2" {
 		t.Fatalf("legacy result.nextCursor = %#v", legacy["nextCursor"])
+	}
+}
+
+func TestCrossPlatformCoverageChatAtomicMessageReadsProjectExistingCollections(t *testing.T) {
+	tests := []struct {
+		name     string
+		serverID string
+		toolName string
+		args     []string
+		payload  string
+		message  func(map[string]any) map[string]any
+	}{
+		{
+			name:     "direct list",
+			serverID: "chat",
+			toolName: "list_individual_chat_message",
+			args:     []string{"message", "list-direct", "--user", "user-1", "--time", "2026-07-14 00:00:00"},
+			payload:  `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}]}}`,
+			message: func(payload map[string]any) map[string]any {
+				return payload["result"].(map[string]any)["messages"].([]any)[0].(map[string]any)
+			},
+		},
+		{
+			name:     "all messages",
+			serverID: "chat",
+			toolName: "search_messages_by_time_range",
+			args:     []string{"message", "list-all"},
+			payload:  `{"result":{"conversationMessagesList":[{"openConversationId":"cid-1","title":"项目群","messages":[{"openMessageId":"msg-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}]}],"hasMore":false}}`,
+			message:  firstGroupedChatMessage,
+		},
+		{
+			name:     "messages by sender",
+			serverID: "chat",
+			toolName: "search_messages_by_sender",
+			args:     []string{"message", "list-by-sender", "--sender-user-id", "user-1"},
+			payload:  `{"result":{"conversationMessagesList":[{"openConversationId":"cid-1","messages":[{"openMessageId":"msg-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}]}],"hasMore":false}}`,
+			message:  firstGroupedChatMessage,
+		},
+		{
+			name:     "mentions",
+			serverID: "chat",
+			toolName: "search_at_me_message",
+			args:     []string{"message", "list-mentions"},
+			payload:  `{"result":{"conversationMessagesList":[{"openConversationId":"cid-1","messages":[{"openMessageId":"msg-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}]}],"hasMore":false}}`,
+			message:  firstGroupedChatMessage,
+		},
+		{
+			name:     "focused messages",
+			serverID: "chat",
+			toolName: "list_special_focus_messages",
+			args:     []string{"message", "list-focused"},
+			payload:  `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}],"hasMore":false}}`,
+			message: func(payload map[string]any) map[string]any {
+				return payload["result"].(map[string]any)["messages"].([]any)[0].(map[string]any)
+			},
+		},
+		{
+			name:     "advanced search",
+			serverID: "im",
+			toolName: "search_messages",
+			args:     []string{"message", "search-advanced", "--query", "正文"},
+			payload:  `{"result":{"conversationMessagesList":[{"openConversationId":"cid-1","messages":[{"openMessageId":"msg-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}]}],"hasMore":false}}`,
+			message:  firstGroupedChatMessage,
+		},
+		{
+			name:     "messages by ids",
+			serverID: "im",
+			toolName: "list_messages_by_ids",
+			args:     []string{"message", "list-by-ids", "--msg-ids", "msg-1"},
+			payload:  `{"result":[{"openMessageId":"msg-1","openConversationId":"cid-1","content":{"text":"正文"},"msgType":"text","legacy":"keep"}]}`,
+			message: func(payload map[string]any) map[string]any {
+				return payload["result"].([]any)[0].(map[string]any)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &imReadResultCaller{responses: map[string]string{tt.toolName: tt.payload}}
+			got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand, tt.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0] != (imReadResultCall{productID: tt.serverID, toolName: tt.toolName}) {
+				t.Fatalf("calls = %#v, want %s/%s", caller.calls, tt.serverID, tt.toolName)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(got), &payload); err != nil {
+				t.Fatalf("decode command output: %v\noutput: %s", err, got)
+			}
+			if _, exists := payload["messages"]; exists {
+				t.Fatalf("atomic command added a redundant top-level messages collection: %#v", payload)
+			}
+			message := tt.message(payload)
+			if message["messageId"] != "msg-1" || message["openMessageId"] != "msg-1" ||
+				message["conversationId"] != "cid-1" || message["text"] != "正文" || message["legacy"] != "keep" {
+				t.Fatalf("projected message = %#v", message)
+			}
+		})
+	}
+}
+
+func firstGroupedChatMessage(payload map[string]any) map[string]any {
+	result := payload["result"].(map[string]any)
+	group := result["conversationMessagesList"].([]any)[0].(map[string]any)
+	return group["messages"].([]any)[0].(map[string]any)
+}
+
+func TestCrossPlatformCoverageChatMessageProjectionHandlesSupportedAndUnsupportedShapes(t *testing.T) {
+	payload := map[string]any{
+		"messages": []map[string]any{{
+			"messageId": "canonical-top", "text": "top text",
+		}},
+		"conversationMessagesList": []map[string]any{{
+			"openConversationId": "group-cid",
+			"title":              "group title",
+			"singleChat":         true,
+			"messages": []map[string]any{{
+				"messageId": "canonical-group", "text": "group text",
+				"conversationTitle": "message title", "singleChat": false,
+			}},
+		}},
+		"result": []map[string]any{{
+			"openMessageId": "legacy-result", "content": "result text",
+		}},
+	}
+
+	projected := projectExistingChatMessageCollections(payload)
+	top := projected["messages"].([]any)[0].(map[string]any)
+	if top["openMessageId"] != "canonical-top" || top["content"] != "top text" {
+		t.Fatalf("canonical-only top message = %#v", top)
+	}
+	group := projected["conversationMessagesList"].([]any)[0].(map[string]any)
+	grouped := group["messages"].([]any)[0].(map[string]any)
+	if grouped["openConversationId"] != "group-cid" || grouped["conversationTitle"] != "message title" ||
+		grouped["singleChat"] != false || grouped["openMessageId"] != "canonical-group" ||
+		grouped["content"] != "group text" {
+		t.Fatalf("group-context message = %#v", grouped)
+	}
+	result := projected["result"].([]any)[0].(map[string]any)
+	if result["messageId"] != "legacy-result" || result["text"] != "result text" {
+		t.Fatalf("typed result messages = %#v", result)
+	}
+
+	for name, value := range map[string]any{
+		"scalar": "unchanged",
+		"mixed":  []any{map[string]any{"messageId": "ok"}, "not-a-message"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := projectChatMessageItems(value, nil); !reflect.DeepEqual(got, value) {
+				t.Fatalf("message items = %#v, want %#v", got, value)
+			}
+			if got := projectChatConversationMessageGroups(value); !reflect.DeepEqual(got, value) {
+				t.Fatalf("conversation groups = %#v, want %#v", got, value)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatAtomicQuerySendStatusProjectsWorkflow(t *testing.T) {
+	const payload = `{"result":{"taskId":"task-1","openMessageId":"msg-1","openConversationId":"cid-1","status":"SUCCESS"},"traceId":"trace-1"}`
+	caller := &imReadResultCaller{responses: map[string]string{"query_message_send_status": payload}}
+
+	got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "query-send-status", "--open-task-id", "task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(got), &result); err != nil {
+		t.Fatalf("decode command output: %v\noutput: %s", err, got)
+	}
+	if result["traceId"] != "trace-1" || result["readyForMessageActions"] != true || result["openTaskId"] != "task-1" {
+		t.Fatalf("projected send status = %#v", result)
+	}
+	messageRef, _ := result["messageRef"].(map[string]any)
+	if messageRef["openMessageId"] != "msg-1" || messageRef["openConversationId"] != "cid-1" {
+		t.Fatalf("messageRef = %#v", messageRef)
+	}
+	nextActions, _ := result["nextActions"].([]any)
+	if len(nextActions) != 3 {
+		t.Fatalf("nextActions = %#v", result["nextActions"])
+	}
+	raw, _ := result["result"].(map[string]any)
+	if raw["status"] != "SUCCESS" || raw["taskId"] != "task-1" {
+		t.Fatalf("raw send status was not preserved: %#v", raw)
 	}
 }
 
@@ -347,6 +915,28 @@ func TestCrossPlatformCoverageChatMessageScopedSearchProjectsStableFields(t *tes
 	legacy, _ := result["result"].(map[string]any)
 	if _, ok := legacy["conversationMessagesList"].([]any); !ok {
 		t.Fatalf("legacy result envelope missing: %#v", legacy)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageScopedSearchRejectsUnverifiableResults(t *testing.T) {
+	payload := `{
+		"result": {
+			"conversationMessagesList": [{
+				"messages": [{"openMessageId":"msg-unverified","content":{"text":"范围未知消息"}}]
+			}],
+			"hasMore": false
+		}
+	}`
+	caller := &imReadResultCaller{responses: map[string]string{
+		"get_conversation_info":      `{}`,
+		"search_messages_by_keyword": payload,
+	}}
+
+	_, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "search", "--query", "范围未知消息", "--group", "cid-1",
+		"--start", "2026-07-01T00:00:00+08:00", "--end", "2026-07-10T00:00:00+08:00")
+	if err == nil || !strings.Contains(err.Error(), "conversationId") {
+		t.Fatalf("scoped search error = %v", err)
 	}
 }
 
@@ -504,8 +1094,8 @@ func TestCrossPlatformCoverageChatMessageListPreservesTopLevelMessageFields(t *t
 	if result["count"] != float64(99) || result["partial"] != true || result["failedCount"] != float64(1) {
 		t.Fatalf("legacy top-level envelope fields = %#v", result)
 	}
-	if _, exists := result["contractVersion"]; exists {
-		t.Fatalf("typed list added an out-of-scope contract envelope: %#v", result)
+	if result["contractVersion"] != chatmsg.MessageListContractVersion || result["complete"] != true || result["paginationKnown"] != true || result["stopReason"] != "source_complete" {
+		t.Fatalf("single-page contract/pagination ledger = %#v", result)
 	}
 	failures, ok := result["failures"].([]any)
 	if !ok || len(failures) != 1 || failures[0].(map[string]any)["stage"] != "legacy" {
@@ -530,6 +1120,50 @@ func TestCrossPlatformCoverageChatMessageListDryRunKeepsPreviewPath(t *testing.T
 	}
 	if preview["dry_run"] != true || preview["executed"] != false || preview["tool"] != "list_conversation_message_v2" {
 		t.Fatalf("dry-run preview = %#v", preview)
+	}
+
+	caller = &imReadResultCaller{dryRun: true}
+	got, err = executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list-direct", "--user", "user-1", "--time", "2026-07-14 00:00:00")
+	if err != nil {
+		t.Fatalf("chat message list-direct dry-run returned error: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("list-direct dry-run calls = %#v, want none", caller.calls)
+	}
+	preview = map[string]any{}
+	if err := json.Unmarshal([]byte(got), &preview); err != nil {
+		t.Fatalf("decode list-direct dry-run output: %v\noutput: %s", err, got)
+	}
+	if preview["dry_run"] != true || preview["executed"] != false || preview["tool"] != "list_individual_chat_message" {
+		t.Fatalf("list-direct dry-run preview = %#v", preview)
+	}
+
+	for _, tt := range []struct {
+		name      string
+		toolName  string
+		arguments []string
+	}{
+		{name: "im message collection", toolName: "list_messages_by_ids", arguments: []string{"message", "list-by-ids", "--msg-ids", "msg-1"}},
+		{name: "im send status", toolName: "query_message_send_status", arguments: []string{"message", "query-send-status", "--open-task-id", "task-1"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &imReadResultCaller{dryRun: true}
+			got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand, tt.arguments...)
+			if err != nil {
+				t.Fatalf("dry-run returned error: %v", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("dry-run calls = %#v, want none", caller.calls)
+			}
+			preview := map[string]any{}
+			if err := json.Unmarshal([]byte(got), &preview); err != nil {
+				t.Fatalf("decode dry-run output: %v\noutput: %s", err, got)
+			}
+			if preview["dry_run"] != true || preview["executed"] != false || preview["tool"] != tt.toolName {
+				t.Fatalf("dry-run preview = %#v", preview)
+			}
+		})
 	}
 }
 

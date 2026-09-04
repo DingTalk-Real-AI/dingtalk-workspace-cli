@@ -29,10 +29,20 @@ coverage:
       - references/chat-emoji-list.md
   - mono: contact
     multi_skill: dingtalk-contact
+  - mono: contract
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/contract.md
   - mono: dev
     multi_skill: dingtalk-misc
     multi_refs:
       - references/devapp.md
+      - references/dev/mcp.md
+      - references/dev/mcp/api-to-tool.md
+      - references/dev/mcp/mapping-rules.md
+      - references/dev/mcp/auth-and-credentials.md
+      - references/dev/mcp/expression-functions.md
+      - references/dev/mcp/troubleshooting.md
   - mono: doc
     multi_skill: dingtalk-doc
     multi_refs:
@@ -48,6 +58,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/hrbrain.md
+  - mono: html
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/html.md
   - mono: mail
     multi_skill: dingtalk-mail
   - mono: markdown
@@ -154,6 +168,9 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: references/products/contract.md
+    multi: dingtalk-misc/references/contract.md
+    mode: identical
   - mono: scripts/report_received_today.py
     multi: dingtalk-misc/scripts/report_received_today.py
     mode: identical
@@ -168,8 +185,14 @@ paired_files:
         multi: "../../dingtalk-shared/references/url-patterns.md"
       - mono: "../intent-guide.md"
         multi: "sheet-intent-guide.md"
-  - mono: references/products/whiteboard/recipes.md
-    multi: dingtalk-misc/references/whiteboard/recipes.md
+  - mono: references/products/whiteboard/compose.md
+    multi: dingtalk-misc/references/whiteboard/compose.md
+    mode: identical
+  - mono: references/products/whiteboard/vector.md
+    multi: dingtalk-misc/references/whiteboard/vector.md
+    mode: identical
+  - mono: references/products/whiteboard/replace.md
+    multi: dingtalk-misc/references/whiteboard/replace.md
     mode: identical
 
 # Directory pairs whose relative file sets and contents must stay byte-identical.

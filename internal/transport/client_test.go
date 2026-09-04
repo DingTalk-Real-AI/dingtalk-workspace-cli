@@ -14,6 +14,7 @@
 package transport
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	stderrors "errors"
@@ -23,10 +24,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 func TestInitializeNegotiatesProtocolVersion(t *testing.T) {
@@ -138,7 +141,7 @@ func TestInitializeShortCircuitsOnDialFailure(t *testing.T) {
 	}
 }
 
-func TestListToolsRetriesOnServerError(t *testing.T) {
+func TestCrossPlatformCoverageListToolsRetriesOnServerError(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
@@ -157,7 +160,18 @@ func TestListToolsRetriesOnServerError(t *testing.T) {
 						"name":        "create_document",
 						"title":       "创建文档",
 						"description": "创建文档",
-						"inputSchema": map[string]any{"type": "object"},
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"id": map[string]any{"enum": []any{json.Number("9007199254740993")}},
+							},
+						},
+						"outputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"ratio": map[string]any{"const": json.Number("1.2300")},
+							},
+						},
 					},
 				},
 			},
@@ -175,6 +189,146 @@ func TestListToolsRetriesOnServerError(t *testing.T) {
 	}
 	if len(result.Tools) != 1 {
 		t.Fatalf("ListTools() len = %d, want 1", len(result.Tools))
+	}
+	enum := result.Tools[0].InputSchema["properties"].(map[string]any)["id"].(map[string]any)["enum"].([]any)
+	if value, ok := enum[0].(json.Number); !ok || value.String() != "9007199254740993" {
+		t.Fatalf("schema enum = %#v, want exact json.Number", enum[0])
+	}
+	constant := result.Tools[0].OutputSchema["properties"].(map[string]any)["ratio"].(map[string]any)["const"]
+	if value, ok := constant.(json.Number); !ok || value.String() != "1.2300" {
+		t.Fatalf("output schema const = %#v, want exact json.Number", constant)
+	}
+}
+
+func TestCrossPlatformCoverageToolDescriptorRejectsMalformedJSON(t *testing.T) {
+	t.Parallel()
+
+	var tool ToolDescriptor
+	if err := json.Unmarshal([]byte(`[]`), &tool); err == nil {
+		t.Fatal("UnmarshalJSON() error = nil, want malformed descriptor error")
+	}
+	if err := tool.UnmarshalJSON([]byte(`{} {}`)); err == nil {
+		t.Fatal("UnmarshalJSON() error = nil, want trailing JSON error")
+	}
+	if err := tool.UnmarshalJSON([]byte(`{"name":"first","name":"second"}`)); err == nil {
+		t.Fatal("UnmarshalJSON() error = nil, want duplicate-key error")
+	}
+}
+
+func TestCrossPlatformCoverageToolsListResultRequiresNonNullToolsArray(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{
+		`{}`,
+		`{"tools":null}`,
+		`{"tools":{}}`,
+		`{"tools":"invalid"}`,
+	} {
+		input := input
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+			var result ToolsListResult
+			if err := json.Unmarshal([]byte(input), &result); err == nil {
+				t.Fatalf("json.Unmarshal(%s) error = nil, want required tools array error", input)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageToolsListResultRejectsOversizedPageBeforeDescriptorAllocation(t *testing.T) {
+	var payload strings.Builder
+	payload.WriteString(`{"tools":[`)
+	for index := 0; index <= maxToolsPerListPage; index++ {
+		if index > 0 {
+			payload.WriteByte(',')
+		}
+		payload.WriteString(`{}`)
+	}
+	payload.WriteString(`]}`)
+	var result ToolsListResult
+	if err := json.Unmarshal([]byte(payload.String()), &result); err == nil || !strings.Contains(err.Error(), "tool safety limit") {
+		t.Fatalf("json.Unmarshal() error = %v, want page tool limit", err)
+	}
+}
+
+func TestCrossPlatformCoverageListToolsRecordsExactRawResultBytes(t *testing.T) {
+	t.Parallel()
+
+	resultJSON := `{"tools":[],"nextCursor":" cursor ","metadata":{"ignored":true}}`
+	responseJSON := `{"jsonrpc":"2.0","id":2,"envelopeMetadata":{"ignored":true},"result":` + resultJSON + `}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(responseJSON))
+	}))
+	defer server.Close()
+
+	result, err := NewClient(server.Client()).ListTools(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	if result.RawResultBytes != len(resultJSON) {
+		t.Fatalf("RawResultBytes = %d, want exact result bytes %d", result.RawResultBytes, len(resultJSON))
+	}
+	if result.RawResponseBytes != len(responseJSON) {
+		t.Fatalf("RawResponseBytes = %d, want exact response bytes %d", result.RawResponseBytes, len(responseJSON))
+	}
+	if result.NextCursor != " cursor " {
+		t.Fatalf("NextCursor = %q, want opaque cursor", result.NextCursor)
+	}
+}
+
+func TestCrossPlatformCoverageToolCallResultPreservesRawObjectAndNumberPrecision(t *testing.T) {
+	raw := []byte(`{"content":{"id":9007199254740993},"vendor":{"state":"kept"}}`)
+	var result ToolCallResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if id, ok := result.Content["id"].(json.Number); !ok || id.String() != "9007199254740993" {
+		t.Fatalf("decoded id = %#v", result.Content["id"])
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !bytes.Equal(encoded, raw) {
+		t.Fatalf("marshaled result = %s, want %s", encoded, raw)
+	}
+}
+
+func TestCrossPlatformCoverageJSONRPCRejectsOversizedResponseBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(bytes.Repeat([]byte(" "), config.MaxResponseBodySize+1))
+	}))
+	defer server.Close()
+	if _, err := NewClient(server.Client()).ListTools(t.Context(), server.URL); err == nil || !strings.Contains(err.Error(), "response exceeds safety limit") {
+		t.Fatalf("ListTools() error = %v, want response size limit", err)
+	}
+}
+
+func TestListToolsPageSendsOpaqueCursor(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID     int               `json:"id"`
+			Params map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if got := request.Params["cursor"]; got != " page-2 " {
+			t.Errorf("cursor = %q, want opaque cursor unchanged", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      request.ID,
+			"result":  map[string]any{"tools": []map[string]any{}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.Client())
+	if _, err := client.ListToolsPage(context.Background(), server.URL, " page-2 "); err != nil {
+		t.Fatalf("ListToolsPage() error = %v", err)
 	}
 }
 
@@ -213,6 +367,68 @@ func TestListToolsUsesExponentialBackoffWithCap(t *testing.T) {
 	want := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 25 * time.Millisecond}
 	if !reflect.DeepEqual(delays, want) {
 		t.Fatalf("retry delays = %#v, want %#v", delays, want)
+	}
+}
+
+func TestCrossPlatformCoverageWithHTTPTimeoutClonesHTTPClientForShorterAndLongerValues(t *testing.T) {
+	t.Parallel()
+	baseHTTP := &http.Client{Timeout: 30 * time.Second, Transport: http.DefaultTransport}
+	base := NewClient(baseHTTP)
+	base.AuthToken = "token"
+	base.ExtraHeaders = map[string]string{"x-test": "one"}
+
+	shorter := base.WithHTTPTimeout(2 * time.Second)
+	longer := base.WithHTTPTimeout(90 * time.Second)
+	if shorter == base || longer == base || shorter.HTTPClient == base.HTTPClient || longer.HTTPClient == base.HTTPClient {
+		t.Fatal("WithHTTPTimeout() must clone both transport.Client and http.Client")
+	}
+	if shorter.HTTPClient.Timeout != 2*time.Second || longer.HTTPClient.Timeout != 90*time.Second {
+		t.Fatalf("timeouts shorter=%s longer=%s", shorter.HTTPClient.Timeout, longer.HTTPClient.Timeout)
+	}
+	if base.HTTPClient.Timeout != 30*time.Second {
+		t.Fatalf("base HTTP timeout mutated to %s", base.HTTPClient.Timeout)
+	}
+	if shorter.HTTPClient.Transport == base.HTTPClient.Transport || longer.HTTPClient.Transport == base.HTTPClient.Transport {
+		t.Fatal("standard transports must be cloned to align response-header timeouts")
+	}
+	shortTransport := shorter.HTTPClient.Transport.(*http.Transport)
+	longTransport := longer.HTTPClient.Transport.(*http.Transport)
+	if shortTransport.ResponseHeaderTimeout != 2*time.Second || longTransport.ResponseHeaderTimeout != 90*time.Second {
+		t.Fatalf("response header timeouts shorter=%s longer=%s", shortTransport.ResponseHeaderTimeout, longTransport.ResponseHeaderTimeout)
+	}
+	if base.HTTPClient.Transport.(*http.Transport).ResponseHeaderTimeout == 2*time.Second {
+		t.Fatal("base response-header timeout mutated")
+	}
+	shorter.ExtraHeaders["x-test"] = "changed"
+	if base.ExtraHeaders["x-test"] != "one" {
+		t.Fatal("WithHTTPTimeout() shared mutable headers")
+	}
+}
+
+func TestCrossPlatformCoverageWithHTTPTimeoutBuildsSafeHTTPClientWhenMissing(t *testing.T) {
+	t.Parallel()
+	base := &Client{}
+	clone := base.WithHTTPTimeout(5 * time.Second)
+	if clone.HTTPClient == nil || clone.HTTPClient.Timeout != 5*time.Second || clone.HTTPClient.Transport == nil || clone.HTTPClient.CheckRedirect == nil {
+		t.Fatalf("WithHTTPTimeout() client = %#v", clone.HTTPClient)
+	}
+	if got := clone.HTTPClient.Transport.(*http.Transport).ResponseHeaderTimeout; got != 5*time.Second {
+		t.Fatalf("response header timeout = %s", got)
+	}
+}
+
+func TestCrossPlatformCoverageWithHTTPTimeoutExtendsResponseHeaderDeadline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(40 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`))
+	}))
+	defer server.Close()
+
+	baseTransport := defaultTransport()
+	baseTransport.ResponseHeaderTimeout = 5 * time.Millisecond
+	base := NewClient(&http.Client{Timeout: time.Second, Transport: baseTransport})
+	if _, err := base.WithHTTPTimeout(2*time.Second).ListTools(t.Context(), server.URL); err != nil {
+		t.Fatalf("ListTools() ended at stale response-header timeout: %v", err)
 	}
 }
 

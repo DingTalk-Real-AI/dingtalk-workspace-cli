@@ -414,7 +414,7 @@ func TestCrossPlatformCoverageSearchMsgGroupNameAndDefaultWindowMetadata(t *test
 }
 
 func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *testing.T) {
-	caller := &searchMsgExecutionCaller{}
+	caller := &searchMsgExecutionCaller{mgetResponse: `{"result":[{"openMessageId":"m1","content":"detail-1","messageAiSendFlag":"DWS"},{"openMessageId":"m2","content":"detail-2"}]}`}
 	payload := executeSearchMsg(t, caller,
 		"--query", "周报",
 		"--chat-id", "cid-1,cid-2",
@@ -472,6 +472,9 @@ func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *te
 	firstMessage, _ := messages[0].(map[string]any)
 	if firstMessage["text"] != "detail-1" {
 		t.Fatalf("enriched message = %#v", firstMessage)
+	}
+	if firstMessage["messageAiSendFlag"] != "DWS" {
+		t.Fatalf("enriched AI send flag = %#v", firstMessage)
 	}
 	scope, _ := payload["scope"].(map[string]any)
 	if scope["targetsValidated"] != true || scope["filterMode"] != "client" || scope["resultsWithinScope"] != true {

@@ -440,7 +440,7 @@ var paramAliasCandidateCompleteCommands = map[string][]string{
 	"oa +list-cc":                          {"oa", "+list-cc", "--page", "2"},
 	"oa +list-executed":                    {"oa", "+list-executed", "--limit", "7", "--page", "2"},
 	"oa +list-forms":                       {"oa", "+list-forms", "--cursor", "2"},
-	"oa +list-pending":                     {"oa", "+list-pending", "--start", "1773072000000", "--end", "1773158399000", "--page", "2"},
+	"oa +list-pending":                     {"oa", "+list-pending", "--create-time-from", "2026-03-10", "--create-time-to", "2026-03-11", "--page", "2"},
 	"oa +list-submitted":                   {"oa", "+list-submitted", "--page", "2"},
 	"oa +my-initiated":                     {"oa", "+my-initiated", "--page", "2"},
 	"report +outbox-list":                  {"report", "+outbox-list", "--size", "7"},
@@ -502,7 +502,7 @@ var paramAliasCandidateCompleteCommands = map[string][]string{
 	"wiki +member-remove":         {"wiki", "+member-remove", "--workspace", "workspace-1", "--user", "user-1", "--yes"},
 	"wiki +member-update":         {"wiki", "+member-update", "--workspace", "workspace-1", "--user", "user-1", "--role", "EDITOR", "--yes"},
 	"wiki +move":                  {"wiki", "+move", "--workspace", "workspace-1", "--node", "node-1", "--folder", "folder-1", "--yes"},
-	"wiki +move-to-drive":         {"wiki", "+move-to-drive", "--node", "node-1", "--folder", "folder-1", "--yes"},
+	"wiki +move-to-drive":         {"wiki", "+move-to-drive", "--workspace", "source-1", "--node", "node-1", "--folder", "folder-1", "--yes"},
 	"wiki +node-copy":             {"wiki", "+node-copy", "--workspace", "workspace-1", "--node", "node-1", "--folder", "folder-1", "--yes"},
 	"wiki +node-delete":           {"wiki", "+node-delete", "--workspace", "workspace-1", "--node", "node-1", "--yes"},
 }
@@ -573,6 +573,9 @@ var paramAliasCompleteCommandVariants = map[string]map[string][]string{
 		"order-by":  {"drive", "list", "--folder", "folder-1", "--order-by", "name", "--limit", "7"},
 		"space-id":  {"drive", "list", "--space-id", "space-1", "--limit", "7"},
 		"order":     {"drive", "list", "--folder", "folder-1", "--order", "asc", "--limit", "7"},
+	},
+	"drive +upload": {
+		"workspace": {"drive", "+upload", "--file", "param_alias_payload_equivalence_test.go", "--file-name", "fixture.txt", "--workspace", "workspace-1", "--node", "node-1", "--yes"},
 	},
 	"chat message list": {
 		"user": {"chat", "message", "list", "--user", "user-1", "--time", "2026-03-10 00:00:00", "--limit", "7"},
