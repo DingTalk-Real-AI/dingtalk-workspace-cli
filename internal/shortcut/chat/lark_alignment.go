@@ -865,9 +865,17 @@ var FeedGroupQueryItem = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		payload := feedGroupQueryProject(categoryConversationsProject(data), rt.StrSlice("conversation-ids"))
+		conversations, err := categoryConversationsProject(data)
+		if err != nil {
+			return err
+		}
+		payload := feedGroupQueryProject(conversations, rt.StrSlice("conversation-ids"))
 		chatmsg.ApplyPagination(payload, data)
-		if page := chatmsg.Pagination(data); page["hasMore"] == true {
+		hasMore, err := requireCategoryConversationsPagination(data)
+		if err != nil {
+			return err
+		}
+		if hasMore {
 			unresolved, _ := payload["notFoundConversationIds"].([]string)
 			payload["ok"] = false
 			payload["complete"] = false

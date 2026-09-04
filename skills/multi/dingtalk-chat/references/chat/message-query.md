@@ -11,6 +11,7 @@ Favorite、Pin 和 reaction。只读任务优先使用 Shortcut；只有 Shortcu
 | 用户终点 | 唯一推荐入口 |
 |---|---|
 | <!-- dws-intent: chat.read.conversation -->浏览或导出一个指定群聊/单聊 | `dws chat +chat-messages` |
+| <!-- dws-intent: chat.read.reactions -->筛选指定会话中存在 reaction 的消息 | `dws chat +search-msg --group <群名或ID> --has-reactions --page-all` |
 | <!-- dws-intent: chat.search.filtered -->发送者、关键词、@对象或消息类型是主要条件 | `dws chat +search-msg` |
 | 已知消息 IDs 读取详情 | `dws chat +messages-mget` |
 | 查看 @我的消息 | `dws chat +at-me` |
@@ -54,14 +55,8 @@ dws chat +chat-messages --group <openConversationId> \
   --order asc --page-all --format json
 ```
 
-完整读取后只需消息字段可判断的子集时，在同一次调用中使用全局 `--jq`，保留根信封并
-同步改写 `messages/count`；不得丢失 `complete`、`hasMore`、`failures` 等 ledger。
-发送者姓名仍使用 `--sender-query` 解析稳定身份，不用 `--jq` 比较展示名。
-
-```bash
-dws chat +chat-messages --group "项目群" --page-all --format json \
-  --jq '. as $root | [.messages[] | select((.reactions // []) | length > 0)] as $matched | $root | .messages = $matched | .count = ($matched | length)'
-```
+只需消息字段可判断的子集可在同一次调用中使用全局 `--jq`，但必须保留根信封并同步
+改写 `messages/count`；发送者姓名仍用 `--sender-query` 解析稳定身份，不按展示名过滤。
 
 要求导出时用 `--output <工作目录内相对.json>` 原子写入；需要资源时在读取命令上加
 `--download-resources`，不要让 Agent 先输出全量 JSON 再手工遍历资源引用。
@@ -75,11 +70,13 @@ dws chat +chat-messages --group "项目群" --page-all --format json \
 - 不传会话过滤时搜索全部会话；默认时间范围为最近 7 天。
 - `--page-all` 只翻完当前时间范围内的游标页；精确范围使用成对的 `--start/--end`。
 - `--order` 只稳定排列已经取得的结果；未全量或 `complete=false` 时不得称为完整范围全局排序。
+- reaction 是消息原生谓词：使用 `--has-reactions --page-all`，不能与 `--no-enrich` 组合；CLI 在详情富化后过滤并返回 `reactionFilter` 证据。
 
 ```bash
 dws chat +search-msg --chat-query "项目群" --sender-query "测试用户甲" --page-all --format json
 dws chat +search-msg --chat-query "项目群" --query "发布计划" --page-all --format json
 dws chat +search-msg --sender-query "测试用户甲" --page-all --format json
+dws chat +search-msg --group "项目群" --has-reactions --page-all --format json
 ```
 
 需要 Shortcut 未发布的原始过滤字段或响应时，才评估 `message search-advanced`。它支持

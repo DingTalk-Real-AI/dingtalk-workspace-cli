@@ -1,6 +1,6 @@
 ---
 name: dingtalk-chat
-description: 钉钉群聊与消息。Use when 发消息、单聊/群聊、建群、群设置/成员、搜索/回复、机器人/Webhook、消息文件。DING 和班级群走 dingtalk-misc；邮件走 dingtalk-mail。前缀 dws chat。
+description: 钉钉群聊与消息。Use when 发/回复消息、建群、群设置/成员、机器人/Webhook、消息文件，或只在 IM 内返回逐条消息并按发送者/会话/关键词/时间/reaction 等结构化谓词筛选。跨来源主题发现与当前用户行为轨迹走 dingtalk-aisearch；DING/班级群走 dingtalk-misc；邮件走 dingtalk-mail。前缀 dws chat。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -35,7 +35,7 @@ metadata:
 
 ## Golden Route
 
-按用户任务选择最小充分入口。公开层按意图分流；Resolver、发送执行、消息投影和错误契约在 Runtime 内复用，不把所有能力塞进一个万能命令。
+先按三个轴选路：①资源是否只限 IM；②答案要逐条消息还是跨源发现/行为轨迹；③是否存在发送者、会话、时间、reaction 等消息谓词。只限 IM＋逐条消息＋谓词走 `+search-msg`；已知会话的时间流浏览走 `+chat-messages`；跨源发现或行为轨迹走 AISearch。
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
@@ -43,6 +43,7 @@ metadata:
 | <!-- dws-intent: chat.send.group -->按群名或 ID 发简单文本或 Markdown | `dws chat +send-to-group --group <群名或ID> --content <内容>` | 稳定 ID 直接使用；群名多候选时停止 |
 | <!-- dws-intent: chat.send.advanced -->文件、Bot、Webhook、复杂 @ 或高级发送 | `dws chat +messages-send` | Bot 多群用 `--groups/--groups-file` 并检查逐项 ledger |
 | <!-- dws-intent: chat.read.conversation -->读取指定会话、返回较多消息 | `dws chat +chat-messages` | 粗粒度读取；目标条件明确时优先 `+search-msg` |
+| <!-- dws-intent: chat.read.reactions -->筛选存在 reaction 的消息 | `dws chat +search-msg --group <群名或ID> --has-reactions --page-all` | reaction 是消息谓词；必须富化详情并检查 `complete` |
 | <!-- dws-intent: chat.search.filtered -->多维度条件搜索（发送者/关键词/@/类型，单/跨会话） | `dws chat +search-msg` | 目标条件明确时使用 |
 | <!-- dws-intent: chat.create.group -->按成员 ID 或姓名创建群聊 | `dws chat +chat-create` | 姓名用 `--member-query` 由 CLI 唯一解析，不先手工搜索 |
 | <!-- dws-intent: chat.reply.quote -->引用回复一条已有消息 | `dws chat +messages-reply` | 使用真实消息与会话 ID；未知投递状态不得写成成功送达 |
@@ -50,7 +51,7 @@ metadata:
 | 获取群邀请链接 | `dws chat +chat-invite-url --group <群名或ID>` | 多候选时停止 |
 | 查看群机器人 | `dws chat +chat-bots --group <群名或ID>` | 返回稳定 `bots[]` |
 | 管理群身份 | 按动作使用 `+chat-role-list` / `+chat-role-add` / `+chat-role-update` / `+chat-role-remove` / `+chat-role-set-user` / `+chat-role-remove-user` / `+chat-role-query-user` | `--group` 接受群名或 ID；定义删除用单数 `--role-id`，成员设置/移除用复数 `--role-ids` |
-| 管理个人会话分类 | `+category-create` → `+category-add-conversation` → `+category-list-conversations` → `+category-delete`；读取全部用 `+category-list` | 分类不是聊天群；高频生命周期直接走 shortcut，详情读 `chat-conversation.md` |
+| <!-- dws-intent: chat.category.list-conversations -->解析现有会话分类并列出会话 | `dws chat +category-list` → `dws chat +category-list-conversations --category-id <ID>` | 先从真实列表解析唯一标题；仅当用户明确授权“任意”时按服务端顺序选首项；分类不是聊天群 |
 | 个人收藏表情列表/发送/收藏 | `dws chat emotion list/send/favorite` | 约束见 leaf Schema |
 | 修改群名称 | `dws chat +chat-update --group <群名或openConversationId> --name <新名称>` | Shortcut 内统一解析群名或稳定 ID；多候选时停止，不直接调用 atomic `group rename` |
 | 查看指定群内 @我的消息 | `dws chat +at-me --group <群名> --page-all` | 检查 `complete`；空结果仍返回数组 |

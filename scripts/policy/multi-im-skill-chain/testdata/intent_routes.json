@@ -1,6 +1,7 @@
 {
   "version": 3,
   "marker_roots": [
+    "skills/multi/dingtalk-aisearch",
     "skills/multi/dingtalk-chat",
     "skills/multi/dingtalk-event"
   ],
@@ -75,6 +76,24 @@
       ]
     },
     {
+      "id": "chat.read.reactions",
+      "preferred_tool": "chat.shortcut_search_msg",
+      "allowed_fallbacks": [
+        {
+          "tool": "chat.list_conversation_message_v2",
+          "reason_code": "raw_page_control"
+        }
+      ],
+      "forbidden_default_tools": [
+        "chat.shortcut_chat_messages",
+        "chat.list_conversation_message_v2"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/chat/message-query.md"
+      ]
+    },
+    {
       "id": "chat.search.filtered",
       "preferred_tool": "chat.shortcut_search_msg",
       "allowed_fallbacks": [
@@ -84,10 +103,14 @@
         }
       ],
       "forbidden_default_tools": [
+        "aisearch.search_enterprise",
+        "aisearch.search_enterprise_behavior",
         "chat.search_messages",
         "chat.search_messages_by_keyword"
       ],
       "references": [
+        "skills/multi/dingtalk-aisearch/SKILL.md",
+        "skills/multi/dingtalk-aisearch/references/intent-guide.md",
         "skills/multi/dingtalk-chat/SKILL.md",
         "skills/multi/dingtalk-chat/references/chat/message-query.md"
       ]
@@ -127,6 +150,17 @@
       ],
       "forbidden_default_tools": [
         "chat.list_top_conversations"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/chat/chat-conversation.md"
+      ]
+    },
+    {
+      "id": "chat.category.list-conversations",
+      "preferred_tool": "chat.shortcut_category_list_conversations",
+      "forbidden_default_tools": [
+        "chat.list_conversations_by_category"
       ],
       "references": [
         "skills/multi/dingtalk-chat/SKILL.md",

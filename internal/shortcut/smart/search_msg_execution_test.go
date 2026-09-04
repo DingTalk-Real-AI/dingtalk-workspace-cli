@@ -34,6 +34,7 @@ type searchMsgExecutionCaller struct {
 	mgetResponse       string
 	numericZeroEnd     bool
 	contactResponse    string
+	contactResponses   map[string]string
 	groupResponse      string
 	failContactKeyword string
 	failGroupKeyword   string
@@ -58,6 +59,9 @@ func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool str
 	if product == "contact" && tool == "search_contact_by_key_word" {
 		if f.failContactKeyword != "" && args["keyword"] == f.failContactKeyword {
 			return nil, errors.New("fixture contact failure")
+		}
+		if response, ok := f.contactResponses[args["keyword"].(string)]; ok {
+			return searchMsgToolResult(response), nil
 		}
 		if f.contactResponse != "" {
 			return searchMsgToolResult(f.contactResponse), nil
@@ -195,6 +199,88 @@ func TestSearchMsgSenderScopeFiltersBackendOverReturn(t *testing.T) {
 	messages := payload["messages"].([]any)
 	if messages[0].(map[string]any)["messageId"] != "wanted" {
 		t.Fatalf("messages=%#v", messages)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgMultiSenderExactRange(t *testing.T) {
+	caller := &searchMsgExecutionCaller{
+		contactResponses: map[string]string{
+			"成员甲": `{"result":[{"userId":"user-a","openDingTalkId":"` + testCurrentDOpenID + `","name":"成员甲"}],"hasMore":false}`,
+			"成员乙": `{"result":[{"userId":"user-b","openDingTalkId":"` + testCurrentDOpenID2 + `","name":"成员乙"}],"hasMore":false}`,
+		},
+		searchResponse: `{"result":{"messages":[
+			{"openMessageId":"m2","senderOpenDingTalkId":"` + testCurrentDOpenID2 + `","createTime":"2026-02-02 09:00:00","content":"项目更新乙"},
+			{"openMessageId":"other","senderOpenDingTalkId":"DOTHERFIXTUREID","createTime":"2030-01-01 10:00:00","content":"越界"},
+			{"openMessageId":"m1","senderOpenDingTalkId":"` + testCurrentDOpenID + `","createTime":"2026-02-01 09:00:00","content":"项目更新甲"}
+		],"hasMore":false}}`,
+	}
+	payload := executeSearchMsg(t, caller,
+		"--sender-query", "成员甲,成员乙",
+		"--query", "项目更新",
+		"--start", "2026-02-01T00:00:00+08:00",
+		"--end", "2026-03-01T00:00:00+08:00",
+		"--order", "asc",
+		"--page-all",
+		"--no-enrich",
+	)
+	if len(caller.calls) != 3 || caller.calls[2].tool != "search_messages" {
+		t.Fatalf("calls=%#v, want two sender resolutions and one message search", caller.calls)
+	}
+	search := caller.calls[2].args
+	if search["keyword"] != "项目更新" {
+		t.Fatalf("keyword=%#v", search["keyword"])
+	}
+	if got, want := search["senderOpenDingTakIds"], []string{testCurrentDOpenID, testCurrentDOpenID2}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("senderOpenDingTakIds=%#v want=%#v", got, want)
+	}
+	start, _ := time.Parse(time.RFC3339, "2026-02-01T00:00:00+08:00")
+	end, _ := time.Parse(time.RFC3339, "2026-03-01T00:00:00+08:00")
+	if search["startTime"] != start.UnixMilli() || search["endTime"] != end.UnixMilli() {
+		t.Fatalf("range start/end=%#v/%#v want=%d/%d", search["startTime"], search["endTime"], start.UnixMilli(), end.UnixMilli())
+	}
+	if payload["complete"] != true || payload["count"] != float64(2) || payload["failedCount"] != float64(0) {
+		t.Fatalf("payload=%#v", payload)
+	}
+	messages := payload["messages"].([]any)
+	if messages[0].(map[string]any)["messageId"] != "m1" || messages[1].(map[string]any)["messageId"] != "m2" {
+		t.Fatalf("messages are not stable ascending filtered results: %#v", messages)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgReactionPredicateUsesEnrichedEvidence(t *testing.T) {
+	caller := &searchMsgExecutionCaller{
+		firstResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1"},{"openMessageId":"m2","openConversationId":"cid-1"}],"hasMore":false}}`,
+		mgetResponse:  `{"result":[{"openMessageId":"m1","openConversationId":"cid-1","emotionReplyList":[{"emoji":"赞","count":1}]},{"openMessageId":"m2","openConversationId":"cid-1"}]}`,
+	}
+	payload := executeSearchMsg(t, caller, "--has-reactions", "--page-all")
+	if payload["complete"] != true || payload["count"] != float64(1) {
+		t.Fatalf("reaction query payload=%#v", payload)
+	}
+	filter, ok := payload["reactionFilter"].(map[string]any)
+	if !ok || filter["predicate"] != "present" || filter["sourceCount"] != float64(2) ||
+		filter["matchedCount"] != float64(1) || filter["evidence"] != "message_detail_enrichment" {
+		t.Fatalf("reaction filter=%#v", payload["reactionFilter"])
+	}
+	messages := payload["messages"].([]any)
+	if messages[0].(map[string]any)["messageId"] != "m1" {
+		t.Fatalf("reaction messages=%#v", messages)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgReactionPredicateValidationStopsBeforeRead(t *testing.T) {
+	for _, args := range [][]string{
+		{},
+		{"--has-reactions"},
+		{"--has-reactions", "--page-all", "--no-enrich"},
+	} {
+		caller := &searchMsgExecutionCaller{}
+		_, err := executeSearchMsgResult(caller, args...)
+		if err == nil {
+			t.Fatalf("invalid reaction query succeeded: %v", args)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("invalid reaction query reached lower service: %v => %#v", args, caller.calls)
+		}
 	}
 }
 
