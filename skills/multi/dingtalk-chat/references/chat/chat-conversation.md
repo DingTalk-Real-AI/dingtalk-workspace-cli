@@ -123,7 +123,6 @@ dws chat +category-delete --category-id 123 --format json
 `--members` 是群成员 openDingTalkId 列表，两者可单独或组合使用。写操作在首次调用前按
 Runtime gate 完成确认；上述示例不代表可以绕过确认。
 
-只有用户明确授权“任选一个现有分组”时才使用 `--select-any`；该模式按服务端列表顺序选择首个真实分组。用户给出标题时用 `--category-name` 做完整标题唯一匹配，零命中或同名多候选都停止。成功结果只把 `conversations[]` 当作会话；成员和消息是不同对象。
 
 ## 常见工作流
 

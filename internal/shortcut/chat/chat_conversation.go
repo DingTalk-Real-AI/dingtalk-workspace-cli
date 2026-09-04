@@ -984,7 +984,7 @@ var CategoryListConversations = shortcut.Shortcut{
 			Reason:       "Reviewed category reader: it preserves the published stable-ID input while validating the collection shape, stable conversation identity, and source exhaustion.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按稳定 categoryId 严格列出会话分组中的会话",
+			AgentSummary: "按稳定 categoryId 列出会话分组中的会话",
 			UseWhen:      []string{categoryListConversationsIntent},
 			AvoidWhen: []string{
 				"只需列出分组本身时使用 chat +category-list；需要群成员或聊天消息时分别使用 chat +chat-members-list 或 chat +chat-messages",
