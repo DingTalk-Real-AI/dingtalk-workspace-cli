@@ -3213,6 +3213,15 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
 	}
 
+	for _, relative := range []string{
+		"third_party/safechat-go-sdk/cgo_windows_amd64.go",
+		"third_party/safechat-go-sdk/cgo_windows_arm64.go",
+	} {
+		if !strings.Contains(read(relative), "-lmsvcrt") {
+			t.Errorf("%s must link the MSVCRT import library required by the vendor archive", relative)
+		}
+	}
+
 	defaultBuild := read("scripts/dev/build.sh")
 	if !strings.Contains(defaultBuild, "CGO_ENABLED=1 go build") || strings.Contains(defaultBuild, "-tags safechat") {
 		t.Fatal("default build must include SafeChat through CGO without a build tag")
