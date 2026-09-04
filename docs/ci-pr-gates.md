@@ -155,6 +155,18 @@ The classifier fails closed unless it can prove every one of these facts:
   published SHA-256 digest and the same head SHA; the archive's admission
   manifest independently binds the run ID, head SHA, and `full` profile kind.
 
+Merged-PR discovery tolerates GitHub's commit-to-PR association index lag. A
+protected-main push fires within seconds of the merge, and a single-shot
+association lookup was observed returning zero matches for eligible merges in
+production, silently forcing the complete suite. The classifier therefore
+re-polls discovery on a bounded budget (`DWS_ADMITTED_MERGE_RETRY_ATTEMPTS`
+attempts, `DWS_ADMITTED_MERGE_RETRY_INTERVAL_MS` apart; twelve attempts at
+five seconds by default) and additionally consults the most recently updated
+closed `main` PRs under the identical exact filter, because the merge
+transaction records `merge_commit_sha` on the PR before the push event fires.
+Only zero-match discovery retries; an ambiguous or mismatched result throws
+immediately, and an exhausted budget keeps the complete protected-main suite.
+
 When those facts hold, `Lint` publishes the bound PR head, run, artifact, and
 digest. The existing `coverage-main-metadata` job downloads the artifact by
 numeric ID, revalidates its API identity, verifies the downloaded archive's

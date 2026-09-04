@@ -528,16 +528,7 @@ jobs:
                       throw new Error('target is not an exact two-parent merge from push before');
                     }
                     const admittedHeadSha = targetCommit.parents[1].sha;
-                    const associatedPulls = await github.paginate(
-                      github.rest.pulls.listPullRequestsAssociatedWithCommit,
-                      {
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        commit_sha: expectedAfter,
-                        per_page: 100,
-                      },
-                    );
-                    const admittedPulls = associatedPulls.filter((pull) =>
+                    const matchesAdmittedMerge = (pull) =>
                       pull.state === 'closed' &&
                       typeof pull.merged_at === 'string' &&
                       pull.merged_at.length > 0 &&
@@ -550,11 +541,80 @@ jobs:
                       typeof pull.head?.ref === 'string' &&
                       pull.head.ref.length > 0 &&
                       typeof pull.head?.repo?.full_name === 'string' &&
-                      pull.head.repo.full_name.length > 0,
+                      pull.head.repo.full_name.length > 0;
+                    const findAdmittedPulls = async () => {
+                      const associatedPulls = await github.paginate(
+                        github.rest.pulls.listPullRequestsAssociatedWithCommit,
+                        {
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          commit_sha: expectedAfter,
+                          per_page: 100,
+                        },
+                      );
+                      const matched = associatedPulls.filter(matchesAdmittedMerge);
+                      if (matched.length > 0) {
+                        return matched;
+                      }
+                      // A protected-main push fires within seconds of the
+                      // merge, before the commit-to-PR association index
+                      // necessarily lists the fresh merge commit. The merge
+                      // transaction has already recorded merge_commit_sha on
+                      // the PR itself, so the most recently updated closed
+                      // PRs are a second discovery source under the identical
+                      // exact filter. One page only: the just-merged PR is
+                      // always among the latest updated closed main PRs.
+                      try {
+                        const {data: recentlyClosedPulls} =
+                          await github.rest.pulls.list({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            state: 'closed',
+                            base: 'main',
+                            sort: 'updated',
+                            direction: 'desc',
+                            per_page: 100,
+                          });
+                        return (recentlyClosedPulls || []).filter(matchesAdmittedMerge);
+                      } catch (error) {
+                        core.warning(
+                          `closed-PR fallback discovery failed: ${error.message}`,
+                        );
+                        return [];
+                      }
+                    };
+                    // Bounded retry so discovery can wait out association-index
+                    // lag instead of failing closed on the first snapshot.
+                    // Only zero matches retry; ambiguity throws immediately.
+                    const retryIntervalMs = Math.max(
+                      0,
+                      Number.parseInt(
+                        process.env.DWS_ADMITTED_MERGE_RETRY_INTERVAL_MS || '5000',
+                        10,
+                      ) || 0,
                     );
+                    const retryAttempts = Math.max(
+                      1,
+                      Number.parseInt(
+                        process.env.DWS_ADMITTED_MERGE_RETRY_ATTEMPTS || '12',
+                        10,
+                      ) || 1,
+                    );
+                    let admittedPulls = await findAdmittedPulls();
+                    let discoveryAttempts = 1;
+                    while (admittedPulls.length === 0 && discoveryAttempts < retryAttempts) {
+                      discoveryAttempts += 1;
+                      if (retryIntervalMs > 0) {
+                        await new Promise((resolve) => {
+                          setTimeout(resolve, retryIntervalMs);
+                        });
+                      }
+                      admittedPulls = await findAdmittedPulls();
+                    }
                     if (admittedPulls.length !== 1) {
                       throw new Error(
-                        `expected one associated merged PR, found ${admittedPulls.length}`,
+                        `expected one associated merged PR, found ${admittedPulls.length} ` +
+                          `after ${discoveryAttempts} discovery attempt(s)`,
                       );
                     }
                     const admittedPull = admittedPulls[0];
