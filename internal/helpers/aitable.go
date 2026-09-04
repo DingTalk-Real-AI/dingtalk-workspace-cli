@@ -1648,9 +1648,9 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
 			UseWhen: []string{
-				"需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时",
+				"需要读取或管理 AI 表格中的结构、数据、应用模式、视图、权限、导入导出或工作流时",
 			},
 			AvoidWhen: []string{
 				"目标是在线电子表格单元格读写时用 sheet；普通文档用 doc",
@@ -1660,10 +1660,11 @@ func newAitableCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
-		Long: `管理钉钉 AI 表格：Base 管理、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
+		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
 
 命令结构:
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
+  dws aitable app        [get|update|page|widget]                                       应用模式管理
   dws aitable table      [get|create|update|delete]                                     数据表管理
   dws aitable field      [get|create|update|delete|search-options]                      字段管理
   dws aitable record     [query|stats|group-stats|create|update|delete]                 记录管理
@@ -8930,7 +8931,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 
 	// 组装 aitable 命令树
 	root.AddCommand(
-		baseCmd, tableCmd, fieldCmd,
+		baseCmd, newAitableAppCommand(), tableCmd, fieldCmd,
 		recordCmd, viewCmd, formCmd,
 		workflowCmd,
 		dashboardCmd, chartCmd,

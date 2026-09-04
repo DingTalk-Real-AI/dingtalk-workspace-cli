@@ -1264,6 +1264,10 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 			t.Errorf("--%s RequiredWhen = %q, want compatibility-safe custom constraint", name, got)
 		}
 	}
+	blockIDDesc := flags["block-id"].Desc
+	if !strings.Contains(blockIDDesc, "逗号分隔") || !strings.Contains(blockIDDesc, "最多 50 个") {
+		t.Fatalf("--block-id description must document batch deletion: %q", blockIDDesc)
+	}
 	if len(Update.Constraints) != 1 || Update.Constraints[0].Kind != shortcut.ConstraintCustom ||
 		!strings.Contains(Update.Constraints[0].Description, "依 command 校验") {
 		t.Fatalf("update custom constraint = %#v", Update.Constraints)

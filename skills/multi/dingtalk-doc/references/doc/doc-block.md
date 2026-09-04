@@ -14,7 +14,10 @@ dws doc +fetch --node <DOC_ID> --detail with-ids --scope section --start-block-i
 dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容"
 dws doc +update --node <DOC_ID> --command block_insert_after --after-block-id <BLOCK_ID> --content "补充内容"
 dws doc +update --node <DOC_ID> --command block_delete --block-id <BLOCK_ID>
+dws doc +update --node <DOC_ID> --command block_delete --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C>
 ```
+
+`block_delete` 的 `--block-id` 支持逗号分隔一次删除多个块。
 
 `block-id` 必须来自真实 `+fetch --detail with-ids`、`+review` 或原子 block 列表返回。确认、写入与验证统一由 `+update` 处理，正常成功不追加整篇回读。
 
