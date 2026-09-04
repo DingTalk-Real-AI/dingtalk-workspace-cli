@@ -192,6 +192,38 @@ In particular, the governance PR that introduces or changes this mechanism
 must itself run the complete post-merge suite; only later eligible source
 merges can use the optimization.
 
+## Fail-fast cancellation on pull-request runs
+
+The first substantive job failure in a pull-request admission run cancels the
+whole run, so already-doomed siblings stop consuming hosted runners and
+concurrency slots while the author iterates. Cancellation is implemented by
+one `fail-fast-*` tripwire helper job per watched job: a job-level `needs`
+evaluates only after every watched job completes, so a shared watcher could
+not react to the first failure, while a dedicated tripwire fires the moment
+its own job fails. Matrix jobs react after their last leg completes; the
+matrix `fail-fast: false` contract is deliberately preserved so every broken
+shard still reports in one run before the tripwire cancels the remainder.
+
+Each tripwire also depends on `lint` directly and fires only after a
+successful lint classification, so the Draft-gated lint job remains the
+single admission entry point: a failed lint already skips every dependent
+job, and Draft revisions never reach a tripwire.
+
+Tripwires are scoped to `pull_request` events. Protected-main pushes run to
+completion: they are the coverage-cache producer and need the full failure
+picture for post-merge triage. `lint` is exempt because its failure skips
+every dependent job anyway; `coverage-main-metadata` is exempt because it is
+push-only.
+
+A cancelled admission run still fails the nine required contexts — a
+cancelled or skipped check is not a success — so fail-fast can never authorize
+a merge; it only reclaims wasted work. Tripwire check runs are helper
+contexts outside the ruleset.
+`TestCIFailFastTripwiresWatchEverySubstantiveJob` derives the watched set
+from the live job graph, so a new substantive job without a tripwire, or a
+tripwire orphaned by a removed or exempted job, fails the workflow contract
+tests.
+
 ## Risk tiers and downstream boundaries
 
 `Lint` resolves the complete base/head diff before any helper is skipped.

@@ -3009,3 +3009,443 @@ jobs:
       - name: Record scoped fast path
         if: ${{ needs.lint.outputs.admitted_merge != 'true' && (needs.lint.outputs.changelog_only == 'true' || needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.edition_sensitive != 'true')) }}
         run: echo "Edition is unaffected by this classified revision." >> "$GITHUB_STEP_SUMMARY"
+
+  # Fail-fast tripwires: the first substantive failure in a pull-request
+  # admission run cancels the whole run so already-doomed siblings stop
+  # consuming hosted runners and concurrency slots while the author iterates.
+  # One tripwire per watched job is required because a job-level `needs`
+  # evaluates only after every watched job completes; a dedicated tripwire
+  # reacts to its own job's failure the moment it happens. Matrix jobs react
+  # after their last leg completes; the matrix `fail-fast: false` contract is
+  # deliberately preserved so every broken shard still reports in one run.
+  #
+  # Each tripwire also depends on lint directly, keeping the Draft-gated lint
+  # job the single admission entry point, and fires only after a successful
+  # lint classification: a failed lint already skips every dependent job, and
+  # Draft revisions never reach these tripwires. Protected-main pushes
+  # deliberately run to completion: they are the coverage-cache producer and
+  # need the full failure picture for post-merge triage, so every tripwire is
+  # scoped to pull-request events. A cancelled admission run still fails the
+  # nine required ruleset contexts (cancelled is not success), so this
+  # mechanism can never authorize a merge; it only reclaims wasted work.
+  # Tripwires are helper jobs, not ruleset contexts.
+
+  fail-fast-runtime-payload:
+    name: Fail fast (Runtime Payload)
+    needs:
+      - lint
+      - runtime-payload
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Runtime Payload failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test-focused:
+    name: Fail fast (focused tests)
+    needs:
+      - lint
+      - test-focused
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after focused tests failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test-race:
+    name: Fail fast (race shards)
+    needs:
+      - lint
+      - test-race
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after race shards failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test-release-scripts:
+    name: Fail fast (release contracts)
+    needs:
+      - lint
+      - test-release-scripts
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after release contracts failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test-cross-platform:
+    name: Fail fast (cross-platform compile)
+    needs:
+      - lint
+      - test-cross-platform
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after cross-platform compile failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test:
+    name: Fail fast (Test aggregate)
+    needs:
+      - lint
+      - test
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Test aggregate failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test-darwin:
+    name: Fail fast (macOS tests)
+    needs:
+      - lint
+      - test-darwin
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after macOS tests failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-test-windows:
+    name: Fail fast (Windows tests)
+    needs:
+      - lint
+      - test-windows
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Windows tests failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage-current:
+    name: Fail fast (scoped coverage)
+    needs:
+      - lint
+      - coverage-current
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after scoped coverage failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage-current-full:
+    name: Fail fast (coverage shards)
+    needs:
+      - lint
+      - coverage-current-full
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after coverage shards failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage-supporting:
+    name: Fail fast (supporting coverage)
+    needs:
+      - lint
+      - coverage-supporting
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after supporting coverage failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage-baseline:
+    name: Fail fast (baseline coverage)
+    needs:
+      - lint
+      - coverage-baseline
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after baseline coverage failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage-darwin:
+    name: Fail fast (macOS coverage)
+    needs:
+      - lint
+      - coverage-darwin
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after macOS coverage failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage-windows:
+    name: Fail fast (Windows coverage)
+    needs:
+      - lint
+      - coverage-windows
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Windows coverage failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-coverage:
+    name: Fail fast (Coverage gate)
+    needs:
+      - lint
+      - coverage
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Coverage gate failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-policy:
+    name: Fail fast (Policy)
+    needs:
+      - lint
+      - policy
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Policy failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-interface-integrity:
+    name: Fail fast (Interface Integrity)
+    needs:
+      - lint
+      - interface-integrity
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Interface Integrity failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-cli-smoke:
+    name: Fail fast (CLI Smoke)
+    needs:
+      - lint
+      - cli-smoke
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after CLI Smoke failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-mock-mcp-smoke:
+    name: Fail fast (Mock MCP)
+    needs:
+      - lint
+      - mock-mcp-smoke
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Mock MCP failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
+
+  fail-fast-edition-tests:
+    name: Fail fast (Edition)
+    needs:
+      - lint
+      - edition-tests
+    if: failure() && needs.lint.result == 'success' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel run after Edition failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! cancel_output="$(gh run cancel "$GITHUB_RUN_ID" 2>&1)"; then
+            printf '%s\n' "$cancel_output"
+            echo "::warning::fail-fast cancel request did not complete: ${cancel_output}"
+          fi
