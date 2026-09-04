@@ -155,6 +155,18 @@ The classifier fails closed unless it can prove every one of these facts:
   published SHA-256 digest and the same head SHA; the archive's admission
   manifest independently binds the run ID, head SHA, and `full` profile kind.
 
+Merged-PR discovery tolerates GitHub's commit-to-PR association index lag. A
+protected-main push fires within seconds of the merge, and a single-shot
+association lookup was observed returning zero matches for eligible merges in
+production, silently forcing the complete suite. The classifier therefore
+re-polls discovery on a bounded budget (`DWS_ADMITTED_MERGE_RETRY_ATTEMPTS`
+attempts, `DWS_ADMITTED_MERGE_RETRY_INTERVAL_MS` apart; twelve attempts at
+five seconds by default) and additionally consults the most recently updated
+closed `main` PRs under the identical exact filter, because the merge
+transaction records `merge_commit_sha` on the PR before the push event fires.
+Only zero-match discovery retries; an ambiguous or mismatched result throws
+immediately, and an exhausted budget keeps the complete protected-main suite.
+
 When those facts hold, `Lint` publishes the bound PR head, run, artifact, and
 digest. The existing `coverage-main-metadata` job downloads the artifact by
 numeric ID, revalidates its API identity, verifies the downloaded archive's
@@ -179,6 +191,38 @@ ineligible because it cannot populate a complete future merge-base profile.
 In particular, the governance PR that introduces or changes this mechanism
 must itself run the complete post-merge suite; only later eligible source
 merges can use the optimization.
+
+## Fail-fast cancellation on pull-request runs
+
+The first substantive job failure in a pull-request admission run cancels the
+whole run, so already-doomed siblings stop consuming hosted runners and
+concurrency slots while the author iterates. Cancellation is implemented by
+one `fail-fast-*` tripwire helper job per watched job: a job-level `needs`
+evaluates only after every watched job completes, so a shared watcher could
+not react to the first failure, while a dedicated tripwire fires the moment
+its own job fails. Matrix jobs react after their last leg completes; the
+matrix `fail-fast: false` contract is deliberately preserved so every broken
+shard still reports in one run before the tripwire cancels the remainder.
+
+Each tripwire also depends on `lint` directly and fires only after a
+successful lint classification, so the Draft-gated lint job remains the
+single admission entry point: a failed lint already skips every dependent
+job, and Draft revisions never reach a tripwire.
+
+Tripwires are scoped to `pull_request` events. Protected-main pushes run to
+completion: they are the coverage-cache producer and need the full failure
+picture for post-merge triage. `lint` is exempt because its failure skips
+every dependent job anyway; `coverage-main-metadata` is exempt because it is
+push-only.
+
+A cancelled admission run still fails the nine required contexts — a
+cancelled or skipped check is not a success — so fail-fast can never authorize
+a merge; it only reclaims wasted work. Tripwire check runs are helper
+contexts outside the ruleset.
+`TestCIFailFastTripwiresWatchEverySubstantiveJob` derives the watched set
+from the live job graph, so a new substantive job without a tripwire, or a
+tripwire orphaned by a removed or exempted job, fails the workflow contract
+tests.
 
 ## Risk tiers and downstream boundaries
 
