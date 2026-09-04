@@ -3265,7 +3265,7 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		"filename.startsWith('third_party/safechat-go-sdk/')",
 		"- name: Compile SafeChat release matrix",
 		"./scripts/release/run-goreleaser-cross.sh build --snapshot --clean --parallelism=2",
-		`"C:\msys64\mingw64\bin\gcc.exe" --version`,
+		`"C:\mingw64\bin\gcc.exe" --version`,
 	} {
 		if !strings.Contains(ciWorkflow, required) {
 			t.Errorf("CI SafeChat release coverage is missing %q", required)
