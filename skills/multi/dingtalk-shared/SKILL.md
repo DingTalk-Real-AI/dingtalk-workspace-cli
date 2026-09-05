@@ -27,6 +27,8 @@ metadata:
 - 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
+国际版、海外版或 `.io` 区域登录必须执行 `dws auth login --intl`（无头环境再加 `--device`）；`--intl` 只用于登录，后续业务命令按所选 profile 自动路由。
+
 产品或跨产品规则在最小契约之上增量加载。用户已明确产品内容意图时，意图优先于 URL 形态；多账号选择与跨组织规则读取 [`../dingtalk-misc/references/profile.md`](../dingtalk-misc/references/profile.md)。本地文件、产品边界和跨产品传递规则只在对应任务中加载，避免把全局手册放入每个单产品请求。
 
 ## 渐进加载

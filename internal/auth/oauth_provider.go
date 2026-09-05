@@ -324,7 +324,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			if processedAuthDisabled {
 				_, _ = fmt.Fprint(w, notEnabledHTML)
 			} else {
-				_, _ = fmt.Fprint(w, successHTML)
+				_, _ = fmt.Fprint(w, renderSuccessHTML())
 			}
 			return
 		}
@@ -344,7 +344,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			if processedAuthDisabled {
 				_, _ = fmt.Fprint(w, notEnabledHTML)
 			} else {
-				_, _ = fmt.Fprint(w, successHTML)
+				_, _ = fmt.Fprint(w, renderSuccessHTML())
 			}
 			return
 		}
@@ -445,7 +445,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		switch {
 		case cliAuthEnabled:
-			_, _ = fmt.Fprint(w, successHTML)
+			_, _ = fmt.Fprint(w, renderSuccessHTML())
 		case denialReason == "user_forbidden" || denialReason == "user_not_allowed":
 			_, _ = fmt.Fprint(w, accessDeniedHTML)
 		case denialReason == "channel_not_allowed" || denialReason == "channel_required":
@@ -554,7 +554,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	// Success page endpoint
 	mux.HandleFunc("/success", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, successHTML)
+		_, _ = fmt.Fprint(w, renderSuccessHTML())
 	})
 
 	server := &http.Server{Handler: mux}
