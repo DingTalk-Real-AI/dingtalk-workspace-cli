@@ -6,6 +6,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.4] - 2026-09-04
+
+### Fixed
+
+- **Release dependency checksums** (#1288) — removes stale module checksum records so release validation remains reproducible after `go mod tidy`.
+
+
 ## [1.0.62-beta.3] - 2026-09-04
 
 ### Added
