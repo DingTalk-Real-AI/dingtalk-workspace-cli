@@ -104,6 +104,7 @@ jobs:
             -run '^TestPersistentSchemaCacheRealDeliveryParityAndLazyIO$' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-parity.txt"
       - name: Build native candidate with finalized runtime payload
+        id: candidate_build
         run: python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
       - name: Verify exact candidate and interleaved process performance
         run: |
@@ -135,6 +136,26 @@ jobs:
             -memprofile "$RUNNER_TEMP/schema-evidence/meta-memory.pprof" \
             -o "$RUNNER_TEMP/schema-meta-profile.test" \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/meta-profile.txt"
+      - name: Check identity with isolated files and network
+        if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends bubblewrap
+            bwrap --version
+          fi
+          python3 scripts/dev/test_schema_identity_environment.py \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/environment-controls.txt"
+          env CGO_ENABLED=0 GOFLAGS='' GOEXPERIMENT='' GOWORK=off GOAMD64=v1 GOARM64=v8.0 \
+            go build -trimpath -buildmode=pie \
+            -o "$RUNNER_TEMP/schema-identity-generator" ./internal/generator/cmd_schema_cache_identity
+          python3 scripts/dev/check-schema-identity-environment.py \
+            --generator "$RUNNER_TEMP/schema-identity-generator" \
+            --expected "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
+            --output "$RUNNER_TEMP/schema-evidence/identity-environment.json" \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/identity-environment.txt"
       - name: Upload native development evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -186,11 +207,13 @@ jobs:
           private_tmp="$HOME/.dws-suite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -m 0700 "$private_tmp"
           export TMPDIR="$private_tmp"
-          # JSON streams per-test events while packages are still running;
-          # multi-package -v output is buffered until each package finishes.
-          # Keep the last active test even if the runner shuts down before upload.
+          python3 scripts/dev/test_record_go_test_events.py
+          # Preserve all events as an artifact, but avoid sending hundreds of MB
+          # of repeated test payloads to the runner's console transport. Progress,
+          # failure tails and memory observations remain visible before upload.
           go test -json -p 2 -parallel 2 -timeout 30m ./... \
-            2>&1 | tee "$RUNNER_TEMP/schema-full-suite.txt"
+            2>&1 | python3 scripts/dev/record-go-test-events.py \
+              --output "$RUNNER_TEMP/schema-full-suite.txt"
       - name: Upload complete-suite development log
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

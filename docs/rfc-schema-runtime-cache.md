@@ -21,13 +21,42 @@
 | authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay；声明树跳过 argv profile 初始化，避免覆盖活动调用的 profile | final binary 的 hostile environment/native proof |
 | identity generator | 输出前检查 typed round trip、Meta/locator/查询投影和重复编码确定性；74e5fdd7 的两平台 Go 1.25.9/proto drift 与 coordinator identity 比较通过；独立声明 drift/assembly/catalog 通过 | hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
-| launcher | 74e5fdd7 两平台 core-free JSON 精确输出与 core fast-path 回归通过；共用 reader/typed renderer；本轮修复 exact version 丢失 commit/time，Go 1.25.9 定向 race 与打包测试通过 | 版本修复的原生输出证明、默认上报优化、竞争性指标和逐次 core hashing 成本 |
-| 性能 | 74e5fdd7 两平台进程 CPU/RSS 门槛通过；完整 Meta file-hit Linux 3.820 ms、macOS 3.661 ms，均通过 5 ms 门槛 | 仍需跨运行稳定裕量、默认上报和 public/native 竞争对照；保留 bf30c3ec macOS 5.663 ms 失败记录 |
+| launcher | 639bfceb 两平台 core-free JSON 与完整 version 元数据精确输出通过，core fast-path 与生命周期 race 通过；共用 reader/typed renderer | 默认上报优化、竞争性指标和逐次 core hashing 成本；受限环境生成器新检查待 native CI |
+| 性能 | 639bfceb 两平台进程 CPU/RSS 门槛通过；完整 Meta file-hit Linux 4.515 ms、macOS 3.494 ms，均通过 5 ms 门槛 | 仍需跨运行稳定裕量、默认上报和 public/native 竞争对照；保留 bf30c3ec macOS 5.663 ms 失败记录 |
 | 全量验证 | bf30c3ec macOS 完整 Go suite 通过；74e5fdd7 独立声明 policy、两平台候选与 identity 比较通过 | 74e5fdd7 Linux 全量仍被 runner shutdown 终止；macOS 全量通过；后续修改与 release proof 仍待验证 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
+
+### 版本输出修复后的原生结果（639bfceb）
+
+[run 33995999901](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33995999901)
+的两平台 native candidate、声明 policy 和 identity coordinator 已通过。真实 core、launcher 与
+无 sibling core 副本的完整 `--version` bytes 一致，包含 commit 和 UTC commit timestamp。
+[Linux 报告](benchmarks/schema-cache/native-639bfceb/linux/process-report.json) 与
+[macOS 报告](benchmarks/schema-cache/native-639bfceb/darwin/process-report.json) 均记录
+`version_build_metadata_parity=true`；这些 native 运行证据补上本机 ad-hoc 签名拒绝留下的版本验证缺口，
+不替代正式 Developer ID/notarization 和最终安装验收。
+
+| 指标 | Linux amd64 | macOS arm64 |
+|---|---:|---:|
+| Meta 完整 file-hit，7 轮中位数，预算 5 ms | 4.515 ms | 3.494 ms |
+| selected product file-hit，预算 15 ms | 8.573 ms | 6.247 ms |
+| opt-out launcher leaf wall p50/p95，30 次 | 20.981 / 22.287 ms | 20.787 / 28.291 ms |
+
+Schema wire、修复并发与 launcher/direct-core CPU/RSS 门槛也均通过；完整 identity 仍与前两轮
+byte-equal。默认 tracker 延迟和竞争性目标仍未证明。
+
+Linux 全量仍收到 runner shutdown/143；[中断记录](benchmarks/schema-cache/native-639bfceb/linux/full-suite-interruption.json)
+绑定原 job 日志哈希，最后活动测试为 app 的 `TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters`
+和 CLI 的 `TestSchemaRuntimeChildQueryParityAllAssembledLocators`，没有 Go test failure event。
+即时 JSON 把重复的测试 payload 膨胀为约 358 MB 控制台日志；这不是已证实的 shutdown 根因。
+后续 `record-go-test-events.py` 将所有原字节保存为 artifact，控制台保留包/测试进度、编译错误、
+失败尾部和 Linux 内存观测。用该次实际日志的 1,072,080 个事件回放，保留全部 326,795,951 B
+事件流且 SHA-256 不变，控制台降为 205,359 B（[回放记录](benchmarks/schema-cache/native-639bfceb/linux/recorder-replay.json)）。
+测试还验证了 shell pipefail 保留上游失败退出码；不跳过测试、不修改测试断言或 timeout。
+macOS 当前 head 的全量运行尚未结束。
 
 ### 共享 core fast path 原生结果（74e5fdd7）
 
@@ -1291,6 +1320,26 @@ credential、clock、user file 或未进入 identity 的 environment，也禁止
 未受 proof 覆盖的动态 factory/overlay 不得启用 persistent identity。该审计不等同于 network、
 clock 或 user-file sandbox；只扫描 build constraints 或比较两次碰巧稳定的输出同样不能替代
 hermetic native exact proof。
+
+开发级环境检查由 `scripts/dev/check-schema-identity-environment.py` 实现，接到 native feedback
+的候选性能采样之后；即使性能失败，只要候选已构建也继续收集环境检查结果。Linux 使用
+[Bubblewrap 的独立 namespace 与只读挂载](https://github.com/containers/bubblewrap/blob/main/README.md)，
+macOS 使用 deny-default sandbox profile；只提供 generator、两个 protobuf source fixture、
+空 HOME 和必要的 OS loader/library 读取路径。macOS 额外允许系统 LibreSSL 配置文件以执行
+系统 curl 的控制探针，并记录该文件与导入的 `dyld-support.sb` 摘要；不导入更宽的 `system.sb`。
+检查器先证明允许的 fixture 可读、限制外的无害哨兵在限制内不可读，以及同一 loopback HTTP
+服务在限制外可达、限制内不可达。允许读取本身失败、curl 无法启动或隔离工具缺失都必须失败，
+不能把任意非零退出码当作隔离成功。随后用 fresh empty HOME 执行两次 clean 和一次 hostile
+PATH/locale/proxy/DWS 非凭据配置，对照 native candidate 的完整 identity bytes，并检查 fixture
+未改变、HOME 未被写入。报告绑定 commit、dirty 状态、generator SHA-256、实际 sandbox argv 与
+环境；此检查不重新生成 Catalog 声明或新增 payload authority。
+
+本机 macOS 的文件与网络控制探针、失效探针拒绝和路径转义回归已通过；实际 generator 首次执行
+收到 SIGKILL，未获得本机受限装配成功证据，两平台完整检查仍须 native CI 核验。该检查只补
+文件/网络隔离与环境变化证据，尚未审计被拒绝后被业务代码忽略的访问尝试，也未证明 wall-clock
+独立性或最终签名制品。报告固定保留 `forbidden_access_attempts_audited=false`、
+`wall_clock_independence_proven=false`、`final_artifact_proven=false` 和 `release_eligible=false`；
+其 `passed` 只能表示此开发检查通过，不能满足本节全部发布前置 proof 或开启 release cache。
 
 前置 proof 不能替代最终 artifact proof。GoReleaser 生成 candidate binary 后，release job 必须
 记录其 binary SHA-256，并把未改写的确切 binary 交给对应 native runner；runner 在相同 hermetic

@@ -1,0 +1,14 @@
+{
+  "commit": "639bfcebabd92282e57528fda5fef22a109b39f6",
+  "run_id": 33995999901,
+  "job_id": 101386552553,
+  "conclusion": "failure",
+  "reason": "runner shutdown, exit 143; no Go test failure event before interruption",
+  "raw_job_log_sha256": "a050f08084ce0c68104eff1daeb8ade69f39c066aaac8a54470f267652104ce1",
+  "raw_job_log_bytes": 357908529,
+  "active_tests_at_shutdown": [
+    "internal/app.TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters",
+    "internal/cli.TestSchemaRuntimeChildQueryParityAllAssembledLocators"
+  ],
+  "root_cause_proven": false
+}
