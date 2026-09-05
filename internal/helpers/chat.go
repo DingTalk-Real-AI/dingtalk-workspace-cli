@@ -2912,9 +2912,10 @@ func newChatCommand() *cobra.Command {
 			AgentSummary: "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
 			UseWhen: []string{
 				"请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人",
+				"资源范围仅为 IM，答案需要可枚举消息记录，或要按消息原生谓词进行结构化检索",
 			},
 			AvoidWhen: []string{
-				"实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
+				"跨文档、邮件和消息按主题发现内容用 aisearch enterprise；查询当前用户参与的跨源行为轨迹用 aisearch behavior；实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
 			},
 		},
 	})

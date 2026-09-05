@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
 )
@@ -47,5 +49,37 @@ func TestCrossPlatformCoverageChatDiscoveryDefensiveBranches(t *testing.T) {
 	renderChatHelpCommandSection(&output, "Empty:", nil)
 	if output.Len() != 0 {
 		t.Fatalf("empty Help command section rendered output: %q", output.String())
+	}
+}
+
+func TestCrossPlatformCoverageFilteredIMSearchUsesResourceAndAnswerShapeBoundary(t *testing.T) {
+	_ = NewRootCommand()
+	contains := func(values []string, needle string) bool {
+		for _, value := range values {
+			if strings.Contains(value, needle) {
+				return true
+			}
+		}
+		return false
+	}
+
+	aisearch, ok := contract.LookupProductDecl("aisearch")
+	if !ok || !contains(aisearch.Selection.AvoidWhen, "答案形态") || !contains(aisearch.Selection.AvoidWhen, "逐条消息记录") {
+		t.Fatalf("aisearch ProductDecl does not defer message-record outcomes to Chat: %#v", aisearch.Selection)
+	}
+	chat, ok := contract.LookupProductDecl("chat")
+	if !ok || !contains(chat.Selection.UseWhen, "资源范围仅为 IM") || !contains(chat.Selection.UseWhen, "可枚举消息记录") {
+		t.Fatalf("chat ProductDecl does not own structured IM records: %#v", chat.Selection)
+	}
+
+	for _, path := range []string{"aisearch enterprise", "aisearch behavior"} {
+		meta, ok := cli.ResolveMeta(path)
+		if !ok || !contains(meta.Selection.AvoidWhen, "chat +search-msg") || !contains(meta.Selection.AvoidWhen, "消息") {
+			t.Errorf("%s final selection does not defer structured IM records: %#v", path, meta.Selection)
+		}
+	}
+	search, ok := cli.ResolveMeta("chat +search-msg")
+	if !ok || !contains(search.Selection.UseWhen, "资源范围仅为 IM") || !contains(search.Selection.UseWhen, "结构化谓词") {
+		t.Fatalf("chat +search-msg final selection does not encode the resource/answer/predicate decision: %#v", search.Selection)
 	}
 }
