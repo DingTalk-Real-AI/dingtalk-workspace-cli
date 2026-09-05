@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
@@ -33,6 +34,7 @@ type Options struct {
 	SchemaIdentity   *schemareader.Identity
 	Version          string
 	Commit           string
+	BuildTime        string // empty means version metadata was not proven; delegate
 	Edition          string
 	CoreSHA256       string
 	CoreSize         int64
@@ -125,8 +127,8 @@ func run(options Options, deps dependencies) error {
 	// Keep the shipped identity/clitrack behavior until an equivalent thin
 	// telemetry path is available. An explicit opt-out needs neither profile
 	// reads nor reporting and can safely use the filesystem-free fast path.
-	if len(deps.args) == 2 && deps.args[1] == "--version" && telemetryOptedOut(deps.environ) {
-		if _, err := fmt.Fprintf(deps.stdout, "dws version %s\n", options.Version); err != nil {
+	if len(deps.args) == 2 && deps.args[1] == "--version" && options.BuildTime != "" && telemetryOptedOut(deps.environ) {
+		if _, err := fmt.Fprintf(deps.stdout, "dws version %s\n", buildversion.Format(options.Version, options.Commit, options.BuildTime)); err != nil {
 			return &Error{Kind: ErrorDelegate, Op: "write version", Err: err}
 		}
 		return nil

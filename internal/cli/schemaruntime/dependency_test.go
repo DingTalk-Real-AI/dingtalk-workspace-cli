@@ -26,6 +26,7 @@ func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 		module + "internal/launcher":          true,
 		module + "internal/schemareader":      true,
 		module + "internal/schemafastpath":    true,
+		module + "internal/buildversion":      true,
 		module + "internal/skillpaths":        true,
 		module + "internal/jsonutil":          true,
 	}

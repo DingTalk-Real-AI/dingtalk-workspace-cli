@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../.."
 
 VERSION=${VERSION:-"0.0.0-SNAPSHOT"}
 COMMIT=$(git rev-parse HEAD)
-BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+BUILD_TIME=$(sh scripts/build/release-build-time.sh "$COMMIT")
 
 DIST_DIR="dist"
 rm -rf "$DIST_DIR"

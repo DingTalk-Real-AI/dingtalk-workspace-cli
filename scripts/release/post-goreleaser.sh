@@ -558,7 +558,7 @@ finalize_platform_archives() {
       *) cp "$final_core" "$stage/dws" ;;
     esac
 
-    launcher_ldflags="-s -w -X main.version=v$version -X main.commit=$release_commit -X main.edition=open -X main.coreSHA256=$core_sha -X main.coreSize=$core_size"
+    launcher_ldflags="-s -w -X main.version=v$version -X main.commit=$release_commit -X main.buildTime=$release_build_time -X main.edition=open -X main.coreSHA256=$core_sha -X main.coreSize=$core_size"
     (cd "$ROOT" && env CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
       go build -buildmode=pie -trimpath -ldflags "$launcher_ldflags" -o "$launcher" ./cmd/dws-launcher)
     [ -f "$launcher" ] && [ ! -L "$launcher" ] || err "launcher build did not produce $launcher"
@@ -604,6 +604,8 @@ write_checksums() {
 version="$(resolve_version)"
 validate_version "$version"
 release_commit="$(resolve_release_commit)"
+release_build_time="$(sh "$ROOT/scripts/build/release-build-time.sh" "$release_commit")" \
+  || err "could not resolve release commit time"
 configure_darwin_signing
 
 if [ "$DARWIN_SIGNING_MODE" = "developer-id" ]; then

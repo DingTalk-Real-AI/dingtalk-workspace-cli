@@ -22,6 +22,7 @@ var (
 	schemaCacheRegistrySHA256 string
 	version                   = "dev"
 	commit                    = "unknown"
+	buildTime                 string
 	edition                   = "open"
 	coreSHA256                = "0000000000000000000000000000000000000000000000000000000000000000"
 	coreSize                  = "0"
@@ -41,5 +42,5 @@ func main() {
 	if identityErr == nil {
 		schemaIdentity = &identity
 	}
-	os.Exit(launcher.Main(launcher.Options{SchemaIdentity: schemaIdentity, Version: version, Commit: commit, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
+	os.Exit(launcher.Main(launcher.Options{SchemaIdentity: schemaIdentity, Version: version, Commit: commit, BuildTime: buildTime, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
 }

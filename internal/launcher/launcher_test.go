@@ -22,7 +22,7 @@ func TestVersionBypassesFilesystemExactly(t *testing.T) {
 	if err := run(testOptions(0), deps); err != nil {
 		t.Fatal(err)
 	}
-	if got := stdout.String(); got != "dws version 1.2.3\n" {
+	if got := stdout.String(); got != "dws version 1.2.3 (abcdef, unknown)\n" {
 		t.Fatalf("version output = %q", got)
 	}
 }
@@ -46,6 +46,27 @@ func TestVersionPreservesTelemetryUnlessExplicitlyOptedOut(t *testing.T) {
 		if !delegated {
 			t.Fatal("version silently bypassed existing identity/clitrack behavior")
 		}
+	}
+}
+
+func TestCrossPlatformCoverageVersionWithoutBuildMetadataDelegates(t *testing.T) {
+	deps, options, _ := testCoreSetup(t, []byte("trusted"))
+	deps.args = []string{"dws", "--version"}
+	deps.environ = []string{"DO_NOT_TRACK=1"}
+	options.BuildTime = ""
+	delegated := false
+	deps.delegate = func(_ string, args, _ []string, _ string, _ io.Reader, _, _ io.Writer) (int, error) {
+		delegated = true
+		if !reflect.DeepEqual(args, deps.args) {
+			t.Fatal("version fallback changed argv")
+		}
+		return 0, nil
+	}
+	if err := run(options, deps); err != nil {
+		t.Fatal(err)
+	}
+	if !delegated {
+		t.Fatal("unproven version metadata was guessed")
 	}
 }
 
@@ -187,7 +208,7 @@ func TestRejectsMissingAliasedAndWrongSizeCore(t *testing.T) {
 const testDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func testOptions(size int64) Options {
-	return Options{Version: "1.2.3", Commit: "abcdef", Edition: "open", CoreSHA256: testDigest, CoreSize: size}
+	return Options{Version: "1.2.3", Commit: "abcdef", BuildTime: "unknown", Edition: "open", CoreSHA256: testDigest, CoreSize: size}
 }
 
 func testCoreSetup(t testing.TB, content []byte) (dependencies, Options, string) {

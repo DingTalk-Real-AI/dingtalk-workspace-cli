@@ -1,7 +1,7 @@
 goos: linux
 goarch: amd64
 pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime
-cpu: AMD EPYC 7763 64-Core Processor                
+cpu: AMD EPYC 7763 64-Core Processor
 BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     250	   4748410 ns/op	 3477819 B/op	   40698 allocs/op
 BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     253	   4733705 ns/op	 3477821 B/op	   40698 allocs/op
 BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     252	   4698687 ns/op	 3477818 B/op	   40698 allocs/op

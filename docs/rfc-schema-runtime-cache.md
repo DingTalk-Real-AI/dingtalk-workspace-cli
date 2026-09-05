@@ -16,18 +16,47 @@
 
 | 范围 | 当前证据 | 仍需完成 |
 |---|---|---|
-| typed model / raw protobuf / product shards | 同步 upstream 后真实 1,370 tools 的 round trip（3.541 s）与完整 delivery parity（42.511 s）通过；历史性能样本对应 1,357 tools | 新声明集合的性能、完整政策门禁与 race 检查 |
+| typed model / raw protobuf / product shards | 74e5fdd7 的真实 1,370 tools 两平台完整 delivery parity、组件与交付 race、独立声明 policy 通过 | 后续修改与最终发布制品复核 |
 | 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归及 Meta/overview/leaf/全量 Registry 混合损坏修复 race 通过（379 s、单次装配） | 新 head 两平台并发验收与错误共享矩阵；旧候选已通过四进程冷启动/Meta 与 Registry 修复；审计状态 race、完整入口单测及真实声明 delivery 在新工作树本机均通过（CLI 定向 62.978 s） |
 | authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay；声明树跳过 argv profile 初始化，避免覆盖活动调用的 profile | final binary 的 hostile environment/native proof |
-| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback；独立 generator 的 delivery 访问审计已通过真实声明，identity 与审计前 byte-equal | b62b2c0d 两平台原生 identity/完整 build metadata 一致，real candidate/parity/并发与 CPU/RSS 门槛通过；Meta file-hit 两平台超限，已继续优化，待新 head 复核；hermetic final proof 与 release 注入仍未完成 |
+| identity generator | 输出前检查 typed round trip、Meta/locator/查询投影和重复编码确定性；74e5fdd7 的两平台 Go 1.25.9/proto drift 与 coordinator identity 比较通过；独立声明 drift/assembly/catalog 通过 | hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
-| launcher | exact version 与严格 argv 的 JSON overview/product/group/leaf 已接通；共用 reader/typed renderer；仅显式 DO_NOT_TRACK 且确认无扩展/兼容警告时命中 | 新 head 原生 core-free 精确输出证明、默认上报优化、竞争性进程指标和逐次 core hashing 成本 |
-| 性能 | DTO v2 的 bf30c3ec 原生候选两平台进程 CPU/RSS 门槛通过；Linux 完整 Meta file-hit 4.748 ms / 3.48 MB，通过 5 ms 门槛 | macOS 同轮 Meta 5.663 ms 未达标；仍需两平台稳定裕量、默认上报和 public/native 竞争对照 |
-| 全量验证 | 89c38222 的 macOS 完整 Go suite 通过（app 1672.640 s、cli 1149.930 s、scripts 552.594 s）；v2 组件 race 与完整 delivery parity 已本机通过 | Linux full-suite 被 runner shutdown 终止；当前 v2 head 的两平台全量测试与独立 policy/release proof 仍待完成 |
+| launcher | 74e5fdd7 两平台 core-free JSON 精确输出与 core fast-path 回归通过；共用 reader/typed renderer；本轮修复 exact version 丢失 commit/time，Go 1.25.9 定向 race 与打包测试通过 | 版本修复的原生输出证明、默认上报优化、竞争性指标和逐次 core hashing 成本 |
+| 性能 | 74e5fdd7 两平台进程 CPU/RSS 门槛通过；完整 Meta file-hit Linux 3.820 ms、macOS 3.661 ms，均通过 5 ms 门槛 | 仍需跨运行稳定裕量、默认上报和 public/native 竞争对照；保留 bf30c3ec macOS 5.663 ms 失败记录 |
+| 全量验证 | bf30c3ec macOS 完整 Go suite 通过；74e5fdd7 独立声明 policy、两平台候选与 identity 比较通过 | 74e5fdd7 Linux 全量仍被 runner shutdown 终止；macOS 全量尚在运行；后续修改与 release proof 仍待验证 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
+
+### 共享 core fast path 原生结果（74e5fdd7）
+
+[run 33994157424](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33994157424)
+的两个 native candidate job、完整 identity JSON 比较 job 和独立声明 policy job 均通过。
+证据按 target 归档于 [Linux](benchmarks/schema-cache/native-74e5fdd7/linux/candidate-build.json)、
+[macOS](benchmarks/schema-cache/native-74e5fdd7/darwin/candidate-build.json)；文本日志仅去除行尾空格。
+两平台 clean commit/tree、Go 1.25.9 与完整 identity 一致，1,370 tools 的声明哈希未改变。
+
+| 指标 | Linux amd64 | macOS arm64 |
+|---|---:|---:|
+| Meta 完整 file-hit，7 轮中位数，预算 5 ms | 3.820 ms | 3.661 ms |
+| selected product file-hit，预算 15 ms | 7.227 ms | 7.794 ms |
+| launcher leaf wall p50/p95，30 次 | 17.283 / 17.951 ms | 18.093 / 24.156 ms |
+| direct core leaf wall p50/p95，7 次 | 27.659 / 28.670 ms | 29.566 / 30.477 ms |
+
+两份 [process report（Linux）](benchmarks/schema-cache/native-74e5fdd7/linux/process-report.json) /
+[（macOS）](benchmarks/schema-cache/native-74e5fdd7/darwin/process-report.json) 的 launcher/core
+CPU 降低至少 80%、peak RSS 不超过 100 MiB 门槛均通过。core-free launcher 与 direct core
+逐字节 Schema 输出、shortcut 诊断、四进程冷启动与两类损坏修复、core 生命周期 race 也通过。
+这些 process 数据全部使用 `DO_NOT_TRACK=1`，不证明默认 tracker 延迟或竞争性目标。
+Meta 这轮两平台达标，但未改变安全目录遍历或门槛，也不能抹去前轮 macOS 5.663 ms 的波动。
+
+[声明 drift/assembly](benchmarks/schema-cache/native-74e5fdd7/policy/schema-generated-drift.txt) 与
+[catalog policy](benchmarks/schema-cache/native-74e5fdd7/policy/schema-catalog-policy.txt) 完整通过。
+Linux 全量 Go suite 再次收到 runner shutdown/exit 143，未提供完整结果；macOS 全量仍在运行。
+后续 workflow 改用 `go test -json` 即时输出测试事件：多 package 的 `-v` 输出会等待 package
+结束，上一轮因此仍未暴露被中断包的活动测试。此改动只改善诊断，不跳过测试或改变 timeout。
+本轮版本元数据修复晚于 74e5fdd7，不能引用这些候选作为新版本 stdout 已通过的证据。
 
 ### DTO v2 原生候选结果（bf30c3ec）
 
@@ -139,8 +168,21 @@ delivery race、真实候选 parity/repair/process benchmark，以及带预算�
 
 候选构建脚本已修正 core build vars 的所属包（`internal/app.version/gitCommit/buildTime`）；
 此前使用不存在的 `main.*` 符号可能被 Go linker 静默忽略。候选 verifier 现在实际执行 core 与
-launcher 的 `--version`，分别对照 manifest 的 version/commit，不能只检查 ldflags 文本或外壳版本。
+launcher 的 `--version`，分别对照 manifest 的 version/commit，并要求两者 stdout 字节一致，
+包含完整的 `version (commit, time)`；不能只检查 ldflags 文本或外壳版本。
 修正后的本机 candidate 在 core 执行阶段仍被系统 SIGKILL，不能算作运行验证通过；原生 CI 将独立核验。
+
+版本文本由无 I/O 的 `internal/buildversion.Format` 共享。launcher 未注入 `buildTime` 时必须
+委派 core，避免输出不完整元数据。正式 GoReleaser、build-all 和 native candidate 统一使用
+commit 的 **committer time，UTC RFC3339**：GoReleaser 的 `{{.CommitDate}}` 与
+`scripts/build/release-build-time.sh` 对齐。该字段是可复现的提交时间，不再表示编译时的墙钟时间；
+版本号与 commit 的语义不变。选择遵循 [GoReleaser 可复现构建建议](https://www.goreleaser.com/blog/reproducible-builds/)。
+保留 `-trimpath`；Go 在此模式下不保留 build info 的 `-ldflags`，不能把读取它作为版本证明。
+共同 build recipe 是一致性前提，最终 native candidate 的 core/launcher 实际执行输出对照才是运行证据；
+隔离出无 core 的 launcher 副本也必须输出同样的完整版本文本。此项本地回归通过不替代正式签名制品验证。
+本轮修复后的本机完整 candidate 构建、runtime payload 注入与 ad-hoc 签名成功；core、launcher、
+无 core 副本的实际 `--version` 均收到 SIGKILL（returncode -9，无 stdout/stderr），因此仍未取得
+本机版本运行通过证据。保留系统保护，不将这个结果改记为测试通过；由后续原生 CI 独立核验。
 
 
 ### 并发与采样复核

@@ -12,6 +12,9 @@ on:
       - 'scripts/build/**'
       - 'scripts/dev/**'
       - 'scripts/policy/**'
+      - 'scripts/release/post-goreleaser.sh'
+      - 'test/scripts/release_build_time_test.go'
+      - '.goreleaser.yaml'
       - '.github/workflows/schema-cache-native.yml'
 
 permissions:
@@ -92,7 +95,7 @@ jobs:
           go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
           go test -race -count=1 -timeout=15m ./internal/app ./cmd \
-            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|Main|CLITracker)' \
+            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|LauncherVersion|Main|CLITracker)' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/core-fast-path-race.txt"
           go test -race -count=1 -timeout=15m ./internal/cli \
             -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache|AssemblyAudit|AssemblyAuditFailureIsolation)|TestPersistentSchemaCacheRealConcurrentRepair)$' \
@@ -183,9 +186,10 @@ jobs:
           private_tmp="$HOME/.dws-suite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -m 0700 "$private_tmp"
           export TMPDIR="$private_tmp"
-          # Preserve the last active test in the job log even if the hosted
-          # runner shuts down before the always-upload step can execute.
-          go test -v -p 2 -parallel 2 -timeout 30m ./... \
+          # JSON streams per-test events while packages are still running;
+          # multi-package -v output is buffered until each package finishes.
+          # Keep the last active test even if the runner shuts down before upload.
+          go test -json -p 2 -parallel 2 -timeout 30m ./... \
             2>&1 | tee "$RUNNER_TEMP/schema-full-suite.txt"
       - name: Upload complete-suite development log
         if: ${{ always() }}

@@ -52,7 +52,7 @@ def main():
     run(["go", "run", "./internal/generator/cmd_schema_cache_identity", "-root", str(root), "-output", str(proof_path)])
     proof = json.loads(proof_path.read_text())
     commit = run(["git", "rev-parse", "HEAD"], True).strip()
-    build_time = run(["git", "show", "-s", "--format=%cI", "HEAD"], True).strip()
+    build_time = run(["sh", "scripts/build/release-build-time.sh", commit], True).strip()
     package = output / f"dws-{args.version}-{goos}-{goarch}"
     (package / "bin").mkdir(parents=True)
     (package / "libexec").mkdir()
@@ -86,7 +86,7 @@ def main():
         run(["codesign", "--force", "--sign", "-", str(core)])
         run(["codesign", "--verify", "--strict", str(core)])
     core_digest, core_size = sha256(core), core.stat().st_size
-    flags = f"-s -w -X main.version={args.version} -X main.commit={commit} -X main.edition=open -X main.coreSHA256={core_digest} -X main.coreSize={core_size}"
+    flags = f"-s -w -X main.version={args.version} -X main.commit={commit} -X main.buildTime={build_time} -X main.edition=open -X main.coreSHA256={core_digest} -X main.coreSize={core_size}"
     for field, key in fields.items():
         flags += f" -X main.{field}={proof[key]}"
     run(["go", "build", "-trimpath", "-buildmode=pie", "-ldflags", flags, "-o", str(launcher), "./cmd/dws-launcher"])

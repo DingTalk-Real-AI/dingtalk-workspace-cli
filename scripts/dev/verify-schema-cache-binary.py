@@ -149,8 +149,8 @@ def main():
             if not core_version.decode().startswith(expected_prefix) or not core_version.endswith(b")\n"):
                 raise RuntimeError("core runtime version/commit differs from the package manifest")
             public_version, _ = invoke(binary, ["--version"], environment, home)
-            if public_version != f"dws version {manifest['release']['version']}\n".encode():
-                raise RuntimeError("launcher runtime version differs from the package manifest")
+            if public_version != core_version:
+                raise RuntimeError("launcher runtime version/build metadata differs from the core")
 
         def verify_artifacts():
             for name, prefix in (("meta.cache", "meta"), ("registry.shards.cache", "registry")):
@@ -185,7 +185,7 @@ def main():
                 raise RuntimeError("core-free probe does not contain the exact launcher bytes")
             # This copy cannot delegate: no libexec/core exists beside it.
             # The measured candidate itself is neither moved nor modified.
-            for route in (["schema"], ["schema", "list"], ["schema", "calendar"],
+            for route in (["--version"], ["schema"], ["schema", "list"], ["schema", "calendar"],
                           ["schema", "calendar event"], leaf,
                           ["schema", "--cli-path", "calendar event create", "--compact"]):
                 actual, _ = invoke(isolated_launcher, route, environment, home)
@@ -195,7 +195,8 @@ def main():
                 core_cached, _ = invoke(core, route, environment, home)
                 if core_cached != expected:
                     raise RuntimeError(f"core cache-hit bytes differ from authoritative core output: {route}")
-            report["schema_fast_path"] = {"core_free_copy_sha256": binary_sha, "exact_wire_parity": True}
+            report["schema_fast_path"] = {"core_free_copy_sha256": binary_sha, "exact_wire_parity": True,
+                                         "version_build_metadata_parity": True}
             report["core_schema_fast_path"] = {"exact_wire_parity": True,
                 "scope": "direct core with DO_NOT_TRACK=1; excludes tracker identity/flush latency"}
             # User shortcut loading owns startup diagnostics even though those
