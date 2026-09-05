@@ -118,9 +118,9 @@ Linux 7.530 ms；selected 分别 5.717 ms、8.860 ms，均满足 15 ms。比较 
 Meta 认证/转换、locator、目标 range 认证/转换；原有 cli 别名保留。命中时不启动 core，renderer
 仍使用 `schemaruntime` 的同一完整/compact 投影，JSON 使用相同的 `jsonutil.MarshalIndent`，
 完成编码后才一次写出；发生写错误后不得再 delegate 产生第二份输出。`--all`、filter、输出文件、
-未知/重复/含歧义 flag、默认 telemetry、DWS 运行选项、非 open edition、plugin/settings 状态、
+未知/重复/含歧义 flag、默认 telemetry、DWS 运行选项、非 open edition、plugin/settings/用户 shortcut 状态、
 旧升级器的 nested-skill 候选路径均回退同版本 core。共享 `skillpaths` 只提供路径，不读取内容；
-这样不会吞掉 core 原有的兼容警告。该严格子集不是默认 telemetry 的最终性能方案。
+这样不会吞掉 core 原有的兼容警告。用户 shortcut 的损坏 YAML 也会在启动时产生 warning，存在 shortcuts 路径时交给 core；此项由先失败后修复的回归测试和原生候选诊断检查覆盖。该严格子集不是默认 telemetry 的最终性能方案。
 
 候选脚本把同一个完整 identity 注入 core 和 launcher；普通 release 仍等待 §6.6 的 proof 才能
 注入。新 candidate 已构建，generator 的 identity 与旧 proof byte-equal，但本机 ad-hoc core 和

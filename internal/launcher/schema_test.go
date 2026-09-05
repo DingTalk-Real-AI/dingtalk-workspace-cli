@@ -162,6 +162,39 @@ func TestCrossPlatformCoverageLauncherSchemaDeclinesUncertainInvocationWithoutCa
 	}
 }
 
+func TestCrossPlatformCoverageLauncherSchemaPreservesUserShortcutDiagnostics(t *testing.T) {
+	deps, options, _, _, _, _ := schemaFixture(t)
+	directory := filepath.Join(environmentValue(deps.environ, "DWS_CONFIG_DIR"), "shortcuts")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "broken.yaml"), []byte("[invalid YAML"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deps.args = []string{"dws", "schema"}
+	deps.openSchemaCache = func(string) (*schemacache.Cache, error) {
+		t.Fatal("user-shortcut diagnostic path entered cache")
+		return nil, nil
+	}
+	delegated := false
+	var stderr bytes.Buffer
+	deps.stderr = &stderr
+	deps.delegate = func(_ string, args, env []string, _ string, _ io.Reader, stdout, stderr io.Writer) (int, error) {
+		delegated = true
+		if !reflect.DeepEqual(args, deps.args) || environmentValue(env, "DWS_CONFIG_DIR") != environmentValue(deps.environ, "DWS_CONFIG_DIR") {
+			t.Fatal("fallback changed shortcut invocation")
+		}
+		_, err := io.WriteString(stderr, "shortcut: failed to load user-defined shortcuts")
+		return 0, err
+	}
+	if err := run(options, deps); err != nil {
+		t.Fatal(err)
+	}
+	if !delegated || !strings.Contains(stderr.String(), "failed to load user-defined shortcuts") {
+		t.Fatal("shortcut diagnostics were lost")
+	}
+}
+
 func TestCrossPlatformCoverageLauncherSchemaPreservesNestedInstallWarning(t *testing.T) {
 	deps, options, _, _, _, _ := schemaFixture(t)
 	nested := filepath.Join(environmentValue(deps.environ, "HOME"), ".agents/skills/dws/multi/doc")

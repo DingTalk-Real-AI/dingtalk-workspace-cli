@@ -193,6 +193,27 @@ def main():
                 if actual != expected:
                     raise RuntimeError(f"core-free launcher bytes differ from authoritative core output: {route}")
             report["schema_fast_path"] = {"core_free_copy_sha256": binary_sha, "exact_wire_parity": True}
+            # User shortcut loading owns startup diagnostics even though those
+            # shortcuts are not part of the declaration-only Schema surface.
+            shortcut_directory = Path(environment["DWS_CONFIG_DIR"]) / "shortcuts"
+            shortcut_directory.mkdir(parents=True)
+            broken_shortcut = shortcut_directory / "broken.yaml"
+            broken_shortcut.write_text("[invalid YAML")
+            try:
+                outputs = []
+                for executable in (binary, core):
+                    result = subprocess.run([str(executable), "schema", "--compact"],
+                                            env=environment, cwd=home, stdin=subprocess.DEVNULL,
+                                            capture_output=True, timeout=180, check=True)
+                    if b"shortcut: failed to load user-defined shortcuts" not in result.stderr:
+                        raise RuntimeError("Schema entry swallowed user-shortcut startup diagnostics")
+                    outputs.append(result.stdout)
+                if outputs[0] != outputs[1]:
+                    raise RuntimeError("user-shortcut fallback changed Schema output")
+                report["schema_fast_path"]["user_shortcut_diagnostics_preserved"] = True
+            finally:
+                broken_shortcut.unlink()
+                shortcut_directory.rmdir()
         # Corruption must synchronously repair from declarations, preserving output.
         with (cache / "meta.cache").open("r+b") as target:
             target.seek(208)

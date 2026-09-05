@@ -167,7 +167,7 @@ func schemaExtensionsAbsent(deps dependencies) bool {
 			return false
 		}
 	}
-	for _, name := range []string{"settings.json", "plugins"} {
+	for _, name := range []string{"settings.json", "plugins", "shortcuts"} {
 		if _, err := deps.lstat(filepath.Join(directory, name)); !errors.Is(err, os.ErrNotExist) {
 			return false
 		}
