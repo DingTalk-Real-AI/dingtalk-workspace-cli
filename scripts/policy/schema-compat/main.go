@@ -1230,7 +1230,8 @@ func compatibleInterfaceRefRedirect(toolPath string, oldTool, newTool toolSchema
 // historical public parameter: aliases and newly added parameters could not
 // have appeared together in an old invocation. A new require-together group is
 // safe only when it contains no historical public parameter. A new
-// require-one-of group always adds a requirement and is therefore incompatible.
+// require-one-of group is safe only if a historical unconditional required
+// parameter without a default already guarantees one of its members is supplied.
 func compatibleAdditiveConstraintEvolution(oldTool, newTool toolSchema) bool {
 	oldGroups, okOld := parseConstraintGroups(oldTool.Constraints)
 	newGroups, okNew := parseConstraintGroups(newTool.Constraints)
@@ -1278,9 +1279,14 @@ func compatibleAdditiveConstraintEvolution(oldTool, newTool toolSchema) bool {
 				continue
 			}
 			historicalMembers := 0
+			historicalRequired := false
 			for member := range stringSet(newGroup) {
-				if _, existed := oldTool.Parameters[member]; existed {
+				if parameter, existed := oldTool.Parameters[member]; existed {
 					historicalMembers++
+					// Conditional/defaulted inputs do not prove explicit presence.
+					if parameter.Required && parameter.RequiredWhen == "" && parameter.Default == "" {
+						historicalRequired = true
+					}
 				}
 			}
 			switch key {
@@ -1293,7 +1299,9 @@ func compatibleAdditiveConstraintEvolution(oldTool, newTool toolSchema) bool {
 					return false
 				}
 			default: // require_one_of
-				return false
+				if !historicalRequired {
+					return false
+				}
 			}
 		}
 	}
