@@ -23,7 +23,7 @@
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | 74e5fdd7 两平台 core-free JSON 精确输出与 core fast-path 回归通过；共用 reader/typed renderer；本轮修复 exact version 丢失 commit/time，Go 1.25.9 定向 race 与打包测试通过 | 版本修复的原生输出证明、默认上报优化、竞争性指标和逐次 core hashing 成本 |
 | 性能 | 74e5fdd7 两平台进程 CPU/RSS 门槛通过；完整 Meta file-hit Linux 3.820 ms、macOS 3.661 ms，均通过 5 ms 门槛 | 仍需跨运行稳定裕量、默认上报和 public/native 竞争对照；保留 bf30c3ec macOS 5.663 ms 失败记录 |
-| 全量验证 | bf30c3ec macOS 完整 Go suite 通过；74e5fdd7 独立声明 policy、两平台候选与 identity 比较通过 | 74e5fdd7 Linux 全量仍被 runner shutdown 终止；macOS 全量尚在运行；后续修改与 release proof 仍待验证 |
+| 全量验证 | bf30c3ec macOS 完整 Go suite 通过；74e5fdd7 独立声明 policy、两平台候选与 identity 比较通过 | 74e5fdd7 Linux 全量仍被 runner shutdown 终止；macOS 全量通过；后续修改与 release proof 仍待验证 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
@@ -53,7 +53,10 @@ Meta 这轮两平台达标，但未改变安全目录遍历或门槛，也不能
 
 [声明 drift/assembly](benchmarks/schema-cache/native-74e5fdd7/policy/schema-generated-drift.txt) 与
 [catalog policy](benchmarks/schema-cache/native-74e5fdd7/policy/schema-catalog-policy.txt) 完整通过。
-Linux 全量 Go suite 再次收到 runner shutdown/exit 143，未提供完整结果；macOS 全量仍在运行。
+Linux 全量 Go suite 再次收到 runner shutdown/exit 143，未提供完整结果；macOS 全量已通过。
+[完整 suite 的证据记录](benchmarks/schema-cache/native-74e5fdd7/darwin/full-suite-evidence.json)
+绑定 raw log 的 SHA-256、49 MB 长度及 CI artifact；[包结果摘要](benchmarks/schema-cache/native-74e5fdd7/darwin/full-suite-summary.txt)
+保留完整日志中所有本模块包的结束行，避免将百万行 verbose 输出放入 RFC。
 后续 workflow 改用 `go test -json` 即时输出测试事件：多 package 的 `-v` 输出会等待 package
 结束，上一轮因此仍未暴露被中断包的活动测试。此改动只改善诊断，不跳过测试或改变 timeout。
 本轮版本元数据修复晚于 74e5fdd7，不能引用这些候选作为新版本 stdout 已通过的证据。
