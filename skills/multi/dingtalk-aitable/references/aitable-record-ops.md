@@ -33,6 +33,18 @@ dws aitable record create --base-id <B> --table-id <T> \
 
 长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.newRecordIds[]` 取 recordId，再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。
 
+在某条父记录下创建层级子记录（同一命令，加 `--parent-record-id`）：
+
+```bash
+dws aitable record create --base-id <B> --table-id <T> --parent-record-id <PARENT_R> \
+  --records '[{"cells":{"fldText":"子记录"}}]'
+```
+
+- 子记录模式单次最多 100 条；`cells` 无需手写层级字段，服务端自动注入指向父记录的关联。
+- 表尚未配置层级字段时，服务端会自动创建 association 字段对并更新视图配置（首次调用会改变表结构）。
+- `--view-id` 可选：指定从哪个视图读取层级配置；仅在子记录模式下有效，单独使用会被 CLI 拒绝。
+- 返回 `data.recordIds[]`（子记录 ID）、`data.hierarchyFieldId` 与 `data.parentRecordId`。
+
 ## 更新、同步与批量修改
 
 已知 recordId：
