@@ -1237,6 +1237,14 @@ func TestCrossPlatformCoverageUpgradeCommandHTTPAndDryRunCoverage(t *testing.T) 
 		{TagName: "v9.9.9", PublishedAt: "2026-01-01T03:04:05Z", Body: "* abcdef1 - stable change", HTMLURL: "https://release.test", Assets: []upgradepkg.GitHubAsset{{Name: assetName}, {Name: "dws-skills.zip"}}},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if index := strings.Index(r.URL.Path, "/git/ref/tags/"); index >= 0 {
+			tag := r.URL.Path[index+len("/git/ref/tags/"):]
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ref":    "refs/tags/" + tag,
+				"object": map[string]string{"type": "commit", "sha": "0123456789abcdef0123456789abcdef01234567"},
+			})
+			return
+		}
 		if strings.Contains(r.URL.Path, "/releases/tags/") {
 			if len(releases) == 0 {
 				http.NotFound(w, r)
@@ -1665,6 +1673,13 @@ func TestCrossPlatformCoverageDoctorCommandCoverage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/releases/latest") {
 			_ = json.NewEncoder(w).Encode(map[string]any{"tag_name": "v1.0.0"})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/git/ref/tags/v1.0.0") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ref":    "refs/tags/v1.0.0",
+				"object": map[string]any{"type": "commit", "sha": strings.Repeat("a", 40)},
+			})
 			return
 		}
 		_, _ = io.WriteString(w, "ok")

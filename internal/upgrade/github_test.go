@@ -7,8 +7,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+const testReleaseCommit = "0123456789abcdef0123456789abcdef01234567"
+
+func serveLightweightTag(w http.ResponseWriter, r *http.Request) bool {
+	const marker = "/git/ref/tags/"
+	index := strings.Index(r.URL.Path, marker)
+	if index < 0 {
+		return false
+	}
+	tag := r.URL.Path[index+len(marker):]
+	_ = json.NewEncoder(w).Encode(gitRef{Ref: "refs/tags/" + tag, Object: gitObject{Type: "commit", SHA: testReleaseCommit}})
+	return true
+}
 
 func TestFetchLatestRelease(t *testing.T) {
 	release := GitHubRelease{
@@ -26,6 +40,9 @@ func TestFetchLatestRelease(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		if r.URL.Path != "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases/latest" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -63,6 +80,9 @@ func TestFetchReleaseByTag(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		expected := "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases/tags/v1.0.5"
 		if r.URL.Path != expected {
 			t.Errorf("path = %q, want %q", r.URL.Path, expected)
@@ -159,6 +179,9 @@ func TestFetchLatestStableRelease(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		expected := "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases"
 		if r.URL.Path != expected {
 			t.Errorf("path = %q, want %q", r.URL.Path, expected)
@@ -189,6 +212,9 @@ func TestFetchLatestPrerelease(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		expected := "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases"
 		if r.URL.Path != expected {
 			t.Errorf("path = %q, want %q", r.URL.Path, expected)
@@ -380,6 +406,9 @@ func TestFetchLatestRelease_FieldMapping(t *testing.T) {
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		json.NewEncoder(w).Encode(release)
 	}))
 	defer server.Close()
@@ -445,6 +474,9 @@ func TestFetchAllReleases_AllDrafts(t *testing.T) {
 
 func TestFetchReleaseByTag_WithVPrefix(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		expected := "/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases/tags/v1.0.5"
 		if r.URL.Path != expected {
 			t.Errorf("path = %q, want %q", r.URL.Path, expected)
@@ -460,6 +492,67 @@ func TestFetchReleaseByTag_WithVPrefix(t *testing.T) {
 	}
 	if info.Version != "1.0.5" {
 		t.Errorf("Version = %q, want %q", info.Version, "1.0.5")
+	}
+}
+
+func TestReleaseCommitPeelsAnnotatedTagsAndIgnoresTargetCommitish(t *testing.T) {
+	outerSHA := "1111111111111111111111111111111111111111"
+	innerSHA := "2222222222222222222222222222222222222222"
+	commitSHA := "3333333333333333333333333333333333333333"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/releases/tags/"):
+			_ = json.NewEncoder(w).Encode(GitHubRelease{TagName: "v1.2.3", TargetCommitish: "refs/heads/main"})
+		case strings.HasSuffix(r.URL.Path, "/git/ref/tags/v1.2.3"):
+			_ = json.NewEncoder(w).Encode(gitRef{Ref: "refs/tags/v1.2.3", Object: gitObject{Type: "tag", SHA: outerSHA}})
+		case strings.HasSuffix(r.URL.Path, "/git/tags/"+outerSHA):
+			_ = json.NewEncoder(w).Encode(gitTag{Tag: "v1.2.3", SHA: outerSHA, Object: gitObject{Type: "tag", SHA: innerSHA}})
+		case strings.HasSuffix(r.URL.Path, "/git/tags/"+innerSHA):
+			_ = json.NewEncoder(w).Encode(gitTag{Tag: "nested", SHA: innerSHA, Object: gitObject{Type: "commit", SHA: commitSHA}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	info, err := NewClientWithBaseURL(server.URL).FetchReleaseByTag("v1.2.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Commit != commitSHA {
+		t.Fatalf("Commit = %q, want peeled %q", info.Commit, commitSHA)
+	}
+}
+
+func TestReleaseCommitRejectsMismatchedAndInvalidTagObjects(t *testing.T) {
+	for name, ref := range map[string]gitRef{
+		"branch identity": {Ref: "refs/heads/v1.2.3", Object: gitObject{Type: "commit", SHA: testReleaseCommit}},
+		"symbolic object": {Ref: "refs/tags/v1.2.3", Object: gitObject{Type: "ref", SHA: testReleaseCommit}},
+		"invalid sha":     {Ref: "refs/tags/v1.2.3", Object: gitObject{Type: "commit", SHA: "main"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "/releases/tags/") {
+					_ = json.NewEncoder(w).Encode(GitHubRelease{TagName: "v1.2.3"})
+					return
+				}
+				_ = json.NewEncoder(w).Encode(ref)
+			}))
+			defer server.Close()
+			if _, err := NewClientWithBaseURL(server.URL).FetchReleaseByTag("v1.2.3"); err == nil {
+				t.Fatal("invalid tag identity was accepted")
+			}
+		})
+	}
+}
+
+func TestFetchReleaseByTagRejectsReleaseIdentityMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(GitHubRelease{TagName: "v9.9.9"})
+	}))
+	defer server.Close()
+	if _, err := NewClientWithBaseURL(server.URL).FetchReleaseByTag("v1.2.3"); err == nil {
+		t.Fatal("mismatched release tag was accepted")
 	}
 }
 
@@ -619,6 +712,9 @@ func TestGetJSON_SetsHeaders(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "test-token-abc")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveLightweightTag(w, r) {
+			return
+		}
 		if ua := r.Header.Get("User-Agent"); ua != userAgent {
 			t.Errorf("User-Agent = %q, want %q", ua, userAgent)
 		}

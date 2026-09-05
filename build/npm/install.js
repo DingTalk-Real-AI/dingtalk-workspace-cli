@@ -805,54 +805,221 @@ function backupAndRemoveSkillDir(homeDir, dir, backups = null, options = {}) {
   return target;
 }
 
-function findBinary(root) {
-  const entries = fs.readdirSync(root, { withFileTypes: true });
-  for (const entry of entries) {
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      const nested = findBinary(entryPath);
-      if (nested) {
-        return nested;
-      }
-      continue;
-    }
-    if (entry.name === "dws" || entry.name === "dws.exe") {
-      return entryPath;
-    }
-  }
-  return "";
+const ROOT_METADATA = new Set(["LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]);
+const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const ARCHIVE_LIMITS = Object.freeze({
+  entries: 10000,
+  entrySize: 512 * 1024 * 1024,
+  totalSize: 1024 * 1024 * 1024,
+  compressedSize: 512 * 1024 * 1024,
+});
+
+function packageIdentity() {
+  const version = process.env.npm_package_version || require(path.join(__dirname, "package.json")).version;
+  if (!SEMVER.test(version)) throw new Error(`invalid npm package version: ${version}`);
+  const goos = process.platform === "win32" ? "windows" : process.platform;
+  const goarch = process.arch === "x64" ? "amd64" : process.arch;
+  return { version: `v${version}`, packageName: `dws-v${version}-${goos}-${goarch}`, goos, goarch };
 }
 
-function extractArchive(archivePath, destDir) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dws-npm-bin-"));
-  try {
-    if (archivePath.endsWith(".tar.gz")) {
-      run("tar", ["-xzf", archivePath, "-C", tmpDir]);
-    } else if (process.platform === "win32") {
-      run("powershell.exe", [
-        "-NoLogo",
-        "-NoProfile",
-        "-Command",
-        `Expand-Archive -Path '${archivePath.replace(/'/g, "''")}' -DestinationPath '${tmpDir.replace(/'/g, "''")}' -Force`,
-      ]);
+function normalizeArchiveEntry(name) {
+  if (!name || name.includes("\\") || name.startsWith("/") || name.includes("\0")) throw new Error(`unsafe archive entry: ${JSON.stringify(name)}`);
+  if (name.startsWith("./")) name = name.slice(2);
+  if (name === "" || name === "/") return ".";
+  const parts = name.replace(/\/$/, "").split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) throw new Error(`unsafe archive entry: ${name}`);
+  return parts.join("/");
+}
+
+function inspectTarGz(archivePath) {
+  const compressedSize = fs.statSync(archivePath).size;
+  if (compressedSize > ARCHIVE_LIMITS.compressedSize) throw new Error("compressed archive exceeds safe size limit");
+  const data = require("zlib").gunzipSync(fs.readFileSync(archivePath), {
+    maxOutputLength: ARCHIVE_LIMITS.totalSize + ARCHIVE_LIMITS.entries * 1024,
+  });
+  const entries = [];
+  let headerCount = 0;
+  let totalSize = 0;
+  for (let offset = 0; offset + 512 <= data.length;) {
+    const header = data.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+    const text = (start, length) => header.subarray(start, start + length).toString("utf8").replace(/\0.*$/, "");
+    const name = [text(345, 155), text(0, 100)].filter(Boolean).join("/");
+    const sizeText = text(124, 12).trim();
+    if (!/^[0-7]*$/.test(sizeText)) throw new Error(`invalid tar size for ${name}`);
+    const size = parseInt(sizeText || "0", 8);
+    headerCount += 1;
+    if (headerCount > ARCHIVE_LIMITS.entries) throw new Error("archive entry count exceeds safe limit");
+    if (!Number.isSafeInteger(size) || size > ARCHIVE_LIMITS.entrySize) throw new Error(`archive entry exceeds safe uncompressed size limit: ${name}`);
+    totalSize += size;
+    if (totalSize > ARCHIVE_LIMITS.totalSize) throw new Error("archive aggregate uncompressed size exceeds safe limit");
+    const type = String.fromCharCode(header[156] || 48);
+    if (type === "x" || type === "g") {
+      const payload = data.subarray(offset + 512, offset + 512 + size).toString("utf8");
+      if (/(^|\n)[0-9]+ (path|linkpath)=/.test(payload)) throw new Error("PAX path overrides are not allowed");
     } else {
-      run("unzip", ["-q", archivePath, "-d", tmpDir]);
+      if (type !== "0" && type !== "5") throw new Error(`archive entry is not a regular file or directory: ${name}`);
+      entries.push({ name: normalizeArchiveEntry(name), directory: type === "5" });
     }
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  return entries;
+}
 
-    const binaryPath = findBinary(tmpDir);
-    if (!binaryPath) {
-      throw new Error(`dws binary not found in archive ${archivePath}`);
+function inspectZip(archivePath) {
+  const compressedSize = fs.statSync(archivePath).size;
+  if (compressedSize > ARCHIVE_LIMITS.compressedSize) throw new Error("compressed archive exceeds safe size limit");
+  const data = fs.readFileSync(archivePath);
+  let eocd = -1;
+  for (let i = data.length - 22; i >= Math.max(0, data.length - 65557); i -= 1) {
+    if (data.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("invalid ZIP: end-of-central-directory not found");
+  const count = data.readUInt16LE(eocd + 10);
+  if (count > ARCHIVE_LIMITS.entries) throw new Error("archive entry count exceeds safe limit");
+  let offset = data.readUInt32LE(eocd + 16);
+  const entries = [];
+  let totalSize = 0;
+  for (let i = 0; i < count; i += 1) {
+    if (offset + 46 > data.length || data.readUInt32LE(offset) !== 0x02014b50) throw new Error("invalid ZIP central directory");
+    const flags = data.readUInt16LE(offset + 8);
+    if ((flags & 1) !== 0) throw new Error("encrypted ZIP entries are not supported");
+    const nameLength = data.readUInt16LE(offset + 28);
+    const extraLength = data.readUInt16LE(offset + 30);
+    const commentLength = data.readUInt16LE(offset + 32);
+    const uncompressedSize = data.readUInt32LE(offset + 24);
+    if (uncompressedSize === 0xffffffff) throw new Error("ZIP64 entries are not supported");
+    if (uncompressedSize > ARCHIVE_LIMITS.entrySize) throw new Error("archive entry exceeds safe uncompressed size limit");
+    totalSize += uncompressedSize;
+    if (totalSize > ARCHIVE_LIMITS.totalSize) throw new Error("archive aggregate uncompressed size exceeds safe limit");
+    const rawName = data.subarray(offset + 46, offset + 46 + nameLength).toString((flags & 0x800) ? "utf8" : "latin1");
+    const unixType = (data.readUInt32LE(offset + 38) >>> 16) & 0xf000;
+    if (unixType && unixType !== 0x8000 && unixType !== 0x4000) throw new Error(`archive entry is a symlink or special file: ${rawName}`);
+    entries.push({ name: normalizeArchiveEntry(rawName), directory: rawName.endsWith("/") });
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function inspectArchive(archivePath, identity) {
+  const entries = archivePath.endsWith(".tar.gz") ? inspectTarGz(archivePath) : inspectZip(archivePath);
+  const legacyName = identity.goos === "windows" ? "dws.exe" : "dws";
+  const seen = new Set();
+  const packageRoots = new Set();
+  for (const entry of entries) {
+    if (entry.name === "." && entry.directory) continue;
+    if (seen.has(entry.name)) throw new Error(`duplicate archive entry: ${entry.name}`);
+    seen.add(entry.name);
+    const first = entry.name.split("/")[0];
+    if (first === identity.packageName) {
+      packageRoots.add(first);
+    } else if ((!ROOT_METADATA.has(entry.name) && entry.name !== legacyName) || entry.directory) {
+      throw new Error(`unexpected archive-root entry: ${entry.name}`);
     }
+  }
+  if (packageRoots.size !== 1) throw new Error(`archive must contain exactly one ${identity.packageName} package root`);
+  for (const metadata of ROOT_METADATA) if (!seen.has(metadata)) throw new Error(`missing archive metadata file: ${metadata}`);
+}
 
-    ensureCleanDir(destDir);
-    const targetName = process.platform === "win32" ? "dws.exe" : "dws";
-    const targetPath = path.join(destDir, targetName);
-    fs.copyFileSync(binaryPath, targetPath);
-    if (process.platform !== "win32") {
-      fs.chmodSync(targetPath, 0o755);
+function assertRegular(filePath, label) {
+  const stat = fs.lstatSync(filePath);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`${label} is not a regular non-symlink file`);
+  return stat;
+}
+
+function verifyPackageTree(root, identity) {
+  const suffix = identity.goos === "windows" ? ".exe" : "";
+  const launcherRel = `bin/dws${suffix}`;
+  const coreRel = `libexec/dws-core${suffix}`;
+  const raw = fs.readFileSync(path.join(root, "package-manifest.json"), "utf8");
+  if (Buffer.byteLength(raw) > 64 * 1024) throw new Error("package manifest is too large");
+  const manifest = JSON.parse(raw);
+  if (raw !== `${JSON.stringify(manifest)}\n`) throw new Error("package manifest is not canonical JSON");
+  const exactKeys = (object, keys, label) => {
+    if (!object || typeof object !== "object" || Array.isArray(object) || JSON.stringify(Object.keys(object)) !== JSON.stringify(keys)) throw new Error(`invalid ${label} fields`);
+  };
+  exactKeys(manifest, ["layout_version", "release", "target", "launcher", "core"], "manifest");
+  exactKeys(manifest.release, ["version", "commit", "edition"], "release");
+  exactKeys(manifest.target, ["goos", "goarch"], "target");
+  exactKeys(manifest.launcher, ["path", "sha256", "size", "mode"], "launcher");
+  exactKeys(manifest.core, ["path", "sha256", "size", "mode"], "core");
+  if (manifest.layout_version !== 1 || manifest.release.version !== identity.version || !/^[0-9a-f]{40}$/.test(manifest.release.commit) ||
+      manifest.release.edition !== "open" || manifest.target.goos !== identity.goos || manifest.target.goarch !== identity.goarch) throw new Error("package manifest identity mismatch");
+  const verifyFile = (label, record, expectedPath) => {
+    if (record.path !== expectedPath || !Number.isSafeInteger(record.size) || record.size <= 0 || record.size > 4 * 1024 ** 3 ||
+        !/^[0-9a-f]{64}$/.test(record.sha256) || !Number.isSafeInteger(record.mode)) throw new Error(`invalid ${label} identity`);
+    if ((identity.goos === "windows" && record.mode !== 0) || (identity.goos !== "windows" && (record.mode < 0 || record.mode > 0o777 || (record.mode & 0o111) === 0))) throw new Error(`invalid ${label} mode`);
+    const filePath = path.join(root, ...expectedPath.split("/"));
+    const stat = assertRegular(filePath, label);
+    if (stat.size !== record.size || (identity.goos !== "windows" && (stat.mode & 0o777) !== record.mode) || fileDigestSync(filePath) !== record.sha256) throw new Error(`${label} path/size/mode/SHA-256 mismatch`);
+  };
+  verifyFile("launcher", manifest.launcher, launcherRel);
+  verifyFile("core", manifest.core, coreRel);
+  const expected = new Set([".", "bin", launcherRel, "libexec", coreRel, "package-manifest.json"]);
+  const visit = (target, rel = ".") => {
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) throw new Error(`symlink or special package entry: ${rel}`);
+    if (!expected.has(rel)) throw new Error(`unexpected package entry: ${rel}`);
+    if (stat.isDirectory()) for (const name of fs.readdirSync(target)) visit(path.join(target, name), rel === "." ? name : `${rel}/${name}`);
+  };
+  visit(root);
+  for (const entry of expected) if (!fs.existsSync(entry === "." ? root : path.join(root, ...entry.split("/")))) throw new Error(`missing package entry: ${entry}`);
+  return manifest;
+}
+
+function publishPackageAtomically(sourceRoot, vendorDir) {
+  const parent = path.dirname(vendorDir);
+  fs.mkdirSync(parent, { recursive: true });
+  const staged = fs.mkdtempSync(path.join(parent, ".vendor.tmp-"));
+  const rollback = `${staged}.old`;
+  let previous = false;
+  try {
+    fs.renameSync(sourceRoot, path.join(staged, path.basename(sourceRoot)));
+    if (pathExistsLexicallySync(vendorDir)) { fs.renameSync(vendorDir, rollback); previous = true; }
+    try { fs.renameSync(staged, vendorDir); } catch (err) {
+      if (previous) fs.renameSync(rollback, vendorDir);
+      throw err;
+    }
+    if (previous) {
+      try { fs.rmSync(rollback, { recursive: true, force: true }); }
+      catch (err) { console.warn(`New vendor package is active; old vendor cleanup failed at ${rollback}: ${err.message}`); }
     }
   } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(staged, { recursive: true, force: true });
+  }
+}
+
+function extractArchive(archivePath, vendorDir, identity) {
+  inspectArchive(archivePath, identity);
+  const legacyName = identity.goos === "windows" ? "dws.exe" : "dws";
+  const extractDir = fs.mkdtempSync(path.join(path.dirname(vendorDir), ".dws-npm-extract-"));
+  try {
+    if (archivePath.endsWith(".tar.gz")) run("tar", ["-xzf", archivePath, "-C", extractDir]);
+    else if (process.platform === "win32") run("powershell.exe", ["-NoLogo", "-NoProfile", "-Command", `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}'`]);
+    else run("unzip", ["-q", archivePath, "-d", extractDir]);
+    for (const name of fs.readdirSync(extractDir)) {
+      const entryPath = path.join(extractDir, name);
+      if (name === identity.packageName) {
+        const stat = fs.lstatSync(entryPath);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("canonical package root is not a real directory");
+      } else {
+        if (!ROOT_METADATA.has(name) && name !== legacyName) throw new Error(`unexpected extracted archive-root entry: ${name}`);
+        assertRegular(entryPath, name);
+      }
+    }
+    const packageRoot = path.join(extractDir, identity.packageName);
+    const manifest = verifyPackageTree(packageRoot, identity);
+    const legacyPath = path.join(extractDir, legacyName);
+    if (pathExistsLexicallySync(legacyPath)) {
+      const legacy = assertRegular(legacyPath, "legacy upgrade entry");
+      if (legacy.size !== manifest.core.size || fileDigestSync(legacyPath) !== manifest.core.sha256 ||
+          (identity.goos !== "windows" && (legacy.mode & 0o777) !== manifest.core.mode)) {
+        throw new Error("legacy upgrade entry differs from canonical core");
+      }
+    }
+    publishPackageAtomically(packageRoot, vendorDir);
+  } finally {
+    fs.rmSync(extractDir, { recursive: true, force: true });
   }
 }
 
@@ -1839,6 +2006,7 @@ function main() {
   // (installed to agent homes) from multi/ (cached for later setup use).
   const skillsStaging = path.join(packageRoot, "share", "skills");
   const assetName = PLATFORM_MAP[`${process.platform}-${process.arch}`];
+  const identity = packageIdentity();
   if (!assetName) {
     throw new Error(`unsupported platform: ${process.platform}/${process.arch}`);
   }
@@ -1852,7 +2020,15 @@ function main() {
     throw new Error(`missing skills archive: ${skillsPath}`);
   }
 
-  extractArchive(archivePath, vendorDir);
+  const checksumsPath = path.join(assetsDir, "checksums.txt");
+  if (!fs.existsSync(checksumsPath)) throw new Error(`missing checksums file: ${checksumsPath}`);
+  const checksumLine = fs.readFileSync(checksumsPath, "utf8").split(/\r?\n/).find((line) => line.trim().split(/\s+/).at(-1) === assetName);
+  if (!checksumLine || !/^[0-9a-fA-F]{64}\s+\*?\S+$/.test(checksumLine.trim())) throw new Error(`${assetName} is missing from checksums.txt`);
+  const expectedChecksum = checksumLine.trim().split(/\s+/)[0].toLowerCase();
+  const actualChecksum = fileDigestSync(archivePath);
+  if (actualChecksum !== expectedChecksum) throw new Error(`SHA256 checksum mismatch for ${assetName}`);
+  extractArchive(archivePath, vendorDir, identity);
+  inspectZip(skillsPath);
   extractSkills(skillsPath, skillsStaging);
 
   // For backward compatibility, the zip root carries a copy of mono content
@@ -1903,4 +2079,10 @@ module.exports = {
   recordSkillPathPublicationSync,
   rollbackPublishedSkillPath,
   verifyPathCopySync,
+  inspectArchive,
+  inspectTarGz,
+  inspectZip,
+  ARCHIVE_LIMITS,
+  verifyPackageTree,
+  publishPackageAtomically,
 };

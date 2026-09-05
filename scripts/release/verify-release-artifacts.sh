@@ -5,9 +5,24 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
 VERSION="${1:-${DWS_PACKAGE_VERSION:-}}"
+RELEASE_COMMIT="${DWS_RELEASE_COMMIT:-}"
 
 [ -n "$VERSION" ] || { printf 'expected release version is required\n' >&2; exit 2; }
 SEMVER="${VERSION#v}"
+printf '%s\n' "$SEMVER" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$' || {
+  printf 'invalid release version: %s\n' "$VERSION" >&2
+  exit 2
+}
+if [ -z "$RELEASE_COMMIT" ]; then
+  RELEASE_COMMIT="$(git -C "$ROOT" rev-parse HEAD)" || {
+    printf 'could not resolve release commit\n' >&2
+    exit 1
+  }
+fi
+printf '%s\n' "$RELEASE_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || {
+  printf 'release commit must be exactly 40 lowercase hexadecimal characters\n' >&2
+  exit 2
+}
 CHECKSUMS="$DIST_DIR/checksums.txt"
 EXPECTED_PLATFORM_ASSETS="
 dws-darwin-amd64.tar.gz
@@ -79,26 +94,15 @@ verify_binary_version() {
   case "$asset" in
     *.tar.gz)
       tar -xzf "$DIST_DIR/$asset" -C "$extract_dir"
-      binary="$extract_dir/dws"
       ;;
     *.zip)
       unzip -q "$DIST_DIR/$asset" -d "$extract_dir"
-      binary="$extract_dir/dws.exe"
       ;;
     *)
       printf 'unsupported release archive: %s\n' "$asset" >&2
       return 1
       ;;
   esac
-  [ -f "$binary" ] || {
-    printf '%s does not contain the expected dws binary\n' "$asset" >&2
-    return 1
-  }
-  LC_ALL=C grep -aFq "v$SEMVER" "$binary" || {
-    printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
-    return 1
-  }
-
   case "$asset" in
     dws-darwin-amd64*) target_os=darwin; target_arch=amd64 ;;
     dws-darwin-arm64*) target_os=darwin; target_arch=arm64 ;;
@@ -107,12 +111,84 @@ verify_binary_version() {
     dws-windows-amd64*) target_os=windows; target_arch=amd64 ;;
     dws-windows-arm64*) target_os=windows; target_arch=arm64 ;;
   esac
-  if [ -e "$extract_dir/.dws-runtime" ]; then
-    printf '%s contains a legacy sidecar runtime payload\n' "$asset" >&2
+  package_name="dws-v${SEMVER}-${target_os}-${target_arch}"
+  package_root="$extract_dir/$package_name"
+  case "$target_os" in
+    windows) legacy_name=dws.exe; core_name=dws-core.exe ;;
+    *) legacy_name=dws; core_name=dws-core ;;
+  esac
+  for entry in "$extract_dir"/* "$extract_dir"/.[!.]* "$extract_dir"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    entry_name="$(basename "$entry")"
+    case "$entry_name" in
+      "$package_name") [ -d "$entry" ] && [ ! -L "$entry" ] || return 1 ;;
+      LICENSE|NOTICE|README.md|CHANGELOG.md) [ -f "$entry" ] && [ ! -L "$entry" ] || return 1 ;;
+      "$legacy_name") [ -f "$entry" ] && [ ! -L "$entry" ] || return 1 ;;
+      *)
+        printf '%s contains unexpected archive-root entry %s\n' "$asset" "$entry_name" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -d "$package_root" ] && [ ! -L "$package_root" ] || {
+    printf '%s does not contain canonical package directory %s\n' "$asset" "$package_name" >&2
+    return 1
+  }
+  [ -f "$extract_dir/$legacy_name" ] && [ ! -L "$extract_dir/$legacy_name" ] || {
+    printf '%s does not contain legacy upgrade entry %s\n' "$asset" "$legacy_name" >&2
+    return 1
+  }
+  cmp -s "$extract_dir/$legacy_name" "$package_root/libexec/$core_name" || {
+    printf '%s legacy upgrade entry differs from canonical core\n' "$asset" >&2
+    return 1
+  }
+
+  (cd "$ROOT" && go run ./scripts/build/package-manifest \
+    --verify \
+    --package-root "$package_root" \
+    --version "v$SEMVER" \
+    --commit "$RELEASE_COMMIT" \
+    --edition open \
+    --goos "$target_os" \
+    --goarch "$target_arch") >/dev/null || return 1
+
+  case "$target_os" in
+    windows)
+      launcher="$package_root/bin/dws.exe"
+      core="$package_root/libexec/dws-core.exe"
+      ;;
+    *)
+      launcher="$package_root/bin/dws"
+      core="$package_root/libexec/dws-core"
+      ;;
+  esac
+  for binary in "$launcher" "$core"; do
+    LC_ALL=C grep -aFq "v$SEMVER" "$binary" || {
+      printf '%s binary %s does not embed expected version v%s\n' "$asset" "${binary#"$package_root/"}" "$SEMVER" >&2
+      return 1
+    }
+  done
+  LC_ALL=C grep -aFq "$RELEASE_COMMIT" "$launcher" || {
+    printf '%s launcher does not embed release commit %s\n' "$asset" "$RELEASE_COMMIT" >&2
+    return 1
+  }
+  LC_ALL=C grep -aFq "$RELEASE_COMMIT" "$core" || {
+    printf '%s core does not embed release commit %s\n' "$asset" "$RELEASE_COMMIT" >&2
+    return 1
+  }
+  core_sha="$(sed -n 's/.*"core":{[^}]*"sha256":"\([0-9a-f]*\)".*/\1/p' "$package_root/package-manifest.json")"
+  if [ "${#core_sha}" -ne 64 ] || ! LC_ALL=C grep -aFq "$core_sha" "$launcher"; then
+    printf '%s launcher does not embed finalized core SHA-256\n' "$asset" >&2
     return 1
   fi
+  core_size="$(sed -n 's/.*"core":{[^}]*"size":\([0-9]*\).*/\1/p' "$package_root/package-manifest.json")"
+  if ! printf '%s\n' "$core_size" | grep -Eq '^[1-9][0-9]*$' || ! LC_ALL=C grep -aFq "$core_size" "$launcher"; then
+    printf '%s launcher does not embed finalized core size\n' "$asset" >&2
+    return 1
+  fi
+
   library="$(cd "$ROOT" && go run ./scripts/build/runtime-payload materialize \
-    "$binary" "$extract_dir/cache" "$target_os" "$target_arch")" || return 1
+    "$core" "$extract_dir/cache" "$target_os" "$target_arch")" || return 1
   runtime_root="$(dirname "$library")"
   [ -f "$runtime_root/manifest.json" ] || {
     printf '%s does not contain an embedded runtime manifest\n' "$asset" >&2

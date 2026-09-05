@@ -6,7 +6,19 @@ const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
 
-const binaryPath = path.join(__dirname, "..", "vendor", process.platform === "win32" ? "dws.exe" : "dws");
+const vendorDir = path.join(__dirname, "..", "vendor");
+let packageDirs = [];
+try {
+  packageDirs = fs.readdirSync(vendorDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && /^dws-v[^/]+-(darwin|linux|windows)-(amd64|arm64)$/.test(entry.name));
+} catch (_) {
+  packageDirs = [];
+}
+if (packageDirs.length !== 1) {
+  console.error(`expected exactly one canonical dws package under ${vendorDir}. Reinstall the package.`);
+  process.exit(1);
+}
+const binaryPath = path.join(vendorDir, packageDirs[0].name, "bin", process.platform === "win32" ? "dws.exe" : "dws");
 
 if (!fs.existsSync(binaryPath)) {
   console.error(`dws binary not found at ${binaryPath}. Reinstall the package.`);

@@ -49,6 +49,7 @@ var (
 	runtimeDeliverySchemaCatalog          loadedSchemaCatalog
 	runtimeDeliverySchemaCatalogErr       error
 	runtimeDeliverySchemaCatalogLazyCount atomic.Uint64
+	runtimeDeliveryLiveCatalog            atomic.Pointer[loadedSchemaCatalog]
 )
 
 func loadSchemaSourceRootFn() func() *cobra.Command {
@@ -69,6 +70,7 @@ func resetDeliverySchemaCatalogState() {
 	runtimeDeliverySchemaCatalog = loadedSchemaCatalog{}
 	runtimeDeliverySchemaCatalogErr = nil
 	runtimeDeliverySchemaCatalogLazyCount.Store(0)
+	runtimeDeliveryLiveCatalog.Store(nil)
 }
 
 // resetSchemaDeliveryState clears ResolveMeta lookup state and Catalog delivery
@@ -86,6 +88,9 @@ func resetSchemaDeliveryState() {
 // delivery (dws schema / ResolveMeta). Production registers from internal/app.
 // Passing nil clears the factory (tests only) and resets lazy delivery / Meta state.
 func RegisterSchemaSourceRoot(factory func() *cobra.Command) {
+	// A new authority must never inherit the previous factory's persistent
+	// identity. Production explicitly registers its cache options afterwards.
+	_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
 	storeSchemaSourceRootFn(factory)
 	resetSchemaDeliveryState()
 }
@@ -169,7 +174,11 @@ func deliverySchemaCatalog() loadedSchemaCatalog {
 			installDeliveryCommandMeta(loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr)
 			return
 		}
+		loaded := runtimeDeliverySchemaCatalog
 		installDeliveryCommandMeta(runtimeDeliverySchemaCatalog, nil)
+		// Publish only after both projections are complete. ResolveMeta's fast
+		// path relies on this release/acquire pair instead of entering the Once.
+		runtimeDeliveryLiveCatalog.Store(&loaded)
 	})
 	return runtimeDeliverySchemaCatalog
 }

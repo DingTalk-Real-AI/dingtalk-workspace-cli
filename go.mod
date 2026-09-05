@@ -29,6 +29,7 @@ require (
 	golang.org/x/image v0.31.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
+	google.golang.org/protobuf v1.33.0
 	safechat-go-sdk v0.0.0
 )
 

@@ -49,18 +49,19 @@ func TestExtractZip_ZipSlipProtection(t *testing.T) {
 	w.Close()
 	f.Close()
 
-	if err := ExtractZip(zipPath, targetDir); err != nil {
-		t.Fatalf("ExtractZip() error = %v", err)
+	if err := ExtractZip(zipPath, targetDir); err == nil {
+		t.Fatal("ExtractZip() accepted a traversal entry")
 	}
 
-	// Path-traversal entry should be skipped
+	// Strict extraction rejects the whole archive before publishing later files.
 	evilPath := filepath.Join(dir, "..", "etc", "passwd")
 	if _, err := os.Stat(evilPath); err == nil {
 		t.Error("zip-slip protection failed: traversal file was extracted")
 	}
 
-	// Normal file should exist
-	assertFileContent(t, filepath.Join(targetDir, "normal.txt"), "ok")
+	if _, err := os.Stat(filepath.Join(targetDir, "normal.txt")); !os.IsNotExist(err) {
+		t.Fatalf("normal entry from rejected archive was published: %v", err)
+	}
 }
 
 func TestExtractZip_InvalidZip(t *testing.T) {
@@ -82,51 +83,6 @@ func TestExtractZip_EmptyZip(t *testing.T) {
 	targetDir := filepath.Join(dir, "extracted")
 	if err := ExtractZip(zipPath, targetDir); err != nil {
 		t.Fatalf("ExtractZip() error = %v for empty zip", err)
-	}
-}
-
-func TestFindBinaryInDir_TopLevel(t *testing.T) {
-	dir := t.TempDir()
-	dwsPath := filepath.Join(dir, "dws")
-	os.WriteFile(dwsPath, []byte("#!/bin/sh"), 0755)
-
-	got := FindBinaryInDir(dir)
-	if got != dwsPath {
-		t.Errorf("FindBinaryInDir() = %q, want %q", got, dwsPath)
-	}
-}
-
-func TestFindBinaryInDir_Nested(t *testing.T) {
-	dir := t.TempDir()
-	nested := filepath.Join(dir, "subdir")
-	os.MkdirAll(nested, 0755)
-	dwsPath := filepath.Join(nested, "dws")
-	os.WriteFile(dwsPath, []byte("#!/bin/sh"), 0755)
-
-	got := FindBinaryInDir(dir)
-	if got != dwsPath {
-		t.Errorf("FindBinaryInDir() = %q, want %q", got, dwsPath)
-	}
-}
-
-func TestFindBinaryInDir_Windows(t *testing.T) {
-	dir := t.TempDir()
-	exePath := filepath.Join(dir, "dws.exe")
-	os.WriteFile(exePath, []byte("MZ"), 0755)
-
-	got := FindBinaryInDir(dir)
-	if got != exePath {
-		t.Errorf("FindBinaryInDir() = %q, want %q", got, exePath)
-	}
-}
-
-func TestFindBinaryInDir_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "other.bin"), []byte("x"), 0755)
-
-	got := FindBinaryInDir(dir)
-	if got != "" {
-		t.Errorf("FindBinaryInDir() = %q, want empty", got)
 	}
 }
 

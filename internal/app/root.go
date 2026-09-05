@@ -1176,6 +1176,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// commands as well as the open-source base.
 		pluginCmds := rootLoadPlugins(root, engine, runner)
 		if len(pluginCmds) > 0 {
+			cli.MarkSchemaCacheRuntimeUncertain()
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}

@@ -653,42 +653,11 @@ install_skills_from_bundle() {
 }
 
 install_binary() {
-  os="$(detect_os)"
-  arch="$(detect_arch)"
-  if [ "$os" = "windows" ]; then
-    asset="${BIN_NAME}-windows-${arch}.zip"
-    binname="${BIN_NAME}.exe"
-  else
-    asset="${BIN_NAME}-${os}-${arch}.tar.gz"
-    binname="${BIN_NAME}"
-  fi
-
-  say "Downloading ${asset} ..."
-  curl -fsSL "https://github.com/${EVENT_REPO}/releases/download/${EVENT_VERSION}/${asset}" -o "$tmp/$asset" \
-    || err "Binary download failed. Does release ${EVENT_VERSION} have ${asset}?"
-  verify_release_asset "$asset" "$tmp/$asset"
-
-  if [ "$os" = "windows" ]; then
-    extract_zip "$tmp/$asset" "$tmp/bin"
-  else
-    need_cmd tar
-    mkdir -p "$tmp/bin"
-    tar -xzf "$tmp/$asset" -C "$tmp/bin"
-  fi
-
-  found=""
-  for c in "$tmp/bin/$binname" "$tmp/bin/${BIN_NAME}-${os}-${arch}/$binname"; do
-    [ -f "$c" ] && found="$c" && break
-  done
-  if [ -z "$found" ]; then
-    found="$(find "$tmp/bin" -name "$binname" -type f | head -1 || true)"
-  fi
-  [ -n "$found" ] || err "${binname} not found inside ${asset}"
-
-  mkdir -p "$INSTALL_DIR"
-  cp "$found" "$INSTALL_DIR/$binname"
-  chmod +x "$INSTALL_DIR/$binname" 2>/dev/null || true
-  say "Binary -> ${INSTALL_DIR}/${binname}"
+  _installer="$tmp/install.sh"
+  curl -fsSL "https://raw.githubusercontent.com/${EVENT_REPO}/${EVENT_VERSION}/scripts/install.sh" -o "$_installer" || err "Canonical installer download failed."
+  DWS_VERSION="$EVENT_VERSION" DWS_INSTALL_DIR="$INSTALL_DIR" DWS_INSTALL_NAME="$BIN_NAME" \
+    DWS_NO_SKILLS=1 DWS_SKILLS_ONLY=0 DWS_NO_FALLBACK=1 sh "$_installer" || err "Canonical package installation failed."
+  say "Binary -> ${INSTALL_DIR}/${BIN_NAME}"
 }
 
 install_skills() {

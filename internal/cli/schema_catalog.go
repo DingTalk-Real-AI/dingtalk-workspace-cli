@@ -17,9 +17,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
@@ -56,7 +58,7 @@ type loadedSchemaCatalog struct {
 }
 
 func registryToSnapshotPayload(registry SchemaRegistry) (SchemaCatalogSnapshot, error) {
-	payload, err := registry.ToSnapshotPayload()
+	payload, err := schemaSnapshotPayload(registry)
 	if err != nil {
 		return SchemaCatalogSnapshot{}, err
 	}
@@ -131,7 +133,7 @@ func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCata
 	// allowlist: doing so could silently erase an otherwise valid reviewed
 	// manual-only command after the exact-set validation above has passed.
 	registry.Source = SchemaSourceRuntimeAssembled
-	payload, err := registry.ToSnapshotPayload()
+	payload, err := schemaSnapshotPayload(registry)
 	if err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("serialize typed Schema registry: %w", err)
 	}
@@ -206,6 +208,33 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 }
 
 func deliverySchemaAllPayload() (map[string]any, error) {
+	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
+		return schemaAllPayloadFromLoaded(*loaded)
+	}
+	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+		if payload, err := runtime.loadAllPayload(); err == nil {
+			return payload, nil
+		}
+		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
+			meta, metaErr := runtime.readMeta()
+			if metaErr != nil {
+				return nil, metaErr
+			}
+			runtime.seedMeta(meta)
+			payload, payloadErr := runtime.readAllPayload(meta, false)
+			if payloadErr == nil {
+				runtime.seedAll(payload)
+			}
+			return payload, payloadErr
+		})
+		if err != nil {
+			return nil, err
+		}
+		if value != nil {
+			return value.(map[string]any), nil
+		}
+		return schemaAllPayloadFromLoaded(loaded)
+	}
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
 	}
@@ -213,6 +242,29 @@ func deliverySchemaAllPayload() (map[string]any, error) {
 }
 
 func deliverySchemaOverviewPayload() (map[string]any, error) {
+	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
+		return schemaOverviewPayloadFromLoaded(*loaded)
+	}
+	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+		if payload, err := runtime.loadOverviewPayload(); err == nil {
+			return payload, nil
+		}
+		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
+			meta, metaErr := runtime.readMeta()
+			if metaErr != nil {
+				return nil, metaErr
+			}
+			runtime.seedMeta(meta)
+			return runtime.overviewPayload(meta)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if value != nil {
+			return value.(map[string]any), nil
+		}
+		return schemaOverviewPayloadFromLoaded(loaded)
+	}
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
 	}
@@ -223,9 +275,13 @@ func deliverySchemaOverviewPayload() (map[string]any, error) {
 // onto a delivery payload. Every envelope that exposes snapshot hashes must
 // go through this helper so the two keys never drift apart.
 func stampSnapshotHashes(payload map[string]any, loaded loadedSchemaCatalog) {
-	payload["catalog_hash"] = loaded.Snapshot.SourceHash
-	if loaded.Snapshot.SurfaceHash != "" {
-		payload["surface_hash"] = loaded.Snapshot.SurfaceHash
+	schemaruntime.StampTrustedHashes(payload, trustedSchemaHashes(loaded))
+}
+
+func trustedSchemaHashes(loaded loadedSchemaCatalog) schemaruntime.TrustedHashes {
+	return schemaruntime.TrustedHashes{
+		CatalogHash: loaded.Snapshot.SourceHash,
+		SurfaceHash: loaded.Snapshot.SurfaceHash,
 	}
 }
 
@@ -253,6 +309,31 @@ func schemaOverviewPayloadFromLoaded(loaded loadedSchemaCatalog) (map[string]any
 // an explicit loaded catalog — never this helper — to avoid an init cycle
 // through assembleSchemaCatalogFromRoot → BuildSchemaCatalogSnapshot.
 func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
+	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
+		return schemaPayloadFromLoadedCatalog(*loaded, args)
+	}
+	if len(args) == 0 {
+		if err := deliverySchemaCatalogError(); err != nil {
+			return nil, err
+		}
+		return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
+	}
+	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+		raw := strings.TrimSpace(args[0])
+		if payload, err := runtime.loadQueryPayload(raw); err == nil {
+			return payload, nil
+		}
+		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
+			return runtime.readQueryPayload(raw)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if value != nil {
+			return value.(map[string]any), nil
+		}
+		return schemaPayloadFromLoadedCatalog(loaded, args)
+	}
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
 	}
@@ -264,68 +345,21 @@ func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
 // prevents generation-only validation from accepting an unqueryable snapshot.
 func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (map[string]any, error) {
 	if len(args) == 0 {
-		snapshot, err := loaded.Registry.ToSnapshotPayload()
-		if err != nil {
-			return nil, err
-		}
-		payload := snapshot.Catalog
-		stampSnapshotHashes(payload, loaded)
-		return payload, nil
+		return schemaruntime.RenderCatalog(loaded.Registry, trustedSchemaHashes(loaded))
 	}
 	raw := strings.TrimSpace(args[0])
-	if tool, ok := loaded.Index.ResolveQuery(raw); ok {
-		return schemaToolForResolvedPath(tool, raw).ToPayload()
+	payload, err := schemaruntime.RenderQueryWithProjectors(loaded.Registry, loaded.Index, raw, schemaruntime.QueryProjectors{
+		ProductSummary: renderSchemaProductSummary,
+		ToolSummary:    renderSchemaToolSummary,
+	})
+	if err == nil {
+		return payload, nil
 	}
-	tokens := splitSchemaPathTokens(raw)
-	if len(tokens) == 1 {
-		if product, ok := loaded.Index.Product(tokens[0]); ok {
-			payload, err := renderSchemaProductSummary(product)
-			if err != nil {
-				return nil, err
-			}
-			source := strings.TrimSpace(loaded.Registry.Source)
-			if source == "" {
-				source = SchemaSourceRuntimeAssembled
-			}
-			return map[string]any{
-				"kind":    "schema",
-				"level":   "product",
-				"count":   len(product.Tools),
-				"product": payload,
-				"source":  source,
-			}, nil
-		}
+	var unknown schemaruntime.UnknownPathError
+	if errors.As(err, &unknown) {
+		return nil, apperrors.NewValidation(err.Error())
 	}
-	if len(tokens) > 1 {
-		path := strings.Join(tokens, " ")
-		if product, ok := loaded.Index.Product(tokens[0]); ok {
-			matched := make([]map[string]any, 0)
-			for _, tool := range product.Tools {
-				if schemaToolUnderGroup(tool, path) {
-					summary, err := renderSchemaToolSummary(tool)
-					if err != nil {
-						return nil, err
-					}
-					matched = append(matched, summary)
-				}
-			}
-			if len(matched) > 0 {
-				source := strings.TrimSpace(loaded.Registry.Source)
-				if source == "" {
-					source = SchemaSourceRuntimeAssembled
-				}
-				return map[string]any{
-					"kind":   "schema",
-					"level":  "group",
-					"path":   path,
-					"count":  len(matched),
-					"tools":  matched,
-					"source": source,
-				}, nil
-			}
-		}
-	}
-	return nil, apperrors.NewValidation("unknown runtime schema path " + strconvQuote(raw))
+	return nil, err
 }
 
 func schemaCatalogSnapshotHash(snapshot SchemaCatalogSnapshot) string {

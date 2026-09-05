@@ -13,6 +13,9 @@ RELEASE_BASE_URL="${DWS_RELEASE_BASE_URL:-}"
 APPLE_CERTIFICATE_P12="${DWS_APPLE_CERTIFICATE_P12:-}"
 APPLE_CERTIFICATE_PASSWORD_FILE="${DWS_APPLE_CERTIFICATE_PASSWORD_FILE:-}"
 REQUIRE_DEVELOPER_ID_SIGNING="${DWS_REQUIRE_DEVELOPER_ID_SIGNING:-false}"
+APPLE_NOTARY_API_KEY_FILE="${DWS_APPLE_NOTARY_API_KEY_FILE:-}"
+REQUIRE_NOTARIZATION="${DWS_REQUIRE_NOTARIZATION:-false}"
+RELEASE_COMMIT="${DWS_RELEASE_COMMIT:-}"
 
 export LANG=C
 export LC_ALL=C
@@ -81,6 +84,22 @@ resolve_version() {
     err "could not resolve package version - set DWS_PACKAGE_VERSION or create a git tag"
   fi
   printf '%s\n' "$version_line"
+}
+
+validate_version() {
+  printf '%s\n' "$1" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$' \
+    || err "invalid package version: $1"
+}
+
+resolve_release_commit() {
+  [ -n "$RELEASE_COMMIT" ] || err "DWS_RELEASE_COMMIT is required"
+  commit="$RELEASE_COMMIT"
+  printf '%s\n' "$commit" | grep -Eq '^[0-9a-f]{40}$' \
+    || err "release commit must be exactly 40 lowercase hexadecimal characters"
+  head_commit="$(git -C "$ROOT" rev-parse HEAD)" || err "could not resolve HEAD commit"
+  [ "$commit" = "$head_commit" ] \
+    || err "DWS_RELEASE_COMMIT $commit does not match HEAD $head_commit"
+  printf '%s\n' "$commit"
 }
 
 resolve_release_base_url() {
@@ -326,57 +345,24 @@ attach_runtime_payload() {
   (cd "$ROOT" && go run ./scripts/build/runtime-payload inject "$binary" "$runtime_root")
 }
 
-prepare_runtime_archives() {
-  "$ROOT/scripts/policy/check-runtime-payload.sh" --allow-unsupported-tools
-  work="$(mktemp -d)"
-  found_any=0
-  for archive in "$DIST_DIR"/dws-darwin-*.tar.gz "$DIST_DIR"/dws-linux-*.tar.gz "$DIST_DIR"/dws-windows-*.zip; do
-    [ -f "$archive" ] || continue
-    found_any=1
-    name="$(basename "$archive")"
-    target="${name#dws-}"
-    target="${target%.tar.gz}"
-    target="${target%.zip}"
-    target_os="${target%-*}"
-    target_arch="${target##*-}"
-    stage="$work/$target"
-    rm -rf "$stage"
-    mkdir -p "$stage"
-    case "$archive" in
-      *.tar.gz) tar -xzf "$archive" -C "$stage" ;;
-      *.zip) unzip -q "$archive" -d "$stage" ;;
-    esac
-    "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
-    if [ "$target_os" != darwin ]; then
-      case "$target_os" in
-        windows) binary="$stage/dws.exe" ;;
-        *) binary="$stage/dws" ;;
-      esac
-      [ -f "$binary" ] || err "dws binary not found inside $name after extraction"
-      attach_runtime_payload "$binary" "$stage/.dws-runtime/20260825"
-      rm -rf "$stage/.dws-runtime"
-    fi
-    repack_platform_archive "$stage" "$archive"
-    update_checksum_entry "$name" "$(sha256_file "$archive")"
-  done
-  rm -rf "$work"
-  [ "$found_any" -eq 1 ] || err "no platform archives found for runtime payload preparation"
-}
-
 # ---------- darwin signing ----------
 #
 # Unsigned arm64 binaries are SIGKILL'd by amfid on Apple Silicon (macOS 11+).
 # Official releases use an Apple Developer ID certificate loaded from GitHub
 # Secrets. Fork/local builds retain ad-hoc signing so they remain runnable.
-# We unpack each dws-darwin-*.tar.gz, sign the runtime library, attach it to the
-# executable, sign the finalized dws binary, repack deterministically,
-# and rewrite the corresponding line in checksums.txt.
+# Darwin runtime libraries are signed before injection. The finalized core and
+# launcher are then signed independently before either identity is recorded.
 
 configure_darwin_signing() {
   case "$REQUIRE_DEVELOPER_ID_SIGNING" in
     1|true|yes) require_developer_id=1 ;;
     0|false|no|"") require_developer_id=0 ;;
     *) err "invalid DWS_REQUIRE_DEVELOPER_ID_SIGNING value: $REQUIRE_DEVELOPER_ID_SIGNING" ;;
+  esac
+  case "$REQUIRE_NOTARIZATION" in
+    1|true|yes) require_notarization=1 ;;
+    0|false|no|"") require_notarization=0 ;;
+    *) err "invalid DWS_REQUIRE_NOTARIZATION value: $REQUIRE_NOTARIZATION" ;;
   esac
 
   if [ -n "$APPLE_CERTIFICATE_P12" ] || [ -n "$APPLE_CERTIFICATE_PASSWORD_FILE" ]; then
@@ -386,13 +372,21 @@ configure_darwin_signing() {
     [ -f "$APPLE_CERTIFICATE_PASSWORD_FILE" ] || err "Developer ID password file not found: $APPLE_CERTIFICATE_PASSWORD_FILE"
     command -v rcodesign >/dev/null 2>&1 || err "rcodesign is required for Developer ID signing"
     DARWIN_SIGNING_MODE="developer-id"
-    return
+  elif [ "$require_developer_id" -eq 1 ]; then
+    err "Developer ID signing is required but DWS_APPLE_CERTIFICATE_P12 and DWS_APPLE_CERTIFICATE_PASSWORD_FILE are not configured"
+  else
+    DARWIN_SIGNING_MODE="ad-hoc"
   fi
 
-  if [ "$require_developer_id" -eq 1 ]; then
-    err "Developer ID signing is required but DWS_APPLE_CERTIFICATE_P12 and DWS_APPLE_CERTIFICATE_PASSWORD_FILE are not configured"
+  if [ -n "$APPLE_NOTARY_API_KEY_FILE" ] || [ "$require_notarization" -eq 1 ]; then
+    [ "$DARWIN_SIGNING_MODE" = "developer-id" ] || err "notarization requires Developer ID signing"
+    [ -n "$APPLE_NOTARY_API_KEY_FILE" ] || err "DWS_APPLE_NOTARY_API_KEY_FILE is required when notarization is required"
+    [ -f "$APPLE_NOTARY_API_KEY_FILE" ] || err "App Store Connect API key file not found: $APPLE_NOTARY_API_KEY_FILE"
+    command -v rcodesign >/dev/null 2>&1 || err "rcodesign is required for notarization"
+    DARWIN_NOTARIZATION_MODE="enabled"
+  else
+    DARWIN_NOTARIZATION_MODE="disabled"
   fi
-  DARWIN_SIGNING_MODE="ad-hoc"
 }
 
 sign_one_darwin_binary() {
@@ -427,43 +421,175 @@ update_checksum_entry() {
   mv "$tmp" "$checksum_path"
 }
 
-sign_darwin_archives() {
+notarize_darwin_package() {
+  package_root="$1"
+  package_name="$2"
+  transport_zip="$3"
+  [ "$DARWIN_NOTARIZATION_MODE" = "enabled" ] || return 0
+
+  rm -f "$transport_zip"
+  (
+    cd "$(dirname "$package_root")"
+    find "$package_name" -type f | LC_ALL=C sort \
+      | env -u LC_ALL -u LC_CTYPE LANG=C LC_ALL=C LC_CTYPE=C zip -X -q "$transport_zip" -@
+  )
+  if ! rcodesign notary-submit --api-key-file "$APPLE_NOTARY_API_KEY_FILE" --wait "$transport_zip"; then
+    rm -f "$transport_zip"
+    err "Apple notarization failed for $package_name"
+  fi
+  rm -f "$transport_zip"
+}
+
+verify_package_tree() {
+  package_root="$1"
+  target_os="$2"
+  target_arch="$3"
+  (cd "$ROOT" && go run ./scripts/build/package-manifest \
+    --verify \
+    --package-root "$package_root" \
+    --version "v$version" \
+    --commit "$release_commit" \
+    --edition open \
+    --goos "$target_os" \
+    --goarch "$target_arch") >/dev/null
+}
+
+verify_archive_root() {
+  stage="$1"
+  package_name="$2"
+  case "$package_name" in
+    *-windows-*) legacy_name=dws.exe; core_name=dws-core.exe ;;
+    *) legacy_name=dws; core_name=dws-core ;;
+  esac
+  [ -d "$stage/$package_name" ] || err "canonical package directory missing: $package_name"
+  [ -f "$stage/$legacy_name" ] && [ ! -L "$stage/$legacy_name" ] \
+    || err "legacy upgrade entry missing: $legacy_name"
+  cmp -s "$stage/$legacy_name" "$stage/$package_name/libexec/$core_name" \
+    || err "legacy upgrade entry must equal the finalized core"
+  for entry in "$stage"/* "$stage"/.[!.]* "$stage"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    entry_name="$(basename "$entry")"
+    case "$entry_name" in
+      "$package_name") [ -d "$entry" ] && [ ! -L "$entry" ] || err "invalid canonical package directory: $entry_name" ;;
+      LICENSE|NOTICE|README.md|CHANGELOG.md) [ -f "$entry" ] && [ ! -L "$entry" ] || err "invalid archive-root metadata file: $entry_name" ;;
+      "$legacy_name") [ -f "$entry" ] && [ ! -L "$entry" ] || err "invalid legacy upgrade entry" ;;
+      *) err "unexpected archive-root entry: $entry_name" ;;
+    esac
+  done
+}
+
+finalize_platform_archives() {
+  "$ROOT/scripts/policy/check-runtime-payload.sh" --allow-unsupported-tools
   work="$(mktemp -d)"
   found_any=0
-  for archive in "$DIST_DIR"/dws-darwin-*.tar.gz; do
+  for archive in "$DIST_DIR"/dws-darwin-*.tar.gz "$DIST_DIR"/dws-linux-*.tar.gz "$DIST_DIR"/dws-windows-*.zip; do
     [ -f "$archive" ] || continue
     found_any=1
     name="$(basename "$archive")"
-    say "  signing $name"
-
-    stage="$work/${name%.tar.gz}"
+    target="${name#dws-}"
+    target="${target%.tar.gz}"
+    target="${target%.zip}"
+    target_os="${target%-*}"
+    target_arch="${target##*-}"
+    package_name="dws-v${version}-${target_os}-${target_arch}"
+    stage="$work/$target"
     rm -rf "$stage"
     mkdir -p "$stage"
-    tar -xzf "$archive" -C "$stage"
+    case "$archive" in
+      *.tar.gz) tar -xzf "$archive" -C "$stage" ;;
+      *.zip) unzip -q "$archive" -d "$stage" ;;
+    esac
 
-    bin="$stage/dws"
-    if [ ! -f "$bin" ]; then
-      err "dws binary not found inside $name after extraction"
+    if [ -d "$stage/$package_name" ]; then
+      verify_archive_root "$stage" "$package_name"
+      verify_package_tree "$stage/$package_name" "$target_os" "$target_arch"
+      update_checksum_entry "$name" "$(sha256_file "$archive")"
+      if [ "$target_os" = darwin ]; then
+        notarize_darwin_package "$stage/$package_name" "$package_name" "$work/notary-${target_arch}.zip"
+      fi
+      continue
     fi
+
+    case "$target_os" in
+      windows) core="$stage/dws-core.exe" ;;
+      darwin|linux) core="$stage/dws-core" ;;
+      *) err "unsupported target OS in archive: $name" ;;
+    esac
+    [ -f "$core" ] && [ ! -L "$core" ] || err "dws-core binary not found inside $name after extraction"
+    chmod 0755 "$core"
+
+    "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
     runtime_root="$stage/.dws-runtime/20260825"
-    runtime_library="$runtime_root/x7k2m9p4q1w8.dylib"
-    [ -f "$runtime_library" ] || err "runtime library not found inside $name after extraction"
-    sign_one_darwin_binary "$runtime_library"
-    target_arch="${name#dws-darwin-}"
-    target_arch="${target_arch%.tar.gz}"
-    write_runtime_manifest "$runtime_root" darwin "$target_arch" x7k2m9p4q1w8.dylib
-    attach_runtime_payload "$bin" "$runtime_root"
+    if [ "$target_os" = darwin ]; then
+      runtime_library="$runtime_root/x7k2m9p4q1w8.dylib"
+      [ -f "$runtime_library" ] || err "runtime library not found inside $name after extraction"
+      sign_one_darwin_binary "$runtime_library"
+      write_runtime_manifest "$runtime_root" darwin "$target_arch" x7k2m9p4q1w8.dylib
+    fi
+    attach_runtime_payload "$core" "$runtime_root"
     rm -rf "$stage/.dws-runtime"
-    sign_one_darwin_binary "$bin"
+    if [ "$target_os" = darwin ]; then
+      sign_one_darwin_binary "$core"
+    fi
+
+    core_sha="$(sha256_file "$core")"
+    core_size="$(wc -c < "$core" | tr -d ' ')"
+    printf '%s\n' "$core_size" | grep -Eq '^[1-9][0-9]*$' || err "invalid finalized core size for $name"
+
+    package_root="$stage/$package_name"
+    mkdir -p "$package_root/bin" "$package_root/libexec"
+    case "$target_os" in
+      windows)
+        final_core="$package_root/libexec/dws-core.exe"
+        launcher="$package_root/bin/dws.exe"
+        ;;
+      *)
+        final_core="$package_root/libexec/dws-core"
+        launcher="$package_root/bin/dws"
+        ;;
+    esac
+    mv "$core" "$final_core"
+
+    # Shipped old upgraders prefer a root dws and copy only that single file.
+    # Preserve a runnable full core for that path; new installers use the
+    # canonical package and authenticate this duplicate against its manifest.
+    case "$target_os" in
+      windows) cp "$final_core" "$stage/dws.exe" ;;
+      *) cp "$final_core" "$stage/dws" ;;
+    esac
+
+    launcher_ldflags="-s -w -X main.version=v$version -X main.commit=$release_commit -X main.edition=open -X main.coreSHA256=$core_sha -X main.coreSize=$core_size"
+    (cd "$ROOT" && env CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+      go build -buildmode=pie -trimpath -ldflags "$launcher_ldflags" -o "$launcher" ./cmd/dws-launcher)
+    [ -f "$launcher" ] && [ ! -L "$launcher" ] || err "launcher build did not produce $launcher"
+    chmod 0755 "$launcher"
+    if [ "$target_os" = darwin ]; then
+      sign_one_darwin_binary "$launcher"
+    fi
+
+    [ "$(sha256_file "$final_core")" = "$core_sha" ] || err "finalized core changed after launcher identity injection for $name"
+    [ "$(wc -c < "$final_core" | tr -d ' ')" = "$core_size" ] || err "finalized core size changed after launcher identity injection for $name"
+    LC_ALL=C grep -aFq "$core_sha" "$launcher" || err "launcher does not embed finalized core SHA-256 for $name"
+    LC_ALL=C grep -aFq "$core_size" "$launcher" || err "launcher does not embed finalized core size for $name"
+
+    (cd "$ROOT" && go run ./scripts/build/package-manifest \
+      --package-root "$package_root" \
+      --version "v$version" \
+      --commit "$release_commit" \
+      --edition open \
+      --goos "$target_os" \
+      --goarch "$target_arch") >/dev/null
+    verify_package_tree "$package_root" "$target_os" "$target_arch"
+    verify_archive_root "$stage" "$package_name"
 
     repack_platform_archive "$stage" "$archive"
-
     update_checksum_entry "$name" "$(sha256_file "$archive")"
+    if [ "$target_os" = darwin ]; then
+      notarize_darwin_package "$package_root" "$package_name" "$work/notary-${target_arch}.zip"
+    fi
   done
   rm -rf "$work"
-  if [ "$found_any" -eq 0 ]; then
-    say "  (no darwin archives found, skipping)"
-  fi
+  [ "$found_any" -eq 1 ] || err "no platform archives found for finalization"
 }
 
 write_checksums() {
@@ -476,17 +602,16 @@ write_checksums() {
 # ---------- main ----------
 
 version="$(resolve_version)"
+validate_version "$version"
+release_commit="$(resolve_release_commit)"
 configure_darwin_signing
 
-say "==> Preparing runtime payload"
-prepare_runtime_archives
-
 if [ "$DARWIN_SIGNING_MODE" = "developer-id" ]; then
-  say "==> Developer ID signing darwin runtime and binaries"
+  say "==> Finalizing package trees with Developer ID signing"
 else
-  say "==> Ad-hoc signing darwin runtime and binaries"
+  say "==> Finalizing package trees with ad-hoc Darwin signing"
 fi
-sign_darwin_archives
+finalize_platform_archives
 
 say "==> Creating skills zip"
 create_skills_zip

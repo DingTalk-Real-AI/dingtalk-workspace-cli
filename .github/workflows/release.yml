@@ -993,35 +993,62 @@ jobs:
           sudo install -m 0755 /tmp/rcodesign/rcodesign /usr/local/bin/rcodesign
           rcodesign --version
 
-      - name: Prepare Apple Developer ID certificate
+      - name: Prepare Apple release credentials
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
+          APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_BASE64 }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
 
-          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
-            if [ "$GITHUB_REPOSITORY_OWNER" = "DingTalk-Real-AI" ]; then
-              echo "APPLE_CERTIFICATE_P12_BASE64 and APPLE_CERTIFICATE_PASSWORD are required for official releases" >&2
+          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || \
+             [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ] || \
+             [ -z "${APPLE_NOTARY_ISSUER_ID:-}" ] || \
+             [ -z "${APPLE_NOTARY_KEY_ID:-}" ] || \
+             [ -z "${APPLE_NOTARY_PRIVATE_KEY_BASE64:-}" ] || \
+             [ -z "${APPLE_TEAM_ID:-}" ]; then
+            if [ "$GITHUB_REPOSITORY" = "DingTalk-Real-AI/dingtalk-workspace-cli" ]; then
+              echo "Developer ID and App Store Connect notarization credentials, including the expected Apple Team ID, are required for official releases" >&2
               exit 1
             fi
-            echo "Developer ID secrets are unavailable; fork release will use ad-hoc signing."
+            echo "Complete Apple release credentials are unavailable; fork release will be ad-hoc signed and unnotarized."
             exit 0
           fi
+
+          printf '%s\n' "$APPLE_TEAM_ID" | grep -Eq '^[A-Z0-9]{10}$' || {
+            echo "APPLE_TEAM_ID repository variable must be a 10-character Apple Team ID" >&2
+            exit 1
+          }
 
           umask 077
           certificate_path="$RUNNER_TEMP/dws-developer-id.p12"
           password_path="$RUNNER_TEMP/dws-developer-id-password"
+          private_key_path="$RUNNER_TEMP/dws-app-store-connect.p8"
+          api_key_path="$RUNNER_TEMP/dws-app-store-connect.json"
           printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$certificate_path"
           printf '%s' "$APPLE_CERTIFICATE_PASSWORD" > "$password_path"
+          printf '%s' "$APPLE_NOTARY_PRIVATE_KEY_BASE64" | base64 --decode > "$private_key_path"
+          chmod 0600 "$certificate_path" "$password_path" "$private_key_path"
+          first_line="$(LC_ALL=C sed -n '1p' "$private_key_path")"
+          test "$first_line" = "-----BEGIN PRIVATE KEY-----" || {
+            echo "App Store Connect private key has an invalid PEM header" >&2
+            exit 1
+          }
 
           # Fail before packaging if the secret is corrupt or the password is wrong.
           # The exported P12 may use legacy PKCS#12 ciphers; OpenSSL 3 requires
           # -legacy to validate those containers even though rcodesign can read them.
           openssl pkcs12 -legacy -in "$certificate_path" -passin "file:$password_path" -noout
+          rcodesign encode-app-store-connect-api-key -o "$api_key_path" \
+            "$APPLE_NOTARY_ISSUER_ID" "$APPLE_NOTARY_KEY_ID" "$private_key_path"
+          chmod 0600 "$api_key_path"
 
           echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path" >> "$GITHUB_ENV"
           echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path" >> "$GITHUB_ENV"
+          echo "DWS_APPLE_NOTARY_API_KEY_FILE=$api_key_path" >> "$GITHUB_ENV"
 
       - name: Require a clean sealed source before GoReleaser
         run: |
@@ -1061,16 +1088,22 @@ jobs:
         env:
           DWS_PACKAGE_VERSION: ${{ needs.release-contract.outputs.release_version }}
           DWS_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.release-contract.outputs.release_version }}
-          DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
+          DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
+          DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
+          DWS_REQUIRE_NOTARIZATION: ${{ github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
 
-      - name: Remove Apple Developer ID certificate
+      - name: Remove Apple release credentials
         if: ${{ always() }}
         run: |
           rm -f "$RUNNER_TEMP/dws-developer-id.p12"
           rm -f "$RUNNER_TEMP/dws-developer-id-password"
+          rm -f "$RUNNER_TEMP/dws-app-store-connect.p8"
+          rm -f "$RUNNER_TEMP/dws-app-store-connect.json"
 
       - name: Verify final release artifacts
         run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
+        env:
+          DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
 
       - name: Verify npm package before sealing GitHub Release
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
@@ -1098,6 +1131,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    env:
+      EXPECTED_APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
     steps:
       - name: Check out sealed release source
         uses: actions/checkout@v4
@@ -1118,6 +1153,42 @@ jobs:
       - name: Verify finalized Darwin signatures with Apple codesign
         run: |
           set -euo pipefail
+          official_release=false
+          if [ "$GITHUB_REPOSITORY" = "DingTalk-Real-AI/dingtalk-workspace-cli" ]; then
+            official_release=true
+            printf '%s\n' "$EXPECTED_APPLE_TEAM_ID" | grep -Eq '^[A-Z0-9]{10}$' || {
+              echo "APPLE_TEAM_ID repository variable must be a 10-character Apple Team ID" >&2
+              exit 1
+            }
+          else
+            echo "Fork Darwin artifacts are explicitly ad-hoc signed and unnotarized."
+          fi
+          signature_details() {
+            codesign -d --verbose=4 "$1" 2>&1
+          }
+          verify_developer_id_executable() {
+            target="$1"
+            codesign --verify --strict --verbose=4 "$target"
+            [ "$official_release" = true ] || return 0
+            details="$(signature_details "$target")"
+            printf '%s\n' "$details" | grep -Eq '^Authority=Developer ID Application:'
+            printf '%s\n' "$details" | grep -Fqx "TeamIdentifier=$EXPECTED_APPLE_TEAM_ID"
+            printf '%s\n' "$details" | grep -Eq '^CodeDirectory .*flags=.*\(runtime\)'
+            printf '%s\n' "$details" | grep -Eq '^Timestamp='
+            codesign --verify --strict --verbose=4 --check-notarization -R='notarized' "$target"
+          }
+          verify_developer_id_library() {
+            target="$1"
+            codesign --verify --strict --verbose=4 "$target"
+            [ "$official_release" = true ] || return 0
+            details="$(signature_details "$target")"
+            printf '%s\n' "$details" | grep -Eq '^Authority=Developer ID Application:'
+            printf '%s\n' "$details" | grep -Fqx "TeamIdentifier=$EXPECTED_APPLE_TEAM_ID"
+            printf '%s\n' "$details" | grep -Eq '^CodeDirectory .*flags=.*\(runtime\)'
+            printf '%s\n' "$details" | grep -Eq '^Timestamp='
+            # Gatekeeper does not define a portable bare-dylib assessment. The
+            # notarized launcher and core are assessed above instead.
+          }
           case "$(uname -m)" in
             arm64) host_arch=arm64 ;;
             x86_64) host_arch=amd64 ;;
@@ -1128,28 +1199,37 @@ jobs:
             stage="$RUNNER_TEMP/verify-darwin-${arch}"
             mkdir -p "$stage"
             tar -xzf "$archive" -C "$stage"
-            test -f "$stage/dws"
-            codesign --verify --strict --verbose=4 "$stage/dws"
-            codesign -dvvv "$stage/dws"
+            package_root="$stage/dws-${RELEASE_VERSION}-darwin-${arch}"
+            launcher="$package_root/bin/dws"
+            core="$package_root/libexec/dws-core"
+            test -f "$launcher"
+            test -f "$core"
+            verify_developer_id_executable "$launcher"
+            verify_developer_id_executable "$core"
+            if [ "$official_release" = true ]; then
+              spctl --assess --type execute --verbose=4 "$launcher"
+              spctl --assess --type execute --verbose=4 "$core"
+            fi
             library="$(go run ./scripts/build/runtime-payload materialize \
-              "$stage/dws" "$stage/cache" darwin "$arch")"
-            codesign --verify --strict --verbose=4 "$library"
-            binary_team="$(codesign -dvvv "$stage/dws" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+              "$core" "$stage/cache" darwin "$arch")"
+            verify_developer_id_library "$library"
+            launcher_team="$(signature_details "$launcher" | sed -n 's/^TeamIdentifier=//p')"
+            core_team="$(signature_details "$core" | sed -n 's/^TeamIdentifier=//p')"
             library_team="$(codesign -dvvv "$library" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
-            test -n "$binary_team"
-            test "$binary_team" = "$library_team"
+            if [ "$official_release" = true ]; then
+              test "$launcher_team" = "$EXPECTED_APPLE_TEAM_ID"
+              test "$core_team" = "$EXPECTED_APPLE_TEAM_ID"
+              test "$launcher_team" = "$library_team"
+              test "$core_team" = "$library_team"
+            fi
             if [ "$arch" = "$host_arch" ]; then
-              # Runtime context initialization obtains a host-scoped native token.
-              # It is diagnostic-only here: the signed binary and embedded dylib
-              # above are the release artifacts this job is authorized to verify.
               doctor_home="$stage/doctor-home"
               doctor_json="$stage/doctor.json"
               rm -rf "$doctor_home"
               mkdir -p "$doctor_home"
-              if ! HOME="$doctor_home" "$stage/dws" doctor --json --timeout 2 > "$doctor_json"; then
-                echo "runtime_context diagnostic command failed" >&2
-              fi
-              cat "$doctor_json" >&2
+              "$launcher" --version
+              HOME="$doctor_home" "$launcher" doctor --json --timeout 2 > "$doctor_json"
+              test -s "$doctor_json"
             fi
           done
 
@@ -1235,6 +1315,8 @@ jobs:
 
       - name: Verify finalized release artifacts before publication
         run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
+        env:
+          DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
 
       - name: Verify npm package before sealing GitHub Release
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"

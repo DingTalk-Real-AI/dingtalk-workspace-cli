@@ -24,38 +24,24 @@ package cli
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 )
 
 // CommandMeta is the complete runtime metadata view for a single command.
 // Consumers read this struct; they never touch the raw catalog maps.
-type CommandMeta struct {
-	Identity  CommandIdentity
-	Safety    CommandSafety
-	Selection CommandSelection
-}
+type CommandMeta = schemaruntime.CommandMeta
 
 // CommandIdentity is the stable identity of a command.
-type CommandIdentity struct {
-	CLIPath   string   // "dev app delete"
-	Canonical string   // "dev.delete_dev_app"
-	Aliases   []string // ["search", ...]
-	ProductID string   // "devapp"
-	Title     string   // one-line description
-}
+type CommandIdentity = schemaruntime.CommandIdentity
 
 // CommandSelection is the agent-facing selection metadata.
-type CommandSelection struct {
-	AgentSummary  string
-	UseWhen       []string
-	AvoidWhen     []string
-	Prerequisites []string
-	Tips          []string
-	Examples      []string
-}
+type CommandSelection = schemaruntime.CommandSelection
+
+type CommandSafety = schemaruntime.CommandSafety
 
 var (
 	metaByCLIPathOnce sync.Once
@@ -105,42 +91,7 @@ func buildMetaByCLIPath(loaded loadedSchemaCatalog) map[string]CommandMeta {
 }
 
 func buildMetaByCLIPathFromRegistry(registry SchemaRegistry) map[string]CommandMeta {
-	lookup := make(map[string]CommandMeta)
-	metas := make([]CommandMeta, 0, 64)
-	for _, product := range registry.Products {
-		for _, tool := range product.Tools {
-			cliPath := strings.TrimSpace(tool.Identity.CLIPath)
-			if cliPath == "" {
-				continue
-			}
-			meta := CommandMeta{
-				Identity: CommandIdentity{
-					CLIPath:   cliPath,
-					Canonical: tool.Identity.CanonicalPath,
-					Aliases:   append([]string(nil), tool.Identity.Aliases...),
-					ProductID: tool.Identity.ProductID,
-					Title:     tool.Title,
-				},
-				Safety: CommandSafety{
-					Effect:       tool.Safety.Effect,
-					Risk:         tool.Safety.Risk,
-					Confirmation: tool.Safety.Confirmation,
-					Idempotency:  tool.Safety.Idempotency,
-				},
-				Selection: CommandSelection{
-					AgentSummary:  tool.Selection.AgentSummary,
-					UseWhen:       append([]string(nil), tool.Selection.UseWhen...),
-					AvoidWhen:     append([]string(nil), tool.Selection.AvoidWhen...),
-					Prerequisites: append([]string(nil), tool.Selection.Prerequisites...),
-					Tips:          append([]string(nil), tool.Selection.Tips...),
-					Examples:      append([]string(nil), tool.Selection.Examples...),
-				},
-			}
-			lookup[cliPath] = meta
-			metas = append(metas, meta)
-		}
-	}
-	return registerCommandMetaAliases(lookup, metas)
+	return schemaruntime.BuildCommandMetaLookup(registry)
 }
 
 func buildMetaByCLIPathFromSnapshotTools(tools map[string]map[string]any) map[string]CommandMeta {
@@ -187,21 +138,7 @@ func buildMetaByCLIPathFromSnapshotTools(tools map[string]map[string]any) map[st
 // win; alias-vs-alias collisions resolve to the owner with the
 // lexicographically smallest primary cli_path (map iteration is unstable).
 func registerCommandMetaAliases(lookup map[string]CommandMeta, metas []CommandMeta) map[string]CommandMeta {
-	sort.Slice(metas, func(i, j int) bool {
-		return metas[i].Identity.CLIPath < metas[j].Identity.CLIPath
-	})
-	for _, meta := range metas {
-		for _, alias := range meta.Identity.Aliases {
-			alias = strings.TrimSpace(alias)
-			if alias == "" || alias == meta.Identity.CLIPath {
-				continue
-			}
-			if _, exists := lookup[alias]; !exists {
-				lookup[alias] = meta
-			}
-		}
-	}
-	return lookup
+	return schemaruntime.RegisterCommandMetaAliases(lookup, metas)
 }
 
 // ResolveMeta returns the complete metadata for a command identified by its CLI
@@ -209,12 +146,41 @@ func registerCommandMetaAliases(lookup map[string]CommandMeta, metas []CommandMe
 // for "report inbox list"). Returns ok=false for commands not in the Schema
 // surface (utility commands, hidden commands, shortcuts).
 //
-// Ensures deliverySchemaCatalog Once (assembles + caches Meta), then O(1) map
-// lookup. Without a registered source root, fails closed (panic).
+// A persistent hit authenticates and decodes Meta only, then performs an O(1)
+// map lookup. Misses and corruption use the shared authoritative repair path.
 func ResolveMeta(cliPath string) (CommandMeta, bool) {
 	cliPath = strings.TrimSpace(cliPath)
+	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
+		m, ok := metaByCLIPath[cliPath]
+		return m, ok
+	}
+	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+		meta, err := runtime.loadMeta()
+		if err == nil {
+			m, ok := meta.CommandMetaByPath[cliPath]
+			return m, ok
+		}
+		value, _, repairErr := repairSchemaCache(runtime, func() (any, error) {
+			fresh, freshErr := runtime.readMeta()
+			if freshErr != nil {
+				return nil, freshErr
+			}
+			runtime.seedMeta(fresh)
+			m, ok := fresh.CommandMetaByPath[cliPath]
+			return resolvedMeta{Meta: m, OK: ok}, nil
+		})
+		if repairErr == nil && value != nil {
+			result := value.(resolvedMeta)
+			return result.Meta, result.OK
+		}
+	}
 	_ = deliverySchemaCatalog()
 	panicIfMetaIndexUnusable(runtimeDeliverySchemaMetaIndexErr)
 	m, ok := metaByCLIPath[cliPath]
 	return m, ok
+}
+
+type resolvedMeta struct {
+	Meta CommandMeta
+	OK   bool
 }

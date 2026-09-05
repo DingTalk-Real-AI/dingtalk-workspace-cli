@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog generate-schema-cache-identity package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -42,6 +42,7 @@ help:
 	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
 	@printf "  make generate-schema - Refresh param_aliases + verify Schema assembly determinism\n"
 	@printf "  make generate-schema-catalog - Optional assembled Catalog dump under artifacts/ (not a delivery step)\n"
+	@printf "  make generate-schema-cache-identity - Emit deterministic release cache identity proof\n"
 	@printf "  make package       - Build all release artifacts locally\n"
 	@printf "  make changelog-pre VERSION=vX.Y.Z-beta.N - Prepare prerelease notes\n"
 	@printf "  make changelog-stable VERSION=vX.Y.Z FROM_BETA=vX.Y.Z-beta.N - Prepare stable notes\n"
@@ -237,6 +238,9 @@ generate-schema-catalog:
 		-root . \
 		-output "$(SCHEMA_CATALOG_OUTPUT)" \
 		-meta-index "$(SCHEMA_META_INDEX_OUTPUT)"
+
+generate-schema-cache-identity:
+	@./scripts/build/generate-schema-cache-identity.sh -edition open
 
 fetch-mcp-metadata:
 	@printf '  %sFetching diagnostic MCP dump (not a Schema pin)%s\n' "$(COLOR_RUN)" "$(COLOR_RESET)"

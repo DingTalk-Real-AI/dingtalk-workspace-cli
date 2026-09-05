@@ -575,25 +575,13 @@ main() {
   say "Target:  ${os}/${arch}"
   printf '\n'
 
-  # 1) binary (already ad-hoc signed by CI; copy does not break the signature)
-  if [ "$os" = "windows" ]; then
-    asset="dws-windows-${arch}.zip"; binname="dws.exe"
-  else
-    asset="dws-${os}-${arch}.tar.gz"; binname="dws"
-  fi
-  say "⬇  Downloading ${asset} ..."
-  curl -fsSL "https://github.com/${DEVAPP_REPO}/releases/download/${DEVAPP_VERSION}/${asset}" -o "$tmp/$asset" \
-    || err "Binary download failed — does release ${DEVAPP_VERSION} have ${asset}?"
-  verify_release_asset "$asset" "$tmp/$asset"
-  if [ "$os" = "windows" ]; then
-    need_cmd unzip; unzip -q "$tmp/$asset" -d "$tmp"
-  else
-    need_cmd tar; tar -xzf "$tmp/$asset" -C "$tmp"
-  fi
-  [ -f "$tmp/$binname" ] || err "${binname} not found inside ${asset}"
-  mkdir -p "$INSTALL_DIR"
-  cp "$tmp/$binname" "$INSTALL_DIR/$binname"; chmod +x "$INSTALL_DIR/$binname" 2>/dev/null || true
-  say "✅ Binary → ${INSTALL_DIR}/${binname}"
+  # 1) binary: delegate to the canonical installer so archive validation and
+  # immutable activation have one implementation instead of drifting here.
+  installer="$tmp/install.sh"
+  curl -fsSL "https://raw.githubusercontent.com/${DEVAPP_REPO}/${DEVAPP_VERSION}/scripts/install.sh" -o "$installer" || err "Canonical installer download failed."
+  DWS_VERSION="$DEVAPP_VERSION" DWS_INSTALL_DIR="$INSTALL_DIR" DWS_INSTALL_NAME=dws \
+    DWS_NO_SKILLS=1 DWS_SKILLS_ONLY=0 DWS_NO_FALLBACK=1 sh "$installer" || err "Canonical package installation failed."
+  say "✅ Binary → ${INSTALL_DIR}/dws"
 
   # 2) dev skill from the release's skills bundle
   if [ "$NO_SKILLS" != "1" ]; then

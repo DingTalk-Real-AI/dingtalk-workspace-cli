@@ -7,9 +7,11 @@ package upgrade
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -49,25 +51,44 @@ func init() {
 }
 
 const (
-	gitHubAPIBase = "https://api.github.com"
-	defaultOwner  = "DingTalk-Real-AI"
-	defaultRepo   = "dingtalk-workspace-cli"
-	httpTimeout   = 30 * time.Second
-	userAgent     = "DWS-CLI-Upgrade/1.0"
-	skillsZipName = "dws-skills.zip"
-	checksumsName = "checksums.txt"
+	gitHubAPIBase   = "https://api.github.com"
+	defaultOwner    = "DingTalk-Real-AI"
+	defaultRepo     = "dingtalk-workspace-cli"
+	httpTimeout     = 30 * time.Second
+	userAgent       = "DWS-CLI-Upgrade/1.0"
+	skillsZipName   = "dws-skills.zip"
+	checksumsName   = "checksums.txt"
+	maxTagPeelDepth = 5
 )
+
+type gitObject struct {
+	Type string `json:"type"`
+	SHA  string `json:"sha"`
+	URL  string `json:"url"`
+}
+
+type gitRef struct {
+	Ref    string    `json:"ref"`
+	Object gitObject `json:"object"`
+}
+
+type gitTag struct {
+	Tag    string    `json:"tag"`
+	SHA    string    `json:"sha"`
+	Object gitObject `json:"object"`
+}
 
 // GitHubRelease represents a single release from the GitHub Releases API.
 type GitHubRelease struct {
-	TagName     string        `json:"tag_name"`
-	Name        string        `json:"name"`
-	Body        string        `json:"body"`
-	Prerelease  bool          `json:"prerelease"`
-	Draft       bool          `json:"draft"`
-	PublishedAt string        `json:"published_at"`
-	Assets      []GitHubAsset `json:"assets"`
-	HTMLURL     string        `json:"html_url"`
+	TagName         string        `json:"tag_name"`
+	TargetCommitish string        `json:"target_commitish"`
+	Name            string        `json:"name"`
+	Body            string        `json:"body"`
+	Prerelease      bool          `json:"prerelease"`
+	Draft           bool          `json:"draft"`
+	PublishedAt     string        `json:"published_at"`
+	Assets          []GitHubAsset `json:"assets"`
+	HTMLURL         string        `json:"html_url"`
 }
 
 // GitHubAsset represents a release asset (downloadable file).
@@ -82,6 +103,7 @@ type GitHubAsset struct {
 // ReleaseInfo is the simplified view of a release used throughout the upgrade flow.
 type ReleaseInfo struct {
 	Version    string
+	Commit     string
 	Date       string
 	Changelog  string
 	Prerelease bool
@@ -153,7 +175,7 @@ func (c *Client) FetchLatestRelease() (*ReleaseInfo, error) {
 		return nil, fmt.Errorf("获取最新版本失败: %w", err)
 	}
 
-	return ghReleaseToInfo(&gh), nil
+	return c.releaseToInfo(&gh)
 }
 
 // FetchLatestReleaseForTrack returns the latest release in the requested track.
@@ -179,7 +201,7 @@ func (c *Client) FetchLatestStableRelease() (*ReleaseInfo, error) {
 		if !releaseMatchesTrack(releases[i], ReleaseTrackRelease) {
 			continue
 		}
-		return ghReleaseToInfo(&releases[i]), nil
+		return c.releaseToInfo(&releases[i])
 	}
 	return nil, fmt.Errorf("未找到正式 release 版本（需要非 pre-release 且 tag 形如 vX.Y.Z）")
 }
@@ -194,7 +216,7 @@ func (c *Client) FetchLatestPrerelease() (*ReleaseInfo, error) {
 		if !releaseMatchesTrack(releases[i], ReleaseTrackBeta) {
 			continue
 		}
-		return ghReleaseToInfo(&releases[i]), nil
+		return c.releaseToInfo(&releases[i])
 	}
 	return nil, fmt.Errorf("未找到 beta 版本（需要 GitHub pre-release 且 tag 形如 vX.Y.Z-*）")
 }
@@ -213,8 +235,10 @@ func (c *Client) FetchReleaseByTag(tag string) (*ReleaseInfo, error) {
 	if err := c.getJSON(url, &gh); err != nil {
 		return nil, fmt.Errorf("获取版本 %s 失败: %w", tag, err)
 	}
-
-	return ghReleaseToInfo(&gh), nil
+	if gh.TagName != tag {
+		return nil, fmt.Errorf("release tag identity mismatch: requested %q, received %q", tag, gh.TagName)
+	}
+	return c.releaseToInfo(&gh)
 }
 
 // FetchAllReleases returns all non-draft releases, newest first.
@@ -412,15 +436,76 @@ func parseGitHubRepository(raw string) (string, string, bool) {
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), true
 }
 
-func ghReleaseToInfo(gh *GitHubRelease) *ReleaseInfo {
+func (c *Client) releaseToInfo(gh *GitHubRelease) (*ReleaseInfo, error) {
+	commit, err := c.resolveTagCommit(gh.TagName)
+	if err != nil {
+		return nil, fmt.Errorf("解析 release tag %q 的 commit 失败: %w", gh.TagName, err)
+	}
 	return &ReleaseInfo{
 		Version:    stripV(gh.TagName),
+		Commit:     commit,
 		Date:       formatDate(gh.PublishedAt),
 		Changelog:  gh.Body,
 		Prerelease: gh.Prerelease,
 		HTMLURL:    gh.HTMLURL,
 		Assets:     gh.Assets,
+	}, nil
+}
+
+func (c *Client) resolveTagCommit(tag string) (string, error) {
+	if tag == "" || strings.ContainsAny(tag, "\x00\r\n") {
+		return "", errors.New("invalid empty or control-character tag")
 	}
+	refURL := fmt.Sprintf("%s/repos/%s/%s/git/ref/tags/%s", c.baseURL, c.owner, c.repo, url.PathEscape(tag))
+	var ref gitRef
+	if err := c.getJSON(refURL, &ref); err != nil {
+		return "", err
+	}
+	wantRef := "refs/tags/" + tag
+	if ref.Ref != wantRef {
+		return "", fmt.Errorf("tag ref identity mismatch: got %q, want %q", ref.Ref, wantRef)
+	}
+	object := ref.Object
+	for depth := 0; depth <= maxTagPeelDepth; depth++ {
+		if !validGitSHA(object.SHA) {
+			return "", fmt.Errorf("invalid git object SHA %q", object.SHA)
+		}
+		switch object.Type {
+		case "commit":
+			return object.SHA, nil
+		case "tag":
+			if depth == maxTagPeelDepth {
+				return "", fmt.Errorf("annotated tag nesting exceeds %d", maxTagPeelDepth)
+			}
+			var annotated gitTag
+			tagURL := fmt.Sprintf("%s/repos/%s/%s/git/tags/%s", c.baseURL, c.owner, c.repo, object.SHA)
+			if err := c.getJSON(tagURL, &annotated); err != nil {
+				return "", err
+			}
+			if annotated.SHA != object.SHA {
+				return "", fmt.Errorf("annotated tag identity mismatch: got SHA %q, want %q", annotated.SHA, object.SHA)
+			}
+			if depth == 0 && annotated.Tag != tag {
+				return "", fmt.Errorf("annotated tag name mismatch: got %q, want %q", annotated.Tag, tag)
+			}
+			object = annotated.Object
+		default:
+			return "", fmt.Errorf("tag resolves to unsupported git object type %q", object.Type)
+		}
+	}
+	return "", errors.New("unreachable tag peel state")
+}
+
+func validGitSHA(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func stripV(tag string) string {

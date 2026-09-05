@@ -602,22 +602,20 @@ Say "Version: $Version"
 Say "Target:  windows/$arch"
 Write-Host ""
 
-# 1) binary
-$asset = "dws-windows-$arch.zip"
-$zip   = Join-Path $tmp $asset
-Say "Downloading $asset ..."
+# 1) binary: delegate to install.ps1 so ZIP inspection, manifest verification,
+# immutable version publication, and the stable .cmd pointer cannot drift.
+$localInstaller = Join-Path $tmp "install.ps1"
 try {
-    Invoke-WebRequest -Uri "https://github.com/$Repo/releases/download/$Version/$asset" `
-        -OutFile $zip -UseBasicParsing
-} catch { Die "Binary download failed - does release $Version have $asset?" }
-Assert-DevReleaseAssetChecksum $zip $asset $tmp
-
-Expand-Archive -Path $zip -DestinationPath $tmp -Force
-$exe = Get-ChildItem -Path $tmp -Recurse -Filter "dws.exe" | Select-Object -First 1
-if (-not $exe) { Die "dws.exe not found inside $asset" }
-if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null }
-Copy-Item -Path $exe.FullName -Destination (Join-Path $InstallDir "dws.exe") -Force
-Say "Binary -> $InstallDir\dws.exe"
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/$Repo/$Version/scripts/install.ps1" -OutFile $localInstaller -UseBasicParsing
+} catch { Die "Canonical installer download failed: $($_.Exception.Message)" }
+$savedVersion = $env:DWS_VERSION; $savedInstallDir = $env:DWS_INSTALL_DIR; $savedNoSkills = $env:DWS_NO_SKILLS
+try {
+    $env:DWS_VERSION = $Version; $env:DWS_INSTALL_DIR = $InstallDir; $env:DWS_NO_SKILLS = "1"
+    & $localInstaller
+} finally {
+    $env:DWS_VERSION = $savedVersion; $env:DWS_INSTALL_DIR = $savedInstallDir; $env:DWS_NO_SKILLS = $savedNoSkills
+}
+Say "Binary -> $InstallDir\dws.cmd"
 
 # 2) dev skill from the release's skills bundle
 if (-not $NoSkills) {
