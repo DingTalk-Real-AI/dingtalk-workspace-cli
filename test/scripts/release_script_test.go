@@ -13,8 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/packagemanifest"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimepayload"
 )
+
+const releaseFixtureCommit = "0123456789abcdef0123456789abcdef01234567"
 
 var releasePlatformAssets = []string{
 	"dws-darwin-amd64.tar.gz",
@@ -28,22 +31,55 @@ var releasePlatformAssets = []string{
 func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 	t.Helper()
 	stage := t.TempDir()
-	binary := "dws"
-	if strings.HasSuffix(asset, ".zip") {
-		binary = "dws.exe"
+	targetName := strings.TrimPrefix(asset, "dws-")
+	targetName = strings.TrimSuffix(strings.TrimSuffix(targetName, ".tar.gz"), ".zip")
+	parts := strings.Split(targetName, "-")
+	if len(parts) != 2 {
+		t.Fatalf("invalid release fixture asset %q", asset)
+	}
+	target := packagemanifest.Target{GOOS: parts[0], GOARCH: parts[1]}
+	packageName := "dws-" + version + "-" + target.GOOS + "-" + target.GOARCH
+	packageRoot := filepath.Join(stage, packageName)
+	launcher, core, err := packagemanifest.Paths(target)
+	if err != nil {
+		t.Fatal(err)
 	}
 	writeReleaseRuntimeFixture(t, stage, asset)
 	container, err := runtimepayload.BuildContainer(filepath.Join(stage, ".dws-runtime", "20260825"), 12<<20)
 	if err != nil {
 		t.Fatalf("BuildContainer(%s): %v", asset, err)
 	}
-	binaryData := append([]byte("fake release binary\n"+version+"\n"), container...)
-	mustWriteFile(t, filepath.Join(stage, binary), binaryData, 0o755)
+	coreData := append([]byte("fake release core\n"+version+"\n"+releaseFixtureCommit+"\n"), container...)
+	coreSum := sha256.Sum256(coreData)
+	launcherData := []byte(fmt.Sprintf("fake release launcher\n%s\n%s\n%x\n%d\n", version, releaseFixtureCommit, coreSum, len(coreData)))
+	mustWriteFile(t, filepath.Join(packageRoot, launcher), launcherData, 0o755)
+	mustWriteFile(t, filepath.Join(packageRoot, core), coreData, 0o755)
+	identity := packagemanifest.Identity{
+		Release: packagemanifest.Release{Version: version, Commit: releaseFixtureCommit, Edition: "open"},
+		Target:  target,
+	}
+	manifest, err := packagemanifest.Build(packageRoot, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := packagemanifest.WriteAtomic(packageRoot, manifest); err != nil {
+		t.Fatal(err)
+	}
+	legacyName := "dws"
+	if target.GOOS == "windows" {
+		legacyName += ".exe"
+	}
+	mustWriteFile(t, filepath.Join(stage, legacyName), coreData, 0o755)
+	// zip updates an existing archive in place; remove the old fixture so a
+	// version replacement cannot retain the previous canonical directory.
+	if err := os.Remove(filepath.Join(dist, asset)); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
 	if strings.HasSuffix(asset, ".zip") {
-		mustRun(t, stage, "zip", "-qr", filepath.Join(dist, asset), binary)
+		mustRun(t, stage, "zip", "-qr", filepath.Join(dist, asset), packageName, legacyName)
 		return
 	}
-	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, asset), binary)
+	mustRun(t, stage, "tar", "-czf", filepath.Join(dist, asset), packageName, legacyName)
 }
 
 func writeReleaseRuntimeFixture(t *testing.T, stage, asset string) {
@@ -2194,6 +2230,7 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 			cmd.Env = append(os.Environ(),
 				"DIST_DIR="+dist,
 				"VERSION="+test.version,
+				"DWS_RELEASE_COMMIT="+releaseFixtureCommit,
 				"DWS_RELEASE_CHANNEL="+test.channel,
 				"OSS_ACCESS_KEY_ID=test-key",
 				"OSS_ACCESS_KEY_SECRET=test-secret",
@@ -2265,6 +2302,7 @@ func TestReleaseMirrorFailsClosedWhenPointerCannotBeRead(t *testing.T) {
 			cmd.Env = append(os.Environ(),
 				"DIST_DIR="+dist,
 				"VERSION=v1.2.3-beta.1",
+				"DWS_RELEASE_COMMIT="+releaseFixtureCommit,
 				"DWS_RELEASE_CHANNEL=prerelease",
 				"OSS_ACCESS_KEY_ID=test-key",
 				"OSS_ACCESS_KEY_SECRET=test-secret",
@@ -2302,6 +2340,7 @@ func TestReleaseMirrorRepairsHistoricalAssetsWithoutMovingNewerPointer(t *testin
 	cmd.Env = append(os.Environ(),
 		"DIST_DIR="+dist,
 		"VERSION=v1.2.3-beta.1",
+		"DWS_RELEASE_COMMIT="+releaseFixtureCommit,
 		"DWS_RELEASE_CHANNEL=prerelease",
 		"OSS_ACCESS_KEY_ID=test-key",
 		"OSS_ACCESS_KEY_SECRET=test-secret",
@@ -2359,14 +2398,14 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	dist := t.TempDir()
 	seedVersionedReleaseArtifacts(t, dist, "v1.2.3")
 	cmd := exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist, "DWS_RELEASE_COMMIT="+releaseFixtureCommit)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("artifact verification error = %v\noutput:\n%s", err, output)
 	}
 
 	writeReleaseChecksums(t, dist, false)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist, "DWS_RELEASE_COMMIT="+releaseFixtureCommit)
 	output, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "dws-skills.zip exactly once") {
 		t.Fatalf("missing checksum was not blocked: err=%v\noutput:\n%s", err, output)
@@ -2375,7 +2414,7 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeReleaseChecksums(t, dist, true)
 	mustWriteFile(t, filepath.Join(dist, "dws-linux-riscv64.tar.gz"), []byte("unexpected\n"), 0o644)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist, "DWS_RELEASE_COMMIT="+releaseFixtureCommit)
 	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "public release assets") {
 		t.Fatalf("extra public archive was not rejected: err=%v\noutput:\n%s", err, output)
 	}
@@ -2386,8 +2425,8 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeVersionedReleaseArchive(t, dist, "dws-windows-arm64.zip", "v1.2.2")
 	writeReleaseChecksums(t, dist, true)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
-	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-windows-arm64.zip binary") {
+	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist, "DWS_RELEASE_COMMIT="+releaseFixtureCommit)
+	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-v1.2.2-windows-arm64") {
 		t.Fatalf("mixed-version archive was not rejected: err=%v\noutput:\n%s", err, output)
 	}
 }

@@ -380,8 +380,8 @@ func TestStrictVerifyFile_NoChecksumInfo(t *testing.T) {
 	os.WriteFile(filePath, []byte("content"), 0644)
 
 	err := strictVerifyFile("[1/5]", filePath, "test.tar.gz", "", "")
-	if err != nil {
-		t.Errorf("no checksum info should skip, not error: %v", err)
+	if err == nil {
+		t.Fatal("package without trusted checksum was accepted")
 	}
 }
 

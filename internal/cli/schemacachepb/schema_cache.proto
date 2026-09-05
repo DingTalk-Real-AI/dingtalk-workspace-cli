@@ -1,0 +1,293 @@
+syntax = "proto3";
+
+package dws.schemacache.v2;
+
+option go_package = "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb;schemacachepb";
+
+enum DTOVersion {
+  DTO_VERSION_UNSPECIFIED = 0;
+  DTO_VERSION_V1 = 1; // Recognized only so readers can explicitly reject retired DTOs.
+  DTO_VERSION_V2 = 2;
+}
+
+enum OverviewSummaryKind {
+  OVERVIEW_SUMMARY_KIND_UNSPECIFIED = 0;
+  OVERVIEW_SUMMARY_KIND_AGENT_SUMMARY = 1;
+  OVERVIEW_SUMMARY_KIND_USE_WHEN = 2;
+  OVERVIEW_SUMMARY_KIND_DESCRIPTION = 3;
+}
+
+enum ResultOutcome {
+  RESULT_OUTCOME_UNSPECIFIED = 0;
+  RESULT_OUTCOME_SUCCESS = 1;
+  RESULT_OUTCOME_PENDING = 2;
+  RESULT_OUTCOME_PARTIAL_FAILURE = 3;
+  RESULT_OUTCOME_FAILURE = 4;
+}
+
+enum ExampleDispositionMode {
+  EXAMPLE_DISPOSITION_MODE_UNSPECIFIED = 0;
+  EXAMPLE_DISPOSITION_MODE_CONTRACT = 1;
+  EXAMPLE_DISPOSITION_MODE_DRY_RUN = 2;
+  EXAMPLE_DISPOSITION_MODE_CONTRACT_ONLY = 3;
+}
+
+enum ExampleDispositionReasonCode {
+  EXAMPLE_DISPOSITION_REASON_CODE_UNSPECIFIED = 0;
+  EXAMPLE_DISPOSITION_REASON_CODE_LOCAL_STATE = 1;
+  EXAMPLE_DISPOSITION_REASON_CODE_STATEFUL_PREFLIGHT = 2;
+}
+
+message StringList { repeated string items = 1; }
+message BytesValue { bytes value = 1; }
+message BoolValue { bool value = 1; }
+message IntValue { int64 value = 1; }
+message StringListList { repeated StringList items = 1; }
+
+message SchemaMetaCache {
+  DTOVersion dto_version = 1;
+  RegistryFields registry = 2;
+  CommandMetaEntryList command_entries = 3;
+  SchemaOverviewCache overview = 4;
+  LocatorEntryList locators = 5;
+  ProductDescriptorList product_descriptors = 6;
+  uint64 registry_data_length = 7;
+  bytes registry_data_sha256 = 8;
+  bytes source_sha256 = 9;
+  bytes surface_sha256 = 10;
+}
+
+message SchemaProductCache {
+  DTOVersion dto_version = 1;
+  RegistryFields registry = 2;
+  ProductSpec product = 3;
+}
+
+message RegistryFields {
+  string kind = 1;
+  string level = 2;
+  string source = 3;
+  BytesValue agent_metadata = 4;
+}
+
+message CommandMetaEntryList { repeated CommandMetaEntry items = 1; }
+// DTO v2 stores one complete metadata value in each row. The retired v1
+// nested meta field is reserved, never reinterpreted as a scalar.
+message CommandMetaEntry {
+  string lookup_path = 1;
+  reserved 2;
+  reserved "meta";
+  string cli_path = 3;
+  string canonical = 4;
+  string product_id = 5;
+  string title = 6;
+  string effect = 7;
+  string risk = 8;
+  string confirmation = 9;
+  string idempotency = 10;
+  string agent_summary = 11;
+  repeated string aliases = 12;
+  repeated string use_when = 13;
+  repeated string avoid_when = 14;
+  repeated string prerequisites = 15;
+  repeated string tips = 16;
+  repeated string examples = 17;
+  // Bits 0..5 correspond to the six lists above. A set bit distinguishes
+  // present-empty from nil; nonempty lists require their bit. Other bits fail.
+  uint32 lists_present = 18;
+}
+
+message SchemaOverviewCache {
+  RegistryFields registry = 1;
+  OverviewProductList products = 2;
+  uint64 tool_count = 3;
+}
+message OverviewProductList { repeated OverviewProduct items = 1; }
+message OverviewProduct {
+  string id = 1;
+  uint64 tool_count = 2;
+  string schema_path = 3;
+  OverviewSummaryKind summary_kind = 4;
+  string summary = 5;
+}
+
+message LocatorEntryList { repeated LocatorEntry items = 1; }
+message LocatorEntry {
+  string lookup_path = 1;
+  string product_id = 2;
+}
+
+message ProductDescriptorList { repeated ProductDescriptor items = 1; }
+message ProductDescriptor {
+  string product_id = 1;
+  uint64 offset = 2;
+  uint64 length = 3;
+  bytes sha256 = 4;
+}
+
+message ProductSpec {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool runtime = 4;
+  ToolList tools = 5;
+  Selection selection = 6;
+  ProvenanceList field_provenance = 7;
+}
+
+message ToolList { repeated ToolSpec items = 1; }
+message ToolSpec {
+  ToolIdentity identity = 1;
+  string display = 2;
+  string title = 3;
+  string description = 4;
+  string metadata_source = 5;
+  ParameterList parameters = 6;
+  Constraints constraints = 7;
+  PositionalList positionals = 8;
+  DryRun dry_run = 9;
+  Result result = 10;
+  Pagination pagination = 11;
+  Safety safety = 12;
+  Interface interface = 13;
+  Selection selection = 14;
+  ProvenanceList field_provenance = 15;
+}
+
+message ParameterList { repeated ParameterSpec items = 1; }
+message ParameterSpec {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  string property = 4;
+  bool required = 5;
+  bool cli_required = 6;
+  string required_when = 7;
+  BytesValue default_value = 8;
+  BytesValue interface_default = 9;
+  BytesValue example = 10;
+  string format = 11;
+  StringList enum = 12;
+  string interface_description = 13;
+  string interface_type = 14;
+  ProvenanceList field_provenance = 15;
+}
+
+message ToolIdentity {
+  string product_id = 1;
+  string source_product_id = 2;
+  string name = 3;
+  string cli_name = 4;
+  string canonical_path = 5;
+  string path = 6;
+  string cli_path = 7;
+  string primary_cli_path = 8;
+  string group = 9;
+  StringList aliases = 10;
+  bool is_alias = 11;
+  string source = 12;
+}
+
+message Constraints {
+  StringListList mutually_exclusive = 1;
+  StringListList require_one_of = 2;
+  StringListList require_together = 3;
+}
+
+message PositionalList { repeated Positional items = 1; }
+message Positional {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+  bool variadic = 5;
+  int64 index = 6;
+}
+
+message DryRun {
+  string preview_kind = 1;
+  bool remote_reads = 2;
+}
+
+message Result {
+  ResultOutcomeList outcomes = 1;
+  BytesValue data_schema = 2;
+  StringList sensitive_paths = 3;
+}
+message ResultOutcomeList { repeated ResultOutcome items = 1; }
+
+message Pagination {
+  string kind = 1;
+  string cursor_parameter = 2;
+  string meta_path = 3;
+  string endpoint_exhausted_path = 4;
+  string next_token_path = 5;
+}
+
+message Safety {
+  string effect = 1;
+  string effect_source = 2;
+  string risk = 3;
+  string confirmation = 4;
+  string idempotency = 5;
+}
+
+message Interface {
+  InterfaceRef ref = 1;
+  string mode = 2;
+  string availability = 3;
+  string reason = 4;
+}
+message InterfaceRef {
+  string product_id = 1;
+  string rpc_name = 2;
+}
+
+message Selection {
+  string agent_summary = 1;
+  string agent_summary_source = 2;
+  StringList use_when = 3;
+  StringList avoid_when = 4;
+  StringList prerequisites = 5;
+  StringList tips = 6;
+  StringList workflow_refs = 7;
+  StringList examples = 8;
+  ExampleDispositionList example_dispositions = 9;
+  BoolValue reviewed = 10;
+  StringList source_refs = 11;
+  string metadata_source = 12;
+}
+
+message ExampleDispositionList { repeated ExampleDisposition items = 1; }
+message ExampleDisposition {
+  IntValue index = 1;
+  ExampleDispositionMode mode = 2;
+  ExampleDispositionReasonCode reason_code = 3;
+  string reason = 4;
+  bool reviewed = 5;
+}
+
+message ProvenanceList { repeated ProvenanceEntry items = 1; }
+message ProvenanceEntry {
+  string key = 1;
+  FieldProvenance value = 2;
+}
+message FieldProvenance {
+  BytesValue value = 1;
+  string source = 2;
+  string source_ref = 3;
+  string precedence = 4;
+  string resolution = 5;
+  string review_reason = 6;
+  CandidateList candidates = 7;
+  CandidateList overridden_candidates = 8;
+}
+message CandidateList { repeated FieldCandidate items = 1; }
+message FieldCandidate {
+  BytesValue value = 1;
+  string source = 2;
+  string source_ref = 3;
+  string precedence = 4;
+  string review_reason = 5;
+  BoolValue selected = 6;
+}

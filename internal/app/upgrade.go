@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/packagemanifest"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -46,34 +48,38 @@ type upgradeRollbackManager interface {
 
 var (
 	newUpgradeReleaseClient = func() upgradeReleaseClient { return upgrade.NewClient() }
-	newUpgradeRollback      = func() upgradeRollbackManager { return upgrade.NewRollbackManager() }
-	ensureUpgradeDirs       = upgrade.EnsureUpgradeDirectories
-	cleanupUpgradeStale     = upgrade.CleanupStaleFiles
-	upgradeNeedsUpgrade     = upgrade.NeedsUpgrade
-	findUpgradeBinary       = upgrade.FindBinaryAsset
-	findUpgradeSkills       = upgrade.FindSkillsAsset
-	findUpgradeChecksums    = upgrade.FindChecksumsAsset
-	downloadUpgradeFile     = upgrade.Download
-	downloadUpgradeProgress = upgrade.DownloadWithProgress
-	extractUpgradeZip       = upgrade.ExtractZip
-	findExtractedBinary     = upgrade.FindBinaryInDir
-	locateUpgradeSkill      = upgrade.LocateSkillsRoot
-	replaceUpgradeSelf      = upgrade.ReplaceSelf
-	installUpgradeSkills    = upgrade.UpgradeSkillLocationsWithOptions
-	upgradeMkdirTemp        = os.MkdirTemp
-	upgradeRemoveAll        = os.RemoveAll
-	upgradeReadFile         = os.ReadFile
-	upgradeMkdirAll         = os.MkdirAll
-	verifyUpgradeFile       = strictVerifyFile
-	extractUpgradeTarGz     = extractTarGz
-	validateUpgradeBinary   = validateNewBinary
-	upgradeStat             = os.Stat
-	upgradeChmod            = os.Chmod
-	upgradeTryExecVersion   = tryExecVersion
-	upgradeRepairDarwin     = repairDarwinBinary
-	upgradeRuntimeGOOS      = runtime.GOOS
-	upgradeLookPath         = exec.LookPath
-	upgradeCommandOutput    = func(name string, args ...string) ([]byte, error) {
+	newUpgradeRollback      = func(installation upgrade.Installation) upgradeRollbackManager {
+		return upgrade.NewRollbackManagerForInstallation(installation)
+	}
+	resolveUpgradeInstallation = func() (upgrade.Installation, error) { return upgrade.ResolveInstallation(version, upgradeEdition()) }
+	ensureUpgradeDirs          = upgrade.EnsureUpgradeDirectories
+	cleanupUpgradeStale        = upgrade.CleanupStaleFiles
+	upgradeNeedsUpgrade        = upgrade.NeedsUpgrade
+	findUpgradeBinary          = upgrade.FindBinaryAsset
+	findUpgradeSkills          = upgrade.FindSkillsAsset
+	findUpgradeChecksums       = upgrade.FindChecksumsAsset
+	downloadUpgradeFile        = upgrade.Download
+	downloadUpgradeProgress    = upgrade.DownloadWithProgress
+	extractUpgradeZip          = upgrade.ExtractZip
+	extractUpgradePackage      = upgrade.ExtractAndVerifyPackage
+	locateUpgradeSkill         = upgrade.LocateSkillsRoot
+	activateUpgradePackage     = upgrade.ActivatePackage
+	restoreUpgradeActivation   = upgrade.RestoreActivation
+	installUpgradeSkills       = upgrade.UpgradeSkillLocationsWithOptions
+	upgradeMkdirTemp           = os.MkdirTemp
+	upgradeRemoveAll           = os.RemoveAll
+	upgradeReadFile            = os.ReadFile
+	upgradeMkdirAll            = os.MkdirAll
+	verifyUpgradeFile          = strictVerifyFile
+	extractUpgradeTarGz        = extractTarGz
+	validateUpgradeBinary      = validateNewBinary
+	upgradeStat                = os.Stat
+	upgradeChmod               = os.Chmod
+	upgradeTryExecVersion      = tryExecVersion
+	upgradeRepairDarwin        = repairDarwinBinary
+	upgradeRuntimeGOOS         = runtime.GOOS
+	upgradeLookPath            = exec.LookPath
+	upgradeCommandOutput       = func(name string, args ...string) ([]byte, error) {
 		return exec.Command(name, args...).CombinedOutput()
 	}
 	upgradeUserHomeDir = os.UserHomeDir
@@ -98,8 +104,8 @@ func newUpgradeCommand() *cobra.Command {
 		Short: "升级 DWS CLI 到最新版本",
 		Long: `检查并升级 DWS CLI 到最新版本。
 
-自动下载匹配当前平台的二进制文件和技能包，通过 SHA256 校验后原子替换。
-升级前会自动备份当前版本，可通过 --rollback 回滚。
+自动下载匹配当前平台的 canonical package 和技能包，通过清单与 SHA256 校验后原子激活。
+升级前会保留完整 package generation，可通过 --rollback 原子切换回滚。
 每次升级都会按新版本官方清单全量覆盖预制 Skill；--force 仅额外允许重装当前版本。`,
 		Example: `  dws upgrade                    # 交互式升级到最新版本
   dws upgrade --check            # 仅检查是否有新版本
@@ -314,7 +320,11 @@ func runUpgradeList(cmd *cobra.Command, format string, limit int, track upgrade.
 // --- dws upgrade --rollback ---
 
 func runUpgradeRollback(yes bool) error {
-	rm := newUpgradeRollback()
+	installation, err := resolveUpgradeInstallation()
+	if err != nil {
+		return fmt.Errorf("无法确认可回滚的 DWS 安装: %w", err)
+	}
+	rm := newUpgradeRollback(installation)
 
 	backups, err := rm.ListBackups()
 	if err != nil {
@@ -379,7 +389,7 @@ func writeDryRunPlan(w io.Writer, currentVer, binaryAssetName string, hasSkills 
 	}
 	fmt.Fprintf(w, "    [3/5] 校验 SHA256\n")
 	fmt.Fprintf(w, "    [4/5] 解压并验证\n")
-	replaceStep := "替换二进制"
+	replaceStep := "激活 canonical package"
 	if hasSkills {
 		replaceStep += " 并安装技能包"
 	}
@@ -442,6 +452,17 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		writeDryRunPlan(os.Stdout, currentVer, binaryAsset.Name, hasSkills)
 		return nil
 	}
+	installation, err := resolveUpgradeInstallation()
+	if err != nil {
+		return fmt.Errorf("无法确认可升级的 DWS 安装: %w", err)
+	}
+	if strings.TrimSpace(release.Commit) == "" {
+		return fmt.Errorf("release 缺少可信 tag commit，拒绝安装无法绑定 commit 的 package")
+	}
+	packageIdentity := packagemanifest.Identity{
+		Release: packagemanifest.Release{Version: ensureV(release.Version), Commit: release.Commit, Edition: upgradeEdition()},
+		Target:  packagemanifest.Target{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
+	}
 
 	if !opts.yes {
 		fmt.Println()
@@ -481,13 +502,13 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 
 	// --- Step 1: Backup ---
 	fmt.Printf("  %s 备份当前版本...", stepFmt(1))
-	rm := newUpgradeRollback()
+	rm := newUpgradeRollback(installation)
 	_, backupErr := rm.Backup(strings.TrimPrefix(currentVer, "v"))
 	if backupErr != nil {
-		fmt.Printf(" %s %v\n", ugYellow("⚠"), backupErr)
-	} else {
-		fmt.Printf(" %s\n", ugGreen("✓"))
+		fmt.Printf(" %s %v\n", ugRed("✗"), backupErr)
+		return fmt.Errorf("保留回滚 generation 失败: %w", backupErr)
 	}
+	fmt.Printf(" %s\n", ugGreen("✓"))
 
 	// Fetch checksums.txt (needed for strict verification of both binary and skills)
 	var checksumsContent string
@@ -549,25 +570,10 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	// --- Step 4: Extract + validate ---
 	fmt.Printf("  %s 解压并验证...", stepFmt(4))
 	extractDir := filepath.Join(tmpDir, "extracted")
-	if strings.HasSuffix(binaryAsset.Name, ".zip") {
-		if err := extractUpgradeZip(binaryArchivePath, extractDir); err != nil {
-			fmt.Println()
-			return fmt.Errorf("解压失败: %w", err)
-		}
-	} else {
-		if err := extractUpgradeTarGz(binaryArchivePath, extractDir); err != nil {
-			fmt.Println()
-			return fmt.Errorf("解压失败: %w", err)
-		}
-	}
-	binaryPath := findExtractedBinary(extractDir)
-	if binaryPath == "" {
+	packageRoot, _, err := extractUpgradePackage(binaryArchivePath, extractDir, packageIdentity)
+	if err != nil {
 		fmt.Println()
-		return fmt.Errorf("在解压目录中未找到 dws 二进制文件")
-	}
-	if err := validateUpgradeBinary(binaryPath, release.Version); err != nil {
-		fmt.Println()
-		return fmt.Errorf("验证失败: %w", err)
+		return fmt.Errorf("解压并验证 package 失败: %w", err)
 	}
 
 	var skillSrc string
@@ -592,18 +598,18 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 
 	// --- Step 5: Replace binary + install skills ---
 	fmt.Printf("  %s 替换并安装...", stepFmt(5))
-	if err := replaceUpgradeSelf(binaryPath); err != nil {
+	previousActivation, err := activateUpgradePackage(installation, packageRoot, packageIdentity)
+	if err != nil {
 		fmt.Printf(" %s\n", ugRed("✗"))
-		return fmt.Errorf("替换二进制失败: %w", err)
+		return fmt.Errorf("激活 package 失败: %w", err)
 	}
-
 	if hasSkills {
 		result, installErr := installUpgradeSkills(skillSrc, upgrade.SkillUpgradeOptions{
 			Version: release.Version,
 		})
 		if installErr != nil {
 			fmt.Printf(" %s\n", ugRed("✗"))
-			return fmt.Errorf("技能包安装失败: %w", installErr)
+			return rollbackPackageAfterSkillFailure(installation, previousActivation, fmt.Errorf("技能包安装失败: %w", installErr))
 		}
 		failed := result.Failed()
 		if len(failed) > 0 {
@@ -611,11 +617,11 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 			for _, d := range failed {
 				fmt.Printf("       %s %s %s\n", ugRed("✗"), shortenHome(d.Dir), ugDim(d.Err.Error()))
 			}
-			return fmt.Errorf("技能包安装到 %d 个目录失败，请检查权限后手动重试: dws upgrade --force", len(failed))
+			return rollbackPackageAfterSkillFailure(installation, previousActivation, fmt.Errorf("技能包安装到 %d 个目录失败，请检查权限后手动重试: dws upgrade --force", len(failed)))
 		}
 		succeeded := result.Succeeded()
 		fmt.Printf(" %s\n", ugGreen("✓"))
-		fmt.Printf("       %s %s\n", ugGreen("✓"), ugDim("二进制已替换"))
+		fmt.Printf("       %s %s\n", ugGreen("✓"), ugDim("canonical package 已激活"))
 		fmt.Printf("       %s %s\n", ugGreen("✓"), ugDim(fmt.Sprintf("技能包已安装 (%d 个位置)", len(succeeded))))
 		for _, d := range succeeded {
 			fmt.Printf("         %s %s\n", ugDim("→"), ugCyan(shortenHome(d.Dir)))
@@ -644,10 +650,27 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	return nil
 }
 
+func rollbackPackageAfterSkillFailure(installation upgrade.Installation, previous string, skillErr error) error {
+	if previous == "" {
+		return skillErr
+	}
+	if restoreErr := restoreUpgradeActivation(installation, previous); restoreErr != nil {
+		return errors.Join(skillErr, fmt.Errorf("%w: Skill 发布失败且恢复上一 package 失败: %v", upgrade.ErrActivationStateUncertain, restoreErr))
+	}
+	return fmt.Errorf("%w；已恢复并验证上一 package", skillErr)
+}
+
+func upgradeEdition() string {
+	if hooks := edition.Get(); hooks != nil && strings.TrimSpace(hooks.Name) != "" {
+		return hooks.Name
+	}
+	return "open"
+}
+
 // strictVerifyFile performs SHA256 verification with strict semantics:
 //   - If checksum info is available and matches → ✓
 //   - If checksum info is available but MISMATCHES → error (abort upgrade)
-//   - If no checksum info at all → skip (no data to compare against)
+//   - If no checksum info at all → fail closed
 func strictVerifyFile(label, filePath, fileName, assetDigest, checksumsContent string) error {
 	fmt.Printf("  %s 校验 %s...", label, fileName)
 
@@ -674,9 +697,9 @@ func strictVerifyFile(label, filePath, fileName, assetDigest, checksumsContent s
 		return nil
 	}
 
-	// No checksum info available at all
-	fmt.Printf(" %s\n", ugDim("- 跳过 (无可用校验信息)"))
-	return nil
+	// A self-upgrade package cannot derive trust from its own manifest alone.
+	fmt.Printf(" %s\n", ugRed("✗"))
+	return fmt.Errorf("缺少 %s 的可信 SHA256，拒绝继续升级", fileName)
 }
 
 // validateNewBinary checks the downloaded binary is valid.

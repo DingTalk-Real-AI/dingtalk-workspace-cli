@@ -26,7 +26,15 @@ unrelated work, and use `gofmt` for every modified Go file.
 
 Schema Catalog delivery is **声明即 Catalog**: production assembles via
 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` (factory registered in
-`internal/app`). There is no
+`internal/app`). A release may explicitly register a complete binary-pinned
+Schema cache identity after the factory. The private protobuf Meta and product
+shards are disposable transport derivatives of that exact declaration build;
+they are never authoring inputs. A miss uses the same authoritative assembly.
+The old `RegisterSchemaSourceRoot` API clears previous persistent identity, so
+tests and replacement factories cannot inherit another authority's cache.
+See `docs/rfc-schema-runtime-cache.md` for trust, native proof and performance
+gates. Cache enablement requires final-artifact evidence, not only unit tests.
+There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;
 `internal/cli/schema_catalog/`, `internal/cli/schema_meta_index.gob`, and
@@ -169,6 +177,19 @@ CI determinism (`check-schema-assembly.sh`) and policy jq gates consume a
 fresh assembly dump; runtime consumes the same `ResolveSchemaBuild` path via
 `RegisterSchemaSourceRoot`. Neither path may reopen annotations, merge source
 records, or use a previous Catalog JSON as a source.
+
+Pure typed consumption lives in `internal/cli/schemaruntime`, with parent-cli
+aliases for compatibility. It must remain independent of cli/Cobra/app/auth.
+The private generated protobuf lives in `internal/cli/schemacachepb`; bounded
+authenticated I/O and atomic publication live in `internal/schemacache` and
+must not call payload parsers. Framework constraint DTO normalization belongs
+to `internal/corecmd/contract`, never a dependency from corecmd back into cli.
+`internal/schemareader` owns the immutable binary identity and composes that
+backend with the same typed decoders for both cli and launcher. Keep repair and
+process memoization in cli. Launcher JSON uses the same jsonutil serializer;
+uncertain argv/telemetry/extension/compatibility state delegates unchanged to core.
+The startup warning's agent-relative paths are shared through internal/skillpaths.
+Publish the live Catalog pointer only after its Meta projection is complete.
 
 ### Assembly vs consumption
 

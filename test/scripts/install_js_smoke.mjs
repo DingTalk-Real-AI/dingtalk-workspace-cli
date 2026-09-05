@@ -74,6 +74,7 @@
 
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -104,6 +105,8 @@ const {
   publishManagedMultiSkillSetAtomically,
   recordSkillPathPublicationSync,
   rollbackPublishedSkillPath,
+  inspectZip,
+  ARCHIVE_LIMITS,
 } = require(installJsSource);
 
 assert.equal(UPSTREAM_AGENTS.length, 76, "the complete upstream Agent registry is pinned");
@@ -433,9 +436,38 @@ function stagePkg(zipEntries, emptyDirs = []) {
   fs.mkdirSync(assets, { recursive: true });
   fs.copyFileSync(installJsSource, path.join(pkg, "install.js"));
 
+  const version = "1.2.3";
+  writeFile(path.join(pkg, "package.json"), `${JSON.stringify({ version })}\n`);
   const binStage = path.join(tmp, "bin-stage");
-  writeFile(path.join(binStage, "dws"), "#!/bin/sh\necho fake-dws\n", 0o755);
-  sh("tar", ["-czf", path.join(assets, assetName), "-C", binStage, "."]);
+  const goos = process.platform;
+  const goarch = process.arch === "x64" ? "amd64" : process.arch;
+  const packageName = `dws-v${version}-${goos}-${goarch}`;
+  const packageRoot = path.join(binStage, packageName);
+  const launcher = "#!/bin/sh\nexec \"$(dirname \"$0\")/../libexec/dws-core\" \"$@\"\n";
+  const core = "#!/bin/sh\nif [ \"${1:-}\" = --version ]; then echo v1.2.3; else printf 'business:%s\\n' \"$*\"; fi\n";
+  writeFile(path.join(packageRoot, "bin", "dws"), launcher, 0o755);
+  writeFile(path.join(packageRoot, "libexec", "dws-core"), core, 0o755);
+  writeFile(path.join(binStage, "dws"), core, 0o755);
+  const fileIdentity = (relative, content) => ({
+    path: relative,
+    sha256: crypto.createHash("sha256").update(content).digest("hex"),
+    size: Buffer.byteLength(content),
+    mode: 0o755,
+  });
+  const manifest = {
+    layout_version: 1,
+    release: { version: `v${version}`, commit: "1".repeat(40), edition: "open" },
+    target: { goos, goarch },
+    launcher: fileIdentity("bin/dws", launcher),
+    core: fileIdentity("libexec/dws-core", core),
+  };
+  writeFile(path.join(packageRoot, "package-manifest.json"), `${JSON.stringify(manifest)}\n`);
+  for (const name of ["LICENSE", "NOTICE", "README.md", "CHANGELOG.md"]) writeFile(path.join(binStage, name), `${name}\n`);
+  sh("tar", ["-czf", path.join(assets, assetName), "-C", binStage, "dws", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md", packageName], {
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
+  });
+  const archiveHash = crypto.createHash("sha256").update(fs.readFileSync(path.join(assets, assetName))).digest("hex");
+  writeFile(path.join(assets, "checksums.txt"), `${archiveHash}  ${assetName}\n`);
 
   const zipStage = path.join(tmp, "zip-stage");
   for (const [rel, content] of Object.entries(zipEntries)) {
@@ -460,6 +492,44 @@ function runInstall(pkg, home, skillMode, extraEnv = {}) {
     env,
     encoding: "utf8",
   });
+}
+
+function rewritePlatformArchive(pkg, mutate, duplicateRoot = false) {
+  const assets = path.join(pkg, "assets");
+  const archive = path.join(assets, assetName);
+  const work = fs.mkdtempSync(path.join(path.dirname(pkg), "archive-rewrite-"));
+  sh("tar", ["-xzf", archive, "-C", work]);
+  const packageName = fs.readdirSync(work).find((name) => name.startsWith("dws-v"));
+  mutate(path.join(work, packageName));
+  fs.rmSync(archive);
+  const args = ["-czf", archive, "-C", work, "dws", "LICENSE", "NOTICE", "README.md", "CHANGELOG.md", packageName];
+  if (duplicateRoot) args.push(packageName);
+  sh("tar", args, { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+  const digest = crypto.createHash("sha256").update(fs.readFileSync(archive)).digest("hex");
+  writeFile(path.join(assets, "checksums.txt"), `${digest}  ${assetName}\n`);
+  fs.rmSync(work, { recursive: true, force: true });
+}
+
+function writeSyntheticZipCentral(filePath, sizes, declaredCount = sizes.length) {
+  const records = sizes.map((size, index) => {
+    const name = Buffer.from(String.fromCharCode(97 + index));
+    const record = Buffer.alloc(46 + name.length);
+    record.writeUInt32LE(0x02014b50, 0);
+    record.writeUInt16LE(20, 4);
+    record.writeUInt16LE(20, 6);
+    record.writeUInt32LE(size, 24);
+    record.writeUInt16LE(name.length, 28);
+    name.copy(record, 46);
+    return record;
+  });
+  const central = Buffer.concat(records);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(declaredCount, 8);
+  eocd.writeUInt16LE(declaredCount, 10);
+  eocd.writeUInt32LE(central.length, 12);
+  eocd.writeUInt32LE(0, 16);
+  fs.writeFileSync(filePath, Buffer.concat([central, eocd]));
 }
 
 const scenarios = [];
@@ -503,8 +573,78 @@ scenario("multi install lays out sibling skills and caches", () => {
 
     assert.ok(fs.existsSync(path.join(home, ".dws", "skills", "multi", "dingtalk-test", "SKILL.md")), "multi cache filled");
     assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "mono", "SKILL.md"), "utf8"), "# mono fixture\n", "mono cache from mono/ tree");
-    assert.ok(fs.existsSync(path.join(pkg, "vendor", "dws")), "binary installed into vendor/");
+    assert.ok(fs.existsSync(path.join(pkg, "vendor", "dws-v1.2.3-" + process.platform + "-" + (process.arch === "x64" ? "amd64" : process.arch), "bin", "dws")), "canonical package installed into vendor/");
     assert.ok(!fs.existsSync(path.join(pkg, "vendor", ".dws-runtime")), "legacy runtime sidecar omitted");
+    const wrapper = path.join(repoRoot, "build", "npm", "bin", "dws.js");
+    writeFile(path.join(pkg, "bin", "dws.js"), fs.readFileSync(wrapper), 0o755);
+    const business = childProcess.spawnSync(process.execPath, [path.join(pkg, "bin", "dws.js"), "chat", "send", "hello"], { encoding: "utf8" });
+    assert.equal(business.status, 0);
+    assert.equal(business.stdout, "business:chat send hello\n", "npm wrapper delegates business argv to package launcher/core");
+    const versionResult = childProcess.spawnSync(process.execPath, [path.join(pkg, "bin", "dws.js"), "--version"], { encoding: "utf8" });
+    assert.equal(versionResult.status, 0);
+    assert.equal(versionResult.stdout, "v1.2.3\n", "exact --version path delegates without extra output");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+scenario("tampered manifest, core and legacy upgrade entry are rejected before vendor activation", () => {
+  for (const kind of ["core", "manifest", "legacy"]) {
+    const { tmp, pkg, home } = stagePkg({ "mono/SKILL.md": "# mono\n" });
+    try {
+      rewritePlatformArchive(pkg, (root) => {
+        if (kind === "core") writeFile(path.join(root, "libexec", "dws-core"), "tampered\n", 0o755);
+        else if (kind === "legacy") writeFile(path.join(path.dirname(root), "dws"), "tampered\n", 0o755);
+        else {
+          const manifestPath = path.join(root, "package-manifest.json");
+          writeFile(manifestPath, fs.readFileSync(manifestPath, "utf8").replace('"edition":"open"', '"edition":"enterprise"'));
+        }
+      });
+      const res = runInstall(pkg, home, "mono");
+      assert.notEqual(res.status, 0);
+      assert.match(res.stderr, kind === "core" ? /core path\/size\/mode\/SHA-256 mismatch/ : kind === "legacy" ? /legacy upgrade entry differs/ : /identity mismatch/);
+      assert.equal(fs.existsSync(path.join(pkg, "vendor")), false);
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  }
+});
+
+scenario("symlink and ambiguous package archive entries are rejected", () => {
+  for (const kind of ["symlink", "duplicate"]) {
+    const { tmp, pkg, home } = stagePkg({ "mono/SKILL.md": "# mono\n" });
+    try {
+      rewritePlatformArchive(pkg, (root) => {
+        if (kind === "symlink") {
+          fs.rmSync(path.join(root, "libexec", "dws-core"));
+          fs.symlinkSync("../bin/dws", path.join(root, "libexec", "dws-core"));
+        }
+      }, kind === "duplicate");
+      const res = runInstall(pkg, home, "mono");
+      assert.notEqual(res.status, 0, `${kind} archive must fail`);
+      assert.match(res.stderr, /symlink|special|not a regular file|duplicate archive entry/);
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  }
+});
+
+scenario("npm archive limits reject count, per-entry, and aggregate bombs", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dws-installjs-limits-"));
+  try {
+    assert.equal(ARCHIVE_LIMITS.compressedSize, 512 * 1024 * 1024);
+    const compressedBomb = path.join(tmp, "compressed.zip");
+    fs.closeSync(fs.openSync(compressedBomb, "w"));
+    fs.truncateSync(compressedBomb, ARCHIVE_LIMITS.compressedSize + 1);
+    assert.throws(() => inspectZip(compressedBomb), /compressed archive exceeds safe size limit/);
+
+    const countBomb = path.join(tmp, "count.zip");
+    writeSyntheticZipCentral(countBomb, [], ARCHIVE_LIMITS.entries + 1);
+    assert.throws(() => inspectZip(countBomb), /entry count exceeds safe limit/);
+
+    const entryBomb = path.join(tmp, "entry.zip");
+    writeSyntheticZipCentral(entryBomb, [ARCHIVE_LIMITS.entrySize + 1]);
+    assert.throws(() => inspectZip(entryBomb), /entry exceeds safe uncompressed size limit/);
+
+    const aggregateBomb = path.join(tmp, "aggregate.zip");
+    writeSyntheticZipCentral(aggregateBomb, [400 * 1024 * 1024, 400 * 1024 * 1024, 400 * 1024 * 1024]);
+    assert.throws(() => inspectZip(aggregateBomb), /aggregate uncompressed size exceeds safe limit/);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

@@ -1,0 +1,20 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime
+cpu: Apple M3 Pro
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     152	   7375595 ns/op	 7978838 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     186	   6270453 ns/op	 7978852 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     177	   6443944 ns/op	 7978847 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     207	   5877657 ns/op	 7978839 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     198	   5952803 ns/op	 7978838 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     194	   5897286 ns/op	 7978857 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-12         	     208	   5851029 ns/op	 7978855 B/op	   57575 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     201	   5915903 ns/op	 4376593 B/op	   69088 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     201	   6008818 ns/op	 4377085 B/op	   69090 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     189	   6122040 ns/op	 4376863 B/op	   69089 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     216	   5851017 ns/op	 4376746 B/op	   69089 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     204	   5694756 ns/op	 4376832 B/op	   69089 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     204	   5768368 ns/op	 4376473 B/op	   69088 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-12         	     210	   6122016 ns/op	 4376770 B/op	   69089 allocs/op
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	19.462s

@@ -1,0 +1,29 @@
+{
+  "scope": "median of Go benchmark averages; warm OS page cache",
+  "stages": {
+    "meta-open-authenticate-decode-lookup": {
+      "samples": 7,
+      "median_ns_per_op": 3739446.0,
+      "median_bytes_per_op": 3899582,
+      "median_allocations_per_op": 50514,
+      "latency_budget_ns": 5000000,
+      "allocation_budget_bytes": 8000000,
+      "passed": true
+    },
+    "selected-open-locator-authenticate-decode-index": {
+      "samples": 7,
+      "median_ns_per_op": 5203488.0,
+      "median_bytes_per_op": 4320586,
+      "median_allocations_per_op": 68586,
+      "latency_budget_ns": 15000000,
+      "allocation_budget_bytes": 8000000,
+      "passed": true
+    }
+  },
+  "passed": true,
+  "source_commit": "606b9f8756b2640e814e56ebc84466ac9e8d2962",
+  "go_runtime_version": "go1.25.9",
+  "tools": 1370,
+  "target": "darwin-arm64",
+  "command": "GOTOOLCHAIN=go1.25.9 DO_NOT_TRACK=1 go test ./internal/cli/schemaruntime -run '^$' -bench '^BenchmarkRealSchemaFileHit$' -benchtime=1s -count=7"
+}

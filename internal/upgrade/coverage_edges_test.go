@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -150,6 +151,9 @@ func TestCrossPlatformCoverageGitHubClientEdgeCases(t *testing.T) {
 	]`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.Contains(r.URL.Path, "/git/ref/tags/"):
+			tag := r.URL.Path[strings.Index(r.URL.Path, "/git/ref/tags/")+len("/git/ref/tags/"):]
+			_, _ = fmt.Fprintf(w, `{"ref":"refs/tags/%s","object":{"type":"commit","sha":"0123456789abcdef0123456789abcdef01234567"}}`, tag)
 		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
 			_, _ = io.WriteString(w, `{"tag_name":"v2.0.0"}`)
 		case strings.Contains(r.URL.Path, "/releases/tags/"):
@@ -333,37 +337,6 @@ func TestCrossPlatformCoverageReplacerAndZipEdges(t *testing.T) {
 		upgradeSyncParentDir = originalSync
 	})
 	failure := errors.New("injected failure")
-	current := filepath.Join(t.TempDir(), "dws")
-	if err := os.WriteFile(current, []byte("old"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	upgradeExecutable = func() (string, error) { return current, nil }
-	upgradeEvalSymlinks = func(path string) (string, error) { return path, nil }
-	newBinary := filepath.Join(t.TempDir(), "new")
-	if err := os.WriteFile(newBinary, []byte("new"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := ReplaceSelf(newBinary); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(current); string(data) != "new" {
-		t.Fatalf("replaced binary = %q", data)
-	}
-	upgradeExecutable = func() (string, error) { return "", failure }
-	if err := ReplaceSelf("x"); err == nil {
-		t.Fatal("executable failure ignored")
-	}
-	upgradeExecutable = func() (string, error) { return current, nil }
-	upgradeEvalSymlinks = func(string) (string, error) { return "", failure }
-	if err := ReplaceSelf("x"); err == nil {
-		t.Fatal("symlink failure ignored")
-	}
-	upgradeEvalSymlinks = func(path string) (string, error) { return path, nil }
-	upgradeChmod = func(string, os.FileMode) error { return failure }
-	if err := ReplaceSelf("x"); err == nil {
-		t.Fatal("chmod failure ignored")
-	}
-	upgradeChmod = originalChmod
 	upgradeRename = func(string, string) error { return failure }
 	upgradeCopyFile = func(string, string, os.FileMode) error { return failure }
 	if err := replaceExeFile("src", "dst"); !errors.Is(err, failure) {
@@ -390,6 +363,7 @@ func TestCrossPlatformCoverageReplacerAndZipEdges(t *testing.T) {
 
 	upgradeExecutable = func() (string, error) { return "", failure }
 	CleanupStaleFiles()
+	current := filepath.Join(t.TempDir(), "dws")
 	upgradeExecutable = func() (string, error) { return current, nil }
 	CleanupStaleFiles()
 
@@ -408,11 +382,11 @@ func TestCrossPlatformCoverageReplacerAndZipEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := t.TempDir()
-	if err := ExtractZip(zipPath, target); err != nil {
-		t.Fatal(err)
+	if err := ExtractZip(zipPath, target); err == nil {
+		t.Fatal("non-canonical archive path accepted")
 	}
-	if _, err := os.Stat(filepath.Join(target, "dir", "file.txt")); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(target, "dir", "file.txt")); !os.IsNotExist(err) {
+		t.Fatalf("rejected archive wrote an earlier entry: %v", err)
 	}
 	if err := ExtractZip(filepath.Join(t.TempDir(), "missing"), target); err == nil {
 		t.Fatal("missing zip accepted")
@@ -630,20 +604,8 @@ func TestCrossPlatformCoverageReplacerInjectedIOEdges(t *testing.T) {
 		upgradeFileSync = originalSync
 	})
 	failure := errors.New("injected failure")
-	current := filepath.Join(t.TempDir(), "current")
-	newBinary := filepath.Join(t.TempDir(), "new")
-	for _, path := range []string{current, newBinary} {
-		if err := os.WriteFile(path, []byte("x"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	upgradeExecutable = func() (string, error) { return current, nil }
-	upgradeEvalSymlinks = func(path string) (string, error) { return path, nil }
 	upgradeRename = func(string, string) error { return failure }
 	upgradeCopyFile = func(string, string, os.FileMode) error { return failure }
-	if err := ReplaceSelf(newBinary); !errors.Is(err, failure) {
-		t.Fatalf("ReplaceSelf replacement error = %v", err)
-	}
 	if err := replaceExeFileFor("src", "dst", "linux"); !errors.Is(err, failure) {
 		t.Fatalf("non-Windows copy fallback error = %v", err)
 	}

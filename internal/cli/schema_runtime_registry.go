@@ -519,32 +519,6 @@ func marshalSchemaRaw(value any) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-func schemaToolForResolvedPath(tool ToolSpec, raw string) ToolSpec {
-	normalized := normalizeSchemaQueryCLIPath(raw)
-	if normalized == "" || normalized == tool.Identity.CLIPath || normalized == tool.Identity.PrimaryCLIPath {
-		return tool
-	}
-	for _, alias := range tool.Identity.Aliases {
-		if normalizeSchemaCLIPath(alias) == normalized {
-			tool.Identity.CLIPath = normalizeSchemaCLIPath(alias)
-			tool.Identity.IsAlias = true
-			return tool
-		}
-	}
-	return tool
-}
-
-func schemaToolUnderGroup(tool ToolSpec, group string) bool {
-	prefix := normalizeSchemaCLIPath(group) + " "
-	paths := append([]string{tool.Identity.CLIPath, tool.Identity.PrimaryCLIPath}, tool.Identity.Aliases...)
-	for _, path := range paths {
-		if strings.HasPrefix(normalizeSchemaCLIPath(path), prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 // validateSchemaRegistryAgainstCommandRegistry compares identities as exact
 // sets, not counts. A stale/missing primary path or alias must fail generation
 // even when another executable path happens to preserve the canonical count.

@@ -25,22 +25,22 @@ func TestCrossPlatformCoverageContractModelProvenanceValueAndDryRunEdges(t *test
 	}
 	tool := contractCoverageTool("sample", "run", "sample run")
 	tool.Safety.EffectSource = "source"
-	if value, ok := tool.provenanceValue("effect_source"); !ok || value != "source" {
+	if value, ok := toolProvenanceValue(tool, "effect_source"); !ok || value != "source" {
 		t.Fatalf("effect_source provenance = %#v %v", value, ok)
 	}
-	if _, ok := tool.provenanceValue("unknown"); ok {
+	if _, ok := toolProvenanceValue(tool, "unknown"); ok {
 		t.Fatal("unknown tool provenance field accepted")
 	}
 	parameter := ParameterSpec{Default: json.RawMessage(`1`), InterfaceDefault: json.RawMessage(`2`), InterfaceDescription: "description"}
 	for _, field := range []string{"name", "default", "interface_default", "interface_description"} {
-		if _, ok := parameter.provenanceValue(field); !ok {
+		if _, ok := parameterProvenanceValue(parameter, field); !ok {
 			t.Errorf("parameter provenance field %q missing", field)
 		}
 	}
-	if _, ok := parameter.provenanceValue("unknown"); ok {
+	if _, ok := parameterProvenanceValue(parameter, "unknown"); ok {
 		t.Fatal("unknown parameter provenance field accepted")
 	}
-	if _, ok := (ProductSpec{}).provenanceValue("unknown"); ok {
+	if _, ok := productProvenanceValue(ProductSpec{}, "unknown"); ok {
 		t.Fatal("unknown product provenance field accepted")
 	}
 }
@@ -101,17 +101,17 @@ func TestCrossPlatformCoverageSchemaSnapshotRendererDependencyEdges(t *testing.T
 	})
 	registry := SchemaRegistry{Products: []ProductSpec{{ID: "sample", Tools: []ToolSpec{contractCoverageTool("sample", "run", "sample run")}}}}
 	snapshotToolSummary = func(ToolSpec) (map[string]any, error) { return nil, errors.New("summary failed") }
-	if _, err := registry.ToSnapshotPayload(); err == nil || !strings.Contains(err.Error(), "summary failed") {
+	if _, err := schemaSnapshotPayload(registry); err == nil || !strings.Contains(err.Error(), "summary failed") {
 		t.Fatalf("summary error = %v", err)
 	}
 	snapshotToolSummary = oldToolSummary
 	snapshotToolPayload = func(ToolSpec) (map[string]any, error) { return nil, errors.New("tool failed") }
-	if _, err := registry.ToSnapshotPayload(); err == nil || !strings.Contains(err.Error(), "tool failed") {
+	if _, err := schemaSnapshotPayload(registry); err == nil || !strings.Contains(err.Error(), "tool failed") {
 		t.Fatalf("tool error = %v", err)
 	}
 	snapshotToolPayload = oldToolPayload
 	snapshotProductSummary = func(ProductSpec) (map[string]any, error) { return nil, errors.New("product failed") }
-	if _, err := registry.ToSnapshotPayload(); err == nil || !strings.Contains(err.Error(), "product failed") {
+	if _, err := schemaSnapshotPayload(registry); err == nil || !strings.Contains(err.Error(), "product failed") {
 		t.Fatalf("product error = %v", err)
 	}
 	snapshotProductSummary = oldProductSummary
@@ -203,7 +203,7 @@ func TestCrossPlatformCoverageContractModelNormalizationSortEdges(t *testing.T) 
 	}
 	tool := contractCoverageTool("sample", "run", "sample run")
 	tool.Positionals = []contract.RuntimeSchemaPositional{{Index: 0, Name: "z"}, {Index: 0, Name: "a"}, {Index: 1, Name: "x"}}
-	normalized := tool.normalized()
+	normalized := normalizeToolSpec(tool)
 	if normalized.Positionals[0].Name != "a" || normalized.Positionals[2].Index != 1 {
 		t.Fatalf("positionals = %#v", normalized.Positionals)
 	}

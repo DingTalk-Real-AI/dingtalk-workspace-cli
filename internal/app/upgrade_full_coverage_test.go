@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/packagemanifest"
 	upgradepkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -64,19 +65,21 @@ func (i upgradeFileInfo) IsDir() bool        { return false }
 func (i upgradeFileInfo) Sys() any           { return nil }
 
 func TestCrossPlatformCoverageUpgradeRollbackAndCommandBranchesCoverage(t *testing.T) {
-	oldClient, oldRollback := newUpgradeReleaseClient, newUpgradeRollback
+	oldClient, oldRollback, oldResolve := newUpgradeReleaseClient, newUpgradeRollback, resolveUpgradeInstallation
 	oldEdition := edition.Get()
 	oldStdin := os.Stdin
 	oldVersion := version
 	t.Cleanup(func() {
 		newUpgradeReleaseClient, newUpgradeRollback = oldClient, oldRollback
+		resolveUpgradeInstallation = oldResolve
 		edition.Override(oldEdition)
 		os.Stdin = oldStdin
 		version = oldVersion
 	})
 	fail := errors.New("failure")
 	rb := &fakeUpgradeRollback{listErr: fail}
-	newUpgradeRollback = func() upgradeRollbackManager { return rb }
+	resolveUpgradeInstallation = func() (upgradepkg.Installation, error) { return upgradepkg.Installation{}, nil }
+	newUpgradeRollback = func(upgradepkg.Installation) upgradeRollbackManager { return rb }
 	if err := runUpgradeRollback(true); !errors.Is(err, fail) {
 		t.Fatalf("rollback list error = %v", err)
 	}
@@ -151,22 +154,23 @@ func TestCrossPlatformCoverageUpgradeRollbackAndCommandBranchesCoverage(t *testi
 }
 
 func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
-	oldClient, oldRollback := newUpgradeReleaseClient, newUpgradeRollback
+	oldClient, oldRollback, oldResolve := newUpgradeReleaseClient, newUpgradeRollback, resolveUpgradeInstallation
 	oldEnsure, oldCleanup := ensureUpgradeDirs, cleanupUpgradeStale
 	oldNeeds, oldBinary, oldSkills, oldChecksums := upgradeNeedsUpgrade, findUpgradeBinary, findUpgradeSkills, findUpgradeChecksums
 	oldDownload, oldProgress := downloadUpgradeFile, downloadUpgradeProgress
-	oldExtract, oldFind, oldLocate := extractUpgradeZip, findExtractedBinary, locateUpgradeSkill
-	oldReplace, oldInstall := replaceUpgradeSelf, installUpgradeSkills
+	oldExtract, oldPackage, oldLocate := extractUpgradeZip, extractUpgradePackage, locateUpgradeSkill
+	oldActivate, oldInstall := activateUpgradePackage, installUpgradeSkills
 	oldTemp, oldRemove, oldRead, oldMkdir := upgradeMkdirTemp, upgradeRemoveAll, upgradeReadFile, upgradeMkdirAll
 	oldVerify, oldTar, oldValidate := verifyUpgradeFile, extractUpgradeTarGz, validateUpgradeBinary
 	oldStdin := os.Stdin
 	t.Cleanup(func() {
 		newUpgradeReleaseClient, newUpgradeRollback = oldClient, oldRollback
+		resolveUpgradeInstallation = oldResolve
 		ensureUpgradeDirs, cleanupUpgradeStale = oldEnsure, oldCleanup
 		upgradeNeedsUpgrade, findUpgradeBinary, findUpgradeSkills, findUpgradeChecksums = oldNeeds, oldBinary, oldSkills, oldChecksums
 		downloadUpgradeFile, downloadUpgradeProgress = oldDownload, oldProgress
-		extractUpgradeZip, findExtractedBinary, locateUpgradeSkill = oldExtract, oldFind, oldLocate
-		replaceUpgradeSelf, installUpgradeSkills = oldReplace, oldInstall
+		extractUpgradeZip, extractUpgradePackage, locateUpgradeSkill = oldExtract, oldPackage, oldLocate
+		activateUpgradePackage, installUpgradeSkills = oldActivate, oldInstall
 		upgradeMkdirTemp, upgradeRemoveAll, upgradeReadFile, upgradeMkdirAll = oldTemp, oldRemove, oldRead, oldMkdir
 		verifyUpgradeFile, extractUpgradeTarGz, validateUpgradeBinary = oldVerify, oldTar, oldValidate
 		os.Stdin = oldStdin
@@ -175,14 +179,15 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 	binary := upgradepkg.GitHubAsset{Name: "dws.zip", BrowserDownloadURL: "binary"}
 	skills := upgradepkg.GitHubAsset{Name: "dws-skills.zip", BrowserDownloadURL: "skills"}
 	checksums := upgradepkg.GitHubAsset{Name: "checksums.txt", BrowserDownloadURL: "checksums"}
-	release := &upgradepkg.ReleaseInfo{Version: "9.9.9", Date: "2026-01-01", Prerelease: true, Assets: []upgradepkg.GitHubAsset{binary, skills, checksums}}
+	release := &upgradepkg.ReleaseInfo{Version: "9.9.9", Commit: "0123456789abcdef", Date: "2026-01-01", Prerelease: true, Assets: []upgradepkg.GitHubAsset{binary, skills, checksums}}
 	client := &fakeUpgradeClient{latest: release, tagged: release}
 	rb := &fakeUpgradeRollback{}
 
 	configure := func(stage string) {
 		client.latestErr, client.taggedErr = nil, nil
 		newUpgradeReleaseClient = func() upgradeReleaseClient { return client }
-		newUpgradeRollback = func() upgradeRollbackManager { return rb }
+		resolveUpgradeInstallation = func() (upgradepkg.Installation, error) { return upgradepkg.Installation{}, nil }
+		newUpgradeRollback = func(upgradepkg.Installation) upgradeRollbackManager { return rb }
 		rb.backupErr, rb.cleaned = nil, false
 		ensureUpgradeDirs = func() error {
 			if stage == "ensure" {
@@ -249,7 +254,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 		extractCalls := 0
 		extractUpgradeZip = func(string, string) error {
 			extractCalls++
-			if stage == "extract-binary" && extractCalls == 1 || stage == "extract-skills" && extractCalls == 2 {
+			if stage == "extract-skills" {
 				return fail
 			}
 			return nil
@@ -260,11 +265,11 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			}
 			return nil
 		}
-		findExtractedBinary = func(string) string {
-			if stage == "binary-missing" {
-				return ""
+		extractUpgradePackage = func(string, string, packagemanifest.Identity) (string, packagemanifest.Manifest, error) {
+			if stage == "extract-binary" || stage == "extract-tar" || stage == "binary-missing" || stage == "validate" {
+				return "", packagemanifest.Manifest{}, fail
 			}
-			return "/tmp/new-dws"
+			return "/tmp/new-package", packagemanifest.Manifest{}, nil
 		}
 		validateUpgradeBinary = func(string, string) error {
 			if stage == "validate" {
@@ -279,11 +284,11 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			}
 			return "/tmp/SKILL.md"
 		}
-		replaceUpgradeSelf = func(string) error {
+		activateUpgradePackage = func(upgradepkg.Installation, string, packagemanifest.Identity) (string, error) {
 			if stage == "replace" {
-				return fail
+				return "", fail
 			}
-			return nil
+			return "", nil
 		}
 		installUpgradeSkills = func(string, upgradepkg.SkillUpgradeOptions) (*upgradepkg.SkillUpgradeResult, error) {
 			if stage == "install" {
@@ -336,7 +341,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 				opts.skipSkills = true
 			}
 			err := runUpgrade(context.Background(), opts)
-			wantError := stage != "not-needed" && stage != "cancel" && stage != "backup" && stage != "checksum-download" && stage != "checksum-read" && stage != "success" && stage != "success-no-skills" && stage != "install-retire-warning"
+			wantError := stage != "not-needed" && stage != "cancel" && stage != "checksum-download" && stage != "checksum-read" && stage != "success" && stage != "success-no-skills" && stage != "install-retire-warning"
 			if wantError && err == nil {
 				t.Fatalf("stage %s succeeded", stage)
 			}
@@ -358,6 +363,32 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestUpgradeSkillFailureRestoresChangedActivation(t *testing.T) {
+	oldRestore := restoreUpgradeActivation
+	t.Cleanup(func() { restoreUpgradeActivation = oldRestore })
+	skillErr := errors.New("skill publication failed")
+	restoreErr := errors.New("pointer restore failed")
+	calls := 0
+	restoreUpgradeActivation = func(_ upgradepkg.Installation, previous string) error {
+		calls++
+		if previous != "/old-package" {
+			t.Fatalf("previous = %q", previous)
+		}
+		return nil
+	}
+	if err := rollbackPackageAfterSkillFailure(upgradepkg.Installation{}, "/old-package", skillErr); !errors.Is(err, skillErr) || calls != 1 {
+		t.Fatalf("restored failure = %v, calls=%d", err, calls)
+	}
+	if err := rollbackPackageAfterSkillFailure(upgradepkg.Installation{}, "", skillErr); !errors.Is(err, skillErr) || calls != 1 {
+		t.Fatalf("skill-only failure = %v, calls=%d", err, calls)
+	}
+	restoreUpgradeActivation = func(upgradepkg.Installation, string) error { return restoreErr }
+	err := rollbackPackageAfterSkillFailure(upgradepkg.Installation{}, "/old-package", skillErr)
+	if !errors.Is(err, skillErr) || !errors.Is(err, upgradepkg.ErrActivationStateUncertain) || !strings.Contains(err.Error(), restoreErr.Error()) {
+		t.Fatalf("uncertain failure = %v", err)
 	}
 }
 

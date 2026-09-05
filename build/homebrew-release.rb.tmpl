@@ -31,16 +31,15 @@ __KEG_ONLY_LINE__
   end
 
   def install
-    root = Dir["dws-*"].find { |entry| File.directory?(entry) } || "."
-    binary = File.join(root, "dws")
-    raise "binary not found: #{binary}" unless File.exist?(binary)
+    packages = Dir["dws-v*-*-*"].select { |entry| File.directory?(entry) }
+    raise "expected exactly one canonical package directory" unless packages.length == 1
 
-    libexec.install binary => "dws"
-    bin.install_symlink libexec/"dws"
+    package_dir = packages.first
+    libexec.install package_dir
+    bin.install_symlink libexec/package_dir/"bin/dws"
 
     %w[LICENSE NOTICE README.md CHANGELOG.md].each do |name|
-      source = File.join(root, name)
-      pkgshare.install source if File.exist?(source)
+      pkgshare.install name if File.exist?(name)
     end
 
     skill_dest = pkgshare/"skills/dws"

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -164,7 +165,7 @@ func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
 	}
 }
 
-func TestInstallScriptRemoteModeAllowsArchiveWithoutRuntimePayload(t *testing.T) {
+func TestInstallScriptRemoteModeRejectsLegacyFlatArchive(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell semantics are unavailable")
 	}
@@ -205,15 +206,293 @@ install_binary
 		"DWS_TEST_ARCHIVE="+archivePath,
 	)
 	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "Unsafe or non-canonical archive layout") {
+		t.Fatalf("legacy flat archive result = %v\n%s", err, output)
+	}
+	if _, statErr := os.Lstat(filepath.Join(installDir, "dws-test")); !os.IsNotExist(statErr) {
+		t.Fatalf("legacy archive unexpectedly activated: %v", statErr)
+	}
+}
+
+func TestInstallScriptCanonicalActivationFailureRestoresFlatBinary(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("POSIX canonical package fixture")
+	}
+	root := t.TempDir()
+	archive := filepath.Join(root, "dws-"+runtime.GOOS+"-"+runtime.GOARCH+".tar.gz")
+	writeCanonicalTarGz(t, archive, "v1.2.3", "new-launcher\n")
+	script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.sh"))
 	if err != nil {
-		t.Fatalf("install legacy archive: %v\n%s", err, output)
+		t.Fatal(err)
 	}
-	installed, err := os.ReadFile(filepath.Join(installDir, "dws-test"))
-	if err != nil || string(installed) != "legacy-binary\n" {
-		t.Fatalf("installed legacy binary = %q, %v", installed, err)
+	cut := strings.LastIndex(string(script), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
 	}
-	if _, err := os.Stat(filepath.Join(installDir, ".dws-runtime")); !os.IsNotExist(err) {
-		t.Fatalf("legacy archive unexpectedly published a runtime payload: %v", err)
+	installDir := filepath.Join(root, "bin")
+	mustWriteFile(t, filepath.Join(installDir, "custom-dws"), []byte("old-flat\n"), 0o755)
+	harness := string(script[:cut]) + `
+detect_os() { printf '%s\n' "` + runtime.GOOS + `"; }
+detect_arch() { printf '%s\n' "` + runtime.GOARCH + `"; }
+resolve_version() { VERSION=v1.2.3; }
+asset_url() { printf fixture; }
+download() { cp "$DWS_TEST_ARCHIVE" "$2"; }
+verify_release_asset_checksum() { :; }
+ln() {
+  case "${3-}${2-}" in *"/.custom-dws.tmp."*) return 1 ;; esac
+  command ln "$@"
+}
+if install_binary; then exit 9; fi
+`
+	harnessPath := filepath.Join(root, "activation-failure.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command("sh", harnessPath)
+	cmd.Env = append(os.Environ(), "HOME="+filepath.Join(root, "home"), "DWS_INSTALL_DIR="+installDir,
+		"DWS_INSTALL_NAME=custom-dws", "DWS_TEST_ARCHIVE="+archive)
+	output, runErr := cmd.CombinedOutput()
+	if runErr == nil {
+		t.Fatalf("activation failure unexpectedly succeeded:\n%s", output)
+	}
+	got, err := os.ReadFile(filepath.Join(installDir, "custom-dws"))
+	if err != nil || string(got) != "old-flat\n" {
+		t.Fatalf("flat binary rollback = %q, %v\n%s", got, err, output)
+	}
+	if _, err := os.Lstat(filepath.Join(installDir, ".dws", "current")); !os.IsNotExist(err) {
+		t.Fatalf("failed first activation retained current pointer: %v", err)
+	}
+}
+
+func TestInstallPowerShellUsesStableCommandPointerForImmutablePackages(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{"$InstallName.cmd", "current.txt", "%DWS_PACKAGE%\\bin\\dws.exe", "[System.IO.File]::Replace", "close the old flat", "& $shimPath --version", "& $shimPath version", "installation.json", "format_version", "public_launcher", "installation state uncertain"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("install.ps1 missing Windows stable-command contract %q", want)
+		}
+	}
+	if strings.Contains(extractPowerShellFunction(t, text, "Activate-CanonicalPackage"), "Copy-Item -LiteralPath $PackageRoot -Destination $shimPath") {
+		t.Fatal("Windows stable command must not flatten the package launcher")
+	}
+}
+
+func TestExternalInstallScriptCustomMetadataAndSameVersionSmoke(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("POSIX canonical package fixture")
+	}
+	root := t.TempDir()
+	archive := filepath.Join(root, "release.tar.gz")
+	writeSmokeCanonicalTarGz(t, archive, "v1.2.3")
+	script := installShellWithoutMain(t)
+	harness := script + `
+detect_os() { printf '%s\n' "` + runtime.GOOS + `"; }
+detect_arch() { printf '%s\n' "` + runtime.GOARCH + `"; }
+resolve_version() { VERSION=v1.2.3; }
+asset_url() { printf fixture; }
+download() { cp "$DWS_TEST_ARCHIVE" "$2"; }
+verify_release_asset_checksum() { :; }
+install_binary
+`
+	harnessPath := filepath.Join(root, "install-harness.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	installDir := filepath.Join(root, "custom bin")
+	cliRoot := filepath.Join(root, "custom root")
+	smokeLog := filepath.Join(root, "smoke.log")
+	for run := 1; run <= 2; run++ {
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "HOME="+filepath.Join(root, "home"), "DWS_INSTALL_DIR="+installDir,
+			"DWS_INSTALL_NAME=acme-dws", "DWS_CLI_ROOT="+cliRoot, "DWS_TEST_ARCHIVE="+archive, "DWS_SMOKE_LOG="+smokeLog)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("same-version install run %d: %v\n%s", run, err, output)
+		}
+	}
+	public := filepath.Join(installDir, "acme-dws")
+	if info, err := os.Lstat(public); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("custom public launcher is not a symlink: %#v, %v", info, err)
+	}
+	physicalInstallDir, err := filepath.EvalSymlinks(installDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMetadata := fmt.Sprintf("{\"format_version\":1,\"public_launcher\":%q,\"platform\":\"unix\"}\n", filepath.Join(physicalInstallDir, "acme-dws"))
+	if metadata, err := os.ReadFile(filepath.Join(cliRoot, "installation.json")); err != nil || string(metadata) != wantMetadata {
+		t.Fatalf("installation metadata = %q, %v; want %q", metadata, err, wantMetadata)
+	}
+	if smoke, err := os.ReadFile(smokeLog); err != nil || string(smoke) != "--version\nversion\n--version\nversion\n" {
+		t.Fatalf("same-version smoke calls = %q, %v", smoke, err)
+	}
+}
+
+func TestExternalInstallScriptSmokeFailureRestorationAndUncertainState(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("POSIX canonical package fixture")
+	}
+	for _, restoreFails := range []bool{false, true} {
+		name := "restores"
+		if restoreFails {
+			name = "restore-failure-is-explicit"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			archive := filepath.Join(root, "release.tar.gz")
+			writeSmokeCanonicalTarGz(t, archive, "v1.2.3")
+			installDir := filepath.Join(root, "bin")
+			cliRoot := filepath.Join(root, "root")
+			public := filepath.Join(installDir, "custom")
+			mustWriteFile(t, public, []byte("old public\n"), 0o755)
+			mustWriteFile(t, filepath.Join(cliRoot, "installation.json"), []byte("old metadata\n"), 0o600)
+			extra := ""
+			if restoreFails {
+				extra = `
+mv() {
+  case "$1:$2" in *legacy-custom.*.bak*:*/custom) return 1 ;; esac
+  command mv "$@"
+}
+`
+			}
+			harness := installShellWithoutMain(t) + `
+detect_os() { printf '%s\n' "` + runtime.GOOS + `"; }
+detect_arch() { printf '%s\n' "` + runtime.GOARCH + `"; }
+resolve_version() { VERSION=v1.2.3; }
+asset_url() { printf fixture; }
+download() { cp "$DWS_TEST_ARCHIVE" "$2"; }
+verify_release_asset_checksum() { :; }
+` + extra + `
+install_binary
+`
+			harnessPath := filepath.Join(root, "failure.sh")
+			mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+			cmd := exec.Command("sh", harnessPath)
+			cmd.Env = append(os.Environ(), "HOME="+filepath.Join(root, "home"), "DWS_INSTALL_DIR="+installDir,
+				"DWS_INSTALL_NAME=custom", "DWS_CLI_ROOT="+cliRoot, "DWS_TEST_ARCHIVE="+archive,
+				"DWS_SMOKE_LOG="+filepath.Join(root, "smoke.log"), "DWS_FAIL_SMOKE=1")
+			output, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("smoke failure unexpectedly succeeded:\n%s", output)
+			}
+			if restoreFails {
+				if !strings.Contains(string(output), "FATAL: installation state uncertain") {
+					t.Fatalf("restore failure did not report uncertain state:\n%s", output)
+				}
+				return
+			}
+			if got, readErr := os.ReadFile(public); readErr != nil || string(got) != "old public\n" {
+				t.Fatalf("public launcher not restored: %q, %v\n%s", got, readErr, output)
+			}
+			if got, readErr := os.ReadFile(filepath.Join(cliRoot, "installation.json")); readErr != nil || string(got) != "old metadata\n" {
+				t.Fatalf("metadata not restored: %q, %v\n%s", got, readErr, output)
+			}
+			if _, statErr := os.Lstat(filepath.Join(cliRoot, "current")); !os.IsNotExist(statErr) {
+				t.Fatalf("new current pointer survived rollback: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestExternalInstallScriptArchiveLimitsBeforeExtraction(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX archive tools")
+	}
+	root := t.TempDir()
+	archive := filepath.Join(root, "release.tar.gz")
+	writeSmokeCanonicalTarGz(t, archive, "v1.2.3")
+	zipPath := filepath.Join(root, "skills.zip")
+	writeZip(t, zipPath, map[string]string{"one": "1", "two": "2"})
+	for _, tc := range []struct{ name, override, invoke string }{
+		{"compressed", "ARCHIVE_MAX_COMPRESSED_SIZE=1", `inspect_tar_archive "$DWS_TEST_ARCHIVE" package "$DWS_TEST_LIST"`},
+		{"entry-count", "ARCHIVE_MAX_ENTRIES=1", `inspect_tar_archive "$DWS_TEST_ARCHIVE" package "$DWS_TEST_LIST"`},
+		{"per-entry", "ARCHIVE_MAX_ENTRY_SIZE=1", `inspect_tar_archive "$DWS_TEST_ARCHIVE" package "$DWS_TEST_LIST"`},
+		{"aggregate", "ARCHIVE_MAX_TOTAL_SIZE=1", `inspect_tar_archive "$DWS_TEST_ARCHIVE" package "$DWS_TEST_LIST"`},
+		{"zip-entry-count", "ARCHIVE_MAX_ENTRIES=1", `inspect_zip_archive_limits "$DWS_TEST_ZIP"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prove the same archive/layout is accepted before tightening the
+			// limit. An unrelated path rejection must not satisfy a size test.
+			baseline := "\ninspect_tar_archive \"$DWS_TEST_ARCHIVE\" \"$DWS_TEST_PACKAGE\" \"$DWS_TEST_LIST\" || exit 10\ninspect_zip_archive_limits \"$DWS_TEST_ZIP\" || exit 11\n"
+			invoke := strings.ReplaceAll(tc.invoke, " package ", ` "$DWS_TEST_PACKAGE" `)
+			harness := installShellWithoutMain(t) + baseline + tc.override + "\nif " + invoke + "; then exit 9; fi\n"
+			harnessPath := filepath.Join(root, tc.name+".sh")
+			mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+			cmd := exec.Command("sh", harnessPath)
+			cmd.Env = append(os.Environ(), "DWS_TEST_ARCHIVE="+archive, "DWS_TEST_ZIP="+zipPath, "DWS_TEST_LIST="+filepath.Join(root, tc.name+".list"), "DWS_TEST_PACKAGE=dws-v1.2.3-"+runtime.GOOS+"-"+runtime.GOARCH)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("limit harness failed: %v\n%s", err, output)
+			}
+		})
+	}
+}
+
+func TestInstallArchiveLimitsParseGNUAndBSDNumericListings(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell parser")
+	}
+	for _, tc := range []struct {
+		name, listing string
+		accepted      bool
+	}{
+		{"gnu-small-high-uid", "-rw-r--r-- 99999/99999 1 2026-09-06 00:00 item\n", true},
+		{"bsd-small-high-uid", "-rw-r--r-- 0 99999 99999 1 Sep 6 00:00 item\n", true},
+		{"gnu-too-large", "-rw-r--r-- 0/0 11 2026-09-06 00:00 item\n", false},
+		{"bsd-too-large", "-rw-r--r-- 0 0 0 11 Sep 6 00:00 item\n", false},
+		{"named-owner-rejected", "-rw-r--r-- 0 named owner 1 Sep 6 00:00 item\n", false},
+		{"hardlink-rejected", "hrw-r--r-- 0/0 1 2026-09-06 00:00 item\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			harness := installShellWithoutMain(t) + "\nARCHIVE_MAX_ENTRY_SIZE=10\ncheck_numeric_tar_listing_limits\n"
+			path := filepath.Join(t.TempDir(), "inspect.sh")
+			mustWriteFile(t, path, []byte(harness), 0o755)
+			cmd := exec.Command("sh", path)
+			cmd.Stdin = strings.NewReader(tc.listing)
+			output, err := cmd.CombinedOutput()
+			if (err == nil) != tc.accepted {
+				t.Fatalf("accepted=%v want %v: %v\n%s", err == nil, tc.accepted, err, output)
+			}
+		})
+	}
+}
+
+func TestInstallPowerShellArchiveAndActivationSafetyContracts(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{"ArchiveMaxEntries", "ArchiveMaxEntrySize", "ArchiveMaxTotalSize", "ArchiveMaxCompressedSize", "Assert-ZipArchiveLimits -ArchivePath $zipPath", "$pointerPublished", "$metadataPublished", "previous installation restored"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("install.ps1 missing archive/activation safety contract %q", want)
+		}
+	}
+}
+
+func TestInstallPowerShellZipLimitsRejectBeforeExtraction(t *testing.T) {
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("pwsh is not installed")
+	}
+	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	archive := filepath.Join(root, "fixture.zip")
+	writeZip(t, archive, map[string]string{"one": "12", "two": "34"})
+	quotedArchive := strings.ReplaceAll(archive, "'", "''")
+	function := extractPowerShellFunction(t, string(data), "Assert-ZipArchiveLimits")
+	for _, tc := range []struct{ name, limits, message string }{
+		{"compressed", "$ArchiveMaxCompressedSize=1;$ArchiveMaxEntries=100;$ArchiveMaxEntrySize=100;$ArchiveMaxTotalSize=100", "compressed archive"},
+		{"count", "$ArchiveMaxCompressedSize=100000;$ArchiveMaxEntries=1;$ArchiveMaxEntrySize=100;$ArchiveMaxTotalSize=100", "entry count"},
+		{"entry", "$ArchiveMaxCompressedSize=100000;$ArchiveMaxEntries=100;$ArchiveMaxEntrySize=1;$ArchiveMaxTotalSize=100", "entry exceeds"},
+		{"aggregate", "$ArchiveMaxCompressedSize=100000;$ArchiveMaxEntries=100;$ArchiveMaxEntrySize=100;$ArchiveMaxTotalSize=3", "aggregate"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			program := "$ErrorActionPreference='Stop';" + tc.limits + "\n" + function + "\n$rejected=$false; try { Assert-ZipArchiveLimits -ArchivePath '" + quotedArchive + "' } catch { if ($_.Exception.Message -match '" + tc.message + "') { $rejected=$true } else { Write-Host $_.Exception.Message } }; if (!$rejected) { exit 8 }; exit 0"
+			cmd := exec.Command(pwsh, "-NoLogo", "-NoProfile", "-Command", program)
+			if output, runErr := cmd.CombinedOutput(); runErr != nil {
+				t.Fatalf("PowerShell %s limit: %v\n%s", tc.name, runErr, output)
+			}
+		})
 	}
 }
 
@@ -423,9 +702,7 @@ func TestInstallEventScriptDegradesFailedAgentLoudly(t *testing.T) {
 	if err := os.MkdirAll(releaseDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s) error = %v", releaseDir, err)
 	}
-	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
-		"dws": "fake-event-binary\n",
-	})
+	writeCanonicalTarGz(t, filepath.Join(releaseDir, assetName), "v1.0.51", "fake-event-binary\n")
 	writeZip(t, filepath.Join(releaseDir, "dws-skills.zip"), map[string]string{
 		"multi/dingtalk-event/SKILL.md":  "event skill user_im_message_receive_o2o\n",
 		"multi/dingtalk-shared/SKILL.md": "shared prerequisite\n",
@@ -1677,9 +1954,7 @@ func TestInstallEventScriptInstallsBinaryAndEventSkills(t *testing.T) {
 	if err := os.MkdirAll(releaseDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s) error = %v", releaseDir, err)
 	}
-	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
-		"dws": "fake-event-binary\n",
-	})
+	writeCanonicalTarGz(t, filepath.Join(releaseDir, assetName), "v1.0.51", "fake-event-binary\n")
 	writeZip(t, filepath.Join(releaseDir, "dws-skills.zip"), map[string]string{
 		"multi/dingtalk-event/SKILL.md":  "event skill user_im_message_receive_o2o\n",
 		"multi/dingtalk-shared/SKILL.md": "shared prerequisite\n",
@@ -1741,12 +2016,21 @@ func TestInstallEventScriptInstallsBinaryAndEventSkills(t *testing.T) {
 		}
 	}
 
-	binaryData, err := os.ReadFile(filepath.Join(installDir, "dws"))
-	if err != nil {
-		t.Fatalf("ReadFile(installed dws) error = %v", err)
+	versionOutput, err := exec.Command(filepath.Join(installDir, "dws"), "version").CombinedOutput()
+	if err != nil || string(versionOutput) != "v1.0.51\n" {
+		t.Fatalf("installed launcher delegation = %q, %v", versionOutput, err)
 	}
-	if string(binaryData) != "fake-event-binary\n" {
-		t.Fatalf("installed binary content = %q", string(binaryData))
+	if info, err := os.Lstat(filepath.Join(installDir, "dws")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("public dws command is not a symlink: %#v, %v", info, err)
+	}
+	packageRoot := filepath.Join(installDir, ".dws", "versions", "dws-v1.0.51-"+runtime.GOOS+"-"+runtime.GOARCH)
+	for _, rel := range []string{"package-manifest.json", "bin/dws", "libexec/dws-core"} {
+		if _, err := os.Stat(filepath.Join(packageRoot, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("immutable package tree missing %s: %v", rel, err)
+		}
+	}
+	if target, err := os.Readlink(filepath.Join(installDir, ".dws", "current")); err != nil || target != "versions/dws-v1.0.51-"+runtime.GOOS+"-"+runtime.GOARCH {
+		t.Fatalf("current link = %q, %v", target, err)
 	}
 
 	expectedSkills := map[string]string{
@@ -1957,9 +2241,7 @@ func TestInstallEventScriptNoSkillsOnlyInstallsBinary(t *testing.T) {
 	stubRoot := filepath.Join(root, "stubs")
 	assetName := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
 
-	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
-		"dws": "fake-event-binary\n",
-	})
+	writeCanonicalTarGz(t, filepath.Join(releaseDir, assetName), "v1.0.51", "fake-event-binary\n")
 	writeInstallerFixtureChecksums(t, releaseDir)
 	writeFakeCurl(t, filepath.Join(stubRoot, "curl"))
 	for _, name := range []string{"dingtalk-event", "dingtalk-shared", "dingtalk-misc"} {
@@ -2014,9 +2296,7 @@ func TestInstallEventScriptDefaultsToLatestStableRelease(t *testing.T) {
 	stubRoot := filepath.Join(root, "stubs")
 	assetName := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
 
-	writeTarGz(t, filepath.Join(releaseDir, assetName), map[string]string{
-		"dws": "fake-event-binary\n",
-	})
+	writeCanonicalTarGz(t, filepath.Join(releaseDir, assetName), "v1.0.51", "fake-event-binary\n")
 	writeInstallerFixtureChecksums(t, releaseDir)
 	writeFakeCurl(t, filepath.Join(stubRoot, "curl"))
 	writeFakeGH(t, filepath.Join(stubRoot, "gh"), "v1.0.51")
@@ -4886,6 +5166,131 @@ func writeTarGz(t *testing.T, path string, files map[string]string) {
 	}
 }
 
+func writeCanonicalTarGz(t *testing.T, archivePath, version, launcher string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	semver := strings.TrimPrefix(version, "v")
+	packageName := "dws-v" + semver + "-" + runtime.GOOS + "-" + runtime.GOARCH
+	delegatedOutput := launcher
+	launcher = "#!/bin/sh\ntarget=$(readlink \"$0\" 2>/dev/null || printf '%s' \"$0\")\ncase \"$target\" in /*) ;; *) target=\"$(dirname \"$0\")/$target\" ;; esac\nexec \"$(dirname \"$target\")/../libexec/dws-core\" \"$@\"\n"
+	core := "#!/bin/sh\ncase \"${1-}\" in --version|version) echo " + version + ";; *) printf '%s' " + fmt.Sprintf("%q", delegatedOutput) + ";; esac\n"
+	launcherHash := sha256.Sum256([]byte(launcher))
+	coreHash := sha256.Sum256([]byte(core))
+	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":%q,\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":%q,\"goarch\":%q},\"launcher\":{\"path\":\"bin/dws\",\"sha256\":%q,\"size\":%d,\"mode\":493},\"core\":{\"path\":\"libexec/dws-core\",\"sha256\":%q,\"size\":%d,\"mode\":493}}\n",
+		version, strings.Repeat("1", 40), runtime.GOOS, runtime.GOARCH, hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	entries := []struct {
+		name, content string
+		mode          int64
+		dir           bool
+	}{
+		{"LICENSE", "license\n", 0o644, false}, {"NOTICE", "notice\n", 0o644, false},
+		{"README.md", "readme\n", 0o644, false}, {"CHANGELOG.md", "changes\n", 0o644, false},
+		{packageName + "/", "", 0o755, true}, {packageName + "/bin/", "", 0o755, true},
+		{packageName + "/bin/dws", launcher, 0o755, false}, {packageName + "/libexec/", "", 0o755, true},
+		{packageName + "/libexec/dws-core", core, 0o755, false}, {packageName + "/package-manifest.json", manifest, 0o644, false},
+	}
+	for _, entry := range entries {
+		header := &tar.Header{Name: entry.name, Mode: entry.mode, Size: int64(len(entry.content))}
+		if entry.dir {
+			header.Typeflag = tar.TypeDir
+			header.Size = 0
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if !entry.dir {
+			if _, err := tw.Write([]byte(entry.content)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func installShellWithoutMain(t *testing.T) string {
+	t.Helper()
+	script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(script), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+	return string(script[:cut])
+}
+
+func writeSmokeCanonicalTarGz(t *testing.T, archivePath, version string) {
+	t.Helper()
+	launcher := "#!/bin/sh\ntarget=$(readlink \"$0\" 2>/dev/null || printf '%s' \"$0\")\ncase \"$target\" in /*) ;; *) target=\"$(dirname \"$0\")/$target\" ;; esac\nexec \"$(dirname \"$target\")/../libexec/dws-core\" \"$@\"\n"
+	core := "#!/bin/sh\nprintf '%s\\n' \"${1-}\" >> \"$DWS_SMOKE_LOG\"\n[ \"${DWS_FAIL_SMOKE:-0}\" != 1 ] || exit 42\ncase \"${1-}\" in --version|version) echo " + version + ";; *) exit 3;; esac\n"
+	semver := strings.TrimPrefix(version, "v")
+	packageName := "dws-v" + semver + "-" + runtime.GOOS + "-" + runtime.GOARCH
+	launcherHash := sha256.Sum256([]byte(launcher))
+	coreHash := sha256.Sum256([]byte(core))
+	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":%q,\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":%q,\"goarch\":%q},\"launcher\":{\"path\":\"bin/dws\",\"sha256\":%q,\"size\":%d,\"mode\":493},\"core\":{\"path\":\"libexec/dws-core\",\"sha256\":%q,\"size\":%d,\"mode\":493}}\n",
+		version, strings.Repeat("1", 40), runtime.GOOS, runtime.GOARCH, hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	entries := []struct {
+		name, content string
+		mode          int64
+		typeflag      byte
+	}{
+		{"LICENSE", "license\n", 0o644, tar.TypeReg}, {"NOTICE", "notice\n", 0o644, tar.TypeReg},
+		{"README.md", "readme\n", 0o644, tar.TypeReg}, {"CHANGELOG.md", "changes\n", 0o644, tar.TypeReg},
+		{packageName + "/", "", 0o755, tar.TypeDir}, {packageName + "/bin/", "", 0o755, tar.TypeDir},
+		{packageName + "/bin/dws", launcher, 0o755, tar.TypeReg}, {packageName + "/libexec/", "", 0o755, tar.TypeDir},
+		{packageName + "/libexec/dws-core", core, 0o755, tar.TypeReg}, {packageName + "/package-manifest.json", manifest, 0o644, tar.TypeReg},
+	}
+	for _, entry := range entries {
+		size := int64(len(entry.content))
+		if entry.typeflag == tar.TypeDir {
+			size = 0
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: entry.name, Mode: entry.mode, Size: size, Typeflag: entry.typeflag}); err != nil {
+			t.Fatal(err)
+		}
+		if size > 0 {
+			if _, err := tw.Write([]byte(entry.content)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeZip(t *testing.T, path string, files map[string]string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -4915,7 +5320,11 @@ func writeZip(t *testing.T, path string, files map[string]string) {
 
 func writeFakeCurl(t *testing.T, path string) {
 	t.Helper()
-	const script = `#!/bin/sh
+	canonicalInstaller, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf(`#!/bin/sh
 set -eu
 out=""
 url=""
@@ -4928,12 +5337,13 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$out" ] || { echo "fake curl: missing -o" >&2; exit 1; }
 case "$url" in
+  *"/scripts/install.sh") cp %q "$out" ;;
   *"/${FAKE_ASSET_NAME}") cp "$FAKE_RELEASE_DIR/$FAKE_ASSET_NAME" "$out" ;;
   *"/dws-skills.zip") cp "$FAKE_RELEASE_DIR/dws-skills.zip" "$out" ;;
   *"/checksums.txt") cp "$FAKE_RELEASE_DIR/checksums.txt" "$out" ;;
   *) echo "fake curl: unexpected URL $url" >&2; exit 1 ;;
 esac
-`
+`, canonicalInstaller)
 	mustWriteFile(t, path, []byte(script), 0o755)
 }
 

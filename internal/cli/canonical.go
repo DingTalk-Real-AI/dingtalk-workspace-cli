@@ -23,10 +23,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// schemaCommandCatalogError / payloads use deliverySchemaCatalog
-// (RegisterSchemaSourceRoot → ResolveSchemaBuild). There is no committed
-// Schema Catalog embed fallback.
-var schemaCommandCatalogError = deliverySchemaCatalogError
+// schemaCommandCatalogError is retained as a command-boundary test seam. The
+// default must not load the monolithic Catalog: each route selects its own
+// Meta/product/all loader below.
+var schemaCommandCatalogError = func() error { return nil }
 
 // NewMCPCommand registers the mcp product declaration and returns its root
 // command. The app layer attaches reviewed static MCP helpers as
@@ -124,30 +124,4 @@ func NewSchemaCommand() *cobra.Command {
 	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束、安全语义和返回契约")
 	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询")
 	return cmd
-}
-
-// splitSchemaPathTokens splits a CLI path on dots, slashes, and
-// whitespace, returning only non-empty tokens.
-func splitSchemaPathTokens(raw string) []string {
-	fields := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == '.' || r == '/' || r == ' ' || r == '\t'
-	})
-	out := fields[:0]
-	for _, f := range fields {
-		if s := strings.TrimSpace(f); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// normalizeSchemaQueryCLIPath accepts the historical query spellings while
-// keeping authored Registry CLI paths strict and space-separated. Canonical
-// identity lookup still runs before this compatibility normalization.
-func normalizeSchemaQueryCLIPath(path string) string {
-	parts := splitSchemaPathTokens(strings.TrimSpace(path))
-	if len(parts) > 0 && parts[0] == "dws" {
-		parts = parts[1:]
-	}
-	return strings.Join(parts, " ")
 }

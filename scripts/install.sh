@@ -35,6 +35,7 @@ GITEE_REPO="${DWS_GITEE_REPO:-}"
 GITEE_FALLBACK_REPO="${DWS_GITEE_FALLBACK_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_NAME="${DWS_INSTALL_NAME:-$BIN_NAME}"
+CLI_ROOT="${DWS_CLI_ROOT:-$INSTALL_DIR/.dws}"
 VERSION="${DWS_VERSION:-latest}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
 SKILLS_ONLY="${DWS_SKILLS_ONLY:-0}"
@@ -42,6 +43,10 @@ SKILL_STATE_ROOT="${DWS_CONFIG_DIR:-$HOME/.dws}"
 SKILL_NAME="dws"
 SKILL_MODE=""
 MANAGED_SKILL_DIGEST_SCOPE="skill-directory-v1"
+ARCHIVE_MAX_ENTRIES=10000
+ARCHIVE_MAX_ENTRY_SIZE=536870912
+ARCHIVE_MAX_TOTAL_SIZE=1073741824
+ARCHIVE_MAX_COMPRESSED_SIZE=536870912
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -285,6 +290,220 @@ verify_release_asset_checksum() {
   [ "$_checksum_actual" = "$_checksum_expected" ] || \
     err "SHA256 checksum mismatch for ${_checksum_asset}. Expected ${_checksum_expected}, got ${_checksum_actual}."
   say "✅ SHA256 checksum verified: ${_checksum_asset}"
+}
+
+file_mode_decimal() {
+  _mode="$(stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null)" || return 1
+  printf '%d\n' "0$_mode"
+}
+
+verify_canonical_package() {
+  _root="$1"; _os="$2"; _arch="$3"
+  _semver="${VERSION#v}"
+  _package="dws-v${_semver}-${_os}-${_arch}"
+  [ "$(basename "$_root")" = "$_package" ] || return 1
+  case "$_semver" in ''|*[!0-9A-Za-z.-]*|.*|*.) return 1 ;; esac
+  printf '%s\n' "$_semver" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$' || return 1
+  _suffix=""; [ "$_os" = windows ] && _suffix=.exe
+  _launcher_rel="bin/dws${_suffix}"; _core_rel="libexec/dws-core${_suffix}"
+  _manifest="$_root/package-manifest.json"
+  [ -f "$_manifest" ] && [ ! -L "$_manifest" ] || return 1
+  [ "$(file_mode_decimal "$_manifest")" = 420 ] || return 1
+  [ "$(wc -l < "$_manifest" | tr -d ' ')" = 1 ] || return 1
+  _line="$(cat "$_manifest")" || return 1
+  _commit="$(printf '%s\n' "$_line" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')"
+  [ "${#_commit}" -eq 40 ] || return 1
+  _launcher_sha="$(printf '%s\n' "$_line" | sed -n 's/.*"launcher":{"path":"[^"]*","sha256":"\([0-9a-f]*\)".*/\1/p')"
+  _launcher_size="$(printf '%s\n' "$_line" | sed -n 's/.*"launcher":{"path":"[^"]*","sha256":"[0-9a-f]*","size":\([0-9]*\).*/\1/p')"
+  _launcher_mode="$(printf '%s\n' "$_line" | sed -n 's/.*"launcher":{"path":"[^"]*","sha256":"[0-9a-f]*","size":[0-9]*,"mode":\([0-9]*\)}.*/\1/p')"
+  _core_sha="$(printf '%s\n' "$_line" | sed -n 's/.*"core":{"path":"[^"]*","sha256":"\([0-9a-f]*\)".*/\1/p')"
+  _core_size="$(printf '%s\n' "$_line" | sed -n 's/.*"core":{"path":"[^"]*","sha256":"[0-9a-f]*","size":\([0-9]*\).*/\1/p')"
+  _core_mode="$(printf '%s\n' "$_line" | sed -n 's/.*"core":{"path":"[^"]*","sha256":"[0-9a-f]*","size":[0-9]*,"mode":\([0-9]*\)}.*/\1/p')"
+  for _value in "$_launcher_sha" "$_core_sha"; do [ "${#_value}" -eq 64 ] || return 1; done
+  for _value in "$_launcher_size" "$_core_size"; do case "$_value" in ''|0|*[!0-9]*) return 1 ;; esac; [ "$_value" -le 4294967296 ] || return 1; done
+  _expected="{\"layout_version\":1,\"release\":{\"version\":\"v${_semver}\",\"commit\":\"${_commit}\",\"edition\":\"open\"},\"target\":{\"goos\":\"${_os}\",\"goarch\":\"${_arch}\"},\"launcher\":{\"path\":\"${_launcher_rel}\",\"sha256\":\"${_launcher_sha}\",\"size\":${_launcher_size},\"mode\":${_launcher_mode}},\"core\":{\"path\":\"${_core_rel}\",\"sha256\":\"${_core_sha}\",\"size\":${_core_size},\"mode\":${_core_mode}}}"
+  [ "$_line" = "$_expected" ] || return 1
+  for _rel in "$_launcher_rel" "$_core_rel"; do
+    _file="$_root/$_rel"; [ -f "$_file" ] && [ ! -L "$_file" ] || return 1
+  done
+  [ "$(wc -c < "$_root/$_launcher_rel" | tr -d ' ')" = "$_launcher_size" ] || return 1
+  [ "$(wc -c < "$_root/$_core_rel" | tr -d ' ')" = "$_core_size" ] || return 1
+  [ "$(sha256_file "$_root/$_launcher_rel")" = "$_launcher_sha" ] || return 1
+  [ "$(sha256_file "$_root/$_core_rel")" = "$_core_sha" ] || return 1
+  if [ "$_os" = windows ]; then
+    [ "$_launcher_mode" = 0 ] && [ "$_core_mode" = 0 ] || return 1
+  else
+    [ "$(file_mode_decimal "$_root/$_launcher_rel")" = "$_launcher_mode" ] || return 1
+    [ "$(file_mode_decimal "$_root/$_core_rel")" = "$_core_mode" ] || return 1
+  fi
+  [ -z "$(find "$_root" -type l -print -o ! -type d ! -type f -print)" ] || return 1
+  _actual="$(CDPATH= cd -- "$_root" && find . -print | LC_ALL=C sort)"
+  _wanted="$(printf '%s\n' . ./bin "./$_launcher_rel" ./libexec "./$_core_rel" ./package-manifest.json | LC_ALL=C sort)"
+  [ "$_actual" = "$_wanted" ]
+}
+
+check_numeric_tar_listing_limits() {
+  # GNU tar prints mode uid/gid size; BSD tar prints mode links uid gid size.
+  # Numeric ownership keeps archive-controlled owner/group names out of parsing.
+  awk -v max_entries="$ARCHIVE_MAX_ENTRIES" -v max_entry="$ARCHIVE_MAX_ENTRY_SIZE" -v max_total="$ARCHIVE_MAX_TOTAL_SIZE" '
+    {
+      if ($2 ~ /^[0-9]+\/[0-9]+$/) size = $3
+      else if ($2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/) size = $5
+      else exit 2
+      if (size !~ /^[0-9]+$/) exit 2
+      count++; if (size > max_entry) exit 3; total += size
+      if (count > max_entries || total > max_total) exit 4
+      if (substr($1,1,1)!="d" && substr($1,1,1)!="-") exit 5
+    }
+    END { if (count == 0) exit 6 }
+  '
+}
+
+inspect_tar_archive() {
+  _archive="$1"; _package="$2"; _list="$3"
+  _compressed_size="$(wc -c < "$_archive" | tr -d ' ')" || return 1
+  [ "$_compressed_size" -le "$ARCHIVE_MAX_COMPRESSED_SIZE" ] || return 1
+  # Inspect verbose headers first so a declared single-entry size bomb is
+  # rejected as soon as its header is decoded, before a full names pass.
+  LC_ALL=C tar --numeric-owner -tvzf "$_archive" | check_numeric_tar_listing_limits || return 1
+  tar -tzf "$_archive" > "$_list" || return 1
+  [ -s "$_list" ] || return 1
+  [ "$(wc -l < "$_list" | tr -d ' ')" -le "$ARCHIVE_MAX_ENTRIES" ] || return 1
+  [ -z "$(LC_ALL=C grep '[[:space:]\\]' "$_list" || true)" ] || return 1
+  [ "$(LC_ALL=C sort "$_list" | uniq -d | wc -l | tr -d ' ')" = 0 ] || return 1
+  _roots=0
+  while IFS= read -r _entry; do
+    _entry="${_entry#./}"
+    _entry="${_entry%/}"
+    [ -n "$_entry" ] || continue
+    case "$_entry" in
+      "$_package"|"$_package"/*) _roots=1 ;;
+      LICENSE|NOTICE|README.md|CHANGELOG.md|dws) ;;
+      *) return 1 ;;
+    esac
+  done < "$_list"
+  [ "$_roots" -eq 1 ] || return 1
+  for _meta in LICENSE NOTICE README.md CHANGELOG.md; do grep -E "^(\./)?${_meta}$" "$_list" >/dev/null || return 1; done
+}
+
+inspect_zip_archive_limits() {
+  _archive="$1"
+  _compressed_size="$(wc -c < "$_archive" | tr -d ' ')" || return 1
+  [ "$_compressed_size" -le "$ARCHIVE_MAX_COMPRESSED_SIZE" ] || return 1
+  if need_cmd unzip; then
+    unzip -l "$_archive" | awk -v max_entries="$ARCHIVE_MAX_ENTRIES" -v max_entry="$ARCHIVE_MAX_ENTRY_SIZE" -v max_total="$ARCHIVE_MAX_TOTAL_SIZE" '
+      NF >= 4 && $1 ~ /^[0-9]+$/ {
+        count++; if ($1 > max_entry) exit 2; total += $1
+        if (count > max_entries || total > max_total) exit 3
+      }
+      END { if (count == 0) exit 4 }
+    '
+    return $?
+  fi
+  LC_ALL=C tar --numeric-owner -tvf "$_archive" | check_numeric_tar_listing_limits
+}
+
+atomic_replace_symlink() {
+  _ars_source="$1"; _ars_dest="$2"
+  case "$(detect_os)" in
+    darwin) mv -fh "$_ars_source" "$_ars_dest" ;;
+    *) mv -Tf "$_ars_source" "$_ars_dest" ;;
+  esac
+}
+
+activate_canonical_package() {
+  _package_root="$1"; _package_name="$(basename "$_package_root")"
+  _activation_error=""
+  _versions="$CLI_ROOT/versions"; _target="$_versions/$_package_name"; _current="$CLI_ROOT/current"
+  mkdir -p "$_versions" "$INSTALL_DIR" || return 1
+  if [ -e "$_target" ] || [ -L "$_target" ]; then
+    verify_canonical_package "$_target" "$(detect_os)" "$(detect_arch)" || err "Existing immutable package is invalid: $_target"
+  else
+    mv "$_package_root" "$_target" || return 1
+  fi
+  _old_current=""; [ -L "$_current" ] && _old_current="$(readlink "$_current")"
+  if [ -e "$_current" ] && [ ! -L "$_current" ]; then err "Refusing to replace non-symlink CLI pointer: $_current"; fi
+  _current_tmp="$CLI_ROOT/.current.tmp.$$"; rm -f "$_current_tmp"
+  ln -s "versions/$_package_name" "$_current_tmp" || return 1
+  if ! atomic_replace_symlink "$_current_tmp" "$_current"; then
+    rm -f "$_current_tmp"
+    _pointer_restore_ok=1
+    if [ -n "$_old_current" ]; then
+      ln -s "$_old_current" "$_current_tmp" && atomic_replace_symlink "$_current_tmp" "$_current" || _pointer_restore_ok=0
+    else
+      rm -f "$_current" || _pointer_restore_ok=0
+    fi
+    if [ "$_pointer_restore_ok" -ne 1 ]; then
+      say "FATAL: installation state uncertain; failed to restore current pointer after pointer publication failure."
+      return 2
+    fi
+    return 1
+  fi
+  _public="$INSTALL_DIR/$INSTALL_NAME"; _backup=""; _public_correct=0
+  _public_target=".dws/current/bin/dws"
+  [ -z "${DWS_CLI_ROOT:-}" ] || _public_target="$CLI_ROOT/current/bin/dws"
+  if [ -L "$_public" ] && [ "$(readlink "$_public")" = "$_public_target" ]; then _public_correct=1; fi
+  if [ "$_public_correct" -eq 0 ] && { [ -e "$_public" ] || [ -L "$_public" ]; }; then
+    _backup="$CLI_ROOT/legacy-${INSTALL_NAME}.$$.bak"
+    if ! mv "$_public" "$_backup"; then
+      rm -f "$_current_tmp"
+      if [ -n "$_old_current" ]; then ln -s "$_old_current" "$_current_tmp" && atomic_replace_symlink "$_current_tmp" "$_current"; else rm -f "$_current"; fi || {
+        say "FATAL: installation state uncertain; failed to restore current pointer after public launcher backup failure."
+        return 2
+      }
+      return 1
+    fi
+  fi
+  _public_tmp="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"; rm -f "$_public_tmp"
+  if [ "$_public_correct" -eq 0 ]; then
+    if ! ln -s "$_public_target" "$_public_tmp" || ! atomic_replace_symlink "$_public_tmp" "$_public"; then
+      _activation_error="public launcher publication failed"
+    fi
+  fi
+  _metadata="$CLI_ROOT/installation.json"
+  _metadata_backup="$CLI_ROOT/.installation.previous.$$"
+  _metadata_tmp="$CLI_ROOT/.installation.tmp.$$"
+  _metadata_had=0
+  if { [ -e "$_metadata" ] || [ -L "$_metadata" ]; } && { [ ! -f "$_metadata" ] || [ -L "$_metadata" ]; }; then
+    _activation_error="installation metadata is not a regular non-link file"
+  elif [ -f "$_metadata" ]; then
+    _metadata_had=1
+    cp -p "$_metadata" "$_metadata_backup" || _activation_error="installation metadata backup failed"
+  fi
+  if [ -z "${_activation_error:-}" ]; then
+    "$_public" --version >/dev/null 2>&1 || _activation_error="launcher --version smoke failed"
+  fi
+  if [ -z "${_activation_error:-}" ]; then
+    "$_public" version >/dev/null 2>&1 || _activation_error="delegated version smoke failed"
+  fi
+  if [ -z "${_activation_error:-}" ]; then
+    _public_absolute="$(CDPATH= cd -- "$(dirname "$_public")" && printf '%s/%s' "$(pwd -P)" "$(basename "$_public")")" || _activation_error="public launcher path resolution failed"
+  fi
+  if [ -z "${_activation_error:-}" ]; then
+    printf '{"format_version":1,"public_launcher":"%s","platform":"unix"}\n' "$(json_escape "$_public_absolute")" > "$_metadata_tmp" && mv "$_metadata_tmp" "$_metadata" || _activation_error="installation metadata publication failed"
+  fi
+  if [ -n "${_activation_error:-}" ]; then
+    _restore_ok=1
+    rm -f "$_current_tmp" "$_public_tmp" "$_metadata_tmp"
+    if [ -n "$_old_current" ]; then
+      ln -s "$_old_current" "$_current_tmp" && atomic_replace_symlink "$_current_tmp" "$_current" || _restore_ok=0
+    else
+      rm -f "$_current" || _restore_ok=0
+    fi
+    if [ "$_public_correct" -eq 0 ]; then
+      rm -f "$_public" || _restore_ok=0
+      if [ -n "$_backup" ]; then mv "$_backup" "$_public" || _restore_ok=0; fi
+    fi
+    if [ "$_metadata_had" -eq 1 ]; then mv "$_metadata_backup" "$_metadata" || _restore_ok=0; else rm -f "$_metadata" || _restore_ok=0; fi
+    if [ "$_restore_ok" -ne 1 ]; then
+      say "FATAL: installation state uncertain after ${_activation_error}; failed to restore current pointer, public launcher, or installation metadata."
+      return 2
+    fi
+    say "Package activation failed (${_activation_error}); previous installation restored."
+    return 1
+  fi
+  rm -f "$_metadata_backup"
+  [ -z "$_backup" ] || say "Previous flat command retained at $_backup"
 }
 
 digest_skill_dir() {
@@ -1561,25 +1780,22 @@ install_binary() {
 
   verify_release_asset_checksum "$archive_name" "$tmpdir/$archive_name" "$tmpdir"
 
+  semver="${VERSION#v}"
+  package_name="dws-v${semver}-${os}-${arch}"
+  inspect_tar_archive "$tmpdir/$archive_name" "$package_name" "$tmpdir/archive.list" || err "Unsafe or non-canonical archive layout: ${archive_name}"
   say "📦 Extracting..."
-  tar xzf "$tmpdir/$archive_name" -C "$tmpdir"
-
-  mkdir -p "$INSTALL_DIR"
-
-  # The archive may contain a top-level directory or just the binary.
-  if [ -f "$tmpdir/$BIN_NAME" ]; then
-    found="$tmpdir/$BIN_NAME"
-  elif [ -f "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" ]; then
-    found="$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME"
-  else
-    found="$(find "$tmpdir" -name "$BIN_NAME" -type f | head -1)"
-    [ -n "$found" ] || err "Could not find the ${BIN_NAME} binary in the downloaded archive."
+  extract_dir="$tmpdir/extracted"; mkdir "$extract_dir"
+  tar xzf "$tmpdir/$archive_name" -C "$extract_dir"
+  for metadata in LICENSE NOTICE README.md CHANGELOG.md; do
+    [ -f "$extract_dir/$metadata" ] && [ ! -L "$extract_dir/$metadata" ] || err "Invalid archive metadata file: $metadata"
+  done
+  verify_canonical_package "$extract_dir/$package_name" "$os" "$arch" || err "Package manifest/tree verification failed for ${archive_name}."
+  if [ -e "$extract_dir/dws" ] || [ -L "$extract_dir/dws" ]; then
+    [ -f "$extract_dir/dws" ] && [ ! -L "$extract_dir/dws" ] \
+      && cmp -s "$extract_dir/dws" "$extract_dir/$package_name/libexec/dws-core" \
+      || err "Legacy upgrade entry differs from the canonical core."
   fi
-
-  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
-  cp "$found" "$staged_bin"
-  chmod +x "$staged_bin"
-  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
+  activate_canonical_package "$extract_dir/$package_name" || err "Package activation failed."
 
   say "✅ Binary installed: ${INSTALL_DIR}/${INSTALL_NAME}"
 
@@ -1623,6 +1839,7 @@ install_skills() {
   fi
 
   verify_release_asset_checksum "$skills_archive" "$tmpdir_skills/$skills_archive" "$tmpdir_skills"
+  inspect_zip_archive_limits "$tmpdir_skills/$skills_archive" || err "Skills archive exceeds safe extraction limits or is invalid."
 
   extract_root="$tmpdir_skills/skills"
   mkdir -p "$extract_root"

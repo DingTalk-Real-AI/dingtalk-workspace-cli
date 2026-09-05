@@ -34,6 +34,8 @@ $GiteeRepo = if ($env:DWS_GITEE_REPO) { $env:DWS_GITEE_REPO } else { "" }
 # Auto-fallback Gitee mirror used when GitHub is unreachable (see Resolve-Source).
 $GiteeFallbackRepo = if ($env:DWS_GITEE_FALLBACK_REPO) { $env:DWS_GITEE_FALLBACK_REPO } else { "DingTalk-Real-AI/dingtalk-workspace-cli" }
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
+$InstallName = if ($env:DWS_INSTALL_NAME) { $env:DWS_INSTALL_NAME } else { $BinName }
+$CliRoot = if ($env:DWS_CLI_ROOT) { $env:DWS_CLI_ROOT } else { Join-Path $InstallDir ".dws" }
 $Version = if ($env:DWS_VERSION) { $env:DWS_VERSION } else { "latest" }
 $NoSkills = $env:DWS_NO_SKILLS -eq "1"
 $SkillsOnly = $env:DWS_SKILLS_ONLY -eq "1"
@@ -41,6 +43,10 @@ $SkillName = "dws"
 $SkillMode = ""
 $SkillStateRoot = if ($env:DWS_CONFIG_DIR) { $env:DWS_CONFIG_DIR } else { Join-Path $HOME ".dws" }
 $ManagedSkillDigestScope = "skill-directory-v1"
+$ArchiveMaxEntries = 10000
+$ArchiveMaxEntrySize = 536870912
+$ArchiveMaxTotalSize = 1073741824
+$ArchiveMaxCompressedSize = 536870912
 $LegacyOfficialMultiSkills = @(
     "dingtalk-agoal", "dingtalk-aiapp", "dingtalk-aisearch", "dingtalk-aitable",
     "dingtalk-attendance", "dingtalk-calendar", "dingtalk-chat", "dingtalk-contact",
@@ -609,6 +615,235 @@ function Assert-ReleaseAssetChecksum {
     $actual = (Get-FileHash -LiteralPath $AssetPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
     if ($actual -ne $expected) { Write-Err "SHA256 checksum mismatch for $AssetName. Expected $expected, got $actual." }
     Write-Say "✅ SHA256 checksum verified: $AssetName"
+}
+
+function Assert-ZipArchiveLimits {
+    param([string]$ArchivePath)
+    $archiveItem = Get-Item -LiteralPath $ArchivePath -Force -ErrorAction Stop
+    if ($archiveItem.Length -gt $ArchiveMaxCompressedSize) { throw "compressed archive exceeds safe size limit" }
+    Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
+    $stream = [System.IO.File]::OpenRead($ArchivePath)
+    try {
+        $zip = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Read, $false)
+        [int64]$totalSize = 0
+        if ($zip.Entries.Count -gt $ArchiveMaxEntries) { throw "archive entry count exceeds safe limit" }
+        foreach ($entry in $zip.Entries) {
+            if ($entry.Length -gt $ArchiveMaxEntrySize) { throw "archive entry exceeds safe uncompressed size limit: $($entry.FullName)" }
+            $totalSize += $entry.Length
+            if ($totalSize -gt $ArchiveMaxTotalSize) { throw "archive aggregate uncompressed size exceeds safe limit" }
+        }
+    } finally {
+        if ($zip) { $zip.Dispose() }
+        $stream.Dispose()
+    }
+}
+
+function Assert-CanonicalZipArchive {
+    param([string]$ArchivePath, [string]$PackageName)
+    Assert-ZipArchiveLimits -ArchivePath $ArchivePath
+    $stream = [System.IO.File]::OpenRead($ArchivePath)
+    try {
+        $zip = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Read, $false)
+        $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        $roots = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        $metadata = @("LICENSE", "NOTICE", "README.md", "CHANGELOG.md")
+        foreach ($entry in $zip.Entries) {
+            $name = $entry.FullName
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains('\') -or $name.StartsWith('/') -or $name.Contains([char]0)) { throw "unsafe archive entry: $name" }
+            $normalized = $name.TrimEnd('/')
+            $parts = $normalized.Split('/')
+            if (@($parts | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) { throw "unsafe archive entry: $name" }
+            if (!$seen.Add($normalized)) { throw "duplicate archive entry: $normalized" }
+            $unixType = ([int64]$entry.ExternalAttributes -shr 16) -band 0xF000
+            if ($unixType -ne 0 -and $unixType -ne 0x8000 -and $unixType -ne 0x4000) { throw "symlink or special archive entry: $name" }
+            if ($parts[0] -eq $PackageName) {
+                $roots.Add($parts[0]) | Out-Null
+            } elseif (($metadata -notcontains $normalized -and $normalized -cne 'dws.exe') -or $name.EndsWith('/')) {
+                throw "unexpected archive-root entry: $name"
+            }
+        }
+        if ($roots.Count -ne 1) { throw "archive must contain exactly one $PackageName package root" }
+        foreach ($name in $metadata) { if (!$seen.Contains($name)) { throw "missing archive metadata file: $name" } }
+    } finally {
+        if ($zip) { $zip.Dispose() }
+        $stream.Dispose()
+    }
+}
+
+function Assert-RegularPackageFile {
+    param([string]$Path, [string]$Label)
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or $item.LinkType -or $item -isnot [System.IO.FileInfo]) { throw "$Label is not a regular non-link file" }
+    return $item
+}
+
+function Assert-CanonicalPackage {
+    param([string]$Root, [string]$ExpectedVersion, [string]$Arch)
+    $manifestPath = Join-Path $Root "package-manifest.json"
+    $manifestItem = Assert-RegularPackageFile -Path $manifestPath -Label "manifest"
+    if ($manifestItem.Length -gt 65536) { throw "package manifest exceeds 64 KiB" }
+    $raw = [System.IO.File]::ReadAllText($manifestPath)
+    $manifest = $raw | ConvertFrom-Json -ErrorAction Stop
+    function Assert-PropertyNames($Object, [string[]]$Names, [string]$Label) {
+        $actual = @($Object.PSObject.Properties.Name)
+        if (($actual -join "`0") -ne ($Names -join "`0")) { throw "invalid $Label fields" }
+        foreach ($name in $Names) {
+            if ([regex]::Matches($raw, '"' + [regex]::Escape($name) + '"\s*:').Count -lt 1) { throw "missing $Label field $name" }
+        }
+    }
+    Assert-PropertyNames $manifest @("layout_version", "release", "target", "launcher", "core") "manifest"
+    Assert-PropertyNames $manifest.release @("version", "commit", "edition") "release"
+    Assert-PropertyNames $manifest.target @("goos", "goarch") "target"
+    Assert-PropertyNames $manifest.launcher @("path", "sha256", "size", "mode") "launcher"
+    Assert-PropertyNames $manifest.core @("path", "sha256", "size", "mode") "core"
+    foreach ($key in @("layout_version", "release", "target", "launcher", "core", "version", "commit", "edition", "goos", "goarch")) {
+        if ([regex]::Matches($raw, '"' + $key + '"\s*:').Count -ne 1) { throw "duplicate manifest field: $key" }
+    }
+    foreach ($key in @("path", "sha256", "size", "mode")) {
+        if ([regex]::Matches($raw, '"' + $key + '"\s*:').Count -ne 2) { throw "duplicate manifest file field: $key" }
+    }
+    if ($manifest.layout_version -ne 1 -or $manifest.release.version -ne $ExpectedVersion -or
+        $manifest.release.commit -cnotmatch '^[0-9a-f]{40}$' -or $manifest.release.edition -cne 'open' -or
+        $manifest.target.goos -cne 'windows' -or $manifest.target.goarch -cne $Arch) { throw "package manifest identity mismatch" }
+    foreach ($record in @(@("launcher", $manifest.launcher, "bin/dws.exe"), @("core", $manifest.core, "libexec/dws-core.exe"))) {
+        $label = $record[0]; $identity = $record[1]; $relative = $record[2]
+        if ($identity.path -cne $relative -or $identity.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            [int64]$identity.size -le 0 -or [int64]$identity.size -gt 4294967296 -or [int]$identity.mode -ne 0) { throw "invalid $label identity" }
+        $file = Assert-RegularPackageFile -Path (Join-Path $Root $relative) -Label $label
+        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+        if ($file.Length -ne [int64]$identity.size -or $hash -cne $identity.sha256) { throw "$label size/SHA-256 mismatch" }
+    }
+    $expected = @('.', 'bin', 'bin/dws.exe', 'libexec', 'libexec/dws-core.exe', 'package-manifest.json')
+    $actual = @('.') + @(Get-ChildItem -LiteralPath $Root -Recurse -Force -ErrorAction Stop | ForEach-Object {
+        if ($_.LinkType -or (!$_.PSIsContainer -and $_ -isnot [System.IO.FileInfo])) { throw "symlink or special package entry: $($_.FullName)" }
+        $_.FullName.Substring($Root.TrimEnd('\', '/').Length + 1).Replace('\', '/')
+    })
+    if ((@($actual | Sort-Object) -join "`0") -ne (@($expected | Sort-Object) -join "`0")) { throw "package tree contains missing or unexpected entries" }
+}
+
+# Windows uses a stable dws.cmd in PATH and atomically replaces current.txt.
+# This avoids unreliable ordinary-user symlinks and allows upgrades while the
+# immutable launcher/core are running. The one-time migration of an old flat
+# dws.exe must be run after that executable exits because Windows locks it.
+function Activate-CanonicalPackage {
+    param([string]$PackageRoot, [string]$PackageName, [string]$ExpectedVersion, [string]$Arch)
+    $versions = Join-Path $CliRoot "versions"
+    New-Item -ItemType Directory -Path $versions -Force -ErrorAction Stop | Out-Null
+    New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop | Out-Null
+    $target = Join-Path $versions $PackageName
+    if (Test-Path -LiteralPath $target) {
+        Assert-CanonicalPackage -Root $target -ExpectedVersion $ExpectedVersion -Arch $Arch
+    } else {
+        $stage = Join-Path $versions (".$PackageName.tmp-" + [guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath $PackageRoot -Destination $stage -Recurse -ErrorAction Stop
+        try {
+            Assert-CanonicalPackage -Root $stage -ExpectedVersion $ExpectedVersion -Arch $Arch
+            [System.IO.Directory]::Move($stage, $target)
+        } finally {
+            if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    $shimPath = Join-Path $InstallDir "$InstallName.cmd"
+    $oldExe = Join-Path $InstallDir "$InstallName.exe"
+    $backupExe = ""; $backupShim = ""; $pointerBackup = ""; $metadataBackup = ""
+    $shimRoot = if ($env:DWS_CLI_ROOT) { $CliRoot } else { "%~dp0.dws" }
+    $shim = "@echo off`r`nsetlocal`r`nset `"DWS_ROOT=$shimRoot`"`r`nset /p DWS_PACKAGE=<`"%DWS_ROOT%\current.txt`"`r`n`"%DWS_ROOT%\versions\%DWS_PACKAGE%\bin\dws.exe`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    $createdShim = $false; $pointerAttempted = $false; $pointerPublished = $false; $metadataPublished = $false
+    $pointer = Join-Path $CliRoot "current.txt"
+    $metadataPath = Join-Path $CliRoot "installation.json"
+    $pointerHad = Test-Path -LiteralPath $pointer -PathType Leaf
+    $oldPointer = if ($pointerHad) { [System.IO.File]::ReadAllText($pointer) } else { "" }
+    try {
+        if (Test-Path -LiteralPath $oldExe) {
+            $backupExe = Join-Path $CliRoot ("legacy-$InstallName.exe." + [guid]::NewGuid().ToString('N') + ".bak")
+            try { Move-Item -LiteralPath $oldExe -Destination $backupExe -ErrorAction Stop } catch { throw "close the old flat $oldExe before migration: $_" }
+        }
+        if (Test-Path -LiteralPath $shimPath) {
+            $existing = [System.IO.File]::ReadAllText($shimPath)
+            if ($existing -cne $shim) {
+                $backupShim = Join-Path $CliRoot ("legacy-$InstallName.cmd." + [guid]::NewGuid().ToString('N') + ".bak")
+                Move-Item -LiteralPath $shimPath -Destination $backupShim -ErrorAction Stop
+            }
+        }
+        if (!(Test-Path -LiteralPath $shimPath)) {
+            [System.IO.File]::WriteAllText($shimPath, $shim, [System.Text.Encoding]::ASCII)
+            $createdShim = $true
+        }
+        $pointerTemp = Join-Path $CliRoot (".current-" + [guid]::NewGuid().ToString('N') + ".tmp")
+        [System.IO.File]::WriteAllText($pointerTemp, "$PackageName`r`n", [System.Text.Encoding]::ASCII)
+        $pointerAttempted = $true
+        if (Test-Path -LiteralPath $pointer) {
+            $pointerBackup = Join-Path $CliRoot (".current-" + [guid]::NewGuid().ToString('N') + ".bak")
+            [System.IO.File]::Replace($pointerTemp, $pointer, $pointerBackup, $true)
+        } else { [System.IO.File]::Move($pointerTemp, $pointer) }
+        $pointerPublished = $true
+
+        & $shimPath --version *> $null
+        if ($LASTEXITCODE -ne 0) { throw "launcher --version smoke failed with exit code $LASTEXITCODE" }
+        & $shimPath version *> $null
+        if ($LASTEXITCODE -ne 0) { throw "delegated version smoke failed with exit code $LASTEXITCODE" }
+
+        $metadata = [ordered]@{
+            format_version = 1
+            public_launcher = [System.IO.Path]::GetFullPath($shimPath)
+            platform = "windows"
+        }
+        $metadataTemp = Join-Path $CliRoot (".installation-" + [guid]::NewGuid().ToString('N') + ".tmp")
+        [System.IO.File]::WriteAllText($metadataTemp, (($metadata | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $metadataPath -PathType Leaf) {
+            $metadataBackup = Join-Path $CliRoot (".installation-" + [guid]::NewGuid().ToString('N') + ".bak")
+            [System.IO.File]::Replace($metadataTemp, $metadataPath, $metadataBackup, $true)
+        } else {
+            [System.IO.File]::Move($metadataTemp, $metadataPath)
+        }
+        $metadataPublished = $true
+
+        if ($pointerBackup) { Remove-Item -LiteralPath $pointerBackup -Force -ErrorAction SilentlyContinue }
+        if ($metadataBackup) { Remove-Item -LiteralPath $metadataBackup -Force -ErrorAction SilentlyContinue }
+        if ($backupExe) { Remove-Item -LiteralPath $backupExe -Force -ErrorAction SilentlyContinue }
+        if ($backupShim) { Remove-Item -LiteralPath $backupShim -Force -ErrorAction SilentlyContinue }
+    } catch {
+        $activationError = $_
+        $restoreErrors = [System.Collections.Generic.List[string]]::new()
+        try {
+            if ($pointerAttempted) {
+                $pointerBackupAvailable = $pointerBackup -and (Test-Path -LiteralPath $pointerBackup -PathType Leaf)
+                if (!$pointerPublished -and $pointerHad -and !$pointerBackupAvailable) {
+                    if (!(Test-Path -LiteralPath $pointer -PathType Leaf) -or [System.IO.File]::ReadAllText($pointer) -cne $oldPointer) {
+                        throw "pointer publication failed without a recoverable backup"
+                    }
+                } else {
+                    if ($pointerPublished -and $pointerHad -and !$pointerBackupAvailable) {
+                        throw "published pointer has no recoverable previous-pointer backup"
+                    }
+                    if (Test-Path -LiteralPath $pointer) { Remove-Item -LiteralPath $pointer -Force -ErrorAction Stop }
+                    if ($pointerBackupAvailable) { Move-Item -LiteralPath $pointerBackup -Destination $pointer -ErrorAction Stop }
+                }
+            }
+        } catch { $restoreErrors.Add("current pointer: $_") }
+        try {
+            if ($metadataPublished) {
+                if ($metadataBackup) {
+                    if (Test-Path -LiteralPath $metadataPath) { Remove-Item -LiteralPath $metadataPath -Force -ErrorAction Stop }
+                    Move-Item -LiteralPath $metadataBackup -Destination $metadataPath -ErrorAction Stop
+                } elseif (Test-Path -LiteralPath $metadataPath) {
+                    Remove-Item -LiteralPath $metadataPath -Force -ErrorAction Stop
+                }
+            }
+        } catch { $restoreErrors.Add("installation metadata: $_") }
+        try {
+            if (($createdShim -or $backupShim) -and (Test-Path -LiteralPath $shimPath)) { Remove-Item -LiteralPath $shimPath -Force -ErrorAction Stop }
+            if ($backupShim) { Move-Item -LiteralPath $backupShim -Destination $shimPath -ErrorAction Stop }
+        } catch { $restoreErrors.Add("public launcher: $_") }
+        try {
+            if ($backupExe) { Move-Item -LiteralPath $backupExe -Destination $oldExe -ErrorAction Stop }
+        } catch { $restoreErrors.Add("legacy executable: $_") }
+        if ($restoreErrors.Count -gt 0) {
+            throw "FATAL: installation state uncertain after $activationError; restoration failed: $($restoreErrors -join '; ')"
+        }
+        throw "Package activation failed ($activationError); previous installation restored."
+    }
 }
 
 function Resolve-Source {
@@ -1301,27 +1536,29 @@ function Install-Binary {
 
         Assert-ReleaseAssetChecksum -AssetPath $archivePath -AssetName $archiveName -TempDir $tmpDir
 
+        $semver = $Version.TrimStart('v')
+        if ($semver -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$') { Write-Err "Invalid release version: $Version" }
+        $packageName = "dws-v$semver-windows-$arch"
+        Assert-CanonicalZipArchive -ArchivePath $archivePath -PackageName $packageName
         Write-Say "📦 Extracting..."
-        Expand-Archive -Path $archivePath -DestinationPath $tmpDir -Force
-
-        # Create install directory
-        if (!(Test-Path $InstallDir)) {
-            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+        $extractDir = Join-Path $tmpDir "extracted"
+        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir
+        $packageRoot = Join-Path $extractDir $packageName
+        Assert-CanonicalPackage -Root $packageRoot -ExpectedVersion "v$semver" -Arch $arch
+        $legacyPath = Join-Path $extractDir 'dws.exe'
+        if (Test-Path -LiteralPath $legacyPath) {
+            $legacyFile = Assert-RegularPackageFile -Path $legacyPath -Label 'legacy upgrade entry'
+            $coreFile = Get-Item -LiteralPath (Join-Path $packageRoot 'libexec/dws-core.exe')
+            if ($legacyFile.Length -ne $coreFile.Length -or
+                (Get-FileHash -LiteralPath $legacyPath -Algorithm SHA256).Hash -cne
+                (Get-FileHash -LiteralPath $coreFile.FullName -Algorithm SHA256).Hash) {
+                throw 'legacy upgrade entry differs from canonical core'
+            }
         }
-
-        # Find the binary
-        $binFile = Get-ChildItem -Path $tmpDir -Recurse -Filter "${BinName}.exe" | Select-Object -First 1
-        if ($null -eq $binFile) {
-            Write-Err "Could not find ${BinName}.exe in the downloaded archive."
-        }
-
-        $destBin = Join-Path $InstallDir "${BinName}.exe"
-        $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"
-        Copy-Item -Path $binFile.FullName -Destination $stagedBin -Force
-        Move-Item -Path $stagedBin -Destination $destBin -Force
+        Activate-CanonicalPackage -PackageRoot $packageRoot -PackageName $packageName -ExpectedVersion "v$semver" -Arch $arch
 
         Write-Say "✅ Binary installed:"
-        Write-Say "   → $destBin"
+        Write-Say "   → $(Join-Path $InstallDir "$InstallName.cmd")"
 
         # Check if install dir is in PATH
         $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
@@ -1782,6 +2019,7 @@ function Install-Skills {
             }
         }
         Assert-ReleaseAssetChecksum -AssetPath $zipPath -AssetName "dws-skills.zip" -TempDir $tmpDir
+        Assert-ZipArchiveLimits -ArchivePath $zipPath
 
         $extractRoot = Join-Path $tmpDir "skills"
         Expand-Archive -Path $zipPath -DestinationPath $extractRoot -Force

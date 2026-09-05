@@ -1,0 +1,24 @@
+{
+  "scope": "median of Go benchmark averages; warm OS page cache",
+  "stages": {
+    "meta-open-authenticate-decode-lookup": {
+      "samples": 7,
+      "median_ns_per_op": 5873621.0,
+      "median_bytes_per_op": 3867060,
+      "median_allocations_per_op": 50045,
+      "latency_budget_ns": 5000000,
+      "allocation_budget_bytes": 8000000,
+      "passed": false
+    },
+    "selected-open-locator-authenticate-decode-index": {
+      "samples": 7,
+      "median_ns_per_op": 9101601.0,
+      "median_bytes_per_op": 4319653,
+      "median_allocations_per_op": 68583,
+      "latency_budget_ns": 15000000,
+      "allocation_budget_bytes": 8000000,
+      "passed": true
+    }
+  },
+  "passed": false
+}

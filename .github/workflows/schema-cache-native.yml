@@ -1,0 +1,232 @@
+name: Schema cache native feedback
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'internal/**'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/build/**'
+      - 'scripts/dev/**'
+      - '.github/workflows/schema-cache-native.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-cache-native-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Development evidence only. These jobs neither replace admission contexts nor
+# publish a release or authorize cache identity injection into release builds.
+jobs:
+  native:
+    name: Native candidate (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-amd64
+            protoc_archive: protoc-35.1-linux-x86_64.zip
+            protoc_sha256: 6930ebf62bd4ea607b98fff052596c6ee564b9835b4ce172c75a3f53ae9d91b7
+          - runner: macos-latest
+            target: darwin-arm64
+            protoc_archive: protoc-35.1-osx-aarch_64.zip
+            protoc_sha256: 193289af0470c6a1aada357d4fba0bbf8d78bfaac8b5e42ca30af2ef75583de2
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: go1.25.9
+      GOWORK: 'off'
+      DO_NOT_TRACK: '1'
+      DWS_PACKAGE_VERSION: 0.0.0-test
+      EXPECTED_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.9
+          cache: false
+      - name: Verify native target and prepare private test directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOHOSTOS)-$(go env GOHOSTARCH)" = "$EXPECTED_TARGET"
+          test "$(go env GOVERSION)" = go1.25.9
+          test -z "$(git status --porcelain)"
+          private_tmp="$HOME/.dws-native-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 0700 "$private_tmp"
+          echo "TMPDIR=$private_tmp" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/schema-evidence"
+      - name: Check generated protobuf with the pinned native compiler
+        shell: bash
+        env:
+          PROTOC_ARCHIVE: ${{ matrix.protoc_archive }}
+          PROTOC_SHA256: ${{ matrix.protoc_sha256 }}
+        run: |
+          set -euo pipefail
+          compiler_dir="$TMPDIR/protoc"
+          mkdir -m 0700 "$compiler_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v35.1/$PROTOC_ARCHIVE" \
+            --output "$compiler_dir/compiler.zip"
+          python3 - "$compiler_dir/compiler.zip" "$PROTOC_SHA256" <<'PYVERIFY'
+          import hashlib, pathlib, sys
+          assert hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest() == sys.argv[2], "protoc archive SHA-256 mismatch"
+          PYVERIFY
+          unzip -q "$compiler_dir/compiler.zip" -d "$compiler_dir"
+          PROTOC="$compiler_dir/bin/protoc" ./scripts/generate-schema-cache-proto.sh --check
+          git diff --exit-code -- internal/cli/schemacachepb
+      - name: Test cache integrity and concurrency
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
+          go test -race -count=1 -timeout=15m ./internal/cli \
+            -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache|AssemblyAudit|AssemblyAuditFailureIsolation)|TestPersistentSchemaCacheRealConcurrentRepair)$' \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-race.txt"
+          go test -count=1 -timeout=10m ./internal/cli \
+            -run '^TestPersistentSchemaCacheRealDeliveryParityAndLazyIO$' \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-parity.txt"
+      - name: Build native candidate with finalized runtime payload
+        run: python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
+      - name: Verify exact candidate and interleaved process performance
+        run: |
+          python3 scripts/dev/test_verify_schema_cache_binary.py
+          python3 scripts/dev/verify-schema-cache-binary.py \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
+            --require-schema-fast-path \
+            --output "$RUNNER_TEMP/schema-evidence/process-report.json"
+      - name: Measure complete file hits
+        id: file_hit
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./internal/cli/schemaruntime -run '^$' \
+            -bench '^BenchmarkRealSchemaFileHit$' -benchtime=1s -count=7 \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/file-hit.txt"
+          python3 scripts/dev/check-schema-cache-benchmark.py \
+            "$RUNNER_TEMP/schema-evidence/file-hit.txt" \
+            --output "$RUNNER_TEMP/schema-evidence/file-hit-report.json"
+      - name: Profile Meta when the file-hit budget fails
+        if: ${{ failure() && steps.file_hit.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./internal/cli/schemaruntime -run '^$' \
+            -bench '^BenchmarkRealSchemaFileHit/meta-' -benchtime=3s -count=1 \
+            -cpuprofile "$RUNNER_TEMP/schema-evidence/meta-cpu.pprof" \
+            -memprofile "$RUNNER_TEMP/schema-evidence/meta-memory.pprof" \
+            -o "$RUNNER_TEMP/schema-meta-profile.test" \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/meta-profile.txt"
+      - name: Upload native development evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-native-${{ matrix.target }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/schema-evidence/*.txt
+            ${{ runner.temp }}/schema-evidence/*.json
+            ${{ runner.temp }}/schema-evidence/*.pprof
+            ${{ runner.temp }}/schema-evidence/candidate/identity.json
+            ${{ runner.temp }}/schema-evidence/candidate/candidate-build.json
+            ${{ runner.temp }}/schema-evidence/candidate/**/package-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  full-suite:
+    name: Full Go suite (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-amd64
+          - runner: macos-latest
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: go1.25.9
+      GOWORK: 'off'
+      DO_NOT_TRACK: '1'
+      DWS_PACKAGE_VERSION: 0.0.0-test
+      EXPECTED_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.9
+          cache: false
+      - name: Validate native host and run the complete Go suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOHOSTOS)-$(go env GOHOSTARCH)" = "$EXPECTED_TARGET"
+          test "$(go env GOVERSION)" = go1.25.9
+          private_tmp="$HOME/.dws-suite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 0700 "$private_tmp"
+          export TMPDIR="$private_tmp"
+          go test -p 2 -parallel 2 -timeout 30m ./... \
+            2>&1 | tee "$RUNNER_TEMP/schema-full-suite.txt"
+      - name: Upload complete-suite development log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-suite-${{ matrix.target }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/schema-full-suite.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  compare-identities:
+    name: Compare native identity metadata
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: schema-native-*-${{ github.event.pull_request.head.sha }}
+          path: native-evidence
+      - name: Compare complete metadata from the same clean source
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          records = list(Path("native-evidence").rglob("candidate-build.json"))
+          assert len(records) == 2, "both native candidate records are required"
+          targets = set()
+          identities = []
+          trees = set()
+          for path in records:
+              record = json.loads(path.read_text())
+              assert record["source_commit"] == os.environ["EXPECTED_COMMIT"]
+              assert record["source_dirty"] is False
+              assert record["go_version"] == "go1.25.9"
+              assert record["cgo_enabled"] == "0"
+              assert record["goexperiment"] == "" and record["gowork"] == "off"
+              assert record["build_tags"] == []
+              assert record["build_flags"] == ["-trimpath", "-buildmode=pie"]
+              targets.add((record["goos"], record["goarch"]))
+              trees.add(record["source_tree"])
+              identities.append(path.with_name("identity.json").read_bytes())
+          assert targets == {("darwin", "arm64"), ("linux", "amd64")}
+          assert len(trees) == 1, "native candidates used different source trees"
+          assert identities[0] == identities[1], "native Schema identity/artifact metadata differs"
+          print("Native candidate identity metadata is byte-equal; release enablement still requires hermetic final-artifact proof.")

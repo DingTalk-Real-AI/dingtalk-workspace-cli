@@ -73,6 +73,26 @@ func DeliverySchemaAllPayloadForTest() (map[string]any, error) {
 	return deliverySchemaAllPayload()
 }
 
+// DeliverySchemaOverviewPayloadForTest exercises the production route split.
+func DeliverySchemaOverviewPayloadForTest() (map[string]any, error) {
+	return deliverySchemaOverviewPayload()
+}
+
+// DeliverySchemaQueryPayloadForTest exercises one production path query.
+func DeliverySchemaQueryPayloadForTest(path string) (map[string]any, error) {
+	return queryDeliverySchemaPayload([]string{path})
+}
+
+// DeliverySchemaCacheArtifactsForTest derives artifacts from an already
+// assembled live result without invoking its source factory again.
+func DeliverySchemaCacheArtifactsForTest() (SchemaCacheArtifacts, error) {
+	loaded := runtimeDeliveryLiveCatalog.Load()
+	if loaded == nil {
+		return SchemaCacheArtifacts{}, runtimeDeliverySchemaCatalogErr
+	}
+	return buildSchemaCacheArtifactsFromLoaded(*loaded)
+}
+
 // RestorePackageCLISchemaDeliveryForTest reinstalls the package-cli TestMain
 // assembled-delivery stub after a production-assembly exercise. Outside package
 // cli TestMain it clears the factory and resets lazy delivery state.

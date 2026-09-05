@@ -5,12 +5,12 @@ package upgrade
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 var (
@@ -23,37 +23,6 @@ var (
 	upgradeIOCopy        = io.Copy
 	upgradeFileSync      = func(f *os.File) error { return f.Sync() }
 )
-
-// ReplaceSelf atomically replaces the currently running binary with newBinaryPath.
-//
-// On Unix (macOS / Linux):
-//  1. Try atomic os.Rename (same filesystem, instant swap)
-//  2. Fallback to copy if cross-device
-//
-// On Windows the running .exe is locked by the OS, so direct overwrite fails.
-// Strategy: rename running exe → .old, then rename/copy new binary in, then
-// clean up .old (best-effort, may be cleaned on next run).
-func ReplaceSelf(newBinaryPath string) error {
-	currentExe, err := upgradeExecutable()
-	if err != nil {
-		return fmt.Errorf("无法获取当前二进制路径: %w", err)
-	}
-	currentExe, err = upgradeEvalSymlinks(currentExe)
-	if err != nil {
-		return fmt.Errorf("无法解析符号链接: %w", err)
-	}
-
-	if err := upgradeChmod(newBinaryPath, filePermBinary); err != nil {
-		return fmt.Errorf("设置权限失败: %w", err)
-	}
-
-	if err := replaceExeFile(newBinaryPath, currentExe); err != nil {
-		return err
-	}
-
-	upgradeSyncParentDir(currentExe)
-	return nil
-}
 
 // replaceExeFile replaces dst with src, handling Windows file-lock semantics.
 func replaceExeFile(src, dst string) error {
@@ -125,14 +94,18 @@ func ExtractZip(zipPath, targetDir string) error {
 	defer r.Close()
 
 	targetDir = filepath.Clean(targetDir)
+	if err := validateStrictZipEntries(r.File, targetDir); err != nil {
+		return err
+	}
 	for _, f := range r.File {
-		destPath := filepath.Join(targetDir, f.Name)
-		rel, err := filepath.Rel(targetDir, destPath)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			continue // zip-slip guard
+		destPath, err := cleanArchivePath(targetDir, f.Name)
+		if err != nil {
+			return err
 		}
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(destPath, dirPermShared)
+			if err := os.MkdirAll(destPath, dirPermShared); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := extractZipEntry(f, destPath); err != nil {
@@ -142,34 +115,10 @@ func ExtractZip(zipPath, targetDir string) error {
 	return nil
 }
 
-// FindBinaryInDir recursively finds the dws binary in an extracted directory.
-func FindBinaryInDir(dir string) string {
-	candidates := []string{
-		filepath.Join(dir, "dws"),
-		filepath.Join(dir, "dws.exe"),
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
-	}
-
-	var found string
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		name := info.Name()
-		if name == "dws" || name == "dws.exe" {
-			found = path
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return found
-}
-
 func extractZipEntry(f *zip.File, destPath string) error {
+	if f.UncompressedSize64 > uint64(maxArchiveEntrySize) {
+		return fmt.Errorf("zip 条目大小超限: %s", f.Name)
+	}
 	os.MkdirAll(filepath.Dir(destPath), dirPermShared)
 
 	rc, err := upgradeOpenZipEntry(f)
@@ -184,8 +133,17 @@ func extractZipEntry(f *zip.File, destPath string) error {
 	}
 	defer out.Close()
 
-	_, err = upgradeIOCopy(out, rc)
-	return err
+	written, copyErr := upgradeIOCopy(out, io.LimitReader(rc, maxArchiveEntrySize+1))
+	if written > maxArchiveEntrySize {
+		return fmt.Errorf("zip 条目解压后超过 %d bytes: %s", maxArchiveEntrySize, f.Name)
+	}
+	if copyErr != nil {
+		return copyErr
+	}
+	if written != int64(f.UncompressedSize64) {
+		return errors.New("zip 条目解压大小与元数据不符")
+	}
+	return nil
 }
 
 func copyFile(src, dst string, perm os.FileMode) error {

@@ -4,10 +4,12 @@
 #        VERSION=1.0.0 ./scripts/dev/build-all.sh
 set -eu
 
+export GOTOOLCHAIN=go1.25.9
+
 cd "$(dirname "$0")/../.."
 
 VERSION=${VERSION:-"0.0.0-SNAPSHOT"}
-COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+COMMIT=$(git rev-parse HEAD)
 BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 DIST_DIR="dist"
@@ -34,11 +36,13 @@ for platform in "${platforms[@]}"; do
     GOOS=${platform%/*}
     GOARCH=${platform#*/}
     
-    output_name="dws"
+    # post-goreleaser finalizes/signs the core before building its launcher.
+    # Keep this input layout identical to GoReleaser's candidate archives.
+    output_name="dws-core"
     archive_name="dws-${GOOS}-${GOARCH}"
     
     if [ "$GOOS" = "windows" ]; then
-        output_name="dws.exe"
+        output_name="dws-core.exe"
     fi
     
     echo "  • building ${GOOS}/${GOARCH}..."
@@ -64,6 +68,11 @@ echo "==> Calculating checksums"
 cd "$DIST_DIR"
 shasum -a 256 *.tar.gz *.zip > checksums.txt
 cd ..
+
+# Both build routes deliver the same canonical package tree, runtime payload,
+# launcher/core identity, manifest, npm staging and Homebrew formula.
+DWS_PACKAGE_VERSION="$VERSION" DWS_RELEASE_COMMIT="$COMMIT" \
+    ./scripts/release/post-goreleaser.sh
 
 echo "==> Build complete! Artifacts in $DIST_DIR/"
 ls -lh "$DIST_DIR"
