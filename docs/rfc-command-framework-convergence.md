@@ -726,8 +726,10 @@ Flags: []shortcut.Flag{
 
 - 声明即全部能力：required/enum/约束/Validate 校验的已是解析后的真实内容，`Execute`/`Invoke` 无需任何额外代码。
 - `Usage`/`Desc` 必须写明支持 `@路径`/`-`；框架不自动改写 help 文案，今日也不向 Schema 投影（新增投影字段须先过 homology 评审，避免 catalog drift）。
-- `user_required` 确认的写命令若声明 `InputStdin`：stdin 在校验阶段被消费，交互确认将 fail-closed 为 `confirmation_required`，此类调用必须显式 `--yes`（或 `--dry-run`）。
+- `user_required` 确认的写命令若声明 `InputStdin`：stdin 在校验阶段被消费，交互确认随后读到 EOF 并 fail-closed 为 `confirmation_required`（已有回归测试钉住），此类调用必须显式 `--yes`（或 `--dry-run`）。**`ConfirmFirst` + `InputStdin` 在构造期直接 panic**：该顺序下确认发生在解析之前，提示会把管道里的 payload 当成答复——首行是 `yes` 的 payload 足以授权一次破坏性操作，而 flag 本身反而拿到空值（数据被当作控制通道）。需要 guard-first 语义时改用默认顺序并要求 `--yes`。
 - **声明前先确认取值空间不会被前缀吃掉**：声明 `InputFile` 后，任何以 `@` 开头的合法值都会被当成文件路径（本产品尤其常见的是 at 提及类取值，如 `--at-user @zhangsan` 会报读取文件失败），用户只能改用 `@@` 转义；声明 `InputStdin` 后字面值 `-` 不可达（与 curl 等约定一致）。若该 flag 的正常取值可能命中这两种形态，就不要声明对应来源。
+- **空载荷原样抵达（端到端）**：从 `@文件`/stdin 解析出的取值被标记为「来源已解析」，该权威贯穿整条流水线——`rawValue` 原样返回（即使为空，不回退到别名/环境/`Default`）；约束判定把它算作「已提供」（`at_least_one`/`exactly_one` 不会因载荷为空而误判未提供）；`BuildArgs` 的 `ArgDefault` 不再二次替换它。因此「用空文件清空某字段」在声明了 `Default`/`ArgDefault` 时也成立。内联的空值仍按既有语义回退。三个例外：必填 flag 遇空载荷照常报「不能为空」；`OmitEmpty` 丢弃空载荷；声明了 `Transform` 时空载荷经 `emptyTransformResult` 收敛后该键被跳过——后两者是作者显式声明的载荷规则（省略/转换），不是把值静默换成别的东西。若空载荷必须作为 `""` 抵达后端，就不要在同一 flag 上声明 `OmitEmpty`/`Transform`。
+- **Shortcut 路径已对齐同一不变量**（`Input` 的主要落地面）：`RuntimeContext.Str` 对已解析的 payload 原样返回（不再 `TrimSpace`，避免破坏校验和/结尾换行等字节精确内容），内联取值仍保持历史的无条件 trim，故既有命令行为不变；`StrFirst` 遇到显式提供的 payload 立即采用（即使为空），不会回退到别名；`rt.InputResolvedFromSource(name)` 为类型化访问器，供领域 guard 跳过形态启发式。
 - 声明在构造期校验（fail-closed panic）：仅限 `KindString`；源值必须是 `file`/`stdin` 且不重复。
 
 **今日实现与目标形态的差异**（迁移到本节目标 `FlagSpec` 时收敛）：
@@ -737,6 +739,7 @@ Flags: []shortcut.Flag{
 | 源类型 | `[]string` 常量 | 类型化 `InputSource` |
 | 路径边界 | 直接本地文件 IO | 复用 §5.5.2 本地文件 effect 边界 |
 | Schema 投影 | 无（靠作者在 Usage 声明） | 声明即最终源，随 Catalog 透传 |
+| 「来源已解析」标记 | 运行时 cobra flag 注解（非 `dws.schema.*`，每次调用先重置），经 `corecmd.InputResolvedFromSource(cmd, name)` / `Ctx.InputResolvedFromSource(name)` / `rt.InputResolvedFromSource(name)` 读取；同时让空载荷在回退链中保持权威。**成立前提**：一个命令对象同一时刻只有一次执行在飞（今日 CLI 与测试均满足；`dws mcp` 只是连接信息管理命令，不是并发派发器） | 由 §5.4 的类型化 `ResolvedValues` / `ValueMeta` 携带来源，不再借用 flag 注解存运行时状态——这也是引入进程内并发派发时必须先完成的前置 |
 
 核心 FlagSpec 故意没有：
 
