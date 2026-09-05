@@ -2,7 +2,7 @@
 
 状态：**Draft（草案）**。更新日期：2026-09-06。
 
-复审发现的 `TraverseChildren` 父级解析缺口采用已确认的最小 Cobra 依赖补丁修复；wiki 手动解析已接回统一框架。本文保持 Draft，最终验证状态和逐项证据见[复审记录](unified-validation-errors-v2-review.md)。
+复审发现的 `TraverseChildren` 父级解析缺口采用已确认的最小 Cobra 依赖补丁修复；wiki 手动解析已接回统一框架。本轮架构复审和实现验证已完成，本文与 PR 按要求保持 Draft；逐项证据及合并准入限制见[复审记录](unified-validation-errors-v2-review.md)。
 
 基于 `fix/unified-validation-errors` 分支的两次提交及当前工作区补充改动。
 本文补充 [命令框架 RFC](rfc-command-framework-convergence.md) 的 §5.0，沿用

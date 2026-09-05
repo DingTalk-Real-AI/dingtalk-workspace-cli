@@ -1,6 +1,6 @@
 # 统一校验框架 v2：复审记录
 
-状态：Draft；架构阻断已修复，最终验证进行中。日期：2026-09-06。
+状态：Draft；本轮架构复审与实现验证已完成，无未解决的代码阻断。日期：2026-09-06。保留 Draft，不代表合并准入已通过。
 
 本轮以 PR #1292 的 `a2a7d779` 和当前工作区为起点。原有验证记录代表原有用例通过，不构成所有 Cobra 执行路径均已覆盖的证明。
 
@@ -32,9 +32,9 @@ Cobra 的 [Traverse 实现](https://github.com/spf13/cobra/blob/v1.10.2/command.
 | 代理解析接回统一边界 | 原二进制复现；新 ProxyParseValidationBoundary 和 app 代表用例通过；重新构建的真实二进制返回 validation/3 | 已证实 |
 | 重复执行保留状态，独立调用创建新树 | Cobra reuse/fresh fixture，凭证和 version 生命周期回归 | 已证实 |
 | I/O 不被误归类 | 招聘文件读取显式 internal/cause；drive 取消/超时保留；输入读取错误已有来源分类 | 已证实本轮涉及的路径；不宣称整个仓库业务错误已迁移 |
-| Help、Schema、输出契约 | 最终全量、二进制输出回归通过；独立生成漂移/Schema 门禁待 Linux CI 补验 | 部分已证实，尚未签署全部通过 |
+| Help、Schema、输出契约 | 最终全量、二进制输出回归通过；固定 PR head 的 Linux 生成漂移、确定性和 Schema 门禁通过 | 已证实 |
 | 性能在可比条件下确认 | 固定编译产物、同一时段交替采样，见下表 | 原 20.5% 跨时段差异未复现；新增分配已显著收敛 |
-| CI | AI Behavior 因 Draft 被仓库策略拒绝；Draft Fast Gate 在事件 base SHA 与 synthetic merge 第一父节点不一致时失败，未执行后续代码检查 | 不能称远端 CI 全绿；保持 Draft，不绕过准入 |
+| CI | 新增专项 CI 对 PR head 的依赖、框架、生成与 Schema 检查全部通过；既有 AI Behavior 因 Draft 拒绝准入，Draft Fast Gate 在 merge 父节点与事件 base 不一致时失败 | 本轮代码验证完成；仓库合并准入未通过，保持 Draft |
 
 ## 本轮补验状态
 
@@ -42,7 +42,10 @@ Cobra 的 [Traverse 实现](https://github.com/spf13/cobra/blob/v1.10.2/command.
 - `make build` 通过。最终二进制在隔离配置下，wiki 代理、audit、OA 的参数错误返回 stderr legacy validation/3，sheet revision-get 返回 stdout unified validation/3；实际退出码均为 3，另一输出流为空（wiki stderr 保留重定向提示）。
 - 加入 Traverse 回归后，门禁曾以该用例失败阻止验收；依赖补丁后已退出 0。Cobra/doc 全量测试通过，DWS 真实树扫描为 1,809 节点，5 个扩展子用例全部通过。
 - 本地 `check-generated-drift.sh` 未完成：生成器在启动时收到 SIGKILL（退出 137），更换临时目录及 `GOFLAGS=-a` 全量重编译均未改变结果。单独生成器的磁盘签名校验有效，执行仍以 -9 退出；系统日志仅提供终端防护对该进程的标记，没有明确终止原因。未修改主机防护设置，未将中断记为内容漂移或检查通过。
-- 新增 `Cobra compatibility` workflow 为 Draft PR 也运行依赖、框架、生成漂移、确定性和 Schema 门禁；在正常 Linux CI 上补验相同源码，不改变既有准入要求。远端结果尚待确认。
+- 固定 PR head `ee66854953d1cb0c9be4cb80c8304cab5018f6b2` 的 [Linux CI #33985390886](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33985390886) 全部通过。日志明确 checkout 该提交：依赖及框架门禁覆盖 1,809 节点、5 个扩展场景；生成漂移与两次组装确定性通过；Schema 契约通过（31 产品、1,357 工具）。此结果补齐本地独立生成器无法执行的验证，不改写本地 SIGKILL 记录。
+- 较早的 [CI #33984836718](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33984836718) 也通过，但默认 checkout 的是合并预览 `f4f87d53`（含主线 `d39d7590` 的额外命令，1,825 节点/1,370 工具）。已修正 workflow 固定 PR head；不将合并预览的数据冒充本分支数据。
+- 本地全量测试、构建及最终性能基于 `b3206646` 的生产代码；该提交至 `ee668549` 的全部 Go 源码、go.mod/go.sum 均无差异。后续交付只更新复审与方案文档，不改变已验证代码或 workflow。
+- 发布说明片段门禁、Go 格式与变更空白检查通过。Cobra 模块归档与 go.sum 的 h1 校验和匹配，42 个上游文件的原始哈希已逐一对照归档确认。
 
 ## 性能复核
 
