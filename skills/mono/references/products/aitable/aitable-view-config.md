@@ -129,12 +129,15 @@ dws aitable view update visible-fields --view-id VIEW_ID --json '["fldPrimary","
 ### view update filter / sort / group（通用，纯 --json）
 
 ```bash
-dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]'
+# 平铺条件默认 AND
+dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]'
+# OR 的 filter 数组中只放一个 OR 根节点
+dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]'
 dws aitable view update sort   --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'
 dws aitable view update group  --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'
 ```
 
-> filter/sort/group 入参格式与 `record query --filters`（对象格式）**不同**：view config 这边外层必须是数组。传对象 CLI 会自动 wrap，建议直接用数组。详见 [aitable-filter-sort.md](./aitable-filter-sort.md)。
+> filter/sort/group 入参格式与 `record query --filters`（根对象格式）**不同**：view config 写入时外层必须是数组。平铺 filter 表示 AND；数组中唯一的 `and`/`or` 根节点表示显式逻辑。当前只支持一层统一 AND 或 OR，拒绝混合嵌套；`[]` 清空筛选。传单个对象时 CLI 会自动 wrap。
 
 ### view update name（重命名）
 
