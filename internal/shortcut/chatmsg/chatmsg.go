@@ -237,10 +237,23 @@ func senderDisplayName(m map[string]any) string {
 
 // Text reads a message's textual content (tolerating common text keys and one
 // level of nesting) and runs it through CleanText.
+//
+// Interactive cards (msgtype=interactiveCard or action_card) nest their body in
+// cardContent[].children[].value (elementType TEXT).  When the MCP service
+// includes that field in the response this function extracts it.  Currently the
+// MCP service only returns the plain fallback text; the cardContent path is
+// present and ready for when the service-side schema is updated.
 func Text(m map[string]any) any {
 	for _, key := range []string{"text", "content", "msgContent", "message", "msg", "body", "plainText"} {
 		v, ok := m[key]
 		if !ok || v == nil {
+			// Fallback: check for interactive-card cardContent at the message
+			// level (alongside content/text) when the primary key is absent.
+			if key == "content" || key == "text" {
+				if extracted := extractInteractiveCardTextFromMap(m); extracted != "" {
+					return extracted
+				}
+			}
 			continue
 		}
 		switch t := v.(type) {
@@ -249,6 +262,10 @@ func Text(m map[string]any) any {
 				return CleanText(t)
 			}
 		case map[string]any:
+			// Interactive-card body: data.Content is a map with cardContent.
+			if extracted := extractInteractiveCardTextFromMap(t); extracted != "" {
+				return extracted
+			}
 			for _, inner := range []string{"text", "content", "richText", "title", "value"} {
 				if s, ok := t[inner].(string); ok && s != "" {
 					return CleanText(s)
@@ -257,6 +274,50 @@ func Text(m map[string]any) any {
 		}
 	}
 	return nil
+}
+
+// extractInteractiveCardTextFromMap extracts readable text from an
+// interactiveCard cardContent tree.  Shape (verified live from bot callbacks):
+// cardContent is an array of blocks, each with a "children" array of
+// {elementType:"TEXT", value:"..."} leaves; nested blocks recurse via their own
+// "children".
+func extractInteractiveCardTextFromMap(m map[string]any) string {
+	raw, ok := m["cardContent"]
+	if !ok || raw == nil {
+		return ""
+	}
+	leaves := cardContentLeaves(raw)
+	if len(leaves) == 0 {
+		return ""
+	}
+	return strings.Join(leaves, "")
+}
+
+// cardContentLeaves flattens an interactiveCard cardContent tree into its
+// ordered TEXT leaf values.
+func cardContentLeaves(v any) []string {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	var leaves []string
+	var walk func(items []any)
+	walk = func(items []any) {
+		for _, item := range items {
+			child, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if s, ok := child["value"].(string); ok && s != "" {
+				leaves = append(leaves, s)
+			}
+			if kids, ok := child["children"].([]any); ok {
+				walk(kids)
+			}
+		}
+	}
+	walk(arr)
+	return leaves
 }
 
 // CreateTime reads a message's create/send time under whichever candidate key is
@@ -1212,8 +1273,15 @@ func CleanText(s string) string {
 	}
 
 	// Fast path: no JSON delimiters at all — the overwhelming common case.
-	if !strings.ContainsAny(s, "{[") {
+	if !strings.ContainsAny(s, "{[\n") {
 		return s
+	}
+
+	// Interactive card: the whole body might be a single JSON blob whose
+	// top-level shape contains cardContent.  Try to parse and extract before
+	// the line-by-line rich-content heuristic.
+	if extracted := tryExtractInteractiveCardJSON(s); extracted != "" {
+		return extracted
 	}
 
 	lines := strings.Split(s, "\n")
@@ -1250,9 +1318,6 @@ func CleanText(s string) string {
 			out = append(out, extracted[i]...)
 			continue
 		}
-		// In card mode, drop only JSON shapes known to be card decoration.
-		// Unrecognised JSON may be user-authored message content and must remain
-		// verbatim even when another line contains a rich-content block.
 		if isJSON[i] && isDecoration[i] {
 			continue
 		}
@@ -1261,9 +1326,23 @@ func CleanText(s string) string {
 		}
 		out = append(out, line)
 	}
-	// anyExtracted is true here, so out always holds at least one non-empty
-	// extracted text — the joined result is never empty.
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// tryExtractInteractiveCardJSON parses a single-line JSON interactive-card body
+// (including the common `{"cardContent":[...]}` shape) and returns the
+// concatenated TEXT leaves.  Returns "" if the input is not a recognised
+// interactive card.
+func tryExtractInteractiveCardJSON(s string) string {
+	t := strings.TrimSpace(s)
+	if !strings.HasPrefix(t, "{") || !strings.Contains(t, "cardContent") {
+		return ""
+	}
+	var v map[string]any
+	if json.Unmarshal([]byte(t), &v) != nil {
+		return ""
+	}
+	return extractInteractiveCardTextFromMap(v)
 }
 
 // isKnownRichDecoration recognises the two decoration records emitted alongside

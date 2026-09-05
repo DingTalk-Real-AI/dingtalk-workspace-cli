@@ -678,3 +678,102 @@ func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *te
 		t.Fatal("non-map result was accepted")
 	}
 }
+
+func TestCrossPlatformCoverageInteractiveCardTextExtraction(t *testing.T) {
+	// Verified live shape from bot callbacks.
+	cardContent := []any{
+		"invalid-node",
+		map[string]any{
+			"children": []any{
+				map[string]any{"elementType": "TEXT", "value": "@监控机器人 "},
+				map[string]any{"elementType": "TEXT", "value": "pod_status_no_running_wbprod"},
+			},
+		},
+		map[string]any{
+			"children": []any{
+				map[string]any{"elementType": "TEXT", "value": "详情: "},
+				map[string]any{
+					"children": []any{
+						map[string]any{"elementType": "TEXT", "value": "集群: prod-cluster"},
+					},
+				},
+			},
+		},
+	}
+
+	t.Run("content map with cardContent", func(t *testing.T) {
+		msg := map[string]any{
+			"content": map[string]any{
+				"cardContent": cardContent,
+			},
+		}
+		got := Text(msg)
+		if got != "@监控机器人 pod_status_no_running_wbprod详情: 集群: prod-cluster" {
+			t.Fatalf("Text() = %q", got)
+		}
+	})
+
+	t.Run("cardContent at message top level", func(t *testing.T) {
+		msg := map[string]any{
+			"messageId":   "msg-1",
+			"cardContent": cardContent,
+		}
+		got := Text(msg)
+		if got != "@监控机器人 pod_status_no_running_wbprod详情: 集群: prod-cluster" {
+			t.Fatalf("Text() = %q", got)
+		}
+	})
+
+	t.Run("no cardContent falls through plain text", func(t *testing.T) {
+		msg := map[string]any{"content": "plain text message"}
+		got := Text(msg)
+		if got != "plain text message" {
+			t.Fatalf("Text() = %q", got)
+		}
+	})
+
+	t.Run("nil cardContent returns nil", func(t *testing.T) {
+		got := extractInteractiveCardTextFromMap(map[string]any{"cardContent": nil})
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("empty cardContent returns empty", func(t *testing.T) {
+		got := extractInteractiveCardTextFromMap(map[string]any{"cardContent": []any{}})
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("non-array cardContent returns empty", func(t *testing.T) {
+		got := extractInteractiveCardTextFromMap(map[string]any{"cardContent": "invalid"})
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("CleanText with JSON cardContent", func(t *testing.T) {
+		input := `{"cardContent":[{"children":[{"elementType":"TEXT","value":"Alert: "},{"elementType":"TEXT","value":"CPU high"}]}]}`
+		got := CleanText(input)
+		if got != "Alert: CPU high" {
+			t.Fatalf("CleanText() = %q", got)
+		}
+	})
+
+	t.Run("CleanText plain text unchanged", func(t *testing.T) {
+		input := "pod_status_no_running_wbprod"
+		got := CleanText(input)
+		if got != input {
+			t.Fatalf("CleanText() = %q, want unchanged", got)
+		}
+	})
+
+	t.Run("CleanText malformed card JSON unchanged", func(t *testing.T) {
+		input := `{"cardContent":`
+		got := CleanText(input)
+		if got != input {
+			t.Fatalf("CleanText() = %q, want unchanged", got)
+		}
+	})
+}
