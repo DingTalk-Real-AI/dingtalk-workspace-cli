@@ -17,10 +17,7 @@ import (
 )
 
 func TestPublicRootDirectExecuteResetsUnifiedResultLifecycle(t *testing.T) {
-	root := NewRootCommand(context.Background())
 	var stdout bytes.Buffer
-	root.SetOut(&stdout)
-	root.SetErr(&bytes.Buffer{})
 	run := 0
 	leaf := &cobra.Command{
 		Use: "lifecycle-repeat",
@@ -30,7 +27,11 @@ func TestPublicRootDirectExecuteResetsUnifiedResultLifecycle(t *testing.T) {
 		},
 	}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	missing := &cobra.Command{Use: "lifecycle-missing", RunE: func(*cobra.Command, []string) error { return nil }}
+	output.SetCommandRollout(missing, output.RolloutUnifiedActive)
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf, missing) })
+	root.SetOut(&stdout)
+	root.SetErr(&bytes.Buffer{})
 
 	for want := 1; want <= 2; want++ {
 		stdout.Reset()
@@ -56,9 +57,6 @@ func TestPublicRootDirectExecuteResetsUnifiedResultLifecycle(t *testing.T) {
 		}
 	}
 
-	missing := &cobra.Command{Use: "lifecycle-missing", RunE: func(*cobra.Command, []string) error { return nil }}
-	output.SetCommandRollout(missing, output.RolloutUnifiedActive)
-	root.AddCommand(missing)
 	stdout.Reset()
 	root.SetArgs([]string{"lifecycle-missing", "--format", "json"})
 	if _, err := root.ExecuteC(); err == nil || !strings.Contains(err.Error(), "without a CommandResult") {
@@ -70,10 +68,7 @@ func TestPublicRootDirectExecuteResetsUnifiedResultLifecycle(t *testing.T) {
 }
 
 func TestPublicRootRestoresStdoutAfterSuccessfulOutputPublication(t *testing.T) {
-	root := NewRootCommand(context.Background())
 	var stdout bytes.Buffer
-	root.SetOut(&stdout)
-	root.SetErr(&bytes.Buffer{})
 	run := 0
 	leaf := &cobra.Command{
 		Use: "lifecycle-output-repeat",
@@ -83,7 +78,9 @@ func TestPublicRootRestoresStdoutAfterSuccessfulOutputPublication(t *testing.T) 
 		},
 	}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+	root.SetOut(&stdout)
+	root.SetErr(&bytes.Buffer{})
 
 	target := filepath.Join(t.TempDir(), "result.json")
 	root.SetArgs([]string{"lifecycle-output-repeat", "--output", target, "--format", "json"})
@@ -120,7 +117,6 @@ func TestPublicRootDirectExecuteFailsWhenUnifiedSinkCannotPublish(t *testing.T) 
 		return errors.New("late close diagnostic")
 	}
 
-	root := NewRootCommand(context.Background())
 	leaf := &cobra.Command{
 		Use: "lifecycle-unified",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -128,7 +124,8 @@ func TestPublicRootDirectExecuteFailsWhenUnifiedSinkCannotPublish(t *testing.T) 
 		},
 	}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 	root.SetArgs([]string{"lifecycle-unified", "--output", filepath.Join(t.TempDir(), "result.json")})
 
 	executed, err := root.ExecuteC()
@@ -151,8 +148,9 @@ func TestPublicRootDirectExecutePreservesLegacyCloseError(t *testing.T) {
 		return errors.New("legacy close failed")
 	}
 
-	root := NewRootCommandWithEngine(context.Background(), nil)
-	root.AddCommand(&cobra.Command{Use: "lifecycle-legacy", RunE: func(*cobra.Command, []string) error { return nil }})
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) {
+		root.AddCommand(&cobra.Command{Use: "lifecycle-legacy", RunE: func(*cobra.Command, []string) error { return nil }})
+	})
 	root.SetArgs([]string{"lifecycle-legacy", "--output", filepath.Join(t.TempDir(), "result.txt")})
 	if _, err := root.ExecuteC(); err == nil || !strings.Contains(err.Error(), "legacy close failed") {
 		t.Fatalf("legacy direct ExecuteC error=%v, want close failure", err)
@@ -168,10 +166,11 @@ func TestPublicRootDirectExecuteClosesSinkOnHandlerError(t *testing.T) {
 		return file.Close()
 	}
 
-	root := NewRootCommand(context.Background())
-	root.AddCommand(&cobra.Command{Use: "lifecycle-error", RunE: func(*cobra.Command, []string) error {
-		return errors.New("handler failed")
-	}})
+	root := newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) {
+		root.AddCommand(&cobra.Command{Use: "lifecycle-error", RunE: func(*cobra.Command, []string) error {
+			return errors.New("handler failed")
+		}})
+	})
 	root.SetArgs([]string{"lifecycle-error", "--output", filepath.Join(t.TempDir(), "result.txt")})
 	if _, err := root.ExecuteC(); err == nil || !strings.Contains(err.Error(), "handler failed") {
 		t.Fatalf("direct ExecuteC error=%v, want handler failure", err)

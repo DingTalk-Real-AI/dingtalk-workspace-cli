@@ -24,7 +24,7 @@ func runMailDeclarationForCoverage(t *testing.T, declaration shortcut.Shortcut, 
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func mailRuntimeForCoverage(t *testing.T, declaration shortcut.Shortcut, values map[string]string) *shortcut.RuntimeContext {

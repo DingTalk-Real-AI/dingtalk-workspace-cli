@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -610,6 +611,10 @@ func newOAAttachmentCommand() *cobra.Command {
 // oaAdminQueryMaxPageSize is the pageSize upper bound of
 // get_process_instances_by_admin.
 const oaAdminQueryMaxPageSize = float64(20)
+
+func normalizeOAAdminQueryValidation(err error) error {
+	return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag_value"))
+}
 
 // validateOARequestProcessCode checks the processCode field of a decoded
 // --request payload: the tool requires it, and the backend answers a bad
@@ -1957,17 +1962,23 @@ func newOaCommand() *cobra.Command {
 			request, _ := cmd.Flags().GetString("request")
 			processCode, _ := cmd.Flags().GetString("process-code")
 			if request == "" && processCode == "" {
-				return fmt.Errorf("--request、--process-code 至少指定一个")
+				return apperrors.NewValidation("--request、--process-code 至少指定一个", apperrors.WithReason("invalid_flag_group"))
 			}
 			if request != "" {
 				for _, name := range listByAdminSimpleFlags {
 					if cmd.Flags().Changed(name) {
-						return fmt.Errorf("--request 与 --%s 不能同时指定", name)
+						return apperrors.NewValidation(
+							fmt.Sprintf("--request 与 --%s 不能同时指定", name),
+							apperrors.WithReason("invalid_flag_group"),
+						)
 					}
 				}
 			}
 			if processCode != "" && !cmd.Flags().Changed("start") {
-				return fmt.Errorf("--process-code、--start 必须同时指定（缺少 --start）")
+				return apperrors.NewValidation(
+					"--process-code、--start 必须同时指定（缺少 --start）",
+					apperrors.WithReason("invalid_flag_group"),
+				)
 			}
 			return nil
 		},
@@ -1975,36 +1986,42 @@ func newOaCommand() *cobra.Command {
 			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
 				request, err := decodeOARequest(raw)
 				if err != nil {
-					return fmt.Errorf("--request JSON 解析失败: %w", err)
+					return normalizeOAAdminQueryValidation(fmt.Errorf("--request JSON 解析失败: %w", err))
 				}
 				if err := validateOARequestProcessCode(request); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				if err := validateOARequestPageSize(request); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				if err := validateOARequestTimeRange(request); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				return callMCPTool("get_process_instances_by_admin", map[string]any{"ProcessInstanceListQueryRequest": request})
 			}
 			if err := validateRequiredFlags(cmd, "process-code", "start"); err != nil {
-				return err
+				return normalizeOAAdminQueryValidation(err)
 			}
 			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
 			if err != nil {
-				return err
+				return normalizeOAAdminQueryValidation(err)
 			}
 			cursor, err := strconv.ParseFloat(mustGetFlag(cmd, "cursor"), 64)
 			if err != nil {
-				return fmt.Errorf("--cursor 必须为数字: %w", err)
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--cursor 必须为数字: %w", err))
+			}
+			if math.IsNaN(cursor) || math.IsInf(cursor, 0) {
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--cursor 必须为有限数字，got: %s", mustGetFlag(cmd, "cursor")))
 			}
 			pageSize, err := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
 			if err != nil {
-				return fmt.Errorf("--limit 必须为数字: %w", err)
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--limit 必须为数字: %w", err))
+			}
+			if math.IsNaN(pageSize) || math.IsInf(pageSize, 0) {
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--limit 必须为有限数字，got: %s", mustGetFlag(cmd, "limit")))
 			}
 			if pageSize < 1 || pageSize > oaAdminQueryMaxPageSize {
-				return fmt.Errorf("--limit 必须在 1-%d 之间，got: %s", int(oaAdminQueryMaxPageSize), mustGetFlag(cmd, "limit"))
+				return normalizeOAAdminQueryValidation(fmt.Errorf("--limit 必须在 1-%d 之间，got: %s", int(oaAdminQueryMaxPageSize), mustGetFlag(cmd, "limit")))
 			}
 			request := map[string]any{
 				"processCode": mustGetFlag(cmd, "process-code"),
@@ -2015,10 +2032,10 @@ func newOaCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("end"); v != "" {
 				endMs, err := parseISOTimeToMillis("end", v)
 				if err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				if err := validateTimeRange(startMs, endMs); err != nil {
-					return err
+					return normalizeOAAdminQueryValidation(err)
 				}
 				request["endTime"] = formatOAAdminQueryTime(endMs)
 			}

@@ -67,7 +67,7 @@ func runDevAppCoverage(t *testing.T, declaration shortcut.Shortcut, caller *devA
 	root.SetErr(io.Discard)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(append([]string{"devapp", declaration.Command}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func runDevAppUnifiedCoverage(t *testing.T, declaration shortcut.Shortcut, caller *devAppCoverageCaller, args ...string) ([]byte, error) {
@@ -91,7 +91,7 @@ func runDevAppUnifiedCoverage(t *testing.T, declaration shortcut.Shortcut, calle
 		return err
 	}
 	root.SetArgs(append([]string{"devapp", declaration.Command}, args...))
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		return nil, err
 	}
 	return stdout.Bytes(), nil

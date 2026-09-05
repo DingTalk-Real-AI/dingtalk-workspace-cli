@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
@@ -21,7 +22,7 @@ func TestCrossPlatformCoverageChatSearchDryRunStopsBeforeRead(t *testing.T) {
 		"chat", "+chat-search", "--query", "项目", "--page-size", "20",
 		"--cursor", "cursor-1", "--exclude-muted", "--dry-run",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 0 {
@@ -41,7 +42,7 @@ func TestCrossPlatformCoverageChatSearchPageAllUsesOpaqueCursorAndDeduplicates(t
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--page-size", "1", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].args["cursor"] != "0" || fake.calls[1].args["cursor"] != "cursor-2" {
@@ -72,7 +73,7 @@ func TestCrossPlatformCoverageChatSearchProbesMaximumWindowWhenBackendFalselyEnd
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--page-size", "1", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].args["limit"] != 1 || fake.calls[1].args["limit"] != 100 {
@@ -97,7 +98,7 @@ func TestCrossPlatformCoverageChatSearchPageTokenAndPageLimit(t *testing.T) {
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--page-token", "cursor-2", "--page-all", "--page-limit", "1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].args["cursor"] != "cursor-2" {
@@ -126,7 +127,7 @@ func TestCrossPlatformCoverageChatSearchFailureModes(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--page-all"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("expected later-page error")
 		}
 		var payload map[string]any
@@ -146,7 +147,7 @@ func TestCrossPlatformCoverageChatSearchFailureModes(t *testing.T) {
 		root := newPlatformCoverageRoot()
 		root.SetOut(&bytes.Buffer{})
 		root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--page-size", "1", "--page-all"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("missing pagination unexpectedly succeeded")
 		}
 	})
@@ -158,7 +159,7 @@ func TestCrossPlatformCoverageChatSearchFailureModes(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+chat-search", "--query", "不存在"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		var payload map[string]any
@@ -182,7 +183,7 @@ func TestCrossPlatformCoverageChatSearchPaginationValidation(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+chat-search", "--query", "项目"}, args...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
 	}
@@ -196,7 +197,7 @@ func TestCrossPlatformCoverageChatSearchAdditionalPaginationEdges(t *testing.T) 
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(append([]string{"chat", "+chat-search", "--query", "项目"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -290,7 +291,7 @@ func TestCrossPlatformCoverageChatSearchAdditionalPaginationEdges(t *testing.T) 
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
 		root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--exclude-muted"})
-		if err := root.Execute(); err == nil || fake.calls[0].args["excludeMuted"] != true {
+		if err := corecmd.ExecuteForTest(root); err == nil || fake.calls[0].args["excludeMuted"] != true {
 			t.Fatalf("calls=%#v err=%v", fake.calls, err)
 		}
 	})
@@ -322,7 +323,7 @@ func TestCrossPlatformCoverageChatSearchProjectionEdges(t *testing.T) {
 	root := newPlatformCoverageRoot()
 	root.SetOut(&bytes.Buffer{})
 	root.SetArgs([]string{"chat", "+chat-search", "--query", "项目", "--cursor="})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -99,7 +100,7 @@ func TestCrossPlatformCoverageExternalContactAmbiguity(t *testing.T) {
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+dm", "--to", "张三", "--text", "你好", "--yes"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil {
 		t.Fatal("ambiguous internal and external contacts unexpectedly resolved")
 	}
@@ -157,7 +158,7 @@ func TestCrossPlatformCoverageIMObservedCompatibilityAliasesReachCanonicalInvoca
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) != 1 || fake.calls[0].tool != tt.wantTool || !reflect.DeepEqual(fake.calls[0].args[tt.wantKey], tt.wantValue) {
@@ -178,7 +179,7 @@ func TestCrossPlatformCoverageIMObservedCompatibilityAliasesConflictWithCanonica
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("conflicting aliases unexpectedly succeeded: %#v", args)
 		}
 		if len(fake.calls) != 0 {
@@ -206,7 +207,7 @@ func TestCrossPlatformCoverageChatShortcutsRejectInvalidLocalOptions(t *testing.
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.argv)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatalf("invalid options unexpectedly succeeded: %v", tc.argv)
 			}
 			if len(fake.calls) != 0 {
@@ -235,7 +236,7 @@ func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.argv)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) == 0 {
@@ -256,7 +257,7 @@ func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+dm", "--to", "张三", "--text", "你好", "--ai-tag=false", "--yes"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		send := fake.calls[len(fake.calls)-1]
@@ -279,7 +280,7 @@ func TestCrossPlatformCoverageBroadcastDryRunPublishesExecutablePlan(t *testing.
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("execute: %v; calls = %#v", err, fake.calls)
 	}
 	if len(fake.calls) != 1 ||
@@ -330,7 +331,7 @@ func TestCrossPlatformCoverageBroadcastUsesEnterpriseAliasAndUserIDFallback(t *t
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("execute: %v; calls = %#v", err, fake.calls)
 	}
 	var payload map[string]any
@@ -361,7 +362,7 @@ func TestCrossPlatformCoverageBroadcastRecipientFallbackAndSendFailure(t *testin
 		root.SetArgs([]string{
 			"chat", "+broadcast", "--to", "无名用户", "--text", "你好", "--dry-run", "--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		var payload map[string]any
@@ -382,7 +383,7 @@ func TestCrossPlatformCoverageBroadcastRecipientFallbackAndSendFailure(t *testin
 		root.SetArgs([]string{
 			"chat", "+broadcast", "--to", "张三", "--text", "你好", "--yes",
 		})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("send failure unexpectedly succeeded")
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "send_personal_message" {
@@ -424,7 +425,7 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.argv)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			call := fake.calls[len(fake.calls)-1]

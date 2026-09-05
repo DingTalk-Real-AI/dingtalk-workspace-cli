@@ -90,7 +90,7 @@ func TestFrameworkPaginatedShortcutExecutionMovesCursorToMeta(t *testing.T) {
 		cmd.SetOut(&stdout)
 		cmd.SetErr(&stderr)
 		cmd.SetArgs(tc.args)
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("%s: %v", tc.declaration.Command, err)
 		}
 		code, emitted, err := output.EmitStoredResult(cmd)

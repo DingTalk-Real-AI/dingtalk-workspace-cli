@@ -15,6 +15,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	stderrors "errors"
 	"io"
 	"slices"
@@ -24,6 +25,39 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 )
+
+type preParseExitCoderError struct{}
+
+func (*preParseExitCoderError) Error() string { return "explicit exit" }
+func (*preParseExitCoderError) ExitCode() int { return 42 }
+
+func TestCrossPlatformCoverageNewPreParseValidationErrorPreservesAuthoritativeErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "typed", err: apperrors.NewAPI("API failed")},
+		{name: "typed outside handler", err: apperrors.NewAPI("API failed", apperrors.WithCause(&pipeline.HandlerError{Phase: pipeline.PreParse, Handler: "nested", Cause: stderrors.New("raw failure")}))},
+		{name: "exit coder", err: &preParseExitCoderError{}},
+		{name: "canceled", err: context.Canceled},
+		{name: "deadline", err: context.DeadlineExceeded},
+	} {
+		for _, wrapped := range []bool{false, true} {
+			name := tc.name + "/direct"
+			input := tc.err
+			if wrapped {
+				name = tc.name + "/handler"
+				input = &pipeline.HandlerError{Phase: pipeline.PreParse, Handler: "test", Cause: tc.err}
+			}
+			t.Run(name, func(t *testing.T) {
+				got := newPreParseValidationError(input)
+				if got != tc.err || !stderrors.Is(got, tc.err) {
+					t.Fatalf("newPreParseValidationError() = %v, want %v", got, tc.err)
+				}
+			})
+		}
+	}
+}
 
 func TestCrossPlatformCoverageLeadingPersistentFlagVariantsReachTheRealCommand(t *testing.T) {
 	tests := []struct {

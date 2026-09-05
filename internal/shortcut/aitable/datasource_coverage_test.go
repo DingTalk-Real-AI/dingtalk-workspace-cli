@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -41,7 +42,7 @@ func runDatasourceShortcutCLI(t *testing.T, caller *datasourceCoverageCaller, ar
 	helpers.InitDepsForTest(t, caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs(append([]string{"aitable"}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 // ── DatasourceCreate error paths ─────────────────────────────────────────────

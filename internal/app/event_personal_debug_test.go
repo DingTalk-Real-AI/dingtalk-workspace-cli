@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -164,7 +165,7 @@ func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 			cmd.SetArgs(tc.args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
 			}
@@ -228,7 +229,7 @@ func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptI
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 			cmd.SetArgs(baseArgs)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "--format raw for VoIP events requires explicit --debug-raw-events") {
 				t.Fatalf("reused VoIP raw without debug error = %v", err)
 			}
@@ -237,7 +238,7 @@ func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptI
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 			cmd.SetArgs(append(append([]string(nil), baseArgs...), "--debug-raw-events"))
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("reused VoIP raw with explicit debug error = %v", err)
 			}
 		})
@@ -271,7 +272,7 @@ func TestEventConsumeFlattenFlagIsForwarded(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{personal.EventMention, "--flatten", "--format", "compact"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !got.Flatten || got.Common.FormatRaw != "compact" {
@@ -284,7 +285,7 @@ func TestEventConsumeDebugRawEventsRequiresUserMode(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "app", "--debug-raw-events"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
 		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}
@@ -295,7 +296,7 @@ func TestEventConsumeAsAppRejectedBeforeEventKeyValidation(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "app", personal.EventSingleChat})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
 		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}
@@ -338,7 +339,7 @@ func TestEventConsumeRetiredPersonalFlagsAreUnknown(t *testing.T) {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 			cmd.SetArgs([]string{personal.EventSingleChat, "--" + name, "x"})
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "unknown flag: --"+name) {
 				t.Fatalf("Execute() error = %v, want unknown flag", err)
 			}
@@ -357,7 +358,7 @@ func TestEventConsumeAsAppRejectedBeforePersonalParamSpecFlags(t *testing.T) {
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true
 		cmd.SetArgs(args)
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
 			t.Fatalf("Execute(%v) error = %v, want public availability guard", args, err)
 		}

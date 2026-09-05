@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -41,7 +42,7 @@ func TestCrossPlatformCoverageGetMyTasksRejectsUnsupportedPageSize(t *testing.T)
 	root.AddCommand(shortcut.Commands()...)
 	root.SetArgs([]string{"todo", "+get-my-tasks", "--size", "21"})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "--size") {
 		t.Fatalf("size 21 error = %v, want local --size validation", err)
 	}

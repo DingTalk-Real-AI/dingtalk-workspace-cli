@@ -9,6 +9,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -46,7 +47,7 @@ func runAITableResolverCLI(t *testing.T, caller *aitableResolverCaller, args ...
 	root.SetOut(stdout)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 

@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -88,7 +89,7 @@ func executeSheetImportCommand(t *testing.T, caller *sheetImportCaller, cfg impo
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return output.String(), err
 }
 
@@ -295,7 +296,7 @@ func TestSheetImportGetPropagatesJSONWriteFailure(t *testing.T) {
 			root.SilenceErrors = true
 			root.SilenceUsage = true
 			root.SetArgs([]string{"get", "--task-id", "task-write-failure"})
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), "forced JSON output failure") {
 				t.Fatalf("error = %v, want JSON write failure", err)
 			}
@@ -352,7 +353,7 @@ func TestCrossPlatformCoverageDocImportDryRunStillAcceptsMarkdownWithoutTarget(t
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs([]string{"import", "--file", filePath})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("doc import dry-run changed behavior: %v", err)
 	}
 	if len(caller.calls) != 0 {

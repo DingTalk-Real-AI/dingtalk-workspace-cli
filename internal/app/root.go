@@ -282,7 +282,6 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			exitCode = code
 			return
 		}
-		err = rewordRequiredFlagError(err)
 		var raw apperrors.RawStderrError
 		if output.UsesUnifiedResult(executed) && !stderrors.As(err, &raw) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
@@ -514,54 +513,25 @@ func errorTypeForExitCode(code int) string {
 // newPreParseValidationError keeps pipeline handler identity in internal logs
 // while exposing only the underlying parameter-domain error to CLI users.
 func newPreParseValidationError(err error) error {
-	if structured, ok := err.(*apperrors.Error); ok {
-		return structured
-	}
+	// Only the engine's direct diagnostic shell is transparent. Never search
+	// through an authoritative error to find and strip a deeper HandlerError.
 	userErr := err
-	var handlerErr *pipeline.HandlerError
-	if stderrors.As(err, &handlerErr) && handlerErr.Unwrap() != nil {
+	for {
+		handlerErr, ok := userErr.(*pipeline.HandlerError)
+		if !ok || handlerErr.Unwrap() == nil {
+			break
+		}
 		userErr = handlerErr.Unwrap()
 	}
-	return apperrors.NewValidation(
-		userErr.Error(),
+	return apperrors.NormalizeValidation(
+		userErr,
 		apperrors.WithReason("parameter_conflict"),
 		apperrors.WithHint("Remove the duplicate alias/canonical spelling and pass the parameter exactly once."),
-		apperrors.WithCause(userErr),
 	)
 }
 
 func isUnknownCommandError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown command")
-}
-
-// rewordRequiredFlagError rewrites cobra's default missing-required-flag message
-// (`required flag(s) "email" not set`) into the wukong-aligned form
-// (`missing required flag(s): --email`). cobra's ValidateRequiredFlags returns
-// this error directly (it does not pass through FlagErrorFunc), so it is
-// normalised here. The substring "required flag" is preserved for compatibility
-// with existing assertions; flag names gain the "--" prefix and quotes are
-// dropped so error output matches hardcoded cmdutil.ValidateRequiredFlags.
-func rewordRequiredFlagError(err error) error {
-	if err == nil {
-		return err
-	}
-	const pfx = "required flag(s) "
-	const sfx = " not set"
-	msg := err.Error()
-	if !strings.HasPrefix(msg, pfx) || !strings.HasSuffix(msg, sfx) {
-		return err
-	}
-	mid := strings.TrimSuffix(strings.TrimPrefix(msg, pfx), sfx)
-	var flags []string
-	for _, part := range strings.Split(mid, ", ") {
-		if name := strings.Trim(strings.TrimSpace(part), "\""); name != "" {
-			flags = append(flags, "--"+name)
-		}
-	}
-	if len(flags) == 0 {
-		return err
-	}
-	return apperrors.NewValidation(fmt.Sprintf("missing required flag(s): %s", strings.Join(flags, ", ")))
 }
 
 // flagErrorWithSuggestions provides helpful suggestions for common flag mistakes.
@@ -571,6 +541,12 @@ func rewordRequiredFlagError(err error) error {
 // 装在 root 的 FlagErrorFunc 通过 cobra 的 parent fallback 机制覆盖全命令树
 // （cobra.Command.FlagErrorFunc 沿 c.parent 递归向上查找）。
 func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
+	// Explicitly classified and interrupted errors are authoritative even when
+	// their text happens to resemble a known flag typo. Suggestions may enrich
+	// raw parser failures only; they must never relabel an existing contract.
+	if apperrors.PreserveClassification(err) {
+		return err
+	}
 	errMsg := err.Error()
 	// 尾部 hint：换行 + See '...' for usage.
 	// JSON 输出时 \n 会被序列化为字面 \n，文本输出时换行；
@@ -654,7 +630,10 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// Fallback：未命中已知别名 / SuggestFlagFix 未给建议的 flag 解析错误
 	// （missing required / ambiguous / unknown shorthand 等），仍包尾部 hint，
 	// 行为对齐 wukong / docker / kubectl。
-	return fmt.Errorf("%s%s", errMsg, tail)
+	return apperrors.NormalizeValidation(
+		fmt.Errorf("%w%s", err, tail),
+		apperrors.WithReason("invalid_flag"),
+	)
 }
 
 func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline.FlagProtection, bool) {
@@ -793,9 +772,15 @@ func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
 // optional pipeline engine for input correction. When engine is nil,
 // no pipeline processing is applied.
 func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	return newRootCommandWithAssembly(rootCtx, engine, nil)
+}
+
+// newRootCommandWithAssembly mounts caller-owned additions before the framework
+// snapshots and prepares the final tree. The callback must not execute commands.
+func newRootCommandWithAssembly(rootCtx context.Context, engine *pipeline.Engine, assemble func(*cobra.Command)) *cobra.Command {
 	registerSchemaRuntimeDelivery()
 	rootCtx, _ = output.WithResultStore(rootCtx)
-	return newRootCommandWithEngine(rootCtx, engine, true, false)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false, assemble)
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
@@ -933,7 +918,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	visit(root)
 }
 
-func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool) *cobra.Command {
+func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool, assemble ...func(*cobra.Command)) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -1182,10 +1167,18 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	if !presentationOnly {
 		hideNonDirectRuntimeCommands(root)
 	}
+	for _, mount := range assemble {
+		if mount != nil {
+			mount(root)
+		}
+	}
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX.
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
 	installReviewedFlagProtectionHandlers(root)
+	if err := corecmd.PrepareCommandTree(root); err != nil {
+		panic(fmt.Sprintf("prepare command tree: %v", err))
+	}
 	installInvocationExitHandlers(root, flags, &credentialInvocationSeen, &rootVersionRequested)
 	root.SetContext(rootCtx)
 

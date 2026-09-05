@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -70,7 +71,7 @@ func TestReportEntrySubmitRequiresRecipientFlag(t *testing.T) {
 		"--template-id", "TPL",
 		"--contents", `[{"key":"k","sort":"0","content":"c","contentType":"markdown","type":"1"}]`,
 	})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "to-user-ids") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "to-user-ids") {
 		t.Fatalf("missing --to-user-ids error = %v", err)
 	}
 }

@@ -34,7 +34,7 @@ func TestResultInvokeCarriesOneFrameworkResult(t *testing.T) {
 		_, _, err := output.EmitStoredResult(executed)
 		return err
 	}
-	if err := cmd.Execute(); err != nil {
+	if err := ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
@@ -67,7 +67,7 @@ func TestFrameworkResultInvokeErrorLegacyAndStoreEdges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := New(Spec{Use: "result", OutputRollout: tc.rollout, Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}, ResultInvoke: tc.invoke})
 			cmd.SetArgs(nil)
-			err := cmd.Execute()
+			err := ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Execute error=%v, want %q", err, tc.want)
 			}
@@ -89,7 +89,7 @@ func TestLegacyResultInvokeIsRejectedBeforeBusinessDispatch(t *testing.T) {
 		},
 	})
 	cmd.SetArgs(nil)
-	err := cmd.Execute()
+	err := ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "without an active unified-result rollout") {
 		t.Fatalf("Execute error=%v", err)
 	}

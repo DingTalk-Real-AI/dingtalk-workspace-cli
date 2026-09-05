@@ -415,11 +415,9 @@ func New(spec Spec) *cobra.Command {
 		}
 		cmd.Annotations[ConfirmFirstAnnotation] = "true"
 	}
+	var dispatch func(*cobra.Command, []string) error
 	if spec.RunE != nil {
-		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if err := runDeclaredPreflight(cmd, args, spec); err != nil {
-				return err
-			}
+		dispatch = func(cmd *cobra.Command, args []string) error {
 			if !spec.ConfirmFirst {
 				if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 					return err
@@ -427,44 +425,48 @@ func New(spec Spec) *cobra.Command {
 			}
 			return spec.RunE(cmd, args)
 		}
-		return cmd
-	}
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := runDeclaredPreflight(cmd, args, spec); err != nil {
-			return err
-		}
-		ctx := newCtx(cmd, args, spec.Flags)
-		if spec.Orchestrate != nil {
+	} else {
+		dispatch = func(cmd *cobra.Command, args []string) error {
+			ctx := newCtx(cmd, args, spec.Flags)
+			if spec.Orchestrate != nil {
+				if !spec.ConfirmFirst {
+					if err := ConfirmSafety(cmd, spec.Safety); err != nil {
+						return err
+					}
+				}
+				return spec.Orchestrate(ctx)
+			}
+			toolArgs, err := BuildArgs(cmd, spec.Flags)
+			if err != nil {
+				return err
+			}
+			for key, value := range spec.ConstParams {
+				toolArgs[key] = value
+			}
 			if !spec.ConfirmFirst {
 				if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 					return err
 				}
 			}
-			return spec.Orchestrate(ctx)
+			if spec.ResultInvoke != nil {
+				if !output.UsesUnifiedResult(cmd) {
+					return fmt.Errorf("command %q uses ResultInvoke without an active unified-result rollout", cmd.CommandPath())
+				}
+				result, err := spec.ResultInvoke(ctx, toolArgs)
+				if err != nil {
+					return err
+				}
+				return output.StoreResult(cmd.Context(), result)
+			}
+			return spec.Invoke(ctx, toolArgs)
 		}
-		toolArgs, err := BuildArgs(cmd, spec.Flags)
-		if err != nil {
+	}
+	validated := WithValidation(spec.Validate, dispatch)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := runDeclaredPreflight(cmd, args, spec); err != nil {
 			return err
 		}
-		for key, value := range spec.ConstParams {
-			toolArgs[key] = value
-		}
-		if !spec.ConfirmFirst {
-			if err := ConfirmSafety(cmd, spec.Safety); err != nil {
-				return err
-			}
-		}
-		if spec.ResultInvoke != nil {
-			if !output.UsesUnifiedResult(cmd) {
-				return fmt.Errorf("command %q uses ResultInvoke without an active unified-result rollout", cmd.CommandPath())
-			}
-			result, err := spec.ResultInvoke(ctx, toolArgs)
-			if err != nil {
-				return err
-			}
-			return output.StoreResult(cmd.Context(), result)
-		}
-		return spec.Invoke(ctx, toolArgs)
+		return validated(cmd, args)
 	}
 	return cmd
 }
@@ -492,7 +494,8 @@ func HasDeclaredConfirmFirst(cmd *cobra.Command) bool {
 	return cmd != nil && cmd.Annotations != nil && cmd.Annotations[ConfirmFirstAnnotation] == "true"
 }
 
-// runDeclaredPreflight runs the checks the Spec itself declares, in the one
+// runDeclaredPreflight resolves inputs and runs structural checks before the
+// shared WithValidation boundary executes Spec.Validate. It preserves the one
 // order both dispatch paths share. ConfirmFirst is the declared opt-out for
 // legacy guard-first commands: those confirm before parameter completeness is
 // known. Keeping this in one function is deliberate — when the RunE escape
@@ -515,13 +518,7 @@ func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
 	if err := ValidateEnums(cmd, spec.Flags); err != nil {
 		return err
 	}
-	if err := ValidateConstraints(cmd, spec.Flags, spec.Constraints); err != nil {
-		return err
-	}
-	if spec.Validate != nil {
-		return spec.Validate(cmd, args)
-	}
-	return nil
+	return ValidateConstraints(cmd, spec.Flags, spec.Constraints)
 }
 
 // validateDispatchDecl enforces "exactly one dispatcher" at build time. Like
@@ -935,7 +932,10 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 		if flag.Kind == KindInt {
 			v, err := integerValue(cmd, flag)
 			if err != nil {
-				return nil, err
+				return nil, apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			// ArgDefault floors values < 1 (cursor page-size: 0/-1 → default).
 			if v < 1 && flag.ArgDefault != "" {
@@ -984,7 +984,10 @@ func BuildArgs(cmd *cobra.Command, flags []FlagSpec) (map[string]any, error) {
 		if flag.Transform != nil {
 			value, err := flag.Transform(effective)
 			if err != nil {
-				return nil, err
+				return nil, apperrors.NormalizeValidation(
+					err,
+					apperrors.WithReason("invalid_flag_value"),
+				)
 			}
 			// Required is checked on the pre-transform string. A transform that
 			// collapses separator-only input ("," / ";") to nil/empty must still

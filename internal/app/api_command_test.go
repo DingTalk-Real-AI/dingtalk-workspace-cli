@@ -27,6 +27,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -111,7 +112,7 @@ func TestCrossPlatformCoverageRunAPIQueryStringBlocked(t *testing.T) {
 	cmd.SetErr(&stderr)
 
 	cmd.SetArgs([]string{"GET", "/v1.0/calendar/users/me/events?timeMin=2026-04-01&maxResults=10"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 
 	if err == nil {
 		t.Fatal("expected error when path contains query string, got nil")
@@ -137,7 +138,7 @@ func TestRunAPI_NoErrorWithoutQueryString(t *testing.T) {
 	cmd.SetOut(&bytes.Buffer{})
 
 	cmd.SetArgs([]string{"GET", "/v1.0/microApp/allApps"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 
 	errMsg := stderr.String()
 	if strings.Contains(errMsg, "查询参数") {
@@ -183,7 +184,7 @@ func TestCrossPlatformCoverageRunAPIDryRunHasZeroCredentialFileAndNetworkSideEff
 		"--data", "@/definitely/missing/body.json",
 		"--file", "media=/definitely/missing/upload.bin",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("dry-run should not open deferred inputs: %v\nstderr=%s", err, stderr.String())
 	}
 	if called {
@@ -209,7 +210,7 @@ func TestCrossPlatformCoverageAPIFileFlagCompatibilityAndValidation(t *testing.T
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"GET", "/v1.0/test", "--file", "demo.bin"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "GET") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "GET") {
 		t.Fatalf("GET --file error = %v", err)
 	}
 
@@ -217,7 +218,7 @@ func TestCrossPlatformCoverageAPIFileFlagCompatibilityAndValidation(t *testing.T
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"POST", "/v1.0/test", "--params", "-", "--file", "-"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "stdin") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "stdin") {
 		t.Fatalf("stdin conflict error = %v", err)
 	}
 
@@ -235,7 +236,7 @@ func TestCrossPlatformCoverageAPIFileFlagCompatibilityAndValidation(t *testing.T
 			command.SetOut(&bytes.Buffer{})
 			command.SetErr(&bytes.Buffer{})
 			command.SetArgs(tc.args)
-			if err := command.Execute(); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if err := corecmd.ExecuteForTest(command); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("file exclusion error = %v", err)
 			}
 		})
@@ -328,7 +329,7 @@ func TestCrossPlatformCoverageAPIFileStdinIsAttachedOnlyForLiveRequest(t *testin
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"POST", "/v1.0/test", "--file", "-"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -544,7 +545,7 @@ func TestCrossPlatformCoverageRawAPICommandUsesAppConfigPairEndToEnd(t *testing.
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"GET", "/v1.0/microApp/allApps"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"count": 1`) {
@@ -573,7 +574,7 @@ func TestCrossPlatformCoverageRunAPINonPaginatedResponseErrorsAreTypedAPI(t *tes
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"POST", "/v1.0/contact/users/search", "--data", `{}`})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryAPI || typed.ExitCode() != apperrors.ExitCodeAPI {
 		t.Fatalf("response error = %#v, want typed API error", err)
@@ -602,7 +603,7 @@ func TestCrossPlatformCoverageRunAPINonPaginatedPreservesLocalErrorCategories(t 
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(io.Discard)
 		cmd.SetArgs([]string{"GET", "/v1.0/microApp/allApps"})
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.ExitCode() != apperrors.ExitCodeValidation {
 			t.Fatalf("invalid jq error = %#v, want validation error", err)
@@ -635,7 +636,7 @@ func TestCrossPlatformCoverageRunAPINonPaginatedPreservesLocalErrorCategories(t 
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(io.Discard)
 		cmd.SetArgs([]string{"GET", "/v1.0/download"})
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		if err == nil {
 			t.Fatal("download to invalid local path succeeded")
 		}

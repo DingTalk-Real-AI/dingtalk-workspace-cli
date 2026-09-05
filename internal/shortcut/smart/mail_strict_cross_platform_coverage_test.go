@@ -57,7 +57,7 @@ func runSmartMailDeclaration(t *testing.T, declaration shortcut.Shortcut, caller
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageSmartMailContractsAreUnifiedAndTyped(t *testing.T) {

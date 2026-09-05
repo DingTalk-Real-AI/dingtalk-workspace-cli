@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -85,7 +86,7 @@ func executeFileCommentCommand(t *testing.T, caller *fileCommentTestCaller, stdi
 	drive.AddCommand(newDriveFileCommentCmd())
 	root.AddCommand(drive)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.Bytes(), err
 }
 

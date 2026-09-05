@@ -1,0 +1,6 @@
+--- a/command.go
++++ b/command.go
+@@ -854,0 +855,3 @@
++			if handled := c.FlagErrorFunc()(c, err); handled != nil {
++				return nil, args, handled
++			}

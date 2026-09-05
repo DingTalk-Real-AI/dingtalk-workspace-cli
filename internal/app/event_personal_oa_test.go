@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/spf13/cobra"
@@ -24,7 +25,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 	var listOut bytes.Buffer
 	list.SetOut(&listOut)
 	list.SetArgs([]string{"--category", "oa"})
-	if err := list.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(list); err != nil {
 		t.Fatalf("event list --category oa error = %v", err)
 	}
 	tests := []struct {
@@ -96,7 +97,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 		var schemaOut bytes.Buffer
 		schema.SetOut(&schemaOut)
 		schema.SetArgs([]string{eventKey, "--flatten"})
-		if err := schema.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(schema); err != nil {
 			t.Fatalf("event schema %s --flatten error = %v", eventKey, err)
 		}
 		var doc map[string]any
@@ -181,7 +182,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(&stderr)
 			cmd.SetArgs([]string{eventKey, "--dry-run"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("OA dry-run error = %v", err)
 			}
 			if !strings.Contains(stderr.String(), "event_types      : "+eventKey) {
@@ -205,7 +206,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 				cmd.SetOut(io.Discard)
 				cmd.SetErr(io.Discard)
 				cmd.SetArgs(append([]string{eventKey}, append(args, "--dry-run")...))
-				err := cmd.Execute()
+				err := corecmd.ExecuteForTest(cmd)
 				if err == nil || !strings.Contains(err.Error(), "not supported") {
 					t.Fatalf("OA consume %s error = %v, want unsupported option", args[0], err)
 				}
@@ -221,7 +222,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(&stderr)
 		cmd.SetArgs(append(append([]string(nil), oaEvents...), "--dry-run"))
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("multi OA dry-run error = %v", err)
 		}
 		for _, eventKey := range oaEvents {
@@ -247,7 +248,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(&stderr)
 		cmd.SetArgs([]string{"--subscribe-id", "oa-sub-task", "--dry-run"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("implicit reused OA dry-run error = %v", err)
 		}
 		if !strings.Contains(stderr.String(), "event_types      : "+personal.EventOAApprovalTaskCreated) {
@@ -273,7 +274,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 				cmd.SetOut(io.Discard)
 				cmd.SetErr(io.Discard)
 				cmd.SetArgs(args)
-				err := cmd.Execute()
+				err := corecmd.ExecuteForTest(cmd)
 				if err == nil || !strings.Contains(err.Error(), flag+" not supported for OA event") {
 					t.Fatalf("%s reused OA dry-run %s error = %v", mode, flag, err)
 				}
@@ -288,7 +289,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(io.Discard)
 		cmd.SetArgs([]string{"--subscribe-id", "im-sub-at", "--query", "urgent", "--dry-run"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("implicit reused IM dry-run error = %v", err)
 		}
 	})
@@ -304,7 +305,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			args := append([]string(nil), oaEvents...)
 			args = append(args, flag, value, "--dry-run")
 			cmd.SetArgs(args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "not supported for OA event") {
 				t.Fatalf("multi OA consume %s error = %v", flag, err)
 			}
@@ -336,7 +337,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs(test.args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("existing IM consume behavior changed: %v", err)
 			}
 		})
@@ -543,7 +544,7 @@ func TestPersonalOAImplicitReuseRuntimeLooksUpEventBeforeValidation(t *testing.T
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"--subscribe-id", "oa-sub-task", "--group", "cid-1"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "--group not supported for OA event "+personal.EventOAApprovalTaskCreated) {
 		t.Fatalf("implicit reused OA runtime error = %v", err)
 	}
@@ -606,7 +607,7 @@ func TestPersonalOAStatusAndStopCommandWiring(t *testing.T) {
 		"--subscribe-id", "oa-sub-task",
 		"--status", "all",
 	})
-	if err := status.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(status); err != nil {
 		t.Fatalf("OA event status error = %v", err)
 	}
 	if statusOpts.EventKey != personal.EventOAApprovalTaskCreated ||
@@ -628,7 +629,7 @@ func TestPersonalOAStatusAndStopCommandWiring(t *testing.T) {
 	event.AddCommand(newEventStopCommand())
 	root.AddCommand(event)
 	root.SetArgs([]string{"event", "stop", "oa-sub-task", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("OA event stop error = %v", err)
 	}
 	if stopOpts.SubscribeID != "oa-sub-task" || stopOpts.All {

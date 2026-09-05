@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func mustBatchOperationsJSON(t *testing.T, operations []any) string {
@@ -513,7 +515,7 @@ func executeSheetBatchCommand(t *testing.T, caller *scriptedToolCaller, cmd *cob
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func batchUpdateCoverageCommand() *cobra.Command {

@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,6 +9,11 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
+
+type helperExitCoderError struct{}
+
+func (*helperExitCoderError) Error() string { return "explicit exit" }
+func (*helperExitCoderError) ExitCode() int { return 42 }
 
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 	cause := errors.New("root cause")
@@ -129,6 +135,17 @@ func TestCrossPlatformCoverageWrapErrorPreservesFrameworkClassification(t *testi
 
 	if got := WrapErrorWithOperation(want, "contact/get_current_user_profile"); got != want {
 		t.Fatalf("WrapErrorWithOperation() = %v, want typed framework error passed through unchanged", got)
+	}
+
+	for _, authoritative := range []error{
+		&helperExitCoderError{},
+		context.Canceled,
+		context.DeadlineExceeded,
+	} {
+		want := fmt.Errorf("shortcut call: %w", authoritative)
+		if got := WrapErrorWithOperation(want, "contact/get_current_user_profile"); got != want {
+			t.Fatalf("WrapErrorWithOperation() = %v, want authoritative error %v unchanged", got, authoritative)
+		}
 	}
 }
 

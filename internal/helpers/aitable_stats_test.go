@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
@@ -22,7 +23,7 @@ func runAitableStatsCLI(t *testing.T, args ...string) (*aitableTestCaller, error
 	command.SilenceErrors = true
 	command.SilenceUsage = true
 	command.SetArgs(args)
-	return caller, command.Execute()
+	return caller, corecmd.ExecuteForTest(command)
 }
 
 func TestCrossPlatformCoverageAitableRecordsStatsForwardsValidatedContract(t *testing.T) {

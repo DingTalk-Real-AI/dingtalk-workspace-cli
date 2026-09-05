@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestWhiteboardInjectedEncodingFailures(t *testing.T) {
@@ -28,7 +30,7 @@ func TestWhiteboardInjectedEncodingFailures(t *testing.T) {
 	installWhiteboardTestCaller(t, caller)
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "n", "--yes"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "模板未通过") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "模板未通过") {
 		t.Fatalf("err=%v", err)
 	}
 
@@ -45,7 +47,7 @@ func TestDocWhiteboardInsertDryRun(t *testing.T) {
 	installWhiteboardTestCaller(t, caller)
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "n"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -188,7 +190,7 @@ func TestWhiteboardCommandValidationBranches(t *testing.T) {
 		cmd.PersistentFlags().String("jq", "", "")
 		cmd.PersistentFlags().String("fields", "", "")
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("args %v should fail", args)
 		}
 	}
@@ -200,7 +202,7 @@ func TestWhiteboardUpdateOverwriteAndSourceErrors(t *testing.T) {
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"update", "--node", "n", "--part-id", "p", "--source", writeWhiteboardFixture(t,
 		`{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}}`), "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if caller.calls[0].args["mode"] != "overwrite" {
@@ -209,7 +211,7 @@ func TestWhiteboardUpdateOverwriteAndSourceErrors(t *testing.T) {
 
 	cmd = newWhiteboardCommand()
 	cmd.SetArgs([]string{"update", "--node", "n", "--part-id", "p", "--source", filepath.Join(t.TempDir(), "missing")})
-	if err := cmd.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(cmd); err == nil {
 		t.Fatal("expected source error")
 	}
 }
@@ -225,7 +227,7 @@ func TestDocMediaUploadValidationAndSuccess(t *testing.T) {
 	file := writeWhiteboardFixture(t, "svg")
 	cmd := newDocCommand()
 	cmd.SetArgs([]string{"media", "upload", "--node", "n", "--file", file, "--name", "icon", "--mime-type", "image/custom", "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if caller.calls[0].args["fileName"] != "icon.json" || caller.calls[0].args["mimeType"] != "image/custom" {
@@ -239,7 +241,7 @@ func TestDocMediaUploadValidationAndSuccess(t *testing.T) {
 	} {
 		cmd = newDocCommand()
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("args %v should fail", args)
 		}
 	}
@@ -252,7 +254,7 @@ func TestDocMediaUploadRemainingBranches(t *testing.T) {
 	installWhiteboardTestCaller(t, caller)
 	cmd := newDocCommand()
 	cmd.SetArgs([]string{"media", "upload", "--node", "n", "--file", file})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,7 +272,7 @@ func TestDocMediaUploadRemainingBranches(t *testing.T) {
 			installWhiteboardTestCaller(t, test.caller)
 			cmd := newDocCommand()
 			cmd.SetArgs([]string{"media", "upload", "--node", "n", "--file", file, "--yes"})
-			if err := cmd.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(cmd); err == nil {
 				t.Fatal("expected upload error")
 			}
 		})
@@ -287,7 +289,7 @@ func TestDocWhiteboardInsertCallerError(t *testing.T) {
 	installWhiteboardTestCaller(t, caller)
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "n", "--yes"})
-	if err := cmd.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(cmd); err == nil {
 		t.Fatal("expected insert error")
 	}
 }

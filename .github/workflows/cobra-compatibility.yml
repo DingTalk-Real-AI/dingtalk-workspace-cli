@@ -1,0 +1,56 @@
+name: Cobra compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cobra-compatibility.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'third_party/cobra/**'
+      - 'internal/corecmd/**'
+      - 'internal/errors/**'
+      - 'internal/helpers/**'
+      - 'internal/app/**'
+      - 'scripts/policy/check-cobra-patch.sh'
+      - 'scripts/policy/check-typed-validation-errors.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cobra-compatibility.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'third_party/cobra/**'
+      - 'internal/corecmd/**'
+      - 'internal/errors/**'
+      - 'internal/helpers/**'
+      - 'internal/app/**'
+      - 'scripts/policy/check-cobra-patch.sh'
+      - 'scripts/policy/check-typed-validation-errors.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: Cobra validation boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify dependency patch and validation boundaries
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: ./scripts/policy/check-typed-validation-errors.sh
+      - name: Verify generated declarations and assembly determinism
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: ./scripts/policy/check-generated-drift.sh
+      - name: Verify Schema contract
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: ./scripts/policy/check-schema-catalog.sh

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -70,7 +71,7 @@ func TestWhiteboardQueryRoutesAndDecodesResultJSON(t *testing.T) {
 	output := installWhiteboardTestCaller(t, caller)
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "doc-1", "--part-id", "part-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].server != "whiteboard" || caller.calls[0].tool != whiteboardQueryTool {
@@ -99,7 +100,7 @@ func TestWhiteboardUpdateValidatesSourceAndRequiresConfirmation(t *testing.T) {
 	cmd := newWhiteboardCommand()
 	cmd.SetIn(strings.NewReader("no\n"))
 	cmd.SetArgs([]string{"update", "--node", "doc-1", "--part-id", "part-1", "--source", path})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("err = %v, want cancellation", err)
 	}
 	if len(caller.calls) != 0 {
@@ -108,7 +109,7 @@ func TestWhiteboardUpdateValidatesSourceAndRequiresConfirmation(t *testing.T) {
 
 	cmd = newWhiteboardCommand()
 	cmd.SetArgs([]string{"update", "--node", "doc-1", "--part-id", "part-1", "--source", path, "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != whiteboardUpdateTool {
@@ -145,7 +146,7 @@ func TestDocWhiteboardInsertBuildsCardAndReturnsPersistedPartID(t *testing.T) {
 
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "doc-1", "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 2 || caller.calls[0].tool != "insert_document_block" || caller.calls[1].tool != "list_document_blocks" {
@@ -262,7 +263,7 @@ func TestDocWhiteboardInsertFailsClosedWhenVerificationQueryFails(t *testing.T) 
 
 			cmd := newDocWhiteboardCommand()
 			cmd.SetArgs([]string{"insert", "--node", "doc-1", "--yes"})
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "回查验证失败") {
 				t.Fatalf("err = %v, want fail-closed verification error", err)
 			}
@@ -294,7 +295,7 @@ func TestDocWhiteboardInsertSoftSucceedsWhenBlockNotYetVisible(t *testing.T) {
 
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "doc-1", "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("block-not-visible must stay a soft success: %v", err)
 	}
 	// 1 次插入 + 3 次回查（attempt 0..2），其间休眠 2 次。
@@ -339,7 +340,7 @@ func TestDocWhiteboardInsertRejectsConflictingBlockAnchors(t *testing.T) {
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 			cmd.SetArgs(test.args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil {
 				t.Fatalf("args %v must be rejected as mutually exclusive", test.args)
 			}
@@ -368,7 +369,7 @@ func TestDocMediaUploadReturnsStableResourceContract(t *testing.T) {
 
 	cmd := newDocCommand()
 	cmd.SetArgs([]string{"media", "upload", "--node", "doc-1", "--file", file, "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].server != "doc" || caller.calls[0].tool != "get_doc_attachment_upload_info" {
@@ -404,7 +405,7 @@ func TestDocMediaUploadRedactsTemporaryURLFromUploadError(t *testing.T) {
 
 	cmd := newDocCommand()
 	cmd.SetArgs([]string{"media", "upload", "--node", "doc-1", "--file", file, "--yes"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || strings.Contains(err.Error(), uploadURL) || !strings.Contains(err.Error(), "<redacted upload URL>") {
 		t.Fatalf("err = %v, want redacted temporary upload URL", err)
 	}

@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
@@ -35,7 +36,7 @@ func TestCrossPlatformCoverageThreadRepliesResolvesRootMessageIDBeforeReadingRep
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+thread-replies", "--message-id", "root-message"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.args) != 2 || !reflect.DeepEqual(caller.args[0]["openMsgIds"], []string{"root-message"}) ||
@@ -58,7 +59,7 @@ func TestCrossPlatformCoverageThreadRepliesMessageResolutionFailsClosedWithoutTh
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+thread-replies", "--message-id", "ordinary-message"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryAPI || typed.Reason != "thread_context_missing" {
 		t.Fatalf("error = %#v", err)
@@ -77,7 +78,7 @@ func TestCrossPlatformCoverageThreadRepliesMessageResolutionRejectsConversationM
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--message-id", "root-message", "--group", "different-cid",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryValidation {
 		t.Fatalf("error = %#v", err)
@@ -100,7 +101,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllOrdersCompleteResultAscending(
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
 		"--page-all", "--sort", "asc",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	payload := decodeThreadRepliesPayload(t, output.Bytes())
@@ -120,7 +121,7 @@ func TestCrossPlatformCoverageThreadRepliesAscendingRequiresPageAll(t *testing.T
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--order", "asc",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("single-page asc unexpectedly succeeded")
 	}
 	if len(caller.args) != 0 {
@@ -133,7 +134,7 @@ func TestCrossPlatformCoverageThreadRepliesThreadSelectorRequiresGroup(t *testin
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+thread-replies", "--thread-id", "thread"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("thread selector without group unexpectedly succeeded")
 	}
 	if len(caller.args) != 0 {
@@ -154,7 +155,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllUsesMillisecondCursorAndDedupl
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
 		"--page-size", "2", "--page-all", "--page-limit", "5", "--no-reactions",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.args) != 2 || caller.args[0]["pageSize"] != 2 ||
@@ -186,7 +187,7 @@ func TestCrossPlatformCoverageThreadRepliesSinglePagePublishesMillisecondContinu
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-size", "1",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	payload := decodeThreadRepliesPayload(t, output.Bytes())
@@ -210,7 +211,7 @@ func TestCrossPlatformCoverageThreadRepliesSinglePageFailsClosedWithoutCursor(t 
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-size", "1",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	payload := decodeThreadRepliesPayload(t, output.Bytes())
@@ -234,7 +235,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllAcceptsEmptyTerminalPage(t *te
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
 		"--limit", "1", "--page-all", "--page-limit", "5",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	payload := decodeThreadRepliesPayload(t, output.Bytes())
@@ -256,7 +257,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllPublishesBoundedContinuation(t
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
 		"--page-all", "--page-limit", "1",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	payload := decodeThreadRepliesPayload(t, output.Bytes())
@@ -283,7 +284,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllReturnsPartialLedgerOnLaterFai
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryAPI ||
 		typed.Reason != "thread_replies_incomplete" || !typed.Retryable ||
@@ -309,7 +310,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllFailsClosedWithoutCursor(t *te
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Reason != "thread_replies_incomplete" {
 		t.Fatalf("error = %#v", err)
@@ -333,7 +334,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllFailsClosedOnStalledCursor(t *
 	root.SetArgs([]string{
 		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Reason != "thread_replies_incomplete" {
 		t.Fatalf("error = %#v", err)
@@ -395,7 +396,7 @@ func TestCrossPlatformCoverageThreadRepliesAdditionalEdges(t *testing.T) {
 			root.SetOut(&output)
 		}
 		root.SetArgs(append([]string{"chat", "+thread-replies"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -473,7 +474,7 @@ func TestCrossPlatformCoverageThreadRepliesPaginationValidationStopsBeforeRead(t
 		root.SetArgs(append([]string{
 			"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
 		}, args...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid pagination succeeded: %v", args)
 		}
 		if len(caller.args) != 0 {

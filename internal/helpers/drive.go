@@ -4814,8 +4814,18 @@ func resolveFileDomain(ctx context.Context, nodeID string) (string, error) {
 	if docErr == nil {
 		return "doc", nil
 	}
+	if errors.Is(driveErr, context.Canceled) {
+		return "", driveErr
+	}
+	if errors.Is(docErr, context.Canceled) {
+		return "", docErr
+	}
 	if isTimeoutCLIError(driveErr) || isTimeoutCLIError(docErr) {
-		return "", fmt.Errorf("路由文件所在域超时，请重试或通过 --space-id（钉盘）/ --workspace（知识库）显式指定")
+		cause := driveErr
+		if !isTimeoutCLIError(cause) {
+			cause = docErr
+		}
+		return "", fmt.Errorf("路由文件所在域超时，请重试或通过 --space-id（钉盘）/ --workspace（知识库）显式指定: %w", cause)
 	}
 	if isPermissionCLIError(driveErr) || isPermissionCLIError(docErr) {
 		return "", fmt.Errorf("无权限访问该文件，请确认权限或通过 --space-id/--workspace 显式指定所在域")
@@ -4860,6 +4870,9 @@ func parseRemoteFileName(text string) string {
 func isTimeoutCLIError(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
 	var cliErr *CLIError
 	if errors.As(err, &cliErr) {

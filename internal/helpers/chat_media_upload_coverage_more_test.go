@@ -3,6 +3,8 @@ package helpers
 import (
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestCrossPlatformCoverageChatMediaUploadIsDeprecatedCompatibilityStub(t *testing.T) {
@@ -24,7 +26,7 @@ func TestCrossPlatformCoverageChatMediaUploadIsDeprecatedCompatibilityStub(t *te
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--file", "/path/that/does/not/exist.png", "--type", "image"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Fatal("deprecated media upload returned nil error")
 	}

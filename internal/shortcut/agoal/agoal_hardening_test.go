@@ -65,7 +65,7 @@ func runAgoalCoverage(t *testing.T, declaration shortcut.Shortcut, caller *agoal
 	root.SetErr(io.Discard)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(append([]string{productAgoal, declaration.Command}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func agoalRegistered(command string) (shortcut.Shortcut, bool) {

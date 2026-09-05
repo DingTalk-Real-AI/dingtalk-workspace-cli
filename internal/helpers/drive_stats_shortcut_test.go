@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -53,7 +54,7 @@ func executeDriveStatsShortcutCommand(t *testing.T, caller *driveStatsShortcutCa
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestDriveStatsShortcutCommandsRegistered(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -93,7 +94,7 @@ func runDriveCmdWithoutConfirm(t *testing.T, caller edition.ToolCaller, args ...
 
 	testseam.Swap(t, &os.Args, append([]string{"dws", "drive"}, args...))
 	root.SetArgs(append([]string{"drive"}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 // ──────────────────────────────────────────────────────────

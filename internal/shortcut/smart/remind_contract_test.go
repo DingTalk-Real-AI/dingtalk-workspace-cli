@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
@@ -31,7 +32,7 @@ func TestRemindShortcutWritesAtOnlyAsDueTime(t *testing.T) {
 		"--at", "2026-03-10T18:00:00+08:00",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("execute +remind: %v", err)
 	}
 	if len(fake.calls) != 3 {
@@ -61,7 +62,7 @@ func TestRemindShortcutRejectsInvalidAtBeforeTodoCreate(t *testing.T) {
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"todo", "+remind", "--task", "交周报", "--at", "tomorrow", "--yes"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "--at 时间格式无效") {
 		t.Fatalf("error = %v, want invalid --at validation", err)
 	}

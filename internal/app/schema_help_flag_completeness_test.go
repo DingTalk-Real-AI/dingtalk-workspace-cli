@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -61,7 +62,7 @@ func deliverySchemaAllToolsForHelpFlagTest(t testing.TB, root *cobra.Command) ma
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"schema", "--all", "--format", "json"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("execute delivery schema --all: %v; stderr=%s", err, stderr.String())
 	}
 	var payload struct {

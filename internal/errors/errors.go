@@ -15,6 +15,7 @@ package errors
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -351,6 +352,33 @@ func NewAuth(message string, opts ...Option) error {
 // NewValidation returns a validation-category error.
 func NewValidation(message string, opts ...Option) error {
 	return newError(CategoryValidation, message, opts...)
+}
+
+// PreserveClassification reports whether adapting err must preserve its original
+// identity, category and exit code. It follows wrapped errors; nil is false.
+func PreserveClassification(err error) bool {
+	if err == nil {
+		return false
+	}
+	var typed *Error
+	var exitCoder ExitCoder
+	return stderrors.As(err, &typed) || stderrors.As(err, &exitCoder) ||
+		stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded)
+}
+
+// NormalizeValidation converts an untyped error produced by an authoritative
+// parameter-validation phase into the repository's validation error contract.
+// Errors that already carry an explicit category or exit code pass through
+// unchanged, as do cancellation and deadline errors. Callers must use this at
+// the validation boundary rather than infer categories from error messages.
+func NormalizeValidation(err error, opts ...Option) error {
+	if err == nil || PreserveClassification(err) {
+		return err
+	}
+	options := make([]Option, 0, len(opts)+1)
+	options = append(options, WithCause(err))
+	options = append(options, opts...)
+	return NewValidation(err.Error(), options...)
 }
 
 // NewDiscovery returns a discovery-category error.

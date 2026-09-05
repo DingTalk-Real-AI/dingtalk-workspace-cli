@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeSheetReadCompletionCommand(t *testing.T, caller *scriptedToolCaller, args ...string) (*bytes.Buffer, error) {
@@ -20,7 +22,7 @@ func executeSheetReadCompletionCommand(t *testing.T, caller *scriptedToolCaller,
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	return stdout, cmd.Execute()
+	return stdout, corecmd.ExecuteForTest(cmd)
 }
 
 func decodeSheetReadOutput(t *testing.T, stdout *bytes.Buffer) map[string]any {

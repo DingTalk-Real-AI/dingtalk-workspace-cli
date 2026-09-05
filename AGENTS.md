@@ -43,6 +43,25 @@ Schema contract) keep separate authorities — do not merge them with
 
 ## Command framework declaration
 
+- 第三阶段 CI 门禁覆盖框架拥有的参数校验边界：Cobra `Args`、flag parser、
+  required/group constraint、`corecmd.Spec.Validate` 和 metadata-only
+  `LeafSpec.Validate` 均须保持 `validation` / exit code 3。命令自有的
+  `PreRunE` / `RunE` 不是自动归类边界，其中的参数校验必须显式使用
+  `internal/errors.NewValidation`；框架权威校验阶段可通过
+  `internal/errors.NormalizeValidation` 统一转换。禁止在输出层根据错误文案
+  猜测类别，已分类错误及取消/超时错误必须原样透传。
+- 参数校验执行由 `corecmd.WithValidation(validate, next)` 编排：Validate 失败时
+  不调用 next，next 的业务错误原样透传。Tier1 与 metadata-only Tier2 共用该边界。
+  `corecmd.New` 只构造命令；独立执行前必须在完成挂载后调用一次
+  `corecmd.PrepareCommandTree(root)`，再使用 Cobra `Execute` / `ExecuteC`。
+  app root 工厂已完成准备，不重复准备，也不在其返回后追加命令或替换校验钩子。
+  测试扩展通过组装回调挂载；独立命令测试可使用 `corecmd.*ForTest` 执行辅助函数。
+  重复执行保持 Cobra 的 flag 值和 Changed 状态；需要独立参数状态时从工厂创建新树。
+  错误保留规则统一使用 `internal/errors.PreserveClassification`。
+- Cobra v1.10.2 的本地依赖替换仅修复 `Traverse` 父级解析调用 flag handler 的缺口；
+  来源、补丁和升级约束见 `third_party/cobra/PATCHES.md`。修改依赖或统一校验框架时运行
+  `scripts/policy/check-typed-validation-errors.sh`（包含原始源码完整性与 Cobra 全量测试）。
+  根模块 `go test ./...` 不会覆盖该嵌套模块，不能替代依赖专项门禁。
 - Framework definition: `docs/rfc-command-framework-convergence.md` **§5.0**
 - Today (leaf): `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
 - Today (non-leaf): owning Cobra command → complete `corecmd.GroupPolicy{Mode, Positionals, Recovery}` → `corecmd.ApplyGroupPolicy`; the final assembled-tree gate rejects undeclared groups and stale group declarations on leaves

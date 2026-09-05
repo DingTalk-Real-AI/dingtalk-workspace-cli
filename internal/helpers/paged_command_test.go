@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -109,7 +110,7 @@ func executePagedCommandTestWithContext(t *testing.T, ctx context.Context, calle
 	AddPagedMCPFlags(cmd)
 	cmd.SetErr(errOut)
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if buf, ok := out.(*bytes.Buffer); ok {
 		return buf.String(), errOut.String(), err
 	}

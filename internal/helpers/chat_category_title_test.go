@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -64,7 +65,7 @@ func TestCrossPlatformCoverageCategoryCommandsRejectInvalidTitles(t *testing.T) 
 	} {
 		cmd := newChatCommand()
 		cmd.SetArgs(argv)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("newChatCommand(%v) unexpectedly accepted an invalid title", argv)
 		}
 	}
