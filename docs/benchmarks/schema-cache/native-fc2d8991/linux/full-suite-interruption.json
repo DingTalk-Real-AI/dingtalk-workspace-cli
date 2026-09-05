@@ -1,0 +1,59 @@
+{
+  "source_commit": "fc2d8991f6fc3d446eadf363ad3b25cbfba1ae07",
+  "run_url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33998082608",
+  "job_id": 101391994411,
+  "conclusion": "failure",
+  "exit_code": 143,
+  "job_log_sha256": "a52908d19d5e96cebc53901d1ebb2ebf05e27266780f2a1fb5c8d1b7a60a3ba7",
+  "job_log_bytes": 301416,
+  "progress_events": 26,
+  "last_progress": {
+    "timestamp": "2026-09-05T23:20:03.1448672Z",
+    "active": {
+      "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app": [
+        "TestAllShortcutsAITableDatasourceExamplesSourceConfigHasRequiredMembers"
+      ],
+      "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli": [
+        "TestSchemaRuntimeChildQueryParityAllAssembledLocators"
+      ]
+    },
+    "memory": {
+      "available_mib": 117,
+      "cgroup_v2": {
+        "memory.current": "16155054080",
+        "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+        "memory.max": "max",
+        "memory.peak": "16175882240",
+        "path": "/sys/fs/cgroup/system.slice/hosted-compute-agent.service"
+      },
+      "largest_test_or_runner_processes": [
+        {
+          "name": "app.test",
+          "rss_mib": 14652
+        },
+        {
+          "name": "cli.test",
+          "rss_mib": 298
+        },
+        {
+          "name": "go",
+          "rss_mib": 69
+        },
+        {
+          "name": "Runner.Listener",
+          "rss_mib": 46
+        },
+        {
+          "name": "Runner.Worker",
+          "rss_mib": 43
+        }
+      ],
+      "total_mib": 15993
+    }
+  },
+  "termination_lines": [
+    "2026-09-05T23:20:16.6478294Z ##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.",
+    "2026-09-05T23:20:16.6479752Z ##[error]Process completed with exit code 143."
+  ],
+  "interpretation": "Severe host memory pressure is observed before runner shutdown. cgroup OOM counters remain zero; the shutdown mechanism is not proven. A separate real-root GC regression reproduces strong command metadata retention. Native full-suite validation of its fix remains required."
+}

@@ -1,0 +1,5 @@
+--- FAIL: TestCrossPlatformCoverageSchemaSourceRootsAreCollectible (5.04s)
+    schema_root_lifetime_test.go:28: discarded Schema source root remains reachable through framework metadata
+FAIL
+FAIL	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	5.877s
+FAIL

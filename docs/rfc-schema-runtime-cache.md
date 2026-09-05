@@ -29,6 +29,36 @@
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
 
+### 命令树生命周期与最新原生隔离结果
+
+`fc2d8991` 的 Linux 完整 suite 退出前，`app.test` RSS 达 14,652 MiB，整机可用内存
+仅 117 MiB；cgroup `oom`/`oom_kill` 仍为 0，随后 runner shutdown/143。
+[中断证据](benchmarks/schema-cache/native-fc2d8991/linux/full-suite-interruption.json)
+记录完整 job 日志 SHA-256 和最后一次内存观测。现在可确认严重内存压力，尚不能把
+具体 shutdown 机制表述为已证实的 OOM。
+
+真实 `NewSchemaSourceRootCommand` 的 GC 回归证实：ContractFinal、boolean ConstParams
+和 helpers 校验钩子的全局强键 map 会保留叶子、父节点、整棵树及其输出缓冲。修复采用
+框架内 `commandstore.Map`：键为标准库 `weak.Pointer[cobra.Command]`，`runtime.AddCleanup`
+回收过期条目，lookup/Range 保持活动命令存活。声明 DTO 仍由原注册入口克隆与持有，
+不能包含命令指针；执行钩子可能捕获命令，因此 lookup 的值也为弱引用，强所有权留在
+已安装的 RunE pipeline。不能用全局 Clear、删除测试、丢弃校验或调低并发掩盖泄漏。
+标准库的弱指针与 cleanup 语义见 [Go 官方说明](https://go.dev/blog/cleanups-and-weak)。
+
+本机 Go 1.25.9 已通过真实 Schema/public 根回收、闭包引用环回收、GC 后 Validate 保留、
+并发元数据读写以及 ContractFinal 克隆/冲突的定向 race；app 的 Wiki/AITable 全量输出用例
+连续三轮通过。CLI TestMain 和 drift 脚本都在启动独立生成器时收到 SIGKILL，未完成本轮
+检查；不能用旧 head 的 policy 通过记录替代。仍需新 head 的 native 全量、声明一致性及性能验证。
+
+同次旧 head 的两平台候选进程与文件命中指标通过：完整 Meta file-hit 七轮中位数
+Linux 4.741 ms、macOS 3.244 ms；macOS 的真实生成器在 clean/repeat/hostile 三种环境
+下均通过允许文件、禁止文件、禁止网络的正反控制，完整 identity bytes 一致。
+[原生隔离报告](benchmarks/schema-cache/native-fc2d8991/darwin/identity-environment.json)
+仍明确标记 `release_eligible=false`：wall clock、被拒绝后忽略的访问尝试与最终签名制品
+证明均未完成。Linux 在 loopback 初始化时被拒绝，
+[失败记录](benchmarks/schema-cache/native-fc2d8991/linux/identity-environment-failure.json)
+不能算作有效的隔离证明。
+
 ### 正式发布包的版本合同验证
 
 正式 release workflow 的 Darwin 验证 job 曾在 `set -u` 下读取未注入的

@@ -64,6 +64,10 @@ Schema contract) keep separate authorities — do not merge them with
   - homology gates → `internal/cli/homology`
   - Catalog assembly / `ResolveMeta` (`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`); go:embed only for reviewed inputs → `internal/cli` root (package-local aliases for annotate/store APIs live in `runtime_schema_seam.go`; the former `cli/runtimeannotate` / `cli/contractfinal` shim packages are removed — import `corecmd/*` directly)
   - **Hard rule**: `internal/corecmd` (and its subpackages) must **not** import any `internal/cli` package
+- Command metadata must not keep discarded Cobra trees alive. Use framework
+  `commandstore.Map` weak keys for DTO metadata; values must not reference commands.
+  Execution-hook lookups must also use weak values when closures can capture a
+  command; the installed RunE pipeline owns those hooks strongly.
 - Authoring tiers (current, not aspirational):
   - **Tier1** — `corecmd.New` / `helpers.NewLeafCommand` (fully managed declare + execute)
   - **Tier2** — `DeclareLeafMetadata` (helpers migration; **Shortcut may also use this path — acceptable**)

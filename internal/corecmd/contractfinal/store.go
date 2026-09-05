@@ -15,15 +15,15 @@ package contractfinal
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 )
 
-var contractFinalByCommand sync.Map // *cobra.Command → *contract.ContractFinalPayload
+var contractFinalByCommand commandstore.Map // live command → *contract.ContractFinalPayload
 
 // RegisterRuntimeContractFinal annotates dws.schema.contract then stores the
 // typed final Schema overlay. This is the atomic annotate+store implementation.
@@ -145,7 +145,8 @@ func HasRuntimeContractFinal(cmd *cobra.Command) bool {
 // invocation identity. declared distinguishes a matched declaration whose
 // safety is unavailable or conflicting from a legacy invocation with no unified
 // declaration context. Repeated equivalent command-tree registrations are
-// accepted; conflicting matches fail closed with ok=false.
+// accepted; conflicting matches fail closed with ok=false. Only live commands
+// participate; the invocation owner must retain its command tree.
 func ResolveRuntimeSafety(canonicalPath, cliPath string) (safety contract.SafetySpec, declared, ok bool) {
 	canonicalPath = strings.TrimSpace(canonicalPath)
 	cliPath = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(cliPath), "dws "))

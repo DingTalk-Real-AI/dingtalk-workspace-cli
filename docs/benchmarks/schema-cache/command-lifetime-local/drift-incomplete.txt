@@ -1,0 +1,1 @@
+./scripts/policy/check-generated-drift.sh: line 48: 98490 Killed: 9               "$param_aliases_generator" -root . -output "$param_aliases_tmp"

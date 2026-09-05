@@ -1,0 +1,8 @@
+{
+  "source_commit": "fc2d8991f6fc3d446eadf363ad3b25cbfba1ae07",
+  "job_id": 101391994235,
+  "passed": false,
+  "release_eligible": false,
+  "failure": "bubblewrap failed to configure loopback: Failed RTM_NEWADDR: Operation not permitted",
+  "scope": "Positive allowed-file control could not execute; no identity sandbox proof was produced. Native process and file-hit reports passed independently before this stage."
+}

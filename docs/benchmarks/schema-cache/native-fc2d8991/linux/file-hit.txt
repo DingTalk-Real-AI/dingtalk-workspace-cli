@@ -1,0 +1,20 @@
+goos: linux
+goarch: amd64
+pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime
+cpu: AMD EPYC 7763 64-Core Processor
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     229	   5198916 ns/op	 3477818 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     255	   4741456 ns/op	 3477819 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     256	   4690818 ns/op	 3477818 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     254	   4763620 ns/op	 3477820 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     250	   4739949 ns/op	 3477818 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     252	   4757874 ns/op	 3477821 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     252	   4691424 ns/op	 3477812 B/op	   40698 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     134	   8943491 ns/op	 4320047 B/op	   68584 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     132	   9040716 ns/op	 4319566 B/op	   68583 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     132	   9018275 ns/op	 4319718 B/op	   68583 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     134	   8924073 ns/op	 4319508 B/op	   68583 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     132	   9035177 ns/op	 4319826 B/op	   68584 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     132	   9089934 ns/op	 4319985 B/op	   68584 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     132	   9051776 ns/op	 4319982 B/op	   68583 allocs/op
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	17.658s

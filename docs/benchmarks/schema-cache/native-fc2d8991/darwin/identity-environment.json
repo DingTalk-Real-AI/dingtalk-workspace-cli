@@ -1,0 +1,114 @@
+{
+  "scope": "Check native identity generation with isolated files and no host network.\n\nDevelopment evidence only: wall-clock independence and final signed-artifact\nproof remain separate requirements. This report never enables release caches.",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "source_commit": "fc2d8991f6fc3d446eadf363ad3b25cbfba1ae07",
+  "source_dirty": false,
+  "generator_sha256": "aaee288a31b2b1fea4318876169c8947810435fd15bac9d52a138f23812350f3",
+  "identity_sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+  "wall_clock_independence_proven": false,
+  "forbidden_access_attempts_audited": false,
+  "final_artifact_proven": false,
+  "release_eligible": false,
+  "passed": true,
+  "runs": [
+    {
+      "name": "clean-first",
+      "controls": {
+        "allowed_fixture_read": true,
+        "non_fixture_read_blocked": true,
+        "host_network_blocked": true
+      },
+      "identity_byte_equal": true,
+      "sandbox_argv": [
+        "/usr/bin/sandbox-exec",
+        "-p",
+        "(version 1)\n(deny default)\n(import \"dyld-support.sb\")\n(allow sysctl-read)\n(allow process-info* (target self))\n(allow signal (target self))\n(allow file-write-data (subpath \"/dev/fd\") (literal \"/dev/null\"))\n(allow file-read* file-map-executable (subpath \"/System/Library\") (subpath \"/usr/lib\"))\n(allow file-read* (literal \"/dev/urandom\") (literal \"/dev/random\") (literal \"/dev/null\"))\n(allow file-read* (literal \"/private/etc/ssl/openssl.cnf\"))\n(allow file-read* (subpath \"/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/fixture\") (subpath \"/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-first\"))\n(allow file-read* file-map-executable (literal \"/Users/runner/work/_temp/schema-identity-generator\") (literal \"/bin/cat\") (literal \"/usr/bin/curl\"))\n(allow process-exec (literal \"/Users/runner/work/_temp/schema-identity-generator\") (literal \"/bin/cat\") (literal \"/usr/bin/curl\"))"
+      ],
+      "environment": {
+        "HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-first",
+        "TMPDIR": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-first",
+        "XDG_CONFIG_HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-first/config",
+        "XDG_CACHE_HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-first/cache",
+        "DO_NOT_TRACK": "1",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "TZ": "UTC",
+        "PATH": "/usr/bin:/bin"
+      },
+      "sandbox_argv_sha256": "ddb56692ae4a03306a3adc02c25b91d6de33a519ff0bd77b48440fdd8ee55b65",
+      "exit_code": 0
+    },
+    {
+      "name": "clean-repeat",
+      "controls": {
+        "allowed_fixture_read": true,
+        "non_fixture_read_blocked": true,
+        "host_network_blocked": true
+      },
+      "identity_byte_equal": true,
+      "sandbox_argv": [
+        "/usr/bin/sandbox-exec",
+        "-p",
+        "(version 1)\n(deny default)\n(import \"dyld-support.sb\")\n(allow sysctl-read)\n(allow process-info* (target self))\n(allow signal (target self))\n(allow file-write-data (subpath \"/dev/fd\") (literal \"/dev/null\"))\n(allow file-read* file-map-executable (subpath \"/System/Library\") (subpath \"/usr/lib\"))\n(allow file-read* (literal \"/dev/urandom\") (literal \"/dev/random\") (literal \"/dev/null\"))\n(allow file-read* (literal \"/private/etc/ssl/openssl.cnf\"))\n(allow file-read* (subpath \"/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/fixture\") (subpath \"/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-repeat\"))\n(allow file-read* file-map-executable (literal \"/Users/runner/work/_temp/schema-identity-generator\") (literal \"/bin/cat\") (literal \"/usr/bin/curl\"))\n(allow process-exec (literal \"/Users/runner/work/_temp/schema-identity-generator\") (literal \"/bin/cat\") (literal \"/usr/bin/curl\"))"
+      ],
+      "environment": {
+        "HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-repeat",
+        "TMPDIR": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-repeat",
+        "XDG_CONFIG_HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-repeat/config",
+        "XDG_CACHE_HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/clean-repeat/cache",
+        "DO_NOT_TRACK": "1",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "TZ": "UTC",
+        "PATH": "/usr/bin:/bin"
+      },
+      "sandbox_argv_sha256": "43de79741f2af8d59ac75b7d1a8aed180e15e993c066d302642aae48e3bacea5",
+      "exit_code": 0
+    },
+    {
+      "name": "hostile",
+      "controls": {
+        "allowed_fixture_read": true,
+        "non_fixture_read_blocked": true,
+        "host_network_blocked": true
+      },
+      "identity_byte_equal": true,
+      "sandbox_argv": [
+        "/usr/bin/sandbox-exec",
+        "-p",
+        "(version 1)\n(deny default)\n(import \"dyld-support.sb\")\n(allow sysctl-read)\n(allow process-info* (target self))\n(allow signal (target self))\n(allow file-write-data (subpath \"/dev/fd\") (literal \"/dev/null\"))\n(allow file-read* file-map-executable (subpath \"/System/Library\") (subpath \"/usr/lib\"))\n(allow file-read* (literal \"/dev/urandom\") (literal \"/dev/random\") (literal \"/dev/null\"))\n(allow file-read* (literal \"/private/etc/ssl/openssl.cnf\"))\n(allow file-read* (subpath \"/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/fixture\") (subpath \"/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/hostile\"))\n(allow file-read* file-map-executable (literal \"/Users/runner/work/_temp/schema-identity-generator\") (literal \"/bin/cat\") (literal \"/usr/bin/curl\"))\n(allow process-exec (literal \"/Users/runner/work/_temp/schema-identity-generator\") (literal \"/bin/cat\") (literal \"/usr/bin/curl\"))"
+      ],
+      "environment": {
+        "HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/hostile",
+        "TMPDIR": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/hostile",
+        "XDG_CONFIG_HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/hostile/config",
+        "XDG_CACHE_HOME": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/hostile/cache",
+        "DO_NOT_TRACK": "1",
+        "LANG": "tr_TR.UTF-8",
+        "LC_ALL": "tr_TR.UTF-8",
+        "TZ": "Pacific/Honolulu",
+        "PATH": "/nonexistent-schema-proof-path",
+        "HTTP_PROXY": "http://127.0.0.1:1",
+        "HTTPS_PROXY": "http://127.0.0.1:1",
+        "ALL_PROXY": "http://127.0.0.1:1",
+        "DWS_PROFILE": "schema-proof-hostile",
+        "DWS_CONFIG_DIR": "/Users/runner/.dws-native-33998082608-1/dws-identity-environment-ddv5aqjz/hostile/unconfigured",
+        "DWS_SCHEMA_CACHE_DISABLE": "1",
+        "DWS_AGENT_HOST": "invalid-proof-host",
+        "DWS_AGENT_PRODUCT": "invalid-proof-product",
+        "SOURCE_DATE_EPOCH": "1"
+      },
+      "sandbox_argv_sha256": "91eaef2eed023f642967966851221445e89c39ba7eb643d882e7c0995e795b31",
+      "exit_code": 0
+    }
+  ],
+  "os_policy_inputs_sha256": {
+    "/System/Library/Sandbox/Profiles/dyld-support.sb": "06215a5d32689aefe395c29710e182eb54ba22162f50df8b4842290f8a19bf1c",
+    "/private/etc/ssl/openssl.cnf": "025f5e31cd7b2248a0a661d8d346452c31d98e280f3420c3f6017c74c829ae73"
+  },
+  "fixture_sha256": {
+    "read-control.txt": "15a9ee7b7456af02120a7427a2b42609342333a9fcae6173d080dfe8acb0933b",
+    "internal/cli/schemacachepb/schema_cache.pb.go": "6c4f5280b1e95a61cd708f057c29b09d2e52dc2b953f2dc474aee54d3a002668",
+    "internal/cli/schemacachepb/schema_cache.proto": "a3db67d69fbd326f96473ee594b4482a038c7a1dbe2a1544968a90e9333b0c68"
+  }
+}

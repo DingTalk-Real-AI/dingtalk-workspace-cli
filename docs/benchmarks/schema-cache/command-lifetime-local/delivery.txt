@@ -1,0 +1,5 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	6.526s
+schema package-cli TestMain: run cmd_schema_catalog: signal: killed
+
+FAIL	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli	14.050s
+FAIL

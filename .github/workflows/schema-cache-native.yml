@@ -95,11 +95,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
+          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime ./internal/corecmd/... \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
           go test -race -count=1 -timeout=15m ./internal/app ./cmd \
-            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|LauncherVersion|Main|CLITracker)' \
+            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|LauncherVersion|Main|CLITracker|SchemaSourceRoots)' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/core-fast-path-race.txt"
+          go test -race -count=1 -timeout=15m ./internal/helpers \
+            -run 'TestCrossPlatformCoverageContractValidation|TestSheetMutationGuard|TestUserRequiredSafetyHomology|TestDeclareLeafMetadata' \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/validation-lifetime-race.txt"
           go test -race -count=1 -timeout=15m ./internal/cli \
             -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache|AssemblyAudit|AssemblyAuditFailureIsolation)|TestPersistentSchemaCacheRealConcurrentRepair)$' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-race.txt"

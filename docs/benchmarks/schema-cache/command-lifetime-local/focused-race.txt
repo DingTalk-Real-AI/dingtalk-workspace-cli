@@ -1,0 +1,7 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd	1.551s [no tests to run]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore	2.304s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract	2.668s [no tests to run]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal	3.045s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate	1.924s [no tests to run]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	2.172s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	2.920s
