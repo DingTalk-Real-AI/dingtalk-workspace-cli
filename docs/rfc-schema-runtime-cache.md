@@ -182,7 +182,12 @@ commit 的 **committer time，UTC RFC3339**：GoReleaser 的 `{{.CommitDate}}` �
 隔离出无 core 的 launcher 副本也必须输出同样的完整版本文本。此项本地回归通过不替代正式签名制品验证。
 本轮修复后的本机完整 candidate 构建、runtime payload 注入与 ad-hoc 签名成功；core、launcher、
 无 core 副本的实际 `--version` 均收到 SIGKILL（returncode -9，无 stdout/stderr），因此仍未取得
-本机版本运行通过证据。保留系统保护，不将这个结果改记为测试通过；由后续原生 CI 独立核验。
+本机版本运行通过证据。[该候选的系统日志](benchmarks/schema-cache/version-metadata-local/amfid.txt)
+明确记录 amfid `AppleMobileFileIntegrityError -423`，原因为 ad-hoc 签名或未知证书链；
+[三次执行结果](benchmarks/schema-cache/version-metadata-local/version-parity.json) 与
+[dirty-source build recipe](benchmarks/schema-cache/version-metadata-local/candidate-build.json) 一并保留。
+这是本机签名信任拒绝的证据，不是 version 断言通过，也不能推出其他机器结果。保留系统保护，
+由原生 CI 补运行对照，正式生产启用仍须 Developer ID/notarization 和最终制品验收。
 
 
 ### 并发与采样复核
