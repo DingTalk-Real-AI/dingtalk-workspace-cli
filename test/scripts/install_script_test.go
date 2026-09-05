@@ -3482,8 +3482,8 @@ upstream_agent_registry
 				t.Fatalf("%s registry failed: %v\n%s", scriptName, err, output)
 			}
 			lines := strings.Fields(strings.TrimSpace(string(output)))
-			if len(lines) != 76 {
-				t.Fatalf("%s registry has %d Agents, want 76", scriptName, len(lines))
+			if len(lines) != 77 {
+				t.Fatalf("%s registry has %d Agents, want 77", scriptName, len(lines))
 			}
 			ids := map[string]bool{}
 			roots := map[string]bool{}
@@ -3511,7 +3511,7 @@ upstream_agent_registry
 					roots[parts[2]] = true
 				}
 			}
-			if universal != 19 || nonUniversal != 57 || noGlobal != 2 || canonicalDirect != 6 || len(roots) != 65 {
+			if universal != 19 || nonUniversal != 58 || noGlobal != 2 || canonicalDirect != 6 || len(roots) != 66 {
 				t.Fatalf("%s registry classification U=%d N=%d no-global=%d canonical=%d roots=%d", scriptName, universal, nonUniversal, noGlobal, canonicalDirect, len(roots))
 			}
 		})
