@@ -1,12 +1,13 @@
 syntax = "proto3";
 
-package dws.schemacache.v1;
+package dws.schemacache.v2;
 
 option go_package = "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb;schemacachepb";
 
 enum DTOVersion {
   DTO_VERSION_UNSPECIFIED = 0;
-  DTO_VERSION_V1 = 1;
+  DTO_VERSION_V1 = 1; // Recognized only so readers can explicitly reject retired DTOs.
+  DTO_VERSION_V2 = 2;
 }
 
 enum OverviewSummaryKind {
@@ -70,35 +71,30 @@ message RegistryFields {
 }
 
 message CommandMetaEntryList { repeated CommandMetaEntry items = 1; }
+// DTO v2 stores one complete metadata value in each row. The retired v1
+// nested meta field is reserved, never reinterpreted as a scalar.
 message CommandMetaEntry {
   string lookup_path = 1;
-  CommandMeta meta = 2;
-}
-message CommandMeta {
-  CommandIdentity identity = 1;
-  CommandSafety safety = 2;
-  CommandSelection selection = 3;
-}
-message CommandIdentity {
-  string cli_path = 1;
-  string canonical = 2;
-  StringList aliases = 3;
-  string product_id = 4;
-  string title = 5;
-}
-message CommandSafety {
-  string effect = 1;
-  string risk = 2;
-  string confirmation = 3;
-  string idempotency = 4;
-}
-message CommandSelection {
-  string agent_summary = 1;
-  StringList use_when = 2;
-  StringList avoid_when = 3;
-  StringList prerequisites = 4;
-  StringList tips = 5;
-  StringList examples = 6;
+  reserved 2;
+  reserved "meta";
+  string cli_path = 3;
+  string canonical = 4;
+  string product_id = 5;
+  string title = 6;
+  string effect = 7;
+  string risk = 8;
+  string confirmation = 9;
+  string idempotency = 10;
+  string agent_summary = 11;
+  repeated string aliases = 12;
+  repeated string use_when = 13;
+  repeated string avoid_when = 14;
+  repeated string prerequisites = 15;
+  repeated string tips = 16;
+  repeated string examples = 17;
+  // Bits 0..5 correspond to the six lists above. A set bit distinguishes
+  // present-empty from nil; nonempty lists require their bit. Other bits fail.
+  uint32 lists_present = 18;
 }
 
 message SchemaOverviewCache {

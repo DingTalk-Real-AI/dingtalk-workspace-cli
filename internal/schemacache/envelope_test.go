@@ -54,17 +54,18 @@ func TestEnvelopeRejectsEveryFixedFieldViolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := map[string]func([]byte){
-		"magic":          func(b []byte) { b[0] ^= 1 },
-		"version":        func(b []byte) { binary.BigEndian.PutUint16(b[8:10], 2) },
-		"header size":    func(b []byte) { binary.BigEndian.PutUint16(b[10:12], 207) },
-		"kind":           func(b []byte) { b[12] = 3 },
-		"serializer":     func(b []byte) { b[13] = 1 },
-		"codec":          func(b []byte) { b[14] = 1 },
-		"flags":          func(b []byte) { b[15] = 1 },
-		"DTO version":    func(b []byte) { binary.BigEndian.PutUint32(b[16:20], 2) },
-		"public version": func(b []byte) { binary.BigEndian.PutUint32(b[20:24], 0) },
-		"raw lengths":    func(b []byte) { binary.BigEndian.PutUint64(b[32:40], 2) },
-		"reserved":       func(b []byte) { b[207] = 1 },
+		"magic":               func(b []byte) { b[0] ^= 1 },
+		"version":             func(b []byte) { binary.BigEndian.PutUint16(b[8:10], 2) },
+		"header size":         func(b []byte) { binary.BigEndian.PutUint16(b[10:12], 207) },
+		"kind":                func(b []byte) { b[12] = 3 },
+		"serializer":          func(b []byte) { b[13] = 1 },
+		"codec":               func(b []byte) { b[14] = 1 },
+		"flags":               func(b []byte) { b[15] = 1 },
+		"DTO version":         func(b []byte) { binary.BigEndian.PutUint32(b[16:20], DTOFormatVersion+1) },
+		"retired DTO version": func(b []byte) { binary.BigEndian.PutUint32(b[16:20], 1) },
+		"public version":      func(b []byte) { binary.BigEndian.PutUint32(b[20:24], 0) },
+		"raw lengths":         func(b []byte) { binary.BigEndian.PutUint64(b[32:40], 2) },
+		"reserved":            func(b []byte) { b[207] = 1 },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {

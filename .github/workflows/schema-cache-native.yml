@@ -31,8 +31,12 @@ jobs:
         include:
           - runner: ubuntu-latest
             target: linux-amd64
+            protoc_archive: protoc-35.1-linux-x86_64.zip
+            protoc_sha256: 6930ebf62bd4ea607b98fff052596c6ee564b9835b4ce172c75a3f53ae9d91b7
           - runner: macos-latest
             target: darwin-arm64
+            protoc_archive: protoc-35.1-osx-aarch_64.zip
+            protoc_sha256: 193289af0470c6a1aada357d4fba0bbf8d78bfaac8b5e42ca30af2ef75583de2
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     env:
@@ -61,6 +65,25 @@ jobs:
           mkdir -m 0700 "$private_tmp"
           echo "TMPDIR=$private_tmp" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/schema-evidence"
+      - name: Check generated protobuf with the pinned native compiler
+        shell: bash
+        env:
+          PROTOC_ARCHIVE: ${{ matrix.protoc_archive }}
+          PROTOC_SHA256: ${{ matrix.protoc_sha256 }}
+        run: |
+          set -euo pipefail
+          compiler_dir="$TMPDIR/protoc"
+          mkdir -m 0700 "$compiler_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v35.1/$PROTOC_ARCHIVE" \
+            --output "$compiler_dir/compiler.zip"
+          python3 - "$compiler_dir/compiler.zip" "$PROTOC_SHA256" <<'PYVERIFY'
+          import hashlib, pathlib, sys
+          assert hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest() == sys.argv[2], "protoc archive SHA-256 mismatch"
+          PYVERIFY
+          unzip -q "$compiler_dir/compiler.zip" -d "$compiler_dir"
+          PROTOC="$compiler_dir/bin/protoc" ./scripts/generate-schema-cache-proto.sh --check
+          git diff --exit-code -- internal/cli/schemacachepb
       - name: Test cache integrity and concurrency
         shell: bash
         run: |

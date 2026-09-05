@@ -10,7 +10,7 @@ import (
 const (
 	HeaderSize             = 208
 	EnvelopeVersion        = uint16(1)
-	DTOFormatVersion       = uint32(1)
+	DTOFormatVersion       = uint32(2)
 	SerializerProtobuf     = uint8(2)
 	CodecRaw               = uint8(0)
 	MaxMetaFileSize        = uint64(4 << 20)

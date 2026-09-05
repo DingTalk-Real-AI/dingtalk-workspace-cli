@@ -1,0 +1,190 @@
+go: downloading github.com/spf13/cobra v1.10.2
+go: downloading github.com/google/uuid v1.6.0
+go: downloading github.com/spf13/pflag v1.0.9
+go: downloading google.golang.org/protobuf v1.33.0
+go: downloading github.com/mattn/go-isatty v0.0.20
+go: downloading golang.org/x/sys v0.42.0
+go: downloading github.com/gorilla/websocket v1.5.0
+go: downloading github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
+go: downloading golang.org/x/text v0.35.0
+go: downloading github.com/charmbracelet/bubbletea v1.3.6
+go: downloading github.com/charmbracelet/huh v1.0.0
+go: downloading github.com/charmbracelet/lipgloss v1.1.0
+go: downloading github.com/muesli/termenv v0.16.0
+go: downloading github.com/fatih/color v1.18.0
+go: downloading github.com/itchyny/gojq v0.12.18
+go: downloading github.com/zalando/go-keyring v0.2.8
+go: downloading github.com/ebitengine/purego v0.10.2
+go: downloading github.com/RealAlexandreAI/json-repair v0.0.15
+go: downloading golang.org/x/image v0.31.0
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading golang.org/x/crypto v0.49.0
+go: downloading github.com/yuin/goldmark v1.8.5
+go: downloading github.com/creack/pty v1.1.24
+go: downloading github.com/charmbracelet/x/ansi v0.9.3
+go: downloading github.com/charmbracelet/x/term v0.2.1
+go: downloading github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
+go: downloading github.com/muesli/cancelreader v0.2.2
+go: downloading golang.org/x/sync v0.20.0
+go: downloading github.com/catppuccin/go v0.3.0
+go: downloading github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
+go: downloading github.com/charmbracelet/x/cellbuf v0.0.13
+go: downloading github.com/mitchellh/hashstructure/v2 v2.0.2
+go: downloading github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0
+go: downloading github.com/rivo/uniseg v0.4.7
+go: downloading github.com/mattn/go-colorable v0.1.13
+go: downloading github.com/aymanbagabas/go-osc52/v2 v2.0.1
+go: downloading github.com/lucasb-eyer/go-colorful v1.2.0
+go: downloading github.com/itchyny/timefmt-go v0.1.7
+go: downloading github.com/dustin/go-humanize v1.0.1
+go: downloading github.com/mattn/go-runewidth v0.0.19
+go: downloading github.com/atotto/clipboard v0.1.4
+go: downloading github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc
+go: downloading github.com/clipperhouse/uax29/v2 v2.3.0
+go: downloading github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
+go: downloading github.com/clipperhouse/stringish v0.1.1
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli	0.008s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd	0.033s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/dws-launcher	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/fetch_mcp_metadata	0.146s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/interface-snapshot	2.149s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient	0.487s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	1672.640s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit	0.252s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth	122.265s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli	1149.930s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/homology	2.794s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	14.933s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd	0.032s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction	0.030s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd	0.743s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract	0.021s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal	0.023s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate	0.012s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors	0.029s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event	0.025s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus	1.521s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl	1.459s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume	3.676s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/dedup	0.015s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/lock	0.026s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal	2.486s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/process	0.051s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/registry	0.015s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred	0.082s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source	0.293s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport	0.054s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor	0.013s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/agentmetadata	0.988s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_command_path_fallbacks	0.155s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_param_aliases	0.064s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_agent_metadata	4.076s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_cache_identity	0.137s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_catalog	168.759s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_registry_smoke	0.125s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/outputguard	0.039s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	169.862s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers/chat	0.063s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers/doc	0.026s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n	0.017s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot	0.079s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil	0.012s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain	0.106s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/launcher	0.046s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio	1.480s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging	0.021s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/mcpschema	0.040s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto	0.038s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message	0.016s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output	0.043s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/packagemanifest	0.107s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat	0.067s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline	0.021s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers	0.030s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin	1.420s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilectx	0.013s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp	0.053s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/registry	0.013s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext	0.225s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimepayload	1.586s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety	0.012s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache	0.202s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader	0.015s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/security	2.282s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut	0.055s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/agoal	0.043s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aisearch	0.030s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitable	1.479s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget	0.011s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/attendance	0.042s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin	116.440s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendar	0.038s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendarcompat	0.011s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat	1.155s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg	0.012s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/contact	0.038s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/devapp	0.034s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/devdoc	0.038s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/ding	0.030s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/doc	3.375s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/docresolver	0.008s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/drive	0.059s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/hrbrain	0.040s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/live	0.034s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/mail	0.078s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutes	1.294s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata	0.012s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/oa	0.034s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/pat	0.042s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/report	0.050s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck	0.007s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/sheet	0.051s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/smart	3.418s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver	0.017s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/todo	0.061s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage	0.081s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef	0.054s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/whiteboard	0.095s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/wiki	0.270s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillpaths	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance	0.023s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate	0.051s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata	0.013s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam	0.012s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport	2.563s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui	0.013s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade	2.552s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct	0.011s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/asynctask	0.060s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/authretry	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cli	0.042s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil	0.020s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config	0.017s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta	0.009s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/convert	0.013s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition	0.011s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/editiontest	0.010s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes	0.010s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging	0.107s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/runtimetoken	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate	0.010s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/build/package-manifest	0.036s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/build/runtime-payload	4.358s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/commandcompat	64.143s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/coverage-gate	0.602s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/interface-baseline	0.118s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/multi-doc-skill-chain	6.517s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/multi-im-skill-chain	6.796s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/schema-compat	0.118s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/schemacompat	83.782s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/skill-command-check	0.079s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/skills	0.022s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/cli	7.650s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/contract	0.027s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/integration/extensions	0.022s [no tests to run]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp	5.721s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/scripts	552.594s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/smoke	11.526s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/unit	2.558s

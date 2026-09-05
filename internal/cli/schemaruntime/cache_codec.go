@@ -19,7 +19,7 @@ import (
 
 const (
 	// SchemaCacheDTOVersion is the independently validated private DTO version.
-	SchemaCacheDTOVersion = 1
+	SchemaCacheDTOVersion = 2
 	MaxSchemaMetaBytes    = 4 << 20
 	MaxSchemaProductBytes = 8 << 20
 	MaxSchemaShardData    = 64<<20 - 208
@@ -256,7 +256,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 			return BuiltSchemaCache{}, fmt.Errorf("convert product %q: %w", registry.Products[i].ID, conversionErr)
 		}
 		root := &schemacachepb.SchemaProductCache{
-			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V1,
+			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V2,
 			Registry:   registryFieldsToProto(registry),
 			Product:    product,
 		}
@@ -282,7 +282,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	result.RegistryDataSize = uint64(len(result.ProductShards))
 	result.RegistrySHA256 = sha256.Sum256(result.ProductShards)
 	meta := &schemacachepb.SchemaMetaCache{
-		DtoVersion:         schemacachepb.DTOVersion_DTO_VERSION_V1,
+		DtoVersion:         schemacachepb.DTOVersion_DTO_VERSION_V2,
 		Registry:           registryFieldsToProto(registry),
 		CommandEntries:     commandLookupToProto(lookup),
 		Overview:           overviewToProto(overview),
@@ -363,7 +363,7 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
 		return DecodedSchemaProduct{}, err
 	}
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V1 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V2 {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q DTO version is %d, want %d", descriptor.ProductID, root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetProduct() == nil {
@@ -457,7 +457,7 @@ func DecodeAllSchemaProducts(shards []byte, meta DecodedSchemaMeta) (SchemaRegis
 }
 
 func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaMeta, error) {
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V1 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V2 {
 		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta DTO version is %d, want %d", root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetOverview() == nil || root.GetCommandEntries() == nil || root.GetLocators() == nil || root.GetProductDescriptors() == nil {
@@ -500,14 +500,17 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 
 	last := ""
 	for i, entry := range root.CommandEntries.Items {
-		if entry == nil || entry.GetMeta() == nil || entry.Meta.GetIdentity() == nil || entry.Meta.GetSafety() == nil || entry.Meta.GetSelection() == nil {
+		if entry == nil {
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta command entry %d is incomplete", i)
 		}
 		if entry.GetLookupPath() == "" || (i > 0 && entry.GetLookupPath() <= last) {
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta command lookup keys are empty, duplicate, or unsorted at %q", entry.GetLookupPath())
 		}
 		last = entry.GetLookupPath()
-		commandMeta := commandMetaFromProto(entry.Meta)
+		if err := validateCommandMetaListPresence(entry); err != nil {
+			return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta command entry %q: %w", entry.GetLookupPath(), err)
+		}
+		commandMeta := commandMetaFromProto(entry)
 		if commandMeta.Identity.CLIPath == "" || commandMeta.Identity.Canonical == "" || commandMeta.Identity.ProductID == "" {
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta command entry %q has incomplete identity", entry.GetLookupPath())
 		}
@@ -540,7 +543,9 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta CommandMeta entries are not an exact primary/alias expansion")
 	}
 
+	result.commandCountByProduct = make(map[string]int, len(products))
 	for path, meta := range result.CommandMetaByPath {
+		result.commandCountByProduct[meta.Identity.ProductID]++
 		if !products[meta.Identity.ProductID] || result.LocatorProductByPath[path] != meta.Identity.ProductID {
 			return DecodedSchemaMeta{}, fmt.Errorf("CommandMeta %q has inconsistent product locator", path)
 		}
@@ -552,10 +557,6 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 	}
 	// Product verification needs an exact subset cardinality and global-key
 	// lookup, not another heap copy of every large CommandMeta value.
-	result.commandCountByProduct = make(map[string]int, len(products))
-	for _, commandMeta := range result.CommandMetaByPath {
-		result.commandCountByProduct[commandMeta.Identity.ProductID]++
-	}
 	result.locatorCountByProduct = make(map[string]int, len(products))
 	for _, productID := range result.LocatorProductByPath {
 		result.locatorCountByProduct[productID]++
@@ -665,13 +666,7 @@ func rejectUnknownFieldsAndEnums(message proto.Message) error {
 			}
 		}
 	case *schemacachepb.CommandMetaEntry:
-		return check(value.Meta)
-	case *schemacachepb.CommandMeta:
-		return check(value.Identity, value.Safety, value.Selection)
-	case *schemacachepb.CommandIdentity:
-		return check(value.Aliases)
-	case *schemacachepb.CommandSelection:
-		return check(value.UseWhen, value.AvoidWhen, value.Prerequisites, value.Tips, value.Examples)
+		return nil
 	case *schemacachepb.SchemaOverviewCache:
 		return check(value.Registry, value.Products)
 	case *schemacachepb.OverviewProductList:
@@ -777,7 +772,7 @@ func rejectUnknownFieldsAndEnums(message proto.Message) error {
 	case *schemacachepb.FieldCandidate:
 		return check(value.Value, value.Selected)
 	case *schemacachepb.StringList, *schemacachepb.BytesValue, *schemacachepb.BoolValue, *schemacachepb.IntValue,
-		*schemacachepb.CommandSafety, *schemacachepb.LocatorEntry, *schemacachepb.Positional, *schemacachepb.DryRun,
+		*schemacachepb.LocatorEntry, *schemacachepb.Positional, *schemacachepb.DryRun,
 		*schemacachepb.Pagination, *schemacachepb.Safety, *schemacachepb.InterfaceRef:
 		return nil
 	default:

@@ -6,6 +6,7 @@ package schemaruntime
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb"
@@ -29,41 +30,60 @@ func commandLookupToProto(in map[string]CommandMeta) *schemacachepb.CommandMetaE
 	keys := sortedMapKeys(in)
 	out := &schemacachepb.CommandMetaEntryList{Items: make([]*schemacachepb.CommandMetaEntry, len(keys))}
 	for i, key := range keys {
-		out.Items[i] = &schemacachepb.CommandMetaEntry{LookupPath: key, Meta: commandMetaToProto(in[key])}
+		out.Items[i] = commandMetaToProto(in[key])
+		out.Items[i].LookupPath = key
 	}
 	return out
 }
 
-func commandMetaToProto(in CommandMeta) *schemacachepb.CommandMeta {
-	return &schemacachepb.CommandMeta{
-		Identity: &schemacachepb.CommandIdentity{
-			CliPath: in.Identity.CLIPath, Canonical: in.Identity.Canonical, Aliases: stringsToProto(in.Identity.Aliases),
-			ProductId: in.Identity.ProductID, Title: in.Identity.Title,
-		},
-		Safety: &schemacachepb.CommandSafety{
-			Effect: in.Safety.Effect, Risk: in.Safety.Risk, Confirmation: in.Safety.Confirmation, Idempotency: in.Safety.Idempotency,
-		},
-		Selection: &schemacachepb.CommandSelection{
-			AgentSummary: in.Selection.AgentSummary, UseWhen: stringsToProto(in.Selection.UseWhen), AvoidWhen: stringsToProto(in.Selection.AvoidWhen),
-			Prerequisites: stringsToProto(in.Selection.Prerequisites), Tips: stringsToProto(in.Selection.Tips), Examples: stringsToProto(in.Selection.Examples),
-		},
+const commandMetaListCount = 6
+
+func commandMetaToProto(in CommandMeta) *schemacachepb.CommandMetaEntry {
+	out := &schemacachepb.CommandMetaEntry{
+		CliPath: in.Identity.CLIPath, Canonical: in.Identity.Canonical, ProductId: in.Identity.ProductID, Title: in.Identity.Title,
+		Effect: in.Safety.Effect, Risk: in.Safety.Risk, Confirmation: in.Safety.Confirmation, Idempotency: in.Safety.Idempotency,
+		AgentSummary: in.Selection.AgentSummary,
+		Aliases:      slices.Clone(in.Identity.Aliases), UseWhen: slices.Clone(in.Selection.UseWhen), AvoidWhen: slices.Clone(in.Selection.AvoidWhen),
+		Prerequisites: slices.Clone(in.Selection.Prerequisites), Tips: slices.Clone(in.Selection.Tips), Examples: slices.Clone(in.Selection.Examples),
 	}
+	for bit, list := range commandMetaProtoLists(out) {
+		if list != nil {
+			out.ListsPresent |= 1 << bit
+		}
+	}
+	return out
 }
 
-func commandMetaFromProto(in *schemacachepb.CommandMeta) CommandMeta {
-	identity, safety, selection := in.GetIdentity(), in.GetSafety(), in.GetSelection()
+func commandMetaProtoLists(in *schemacachepb.CommandMetaEntry) [commandMetaListCount][]string {
+	return [commandMetaListCount][]string{in.Aliases, in.UseWhen, in.AvoidWhen, in.Prerequisites, in.Tips, in.Examples}
+}
+
+func validateCommandMetaListPresence(in *schemacachepb.CommandMetaEntry) error {
+	if in.ListsPresent & ^uint32((1<<commandMetaListCount)-1) != 0 {
+		return fmt.Errorf("unknown metadata list presence bits")
+	}
+	for bit, list := range commandMetaProtoLists(in) {
+		if len(list) != 0 && in.ListsPresent&(1<<bit) == 0 {
+			return fmt.Errorf("nonempty metadata list %d has no presence bit", bit)
+		}
+	}
+	return nil
+}
+
+// Copy into runtime-owned slices; no generated pointer or backing slice escapes.
+// An explicit set bit restores present-empty even when protobuf omits its values.
+func commandMetaFromProto(in *schemacachepb.CommandMetaEntry) CommandMeta {
+	var lists [commandMetaListCount][]string
+	for bit, values := range commandMetaProtoLists(in) {
+		if in.ListsPresent&(1<<bit) != 0 {
+			lists[bit] = make([]string, len(values))
+			copy(lists[bit], values)
+		}
+	}
 	return CommandMeta{
-		Identity: CommandIdentity{
-			CLIPath: identity.GetCliPath(), Canonical: identity.GetCanonical(), Aliases: stringsFromProto(identity.GetAliases()),
-			ProductID: identity.GetProductId(), Title: identity.GetTitle(),
-		},
-		Safety: CommandSafety{
-			Effect: safety.GetEffect(), Risk: safety.GetRisk(), Confirmation: safety.GetConfirmation(), Idempotency: safety.GetIdempotency(),
-		},
-		Selection: CommandSelection{
-			AgentSummary: selection.GetAgentSummary(), UseWhen: stringsFromProto(selection.GetUseWhen()), AvoidWhen: stringsFromProto(selection.GetAvoidWhen()),
-			Prerequisites: stringsFromProto(selection.GetPrerequisites()), Tips: stringsFromProto(selection.GetTips()), Examples: stringsFromProto(selection.GetExamples()),
-		},
+		Identity:  CommandIdentity{CLIPath: in.CliPath, Canonical: in.Canonical, Aliases: lists[0], ProductID: in.ProductId, Title: in.Title},
+		Safety:    CommandSafety{Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency},
+		Selection: CommandSelection{AgentSummary: in.AgentSummary, UseWhen: lists[1], AvoidWhen: lists[2], Prerequisites: lists[3], Tips: lists[4], Examples: lists[5]},
 	}
 }
 

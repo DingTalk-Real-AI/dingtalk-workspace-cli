@@ -23,7 +23,7 @@
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | exact version 与严格 argv 的 JSON overview/product/group/leaf 已接通；共用 reader/typed renderer；仅显式 DO_NOT_TRACK 且确认无扩展/兼容警告时命中 | 新 head 原生 core-free 精确输出证明、默认上报优化、竞争性进程指标和逐次 core hashing 成本 |
 | 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | upstream 合并后本机完整 file-hit Meta 3.739 ms / 3.90 MB，selected 5.203 ms / 4.32 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
-| 全量验证 | Go 1.25.9 CLI/app 包通过；组件回归与 Meta comparator 全字段测试通过；schemacache/launcher/packagemanifest/Meta comparator race 通过；4 项 release fixture 回归通过 | 全套仍未绿：构建期间源码修改导致 schemaruntime import graph 失败（冻结后该包已通过）；stdio/helper 子进程退出与生成器被系统终止待解决；完整 scripts 已通过（361 s），全量 suite 仍失败 |
+| 全量验证 | 89c38222 的 macOS 完整 Go suite 通过（app 1672.640 s、cli 1149.930 s、scripts 552.594 s）；v2 组件 race 与完整 delivery parity 已本机通过 | Linux full-suite 被 runner shutdown 终止；当前 v2 head 的两平台全量测试与独立 policy/release proof 仍待完成 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
@@ -45,7 +45,7 @@ Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能�
 包含薄 Schema 入口与 Meta 分配优化，但早于本次 upstream 同步和用户 shortcut 诊断修复。
 其 Linux full-suite job 在运行中收到 runner shutdown 信号并以 143 退出，always-upload 也未
 执行；job 日志未给出完整测试结论，不能记为通过或当作某项断言失败。剩余 native job 的
-最终状态与合并后 head 的原生验证仍须分别核对。
+macOS 的[完整 Go suite 日志](benchmarks/schema-cache/native-89c38222/darwin-arm64/full-suite.txt)确认所有包通过；合并后及 DTO v2 head 的原生验证仍须重新核对。
 
 这轮[原始 native 证据](benchmarks/schema-cache/native-89c38222/)已确认两平台 core-free
 launcher 的精确 stdout parity、四进程冷启动/损坏修复和 CPU/RSS 门槛通过；identity JSON
@@ -175,7 +175,7 @@ Cache，并采用 Meta + product-sharded Registry 两层派生物，而不是让
 
 | 消费路径 | 缓存内容 | 编码 | 压缩 | 当前样本 | 决策理由 |
 |---|---|---|---|---:|---|
-| 普通业务命令、leaf help、`ResolveMeta` | generated `SchemaMetaCache` protobuf v1 | deterministic protobuf | 不压缩 | overview/locator-inclusive Meta mirror 718,182 B | decode + complete lookup p50 约 1.44 ms、2.44 MB allocated；gob 的约 0.15 ms 差异不足以证明收益，统一 protobuf 可减少 parser/format 面 |
+| 普通业务命令、leaf help、`ResolveMeta` | generated `SchemaMetaCache` protobuf DTO v2 (historical v1 prototype measurements) | deterministic protobuf | 不压缩 | overview/locator-inclusive Meta mirror 718,182 B | decode + complete lookup p50 约 1.44 ms、2.44 MB allocated；gob 的约 0.15 ms 差异不足以证明收益，统一 protobuf 可减少 parser/format 面 |
 | `dws schema` leaf/product/group | `SchemaMetaCache` 内的 path→product locator + concatenated generated product protobuf shards | deterministic protobuf | 不压缩 | 31 shards 合计 14,927,893 B；目标 calendar shard 549,488 B | Meta resolve 后的 Registry stage：authenticated locator + `pread` + shard SHA-256 + decode/conversion + product-local `Index()` p50 约 4.35 ms、3.80 MB allocated |
 | `dws schema --all` | 同一 product shard container | deterministic protobuf | 不压缩 | 与完整 Registry protobuf 相比只增加 7,170 B payload | 逐 shard 认证/解码后组装完整 Registry 并做全局 `Index()`；不维护第二份 monolith |
 
@@ -187,7 +187,7 @@ Cache，并采用 Meta + product-sharded Registry 两层派生物，而不是让
    不构成信任锚。
 3. header 的 `source_hash`、`surface_hash` 和 `build_id` 与二进制预期值完全一致。
 4. private protobuf 禁止 protobuf map/Any/Struct；optional、nil/empty map/slice、RawMessage 均
-   使用显式 wrapper/sorted repeated entries，generated message pointer 只表达 wire presence，
+   使用显式 presence/sorted repeated entries（Meta v2 的列表用存在位，其余 optional 用 wrapper），generated message pointer 只表达 wire presence，
    解码后通过 exact semantic conversion/validation。
 5. DTO 通过 typed validation；它与 public Catalog `source_hash`/`surface_hash` 的关系由
    release-time exact projection gate 和已认证 artifact digest 建立，cache hit 不重建 public
@@ -300,7 +300,7 @@ codec-stage latency 为 1.44 ms，给 5 ms 完整预算留下余量但尚未证�
 - `.proto` 不使用 `map`、`Any`、`Struct` 或 opaque JSON envelope，只使用 typed
   message/scalar/repeated fields；
 - optional value 使用 message wrapper；nil/empty collection 使用 presence message + repeated
-  items；map 转为按 UTF-8 key 排序的 repeated entry；RawMessage 使用 presence message + bytes；
+  items，Meta v2 的六个字符串列表例外，改用显式存在位（§6.2.1）；map 转为按 UTF-8 key 排序的 repeated entry；RawMessage 使用 presence message + bytes；
   protobuf generated pointer 不能直接泄漏到 runtime model；
 - Meta 和每个 product shard 都使用 `proto.MarshalOptions{Deterministic:true}`；generator 连续编码
   两次必须逐 artifact byte-equal；protobuf schema digest、generator/runtime version、Go toolchain、
@@ -327,7 +327,7 @@ typed wire struct，最后规范化、校验并建立 `SchemaIndex`。
 现有 `SchemaMetaIndexSnapshot` 明确是 CI/test dump。它的 entry 未包含
 `CommandMeta.Selection.Prerequisites` 和 `Tips`，因此是有损投影。
 
-实现不复用该 dump 格式，而是定义 generated `SchemaMetaCache` protobuf v1，补齐 `CommandMeta` 全部字段，
+实现不复用该 dump 格式，而是定义 generated `SchemaMetaCache` protobuf DTO v2，补齐 `CommandMeta` 全部字段，
 并增加“Registry projection 与 DTO lookup 完全相等”的 generation/release gate。现有
 MetaIndex v1 文件不能被 runtime cache 接受。
 
@@ -929,7 +929,7 @@ shards；它不编码 `SchemaIndex` 和 `SchemaCatalogSnapshot` 的 `map[string]
   Go struct 布局当持久格式；
 - pointer、nil/empty collection 和 optional field 必须通过 exact round-trip gate。
 
-Meta cache 编码 generated `SchemaMetaCache` protobuf v1，包括完整 CommandMeta projection、typed
+Meta cache 编码 generated `SchemaMetaCache` protobuf DTO v2，包括完整 CommandMeta projection、typed
 Overview projection、Registry data 总长/aggregate digest 和 sorted product descriptors。两个
 artifact 都不能包含 endpoint、token、tenant 或用户数据。
 
@@ -938,8 +938,8 @@ DTO mirror 的覆盖范围是规范性的，而不是实现时自行裁剪：pro
 以及 Tool 引用的 contract identity、positionals、dry-run、result、pagination、safety、
 interface、selection 和 provenance 全部字段；Meta DTO 必须覆盖 `CommandMeta.Identity`、
 `Safety`、`Selection`、Overview product summary/envelope 和 product descriptor 全部字段。private
-protobuf 不使用 protobuf map/Any/Struct。所有 optional 与 collection 都通过 presence message/wrapper
-恢复 nil、empty 和 zero-value 的区别，`*bool` 映射为 optional `BoolValue` message 以区分
+protobuf 不使用 protobuf map/Any/Struct。optional 与 collection 通过 presence message/wrapper
+恢复 nil、empty 和 zero-value 的区别；Meta v2 的六个列表使用 §6.2.1 的显式存在位，`*bool` 映射为 optional `BoolValue` message 以区分
 nil、false、true。
 
 所有 runtime `json.RawMessage` 位置使用统一的 private wrapper：Registry `AgentMetadata`，Parameter
@@ -957,6 +957,51 @@ fully-qualified field path/type/presence-kind 清单，并与 protobuf descripto
 RawMessage 和 provenance candidate 注入非零/两种 presence 值。新增、删除或改型字段若未同步
 `.proto`、conversion、DTO version 和 sentinel，必须在编译/测试阶段失败。
 
+### 6.2.1 Meta DTO v2：展开记录，保留完整语义
+
+Linux DTO v1 的 Meta file-hit 在两轮原生反馈中分别为 7.530 ms、5.874 ms，均超过
+5 ms；优化 map 拷贝已降低分配，但 protobuf 多层 message 分配与 GC 仍是主要成本。
+隔离原型保留同一个 `protoc-gen-go v1.33.0` / protobuf runtime、全部字符串字段和列表存在性，
+把每条 Meta 记录展开；在 1,370 tools 上能还原 byte-identical 的 v1 Meta，decode-only 的
+7 轮中位数从 1.733 ms / 2.29 MB / 44,766 allocations 降至 1.426 ms / 1.88 MB /
+34,953 allocations。该原型不是完整 file-hit 或 Linux 验收，正式 v2 必须重跑所有门槛。
+
+当前私有 protobuf 包为 `dws.schemacache.v2`，root DTO version 与 envelope 的 DTO format
+version 均为 `2`。208 B envelope 布局、magic/envelope version `1`、raw protobuf serializer、
+cache 容器目录 `v1` 和公开 Catalog snapshot version 不变。旧缓存先在 envelope format
+检查被拒绝，然后走既有权威装配修复；不尝试解释或迁移旧 payload。BuildID 已包含这些版本、
+`.proto`、generated code、descriptor 和实际 artifact digest，v1 identity 不能授权 v2 数据。
+
+`CommandMetaEntry` 本身承载完整 Identity/Safety/Selection 值，避免仅用于中转的嵌套对象。
+旧字段号 `2` 和名称 `meta` 保留为 reserved，新 scalar/list 使用独立 field numbers；
+unknown/reserved fields 仍被标准 protobuf 解码后的 visitor 拒绝。Identity 的 CLI/canonical/
+product 非空、alias 展开、locator、overview、descriptor、选中 shard 的完整逐字段一致性校验
+全部保留。Safety/Selection 在 runtime model 中本来就是值类型，记录存在即代表这两个值，
+不会把空 safety 值推断成其他语义，也不省略 Selection 字段。
+
+六个 repeated string 列表依次为 aliases/use_when/avoid_when/prerequisites/tips/examples；
+`lists_present` 的 bits 0–5 逐一标记存在性。0 bit 恢复 nil，1 bit 且没有元素恢复非 nil 的
+空 slice，1 bit 且有元素复制全部内容及顺序。非空列表却没有 bit、以及 bits 6–31 非零都失败。
+转换结果继续持有独立 backing storage。729 种 nil/empty/nonempty 组合通过真实 protobuf
+wire round trip；另测 bit 顺序、生成对象修改后的隔离、旧 DTO/旧字段号和非法 bit 拒绝。
+
+该变更没有引入第二套 parser、字符串 intern/pool、跳过 UTF-8 或减少认证/语义校验。
+DTO v2 的 performance/native/final-artifact 证据必须独立记录，不能沿用 v1 的绿色结果。
+最新 alias validator 只比较 alias 与其 primary，省去 primary 与自身的重复逐字段比较；
+expected alias 集合逐项验证加相同条目数，继续排除缺失/额外 alias，并通过原有 1,400 组
+独立旧算法对照。产品条目计数与既有 locator 检查同次遍历完成。
+
+本机 `protoc-gen-go --check` 再生成时子进程被系统 SIGKILL，未获得 drift 通过结论。
+native feedback 现从官方 v35.1 release 下载并校验固定 SHA-256 的各平台 protoc，再以
+固定 Go/plugin 版本执行 drift check；该检查待新 head 原生运行。
+
+v2 本机组件 race 通过（schemaruntime 25.712 s、schemacache 1.637 s、reader 1.499 s、
+launcher 2.013 s）；完整 real delivery parity 通过 41.525 s，app identity 与 generator
+定向测试通过。[独立 7 轮完整 file-hit](benchmarks/schema-cache/2026-09-06-darwin-arm64-dto-v2-file-hit.json)
+中位数为 Meta **3.066 ms / 3.48 MB / 40,701 allocations**，selected 为
+**5.182 ms / 4.32 MB**。报告绑定基线提交和确切 runtime 源文件摘要；这是工作树验证，
+尚未证明 v2 的原生 Linux 5 ms 门槛或最终候选进程指标。
+
 ### 6.3 固定 envelope
 
 每个文件使用 208 B 固定二进制 header，整数为 big-endian，hash 使用 32 B 原始 SHA-256
@@ -971,7 +1016,7 @@ RawMessage 和 provenance candidate 注入非零/两种 presence 值。新增、
 | 13 | 1 | serializer | Meta 与每个 Registry shard 均只接受 `2=deterministic-protobuf` |
 | 14 | 1 | codec | v1 只接受 `0=raw` |
 | 15 | 1 | flags | 必须为 `0` |
-| 16 | 4 | DTO format version | kind-specific，v1 为 `1` |
+| 16 | 4 | DTO format version | 当前 Meta 与 Registry 均为 `2`；拒绝 retired `1` |
 | 20 | 4 | Catalog snapshot version | 必须等于 binary expected value |
 | 24 | 8 | encoded length | payload 精确长度 |
 | 32 | 8 | decoded length | raw serializer payload 精确长度；等于 encoded length |

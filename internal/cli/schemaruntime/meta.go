@@ -156,14 +156,18 @@ func validMetaAliasExpansion(lookup map[string]CommandMeta) bool {
 		return false
 	}
 	owners := make(map[string]string)
+	aliases := 0
 	for path, meta := range lookup {
-		primary, found := lookup[meta.Identity.CLIPath]
-		if !found || !equalCommandMeta(primary, meta) {
-			return false
-		}
 		if path != meta.Identity.CLIPath {
+			primary, found := lookup[meta.Identity.CLIPath]
+			if !found || !equalCommandMeta(primary, meta) {
+				return false
+			}
+			aliases++
 			continue
 		}
+		// A primary row is the lookup's own value at this key. Comparing
+		// every field against that same row again cannot add validation.
 		for _, raw := range meta.Identity.Aliases {
 			alias := strings.TrimSpace(raw)
 			if alias == "" || alias == path {
@@ -177,14 +181,14 @@ func validMetaAliasExpansion(lookup map[string]CommandMeta) bool {
 			}
 		}
 	}
+	// Every expected alias must exist with its exact owner. Equal cardinality
+	// then rejects extra aliases without another full metadata-map traversal.
+	if len(owners) != aliases {
+		return false
+	}
 	for alias, owner := range owners {
 		entry, found := lookup[alias]
 		if !found || entry.Identity.CLIPath != owner {
-			return false
-		}
-	}
-	for path, meta := range lookup {
-		if path != meta.Identity.CLIPath && owners[path] != meta.Identity.CLIPath {
 			return false
 		}
 	}

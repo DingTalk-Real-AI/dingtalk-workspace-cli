@@ -1,0 +1,37 @@
+{
+  "scope": "median of Go benchmark averages; warm OS page cache",
+  "stages": {
+    "meta-open-authenticate-decode-lookup": {
+      "samples": 7,
+      "median_ns_per_op": 3065664.0,
+      "median_bytes_per_op": 3478325,
+      "median_allocations_per_op": 40701,
+      "latency_budget_ns": 5000000,
+      "allocation_budget_bytes": 8000000,
+      "passed": true
+    },
+    "selected-open-locator-authenticate-decode-index": {
+      "samples": 7,
+      "median_ns_per_op": 5182107.0,
+      "median_bytes_per_op": 4320449,
+      "median_allocations_per_op": 68586,
+      "latency_budget_ns": 15000000,
+      "allocation_budget_bytes": 8000000,
+      "passed": true
+    }
+  },
+  "passed": true,
+  "base_commit": "ffe5c51bd8088542ff6d0d33f84151893a89ac30",
+  "runtime_overrides_sha256": {
+    "internal/cli/schemacachepb/schema_cache.proto": "a3db67d69fbd326f96473ee594b4482a038c7a1dbe2a1544968a90e9333b0c68",
+    "internal/cli/schemacachepb/schema_cache.pb.go": "6c4f5280b1e95a61cd708f057c29b09d2e52dc2b953f2dc474aee54d3a002668",
+    "internal/cli/schemaruntime/cache_codec.go": "68116d397284434379e775493dfa813533840cf01721fb4fd51c9d83af9bc69d",
+    "internal/cli/schemaruntime/cache_conversion.go": "db8fbb003e426fae6dcbe32f1b733c414d13281dd8613d06888b5164e2b90b25",
+    "internal/cli/schemaruntime/meta.go": "c9fd00fd486d0225d54417a6f5cee3b1c348aacbc68845ae0989554099469638",
+    "internal/schemacache/envelope.go": "f56bf53a72a21990ab13821554089d3ef46f18b67afa195a4a8dbec684dc479d"
+  },
+  "target": "darwin-arm64",
+  "tools": 1370,
+  "go_runtime_version": "go1.25.9",
+  "dto_version": 2
+}
