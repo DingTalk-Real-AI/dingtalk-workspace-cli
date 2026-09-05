@@ -189,6 +189,7 @@ func TestCrossPlatformCoverageMinutesAtomicConfirmationPolicy(t *testing.T) {
 		args []string
 	}{
 		{name: "upload notify", args: []string{"upload", "create-and-notify", "--file-name", "meeting.mp4", "--file-size", "10"}},
+		{name: "replace text", args: []string{"replace-text", "--id", "u1", "--search", "旧", "--replace", "新"}},
 	}
 	for _, test := range protected {
 		t.Run(test.name, func(t *testing.T) {
@@ -216,7 +217,6 @@ func TestCrossPlatformCoverageMinutesAtomicConfirmationPolicy(t *testing.T) {
 		{name: "update summary", args: []string{"update", "summary", "--id", "u1", "--content", "新纪要"}},
 		{name: "speaker replace", args: []string{"speaker", "replace", "--id", "u1", "--from", "甲", "--to", "乙"}},
 		{name: "hot-word delete", args: []string{"hot-word", "delete", "--words", "旧词"}},
-		{name: "replace text", args: []string{"replace-text", "--id", "u1", "--search", "旧", "--replace", "新"}},
 		{name: "permission add", args: []string{"permission", "add", "--ids", "u1", "--member-uids", "m1", "--policy", "4"}},
 		{name: "permission remove", args: []string{"permission", "remove", "--ids", "u1", "--member-uids", "m1"}},
 		{name: "permission apply", args: []string{"permission", "apply", "--id", "u1", "--policy", "4"}},

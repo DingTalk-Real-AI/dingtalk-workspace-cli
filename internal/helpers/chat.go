@@ -3446,8 +3446,8 @@ func newChatCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(chatGroupMemberRemoveCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{

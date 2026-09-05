@@ -56,7 +56,7 @@ func TestMinutesP0ConfirmationPolicyReachesFinalSchema(t *testing.T) {
 		{canonical: "minutes.update_minutes_summary", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
 		{canonical: "minutes.replace_speaker", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
 		{canonical: "minutes.delete_personal_hotword", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
-		{canonical: "minutes.replace_minutes_text", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.replace_minutes_text", effect: "destructive", risk: "high", confirmation: "user_required", idempotency: "unknown"},
 		{canonical: "minutes.add_member_permission", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
 		{canonical: "minutes.remove_member_permission", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
 		{canonical: "minutes.apply_minutes_permission", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},

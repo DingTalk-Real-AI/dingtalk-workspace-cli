@@ -1423,8 +1423,8 @@ func newMinutesCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(replaceTextCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "destructive", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
