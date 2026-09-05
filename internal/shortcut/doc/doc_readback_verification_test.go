@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -544,5 +545,112 @@ func TestCrossPlatformCoverageDocReadbackDefensiveEdges(t *testing.T) {
 	}
 	if !isGeneratedTextSpan(nil) || isGeneratedTextSpan(map[string]any{"a": 1, "b": 2}) || isGeneratedTextSpan(map[string]any{"data-type": 3}) || isGeneratedTextSpan(map[string]any{"data-type": "other"}) {
 		t.Fatal("generated span classification failed")
+	}
+}
+
+// The document service rewrites [@name](alidocs-mcp://doc/mention?openDingTalkId=X)
+// into a profile link while committing markdown, so the authored destination can
+// never appear in a readback. Before mention canonicalization every verified
+// write path reported doc_write_verification_failed even though the content had
+// landed, which pushed agents into retrying and duplicating content.
+//
+// Only the link shape matters here, so every identifier below is synthetic. Real
+// user names and real openDingTalkId / corpId / staffId values must never be
+// committed as fixtures.
+const (
+	docMentionAuthored = "请 [@测试甲](alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEMENTIONIDAAAA) 跟进。"
+	docMentionServer   = "请 [@测试甲](dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100001) 跟进。"
+)
+
+func TestCrossPlatformCoverageDocMentionRewritePassesVerifiedWrites(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		readback string
+		args     []string
+	}{
+		{
+			name:     "append",
+			readback: "锚点段落\n\n" + docMentionServer,
+			args:     []string{"--node", "n", "--command", "append", "--content", docMentionAuthored, "--yes"},
+		},
+		{
+			name:     "overwrite",
+			readback: docMentionServer,
+			args:     []string{"--node", "n", "--command", "overwrite", "--content", docMentionAuthored, "--yes"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": tc.readback}},
+			}}
+			if err := runDocCoverage(t, Update, caller, tc.args...); err != nil {
+				t.Fatalf("verified %s write with a rewritten mention must succeed: %v", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocMentionRewritePassesVerifiedCreate(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"create_document":      {{"nodeId": "created-node"}},
+		"get_document_content": {{"markdown": docMentionServer}},
+	}}
+	if err := runDocCoverage(t, Create, caller,
+		"--name", "周报", "--content", docMentionAuthored, "--yes"); err != nil {
+		t.Fatalf("verified create with a rewritten mention must succeed: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDocMentionCanonicalizationStillDetectsDrift(t *testing.T) {
+	// Canonicalization drops only the rewritten destination. Label text, node
+	// order and the presence of the link stay in the fingerprint, so a write
+	// that did not actually land must still fail.
+	for _, tc := range []struct {
+		name     string
+		readback string
+	}{
+		{"mention dropped entirely", "请 跟进。"},
+		{"label changed", "请 [@测试乙](dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100002) 跟进。"},
+		{"link degraded to plain text", "请 @测试甲 跟进。"},
+		{"surrounding prose lost", docMentionServer + "\n多写了一段"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": tc.readback}},
+			}}
+			err := runDocCoverage(t, Update, caller,
+				"--node", "n", "--command", "overwrite", "--content", docMentionAuthored, "--yes")
+			var typed *apperrors.Error
+			if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" {
+				t.Fatalf("readback %q must still fail verification, got %v", tc.readback, err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocMentionCanonicalizationScopedToMentionWrites(t *testing.T) {
+	// The relaxation is gated on the authored side carrying the mention
+	// protocol. A write with no mention must keep the strict comparison, so a
+	// server that silently rewrote an ordinary link still fails.
+	authored := "见 [钉钉](https://www.dingtalk.com) 说明。"
+	server := "见 [钉钉](https://example.com/rewritten) 说明。"
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": server}},
+	}}
+	err := runDocCoverage(t, Update, caller,
+		"--node", "n", "--command", "overwrite", "--content", authored, "--yes")
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" {
+		t.Fatalf("non-mention writes must keep strict destination comparison, got %v", err)
+	}
+
+	if _, ok := markdownMentionCanonicalFingerprint(strings.Repeat("x", docMarkdownVerifyMax+1)); ok {
+		t.Fatal("oversized input must not produce a mention fingerprint")
+	}
+	if docContentHasMentionLink(authored) || !docContentHasMentionLink(docMentionAuthored) {
+		t.Fatal("mention protocol detection failed")
+	}
+	if docMentionLinkDestination("https://www.dingtalk.com") {
+		t.Fatal("ordinary destinations must not be treated as mention links")
 	}
 }

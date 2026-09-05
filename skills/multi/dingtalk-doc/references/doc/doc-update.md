@@ -68,6 +68,20 @@ dws doc block insert --node <DOC_ID> --heading "发布说明 v1.0" --level 1 --r
 
 同一篇文档的正文由一个主上下文串行维护：Plan（确定最小变更）→ Execute（一次写）→ Observe（先消费回执）→ Iterate（只修未达标部分）。不要按章节并行写同一文档，也不要每次迭代都重新读取全文或 Schema。
 
+## @人（markdown mention）
+
+在 `append` / `overwrite` 的 markdown 正文里通过该协议插入链接：
+
+```
+[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)
+```
+
+服务端会改写为指向该用户的钉钉个人资料链接。
+
+- `openDingTalkId` 取自 `dws aisearch +search-person --query "姓名"` 返回的 `openDingTalkId`（或 `dws contact +search-user`）。
+- `@` 与显示名由你写在方括号里；服务端只替换链接、保留显示文本。
+- 仅 markdown 正文生效：`append` / `overwrite` 有效；`--doc-format jsonml` 与 `block_insert_*` / `block_replace` 不解析 markdown，写进去的协议原文不会被改写。
+
 ## Block ID 生命周期与保真
 
 - `block_replace` 成功后 Runtime 使用同一 `blockId` 回读验证，该 ID 可继续作为锚点；验证失败时先局部 `+fetch` 核对现状。`block_delete` 成功后旧 ID 失效，不得继续复用。
