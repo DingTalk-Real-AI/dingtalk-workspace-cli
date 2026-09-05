@@ -899,6 +899,411 @@ func newContactAccountUpdateCommand() *cobra.Command {
 	return cmd
 }
 
+// ── 企业申请/邀请与账号状态辅助解析 ──────────────────────────
+
+// contactParseStatusWithAliases 解析必填的整型状态 flag 并校验枚举取值。
+// allowedDesc 用于报错文案（如 "1（未处理）/ 2（已同意）"）。
+func contactParseStatusWithAliases(cmd *cobra.Command, primary, allowedDesc string, allowedValues ...int64) (int64, error) {
+	if err := validateRequiredFlagWithAliases(cmd, primary); err != nil {
+		return 0, err
+	}
+	raw := strings.TrimSpace(flagOrFallback(cmd, primary))
+	setName := contactFirstSetFlagName(cmd, primary)
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("--%s 必须是整数: %w", setName, err)
+	}
+	for _, allowed := range allowedValues {
+		if v == allowed {
+			return v, nil
+		}
+	}
+	return 0, fmt.Errorf("--%s 取值必须是 %s，当前值 %d", setName, allowedDesc, v)
+}
+
+// contactParsePageSizeWithAliases 解析每页条数 flag（默认值在注册时给出），校验 1..max 区间。
+func contactParsePageSizeWithAliases(cmd *cobra.Command, primary string, max int64, aliases ...string) (int64, error) {
+	raw := strings.TrimSpace(flagOrFallback(cmd, primary, aliases...))
+	setName := contactFirstSetFlagName(cmd, append([]string{primary}, aliases...)...)
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("--%s 必须是整数: %w", setName, err)
+	}
+	if v < 1 || v > max {
+		return 0, fmt.Errorf("--%s 取值范围 1-%d，当前值 %d", setName, max, v)
+	}
+	return v, nil
+}
+
+// contactParseOptionalInt64WithAliases 解析可选整型 flag；未传或传空返回 (0, false)。
+func contactParseOptionalInt64WithAliases(cmd *cobra.Command, primary string, aliases ...string) (int64, bool, error) {
+	if !contactAnyFlagChanged(cmd, append([]string{primary}, aliases...)...) {
+		return 0, false, nil
+	}
+	raw := strings.TrimSpace(flagOrFallback(cmd, primary, aliases...))
+	if raw == "" {
+		return 0, false, nil
+	}
+	setName := contactFirstSetFlagName(cmd, append([]string{primary}, aliases...)...)
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("--%s 必须是整数: %w", setName, err)
+	}
+	return v, true, nil
+}
+
+// contactOptionalBoolFlag 读取可选布尔 flag（String 注册，值 true/false）；
+// 未传或传空返回 nil，传入但解析失败时报错。
+func contactOptionalBoolFlag(cmd *cobra.Command, name string) (*bool, error) {
+	if !cmd.Flags().Changed(name) {
+		return nil, nil
+	}
+	raw := strings.TrimSpace(mustGetFlag(cmd, name))
+	if raw == "" {
+		return nil, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil, fmt.Errorf("--%s 必须是 boolean（true/false）: %w", name, err)
+	}
+	return &v, nil
+}
+
+// contactRequireNoAuditFlag 读取 --no-audit 布尔 flag（必须显式传值），
+// 返回对应 auditType：true→0（免审核），false→1（需管理员审核）。
+func contactRequireNoAuditFlag(cmd *cobra.Command) (int64, error) {
+	if !cmd.Flags().Changed("no-audit") {
+		return 0, fmt.Errorf("必须显式传 --no-audit true/false：true=免审核（申请自动通过），false=需管理员审核")
+	}
+	noAudit, err := cmd.Flags().GetBool("no-audit")
+	if err != nil {
+		return 0, fmt.Errorf("--no-audit 解析失败: %w", err)
+	}
+	if noAudit {
+		return 0, nil
+	}
+	return 1, nil
+}
+
+// contactParseOrgApplyID 解析成员申请记录 ID（来自 org apply-list 返回的 id 字段）。
+func contactParseOrgApplyID(cmd *cobra.Command, primary string, aliases ...string) (int64, error) {
+	if err := validateRequiredFlagWithAliases(cmd, primary, aliases...); err != nil {
+		return 0, err
+	}
+	raw := strings.TrimSpace(flagOrFallback(cmd, primary, aliases...))
+	setName := contactFirstSetFlagName(cmd, append([]string{primary}, aliases...)...)
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("--%s 必须是整数（申请记录 ID 来自 dws contact org apply-list 的 id 字段）: %w", setName, err)
+	}
+	return v, nil
+}
+
+// contactNoAuditArgs 是 org/dept invite-audit 的 Args 校验：正常拒绝位置参数，
+// 但将 pflag 布尔 flag 不吞并的后置值（--no-audit true / --no-audit false）
+// 归并回 flag 值，避免用户/LLM 的常见写法被当作位置参数拒绝。
+func contactNoAuditArgs(cmd *cobra.Command, args []string) error {
+	if len(args) == 1 && cmd.Flags().Changed("no-audit") {
+		switch strings.ToLower(strings.TrimSpace(args[0])) {
+		case "true", "false":
+			_ = cmd.Flags().Set("no-audit", args[0])
+			args = nil
+		}
+	}
+	if len(args) > 0 {
+		return fmt.Errorf("unknown command %q（--no-audit 为布尔 flag：裸传 --no-audit 即 true，显式取值用 --no-audit=false）", args[0])
+	}
+	return nil
+}
+
+// newContactExclusiveAccountSetStatusCommand 构造 exclusive-account disable/enable 命令。
+// 两者共用 exclusive_account_set_status MCP 工具，目标状态由 statusValue 固定。
+func newContactExclusiveAccountSetStatusCommand(verb, verbLabel, statusValue string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   verb,
+		Short: verbLabel + "企业账号",
+		Long:  verbLabel + "当前企业的专属登录账号（停用后该账号无法登录钉钉，启用后恢复登录）。需要企业管理员权限，执行前需要确认。",
+		Example: `  dws contact exclusive-account ` + verb + ` --staff-id user001
+
+  # 查询 userId: dws contact user search --keyword "姓名"`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "staff-id", "user-id", "userid", "staffId"); err != nil {
+				return err
+			}
+			staffID := strings.TrimSpace(flagOrFallback(cmd, "staff-id", "user-id", "userid", "staffId"))
+			if staffID == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "staff-id", "user-id", "userid", "staffId"))
+			}
+			return callMCPTool("exclusive_account_set_status", map[string]any{
+				// MCP 工具运行时入参字段名为 uesrId（平台 inputMappings 的历史笔误，
+				// 已发布版本不可改名），CLI 传参必须与其保持一致，勿"修正"为 userId。
+				"uesrId": staffID,
+				"status": statusValue,
+			})
+		},
+	}
+	cmd.Flags().String("staff-id", "", "企业账号的员工 userid (必填)")
+	cmd.Flags().String("user-id", "", "--staff-id 的别名")
+	cmd.Flags().String("userid", "", "--staff-id 的别名")
+	_ = cmd.Flags().MarkHidden("user-id")
+	_ = cmd.Flags().MarkHidden("userid")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "staff-id")
+	return cmd
+}
+
+// newContactOrgInviteSwitchCommand 构造 contact org invite-switch 命令。
+func newContactOrgInviteSwitchCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "invite-switch",
+		Short: "设置加入企业申请开关",
+		Long: `设置用户申请加入企业的开关：总开关 --open（是否允许用户申请加入企业），以及三个子开关
+--search-invite（搜索团队名称申请）、--apply-code-invite（填写团队号申请）、--link-invite（链接和二维码申请）。
+子开关不传表示保持当前值不变。返回更新后的企业邀请信息。需要超级管理员权限，执行前需要确认。
+
+【相关命令】
+  - 只查看当前开关状态（不修改）→ contact org invite-info`,
+		Example: `  dws contact org invite-switch --open true
+  dws contact org invite-switch --open true --search-invite false --link-invite true`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			open, err := contactParseBoolWithAliases(cmd, "open")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"open": open}
+			if v, err := contactOptionalBoolFlag(cmd, "search-invite"); err != nil {
+				return err
+			} else if v != nil {
+				toolArgs["searchInviteSwitch"] = *v
+			}
+			if v, err := contactOptionalBoolFlag(cmd, "apply-code-invite"); err != nil {
+				return err
+			} else if v != nil {
+				toolArgs["orgApplyCodeInviteSwitch"] = *v
+			}
+			if v, err := contactOptionalBoolFlag(cmd, "link-invite"); err != nil {
+				return err
+			} else if v != nil {
+				toolArgs["linkInviteSwitch"] = *v
+			}
+			return callMCPTool("set_org_invite_switch", toolArgs)
+		},
+	}
+	cmd.Flags().String("open", "", "申请加入企业总开关：true=允许用户申请加入企业 (必填)")
+	cmd.Flags().String("search-invite", "", "搜索团队名称申请加入开关：true/false（可选，不传保持不变）")
+	cmd.Flags().String("apply-code-invite", "", "填写团队号申请加入开关：true/false（可选，不传保持不变）")
+	cmd.Flags().String("link-invite", "", "链接和二维码申请加入开关：true/false（可选，不传保持不变）")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "open")
+	return cmd
+}
+
+// newContactOrgInviteAuditCommand 构造 contact org invite-audit 命令（企业级免审核）。
+func newContactOrgInviteAuditCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "invite-audit",
+		Short: "设置加入企业申请免审核（企业级）",
+		Long: `设置【企业级】申请加入企业的审核策略：--no-audit 开启免审核（auditType=0，申请自动通过、无需管理员审核），
+--no-audit=false 恢复需管理员审核（auditType=1）。执行前需要确认。
+
+【相关命令】
+  - 只设置某个部门的免审核 → contact dept invite-audit --dept <deptId> --no-audit
+  - 查看当前审核类型      → contact org invite-info`,
+		Example: `  dws contact org invite-audit --no-audit            # 开启免审核（申请自动通过）
+  dws contact org invite-audit --no-audit=false      # 恢复需管理员审核`,
+		Args: contactNoAuditArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			auditType, err := contactRequireNoAuditFlag(cmd)
+			if err != nil {
+				return err
+			}
+			return callMCPTool("set_org_apply_audit", map[string]any{"auditType": auditType})
+		},
+	}
+	cmd.Flags().Bool("no-audit", false, "裸传 --no-audit 即开启免审核（auditType=0，申请自动通过），--no-audit=false 恢复需管理员审核（auditType=1）(必填)")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "no-audit")
+	return cmd
+}
+
+// newContactDeptInviteAuditCommand 构造 contact dept invite-audit 命令（部门级免审核）。
+func newContactDeptInviteAuditCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "invite-audit",
+		Short: "设置加入部门申请免审核（部门级）",
+		Long: `设置指定部门的申请加入免审核策略：--no-audit 开启免审核（auditType=0，非组织内成员申请加入该部门时自动通过），
+--no-audit=false 恢复需管理员审核（auditType=1）。执行前需要确认。
+
+免审核开启时可传 --emp-apply-join-dept 控制【组织内成员】能否直接申请加入该部门
+（true=允许，false=不允许；仅免审核开启时生效，不传默认 false）。
+
+【相关命令】
+  - 企业级免审核 → contact org invite-audit --no-audit`,
+		Example: `  dws contact dept invite-audit --dept 12345 --no-audit
+  dws contact dept invite-audit --dept 12345 --no-audit --emp-apply-join-dept true`,
+		Args: contactNoAuditArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			deptID, err := contactParseInt64WithAliases(cmd, "dept", "dept-id", "deptId", "id")
+			if err != nil {
+				return err
+			}
+			auditType, err := contactRequireNoAuditFlag(cmd)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"deptId": deptID, "auditType": auditType}
+			if v, err := contactOptionalBoolFlag(cmd, "emp-apply-join-dept"); err != nil {
+				return err
+			} else if v != nil {
+				toolArgs["empApplyJoinDept"] = *v
+			}
+			return callMCPTool("set_dept_apply_audit", toolArgs)
+		},
+	}
+	cmd.Flags().String("dept", "", "部门 ID (必填)；根部门传 1")
+	cmd.Flags().String("dept-id", "", "--dept 的别名")
+	_ = cmd.Flags().MarkHidden("dept-id")
+	cmd.Flags().Bool("no-audit", false, "裸传 --no-audit 即开启免审核（auditType=0，申请自动通过），--no-audit=false 恢复需管理员审核（auditType=1）(必填)")
+	cmd.Flags().String("emp-apply-join-dept", "", "免审核开启时是否允许组织内成员申请加入该部门：true/false（可选，默认 false）")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "dept", "no-audit")
+	return cmd
+}
+
+// newContactOrgInviteListCommand 构造 contact org invite-list 命令。
+func newContactOrgInviteListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "invite-list",
+		Short: "查询企业邀请记录列表",
+		Long: `分页查询企业已发出的成员邀请记录（管理员邀请加入企业的记录），按创建时间倒序。
+--status 筛选：1=未处理（默认），2=已同意，3=已忽略或失效。
+主管理员/创建者/超级管理员可查看所有邀请记录，子管理员仅能查看自己邀请的成员。`,
+		Example: `  dws contact org invite-list
+  dws contact org invite-list --status 2 --size 50
+  dws contact org invite-list --cursor 20   # 翻页：cursor 传上一页返回的 nextCursor`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			status, err := contactParseStatusWithAliases(cmd, "status", "1（未处理）/ 2（已同意）/ 3（已忽略）", 1, 2, 3)
+			if err != nil {
+				return err
+			}
+			size, err := contactParsePageSizeWithAliases(cmd, "size", 100)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"status": status, "size": size}
+			if cursor, ok, err := contactParseOptionalInt64WithAliases(cmd, "cursor"); err != nil {
+				return err
+			} else if ok {
+				toolArgs["cursor"] = cursor
+			}
+			return callMCPTool("list_team_invite", toolArgs)
+		},
+	}
+	cmd.Flags().String("status", "1", "邀请状态：1=未处理，2=已同意，3=已忽略或失效（默认 1）")
+	cmd.Flags().String("size", "20", "每页条数，1-100（默认 20）")
+	cmd.Flags().String("cursor", "", "分页游标；首页不传，翻页时传上一页返回的 nextCursor（可选）")
+	return cmd
+}
+
+// newContactOrgApplyListCommand 构造 contact org apply-list 命令。
+func newContactOrgApplyListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "apply-list",
+		Short: "查询加入企业申请列表",
+		Long: `分页查询用户主动申请加入企业的记录，供管理员审批处理。
+--status 筛选：0=全部，1=未处理（默认），2=已通过，3=已拒绝，4=已屏蔽。
+返回申请 ID（id）、申请人姓名（content）、申请说明、状态、申请时间、申请加入的部门、邀请人/操作人信息；
+hasMore=true 时用 nextCursor 翻页。
+
+注意：查询后未读申请会被标记为已读。
+后续审批：contact org apply-approve / apply-reject / apply-block / apply-remove（均传本命令返回的 id）。`,
+		Example: `  dws contact org apply-list
+  dws contact org apply-list --status 0 --size 50
+  dws contact org apply-list --cursor 20   # 翻页：cursor 传上一页返回的 nextCursor`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			status, err := contactParseStatusWithAliases(cmd, "status", "0（全部）/ 1（未处理）/ 2（已通过）/ 3（已拒绝）/ 4（已屏蔽）", 0, 1, 2, 3, 4)
+			if err != nil {
+				return err
+			}
+			size, err := contactParsePageSizeWithAliases(cmd, "size", 100)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"status": status, "size": size}
+			if cursor, ok, err := contactParseOptionalInt64WithAliases(cmd, "cursor"); err != nil {
+				return err
+			} else if ok {
+				toolArgs["cursor"] = cursor
+			}
+			return callMCPTool("query_org_apply_list", toolArgs)
+		},
+	}
+	cmd.Flags().String("status", "1", "申请状态：0=全部，1=未处理，2=已通过，3=已拒绝，4=已屏蔽（默认 1）")
+	cmd.Flags().String("size", "20", "每页条数，1-100（默认 20）")
+	cmd.Flags().String("cursor", "", "分页游标；首页不传，翻页时传上一页返回的 nextCursor（可选）")
+	return cmd
+}
+
+// contactOrgApplyDecisionSpec 描述 apply-approve / apply-reject / apply-block / apply-remove
+// 四个成员申请审批命令的差异，共用 newContactOrgApplyDecisionCommand 构造。
+type contactOrgApplyDecisionSpec struct {
+	use        string   // 子命令名
+	verbLabel  string   // 中文动词（同意/拒绝/屏蔽/删除）
+	toolName   string   // MCP 工具名
+	risk       string   // Safety 风险级别
+	withReason bool     // 是否需要 --reason
+	aliases    []string // 子命令别名
+}
+
+// newContactOrgApplyDecisionCommand 构造成员申请审批命令（approve/reject/block/remove）。
+func newContactOrgApplyDecisionCommand(spec contactOrgApplyDecisionSpec) *cobra.Command {
+	long := spec.verbLabel + "指定的「申请加入企业」记录，申请记录 ID 来自 contact org apply-list 返回的 id 字段。执行前需要确认。"
+	if spec.withReason {
+		long += "\n--reason 为" + spec.verbLabel + "原因，会记录在申请处理记录中 (必填)。"
+	}
+	example := fmt.Sprintf("  dws contact org %s --id 12345", spec.use)
+	if spec.withReason {
+		example += ` --reason "不符合入职条件"`
+	}
+	example += "\n\n  # 查询申请 ID: dws contact org apply-list"
+	cmd := &cobra.Command{
+		Use:     spec.use,
+		Aliases: spec.aliases,
+		Short:   spec.verbLabel + "加入企业申请",
+		Long:    long,
+		Example: example,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			applyID, err := contactParseOrgApplyID(cmd, "id", "apply-id", "applyId")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"id": applyID}
+			if spec.withReason {
+				if err := validateRequiredFlagWithAliases(cmd, "reason"); err != nil {
+					return err
+				}
+				reason := strings.TrimSpace(flagOrFallback(cmd, "reason"))
+				if reason == "" {
+					return fmt.Errorf("--reason 不能为空")
+				}
+				toolArgs["reason"] = reason
+			}
+			return callMCPTool(spec.toolName, toolArgs)
+		},
+	}
+	cmd.Flags().String("id", "", "申请记录 ID (必填)，来自 contact org apply-list 的 id 字段")
+	cmd.Flags().String("apply-id", "", "--id 的别名")
+	_ = cmd.Flags().MarkHidden("apply-id")
+	required := []string{"id"}
+	if spec.withReason {
+		cmd.Flags().String("reason", "", spec.verbLabel+"原因 (必填)")
+		required = append(required, "reason")
+	}
+	cli.AnnotateRuntimeRequiredFlags(cmd, required...)
+	return cmd
+}
+
 func newContactCommand() *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/contact.json
 	// products.contact). Catalog assembly stamps provenance contract_final.
@@ -1536,7 +1941,21 @@ func newContactCommand() *cobra.Command {
 		contactLabelListMembersCmd,
 	)
 
-	contactDeptCmd := newGroupCommand(&cobra.Command{Use: "dept", Short: "部门查询", RunE: groupRunE})
+	contactDeptCmd := newGroupCommand(&cobra.Command{
+		Use:   "dept",
+		Short: "部门管理",
+		Long: `部门管理：部门查询（搜索、详情、子部门、成员列表）、创建/更新部门，以及部门级申请免审核设置。
+
+【何时用哪个命令】
+  - 搜索部门                           → contact dept search
+  - 查询部门详情                       → contact dept get-info
+  - 查询子部门列表                     → contact dept list-children
+  - 查询部门成员列表                   → contact dept list-members
+  - 创建部门                           → contact dept create
+  - 更新部门名称/父部门                → contact dept update
+  - 设置部门级申请免审核                → contact dept invite-audit`,
+		RunE: groupRunE,
+	})
 
 	contactDeptSearchCmd := &cobra.Command{
 		Use:     "search",
@@ -2297,6 +2716,46 @@ contact user profile fields 获取可用字段列表。
 			_ = s.cmd.Flags().MarkHidden(name)
 		}
 	}
+	contactDeptInviteAuditCmd := newContactDeptInviteAuditCommand()
+	DeclareLeafMetadata(contactDeptInviteAuditCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "set_dept_apply_audit",
+				CanonicalPath:  "contact.set_dept_apply_audit",
+				CLIPath:        "contact dept invite-audit",
+				PrimaryCLIPath: "contact dept invite-audit",
+			},
+			Description: "设置指定部门的申请加入免审核策略：--no-audit true 免审核（auditType=0），false 需管理员审核（auditType=1）",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"部门免审核设置结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "set_dept_apply_audit"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "设置指定部门的申请加入免审核策略",
+				UseWhen:      []string{"用户明确要求设置某个部门的申请免审核（部门 ID 已确认）"},
+				AvoidWhen:    []string{"企业级免审核用 contact org invite-audit；未确认部门 ID 时先用 contact dept search / get-info 查询"},
+				Examples: []string{
+					"dws contact dept invite-audit --dept 12345 --no-audit",
+					"dws contact dept invite-audit --dept 12345 --no-audit --emp-apply-join-dept true",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "dept", Property: "deptId", Required: boolPtr(true), InterfaceType: "integer", Description: "部门 ID；根部门传 1（服务端自动映射）"},
+				{Name: "no-audit", Property: "auditType", Required: boolPtr(true), InterfaceType: "boolean", Description: "true=免审核（auditType=0），false=需管理员审核（auditType=1）"},
+				{Name: "emp-apply-join-dept", Property: "empApplyJoinDept", Required: boolPtr(false), InterfaceType: "boolean", Description: "免审核开启时是否允许组织内成员申请加入该部门；默认 false"},
+			},
+		},
+	})
 	contactDeptCmd.AddCommand(
 		contactDeptSearchCmd,
 		contactDeptGetInfoCmd,
@@ -2304,6 +2763,7 @@ contact user profile fields 获取可用字段列表。
 		contactDeptListMembersCmd,
 		contactDeptCreateCmd,
 		contactDeptUpdateCmd,
+		contactDeptInviteAuditCmd,
 	)
 
 	// ── org 企业管理 ──────────────────────────────────────────────────
@@ -2311,12 +2771,19 @@ contact user profile fields 获取可用字段列表。
 	contactOrgCmd := newGroupCommand(&cobra.Command{
 		Use:   "org",
 		Short: "企业管理",
-		Long: `企业管理：创建企业。
+		Long: `企业管理：创建企业，以及企业申请/邀请管理（申请开关、免审核、邀请信息、邀请与申请记录查询、申请审批）。
 
 【何时用哪个命令】
   - 创建新企业                         → contact org create
+  - 设置申请加入企业开关                → contact org invite-switch
+  - 设置企业级申请免审核                → contact org invite-audit
+  - 获取邀请链接/团队码/开关状态        → contact org invite-info
+  - 查询已发出的邀请记录                → contact org invite-list
+  - 查询用户申请记录                    → contact org apply-list
+  - 同意/拒绝/屏蔽/删除申请             → contact org apply-approve / apply-reject / apply-block / apply-remove
   - 创建企业专属账号                   → contact account create
-  - 邀请员工加入企业                   → contact user invite`,
+  - 邀请员工加入企业                   → contact user invite
+  - 部门级申请免审核                    → contact dept invite-audit`,
 		RunE: groupRunE,
 	})
 
@@ -2376,6 +2843,392 @@ contact user profile fields 获取可用字段列表。
 	contactOrgCreateCmd.Flags().String("org-name", "", "企业名称 (必填)")
 	contactOrgCreateCmd.Flags().String("creator-username", "", "创建者在企业内的名称，对应 creatorUsername (必填)")
 	contactOrgCmd.AddCommand(contactOrgCreateCmd)
+
+	// org 企业申请/邀请管理（MCP 工具：set_org_invite_switch / set_org_apply_audit /
+	// get_org_invite_info / list_team_invite / query_org_apply_list / *_org_apply）。
+	contactOrgInviteSwitchCmd := newContactOrgInviteSwitchCommand()
+	DeclareLeafMetadata(contactOrgInviteSwitchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "set_org_invite_switch",
+				CanonicalPath:  "contact.set_org_invite_switch",
+				CLIPath:        "contact org invite-switch",
+				PrimaryCLIPath: "contact org invite-switch",
+			},
+			Description: "设置用户申请加入企业的开关（总开关与搜索/团队号/链接三个子开关），子开关不传保持不变",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"申请开关设置结果","properties":{"result":{"type":"object","description":"更新后的企业邀请信息","properties":{"url":{"type":"string","description":"邀请链接"},"inviteSwitch":{"type":"boolean","description":"邀请开关，true=开启了邀请"},"searchInviteSwitch":{"type":"boolean","description":"搜索团队名称申请加入开关"},"orgApplyCodeInviteSwitch":{"type":"boolean","description":"填写团队号申请加入开关"},"linkInviteSwitch":{"type":"boolean","description":"链接和二维码申请加入开关"},"auditType":{"type":"number","description":"审核类型，0=申请无需审核，1=申请需管理员审核"}}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "set_org_invite_switch"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "设置用户申请加入企业的开关",
+				UseWhen:      []string{"用户明确要求开启/关闭申请加入企业，或调整搜索团队名/团队号/链接二维码等申请渠道"},
+				AvoidWhen:    []string{"仅查看开关状态用 contact org invite-info；调整审核策略用 contact org invite-audit；部门级开关用 contact dept invite-audit"},
+				Examples: []string{
+					"dws contact org invite-switch --open true",
+					"dws contact org invite-switch --open true --search-invite false --link-invite true",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "open", Property: "open", Required: boolPtr(true), InterfaceType: "boolean", Description: "申请加入企业总开关：true=允许用户申请加入"},
+				{Name: "search-invite", Property: "searchInviteSwitch", Required: boolPtr(false), InterfaceType: "boolean", Description: "搜索团队名称申请加入开关；不传保持不变"},
+				{Name: "apply-code-invite", Property: "orgApplyCodeInviteSwitch", Required: boolPtr(false), InterfaceType: "boolean", Description: "填写团队号申请加入开关；不传保持不变"},
+				{Name: "link-invite", Property: "linkInviteSwitch", Required: boolPtr(false), InterfaceType: "boolean", Description: "链接和二维码申请加入开关；不传保持不变"},
+			},
+		},
+	})
+
+	contactOrgInviteAuditCmd := newContactOrgInviteAuditCommand()
+	DeclareLeafMetadata(contactOrgInviteAuditCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "set_org_apply_audit",
+				CanonicalPath:  "contact.set_org_apply_audit",
+				CLIPath:        "contact org invite-audit",
+				PrimaryCLIPath: "contact org invite-audit",
+			},
+			Description: "设置企业级申请加入免审核策略：--no-audit true 免审核（auditType=0），false 需管理员审核（auditType=1）",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"企业级免审核设置结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "set_org_apply_audit"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "设置企业级申请加入免审核策略",
+				UseWhen:      []string{"用户明确要求开启/关闭「申请加入企业免审核」，影响整个企业的申请审核策略"},
+				AvoidWhen:    []string{"仅设置某个部门的免审核用 contact dept invite-audit；查看当前审核类型用 contact org invite-info"},
+				Examples: []string{
+					"dws contact org invite-audit --no-audit",
+					"dws contact org invite-audit --no-audit=false",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "no-audit", Property: "auditType", Required: boolPtr(true), InterfaceType: "boolean", Description: "true=免审核（auditType=0，申请自动通过），false=需管理员审核（auditType=1）"},
+			},
+		},
+	})
+
+	contactOrgInviteInfoCmd := &cobra.Command{
+		Use:   "invite-info",
+		Short: "获取企业邀请信息",
+		Long: `获取当前企业的邀请信息：邀请链接（url）、微信邀请链接、邀请码、邀请有效期，
+以及申请加入相关开关状态（inviteSwitch、searchInviteSwitch、orgApplyCodeInviteSwitch、linkInviteSwitch）、
+审核类型（auditType：0=免审核，1=需审核）等。无需参数。
+
+【相关命令】
+  - 修改申请开关      → contact org invite-switch
+  - 修改审核类型      → contact org invite-audit`,
+		Example: `  dws contact org invite-info`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return callMCPTool("get_org_invite_info", nil)
+		},
+	}
+	DeclareLeafMetadata(contactOrgInviteInfoCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_org_invite_info",
+				CanonicalPath:  "contact.get_org_invite_info",
+				CLIPath:        "contact org invite-info",
+				PrimaryCLIPath: "contact org invite-info",
+			},
+			Description: "获取企业邀请信息：邀请链接、邀请码、申请开关状态与审核类型",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"企业邀请信息","properties":{"result":{"type":"object","description":"企业邀请信息","properties":{"url":{"type":"string","description":"邀请链接"},"inviteSwitch":{"type":"boolean","description":"邀请开关，true=开启了邀请"},"orgAuthLevel":{"type":"number","description":"企业认证等级，0=未认证，1=高级认证，2=中级认证，3=初级认证，4=普通认证，6=年检认证"},"searchInviteSwitch":{"type":"boolean","description":"搜索团队名称申请加入开关"},"orgApplyCodeInviteSwitch":{"type":"boolean","description":"填写团队号申请加入开关"},"linkInviteSwitch":{"type":"boolean","description":"链接和二维码申请加入开关"},"auditType":{"type":"number","description":"审核类型，0=申请无需审核，1=申请需管理员审核"},"allowEmpApplyJoinDept":{"type":"boolean","description":"是否允许员工申请加入部门（仅免审核时有效）"},"antWxUrl":{"type":"string","description":"微信邀请链接"},"expireTime":{"type":"number","description":"邀请链接过期时间（毫秒时间戳）"},"validPeriod":{"type":"number","description":"邀请有效期（天），空为永久有效"},"inviteCode":{"type":"string","description":"邀请码"}}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_org_invite_info"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取企业邀请信息（邀请链接、邀请码、申请开关与审核类型）",
+				UseWhen:      []string{"用户需要获取企业邀请链接/邀请码，或查看申请加入相关开关与审核策略的当前状态"},
+				AvoidWhen:    []string{"修改开关用 contact org invite-switch；修改审核类型用 contact org invite-audit；查询邀请/申请记录用 contact org invite-list / apply-list"},
+				Examples:     []string{"dws contact org invite-info"},
+			},
+		},
+	})
+
+	contactOrgInviteListCmd := newContactOrgInviteListCommand()
+	DeclareLeafMetadata(contactOrgInviteListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "list_team_invite",
+				CanonicalPath:  "contact.list_team_invite",
+				CLIPath:        "contact org invite-list",
+				PrimaryCLIPath: "contact org invite-list",
+			},
+			Description: "分页查询企业已发出的成员邀请记录（管理员邀请加入企业的记录），按创建时间倒序，可按状态筛选",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"企业邀请记录列表","properties":{"result":{"type":"object","description":"邀请记录列表","properties":{"values":{"type":"array","description":"邀请记录","items":{"type":"object","properties":{"id":{"type":"number","description":"邀请记录ID"},"status":{"type":"number","description":"邀请状态：1=未处理，2=已同意，3=已忽略或失效"},"empName":{"type":"string","description":"被邀请人姓名"},"optUserProfileModel":{"type":"object","description":"邀请人信息","properties":{"nick":{"type":"string","description":"邀请人昵称"}}}}}},"hasMore":{"type":"boolean","description":"是否还有更多数据"},"nextCursor":{"type":"number","description":"下一页游标，hasMore=true 时传回继续翻页"}}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "list_team_invite"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询企业已发出的成员邀请记录列表",
+				UseWhen:      []string{"用户需要查看管理员邀请加入企业的记录（如待处理邀请、邀请后未加入的成员）"},
+				AvoidWhen:    []string{"查询用户主动申请加入的记录用 contact org apply-list；获取邀请链接用 contact org invite-info"},
+				Examples: []string{
+					"dws contact org invite-list",
+					"dws contact org invite-list --status 2 --size 50",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "status", Property: "status", Required: boolPtr(false), InterfaceType: "integer", Description: "邀请状态：1=未处理（默认），2=已同意，3=已忽略或失效"},
+				{Name: "size", Property: "size", Required: boolPtr(false), InterfaceType: "integer", Description: "每页条数 1-100，默认 20"},
+				{Name: "cursor", Property: "cursor", Required: boolPtr(false), InterfaceType: "integer", Description: "分页游标；翻页时传上一页返回的 nextCursor"},
+			},
+		},
+	})
+
+	contactOrgApplyListCmd := newContactOrgApplyListCommand()
+	// Safety：查询会把服务端未读申请标记为已读（见 Long 帮助），因此 Effect
+	// 如实声明为 write（对齐 chat mark-read 先例）；副作用仅清除未读标记，
+	// Risk 仍为 low 且无需用户确认，重复查询幂等。
+	DeclareLeafMetadata(contactOrgApplyListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "query_org_apply_list",
+				CanonicalPath:  "contact.query_org_apply_list",
+				CLIPath:        "contact org apply-list",
+				PrimaryCLIPath: "contact org apply-list",
+			},
+			Description: "分页查询用户主动申请加入企业的记录（可按状态筛选），返回申请 ID 供后续审批命令使用；查询后服务端会把未读申请标记为已读",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"加入企业申请列表","properties":{"result":{"type":"object","description":"申请记录列表","properties":{"values":{"type":"array","description":"申请记录","items":{"type":"object","properties":{"id":{"type":"number","description":"申请记录ID，供 apply-approve/reject/block/remove 使用"},"status":{"type":"number","description":"申请状态：1=未处理，2=已通过，3=已拒绝，4=已屏蔽"},"content":{"type":"string","description":"申请人姓名"},"gmtCreate":{"type":"number","description":"申请时间（毫秒时间戳）"},"dept":{"type":"object","description":"申请加入的部门","properties":{"deptId":{"type":"number","description":"部门ID"},"deptName":{"type":"string","description":"部门名称"},"deptPathName":{"type":"string","description":"部门名称全路径"}}},"inviterEmployeeModel":{"type":"object","description":"邀请人信息","properties":{"nick":{"type":"string","description":"邀请人昵称"},"name":{"type":"string","description":"邀请人姓名"}}},"optEmployeeModel":{"type":"object","description":"操作人信息","properties":{"nick":{"type":"string","description":"操作人昵称"},"name":{"type":"string","description":"操作人姓名"}}}}}},"hasMore":{"type":"boolean","description":"是否还有更多数据"},"nextCursor":{"type":"number","description":"下一页游标，hasMore=true 时传回继续翻页"}}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "query_org_apply_list"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询用户申请加入企业的记录列表（查询会把未读申请标记为已读）",
+				UseWhen:      []string{"用户需要查看待处理/已处理的企业加入申请，或需要获取申请 ID 以便审批（同意/拒绝/屏蔽/删除）；注意查询会把服务端未读申请标记为已读，属有副作用的查询"},
+				AvoidWhen:    []string{"查询管理员发出的邀请记录用 contact org invite-list；直接审批时仍应先读本命令确认申请人与状态，注意本命令会清除未读标记"},
+				Examples: []string{
+					"dws contact org apply-list",
+					"dws contact org apply-list --status 0 --size 50",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "status", Property: "status", Required: boolPtr(false), InterfaceType: "integer", Description: "申请状态：0=全部，1=未处理（默认），2=已通过，3=已拒绝，4=已屏蔽"},
+				{Name: "size", Property: "size", Required: boolPtr(false), InterfaceType: "integer", Description: "每页条数 1-100，默认 20"},
+				{Name: "cursor", Property: "cursor", Required: boolPtr(false), InterfaceType: "integer", Description: "分页游标；翻页时传上一页返回的 nextCursor"},
+			},
+		},
+	})
+
+	contactOrgApplyApproveCmd := newContactOrgApplyDecisionCommand(contactOrgApplyDecisionSpec{
+		use: "apply-approve", verbLabel: "同意", toolName: "approve_org_apply",
+		risk: "medium", aliases: []string{"approve"},
+	})
+	DeclareLeafMetadata(contactOrgApplyApproveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "approve_org_apply",
+				CanonicalPath:  "contact.approve_org_apply",
+				CLIPath:        "contact org apply-approve",
+				PrimaryCLIPath: "contact org apply-approve",
+			},
+			Description: "同意指定的「申请加入企业」记录，申请人将加入企业",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"同意申请结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "approve_org_apply"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "同意指定的「申请加入企业」记录",
+				UseWhen:      []string{"用户明确要求同意某条加入企业申请，且已通过 contact org apply-list 确认申请 ID 与申请人"},
+				AvoidWhen:    []string{"拒绝用 contact org apply-reject；屏蔽申请人用 contact org apply-block；未确认申请内容前不要执行"},
+				Examples:     []string{"dws contact org apply-approve --id 12345"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "id", Required: boolPtr(true), InterfaceType: "integer", Description: "申请记录 ID，来自 contact org apply-list 的 id 字段"},
+			},
+		},
+	})
+
+	contactOrgApplyRejectCmd := newContactOrgApplyDecisionCommand(contactOrgApplyDecisionSpec{
+		use: "apply-reject", verbLabel: "拒绝", toolName: "reject_org_apply",
+		risk: "medium", withReason: true, aliases: []string{"reject"},
+	})
+	DeclareLeafMetadata(contactOrgApplyRejectCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "reject_org_apply",
+				CanonicalPath:  "contact.reject_org_apply",
+				CLIPath:        "contact org apply-reject",
+				PrimaryCLIPath: "contact org apply-reject",
+			},
+			Description: "拒绝指定的「申请加入企业」记录，需填写拒绝原因",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"拒绝申请结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "reject_org_apply"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "拒绝指定的「申请加入企业」记录",
+				UseWhen:      []string{"用户明确要求拒绝某条加入企业申请并说明了拒绝原因"},
+				AvoidWhen:    []string{"同意用 contact org apply-approve；屏蔽申请人用 contact org apply-block；删除记录用 contact org apply-remove"},
+				Examples:     []string{"dws contact org apply-reject --id 12345 --reason \"不符合入职条件\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "id", Required: boolPtr(true), InterfaceType: "integer", Description: "申请记录 ID，来自 contact org apply-list 的 id 字段"},
+				{Name: "reason", Property: "reason", Required: boolPtr(true), Description: "拒绝原因，会记录在申请处理记录中"},
+			},
+		},
+	})
+
+	contactOrgApplyBlockCmd := newContactOrgApplyDecisionCommand(contactOrgApplyDecisionSpec{
+		use: "apply-block", verbLabel: "屏蔽", toolName: "block_org_apply",
+		risk: "high", withReason: true, aliases: []string{"block"},
+	})
+	DeclareLeafMetadata(contactOrgApplyBlockCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "block_org_apply",
+				CanonicalPath:  "contact.block_org_apply",
+				CLIPath:        "contact org apply-block",
+				PrimaryCLIPath: "contact org apply-block",
+			},
+			Description: "屏蔽指定的「申请加入企业」记录（拉黑该申请人），需填写屏蔽原因",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"屏蔽申请结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "block_org_apply"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "屏蔽指定的「申请加入企业」记录（拉黑申请人）",
+				UseWhen:      []string{"用户明确要求屏蔽/拉黑某申请人及其申请记录，并说明屏蔽原因"},
+				AvoidWhen:    []string{"仅拒绝单次申请用 contact org apply-reject；屏蔽后申请人后续申请也会被拦截，非明确要求不要使用"},
+				Examples:     []string{"dws contact org apply-block --id 12345 --reason \"恶意重复申请\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "id", Required: boolPtr(true), InterfaceType: "integer", Description: "申请记录 ID，来自 contact org apply-list 的 id 字段"},
+				{Name: "reason", Property: "reason", Required: boolPtr(true), Description: "屏蔽原因，会记录在申请处理记录中"},
+			},
+		},
+	})
+
+	contactOrgApplyRemoveCmd := newContactOrgApplyDecisionCommand(contactOrgApplyDecisionSpec{
+		use: "apply-remove", verbLabel: "删除", toolName: "remove_org_apply",
+		risk: "high", aliases: []string{"remove", "apply-delete"},
+	})
+	DeclareLeafMetadata(contactOrgApplyRemoveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "remove_org_apply",
+				CanonicalPath:  "contact.remove_org_apply",
+				CLIPath:        "contact org apply-remove",
+				PrimaryCLIPath: "contact org apply-remove",
+			},
+			Description: "删除指定的「申请加入企业」记录（记录删除后不可恢复）",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"删除申请结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "remove_org_apply"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除指定的「申请加入企业」记录",
+				UseWhen:      []string{"用户明确要求删除某条申请记录且已理解删除后不可恢复"},
+				AvoidWhen:    []string{"正常审批用 apply-approve / apply-reject；删除不可恢复，优先考虑拒绝或屏蔽"},
+				Examples:     []string{"dws contact org apply-remove --id 12345"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "id", Required: boolPtr(true), InterfaceType: "integer", Description: "申请记录 ID，来自 contact org apply-list 的 id 字段"},
+			},
+		},
+	})
+
+	contactOrgCmd.AddCommand(
+		contactOrgInviteSwitchCmd,
+		contactOrgInviteAuditCmd,
+		contactOrgInviteInfoCmd,
+		contactOrgInviteListCmd,
+		contactOrgApplyListCmd,
+		contactOrgApplyApproveCmd,
+		contactOrgApplyRejectCmd,
+		contactOrgApplyBlockCmd,
+		contactOrgApplyRemoveCmd,
+	)
 
 	// ── account 企业账号管理 ──────────────────────────────────────────
 
@@ -2513,6 +3366,93 @@ contact user profile fields 获取可用字段列表。
 		},
 	})
 	contactAccountCmd.AddCommand(contactAccountCreateCmd, contactAccountUpdateCmd)
+
+	// ── exclusive-account 企业账号状态 ──────────────────────────
+
+	contactExclusiveAccountCmd := newGroupCommand(&cobra.Command{
+		Use:   "exclusive-account",
+		Short: "企业账号状态管理",
+		Long: `企业专属账号状态管理：停用或启用企业账号。
+
+【何时用哪个命令】
+  - 停用企业账号（无法登录）           → contact exclusive-account disable
+  - 重新启用已停用的企业账号           → contact exclusive-account enable
+  - 创建企业专属账号                   → contact account create
+  - 更新企业账号资料                   → contact account update`,
+		RunE: groupRunE,
+	})
+
+	contactExclusiveAccountDisableCmd := newContactExclusiveAccountSetStatusCommand("disable", "停用", "disable")
+	DeclareLeafMetadata(contactExclusiveAccountDisableCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "exclusive_account_disable",
+				CanonicalPath:  "contact.exclusive_account_disable",
+				CLIPath:        "contact exclusive-account disable",
+				PrimaryCLIPath: "contact exclusive-account disable",
+			},
+			Description: "停用指定的企业专属账号，停用后该账号无法登录钉钉",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"停用企业账号结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "exclusive_account_set_status"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "停用指定的企业专属账号",
+				UseWhen:      []string{"用户明确要求停用/禁用某个企业专属账号（员工 userid 已确认）"},
+				AvoidWhen:    []string{"恢复登录用 contact exclusive-account enable；更新账号资料用 contact account update；不确定 userid 时先通过 contact user search 确认"},
+				Examples:     []string{"dws contact exclusive-account disable --staff-id user001"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "staff-id", Property: "uesrId", Required: boolPtr(true), Description: "企业账号的员工 userid（映射到 MCP 工具入参 uesrId，平台侧历史字段名）"},
+			},
+		},
+	})
+	contactExclusiveAccountEnableCmd := newContactExclusiveAccountSetStatusCommand("enable", "启用", "enable")
+	DeclareLeafMetadata(contactExclusiveAccountEnableCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "exclusive_account_enable",
+				CanonicalPath:  "contact.exclusive_account_enable",
+				CLIPath:        "contact exclusive-account enable",
+				PrimaryCLIPath: "contact exclusive-account enable",
+			},
+			Description: "重新启用已停用的企业专属账号，启用后该账号恢复登录",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","description":"启用企业账号结果","properties":{"result":{"type":"object","description":"调用结果","properties":{}},"success":{"type":"boolean","description":"是否成功"},"errorCode":{"type":"string","description":"错误码"},"errorMsg":{"type":"string","description":"错误信息"}},"required":["success"],"additionalProperties":true}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "exclusive_account_set_status"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "重新启用已停用的企业专属账号",
+				UseWhen:      []string{"用户明确要求启用/恢复某个已停用的企业专属账号"},
+				AvoidWhen:    []string{"停用账号用 contact exclusive-account disable；创建新账号用 contact account create"},
+				Examples:     []string{"dws contact exclusive-account enable --staff-id user001"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "staff-id", Property: "uesrId", Required: boolPtr(true), Description: "企业账号的员工 userid（映射到 MCP 工具入参 uesrId，平台侧历史字段名）"},
+			},
+		},
+	})
+	contactExclusiveAccountCmd.AddCommand(contactExclusiveAccountDisableCmd, contactExclusiveAccountEnableCmd)
 
 	relationCmd.AddCommand(contactRelationListMyFollowingsCmd)
 
@@ -2679,7 +3619,7 @@ contact user profile fields 获取可用字段列表。
 
 	contactExtFieldCmd.AddCommand(contactExtFieldListCmd, contactExtFieldCreateCmd, contactExtFieldUpdateCmd, contactExtFieldDeleteCmd)
 
-	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, contactExtFieldCmd, relationCmd, contactOrgCmd, contactAccountCmd)
+	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, contactExtFieldCmd, relationCmd, contactOrgCmd, contactAccountCmd, contactExclusiveAccountCmd)
 
 	addQueryFlags := func(cmd *cobra.Command) {
 		cmd.Flags().String("query", "", "搜索关键词 (必填)")

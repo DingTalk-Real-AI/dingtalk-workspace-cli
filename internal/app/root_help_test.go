@@ -15,11 +15,13 @@ package app
 
 import (
 	"bytes"
+	"context"
 	stderrors "errors"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -123,6 +126,7 @@ func TestLeafHelpRendersSelectionSafetyAndReferences(t *testing.T) {
 		{path: "dev app delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/devapp.md"},
 		{path: "contract record list", wantEffect: "read", wantConfirm: "not_required", wantSkill: "dingtalk-misc", wantDocument: "references/contract.md"},
 		{path: "contract subject delete", wantEffect: "destructive", wantConfirm: "user_required", wantSkill: "dingtalk-misc", wantDocument: "references/contract.md"},
+		{path: "contact org apply-list", wantEffect: "write", wantConfirm: "not_required", wantSkill: "dingtalk-contact", wantDocument: "references/contact.md"},
 	} {
 		t.Run(strings.ReplaceAll(tc.path, " ", "_"), func(t *testing.T) {
 			root := NewRootCommand()
@@ -708,6 +712,291 @@ func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRootKeepsContactOrgInviteApplyAdminCommands(t *testing.T) {
+	root := NewRootCommand()
+
+	// 命令树结构：exclusive-account 新组、org 组 9 个新子命令、dept 组 invite-audit。
+	mustFindCommand(t, root, "contact", "exclusive-account")
+	mustFindCommand(t, root, "contact", "exclusive-account", "disable")
+	mustFindCommand(t, root, "contact", "exclusive-account", "enable")
+	mustFindCommand(t, root, "contact", "org", "invite-switch")
+	mustFindCommand(t, root, "contact", "org", "invite-audit")
+	mustFindCommand(t, root, "contact", "org", "invite-info")
+	mustFindCommand(t, root, "contact", "org", "invite-list")
+	mustFindCommand(t, root, "contact", "org", "apply-list")
+	mustFindCommand(t, root, "contact", "org", "apply-approve")
+	mustFindCommand(t, root, "contact", "org", "apply-reject")
+	mustFindCommand(t, root, "contact", "org", "apply-block")
+	mustFindCommand(t, root, "contact", "org", "apply-remove")
+	mustFindCommand(t, root, "contact", "dept", "invite-audit")
+
+	approve := mustFindCommand(t, root, "contact", "org", "apply-approve")
+	if !containsString(approve.Aliases, "approve") {
+		t.Fatal("contact org apply-approve missing approve alias")
+	}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "exclusive account disable",
+			args: []string{"--dry-run", "contact", "exclusive-account", "disable", "--staff-id", "user001"},
+			want: []string{"exclusive_account_set_status", "uesrId", "user001", "disable"},
+		},
+		{
+			name: "exclusive account enable",
+			args: []string{"--dry-run", "contact", "exclusive-account", "enable", "--staff-id", "user001"},
+			want: []string{"exclusive_account_set_status", "uesrId", "user001", "enable"},
+		},
+		{
+			name: "org invite switch",
+			args: []string{"--dry-run", "contact", "org", "invite-switch", "--open", "true", "--search-invite", "false"},
+			want: []string{"set_org_invite_switch", `"open": true`, `"searchInviteSwitch": false`},
+		},
+		{
+			name: "org invite audit open",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit"},
+			want: []string{"set_org_apply_audit", `"auditType": 0`},
+		},
+		{
+			name: "org invite audit close",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit=false"},
+			want: []string{"set_org_apply_audit", `"auditType": 1`},
+		},
+		{
+			name: "org invite info",
+			args: []string{"--dry-run", "contact", "org", "invite-info"},
+			want: []string{"get_org_invite_info"},
+		},
+		{
+			name: "org invite list defaults",
+			args: []string{"--dry-run", "contact", "org", "invite-list"},
+			want: []string{"list_team_invite", `"status": 1`, `"size": 20`},
+		},
+		{
+			name: "org invite list paging",
+			args: []string{"--dry-run", "contact", "org", "invite-list", "--status", "2", "--cursor", "33", "--size", "50"},
+			want: []string{"list_team_invite", `"status": 2`, `"cursor": 33`, `"size": 50`},
+		},
+		{
+			name: "org apply list all",
+			args: []string{"--dry-run", "contact", "org", "apply-list", "--status", "0"},
+			want: []string{"query_org_apply_list", `"status": 0`},
+		},
+		{
+			name: "org apply approve",
+			args: []string{"--dry-run", "contact", "org", "apply-approve", "--id", "123"},
+			want: []string{"approve_org_apply", `"id": 123`},
+		},
+		{
+			name: "org apply reject",
+			args: []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123", "--reason", "不符合入职条件"},
+			want: []string{"reject_org_apply", `"id": 123`, "reason", "不符合入职条件"},
+		},
+		{
+			name: "org apply block",
+			args: []string{"--dry-run", "contact", "org", "apply-block", "--id", "123", "--reason", "恶意重复申请"},
+			want: []string{"block_org_apply", `"id": 123`, "reason", "恶意重复申请"},
+		},
+		{
+			name: "org apply remove",
+			args: []string{"--dry-run", "contact", "org", "apply-remove", "--id", "123"},
+			want: []string{"remove_org_apply", `"id": 123`},
+		},
+		{
+			name: "dept invite audit",
+			args: []string{"--dry-run", "contact", "dept", "invite-audit", "--dept", "12345", "--no-audit"},
+			want: []string{"set_dept_apply_audit", `"deptId": 12345`, `"auditType": 0`},
+		},
+		{
+			name: "dept invite audit emp apply join",
+			args: []string{"--dry-run", "contact", "dept", "invite-audit", "--dept", "12345", "--no-audit", "--emp-apply-join-dept", "true"},
+			want: []string{"set_dept_apply_audit", `"deptId": 12345`, `"auditType": 0`, `"empApplyJoinDept": true`},
+		},
+		{
+			// pflag 布尔 flag 不吞并后置值：--no-audit true 中的 "true" 是位置参数，
+			// contactNoAuditArgs 需将其归并回 flag 值而不是拒绝。
+			name: "org invite audit positional bool tolerance",
+			args: []string{"--dry-run", "contact", "org", "invite-audit", "--no-audit", "false"},
+			want: []string{"set_org_apply_audit", `"auditType": 1`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := executeRootCaptureStdout(t, tc.args)
+			if err != nil {
+				t.Fatalf("Execute(%v) error = %v\n%s", tc.args, err, got)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("Execute(%v) output missing %q:\n%s", tc.args, want, got)
+				}
+			}
+		})
+	}
+
+	// 负例：--no-audit 必须显式传值（dry-run 已绕过确认 gate，能命中参数校验）。
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "invite-audit"}); err == nil || !strings.Contains(err.Error(), "--no-audit") {
+		t.Fatalf("org invite-audit without --no-audit should fail with a no-audit hint, got err = %v\n%s", err, got)
+	}
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "invite-list", "--status", "9"}); err == nil || !strings.Contains(err.Error(), "--status") {
+		t.Fatalf("org invite-list --status 9 should fail with a status hint, got err = %v\n%s", err, got)
+	}
+	if got, err := executeRootCaptureStdout(t, []string{"--dry-run", "contact", "org", "apply-reject", "--id", "123"}); err == nil || !strings.Contains(err.Error(), "--reason") {
+		t.Fatalf("org apply-reject without --reason should fail with a reason hint, got err = %v\n%s", err, got)
+	}
+}
+
+// contactWriteOpsCall 记录一次 MCP 写调用的完整入参。
+type contactWriteOpsCall struct {
+	server string
+	tool   string
+	args   map[string]any
+}
+
+// contactWriteOpsRecorder 是记录型 ToolCaller，供确认门禁测试断言
+// 工具名与参数（区别于只验证参数组装的 --dry-run 用例）。
+type contactWriteOpsRecorder struct {
+	calls []contactWriteOpsCall
+}
+
+func (r *contactWriteOpsRecorder) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	r.calls = append(r.calls, contactWriteOpsCall{server: server, tool: tool, args: args})
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true}`}}}, nil
+}
+
+func (*contactWriteOpsRecorder) Format() string { return "json" }
+func (*contactWriteOpsRecorder) DryRun() bool   { return false }
+func (*contactWriteOpsRecorder) Fields() string { return "" }
+func (*contactWriteOpsRecorder) JQ() string     { return "" }
+
+// executeContactWriteOp 走非 dry-run 真实执行路径：os.Args 需含产品名 contact
+// 供 resolveProductID 路由 MCP Server；stdin 传空 reader 模拟非交互环境
+// （EOF 时 ConfirmSafety 失败关闭）。
+func executeContactWriteOp(t *testing.T, recorder *contactWriteOpsRecorder, args []string) error {
+	t.Helper()
+	testseam.Swap(t, &os.Args, append([]string{"dws"}, args...))
+	root := NewRootCommand()
+	helpers.InitDepsForTest(t, recorder)
+	root.SetIn(strings.NewReader(""))
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+// TestContactWriteOpsConfirmationGate 是 user_required 写操作的端到端回归：
+// 上方成功用例全部传 --dry-run（绕过确认 gate），无法证明真实执行路径上
+// 未确认会在 MCP 调用前被拒绝。这里覆盖三类高风险写操作：
+//   - apply-remove：删除申请记录，不可恢复；
+//   - apply-block：屏蔽会拉黑申请人；
+//   - disable：停用企业账号会阻止其登录钉钉。
+func TestContactWriteOpsConfirmationGate(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		tool     string
+		wantArgs map[string]any
+	}{
+		{
+			name:     "apply remove is not recoverable",
+			args:     []string{"contact", "org", "apply-remove", "--id", "123"},
+			tool:     "remove_org_apply",
+			wantArgs: map[string]any{"id": int64(123)},
+		},
+		{
+			name:     "apply block blacklists the applicant",
+			args:     []string{"contact", "org", "apply-block", "--id", "123", "--reason", "恶意重复申请"},
+			tool:     "block_org_apply",
+			wantArgs: map[string]any{"id": int64(123), "reason": "恶意重复申请"},
+		},
+		{
+			name: "exclusive account disable blocks sign-in",
+			args: []string{"contact", "exclusive-account", "disable", "--staff-id", "user001"},
+			tool: "exclusive_account_set_status",
+			// uesrId 是 MCP 工具运行时入参的历史字段名（平台 inputMappings 笔误）。
+			wantArgs: map[string]any{"uesrId": "user001", "status": "disable"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("unconfirmed rejects before any MCP call", func(t *testing.T) {
+				recorder := &contactWriteOpsRecorder{}
+				err := executeContactWriteOp(t, recorder, tc.args)
+				if err == nil {
+					t.Fatalf("%s without confirmation must be rejected", tc.name)
+				}
+				if !apperrors.IsConfirmationRequired(err) {
+					t.Fatalf("%s error = %v, want reason confirmation_required", tc.name, err)
+				}
+				if len(recorder.calls) != 0 {
+					t.Fatalf("%s must not reach MCP before confirmation, got calls: %+v", tc.name, recorder.calls)
+				}
+			})
+
+			t.Run("explicit yes executes exactly the expected tool call", func(t *testing.T) {
+				recorder := &contactWriteOpsRecorder{}
+				err := executeContactWriteOp(t, recorder, append(tc.args, "--yes"))
+				if err != nil {
+					t.Fatalf("%s with --yes failed: %v", tc.name, err)
+				}
+				if len(recorder.calls) != 1 {
+					t.Fatalf("%s with --yes want exactly 1 MCP call, got %d: %+v", tc.name, len(recorder.calls), recorder.calls)
+				}
+				call := recorder.calls[0]
+				if call.server != "contact" || call.tool != tc.tool {
+					t.Fatalf("%s call = %s/%s, want contact/%s", tc.name, call.server, call.tool, tc.tool)
+				}
+				if !reflect.DeepEqual(call.args, tc.wantArgs) {
+					t.Fatalf("%s args = %#v, want %#v", tc.name, call.args, tc.wantArgs)
+				}
+			})
+		})
+	}
+}
+
+// TestContactApplyListSchemaProjectionMatchesRuntimeBehavior 是 apply-list
+// 安全语义的回归：查询会把服务端未读申请标记为已读（Long 帮助明示），
+// 最终 Schema 投影必须声明 Effect=write，不能把有副作用的查询伪装成纯
+// 读取；同时副作用仅清除未读标记，Confirmation 应保持 not_required，
+// 运行时也不得出现确认 gate。投影与运行行为任一侧回归都会被本测试拦截。
+func TestContactApplyListSchemaProjectionMatchesRuntimeBehavior(t *testing.T) {
+	t.Run("schema projection discloses read-marking side effect", func(t *testing.T) {
+		meta, ok := cli.ResolveMeta("contact org apply-list")
+		if !ok {
+			t.Fatal("ResolveMeta(contact org apply-list) missing")
+		}
+		if meta.Safety.Effect != "write" {
+			t.Fatalf("apply-list effect = %q, want write (query marks unread applies as read)", meta.Safety.Effect)
+		}
+		if meta.Safety.Risk != "low" || meta.Safety.Confirmation != "not_required" || meta.Safety.Idempotency != "idempotent" {
+			t.Fatalf("apply-list safety = %+v, want low/not_required/idempotent", meta.Safety)
+		}
+		if !strings.Contains(meta.Selection.AgentSummary, "标记为已读") {
+			t.Fatalf("apply-list agent summary %q must disclose the read-marking side effect", meta.Selection.AgentSummary)
+		}
+	})
+
+	t.Run("not_required projection runs without confirmation gate", func(t *testing.T) {
+		recorder := &contactWriteOpsRecorder{}
+		err := executeContactWriteOp(t, recorder, []string{"contact", "org", "apply-list"})
+		if err != nil {
+			t.Fatalf("apply-list without --yes must not hit the confirmation gate: %v", err)
+		}
+		if len(recorder.calls) != 1 {
+			t.Fatalf("apply-list want exactly 1 MCP call, got %d: %+v", len(recorder.calls), recorder.calls)
+		}
+		call := recorder.calls[0]
+		if call.server != "contact" || call.tool != "query_org_apply_list" {
+			t.Fatalf("apply-list call = %s/%s, want contact/query_org_apply_list", call.server, call.tool)
+		}
+		if want := map[string]any{"status": int64(1), "size": int64(20)}; !reflect.DeepEqual(call.args, want) {
+			t.Fatalf("apply-list args = %#v, want %#v", call.args, want)
+		}
+	})
 }
 
 func TestChatConversationFileUploadUsesANewPath(t *testing.T) {
