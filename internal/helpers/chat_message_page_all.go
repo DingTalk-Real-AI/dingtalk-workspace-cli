@@ -136,9 +136,10 @@ func readAllConversationMessages(cmd *cobra.Command, opts pagedCommandOptions, s
 			break
 		}
 		pagesFetched++
+		pageItems := chatmsg.ListMessageItems(data)
 		projected := projectChatMessagesPayload(data, false)
 		pageMessages, _ := projected["messages"].([]map[string]any)
-		for _, item := range pageMessages {
+		for _, item := range pageItems {
 			id := chatmsg.StableMessageID(item)
 			if id != "" && seenMessages[id] {
 				continue
@@ -225,7 +226,15 @@ func readAllConversationMessages(cmd *cobra.Command, opts pagedCommandOptions, s
 		stopReason = "result_limit"
 		nextPage = nil
 	}
-	payload := chatmsg.NewMessageListPayload(allItems)
+	ledger := decryptProjectedChatMessagesByPolicy(cmd, allItems)
+	messages := make([]map[string]any, 0, len(allItems))
+	for _, item := range allItems {
+		messages = append(messages, projectChatMessageItem(item, nil))
+	}
+	payload := chatmsg.NewMessageListPayload(messages)
+	for key, value := range ledger {
+		payload[key] = value
+	}
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = paginationKnown
 	payload["complete"] = complete && len(failures) == 0 && !truncatedByResultLimit
@@ -236,7 +245,8 @@ func readAllConversationMessages(cmd *cobra.Command, opts pagedCommandOptions, s
 	chatmsg.ApplyTruncation(payload)
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
-	payload["partial"] = len(failures) > 0 && len(allItems) > 0
+	decryptPartial, _ := payload["partial"].(bool)
+	payload["partial"] = decryptPartial || len(failures) > 0 && len(allItems) > 0
 	if hasMore && nextPage != nil {
 		payload["nextPage"] = nextPage
 	}

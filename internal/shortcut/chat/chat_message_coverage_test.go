@@ -183,6 +183,45 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *
 	}
 }
 
+func TestCrossPlatformCoverageMessagesMgetSkipsCryptoWhenBackendUnavailable(t *testing.T) {
+	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			t.Fatal("identity lookup must not run without the SafeChat backend")
+			return messagecrypto.Identity{}, nil
+		},
+		BackendReady: func() bool { return false },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids": `{"result":[{"openMessageId":"m1","openConversationId":"cid","content":"` + testCipher + `"}]}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_messages_by_ids" {
+		t.Fatalf("calls = %#v, want message list only", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"decryptCandidateCount", "decryptedCount", "decryptFailedCount", "decryptFailures"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("unavailable backend emitted %q: %#v", key, payload)
+		}
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "[加密消息，无法解码]" || first["contentDecrypted"] == true {
+		t.Fatalf("message changed without backend: %#v", first)
+	}
+}
+
 func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenBatchDecryptFails(t *testing.T) {
 	swapMessageReadCryptoClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {

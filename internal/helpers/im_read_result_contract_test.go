@@ -331,6 +331,47 @@ func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t 
 	}
 }
 
+func TestCrossPlatformCoverageChatMessageListSkipsCryptoWhenBackendUnavailable(t *testing.T) {
+	old := chatCryptoClient
+	SetChatCryptoClient(&messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			t.Fatal("identity lookup must not run without the SafeChat backend")
+			return messagecrypto.Identity{}, nil
+		},
+		BackendReady: func() bool { return false },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	t.Cleanup(func() { chatCryptoClient = old })
+
+	const encrypted = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	caller := &imReadResultCaller{responses: map[string]string{
+		"list_conversation_message_v2": `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid","content":"` + encrypted + `"}]}}`,
+	}}
+	got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list", "--group", "cid", "--time", "2026-07-14 00:00:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(caller.calls, []imReadResultCall{{productID: "chat", toolName: "list_conversation_message_v2"}}) {
+		t.Fatalf("calls = %#v, want message list only", caller.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(got), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount", "decryptFailures"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("unavailable backend emitted %q: %#v", key, payload)
+		}
+	}
+	body, _ := payload["result"].(map[string]any)
+	messages, _ := body["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["content"] != encrypted || first["contentDecrypted"] == true {
+		t.Fatalf("message changed without backend: %#v", first)
+	}
+}
+
 func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testing.T) {
 	old := chatCryptoClient
 	t.Cleanup(func() { chatCryptoClient = old })
@@ -344,7 +385,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
 				return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
 			},
-			PolicyCache: messagecrypto.NewPolicyCache(nil),
+			BackendReady: func() bool { return true },
+			PolicyCache:  messagecrypto.NewPolicyCache(nil),
 		})
 		caller := &imReadResultCaller{
 			responses: map[string]string{
@@ -378,7 +420,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
 				return &messagecrypto.Session{Cipher: imReadSelectiveCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
 			},
-			PolicyCache: messagecrypto.NewPolicyCache(nil),
+			BackendReady: func() bool { return true },
+			PolicyCache:  messagecrypto.NewPolicyCache(nil),
 		})
 		caller := &imReadResultCaller{responses: map[string]string{
 			"list_conversation_message_v2": `{"result":{"messages":[` +
@@ -427,7 +470,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 				return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 			},
-			PolicyCache: messagecrypto.NewPolicyCache(nil),
+			BackendReady: func() bool { return true },
+			PolicyCache:  messagecrypto.NewPolicyCache(nil),
 		})
 		caller := &imReadResultCaller{responses: map[string]string{"get_message_crypto_policy": `{"result":{"mode":"off"}}`}}
 		InitDeps(caller)
@@ -520,7 +564,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 				return messagecrypto.Identity{}, errors.New("policy unavailable")
 			},
-			PolicyCache: messagecrypto.NewPolicyCache(nil),
+			BackendReady: func() bool { return true },
+			PolicyCache:  messagecrypto.NewPolicyCache(nil),
 		})
 		ledger := decryptProjectedChatMessagesByPolicy(cmd, []map[string]any{
 			{"messageId": "m", "conversationId": "cid", "content": encrypted},
@@ -552,7 +597,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
 				return &messagecrypto.Session{Cipher: imReadFailingCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
 			},
-			PolicyCache: messagecrypto.NewPolicyCache(nil),
+			BackendReady: func() bool { return true },
+			PolicyCache:  messagecrypto.NewPolicyCache(nil),
 		})
 		caller := &imReadResultCaller{responses: map[string]string{"get_message_crypto_policy": `{"result":{"mode":"required"}}`}}
 		InitDeps(caller)
@@ -576,7 +622,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
 				return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
 			},
-			PolicyCache: messagecrypto.NewPolicyCache(nil),
+			BackendReady: func() bool { return true },
+			PolicyCache:  messagecrypto.NewPolicyCache(nil),
 		})
 		caller = &imReadResultCaller{responses: map[string]string{
 			"get_message_crypto_policy":   `{"result":{"mode":"required"}}`,
