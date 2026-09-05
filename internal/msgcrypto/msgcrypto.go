@@ -16,10 +16,10 @@
 // material, and encrypt outbound ones.
 //
 // The SafeChat backend links a prebuilt C static library and therefore needs
-// CGO. Because DWS ships CGO-free cross-compiled release binaries, the backend
-// is compiled only under the "safechat" build tag:
+// CGO. Supported Darwin, Linux, and Windows amd64/arm64 builds include it by
+// default:
 //
-//	CGO_ENABLED=1 go build -tags safechat ./cmd
+//	CGO_ENABLED=1 go build ./cmd
 //
 // Every other build gets a stub whose constructor fails with ErrUnavailable,
 // so callers must always handle that error rather than assume the capability
@@ -44,12 +44,11 @@ import (
 )
 
 // Errors reported by this package. Callers are expected to test for
-// ErrUnavailable explicitly, because it is the normal outcome on every build
-// that does not enable the safechat tag.
+// ErrUnavailable explicitly, because it is the normal outcome on builds that
+// disable CGO or target an unsupported platform.
 var (
 	// ErrUnavailable means this binary was built without the SafeChat
-	// backend, or for a platform the vendor does not ship a static library
-	// for (notably windows/arm64).
+	// backend, or for a platform the vendor does not ship a static library.
 	ErrUnavailable = errors.New("msgcrypto: SafeChat backend not built into this binary")
 
 	// ErrAlreadyOpen means a Cipher is already open. The underlying C

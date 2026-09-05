@@ -12,11 +12,10 @@
 // limitations under the License.
 
 // The constraint below is the exact negation of the one in cipher_safechat.go;
-// change both together. This file covers every default DWS build: the release
-// binaries are cross-compiled with CGO_ENABLED=0, and windows/arm64 has no
-// vendor static library even when the tag is set.
+// change both together. It keeps unsupported or explicitly CGO-disabled builds
+// fail-closed without changing the default supported-platform behavior.
 
-//go:build !(safechat && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64)))
+//go:build !(cgo && (darwin || linux || windows) && (amd64 || arm64))
 
 package msgcrypto
 

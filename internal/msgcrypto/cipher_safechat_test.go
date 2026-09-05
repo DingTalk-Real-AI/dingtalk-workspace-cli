@@ -13,7 +13,7 @@
 
 // Keep this constraint in sync with cipher_safechat.go.
 
-//go:build safechat && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
+//go:build cgo && (darwin || linux || windows) && (amd64 || arm64)
 
 package msgcrypto
 
@@ -33,10 +33,10 @@ import (
 
 func TestCrossPlatformCoverageBackendIsReportedAvailable(t *testing.T) {
 	if !Available() {
-		t.Fatal("Available() = false in a safechat build")
+		t.Fatal("Available() = false in a default CGO build")
 	}
 	if BackendVersion == "" {
-		t.Fatal("BackendVersion is empty in a safechat build")
+		t.Fatal("BackendVersion is empty in a default CGO build")
 	}
 	if !strings.Contains(BackendVersion, "safechat") {
 		t.Fatalf("BackendVersion = %q, want it to name the vendor SDK", BackendVersion)

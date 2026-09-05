@@ -3,8 +3,8 @@ set -eu
 
 # post-goreleaser.sh — Post-build packaging for npm and Homebrew.
 #
-# Run after `goreleaser release` or `goreleaser release --snapshot` to stage
-# the npm package and render the Homebrew formula from goreleaser's dist/ output.
+# Run after scripts/release/run-goreleaser-cross.sh to stage the npm package and
+# render the Homebrew formula from GoReleaser's dist/ output.
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"

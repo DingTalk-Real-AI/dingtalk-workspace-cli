@@ -2,7 +2,7 @@
 set -eu
 
 "$(dirname "$0")/../policy/check-runtime-payload.sh" --allow-unsupported-tools
-go build -buildmode=pie -trimpath -ldflags="-s -w" -o dws ./cmd
+CGO_ENABLED=1 go build -buildmode=pie -trimpath -ldflags="-s -w" -o dws ./cmd
 
 case "$(uname -s)" in
   Darwin) runtime_os=darwin ;;

@@ -25,6 +25,35 @@ var releasePlatformAssets = []string{
 	"dws-windows-arm64.zip",
 }
 
+func releaseArtifactVerificationEnv(t *testing.T) []string {
+	t.Helper()
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("LookPath(go) error = %v", err)
+	}
+	shimDir := t.TempDir()
+	shim := fmt.Sprintf(`#!/bin/sh
+if [ "$#" -ge 2 ] && [ "$1" = "version" ] && [ "$2" = "-m" ]; then
+  printf '%%s: go1.25.9\n' "${3:-dws}"
+  printf '\tdep\tsafechat-go-sdk\tv0.0.0\n'
+  printf '\tbuild\tCGO_ENABLED=1\n'
+  exit 0
+fi
+exec %q "$@"
+`, realGo)
+	mustWriteFile(t, filepath.Join(shimDir, "go"), []byte(shim), 0o755)
+
+	env := os.Environ()
+	pathValue := shimDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	for i, value := range env {
+		if strings.HasPrefix(value, "PATH=") {
+			env[i] = "PATH=" + pathValue
+			return env
+		}
+	}
+	return append(env, "PATH="+pathValue)
+}
+
 func writeVersionedReleaseArchive(t *testing.T, dist, asset, version string) {
 	t.Helper()
 	stage := t.TempDir()
@@ -2191,7 +2220,7 @@ func TestReleaseMirrorUsesChannelSpecificPointer(t *testing.T) {
 
 			cmd := exec.Command("bash", script)
 			cmd.Dir = sourceRoot
-			cmd.Env = append(os.Environ(),
+			cmd.Env = append(releaseArtifactVerificationEnv(t),
 				"DIST_DIR="+dist,
 				"VERSION="+test.version,
 				"DWS_RELEASE_CHANNEL="+test.channel,
@@ -2262,7 +2291,7 @@ func TestReleaseMirrorFailsClosedWhenPointerCannotBeRead(t *testing.T) {
 
 			cmd := exec.Command("bash", script)
 			cmd.Dir = sourceRoot
-			cmd.Env = append(os.Environ(),
+			cmd.Env = append(releaseArtifactVerificationEnv(t),
 				"DIST_DIR="+dist,
 				"VERSION=v1.2.3-beta.1",
 				"DWS_RELEASE_CHANNEL=prerelease",
@@ -2299,7 +2328,7 @@ func TestReleaseMirrorRepairsHistoricalAssetsWithoutMovingNewerPointer(t *testin
 	mustWriteFile(t, fakeOSSUtil, []byte("#!/bin/sh\nset -eu\nprevious=\npenultimate=\nfor arg in \"$@\"; do penultimate=\"$previous\"; previous=\"$arg\"; done\nlast=\"$previous\"\ncase \"$penultimate\" in oss://*) printf 'v1.2.4-beta.1\\n' > \"$last\"; exit 0 ;; esac\nprintf '%s\\n' \"$last\" >> \"$OSSUTIL_LOG\"\n"), 0o755)
 	cmd := exec.Command("bash", filepath.Join(sourceRoot, "scripts", "release", "sync-to-oss.sh"))
 	cmd.Dir = sourceRoot
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(releaseArtifactVerificationEnv(t),
 		"DIST_DIR="+dist,
 		"VERSION=v1.2.3-beta.1",
 		"DWS_RELEASE_CHANNEL=prerelease",
@@ -2359,14 +2388,14 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	dist := t.TempDir()
 	seedVersionedReleaseArtifacts(t, dist, "v1.2.3")
 	cmd := exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("artifact verification error = %v\noutput:\n%s", err, output)
 	}
 
 	writeReleaseChecksums(t, dist, false)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	output, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "dws-skills.zip exactly once") {
 		t.Fatalf("missing checksum was not blocked: err=%v\noutput:\n%s", err, output)
@@ -2375,7 +2404,7 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeReleaseChecksums(t, dist, true)
 	mustWriteFile(t, filepath.Join(dist, "dws-linux-riscv64.tar.gz"), []byte("unexpected\n"), 0o644)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "public release assets") {
 		t.Fatalf("extra public archive was not rejected: err=%v\noutput:\n%s", err, output)
 	}
@@ -2386,7 +2415,7 @@ func TestReleaseArtifactVerificationRequiresEveryChecksum(t *testing.T) {
 	writeVersionedReleaseArchive(t, dist, "dws-windows-arm64.zip", "v1.2.2")
 	writeReleaseChecksums(t, dist, true)
 	cmd = exec.Command("sh", r.verify, "v1.2.3")
-	cmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+dist)
+	cmd.Env = append(releaseArtifactVerificationEnv(t), "DWS_PACKAGE_DIST_DIR="+dist)
 	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "dws-windows-arm64.zip binary") {
 		t.Fatalf("mixed-version archive was not rejected: err=%v\noutput:\n%s", err, output)
 	}

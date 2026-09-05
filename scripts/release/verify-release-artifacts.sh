@@ -98,6 +98,18 @@ verify_binary_version() {
     printf '%s binary does not embed expected version v%s\n' "$asset" "$SEMVER" >&2
     return 1
   }
+  build_info="$(go version -m "$binary")" || {
+    printf '%s does not expose readable Go build information\n' "$asset" >&2
+    return 1
+  }
+  printf '%s\n' "$build_info" | grep -Fq 'build	CGO_ENABLED=1' || {
+    printf '%s was not built with CGO enabled\n' "$asset" >&2
+    return 1
+  }
+  printf '%s\n' "$build_info" | grep -Fq 'dep	safechat-go-sdk	' || {
+    printf '%s does not link the SafeChat backend\n' "$asset" >&2
+    return 1
+  }
 
   case "$asset" in
     dws-darwin-amd64*) target_os=darwin; target_arch=amd64 ;;
