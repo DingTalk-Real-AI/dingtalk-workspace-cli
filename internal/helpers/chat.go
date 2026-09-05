@@ -7778,14 +7778,15 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageReplyCmd := &cobra.Command{
 		Use:   "reply",
 		Short: "引用回复消息（支持单聊/群聊）",
-		Long: `以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。群聊回复可通过 --at-open-dingtalk-ids @指定成员，或通过 --at-all @所有人；正文中的裸 @openDingTalkId 会自动规范化为 <@openDingTalkId>，缺少对应成员或 <@all> 占位符时会自动补齐。
+		Long: `以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。群聊回复可通过 --at-open-dingtalk-ids @指定成员，或通过 --at-all @所有人；正文中的裸 @openDingTalkId 会自动规范化为 <@openDingTalkId>，缺少对应成员或 <@all> 占位符时会自动补齐。也可通过 --at-users 传入逗号分隔的 userId 或 openDingTalkId，userId 会自动解析为 openDingTalkId，正文中对应的 @ 标识会同步转换为 <@openDingTalkId>。
 
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>
           （人员信息可通过 dws contact user search --keyword "姓名" --format json 获取）`,
 		Example: `  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "收到，马上处理"
-  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>`,
+  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>
+  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "@userId 收到" --at-users userId`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := promoteLegacyChatString(cmd, "group", "conversation-id"); err != nil {
 				return err
@@ -7825,9 +7826,37 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			atAll, _ := cmd.Flags().GetBool("at-all")
 			atOpenIDs := mustGetFlag(cmd, "at-open-dingtalk-ids")
+			replyBody := mustGetFlag(cmd, "content")
+			// --at-users accepts userId or openDingTalkId, mirroring the flag
+			// chat message send-by-webhook already exposes. Resolve to
+			// openDingTalkId and fold into --at-open-dingtalk-ids so both flags
+			// share one mention path.
+			if atUsers := parseCSVValues(mustGetFlag(cmd, "at-users")); len(atUsers) > 0 {
+				resolved, err := resolveOpenDingTalkIDs(cmd.Context(), atUsers)
+				if err != nil {
+					return fmt.Errorf("cannot resolve --at-users: %w", err)
+				}
+				replyBody = normalizeAtPlaceholders(replyBody, atUsers, true)
+				for i, atUser := range atUsers {
+					replyBody = strings.ReplaceAll(replyBody, "<@"+atUser+">", "<@"+resolved[i]+">")
+				}
+				merged := parseCSVValues(atOpenIDs)
+				seen := make(map[string]struct{}, len(merged)+len(resolved))
+				for _, id := range merged {
+					seen[id] = struct{}{}
+				}
+				for _, id := range resolved {
+					if _, ok := seen[id]; ok {
+						continue
+					}
+					seen[id] = struct{}{}
+					merged = append(merged, id)
+				}
+				atOpenIDs = strings.Join(merged, ",")
+			}
 			replyText := applyCurrentUserGroupMentions(
 				toolArgs,
-				mustGetFlag(cmd, "content"),
+				replyBody,
 				atOpenIDs,
 				atAll,
 			)
@@ -7875,6 +7904,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				{Name: "ai-tag", Property: "clawType", InterfaceType: "string"},
 				{Name: "at-all", Property: "atAll", Required: boolPtr(false), InterfaceType: "boolean"},
 				{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "at-users", Property: "atOpenDingTalkIds", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "group", Property: "openConversationId"},
 			},
 		},
@@ -7899,6 +7929,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageReplyCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
 	chatMessageReplyCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效；正文缺少 <@all> 时自动补齐）")
 	chatMessageReplyCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效；正文缺少对应 <@id> 时自动补齐，裸 @id 自动规范化）")
+	chatMessageReplyCmd.Flags().String("at-users", "", "@指定成员的 userId 或 openDingTalkId 列表，逗号分隔；userId 会自动解析为 openDingTalkId")
 	cli.AttachRuntimeSchema(chatMessageReplyCmd, "chat", "reply_personal_message", "hardcoded:chat")
 
 	// ── message forward: 转发单条消息 ────────────────────────

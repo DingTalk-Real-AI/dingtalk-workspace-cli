@@ -1380,6 +1380,7 @@ Usage:
 Example:
   dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "收到，马上处理"
   dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>
+  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "@userId 收到" --at-users userId
   # 被引用消息的 openMessageId、发送者 openDingTalkId 通过 dws chat message list 获取
 Flags:
       --at-all                   @所有人（仅群聊时生效；正文缺少 <@all> 时自动补齐）
@@ -1388,12 +1389,14 @@ Flags:
       --ref-msg-id string        被引用的消息 openMessageId (必填)
       --ref-sender string        被引用消息的发送者 openDingTalkId (必填)
       --content string           回复内容 (必填)
+      --at-users string          @指定成员的 userId 或 openDingTalkId 列表，逗号分隔
       --ai-tag                   消息是否带 AI 发送角标（可选，默认 true）
       --uuid string              幂等键（可选）
 
 注意:
   - 以当前用户身份引用回复，语义同 chat message send；目前回复类型仅支持 text
   - 群聊 @指定成员时，正文缺少对应 <@openDingTalkId> 会自动补齐，已有裸 @openDingTalkId 会规范化；--at-all 会自动补齐 <@all>
+  - --at-users 中的 userId 会自动解析为 openDingTalkId，正文中对应的 @userId、<@userId> 标识会同步转换为 <@openDingTalkId>
 ```
 
 #### 转发单条消息 — 将一条消息从源会话转发到目标会话（源/目标均支持单聊/群聊）
@@ -2588,7 +2591,7 @@ Flags:
 - `chat hide` 隐藏会话，需传 --conversation-id（openConversationId，支持单聊/群聊），隐藏后不显示在列表中，收到新消息时重新出现
 - `chat mute-at-all` 关闭/开启 @所有人消息提醒，需传 --conversation-id（openConversationId），默认关闭通知，传 --off 恢复接收；调用前需先开启总免打扰
 - `chat mute-red-envelope` 关闭/开启红包消息提醒，需传 --conversation-id（openConversationId），默认关闭通知，传 --off 恢复接收；调用前需先开启总免打扰
-- `chat message reply` 引用回复消息（**单聊/群聊均可**），需传 --group（openConversationId，单聊与群聊使用同一字段）、--ref-msg-id（被引用消息 openMessageId）、--ref-sender（被引用消息发送者 openDingTalkId）、--content（回复内容）；目前回复类型仅支持 text
+- `chat message reply` 引用回复消息（**单聊/群聊均可**），需传 --group（openConversationId，单聊与群聊使用同一字段）、--ref-msg-id（被引用消息 openMessageId）、--ref-sender（被引用消息发送者 openDingTalkId）、--content（回复内容）；可选 --at-users 传逗号分隔的 userId 或 openDingTalkId，userId 会自动解析并同步转换正文中的 @ 标识；目前回复类型仅支持 text
 - `chat message forward` 转发单条消息（**源/目标会话均支持单聊/群聊**，常见组合：群→群、群→单、单→群、单→单），需传 --src-conversation-id（源会话 openConversationId）、--msg-id（源消息 openMessageId）、--dest-conversation-id（目标会话 openConversationId）
 - `chat set-top` 设置/取消会话置顶（**单聊/群聊均可**），需传 --conversation-id（openConversationId，单聊与群聊使用同一字段），默认置顶，传 --off 取消
 - `chat message reply` 以当前用户身份引用回复，与 `chat message send` 的用户身份发送语义一致
