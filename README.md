@@ -452,10 +452,10 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 | Intent guide | `skills/mono/references/intent-guide.md` | Disambiguation for confusing scenarios (e.g. report vs todo) |
 | Global reference | `skills/mono/references/global-reference.md` | Auth, output formats, global flags |
 | Error codes | `skills/mono/references/error-codes.md` | Error codes + debugging workflows |
-| Ready-made scripts | `skills/mono/scripts/*.py` | 13 batch operation scripts (see below) |
+| Ready-made scripts | `skills/mono/scripts/*.py` | 11 batch operation scripts (see below) |
 
 <details>
-<summary><strong>Ready-made scripts</strong> — 13 Python scripts for common multi-step workflows</summary>
+<summary><strong>Ready-made scripts</strong> — 11 Python scripts for common multi-step workflows</summary>
 
 | Script | Description |
 |--------|-------------|
@@ -469,8 +469,6 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 | `todo_daily_summary.py` | Summarize today/this week's incomplete todos |
 | `todo_overdue_check.py` | Scan overdue todos and output overdue list |
 | `contact_dept_members.py` | Search department by name and list all members |
-| `attendance_my_record.py` | View my attendance records for today/this week/specific date |
-| `attendance_team_shift.py` | Query team shift schedules and attendance statistics |
 | `report_inbox_today.py` | View today's received reports with details |
 
 </details>
