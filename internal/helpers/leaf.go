@@ -22,7 +22,6 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -284,15 +283,7 @@ func installContractRunEPipeline(cmd *cobra.Command, rt *contractRuntime) {
 	if inner == nil {
 		panic(fmt.Sprintf("installContractRunEPipeline(%q): RunE is nil", cmd.Name()))
 	}
-	cmd.RunE = func(c *cobra.Command, args []string) error {
-		if rt.validate != nil {
-			if err := rt.validate(c, args); err != nil {
-				return apperrors.NormalizeValidation(
-					err,
-					apperrors.WithReason("invalid_parameters"),
-				)
-			}
-		}
+	cmd.RunE = corecmd.WithValidation(rt.validate, func(c *cobra.Command, args []string) error {
 		if !rt.confirm {
 			return inner(c, args)
 		}
@@ -335,7 +326,7 @@ func installContractRunEPipeline(cmd *cobra.Command, rt *contractRuntime) {
 			return fmt.Errorf("contract: user_required confirmation was never obtained via CallTool for %q; add Validate for local side effects or dispatch through deps.Caller.CallTool", c.Name())
 		}
 		return nil
-	}
+	})
 }
 
 // contractConfirmCaller defers ConfirmSafety until the first CallTool, so

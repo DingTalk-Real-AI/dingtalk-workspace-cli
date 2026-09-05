@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeFormulaVerify(t *testing.T, caller *scriptedToolCaller, stdin *strings.Reader, args ...string) error {
@@ -17,7 +19,7 @@ func executeFormulaVerify(t *testing.T, caller *scriptedToolCaller, stdin *strin
 		cmd.SetIn(stdin)
 	}
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageSheetFormulaVerifyRejectsNonPositiveLimits(t *testing.T) {
@@ -90,7 +92,7 @@ func TestCrossPlatformCoverageSheetFormulaVerifyTargetsStdinFailure(t *testing.T
 	cmd.SilenceUsage = true
 	cmd.SetIn(failingReader{})
 	cmd.SetArgs([]string{"--node", "n1", "--targets", "-"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "读取 stdin 失败") {
 		t.Fatalf("err = %v, want stdin failure", err)
 	}
@@ -165,7 +167,7 @@ func TestCrossPlatformCoverageSheetFormulaVerifyPayloadEdges(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--node", "n1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "write failed") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "write failed") {
 		t.Fatalf("print failure err = %v, want write failed", err)
 	}
 }

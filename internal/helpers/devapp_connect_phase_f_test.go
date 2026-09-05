@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // phaseFConnectRoot 构造 stdout/stderr 分流的可观测命令树根，供 connect 族
@@ -86,7 +88,7 @@ func TestDevConnectCustomChannelPreviewEnvelope(t *testing.T) {
 		"--robot-client-secret", "sec-1",
 		"--dry-run",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 
@@ -136,7 +138,7 @@ func TestDevConnectDryRunUnifiedAppIDPreviewEndToEnd(t *testing.T) {
 		"--unified-app-id", "u-9",
 		"--dry-run",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 
@@ -182,7 +184,7 @@ func TestDevConnectForegroundStdoutDiscipline(t *testing.T) {
 		"--robot-client-id", "cid-1",
 		"--robot-client-secret", "sec-1",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 

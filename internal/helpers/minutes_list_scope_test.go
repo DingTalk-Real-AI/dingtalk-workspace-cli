@@ -8,6 +8,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -52,7 +53,7 @@ func TestMinutesListLeavesDeliverTheirFixedRPCScope(t *testing.T) {
 			command.SilenceErrors = true
 			command.SilenceUsage = true
 			command.SetArgs([]string{"list", test.path})
-			if err := command.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(command); err != nil {
 				t.Fatalf("minutes list %s: %v", test.path, err)
 			}
 			if caller.calls != 1 {

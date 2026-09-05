@@ -94,7 +94,7 @@ func runDriveCoverageTo(t *testing.T, declaration shortcut.Shortcut, caller *dri
 	root.SetOut(writer)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"drive", declaration.Command}, args...))
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err != nil || !output.UsesUnifiedResult(executed) {
 		return err
 	}

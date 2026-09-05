@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ func TestCrossPlatformCoveragePersonalTodoEventListAndSchema(t *testing.T) {
 	var listOut bytes.Buffer
 	list.SetOut(&listOut)
 	list.SetArgs([]string{"--category", "todo"})
-	if err := list.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(list); err != nil {
 		t.Fatalf("event list --category todo error = %v", err)
 	}
 
@@ -78,7 +79,7 @@ func TestCrossPlatformCoveragePersonalTodoEventListAndSchema(t *testing.T) {
 		var schemaOut bytes.Buffer
 		schema.SetOut(&schemaOut)
 		schema.SetArgs([]string{tt.eventKey, "--flatten"})
-		if err := schema.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(schema); err != nil {
 			t.Fatalf("event schema %s --flatten error = %v", tt.eventKey, err)
 		}
 		var doc map[string]any
@@ -117,7 +118,7 @@ func TestCrossPlatformCoveragePersonalTodoRoleTypesCobraWiring(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{personal.EventTodoTaskCreated, "--role-types", "executor,creator", "--dry-run"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("event consume Todo wiring error = %v", err)
 	}
 	if got.EventKey != personal.EventTodoTaskCreated || !reflect.DeepEqual(got.RoleTypes, []string{"executor", "creator"}) || !got.Common.DryRun {

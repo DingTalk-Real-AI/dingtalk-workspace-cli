@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -99,7 +100,7 @@ func TestCrossPlatformCoverageSkillSetupDeclinedConfirmationNeverRemoves(t *test
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetArgs([]string{"--mode", "multi", "--target", "claude", "--source", multiSrc})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("declined setup should succeed as a no-op: %v (%s)", err, errOut.String())
 	}
 	if !strings.Contains(out.String(), "已取消") {
@@ -122,7 +123,7 @@ func TestCrossPlatformCoverageSkillSetupDeclinedConfirmationNeverRemoves(t *test
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetArgs([]string{"--mode", "multi", "--target", "claude", "--source", multiSrc})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("confirmed setup failed: %v (%s)", err, errOut.String())
 	}
 	for _, gone := range []string{filepath.Join(agentHome, "dws"), filepath.Join(agentHome, "dingtalk-stale")} {
@@ -173,7 +174,7 @@ func TestCrossPlatformCoverageSkillSetupNonInteractiveRequiresYes(t *testing.T) 
 		cmd.SetErr(io.Discard)
 		args := []string{"--mode", "multi", "--target", "claude", "--source", multiSrc}
 		cmd.SetArgs(append(args, extra...))
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 
 	if err := run(); err == nil || !strings.Contains(err.Error(), "--yes") {
@@ -805,7 +806,7 @@ func TestRunSkillSetupRejectsSkillFlagInMonoMode(t *testing.T) {
 	cmd.SetArgs([]string{"--mode", "mono", "--yes", "--skill", "aitable"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Fatal("expected error for --skill in mono mode")
 	}
@@ -979,7 +980,7 @@ func executeMultiSkillSetupTest(t *testing.T, src string, dests []string, args .
 	cmd.SetErr(&stderr)
 	baseArgs := []string{"--mode", "multi", "--source", src}
 	cmd.SetArgs(append(baseArgs, args...))
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	return stdout.String(), stderr.String(), err
 }
 

@@ -42,7 +42,7 @@ func runMinutesAlignmentCLIWithWriter(t *testing.T, caller *minutesE2ECaller, wr
 	root.SetOut(writer)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err != nil || !output.UsesUnifiedResult(executed) {
 		return err
 	}

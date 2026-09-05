@@ -9,6 +9,8 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func newProxyTestRoot(proxy *cobra.Command, target *cobra.Command) *cobra.Command {
@@ -134,7 +136,7 @@ func executeWikiEdgeWithCaller(t *testing.T, args ...string) (*scriptedToolCalle
 	root.SetIn(os.Stdin)
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
-	return caller, root.Execute()
+	return caller, corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageWikiRoutingAndValidationEdges(t *testing.T) {

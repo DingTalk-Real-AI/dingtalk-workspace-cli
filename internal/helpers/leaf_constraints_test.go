@@ -58,7 +58,7 @@ func leafConstraintExecute(t *testing.T, args ...string) (map[string]any, error)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	return captured, err
 }
 
@@ -116,7 +116,7 @@ func TestCrossPlatformCoverageLeafConstraintDefaultNotCounted(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(nil)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "请至少指定 --channel、--group 之一") {
 		t.Fatalf("default counted as provided: err = %v, captured = %#v", err, captured)
 	}
@@ -189,7 +189,7 @@ func TestCrossPlatformCoverageLeafBoolSliceRequired(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 	if err := run("--ids", "a"); err == nil || !strings.Contains(err.Error(), "confirm") {
 		t.Fatalf("missing bool err = %v", err)
@@ -298,7 +298,7 @@ func TestCrossPlatformCoverageLeafConstraintRunsBeforeValidateHook(t *testing.T)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(nil)
-	if err := cmd.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(cmd); err == nil {
 		t.Fatal("constraint should fail before Validate")
 	}
 	if hookRan {
@@ -331,7 +331,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 		},
 	})
 	escape.SetArgs(nil)
-	if err := escape.Execute(); err != nil || !escaped {
+	if err := corecmd.ExecuteForTest(escape); err != nil || !escaped {
 		t.Fatalf("RunE escape hatch not used: err = %v", err)
 	}
 
@@ -353,7 +353,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs([]string{"--count", "3"})
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 	if err := serverRouted(); err != nil {
 		t.Fatalf("server routing err = %v", err)
@@ -379,7 +379,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 	badInt.SilenceErrors = true
 	badInt.SilenceUsage = true
 	badInt.SetArgs(nil)
-	if err := badInt.Execute(); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
+	if err := corecmd.ExecuteForTest(badInt); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
 		t.Fatalf("invalid env integer err = %v", err)
 	}
 
@@ -394,7 +394,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 	transformFail.SilenceErrors = true
 	transformFail.SilenceUsage = true
 	transformFail.SetArgs([]string{"--raw", "x"})
-	if err := transformFail.Execute(); err == nil || !strings.Contains(err.Error(), "transform failed") {
+	if err := corecmd.ExecuteForTest(transformFail); err == nil || !strings.Contains(err.Error(), "transform failed") {
 		t.Fatalf("transform error not surfaced: %v", err)
 	}
 
@@ -410,7 +410,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 	hinted.SilenceErrors = true
 	hinted.SilenceUsage = true
 	hinted.SetArgs(nil)
-	if err := hinted.Execute(); err == nil || !strings.Contains(err.Error(), "DWS_LEAF_CORE_TEST_TOKEN") {
+	if err := corecmd.ExecuteForTest(hinted); err == nil || !strings.Contains(err.Error(), "DWS_LEAF_CORE_TEST_TOKEN") {
 		t.Fatalf("required hint err = %v", err)
 	}
 
@@ -435,7 +435,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs([]string{"--n", "5", "--opt", "ignored"})
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 	if err := defaultRouted(); err != nil {
 		t.Fatalf("default route err = %v", err)
@@ -459,7 +459,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 	missingInt.SilenceErrors = true
 	missingInt.SilenceUsage = true
 	missingInt.SetArgs(nil)
-	if err := missingInt.Execute(); err == nil || !strings.Contains(err.Error(), "n") {
+	if err := corecmd.ExecuteForTest(missingInt); err == nil || !strings.Contains(err.Error(), "n") {
 		t.Fatalf("missing int required err = %v", err)
 	}
 	// 带 EnvVar 但 RequiredHint 为空：走默认 'flag --x is required' 文案。
@@ -472,7 +472,7 @@ func TestCrossPlatformCoverageLeafSpecCorePaths(t *testing.T) {
 	envDefaultHint.SilenceErrors = true
 	envDefaultHint.SilenceUsage = true
 	envDefaultHint.SetArgs(nil)
-	if err := envDefaultHint.Execute(); err == nil || !strings.Contains(err.Error(), "flag --key is required") {
+	if err := corecmd.ExecuteForTest(envDefaultHint); err == nil || !strings.Contains(err.Error(), "flag --key is required") {
 		t.Fatalf("env default hint err = %v", err)
 	}
 }
@@ -527,7 +527,7 @@ func leafSafetyRun(t *testing.T, safety contract.SafetySpec, stdin string, args 
 		cmd.SetIn(strings.NewReader(stdin))
 	}
 	cmd.SetArgs(args)
-	return called, cmd.Execute()
+	return called, corecmd.ExecuteForTest(cmd)
 }
 
 // TestCrossPlatformCoverageLeafSafetyUnderRootGlobalFlags mirrors the production
@@ -553,7 +553,7 @@ func TestCrossPlatformCoverageLeafSafetyUnderRootGlobalFlags(t *testing.T) {
 			args = append(args, globalFlag)
 		}
 		root.SetArgs(args)
-		return called, root.Execute()
+		return called, corecmd.ExecuteForTest(root)
 	}
 
 	// root-level --yes bypasses the prompt (no stdin available).
@@ -632,7 +632,7 @@ func TestCrossPlatformCoverageLeafYesFlagAndIntEdges(t *testing.T) {
 	badInt.SilenceErrors = true
 	badInt.SilenceUsage = true
 	badInt.SetArgs(nil)
-	if err := badInt.Execute(); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
+	if err := corecmd.ExecuteForTest(badInt); err == nil || !strings.Contains(err.Error(), "invalid integer value") {
 		t.Fatalf("unparseable int env err = %v", err)
 	}
 
@@ -644,7 +644,7 @@ func TestCrossPlatformCoverageLeafYesFlagAndIntEdges(t *testing.T) {
 	noYes.SilenceUsage = true
 	noYes.SetIn(strings.NewReader("no\n"))
 	noYes.SetArgs([]string{"--id", "x"})
-	if err := noYes.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := corecmd.ExecuteForTest(noYes); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("no-yes-flag cancel err = %v", err)
 	}
 	if called {

@@ -24,6 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -191,7 +192,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner
 	cmd.SetArgs([]string{})
 
 	// Validate failure short-circuits before the inner RunE.
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "flag --id is required") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "flag --id is required") {
 		t.Fatalf("Execute() error = %v, want Validate failure", err)
 	} else {
 		var typed *apperrors.Error
@@ -207,7 +208,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner
 	if err := cmd.Flags().Set("id", "x"); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v, want nil for not_required leaf", err)
 	}
 	if !ran {
@@ -246,7 +247,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataConfirmFallbackWithoutCaller(t 
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{})
 
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || (!strings.Contains(err.Error(), "confirmation_required") && !strings.Contains(err.Error(), "需要用户确认")) {
 		t.Fatalf("Execute() without deps/--yes error = %v, want confirmation_required", err)
 	}
@@ -257,7 +258,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataConfirmFallbackWithoutCaller(t 
 	if err := cmd.Flags().Set("yes", "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() with --yes error = %v", err)
 	}
 	if !ran {
@@ -296,7 +297,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataDeferredConfirmAfterRunEWithout
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{})
 
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "never obtained via CallTool") {
 		t.Fatalf("Execute() without CallTool error = %v, want fail-closed contract error", err)
 	}
@@ -308,7 +309,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataDeferredConfirmAfterRunEWithout
 	}
 
 	cmd.Flags().Set("dry-run", "true")
-	err = cmd.Execute()
+	err = corecmd.ExecuteForTest(cmd)
 	if err != nil {
 		t.Fatalf("Execute() with --dry-run error = %v, want nil dry-run bypass", err)
 	}
@@ -324,7 +325,7 @@ func TestCrossPlatformCoverageDeclareLeafMetadataDeferredConfirmAfterRunEWithout
 	if err := cmd.Flags().Set("yes", "true"); err != nil {
 		t.Fatal(err)
 	}
-	err = cmd.Execute()
+	err = corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "never obtained via CallTool") {
 		t.Fatalf("Execute() with --yes but no CallTool error = %v, want fail-closed contract error", err)
 	}
@@ -508,7 +509,7 @@ func TestCrossPlatformCoverageSheetMutationGuardRunsContractValidateBeforeTarget
 	cmd.SetArgs([]string{})
 
 	// Validate failure must win over missing --node and the --yes-only prompt.
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "flag --range is required") {
 		t.Fatalf("Execute() error = %v, want ContractValidate failure first", err)
 	}
@@ -526,7 +527,7 @@ func TestCrossPlatformCoverageSheetMutationGuardRunsContractValidateBeforeTarget
 	if err := cmd.Flags().Set("yes", "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() with valid flags error = %v", err)
 	}
 	if !ran {
@@ -543,5 +544,71 @@ func TestCrossPlatformCoverageRequireSheetMutationTargetsSkipsCommandsWithoutNod
 	cmd := &cobra.Command{Use: "no-node"}
 	if err := requireSheetMutationTargets(cmd); err != nil {
 		t.Fatalf("requireSheetMutationTargets(no --node) = %v, want nil", err)
+	}
+}
+
+func TestCrossPlatformCoverageValidationPipelineTierParity(t *testing.T) {
+	for _, tier := range []string{"managed", "metadata"} {
+		for _, direct := range []bool{false, true} {
+			for _, outcome := range []string{"invalid", "success", "business error", "typed", "cancel"} {
+				t.Run(fmt.Sprintf("%s/direct=%t/%s", tier, direct, outcome), func(t *testing.T) {
+					validationCalls, businessCalls := 0, 0
+					raw := fmt.Errorf("invalid argument")
+					businessErr := fmt.Errorf("business I/O")
+					var validationErr error
+					switch outcome {
+					case "invalid":
+						validationErr = raw
+					case "typed":
+						validationErr = apperrors.NewAPI("upstream")
+					case "cancel":
+						validationErr = context.Canceled
+					}
+					validate := func(*cobra.Command, []string) error { validationCalls++; return validationErr }
+					next := func(*cobra.Command, []string) error {
+						businessCalls++
+						if outcome == "business error" {
+							return businessErr
+						}
+						return nil
+					}
+					var cmd *cobra.Command
+					if tier == "managed" {
+						cmd = corecmd.New(corecmd.Spec{Use: "test", Validate: validate, RunE: next})
+					} else {
+						cmd = &cobra.Command{Use: "test", RunE: next}
+						DeclareLeafMetadata(cmd, LeafSpec{Validate: validate, Contract: contractCoverageSchema("test")})
+					}
+					cmd.SetOut(io.Discard)
+					cmd.SetErr(io.Discard)
+					cmd.SetArgs([]string{})
+					var err error
+					if direct {
+						err = cmd.RunE(cmd, nil)
+					} else {
+						err = corecmd.ExecuteForTest(cmd)
+					}
+					wantBusiness := 1
+					if validationErr != nil {
+						wantBusiness = 0
+					}
+					if validationCalls != 1 || businessCalls != wantBusiness {
+						t.Fatalf("validation=%d business=%d want 1/%d", validationCalls, businessCalls, wantBusiness)
+					}
+					if outcome == "invalid" {
+						var typed *apperrors.Error
+						if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.Reason != "invalid_parameters" || apperrors.ExitCode(err) != 3 || !stderrors.Is(err, raw) {
+							t.Fatalf("validation error=%v", err)
+						}
+					} else if outcome == "business error" {
+						if err != businessErr {
+							t.Fatalf("business identity changed: %v", err)
+						}
+					} else if err != validationErr {
+						t.Fatalf("error identity changed: %v", err)
+					}
+				})
+			}
+		}
 	}
 }

@@ -14,12 +14,26 @@
 package corecmd
 
 import (
+	"context"
 	stderrors "errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
+
+type validationExitCoderError struct{}
+
+func (*validationExitCoderError) Error() string { return "explicit exit code" }
+func (*validationExitCoderError) ExitCode() int { return 42 }
+
+type validationFailingValue struct{ err error }
+
+func (*validationFailingValue) String() string     { return "" }
+func (v *validationFailingValue) Set(string) error { return v.err }
+func (*validationFailingValue) Type() string       { return "validation-failing" }
 
 func requireValidationError(t *testing.T, err error, reason string) {
 	t.Helper()
@@ -33,14 +47,18 @@ func requireValidationError(t *testing.T, err error, reason string) {
 }
 
 func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
-	InstallValidationAdapters(nil)
+	if err := PrepareCommandTree(nil); err == nil {
+		t.Fatal("nil root must fail preparation")
+	}
 
 	t.Run("positionals", func(t *testing.T) {
 		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 		leaf := &cobra.Command{Use: "leaf", Args: cobra.ExactArgs(1), RunE: func(*cobra.Command, []string) error { return nil }}
 		root.AddCommand(leaf)
-		InstallValidationAdapters(root)
-		InstallValidationAdapters(root)
+		prepareValidationTree(t, root)
+		if err := PrepareCommandTree(root); err == nil {
+			t.Fatal("duplicate preparation must fail")
+		}
 		root.SetArgs([]string{"leaf"})
 		_, err := root.ExecuteC()
 		requireValidationError(t, err, "invalid_positionals")
@@ -51,10 +69,312 @@ func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
 		leaf := &cobra.Command{Use: "leaf", RunE: func(*cobra.Command, []string) error { return nil }}
 		leaf.Flags().Int("count", 0, "count")
 		root.AddCommand(leaf)
-		InstallValidationAdapters(root)
+		prepareValidationTree(t, root)
 		root.SetArgs([]string{"leaf", "--count", "not-an-int"})
 		_, err := root.ExecuteC()
 		requireValidationError(t, err, "invalid_flag")
+	})
+
+	t.Run("standalone corecmd flag parse", func(t *testing.T) {
+		cmd := New(Spec{
+			Use:    "leaf",
+			Flags:  []FlagSpec{{Name: "count", Kind: KindInt}},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		prepareValidationTree(t, cmd)
+		cmd.SetArgs([]string{"--count", "not-an-int"})
+		_, err := cmd.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+	})
+
+	t.Run("mounted corecmd inherits parent flag handler", func(t *testing.T) {
+		rootHandlerErr := stderrors.New("root flag handler")
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		root.SetFlagErrorFunc(func(*cobra.Command, error) error { return rootHandlerErr })
+		leaf := New(Spec{
+			Use:    "leaf",
+			Flags:  []FlagSpec{{Name: "count", Kind: KindInt}},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		root.AddCommand(leaf)
+		prepareValidationTree(t, root)
+		root.SetArgs([]string{"leaf", "--count", "not-an-int"})
+		_, err := root.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+		if !stderrors.Is(err, rootHandlerErr) {
+			t.Fatalf("mounted flag error did not use the parent handler: %v", err)
+		}
+	})
+
+	t.Run("nested corecmd inherits the nearest handler without recursion", func(t *testing.T) {
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			return fmt.Errorf("root handler: %w", err)
+		})
+		parent := New(Spec{
+			Use:    "parent",
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		leaf := New(Spec{
+			Use:    "leaf",
+			Flags:  []FlagSpec{{Name: "count", Kind: KindInt}},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		parent.AddCommand(leaf)
+		root.AddCommand(parent)
+		prepareValidationTree(t, root)
+		root.SetArgs([]string{"parent", "leaf", "--count", "not-an-int"})
+
+		_, err := root.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+		if !strings.Contains(err.Error(), "root handler") {
+			t.Fatalf("nested flag error did not use the root handler: %v", err)
+		}
+	})
+
+	t.Run("final install wraps a replaced handler", func(t *testing.T) {
+		replacementErr := stderrors.New("replacement flag handler")
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		leaf := New(Spec{
+			Use:    "leaf",
+			Flags:  []FlagSpec{{Name: "count", Kind: KindInt}},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		leaf.SetFlagErrorFunc(func(*cobra.Command, error) error { return replacementErr })
+		root.AddCommand(leaf)
+		prepareValidationTree(t, root)
+		root.SetArgs([]string{"leaf", "--count", "not-an-int"})
+
+		_, err := root.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+		if !stderrors.Is(err, replacementErr) {
+			t.Fatalf("flag error did not use replacement handler: %v", err)
+		}
+	})
+
+	t.Run("final install wraps replaced args and pre-run hooks", func(t *testing.T) {
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		leaf := New(Spec{
+			Use:   "leaf",
+			Flags: []FlagSpec{{Name: "name", Kind: KindString, Required: true}},
+			PostMount: func(cmd *cobra.Command) {
+				cmd.Args = cobra.ExactArgs(1)
+			},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		rejectArgs := true
+		leaf.Args = func(*cobra.Command, []string) error {
+			if rejectArgs {
+				return stderrors.New("replacement args error")
+			}
+			return nil
+		}
+		leaf.PreRunE = func(*cobra.Command, []string) error { return nil }
+		root.AddCommand(leaf)
+		prepareValidationTree(t, root)
+
+		root.SetArgs([]string{"leaf", "value"})
+		_, err := root.ExecuteC()
+		requireValidationError(t, err, "invalid_positionals")
+
+		rejectArgs = false
+		root.SetArgs([]string{"leaf"})
+		_, err = root.ExecuteC()
+		requireValidationError(t, err, "missing_required_flags")
+	})
+
+	t.Run("preparation marks a custom pre-run hook", func(t *testing.T) {
+		cmd := New(Spec{
+			Use: "leaf",
+			PostMount: func(cmd *cobra.Command) {
+				cmd.PreRun = func(*cobra.Command, []string) {}
+			},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		prepareValidationTree(t, cmd)
+		if cmd.Annotations[preparedCommandAnnotation] != "true" {
+			t.Fatal("command was not marked prepared")
+		}
+	})
+
+	t.Run("nil flag handlers fall back to parser errors", func(t *testing.T) {
+		rootHandlerCalls := 0
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			rootHandlerCalls++
+			if err == nil {
+				t.Fatal("parent handler received nil")
+			}
+			return err
+		})
+		leaf := New(Spec{
+			Use:   "leaf",
+			Flags: []FlagSpec{{Name: "count", Kind: KindInt}},
+			PostMount: func(cmd *cobra.Command) {
+				cmd.SetFlagErrorFunc(func(*cobra.Command, error) error { return nil })
+			},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		root.AddCommand(leaf)
+		prepareValidationTree(t, root)
+		root.SetArgs([]string{"leaf", "--count", "not-an-int"})
+
+		_, err := root.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+		if rootHandlerCalls != 0 {
+			t.Fatalf("root handler calls = %d, want 0 for an explicit local handler", rootHandlerCalls)
+		}
+
+		bare := &cobra.Command{Use: "bare", SilenceErrors: true, SilenceUsage: true, RunE: func(*cobra.Command, []string) error { return nil }}
+		bare.Flags().Int("count", 0, "count")
+		bare.SetFlagErrorFunc(func(*cobra.Command, error) error { return nil })
+		prepareValidationTree(t, bare)
+		bare.SetArgs([]string{"--count", "not-an-int"})
+		_, err = bare.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+	})
+
+	t.Run("standalone preparation preserves authoritative parser causes", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			err  error
+		}{
+			{name: "typed", err: apperrors.NewAuth("auth failed")},
+			{name: "exit coder", err: &validationExitCoderError{}},
+			{name: "canceled", err: context.Canceled},
+			{name: "deadline", err: context.DeadlineExceeded},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				handlerCalls := 0
+				cmd := New(Spec{
+					Use: "leaf",
+					PostMount: func(cmd *cobra.Command) {
+						cmd.Flags().Var(&validationFailingValue{err: tc.err}, "value", "value")
+						cmd.SetFlagErrorFunc(func(*cobra.Command, error) error {
+							handlerCalls++
+							return stderrors.New("handler destroyed parser cause")
+						})
+					},
+					Invoke: func(*Ctx, map[string]any) error { return nil },
+				})
+				prepareValidationTree(t, cmd)
+				cmd.SilenceErrors = true
+				cmd.SilenceUsage = true
+				cmd.SetArgs([]string{"--value", "invalid"})
+
+				_, err := cmd.ExecuteC()
+				if !stderrors.Is(err, tc.err) {
+					t.Fatalf("Execute error = %v, want parser cause %v", err, tc.err)
+				}
+				if handlerCalls != 0 {
+					t.Fatalf("local handler calls = %d, want 0", handlerCalls)
+				}
+			})
+		}
+	})
+
+	t.Run("final adapter preserves authoritative parser cause", func(t *testing.T) {
+		parserCause := apperrors.NewAPI("API failed")
+		replacementCalls := 0
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		leaf := New(Spec{
+			Use: "leaf",
+			PostMount: func(cmd *cobra.Command) {
+				cmd.Flags().Var(&validationFailingValue{err: parserCause}, "value", "value")
+			},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		leaf.SetFlagErrorFunc(func(*cobra.Command, error) error {
+			replacementCalls++
+			return stderrors.New("replacement destroyed parser cause")
+		})
+		root.AddCommand(leaf)
+		prepareValidationTree(t, root)
+		root.SetArgs([]string{"leaf", "--value", "invalid"})
+
+		_, err := root.ExecuteC()
+		if !stderrors.Is(err, parserCause) {
+			t.Fatalf("Execute error = %v, want parser cause %v", err, parserCause)
+		}
+		if replacementCalls != 0 {
+			t.Fatalf("replacement handler calls = %d, want 0", replacementCalls)
+		}
+	})
+
+	t.Run("mounted corecmd preserves post-mount handler", func(t *testing.T) {
+		rootHandlerCalls := 0
+		localHandlerCalls := 0
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			rootHandlerCalls++
+			return fmt.Errorf("root handler: %w", err)
+		})
+		leaf := New(Spec{
+			Use:   "leaf",
+			Flags: []FlagSpec{{Name: "count", Kind: KindInt}},
+			PostMount: func(cmd *cobra.Command) {
+				cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+					localHandlerCalls++
+					return fmt.Errorf("local handler: %w", err)
+				})
+			},
+			Invoke: func(*Ctx, map[string]any) error { return nil },
+		})
+		root.AddCommand(leaf)
+		prepareValidationTree(t, root)
+		if err := PrepareCommandTree(root); err == nil {
+			t.Fatal("duplicate preparation must fail")
+		}
+		root.SetArgs([]string{"leaf", "--count", "not-an-int"})
+
+		_, err := root.ExecuteC()
+		requireValidationError(t, err, "invalid_flag")
+		if !strings.HasPrefix(err.Error(), "local handler:") || strings.Contains(err.Error(), "root handler:") {
+			t.Fatalf("flag error did not select the nearest handler: %v", err)
+		}
+		if localHandlerCalls != 1 || rootHandlerCalls != 0 {
+			t.Fatalf("handler calls = local %d root %d, want local 1 root 0", localHandlerCalls, rootHandlerCalls)
+		}
+	})
+
+	t.Run("mounted corecmd preserves authoritative local errors", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			err  error
+		}{
+			{name: "typed", err: apperrors.NewAuth("auth failed")},
+			{name: "exit coder", err: &validationExitCoderError{}},
+			{name: "canceled", err: context.Canceled},
+			{name: "deadline", err: context.DeadlineExceeded},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				parentHandlerCalls := 0
+				root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+				root.SetFlagErrorFunc(func(*cobra.Command, error) error {
+					parentHandlerCalls++
+					return stderrors.New("parent replaced authoritative error")
+				})
+				leaf := New(Spec{
+					Use:   "leaf",
+					Flags: []FlagSpec{{Name: "count", Kind: KindInt}},
+					PostMount: func(cmd *cobra.Command) {
+						cmd.SetFlagErrorFunc(func(*cobra.Command, error) error { return tc.err })
+					},
+					Invoke: func(*Ctx, map[string]any) error { return nil },
+				})
+				root.AddCommand(leaf)
+				prepareValidationTree(t, root)
+				root.SetArgs([]string{"leaf", "--count", "not-an-int"})
+
+				_, err := root.ExecuteC()
+				if !stderrors.Is(err, tc.err) {
+					t.Fatalf("Execute error = %v, want authoritative error %v", err, tc.err)
+				}
+				if parentHandlerCalls != 0 {
+					t.Fatalf("parent handler calls = %d, want 0", parentHandlerCalls)
+				}
+			})
+		}
 	})
 
 	t.Run("required after pre-run", func(t *testing.T) {
@@ -74,7 +394,7 @@ func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
 		leaf.Flags().String("alias", "", "alias")
 		_ = leaf.MarkFlagRequired("name")
 		root.AddCommand(leaf)
-		InstallValidationAdapters(root)
+		prepareValidationTree(t, root)
 
 		root.SetArgs([]string{"leaf"})
 		_, err := root.ExecuteC()
@@ -100,7 +420,7 @@ func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
 			RunE: func(*cobra.Command, []string) error { return nil },
 		}
 		root.AddCommand(leaf)
-		InstallValidationAdapters(root)
+		prepareValidationTree(t, root)
 		root.SetArgs([]string{"leaf"})
 		_, err := root.ExecuteC()
 		if !preRunCalled {
@@ -118,7 +438,7 @@ func TestCrossPlatformCoverageValidationAdapters(t *testing.T) {
 		leaf.Flags().String("right", "", "right")
 		leaf.MarkFlagsOneRequired("left", "right")
 		root.AddCommand(leaf)
-		InstallValidationAdapters(root)
+		prepareValidationTree(t, root)
 		root.SetArgs([]string{"leaf"})
 		_, err := root.ExecuteC()
 		requireValidationError(t, err, "invalid_flag_group")
@@ -151,6 +471,7 @@ func TestCrossPlatformCoverageFrameworkValidationHooksAreTyped(t *testing.T) {
 		Invoke: func(*Ctx, map[string]any) error { return nil },
 	})
 	cmd.SetArgs(nil)
+	prepareValidationTree(t, cmd)
 	_, err := cmd.ExecuteC()
 	requireValidationError(t, err, "invalid_parameters")
 	if !stderrors.Is(err, boom) {
@@ -165,6 +486,7 @@ func TestCrossPlatformCoverageFrameworkValidationHooksAreTyped(t *testing.T) {
 		}},
 		Invoke: func(*Ctx, map[string]any) error { return nil },
 	})
+	prepareValidationTree(t, cmd)
 	_, err = cmd.ExecuteC()
 	requireValidationError(t, err, "invalid_flag_value")
 	if !stderrors.Is(err, boom) {
@@ -179,6 +501,7 @@ func TestCrossPlatformCoverageFrameworkValidationHooksAreTyped(t *testing.T) {
 		}},
 		Invoke: func(*Ctx, map[string]any) error { return nil },
 	})
+	prepareValidationTree(t, cmd)
 	_, err = cmd.ExecuteC()
 	requireValidationError(t, err, "invalid_flag_value")
 
@@ -187,6 +510,14 @@ func TestCrossPlatformCoverageFrameworkValidationHooksAreTyped(t *testing.T) {
 		Flags:  []FlagSpec{{Name: "name", Usage: "name", MarkRequired: true}},
 		Invoke: func(*Ctx, map[string]any) error { return nil },
 	})
+	prepareValidationTree(t, cmd)
 	_, err = cmd.ExecuteC()
 	requireValidationError(t, err, "missing_required_flags")
+}
+
+func prepareValidationTree(t *testing.T, root *cobra.Command) {
+	t.Helper()
+	if err := PrepareCommandTree(root); err != nil {
+		t.Fatal(err)
+	}
 }

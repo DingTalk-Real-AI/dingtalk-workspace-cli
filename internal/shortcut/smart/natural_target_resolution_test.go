@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -117,7 +118,7 @@ func TestCrossPlatformCoverageChatMessagesResolvesNaturalChatAndUserTargets(t *t
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) != 2 {
@@ -136,7 +137,7 @@ func TestCrossPlatformCoverageChatMessagesStableGroupBypassesNaturalResolution(t
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid-fixture-chat-0001"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" ||
@@ -162,7 +163,7 @@ func TestCrossPlatformCoverageChatMessagesOptionallyFiltersResolvedSenderByEithe
 		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
 		"--sender", "测试用户甲", "--page-all",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "list_conversation_message_v2" ||
@@ -216,7 +217,7 @@ func TestChatMessagesFormatValidSenderSkipsDirectoryAndFiltersStableID(t *testin
 		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
 		"--sender", "DAAAAAAAAAAAiE", "--page-all",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" {
@@ -241,7 +242,7 @@ func TestChatMessagesWithoutSenderDoesNotResolveEveryMessageIdentity(t *testing.
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid-fixture-chat-0001", "--page-all"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" {
@@ -273,7 +274,7 @@ func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureStopsWithoutUnf
 		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
 		"--sender-query", "不存在的人", "--page-all",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("sender resolution failure unexpectedly succeeded")
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "list_conversation_message_v2" ||
@@ -308,7 +309,7 @@ func TestCrossPlatformCoverageChatMessagesNaturalUserAmbiguityStopsBeforeMessage
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-messages", "--user-query", "张三"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("ambiguous user unexpectedly reached message read")
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "search_contact_by_key_word" {
@@ -321,7 +322,7 @@ func TestCrossPlatformCoverageChatMessagesRejectsConversationIDInPeerIdentityFla
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", "cid-fixture-chat-0001"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "--group") {
 		t.Fatalf("error = %v", err)
 	}
@@ -335,7 +336,7 @@ func TestCrossPlatformCoverageAtMeResolvesNaturalGroupBeforeSearch(t *testing.T)
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+at-me", "--chat-query", "项目冲刺"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[1].tool != "search_at_me_message" || fake.calls[1].args["openConversationId"] != "cid-1" {
@@ -348,7 +349,7 @@ func TestCrossPlatformCoverageAtMeStableIDInQueryBypassesNaturalResolution(t *te
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+at-me", "--chat-query", "cid-fixture-chat-0001"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "search_at_me_message" ||
@@ -362,7 +363,7 @@ func TestCrossPlatformCoverageSendToGroupStableIDBypassesNaturalResolution(t *te
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+send-to-group", "--group", "cid-fixture-chat-0001", "--text", "评测", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "send_personal_message" ||
@@ -381,7 +382,7 @@ func TestCrossPlatformCoverageSearchMsgResolvesNaturalChatAndSenderBeforeSearch(
 		"--sender-query", "张三",
 		"--no-enrich",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 4 {
@@ -412,7 +413,7 @@ func TestCrossPlatformCoverageSearchMsgPreservesResolvedSenderWhenDisplayNameDif
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+search-msg", "--sender-query", "测试用户甲", "--no-enrich"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 
@@ -453,7 +454,7 @@ func TestCrossPlatformCoverageSearchMsgAcceptsStableIDInChatQuery(t *testing.T) 
 		"--text", "评测",
 		"--no-enrich",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "get_conversation_info" || fake.calls[1].tool != "search_messages" {
@@ -485,7 +486,7 @@ func TestCrossPlatformCoverageChatMembersListGroupAcceptsNameAndStableID(t *test
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) != tt.wantCalls || fake.calls[len(fake.calls)-1].tool != "get_group_members" {
@@ -500,7 +501,7 @@ func TestCrossPlatformCoverageSearchMsgNaturalSenderAmbiguityStopsBeforeSearch(t
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+search-msg", "--sender-query", "张三", "--no-enrich"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("ambiguous sender unexpectedly reached search")
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "search_contact_by_key_word" {

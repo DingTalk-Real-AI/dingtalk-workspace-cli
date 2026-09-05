@@ -16,6 +16,7 @@ package errors
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"testing"
 )
 
@@ -53,5 +54,22 @@ func TestCrossPlatformCoverageNormalizeValidation(t *testing.T) {
 	}
 	if NormalizeValidation(nil) != nil {
 		t.Fatal("NormalizeValidation(nil) must be nil")
+	}
+}
+
+func TestCrossPlatformCoveragePreserveClassification(t *testing.T) {
+	for _, err := range []error{nil, stderrors.New("raw validation error")} {
+		if PreserveClassification(err) {
+			t.Fatalf("unclassified error protected: %v", err)
+		}
+	}
+	for _, cause := range []error{NewAPI("api"), validationTestExitError{}, context.Canceled, context.DeadlineExceeded} {
+		err := fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", cause))
+		if !PreserveClassification(err) || NormalizeValidation(err) != err {
+			t.Fatalf("wrapped error identity lost: %v", err)
+		}
+		if ExitCode(err) != ExitCode(NormalizeValidation(err)) {
+			t.Fatal("exit code changed")
+		}
 	}
 }

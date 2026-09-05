@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/spf13/cobra"
 )
@@ -154,7 +155,7 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 			cmd.SetOut(&output)
 			cmd.SetErr(&output)
 			cmd.SetArgs([]string{"message", test.command, "--help"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("chat message %s --help: %v\n%s", test.command, err, output.String())
 			}
 
@@ -246,7 +247,7 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsOptionalTimeDefaults(t *te
 			cmd.SetOut(&output)
 			cmd.SetErr(&output)
 			cmd.SetArgs(test.args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("dws chat %s: %v\n%s", strings.Join(test.args, " "), err, output.String())
 			}
 			help := output.String()
@@ -272,7 +273,7 @@ func TestCrossPlatformCoverageChatReactionHelpKeepsManifestExternalAliasesVisibl
 			cmd.SetOut(&output)
 			cmd.SetErr(&output)
 			cmd.SetArgs([]string{"message", command, "--help"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("chat message %s --help: %v\n%s", command, err, output.String())
 			}
 
@@ -295,7 +296,7 @@ func TestCrossPlatformCoverageChatGroupBotsHelpKeepsLegacyGroup(t *testing.T) {
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 	cmd.SetArgs([]string{"group", "bots", "--help"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("chat group bots --help: %v\n%s", err, output.String())
 	}
 
@@ -316,7 +317,7 @@ func TestCrossPlatformCoverageChatSendCardHelpUsesCanonicalIDFlags(t *testing.T)
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 	cmd.SetArgs([]string{"message", "send-card", "--help"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("chat message send-card --help: %v\n%s", err, output.String())
 	}
 
@@ -339,7 +340,7 @@ func TestCrossPlatformCoverageChatGroupAuditJoinValidationHelpUsesCanonicalConve
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 	cmd.SetArgs([]string{"group", "audit-join-validation", "--help"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("chat group audit-join-validation --help: %v\n%s", err, output.String())
 	}
 

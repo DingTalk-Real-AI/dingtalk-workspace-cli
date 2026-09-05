@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -117,7 +118,7 @@ func TestRegisterStdioServerFromManifestDoesNotStartProcess(t *testing.T) {
 	commands := buildPluginCommands([]mcptypes.ServerDescriptor{descriptor}, executor.EchoRunner{}, nil)
 	root := pluginTestRoot(commands...)
 	root.SetArgs([]string{"lazy-stdio", "--help"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("lazy stdio help: %v", err)
 	}
 	requirePluginChild(t, commands[0], "health", "ping")

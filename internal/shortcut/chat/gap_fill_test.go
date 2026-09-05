@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -134,7 +135,7 @@ func TestCrossPlatformCoverageMessagesSendStatusAliasPublishesWorkflowReceipt(t 
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+messages-send-status", "--open-task-id", "task-1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "query_message_send_status" || fake.calls[0].args["openTaskId"] != "task-1" {
@@ -159,7 +160,7 @@ func TestCrossPlatformCoverageMessageWorkflowFailureAndPreviewBranches(t *testin
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+messages-query-send-status", "--open-task-id", "task-1"})
-		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "fixture lower call failed") {
+		if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "fixture lower call failed") {
 			t.Fatalf("error = %v", err)
 		}
 	})
@@ -173,7 +174,7 @@ func TestCrossPlatformCoverageMessageWorkflowFailureAndPreviewBranches(t *testin
 		root.SetArgs([]string{
 			"chat", "+messages-send-card", "--group", "cid", "--dry-run", "--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 0 {
@@ -210,7 +211,7 @@ func TestCrossPlatformCoverageMessageWorkflowFailureAndPreviewBranches(t *testin
 			helpers.InitDeps(test.fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs([]string{"chat", "+messages-send-card", "--group", "cid", "--yes"})
-			if err := root.Execute(); err == nil || !strings.Contains(err.Error(), test.wantError) {
+			if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("error = %v, want substring %q", err, test.wantError)
 			}
 		})
@@ -224,7 +225,7 @@ func TestCrossPlatformCoverageMessageWorkflowFailureAndPreviewBranches(t *testin
 			"chat", "+messages-update-card",
 			"--biz-id", "biz-1", "--content", "完成", "--flow-status", "3", "--yes",
 		})
-		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "fixture lower call failed") {
+		if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "fixture lower call failed") {
 			t.Fatalf("error = %v", err)
 		}
 	})
@@ -261,7 +262,7 @@ func TestCrossPlatformCoverageMessagesSendPublishesStatusQueryReceipt(t *testing
 		"chat", "+messages-send", "--as", "user", "--chat-id", "cid-1",
 		"--text", "hello", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -288,7 +289,7 @@ func TestCrossPlatformCoverageMessagesSendBotMultiGroupPublishesPerTargetLedger(
 		"chat", "+messages-send", "--as", "bot", "--robot-code", "robot",
 		"--groups", "cid-a,cid-b,cid-a", "--markdown", "通知", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -348,7 +349,7 @@ func TestCrossPlatformCoverageMessagesSendBotMultiGroupFailuresReturnNonzero(t *
 				"--groups", "cid-a,cid-b", "--markdown", "通知", "--yes",
 			})
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil {
 				t.Fatal("failed multi-group delivery returned success")
 			}
@@ -382,7 +383,7 @@ func TestCrossPlatformCoverageMessagesSendBotMultiGroupPropagatesOutputFailure(t
 		"--groups", "cid-a,cid-b", "--markdown", "通知", "--yes",
 	})
 
-	if err := root.Execute(); !errors.Is(err, wantErr) {
+	if err := corecmd.ExecuteForTest(root); !errors.Is(err, wantErr) {
 		t.Fatalf("output error = %v, want %v", err, wantErr)
 	}
 	if len(fake.calls) != 2 {
@@ -403,7 +404,7 @@ func TestCrossPlatformCoverageMessagesSendBotGroupsFileUsesSafeDeduplicatedTarge
 		"chat", "+messages-send", "--as", "bot", "--robot-code", "robot",
 		"--groups-file", "groups.txt", "--text", "通知", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -420,7 +421,7 @@ func TestCrossPlatformCoverageChatCreateExplicitOwnerSkipsCurrentProfileAndDedup
 		"chat", "+chat-create", "--name", "测试群", "--users", fixtureCurrentDOpenID + ",user-1",
 		"--owner-open-dingtalk-id", fixtureCurrentDOpenID, "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "create_group_conversation" {
@@ -446,7 +447,7 @@ func TestCrossPlatformCoverageChatCreateOwnerQueryResolvesBeforeSingleCreate(t *
 		"chat", "+chat-create", "--name", "测试群", "--users", "user-1",
 		"--owner-query", "测试用户甲", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "search_contact_by_key_word" ||
@@ -482,7 +483,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserImageAndUserResolution(t *t
 		"--idempotency-key", "image-key",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -552,7 +553,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileFlow(t *testing.T)
 		"--uuid", "file-key",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if string(uploaded) != "gap-fill" || len(fake.calls) != 3 {
@@ -648,7 +649,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserDirectLocalFileUsesTranspor
 			}
 			args = append(args, tt.targetArgs...)
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 
@@ -719,7 +720,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 0 {
@@ -755,7 +756,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 			args := append([]string{"chat", "+messages-send"}, tc.args...)
 			args = append(args, "--yes")
 			command.SetArgs(args)
-			if err := command.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(command); err == nil {
 				t.Fatalf("invalid args succeeded: %v", tc.args)
 			}
 		})
@@ -796,7 +797,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 				"--file", "./fixture.bin",
 				"--yes",
 			})
-			if err := command.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(command); err == nil {
 				t.Fatal("file failure scenario unexpectedly succeeded")
 			}
 		})
@@ -828,7 +829,7 @@ func TestCrossPlatformCoverageMessagesSendUserResolutionFailures(t *testing.T) {
 				"--text", "hello",
 				"--yes",
 			})
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("unresolved user was accepted")
 			}
 			if len(tc.fake.calls) != 1 {
@@ -847,7 +848,7 @@ func TestCrossPlatformCoverageMessagesSendTextModesAndExecuteGuard(t *testing.T)
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append(append([]string{"chat", "+messages-send"}, args...), "--yes"))
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "send_personal_message" {
@@ -869,7 +870,7 @@ func TestCrossPlatformCoverageMessagesSendTextModesAndExecuteGuard(t *testing.T)
 		"--media-id", "@image",
 		"--msg-type", "file",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("execute-time content mismatch was accepted")
 	}
 }
@@ -892,7 +893,7 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 		"--flow-status", "3",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "create_and_send_card" ||
@@ -938,7 +939,7 @@ func TestCrossPlatformCoverageMessagesSendCardKeepsContentWithoutAtTag(t *testin
 		"--content", "正文",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[1].args["msgContent"] != "正文" {
@@ -959,7 +960,7 @@ func TestCrossPlatformCoverageMessagesSendCardRejectsMissingRequestedAtTag(t *te
 		"--content", "正文",
 		"--yes",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "biz-missing-at-tag") || !strings.Contains(err.Error(), "atTag") {
 		t.Fatalf("error = %v, want recoverable missing-atTag error containing bizId", err)
 	}
@@ -977,7 +978,7 @@ func TestCrossPlatformCoverageMessagesSendCardResolvesReceiverForLowerTool(t *te
 		"--receiver", "d-user-id",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 ||
@@ -1007,7 +1008,7 @@ func TestCrossPlatformCoverageMessagesSendCardUsesExplicitOpenReceiver(t *testin
 		"--receiver-open-dingtalk-id", fixtureCurrentDOpenID2,
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 ||
@@ -1030,7 +1031,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			"--group", "cid",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "create_and_send_card" {
@@ -1052,7 +1053,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			"--dry-run",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 ||
@@ -1088,7 +1089,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			"--dry-run",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 0 {
@@ -1126,7 +1127,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			"--receiver", "user-id",
 			"--yes",
 		})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if err == nil || !strings.Contains(err.Error(), "解析为 openDingTalkId 失败") {
 			t.Fatalf("receiver resolution error = %v", err)
 		}
@@ -1180,7 +1181,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 				"--content", "完成",
 				"--yes",
 			})
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 				t.Fatalf("error = %v, want substring %q", err, tc.wantError)
 			}
@@ -1202,7 +1203,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			"--content", "完成",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "update_streaming_card" {
@@ -1228,7 +1229,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+messages-send-card"}, args...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid card args succeeded: %v", args)
 		}
 	}
@@ -1257,7 +1258,7 @@ func TestCrossPlatformCoverageExplicitOpenIDValidationEdges(t *testing.T) {
 	} {
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid explicit open ID unexpectedly accepted: %v", args)
 		}
 	}
@@ -1277,7 +1278,7 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 			"--content", "高层更新",
 			"--flow-status", "3",
 		})
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "confirmation_required" {
 			t.Fatalf("error = %#v, want confirmation_required", err)
@@ -1302,7 +1303,7 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 			"--flow-status", "3",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "update_streaming_card" {
@@ -1330,7 +1331,7 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 			"--flow-status", "3",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1346,7 +1347,7 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 			"--flow-status", "3",
 			"--yes",
 		})
-		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "占位符") {
+		if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "占位符") {
 			t.Fatalf("error = %v, want placeholder validation", err)
 		}
 		if len(fake.calls) != 0 {
@@ -1368,7 +1369,7 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 			"--dry-run",
 			"--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 0 {
@@ -1479,7 +1480,7 @@ func TestCrossPlatformCoverageMessageResourceDownloadKeepsNestedMessageContext(t
 	})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+gap-resource-download", "--output-dir", "./downloads"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if ledger["discoveredCount"] != 5 || ledger["requestedCount"] != 3 ||
@@ -1532,7 +1533,7 @@ func TestCrossPlatformCoverageMessageFileResourceDownloadUsesDriveAndPreservesNa
 		"--output", "./downloads/",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(filepath.Join("downloads", "fixture.txt"))
@@ -1563,7 +1564,7 @@ func TestCrossPlatformCoverageMessageFileResourceDownloadUsesDriveAndPreservesNa
 	})
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+gap-file-resource-download", "--output-dir", "./batch-downloads"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if ledger["downloadedCount"] != 1 || ledger["failedCount"] != 0 {
@@ -1611,7 +1612,7 @@ func TestCrossPlatformCoverageMessageResourceDownloadDisambiguatesSameNames(t *t
 	})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+gap-colliding-resource-download", "--output-dir", "./downloads"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(destinations, []string{"fixture.txt", "fixture (2).txt"}) {
@@ -1673,7 +1674,7 @@ func TestCrossPlatformCoverageFailedResourceDownloadDoesNotConsumeFilename(t *te
 	})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+gap-failed-colliding-resource-download", "--output-dir", "./downloads"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(destinations, []string{"fixture.txt", "fixture.txt"}) {
@@ -1691,7 +1692,7 @@ func TestCrossPlatformCoverageMessageResourceDownloadRequiresMediaContextOnly(t 
 		"chat", "+messages-resource-download",
 		"--resource-id", "@media",
 	})
-	if err := root.Execute(); err == nil ||
+	if err := corecmd.ExecuteForTest(root); err == nil ||
 		!strings.Contains(err.Error(), "--type mediaId") {
 		t.Fatalf("missing media context error = %v", err)
 	}
@@ -1703,7 +1704,7 @@ func TestCrossPlatformCoverageMessageResourceDownloadRequiresMediaContextOnly(t 
 		"--resource-id", "drive-file",
 		"--output", "../outside",
 	})
-	if err := root.Execute(); err == nil ||
+	if err := corecmd.ExecuteForTest(root); err == nil ||
 		!strings.Contains(err.Error(), "--output") {
 		t.Fatalf("unsafe output error = %v", err)
 	}

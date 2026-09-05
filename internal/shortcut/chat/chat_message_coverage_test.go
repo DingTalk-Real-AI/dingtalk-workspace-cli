@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
@@ -115,7 +116,7 @@ func TestCrossPlatformCoverageMessagesMgetDecryptsEncryptedMessagesInBatch(t *te
 		"chat", "+messages-mget",
 		"--msg-ids", "m1,m2",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 ||
@@ -166,7 +167,7 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -206,7 +207,7 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenBatchDecryptFai
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -387,7 +388,7 @@ func TestCrossPlatformCoverageMessagesMgetDecryptItemFailureEdges(t *testing.T) 
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "ok,failed,empty"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -419,7 +420,7 @@ func TestCrossPlatformCoverageMessagesMgetRecordsSafeChatFailures(t *testing.T) 
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -443,7 +444,7 @@ func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
 		}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append(append([]string{}, baseArgs...), "--dry-run"))
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -457,7 +458,7 @@ func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("getwd ledger error = %v", err)
 		}
 		var payload map[string]any
@@ -484,7 +485,7 @@ func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("zero-resource download error = %v", err)
 		}
 		if getwdCalled {
@@ -550,7 +551,7 @@ func TestCrossPlatformCoverageMgetResourceDownloadOutcomes(t *testing.T) {
 				args = append(args, "--output-dir", tc.outputDir)
 			}
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -584,7 +585,7 @@ func TestCrossPlatformCoverageMgetDownloadRunsWithoutConfirmation(t *testing.T) 
 		"--msg-ids", "msg",
 		"--download-resources",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 ||

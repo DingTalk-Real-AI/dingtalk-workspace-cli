@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -95,7 +96,7 @@ func executeMCPPublishedCommand(
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(t.Context())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err == nil && executed != nil {
 		_, _, err = output.EmitStoredResult(executed)
 	}
@@ -355,7 +356,7 @@ func TestCrossPlatformCoverageMCPPublishedInvokeUsesPublishedClientForLaterPageV
 	root.SetErr(&out)
 	root.SetArgs([]string{"--yes", "published", "invoke", "2480", "search", "--params", `{"query":"example"}`})
 	ctx, _ := output.WithResultStore(t.Context())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err == nil {
 		_, _, err = output.EmitStoredResult(executed)
 	}
@@ -534,7 +535,7 @@ func TestCrossPlatformCoverageMCPPublishedGroupHelpAndDefaultFactory(t *testing.
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetArgs([]string{"published"})
-	if err := root.ExecuteContext(t.Context()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, t.Context()); err != nil {
 		t.Fatalf("execute group help: %v", err)
 	}
 	if !strings.Contains(out.String(), "tools") || !strings.Contains(out.String(), "invoke") {
@@ -609,7 +610,7 @@ func TestCrossPlatformCoverageMCPPublishedToolsErrorPaths(t *testing.T) {
 			}
 			root.AddCommand(newMCPPublishedGroup(tt.caller, factory))
 			root.SetArgs([]string{"published", "tools", "2480"})
-			err := root.ExecuteContext(t.Context())
+			err := corecmd.ExecuteContextForTest(root, t.Context())
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want %q", err, tt.wantErr)
 			}
@@ -682,7 +683,7 @@ func TestCrossPlatformCoverageMCPPublishedInvokeErrorPaths(t *testing.T) {
 			root.PersistentFlags().String("format", "json", "")
 			root.AddCommand(newMCPPublishedGroup(tt.caller, factory))
 			root.SetArgs([]string{"--yes", "published", "invoke", "2480", "search"})
-			err := root.ExecuteContext(t.Context())
+			err := corecmd.ExecuteContextForTest(root, t.Context())
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %v, want %q", err, tt.wantErr)
 			}

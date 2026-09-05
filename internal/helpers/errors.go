@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -142,8 +141,7 @@ func WrapErrorWithOperation(err error, operation string) error {
 	// Preserve that contract so helper shortcuts render the same recovery
 	// guidance as their underlying direct leaf commands instead of reclassifying
 	// typed failures from localized message text.
-	var typed *apperrors.Error
-	if errors.As(err, &typed) {
+	if apperrors.PreserveClassification(err) {
 		return err
 	}
 	// 框架确认门禁错误（deferred ConfirmSafety 从 CallTool 返回）必须原样透传：

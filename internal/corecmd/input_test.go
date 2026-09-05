@@ -39,7 +39,7 @@ func newInputCommand(flags []FlagSpec, captured *map[string]any) *cobra.Command 
 func runInputCommand(t *testing.T, cmd *cobra.Command, args ...string) error {
 	t.Helper()
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return ExecuteForTest(cmd)
 }
 
 func writeInputFile(t *testing.T, content string) string {

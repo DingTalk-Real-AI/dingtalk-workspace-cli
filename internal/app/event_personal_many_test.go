@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
@@ -39,7 +40,7 @@ func TestEventConsumeAcceptsOrderedVariadicEventKeys(t *testing.T) {
 		personal.EventMention,
 		"--user", "test-user-001",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	want := []string{personal.EventMention, personal.EventSingleChat}
@@ -275,7 +276,7 @@ func TestCrossPlatformCoverageEventConsumeMultiRejectsExplicitSingleOnlyFlagsEve
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs([]string{personal.EventMention, personal.EventAllSingleChat, flag})
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "not supported when consuming multiple events") {
 				t.Fatalf("Execute() error = %v", err)
 			}

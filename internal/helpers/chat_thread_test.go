@@ -83,7 +83,7 @@ func executeAtomicThreadCommandOutput(t *testing.T, caller *chatThreadCaller, ar
 	root.SetErr(&stderr)
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return stdout.Bytes(), err
 	}
@@ -105,7 +105,7 @@ func executeAtomicThreadDryRun(t *testing.T, caller *chatThreadCaller, args ...s
 	root.SetErr(&stderr)
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return stdout.Bytes(), err
 	}

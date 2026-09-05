@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // executeHrbrainWriteCommand runs a write command tree that requires
@@ -28,7 +30,7 @@ func executeHrbrainWriteCommand(t *testing.T, root *cobra.Command, input string,
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 // executeHrbrainCommand runs the given hrbrain command tree with args, discarding
@@ -46,7 +48,7 @@ func executeHrbrainCommand(t *testing.T, root *cobra.Command, args ...string) er
 	// call), cobra falls back to os.Args[1:] internally, which would wrongly
 	// feed the literal "hrbrain" token back in as a bogus positional arg.
 	root.SetArgs(append([]string{}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestHrbrainTalentPoolList(t *testing.T) {

@@ -58,7 +58,7 @@ func runReportCoverage(t *testing.T, declaration shortcut.Shortcut, caller *repo
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd, cmd.Execute()
+	return cmd, corecmd.ExecuteForTest(cmd)
 }
 
 func directReportRuntime(t *testing.T, declaration shortcut.Shortcut, caller *reportCoverageCaller, args ...string) *shortcut.RuntimeContext {

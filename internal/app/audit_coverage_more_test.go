@@ -13,6 +13,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
@@ -42,8 +43,10 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 
 	tail := newAuditTailCommand()
 	tail.SetArgs([]string{"--lines", "1"})
-	if err := tail.Execute(); err == nil || !strings.Contains(err.Error(), "无审计记录") {
+	if err := corecmd.ExecuteForTest(tail); err == nil || !strings.Contains(err.Error(), "无审计记录") {
 		t.Fatalf("audit tail(empty) error = %v", err)
+	} else if apperrors.ExitCode(err) == apperrors.ExitCodeValidation {
+		t.Fatalf("audit tail(empty) error was relabeled as validation: %v", err)
 	}
 	path := filepath.Join(dir, "audit-20260101.jsonl")
 	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o600); err != nil {
@@ -51,7 +54,7 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 	}
 	tail = newAuditTailCommand()
 	tail.SetArgs([]string{"--lines", "1"})
-	if err := tail.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(tail); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tailFile(filepath.Join(dir, "missing"), 1); err == nil {
@@ -63,8 +66,10 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 	}
 	t.Setenv(audit.EnvAuditDir, tailErrorDir)
 	tail = newAuditTailCommand()
-	if err := tail.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(tail); err == nil {
 		t.Fatal("audit tail(directory record) error = nil")
+	} else if apperrors.ExitCode(err) == apperrors.ExitCodeValidation {
+		t.Fatalf("audit tail(directory record) error was relabeled as validation: %v", err)
 	}
 	oversize := filepath.Join(dir, "oversize")
 	if err := os.WriteFile(oversize, []byte(strings.Repeat("x", 2*1024*1024)), 0o600); err != nil {
@@ -77,7 +82,7 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 	exportDir := t.TempDir()
 	t.Setenv(audit.EnvAuditDir, exportDir)
 	export := newAuditExportCommand()
-	if err := export.Execute(); err == nil || !strings.Contains(err.Error(), "无审计文件") {
+	if err := corecmd.ExecuteForTest(export); err == nil || !strings.Contains(err.Error(), "无审计文件") {
 		t.Fatalf("audit export(empty) error = %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(exportDir, "audit-20260102.jsonl"), []byte("{}\n"), 0o600); err != nil {
@@ -86,18 +91,18 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 	for _, format := range []string{"jsonl", "csv"} {
 		export = newAuditExportCommand()
 		export.SetArgs([]string{"--since", "2026-01-01", "--until", "2026-01-03", "--format", format})
-		if err := export.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(export); err != nil {
 			t.Fatalf("audit export(%s) error = %v", format, err)
 		}
 	}
 	export = newAuditExportCommand()
 	export.SetArgs([]string{"--format", "xml"})
-	if err := export.Execute(); err == nil || !strings.Contains(err.Error(), "不支持的格式") {
+	if err := corecmd.ExecuteForTest(export); err == nil || !strings.Contains(err.Error(), "不支持的格式") {
 		t.Fatalf("audit export(xml) error = %v", err)
 	}
 	t.Setenv(audit.EnvAuditDir, filepath.Join(exportDir, "missing"))
 	export = newAuditExportCommand()
-	if err := export.Execute(); err == nil || !strings.Contains(err.Error(), "查找审计文件失败") {
+	if err := corecmd.ExecuteForTest(export); err == nil || !strings.Contains(err.Error(), "查找审计文件失败") {
 		t.Fatalf("audit export(missing dir) error = %v", err)
 	}
 
@@ -146,12 +151,12 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 
 	t.Setenv(audit.EnvAuditDir, t.TempDir())
 	verify := newAuditVerifyCommand()
-	if err := verify.Execute(); err == nil || !strings.Contains(err.Error(), "无审计文件") {
+	if err := corecmd.ExecuteForTest(verify); err == nil || !strings.Contains(err.Error(), "无审计文件") {
 		t.Fatalf("audit verify(empty) error = %v", err)
 	}
 	verify = newAuditVerifyCommand()
 	verify.SetArgs([]string{"--file", filepath.Join(dir, "missing")})
-	if err := verify.Execute(); err == nil || !strings.Contains(err.Error(), "校验失败") {
+	if err := corecmd.ExecuteForTest(verify); err == nil || !strings.Contains(err.Error(), "校验失败") {
 		t.Fatalf("audit verify(missing) error = %v", err)
 	}
 	validDir := t.TempDir()
@@ -172,7 +177,7 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 	}
 	verify = newAuditVerifyCommand()
 	verify.SetArgs([]string{"--file", validFile})
-	if err := verify.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(verify); err != nil {
 		t.Fatal(err)
 	}
 	broken := filepath.Join(t.TempDir(), "audit-broken.jsonl")
@@ -184,7 +189,7 @@ func TestCrossPlatformCoverageAuditCommandsAndFileHelpersCoverage(t *testing.T) 
 	auditVerify = func(string) (bool, int, error) { return false, 1, nil }
 	verify = newAuditVerifyCommand()
 	verify.SetArgs([]string{"--file", broken})
-	if err := verify.Execute(); err != nil || exitCode != 1 {
+	if err := corecmd.ExecuteForTest(verify); err != nil || exitCode != 1 {
 		t.Fatalf("audit verify(broken) = %v, exit=%d", err, exitCode)
 	}
 	t.Setenv(audit.EnvAuditDir, "")

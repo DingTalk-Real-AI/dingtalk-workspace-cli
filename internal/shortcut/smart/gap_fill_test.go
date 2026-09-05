@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -28,7 +29,7 @@ func TestCrossPlatformCoverageAtMeEmptyResultKeepsMessagesAndItemsIterable(t *te
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+at-me", "--format", "json"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -93,7 +94,7 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 			args := append([]string{}, tc.args...)
 			args = append(args, "--download-resources", "--output-dir", "./downloads", "--dry-run")
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if caller.counts[tc.tool] != 1 {
@@ -132,7 +133,7 @@ func TestCrossPlatformCoverageMessageReadShortcutResourceOutputValidation(t *tes
 		helpers.InitDeps(&smartCoverageCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append(args, "--download-resources", "--output-dir", "../outside", "--yes"))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("unsafe output accepted: %v", args)
 		}
 	}
@@ -144,7 +145,7 @@ func TestCrossPlatformCoverageChatMessagesDefaultsToRecentHistory(t *testing.T) 
 	root := newPlatformCoverageRoot()
 	before := time.Now().Add(-2 * time.Second)
 	root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	after := time.Now().Add(2 * time.Second)
@@ -185,7 +186,7 @@ func TestCrossPlatformCoverageChatMessagesPreservesExplicitTime(t *testing.T) {
 		"--time", "2026-07-01 12:34:56",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 ||

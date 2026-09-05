@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -145,7 +146,7 @@ func TestCrossPlatformCoverageDrivePull_nonexistentLocalRoot(t *testing.T) {
 	root.SetArgs(append([]string{"drive"}, full...))
 
 	// 全部下载成功时 runDrivePull 返回 nil；若误判逃逸则会有 failed 并返回 partial_failure。
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("pull 到不存在的本地根目录不应失败: %v", err)
 	}
 	got, rerr := os.ReadFile(filepath.Join(absDir, "a.txt"))

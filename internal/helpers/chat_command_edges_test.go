@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -32,7 +33,7 @@ func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...str
 	root.SetErr(io.Discard)
 	root.SetArgs(append(append([]string(nil), args...), "--yes"))
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return err
 	}
@@ -142,7 +143,7 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 			t.Fatalf("chat %s compatibility contract: hidden=%v runnable=%v", tc.path, command.Hidden, command.Runnable())
 		}
 		root.SetArgs(tc.args)
-		err = root.ExecuteContext(context.Background())
+		err = corecmd.ExecuteContextForTest(root, context.Background())
 		var structured *apperrors.Error
 		if !errors.As(err, &structured) {
 			t.Fatalf("chat %s with legacy flags error = %T %v, want structured validation", tc.path, err, err)
@@ -189,7 +190,7 @@ func TestCrossPlatformCoverageChatAliasInstallerRemainingEdges(t *testing.T) {
 	withPreRun.Flags().String("conversation-id", "", "")
 	installChatFlagAliases(withPreRun, "conversation-id", []string{"group"}, requireChatConversationID)
 	withPreRun.SetArgs([]string{"--group", "cid"})
-	if err := withPreRun.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(withPreRun, context.Background()); err != nil {
 		t.Fatalf("execute with alias and previous PreRunE: %v", err)
 	}
 	if !preRunCalled {

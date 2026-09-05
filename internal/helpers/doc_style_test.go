@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func writeTempImage(t *testing.T, name string) string {
@@ -52,7 +54,7 @@ func executeDocStyleCommand(t *testing.T, caller *scriptedToolCaller, args ...st
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageDocStyleCoverSetMutualExclusion(t *testing.T) {
@@ -221,7 +223,7 @@ func TestCrossPlatformCoverageDocStyleCoverSetUsesCommandContext(t *testing.T) {
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs([]string{"cover", "set", "--node", "n1", "--file", path})
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if caller.calls != 2 {

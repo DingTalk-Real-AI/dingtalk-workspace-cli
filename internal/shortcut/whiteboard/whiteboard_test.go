@@ -74,7 +74,7 @@ func runWhiteboardCoverageOutput(t *testing.T, declaration shortcut.Shortcut, ca
 	service.AddCommand(leaf)
 	root.AddCommand(service)
 	root.SetArgs(append([]string{"whiteboard", declaration.Command}, args...))
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		return nil, err
 	}
 	_, _, err := output.EmitStoredResult(leaf)

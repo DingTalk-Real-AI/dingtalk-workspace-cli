@@ -21,6 +21,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	eventbus "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
@@ -562,7 +563,7 @@ func TestCrossPlatformCoverageEventCommandValidationCoverage(t *testing.T) {
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(io.Discard)
 		cmd.SetArgs(args)
-		return cmd.Execute()
+		return corecmd.ExecuteForTest(cmd)
 	}
 	if err := execute(t, newEventCommand()); err != nil {
 		t.Fatal(err)
@@ -604,14 +605,14 @@ func TestCrossPlatformCoverageVersionCacheCompletionCoverage(t *testing.T) {
 		var output bytes.Buffer
 		cmd.SetOut(&output)
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err != nil || output.Len() == 0 {
+		if err := corecmd.ExecuteForTest(cmd); err != nil || output.Len() == 0 {
 			t.Fatalf("version %#v = %q %v", args, output.String(), err)
 		}
 	}
 	version, buildTime, gitCommit = "1.0", "today", "abc"
 	cmd := newVersionCommand()
 	cmd.SetOut(io.Discard)
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -630,7 +631,7 @@ func TestCrossPlatformCoverageVersionCacheCompletionCoverage(t *testing.T) {
 	cache := newCacheCommand()
 	cache.SetOut(io.Discard)
 	cache.SetArgs([]string{"status"})
-	if err := cache.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cache); err != nil {
 		t.Fatal(err)
 	}
 
@@ -640,7 +641,7 @@ func TestCrossPlatformCoverageVersionCacheCompletionCoverage(t *testing.T) {
 		completion := newCompletionCommand(completionRoot)
 		completion.SetOut(io.Discard)
 		completion.SetArgs([]string{shell})
-		if err := completion.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(completion); err != nil {
 			t.Fatalf("completion %s: %v", shell, err)
 		}
 	}
@@ -969,7 +970,7 @@ func TestCrossPlatformCoverageAuthLoginTokenCommandCoverage(t *testing.T) {
 				args = append(args, "--format", "json")
 			}
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil || output.Len() == 0 {
+			if err := corecmd.ExecuteForTest(root); err != nil || output.Len() == 0 {
 				t.Fatalf("token login = %q %v", output.String(), err)
 			}
 			data, err := authpkg.LoadTokenData(configDir)
@@ -1016,7 +1017,7 @@ func TestCrossPlatformCoverageAuthLoginTokenCommandCoverage(t *testing.T) {
 			root.SetArgs(args)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("international=%v login error = %v", international, err)
 			}
 		}
@@ -1080,7 +1081,7 @@ func TestCrossPlatformCoveragePluginCommandLifecycleCoverage(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SilenceUsage = true
 		cmd.SetArgs(args)
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		return output.String(), err
 	}
 
@@ -1305,13 +1306,13 @@ func TestCrossPlatformCoverageUpgradeCommandHTTPAndDryRunCoverage(t *testing.T) 
 	edition.Override(&edition.Hooks{IsEmbedded: true, Name: "host"})
 	upgradeCmd := newUpgradeCommand()
 	upgradeCmd.SetArgs(nil)
-	if err := upgradeCmd.Execute(); err == nil || !strings.Contains(err.Error(), "嵌入") {
+	if err := corecmd.ExecuteForTest(upgradeCmd); err == nil || !strings.Contains(err.Error(), "嵌入") {
 		t.Fatalf("embedded upgrade = %v", err)
 	}
 	edition.Override(&edition.Hooks{})
 	upgradeCmd = newUpgradeCommand()
 	upgradeCmd.SetArgs([]string{"--beta", "--version", "v1.0.0"})
-	if err := upgradeCmd.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(upgradeCmd); err == nil {
 		t.Fatal("conflicting upgrade track succeeded")
 	}
 }
@@ -1686,7 +1687,7 @@ func TestCrossPlatformCoverageDoctorCommandCoverage(t *testing.T) {
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err != nil || out.Len() == 0 {
+		if err := corecmd.ExecuteForTest(cmd); err != nil || out.Len() == 0 {
 			t.Fatalf("doctor %#v = %q, %v", args, out.String(), err)
 		}
 	}
@@ -1805,7 +1806,7 @@ func TestCrossPlatformCoverageSkillCommandHTTPCoverage(t *testing.T) {
 		cmd.SilenceErrors = true
 		cmd.SetOut(&out)
 		cmd.SetArgs(args)
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		return out.String(), err
 	}
 	for _, args := range [][]string{{"--query", "demo", "--source", "DingtalkMarket"}, {"--query", "empty"}} {
@@ -1981,7 +1982,7 @@ func TestCrossPlatformCoverageProfileCommandAndModelCoverage(t *testing.T) {
 		root.SilenceUsage = true
 		root.SilenceErrors = true
 		root.SetArgs(append([]string{cmd.Name()}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		return out.String(), err
 	}
 	if output, err := run(newProfileListCommand()); err != nil || !strings.Contains(output, "corp-a") {
@@ -1994,7 +1995,7 @@ func TestCrossPlatformCoverageProfileCommandAndModelCoverage(t *testing.T) {
 	var out bytes.Buffer
 	rootJSON.SetOut(&out)
 	rootJSON.SetArgs([]string{"list"})
-	if err := rootJSON.Execute(); err != nil || !strings.Contains(out.String(), `"profiles"`) {
+	if err := corecmd.ExecuteForTest(rootJSON); err != nil || !strings.Contains(out.String(), `"profiles"`) {
 		t.Fatalf("profile JSON = %q, %v", out.String(), err)
 	}
 	if output, err := run(newProfileSwitchCommand(), "corp-b"); err != nil || !strings.Contains(output, "corp-b") {
@@ -2126,7 +2127,7 @@ func TestCrossPlatformCoverageSkillSetupRuntimeCoverage(t *testing.T) {
 		cmd.SetOut(&out)
 		cmd.SetErr(&errOut)
 		cmd.SetArgs(args)
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		return out.String(), errOut.String(), err
 	}
 	if output, _, err := run("--mode", "mono", "--source", mono, "--target", "agents", "--yes"); err != nil || !strings.Contains(output, "installed=1") {

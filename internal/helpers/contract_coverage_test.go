@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // writeTempJSON writes a JSON file to a temp dir and returns its path.
@@ -1154,7 +1156,7 @@ func TestCrossPlatformCoverageContractHelperEdges(t *testing.T) {
 	var stdout bytes.Buffer
 	deps.Out.w = &stdout
 	deps.Out.errW = io.Discard
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("record create from stdin: %v", err)
 	}
 	call := onlyContractCall(t, caller)
@@ -1362,7 +1364,7 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	var stdout bytes.Buffer
 	deps.Out.w = &stdout
 	deps.Out.errW = io.Discard
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("review create from stdin: %v", err)
 	}
 	call := onlyContractCall(t, caller)
@@ -1382,7 +1384,7 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	InitDeps(caller)
 	deps.Out.w = &stdout
 	deps.Out.errW = io.Discard
-	if err := root2.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root2); err != nil {
 		t.Fatalf("review analysis from stdin: %v", err)
 	}
 	call = onlyContractCall(t, caller)

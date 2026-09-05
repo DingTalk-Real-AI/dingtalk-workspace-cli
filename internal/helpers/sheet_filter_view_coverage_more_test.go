@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 type invalidIntFlagValue struct{}
@@ -36,7 +38,7 @@ func executeFilterCoverage(t *testing.T, root *cobra.Command, args ...string) er
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func findCoverageSubcommand(t *testing.T, root *cobra.Command, name string) *cobra.Command {

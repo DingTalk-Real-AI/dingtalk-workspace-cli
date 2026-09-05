@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ func executeDriveCommandCapture(t *testing.T, caller edition.ToolCaller, args ..
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return buf, err
 }
 
@@ -258,7 +259,7 @@ func TestCrossPlatformCoverageDriveDownloadVersionDirectoryOutput(t *testing.T) 
 		root.SilenceErrors = true
 		root.SilenceUsage = true
 		root.SetArgs([]string{"download-version", "--node", "node-1", "--version", "3", "--output", dir})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if caller.calls != 1 {

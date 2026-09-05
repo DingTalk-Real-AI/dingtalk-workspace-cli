@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
@@ -84,7 +85,7 @@ func TestCrossPlatformCoverageConversationListTopRejectsInvalidType(t *testing.T
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+conversation-list-top", "--type", "bot"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("invalid --type unexpectedly succeeded")
 	}
 	if fake.tool != "" {
@@ -118,7 +119,7 @@ func TestCrossPlatformCoverageConversationListPageAllFollowsTypedCursor(t *testi
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[1].args["cursor"] != int64(2) {
@@ -135,7 +136,7 @@ func TestCrossPlatformCoverageConversationListSinglePagePreservesTypedCursor(t *
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 {
@@ -159,7 +160,7 @@ func TestCrossPlatformCoverageConversationListMaxItemsPublishesStableTruncation(
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--max-items", "1", "--page-delay", "0"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -184,7 +185,7 @@ func TestCrossPlatformCoverageConversationListRejectsOversizedLimitPage(t *testi
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--max-items", "1"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("oversized lower page unexpectedly published a safe continuation")
 	}
 	var payload map[string]any
@@ -208,7 +209,7 @@ func TestCrossPlatformCoverageConversationListPropagatesDelayCancellation(t *tes
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--page-delay", "1"})
-	if err := root.Execute(); err == nil || err != context.Canceled {
+	if err := corecmd.ExecuteForTest(root); err == nil || err != context.Canceled {
 		t.Fatalf("delay cancellation error = %v, want context.Canceled", err)
 	}
 	var payload map[string]any
@@ -224,7 +225,7 @@ func TestCrossPlatformCoverageConversationListAutoPageValidationAndOutputFailure
 	helpers.InitDeps(&larkAlignmentCaller{})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+conversation-list", "--max-items", "1"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("max-items without page-all unexpectedly succeeded")
 	}
 
@@ -235,7 +236,7 @@ func TestCrossPlatformCoverageConversationListAutoPageValidationAndOutputFailure
 	root = newPlatformCoverageRoot()
 	root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
 	root.SetArgs([]string{"chat", "+conversation-list"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("output error was swallowed")
 	}
 }
@@ -249,7 +250,7 @@ func TestCrossPlatformCoverageConversationListDeduplicatesStableIDs(t *testing.T
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+conversation-list"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any

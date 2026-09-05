@@ -123,10 +123,10 @@ func TestFlagErrorWithSuggestionsChatFromExplainsBothMeanings(t *testing.T) {
 	}
 }
 
-// TestFlagErrorWithSuggestions_fallbackTailHint 验证 fallback 路径（非 unknown flag 类错误，
+// TestCrossPlatformCoverageFlagErrorWithSuggestionsFallbackTailHint 验证 fallback 路径（非 unknown flag 类错误，
 // 如 missing required flag / ambiguous shorthand）也带尾部 See '<cmd> --help' for usage.
 // 这是 wukong / docker / kubectl 的通用 UX——任何 flag 解析错误都给用户一条 help 入口。
-func TestFlagErrorWithSuggestions_fallbackTailHint(t *testing.T) {
+func TestCrossPlatformCoverageFlagErrorWithSuggestionsFallbackTailHint(t *testing.T) {
 	t.Parallel()
 	cmd := &cobra.Command{Use: "send", Run: func(*cobra.Command, []string) {}}
 	orig := fmt.Errorf("required flag(s) \"to\" not set")
@@ -147,7 +147,7 @@ func TestFlagErrorWithSuggestions_fallbackTailHint(t *testing.T) {
 	}
 }
 
-func TestFlagErrorWithSuggestionsPreservesCancellation(t *testing.T) {
+func TestCrossPlatformCoverageFlagErrorWithSuggestionsPreservesCancellation(t *testing.T) {
 	t.Parallel()
 	cmd := &cobra.Command{Use: "send", Run: func(*cobra.Command, []string) {}}
 	err := flagErrorWithSuggestions(cmd, fmt.Errorf("unknown flag: --json: %w", context.Canceled))

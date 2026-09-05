@@ -40,7 +40,7 @@ func runDocAccessCoverage(t *testing.T, caller *smartCoverageCaller, args ...str
 	root := newPlatformCoverageRoot()
 	root.SetIn(bytes.NewReader(nil))
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func runDocAccessCoverageOutput(t *testing.T, caller *smartCoverageCaller, args ...string) (map[string]any, error) {
@@ -52,7 +52,7 @@ func runDocAccessCoverageOutput(t *testing.T, caller *smartCoverageCaller, args 
 	root.SetErr(io.Discard)
 	root.SetIn(bytes.NewReader(nil))
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if stdout.Len() == 0 {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func runDocAccessDeclaration(t *testing.T, declaration shortcut.Shortcut, caller
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
 	root.AddCommand(service)
 	root.SetArgs(append([]string{"doc", declaration.Command}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageDocAccessSuccessDryRunAndPreflight(t *testing.T) {
@@ -299,7 +299,7 @@ func TestCrossPlatformCoverageDocShareFailureExitContracts(t *testing.T) {
 	root.SetErr(io.Discard)
 	root.SetIn(bytes.NewReader(nil))
 	root.SetArgs([]string{"doc", "+share", "--to", "alice", "--url", "https://example.com/doc", "--yes"})
-	if err := root.Execute(); err == nil || err.Error() != "output failure" {
+	if err := corecmd.ExecuteForTest(root); err == nil || err.Error() != "output failure" {
 		t.Fatalf("output failure = %v", err)
 	}
 }

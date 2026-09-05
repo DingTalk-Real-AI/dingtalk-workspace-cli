@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -57,7 +58,7 @@ func runContactEnterpriseCommand(t *testing.T, args ...string) (*contactEnterpri
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	return caller, cmd.Execute()
+	return caller, corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageContactEnterpriseCommandsExposeExpectedFlags(t *testing.T) {

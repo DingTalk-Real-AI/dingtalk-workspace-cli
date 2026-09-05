@@ -22,89 +22,115 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const (
-	validationArgsAdapterAnnotation = "dws.runtime.validation_args_adapter"
-	validationFlagAdapterAnnotation = "dws.runtime.validation_flag_adapter"
-	validationConstraintAnnotation  = "dws.runtime.validation_constraint_adapter"
-)
+const preparedCommandAnnotation = "dws.internal.corecmd.prepared"
 
-// InstallValidationAdapters installs typed-error boundaries on the final Cobra
-// tree. It must run after built-in, edition, and plugin commands are mounted so
-// every positional validator, flag parser, and Cobra flag constraint shares the
-// same validation contract.
-func InstallValidationAdapters(root *cobra.Command) {
+// WithValidation compiles a validation boundary into an execution step. A
+// validation failure stops the continuation; continuation errors pass through
+// unchanged. Both managed commands and metadata-only migration wrappers use
+// this function so callers do not reimplement failure/continuation ordering.
+func WithValidation(validate, next func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	if next == nil {
+		panic("corecmd.WithValidation: next is nil")
+	}
+	if validate == nil {
+		return next
+	}
+	return func(cmd *cobra.Command, args []string) error {
+		if err := apperrors.NormalizeValidation(validate(cmd, args), apperrors.WithReason("invalid_parameters")); err != nil {
+			return err
+		}
+		return next(cmd, args)
+	}
+}
+
+// PrepareCommandTree installs the framework's Cobra adapters once, after all
+// built-in, edition and plugin commands and flag handlers have been mounted.
+// It snapshots effective handlers before modifying any node, preserving Cobra's
+// nearest-handler semantics without capturing already adapted ancestors.
+//
+// Commands must not be mounted or have their hooks replaced after preparation;
+// transparent lifecycle decorators may chain the installed handlers. Repeated
+// execution retains Cobra's flag values and Changed bits: construct a new tree
+// for independent invocations. Repeated preparation is a construction error.
+func PrepareCommandTree(root *cobra.Command) error {
 	if root == nil {
-		return
+		return fmt.Errorf("corecmd.PrepareCommandTree: root is nil")
 	}
-	var visit func(*cobra.Command)
-	visit = func(cmd *cobra.Command) {
-		installCommandValidationAdapters(cmd, true)
+	if root.Parent() != nil {
+		return fmt.Errorf("corecmd.PrepareCommandTree: %q is not a root", root.CommandPath())
+	}
+	type commandHooks struct {
+		cmd       *cobra.Command
+		args      cobra.PositionalArgs
+		flagError func(*cobra.Command, error) error
+		preRunE   func(*cobra.Command, []string) error
+		preRun    func(*cobra.Command, []string)
+	}
+	var hooks []commandHooks
+	var collect func(*cobra.Command) error
+	collect = func(cmd *cobra.Command) error {
+		if cmd.Annotations[preparedCommandAnnotation] != "" {
+			return fmt.Errorf("corecmd.PrepareCommandTree: %q is already prepared", cmd.CommandPath())
+		}
+		hooks = append(hooks, commandHooks{cmd, cmd.Args, cmd.FlagErrorFunc(), cmd.PreRunE, cmd.PreRun})
 		for _, child := range cmd.Commands() {
-			visit(child)
-		}
-	}
-	visit(root)
-}
-
-// installLocalValidationAdapters covers constraints owned by a corecmd command
-// even when it is executed standalone in an embedding process. Flag parsing is
-// deliberately installed only on the final tree so a command mounted later can
-// still inherit the root's richer flag error handler.
-func installLocalValidationAdapters(cmd *cobra.Command) {
-	installCommandValidationAdapters(cmd, false)
-}
-
-func installCommandValidationAdapters(cmd *cobra.Command, includeFlagParser bool) {
-	if cmd.Annotations == nil {
-		cmd.Annotations = map[string]string{}
-	}
-	if positional := cmd.Args; positional != nil && cmd.Annotations[validationArgsAdapterAnnotation] != "true" {
-		cmd.Args = func(current *cobra.Command, args []string) error {
-			return apperrors.NormalizeValidation(
-				positional(current, args),
-				apperrors.WithReason("invalid_positionals"),
-			)
-		}
-		cmd.Annotations[validationArgsAdapterAnnotation] = "true"
-	}
-
-	if includeFlagParser && cmd.Annotations[validationFlagAdapterAnnotation] != "true" {
-		flagError := cmd.FlagErrorFunc()
-		cmd.SetFlagErrorFunc(func(current *cobra.Command, err error) error {
-			return apperrors.NormalizeValidation(
-				flagError(current, err),
-				apperrors.WithReason("invalid_flag"),
-			)
-		})
-		cmd.Annotations[validationFlagAdapterAnnotation] = "true"
-	}
-
-	if cmd.Annotations[validationConstraintAnnotation] == "true" {
-		return
-	}
-
-	preRunE := cmd.PreRunE
-	preRun := cmd.PreRun
-	cmd.PreRun = nil
-	cmd.PreRunE = func(current *cobra.Command, args []string) error {
-		if preRunE != nil {
-			if err := preRunE(current, args); err != nil {
-				// PreRunE is a general lifecycle hook; only explicit validation
-				// boundaries may change an error's category and exit code.
+			if err := collect(child); err != nil {
 				return err
 			}
-		} else if preRun != nil {
-			preRun(current, args)
 		}
-		if err := current.ValidateRequiredFlags(); err != nil {
-			return normalizeRequiredFlagError(current, err)
-		}
-		return apperrors.NormalizeValidation(
-			current.ValidateFlagGroups(),
-			apperrors.WithReason("invalid_flag_group"),
-		)
+		return nil
 	}
-	cmd.Annotations[validationConstraintAnnotation] = "true"
+	if err := collect(root); err != nil {
+		return err
+	}
+	for _, hook := range hooks {
+		cmd := hook.cmd
+		if hook.args != nil {
+			cmd.Args = func(current *cobra.Command, args []string) error {
+				return apperrors.NormalizeValidation(hook.args(current, args), apperrors.WithReason("invalid_positionals"))
+			}
+		}
+		cmd.SetFlagErrorFunc(func(current *cobra.Command, parserErr error) error {
+			if apperrors.PreserveClassification(parserErr) {
+				return parserErr
+			}
+			err := hook.flagError(current, parserErr)
+			if err == nil {
+				err = parserErr
+			}
+			return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag"))
+		})
+		cmd.PreRun = nil
+		if hook.preRunE == nil && hook.preRun == nil {
+			cmd.PreRunE = validateCobraFlagConstraints
+		} else {
+			cmd.PreRunE = func(current *cobra.Command, args []string) error {
+				if hook.preRunE != nil {
+					if err := hook.preRunE(current, args); err != nil {
+						return err
+					}
+				} else {
+					hook.preRun(current, args)
+				}
+				return validateCobraFlagConstraints(current, args)
+			}
+		}
+		if cmd.Annotations == nil {
+			cmd.Annotations = make(map[string]string)
+		}
+		cmd.Annotations[preparedCommandAnnotation] = "true"
+	}
+	return nil
+}
+
+// Cobra runs its own required/group checks again after PreRun. Keep their
+// annotations intact for help, completion and Schema. This early check exists
+// only to type errors at their source, after business PreRun alias resolution.
+func validateCobraFlagConstraints(current *cobra.Command, _ []string) error {
+	if err := current.ValidateRequiredFlags(); err != nil {
+		return normalizeRequiredFlagError(current, err)
+	}
+	return apperrors.NormalizeValidation(current.ValidateFlagGroups(), apperrors.WithReason("invalid_flag_group"))
 }
 
 func normalizeRequiredFlagError(cmd *cobra.Command, err error) error {

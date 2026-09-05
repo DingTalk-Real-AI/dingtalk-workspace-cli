@@ -15,6 +15,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -22,6 +23,8 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -87,13 +90,10 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreScopedToEachExecuteCInvocati
 	t.Cleanup(CloseFileLogger)
 	t.Cleanup(func() { authpkg.SetClientCredentials("", "") })
 
-	root := NewRootCommand(t.Context())
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	observed := addCredentialCaptureCommand(root)
+	root, observed := newCredentialCaptureRoot(t.Context())
 
 	root.SetArgs([]string{"capture-credentials", "--client-id", "first-client", "--client-secret", "first-secret"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if observed.clientID != "first-client" || observed.clientSecret != "first-secret" {
@@ -101,7 +101,7 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreScopedToEachExecuteCInvocati
 	}
 
 	root.SetArgs([]string{"capture-credentials"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if observed.clientID != "" || observed.clientSecret != "" {
@@ -109,7 +109,7 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreScopedToEachExecuteCInvocati
 	}
 
 	root.SetArgs([]string{"capture-credentials", "--client-secret", "third-secret"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if observed.clientID != "" || observed.clientSecret != "third-secret" {
@@ -124,11 +124,7 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreClearedAfterExecutionErrors(
 	t.Cleanup(CloseFileLogger)
 	t.Cleanup(func() { authpkg.SetClientCredentials("", "") })
 
-	root := NewRootCommand(t.Context())
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	observed := addCredentialCaptureCommand(root)
-	root.AddCommand(&cobra.Command{
+	root, observed := newCredentialCaptureRoot(t.Context(), &cobra.Command{
 		Use: "credential-error",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return errors.New("expected execution failure")
@@ -136,12 +132,12 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreClearedAfterExecutionErrors(
 	})
 
 	root.SetArgs([]string{"credential-error", "--client-id", "failed-client", "--client-secret", "failed-secret"})
-	if _, err := root.ExecuteC(); err == nil {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil {
 		t.Fatal("expected command error")
 	}
 
 	root.SetArgs([]string{"capture-credentials"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if observed.clientID != "" || observed.clientSecret != "" {
@@ -149,15 +145,33 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreClearedAfterExecutionErrors(
 	}
 
 	root.SetArgs([]string{"version", "--client-id", "partial", "--not-a-real-flag"})
-	if _, err := root.ExecuteC(); err == nil {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil {
 		t.Fatal("expected flag parse error")
+	} else {
+		var structured *apperrors.Error
+		if !errors.As(err, &structured) || structured.Category != apperrors.CategoryValidation || structured.ExitCode() != apperrors.ExitCodeValidation {
+			t.Fatalf("flag parse error = %#v, want validation exit 3 after invocation cleanup", structured)
+		}
 	}
 	root.SetArgs([]string{"capture-credentials"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if observed.clientID != "" || observed.clientSecret != "" {
 		t.Fatalf("flag parse error leaked credential flags: id:%q secret_set:%t", observed.clientID, observed.clientSecret != "")
+	}
+}
+
+func TestCrossPlatformCoverageInvocationExitHandlerPreservesAuthoritativeFlagError(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	root.SetFlagErrorFunc(func(*cobra.Command, error) error { return context.DeadlineExceeded })
+	invocationSeen := false
+	versionRequested := false
+	installInvocationExitHandlers(root, nil, &invocationSeen, &versionRequested)
+
+	err := root.FlagErrorFunc()(root, errors.New("raw parser error"))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("decorated flag error = %v, want deadline preserved", err)
 	}
 }
 
@@ -168,11 +182,11 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreClearedOnPreRunExitPaths(t *
 	t.Cleanup(CloseFileLogger)
 	t.Cleanup(func() { authpkg.SetClientCredentials("", "") })
 
-	assertNextInvocationDoesNotReuse := func(t *testing.T, root *cobra.Command, args []string, wantErr bool, leakedID, leakedSecret string) {
+	assertNextInvocationDoesNotReuse := func(t *testing.T, args []string, wantErr bool, leakedID, leakedSecret string) {
 		t.Helper()
-		observed := addCredentialCaptureCommand(root)
+		root, observed := newCredentialCaptureRoot(t.Context())
 		root.SetArgs(args)
-		_, err := root.ExecuteC()
+		_, err := corecmd.ExecuteCForTest(root)
 		if wantErr && err == nil {
 			t.Fatalf("ExecuteC(%v) error = nil", args)
 		}
@@ -181,7 +195,7 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreClearedOnPreRunExitPaths(t *
 		}
 
 		root.SetArgs([]string{"capture-credentials"})
-		if _, err := root.ExecuteC(); err != nil {
+		if _, err := corecmd.ExecuteCForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if observed.clientID == leakedID {
@@ -192,30 +206,23 @@ func TestCrossPlatformCoverageRootCredentialFlagsAreClearedOnPreRunExitPaths(t *
 		}
 	}
 
-	newRoot := func() *cobra.Command {
-		root := NewRootCommand(t.Context())
-		root.SetOut(io.Discard)
-		root.SetErr(io.Discard)
-		return root
-	}
-
 	t.Run("help", func(t *testing.T) {
-		assertNextInvocationDoesNotReuse(t, newRoot(), []string{
+		assertNextInvocationDoesNotReuse(t, []string{
 			"version", "--client-id", "help-client", "--client-secret", "help-secret", "--help",
 		}, false, "help-client", "help-secret")
 	})
 	t.Run("version flag", func(t *testing.T) {
-		assertNextInvocationDoesNotReuse(t, newRoot(), []string{
+		assertNextInvocationDoesNotReuse(t, []string{
 			"--client-id", "version-client", "--client-secret", "version-secret", "--version",
 		}, false, "version-client", "version-secret")
 	})
 	t.Run("args validation", func(t *testing.T) {
-		assertNextInvocationDoesNotReuse(t, newRoot(), []string{
+		assertNextInvocationDoesNotReuse(t, []string{
 			"api", "GET", "/v1.0/microApp/allApps", "extra", "--client-id", "args-client", "--client-secret", "args-secret",
 		}, true, "args-client", "args-secret")
 	})
 	t.Run("subcommand flag handler", func(t *testing.T) {
-		assertNextInvocationDoesNotReuse(t, newRoot(), []string{
+		assertNextInvocationDoesNotReuse(t, []string{
 			"contact", "user", "get", "--client-id", "contact-client", "--client-secret", "contact-secret", "--not-a-real-flag",
 		}, true, "contact-client", "contact-secret")
 	})
@@ -239,13 +246,11 @@ func TestCrossPlatformCoverageRootVersionPreservesCobraEarlyExitCompatibility(t 
 		},
 	})
 
-	root := NewRootCommand(t.Context())
+	root, observed := newCredentialCaptureRoot(t.Context())
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
-	root.SetErr(io.Discard)
-	observed := addCredentialCaptureCommand(root)
 	root.SetArgs([]string{"--client-id", "version-client", "--client-secret", "version-secret", "--version", "unexpected-arg"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatalf("--version must ignore invalid Agent metadata and edition hooks: %v", err)
 	}
 	if got, want := stdout.String(), "dws version "+Version()+"\n"; got != want {
@@ -257,7 +262,7 @@ func TestCrossPlatformCoverageRootVersionPreservesCobraEarlyExitCompatibility(t 
 
 	stdout.Reset()
 	root.SetArgs([]string{"--version=false", "unexpected-arg"})
-	if _, err := root.ExecuteC(); err == nil {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil {
 		t.Fatal("--version=false bypassed root positional validation")
 	}
 
@@ -267,19 +272,19 @@ func TestCrossPlatformCoverageRootVersionPreservesCobraEarlyExitCompatibility(t 
 	edition.Override(&edition.Hooks{})
 	root.SetOut(runnerCredentialFailWriter{})
 	root.SetArgs([]string{"--version"})
-	if _, err := root.ExecuteC(); err == nil {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil {
 		t.Fatal("expected --version writer failure")
 	}
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"unexpected-arg"})
-	if _, err := root.ExecuteC(); err == nil || !strings.Contains(err.Error(), "unexpected-arg") {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil || !strings.Contains(err.Error(), "unexpected-arg") {
 		t.Fatalf("next invocation bypassed positional validation after writer failure: %v", err)
 	}
 
 	// A later ordinary invocation on the same root must not inherit either the
 	// version flag or credentials supplied to the short-circuited call.
 	root.SetArgs([]string{"capture-credentials"})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if observed.clientID == "version-client" {
@@ -332,4 +337,15 @@ type runnerCredentialFailWriter struct{}
 
 func (runnerCredentialFailWriter) Write([]byte) (int, error) {
 	return 0, errors.New("expected writer failure")
+}
+
+func newCredentialCaptureRoot(ctx context.Context, extra ...*cobra.Command) (*cobra.Command, *capturedCredentialFlags) {
+	var observed *capturedCredentialFlags
+	root := newRootCommandWithAssembly(ctx, nil, func(root *cobra.Command) {
+		observed = addCredentialCaptureCommand(root)
+		root.AddCommand(extra...)
+	})
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	return root, observed
 }

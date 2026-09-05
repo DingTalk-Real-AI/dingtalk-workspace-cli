@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -147,7 +148,7 @@ func executeSearchMsgResult(caller *searchMsgExecutionCaller, args ...string) (m
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, args...))
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		return nil, err
 	}
 	var payload map[string]any

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -64,7 +65,7 @@ func runRecordQueryCLI(t *testing.T, caller *recordQueryE2ECaller, extraArgs ...
 	command.SilenceErrors = true
 	command.SilenceUsage = true
 	command.SetArgs(args)
-	err := command.Execute()
+	err := corecmd.ExecuteForTest(command)
 	return out.String(), err
 }
 
@@ -182,7 +183,7 @@ func TestCrossPlatformCoverageRecordQueryCLIPageLimitHelpE2E(t *testing.T) {
 	command.SetOut(out)
 	command.SetErr(out)
 	command.SetArgs([]string{"record", "query", "--help"})
-	if err := command.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(command); err != nil {
 		t.Fatalf("record query help failed: %v", err)
 	}
 	for _, want := range []string{"返回非零结构化错误", "不完整结果", "错误详情保留已取记录和续传 cursor"} {

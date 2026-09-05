@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
@@ -22,7 +23,7 @@ func TestCrossPlatformCoverageAtMePageAllUsesOpaqueCursorAndDeduplicates(t *test
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+at-me", "--limit", "2", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.args) != 2 || caller.args[0]["cursor"] != "0" || caller.args[1]["cursor"] != "cursor-2" {
@@ -50,7 +51,7 @@ func TestCrossPlatformCoverageAtMePageAllFailsClosedWithoutContinuation(t *testi
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+at-me", "--page-all"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("missing @me continuation unexpectedly succeeded")
 	}
 	var payload map[string]any
@@ -72,7 +73,7 @@ func TestCrossPlatformCoverageAtMePageAllContinuesAcrossEmptyIntermediatePage(t 
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+at-me", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -93,7 +94,7 @@ func TestCrossPlatformCoverageAtMeMaxItemsPublishesStableTruncation(t *testing.T
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+at-me", "--page-all", "--max-items", "1", "--page-delay", "0"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -119,7 +120,7 @@ func TestCrossPlatformCoverageMyGroupsPageAllUsesNumericCursorAndFiltersAfterMer
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+my-groups", "--type", "group", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.args) != 2 || caller.args[1]["cursor"] != float64(88) {
@@ -145,7 +146,7 @@ func TestCrossPlatformCoverageMyGroupsMaxItemsAppliesAfterTypeFilter(t *testing.
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+my-groups", "--type", "group", "--page-all", "--max-items", "1", "--page-delay", "0"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -191,7 +192,7 @@ func TestCrossPlatformCoverageRemainingListsFailClosedOnOversizeAndCanceledDelay
 			args := append([]string{"chat", tc.command}, tc.extra...)
 			args = append(args, "--page-all", "--max-items", "1")
 			root.SetArgs(args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("oversized lower page unexpectedly published a continuation")
 			}
 			var payload map[string]any
@@ -224,7 +225,7 @@ func TestCrossPlatformCoverageRemainingListsFailClosedOnOversizeAndCanceledDelay
 			args := append([]string{"chat", tc.command}, tc.extra...)
 			args = append(args, "--page-all", "--page-delay", "1")
 			root.SetArgs(args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("canceled delay unexpectedly succeeded")
 			}
 			var payload map[string]any
@@ -253,7 +254,7 @@ func TestCrossPlatformCoverageRemainingReadPaginationValidation(t *testing.T) {
 		helpers.InitDeps(&chatMessagesPagingCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
 	}
@@ -267,7 +268,7 @@ func TestCrossPlatformCoverageMyGroupsAdditionalEdges(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(append([]string{"chat", "+my-groups"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -338,7 +339,7 @@ func TestCrossPlatformCoverageMyGroupsAdditionalEdges(t *testing.T) {
 			root := newPlatformCoverageRoot()
 			root.SetOut(chatMessagesFailWriter{})
 			root.SetArgs(args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatalf("output failure swallowed for %v", args)
 			}
 		}
@@ -359,7 +360,7 @@ func TestCrossPlatformCoverageAtMeAdditionalEdges(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(append([]string{"chat", "+at-me"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -426,7 +427,7 @@ func TestCrossPlatformCoverageAtMeAdditionalEdges(t *testing.T) {
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatMessagesFailWriter{})
 		root.SetArgs([]string{"chat", "+at-me"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("output error was swallowed")
 		}
 	})

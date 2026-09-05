@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -89,7 +90,7 @@ func runUpsertByKeyCLI(t *testing.T, caller *upsertByKeyCaller, extra ...string)
 	}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -254,7 +255,7 @@ func runRecordBatchCLI(t *testing.T, caller *upsertByKeyCaller, command string, 
 	args := []string{"aitable", command, "--base-id", "base", "--table-id", "table", "--records", string(raw), "--yes"}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err = root.Execute()
+	err = corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 
@@ -326,7 +327,7 @@ func runRecordQueryShortcutCLI(t *testing.T, caller *upsertByKeyCaller, limit in
 	root.SetErr(&bytes.Buffer{})
 	args := []string{"aitable", "+record-query", "--base-id", "base", "--table-id", "table", "--limit", fmt.Sprint(limit)}
 	root.SetArgs(append(args, extra...))
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if stdout.Len() == 0 {
 		return nil, err
 	}
@@ -891,7 +892,7 @@ func runRecordDeleteCLI(t *testing.T, caller *upsertByKeyCaller, ids []string, e
 	args := []string{"aitable", "+record-delete", "--base-id", "base", "--table-id", "table", "--record-ids", strings.Join(ids, ","), "--yes"}
 	args = append(args, extra...)
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 

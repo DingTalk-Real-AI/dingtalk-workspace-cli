@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -80,7 +81,7 @@ func TestPrimaryParamMigrationChatContentPayloadCompatibility(t *testing.T) {
 				args = append(args, spelling.args...)
 				args = append(args, "--yes")
 				root.SetArgs(args)
-				if err := root.Execute(); err != nil {
+				if err := corecmd.ExecuteForTest(root); err != nil {
 					t.Fatalf("execute %v: %v", args, err)
 				}
 				if len(fake.calls) != 1 {
@@ -152,7 +153,7 @@ func TestPrimaryParamMigrationMessagesReplyPayloadCompatibility(t *testing.T) {
 			args = append(args, spelling.args...)
 			args = append(args, "--yes")
 			root.SetArgs(args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("execute %v: %v", args, err)
 			}
 			if len(fake.calls) != 1 {
@@ -193,7 +194,7 @@ func TestPrimaryParamMigrationMessagesReplyPayloadCompatibility(t *testing.T) {
 			"--text", "legacy-body", "--content", "canonical-body",
 			"--dry-run", "--yes",
 		})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 0 {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -59,7 +60,7 @@ func executeChatMessagePaginationCommand(t *testing.T, caller *chatMessagePagina
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	err := root.ExecuteContext(context.Background())
+	err := corecmd.ExecuteContextForTest(root, context.Background())
 	if out.Len() == 0 {
 		return nil, err
 	}

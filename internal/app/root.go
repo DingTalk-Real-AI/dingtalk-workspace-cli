@@ -513,19 +513,20 @@ func errorTypeForExitCode(code int) string {
 // newPreParseValidationError keeps pipeline handler identity in internal logs
 // while exposing only the underlying parameter-domain error to CLI users.
 func newPreParseValidationError(err error) error {
-	if structured, ok := err.(*apperrors.Error); ok {
-		return structured
-	}
+	// Only the engine's direct diagnostic shell is transparent. Never search
+	// through an authoritative error to find and strip a deeper HandlerError.
 	userErr := err
-	var handlerErr *pipeline.HandlerError
-	if stderrors.As(err, &handlerErr) && handlerErr.Unwrap() != nil {
+	for {
+		handlerErr, ok := userErr.(*pipeline.HandlerError)
+		if !ok || handlerErr.Unwrap() == nil {
+			break
+		}
 		userErr = handlerErr.Unwrap()
 	}
-	return apperrors.NewValidation(
-		userErr.Error(),
+	return apperrors.NormalizeValidation(
+		userErr,
 		apperrors.WithReason("parameter_conflict"),
 		apperrors.WithHint("Remove the duplicate alias/canonical spelling and pass the parameter exactly once."),
-		apperrors.WithCause(userErr),
 	)
 }
 
@@ -543,10 +544,7 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// Explicitly classified and interrupted errors are authoritative even when
 	// their text happens to resemble a known flag typo. Suggestions may enrich
 	// raw parser failures only; they must never relabel an existing contract.
-	var typed *apperrors.Error
-	var exitCoder apperrors.ExitCoder
-	if stderrors.As(err, &typed) || stderrors.As(err, &exitCoder) ||
-		stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded) {
+	if apperrors.PreserveClassification(err) {
 		return err
 	}
 	errMsg := err.Error()
@@ -774,9 +772,15 @@ func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
 // optional pipeline engine for input correction. When engine is nil,
 // no pipeline processing is applied.
 func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	return newRootCommandWithAssembly(rootCtx, engine, nil)
+}
+
+// newRootCommandWithAssembly mounts caller-owned additions before the framework
+// snapshots and prepares the final tree. The callback must not execute commands.
+func newRootCommandWithAssembly(rootCtx context.Context, engine *pipeline.Engine, assemble func(*cobra.Command)) *cobra.Command {
 	registerSchemaRuntimeDelivery()
 	rootCtx, _ = output.WithResultStore(rootCtx)
-	return newRootCommandWithEngine(rootCtx, engine, true, false)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false, assemble)
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
@@ -914,7 +918,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	visit(root)
 }
 
-func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool) *cobra.Command {
+func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool, assemble ...func(*cobra.Command)) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -1163,11 +1167,18 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	if !presentationOnly {
 		hideNonDirectRuntimeCommands(root)
 	}
+	for _, mount := range assemble {
+		if mount != nil {
+			mount(root)
+		}
+	}
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX.
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
 	installReviewedFlagProtectionHandlers(root)
-	corecmd.InstallValidationAdapters(root)
+	if err := corecmd.PrepareCommandTree(root); err != nil {
+		panic(fmt.Sprintf("prepare command tree: %v", err))
+	}
 	installInvocationExitHandlers(root, flags, &credentialInvocationSeen, &rootVersionRequested)
 	root.SetContext(rootCtx)
 

@@ -60,7 +60,7 @@ func TestCrossPlatformCoverageWhiteboardCommittedFailureSurvivesUnifiedOutput(t 
 	root.AddCommand(group)
 	root.SetArgs([]string{"whiteboard", "+update", "--node", "doc", "--part-id", "part", "--yes", "--source",
 		`{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"group","x":40}]}}`})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil {
 		t.Fatal("coordinate drift must not report complete success")
 	}

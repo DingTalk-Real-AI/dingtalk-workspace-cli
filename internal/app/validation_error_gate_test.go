@@ -15,10 +15,17 @@ package app
 
 import (
 	stderrors "errors"
+	"io"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
 )
 
@@ -33,13 +40,16 @@ func requireFinalValidationError(t *testing.T, path string, err error) {
 	}
 }
 
-func TestTypedValidationErrorGateFinalCommandTree(t *testing.T) {
+func TestCrossPlatformCoverageTypedValidationErrorGateFinalCommandTree(t *testing.T) {
 	root := NewSchemaSourceRootCommand()
+	tooManyArgs := make([]string, 256)
+	nodes := 0
 	var walk func(*cobra.Command)
 	walk = func(cmd *cobra.Command) {
+		nodes++
 		path := cmd.CommandPath()
 		if cmd.Args != nil {
-			for _, args := range [][]string{nil, make([]string, 256)} {
+			for _, args := range [][]string{nil, tooManyArgs} {
 				if err := cmd.Args(cmd, args); err != nil {
 					requireFinalValidationError(t, path+" Args", err)
 				}
@@ -52,15 +62,18 @@ func TestTypedValidationErrorGateFinalCommandTree(t *testing.T) {
 		}
 	}
 	walk(root)
+	t.Logf("distribution validation coverage: %d nodes", nodes)
 }
 
-func TestTypedValidationErrorGateRepresentativeCommands(t *testing.T) {
+func TestCrossPlatformCoverageTypedValidationErrorGateRepresentativeCommands(t *testing.T) {
 	for _, args := range [][]string{
 		{"mcp", "published", "tools"},
 		{"skill", "install"},
 		{"skill", "get"},
 		{"skill", "search", "--query", "value", "--unknown-validation-gate-flag"},
 		{"oa", "approval", "list-by-admin"},
+		{"oa", "approval", "list-by-admin", "--request", "{"},
+		{"audit", "tail", "--lines", "0"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			root := NewSchemaSourceRootCommand()
@@ -76,4 +89,46 @@ func TestTypedValidationErrorGateRepresentativeCommands(t *testing.T) {
 			requireFinalValidationError(t, path, err)
 		})
 	}
+}
+
+func TestCrossPlatformCoverageTypedValidationErrorGateExtensions(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	oldEdition := edition.Get()
+	t.Cleanup(func() { edition.Override(oldEdition) })
+	businessCalls := 0
+	edition.Override(&edition.Hooks{RegisterExtraCommands: func(root *cobra.Command, _ edition.ToolCaller) {
+		leaf := &cobra.Command{Use: "validation-extension", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error { businessCalls++; return nil }}
+		leaf.Flags().String("required", "", "")
+		_ = leaf.MarkFlagRequired("required")
+		leaf.Flags().String("left", "", "")
+		leaf.Flags().String("right", "", "")
+		leaf.MarkFlagsOneRequired("left", "right")
+		root.AddCommand(leaf)
+	}})
+	testseam.Swap(t, &rootLoadPlugins, func(root *cobra.Command, _ *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+		return buildPluginCommands([]mcptypes.ServerDescriptor{conferencePluginDescriptor()}, runner, root)
+	})
+	for _, args := range [][]string{
+		{"validation-extension", "unexpected"},
+		{"validation-extension"},
+		{"validation-extension", "--required", "value"},
+		{"validation-extension", "--unknown"},
+		{"conference", "camera", "open", "--unknown"},
+	} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			root := NewRootCommand()
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(args)
+			_, err := root.ExecuteC()
+			requireFinalValidationError(t, strings.Join(args, " "), err)
+			if businessCalls != 0 {
+				t.Fatal("invalid extension args reached business execution")
+			}
+			if err := corecmd.PrepareCommandTree(root); err == nil {
+				t.Fatal("runtime root was not already prepared")
+			}
+		})
+	}
+	t.Log("runtime validation coverage: edition positional/required/group/parser; plugin overlay parser")
 }

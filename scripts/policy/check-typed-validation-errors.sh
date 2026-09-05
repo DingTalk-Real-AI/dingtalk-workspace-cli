@@ -6,35 +6,41 @@ cd "$ROOT"
 
 GO_BIN="${GO:-go}"
 
-run_tests() {
-	package="$1"
-	pattern="$2"
-	shift 2
-	if ! output=$("$GO_BIN" test -v -count=1 "$package" -run "$pattern" 2>&1); then
-		printf '%s\n' "$output" >&2
-		return 1
-	fi
-	printf '%s\n' "$output"
-	for test_name in "$@"; do
-		case "$output" in
-			*"=== RUN   $test_name"*) ;;
-			*)
-				printf 'typed validation error gate did not run %s in %s\n' "$test_name" "$package" >&2
-				return 1
-				;;
-		esac
-	done
+pattern='^TestCrossPlatformCoverage(NormalizeValidation|PreserveClassification|WithValidation|PrepareCommandTree|ValidationPipelineTierParity|ValidationAdapters|FrameworkValidationHooksAreTyped|DeclareLeafMetadataValidateWithoutConfirmRunsInner|OAListByAdminValidationErrorsAreTyped|NewPreParseValidationErrorPreservesAuthoritativeErrors|TypedValidationErrorGate(FinalCommandTree|RepresentativeCommands|Extensions))$'
+if ! output=$("$GO_BIN" test -json -count=1 \
+	./internal/errors ./internal/corecmd ./internal/helpers ./internal/app \
+	-run "$pattern" 2>&1); then
+	printf '%s\n' "$output" >&2
+	exit 1
+fi
+
+module='github.com/DingTalk-Real-AI/dingtalk-workspace-cli'
+require_test() {
+	package="$module/$1"
+	test_name="$2"
+	run_marker="\"Action\":\"run\",\"Package\":\"$package\",\"Test\":\"$test_name\""
+	pass_marker="\"Action\":\"pass\",\"Package\":\"$package\",\"Test\":\"$test_name\""
+	case "$output" in
+		*"$run_marker"*"$pass_marker"*) ;;
+		*)
+			printf 'typed validation error gate did not run and pass %s in %s\n' "$test_name" "$package" >&2
+			exit 1
+			;;
+	esac
 }
 
-run_tests ./internal/errors '^TestCrossPlatformCoverageNormalizeValidation$' \
-	TestCrossPlatformCoverageNormalizeValidation
-run_tests ./internal/corecmd '^TestCrossPlatformCoverage(ValidationAdapters|FrameworkValidationHooksAreTyped)$' \
-	TestCrossPlatformCoverageValidationAdapters \
-	TestCrossPlatformCoverageFrameworkValidationHooksAreTyped
-run_tests ./internal/helpers '^TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner$' \
-	TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner
-run_tests ./internal/app '^TestTypedValidationErrorGate(FinalCommandTree|RepresentativeCommands)$' \
-	TestTypedValidationErrorGateFinalCommandTree \
-	TestTypedValidationErrorGateRepresentativeCommands
+require_test internal/errors TestCrossPlatformCoverageNormalizeValidation
+require_test internal/errors TestCrossPlatformCoveragePreserveClassification
+require_test internal/corecmd TestCrossPlatformCoverageWithValidation
+require_test internal/corecmd TestCrossPlatformCoveragePrepareCommandTree
+require_test internal/helpers TestCrossPlatformCoverageValidationPipelineTierParity
+require_test internal/app TestCrossPlatformCoverageTypedValidationErrorGateExtensions
+require_test internal/corecmd TestCrossPlatformCoverageValidationAdapters
+require_test internal/corecmd TestCrossPlatformCoverageFrameworkValidationHooksAreTyped
+require_test internal/helpers TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner
+require_test internal/helpers TestCrossPlatformCoverageOAListByAdminValidationErrorsAreTyped
+require_test internal/app TestCrossPlatformCoverageNewPreParseValidationErrorPreservesAuthoritativeErrors
+require_test internal/app TestCrossPlatformCoverageTypedValidationErrorGateFinalCommandTree
+require_test internal/app TestCrossPlatformCoverageTypedValidationErrorGateRepresentativeCommands
 
 printf '%s\n' 'typed validation error gate ok (framework lifecycle boundaries)'
