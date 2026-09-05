@@ -1,12 +1,6 @@
 --- a/command.go
 +++ b/command.go
-@@ -852,6 +852,9 @@
- 		}
- 
- 		if err := c.ParseFlags(flags); err != nil {
+@@ -854,0 +855,3 @@
 +			if handled := c.FlagErrorFunc()(c, err); handled != nil {
 +				return nil, args, handled
 +			}
- 			return nil, args, err
- 		}
- 		return cmd.Traverse(args[i+1:])
