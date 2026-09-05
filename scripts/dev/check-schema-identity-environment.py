@@ -51,7 +51,18 @@ class Sandbox:
             bwrap = shutil.which('bwrap')
             if not bwrap:
                 raise RuntimeError('bubblewrap is required; no unrestricted fallback is allowed')
-            self.prefix = [bwrap, '--unshare-all', '--unshare-user', '--new-session', '--die-with-parent', '--clearenv']
+            unshare = shutil.which('unshare')
+            if not unshare:
+                raise RuntimeError('unshare is required for the private network namespace; no host-network fallback is allowed')
+            # Create a fresh, empty network namespace without configuring its
+            # loopback device. Some native hosts reject RTM_NEWADDR, which bwrap
+            # normally sends while bringing loopback up. No interface needs to
+            # be up for an offline identity generator. --share-net below inherits
+            # ONLY this mandatory outer namespace, never the host's network.
+            # Neither a failed unshare nor failed bwrap has an unrestricted retry.
+            self.prefix = [unshare, '--user', '--map-root-user', '--net', '--',
+                           bwrap, '--unshare-all', '--share-net', '--unshare-user',
+                           '--new-session', '--die-with-parent', '--clearenv']
             # Mount only OS libraries and the exact executables/fixture. No host
             # /etc, HOME, /run sockets or repository checkout is exposed.
             for path in ('/usr/lib', '/lib', '/lib64'):

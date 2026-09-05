@@ -160,8 +160,9 @@ jobs:
           set -euo pipefail
           if [ "$RUNNER_OS" = Linux ]; then
             sudo apt-get update
-            sudo apt-get install --yes --no-install-recommends bubblewrap
+            sudo apt-get install --yes --no-install-recommends bubblewrap util-linux
             bwrap --version
+            unshare --version
           fi
           python3 scripts/dev/test_schema_identity_environment.py \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/environment-controls.txt"

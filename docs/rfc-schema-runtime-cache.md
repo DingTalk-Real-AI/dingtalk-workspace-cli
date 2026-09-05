@@ -59,6 +59,12 @@ Linux 4.741 ms、macOS 3.244 ms；macOS 的真实生成器在 clean/repeat/hosti
 [失败记录](benchmarks/schema-cache/native-fc2d8991/linux/identity-environment-failure.json)
 不能算作有效的隔离证明。
 
+Linux 后续检查先由 util-linux `unshare --user --map-root-user --net` 创建独立空网络
+命名空间，再由 bubblewrap 在其中隔离文件、进程及其他命名空间。离线进程不需要配置
+loopback；bwrap 的 `--share-net` 仅继承外层新命名空间，禁止直接继承主机网络或失败后
+降级。工具缺失、namespace 创建失败、允许文件正控制失败或禁止文件/网络负控制失败均
+不能通过。本机五个控制/构造回归通过；该 Linux 初始化方式仍需 native 实测。
+
 ### 正式发布包的版本合同验证
 
 正式 release workflow 的 Darwin 验证 job 曾在 `set -u` 下读取未注入的

@@ -56,6 +56,19 @@ class IdentityEnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'cannot read its allowed fixture'):
             check.check_controls(broken, check.environment(self.home), self.forbidden)
 
+    def test_linux_network_is_always_created_before_bwrap(self):
+        with patch.object(check.platform, 'system', return_value='Linux'), \
+             patch.object(check.shutil, 'which', side_effect=lambda name: '/usr/bin/' + name):
+            prefix = check.Sandbox(self.cat, self.fixture, self.home).prefix
+        self.assertEqual(prefix[:6], ['/usr/bin/unshare', '--user', '--map-root-user', '--net', '--', '/usr/bin/bwrap'])
+        self.assertIn('--share-net', prefix[6:])
+
+    def test_missing_network_isolator_cannot_inherit_host_network(self):
+        with patch.object(check.platform, 'system', return_value='Linux'), \
+             patch.object(check.shutil, 'which', side_effect=lambda name: '/usr/bin/bwrap' if name == 'bwrap' else None):
+            with self.assertRaisesRegex(RuntimeError, 'no host-network fallback'):
+                check.Sandbox(self.cat, self.fixture, self.home)
+
     def test_missing_isolator_cannot_use_unrestricted_process(self):
         with patch.object(check.platform, 'system', return_value='Linux'), \
              patch.object(check.shutil, 'which', return_value=None):
