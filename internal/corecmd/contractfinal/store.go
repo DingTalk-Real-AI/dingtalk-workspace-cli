@@ -74,6 +74,15 @@ func cloneContractFinalPayload(in contract.ContractFinalPayload) contract.Contra
 		value := *in.DryRun
 		out.DryRun = &value
 	}
+	if in.Wait != nil {
+		value := *in.Wait
+		value.Terminal = make(map[string]contract.ResultOutcome, len(in.Wait.Terminal))
+		for status, outcome := range in.Wait.Terminal {
+			value.Terminal[status] = outcome
+		}
+		value.PendingValues = cloneSlice(in.Wait.PendingValues)
+		out.Wait = &value
+	}
 	if in.Result != nil {
 		value := *in.Result
 		value.Outcomes = cloneSlice(in.Result.Outcomes)

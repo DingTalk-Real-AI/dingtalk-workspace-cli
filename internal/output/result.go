@@ -19,6 +19,10 @@ import (
 type CommandResult interface {
 	Outcome() Outcome
 	ExitCode() int
+	// Data returns the accepted payload (already deep-copied). The wait
+	// phase reads it to resolve the resource identifier an event stream
+	// correlates against.
+	Data() any
 	envelope() *Envelope
 }
 
@@ -30,6 +34,7 @@ type commandResult struct {
 
 func (r *commandResult) Outcome() Outcome { return r.env.Outcome }
 func (r *commandResult) ExitCode() int    { return r.exitCode }
+func (r *commandResult) Data() any        { return cloneResultData(r.env.Data) }
 func (r *commandResult) envelope() *Envelope {
 	copy := cloneEnvelope(r.env)
 	return &copy
@@ -69,6 +74,91 @@ func Pending(data any, operation *OperationInfo, opts ...ResultOption) CommandRe
 // Partial constructs an immutable multi-status result with exit code 7.
 func Partial(data *PartialData, opts ...ResultOption) CommandResult {
 	return newCommandResult(OutcomePartialFailure, data, nil, opts...)
+}
+
+// WithMeta(meta *Meta) ResultOption was declared above; the two options below
+// exist for the wait phase.
+
+// WithErrorInfo replaces the error info of the envelope. Used when a wait
+// phase closes an accepted result into failure: envelope invariant I3
+// requires an error iff the outcome is failure.
+func WithErrorInfo(info *ErrorInfo) ResultOption {
+	return ResultOption{apply: func(env *Envelope) {
+		if info != nil {
+			info = cloneErrorInfo(info)
+		}
+		env.Error = info
+	}}
+}
+
+// WithOperationTimedOut marks the envelope's async operation as timed out at
+// the last observed state, preserving the declared id / next_command resume
+// facts (契约规范 §2.2: 超时必须保持 State 真实值并置 TimedOut:true). A result
+// without operation info keeps nil — the pending envelope invariant then fails
+// at emission, surfacing the leaf bug instead of synthesizing fake resume
+// facts.
+func WithOperationTimedOut(state string) ResultOption {
+	return ResultOption{apply: func(env *Envelope) {
+		if env.Meta == nil || env.Meta.Operation == nil {
+			return
+		}
+		operation := *env.Meta.Operation
+		// A subscribe/poll that never observed a status still times out
+		// against the accepted pending result: keep the original state
+		// rather than wiping it to empty (pending requires operation.state).
+		if strings.TrimSpace(state) != "" {
+			operation.State = state
+		}
+		operation.TimedOut = true
+		env.Meta.Operation = &operation
+	}}
+}
+
+// WithOperationTerminalState closes the envelope's async operation at the observed
+// terminal status (契约规范 §2.2: 终态封装必须同步 operation.state — a success or
+// failure close that kept the acceptance-phase state would emit a
+// self-contradicting envelope such as outcome=success with
+// operation.state=processing). The declared id / next_command facts are kept
+// as the operation identity, and timed_out is cleared: the §2.2 anti-spoof
+// rule forbids a timed-out claim on an operation that reached a terminal
+// state. A result without operation info is left untouched.
+func WithOperationTerminalState(state string) ResultOption {
+	return ResultOption{apply: func(env *Envelope) {
+		if env.Meta == nil || env.Meta.Operation == nil {
+			return
+		}
+		operation := *env.Meta.Operation
+		if strings.TrimSpace(state) != "" {
+			operation.State = state
+		}
+		operation.TimedOut = false
+		env.Meta.Operation = &operation
+	}}
+}
+
+// WithOutcome rewraps an existing result with a new outcome, preserving data,
+// meta, identity, and any error info (subject to the opts). The corecmd wait
+// phase uses it to close an accepted result into its terminal (or timed-out
+// pending) outcome; the exit code is re-derived from the new envelope.
+func WithOutcome(result CommandResult, outcome Outcome, opts ...ResultOption) CommandResult {
+	env := *result.envelope()
+	for _, opt := range opts {
+		if opt.apply != nil {
+			opt.apply(&env)
+		}
+	}
+	env.Outcome = outcome
+	env.OK = outcome == OutcomeSuccess || outcome == OutcomePending
+	if outcome == OutcomeFailure {
+		// Invariant I3: data and error are mutually exclusive. Closing into
+		// failure replaces the accepted data with the failure error.
+		env.Data = nil
+	}
+	exitCode := ExitCodeForEnvelope(&env)
+	if env.Error != nil {
+		env.Error.ExitCode = exitCode
+	}
+	return &commandResult{env: env, exitCode: exitCode}
 }
 
 // Failure constructs an immutable typed failure result.
