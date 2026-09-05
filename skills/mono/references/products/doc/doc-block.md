@@ -131,10 +131,17 @@ Usage:
   dws doc block delete [flags]
 Example:
   dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
+  dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --block-id string    目标块 ID (必填)
+      --block-id string    目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个
 ```
+
+**批量删除（删多个块时的默认写法）**：
+
+- `--block-id` 逗号分隔一次传入全部目标块（单次最多 50 个）
+- 定位基于 blockId
+- 删除父块会连带删除其子块；父块与子块同时传入时，子块会落入 `notFoundBlockIds`，属预期行为。
 
 ---
 
@@ -228,6 +235,9 @@ dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content-format elem
 
 # 删除（用户确认后）
 dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
+
+# 一次删多个块（逗号分隔，单次最多 50 个）
+dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
 
 # ── JSONML 形态（首选）──
 

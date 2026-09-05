@@ -14,10 +14,19 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 )
 
-const realSchemaToolCount = 1357
+// Count the authoritative assembly, so newly declared commands are covered
+// without retaining a stale benchmark-era fixture size.
+func realSchemaToolCount(registry schemaruntime.SchemaRegistry) int {
+	count := 0
+	for _, product := range registry.Products {
+		count += len(product.Tools)
+	}
+	return count
+}
 
 func TestRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
 	registry := assembleRealRegistry(t)
+	wantTools := realSchemaToolCount(registry)
 	built, meta := buildRealCache(t, registry)
 	second, _ := buildRealCache(t, registry)
 	if !bytes.Equal(built.Meta, second.Meta) || !bytes.Equal(built.ProductShards, second.ProductShards) {
@@ -47,15 +56,15 @@ func TestRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
 		}
 		decodedTools += len(decoded.Registry.Products[0].Tools)
 	}
-	if decodedTools != realSchemaToolCount {
-		t.Fatalf("decoded tools = %d, want %d", decodedTools, realSchemaToolCount)
+	if decodedTools != wantTools {
+		t.Fatalf("decoded tools = %d, want %d", decodedTools, wantTools)
 	}
 	decoded, index, err := schemaruntime.DecodeAllSchemaProducts(built.ProductShards, meta)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(index.CanonicalPaths()) != realSchemaToolCount {
-		t.Fatalf("global index tools = %d, want %d", len(index.CanonicalPaths()), realSchemaToolCount)
+	if len(index.CanonicalPaths()) != wantTools {
+		t.Fatalf("global index tools = %d, want %d", len(index.CanonicalPaths()), wantTools)
 	}
 	if !reflect.DeepEqual(registry, decoded) {
 		t.Fatal("real typed Registry differs after cache round trip")
@@ -92,7 +101,7 @@ func BenchmarkRealSchemaCache(b *testing.B) {
 		b.ReportMetric(float64(len(productPayload)), "selected-shard-bytes")
 		b.ReportMetric(float64(len(meta.ProductDescriptors)), "products")
 		b.ReportMetric(float64(len(schemaruntime.BuildCommandMetaLookup(registry))), "meta-lookups")
-		b.ReportMetric(float64(realSchemaToolCount), "tools")
+		b.ReportMetric(float64(realSchemaToolCount(registry)), "tools")
 	})
 	b.Run("meta-decode-validate-convert", func(b *testing.B) {
 		b.ReportAllocs()
@@ -133,6 +142,9 @@ func assembleRealRegistry(t testFataler) cli.SchemaRegistry {
 	registry, err := cli.AssembleSchemaRegistry(app.NewSchemaSourceRootCommand())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if realSchemaToolCount(registry) == 0 {
+		t.Fatal("authoritative Schema assembly is empty")
 	}
 	return registry
 }

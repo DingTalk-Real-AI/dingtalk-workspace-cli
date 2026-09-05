@@ -728,7 +728,7 @@ func validateAitableArrayDSL(name, raw string) error {
 // 兼容输入格式：
 //   - 传入单个叶子对象 {"operator":"eq","operands":[...]} → 自动 wrap 为 [对象]
 //   - 叶子条件使用 MCP 简写格式 {fieldId,operator,value} → 自动 normalize 为 operands 格式
-//   - and/or 逻辑组不属于 view filter 契约，由 validateViewConfigFilter 明确拒绝
+//   - and/or 逻辑组不属于通用 view config 校验契约；专用 view update filter 入口单独处理
 func normalizeViewConfigFilter(filterVal any) any {
 	switch v := filterVal.(type) {
 	case []any:
@@ -903,6 +903,59 @@ func validateViewConfigFilter(filterVal any) error {
 		}
 	}
 	return nil
+}
+
+// normalizeAitableViewUpdateFilter 只服务于 view update filter 专用入口。
+// 它保留服务端需要的根 AND/OR 结构，同时返回叶子数组供原有校验逻辑使用。
+func normalizeAitableViewUpdateFilter(filterVal any) (filter []any, leaves []any, err error) {
+	normalized := normalizeViewConfigFilter(filterVal)
+	filter, ok := normalized.([]any)
+	if !ok {
+		return nil, nil, apperrors.NewValidation("invalid config.filter: view filter 必须是 JSON 数组或对象",
+			apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+	}
+
+	leaves = filter
+	for index, raw := range filter {
+		condition, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		operator, _ := condition["operator"].(string)
+		operator = strings.TrimSpace(operator)
+		if operator != "and" && operator != "or" {
+			continue
+		}
+		if len(filter) != 1 || index != 0 {
+			return nil, nil, apperrors.NewValidation(fmt.Sprintf("invalid config.filter: %s 逻辑根节点必须是 filter 数组中的唯一元素", operator),
+				apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+		}
+		operands, ok := condition["operands"].([]any)
+		if !ok {
+			return nil, nil, apperrors.NewValidation("invalid config.filter[0].operands: 必须是叶子条件数组",
+				apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+		}
+		for operandIndex, operand := range operands {
+			leaf, ok := operand.(map[string]any)
+			if !ok {
+				return nil, nil, apperrors.NewValidation(fmt.Sprintf("invalid config.filter[0].operands[%d]: 必须是叶子条件对象", operandIndex),
+					apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+			}
+			childOperator, _ := leaf["operator"].(string)
+			childOperator = strings.TrimSpace(childOperator)
+			if childOperator == "and" || childOperator == "or" {
+				return nil, nil, apperrors.NewValidation(fmt.Sprintf("invalid config.filter[0].operands[%d]: 不支持嵌套逻辑组 %q；当前只支持一层统一 AND 或 OR", operandIndex, childOperator),
+					apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+			}
+		}
+		condition["operator"] = operator
+		leaves = operands
+		break
+	}
+	if err := validateViewConfigFilter(leaves); err != nil {
+		return nil, nil, err
+	}
+	return filter, leaves, nil
 }
 
 // validFilterOperators 是 MCP 支持的合法过滤操作符集合
@@ -1365,16 +1418,15 @@ func runAitableViewUpdateFilter(cmd *cobra.Command) error {
 	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
 		return fmt.Errorf("--json 解析失败: %v", err)
 	}
-	cfgMap := map[string]any{"filter": parsed}
-	if err := normalizeViewConfigBlock(cfgMap); err != nil {
+	filter, leaves, err := normalizeAitableViewUpdateFilter(parsed)
+	if err != nil {
 		return err
 	}
-	filter, _ := cfgMap["filter"].([]any)
 	fieldTypes, err := loadAitableFieldTypes(context.Background(), baseID, tableID)
 	if err != nil {
 		return err
 	}
-	if err := validateAitableViewFilter(filter, fieldTypes); err != nil {
+	if err := validateAitableViewFilter(leaves, fieldTypes); err != nil {
 		return err
 	}
 	toolArgs := map[string]any{
@@ -1430,15 +1482,36 @@ const aitableViewFilterReadbackAttempts = 6
 var aitableViewFilterReadbackSleep = time.Sleep
 
 func persistedViewFilterMatches(actual any, expected []any) bool {
-	if reflect.DeepEqual(actual, expected) {
-		return true
+	actualRoot, actualOK := canonicalViewFilter(actual)
+	expectedRoot, expectedOK := canonicalViewFilter(expected)
+	return actualOK && expectedOK && reflect.DeepEqual(actualRoot, expectedRoot)
+}
+
+// canonicalViewFilter 把写入使用的数组形态和 get_views 返回的根对象形态
+// 投影为同一份逻辑表达式，以便正确校验 AND、OR 与空筛选。
+func canonicalViewFilter(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		if len(typed) == 1 {
+			if root, ok := typed[0].(map[string]any); ok {
+				operator, _ := root["operator"].(string)
+				operator = strings.TrimSpace(operator)
+				if operator == "and" || operator == "or" {
+					return root, true
+				}
+			}
+		}
+		return map[string]any{"operator": "and", "operands": typed}, true
+	case map[string]any:
+		operator, _ := typed["operator"].(string)
+		operator = strings.TrimSpace(operator)
+		if operator == "and" || operator == "or" {
+			return typed, true
+		}
+		return map[string]any{"operator": "and", "operands": []any{typed}}, true
+	default:
+		return nil, false
 	}
-	root, ok := actual.(map[string]any)
-	if !ok || root["operator"] != "and" {
-		return false
-	}
-	operands, ok := root["operands"].([]any)
-	return ok && reflect.DeepEqual(operands, expected)
 }
 
 func loadAitableFieldTypes(ctx context.Context, baseID, tableID string) (map[string]string, error) {
@@ -1648,9 +1721,9 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
 			UseWhen: []string{
-				"需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时",
+				"需要读取或管理 AI 表格中的结构、数据、应用模式、视图、权限、导入导出或工作流时",
 			},
 			AvoidWhen: []string{
 				"目标是在线电子表格单元格读写时用 sheet；普通文档用 doc",
@@ -1660,10 +1733,11 @@ func newAitableCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
-		Long: `管理钉钉 AI 表格：Base 管理、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
+		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
 
 命令结构:
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
+  dws aitable app        [get|update|page|widget]                                       应用模式管理
   dws aitable table      [get|create|update|delete]                                     数据表管理
   dws aitable field      [get|create|update|delete|search-options]                      字段管理
   dws aitable record     [query|stats|group-stats|create|update|delete]                 记录管理
@@ -4530,10 +4604,12 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 	viewUpdateFilterCmd := &cobra.Command{
 		Use:   "filter",
 		Short: "更新视图 filter 配置",
-		Long: `按属性更新视图的 filter 数组（整组替换）。每项必须是叶子条件 {operator,operands}；外层数组表示 AND，不接受 and/or 逻辑组。
-[{"operator":"eq","operands":["fldX","value"]}]
+		Long: `按属性更新视图的 filter 数组（整组替换）。
+平铺叶子条件数组隐式按 AND 连接；需要 OR 时，数组中只传一个 {"operator":"or","operands":[叶子条件...]} 根节点。
+也接受显式 AND 根节点，但不支持 AND/OR 混合嵌套；空数组 [] 清空筛选。
 若传单个叶子对象会自动 wrap 为数组；neq/not_eq 会明确提示改用 ne；其他非法格式拒绝。`,
-		Example: `  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldX","value"]}]'`,
+		Example: `  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]'
+  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateFilter(cmd)
 		},
@@ -4554,7 +4630,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图筛选",
 				UseWhen:      []string{"固化视图筛选条件时"},
 				AvoidWhen:    []string{"一次性查询过滤用 record query --filters"},
-				Examples:     []string{"dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]'"},
+				Examples:     []string{"dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"operator\":\"or\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldA\",\"x\"]},{\"operator\":\"eq\",\"operands\":[\"fldB\",\"y\"]}]}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.filter"},
@@ -8930,7 +9006,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 
 	// 组装 aitable 命令树
 	root.AddCommand(
-		baseCmd, tableCmd, fieldCmd,
+		baseCmd, newAitableAppCommand(), tableCmd, fieldCmd,
 		recordCmd, viewCmd, formCmd,
 		workflowCmd,
 		dashboardCmd, chartCmd,

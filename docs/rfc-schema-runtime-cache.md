@@ -16,7 +16,7 @@
 
 | 范围 | 当前证据 | 仍需完成 |
 |---|---|---|
-| typed model / raw protobuf / product shards | 真实 1,357 tools 的 round trip 与 delivery parity 测试已存在；CLI 包基线测试通过 | 修改后的完整政策门禁与 race 检查 |
+| typed model / raw protobuf / product shards | 同步 upstream 后真实 1,370 tools 的 round trip（3.541 s）与完整 delivery parity（42.511 s）通过；历史性能样本对应 1,357 tools | 新声明集合的性能、完整政策门禁与 race 检查 |
 | 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归及 Meta/overview/leaf/全量 Registry 混合损坏修复 race 通过（379 s、单次装配） | 新 head 两平台并发验收与错误共享矩阵；旧候选已通过四进程冷启动/Meta 与 Registry 修复；审计状态 race、完整入口单测及真实声明 delivery 在新工作树本机均通过（CLI 定向 62.978 s） |
 | authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay | final binary 的 hostile environment/native proof |
 | identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback；独立 generator 的 delivery 访问审计已通过真实声明，identity 与审计前 byte-equal | b62b2c0d 两平台原生 identity/完整 build metadata 一致，real candidate/parity/并发与 CPU/RSS 门槛通过；Meta file-hit 两平台超限，已继续优化，待新 head 复核；hermetic final proof 与 release 注入仍未完成 |
@@ -28,6 +28,21 @@
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
+
+### upstream 同步与本轮验证
+
+已核对 upstream `main` 为 `d39d75909a5f165e94c4d45271c717dd2e024bf1`，合入相对初始基线的
+47 个提交，覆盖 AI 表格 app mode、文档批量删除和 CI/release 修复，无文本冲突。新声明装配
+为 **1,370 tools**。两处 cache 测试写死旧 1,357 数量，已通过实际失败复现后改为与同次
+权威声明的数量比较；完整 Registry/Meta/locator/query 的逐项及输出等价断言保留。新增命令
+的定向回归通过（helpers 1.092 s、doc shortcuts 0.506 s），真实 round trip 与 delivery parity
+分别通过 3.541 s / 42.511 s。合并后的完整 `test/scripts` suite 通过（345.984 s）。下文 1,357 tools 的历史 benchmark 不代表合并后的性能。
+
+`89c38222` 的[原生反馈](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33989255990)
+包含薄 Schema 入口与 Meta 分配优化，但早于本次 upstream 同步和用户 shortcut 诊断修复。
+其 Linux full-suite job 在运行中收到 runner shutdown 信号并以 143 退出，always-upload 也未
+执行；job 日志未给出完整测试结论，不能记为通过或当作某项断言失败。剩余 native job 的
+最终状态与合并后 head 的原生验证仍须分别核对。
 
 ### 本机候选包证据（2026-09-06）
 

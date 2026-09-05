@@ -23,8 +23,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const persistentCacheRealToolCount = 1357
-
 func TestPersistentSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
 	testPersistentSchemaCacheRealDelivery(t, true)
 }
@@ -140,8 +138,8 @@ func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
 	if err != nil || !reflect.DeepEqual(gotAll, wantAll) {
 		t.Fatalf("--all parity: err=%v equal=%v", err, reflect.DeepEqual(gotAll, wantAll))
 	}
-	if got, _ := gotAll["tool_count"].(int); got != persistentCacheRealToolCount {
-		t.Fatalf("--all tool_count = %d, want %d", got, persistentCacheRealToolCount)
+	if got, _ := gotAll["tool_count"].(int); got != resolved.CommandCount() {
+		t.Fatalf("--all tool_count = %d, want %d", got, resolved.CommandCount())
 	}
 	if factoryCalls.Load() != 0 {
 		t.Fatalf("cache-hit delivery invoked Cobra factory %d times", factoryCalls.Load())

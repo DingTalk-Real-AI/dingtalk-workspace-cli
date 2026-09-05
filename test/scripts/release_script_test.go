@@ -639,12 +639,18 @@ func TestReleaseNpmPackingIgnoresLifecycleScripts(t *testing.T) {
 	mustWriteFile(t, filepath.Join(packageDir, "README.md"), []byte("test package\n"), 0o644)
 	outputTarball := filepath.Join(t.TempDir(), "package.tgz")
 	cmd := exec.Command("sh", filepath.Join(sourceRoot, "scripts", "release", "pack-npm-package.sh"), packageDir, outputTarball)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("pack-npm-package error = %v\noutput:\n%s", err, output)
+	// The script's contract — the one release.yml consumes through command
+	// substitution — is that stdout carries only the integrity value. npm/npx
+	// diagnostics (registry deprecation notices, fund/audit banners) belong to
+	// stderr and must not pollute the assertion.
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("pack-npm-package error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
-	if !strings.HasPrefix(strings.TrimSpace(string(output)), "sha512-") {
-		t.Fatalf("pack output is not an integrity value: %s", output)
+	if !strings.HasPrefix(strings.TrimSpace(stdout.String()), "sha512-") {
+		t.Fatalf("pack stdout is not an integrity value: %s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
 	if _, err := os.Stat(outputTarball); err != nil {
 		t.Fatalf("packed tarball missing: %v", err)
