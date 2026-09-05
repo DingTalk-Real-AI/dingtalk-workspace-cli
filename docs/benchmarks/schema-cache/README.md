@@ -67,3 +67,19 @@ interpreter; the coordinator ignores the sampler's own inherited usage. Timing
 starts inside that sampler immediately before spawning the candidate. A test
 retains 128 MiB in the coordinator and verifies this does not inflate child RSS.
 The 100 MiB candidate gate is unchanged and needs a fresh Linux native result.
+
+The `native-b62b2c0d/` directories contain the complete clean-source native
+candidate records and reports from run 33987231960. Both platforms passed
+concurrency, parity and process CPU/RSS, and their identity JSON is byte-equal.
+Both failed the 5 ms Meta budget (macOS 5.054 ms; Linux 7.530 ms). The run failed;
+these are development evidence only. Later thin-launcher changes are not covered.
+
+After removing duplicate metadata maps and sorting from Meta validation, the
+independent local `file-hit-subset` run measured Meta 3.770 ms / 3.87 MB and
+selected product 5.332 ms / 4.32 MB. Exact alias-expansion and product-subset
+validation remain covered. Linux and final signed-binary acceptance are pending.
+
+New native candidates inject the same identity into launcher and core. Pass
+`--require-schema-fast-path` to the process verifier to require exact output from
+a byte-identical launcher copy in a directory with no core. This prevents a
+silently delegated cache hit from masquerading as proof of the thin path.

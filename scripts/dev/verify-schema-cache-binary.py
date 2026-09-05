@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import shutil
 import statistics
 import subprocess
 import sys
@@ -97,6 +98,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--seed", type=int, default=20260906)
+    parser.add_argument("--require-schema-fast-path", action="store_true", help="prove hits execute in a byte-identical launcher copy with no core available")
     args = parser.parse_args()
     if not hasattr(os, "wait4") or sys.platform not in ("darwin", "linux"):
         parser.error("native process accounting requires macOS or Linux")
@@ -172,6 +174,25 @@ def main():
             live, _ = invoke(binary, [*route, "-f", "json"], disabled, home)
             if json.loads(cached) != json.loads(live):
                 raise RuntimeError(f"cached/live wire differs: {route}")
+        if args.require_schema_fast_path:
+            if core is None:
+                raise RuntimeError("Schema fast-path proof requires a canonical launcher/core package")
+            isolated_launcher = home / "core-free-probe/bin/dws"
+            isolated_launcher.parent.mkdir(parents=True)
+            shutil.copyfile(binary, isolated_launcher)
+            isolated_launcher.chmod(binary.stat().st_mode & 0o777)
+            if digest(isolated_launcher) != binary_sha:
+                raise RuntimeError("core-free probe does not contain the exact launcher bytes")
+            # This copy cannot delegate: no libexec/core exists beside it.
+            # The measured candidate itself is neither moved nor modified.
+            for route in (["schema"], ["schema", "list"], ["schema", "calendar"],
+                          ["schema", "calendar event"], leaf,
+                          ["schema", "--cli-path", "calendar event create", "--compact"]):
+                actual, _ = invoke(isolated_launcher, route, environment, home)
+                expected, _ = invoke(core, route, disabled, home)
+                if actual != expected:
+                    raise RuntimeError(f"core-free launcher bytes differ from authoritative core output: {route}")
+            report["schema_fast_path"] = {"core_free_copy_sha256": binary_sha, "exact_wire_parity": True}
         # Corruption must synchronously repair from declarations, preserving output.
         with (cache / "meta.cache").open("r+b") as target:
             target.seek(208)

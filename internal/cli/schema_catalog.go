@@ -19,13 +19,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-const SchemaCatalogSnapshotVersion = 1
+const SchemaCatalogSnapshotVersion = schemareader.CatalogSnapshotVersion
 
 // Schema Catalog delivery is single-track: RegisterSchemaSourceRoot →
 // ResolveSchemaBuild (see schema_source_root.go). There is no committed

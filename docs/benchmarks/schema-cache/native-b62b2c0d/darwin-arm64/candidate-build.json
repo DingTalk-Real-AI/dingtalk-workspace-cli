@@ -1,0 +1,24 @@
+{
+  "scope": "native development candidate; not release enablement proof",
+  "source_commit": "b62b2c0dd95859c90f5bb57968f54949e4cf7c42",
+  "source_tree": "00c0d001d10a161fc881cb941b4fe8d69fa6e5ab",
+  "source_dirty": false,
+  "go_version": "go1.25.9",
+  "goos": "darwin",
+  "goarch": "arm64",
+  "cgo_enabled": "0",
+  "goexperiment": "",
+  "gowork": "off",
+  "build_flags": [
+    "-trimpath",
+    "-buildmode=pie"
+  ],
+  "build_tags": [],
+  "core_ldflags": "-s -w -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.version=v0.0.0-schema-cache-candidate -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit=b62b2c0dd95859c90f5bb57968f54949e4cf7c42 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime=2026-09-06T03:27:53+08:00 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheEdition=open -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheSourceSHA256=89903f5ce914316ee4ed2094d8d9be881c9fa6fa698d3a4e6486896e08d3d96f -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheSurfaceSHA256=b1b1db00f66f78bdbbd53b134df1fe76d48457a92cd88dbe577bc59076c52ba1 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheBuildID=6db68fc9eb8bb9bab15f64d092eedbc8b51e97364fc236b2e68997887b8e2d00 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheMetaLength=881926 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheMetaSHA256=a51db95e94f4a9b151bc79a91764e341531665cbb5d387cd6744f972ed613a00 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheRegistryLength=14925362 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheRegistrySHA256=a657b32988cf66ddc4f1dea693f9c12cf61dfc533886b86859de529ba817cf59",
+  "launcher_ldflags": "-s -w -X main.version=v0.0.0-schema-cache-candidate -X main.commit=b62b2c0dd95859c90f5bb57968f54949e4cf7c42 -X main.edition=open -X main.coreSHA256=6470c6260b1cf66a3ea82ccd09176c7683b89fca654802c6ed3ddfdf954ab0fa -X main.coreSize=41309536",
+  "identity_sha256": "4a2847f5df7274d1035378dd3034cfc0e351801bfa698e96c4184676773338ca",
+  "core_sha256": "6470c6260b1cf66a3ea82ccd09176c7683b89fca654802c6ed3ddfdf954ab0fa",
+  "launcher_sha256": "b72dfdca30c73178636d18c67601f2f7b05f04a01490c21cf6eba34374a409f9",
+  "package_manifest_sha256": "997fdf80d8b0063ba7522b0d05570815d171f30260130d4ca58e5ccd4364e6eb",
+  "signing": "ad-hoc"
+}

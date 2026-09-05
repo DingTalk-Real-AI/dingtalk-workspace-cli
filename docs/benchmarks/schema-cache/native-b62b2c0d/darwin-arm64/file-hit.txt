@@ -1,0 +1,20 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime
+cpu: Apple M1 (Virtual)
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     246	   4958955 ns/op	 6364523 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     231	   5029145 ns/op	 6364519 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     224	   5191861 ns/op	 6364519 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     238	   5038358 ns/op	 6364519 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     235	   5053915 ns/op	 6364516 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     241	   5278720 ns/op	 6364518 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     234	   5231317 ns/op	 6364518 B/op	   53331 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     184	   6236185 ns/op	 4325276 B/op	   68928 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     207	   5726588 ns/op	 4325537 B/op	   68928 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     210	   5687312 ns/op	 4325182 B/op	   68928 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     210	   5688265 ns/op	 4325320 B/op	   68928 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     208	   5716528 ns/op	 4325324 B/op	   68928 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     211	   5697672 ns/op	 4325250 B/op	   68928 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-3         	     210	   5735146 ns/op	 4325174 B/op	   68928 allocs/op
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	17.340s

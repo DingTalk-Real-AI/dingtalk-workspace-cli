@@ -17,12 +17,12 @@
 | 范围 | 当前证据 | 仍需完成 |
 |---|---|---|
 | typed model / raw protobuf / product shards | 真实 1,357 tools 的 round trip 与 delivery parity 测试已存在；CLI 包基线测试通过 | 修改后的完整政策门禁与 race 检查 |
-| 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归及 Meta/overview/leaf/全量 Registry 混合损坏修复 race 通过（379 s、单次装配） | 新 head 两平台并发验收与错误共享矩阵；旧候选已通过四进程冷启动/Meta 与 Registry 修复；审计状态 race 通过，完整入口单测仍受本机 helper SIGKILL 阻塞 |
+| 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归及 Meta/overview/leaf/全量 Registry 混合损坏修复 race 通过（379 s、单次装配） | 新 head 两平台并发验收与错误共享矩阵；旧候选已通过四进程冷启动/Meta 与 Registry 修复；审计状态 race、完整入口单测及真实声明 delivery 在新工作树本机均通过（CLI 定向 62.978 s） |
 | authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay | final binary 的 hostile environment/native proof |
-| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback；独立 generator 的 delivery 访问审计已通过真实声明，identity 与审计前 byte-equal | 首次 native CI 未全绿（macOS 全量投影 race 超时，Linux RSS 测量疑似受到验证器 fork 内存污染，均已调整验证方式，待新 head 复核）；hermetic final proof 与 release 注入仍未完成 |
+| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback；独立 generator 的 delivery 访问审计已通过真实声明，identity 与审计前 byte-equal | b62b2c0d 两平台原生 identity/完整 build metadata 一致，real candidate/parity/并发与 CPU/RSS 门槛通过；Meta file-hit 两平台超限，已继续优化，待新 head 复核；hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
-| launcher | core delegation 已实现；默认保留原 identity/clitrack，exact version 仅在显式 DO_NOT_TRACK 时走 fast path | 默认上报路径的启动优化、Schema fast path、逐次 core hashing 的完整性能成本 |
-| 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | Meta 优化后完整 file-hit 4.52 ms / 6.36 MB，selected 5.30 ms / 4.33 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
+| launcher | exact version 与严格 argv 的 JSON overview/product/group/leaf 已接通；共用 reader/typed renderer；仅显式 DO_NOT_TRACK 且确认无扩展/兼容警告时命中 | 新 head 原生 core-free 精确输出证明、默认上报优化、竞争性进程指标和逐次 core hashing 成本 |
+| 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | Meta 最新优化后本机完整 file-hit 3.77 ms / 3.87 MB，selected 5.33 ms / 4.32 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
 | 全量验证 | Go 1.25.9 CLI/app 包通过；组件回归与 Meta comparator 全字段测试通过；schemacache/launcher/packagemanifest/Meta comparator race 通过；4 项 release fixture 回归通过 | 全套仍未绿：构建期间源码修改导致 schemaruntime import graph 失败（冻结后该包已通过）；stdio/helper 子进程退出与生成器被系统终止待解决；完整 scripts 已通过（361 s），全量 suite 仍失败 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
@@ -93,6 +93,41 @@ macOS runner 在 11 分钟时被 Go 默认超时终止，栈位于 ValidateRound
 没有显示锁等待。CI 现在分别运行 exhaustive parity 和真实混合 loader/repair/lock race，后者
 仍覆盖实际数据的 Meta、选中产品与完整 Registry 以及错误回退；串行 exhaustive 投影保留全部
 locator 断言，单独运行。新 head 的两项检查仍须分别通过，不能以旧 head 的部分结果代替。
+
+
+### 原生反馈与薄入口实施（b62b2c0d 之后）
+
+[第二轮原生 CI](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33987231960)
+的[原始证据](benchmarks/schema-cache/native-b62b2c0d/)绑定 clean `b62b2c0d`、同一 source tree、
+Go 1.25.9、完整 identity 与最终 candidate SHA-256；两个 identity JSON 已本地逐字节复核一致。
+两平台 assembly audit、组件/混合 loader race、完整 locator parity、四进程冷启动与两种损坏修复，
+以及 60 次进程 CPU/RSS 门槛通过。独立 sampler 的 Linux cache RSS p50 为 63,186,944 B，
+不再被 coordinator 的约 400 MB JSON heap 污染。file-hit 仍失败：Meta 中位数 macOS 5.054 ms、
+Linux 7.530 ms；selected 分别 5.717 ms、8.860 ms，均满足 15 ms。比较 job 因门槛失败被跳过，
+不能把本地 identity 对照视为整个 workflow 通过。
+
+针对 Meta 的额外分配，validator 已取消重建/排序整份 CommandMeta alias map 和按产品复制
+全部 metadata/locator map。alias owner 仍遵循 primary 优先、alias 冲突选最小 primary 的同一
+规则；1,400 组含冲突/缺失/额外项/字段损坏的对照用例与旧算法一致。产品 decoder 通过精确
+条目数加 global lookup 逐项比较完成相同校验。protobuf bytes 和版本不变；没有减少验证字段。
+[独立 7 轮 file-hit 复测](benchmarks/schema-cache/2026-09-06-darwin-arm64-file-hit-subset.txt)
+的 Meta 为 **3.770 ms / 3.87 MB**，selected 为 **5.332 ms / 4.32 MB**。这是本机 file-stage
+证据；新 head 的 Linux 5 ms 门槛仍未证明，后续失败时 CI 会保存原生 CPU/heap profile。
+
+薄入口的共享认证读取已接入 `internal/schemareader`：core 与 launcher 共用 identity parser、
+Meta 认证/转换、locator、目标 range 认证/转换；原有 cli 别名保留。命中时不启动 core，renderer
+仍使用 `schemaruntime` 的同一完整/compact 投影，JSON 使用相同的 `jsonutil.MarshalIndent`，
+完成编码后才一次写出；发生写错误后不得再 delegate 产生第二份输出。`--all`、filter、输出文件、
+未知/重复/含歧义 flag、默认 telemetry、DWS 运行选项、非 open edition、plugin/settings 状态、
+旧升级器的 nested-skill 候选路径均回退同版本 core。共享 `skillpaths` 只提供路径，不读取内容；
+这样不会吞掉 core 原有的兼容警告。该严格子集不是默认 telemetry 的最终性能方案。
+
+候选脚本把同一个完整 identity 注入 core 和 launcher；普通 release 仍等待 §6.6 的 proof 才能
+注入。新 candidate 已构建，generator 的 identity 与旧 proof byte-equal，但本机 ad-hoc core 和
+launcher 均在执行前被系统 SIGKILL，amfid 同时报告 ad-hoc/未知证书链不受信任。没有关闭系统
+保护或修改 quarantine；不能据此宣称新 binary 本机可运行。原生 verifier 新增 core-free probe：
+在隔离目录运行 byte-identical launcher 副本（无 sibling core），与 authoritative core 做精确
+stdout bytes 比较，证明真实命中没有偷偷 delegate。该新 head 原生证明待运行。 最新 reader/launcher race 通过（1.566 s / 2.013 s）；CLI 混合修复 race 在 TestMain 的 generator 子进程被系统终止，未运行到测试断言，不能记为通过。相同 head 另有两个独立 native full-suite job（`go test -p 2 -parallel 2 -timeout 30m ./...`），即使性能 job 失败也继续收集全量回归结果；仍不替代 Code Admission。
 
 ## 1. 决策摘要
 
@@ -1096,6 +1131,7 @@ proof 之前。无法原生执行 final candidate 的 cross-build 只可发布�
 
 ```text
 internal/app → internal/cli（Cobra 绑定、声明装配、delivery/repair）
+                        ├─ internal/schemareader（binary identity、共享认证读取）
                         ├─ internal/cli/schemaruntime（typed model/index/query/DTO conversion）
                         │                  ├─ internal/cli/schemacachepb
                         │                  └─ internal/corecmd/contract
@@ -1103,6 +1139,9 @@ internal/app → internal/cli（Cobra 绑定、声明装配、delivery/repair）
 
 internal/generator/cmd_schema_cache_identity → internal/app + internal/cli
 cmd/dws-launcher → internal/launcher（argv 路由、同版本 core delegation）
+                           ├─ internal/schemareader → schemacache + schemaruntime
+                           ├─ internal/jsonutil（同一 JSON byte contract）
+                           └─ internal/skillpaths（共享兼容检查路径，无 I/O）
 internal/upgrade → internal/packagemanifest（canonical package 校验）
 ```
 

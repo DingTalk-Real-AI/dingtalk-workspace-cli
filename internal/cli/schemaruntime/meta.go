@@ -148,3 +148,65 @@ func RegisterCommandMetaAliases(lookup map[string]CommandMeta, metas []CommandMe
 	}
 	return lookup
 }
+
+// validMetaAliasExpansion checks the same primary-wins / lexical-alias-owner
+// rule as RegisterCommandMetaAliases without copying/sorting large metadata.
+func validMetaAliasExpansion(lookup map[string]CommandMeta) bool {
+	if lookup == nil {
+		return false
+	}
+	owners := make(map[string]string)
+	for path, meta := range lookup {
+		primary, found := lookup[meta.Identity.CLIPath]
+		if !found || !equalCommandMeta(primary, meta) {
+			return false
+		}
+		if path != meta.Identity.CLIPath {
+			continue
+		}
+		for _, raw := range meta.Identity.Aliases {
+			alias := strings.TrimSpace(raw)
+			if alias == "" || alias == path {
+				continue
+			}
+			if entry, found := lookup[alias]; found && entry.Identity.CLIPath == alias {
+				continue
+			}
+			if owner, found := owners[alias]; !found || path < owner {
+				owners[alias] = path
+			}
+		}
+	}
+	for alias, owner := range owners {
+		entry, found := lookup[alias]
+		if !found || entry.Identity.CLIPath != owner {
+			return false
+		}
+	}
+	for path, meta := range lookup {
+		if path != meta.Identity.CLIPath && owners[path] != meta.Identity.CLIPath {
+			return false
+		}
+	}
+	return true
+}
+
+func commandMetaSubsetEqual(whole, subset map[string]CommandMeta) bool {
+	for path, expected := range subset {
+		actual, found := whole[path]
+		if !found || !equalCommandMeta(actual, expected) {
+			return false
+		}
+	}
+	return true
+}
+
+func locatorSubsetEqual(whole, subset map[string]string) bool {
+	for path, expected := range subset {
+		actual, found := whole[path]
+		if !found || actual != expected {
+			return false
+		}
+	}
+	return true
+}

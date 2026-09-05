@@ -87,6 +87,8 @@ def main():
         run(["codesign", "--verify", "--strict", str(core)])
     core_digest, core_size = sha256(core), core.stat().st_size
     flags = f"-s -w -X main.version={args.version} -X main.commit={commit} -X main.edition=open -X main.coreSHA256={core_digest} -X main.coreSize={core_size}"
+    for field, key in fields.items():
+        flags += f" -X main.{field}={proof[key]}"
     run(["go", "build", "-trimpath", "-buildmode=pie", "-ldflags", flags, "-o", str(launcher), "./cmd/dws-launcher"])
     if goos == "darwin":
         run(["codesign", "--force", "--sign", "-", str(launcher)])

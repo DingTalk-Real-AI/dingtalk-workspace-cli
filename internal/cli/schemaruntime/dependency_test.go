@@ -24,6 +24,9 @@ func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 		module + "internal/corecmd/contract":  true,
 		module + "internal/schemacache":       true,
 		module + "internal/launcher":          true,
+		module + "internal/schemareader":      true,
+		module + "internal/skillpaths":        true,
+		module + "internal/jsonutil":          true,
 	}
 	command := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", ".", module+"internal/schemacache", module+"internal/launcher")
 	output, err := command.CombinedOutput()

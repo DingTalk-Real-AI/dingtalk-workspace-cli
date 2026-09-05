@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test -race -count=1 ./internal/schemacache ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
+          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
           go test -race -count=1 -timeout=15m ./internal/cli \
             -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache|AssemblyAudit|AssemblyAuditFailureIsolation)|TestPersistentSchemaCacheRealConcurrentRepair)$' \
@@ -81,8 +81,10 @@ jobs:
           python3 scripts/dev/verify-schema-cache-binary.py \
             --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
             --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
+            --require-schema-fast-path \
             --output "$RUNNER_TEMP/schema-evidence/process-report.json"
       - name: Measure complete file hits
+        id: file_hit
         shell: bash
         run: |
           set -euo pipefail
@@ -92,6 +94,17 @@ jobs:
           python3 scripts/dev/check-schema-cache-benchmark.py \
             "$RUNNER_TEMP/schema-evidence/file-hit.txt" \
             --output "$RUNNER_TEMP/schema-evidence/file-hit-report.json"
+      - name: Profile Meta when the file-hit budget fails
+        if: ${{ failure() && steps.file_hit.outcome == 'failure' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./internal/cli/schemaruntime -run '^$' \
+            -bench '^BenchmarkRealSchemaFileHit/meta-' -benchtime=3s -count=1 \
+            -cpuprofile "$RUNNER_TEMP/schema-evidence/meta-cpu.pprof" \
+            -memprofile "$RUNNER_TEMP/schema-evidence/meta-memory.pprof" \
+            -o "$RUNNER_TEMP/schema-meta-profile.test" \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/meta-profile.txt"
       - name: Upload native development evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -100,9 +113,57 @@ jobs:
           path: |
             ${{ runner.temp }}/schema-evidence/*.txt
             ${{ runner.temp }}/schema-evidence/*.json
+            ${{ runner.temp }}/schema-evidence/*.pprof
             ${{ runner.temp }}/schema-evidence/candidate/identity.json
             ${{ runner.temp }}/schema-evidence/candidate/candidate-build.json
             ${{ runner.temp }}/schema-evidence/candidate/**/package-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  full-suite:
+    name: Full Go suite (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-amd64
+          - runner: macos-latest
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: go1.25.9
+      GOWORK: 'off'
+      DO_NOT_TRACK: '1'
+      DWS_PACKAGE_VERSION: 0.0.0-test
+      EXPECTED_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.9
+          cache: false
+      - name: Validate native host and run the complete Go suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOHOSTOS)-$(go env GOHOSTARCH)" = "$EXPECTED_TARGET"
+          test "$(go env GOVERSION)" = go1.25.9
+          private_tmp="$HOME/.dws-suite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 0700 "$private_tmp"
+          export TMPDIR="$private_tmp"
+          go test -p 2 -parallel 2 -timeout 30m ./... \
+            2>&1 | tee "$RUNNER_TEMP/schema-full-suite.txt"
+      - name: Upload complete-suite development log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-suite-${{ matrix.target }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/schema-full-suite.txt
           if-no-files-found: warn
           retention-days: 14
 

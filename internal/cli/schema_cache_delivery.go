@@ -23,21 +23,14 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
 
 const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 
 // SchemaCacheIdentity is the complete binary-pinned identity of one cache
 // generation. No value is learned from an on-disk envelope.
-type SchemaCacheIdentity struct {
-	Edition                string
-	CatalogSnapshotVersion uint32
-	SourceSHA256           [sha256.Size]byte
-	SurfaceSHA256          [sha256.Size]byte
-	BuildID                [sha256.Size]byte
-	Meta                   schemacache.ArtifactExpectation
-	Registry               schemacache.ArtifactExpectation
-}
+type SchemaCacheIdentity = schemareader.Identity
 
 // SchemaCacheOptions configures production cache delivery. Enabled options are
 // accepted only for the two v1 release targets; tests may inject GOOS/GOARCH.
@@ -95,39 +88,7 @@ func validateSchemaCacheOptions(options SchemaCacheOptions) error {
 	if !((options.GOOS == "darwin" && options.GOARCH == "arm64") || (options.GOOS == "linux" && options.GOARCH == "amd64")) {
 		return fmt.Errorf("Schema cache v1 is disabled for %s/%s", options.GOOS, options.GOARCH)
 	}
-	editionDigest, err := schemacache.EditionSHA256(options.Identity.Edition)
-	if err != nil {
-		return err
-	}
-	identity := options.Identity.expectedIdentity()
-	if editionDigest != identity.EditionSHA256 {
-		return fmt.Errorf("Schema cache edition identity mismatch")
-	}
-	for _, expectation := range []schemacache.ArtifactExpectation{options.Identity.Meta, options.Identity.Registry} {
-		envelope := schemacache.Envelope{
-			Kind: expectation.Kind, Serializer: expectation.Serializer, Codec: expectation.Codec,
-			FormatVersion: expectation.FormatVersion, CatalogSnapshotVersion: identity.CatalogSnapshotVersion,
-			EncodedLength: expectation.EncodedLength, DecodedLength: expectation.DecodedLength,
-			EditionSHA256: identity.EditionSHA256, SourceSHA256: identity.SourceSHA256,
-			SurfaceSHA256: identity.SurfaceSHA256, BuildID: identity.BuildID, EncodedSHA256: expectation.EncodedSHA256,
-		}
-		if err := identity.Authenticate(envelope, expectation); err != nil {
-			return fmt.Errorf("invalid Schema cache identity: %w", err)
-		}
-	}
-	if options.Identity.Meta.Kind != schemacache.KindMeta || options.Identity.Registry.Kind != schemacache.KindRegistry {
-		return fmt.Errorf("invalid Schema cache artifact kinds")
-	}
-	return nil
-}
-
-func (identity SchemaCacheIdentity) expectedIdentity() schemacache.ExpectedIdentity {
-	edition, _ := schemacache.EditionSHA256(identity.Edition)
-	return schemacache.ExpectedIdentity{
-		CatalogSnapshotVersion: identity.CatalogSnapshotVersion,
-		EditionSHA256:          edition, SourceSHA256: identity.SourceSHA256,
-		SurfaceSHA256: identity.SurfaceSHA256, BuildID: identity.BuildID,
-	}
+	return options.Identity.Validate()
 }
 
 func activeSchemaCacheRuntime() *schemaCacheRuntime {
@@ -182,19 +143,7 @@ func (r *schemaCacheRuntime) readMeta() (schemaruntime.DecodedSchemaMeta, error)
 	if err != nil {
 		return schemaruntime.DecodedSchemaMeta{}, err
 	}
-	payload, err := cache.ReadMeta(r.options.Identity.expectedIdentity(), r.options.Identity.Meta)
-	if err != nil {
-		return schemaruntime.DecodedSchemaMeta{}, err
-	}
-	meta, err := schemaruntime.DecodeSchemaMetaCache(payload)
-	if err != nil {
-		return schemaruntime.DecodedSchemaMeta{}, err
-	}
-	if meta.Hashes.SourceSHA256 != r.options.Identity.SourceSHA256 || meta.Hashes.SurfaceSHA256 != r.options.Identity.SurfaceSHA256 ||
-		meta.RegistryDataLength != r.options.Identity.Registry.EncodedLength || meta.RegistryDataSHA256 != r.options.Identity.Registry.EncodedSHA256 {
-		return schemaruntime.DecodedSchemaMeta{}, schemacache.ErrIdentityMismatch
-	}
-	return meta, nil
+	return schemareader.ReadMeta(cache, r.options.Identity)
 }
 
 func (r *schemaCacheRuntime) loadMeta() (schemaruntime.DecodedSchemaMeta, error) {
@@ -214,32 +163,15 @@ func (r *schemaCacheRuntime) seedMeta(meta schemaruntime.DecodedSchemaMeta) {
 }
 
 func (r *schemaCacheRuntime) descriptor(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.ProductDescriptor, bool) {
-	i := sort.Search(len(meta.ProductDescriptors), func(i int) bool { return meta.ProductDescriptors[i].ProductID >= productID })
-	if i == len(meta.ProductDescriptors) || meta.ProductDescriptors[i].ProductID != productID {
-		return schemaruntime.ProductDescriptor{}, false
-	}
-	return meta.ProductDescriptors[i], true
+	return schemareader.Descriptor(meta, productID)
 }
 
 func (r *schemaCacheRuntime) readProduct(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedSchemaProduct, error) {
-	descriptor, ok := r.descriptor(meta, productID)
-	if !ok {
-		return schemaruntime.DecodedSchemaProduct{}, fmt.Errorf("unknown Schema product %q", productID)
-	}
 	cache, err := r.opened()
 	if err != nil {
 		return schemaruntime.DecodedSchemaProduct{}, err
 	}
-	registry, err := cache.OpenRegistry(r.options.Identity.expectedIdentity(), r.options.Identity.Registry)
-	if err != nil {
-		return schemaruntime.DecodedSchemaProduct{}, err
-	}
-	defer registry.Close()
-	payload, err := registry.ReadRange(schemacache.RangeDescriptor{Offset: descriptor.Offset, Length: descriptor.Length, SHA256: descriptor.SHA256})
-	if err != nil {
-		return schemaruntime.DecodedSchemaProduct{}, err
-	}
-	return schemaruntime.DecodeSchemaProductCache(payload, descriptor, meta)
+	return schemareader.ReadProduct(cache, r.options.Identity, meta, productID)
 }
 
 func (r *schemaCacheRuntime) loadProduct(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedSchemaProduct, error) {
@@ -282,14 +214,7 @@ func (r *schemaCacheRuntime) loadOverviewPayload() (map[string]any, error) {
 }
 
 func schemaCacheLocator(meta schemaruntime.DecodedSchemaMeta, raw string) (string, bool) {
-	tokens := schemaruntime.SplitPathTokens(raw)
-	candidates := []string{strings.TrimSpace(raw), schemaruntime.NormalizeQueryCLIPath(raw), strings.Join(tokens, ".")}
-	for _, candidate := range candidates {
-		if product, ok := meta.LocatorProductByPath[candidate]; ok {
-			return product, true
-		}
-	}
-	return "", false
+	return schemareader.Locator(meta, raw)
 }
 
 func (r *schemaCacheRuntime) queryPayload(meta schemaruntime.DecodedSchemaMeta, raw string, cached bool) (map[string]any, error) {
@@ -346,7 +271,7 @@ func (r *schemaCacheRuntime) readAllPayload(meta schemaruntime.DecodedSchemaMeta
 	if err != nil {
 		return nil, err
 	}
-	registryFile, err := cache.OpenRegistry(r.options.Identity.expectedIdentity(), r.options.Identity.Registry)
+	registryFile, err := cache.OpenRegistry(r.options.Identity.ExpectedIdentity(), r.options.Identity.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +384,7 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 				return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
 			}
 			if artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded); err == nil && artifacts.match(r.options.Identity) {
-				_ = cache.Publish(r.options.Identity.expectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact())
+				_ = cache.Publish(r.options.Identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact())
 			}
 			return nil, loaded, nil
 		}

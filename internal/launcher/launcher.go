@@ -15,6 +15,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
 
 const (
@@ -27,6 +30,7 @@ const (
 
 // Options is immutable release identity injected into the launcher build.
 type Options struct {
+	SchemaIdentity   *schemareader.Identity
 	Version          string
 	Commit           string
 	Edition          string
@@ -75,18 +79,19 @@ func Main(options Options) int {
 }
 
 type dependencies struct {
-	args         []string
-	environ      []string
-	stdin        io.Reader
-	stdout       io.Writer
-	stderr       io.Writer
-	executable   func() (string, error)
-	evalSymlinks func(string) (string, error)
-	lstat        func(string) (os.FileInfo, error)
-	stat         func(string) (os.FileInfo, error)
-	open         func(string) (coreFile, error)
-	getwd        func() (string, error)
-	delegate     func(string, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error)
+	openSchemaCache func(string) (*schemacache.Cache, error)
+	args            []string
+	environ         []string
+	stdin           io.Reader
+	stdout          io.Writer
+	stderr          io.Writer
+	executable      func() (string, error)
+	evalSymlinks    func(string) (string, error)
+	lstat           func(string) (os.FileInfo, error)
+	stat            func(string) (os.FileInfo, error)
+	open            func(string) (coreFile, error)
+	getwd           func() (string, error)
+	delegate        func(string, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error)
 }
 
 type coreFile interface {
@@ -97,18 +102,19 @@ type coreFile interface {
 
 func systemDependencies() dependencies {
 	return dependencies{
-		args:         os.Args,
-		environ:      os.Environ(),
-		stdin:        os.Stdin,
-		stdout:       os.Stdout,
-		stderr:       os.Stderr,
-		executable:   os.Executable,
-		evalSymlinks: filepath.EvalSymlinks,
-		lstat:        os.Lstat,
-		stat:         os.Stat,
-		open:         func(path string) (coreFile, error) { return os.Open(path) },
-		getwd:        os.Getwd,
-		delegate:     platformDelegate,
+		openSchemaCache: func(edition string) (*schemacache.Cache, error) { return schemacache.Open(edition) },
+		args:            os.Args,
+		environ:         os.Environ(),
+		stdin:           os.Stdin,
+		stdout:          os.Stdout,
+		stderr:          os.Stderr,
+		executable:      os.Executable,
+		evalSymlinks:    filepath.EvalSymlinks,
+		lstat:           os.Lstat,
+		stat:            os.Stat,
+		open:            func(path string) (coreFile, error) { return os.Open(path) },
+		getwd:           os.Getwd,
+		delegate:        platformDelegate,
 	}
 }
 
@@ -122,6 +128,12 @@ func run(options Options, deps dependencies) error {
 	if len(deps.args) == 2 && deps.args[1] == "--version" && telemetryOptedOut(deps.environ) {
 		if _, err := fmt.Fprintf(deps.stdout, "dws version %s\n", options.Version); err != nil {
 			return &Error{Kind: ErrorDelegate, Op: "write version", Err: err}
+		}
+		return nil
+	}
+	if handled, err := trySchema(options, deps); handled {
+		if err != nil {
+			return &Error{Kind: ErrorDelegate, Op: "write Schema", Err: err}
 		}
 		return nil
 	}

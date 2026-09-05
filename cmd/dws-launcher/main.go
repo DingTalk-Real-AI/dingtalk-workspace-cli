@@ -8,14 +8,23 @@ import (
 	"strconv"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/launcher"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
 
 var (
-	version    = "dev"
-	commit     = "unknown"
-	edition    = "open"
-	coreSHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
-	coreSize   = "0"
+	schemaCacheEdition        string
+	schemaCacheSourceSHA256   string
+	schemaCacheSurfaceSHA256  string
+	schemaCacheBuildID        string
+	schemaCacheMetaLength     string
+	schemaCacheMetaSHA256     string
+	schemaCacheRegistryLength string
+	schemaCacheRegistrySHA256 string
+	version                   = "dev"
+	commit                    = "unknown"
+	edition                   = "open"
+	coreSHA256                = "0000000000000000000000000000000000000000000000000000000000000000"
+	coreSize                  = "0"
 )
 
 func main() {
@@ -23,5 +32,14 @@ func main() {
 	if err != nil {
 		size = -1
 	}
-	os.Exit(launcher.Main(launcher.Options{Version: version, Commit: commit, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
+	identity, identityErr := schemareader.ParseIdentity(schemareader.RawIdentity{
+		Edition: schemaCacheEdition, SourceSHA256: schemaCacheSourceSHA256, SurfaceSHA256: schemaCacheSurfaceSHA256,
+		BuildID: schemaCacheBuildID, MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
+		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
+	})
+	var schemaIdentity *schemareader.Identity
+	if identityErr == nil {
+		schemaIdentity = &identity
+	}
+	os.Exit(launcher.Main(launcher.Options{SchemaIdentity: schemaIdentity, Version: version, Commit: commit, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
 }

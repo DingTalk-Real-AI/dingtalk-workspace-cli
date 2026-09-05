@@ -14,16 +14,13 @@
 package app
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -70,23 +67,18 @@ func productionSchemaCacheOptions() (cli.SchemaCacheOptions, bool) {
 	if !((schemaCacheGOOS == "darwin" && schemaCacheGOARCH == "arm64") || (schemaCacheGOOS == "linux" && schemaCacheGOARCH == "amd64")) {
 		return cli.SchemaCacheOptions{}, false
 	}
-	editionName := schemaCacheEdition
-	source, sourceOK := parseSchemaCacheLowerHex(schemaCacheSourceSHA256)
-	surface, surfaceOK := parseSchemaCacheLowerHex(schemaCacheSurfaceSHA256)
-	buildID, buildOK := parseSchemaCacheLowerHex(schemaCacheBuildID)
-	metaHash, metaHashOK := parseSchemaCacheLowerHex(schemaCacheMetaSHA256)
-	registryHash, registryHashOK := parseSchemaCacheLowerHex(schemaCacheRegistrySHA256)
-	metaLength, metaLengthOK := parseSchemaCachePositiveDecimal(schemaCacheMetaLength)
-	registryLength, registryLengthOK := parseSchemaCachePositiveDecimal(schemaCacheRegistryLength)
-	if editionName == "" || !sourceOK || !surfaceOK || !buildOK || !metaHashOK || !registryHashOK || !metaLengthOK || !registryLengthOK {
+
+	identity, err := schemareader.ParseIdentity(schemareader.RawIdentity{
+		Edition: schemaCacheEdition, SourceSHA256: schemaCacheSourceSHA256,
+		SurfaceSHA256: schemaCacheSurfaceSHA256, BuildID: schemaCacheBuildID,
+		MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
+		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
+	})
+	if err != nil {
 		return cli.SchemaCacheOptions{}, false
 	}
-	identity := cli.SchemaCacheIdentity{
-		Edition: editionName, CatalogSnapshotVersion: cli.SchemaCatalogSnapshotVersion,
-		SourceSHA256: source, SurfaceSHA256: surface, BuildID: buildID,
-		Meta:     schemaCacheArtifactExpectation(schemacache.KindMeta, metaLength, metaHash),
-		Registry: schemaCacheArtifactExpectation(schemacache.KindRegistry, registryLength, registryHash),
-	}
+	editionName := identity.Edition
+
 	return cli.SchemaCacheOptions{
 		Enabled: true, Identity: identity, GOOS: schemaCacheGOOS, GOARCH: schemaCacheGOARCH,
 		RuntimeEligible: func() bool {
@@ -97,42 +89,4 @@ func productionSchemaCacheOptions() (cli.SchemaCacheOptions, bool) {
 			return hooks != nil && hooks.Name == editionName && hooks.RegisterExtraCommands == nil
 		},
 	}, true
-}
-
-func schemaCacheArtifactExpectation(kind schemacache.ArtifactKind, length uint64, digest [sha256.Size]byte) schemacache.ArtifactExpectation {
-	return schemacache.ArtifactExpectation{
-		Kind: kind, Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
-		FormatVersion: schemacache.DTOFormatVersion, EncodedLength: length, DecodedLength: length, EncodedSHA256: digest,
-	}
-}
-
-func parseSchemaCacheLowerHex(raw string) ([sha256.Size]byte, bool) {
-	var result [sha256.Size]byte
-	if len(raw) != sha256.Size*2 {
-		return result, false
-	}
-	for _, value := range raw {
-		if !((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')) {
-			return result, false
-		}
-	}
-	decoded, err := hex.DecodeString(raw)
-	if err != nil || len(decoded) != len(result) {
-		return result, false
-	}
-	copy(result[:], decoded)
-	return result, true
-}
-
-func parseSchemaCachePositiveDecimal(raw string) (uint64, bool) {
-	if raw == "" || raw[0] < '1' || raw[0] > '9' {
-		return 0, false
-	}
-	for _, value := range raw[1:] {
-		if value < '0' || value > '9' {
-			return 0, false
-		}
-	}
-	parsed, err := strconv.ParseUint(raw, 10, 64)
-	return parsed, err == nil && parsed > 0
 }

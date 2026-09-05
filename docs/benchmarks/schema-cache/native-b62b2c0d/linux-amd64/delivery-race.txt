@@ -1,0 +1,1 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli	477.596s

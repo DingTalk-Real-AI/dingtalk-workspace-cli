@@ -117,19 +117,19 @@ type BuiltSchemaCache struct {
 
 // DecodedSchemaMeta is a fully validated runtime Meta cache.
 type DecodedSchemaMeta struct {
-	Kind                 string
-	Level                string
-	Source               string
-	AgentMetadata        json.RawMessage
-	CommandMetaByPath    map[string]CommandMeta
-	Overview             SchemaOverview
-	LocatorProductByPath map[string]string
-	ProductDescriptors   []ProductDescriptor
-	RegistryDataLength   uint64
-	RegistryDataSHA256   [sha256.Size]byte
-	Hashes               CacheHashes
-	commandMetaByProduct map[string]map[string]CommandMeta
-	locatorsByProduct    map[string]map[string]string
+	Kind                  string
+	Level                 string
+	Source                string
+	AgentMetadata         json.RawMessage
+	CommandMetaByPath     map[string]CommandMeta
+	Overview              SchemaOverview
+	LocatorProductByPath  map[string]string
+	ProductDescriptors    []ProductDescriptor
+	RegistryDataLength    uint64
+	RegistryDataSHA256    [sha256.Size]byte
+	Hashes                CacheHashes
+	commandCountByProduct map[string]int
+	locatorCountByProduct map[string]int
 }
 
 // DecodedSchemaProduct contains the exact shard conversion and its typed index.
@@ -391,16 +391,16 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 		}
 	}
 	wantLookup := BuildCommandMetaLookup(registry)
-	gotLookup := meta.commandMetaByProduct[descriptor.ProductID]
-	if !equalCommandMetaLookups(gotLookup, wantLookup) {
+	count, present := meta.commandCountByProduct[descriptor.ProductID]
+	if !present || count != len(wantLookup) || !commandMetaSubsetEqual(meta.CommandMetaByPath, wantLookup) {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q CommandMeta entries disagree with shard", descriptor.ProductID)
 	}
 	wantLocators, err := buildSchemaProductLocatorsUnchecked(registry)
 	if err != nil {
 		return DecodedSchemaProduct{}, fmt.Errorf("build product %q locators: %w", descriptor.ProductID, err)
 	}
-	gotLocators := meta.locatorsByProduct[descriptor.ProductID]
-	if !reflect.DeepEqual(gotLocators, wantLocators) {
+	locatorCount, locatorsPresent := meta.locatorCountByProduct[descriptor.ProductID]
+	if !locatorsPresent || locatorCount != len(wantLocators) || !locatorSubsetEqual(meta.LocatorProductByPath, wantLocators) {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q locator entries disagree with shard", descriptor.ProductID)
 	}
 	position := sort.Search(len(meta.Overview.Products), func(i int) bool { return meta.Overview.Products[i].ID >= descriptor.ProductID })
@@ -536,22 +536,10 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema locator %q names unknown product %q", path, productID)
 		}
 	}
-	primaryLookup := make(map[string]CommandMeta)
-	metas := make([]CommandMeta, 0)
-	for _, commandMeta := range result.CommandMetaByPath {
-		primary := commandMeta.Identity.CLIPath
-		if existing, ok := primaryLookup[primary]; ok {
-			if !equalCommandMeta(existing, commandMeta) {
-				return DecodedSchemaMeta{}, fmt.Errorf("CommandMeta primary path %q has inconsistent entries", primary)
-			}
-			continue
-		}
-		primaryLookup[primary] = commandMeta
-		metas = append(metas, commandMeta)
-	}
-	if expanded := RegisterCommandMetaAliases(primaryLookup, metas); !equalCommandMetaLookups(expanded, result.CommandMetaByPath) {
+	if !validMetaAliasExpansion(result.CommandMetaByPath) {
 		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta CommandMeta entries are not an exact primary/alias expansion")
 	}
+
 	for path, meta := range result.CommandMetaByPath {
 		if !products[meta.Identity.ProductID] || result.LocatorProductByPath[path] != meta.Identity.ProductID {
 			return DecodedSchemaMeta{}, fmt.Errorf("CommandMeta %q has inconsistent product locator", path)
@@ -562,24 +550,17 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 			}
 		}
 	}
-	result.commandMetaByProduct = make(map[string]map[string]CommandMeta, len(products))
-	for path, commandMeta := range result.CommandMetaByPath {
-		entries := result.commandMetaByProduct[commandMeta.Identity.ProductID]
-		if entries == nil {
-			entries = make(map[string]CommandMeta)
-			result.commandMetaByProduct[commandMeta.Identity.ProductID] = entries
-		}
-		entries[path] = commandMeta
+	// Product verification needs an exact subset cardinality and global-key
+	// lookup, not another heap copy of every large CommandMeta value.
+	result.commandCountByProduct = make(map[string]int, len(products))
+	for _, commandMeta := range result.CommandMetaByPath {
+		result.commandCountByProduct[commandMeta.Identity.ProductID]++
 	}
-	result.locatorsByProduct = make(map[string]map[string]string, len(products))
-	for path, productID := range result.LocatorProductByPath {
-		entries := result.locatorsByProduct[productID]
-		if entries == nil {
-			entries = make(map[string]string)
-			result.locatorsByProduct[productID] = entries
-		}
-		entries[path] = productID
+	result.locatorCountByProduct = make(map[string]int, len(products))
+	for _, productID := range result.LocatorProductByPath {
+		result.locatorCountByProduct[productID]++
 	}
+
 	return result, nil
 }
 

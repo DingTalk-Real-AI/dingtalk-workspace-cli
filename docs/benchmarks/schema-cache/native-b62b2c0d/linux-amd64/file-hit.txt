@@ -1,0 +1,20 @@
+goos: linux
+goarch: amd64
+pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     157	   7721414 ns/op	 6364350 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     146	   8148418 ns/op	 6364317 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     159	   7474011 ns/op	 6364317 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     157	   7615503 ns/op	 6364324 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     158	   7530084 ns/op	 6364310 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     158	   7507157 ns/op	 6364310 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-4         	     160	   7444229 ns/op	 6364314 B/op	   53328 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     134	   8871433 ns/op	 4325180 B/op	   68925 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     133	   8936797 ns/op	 4324878 B/op	   68924 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     133	   8901127 ns/op	 4324485 B/op	   68924 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     135	   8837914 ns/op	 4324838 B/op	   68924 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     134	   8839278 ns/op	 4324702 B/op	   68924 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     136	   8807312 ns/op	 4325107 B/op	   68925 allocs/op
+BenchmarkRealSchemaFileHit/selected-open-locator-authenticate-decode-index-4         	     135	   8859542 ns/op	 4324690 B/op	   68924 allocs/op
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	17.619s
