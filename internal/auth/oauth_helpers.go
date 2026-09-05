@@ -548,6 +548,138 @@ const successHTML = `<!doctype html>
   </body>
 </html>`
 
+const applyPendingHTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>钉钉 CLI</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f5f5;
+        padding: 20px;
+      }
+      .card {
+        height: 600px;
+        width: 480px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-sizing: border-box;
+        border: 1px solid #f2f2f6;
+        box-shadow: 0px 2px 4px 0px rgba(0, 0, 0, 0.12);
+        padding: 32px 24px 24px;
+        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .pending-icon {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        display: block;
+      }
+      h1 {
+        margin: 8px 0 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 44px;
+        text-align: center;
+        letter-spacing: normal;
+        color: #181c1f;
+      }
+      p {
+        margin: 0;
+        font-family:
+          "PingFang SC",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        font-weight: normal;
+        line-height: 21px;
+        text-align: center;
+        letter-spacing: normal;
+        color: rgba(24, 28, 31, 0.6);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <svg
+        class="pending-icon"
+        viewBox="0 0 120 120"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle cx="60" cy="60" r="56" fill="#EAF1FF" />
+        <path
+          d="M60 34V60L74 68"
+          stroke="#0066FF"
+          stroke-width="6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <circle cx="60" cy="60" r="8" fill="#0066FF" />
+      </svg>
+      <h1>访问权限申请中</h1>
+      <p>
+        已向管理员发送权限申请，正在等待审核<br />
+        审核通过后，将在工作通知中提示
+      </p>
+    </div>
+    <script>
+      const POLL_MAX_MS = 10 * 60 * 1000; // 10 minutes, aligned with server-side oauthApprovalTimeout
+      const pollStart = Date.now();
+      let pollTimer = null;
+
+      async function checkAuthStatus() {
+        try {
+          const res = await fetch("/api/cliAuthEnabled");
+          const data = await res.json();
+          if (data.success && data.result && data.result.cliAuthEnabled) {
+            if (pollTimer) clearInterval(pollTimer);
+            location.href = "/success";
+            return;
+          }
+        } catch (e) {
+          console.error("Poll error", e);
+        }
+        if (Date.now() - pollStart >= POLL_MAX_MS) {
+          if (pollTimer) clearInterval(pollTimer);
+          document.querySelector(".card p").innerHTML =
+            "审核超时，请关闭页面后重新登录";
+        }
+      }
+
+      pollTimer = setInterval(checkAuthStatus, 5000);
+      checkAuthStatus();
+    </script>
+  </body>
+</html>`
+
 const notEnabledHTML = `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -751,29 +883,6 @@ const notEnabledHTML = `<!doctype html>
         margin-top: 16px;
         display: inline-block;
       }
-      .success-msg {
-        display: none;
-        width: 100%;
-        height: 60px;
-        gap: 12px;
-        padding: 16px 20px;
-        margin-top: 50px;
-        margin-bottom: 16px;
-        background: #eaf1ff;
-        border-radius: 12px;
-        align-items: center;
-      }
-      .success-msg-icon {
-        width: 24px;
-        height: 24px;
-        flex-shrink: 0;
-      }
-      .success-msg-text {
-        flex: 1;
-        font-size: 14px;
-        line-height: 22px;
-        color: #181c1f;
-      }
       .error-msg {
         color: #ff4d4f;
         font-size: 14px;
@@ -805,14 +914,13 @@ const notEnabledHTML = `<!doctype html>
         src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
         alt="lock icon"
       />
-      <h1>该组织尚未开启 CLI 数据访问权限</h1>
+      <h1>您暂无 CLI 数据访问权限</h1>
       <p>
-        你所选择的组织管理员尚未开启<br />「允许成员通过 CLI
-        访问其个人数据」的权限。
+        当前组织未授权您通过 CLI 访问个人数据。<br />如需使用，请提交开通申请。
       </p>
 
       <div class="form-group">
-        <label class="form-label">选择一位主管理员发送开通申请</label>
+        <label class="form-label">选择审批人</label>
         <div class="select-wrapper">
           <div class="custom-select" id="adminSelect">
             <button
@@ -831,23 +939,6 @@ const notEnabledHTML = `<!doctype html>
         <div id="errorMsg" class="error-msg"></div>
       </div>
 
-      <div id="successMsg" class="success-msg">
-        <svg
-          class="success-msg-icon"
-          viewBox="0 0 16 16"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M8 1.33333C4.32 1.33333 1.33333 4.32 1.33333 8C1.33333 11.68 4.32 14.6667 8 14.6667C11.68 14.6667 14.6667 11.68 14.6667 8C14.6667 4.32 11.68 1.33333 8 1.33333ZM8 13.3333C5.05333 13.3333 2.66667 10.9467 2.66667 8C2.66667 5.05333 5.05333 2.66667 8 2.66667C10.9467 2.66667 13.3333 5.05333 13.3333 8C13.3333 10.9467 10.9467 13.3333 8 13.3333ZM7.33333 9.33333H8.66667V10.6667H7.33333V9.33333ZM7.33333 5.33333H8.66667V8H7.33333V5.33333Z"
-            fill="#0066FF"
-          />
-        </svg>
-        <span class="success-msg-text"
-          >已向管理员发送权限申请，正在等待审核<br />审核通过后，请返回终端继续操作</span
-        >
-      </div>
-
       <button id="applyBtn" class="btn" disabled>立即申请</button>
       <a id="backLink" class="link" href="#">返回选择其他组织</a>
     </div>
@@ -859,7 +950,6 @@ const notEnabledHTML = `<!doctype html>
       const menu = document.getElementById("adminMenu");
       const hiddenInput = adminSelect.querySelector('input[name="adminStaffId"]');
       const btn = document.getElementById("applyBtn");
-      const successMsg = document.getElementById("successMsg");
       const errorMsg = document.getElementById("errorMsg");
       const backLink = document.getElementById("backLink");
 
@@ -867,7 +957,7 @@ const notEnabledHTML = `<!doctype html>
       let clientId = "";
       let applySent = false;
       let selectedAdminId = "";
-      let pollTimer = null;
+      let applying = false;
 
       function closeMenu() {
         adminSelect.classList.remove("open");
@@ -896,7 +986,7 @@ const notEnabledHTML = `<!doctype html>
         } else {
           adminSelect.classList.remove("has-value");
         }
-        btn.disabled = applySent || !staffId;
+        btn.disabled = !staffId;
       }
 
       function renderAdminOptions(list) {
@@ -928,47 +1018,6 @@ const notEnabledHTML = `<!doctype html>
           li.appendChild(option);
           menu.appendChild(li);
         });
-      }
-
-      function setAppliedState() {
-        btn.disabled = true;
-        btn.textContent = "立即申请";
-        trigger.disabled = true;
-        adminSelect.classList.remove("open");
-        successMsg.style.display = "flex";
-        backLink.style.pointerEvents = "none";
-        backLink.style.color = "#999";
-        backLink.onclick = function (e) {
-          e.preventDefault();
-          return false;
-        };
-        startPolling();
-      }
-
-      function startPolling() {
-        if (pollTimer) return;
-        pollTimer = setInterval(checkAuthStatus, 5000);
-        checkAuthStatus();
-      }
-
-      function stopPolling() {
-        if (pollTimer) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
-      }
-
-      async function checkAuthStatus() {
-        try {
-          const res = await fetch("/api/cliAuthEnabled");
-          const data = await res.json();
-          if (data.success && data.result && data.result.cliAuthEnabled) {
-            stopPolling();
-            location.href = "/success";
-          }
-        } catch (e) {
-          console.error("Poll error", e);
-        }
       }
 
       async function loadAdmins() {
@@ -1025,8 +1074,12 @@ const notEnabledHTML = `<!doctype html>
               "&response_type=code&scope=openid+corpid";
           }
 
-          if (applySent) {
-            setAppliedState();
+          // The apply request is either already sent or the server knows
+          // about one (hasDwsApply); both cases land on the dedicated
+          // approval-pending page.
+          if (applySent || status.hasDwsApply) {
+            location.href = "/applyPending";
+            return;
           }
         } catch (e) {
           console.error("Failed to load status", e);
@@ -1052,8 +1105,9 @@ const notEnabledHTML = `<!doctype html>
 
       btn.onclick = async function () {
         const value = hiddenInput.value;
-        if (!value) return;
+        if (!value || applying) return;
 
+        applying = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="loading"></span>申请中...';
         hideError();
@@ -1063,14 +1117,26 @@ const notEnabledHTML = `<!doctype html>
           );
           const data = await res.json();
           if (data.success && data.result) {
-            setAppliedState();
+            applying = false;
+            location.href = "/applyPending";
+          } else if (
+            data.errorCode && data.errorCode === "DWS_USE_APPLY_DUPLICATE"
+          ) {
+            // The server reports an existing application (e.g. a retried
+            // request landed after the client already gave up). That is
+            // the goal state: land on the pending page instead of
+            // treating it as a retryable failure.
+            applying = false;
+            location.href = "/applyPending";
           } else {
             showError(data.errorMsg || "申请失败，请重试");
+            applying = false;
             btn.disabled = false;
             btn.textContent = "立即申请";
           }
         } catch (e) {
           showError("网络错误，请重试");
+          applying = false;
           btn.disabled = false;
           btn.textContent = "立即申请";
         }
@@ -1167,8 +1233,8 @@ const accessDeniedHTML = `<!doctype html>
         src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
         alt="lock icon"
       />
-      <h1>无权限访问</h1>
-      <p>您不在该组织的 CLI 授权人员范围内。请联系组织管理员将您加入授权名单。此页面可以关闭。</p>
+      <h1>该组织尚未开启CLI数据访问权限</h1>
+      <p>你所在组织的管理员尚未开启<br />「允许成员通过CLI访问其个人数据」的权限。此页面可以关闭。</p>
     </div>
   </body>
 </html>`
@@ -1389,6 +1455,7 @@ type CLIAuthResult struct {
 	ChannelScope         string   `json:"channelScope,omitempty"`         // "all" | "specified"
 	AllowedChannels      []string `json:"allowedChannels,omitempty"`      // channelCode list when channelScope="specified"
 	ChannelConfigEnabled bool     `json:"channelConfigEnabled,omitempty"` // whether org has any channel restriction configured
+	HasDwsApply          bool     `json:"hasDwsApply,omitempty"`          // whether the user has already submitted an apply request on DWS
 }
 
 // classifyDenialReason inspects a CLIAuthStatus response and returns a machine-readable
@@ -1460,6 +1527,18 @@ type SendApplyResponse struct {
 	ErrorCode string `json:"errorCode,omitempty"`
 	ErrorMsg  string `json:"errorMsg,omitempty"`
 	Result    bool   `json:"result"`
+}
+
+// isAlreadyAppliedError reports whether a failed send-apply response is
+// actually the idempotent "already applied" business result. The retry
+// layer resends a request whose first attempt already landed on the
+// backend; the follow-up response reports the existing application, which
+// is the goal state rather than a retryable failure.
+func isAlreadyAppliedError(result *SendApplyResponse) bool {
+	if result == nil || result.Success {
+		return false
+	}
+	return strings.ToUpper(strings.TrimSpace(result.ErrorCode)) == "DWS_USE_APPLY_DUPLICATE"
 }
 
 // mcpRequestMaxRetries is the maximum number of attempts for MCP API calls

@@ -1025,6 +1025,15 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, "true") {
 			t.Fatalf("apply response = %q", body)
 		}
+		// Revisiting the callback after a successful apply must land on the
+		// dedicated approval-pending page for both the cached-code branch and
+		// the cached-token branch.
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath+"?code=apply"); !strings.Contains(body, "访问权限申请中") {
+			t.Fatalf("cached pending callback = %q", body)
+		}
+		if _, body := httpGetBody(t, f.callbackBase+CallbackPath); !strings.Contains(body, "访问权限申请中") {
+			t.Fatalf("cached pending no-code callback = %q", body)
+		}
 		time.Sleep(20 * time.Millisecond)
 		cancel()
 		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
@@ -1032,6 +1041,138 @@ func TestCrossPlatformCoverageOAuthCallbackRemainingEdges(t *testing.T) {
 		}
 		if !strings.Contains(output.String(), "Waiting for admin approval") && !strings.Contains(output.String(), "等待管理员审批中") {
 			t.Fatalf("apply polling output = %q", output.String())
+		}
+	})
+
+	t.Run("server-side hasDwsApply polling", func(t *testing.T) {
+		// The user submitted an apply request in a previous session; the
+		// server reports hasDwsApply=true. The terminal must show the
+		// approval-pending status without a local apply submission.
+		oauthPollInterval = 5 * time.Millisecond
+		oauthCheckStatus = func(*OAuthProvider, context.Context, string) (*CLIAuthStatus, error) {
+			return &CLIAuthStatus{Success: true, Result: &CLIAuthResult{HasDwsApply: true}}, nil
+		}
+		oauthSendApply = func(context.Context, string, string) (*SendApplyResponse, error) {
+			return &SendApplyResponse{Success: true, Result: true}, nil
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
+		var output bytes.Buffer
+		f.provider.Output = &output
+		done := startOAuthLogin(t, ctx, f)
+		if body := finishExchange(t, f, done, "hasDwsApply"); !strings.Contains(body, "访问权限申请中") {
+			t.Fatalf("hasDwsApply callback must render the apply-pending page = %q", body)
+		}
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("canceled hasDwsApply login = %v", result.err)
+		}
+		if !strings.Contains(output.String(), "Waiting for admin approval") && !strings.Contains(output.String(), "等待管理员审批中") {
+			t.Fatalf("hasDwsApply polling output = %q", output.String())
+		}
+		if strings.Contains(output.String(), "Waiting for apply submission") || strings.Contains(output.String(), "等待提交申请中") {
+			t.Fatalf("hasDwsApply polling must not show apply submission status = %q", output.String())
+		}
+	})
+
+	t.Run("status exposes server-side hasDwsApply", func(t *testing.T) {
+		// The page reads hasDwsApply from /api/status; the value must be
+		// captured from the callback's /cli/cliAuthEnabled lookup without
+		// an extra API call.
+		oauthPollInterval = time.Hour
+		oauthCheckStatus = oldCheck
+		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus {
+			return CLIAuthStatus{Success: true, Result: &CLIAuthResult{HasDwsApply: true}}
+		})
+		ctx, cancel := context.WithCancel(context.Background())
+		done := startOAuthLogin(t, ctx, f)
+
+		callbackDone := make(chan oauthHTTPResult, 1)
+		go func() {
+			callbackDone <- getHTTPBody(f.callbackBase + CallbackPath + "?code=hasDwsApply-status")
+		}()
+		waitOAuthSignal(t, f.exchangeEntered, done, "token exchange")
+		closeOAuthRelease(f.exchangeRelease)
+		waitOAuthSignal(t, f.statusEntered, done, "CLI auth status check")
+		closeOAuthRelease(f.statusRelease)
+		select {
+		case result := <-callbackDone:
+			if result.err != nil || !strings.Contains(result.body, "<html") {
+				t.Fatalf("callback body = %q, %v", result.body, result.err)
+			}
+		case <-time.After(oauthTestWaitTimeout):
+			t.Fatal("timed out waiting for OAuth callback")
+		}
+
+		if _, body := httpGetBody(t, f.callbackBase+"/api/status"); !strings.Contains(body, `"hasDwsApply":true`) {
+			t.Fatalf("status API missing server-side hasDwsApply = %q", body)
+		}
+		if _, body := httpGetBody(t, f.callbackBase+"/applyPending"); !strings.Contains(body, "访问权限申请中") {
+			t.Fatalf("apply-pending page = %q", body)
+		}
+
+		cancel()
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("canceled hasDwsApply status login = %v", result.err)
+		}
+	})
+
+	t.Run("already applied is idempotent success", func(t *testing.T) {
+		// A retried request can reach the backend after the first attempt
+		// already created the application; the follow-up business error
+		// must be normalized to success instead of surfacing as a failure.
+		oauthPollInterval = time.Hour
+		oauthCheckStatus = func(*OAuthProvider, context.Context, string) (*CLIAuthStatus, error) {
+			return &CLIAuthStatus{Success: true, Result: &CLIAuthResult{}}, nil
+		}
+		oauthSendApply = func(context.Context, string, string) (*SendApplyResponse, error) {
+			return &SendApplyResponse{Success: false, ErrorCode: "DWS_USE_APPLY_DUPLICATE"}, nil
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
+		done := startOAuthLogin(t, ctx, f)
+		finishExchange(t, f, done, "already-applied")
+		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, `"success":true`) {
+			t.Fatalf("already-applied response must be normalized to success = %q", body)
+		}
+		if _, body := httpGetBody(t, f.callbackBase+"/api/status"); !strings.Contains(body, `"applySent":true`) {
+			t.Fatalf("already-applied must mark apply as sent = %q", body)
+		}
+		cancel()
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("canceled already-applied login = %v", result.err)
+		}
+	})
+
+	t.Run("duplicate sendApply short-circuits", func(t *testing.T) {
+		// Once an apply is recorded for the session, further submissions
+		// must not reach the backend again and must still answer success.
+		oauthPollInterval = time.Hour
+		oauthCheckStatus = func(*OAuthProvider, context.Context, string) (*CLIAuthStatus, error) {
+			return &CLIAuthStatus{Success: true, Result: &CLIAuthResult{}}, nil
+		}
+		var calls atomic.Int32
+		oauthSendApply = func(context.Context, string, string) (*SendApplyResponse, error) {
+			calls.Add(1)
+			return &SendApplyResponse{Success: true, Result: true}, nil
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		f := newOAuthLoginFixture(t, func(int32) CLIAuthStatus { return CLIAuthStatus{} })
+		done := startOAuthLogin(t, ctx, f)
+		finishExchange(t, f, done, "duplicate-apply")
+		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, `"success":true`) {
+			t.Fatalf("first apply response = %q", body)
+		}
+		if _, body := httpGetBody(t, f.callbackBase+"/api/sendApply?adminStaffId=admin"); !strings.Contains(body, `"success":true`) {
+			t.Fatalf("duplicate apply response = %q", body)
+		}
+		if calls.Load() != 1 {
+			t.Fatalf("duplicate apply must not hit the backend again, calls = %d", calls.Load())
+		}
+		cancel()
+		if result := awaitOAuthLogin(t, done); !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("canceled duplicate-apply login = %v", result.err)
 		}
 	})
 
