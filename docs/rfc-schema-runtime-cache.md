@@ -47,6 +47,26 @@ Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能�
 执行；job 日志未给出完整测试结论，不能记为通过或当作某项断言失败。剩余 native job 的
 最终状态与合并后 head 的原生验证仍须分别核对。
 
+这轮[原始 native 证据](benchmarks/schema-cache/native-89c38222/)已确认两平台 core-free
+launcher 的精确 stdout parity、四进程冷启动/损坏修复和 CPU/RSS 门槛通过；identity JSON
+在相同 clean source tree 下 byte-equal（协调 job 因 Linux file-hit 失败被跳过）。
+
+| 89c38222 opt-out leaf | macOS arm64 | Linux amd64 |
+|---|---|---|
+| wall p50 / p95 | 22.870 / 29.482 ms | 21.939 / 23.032 ms |
+| user CPU p50 / p95 | 20.645 / 25.030 ms | 22.927 / 26.026 ms |
+| peak RSS p50 / p95 | 15,745,024 / 16,580,608 B | 17,358,848 / 17,666,048 B |
+| Meta file-hit median | 4.967 ms / 3.87 MB，PASS | 5.874 ms / 3.87 MB，FAIL（预算 5 ms） |
+| selected file-hit median | 7.166 ms / 4.32 MB，PASS | 9.102 ms / 4.32 MB，PASS |
+
+macOS native candidate job 全部通过。Linux profile 显示 protobuf message/string 分配与 GC
+占明显成本；profile 含 benchmark 的一次装配准备，不能把累计百分比直接当作单次命中比例。
+使用临时 modfile 将官方 protobuf runtime 换为
+[v1.36.12](https://github.com/protocolbuffers/protobuf-go/releases/tag/v1.36.12) 的本机诊断实验，
+在 1,370 tools 上保留同一 generated DTO、通过 round-trip，7 轮 Meta 为 3.751 ms / 3.90 MB，
+selected 为 5.413 ms / 4.32 MB，没有证明收益，因此没有改动仓库依赖或 generator pin。
+这个实验不是新的 release recipe，也不能覆盖 generator/runtime 兼容性和原生门槛。
+
 ### 本机候选包证据（2026-09-06）
 
 [原始 60 次进程样本](benchmarks/schema-cache/2026-09-06-darwin-arm64-candidate.json) 绑定

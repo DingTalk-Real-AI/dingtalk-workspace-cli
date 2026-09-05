@@ -87,3 +87,5 @@ silently delegated cache hit from masquerading as proof of the thin path.
 Imported benchmark text trims trailing whitespace on the CPU model header; numerical samples are unchanged.
 
 `2026-09-06-darwin-arm64-upstream-file-hit.txt/.json` records the seven independent warm file-hit rounds at `606b9f87` after upstream synchronization (1,370 tools, Go 1.25.9). Both local stage budgets pass; these samples are not final-process or Linux evidence.
+
+`native-89c38222/` contains exact-head native candidate results from run `33989255990`: both core-free thin launchers pass byte parity and process CPU/RSS budgets; macOS passes file-hit budgets, Linux Meta remains 5.874 ms against 5 ms. These candidates predate upstream synchronization and the user-shortcut diagnostic fix.

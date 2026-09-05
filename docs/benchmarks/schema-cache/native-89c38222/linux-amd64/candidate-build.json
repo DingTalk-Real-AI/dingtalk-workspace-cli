@@ -1,0 +1,24 @@
+{
+  "scope": "native development candidate; not release enablement proof",
+  "source_commit": "89c382224a244257045bc1db545adbeae4fe041a",
+  "source_tree": "e6e1621149f1b61136ad5a227b077c3b356c72fb",
+  "source_dirty": false,
+  "go_version": "go1.25.9",
+  "goos": "linux",
+  "goarch": "amd64",
+  "cgo_enabled": "0",
+  "goexperiment": "",
+  "gowork": "off",
+  "build_flags": [
+    "-trimpath",
+    "-buildmode=pie"
+  ],
+  "build_tags": [],
+  "core_ldflags": "-s -w -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.version=v0.0.0-schema-cache-candidate -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.gitCommit=89c382224a244257045bc1db545adbeae4fe041a -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.buildTime=2026-09-06T04:08:28+08:00 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheEdition=open -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheSourceSHA256=89903f5ce914316ee4ed2094d8d9be881c9fa6fa698d3a4e6486896e08d3d96f -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheSurfaceSHA256=b1b1db00f66f78bdbbd53b134df1fe76d48457a92cd88dbe577bc59076c52ba1 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheBuildID=6db68fc9eb8bb9bab15f64d092eedbc8b51e97364fc236b2e68997887b8e2d00 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheMetaLength=881926 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheMetaSHA256=a51db95e94f4a9b151bc79a91764e341531665cbb5d387cd6744f972ed613a00 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheRegistryLength=14925362 -X github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app.schemaCacheRegistrySHA256=a657b32988cf66ddc4f1dea693f9c12cf61dfc533886b86859de529ba817cf59",
+  "launcher_ldflags": "-s -w -X main.version=v0.0.0-schema-cache-candidate -X main.commit=89c382224a244257045bc1db545adbeae4fe041a -X main.edition=open -X main.coreSHA256=109542a0657e4146d3dde3ec01efb06b0388084f861055d17886206e1cf4bede -X main.coreSize=45900129 -X main.schemaCacheEdition=open -X main.schemaCacheSourceSHA256=89903f5ce914316ee4ed2094d8d9be881c9fa6fa698d3a4e6486896e08d3d96f -X main.schemaCacheSurfaceSHA256=b1b1db00f66f78bdbbd53b134df1fe76d48457a92cd88dbe577bc59076c52ba1 -X main.schemaCacheBuildID=6db68fc9eb8bb9bab15f64d092eedbc8b51e97364fc236b2e68997887b8e2d00 -X main.schemaCacheMetaLength=881926 -X main.schemaCacheMetaSHA256=a51db95e94f4a9b151bc79a91764e341531665cbb5d387cd6744f972ed613a00 -X main.schemaCacheRegistryLength=14925362 -X main.schemaCacheRegistrySHA256=a657b32988cf66ddc4f1dea693f9c12cf61dfc533886b86859de529ba817cf59",
+  "identity_sha256": "4a2847f5df7274d1035378dd3034cfc0e351801bfa698e96c4184676773338ca",
+  "core_sha256": "109542a0657e4146d3dde3ec01efb06b0388084f861055d17886206e1cf4bede",
+  "launcher_sha256": "b8e405dc9b0e4725beedc4da3e6dadb914aa49a304a1fa13696f3c5087d6ee13",
+  "package_manifest_sha256": "6143f46715dd52d5f0bbeb103dd8f8a68a14c915978104fa33cf065bdb9a06e8",
+  "signing": "none"
+}
