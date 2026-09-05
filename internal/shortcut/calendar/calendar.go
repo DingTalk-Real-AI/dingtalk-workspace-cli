@@ -749,7 +749,12 @@ var BusySearch = shortcut.Shortcut{
 }
 
 func busySearchProject(data map[string]any) ([]map[string]any, error) {
-	entries, _, err := requireCalendarCollection(data, "calendar/query_busy_status", "busy", "entries")
+	// Use the strict collection extractor because busy/free status is a decision
+	// signal: a malformed response must fail closed rather than be projected to
+	// "free: true". callFilteredBusyStatus only filters individual scheduleItems
+	// that lack a usable status; it never treats a missing scheduleItems array as
+	// an empty/free interval.
+	entries, _, err := requireCalendarCollectionStrict(data, "calendar/query_busy_status", "busy", "entries")
 	if err != nil {
 		return nil, err
 	}
@@ -764,15 +769,15 @@ func busySearchProject(data map[string]any) ([]map[string]any, error) {
 		if !ok {
 			return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_items", fmt.Sprintf("result[%d].scheduleItems 不是数组", entryIndex))
 		}
-		if err := validateCalendarCollectionItems(items, "calendar/query_busy_status", "scheduleItems"); err != nil {
-			return nil, err
-		}
 		for itemIndex, rawItem := range items {
-			item := rawItem.(map[string]any)
+			item, ok := rawItem.(map[string]any)
+			if !ok {
+				return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_item", fmt.Sprintf("result[%d].scheduleItems[%d] 不是对象", entryIndex, itemIndex))
+			}
 			start := calendarBusyDateTime(item["start"])
 			end := calendarBusyDateTime(item["end"])
 			if calendarEmptyValue(start) || calendarEmptyValue(end) {
-				return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_time", fmt.Sprintf("scheduleItems[%d] 缺少开始或结束时间", itemIndex))
+				return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_time", fmt.Sprintf("result[%d].scheduleItems[%d] 缺少有效起止时间", entryIndex, itemIndex))
 			}
 			out = append(out, map[string]any{"start": start, "end": end})
 		}
