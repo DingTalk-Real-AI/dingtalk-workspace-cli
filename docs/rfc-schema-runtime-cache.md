@@ -22,7 +22,7 @@
 | identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback；独立 generator 的 delivery 访问审计已通过真实声明，identity 与审计前 byte-equal | b62b2c0d 两平台原生 identity/完整 build metadata 一致，real candidate/parity/并发与 CPU/RSS 门槛通过；Meta file-hit 两平台超限，已继续优化，待新 head 复核；hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | exact version 与严格 argv 的 JSON overview/product/group/leaf 已接通；共用 reader/typed renderer；仅显式 DO_NOT_TRACK 且确认无扩展/兼容警告时命中 | 新 head 原生 core-free 精确输出证明、默认上报优化、竞争性进程指标和逐次 core hashing 成本 |
-| 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | Meta 最新优化后本机完整 file-hit 3.77 ms / 3.87 MB，selected 5.33 ms / 4.32 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
+| 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | upstream 合并后本机完整 file-hit Meta 3.739 ms / 3.90 MB，selected 5.203 ms / 4.32 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
 | 全量验证 | Go 1.25.9 CLI/app 包通过；组件回归与 Meta comparator 全字段测试通过；schemacache/launcher/packagemanifest/Meta comparator race 通过；4 项 release fixture 回归通过 | 全套仍未绿：构建期间源码修改导致 schemaruntime import graph 失败（冻结后该包已通过）；stdio/helper 子进程退出与生成器被系统终止待解决；完整 scripts 已通过（361 s），全量 suite 仍失败 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
@@ -37,6 +37,9 @@ Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能�
 权威声明的数量比较；完整 Registry/Meta/locator/query 的逐项及输出等价断言保留。新增命令
 的定向回归通过（helpers 1.092 s、doc shortcuts 0.506 s），真实 round trip 与 delivery parity
 分别通过 3.541 s / 42.511 s。合并后的完整 `test/scripts` suite 通过（345.984 s）。下文 1,357 tools 的历史 benchmark 不代表合并后的性能。
+合并提交 `606b9f87` 的[独立 7 轮 file-hit](benchmarks/schema-cache/2026-09-06-darwin-arm64-upstream-file-hit.json)
+中位数为 Meta **3.739 ms / 3.90 MB**、selected **5.203 ms / 4.32 MB**，两项本机预算通过。
+该测量在本机其他测试全部结束后执行；原生 Linux 和最终进程门槛仍需独立证明。
 
 `89c38222` 的[原生反馈](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33989255990)
 包含薄 Schema 入口与 Meta 分配优化，但早于本次 upstream 同步和用户 shortcut 诊断修复。
