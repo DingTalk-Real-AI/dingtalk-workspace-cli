@@ -1425,11 +1425,30 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	// short/long remain in the signature so call sites keep passing Cobra prose;
 	// Catalog assembly (not this store) prefers Long for description and may
 	// use Short only as a title fallback after declared Title.
-	_, _ = short, long
+	_ = short
 	// Reuse NewCommand's completeness rules so bind-time attaches cannot ship
 	// a partial declaration that would only fail in generated artifacts.
 	validateContractDecl(Spec{Use: cmd.Name(), Safety: safety, Contract: decl})
 	validateSafetySpec(Spec{Use: cmd.Name(), Safety: safety})
+	currentLong := cmd.Long
+	if strings.TrimSpace(currentLong) == "" && strings.TrimSpace(long) != "" {
+		currentLong = long
+	}
+	// Drop guidance appended for a previous declaration: AttachContract
+	// overwrites the prior ContractFinal, so --help must re-render the updated
+	// guidance instead of stacking the stale block on top of it.
+	base, tail := splitSelectionHelp(currentLong)
+	// The guidance sections are anchored "after the intent prose"; without
+	// authored prose they must not become the whole Long, or catalog assembly
+	// would flip the delivered description winner from Contract.Description
+	// (contract_final) to the guidance text (cobra_help).
+	if help := SelectionHelp(decl.Selection); help != "" && strings.TrimSpace(base) != "" {
+		cmd.Long = strings.TrimRight(base, "\n") + help + tail
+	} else if base+tail != currentLong {
+		// The updated declaration no longer renders guidance; publish the
+		// prose without the stale block (constraint suffix preserved).
+		cmd.Long = base + tail
+	}
 
 	payload := contract.ContractFinalPayload{
 		Title:       strings.TrimSpace(decl.Title),
@@ -1630,6 +1649,75 @@ func ConstraintHelp(constraints []Constraint) string {
 		lines = append(lines, "  - "+text)
 	}
 	return "\n\n参数约束：\n" + strings.Join(lines, "\n")
+}
+
+// SelectionHelp renders the --help Selection guidance sections — "Avoid
+// when", "Prerequisites", "Tips" — so an agent exploring via --help sees the
+// same guidance the Runtime Schema publishes in --compact. UseWhen is not
+// rendered: today every declared UseWhen restates the Long intent prose
+// verbatim (the reviewed-contract generators copy Intent into it), so a
+// rendered section would either duplicate the prose or need a dedup rule that
+// knows about that data-layer shortcut; add the section back once authored
+// UseWhen content diverges from the prose. Examples stay in the cobra Example
+// block. Returns "" when nothing renders.
+func SelectionHelp(selection contract.SelectionSpec) string {
+	var sections []string
+	if items := guidanceItems(selection.AvoidWhen); len(items) > 0 {
+		sections = append(sections, renderGuidance("Avoid when:", items))
+	}
+	if items := guidanceItems(selection.Prerequisites); len(items) > 0 {
+		sections = append(sections, renderGuidance("Prerequisites:", items))
+	}
+	if items := guidanceItems(selection.Tips); len(items) > 0 {
+		sections = append(sections, renderGuidance("Tips:", items))
+	}
+	if len(sections) == 0 {
+		return ""
+	}
+	return "\n\n" + strings.Join(sections, "\n\n")
+}
+
+// guidanceItems returns the non-blank trimmed guidance entries.
+func guidanceItems(items []string) []string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		if text := strings.TrimSpace(item); text != "" {
+			lines = append(lines, text)
+		}
+	}
+	return lines
+}
+
+// splitSelectionHelp splits a Long that may carry a previously appended
+// SelectionHelp block into the pristine prose (base) and whatever New
+// appended after the guidance (tail — the constraint section, when present),
+// dropping the stale block itself. Re-attaching an updated declaration then
+// re-renders guidance between the two instead of stacking versions. The block
+// is located by its generated section titles (each is preceded by a blank
+// line and followed by an item list, which authored prose never reproduces).
+func splitSelectionHelp(long string) (base, tail string) {
+	cut := -1
+	for _, title := range []string{"Avoid when:", "Prerequisites:", "Tips:"} {
+		if i := strings.Index(long, "\n\n"+title+"\n"); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
+	}
+	if cut < 0 {
+		return long, ""
+	}
+	rest := long[cut+2:]
+	if j := strings.Index(rest, "\n\n参数约束："); j >= 0 {
+		return long[:cut], rest[j:]
+	}
+	return long[:cut], ""
+}
+
+func renderGuidance(title string, items []string) string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, "  - "+item)
+	}
+	return title + "\n" + strings.Join(lines, "\n")
 }
 
 func dashed(flags []string) string {
