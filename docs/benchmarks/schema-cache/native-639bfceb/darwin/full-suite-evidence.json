@@ -1,0 +1,15 @@
+{
+  "scope": "terminal package events from complete go test -json output; original verbose artifact retained in CI",
+  "commit": "639bfcebabd92282e57528fda5fef22a109b39f6",
+  "run_id": 33995999901,
+  "job_id": 101386552557,
+  "conclusion": "success",
+  "go_version": "go1.25.9",
+  "command": "go test -json -p 2 -parallel 2 -timeout 30m ./...",
+  "artifact_name": "schema-suite-darwin-arm64-639bfcebabd92282e57528fda5fef22a109b39f6",
+  "raw_log_sha256": "a9e45b26890841ca677b088843e7145d7a8eb50de2b97469c635508232dd007c",
+  "raw_log_bytes": 346046129,
+  "raw_log_lines": 1157351,
+  "failure_event_count": 0,
+  "package_terminal_event_count": 147
+}
