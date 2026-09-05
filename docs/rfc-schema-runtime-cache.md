@@ -24,7 +24,7 @@
 | launcher | core delegation 已实现；默认保留原 identity/clitrack，exact version 仅在显式 DO_NOT_TRACK 时走 fast path | 默认上报路径的启动优化、Schema fast path、逐次 core hashing 的完整性能成本 |
 | 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | Meta 优化后完整 file-hit 4.52 ms / 6.36 MB，selected 5.30 ms / 4.33 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
 | 全量验证 | Go 1.25.9 CLI/app 包通过；组件回归与 Meta comparator 全字段测试通过；schemacache/launcher/packagemanifest/Meta comparator race 通过；4 项 release fixture 回归通过 | 全套仍未绿：构建期间源码修改导致 schemaruntime import graph 失败（冻结后该包已通过）；stdio/helper 子进程退出与生成器被系统终止待解决；完整 scripts 已通过（361 s），全量 suite 仍失败 |
-| PR | 当前尚未提交 | 必须创建并保持 Draft；验收未完成不得改为 ready 或合并 |
+| PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
