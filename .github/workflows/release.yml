@@ -1107,6 +1107,29 @@ jobs:
         env:
           DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
 
+      - name: Verify native finalized Linux package version
+        run: |
+          set -euo pipefail
+          test "$(uname -s)-$(uname -m)" = Linux-x86_64
+          stage="$(mktemp -d "$RUNNER_TEMP/verify-linux-version.XXXXXX")"
+          trap 'rm -rf "$stage"' EXIT
+          tar -xzf dist/dws-linux-amd64.tar.gz -C "$stage"
+          package_root="$stage/dws-${RELEASE_VERSION}-linux-amd64"
+          python3 scripts/release/verify-package-version.py \
+            --launcher "$package_root/bin/dws" --core "$package_root/libexec/dws-core" \
+            --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" \
+            --build-time "$(sh scripts/build/release-build-time.sh "$RELEASE_COMMIT")" \
+            --report "$RUNNER_TEMP/package-version-linux-amd64.json"
+
+      - name: Preserve native Linux version evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package-version-linux-amd64
+          path: ${{ runner.temp }}/package-version-linux-amd64.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify npm package before sealing GitHub Release
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
 
@@ -1135,6 +1158,8 @@ jobs:
       contents: read
     env:
       EXPECTED_APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}
+      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
     steps:
       - name: Check out sealed release source
         uses: actions/checkout@v4
@@ -1229,11 +1254,24 @@ jobs:
               doctor_json="$stage/doctor.json"
               rm -rf "$doctor_home"
               mkdir -p "$doctor_home"
-              "$launcher" --version
+              python3 scripts/release/verify-package-version.py \
+                --launcher "$launcher" --core "$core" \
+                --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" \
+                --build-time "$(sh scripts/build/release-build-time.sh "$RELEASE_COMMIT")" \
+                --report "$RUNNER_TEMP/package-version-darwin-${arch}.json"
               HOME="$doctor_home" "$launcher" doctor --json --timeout 2 > "$doctor_json"
               test -s "$doctor_json"
             fi
           done
+
+      - name: Preserve native Darwin version evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package-version-darwin
+          path: ${{ runner.temp }}/package-version-darwin-*.json
+          if-no-files-found: warn
+          retention-days: 14
 
   publish-release:
     name: Publish immutable GitHub Release

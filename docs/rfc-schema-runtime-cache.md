@@ -29,6 +29,21 @@
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
 
+### 正式发布包的版本合同验证
+
+正式 release workflow 的 Darwin 验证 job 曾在 `set -u` 下读取未注入的
+`RELEASE_VERSION`；现显式从 `release-contract` 接入版本和 commit，并用负向回归证实
+旧配置失败、修复后通过。正式包增加共享 `scripts/release/verify-package-version.py`：
+在 Linux archive/manifest 验证之后、Darwin Developer ID/notarization/Gatekeeper 验证之后，
+只在匹配的 native host 运行完整 core、launcher 和没有 sibling core 的 launcher 副本。
+三条路径都必须逐字节匹配 sealed commit、版本和 UTC committer date 的完整输出，且 stderr
+为空、退出码为 0；验证前后二进制 SHA-256 不得变化。独立报告不改变 finalized-release-dist
+artifact 布局。候选 CI 复用同一验证器；错误但一致的时间、缺少元数据、强制依赖 core、
+运行时修改自身等负向 fixture 均必须拒绝。
+
+这新增的是版本合同门禁，尚未产生本次修改的正式签名包运行证据；也不等同于 hermetic
+Schema identity 或安装/升级/回滚证明，不能据此启用 release cache identity。
+
 ### 版本输出修复后的原生结果（639bfceb）
 
 [run 33995999901](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33995999901)

@@ -13,6 +13,9 @@ on:
       - 'scripts/dev/**'
       - 'scripts/policy/**'
       - 'scripts/release/post-goreleaser.sh'
+      - 'scripts/release/verify-package-version.py'
+      - 'scripts/release/test_verify_package_version.py'
+      - '.github/workflows/release.yml'
       - 'test/scripts/release_build_time_test.go'
       - '.goreleaser.yaml'
       - '.github/workflows/schema-cache-native.yml'
@@ -106,6 +109,17 @@ jobs:
       - name: Build native candidate with finalized runtime payload
         id: candidate_build
         run: python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
+      - name: Verify finalized candidate version contract
+        run: |
+          set -euo pipefail
+          python3 scripts/release/test_verify_package_version.py
+          package_root="$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET"
+          commit="$(git rev-parse HEAD)"
+          python3 scripts/release/verify-package-version.py \
+            --launcher "$package_root/bin/dws" --core "$package_root/libexec/dws-core" \
+            --version v0.0.0-schema-cache-candidate --commit "$commit" \
+            --build-time "$(sh scripts/build/release-build-time.sh "$commit")" \
+            --report "$RUNNER_TEMP/schema-evidence/package-version.json"
       - name: Verify exact candidate and interleaved process performance
         run: |
           python3 scripts/dev/test_verify_schema_cache_binary.py
