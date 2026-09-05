@@ -376,12 +376,14 @@ the current head SHA, and treats server-declared not-ready or
 concurrent-revision responses as retriable. An exact behind-main state is also
 retriable before the merge request. The exact transient pair
 `mergeable=null` and `mergeable_state=unknown` is likewise deferred without a
-merge request; it is not treated as evidence that the PR is admissible. If
-GitHub instead reports a behind state as HTTP 403
-`Resource not accessible by integration`, reconciliation recovers
-only after a same-token read proves the unchanged open head, repository-owned
-`main` base, and exact behind mergeability; every other 403 remains a hard
-failure. The live preflight requires the
+merge request; it is not treated as evidence that the PR is admissible.
+`mergeable=false`、`dirty`、`draft` 及缺失的 `mergeable` 同样提前延后。
+`mergeable=true + blocked` 不会被一律跳过：主干写入限制可能使这个状态持续存在，
+因此仍由 App 尝试同步合并，让 GitHub 强制执行审批和必需检查。
+精确的 HTTP 403 `Resource not accessible by integration` 只有在同一 App
+重新读取并证明 PR 仍打开、head 未变、目标仍为本仓库 `main`，且状态为 `behind`、
+`true + blocked` 或原有显式不可合并状态时才可重试；其他 403 仍为失败。
+The live preflight requires the
 exact repository-owned approval ruleset and exact nine-check strict quality
 ruleset, with every context bound to the GitHub Actions App
 (`integration_id=15368`) and the Reviewer Router App unable to bypass either;
