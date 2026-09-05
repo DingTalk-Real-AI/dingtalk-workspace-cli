@@ -50,3 +50,20 @@ To enforce the file-stage budgets on a saved log, run:
 ```sh
 python3 scripts/dev/check-schema-cache-benchmark.py /path/to/file-hit.txt
 ```
+
+The multiprocess candidate report exercises four independent CLI processes on
+one cache directory for cold startup, damaged Meta and damaged Registry. Every
+output is compared with authoritative assembly and both final artifact digests
+are checked. It uses the earlier `v0.0.0-perf` candidate and does not prove newer
+source changes. Its 60 process samples use a fresh, small sampler for each child. A CLI test
+binary compilation overlapped part of this run: the timings are not idle-machine
+performance acceptance. The report records this limitation.
+
+Linux wait4 peak RSS includes pre-exec memory. The first native run forked from
+the coordinator after retaining full JSON exports, producing identical 400 MB
+RSS floors in both modes. Those RSS samples are not valid candidate acceptance.
+`schema-cache-process-measure.py` now forks the measured child from a new small
+interpreter; the coordinator ignores the sampler's own inherited usage. Timing
+starts inside that sampler immediately before spawning the candidate. A test
+retains 128 MiB in the coordinator and verifies this does not inflate child RSS.
+The 100 MiB candidate gate is unchanged and needs a fresh Linux native result.

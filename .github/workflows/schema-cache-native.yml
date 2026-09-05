@@ -34,7 +34,7 @@ jobs:
           - runner: macos-latest
             target: darwin-arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       GOTOOLCHAIN: go1.25.9
       GOWORK: 'off'
@@ -67,13 +67,17 @@ jobs:
           set -euo pipefail
           go test -race -count=1 ./internal/schemacache ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
-          go test -race -count=1 ./internal/cli \
-            -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache)|TestPersistentSchemaCacheRealDeliveryParityAndLazyIO)$' \
+          go test -race -count=1 -timeout=15m ./internal/cli \
+            -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache|AssemblyAudit|AssemblyAuditFailureIsolation)|TestPersistentSchemaCacheRealConcurrentRepair)$' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-race.txt"
+          go test -count=1 -timeout=10m ./internal/cli \
+            -run '^TestPersistentSchemaCacheRealDeliveryParityAndLazyIO$' \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-parity.txt"
       - name: Build native candidate with finalized runtime payload
         run: python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
       - name: Verify exact candidate and interleaved process performance
         run: |
+          python3 scripts/dev/test_verify_schema_cache_binary.py
           python3 scripts/dev/verify-schema-cache-binary.py \
             --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
             --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \

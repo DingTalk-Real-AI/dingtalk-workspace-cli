@@ -208,6 +208,7 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 }
 
 func deliverySchemaAllPayload() (map[string]any, error) {
+	auditSchemaDeliveryAccess("complete Registry loader")
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		return schemaAllPayloadFromLoaded(*loaded)
 	}
@@ -242,6 +243,7 @@ func deliverySchemaAllPayload() (map[string]any, error) {
 }
 
 func deliverySchemaOverviewPayload() (map[string]any, error) {
+	auditSchemaDeliveryAccess("overview loader")
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		return schemaOverviewPayloadFromLoaded(*loaded)
 	}
@@ -309,6 +311,7 @@ func schemaOverviewPayloadFromLoaded(loaded loadedSchemaCatalog) (map[string]any
 // an explicit loaded catalog — never this helper — to avoid an init cycle
 // through assembleSchemaCatalogFromRoot → BuildSchemaCatalogSnapshot.
 func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
+	auditSchemaDeliveryAccess("query loader")
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		return schemaPayloadFromLoadedCatalog(*loaded, args)
 	}

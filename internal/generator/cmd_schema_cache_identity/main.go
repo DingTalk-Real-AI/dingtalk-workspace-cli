@@ -113,7 +113,16 @@ func main() {
 	}
 }
 
-func generateIdentityProof(rootPath, editionName string) (identityProof, error) {
+func generateIdentityProof(rootPath, editionName string) (proof identityProof, err error) {
+	err = cli.AuditSchemaAssembly(func() error {
+		var buildErr error
+		proof, buildErr = generateIdentityProofFromDeclarations(rootPath, editionName)
+		return buildErr
+	})
+	return proof, err
+}
+
+func generateIdentityProofFromDeclarations(rootPath, editionName string) (identityProof, error) {
 	editionName = strings.TrimSpace(editionName)
 	if _, err := schemacache.EditionSHA256(editionName); err != nil {
 		return identityProof{}, err

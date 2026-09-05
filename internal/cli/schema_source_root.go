@@ -155,6 +155,7 @@ func assembleSchemaCatalogFromRoot(root *cobra.Command) (loadedSchemaCatalog, er
 // assembles via ResolveSchemaBuild and caches the ResolveMeta map. Without a
 // factory it fails closed.
 func deliverySchemaCatalog() loadedSchemaCatalog {
+	auditSchemaDeliveryAccess("Catalog loader")
 	runtimeDeliverySchemaCatalogOnce.Do(func() {
 		runtimeDeliverySchemaCatalogLazyCount.Add(1)
 		factory := loadSchemaSourceRootFn()

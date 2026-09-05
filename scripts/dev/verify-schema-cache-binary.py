@@ -30,26 +30,56 @@ def digest(path):
 
 
 def invoke(binary, args, env, cwd):
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        started = time.perf_counter()
-        child = subprocess.Popen([str(binary), *args], env=env, cwd=cwd,
-                                 stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr)
-        _, status, usage = os.wait4(child.pid, 0)
-        elapsed = (time.perf_counter() - started) * 1000
-        child.returncode = os.waitstatus_to_exitcode(status)
-        stdout.seek(0)
-        stderr.seek(0)
-        output, error = stdout.read(), stderr.read()
-        if child.returncode:
-            raise RuntimeError(f"{args}: exit {child.returncode}: {error.decode(errors='replace')}")
+    # Keep retained full-export JSON in this coordinator out of child RSS.
+    # Report only the sampler's child, never the sampler process's own usage.
+    with tempfile.TemporaryDirectory(prefix="measurement-", dir=cwd) as directory:
+        stdout, stderr = Path(directory) / "stdout", Path(directory) / "stderr"
+        request = {"argv": [str(binary), *args], "env": env, "cwd": str(cwd),
+                   "stdout": str(stdout), "stderr": str(stderr)}
+        sampler = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("schema-cache-process-measure.py"))],
+            input=json.dumps(request), text=True, capture_output=True, check=True)
+        result = json.loads(sampler.stdout)
+        output, error = stdout.read_bytes(), stderr.read_bytes()
+        if result["returncode"]:
+            raise RuntimeError(f"{args}: exit {result['returncode']}: {error.decode(errors='replace')}")
         if error:
             raise RuntimeError(f"{args}: unexpected stderr: {error.decode(errors='replace')}")
-        return output, {
-            "wall_ms": elapsed,
-            "user_ms": usage.ru_utime * 1000,
-            "system_ms": usage.ru_stime * 1000,
-            "max_rss_bytes": usage.ru_maxrss * (1 if sys.platform == "darwin" else 1024),
-        }
+        return output, result["measurement"]
+
+
+def invoke_concurrently(binary, routes, expected, env, cwd, timeout=180):
+    """Start all independent CLI processes before waiting; bound and reap the batch.
+
+    This is a correctness probe, not a process benchmark. Temporary files avoid
+    pipe backpressure from a full Schema export while other children repair.
+    """
+    started = time.monotonic()
+    children = []
+    with tempfile.TemporaryDirectory(prefix="concurrent-", dir=cwd) as output_dir:
+        try:
+            for index, route in enumerate(routes):
+                output = Path(output_dir) / f"{index}.stdout"
+                error = Path(output_dir) / f"{index}.stderr"
+                with output.open("wb") as stdout, error.open("wb") as stderr:
+                    child = subprocess.Popen([str(binary), *route], env=env, cwd=cwd,
+                                             stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr)
+                children.append((child, route, output, error))
+            for index, (child, route, output, error) in enumerate(children):
+                child.wait(timeout=max(.001, timeout - (time.monotonic() - started)))
+                stderr = error.read_text(errors="replace")
+                if child.returncode or stderr:
+                    raise RuntimeError(f"concurrent {route}: exit {child.returncode}: {stderr}")
+                if json.loads(output.read_bytes()) != expected[index]:
+                    raise RuntimeError(f"concurrent output differs from authoritative assembly: {route}")
+        finally:
+            for child, *_ in children:
+                if child.poll() is None:
+                    child.kill()
+            for child, *_ in children:
+                child.wait()
+    return {"processes": len(routes), "routes": routes,
+            "elapsed_ms": (time.monotonic() - started) * 1000, "wire_parity": True}
 
 
 def summarize(samples):
@@ -93,6 +123,7 @@ def main():
         "binary": str(binary), "binary_sha256": binary_sha, "core_sha256": core_sha,
         "build_id": proof["build_id"], "proof_sha256": digest(args.proof),
         "platform": platform.platform(), "samples_per_mode": args.samples, "seed": args.seed,
+        "measurement": "wait4 in a fresh sampler; sampler startup excluded from candidate wall time",
         "telemetry": "DO_NOT_TRACK=1 in both modes", "network_sandboxed": False,
         "scope": "native candidate cache versus its authoritative assembly; not competitive acceptance",
     }
@@ -151,6 +182,29 @@ def main():
         if json.loads(repaired) != canonical_leaf:
             raise RuntimeError("repair changed leaf output")
         verify_artifacts()
+        # Independent processes share the same HOME/cache. Exercise directory
+        # bootstrap as well as both publication phases, without assuming a
+        # single assembler across processes (the lock has a bounded wait).
+        routes = [leaf, ["schema", "-f", "json"], ["schema", "calendar", "-f", "json"],
+                  ["schema", "--all", "-f", "json"]]
+        expected = [json.loads(invoke(binary, route, disabled, home)[0]) for route in routes]
+        for path in cache.iterdir():
+            if path.name not in {"meta.cache", "registry.shards.cache", "rebuild.lock"}:
+                raise RuntimeError(f"unexpected cache artifact before cold-start probe: {path.name}")
+            path.unlink()
+        for directory in (cache, *list(cache.parents)[:3]):
+            directory.rmdir()
+        report["concurrent_cold"] = invoke_concurrently(binary, routes, expected, environment, home)
+        verify_artifacts()
+        for artifact, field in (("meta.cache", "concurrent_meta_repair"),
+                                ("registry.shards.cache", "concurrent_registry_repair")):
+            with (cache / artifact).open("r+b") as target:
+                target.seek(208)
+                first = target.read(1)
+                target.seek(208)
+                target.write(bytes([first[0] ^ 1]))
+            report[field] = invoke_concurrently(binary, routes, expected, environment, home)
+            verify_artifacts()
         samples = {"cache": [], "live": []}
         order = ["cache", "live"] * args.samples
         random.Random(args.seed).shuffle(order)

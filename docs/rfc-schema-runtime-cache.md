@@ -17,9 +17,9 @@
 | 范围 | 当前证据 | 仍需完成 |
 |---|---|---|
 | typed model / raw protobuf / product shards | 真实 1,357 tools 的 round trip 与 delivery parity 测试已存在；CLI 包基线测试通过 | 修改后的完整政策门禁与 race 检查 |
-| 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归通过 | 两类 loader 混合、多进程首次使用、重入和错误共享矩阵 |
+| 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归及 Meta/overview/leaf/全量 Registry 混合损坏修复 race 通过（379 s、单次装配） | 新 head 两平台并发验收与错误共享矩阵；旧候选已通过四进程冷启动/Meta 与 Registry 修复；审计状态 race 通过，完整入口单测仍受本机 helper SIGKILL 阻塞 |
 | authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay | final binary 的 hostile environment/native proof |
-| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback | 原生 CI 结果待验证；hermetic final proof 与 release 注入仍未完成 |
+| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback；独立 generator 的 delivery 访问审计已通过真实声明，identity 与审计前 byte-equal | 首次 native CI 未全绿（macOS 全量投影 race 超时，Linux RSS 测量疑似受到验证器 fork 内存污染，均已调整验证方式，待新 head 复核）；hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | core delegation 已实现；默认保留原 identity/clitrack，exact version 仅在显式 DO_NOT_TRACK 时走 fast path | 默认上报路径的启动优化、Schema fast path、逐次 core hashing 的完整性能成本 |
 | 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | Meta 优化后完整 file-hit 4.52 ms / 6.36 MB，selected 5.30 ms / 4.33 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
@@ -68,6 +68,31 @@ delivery race、真实候选 parity/repair/process benchmark，以及带预算�
 此前使用不存在的 `main.*` 符号可能被 Go linker 静默忽略。候选 verifier 现在实际执行 core 与
 launcher 的 `--version`，分别对照 manifest 的 version/commit，不能只检查 ldflags 文本或外壳版本。
 修正后的本机 candidate 在 core 执行阶段仍被系统 SIGKILL，不能算作运行验证通过；原生 CI 将独立核验。
+
+
+### 并发与采样复核
+
+[四进程与独立采样器报告](benchmarks/schema-cache/2026-09-06-darwin-arm64-multiprocess-candidate.json)
+绑定此前可运行的 `v0.0.0-perf` macOS 候选包。四个独立 CLI 同时读取相同 HOME/cache，分别
+查询 leaf、overview、product 和 `--all`；空目录创建、Meta 损坏修复、Registry 损坏修复均与
+authoritative JSON 一致，最终两个文件的完整 length/digest 均正确。跨进程锁是有界等待，
+测试不要求所有进程只装配一次；进程内混合 loader 的 race 则明确要求 factory 只调用一次。
+该旧候选不包含本轮 assembly audit；采样窗口还与 CLI 测试二进制编译部分重叠，计时不能
+当作空闲机器性能验收，也不能当作最新源码或最终签名 release 的验收证据。
+
+首次 [native feedback run](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33986063995)
+中，Linux 组件与 delivery race、真实 binary parity/repair 和 CPU 门槛通过，但 60 次 cached/live
+RSS 全部是同一个 400,936,960 B 值，RSS 门槛失败。Linux 的资源统计会保留 exec 前的峰值
+（[getrusage](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)）；直接从持有完整
+JSON 的 Python verifier fork 候选进程会污染该统计。因此每次测量改由全新小型 sampler
+启动候选，并只记录 sampler 的 child wait4，排除 sampler 自身的 inherited peak 和启动时间。
+回归测试在 coordinator 保留 128 MiB resident heap 后检查 child RSS 不随之上升；Linux 原生
+结果仍须重跑，不能通过丢弃超限样本或调整 100 MiB 门槛宣称通过。
+
+macOS runner 在 11 分钟时被 Go 默认超时终止，栈位于 ValidateRoundTrip 的串行 JSON 投影，
+没有显示锁等待。CI 现在分别运行 exhaustive parity 和真实混合 loader/repair/lock race，后者
+仍覆盖实际数据的 Meta、选中产品与完整 Registry 以及错误回退；串行 exhaustive 投影保留全部
+locator 断言，单独运行。新 head 的两项检查仍须分别通过，不能以旧 head 的部分结果代替。
 
 ## 1. 决策摘要
 
@@ -1044,10 +1069,18 @@ target。proof runner 必须使用 isolated empty HOME/config/credential stores�
 配置）下得到相同 identity；任何访问 network、credential、非 fixture user file，或任何输出
 差异都禁用该 target 的 cache。`NewSchemaSourceRootCommand` 的构造合同禁止依赖 network、
 credential、clock、user file 或未进入 identity 的 environment，也禁止调用 `ResolveMeta`、
-`deliverySchemaCatalog`、Meta/Registry loader 或任何间接 Schema delivery consumer。实现必须用
-loader access seam 在 factory/`ResolveSchemaBuild` 全调用栈中 fail-fast 并由测试证明零重入；不能
-让违反合同的 hook 等待正在运行的 loader/repair Once 而死锁。只扫描 build constraints 或比较
-两次碰巧稳定的输出不能替代 hermetic native exact proof。
+`deliverySchemaCatalog`、Meta/Registry loader 或任何间接 Schema delivery consumer。独立 identity generator 必须用
+`AuditSchemaAssembly` 包住 factory、`ResolveSchemaBuild` 和 projection/round-trip 全调用链。
+五个 delivery 入口在进入任何 loader Once 或命中已有内存状态之前检查审计状态；访问立即
+终止该次 proof，回调自行 recover 也不能清除已记录的 violation。审计本身的测试还须证明
+错误/无关 panic 后状态恢复以及正常消费可继续。
+
+审计只在独立构建进程安装，禁止把全局“正在装配”标志用于正常 runtime：那会把另一 goroutine
+的合法读取误判为重入。正常 runtime factory 仍须遵守同一不消费 delivery 的构造合同，由
+对应完整 build recipe 的原生 proof 证明；它不安装进程级审计，不改变 loader/repair 并发行为。
+未受 proof 覆盖的动态 factory/overlay 不得启用 persistent identity。该审计不等同于 network、
+clock 或 user-file sandbox；只扫描 build constraints 或比较两次碰巧稳定的输出同样不能替代
+hermetic native exact proof。
 
 前置 proof 不能替代最终 artifact proof。GoReleaser 生成 candidate binary 后，release job 必须
 记录其 binary SHA-256，并把未改写的确切 binary 交给对应 native runner；runner 在相同 hermetic

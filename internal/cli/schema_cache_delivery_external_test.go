@@ -26,6 +26,18 @@ import (
 const persistentCacheRealToolCount = 1357
 
 func TestPersistentSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
+	testPersistentSchemaCacheRealDelivery(t, true)
+}
+
+// This runs the same real-data loader/repair/lock assertions under -race without
+// repeating exhaustive, serial build-time projection checks for every locator.
+// Native CI runs the exhaustive test separately, without race instrumentation.
+func TestPersistentSchemaCacheRealConcurrentRepair(t *testing.T) {
+	testPersistentSchemaCacheRealDelivery(t, false)
+}
+
+func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
+	t.Helper()
 	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
@@ -38,8 +50,10 @@ func TestPersistentSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := artifacts.ValidateRoundTrip(); err != nil {
-		t.Fatal(err)
+	if exhaustive {
+		if err := artifacts.ValidateRoundTrip(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	identity := testSchemaCacheIdentity(t, artifacts)
 	cache, err := schemacache.Open(identity.Edition)
@@ -133,17 +147,20 @@ func TestPersistentSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
 		t.Fatalf("cache-hit delivery invoked Cobra factory %d times", factoryCalls.Load())
 	}
 
-	for _, path := range artifacts.LocatorPaths() {
-		want, renderErr := artifacts.RenderQuery(path)
-		got, deliveryErr := cli.DeliverySchemaQueryPayloadForTest(path)
-		if renderErr != nil || deliveryErr != nil || !reflect.DeepEqual(got, want) {
-			t.Fatalf("locator parity for %q: render=%v delivery=%v equal=%v", path, renderErr, deliveryErr, reflect.DeepEqual(got, want))
+	if exhaustive {
+		for _, path := range artifacts.LocatorPaths() {
+			want, renderErr := artifacts.RenderQuery(path)
+			got, deliveryErr := cli.DeliverySchemaQueryPayloadForTest(path)
+			if renderErr != nil || deliveryErr != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("locator parity for %q: render=%v delivery=%v equal=%v", path, renderErr, deliveryErr, reflect.DeepEqual(got, want))
+			}
 		}
 	}
 
 	// Corrupt Registry after a clean hit, then race callers through the one
 	// repair coordinator. Exactly one authoritative assembly republishes the
-	// exact generation; every caller receives the complete live leaf.
+	// exact generation. Mix both loader families with a complete Registry read
+	// so an in-flight product load cannot be consumed by --all memoization.
 	if err := os.WriteFile(filepath.Join(cacheDirectory, "registry.shards.cache"), []byte("corrupt"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -160,20 +177,42 @@ func TestPersistentSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
 	}
 	var wait sync.WaitGroup
 	errorsByCaller := make(chan error, 12)
-	for range 12 {
+	start := make(chan struct{})
+	for i := range 12 {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			payload, queryErr := cli.DeliverySchemaQueryPayloadForTest("calendar event create")
+			<-start
+			var payload, want map[string]any
+			var queryErr error
+			var path string
+			switch i % 4 {
+			case 0:
+				path, want = "calendar event create", wantLeaf
+				payload, queryErr = cli.DeliverySchemaQueryPayloadForTest(path)
+			case 1:
+				path, want = "overview", wantOverview
+				payload, queryErr = cli.DeliverySchemaOverviewPayloadForTest()
+			case 2:
+				path, want = "--all", wantAll
+				payload, queryErr = cli.DeliverySchemaAllPayloadForTest()
+			case 3:
+				gotMeta, found := cli.ResolveMeta("calendar event create")
+				if !found || !reflect.DeepEqual(gotMeta, meta) {
+					errorsByCaller <- &parityError{path: "ResolveMeta(calendar event create)"}
+				}
+				return
+			}
 			if queryErr != nil {
 				errorsByCaller <- queryErr
 				return
 			}
-			if !reflect.DeepEqual(payload, wantLeaf) {
-				errorsByCaller <- &parityError{path: "calendar event create"}
+			if !reflect.DeepEqual(payload, want) {
+				errorsByCaller <- &parityError{path: path}
 			}
 		}()
 	}
+	close(start)
 	wait.Wait()
 	close(errorsByCaller)
 	for callerErr := range errorsByCaller {

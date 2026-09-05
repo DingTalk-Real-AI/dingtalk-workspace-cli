@@ -149,6 +149,7 @@ func registerCommandMetaAliases(lookup map[string]CommandMeta, metas []CommandMe
 // A persistent hit authenticates and decodes Meta only, then performs an O(1)
 // map lookup. Misses and corruption use the shared authoritative repair path.
 func ResolveMeta(cliPath string) (CommandMeta, bool) {
+	auditSchemaDeliveryAccess("ResolveMeta")
 	cliPath = strings.TrimSpace(cliPath)
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		m, ok := metaByCLIPath[cliPath]
