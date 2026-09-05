@@ -83,3 +83,5 @@ New native candidates inject the same identity into launcher and core. Pass
 `--require-schema-fast-path` to the process verifier to require exact output from
 a byte-identical launcher copy in a directory with no core. This prevents a
 silently delegated cache hit from masquerading as proof of the thin path.
+
+Imported benchmark text trims trailing whitespace on the CPU model header; numerical samples are unchanged.
