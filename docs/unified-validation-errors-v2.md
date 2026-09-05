@@ -2,7 +2,7 @@
 
 状态：**Draft（草案）**。更新日期：2026-09-06。
 
-实现与功能验证已完成；性能已测量，根构建基准的退化信号仍需保留。本文仍处于评审阶段，不代表方案或性能验收已批准。
+复审发现的 `TraverseChildren` 父级解析缺口采用已确认的最小 Cobra 依赖补丁修复；wiki 手动解析已接回统一框架。本文保持 Draft，最终验证状态和逐项证据见[复审记录](unified-validation-errors-v2-review.md)。
 
 基于 `fix/unified-validation-errors` 分支的两次提交及当前工作区补充改动。
 本文补充 [命令框架 RFC](rfc-command-framework-convergence.md) 的 §5.0，沿用
@@ -24,7 +24,8 @@ Cobra 的解析、位置参数及原生 required/group 通过框架适配层接�
 `corecmd` 或增加一个 `ExecuteC` 转发函数，就认定完成了统一框架收敛。
 
 用户继续使用原来的命令、参数和 `--format json`。本方案不改变 legacy/unified
-输出 rollout，不扩展 Schema 字段，不改变确认顺序，不引入 Cobra fork。
+输出 rollout，不扩展 Schema 字段，不改变确认顺序。用户于 2026-09-06 确认采用最小 Cobra
+依赖补丁，替代初稿“不修改 Cobra”的约束；补丁范围与维护方式见 §5.4。
 
 ### 本轮解决的问题
 
@@ -175,9 +176,8 @@ Tier2 的 deferred confirmation 和 caller 管理暂留既有兼容接缝，不�
 `corecmd.PrepareCommandTree(root *cobra.Command) error` 是框架的装配步骤：
 
 1. 接收已经完成挂载的 Cobra 根命令；独立叶命令也是一棵合法树。
-2. 第一遍检查整树是否包含已准备节点，并读取原始 `Args`、`PreRunE` / `PreRun` 和有效
-   flag handler。发现非法状态先返回构造错误，不修改部分节点。
-3. 第二遍安装适配器；不在安装过程中继续读取已经包装过的父级 handler。
+2. 第一遍检查整树是否包含已准备节点，并快照有继承语义的有效 flag handler。发现非法状态先返回构造错误，不修改部分节点。
+3. 第二遍读取并包装各节点自己的 `Args`、`PreRunE` / `PreRun`；这些钩子不继承父节点，因此无需保存在整树快照中。闭包只捕获自身需要的函数；不在安装过程中继续读取已经包装过的父级 flag handler。
 4. 成功返回 nil；不返回执行句柄，不使用进程级强引用 map 留住整棵命令树。
 5. 对已准备树再次调用准备入口应明确报构造错误，禁止静默再包装。重复装配与重复执行
    是两件事，后者的状态约定见 §5.3。
@@ -248,6 +248,21 @@ app 的参数保护装饰器仍由 app 安装，corecmd 不读取参数别名目
 
 调用状态清理装饰器包在最终 flag adapter 外层，保证原始权威错误的提前返回也执行清理。
 其职责是清理状态并透传结果，不再寻找父级处理器。
+
+手动调用 `ParseFlags` 的兼容代理必须把解析失败交给目标命令已安装的 `FlagErrorFunc`。
+`ParseFlags` 本身不会调用该处理器；仅给错误增加一层 `fmt.Errorf` 会漏过统一边界。
+该修复不把代理的直接 `RunE` 委派升级成完整的目标命令生命周期保证。
+
+**已确认的依赖补丁：** Cobra v1.10.2 的 `TraverseChildren` 父级解析不调用 `FlagErrorFunc`，
+且公共命令钩子无法在该失败点插入适配。保留完整遍历语义和原生执行入口，采用
+`replace github.com/spf13/cobra => ./third_party/cobra`，仅在父级 `ParseFlags` 失败时
+调用当前解析节点的有效 handler；handler 返回 nil 时保留原解析错误并停止执行。
+成功遍历、父级局部 flag、命令选择及业务钩子顺序均保持原语义。
+
+依赖内不导入 DWS 包、不承担错误分类；分类仍由 corecmd 安装的 handler 拥有。
+保留上游 v1.10.2 源码、测试、许可证、原始文件校验和与可逆补丁，详见
+[依赖补丁记录](../third_party/cobra/PATCHES.md)。专项门禁先验证补丁范围并运行 Cobra
+全量测试，再验证真实 DWS 执行。升级依赖时需重验；上游满足相同语义后移除本地替换。
 
 ### 5.5 生命周期顺序
 
@@ -386,4 +401,7 @@ A 可独立保留。B 的共享校验边界若回退，必须同时恢复 Tier1 
 截至本次讨论，当前旧实现的专项门禁、构建、三个二进制参数错误场景以及生成漂移检查已通过；
 一次全量测试的 app 包触及默认 10 分钟超时。这些结果是背景证据，不是本提案的实现验收。
 核心实现现已包含共享校验包装、一次装配、独立测试入口迁移及扩展门禁。
-本次完整结果见[验证与性能记录](unified-validation-errors-v2-verification.md)：最终全量测试、专项门禁、生成漂移、Schema 与构建已通过；根构建基准耗时中位数增加约 20.5%，不能签署无性能退化结论。旧实现的通过结果不作为新实现已通过的证据。
+首次实现数据保留在[验证与性能记录](unified-validation-errors-v2-verification.md)，包括
+跨时段根构建耗时增加约 20.5% 的信号。随后复审采用固定编译产物交替测量，并精简闭包
+分配；当前结论以[复审记录](unified-validation-errors-v2-review.md)的逐项验证为准。
+旧实现的通过结果不作为最终修订已经通过的证据。

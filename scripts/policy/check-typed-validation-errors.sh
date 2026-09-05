@@ -6,7 +6,9 @@ cd "$ROOT"
 
 GO_BIN="${GO:-go}"
 
-pattern='^TestCrossPlatformCoverage(NormalizeValidation|PreserveClassification|WithValidation|PrepareCommandTree|ValidationPipelineTierParity|ValidationAdapters|FrameworkValidationHooksAreTyped|DeclareLeafMetadataValidateWithoutConfirmRunsInner|OAListByAdminValidationErrorsAreTyped|NewPreParseValidationErrorPreservesAuthoritativeErrors|TypedValidationErrorGate(FinalCommandTree|RepresentativeCommands|Extensions))$'
+"$ROOT/scripts/policy/check-cobra-patch.sh"
+
+pattern='^TestCrossPlatformCoverage(NormalizeValidation|PreserveClassification|WithValidation|PrepareCommandTree|ValidationTraversal|ValidationPipelineTierParity|ValidationAdapters|FrameworkValidationHooksAreTyped|DeclareLeafMetadataValidateWithoutConfirmRunsInner|OAListByAdminValidationErrorsAreTyped|ProxyParseValidationBoundary|NewPreParseValidationErrorPreservesAuthoritativeErrors|TypedValidationErrorGate(FinalCommandTree|RepresentativeCommands|Extensions))$'
 if ! output=$("$GO_BIN" test -json -count=1 \
 	./internal/errors ./internal/corecmd ./internal/helpers ./internal/app \
 	-run "$pattern" 2>&1); then
@@ -33,14 +35,21 @@ require_test internal/errors TestCrossPlatformCoverageNormalizeValidation
 require_test internal/errors TestCrossPlatformCoveragePreserveClassification
 require_test internal/corecmd TestCrossPlatformCoverageWithValidation
 require_test internal/corecmd TestCrossPlatformCoveragePrepareCommandTree
+require_test internal/corecmd TestCrossPlatformCoverageValidationTraversal
 require_test internal/helpers TestCrossPlatformCoverageValidationPipelineTierParity
 require_test internal/app TestCrossPlatformCoverageTypedValidationErrorGateExtensions
 require_test internal/corecmd TestCrossPlatformCoverageValidationAdapters
 require_test internal/corecmd TestCrossPlatformCoverageFrameworkValidationHooksAreTyped
 require_test internal/helpers TestCrossPlatformCoverageDeclareLeafMetadataValidateWithoutConfirmRunsInner
 require_test internal/helpers TestCrossPlatformCoverageOAListByAdminValidationErrorsAreTyped
+require_test internal/helpers TestCrossPlatformCoverageProxyParseValidationBoundary
 require_test internal/app TestCrossPlatformCoverageNewPreParseValidationErrorPreservesAuthoritativeErrors
 require_test internal/app TestCrossPlatformCoverageTypedValidationErrorGateFinalCommandTree
 require_test internal/app TestCrossPlatformCoverageTypedValidationErrorGateRepresentativeCommands
 
+printf '%s\n' "$output" | sed -n 's/.*distribution validation coverage: \([0-9][0-9]* nodes\).*/distribution validation coverage: \1/p'
+printf '%s\n' "$output" | awk '
+    /"Action":"pass"/ && /"Test":"TestCrossPlatformCoverageTypedValidationErrorGateExtensions\// { count++ }
+    END { printf "runtime extension validation coverage: %d executed cases\n", count }
+'
 printf '%s\n' 'typed validation error gate ok (framework lifecycle boundaries)'

@@ -61,10 +61,7 @@ func PrepareCommandTree(root *cobra.Command) error {
 	}
 	type commandHooks struct {
 		cmd       *cobra.Command
-		args      cobra.PositionalArgs
 		flagError func(*cobra.Command, error) error
-		preRunE   func(*cobra.Command, []string) error
-		preRun    func(*cobra.Command, []string)
 	}
 	var hooks []commandHooks
 	var collect func(*cobra.Command) error
@@ -72,7 +69,7 @@ func PrepareCommandTree(root *cobra.Command) error {
 		if cmd.Annotations[preparedCommandAnnotation] != "" {
 			return fmt.Errorf("corecmd.PrepareCommandTree: %q is already prepared", cmd.CommandPath())
 		}
-		hooks = append(hooks, commandHooks{cmd, cmd.Args, cmd.FlagErrorFunc(), cmd.PreRunE, cmd.PreRun})
+		hooks = append(hooks, commandHooks{cmd, cmd.FlagErrorFunc()})
 		for _, child := range cmd.Commands() {
 			if err := collect(child); err != nil {
 				return err
@@ -85,32 +82,37 @@ func PrepareCommandTree(root *cobra.Command) error {
 	}
 	for _, hook := range hooks {
 		cmd := hook.cmd
-		if hook.args != nil {
+		// Only flag handlers inherit from parents. Read node-local hooks here
+		// and capture their function values, rather than retaining a full
+		// snapshot (including unrelated hooks) in every adapter closure.
+		if positional := cmd.Args; positional != nil {
 			cmd.Args = func(current *cobra.Command, args []string) error {
-				return apperrors.NormalizeValidation(hook.args(current, args), apperrors.WithReason("invalid_positionals"))
+				return apperrors.NormalizeValidation(positional(current, args), apperrors.WithReason("invalid_positionals"))
 			}
 		}
+		flagError := hook.flagError
 		cmd.SetFlagErrorFunc(func(current *cobra.Command, parserErr error) error {
 			if apperrors.PreserveClassification(parserErr) {
 				return parserErr
 			}
-			err := hook.flagError(current, parserErr)
+			err := flagError(current, parserErr)
 			if err == nil {
 				err = parserErr
 			}
 			return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag"))
 		})
+		preRunE, preRun := cmd.PreRunE, cmd.PreRun
 		cmd.PreRun = nil
-		if hook.preRunE == nil && hook.preRun == nil {
+		if preRunE == nil && preRun == nil {
 			cmd.PreRunE = validateCobraFlagConstraints
 		} else {
 			cmd.PreRunE = func(current *cobra.Command, args []string) error {
-				if hook.preRunE != nil {
-					if err := hook.preRunE(current, args); err != nil {
+				if preRunE != nil {
+					if err := preRunE(current, args); err != nil {
 						return err
 					}
 				} else {
-					hook.preRun(current, args)
+					preRun(current, args)
 				}
 				return validateCobraFlagConstraints(current, args)
 			}

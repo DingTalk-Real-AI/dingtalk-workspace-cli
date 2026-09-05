@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	stderrors "errors"
 	"io"
 	"os"
@@ -12,6 +13,59 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
+
+func TestCrossPlatformCoverageProxyParseValidationBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		handlerError error
+	}{
+		{name: "raw parser fallback"},
+		{name: "API error", handlerError: apperrors.NewAPI("upstream")},
+		{name: "canceled", handlerError: context.Canceled},
+		{name: "deadline", handlerError: context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			businessCalls, handlerCalls := 0, 0
+			proxy := proxySubCmd("proxy", "doc", "read", nil)
+			doc := &cobra.Command{Use: "doc"}
+			read := &cobra.Command{Use: "read", RunE: func(*cobra.Command, []string) error {
+				businessCalls++
+				return nil
+			}}
+			read.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+				handlerCalls++
+				if cmd != read {
+					t.Fatal("wrong parser command")
+				}
+				return tc.handlerError
+			})
+			doc.AddCommand(read)
+			root := newProxyTestRoot(proxy, doc)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SilenceErrors = true
+			root.SilenceUsage = true
+			if err := corecmd.PrepareCommandTree(root); err != nil {
+				t.Fatal(err)
+			}
+			root.SetArgs([]string{"proxy", "--unknown"})
+			_, err := root.ExecuteC()
+			if tc.handlerError != nil {
+				if err != tc.handlerError {
+					t.Fatalf("handler error identity changed: %v", err)
+				}
+			} else {
+				var typed *apperrors.Error
+				if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.ExitCode() != 3 {
+					t.Fatalf("expected validation/3, got %T %v", err, err)
+				}
+			}
+			if businessCalls != 0 || handlerCalls != 1 {
+				t.Fatalf("business=%d handler=%d", businessCalls, handlerCalls)
+			}
+		})
+	}
+}
 
 func newProxyTestRoot(proxy *cobra.Command, target *cobra.Command) *cobra.Command {
 	root := &cobra.Command{Use: "dws"}

@@ -74,6 +74,7 @@ func TestCrossPlatformCoverageTypedValidationErrorGateRepresentativeCommands(t *
 		{"oa", "approval", "list-by-admin"},
 		{"oa", "approval", "list-by-admin", "--request", "{"},
 		{"audit", "tail", "--lines", "0"},
+		{"wiki", "list", "--unknown-validation-gate-flag"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			root := NewSchemaSourceRootCommand()
