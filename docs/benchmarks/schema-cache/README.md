@@ -40,3 +40,13 @@ After replacing reflective Meta equality with exact field comparisons, the
 optimized file-hit run (after the full test process ended) measured 4.52 ms /
 6.36 MB per Meta load and 5.30 ms / 4.33 MB per selected product load, using
 the median of seven benchmark averages. Both local file-stage budgets passed.
+
+The native feedback workflow runs these checks on the exact PR head for both
+enabled targets. It records the source tree and build recipe, verifies core
+and launcher runtime versions against the manifest, and compares the two
+identity JSON files. This feedback does not authorize release cache injection.
+To enforce the file-stage budgets on a saved log, run:
+
+```sh
+python3 scripts/dev/check-schema-cache-benchmark.py /path/to/file-hit.txt
+```

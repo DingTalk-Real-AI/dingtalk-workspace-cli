@@ -19,7 +19,7 @@
 | typed model / raw protobuf / product shards | 真实 1,357 tools 的 round trip 与 delivery parity 测试已存在；CLI 包基线测试通过 | 修改后的完整政策门禁与 race 检查 |
 | 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归通过 | 两类 loader 混合、多进程首次使用、重入和错误共享矩阵 |
 | authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay | final binary 的 hostile environment/native proof |
-| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过 | 两平台相等 proof + release 注入 |
+| identity generator | 输出前检查 typed round trip、Meta/locator/各查询投影和重复编码确定性；shell 固定 Go 1.25.9；proto drift 检查通过；新增两平台 native candidate feedback | 原生 CI 结果待验证；hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | core delegation 已实现；默认保留原 identity/clitrack，exact version 仅在显式 DO_NOT_TRACK 时走 fast path | 默认上报路径的启动优化、Schema fast path、逐次 core hashing 的完整性能成本 |
 | 性能 | Go 1.25.9 注入 runtime payload、ad-hoc 签名候选包的 60 次交错进程测量：leaf CPU 减少 95.6%，RSS p50 55.4 MiB；raw 样本见下 | Meta 优化后完整 file-hit 4.52 ms / 6.36 MB，selected 5.30 ms / 4.33 MB；仍需默认上报、public/native 竞争对照和 Linux native 验证 |
@@ -55,6 +55,19 @@ benchmark 的 selected stage 从已认证 Meta 开始，包含自己的 secure d
 此处是 OS page-cache warm 的 Go benchmark，每轮 ns/op 的中位数，不冒充单次读取的 p50/p95。
 
 profile 后已把 Meta/alias 验证的反射比较改为直接比较；逐字段反射驱动的测试确保未来新增字段不能被遗漏，且保留 nil/empty 和顺序语义。真实 round-trip、定向 race 均通过，Meta 分配降至约 6.36 MB/op。第一次优化后计时与全量测试重叠，已丢弃。全量任务终止后的[独立 7 轮复测](benchmarks/schema-cache/2026-09-06-darwin-arm64-file-hit-optimized.txt)为 Meta **4.52 ms / 6.36 MB/op**、selected **5.30 ms / 4.33 MB/op**，满足本机两项 file-hit 预算；Linux 与最终发布制品仍须独立证明。
+
+### 原生候选 CI 与构建身份核对
+
+`.github/workflows/schema-cache-native.yml` 在确切 PR head 上运行 darwin/arm64 和 linux/amd64
+候选测试，校验实际 host architecture，记录完整 build recipe 与 binary digest，执行组件与
+delivery race、真实候选 parity/repair/process benchmark，以及带预算判断的 7 轮 file-hit benchmark。
+两个 native job 成功后，协调 job 比较 clean source commit/tree 和完整 identity JSON 的字节一致性。
+它仅提供开发证据，不修改 Code Admission、不发布版本，也不授权 release cache enablement。
+
+候选构建脚本已修正 core build vars 的所属包（`internal/app.version/gitCommit/buildTime`）；
+此前使用不存在的 `main.*` 符号可能被 Go linker 静默忽略。候选 verifier 现在实际执行 core 与
+launcher 的 `--version`，分别对照 manifest 的 version/commit，不能只检查 ldflags 文本或外壳版本。
+修正后的本机 candidate 在 core 执行阶段仍被系统 SIGKILL，不能算作运行验证通过；原生 CI 将独立核验。
 
 ## 1. 决策摘要
 

@@ -110,6 +110,15 @@ def main():
         disabled = {**environment, "DWS_SCHEMA_CACHE_DISABLE": "1"}
         cache = cache_base / "dws/schema" / hashlib.sha256(proof["edition"].encode()).hexdigest() / "v1"
 
+        if core is not None:
+            core_version, _ = invoke(core, ["--version"], environment, home)
+            expected_prefix = f"dws version {manifest['release']['version']} ({manifest['release']['commit']}, "
+            if not core_version.decode().startswith(expected_prefix) or not core_version.endswith(b")\n"):
+                raise RuntimeError("core runtime version/commit differs from the package manifest")
+            public_version, _ = invoke(binary, ["--version"], environment, home)
+            if public_version != f"dws version {manifest['release']['version']}\n".encode():
+                raise RuntimeError("launcher runtime version differs from the package manifest")
+
         def verify_artifacts():
             for name, prefix in (("meta.cache", "meta"), ("registry.shards.cache", "registry")):
                 data = (cache / name).read_bytes()

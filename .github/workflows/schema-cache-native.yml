@@ -1,0 +1,144 @@
+name: Schema cache native feedback
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'internal/**'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/build/**'
+      - 'scripts/dev/**'
+      - '.github/workflows/schema-cache-native.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-cache-native-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Development evidence only. These jobs neither replace admission contexts nor
+# publish a release or authorize cache identity injection into release builds.
+jobs:
+  native:
+    name: Native candidate (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-amd64
+          - runner: macos-latest
+            target: darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: go1.25.9
+      GOWORK: 'off'
+      DO_NOT_TRACK: '1'
+      DWS_PACKAGE_VERSION: 0.0.0-test
+      EXPECTED_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.9
+          cache: false
+      - name: Verify native target and prepare private test directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOHOSTOS)-$(go env GOHOSTARCH)" = "$EXPECTED_TARGET"
+          test "$(go env GOVERSION)" = go1.25.9
+          test -z "$(git status --porcelain)"
+          private_tmp="$HOME/.dws-native-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -m 0700 "$private_tmp"
+          echo "TMPDIR=$private_tmp" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/schema-evidence"
+      - name: Test cache integrity and concurrency
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -race -count=1 ./internal/schemacache ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
+          go test -race -count=1 ./internal/cli \
+            -run '^(TestCrossPlatformCoverageSchema(MetaPublication|ProductMemoizationRepair|SourceRegistrationClearsCache)|TestPersistentSchemaCacheRealDeliveryParityAndLazyIO)$' \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-race.txt"
+      - name: Build native candidate with finalized runtime payload
+        run: python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
+      - name: Verify exact candidate and interleaved process performance
+        run: |
+          python3 scripts/dev/verify-schema-cache-binary.py \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
+            --output "$RUNNER_TEMP/schema-evidence/process-report.json"
+      - name: Measure complete file hits
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./internal/cli/schemaruntime -run '^$' \
+            -bench '^BenchmarkRealSchemaFileHit$' -benchtime=1s -count=7 \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/file-hit.txt"
+          python3 scripts/dev/check-schema-cache-benchmark.py \
+            "$RUNNER_TEMP/schema-evidence/file-hit.txt" \
+            --output "$RUNNER_TEMP/schema-evidence/file-hit-report.json"
+      - name: Upload native development evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-native-${{ matrix.target }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/schema-evidence/*.txt
+            ${{ runner.temp }}/schema-evidence/*.json
+            ${{ runner.temp }}/schema-evidence/candidate/identity.json
+            ${{ runner.temp }}/schema-evidence/candidate/candidate-build.json
+            ${{ runner.temp }}/schema-evidence/candidate/**/package-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  compare-identities:
+    name: Compare native identity metadata
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: schema-native-*-${{ github.event.pull_request.head.sha }}
+          path: native-evidence
+      - name: Compare complete metadata from the same clean source
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          records = list(Path("native-evidence").rglob("candidate-build.json"))
+          assert len(records) == 2, "both native candidate records are required"
+          targets = set()
+          identities = []
+          trees = set()
+          for path in records:
+              record = json.loads(path.read_text())
+              assert record["source_commit"] == os.environ["EXPECTED_COMMIT"]
+              assert record["source_dirty"] is False
+              assert record["go_version"] == "go1.25.9"
+              assert record["cgo_enabled"] == "0"
+              assert record["goexperiment"] == "" and record["gowork"] == "off"
+              assert record["build_tags"] == []
+              assert record["build_flags"] == ["-trimpath", "-buildmode=pie"]
+              targets.add((record["goos"], record["goarch"]))
+              trees.add(record["source_tree"])
+              identities.append(path.with_name("identity.json").read_bytes())
+          assert targets == {("darwin", "arm64"), ("linux", "amd64")}
+          assert len(trees) == 1, "native candidates used different source trees"
+          assert identities[0] == identities[1], "native Schema identity/artifact metadata differs"
+          print("Native candidate identity metadata is byte-equal; release enablement still requires hermetic final-artifact proof.")

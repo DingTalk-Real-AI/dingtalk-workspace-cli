@@ -1046,9 +1046,11 @@ jobs:
             "$APPLE_NOTARY_ISSUER_ID" "$APPLE_NOTARY_KEY_ID" "$private_key_path"
           chmod 0600 "$api_key_path"
 
-          echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path" >> "$GITHUB_ENV"
-          echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path" >> "$GITHUB_ENV"
-          echo "DWS_APPLE_NOTARY_API_KEY_FILE=$api_key_path" >> "$GITHUB_ENV"
+          {
+            echo "DWS_APPLE_CERTIFICATE_P12=$certificate_path"
+            echo "DWS_APPLE_CERTIFICATE_PASSWORD_FILE=$password_path"
+            echo "DWS_APPLE_NOTARY_API_KEY_FILE=$api_key_path"
+          } >> "$GITHUB_ENV"
 
       - name: Require a clean sealed source before GoReleaser
         run: |
