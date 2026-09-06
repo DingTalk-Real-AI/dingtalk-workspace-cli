@@ -104,3 +104,35 @@ func TestDWSValidationHandlerExcludesBusinessHooks(t *testing.T) {
 		})
 	}
 }
+
+func TestDWSLegacyArgsValidationHandler(t *testing.T) {
+	for _, fallback := range []bool{false, true} {
+		t.Run(fmtBool(fallback), func(t *testing.T) {
+			root := &Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
+			root.AddCommand(&Command{Use: "leaf", Run: func(*Command, []string) { t.Fatal("unknown command executed") }})
+			calls := 0
+			var original error
+			classified := errors.New("classified legacy Args")
+			root.SetValidationErrorFunc(func(cmd *Command, stage ValidationStage, err error) error {
+				calls++
+				original = err
+				if cmd != root || stage != ValidationStageArgs {
+					t.Fatalf("owner/stage=%v/%s", cmd, stage)
+				}
+				if fallback {
+					return nil
+				}
+				return classified
+			})
+			root.SetArgs([]string{"unknown"})
+			cmd, err := root.ExecuteC()
+			want := classified
+			if fallback {
+				want = original
+			}
+			if cmd != root || err == nil || err != want || calls != 1 {
+				t.Fatalf("cmd=%v err=%v calls=%d", cmd, err, calls)
+			}
+		})
+	}
+}

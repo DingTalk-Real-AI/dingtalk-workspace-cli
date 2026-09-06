@@ -213,3 +213,9 @@ S7 仍为流程事项：PR 与方案保持 Draft，旧 CHANGES_REQUESTED、leaf/
 | invalid_parameters | 1774 | 1552 | 3274 | 3226 | 25 | 23 |
 
 成功路径中位耗时下降约 11.4%，分配 32→30；required 失败路径增加约 75 ns 和 1 次分配。分类保留检查与失败回调有成本，不能把成功路径收益表述为所有错误路径都更快。上述小场景是同机样本中位数，不是跨平台性能保证。
+
+### Find 的 legacyArgs 补充
+
+收尾时继续枚举 Cobra 的校验返回点，发现 `Find` 会在 Args 未声明时提前执行 `legacyArgs`。独立准备的裸根传入未知子命令仍返回 untyped 错误；补充复现先失败。现在 ExecuteC 的 Find 失败分支也交给同一 Args 回调，Traverse 的 flag 错误继续走 FlagErrorFunc。新增依赖回归覆盖 owner、回调一次、nil fallback 和失败不执行，corecmd 门禁覆盖实际 typed/3。
+
+前一版 `aace4ff6` 的全仓库测试已通过（app 416.722 s、cli 154.437 s、helpers 127.707 s、test/scripts 352.444 s），[对应 Linux CI](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34005743046) 也已全部通过（31 产品、1,357 工具）。legacyArgs 补充仅改 Find 失败分支，性能样本中的构造与五个执行场景代码不受影响；最终增量与全量验证结果以 PR 最终 head 记录为准。

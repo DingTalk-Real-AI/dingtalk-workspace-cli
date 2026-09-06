@@ -1163,6 +1163,10 @@ func (c *Command) ExecuteC() (cmd *Command, err error) {
 		cmd, flags, err = c.Traverse(args)
 	} else {
 		cmd, flags, err = c.Find(args)
+		if err != nil {
+			// Find runs legacyArgs before execute when Args is unspecified.
+			err = cmd.validationError(ValidationStageArgs, err)
+		}
 	}
 	if err != nil {
 		// If found parse to a subcommand and then failed, talk about the subcommand

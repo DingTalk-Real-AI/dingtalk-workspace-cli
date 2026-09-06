@@ -619,6 +619,17 @@ func TestCrossPlatformCoverageExecuteForTestNil(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageNativeValidationAdapter(t *testing.T) {
+	t.Run("Find legacy Args", func(t *testing.T) {
+		root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
+		root.AddCommand(&cobra.Command{Use: "leaf", Run: func(*cobra.Command, []string) { t.Fatal("unknown command executed") }})
+		prepareValidationTree(t, root)
+		root.SetArgs([]string{"unknown"})
+		selected, err := root.ExecuteC()
+		if selected != root {
+			t.Fatalf("selected=%v", selected)
+		}
+		requireValidationError(t, err, "invalid_positionals")
+	})
 	cmd := &cobra.Command{Use: "root"}
 	cmd.Flags().String("name", "", "")
 	if err := cmd.MarkFlagRequired("name"); err != nil {

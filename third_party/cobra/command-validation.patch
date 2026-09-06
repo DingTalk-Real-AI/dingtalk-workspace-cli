@@ -57,9 +57,14 @@
 @@ -1011 +1053 @@
 -		return err
 +		return c.validationError(ValidationStageFlagGroups, err)
-@@ -1126,0 +1169 @@
+@@ -1123,0 +1166,4 @@
++		if err != nil {
++			// Find runs legacyArgs before execute when Args is unspecified.
++			err = cmd.validationError(ValidationStageArgs, err)
++		}
+@@ -1126,0 +1173 @@
 +		silenceErrors := c.SilenceErrors
-@@ -1130 +1173 @@
+@@ -1130 +1177 @@
 -		if !c.SilenceErrors {
 +		if !c.SilenceErrors && !silenceErrors {
 --- a/command_test.go

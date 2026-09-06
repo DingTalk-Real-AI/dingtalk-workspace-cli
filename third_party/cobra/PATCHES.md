@@ -30,7 +30,8 @@ introduced into Cobra.
 The traversal patch was approved on 2026-09-06. The subsequent review extends
 the patch for late-created commands with `ValidationStage` and
 `SetValidationErrorFunc` / `ValidationErrorFunc`. Native execution invokes the
-nearest handler only when Args, required flags or flag groups fail. A nil
+nearest handler only when Args (including Find’s legacyArgs path), required
+flags or flag groups fail. A nil
 handler result preserves the original failure; without a handler all existing
 upstream behavior remains unchanged. Successful validation and business hooks
 do not call it. DWS installs its classifier from corecmd and removes early

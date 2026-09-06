@@ -39,7 +39,7 @@ Cobra 的解析、位置参数及原生 required/group 通过框架适配层接�
 
 上游 Cobra 的 `FlagErrorFunc` 不覆盖 Args/required/group；预装 per-node 包装也无法
 覆盖 ExecuteC 延迟创建的 help/completion。当前本地补丁提供继承式 `ValidationErrorFunc`，
-在这三个原生校验失败点调用 corecmd 的统一分类器。保留原生顺序，required/group 只检查一次，
+在这三个原生校验失败阶段调用 corecmd 的统一分类器，包含 Find 的 legacyArgs 分支。保留原生顺序，required/group 只检查一次，
 业务钩子错误不进入该回调。相比原先仅 Traverse 的补丁，依赖维护面有所扩大，需专项全量验证。
 
 不删除 required/group annotations；它们同时服务 Help、补全和 Schema。
