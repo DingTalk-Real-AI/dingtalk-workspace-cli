@@ -29,13 +29,13 @@
       "sha256": "e9515a754be638ce7528b4f9cadd5dc0017ba38b85ba826c0647ee05bfaecf40",
       "bytes": 103
     },
-    "head-reproduction.txt": {
-      "sha256": "861b70afdd7ae24456e538b06fed066f3db14628b7c13995a8fea62371cfc5fa",
-      "bytes": 28879
-    },
     "fixed-projection.txt": {
       "sha256": "8b55469201aa9c822dc7ef51a0f43b766904c2f0bd458c56db5e8f8ae2005402",
       "bytes": 76
+    },
+    "head-reproduction.json": {
+      "sha256": "4ecedfaae34bd49cc585858603e84486cbbee8032e37cf6bd1ecb0f3144f0343",
+      "bytes": 38664
     }
   },
   "passed_existing_default_entry_gates": true,
