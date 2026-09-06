@@ -155,8 +155,20 @@ jobs:
             -memprofile "$RUNNER_TEMP/schema-evidence/meta-memory.pprof" \
             -o "$RUNNER_TEMP/schema-meta-profile.test" \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/meta-profile.txt"
-      - name: Measure default tracker and canonical package overhead
+      - name: Build the immutable pre-PR entry baseline
+        id: entry_baseline
         if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_build_schema_entry_baseline.py
+          git fetch --no-tags --depth=1 origin 5243e5ca19b55a3e785e5cc09273b653ad5381dc
+          python3 scripts/dev/build-schema-entry-baseline.py \
+            --output "$RUNNER_TEMP/schema-entry-baseline" \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/baseline-build.txt"
+          cp "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" "$RUNNER_TEMP/schema-evidence/"
+      - name: Measure default tracker, package overhead and pre-PR entry regression
+        if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' && steps.entry_baseline.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -164,6 +176,8 @@ jobs:
           python3 scripts/dev/measure-schema-default-entry.py \
             --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
             --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
+            --baseline "$RUNNER_TEMP/schema-entry-baseline/dws-baseline" \
+            --baseline-proof "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" \
             --output "$RUNNER_TEMP/schema-evidence/default-entry-report.json" \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/default-entry.txt"
       - name: Check identity with isolated files and network

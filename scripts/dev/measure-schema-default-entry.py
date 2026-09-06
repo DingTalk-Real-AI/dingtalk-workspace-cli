@@ -4,7 +4,8 @@
 Uses the exact candidate and its packaged core with a fresh HOME and no auth
 profile. DO_NOT_TRACK is absent from every measured child: identity resolution,
 tracking and the normal flush budget remain active. Network conditions are not
-controlled. This is not a pre-PR baseline or competitive acceptance report.
+controlled. An optional pinned pre-PR binary adds whole-PR help/version latency
+comparisons. This is not competitive acceptance or cache-I/O absence proof.
 """
 
 import argparse
@@ -23,6 +24,25 @@ spec = importlib.util.spec_from_file_location('candidate_measure',
     Path(__file__).with_name('verify-schema-cache-binary.py'))
 measure = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(measure)
+baseline_spec = importlib.util.spec_from_file_location('entry_baseline',
+    Path(__file__).with_name('build-schema-entry-baseline.py'))
+baseline_build = importlib.util.module_from_spec(baseline_spec)
+baseline_spec.loader.exec_module(baseline_build)
+
+
+def validate_baseline(binary, proof_path):
+    proof = json.loads(proof_path.read_text())
+    if proof.get('source_commit') != baseline_build.BASE_COMMIT:
+        raise RuntimeError('baseline must use the immutable pre-PR RFC commit')
+    if proof.get('go_version') != 'go1.25.9' or proof.get('binary_sha256') != measure.digest(binary):
+        raise RuntimeError('baseline bytes or toolchain differ from its build report')
+    target = ('darwin', 'arm64') if sys.platform == 'darwin' else ('linux', 'amd64')
+    if (proof.get('goos'), proof.get('goarch')) != target:
+        raise RuntimeError('baseline must be built for the same native target')
+    info = subprocess.check_output(['go', 'version', '-m', str(binary)], text=True)
+    if info.splitlines()[0].split()[-1] != 'go1.25.9':
+        raise RuntimeError('baseline binary must use Go 1.25.9')
+    return proof
 
 
 def measure_cases(cases, samples, seed, home, report):
@@ -53,6 +73,12 @@ def measure_cases(cases, samples, seed, home, report):
             gates[f'{entry}_package_wall_{percentile}_overhead_at_most_5_percent'] = (
                 summary[f'{entry}-launcher']['wall_ms'][percentile] <=
                 1.05 * summary[f'{entry}-core']['wall_ms'][percentile])
+            if f'{entry}-baseline' in summary:
+                gates[f'{entry}_pre_pr_wall_{percentile}_regression_at_most_5_percent'] = (
+                    summary[f'{entry}-launcher']['wall_ms'][percentile] <=
+                    1.05 * summary[f'{entry}-baseline']['wall_ms'][percentile])
+    baseline_gates = [value for key, value in gates.items() if '_pre_pr_' in key]
+    report['pre_pr_help_version_latency_proven'] = len(baseline_gates) == 4 and all(baseline_gates)
     report['gates'] = gates
     report['passed'] = all(gates.values())
 
@@ -62,6 +88,8 @@ def main():
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--proof', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--baseline', type=Path, help='exact native pre-PR executable')
+    parser.add_argument('--baseline-proof', type=Path, help='its baseline-build.json')
     parser.add_argument('--samples', type=int, default=30)
     parser.add_argument('--seed', type=int, default=20260906)
     args = parser.parse_args()
@@ -69,8 +97,11 @@ def main():
         parser.error('requires native Darwin/Linux process accounting')
     if args.samples < 30:
         parser.error('at least 30 samples per mode are required')
+    if bool(args.baseline) != bool(args.baseline_proof):
+        parser.error('--baseline and --baseline-proof must be supplied together')
     report = {'scope': __doc__.strip(), 'passed': False, 'release_eligible': False,
               'pre_pr_baseline_proven': False, 'competitive_acceptance_proven': False,
+              'pre_pr_help_version_latency_proven': False, 'cache_io_absence_proven': False,
               'platform': platform.platform(), 'samples_per_mode': args.samples, 'seed': args.seed,
               'telemetry': 'DO_NOT_TRACK absent in every measured child; default tracker unchanged',
               'network_sandboxed': False,
@@ -94,6 +125,11 @@ def main():
         report.update(binary_sha256=binary_sha, core_sha256=core_sha,
                       proof_sha256=measure.digest(args.proof), build_id=proof['build_id'],
                       release=manifest['release'])
+        baseline = args.baseline.resolve(strict=True) if args.baseline else None
+        if baseline:
+            baseline_proof = validate_baseline(baseline, args.baseline_proof)
+            report['baseline_build'] = baseline_proof
+            report['baseline_proof_sha256'] = measure.digest(args.baseline_proof)
         with tempfile.TemporaryDirectory(prefix='.dws-default-entry-', dir=Path.home()) as directory:
             home = Path(directory)
             cache = home / ('Library/Caches' if sys.platform == 'darwin' else '.cache')
@@ -120,9 +156,24 @@ def main():
                 expected, _ = measure.invoke(core, argv, {**env, 'DO_NOT_TRACK': '1'}, home)
                 cases[name + '-launcher'] = (binary, argv, env, expected)
                 cases[name + '-core'] = (core, argv, env, expected)
+                if baseline:
+                    baseline_output, _ = measure.invoke(baseline, argv, {**env, 'DO_NOT_TRACK': '1'}, home)
+                    if not baseline_output:
+                        raise RuntimeError('baseline entry produced empty output')
+                    if name == 'version':
+                        expected_version = (f"dws version {baseline_proof['version']} "
+                                            f"({baseline_proof['source_commit']}, {baseline_proof['build_time']})\n").encode()
+                        if baseline_output != expected_version:
+                            raise RuntimeError('baseline version differs from its sealed build metadata')
+                    # Help and version can legitimately change across source
+                    # commits; each baseline invocation must match its own oracle.
+                    report.setdefault('baseline_output_sha256', {})[name] = hashlib.sha256(baseline_output).hexdigest()
+                    cases[name + '-baseline'] = (baseline, argv, env, baseline_output)
             measure_cases(cases, args.samples, args.seed, home, report)
         if measure.digest(binary) != binary_sha or measure.digest(core) != core_sha:
             raise RuntimeError('finalized candidate bytes changed during measurement')
+        if baseline and measure.digest(baseline) != baseline_proof['binary_sha256']:
+            raise RuntimeError('baseline executable changed during measurement')
     except Exception as error:
         report.update(passed=False, error=str(error))
         raise

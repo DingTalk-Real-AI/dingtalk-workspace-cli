@@ -109,6 +109,27 @@ launcher 相对同包 core 的 wall p50/p95 开销均要求不超过 5%。后者
 或慢样本来改善指标；该报告不构成 Lark/GWS 竞争结论或 release enablement proof。三个真实
 子进程/失败控制回归和 actionlint 已通过，新的默认 tracker native 结果尚未取得。
 
+整体回归补测使用 RFC 固定基线 `5243e5ca19b55a3e785e5cc09273b653ad5381dc`，不能改选
+更慢的历史提交。`build-schema-entry-baseline.py` 从该 Git tree 的 archive 提取独立源码，
+采用同一 native Go 1.25.9、CGO=0、trimpath/PIE/strip 参数，并使用基线源码中的完整 runtime
+payload；macOS 与开发候选同样完成 payload 注入及 ad-hoc 签名。报告记录 commit/tree、源码
+archive 和最终 binary hashes、全部 ldflags、target 与 runtime manifest hash。基线不得混入
+候选声明、launcher、运行时实现或缓存 identity。
+
+提供该基线时，默认模式采样扩为八种随机交错模式，新增旧入口 help/version 各至少 30 次，
+分别检查候选 launcher 的 wall p50/p95 相对原始入口不回退超过 5%。基线版本必须匹配其
+sealed metadata；help 的历史内容允许不同，但每次输出必须等于该基线自己的 oracle。
+整个测量前后核对基线二进制 hash，错误 commit 或已修改的二进制不能计入比较。新增负向
+回归证明：同包 launcher/core 即使通过，仍不能掩盖相对 PR 基线的 10% 回退。
+`pre_pr_help_version_latency_proven` 只报告四个延迟门槛；cache I/O absence、竞争性领先与
+正式签名制品仍分别待证，因此不能据此把整体 `pre_pr_baseline_proven` 或 release eligibility
+改为 true。该扩展尚待新的 native CI，不属于 e70a11dd 运行中的六模式报告。
+本机 darwin/arm64 已用该驱动构建原始基线并完成实际 `--help`/`--version` 启动检查：
+退出 0、stderr 为空、版本与 sealed metadata 精确一致、最终二进制 hash 不变；记录见
+[构建](benchmarks/schema-cache/pre-pr-baseline-local/baseline-build.json) 与
+[启动检查](benchmarks/schema-cache/pre-pr-baseline-local/startup-check.json)。这是 opt-out 的
+基线可运行性证据，不是候选的默认延迟结果或正式发布验收。
+
 ### 正式发布包的版本合同验证
 
 正式 release workflow 的 Darwin 验证 job 曾在 `set -u` 下读取未注入的

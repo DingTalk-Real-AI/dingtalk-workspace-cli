@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -61,6 +62,38 @@ printf 'exact output\\n'
         with self.assertRaisesRegex(RuntimeError, 'must not set DO_NOT_TRACK'):
             check.measure_cases({'schema-cache': (binary, argv, {**env, 'DO_NOT_TRACK': '1'}, expected)},
                                 1, 42, self.home, {'passed': False})
+
+    def test_good_package_comparison_cannot_hide_pre_pr_regression(self):
+        cases = dict(self.cases)
+        for entry in ('help', 'version'):
+            cases[entry + '-baseline'] = (self.binary, [entry + '-baseline'],
+                                         cases[entry + '-core'][2], b'exact output\n')
+
+        def invoke(binary, argv, env, home):
+            name = argv[0]
+            # Package core and launcher agree, but help regresses 10% from
+            # the pre-PR executable. This must fail the independent gate.
+            wall = 10 if name == 'help-baseline' else 11
+            return b'exact output\n', {'wall_ms': wall,
+                'user_ms': 100 if name == 'schema-live' else 1,
+                'system_ms': 1, 'max_rss_bytes': 1024}
+
+        report = {'passed': False}
+        with patch.object(check.measure, 'invoke', side_effect=invoke):
+            check.measure_cases(cases, 30, 42, self.home, report)
+        self.assertTrue(report['gates']['help_package_wall_p95_overhead_at_most_5_percent'])
+        self.assertFalse(report['gates']['help_pre_pr_wall_p95_regression_at_most_5_percent'])
+        self.assertFalse(report['pre_pr_help_version_latency_proven'])
+        self.assertFalse(report['passed'])
+
+    def test_wrong_source_or_modified_baseline_cannot_supply_comparison(self):
+        proof = self.home / 'baseline-build.json'
+        for record, error in (({'source_commit': 'a' * 40}, 'immutable pre-PR'),
+                              ({'source_commit': check.baseline_build.BASE_COMMIT,
+                                'go_version': 'go1.25.9', 'binary_sha256': 'b' * 64}, 'baseline bytes')):
+            proof.write_text(json.dumps(record))
+            with self.assertRaisesRegex(RuntimeError, error):
+                check.validate_baseline(self.binary, proof)
 
 
 if __name__ == '__main__':
