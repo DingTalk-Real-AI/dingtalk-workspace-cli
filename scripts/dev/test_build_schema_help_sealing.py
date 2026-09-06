@@ -34,14 +34,14 @@ class HelpSealingTests(unittest.TestCase):
     def seal(self):
         return contract.seal_root_help(
             self.core, self.generator, contract.sha256(self.core), 'a' * 40,
-            self.output / 'root-help-proof.json')
+            self.output / 'root-help-proof.json', release_eligible=False)
 
     def test_real_children_match_both_locales_before_sealing(self):
         self.assertEqual(self.seal(), 'sealed-snapshot')
         proof = json.loads((self.output / 'root-help-proof.json').read_text())
         self.assertTrue(proof['passed'])
         self.assertEqual(set(proof['locales']), {'en', 'zh'})
-        self.assertTrue(proof['release_eligible'])
+        self.assertFalse(proof['release_eligible'])
 
     def test_drift_diagnostics_and_nonzero_cannot_seal(self):
         for action in ('printf "different help\\n"', 'printf "%s help\\n" "$LANG"; echo warning >&2', 'exit 7'):

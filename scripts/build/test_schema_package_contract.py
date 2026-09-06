@@ -47,7 +47,9 @@ class SchemaPackageContractTests(unittest.TestCase):
             proof = root / 'proof.json'
             snapshot = contract.seal_root_help(core, generator, contract.sha256(core), 'd' * 40, proof)
             self.assertEqual(snapshot, 'snapshot')
-            self.assertTrue(json.loads(proof.read_text())['passed'])
+            release_proof = json.loads(proof.read_text())
+            self.assertTrue(release_proof['passed'])
+            self.assertTrue(release_proof['release_eligible'])
             core.write_text('#!/bin/sh\nprintf "drifted help\\n"\n')
             with self.assertRaisesRegex(RuntimeError, 'help projection differs'):
                 contract.seal_root_help(core, generator, contract.sha256(core), 'd' * 40, proof)

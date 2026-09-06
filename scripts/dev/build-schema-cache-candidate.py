@@ -84,8 +84,9 @@ def main():
     help_generator = output / "root-help-generator"
     run(["go", "build", "-trimpath", "-buildmode=pie", "-o", str(help_generator),
          "./internal/generator/cmd_root_help_snapshot"])
-    help_snapshot = contract.seal_root_help(core, help_generator, core_digest, commit,
-                                            output / "root-help-proof.json")
+    help_snapshot = contract.seal_root_help(
+        core, help_generator, core_digest, commit, output / "root-help-proof.json",
+        release_eligible=False)
     flags = contract.launcher_ldflags(proof, args.version, commit, build_time,
                                       core_digest, str(core_size), help_snapshot)
     run(["go", "build", "-trimpath", "-buildmode=pie", "-ldflags", flags, "-o", str(launcher), "./cmd/dws-launcher"])

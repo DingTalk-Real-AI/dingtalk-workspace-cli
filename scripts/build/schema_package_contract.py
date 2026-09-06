@@ -85,7 +85,8 @@ def failure_output(data):
             'base64': base64.b64encode(data[:limit]).decode(), 'truncated': len(data) > limit}
 
 
-def seal_root_help(core, help_generator, core_digest, commit, proof_path, compare_core=True):
+def seal_root_help(core, help_generator, core_digest, commit, proof_path, compare_core=True,
+                   release_eligible=True):
     proof_path = Path(proof_path)
     proof = {'passed': False, 'release_eligible': False, 'core_sha256': core_digest,
              'source_commit': commit, 'generator_sha256': sha256(help_generator), 'locales': {}}
@@ -143,7 +144,7 @@ def seal_root_help(core, help_generator, core_digest, commit, proof_path, compar
             proof.update(
                 passed=compare_core,
                 native_core_compared=compare_core,
-                release_eligible=compare_core,
+                release_eligible=compare_core and release_eligible,
                 status='passed' if compare_core else 'pending_native_comparison',
                 snapshot_sha256=hashlib.sha256(snapshot.encode()).hexdigest(),
             )
