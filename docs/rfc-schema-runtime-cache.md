@@ -1,589 +1,61 @@
-# RFC：DWS Schema Runtime Cache、序列化与压缩格式选择
+# RFC：DWS 热路径 runtime、Schema Runtime Cache 与发布合同
 
 | 字段 | 内容 |
 |---|---|
-| 状态 | Implementation review / 发布门禁尚未全部完成 |
-| 范围 | Schema delivery、身份生成与 release proof、薄 launcher/core canonical package、安装/升级/回滚及性能验证 |
+| 状态 | Draft；产品形态已定，代码对齐与发布验收未完成 |
+| 范围 | Schema delivery、身份生成与 release proof、受限热路径 runtime / core 双二进制 canonical package、安装/升级/回滚及性能验证 |
 | 基线 | `5243e5ca19b55a3e785e5cc09273b653ad5381dc` |
 | 目标 | 降低普通业务命令首次调用 `ResolveMeta` 时的 Schema 装配成本，同时保持 Schema、安全元数据与发布合同同源 |
 | 非目标 | 不恢复 deprecated `dws cache` 产品面；不把生成 Catalog 提交进仓库或嵌入二进制；不修改公开 Schema JSON 合同 |
 
 
-性能附件：[Schema 缓存与 CLI 入口性能报告](rfc-schema-runtime-cache-performance.md)（2026-09-06；覆盖 Schema、help、命令、进程内存及竞品对比；已完成测量 `decb45a7`，`f2a8b9d7` 两平台 help 封装失败，未进入采样）。
+性能数据统一放在[性能附件](rfc-schema-runtime-cache-performance.md)及其原始样本中；正文只规定选择、约束和验收。
 
-## 实施评审与验收状态（2026-09-06）
+本文的规范性决策自 **2026-09-06** 起以 §1、§6.6、§6.7.1、§6.11、§8.4 和 §9 为准；§10 逐项记录代码差距。历史实验用于说明选择，不定义第二套验收标准。逐提交实施流水不再放在本 RFC 正文，既有原始记录保持不变。
 
-本节记录可复核事实，不把设计要求视为已完成。§5 的 benchmark 表是历史 prototype
-证据，不能替代下面的最终二进制、平台和交付验证。
-
-| 范围 | 当前证据 | 仍需完成 |
-|---|---|---|
-| typed model / raw protobuf / product shards | 74e5fdd7 的真实 1,370 tools 两平台完整 delivery parity、组件与交付 race、独立声明 policy 通过 | 后续修改与最终发布制品复核 |
-| 初始化/repair 并发 | 已修复 live pointer 提前发布、读取分片消耗 Once、失败状态不能替换；定向回归及 Meta/overview/leaf/全量 Registry 混合损坏修复 race 通过（379 s、单次装配） | 新 head 两平台并发验收与错误共享矩阵；旧候选已通过四进程冷启动/Meta 与 Registry 修复；审计状态 race、完整入口单测及真实声明 delivery 在新工作树本机均通过（CLI 定向 62.978 s） |
-| authority/edition 隔离 | source registration 清空旧 identity；generator 拒绝 edition mismatch/overlay；声明树跳过 argv profile 初始化，避免覆盖活动调用的 profile | final binary 的 hostile environment/native proof |
-| identity generator | 输出前检查 typed round trip、Meta/locator/查询投影和重复编码确定性；74e5fdd7 的两平台 Go 1.25.9/proto drift 与 coordinator identity 比较通过；独立声明 drift/assembly/catalog 通过 | hermetic final proof 与 release 注入仍未完成 |
-| 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
-| launcher | 639bfceb 两平台 core-free JSON 与完整 version 元数据精确输出通过，core fast-path 与生命周期 race 通过；共用 reader/typed renderer | 默认上报优化、竞争性指标和逐次 core hashing 成本；受限环境生成器新检查待 native CI |
-| 性能 | e70a11dd 两平台 opt-out 与默认 Schema CPU/RSS 门槛通过；Meta file-hit Linux 4.484 ms、macOS 3.653 ms | 默认 help/version 相对同包 core 回退约 6–11%，5% 检查失败；6f64ee2c 原始 PR base 对照也失败；public/native 竞争目标仍待证明 |
-| 全量验证 | e70a11dd 两平台完整 148 包均通过，Linux 安装器 stat 修复已通过原生验证；两平台文件/网络隔离通过 | 新的原始基线对照、默认入口优化和完整 release proof 待验证 |
-| PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
-
-生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
-Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
-
-### 根帮助共享投影与依赖门禁修正（bbcc8537 后续）
-
-修正后的 `decb45a7` 在
-[run 34007681787](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34007681787)
-已通过两平台完整 Go suite 和声明 policy。逐行审计确认两边各 152 个包终态，无失败事件、
-无缺失终态；记录见 [Linux](benchmarks/schema-cache/native-decb45a7/linux-full-suite.json) 与
-[macOS](benchmarks/schema-cache/native-decb45a7/darwin-full-suite.json)。该提交仅包含共享帮助
-renderer，尚不包含下面的帮助快路径。本轮已结束：两边默认版本入口的四项 5% 检查均通过，
-默认 Schema CPU/RSS 两项通过，帮助入口的四项 5% 检查仍失败，故整轮 failure、coordinator
-跳过。每平台八种模式各 30 次样本；core-free 默认 version 的真实执行、包版本、完整 wire、
-缓存修复、Meta file-hit 预算与实际生成器的文件/网络隔离检查通过。
-
-| `decb45a7` 默认入口 wall p50 / p95（ms） | Linux amd64 | macOS arm64 |
-|---|---:|---:|
-| version launcher | 304.655 / 305.172 | 319.306 / 329.747 |
-| version 原始基线 | 345.677 / 347.815 | 354.563 / 366.908 |
-| help launcher | 385.185 / 386.906 | 386.923 / 401.456 |
-| help 原始基线 | 346.108 / 347.453 | 352.782 / 361.652 |
-
-默认 version 已消除本轮原生 5% 回退；默认 help 相对原始基线 p50/p95 仍回退
-11.29%/11.35%（Linux）、9.68%/11.01%（macOS），需要下面的入口改动和新原生验证。
-保留全部样本、摘要、构建/identity/基线绑定及 job/artifact 记录，见
-[本轮原生证据](benchmarks/schema-cache/native-decb45a7/evidence.json)。300 ms 级默认上报
-延迟依旧存在，不能把 version 的改善当作 Schema 竞争性目标或最终签名包验收。
-
-[run 34006621679](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34006621679)
-已完成。两平台完整 suite 的包终态与失败事件已逐行审计，记录见
-[Linux](benchmarks/schema-cache/native-bbcc8537/linux-full-suite.json) 与
-[macOS](benchmarks/schema-cache/native-bbcc8537/darwin-full-suite.json)；唯一失败测试均为下述
-依赖门禁，声明 policy 成功。原始日志摘要和 artifact/job 绑定保留，不能把有失败的整轮说成通过。
-
-bbcc8537 的两个 native candidate jobs 都在 `TestCrossPlatformCoverageThinSchemaDependencyClosure`
-失败，尚未进入构建或默认入口测量。该旧门禁把整个 launcher 与 Schema decoder 一起禁止
-所有网络依赖，与上一节已评审的默认官方埋点入口不一致；不是 Schema decoder 本身引入了
-网络。现对 schemaruntime、schemacache、schemareader 和 schemafastpath 的实际传递依赖
-继续严格禁止网络/命令框架，并显式禁止它们反向依赖 launcher。入口门禁另外检查完整依赖图：
-保持仓库包 allowlist，只允许既有 SDK sender 引入 HTTP、SDK aem 引入 socket 类型，以及
-现有工具包的 URL 解析；其他非标准库包新增网络依赖都会失败。profilemetadata/clisignal
-仍只能直接依赖标准库。修正后的两条实际 dependency closure race 检查均通过，性能门槛未改。
-
-默认 help 的后续优化先消除第二套渲染器风险。`internal/roothelp.Model` 只保存已决定的
-service/utility 名称与说明、flag 标签与说明、root Long；`app.RootHelpModel` 从最终命令树
-沿用原可见性、语言、排序及 pflag 类型规则投影。公开 help 已改为使用这个无 Cobra、无网络
-的共享 renderer，Model 不是 CLI 声明或 Schema Catalog 的替代来源。
-
-本机 Go 1.25.9 比较改动前后的 12 份完整输出：en/zh × 彩色/无色 × 真实/空/自定义树，
-字节全部一致。声明专用构造器与实际运行构造器在四个语言/颜色组合的输出也相同；新的
-永久回归比较真实根帮助与声明模型 JSON round trip 后的渲染。相关 root help、输出边界和
-依赖 race 通过（app 22.246 s）。原始输出、摘要、捕获代码与检查记录见
-[投影证据](benchmarks/schema-cache/root-help-projection-local/compatibility.json)。
-
-共享 renderer 的兼容结果本身不证明入口性能。后续候选实现现已接入 exact `--help`：
-只有通过原生平台、plain open-edition、编译期 Schema identity 和扩展缺席检查，才消费
-编译进 launcher 的 `roothelp.Snapshot`。它不是 runtime cache，也不是可编辑的声明输入；
-包含 en/zh 的 `RootHelpModel` 派生投影，并绑定完整提交、edition 和最终 core SHA-256。
-解码有大小限制，拒绝未知/重复 JSON 字段、非规范编码和不匹配 identity。语言选择复用
-`internal/localename` 的原 i18n 规则；带 `DWS_LANG` 等未证明环境仍委派原 core。
-
-候选构建在 runtime payload 注入和 core 签名之后运行帮助生成器，先检查模型编码/解码的
-完整输出不变，再在独立 HOME 中逐语言执行该最终 core 的 `--help`，核对全部 stdout、
-空 stderr 和成功状态；重查 core 摘要不变后才能把投影注入 launcher。任何失败保留
-`root-help-proof.json` 且中止构建。默认入口测量另外将同一 launcher 单独复制到没有 core
-的目录，检查 en/zh 完整帮助与最终 core oracle 相同，确保实际进入快路径。
-
-运行时复用共享 renderer、样式及 version 的 tracker/信号生命周期：默认配置仍产生一次
-官方上报，明确 opt-out 不读取身份；SIGINT/SIGTERM 保持 130/143，panic 保持 5 和固定
-上报摘要；清理先于上报结束。原根 HelpFunc 忽略 writer error 的行为保持不变，部分输出或
-失败后不会再次委派。帮助入口和版本入口均有上述生命周期回归，另有缺失/过期投影、
-未知 flag、settings 和诊断环境的委派测试。
-
-本机 Go 1.25.9 的 launcher/roothelp/i18n race、生成器及生产 launcher 编译通过；构建
-封装的 4 项子进程失败控制与默认采样的 5 项测试通过。app/cmd 的 root help、信号、
-telemetry 和真实 Schema fast-path race 通过（242.556 s / 1.818 s），实际 Schema identity
-与先前原生 proof 字节相同。源码摘要、测试日志与初次构建失败记录见
-[本地帮助入口证据](benchmarks/schema-cache/help-fast-path-local/evidence.json)。本机候选运行帮助生成器时收到
-SIGKILL，未得到双语言最终 core 校验或性能样本，不能宣称 help 回退已消除。
-未知环境/扩展继续完整委派；help/version 零 Schema cache I/O、5% 回归与竞争性要求不变。
-普通正式构建的 help snapshot 仍为空，最终签名包 proof 完成前不得启用，PR 保持 Draft。
-
-### 原始基线对照失败与默认 version 修正（6f64ee2c 后续）
-
-[run 34003658436](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34003658436)
-已完成：两平台完整 suite 和声明 policy jobs 成功，native candidate jobs 的默认入口性能检查失败，
-identity coordinator 跳过。八模式各 30 次、共 240 个默认 tracker 样本证实：相对固定 PR 基线
-`5243e5ca`，help/version 也存在回退，不只是同包 core 对照失败。
-
-| 相对原始入口 wall 回退 p50 / p95 | Linux amd64 | macOS arm64 |
-|---|---:|---:|
-| 默认 help | 11.19% / 11.23% | 12.07% / 11.23% |
-| 默认 version | 11.05% / 11.09% | 10.17% / 7.40% |
-
-两平台八项 help/version 检查均失败，Schema CPU/RSS 两项仍通过。原始样本、构建 identity、
-隔离报告以及 job/artifact/hash 绑定见 [本轮证据](benchmarks/schema-cache/native-6f64ee2c/evidence.json)。
-这些结果取代“原始基线对照尚未运行”的状态，不代表后续实现或正式签名包通过。
-
-后续实现把原 CLI 的官方 SDK 配置、只读身份投影和错误脱敏抽到 `internal/clitelemetry`；
-两个入口引用同一实现。profile 的纯数据、规范化和选择逻辑从 auth 移至只依赖标准库的
-`internal/profilemetadata`，原 auth API 也委托这份实现；launcher 不加载认证或凭据模块。精确 `dws --version` 在原生受支持平台、open edition、有效编译期
-identity、无扩展或诊断覆盖时，可以在 launcher 内执行完整版本输出及一次正常上报。
-它读取与 core 相同的 profile metadata，不读取凭据，不打开 Schema cache，不启动 core。
-额外 flags、未知环境、settings/plugin/shortcut 和缺少 proof 的调用仍交给 core。
-官方 SDK 的默认 flush budget、PID、identity 字段与隐私配置均保持原值。
-
-审查同时发现快路径必须保留外层信号与 panic 行为。因此首个中断、第二次信号升级及
-取消错误类型由 `internal/clisignal` 共享；version 回调在 tracker 完成前停止信号监听，
-保留 130/143 状态、human error 与固定 panic 摘要。失败或开始输出后不得重新委派或再次上报。
-core 的统一结果发布优先级和取消恢复信息仍由原执行层处理。
-
-本机完整 auth race（108.172 s）、app 信号/telemetry/Schema fast-path 回归（263.826 s）、
-cmd 与 launcher/component race 均通过；抽出的 22 个纯身份函数与父提交比较，函数体只改符号。
-依赖门禁确认 launcher 没有 auth、Cobra/pflag、output 或业务传输模块。新候选构建后，24 个
-变更 Go 文件摘要保持不变，完整 identity bytes 与 6f64ee2c 的原生结果一致。
-
-实际默认入口复测在取得 core 版本 oracle 时被系统终止（exit -9）；对应 amfid 日志明确报告
-ad-hoc/未知证书链拒绝（AppleMobileFileIntegrityError -423）。本轮没有性能样本，新增
-默认 core-free version 检查也尚未执行，不能拿早期中间实现的测量替代。构建 recipe、源码
-delta、错误报告、系统原因与测试记录见 [本机证据](benchmarks/schema-cache/shared-entry-local/evidence.json)。
-原生 CI 将运行新检查，系统保护和正式签名验收要求保持不变。
-
-该实现尚待本次源码的完整原生性能、输出及生命周期复核；默认 help 和 Schema 仍委派 core，
-每次委派的完整 SHA-256 校验继续保留。默认 version 的局部改进不能替代 help 回归修复、
-竞争性性能或最终签名制品的生产验收。正式 release 的 Schema identity 继续留空，PR 保持 Draft。
-
-### 全量测试、原生隔离通过与默认入口回退（e70a11dd）
-
-[run 34001894342](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34001894342)
-的两平台完整 suite 各有 148 个包终态、无失败事件。Linux app/CLI/scripts 分别为
-316.593/389.501/371.702 s；macOS 为 344.869/261.097/323.681 s。绑定原始 JSONL 日志 hash、
-长度、job/artifact ID 的记录与全部包终态见
-[Linux](benchmarks/schema-cache/native-e70a11dd/linux/full-suite-evidence.json) 和
-[macOS](benchmarks/schema-cache/native-e70a11dd/darwin/full-suite-evidence.json)。
-这补齐 Linux stat 修复的原生证明；不是最终签名安装包的验收。
-
-声明 policy、完整 wire/version、组件/交付 race、四进程 cold/repair、opt-out 进程性能与
-完整 file-hit 预算均通过。Linux 新 Docker 后端的实际生成器在 clean/repeat/hostile 环境
-下均通过文件与网络控制，identity bytes 与预期一致；macOS 也通过。Linux 的根镜像由空 tar
-本地 import，报告验证其唯一 RootFS diffID、无继承环境、只读挂载与无网络运行方式。
-[Linux 隔离](benchmarks/schema-cache/native-e70a11dd/linux/identity-environment.json) 与
-[macOS 隔离](benchmarks/schema-cache/native-e70a11dd/darwin/identity-environment.json)
-继续保留 clock、访问尝试审计和 final-artifact 未证明字段。coordinator 因默认性能失败而跳过；
-[人工完整 identity 比较](benchmarks/schema-cache/native-e70a11dd/identity-comparison.json)
-只能证明下载的两份 bytes 相同，不能替代未执行的 release coordinator。
-
-默认 tracker 六模式测量保留全部 180 个样本。默认 Schema user CPU p50 相对实时装配下降
-Linux 97.85%、macOS 97.37%，最高 RSS 分别为 45.85/38.69 MiB，均通过预算；但默认 Schema
-wall p50 仍约 371.52/378.88 ms，不能声称竞争性延迟达标。默认 help/version 出现稳定的
-同包入口开销，所有四个 5% package 检查均失败：
-
-| 默认入口 wall p50/p95（ms） | Linux amd64 | macOS arm64 |
-|---|---:|---:|
-| help launcher | 384.965 / 389.117 | 390.993 / 406.268 |
-| help core | 349.525 / 352.000 | 360.202 / 383.646 |
-| version launcher | 384.452 / 387.032 | 387.593 / 399.789 |
-| version core | 349.095 / 352.040 | 362.890 / 374.852 |
-
-原始值与门槛见 [Linux](benchmarks/schema-cache/native-e70a11dd/linux/default-entry-report.json)、
-[macOS](benchmarks/schema-cache/native-e70a11dd/darwin/default-entry-report.json)。完整 core digest
-校验与默认 tracker 仍须保留；不能通过删除校验、丢弃上报或放宽门槛掩盖该结果。逐次 hashing
-是候选成本来源，尚未用 profile 完成归因。下一轮加入固定原始基线 `5243e5ca` 的八模式对照，
-分别报告整个 PR 的回退与同包 launcher/core 开销。
-
-### 标准时钟 API 的局部插桩调查
-
-本机 Go 1.25.9 的临时工具链副本通过 `-overlay` 替换 `time.Now`、`time.Since`、`time.Until`
-的入口，每次调用立即 panic。构建的真实 identity generator 仍退出 0、stderr 为空，输出与
-原生 identity byte-equal；clock-free 控制程序成功，三个主动调用探针分别按预期失败。
-[控制与摘要记录](benchmarks/schema-cache/clock-api-probe-local/control-report.json) 绑定本机
-source commit、generator 与原/替换 time.go hashes。overlay 机制见
-[Go 官方构建参数](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies)。
-
-这只是一次诊断实验：尚未记录被 callback recover 的访问尝试，没有覆盖直接 syscall/runtime
-clock 路径，也未在同次文件/网络沙箱或 Linux 运行。插桩后的标准库不是最终制品。因而不能
-从该实验推导“没有任何时钟调用”，`wall_clock_independence_proven` 和 `release_eligible`
-继续为 false；后续需要带不可清除访问计数的动态检查与更完整的时钟入口审计。
-
-### 生命周期修复的原生结果与 Linux 安装修复（aa827379）
-
-[run 33999677802](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33999677802)
-中两平台 app/CLI 测试均通过；macOS 全量 148 个包无失败（app 343.982 s、CLI 258.944 s、
-scripts 326.516 s）。Linux 全量也完成 148 个包终态，app 309.661 s、CLI 376.290 s 通过，
-仅安装脚本测试失败；10 秒采样中的 app 最高 RSS 为 1,020 MiB、最低主机可用内存为
-11,947 MiB，未发生 runner shutdown。
-[Linux 内存观测](benchmarks/schema-cache/native-aa827379/linux/full-suite-memory.json)
-是采样值，不冒充精确进程 high-water mark。
-
-失败来自 GNU/BSD `stat` 的 stdout 合并：GNU `stat -f '%Lp'` 可先输出文件系统信息再
-返回失败，随后 `stat -c '%a'` 的正确权限值被拼接进同一字符串，合法包因而被拒绝。
-三个 Unix 安装器现分别捕获两次调用，只接受成功返回的 1–4 位八进制模式；保留 special
-bits，不能掩码后误接受 setuid 等不符合同的文件。覆盖 36 个 dialect/mode 组合的回归测试在修复前复现问题，
-修复后安装/升级 smoke、回滚、不确定状态及 event/devapp 定向测试通过（23.276 s）；
-仍需下一轮 Linux 全量通过证明安装修复已收敛。
-
-两平台 shared finalized-version 检查均通过真实 core、launcher 和 core-free 副本，包含完整
-版本/commit/UTC timestamp，并保持二进制 hash 不变。完整 Meta file-hit 中位数 Linux
-4.508 ms、macOS 3.544 ms；selected product 8.685/8.108 ms，均通过预算。launcher/direct-core
-进程 CPU/RSS、完整 wire、repair/race 及独立声明 policy 也通过。macOS 受限生成器通过，
-Linux 因 user mapping 被宿主拒绝而失败，coordinator job 因此跳过；不能把整轮 native run
-表述为通过。原始候选报告及全量日志摘要见
-[本轮证据](benchmarks/schema-cache/native-aa827379/darwin/full-suite-evidence.json)。
-
-### 命令树生命周期与最新原生隔离结果
-
-`fc2d8991` 的 Linux 完整 suite 退出前，`app.test` RSS 达 14,652 MiB，整机可用内存
-仅 117 MiB；cgroup `oom`/`oom_kill` 仍为 0，随后 runner shutdown/143。
-[中断证据](benchmarks/schema-cache/native-fc2d8991/linux/full-suite-interruption.json)
-记录完整 job 日志 SHA-256 和最后一次内存观测。现在可确认严重内存压力，尚不能把
-具体 shutdown 机制表述为已证实的 OOM。
-
-真实 `NewSchemaSourceRootCommand` 的 GC 回归证实：ContractFinal、boolean ConstParams
-和 helpers 校验钩子的全局强键 map 会保留叶子、父节点、整棵树及其输出缓冲。修复采用
-框架内 `commandstore.Map`：键为标准库 `weak.Pointer[cobra.Command]`，`runtime.AddCleanup`
-回收过期条目，lookup/Range 保持活动命令存活。声明 DTO 仍由原注册入口克隆与持有，
-不能包含命令指针；执行钩子可能捕获命令，因此 lookup 的值也为弱引用，强所有权留在
-已安装的 RunE pipeline。不能用全局 Clear、删除测试、丢弃校验或调低并发掩盖泄漏。
-标准库的弱指针与 cleanup 语义见 [Go 官方说明](https://go.dev/blog/cleanups-and-weak)。
-
-本机 Go 1.25.9 已通过真实 Schema/public 根回收、闭包引用环回收、GC 后 Validate 保留、
-并发元数据读写以及 ContractFinal 克隆/冲突的定向 race；app 的 Wiki/AITable 全量输出用例
-连续三轮通过。CLI TestMain 和 drift 脚本都在启动独立生成器时收到 SIGKILL，未完成本轮
-检查；不能用旧 head 的 policy 通过记录替代。仍需新 head 的 native 全量、声明一致性及性能验证。
-
-同次旧 head 的两平台候选进程与文件命中指标通过：完整 Meta file-hit 七轮中位数
-Linux 4.741 ms、macOS 3.244 ms；macOS 的真实生成器在 clean/repeat/hostile 三种环境
-下均通过允许文件、禁止文件、禁止网络的正反控制，完整 identity bytes 一致。
-[原生隔离报告](benchmarks/schema-cache/native-fc2d8991/darwin/identity-environment.json)
-仍明确标记 `release_eligible=false`：wall clock、被拒绝后忽略的访问尝试与最终签名制品
-证明均未完成。Linux 在 loopback 初始化时被拒绝，
-[失败记录](benchmarks/schema-cache/native-fc2d8991/linux/identity-environment-failure.json)
-不能算作有效的隔离证明。
-
-aa827379 的 `unshare` 路径同样未通过：宿主拒绝写 `/proc/self/uid_map`。后续 Linux 检查
-改用 runner 已提供的本机 Docker daemon；从空 tar 本地 import rootfs，不下载 base image。
-按确切 image ID 运行，强制 `--network=none`、只读 rootfs/挂载、`--cap-drop=ALL`、
-`no-new-privileges` 与 runner UID/GID；不挂载 Docker socket、宿主 HOME 或凭据。
-同一份 host generator、cat/curl 和 OS 库只读挂载到容器，避免更换控制探针的可执行文件。
-Docker 的网络模式见 [官方说明](https://docs.docker.com/engine/network/drivers/none/)。
-报告记录 image/rootfs 标识与实际 generator argv；任何工具/daemon/控制探针失败均不能
-通过，超时只清理本次唯一命名的容器。不会调整宿主 kernel/AppArmor 设置或启用 privileged。
-本机七个控制/构造/超时回归通过，但这不能替代新的 Linux native 隔离结果。
-
-### 默认 tracker 的进程性能补测
-
-`scripts/dev/measure-schema-default-entry.py` 为每个测量子进程构造 fresh HOME 下的显式环境，
-不传 `DO_NOT_TRACK`，不改变 identity resolution、SDK 配置或默认 flush budget。正式采样前
-用完整 core 装配取得输出 oracle 并预热、校验 candidate 的 Meta/Registry artifact hashes；
-这些 opt-out 准备调用不计入默认模式样本。随后随机交错六种模式，各至少 30 次：默认 Schema
-cache/live，以及默认 help/version 的 launcher/direct-core。逐次核对完整 stdout、退出状态
-和 stderr，保留全部原始 wall/user/system/RSS 样本，结束后复核 launcher/core bytes 未变。
-
-默认 Schema 仍要求 user CPU 至少下降 80%、peak RSS 不超过 100 MiB；help/version 的
-launcher 相对同包 core 的 wall p50/p95 开销均要求不超过 5%。后者只隔离 canonical package
-引入的开销，**不能替代本 PR 相对原始 base 的整体回归对照**。网络延迟未控制，不删除超时
-或慢样本来改善指标；该报告不构成 Lark/GWS 竞争结论或 release enablement proof。三个真实
-子进程/失败控制回归和 actionlint 已通过，新的默认 tracker native 结果尚未取得。
-
-整体回归补测使用 RFC 固定基线 `5243e5ca19b55a3e785e5cc09273b653ad5381dc`，不能改选
-更慢的历史提交。`build-schema-entry-baseline.py` 从该 Git tree 的 archive 提取独立源码，
-采用同一 native Go 1.25.9、CGO=0、trimpath/PIE/strip 参数，并使用基线源码中的完整 runtime
-payload；macOS 与开发候选同样完成 payload 注入及 ad-hoc 签名。报告记录 commit/tree、源码
-archive 和最终 binary hashes、全部 ldflags、target 与 runtime manifest hash。基线不得混入
-候选声明、launcher、运行时实现或缓存 identity。
-
-提供该基线时，默认模式采样扩为八种随机交错模式，新增旧入口 help/version 各至少 30 次，
-分别检查候选 launcher 的 wall p50/p95 相对原始入口不回退超过 5%。基线版本必须匹配其
-sealed metadata；help 的历史内容允许不同，但每次输出必须等于该基线自己的 oracle。
-整个测量前后核对基线二进制 hash，错误 commit 或已修改的二进制不能计入比较。新增负向
-回归证明：同包 launcher/core 即使通过，仍不能掩盖相对 PR 基线的 10% 回退。
-`pre_pr_help_version_latency_proven` 只报告四个延迟门槛；cache I/O absence、竞争性领先与
-正式签名制品仍分别待证，因此不能据此把整体 `pre_pr_baseline_proven` 或 release eligibility
-改为 true。该扩展已在 6f64ee2c 的 native CI 运行，八项入口延迟检查均失败；不属于 e70a11dd 的六模式报告。
-本机 darwin/arm64 已用该驱动构建原始基线并完成实际 `--help`/`--version` 启动检查：
-退出 0、stderr 为空、版本与 sealed metadata 精确一致、最终二进制 hash 不变；记录见
-[构建](benchmarks/schema-cache/pre-pr-baseline-local/baseline-build.json) 与
-[启动检查](benchmarks/schema-cache/pre-pr-baseline-local/startup-check.json)。这是 opt-out 的
-基线可运行性证据，不是候选的默认延迟结果或正式发布验收。
-
-### 正式发布包的版本合同验证
-
-正式 release workflow 的 Darwin 验证 job 曾在 `set -u` 下读取未注入的
-`RELEASE_VERSION`；现显式从 `release-contract` 接入版本和 commit，并用负向回归证实
-旧配置失败、修复后通过。正式包增加共享 `scripts/release/verify-package-version.py`：
-在 Linux archive/manifest 验证之后、Darwin Developer ID/notarization/Gatekeeper 验证之后，
-只在匹配的 native host 运行完整 core、launcher 和没有 sibling core 的 launcher 副本。
-三条路径都必须逐字节匹配 sealed commit、版本和 UTC committer date 的完整输出，且 stderr
-为空、退出码为 0；验证前后二进制 SHA-256 不得变化。独立报告不改变 finalized-release-dist
-artifact 布局。候选 CI 复用同一验证器；错误但一致的时间、缺少元数据、强制依赖 core、
-运行时修改自身等负向 fixture 均必须拒绝。
-
-这新增的是版本合同门禁，尚未产生本次修改的正式签名包运行证据；也不等同于 hermetic
-Schema identity 或安装/升级/回滚证明，不能据此启用 release cache identity。
-
-### 版本输出修复后的原生结果（639bfceb）
-
-[run 33995999901](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33995999901)
-的两平台 native candidate、声明 policy 和 identity coordinator 已通过。真实 core、launcher 与
-无 sibling core 副本的完整 `--version` bytes 一致，包含 commit 和 UTC commit timestamp。
-[Linux 报告](benchmarks/schema-cache/native-639bfceb/linux/process-report.json) 与
-[macOS 报告](benchmarks/schema-cache/native-639bfceb/darwin/process-report.json) 均记录
-`version_build_metadata_parity=true`；这些 native 运行证据补上本机 ad-hoc 签名拒绝留下的版本验证缺口，
-不替代正式 Developer ID/notarization 和最终安装验收。
-
-| 指标 | Linux amd64 | macOS arm64 |
-|---|---:|---:|
-| Meta 完整 file-hit，7 轮中位数，预算 5 ms | 4.515 ms | 3.494 ms |
-| selected product file-hit，预算 15 ms | 8.573 ms | 6.247 ms |
-| opt-out launcher leaf wall p50/p95，30 次 | 20.981 / 22.287 ms | 20.787 / 28.291 ms |
-
-Schema wire、修复并发与 launcher/direct-core CPU/RSS 门槛也均通过；完整 identity 仍与前两轮
-byte-equal。默认 tracker 延迟和竞争性目标仍未证明。
-
-Linux 全量仍收到 runner shutdown/143；[中断记录](benchmarks/schema-cache/native-639bfceb/linux/full-suite-interruption.json)
-绑定原 job 日志哈希，最后活动测试为 app 的 `TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters`
-和 CLI 的 `TestSchemaRuntimeChildQueryParityAllAssembledLocators`，没有 Go test failure event。
-即时 JSON 把重复的测试 payload 膨胀为约 358 MB 控制台日志；这不是已证实的 shutdown 根因。
-后续 `record-go-test-events.py` 将所有原字节保存为 artifact，控制台保留包/测试进度、编译错误、
-失败尾部和 Linux 内存观测。用该次实际日志的 1,072,080 个事件回放，保留全部 326,795,951 B
-事件流且 SHA-256 不变，控制台降为 205,359 B（[回放记录](benchmarks/schema-cache/native-639bfceb/linux/recorder-replay.json)）。
-测试还验证了 shell pipefail 保留上游失败退出码；不跳过测试、不修改测试断言或 timeout。
-639bfceb 的 macOS 全量运行已通过；[日志证据](benchmarks/schema-cache/native-639bfceb/darwin/full-suite-evidence.json)
-和 [全部包终态](benchmarks/schema-cache/native-639bfceb/darwin/full-suite-summary.json) 绑定对应 CI artifact，
-不覆盖此后新增的隔离检查与日志记录器。
-
-### 共享 core fast path 原生结果（74e5fdd7）
-
-[run 33994157424](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33994157424)
-的两个 native candidate job、完整 identity JSON 比较 job 和独立声明 policy job 均通过。
-证据按 target 归档于 [Linux](benchmarks/schema-cache/native-74e5fdd7/linux/candidate-build.json)、
-[macOS](benchmarks/schema-cache/native-74e5fdd7/darwin/candidate-build.json)；文本日志仅去除行尾空格。
-两平台 clean commit/tree、Go 1.25.9 与完整 identity 一致，1,370 tools 的声明哈希未改变。
-
-| 指标 | Linux amd64 | macOS arm64 |
-|---|---:|---:|
-| Meta 完整 file-hit，7 轮中位数，预算 5 ms | 3.820 ms | 3.661 ms |
-| selected product file-hit，预算 15 ms | 7.227 ms | 7.794 ms |
-| launcher leaf wall p50/p95，30 次 | 17.283 / 17.951 ms | 18.093 / 24.156 ms |
-| direct core leaf wall p50/p95，7 次 | 27.659 / 28.670 ms | 29.566 / 30.477 ms |
-
-两份 [process report（Linux）](benchmarks/schema-cache/native-74e5fdd7/linux/process-report.json) /
-[（macOS）](benchmarks/schema-cache/native-74e5fdd7/darwin/process-report.json) 的 launcher/core
-CPU 降低至少 80%、peak RSS 不超过 100 MiB 门槛均通过。core-free launcher 与 direct core
-逐字节 Schema 输出、shortcut 诊断、四进程冷启动与两类损坏修复、core 生命周期 race 也通过。
-这些 process 数据全部使用 `DO_NOT_TRACK=1`，不证明默认 tracker 延迟或竞争性目标。
-Meta 这轮两平台达标，但未改变安全目录遍历或门槛，也不能抹去前轮 macOS 5.663 ms 的波动。
-
-[声明 drift/assembly](benchmarks/schema-cache/native-74e5fdd7/policy/schema-generated-drift.txt) 与
-[catalog policy](benchmarks/schema-cache/native-74e5fdd7/policy/schema-catalog-policy.txt) 完整通过。
-Linux 全量 Go suite 再次收到 runner shutdown/exit 143，未提供完整结果；macOS 全量已通过。
-[完整 suite 的证据记录](benchmarks/schema-cache/native-74e5fdd7/darwin/full-suite-evidence.json)
-绑定 raw log 的 SHA-256、49 MB 长度及 CI artifact；[包结果摘要](benchmarks/schema-cache/native-74e5fdd7/darwin/full-suite-summary.txt)
-保留完整日志中所有本模块包的结束行，避免将百万行 verbose 输出放入 RFC。
-后续 workflow 改用 `go test -json` 即时输出测试事件：多 package 的 `-v` 输出会等待 package
-结束，上一轮因此仍未暴露被中断包的活动测试。此改动只改善诊断，不跳过测试或改变 timeout。
-本轮版本元数据修复晚于 74e5fdd7，不能引用这些候选作为新版本 stdout 已通过的证据。
-
-### DTO v2 原生候选结果（bf30c3ec）
-
-[原生 run 33991840334](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33991840334)
-的两个 candidate job 对同一 clean tree、Go 1.25.9 完成 protobuf drift、组件/交付 race、
-完整 delivery parity、真实候选构建、无 sibling core 的 launcher 精确 wire 对照，以及
-shortcut 警告保留和多进程冷启动/修复验证。原始证据分别保存在
-[Linux](benchmarks/schema-cache/native-bf30c3ec/linux/candidate-build.json) 和
-[macOS](benchmarks/schema-cache/native-bf30c3ec/darwin/candidate-build.json)。完整 identity
-JSON 两平台 byte-equal；后续 a08fe756 的 profile 隔离修复生成相同 identity。
-
-| 完整 file-hit（7 次 benchmark 平均值的中位数） | Linux amd64 | macOS arm64 |
-|---|---:|---:|
-| Meta，预算 5 ms | **4.748 ms，通过** | **5.663 ms，未通过** |
-| selected product，预算 15 ms | 9.069 ms，通过 | 10.432 ms，通过 |
-| Meta allocation | 3,477,820 B/op | 3,478,038 B/op |
-
-数据来自 [Linux 报告](benchmarks/schema-cache/native-bf30c3ec/linux/file-hit-report.json) 与
-[macOS 报告](benchmarks/schema-cache/native-bf30c3ec/darwin/file-hit-report.json)。macOS 随后的
-[单次 profile 测量](benchmarks/schema-cache/native-bf30c3ec/darwin/meta-profile.txt) 为 4.080 ms，
-不能替换上述 7 次门槛结果。该 CPU profile 中目录打开占较大比例，下一步须区分安全遍历、
-文件系统开销与 DTO/GC 成本；不能因单次较快或 Linux 通过就宣称两平台达标。
-
-显式 `DO_NOT_TRACK=1` 的真实 launcher leaf wall p50/p95：Linux **21.862/22.929 ms**，
-macOS **21.488/53.488 ms**。两平台 user CPU 降低至少 80%、RSS 不超过 100 MiB 的门槛
-通过，macOS 尾延迟仍有明显波动；这些数据不证明默认 telemetry 或竞争性延迟目标达标。
-Linux full-suite 再次收到 runner shutdown（exit 143），无完整结果。bf30c3ec 的
-[macOS 全量 suite](benchmarks/schema-cache/native-bf30c3ec/darwin/full-suite.txt) 已通过：
-app 835.638 s、cli 590.765 s、test/scripts 385.315 s。该结果不覆盖后续提交。独立 identity 比较 job 因
-macOS file-hit 失败被跳过，手动 byte-equal 校验不是该 workflow 通过或生产 release proof。
-
-本机 a08fe756 的 profile/声明树相关 race 通过（34.281 s），独立进程冷/热 metadata 与
-普通 root profile 初始化回归通过（20.994 s），identity generator 单测及真实生成通过。
-完整 generated-drift 脚本在执行 param-aliases generator 时收到 SIGKILL，未获通过证据；
-后续 Draft feedback 增加独立 Linux 声明 policy job 执行原有 drift/assembly/catalog 门禁。
-
-### upstream 同步与本轮验证
-
-已核对 upstream `main` 为 `d39d75909a5f165e94c4d45271c717dd2e024bf1`，合入相对初始基线的
-47 个提交，覆盖 AI 表格 app mode、文档批量删除和 CI/release 修复，无文本冲突。新声明装配
-为 **1,370 tools**。两处 cache 测试写死旧 1,357 数量，已通过实际失败复现后改为与同次
-权威声明的数量比较；完整 Registry/Meta/locator/query 的逐项及输出等价断言保留。新增命令
-的定向回归通过（helpers 1.092 s、doc shortcuts 0.506 s），真实 round trip 与 delivery parity
-分别通过 3.541 s / 42.511 s。合并后的完整 `test/scripts` suite 通过（345.984 s）。下文 1,357 tools 的历史 benchmark 不代表合并后的性能。
-合并提交 `606b9f87` 的[独立 7 轮 file-hit](benchmarks/schema-cache/2026-09-06-darwin-arm64-upstream-file-hit.json)
-中位数为 Meta **3.739 ms / 3.90 MB**、selected **5.203 ms / 4.32 MB**，两项本机预算通过。
-该测量在本机其他测试全部结束后执行；原生 Linux 和最终进程门槛仍需独立证明。
-
-`89c38222` 的[原生反馈](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33989255990)
-包含薄 Schema 入口与 Meta 分配优化，但早于本次 upstream 同步和用户 shortcut 诊断修复。
-其 Linux full-suite job 在运行中收到 runner shutdown 信号并以 143 退出，always-upload 也未
-执行；job 日志未给出完整测试结论，不能记为通过或当作某项断言失败。剩余 native job 的
-macOS 的[完整 Go suite 日志](benchmarks/schema-cache/native-89c38222/darwin-arm64/full-suite.txt)确认所有包通过；合并后及 DTO v2 head 的原生验证仍须重新核对。
-
-这轮[原始 native 证据](benchmarks/schema-cache/native-89c38222/)已确认两平台 core-free
-launcher 的精确 stdout parity、四进程冷启动/损坏修复和 CPU/RSS 门槛通过；identity JSON
-在相同 clean source tree 下 byte-equal（协调 job 因 Linux file-hit 失败被跳过）。
-
-| 89c38222 opt-out leaf | macOS arm64 | Linux amd64 |
-|---|---|---|
-| wall p50 / p95 | 22.870 / 29.482 ms | 21.939 / 23.032 ms |
-| user CPU p50 / p95 | 20.645 / 25.030 ms | 22.927 / 26.026 ms |
-| peak RSS p50 / p95 | 15,745,024 / 16,580,608 B | 17,358,848 / 17,666,048 B |
-| Meta file-hit median | 4.967 ms / 3.87 MB，PASS | 5.874 ms / 3.87 MB，FAIL（预算 5 ms） |
-| selected file-hit median | 7.166 ms / 4.32 MB，PASS | 9.102 ms / 4.32 MB，PASS |
-
-macOS native candidate job 全部通过。Linux profile 显示 protobuf message/string 分配与 GC
-占明显成本；profile 含 benchmark 的一次装配准备，不能把累计百分比直接当作单次命中比例。
-使用临时 modfile 将官方 protobuf runtime 换为
-[v1.36.12](https://github.com/protocolbuffers/protobuf-go/releases/tag/v1.36.12) 的本机诊断实验，
-在 1,370 tools 上保留同一 generated DTO、通过 round-trip，7 轮 Meta 为 3.751 ms / 3.90 MB，
-selected 为 5.413 ms / 4.32 MB，没有证明收益，因此没有改动仓库依赖或 generator pin。
-这个实验不是新的 release recipe，也不能覆盖 generator/runtime 兼容性和原生门槛。
-
-### 本机候选包证据（2026-09-06）
-
-[原始 60 次进程样本](benchmarks/schema-cache/2026-09-06-darwin-arm64-candidate.json) 绑定
-最终 launcher/core 的 SHA-256；core 已注入 runtime payload，两者经本机 ad-hoc 签名。
-该候选包基于本节记录时的工作树；后续修改需重建并重测，不能把旧摘要视为新版本证据。
-在隔离 HOME/config、双方 `DO_NOT_TRACK=1` 下，cold build、Meta 损坏修复、overview/product/
-group/leaf/cli-path/--all 的 cached/live JSON parity 全部通过。
-
-| 进程级指标 | cache hit p50 / p95 | authoritative live p50 / p95 |
-|---|---|---|
-| wall | 91.8 / 115.6 ms | 1260.2 / 1360.1 ms |
-| user CPU | 79.1 / 86.9 ms | 1806.0 / 1877.5 ms |
-| max RSS | 55.4 / 56.3 MiB | 336.7 / 353.4 MiB |
-
-cold leaf 为 2079.6 ms wall / 438.3 MiB RSS；损坏修复为 1796.2 ms / 459.3 MiB。
-这些是开发候选验证，未做网络 sandbox、Developer ID/notarization 或跨平台最终制品证明，
-也不证明默认上报入口或竞争性目标。
-
-[完整 file-hit benchmark](benchmarks/schema-cache/2026-09-06-darwin-arm64-file-hit.txt)
-使用真实声明、secure directory open、envelope/摘要校验和 typed decoder。7 轮 ns/op
-中位数为 Meta **5.95 ms / 7.98 MB/op**、selected product **5.92 ms / 4.38 MB/op**。
-Meta 尚未满足 5 ms 预算，需 profile 优化并在空闲机器复测；不能用 process CPU 通过覆盖这个失败。
-benchmark 的 selected stage 从已认证 Meta 开始，包含自己的 secure directory open；首次查询还须加 Meta stage。
-此处是 OS page-cache warm 的 Go benchmark，每轮 ns/op 的中位数，不冒充单次读取的 p50/p95。
-
-profile 后已把 Meta/alias 验证的反射比较改为直接比较；逐字段反射驱动的测试确保未来新增字段不能被遗漏，且保留 nil/empty 和顺序语义。真实 round-trip、定向 race 均通过，Meta 分配降至约 6.36 MB/op。第一次优化后计时与全量测试重叠，已丢弃。全量任务终止后的[独立 7 轮复测](benchmarks/schema-cache/2026-09-06-darwin-arm64-file-hit-optimized.txt)为 Meta **4.52 ms / 6.36 MB/op**、selected **5.30 ms / 4.33 MB/op**，满足本机两项 file-hit 预算；Linux 与最终发布制品仍须独立证明。
-
-### 原生候选 CI 与构建身份核对
-
-`.github/workflows/schema-cache-native.yml` 在确切 PR head 上运行 darwin/arm64 和 linux/amd64
-候选测试，校验实际 host architecture，记录完整 build recipe 与 binary digest，执行组件与
-delivery race、真实候选 parity/repair/process benchmark，以及带预算判断的 7 轮 file-hit benchmark。
-两个 native job 成功后，协调 job 比较 clean source commit/tree 和完整 identity JSON 的字节一致性。
-它仅提供开发证据，不修改 Code Admission、不发布版本，也不授权 release cache enablement。
-
-候选构建脚本已修正 core build vars 的所属包（`internal/app.version/gitCommit/buildTime`）；
-此前使用不存在的 `main.*` 符号可能被 Go linker 静默忽略。候选 verifier 现在实际执行 core 与
-launcher 的 `--version`，分别对照 manifest 的 version/commit，并要求两者 stdout 字节一致，
-包含完整的 `version (commit, time)`；不能只检查 ldflags 文本或外壳版本。
-修正后的本机 candidate 在 core 执行阶段仍被系统 SIGKILL，不能算作运行验证通过；原生 CI 将独立核验。
-
-版本文本由无 I/O 的 `internal/buildversion.Format` 共享。launcher 未注入 `buildTime` 时必须
-委派 core，避免输出不完整元数据。正式 GoReleaser、build-all 和 native candidate 统一使用
-commit 的 **committer time，UTC RFC3339**：GoReleaser 的 `{{.CommitDate}}` 与
-`scripts/build/release-build-time.sh` 对齐。该字段是可复现的提交时间，不再表示编译时的墙钟时间；
-版本号与 commit 的语义不变。选择遵循 [GoReleaser 可复现构建建议](https://www.goreleaser.com/blog/reproducible-builds/)。
-保留 `-trimpath`；Go 在此模式下不保留 build info 的 `-ldflags`，不能把读取它作为版本证明。
-共同 build recipe 是一致性前提，最终 native candidate 的 core/launcher 实际执行输出对照才是运行证据；
-隔离出无 core 的 launcher 副本也必须输出同样的完整版本文本。此项本地回归通过不替代正式签名制品验证。
-本轮修复后的本机完整 candidate 构建、runtime payload 注入与 ad-hoc 签名成功；core、launcher、
-无 core 副本的实际 `--version` 均收到 SIGKILL（returncode -9，无 stdout/stderr），因此仍未取得
-本机版本运行通过证据。[该候选的系统日志](benchmarks/schema-cache/version-metadata-local/amfid.txt)
-明确记录 amfid `AppleMobileFileIntegrityError -423`，原因为 ad-hoc 签名或未知证书链；
-[三次执行结果](benchmarks/schema-cache/version-metadata-local/version-parity.json) 与
-[dirty-source build recipe](benchmarks/schema-cache/version-metadata-local/candidate-build.json) 一并保留。
-这是本机签名信任拒绝的证据，不是 version 断言通过，也不能推出其他机器结果。保留系统保护，
-由原生 CI 补运行对照，正式生产启用仍须 Developer ID/notarization 和最终制品验收。
-
-
-### 并发与采样复核
-
-[四进程与独立采样器报告](benchmarks/schema-cache/2026-09-06-darwin-arm64-multiprocess-candidate.json)
-绑定此前可运行的 `v0.0.0-perf` macOS 候选包。四个独立 CLI 同时读取相同 HOME/cache，分别
-查询 leaf、overview、product 和 `--all`；空目录创建、Meta 损坏修复、Registry 损坏修复均与
-authoritative JSON 一致，最终两个文件的完整 length/digest 均正确。跨进程锁是有界等待，
-测试不要求所有进程只装配一次；进程内混合 loader 的 race 则明确要求 factory 只调用一次。
-该旧候选不包含本轮 assembly audit；采样窗口还与 CLI 测试二进制编译部分重叠，计时不能
-当作空闲机器性能验收，也不能当作最新源码或最终签名 release 的验收证据。
-
-首次 [native feedback run](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33986063995)
-中，Linux 组件与 delivery race、真实 binary parity/repair 和 CPU 门槛通过，但 60 次 cached/live
-RSS 全部是同一个 400,936,960 B 值，RSS 门槛失败。Linux 的资源统计会保留 exec 前的峰值
-（[getrusage](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)）；直接从持有完整
-JSON 的 Python verifier fork 候选进程会污染该统计。因此每次测量改由全新小型 sampler
-启动候选，并只记录 sampler 的 child wait4，排除 sampler 自身的 inherited peak 和启动时间。
-单个候选的阻塞等待设 180 s 上限，以一次 POSIX timer 中断后 kill/reap；成功样本仍使用
-阻塞 `wait4`，不加轮询 sleep 来量化短命令延迟。超时保留部分 stdout/stderr 并抛出错误，
-不把终止后的资源统计记为有效样本，也不丢弃超时后继续宣布性能通过。实际挂起子进程的
-回收/部分输出控制，以及原有并发回收、RSS 隔离和默认测量测试通过（6 + 5 项）；
-这只是采样可靠性修正，不改变任何性能门槛。
-回归测试在 coordinator 保留 128 MiB resident heap 后检查 child RSS 不随之上升；Linux 原生
-结果仍须重跑，不能通过丢弃超限样本或调整 100 MiB 门槛宣称通过。
-
-macOS runner 在 11 分钟时被 Go 默认超时终止，栈位于 ValidateRoundTrip 的串行 JSON 投影，
-没有显示锁等待。CI 现在分别运行 exhaustive parity 和真实混合 loader/repair/lock race，后者
-仍覆盖实际数据的 Meta、选中产品与完整 Registry 以及错误回退；串行 exhaustive 投影保留全部
-locator 断言，单独运行。新 head 的两项检查仍须分别通过，不能以旧 head 的部分结果代替。
-
-
-### 原生反馈与薄入口实施（b62b2c0d 之后）
-
-[第二轮原生 CI](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33987231960)
-的[原始证据](benchmarks/schema-cache/native-b62b2c0d/)绑定 clean `b62b2c0d`、同一 source tree、
-Go 1.25.9、完整 identity 与最终 candidate SHA-256；两个 identity JSON 已本地逐字节复核一致。
-两平台 assembly audit、组件/混合 loader race、完整 locator parity、四进程冷启动与两种损坏修复，
-以及 60 次进程 CPU/RSS 门槛通过。独立 sampler 的 Linux cache RSS p50 为 63,186,944 B，
-不再被 coordinator 的约 400 MB JSON heap 污染。file-hit 仍失败：Meta 中位数 macOS 5.054 ms、
-Linux 7.530 ms；selected 分别 5.717 ms、8.860 ms，均满足 15 ms。比较 job 因门槛失败被跳过，
-不能把本地 identity 对照视为整个 workflow 通过。
-
-针对 Meta 的额外分配，validator 已取消重建/排序整份 CommandMeta alias map 和按产品复制
-全部 metadata/locator map。alias owner 仍遵循 primary 优先、alias 冲突选最小 primary 的同一
-规则；1,400 组含冲突/缺失/额外项/字段损坏的对照用例与旧算法一致。产品 decoder 通过精确
-条目数加 global lookup 逐项比较完成相同校验。protobuf bytes 和版本不变；没有减少验证字段。
-[独立 7 轮 file-hit 复测](benchmarks/schema-cache/2026-09-06-darwin-arm64-file-hit-subset.txt)
-的 Meta 为 **3.770 ms / 3.87 MB**，selected 为 **5.332 ms / 4.32 MB**。这是本机 file-stage
-证据；新 head 的 Linux 5 ms 门槛仍未证明，后续失败时 CI 会保存原生 CPU/heap profile。
-
-薄入口的共享认证读取已接入 `internal/schemareader`：core 与 launcher 共用 identity parser、
-Meta 认证/转换、locator、目标 range 认证/转换；原有 cli 别名保留。命中时不启动 core，renderer
-仍使用 `schemaruntime` 的同一完整/compact 投影，JSON 使用相同的 `jsonutil.MarshalIndent`，
-完成编码后才一次写出；发生写错误后不得再 delegate 产生第二份输出。`--all`、filter、输出文件、
-未知/重复/含歧义 flag、默认 telemetry、DWS 运行选项、非 open edition、plugin/settings/用户 shortcut 状态、
-旧升级器的 nested-skill 候选路径均回退同版本 core。共享 `skillpaths` 只提供路径，不读取内容；
-这样不会吞掉 core 原有的兼容警告。用户 shortcut 的损坏 YAML 也会在启动时产生 warning，存在 shortcuts 路径时交给 core；此项由先失败后修复的回归测试和原生候选诊断检查覆盖。该严格子集不是默认 telemetry 的最终性能方案。
-
-候选脚本把同一个完整 identity 注入 core 和 launcher；普通 release 仍等待 §6.6 的 proof 才能
-注入。新 candidate 已构建，generator 的 identity 与旧 proof byte-equal，但本机 ad-hoc core 和
-launcher 均在执行前被系统 SIGKILL，amfid 同时报告 ad-hoc/未知证书链不受信任。没有关闭系统
-保护或修改 quarantine；不能据此宣称新 binary 本机可运行。原生 verifier 新增 core-free probe：
-在隔离目录运行 byte-identical launcher 副本（无 sibling core），与 authoritative core 做精确
-stdout bytes 比较，证明真实命中没有偷偷 delegate。该新 head 原生证明待运行。 最新 reader/launcher race 通过（1.566 s / 2.013 s）；CLI 混合修复 race 在 TestMain 的 generator 子进程被系统终止，未运行到测试断言，不能记为通过。相同 head 另有两个独立 native full-suite job（`go test -p 2 -parallel 2 -timeout 30m ./...`），即使性能 job 失败也继续收集全量回归结果；仍不替代 Code Admission。
+`c0f3aaca` 原生 CI 按旧脚本收集的数据保留原始门槛标识。原始报告的 `passed/gates` 只能解释为当时规则下的结果；新设计验收必须在 §10 的阻挡项清零后重新执行。不得改写旧报告布尔值、把旧 gate 通过称为新架构已验收，或用候选数据宣称正式产品已经达标。
 
 ## 1. 决策摘要
 
-本文提议引入一个由发布二进制内容摘要约束的、本地自愈的 Schema Runtime
+### 1.1 产品形态：选 A，保留双二进制
+
+本 RFC **选择 A**：`bin/dws` 是受限的**热路径 runtime**，`libexec/dws-core` 是完整命令 runtime。保留现有 `launcher` 包名以避免无关重命名，产品与设计叙事不再使用 thin/极瘦启动器。它承担限定的执行职责，不能以“优化”名义扩展成通用 CLI。
+
+不采用 B（收回单二进制 / help、version 全部回 core）。这是本 RFC 的固定设计，不以某次微基准胜负在 A/B 间切换。若未来改选 B，必须另行修改产品形态决策和验收，不在本实现中暗改。
+
+选择 A 接受两项成本：维护绑定同一版本的两个制品；每次委派前完整验证 core 的 size/SHA-256。Unix 委派使用 `execve` 保持 PID，并非两个 runtime 同时驻留；Windows 使用 spawn/wait。SDK、只读 profile metadata、信号与错误格式通过共享实现保留语义，不复制实现来满足包体积目标。
+
+### 1.2 可执行 allowlist：能力与依赖均封闭
+
+以下是允许的全部 launcher 执行能力，未列出的一律交给 core。`plain` 的严格环境、无扩展和配置缺席检查由 `schemafastpath.PlainInvocation` 统一拥有，不能在每条快路径中自行放宽。
+
+| 能力 | 允许 | 禁止 / 委派 |
+|---|---|---|
+| 版本 | exact `dws --version`；完整 version/commit/buildTime；默认模式共用 tracker，显式 opt-out 保持不读身份 | 附加 flags、别名、缺失所需元数据或不在支持范围的调用委派 |
+| 根帮助 | exact `dws --help`；v1 open edition、已证明 target、plain 调用；只渲染已认证 `RootHelpModel`，en/zh 与 core 同源 | leaf help、`help <path>`、`-h`、扩展/动态发现、非 plain、非 open 全部委派，详见 §6.7.1 |
+| Schema | 仅显式 telemetry opt-out、受 `schemafastpath.Prepare` 接受的 argv、有效 identity 和已认证命中；共用 typed reader/renderer | **默认上报 Schema 永远由 core 执行**；missing/corrupt cache、未知 argv、需要装配/repair 的调用委派 |
+| 通用支持 | release identity/core 完整校验、共享信号/错误处理、只读 profile metadata、官方 SDK 的既有上报 | 不执行业务命令，不增加自己的认证、发送器或第二套 metadata/参数语义 |
+
+仓库包 allowlist 必须与 [入口传递依赖门禁](../internal/launcher/dependencies_test.go) 中 `TestCrossPlatformCoverageLauncherRuntimeDependencies` 的集合完全一致：
+
+| 允许的包（完整列举，组内不是通配符） | 限定用途 |
+|---|---|
+| `cmd/dws-launcher`、`internal/launcher`、`internal/buildversion` | 固定能力路由、制品校验、版本与委派 |
+| `internal/roothelp`、`internal/localename` | 只读帮助模型、共享 renderer 与语言规则 |
+| `internal/clitelemetry`、`internal/profilemetadata`、`internal/clisignal` | 既有官方 SDK、非凭据身份投影、信号；后两者直接依赖只能是标准库 |
+| `internal/jsonutil`、`internal/errors`、`internal/tui`、`pkg/config`、`pkg/validate` | 既有 JSON/错误/非交互样式与纯配置校验；不授权交互 TUI、认证或业务执行 |
+| `internal/schemacache`、`internal/schemareader`、`internal/schemafastpath` | 安全文件读取、identity 与严格快路径准备 |
+| `internal/cli/schemacachepb`、`internal/cli/schemaruntime`、`internal/corecmd/contract`、`internal/skillpaths` | generated DTO、纯查询与合同、兼容路径；不包含父包 `internal/cli` |
+
+**永久禁止项（本 RFC v1）**：Cobra/pflag、`internal/app`、`internal/cli` 根包、auth/凭据/keychain、plugin 执行、runtime payload、业务 transport、完整 Schema assembler，以及上述清单外的仓库包。禁止通过允许包的传递依赖绕过边界。
+
+非标准库网络依赖只允许现有 gate 中的精确边：官方 SDK `internal/sender → net/http`、`aem → net`、`internal/encoder → net/url`，以及 `pkg/config`、`internal/errors`、`pkg/validate` 的 `net/url` 解析。不得新增 launcher 自有 sender。纯 Schema reader 的 [独立依赖门禁](../internal/cli/schemaruntime/dependency_test.go) `TestCrossPlatformCoverageThinSchemaDependencyClosure` 继续禁止全部网络/命令框架及反向依赖 launcher；该旧测试名不代表 launcher 产品形态。
+
+**新增快路径或扩大现有 argv/环境适用范围的合入顺序固定为：先更新本节 RFC allowlist 与对应 dependency/能力路由 gate，经评审后才能合实现。** 不得先合代码、后补白名单。能力须有可枚举的入口合同与正负路由测试；PR policy 必须验证能力集合变化同时修改 RFC 与 gate。当前仅有包依赖检查尚不能执行这一完整规则，差距见 R1。
+
+### 1.3 数据形态与单一声明源
+
+本 RFC 采用一个由发布二进制内容摘要约束的、本地自愈的 Schema Runtime
 Cache，并采用 Meta + product-sharded Registry 两层派生物，而不是让所有消费方读取同一个
 39 MB JSON 或 14.92 MB protobuf：
 
@@ -607,17 +79,15 @@ Cache，并采用 Meta + product-sharded Registry 两层派生物，而不是让
    release-time exact projection gate 和已认证 artifact digest 建立，cache hit 不重建 public
    `map[string]any` snapshot 来重算 hash。
 
-任何检查失败都视为 cache miss。进程同步回到声明驱动的
+对用户可写缓存文件的上述检查失败都视为 cache miss；内置 identity/帮助绑定的失败不适用此规则。进程同步回到声明驱动的
 `NewSchemaSourceRootCommand → ResolveSchemaBuild`，成功后原子替换缓存。缓存读写失败
 不得覆盖一次成功的实时装配结果。
 
-如果二进制没有注入完整可信 identity，例如普通 `go build`、`version=dev`、未知
-overlay、edition 不匹配、v1 未证明 target，或 `RegisterExtraCommands` 非 nil，
-持久缓存完全禁用，只保留进程内 lazy loader。
+普通 `go build`/dev 或明确 disabled target 的 identity 全部未注入时，持久缓存禁用，只保留进程内 lazy loader。未知 overlay、`RegisterExtraCommands` 非 nil 或运行时声明环境不在 proof 范围内时，不消费缓存。已注入 identity 的字段不完整、解析失败或与编译身份矛盾，按 §6.11.1 fail-closed；不能把它当作未启用。
 
 ## 2. 背景与问题定义
 
-当前生产路径是：
+固定 pre-PR 基线的生产路径是：
 
 ```text
 app.NewRootCommand
@@ -646,7 +116,7 @@ first ResolveMeta / leaf help / schema query
 | `dws auth status --help` | 4.28 s | 2.45 s | 363 MB |
 | `dws schema list -f json` | 3.82 s | 2.37 s | 380 MB |
 
-root help 和 version 保留 Schema-lazy、零缓存 I/O 合同；exact `--version` 另由薄 launcher 优化。
+root help 和 version 保留 Schema-lazy、零缓存 I/O 合同；exact `--version` 与符合边界的 root help 由 §1.2 热路径 runtime 执行。
 会调用 `ResolveMeta` 的普通命令和显式 Schema 查询使用同一缓存体系。
 
 ## 3. 目标与非目标
@@ -659,11 +129,17 @@ root help 和 version 保留 Schema-lazy、零缓存 I/O 合同；exact `--versi
 - safety、confirmation、interface 和 provenance 不能被用户可写缓存静默篡改。
 - 官方 release 和 source fork 对“是否启用缓存”有可验证的构建合同；external private
   overlay 在 v1 fail-safe disabled。
-- 缓存优化失败时保持现有正确行为；cache 是优化，不是可用性依赖。
+- 用户可写 Schema cache 失败时保持声明驱动行为；内置密封身份/帮助绑定损坏按 §6.11 fail-closed，不能混作 cache miss。
 - 控制缓存大小和瞬时内存，不接受无界反序列化；v1 不引入 decompressor。
 
 ### 3.2 非目标
 
+- 不追求 launcher 无 SDK、无网络依赖或只有校验/委派；官方上报是允许的限定职责。
+- 不追求全部 help 入口无委派，不为 non-open edition 封存 root help，不把业务命令搬进 launcher。
+- 不把 Lark/GWS 的 public/native 排名作为本 RFC Ready 或 release gate；领先声明必须另附同条件证据。
+- 不追求委派入口与直接 core 的 wall 时间相差 ≤5%；逐次 core 校验成本作为诊断项单列。
+- 不采用另一份手写帮助声明，不让 snapshot、Catalog dump 或缓存成为声明权威。
+- 不通过减少安全校验、关闭默认上报、缩短 SDK flush budget 或默默丢弃慢样本达到预算。
 - 不改变 `dws schema` 公开 JSON wire contract。
 - 不提交 `schema_catalog/`、`schema_meta_index.gob` 或新的生成 Catalog 权威。
 - 不把完整 Schema blob 嵌入可执行文件。
@@ -724,8 +200,7 @@ codec-stage latency 为 1.44 ms，给 5 ms 完整预算留下余量但尚未证�
   `reflect.DeepEqual` 和 public wire equality，不依赖“能解码”作为等价证明。
 
 这个格式只是当前二进制私有、可丢弃的本地 transport，不是长期 public storage contract。
-任何 wrapper、generated schema、conversion 或 determinism gate 无法满足时，
-persistent cache 必须禁用。
+任何 wrapper、generated schema、conversion 或 determinism gate 无法满足时，不得发布 enabled-target 包；明确 disabled 的开发产物不启用 persistent cache。
 
 ### 4.4 现有 JSON snapshot 适合 wire，不适合本地热路径
 
@@ -995,7 +470,7 @@ protobuf 相对同一 mirror 的 gob p50 快约 22%，累计分配少约 35%，a
 gob mirror 使用 generated message pointer graph，不代表手写 pointer-free gob DTO 的最佳值；
 因此该数据不能证明 protobuf 击败所有可能的 gob 布局，但足以否定“direct gob 的 118 ms 已证明
 优于 protobuf”这一旧依据。v1 格式仍固定为 protobuf；Phase 1 的可复现 selected-path gate 只
-确认 protobuf 是否达标，失败时禁用 persistent cache，不在实现 PR 中重新打开 gob 选择。
+确认 protobuf 是否达标，失败时阻止 enabled-target 发布，不在实现 PR 中重新打开 gob 选择。
 
 同一 Registry protobuf artifact 的 raw/gzip/zstd/LZ4/Snappy 大小分别为
 14,920,723/1,310,234/929,284/1,645,498/2,387,203 B。压缩路径的 decode + Index 受当前机器
@@ -1193,46 +668,14 @@ repository benchmark 保留，不能声称 strip 绝对无效；它至少没有�
 recipe 但未附加 runtime payload 的构建也受同一系统压力污染，不能用于发布性能排名。因此
 不能用 strip、压缩 Schema 或继续微调 protobuf 代替消费边界调整。
 
-如果竞争目标仅是 npm public wrapper，同 binary pre-Cobra fast path 仍是可行的低风险方案；但
-本文后续目标已经明确包含 GWS native。`internal/app` import-only 的 release-like p50 约
-14.7 ms，已经高于 GWS native 约 9.8 ms，因此选择不静态 import `internal/app` 的极瘦 native
-launcher，而不是把同 binary 结果包装成达标。launcher 的 fast path 遵循：
+本节原型是历史归因实验，不再决定产品形态。§1.1 已选择受限热路径 runtime；能力和依赖只以 §1.2 为准。同 binary 原型保留为替代方案的历史材料，不构成当前实现可自行改选 B 的授权。
 
-1. 只识别 exact `--version`、有最终 core 绑定投影的 exact `--help` 和受支持的 `schema` argv；不做模糊 prefix、alias 猜测或未知 flag
-   容错。任何不确定输入均原样 `exec` 同版本的完整 core。
-2. Schema hit 只读取 binary-authenticated Meta 和目标 product range，并复用本文同一个
-   envelope、protobuf conversion、typed validation 和 renderer；禁止建立第二套 Schema 语义。
-3. cache missing/corrupt/disabled、external overlay、plugin 可能改变 surface，或 output contract
-   无法完全复现时，fast path 返回 unhandled，由完整 core authoritative assembly/repair。
-4. 保留现有 telemetry 语义并单独测量 identity/`clitrack` 成本。默认 Schema 请求仍由 core
-   处理；精确且满足 plain-invocation 边界的默认 `--version`、具有已验证投影的 `--help` 复用共享 SDK 配置与只读身份解析，
-   在 launcher 完成同一次上报。只有显式 `DO_NOT_TRACK` 才能使用无上报 fast path；
-   不能因实现了 launcher 就静默省略默认上报。opt-out benchmark 必须明确标注，不能用于
-   证明默认 public entry 的竞争性目标。
-5. launcher 不 import `internal/app`、Cobra/pflag、auth、plugin、runtime payload、业务 network
-   transport 或完整 Schema assembler。`profilemetadata` 只依赖标准库，共享原 auth 的 DTO、
-   normalization 与 selector 实现，不能维护另一套身份选择规则。`clisignal` 也只依赖标准库，
-   core 通过回调提供已完成输出状态，launcher 不引入 `output` 命令框架。错误分类和原 human
-   formatter 复用 `internal/errors`，允许其现有非交互 `tui` 样式依赖；官方埋点 SDK 的网络栈
-   是保留上报合同所必需的依赖。此前笼统的“无 TUI/网络”规则在默认埋点入口不成立，不能
-   为满足包名禁令重写错误样式或自行投递埋点。dependency allowlist 与 I/O seams 共同门禁，
-   任何新增运行时包必须重新审查；包括这些依赖的实际默认/opt-out 延迟仍须通过原性能门槛。
-
-`internal/app` import probe 在非 release build 上观测到约 20 ms CPU；这是包含 process startup、
-Mach-O loading、package init 和 output 的粗略 baseline，不是 production floor。direct app probe
-的约 184 ms CPU 也不是完整 public entry，因为它绕过 identity/`clitrack`。两者只证明 launcher
-必须切断 app dependency graph。竞争目标分开报告，但都作为门禁：
-
-- primary：官方 public entry 对 public entry；DWS p50/p95 同时低于 Lark 和 GWS npm wrapper；
-- diagnostic：native 对 native，帮助发现 wrapper 税；不得用它改写 primary 结论；
-- native：DWS launcher p50/p95 低于 GWS native；必须测量最终 launcher 的完整 Schema leaf 路径。
-  是否需要更细分片由这个测量决定，不能先把 tool-offset 写成必要条件、又在 §7 拒绝它。
-  product shard 未达标时继续优化或重新评审分片粒度，不能降低竞争性目标。
+历史上将“DWS public/native 同时领先 Lark/GWS”作为本 RFC 门禁的条款在 **2026-09-06 废止**。竞争对比继续提供诊断数据；它不能代替本 RFC 的固定 pre-PR 回归预算，也不阻挡符合 §8.4 的 release。不得用本文的 release gate 通过宣称竞争性领先。
 
 一个不含 Schema、只处理 exact `--version` 的 release-like launcher prototype 已完成 100 次
 随机交错子进程对比：DWS packed prototype p50/p95 为 4.22/6.51 ms，GWS native 为
 8.23/10.75 ms；DWS maximum RSS p50 约 4.4 MiB，GWS 约 8.8 MiB。该结果尚非签名/notarized final
-artifact，也不证明 Schema path 达标，但证明“极瘦 native launcher”具备必要 process margin。
+artifact，也不证明 Schema path 达标，只说明该历史 prototype 的启动成本；不能代表当前默认上报的热路径 runtime。
 
 ### 5.14 GWS、Lark CLI、Codex 与 Grok Build 的交付/签名对照
 
@@ -1252,7 +695,7 @@ ad-hoc signature，重新 `codesign` 仍报 `main executable failed strict valid
 ```text
 <version-root>/
   package-manifest.json
-  bin/dws                 # 极瘦 launcher
+  bin/dws                 # 受限热路径 runtime
   libexec/dws-core        # 当前完整 Go app，内部仍携带 native runtime payload
 ```
 
@@ -1279,9 +722,7 @@ ad-hoc signature，重新 `codesign` 仍报 `main executable failed strict valid
 - Unix launcher 通过 `execve` 保持 PID/stdio/signal/exit；Windows spawn/wait。core 中 upgrade、
   rollback 和 executable-relative config 必须使用受 package-layout 约束的 launcher identity；daemon
   和内部 subprocess 继续直接使用 running core。
-- core fast hit 不在每次启动 hash 40 MB：macOS 依赖 kernel code-sign validation，其他平台依赖
-  install-time signed/checksummed package 与不可变版本目录。active same-UID attacker 本来即可替换
-  用户目录中的 launcher，不在额外 threat model；高权限 helper 仍需像 Codex bwrap 一样逐次验证。
+- launcher 已处理的快路径不打开 core；所有委派路径（包括默认 Schema）在执行 core 前都完整校验其 size/SHA-256。安装时验证、不可变目录和 OS 签名不替代逐次委派校验。本 RFC 不引入 mtime/size 验证缓存，也不跳过哈希来满足延迟预算；该成本按 §8.4 单列诊断。
 
 ## 6. 详细设计
 
@@ -1557,6 +998,12 @@ compiled edition 不同的 `-edition`，并拒绝 `RegisterExtraCommands` 非 ni
 
 ### 6.6 构建与发布接入
 
+**选择“正式包与候选同构注入”，不采用长期内部专用或运行时版本开关方案。** 生效条件固定为：**首次包含本 RFC 实现的官方 release（prerelease 与 stable 均包含）**。对 v1 enabled targets `open × {darwin/arm64, linux/amd64}`，该次发布必须同时包含 core/launcher 的完整 Schema identity，以及绑定最终 core 的 launcher help snapshot；不得发布能力字段缺失的 enabled-target 包。proof 缺失/失败即阻止该 target 发布，不准退化为空字段后继续宣称支持；不得临时删除 enabled target 或改标 disabled 绕过此条件，支持矩阵变化须先改 RFC。
+
+候选与正式包必须调用**同一份封装实现**：生成/核验 target proof → 注入 Schema identity 构建 core → 注入 runtime payload 并完成 core 签名 → 从声明生成帮助模型并与最终 core 的 en/zh 输出逐字节比较 → 同时注入 core digest/size、Schema identity 和 help snapshot 构建 launcher → 签名/公证 → 对最终 bytes 执行 proof → 归档/解包再验。只允许签名凭据、版本元数据及“是否发布”的参数不同，不能有分别维护的步骤顺序或 capability 开关。
+
+manifest 必须显式记录每个 target 的能力模式和禁用原因。v1 未启用的 target、non-open launcher 和普通 dev build 可以声明 disabled；这是预先限定的支持矩阵，不是同一 enabled target 上候选/正式行为分裂。不得拿 enabled candidate 的数据替 disabled 正式包背书。回滚只切换到上一份已验证的完整版本包，不能通过清空注入字段或混装 launcher/core 回滚，详见 §9。
+
 新增 build-time identity generator，使用与生产相同的：
 
 ```text
@@ -1573,7 +1020,7 @@ generator 只输出 hash、format 和 size 元数据，不输出或提交 Catalo
 manifest 必须绑定 GOOS/GOARCH、commit、exact Go toolchain、edition、build tags、`CGO_ENABLED`、
 Schema-affecting ldflags 和 normalized build recipe digest；协调 job 验证 §6.6 前置 proof 后，才把
 共同 identity 写入 `$GITHUB_ENV`，由 `.goreleaser.yaml` 通过 ldflags 注入对应 enabled target。
-proof 缺失或不一致的 target 使用空 identity。该步骤不写仓库文件，因此仍满足 sealed source clean gate。
+enabled target 的 proof 缺失或不一致即阻止发布；只有支持矩阵中明确 disabled 的 target 才使用空 capability 元数据。该步骤不写仓库文件，因此仍满足 sealed source clean gate。
 workflow 和 `scripts/dev/build-all.sh` 必须显式设置
 `GOTOOLCHAIN=go1.25.9` 并校验 `go env GOVERSION`；只依赖 `go.mod` 下限不够，因为本地更高
 版本会被直接使用并可能生成不同 protobuf bytes。generator 还必须校验 checked-in generated
@@ -1581,7 +1028,7 @@ workflow 和 `scripts/dev/build-all.sh` 必须显式设置
 
 `scripts/dev/build-all.sh` 不能把本机生成结果直接注入所有 cross-build target。它只允许消费
 与目标完整 build recipe 精确匹配且已由 release job 校验的 native proof manifest；缺少
-target-specific proof 的产物必须注入空 identity。普通 `scripts/dev/build.sh`
+target-specific proof 时不得构建声称 enabled/release-ready 的产物；仅可输出明确 disabled 的开发产物。普通 `scripts/dev/build.sh`
 保持 `dev` 行为并禁用持久缓存，避免每次开发 build 支付额外 generation 成本。
 
 v1 不为 module 外的 private overlay 暴露 build-only generator API。只要
@@ -1597,7 +1044,10 @@ release gate 必须证明：
 2. Meta DTO 与同次 resolved Registry 的 `CommandMeta` projection 完全一致；
 3. release binary 内 expected identity 非空；
 4. release binary 空缓存实时装配得到相同 SourceHash、SurfaceHash 和 artifact bytes；
-5. cache hit 的 Schema wire 与实时装配 wire 等价。
+5. cache hit 的 Schema wire 与实时装配 wire 等价；
+6. enabled package 同时具备完整 Schema identity、help snapshot、core digest/size，三者的 commit/edition/目标 proof 一致，拒绝任一缺失、半注入或混版；
+7. 最终 launcher 在无 core 副本中完成 en/zh root help，与最终 core oracle 逐字节相同；版本、信号、上报语义不变；
+8. candidate 与 release 调用同一封装入口，测试证明两者的 capability 注入与失败分支相同；最终签名/公证和安装/升级/整包回滚全部通过。
 
 上述 proof 必须在每个启用 target 的 native runner（v1 仅 darwin/arm64、linux/amd64）对同一
 commit 和 Go 1.25.9 分别执行。两个 runner 输出的完整 identity/artifact metadata 必须 byte
@@ -1606,7 +1056,7 @@ target。proof runner 必须使用 isolated empty HOME/config/credential stores�
 并通过固定 clock seam 或静态/动态 gate 证明 Schema-producing path 不读取 wall clock。随后还要
 在 sanitized environment 与 hostile-variation environment（PATH、locale、proxy、DWS_* 非凭据
 配置）下得到相同 identity；任何访问 network、credential、非 fixture user file，或任何输出
-差异都禁用该 target 的 cache。`NewSchemaSourceRootCommand` 的构造合同禁止依赖 network、
+差异都使 enabled target 的发布 gate 失败。`NewSchemaSourceRootCommand` 的构造合同禁止依赖 network、
 credential、clock、user file 或未进入 identity 的 environment，也禁止调用 `ResolveMeta`、
 `deliverySchemaCatalog`、Meta/Registry loader 或任何间接 Schema delivery consumer。独立 identity generator 必须用
 `AuditSchemaAssembly` 包住 factory、`ResolveSchemaBuild` 和 projection/round-trip 全调用链。
@@ -1641,20 +1091,12 @@ PATH/locale/proxy/DWS 非凭据配置，对照 native candidate 的完整 identi
 未改变、HOME 未被写入。报告绑定 commit、dirty 状态、generator SHA-256、实际 sandbox argv 与
 环境；此检查不重新生成 Catalog 声明或新增 payload authority。
 
-本机 macOS 的文件与网络控制探针、失效探针拒绝和路径转义回归已通过；实际 generator 首次执行
-收到 SIGKILL，未获得本机受限装配成功证据。fc2d8991 的 macOS 原生 runner 已取得真实受限
-生成器成功证据；Linux 的 namespace 初始化修复仍须新 head 核验。该检查只补
-文件/网络隔离与环境变化证据，尚未审计被拒绝后被业务代码忽略的访问尝试，也未证明 wall-clock
-独立性或最终签名制品。报告固定保留 `forbidden_access_attempts_audited=false`、
-`wall_clock_independence_proven=false`、`final_artifact_proven=false` 和 `release_eligible=false`；
-其 `passed` 只能表示此开发检查通过，不能满足本节全部发布前置 proof 或开启 release cache。
-
 前置 proof 不能替代最终 artifact proof。GoReleaser 生成 candidate binary 后，release job 必须
 记录其 binary SHA-256，并把未改写的确切 binary 交给对应 native runner；runner 在相同 hermetic
 条件下执行上述第 3-5 项，输出同时绑定 binary SHA-256、前置 manifest 和 injected identity 的
 final proof。发布 job 只允许归档/发布该 SHA-256 对应的 binary；归档后还要解包复核 binary
 digest。任何 rebuild、relink、codesign 或其他会改变 binary bytes 的步骤都必须发生在 final
-proof 之前。无法原生执行 final candidate 的 cross-build 只可发布空 cache identity。
+proof 之前。enabled target 无法原生执行 final candidate 时不得发布；其他明确 disabled 的 cross-build 不得携带 enabled 能力声明。
 
 ### 6.7 包结构与依赖方向
 
@@ -1703,9 +1145,7 @@ core 必须先确认 `SchemaCacheFastPathIdentity()` 的当前注册身份等于
 用户 shortcut 和兼容 warning 条件继续按共享规则回退。全部认证和渲染成功前不输出；
 输出一旦开始，即使短写或失败也不得再回退，错误按原 human/JSON 选择报告给 tracker。
 
-此改动仍需当前 head 的两平台最终 candidate 验证。native verifier 增加 direct-core 精确
-wire 对照及 CPU/RSS 检查；其中测量显式关闭 telemetry，因此不能把这些数字写成默认
-tracker identity/flush 的进程延迟。默认 telemetry 性能和竞争性端到端目标仍须另证。
+native verifier 必须保留 direct-core 精确 wire 对照及 CPU/RSS 诊断；显式 opt-out 与默认 tracker 的测量分开。Ready/release 只按 §8.4 判定，不从关闭 telemetry 的数据推导默认入口延迟。
 
 `internal/schemacache` 只依赖标准库和 `golang.org/x/sys`，不调用 payload parser；它校验
 binary-pinned expectation、使用 bounded fd reads、认证 exact range、发布 Registry/Meta，
@@ -1718,7 +1158,7 @@ App 注入 build vars、判断 edition/overlay/platform eligibility 和注册 op
 注册顺序为 `RegisterSchemaSourceRoot(factory)` → `RegisterSchemaCacheOptions(options)`：
 
 - 旧 `RegisterSchemaSourceRoot` 先清除缓存身份与 lazy delivery 状态，确保新 factory 不继承旧信任锚；
-- 只有显式 `Enabled` 且完整有效的 identity 才启用缓存；无效选项立即清除 registration；
+- 只有显式 `Enabled` 且完整有效的 identity 才启用缓存；无效选项先清除 registration，随后向调用者返回错误；发布入口按 §6.11.1 拒绝，不得以清除注册替代错误处理；
 - options 的内容解析不做 I/O，文件打开仅在首次消费时发生；
 - `RuntimeEligible` 在消费前重新检查 disable 环境、edition 和 overlay；plugin 注入会标记
   runtime uncertain，进程内后续调用绕过持久缓存；
@@ -1731,6 +1171,25 @@ App 注入 build vars、判断 edition/overlay/platform eligibility 和注册 op
 Cache protobuf/DTO 不从 `pkg/cli` 导出，也不进入 public Schema wire。跨 package 测试辅助仅放在
 `fortest.go`；production 不调用 ForTest API。声明仍是唯一权威，binary-pinned 缓存只作为其
 可丢弃、可重建的传输派生物；旧 Catalog dump 不能替代声明输入。
+
+### 6.7.1 Help 单一真相与委派矩阵
+
+唯一帮助源为 **declarations → `app.RootHelpModel` → `roothelp.Model`**。core 从当前有效声明树取得模型；构建进程从隔离的声明树取得同源模型并与最终 core 核对。`roothelp.Snapshot` 只是绑定完整 commit、open edition、最终 core SHA-256 的构建派生品，不能手写服务表、成为第二份声明，或从用户可写配置读取。
+
+可见性必须从声明与 edition 的静态信息得到，不能依赖先执行 runtime root 的全局注入副作用。回归必须在 fresh subprocess 中先生成声明投影、再执行 runtime root，分别覆盖 en/zh，并覆盖显式注册的 supplement-backed 命令。增加命令/描述、改变可见性或 core bytes 后必须重封整个 package。
+
+| 调用 / 制品状态 | 执行所有者 | 必须满足的行为 |
+|---|---|---|
+| exact `--help`，open、enabled target、plain、完整有效绑定 | launcher | 使用同一 renderer；默认上报一次，opt-out 不读取身份；零 Schema cache I/O，不定位/打开 core |
+| exact `--help`，适用范围内但 snapshot 缺失 | core | 原样委派；正式 enabled 包在构建阶段就应拒绝该状态 |
+| exact `--help`，适用范围内且 snapshot present but invalid/mismatch | launcher 错误出口 | §6.11：退出 125、明确诊断、stdout 为空、不委派 |
+| leaf `--help`、`help <path>`、`-h`、附加/未知 flags | core | argv 原样交付完整框架；不得猜测等价入口 |
+| settings/plugin/shortcut 扩展、动态发现或非 plain 环境 | core | 不消费封存模型，保留运行时有效命令树 |
+| edition ≠ open 或未启用 target | core | **v1 永远委派，不另封该 edition 的帮助投影**；扩展支持须先修改 RFC 与 gate |
+
+先判断静态支持范围和调用是否属于允许能力；本来就应委派的调用不消费 snapshot，不把运行时扩展导致的树变化误判为绑定损坏。进入受支持的 exact-help 分支后，必须区分 missing 与 invalid，禁止将解码错误统一转换为 unhandled。模型完全校验后才能输出；任何已开始输出的路径不得再次委派或重复上报。
+
+构建期模型解码、语言投影、stderr/退出码或最终 core 摘要校验任一失败，**候选与正式包构建均失败**。运行期采用下节明确的 fail-closed，不保留“坏 snapshot 静默委派”的 availability 例外。
 
 ### 6.8 路径与权限
 
@@ -1845,7 +1304,23 @@ lock 只用于抑制多进程同时支付约 2.4 s 的 cold rebuild，不承担�
 
 现有 event/auth lock 实现只能作为行为参考；Schema core 不应依赖 event-owned 包。
 
-### 6.11 错误处理
+### 6.11 失败语义：密封制品与可丢弃缓存分开
+
+#### 6.11.1 内置帮助/身份绑定
+
+| 状态 | 对外行为 | 输出 / 观测 | release 验收 |
+|---|---|---|---|
+| 所需 capability 元数据完整缺失 | 委派 core；dev/disabled/兼容包可以走该路径 | 不产生部分帮助，不重复 tracker | enabled 正式包必须在封装前拒绝 missing |
+| snapshot present，但编码/版本/大小/结构/模型无效 | **fail-closed，退出 125，不委派** | stdout 为空；stderr 使用稳定 `artifact` 分类及 `invalid_help_snapshot` 原因，不打印原始 payload | 子进程负向测试证明无 core 调用、无部分 help |
+| snapshot 的 commit/edition/core digest 与当前内置身份不匹配 | **fail-closed，退出 125，不委派** | stdout 为空；稳定 `help_snapshot_mismatch` 原因 | stale/mixed-package 测试必须失败，不能按 missing 测试 |
+| Schema identity 字段有任意值但不完整、解析失败或绑定矛盾 | **fail-closed，退出 125**；禁止当成“未注入” | 稳定 `invalid_schema_identity`，不读取不可信缓存 | launcher/core 构建入口和 runtime 的 missing/invalid 区分必须一致 |
+| 委派需要的 core 缺失、size/hash 不符或路径不可信 | 保持 artifact error / 125，不执行 core | 保留稳定错误与空业务输出 | 错版本、篡改、symlink、校验竞争均必须拒绝 |
+
+non-open、非 plain、leaf help 等适用范围外的调用先按 §6.7.1 委派，不解析本次不消费的 snapshot。对范围内 present-but-invalid 的密封投影，**没有静默回退例外**。失败至少通过退出码和稳定 stderr 原因可观测；不为上报失败再启动一套 tracker，也不泄露 snapshot、凭据或 profile 原文。
+
+#### 6.11.2 用户可写 Schema cache 的显式可用性例外
+
+以下表只适用于可重建的磁盘 Meta/product cache，**不适用于内置 help snapshot 或 binary-pinned identity**。其失败允许回到唯一的声明装配，因为它是派生数据，不是发布绑定；必须记录既有内部 counters/debug 原因，不在默认 stdout/stderr 增加 cache warning。
 
 | 情况 | 行为 |
 |---|---|
@@ -1856,7 +1331,7 @@ lock 只用于抑制多进程同时支付约 2.4 s 的 cold rebuild，不承担�
 | source-root 返回 nil | 保持当前 fail-closed error |
 | 实时装配失败 | 返回实时装配错误；不使用 stale cache |
 | 实时装配 hash 与注入 expected hash 不同 | 使用实时 authoritative 结果但禁写 cache；记录内部诊断，release gate 必须阻止该状态发布 |
-| expected identity 为空 | 完全绕过持久 cache |
+| expected identity 全部为空（dev/明确 disabled 模式） | 完全绕过持久 cache；部分字段或解析失败按 §6.11.1 拒绝 |
 
 默认不向 stderr 打 cache warning，避免污染 JSON/脚本输出。命中、miss、corrupt、repair、
 write failure 和 identity mismatch 通过内部 counters/debug logging 暴露。
@@ -1906,7 +1381,7 @@ confidentiality 需求时另行设计 compress-before-encrypt 的 AES-256-GCM en
 | TTL | Schema 对一个二进制是静态内容，时间不代表 freshness |
 | stale-while-revalidate | 可短暂发布旧 safety/confirmation，拒绝 |
 | background repair | CLI 可能立即退出，无法保证写完；增加 goroutine/lifecycle 风险 |
-| cache error fatal | 性能派生物不应降低声明驱动路径的可用性 |
+| 用户可写 Schema cache error 一律 fatal | 可重建 cache 不应降低声明驱动路径的可用性；内置密封绑定损坏必须 fatal，按 §6.11.1 |
 | committed/generated Catalog authority | 违反“声明即 Catalog”和现有 drift policy |
 | 直接复用 `dws cache` | 该命令是 deprecated 服务发现兼容 no-op，不属于 Schema cache 产品面 |
 
@@ -1924,8 +1399,8 @@ confidentiality 需求时另行设计 compress-before-encrypt 的 AES-256-GCM en
 - all-fields sentinel 覆盖每个 scalar、pointer、nil/empty collection、RawMessage 和 provenance
   candidate；任一缺失或未 bump DTO version 均失败。
 - root help 和 `--version` 不读取 cache。
-- expected identity 为空时零 persistent-cache I/O。
-- edition mismatch、external overlay 和未证明 target 均禁用 persistent cache。
+- expected identity 全部为空时零 persistent-cache I/O；部分注入、无效绑定按 §6.11.1 拒绝。
+- external overlay、运行时环境不在 proof 范围和明确 disabled target 不消费 persistent cache；编译身份与已注入 identity 的 edition 矛盾必须拒绝。
 
 ### 8.2 损坏与边界
 
@@ -1958,111 +1433,71 @@ confidentiality 需求时另行设计 compress-before-encrypt 的 AES-256-GCM en
 - 多 subprocess first-use 最终得到一个可解码文件。
 - lock timeout 不死锁、不阻断 live fallback。
 
-### 8.4 性能预算
+### 8.4 性能门槛：唯一生效口径
 
-首版建议预算以同机 candidate/base 对比为准：
+本节是 Ready/release 的唯一性能 gate 定义。**旧的 `launcher vs 同包 core ≤5%`（help/version p50、p95 共四项）自 2026-09-06 起废止**；必须从脚本的阻挡 `gates/passed` 聚合中移除，只能保留为 `diagnostics`。旧 raw reports 不改写、不追溯“改绿”。本节不允许同一指标同时存在新旧两套 release 判定。
 
-| 路径 | 目标 |
+#### 8.4.1 入口回归：只对固定 pre-PR 入口
+
+基线固定为 `5243e5ca19b55a3e785e5cc09273b653ad5381dc`，在同一 native host 使用 Go 1.25.9、相同 release flags/runtime payload 和一致的默认上报、认证、locale 条件构建与测量。每种模式至少 30 个独立子进程，随机交错，保存完整样本；p50 为中位数，p95 为排序后 `ceil(n×0.95)` 项。
+
+| 入口 / 模式 | release gate | 不属于 gate 的数据 |
+|---|---|---|
+| exact root `--help` 与 exact `--version`，默认上报与显式 opt-out **分开** | 每平台、每模式的 wall p50 和 p95 都 ≤固定 pre-PR 对应入口的 1.05 倍；help/version Schema cache I/O count = 0 | 同包 core 差值只用于定位装配与入口成本 |
+| opt-out Schema 命中（launcher 直接执行）及默认 Schema 命中（core 执行） | 同一候选、同一上报模式的 authoritative assembly 对照；user CPU p50 至少降低 80%，全部有效样本 process peak RSS ≤100 MiB | 不设置“launcher ≤ core+5%”，不要求低于竞品 |
+| 委派路径：leaf help、普通命令、扩展/非 plain 等 | 正确性、参数/信号/退出码、逐次 core 完整校验必过；**不设相对同包 core 的 wall release gate** | 成对上报 launcher/core 的 wall、CPU、RSS，以及 core 大小、哈希阶段耗时和启动开销；不把总差值全部归因于哈希 |
+
+hash 阶段必须独立测量/归因，诊断可用专门 benchmark 或不进入验收耗时样本的 tracing；不能通过删校验、缓存校验结论或改变 SDK 默认 flush budget 换取通过。对委派路径没有墙钟门槛不等于声称其性能无回退，所有测到的变化必须如实报告。
+
+#### 8.4.2 Schema 组件预算
+
+| 路径 | release gate |
 |---|---|
-| Meta cache hit：read + verify + protobuf + exact conversion + lookup | p50 ≤ 5 ms，allocated bytes ≤ 8 MB |
-| selected product-shard hit：authenticated locator + pread + verify + protobuf + exact conversion + product-local validate/Index | p50 ≤ 15 ms，allocated bytes ≤ 8 MB |
-| `schema --all`：逐 product verify/decode + global validate/Index | p50 ≤ 150 ms，allocated bytes ≤ 110 MB |
-| Registry raw shard data | 总 payload ≤ 64 MiB - 208 B（67,108,656 B），单 shard ≤ 8 MiB，总文件 ≤ 64 MiB；超过上限或 cold-read 明显回退时重新评审压缩/粒度 |
-| full `--all` product-shard protobuf 相对同形 JSON | p50 和 user CPU 均 ≤ JSON 的 60%；peak RSS ≤ JSON 的 125%，否则重新评审 serializer |
-| end-to-end Schema leaf hit | 相对 authoritative assembly user CPU 至少降低 80%；process peak RSS ≤ 100 MiB |
-| steady `ResolveMeta` | 保持 map lookup，0 allocation |
-| root help / `--version` | 相对 base 不回退超过 5%，且 cache I/O count = 0 |
-| cache miss | 不设置硬 latency 回归门禁；必须只 assemble 一次并成功自愈 |
+| Meta cache hit：read + verify + protobuf + exact conversion + lookup | p50 ≤5 ms，allocated bytes ≤8 MB |
+| selected product-shard hit：authenticated locator + pread + verify + protobuf + exact conversion + product-local validate/Index | p50 ≤15 ms，allocated bytes ≤8 MB |
+| `schema --all`：逐 product verify/decode + global validate/Index | p50 ≤150 ms，allocated bytes ≤110 MB |
+| Registry raw shard data | 总 payload ≤67,108,656 B，单 shard ≤8 MiB，总文件 ≤64 MiB；超限须重新评审压缩/粒度 |
+| full `--all` product-shard protobuf 相对同形 JSON | p50 和 user CPU 均 ≤JSON 的60%；peak RSS ≤JSON 的125% |
+| steady `ResolveMeta` | map lookup，0 allocation |
+| cache miss | 不设硬 latency gate；只 assemble 一次并成功自愈，失败遵守 §6.11 |
 
-correctness 必须覆盖 darwin/arm64、linux/amd64 enabled path，以及其他 target disabled
-stub 的 build/fallback。性能基线在两个 enabled target 各记录一次；不同机器不直接
-比较绝对时间。Lark/GWS 领先声明另设竞争性 gate：必须在空闲、固定版本、交错顺序、至少
-30 个子进程样本下同时比较 public entry p50/p95；DWS 两项都低于两个对手后才能声称“稳定更快”。
-当前约 250 ms 的 DWS 非 Schema floor 未达该条件，product sharding 本身不承担或伪造该结论。
+正确性覆盖 darwin/arm64、linux/amd64 enabled path，以及其他 target 的明确 disabled build/fallback。预算分别在两个 enabled native target 验收，不能跨机器拼接基线。
 
-## 9. 上线计划
+#### 8.4.3 竞争性与整体内存报告
 
-### Phase 0：RFC 与 benchmark
+Lark/GWS 对比独立于 Ready/release gate。public 对 public、native 对 native，固定版本和机器、元数据预热与认证/上报条件，至少 30 次交错样本，列出完整 argv 和输出大小。只有相应同条件 p50/p95 数据支持时才能宣称领先；一个入口的结论不得替代另一个。
 
-- 评审本文的信任边界、双层格式和 codec 决策。
-- Phase 1 合入前先把 selected-path complete-mirror benchmark、field inventory 和固定 fixture
-  迁入仓库，使本 RFC 的 one-off protobuf prototype 可复现；不提交临时 39 MB/24 MB/14 MB blob。
+普通命令与进程树 RSS 是完整性能报告的必报维度，不由 Schema 或 version 外推。wrapper 与 native 子进程同时驻留的 RSS 另做独立采样，披露采样间隔和下界性质；不能相加不同时刻的各自峰值。真实 RPC、mock、dry-run 和长期事件进程分开说明测量范围。该报告不新增“必须击败竞品”或“所有命令统一省内存”的 gate。
 
-### Phase 1：格式与生成门禁
+## 9. 实施顺序、发布生效条件与回滚
 
-- 定义完整 generated Product Registry/Meta protobuf mirror，补齐 Meta 字段和 sorted product descriptors。
-- 增加 binary-pinned artifact digest、SourceHash、SurfaceHash 和 build identity generator。
-- 增加 deterministic、projection equality 和 release identity tests。
-- 尚不启用 runtime disk read。
+1. **设计冻结（2026-09-06）**：选 A；§1.2 allowlist、§6.7.1 委派、§6.11 失败语义与 §8.4 新门槛生效。§10 未对齐项按代码事实保持未勾选。
+2. **代码对齐，仍保持 Draft**：先完成能力/依赖 gate 和旧延迟 gate 迁移，再实现 missing/invalid 分流及负向测试；把候选与 release 封装归并为一个入口。已有 CI 可以完成并保留原始结果，但不能算此阶段完成。
+3. **Ready 条件**：§10 所有“阻挡 Ready：是”条目勾选且绑定可复核的代码/测试；在对齐后的同一源码上完成两平台新 gate、声明/全量 suite、最终制品身份、help、签名/公证、安装/升级/整包回滚 proof。正式 enabled target 的任一 proof 不足即不能 Ready。
+4. **发布条件**：首次包含本实现的官方 prerelease 和 stable 都执行 §6.6 同构注入；不存在“先发布空快路径正式包、以后再补”的过渡产品态。支持矩阵外的 disabled target 必须显式标识，不能借 enabled target 的证据宣传。
+5. **回滚**：保留上一份已验证的完整 immutable version package，原子切换公开入口/版本指针；对 launcher、core、manifest 和 runtime payload 一起回滚并做版本/业务 smoke。禁止清空注入字段、仅替换单个二进制或在发布后改写已签名 bytes。旧用户 cache 因 identity 不符而 miss，无须 migration/手工删除；下一次受支持版本按正常规则自愈。
 
-### Phase 2：runtime read/self-heal
+## 10. 代码未对齐清单与 Ready 检查
 
-- 接入 explicit cache registration options。
-- 拆分 Meta 与 Registry product-shard loader。
-- 实现 bounded read/`pread`、range hash/typed validation、锁，以及 Registry-first/Meta-last 原子发布。
-- 更新 AGENTS/docs 中“禁止 previous Catalog runtime source”的表述：声明仍是 authority，
-  binary-pinned local derivative 是允许的 transport optimization。
+审计基准：`c0f3aaca` 生产实现及 `bc4187c4` 本地诊断补充。以下是**尚未完成**的代码工作，不因 RFC 修改或历史 CI 通过自动勾选。勾选必须附对应实现和测试结果；本清单是“设计已定、实现未齐”的唯一状态入口。
 
-### Phase 3：release enablement
+- [ ] **R1 — 能力 allowlist 可执行；阻挡 Ready：是。** [入口路由](../internal/launcher/launcher.go) 的 `run` 与 [依赖 gate](../internal/launcher/dependencies_test.go) 目前只有硬编码分支/包闭包。增加能力合同与正负 argv/环境矩阵，并在 PR policy 中验证新增/扩大能力先修改 §1.2 和 gate；保持 Schema reader 的 [独立闭包 gate](../internal/cli/schemaruntime/dependency_test.go)。包集合不得靠“修改测试让它绿”绕过 RFC。
+- [ ] **R2 — 延迟 gate 一次性迁移；阻挡 Ready：是。** [默认入口脚本](../scripts/dev/measure-schema-default-entry.py) 的 `measure_cases` 仍把同包 core 四项 5% 检查计入 `passed`，[测试](../scripts/dev/test_measure_schema_default_entry.py) 和 [native workflow](../.github/workflows/schema-cache-native.yml) 仍执行旧合同。移到 diagnostics，增加独立 opt-out/pre-PR 对照；报告分别记录诊断与 §8.4 有效 gate，并单列逐次哈希阶段归因。不得并存两套阻挡口径。
+- [ ] **R3 — invalid help snapshot 拒绝；阻挡 Ready：是。** [tryTrackedHelp](../internal/launcher/help_tracking.go) 当前把 `DecodeSnapshot` 错误返回 `false,nil`；[HelpUncertainInputsDelegate 测试](../internal/launcher/help_tracking_test.go) 当前还要求 `stale` 委派。按 §6.11 改为稳定 artifact 错误/125，拆分 missing 与 invalid/mismatch，覆盖空 stdout、零委派和无重复上报。
+- [ ] **R4 — Schema identity 的 missing/invalid 区分；阻挡 Ready：是。** [launcher main](../cmd/dws-launcher/main.go) 当前把 `ParseIdentity` 失败统一折叠为 nil；审计 core 注册入口的对应分支。完整缺失才可 disabled，部分注入/解析失败不得冒充未注入；补封装与真实子进程负向测试。
+- [ ] **R5 — 唯一候选/正式封装入口与完整注入；阻挡 Ready：是。** [candidate builder](../scripts/dev/build-schema-cache-candidate.py) 已注入 Schema identity/help snapshot，[post-goreleaser](../scripts/release/post-goreleaser.sh) 的 launcher ldflags 当前只注入版本与 core digest/size；[GoReleaser](../.goreleaser.yaml) 与 [build-all](../scripts/dev/build-all.sh) 须共用 target proof/注入合同。将“候选有、正式空”的现状消除，enabled target proof 不足直接拒绝发布。
+- [ ] **R6 — manifest 与部署失败分支；阻挡 Ready：是。** [package manifest](../internal/packagemanifest)、[package verifier](../scripts/release/verify-package-version.py) 和正式 release workflow 须校验 enabled/disabled 能力矩阵、半注入/错绑定拒绝，以及前后签名 bytes 一致；不能只验证 `--version`。
+- [ ] **R7 — help 单源的最终制品证明；阻挡 Ready：是。** [RootHelpModel](../internal/app/root_help.go)、[fresh-process 投影回归](../internal/app/root_help_projection_test.go)、[snapshot decoder](../internal/roothelp/snapshot.go) 与 candidate seal 已有基础。正式封装必须复用同一机制，覆盖 en/zh、supplement 可见性、leaf/非 plain/non-open 委派、构建失败和无 core 真实输出；绑定最终已签名制品。
+- [ ] **R8 — 最终 release proof 与整包回滚；阻挡 Ready：是。** [环境 proof](../scripts/dev/check-schema-identity-environment.py) 尚不等于 wall-clock/访问尝试审计及 final-artifact proof；[release workflow](../.github/workflows/release.yml)、安装/upgrade/rollback 链需补足 §6.6/§9 的 Developer ID、公证、最终包执行和原子整包回退验证。不得用 ad-hoc candidate 替代。
+- [ ] **R9 — 新 gate 的同源码原生复验；阻挡 Ready：是。** [native workflow](../.github/workflows/schema-cache-native.yml) 须在 R1–R8 对齐后跑两平台全量/声明/生命周期/新性能 gate。`c0f3aaca` 当前测量继续作为历史数据保留，不能据此勾选本项。
+- [ ] **D1 — 五维诊断与哈希归因报告；阻挡 Ready：否（不参与 release gate）。** [五维脚本](../scripts/dev/measure-cli-five-dimensions.py) 正在测固定场景；补完整 raw samples、同包 core 诊断、哈希阶段独立归因和竞品对比到[性能附件](rfc-schema-runtime-cache-performance.md)。缺失维度必须标明，不能发表该维度的领先/整体改善结论。
 
-- GitHub release 和 `build-all.sh` 只为已校验 target-specific native proof 的产物注入 identity。
-- 先在 prerelease 启用，收集 hit/miss/repair 与启动性能。
-- official stable 只在 release proof 和平台测试通过后启用。
-- 未证明 target 和 external overlay 保持 disabled；后续启用需要单独 RFC/native proof。
+已定且不可在实现中临时改选的格式边界继续保留：Meta/product Registry 均为 raw deterministic generated protobuf；不恢复生成 Catalog 权威；缓存 envelope/I/O/锁由 `internal/schemacache` 统一拥有；唯一 repair coordinator 管装配；private overlay 未获 proof 不启用；Serializer/codec 变化须另行 RFC 与格式版本变更。磁盘 cache mismatch 的自愈例外不适用于密封 help/identity。
 
-### Rollback
+## 11. 决策结论
 
-runtime 只在 expected identity 非空时启用，因此回滚不需要 cache migration：
+本 RFC 选定 **受限热路径 runtime + core 双二进制 canonical package**，固定执行能力与依赖 allowlist；Meta 和 product-sharded Registry 使用同源、可重建的 raw deterministic protobuf。help 只有 declarations → RootHelpModel 一个源，snapshot 仅为最终 core 绑定的构建派生品。
 
-- 构建时停止注入 expected identity，即恢复现有实时装配；
-- 旧 cache 文件保持无害，下次启用时仍需 hash 匹配；
-- format version bump 会自动 miss 和替换，不需要用户手工清理。
+热路径按固定 pre-PR 入口验收；同包 core 和竞品对比只作诊断。正式 enabled 包从第一次包含本实现的 release 起与候选同构注入。缺失 capability 走明确委派，范围内 present-but-invalid 的密封绑定 fail-closed；用户可写 Schema cache 的自愈是单列的可用性例外。
 
-## 10. 已定实现边界与评审检查项
-
-以下项目在 RFC 中已定，不留给实现 PR 临时选择：
-
-1. Product Registry/Meta 都使用 generated private protobuf mirror；不直接
-   持久化 public wire map 或 runtime struct 布局，wire 由 schema/DTO/toolchain/version/artifact
-   digest 共同约束。
-2. envelope/I/O/atomic publish/lock 统一进入 `internal/schemacache`；不新增
-   `internal/filelock`，也不让 Schema import event/auth。
-3. Unix directory sync 是发布成功条件；v1 只启用 darwin/arm64、linux/amd64。
-4. identity mismatch 只进入 debug log + internal counter，不新增公共 flag/命令。
-5. Meta/Registry shard loader 不互相递归调用；唯一 repair coordinator 是 authoritative rebuild owner。
-6. external private overlay v1 禁用；source fork 只能使用 module-internal generator。
-7. 最终 Product Registry/Meta protobuf 任一 gate 失败时禁用 persistent cache；替换任一
-   serializer/codec 需要新 RFC 和 envelope version，不能在实现 PR 内临时切换。
-
-实现评审仍需逐项验证 Unix openat/renameat/lock 代码、Windows disabled fallback、
-linux/amd64 性能数据和 release workflow 的 sealed-source 行为，但这些验证不改变上述
-包边界或格式选择。
-
-## 11. 结论
-
-首版不应先选择“gzip 还是 zstd”，因为真正的性能问题是错误的数据形态和消费边界：
-
-- 对每次业务命令，加载完整 Catalog 再 typed rebuild 是架构错误；
-- overview/locator-inclusive Meta mirror 的 protobuf decode + lookup p50 约 1.44 ms、2.44 MB
-  allocated；gob 虽测得 1.29 ms，但差异不足以证明第二种 parser/format 的收益；
-- 对显式 Schema 查询，private DTO 避开 39 MB public JSON 的 `map[string]any` adapter；
-- 完整 Registry generated protobuf 为约 14.92 MB，decode + exact conversion + Index p50 约
-  105.8 ms；同一 mirror 的 gob 约 135.8 ms，protobuf 快约 22%、累计分配少约 35%；
-- 31 个 product protobuf shards 合计只比 monolith 多 7,170 B；calendar target 的 authenticated
-  product-offset file hit 约 4.35 ms、3.80 MB/op，因此 leaf/product/group 不应加载完整 Registry；
-- tool-offset target 虽约 1.06 ms，但只比 product shard 再省约 3.3 ms，复杂度收益不成立，v1 拒绝；
-- direct gob runtime model 虽曾测得约 118 ms，但未通过 exact `reflect.DeepEqual` fidelity gate，
-  不能作为上线格式；
-- 两个 raw artifact 都满足本地大小预算；压缩会增加 decoder、边界和 bitstream 合同，没有网络
-  传输收益；
-- 若未来必须压缩，zstd-default 的 size/decode 均优于 gzip，应重新做完整 DTO 与 binary-size
-  评审，而不是默认回到 gzip；
-- 当前 DWS compact leaf p50 约 1.89 s/334 MiB，而 Lark/GWS public entry 在较低系统压力样本中
-  分别约 122/149 ms；product shard 能消除主要 Schema 成本，但 DWS 非 Schema 启动 floor 仍约
-  250 ms，因此 cache-only 不能宣称稳定超过两者。
-
-因此本文推荐：**Meta 与 product-sharded Registry 均使用 raw deterministic generated private
-protobuf，不压缩；Meta 由 binary-injected exact artifact digest 认证，Meta 内的 sorted descriptor
-再认证每个 product range；同时校验 SourceHash、SurfaceHash、BuildID 和 edition。miss 时由唯一
-repair coordinator 通过同一声明装配同步自愈。launcher、core、安装/升级/回滚与真实 public-entry
-benchmark 属于本 RFC 的完整交付范围；prototype 和单包测试均不能替代最终发布验证。**
+**形态与规则已定；§10 代码差距清零并完成新规则的最终制品验证后，才可转 Ready。**
