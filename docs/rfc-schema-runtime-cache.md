@@ -36,7 +36,23 @@ Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能�
 已通过两平台完整 Go suite 和声明 policy。逐行审计确认两边各 152 个包终态，无失败事件、
 无缺失终态；记录见 [Linux](benchmarks/schema-cache/native-decb45a7/linux-full-suite.json) 与
 [macOS](benchmarks/schema-cache/native-decb45a7/darwin-full-suite.json)。该提交仅包含共享帮助
-renderer，尚不包含下面的帮助快路径；本轮原生候选性能仍在执行，不能以全量测试替代。
+renderer，尚不包含下面的帮助快路径。本轮已结束：两边默认版本入口的四项 5% 检查均通过，
+默认 Schema CPU/RSS 两项通过，帮助入口的四项 5% 检查仍失败，故整轮 failure、coordinator
+跳过。每平台八种模式各 30 次样本；core-free 默认 version 的真实执行、包版本、完整 wire、
+缓存修复、Meta file-hit 预算与实际生成器的文件/网络隔离检查通过。
+
+| `decb45a7` 默认入口 wall p50 / p95（ms） | Linux amd64 | macOS arm64 |
+|---|---:|---:|
+| version launcher | 304.655 / 305.172 | 319.306 / 329.747 |
+| version 原始基线 | 345.677 / 347.815 | 354.563 / 366.908 |
+| help launcher | 385.185 / 386.906 | 386.923 / 401.456 |
+| help 原始基线 | 346.108 / 347.453 | 352.782 / 361.652 |
+
+默认 version 已消除本轮原生 5% 回退；默认 help 相对原始基线 p50/p95 仍回退
+11.29%/11.35%（Linux）、9.68%/11.01%（macOS），需要下面的入口改动和新原生验证。
+保留全部样本、摘要、构建/identity/基线绑定及 job/artifact 记录，见
+[本轮原生证据](benchmarks/schema-cache/native-decb45a7/evidence.json)。300 ms 级默认上报
+延迟依旧存在，不能把 version 的改善当作 Schema 竞争性目标或最终签名包验收。
 
 [run 34006621679](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34006621679)
 已完成。两平台完整 suite 的包终态与失败事件已逐行审计，记录见
@@ -515,6 +531,11 @@ RSS 全部是同一个 400,936,960 B 值，RSS 门槛失败。Linux 的资源统
 （[getrusage](https://www.man7.org/linux/man-pages/man2/getrusage.2.html)）；直接从持有完整
 JSON 的 Python verifier fork 候选进程会污染该统计。因此每次测量改由全新小型 sampler
 启动候选，并只记录 sampler 的 child wait4，排除 sampler 自身的 inherited peak 和启动时间。
+单个候选的阻塞等待设 180 s 上限，以一次 POSIX timer 中断后 kill/reap；成功样本仍使用
+阻塞 `wait4`，不加轮询 sleep 来量化短命令延迟。超时保留部分 stdout/stderr 并抛出错误，
+不把终止后的资源统计记为有效样本，也不丢弃超时后继续宣布性能通过。实际挂起子进程的
+回收/部分输出控制，以及原有并发回收、RSS 隔离和默认测量测试通过（6 + 5 项）；
+这只是采样可靠性修正，不改变任何性能门槛。
 回归测试在 coordinator 保留 128 MiB resident heap 后检查 child RSS 不随之上升；Linux 原生
 结果仍须重跑，不能通过丢弃超限样本或调整 100 MiB 门槛宣称通过。
 

@@ -1,0 +1,464 @@
+{
+  "source_commit": "decb45a741de47204aa0f7cf4ea98ea1a07e21f5",
+  "run_id": 34007681787,
+  "conclusion": "failure",
+  "release_eligible": false,
+  "platforms": {
+    "linux": {
+      "artifact": {
+        "id": 9981833798,
+        "node_id": "MDg6QXJ0aWZhY3Q5OTgxODMzNzk4",
+        "name": "schema-native-linux-amd64-decb45a741de47204aa0f7cf4ea98ea1a07e21f5",
+        "size_in_bytes": 22616,
+        "url": "https://api.github.com/repos/DingTalk-Real-AI/dingtalk-workspace-cli/actions/artifacts/9981833798",
+        "archive_download_url": "https://api.github.com/repos/DingTalk-Real-AI/dingtalk-workspace-cli/actions/artifacts/9981833798/zip",
+        "expired": false,
+        "digest": "sha256:3681fc850b7975c2a87daf3c072304590f4891a84f5a3cf5b71f8d307c2537f7",
+        "created_at": "2026-09-06T03:24:23Z",
+        "updated_at": "2026-09-06T03:24:23Z",
+        "expires_at": "2026-09-20T03:24:22Z",
+        "workflow_run": {
+          "id": 34007681787,
+          "repository_id": 1187709537,
+          "head_repository_id": 1200426582,
+          "head_branch": "perf/schema-cache-fast-version",
+          "head_sha": "decb45a741de47204aa0f7cf4ea98ea1a07e21f5"
+        }
+      },
+      "job": {
+        "completedAt": "2026-09-06T03:24:26Z",
+        "conclusion": "failure",
+        "databaseId": 101417786094,
+        "name": "Native candidate (linux-amd64)",
+        "startedAt": "2026-09-06T02:55:00Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-09-06T02:55:02Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-09-06T02:55:01Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:07Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-09-06T02:55:02Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:15Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-go@v5",
+            "number": 3,
+            "startedAt": "2026-09-06T02:55:07Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:16Z",
+            "conclusion": "success",
+            "name": "Verify native target and prepare private test directory",
+            "number": 4,
+            "startedAt": "2026-09-06T02:55:15Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:26Z",
+            "conclusion": "success",
+            "name": "Check generated protobuf with the pinned native compiler",
+            "number": 5,
+            "startedAt": "2026-09-06T02:55:16Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:13:19Z",
+            "conclusion": "success",
+            "name": "Test cache integrity and concurrency",
+            "number": 6,
+            "startedAt": "2026-09-06T02:55:26Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:15:09Z",
+            "conclusion": "success",
+            "name": "Build native candidate with finalized runtime payload",
+            "number": 7,
+            "startedAt": "2026-09-06T03:13:19Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:15:09Z",
+            "conclusion": "success",
+            "name": "Verify finalized candidate version contract",
+            "number": 8,
+            "startedAt": "2026-09-06T03:15:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:17:29Z",
+            "conclusion": "success",
+            "name": "Verify exact candidate and interleaved process performance",
+            "number": 9,
+            "startedAt": "2026-09-06T03:15:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:18:00Z",
+            "conclusion": "success",
+            "name": "Measure complete file hits",
+            "number": 10,
+            "startedAt": "2026-09-06T03:17:29Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:18:00Z",
+            "conclusion": "skipped",
+            "name": "Profile Meta when the file-hit budget fails",
+            "number": 11,
+            "startedAt": "2026-09-06T03:18:00Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:18:19Z",
+            "conclusion": "success",
+            "name": "Build the immutable pre-PR entry baseline",
+            "number": 12,
+            "startedAt": "2026-09-06T03:18:00Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:21:04Z",
+            "conclusion": "failure",
+            "name": "Measure default tracker, package overhead and pre-PR entry regression",
+            "number": 13,
+            "startedAt": "2026-09-06T03:18:19Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:24:22Z",
+            "conclusion": "success",
+            "name": "Check identity with isolated files and network",
+            "number": 14,
+            "startedAt": "2026-09-06T03:21:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:24:23Z",
+            "conclusion": "success",
+            "name": "Upload native development evidence",
+            "number": 15,
+            "startedAt": "2026-09-06T03:24:22Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:24:23Z",
+            "conclusion": "skipped",
+            "name": "Post Run actions/setup-go@v5",
+            "number": 29,
+            "startedAt": "2026-09-06T03:24:23Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:24:23Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 30,
+            "startedAt": "2026-09-06T03:24:23Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:24:23Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 31,
+            "startedAt": "2026-09-06T03:24:23Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34007681787/job/101417786094"
+      },
+      "files": {
+        "default-entry-report.json": {
+          "sha256": "7467ab0305075da21cc59673fa046fa1a65c0ce3e5d15fcfc42885d30f832e14",
+          "bytes": 49176
+        },
+        "baseline-build.json": {
+          "sha256": "c2b3b3289a22eb6ab4f9a046858a8e91f5736b5cc630a793d358e90e7bc77407",
+          "bytes": 1396
+        },
+        "process-report.json": {
+          "sha256": "7f7f5467d34519d10aa51b4809bc5754c55153e3959c4f050dbb58091a4e10b7",
+          "bytes": 14754
+        },
+        "identity-environment.json": {
+          "sha256": "8b4a4fbb52166a7efdd3520d629f267f020b2e6cd9e9d6c857daf56442cd3be5",
+          "bytes": 17564
+        },
+        "file-hit-report.json": {
+          "sha256": "00a689a742318fd29cbdabcb085aee7cdf31b7eed67924e54e14538b142c014b",
+          "bytes": 695
+        },
+        "package-version.json": {
+          "sha256": "db602ef3656296c580e52a8bbc2d4f2059e67c03a556aae76ce48c25e167b4d1",
+          "bytes": 979
+        },
+        "candidate-build.json": {
+          "sha256": "69557944caca4a35fee2b78ddf8e524c7dbb5208208d919a35ac81942453a7b0",
+          "bytes": 3128
+        },
+        "identity.json": {
+          "sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+          "bytes": 1026
+        },
+        "package-manifest.json": {
+          "sha256": "cb37009b41df532649910db9769b84508a207bbdefba2be8d9a495028884ea6f",
+          "bytes": 457
+        }
+      },
+      "gates": {
+        "schema_user_cpu_reduction_at_least_80_percent": true,
+        "schema_peak_rss_at_most_100_mib": true,
+        "help_package_wall_p50_overhead_at_most_5_percent": false,
+        "help_pre_pr_wall_p50_regression_at_most_5_percent": false,
+        "help_package_wall_p95_overhead_at_most_5_percent": false,
+        "help_pre_pr_wall_p95_regression_at_most_5_percent": false,
+        "version_package_wall_p50_overhead_at_most_5_percent": true,
+        "version_pre_pr_wall_p50_regression_at_most_5_percent": true,
+        "version_package_wall_p95_overhead_at_most_5_percent": true,
+        "version_pre_pr_wall_p95_regression_at_most_5_percent": true
+      },
+      "samples": 240
+    },
+    "darwin": {
+      "artifact": {
+        "id": 9981825721,
+        "node_id": "MDg6QXJ0aWZhY3Q5OTgxODI1NzIx",
+        "name": "schema-native-darwin-arm64-decb45a741de47204aa0f7cf4ea98ea1a07e21f5",
+        "size_in_bytes": 22297,
+        "url": "https://api.github.com/repos/DingTalk-Real-AI/dingtalk-workspace-cli/actions/artifacts/9981825721",
+        "archive_download_url": "https://api.github.com/repos/DingTalk-Real-AI/dingtalk-workspace-cli/actions/artifacts/9981825721/zip",
+        "expired": false,
+        "digest": "sha256:741557228ebe3525e2638a8c2b4af7d37d47807c035f13ddfa00999874cac784",
+        "created_at": "2026-09-06T03:23:45Z",
+        "updated_at": "2026-09-06T03:23:45Z",
+        "expires_at": "2026-09-20T03:23:45Z",
+        "workflow_run": {
+          "id": 34007681787,
+          "repository_id": 1187709537,
+          "head_repository_id": 1200426582,
+          "head_branch": "perf/schema-cache-fast-version",
+          "head_sha": "decb45a741de47204aa0f7cf4ea98ea1a07e21f5"
+        }
+      },
+      "job": {
+        "completedAt": "2026-09-06T03:23:49Z",
+        "conclusion": "failure",
+        "databaseId": 101417786076,
+        "name": "Native candidate (darwin-arm64)",
+        "startedAt": "2026-09-06T02:55:04Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-09-06T02:55:06Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-09-06T02:55:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:11Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-09-06T02:55:06Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:26Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-go@v5",
+            "number": 3,
+            "startedAt": "2026-09-06T02:55:11Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:26Z",
+            "conclusion": "success",
+            "name": "Verify native target and prepare private test directory",
+            "number": 4,
+            "startedAt": "2026-09-06T02:55:26Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T02:55:35Z",
+            "conclusion": "success",
+            "name": "Check generated protobuf with the pinned native compiler",
+            "number": 5,
+            "startedAt": "2026-09-06T02:55:26Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:14:03Z",
+            "conclusion": "success",
+            "name": "Test cache integrity and concurrency",
+            "number": 6,
+            "startedAt": "2026-09-06T02:55:35Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:15:13Z",
+            "conclusion": "success",
+            "name": "Build native candidate with finalized runtime payload",
+            "number": 7,
+            "startedAt": "2026-09-06T03:14:03Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:15:14Z",
+            "conclusion": "success",
+            "name": "Verify finalized candidate version contract",
+            "number": 8,
+            "startedAt": "2026-09-06T03:15:13Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:17:12Z",
+            "conclusion": "success",
+            "name": "Verify exact candidate and interleaved process performance",
+            "number": 9,
+            "startedAt": "2026-09-06T03:15:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:17:40Z",
+            "conclusion": "success",
+            "name": "Measure complete file hits",
+            "number": 10,
+            "startedAt": "2026-09-06T03:17:12Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:17:40Z",
+            "conclusion": "skipped",
+            "name": "Profile Meta when the file-hit budget fails",
+            "number": 11,
+            "startedAt": "2026-09-06T03:17:40Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:18:01Z",
+            "conclusion": "success",
+            "name": "Build the immutable pre-PR entry baseline",
+            "number": 12,
+            "startedAt": "2026-09-06T03:17:40Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:20:31Z",
+            "conclusion": "failure",
+            "name": "Measure default tracker, package overhead and pre-PR entry regression",
+            "number": 13,
+            "startedAt": "2026-09-06T03:18:01Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:23:44Z",
+            "conclusion": "success",
+            "name": "Check identity with isolated files and network",
+            "number": 14,
+            "startedAt": "2026-09-06T03:20:31Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:23:45Z",
+            "conclusion": "success",
+            "name": "Upload native development evidence",
+            "number": 15,
+            "startedAt": "2026-09-06T03:23:44Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:23:45Z",
+            "conclusion": "skipped",
+            "name": "Post Run actions/setup-go@v5",
+            "number": 29,
+            "startedAt": "2026-09-06T03:23:45Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:23:46Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 30,
+            "startedAt": "2026-09-06T03:23:45Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-09-06T03:23:46Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 31,
+            "startedAt": "2026-09-06T03:23:46Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34007681787/job/101417786076"
+      },
+      "files": {
+        "default-entry-report.json": {
+          "sha256": "9927231632f11171cc931655a84166eb3491647bedf2b2354253285c5eba8f19",
+          "bytes": 49066
+        },
+        "baseline-build.json": {
+          "sha256": "19c84e4b6ceb50d6236a1d3b6437a42b2a348e94109d143ecb6a8b0845929696",
+          "bytes": 1399
+        },
+        "process-report.json": {
+          "sha256": "c9ba4e6412b51b7ee50044da1cae4797412dd388e080c335a28e01f6ea6cbddc",
+          "bytes": 14892
+        },
+        "identity-environment.json": {
+          "sha256": "1b11b8f2b1ea439e76b086c9cdc05d9b474c9aeda75ff5fb65557db6b8d28d2a",
+          "bytes": 11695
+        },
+        "file-hit-report.json": {
+          "sha256": "bead34121c744d05d71c6225e1ac74f2424cc3988ab85ee75e1c0464da5adea5",
+          "bytes": 695
+        },
+        "package-version.json": {
+          "sha256": "e0ab2964a1df728d9efd5c3bf3a4ce26074735a1d763fb41dbd157d0a7240f51",
+          "bytes": 979
+        },
+        "candidate-build.json": {
+          "sha256": "c53e4744300ff7a8df950f74c71f9df89c854a5909fd5dce35c485a53482b34c",
+          "bytes": 3131
+        },
+        "identity.json": {
+          "sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+          "bytes": 1026
+        },
+        "package-manifest.json": {
+          "sha256": "07542d39449db1af3986e95625d76c22cb2d8e38ddd31dab8e8d2a29003214d9",
+          "bytes": 458
+        }
+      },
+      "gates": {
+        "schema_user_cpu_reduction_at_least_80_percent": true,
+        "schema_peak_rss_at_most_100_mib": true,
+        "help_package_wall_p50_overhead_at_most_5_percent": false,
+        "help_pre_pr_wall_p50_regression_at_most_5_percent": false,
+        "help_package_wall_p95_overhead_at_most_5_percent": false,
+        "help_pre_pr_wall_p95_regression_at_most_5_percent": false,
+        "version_package_wall_p50_overhead_at_most_5_percent": true,
+        "version_pre_pr_wall_p50_regression_at_most_5_percent": true,
+        "version_package_wall_p95_overhead_at_most_5_percent": true,
+        "version_pre_pr_wall_p95_regression_at_most_5_percent": true
+      },
+      "samples": 240
+    }
+  }
+}

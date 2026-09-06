@@ -74,6 +74,17 @@ print(json.dumps({'index': index}))
 
 
 class ProcessAccountingTest(unittest.TestCase):
+    def test_timeout_reaps_measured_child_and_keeps_partial_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = "import os, pathlib, time; pathlib.Path('pid').write_text(str(os.getpid())); print('partial output', flush=True); time.sleep(60)"
+            with self.assertRaises(subprocess.TimeoutExpired) as caught:
+                verifier.invoke(Path(sys.executable), ['-c', script], os.environ.copy(), root, timeout=1)
+            self.assertEqual(caught.exception.output, b'partial output\n')
+            with self.assertRaises(ProcessLookupError):
+                os.kill(int((root / 'pid').read_text()), 0)
+            self.assertEqual(list(root.glob('measurement-*')), [])
+
     def test_retained_parent_json_does_not_become_candidate_rss(self):
         with tempfile.TemporaryDirectory() as directory:
             def sample():

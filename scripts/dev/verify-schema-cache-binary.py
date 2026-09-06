@@ -30,18 +30,20 @@ def digest(path):
     return value.hexdigest()
 
 
-def invoke(binary, args, env, cwd):
+def invoke(binary, args, env, cwd, timeout=180):
     # Keep retained full-export JSON in this coordinator out of child RSS.
     # Report only the sampler's child, never the sampler process's own usage.
     with tempfile.TemporaryDirectory(prefix="measurement-", dir=cwd) as directory:
         stdout, stderr = Path(directory) / "stdout", Path(directory) / "stderr"
         request = {"argv": [str(binary), *args], "env": env, "cwd": str(cwd),
-                   "stdout": str(stdout), "stderr": str(stderr)}
+                   "stdout": str(stdout), "stderr": str(stderr), "timeout_seconds": timeout}
         sampler = subprocess.run(
             [sys.executable, str(Path(__file__).with_name("schema-cache-process-measure.py"))],
             input=json.dumps(request), text=True, capture_output=True, check=True)
         result = json.loads(sampler.stdout)
         output, error = stdout.read_bytes(), stderr.read_bytes()
+        if result["timed_out"]:
+            raise subprocess.TimeoutExpired(request['argv'], timeout, output=output, stderr=error)
         if result["returncode"]:
             raise RuntimeError(f"{args}: exit {result['returncode']}: {error.decode(errors='replace')}")
         if error:
