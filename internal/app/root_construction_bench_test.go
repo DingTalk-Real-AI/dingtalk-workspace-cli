@@ -43,6 +43,7 @@ func BenchmarkProcessRootConstruction(b *testing.B) {
 		name string
 		args []string
 	}{
+		{name: "root-help", args: []string{"dws", "--help"}},
 		{name: "calendar-list", args: []string{"dws", "calendar", "book", "list", "--dry-run", "-f", "json"}},
 		{name: "config-get", args: []string{"dws", "config", "get", "output"}},
 	} {

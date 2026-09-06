@@ -527,7 +527,6 @@ func TestCrossPlatformCoverageAgentMetadataProcessEntryValidationPrecedesRootCon
 		true,
 		true,
 		false,
-		false,
 	)
 	if capturedRunner == nil || capturedRunner.agentMetadata == nil || *capturedRunner.agentMetadata != cachedSnapshot {
 		t.Fatalf("root runner Agent metadata = %#v, want %#v", capturedRunner, cachedSnapshot)

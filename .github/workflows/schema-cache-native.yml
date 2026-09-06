@@ -119,7 +119,9 @@ jobs:
           set -euo pipefail
           binary="$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/dws"
           test -x "$binary"
-          test "$($binary --version)" = "dws version 0.0.0-schema-cache-candidate"
+          source_commit="$(git rev-parse HEAD)"
+          build_time="$(sh scripts/build/release-build-time.sh "$source_commit")"
+          test "$($binary --version)" = "dws version v0.0.0-schema-cache-candidate ($source_commit, $build_time)"
       - name: Verify exact candidate and interleaved process performance
         run: |
           python3 scripts/dev/test_verify_schema_cache_binary.py

@@ -83,6 +83,33 @@ func TestResolveStartupRouteHandlesRootFlagsWithoutGuessingUnknownSyntax(t *test
 	}
 }
 
+func TestProcessRootSkipsEligibilityIOWhenArgvAlreadyRequiresCompleteTree(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv("DO_NOT_TRACK", "1")
+	testseam.Swap(t, &os.Args, []string{"dws", "--help"})
+	var lstatCalls, readDirCalls, readFileCalls int
+	testseam.Swap(t, &startupRouteLstat, func(string) (os.FileInfo, error) {
+		lstatCalls++
+		return nil, fs.ErrNotExist
+	})
+	testseam.Swap(t, &startupRouteReadDir, func(string) ([]os.DirEntry, error) {
+		readDirCalls++
+		return nil, fs.ErrNotExist
+	})
+	testseam.Swap(t, &startupRouteReadFile, func(string) ([]byte, error) {
+		readFileCalls++
+		return nil, fs.ErrNotExist
+	})
+
+	root := newProcessRootCommandWithEngine(context.Background(), nil)
+	if !hasTopLevelCommand(root, "calendar") || !hasTopLevelCommand(root, "drive") {
+		t.Fatal("root help must retain the complete product tree")
+	}
+	if lstatCalls != 0 || readDirCalls != 0 || readFileCalls != 0 {
+		t.Fatalf("complete-tree route performed eligibility I/O = lstat:%d readdir:%d readfile:%d", lstatCalls, readDirCalls, readFileCalls)
+	}
+}
+
 func TestProcessRootSkipsPluginLoaderOnlyAfterAbsenceProof(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)

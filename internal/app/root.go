@@ -834,18 +834,15 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 func newProcessRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
 	registerSchemaRuntimeDelivery()
 	rootCtx, _ = output.WithResultStore(rootCtx)
-	surfaceStart := time.Now()
-	surface := inspectRuntimeCommandSurface()
-	RecordNestedTiming(rootCtx, "startup_surface", time.Since(surfaceStart))
-	return newRootCommandWithMode(rootCtx, engine, true, false, false, surface.selectiveStartup, surface.pluginsProvenAbsent)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false, true)
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
-	return newRootCommandWithMode(rootCtx, engine, loadRuntimeExtensions, declarationOnly, false, false, false)
+	return newRootCommandWithMode(rootCtx, engine, loadRuntimeExtensions, declarationOnly, false, false)
 }
 
 func newRootPresentationCommand() *cobra.Command {
-	return newRootCommandWithMode(context.Background(), nil, false, true, true, false, false)
+	return newRootCommandWithMode(context.Background(), nil, false, true, true, false)
 }
 
 func consumeCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen *bool) {
@@ -975,7 +972,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	visit(root)
 }
 
-func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool, selectiveStartup bool, pluginsProvenAbsent bool) *cobra.Command {
+func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool, processStartup bool) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -1144,10 +1141,21 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 
 	bindPersistentFlags(root, flags)
 	route := startupRoute{}
-	if selectiveStartup {
+	pluginsProvenAbsent := false
+	if processStartup {
 		routeStart := time.Now()
 		route = resolveStartupRoute(root, os.Args[1:])
 		RecordNestedTiming(rootCtx, "startup_route", time.Since(routeStart))
+		if route.selective {
+			surfaceStart := time.Now()
+			surface := inspectRuntimeCommandSurface()
+			RecordNestedTiming(rootCtx, "startup_surface", time.Since(surfaceStart))
+			if surface.selectiveStartup {
+				pluginsProvenAbsent = surface.pluginsProvenAbsent
+			} else {
+				route = startupRoute{}
+			}
+		}
 	}
 
 	schemaCmd := cli.NewSchemaCommand()

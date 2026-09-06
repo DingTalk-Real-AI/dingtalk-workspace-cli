@@ -254,6 +254,7 @@ def main():
                         stdout_sha256=hashlib.sha256(out).hexdigest(), stderr_sha256=hashlib.sha256(err).hexdigest())
                 except Exception as error:
                     report['failures'][key] = str(error)
+                    print(f'failed {key}: {error}', file=sys.stderr, flush=True)
                 print('prepared ' + key, file=sys.stderr, flush=True)
             for workload in ('schema', 'dry-run', 'mock'):
                 hit, live = 'dws-native/' + workload, 'dws-live/' + workload
@@ -281,6 +282,7 @@ def main():
                         report[field][key].append(usage)
                     except Exception as error:
                         report['failures'][key] = str(error)
+                        print(f'failed {field} {key}: {error}', file=sys.stderr, flush=True)
                     if (index + 1) % 30 == 0:
                         print(f'{field}: {index + 1}/{len(order)}', file=sys.stderr, flush=True)
                 report[field + '_summary'] = {key: measure.summarize(values)
