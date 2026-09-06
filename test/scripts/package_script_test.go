@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -773,6 +774,8 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	for _, rel := range []string{
 		"dws-skills.zip",
 		"checksums.txt",
+		filepath.Join("schema-proofs", "root-help-darwin-arm64.json"),
+		filepath.Join("schema-proofs", "root-help-linux-amd64.json"),
 		filepath.Join("npm", "dingtalk-workspace-cli", "package.json"),
 		filepath.Join("homebrew", "dingtalk-workspace-cli.rb"),
 		filepath.Join("homebrew", "dingtalk-workspace-cli-local.rb"),
@@ -780,6 +783,32 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 		full := filepath.Join(distDir, rel)
 		if _, err := os.Stat(full); err != nil {
 			t.Fatalf("Stat(%s) error = %v\noutput:\n%s", full, err, string(output))
+		}
+	}
+	for _, target := range []string{"darwin-arm64", "linux-amd64"} {
+		data, err := os.ReadFile(filepath.Join(distDir, "schema-proofs", "root-help-"+target+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var proof struct {
+			Passed             bool   `json:"passed"`
+			ReleaseEligible    bool   `json:"release_eligible"`
+			NativeCoreCompared bool   `json:"native_core_compared"`
+			Status             string `json:"status"`
+		}
+		if err := json.Unmarshal(data, &proof); err != nil {
+			t.Fatal(err)
+		}
+		native := target == runtime.GOOS+"-"+runtime.GOARCH
+		if proof.NativeCoreCompared != native || proof.Passed != native || proof.ReleaseEligible != native {
+			t.Fatalf("%s proof state = %+v, native=%v", target, proof, native)
+		}
+		expectedStatus := "pending_native_comparison"
+		if native {
+			expectedStatus = "passed"
+		}
+		if proof.Status != expectedStatus {
+			t.Fatalf("%s proof status = %q, want %q", target, proof.Status, expectedStatus)
 		}
 	}
 

@@ -504,6 +504,8 @@ finalize_platform_archives() {
   schema_cache_build_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build_id"])' "$identity_json")" \
     || err "could not read Schema identity proof"
   help_generator="$work/root-help-generator"
+  help_proof_dir="$DIST_DIR/schema-proofs"
+  mkdir -p "$help_proof_dir"
   (cd "$ROOT" && env CGO_ENABLED=0 GOTOOLCHAIN=go1.25.9 GOFLAGS='' GOEXPERIMENT='' GOWORK=off \
     go build -buildmode=pie -trimpath -o "$help_generator" ./internal/generator/cmd_root_help_snapshot)
   found_any=0
@@ -621,7 +623,7 @@ finalize_platform_archives() {
       fi
       python3 "$ROOT/scripts/build/schema_package_contract.py" seal-help \
         --core "$final_core" --generator "$help_generator" --core-sha256 "$core_sha" \
-        --commit "$release_commit" --proof "$work/root-help-$target-proof.json" \
+        --commit "$release_commit" --proof "$help_proof_dir/root-help-$target.json" \
         --snapshot-output "$help_snapshot_file" $native_compare_arg \
         || err "could not seal final core help for $name"
       help_snapshot="$(cat "$help_snapshot_file")"

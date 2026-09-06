@@ -14,9 +14,12 @@ git rev-parse --verify "${head_ref}^{commit}" >/dev/null
 
 changed=$(git diff --name-only "$base_ref" "$head_ref" -- \
   cmd/dws-launcher/main.go \
-  internal/launcher/capabilities.go internal/launcher/help_tracking.go \
+  internal/launcher/capabilities.go internal/launcher/dependencies_test.go \
+  internal/launcher/help_tracking.go internal/launcher/launcher.go \
+  internal/launcher/launcher_test.go \
   internal/launcher/schema.go internal/launcher/version_tracking.go \
-  internal/schemafastpath/schema.go)
+  internal/schemafastpath/schema.go \
+  scripts/policy/check-launcher-capability-allowlist.sh)
 [ -n "$changed" ] || exit 0
 
 required='docs/rfc-schema-runtime-cache.md
