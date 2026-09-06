@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "release_eligible": false,
+  "core_sha256": "6be0f1ee92a9605532d12f88874f97d32282db64ba8a519dba3257d3595ec22e",
+  "source_commit": "c0f3aaca53c502cab780d67d8eccca4a55e5107f",
+  "generator_sha256": "e7051d4a8bad84c7f9d18fd7990a31a2781aa9eca03ee15bce79b52745cf2730",
+  "locales": {
+    "en": {
+      "stdout_sha256": "590ebfc7d090cdfa81e63cfcf6f47727ad1f4ac5f0fc5451445e855ebcf497d0",
+      "stdout_bytes": 4760,
+      "equal": true
+    },
+    "zh": {
+      "stdout_sha256": "0c8995d70aae442a0c07593f0986c2effa3c5ab923915cba59ec05943b8874c2",
+      "stdout_bytes": 4766,
+      "equal": true
+    }
+  },
+  "snapshot_sha256": "39fa0c64841420f4befff4776d75db48981581a91de6e11fc954a8b8c0018166"
+}
