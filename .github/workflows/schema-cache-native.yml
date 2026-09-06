@@ -47,7 +47,7 @@ jobs:
             protoc_archive: protoc-35.1-osx-aarch_64.zip
             protoc_sha256: 193289af0470c6a1aada357d4fba0bbf8d78bfaac8b5e42ca30af2ef75583de2
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       GOTOOLCHAIN: go1.25.9
       GOWORK: 'off'
@@ -206,6 +206,29 @@ jobs:
             --expected "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
             --output "$RUNNER_TEMP/schema-evidence/identity-environment.json" \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/identity-environment.txt"
+      - uses: actions/setup-node@v4
+        if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' && steps.entry_baseline.outcome == 'success' }}
+        with:
+          node-version: '22.16.0'
+      - name: Measure ordinary commands, process trees and pinned competing CLIs
+        if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' && steps.entry_baseline.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools_prefix="$TMPDIR/cli-comparison-tools"
+          npm install --prefix "$tools_prefix" --no-audit --no-fund @larksuite/cli@1.0.85 @googleworkspace/cli@0.22.5 \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/comparison-install.txt"
+          cp "$tools_prefix/package-lock.json" "$RUNNER_TEMP/schema-evidence/comparison-package-lock.json"
+          python3 -m venv "$TMPDIR/cli-comparison-venv"
+          "$TMPDIR/cli-comparison-venv/bin/pip" install psutil==7.2.2
+          "$TMPDIR/cli-comparison-venv/bin/python" scripts/dev/test_measure_cli_five_dimensions.py
+          "$TMPDIR/cli-comparison-venv/bin/python" scripts/dev/measure-cli-five-dimensions.py \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --baseline "$RUNNER_TEMP/schema-entry-baseline/dws-baseline" \
+            --baseline-proof "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" \
+            --tools-prefix "$tools_prefix" \
+            --output "$RUNNER_TEMP/schema-evidence/five-dimensions-report.json" \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/five-dimensions.txt"
       - name: Upload native development evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

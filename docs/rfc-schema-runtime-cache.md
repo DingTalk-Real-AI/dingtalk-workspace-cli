@@ -9,6 +9,8 @@
 | 非目标 | 不恢复 deprecated `dws cache` 产品面；不把生成 Catalog 提交进仓库或嵌入二进制；不修改公开 Schema JSON 合同 |
 
 
+性能附件：[Schema 缓存与 CLI 入口性能报告](rfc-schema-runtime-cache-performance.md)（2026-09-06；覆盖 Schema、help、命令、进程内存及竞品对比；已完成测量 `decb45a7`，`f2a8b9d7` 两平台 help 封装失败，未进入采样）。
+
 ## 实施评审与验收状态（2026-09-06）
 
 本节记录可复核事实，不把设计要求视为已完成。§5 的 benchmark 表是历史 prototype
