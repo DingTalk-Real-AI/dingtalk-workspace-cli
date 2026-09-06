@@ -307,7 +307,8 @@ func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledg
 }
 
 func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string]any) map[string]any {
-	if cmd == nil || commandBoolFlag(cmd, "dry-run") {
+	if cmd == nil || commandBoolFlag(cmd, "dry-run") ||
+		chatCryptoClient == nil || chatCryptoClient.BackendReady == nil || !chatCryptoClient.BackendReady() {
 		return nil
 	}
 	batchItems := make([]messagecrypto.BatchDecryptItem, 0)

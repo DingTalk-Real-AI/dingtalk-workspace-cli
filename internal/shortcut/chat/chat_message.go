@@ -484,7 +484,8 @@ func newMessageReadCryptoClient() *messagecrypto.Client {
 }
 
 func decryptMessageItemsIfRequested(rt *shortcut.RuntimeContext, messages []map[string]any) messageDecryptLedger {
-	if rt.DryRun() {
+	if rt.DryRun() || messageReadCryptoClient == nil || messageReadCryptoClient.BackendReady == nil ||
+		!messageReadCryptoClient.BackendReady() {
 		return messageDecryptLedger{}
 	}
 	items := collectEncryptedMessageItems(messages)

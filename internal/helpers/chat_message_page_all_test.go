@@ -11,13 +11,15 @@ import (
 	"testing"
 	"time"
 
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 type chatMessagePageAllCaller struct {
-	steps []scriptedToolStep
-	dry   bool
-	calls []pagedCommandCall
+	steps     []scriptedToolStep
+	responses map[string]string
+	dry       bool
+	calls     []pagedCommandCall
 }
 
 func (c *chatMessagePageAllCaller) CallTool(_ context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -26,6 +28,9 @@ func (c *chatMessagePageAllCaller) CallTool(_ context.Context, serverID, toolNam
 		copied[k] = v
 	}
 	c.calls = append(c.calls, pagedCommandCall{server: serverID, tool: toolName, args: copied})
+	if response, ok := c.responses[serverID+"/"+toolName]; ok {
+		return textToolResult(response), nil
+	}
 	if len(c.steps) == 0 {
 		return textToolResult(`{"result":{"messages":[],"hasMore":false}}`), nil
 	}
@@ -282,6 +287,66 @@ func TestCrossPlatformCoverageChatMessageListPageAllAggregatesAndDedups(t *testi
 	}
 	if _, exists := got["nextPage"]; exists {
 		t.Fatalf("nextPage = %#v, want absent when source complete", got["nextPage"])
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListPageAllDecryptsAfterAggregation(t *testing.T) {
+	old := chatCryptoClient
+	SetChatCryptoClient(&messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	t.Cleanup(func() { chatCryptoClient = old })
+
+	const cipher1 = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	const cipher2 = "TWzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	caller := &chatMessagePageAllCaller{
+		steps: []scriptedToolStep{
+			{text: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cidAAAAAAAAAA1","content":"` + cipher1 + `"}],"hasMore":true,"nextCursor":1787000000123}}`},
+			{text: `{"result":{"messages":[{"openMessageId":"m2","openConversationId":"cidAAAAAAAAAA1","content":"` + cipher2 + `"}],"hasMore":false}}`},
+		},
+		responses: map[string]string{
+			"im/get_message_crypto_policy": `{"result":{"mode":"required","ttlSeconds":60}}`,
+			"im/batch_ding_decrypt_messages": `{"result":{"items":[` +
+				`{"messageId":"m1","status":"success","plaintextContent":"明文一","keyVersion":5},` +
+				`{"messageId":"m2","status":"success","plaintextContent":"明文二","keyVersion":5}` +
+				`]}}`,
+		},
+	}
+	got, err := executeChatMessagePageAllCommand(t, caller,
+		"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older", "--page-all", "--page-delay", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCalls := []string{
+		"chat/list_conversation_message_v2",
+		"chat/list_conversation_message_v2",
+		"im/get_message_crypto_policy",
+		"im/get_message_crypto_policy",
+		"im/batch_ding_decrypt_messages",
+	}
+	if len(caller.calls) != len(wantCalls) {
+		t.Fatalf("calls = %#v, want %v", caller.calls, wantCalls)
+	}
+	for i, call := range caller.calls {
+		if gotCall := call.server + "/" + call.tool; gotCall != wantCalls[i] {
+			t.Fatalf("call[%d] = %q, want %q", i, gotCall, wantCalls[i])
+		}
+	}
+	messages := pageAllMessages(t, got)
+	if messages[0]["text"] != "明文一" || messages[1]["text"] != "明文二" ||
+		messages[0]["contentDecrypted"] != true || messages[1]["contentDecrypted"] != true {
+		t.Fatalf("messages = %#v, want decrypted page aggregation", messages)
+	}
+	if got["decryptCandidateCount"] != float64(2) || got["decryptAllowedCount"] != float64(2) ||
+		got["decryptedCount"] != float64(2) || got["decryptFailedCount"] != float64(0) || got["partial"] != false {
+		t.Fatalf("decrypt ledger = %#v", got)
 	}
 }
 
