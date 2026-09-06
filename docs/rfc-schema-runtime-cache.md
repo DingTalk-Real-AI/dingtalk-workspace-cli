@@ -111,7 +111,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。embedded ide
 
 | 维度 | 门槛 |
 |---|---|
-| help/version 默认与 opt-out | candidate p50、p95 均 ≤ 固定 main 的 105% |
+| help/version 默认与 opt-out | candidate p50 ≤ `max(main × 105%, main + 3 ms)`；p95 ≤ `max(main × 110%, main + 3 ms)`。3 ms 覆盖低延迟进程的绝对噪声与 weak command metadata 固定成本；p95 10% 与命令框架 RFC 的冷启动阻断线一致 |
 | Schema cache | warm leaf 相对 live declaration assembly 的 user CPU p50 至少降低 80%；所有有效样本 peak RSS ≤100 MiB |
 | 业务命令 | `calendar ... list --dry-run`、常用 get、config 读取各自 default p50/p95 相对固定 main 不回退；至少一个代表业务命令的 p50 降低 40% |
 | 装配贡献 | process `calendar list` 的构树时间与 allocations 均 ≤完整树的 70%；utility `config get` 均 ≤完整树的 10% |

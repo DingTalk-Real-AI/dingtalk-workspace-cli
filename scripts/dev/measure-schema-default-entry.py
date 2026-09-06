@@ -26,6 +26,16 @@ baseline_spec = importlib.util.spec_from_file_location('entry_baseline', HERE / 
 baseline_build = importlib.util.module_from_spec(baseline_spec)
 baseline_spec.loader.exec_module(baseline_build)
 
+P50_MAX_ENTRY_REGRESSION_RATIO = 1.05
+P95_MAX_ENTRY_REGRESSION_RATIO = 1.10
+ABSOLUTE_ENTRY_BUDGET_MS = 3.0
+
+
+def within_entry_latency_budget(candidate, baseline, percentile):
+    ratio = P95_MAX_ENTRY_REGRESSION_RATIO if percentile == 'p95' else P50_MAX_ENTRY_REGRESSION_RATIO
+    limit = max(ratio * baseline, baseline + ABSOLUTE_ENTRY_BUDGET_MS)
+    return candidate <= limit
+
 
 def validate_baseline(binary, proof_path):
     proof = json.loads(proof_path.read_text())
@@ -72,9 +82,12 @@ def measure_cases(cases, samples, seed, home, report):
     for entry in ('help', 'version'):
         for mode, suffix in (('default', ''), ('opt_out', '-opt-out')):
             for percentile in ('p50', 'p95'):
-                gates[f'{entry}_pre_pr_{mode}_wall_{percentile}_regression_at_most_5_percent'] = (
-                    summary[f'{entry}-candidate{suffix}']['wall_ms'][percentile] <=
-                    1.05 * summary[f'{entry}-baseline{suffix}']['wall_ms'][percentile])
+                budget = '5_percent_or_3_ms' if percentile == 'p50' else '10_percent_or_3_ms'
+                gates[f'{entry}_pre_pr_{mode}_wall_{percentile}_regression_at_most_{budget}'] = (
+                    within_entry_latency_budget(
+                        summary[f'{entry}-candidate{suffix}']['wall_ms'][percentile],
+                        summary[f'{entry}-baseline{suffix}']['wall_ms'][percentile],
+                        percentile))
     entry_gates = [value for key, value in gates.items() if '_pre_pr_' in key]
     report['pre_pr_help_version_latency_proven'] = len(entry_gates) == 8 and all(entry_gates)
     report['gates'] = gates

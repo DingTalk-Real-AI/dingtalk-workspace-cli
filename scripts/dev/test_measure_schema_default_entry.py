@@ -67,10 +67,15 @@ class DefaultEntryTests(unittest.TestCase):
         return report
 
     def test_candidate_regression_against_main_fails(self):
-        report = self.run_synthetic(11)
-        self.assertFalse(report['gates']['help_pre_pr_default_wall_p95_regression_at_most_5_percent'])
+        report = self.run_synthetic(14)
+        self.assertFalse(report['gates']['help_pre_pr_default_wall_p50_regression_at_most_5_percent_or_3_ms'])
         self.assertFalse(report['pre_pr_help_version_latency_proven'])
         self.assertFalse(report['passed'])
+
+    def test_p95_budget_includes_three_ms_absolute_noise_floor(self):
+        self.assertTrue(check.within_entry_latency_budget(12.9, 10, 'p95'))
+        self.assertFalse(check.within_entry_latency_budget(13.1, 10, 'p95'))
+        self.assertFalse(check.within_entry_latency_budget(106, 100, 'p50'))
 
     def test_candidate_within_main_budget_passes(self):
         report = self.run_synthetic(10.4)

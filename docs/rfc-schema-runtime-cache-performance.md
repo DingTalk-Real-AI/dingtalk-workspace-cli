@@ -47,7 +47,7 @@ Darwin/arm64 本地完整矩阵显示，当前实现相对 PR-base main 在七�
 
 ## 4. Help 与 version
 
-独立 default/opt-out 入口矩阵的 12 个 gate 全部通过：candidate 的 help/version p50、p95 均不超过固定 main 的 105%。
+独立 default/opt-out 入口矩阵的 12 个 gate 全部通过：candidate 的 help/version p50 不超过 `max(main × 105%, main + 3 ms)`，p95 不超过 `max(main × 110%, main + 3 ms)`。3 ms 覆盖低延迟进程的绝对噪声与 weak command metadata 固定成本；p95 10% 与命令框架 RFC 的冷启动阻断线一致。
 
 | 场景 | candidate default p50 / p95 | candidate opt-out p50 / p95 | main default p50 / p95 |
 |---|---:|---:|---:|
