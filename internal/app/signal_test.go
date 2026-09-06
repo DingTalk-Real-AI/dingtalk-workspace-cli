@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clisignal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
@@ -33,11 +34,9 @@ func signalSelf(t *testing.T, sig syscall.Signal) {
 }
 
 func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
-	originalFind, originalExit := rootFindProcess, rootExitProcess
-	t.Cleanup(func() { rootFindProcess, rootExitProcess = originalFind, originalExit })
-	rootFindProcess = func(int) (*os.Process, error) { return nil, errors.New("find failed") }
+	testseam.Swap(t, &rootFindProcess, func(int) (*os.Process, error) { return nil, errors.New("find failed") })
 	exitCode := 0
-	rootExitProcess = func(code int) { exitCode = code }
+	testseam.Swap(t, &rootExitProcess, func(code int) { exitCode = code })
 	rootEscalateSignal(syscall.SIGTERM)
 	if exitCode != 143 {
 		t.Fatalf("escalation exit=%d", exitCode)
@@ -47,43 +46,43 @@ func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
 	if exitCode != 143 {
 		t.Fatalf("fallback exit=%d", exitCode)
 	}
-	rootFindProcess = func(int) (*os.Process, error) { return os.FindProcess(99999999) }
+	testseam.Swap(t, &rootFindProcess, func(int) (*os.Process, error) { return os.FindProcess(99999999) })
 	exitCode = 0
 	redeliverProcessSignal(syscall.SIGINT)
 	if exitCode != 130 {
 		t.Fatalf("signal fallback exit=%d", exitCode)
 	}
-	interrupted := &processInterruption{signal: syscall.SIGINT}
+	interrupted := clisignal.NewInterruption(syscall.SIGINT)
 	if !errors.Is(interrupted, context.Canceled) || interrupted.ExitCode() != 130 || interrupted.Subtype() != "cancelled_by_user" || !strings.Contains(interrupted.Error(), "interrupt") {
 		t.Fatalf("interruption=%v", interrupted)
 	}
-	detailed := interrupted.withCancellationDetail(fmt.Errorf("resume with dws doc import get: %w", context.Canceled))
+	detailed := interrupted.WithCancellationDetail(fmt.Errorf("resume with dws doc import get: %w", context.Canceled))
 	if detailed == interrupted || !errors.Is(detailed, context.Canceled) || !strings.Contains(detailed.Error(), "dws doc import get") {
 		t.Fatalf("detailed interruption=%v", detailed)
 	}
-	typedDetail := interrupted.withCancellationDetail(apperrors.NewInternal("resume import", apperrors.WithCause(context.Canceled)))
+	typedDetail := interrupted.WithCancellationDetail(apperrors.NewInternal("resume import", apperrors.WithCause(context.Canceled)))
 	if code := apperrors.ExitCode(typedDetail); code != 130 {
 		t.Fatalf("typed cancellation detail changed interruption exit code to %d", code)
 	}
-	if got := interrupted.withCancellationDetail(context.Canceled); got != interrupted {
+	if got := interrupted.WithCancellationDetail(context.Canceled); got != interrupted {
 		t.Fatalf("plain cancellation changed interruption: %v", got)
 	}
-	if got := interrupted.withCancellationDetail(errors.New("unrelated failure")); got != interrupted {
+	if got := interrupted.WithCancellationDetail(errors.New("unrelated failure")); got != interrupted {
 		t.Fatalf("unrelated failure changed interruption: %v", got)
 	}
-	terminated := &processInterruption{signal: syscall.SIGTERM}
+	terminated := clisignal.NewInterruption(syscall.SIGTERM)
 	if terminated.ExitCode() != 143 || terminated.Subtype() != "terminated" {
 		t.Fatalf("termination=%v", terminated)
 	}
 	state := &processSignalState{}
-	if !state.record(syscall.SIGINT, nil) || state.record(syscall.SIGTERM, nil) {
+	if !state.Record(syscall.SIGINT, nil) || state.Record(syscall.SIGTERM, nil) {
 		t.Fatal("signal state did not reject a second interruption")
 	}
 }
 
 func TestCrossPlatformCoverageProcessInterruptionRejectsNestedDetail(t *testing.T) {
-	interrupted := &processInterruption{signal: syscall.SIGINT}
-	if got := interrupted.withCancellationDetail(&processInterruption{signal: syscall.SIGTERM}); got != interrupted {
+	interrupted := clisignal.NewInterruption(syscall.SIGINT)
+	if got := interrupted.WithCancellationDetail(clisignal.NewInterruption(syscall.SIGTERM)); got != interrupted {
 		t.Fatalf("nested interruption changed the primary signal error: %v", got)
 	}
 }

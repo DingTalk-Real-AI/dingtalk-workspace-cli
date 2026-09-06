@@ -122,6 +122,31 @@ func TestRejectsTamperedSameSizeCore(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageCoreDigestCoversBytesBeyondFirstRead(t *testing.T) {
+	const payloadSize = 2<<20 + 19
+	for _, offset := range []int64{1<<20 - 1, 1<<20 + 7, payloadSize - 1} {
+		t.Run(fmt.Sprint(offset), func(t *testing.T) {
+			deps, options, path := testCoreSetup(t, bytes.Repeat([]byte("x"), payloadSize))
+			file, err := os.OpenFile(path, os.O_WRONLY, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, writeErr := file.WriteAt([]byte("y"), offset)
+			closeErr := file.Close()
+			if writeErr != nil || closeErr != nil {
+				t.Fatalf("tamper fixture: write %v, close %v", writeErr, closeErr)
+			}
+			deps.delegate = func(string, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error) {
+				t.Fatal("tampered core was delegated")
+				return 0, nil
+			}
+			if err := run(options, deps); err == nil || !strings.Contains(err.Error(), "SHA-256 mismatch") {
+				t.Fatalf("tampering at byte %d: %v", offset, err)
+			}
+		})
+	}
+}
+
 func TestRejectsCoreChangedDuringHash(t *testing.T) {
 	deps, options, corePath := testCoreSetup(t, []byte("trusted"))
 	baseOpen := deps.open
@@ -155,15 +180,29 @@ func TestRejectsCoreReadFailure(t *testing.T) {
 }
 
 func BenchmarkLauncherCoreVerification(b *testing.B) {
-	content := bytes.Repeat([]byte("dws-core-benchmark"), 1<<16)
-	deps, options, _ := testCoreSetup(b, content)
-	b.SetBytes(int64(len(content)))
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := run(options, deps); err != nil {
-			b.Fatal(err)
-		}
+	for _, size := range []struct {
+		name  string
+		bytes int
+	}{
+		{"small", 1 << 20},
+		// The e70a11dd native Linux core is 46,055,777 bytes. Exercise the
+		// complete verification path at that size before attributing public
+		// entry overhead from the previous approximately 1 MiB fixture.
+		{"release-sized", 46055777},
+	} {
+		b.Run(size.name, func(b *testing.B) {
+			pattern := []byte("dws-core-benchmark")
+			content := bytes.Repeat(pattern, size.bytes/len(pattern)+1)[:size.bytes]
+			deps, options, _ := testCoreSetup(b, content)
+			b.SetBytes(int64(len(content)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := run(options, deps); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

@@ -1,0 +1,5 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth	108.172s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata	[no test files]
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clisignal	1.466s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clitelemetry	2.333s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/launcher	2.111s

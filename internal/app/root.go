@@ -185,8 +185,8 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	if prepared, ok := prepareSchemaFastPath(os.Args, nil); ok {
 		commandPath = "schema"
 		err := prepared.Write(os.Stdout)
-		if interrupted, _ := signalState.outcome(); interrupted != nil {
-			err = interrupted.withCancellationDetail(err)
+		if interrupted, _ := signalState.Outcome(); interrupted != nil {
+			err = interrupted.WithCancellationDetail(err)
 		}
 		if err != nil {
 			errorMessage = telemetryErrorSummary(err)
@@ -211,7 +211,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	// and --limit100 → --limit 100.
 	if err := rootRunPreParse(root, engine); err != nil {
 		err = newPreParseValidationError(err)
-		if interrupted, _ := signalState.outcome(); interrupted != nil {
+		if interrupted, _ := signalState.Outcome(); interrupted != nil {
 			err = interrupted
 		}
 		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
@@ -248,7 +248,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			fmt.Fprintf(executed.ErrOrStderr(), "Warning: abort output sink after command failure: %v\n", abortErr)
 		}
 	}
-	interrupted, primaryCompletedBeforeSignal := signalState.outcome()
+	interrupted, primaryCompletedBeforeSignal := signalState.Outcome()
 	if interrupted != nil && !primaryCompletedBeforeSignal {
 		if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 			var publicationErr *outputPublicationError
@@ -273,7 +273,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 		}
 		var publicationErr *outputPublicationError
 		if err == nil || !stderrors.As(err, &publicationErr) {
-			err = interrupted.withCancellationDetail(err)
+			err = interrupted.WithCancellationDetail(err)
 		}
 	}
 	if err != nil {

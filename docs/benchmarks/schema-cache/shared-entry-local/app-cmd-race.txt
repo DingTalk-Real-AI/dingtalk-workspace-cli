@@ -1,0 +1,2 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	263.826s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd	1.827s

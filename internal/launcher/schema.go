@@ -6,7 +6,7 @@ package launcher
 import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemafastpath"
 
 func trySchema(options Options, deps dependencies) (bool, error) {
-	// The launcher has no tracker. Default telemetry remains owned by core.
+	// Default Schema execution and telemetry remain owned by core.
 	if !telemetryOptedOut(deps.environ) {
 		return false, nil
 	}

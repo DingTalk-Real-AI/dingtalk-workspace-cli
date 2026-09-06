@@ -22,12 +22,56 @@
 | identity generator | 输出前检查 typed round trip、Meta/locator/查询投影和重复编码确定性；74e5fdd7 的两平台 Go 1.25.9/proto drift 与 coordinator identity 比较通过；独立声明 drift/assembly/catalog 通过 | hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | 639bfceb 两平台 core-free JSON 与完整 version 元数据精确输出通过，core fast-path 与生命周期 race 通过；共用 reader/typed renderer | 默认上报优化、竞争性指标和逐次 core hashing 成本；受限环境生成器新检查待 native CI |
-| 性能 | e70a11dd 两平台 opt-out 与默认 Schema CPU/RSS 门槛通过；Meta file-hit Linux 4.484 ms、macOS 3.653 ms | 默认 help/version 相对同包 core 回退约 6–11%，5% 检查失败；原始 PR base 对照和 public/native 竞争目标仍待证明 |
+| 性能 | e70a11dd 两平台 opt-out 与默认 Schema CPU/RSS 门槛通过；Meta file-hit Linux 4.484 ms、macOS 3.653 ms | 默认 help/version 相对同包 core 回退约 6–11%，5% 检查失败；6f64ee2c 原始 PR base 对照也失败；public/native 竞争目标仍待证明 |
 | 全量验证 | e70a11dd 两平台完整 148 包均通过，Linux 安装器 stat 修复已通过原生验证；两平台文件/网络隔离通过 | 新的原始基线对照、默认入口优化和完整 release proof 待验证 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
+
+### 原始基线对照失败与默认 version 修正（6f64ee2c 后续）
+
+[run 34003658436](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34003658436)
+已完成：两平台完整 suite 和声明 policy jobs 成功，native candidate jobs 的默认入口性能检查失败，
+identity coordinator 跳过。八模式各 30 次、共 240 个默认 tracker 样本证实：相对固定 PR 基线
+`5243e5ca`，help/version 也存在回退，不只是同包 core 对照失败。
+
+| 相对原始入口 wall 回退 p50 / p95 | Linux amd64 | macOS arm64 |
+|---|---:|---:|
+| 默认 help | 11.19% / 11.23% | 12.07% / 11.23% |
+| 默认 version | 11.05% / 11.09% | 10.17% / 7.40% |
+
+两平台八项 help/version 检查均失败，Schema CPU/RSS 两项仍通过。原始样本、构建 identity、
+隔离报告以及 job/artifact/hash 绑定见 [本轮证据](benchmarks/schema-cache/native-6f64ee2c/evidence.json)。
+这些结果取代“原始基线对照尚未运行”的状态，不代表后续实现或正式签名包通过。
+
+后续实现把原 CLI 的官方 SDK 配置、只读身份投影和错误脱敏抽到 `internal/clitelemetry`；
+两个入口引用同一实现。profile 的纯数据、规范化和选择逻辑从 auth 移至只依赖标准库的
+`internal/profilemetadata`，原 auth API 也委托这份实现；launcher 不加载认证或凭据模块。精确 `dws --version` 在原生受支持平台、open edition、有效编译期
+identity、无扩展或诊断覆盖时，可以在 launcher 内执行完整版本输出及一次正常上报。
+它读取与 core 相同的 profile metadata，不读取凭据，不打开 Schema cache，不启动 core。
+额外 flags、未知环境、settings/plugin/shortcut 和缺少 proof 的调用仍交给 core。
+官方 SDK 的默认 flush budget、PID、identity 字段与隐私配置均保持原值。
+
+审查同时发现快路径必须保留外层信号与 panic 行为。因此首个中断、第二次信号升级及
+取消错误类型由 `internal/clisignal` 共享；version 回调在 tracker 完成前停止信号监听，
+保留 130/143 状态、human error 与固定 panic 摘要。失败或开始输出后不得重新委派或再次上报。
+core 的统一结果发布优先级和取消恢复信息仍由原执行层处理。
+
+本机完整 auth race（108.172 s）、app 信号/telemetry/Schema fast-path 回归（263.826 s）、
+cmd 与 launcher/component race 均通过；抽出的 22 个纯身份函数与父提交比较，函数体只改符号。
+依赖门禁确认 launcher 没有 auth、Cobra/pflag、output 或业务传输模块。新候选构建后，24 个
+变更 Go 文件摘要保持不变，完整 identity bytes 与 6f64ee2c 的原生结果一致。
+
+实际默认入口复测在取得 core 版本 oracle 时被系统终止（exit -9）；对应 amfid 日志明确报告
+ad-hoc/未知证书链拒绝（AppleMobileFileIntegrityError -423）。本轮没有性能样本，新增
+默认 core-free version 检查也尚未执行，不能拿早期中间实现的测量替代。构建 recipe、源码
+delta、错误报告、系统原因与测试记录见 [本机证据](benchmarks/schema-cache/shared-entry-local/evidence.json)。
+原生 CI 将运行新检查，系统保护和正式签名验收要求保持不变。
+
+该实现尚待本次源码的完整原生性能、输出及生命周期复核；默认 help 和 Schema 仍委派 core，
+每次委派的完整 SHA-256 校验继续保留。默认 version 的局部改进不能替代 help 回归修复、
+竞争性性能或最终签名制品的生产验收。正式 release 的 Schema identity 继续留空，PR 保持 Draft。
 
 ### 全量测试、原生隔离通过与默认入口回退（e70a11dd）
 
@@ -175,7 +219,7 @@ sealed metadata；help 的历史内容允许不同，但每次输出必须等于
 回归证明：同包 launcher/core 即使通过，仍不能掩盖相对 PR 基线的 10% 回退。
 `pre_pr_help_version_latency_proven` 只报告四个延迟门槛；cache I/O absence、竞争性领先与
 正式签名制品仍分别待证，因此不能据此把整体 `pre_pr_baseline_proven` 或 release eligibility
-改为 true。该扩展尚待新的 native CI，不属于 e70a11dd 运行中的六模式报告。
+改为 true。该扩展已在 6f64ee2c 的 native CI 运行，八项入口延迟检查均失败；不属于 e70a11dd 的六模式报告。
 本机 darwin/arm64 已用该驱动构建原始基线并完成实际 `--help`/`--version` 启动检查：
 退出 0、stderr 为空、版本与 sealed metadata 精确一致、最终二进制 hash 不变；记录见
 [构建](benchmarks/schema-cache/pre-pr-baseline-local/baseline-build.json) 与
@@ -1074,12 +1118,19 @@ launcher，而不是把同 binary 结果包装成达标。launcher 的 fast path
    envelope、protobuf conversion、typed validation 和 renderer；禁止建立第二套 Schema 语义。
 3. cache missing/corrupt/disabled、external overlay、plugin 可能改变 surface，或 output contract
    无法完全复现时，fast path 返回 unhandled，由完整 core authoritative assembly/repair。
-4. 保留现有 telemetry 语义并单独测量 identity/`clitrack` 成本。默认请求由 core 处理身份与
-   上报；只有显式 `DO_NOT_TRACK` 才能直接使用无上报 fast path。默认本地只读请求免上报
-   属于单独的产品决策；在得到明确选择前不能因实现了 launcher 就静默省略。
-   opt-out benchmark 必须明确标注，不能用于证明默认 public entry 的竞争性目标。
-5. launcher 不 import `internal/app`、Cobra、auth、plugin、runtime payload、network transport、
-   TUI 或完整 Schema assembler；test 必须对 dependency list 和 I/O seams 同时门禁。
+4. 保留现有 telemetry 语义并单独测量 identity/`clitrack` 成本。默认 Schema 请求仍由 core
+   处理；精确且满足 plain-invocation 边界的默认 `--version` 复用共享 SDK 配置与只读身份解析，
+   在 launcher 完成同一次上报。只有显式 `DO_NOT_TRACK` 才能使用无上报 fast path；
+   不能因实现了 launcher 就静默省略默认上报。opt-out benchmark 必须明确标注，不能用于
+   证明默认 public entry 的竞争性目标。
+5. launcher 不 import `internal/app`、Cobra/pflag、auth、plugin、runtime payload、业务 network
+   transport 或完整 Schema assembler。`profilemetadata` 只依赖标准库，共享原 auth 的 DTO、
+   normalization 与 selector 实现，不能维护另一套身份选择规则。`clisignal` 也只依赖标准库，
+   core 通过回调提供已完成输出状态，launcher 不引入 `output` 命令框架。错误分类和原 human
+   formatter 复用 `internal/errors`，允许其现有非交互 `tui` 样式依赖；官方埋点 SDK 的网络栈
+   是保留上报合同所必需的依赖。此前笼统的“无 TUI/网络”规则在默认埋点入口不成立，不能
+   为满足包名禁令重写错误样式或自行投递埋点。dependency allowlist 与 I/O seams 共同门禁，
+   任何新增运行时包必须重新审查；包括这些依赖的实际默认/opt-out 延迟仍须通过原性能门槛。
 
 `internal/app` import probe 在非 release build 上观测到约 20 ms CPU；这是包含 process startup、
 Mach-O loading、package init 和 output 的粗略 baseline，不是 production floor。direct app probe

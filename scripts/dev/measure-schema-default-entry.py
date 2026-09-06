@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -138,6 +139,25 @@ def main():
                    'XDG_CACHE_HOME': str(cache), 'XDG_CONFIG_HOME': str(home / '.config'),
                    'DWS_CONFIG_DIR': str(home / '.dws'), 'LANG': 'C', 'LC_ALL': 'C'}
             live = {**env, 'DWS_SCHEMA_CACHE_DISABLE': '1'}
+            # Exercise the default tracked version in an identical launcher
+            # with no core available, before any Schema artifacts are created.
+            # This proves execution ownership, not absence of attempted I/O or
+            # successful delivery to the external telemetry service.
+            version_output, _ = measure.invoke(core, ['--version'], {**env, 'DO_NOT_TRACK': '1'}, home)
+            isolated = home / 'version-only' / 'bin' / 'dws'
+            isolated.parent.mkdir(parents=True)
+            shutil.copy2(binary, isolated)
+            if measure.digest(isolated) != binary_sha:
+                raise RuntimeError('isolated version launcher differs from the finalized candidate')
+            isolated_output, _ = measure.invoke(isolated, ['--version'], env, home)
+            if isolated_output != version_output or measure.digest(isolated) != binary_sha:
+                raise RuntimeError('default core-free version changed output or executable bytes')
+            report['default_version_core_free'] = {
+                'passed': True, 'launcher_sha256': binary_sha,
+                'stdout_sha256': hashlib.sha256(isolated_output).hexdigest(),
+                'do_not_track_present': False, 'core_present': False,
+                'telemetry_delivery_proven': False,
+            }
             leaf = ['schema', 'calendar.create_calendar_event', '--compact', '-f', 'json']
             # Preparatory calls are excluded from measurements. Get the oracle
             # through full declaration assembly, then authenticate warmed bytes.

@@ -132,7 +132,7 @@ func TestCrossPlatformCoverageCoreSchemaFastPathPreservesWireAndTelemetryResult(
 		stopped := false
 		testseam.Swap(t, &rootInstallProcessSignalContext, func(ctx context.Context, store *output.ResultStore) (context.Context, *processSignalState, func()) {
 			state := &processSignalState{}
-			state.record(syscall.SIGTERM, store)
+			state.Record(syscall.SIGTERM, processResultCompleted(store))
 			return ctx, state, func() { stopped = true }
 		})
 		for _, stream := range []**os.File{&os.Stdout, &os.Stderr} {

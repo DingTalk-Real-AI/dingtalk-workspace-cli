@@ -18,45 +18,23 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clitelemetry"
 	"gitlab.alibaba-inc.com/aes/aem-go-sdk/clitrack"
 )
 
 var (
 	appExecute               = app.ExecuteWithTelemetry
 	resolveTelemetryIdentity = app.ResolveTelemetryIdentity
-	trackRun                 = func(cfg clitrack.Config, execute func() error, exitCode func(error) int) {
-		clitrack.New(cfg).Run(execute, exitCode)
-	}
+	trackRun                 = clitelemetry.Run
 )
 
 // trackedExitError tells clitrack that the command failed without asking it to
 // print the error a second time. The already-rendered message is published via
 // ExtraFields c5, while app.Execute remains the sole owner of presentation.
-type trackedExitError struct{}
-
-func (trackedExitError) Error() string { return "" }
+type trackedExitError = clitelemetry.RenderedError
 
 func trackerConfig(identity app.TelemetryIdentity, commandPath, errorMessage *string) clitrack.Config {
-	return clitrack.Config{
-		PID:                   "wcCRwZ",
-		App:                   "dws",
-		Version:               app.RawVersion(),
-		UID:                   identity.UserID,
-		Username:              identity.UserName,
-		NoCommandLine:         true,
-		NoCwd:                 true,
-		NoAutomaticDimensions: true,
-		ExtraFields: func() map[string]string {
-			fields := map[string]string{"c9": *commandPath}
-			if identity.CorpID != "" {
-				fields["c10"] = identity.CorpID
-			}
-			if *errorMessage != "" {
-				fields["c5"] = *errorMessage
-			}
-			return fields
-		},
-	}
+	return clitelemetry.Configuration(app.RawVersion(), identity, commandPath, errorMessage)
 }
 
 func telemetryOptedOut() bool {

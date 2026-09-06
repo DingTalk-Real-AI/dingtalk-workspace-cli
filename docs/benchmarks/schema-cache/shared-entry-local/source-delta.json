@@ -1,0 +1,30 @@
+{
+  "base_commit": "6f64ee2c23afe308c4e580bd5e74229a1f075ea6",
+  "modified_or_new_go_files": {
+    "cmd/main.go": "e6e8efd766b2a5ef37116a2c9fc2edfb0ab6546cb5511765183bb1b8f8eb6bc6",
+    "internal/app/framework_coverage_test.go": "16df39a9b11d9cb25fb15c2932fea29f21a4b57ee79d1821506542ea5027ccca",
+    "internal/app/root.go": "97ff965a3eaf413ece0cbfc4670b859c6cdd233bf231a810eecd53991ce234df",
+    "internal/app/schema_fast_path_test.go": "dd0c0fe12cde59851691c68b38200003b7f638a7aaef7f9a78412c01d1777a57",
+    "internal/app/signal.go": "81f0996f2d12611c3098a3c5215e08e52c964fc78d25768cd8657822c9ad8432",
+    "internal/app/signal_test.go": "a49df1d33e9d9274819b882837d5fd067b022cd692f3d6c8eaa3f0f6b9eeee0d",
+    "internal/app/telemetry_error.go": "c31660de3b302112ed6968799ff2dc8b68b069ec2502aa691cab8a1f3ddf88dc",
+    "internal/app/telemetry_identity.go": "daa5f6c89ffd131a498f67be16fd76bb90c28f75057535717e94b3db0c26f1ba",
+    "internal/auth/profile_metadata_readonly.go": "42d4bb0e0ca84517d01e89fc7fade85cf836cd217576b29819490067cc79782e",
+    "internal/auth/profiles.go": "39a9ef8bc674695c2e26baaab330e331da3909fa3ccfaf012a1d47a1f4587ac5",
+    "internal/clisignal/signal.go": "e713270772df2a1e69aaaa264a361de5172e679c69b92e1e362a04e3d735d178",
+    "internal/clisignal/signal_test.go": "331ad954d5b841dabb62c33fab4509329ed928b4ff5d0958608f1919aea9ffd9",
+    "internal/clitelemetry/error.go": "0f429c81cac1d6383b954e8d43febc12a99a6b67e3a088da718fdc676ea91610",
+    "internal/clitelemetry/tracker.go": "f62d99364ee263f5fe5e4cba14b69b48f72cd5e750cc0e7d5c1c481569e16c48",
+    "internal/clitelemetry/tracker_test.go": "449aa17cae0afde4f689451a6622bf68d68cfd0e31cecb46d5731aa40010662e",
+    "internal/launcher/dependencies_test.go": "33ccdc5234ffff91442f9b14d79d6df12c8213185eb2969f7d8191a07130a38a",
+    "internal/launcher/launcher.go": "3046bc72498cea3cff78dc2410fe29dc943cfd3d62aedf93d39076700ff1a71e",
+    "internal/launcher/launcher_test.go": "02ce37f9ac1903e5601ebf59e25302eb6cabcdecae17746a993484fe1e360718",
+    "internal/launcher/schema.go": "fbb4f517c5b6e8bd25e60bc0289a4dca0a23cb585c8b7303a035f74b60bfa0df",
+    "internal/launcher/version_tracking.go": "021c51574064a33e49c264442d5c4c33ddecdee42b92ba5db9c49912bb5bcc01",
+    "internal/launcher/version_tracking_test.go": "fce8836056178f46abcdcd2c34723c37c24d2aff6b6bc22c09f7d8c418efb6bc",
+    "internal/profilemetadata/profiles.go": "24151996566b6e77c9e341885e97e07637433159527f1723343a337fc32a65ad",
+    "internal/profilemetadata/readonly.go": "97e2c2659890d8611fe0b3dc4355f5767ec126a66e3a53f464ea07d54b665b81",
+    "internal/schemafastpath/schema.go": "f020eeb014a4c619472bb64c34412db90dae2ecda11be7ecca80c028570b015f"
+  },
+  "scope": "local working-tree source delta; development evidence, not a sealed release recipe"
+}

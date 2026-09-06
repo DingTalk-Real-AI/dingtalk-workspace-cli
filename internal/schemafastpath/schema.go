@@ -164,13 +164,9 @@ func environmentValue(environment []string, key string) string {
 // Extensions can replace the CLI tree or install preparse/output hooks. Their
 // absence is a prerequisite, not an interpretation of their configuration.
 func schemaExtensionsAbsent(deps Dependencies) bool {
-	directory := environmentValue(deps.Environment, "DWS_CONFIG_DIR")
+	directory := invocationConfigDir(deps.Environment)
 	if directory == "" {
-		home := environmentValue(deps.Environment, "HOME")
-		if !filepath.IsAbs(home) {
-			return false
-		}
-		directory = filepath.Join(home, ".dws")
+		return false
 	}
 	// Reject dangling links and unreadable/non-directory ancestry. Absence below
 	// a plain directory is safe; no creation or user-file reading is performed.
@@ -205,22 +201,45 @@ func schemaExtensionsAbsent(deps Dependencies) bool {
 	return true
 }
 
+func invocationConfigDir(environment []string) string {
+	if directory := environmentValue(environment, "DWS_CONFIG_DIR"); directory != "" {
+		return directory
+	}
+	if home := environmentValue(environment, "HOME"); filepath.IsAbs(home) {
+		return filepath.Join(home, ".dws")
+	}
+	return ""
+}
+
+// PlainInvocation checks the proven edition and the shared diagnostic/extension
+// boundary without opening a Schema cache. Presentation-only callers may use
+// the returned config directory for the same read-only identity snapshot as core.
+// A successful check does not replace the caller's tracker or output lifecycle.
+func PlainInvocation(edition string, identity *schemareader.Identity, deps Dependencies) (string, bool) {
+	if identity == nil || !schemaEnvironmentIsPlain(deps.Environment) {
+		return "", false
+	}
+	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+		return "", false
+	}
+	if edition != "open" || identity.Edition != edition || identity.Validate() != nil || deps.Lstat == nil {
+		return "", false
+	}
+	if !schemaExtensionsAbsent(deps) {
+		return "", false
+	}
+	return invocationConfigDir(deps.Environment), true
+}
+
 // Prepare authenticates and renders a supported, plain invocation before output.
 // The caller owns telemetry, signal handling and output error presentation.
 // A miss leaves all output untouched and must use normal command execution.
 func Prepare(edition string, identity *schemareader.Identity, deps Dependencies) (Prepared, bool) {
 	request, ok := parseSchemaRequest(deps.Args)
-	if !ok || identity == nil || !schemaEnvironmentIsPlain(deps.Environment) {
+	if !ok || deps.OpenCache == nil {
 		return Prepared{}, false
 	}
-	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
-		return Prepared{}, false
-	}
-	// Only the overlay-free open edition is currently proven by the generator.
-	if edition != "open" || identity.Edition != edition || identity.Validate() != nil || deps.OpenCache == nil || deps.Lstat == nil {
-		return Prepared{}, false
-	}
-	if !schemaExtensionsAbsent(deps) {
+	if _, ok := PlainInvocation(edition, identity, deps); !ok {
 		return Prepared{}, false
 	}
 	cache, err := deps.OpenCache(identity.Edition)

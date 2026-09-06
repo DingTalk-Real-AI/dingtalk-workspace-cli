@@ -97,10 +97,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/launcher ./internal/packagemanifest ./internal/cli/schemaruntime ./internal/corecmd/... \
+          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/launcher ./internal/clitelemetry ./internal/clisignal ./internal/profilemetadata ./internal/packagemanifest ./internal/cli/schemaruntime ./internal/corecmd/... \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
           go test -race -count=1 -timeout=15m ./internal/app ./cmd \
-            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|LauncherVersion|Main|CLITracker|SchemaSourceRoots)' \
+            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|LauncherVersion|Main|CLITracker|Tracker|DefaultTrackRun|SchemaSourceRoots|ExecuteSignal|ExecuteDeterministicInterruption|ProcessInterruption|Signal|ResolveTelemetryIdentity|Telemetry|SanitizeTelemetry)|TestExecuteSignalSubprocessExitStatus|TestFramework.*Signal|TestSecondSignal' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/core-fast-path-race.txt"
           go test -race -count=1 -timeout=15m ./internal/helpers \
             -run 'TestCrossPlatformCoverageContractValidation|TestSheetMutationGuard|TestUserRequiredSafetyHomology|TestDeclareLeafMetadata' \

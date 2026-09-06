@@ -1,0 +1,53 @@
+{
+  "scope": "Local dirty-source development build and focused race tests; not native release or performance acceptance",
+  "go_toolchain": "go1.25.9",
+  "pure_profile_function_migration_audit": {
+    "functions": 22,
+    "body_changes": "symbol renames only compared with parent Git source"
+  },
+  "source_delta_unchanged_after_build": true,
+  "identity_equal_to_native_6f64ee2c": true,
+  "performance_samples": 0,
+  "default_version_core_free_proven": false,
+  "failure": "core --version terminated with SIGKILL; matching amfid record rejects ad-hoc/unknown signature, AppleMobileFileIntegrityError -423",
+  "release_eligible": false,
+  "measurement_script_sha256": "40560fdc9809fec8ac77603c28826a1f006f48806b8b96aa8f23490cff640b96",
+  "files": {
+    "candidate-build.json": {
+      "sha256": "ffecd9e0ed20ca0635fb13eb429dbc97a467db448ca18eab125c550d253e9c25",
+      "bytes": 3130
+    },
+    "identity.json": {
+      "sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+      "bytes": 1026
+    },
+    "source-delta.json": {
+      "sha256": "c163e9c8f62fe967714409959ad72514ef39308106e168daec5aaea9299a3ee0",
+      "bytes": 2781
+    },
+    "default-entry-failure.json": {
+      "sha256": "6e1d510accfb3c07bcfe438c3f3620966dce1e9106992604b1369c81ea5eebdb",
+      "bytes": 3082
+    },
+    "amfid.txt": {
+      "sha256": "81c47af7f4e2209a52e7efdd2af9553cfc5807b530c69c7af85299912db78992",
+      "bytes": 805
+    },
+    "auth-components-race.txt": {
+      "sha256": "f030015eb4974f1431290539b1d6cb36b812ee5308520032f04adebfda0eb58e",
+      "bytes": 424
+    },
+    "app-cmd-race.txt": {
+      "sha256": "e020f4372476c784ccfb9e3e043e9d02e5ca4615bb8a4dd92dbfe2fb68c759fa",
+      "bytes": 145
+    },
+    "dependencies-race.txt": {
+      "sha256": "f17dc4c29856c32ffc8c54a4e4dce60067dc44c1057905a5d4bd2974390b21eb",
+      "bytes": 81
+    },
+    "measurement-tests.txt": {
+      "sha256": "f24c779bb167cf0a56f7bd49280f428f3f67140f20731afe0919ffe27b0cefda",
+      "bytes": 436
+    }
+  }
+}

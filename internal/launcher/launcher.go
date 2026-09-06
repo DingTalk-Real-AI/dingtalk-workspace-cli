@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clisignal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/clitelemetry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
@@ -81,6 +83,9 @@ func Main(options Options) int {
 }
 
 type dependencies struct {
+	versionSignals  func() (*clisignal.State, func())
+	trackRun        func(clitelemetry.Config, func() error, func(error) int)
+	defaultIdentity func(string) clitelemetry.Identity
 	openSchemaCache func(string) (*schemacache.Cache, error)
 	args            []string
 	environ         []string
@@ -104,6 +109,8 @@ type coreFile interface {
 
 func systemDependencies() dependencies {
 	return dependencies{
+		trackRun:        clitelemetry.Run,
+		defaultIdentity: clitelemetry.DefaultIdentity,
 		openSchemaCache: func(edition string) (*schemacache.Cache, error) { return schemacache.Open(edition) },
 		args:            os.Args,
 		environ:         os.Environ(),
@@ -124,14 +131,18 @@ func run(options Options, deps dependencies) error {
 	if err := validateIdentity(options); err != nil {
 		return &Error{Kind: ErrorConfiguration, Op: "validate release identity", Err: err}
 	}
-	// Keep the shipped identity/clitrack behavior until an equivalent thin
-	// telemetry path is available. An explicit opt-out needs neither profile
-	// reads nor reporting and can safely use the filesystem-free fast path.
-	if len(deps.args) == 2 && deps.args[1] == "--version" && options.BuildTime != "" && telemetryOptedOut(deps.environ) {
-		if _, err := fmt.Fprintf(deps.stdout, "dws version %s\n", buildversion.Format(options.Version, options.Commit, options.BuildTime)); err != nil {
-			return &Error{Kind: ErrorDelegate, Op: "write version", Err: err}
+	if len(deps.args) == 2 && deps.args[1] == "--version" && options.BuildTime != "" {
+		// Explicit opt-out keeps its filesystem-free path. Default tracking
+		// uses the same SDK configuration only for a proven plain invocation.
+		if telemetryOptedOut(deps.environ) {
+			if _, err := fmt.Fprintf(deps.stdout, "dws version %s\n", buildversion.Format(options.Version, options.Commit, options.BuildTime)); err != nil {
+				return &Error{Kind: ErrorDelegate, Op: "write version", Err: err}
+			}
+			return nil
 		}
-		return nil
+		if handled, err := tryTrackedVersion(options, deps); handled {
+			return err
+		}
 	}
 	if handled, err := trySchema(options, deps); handled {
 		if err != nil {
