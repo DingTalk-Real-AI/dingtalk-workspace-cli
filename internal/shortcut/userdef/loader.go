@@ -74,6 +74,9 @@ func Dir() string { return filepath.Join(config.DefaultConfigDir(), "shortcuts")
 // errors. It never fails hard — a bad file is reported and skipped.
 func Load() (registered int, errs []error) {
 	files, _ := filepath.Glob(filepath.Join(Dir(), "*.yaml"))
+	if len(files) == 0 {
+		return 0, nil
+	}
 	existing := registeredKeys()
 	for _, f := range files {
 		s, err := parseFile(f)

@@ -1,0 +1,6 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app
+cpu: Apple M3 Pro
+BenchmarkNewRootCommand-12    	      79	  14425624 ns/op	17747392 B/op	  171639 allocs/op
+PASS

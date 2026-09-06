@@ -1,8 +1,10 @@
 # PR #1296 性能专项：技术分析与优化方案
 
-状态：技术分析 / Draft，尚未实现。基准为 PR #1296 实现 `7cbf7f52`、[原生 run 34018840739](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34018840739)。相关：[性能报告](rfc-schema-runtime-cache-performance.md)、[执行计划](plan-cli-performance-parity.md)、[当前 Schema RFC](rfc-schema-runtime-cache.md)。
+状态：Draft / 已开始实施，整体目标尚未达成。基准为 PR #1296 实现 `7cbf7f52`、[原生 run 34018840739](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34018840739)。相关：[性能报告](rfc-schema-runtime-cache-performance.md)、[执行计划](plan-cli-performance-parity.md)、[当前 Schema RFC](rfc-schema-runtime-cache.md)。
 
-本次范围是 PR #1296 的性能专项：在当前 verified Schema cache 与 canonical CLI packages 上定位和削减真实成本。先交付技术方案与实验设计，尚未修改生产代码。当前 RFC 的发布合同继续有效；单二进制与 outbox 仅用于分析现有模型的上限，不能把它们排成这次专项的默认前置改造。
+本次范围是 PR #1296 的性能专项：在当前 verified Schema cache 与 canonical CLI packages 上定位和削减真实成本。已开始实施有 profile 支持的 Schema 校验和初始化优化。当前 RFC 的发布合同继续有效；单二进制与 outbox 仅用于分析现有模型的上限，不能把它们排成这次专项的默认前置改造。
+
+用户约束更新（2026-09-06）：本轮目标是默认入口性能超过 Lark CLI；GWS 保留为进一步优化的对照。用户明确决定**不修改统计行为**：保留官方 SDK 异步发送、退出前最多 300 ms 的等待及既有字段/投递方式。下文 outbox 等分析仅作历史备选，本轮不实施。保留默认入口的全部失败格，不能以 opt-out 或组件收益替代“超过 Lark”的结论。
 
 ## 1. 结论与判断边界
 
@@ -10,7 +12,7 @@
 
 本轮优先优化 **现有 Schema 认证/解码、launcher 校验、core 初始化/命令装配、共享展示生命周期及整体分配**。先把每项 CPU、墙钟、I/O 和 RSS 分解清楚，尤其定位 config/dry-run/mock 的 8.39%–12.74% 回退。所有命令执行继续集中到统一框架。单原生二进制和按需 runtime 的大范围迁移只作为后续突破结构成本的候选，不能先推翻形态再补性能证明。
 
-Telemetry 必须单独做产品语义决策：保留退出前网络发送等待，就不能在不受控的慢网络上承诺几毫秒退出；若选择短命令不等远端发送，则需要明确本地记录和后续投递的边界。持久 outbox 是候选实现，不是“免费异步”或保证不丢。
+Telemetry 决策已明确：保留当前行为，因此在不受控的慢网络上不能承诺几毫秒退出。继续削减实际执行成本，并在默认测量中诚实保留上报等待造成的差距。持久 outbox 不属于本轮实施范围。
 
 **当前没有证据证明以上改造足以达到 GWS 的所有延迟与内存指标。** 技术方案的责任是给出成本模型、可实现结构与可证伪实验；最终达标仍以执行计划的完整矩阵为准。
 
@@ -215,3 +217,5 @@ per-leaf 分片在旧 RFC 曾因收益不足而延后；新的竞品目标可以
 已有证据足以否定“只继续优化 Schema，就能全面追齐”的假设；也不足以证明“换成单二进制或 outbox 就必然追齐”。
 
 本轮先按 O0–O5 对 #1296 做专项：生产路径分段、Schema 解码/分配、canonical package 委派、命令装配与 telemetry 因果分析。结果决定后续是否值得改变产品形态或上报合同。命令执行始终集中到统一框架；任何优化都不能产生第二份 validation、安全或业务执行规则。
+
+实施记录：[PR #1296 性能专项实施记录](performance-optimization-progress.md)。

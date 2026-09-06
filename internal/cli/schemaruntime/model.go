@@ -591,7 +591,9 @@ func validateFinalFieldProvenance(owner, field string, provenance contract.Field
 	if err != nil {
 		return fmt.Errorf("%s field %s cannot encode final provenance value: %w", owner, field, err)
 	}
-	if len(provenance.Value) == 0 || !json.Valid(provenance.Value) || !equalJSONValues(provenance.Value, expected) {
+	// expected was just marshaled successfully. Identical bytes are therefore
+	// already valid JSON; the semantic fallback validates differing encodings.
+	if !bytes.Equal(provenance.Value, expected) && !equalJSONValues(provenance.Value, expected) {
 		return fmt.Errorf("%s field %s provenance winner does not equal final value: winner=%s final=%s", owner, field, string(provenance.Value), string(expected))
 	}
 	if strings.TrimSpace(provenance.Source) == "" || strings.TrimSpace(provenance.Precedence) == "" || strings.TrimSpace(provenance.Resolution) == "" {
@@ -602,14 +604,18 @@ func validateFinalFieldProvenance(owner, field string, provenance contract.Field
 	}
 	selected := 0
 	for _, candidate := range provenance.Candidates {
-		if len(candidate.Value) == 0 || !json.Valid(candidate.Value) {
+		// The selected candidate is commonly byte-identical to the marshaled
+		// value too. Validate other candidates independently; none may be lost
+		// simply because the selected value matched.
+		matches := bytes.Equal(candidate.Value, expected)
+		if !matches && (len(candidate.Value) == 0 || !json.Valid(candidate.Value)) {
 			return fmt.Errorf("%s field %s has a provenance candidate with invalid value", owner, field)
 		}
 		if candidate.Selected == nil || !*candidate.Selected {
 			continue
 		}
 		selected++
-		if !json.Valid(candidate.Value) || !equalJSONValues(candidate.Value, expected) {
+		if !matches && !equalJSONValues(candidate.Value, expected) {
 			return fmt.Errorf("%s field %s selected provenance candidate does not equal final value", owner, field)
 		}
 		if strings.TrimSpace(candidate.Source) != strings.TrimSpace(provenance.Source) ||

@@ -1,0 +1,6 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd	1.058s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore	1.222s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract	1.613s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal	2.030s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate	0.844s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef	0.495s

@@ -873,8 +873,8 @@ func validateProductProto(product *schemacachepb.ProductSpec) error {
 			for name, raw := range map[string]*schemacachepb.BytesValue{
 				"default": parameter.GetDefaultValue(), "interface_default": parameter.GetInterfaceDefault(), "example": parameter.GetExample(),
 			} {
-				if err := validateRawValue(raw, "tool "+canonical+" parameter "+parameter.GetName()+" "+name); err != nil {
-					return err
+				if !validRawValue(raw) {
+					return fmt.Errorf("tool %s parameter %s %s is invalid JSON", canonical, parameter.GetName(), name)
 				}
 			}
 			if err := validateProvenanceProto(parameter.GetFieldProvenance(), "tool "+canonical+" parameter "+parameter.GetName()+" provenance"); err != nil {
@@ -890,8 +890,8 @@ func validateProductProto(product *schemacachepb.ProductSpec) error {
 					return fmt.Errorf("tool %q result contains unspecified outcome", canonical)
 				}
 			}
-			if err := validateRawValue(result.GetDataSchema(), "tool "+canonical+" result data_schema"); err != nil {
-				return err
+			if !validRawValue(result.GetDataSchema()) {
+				return fmt.Errorf("tool %s result data_schema is invalid JSON", canonical)
 			}
 		}
 		if err := validateSelectionEnums(tool.GetSelection(), "tool "+canonical); err != nil {
@@ -928,8 +928,8 @@ func validateProvenanceProto(in *schemacachepb.ProvenanceList, path string) erro
 		if entry == nil || entry.GetValue() == nil || entry.GetKey() == "" || (i > 0 && entry.GetKey() <= last) {
 			return fmt.Errorf("%s keys are empty, duplicate, or unsorted at %q", path, entry.GetKey())
 		}
-		if err := validateRawValue(entry.Value.GetValue(), path+"."+entry.GetKey()+".value"); err != nil {
-			return err
+		if !validRawValue(entry.Value.GetValue()) {
+			return fmt.Errorf("%s.%s.value is invalid JSON", path, entry.GetKey())
 		}
 		for _, candidates := range []*schemacachepb.CandidateList{entry.Value.GetCandidates(), entry.Value.GetOverriddenCandidates()} {
 			if candidates == nil {
@@ -942,8 +942,8 @@ func validateProvenanceProto(in *schemacachepb.ProvenanceList, path string) erro
 				if candidate == nil {
 					return fmt.Errorf("%s.%s candidate %d is nil", path, entry.GetKey(), candidateIndex)
 				}
-				if err := validateRawValue(candidate.GetValue(), fmt.Sprintf("%s.%s candidate %d value", path, entry.GetKey(), candidateIndex)); err != nil {
-					return err
+				if !validRawValue(candidate.GetValue()) {
+					return fmt.Errorf("%s.%s candidate %d value is invalid JSON", path, entry.GetKey(), candidateIndex)
 				}
 			}
 		}
@@ -952,11 +952,10 @@ func validateProvenanceProto(in *schemacachepb.ProvenanceList, path string) erro
 	return nil
 }
 
-func validateRawValue(in *schemacachepb.BytesValue, path string) error {
-	if in != nil && len(in.Value) > 0 && !json.Valid(in.Value) {
-		return fmt.Errorf("%s is invalid JSON", path)
-	}
-	return nil
+// Keep diagnostics on the failure path: a valid shard contains thousands of
+// provenance values, each of which previously allocated its error location.
+func validRawValue(in *schemacachepb.BytesValue) bool {
+	return in == nil || len(in.Value) == 0 || json.Valid(in.Value)
 }
 
 func sortRegistryExact(in SchemaRegistry) SchemaRegistry {

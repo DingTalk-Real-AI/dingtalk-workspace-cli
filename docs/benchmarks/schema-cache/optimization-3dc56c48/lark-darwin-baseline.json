@@ -1,0 +1,279 @@
+{
+  "passed": false,
+  "scope": "Evaluate one five-dimensions report against Lark, using raw default-entry samples.\n\nThis is one platform/run's diagnostic acceptance, not three-run/two-platform\nor release approval. Historical 30-sample reports produce observed comparisons\nbut cannot pass the plan's 100-sample requirement. No old release gate changes.\n",
+  "comparisons": {
+    "native/schema/wall_ms/p50": {
+      "dws": 368.4908960001394,
+      "lark": 41.966437499922904,
+      "ratio": 8.780609409622066,
+      "passed": false
+    },
+    "native/schema/wall_ms/p95": {
+      "dws": 376.0874589997911,
+      "lark": 45.91074999962075,
+      "ratio": 8.191708020515845,
+      "passed": false
+    },
+    "native/schema/kernel_process_peak_rss_bytes/p50": {
+      "dws": 40042496.0,
+      "lark": 46120960.0,
+      "ratio": 0.8682060390763765,
+      "passed": true
+    },
+    "native/schema/kernel_process_peak_rss_bytes/p95": {
+      "dws": 40435712,
+      "lark": 46727168,
+      "ratio": 0.8653576437587658,
+      "passed": true
+    },
+    "native/help/wall_ms/p50": {
+      "dws": 320.2179165000416,
+      "lark": 42.154000000209635,
+      "ratio": 7.596382703858451,
+      "passed": false
+    },
+    "native/help/wall_ms/p95": {
+      "dws": 327.337209000234,
+      "lark": 46.23770799980775,
+      "ratio": 7.079442800270182,
+      "passed": false
+    },
+    "native/help/kernel_process_peak_rss_bytes/p50": {
+      "dws": 14639104.0,
+      "lark": 46284800.0,
+      "ratio": 0.31628318584070797,
+      "passed": true
+    },
+    "native/help/kernel_process_peak_rss_bytes/p95": {
+      "dws": 14893056,
+      "lark": 46825472,
+      "ratio": 0.3180545836249125,
+      "passed": true
+    },
+    "native/version/wall_ms/p50": {
+      "dws": 319.5417085000827,
+      "lark": 41.732645500133,
+      "ratio": 7.656876401450857,
+      "passed": false
+    },
+    "native/version/wall_ms/p95": {
+      "dws": 327.0102090000364,
+      "lark": 45.7294580000962,
+      "ratio": 7.150974957965793,
+      "passed": false
+    },
+    "native/version/kernel_process_peak_rss_bytes/p50": {
+      "dws": 14401536.0,
+      "lark": 45965312.0,
+      "ratio": 0.31331313491356266,
+      "passed": true
+    },
+    "native/version/kernel_process_peak_rss_bytes/p95": {
+      "dws": 14680064,
+      "lark": 46497792,
+      "ratio": 0.3157152924594785,
+      "passed": true
+    },
+    "native/leaf-help/wall_ms/p50": {
+      "dws": 382.30256199994983,
+      "lark": 41.07491699983257,
+      "ratio": 9.307445758235085,
+      "passed": false
+    },
+    "native/leaf-help/wall_ms/p95": {
+      "dws": 392.6032499998655,
+      "lark": 43.936458000189305,
+      "ratio": 8.935705513589054,
+      "passed": false
+    },
+    "native/leaf-help/kernel_process_peak_rss_bytes/p50": {
+      "dws": 51339264.0,
+      "lark": 45907968.0,
+      "ratio": 1.11830835117773,
+      "passed": false
+    },
+    "native/leaf-help/kernel_process_peak_rss_bytes/p95": {
+      "dws": 52199424,
+      "lark": 46481408,
+      "ratio": 1.12301727176595,
+      "passed": false
+    },
+    "native/dry-run/wall_ms/p50": {
+      "dws": 377.57272949988874,
+      "lark": 41.73391649987934,
+      "ratio": 9.047143454676254,
+      "passed": false
+    },
+    "native/dry-run/wall_ms/p95": {
+      "dws": 392.49979200030793,
+      "lark": 48.402541000086785,
+      "ratio": 8.10907410831188,
+      "passed": false
+    },
+    "native/dry-run/kernel_process_peak_rss_bytes/p50": {
+      "dws": 49250304.0,
+      "lark": 46088192.0,
+      "ratio": 1.068610024884465,
+      "passed": false
+    },
+    "native/dry-run/kernel_process_peak_rss_bytes/p95": {
+      "dws": 49856512,
+      "lark": 46841856,
+      "ratio": 1.0643581671913256,
+      "passed": false
+    },
+    "public/schema/wall_ms/p50": {
+      "dws": 397.911770500059,
+      "lark": 68.47729200012509,
+      "ratio": 5.810857276589327,
+      "passed": false
+    },
+    "public/schema/wall_ms/p95": {
+      "dws": 415.46775000006164,
+      "lark": 76.55620800005636,
+      "ratio": 5.426963545526651,
+      "passed": false
+    },
+    "public/schema/sampled_tree_peak_rss_bytes/p50": {
+      "dws": 79945728.0,
+      "lark": 79241216.0,
+      "ratio": 1.0088907267652227,
+      "passed": false
+    },
+    "public/schema/sampled_tree_peak_rss_bytes/p95": {
+      "dws": 81002496,
+      "lark": 86769664,
+      "ratio": 0.9335347432024169,
+      "passed": true
+    },
+    "public/help/wall_ms/p50": {
+      "dws": 355.10877050001,
+      "lark": 68.98602100000062,
+      "ratio": 5.147546783427425,
+      "passed": false
+    },
+    "public/help/wall_ms/p95": {
+      "dws": 363.42641700002787,
+      "lark": 79.69933400045193,
+      "ratio": 4.559968054412689,
+      "passed": false
+    },
+    "public/help/sampled_tree_peak_rss_bytes/p50": {
+      "dws": 55590912.0,
+      "lark": 78020608.0,
+      "ratio": 0.7125157496850063,
+      "passed": true
+    },
+    "public/help/sampled_tree_peak_rss_bytes/p95": {
+      "dws": 55902208,
+      "lark": 86376448,
+      "ratio": 0.6471927162367223,
+      "passed": true
+    },
+    "public/version/wall_ms/p50": {
+      "dws": 354.3780620000234,
+      "lark": 67.8638750000573,
+      "ratio": 5.221895478260329,
+      "passed": false
+    },
+    "public/version/wall_ms/p95": {
+      "dws": 360.0526660002288,
+      "lark": 73.81654200025878,
+      "ratio": 4.877669100226431,
+      "passed": false
+    },
+    "public/version/sampled_tree_peak_rss_bytes/p50": {
+      "dws": 55361536.0,
+      "lark": 78454784.0,
+      "ratio": 0.7056489506108384,
+      "passed": true
+    },
+    "public/version/sampled_tree_peak_rss_bytes/p95": {
+      "dws": 55525376,
+      "lark": 85852160,
+      "ratio": 0.6467557251908397,
+      "passed": true
+    },
+    "public/leaf-help/wall_ms/p50": {
+      "dws": 413.76158350021797,
+      "lark": 68.21270849991379,
+      "ratio": 6.065755085809866,
+      "passed": false
+    },
+    "public/leaf-help/wall_ms/p95": {
+      "dws": 436.6270410000652,
+      "lark": 86.3561250002931,
+      "ratio": 5.056121276847279,
+      "passed": false
+    },
+    "public/leaf-help/sampled_tree_peak_rss_bytes/p50": {
+      "dws": 93093888.0,
+      "lark": 77283328.0,
+      "ratio": 1.2045791816832732,
+      "passed": false
+    },
+    "public/leaf-help/sampled_tree_peak_rss_bytes/p95": {
+      "dws": 94502912,
+      "lark": 85884928,
+      "ratio": 1.1003433803891645,
+      "passed": false
+    },
+    "public/dry-run/wall_ms/p50": {
+      "dws": 412.53839599994535,
+      "lark": 68.85397949986327,
+      "ratio": 5.991496773265873,
+      "passed": false
+    },
+    "public/dry-run/wall_ms/p95": {
+      "dws": 419.3645830000605,
+      "lark": 87.81133399997998,
+      "ratio": 4.775745497729896,
+      "passed": false
+    },
+    "public/dry-run/sampled_tree_peak_rss_bytes/p50": {
+      "dws": 90062848.0,
+      "lark": 77733888.0,
+      "ratio": 1.1586047001791548,
+      "passed": false
+    },
+    "public/dry-run/sampled_tree_peak_rss_bytes/p95": {
+      "dws": 90898432,
+      "lark": 86376448,
+      "ratio": 1.052352048558422,
+      "passed": false
+    }
+  },
+  "failures": [
+    "at least 100 samples per case per phase are required",
+    "native/schema/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "native/schema/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "native/help/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "native/help/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "native/version/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "native/version/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "native/leaf-help/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "native/leaf-help/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "native/leaf-help/kernel_process_peak_rss_bytes/p50: DWS is not faster/smaller than Lark",
+    "native/leaf-help/kernel_process_peak_rss_bytes/p95: DWS is not faster/smaller than Lark",
+    "native/dry-run/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "native/dry-run/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "native/dry-run/kernel_process_peak_rss_bytes/p50: DWS is not faster/smaller than Lark",
+    "native/dry-run/kernel_process_peak_rss_bytes/p95: DWS is not faster/smaller than Lark",
+    "public/schema/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "public/schema/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "public/schema/sampled_tree_peak_rss_bytes/p50: DWS is not faster/smaller than Lark",
+    "public/help/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "public/help/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "public/version/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "public/version/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "public/leaf-help/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "public/leaf-help/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "public/leaf-help/sampled_tree_peak_rss_bytes/p50: DWS is not faster/smaller than Lark",
+    "public/leaf-help/sampled_tree_peak_rss_bytes/p95: DWS is not faster/smaller than Lark",
+    "public/dry-run/wall_ms/p50: DWS is not faster/smaller than Lark",
+    "public/dry-run/wall_ms/p95: DWS is not faster/smaller than Lark",
+    "public/dry-run/sampled_tree_peak_rss_bytes/p50: DWS is not faster/smaller than Lark",
+    "public/dry-run/sampled_tree_peak_rss_bytes/p95: DWS is not faster/smaller than Lark"
+  ],
+  "source_report_sha256": "cdaf45ef9d1ef7c1877a462bce959a7d960a363f11c221893b842b6a007521d3"
+}

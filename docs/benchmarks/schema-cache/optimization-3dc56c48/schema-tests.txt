@@ -1,0 +1,4 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli	170.237s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	3.127s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemafastpath	0.511s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader	0.912s

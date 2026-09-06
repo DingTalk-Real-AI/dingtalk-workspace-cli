@@ -1,0 +1,9 @@
+injected build-time Agent metadata: products=31 tools=1370 surface_tools=1370
+generated schema catalog: output=/var/folders/fj/17qvmrfd0b141s5cxshpt6lm0000gn/T/tmp.wMMdshOO8j/schema_catalog meta_index=/var/folders/fj/17qvmrfd0b141s5cxshpt6lm0000gn/T/tmp.wMMdshOO8j/schema_meta_index.gob registry_commands=1370 tools=1370 products=31 registry_hash=sha256:57fe197f96d103661ecefdfe90000c49ac024f868a85da783a2589e87b98f988 source_hash=sha256:26f0b588fce9d6c5a944363c1c79128bb5ce2d86d374029afa67fdc56fa6351d
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/homology	0.743s
+runtime confirmation truth ok (live Contract SafetySpec homology)
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli	60.648s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/homology	0.868s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers	0.416s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app	18.237s
+schema catalog check: ok (31 products, 1370 tools)
