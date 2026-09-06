@@ -1,0 +1,7 @@
+default entry: 30/180 measured processes
+default entry: 60/180 measured processes
+default entry: 90/180 measured processes
+default entry: 120/180 measured processes
+default entry: 150/180 measured processes
+default entry: 180/180 measured processes
+{"report": "/Users/runner/work/_temp/schema-evidence/default-entry-report.json", "gates": {"schema_user_cpu_reduction_at_least_80_percent": true, "schema_peak_rss_at_most_100_mib": true, "help_package_wall_p50_overhead_at_most_5_percent": false, "help_package_wall_p95_overhead_at_most_5_percent": false, "version_package_wall_p50_overhead_at_most_5_percent": false, "version_package_wall_p95_overhead_at_most_5_percent": false}}

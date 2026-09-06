@@ -1,0 +1,46 @@
+{
+  "scope": "Experimental Go 1.25.9 standard clock API guard; not complete clock independence or final artifact proof",
+  "source_commit": "8c9a6a3811d59843f12dcbbc33451ee8578db0d7",
+  "platform": "darwin/arm64",
+  "controls": [
+    {
+      "case": "clean",
+      "exit_code": 0,
+      "passed": true,
+      "stderr": ""
+    },
+    {
+      "case": "now",
+      "exit_code": 2,
+      "passed": true,
+      "stderr": "panic: schema clock audit: time.Now\n\ngoroutine 1 [running]:\ntime.Now(...)\n\ttime/time.go:1346\nmain.main()\n\t./control.go:3 +0x138\n"
+    },
+    {
+      "case": "since",
+      "exit_code": 2,
+      "passed": true,
+      "stderr": "panic: schema clock audit: time.Since\n\ngoroutine 1 [running]:\ntime.Since(...)\n\ttime/time.go:1224\nmain.main()\n\t./control.go:3 +0x124\n"
+    },
+    {
+      "case": "until",
+      "exit_code": 2,
+      "passed": true,
+      "stderr": "panic: schema clock audit: time.Until\n\ngoroutine 1 [running]:\ntime.Until(...)\n\ttime/time.go:1235\nmain.main()\n\t./control.go:3 +0x110\n"
+    }
+  ],
+  "identity_matches_prior_native_proof": true,
+  "generator_sha256": "2a4ff61a51cd84789dd3c673a682d2dc79aca4538807a817e3ff83d3354e493b",
+  "overlay_source_sha256": "7d62f20e6353b5cbaf069d8b67dd06fdc6903e280d65c8d0598d0ac4bc39cfe0",
+  "identity_sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+  "wall_clock_independence_proven": false,
+  "release_eligible": false,
+  "base_time_source_sha256": "ab61194d541aee6a83f9f45400bec8a78426377a7c4f59d7d807fa4f6e6a18f0",
+  "control_source_sha256": "26efd9cd01ded324fddcc9375415cbc027c7ac22654c81630fd3f5a2959142aa",
+  "limitations": [
+    "Only time.Now, time.Since and time.Until entry points are trapped.",
+    "A declaration callback could recover these panics; attempted calls are not counted.",
+    "Direct syscalls, runtime clock entry points and native code are not audited.",
+    "This local experiment did not run inside the file/network sandbox.",
+    "The standard library is instrumented; this is not the final shipped executable."
+  ]
+}

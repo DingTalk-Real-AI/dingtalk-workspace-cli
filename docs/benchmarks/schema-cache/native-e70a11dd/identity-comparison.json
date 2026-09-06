@@ -1,0 +1,9 @@
+{
+  "source_commit": "e70a11dda1ded7c6ffcc841d451c5dd13a90dc4e",
+  "run_id": 34001894342,
+  "scope": "Manual byte comparison of downloaded native artifacts; CI coordinator skipped after default performance failures",
+  "byte_equal": true,
+  "linux_identity_sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+  "darwin_identity_sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+  "release_eligible": false
+}

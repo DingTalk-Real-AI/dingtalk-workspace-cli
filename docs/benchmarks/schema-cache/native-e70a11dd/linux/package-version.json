@@ -1,0 +1,31 @@
+{
+  "scope": "Verify exact finalized launcher/core version behavior without modifying them.\n\nRun after archive/manifest/signature verification on the matching native host.\nThis is version-contract evidence, not complete Schema release enablement proof.",
+  "passed": true,
+  "version": "v0.0.0-schema-cache-candidate",
+  "commit": "e70a11dda1ded7c6ffcc841d451c5dd13a90dc4e",
+  "build_time": "2026-09-06T00:35:27Z",
+  "binaries": {
+    "launcher": "06b58a387545caa23cd879408f8014efa7a0e4e1336636a7a36325dd838b1a57",
+    "core": "3c8d76bf3166bb1873007c765b9fa319c3adae85a0734a98697873637e10cbe2"
+  },
+  "runs": [
+    {
+      "binary": "core",
+      "exit_code": 0,
+      "stdout_exact": true,
+      "stderr_empty": true
+    },
+    {
+      "binary": "launcher",
+      "exit_code": 0,
+      "stdout_exact": true,
+      "stderr_empty": true
+    },
+    {
+      "binary": "core-free-launcher",
+      "exit_code": 0,
+      "stdout_exact": true,
+      "stderr_empty": true
+    }
+  ]
+}

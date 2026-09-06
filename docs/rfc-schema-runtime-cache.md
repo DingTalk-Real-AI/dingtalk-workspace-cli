@@ -22,12 +22,64 @@
 | identity generator | 输出前检查 typed round trip、Meta/locator/查询投影和重复编码确定性；74e5fdd7 的两平台 Go 1.25.9/proto drift 与 coordinator identity 比较通过；独立声明 drift/assembly/catalog 通过 | hermetic final proof 与 release 注入仍未完成 |
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | 639bfceb 两平台 core-free JSON 与完整 version 元数据精确输出通过，core fast-path 与生命周期 race 通过；共用 reader/typed renderer | 默认上报优化、竞争性指标和逐次 core hashing 成本；受限环境生成器新检查待 native CI |
-| 性能 | 639bfceb 两平台进程 CPU/RSS 门槛通过；完整 Meta file-hit Linux 4.515 ms、macOS 3.494 ms，均通过 5 ms 门槛 | 仍需跨运行稳定裕量、默认上报和 public/native 竞争对照；保留 bf30c3ec macOS 5.663 ms 失败记录 |
-| 全量验证 | aa827379 两平台 app/CLI 均通过、macOS 完整 148 包通过；Linux 已完整跑完且内存压力下降 | Linux 安装器 stat 修复与 Docker 隔离待 native；新默认 tracker 采样和完整 release proof 待验证 |
+| 性能 | e70a11dd 两平台 opt-out 与默认 Schema CPU/RSS 门槛通过；Meta file-hit Linux 4.484 ms、macOS 3.653 ms | 默认 help/version 相对同包 core 回退约 6–11%，5% 检查失败；原始 PR base 对照和 public/native 竞争目标仍待证明 |
+| 全量验证 | e70a11dd 两平台完整 148 包均通过，Linux 安装器 stat 修复已通过原生验证；两平台文件/网络隔离通过 | 新的原始基线对照、默认入口优化和完整 release proof 待验证 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
+
+### 全量测试、原生隔离通过与默认入口回退（e70a11dd）
+
+[run 34001894342](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34001894342)
+的两平台完整 suite 各有 148 个包终态、无失败事件。Linux app/CLI/scripts 分别为
+316.593/389.501/371.702 s；macOS 为 344.869/261.097/323.681 s。绑定原始 JSONL 日志 hash、
+长度、job/artifact ID 的记录与全部包终态见
+[Linux](benchmarks/schema-cache/native-e70a11dd/linux/full-suite-evidence.json) 和
+[macOS](benchmarks/schema-cache/native-e70a11dd/darwin/full-suite-evidence.json)。
+这补齐 Linux stat 修复的原生证明；不是最终签名安装包的验收。
+
+声明 policy、完整 wire/version、组件/交付 race、四进程 cold/repair、opt-out 进程性能与
+完整 file-hit 预算均通过。Linux 新 Docker 后端的实际生成器在 clean/repeat/hostile 环境
+下均通过文件与网络控制，identity bytes 与预期一致；macOS 也通过。Linux 的根镜像由空 tar
+本地 import，报告验证其唯一 RootFS diffID、无继承环境、只读挂载与无网络运行方式。
+[Linux 隔离](benchmarks/schema-cache/native-e70a11dd/linux/identity-environment.json) 与
+[macOS 隔离](benchmarks/schema-cache/native-e70a11dd/darwin/identity-environment.json)
+继续保留 clock、访问尝试审计和 final-artifact 未证明字段。coordinator 因默认性能失败而跳过；
+[人工完整 identity 比较](benchmarks/schema-cache/native-e70a11dd/identity-comparison.json)
+只能证明下载的两份 bytes 相同，不能替代未执行的 release coordinator。
+
+默认 tracker 六模式测量保留全部 180 个样本。默认 Schema user CPU p50 相对实时装配下降
+Linux 97.85%、macOS 97.37%，最高 RSS 分别为 45.85/38.69 MiB，均通过预算；但默认 Schema
+wall p50 仍约 371.52/378.88 ms，不能声称竞争性延迟达标。默认 help/version 出现稳定的
+同包入口开销，所有四个 5% package 检查均失败：
+
+| 默认入口 wall p50/p95（ms） | Linux amd64 | macOS arm64 |
+|---|---:|---:|
+| help launcher | 384.965 / 389.117 | 390.993 / 406.268 |
+| help core | 349.525 / 352.000 | 360.202 / 383.646 |
+| version launcher | 384.452 / 387.032 | 387.593 / 399.789 |
+| version core | 349.095 / 352.040 | 362.890 / 374.852 |
+
+原始值与门槛见 [Linux](benchmarks/schema-cache/native-e70a11dd/linux/default-entry-report.json)、
+[macOS](benchmarks/schema-cache/native-e70a11dd/darwin/default-entry-report.json)。完整 core digest
+校验与默认 tracker 仍须保留；不能通过删除校验、丢弃上报或放宽门槛掩盖该结果。逐次 hashing
+是候选成本来源，尚未用 profile 完成归因。下一轮加入固定原始基线 `5243e5ca` 的八模式对照，
+分别报告整个 PR 的回退与同包 launcher/core 开销。
+
+### 标准时钟 API 的局部插桩调查
+
+本机 Go 1.25.9 的临时工具链副本通过 `-overlay` 替换 `time.Now`、`time.Since`、`time.Until`
+的入口，每次调用立即 panic。构建的真实 identity generator 仍退出 0、stderr 为空，输出与
+原生 identity byte-equal；clock-free 控制程序成功，三个主动调用探针分别按预期失败。
+[控制与摘要记录](benchmarks/schema-cache/clock-api-probe-local/control-report.json) 绑定本机
+source commit、generator 与原/替换 time.go hashes。overlay 机制见
+[Go 官方构建参数](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies)。
+
+这只是一次诊断实验：尚未记录被 callback recover 的访问尝试，没有覆盖直接 syscall/runtime
+clock 路径，也未在同次文件/网络沙箱或 Linux 运行。插桩后的标准库不是最终制品。因而不能
+从该实验推导“没有任何时钟调用”，`wall_clock_independence_proven` 和 `release_eligible`
+继续为 false；后续需要带不可清除访问计数的动态检查与更完整的时钟入口审计。
 
 ### 生命周期修复的原生结果与 Linux 安装修复（aa827379）
 
