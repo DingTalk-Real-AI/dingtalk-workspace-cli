@@ -97,10 +97,25 @@ def seal_root_help(core, help_generator, core_digest, commit, proof_path, compar
                    'NO_COLOR': '1', 'LANG': 'en', 'LC_ALL': 'C',
                    'GOMEMLIMIT': '1GiB', 'GOGC': '50'}
             generated = subprocess.run([str(help_generator), '-commit', commit, '-core-sha256', core_digest],
-                                       env=env, cwd=home, capture_output=True, timeout=30, check=True)
-            if generated.stderr:
-                raise RuntimeError('help generator emitted diagnostics')
-            projection = json.loads(generated.stdout)
+                                       env=env, cwd=home, capture_output=True, timeout=30)
+            if generated.returncode != 0 or generated.stderr:
+                proof['failed_process'] = {
+                    'timed_out': False,
+                    'returncode': generated.returncode,
+                    'stdout': failure_output(generated.stdout),
+                    'stderr': failure_output(generated.stderr),
+                }
+                raise RuntimeError('help generator failed or emitted diagnostics')
+            try:
+                projection = json.loads(generated.stdout)
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                proof['failed_process'] = {
+                    'timed_out': False,
+                    'returncode': generated.returncode,
+                    'stdout': failure_output(generated.stdout),
+                    'stderr': failure_output(generated.stderr),
+                }
+                raise RuntimeError('help generator emitted an invalid projection') from error
             for locale in ('en', 'zh'):
                 expected = base64.b64decode(projection['References'][locale], validate=True)
                 proof['locales'][locale] = {
