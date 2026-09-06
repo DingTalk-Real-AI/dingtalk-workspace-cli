@@ -1481,7 +1481,7 @@ Lark/GWS 对比独立于 Ready/release gate。public 对 public、native 对 nat
 
 ## 10. 代码未对齐清单与 Ready 检查
 
-审计基准：`c0f3aaca` 生产实现、本分支当前实现及本节所列自动化证明。勾选表示代码与本地定向测试已经对齐；依赖新提交 native CI 的项目仍保持未勾选。
+审计基准：当前验收 head `7cbf7f529d347bd0e9750687138dd2be009c5bcb`（tree `9dfbbca99267c7eaca3e6fe81fc1748888d3d682`）及本节所列自动化证明。勾选表示代码、定向测试与所引用的绑定证据已经对齐。
 
 - [x] **R1 — 能力 allowlist 可执行；阻挡 Ready：是。** [能力分类器](../internal/launcher/capabilities.go) 集中定义 version/help/Schema 的 argv 与环境边界，[路由矩阵](../internal/launcher/launcher_test.go)、[依赖 gate](../internal/launcher/dependencies_test.go) 和 [PR policy](../scripts/policy/check-launcher-capability-allowlist.sh) 同时约束能力扩大；Schema reader 的独立闭包 gate 保留。
 - [x] **R2 — 延迟 gate 一次性迁移；阻挡 Ready：是。** [默认入口脚本](../scripts/dev/measure-schema-default-entry.py) 只用 default/opt-out 的 pre-PR help、version 与 Schema CPU/RSS 合同决定 `passed`；同包 core 比较和全量 SHA 阶段归因均进入 diagnostics，[测试](../scripts/dev/test_measure_schema_default_entry.py) 固定覆盖 480 个样本且拒绝缺 baseline 假绿。
@@ -1491,8 +1491,8 @@ Lark/GWS 对比独立于 Ready/release gate。public 对 public、native 对 nat
 - [x] **R6 — manifest 与部署失败分支；阻挡 Ready：是。** [package manifest](../internal/packagemanifest) 显式声明 enabled/disabled 能力矩阵；安装器和 [最终包 verifier](../scripts/release/verify-package-version.py) 校验 manifest、二进制绑定、core-free help/Schema，并确认执行前后 launcher/core bytes 未变。
 - [x] **R7 — help 单源的最终制品证明；阻挡 Ready：是。** candidate/release 共用声明投影 generator 与 seal 合同；最终包 verifier 在 native runner 上逐字节比较 en/zh core help 和无 core launcher 输出，并覆盖真实 Schema live/warm/core-free cache-hit 路径。invalid snapshot、非 plain/leaf 委派继续由 launcher 单测覆盖。
 - [ ] **R8 — 最终 release proof 与整包回滚；阻挡 Ready：否；阻挡官方发布：是。** [环境 proof](../scripts/dev/check-schema-identity-environment.py) 不等于 Developer ID/公证及正式 final-artifact proof；[release workflow](../.github/workflows/release.yml) 必须在发布前运行 enabled target 的 native help/Schema、签名/公证和最终 bytes 验证，安装/upgrade/rollback 链必须只切换完整 immutable package。PR 只验收这套 fail-closed 工作流和无凭据回滚测试，正式勾选须引用第一次包含本实现的 release run；不得用 ad-hoc candidate 替代。
-- [x] **R9 — 新 gate 的同源码原生复验；阻挡 Ready：是。** [`7cbf7f52` native run](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34018840739) 在 R1–R7 代码对齐后通过 Darwin/arm64、Linux/amd64 两平台全量 suite、声明策略、生命周期/race、候选最终包、新性能 gate 与 byte-identical identity 比较。`c0f3aaca` 测量继续只作为历史数据保留。
-- [ ] **D1 — 五维诊断与哈希归因报告；阻挡 Ready：否（不参与 release gate）。** [五维脚本](../scripts/dev/measure-cli-five-dimensions.py) 正在测固定场景；补完整 raw samples、同包 core 诊断、哈希阶段独立归因和竞品对比到[性能附件](rfc-schema-runtime-cache-performance.md)。缺失维度必须标明，不能发表该维度的领先/整体改善结论。
+- [x] **R9 — 新 gate 的同源码原生复验；阻挡 Ready：是。** [native workflow run 34018840739](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34018840739) 绑定 head `7cbf7f52`：Darwin/arm64 与 Linux/amd64 的完整 Go suite、声明 policy、生命周期/race、候选最终制品、12 项新性能 gate 和跨平台 identity coordinator 全部成功；两个候选均为 clean source tree `9dfbbca9`。
+- [x] **D1 — 五维诊断与哈希归因报告；阻挡 Ready：否（不参与 release gate）。** [性能附件](rfc-schema-runtime-cache-performance.md)与[证据索引](benchmarks/schema-cache/native-7cbf7f52/evidence.json)绑定 run `34018840739`：两平台各 51 个 latency/memory case、每 case 30 次，`complete:true` 且无失败；保存 raw samples、同包 core/固定 pre-PR、独立全量 SHA 诊断及 Lark/GWS 对比。报告明确保留普通命令回退和未证明竞品领先的结论。
 
 已定且不可在实现中临时改选的格式边界继续保留：Meta/product Registry 均为 raw deterministic generated protobuf；不恢复生成 Catalog 权威；缓存 envelope/I/O/锁由 `internal/schemacache` 统一拥有；唯一 repair coordinator 管装配；private overlay 未获 proof 不启用；Serializer/codec 变化须另行 RFC 与格式版本变更。磁盘 cache mismatch 的自愈例外不适用于密封 help/identity。
 
