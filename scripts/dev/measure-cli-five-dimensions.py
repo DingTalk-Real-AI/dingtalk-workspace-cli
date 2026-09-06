@@ -28,7 +28,7 @@ entry = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(entry)
 measure = entry.measure
 
-EXPECTED_CASE_COUNT = 51
+EXPECTED_CASE_COUNT = 44
 
 
 def tree_digest(root):
@@ -154,17 +154,13 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     try:
         binary = args.binary.resolve(strict=True)
-        package = binary.parent.parent
-        manifest = json.loads((package / 'package-manifest.json').read_text())
-        if manifest.get('capabilities') != {
-                'schema_cache': 'enabled', 'root_help': 'enabled', 'disabled_reason': ''}:
-            raise RuntimeError('candidate manifest does not declare enabled Schema/help capabilities')
-        core = (package / manifest['core']['path']).resolve(strict=True)
-        if measure.digest(binary) != manifest['launcher']['sha256'] or measure.digest(core) != manifest['core']['sha256']:
-            raise RuntimeError('candidate differs from finalized manifest')
+        package = binary.parent
+        build = json.loads((package.parent / 'candidate-build.json').read_text())
+        if measure.digest(binary) != build['binary_sha256']:
+            raise RuntimeError('candidate differs from finalized single-binary build record')
         baseline = args.baseline.resolve(strict=True)
         report['baseline_build'] = entry.validate_baseline(baseline, args.baseline_proof)
-        report['release'] = manifest['release']
+        report['release'] = {'version': build['version'], 'commit': build['source_commit'], 'edition': 'open'}
         modules = args.tools_prefix.resolve(strict=True) / 'node_modules'
         competitor_roots = {'lark': modules / '@larksuite/cli', 'gws': modules / '@googleworkspace/cli'}
         report['executables'] = {}
@@ -176,14 +172,15 @@ def main():
             report['native_memory_sampler_sha256'] = measure.digest(native_sampler)
             report['native_memory_sampler_source_sha256'] = measure.digest(HERE / 'cli-native-memory-measure.c')
             report['native_memory_compiler'] = subprocess.check_output(['cc', '--version'], text=True).splitlines()[0]
-            # Use the repository's actual npm wrapper and a byte-identical
-            # canonical package. Staging is outside the measured interval.
+            # Use the repository's actual npm wrapper and byte-identical
+            # single binary. Staging is outside the measured interval.
             npm = root / 'npm'
             (npm / 'bin').mkdir(parents=True)
             shutil.copy2(HERE.parents[1] / 'build/npm/bin/dws.js', npm / 'bin/dws.js')
-            shutil.copytree(package, npm / 'vendor' / package.name)
+            (npm / 'vendor').mkdir()
+            shutil.copy2(binary, npm / 'vendor' / 'dws')
             executables = {'dws-native': binary, 'dws-public': npm / 'bin/dws.js',
-                           'dws-core': core, 'dws-baseline': baseline}
+                           'dws-baseline': baseline}
             for product, path in competitor_roots.items():
                 metadata = json.loads((path / 'package.json').read_text())
                 version = {'lark': '1.0.85', 'gws': '0.22.5'}[product]
@@ -194,7 +191,7 @@ def main():
                 executables[product + '-native'] = path / 'bin' / name
             for name, executable in executables.items():
                 report['executables'][name] = {'path': str(executable), 'sha256': measure.digest(executable),
-                                              'version': manifest['release']['version'] if name.startswith('dws') else
+                                              'version': build['version'] if name.startswith('dws') else
                                                          {'lark': '1.0.85', 'gws': '0.22.5'}[name.split('-')[0]]}
             report['executables']['dws-baseline']['version'] = report['baseline_build'].get('version', 'see baseline_build')
             artifact_roots = {'dws-candidate-package': package, 'dws-public-package': npm,

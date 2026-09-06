@@ -214,6 +214,23 @@ func TestBuildReport(t *testing.T) {
 	}
 }
 
+func TestBuildReportDoesNotDoubleCountNestedPhases(t *testing.T) {
+	tc := NewTimingCollector()
+	tc.Record("cmd_init", 40*time.Millisecond)
+	tc.RecordNested("product_assemble", 25*time.Millisecond)
+	// Make Total deterministic enough for this accounting assertion without
+	// depending on wall-clock sleeps.
+	tc.start = time.Now().Add(-100 * time.Millisecond)
+
+	report := tc.BuildReport("dev", "dws calendar book list")
+	if len(report.Phases) != 2 || !report.Phases[1].Nested {
+		t.Fatalf("nested phase was not preserved: %+v", report.Phases)
+	}
+	if report.OverheadMs < 55 || report.OverheadMs > report.TotalMs {
+		t.Fatalf("overhead_ms = %d, want nested duration excluded from the total", report.OverheadMs)
+	}
+}
+
 func TestBuildReportEmpty(t *testing.T) {
 	tc := NewTimingCollector()
 	report := tc.BuildReport("dev", "dws version")

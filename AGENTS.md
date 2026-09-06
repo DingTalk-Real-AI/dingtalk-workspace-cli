@@ -189,9 +189,10 @@ authenticated I/O and atomic publication live in `internal/schemacache` and
 must not call payload parsers. Framework constraint DTO normalization belongs
 to `internal/corecmd/contract`, never a dependency from corecmd back into cli.
 `internal/schemareader` owns the immutable binary identity and composes that
-backend with the same typed decoders for both cli and launcher. Keep repair and
-process memoization in cli. Launcher JSON uses the same jsonutil serializer;
-uncertain argv/telemetry/extension/compatibility state delegates unchanged to core.
+backend with the same typed decoders used by the CLI. Keep repair and process
+memoization in cli. The process entry may select one product factory from argv,
+but Cobra remains the final parser and any uncertain extension or flag state
+must fall back to the complete command tree.
 The startup warning's agent-relative paths are shared through internal/skillpaths.
 Publish the live Catalog pointer only after its Meta projection is complete.
 

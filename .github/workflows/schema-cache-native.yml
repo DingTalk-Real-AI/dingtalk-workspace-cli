@@ -13,8 +13,6 @@ on:
       - 'scripts/dev/**'
       - 'scripts/policy/**'
       - 'scripts/release/post-goreleaser.sh'
-      - 'scripts/release/verify-package-version.py'
-      - 'scripts/release/test_verify_package_version.py'
       - '.github/workflows/release.yml'
       - 'scripts/install*.sh'
       - 'scripts/install*.ps1'
@@ -98,10 +96,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/launcher ./internal/clitelemetry ./internal/clisignal ./internal/profilemetadata ./internal/roothelp ./internal/packagemanifest ./internal/cli/schemaruntime ./internal/corecmd/... \
+          go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/clitelemetry ./internal/clisignal ./internal/profilemetadata ./internal/roothelp ./internal/cli/schemaruntime ./internal/corecmd/... \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
           go test -race -count=1 -timeout=15m ./internal/app ./cmd \
-            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|RootHelp|LauncherVersion|Main|CLITracker|Tracker|DefaultTrackRun|SchemaSourceRoots|ExecuteSignal|ExecuteDeterministicInterruption|ProcessInterruption|Signal|ResolveTelemetryIdentity|Telemetry|SanitizeTelemetry)|TestExecuteSignalSubprocessExitStatus|TestFramework.*Signal|TestSecondSignal' \
+            -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|RootHelp|Main|CLITracker|Tracker|DefaultTrackRun|SchemaSourceRoots|ExecuteSignal|ExecuteDeterministicInterruption|ProcessInterruption|Signal|ResolveTelemetryIdentity|Telemetry|SanitizeTelemetry)|TestExecuteSignalSubprocessExitStatus|TestFramework.*Signal|TestSecondSignal|TestResolveStartupRoute|TestProcessRootMountsOnlySelectedProduct' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/core-fast-path-race.txt"
           go test -race -count=1 -timeout=15m ./internal/helpers \
             -run 'TestCrossPlatformCoverageContractValidation|TestSheetMutationGuard|TestUserRequiredSafetyHomology|TestDeclareLeafMetadata' \
@@ -115,24 +113,18 @@ jobs:
       - name: Build native candidate with finalized runtime payload
         id: candidate_build
         run: |
-          python3 -m unittest discover -s scripts/dev -p 'test_build_schema_help_sealing.py'
           python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
-      - name: Verify finalized candidate version contract
+      - name: Verify finalized single-binary version contract
         run: |
           set -euo pipefail
-          python3 scripts/release/test_verify_package_version.py
-          package_root="$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET"
-          commit="$(git rev-parse HEAD)"
-          python3 scripts/release/verify-package-version.py \
-            --launcher "$package_root/bin/dws" --core "$package_root/libexec/dws-core" \
-            --version v0.0.0-schema-cache-candidate --commit "$commit" \
-            --build-time "$(sh scripts/build/release-build-time.sh "$commit")" \
-            --report "$RUNNER_TEMP/schema-evidence/package-version.json"
+          binary="$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/dws"
+          test -x "$binary"
+          test "$($binary --version)" = "dws version 0.0.0-schema-cache-candidate"
       - name: Verify exact candidate and interleaved process performance
         run: |
           python3 scripts/dev/test_verify_schema_cache_binary.py
           python3 scripts/dev/verify-schema-cache-binary.py \
-            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/dws" \
             --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
             --require-schema-fast-path \
             --output "$RUNNER_TEMP/schema-evidence/process-report.json"
@@ -165,19 +157,19 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/dev/test_build_schema_entry_baseline.py
-          git fetch --no-tags --depth=1 origin 5243e5ca19b55a3e785e5cc09273b653ad5381dc
+          git fetch --no-tags --depth=1 origin 6f71222b9b07c760cdb5f376b24dab9155e62094
           python3 scripts/dev/build-schema-entry-baseline.py \
             --output "$RUNNER_TEMP/schema-entry-baseline" \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/baseline-build.txt"
           cp "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" "$RUNNER_TEMP/schema-evidence/"
-      - name: Measure default tracker, package overhead and pre-PR entry regression
+      - name: Measure default tracker and PR-base entry regression
         if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' && steps.entry_baseline.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/dev/test_measure_schema_default_entry.py
           python3 scripts/dev/measure-schema-default-entry.py \
-            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/dws" \
             --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
             --baseline "$RUNNER_TEMP/schema-entry-baseline/dws-baseline" \
             --baseline-proof "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" \
@@ -225,7 +217,7 @@ jobs:
           "$TMPDIR/cli-comparison-venv/bin/pip" install psutil==7.2.2
           "$TMPDIR/cli-comparison-venv/bin/python" scripts/dev/test_measure_cli_five_dimensions.py
           "$TMPDIR/cli-comparison-venv/bin/python" scripts/dev/measure-cli-five-dimensions.py \
-            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/dws" \
             --baseline "$RUNNER_TEMP/schema-entry-baseline/dws-baseline" \
             --baseline-proof "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" \
             --tools-prefix "$tools_prefix" \
@@ -242,8 +234,6 @@ jobs:
             ${{ runner.temp }}/schema-evidence/*.pprof
             ${{ runner.temp }}/schema-evidence/candidate/identity.json
             ${{ runner.temp }}/schema-evidence/candidate/candidate-build.json
-            ${{ runner.temp }}/schema-evidence/candidate/root-help-proof.json
-            ${{ runner.temp }}/schema-evidence/candidate/**/package-manifest.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -329,14 +319,6 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/policy/check-schema-catalog.sh 2>&1 | tee "$RUNNER_TEMP/schema-catalog-policy.txt"
-      - name: Enforce launcher capability allowlist review order
-        if: ${{ !cancelled() }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --depth=1 origin "$PR_BASE_SHA"
-          ./scripts/policy/check-launcher-capability-allowlist.sh "$PR_BASE_SHA" HEAD
       - name: Upload declaration policy evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

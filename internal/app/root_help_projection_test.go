@@ -15,7 +15,7 @@ import (
 
 func TestCrossPlatformCoverageRootHelpDeclarationProjectionMatchesRuntime(t *testing.T) {
 	if hooks := edition.Get(); hooks.Name != "open" || hooks.RegisterExtraCommands != nil {
-		t.Skip("the launcher help projection is limited to the overlay-free open edition")
+		t.Skip("the root help projection is limited to the overlay-free open edition")
 	}
 	// Each locale must start without runtime-injected endpoints. Building a
 	// runtime root first used to mask missing supplement-backed commands in

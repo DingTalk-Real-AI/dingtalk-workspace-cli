@@ -1,6 +1,6 @@
 #!/bin/sh
 # Match GoReleaser's .CommitDate: committer time, normalized to UTC RFC3339.
-# Both core and launcher must use this reproducible value, never wall-clock time.
+# Release rebuilds must use this reproducible value, never wall-clock time.
 set -eu
 
 [ "$#" -eq 1 ] || { echo 'usage: release-build-time.sh <full-commit>' >&2; exit 1; }

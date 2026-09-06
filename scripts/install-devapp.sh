@@ -54,17 +54,7 @@ verify_release_asset() {
 # disagree on flags, so try both spellings and fail loudly when neither is
 # available.
 perm_of() {
-  # A rejected stat dialect can emit partial stdout (GNU -f prints filesystem
-  # data). Capture each attempt separately so only a successful result survives.
-  if _po_mode="$(stat -c %a "$1" 2>/dev/null)"; then
-    :
-  elif _po_mode="$(stat -f %Lp "$1" 2>/dev/null)"; then
-    :
-  else
-    return 1
-  fi
-  case "$_po_mode" in ''|*[!0-7]*) return 1 ;; esac
-  [ "${#_po_mode}" -le 4 ] || return 1
+  _po_mode="$(stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null)" || return 1
   printf '%s\n' "$_po_mode"
 }
 
@@ -585,13 +575,25 @@ main() {
   say "Target:  ${os}/${arch}"
   printf '\n'
 
-  # 1) binary: delegate to the canonical installer so archive validation and
-  # immutable activation have one implementation instead of drifting here.
-  installer="$tmp/install.sh"
-  curl -fsSL "https://raw.githubusercontent.com/${DEVAPP_REPO}/${DEVAPP_VERSION}/scripts/install.sh" -o "$installer" || err "Canonical installer download failed."
-  DWS_VERSION="$DEVAPP_VERSION" DWS_INSTALL_DIR="$INSTALL_DIR" DWS_INSTALL_NAME=dws \
-    DWS_NO_SKILLS=1 DWS_SKILLS_ONLY=0 DWS_NO_FALLBACK=1 sh "$installer" || err "Canonical package installation failed."
-  say "✅ Binary → ${INSTALL_DIR}/dws"
+  # 1) binary (already ad-hoc signed by CI; copy does not break the signature)
+  if [ "$os" = "windows" ]; then
+    asset="dws-windows-${arch}.zip"; binname="dws.exe"
+  else
+    asset="dws-${os}-${arch}.tar.gz"; binname="dws"
+  fi
+  say "⬇  Downloading ${asset} ..."
+  curl -fsSL "https://github.com/${DEVAPP_REPO}/releases/download/${DEVAPP_VERSION}/${asset}" -o "$tmp/$asset" \
+    || err "Binary download failed — does release ${DEVAPP_VERSION} have ${asset}?"
+  verify_release_asset "$asset" "$tmp/$asset"
+  if [ "$os" = "windows" ]; then
+    need_cmd unzip; unzip -q "$tmp/$asset" -d "$tmp"
+  else
+    need_cmd tar; tar -xzf "$tmp/$asset" -C "$tmp"
+  fi
+  [ -f "$tmp/$binname" ] || err "${binname} not found inside ${asset}"
+  mkdir -p "$INSTALL_DIR"
+  cp "$tmp/$binname" "$INSTALL_DIR/$binname"; chmod +x "$INSTALL_DIR/$binname" 2>/dev/null || true
+  say "✅ Binary → ${INSTALL_DIR}/${binname}"
 
   # 2) dev skill from the release's skills bundle
   if [ "$NO_SKILLS" != "1" ]; then

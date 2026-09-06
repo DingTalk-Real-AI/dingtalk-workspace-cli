@@ -482,6 +482,8 @@ func TestCrossPlatformCoverageBuildGroupsByService(t *testing.T) {
 
 func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
 	testseam.Swap(t, &allShortcuts, []Shortcut(nil))
+	testseam.Swap(t, &shortcutsByService, make(map[string][]Shortcut))
+	testseam.Swap(t, &builtInShortcutsByService, make(map[string][]Shortcut))
 	Register(
 		Shortcut{Service: "calendar", Command: "+builtin", Execute: noop},
 		Shortcut{Service: "calendar", Command: "+user", UserDefined: true, Execute: noop},
@@ -495,6 +497,34 @@ func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {
 	if len(builtins) != 1 || len(builtins[0].Commands()) != 1 ||
 		builtins[0].Commands()[0].Name() != "+builtin" {
 		t.Fatalf("built-in shortcut commands = %#v", builtins)
+	}
+}
+
+func TestServiceIndexesMatchRegisteredShortcutAuthority(t *testing.T) {
+	registered := All()
+	wantAll := make(map[string]int)
+	wantBuiltIn := make(map[string]int)
+	for _, item := range registered {
+		wantAll[item.Service]++
+		if !item.UserDefined {
+			wantBuiltIn[item.Service]++
+		}
+	}
+
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
+	if len(shortcutsByService) != len(wantAll) {
+		t.Fatalf("service index size = %d, want %d", len(shortcutsByService), len(wantAll))
+	}
+	for service, count := range wantAll {
+		if got := len(shortcutsByService[service]); got != count {
+			t.Fatalf("service %q index count = %d, want %d", service, got, count)
+		}
+	}
+	for service, count := range wantBuiltIn {
+		if got := len(builtInShortcutsByService[service]); got != count {
+			t.Fatalf("built-in service %q index count = %d, want %d", service, got, count)
+		}
 	}
 }
 

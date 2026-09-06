@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the RFC's immutable pre-PR entry baseline on the native host.
+"""Build the immutable PR-base main entry on the native host.
 
 The old source and runtime payload come exclusively from the pinned Git tree.
 Only version metadata and release build flags are supplied by this driver.
@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
 
-BASE_COMMIT = '5243e5ca19b55a3e785e5cc09273b653ad5381dc'
+BASE_COMMIT = '6f71222b9b07c760cdb5f376b24dab9155e62094'
 
 
 def digest(path):
@@ -56,7 +56,7 @@ def main():
     env.update(GOOS=goos, GOARCH=goarch)
     commit = run(['git', 'rev-parse', BASE_COMMIT + '^{commit}'], capture=True).strip()
     if commit != BASE_COMMIT:
-        raise RuntimeError('baseline must be the exact RFC commit')
+        raise RuntimeError('baseline must be the exact PR-base main commit')
     tree = run(['git', 'rev-parse', BASE_COMMIT + '^{tree}'], capture=True).strip()
     stamp = int(run(['git', 'show', '-s', '--format=%ct', commit], capture=True))
     build_time = datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')

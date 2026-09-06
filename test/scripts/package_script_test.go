@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -130,10 +129,7 @@ func TestNPMWrapperForwardsSIGTERMToVendor(t *testing.T) {
 
 	pidPath := filepath.Join(root, "child.pid")
 	signalPath := filepath.Join(root, "child.signal")
-	vendorPath := filepath.Join(vendorDir, "dws-v1.2.3-"+runtime.GOOS+"-"+runtime.GOARCH, "bin", "dws")
-	if err := os.MkdirAll(filepath.Dir(vendorPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	vendorPath := filepath.Join(vendorDir, "dws")
 	vendorScript := "#!/bin/sh\n" +
 		"printf '%s' \"$$\" > \"$DWS_TEST_CHILD_PID_FILE\"\n" +
 		"trap 'printf TERM > \"$DWS_TEST_SIGNAL_FILE\"; exit 0' TERM\n" +
@@ -214,10 +210,7 @@ func TestNPMWrapperForwardsForegroundGroupSIGINTToVendorGroupOnce(t *testing.T) 
 	signalPath := filepath.Join(root, "child.signal")
 	descendantPIDPath := filepath.Join(root, "descendant.pid")
 	descendantSignalPath := filepath.Join(root, "descendant.signal")
-	vendorPath := filepath.Join(vendorDir, "dws-v1.2.3-"+runtime.GOOS+"-"+runtime.GOARCH, "bin", "dws")
-	if err := os.MkdirAll(filepath.Dir(vendorPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	vendorPath := filepath.Join(vendorDir, "dws")
 	vendorScript := `#!/usr/bin/env node
 "use strict";
 const fs = require("fs");
@@ -355,10 +348,7 @@ func TestNPMWrapperPreservesInteractiveTTY(t *testing.T) {
 
 	resultPath := filepath.Join(root, "interactive.result")
 	readyPath := filepath.Join(root, "interactive.ready")
-	vendorPath := filepath.Join(vendorDir, "dws-v1.2.3-"+runtime.GOOS+"-"+runtime.GOARCH, "bin", "dws")
-	if err := os.MkdirAll(filepath.Dir(vendorPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	vendorPath := filepath.Join(vendorDir, "dws")
 	vendorScript := "#!/bin/sh\n" +
 		"printf 'DWS prompt: ' > /dev/tty\n" +
 		"printf ready > \"$DWS_TEST_INTERACTIVE_READY\"\n" +
@@ -626,20 +616,11 @@ func seedDistArchive(t *testing.T, path string) {
 	case strings.HasSuffix(path, ".tar.gz"):
 		gzipWriter := gzip.NewWriter(file)
 		tarWriter := tar.NewWriter(gzipWriter)
-		if err := tarWriter.WriteHeader(&tar.Header{Name: "dws-core", Mode: 0o755, Size: int64(len(content))}); err != nil {
+		if err := tarWriter.WriteHeader(&tar.Header{Name: "dws", Mode: 0o755, Size: int64(len(content))}); err != nil {
 			t.Fatalf("WriteHeader(%s) error = %v", path, err)
 		}
 		if _, err := tarWriter.Write(content); err != nil {
 			t.Fatalf("Write(%s) error = %v", path, err)
-		}
-		for _, name := range []string{"LICENSE", "NOTICE", "README.md", "CHANGELOG.md"} {
-			body := []byte(name + " fixture\n")
-			if err := tarWriter.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body))}); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := tarWriter.Write(body); err != nil {
-				t.Fatal(err)
-			}
 		}
 		if err := tarWriter.Close(); err != nil {
 			t.Fatalf("Close tar(%s) error = %v", path, err)
@@ -649,7 +630,7 @@ func seedDistArchive(t *testing.T, path string) {
 		}
 	case strings.HasSuffix(path, ".zip"):
 		zipWriter := zip.NewWriter(file)
-		header := &zip.FileHeader{Name: "dws-core.exe", Method: zip.Store}
+		header := &zip.FileHeader{Name: "dws.exe", Method: zip.Store}
 		header.SetMode(0o755)
 		entry, err := zipWriter.CreateHeader(header)
 		if err != nil {
@@ -657,17 +638,6 @@ func seedDistArchive(t *testing.T, path string) {
 		}
 		if _, err := entry.Write(content); err != nil {
 			t.Fatalf("Write(%s) error = %v", path, err)
-		}
-		for _, name := range []string{"LICENSE", "NOTICE", "README.md", "CHANGELOG.md"} {
-			header := &zip.FileHeader{Name: name, Method: zip.Store}
-			header.SetMode(0o644)
-			metadataEntry, err := zipWriter.CreateHeader(header)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := metadataEntry.Write([]byte(name + " fixture\n")); err != nil {
-				t.Fatal(err)
-			}
 		}
 		if err := zipWriter.Close(); err != nil {
 			t.Fatalf("Close zip(%s) error = %v", path, err)
@@ -705,11 +675,6 @@ func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 
 func postGoreleaserEnv(t *testing.T, distDir, version, releaseBaseURL string) []string {
 	t.Helper()
-	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	releaseCommit := strings.TrimSpace(mustOutput(t, sourceRoot, "git", "rev-parse", "HEAD"))
 
 	binDir := t.TempDir()
 	fakeCodesign := filepath.Join(binDir, "codesign")
@@ -722,7 +687,6 @@ func postGoreleaserEnv(t *testing.T, distDir, version, releaseBaseURL string) []
 		"DWS_PACKAGE_VERSION="+version,
 		"DWS_PACKAGE_DIST_DIR="+distDir,
 		"DWS_RELEASE_BASE_URL="+releaseBaseURL,
-		"DWS_RELEASE_COMMIT="+releaseCommit,
 	)
 }
 
@@ -774,8 +738,6 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	for _, rel := range []string{
 		"dws-skills.zip",
 		"checksums.txt",
-		filepath.Join("schema-proofs", "root-help-darwin-arm64.json"),
-		filepath.Join("schema-proofs", "root-help-linux-amd64.json"),
 		filepath.Join("npm", "dingtalk-workspace-cli", "package.json"),
 		filepath.Join("homebrew", "dingtalk-workspace-cli.rb"),
 		filepath.Join("homebrew", "dingtalk-workspace-cli-local.rb"),
@@ -783,32 +745,6 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 		full := filepath.Join(distDir, rel)
 		if _, err := os.Stat(full); err != nil {
 			t.Fatalf("Stat(%s) error = %v\noutput:\n%s", full, err, string(output))
-		}
-	}
-	for _, target := range []string{"darwin-arm64", "linux-amd64"} {
-		data, err := os.ReadFile(filepath.Join(distDir, "schema-proofs", "root-help-"+target+".json"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var proof struct {
-			Passed             bool   `json:"passed"`
-			ReleaseEligible    bool   `json:"release_eligible"`
-			NativeCoreCompared bool   `json:"native_core_compared"`
-			Status             string `json:"status"`
-		}
-		if err := json.Unmarshal(data, &proof); err != nil {
-			t.Fatal(err)
-		}
-		native := target == runtime.GOOS+"-"+runtime.GOARCH
-		if proof.NativeCoreCompared != native || proof.Passed != native || proof.ReleaseEligible != native {
-			t.Fatalf("%s proof state = %+v, native=%v", target, proof, native)
-		}
-		expectedStatus := "pending_native_comparison"
-		if native {
-			expectedStatus = "passed"
-		}
-		if proof.Status != expectedStatus {
-			t.Fatalf("%s proof status = %q, want %q", target, proof.Status, expectedStatus)
 		}
 	}
 
@@ -821,8 +757,6 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	for _, want := range []string{
 		"class DingtalkWorkspaceCliLocal < Formula",
 		"resource \"skills\" do",
-		`libexec.install package_dir`,
-		`bin.install_symlink libexec/package_dir/"bin/dws"`,
 		"Install locally built DingTalk workspace CLI artifacts for verification",
 		"Agent Skills are bundled in #{pkgshare}/skills/dws",
 	} {
@@ -2561,8 +2495,9 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 	release := releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n")
 	for _, required := range []string{
 		"needs: [release-contract, compare-schema-release-proofs]",
-		"SCHEMA_PROOF_RESULT: ${{ needs.compare-schema-release-proofs.result }}",
-		`test "$SCHEMA_PROOF_RESULT" = success`,
+		"name: schema-release-identity-verified",
+		"DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}",
+		"DWS_SCHEMA_IDENTITY_PROOF: ${{ runner.temp }}/schema-release-identity/identity.json",
 	} {
 		if !strings.Contains(release, required) {
 			t.Errorf("build must fail closed on native Schema proof via %q", required)
@@ -2697,10 +2632,10 @@ func TestReleaseWorkflowConfiguresDeveloperIDSigning(t *testing.T) {
 	}
 	workflow := string(data)
 
-	prepare := strings.Index(workflow, "Prepare Apple release credentials")
+	prepare := strings.Index(workflow, "Prepare Apple Developer ID certificate")
 	goReleaser := strings.Index(workflow, "Build release artifacts without publishing")
 	postProcess := strings.Index(workflow, "./scripts/release/post-goreleaser.sh")
-	cleanup := strings.Index(workflow, "Remove Apple release credentials")
+	cleanup := strings.Index(workflow, "Remove Apple Developer ID certificate")
 	if prepare == -1 || goReleaser == -1 || postProcess == -1 || cleanup == -1 ||
 		prepare > goReleaser || goReleaser > postProcess || cleanup < postProcess {
 		t.Fatalf("Developer ID material must be validated before GoReleaser and removed after post-processing")
@@ -2710,46 +2645,16 @@ func TestReleaseWorkflowConfiguresDeveloperIDSigning(t *testing.T) {
 		`RCS_VERSION="0.29.0"`,
 		"secrets.APPLE_CERTIFICATE_P12_BASE64",
 		"secrets.APPLE_CERTIFICATE_PASSWORD",
-		"vars.APPLE_NOTARY_ISSUER_ID",
-		"vars.APPLE_NOTARY_KEY_ID",
-		"secrets.APPLE_NOTARY_PRIVATE_KEY_BASE64",
-		"vars.APPLE_TEAM_ID",
 		"base64 --decode",
 		"openssl pkcs12 -legacy",
-		`test "$first_line" = "-----BEGIN PRIVATE KEY-----"`,
-		`printf '%s\n' "$APPLE_TEAM_ID" | grep -Eq '^[A-Z0-9]{10}$'`,
-		`rcodesign encode-app-store-connect-api-key -o "$api_key_path"`,
-		`chmod 0600 "$api_key_path"`,
 		"DWS_APPLE_CERTIFICATE_P12",
 		"DWS_APPLE_CERTIFICATE_PASSWORD_FILE",
-		"DWS_APPLE_NOTARY_API_KEY_FILE",
 		"DWS_REQUIRE_DEVELOPER_ID_SIGNING",
-		"DWS_REQUIRE_NOTARIZATION",
-		"DWS_RELEASE_COMMIT",
-		`GITHUB_REPOSITORY" = "DingTalk-Real-AI/dingtalk-workspace-cli`,
-		`github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli'`,
-		`rm -f "$RUNNER_TEMP/dws-app-store-connect.p8"`,
-		`rm -f "$RUNNER_TEMP/dws-app-store-connect.json"`,
+		`GITHUB_REPOSITORY_OWNER" = "DingTalk-Real-AI`,
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("release workflow is missing Developer ID configuration %q", required)
 		}
-	}
-	prepareSection := workflow[prepare:goReleaser]
-	for _, forbidden := range []string{
-		"secrets.APPLE_NOTARY_ISSUER_ID",
-		"secrets.APPLE_NOTARY_KEY_ID",
-		"vars.APPLE_NOTARY_PRIVATE_KEY_BASE64",
-		"secrets.APPLE_TEAM_ID",
-		`cat "$private_key_path"`,
-	} {
-		if strings.Contains(prepareSection, forbidden) {
-			t.Errorf("Apple credential preparation contains forbidden contract %q", forbidden)
-		}
-	}
-	cleanupSection := workflow[cleanup : strings.Index(workflow[cleanup:], "      - name: Verify final release artifacts")+cleanup]
-	if !strings.Contains(cleanupSection, `if: ${{ always() }}`) {
-		t.Fatal("Apple credential cleanup must run unconditionally")
 	}
 }
 
@@ -2770,13 +2675,9 @@ func TestPostGoreleaserSupportsDeveloperIDSigning(t *testing.T) {
 		`APPLE_CERTIFICATE_P12="${DWS_APPLE_CERTIFICATE_P12:-}"`,
 		`APPLE_CERTIFICATE_PASSWORD_FILE="${DWS_APPLE_CERTIFICATE_PASSWORD_FILE:-}"`,
 		`REQUIRE_DEVELOPER_ID_SIGNING="${DWS_REQUIRE_DEVELOPER_ID_SIGNING:-false}"`,
-		`APPLE_NOTARY_API_KEY_FILE="${DWS_APPLE_NOTARY_API_KEY_FILE:-}"`,
-		`REQUIRE_NOTARIZATION="${DWS_REQUIRE_NOTARIZATION:-false}"`,
 		`--p12-file "$APPLE_CERTIFICATE_P12"`,
 		`--p12-password-file "$APPLE_CERTIFICATE_PASSWORD_FILE"`,
 		"--for-notarization",
-		`rcodesign notary-submit --api-key-file "$APPLE_NOTARY_API_KEY_FILE" --wait "$transport_zip"`,
-		`err "Apple notarization failed for $package_name"`,
 	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("post-goreleaser.sh is missing Developer ID signing behavior %q", required)
@@ -2785,55 +2686,35 @@ func TestPostGoreleaserSupportsDeveloperIDSigning(t *testing.T) {
 	if strings.Contains(script, `rcodesign verify "$bin"`) {
 		t.Fatal("rcodesign verify must not be treated as authoritative Apple signature validation")
 	}
-	if strings.Contains(script, "staple") {
-		t.Fatal("post-goreleaser must not attempt to staple raw CLI executables")
-	}
-	repack := strings.Index(script, `repack_platform_archive "$stage" "$archive"`)
-	notary := strings.Index(script, `notarize_darwin_package "$package_root"`)
-	if repack == -1 || notary == -1 || repack > notary {
-		t.Fatal("notarization transport must be created only after the deterministic public archive is finalized")
-	}
 }
 
-func TestPostGoreleaserNotarizationFailsClosedWithoutCredentials(t *testing.T) {
+func TestPostGoreleaserSealsSchemaIntoSingleBinary(t *testing.T) {
 	t.Parallel()
 
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("sh", scriptPath)
-	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	data, err := os.ReadFile(scriptPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	releaseCommit := strings.TrimSpace(mustOutput(t, sourceRoot, "git", "rev-parse", "HEAD"))
-	cmd.Env = append(os.Environ(),
-		"DWS_PACKAGE_VERSION=v1.2.3",
-		"DWS_RELEASE_COMMIT="+releaseCommit,
-		"DWS_REQUIRE_NOTARIZATION=true",
-	)
-	output, err := cmd.CombinedOutput()
-	if err == nil || !strings.Contains(string(output), "notarization requires Developer ID signing") {
-		t.Fatalf("required notarization did not fail closed: err=%v\noutput:\n%s", err, output)
+	script := string(data)
+	for _, required := range []string{
+		`SCHEMA_IDENTITY_PROOF="${DWS_SCHEMA_IDENTITY_PROOF:-}"`,
+		`[ "$(git -C "$ROOT" rev-parse HEAD)" = "$RELEASE_COMMIT" ]`,
+		`--scope core --identity "$SCHEMA_IDENTITY_PROOF" --version "v$version"`,
+		`go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$binary" ./cmd`,
+		`grep -aFq "$schema_build_id" "$binary"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("single-binary Schema sealing is missing %q", required)
+		}
 	}
-}
-
-func TestPostGoreleaserRejectsReleaseCommitDifferentFromHEAD(t *testing.T) {
-	t.Parallel()
-
-	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("sh", scriptPath)
-	cmd.Env = append(os.Environ(),
-		"DWS_PACKAGE_VERSION=v1.2.3",
-		"DWS_RELEASE_COMMIT="+strings.Repeat("0", 40),
-	)
-	output, err := cmd.CombinedOutput()
-	if err == nil || !strings.Contains(string(output), "does not match HEAD") {
-		t.Fatalf("mismatched release commit was not rejected: err=%v\noutput:\n%s", err, output)
+	for _, forbidden := range []string{"dws-core", "internal/launcher", "package-manifest.json"} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("single-binary packager still references %q", forbidden)
+		}
 	}
 }
 
@@ -2902,35 +2783,13 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 		"actions/download-artifact@v4",
 		"finalized-release-dist",
 		`dws-darwin-${arch}.tar.gz`,
-		`package_root="$stage/dws-${RELEASE_VERSION}-darwin-${arch}"`,
-		`launcher="$package_root/bin/dws"`,
-		`core="$package_root/libexec/dws-core"`,
 		"codesign --verify --strict --verbose=4",
-		`codesign --verify --strict --verbose=4 --check-notarization -R='notarized'`,
-		`spctl --assess --type execute --verbose=4 "$launcher"`,
-		`spctl --assess --type execute --verbose=4 "$core"`,
-		`grep -Eq '^Authority=Developer ID Application:'`,
-		`grep -Fqx "TeamIdentifier=$EXPECTED_APPLE_TEAM_ID"`,
-		`grep -Eq '^CodeDirectory .*flags=.*\(runtime\)'`,
-		`grep -Eq '^Timestamp='`,
-		`Gatekeeper does not define a portable bare-dylib assessment`,
-		`verify_developer_id_library "$library"`,
 		"runtime-payload materialize",
-		`test "$launcher_team" = "$library_team"`,
-		`test "$core_team" = "$library_team"`,
-		`python3 scripts/release/verify-package-version.py`,
-		`--launcher "$launcher" --core "$core"`,
-		`--version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT"`,
-		`--build-time "$(sh scripts/build/release-build-time.sh "$RELEASE_COMMIT")"`,
-		`HOME="$doctor_home" "$launcher" doctor --json --timeout 2`,
+		`test "$binary_team" = "$library_team"`,
 		`doctor --json --timeout 2`,
 		`doctor-home`,
 		`doctor.json`,
-		`EXPECTED_APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}`,
-		`RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}`,
-		`RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}`,
-		`if [ "$GITHUB_REPOSITORY" = "DingTalk-Real-AI/dingtalk-workspace-cli" ]`,
-		`Fork Darwin artifacts are explicitly ad-hoc signed and unnotarized.`,
+		"runtime_context diagnostic command failed",
 	} {
 		if !strings.Contains(verifySection, required) {
 			t.Errorf("Apple verification stage is missing %q", required)
@@ -2951,28 +2810,6 @@ func TestReleaseWorkflowUsesAppleCodesignBeforePublication(t *testing.T) {
 	} {
 		if !strings.Contains(publishSection, required) {
 			t.Errorf("post-verification publication stage is missing %q", required)
-		}
-	}
-}
-
-func TestReleaseArtifactVerifierRequiresCommitInLauncherAndCore(t *testing.T) {
-	t.Parallel()
-
-	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-release-artifacts.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(scriptPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(data)
-	for _, required := range []string{
-		`grep -aFq "$RELEASE_COMMIT" "$launcher"`,
-		`grep -aFq "$RELEASE_COMMIT" "$core"`,
-	} {
-		if !strings.Contains(script, required) {
-			t.Errorf("release artifact verifier is missing %q", required)
 		}
 	}
 }

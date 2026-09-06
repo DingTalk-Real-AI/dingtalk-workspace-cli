@@ -11,7 +11,7 @@ version: 2
 
 builds:
   - main: ./cmd
-    binary: dws-core
+    binary: dws
     env:
       - CGO_ENABLED=0
     flags:

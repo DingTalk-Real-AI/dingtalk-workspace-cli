@@ -16,8 +16,7 @@ import (
 
 // Check actual transitive dependencies as well as direct source imports: an
 // allowed DTO/helper must not silently bring the assembler or network back in.
-// The tracker-bearing launcher has its own dependency gate; Schema preparation
-// and reading stay network-free even when called from that entrypoint.
+// Schema preparation and reading stay network-free when called during startup.
 func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 	const module = "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/"
 	allowed := map[string]bool{

@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 import platform
 import random
-import shutil
 import statistics
 import subprocess
 import sys
@@ -100,7 +99,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--seed", type=int, default=20260906)
-    parser.add_argument("--require-schema-fast-path", action="store_true", help="prove hits execute in a byte-identical launcher copy with no core available")
+    parser.add_argument("--require-schema-fast-path", action="store_true", help="prove cache hits in a byte-identical isolated copy")
     args = parser.parse_args()
     if not hasattr(os, "wait4") or sys.platform not in ("darwin", "linux"):
         parser.error("native process accounting requires macOS or Linux")
@@ -114,17 +113,12 @@ def main():
     build_info = subprocess.check_output(["go", "version", "-m", str(binary)], text=True)
     if "go1.25.9" not in build_info.splitlines()[0]:
         raise RuntimeError("candidate toolchain differs from the native proof")
-    package_manifest = binary.parent.parent / "package-manifest.json"
-    core = None
-    if package_manifest.is_file():
-        manifest = json.loads(package_manifest.read_text())
-        core = package_manifest.parent / manifest["core"]["path"]
-        if digest(core) != manifest["core"]["sha256"] or binary_sha != manifest["launcher"]["sha256"]:
-            raise RuntimeError("candidate package does not match its final manifest")
-    core_sha = digest(core) if core else None
+    build = json.loads((binary.parent.parent / "candidate-build.json").read_text())
+    if build.get("binary_sha256") != binary_sha or build.get("identity_sha256") != digest(args.proof):
+        raise RuntimeError("candidate differs from its finalized single-binary build record")
     leaf = ["schema", "calendar.create_calendar_event", "--compact", "-f", "json"]
     report = {
-        "binary": str(binary), "binary_sha256": binary_sha, "core_sha256": core_sha,
+        "binary": str(binary), "binary_sha256": binary_sha,
         "build_id": proof["build_id"], "proof_sha256": digest(args.proof),
         "platform": platform.platform(), "samples_per_mode": args.samples, "seed": args.seed,
         "measurement": "wait4 in a fresh sampler; sampler startup excluded from candidate wall time",
@@ -144,15 +138,6 @@ def main():
         }
         disabled = {**environment, "DWS_SCHEMA_CACHE_DISABLE": "1"}
         cache = cache_base / "dws/schema" / hashlib.sha256(proof["edition"].encode()).hexdigest() / "v1"
-
-        if core is not None:
-            core_version, _ = invoke(core, ["--version"], environment, home)
-            expected_prefix = f"dws version {manifest['release']['version']} ({manifest['release']['commit']}, "
-            if not core_version.decode().startswith(expected_prefix) or not core_version.endswith(b")\n"):
-                raise RuntimeError("core runtime version/commit differs from the package manifest")
-            public_version, _ = invoke(binary, ["--version"], environment, home)
-            if public_version != core_version:
-                raise RuntimeError("launcher runtime version/build metadata differs from the core")
 
         def verify_artifacts():
             for name, prefix in (("meta.cache", "meta"), ("registry.shards.cache", "registry")):
@@ -177,30 +162,14 @@ def main():
             if json.loads(cached) != json.loads(live):
                 raise RuntimeError(f"cached/live wire differs: {route}")
         if args.require_schema_fast_path:
-            if core is None:
-                raise RuntimeError("Schema fast-path proof requires a canonical launcher/core package")
-            isolated_launcher = home / "core-free-probe/bin/dws"
-            isolated_launcher.parent.mkdir(parents=True)
-            shutil.copyfile(binary, isolated_launcher)
-            isolated_launcher.chmod(binary.stat().st_mode & 0o777)
-            if digest(isolated_launcher) != binary_sha:
-                raise RuntimeError("core-free probe does not contain the exact launcher bytes")
-            # This copy cannot delegate: no libexec/core exists beside it.
-            # The measured candidate itself is neither moved nor modified.
             for route in (["--version"], ["schema"], ["schema", "list"], ["schema", "calendar"],
                           ["schema", "calendar event"], leaf,
                           ["schema", "--cli-path", "calendar event create", "--compact"]):
-                actual, _ = invoke(isolated_launcher, route, environment, home)
-                expected, _ = invoke(core, route, disabled, home)
+                actual, _ = invoke(binary, route, environment, home)
+                expected, _ = invoke(binary, route, disabled, home)
                 if actual != expected:
-                    raise RuntimeError(f"core-free launcher bytes differ from authoritative core output: {route}")
-                core_cached, _ = invoke(core, route, environment, home)
-                if core_cached != expected:
-                    raise RuntimeError(f"core cache-hit bytes differ from authoritative core output: {route}")
-            report["schema_fast_path"] = {"core_free_copy_sha256": binary_sha, "exact_wire_parity": True,
-                                         "version_build_metadata_parity": True}
-            report["core_schema_fast_path"] = {"exact_wire_parity": True,
-                "scope": "direct core with DO_NOT_TRACK=1; excludes tracker identity/flush latency"}
+                    raise RuntimeError(f"cache-hit bytes differ from authoritative assembly: {route}")
+            report["schema_fast_path"] = {"candidate_sha256": binary_sha, "exact_wire_parity": True}
             # User shortcut loading owns startup diagnostics even though those
             # shortcuts are not part of the declaration-only Schema surface.
             shortcut_directory = Path(environment["DWS_CONFIG_DIR"]) / "shortcuts"
@@ -208,16 +177,11 @@ def main():
             broken_shortcut = shortcut_directory / "broken.yaml"
             broken_shortcut.write_text("[invalid YAML")
             try:
-                outputs = []
-                for executable in (binary, core):
-                    result = subprocess.run([str(executable), "schema", "--compact"],
-                                            env=environment, cwd=home, stdin=subprocess.DEVNULL,
-                                            capture_output=True, timeout=180, check=True)
-                    if b"shortcut: failed to load user-defined shortcuts" not in result.stderr:
-                        raise RuntimeError("Schema entry swallowed user-shortcut startup diagnostics")
-                    outputs.append(result.stdout)
-                if outputs[0] != outputs[1]:
-                    raise RuntimeError("user-shortcut fallback changed Schema output")
+                result = subprocess.run([str(binary), "schema", "--compact"],
+                                        env=environment, cwd=home, stdin=subprocess.DEVNULL,
+                                        capture_output=True, timeout=180, check=True)
+                if b"shortcut: failed to load user-defined shortcuts" not in result.stderr:
+                    raise RuntimeError("Schema entry swallowed user-shortcut startup diagnostics")
                 report["schema_fast_path"]["user_shortcut_diagnostics_preserved"] = True
             finally:
                 broken_shortcut.unlink()
@@ -272,19 +236,8 @@ def main():
             "leaf_user_cpu_reduction_at_least_80_percent": cache_summary["user_ms"]["p50"] <= .2 * live_summary["user_ms"]["p50"],
             "leaf_peak_rss_at_most_100_mib": max(s["max_rss_bytes"] for s in samples["cache"]) <= 100 * 1024 * 1024,
         }
-        if args.require_schema_fast_path:
-            core_samples = []
-            for _ in range(7):
-                output, measurement = invoke(core, leaf, environment, home)
-                if json.loads(output) != canonical_leaf:
-                    raise RuntimeError("direct core cache hit changed leaf output")
-                core_samples.append(measurement)
-            core_summary = summarize(core_samples)
-            report["core_schema_fast_path"].update(raw_samples=core_samples, summary=core_summary)
-            report["gates"]["core_hit_user_cpu_reduction_at_least_80_percent"] = core_summary["user_ms"]["p50"] <= .2 * live_summary["user_ms"]["p50"]
-            report["gates"]["core_hit_peak_rss_at_most_100_mib"] = max(s["max_rss_bytes"] for s in core_samples) <= 100 * 1024 * 1024
         verify_artifacts()
-    if digest(binary) != binary_sha or (core and digest(core) != core_sha):
+    if digest(binary) != binary_sha:
         raise RuntimeError("candidate bytes changed during verification")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")

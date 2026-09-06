@@ -5,7 +5,6 @@ package app
 
 import (
 	"os"
-	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
@@ -35,25 +34,13 @@ func prepareSchemaFastPath(args, environment []string) (schemafastpath.Prepared,
 	if !ok || identity != options.Identity {
 		return schemafastpath.Prepared{}, false
 	}
-	// Avoid copying the process environment for ordinary commands or disabled
+	// Avoid reading the process environment for ordinary commands or disabled
 	// development builds. Tests may provide an explicit invocation snapshot.
 	if environment == nil {
 		environment = os.Environ()
 	}
-	plainEnvironment := make([]string, 0, len(environment))
-	for _, entry := range environment {
-		key, _, _ := strings.Cut(entry, "=")
-		switch key {
-		case "DWS_INTERNAL_LAUNCHER_PATH", "DWS_INTERNAL_CORE_SHA256", "DWS_INTERNAL_CORE_VERSION":
-			// These transport markers affect executable/version lookup during
-			// upgrade. They cannot change a Schema query or its output. Retain
-			// them in the actual process environment for ordinary fallback.
-			continue
-		}
-		plainEnvironment = append(plainEnvironment, entry)
-	}
 	return schemafastpath.Prepare(options.Identity.Edition, &options.Identity, schemafastpath.Dependencies{
-		Args: args, Environment: plainEnvironment, Lstat: os.Lstat,
+		Args: args, Environment: environment, Lstat: os.Lstat,
 		OpenCache: func(edition string) (*schemacache.Cache, error) { return schemacache.Open(edition) },
 	})
 }

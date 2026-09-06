@@ -3,7 +3,7 @@
 
 // Package schemareader composes authenticated cache I/O with the shared typed
 // Schema decoder. It owns no declarations, process globals, repair or rendering
-// policy; cli and the thin launcher consume these same immutable identities.
+// policy; the CLI consumes these immutable identities.
 package schemareader
 
 import (

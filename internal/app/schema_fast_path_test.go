@@ -236,9 +236,6 @@ func coreSchemaFastPathFixture(t *testing.T) (string, cli.SchemaCacheArtifacts) 
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	t.Setenv("DO_NOT_TRACK", "") // ExecuteWithTelemetry itself never starts a tracker.
 	t.Setenv("DWS_CONFIG_DIR", filepath.Join(home, ".dws"))
-	t.Setenv("DWS_INTERNAL_LAUNCHER_PATH", "/synthetic/bin/dws")
-	t.Setenv("DWS_INTERNAL_CORE_SHA256", strings.Repeat("a", 64))
-	t.Setenv("DWS_INTERNAL_CORE_VERSION", "v0.0.0-test")
 	resolved, err := cli.ResolveSchemaBuild(NewSchemaSourceRootCommand())
 	if err != nil {
 		t.Fatal(err)

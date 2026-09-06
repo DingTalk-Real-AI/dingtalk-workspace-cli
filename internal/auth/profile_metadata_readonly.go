@@ -18,7 +18,7 @@ import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetad
 type ProfileMetadata = profilemetadata.ProfileMetadata
 
 // ResolveProfileMetadataReadOnly reads only non-sensitive profiles.json metadata.
-// The same pure selector and normalization implementation is used by the launcher.
+// Keep selection and normalization pure so startup checks do not initialize auth.
 func ResolveProfileMetadataReadOnly(configDir, selector string) (*ProfileMetadata, error) {
 	return profilemetadata.ResolveReadOnlyWithReader(configDir, selector, profilesReadFile)
 }

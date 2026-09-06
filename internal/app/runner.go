@@ -655,7 +655,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	callStart := time.Now()
 	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
-	RecordTiming(ctx, "mcp_call", time.Since(callStart))
+	RecordNestedTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
 		if isRefreshableTransportAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
@@ -906,7 +906,7 @@ func resolveRuntimeAuthSnapshot(ctx context.Context, explicitToken string) (Acce
 // cache itself lives exclusively in TokenManager.
 func getCachedRuntimeToken(ctx context.Context) (string, error) {
 	loadStart := time.Now()
-	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+	defer func() { RecordNestedTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
 	return resolveRuntimeAuthToken(ctx, "")
 }
 

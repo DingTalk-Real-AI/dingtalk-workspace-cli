@@ -15,6 +15,7 @@ package shortcut
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/spf13/cobra"
@@ -23,13 +24,25 @@ import (
 // allShortcuts is the registry of built-in shortcuts. Service packages append to
 // it via Register from their init(), keeping this package free of import cycles
 // on the concrete command definitions.
-var allShortcuts []Shortcut
+var (
+	shortcutRegistryMu        sync.RWMutex
+	allShortcuts              []Shortcut
+	shortcutsByService        = make(map[string][]Shortcut)
+	builtInShortcutsByService = make(map[string][]Shortcut)
+)
 
 // Register adds one or more shortcuts to the built-in registry. Call from a
 // service package's init().
 func Register(shortcuts ...Shortcut) {
+	shortcutRegistryMu.Lock()
+	defer shortcutRegistryMu.Unlock()
 	for i := range shortcuts {
 		shortcuts[i] = applyPublicCatalog(shortcuts[i])
+		registered := shortcuts[i]
+		shortcutsByService[registered.Service] = append(shortcutsByService[registered.Service], registered)
+		if !registered.UserDefined {
+			builtInShortcutsByService[registered.Service] = append(builtInShortcutsByService[registered.Service], registered)
+		}
 	}
 	allShortcuts = append(allShortcuts, shortcuts...)
 }
@@ -38,26 +51,65 @@ func Register(shortcuts ...Shortcut) {
 // commands, one per service, each carrying its `+command` leaves. The result is
 // merged into the root command tree by the host application.
 func Commands() []*cobra.Command {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
 	return build(allShortcuts)
+}
+
+// CommandsForService compiles only one top-level service from the same
+// registered shortcut declarations used by Commands.
+func CommandsForService(service string) []*cobra.Command {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
+	return build(shortcutsByService[service])
+}
+
+func HasService(service string) bool {
+	shortcutRegistryMu.RLock()
+	_, ok := shortcutsByService[service]
+	shortcutRegistryMu.RUnlock()
+	return ok
 }
 
 // BuiltInCommands compiles only distribution-owned shortcuts.
 func BuiltInCommands() []*cobra.Command {
-	builtins := make([]Shortcut, 0, len(allShortcuts))
-	for _, registered := range allShortcuts {
-		if !registered.UserDefined {
-			builtins = append(builtins, registered)
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
+	return build(filterService(allShortcuts, "", true))
+}
+
+// BuiltInCommandsForService is the declaration-only counterpart of
+// CommandsForService.
+func BuiltInCommandsForService(service string) []*cobra.Command {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
+	return build(builtInShortcutsByService[service])
+}
+
+func shortcutsSnapshot() []Shortcut {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
+	return append([]Shortcut(nil), allShortcuts...)
+}
+
+func filterService(shortcuts []Shortcut, service string, builtInOnly bool) []Shortcut {
+	filtered := make([]Shortcut, 0, len(shortcuts))
+	for _, registered := range shortcuts {
+		if builtInOnly && registered.UserDefined {
+			continue
 		}
+		if service != "" && registered.Service != service {
+			continue
+		}
+		filtered = append(filtered, registered)
 	}
-	return build(builtins)
+	return filtered
 }
 
 // All returns the registered shortcuts. Primarily for coverage tests that need
 // each shortcut's declared flags (types/enums/required) to synthesize inputs.
 func All() []Shortcut {
-	out := make([]Shortcut, len(allShortcuts))
-	copy(out, allShortcuts)
-	return out
+	return shortcutsSnapshot()
 }
 
 // build groups shortcuts by service and mounts each as a leaf under its service

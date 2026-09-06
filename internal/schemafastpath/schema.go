@@ -152,7 +152,7 @@ func schemaEnvironmentIsPlain(environment []string) bool {
 }
 
 // SupportsRequest reports whether argv and environment are inside the closed
-// launcher Schema capability before any cache or user filesystem access.
+// Schema fast path before any cache or user filesystem access.
 func SupportsRequest(args, environment []string) bool {
 	_, ok := parseSchemaRequest(args)
 	return ok && schemaEnvironmentIsPlain(environment)

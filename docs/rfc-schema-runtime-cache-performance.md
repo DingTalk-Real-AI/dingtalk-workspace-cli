@@ -1,144 +1,129 @@
-# RFC 附件：Schema、help、命令与进程内存性能报告
+# RFC 附件：CLI 性能提升报告
 
-日期：2026-09-06。候选：`7cbf7f529d347bd0e9750687138dd2be009c5bcb`，源码树：`9dfbbca99267c7eaca3e6fe81fc1748888d3d682`。状态：当前 RFC 口径下的双平台开发候选验收通过；候选本身 `release_eligible:false`，正式签名、公证、安装升级与整包回滚仍由主 RFC R8 阻挡首次官方发布。
+状态：Draft。日期：2026-09-06。设计见 [单入口 CLI 与 Schema Runtime Cache RFC](rfc-schema-runtime-cache.md)。
 
-关联：[主 RFC](rfc-schema-runtime-cache.md) · [PR #1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) · [原生 CI 34018840739](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34018840739) · [本轮证据索引](benchmarks/schema-cache/native-7cbf7f52/evidence.json)。
+## 1. 结论
 
-## 1. 性能提升多少
+Darwin/arm64 本地完整矩阵显示，当前实现相对 PR-base main 在七个代表场景全部更快：
 
-| 维度 | 双平台实测结论 |
-|---|---|
-| Schema | 相对固定 pre-PR 基线，native wall p50 **下降 78.19%–84.57%**；相对同一候选的实时装配，用户态 CPU p50 **下降 97.39%–97.88%** |
-| 根 help | 相对固定 pre-PR 基线，默认上报五维样本的 wall p50 **下降 7.92%–11.61%**；独立入口 gate 的 default/opt-out p50、p95 八项全部通过 |
-| 命令 | version p50 **下降 7.75%–11.77%**，日历列表 leaf help p50 **下降 77.40%–83.79%**；config、dry-run、mock p50 **增加 8.39%–12.74%**，不能宣称所有命令加速 |
-| 整体运行内存 | 相对固定基线，native Schema 峰值 RSS p50 **下降 87.69%–88.99%**，root help **下降 69.42%–76.21%**；config、dry-run、mock 增加约 **2.51%–4.47%**，不存在统一的“全 CLI 内存下降百分比” |
-| Lark CLI / GWS | DWS 在已测五类 native/public wall p50、p95 中均更慢；root help/version 的 native RSS 低于 Lark、高于 GWS。Schema 优化没有证明竞品领先 |
+| 场景 | main p50 | candidate p50 | 提升 | native RSS p50 |
+|---|---:|---:|---:|---:|
+| Schema leaf | 1508.36 ms | 292.97 ms | **80.6%** | 341.34 → 36.18 MiB（89.4%） |
+| root help | 405.24 ms | 302.23 ms | **25.4%** | 47.82 → 45.88 MiB（4.1%） |
+| version | 407.07 ms | 285.67 ms | **29.8%** | 47.83 → 31.05 MiB（35.1%） |
+| leaf help | 1505.69 ms | 294.64 ms | **80.4%** | 342.97 → 41.65 MiB（87.9%） |
+| calendar list dry-run | 406.82 ms | 291.51 ms | **28.3%** | 48.10 → 40.03 MiB（16.8%） |
+| config list | 408.96 ms | 285.62 ms | **30.2%** | 47.96 → 30.89 MiB（35.6%） |
+| calendar list mock | 407.56 ms | 291.51 ms | **28.5%** | 48.45 → 40.45 MiB（16.5%） |
 
-这些结论只覆盖预热元数据、无真实凭据的短命令。它们不外推到远端 RPC、认证、冷缓存首次修复或长期事件进程，也不代表尚未发布的正式安装包。
+同轮 DWS native 的 wall p50 在 Schema/help/version/leaf-help/dry-run 上比 Lark native 快 **7.5%～12.6%**；npm public 入口的 wall p50 比 Lark public 快 **5.3%～8.2%**。完整 Lark 诊断为 **37/40** 指标通过：help RSS 三项未过，且本地 30 样本未达到该诊断器要求的 100 样本，因此不能表述为整体追平 Lark。DWS 也尚未追平 GWS：native wall p50 慢约 **2.5～2.7 倍**，public 慢约 **50%～54%**。
 
-## 2. 验收结果与测量合同
+这份本地矩阵使用实现完成但尚未提交的工作树候选，因此是方向和回归判断证据，不是最终 release proof。Ready 结论以推送后 clean head 的 Darwin/arm64、Linux/amd64 CI artifact 为准。
 
-原生 workflow `34018840739` 的六个 job 全部成功：Darwin/arm64 与 Linux/amd64 native candidate、两平台完整 Go suite、Schema declaration policy、跨平台 identity metadata coordinator。两个五维报告均满足：
+## 2. 方法与可比边界
 
-- `complete:true`，`failures:{}`；
-- 51 个 latency case 与 51 个 memory case，每个 case 恰好 30 个样本；
-- 默认入口报告 `passed:true`，12 个正式 gate 全部为 true；
-- package version、identity environment、en/zh finalized core help proof 全部通过；
-- candidate source commit/tree 精确匹配，`source_dirty:false`；
-- 候选 package、public package 和固定竞品安装在测量前后的摘要不变。
+- CPU：Apple M3 Pro；OS：Darwin/arm64；Go：1.25.9。
+- 固定 main：`6f71222b9b07c760cdb5f376b24dab9155e62094`。
+- candidate、main、Lark CLI 1.0.85、GWS 0.22.5 每场景 30 次随机交错延迟样本，另做 30 次独立内存样本，共 2,640 次正式 invocation。
+- native RSS 来自小型 C parent 在 `wait4` 读取的进程峰值；public RSS 是 1 ms 采样的同时进程树峰值，包含 Node wrapper 与 native child。
+- 每个场景先锁定 stdout/stderr oracle，正式样本必须逐字节一致；错误退出不能算快速成功。
+- Schema cache/live、default telemetry/DO_NOT_TRACK 分开。竞品命令只保证意图相近，不保证字段、鉴权和输出合同相同，因此竞品是诊断，不是 release gate。
+- 本机本轮存在约 280 ms 的 DWS 进程启动/安全扫描共同地板；它同时影响 candidate 与 main，配对提升有效，但绝对毫秒不能与先前约 10 ms 的 run 混用。
 
-| 项目 | 固定口径 |
-|---|---|
-| pre-PR 基线 | `5243e5ca19b55a3e785e5cc09273b653ad5381dc`，在各 native host 以相同 Go 1.25.9、CGO=0、PIE 与 runtime payload 构建 |
-| 平台 | Linux amd64，4 CPU；macOS 26.6.2 arm64，3 CPU |
-| 工具 | Go 1.25.9、Node 22.16.0、Lark CLI 1.0.85、GWS 0.22.5 |
-| 矩阵 | 每平台 51 场景；每场景 30 次独立耗时与 30 次独立内存试验；随机交错，预热不计样本 |
-| 默认环境 | 独立 HOME、预热缓存、无真实凭据；五维耗时保留各产品默认上报，网络未统一隔离 |
-| 耗时 | 原生父进程阻塞 `wait4`，从子进程启动到回收；p50 为中位数，p95 为排序后第 `ceil(n×0.95)` 项 |
-| native 内存 | 小型 C 父进程 `exec` 后读取内核 `wait4` peak RSS，避免 Python 自身 pre-exec RSS；native case 均为单进程负载 |
-| public 内存 | 1 ms 请求间隔采样同时驻留的 wrapper + child 进程树 RSS；共享页可能重复，是观测下界，不是 PSS |
-| 业务范围 | Schema 发现、root/leaf help、version、配置查询、日历列表 dry-run；DWS 另测本地 mock，不执行真实业务 RPC |
+五维报告完成状态为 `complete: true`，`failures: {}`。本地原始报告 SHA-256：`60ab19f6d5c34b6436e0615be9827cbc93653283fb494390ec10ec4048e10374`；该文件将在 clean-head CI 中重新生成并作为 workflow artifact 上传。
 
-## 3. 相对固定 pre-PR 入口的净变化
+`check-cli-lark-performance.py` 对该报告给出 37/40 observed metrics pass、`accepted: false`。原因是 native help RSS p50、public help RSS p50/p95 三项高于 Lark，并且每场景只有 30 个样本；该脚本要求 100。表中的 wall 延迟结论成立，但不能替代完整竞品诊断结论。
 
-耗时为默认上报条件下的 native p50；内存为独立 `wait4` 峰值 RSS p50。
+## 3. Schema
 
-| 平台 | 场景 | 基线 p50 ms | 候选 p50 ms | 耗时变化 | 基线 RSS MiB | 候选 RSS MiB | RSS 变化 |
-|---|---|---:|---:|---:|---:|---:|---:|
-| linux | schema | 2432.95 | 375.45 | 下降 84.57% | 350.70 | 43.19 | 下降 87.69% |
-| linux | help | 346.19 | 305.99 | 下降 11.61% | 51.29 | 12.20 | 下降 76.21% |
-| linux | version | 345.78 | 305.08 | 下降 11.77% | 51.34 | 12.05 | 下降 76.52% |
-| linux | leaf-help | 2435.48 | 394.70 | 下降 83.79% | 349.42 | 55.35 | 下降 84.16% |
-| linux | config | 346.38 | 390.51 | 增加 12.74% | 50.83 | 53.10 | 增加 4.47% |
-| linux | dry-run | 346.19 | 389.67 | 增加 12.56% | 50.98 | 52.95 | 增加 3.85% |
-| linux | mock | 346.51 | 390.33 | 增加 12.65% | 51.44 | 53.16 | 增加 3.35% |
-| darwin | schema | 1689.57 | 368.49 | 下降 78.19% | 346.77 | 38.19 | 下降 88.99% |
-| darwin | help | 347.76 | 320.22 | 下降 7.92% | 45.65 | 13.96 | 下降 69.42% |
-| darwin | version | 346.37 | 319.54 | 下降 7.75% | 45.58 | 13.73 | 下降 69.87% |
-| darwin | leaf-help | 1691.71 | 382.30 | 下降 77.40% | 345.76 | 48.96 | 下降 85.84% |
-| darwin | config | 346.17 | 377.23 | 增加 8.97% | 45.76 | 46.91 | 增加 2.51% |
-| darwin | dry-run | 347.15 | 377.57 | 增加 8.76% | 45.54 | 46.97 | 增加 3.14% |
-| darwin | mock | 348.76 | 378.02 | 增加 8.39% | 46.04 | 47.23 | 增加 2.58% |
+| 路径 | wall p50 / p95 | user CPU p50 | RSS p50 / p95 |
+|---|---:|---:|---:|
+| candidate cache hit | 292.97 / 300.58 ms | 26.12 ms | 36.18 / 37.33 MiB |
+| candidate live assembly | 1188.15 / 1223.82 ms | 1527.00 ms | 308.13 / 316.23 MiB |
+| fixed main | 1508.36 / 1576.56 ms | 1770.93 ms | 341.34 / 364.80 MiB |
 
-Schema 缓存命中与同一候选实时装配的对照如下。该对照只改变 Schema delivery 路径，更适合描述缓存本身收益。
+缓存命中相对同候选 live assembly 的 user CPU 降低 **98.3%**，RSS p50 降低 **88.3%**。它证明 verified protobuf cache 解决了 Schema 构建成本。缓存仍不是业务 handler；普通命令不会因为 cache 存在而绕过框架。
 
-| 平台 | 指标 p50 | 实时装配 | 缓存命中 | 变化 |
-|---|---|---:|---:|---:|
-| linux | wall | 2626.17 ms | 375.45 ms | 下降 85.70% |
-| linux | user CPU | 3344.09 ms | 70.82 ms | 下降 97.88% |
-| linux | peak RSS | 333.67 MiB | 43.19 MiB | 下降 87.06% |
-| darwin | wall | 1731.59 ms | 368.49 ms | 下降 78.72% |
-| darwin | user CPU | 1838.08 ms | 47.96 ms | 下降 97.39% |
-| darwin | peak RSS | 335.80 MiB | 38.19 MiB | 下降 88.63% |
+## 4. Help 与 version
 
-## 4. 生效的 help/version/Schema gate
+独立 default/opt-out 入口矩阵的 12 个 gate 全部通过：candidate 的 help/version p50、p95 均不超过固定 main 的 105%。
 
-本表来自独立默认入口报告。default 与显式 `DO_NOT_TRACK` opt-out 分开测量；每个候选 p50、p95 都必须不超过固定 pre-PR 对应值的 1.05 倍。旧的 `launcher ≤ 同包 core +5%` 只保留 diagnostics，本轮 diagnostics 也全部为 true，但不参与 `passed`。
+| 场景 | candidate default p50 / p95 | candidate opt-out p50 / p95 | main default p50 / p95 |
+|---|---:|---:|---:|
+| root help | 302.22 / 324.39 ms | 301.52 / 323.34 ms | 403.49 / 435.35 ms |
+| version | 283.50 / 299.37 ms | 284.30 / 301.20 ms | 410.90 / 435.83 ms |
 
-| 平台 | 入口/模式 | pre-PR p50/p95 ms | 候选 p50/p95 ms | 变化 p50/p95 |
-|---|---|---:|---:|---:|
-| linux | help default | 345.95/347.19 | 305.95/306.40 | -11.56%/-11.75% |
-| linux | help opt-out | 45.31/47.29 | 4.83/5.10 | -89.35%/-89.21% |
-| linux | version default | 345.44/346.96 | 304.97/305.54 | -11.72%/-11.94% |
-| linux | version opt-out | 44.39/45.70 | 3.55/3.73 | -91.99%/-91.84% |
-| darwin | help default | 349.61/375.60 | 318.49/327.96 | -8.90%/-12.68% |
-| darwin | help opt-out | 39.37/69.75 | 10.28/12.94 | -73.89%/-81.45% |
-| darwin | version default | 350.53/391.93 | 317.86/325.68 | -9.32%/-16.90% |
-| darwin | version opt-out | 40.20/66.90 | 9.05/15.00 | -77.49%/-77.58% |
+candidate 的 default 与 opt-out 基本重合，支持“事件入队后不等待最后一次发送”的因果判断。main 的 default 比 opt-out 多约 112～122 ms；具体差值受当时网络响应影响，不能把 300 ms timeout 当固定 sleep。
 
-Schema 的正式 gate 同样通过：default 命中的 user CPU p50 相对实时装配下降 97.38%–97.82%，opt-out 下降 99.12%–99.35%；四个平台/模式的 peak RSS p95 为 19.69–43.82 MiB，低于 100 MiB 上限。
+version 的 user CPU p50 从约 49.95 ms 降到 17.38 ms，RSS 从 47.83 MiB 降到 31.05 MiB，说明收益也来自 utility 路径不构建产品树，不只是 telemetry。
 
-## 5. 与 Lark CLI、GWS 的同机对比
+## 5. 业务命令
 
-Schema 选择相近的日历列表发现接口：DWS `calendar.list_calendars`、Lark `calendar.calendars.list`、GWS `calendar.calendarList.list`。输出及产品合同不完全等价，结果只用于诊断。耗时单位 ms，格式为 p50/p95；RSS 为独立内存试验 p50。
+| 场景 | main wall p50 / p95 | candidate wall p50 / p95 | p50 提升 | candidate RSS p50 |
+|---|---:|---:|---:|---:|
+| calendar leaf help | 1505.69 / 1561.17 ms | 294.64 / 310.65 ms | **80.4%** | 41.65 MiB |
+| calendar list dry-run | 406.82 / 433.73 ms | 291.51 / 306.65 ms | **28.3%** | 40.03 MiB |
+| calendar list mock | 407.56 / 442.56 ms | 291.51 / 308.26 ms | **28.5%** | 40.45 MiB |
+| config list | 408.96 / 462.30 ms | 285.62 / 297.63 ms | **30.2%** | 30.89 MiB |
 
-### 5.1 Native 对 native
+这些场景覆盖真实命令树、flag、PreParse、validation、Safety/dry-run 或 mock 输出，但不包含有真实凭据的远端 RPC。网络服务时延和 authenticated throughput 不在这份启动报告中。
 
-| 平台 | 场景 | DWS ms | Lark ms | GWS ms | DWS RSS | Lark RSS | GWS RSS |
-|---|---|---:|---:|---:|---:|---:|---:|
-| linux | schema | 375.45/377.22 | 46.06/47.89 | 4.34/4.55 | 43.19 | 42.68 | 9.10 |
-| linux | help | 305.99/306.46 | 46.42/47.72 | 3.27/3.37 | 12.20 | 42.70 | 6.91 |
-| linux | version | 305.08/305.53 | 45.25/46.98 | 3.14/3.26 | 12.05 | 40.93 | 6.84 |
-| linux | leaf-help | 394.70/396.32 | 45.52/47.66 | 4.67/4.82 | 55.35 | 40.79 | 9.42 |
-| linux | dry-run | 389.67/391.47 | 46.61/47.89 | 4.84/5.02 | 52.95 | 42.46 | 9.97 |
-| darwin | schema | 368.49/376.09 | 41.97/45.91 | 8.38/9.84 | 38.19 | 43.98 | 9.67 |
-| darwin | help | 320.22/327.34 | 42.15/46.24 | 6.80/8.88 | 13.96 | 44.14 | 8.01 |
-| darwin | version | 319.54/327.01 | 41.73/45.73 | 6.83/8.68 | 13.73 | 43.84 | 7.92 |
-| darwin | leaf-help | 382.30/392.60 | 41.07/43.94 | 8.81/10.40 | 48.96 | 43.78 | 10.45 |
-| darwin | dry-run | 377.57/392.50 | 41.73/48.40 | 8.02/10.87 | 46.97 | 43.95 | 10.81 |
+core 构树微基准进一步分离了装配贡献：
 
-### 5.2 Public wrapper 对 public wrapper
+| 构造路径 | ns/op | B/op | allocs/op | 相对完整树 |
+|---|---:|---:|---:|---:|
+| 完整 root | 14.0～14.4 ms | 17.1 MB | 169k | 100% |
+| process calendar list | 0.84～0.86 ms | 1.17 MB | 10.1k | 时间约 6.0%，alloc 约 5.9% |
+| process config get | 0.35～0.38 ms | 0.46 MB | 3.7k | 时间约 2.6%，alloc 约 2.2% |
 
-public RSS 采样包含同时驻留的 Node wrapper 与子进程；DWS public 使用候选 canonical package 的相同字节，不代表 npm 当前正式版已启用这些快路径。
+因此业务收益有两个来源：单入口和 telemetry no-wait 消除固定税；统一框架按需装配减少 core 内无关产品构建。早期约 7.1 ms 的选择性数据仍先执行了全量 helper 工厂；修复后 calendar 降至约 0.85 ms。Prepare/config/profile 未删除：调用计数显示单 profile 一次、dry-run 零次，未发现值得承担生命周期风险的重复点。
 
-| 平台 | 场景 | DWS ms | Lark ms | GWS ms | DWS RSS | Lark RSS | GWS RSS |
-|---|---|---:|---:|---:|---:|---:|---:|
-| linux | schema | 402.45/404.62 | 72.00/73.65 | 31.88/32.49 | 88.69 | 85.18 | 44.81 |
-| linux | help | 332.85/333.52 | 72.17/74.71 | 30.68/31.73 | 57.54 | 85.20 | 44.80 |
-| linux | version | 331.88/332.43 | 70.66/73.14 | 30.56/31.82 | 57.57 | 85.17 | 44.81 |
-| linux | leaf-help | 422.14/423.89 | 70.87/72.91 | 32.20/33.03 | 100.88 | 84.17 | 44.95 |
-| linux | dry-run | 417.52/419.77 | 71.85/73.57 | 32.72/33.41 | 98.63 | 85.29 | 44.81 |
-| darwin | schema | 397.91/415.47 | 68.48/76.56 | 36.63/41.99 | 76.24 | 75.57 | 38.62 |
-| darwin | help | 355.11/363.43 | 68.99/79.70 | 35.69/38.17 | 53.02 | 74.41 | 38.69 |
-| darwin | version | 354.38/360.05 | 67.86/73.82 | 35.96/40.99 | 52.80 | 74.82 | 38.65 |
-| darwin | leaf-help | 413.76/436.63 | 68.21/86.36 | 35.73/43.77 | 88.78 | 73.70 | 38.79 |
-| darwin | dry-run | 412.54/419.36 | 68.85/87.81 | 35.39/40.87 | 85.89 | 74.13 | 38.85 |
+## 6. 整体运行内存
 
-DWS 没有在这些竞争性 wall 指标上领先。内存随入口变化：native root help/version 明显小于 Lark，但大于 GWS；Schema 在 Darwin 小于 Lark，在 Linux略大于 Lark；leaf help、dry-run 和多数 public 入口没有统一优势。
+| 产品/入口 | Schema | help | version | leaf help | dry-run |
+|---|---:|---:|---:|---:|---:|
+| DWS native | 36.18 MiB | 45.88 MiB | 31.05 MiB | 41.65 MiB | 40.03 MiB |
+| DWS npm public | 73.08 MiB | 85.19 MiB | 56.73 MiB | 76.70 MiB | 74.42 MiB |
+| Lark native | 45.40 MiB | 45.65 MiB | 44.91 MiB | 45.16 MiB | 45.57 MiB |
+| Lark public | 79.40 MiB | 79.38 MiB | 77.62 MiB | 77.71 MiB | 80.03 MiB |
+| GWS native | 10.12 MiB | 8.44 MiB | 8.33 MiB | 10.88 MiB | 11.23 MiB |
+| GWS public | 42.62 MiB | 41.92 MiB | 41.89 MiB | 42.14 MiB | 42.21 MiB |
 
-## 6. 架构与性能含义
+DWS native 已低于或接近 Lark；DWS public 的 help 高约 7.3%，其余表中场景低约 1.3%～26.9%。GWS 仍有明显的 runtime 与命令面体积优势。
 
-结果支持 RFC 选定的受限热路径 runtime：Schema、exact root help、exact version 获得显著收益，且新的固定 pre-PR gate 双平台通过。结果也验证了委派路径不应以“launcher 相对同包 core ≤5%”作为 release gate：leaf help 因避免全量 Schema 组装而大幅改善，但 config、dry-run、mock 仍承担 launcher 启动、完整 core 校验和委派成本，出现 8.39%–12.74% 回退。
+Schema live assembly 是例外高峰：candidate 约 308 MiB。cache hit 将它降至约 36 MiB；未启用 identity 的平台或首次重建仍会承担 live 峰值，报告不能隐去这条冷路径。
 
-因此本 RFC 的性能承诺只覆盖 allowlist 内热路径和明确的 Schema CPU/RSS 预算。委派路径保留墙钟、CPU、RSS 和同包 core 诊断，不用热路径收益抵消普通命令回退，也不以竞品对比作为 Ready/release gate。
+## 7. Lark 与 GWS 对比
 
-## 7. 原始证据与剩余发布边界
+### Native wall p50
 
-[证据索引](benchmarks/schema-cache/native-7cbf7f52/evidence.json)记录 run、artifact ID、源码 commit/tree、原始字节数，以及归档前后 SHA-256。两个较大的 JSON 使用确定性 gzip 无损保存：
+| 场景 | DWS | Lark | DWS 对 Lark | GWS | DWS 对 GWS |
+|---|---:|---:|---:|---:|---:|
+| Schema | 292.97 ms | 324.37 ms | 快 9.7% | 114.45 ms | 慢 2.56× |
+| help | 302.23 ms | 326.84 ms | 快 7.5% | 113.45 ms | 慢 2.66× |
+| version | 285.67 ms | 327.01 ms | 快 12.6% | 113.21 ms | 慢 2.52× |
+| leaf help | 294.64 ms | 325.43 ms | 快 9.5% | 114.09 ms | 慢 2.58× |
+| dry-run | 291.51 ms | 329.66 ms | 快 11.6% | 112.68 ms | 慢 2.59× |
 
-- 五维逐次样本：[Linux](benchmarks/schema-cache/native-7cbf7f52/linux/five-dimensions-report.json.gz) · [Darwin](benchmarks/schema-cache/native-7cbf7f52/darwin/five-dimensions-report.json.gz)；
-- 默认入口 gate：[Linux](benchmarks/schema-cache/native-7cbf7f52/linux/default-entry-report.json.gz) · [Darwin](benchmarks/schema-cache/native-7cbf7f52/darwin/default-entry-report.json.gz)；
-- 最终 help proof、package version、identity environment、candidate build 和固定基线信息在同目录按平台保存；
-- 迁移前历史数据继续保留在 [`native-c0f3aaca`](benchmarks/schema-cache/native-c0f3aaca/evidence.json)，其旧 gate 语义不再用于当前验收。
+### Public wall p50
 
-R9 和 D1 可由本轮证据勾选。R8 仍未完成：开发候选使用 ad-hoc/无签名，`release_eligible:false` 是预期状态；第一次包含本实现的官方 prerelease/stable 仍须完成 Developer ID、公证、最终发布制品的 native help/Schema 验证，以及不可变整包安装、升级和回滚证明。
+| 场景 | DWS npm | Lark public | DWS 对 Lark | GWS public | DWS 对 GWS |
+|---|---:|---:|---:|---:|---:|
+| Schema | 503.89 ms | 541.43 ms | 快 6.9% | 331.31 ms | 慢 52.1% |
+| help | 511.19 ms | 539.72 ms | 快 5.3% | 331.86 ms | 慢 54.0% |
+| version | 495.71 ms | 540.06 ms | 快 8.2% | 330.58 ms | 慢 50.0% |
+| leaf help | 506.77 ms | 539.87 ms | 快 6.1% | 332.07 ms | 慢 52.6% |
+| dry-run | 503.48 ms | 539.41 ms | 快 6.7% | 331.78 ms | 慢 51.8% |
+
+Lark 在本轮同机环境中主要承担 Node/CLI 初始化地板；DWS 通过单进程 native 路径和按需构树已经在 wall 延迟上略快。help RSS 仍是明确差距。GWS 的 native executable 启动 CPU 只有约 3～4 ms，RSS 约 8～11 MiB，说明它的程序映像、runtime 和命令面更小。DWS 若继续追 GWS，需要分析静态依赖/init、Go runtime 映像和业务框架常驻对象；继续压 Schema protobuf 已不是首要方向。
+
+## 8. 验收状态
+
+- [x] 本地固定 main default/opt-out 入口 gate：12/12 通过。
+- [x] 本地五维报告：44 场景，延迟与内存各 30 样本，`complete: true`、零失败。
+- [x] 相对 main 的业务命令 p50 全部下降，代表业务下降超过 40% 的门槛由 leaf help 满足。
+- [x] 本地 DWS native/public 五个可比场景的 wall p50 均快于 Lark。
+- [ ] 完整 Lark 诊断：当前 37/40；help RSS 三项和 100 样本要求未通过，因此不得宣称整体追平。
+- [ ] clean PR head Darwin/arm64 native CI。
+- [ ] clean PR head Linux/amd64 native CI。
+- [ ] 正式 release 最终签名制品与安装验证。

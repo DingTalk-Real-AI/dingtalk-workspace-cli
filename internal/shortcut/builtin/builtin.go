@@ -59,8 +59,16 @@ func Commands() []*cobra.Command {
 	return shortcut.Commands()
 }
 
+func CommandsForService(service string) []*cobra.Command {
+	return shortcut.CommandsForService(service)
+}
+
 // BaseCommands returns only distribution-owned shortcuts for Schema and
 // interface generation.
 func BaseCommands() []*cobra.Command {
 	return shortcut.BuiltInCommands()
+}
+
+func BaseCommandsForService(service string) []*cobra.Command {
+	return shortcut.BuiltInCommandsForService(service)
 }

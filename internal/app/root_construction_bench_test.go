@@ -13,7 +13,11 @@
 
 package app
 
-import "testing"
+import (
+	"context"
+	"os"
+	"testing"
+)
 
 // BenchmarkNewRootCommand measures building the real Cobra tree — roughly 800
 // leaves with their flags, Schema annotations and PostMount work.
@@ -29,5 +33,30 @@ func BenchmarkNewRootCommand(b *testing.B) {
 		if root == nil {
 			b.Fatal("nil root")
 		}
+	}
+}
+
+func BenchmarkProcessRootConstruction(b *testing.B) {
+	b.Setenv("DWS_CONFIG_DIR", b.TempDir())
+	b.Setenv("DO_NOT_TRACK", "1")
+	for _, benchmark := range []struct {
+		name string
+		args []string
+	}{
+		{name: "calendar-list", args: []string{"dws", "calendar", "book", "list", "--dry-run", "-f", "json"}},
+		{name: "config-get", args: []string{"dws", "config", "get", "output"}},
+	} {
+		b.Run(benchmark.name, func(b *testing.B) {
+			original := os.Args
+			os.Args = benchmark.args
+			b.Cleanup(func() { os.Args = original })
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				root := newProcessRootCommandWithEngine(context.Background(), nil)
+				if root == nil {
+					b.Fatal("nil root")
+				}
+			}
+		})
 	}
 }
