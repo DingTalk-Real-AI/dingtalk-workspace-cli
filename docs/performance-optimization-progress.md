@@ -34,7 +34,9 @@
 
 本轮第二次尝试收齐 17 场景 × 改前/改后 × 30 次的 **1,020 个耗时样本**：opt-out 完整导出 p50 从约 1,105 ms 降到 1,008 ms（8.8%）；opt-out 单叶从 75.62 ms 到 73.86 ms（2.3%）；默认单叶从 488.61 ms 到 482.88 ms（1.2%）。普通命令和 help/version 暂无稳定改善，个别场景变慢，不能用组件 28% 代替默认体验收益。
 
-这些本机进程时间明显高于历史原生 CI 数量级。还出现两次 SIGKILL：第一次在初次 Schema 预热，第二次在新编译的内存采样器首次执行；没有退出错误文本。签名校验和随后直接 core/launcher 探测通过，固定路径的内存采样器探测也通过，但尚未确定被杀原因。**没有删除失败并标绿；整份配对报告保持 incomplete，内存仍缺测。** [失败与原始耗时样本](benchmarks/schema-cache/optimization-3dc56c48/native-paired-incomplete.json)。后续内存测量独立归档，不改写这次失败记录。
+这些本机进程时间明显高于历史原生 CI 数量级。还出现两次 SIGKILL：第一次在初次 Schema 预热，第二次在新编译的内存采样器首次执行；没有退出错误文本。签名校验和随后直接 core/launcher 探测通过，固定路径的内存采样器探测也通过，但尚未确定被杀原因。**没有删除失败并标绿；这份配对报告保持 incomplete，当时内存缺测。** [失败与原始耗时样本](benchmarks/schema-cache/optimization-3dc56c48/native-paired-incomplete.json)。后续内存测量独立归档，不改写这次失败记录。
+
+随后使用已经验证可执行的固定路径 C sampler，完成独立的 17 场景 × 改前/改后 × 30 次内存试验，1,020 个样本全部成功，候选包和输出绑定通过。[完整内存报告](benchmarks/schema-cache/optimization-3dc56c48/native-memory-paired.json)。默认 Schema peak RSS p50 为 40.85 → 40.59 MiB（下降 0.6%），config 为 49.84 → 49.40 MiB（下降 0.9%），dry-run 为 49.51 → 49.29 MiB（下降 0.4%）；leaf help 约 52.09 MiB，未改善。部分场景略有上升：例如 opt-out 全量导出 486.85 → 493.44 MiB（上升 1.35%）。不能用累计 B/op 减少替代整体 RSS 改善。
 
 ## 超过 Lark 的判定
 
@@ -46,7 +48,7 @@
 
 ## 验证与下一步
 
-- 已通过：Schema reader/fastpath/runtime 与 CLI 测试；corecmd 全包与 userdef 测试；Schema 合同门禁（31 产品、1,370 工具）；全量 Go suite；Lark 检查器反例测试。
-- 正在完成：独立内存测量、最终提交的两平台原生 CI。
+- 已通过：Schema reader/fastpath/runtime 与 CLI 测试；corecmd 全包与 userdef 测试；Schema 合同门禁（31 产品、1,370 工具）；全量 Go suite（145 个包有测试并通过）；独立 1,020 个内存样本；Lark 检查器反例测试。
+- 正在完成：实现提交 `85914e46` 的[两平台原生 CI](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34030893007)。
 - 仍未完成：默认入口超过 Lark、普通命令回退消除、public 对比、两平台三轮完整矩阵及发布验证。
 - 下一步按 profile 继续减少普通命令初始化与元数据分配。保持当前上报行为；若等待构成默认场景的下界，明确保留未通过指标，不改比较口径。
