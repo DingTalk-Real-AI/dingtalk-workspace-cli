@@ -38,6 +38,16 @@ const (
 	helpCommandName = "help"
 )
 
+// ValidationStage identifies a Cobra-owned validation failure. Business hooks
+// are not validation stages and do not invoke the validation error handler.
+type ValidationStage string
+
+const (
+	ValidationStageArgs          ValidationStage = "args"
+	ValidationStageRequiredFlags ValidationStage = "required_flags"
+	ValidationStageFlagGroups    ValidationStage = "flag_groups"
+)
+
 // FParseErrWhitelist configures Flag parse errors to be ignored
 type FParseErrWhitelist flag.ParseErrorsAllowlist
 
@@ -175,6 +185,8 @@ type Command struct {
 	// flagErrorFunc is func defined by user and it's called when the parsing of
 	// flags returns an error.
 	flagErrorFunc func(*Command, error) error
+	// validationErrorFunc adapts failures at native validation boundaries.
+	validationErrorFunc func(*Command, ValidationStage, error) error
 	// helpTemplate is help template defined by user.
 	helpTemplate *tmplFunc
 	// helpFunc is help func defined by user.
@@ -321,6 +333,33 @@ func (c *Command) SetUsageTemplate(s string) {
 		return
 	}
 	c.usageTemplate = tmpl(s)
+}
+
+// SetValidationErrorFunc installs a failure-only adapter for native Args,
+// required-flag and flag-group checks during execution. Descendants, including
+// lazily generated commands, inherit the nearest handler. Returning nil retains
+// the original error; a validation failure cannot enable business execution.
+func (c *Command) SetValidationErrorFunc(f func(*Command, ValidationStage, error) error) {
+	c.validationErrorFunc = f
+}
+
+// ValidationErrorFunc returns the nearest validation error handler, or an
+// identity handler when no command in the parent chain defines one.
+func (c *Command) ValidationErrorFunc() func(*Command, ValidationStage, error) error {
+	if c.validationErrorFunc != nil {
+		return c.validationErrorFunc
+	}
+	if c.HasParent() {
+		return c.parent.ValidationErrorFunc()
+	}
+	return func(_ *Command, _ ValidationStage, err error) error { return err }
+}
+
+func (c *Command) validationError(stage ValidationStage, err error) error {
+	if handled := c.ValidationErrorFunc()(c, stage, err); handled != nil {
+		return handled
+	}
+	return err
 }
 
 // SetFlagErrorFunc sets a function to generate an error when flag parsing
@@ -969,7 +1008,7 @@ func (c *Command) execute(a []string) (err error) {
 	}
 
 	if err := c.ValidateArgs(argWoFlags); err != nil {
-		return err
+		return c.validationError(ValidationStageArgs, err)
 	}
 
 	parents := make([]*Command, 0, 5)
@@ -1008,10 +1047,10 @@ func (c *Command) execute(a []string) (err error) {
 	}
 
 	if err := c.ValidateRequiredFlags(); err != nil {
-		return err
+		return c.validationError(ValidationStageRequiredFlags, err)
 	}
 	if err := c.ValidateFlagGroups(); err != nil {
-		return err
+		return c.validationError(ValidationStageFlagGroups, err)
 	}
 
 	if c.RunE != nil {

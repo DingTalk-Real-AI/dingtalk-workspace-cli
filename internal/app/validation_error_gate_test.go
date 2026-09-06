@@ -42,21 +42,14 @@ func requireFinalValidationError(t *testing.T, path string, err error) {
 
 func TestCrossPlatformCoverageTypedValidationErrorGateFinalCommandTree(t *testing.T) {
 	root := NewSchemaSourceRootCommand()
-	tooManyArgs := make([]string, 256)
 	nodes := 0
 	var walk func(*cobra.Command)
 	walk = func(cmd *cobra.Command) {
 		nodes++
 		path := cmd.CommandPath()
-		if cmd.Runnable() && cmd.PreRunE == nil {
-			t.Fatalf("%s lacks the typed required/group constraint boundary", path)
-		}
-		if cmd.Args != nil {
-			for _, args := range [][]string{nil, tooManyArgs} {
-				if err := cmd.Args(cmd, args); err != nil {
-					requireFinalValidationError(t, path+" Args", err)
-				}
-			}
+		for _, stage := range []cobra.ValidationStage{cobra.ValidationStageArgs, cobra.ValidationStageRequiredFlags, cobra.ValidationStageFlagGroups} {
+			err := cmd.ValidationErrorFunc()(cmd, stage, stderrors.New("synthetic native validation error"))
+			requireFinalValidationError(t, path+" "+string(stage), err)
 		}
 		flagErr := cmd.FlagErrorFunc()(cmd, stderrors.New("synthetic flag parse error"))
 		requireFinalValidationError(t, path+" FlagErrorFunc", flagErr)
@@ -70,6 +63,7 @@ func TestCrossPlatformCoverageTypedValidationErrorGateFinalCommandTree(t *testin
 
 func TestCrossPlatformCoverageTypedValidationErrorGateRepresentativeCommands(t *testing.T) {
 	for _, args := range [][]string{
+		{"completion", "bash", "unexpected"},
 		{"mcp", "published", "tools"},
 		{"skill", "install"},
 		{"skill", "get"},

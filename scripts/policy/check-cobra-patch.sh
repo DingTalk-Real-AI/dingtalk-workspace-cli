@@ -9,7 +9,7 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 cp -R "$ROOT/third_party/cobra/." "$tmp/"
 (
 	cd "$tmp"
-	patch -R -p1 < traverse-flag-error.patch
+	patch -R -p1 < command-validation.patch
 	shasum -a 256 -c UPSTREAM.sha256 >/dev/null
 )
 (

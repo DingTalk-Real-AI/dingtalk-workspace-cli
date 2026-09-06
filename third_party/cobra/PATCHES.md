@@ -12,7 +12,7 @@ The local replacement includes all root Go sources and tests, the complete
 documents. Website/assets and other non-package repository files are omitted.
 `UPSTREAM.sha256` records every included upstream file before patching.
 
-The production changes are recorded in `traverse-flag-error.patch`. When a
+The production changes are recorded in `command-validation.patch`. When a
 parent fails to parse flags, `Traverse` invokes that parsing command's effective
 `FlagErrorFunc` once. A non-nil handler result replaces the parser error; nil
 retains the original parser error and stops execution. Both cases return the
@@ -27,7 +27,18 @@ root/group silence combinations. Remaining arguments and the successful
 traversal path are unchanged. No DWS imports or classification policy are
 introduced into Cobra.
 
-User approved this bounded dependency change on 2026-09-06. It replaces the
+The traversal patch was approved on 2026-09-06. The subsequent review extends
+the patch for late-created commands with `ValidationStage` and
+`SetValidationErrorFunc` / `ValidationErrorFunc`. Native execution invokes the
+nearest handler only when Args, required flags or flag groups fail. A nil
+handler result preserves the original failure; without a handler all existing
+upstream behavior remains unchanged. Successful validation and business hooks
+do not call it. DWS installs its classifier from corecmd and removes early
+PreRun constraint checks; lazily generated commands inherit the same adapter.
+Public standalone ValidateArgs/ValidateRequiredFlags/ValidateFlagGroups and
+direct hook calls retain their upstream behavior outside Execute/ExecuteC.
+
+This replaces the
 earlier design constraint of keeping Cobra unchanged; native `Execute` /
 `ExecuteC`, parent local flags and traversal semantics remain supported.
 
@@ -48,9 +59,9 @@ assembly-determinism and Schema gates for affected pull requests, including
 Drafts, and changes on main. It supplements the existing admission checks
 without changing their rules.
 
-When upgrading Cobra, compare the new upstream traversal behavior, rerun both
+When upgrading Cobra, compare upstream traversal and native validation behavior, rerun both
 gates and the application suite, and refresh provenance explicitly. Remove the
-local replacement when upstream provides the required failure-stop semantics;
+local replacement when upstream provides the required failure-stop and inherited validation-adapter semantics;
 do not stack unrelated changes in this copy.
 
 Builds must retain the root module's replacement and this directory. An overlay

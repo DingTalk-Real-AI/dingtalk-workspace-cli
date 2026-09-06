@@ -82,14 +82,9 @@ func PrepareCommandTree(root *cobra.Command) error {
 	}
 	for _, hook := range hooks {
 		cmd := hook.cmd
-		// Only flag handlers inherit from parents. Read node-local hooks here
-		// and capture their function values, rather than retaining a full
-		// snapshot (including unrelated hooks) in every adapter closure.
-		if positional := cmd.Args; positional != nil {
-			cmd.Args = func(current *cobra.Command, args []string) error {
-				return apperrors.NormalizeValidation(positional(current, args), apperrors.WithReason("invalid_positionals"))
-			}
-		}
+		// Native Cobra validation failures use one shared adapter. Inheritance
+		// also covers help/completion nodes created later by ExecuteC.
+		cmd.SetValidationErrorFunc(normalizeCobraValidationError)
 		flagError := hook.flagError
 		cmd.SetFlagErrorFunc(func(current *cobra.Command, parserErr error) error {
 			if apperrors.PreserveClassification(parserErr) {
@@ -102,22 +97,6 @@ func PrepareCommandTree(root *cobra.Command) error {
 			// NormalizeValidation also preserves classifications returned by the handler.
 			return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag"))
 		})
-		preRunE, preRun := cmd.PreRunE, cmd.PreRun
-		cmd.PreRun = nil
-		if preRunE == nil && preRun == nil {
-			cmd.PreRunE = validateCobraFlagConstraints
-		} else {
-			cmd.PreRunE = func(current *cobra.Command, args []string) error {
-				if preRunE != nil {
-					if err := preRunE(current, args); err != nil {
-						return err
-					}
-				} else {
-					preRun(current, args)
-				}
-				return validateCobraFlagConstraints(current, args)
-			}
-		}
 		if cmd.Annotations == nil {
 			cmd.Annotations = make(map[string]string)
 		}
@@ -126,14 +105,27 @@ func PrepareCommandTree(root *cobra.Command) error {
 	return nil
 }
 
-// Cobra runs its own required/group checks again after PreRun. Keep their
-// annotations intact for help, completion and Schema. This early check exists
-// only to type errors at their source, after business PreRun alias resolution.
-func validateCobraFlagConstraints(current *cobra.Command, _ []string) error {
-	if err := current.ValidateRequiredFlags(); err != nil {
-		return normalizeRequiredFlagError(current, err)
+// Cobra invokes this only at native validation failures, retaining its original
+// lifecycle order and checking required/groups once after business PreRun hooks.
+// Args and business hooks themselves are left intact during preparation.
+func normalizeCobraValidationError(cmd *cobra.Command, stage cobra.ValidationStage, err error) error {
+	if err == nil {
+		return nil
 	}
-	return apperrors.NormalizeValidation(current.ValidateFlagGroups(), apperrors.WithReason("invalid_flag_group"))
+	switch stage {
+	case cobra.ValidationStageArgs:
+		return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_positionals"))
+	case cobra.ValidationStageRequiredFlags:
+		if apperrors.PreserveClassification(err) {
+			return err
+		}
+		return normalizeRequiredFlagError(cmd, err)
+	case cobra.ValidationStageFlagGroups:
+		return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag_group"))
+	default:
+		// A future dependency stage needs an explicit framework policy.
+		return err
+	}
 }
 
 func normalizeRequiredFlagError(cmd *cobra.Command, err error) error {

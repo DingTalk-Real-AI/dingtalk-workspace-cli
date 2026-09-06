@@ -891,6 +891,15 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 		previousHelp(cmd, args)
 	})
 
+	// All prepared nodes share the framework's native validation policy. Use a
+	// single cleanup decorator across the tree; late default commands inherit it.
+	previousValidationError := root.ValidationErrorFunc()
+	validationError := func(current *cobra.Command, stage cobra.ValidationStage, err error) error {
+		// Classify before clearing flags needed for required-flag diagnostics.
+		defer cleanup()
+		return previousValidationError(current, stage, err)
+	}
+
 	// Install leaf handlers before the root handler so inherited handlers are
 	// captured without recursively wrapping an already wrapped parent.
 	var visit func(*cobra.Command)
@@ -899,15 +908,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 			visit(child)
 		}
 
-		if previousArgs := cmd.Args; previousArgs != nil {
-			cmd.Args = func(current *cobra.Command, args []string) error {
-				err := previousArgs(current, args)
-				if err != nil {
-					cleanup()
-				}
-				return err
-			}
-		}
+		cmd.SetValidationErrorFunc(validationError)
 
 		previousFlagError := cmd.FlagErrorFunc()
 		cmd.SetFlagErrorFunc(func(current *cobra.Command, err error) error {

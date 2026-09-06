@@ -37,11 +37,12 @@ Cobra 的解析、位置参数及原生 required/group 通过框架适配层接�
 
 ### 明确的取舍
 
-使用 Cobra 公共 API 时，required/group 错误不能通过 `FlagErrorFunc` 拦截。
-本方案仍在业务 `PreRunE` 成功后提前调用 Cobra 的约束检查并转换错误。成功路径上，
-Cobra 随后会原生复查一次。消除的是 local/final 的额外重复，不承诺原生检查也只执行一次。
+上游 Cobra 的 `FlagErrorFunc` 不覆盖 Args/required/group；预装 per-node 包装也无法
+覆盖 ExecuteC 延迟创建的 help/completion。当前本地补丁提供继承式 `ValidationErrorFunc`，
+在这三个原生校验失败点调用 corecmd 的统一分类器。保留原生顺序，required/group 只检查一次，
+业务钩子错误不进入该回调。相比原先仅 Traverse 的补丁，依赖维护面有所扩大，需专项全量验证。
 
-不删除 required/group annotations 来跳过原生复查；它们同时服务 Help、补全和 Schema。
+不删除 required/group annotations；它们同时服务 Help、补全和 Schema。
 `runDeclaredPreflight` 的声明式 required/enum/constraints 继续存在，以保护直接进入
 受管 `RunE` 的调用路径，不能因为整树适配而移除。
 
@@ -177,7 +178,7 @@ Tier2 的 deferred confirmation 和 caller 管理暂留既有兼容接缝，不�
 
 1. 接收已经完成挂载的 Cobra 根命令；独立叶命令也是一棵合法树。
 2. 第一遍检查整树是否包含已准备节点，并快照有继承语义的有效 flag handler。发现非法状态先返回构造错误，不修改部分节点。
-3. 第二遍读取并包装各节点自己的 `Args`、`PreRunE` / `PreRun`；这些钩子不继承父节点，因此无需保存在整树快照中。闭包只捕获自身需要的函数；不在安装过程中继续读取已经包装过的父级 flag handler。
+3. 第二遍安装共享 `ValidationErrorFunc` 和每节点的 flag handler 适配器；保持 `Args`、`PreRunE` / `PreRun` 原样，不额外提前检查原生约束。延迟生成节点继承已准备祖先的分类回调。
 4. 成功返回 nil；不返回执行句柄，不使用进程级强引用 map 留住整棵命令树。
 5. 对已准备树再次调用准备入口应明确报构造错误，禁止静默再包装。重复装配与重复执行
    是两件事，后者的状态约定见 §5.3。
@@ -246,17 +247,20 @@ app 的参数保护装饰器仍由 app 安装，corecmd 不读取参数别名目
 如果还需要根提示，应通过显式装配组合实现；不由 corecmd 在执行阶段偷偷补链。
 这与当前分支“local 再调用 parent”的行为不同，需要更新相应用例并检查实际用户提示。
 
-调用状态清理装饰器包在最终 flag adapter 外层，保证原始权威错误的提前返回也执行清理。
+调用状态清理装饰器覆盖 flag adapter 与原生校验回调，保证原始权威错误的提前返回也执行清理。
+原生校验的清理回调由整树共享，先分类以保留 required flag 诊断，再清理状态；后建节点继承它。
 其职责是清理状态并透传结果，不再寻找父级处理器。
 
 手动调用 `ParseFlags` 的兼容代理必须把解析失败交给目标命令已安装的 `FlagErrorFunc`。
 `ParseFlags` 本身不会调用该处理器；仅给错误增加一层 `fmt.Errorf` 会漏过统一边界。
 该修复不把代理的直接 `RunE` 委派升级成完整的目标命令生命周期保证。
 
-**已确认的依赖补丁：** Cobra v1.10.2 的 `TraverseChildren` 父级解析不调用 `FlagErrorFunc`，
+**当前依赖补丁：** Cobra v1.10.2 的 `TraverseChildren` 父级解析不调用 `FlagErrorFunc`，
 且公共命令钩子无法在该失败点插入适配。保留完整遍历语义和原生执行入口，采用
-`replace github.com/spf13/cobra => ./third_party/cobra`，仅在父级 `ParseFlags` 失败时
+`replace github.com/spf13/cobra => ./third_party/cobra`，在父级 `ParseFlags` 失败时
 调用当前解析节点的有效 handler；handler 返回 nil 时保留原解析错误并停止执行。
+失败时返回解析节点并保留 root/节点静默策略。另在原生 Args/required/group 失败点
+提供带阶段标识的继承回调；默认原样返回，handler 返回 nil 仍保留原错误并停止执行。
 成功遍历、父级局部 flag、命令选择及业务钩子顺序均保持原语义。
 
 依赖内不导入 DWS 包、不承担错误分类；分类仍由 corecmd 安装的 handler 拥有。
@@ -269,8 +273,7 @@ app 的参数保护装饰器仍由 app 安装，corecmd 不读取参数别名目
 ```text
 flag parse → Args → PersistentPreRunE
 → 业务 PreRunE / PreRun
-→ 适配层 Cobra required/group 检查
-→ Cobra 原生 required/group 复查
+→ Cobra 原生 required/group 检查（失败时调用统一分类回调）
 → 受管 RunE 的声明式 preflight
 → 既有确认与业务执行流水线
 ```
@@ -331,8 +334,9 @@ CLI 语义时必须走执行入口，不能借本方案宣称直接 `RunE` 已�
   其错误；Tier1 / Tier2 分别验证实际挂载后的 RunE，避免只证明一个未接入的工具函数。
 - legacy 与 unified 各选择代表命令，分别校验现有错误字段及 exit 3，不强行统一 JSON 形状。
 - 补全和 help 的可见性、required/group 标记、Schema 双向绑定保持不变。
-- Cobra 自动生成的 help/completion 命令单独验证；整树准备的覆盖声明以实际准备时的树为准，
-  不将后续自动生成节点误计入“已遍历”的证据。
+- Cobra 自动生成的 help/completion 单独通过真实 ExecuteC 验证：默认 completion 的位置参数、
+  继承的 required/group、隐藏 __complete 及别名的缺参、定制 help 的 Args 错误均为 typed/3；
+  合法补全和帮助仍成功。静态节点数量只计算准备时的树，动态节点继承分类回调。
 
 全树结构扫描保留，用于发现漏接和覆盖范围变化；不对所有业务钩子盲目执行以避免真实副作用。
 测试 edition 和 plugin 使用本地 fixture 与 fake transport，不需要真实鉴权和线上服务。
@@ -410,7 +414,7 @@ A 可独立保留。B 的共享校验边界若回退，必须同时恢复 Tier1 
 
 - Traverse 解析失败返回实际解析节点，供 telemetry 和帮助提示使用；ExecuteC 的此失败分支同时遵守 root 与解析节点的 SilenceErrors。
 - required flag 统一文案为 `missing required flag(s): --name`，与 Cobra 原版存在可见差异；changelog 明确记录，原始错误保留为 cause。
-- 准备阶段的 PreRunE 在业务钩子成功后执行 typed required/group 检查，这是阻止 Cobra 后续 untyped 错误逃逸的必要边界。不可用原生重复检查替代，也不可删除约束注解。
+- S3 原先锁定 PreRunE 提前检查；延迟节点复审后由原生 ValidationErrorFunc 替代。新版门禁锁定原生失败分类恰好一次和业务不执行，业务 PreRun 保持原样，约束注解继续保留。
 - NormalizeValidation 统一保护 FlagErrorFunc handler 返回的已有分类，不增加重复 PreserveClassification 调用。
 - 手动 Cobra 解析清单由 `check-manual-cobra-parsing.sh` 门禁约束，目前仅允许已审核的 wiki proxy 表达式。该门禁使用仓库可移植搜索工具，覆盖常规单行调用，不宣称替代 AST/type 分析。
 - 测试执行辅助入口对 nil command 明确报错，含 context 变体。

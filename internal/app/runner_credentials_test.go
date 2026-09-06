@@ -349,3 +349,39 @@ func newCredentialCaptureRoot(ctx context.Context, extra ...*cobra.Command) (*co
 	root.SetErr(io.Discard)
 	return root, observed
 }
+
+func TestCrossPlatformCoverageLazyValidationCleansInvocationFlags(t *testing.T) {
+	t.Setenv(authpkg.EnvClientID, "")
+	t.Setenv(authpkg.EnvClientSecret, "")
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Cleanup(CloseFileLogger)
+	t.Cleanup(func() { authpkg.SetClientCredentials("", "") })
+	root, observed := newCredentialCaptureRoot(t.Context())
+	// Emulate already parsed invocation flags before a lazily created command's
+	// Args failure. That command did not exist when exit handlers were installed.
+	if err := root.PersistentFlags().Set("client-id", "pending-client"); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.PersistentFlags().Set("client-secret", "pending-secret"); err != nil {
+		t.Fatal(err)
+	}
+	root.SetArgs([]string{"__complete"})
+	cmd, err := root.ExecuteC()
+	if cmd == nil || cmd.Name() != "__complete" {
+		t.Fatalf("selected=%v err=%v", cmd, err)
+	}
+	requireFinalValidationError(t, "lazy completion", err)
+	for _, name := range []string{"client-id", "client-secret"} {
+		flag := root.PersistentFlags().Lookup(name)
+		if flag.Changed || flag.Value.String() != "" {
+			t.Fatalf("lazy validation did not clear %s", name)
+		}
+	}
+	root.SetArgs([]string{"capture-credentials"})
+	if _, err := root.ExecuteC(); err != nil {
+		t.Fatal(err)
+	}
+	if observed.clientID != "" || observed.clientSecret != "" {
+		t.Fatal("lazy validation leaked credentials into next invocation")
+	}
+}

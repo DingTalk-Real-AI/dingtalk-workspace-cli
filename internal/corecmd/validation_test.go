@@ -522,8 +522,8 @@ func prepareValidationTree(t *testing.T, root *cobra.Command) {
 	}
 }
 
-// Cobra's native checks return untyped errors. The prepared PreRunE is the
-// boundary that must reject constraints before those native checks and Run/RunE.
+// Cobra checks each native constraint after business hooks; the shared error
+// handler types the failure before Run/RunE without an early duplicate check.
 func TestCrossPlatformCoveragePreparedFlagConstraintBoundary(t *testing.T) {
 	for _, hook := range []string{"none", "PreRun", "PreRunE"} {
 		for _, run := range []string{"Run", "RunE"} {
@@ -562,6 +562,12 @@ func TestCrossPlatformCoveragePreparedFlagConstraintBoundary(t *testing.T) {
 						t.Fatalf("native error must be untyped: %v", native)
 					}
 					prepareValidationTree(t, root)
+					adapterCalls := 0
+					adapter := leaf.ValidationErrorFunc()
+					leaf.SetValidationErrorFunc(func(cmd *cobra.Command, stage cobra.ValidationStage, err error) error {
+						adapterCalls++
+						return adapter(cmd, stage, err)
+					})
 					root.SetArgs([]string{"leaf"})
 					selected, err := root.ExecuteC()
 					requireValidationError(t, err, reason)
@@ -579,8 +585,8 @@ func TestCrossPlatformCoveragePreparedFlagConstraintBoundary(t *testing.T) {
 					if hook == "none" {
 						wantHooks = 0
 					}
-					if hooks != wantHooks || runs != 0 {
-						t.Fatalf("hooks=%d want=%d runs=%d", hooks, wantHooks, runs)
+					if hooks != wantHooks || runs != 0 || adapterCalls != 1 {
+						t.Fatalf("hooks=%d want=%d runs=%d adapters=%d", hooks, wantHooks, runs, adapterCalls)
 					}
 					if leaf.Annotations == nil || leaf.Flags().Lookup("name").Annotations == nil {
 						t.Fatal("constraint annotations lost")
@@ -609,5 +615,32 @@ func TestCrossPlatformCoverageExecuteForTestNil(t *testing.T) {
 				t.Fatalf("result = %v, %v", cmd, err)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageNativeValidationAdapter(t *testing.T) {
+	cmd := &cobra.Command{Use: "root"}
+	cmd.Flags().String("name", "", "")
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		t.Fatal(err)
+	}
+	prepareValidationTree(t, cmd)
+	if cmd.PreRunE != nil || cmd.PreRun != nil || cmd.Args != nil {
+		t.Fatal("preparation rewrote native validation/business hooks")
+	}
+	for _, stage := range []cobra.ValidationStage{cobra.ValidationStageArgs, cobra.ValidationStageRequiredFlags, cobra.ValidationStageFlagGroups} {
+		for _, failure := range []error{apperrors.NewAPI("api"), &validationExitCoderError{}, context.Canceled, context.DeadlineExceeded} {
+			wrapped := fmt.Errorf("wrapped: %w", failure)
+			if got := cmd.ValidationErrorFunc()(cmd, stage, wrapped); got != wrapped {
+				t.Fatalf("%s changed classified error: %v", stage, got)
+			}
+		}
+		if got := cmd.ValidationErrorFunc()(cmd, stage, nil); got != nil {
+			t.Fatalf("%s converted nil: %v", stage, got)
+		}
+	}
+	raw := stderrors.New("future stage")
+	if got := cmd.ValidationErrorFunc()(cmd, cobra.ValidationStage("future"), raw); got != raw {
+		t.Fatalf("unknown stage classified: %v", got)
 	}
 }
