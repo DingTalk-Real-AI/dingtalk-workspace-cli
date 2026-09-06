@@ -816,6 +816,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	pagesFetched := 0
 	complete := false
 	hasMore := false
+	paginationKnown := true
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
 	var nextPage map[string]any
@@ -848,6 +849,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 		page := chatmsg.Pagination(data)
 		pageHasMore, known := page["hasMore"].(bool)
 		if !known {
+			paginationKnown = false
 			failures = append(failures, map[string]any{
 				"page": pagesFetched, "stage": "pagination",
 				"error": "单聊消息下层未返回可靠的 hasMore，无法证明结果完整",
@@ -901,9 +903,8 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	decryptLedger := decryptMessageItemsIfRequested(rt, allItems)
 	messages := projectMessageMapsWithReactions(allItems, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(messages)
-	applyMessageDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
-	payload["paginationKnown"] = true
+	payload["paginationKnown"] = paginationKnown
 	payload["complete"] = complete && len(failures) == 0
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason
@@ -912,6 +913,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
 	payload["partial"] = len(failures) > 0 && len(messages) > 0
+	applyMessageDecryptLedger(payload, decryptLedger)
 	if hasMore && nextPage != nil {
 		payload["nextPage"] = nextPage
 	}
