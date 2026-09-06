@@ -1,0 +1,9 @@
+default entry: 30/240 measured processes
+default entry: 60/240 measured processes
+default entry: 90/240 measured processes
+default entry: 120/240 measured processes
+default entry: 150/240 measured processes
+default entry: 180/240 measured processes
+default entry: 210/240 measured processes
+default entry: 240/240 measured processes
+{"report": "/private/tmp/dws-help-review-default-entry.json", "gates": {"schema_user_cpu_reduction_at_least_80_percent": true, "schema_peak_rss_at_most_100_mib": true, "help_package_wall_p50_overhead_at_most_5_percent": true, "help_pre_pr_wall_p50_regression_at_most_5_percent": true, "help_package_wall_p95_overhead_at_most_5_percent": true, "help_pre_pr_wall_p95_regression_at_most_5_percent": true, "version_package_wall_p50_overhead_at_most_5_percent": true, "version_pre_pr_wall_p50_regression_at_most_5_percent": true, "version_package_wall_p95_overhead_at_most_5_percent": true, "version_pre_pr_wall_p95_regression_at_most_5_percent": true}}

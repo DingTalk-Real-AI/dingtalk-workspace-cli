@@ -24,6 +24,12 @@ def sha256(path):
     return value.hexdigest()
 
 
+def failure_output(data):
+    """Keep bounded failure bytes plus the digest of the complete stream."""
+    limit = 1024 * 1024
+    return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+            "base64": base64.b64encode(data[:limit]).decode(), "truncated": len(data) > limit}
+
 
 def seal_root_help(core, help_generator, core_digest, commit, output):
     help_proof = {"passed": False, "release_eligible": False, "core_sha256": core_digest,
@@ -37,16 +43,24 @@ def seal_root_help(core, help_generator, core_digest, commit, output):
             generated = subprocess.run([str(help_generator), "-commit", commit, "-core-sha256", core_digest],
                                        env=help_env, cwd=home, capture_output=True, timeout=30, check=True)
             if generated.stderr:
+                help_proof["failed_process"] = {"timed_out": False, "returncode": generated.returncode,
+                                                "stdout": failure_output(generated.stdout),
+                                                "stderr": failure_output(generated.stderr)}
                 raise RuntimeError("help generator emitted diagnostics")
             projection = json.loads(generated.stdout)
             for locale in ("en", "zh"):
                 result = subprocess.run([str(core), "--help"], env={**help_env, "LANG": locale},
-                                        cwd=home, capture_output=True, timeout=30, check=True)
+                                        cwd=home, capture_output=True, timeout=30)
                 expected = base64.b64decode(projection["References"][locale], validate=True)
-                if result.stderr or result.stdout != expected:
+                equal = result.returncode == 0 and not result.stderr and result.stdout == expected
+                detail = help_proof["locales"][locale] = {
+                    "stdout_sha256": hashlib.sha256(expected).hexdigest(), "stdout_bytes": len(expected),
+                    "actual_stdout_sha256": hashlib.sha256(result.stdout).hexdigest(),
+                    "returncode": result.returncode, "equal": bool(equal)}
+                if not equal:
+                    detail.update(expected_stdout=failure_output(expected),
+                                  actual_stdout=failure_output(result.stdout), stderr=failure_output(result.stderr))
                     raise RuntimeError(f"{locale} help projection differs from finalized core")
-                help_proof["locales"][locale] = {"stdout_sha256": hashlib.sha256(expected).hexdigest(),
-                                                "stdout_bytes": len(expected), "equal": True}
             if sha256(core) != core_digest:
                 raise RuntimeError("core changed during help projection proof")
             help_snapshot = projection["Snapshot"]
@@ -55,6 +69,12 @@ def seal_root_help(core, help_generator, core_digest, commit, output):
             help_proof.update(passed=True, snapshot_sha256=hashlib.sha256(help_snapshot.encode()).hexdigest())
     except Exception as error:
         help_proof["error"] = str(error)
+        if isinstance(error, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+            help_proof["failed_process"] = {
+                "timed_out": isinstance(error, subprocess.TimeoutExpired),
+                "returncode": getattr(error, "returncode", None),
+                "stdout": failure_output(error.stdout or b""),
+                "stderr": failure_output(error.stderr or b"")}
         raise
     finally:
         (output / "root-help-proof.json").write_text(json.dumps(help_proof, indent=2) + "\n")

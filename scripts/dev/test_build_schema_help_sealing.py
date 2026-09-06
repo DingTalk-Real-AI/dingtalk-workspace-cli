@@ -49,6 +49,28 @@ class HelpSealingTests(unittest.TestCase):
                 proof = json.loads((self.output / 'root-help-proof.json').read_text())
                 self.assertFalse(proof['passed'])
                 self.assertIn('error', proof)
+                detail = proof['locales']['en']
+                self.assertFalse(detail['equal'])
+                self.assertEqual(base64.b64decode(detail['expected_stdout']['base64']), b'en help\n')
+                if 'different' in action:
+                    self.assertEqual(base64.b64decode(detail['actual_stdout']['base64']), b'different help\n')
+                elif 'warning' in action:
+                    self.assertEqual(base64.b64decode(detail['stderr']['base64']), b'warning\n')
+                else:
+                    self.assertEqual(detail['returncode'], 7)
+
+    def test_generator_failure_retains_output_before_proof_directory_cleanup(self):
+        for code in (0, 6):
+            with self.subTest(code=code):
+                self.generator.write_text('#!/bin/sh\nprintf "partial projection"\nprintf "generator failure" >&2\nexit ' + str(code) + '\n')
+                with self.assertRaises(Exception):
+                    self.seal()
+                proof = json.loads((self.output / 'root-help-proof.json').read_text())
+                self.assertFalse(proof['passed'])
+                failed = proof['failed_process']
+                self.assertEqual(failed['returncode'], code)
+                self.assertEqual(base64.b64decode(failed['stdout']['base64']), b'partial projection')
+                self.assertEqual(base64.b64decode(failed['stderr']['base64']), b'generator failure')
 
     def test_core_changed_during_verification_cannot_seal(self):
         self.write_core('printf "%s help\\n" "$LANG"\necho "# mutation" >> "$0"')

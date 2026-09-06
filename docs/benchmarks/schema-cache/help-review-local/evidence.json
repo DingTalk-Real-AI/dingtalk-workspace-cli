@@ -1,0 +1,44 @@
+{
+  "scope": "Local macOS development candidate from f2a8b9d7 with the same root-help correction now in c0f3aaca and local diagnostic changes; not an exact c0f3aaca or final release build",
+  "files": {
+    "source.json": {
+      "sha256": "c4b8e1fffed9a98e926d8c40841821b88189d6292b8b2661f844f43631df14f2",
+      "bytes": 1824
+    },
+    "root-help-proof.json": {
+      "sha256": "53e861b1b589baa495f993ea736ff9f5dc5987b59ae651959fdd7ab32ec5e181",
+      "bytes": 954
+    },
+    "candidate-build.json": {
+      "sha256": "c5cbd66c24b311b3a4deb5981a00665858c81c15e66621c20ed16f74e35fb880",
+      "bytes": 13779
+    },
+    "default-entry-report.json": {
+      "sha256": "cad9e7927b020c25de41cea178d81bcda3bc54da677ce04b054fe1b963eba405",
+      "bytes": 48834
+    },
+    "default-entry.txt": {
+      "sha256": "df5cdc71913d7523a7c8ac94a3a22631042c9e48a211a5e26e3ccde13505a9a3",
+      "bytes": 982
+    },
+    "root-help-race.txt": {
+      "sha256": "1febae18368d9937c0597e632dce0ebdd3f2b9d56dfab4434b71edafefb044ca",
+      "bytes": 77
+    },
+    "sealing-tests.txt": {
+      "sha256": "e9515a754be638ce7528b4f9cadd5dc0017ba38b85ba826c0647ee05bfaecf40",
+      "bytes": 103
+    },
+    "head-reproduction.txt": {
+      "sha256": "861b70afdd7ae24456e538b06fed066f3db14628b7c13995a8fea62371cfc5fa",
+      "bytes": 28879
+    },
+    "fixed-projection.txt": {
+      "sha256": "8b55469201aa9c822dc7ef51a0f43b766904c2f0bd458c56db5e8f8ae2005402",
+      "bytes": 76
+    }
+  },
+  "passed_existing_default_entry_gates": true,
+  "release_eligible": false,
+  "current_head_native_performance_proven": false
+}
