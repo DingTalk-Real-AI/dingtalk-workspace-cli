@@ -6,9 +6,10 @@ cd "$ROOT"
 
 GO_BIN="${GO:-go}"
 
+"$ROOT/scripts/policy/check-manual-cobra-parsing.sh"
 "$ROOT/scripts/policy/check-cobra-patch.sh"
 
-pattern='^TestCrossPlatformCoverage(NormalizeValidation|PreserveClassification|WithValidation|PrepareCommandTree|ValidationTraversal|ValidationPipelineTierParity|ValidationAdapters|FrameworkValidationHooksAreTyped|DeclareLeafMetadataValidateWithoutConfirmRunsInner|OAListByAdminValidationErrorsAreTyped|ProxyParseValidationBoundary|NewPreParseValidationErrorPreservesAuthoritativeErrors|TypedValidationErrorGate(FinalCommandTree|RepresentativeCommands|Extensions))$'
+pattern='^TestCrossPlatformCoverage(NormalizeValidation|PreserveClassification|WithValidation|PreparedFlagConstraintBoundary|ExecuteForTestNil|PrepareCommandTree|ValidationTraversal|ValidationPipelineTierParity|ValidationAdapters|FrameworkValidationHooksAreTyped|DeclareLeafMetadataValidateWithoutConfirmRunsInner|OAListByAdminValidationErrorsAreTyped|ProxyParseValidationBoundary|NewPreParseValidationErrorPreservesAuthoritativeErrors|TypedValidationErrorGate(FinalCommandTree|RepresentativeCommands|Extensions))$'
 if ! output=$("$GO_BIN" test -json -count=1 \
 	./internal/errors ./internal/corecmd ./internal/helpers ./internal/app \
 	-run "$pattern" 2>&1); then
@@ -34,6 +35,8 @@ require_test() {
 require_test internal/errors TestCrossPlatformCoverageNormalizeValidation
 require_test internal/errors TestCrossPlatformCoveragePreserveClassification
 require_test internal/corecmd TestCrossPlatformCoverageWithValidation
+require_test internal/corecmd TestCrossPlatformCoveragePreparedFlagConstraintBoundary
+require_test internal/corecmd TestCrossPlatformCoverageExecuteForTestNil
 require_test internal/corecmd TestCrossPlatformCoveragePrepareCommandTree
 require_test internal/corecmd TestCrossPlatformCoverageValidationTraversal
 require_test internal/helpers TestCrossPlatformCoverageValidationPipelineTierParity

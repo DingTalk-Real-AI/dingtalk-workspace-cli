@@ -102,7 +102,10 @@ func TestCrossPlatformCoverageValidationTraversal(t *testing.T) {
 					})
 					prepareValidationTree(t, root)
 					root.SetArgs(args)
-					_, err := root.ExecuteC()
+					selected, err := root.ExecuteC()
+					if selected != parser {
+						t.Fatalf("returned command = %v, want parsing node %v", selected, parser)
+					}
 					if want != nil {
 						if err != want {
 							t.Fatalf("error identity = %v, want %v", err, want)

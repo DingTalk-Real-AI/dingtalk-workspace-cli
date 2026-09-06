@@ -15,6 +15,7 @@ package corecmd
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -32,7 +33,7 @@ func ExecuteForTest(cmd *cobra.Command) error {
 // Preparation-contract tests should call PrepareCommandTree directly instead.
 func ExecuteCForTest(cmd *cobra.Command) (*cobra.Command, error) {
 	if cmd == nil {
-		return nil, PrepareCommandTree(nil)
+		return nil, fmt.Errorf("corecmd.ExecuteCForTest: cmd is nil")
 	}
 	root := cmd.Root()
 	if root.Annotations[preparedCommandAnnotation] == "" {
@@ -51,6 +52,9 @@ func ExecuteContextForTest(cmd *cobra.Command, ctx context.Context) error {
 
 // ExecuteContextCForTest preserves ExecuteContextC context assignment semantics.
 func ExecuteContextCForTest(cmd *cobra.Command, ctx context.Context) (*cobra.Command, error) {
+	if cmd == nil {
+		return nil, fmt.Errorf("corecmd.ExecuteContextCForTest: cmd is nil")
+	}
 	cmd.SetContext(ctx)
 	return ExecuteCForTest(cmd)
 }

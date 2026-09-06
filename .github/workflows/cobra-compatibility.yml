@@ -12,6 +12,7 @@ on:
       - 'internal/helpers/**'
       - 'internal/app/**'
       - 'scripts/policy/check-cobra-patch.sh'
+      - 'scripts/policy/check-manual-cobra-parsing.sh'
       - 'scripts/policy/check-typed-validation-errors.sh'
   push:
     branches: [main]
@@ -25,6 +26,7 @@ on:
       - 'internal/helpers/**'
       - 'internal/app/**'
       - 'scripts/policy/check-cobra-patch.sh'
+      - 'scripts/policy/check-manual-cobra-parsing.sh'
       - 'scripts/policy/check-typed-validation-errors.sh'
 
 permissions:

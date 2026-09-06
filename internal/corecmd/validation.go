@@ -99,6 +99,7 @@ func PrepareCommandTree(root *cobra.Command) error {
 			if err == nil {
 				err = parserErr
 			}
+			// NormalizeValidation also preserves classifications returned by the handler.
 			return apperrors.NormalizeValidation(err, apperrors.WithReason("invalid_flag"))
 		})
 		preRunE, preRun := cmd.PreRunE, cmd.PreRun

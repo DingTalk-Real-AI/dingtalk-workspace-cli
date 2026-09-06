@@ -853,9 +853,9 @@ func (c *Command) Traverse(args []string) (*Command, []string, error) {
 
 		if err := c.ParseFlags(flags); err != nil {
 			if handled := c.FlagErrorFunc()(c, err); handled != nil {
-				return nil, args, handled
+				return c, args, handled
 			}
-			return nil, args, err
+			return c, args, err
 		}
 		return cmd.Traverse(args[i+1:])
 	}
@@ -1127,10 +1127,11 @@ func (c *Command) ExecuteC() (cmd *Command, err error) {
 	}
 	if err != nil {
 		// If found parse to a subcommand and then failed, talk about the subcommand
+		silenceErrors := c.SilenceErrors
 		if cmd != nil {
 			c = cmd
 		}
-		if !c.SilenceErrors {
+		if !c.SilenceErrors && !silenceErrors {
 			c.PrintErrln(c.ErrPrefix(), err.Error())
 			c.PrintErrf("Run '%v --help' for usage.\n", c.CommandPath())
 		}

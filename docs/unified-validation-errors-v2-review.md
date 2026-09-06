@@ -17,7 +17,7 @@ Cobra 的 [Traverse 实现](https://github.com/spf13/cobra/blob/v1.10.2/command.
 
 保持无独立执行句柄、保留遍历语义、保持 Cobra 不变，这三个要求在当前公共 API 下不能同时兑现。用户于 2026-09-06 明确确认最小依赖补丁，调整“不修改 Cobra”的约束；执行入口和遍历支持范围保持原方案。
 
-实际补丁限于 `Traverse` 的 `ParseFlags` 失败分支，生产源码增加 3 行。`third_party/cobra` 用 Go module replace 接入，保留全部上游包与测试、许可证、原始校验和以及可逆补丁。依赖门禁反向应用补丁后检查上游文件原始哈希，再运行 Cobra 与 doc 全量测试，均已通过。DWS 回归覆盖多层父级、局部/持久 flag、未知 flag/值错误、最近 handler 恰好一次、nil fallback、API/ExitCoder/取消/超时身份；成功路径验证 alias 命令选择、flag 值和钩子顺序。依赖内部没有引入 DWS 分类策略或第二执行器。
+补丁覆盖 `Traverse` 的 `ParseFlags` 失败分支及 `ExecuteC` 对应报错分支：调用 handler、返回解析失败节点，并保留根命令静默策略。`third_party/cobra` 用 Go module replace 接入，保留全部上游包与测试、许可证、原始校验和以及可逆补丁。依赖门禁反向应用补丁后检查上游文件原始哈希，再运行 Cobra 与 doc 全量测试，均已通过。DWS 回归覆盖多层父级、局部/持久 flag、未知 flag/值错误、最近 handler 恰好一次、nil fallback、API/ExitCoder/取消/超时身份；成功路径验证 alias 命令选择、flag 值和钩子顺序。依赖内部没有引入 DWS 分类策略或第二执行器。
 
 ## 逐项核对
 
@@ -36,7 +36,7 @@ Cobra 的 [Traverse 实现](https://github.com/spf13/cobra/blob/v1.10.2/command.
 | 性能在可比条件下确认 | 固定编译产物、同一时段交替采样，见下表 | 原 20.5% 跨时段差异未复现；新增分配已显著收敛 |
 | CI | 新增专项 CI 对 PR head 的依赖、框架、生成与 Schema 检查全部通过；既有 AI Behavior 因 Draft 拒绝准入，Draft Fast Gate 在 merge 父节点与事件 base 不一致时失败 | 本轮代码验证完成；仓库合并准入未通过，保持 Draft |
 
-## 本轮补验状态
+## 前轮补验状态（S1–S6 跟进前）
 
 - `DWS_PACKAGE_VERSION=0.0.0-test go test -p 2 ./... -timeout=20m` 退出 0：app 441.286 秒、helpers 121.404 秒、test/scripts 421.270 秒。随后新增的 parser cause 身份用例随最终专项门禁复跑通过；生产代码未再改动。
 - `make build` 通过。最终二进制在隔离配置下，wiki 代理、audit、OA 的参数错误返回 stderr legacy validation/3，sheet revision-get 返回 stdout unified validation/3；实际退出码均为 3，另一输出流为空（wiki stderr 保留重定向提示）。
@@ -44,7 +44,7 @@ Cobra 的 [Traverse 实现](https://github.com/spf13/cobra/blob/v1.10.2/command.
 - 本地 `check-generated-drift.sh` 未完成：生成器在启动时收到 SIGKILL（退出 137），更换临时目录及 `GOFLAGS=-a` 全量重编译均未改变结果。单独生成器的磁盘签名校验有效，执行仍以 -9 退出；系统日志仅提供终端防护对该进程的标记，没有明确终止原因。未修改主机防护设置，未将中断记为内容漂移或检查通过。
 - 固定 PR head `ee66854953d1cb0c9be4cb80c8304cab5018f6b2` 的 [Linux CI #33985390886](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33985390886) 全部通过。日志明确 checkout 该提交：依赖及框架门禁覆盖 1,809 节点、5 个扩展场景；生成漂移与两次组装确定性通过；Schema 契约通过（31 产品、1,357 工具）。此结果补齐本地独立生成器无法执行的验证，不改写本地 SIGKILL 记录。
 - 较早的 [CI #33984836718](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33984836718) 也通过，但默认 checkout 的是合并预览 `f4f87d53`（含主线 `d39d7590` 的额外命令，1,825 节点/1,370 工具）。已修正 workflow 固定 PR head；不将合并预览的数据冒充本分支数据。
-- 本地全量测试、构建及最终性能基于 `b3206646` 的生产代码；该提交至 `ee668549` 的全部 Go 源码、go.mod/go.sum 均无差异。后续交付只更新复审与方案文档，不改变已验证代码或 workflow。
+- 本地全量测试、构建及最终性能基于 `b3206646` 的生产代码；该提交至 `ee668549` 的全部 Go 源码、go.mod/go.sum 均无差异。至 `35d59111` 的交付只更新复审与方案文档；以下 S1–S6 跟进另有失败分支改动与独立验证。
 - 发布说明片段门禁、Go 格式与变更空白检查通过。Cobra 模块归档与 go.sum 的 h1 校验和匹配，42 个上游文件的原始哈希已逐一对照归档确认。
 
 ## 性能复核
@@ -95,7 +95,7 @@ pair,before_ns,candidate_ns,before_bytes,candidate_bytes,before_allocs,candidate
 ```
 
 ## 最终补丁版本性能复核
-最终版本包含精简快照、wiki 解析修复和 Cobra 三行补丁。使用相同的 `0758f351` 基线二进制，10 对交替测量，每次 100 次构建；测量时本任务的测试和构建均已结束。
+本节测量版本包含精简快照、wiki 解析修复和当时的 Cobra 三行补丁（后续 S1 仅调整失败分支归属与静默处理）。使用相同的 `0758f351` 基线二进制，10 对交替测量，每次 100 次构建；测量时本任务的测试和构建均已结束。
 | 指标 | 基线中位数 | 最终版本中位数 |
 | --- | ---: | ---: |
 | ns/op | 13,957,918.0 | 14,153,880.5 |
@@ -136,3 +136,20 @@ pair,before_ns,candidate_ns,before_bytes,candidate_bytes,before_allocs,candidate
 | missing_required | 1,086.0 | 2,529.0 | 22.0 |
 | invalid_positionals | 1,255.0 | 2,586.0 | 25.0 |
 | invalid_parameters | 1,744.0 | 3,274.0 | 25.0 |
+
+## S1–S6 代码建议跟进
+
+| 建议 | 处理 | 验证 |
+| --- | --- | --- |
+| S1 失败节点归属 | Traverse 的 handler 结果与 nil fallback 均返回实际解析节点；ExecuteC 报错同时遵守 root 与该节点的 SilenceErrors，避免根静默失效 | 直接 Traverse/ExecuteC 的返回节点、group 帮助路径、四种 root/group 静默组合，以及 DWS 五种 flag 作用域的节点断言通过 |
+| S2 required 文案 | 保留统一文案，changelog 明确旧/新差异；原始 Cobra 文案保留为 cause | required 错误的统一文案与原始 cause 双重断言通过 |
+| S3 typed constraint 边界 | AGENTS 与方案明确 PreRunE 中该步骤不可由原生检查替代；真实树门禁要求 runnable 节点存在该钩子 | 无钩子/PreRun/PreRunE × Run/RunE × required/group 共 12 例；typed/3、原始 cause、业务不执行均通过 |
+| S4 handler 返回保护 | 保持 NormalizeValidation 中的共享保护规则，补注释说明，不重复调用 PreserveClassification | 既有 API/ExitCoder/取消/超时身份回归继续通过 |
+| S5 手动解析清单 | 扫描发现唯一 production Cobra 手动调用为 wiki proxy；门禁仅允许该已审核表达式 | 当前清单通过；临时新增 ParseFlags、Flags().Parse、PersistentFlags().Parse 三种调用均被拒绝。使用 POSIX 搜索以适配 CI，明确只覆盖常规单行表达式 |
+| S6 nil 测试入口 | ExecuteCForTest 明确报参数错误；context 变体也先检查 nil，避免 panic | 四个辅助入口 nil 回归通过 |
+
+本轮 `go test ./internal/corecmd -count=1`、统一校验专项门禁与 `make build` 通过。专项门禁反向应用包含 `command.go` 和原始测试预期调整的可逆补丁，42 个原始文件哈希仍匹配；Cobra/doc 全量测试、1,809 节点和 5 个扩展场景通过。上述新增用例均纳入门禁必跑/必过清单。新构建二进制的 wiki/audit/OA legacy stderr 与 sheet unified stdout 检查均返回 validation/exit 3，另一输出流为空。
+
+前轮根命令构建性能样本没有重新测量：本轮未改变 PrepareCommandTree 构造逻辑或 Cobra 成功执行路径，只调整解析失败分支和 nil 测试入口。前轮全仓库测试结果是历史证据，本轮本地复验范围为 corecmd、依赖全量与专项门禁；PR head 的生成/Schema 验证由更新后的 Linux CI 执行。
+
+S7 仍为流程事项：PR 与方案保持 Draft，旧 CHANGES_REQUESTED、leaf/OA 截图和 Code Admission 不在本次代码改动中解除。没有将已有评论代为撤销，也不把专项检查通过表述为合并准入通过。

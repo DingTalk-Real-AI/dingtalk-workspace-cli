@@ -1,6 +1,20 @@
 --- a/command.go
 +++ b/command.go
-@@ -854,0 +855,3 @@
+@@ -855 +855,4 @@
+-			return nil, args, err
 +			if handled := c.FlagErrorFunc()(c, err); handled != nil {
-+				return nil, args, handled
++				return c, args, handled
 +			}
++			return c, args, err
+@@ -1126,0 +1130 @@
++		silenceErrors := c.SilenceErrors
+@@ -1130 +1134 @@
+-		if !c.SilenceErrors {
++		if !c.SilenceErrors && !silenceErrors {
+--- a/command_test.go
++++ b/command_test.go
+@@ -2377,2 +2377,2 @@
+-	if c != nil {
+-		t.Errorf("Expected nil command")
++	if c != rootCmd {
++		t.Errorf("Expected parsing command root, got %v", c)

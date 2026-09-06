@@ -2374,8 +2374,8 @@ func TestTraverseWithBadParentFlags(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), expected) {
 		t.Errorf("Expected error, %q, got %q", expected, err)
 	}
-	if c != nil {
-		t.Errorf("Expected nil command")
+	if c != rootCmd {
+		t.Errorf("Expected parsing command root, got %v", c)
 	}
 }
 

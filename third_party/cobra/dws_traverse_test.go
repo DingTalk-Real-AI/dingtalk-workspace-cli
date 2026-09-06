@@ -1,9 +1,11 @@
 package cobra
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -40,12 +42,16 @@ func TestDWSTraverseFlagErrorHandler(t *testing.T) {
 					var cmd *Command
 					var remaining []string
 					cmd, remaining, err = root.Traverse(args)
-					if cmd != nil || !reflect.DeepEqual(remaining, args[1:]) {
+					if cmd != group || !reflect.DeepEqual(remaining, args[1:]) {
 						t.Fatalf("traversal result = %v, %v", cmd, remaining)
 					}
 				} else {
 					root.SetArgs(args)
-					_, err = root.ExecuteC()
+					var cmd *Command
+					cmd, err = root.ExecuteC()
+					if cmd != group {
+						t.Fatalf("executed command = %v, want group", cmd)
+					}
 				}
 				want := handled
 				if fallback {
@@ -64,4 +70,33 @@ func fmtBool(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// Returning the parsing node must preserve the root's diagnostic policy.
+func TestDWSTraverseFailureDiagnostics(t *testing.T) {
+	for _, rootSilent := range []bool{false, true} {
+		for _, groupSilent := range []bool{false, true} {
+			t.Run(fmtBool(rootSilent)+"/"+fmtBool(groupSilent), func(t *testing.T) {
+				var output bytes.Buffer
+				root := &Command{Use: "root", TraverseChildren: true, SilenceErrors: rootSilent}
+				group := &Command{Use: "group", SilenceErrors: groupSilent}
+				group.Flags().Int("count", 0, "")
+				group.AddCommand(&Command{Use: "leaf", Run: func(*Command, []string) { t.Fatal("unexpected execution") }})
+				root.AddCommand(group)
+				root.SetErr(&output)
+				root.SetArgs([]string{"group", "--count=bad", "leaf"})
+				cmd, err := root.ExecuteC()
+				if cmd != group || err == nil {
+					t.Fatalf("result = %v, %v", cmd, err)
+				}
+				if rootSilent || groupSilent {
+					if output.Len() != 0 {
+						t.Fatalf("silent execution printed %q", output.String())
+					}
+				} else if !strings.Contains(output.String(), err.Error()) || !strings.Contains(output.String(), "Run 'root group --help' for usage.") {
+					t.Fatalf("missing group error/help: %q", output.String())
+				}
+			})
+		}
+	}
 }

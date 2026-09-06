@@ -58,7 +58,10 @@ Schema contract) keep separate authorities — do not merge them with
   测试扩展通过组装回调挂载；独立命令测试可使用 `corecmd.*ForTest` 执行辅助函数。
   重复执行保持 Cobra 的 flag 值和 Changed 状态；需要独立参数状态时从工厂创建新树。
   错误保留规则统一使用 `internal/errors.PreserveClassification`。
-- Cobra v1.10.2 的本地依赖替换仅修复 `Traverse` 父级解析调用 flag handler 的缺口；
+- 准备阶段安装的 `PreRunE` 必须在业务钩子成功后执行 typed required/group 检查。
+  Cobra 后续的原生检查会返回 untyped 错误，不能替代这一分类边界；保留原生约束注解。
+  手动 Cobra 解析必须经过 prepared `FlagErrorFunc`，并更新手动解析调用清单门禁。
+- Cobra v1.10.2 的本地依赖替换修复 `Traverse` 父级 flag handler、失败节点归属和根级静默行为；
   来源、补丁和升级约束见 `third_party/cobra/PATCHES.md`。修改依赖或统一校验框架时运行
   `scripts/policy/check-typed-validation-errors.sh`（包含原始源码完整性与 Cobra 全量测试）。
   根模块 `go test ./...` 不会覆盖该嵌套模块，不能替代依赖专项门禁。

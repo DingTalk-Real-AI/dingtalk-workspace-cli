@@ -48,6 +48,9 @@ func TestCrossPlatformCoverageTypedValidationErrorGateFinalCommandTree(t *testin
 	walk = func(cmd *cobra.Command) {
 		nodes++
 		path := cmd.CommandPath()
+		if cmd.Runnable() && cmd.PreRunE == nil {
+			t.Fatalf("%s lacks the typed required/group constraint boundary", path)
+		}
 		if cmd.Args != nil {
 			for _, args := range [][]string{nil, tooManyArgs} {
 				if err := cmd.Args(cmd, args); err != nil {

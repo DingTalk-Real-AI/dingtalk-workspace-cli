@@ -12,12 +12,19 @@ The local replacement includes all root Go sources and tests, the complete
 documents. Website/assets and other non-package repository files are omitted.
 `UPSTREAM.sha256` records every included upstream file before patching.
 
-The only production change is the three added lines in
-`traverse-flag-error.patch`. When a parent fails to parse flags, `Traverse`
-invokes that parsing command's effective `FlagErrorFunc` once. A non-nil handler
-result replaces the parser error; nil retains the original parser error and
-stops execution. The existing return command/remaining args and successful
-traversal path remain unchanged. No DWS imports or classification policy are
+The production changes are recorded in `traverse-flag-error.patch`. When a
+parent fails to parse flags, `Traverse` invokes that parsing command's effective
+`FlagErrorFunc` once. A non-nil handler result replaces the parser error; nil
+retains the original parser error and stops execution. Both cases return the
+parsing command instead of nil, so `ExecuteC` returns the correct error owner
+and prints that command's help path. Its early error branch respects both the
+root's and the parsing command's `SilenceErrors` settings.
+
+The upstream `TestTraverseWithBadParentFlags` expectation is updated in the same
+reversible patch to require the parsing command. Additional DWS dependency tests
+cover direct traversal, execution, handler fallback, help attribution and all
+root/group silence combinations. Remaining arguments and the successful
+traversal path are unchanged. No DWS imports or classification policy are
 introduced into Cobra.
 
 User approved this bounded dependency change on 2026-09-06. It replaces the

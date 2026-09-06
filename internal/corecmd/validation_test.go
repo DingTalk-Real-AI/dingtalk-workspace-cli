@@ -521,3 +521,93 @@ func prepareValidationTree(t *testing.T, root *cobra.Command) {
 		t.Fatal(err)
 	}
 }
+
+// Cobra's native checks return untyped errors. The prepared PreRunE is the
+// boundary that must reject constraints before those native checks and Run/RunE.
+func TestCrossPlatformCoveragePreparedFlagConstraintBoundary(t *testing.T) {
+	for _, hook := range []string{"none", "PreRun", "PreRunE"} {
+		for _, run := range []string{"Run", "RunE"} {
+			for _, constraint := range []string{"required", "group"} {
+				t.Run(hook+"/"+run+"/"+constraint, func(t *testing.T) {
+					root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
+					leaf := &cobra.Command{Use: "leaf"}
+					root.AddCommand(leaf)
+					hooks, runs := 0, 0
+					switch hook {
+					case "PreRun":
+						leaf.PreRun = func(*cobra.Command, []string) { hooks++ }
+					case "PreRunE":
+						leaf.PreRunE = func(*cobra.Command, []string) error { hooks++; return nil }
+					}
+					if run == "Run" {
+						leaf.Run = func(*cobra.Command, []string) { runs++ }
+					} else {
+						leaf.RunE = func(*cobra.Command, []string) error { runs++; return nil }
+					}
+					leaf.Flags().String("name", "", "")
+					reason := "missing_required_flags"
+					var native error
+					if constraint == "required" {
+						if err := leaf.MarkFlagRequired("name"); err != nil {
+							t.Fatal(err)
+						}
+						native = leaf.ValidateRequiredFlags()
+					} else {
+						leaf.Flags().String("other", "", "")
+						leaf.MarkFlagsOneRequired("name", "other")
+						native = leaf.ValidateFlagGroups()
+						reason = "invalid_flag_group"
+					}
+					if native == nil || apperrors.PreserveClassification(native) {
+						t.Fatalf("native error must be untyped: %v", native)
+					}
+					prepareValidationTree(t, root)
+					root.SetArgs([]string{"leaf"})
+					selected, err := root.ExecuteC()
+					requireValidationError(t, err, reason)
+					if selected != leaf {
+						t.Fatalf("selected = %v, want leaf", selected)
+					}
+					cause := stderrors.Unwrap(err)
+					if cause == nil || cause.Error() != native.Error() {
+						t.Fatalf("cause = %v, want %v", cause, native)
+					}
+					if constraint == "required" && (err.Error() != "missing required flag(s): --name" || cause.Error() != `required flag(s) "name" not set`) {
+						t.Fatalf("required wording/cause changed: %v / %v", err, cause)
+					}
+					wantHooks := 1
+					if hook == "none" {
+						wantHooks = 0
+					}
+					if hooks != wantHooks || runs != 0 {
+						t.Fatalf("hooks=%d want=%d runs=%d", hooks, wantHooks, runs)
+					}
+					if leaf.Annotations == nil || leaf.Flags().Lookup("name").Annotations == nil {
+						t.Fatal("constraint annotations lost")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageExecuteForTestNil(t *testing.T) {
+	tests := []struct {
+		name    string
+		call    func() (*cobra.Command, error)
+		message string
+	}{
+		{"Execute", func() (*cobra.Command, error) { return nil, ExecuteForTest(nil) }, "corecmd.ExecuteCForTest: cmd is nil"},
+		{"ExecuteC", func() (*cobra.Command, error) { return ExecuteCForTest(nil) }, "corecmd.ExecuteCForTest: cmd is nil"},
+		{"ExecuteContext", func() (*cobra.Command, error) { return nil, ExecuteContextForTest(nil, context.Background()) }, "corecmd.ExecuteContextCForTest: cmd is nil"},
+		{"ExecuteContextC", func() (*cobra.Command, error) { return ExecuteContextCForTest(nil, context.Background()) }, "corecmd.ExecuteContextCForTest: cmd is nil"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := tt.call()
+			if cmd != nil || err == nil || err.Error() != tt.message {
+				t.Fatalf("result = %v, %v", cmd, err)
+			}
+		})
+	}
+}

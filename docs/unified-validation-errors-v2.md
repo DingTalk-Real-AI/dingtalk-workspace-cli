@@ -405,3 +405,12 @@ A 可独立保留。B 的共享校验边界若回退，必须同时恢复 Tier1 
 跨时段根构建耗时增加约 20.5% 的信号。随后复审采用固定编译产物交替测量，并精简闭包
 分配；当前结论以[复审记录](unified-validation-errors-v2-review.md)的逐项验证为准。
 旧实现的通过结果不作为最终修订已经通过的证据。
+
+### 代码建议补充（仍为 Draft）
+
+- Traverse 解析失败返回实际解析节点，供 telemetry 和帮助提示使用；ExecuteC 的此失败分支同时遵守 root 与解析节点的 SilenceErrors。
+- required flag 统一文案为 `missing required flag(s): --name`，与 Cobra 原版存在可见差异；changelog 明确记录，原始错误保留为 cause。
+- 准备阶段的 PreRunE 在业务钩子成功后执行 typed required/group 检查，这是阻止 Cobra 后续 untyped 错误逃逸的必要边界。不可用原生重复检查替代，也不可删除约束注解。
+- NormalizeValidation 统一保护 FlagErrorFunc handler 返回的已有分类，不增加重复 PreserveClassification 调用。
+- 手动 Cobra 解析清单由 `check-manual-cobra-parsing.sh` 门禁约束，目前仅允许已审核的 wiki proxy 表达式。该门禁使用仓库可移植搜索工具，覆盖常规单行调用，不宣称替代 AST/type 分析。
+- 测试执行辅助入口对 nil command 明确报错，含 context 变体。
