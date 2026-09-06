@@ -85,3 +85,20 @@ class HelpSealingTests(unittest.TestCase):
         self.write_generator(snapshot='')
         with self.assertRaisesRegex(RuntimeError, 'invalid snapshot'):
             self.seal()
+        proof = json.loads((self.output / 'root-help-proof.json').read_text())
+        self.assertEqual(proof['failed_process']['returncode'], 0)
+        self.assertIn(b'"Snapshot": ""', base64.b64decode(
+            proof['failed_process']['stdout']['base64']))
+
+    def test_malformed_references_retain_generator_output(self):
+        projection = {'Snapshot': 'sealed-snapshot',
+                      'References': {'en': 'not base64', 'zh': 'also invalid'}}
+        self.generator.write_text(
+            "#!/bin/sh\ncat <<'PROJECTION'\n" + json.dumps(projection) + '\nPROJECTION\n')
+        with self.assertRaisesRegex(RuntimeError, 'invalid projection'):
+            self.seal()
+        proof = json.loads((self.output / 'root-help-proof.json').read_text())
+        self.assertFalse(proof['passed'])
+        failed = proof['failed_process']
+        self.assertEqual(failed['returncode'], 0)
+        self.assertEqual(json.loads(base64.b64decode(failed['stdout']['base64'])), projection)

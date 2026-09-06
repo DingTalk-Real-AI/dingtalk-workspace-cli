@@ -3,6 +3,7 @@
 
 import argparse
 import base64
+import binascii
 import hashlib
 import json
 import os
@@ -109,16 +110,28 @@ def seal_root_help(core, help_generator, core_digest, commit, proof_path, compar
                 raise RuntimeError('help generator failed or emitted diagnostics')
             try:
                 projection = json.loads(generated.stdout)
-            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                snapshot = projection['Snapshot']
+                if (not isinstance(snapshot, str) or not snapshot
+                        or any(character.isspace() for character in snapshot)):
+                    raise ValueError('invalid snapshot')
+                references = projection['References']
+                expected_help = {}
+                for locale in ('en', 'zh'):
+                    reference = references[locale]
+                    if not isinstance(reference, str):
+                        raise TypeError(f'invalid {locale} reference')
+                    expected_help[locale] = base64.b64decode(reference, validate=True)
+            except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError,
+                    ValueError, binascii.Error) as error:
                 proof['failed_process'] = {
                     'timed_out': False,
                     'returncode': generated.returncode,
                     'stdout': failure_output(generated.stdout),
                     'stderr': failure_output(generated.stderr),
                 }
-                raise RuntimeError('help generator emitted an invalid projection') from error
+                raise RuntimeError(f'help generator emitted an invalid projection: {error}') from error
             for locale in ('en', 'zh'):
-                expected = base64.b64decode(projection['References'][locale], validate=True)
+                expected = expected_help[locale]
                 proof['locales'][locale] = {
                     'stdout_sha256': hashlib.sha256(expected).hexdigest(), 'stdout_bytes': len(expected),
                 }
@@ -138,9 +151,6 @@ def seal_root_help(core, help_generator, core_digest, commit, proof_path, compar
                     proof['locales'][locale]['native_comparison'] = 'deferred to final-artifact native runner'
             if sha256(core) != core_digest:
                 raise RuntimeError('core changed during help projection proof')
-            snapshot = projection['Snapshot']
-            if not isinstance(snapshot, str) or not snapshot or any(character.isspace() for character in snapshot):
-                raise RuntimeError('help generator emitted an invalid snapshot')
             proof.update(
                 passed=compare_core,
                 native_core_compared=compare_core,
