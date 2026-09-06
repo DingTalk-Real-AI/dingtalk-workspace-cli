@@ -57,6 +57,18 @@ Schema 的唯一语义源仍是 declarations，经 `ResolveSchemaBuild` 生成 t
 
 根级 metadata validation、profile 参数规范化、pipeline PreParse、leaf validation、auth 和 Safety 均保留。只在 profile 或 trace 证明同一 invocation 重复读取或重复 Prepare 后，才删除具体重复点，并附带输出、错误分类和副作用等价测试。本 RFC 不以推测为由合并这些生命周期。
 
+### 1.6 已接受的架构张力与边界
+
+本设计接受选择性树与完整树在同一进程内长期共存。两种构造模式共享同一 factory、Cobra pipeline、validation、auth、Safety、handler 和输出合同；差别只在启动时构造的产品范围。环境或输入无法证明可安全选择时必须回退完整树。后续优化应减少误回退并扩大等价性证明，不得为消除回退重新引入 launcher、第二执行器或独立 handler 路由。
+
+选择性资格检查允许有限且有界的启动 I/O：仅选择性候选路径可执行一次 shortcut `Lstat`、一次用户插件目录 `ReadDir` 和一次 settings 读取。完整树路径不得先执行这些资格探测再重复做扩展加载。新增启动 I/O 必须给出必要性、分段数据和去重证明；“装配期禁盘”指禁止 factory/Mount 随命令数量增长地读取磁盘，不否定上述固定资格检查。
+
+完整树仍承担 weak command metadata 的固定分配成本。该元数据用于统一框架合同的类型化所有权与清理，防止全局 command 引用泄漏，不能以性能为由绕开。选择性构树负责把该成本限制在实际产品范围；若要继续降低完整树成本，必须在保持 ownership、validation 和 Safety 等价的前提下另行设计。
+
+Telemetry 采用 best-effort 退出语义，最后一条分析事件可能随进程结束而丢失；业务结果、退出码和同步清理不受影响。这是产品合同，不是临时性能开关。
+
+本 RFC 的竞争性目标是让 DWS 单进程默认路径达到 Lark 同机量级。追平 GWS 约 3～4 ms 的 native 启动不属于本 RFC；该目标需要单独分析程序映像、静态依赖/init 和框架常驻对象，不能继续通过复制快路径或增加运行时来追求。
+
 ## 2. Schema 缓存合同
 
 ### 2.1 数据与身份
