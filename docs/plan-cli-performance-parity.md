@@ -2,6 +2,8 @@
 
 状态：Draft / 待实现。日期：2026-09-06。交付目标是可执行计划；本文件完成不表示性能已经追齐。
 
+范围更新：用户明确本次针对 PR #1296 做性能专项。当前执行顺序以[技术方案 §1.1](design-cli-performance-parity.md#11-本次专项的直接工作包)的 O0–O5 为准；下文单二进制/telemetry 新合同是结构成本无法满足目标后的后续备选，不是本次专项的默认前置改造。
+
 关联：[当前 RFC](rfc-schema-runtime-cache.md)、[五维报告](rfc-schema-runtime-cache-performance.md)、[原生证据](benchmarks/schema-cache/native-7cbf7f52/evidence.json)、[PR #1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296)。
 
 ## 1. 完成定义
@@ -10,7 +12,7 @@
 
 当前 PR #1296 完成了自身历史回归门槛。它没有证明竞品追齐；本计划是独立的下一阶段，不能把旧 RFC 的“竞品仅诊断”悄悄改成已经通过的竞品门禁。
 
-本计划选定的实现方向是：**统一的按需命令 runtime + 单个原生执行二进制，先解除退出等待，再消除逐次双产物校验成本，最后压低命令装配与内存。** 这是下一版设计提案，需要先提交明确取代旧 RFC 对应条款的设计补丁，再实现。当前双二进制发布合同在新设计通过评审与制品验收前继续有效。
+本轮先对 PR #1296 的既有实现做性能专项。具体优化工作包见[技术方案](design-cli-performance-parity.md)；先取得真实路径的启动/RSS、SDK 完成时间线、生产哈希和 Schema 分配证据，再逐点优化。单二进制、outbox 与大范围按需 runtime 迁移仅作为后续备选，需要结构成本证据和独立合同评审。当前双二进制发布合同继续有效。
 
 “确保追齐”由自动化阻挡条件落实，不承诺未经测量的收益；任何维度未达标都保持未完成，不以另一个维度的收益抵消。
 
@@ -50,13 +52,13 @@
 - 不把常驻进程、异步 helper、outbox 的内存与启动成本移出统计；不把返回码失败或空输出当快样本。
 - 不把 p50 单项、某一 OS、某个入口或平均值达标外推为全矩阵完成。
 
-## 4. 设计变化及必须先解决的冲突
+## 4. 候选设计及必须先解决的冲突
 
 | 决策 | 本计划方向 | 旧合同冲突 / 实现前交付 |
 |---|---|---|
-| 产品形态 | 后续版本使用一个原生执行二进制；同一 runtime 处理 presentation、Schema 与业务命令，按请求按需构造 | 取代当前 RFC §1 的双二进制选择、§6 的绑定与发布流程；提交单独设计补丁和迁移矩阵，不能直接绕过旧 gate |
+| 产品形态 | 优先验证一个原生执行二进制；真实依赖/RSS 与信任实验通过后，才决定是否作为后续版本形态 | 取代当前 RFC §1 的双二进制选择、§6 的绑定与发布流程；提交单独设计补丁和迁移矩阵，不能直接绕过旧 gate |
 | 制品信任 | 新包在下载/安装/升级时验证可信发布摘要和签名，安装后使用明确的 OS/权限保护；保留 Schema payload 的二进制绑定与校验 | 逐次 launcher→core 哈希移除是信任边界变化；须逐平台写清本地篡改威胁、签名验证时机及限制。旧“双产物任一损坏在执行前拒绝”与新单产物承诺必须逐项映射。无法接受的威胁退化阻挡实施，不能宣称等价 |
-| telemetry | 先修 SDK 真正的 flush/完成通知；若正常/故障网络仍拖慢前台，提案改为 **SDK 管理的有界持久 outbox + 后续有网络业务进程机会式投递**，无强制常驻服务 | 当前 RFC §3.2/§6.7 禁止改变 SDK 投递方式。需明确取消“本次命令退出前网络投递尝试完成”的语义；不得保持旧承诺同时宣称毫秒退出。未经该设计对齐不写生产代码 |
+| telemetry | 先验证 SDK flush/完成通知，只有证实实现缺陷才修复；若正常/故障网络仍拖慢前台，提案改为 **SDK 管理的有界持久 outbox + 后续有网络业务进程机会式投递**，无强制常驻服务 | 当前 RFC §3.2/§6.7 禁止改变 SDK 投递方式。需明确取消“本次命令退出前网络投递尝试完成”的语义；不得保持旧承诺同时宣称毫秒退出。未经该设计对齐不写生产代码 |
 | delivery 单源 | 按需目录由现有 declarations 派生，presentation/Schema 和业务执行继续共用 `corecmd` 合同 | 不新增手工路由清单、Catalog 权威或一份只为性能维护的 help；依赖 gate 与全树/按需路径一致性测试先行 |
 | 竞品门槛 | 新增独立 performance-parity gate；保留 v1 历史回归和正确性 gate | 不把同包 core +5% 门槛恢复成发布目标；竞争性完成由下述新矩阵决定 |
 
@@ -71,14 +73,14 @@ Telemetry outbox 提案的明确代价：只有离线/短 presentation 调用的
 | 阶段 | 责任模块与代码落点 | 必须交付 | 完成/继续条件 |
 |---|---|---|---|
 | P0：基线与分段测量 | 性能 harness；`scripts/dev/measure-cli-five-dimensions.py`、`measure-schema-default-entry.py`、内存 sampler | 固定三产品实际安装包；首次调用/预热、default/opt-out 分开；SDK close、core hash、exec/startup、config、树装配、decode/output 的独立诊断；CPU/alloc/heap/init profile；完整 argv/输出 oracle | 三产品所有计时调用成功、返回所需字段；分段解释和总耗时相符且标明重叠；找出前两大 wall 和 RSS 来源。先建立红色竞品 gate，不能只产图 |
-| P1：SDK 生命周期 | telemetry/SDK；`internal/clitelemetry`、`third_party/aem-go-sdk/clitrack` 与 `aem`，同时维护 SDK 变更说明 | 可控 collector 下证明 Close 在发送完成即返回；慢响应/不可达/退出/信号/并发覆盖。若需 outbox，先完成 §4 的语义与数据合同，再实现 SDK 统一入口 | 默认 help/version 的退出等待消失，且事件接受、后续投递、去重/过期行为符合新合同。单纯 opt-out 变快不通过。P1 只解决生命周期，不代表追齐 |
+| P1：SDK 生命周期 | telemetry/SDK；`internal/clitelemetry`、`third_party/aem-go-sdk/clitrack` 与 `aem`，同时维护 SDK 变更说明 | 可控 collector 下证明 Close 在发送完成即返回；慢响应/不可达/退出/信号/并发覆盖。若需 outbox，先完成 §4 的语义与数据合同，再实现 SDK 统一入口 | 给出等待成本的真实归因；选定新合同后，默认 help/version 达到其退出预算，且事件接受、后续投递、去重/过期行为符合合同。单纯 opt-out 变快不通过。P1 只解决生命周期，不代表追齐 |
 | P2：单原生制品与信任迁移 | runtime/release；`cmd`、`cmd/dws-launcher`、`internal/launcher`、packagemanifest、post-goreleaser、安装器 | 明确选择单二进制的 v2 RFC；新 manifest/install/upgrade/rollback；移除内部委派自校验链；裁剪 package init 和静态依赖；两个 OS 的真实签名/安装证明 | 不启动/哈希旁路 core，制品验证和旧版本升级回滚通过；root help/version 默认及内存具备达到 GWS 的实测可能。未通过可信制品边界评审不能以性能名义合入 |
 | P3：统一框架按需装配 | 命令框架；`internal/app/root.go`、`internal/corecmd`、`helpers.LeafSpec`、product declarations | 一条 owning declaration→路由→按需产品/叶子的路径；Schema/presentation 不初始化业务 transport/auth；业务调用仍经统一 validation/safety/lifecycle；full export 保留全量装配 | root/leaf help、Schema 与真实执行的 alias/flags/required/safety/result/locale 一致；config/dry-run/mock 相对旧入口回退消除；错误路径与扩展委派不丢合同 |
 | P4：Schema 与 RSS 尾差 | Schema/runtime；schemareader、schemacache、schemaruntime、roothelp、profilemetadata | 依据 P0 profile 减少冗余 decode/复制/索引和静态初始化；选定 product/leaf 精确消费；解码前完整认证；必要时另审版本化格式变更 | Schema native p50/p95 与 RSS 都通过竞品 gate；不得用 mmap 后的低 RSS 隐藏缺页/映射成本，需另报 page faults/mapped bytes；缓存 miss 仍权威自愈 |
-| P5：public 与所有命令 | npm/install 与统一 runtime；`scripts/build/npm/bin/dws.js`、installers、性能 harness | npm wrapper 依赖和同步检查 profile；减少重复解析/进程工作；验证 public 启动真实最终二进制；普通命令独立 CPU/RSS 改善 | public 对 public 五场景以及普通命令合同通过；native/public 不能混比较；单个 help 结果不能覆盖实际命令 |
+| P5：public 与所有命令 | npm/install 与统一 runtime；`build/npm/bin/dws.js`、installers、性能 harness | npm wrapper 依赖和同步检查 profile；减少重复解析/进程工作；验证 public 启动真实最终二进制；普通命令独立 CPU/RSS 改善 | public 对 public 五场景以及普通命令合同通过；native/public 不能混比较；单个 help 结果不能覆盖实际命令 |
 | P6：稳定性与发布 | CI/release；新增 parity workflow/report，沿用全量 suite/声明/制品验证 | 三轮独立完整同机交错测量；稳定版本 final-artifact proof；最终五维报告、完整失败/样本归档；旧包→新包→旧包回滚 | §6 全部指标逐格通过，telemetry/安全合同完成，无未归因回退，正式安装后复核同样通过才标记“追齐” |
 
-P1、P2、P3 是核心路径。P4/P5 不能通过在旧 launcher 继续添加业务快路径替代 P2/P3。若单二进制的 Go 启动或 RSS 下界仍高于目标，必须在 P2 输出最小真实合同实验及失败数据，另提 runtime/backend 设计评审；不得预先假定换语言必然成功，也不得直接降低目标宣布完成。
+本次先执行技术方案的 O0–O5，优先定位并优化现有实现。上表是完整追齐的条件路线图；涉及产品形态和上报语义的 P2 及相关迁移，必须有结构下界证据后另行决定。不得通过在旧 launcher 添加业务快路径替代统一框架优化。若单二进制的 Go 启动或 RSS 下界仍高于目标，必须在 P2 输出最小真实合同实验及失败数据，另提 runtime/backend 设计评审；不得预先假定换语言必然成功，也不得直接降低目标宣布完成。
 
 ## 6. 追齐门槛：逐格判定
 
