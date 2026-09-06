@@ -333,7 +333,10 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: ./scripts/policy/check-launcher-capability-allowlist.sh "$PR_BASE_SHA" HEAD
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$PR_BASE_SHA"
+          ./scripts/policy/check-launcher-capability-allowlist.sh "$PR_BASE_SHA" HEAD
       - name: Upload declaration policy evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
