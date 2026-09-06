@@ -16,6 +16,8 @@ import (
 
 // Check actual transitive dependencies as well as direct source imports: an
 // allowed DTO/helper must not silently bring the assembler or network back in.
+// The tracker-bearing launcher has its own dependency gate; Schema preparation
+// and reading stay network-free even when called from that entrypoint.
 func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 	const module = "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/"
 	allowed := map[string]bool{
@@ -23,14 +25,13 @@ func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 		module + "internal/cli/schemacachepb": true,
 		module + "internal/corecmd/contract":  true,
 		module + "internal/schemacache":       true,
-		module + "internal/launcher":          true,
 		module + "internal/schemareader":      true,
 		module + "internal/schemafastpath":    true,
 		module + "internal/buildversion":      true,
 		module + "internal/skillpaths":        true,
 		module + "internal/jsonutil":          true,
 	}
-	command := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", ".", module+"internal/schemacache", module+"internal/launcher")
+	command := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", ".", module+"internal/schemacache", module+"internal/schemareader", module+"internal/schemafastpath")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("resolve production dependency closure: %v\n%s", err, output)

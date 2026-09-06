@@ -29,6 +29,40 @@
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
 
+### 根帮助共享投影与依赖门禁修正（bbcc8537 后续）
+
+[run 34006621679](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34006621679)
+已完成。两平台完整 suite 的包终态与失败事件已逐行审计，记录见
+[Linux](benchmarks/schema-cache/native-bbcc8537/linux-full-suite.json) 与
+[macOS](benchmarks/schema-cache/native-bbcc8537/darwin-full-suite.json)；唯一失败测试均为下述
+依赖门禁，声明 policy 成功。原始日志摘要和 artifact/job 绑定保留，不能把有失败的整轮说成通过。
+
+bbcc8537 的两个 native candidate jobs 都在 `TestCrossPlatformCoverageThinSchemaDependencyClosure`
+失败，尚未进入构建或默认入口测量。该旧门禁把整个 launcher 与 Schema decoder 一起禁止
+所有网络依赖，与上一节已评审的默认官方埋点入口不一致；不是 Schema decoder 本身引入了
+网络。现对 schemaruntime、schemacache、schemareader 和 schemafastpath 的实际传递依赖
+继续严格禁止网络/命令框架，并显式禁止它们反向依赖 launcher。入口门禁另外检查完整依赖图：
+保持仓库包 allowlist，只允许既有 SDK sender 引入 HTTP、SDK aem 引入 socket 类型，以及
+现有工具包的 URL 解析；其他非标准库包新增网络依赖都会失败。profilemetadata/clisignal
+仍只能直接依赖标准库。修正后的两条实际 dependency closure race 检查均通过，性能门槛未改。
+
+默认 help 的后续优化先消除第二套渲染器风险。`internal/roothelp.Model` 只保存已决定的
+service/utility 名称与说明、flag 标签与说明、root Long；`app.RootHelpModel` 从最终命令树
+沿用原可见性、语言、排序及 pflag 类型规则投影。公开 help 已改为使用这个无 Cobra、无网络
+的共享 renderer，Model 不是 CLI 声明或 Schema Catalog 的替代来源。
+
+本机 Go 1.25.9 比较改动前后的 12 份完整输出：en/zh × 彩色/无色 × 真实/空/自定义树，
+字节全部一致。声明专用构造器与实际运行构造器在四个语言/颜色组合的输出也相同；新的
+永久回归比较真实根帮助与声明模型 JSON round trip 后的渲染。相关 root help、输出边界和
+依赖 race 通过（app 22.246 s）。原始输出、摘要、捕获代码与检查记录见
+[投影证据](benchmarks/schema-cache/root-help-projection-local/compatibility.json)。
+
+这一步尚未让 launcher 执行 help，不能据此宣称 help 性能回退已消除。后续仅可在 exact
+`--help`、plain open-edition 边界内消费与最终 core 绑定的声明派生投影；注入前必须以真实
+core 核对每种语言的完整输出，运行时复用同一 renderer、样式、tracker 和信号语义。
+未知环境/扩展继续完整委派；help/version 零 Schema cache I/O、5% 回归与竞争性要求不变。
+正式构建不得在这份 proof 完成前启用该入口，PR 继续保持 Draft。
+
 ### 原始基线对照失败与默认 version 修正（6f64ee2c 后续）
 
 [run 34003658436](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34003658436)

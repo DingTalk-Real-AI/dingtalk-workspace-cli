@@ -1,7 +1,10 @@
 package launcher
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,7 +15,7 @@ import (
 func TestCrossPlatformCoverageLauncherRuntimeDependencies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, "go", "list", "-deps", "./cmd/dws-launcher")
+	command := exec.CommandContext(ctx, "go", "list", "-deps", "-json", "./cmd/dws-launcher")
 	command.Dir = filepath.Join("..", "..")
 	data, err := command.CombinedOutput()
 	if err != nil {
@@ -29,12 +32,46 @@ func TestCrossPlatformCoverageLauncherRuntimeDependencies(t *testing.T) {
 	} {
 		allowed[module+name] = true
 	}
-	for _, name := range strings.Fields(string(data)) {
+	type dependency struct {
+		ImportPath string
+		Imports    []string
+		Standard   bool
+	}
+	graph := map[string]dependency{}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	for {
+		var item dependency
+		if err := decoder.Decode(&item); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		graph[item.ImportPath] = item
+	}
+	// URL parsing is not a transport. Actual socket/HTTP imports belong only
+	// to the existing official SDK; other dependencies cannot add a sender.
+	networkImports := map[string]string{
+		module + "pkg/config":                                    "net/url",
+		module + "internal/errors":                               "net/url",
+		module + "pkg/validate":                                  "net/url",
+		"gitlab.alibaba-inc.com/aes/aem-go-sdk/internal/encoder": "net/url",
+		"gitlab.alibaba-inc.com/aes/aem-go-sdk/internal/sender":  "net/http",
+		"gitlab.alibaba-inc.com/aes/aem-go-sdk/aem":              "net",
+	}
+	for name, item := range graph {
 		if strings.HasPrefix(name, module) && !allowed[name] {
 			t.Errorf("launcher acquired an unreviewed runtime dependency: %s", name)
 		}
 		if name == "github.com/spf13/cobra" || name == "github.com/spf13/pflag" {
 			t.Errorf("launcher imports the command parser: %s", name)
+		}
+		for _, imported := range item.Imports {
+			if !item.Standard && (imported == "net" || strings.HasPrefix(imported, "net/")) && networkImports[name] != imported {
+				t.Errorf("unreviewed launcher network dependency: %s imports %s", name, imported)
+			}
+			if (name == module+"internal/profilemetadata" || name == module+"internal/clisignal") && !graph[imported].Standard {
+				t.Errorf("pure shared package %s imports non-stdlib dependency %s", name, imported)
+			}
 		}
 	}
 }
