@@ -98,6 +98,8 @@ jobs:
           set -euo pipefail
           go test -race -count=1 ./internal/schemacache ./internal/schemareader ./internal/schemafastpath ./internal/clitelemetry ./internal/clisignal ./internal/profilemetadata ./internal/roothelp ./internal/cli/schemaruntime ./internal/corecmd/... \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/component-race.txt"
+          go -C third_party/aem-go-sdk test -race -count=1 ./clitrack \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/telemetry-sdk-race.txt"
           go test -race -count=1 -timeout=15m ./internal/app ./cmd \
             -run 'TestCrossPlatformCoverage(CoreSchemaFastPath|RootHelp|Main|CLITracker|Tracker|DefaultTrackRun|SchemaSourceRoots|ExecuteSignal|ExecuteDeterministicInterruption|ProcessInterruption|Signal|ResolveTelemetryIdentity|Telemetry|SanitizeTelemetry)|TestExecuteSignalSubprocessExitStatus|TestFramework.*Signal|TestSecondSignal|TestResolveStartupRoute|TestProcessRootMountsOnlySelectedProduct' \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/core-fast-path-race.txt"
