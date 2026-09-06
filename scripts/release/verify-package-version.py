@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Verify exact finalized launcher/core version behavior without modifying them.
+"""Verify finalized launcher/core identity and enabled native hot paths.
 
 Run after archive/manifest/signature verification on the matching native host.
-This is version-contract evidence, not complete Schema release enablement proof.
+The core-free help and warmed Schema probes prove that release packaging sealed
+the same capabilities exercised by native candidates.
 """
 
 import argparse
@@ -25,7 +26,23 @@ def sha256(path):
     return value.hexdigest()
 
 
-def verify(launcher, core, version, commit, build_time, report):
+def invoke(binary, argv, env, home, output_limit=32 * 1024 * 1024):
+    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+        result = subprocess.run([str(binary), *argv], cwd=home, env=env,
+                                stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
+                                timeout=180, close_fds=True)
+        stdout.seek(0)
+        output = stdout.read(output_limit + 1)
+        stderr.seek(0)
+        diagnostic = stderr.read(8192)
+    if len(output) > output_limit:
+        raise RuntimeError(f'{argv}: output exceeds {output_limit} bytes')
+    if result.returncode or diagnostic:
+        raise RuntimeError(f'{argv}: exit={result.returncode}, stderr={diagnostic!r}')
+    return output
+
+
+def verify(launcher, core, version, commit, build_time, report, verify_hot_paths=True):
     expected = f'dws version {version} ({commit}, {build_time})\n'.encode()
     originals = {'launcher': launcher, 'core': core}
     for path in originals.values():
@@ -33,6 +50,12 @@ def verify(launcher, core, version, commit, build_time, report):
             raise RuntimeError(f'version verification requires a regular binary: {path}')
     digests = {name: sha256(path) for name, path in originals.items()}
     report.update(version=version, commit=commit, build_time=build_time, binaries=digests, runs=[])
+    if verify_hot_paths:
+        manifest = json.loads((launcher.parent.parent / 'package-manifest.json').read_text())
+        expected_capabilities = {'schema_cache': 'enabled', 'root_help': 'enabled', 'disabled_reason': ''}
+        if manifest.get('capabilities') != expected_capabilities:
+            raise RuntimeError(f'enabled native package capability matrix mismatch: {manifest.get("capabilities")!r}')
+        report['capabilities'] = manifest['capabilities']
     with tempfile.TemporaryDirectory(prefix='dws-package-version-') as temporary:
         home = Path(temporary).resolve()
         env = {name: os.environ[name] for name in ('SystemRoot', 'SYSTEMROOT', 'WINDIR') if name in os.environ}
@@ -62,6 +85,28 @@ def verify(launcher, core, version, commit, build_time, report):
             if result.returncode != 0 or actual != expected or diagnostic:
                 raise RuntimeError(f'{name} version contract failed: exit={result.returncode}, '
                                    f'stdout={actual!r}, stderr={diagnostic!r}')
+        if verify_hot_paths:
+            report['hot_paths'] = {'help': {}, 'schema': {}}
+            for locale in ('en', 'zh'):
+                help_env = {**env, 'LANG': locale}
+                expected_help = invoke(core, ['--help'], help_env, home)
+                actual_help = invoke(isolated, ['--help'], help_env, home)
+                if actual_help != expected_help:
+                    raise RuntimeError(f'{locale}: core-free sealed help differs from finalized core')
+                report['hot_paths']['help'][locale] = {
+                    'stdout_sha256': hashlib.sha256(actual_help).hexdigest(),
+                    'stdout_bytes': len(actual_help), 'core_free': True,
+                }
+            leaf = ['schema', 'calendar.create_calendar_event', '--compact', '-f', 'json']
+            expected_schema = invoke(core, leaf, {**env, 'DWS_SCHEMA_CACHE_DISABLE': '1'}, home)
+            warmed_schema = invoke(launcher, leaf, env, home)
+            cached_schema = invoke(isolated, leaf, env, home)
+            if warmed_schema != expected_schema or cached_schema != expected_schema:
+                raise RuntimeError('finalized release Schema cache differs from authoritative core')
+            report['hot_paths']['schema'] = {
+                'stdout_sha256': hashlib.sha256(cached_schema).hexdigest(),
+                'stdout_bytes': len(cached_schema), 'core_free_cache_hit': True,
+            }
         for name, path in originals.items():
             if sha256(path) != digests[name]:
                 raise RuntimeError(f'finalized {name} changed during version verification')

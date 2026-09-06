@@ -2474,14 +2474,26 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 		{
 			name:      "release contract",
 			start:     "  release-contract:\n",
-			end:       "\n  release:\n",
+			end:       "\n  schema-release-native-proof:\n",
 			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}`,
+		},
+		{
+			name:      "native Schema proof",
+			start:     "  schema-release-native-proof:\n",
+			end:       "\n  compare-schema-release-proofs:\n",
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
+		},
+		{
+			name:      "Schema proof comparison",
+			start:     "  compare-schema-release-proofs:\n",
+			end:       "\n  release:\n",
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.schema-release-native-proof.result == 'success' }}`,
 		},
 		{
 			name:      "build",
 			start:     "  release:\n",
 			end:       "\n  verify-darwin-signatures:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.compare-schema-release-proofs.result == 'success' }}`,
 		},
 		{
 			name:      "Darwin verification",
@@ -2516,6 +2528,16 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 				t.Errorf("%s must override skipped dispatch ancestors while preserving cancellation and dependency gates", test.name)
 			}
 		})
+	}
+	release := releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n")
+	for _, required := range []string{
+		"needs: [release-contract, compare-schema-release-proofs]",
+		"SCHEMA_PROOF_RESULT: ${{ needs.compare-schema-release-proofs.result }}",
+		`test "$SCHEMA_PROOF_RESULT" = success`,
+	} {
+		if !strings.Contains(release, required) {
+			t.Errorf("build must fail closed on native Schema proof via %q", required)
+		}
 	}
 }
 

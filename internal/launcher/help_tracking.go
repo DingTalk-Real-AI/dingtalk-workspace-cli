@@ -1,10 +1,15 @@
 package launcher
 
 import (
+	"errors"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localename"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/roothelp"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemafastpath"
 )
+
+var errInvalidHelpSnapshot = errors.New("invalid_help_snapshot")
+var errHelpSnapshotMismatch = errors.New("help_snapshot_mismatch")
 
 func tryTrackedHelp(options Options, deps dependencies) (bool, error) {
 	if len(deps.args) != 2 || deps.args[1] != "--help" || options.HelpSnapshot == "" || deps.trackRun == nil || deps.defaultIdentity == nil {
@@ -16,7 +21,10 @@ func tryTrackedHelp(options Options, deps dependencies) (bool, error) {
 	}
 	model, err := roothelp.DecodeSnapshot(options.HelpSnapshot, options.CoreSHA256, options.Commit, options.Edition, localename.Resolve(environmentValue(deps.environ, "LANG")))
 	if err != nil {
-		return false, nil
+		if errors.Is(err, roothelp.ErrSnapshotMismatch) {
+			return true, &Error{Kind: ErrorArtifact, Op: "validate sealed help", Err: errHelpSnapshotMismatch}
+		}
+		return true, &Error{Kind: ErrorArtifact, Op: "validate sealed help", Err: errInvalidHelpSnapshot}
 	}
 	return true, runTrackedPresentation(options, deps, configDir, func() error {
 		// Cobra's existing root HelpFunc ignores writer errors. Preserve that

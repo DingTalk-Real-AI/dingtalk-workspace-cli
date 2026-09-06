@@ -148,6 +148,12 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			}
 		}
 	}()
+	if err := productionSchemaCacheIdentityError(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid embedded Schema cache identity: %v\n", err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = 125
+		return
+	}
 
 	restoreArgs := rootNormalizeProcessProfileArgs()
 	defer restoreArgs()

@@ -68,19 +68,14 @@ func productionSchemaCacheOptions() (cli.SchemaCacheOptions, bool) {
 		return cli.SchemaCacheOptions{}, false
 	}
 
-	identity, err := schemareader.ParseIdentity(schemareader.RawIdentity{
-		Edition: schemaCacheEdition, SourceSHA256: schemaCacheSourceSHA256,
-		SurfaceSHA256: schemaCacheSurfaceSHA256, BuildID: schemaCacheBuildID,
-		MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
-		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
-	})
-	if err != nil {
+	identity, err := schemareader.ParseOptionalIdentity(productionSchemaCacheRawIdentity())
+	if err != nil || identity == nil {
 		return cli.SchemaCacheOptions{}, false
 	}
 	editionName := identity.Edition
 
 	return cli.SchemaCacheOptions{
-		Enabled: true, Identity: identity, GOOS: schemaCacheGOOS, GOARCH: schemaCacheGOARCH,
+		Enabled: true, Identity: *identity, GOOS: schemaCacheGOOS, GOARCH: schemaCacheGOARCH,
 		RuntimeEligible: func() bool {
 			if strings.TrimSpace(os.Getenv(schemaCacheDisableEnv)) != "" {
 				return false
@@ -89,4 +84,18 @@ func productionSchemaCacheOptions() (cli.SchemaCacheOptions, bool) {
 			return hooks != nil && hooks.Name == editionName && hooks.RegisterExtraCommands == nil
 		},
 	}, true
+}
+
+func productionSchemaCacheRawIdentity() schemareader.RawIdentity {
+	return schemareader.RawIdentity{
+		Edition: schemaCacheEdition, SourceSHA256: schemaCacheSourceSHA256,
+		SurfaceSHA256: schemaCacheSurfaceSHA256, BuildID: schemaCacheBuildID,
+		MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
+		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
+	}
+}
+
+func productionSchemaCacheIdentityError() error {
+	_, err := schemareader.ParseOptionalIdentity(productionSchemaCacheRawIdentity())
+	return err
 }

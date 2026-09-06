@@ -458,6 +458,9 @@ function stagePkg(zipEntries, emptyDirs = []) {
     layout_version: 1,
     release: { version: `v${version}`, commit: "1".repeat(40), edition: "open" },
     target: { goos, goarch },
+    capabilities: (goos === "darwin" && goarch === "arm64") || (goos === "linux" && goarch === "amd64")
+      ? { schema_cache: "enabled", root_help: "enabled", disabled_reason: "" }
+      : { schema_cache: "disabled", root_help: "disabled", disabled_reason: "unsupported target or edition" },
     launcher: fileIdentity("bin/dws", launcher),
     core: fileIdentity("libexec/dws-core", core),
   };
@@ -588,21 +591,26 @@ scenario("multi install lays out sibling skills and caches", () => {
   }
 });
 
-scenario("tampered manifest, core and legacy upgrade entry are rejected before vendor activation", () => {
-  for (const kind of ["core", "manifest", "legacy"]) {
+scenario("tampered manifest, capabilities, core and legacy upgrade entry are rejected before vendor activation", () => {
+  for (const kind of ["core", "manifest", "capabilities", "legacy"]) {
     const { tmp, pkg, home } = stagePkg({ "mono/SKILL.md": "# mono\n" });
     try {
       rewritePlatformArchive(pkg, (root) => {
         if (kind === "core") writeFile(path.join(root, "libexec", "dws-core"), "tampered\n", 0o755);
         else if (kind === "legacy") writeFile(path.join(path.dirname(root), "dws"), "tampered\n", 0o755);
-        else {
+        else if (kind === "manifest") {
           const manifestPath = path.join(root, "package-manifest.json");
           writeFile(manifestPath, fs.readFileSync(manifestPath, "utf8").replace('"edition":"open"', '"edition":"enterprise"'));
+        } else {
+          const manifestPath = path.join(root, "package-manifest.json");
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          manifest.capabilities.root_help = manifest.capabilities.root_help === "enabled" ? "disabled" : "enabled";
+          writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
         }
       });
       const res = runInstall(pkg, home, "mono");
       assert.notEqual(res.status, 0);
-      assert.match(res.stderr, kind === "core" ? /core path\/size\/mode\/SHA-256 mismatch/ : kind === "legacy" ? /legacy upgrade entry differs/ : /identity mismatch/);
+      assert.match(res.stderr, kind === "core" ? /core path\/size\/mode\/SHA-256 mismatch/ : kind === "legacy" ? /legacy upgrade entry differs/ : kind === "capabilities" ? /capability matrix mismatch/ : /identity mismatch/);
       assert.equal(fs.existsSync(path.join(pkg, "vendor")), false);
     } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
   }

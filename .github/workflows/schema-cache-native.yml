@@ -58,6 +58,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
@@ -212,6 +213,7 @@ jobs:
           node-version: '22.16.0'
       - name: Measure ordinary commands, process trees and pinned competing CLIs
         if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' && steps.entry_baseline.outcome == 'success' }}
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -327,6 +329,11 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/policy/check-schema-catalog.sh 2>&1 | tee "$RUNNER_TEMP/schema-catalog-policy.txt"
+      - name: Enforce launcher capability allowlist review order
+        if: ${{ !cancelled() }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: ./scripts/policy/check-launcher-capability-allowlist.sh "$PR_BASE_SHA" HEAD
       - name: Upload declaration policy evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

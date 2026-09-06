@@ -85,14 +85,12 @@ func TestCrossPlatformCoverageTrackedHelpUsesBoundProjection(t *testing.T) {
 	}
 }
 func TestCrossPlatformCoverageHelpUncertainInputsDelegate(t *testing.T) {
-	for _, condition := range []string{"missing", "stale", "unknown flag", "settings", "diagnostics"} {
+	for _, condition := range []string{"missing", "unknown flag", "settings", "diagnostics"} {
 		t.Run(condition, func(t *testing.T) {
 			deps, options, _ := helpFixture(t)
 			switch condition {
 			case "missing":
 				options.HelpSnapshot = ""
-			case "stale":
-				options.Commit = strings.Repeat("c", 40)
 			case "unknown flag":
 				deps.args = append(deps.args, "--unknown")
 			case "settings":
@@ -118,6 +116,47 @@ func TestCrossPlatformCoverageHelpUncertainInputsDelegate(t *testing.T) {
 			}
 			if err := run(options, deps); err != nil || !delegated {
 				t.Fatalf("fallback: %v %v", err, delegated)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageInvalidSealedHelpFailsClosed(t *testing.T) {
+	for _, condition := range []string{"malformed", "stale"} {
+		t.Run(condition, func(t *testing.T) {
+			deps, options, _ := helpFixture(t)
+			var stdout bytes.Buffer
+			deps.stdout = &stdout
+			if condition == "malformed" {
+				options.HelpSnapshot = "not-base64"
+			} else {
+				options.Commit = strings.Repeat("c", 40)
+			}
+			deps.delegate = func(string, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error) {
+				t.Fatal("invalid sealed help delegated")
+				return 0, nil
+			}
+			deps.defaultIdentity = func(string) clitelemetry.Identity {
+				t.Fatal("invalid sealed help read tracker identity")
+				return clitelemetry.Identity{}
+			}
+			deps.trackRun = func(clitelemetry.Config, func() error, func(error) int) {
+				t.Fatal("invalid sealed help emitted tracker event")
+			}
+			err := run(options, deps)
+			var launcherErr *Error
+			if !errors.As(err, &launcherErr) || launcherErr.Kind != ErrorArtifact || launcherErr.Op != "validate sealed help" {
+				t.Fatalf("invalid help error = %#v", err)
+			}
+			expected := errInvalidHelpSnapshot
+			if condition == "stale" {
+				expected = errHelpSnapshotMismatch
+			}
+			if !errors.Is(err, expected) || err.Error() != "artifact validate sealed help: "+expected.Error() {
+				t.Fatalf("invalid help classification = %q", err)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("invalid help emitted %q", stdout.String())
 			}
 		})
 	}

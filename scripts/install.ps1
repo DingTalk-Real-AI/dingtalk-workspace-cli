@@ -692,12 +692,13 @@ function Assert-CanonicalPackage {
             if ([regex]::Matches($raw, '"' + [regex]::Escape($name) + '"\s*:').Count -lt 1) { throw "missing $Label field $name" }
         }
     }
-    Assert-PropertyNames $manifest @("layout_version", "release", "target", "launcher", "core") "manifest"
+    Assert-PropertyNames $manifest @("layout_version", "release", "target", "capabilities", "launcher", "core") "manifest"
     Assert-PropertyNames $manifest.release @("version", "commit", "edition") "release"
     Assert-PropertyNames $manifest.target @("goos", "goarch") "target"
+    Assert-PropertyNames $manifest.capabilities @("schema_cache", "root_help", "disabled_reason") "capabilities"
     Assert-PropertyNames $manifest.launcher @("path", "sha256", "size", "mode") "launcher"
     Assert-PropertyNames $manifest.core @("path", "sha256", "size", "mode") "core"
-    foreach ($key in @("layout_version", "release", "target", "launcher", "core", "version", "commit", "edition", "goos", "goarch")) {
+    foreach ($key in @("layout_version", "release", "target", "capabilities", "launcher", "core", "version", "commit", "edition", "goos", "goarch", "schema_cache", "root_help", "disabled_reason")) {
         if ([regex]::Matches($raw, '"' + $key + '"\s*:').Count -ne 1) { throw "duplicate manifest field: $key" }
     }
     foreach ($key in @("path", "sha256", "size", "mode")) {
@@ -706,6 +707,11 @@ function Assert-CanonicalPackage {
     if ($manifest.layout_version -ne 1 -or $manifest.release.version -ne $ExpectedVersion -or
         $manifest.release.commit -cnotmatch '^[0-9a-f]{40}$' -or $manifest.release.edition -cne 'open' -or
         $manifest.target.goos -cne 'windows' -or $manifest.target.goarch -cne $Arch) { throw "package manifest identity mismatch" }
+    if ($manifest.capabilities.schema_cache -cne 'disabled' -or
+        $manifest.capabilities.root_help -cne 'disabled' -or
+        $manifest.capabilities.disabled_reason -cne 'unsupported target or edition') {
+        throw "package capability matrix mismatch"
+    }
     foreach ($record in @(@("launcher", $manifest.launcher, "bin/dws.exe"), @("core", $manifest.core, "libexec/dws-core.exe"))) {
         $label = $record[0]; $identity = $record[1]; $relative = $record[2]
         if ($identity.path -cne $relative -or $identity.sha256 -cnotmatch '^[0-9a-f]{64}$' -or

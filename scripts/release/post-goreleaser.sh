@@ -16,6 +16,7 @@ REQUIRE_DEVELOPER_ID_SIGNING="${DWS_REQUIRE_DEVELOPER_ID_SIGNING:-false}"
 APPLE_NOTARY_API_KEY_FILE="${DWS_APPLE_NOTARY_API_KEY_FILE:-}"
 REQUIRE_NOTARIZATION="${DWS_REQUIRE_NOTARIZATION:-false}"
 RELEASE_COMMIT="${DWS_RELEASE_COMMIT:-}"
+SCHEMA_IDENTITY_PROOF="${DWS_SCHEMA_IDENTITY_PROOF:-}"
 
 export LANG=C
 export LC_ALL=C
@@ -480,7 +481,31 @@ verify_archive_root() {
 
 finalize_platform_archives() {
   "$ROOT/scripts/policy/check-runtime-payload.sh" --allow-unsupported-tools
-  work="$(mktemp -d)"
+  # macOS endpoint policy may terminate freshly built executables launched from
+  # the system temp directory. Keep native build helpers under the checkout and
+  # remove the private staging tree on every exit path.
+  work="$(mktemp -d "$ROOT/.schema-package.XXXXXX")"
+  trap 'rm -rf "$work"' EXIT HUP INT TERM
+  identity_json="$work/schema-cache-identity.json"
+  if [ -n "$SCHEMA_IDENTITY_PROOF" ]; then
+    [ -f "$SCHEMA_IDENTITY_PROOF" ] && [ ! -L "$SCHEMA_IDENTITY_PROOF" ] \
+      || err "DWS_SCHEMA_IDENTITY_PROOF must be a regular native-proof file"
+    cp "$SCHEMA_IDENTITY_PROOF" "$identity_json"
+  else
+    "$ROOT/scripts/build/generate-schema-cache-identity.sh" \
+      -edition open -output "$identity_json"
+  fi
+  # Validate the complete proof and its release binding even when an earlier
+  # workflow attempt already produced canonical package trees below.
+  python3 "$ROOT/scripts/build/schema_package_contract.py" ldflags \
+    --scope core --identity "$identity_json" --version "v$version" \
+    --commit "$release_commit" --build-time "$release_build_time" >/dev/null \
+    || err "invalid Schema identity proof"
+  schema_cache_build_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build_id"])' "$identity_json")" \
+    || err "could not read Schema identity proof"
+  help_generator="$work/root-help-generator"
+  (cd "$ROOT" && env CGO_ENABLED=0 GOTOOLCHAIN=go1.25.9 GOFLAGS='' GOEXPERIMENT='' GOWORK=off \
+    go build -buildmode=pie -trimpath -o "$help_generator" ./internal/generator/cmd_root_help_snapshot)
   found_any=0
   for archive in "$DIST_DIR"/dws-darwin-*.tar.gz "$DIST_DIR"/dws-linux-*.tar.gz "$DIST_DIR"/dws-windows-*.zip; do
     [ -f "$archive" ] || continue
@@ -492,6 +517,11 @@ finalize_platform_archives() {
     target_os="${target%-*}"
     target_arch="${target##*-}"
     package_name="dws-v${version}-${target_os}-${target_arch}"
+    schema_cache_enabled=0
+    if { [ "$target_os" = darwin ] && [ "$target_arch" = arm64 ]; } || \
+       { [ "$target_os" = linux ] && [ "$target_arch" = amd64 ]; }; then
+      schema_cache_enabled=1
+    fi
     stage="$work/$target"
     rm -rf "$stage"
     mkdir -p "$stage"
@@ -503,6 +533,16 @@ finalize_platform_archives() {
     if [ -d "$stage/$package_name" ]; then
       verify_archive_root "$stage" "$package_name"
       verify_package_tree "$stage/$package_name" "$target_os" "$target_arch"
+      if [ "$schema_cache_enabled" -eq 1 ]; then
+        case "$target_os" in
+          windows) packaged_core="$stage/$package_name/libexec/dws-core.exe"; packaged_launcher="$stage/$package_name/bin/dws.exe" ;;
+          *) packaged_core="$stage/$package_name/libexec/dws-core"; packaged_launcher="$stage/$package_name/bin/dws" ;;
+        esac
+        LC_ALL=C grep -aFq "$schema_cache_build_id" "$packaged_core" \
+          || err "canonical package core lacks the sealed Schema identity: $name"
+        LC_ALL=C grep -aFq "$schema_cache_build_id" "$packaged_launcher" \
+          || err "canonical package launcher lacks the sealed Schema identity: $name"
+      fi
       update_checksum_entry "$name" "$(sha256_file "$archive")"
       if [ "$target_os" = darwin ]; then
         notarize_darwin_package "$stage/$package_name" "$package_name" "$work/notary-${target_arch}.zip"
@@ -517,6 +557,17 @@ finalize_platform_archives() {
     esac
     [ -f "$core" ] && [ ! -L "$core" ] || err "dws-core binary not found inside $name after extraction"
     chmod 0755 "$core"
+
+    if [ "$schema_cache_enabled" -eq 1 ]; then
+      core_ldflags="$(python3 "$ROOT/scripts/build/schema_package_contract.py" ldflags \
+        --scope core --identity "$identity_json" --version "v$version" \
+        --commit "$release_commit" --build-time "$release_build_time")" \
+        || err "could not create sealed core build contract for $name"
+      (cd "$ROOT" && env CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+        GOTOOLCHAIN=go1.25.9 GOFLAGS='' GOEXPERIMENT='' GOWORK=off GOAMD64=v1 GOARM64=v8.0 \
+        go build -buildmode=pie -trimpath -ldflags "$core_ldflags" -o "$core" ./cmd)
+      chmod 0755 "$core"
+    fi
 
     "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
     runtime_root="$stage/.dws-runtime/20260825"
@@ -559,7 +610,29 @@ finalize_platform_archives() {
     esac
 
     launcher_ldflags="-s -w -X main.version=v$version -X main.commit=$release_commit -X main.buildTime=$release_build_time -X main.edition=open -X main.coreSHA256=$core_sha -X main.coreSize=$core_size"
+    if [ "$schema_cache_enabled" -eq 1 ]; then
+      help_snapshot_file="$work/root-help-$target.snapshot"
+      native_compare_arg=
+      host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+      host_arch="$(uname -m)"
+      [ "$host_arch" != x86_64 ] || host_arch=amd64
+      if [ "$target_os/$target_arch" != "$host_os/$host_arch" ]; then
+        native_compare_arg=--defer-native-comparison
+      fi
+      python3 "$ROOT/scripts/build/schema_package_contract.py" seal-help \
+        --core "$final_core" --generator "$help_generator" --core-sha256 "$core_sha" \
+        --commit "$release_commit" --proof "$work/root-help-$target-proof.json" \
+        --snapshot-output "$help_snapshot_file" $native_compare_arg \
+        || err "could not seal final core help for $name"
+      help_snapshot="$(cat "$help_snapshot_file")"
+      launcher_ldflags="$(python3 "$ROOT/scripts/build/schema_package_contract.py" ldflags \
+        --scope launcher --identity "$identity_json" --version "v$version" \
+        --commit "$release_commit" --build-time "$release_build_time" \
+        --core-sha256 "$core_sha" --core-size "$core_size" --help-snapshot "$help_snapshot")" \
+        || err "could not create sealed launcher build contract for $name"
+    fi
     (cd "$ROOT" && env CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+      GOTOOLCHAIN=go1.25.9 GOFLAGS='' GOEXPERIMENT='' GOWORK=off GOAMD64=v1 GOARM64=v8.0 \
       go build -buildmode=pie -trimpath -ldflags "$launcher_ldflags" -o "$launcher" ./cmd/dws-launcher)
     [ -f "$launcher" ] && [ ! -L "$launcher" ] || err "launcher build did not produce $launcher"
     chmod 0755 "$launcher"
@@ -571,6 +644,14 @@ finalize_platform_archives() {
     [ "$(wc -c < "$final_core" | tr -d ' ')" = "$core_size" ] || err "finalized core size changed after launcher identity injection for $name"
     LC_ALL=C grep -aFq "$core_sha" "$launcher" || err "launcher does not embed finalized core SHA-256 for $name"
     LC_ALL=C grep -aFq "$core_size" "$launcher" || err "launcher does not embed finalized core size for $name"
+    if [ "$schema_cache_enabled" -eq 1 ]; then
+      LC_ALL=C grep -aFq "$schema_cache_build_id" "$final_core" \
+        || err "finalized core lacks the sealed Schema identity for $name"
+      LC_ALL=C grep -aFq "$schema_cache_build_id" "$launcher" \
+        || err "launcher lacks the sealed Schema identity for $name"
+      LC_ALL=C grep -aFq "$help_snapshot" "$launcher" \
+        || err "launcher lacks the sealed root help snapshot for $name"
+    fi
 
     (cd "$ROOT" && go run ./scripts/build/package-manifest \
       --package-root "$package_root" \
@@ -589,6 +670,7 @@ finalize_platform_archives() {
     fi
   done
   rm -rf "$work"
+  trap - EXIT HUP INT TERM
   [ "$found_any" -eq 1 ] || err "no platform archives found for finalization"
 }
 

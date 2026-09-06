@@ -9,6 +9,7 @@ package schemareader
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -16,6 +17,10 @@ import (
 )
 
 const CatalogSnapshotVersion = 1
+
+// ErrInvalidIdentity is the stable boundary classification for a linker-pinned
+// identity that is present but incomplete or malformed.
+var ErrInvalidIdentity = errors.New("invalid_schema_identity")
 
 type Identity struct {
 	Edition                string
@@ -31,6 +36,33 @@ type Identity struct {
 type RawIdentity struct {
 	Edition, SourceSHA256, SurfaceSHA256, BuildID          string
 	MetaLength, MetaSHA256, RegistryLength, RegistrySHA256 string
+}
+
+// ParseOptionalIdentity distinguishes an intentionally disabled build (every
+// linker field is empty) from a partially injected or malformed release. A
+// broken sealed identity must never be treated as an ordinary cache miss.
+func ParseOptionalIdentity(raw RawIdentity) (*Identity, error) {
+	values := []string{
+		raw.Edition, raw.SourceSHA256, raw.SurfaceSHA256, raw.BuildID,
+		raw.MetaLength, raw.MetaSHA256, raw.RegistryLength, raw.RegistrySHA256,
+	}
+	present := 0
+	for _, value := range values {
+		if value != "" {
+			present++
+		}
+	}
+	if present == 0 {
+		return nil, nil
+	}
+	if present != len(values) {
+		return nil, fmt.Errorf("%w: partial Schema cache identity: got %d of %d fields", ErrInvalidIdentity, present, len(values))
+	}
+	identity, err := ParseIdentity(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidIdentity, err)
+	}
+	return &identity, nil
 }
 
 func ParseIdentity(raw RawIdentity) (Identity, error) {

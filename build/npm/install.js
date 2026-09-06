@@ -938,13 +938,20 @@ function verifyPackageTree(root, identity) {
   const exactKeys = (object, keys, label) => {
     if (!object || typeof object !== "object" || Array.isArray(object) || JSON.stringify(Object.keys(object)) !== JSON.stringify(keys)) throw new Error(`invalid ${label} fields`);
   };
-  exactKeys(manifest, ["layout_version", "release", "target", "launcher", "core"], "manifest");
+  exactKeys(manifest, ["layout_version", "release", "target", "capabilities", "launcher", "core"], "manifest");
   exactKeys(manifest.release, ["version", "commit", "edition"], "release");
   exactKeys(manifest.target, ["goos", "goarch"], "target");
+  exactKeys(manifest.capabilities, ["schema_cache", "root_help", "disabled_reason"], "capabilities");
   exactKeys(manifest.launcher, ["path", "sha256", "size", "mode"], "launcher");
   exactKeys(manifest.core, ["path", "sha256", "size", "mode"], "core");
   if (manifest.layout_version !== 1 || manifest.release.version !== identity.version || !/^[0-9a-f]{40}$/.test(manifest.release.commit) ||
       manifest.release.edition !== "open" || manifest.target.goos !== identity.goos || manifest.target.goarch !== identity.goarch) throw new Error("package manifest identity mismatch");
+  const enabled = (identity.goos === "darwin" && identity.goarch === "arm64") ||
+    (identity.goos === "linux" && identity.goarch === "amd64");
+  const expectedCapabilities = enabled
+    ? { schema_cache: "enabled", root_help: "enabled", disabled_reason: "" }
+    : { schema_cache: "disabled", root_help: "disabled", disabled_reason: "unsupported target or edition" };
+  if (JSON.stringify(manifest.capabilities) !== JSON.stringify(expectedCapabilities)) throw new Error("package capability matrix mismatch");
   const verifyFile = (label, record, expectedPath) => {
     if (record.path !== expectedPath || !Number.isSafeInteger(record.size) || record.size <= 0 || record.size > 4 * 1024 ** 3 ||
         !/^[0-9a-f]{64}$/.test(record.sha256) || !Number.isSafeInteger(record.mode)) throw new Error(`invalid ${label} identity`);

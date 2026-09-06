@@ -27,6 +27,46 @@ func TestVersionBypassesFilesystemExactly(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageCapabilityAllowlist(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		env  []string
+		want capability
+	}{
+		{"version default", []string{"dws", "--version"}, nil, capabilityVersion},
+		{"version opt-out", []string{"dws", "--version"}, []string{"DO_NOT_TRACK=1"}, capabilityVersion},
+		{"version opt-out remains filesystem-free", []string{"dws", "--version"}, []string{"DO_NOT_TRACK=1", "DWS_PERF_DEBUG=1"}, capabilityVersion},
+		{"version extra flag", []string{"dws", "--version", "--json"}, nil, capabilityDelegate},
+		{"root help default", []string{"dws", "--help"}, nil, capabilityRootHelp},
+		{"root help opt-out", []string{"dws", "--help"}, []string{"DO_NOT_TRACK=1"}, capabilityRootHelp},
+		{"short help", []string{"dws", "-h"}, nil, capabilityDelegate},
+		{"leaf help", []string{"dws", "calendar", "--help"}, nil, capabilityDelegate},
+		{"schema opt-out", []string{"dws", "schema", "calendar.list"}, []string{"DO_NOT_TRACK=1"}, capabilitySchema},
+		{"schema default", []string{"dws", "schema", "calendar.list"}, nil, capabilityDelegate},
+		{"schema unsupported flag", []string{"dws", "schema", "calendar.list", "--jq", "."}, []string{"DO_NOT_TRACK=1"}, capabilityDelegate},
+		{"diagnostic environment", []string{"dws", "--help"}, []string{"DWS_PERF_DEBUG=1"}, capabilityDelegate},
+		{"future environment", []string{"dws", "schema"}, []string{"DO_NOT_TRACK=1", "DWS_FUTURE=1"}, capabilityDelegate},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := classifyCapability(test.args, test.env); got != test.want {
+				t.Fatalf("classifyCapability(%q, %q) = %v, want %v", test.args, test.env, got, test.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageInvalidEmbeddedSchemaIdentityFailsBeforeFastPaths(t *testing.T) {
+	deps := dependencies{args: []string{"dws", "--version"}, environ: []string{"DO_NOT_TRACK=1"}, stdout: io.Discard}
+	options := testOptions(0)
+	options.SchemaIdentityErr = errors.New("partial Schema cache identity")
+	err := run(options, deps)
+	var launcherErr *Error
+	if !errors.As(err, &launcherErr) || launcherErr.Kind != ErrorConfiguration || !strings.Contains(err.Error(), "partial Schema cache identity") {
+		t.Fatalf("identity error = %#v", err)
+	}
+}
+
 func TestVersionPreservesTelemetryUnlessExplicitlyOptedOut(t *testing.T) {
 	for _, environment := range [][]string{nil, {"DO_NOT_TRACK="}, {"DO_NOT_TRACK=  "}} {
 		deps, options, _ := testCoreSetup(t, []byte("trusted"))

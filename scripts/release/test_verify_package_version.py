@@ -32,7 +32,8 @@ class PackageVersionTests(unittest.TestCase):
 
     def verify(self):
         report = {'passed': False}
-        check.verify(self.launcher, self.core, self.version, self.commit, self.build_time, report)
+        check.verify(self.launcher, self.core, self.version, self.commit, self.build_time, report,
+                     verify_hot_paths=False)
         return report
 
     def test_exact_metadata_and_unchanged_binaries_pass(self):

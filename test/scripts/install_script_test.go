@@ -466,6 +466,58 @@ func TestInstallPowerShellArchiveAndActivationSafetyContracts(t *testing.T) {
 	}
 }
 
+func TestInstallPowerShellRejectsCapabilityMatrixDrift(t *testing.T) {
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("pwsh is not installed")
+	}
+	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	launcher := []byte("launcher")
+	core := []byte("core")
+	mustWriteFile(t, filepath.Join(root, "bin", "dws.exe"), launcher, 0o644)
+	mustWriteFile(t, filepath.Join(root, "libexec", "dws-core.exe"), core, 0o644)
+	launcherHash := sha256.Sum256(launcher)
+	coreHash := sha256.Sum256(core)
+	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":\"v1.2.3\",\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":\"windows\",\"goarch\":\"amd64\"},\"capabilities\":{\"schema_cache\":\"disabled\",\"root_help\":\"disabled\",\"disabled_reason\":\"unsupported target or edition\"},\"launcher\":{\"path\":\"bin/dws.exe\",\"sha256\":%q,\"size\":%d,\"mode\":0},\"core\":{\"path\":\"libexec/dws-core.exe\",\"sha256\":%q,\"size\":%d,\"mode\":0}}\n",
+		strings.Repeat("1", 40), hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
+	manifestPath := filepath.Join(root, "package-manifest.json")
+	mustWriteFile(t, manifestPath, []byte(manifest), 0o644)
+	functions := extractPowerShellFunction(t, string(data), "Assert-RegularPackageFile") + "\n" +
+		extractPowerShellFunction(t, string(data), "Assert-CanonicalPackage")
+	quotedRoot := strings.ReplaceAll(root, "'", "''")
+	run := func(expectFailure bool) {
+		t.Helper()
+		expect := "$false"
+		if expectFailure {
+			expect = "$true"
+		}
+		program := "$ErrorActionPreference='Stop'\n" + functions +
+			"\ntry { Assert-CanonicalPackage -Root '" + quotedRoot + "' -ExpectedVersion 'v1.2.3' -Arch 'amd64'; " +
+			"if (" + expect + ") { exit 8 } } catch { " +
+			"if (!" + expect + ") { Write-Error $_; exit 9 }; " +
+			"if ($_.Exception.Message -notmatch 'capability matrix mismatch') { Write-Error $_; exit 10 } }; exit 0"
+		if output, runErr := exec.Command(pwsh, "-NoLogo", "-NoProfile", "-Command", program).CombinedOutput(); runErr != nil {
+			current, _ := os.ReadFile(manifestPath)
+			t.Fatalf("PowerShell capability contract: %v\n%s\nmanifest:\n%s\nprogram:\n%s", runErr, output, current, program)
+		}
+	}
+	run(false)
+	from, to := `"root_help":"disabled"`, `"root_help":"enabled"`
+	if strings.Contains(manifest, to) {
+		from, to = to, from
+	}
+	tampered := strings.Replace(manifest, from, to, 1)
+	if tampered == manifest {
+		t.Fatal("capability fixture did not change")
+	}
+	mustWriteFile(t, manifestPath, []byte(tampered), 0o644)
+	run(true)
+}
+
 func TestInstallPowerShellZipLimitsRejectBeforeExtraction(t *testing.T) {
 	pwsh, err := exec.LookPath("pwsh")
 	if err != nil {
@@ -5166,6 +5218,13 @@ func writeTarGz(t *testing.T, path string, files map[string]string) {
 	}
 }
 
+func canonicalCapabilitiesJSON(goos, goarch string) string {
+	if (goos == "darwin" && goarch == "arm64") || (goos == "linux" && goarch == "amd64") {
+		return `{"schema_cache":"enabled","root_help":"enabled","disabled_reason":""}`
+	}
+	return `{"schema_cache":"disabled","root_help":"disabled","disabled_reason":"unsupported target or edition"}`
+}
+
 func writeCanonicalTarGz(t *testing.T, archivePath, version, launcher string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
@@ -5178,8 +5237,8 @@ func writeCanonicalTarGz(t *testing.T, archivePath, version, launcher string) {
 	core := "#!/bin/sh\ncase \"${1-}\" in --version|version) echo " + version + ";; *) printf '%s' " + fmt.Sprintf("%q", delegatedOutput) + ";; esac\n"
 	launcherHash := sha256.Sum256([]byte(launcher))
 	coreHash := sha256.Sum256([]byte(core))
-	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":%q,\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":%q,\"goarch\":%q},\"launcher\":{\"path\":\"bin/dws\",\"sha256\":%q,\"size\":%d,\"mode\":493},\"core\":{\"path\":\"libexec/dws-core\",\"sha256\":%q,\"size\":%d,\"mode\":493}}\n",
-		version, strings.Repeat("1", 40), runtime.GOOS, runtime.GOARCH, hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
+	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":%q,\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":%q,\"goarch\":%q},\"capabilities\":%s,\"launcher\":{\"path\":\"bin/dws\",\"sha256\":%q,\"size\":%d,\"mode\":493},\"core\":{\"path\":\"libexec/dws-core\",\"sha256\":%q,\"size\":%d,\"mode\":493}}\n",
+		version, strings.Repeat("1", 40), runtime.GOOS, runtime.GOARCH, canonicalCapabilitiesJSON(runtime.GOOS, runtime.GOARCH), hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
 	f, err := os.Create(archivePath)
 	if err != nil {
 		t.Fatal(err)
@@ -5244,8 +5303,8 @@ func writeSmokeCanonicalTarGz(t *testing.T, archivePath, version string) {
 	packageName := "dws-v" + semver + "-" + runtime.GOOS + "-" + runtime.GOARCH
 	launcherHash := sha256.Sum256([]byte(launcher))
 	coreHash := sha256.Sum256([]byte(core))
-	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":%q,\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":%q,\"goarch\":%q},\"launcher\":{\"path\":\"bin/dws\",\"sha256\":%q,\"size\":%d,\"mode\":493},\"core\":{\"path\":\"libexec/dws-core\",\"sha256\":%q,\"size\":%d,\"mode\":493}}\n",
-		version, strings.Repeat("1", 40), runtime.GOOS, runtime.GOARCH, hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
+	manifest := fmt.Sprintf("{\"layout_version\":1,\"release\":{\"version\":%q,\"commit\":%q,\"edition\":\"open\"},\"target\":{\"goos\":%q,\"goarch\":%q},\"capabilities\":%s,\"launcher\":{\"path\":\"bin/dws\",\"sha256\":%q,\"size\":%d,\"mode\":493},\"core\":{\"path\":\"libexec/dws-core\",\"sha256\":%q,\"size\":%d,\"mode\":493}}\n",
+		version, strings.Repeat("1", 40), runtime.GOOS, runtime.GOARCH, canonicalCapabilitiesJSON(runtime.GOOS, runtime.GOARCH), hex.EncodeToString(launcherHash[:]), len(launcher), hex.EncodeToString(coreHash[:]), len(core))
 	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
 		t.Fatal(err)
 	}

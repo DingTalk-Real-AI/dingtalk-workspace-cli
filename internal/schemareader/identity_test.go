@@ -4,6 +4,7 @@
 package schemareader
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,5 +47,21 @@ func TestCrossPlatformCoverageBinaryIdentityRejectsUnsupportedAndUnboundedValues
 		if err := candidate.Validate(); err == nil {
 			t.Fatal("unsupported identity accepted")
 		}
+	}
+}
+
+func TestCrossPlatformCoverageOptionalIdentityDistinguishesDisabledAndInvalid(t *testing.T) {
+	if identity, err := ParseOptionalIdentity(RawIdentity{}); err != nil || identity != nil {
+		t.Fatalf("empty identity = %#v, %v", identity, err)
+	}
+	if identity, err := ParseOptionalIdentity(RawIdentity{Edition: "open"}); !errors.Is(err, ErrInvalidIdentity) || identity != nil {
+		t.Fatalf("partial identity = %#v, %v", identity, err)
+	}
+	digest := strings.Repeat("a", 64)
+	valid := RawIdentity{Edition: "open", SourceSHA256: digest, SurfaceSHA256: digest, BuildID: digest,
+		MetaLength: "1", MetaSHA256: digest, RegistryLength: "1", RegistrySHA256: digest}
+	identity, err := ParseOptionalIdentity(valid)
+	if err != nil || identity == nil || identity.Edition != "open" {
+		t.Fatalf("valid optional identity = %#v, %v", identity, err)
 	}
 }

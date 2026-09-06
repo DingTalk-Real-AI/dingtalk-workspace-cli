@@ -24,6 +24,46 @@ def timeout_handler(signum, frame):
     raise CommandTimedOut()
 
 
+def terminate_process_tree(child, grace_seconds=2):
+    """Stop a wrapper and descendants, including children in another group."""
+    descendants = []
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
+    if psutil is not None:
+        try:
+            root = psutil.Process(child.pid)
+            descendants = root.children(recursive=True)
+        except psutil.NoSuchProcess:
+            pass
+    if child.poll() is None:
+        try:
+            child.terminate()
+        except ProcessLookupError:
+            pass
+    if descendants:
+        for process in descendants:
+            try:
+                process.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        _, alive = psutil.wait_procs(descendants, timeout=grace_seconds)
+        for process in alive:
+            try:
+                process.kill()
+            except psutil.NoSuchProcess:
+                pass
+    try:
+        child.wait(timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        try:
+            child.kill()
+        except ProcessLookupError:
+            pass
+        child.wait()
+
+
 def main():
     request = json.load(sys.stdin)
     timeout = float(request['timeout_seconds'])
@@ -43,11 +83,11 @@ def main():
             signal.setitimer(signal.ITIMER_REAL, 0)
         except CommandTimedOut:
             timed_out = True
-            child.kill()
-            # A deadline may race with successful wait4 completion. Popen's
-            # wait tolerates an already-reaped child; failed samples have no
-            # resource-usage claim and are rejected by the coordinator.
-            child.wait()
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            # The real npm wrapper creates a separate vendor process group.
+            # SIGTERM lets it forward shutdown; psutil (when installed by the
+            # process-tree job) also closes descendants if the wrapper cannot.
+            terminate_process_tree(child)
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
         elapsed = (time.perf_counter() - started) * 1000

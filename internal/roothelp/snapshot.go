@@ -13,6 +13,10 @@ import (
 
 const MaxSnapshotBytes = 256 << 10
 
+// ErrSnapshotMismatch is the stable classification for a structurally valid
+// snapshot that is bound to a different finalized package identity.
+var ErrSnapshotMismatch = errors.New("help snapshot does not match finalized core")
+
 // Snapshot is a disposable build derivative, sealed into the launcher only
 // after comparing both locale projections with the exact finalized core.
 // It is never read from user configuration or a runtime cache.
@@ -92,7 +96,7 @@ func DecodeSnapshot(encoded, coreSHA256, commit, edition, locale string) (Model,
 		return Model{}, errors.New("non-canonical help snapshot")
 	}
 	if snapshot.CoreSHA256 != coreSHA256 || snapshot.Commit != commit || snapshot.Edition != edition {
-		return Model{}, errors.New("help snapshot does not match finalized core")
+		return Model{}, ErrSnapshotMismatch
 	}
 	switch locale {
 	case "en":

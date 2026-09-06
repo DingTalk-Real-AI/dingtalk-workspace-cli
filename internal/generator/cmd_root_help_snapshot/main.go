@@ -1,6 +1,6 @@
-// cmd_root_help_snapshot projects the reviewed root for development-candidate
-// sealing. The build driver must compare its references with the finalized core
-// before injecting Snapshot into a launcher. This does not authorize releases.
+// cmd_root_help_snapshot projects the reviewed root for candidate and release
+// sealing. Native candidate and final-artifact jobs compare its references with
+// the finalized core before accepting the launcher.
 package main
 
 import (
@@ -32,18 +32,16 @@ func main() {
 	snapshot := roothelp.Snapshot{Version: 1, Edition: "open", Commit: commit, CoreSHA256: digest}
 	references := map[string][]byte{}
 	for _, locale := range []string{"en", "zh"} {
-		i18n.SetLang(locale)
-		root := app.NewSchemaSourceRootCommand()
-		root.InitDefaultHelpCmd()
-		model := app.RootHelpModel(root)
+		model, reference := project(locale)
 		if locale == "en" {
 			snapshot.English = model
 		} else {
 			snapshot.Chinese = model
 		}
-		var out bytes.Buffer
-		roothelp.Render(&out, model)
-		references[locale] = out.Bytes()
+		references[locale] = reference
+		// The declaration root is much larger than the retained root-help model.
+		// Release it before constructing the second locale on constrained runners.
+		runtime.GC()
 	}
 	encoded, err := roothelp.EncodeSnapshot(snapshot)
 	if err != nil {
@@ -67,4 +65,15 @@ func main() {
 		fail(err)
 	}
 }
+
+func project(locale string) (roothelp.Model, []byte) {
+	i18n.SetLang(locale)
+	root := app.NewSchemaSourceRootCommand()
+	root.InitDefaultHelpCmd()
+	model := app.RootHelpModel(root)
+	var out bytes.Buffer
+	roothelp.Render(&out, model)
+	return model, out.Bytes()
+}
+
 func fail(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }

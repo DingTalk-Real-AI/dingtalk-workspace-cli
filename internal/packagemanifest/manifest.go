@@ -44,6 +44,13 @@ type Target struct {
 	GOARCH string `json:"goarch"`
 }
 
+// Capabilities records the fixed hot-path support matrix for this target.
+type Capabilities struct {
+	SchemaCache    string `json:"schema_cache"`
+	RootHelp       string `json:"root_help"`
+	DisabledReason string `json:"disabled_reason"`
+}
+
 // Identity is supplied independently by a trusted caller when verifying.
 type Identity struct {
 	Release Release
@@ -65,6 +72,7 @@ type Manifest struct {
 	LayoutVersion int          `json:"layout_version"`
 	Release       Release      `json:"release"`
 	Target        Target       `json:"target"`
+	Capabilities  Capabilities `json:"capabilities"`
 	Launcher      FileIdentity `json:"launcher"`
 	Core          FileIdentity `json:"core"`
 }
@@ -112,6 +120,7 @@ func Build(root string, identity Identity) (Manifest, error) {
 		LayoutVersion: LayoutVersion,
 		Release:       identity.Release,
 		Target:        identity.Target,
+		Capabilities:  capabilitiesFor(identity),
 		Launcher:      launcher,
 		Core:          core,
 	}
@@ -175,10 +184,23 @@ func (manifest Manifest) Validate() error {
 	if err := validateIdentity(identity); err != nil {
 		return err
 	}
+	if expected := capabilitiesFor(identity); manifest.Capabilities != expected {
+		return fmt.Errorf("capability matrix mismatch: got %+v, want %+v", manifest.Capabilities, expected)
+	}
 	if err := validateFileIdentity("launcher", manifest.Launcher, manifest.Target); err != nil {
 		return err
 	}
 	return validateFileIdentity("core", manifest.Core, manifest.Target)
+}
+
+func capabilitiesFor(identity Identity) Capabilities {
+	enabled := identity.Release.Edition == "open" &&
+		((identity.Target.GOOS == "darwin" && identity.Target.GOARCH == "arm64") ||
+			(identity.Target.GOOS == "linux" && identity.Target.GOARCH == "amd64"))
+	if enabled {
+		return Capabilities{SchemaCache: "enabled", RootHelp: "enabled"}
+	}
+	return Capabilities{SchemaCache: "disabled", RootHelp: "disabled", DisabledReason: "unsupported target or edition"}
 }
 
 // VerifyTree verifies the complete fixed-layout tree against a trusted identity.

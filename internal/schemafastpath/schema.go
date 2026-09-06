@@ -151,6 +151,19 @@ func schemaEnvironmentIsPlain(environment []string) bool {
 	return true
 }
 
+// SupportsRequest reports whether argv and environment are inside the closed
+// launcher Schema capability before any cache or user filesystem access.
+func SupportsRequest(args, environment []string) bool {
+	_, ok := parseSchemaRequest(args)
+	return ok && schemaEnvironmentIsPlain(environment)
+}
+
+// PlainEnvironment reports the shared build-time allowlist for presentation
+// capabilities. Filesystem extension absence remains part of PlainInvocation.
+func PlainEnvironment(environment []string) bool {
+	return schemaEnvironmentIsPlain(environment)
+}
+
 func environmentValue(environment []string, key string) string {
 	for _, entry := range environment {
 		name, value, _ := strings.Cut(entry, "=")

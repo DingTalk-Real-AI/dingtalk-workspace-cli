@@ -4,12 +4,44 @@
 package app
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
+
+const partialSchemaIdentityProcess = "DWS_TEST_PARTIAL_SCHEMA_IDENTITY_PROCESS"
+
+func TestCrossPlatformCoverageCorePartialIdentityFailsAtProcessBoundary(t *testing.T) {
+	if os.Getenv(partialSchemaIdentityProcess) == "1" {
+		schemaCacheGOOS, schemaCacheGOARCH = "linux", "amd64"
+		schemaCacheEdition = "open"
+		schemaCacheSourceSHA256, schemaCacheSurfaceSHA256, schemaCacheBuildID = "", "", ""
+		schemaCacheMetaLength, schemaCacheMetaSHA256, schemaCacheRegistryLength, schemaCacheRegistrySHA256 = "", "", "", ""
+		os.Args = []string{"dws", "--version"}
+		exitCode, _, _ := ExecuteWithTelemetry()
+		if exitCode != 125 {
+			fmt.Fprintf(os.Stderr, "unexpected core exit code %d\n", exitCode)
+			os.Exit(99)
+		}
+		os.Exit(exitCode)
+	}
+
+	command := exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoverageCorePartialIdentityFailsAtProcessBoundary$", "-test.count=1")
+	command.Env = append(os.Environ(), partialSchemaIdentityProcess+"=1")
+	output, err := command.CombinedOutput()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 125 ||
+		!strings.Contains(string(output), "Error: invalid embedded Schema cache identity: invalid_schema_identity: partial Schema cache identity") {
+		t.Fatalf("partial core identity result: err=%v output=%q", err, output)
+	}
+}
 
 func TestProductionSchemaCacheIdentityParsingFailsClosed(t *testing.T) {
 	restore := saveSchemaCacheBuildVars()
@@ -48,6 +80,37 @@ func TestProductionSchemaCacheIdentityParsingFailsClosed(t *testing.T) {
 			test.set()
 			if _, enabled := productionSchemaCacheOptions(); enabled {
 				t.Fatal("invalid production identity enabled persistent cache")
+			}
+			if test.name != "unknown target" && productionSchemaCacheIdentityError() == nil {
+				t.Fatal("invalid production identity was treated as an intentionally disabled build")
+			}
+		})
+	}
+	t.Run("partial identity on unsupported target", func(t *testing.T) {
+		restoreCase := saveSchemaCacheBuildVars()
+		defer restoreCase()
+		schemaCacheGOOS, schemaCacheGOARCH = "windows", "amd64"
+		schemaCacheBuildID = ""
+		if err := productionSchemaCacheIdentityError(); !errors.Is(err, schemareader.ErrInvalidIdentity) {
+			t.Fatalf("partial unsupported identity error = %v", err)
+		}
+	})
+	for _, test := range []struct {
+		name string
+		set  func()
+	}{
+		{"all empty", func() {
+			schemaCacheEdition, schemaCacheSourceSHA256, schemaCacheSurfaceSHA256, schemaCacheBuildID = "", "", "", ""
+			schemaCacheMetaLength, schemaCacheMetaSHA256, schemaCacheRegistryLength, schemaCacheRegistrySHA256 = "", "", "", ""
+		}},
+		{"unsupported target", func() { schemaCacheGOOS, schemaCacheGOARCH = "windows", "amd64" }},
+	} {
+		t.Run(test.name+" is intentionally disabled", func(t *testing.T) {
+			restoreCase := saveSchemaCacheBuildVars()
+			defer restoreCase()
+			test.set()
+			if err := productionSchemaCacheIdentityError(); err != nil {
+				t.Fatalf("disabled build error: %v", err)
 			}
 		})
 	}

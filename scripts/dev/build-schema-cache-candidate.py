@@ -6,14 +6,18 @@ not a release enablement or Developer ID/notarization proof.
 """
 
 import argparse
-import base64
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
-import tempfile
+
+contract_spec = importlib.util.spec_from_file_location(
+    'schema_package_contract', Path(__file__).resolve().parents[1] / 'build/schema_package_contract.py')
+contract = importlib.util.module_from_spec(contract_spec)
+contract_spec.loader.exec_module(contract)
 
 
 def sha256(path):
@@ -23,62 +27,6 @@ def sha256(path):
             value.update(chunk)
     return value.hexdigest()
 
-
-def failure_output(data):
-    """Keep bounded failure bytes plus the digest of the complete stream."""
-    limit = 1024 * 1024
-    return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-            "base64": base64.b64encode(data[:limit]).decode(), "truncated": len(data) > limit}
-
-
-def seal_root_help(core, help_generator, core_digest, commit, output):
-    help_proof = {"passed": False, "release_eligible": False, "core_sha256": core_digest,
-                  "source_commit": commit, "generator_sha256": sha256(help_generator), "locales": {}}
-    try:
-        with tempfile.TemporaryDirectory(prefix=".dws-help-proof-", dir=Path.home()) as directory:
-            home = Path(directory)
-            help_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(home),
-                        "DWS_CONFIG_DIR": str(home / ".dws"), "DO_NOT_TRACK": "1",
-                        "NO_COLOR": "1", "LANG": "en", "LC_ALL": "C"}
-            generated = subprocess.run([str(help_generator), "-commit", commit, "-core-sha256", core_digest],
-                                       env=help_env, cwd=home, capture_output=True, timeout=30, check=True)
-            if generated.stderr:
-                help_proof["failed_process"] = {"timed_out": False, "returncode": generated.returncode,
-                                                "stdout": failure_output(generated.stdout),
-                                                "stderr": failure_output(generated.stderr)}
-                raise RuntimeError("help generator emitted diagnostics")
-            projection = json.loads(generated.stdout)
-            for locale in ("en", "zh"):
-                result = subprocess.run([str(core), "--help"], env={**help_env, "LANG": locale},
-                                        cwd=home, capture_output=True, timeout=30)
-                expected = base64.b64decode(projection["References"][locale], validate=True)
-                equal = result.returncode == 0 and not result.stderr and result.stdout == expected
-                detail = help_proof["locales"][locale] = {
-                    "stdout_sha256": hashlib.sha256(expected).hexdigest(), "stdout_bytes": len(expected),
-                    "actual_stdout_sha256": hashlib.sha256(result.stdout).hexdigest(),
-                    "returncode": result.returncode, "equal": bool(equal)}
-                if not equal:
-                    detail.update(expected_stdout=failure_output(expected),
-                                  actual_stdout=failure_output(result.stdout), stderr=failure_output(result.stderr))
-                    raise RuntimeError(f"{locale} help projection differs from finalized core")
-            if sha256(core) != core_digest:
-                raise RuntimeError("core changed during help projection proof")
-            help_snapshot = projection["Snapshot"]
-            if not isinstance(help_snapshot, str) or not help_snapshot:
-                raise RuntimeError("help generator emitted an empty snapshot")
-            help_proof.update(passed=True, snapshot_sha256=hashlib.sha256(help_snapshot.encode()).hexdigest())
-    except Exception as error:
-        help_proof["error"] = str(error)
-        if isinstance(error, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
-            help_proof["failed_process"] = {
-                "timed_out": isinstance(error, subprocess.TimeoutExpired),
-                "returncode": getattr(error, "returncode", None),
-                "stdout": failure_output(error.stdout or b""),
-                "stderr": failure_output(error.stderr or b"")}
-        raise
-    finally:
-        (output / "root-help-proof.json").write_text(json.dumps(help_proof, indent=2) + "\n")
-    return help_snapshot
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -115,18 +63,7 @@ def main():
     (package / "bin").mkdir(parents=True)
     (package / "libexec").mkdir()
     core, launcher = package / "libexec/dws-core", package / "bin/dws"
-    fields = {
-        "schemaCacheEdition": "edition", "schemaCacheSourceSHA256": "source_sha256",
-        "schemaCacheSurfaceSHA256": "surface_sha256", "schemaCacheBuildID": "build_id",
-        "schemaCacheMetaLength": "meta_length", "schemaCacheMetaSHA256": "meta_sha256",
-        "schemaCacheRegistryLength": "registry_length", "schemaCacheRegistrySHA256": "registry_sha256",
-    }
-    app_package = "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
-    flags = ["-s", "-w", "-X", f"{app_package}.version={args.version}",
-             "-X", f"{app_package}.gitCommit={commit}", "-X", f"{app_package}.buildTime={build_time}"]
-    for field, key in fields.items():
-        flags += ["-X", f"{app_package}.{field}={proof[key]}"]
-    core_ldflags = " ".join(flags)
+    core_ldflags = contract.core_ldflags(proof, args.version, commit, build_time)
     run(["go", "build", "-trimpath", "-buildmode=pie", "-ldflags", core_ldflags, "-o", str(core), "./cmd"])
     staging = output / "runtime-staging"
     run(["sh", "scripts/build/prepare-runtime-payload.sh", goos, goarch, str(staging)])
@@ -147,11 +84,10 @@ def main():
     help_generator = output / "root-help-generator"
     run(["go", "build", "-trimpath", "-buildmode=pie", "-o", str(help_generator),
          "./internal/generator/cmd_root_help_snapshot"])
-    help_snapshot = seal_root_help(core, help_generator, core_digest, commit, output)
-    flags = f"-s -w -X main.version={args.version} -X main.commit={commit} -X main.buildTime={build_time} -X main.edition=open -X main.coreSHA256={core_digest} -X main.coreSize={core_size}"
-    flags += f" -X main.helpSnapshot={help_snapshot}"
-    for field, key in fields.items():
-        flags += f" -X main.{field}={proof[key]}"
+    help_snapshot = contract.seal_root_help(core, help_generator, core_digest, commit,
+                                            output / "root-help-proof.json")
+    flags = contract.launcher_ldflags(proof, args.version, commit, build_time,
+                                      core_digest, str(core_size), help_snapshot)
     run(["go", "build", "-trimpath", "-buildmode=pie", "-ldflags", flags, "-o", str(launcher), "./cmd/dws-launcher"])
     if goos == "darwin":
         run(["codesign", "--force", "--sign", "-", str(launcher)])

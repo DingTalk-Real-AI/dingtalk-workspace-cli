@@ -13,6 +13,8 @@ import (
 )
 
 func TestCrossPlatformCoverageLauncherRuntimeDependencies(t *testing.T) {
+	// This exact repository package closure is the dependency half of the
+	// executable capability allowlist enforced by capabilities.go and PR policy.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	command := exec.CommandContext(ctx, "go", "list", "-deps", "-json", "./cmd/dws-launcher")

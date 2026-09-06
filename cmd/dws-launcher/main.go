@@ -34,14 +34,10 @@ func main() {
 	if err != nil {
 		size = -1
 	}
-	identity, identityErr := schemareader.ParseIdentity(schemareader.RawIdentity{
+	schemaIdentity, identityErr := schemareader.ParseOptionalIdentity(schemareader.RawIdentity{
 		Edition: schemaCacheEdition, SourceSHA256: schemaCacheSourceSHA256, SurfaceSHA256: schemaCacheSurfaceSHA256,
 		BuildID: schemaCacheBuildID, MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
 		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
 	})
-	var schemaIdentity *schemareader.Identity
-	if identityErr == nil {
-		schemaIdentity = &identity
-	}
-	os.Exit(launcher.Main(launcher.Options{HelpSnapshot: helpSnapshot, SchemaIdentity: schemaIdentity, Version: version, Commit: commit, BuildTime: buildTime, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
+	os.Exit(launcher.Main(launcher.Options{HelpSnapshot: helpSnapshot, SchemaIdentity: schemaIdentity, SchemaIdentityErr: identityErr, Version: version, Commit: commit, BuildTime: buildTime, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
 }

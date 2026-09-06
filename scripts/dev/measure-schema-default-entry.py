@@ -2,10 +2,11 @@
 """Measure default-tracker Schema and canonical package entry overhead.
 
 Uses the exact candidate and its packaged core with a fresh HOME and no auth
-profile. DO_NOT_TRACK is absent from every measured child: identity resolution,
-tracking and the normal flush budget remain active. Network conditions are not
-controlled. An optional pinned pre-PR binary adds whole-PR help/version latency
-comparisons. This is not competitive acceptance or cache-I/O absence proof.
+profile. Help/version are measured both with the default tracker and with the
+explicit DO_NOT_TRACK opt-out. Network conditions are not controlled. An
+optional pinned pre-PR binary adds whole-PR help/version latency gates. The
+same-package launcher/core comparison is diagnostic only. This is not
+competitive acceptance or cache-I/O absence proof.
 """
 
 import argparse
@@ -20,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 spec = importlib.util.spec_from_file_location('candidate_measure',
     Path(__file__).with_name('verify-schema-cache-binary.py'))
@@ -53,8 +55,9 @@ def measure_cases(cases, samples, seed, home, report):
     raw = report['raw_samples'] = {name: [] for name in cases}
     for index, name in enumerate(order):
         binary, argv, env, expected = cases[name]
-        if 'DO_NOT_TRACK' in env:
-            raise RuntimeError('default-entry measurement must not set DO_NOT_TRACK')
+        opt_out = name.endswith('-opt-out')
+        if ('DO_NOT_TRACK' in env) != opt_out:
+            raise RuntimeError(f'{name}: DO_NOT_TRACK presence does not match case classification')
         output, usage = measure.invoke(binary, argv, env, home)
         raw[name].append(usage)
         if output != expected:
@@ -64,24 +67,47 @@ def measure_cases(cases, samples, seed, home, report):
     report['summary'] = {name: measure.summarize(values) for name, values in raw.items()}
     summary = report['summary']
     gates = {
-        'schema_user_cpu_reduction_at_least_80_percent':
+        'schema_default_user_cpu_reduction_at_least_80_percent':
             summary['schema-cache']['user_ms']['p50'] <= .2 * summary['schema-live']['user_ms']['p50'],
-        'schema_peak_rss_at_most_100_mib':
+        'schema_default_peak_rss_at_most_100_mib':
             max(s['max_rss_bytes'] for s in raw['schema-cache']) <= 100 * 1024 * 1024,
+        'schema_opt_out_user_cpu_reduction_at_least_80_percent':
+            summary['schema-cache-opt-out']['user_ms']['p50'] <= .2 * summary['schema-live-opt-out']['user_ms']['p50'],
+        'schema_opt_out_peak_rss_at_most_100_mib':
+            max(s['max_rss_bytes'] for s in raw['schema-cache-opt-out']) <= 100 * 1024 * 1024,
     }
+    diagnostics = {}
     for entry in ('help', 'version'):
-        for percentile in ('p50', 'p95'):
-            gates[f'{entry}_package_wall_{percentile}_overhead_at_most_5_percent'] = (
-                summary[f'{entry}-launcher']['wall_ms'][percentile] <=
-                1.05 * summary[f'{entry}-core']['wall_ms'][percentile])
-            if f'{entry}-baseline' in summary:
-                gates[f'{entry}_pre_pr_wall_{percentile}_regression_at_most_5_percent'] = (
-                    summary[f'{entry}-launcher']['wall_ms'][percentile] <=
-                    1.05 * summary[f'{entry}-baseline']['wall_ms'][percentile])
+        for mode, suffix in (('default', ''), ('opt_out', '-opt-out')):
+            for percentile in ('p50', 'p95'):
+                diagnostics[f'{entry}_same_package_{mode}_wall_{percentile}_overhead_at_most_5_percent'] = (
+                    summary[f'{entry}-launcher{suffix}']['wall_ms'][percentile] <=
+                    1.05 * summary[f'{entry}-core{suffix}']['wall_ms'][percentile])
+                if f'{entry}-baseline{suffix}' in summary:
+                    gates[f'{entry}_pre_pr_{mode}_wall_{percentile}_regression_at_most_5_percent'] = (
+                        summary[f'{entry}-launcher{suffix}']['wall_ms'][percentile] <=
+                        1.05 * summary[f'{entry}-baseline{suffix}']['wall_ms'][percentile])
     baseline_gates = [value for key, value in gates.items() if '_pre_pr_' in key]
-    report['pre_pr_help_version_latency_proven'] = len(baseline_gates) == 4 and all(baseline_gates)
+    report['pre_pr_help_version_latency_proven'] = len(baseline_gates) == 8 and all(baseline_gates)
+    report['diagnostics'] = diagnostics
     report['gates'] = gates
-    report['passed'] = all(gates.values())
+    report['passed'] = all(gates.values()) and report['pre_pr_help_version_latency_proven']
+
+
+def measure_core_hash_diagnostic(core, expected_sha256, samples):
+    """Measure the mandatory full-core digest separately from entry gates."""
+    raw = []
+    for _ in range(samples):
+        started = time.perf_counter()
+        actual = measure.digest(core)
+        raw.append({'wall_ms': (time.perf_counter() - started) * 1000})
+        if actual != expected_sha256:
+            raise RuntimeError('core changed during SHA-256 diagnostic')
+    return {
+        'method': 'Python SHA-256 over every finalized core byte; excluded from gates',
+        'raw_samples': raw,
+        'summary': measure.summarize(raw),
+    }
 
 
 def main():
@@ -104,12 +130,15 @@ def main():
               'pre_pr_baseline_proven': False, 'competitive_acceptance_proven': False,
               'pre_pr_help_version_latency_proven': False, 'cache_io_absence_proven': False,
               'platform': platform.platform(), 'samples_per_mode': args.samples, 'seed': args.seed,
-              'telemetry': 'DO_NOT_TRACK absent in every measured child; default tracker unchanged',
+              'telemetry': 'help/version cover default tracking and explicit DO_NOT_TRACK opt-out',
               'network_sandboxed': False,
               'measurement': 'wait4 in a fresh sampler; sampler startup excluded from child wall time'}
     try:
         binary = args.binary.resolve(strict=True)
         manifest = json.loads((binary.parent.parent / 'package-manifest.json').read_text())
+        if manifest.get('capabilities') != {
+                'schema_cache': 'enabled', 'root_help': 'enabled', 'disabled_reason': ''}:
+            raise RuntimeError('candidate manifest does not declare enabled Schema/help capabilities')
         core = (binary.parent.parent / manifest['core']['path']).resolve(strict=True)
         binary_sha, core_sha = measure.digest(binary), measure.digest(core)
         if binary_sha != manifest['launcher']['sha256'] or core_sha != manifest['core']['sha256']:
@@ -184,24 +213,31 @@ def main():
                 if len(data) != 208 + proof[prefix + '_length'] or hashlib.sha256(data[208:]).hexdigest() != proof[prefix + '_sha256']:
                     raise RuntimeError('warmed artifact differs from native identity proof')
             cases = {'schema-cache': (binary, leaf, env, expected),
-                     'schema-live': (binary, leaf, live, expected)}
+                     'schema-live': (binary, leaf, live, expected),
+                     'schema-cache-opt-out': (binary, leaf, {**env, 'DO_NOT_TRACK': '1'}, expected),
+                     'schema-live-opt-out': (binary, leaf, {**live, 'DO_NOT_TRACK': '1'}, expected)}
             for name, argv in (('help', ['--help']), ('version', ['--version'])):
                 expected, _ = measure.invoke(core, argv, {**env, 'DO_NOT_TRACK': '1'}, home)
-                cases[name + '-launcher'] = (binary, argv, env, expected)
-                cases[name + '-core'] = (core, argv, env, expected)
-                if baseline:
-                    baseline_output, _ = measure.invoke(baseline, argv, {**env, 'DO_NOT_TRACK': '1'}, home)
-                    if not baseline_output:
-                        raise RuntimeError('baseline entry produced empty output')
-                    if name == 'version':
-                        expected_version = (f"dws version {baseline_proof['version']} "
-                                            f"({baseline_proof['source_commit']}, {baseline_proof['build_time']})\n").encode()
-                        if baseline_output != expected_version:
-                            raise RuntimeError('baseline version differs from its sealed build metadata')
-                    # Help and version can legitimately change across source
-                    # commits; each baseline invocation must match its own oracle.
-                    report.setdefault('baseline_output_sha256', {})[name] = hashlib.sha256(baseline_output).hexdigest()
-                    cases[name + '-baseline'] = (baseline, argv, env, baseline_output)
+                for mode, suffix, mode_env in (
+                        ('default', '', env),
+                        ('opt_out', '-opt-out', {**env, 'DO_NOT_TRACK': '1'})):
+                    cases[name + '-launcher' + suffix] = (binary, argv, mode_env, expected)
+                    cases[name + '-core' + suffix] = (core, argv, mode_env, expected)
+                    if baseline:
+                        baseline_output, _ = measure.invoke(baseline, argv, mode_env, home)
+                        if not baseline_output:
+                            raise RuntimeError('baseline entry produced empty output')
+                        if name == 'version':
+                            expected_version = (f"dws version {baseline_proof['version']} "
+                                                f"({baseline_proof['source_commit']}, {baseline_proof['build_time']})\n").encode()
+                            if baseline_output != expected_version:
+                                raise RuntimeError('baseline version differs from its sealed build metadata')
+                        # Help and version can legitimately change across source
+                        # commits; each baseline invocation must match its own oracle.
+                        key = f'{name}_{mode}'
+                        report.setdefault('baseline_output_sha256', {})[key] = hashlib.sha256(baseline_output).hexdigest()
+                        cases[name + '-baseline' + suffix] = (baseline, argv, mode_env, baseline_output)
+            report['core_sha256_diagnostic'] = measure_core_hash_diagnostic(core, core_sha, args.samples)
             measure_cases(cases, args.samples, args.seed, home, report)
         if measure.digest(binary) != binary_sha or measure.digest(core) != core_sha:
             raise RuntimeError('finalized candidate bytes changed during measurement')

@@ -27,7 +27,7 @@
 
 ### 1.2 可执行 allowlist：能力与依赖均封闭
 
-以下是允许的全部 launcher 执行能力，未列出的一律交给 core。`plain` 的严格环境、无扩展和配置缺席检查由 `schemafastpath.PlainInvocation` 统一拥有，不能在每条快路径中自行放宽。
+以下是允许的全部 launcher 执行能力，未列出的一律交给 core。环境变量的 `plain` 判定由 `schemafastpath.PlainEnvironment` 统一拥有；会读取配置目录的 help/Schema 再由 `schemafastpath.PlainInvocation` 统一验证无扩展和配置缺席，不能在每条快路径中自行放宽。exact `--version` 的默认上报模式应用环境 allowlist；显式 telemetry opt-out 的输出不受扩展或其他 `DWS_*` 环境影响，保留 exact argv + opt-out 判定后的零文件系统路径，不为检查扩展而读取配置目录。
 
 | 能力 | 允许 | 禁止 / 委派 |
 |---|---|---|
@@ -1000,7 +1000,9 @@ compiled edition 不同的 `-edition`，并拒绝 `RegisterExtraCommands` 非 ni
 
 **选择“正式包与候选同构注入”，不采用长期内部专用或运行时版本开关方案。** 生效条件固定为：**首次包含本 RFC 实现的官方 release（prerelease 与 stable 均包含）**。对 v1 enabled targets `open × {darwin/arm64, linux/amd64}`，该次发布必须同时包含 core/launcher 的完整 Schema identity，以及绑定最终 core 的 launcher help snapshot；不得发布能力字段缺失的 enabled-target 包。proof 缺失/失败即阻止该 target 发布，不准退化为空字段后继续宣称支持；不得临时删除 enabled target 或改标 disabled 绕过此条件，支持矩阵变化须先改 RFC。
 
-候选与正式包必须调用**同一份封装实现**：生成/核验 target proof → 注入 Schema identity 构建 core → 注入 runtime payload 并完成 core 签名 → 从声明生成帮助模型并与最终 core 的 en/zh 输出逐字节比较 → 同时注入 core digest/size、Schema identity 和 help snapshot 构建 launcher → 签名/公证 → 对最终 bytes 执行 proof → 归档/解包再验。只允许签名凭据、版本元数据及“是否发布”的参数不同，不能有分别维护的步骤顺序或 capability 开关。
+候选与正式包必须调用**同一份封装实现**：生成/核验 target proof → 注入 Schema identity 构建 core → 注入 runtime payload 并完成 core 签名 → 从声明生成绑定最终 core digest 的帮助模型 → 同时注入 core digest/size、Schema identity 和 help snapshot 构建 launcher → 签名/公证 → 在对应 target 的 native runner 上将最终 core 的 en/zh 输出与模型逐字节比较，并验证无 core 副本的 launcher 输出 → 对最终 bytes 执行 proof → 归档/解包再验。
+
+native 候选在同一机器上连续完成模型生成、core 比较和 launcher 构建。正式发布的归档集中在 Linux 构建机产生；对于同机可执行的 Linux/amd64，比较可在 launcher 构建前完成；对于交叉构建的 Darwin/arm64，构建机必须把比较明确记录为 pending，随后由发布工作流中的 Darwin/arm64 native runner 在公开发布前完成。pending 不是通过，native proof 缺失或失败必须阻止发布。两条路径使用同一 identity、snapshot generator、ldflags builder 和最终制品 verifier；只允许 native 比较所在阶段因交叉编译移动，不允许分别维护 capability、模型或失败语义。
 
 manifest 必须显式记录每个 target 的能力模式和禁用原因。v1 未启用的 target、non-open launcher 和普通 dev build 可以声明 disabled；这是预先限定的支持矩阵，不是同一 enabled target 上候选/正式行为分裂。不得拿 enabled candidate 的数据替 disabled 正式包背书。回滚只切换到上一份已验证的完整版本包，不能通过清空注入字段或混装 launcher/core 回滚，详见 §9。
 
@@ -1473,23 +1475,23 @@ Lark/GWS 对比独立于 Ready/release gate。public 对 public、native 对 nat
 
 1. **设计冻结（2026-09-06）**：选 A；§1.2 allowlist、§6.7.1 委派、§6.11 失败语义与 §8.4 新门槛生效。§10 未对齐项按代码事实保持未勾选。
 2. **代码对齐，仍保持 Draft**：先完成能力/依赖 gate 和旧延迟 gate 迁移，再实现 missing/invalid 分流及负向测试；把候选与 release 封装归并为一个入口。已有 CI 可以完成并保留原始结果，但不能算此阶段完成。
-3. **Ready 条件**：§10 所有“阻挡 Ready：是”条目勾选且绑定可复核的代码/测试；在对齐后的同一源码上完成两平台新 gate、声明/全量 suite、最终制品身份、help、签名/公证、安装/升级/整包回滚 proof。正式 enabled target 的任一 proof 不足即不能 Ready。
-4. **发布条件**：首次包含本实现的官方 prerelease 和 stable 都执行 §6.6 同构注入；不存在“先发布空快路径正式包、以后再补”的过渡产品态。支持矩阵外的 disabled target 必须显式标识，不能借 enabled target 的证据宣传。
+3. **Ready 条件**：§10 所有“阻挡 Ready：是”条目勾选且绑定可复核的代码/测试；在对齐后的同一源码上完成两平台新 gate、声明/全量 suite、候选最终制品身份、help、安装和整包回滚测试。PR runner 不持有正式 Developer ID/公证与发布凭据，因此 R8 的官方 release proof 不作为转 Ready 的前置条件，也不得被候选 proof 冒充。
+4. **发布条件**：R8 必须在首次包含本实现的官方 prerelease/stable 发布工作流中完成，且该工作流在公开资产前执行 §6.6 同构注入、Developer ID/公证、enabled target native proof、安装/升级/整包回滚验证；任一证明不足即停止发布。不存在“先发布空快路径正式包、以后再补”的过渡产品态。支持矩阵外的 disabled target 必须显式标识，不能借 enabled target 的证据宣传。
 5. **回滚**：保留上一份已验证的完整 immutable version package，原子切换公开入口/版本指针；对 launcher、core、manifest 和 runtime payload 一起回滚并做版本/业务 smoke。禁止清空注入字段、仅替换单个二进制或在发布后改写已签名 bytes。旧用户 cache 因 identity 不符而 miss，无须 migration/手工删除；下一次受支持版本按正常规则自愈。
 
 ## 10. 代码未对齐清单与 Ready 检查
 
-审计基准：`c0f3aaca` 生产实现及 `bc4187c4` 本地诊断补充。以下是**尚未完成**的代码工作，不因 RFC 修改或历史 CI 通过自动勾选。勾选必须附对应实现和测试结果；本清单是“设计已定、实现未齐”的唯一状态入口。
+审计基准：`c0f3aaca` 生产实现、本分支当前实现及本节所列自动化证明。勾选表示代码与本地定向测试已经对齐；依赖新提交 native CI 的项目仍保持未勾选。
 
-- [ ] **R1 — 能力 allowlist 可执行；阻挡 Ready：是。** [入口路由](../internal/launcher/launcher.go) 的 `run` 与 [依赖 gate](../internal/launcher/dependencies_test.go) 目前只有硬编码分支/包闭包。增加能力合同与正负 argv/环境矩阵，并在 PR policy 中验证新增/扩大能力先修改 §1.2 和 gate；保持 Schema reader 的 [独立闭包 gate](../internal/cli/schemaruntime/dependency_test.go)。包集合不得靠“修改测试让它绿”绕过 RFC。
-- [ ] **R2 — 延迟 gate 一次性迁移；阻挡 Ready：是。** [默认入口脚本](../scripts/dev/measure-schema-default-entry.py) 的 `measure_cases` 仍把同包 core 四项 5% 检查计入 `passed`，[测试](../scripts/dev/test_measure_schema_default_entry.py) 和 [native workflow](../.github/workflows/schema-cache-native.yml) 仍执行旧合同。移到 diagnostics，增加独立 opt-out/pre-PR 对照；报告分别记录诊断与 §8.4 有效 gate，并单列逐次哈希阶段归因。不得并存两套阻挡口径。
-- [ ] **R3 — invalid help snapshot 拒绝；阻挡 Ready：是。** [tryTrackedHelp](../internal/launcher/help_tracking.go) 当前把 `DecodeSnapshot` 错误返回 `false,nil`；[HelpUncertainInputsDelegate 测试](../internal/launcher/help_tracking_test.go) 当前还要求 `stale` 委派。按 §6.11 改为稳定 artifact 错误/125，拆分 missing 与 invalid/mismatch，覆盖空 stdout、零委派和无重复上报。
-- [ ] **R4 — Schema identity 的 missing/invalid 区分；阻挡 Ready：是。** [launcher main](../cmd/dws-launcher/main.go) 当前把 `ParseIdentity` 失败统一折叠为 nil；审计 core 注册入口的对应分支。完整缺失才可 disabled，部分注入/解析失败不得冒充未注入；补封装与真实子进程负向测试。
-- [ ] **R5 — 唯一候选/正式封装入口与完整注入；阻挡 Ready：是。** [candidate builder](../scripts/dev/build-schema-cache-candidate.py) 已注入 Schema identity/help snapshot，[post-goreleaser](../scripts/release/post-goreleaser.sh) 的 launcher ldflags 当前只注入版本与 core digest/size；[GoReleaser](../.goreleaser.yaml) 与 [build-all](../scripts/dev/build-all.sh) 须共用 target proof/注入合同。将“候选有、正式空”的现状消除，enabled target proof 不足直接拒绝发布。
-- [ ] **R6 — manifest 与部署失败分支；阻挡 Ready：是。** [package manifest](../internal/packagemanifest)、[package verifier](../scripts/release/verify-package-version.py) 和正式 release workflow 须校验 enabled/disabled 能力矩阵、半注入/错绑定拒绝，以及前后签名 bytes 一致；不能只验证 `--version`。
-- [ ] **R7 — help 单源的最终制品证明；阻挡 Ready：是。** [RootHelpModel](../internal/app/root_help.go)、[fresh-process 投影回归](../internal/app/root_help_projection_test.go)、[snapshot decoder](../internal/roothelp/snapshot.go) 与 candidate seal 已有基础。正式封装必须复用同一机制，覆盖 en/zh、supplement 可见性、leaf/非 plain/non-open 委派、构建失败和无 core 真实输出；绑定最终已签名制品。
-- [ ] **R8 — 最终 release proof 与整包回滚；阻挡 Ready：是。** [环境 proof](../scripts/dev/check-schema-identity-environment.py) 尚不等于 wall-clock/访问尝试审计及 final-artifact proof；[release workflow](../.github/workflows/release.yml)、安装/upgrade/rollback 链需补足 §6.6/§9 的 Developer ID、公证、最终包执行和原子整包回退验证。不得用 ad-hoc candidate 替代。
-- [ ] **R9 — 新 gate 的同源码原生复验；阻挡 Ready：是。** [native workflow](../.github/workflows/schema-cache-native.yml) 须在 R1–R8 对齐后跑两平台全量/声明/生命周期/新性能 gate。`c0f3aaca` 当前测量继续作为历史数据保留，不能据此勾选本项。
+- [x] **R1 — 能力 allowlist 可执行；阻挡 Ready：是。** [能力分类器](../internal/launcher/capabilities.go) 集中定义 version/help/Schema 的 argv 与环境边界，[路由矩阵](../internal/launcher/launcher_test.go)、[依赖 gate](../internal/launcher/dependencies_test.go) 和 [PR policy](../scripts/policy/check-launcher-capability-allowlist.sh) 同时约束能力扩大；Schema reader 的独立闭包 gate 保留。
+- [x] **R2 — 延迟 gate 一次性迁移；阻挡 Ready：是。** [默认入口脚本](../scripts/dev/measure-schema-default-entry.py) 只用 default/opt-out 的 pre-PR help、version 与 Schema CPU/RSS 合同决定 `passed`；同包 core 比较和全量 SHA 阶段归因均进入 diagnostics，[测试](../scripts/dev/test_measure_schema_default_entry.py) 固定覆盖 480 个样本且拒绝缺 baseline 假绿。
+- [x] **R3 — invalid help snapshot 拒绝；阻挡 Ready：是。** [tryTrackedHelp](../internal/launcher/help_tracking.go) 对 malformed/stale snapshot 返回稳定 artifact 错误；[负向测试](../internal/launcher/help_tracking_test.go) 验证空 stdout、零 core 委派、零 identity/tracking 副作用。
+- [x] **R4 — Schema identity 的 missing/invalid 区分；阻挡 Ready：是。** [identity parser](../internal/schemareader/identity.go) 仅把全空字段识别为 disabled，launcher 与 core 对部分注入/非法字段 fail-closed；[真实 launcher 子进程测试](../cmd/dws-launcher/main_test.go) 证明部分注入以 125 退出。
+- [x] **R5 — 唯一候选/正式封装入口与完整注入；阻挡 Ready：是。** [共享构建合同](../scripts/build/schema_package_contract.py) 统一验证 identity、生成 core/launcher ldflags 并密封最终 core help；candidate builder 与 [post-goreleaser](../scripts/release/post-goreleaser.sh) 共用该入口。正式 workflow 要求 Darwin/arm64 与 Linux/amd64 原生生成 byte-identical proof 后才允许打包。
+- [x] **R6 — manifest 与部署失败分支；阻挡 Ready：是。** [package manifest](../internal/packagemanifest) 显式声明 enabled/disabled 能力矩阵；安装器和 [最终包 verifier](../scripts/release/verify-package-version.py) 校验 manifest、二进制绑定、core-free help/Schema，并确认执行前后 launcher/core bytes 未变。
+- [x] **R7 — help 单源的最终制品证明；阻挡 Ready：是。** candidate/release 共用声明投影 generator 与 seal 合同；最终包 verifier 在 native runner 上逐字节比较 en/zh core help 和无 core launcher 输出，并覆盖真实 Schema live/warm/core-free cache-hit 路径。invalid snapshot、非 plain/leaf 委派继续由 launcher 单测覆盖。
+- [ ] **R8 — 最终 release proof 与整包回滚；阻挡 Ready：否；阻挡官方发布：是。** [环境 proof](../scripts/dev/check-schema-identity-environment.py) 不等于 Developer ID/公证及正式 final-artifact proof；[release workflow](../.github/workflows/release.yml) 必须在发布前运行 enabled target 的 native help/Schema、签名/公证和最终 bytes 验证，安装/upgrade/rollback 链必须只切换完整 immutable package。PR 只验收这套 fail-closed 工作流和无凭据回滚测试，正式勾选须引用第一次包含本实现的 release run；不得用 ad-hoc candidate 替代。
+- [ ] **R9 — 新 gate 的同源码原生复验；阻挡 Ready：是。** [native workflow](../.github/workflows/schema-cache-native.yml) 须在 R1–R7 的代码对齐后跑两平台全量/声明/生命周期/新性能 gate。`c0f3aaca` 当前测量继续作为历史数据保留，不能据此勾选本项。
 - [ ] **D1 — 五维诊断与哈希归因报告；阻挡 Ready：否（不参与 release gate）。** [五维脚本](../scripts/dev/measure-cli-five-dimensions.py) 正在测固定场景；补完整 raw samples、同包 core 诊断、哈希阶段独立归因和竞品对比到[性能附件](rfc-schema-runtime-cache-performance.md)。缺失维度必须标明，不能发表该维度的领先/整体改善结论。
 
 已定且不可在实现中临时改选的格式边界继续保留：Meta/product Registry 均为 raw deterministic generated protobuf；不恢复生成 Catalog 权威；缓存 envelope/I/O/锁由 `internal/schemacache` 统一拥有；唯一 repair coordinator 管装配；private overlay 未获 proof 不启用；Serializer/codec 变化须另行 RFC 与格式版本变更。磁盘 cache mismatch 的自愈例外不适用于密封 help/identity。
@@ -1500,4 +1502,4 @@ Lark/GWS 对比独立于 Ready/release gate。public 对 public、native 对 nat
 
 热路径按固定 pre-PR 入口验收；同包 core 和竞品对比只作诊断。正式 enabled 包从第一次包含本实现的 release 起与候选同构注入。缺失 capability 走明确委派，范围内 present-but-invalid 的密封绑定 fail-closed；用户可写 Schema cache 的自愈是单列的可用性例外。
 
-**形态与规则已定；§10 代码差距清零并完成新规则的最终制品验证后，才可转 Ready。**
+**形态与规则已定；§10 中所有“阻挡 Ready：是”的代码差距清零并完成同源码 native 候选验证后，才可转 Ready；R8 在首次官方发布前单独清零。**

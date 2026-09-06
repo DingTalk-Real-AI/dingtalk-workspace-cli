@@ -331,7 +331,12 @@ verify_canonical_package() {
   _core_mode="$(printf '%s\n' "$_line" | sed -n 's/.*"core":{"path":"[^"]*","sha256":"[0-9a-f]*","size":[0-9]*,"mode":\([0-9]*\)}.*/\1/p')"
   for _value in "$_launcher_sha" "$_core_sha"; do [ "${#_value}" -eq 64 ] || return 1; done
   for _value in "$_launcher_size" "$_core_size"; do case "$_value" in ''|0|*[!0-9]*) return 1 ;; esac; [ "$_value" -le 4294967296 ] || return 1; done
-  _expected="{\"layout_version\":1,\"release\":{\"version\":\"v${_semver}\",\"commit\":\"${_commit}\",\"edition\":\"open\"},\"target\":{\"goos\":\"${_os}\",\"goarch\":\"${_arch}\"},\"launcher\":{\"path\":\"${_launcher_rel}\",\"sha256\":\"${_launcher_sha}\",\"size\":${_launcher_size},\"mode\":${_launcher_mode}},\"core\":{\"path\":\"${_core_rel}\",\"sha256\":\"${_core_sha}\",\"size\":${_core_size},\"mode\":${_core_mode}}}"
+  _capability='{"schema_cache":"disabled","root_help":"disabled","disabled_reason":"unsupported target or edition"}'
+  if { [ "$_os" = darwin ] && [ "$_arch" = arm64 ]; } || \
+     { [ "$_os" = linux ] && [ "$_arch" = amd64 ]; }; then
+    _capability='{"schema_cache":"enabled","root_help":"enabled","disabled_reason":""}'
+  fi
+  _expected="{\"layout_version\":1,\"release\":{\"version\":\"v${_semver}\",\"commit\":\"${_commit}\",\"edition\":\"open\"},\"target\":{\"goos\":\"${_os}\",\"goarch\":\"${_arch}\"},\"capabilities\":${_capability},\"launcher\":{\"path\":\"${_launcher_rel}\",\"sha256\":\"${_launcher_sha}\",\"size\":${_launcher_size},\"mode\":${_launcher_mode}},\"core\":{\"path\":\"${_core_rel}\",\"sha256\":\"${_core_sha}\",\"size\":${_core_size},\"mode\":${_core_mode}}}"
   [ "$_line" = "$_expected" ] || return 1
   for _rel in "$_launcher_rel" "$_core_rel"; do
     _file="$_root/$_rel"; [ -f "$_file" ] && [ ! -L "$_file" ] || return 1

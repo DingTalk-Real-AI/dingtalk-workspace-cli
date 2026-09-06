@@ -139,16 +139,18 @@ func TestManifestValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := map[string]func(*Manifest){
-		"layout":           func(m *Manifest) { m.LayoutVersion++ },
-		"empty release":    func(m *Manifest) { m.Release.Version = "" },
-		"control release":  func(m *Manifest) { m.Release.Commit = "bad\ncommit" },
-		"invalid target":   func(m *Manifest) { m.Target.GOOS = "WINDOWS" },
-		"invalid pair":     func(m *Manifest) { m.Target = Target{GOOS: "windows", GOARCH: "wasm"} },
-		"arbitrary path":   func(m *Manifest) { m.Launcher.Path = "other/dws" },
-		"uppercase digest": func(m *Manifest) { m.Launcher.SHA256 = strings.ToUpper(m.Launcher.SHA256) },
-		"short digest":     func(m *Manifest) { m.Core.SHA256 = "00" },
-		"zero size":        func(m *Manifest) { m.Core.Size = 0 },
-		"large size":       func(m *Manifest) { m.Core.Size = MaxExecutableSize + 1 },
+		"layout":            func(m *Manifest) { m.LayoutVersion++ },
+		"empty release":     func(m *Manifest) { m.Release.Version = "" },
+		"control release":   func(m *Manifest) { m.Release.Commit = "bad\ncommit" },
+		"invalid target":    func(m *Manifest) { m.Target.GOOS = "WINDOWS" },
+		"invalid pair":      func(m *Manifest) { m.Target = Target{GOOS: "windows", GOARCH: "wasm"} },
+		"capability mode":   func(m *Manifest) { m.Capabilities.SchemaCache = "bogus" },
+		"capability reason": func(m *Manifest) { m.Capabilities.DisabledReason = "fallback" },
+		"arbitrary path":    func(m *Manifest) { m.Launcher.Path = "other/dws" },
+		"uppercase digest":  func(m *Manifest) { m.Launcher.SHA256 = strings.ToUpper(m.Launcher.SHA256) },
+		"short digest":      func(m *Manifest) { m.Core.SHA256 = "00" },
+		"zero size":         func(m *Manifest) { m.Core.Size = 0 },
+		"large size":        func(m *Manifest) { m.Core.Size = MaxExecutableSize + 1 },
 	}
 	if valid.Target.GOOS == "windows" {
 		tests["windows mode"] = func(m *Manifest) { m.Core.Mode = 0o755 }

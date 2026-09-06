@@ -33,15 +33,16 @@ const (
 
 // Options is immutable release identity injected into the launcher build.
 type Options struct {
-	HelpSnapshot     string
-	SchemaIdentity   *schemareader.Identity
-	Version          string
-	Commit           string
-	BuildTime        string // empty means version metadata was not proven; delegate
-	Edition          string
-	CoreSHA256       string
-	CoreSize         int64
-	CoreRelativePath string
+	HelpSnapshot      string
+	SchemaIdentity    *schemareader.Identity
+	SchemaIdentityErr error
+	Version           string
+	Commit            string
+	BuildTime         string // empty means version metadata was not proven; delegate
+	Edition           string
+	CoreSHA256        string
+	CoreSize          int64
+	CoreRelativePath  string
 }
 
 // ErrorKind classifies launcher failures independently of core exit status.
@@ -132,7 +133,11 @@ func run(options Options, deps dependencies) error {
 	if err := validateIdentity(options); err != nil {
 		return &Error{Kind: ErrorConfiguration, Op: "validate release identity", Err: err}
 	}
-	if len(deps.args) == 2 && deps.args[1] == "--version" && options.BuildTime != "" {
+	switch classifyCapability(deps.args, deps.environ) {
+	case capabilityVersion:
+		if options.BuildTime == "" {
+			break
+		}
 		// Explicit opt-out keeps its filesystem-free path. Default tracking
 		// uses the same SDK configuration only for a proven plain invocation.
 		if telemetryOptedOut(deps.environ) {
@@ -144,15 +149,17 @@ func run(options Options, deps dependencies) error {
 		if handled, err := tryTrackedVersion(options, deps); handled {
 			return err
 		}
-	}
-	if handled, err := tryTrackedHelp(options, deps); handled {
-		return err
-	}
-	if handled, err := trySchema(options, deps); handled {
-		if err != nil {
-			return &Error{Kind: ErrorDelegate, Op: "write Schema", Err: err}
+	case capabilityRootHelp:
+		if handled, err := tryTrackedHelp(options, deps); handled {
+			return err
 		}
-		return nil
+	case capabilitySchema:
+		if handled, err := trySchema(options, deps); handled {
+			if err != nil {
+				return &Error{Kind: ErrorDelegate, Op: "write Schema", Err: err}
+			}
+			return nil
+		}
 	}
 	if options.CoreSize <= 0 {
 		return &Error{Kind: ErrorConfiguration, Op: "validate core size", Err: errors.New("core size must be positive")}
@@ -291,6 +298,9 @@ func validateCorePath(path string, opened os.FileInfo, deps dependencies) error 
 }
 
 func validateIdentity(options Options) error {
+	if options.SchemaIdentityErr != nil {
+		return fmt.Errorf("invalid embedded Schema cache identity: %w", options.SchemaIdentityErr)
+	}
 	for name, value := range map[string]string{"version": options.Version, "commit": options.Commit, "edition": options.Edition} {
 		if strings.TrimSpace(value) == "" || strings.TrimSpace(value) != value {
 			return fmt.Errorf("%s is empty or not canonical", name)
