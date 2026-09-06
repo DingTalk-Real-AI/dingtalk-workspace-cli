@@ -113,7 +113,9 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/delivery-parity.txt"
       - name: Build native candidate with finalized runtime payload
         id: candidate_build
-        run: python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
+        run: |
+          python3 -m unittest discover -s scripts/dev -p 'test_build_schema_help_sealing.py'
+          python3 scripts/dev/build-schema-cache-candidate.py --output "$RUNNER_TEMP/schema-evidence/candidate"
       - name: Verify finalized candidate version contract
         run: |
           set -euo pipefail
@@ -215,6 +217,7 @@ jobs:
             ${{ runner.temp }}/schema-evidence/*.pprof
             ${{ runner.temp }}/schema-evidence/candidate/identity.json
             ${{ runner.temp }}/schema-evidence/candidate/candidate-build.json
+            ${{ runner.temp }}/schema-evidence/candidate/root-help-proof.json
             ${{ runner.temp }}/schema-evidence/candidate/**/package-manifest.json
           if-no-files-found: warn
           retention-days: 14

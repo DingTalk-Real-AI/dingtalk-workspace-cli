@@ -158,6 +158,19 @@ def main():
                 'do_not_track_present': False, 'core_present': False,
                 'telemetry_delivery_proven': False,
             }
+            report['default_help_core_free'] = {}
+            for locale in ('en', 'zh'):
+                help_env = {**env, 'LANG': locale}
+                expected_help, _ = measure.invoke(core, ['--help'], {**help_env, 'DO_NOT_TRACK': '1'}, home)
+                actual_help, _ = measure.invoke(isolated, ['--help'], help_env, home)
+                if actual_help != expected_help or measure.digest(isolated) != binary_sha:
+                    raise RuntimeError(f'{locale}: default core-free help changed output or executable bytes')
+                report['default_help_core_free'][locale] = {
+                    'passed': True, 'launcher_sha256': binary_sha,
+                    'stdout_sha256': hashlib.sha256(actual_help).hexdigest(),
+                    'do_not_track_present': False, 'core_present': False,
+                    'telemetry_delivery_proven': False,
+                }
             leaf = ['schema', 'calendar.create_calendar_event', '--compact', '-f', 'json']
             # Preparatory calls are excluded from measurements. Get the oracle
             # through full declaration assembly, then authenticate warmed bytes.

@@ -89,50 +89,54 @@ type trackedVersionWriter func([]byte) (int, error)
 
 func (w trackedVersionWriter) Write(data []byte) (int, error) { return w(data) }
 
-func TestCrossPlatformCoverageTrackedVersionSignalAndPanicLifecycle(t *testing.T) {
-	for _, failure := range []string{"interrupt", "terminate", "panic"} {
-		t.Run(failure, func(t *testing.T) {
-			deps, options, _, _, _, _ := schemaFixture(t)
-			deps.args, deps.environ = []string{"dws", "--version"}, deps.environ[1:]
-			state, stopped := &clisignal.State{}, false
-			deps.versionSignals = func() (*clisignal.State, func()) {
-				return state, func() { stopped = true }
-			}
-			var stderr bytes.Buffer
-			deps.stderr = &stderr
-			deps.defaultIdentity = func(string) clitelemetry.Identity { return clitelemetry.Identity{} }
-			deps.executable = func() (string, error) { t.Fatal("version failure delegated"); return "", nil }
-			wantCode, wantSummary := 130, "process interrupted by interrupt"
-			if failure == "terminate" {
-				wantCode, wantSummary = 143, "process interrupted by terminated"
-			} else if failure == "panic" {
-				wantCode, wantSummary = 5, "internal panic"
-			}
-			deps.stdout = trackedVersionWriter(func(data []byte) (int, error) {
-				if failure == "panic" {
-					panic("private-token-value")
-				}
-				sig := os.Interrupt
-				if failure == "terminate" {
-					sig = syscall.SIGTERM
-				}
-				state.Record(sig, nil)
-				return len(data), nil
-			})
-			events := 0
-			deps.trackRun = func(cfg clitelemetry.Config, execute func() error, exitCode func(error) int) {
-				events++
-				err := execute()
-				if err == nil || err.Error() != "" || exitCode(err) != wantCode || !stopped {
-					t.Fatalf("tracker completed before cleanup or lost error: %v, code %d, stopped %v", err, exitCode(err), stopped)
-				}
-				if fields := cfg.ExtraFields(); !reflect.DeepEqual(fields, map[string]string{"c9": "dws", "c5": wantSummary}) {
-					t.Fatalf("unsafe failure telemetry: %#v", fields)
-				}
-			}
-			var exit *ExitError
-			if err := run(options, deps); !errors.As(err, &exit) || exit.Code != wantCode || events != 1 || stderr.Len() == 0 {
-				t.Fatalf("failure lifecycle: %v, events %d, stderr %q", err, events, stderr.String())
+func TestCrossPlatformCoverageTrackedPresentationSignalAndPanicLifecycle(t *testing.T) {
+	for _, command := range []string{"--version", "--help"} {
+		t.Run(command, func(t *testing.T) {
+			for _, failure := range []string{"interrupt", "terminate", "panic"} {
+				t.Run(failure, func(t *testing.T) {
+					deps, options, _ := helpFixture(t)
+					deps.args = []string{"dws", command}
+					state, stopped := &clisignal.State{}, false
+					deps.presentationSignals = func() (*clisignal.State, func()) {
+						return state, func() { stopped = true }
+					}
+					var stderr bytes.Buffer
+					deps.stderr = &stderr
+					deps.defaultIdentity = func(string) clitelemetry.Identity { return clitelemetry.Identity{} }
+					deps.executable = func() (string, error) { t.Fatal("presentation failure delegated"); return "", nil }
+					wantCode, wantSummary := 130, "process interrupted by interrupt"
+					if failure == "terminate" {
+						wantCode, wantSummary = 143, "process interrupted by terminated"
+					} else if failure == "panic" {
+						wantCode, wantSummary = 5, "internal panic"
+					}
+					deps.stdout = trackedVersionWriter(func(data []byte) (int, error) {
+						if failure == "panic" {
+							panic("private-token-value")
+						}
+						sig := os.Interrupt
+						if failure == "terminate" {
+							sig = syscall.SIGTERM
+						}
+						state.Record(sig, nil)
+						return len(data), nil
+					})
+					events := 0
+					deps.trackRun = func(cfg clitelemetry.Config, execute func() error, exitCode func(error) int) {
+						events++
+						err := execute()
+						if err == nil || err.Error() != "" || exitCode(err) != wantCode || !stopped {
+							t.Fatalf("tracker completed before cleanup or lost error: %v, code %d, stopped %v", err, exitCode(err), stopped)
+						}
+						if fields := cfg.ExtraFields(); !reflect.DeepEqual(fields, map[string]string{"c9": "dws", "c5": wantSummary}) {
+							t.Fatalf("unsafe failure telemetry: %#v", fields)
+						}
+					}
+					var exit *ExitError
+					if err := run(options, deps); !errors.As(err, &exit) || exit.Code != wantCode || events != 1 || stderr.Len() == 0 {
+						t.Fatalf("failure lifecycle: %v, events %d, stderr %q", err, events, stderr.String())
+					}
+				})
 			}
 		})
 	}

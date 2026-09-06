@@ -31,6 +31,13 @@ Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能�
 
 ### 根帮助共享投影与依赖门禁修正（bbcc8537 后续）
 
+修正后的 `decb45a7` 在
+[run 34007681787](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34007681787)
+已通过两平台完整 Go suite 和声明 policy。逐行审计确认两边各 152 个包终态，无失败事件、
+无缺失终态；记录见 [Linux](benchmarks/schema-cache/native-decb45a7/linux-full-suite.json) 与
+[macOS](benchmarks/schema-cache/native-decb45a7/darwin-full-suite.json)。该提交仅包含共享帮助
+renderer，尚不包含下面的帮助快路径；本轮原生候选性能仍在执行，不能以全量测试替代。
+
 [run 34006621679](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34006621679)
 已完成。两平台完整 suite 的包终态与失败事件已逐行审计，记录见
 [Linux](benchmarks/schema-cache/native-bbcc8537/linux-full-suite.json) 与
@@ -57,11 +64,33 @@ service/utility 名称与说明、flag 标签与说明、root Long；`app.RootHe
 依赖 race 通过（app 22.246 s）。原始输出、摘要、捕获代码与检查记录见
 [投影证据](benchmarks/schema-cache/root-help-projection-local/compatibility.json)。
 
-这一步尚未让 launcher 执行 help，不能据此宣称 help 性能回退已消除。后续仅可在 exact
-`--help`、plain open-edition 边界内消费与最终 core 绑定的声明派生投影；注入前必须以真实
-core 核对每种语言的完整输出，运行时复用同一 renderer、样式、tracker 和信号语义。
+共享 renderer 的兼容结果本身不证明入口性能。后续候选实现现已接入 exact `--help`：
+只有通过原生平台、plain open-edition、编译期 Schema identity 和扩展缺席检查，才消费
+编译进 launcher 的 `roothelp.Snapshot`。它不是 runtime cache，也不是可编辑的声明输入；
+包含 en/zh 的 `RootHelpModel` 派生投影，并绑定完整提交、edition 和最终 core SHA-256。
+解码有大小限制，拒绝未知/重复 JSON 字段、非规范编码和不匹配 identity。语言选择复用
+`internal/localename` 的原 i18n 规则；带 `DWS_LANG` 等未证明环境仍委派原 core。
+
+候选构建在 runtime payload 注入和 core 签名之后运行帮助生成器，先检查模型编码/解码的
+完整输出不变，再在独立 HOME 中逐语言执行该最终 core 的 `--help`，核对全部 stdout、
+空 stderr 和成功状态；重查 core 摘要不变后才能把投影注入 launcher。任何失败保留
+`root-help-proof.json` 且中止构建。默认入口测量另外将同一 launcher 单独复制到没有 core
+的目录，检查 en/zh 完整帮助与最终 core oracle 相同，确保实际进入快路径。
+
+运行时复用共享 renderer、样式及 version 的 tracker/信号生命周期：默认配置仍产生一次
+官方上报，明确 opt-out 不读取身份；SIGINT/SIGTERM 保持 130/143，panic 保持 5 和固定
+上报摘要；清理先于上报结束。原根 HelpFunc 忽略 writer error 的行为保持不变，部分输出或
+失败后不会再次委派。帮助入口和版本入口均有上述生命周期回归，另有缺失/过期投影、
+未知 flag、settings 和诊断环境的委派测试。
+
+本机 Go 1.25.9 的 launcher/roothelp/i18n race、生成器及生产 launcher 编译通过；构建
+封装的 4 项子进程失败控制与默认采样的 5 项测试通过。app/cmd 的 root help、信号、
+telemetry 和真实 Schema fast-path race 通过（242.556 s / 1.818 s），实际 Schema identity
+与先前原生 proof 字节相同。源码摘要、测试日志与初次构建失败记录见
+[本地帮助入口证据](benchmarks/schema-cache/help-fast-path-local/evidence.json)。本机候选运行帮助生成器时收到
+SIGKILL，未得到双语言最终 core 校验或性能样本，不能宣称 help 回退已消除。
 未知环境/扩展继续完整委派；help/version 零 Schema cache I/O、5% 回归与竞争性要求不变。
-正式构建不得在这份 proof 完成前启用该入口，PR 继续保持 Draft。
+普通正式构建的 help snapshot 仍为空，最终签名包 proof 完成前不得启用，PR 保持 Draft。
 
 ### 原始基线对照失败与默认 version 修正（6f64ee2c 后续）
 
@@ -1146,14 +1175,14 @@ recipe 但未附加 runtime payload 的构建也受同一系统压力污染，�
 14.7 ms，已经高于 GWS native 约 9.8 ms，因此选择不静态 import `internal/app` 的极瘦 native
 launcher，而不是把同 binary 结果包装成达标。launcher 的 fast path 遵循：
 
-1. 只识别 exact `--version` 和受支持的 `schema` argv；不做模糊 prefix、alias 猜测或未知 flag
+1. 只识别 exact `--version`、有最终 core 绑定投影的 exact `--help` 和受支持的 `schema` argv；不做模糊 prefix、alias 猜测或未知 flag
    容错。任何不确定输入均原样 `exec` 同版本的完整 core。
 2. Schema hit 只读取 binary-authenticated Meta 和目标 product range，并复用本文同一个
    envelope、protobuf conversion、typed validation 和 renderer；禁止建立第二套 Schema 语义。
 3. cache missing/corrupt/disabled、external overlay、plugin 可能改变 surface，或 output contract
    无法完全复现时，fast path 返回 unhandled，由完整 core authoritative assembly/repair。
 4. 保留现有 telemetry 语义并单独测量 identity/`clitrack` 成本。默认 Schema 请求仍由 core
-   处理；精确且满足 plain-invocation 边界的默认 `--version` 复用共享 SDK 配置与只读身份解析，
+   处理；精确且满足 plain-invocation 边界的默认 `--version`、具有已验证投影的 `--help` 复用共享 SDK 配置与只读身份解析，
    在 launcher 完成同一次上报。只有显式 `DO_NOT_TRACK` 才能使用无上报 fast path；
    不能因实现了 launcher 就静默省略默认上报。opt-out benchmark 必须明确标注，不能用于
    证明默认 public entry 的竞争性目标。
@@ -1618,6 +1647,10 @@ internal/app → internal/cli（Cobra 绑定、声明装配、delivery/repair）
                         └─ internal/schemacache（envelope、安全文件 I/O、锁、原子发布）
 
 internal/generator/cmd_schema_cache_identity → internal/app + internal/cli
+internal/generator/cmd_root_help_snapshot → internal/app → internal/roothelp（声明派生帮助）
+internal/launcher → internal/roothelp（内置投影认证与共享 renderer，无文件读取）
+                 → internal/clitelemetry → internal/profilemetadata + 官方 SDK
+                 → internal/clisignal + internal/localename（与 core 共用纯规则）
 cmd/dws-launcher → internal/launcher（argv 路由、同版本 core delegation）
                            └─ internal/schemafastpath（严格 argv/环境边界，准备完整输出）
 internal/app ────────────────────────┘

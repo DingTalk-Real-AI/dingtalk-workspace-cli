@@ -24,23 +24,37 @@ func tryTrackedVersion(options Options, deps dependencies) (bool, error) {
 	if !plain {
 		return false, nil
 	}
-	identity := deps.defaultIdentity(configDir)
+	return true, runTrackedPresentation(options, deps, configDir, func() error {
+		_, err := fmt.Fprintf(deps.stdout, "dws version %s\n", buildversion.Format(options.Version, options.Commit, options.BuildTime))
+		return err
+	})
+}
+
+func runTrackedPresentation(options Options, deps dependencies, configDir string, execute func() error) error {
+	identity := clitelemetry.Identity{}
+	optedOut := telemetryOptedOut(deps.environ)
+	if !optedOut {
+		identity = deps.defaultIdentity(configDir)
+	}
 	code, commandPath, errorMessage := 0, "dws", ""
 	cfg := clitelemetry.Configuration(options.Version, identity, &commandPath, &errorMessage)
+	if optedOut {
+		cfg.PID = ""
+	}
 	deps.trackRun(cfg, func() error {
-		code, errorMessage = executeTrackedVersion(options, deps)
+		code, errorMessage = executeTrackedPresentation(deps, execute)
 		if code == 0 {
 			return nil
 		}
 		return clitelemetry.RenderedError{}
 	}, func(error) int { return code })
 	if code != 0 {
-		return true, &ExitError{Code: code}
+		return &ExitError{Code: code}
 	}
-	return true, nil
+	return nil
 }
 
-func executeTrackedVersion(options Options, deps dependencies) (code int, summary string) {
+func executeTrackedPresentation(deps dependencies, execute func() error) (code int, summary string) {
 	// Match core's outer recovery: cleanup runs before reporting a panic, and
 	// the SDK receives only the fixed summary, never arbitrary panic data.
 	defer func() {
@@ -49,7 +63,7 @@ func executeTrackedVersion(options Options, deps dependencies) (code int, summar
 			fmt.Fprintf(deps.stderr, "Error: internal panic: %v\n", value)
 		}
 	}()
-	install := deps.versionSignals
+	install := deps.presentationSignals
 	if install == nil {
 		install = func() (*clisignal.State, func()) {
 			_, state, stop := clisignal.Install(context.Background(), nil)
@@ -58,14 +72,14 @@ func executeTrackedVersion(options Options, deps dependencies) (code int, summar
 	}
 	state, stop := install()
 	defer stop()
-	_, err := fmt.Fprintf(deps.stdout, "dws version %s\n", buildversion.Format(options.Version, options.Commit, options.BuildTime))
+	err := execute()
 	if interrupted, _ := state.Outcome(); interrupted != nil {
 		err = interrupted.WithCancellationDetail(err)
 	}
 	if err == nil {
 		return 0, ""
 	}
-	// Plain --version has neither JSON-error nor verbosity flags. Preserve
+	// Plain help/version has neither JSON-error nor verbosity flags. Preserve
 	// core's classification, human error output and reviewed c5 summary.
 	_ = apperrors.PrintHumanAt(deps.stderr, err, apperrors.VerbosityNormal)
 	return apperrors.ExitCode(err), clitelemetry.ErrorSummary(err)

@@ -1,0 +1,2 @@
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_root_help_snapshot	[no test files]
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/dws-launcher	[no test files]

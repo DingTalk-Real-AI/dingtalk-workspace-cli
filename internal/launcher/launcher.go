@@ -33,6 +33,7 @@ const (
 
 // Options is immutable release identity injected into the launcher build.
 type Options struct {
+	HelpSnapshot     string
 	SchemaIdentity   *schemareader.Identity
 	Version          string
 	Commit           string
@@ -83,22 +84,22 @@ func Main(options Options) int {
 }
 
 type dependencies struct {
-	versionSignals  func() (*clisignal.State, func())
-	trackRun        func(clitelemetry.Config, func() error, func(error) int)
-	defaultIdentity func(string) clitelemetry.Identity
-	openSchemaCache func(string) (*schemacache.Cache, error)
-	args            []string
-	environ         []string
-	stdin           io.Reader
-	stdout          io.Writer
-	stderr          io.Writer
-	executable      func() (string, error)
-	evalSymlinks    func(string) (string, error)
-	lstat           func(string) (os.FileInfo, error)
-	stat            func(string) (os.FileInfo, error)
-	open            func(string) (coreFile, error)
-	getwd           func() (string, error)
-	delegate        func(string, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error)
+	presentationSignals func() (*clisignal.State, func())
+	trackRun            func(clitelemetry.Config, func() error, func(error) int)
+	defaultIdentity     func(string) clitelemetry.Identity
+	openSchemaCache     func(string) (*schemacache.Cache, error)
+	args                []string
+	environ             []string
+	stdin               io.Reader
+	stdout              io.Writer
+	stderr              io.Writer
+	executable          func() (string, error)
+	evalSymlinks        func(string) (string, error)
+	lstat               func(string) (os.FileInfo, error)
+	stat                func(string) (os.FileInfo, error)
+	open                func(string) (coreFile, error)
+	getwd               func() (string, error)
+	delegate            func(string, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error)
 }
 
 type coreFile interface {
@@ -143,6 +144,9 @@ func run(options Options, deps dependencies) error {
 		if handled, err := tryTrackedVersion(options, deps); handled {
 			return err
 		}
+	}
+	if handled, err := tryTrackedHelp(options, deps); handled {
+		return err
 	}
 	if handled, err := trySchema(options, deps); handled {
 		if err != nil {
@@ -320,4 +324,14 @@ func withInternalEnvironment(environment []string, launcherPath, digest, version
 		result = append(result, entry)
 	}
 	return append(result, EnvLauncherPath+"="+launcherPath, EnvCoreDigest+"="+digest, EnvCoreVersion+"="+version)
+}
+
+func environmentValue(environment []string, key string) string {
+	for _, entry := range environment {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == key {
+			return value
+		}
+	}
+	return ""
 }

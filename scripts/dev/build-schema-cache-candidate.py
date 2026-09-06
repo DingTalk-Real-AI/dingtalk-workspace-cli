@@ -6,12 +6,14 @@ not a release enablement or Developer ID/notarization proof.
 """
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 
 def sha256(path):
@@ -21,6 +23,42 @@ def sha256(path):
             value.update(chunk)
     return value.hexdigest()
 
+
+
+def seal_root_help(core, help_generator, core_digest, commit, output):
+    help_proof = {"passed": False, "release_eligible": False, "core_sha256": core_digest,
+                  "source_commit": commit, "generator_sha256": sha256(help_generator), "locales": {}}
+    try:
+        with tempfile.TemporaryDirectory(prefix=".dws-help-proof-", dir=Path.home()) as directory:
+            home = Path(directory)
+            help_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(home),
+                        "DWS_CONFIG_DIR": str(home / ".dws"), "DO_NOT_TRACK": "1",
+                        "NO_COLOR": "1", "LANG": "en", "LC_ALL": "C"}
+            generated = subprocess.run([str(help_generator), "-commit", commit, "-core-sha256", core_digest],
+                                       env=help_env, cwd=home, capture_output=True, timeout=30, check=True)
+            if generated.stderr:
+                raise RuntimeError("help generator emitted diagnostics")
+            projection = json.loads(generated.stdout)
+            for locale in ("en", "zh"):
+                result = subprocess.run([str(core), "--help"], env={**help_env, "LANG": locale},
+                                        cwd=home, capture_output=True, timeout=30, check=True)
+                expected = base64.b64decode(projection["References"][locale], validate=True)
+                if result.stderr or result.stdout != expected:
+                    raise RuntimeError(f"{locale} help projection differs from finalized core")
+                help_proof["locales"][locale] = {"stdout_sha256": hashlib.sha256(expected).hexdigest(),
+                                                "stdout_bytes": len(expected), "equal": True}
+            if sha256(core) != core_digest:
+                raise RuntimeError("core changed during help projection proof")
+            help_snapshot = projection["Snapshot"]
+            if not isinstance(help_snapshot, str) or not help_snapshot:
+                raise RuntimeError("help generator emitted an empty snapshot")
+            help_proof.update(passed=True, snapshot_sha256=hashlib.sha256(help_snapshot.encode()).hexdigest())
+    except Exception as error:
+        help_proof["error"] = str(error)
+        raise
+    finally:
+        (output / "root-help-proof.json").write_text(json.dumps(help_proof, indent=2) + "\n")
+    return help_snapshot
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -86,7 +124,12 @@ def main():
         run(["codesign", "--force", "--sign", "-", str(core)])
         run(["codesign", "--verify", "--strict", str(core)])
     core_digest, core_size = sha256(core), core.stat().st_size
+    help_generator = output / "root-help-generator"
+    run(["go", "build", "-trimpath", "-buildmode=pie", "-o", str(help_generator),
+         "./internal/generator/cmd_root_help_snapshot"])
+    help_snapshot = seal_root_help(core, help_generator, core_digest, commit, output)
     flags = f"-s -w -X main.version={args.version} -X main.commit={commit} -X main.buildTime={build_time} -X main.edition=open -X main.coreSHA256={core_digest} -X main.coreSize={core_size}"
+    flags += f" -X main.helpSnapshot={help_snapshot}"
     for field, key in fields.items():
         flags += f" -X main.{field}={proof[key]}"
     run(["go", "build", "-trimpath", "-buildmode=pie", "-ldflags", flags, "-o", str(launcher), "./cmd/dws-launcher"])
@@ -107,6 +150,7 @@ def main():
         "build_flags": ["-trimpath", "-buildmode=pie"], "build_tags": [],
         "core_ldflags": core_ldflags, "launcher_ldflags": flags,
         "identity_sha256": sha256(proof_path), "core_sha256": core_digest,
+        "root_help_proof_sha256": sha256(output / "root-help-proof.json"),
         "launcher_sha256": sha256(launcher),
         "package_manifest_sha256": sha256(package / "package-manifest.json"),
         "signing": "ad-hoc" if goos == "darwin" else "none",

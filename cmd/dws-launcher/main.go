@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	helpSnapshot              string
 	schemaCacheEdition        string
 	schemaCacheSourceSHA256   string
 	schemaCacheSurfaceSHA256  string
@@ -42,5 +43,5 @@ func main() {
 	if identityErr == nil {
 		schemaIdentity = &identity
 	}
-	os.Exit(launcher.Main(launcher.Options{SchemaIdentity: schemaIdentity, Version: version, Commit: commit, BuildTime: buildTime, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
+	os.Exit(launcher.Main(launcher.Options{HelpSnapshot: helpSnapshot, SchemaIdentity: schemaIdentity, Version: version, Commit: commit, BuildTime: buildTime, Edition: edition, CoreSHA256: coreSHA256, CoreSize: size}))
 }

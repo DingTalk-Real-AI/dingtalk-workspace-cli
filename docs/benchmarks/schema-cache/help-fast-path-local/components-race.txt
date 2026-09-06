@@ -1,0 +1,4 @@
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/launcher	2.288s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/roothelp	1.544s
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n	2.329s
+?   	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localename	[no test files]

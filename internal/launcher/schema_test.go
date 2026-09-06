@@ -305,13 +305,3 @@ func schemaFixture(t *testing.T) (dependencies, Options, schemaruntime.SchemaReg
 	}
 	return deps, options, registry, built, directory, counters
 }
-
-func environmentValue(environment []string, key string) string {
-	for _, entry := range environment {
-		name, value, _ := strings.Cut(entry, "=")
-		if name == key {
-			return value
-		}
-	}
-	return ""
-}

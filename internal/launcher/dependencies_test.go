@@ -25,7 +25,7 @@ func TestCrossPlatformCoverageLauncherRuntimeDependencies(t *testing.T) {
 	allowed := map[string]bool{}
 	for _, name := range []string{
 		"cmd/dws-launcher", "internal/launcher", "internal/buildversion",
-		"internal/clisignal", "internal/clitelemetry", "internal/profilemetadata",
+		"internal/roothelp", "internal/localename", "internal/clisignal", "internal/clitelemetry", "internal/profilemetadata",
 		"internal/jsonutil", "internal/errors", "internal/tui", "pkg/config", "pkg/validate",
 		"internal/schemacache", "internal/schemareader", "internal/schemafastpath",
 		"internal/cli/schemacachepb", "internal/cli/schemaruntime", "internal/corecmd/contract", "internal/skillpaths",
