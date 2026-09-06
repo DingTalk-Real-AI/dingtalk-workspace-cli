@@ -1,0 +1,6 @@
+{
+  "source_commit": "aa8273792b376ae48163304eed8c18efb02ed585",
+  "complete_identity_byte_equal": true,
+  "identity_sha256": "08f3f0f99a02d6ff6f58146c6c24a3e57d63da59c953bbdc0155e3ef2e71d7fc",
+  "scope": "Comparison of downloaded native candidate identity bytes only. Coordinator job was skipped because Linux isolation failed; this does not override that outcome or enable release caches."
+}

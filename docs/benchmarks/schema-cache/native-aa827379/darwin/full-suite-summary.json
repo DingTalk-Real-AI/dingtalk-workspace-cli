@@ -1,0 +1,742 @@
+[
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/dws-launcher",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd",
+    "Elapsed": 0.028
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/fetch_mcp_metadata",
+    "Elapsed": 0.151
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient",
+    "Elapsed": 0.462
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/cmd/interface-snapshot",
+    "Elapsed": 2.118
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit",
+    "Elapsed": 0.278
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth",
+    "Elapsed": 97.975
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app",
+    "Elapsed": 343.982
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/homology",
+    "Elapsed": 1.21
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime",
+    "Elapsed": 2.817
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd",
+    "Elapsed": 0.013
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd",
+    "Elapsed": 0.646
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/commandstore",
+    "Elapsed": 0.019
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate",
+    "Elapsed": 0.009
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors",
+    "Elapsed": 0.017
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event",
+    "Elapsed": 0.009
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus",
+    "Elapsed": 1.297
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl",
+    "Elapsed": 1.1280000000000001
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume",
+    "Elapsed": 3.3609999999999998
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/dedup",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/lock",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli",
+    "Elapsed": 258.944
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/process",
+    "Elapsed": 0.011
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/registry",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred",
+    "Elapsed": 0.067
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal",
+    "Elapsed": 1.7429999999999999
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport",
+    "Elapsed": 0.016
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source",
+    "Elapsed": 0.156
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_command_path_fallbacks",
+    "Elapsed": 0.051
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/agentmetadata",
+    "Elapsed": 0.434
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_param_aliases",
+    "Elapsed": 0.041
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_cache_identity",
+    "Elapsed": 0.028
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_agent_metadata",
+    "Elapsed": 1.724
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_registry_smoke",
+    "Elapsed": 0.084
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/outputguard",
+    "Elapsed": 0.053
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/cmd_schema_catalog",
+    "Elapsed": 43.958
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers/chat",
+    "Elapsed": 0.012
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers/doc",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot",
+    "Elapsed": 0.02
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain",
+    "Elapsed": 0.058
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/launcher",
+    "Elapsed": 0.049
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio",
+    "Elapsed": 1.541
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging",
+    "Elapsed": 0.017
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/mcpschema",
+    "Elapsed": 0.022
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto",
+    "Elapsed": 0.025
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output",
+    "Elapsed": 0.03
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/packagemanifest",
+    "Elapsed": 0.061
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat",
+    "Elapsed": 0.038
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline",
+    "Elapsed": 0.011
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers",
+    "Elapsed": 0.015
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin",
+    "Elapsed": 0.602
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilectx",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp",
+    "Elapsed": 0.023
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/registry",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext",
+    "Elapsed": 0.162
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimepayload",
+    "Elapsed": 1.27
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache",
+    "Elapsed": 0.098
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemafastpath",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/security",
+    "Elapsed": 1.9489999999999998
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut",
+    "Elapsed": 0.027
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/agoal",
+    "Elapsed": 0.029
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aisearch",
+    "Elapsed": 0.019
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitable",
+    "Elapsed": 0.797
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget",
+    "Elapsed": 0.01
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/attendance",
+    "Elapsed": 0.028
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers",
+    "Elapsed": 127.49
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendar",
+    "Elapsed": 0.03
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendarcompat",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat",
+    "Elapsed": 0.666
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg",
+    "Elapsed": 0.011
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/contact",
+    "Elapsed": 0.018
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/devapp",
+    "Elapsed": 0.03
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/devdoc",
+    "Elapsed": 0.017
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/ding",
+    "Elapsed": 0.019
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/doc",
+    "Elapsed": 3.721
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/docresolver",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/drive",
+    "Elapsed": 0.047
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/hrbrain",
+    "Elapsed": 0.02
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/live",
+    "Elapsed": 0.015
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/mail",
+    "Elapsed": 0.062
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutes",
+    "Elapsed": 1.172
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/oa",
+    "Elapsed": 0.026
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/pat",
+    "Elapsed": 0.042
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/report",
+    "Elapsed": 0.022
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/sheet",
+    "Elapsed": 0.025
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/smart",
+    "Elapsed": 1.354
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/todo",
+    "Elapsed": 0.026
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage",
+    "Elapsed": 0.038
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef",
+    "Elapsed": 0.018
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/whiteboard",
+    "Elapsed": 0.036
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/wiki",
+    "Elapsed": 0.106
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillpaths",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate",
+    "Elapsed": 0.031
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport",
+    "Elapsed": 1.6059999999999999
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade",
+    "Elapsed": 1.8519999999999999
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/asynctask",
+    "Elapsed": 0.063
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/authretry",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cli",
+    "Elapsed": 0.024
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil",
+    "Elapsed": 0.009
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config",
+    "Elapsed": 0.01
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta",
+    "Elapsed": 0.009
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/convert",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/editiontest",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes",
+    "Elapsed": 0.006
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging",
+    "Elapsed": 0.127
+  },
+  {
+    "Action": "skip",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/runtimetoken",
+    "Elapsed": 0
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate",
+    "Elapsed": 0.007
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/build/package-manifest",
+    "Elapsed": 0.025
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/build/runtime-payload",
+    "Elapsed": 1.8519999999999999
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin",
+    "Elapsed": 115.734
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/coverage-gate",
+    "Elapsed": 0.452
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/interface-baseline",
+    "Elapsed": 0.081
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/multi-doc-skill-chain",
+    "Elapsed": 4.134
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/multi-im-skill-chain",
+    "Elapsed": 3.5789999999999997
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/schema-compat",
+    "Elapsed": 0.05
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/commandcompat",
+    "Elapsed": 26.109
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/skill-command-check",
+    "Elapsed": 0.069
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/skills",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/cli",
+    "Elapsed": 3.901
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/contract",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/integration/extensions",
+    "Elapsed": 0.008
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/mock_mcp",
+    "Elapsed": 3.547
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/scripts/policy/schemacompat",
+    "Elapsed": 44.58
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/smoke",
+    "Elapsed": 7.7059999999999995
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/unit",
+    "Elapsed": 1.124
+  },
+  {
+    "Action": "pass",
+    "Package": "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/scripts",
+    "Elapsed": 326.516
+  }
+]

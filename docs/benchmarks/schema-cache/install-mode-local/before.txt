@@ -1,0 +1,64 @@
+--- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback (0.75s)
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-c/644 (0.04s)
+        install_file_mode_test.go:44: permission = "0\n", err=exit status 1; want "420\n"
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-c/4755 (0.04s)
+        install_file_mode_test.go:44: permission = "0\n", err=exit status 1; want "2541\n"
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-c/bad644 (0.04s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-c/888 (0.03s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-c/644_755 (0.03s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-c/77777777777777777777 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-f/bad644 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-f/888 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-f/644_755 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "0\n", err=exit status 1
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install.sh/-f/77777777777777777777 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "1152921504606846975\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-c/bad644 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "bad644\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-c/888 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "888\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-c/644_755 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "644\n755\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-c/77777777777777777777 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "77777777777777777777\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-f/644 (0.02s)
+        install_file_mode_test.go:44: permission = "filesystem report from failed stat\n644\n", err=<nil>; want "644\n"
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-f/4755 (0.02s)
+        install_file_mode_test.go:44: permission = "filesystem report from failed stat\n4755\n", err=<nil>; want "4755\n"
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-f/bad644 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\nbad644\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-f/888 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\n888\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-f/644_755 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\n644\n755\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-event.sh/-f/77777777777777777777 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\n77777777777777777777\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-c/bad644 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "bad644\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-c/888 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "888\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-c/644_755 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "644\n755\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-c/77777777777777777777 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "77777777777777777777\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-f/644 (0.01s)
+        install_file_mode_test.go:44: permission = "filesystem report from failed stat\n644\n", err=<nil>; want "644\n"
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-f/4755 (0.02s)
+        install_file_mode_test.go:44: permission = "filesystem report from failed stat\n4755\n", err=<nil>; want "4755\n"
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-f/bad644 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\nbad644\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-f/888 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\n888\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-f/644_755 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\n644\n755\n", err=<nil>
+    --- FAIL: TestCrossPlatformCoverageInstallerPermissionStatFallback/install-devapp.sh/-f/77777777777777777777 (0.02s)
+        install_file_mode_test.go:32: invalid mode emitted "filesystem report from failed stat\n77777777777777777777\n", err=<nil>
+FAIL
+FAIL	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/scripts	1.366s
+FAIL

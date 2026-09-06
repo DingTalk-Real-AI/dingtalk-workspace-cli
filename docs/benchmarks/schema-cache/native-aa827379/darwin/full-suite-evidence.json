@@ -1,0 +1,13 @@
+{
+  "source_commit": "aa8273792b376ae48163304eed8c18efb02ed585",
+  "run_id": 33999677802,
+  "job_id": 101396178057,
+  "artifact_id": 9979299620,
+  "conclusion": "success",
+  "raw_log_sha256": "6eeb192b87c1841c6e742b173c91c31868d4bc0b82b6b0019fb7316bbde14da7",
+  "raw_log_bytes": 346052924,
+  "raw_log_lines": 1157389,
+  "terminal_packages": 148,
+  "failure_events": [],
+  "command": "GOTOOLCHAIN=go1.25.9 DWS_PACKAGE_VERSION=0.0.0-test go test -json -p 2 -parallel 2 -timeout 30m ./..."
+}

@@ -1,0 +1,16 @@
+....E
+======================================================================
+ERROR: test_native_file_and_network_isolation_controls (__main__.IdentityEnvironmentTests.test_native_file_and_network_isolation_controls)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/dingtalk-workspace-cli/dingtalk-workspace-cli/scripts/dev/test_schema_identity_environment.py", line 44, in test_native_file_and_network_isolation_controls
+    result = check.check_controls(sandbox, check.environment(self.home, hostile), self.forbidden)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/dingtalk-workspace-cli/dingtalk-workspace-cli/scripts/dev/check-schema-identity-environment.py", line 106, in check_controls
+    raise RuntimeError(f'sandbox cannot read its allowed fixture: {positive.returncode}, {positive.stderr!r}')
+RuntimeError: sandbox cannot read its allowed fixture: 1, b'unshare: write failed /proc/self/uid_map: Operation not permitted\n'
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.007s
+
+FAILED (errors=1)

@@ -23,11 +23,36 @@
 | 构建/安装/升级 | canonical launcher/core 与 manifest 已实现；npm 29 个场景通过；真实归档发现并修复 BSD/GNU tar 大小列误读与原测试假通过，定向回归通过 | 真实包已通过 checksum/layout/manifest，安装后的 ad-hoc launcher 被 macOS 终止，激活正确回滚；仍需最终签名包运行/升级/回滚与平台 matrix |
 | launcher | 639bfceb 两平台 core-free JSON 与完整 version 元数据精确输出通过，core fast-path 与生命周期 race 通过；共用 reader/typed renderer | 默认上报优化、竞争性指标和逐次 core hashing 成本；受限环境生成器新检查待 native CI |
 | 性能 | 639bfceb 两平台进程 CPU/RSS 门槛通过；完整 Meta file-hit Linux 4.515 ms、macOS 3.494 ms，均通过 5 ms 门槛 | 仍需跨运行稳定裕量、默认上报和 public/native 竞争对照；保留 bf30c3ec macOS 5.663 ms 失败记录 |
-| 全量验证 | 639bfceb macOS 完整 Go suite 通过（app 1539.510 s、CLI 1144.428 s、scripts 404.865 s）；独立声明 policy、两平台候选与 identity 比较通过 | Linux 全量仍被 runner shutdown 终止；新环境隔离/日志检查及 release proof 待验证 |
+| 全量验证 | aa827379 两平台 app/CLI 均通过、macOS 完整 148 包通过；Linux 已完整跑完且内存压力下降 | Linux 安装器 stat 修复与 Docker 隔离待 native；新默认 tracker 采样和完整 release proof 待验证 |
 | PR | [#1296](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1296) 已创建，GitHub 已验证 `isDraft=true` | 保持 Draft；补齐本节未完成项和 CI，验收未完成不得改为 ready 或合并 |
 
 生产启用条件继续以 §6.6、§8 和 canonical-package 验证为准。任何未验证平台、签名步骤、
 Schema fast path 或 telemetry 合同都必须明确保留为未完成，不能用收窄 RFC 范围宣称生产可用。
+
+### 生命周期修复的原生结果与 Linux 安装修复（aa827379）
+
+[run 33999677802](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/33999677802)
+中两平台 app/CLI 测试均通过；macOS 全量 148 个包无失败（app 343.982 s、CLI 258.944 s、
+scripts 326.516 s）。Linux 全量也完成 148 个包终态，app 309.661 s、CLI 376.290 s 通过，
+仅安装脚本测试失败；10 秒采样中的 app 最高 RSS 为 1,020 MiB、最低主机可用内存为
+11,947 MiB，未发生 runner shutdown。
+[Linux 内存观测](benchmarks/schema-cache/native-aa827379/linux/full-suite-memory.json)
+是采样值，不冒充精确进程 high-water mark。
+
+失败来自 GNU/BSD `stat` 的 stdout 合并：GNU `stat -f '%Lp'` 可先输出文件系统信息再
+返回失败，随后 `stat -c '%a'` 的正确权限值被拼接进同一字符串，合法包因而被拒绝。
+三个 Unix 安装器现分别捕获两次调用，只接受成功返回的 1–4 位八进制模式；保留 special
+bits，不能掩码后误接受 setuid 等不符合同的文件。覆盖 36 个 dialect/mode 组合的回归测试在修复前复现问题，
+修复后安装/升级 smoke、回滚、不确定状态及 event/devapp 定向测试通过（23.276 s）；
+仍需下一轮 Linux 全量通过证明安装修复已收敛。
+
+两平台 shared finalized-version 检查均通过真实 core、launcher 和 core-free 副本，包含完整
+版本/commit/UTC timestamp，并保持二进制 hash 不变。完整 Meta file-hit 中位数 Linux
+4.508 ms、macOS 3.544 ms；selected product 8.685/8.108 ms，均通过预算。launcher/direct-core
+进程 CPU/RSS、完整 wire、repair/race 及独立声明 policy 也通过。macOS 受限生成器通过，
+Linux 因 user mapping 被宿主拒绝而失败，coordinator job 因此跳过；不能把整轮 native run
+表述为通过。原始候选报告及全量日志摘要见
+[本轮证据](benchmarks/schema-cache/native-aa827379/darwin/full-suite-evidence.json)。
 
 ### 命令树生命周期与最新原生隔离结果
 
@@ -59,11 +84,30 @@ Linux 4.741 ms、macOS 3.244 ms；macOS 的真实生成器在 clean/repeat/hosti
 [失败记录](benchmarks/schema-cache/native-fc2d8991/linux/identity-environment-failure.json)
 不能算作有效的隔离证明。
 
-Linux 后续检查先由 util-linux `unshare --user --map-root-user --net` 创建独立空网络
-命名空间，再由 bubblewrap 在其中隔离文件、进程及其他命名空间。离线进程不需要配置
-loopback；bwrap 的 `--share-net` 仅继承外层新命名空间，禁止直接继承主机网络或失败后
-降级。工具缺失、namespace 创建失败、允许文件正控制失败或禁止文件/网络负控制失败均
-不能通过。本机五个控制/构造回归通过；该 Linux 初始化方式仍需 native 实测。
+aa827379 的 `unshare` 路径同样未通过：宿主拒绝写 `/proc/self/uid_map`。后续 Linux 检查
+改用 runner 已提供的本机 Docker daemon；从空 tar 本地 import rootfs，不下载 base image。
+按确切 image ID 运行，强制 `--network=none`、只读 rootfs/挂载、`--cap-drop=ALL`、
+`no-new-privileges` 与 runner UID/GID；不挂载 Docker socket、宿主 HOME 或凭据。
+同一份 host generator、cat/curl 和 OS 库只读挂载到容器，避免更换控制探针的可执行文件。
+Docker 的网络模式见 [官方说明](https://docs.docker.com/engine/network/drivers/none/)。
+报告记录 image/rootfs 标识与实际 generator argv；任何工具/daemon/控制探针失败均不能
+通过，超时只清理本次唯一命名的容器。不会调整宿主 kernel/AppArmor 设置或启用 privileged。
+本机七个控制/构造/超时回归通过，但这不能替代新的 Linux native 隔离结果。
+
+### 默认 tracker 的进程性能补测
+
+`scripts/dev/measure-schema-default-entry.py` 为每个测量子进程构造 fresh HOME 下的显式环境，
+不传 `DO_NOT_TRACK`，不改变 identity resolution、SDK 配置或默认 flush budget。正式采样前
+用完整 core 装配取得输出 oracle 并预热、校验 candidate 的 Meta/Registry artifact hashes；
+这些 opt-out 准备调用不计入默认模式样本。随后随机交错六种模式，各至少 30 次：默认 Schema
+cache/live，以及默认 help/version 的 launcher/direct-core。逐次核对完整 stdout、退出状态
+和 stderr，保留全部原始 wall/user/system/RSS 样本，结束后复核 launcher/core bytes 未变。
+
+默认 Schema 仍要求 user CPU 至少下降 80%、peak RSS 不超过 100 MiB；help/version 的
+launcher 相对同包 core 的 wall p50/p95 开销均要求不超过 5%。后者只隔离 canonical package
+引入的开销，**不能替代本 PR 相对原始 base 的整体回归对照**。网络延迟未控制，不删除超时
+或慢样本来改善指标；该报告不构成 Lark/GWS 竞争结论或 release enablement proof。三个真实
+子进程/失败控制回归和 actionlint 已通过，新的默认 tracker native 结果尚未取得。
 
 ### 正式发布包的版本合同验证
 
@@ -1376,7 +1420,7 @@ hermetic native exact proof。
 
 开发级环境检查由 `scripts/dev/check-schema-identity-environment.py` 实现，接到 native feedback
 的候选性能采样之后；即使性能失败，只要候选已构建也继续收集环境检查结果。Linux 使用
-[Bubblewrap 的独立 namespace 与只读挂载](https://github.com/containers/bubblewrap/blob/main/README.md)，
+本机 Docker 的独立网络/进程空间、无 capabilities 的 runner 用户进程与只读挂载；
 macOS 使用 deny-default sandbox profile；只提供 generator、两个 protobuf source fixture、
 空 HOME 和必要的 OS loader/library 读取路径。macOS 额外允许系统 LibreSSL 配置文件以执行
 系统 curl 的控制探针，并记录该文件与导入的 `dyld-support.sb` 摘要；不导入更宽的 `system.sb`。
@@ -1388,7 +1432,8 @@ PATH/locale/proxy/DWS 非凭据配置，对照 native candidate 的完整 identi
 环境；此检查不重新生成 Catalog 声明或新增 payload authority。
 
 本机 macOS 的文件与网络控制探针、失效探针拒绝和路径转义回归已通过；实际 generator 首次执行
-收到 SIGKILL，未获得本机受限装配成功证据，两平台完整检查仍须 native CI 核验。该检查只补
+收到 SIGKILL，未获得本机受限装配成功证据。fc2d8991 的 macOS 原生 runner 已取得真实受限
+生成器成功证据；Linux 的 namespace 初始化修复仍须新 head 核验。该检查只补
 文件/网络隔离与环境变化证据，尚未审计被拒绝后被业务代码忽略的访问尝试，也未证明 wall-clock
 独立性或最终签名制品。报告固定保留 `forbidden_access_attempts_audited=false`、
 `wall_clock_independence_proven=false`、`final_artifact_proven=false` 和 `release_eligible=false`；

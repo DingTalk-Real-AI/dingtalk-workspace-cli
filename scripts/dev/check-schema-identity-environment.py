@@ -6,6 +6,11 @@ proof remain separate requirements. This report never enables release caches.
 """
 
 import argparse
+import csv
+import io
+import os
+import re
+import uuid
 import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
@@ -48,38 +53,63 @@ class Sandbox:
             ])
             self.prefix = ['/usr/bin/sandbox-exec', '-p', self.profile]
         elif self.system == 'Linux':
-            bwrap = shutil.which('bwrap')
-            if not bwrap:
-                raise RuntimeError('bubblewrap is required; no unrestricted fallback is allowed')
-            unshare = shutil.which('unshare')
-            if not unshare:
-                raise RuntimeError('unshare is required for the private network namespace; no host-network fallback is allowed')
-            # Create a fresh, empty network namespace without configuring its
-            # loopback device. Some native hosts reject RTM_NEWADDR, which bwrap
-            # normally sends while bringing loopback up. No interface needs to
-            # be up for an offline identity generator. --share-net below inherits
-            # ONLY this mandatory outer namespace, never the host's network.
-            # Neither a failed unshare nor failed bwrap has an unrestricted retry.
-            self.prefix = [unshare, '--user', '--map-root-user', '--net', '--',
-                           bwrap, '--unshare-all', '--share-net', '--unshare-user',
-                           '--new-session', '--die-with-parent', '--clearenv']
-            # Mount only OS libraries and the exact executables/fixture. No host
-            # /etc, HOME, /run sockets or repository checkout is exposed.
-            for path in ('/usr/lib', '/lib', '/lib64'):
-                if Path(path).exists():
-                    self.prefix += ['--ro-bind', path, path]
-            for path in self.executables + [fixture]:
-                self.prefix += ['--ro-bind', str(path), str(path)]
-            self.prefix += ['--proc', '/proc', '--dev', '/dev', '--dir', str(home), '--remount-ro', '/']
+            docker = shutil.which('docker')
+            if not docker:
+                raise RuntimeError('Docker is required; no unrestricted fallback is allowed')
+            self.image = os.environ.get('DWS_SCHEMA_PROOF_IMAGE', '')
+            if not re.fullmatch(r'sha256:[0-9a-f]{64}', self.image):
+                raise RuntimeError('an exact locally imported empty image ID is required')
+            if os.getuid() == 0:
+                raise RuntimeError('the proof generator must run as the unprivileged native runner user')
+            self.docker = [docker, '--host', 'unix:///var/run/docker.sock']
+            server = subprocess.check_output(self.docker + ['info', '--format', '{{.OSType}}/{{.Architecture}}'],
+                                             text=True, timeout=30).strip()
+            if server not in ('linux/amd64', 'linux/x86_64'):
+                raise RuntimeError('Docker must use the local native Linux amd64 daemon')
+            details = json.loads(subprocess.check_output(self.docker + ['image', 'inspect', self.image], timeout=30))[0]
+            config = details.get('Config') or {}
+            if details['Id'] != self.image or any(config.get(key) for key in ('Env', 'Entrypoint', 'Cmd', 'Volumes')):
+                raise RuntimeError('proof image must have no inherited environment, command or volumes')
+            rootfs = details.get('RootFS') or {}
+            empty_layer = 'sha256:' + hashlib.sha256(bytes(10240)).hexdigest()
+            if rootfs.get('Type') != 'layers' or rootfs.get('Layers') != [empty_layer]:
+                raise RuntimeError('proof image rootfs must be the exact empty tar imported by the workflow')
+            self.image_metadata = {'id': self.image, 'rootfs': rootfs, 'server': server}
+            self.prefix = self.docker + ['run', '--rm', '--pull=never', '--network=none', '--read-only',
+                '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=128',
+                '--user', f'{os.getuid()}:{os.getgid()}', '--hostname', 'schema-proof']
+            # An empty imported rootfs contains no host HOME or credentials.
+            # Bind only the exact native executables, libraries and fixtures;
+            # the same cat/curl bytes are used by outside and inside controls.
+            paths = [Path(p) for p in ('/usr/lib', '/lib', '/lib64') if Path(p).exists()]
+            paths += self.executables + [fixture, home]
+            for path in paths:
+                value = io.StringIO()
+                csv.writer(value, lineterminator='').writerow(['type=bind', 'source=' + str(path),
+                                                             'target=' + str(path), 'readonly'])
+                self.prefix += ['--mount', value.getvalue()]
+
         else:
             raise RuntimeError('identity environment checks require native Linux or macOS')
 
     def run(self, command, env, timeout=120):
         prefix = self.prefix.copy()
         if self.system == 'Linux':
+            name = 'dws-schema-proof-' + uuid.uuid4().hex
+            prefix += ['--name', name]
             for key, value in sorted(env.items()):
-                prefix += ['--setenv', key, value]
-            prefix += ['--chdir', str(self.home)]
+                prefix += ['--env', key + '=' + value]
+            prefix += ['--workdir', str(self.home), '--entrypoint', str(command[0]), self.image]
+            try:
+                return subprocess.run(prefix + list(map(str, command[1:])), cwd=self.home, env=env,
+                                      stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout,
+                                      close_fds=True)
+            finally:
+                # A timeout kills the client, not necessarily its container.
+                # Remove only this invocation's unique container, even on error.
+                subprocess.run(self.docker + ['rm', '--force', name], env=env,
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=30, check=False)
         return subprocess.run(prefix + list(map(str, command)), cwd=self.home, env=env,
                               stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout,
                               close_fds=True)
@@ -190,6 +220,8 @@ def main():
                 home.mkdir(mode=0o700)
                 sandbox = Sandbox(generator, fixture, home)
                 env = environment(home, hostile)
+                if hasattr(sandbox, 'image_metadata'):
+                    report['linux_image'] = sandbox.image_metadata
                 controls = check_controls(sandbox, env, forbidden)
                 entry = {'name': name, 'controls': controls, 'identity_byte_equal': False,
                          'sandbox_argv': sandbox.prefix, 'environment': env,
@@ -197,6 +229,7 @@ def main():
                 report['runs'].append(entry)
                 result = sandbox.run([generator, '-root', fixture], env)
                 entry['exit_code'] = result.returncode
+                entry['generator_argv'] = result.args
                 if result.returncode != 0 or result.stdout != expected:
                     raise RuntimeError(f'{name}: identity differs or generator failed: {result.returncode}, {result.stderr!r}')
                 if list(home.rglob('*')):

@@ -16,7 +16,9 @@ on:
       - 'scripts/release/verify-package-version.py'
       - 'scripts/release/test_verify_package_version.py'
       - '.github/workflows/release.yml'
-      - 'test/scripts/release_build_time_test.go'
+      - 'scripts/install*.sh'
+      - 'scripts/install*.ps1'
+      - 'test/scripts/**'
       - '.goreleaser.yaml'
       - '.github/workflows/schema-cache-native.yml'
 
@@ -153,16 +155,30 @@ jobs:
             -memprofile "$RUNNER_TEMP/schema-evidence/meta-memory.pprof" \
             -o "$RUNNER_TEMP/schema-meta-profile.test" \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/meta-profile.txt"
+      - name: Measure default tracker and canonical package overhead
+        if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/dev/test_measure_schema_default_entry.py
+          python3 scripts/dev/measure-schema-default-entry.py \
+            --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/bin/dws" \
+            --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
+            --output "$RUNNER_TEMP/schema-evidence/default-entry-report.json" \
+            2>&1 | tee "$RUNNER_TEMP/schema-evidence/default-entry.txt"
       - name: Check identity with isolated files and network
         if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "$RUNNER_OS" = Linux ]; then
-            sudo apt-get update
-            sudo apt-get install --yes --no-install-recommends bubblewrap util-linux
-            bwrap --version
-            unshare --version
+            docker --host unix:///var/run/docker.sock version
+            # Import an empty tar locally: no base image, registry download,
+            # Dockerfile or repository files enter the proof root filesystem.
+            python3 -c 'import sys; sys.stdout.buffer.write(bytes(10240))' > "$RUNNER_TEMP/schema-empty-rootfs.tar"
+            DWS_SCHEMA_PROOF_IMAGE="$(docker --host unix:///var/run/docker.sock import "$RUNNER_TEMP/schema-empty-rootfs.tar")"
+            export DWS_SCHEMA_PROOF_IMAGE
+            trap 'docker --host unix:///var/run/docker.sock image rm "$DWS_SCHEMA_PROOF_IMAGE" >/dev/null 2>&1 || true' EXIT
           fi
           python3 scripts/dev/test_schema_identity_environment.py \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/environment-controls.txt"
