@@ -117,7 +117,17 @@ resolve_event_version() {
 # disagree on flags, so try both spellings and fail loudly when neither is
 # available.
 perm_of() {
-  _po_mode="$(stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null)" || return 1
+  # A rejected stat dialect can emit partial stdout (GNU -f prints filesystem
+  # data). Capture each attempt separately so only a successful result survives.
+  if _po_mode="$(stat -c %a "$1" 2>/dev/null)"; then
+    :
+  elif _po_mode="$(stat -f %Lp "$1" 2>/dev/null)"; then
+    :
+  else
+    return 1
+  fi
+  case "$_po_mode" in ''|*[!0-7]*) return 1 ;; esac
+  [ "${#_po_mode}" -le 4 ] || return 1
   printf '%s\n' "$_po_mode"
 }
 

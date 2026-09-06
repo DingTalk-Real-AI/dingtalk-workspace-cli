@@ -293,7 +293,17 @@ verify_release_asset_checksum() {
 }
 
 file_mode_decimal() {
-  _mode="$(stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null)" || return 1
+  # A rejected stat dialect can emit partial stdout (GNU -f prints filesystem
+  # data). Capture each attempt separately so only a successful result survives.
+  if _mode="$(stat -f '%Lp' "$1" 2>/dev/null)"; then
+    :
+  elif _mode="$(stat -c '%a' "$1" 2>/dev/null)"; then
+    :
+  else
+    return 1
+  fi
+  case "$_mode" in ''|*[!0-7]*) return 1 ;; esac
+  [ "${#_mode}" -le 4 ] || return 1
   printf '%d\n' "0$_mode"
 }
 
