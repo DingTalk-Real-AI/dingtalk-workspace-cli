@@ -166,7 +166,7 @@ Schema 选择日历列表接口：DWS `calendar.list_calendars`、Lark `calendar
 ## 6. 未完成项与验收边界
 
 - [ ] 补齐 macOS GWS native 五项内存采样；原生单进程改为低开销父进程的内核峰值采样后，要另建测量批次并记录方法变化，不能覆盖这批轮询原始数据。public 仍需同时进程树观测。
-- [ ] 按主 RFC §10 完成 allowlist/能力 gate、invalid snapshot/identity fail-closed、正式与候选同构注入，以及新延迟门槛迁移后，对最终代码重新验收。本次旧 gate 通过不勾选这些项目。
+- [x] 按主 RFC §10 完成 allowlist/能力 gate、invalid snapshot/identity fail-closed、正式与候选同构注入，以及新延迟门槛迁移后，对最终代码重新验收；[`7cbf7f52` native run](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34018840739) 已通过两平台全量、声明、生命周期、最终候选包和新性能 gate。
 - [ ] 正式发布仍需最终签名/公证、安装升级与回滚、release identity 等证明。候选的 `release_eligible:false` 保持原样。
 
 远端真实请求、持续事件内存、冷缓存首次修复和独立哈希阶段剖析不在本次五维短命令矩阵内；需要相应结论时单独设计实验，不能从上述收益外推。
