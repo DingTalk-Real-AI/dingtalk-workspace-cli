@@ -207,12 +207,12 @@ func (c *Cache) Publish(identity ExpectedIdentity, registry, meta Artifact, extr
 	if registry.Expectation.Kind != KindRegistry || meta.Expectation.Kind != KindMeta {
 		return fmt.Errorf("%w: publish requires Registry then Meta", ErrInvalidArtifact)
 	}
-	artifacts := append([]Artifact{registry, meta}, extra...)
-	for i, artifact := range artifacts {
-		if artifact.Expectation.Kind == KindMeta && i != len(artifacts)-1 {
-			return fmt.Errorf("%w: publish requires Meta last", ErrInvalidArtifact)
+	for _, artifact := range extra {
+		if artifact.Expectation.Kind != KindPayloads {
+			return fmt.Errorf("%w: publish extras must be payloads", ErrInvalidArtifact)
 		}
 	}
+	artifacts := append([]Artifact{registry}, append(extra, meta)...)
 	// Validate all before replacing any old artifact.
 	for _, artifact := range artifacts {
 		if err := validateArtifactPayload(identity, artifact); err != nil {

@@ -355,7 +355,7 @@ func (c *unixCache) openRegistry(identity ExpectedIdentity, expected ArtifactExp
 	if err != nil {
 		return nil, err
 	}
-	return c.openShardFile(fd, initial, identity, expected, registryFileName)
+	return c.openShardFile(fd, initial, identity, expected, registryFileName, readRegistryPayload)
 }
 
 func (c *unixCache) openPayloads(identity ExpectedIdentity, expected ArtifactExpectation) (registryBackend, error) {
@@ -371,12 +371,12 @@ func (c *unixCache) openPayloads(identity ExpectedIdentity, expected ArtifactExp
 	if err != nil {
 		return nil, err
 	}
-	return c.openShardFile(fd, initial, identity, expected, payloadFileName)
+	return c.openShardFile(fd, initial, identity, expected, payloadFileName, readPayloadPayload)
 }
 
 // openShardFile authenticates a shard file's header and identity against the
 // pinned expectation and hands back a range-readable handle.
-func (c *unixCache) openShardFile(fd int, initial fileState, identity ExpectedIdentity, expected ArtifactExpectation, name string) (registryBackend, error) {
+func (c *unixCache) openShardFile(fd int, initial fileState, identity ExpectedIdentity, expected ArtifactExpectation, name string, category readCategory) (registryBackend, error) {
 	fail := func(err error) (registryBackend, error) {
 		_ = c.ops.close(fd)
 		c.counters.closeOps.Add(1)
@@ -404,7 +404,7 @@ func (c *unixCache) openShardFile(fd int, initial fileState, identity ExpectedId
 	if !sameFileState(initial, final) {
 		return fail(fmt.Errorf("%w: %s file changed during open", ErrInvalidArtifact, name))
 	}
-	return &unixRegistry{fd: fd, initial: initial, expected: expected, counters: c.counters, ops: c.ops}, nil
+	return &unixRegistry{fd: fd, initial: initial, expected: expected, counters: c.counters, ops: c.ops, category: category}, nil
 }
 
 type readCategory uint8
@@ -413,6 +413,7 @@ const (
 	readHeader readCategory = iota
 	readMetaPayload
 	readRegistryPayload
+	readPayloadPayload
 )
 
 func (c *unixCache) preadFull(fd int, p []byte, offset int64, category readCategory) error {
@@ -424,6 +425,8 @@ func (c *unixCache) preadFull(fd int, p []byte, offset int64, category readCateg
 			c.counters.metaPayloadReadOps.Add(1)
 		case readRegistryPayload:
 			c.counters.registryReadOps.Add(1)
+		case readPayloadPayload:
+			c.counters.payloadReadOps.Add(1)
 		}
 		n, err := c.ops.pread(fd, p, offset)
 		if n > 0 {
@@ -431,6 +434,8 @@ func (c *unixCache) preadFull(fd int, p []byte, offset int64, category readCateg
 				c.counters.metaPayloadReadBytes.Add(uint64(n))
 			} else if category == readRegistryPayload {
 				c.counters.registryReadBytes.Add(uint64(n))
+			} else if category == readPayloadPayload {
+				c.counters.payloadReadBytes.Add(uint64(n))
 			}
 			p = p[n:]
 			offset += int64(n)
@@ -455,6 +460,7 @@ type unixRegistry struct {
 	expected ArtifactExpectation
 	counters *Counters
 	ops      unixIO
+	category readCategory
 	closed   bool
 }
 
@@ -487,7 +493,7 @@ func (r *unixRegistry) readRange(descriptor RangeDescriptor) ([]byte, error) {
 	}
 	payload := make([]byte, int(descriptor.Length))
 	reader := unixCache{counters: r.counters, ops: r.ops}
-	if err := reader.preadFull(r.fd, payload, int64(HeaderSize+descriptor.Offset), readRegistryPayload); err != nil {
+	if err := reader.preadFull(r.fd, payload, int64(HeaderSize+descriptor.Offset), r.category); err != nil {
 		return nil, err
 	}
 	if digest := sha256.Sum256(payload); !digestEqual(digest, descriptor.SHA256) {
@@ -526,7 +532,7 @@ func (r *unixRegistry) validateAggregate() error {
 			length = uint64(len(buffer))
 		}
 		chunk := buffer[:int(length)]
-		if err := reader.preadFull(r.fd, chunk, int64(HeaderSize+offset), readRegistryPayload); err != nil {
+		if err := reader.preadFull(r.fd, chunk, int64(HeaderSize+offset), r.category); err != nil {
 			return err
 		}
 		_, _ = hash.Write(chunk)

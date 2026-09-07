@@ -13,6 +13,8 @@ type IOSnapshot struct {
 	MetaPayloadReadBytes uint64
 	RegistryReadOps      uint64
 	RegistryReadBytes    uint64
+	PayloadReadOps       uint64
+	PayloadReadBytes     uint64
 	WriteOps             uint64
 	WriteBytes           uint64
 	FileSyncOps          uint64
@@ -33,6 +35,8 @@ type Counters struct {
 	metaPayloadReadBytes atomic.Uint64
 	registryReadOps      atomic.Uint64
 	registryReadBytes    atomic.Uint64
+	payloadReadOps       atomic.Uint64
+	payloadReadBytes     atomic.Uint64
 	writeOps             atomic.Uint64
 	writeBytes           atomic.Uint64
 	fileSyncOps          atomic.Uint64
@@ -57,6 +61,8 @@ func (c *Counters) Snapshot() IOSnapshot {
 		MetaPayloadReadBytes: c.metaPayloadReadBytes.Load(),
 		RegistryReadOps:      c.registryReadOps.Load(),
 		RegistryReadBytes:    c.registryReadBytes.Load(),
+		PayloadReadOps:       c.payloadReadOps.Load(),
+		PayloadReadBytes:     c.payloadReadBytes.Load(),
 		WriteOps:             c.writeOps.Load(),
 		WriteBytes:           c.writeBytes.Load(),
 		FileSyncOps:          c.fileSyncOps.Load(),
