@@ -600,6 +600,7 @@ func (a SchemaCacheArtifacts) ValidateRoundTrip() error {
 	if err != nil {
 		return fmt.Errorf("decode generated Meta: %w", err)
 	}
+	meta.MaterializeCommandMeta()
 	if !reflect.DeepEqual(meta.CommandMetaByPath, schemaruntime.BuildCommandMetaLookup(a.registry)) ||
 		!reflect.DeepEqual(meta.LocatorProductByPath, a.locators) ||
 		!reflect.DeepEqual(meta.ProductDescriptors, a.ProductDescriptors) {

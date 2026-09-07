@@ -32,6 +32,7 @@ func TestRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
 	if !bytes.Equal(built.Meta, second.Meta) || !bytes.Equal(built.ProductShards, second.ProductShards) {
 		t.Fatal("real Schema cache build is not byte deterministic")
 	}
+	meta.MaterializeCommandMeta()
 	if !reflect.DeepEqual(schemaruntime.BuildCommandMetaLookup(registry), meta.CommandMetaByPath) {
 		t.Fatal("real CommandMeta lookup differs after cache round trip")
 	}

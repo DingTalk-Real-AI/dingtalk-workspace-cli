@@ -58,6 +58,20 @@ func commandMetaProtoLists(in *schemacachepb.CommandMetaEntry) [commandMetaListC
 	return [commandMetaListCount][]string{in.Aliases, in.UseWhen, in.AvoidWhen, in.Prerequisites, in.Tips, in.Examples}
 }
 
+// commandIdentityFromProto decodes only the Identity half of a row. Meta
+// validation reads Identity and never Safety or Selection, so a cache read can
+// validate every row without copying the five Selection string lists. The full
+// value stays available on demand through commandMetaFromProto.
+func commandIdentityFromProto(in *schemacachepb.CommandMetaEntry) CommandIdentity {
+	identity := CommandIdentity{
+		CLIPath: in.CliPath, Canonical: in.Canonical, ProductID: in.ProductId, Title: in.Title,
+	}
+	if in.ListsPresent&1 != 0 {
+		identity.Aliases = slices.Clone(in.Aliases)
+	}
+	return identity
+}
+
 func validateCommandMetaListPresence(in *schemacachepb.CommandMetaEntry) error {
 	if in.ListsPresent & ^uint32((1<<commandMetaListCount)-1) != 0 {
 		return fmt.Errorf("unknown metadata list presence bits")

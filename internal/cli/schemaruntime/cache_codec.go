@@ -439,6 +439,7 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	}
 	wantLookup := BuildCommandMetaLookup(registry)
 	count, present := meta.commandCountByProduct[descriptor.ProductID]
+	meta.MaterializeCommandMeta()
 	if !present || count != len(wantLookup) || !commandMetaSubsetEqual(meta.CommandMetaByPath, wantLookup) {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q CommandMeta entries disagree with shard", descriptor.ProductID)
 	}
@@ -535,11 +536,13 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 		Level:                root.Registry.GetLevel(),
 		Source:               root.Registry.GetSource(),
 		AgentMetadata:        bytesFromProto(root.Registry.GetAgentMetadata()),
-		CommandMetaByPath:    make(map[string]CommandMeta, len(root.CommandEntries.Items)),
+		CommandMetaByPath:    make(map[string]CommandMeta),
 		Overview:             overviewFromProto(root.Overview),
 		LocatorProductByPath: make(map[string]string, len(root.Locators.Items)),
 		ProductDescriptors:   descriptorsFromProto(root.ProductDescriptors),
 		RegistryDataLength:   root.GetRegistryDataLength(),
+		commandIdentityByPath: make(map[string]CommandIdentity,
+			len(root.CommandEntries.Items)),
 	}
 	copy(result.RegistryDataSHA256[:], root.GetRegistryDataSha256())
 	copy(result.Hashes.SourceSHA256[:], root.GetSourceSha256())
@@ -557,11 +560,12 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 		if err := validateCommandMetaListPresence(entry); err != nil {
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta command entry %q: %w", entry.GetLookupPath(), err)
 		}
-		commandMeta := commandMetaFromProto(entry)
-		if commandMeta.Identity.CLIPath == "" || commandMeta.Identity.Canonical == "" || commandMeta.Identity.ProductID == "" {
+		identity := commandIdentityFromProto(entry)
+		if identity.CLIPath == "" || identity.Canonical == "" || identity.ProductID == "" {
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta command entry %q has incomplete identity", entry.GetLookupPath())
 		}
-		result.CommandMetaByPath[entry.GetLookupPath()] = commandMeta
+		result.commandIdentityByPath[entry.GetLookupPath()] = identity
+		result.commandEntries = append(result.commandEntries, entry)
 	}
 	last = ""
 	for i, entry := range root.Locators.Items {
@@ -586,18 +590,17 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 			return DecodedSchemaMeta{}, fmt.Errorf("Schema locator %q names unknown product %q", path, productID)
 		}
 	}
-	if !validMetaAliasExpansion(result.CommandMetaByPath) {
-		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta CommandMeta entries are not an exact primary/alias expansion")
-	}
-
+	// The primary/alias expansion check now runs when the cache is built, where
+	// the writer holds the authoritative lookup in memory. Re-running it here
+	// would require decoding every row's Safety and Selection.
 	result.commandCountByProduct = make(map[string]int, len(products))
-	for path, meta := range result.CommandMetaByPath {
-		result.commandCountByProduct[meta.Identity.ProductID]++
-		if !products[meta.Identity.ProductID] || result.LocatorProductByPath[path] != meta.Identity.ProductID {
+	for path, identity := range result.commandIdentityByPath {
+		result.commandCountByProduct[identity.ProductID]++
+		if !products[identity.ProductID] || result.LocatorProductByPath[path] != identity.ProductID {
 			return DecodedSchemaMeta{}, fmt.Errorf("CommandMeta %q has inconsistent product locator", path)
 		}
-		for _, identityPath := range append([]string{meta.Identity.CLIPath, meta.Identity.Canonical}, meta.Identity.Aliases...) {
-			if result.LocatorProductByPath[strings.TrimSpace(identityPath)] != meta.Identity.ProductID {
+		for _, identityPath := range append([]string{identity.CLIPath, identity.Canonical}, identity.Aliases...) {
+			if result.LocatorProductByPath[strings.TrimSpace(identityPath)] != identity.ProductID {
 				return DecodedSchemaMeta{}, fmt.Errorf("CommandMeta %q identity locator %q is missing or inconsistent", path, identityPath)
 			}
 		}

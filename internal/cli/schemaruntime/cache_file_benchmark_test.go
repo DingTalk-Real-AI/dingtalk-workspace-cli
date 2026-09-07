@@ -79,7 +79,7 @@ func BenchmarkRealSchemaFileHit(b *testing.B) {
 			if decoded.Hashes != meta.Hashes || decoded.RegistryDataSHA256 != registryArtifact.Expectation.EncodedSHA256 || decoded.RegistryDataLength != registryArtifact.Expectation.EncodedLength {
 				b.Fatal("Meta identity mismatch")
 			}
-			if _, ok := decoded.CommandMetaByPath["calendar event create"]; !ok {
+			if _, ok := decoded.CommandMeta("calendar event create"); !ok {
 				b.Fatal("missing command metadata")
 			}
 		}
