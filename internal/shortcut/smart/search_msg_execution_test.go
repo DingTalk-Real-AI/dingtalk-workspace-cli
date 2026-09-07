@@ -10,11 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -37,6 +39,8 @@ type searchMsgExecutionCaller struct {
 	groupResponse      string
 	failContactKeyword string
 	failGroupKeyword   string
+	policyResponse     string
+	batchResponse      string
 }
 
 const (
@@ -97,6 +101,16 @@ func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool str
 			return searchMsgToolResult(f.firstResponse), nil
 		}
 		return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","senderOpenDingTalkId":"` + testCurrentDOpenID + `","content":"sparse-1"}],"hasMore":true,"nextCursor":"c2"}}`), nil
+	case "get_message_crypto_policy":
+		if f.policyResponse != "" {
+			return searchMsgToolResult(f.policyResponse), nil
+		}
+		return nil, errors.New("unexpected tool")
+	case "batch_ding_decrypt_messages":
+		if f.batchResponse != "" {
+			return searchMsgToolResult(f.batchResponse), nil
+		}
+		return nil, errors.New("unexpected tool")
 	case "list_messages_by_ids":
 		if f.failEnrichment {
 			return nil, errors.New("mget unavailable")
@@ -748,5 +762,166 @@ func TestCrossPlatformCoverageSearchMsgLarkTimeAliasesAndAscendingOrder(t *testi
 	rangeMeta := payload["queryRange"].(map[string]any)
 	if rangeMeta["order"] != "asc" || rangeMeta["semantics"] != "[start,end)" {
 		t.Fatalf("queryRange = %#v", rangeMeta)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgDecryptEnrichedContentSinglePage(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &searchMsgExecutionCaller{
+		searchResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"sparse-hit"}],"hasMore":false}}`,
+		mgetResponse:   `{"result":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}]}`,
+		policyResponse: `{"result":{"mode":"required"}}`,
+		batchResponse:  `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"hello decrypted","keyVersion":8}]}}`,
+	}
+	payload := executeSearchMsg(t, caller, "--query", "周报")
+	listCalls, enrichCalls, policyCalls, batchCalls := 0, 0, 0, 0
+	for _, call := range caller.calls {
+		switch call.tool {
+		case "search_messages":
+			listCalls++
+		case "list_messages_by_ids":
+			enrichCalls++
+		case "get_message_crypto_policy":
+			policyCalls++
+		case "batch_ding_decrypt_messages":
+			batchCalls++
+		}
+	}
+	if listCalls != 1 || enrichCalls != 1 || policyCalls != 1 || batchCalls != 1 {
+		t.Fatalf("calls = %d search / %d enrich / %d policy / %d batch, want 1/1/1/1", listCalls, enrichCalls, policyCalls, batchCalls)
+	}
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(1) ||
+		payload["decryptedCount"] != float64(1) ||
+		payload["decryptFailedCount"] != float64(0) {
+		t.Fatalf("decrypt ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "hello decrypted" || first["contentDecrypted"] != true ||
+		first["cryptoLayer"] != "ding+safechat" || first["dingKeyVersion"] != float64(8) {
+		t.Fatalf("decrypted message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgDecryptPolicyOffRecordsFailure(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &searchMsgExecutionCaller{
+		searchResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}],"hasMore":false}}`,
+		mgetResponse:   `{"result":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}]}`,
+		policyResponse: `{"result":{"mode":"off"}}`,
+	}
+	payload := executeSearchMsg(t, caller, "--query", "周报", "--no-enrich")
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(0) ||
+		payload["decryptFailedCount"] != float64(1) ||
+		payload["partial"] != true {
+		t.Fatalf("policy-off ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != chatMessagesDecryptCipherText || first["contentDecrypted"] == true {
+		t.Fatalf("policy-off message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgDecryptBatchFailureFallsBackToOriginal(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &searchMsgExecutionCaller{
+		searchResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}],"hasMore":false}}`,
+		policyResponse: `{"result":{"mode":"required"}}`,
+		batchResponse:  `{"result":{"items":[{"messageId":"m1","status":"failed","reason":"key_unavailable"}]}}`,
+	}
+	payload := executeSearchMsg(t, caller, "--query", "周报", "--no-enrich")
+	if payload["decryptFailedCount"] != float64(1) || payload["partial"] != true {
+		t.Fatalf("batch-failure ledger = %#v", payload)
+	}
+	failures, _ := payload["decryptFailures"].([]any)
+	failure, _ := failures[0].(map[string]any)
+	if failure["reason"] != "key_unavailable" || failure["messageId"] != "m1" {
+		t.Fatalf("batch failure = %#v", failure)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != chatMessagesDecryptCipherText || first["contentDecrypted"] == true {
+		t.Fatalf("batch-failure message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgDecryptSkipsWhenBackendUnavailable(t *testing.T) {
+	swapChatMessagesDecryptClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			t.Fatal("identity lookup must not run without the SafeChat backend")
+			return messagecrypto.Identity{}, nil
+		},
+		BackendReady: func() bool { return false },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	caller := &searchMsgExecutionCaller{
+		searchResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}],"hasMore":false}}`,
+	}
+	payload := executeSearchMsg(t, caller, "--query", "周报", "--no-enrich")
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %#v, want search only", caller.calls)
+	}
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount", "decryptFailures"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("unavailable backend emitted %q: %#v", key, payload)
+		}
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if text, _ := first["text"].(string); !strings.Contains(text, "加密消息") {
+		t.Fatalf("message changed without backend: %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgDecryptNoEnrichCoexistsWithDecrypt(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &searchMsgExecutionCaller{
+		searchResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}],"hasMore":false}}`,
+		policyResponse: `{"result":{"mode":"required"}}`,
+		batchResponse:  `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"no-enrich decrypted"}]}}`,
+	}
+	payload := executeSearchMsg(t, caller, "--query", "周报", "--no-enrich")
+	listCalls, enrichCalls, batchCalls := 0, 0, 0
+	for _, call := range caller.calls {
+		switch call.tool {
+		case "search_messages":
+			listCalls++
+		case "list_messages_by_ids":
+			enrichCalls++
+		case "batch_ding_decrypt_messages":
+			batchCalls++
+		}
+	}
+	if listCalls != 1 || enrichCalls != 0 || batchCalls != 1 {
+		t.Fatalf("calls = %d search / %d enrich / %d batch, want 1/0/1", listCalls, enrichCalls, batchCalls)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "no-enrich decrypted" || first["contentDecrypted"] != true {
+		t.Fatalf("no-enrich decrypted message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgDecryptDryRunSkipsDecrypt(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &searchMsgExecutionCaller{
+		searchResponse: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"` + chatMessagesDecryptCipherText + `"}],"hasMore":false}}`,
+	}
+	payload, err := executeSearchMsgResult(caller, "--query", "周报", "--no-enrich", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range caller.calls {
+		if call.tool == "get_message_crypto_policy" || call.tool == "batch_ding_decrypt_messages" {
+			t.Fatalf("dry-run must not call decrypt tools: %#v", caller.calls)
+		}
+	}
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("dry-run emitted %q: %#v", key, payload)
+		}
 	}
 }
