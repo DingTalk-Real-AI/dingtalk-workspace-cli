@@ -258,6 +258,10 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 真正需要处理的约束是并发：`freshMeta` 是 `atomic.Pointer`，说明 meta 会被并发访问，惰性填充共享 map 必须加锁或按条目 `sync.Once`，否则构成数据竞争。这是第 3 层的实际难点，不是值语义。
 
+但加锁方案本身也不可行：`DecodedSchemaMeta` 在约 15 处按值传递（`schemareader/read.go` 与 `cli/schema_cache_delivery.go` 的多个方法签名），且 `cache_codec.go:395` 与 `schema_cache_delivery.go:603` 用 `reflect.DeepEqual` 比较其内容。给它加 `sync.Mutex` 或 `sync.Map` 字段会触发 `go vet` 的 copylocks 失败，并破坏 DeepEqual 比较。
+
+因此正确的设计方向是**按需解码但不做记忆化**：`DecodedSchemaMeta` 只增加一个解码后不可变的 `commandEntries []*schemacachepb.CommandMetaEntry` 字段（不可变数据可安全共享，无 copylocks 问题），并提供一个纯函数式的 `CommandMeta(path)` 方法，用二分查找定位条目后即时解码。无共享可变状态即无需加锁。CLI 进程通常只解析少量路径，重复解码的代价可忽略。`CommandMetaByPath` 保留给校验路径，由显式的物化方法填充；`cache_codec.go:547-557` 的交叉校验改用 identity 映射，不依赖完整 `CommandMeta`。
+
 另一条不可行的捷径仍然是把 `CommandMetaByPath` 填成 identity-only 的不完整值：`command_meta.go:161` 的 `ResolveMeta` 调用方 `RenderHelpAffordances` 要用 `Selection` 渲染 help，值不完整会直接导致 help 文本缺失。惰性解码必须产出完整值，只是推迟到命中时才产出。
 
 ## 4. 验收矩阵
