@@ -12,7 +12,7 @@ GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
 .PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
-all: setup-hooks fmt lint build test rebuild
+all: fmt lint build test rebuild
 
 help:
 	@printf "Available targets:\n"
@@ -26,6 +26,7 @@ help:
 	@printf "  make lint          - Run formatting checks, go vet, and staticcheck\n"
 	@printf "  make format-check  - Check all repository Go source files with gofmt\n"
 	@printf "  make fmt           - Format all repository Go source files\n"
+	@printf "  make setup-hooks   - Opt in to staged-only repository Git hooks\n"
 	@printf "  make policy        - Check the built dws plus open-source and Schema policies\n"
 	@printf "  make interface-integrity [BASE_REF=<ref>] [STABLE_REF=<tag>] [CANDIDATE_REF=<ref>] - Check authoritative CLI history\n"
 	@printf "  make authoritative-interface-integrity BASE_REF=<ref> [STABLE_REF=<tag>] [CANDIDATE_REF=<ref>] - Check Git-owned CLI history\n"
@@ -250,7 +251,8 @@ publish-homebrew-formula:
 	@./scripts/release/publish-homebrew-formula.sh
 
 setup-hooks:
-	@git config core.hooksPath scripts/hooks 2>/dev/null || true
+	@git config core.hooksPath scripts/hooks
+	@printf '%s\n' 'Enabled staged-only repository Git hooks.'
 
 changelog-pre:
 	@test -n "$(VERSION)" || (printf 'VERSION is required, e.g. v1.2.3-beta.1\n' >&2; exit 2)
