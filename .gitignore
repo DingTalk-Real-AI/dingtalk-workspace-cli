@@ -27,6 +27,8 @@ _logs/
 _docs/
 _output/
 vendor/
+# Local DWS runtime state may contain MCP overrides and authentication data.
+/.dws/
 
 # Secrets & credentials
 .env

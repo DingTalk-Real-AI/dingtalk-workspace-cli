@@ -69,7 +69,7 @@ dws auth status --format json
 `--format json` 直接序列化命令的真实 payload；不存在适用于所有产品的固定
 `{"success":true,"body":...}` 包装。读取 leaf 声明的字段，并保留以下完整性信号：
 
-- 分页：`hasMore`、`nextCursor`、`nextPageToken` 等当前响应字段；
+- 分页：`hasMore`、`nextCursor`、`nextPageToken` 等当前响应字段。首次请求不传游标，后续必须原样使用上一页返回的游标，并保持筛选、排序、页大小等查询条件不变。成功空页是合法结果：空页且续页游标非空时继续，空页且续页游标为空时正常完成；只有续页游标为空或命令明确返回 `complete=true` 才表示完整，不能因空列表报错、重试或判定漏查；
 - 批量/编排：`ok`、`partial`、`failures`、`results` 等当前 Shortcut ledger；
 - 写入：返回的稳定资源 ID、投递状态或逐项失败，不用退出码代替结果验证。
 

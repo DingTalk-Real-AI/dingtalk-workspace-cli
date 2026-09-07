@@ -65,18 +65,26 @@
 | `field delete` | 删除字段 | `--base-id` `--table-id` `--field-id` | 不可逆 |
 | `field search-options` | 搜索单选/多选字段的选项 | `--base-id` `--table-id` `--field-id` | 仅 singleSelect/multipleSelect；`--keyword` 模糊过滤，不传返回全部 |
 
+### psql (PostgreSQL 只读查询) → 详见 [aitable-psql.md](./aitable/aitable-psql.md)
+
+| 命令模式 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `psql -l` | 列出可查询的 PostgreSQL 逻辑表 | `-d <baseId>` | 数据查询前的表发现；输出为 psql 文本，不加 `--format json` |
+| `psql -t` | 查看逻辑列名和 PostgreSQL 类型 | `-d <baseId>` `-t <tableId>` | SQL 前核对列；全部属性列加 `--all-properties` |
+| `psql -c` | 执行一条只读 PostgreSQL SELECT | `-d <baseId>` `-c <SQL>` | SQL 的 `FROM` / `JOIN` 自动确定主表；支持单表及同 Base 多表 JOIN；只读；输出为 psql 文本 |
+
 ### record (记录管理)
 
 | 命令 | 用途 | 必读 reference | 路由提醒 |
 |------|------|----------------|----------|
-| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `table get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference；`--query`（隐藏别名 `--keyword`）全文搜索 |
+| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId 与类型；完整结果必须用 `--all --page-limit 0` 自动翻页；filters 中的实体展示名须先解析为稳定 ID/结构化值；`--query`（隐藏别名 `--keyword`）全文搜索 |
 | `record list` | 获取记录（`record query` 的别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 与 `record query` 等价 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
 | `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 小写；group 为 JSON 数组字符串；最多 1000 个分组 |
-| `record query-empty` | 查询完全没填用户字段的空行 | — | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]，`--cursor` 翻页 |
+| `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
-| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；**没有** `--record-id` `--cells` flag |
+| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
 | `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
 | `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
@@ -368,6 +376,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 - 修改/更新 → `record update`（读 [aitable-record-update.md](./aitable/aitable-record-update.md)）
 - 删除 → `record delete`
 
+用户说"查看可查询表/SQL 表结构/SQL 字段类型/查询前 N 条/按列查询/SQL/PostgreSQL/SELECT/JOIN/两表关联" → 读 [aitable-psql.md](./aitable/aitable-psql.md)。数据查询前的表清单和逻辑列发现走 `psql`；普通按记录 ID、关键词或 filters 查行仍走 `record query`；两表关联不得误路由为 LOOKUP/FILTER_UP 公式配置。
+
 用户说"筛选/过滤/filter" → 读 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md)
 
 用户说"统计/分析/聚合/TOP N/全量" → 先读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)，聚合参数见 [aitable-record-stats.md](./aitable/aitable-record-stats.md)
@@ -434,7 +444,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ## 注意事项
 
-- 所有操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称
+- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
 - records 的 cells key 是 fieldId，不是字段名称
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)
