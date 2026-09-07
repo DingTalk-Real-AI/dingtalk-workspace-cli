@@ -236,6 +236,24 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 结论：关闭剩余差距只剩一条路，即 schema / leaf-help 共用的 Meta 惰性解码，而它需要先决定 `equalCommandMeta` 的别名/主行一致性校验是否移到 cache 写入时。
 
+### 3.6 Meta 惰性解码的实施方案（2026-09-07，信任模型方向已确认）
+
+方向已确认：`equalCommandMeta` 的别名/主行一致性校验移到 cache 写入时，读取时不再重跑。依据是 AGENTS.md 把 Meta 与分片定位为「可丢弃的传输派生物，miss 时回落权威装配」，且 cache 完整性已由哈希保证——读取时重跑该校验对损坏是冗余的，它抓的是写入方 bug，因此在写入方自校验即可保留同等保障。
+
+但仅把校验移走并不足以关闭差距，必须先算清幅度：linux leaf-help 需从 50.58 ms 降到 46.29 ms 以下，即削减 4.29 ms，而整笔 Meta 读取只有 4.536 ms，**需要削减约 95%**。
+
+关键在于 protobuf 的 unmarshal 本身就会解码全部字符串字段（`consumeStringValidateUTF8` / `consumeStringSliceValidateUTF8` 合计约 950 KB/op）。因此只跳过 Go 侧的 `CommandMeta` 转换——即 `commandMetaFromProto`（`cache_conversion.go:75`）里 6 个列表拷贝中的 5 个 Selection 列表——最多省掉约 20% 的分配，远不够。要省掉 95%，必须让单叶查询**根本不解码 Selection 字符串**。
+
+因此需要的改动分三层，缺一不可：
+
+1. **DTO 重构**：把 `CommandMetaEntry` 的 Selection 字段（`agent_summary` / `use_when` / `avoid_when` / `prerequisites` / `tips` / `examples`）从内联字段改为一个序列化后的 `bytes` 子消息，或拆到独立的按工具分片。这样外层 unmarshal 不再解码 Selection 字符串，只在命中路径时解码那一条。需要重新生成 protobuf 并同步 `DTOVersion`。
+2. **写入方自校验**：把 `validMetaAliasExpansion`（`meta.go:154`）移到 cache 构建路径，在写入前用内存中的权威 registry 校验别名/主行一致性。写入方持有完整数据，校验比读取时的序列化往返更便宜。
+3. **读取方惰性化**：`validateAndConvertMeta`（`cache_codec.go:459`）改为只解码 Identity 与 locator，保留原始条目；`CommandMetaByPath` 从直接访问的 map 字段改为访问器并按需解码记忆化。需更新的生产消费方：`command_meta.go:161,170`、`cache_codec.go:395`、`schema_cache_delivery.go:603`（该处 `DeepEqual` 属校验路径，强制完整解码可接受），以及 `cache_codec_test.go:49`、`cache_real_test.go:35`、`cache_file_benchmark_test.go:82` 三处测试。
+
+预期收益：leaf-help 省掉整笔 Selection 解码，schema  additionally 省掉产品分片中未命中工具的 Selection 解码。落地后必须重跑 `BenchmarkRealSchemaFileHit` 的两个阶段与 CI 双平台五维测量，并确认 help stdout 的 SHA-256 一致性门禁不变。
+
+本会话预算不足以完成 DTO 重构（涉及 protobuf 重新生成、写入与读取双路径、全部相关测试与 policy 门禁），因此未启动实现，以免仓库停在不可编译状态。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |
