@@ -38,7 +38,9 @@ const messageDecryptFailedOriginalContentKey = "_contentDecryptFailedOriginal"
 var messageDecryptClient = messagecrypto.DefaultClient()
 
 // SetMessageDecryptClient injects the process-wide crypto client; nil resets
-// to the inert DefaultClient.
+// to the inert DefaultClient. It mutates package-global state: production
+// calls it once on the main goroutine during app startup, and tests must not
+// call it from t.Parallel tests.
 func SetMessageDecryptClient(client *messagecrypto.Client) {
 	if client == nil {
 		messageDecryptClient = messagecrypto.DefaultClient()
@@ -181,9 +183,6 @@ func collectEncryptedMessageItems(messages []map[string]any) []messagecrypto.Bat
 	var walk func(map[string]any)
 	walk = func(message map[string]any) {
 		messageID := strings.TrimSpace(fmt.Sprint(MessageID(message)))
-		if messageID == "" || messageID == "<nil>" {
-			messageID = strings.TrimSpace(fmt.Sprint(firstMessageDecryptValue(message, "openMessageId", "messageId", "msgId")))
-		}
 		conversationID := strings.TrimSpace(fmt.Sprint(ConversationID(message)))
 		if conversationID == "<nil>" {
 			conversationID = ""

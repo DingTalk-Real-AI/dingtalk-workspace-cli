@@ -14,6 +14,7 @@
 package chatmsg
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -122,6 +123,40 @@ func TestCrossPlatformCoverageProjectMessageV1PassesDecryptMarkersAndRestoresOri
 	}
 	if _, has := plain["dingKeyVersion"]; has {
 		t.Fatalf("plain row unexpectedly has dingKeyVersion: %#v", plain)
+	}
+}
+
+func TestCrossPlatformCoverageForwardedChildDecryptFailureRestoresProjectedText(t *testing.T) {
+	rt := &decryptTestRuntime{
+		batchData: `{"result":{"items":[{"messageId":"child","status":"failed","reason":"bad_key"}]}}`,
+	}
+	parent := map[string]any{
+		"openMessageId":      "root",
+		"openConversationId": "cid",
+		"content":            "plain root",
+		"forwardMessages": []any{
+			map[string]any{"openMessageId": "child", "openConversationId": "cid", "text": decryptTestCipher},
+		},
+	}
+	ledger := DecryptMessagesByPolicy(context.Background(), rt, decryptTestClient(true),
+		[]map[string]any{parent}, DecryptOptions{MarkFailedOriginal: true})
+	if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 1 ||
+		ledger["decryptedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
+		t.Fatalf("forwarded failure ledger = %#v", ledger)
+	}
+	child, _ := parent["forwardMessages"].([]any)[0].(map[string]any)
+	if child["text"] != decryptTestCipher {
+		t.Fatalf("failed child must keep ciphertext: %#v", child)
+	}
+	if child[messageDecryptFailedOriginalContentKey] != decryptTestCipher {
+		t.Fatalf("failed child must be marked with the original ciphertext: %#v", child)
+	}
+	row := ProjectMessageV1(child, false)
+	if row["text"] != decryptTestCipher {
+		t.Fatalf("projected child text = %#v, want original ciphertext", row["text"])
+	}
+	if _, has := row["contentDecrypted"]; has {
+		t.Fatalf("failed child row must not carry decrypt markers: %#v", row)
 	}
 }
 

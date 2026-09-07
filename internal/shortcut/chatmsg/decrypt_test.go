@@ -35,13 +35,14 @@ func (decryptTestCipherFake) DecryptMessage(_ context.Context, _, _ string, ciph
 }
 
 type decryptTestRuntime struct {
-	dryRun     bool
-	policyMode string
-	policyErr  error
-	batchData  string
-	batchErr   error
-	readCalls  int
-	writeCalls int
+	dryRun           bool
+	policyMode       string
+	policyTTLSeconds int
+	policyErr        error
+	batchData        string
+	batchErr         error
+	readCalls        int
+	writeCalls       int
 }
 
 func (r *decryptTestRuntime) CallMCPReadData(_ string, _ string, params map[string]any) (map[string]any, error) {
@@ -53,7 +54,11 @@ func (r *decryptTestRuntime) CallMCPReadData(_ string, _ string, params map[stri
 	if mode == "" {
 		mode = "required"
 	}
-	return map[string]any{"result": map[string]any{"mode": mode, "openConversationId": params["openConversationId"]}}, nil
+	result := map[string]any{"mode": mode, "openConversationId": params["openConversationId"]}
+	if r.policyTTLSeconds > 0 {
+		result["ttlSeconds"] = r.policyTTLSeconds
+	}
+	return map[string]any{"result": result}, nil
 }
 
 func (r *decryptTestRuntime) CallMCPWriteDataStrict(_ string, _ string, params map[string]any) (map[string]any, error) {
@@ -306,6 +311,25 @@ func TestDecryptMessagesByPolicyTransportErrorRecordsPerItemFailures(t *testing.
 	}
 	if !ids["m1"] || !ids["m2"] {
 		t.Fatalf("transport failures must carry message ids: %#v", ids)
+	}
+}
+
+func TestDecryptMessagesByPolicyPolicyCacheTTLReusesConversationDecisions(t *testing.T) {
+	rt := &decryptTestRuntime{policyTTLSeconds: 60}
+	messages := []map[string]any{
+		encryptedTestMessage("m1"),
+		{"openMessageId": "m2", "openConversationId": "cid", "content": decryptTestCipher},
+		{"openMessageId": "m3", "openConversationId": "cid-2", "content": decryptTestCipher},
+	}
+	ledger := DecryptMessagesByPolicy(context.Background(), rt, decryptTestClient(true), messages, DecryptOptions{})
+	if ledger["decryptAllowedCount"] != 3 || ledger["decryptedCount"] != 3 {
+		t.Fatalf("ttl ledger = %#v", ledger)
+	}
+	if rt.readCalls != 2 {
+		t.Fatalf("readCalls = %d, want one per conversation (2), not per message (3)", rt.readCalls)
+	}
+	if rt.writeCalls != 1 {
+		t.Fatalf("writeCalls = %d, want a single batch decrypt", rt.writeCalls)
 	}
 }
 
