@@ -200,24 +200,31 @@ func (c *Cache) WriteArtifact(identity ExpectedIdentity, artifact Artifact) erro
 }
 
 // Publish commits Registry first and Meta last. Meta is the generation commit marker.
-func (c *Cache) Publish(identity ExpectedIdentity, registry, meta Artifact) error {
+func (c *Cache) Publish(identity ExpectedIdentity, registry, meta Artifact, extra ...Artifact) error {
 	if c == nil || c.backend == nil {
 		return ErrClosed
 	}
 	if registry.Expectation.Kind != KindRegistry || meta.Expectation.Kind != KindMeta {
 		return fmt.Errorf("%w: publish requires Registry then Meta", ErrInvalidArtifact)
 	}
-	// Validate both before replacing either old artifact.
-	if err := validateArtifactPayload(identity, registry); err != nil {
-		return err
+	artifacts := append([]Artifact{registry, meta}, extra...)
+	for i, artifact := range artifacts {
+		if artifact.Expectation.Kind == KindMeta && i != len(artifacts)-1 {
+			return fmt.Errorf("%w: publish requires Meta last", ErrInvalidArtifact)
+		}
 	}
-	if err := validateArtifactPayload(identity, meta); err != nil {
-		return err
+	// Validate all before replacing any old artifact.
+	for _, artifact := range artifacts {
+		if err := validateArtifactPayload(identity, artifact); err != nil {
+			return err
+		}
 	}
-	if err := c.backend.writeArtifact(identity, registry); err != nil {
-		return err
+	for _, artifact := range artifacts {
+		if err := c.backend.writeArtifact(identity, artifact); err != nil {
+			return err
+		}
 	}
-	return c.backend.writeArtifact(identity, meta)
+	return nil
 }
 
 func validateArtifactPayload(identity ExpectedIdentity, artifact Artifact) error {
