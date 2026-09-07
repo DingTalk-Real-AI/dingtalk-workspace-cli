@@ -57,7 +57,7 @@ func TestEnvelopeRejectsEveryFixedFieldViolation(t *testing.T) {
 		"magic":               func(b []byte) { b[0] ^= 1 },
 		"version":             func(b []byte) { binary.BigEndian.PutUint16(b[8:10], 2) },
 		"header size":         func(b []byte) { binary.BigEndian.PutUint16(b[10:12], 207) },
-		"kind":                func(b []byte) { b[12] = 3 },
+		"kind":                func(b []byte) { b[12] = 4 },
 		"serializer":          func(b []byte) { b[13] = 1 },
 		"codec":               func(b []byte) { b[14] = 1 },
 		"flags":               func(b []byte) { b[15] = 1 },

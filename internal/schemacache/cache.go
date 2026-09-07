@@ -13,6 +13,7 @@ import (
 const (
 	metaFileName     = "meta.cache"
 	registryFileName = "registry.shards.cache"
+	payloadFileName  = "payloads.shards.cache"
 	lockFileName     = "rebuild.lock"
 )
 
@@ -33,6 +34,7 @@ type backend interface {
 	directory() string
 	readMeta(ExpectedIdentity, ArtifactExpectation) ([]byte, error)
 	openRegistry(ExpectedIdentity, ArtifactExpectation) (registryBackend, error)
+	openPayloads(ExpectedIdentity, ArtifactExpectation) (registryBackend, error)
 	writeArtifact(ExpectedIdentity, Artifact) error
 	acquire(context.Context, time.Duration) (lockBackend, error)
 }
@@ -133,6 +135,26 @@ func (c *Cache) OpenRegistry(identity ExpectedIdentity, expected ArtifactExpecta
 		return nil, err
 	}
 	b, err := c.backend.openRegistry(identity, expected)
+	if err != nil {
+		return nil, err
+	}
+	return &Registry{backend: b}, nil
+}
+
+// OpenPayloads opens the command payload file for bounded ReadRange calls. It
+// is deliberately independent of the registry so a corrupted registry cannot
+// affect payload reads.
+func (c *Cache) OpenPayloads(identity ExpectedIdentity, expected ArtifactExpectation) (*Registry, error) {
+	if c == nil || c.backend == nil {
+		return nil, ErrClosed
+	}
+	if err := identity.validate(); err != nil {
+		return nil, err
+	}
+	if err := expected.validate(KindPayloads); err != nil {
+		return nil, err
+	}
+	b, err := c.backend.openPayloads(identity, expected)
 	if err != nil {
 		return nil, err
 	}

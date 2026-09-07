@@ -26,6 +26,7 @@ type ArtifactKind uint8
 const (
 	KindMeta     ArtifactKind = 1
 	KindRegistry ArtifactKind = 2
+	KindPayloads ArtifactKind = 3
 )
 
 // Envelope is the fixed, allocation-free portion of a cache artifact.
@@ -139,7 +140,7 @@ func ParseEnvelope(b []byte) (Envelope, error) {
 }
 
 func (e Envelope) validateShape() error {
-	if e.Kind != KindMeta && e.Kind != KindRegistry {
+	if e.Kind != KindMeta && e.Kind != KindRegistry && e.Kind != KindPayloads {
 		return fmt.Errorf("%w: unknown artifact kind %d", ErrInvalidArtifact, e.Kind)
 	}
 	if e.Serializer != SerializerProtobuf {
@@ -167,10 +168,10 @@ func (e Envelope) validateShape() error {
 		return fmt.Errorf("%w: empty payload", ErrInvalidArtifact)
 	}
 	max := MaxMetaFileSize
-	if e.Kind == KindRegistry {
+	if e.Kind != KindMeta {
 		max = MaxRegistryFileSize
 		if e.EncodedLength > MaxRegistryPayloadSize {
-			return fmt.Errorf("%w: registry payload exceeds limit", ErrInvalidArtifact)
+			return fmt.Errorf("%w: shard payload exceeds limit", ErrInvalidArtifact)
 		}
 	}
 	if HeaderSize+e.EncodedLength > max {

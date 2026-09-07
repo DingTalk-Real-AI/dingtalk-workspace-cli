@@ -355,6 +355,28 @@ func (c *unixCache) openRegistry(identity ExpectedIdentity, expected ArtifactExp
 	if err != nil {
 		return nil, err
 	}
+	return c.openShardFile(fd, initial, identity, expected, registryFileName)
+}
+
+func (c *unixCache) openPayloads(identity ExpectedIdentity, expected ArtifactExpectation) (registryBackend, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.closed {
+		return nil, ErrClosed
+	}
+	if !digestEqual(c.edition, identity.EditionSHA256) {
+		return nil, ErrIdentityMismatch
+	}
+	fd, initial, err := c.secureOpen(payloadFileName, secureReadFlags, 0)
+	if err != nil {
+		return nil, err
+	}
+	return c.openShardFile(fd, initial, identity, expected, payloadFileName)
+}
+
+// openShardFile authenticates a shard file's header and identity against the
+// pinned expectation and hands back a range-readable handle.
+func (c *unixCache) openShardFile(fd int, initial fileState, identity ExpectedIdentity, expected ArtifactExpectation, name string) (registryBackend, error) {
 	fail := func(err error) (registryBackend, error) {
 		_ = c.ops.close(fd)
 		c.counters.closeOps.Add(1)
@@ -362,7 +384,7 @@ func (c *unixCache) openRegistry(identity ExpectedIdentity, expected ArtifactExp
 	}
 	wantSize, err := checkedFileSize(expected.EncodedLength)
 	if err != nil || initial.size != wantSize {
-		return fail(fmt.Errorf("%w: Registry file size mismatch", ErrInvalidArtifact))
+		return fail(fmt.Errorf("%w: %s file size mismatch", ErrInvalidArtifact, name))
 	}
 	header := make([]byte, HeaderSize)
 	if err := c.preadFull(fd, header, 0, readHeader); err != nil {
@@ -380,7 +402,7 @@ func (c *unixCache) openRegistry(identity ExpectedIdentity, expected ArtifactExp
 		return fail(err)
 	}
 	if !sameFileState(initial, final) {
-		return fail(fmt.Errorf("%w: Registry file changed during open", ErrInvalidArtifact))
+		return fail(fmt.Errorf("%w: %s file changed during open", ErrInvalidArtifact, name))
 	}
 	return &unixRegistry{fd: fd, initial: initial, expected: expected, counters: c.counters, ops: c.ops}, nil
 }
@@ -545,6 +567,8 @@ func (c *unixCache) writeArtifact(identity ExpectedIdentity, artifact Artifact) 
 	target := metaFileName
 	if artifact.Expectation.Kind == KindRegistry {
 		target = registryFileName
+	} else if artifact.Expectation.Kind == KindPayloads {
+		target = payloadFileName
 	}
 	return c.atomicReplace(target, header, artifact.Payload)
 }
