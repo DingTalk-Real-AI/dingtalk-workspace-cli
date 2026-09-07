@@ -85,6 +85,109 @@ func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *t
 	}
 }
 
+func TestCrossPlatformCoverageServerFailureClassifierAITableBaseNotFound(t *testing.T) {
+	content := map[string]any{
+		"data":     map[string]any{},
+		"status":   "error",
+		"success":  true,
+		"summary":  "Failed to get base because base does not exist or is inaccessible",
+		"trace_id": "trace-redacted",
+		"error": map[string]any{
+			"code":      "BASE_NOT_FOUND",
+			"message":   "Specified base does not exist, has been deleted, or is inaccessible",
+			"retryable": false,
+			"type":      "INPUT_ERROR",
+		},
+	}
+	diag := transport.ExtractServerDiagnosticsFromMap(content)
+	err := newServerFailureAPIError(
+		`{"data":{},"error":{"code":"BASE_NOT_FOUND","message":"Specified base does not exist, has been deleted, or is inaccessible","retryable":false,"type":"INPUT_ERROR"},"status":"error","success":true}`,
+		"mcp_tool_error",
+		"check tool parameters",
+		"aitable",
+		"get_base",
+		diag,
+	)
+
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T, want *errors.Error", err)
+	}
+	if typed.Category != apperrors.CategoryAPI || typed.Reason != "not_found" || typed.ExitCode() != apperrors.ExitCodeAPI {
+		t.Fatalf("classification = category %q reason %q exit %d", typed.Category, typed.Reason, typed.ExitCode())
+	}
+	if typed.Operation != "aitable/get_base" || typed.Origin != "aitable_service" || typed.FailureStage != "resource_lookup" {
+		t.Fatalf("classification context = operation %q origin %q stage %q", typed.Operation, typed.Origin, typed.FailureStage)
+	}
+	if !typed.RetryableSet || typed.Retryable {
+		t.Fatalf("retryability = (%v, %v), want explicit false", typed.RetryableSet, typed.Retryable)
+	}
+	if typed.ServerDiag.ServerErrorCode != "BASE_NOT_FOUND" || typed.ServerDiag.TraceID != "trace-redacted" {
+		t.Fatalf("diagnostics = %#v", typed.ServerDiag)
+	}
+
+	info := errorInfoFromExecutionError(err)
+	if info.Type != "api" || info.Subtype != "not_found" || info.ExitCode != apperrors.ExitCodeAPI || info.UpstreamCode != "BASE_NOT_FOUND" {
+		t.Fatalf("outer error info = %#v", info)
+	}
+}
+
+func TestCrossPlatformCoverageServerFailureClassifierAITableBaseNotFoundBoundaries(t *testing.T) {
+	tests := []struct {
+		name      string
+		message   string
+		serverKey string
+		tool      string
+		code      string
+	}{
+		{
+			name:      "adjacent invalid base id",
+			message:   `{"error":{"code":"INVALID_BASE_ID","message":"baseId format is invalid","retryable":false,"type":"INPUT_ERROR"},"status":"error","success":true}`,
+			serverKey: "aitable", tool: "get_base", code: "INVALID_BASE_ID",
+		},
+		{
+			name:      "same code different tool",
+			message:   `{"error":{"code":"BASE_NOT_FOUND","message":"base missing","retryable":false,"type":"INPUT_ERROR"},"status":"error","success":true}`,
+			serverKey: "aitable", tool: "delete_base", code: "BASE_NOT_FOUND",
+		},
+		{
+			name:      "phrase without structured code",
+			message:   "Specified base does not exist, has been deleted, or is inaccessible",
+			serverKey: "aitable", tool: "get_base", code: "",
+		},
+		{
+			name:      "same code different service",
+			message:   `{"error":{"code":"BASE_NOT_FOUND","message":"base missing"}}`,
+			serverKey: "other", tool: "get_base", code: "BASE_NOT_FOUND",
+		},
+		{
+			name:      "same code retryable envelope",
+			message:   `{"error":{"code":"BASE_NOT_FOUND","message":"base missing","retryable":true,"type":"INPUT_ERROR"},"status":"error","success":true}`,
+			serverKey: "aitable", tool: "get_base", code: "BASE_NOT_FOUND",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := newServerFailureAPIError(
+				test.message,
+				"mcp_tool_error",
+				"check tool parameters",
+				test.serverKey,
+				test.tool,
+				apperrors.ServerDiagnostics{ServerErrorCode: test.code},
+			)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Reason != "mcp_tool_error" || typed.Origin != "" || typed.FailureStage != "" {
+				t.Fatalf("adjacent error was widened into not_found: %#v", typed)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageServerFailureClassifierDingRobotNotInOrg(t *testing.T) {
 	for _, tool := range []string{"send_ding_message", "recall_ding_message"} {
 		t.Run(tool, func(t *testing.T) {

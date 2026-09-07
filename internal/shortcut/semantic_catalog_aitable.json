@@ -36,7 +36,8 @@
     "+record-primary-doc-get": {"disposition":"schema_leaf","semantic_delta":"读取记录主键文档 nodeId 的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+record-primary-doc-create": {"disposition":"semantic_adapter","semantic_delta":"以幂等意图为 primaryDoc 字段创建关联文档。","risk":"write","public":true,"reviewed":true},
 
-    "+template-search": {"disposition":"semantic_adapter","semantic_delta":"按名称关键词搜索 AI 表格模板并返回可用于创建的 templateId。","risk":"read","public":true,"reviewed":true},
+    "+template-search": {"disposition":"semantic_adapter","semantic_delta":"按非空名称关键词搜索 AI 表格模板，稳定投影 templateId，并将严格校验后的 nextCursor 发布到 meta.pagination；拒绝无关键词和不可续分页。","risk":"read","public":true,"reviewed":true},
+    "+ai-field-run": {"disposition":"primary_smart","semantic_delta":"先精确验证一个 AI 字段与 1–100 条显式记录身份，再唯一调用 run_ai_field；只发布 submitted pending 回执，verified 固定 false。","risk":"high-risk-write","public":true,"reviewed":true},
     "+attachment-upload": {"disposition":"schema_leaf","semantic_delta":"申请附件 OSS 直传地址和 fileToken；只负责上传准备，不伪造文件已上传。","risk":"write","public":true,"reviewed":true},
     "+attachment-put": {"disposition":"primary_smart","semantic_delta":"完整执行 prepare、HTTP PUT、attachment cell 覆盖和读回验证；空写回包只有最终附件可证明时成功。","risk":"write","public":true,"reviewed":true},
     "+attachment-remove": {"disposition":"primary_smart","semantic_delta":"清空或按文件名移除附件；若读回缺剩余 fileToken，会在写前明确停止而不破坏其他附件。","risk":"high-risk-write","public":true,"reviewed":true},

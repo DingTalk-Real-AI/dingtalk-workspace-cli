@@ -14,6 +14,7 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"aisearch\u0000+search-person":                  {},
 		"aitable\u0000+advperm-disable":                 {},
 		"aitable\u0000+advperm-enable":                  {},
+		"aitable\u0000+ai-field-run":                    {},
 		"aitable\u0000+attachment-put":                  {},
 		"aitable\u0000+attachment-remove":               {},
 		"aitable\u0000+attachment-upload":               {},
