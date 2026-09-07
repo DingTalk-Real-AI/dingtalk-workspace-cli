@@ -247,13 +247,16 @@ func nestedString(data map[string]any, keys ...string) string {
 	return ""
 }
 
-func driveReadbackNameMatches(data map[string]any, requested string) bool {
+func driveReadbackName(data map[string]any) string {
 	remoteName := firstString(data, "name", "fileName")
-	if remoteName == requested {
-		return true
+	if remoteName == "" {
+		return ""
 	}
 	extension := strings.TrimLeft(firstString(data, "extension", "fileExtension", "ext"), ".")
-	return extension != "" && remoteName+"."+extension == requested
+	if extension == "" || strings.HasSuffix(strings.ToLower(remoteName), "."+strings.ToLower(extension)) {
+		return remoteName
+	}
+	return remoteName + "." + extension
 }
 
 func firstInt64(data map[string]any, keys ...string) (int64, bool) {

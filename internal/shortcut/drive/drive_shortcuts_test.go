@@ -767,7 +767,7 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 	}{
 		{"missing remote id", "uploaded-2", `{"success":true,"result":{"name":"input.bin","fileSize":18}}`, "缺少文件 ID"},
 		{"mismatched remote id", "uploaded-3", `{"success":true,"result":{"fileId":"other","name":"input.bin","fileSize":18}}`, "与提交 ID"},
-		{"prefix-only remote name", "uploaded-4", `{"success":true,"result":{"fileId":"uploaded-4","name":"input.bin-old","fileSize":18}}`, "读回名称"},
+		{"missing remote name", "uploaded-4", `{"success":true,"result":{"fileId":"uploaded-4","fileSize":18}}`, "缺少完整文件名称"},
 		{"missing remote size", "uploaded-5", `{"success":true,"result":{"fileId":"uploaded-5","name":"input.bin"}}`, "缺少有效文件大小"},
 		{"mismatched remote size", "uploaded-6", `{"success":true,"result":{"fileId":"uploaded-6","name":"input.bin","fileSize":17}}`, "与本地文件大小 18 不一致"},
 	} {
@@ -780,26 +780,61 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
 			}
-			if tc.name == "prefix-only remote name" {
-				var typed *apperrors.Error
-				if !errors.As(err, &typed) || typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
-					t.Fatalf("upload mismatch metadata = %#v", err)
-				}
-				if typed.Operation != "drive/commit_upload" || typed.FailureStage != "readback_verification" {
-					t.Fatalf("drive upload mismatch operation/stage = %q/%q", typed.Operation, typed.FailureStage)
-				}
-				if typed.Details["nodeId"] != "uploaded-4" || typed.Details["requestedName"] != "input.bin" {
-					t.Fatalf("upload mismatch details = %#v", typed.Details)
-				}
-			}
 		})
 	}
-	t.Run("split remote extension", func(t *testing.T) {
+	t.Run("new drive upload accepts server auto rename", func(t *testing.T) {
+		uploadCalls := 0
 		testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
+			uploadCalls++
 			return map[string]any{"success": true, "result": map[string]any{"fileId": "uploaded-7"}}, nil
 		})
 		caller := &driveCoverageCaller{responses: map[string][]string{
-			"get_file_info": {`{"success":true,"result":{"fileId":"uploaded-7","name":"input","extension":"bin","fileSize":18}}`},
+			"get_file_info": {`{"success":true,"result":{"fileId":"uploaded-7","name":"input(1)","extension":"bin","fileSize":18}}`},
+		}}
+		raw, err := runDriveCoverageRaw(t, Upload, caller, "--file", "input.bin", "--yes")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+			t.Fatalf("decode upload output %q: %v", raw, err)
+		}
+		data, ok := envelope["data"].(map[string]any)
+		if !ok || envelope["ok"] != true || envelope["outcome"] != "success" {
+			t.Fatalf("upload envelope = %#v", envelope)
+		}
+		if data["nodeId"] != "uploaded-7" || data["requestedName"] != "input.bin" || data["actualName"] != "input(1).bin" || data["renamed"] != true {
+			t.Fatalf("auto-renamed upload result = %#v", data)
+		}
+		if uploadCalls != 1 || strings.Join(caller.history, ",") != "get_file_info" {
+			t.Fatalf("auto-renamed upload repeated work: uploads=%d history=%v", uploadCalls, caller.history)
+		}
+	})
+	t.Run("overwrite keeps exact name validation", func(t *testing.T) {
+		testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
+			return map[string]any{"success": true}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_file_info": {`{"success":true,"result":{"fileId":"existing-1","name":"input.bin-old","fileSize":18}}`},
+		}}
+		err := runDriveCoverage(t, Upload, caller, "--file", "input.bin", "--node", "existing-1", "--yes")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
+			t.Fatalf("overwrite mismatch metadata = %#v", err)
+		}
+		if typed.Operation != "drive/commit_upload" || typed.Reason != "readback_mismatch" || typed.FailureStage != "readback_verification" {
+			t.Fatalf("overwrite mismatch identity = %#v", typed)
+		}
+		if typed.Details["nodeId"] != "existing-1" || typed.Details["requestedName"] != "input.bin" || typed.Details["actualName"] != "input.bin-old" {
+			t.Fatalf("overwrite mismatch details = %#v", typed.Details)
+		}
+	})
+	t.Run("split remote extension", func(t *testing.T) {
+		testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
+			return map[string]any{"success": true, "result": map[string]any{"fileId": "uploaded-8"}}, nil
+		})
+		caller := &driveCoverageCaller{responses: map[string][]string{
+			"get_file_info": {`{"success":true,"result":{"fileId":"uploaded-8","name":"input","extension":"bin","fileSize":18}}`},
 		}}
 		if err := runDriveCoverage(t, Upload, caller, "--file", "input.bin", "--yes"); err != nil {
 			t.Fatal(err)
@@ -880,7 +915,7 @@ func TestCrossPlatformCoverageDriveUploadRoutesWorkspaceToDocSpace(t *testing.T)
 		if typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
 			t.Fatalf("workspace mismatch must record committed, non-retryable execution: %#v", typed)
 		}
-		if typed.Details["status"] != "partial_success" || typed.Details["complete"] != false || typed.Details["retrySafe"] != false || typed.Details["nodeId"] != "doc-file-mismatch" || typed.Details["requestedName"] != "notes.txt" || typed.Details["actualName"] != "wrong" {
+		if typed.Details["status"] != "partial_success" || typed.Details["complete"] != false || typed.Details["retrySafe"] != false || typed.Details["nodeId"] != "doc-file-mismatch" || typed.Details["requestedName"] != "notes.txt" || typed.Details["actualName"] != "wrong.txt" {
 			t.Fatalf("workspace mismatch lost repair evidence: %#v", typed.Details)
 		}
 		resource, ok := typed.Details["resource"].(map[string]any)
