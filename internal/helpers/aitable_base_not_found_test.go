@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -47,6 +48,16 @@ func TestCrossPlatformCoverageAITableBaseNotFoundSurvivesHelperPipeline(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageAITableBaseNotFoundSurvivesTerminalCallPipeline(t *testing.T) {
+	caller := &aitableTestCaller{responses: []string{`{"data":{},"error":{"code":"BASE_NOT_FOUND","message":"Specified base does not exist","retryable":false,"type":"INPUT_ERROR"},"status":"error","success":true}`}}
+	InitDepsForTest(t, caller)
+	err := callMCPToolInternalOpts("aitable", "get_base", map[string]any{"baseId": "base-redacted"}, false)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "not_found" || typed.Operation != "aitable/get_base" || strings.TrimSpace(typed.Message) == "" {
+		t.Fatalf("terminal pipeline error = %#v", err)
+	}
+}
+
 func TestCrossPlatformCoverageAITableBaseNotFoundExactBoundaries(t *testing.T) {
 	tests := []struct {
 		name, serverID, toolName string
@@ -63,6 +74,9 @@ func TestCrossPlatformCoverageAITableBaseNotFoundExactBoundaries(t *testing.T) {
 		}},
 		{name: "wrong status", serverID: "aitable", toolName: "get_base", mutate: func(body map[string]any) {
 			body["status"] = "success"
+		}},
+		{name: "success false", serverID: "aitable", toolName: "get_base", mutate: func(body map[string]any) {
+			body["success"] = false
 		}},
 		{name: "retryable", serverID: "aitable", toolName: "get_base", mutate: func(body map[string]any) {
 			body["error"].(map[string]any)["retryable"] = true

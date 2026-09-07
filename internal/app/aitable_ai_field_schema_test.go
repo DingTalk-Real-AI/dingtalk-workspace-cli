@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
 func TestCrossPlatformCoverageAIFieldRunFinalAndCompactSchema(t *testing.T) {
@@ -66,6 +68,33 @@ func TestCrossPlatformCoverageAIFieldRunFinalAndCompactSchema(t *testing.T) {
 	}
 	if !reflect.DeepEqual(compact["result"], result) {
 		t.Fatalf("compact/full Result differs\ncompact=%#v\nfull=%#v", compact["result"], result)
+	}
+}
+
+func TestCrossPlatformCoverageAIFieldRunExampleDispositionIsExactAndReviewed(t *testing.T) {
+	plan := agentExampleExecutionPlan(t)
+	var matches []cli.AgentExampleExecution
+	for _, execution := range plan.Examples {
+		if execution.CanonicalPath == "aitable.shortcut_ai_field_run" {
+			matches = append(matches, execution)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("AI field example executions = %d, want exactly one: %#v", len(matches), matches)
+	}
+	execution := matches[0]
+	if execution.Index != 0 || execution.Mode != cli.AgentExampleModeContractOnly ||
+		execution.Source != cli.AgentExampleDispositionReviewed ||
+		execution.ReasonCode != cli.AgentExampleReasonStatefulPreflight || strings.TrimSpace(execution.Reason) == "" {
+		t.Fatalf("AI field example disposition = %#v", execution)
+	}
+	if execution.DryRun == nil || execution.DryRun.PreviewKind != "plan" || !execution.DryRun.RemoteReads {
+		t.Fatalf("AI field reviewed dry-run capability was changed: %#v", execution.DryRun)
+	}
+	if plan.Contract+plan.DryRun+plan.ContractOnly != plan.Total ||
+		plan.ReviewedContractOnly != plan.ContractOnly ||
+		plan.ContractOnlyByReason[cli.AgentExampleReasonStatefulPreflight] == 0 {
+		t.Fatalf("Agent example plan counts are inconsistent: %#v", plan)
 	}
 }
 

@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -99,6 +102,48 @@ func TestCrossPlatformCoverageAIFieldRunRejectsInvalidLocalScopeBeforeMCP(t *tes
 	}
 }
 
+func TestCrossPlatformCoverageAIFieldRunExecuteRevalidatesLocalScope(t *testing.T) {
+	for _, test := range []struct {
+		name, baseID, tableID, fieldID string
+	}{
+		{name: "blank base", tableID: "table", fieldID: "field"},
+		{name: "blank table", baseID: "base", fieldID: "field"},
+		{name: "blank field", baseID: "base", tableID: "table"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "ai-field-run"}
+			cmd.Flags().String("base-id", test.baseID, "")
+			cmd.Flags().String("table-id", test.tableID, "")
+			cmd.Flags().String("field-id", test.fieldID, "")
+			cmd.Flags().StringSlice("record-ids", []string{"record"}, "")
+			rt := shortcut.RuntimeContextForTest(cmd, AIFieldRun)
+			if err := executeAIFieldRun(rt); err == nil {
+				t.Fatal("executeAIFieldRun accepted invalid local scope")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAIFieldRunPropagatesMCPFailuresWithoutRetry(t *testing.T) {
+	sentinel := errors.New("sentinel MCP failure")
+	tests := []struct {
+		name  string
+		steps []upsertByKeyStep
+	}{
+		{name: "field read", steps: []upsertByKeyStep{{err: sentinel}}},
+		{name: "record read", steps: []upsertByKeyStep{{text: aiFieldFixture}, {err: sentinel}}},
+		{name: "write", steps: []upsertByKeyStep{{text: aiFieldFixture}, {text: aiRecordFixture}, {err: sentinel}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			out, err, caller := runAIFieldFixture(t, test.steps, aiFieldArgs("--yes")...)
+			if err == nil || out != "" || !strings.Contains(err.Error(), sentinel.Error()) || len(caller.calls) != len(test.steps) {
+				t.Fatalf("MCP failure propagation = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageAIFieldRunPreflightRejectsIdentityDriftBeforeRun(t *testing.T) {
 	fieldCases := []string{
 		`{"data":{}}`,
@@ -144,6 +189,8 @@ func TestCrossPlatformCoverageAIFieldRunRejectsMalformedNonEmptyAIConfig(t *test
 		`{"outputType":"text","prompt":[{"type":"text","value":"only text"}]}`,
 		`{"outputType":"text","prompt":[{"type":"fieldRef","fieldId":" "}]}`,
 		`{"outputType":"text","prompt":["bad"]}`,
+		`{"outputType":"text","prompt":[{"type":"text","value":" "},{"type":"fieldRef","fieldId":"source"}]}`,
+		`{"outputType":"text","prompt":[{"type":"unknown"},{"type":"fieldRef","fieldId":"source"}]}`,
 	}
 	for index, config := range configs {
 		t.Run(fmt.Sprintf("config-%d", index), func(t *testing.T) {
@@ -151,6 +198,50 @@ func TestCrossPlatformCoverageAIFieldRunRejectsMalformedNonEmptyAIConfig(t *test
 			out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: response}}, aiFieldArgs("--yes")...)
 			if err == nil || out != "" || len(caller.calls) != 1 || caller.calls[0].tool != "get_fields" {
 				t.Fatalf("malformed aiConfig = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAIFieldRunStrictEnvelopeAndIntegerBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		response map[string]any
+		key      string
+	}{
+		{name: "nil", response: nil, key: "fields"},
+		{name: "top wrong type", response: map[string]any{"fields": "bad"}, key: "fields"},
+		{name: "data wrong type", response: map[string]any{"data": "bad"}, key: "fields"},
+		{name: "result list wrong type", response: map[string]any{"result": map[string]any{"fields": "bad"}}, key: "fields"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := uniqueAIFieldPreflightList(test.response, test.key); err == nil {
+				t.Fatalf("uniqueAIFieldPreflightList accepted %#v", test.response)
+			}
+		})
+	}
+
+	integerCases := []struct {
+		name   string
+		value  any
+		bits   int
+		want   int
+		wantOK bool
+	}{
+		{name: "int", value: 7, bits: 64, want: 7, wantOK: true},
+		{name: "int64", value: int64(8), bits: 64, want: 8, wantOK: true},
+		{name: "int64 32-bit overflow", value: int64(1) << 40, bits: 32},
+		{name: "zero width", value: int64(1), bits: 0},
+		{name: "invalid width", value: int64(1), bits: 65},
+		{name: "float integer", value: float64(9), bits: 64, want: 9, wantOK: true},
+		{name: "float nan", value: math.NaN(), bits: 64},
+		{name: "unsupported", value: "9", bits: 64},
+	}
+	for _, test := range integerCases {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := strictJSONIntegerForBits(test.value, test.bits)
+			if got != test.want || ok != test.wantOK {
+				t.Fatalf("strictJSONIntegerForBits(%#v, %d) = (%d, %v), want (%d, %v)", test.value, test.bits, got, ok, test.want, test.wantOK)
 			}
 		})
 	}
@@ -255,6 +346,7 @@ func TestCrossPlatformCoverageAIFieldRunRejectsMalformedRunReceipt(t *testing.T)
 		`{"tasks":[{"fieldId":"field-1","status":"submitted","taskId":"task","total":2}]}`,
 		`{"data":"bad","tasks":[{"fieldId":"field-1","status":"submitted","taskId":"task","total":2}]}`,
 		`{"data":{"tasks":[]}}`,
+		`{"data":{"tasks":["bad"]}}`,
 		`{"data":{"tasks":[{"fieldId":"other","status":"submitted","taskId":"task","total":2}]}}`,
 		`{"data":{"tasks":[{"fieldId":"field-1","status":"finished","taskId":"task","total":2}]}}`,
 		`{"data":{"tasks":[{"fieldId":"field-1","status":"submitted","taskId":"","total":2}]}}`,

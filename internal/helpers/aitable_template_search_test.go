@@ -5,12 +5,20 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+type rejectingTemplateQueryValue struct{ value string }
+
+func (v rejectingTemplateQueryValue) String() string { return v.value }
+func (v rejectingTemplateQueryValue) Type() string   { return "string" }
+func (v rejectingTemplateQueryValue) Get() any       { return v.value }
+func (rejectingTemplateQueryValue) Set(string) error { return errors.New("reject normalized query") }
 
 func runAITableTemplateSearch(t *testing.T, caller *aitableTestCaller, args ...string) error {
 	t.Helper()
@@ -75,5 +83,21 @@ func TestCrossPlatformCoverageAITableTemplateSearchHelpMarksQueryRequired(t *tes
 		if strings.Contains(text, "返回热门") || strings.Contains(text, "不传关键词") {
 			t.Fatalf("atomic help still claims unsupported fallback: %q", text)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageAITableTemplateSearchPropagatesNormalizedFlagSetError(t *testing.T) {
+	root := newAitableCommand()
+	command, _, err := root.Find([]string{"template", "search"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := command.Flags().Lookup("query")
+	if query == nil {
+		t.Fatal("query flag missing")
+	}
+	query.Value = rejectingTemplateQueryValue{value: "项目"}
+	if err := command.PreRunE(command, nil); err == nil || !strings.Contains(err.Error(), "reject normalized query") {
+		t.Fatalf("PreRunE error = %v", err)
 	}
 }

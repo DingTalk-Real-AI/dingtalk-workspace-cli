@@ -4,9 +4,14 @@
 package aitable
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageTemplateSearchRequiresNonEmptyQueryBeforeMCP(t *testing.T) {
@@ -25,6 +30,44 @@ func TestCrossPlatformCoverageTemplateSearchRequiresNonEmptyQueryBeforeMCP(t *te
 			}
 			if len(caller.calls) != 0 {
 				t.Fatalf("invalid query made %d MCP calls", len(caller.calls))
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageTemplateSearchValidateExactFlagBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		query  string
+		cursor *string
+		limit  *int
+	}{
+		{name: "blank query", query: " "},
+		{name: "explicit blank cursor", query: "项目", cursor: stringPointer(" ")},
+		{name: "limit below minimum", query: "项目", limit: intPointer(0)},
+		{name: "limit above maximum", query: "项目", limit: intPointer(31)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "template-search"}
+			cmd.Flags().String("query", "", "")
+			cmd.Flags().String("cursor", "", "")
+			cmd.Flags().Int("limit", 0, "")
+			if err := cmd.Flags().Set("query", test.query); err != nil {
+				t.Fatal(err)
+			}
+			if test.cursor != nil {
+				if err := cmd.Flags().Set("cursor", *test.cursor); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.limit != nil {
+				if err := cmd.Flags().Set("limit", fmt.Sprint(*test.limit)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rt := shortcut.RuntimeContextForTest(cmd, TemplateSearch)
+			if err := TemplateSearch.Validate(rt); err == nil {
+				t.Fatal("Validate accepted an invalid exact flag boundary")
 			}
 		})
 	}
@@ -97,12 +140,15 @@ func TestCrossPlatformCoverageTemplateSearchRejectsInvalidPaginationEvidence(t *
 }
 
 func TestCrossPlatformCoverageTemplateSearchRejectsMalformedStableIdentity(t *testing.T) {
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{
-		text: `{"data":{"templates":[{"templateId":42,"name":"bad"}],"hasMore":false}}`,
-	}}}
-	out, err := runAITableCompositeCLI(t, caller, "+template-search", "--query", "项目")
-	if err == nil || out != "" || len(caller.calls) != 1 {
-		t.Fatalf("malformed identity = output:%q err:%v calls:%#v", out, err, caller.calls)
+	for _, response := range []string{
+		`{"data":{"templates":[{"templateId":42,"name":"bad"}],"hasMore":false}}`,
+		`{"data":{"templates":[{"templateId":"template-1","name":42}],"hasMore":false}}`,
+	} {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: response}}}
+		out, err := runAITableCompositeCLI(t, caller, "+template-search", "--query", "项目")
+		if err == nil || out != "" || len(caller.calls) != 1 {
+			t.Fatalf("malformed identity = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
 	}
 }
 
@@ -112,6 +158,9 @@ func TestCrossPlatformCoverageTemplateSearchRejectsConflictingPageEnvelopes(t *t
 		`{"data":{"templates":[],"hasMore":true,"nextCursor":"next"},"result":{"hasMore":false}}`,
 		`{"data":{"templates":[],"list":[],"hasMore":false}}`,
 		`{"nextCursor":"outer","data":{"templates":[],"hasMore":true}}`,
+		`{"result":"ignored"}`,
+		`{"data":"bad"}`,
+		`{"data":{"templates":[],"hasMore":true,"nextCursor":42}}`,
 	}
 	for index, response := range responses {
 		t.Run(fmt.Sprintf("conflict-%d", index), func(t *testing.T) {
@@ -123,3 +172,34 @@ func TestCrossPlatformCoverageTemplateSearchRejectsConflictingPageEnvelopes(t *t
 		})
 	}
 }
+
+func TestCrossPlatformCoverageTemplateSearchEnvelopeAndOutputModes(t *testing.T) {
+	if _, err := templateSearchPageEnvelope(nil); err == nil {
+		t.Fatal("nil response must fail")
+	}
+
+	legacy := &cobra.Command{Use: "template-search"}
+	var stdout bytes.Buffer
+	legacy.SetOut(&stdout)
+	legacyRT := shortcut.RuntimeContextForTest(legacy, TemplateSearch)
+	if err := outputTemplateSearchPage(legacyRT, templateSearchPage{
+		Templates: []map[string]any{{"templateId": "template-1"}}, HasMore: true, NextCursor: "next",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"hasMore": true`, `"nextCursor": "next"`, `"templateId": "template-1"`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("legacy output missing %s: %s", want, stdout.String())
+		}
+	}
+
+	unified := &cobra.Command{Use: "template-search"}
+	output.SetCommandRollout(unified, output.RolloutUnifiedActive)
+	unifiedRT := shortcut.RuntimeContextForTest(unified, TemplateSearch)
+	if err := outputTemplateSearchPage(unifiedRT, templateSearchPage{HasMore: true}); err == nil {
+		t.Fatal("unified pagination accepted hasMore without next cursor")
+	}
+}
+
+func stringPointer(value string) *string { return &value }
+func intPointer(value int) *int          { return &value }

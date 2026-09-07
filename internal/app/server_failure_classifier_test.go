@@ -101,7 +101,7 @@ func TestCrossPlatformCoverageServerFailureClassifierAITableBaseNotFound(t *test
 	}
 	diag := transport.ExtractServerDiagnosticsFromMap(content)
 	err := newServerFailureAPIError(
-		`{"data":{},"error":{"code":"BASE_NOT_FOUND","message":"Specified base does not exist, has been deleted, or is inaccessible","retryable":false,"type":"INPUT_ERROR"},"status":"error","success":true}`,
+		`{"data":{},"error":{"code":"BASE_NOT_FOUND","message":"Specified base does not exist, has been deleted, or is inaccessible","retryable":false,"type":"INPUT_ERROR"},"status":"error","success":true,"trace_id":"trace-redacted"}`,
 		"mcp_tool_error",
 		"check tool parameters",
 		"aitable",

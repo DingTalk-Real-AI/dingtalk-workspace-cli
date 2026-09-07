@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -55,13 +56,20 @@ var AIFieldRun = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "为明确选择的记录触发一个钉钉 AI 字段任务",
-			UseWhen:      []string{"已有一个配置完成的钉钉 AI 字段，需要为 1–100 条明确 recordId 触发一次计算任务时使用；结果只表示 submitted。"},
+			UseWhen:      []string{"当你已有一个配置完成的钉钉 AI 字段，并要为 1–100 条明确 recordId 触发计算时使用。命令只证明任务已受理，不等待或声明计算完成。"},
 			AvoidWhen: []string{
 				"不要用于安装、更新或清除 Lark field extension；这是钉钉原生 AI 字段执行入口。",
 				"不要用于整列或多字段执行；当前公开合同仅支持一个 fieldId 和显式 recordIds。",
 				"当前没有 AI 字段任务状态查询接口；pending 回执不代表计算完成。",
 			},
 			Examples: []string{"dws aitable +ai-field-run --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> --record-ids <R1,R2>"},
+			ExampleDispositions: []contract.ExampleDisposition{{
+				Index:      aiFieldRunExampleIndex(),
+				Mode:       contract.ExampleDispositionModeContractOnly,
+				ReasonCode: contract.ExampleDispositionReasonStatefulPreflight,
+				Reason:     "dry-run must read the exact live AI field and selected records before producing a plan; the isolated Agent example runner has no remote AITable fixture",
+				Reviewed:   true,
+			}},
 		},
 		Parameters: []contract.ParamDecl{
 			{Name: "base-id", Property: "baseId"},
@@ -97,8 +105,8 @@ var AIFieldRun = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "目标 Table ID", Required: true},
-		{Name: "field-id", Type: shortcut.FlagString, Desc: "一个已配置 AI 功能的字段 ID", Required: true},
-		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "明确选择的记录 ID，去重后 1–100 条", Required: true},
+		{Name: "field-id", Type: shortcut.FlagString, Desc: "一个已配置 AI 功能的字段 ID；仅支持一个非空 AI fieldId", Required: true},
+		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "明确选择的记录 ID；recordIds 去除空白并去重后必须为 1–100 条", Required: true},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"field-id"}, Description: "仅支持一个非空 AI fieldId"},
@@ -110,6 +118,11 @@ var AIFieldRun = shortcut.Shortcut{
 		return err
 	},
 	Execute: executeAIFieldRun,
+}
+
+func aiFieldRunExampleIndex() *int {
+	index := 0
+	return &index
 }
 
 func aiFieldRunInputs(rt *shortcut.RuntimeContext) (string, []string, error) {
@@ -397,12 +410,22 @@ func projectAIFieldRunReceipt(receipt map[string]any, fieldID string, requestedC
 }
 
 func strictJSONInteger(value any) (int, bool) {
+	return strictJSONIntegerForBits(value, strconv.IntSize)
+}
+
+func strictJSONIntegerForBits(value any, intBits int) (int, bool) {
 	switch typed := value.(type) {
 	case int:
 		return typed, true
 	case int64:
-		if int64(int(typed)) != typed {
+		if intBits <= 0 || intBits > 64 {
 			return 0, false
+		}
+		if intBits < 64 {
+			limit := int64(1) << (intBits - 1)
+			if typed < -limit || typed >= limit {
+				return 0, false
+			}
 		}
 		return int(typed), true
 	case float64:

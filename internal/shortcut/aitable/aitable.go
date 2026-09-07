@@ -1086,7 +1086,7 @@ var TemplateSearch = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "非空模板名称关键词", Required: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词，去除首尾空白后不能为空", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 10，最大 30（可选）"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）"},
 	},
