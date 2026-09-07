@@ -351,6 +351,9 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 		"text":       projectedResourceText(m, ownedResources),
 		"createTime": CreateTime(m),
 	}
+	if original, ok := m[messageDecryptFailedOriginalContentKey].(string); ok && strings.TrimSpace(original) != "" {
+		row["text"] = original
+	}
 	if value := MessageID(m); value != nil {
 		row["messageId"] = value
 	}
@@ -371,6 +374,15 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	}
 	if value := MessageAISendFlag(m); value != nil {
 		row["messageAiSendFlag"] = value
+	}
+	if value := firstMessageValue(m, "contentDecrypted"); value != nil {
+		row["contentDecrypted"] = value
+	}
+	if value := firstMessageValue(m, "cryptoLayer"); value != nil {
+		row["cryptoLayer"] = value
+	}
+	if value := firstMessageValue(m, "dingKeyVersion"); value != nil {
+		row["dingKeyVersion"] = value
 	}
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value

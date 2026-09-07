@@ -81,6 +81,50 @@ func TestCrossPlatformCoverageProjectMessageV1PublishesSharedIdentityAndContext(
 	}
 }
 
+func TestCrossPlatformCoverageProjectMessageV1PassesDecryptMarkersAndRestoresOriginal(t *testing.T) {
+	const original = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+
+	marked := ProjectMessageV1(map[string]any{
+		"openMessageId":    "msg-1",
+		"content":          "明文",
+		"contentDecrypted": true,
+		"cryptoLayer":      "ding+safechat",
+		"dingKeyVersion":   8,
+	}, false)
+	if marked["contentDecrypted"] != true || marked["cryptoLayer"] != "ding+safechat" || marked["dingKeyVersion"] != 8 {
+		t.Fatalf("decrypt markers lost: %#v", marked)
+	}
+
+	fallback := ProjectMessageV1(map[string]any{
+		"openMessageId":                        "msg-2",
+		"content":                              original,
+		messageDecryptFailedOriginalContentKey: original,
+	}, false)
+	if fallback["text"] != original {
+		t.Fatalf("text fallback = %#v, want original ciphertext", fallback["text"])
+	}
+	if _, has := fallback["contentDecrypted"]; has {
+		t.Fatalf("fallback row must not carry decrypt markers: %#v", fallback)
+	}
+
+	plain := ProjectMessageV1(map[string]any{
+		"openMessageId": "msg-3",
+		"content":       "你好",
+	}, false)
+	if plain["text"] != "你好" {
+		t.Fatalf("plain row text = %#v, want 你好", plain["text"])
+	}
+	if _, has := plain["contentDecrypted"]; has {
+		t.Fatalf("plain row unexpectedly has contentDecrypted: %#v", plain)
+	}
+	if _, has := plain["cryptoLayer"]; has {
+		t.Fatalf("plain row unexpectedly has cryptoLayer: %#v", plain)
+	}
+	if _, has := plain["dingKeyVersion"]; has {
+		t.Fatalf("plain row unexpectedly has dingKeyVersion: %#v", plain)
+	}
+}
+
 func TestCrossPlatformCoverageCleanText(t *testing.T) {
 	// Out-of-office auto-reply: readable body lives in items[].data.text; the
 	// decorative preview/config JSON lines and "empty" placeholder are dropped.
