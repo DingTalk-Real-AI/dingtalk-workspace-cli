@@ -23,6 +23,7 @@
 | 合同台账、起草、审查、归档、项目、相对方或账款管理 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`contract.md`](../../dingtalk-misc/references/contract.md) |
 | Markdown / `.md` 内容读取、创建、覆盖、局部修改或版本差异比较 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`markdown.md`](../../dingtalk-misc/references/markdown.md) |
 | 组织大脑、人才池、员工档案专项、职业历程、绩效、结构化人才搜索 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`hrbrain.md`](../../dingtalk-misc/references/hrbrain.md) |
+| 员工待入职、入职、转正、调岗、离职、合同台账、绩效薪资或花名册维护 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`hrmregister.md`](../../dingtalk-misc/references/hrmregister.md) |
 | PAT 行为授权、scope 授权、授权浏览器策略 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`pat.md`](../../dingtalk-misc/references/pat.md) |
 | 切换组织、跨组织、多组织、profile 管理 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`profile.md`](../../dingtalk-misc/references/profile.md) |
 | 审批查询与处理、考勤、会议、电子表格、日志、DING、直播、开放平台应用、技能市场安装等长尾产品 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) |
@@ -46,7 +47,7 @@ reference，不要加载全部长尾产品文档。
 - `contract`：合同台账、起草、审查、归档、项目、相对方和账款；合同审批实例处理走 `oa`，经营合约走 `agoal`，合同文件存储走 `drive`，花名册合同字段走 `contact`。按听记起草时先由 `minutes` 取得真实 `taskUuid`，再调用 `contract draft`。
 - `chat`：发送消息、读取历史消息和主动群操作；独立的 `event`：未来个人 IM/OA/Todo 事件长连接监听；
   `ding`：强提醒，位于 `dingtalk-misc`。
-- `hrbrain` / `markdown` / `pat` / `profile` 均位于 `dingtalk-misc`。
+- `hrbrain` / `hrmregister` / `markdown` / `pat` / `profile` 均位于 `dingtalk-misc`。
 - 请假、加班、外出、出差、补卡等考勤业务审批优先走 `attendance`；其他通用审批查询、同意、
   拒绝、转交和撤销走 `oa`。两者均位于 `dingtalk-misc`；未来审批任务或实例变化的实时通知走
   独立的 `dingtalk-event`。

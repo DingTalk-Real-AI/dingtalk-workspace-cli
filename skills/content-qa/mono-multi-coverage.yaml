@@ -62,6 +62,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/html.md
+  - mono: hrmregister
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/hrmregister.md
   - mono: mail
     multi_skill: dingtalk-mail
   - mono: markdown
