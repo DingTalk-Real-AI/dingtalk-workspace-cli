@@ -144,8 +144,8 @@ Lark 的完整构树只用于结构和资源预算参考；GWS 用于观察更�
 - [x] ContractFinal ownership transfer、build-only closure 清理、lazy Safety scanner 和低分配 string-slice builder 落地。
 - [x] 测试钉住 process invocation 总是包含完整产品面。
 - [x] telemetry no-wait 明确接受末条事件丢失，并有阻塞 collector 测试。
-- [ ] 两平台完整测试与 race 通过；阻挡 Ready。
-- [ ] 两平台固定 main 性能矩阵和 root help RSS 通过；阻挡 Ready。
+- [x] 两平台完整测试与 race 通过（head `a8376f92`，run `34080469082`）。
+- [ ] 两平台固定 main 性能矩阵已完成；Linux root help RSS 比 Lark 高 11.3%，仍阻挡 Ready。
 - [ ] 首次正式 release 的签名、最终制品与安装验证；阻挡正式发布。
 
 ## 7. 回滚

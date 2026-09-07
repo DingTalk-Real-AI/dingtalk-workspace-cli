@@ -66,20 +66,21 @@ DWS 当前约 1,825 个 command。绝对总量不能只和 Lark wall time 比较
 
 ### P4：向紧凑 service catalog 收敛
 
-- [ ] 统计手写 helper/shortcut builder 中重复的 Cobra 对象、flag spec 和 annotation 形状。
-- [ ] 先迁移一个代表产品到只读 typed service catalog + 通用 builder，比较合同 diff 与 profile。
-- [ ] 只有迁移能减少总复杂度并保持审阅可读性时，再分批替换手写装配。
+- [x] 统计手写 helper/shortcut builder 中重复的 Cobra 对象、flag spec 和 annotation 形状；当前 Linux root help RSS 47.68 MiB，Lark 42.85 MiB，差 11.3%。
+- [ ] 迁移一个代表产品到只读 typed service descriptor + 通用 builder，要求 descriptor 直接成为 Cobra/ContractFinal 的共同构造输入，禁止运行时再合并两套参数声明。
+- [ ] 代表产品必须同时降低 `B/op`、allocs/op 和 Linux wait4 RSS，并保持完整树节点数、help/Schema digest、Safety 与 handler 行为。
+- [ ] 迁移收益可复现后再按产品分批替换手写装配，直到 Linux root help RSS 不超过 Lark +5%。
 - [ ] catalog 只负责构造；Schema、Safety 和 handler 仍使用现有权威类型，不引入生成的第二份命令真相。
 
-P4 是后续专项，不阻挡 #1296 Ready。它对应 Lark 最值得参考的长期方式，而不是本 PR 再做一次大规模产品迁移。
+P4 现在阻挡 #1296 的性能专项验收，因为 clean-head Linux 数据超过 RFC 的 +5% 线。它对应 Lark 最值得参考的长期方式。实现仍必须是一棵完整 runtime tree；不能用 root-help projection、lazy leaf tree 或 argv 路由替代对象压缩。
 
 ### P5：两平台证据与发布
 
-- [ ] Darwin/arm64、Linux/amd64 使用 Go 1.25.9 跑完整测试、受影响 race、generate/drift/schema gates。
+- [x] Darwin/arm64、Linux/amd64 使用 Go 1.25.9 跑完整测试、受影响 race、generate/drift/schema gates。
 - [ ] 每个平台对专项父提交与 candidate 各跑完整树 microbenchmark。
-- [ ] 端到端随机交错测 root help/version/Schema/dry-run/mock/config，记录 wall、CPU、RSS 和输出 digest。
-- [ ] Lark 1.0.85 同机 root help/完整 Build 作为诊断，写清 commit、node count 和入口。
-- [ ] 将 clean-head artifact 和结论回填 PR 正文；保持 Draft 直到代码与性能门禁通过。
+- [x] 端到端随机交错测 root help/version/Schema/dry-run/mock/config，记录 wall、CPU、RSS 和输出 digest。
+- [x] Lark 1.0.85 同机 root help/完整 Build 作为诊断，写清 commit、node count 和入口。
+- [x] 将 clean-head artifact 和结论回填 RFC 附件；保持 Draft 直到 Linux RSS 与发布门禁通过。
 
 ## 3. 当前本地微基准
 

@@ -1,14 +1,14 @@
 # RFC 附件：CLI 性能提升报告
 
-状态：Draft，2026-09-07 单树架构重置后的本地阶段报告。设计见[主 RFC](rfc-schema-runtime-cache.md)。
+状态：Draft，2026-09-07 单树架构 clean-head 报告。设计见[主 RFC](rfc-schema-runtime-cache.md)，机器证据见 [`native-a8376f92/evidence.json`](benchmarks/schema-cache/native-a8376f92/evidence.json)。
 
 ## 1. 当前结论
 
 PR 已撤回 selective tree、Schema 前置执行和 root help projection。旧 head 中 calendar 0.85 ms、config 0.36 ms、root help 比 Lark 慢 2.5% 等数字描述的是已删除结构，全部标记为历史结果，不能用于当前 Ready 结论。
 
-当前可确认的是完整构树优化：在同机、同 toolchain、同一父子提交对照下，DWS 始终构造约 1,825 个 command，B/op 降低 **22.8%**，allocs/op 降低 **9.8%**，ns/op 变化为 **+0.3%**。这说明不需要为 root help 建第二份 projection，也能显著压低完整树的内存分配，同时没有可辨认的构树延迟回退。
+完整构树本地父子对照中，DWS 始终构造约 1,825 个 command，B/op 降低 **22.8%**，allocs/op 降低 **9.8%**，ns/op 变化为 **+0.3%**。clean head `a8376f92` 的 [native workflow](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082) 已在 Darwin/arm64 与 Linux/amd64 全绿，Schema cache、完整 Go suite、race、身份一致性和五维测量均完成。
 
-端到端 Schema、help、业务命令、RSS 和 Lark/GWS 表必须在 clean commit 的 Darwin/arm64、Linux/amd64 CI 上重跑。本附件在 CI 前不宣称已解决 root help RSS。
+root help 延迟已在两平台快于 Lark。RSS 在 Darwin 也低于 Lark；Linux 为 47.68 MiB，对比 Lark 42.85 MiB，仍高 **11.3%**，超过 RFC 的 5% 阻断线。因此本 PR 继续 Draft，不能宣称 root help RSS 已全部解决。这个差距必须通过更紧凑的通用 typed service builder 继续压缩；不允许恢复 projection、selective tree 或 launcher。
 
 ## 2. 方法与版本
 
@@ -58,13 +58,12 @@ DWS 当前完整树总 B/op 约为 Lark 的 1.23 倍、allocs/op 约 1.75 倍，
 
 Schema cache 的算法目标不变：verified protobuf hit 避免约 1,825-command declaration catalog 的 live assembly。上一单二进制候选曾测得 cache-hit 相对 live assembly 的 user CPU 降低 97.6%、RSS 降低 87.5%；该数据仍可证明 cache 方向，但因当时 Schema 在 Cobra 前短路，不能作为当前端到端数字。
 
-当前实现的验收将分开报告：
+当前实现的验收结果：
 
-| 路径 | 必须包含 | 待补指标 |
-|---|---|---|
-| cache hit | 完整 Cobra tree + normal schema handler + authenticated shard read | wall/CPU/RSS p50/p95 |
-| cache miss/disabled | 完整 Cobra tree + declarations assembly | wall/CPU/RSS p50/p95 |
-| repair | 完整 Cobra tree + corrupt cache rejection + rebuild + atomic publish | wire parity、wall/RSS |
+| 平台 | warm cache wall p50 | live assembly wall p50 | warm RSS p50 | live RSS p50 |
+|---|---:|---:|---:|---:|
+| Linux/amd64 | 59.45 ms | 1,878.07 ms | 56.16 MiB | 323.85 MiB |
+| Darwin/arm64 | 65.68 ms | 1,696.10 ms | 49.27 MiB | 326.27 MiB |
 
 门槛仍为 warm hit 相对 live assembly 的 user CPU p50 至少降低 80%，peak RSS ≤100 MiB。
 
@@ -72,15 +71,14 @@ Schema cache 的算法目标不变：verified protobuf hit 避免约 1,825-comma
 
 root help 与 version 现在都构造完整 tree。帮助直接从同一 runtime tree 渲染，不读取 Schema cache、不执行业务 auth/RPC，也不创建中间 projection。
 
-需要在新 head 重测：
+30 次交错 native 样本：
 
-- candidate 相对固定 main 的 default/opt-out p50/p95；
-- candidate 相对专项父提交的 native RSS；
-- DWS 与 Lark native root help 的 p50/p95 RSS；
-- help stdout 的逐字节 oracle；
-- telemetry default 与 opt-out 的差值。
+| 平台 | DWS help wall p50/p95 | Lark help wall p50/p95 | DWS RSS p50/p95 | Lark RSS p50/p95 | 结论 |
+|---|---:|---:|---:|---:|---|
+| Linux/amd64 | 44.05 / 45.99 ms | 47.11 / 48.88 ms | 47.68 / 49.88 MiB | 42.85 / 43.35 MiB | wall 快 6.5%；RSS 高 11.3%，阻断 |
+| Darwin/arm64 | 37.26 / 51.45 ms | 45.06 / 53.49 ms | 41.91 / 42.17 MiB | 44.43 / 44.91 MiB | wall 快 17.3%；RSS 低 5.7%，通过 |
 
-旧 single/selective head 的 DWS 46.37 MiB、Lark 45.20 MiB 只作为问题来源，不能作为当前结果。RFC 要求新 head RSS 相对父提交不回退，并将超过 Lark 5% 作为性能专项阻断。
+default tracker 相对固定 main 的 help/version p50/p95 gate 在两平台全部通过；`DO_NOT_TRACK` 与 default 的结果也证明退出不再等待约 300 ms 的网络 flush。help stdout 为 4,760 bytes，SHA-256 `590ebfc7d090cdfa81e63cfcf6f47727ad1f4ac5f0fc5451445e855ebcf497d0`，与父实现逐字节一致。
 
 ## 6. 业务命令
 
@@ -92,13 +90,20 @@ calendar list/get、dry-run、mock、config 和 event utility 均承担同一完
 - dry-run 不新增真实写 RPC；
 - 输出、错误分类和 side-effect count 与固定 main 一致。
 
-当前只有构树 microbenchmark；新 head 的端到端业务表待两平台 CI 回填。
+端到端业务/utility 的 native p50：
+
+| 平台 | leaf help | dry-run | config | mock |
+|---|---:|---:|---:|---:|
+| Linux/amd64 | 51.02 ms / 52.13 MiB | 44.10 ms / 47.70 MiB | 44.02 ms / 47.83 MiB | 44.21 ms / 48.05 MiB |
+| Darwin/arm64 | 42.87 ms / 45.85 MiB | 38.47 ms / 41.93 MiB | 38.55 ms / 42.05 MiB | 36.97 ms / 42.52 MiB |
+
+每格为 wall p50 / RSS p50。dry-run、config 与 mock 都承担同一完整树成本；结果表中没有 launcher 或第二进程。
 
 ## 7. 整体运行内存
 
-预计 root help、version 和短业务命令都会受益于完整树每次约 3.75 MB 的临时分配下降，但 B/op 不能直接等同 peak RSS。正式报告需要 wait4/native RSS 和 public process-tree RSS，各场景独立采样。
+wait4 native 数据确认，完整树优化相对固定 main 将 root help RSS p50 从 51.66 降到 47.68 MiB（Linux，-7.7%），从 45.70 降到 41.91 MiB（Darwin，-8.3%）。B/op 的下降确实传导到了进程 RSS，但 Linux 还没有压过 Lark。
 
-当前本地新 binary 的少量非正式样本约 44.7～45.1 MiB，接近先前 Lark 的 45.2 MiB；本机安全软件会延迟或终止新 binary，因此该观察不进入验收。
+下一阶段只优化同一完整树：把分散的 helper 构造逐步收敛到紧凑 typed service descriptors 与通用 builder，减少每节点 Cobra/pflag/annotation 常驻对象和构造期触达的代码页。GC 参数实验没有采用：本机 `GOGC/GOMEMLIMIT` 只降低约 0.5 MiB，且增加延迟，不能解决结构性差距。
 
 ## 8. Lark 与 GWS
 
@@ -106,7 +111,18 @@ Lark 证明了“每次完整构树”本身不是 root help projection 的理�
 
 GWS 0.22.5 的历史同机 native 启动约 3～4 ms、RSS 约 8～11 MiB。其优势主要在更小的 executable/init/runtime 与命令面。本 RFC 不通过减少 DWS 产品面、增加第二 runtime 或 daemon 追这个区间。
 
-clean-head 竞品表将包含 Schema、root help、version、leaf help、dry-run，并同时列 wall、CPU、RSS、node count、B/op 和 allocs/op。Lark/GWS 是诊断；固定 main 回归仍是产品 release gate。
+clean-head native p50 对比：
+
+| 平台/场景 | DWS | Lark 1.0.85 | GWS 0.22.5 |
+|---|---:|---:|---:|
+| Linux Schema | 58.32 ms / 54.42 MiB | 47.08 ms / 43.11 MiB | 4.08 ms / 9.05 MiB |
+| Linux root help | 44.05 ms / 47.68 MiB | 47.11 ms / 42.85 MiB | 3.03 ms / 6.90 MiB |
+| Linux dry-run | 44.10 ms / 47.70 MiB | 47.25 ms / 42.62 MiB | 4.45 ms / 9.92 MiB |
+| Darwin Schema | 46.92 ms / 48.94 MiB | 45.02 ms / 44.34 MiB | 8.70 ms / 9.67 MiB |
+| Darwin root help | 37.26 ms / 41.91 MiB | 45.06 ms / 44.43 MiB | 8.08 ms / 8.00 MiB |
+| Darwin dry-run | 38.47 ms / 41.93 MiB | 45.07 ms / 44.41 MiB | 9.07 ms / 10.81 MiB |
+
+每格为 wall p50 / RSS p50。Lark/GWS 是诊断；固定 main 回归仍是产品 release gate。DWS Schema 还包含完整树与认证 cache read；竞品 Schema/业务输出合同不等价。
 
 ## 9. 当前验收状态
 
@@ -114,8 +130,9 @@ clean-head 竞品表将包含 Schema、root help、version、leaf help、dry-run
 - [x] Schema 前置执行与 root help projection 删除。
 - [x] 本地完整树 B/op -22.8%、allocs/op -9.8%，达到 RFC 门槛。
 - [x] 定向 corecmd/app/help/Schema dependency tests 通过。
-- [ ] clean commit Go 1.25.9 microbenchmark。
-- [ ] Darwin/arm64 native full/race/performance artifact。
-- [ ] Linux/amd64 native full/race/performance artifact。
-- [ ] root help RSS 与 Lark 的新 head 对比。
+- [x] clean head Go 1.25.9 双平台完整 suite、race、cache 与性能 workflow。
+- [x] Darwin/arm64 native full/race/performance artifact。
+- [x] Linux/amd64 native full/race/performance artifact。
+- [x] root help RSS 与 Lark 的新 head 对比已记录。
+- [ ] Linux root help RSS ≤ Lark +5%；当前 +11.3%，阻挡性能专项验收。
 - [ ] 正式 release 最终签名制品与安装验证。
