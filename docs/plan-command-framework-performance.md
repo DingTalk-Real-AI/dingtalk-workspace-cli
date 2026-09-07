@@ -164,6 +164,68 @@ DWS_PACKAGE_VERSION=0.0.0-test <binary> -test.run '^$' \
 
 结论：不要再以「按需解码替代单遍通用解码」的方式优化这条路径。若要继续压缩这 17%，方向应是减少解析次数本身（例如复用一次解析结果同时服务规范化与校验），而不是把一次解析拆成多次。
 
+### 3.4 darwin-arm64 本机对 Lark 的五维实测（2026-09-07）
+
+在本机用 CI 完全相同的口径复现了 `measure-cli-five-dimensions.py`：候选由 `build-schema-cache-candidate.py` 从本次框架优化提交构建（go1.25.9、darwin-arm64、工作树干净），基线用 CI 指定的固定提交 `6f71222b`（go1.25.9），竞品固定 `@larksuite/cli@1.0.85` 与 `@googleworkspace/cli@0.22.5`，venv + psutil 7.2.2，harness 自检 7 项通过。报告 `complete=true`、0 失败、44 用例 × 30 样本 × 延迟与内存两阶段全部齐备。
+
+wall p50 / p95（ms），DWS 对 Lark：
+
+| 工作负载 | DWS p50/p95 | Lark p50/p95 | p50 比值 |
+|---|---|---|---|
+| help | 353.09 / 650.78 | 412.95 / 765.52 | 0.855x |
+| version | 335.70 / 588.36 | 376.89 / 656.41 | 0.891x |
+| leaf-help | 357.14 / 711.56 | 418.89 / 818.26 | 0.853x |
+| schema | 413.37 / 1346.92 | 454.18 / 864.57 | 0.910x |
+| dry-run | 334.93 / 612.33 | 387.14 / 2783.71 | 0.865x |
+
+五个负载的 wall p50 全部 DWS 更快。
+
+两条必须随数据一起读的限制：
+
+- 绝对值约 350 ms 远高于 CI 记录的 37–44 ms，因为这台 Mac 的进程 wall time 受安全扫描干扰（§3 开头已说明该干扰，不用于端到端 gate）。可用证据是**同机比值**，不是绝对值。
+- CPU `user_ms` p50 上 DWS 在 leaf-help（45.87 vs 43.26）与 schema（64.57 vs 47.63）反而高于 Lark。按延迟口径这一项通过；若把「快」定义为 CPU 时间，这两个负载仍需优化。schema 的差距与 §3.3 未压缩的那 17% Result Schema 规范化成本方向一致。
+
+本次数据只覆盖 darwin-arm64。linux-amd64 必须由 CI native job 给出，本机无法复现。
+
+### 3.5 CI 双平台对 Lark 的实测差距与根因归因（2026-09-07，head `9e52edcc`）
+
+CI native feedback run `34097698630` 全绿（Schema policy、两平台 Full Go suite、identity comparison 均 success），两平台 `five-dimensions-report.json` 均 `complete=true`、0 失败。wall p50（ms）：
+
+| 负载 | linux DWS | linux Lark | 判定 | darwin DWS | darwin Lark | 判定 |
+|---|---|---|---|---|---|---|
+| help | 43.98 | 47.26 | 快 0.931x | 44.39 | 49.27 | 快 0.901x |
+| version | 43.37 | 46.00 | 快 0.943x | 41.27 | 50.38 | 快 0.819x |
+| leaf-help | 50.58 | 46.29 | **慢 1.093x** | 48.35 | 50.04 | 快 0.966x |
+| schema | 57.78 | 47.07 | **慢 1.228x** | 52.35 | 50.15 | **慢 1.044x** |
+| dry-run | 43.49 | 46.88 | 快 0.928x | 46.17 | 49.35 | 快 0.936x |
+
+CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 release gate。help / version / dry-run 三个负载在两平台都快于 Lark，说明 §3.1–§3.2 的构树分配优化确实传导到了端到端延迟；leaf-help（仅 Linux）与 schema（两平台）仍然慢。
+
+需要关闭的差距：linux schema 10.71 ms、linux leaf-help 4.29 ms、darwin schema 2.20 ms。
+
+根因已确认，两个负载同源——都要解析 Schema Meta，root help 不需要：
+
+| 平台 | file-hit 阶段 | 中位成本 | 对应差距 |
+|---|---|---|---|
+| linux | `selected-open-locator-authenticate-decode-index` | 6.517 ms | leaf-help 差距 6.60 ms（50.58−43.98），几乎完全吻合 |
+| linux | `meta-open-authenticate-decode-lookup` | 4.536 ms | schema 差距 13.80 ms 的主要部分 |
+| darwin | `selected-...-decode-index` | 4.943 ms | leaf-help 差距 3.96 ms |
+| darwin | `meta-open-authenticate-decode-lookup` | 3.719 ms | schema 差距 7.96 ms |
+
+旁证：`TestResolveMetaAndLeafHelpReuseAssembledMetaCache` 证明 leaf `--help` 复用同一份 assembled Meta。本机构建（无 pinned cache identity）实测 `--help` 342 ms 而 leaf `--help` 与 `schema` 均约 1.42 s，与 CI 的 `dws-live/schema` 1369.70 ms 一致，说明 cache 未命中时两者都付 live assembly；CI 测的是 warm cache 情形。
+
+读取路径的分配构成（本机 `-memprofile`，按只出现在读取路径的函数估算约 2.38 MB/op，占 3.48 MB/op 的大部分）：`readMeta` 约 823 KB/op 的文件读取、protobuf 字符串 UTF8 校验约 950 KB/op、`validateAndConvertMeta` 下游的 `ToolSpec.Validate` / `ToolSpec.normalized` / `ProductSpec.normalized`。单叶查询目前仍解码并规范化全部 1370 个工具。
+
+因此关闭差距需要把 Meta 读取削减 65%（linux leaf-help）到 78%（linux schema）。
+
+改动范围已数清。`CommandMetaByPath` 的生产消费方：`command_meta.go:161,170`（`ResolveMeta` 单路径查找）、`cache_codec.go:395`（分片校验 `commandMetaSubsetEqual`）、`cache_codec.go:542`（`validMetaAliasExpansion`）、`cache_codec.go:547-557`（遍历全部条目做 product locator 一致性交叉校验并构建 `commandCountByProduct`）、`schema_cache_delivery.go:603`（与 `BuildCommandMetaLookup(registry)` 做 `DeepEqual` 交付等价校验）。后四项需要全量数据，因此「单叶只解码一个工具」不是纯性能改动。
+
+曾设想一条「只解码 Identity」的路径，理由是 `cache_codec.go:542` 与 `547-557` 看起来只读 `Identity`。**这个前提是错的，已否决**：`meta.go:163` 的 `validMetaAliasExpansion` 对别名行调用 `equalCommandMeta(primary, meta)`，比较的是完整 `CommandMeta`，用于验证别名行与主行的 `Safety` 与 `Selection` 逐字段一致。因此只解码 Identity 会削弱这项校验，不是纯性能改动。相应的 `commandIdentityFromProto` 已回退，未留在仓库里。
+
+`commandMetaFromProto`（`cache_conversion.go:75`）每条拷贝 6 个字符串列表，其中 5 个属于 `Selection`（UseWhen / AvoidWhen / Prerequisites / Tips / Examples），只有 Aliases 属于 Identity；`commandMetaProtoLists` 只返回引用 proto 字段的切片数组，不产生堆分配，所以每条的堆分配就是那 6 次 `make` + `copy`。`CommandEntries.Items` 与 `Locators.Items` 都已由 `cache_codec.go:506-507` 与 `520-521` 强制按 `LookupPath` 严格递增排序，二分查找可行。
+
+因此真正的决策点是信任模型：`equalCommandMeta` 的别名/主行一致性校验是**写入方正确性**检查，却在每次读取时重跑。cache 内容已由哈希保证完整性，哈希并不能发现写入方产生了不一致的别名行——这项检查抓的是写入方 bug，不是损坏。要压缩读取成本，必须决定把它移到写入时（写入方自校验），读取时不再重验；否则每次读取都得付这笔全量解码成本。这个决定不该由性能优化单方面做出。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |
