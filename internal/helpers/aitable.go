@@ -8232,12 +8232,11 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordCmd.AddCommand(recordGetCmd)
 
 	// template
-	templateSearchCmd.Flags().String("query", "", "模板名称关键词 (必填)")
+	templateSearchCmd.Flags().String("query", "", "模板名称关键词（每次调用必须提供；兼容接口保持 optional）")
 	templateSearchCmd.Flags().String("keyword", "", "--query alias")
 	_ = templateSearchCmd.Flags().MarkHidden("keyword")
 	templateSearchCmd.Flags().Int("limit", 0, "每页返回数量。默认 10，最大 30")
 	templateSearchCmd.Flags().String("cursor", "", "分页游标。首次请求不传；后续请原样传入上次返回的 nextCursor")
-	_ = templateSearchCmd.MarkFlagRequired("query")
 	templateCmd.AddCommand(templateSearchCmd)
 
 	// attachment

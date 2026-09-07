@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestCrossPlatformCoverageAITableTemplateSearchFinalSchemaRequiresQuery(t *testing.T) {
+func TestCrossPlatformCoverageAITableTemplateSearchRuntimeRequiresQueryButSchemaStaysOptional(t *testing.T) {
 	snapshot := fullSchemaSnapshotForTest(t)
 	for _, test := range []struct {
 		canonical string
@@ -29,12 +29,12 @@ func TestCrossPlatformCoverageAITableTemplateSearchFinalSchemaRequiresQuery(t *t
 		if query == nil {
 			t.Fatalf("%s final Schema missing query parameter", canonical)
 		}
-		if required, _ := query["required"].(bool); !required {
-			t.Fatalf("%s query required=%#v", canonical, query["required"])
+		if required, _ := query["required"].(bool); required {
+			t.Fatalf("%s query required=%#v, want compatibility optional", canonical, query["required"])
 		}
 		if canonical == "aitable.template_search" {
-			if required, _ := query["cli_required"].(bool); !required {
-				t.Fatalf("%s query cli_required=%#v", canonical, query["cli_required"])
+			if required, _ := query["cli_required"].(bool); required {
+				t.Fatalf("%s query cli_required=%#v, want compatibility optional", canonical, query["cli_required"])
 			}
 		}
 		if canonical == "aitable.shortcut_template_search" {
@@ -81,8 +81,8 @@ func TestCrossPlatformCoverageAITableTemplateSearchFinalSchemaRequiresQuery(t *t
 			t.Fatalf("decode compact Schema %s: %v", test.cliPath, err)
 		}
 		compactQuery := schemaContractMap(compact["parameters"])["query"]
-		if required, _ := compactQuery["required"].(bool); !required {
-			t.Fatalf("compact %s query required=%#v", test.cliPath, compactQuery["required"])
+		if required, _ := compactQuery["required"].(bool); required {
+			t.Fatalf("compact %s query required=%#v, want compatibility optional", test.cliPath, compactQuery["required"])
 		}
 	}
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
@@ -1086,7 +1087,7 @@ var TemplateSearch = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词，去除首尾空白后不能为空", Required: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词；每次调用必须提供且去除首尾空白后不能为空（兼容接口保持 optional）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 10，最大 30（可选）"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）"},
 	},
@@ -1098,13 +1099,13 @@ var TemplateSearch = shortcut.Shortcut{
 	Tips: []string{`dws aitable +template-search --query "项目管理"`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Str("query") == "" {
-			return fmt.Errorf("--query 去除首尾空白后不能为空")
+			return apperrors.NewValidation("--query 去除首尾空白后不能为空")
 		}
 		if rt.Changed("cursor") && rt.Str("cursor") == "" {
-			return fmt.Errorf("--cursor 显式提供时去除首尾空白后不能为空")
+			return apperrors.NewValidation("--cursor 显式提供时去除首尾空白后不能为空")
 		}
 		if rt.Changed("limit") && (rt.Int("limit") < 1 || rt.Int("limit") > 30) {
-			return fmt.Errorf("--limit 必须在 1 到 30 之间")
+			return apperrors.NewValidation("--limit 必须在 1 到 30 之间")
 		}
 		return nil
 	},

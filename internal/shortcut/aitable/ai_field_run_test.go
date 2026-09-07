@@ -23,11 +23,11 @@ const (
 	aiRunFixture    = `{"data":{"tasks":[{"fieldId":"field-1","status":"submitted","taskId":"task-1","total":2}],"documentUrl":"https://alidocs.dingtalk.com/i/nodes/result"}}`
 )
 
-func runAIFieldFixture(t *testing.T, steps []upsertByKeyStep, args ...string) (string, error, *upsertByKeyCaller) {
+func runAIFieldFixture(t *testing.T, steps []upsertByKeyStep, args ...string) (string, *upsertByKeyCaller, error) {
 	t.Helper()
 	caller := &upsertByKeyCaller{steps: steps}
 	out, err := runAITableCompositeCLI(t, caller, "+ai-field-run", args...)
-	return out, err, caller
+	return out, caller, err
 }
 
 func aiFieldArgs(extra ...string) []string {
@@ -36,7 +36,7 @@ func aiFieldArgs(extra ...string) []string {
 }
 
 func TestCrossPlatformCoverageAIFieldRunRequiresConfirmationBeforeAnyMCP(t *testing.T) {
-	out, err, caller := runAIFieldFixture(t, nil, aiFieldArgs()...)
+	out, caller, err := runAIFieldFixture(t, nil, aiFieldArgs()...)
 	var typed *apperrors.Error
 	if err == nil || out != "" || !errors.As(err, &typed) || typed.Reason != "confirmation_required" {
 		t.Fatalf("confirmation = output:%q err:%#v", out, err)
@@ -48,7 +48,7 @@ func TestCrossPlatformCoverageAIFieldRunRequiresConfirmationBeforeAnyMCP(t *test
 
 func TestCrossPlatformCoverageAIFieldRunPayloadAndPendingReceipt(t *testing.T) {
 	args := []string{"--base-id", "base-1", "--table-id", "table-1", "--field-id", " field-1 ", "--record-ids", " record-1 , record-1 , record-2 ", "--yes"}
-	out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: aiRecordFixture}, {text: aiRunFixture}}, args...)
+	out, caller, err := runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: aiRecordFixture}, {text: aiRunFixture}}, args...)
 	if err != nil {
 		t.Fatalf("ai field run error = %v", err)
 	}
@@ -94,7 +94,7 @@ func TestCrossPlatformCoverageAIFieldRunRejectsInvalidLocalScopeBeforeMCP(t *tes
 		{name: "too many", args: []string{"--base-id", "base", "--table-id", "table", "--field-id", "field", "--record-ids", strings.Join(numberedIDs("record", 101), ","), "--yes"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			out, err, caller := runAIFieldFixture(t, nil, test.args...)
+			out, caller, err := runAIFieldFixture(t, nil, test.args...)
 			if err == nil || out != "" || len(caller.calls) != 0 {
 				t.Fatalf("local validation = output:%q err:%v calls:%#v", out, err, caller.calls)
 			}
@@ -136,7 +136,7 @@ func TestCrossPlatformCoverageAIFieldRunPropagatesMCPFailuresWithoutRetry(t *tes
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			out, err, caller := runAIFieldFixture(t, test.steps, aiFieldArgs("--yes")...)
+			out, caller, err := runAIFieldFixture(t, test.steps, aiFieldArgs("--yes")...)
 			if err == nil || out != "" || !strings.Contains(err.Error(), sentinel.Error()) || len(caller.calls) != len(test.steps) {
 				t.Fatalf("MCP failure propagation = output:%q err:%v calls:%#v", out, err, caller.calls)
 			}
@@ -156,7 +156,7 @@ func TestCrossPlatformCoverageAIFieldRunPreflightRejectsIdentityDriftBeforeRun(t
 	}
 	for index, response := range fieldCases {
 		t.Run("field-"+string(rune('a'+index)), func(t *testing.T) {
-			out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: response}}, aiFieldArgs("--yes")...)
+			out, caller, err := runAIFieldFixture(t, []upsertByKeyStep{{text: response}}, aiFieldArgs("--yes")...)
 			if err == nil || out != "" || len(caller.calls) != 1 || caller.calls[0].tool != "get_fields" {
 				t.Fatalf("field preflight = output:%q err:%v calls:%#v", out, err, caller.calls)
 			}
@@ -173,7 +173,7 @@ func TestCrossPlatformCoverageAIFieldRunPreflightRejectsIdentityDriftBeforeRun(t
 	}
 	for index, response := range recordCases {
 		t.Run("record-"+string(rune('a'+index)), func(t *testing.T) {
-			out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: response}}, aiFieldArgs("--yes")...)
+			out, caller, err := runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: response}}, aiFieldArgs("--yes")...)
 			if err == nil || out != "" || len(caller.calls) != 2 || caller.calls[1].tool != "query_records" {
 				t.Fatalf("record preflight = output:%q err:%v calls:%#v", out, err, caller.calls)
 			}
@@ -195,7 +195,7 @@ func TestCrossPlatformCoverageAIFieldRunRejectsMalformedNonEmptyAIConfig(t *test
 	for index, config := range configs {
 		t.Run(fmt.Sprintf("config-%d", index), func(t *testing.T) {
 			response := `{"data":{"fields":[{"fieldId":"field-1","aiConfig":` + config + `}]}}`
-			out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: response}}, aiFieldArgs("--yes")...)
+			out, caller, err := runAIFieldFixture(t, []upsertByKeyStep{{text: response}}, aiFieldArgs("--yes")...)
 			if err == nil || out != "" || len(caller.calls) != 1 || caller.calls[0].tool != "get_fields" {
 				t.Fatalf("malformed aiConfig = output:%q err:%v calls:%#v", out, err, caller.calls)
 			}
@@ -249,17 +249,17 @@ func TestCrossPlatformCoverageAIFieldRunStrictEnvelopeAndIntegerBoundaries(t *te
 
 func TestCrossPlatformCoverageAIFieldRunRejectsConflictingPreflightEnvelopes(t *testing.T) {
 	fieldConflict := `{"fields":[{"fieldId":"field-1","aiConfig":{"outputType":"text","prompt":[{"type":"fieldRef","fieldId":"source"}]}}],"data":{"fields":[{"fieldId":"field-1","aiConfig":{"outputType":"text","prompt":[{"type":"fieldRef","fieldId":"source"}]}}]}}`
-	out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: fieldConflict}}, aiFieldArgs("--yes")...)
+	out, caller, err := runAIFieldFixture(t, []upsertByKeyStep{{text: fieldConflict}}, aiFieldArgs("--yes")...)
 	if err == nil || out != "" || len(caller.calls) != 1 {
 		t.Fatalf("field envelope conflict = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 	fieldConflict = `{"data":{"fields":[{"fieldId":"field-1","aiConfig":{"outputType":"text","prompt":[{"type":"fieldRef","fieldId":"source"}]}}]},"result":{"fields":[{"fieldId":"field-1","aiConfig":{"outputType":"text","prompt":[{"type":"fieldRef","fieldId":"source"}]}}]}}`
-	out, err, caller = runAIFieldFixture(t, []upsertByKeyStep{{text: fieldConflict}}, aiFieldArgs("--yes")...)
+	out, caller, err = runAIFieldFixture(t, []upsertByKeyStep{{text: fieldConflict}}, aiFieldArgs("--yes")...)
 	if err == nil || out != "" || len(caller.calls) != 1 {
 		t.Fatalf("field data/result conflict = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 	recordConflict := `{"records":[{"recordId":"record-1"},{"recordId":"record-2"}],"data":{"records":[{"recordId":"record-1"},{"recordId":"record-2"}]}}`
-	out, err, caller = runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: recordConflict}}, aiFieldArgs("--yes")...)
+	out, caller, err = runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: recordConflict}}, aiFieldArgs("--yes")...)
 	if err == nil || out != "" || len(caller.calls) != 2 {
 		t.Fatalf("record envelope conflict = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
@@ -356,7 +356,7 @@ func TestCrossPlatformCoverageAIFieldRunRejectsMalformedRunReceipt(t *testing.T)
 	}
 	for index, response := range responses {
 		t.Run("receipt-"+string(rune('a'+index)), func(t *testing.T) {
-			out, err, caller := runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: aiRecordFixture}, {text: response}}, aiFieldArgs("--yes")...)
+			out, caller, err := runAIFieldFixture(t, []upsertByKeyStep{{text: aiFieldFixture}, {text: aiRecordFixture}, {text: response}}, aiFieldArgs("--yes")...)
 			if err == nil || out != "" || len(caller.calls) != 3 || caller.calls[2].tool != "run_ai_field" {
 				t.Fatalf("receipt validation = output:%q err:%v calls:%#v", out, err, caller.calls)
 			}

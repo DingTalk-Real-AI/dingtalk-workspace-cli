@@ -69,20 +69,26 @@ func TestCrossPlatformCoverageAITableTemplateSearchTrimsQueryAndPreservesKeyword
 	}
 }
 
-func TestCrossPlatformCoverageAITableTemplateSearchHelpMarksQueryRequired(t *testing.T) {
+func TestCrossPlatformCoverageAITableTemplateSearchHelpRequiresValueWithoutBreakingRequiredMarker(t *testing.T) {
 	root := newAitableCommand()
 	command, _, err := root.Find([]string{"template", "search"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	flag := command.Flags().Lookup("query")
-	if flag == nil || flag.Annotations == nil || len(flag.Annotations[cobra.BashCompOneRequiredFlag]) == 0 || flag.Annotations[cobra.BashCompOneRequiredFlag][0] != "true" {
-		t.Fatalf("query required annotation = %#v", flag)
+	if flag == nil {
+		t.Fatal("query flag missing")
+	}
+	if flag.Annotations != nil && len(flag.Annotations[cobra.BashCompOneRequiredFlag]) > 0 {
+		t.Fatalf("query unexpectedly publishes breaking required annotation: %#v", flag.Annotations)
 	}
 	for _, text := range []string{command.Long, command.Example} {
 		if strings.Contains(text, "返回热门") || strings.Contains(text, "不传关键词") {
 			t.Fatalf("atomic help still claims unsupported fallback: %q", text)
 		}
+	}
+	if !strings.Contains(command.Long, "--query 必填") || !strings.Contains(command.Long, "不能为空") {
+		t.Fatalf("atomic help does not require a non-empty query at runtime: %q", command.Long)
 	}
 }
 

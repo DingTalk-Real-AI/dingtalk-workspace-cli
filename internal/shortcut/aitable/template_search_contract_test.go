@@ -5,10 +5,12 @@ package aitable
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
@@ -21,15 +23,22 @@ func TestCrossPlatformCoverageTemplateSearchRequiresNonEmptyQueryBeforeMCP(t *te
 	}{
 		{name: "missing"},
 		{name: "blank", args: []string{"--query", "   "}},
+		{name: "blank cursor", args: []string{"--query", "项目", "--cursor", "   "}},
+		{name: "limit below minimum", args: []string{"--query", "项目", "--limit", "0"}},
+		{name: "limit above maximum", args: []string{"--query", "项目", "--limit", "31"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			caller := &upsertByKeyCaller{}
 			out, err := runAITableCompositeCLI(t, caller, "+template-search", test.args...)
-			if err == nil || out != "" {
+			var typed *apperrors.Error
+			if err == nil || out != "" || !errors.As(err, &typed) {
 				t.Fatalf("query validation = output:%q err:%v", out, err)
 			}
+			if typed.Category != apperrors.CategoryValidation || typed.ExitCode() != apperrors.ExitCodeValidation {
+				t.Fatalf("validation contract = category:%q exit:%d error:%#v", typed.Category, typed.ExitCode(), typed)
+			}
 			if len(caller.calls) != 0 {
-				t.Fatalf("invalid query made %d MCP calls", len(caller.calls))
+				t.Fatalf("invalid template search made %d MCP calls", len(caller.calls))
 			}
 		})
 	}
@@ -95,8 +104,11 @@ func TestCrossPlatformCoverageTemplateSearchSelectionDoesNotClaimPopularFallback
 			t.Fatalf("template search still claims unsupported fallback: %q", text)
 		}
 	}
-	if len(TemplateSearch.Flags) == 0 || TemplateSearch.Flags[0].Name != "query" || !TemplateSearch.Flags[0].Required {
-		t.Fatalf("template search query flag is not required: %#v", TemplateSearch.Flags)
+	if len(TemplateSearch.Flags) == 0 || TemplateSearch.Flags[0].Name != "query" || TemplateSearch.Flags[0].Required {
+		t.Fatalf("template search query compatibility surface is not optional: %#v", TemplateSearch.Flags)
+	}
+	if !strings.Contains(TemplateSearch.Flags[0].Desc, "每次调用必须提供") || !strings.Contains(TemplateSearch.Flags[0].Desc, "不能为空") {
+		t.Fatalf("template search query runtime requirement is unclear: %#v", TemplateSearch.Flags[0])
 	}
 }
 
