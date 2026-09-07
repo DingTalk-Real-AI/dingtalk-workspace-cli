@@ -252,7 +252,9 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 预期收益：leaf-help 省掉整笔 Selection 解码，schema 还额外省掉产品分片中未命中工具的 Selection 解码。落地后必须重跑 `BenchmarkRealSchemaFileHit` 的两个阶段与 CI 双平台五维测量，并确认 help stdout 的 SHA-256 一致性门禁不变。
 
-本会话预算不足以完成 DTO 重构（涉及 protobuf 重新生成、写入与读取双路径、全部相关测试与 policy 门禁），因此未启动实现，以免仓库停在不可编译状态。
+第 2 层已落地（提交 `e50f53d1`）：`BuildSchemaCache`（`cache_codec.go:232`）在 `DeepEqual` 确认 lookup 与权威 registry 一致后立即执行 `validMetaAliasExpansion`。读取侧的同一校验**刻意保留**——在没有惰性解码时移除它只削弱保障而无收益，应与第 3 层一并移除。`schemaruntime` / `cli` / `app` 三包全量测试通过。
+
+第 3 层还有一条原方案漏掉的前置约束：`DecodedSchemaMeta` 目前是**按值返回**的（`DecodeSchemaMetaCache` 返回值类型），而按需解码加记忆化需要指针接收者方法，值语义与记忆化天然冲突。因此第 3 层必须连带把 `DecodedSchemaMeta` 的传递方式从值改为指针，波及面比上面列出的四个消费方更大。另一条不可行的捷径是把 `CommandMetaByPath` 填成 identity-only 的不完整值：`command_meta.go:161` 的 `ResolveMeta` 调用方 `RenderHelpAffordances` 要用 `Selection` 渲染 help，值不完整会直接导致 help 文本缺失。
 
 ## 4. 验收矩阵
 
