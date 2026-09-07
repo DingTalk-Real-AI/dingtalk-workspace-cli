@@ -25,12 +25,11 @@ func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 		module + "internal/corecmd/contract":  true,
 		module + "internal/schemacache":       true,
 		module + "internal/schemareader":      true,
-		module + "internal/schemafastpath":    true,
 		module + "internal/buildversion":      true,
 		module + "internal/skillpaths":        true,
 		module + "internal/jsonutil":          true,
 	}
-	command := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", ".", module+"internal/schemacache", module+"internal/schemareader", module+"internal/schemafastpath")
+	command := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", ".", module+"internal/schemacache", module+"internal/schemareader")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("resolve production dependency closure: %v\n%s", err, output)

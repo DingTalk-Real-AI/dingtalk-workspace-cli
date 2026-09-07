@@ -53,16 +53,7 @@ var resolveProfileMetadata = authpkg.ResolveProfileMetadataReadOnly
 // Schema source root (declaration-only) path so assembly cannot clobber a live
 // runtime's InitDeps caller or plugin endpoints.
 func mountLegacyPublicCommands(runner executor.Runner, loadUserShortcuts bool) []*cobra.Command {
-	return mountLegacyPublicCommandsFor(runner, loadUserShortcuts, "")
-}
-
-func mountLegacyPublicCommandsFor(runner executor.Runner, loadUserShortcuts bool, selectedProduct string) []*cobra.Command {
-	var commands []*cobra.Command
-	if selectedProduct == "" {
-		commands = helpers.NewPublicCommands(runner)
-	} else {
-		commands = helpers.NewPublicCommandsFor(runner, selectedProduct)
-	}
+	commands := helpers.NewPublicCommands(runner)
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the
 	// built-ins. Conflicts with built-ins are skipped inside Load.
@@ -76,17 +67,9 @@ func mountLegacyPublicCommandsFor(runner executor.Runner, loadUserShortcuts bool
 	// into the matching helper command so the `+leaf` sits alongside existing
 	// subcommands.
 	if loadUserShortcuts {
-		if selectedProduct == "" {
-			commands = append(commands, builtin.Commands()...)
-		} else {
-			commands = append(commands, builtin.CommandsForService(selectedProduct)...)
-		}
+		commands = append(commands, builtin.Commands()...)
 	} else {
-		if selectedProduct == "" {
-			commands = append(commands, builtin.BaseCommands()...)
-		} else {
-			commands = append(commands, builtin.BaseCommandsForService(selectedProduct)...)
-		}
+		commands = append(commands, builtin.BaseCommands()...)
 	}
 	merged := mergeTopLevelCommands(commands)
 	annotatePreferredShortcutOwners(merged)
@@ -121,25 +104,13 @@ func annotatePreferredShortcutOwners(commands []*cobra.Command) {
 // newLegacyPublicCommands is the executable CLI path: inject static MCP
 // endpoints, InitDeps, then mount the public command tree.
 func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
-	return newLegacyPublicCommandsFor(runner, caller, loadUserShortcuts, "")
-}
-
-func newLegacyPublicCommandsFor(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool, selectedProduct string) []*cobra.Command {
-	initializeLegacyPublicRuntime(caller)
-	return mountLegacyPublicCommandsFor(runner, loadUserShortcuts, selectedProduct)
-}
-
-// initializeLegacyPublicRuntime installs the shared caller and static endpoints
-// used by product helpers and utility-owned commands such as event +listen-im.
-// Command selection may skip product construction, but it must not skip this
-// process-level dependency initialization.
-func initializeLegacyPublicRuntime(caller edition.ToolCaller) {
 	injectStaticServers()
 	// Register the $corpId runtimeDefault before the command tree is built so
 	// helpers.resolveCurrentCorpID (delegation-auth options for the legacy
 	// permission format) can resolve the current enterprise at RunE time.
 	ensureCorpIDRuntimeDefault()
 	helpers.InitDeps(caller)
+	return mountLegacyPublicCommands(runner, loadUserShortcuts)
 }
 
 // ensureCorpIDRuntimeDefault registers the $corpId resolver exactly once. The

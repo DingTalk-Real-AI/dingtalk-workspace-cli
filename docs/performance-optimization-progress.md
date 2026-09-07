@@ -1,18 +1,18 @@
 # PR #1296 性能优化进展
 
-更新时间：2026-09-06。状态：Draft，实施与验收中。
+更新时间：2026-09-07。状态：Draft，单树实现已完成本地定向验证，等待 clean-head 两平台验收。
 
 | 工作项 | 状态 | 当前证据 |
 |---|---|---|
-| 单二进制入口 | 已实现 | launcher/core/package manifest 代码撤回；GoReleaser、npm、Homebrew、install/upgrade 恢复单 `dws` |
+| 单二进制入口 | 已实现 | launcher/core/package manifest 已撤回，发布恢复单 `dws` |
+| 单一完整 runtime tree | 已实现 | argv 产品选择、route index、插件资格分流与 selective tests 已删除；help/version/Schema/config/业务共享完整树 |
+| root help | 已实现 | 删除独立 model/snapshot package，直接遍历 runtime Cobra tree；输出回归测试通过 |
+| Schema verified cache | 已实现 | cache 只由正常 schema handler 使用；Cobra 前置 Schema fast path 已删除 |
+| 完整树内存优化 | 本地门槛通过 | 相对父提交 `c0131d35`：16.43→12.68 MB/op（-22.8%），164.2k→148.1k alloc/op（-9.8%） |
+| 完整树延迟 | 本地无实质回退 | clean commit 三轮中位数 13.50→13.54 ms/op（+0.3%）；正式看 Go 1.25.9 CI |
 | telemetry 退出不等待 | 已实现 | 阻塞 collector 单测证明命令返回不等发送；明确接受末事件丢失 |
-| Schema verified cache | 已实现，Darwin clean-head 通过 | candidate builder 和 release linker contract 绑定同一 identity；cache user CPU p50 相对 live 降 97.6% |
-| 产品按需装配 | 已实现，局部测试通过 | 修复先全量后筛选后，calendar 构树约 14.2→0.85 ms，alloc 169k→10.1k；config 约 0.36 ms |
-| completion / 路由索引 | 已实现并审计 | 补全请求完整树；无 DWS 全局 completion callback；shortcut service 约 2.10 µs→7.4 ns |
-| 插件/未知输入回退 | 已实现，聚焦测试通过 | clean path 证明无插件后跳过重复 loader；动态面、异常状态和未知输入完整回退 |
-| Prepare/config/profile 去重 | 已证明保留 | 单 profile 解析一次、dry-run 零次；没有额外 PrepareCommandTree，不删除 auth/Safety 生命周期 |
-| 固定 main 端到端 | Darwin clean-head 本地通过，待 CI | head `4a25ec8b...` 对固定基准 `6f71222b...`；12/12 入口 gate 和 44 场景五维矩阵通过 |
-| Lark/GWS 新 head 对比 | Darwin clean-head 已运行 | wall 延迟五个可比场景快于 Lark、仍慢于 GWS；完整 Lark 诊断 36/40，help RSS 四项未过且样本数未达正式门槛 |
+| Prepare/config/profile | 保留 | 未发现有收益且可安全删除的重复生命周期 |
+| root help RSS / Lark | 待 clean-head CI | 旧 selective-head 的 2.5% 延迟与 RSS 数据已失效，不能用于当前单树结论 |
 | Linux/Darwin full/race | 待 CI | 阻挡 Ready |
 
-当前 clean-head 数据确认了 calendar 构树相对完整树约 94% 的时间下降、七个代表场景相对固定 main 全部提速，以及 telemetry default/opt-out 基本重合。Darwin 本地候选的 Schema、default-entry、五维报告均通过完整性检查；最终结论仍以同一 head 的两平台 CI artifact 为准。
+当前实现把架构复杂度从“双模式构树 + 多条快路径”收回到一棵完整树。局部 microbenchmark 已达到 RFC 的 allocation 门槛；端到端 Schema、help、业务命令与整体 RSS 必须在推送后的相同 head 重新测量。

@@ -39,6 +39,22 @@ func RegisterRuntimeContractFinal(cmd *cobra.Command, payload contract.ContractF
 	contractFinalByCommand.Store(cmd, &p)
 }
 
+// RegisterOwnedRuntimeContractFinal transfers an already normalized payload
+// from the command builder into the runtime store. The caller must not retain
+// or mutate payload after this call. Read access remains defensive through
+// RuntimeContractFinal, which always returns a deep copy.
+//
+// This narrow seam avoids cloning the complete typed contract twice while
+// constructing the production tree. General callers should keep using
+// RegisterRuntimeContractFinal when they cannot transfer ownership.
+func RegisterOwnedRuntimeContractFinal(cmd *cobra.Command, payload contract.ContractFinalPayload) {
+	if cmd == nil {
+		return
+	}
+	runtimeannotate.AnnotateRuntimeContract(cmd)
+	contractFinalByCommand.Store(cmd, &payload)
+}
+
 // RuntimeContractFinal returns the registered final Schema overlay (read-only).
 func RuntimeContractFinal(cmd *cobra.Command) (contract.ContractFinalPayload, bool) {
 	if cmd == nil {

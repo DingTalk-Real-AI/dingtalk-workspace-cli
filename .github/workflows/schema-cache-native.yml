@@ -130,7 +130,6 @@ jobs:
           python3 scripts/dev/verify-schema-cache-binary.py \
             --binary "$RUNNER_TEMP/schema-evidence/candidate/dws-v0.0.0-schema-cache-candidate-$EXPECTED_TARGET/dws" \
             --proof "$RUNNER_TEMP/schema-evidence/candidate/identity.json" \
-            --require-schema-fast-path \
             --output "$RUNNER_TEMP/schema-evidence/process-report.json"
       - name: Measure complete file hits
         id: file_hit

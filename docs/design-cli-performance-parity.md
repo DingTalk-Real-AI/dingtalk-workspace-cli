@@ -1,55 +1,44 @@
 # PR #1296 性能专项技术方案
 
-状态：实施中。规范性选择见 [Schema 与 CLI RFC](rfc-schema-runtime-cache.md)，数字见[性能附件](rfc-schema-runtime-cache-performance.md)。
+状态：实施中。规范性选择见 [Schema 与 CLI RFC](rfc-schema-runtime-cache.md)，执行阶段见[完整命令树专项计划](plan-command-framework-performance.md)，数字见[性能附件](rfc-schema-runtime-cache-performance.md)。
 
 ## 问题
 
-旧候选默认入口约 300 ms 的主要成本是 telemetry 退出等待；业务命令还有 launcher/core 委派、完整 core SHA-256 与全量产品树装配。Schema cache 已证明查询计算可以明显下降，但它不能替代业务 handler，也不能解决这些固定启动税。
+旧候选的主要固定税来自 telemetry 退出等待；launcher/core 又引入第二进程和逐次哈希。撤回 launcher 后，root help 与普通业务命令共同承担完整 Cobra 树的构造成本。此前用按 argv 选择产品和 root help projection 降低局部数字，会长期维护两套 command surface，已被本方案废止。
 
-## 方案
+## 最终结构
 
 ```mermaid
 flowchart LR
     W[可选 npm wrapper] --> D[单一 dws 进程]
-    D --> T[统一 telemetry / signal / output 生命周期]
-    D --> S{Schema 请求?}
-    S -->|cache hit| C[认证并读取 Meta/产品 shard]
-    S -->|miss/disabled| A[declarations 权威装配]
-    D --> R[保守解析顶层 route]
-    R -->|确定产品| P[只构建目标产品 factory]
-    R -->|utility| U[只构建 utility]
-    R -->|扩展/歧义/help| F[完整 Cobra tree]
-    P --> X[统一 PreParse / validation / auth / Safety / handler]
-    U --> X
-    F --> X
-    C --> O[统一输出与同步业务清理]
-    A --> O
-    X --> O
-    O --> Q[事件入队，不等待网络发送]
+    D --> I[identity / metadata preflight]
+    I --> T[构造完整 Cobra runtime tree]
+    T --> C[Cobra parse / Find]
+    C --> P[统一 PreParse / validation / auth / Safety]
+    P --> H{normal handler}
+    H -->|schema| S[verified cache 或 declarations rebuild]
+    H -->|utility / business| B[既有 handler / transport]
+    S --> O[统一 output / cleanup]
+    B --> O
+    O --> Q[telemetry enqueue，不等待网络]
 ```
 
-改动分三层：
+root help 直接遍历 `T`；version、completion、Schema、config 和业务命令都使用同一棵树。Schema cache 是 `schema` handler 的 typed 数据源，不是进程级 argv fast path。
 
-1. 入口恢复 main 的单二进制，撤回 PR 新增的 launcher/core、逐次哈希和双份 help。
-2. telemetry 保持字段与异步 SDK，取消退出等待，明确接受最后事件可能丢失；业务 cleanup 继续同步。
-3. core 内按需构建一个产品树，Schema 只在 Schema 请求上读缓存。未知状态完整回退，框架仍拥有最终执行。
+## 完整树优化
 
-## 边界
+1. ContractFinal 从 builder 向 command-owned weak store 转移所有权，读取侧继续 defensive clone。
+2. RunE closure 只保留执行事实，不捕获已落到 Cobra/ContractFinal 的 help 和 contract 大对象。
+3. Safety scanner 等执行期资源延迟到第一次真实使用。
+4. 通用 flag builder 消除 empty string-slice 的 4 KiB 临时 writer，同时保持 pflag 行为。
+5. shortcut 装配通过 declaration pointer 构造，避免构树期间复制大型声明。
 
-轻量 route 只识别根级已注册 flag 和第一个顶层 token。它不解析 leaf 参数。公共 root constructor 总是完整；真实进程且无插件/edition 扩展时才启用选择性装配。
+本机同提交父子对照显示完整树 B/op 降低 22.8%，allocs/op 降低 9.8%，ns/op 变化为 +0.3%，属于门槛内噪声。端到端延迟与 RSS 仍由 Go 1.25.9 的 Darwin/Linux clean-head CI 决定。
 
-产品 name、factory 和 alias 放在同一 registry；shortcut 先按 service 过滤再 build。过滤发生在 factory 调用前，因此真正避免构造无关命令、flags、annotations 和 PostMount 数据。
+## 正确性与发布边界
 
-Schema embedded identity 缺失走 live，非法则退出 125；用户 cache 损坏走 live 自愈。正式支持 target 在发布前用两个原生 runner 生成一致 proof，并把 identity 链接进同一个 `dws`。
-
-## 当前局部结果
-
-Apple M3 Pro、Go 1.25.9、同一工作树、每组 5 次：
-
-| 构造路径 | 时间 | B/op | allocs/op |
-|---|---:|---:|---:|
-| 完整 `NewRootCommand` | 约 14.0～14.4 ms | 17.1 MB | 169k |
-| process `calendar list` | 约 0.84～0.86 ms | 1.17 MB | 10.1k |
-| process `config get` | 约 0.35～0.38 ms | 0.46 MB | 3.7k |
-
-这只证明装配层收益。最终结论等固定 main 的端到端 30 样本及 Linux/Darwin CI；不得把微基准直接写成用户总体加速。
+- 公开 command、flags、aliases、help、validation、Safety、错误分类和输出不变。
+- embedded identity 缺失走 normal handler 的 live build；非法 identity 在制品预检 fail-closed 125；用户 cache 损坏可修复。
+- candidate 和正式 release 使用相同 identity linker contract，发布物仍是一个 `dws`。
+- telemetry 明确接受最后一条分析事件可能丢失；业务 cleanup 继续同步。
+- Lark 用于验证“完整树也可足够快”的结构选择；GWS 只用于观察更小映像/init 的上限。

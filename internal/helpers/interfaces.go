@@ -53,58 +53,38 @@ const (
 var (
 	registryMu      sync.Mutex
 	publicFactories []registeredFactory
-	publicIndex     = make(map[string]string)
 )
 
 type registeredFactory struct {
 	name    string
-	aliases []string
 	factory Factory
 }
 
-func RegisterPublicNamed(name string, factory Factory, aliases ...string) {
+func RegisterPublicNamed(name string, factory Factory) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	publicFactories = append(publicFactories, registeredFactory{name: name, aliases: aliases, factory: factory})
-	if _, exists := publicIndex[name]; !exists {
-		publicIndex[name] = name
-	}
-	for _, alias := range aliases {
-		if _, exists := publicIndex[alias]; !exists {
-			publicIndex[alias] = name
-		}
-	}
+	publicFactories = append(publicFactories, registeredFactory{name: name, factory: factory})
 }
 
 func NewPublicCommands(runner executor.Runner) []*cobra.Command {
-	return buildCommands(publicFactories, runner, "")
+	return buildCommands(publicFactories, runner)
 }
 
-// NewPublicCommandsFor constructs only the named top-level product. The name
-// comes from the same registration that feeds the full command tree, so the
-// fast path does not create a second command or contract authority.
-func NewPublicCommandsFor(runner executor.Runner, name string) []*cobra.Command {
-	return buildCommands(publicFactories, runner, strings.TrimSpace(name))
-}
-
-func ResolvePublicCommand(name string) (string, bool) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	canonical, ok := publicIndex[name]
-	return canonical, ok
-}
-
-func buildCommands(factories []registeredFactory, runner executor.Runner, selected string) []*cobra.Command {
+func buildCommands(factories []registeredFactory, runner executor.Runner) []*cobra.Command {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 
 	out := make([]*cobra.Command, 0, len(factories))
 	for _, registered := range factories {
-		if selected != "" && registered.name != selected {
-			continue
-		}
 		handler := registered.factory()
 		command := handler.Command(runner)
+		builtName := "<nil>"
+		if command != nil {
+			builtName = command.Name()
+		}
+		if builtName != registered.name {
+			panic(fmt.Sprintf("public command factory %q built %q", registered.name, builtName))
+		}
 		out = append(out, command)
 	}
 	sort.Slice(out, func(i, j int) bool {

@@ -35,8 +35,8 @@ func TestAttachContractUsesContractFinalRegisterSeam(t *testing.T) {
 		t.Fatalf("read corecmd.go: %v", err)
 	}
 	body := string(raw)
-	if !strings.Contains(body, "contractfinal.RegisterRuntimeContractFinal(") {
-		t.Fatal("AttachContract/New must call contractfinal.RegisterRuntimeContractFinal")
+	if !strings.Contains(body, "contractfinal.RegisterOwnedRuntimeContractFinal(") {
+		t.Fatal("AttachContract/New must transfer its normalized payload through contractfinal.RegisterOwnedRuntimeContractFinal")
 	}
 	// Registration goes through contractfinal directly; no cli-root wrapper
 	// exists anymore, and the import-prefix check below forbids corecmd → cli.

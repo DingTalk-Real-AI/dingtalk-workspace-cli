@@ -19,8 +19,8 @@ import (
 	"testing"
 )
 
-// BenchmarkNewRootCommand measures building the real Cobra tree — roughly 800
-// leaves with their flags, Schema annotations and PostMount work.
+// BenchmarkNewRootCommand measures the one production Cobra tree: roughly
+// 1,800 commands with their flags, Schema annotations and PostMount work.
 //
 // It is the other half of the cold-start attribution: `dws version` never
 // decodes the Schema catalog, so whatever it spends beyond process start is
@@ -39,25 +39,14 @@ func BenchmarkNewRootCommand(b *testing.B) {
 func BenchmarkProcessRootConstruction(b *testing.B) {
 	b.Setenv("DWS_CONFIG_DIR", b.TempDir())
 	b.Setenv("DO_NOT_TRACK", "1")
-	for _, benchmark := range []struct {
-		name string
-		args []string
-	}{
-		{name: "root-help", args: []string{"dws", "--help"}},
-		{name: "calendar-list", args: []string{"dws", "calendar", "book", "list", "--dry-run", "-f", "json"}},
-		{name: "config-get", args: []string{"dws", "config", "get", "output"}},
-	} {
-		b.Run(benchmark.name, func(b *testing.B) {
-			original := os.Args
-			os.Args = benchmark.args
-			b.Cleanup(func() { os.Args = original })
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				root := newProcessRootCommandWithEngine(context.Background(), nil)
-				if root == nil {
-					b.Fatal("nil root")
-				}
-			}
-		})
+	original := os.Args
+	os.Args = []string{"dws", "--help"}
+	b.Cleanup(func() { os.Args = original })
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		root := newProcessRootCommandWithEngine(context.Background(), nil)
+		if root == nil {
+			b.Fatal("nil root")
+		}
 	}
 }

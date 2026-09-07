@@ -950,7 +950,24 @@ func newRuntimeContentScanner() safety.Scanner {
 	if !runtimeFlagEnabled(os.Getenv(runtimeContentScanEnv), true) {
 		return nil
 	}
-	return safety.NewContentScanner()
+	return &lazyRuntimeContentScanner{}
+}
+
+// lazyRuntimeContentScanner keeps regex compilation out of command-tree
+// assembly. Help, version, dry-run and local utilities never scan a backend
+// response; the first real response initializes the same safety scanner before
+// inspecting any content.
+type lazyRuntimeContentScanner struct {
+	once    sync.Once
+	scanner *safety.ContentScanner
+}
+
+func (s *lazyRuntimeContentScanner) ScanPayload(payload any) safety.Report {
+	if s == nil {
+		return safety.Report{Scanned: false}
+	}
+	s.once.Do(func() { s.scanner = safety.NewContentScanner() })
+	return s.scanner.ScanPayload(payload)
 }
 
 func (r *runtimeRunner) scanContent(content map[string]any) (safety.Report, error) {

@@ -9,8 +9,8 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/roothelp"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -20,7 +20,7 @@ import (
 // user-experience feedback. The source parameter tags submissions that
 // originated from the CLI help output so they can be told apart from
 // responses arriving through other channels.
-const feedbackFormURL = roothelp.FeedbackFormURL
+const feedbackFormURL = "https://alidocs.dingtalk.com/notable/share/form/v01eLbnj1bw1ELb0laN_dv19yqvsgs3oebp3pcjys_1qX0QQ0?source=dws-cli"
 
 func configureRootHelp(root *cobra.Command) {
 	if root == nil {
@@ -180,37 +180,96 @@ func renderCommandFlagSections(w io.Writer, cmd *cobra.Command) {
 }
 
 func renderRootHelp(root *cobra.Command) {
-	roothelp.Render(root.OutOrStdout(), RootHelpModel(root))
-}
+	w := root.OutOrStdout()
+	services := visibleMCPRootCommands(root)
+	utilities := visibleUtilityRootCommands(root)
 
-// RootHelpModel projects help from the final tree using the same visibility,
-// locale and pflag type rules as the public entrypoint. It neither resolves
-// Schema nor reads a cache; callers must not treat it as declaration authority.
-func RootHelpModel(root *cobra.Command) roothelp.Model {
-	model := roothelp.Model{Long: root.Long}
-	for _, cmd := range visibleMCPRootCommands(root) {
-		model.Services = append(model.Services, roothelp.Command{Name: cmd.Name(), Short: cmd.Short})
+	_, _ = fmt.Fprintln(w, tui.Header("Workspace CLI", "DingTalk blue-white technical console"))
+	_, _ = fmt.Fprintln(w, tui.Rule(76))
+	_, _ = fmt.Fprintln(w)
+	if len(services) == 0 {
+		_, _ = fmt.Fprintf(w, "%s %s\n\n", tui.StateMark("warning"), tui.Warning("No MCP services discovered."))
+	} else {
+		_, _ = fmt.Fprintln(w, tui.Section("Discovered MCP Services:"))
+		_, _ = fmt.Fprintln(w)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for _, service := range services {
+			_, _ = fmt.Fprintf(tw, "  %s %s\t%s\n", tui.StateMark("ok"), tui.Bold(service.Name()), tui.Dim(strings.TrimSpace(service.Short)))
+		}
+		_ = tw.Flush()
+		_, _ = fmt.Fprintln(w)
 	}
-	for _, cmd := range visibleUtilityRootCommands(root) {
-		model.Utilities = append(model.Utilities, roothelp.Command{Name: cmd.Name(), Short: commandShort(cmd)})
-	}
-	model.Flags = rootHelpFlags(root)
-	return model
-}
 
-func rootHelpFlags(root *cobra.Command) []roothelp.Flag {
-	var flags []roothelp.Flag
-	for _, flag := range visiblePersistentFlags(root) {
-		flags = append(flags, roothelp.Flag{Label: formatRootFlag(flag), Usage: flag.Usage})
+	_, _ = fmt.Fprintln(w, tui.Section("Usage:"))
+	_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.White("dws <service> [command] [flags]"))
+	if len(utilities) > 0 {
+		_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.White("dws <command> [flags]"))
 	}
-	return flags
+	_, _ = fmt.Fprintln(w)
+	if len(utilities) > 0 {
+		_, _ = fmt.Fprintln(w, tui.Section("Utility Commands:"))
+		_, _ = fmt.Fprintln(w)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for _, utility := range utilities {
+			_, _ = fmt.Fprintf(tw, "  %s %s\t%s\n", tui.Bullet(), tui.Bold(utility.Name()), tui.Dim(commandShort(utility)))
+		}
+		_ = tw.Flush()
+		_, _ = fmt.Fprintln(w)
+	}
+	renderRootGlobalFlags(root)
+	renderRootAgentQuickstart(w)
+	renderRootSafetyModel(w)
+	_, _ = fmt.Fprintf(w, "%s %s\n", tui.Key("Next"), `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
+	if long := strings.TrimSpace(root.Long); long != "" {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, tui.Dim(long))
+	}
+	_, _ = fmt.Fprintln(w)
+	renderRootFeedback(w)
 }
 
 func renderRootGlobalFlags(root *cobra.Command) {
 	if root == nil {
 		return
 	}
-	roothelp.RenderGlobalFlags(root.OutOrStdout(), rootHelpFlags(root))
+	flags := visiblePersistentFlags(root)
+	if len(flags) == 0 {
+		return
+	}
+	w := root.OutOrStdout()
+	_, _ = fmt.Fprintln(w, tui.Section("Global Flags:"))
+	_, _ = fmt.Fprintln(w)
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, flag := range flags {
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", formatRootFlag(flag), tui.Dim(strings.TrimSpace(flag.Usage)))
+	}
+	_ = tw.Flush()
+	_, _ = fmt.Fprintln(w)
+}
+
+func renderRootAgentQuickstart(w io.Writer) {
+	_, _ = fmt.Fprintln(w, tui.Section("Agent Quickstart:"))
+	_, _ = fmt.Fprintln(w, "  1. Browse a product: dws <service> --help")
+	_, _ = fmt.Fprintln(w, "  2. Inspect leaf parameters and semantics: dws <path> --help")
+	_, _ = fmt.Fprintln(w, `  3. Read the machine contract: dws schema --cli-path "<path>" --compact -f json`)
+	_, _ = fmt.Fprintln(w, "  4. Prefer structured output. Use dry-run only when the leaf explicitly supports it.")
+	_, _ = fmt.Fprintln(w, "  5. Never add --yes without explicit user confirmation.")
+	_, _ = fmt.Fprintln(w)
+}
+
+func renderRootSafetyModel(w io.Writer) {
+	_, _ = fmt.Fprintln(w, tui.Section("Safety model:"))
+	_, _ = fmt.Fprintln(w, "  effect=read|write|destructive — whether the command reads, changes, or irreversibly removes state")
+	_, _ = fmt.Fprintln(w, "  risk=low|medium|high — expected impact if the command is used incorrectly")
+	_, _ = fmt.Fprintln(w, "  confirmation=not_required|user_required — whether explicit user approval is required")
+	_, _ = fmt.Fprintln(w, "  idempotency=idempotent|retryable|non_idempotent|unknown — whether repeating the command is safe")
+	_, _ = fmt.Fprintln(w)
+}
+
+func renderRootFeedback(w io.Writer) {
+	_, _ = fmt.Fprintln(w, tui.Section("Feedback:"))
+	_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.Dim("使用体验反馈问卷（1 分钟）"))
+	_, _ = fmt.Fprintf(w, "    %s\n", tui.Cyan(feedbackFormURL))
 }
 
 func visiblePersistentFlags(root *cobra.Command) []*pflag.Flag {

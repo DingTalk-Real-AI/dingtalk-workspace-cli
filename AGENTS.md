@@ -190,9 +190,10 @@ must not call payload parsers. Framework constraint DTO normalization belongs
 to `internal/corecmd/contract`, never a dependency from corecmd back into cli.
 `internal/schemareader` owns the immutable binary identity and composes that
 backend with the same typed decoders used by the CLI. Keep repair and process
-memoization in cli. The process entry may select one product factory from argv,
-but Cobra remains the final parser and any uncertain extension or flag state
-must fall back to the complete command tree.
+memoization in cli. Every public process invocation constructs the same complete
+Cobra tree before parsing argv, including root help, version, Schema, utilities,
+business commands, and completion. Do not add argv-selected product trees,
+pre-Cobra Schema execution, or a separate root-help projection.
 The startup warning's agent-relative paths are shared through internal/skillpaths.
 Publish the live Catalog pointer only after its Meta projection is complete.
 

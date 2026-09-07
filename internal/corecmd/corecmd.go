@@ -49,6 +49,8 @@ package corecmd
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -415,6 +417,18 @@ func New(spec Spec) *cobra.Command {
 		}
 		cmd.Annotations[ConfirmFirstAnnotation] = "true"
 	}
+	// Only execution facts need to survive with RunE. Contract/help/build facts
+	// have already been validated and attached to Cobra or ContractFinal above;
+	// retaining them in every closure duplicates the full typed catalog for the
+	// lifetime of the command tree.
+	spec.Use = ""
+	spec.Short = ""
+	spec.Long = ""
+	spec.Example = ""
+	spec.Hidden = false
+	spec.OutputRollout = ""
+	spec.Contract = ContractDecl{}
+	spec.PostMount = nil
 	if spec.RunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			if err := runDeclaredPreflight(cmd, args, spec); err != nil {
@@ -699,10 +713,69 @@ func registerFlagP(cmd *cobra.Command, kind FlagKind, name, shorthand, def, usag
 		if value := strings.TrimSpace(def); value != "" {
 			defaults = strings.Split(value, ",")
 		}
-		cmd.Flags().StringSliceP(name, shorthand, defaults, usage)
+		value := &commandStringSliceValue{values: defaults}
+		cmd.Flags().VarP(value, name, shorthand, usage)
 	default:
 		cmd.Flags().StringP(name, shorthand, def, usage)
 	}
+}
+
+// commandStringSliceValue preserves pflag's StringSlice contract while
+// avoiding encoding/csv's 4 KiB writer allocation for the overwhelmingly
+// common empty default. pflag calls String during every flag registration to
+// capture DefValue, so the stock implementation otherwise pays that buffer for
+// every complete-tree build before any command executes.
+type commandStringSliceValue struct {
+	values  []string
+	changed bool
+}
+
+func (s *commandStringSliceValue) Set(raw string) error {
+	values, err := readCommandStringSlice(raw)
+	if err != nil {
+		return err
+	}
+	if !s.changed {
+		s.values = values
+	} else {
+		s.values = append(s.values, values...)
+	}
+	s.changed = true
+	return nil
+}
+
+func (*commandStringSliceValue) Type() string { return "stringSlice" }
+
+func (s *commandStringSliceValue) String() string {
+	if s == nil || len(s.values) == 0 {
+		return "[]"
+	}
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+	_ = writer.Write(s.values)
+	writer.Flush()
+	return "[" + strings.TrimSuffix(buffer.String(), "\n") + "]"
+}
+
+func (s *commandStringSliceValue) Append(value string) error {
+	s.values = append(s.values, value)
+	return nil
+}
+
+func (s *commandStringSliceValue) Replace(values []string) error {
+	s.values = values
+	return nil
+}
+
+func (s *commandStringSliceValue) GetSlice() []string {
+	return s.values
+}
+
+func readCommandStringSlice(raw string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	return csv.NewReader(strings.NewReader(raw)).Read()
 }
 
 // ValidateRequired reproduces the handwritten required semantics: plain Required
@@ -1520,8 +1593,15 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	}
 	if len(decl.Parameters) > 0 {
 		payload.Parameters = append([]contract.ParamDecl(nil), decl.Parameters...)
+		for index := range payload.Parameters {
+			payload.Parameters[index].Enum = append([]string(nil), decl.Parameters[index].Enum...)
+			if decl.Parameters[index].Required != nil {
+				required := *decl.Parameters[index].Required
+				payload.Parameters[index].Required = &required
+			}
+		}
 	}
-	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
+	contractfinal.RegisterOwnedRuntimeContractFinal(cmd, payload)
 }
 
 // schemaSafetyFromDecl copies the single command SafetySpec into the final

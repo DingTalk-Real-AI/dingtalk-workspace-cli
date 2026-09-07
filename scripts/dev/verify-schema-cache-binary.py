@@ -99,7 +99,6 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--seed", type=int, default=20260906)
-    parser.add_argument("--require-schema-fast-path", action="store_true", help="prove cache hits in a byte-identical isolated copy")
     args = parser.parse_args()
     if not hasattr(os, "wait4") or sys.platform not in ("darwin", "linux"):
         parser.error("native process accounting requires macOS or Linux")
@@ -161,31 +160,31 @@ def main():
             live, _ = invoke(binary, [*route, "-f", "json"], disabled, home)
             if json.loads(cached) != json.loads(live):
                 raise RuntimeError(f"cached/live wire differs: {route}")
-        if args.require_schema_fast_path:
-            for route in (["--version"], ["schema"], ["schema", "list"], ["schema", "calendar"],
-                          ["schema", "calendar event"], leaf,
-                          ["schema", "--cli-path", "calendar event create", "--compact"]):
-                actual, _ = invoke(binary, route, environment, home)
-                expected, _ = invoke(binary, route, disabled, home)
-                if actual != expected:
-                    raise RuntimeError(f"cache-hit bytes differ from authoritative assembly: {route}")
-            report["schema_fast_path"] = {"candidate_sha256": binary_sha, "exact_wire_parity": True}
-            # User shortcut loading owns startup diagnostics even though those
-            # shortcuts are not part of the declaration-only Schema surface.
-            shortcut_directory = Path(environment["DWS_CONFIG_DIR"]) / "shortcuts"
-            shortcut_directory.mkdir(parents=True)
-            broken_shortcut = shortcut_directory / "broken.yaml"
-            broken_shortcut.write_text("[invalid YAML")
-            try:
-                result = subprocess.run([str(binary), "schema", "--compact"],
-                                        env=environment, cwd=home, stdin=subprocess.DEVNULL,
-                                        capture_output=True, timeout=180, check=True)
-                if b"shortcut: failed to load user-defined shortcuts" not in result.stderr:
-                    raise RuntimeError("Schema entry swallowed user-shortcut startup diagnostics")
-                report["schema_fast_path"]["user_shortcut_diagnostics_preserved"] = True
-            finally:
-                broken_shortcut.unlink()
-                shortcut_directory.rmdir()
+        for route in (["--version"], ["schema"], ["schema", "list"], ["schema", "calendar"],
+                      ["schema", "calendar event"], leaf,
+                      ["schema", "--cli-path", "calendar event create", "--compact"]):
+            actual, _ = invoke(binary, route, environment, home)
+            expected, _ = invoke(binary, route, disabled, home)
+            if actual != expected:
+                raise RuntimeError(f"cache-hit bytes differ from authoritative assembly: {route}")
+        report["single_tree_schema_cache"] = {"candidate_sha256": binary_sha, "exact_wire_parity": True}
+        # Every invocation builds the normal complete tree, including user
+        # shortcut diagnostics. Schema cache changes only the handler's typed
+        # catalog source; it does not create a second argv execution path.
+        shortcut_directory = Path(environment["DWS_CONFIG_DIR"]) / "shortcuts"
+        shortcut_directory.mkdir(parents=True)
+        broken_shortcut = shortcut_directory / "broken.yaml"
+        broken_shortcut.write_text("[invalid YAML")
+        try:
+            result = subprocess.run([str(binary), "schema", "--compact"],
+                                    env=environment, cwd=home, stdin=subprocess.DEVNULL,
+                                    capture_output=True, timeout=180, check=True)
+            if b"shortcut: failed to load user-defined shortcuts" not in result.stderr:
+                raise RuntimeError("Schema command swallowed user-shortcut startup diagnostics")
+            report["single_tree_schema_cache"]["user_shortcut_diagnostics_preserved"] = True
+        finally:
+            broken_shortcut.unlink()
+            shortcut_directory.rmdir()
         # Corruption must synchronously repair from declarations, preserving output.
         with (cache / "meta.cache").open("r+b") as target:
             target.seek(208)

@@ -247,3 +247,21 @@ func TestFrameworkContractFinalDeepCopyAndSafetyConflicts(t *testing.T) {
 		t.Fatalf("cloneSlice(nil)=%v", got)
 	}
 }
+
+func TestCrossPlatformCoverageOwnedRuntimeContractFinalKeepsReadIsolation(t *testing.T) {
+	cmd := &cobra.Command{Use: "owned"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
+	RegisterOwnedRuntimeContractFinal(cmd, contract.ContractFinalPayload{
+		Parameters: []contract.ParamDecl{{Name: "mode", Enum: []string{"safe"}}},
+	})
+
+	first, ok := RuntimeContractFinal(cmd)
+	if !ok {
+		t.Fatal("owned payload was not registered")
+	}
+	first.Parameters[0].Enum[0] = "changed"
+	second, _ := RuntimeContractFinal(cmd)
+	if second.Parameters[0].Enum[0] != "safe" {
+		t.Fatalf("owned payload read aliased store: %#v", second)
+	}
+}

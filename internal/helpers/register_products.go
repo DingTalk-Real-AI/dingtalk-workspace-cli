@@ -48,9 +48,8 @@ func init() {
 	}
 	for _, p := range products {
 		p := p
-		aliases := map[string][]string{"chat": {"im"}, "report": {"log"}}[p.name]
 		RegisterPublicNamed(p.name, func() Handler {
 			return wukongHandler{name: p.name, buildFn: p.fn}
-		}, aliases...)
+		})
 	}
 }

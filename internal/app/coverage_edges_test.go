@@ -183,8 +183,16 @@ func TestCrossPlatformCoverageRunnerPureCoverage(t *testing.T) {
 		t.Fatal("disabled scanner was created")
 	}
 	t.Setenv(runtimeContentScanEnv, "true")
-	if newRuntimeContentScanner() == nil {
+	created := newRuntimeContentScanner()
+	if created == nil {
 		t.Fatal("enabled scanner missing")
+	}
+	lazy, ok := created.(*lazyRuntimeContentScanner)
+	if !ok || lazy.scanner != nil {
+		t.Fatalf("enabled scanner = %#v, want uninitialized lazy scanner", created)
+	}
+	if report := created.ScanPayload(map[string]any{"text": "benign"}); !report.Scanned || lazy.scanner == nil {
+		t.Fatalf("lazy scanner did not initialize on first payload: %#v", report)
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -40,7 +40,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
-	shortcutregistry "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -190,24 +189,6 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	var stopSignals func()
 	ctx, signalState, stopSignals = rootInstallProcessSignalContext(ctx, resultStore)
 	defer stopSignals()
-
-	if prepared, ok := prepareSchemaFastPath(os.Args, nil); ok {
-		commandPath = "schema"
-		err := prepared.Write(os.Stdout)
-		if interrupted, _ := signalState.Outcome(); interrupted != nil {
-			err = interrupted.WithCancellationDetail(err)
-		}
-		if err != nil {
-			errorMessage = telemetryErrorSummary(err)
-			exitCode = apperrors.ExitCode(err)
-			if prepared.JSONErrors {
-				_ = apperrors.PrintJSON(os.Stderr, err)
-			} else {
-				_ = apperrors.PrintHumanAt(os.Stderr, err, apperrors.VerbosityNormal)
-			}
-		}
-		return
-	}
 
 	initStart := time.Now()
 	engine := newPipelineEngine()
@@ -834,15 +815,15 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 func newProcessRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
 	registerSchemaRuntimeDelivery()
 	rootCtx, _ = output.WithResultStore(rootCtx)
-	return newRootCommandWithMode(rootCtx, engine, true, false, false, true)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false)
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
-	return newRootCommandWithMode(rootCtx, engine, loadRuntimeExtensions, declarationOnly, false, false)
+	return newRootCommandWithMode(rootCtx, engine, loadRuntimeExtensions, declarationOnly, false)
 }
 
 func newRootPresentationCommand() *cobra.Command {
-	return newRootCommandWithMode(context.Background(), nil, false, true, true, false)
+	return newRootCommandWithMode(context.Background(), nil, false, true, true)
 }
 
 func consumeCredentialInvocationFlags(root *cobra.Command, flags *GlobalFlags, invocationSeen *bool) {
@@ -972,7 +953,7 @@ func installInvocationExitHandlers(root *cobra.Command, flags *GlobalFlags, cred
 	visit(root)
 }
 
-func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool, processStartup bool) *cobra.Command {
+func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
@@ -1140,24 +1121,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	}
 
 	bindPersistentFlags(root, flags)
-	route := startupRoute{}
-	pluginsProvenAbsent := false
-	if processStartup {
-		routeStart := time.Now()
-		route = resolveStartupRoute(root, os.Args[1:])
-		RecordNestedTiming(rootCtx, "startup_route", time.Since(routeStart))
-		if route.selective {
-			surfaceStart := time.Now()
-			surface := inspectRuntimeCommandSurface()
-			RecordNestedTiming(rootCtx, "startup_surface", time.Since(surfaceStart))
-			if surface.selectiveStartup {
-				pluginsProvenAbsent = surface.pluginsProvenAbsent
-			} else {
-				route = startupRoute{}
-			}
-		}
-	}
-
 	schemaCmd := cli.NewSchemaCommand()
 	mcpCmd := cli.NewMCPCommand()
 	// Wrap the caller so every MCP tool call's shape is recorded to the local
@@ -1215,43 +1178,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// would clobber a live runtime's caller and plugin endpoints.
 		root.AddCommand(mountLegacyPublicCommands(runner, loadRuntimeExtensions)...)
 	} else {
-		// Utilities can share helper infrastructure even when argv allows the
-		// product tree itself to stay unbuilt (for example event +listen-im).
-		runtimeInitStart := time.Now()
-		initializeLegacyPublicRuntime(patCaller)
-		RecordNestedTiming(rootCtx, "runtime_init", time.Since(runtimeInitStart))
-		selectedProduct := ""
-		mountProducts := true
-		if route.selective {
-			matchedUtility := route.topLevel == ""
-			for _, command := range root.Commands() {
-				if commandMatchesTopLevel(command, route.topLevel) {
-					matchedUtility = true
-					break
-				}
-			}
-			selectedPublicProduct, hasPublicProduct := helpers.ResolvePublicCommand(route.topLevel)
-			knownProduct := hasPublicProduct || shortcutregistry.HasService(route.topLevel)
-			switch {
-			case knownProduct:
-				selectedProduct = route.topLevel
-				if hasPublicProduct {
-					selectedProduct = selectedPublicProduct
-				}
-				mountProducts = true
-			case matchedUtility:
-				mountProducts = false
-			default:
-				// Unknown commands need the complete tree for Cobra aliases,
-				// suggestions, extension conflicts and existing diagnostics.
-				mountProducts = true
-			}
-		}
-		if mountProducts {
-			productStart := time.Now()
-			root.AddCommand(mountLegacyPublicCommandsFor(runner, loadRuntimeExtensions, selectedProduct)...)
-			RecordNestedTiming(rootCtx, "product_assemble", time.Since(productStart))
-		}
+		root.AddCommand(newLegacyPublicCommands(runner, patCaller, loadRuntimeExtensions)...)
 	}
 
 	// PAT authorization commands (open-source core)
@@ -1264,7 +1191,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			deduplicateCommands(root)
 		}
 	}
-	if loadRuntimeExtensions && !pluginsProvenAbsent {
+	if loadRuntimeExtensions {
 		// Resolve plugins only after the complete distribution command tree is
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
