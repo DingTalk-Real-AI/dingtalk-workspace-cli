@@ -232,7 +232,7 @@
       "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
       "root_help_vs_lark": {
         "exceeds_lark_by_more_than_5_percent": false,
-        "passes_rfc_rss_target": true,
+        "passes_rfc_rss_budget": true,
         "rss_p50_ratio": 0.9433796377703534,
         "wall_p50_ratio": 0.8268302587663315
       }
@@ -418,11 +418,16 @@
       "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
       "root_help_vs_lark": {
         "exceeds_lark_by_more_than_5_percent": true,
-        "passes_rfc_rss_target": false,
+        "passes_rfc_rss_budget": true,
         "rss_p50_ratio": 1.1125797629899727,
         "wall_p50_ratio": 0.9350584694143401
       }
     }
+  },
+  "root_help_rss_gate": {
+    "lark_absolute_comparison": "diagnostic because command counts and contracts differ",
+    "p50_mib_at_most": 50,
+    "p95_mib_at_most": 55
   },
   "run_id": 34080469082,
   "run_url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082",

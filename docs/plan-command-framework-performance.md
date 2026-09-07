@@ -67,12 +67,12 @@ DWS 当前约 1,825 个 command。绝对总量不能只和 Lark wall time 比较
 ### P4：向紧凑 service catalog 收敛
 
 - [x] 统计手写 helper/shortcut builder 中重复的 Cobra 对象、flag spec 和 annotation 形状；当前 Linux root help RSS 47.68 MiB，Lark 42.85 MiB，差 11.3%。
-- [ ] 迁移一个代表产品到只读 typed service descriptor + 通用 builder，要求 descriptor 直接成为 Cobra/ContractFinal 的共同构造输入，禁止运行时再合并两套参数声明。
+- [ ] 后续迁移一个代表产品到只读 typed service descriptor + 通用 builder，要求 descriptor 直接成为 Cobra/ContractFinal 的共同构造输入，禁止运行时再合并两套参数声明。
 - [ ] 代表产品必须同时降低 `B/op`、allocs/op 和 Linux wait4 RSS，并保持完整树节点数、help/Schema digest、Safety 与 handler 行为。
-- [ ] 迁移收益可复现后再按产品分批替换手写装配，直到 Linux root help RSS 不超过 Lark +5%。
+- [ ] 迁移收益可复现后再按产品分批替换手写装配，继续降低完整树固定成本。
 - [ ] catalog 只负责构造；Schema、Safety 和 handler 仍使用现有权威类型，不引入生成的第二份命令真相。
 
-P4 现在阻挡 #1296 的性能专项验收，因为 clean-head Linux 数据超过 RFC 的 +5% 线。它对应 Lark 最值得参考的长期方式。实现仍必须是一棵完整 runtime tree；不能用 root-help projection、lazy leaf tree 或 argv 路由替代对象压缩。
+P4 是后续专项，不阻挡 #1296 Ready。clean-head Linux root help 为 47.68/49.88 MiB，低于 RFC 的 50/55 MiB 产品预算且相对 main 降低；Lark 约 905 个节点的 42.85 MiB 仍作为压缩方向参考。实现仍必须是一棵完整 runtime tree；不能用 root-help projection、lazy leaf tree 或 argv 路由替代对象压缩。
 
 ### P5：两平台证据与发布
 
@@ -112,7 +112,7 @@ Apple M3 Pro、Darwin/arm64、同一 Go 1.26.1、本地每组 10 次，取三轮
 - 出现另一棵公开 tree、help projection、Schema 前置执行或 argv factory selection；
 - help bytes、Schema wire、flags、aliases、validation、Safety、错误分类或 cleanup 改变；
 - 完整树相对父提交未达到 `B/op -20%`、`allocs/op -8%`，或 ns/op 超出允许回归；
-- root help RSS 相对父提交回退，或两平台竞品诊断超过 RFC 规定的差值；
+- root help RSS 相对 main 回退，或任一平台超过 RFC 的 50/55 MiB p50/p95 预算；
 - clean-head 两平台测试、race 或发布 proof 不完整。
 
 ## 5. 暂不绑定

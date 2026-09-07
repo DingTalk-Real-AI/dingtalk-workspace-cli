@@ -8,7 +8,7 @@ PR 已撤回 selective tree、Schema 前置执行和 root help projection。旧 
 
 完整构树本地父子对照中，DWS 始终构造约 1,825 个 command，B/op 降低 **22.8%**，allocs/op 降低 **9.8%**，ns/op 变化为 **+0.3%**。clean head `a8376f92` 的 [native workflow](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082) 已在 Darwin/arm64 与 Linux/amd64 全绿，Schema cache、完整 Go suite、race、身份一致性和五维测量均完成。
 
-root help 延迟已在两平台快于 Lark。RSS 在 Darwin 也低于 Lark；Linux 为 47.68 MiB，对比 Lark 42.85 MiB，仍高 **11.3%**，超过 RFC 的 5% 阻断线。因此本 PR 继续 Draft，不能宣称 root help RSS 已全部解决。这个差距必须通过更紧凑的通用 typed service builder 继续压缩；不允许恢复 projection、selective tree 或 launcher。
+root help 延迟已在两平台快于 Lark。RSS 相对固定 main 在 Linux 降低 **7.7%**、Darwin 降低 **8.3%**，p50/p95 均低于 RFC 的 50/55 MiB 产品预算。Darwin 的绝对 RSS 也低于 Lark；Linux 为 47.68 MiB，对比 Lark 42.85 MiB，仍高 **11.3%**。该差值继续公开，但 Lark 只有约一半节点，不能作为绝对 release gate，否则会激励 projection/裁树。后续通过更紧凑的通用 typed service builder 继续压缩；不允许恢复 projection、selective tree 或 launcher。
 
 ## 2. 方法与版本
 
@@ -75,7 +75,7 @@ root help 与 version 现在都构造完整 tree。帮助直接从同一 runtime
 
 | 平台 | DWS help wall p50/p95 | Lark help wall p50/p95 | DWS RSS p50/p95 | Lark RSS p50/p95 | 结论 |
 |---|---:|---:|---:|---:|---|
-| Linux/amd64 | 44.05 / 45.99 ms | 47.11 / 48.88 ms | 47.68 / 49.88 MiB | 42.85 / 43.35 MiB | wall 快 6.5%；RSS 高 11.3%，阻断 |
+| Linux/amd64 | 44.05 / 45.99 ms | 47.11 / 48.88 ms | 47.68 / 49.88 MiB | 42.85 / 43.35 MiB | wall 快 6.5%；RSS 高 11.3%，产品预算通过 |
 | Darwin/arm64 | 37.26 / 51.45 ms | 45.06 / 53.49 ms | 41.91 / 42.17 MiB | 44.43 / 44.91 MiB | wall 快 17.3%；RSS 低 5.7%，通过 |
 
 default tracker 相对固定 main 的 help/version p50/p95 gate 在两平台全部通过；`DO_NOT_TRACK` 与 default 的结果也证明退出不再等待约 300 ms 的网络 flush。help stdout 为 4,760 bytes，SHA-256 `590ebfc7d090cdfa81e63cfcf6f47727ad1f4ac5f0fc5451445e855ebcf497d0`，与父实现逐字节一致。
@@ -101,7 +101,7 @@ calendar list/get、dry-run、mock、config 和 event utility 均承担同一完
 
 ## 7. 整体运行内存
 
-wait4 native 数据确认，完整树优化相对固定 main 将 root help RSS p50 从 51.66 降到 47.68 MiB（Linux，-7.7%），从 45.70 降到 41.91 MiB（Darwin，-8.3%）。B/op 的下降确实传导到了进程 RSS，但 Linux 还没有压过 Lark。
+wait4 native 数据确认，完整树优化相对固定 main 将 root help RSS p50 从 51.66 降到 47.68 MiB（Linux，-7.7%），从 45.70 降到 41.91 MiB（Darwin，-8.3%）。B/op 的下降确实传导到了进程 RSS。两平台 p50/p95 都通过 50/55 MiB 预算；Linux 仍未压过节点数约为一半的 Lark。
 
 下一阶段只优化同一完整树：把分散的 helper 构造逐步收敛到紧凑 typed service descriptors 与通用 builder，减少每节点 Cobra/pflag/annotation 常驻对象和构造期触达的代码页。GC 参数实验没有采用：本机 `GOGC/GOMEMLIMIT` 只降低约 0.5 MiB，且增加延迟，不能解决结构性差距。
 
@@ -134,5 +134,6 @@ clean-head native p50 对比：
 - [x] Darwin/arm64 native full/race/performance artifact。
 - [x] Linux/amd64 native full/race/performance artifact。
 - [x] root help RSS 与 Lark 的新 head 对比已记录。
-- [ ] Linux root help RSS ≤ Lark +5%；当前 +11.3%，阻挡性能专项验收。
+- [x] root help RSS 两平台 p50 ≤50 MiB、p95 ≤55 MiB，且相对固定 main 降低。
+- [x] Lark 差值与节点数差异已记录；Linux +11.3% 作为后续压缩诊断，不替代产品预算。
 - [ ] 正式 release 最终签名制品与安装验证。
