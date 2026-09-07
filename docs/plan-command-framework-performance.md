@@ -226,6 +226,12 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 因此真正的决策点是信任模型：`equalCommandMeta` 的别名/主行一致性校验是**写入方正确性**检查，却在每次读取时重跑。cache 内容已由哈希保证完整性，哈希并不能发现写入方产生了不一致的别名行——这项检查抓的是写入方 bug，不是损坏。要压缩读取成本，必须决定把它移到写入时（写入方自校验），读取时不再重验；否则每次读取都得付这笔全量解码成本。这个决定不该由性能优化单方面做出。
 
+但 leaf-help 存在一条**不需要上述决策**的路径。生产 leaf help 走 `help_affordance.go:29` 的 `RenderHelpAffordances`，它通过 `ResolveMeta(cliPath)` 取三样东西：`meta.Selection`（渲染 selection guidance）、`meta.Safety`（渲染 Safety 行）、`meta.Identity.ProductID`（服务 Help 页引用）。这三样 `ContractFinal` 全都携带——`AttachContract` 在构树时已把 Identity / Safety / Selection 挂到 Cobra 命令上，`CollectIdentitySpecs` 正是从 `ContractFinal.Identity` 读取的。
+
+因此 `RenderHelpAffordances` 可以直接从已挂载的 `ContractFinal` 读取，完全不触发 Schema cache Meta 读取。这条路不改 cache 读取路径，因此不涉及信任模型决策；而且 `ContractFinal` 是上游声明权威、Schema Meta 是它的派生物，读的是更权威的来源而非更弱的来源。预期收益是省掉 leaf-help 的整笔 Meta 读取（linux 约 4.5 ms），足以关闭 linux leaf-help 的 4.29 ms 差距。
+
+落地前必须验证的前提：Schema Meta 的 `CommandMeta` 由 `ContractFinal` 派生，但派生过程可能对 `Selection` 施加了 `Normalized()` 等规范化。切换读取来源前必须证明渲染输出逐字节一致，否则 help 文本会漂移。相关门禁是 help stdout 的 SHA-256 一致性检查。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |
