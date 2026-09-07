@@ -232,6 +232,10 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 落地前必须验证的前提：Schema Meta 的 `CommandMeta` 由 `ContractFinal` 派生，但派生过程可能对 `Selection` 施加了 `Normalized()` 等规范化。切换读取来源前必须证明渲染输出逐字节一致，否则 help 文本会漂移。相关门禁是 help stdout 的 SHA-256 一致性检查。
 
+**该前提已被证否，leaf-help 路径予以否决。** `CommandMetaFromTool`（`meta.go:89`）对 `Selection` 确实是原样搬运，不做变换；但上游的 `ToolSpec.Selection` 本身不等于 `ContractFinal.Selection`——`schema_contract_model.go:33` 的 `conditionalSelectionProvenanceFields` 表明 `use_when` / `avoid_when` / `prerequisites` / `tips` / `workflow_refs` / `examples` 六个字段的 provenance 是**按优先级逐字段条件裁决**的，不恒为 `contract_final`。因此对 provenance 落到其他来源的工具，直接读 `ContractFinal` 会渲染出与当前不同的 help 文本。`Safety` 四个字段仍是原样发布、可以直读，但 `RenderHelpAffordances` 一次 `ResolveMeta` 同时取 Selection / Safety / Identity.ProductID，只改 Safety 仍会触发整笔 Meta 读取，省不下成本——所以这条路径是全有或全无，不能分步落地。
+
+结论：关闭剩余差距只剩一条路，即 schema / leaf-help 共用的 Meta 惰性解码，而它需要先决定 `equalCommandMeta` 的别名/主行一致性校验是否移到 cache 写入时。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |
