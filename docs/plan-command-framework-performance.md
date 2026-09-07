@@ -250,7 +250,7 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 2. **写入方自校验**：把 `validMetaAliasExpansion`（`meta.go:154`）移到 cache 构建路径，在写入前用内存中的权威 registry 校验别名/主行一致性。写入方持有完整数据，校验比读取时的序列化往返更便宜。
 3. **读取方惰性化**：`validateAndConvertMeta`（`cache_codec.go:459`）改为只解码 Identity 与 locator，保留原始条目；`CommandMetaByPath` 从直接访问的 map 字段改为访问器并按需解码记忆化。需更新的生产消费方：`command_meta.go:161,170`、`cache_codec.go:395`、`schema_cache_delivery.go:603`（该处 `DeepEqual` 属校验路径，强制完整解码可接受），以及 `cache_codec_test.go:49`、`cache_real_test.go:35`、`cache_file_benchmark_test.go:82` 三处测试。
 
-预期收益：leaf-help 省掉整笔 Selection 解码，schema  additionally 省掉产品分片中未命中工具的 Selection 解码。落地后必须重跑 `BenchmarkRealSchemaFileHit` 的两个阶段与 CI 双平台五维测量，并确认 help stdout 的 SHA-256 一致性门禁不变。
+预期收益：leaf-help 省掉整笔 Selection 解码，schema 还额外省掉产品分片中未命中工具的 Selection 解码。落地后必须重跑 `BenchmarkRealSchemaFileHit` 的两个阶段与 CI 双平台五维测量，并确认 help stdout 的 SHA-256 一致性门禁不变。
 
 本会话预算不足以完成 DTO 重构（涉及 protobuf 重新生成、写入与读取双路径、全部相关测试与 policy 门禁），因此未启动实现，以免仓库停在不可编译状态。
 
