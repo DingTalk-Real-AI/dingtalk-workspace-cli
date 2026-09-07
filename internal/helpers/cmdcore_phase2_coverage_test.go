@@ -128,7 +128,8 @@ func TestCrossPlatformCoverageDeclareLeafMetadataConstraints(t *testing.T) {
 	build := func() (*cobra.Command, *bool) {
 		ran := false
 		cmd := &cobra.Command{
-			Use: "lookup",
+			Use:   "lookup",
+			Short: "按稳定标识或查询词查找对象",
 			RunE: func(*cobra.Command, []string) error {
 				ran = true
 				return nil
@@ -158,8 +159,8 @@ func TestCrossPlatformCoverageDeclareLeafMetadataConstraints(t *testing.T) {
 	if *missingRan {
 		t.Fatal("inner RunE must not run when the declared constraint fails")
 	}
-	if !strings.Contains(missing.Long, "参数约束") {
-		t.Fatalf("Long help does not render declared constraints: %q", missing.Long)
+	if !strings.HasPrefix(missing.Long, "按稳定标识或查询词查找对象\n\n参数约束：") {
+		t.Fatalf("Long help does not preserve Short before declared constraints: %q", missing.Long)
 	}
 
 	valid, validRan := build()

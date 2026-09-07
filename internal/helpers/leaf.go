@@ -248,9 +248,7 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	corecmd.ValidateConstraintDecls(cmd.Use, constraintFlags, spec.Constraints)
 	corecmd.AttachContract(cmd, spec.Safety, spec.Contract, cmd.Short, cmd.Long)
 	corecmd.AnnotateConstraints(cmd, spec.Constraints)
-	if help := corecmd.ConstraintHelp(spec.Constraints); help != "" {
-		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
-	}
+	corecmd.AppendConstraintHelp(cmd, spec.Constraints)
 	if spec.OutputRollout != "" {
 		output.SetCommandRollout(cmd, spec.OutputRollout)
 	}

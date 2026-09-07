@@ -399,9 +399,7 @@ func New(spec Spec) *cobra.Command {
 	ValidateConstraintDecls(spec.Use, spec.Flags, spec.Constraints)
 	embedContractIntoSchema(cmd, spec)
 	AnnotateConstraints(cmd, spec.Constraints)
-	if help := ConstraintHelp(spec.Constraints); help != "" {
-		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
-	}
+	AppendConstraintHelp(cmd, spec.Constraints)
 	if spec.PostMount != nil {
 		spec.PostMount(cmd)
 	}
@@ -1630,6 +1628,20 @@ func ConstraintHelp(constraints []Constraint) string {
 		lines = append(lines, "  - "+text)
 	}
 	return "\n\n参数约束：\n" + strings.Join(lines, "\n")
+}
+
+// AppendConstraintHelp preserves Cobra's Short fallback when a command has no
+// authored Long description, then appends the generated constraint section.
+func AppendConstraintHelp(cmd *cobra.Command, constraints []Constraint) {
+	help := ConstraintHelp(constraints)
+	if help == "" {
+		return
+	}
+	base := cmd.Long
+	if strings.TrimSpace(base) == "" {
+		base = cmd.Short
+	}
+	cmd.Long = strings.TrimRight(base, "\n") + help
 }
 
 func dashed(flags []string) string {
