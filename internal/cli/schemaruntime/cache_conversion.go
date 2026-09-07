@@ -11,7 +11,6 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"google.golang.org/protobuf/proto"
 )
 
 func registryFieldsToProto(in SchemaRegistry) *schemacachepb.RegistryFields {
@@ -27,18 +26,14 @@ func registryFromProductProto(in *schemacachepb.SchemaProductCache) SchemaRegist
 	}
 }
 
-func commandLookupToProto(in map[string]CommandMeta) (*schemacachepb.CommandMetaEntryList, error) {
+func commandLookupToProto(in map[string]CommandMeta) *schemacachepb.CommandMetaEntryList {
 	keys := sortedMapKeys(in)
 	out := &schemacachepb.CommandMetaEntryList{Items: make([]*schemacachepb.CommandMetaEntry, len(keys))}
 	for i, key := range keys {
-		entry, err := commandMetaToProto(in[key])
-		if err != nil {
-			return nil, fmt.Errorf("command %q: %w", key, err)
-		}
-		entry.LookupPath = key
-		out.Items[i] = entry
+		out.Items[i] = commandMetaToProto(in[key])
+		out.Items[i].LookupPath = key
 	}
-	return out, nil
+	return out
 }
 
 const commandMetaSelectionListCount = 5
@@ -61,38 +56,20 @@ func selectionProtoLists(in *schemacachepb.CommandSelectionPayload) [commandMeta
 	return [commandMetaSelectionListCount][]string{in.UseWhen, in.AvoidWhen, in.Prerequisites, in.Tips, in.Examples}
 }
 
-func commandMetaToProto(in CommandMeta) (*schemacachepb.CommandMetaEntry, error) {
-	selection := &schemacachepb.CommandSelectionPayload{
-		AgentSummary:  in.Selection.AgentSummary,
-		UseWhen:       slices.Clone(in.Selection.UseWhen),
-		AvoidWhen:     slices.Clone(in.Selection.AvoidWhen),
-		Prerequisites: slices.Clone(in.Selection.Prerequisites),
-		Tips:          slices.Clone(in.Selection.Tips),
-		Examples:      slices.Clone(in.Selection.Examples),
-	}
-	for bit, list := range selectionProtoLists(selection) {
-		if list != nil {
-			selection.ListsPresent |= 1 << bit
-		}
-	}
-	encoded, err := proto.Marshal(selection)
-	if err != nil {
-		return nil, fmt.Errorf("encode command selection: %w", err)
-	}
+func commandMetaToProto(in CommandMeta) *schemacachepb.CommandMetaEntry {
 	out := &schemacachepb.CommandMetaEntry{
 		CliPath: in.Identity.CLIPath, Canonical: in.Identity.Canonical, ProductId: in.Identity.ProductID, Title: in.Identity.Title,
-		Effect: in.Safety.Effect, Risk: in.Safety.Risk, Confirmation: in.Safety.Confirmation, Idempotency: in.Safety.Idempotency,
-		Aliases: slices.Clone(in.Identity.Aliases), Selection: encoded,
+		Aliases: slices.Clone(in.Identity.Aliases),
 	}
 	if in.Identity.Aliases != nil {
 		out.ListsPresent = aliasesPresentBit
 	}
-	return out, nil
+	return out
 }
 
 // commandIdentityFromProto decodes only the Identity half of a row and never
-// touches the serialized selection payload, so a cache read can validate every
-// row without decoding Selection strings for all of them.
+// touches Safety or Selection, so a cache read can validate every row without
+// decoding those strings for all of them.
 func commandIdentityFromProto(in *schemacachepb.CommandMetaEntry) CommandIdentity {
 	identity := CommandIdentity{
 		CLIPath: in.CliPath, Canonical: in.Canonical, ProductID: in.ProductId, Title: in.Title,
@@ -113,31 +90,57 @@ func validateCommandMetaListPresence(in *schemacachepb.CommandMetaEntry) error {
 	return nil
 }
 
-// Copy into runtime-owned slices; no generated pointer or backing slice escapes.
-// An explicit set bit restores present-empty even when protobuf omits its values.
+// commandMetaFromProto decodes the Identity-only Meta index row. Safety and
+// Selection come from the command payload file via commandPayloadFromProto.
 func commandMetaFromProto(in *schemacachepb.CommandMetaEntry) CommandMeta {
-	meta := CommandMeta{
-		Identity: commandIdentityFromProto(in),
-		Safety:   CommandSafety{Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency},
+	return CommandMeta{Identity: commandIdentityFromProto(in)}
+}
+
+// commandPayloadToProto carries the Safety and Selection half of a command into
+// its product's payload shard, keeping them out of the Meta index.
+func commandPayloadToProto(path string, in CommandMeta) *schemacachepb.CommandPayloadEntry {
+	selection := &schemacachepb.CommandSelectionPayload{
+		AgentSummary:  in.Selection.AgentSummary,
+		UseWhen:       slices.Clone(in.Selection.UseWhen),
+		AvoidWhen:     slices.Clone(in.Selection.AvoidWhen),
+		Prerequisites: slices.Clone(in.Selection.Prerequisites),
+		Tips:          slices.Clone(in.Selection.Tips),
+		Examples:      slices.Clone(in.Selection.Examples),
 	}
-	if len(in.Selection) == 0 {
-		return meta
+	for bit, list := range selectionProtoLists(selection) {
+		if list != nil {
+			selection.ListsPresent |= 1 << bit
+		}
 	}
-	var payload schemacachepb.CommandSelectionPayload
-	if err := proto.Unmarshal(in.Selection, &payload); err != nil {
-		return meta
+	return &schemacachepb.CommandPayloadEntry{
+		LookupPath:   path,
+		Effect:       in.Safety.Effect,
+		Risk:         in.Safety.Risk,
+		Confirmation: in.Safety.Confirmation,
+		Idempotency:  in.Safety.Idempotency,
+		Selection:    selection,
+	}
+}
+
+// commandPayloadFromProto restores the Safety and Selection half of a command.
+func commandPayloadFromProto(in *schemacachepb.CommandPayloadEntry) (CommandSafety, CommandSelection) {
+	safety := CommandSafety{
+		Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency,
+	}
+	selection := in.GetSelection()
+	if selection == nil {
+		return safety, CommandSelection{}
 	}
 	var lists [commandMetaSelectionListCount][]string
-	for bit, values := range selectionProtoLists(&payload) {
-		if payload.ListsPresent&(1<<bit) != 0 {
+	for bit, values := range selectionProtoLists(selection) {
+		if selection.ListsPresent&(1<<bit) != 0 {
 			lists[bit] = cloneList(values)
 		}
 	}
-	meta.Selection = CommandSelection{
-		AgentSummary: payload.AgentSummary, UseWhen: lists[0], AvoidWhen: lists[1],
+	return safety, CommandSelection{
+		AgentSummary: selection.AgentSummary, UseWhen: lists[0], AvoidWhen: lists[1],
 		Prerequisites: lists[2], Tips: lists[3], Examples: lists[4],
 	}
-	return meta
 }
 
 func overviewToProto(in SchemaOverview) *schemacachepb.SchemaOverviewCache {
@@ -224,6 +227,28 @@ func descriptorsFromProto(in *schemacachepb.ProductDescriptorList) []ProductDesc
 	out := make([]ProductDescriptor, len(in.Items))
 	for i, descriptor := range in.Items {
 		out[i] = ProductDescriptor{ProductID: descriptor.GetProductId(), Offset: descriptor.GetOffset(), Length: descriptor.GetLength()}
+		copy(out[i].SHA256[:], descriptor.GetSha256())
+	}
+	return out
+}
+
+func payloadDescriptorsToProto(in []CommandPayloadDescriptor) *schemacachepb.CommandPayloadDescriptorList {
+	out := &schemacachepb.CommandPayloadDescriptorList{Items: make([]*schemacachepb.CommandPayloadDescriptor, len(in))}
+	for i, descriptor := range in {
+		out.Items[i] = &schemacachepb.CommandPayloadDescriptor{
+			ProductId: descriptor.ProductID, Offset: descriptor.Offset, Length: descriptor.Length, Sha256: cloneBytes(descriptor.SHA256[:]),
+		}
+	}
+	return out
+}
+
+func payloadDescriptorsFromProto(in *schemacachepb.CommandPayloadDescriptorList) []CommandPayloadDescriptor {
+	if in == nil {
+		return nil
+	}
+	out := make([]CommandPayloadDescriptor, len(in.Items))
+	for i, descriptor := range in.Items {
+		out[i] = CommandPayloadDescriptor{ProductID: descriptor.GetProductId(), Offset: descriptor.GetOffset(), Length: descriptor.GetLength()}
 		copy(out[i].SHA256[:], descriptor.GetSha256())
 	}
 	return out

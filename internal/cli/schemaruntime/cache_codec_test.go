@@ -46,7 +46,8 @@ func TestSchemaCacheAllFieldsExactRoundTrip(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(wantOverview, gotOverview) {
 		t.Fatalf("overview wire mismatch: %v\nwant: %#v\n got: %#v", err, wantOverview, gotOverview)
 	}
-	if !reflect.DeepEqual(BuildCommandMetaLookup(registry), meta.CommandMetaByPath) {
+	meta.MaterializeCommandMeta()
+	if !commandIdentitySubsetEqual(meta.CommandMetaByPath, BuildCommandMetaLookup(registry)) {
 		t.Fatal("CommandMeta lookup round trip mismatch")
 	}
 	if got := decoded.Products[0].Tools[0].Parameters[0]; got.Default != nil || got.InterfaceDefault == nil || len(got.InterfaceDefault) != 0 || string(got.Example) != "null" {

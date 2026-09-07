@@ -8,7 +8,8 @@ enum DTOVersion {
   DTO_VERSION_UNSPECIFIED = 0;
   DTO_VERSION_V1 = 1; // Recognized only so readers can explicitly reject retired DTOs.
   DTO_VERSION_V2 = 2; // Recognized only so readers can explicitly reject retired DTOs.
-  DTO_VERSION_V3 = 3;
+  DTO_VERSION_V3 = 3; // Recognized only so readers can explicitly reject retired DTOs.
+  DTO_VERSION_V4 = 4;
 }
 
 enum OverviewSummaryKind {
@@ -56,6 +57,9 @@ message SchemaMetaCache {
   bytes registry_data_sha256 = 8;
   bytes source_sha256 = 9;
   bytes surface_sha256 = 10;
+  CommandPayloadDescriptorList command_payload_descriptors = 11;
+  uint64 payload_data_length = 12;
+  bytes payload_sha256 = 13;
 }
 
 message SchemaProductCache {
@@ -72,10 +76,11 @@ message RegistryFields {
 }
 
 message CommandMetaEntryList { repeated CommandMetaEntry items = 1; }
-// DTO v3 stores Identity and Safety inline and serializes Selection separately,
-// so a reader validating every row does not decode Selection strings for all of
-// them. The retired v1 nested meta field and the v2 inline Selection fields are
-// reserved, never reinterpreted.
+// DTO v4 splits the Meta into an Identity-only index and a separate per-product
+// command payload file, so validating every row no longer decodes Safety or
+// Selection, and a single-command read pulls only its own product's payload.
+// The payload file is deliberately independent of the registry so a corrupted
+// registry cannot affect ResolveMeta. Retired fields stay reserved.
 message CommandSelectionPayload {
   string agent_summary = 1;
   repeated string use_when = 2;
@@ -95,19 +100,36 @@ message CommandMetaEntry {
   string canonical = 4;
   string product_id = 5;
   string title = 6;
-  string effect = 7;
-  string risk = 8;
-  string confirmation = 9;
-  string idempotency = 10;
-  reserved 11;
-  reserved "agent_summary";
+  reserved 7, 8, 9, 10, 11, 19;
+  reserved "effect", "risk", "confirmation", "idempotency", "agent_summary", "selection";
   repeated string aliases = 12;
   reserved 13, 14, 15, 16, 17;
   reserved "use_when", "avoid_when", "prerequisites", "tips", "examples";
   // Bit 0 marks aliases present-empty versus nil. Other bits fail.
   uint32 lists_present = 18;
-  bytes selection = 19;
 }
+// One command's Safety and Selection, held in its product's payload shard.
+message CommandPayloadEntry {
+  string lookup_path = 1;
+  string effect = 2;
+  string risk = 3;
+  string confirmation = 4;
+  string idempotency = 5;
+  CommandSelectionPayload selection = 6;
+}
+message CommandPayloadEntryList { repeated CommandPayloadEntry items = 1; }
+message SchemaCommandPayloadCache {
+  DTOVersion dto_version = 1;
+  string product_id = 2;
+  CommandPayloadEntryList entries = 3;
+}
+message CommandPayloadDescriptor {
+  string product_id = 1;
+  uint64 offset = 2;
+  uint64 length = 3;
+  bytes sha256 = 4;
+}
+message CommandPayloadDescriptorList { repeated CommandPayloadDescriptor items = 1; }
 
 message SchemaOverviewCache {
   RegistryFields registry = 1;

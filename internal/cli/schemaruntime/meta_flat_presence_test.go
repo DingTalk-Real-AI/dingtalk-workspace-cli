@@ -35,10 +35,7 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 			}
 			states /= 3
 		}
-		encodedRow, encodeErr := commandMetaToProto(want)
-		if encodeErr != nil {
-			t.Fatal(encodeErr)
-		}
+		encodedRow := commandMetaToProto(want)
 		if encodedRow.ListsPresent != wantMask&aliasesPresentBit {
 			t.Fatalf("combination %d changed presence bit ordering", combination)
 		}
@@ -53,25 +50,34 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 		if err := validateCommandMetaListPresence(&row); err != nil {
 			t.Fatalf("combination %d: %v", combination, err)
 		}
-		got := commandMetaFromProto(&row)
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("combination %d lost metadata or list presence", combination)
+		gotIdentity := commandMetaFromProto(&row)
+		if !reflect.DeepEqual(gotIdentity.Identity, want.Identity) {
+			t.Fatalf("combination %d lost identity or alias presence", combination)
+		}
+		payloadEntry := commandPayloadToProto("sample group run", want)
+		payloadBytes, err := proto.Marshal(payloadEntry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var decodedPayload schemacachepb.CommandPayloadEntry
+		if err := proto.Unmarshal(payloadBytes, &decodedPayload); err != nil {
+			t.Fatal(err)
+		}
+		gotSafety, gotSelection := commandPayloadFromProto(&decodedPayload)
+		if !reflect.DeepEqual(gotSafety, want.Safety) || !reflect.DeepEqual(gotSelection, want.Selection) {
+			t.Fatalf("combination %d lost safety or selection presence", combination)
 		}
 		if len(row.Aliases) > 0 {
 			row.Aliases[0] = "mutated protobuf"
 		}
-		var payload schemacachepb.CommandSelectionPayload
-		if len(row.Selection) != 0 {
-			if err := proto.Unmarshal(row.Selection, &payload); err != nil {
-				t.Fatal(err)
-			}
-			for _, values := range selectionProtoLists(&payload) {
-				if len(values) > 0 {
-					values[0] = "mutated protobuf"
-				}
+		for _, values := range selectionProtoLists(decodedPayload.GetSelection()) {
+			if len(values) > 0 {
+				values[0] = "mutated protobuf"
 			}
 		}
-		if !reflect.DeepEqual(got, want) {
+		if !reflect.DeepEqual(gotIdentity.Identity, want.Identity) ||
+			!reflect.DeepEqual(gotSafety, want.Safety) ||
+			!reflect.DeepEqual(gotSelection, want.Selection) {
 			t.Fatalf("combination %d retained protobuf backing slices", combination)
 		}
 	}

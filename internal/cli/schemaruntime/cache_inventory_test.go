@@ -57,7 +57,7 @@ func TestSchemaCacheRuntimeFieldInventory(t *testing.T) {
 }
 
 func TestSchemaCacheDescriptorContract(t *testing.T) {
-	const expectedProtoSHA256 = "e52681aa593764b70a92bb5abd4e5eb9789ff217ff5def8174ba5bc67fa0df4e"
+	const expectedProtoSHA256 = "15341fc94d7759eea30a63313130cccc1b73376116135cf5cce1df33cef043b0"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {
 		t.Fatal(err)
@@ -70,13 +70,13 @@ func TestSchemaCacheDescriptorContract(t *testing.T) {
 		t.Fatal("private DTO package version drift")
 	}
 	entry := (&schemacachepb.CommandMetaEntry{}).ProtoReflect().Descriptor()
-	assertFieldNumbers(t, entry, []protoreflect.FieldNumber{1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 19})
-	for _, number := range []protoreflect.FieldNumber{2, 11, 13, 14, 15, 16, 17} {
+	assertFieldNumbers(t, entry, []protoreflect.FieldNumber{1, 3, 4, 5, 6, 12, 18})
+	for _, number := range []protoreflect.FieldNumber{2, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 19} {
 		if !entry.ReservedRanges().Has(number) {
 			t.Fatalf("retired field %d must stay reserved", number)
 		}
 	}
-	for _, name := range []protoreflect.Name{"meta", "agent_summary", "use_when", "avoid_when", "prerequisites", "tips", "examples"} {
+	for _, name := range []protoreflect.Name{"meta", "effect", "risk", "confirmation", "idempotency", "agent_summary", "selection", "use_when", "avoid_when", "prerequisites", "tips", "examples"} {
 		if !entry.ReservedNames().Has(name) {
 			t.Fatalf("retired field name %q must stay reserved", name)
 		}
@@ -84,7 +84,7 @@ func TestSchemaCacheDescriptorContract(t *testing.T) {
 	for i := 0; i < file.Messages().Len(); i++ {
 		assertNoProtoMaps(t, file.Messages().Get(i))
 	}
-	assertFieldNumbers(t, (&schemacachepb.SchemaMetaCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+	assertFieldNumbers(t, (&schemacachepb.SchemaMetaCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13})
 	assertFieldNumbers(t, (&schemacachepb.SchemaProductCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3})
 }
 

@@ -205,6 +205,22 @@ func commandMetaSubsetEqual(whole, subset map[string]CommandMeta) bool {
 	return true
 }
 
+// commandIdentitySubsetEqual compares only Identity, which is all the v4 Meta
+// index carries; Safety and Selection live in the separate payload file.
+func commandIdentitySubsetEqual(whole, subset map[string]CommandMeta) bool {
+	for path, expected := range subset {
+		actual, found := whole[path]
+		if !found || actual.Identity.CLIPath != expected.Identity.CLIPath ||
+			actual.Identity.Canonical != expected.Identity.Canonical ||
+			actual.Identity.ProductID != expected.Identity.ProductID ||
+			actual.Identity.Title != expected.Identity.Title ||
+			!slices.Equal(actual.Identity.Aliases, expected.Identity.Aliases) {
+			return false
+		}
+	}
+	return true
+}
+
 func locatorSubsetEqual(whole, subset map[string]string) bool {
 	for path, expected := range subset {
 		actual, found := whole[path]

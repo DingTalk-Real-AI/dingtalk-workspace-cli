@@ -33,8 +33,15 @@ func TestRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
 		t.Fatal("real Schema cache build is not byte deterministic")
 	}
 	meta.MaterializeCommandMeta()
-	if !reflect.DeepEqual(schemaruntime.BuildCommandMetaLookup(registry), meta.CommandMetaByPath) {
-		t.Fatal("real CommandMeta lookup differs after cache round trip")
+	wantLookup := schemaruntime.BuildCommandMetaLookup(registry)
+	if len(meta.CommandMetaByPath) != len(wantLookup) {
+		t.Fatalf("real CommandMeta lookup count differs: got %d want %d", len(meta.CommandMetaByPath), len(wantLookup))
+	}
+	for path, expected := range wantLookup {
+		actual, ok := meta.CommandMetaByPath[path]
+		if !ok || !reflect.DeepEqual(actual.Identity, expected.Identity) {
+			t.Fatalf("real CommandMeta identity differs at %q", path)
+		}
 	}
 	wantOverview, err := registry.ToOverviewPayload()
 	if err != nil {

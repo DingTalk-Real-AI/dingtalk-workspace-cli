@@ -159,7 +159,14 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 		meta, err := runtime.loadMeta()
 		if err == nil {
 			m, ok := meta.CommandMeta(cliPath)
-			return m, ok
+			if !ok {
+				return m, false
+			}
+			if enriched, enrichedOK := runtime.enrichCommandMeta(meta, m); enrichedOK {
+				return enriched, true
+			}
+			// Payload unreadable, e.g. a concurrently repairing registry; fall
+			// through to the repair path so ResolveMeta never returns a partial value.
 		}
 		value, _, repairErr := repairSchemaCache(runtime, func() (any, error) {
 			fresh, freshErr := runtime.readMeta()
@@ -168,7 +175,14 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 			}
 			runtime.seedMeta(fresh)
 			m, ok := fresh.CommandMeta(cliPath)
-			return resolvedMeta{Meta: m, OK: ok}, nil
+			if !ok {
+				return resolvedMeta{Meta: m, OK: false}, nil
+			}
+			enriched, enrichedOK := runtime.enrichCommandMeta(fresh, m)
+			if !enrichedOK {
+				return nil, fmt.Errorf("read command payload for %q", cliPath)
+			}
+			return resolvedMeta{Meta: enriched, OK: true}, nil
 		})
 		if repairErr == nil && value != nil {
 			result := value.(resolvedMeta)

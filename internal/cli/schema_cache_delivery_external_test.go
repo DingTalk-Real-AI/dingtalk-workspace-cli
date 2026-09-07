@@ -58,7 +58,7 @@ func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact()); err != nil {
+	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
 		t.Fatal(err)
 	}
 	cacheDirectory := cache.Directory()
@@ -451,7 +451,7 @@ func publishCacheGeneration(t *testing.T, identity cli.SchemaCacheIdentity, arti
 		t.Fatal(err)
 	}
 	defer cache.Close()
-	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact()); err != nil {
+	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
 		t.Fatal(err)
 	}
 }

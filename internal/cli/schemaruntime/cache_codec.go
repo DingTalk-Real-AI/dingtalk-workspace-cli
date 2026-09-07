@@ -19,7 +19,7 @@ import (
 
 const (
 	// SchemaCacheDTOVersion is the independently validated private DTO version.
-	SchemaCacheDTOVersion = 3
+	SchemaCacheDTOVersion = 4
 	MaxSchemaMetaBytes    = 4 << 20
 	MaxSchemaProductBytes = 8 << 20
 	MaxSchemaShardData    = 64<<20 - 208
@@ -106,13 +106,26 @@ type ProductDescriptor struct {
 	SHA256    [sha256.Size]byte
 }
 
+// CommandPayloadDescriptor locates one product's Safety and Selection shard in
+// the separate payload file, deliberately independent of the registry.
+type CommandPayloadDescriptor struct {
+	ProductID string
+	Offset    uint64
+	Length    uint64
+	SHA256    [sha256.Size]byte
+}
+
 // BuiltSchemaCache is one deterministic Meta payload and its concatenated shards.
 type BuiltSchemaCache struct {
-	Meta             []byte
-	ProductShards    []byte
-	Descriptors      []ProductDescriptor
-	RegistrySHA256   [sha256.Size]byte
-	RegistryDataSize uint64
+	Meta               []byte
+	ProductShards      []byte
+	PayloadShards      []byte
+	Descriptors        []ProductDescriptor
+	PayloadDescriptors []CommandPayloadDescriptor
+	RegistrySHA256     [sha256.Size]byte
+	RegistryDataSize   uint64
+	PayloadSHA256      [sha256.Size]byte
+	PayloadDataSize    uint64
 }
 
 // DecodedSchemaMeta is a fully validated runtime Meta cache.
@@ -125,7 +138,10 @@ type DecodedSchemaMeta struct {
 	Overview              SchemaOverview
 	LocatorProductByPath  map[string]string
 	ProductDescriptors    []ProductDescriptor
+	PayloadDescriptors    []CommandPayloadDescriptor
 	RegistryDataLength    uint64
+	PayloadDataLength     uint64
+	PayloadSHA256         [sha256.Size]byte
 	RegistryDataSHA256    [sha256.Size]byte
 	Hashes                CacheHashes
 	commandCountByProduct map[string]int
@@ -303,7 +319,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 			return BuiltSchemaCache{}, fmt.Errorf("convert product %q: %w", registry.Products[i].ID, conversionErr)
 		}
 		root := &schemacachepb.SchemaProductCache{
-			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V3,
+			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V4,
 			Registry:   registryFieldsToProto(registry),
 			Product:    product,
 		}
@@ -328,21 +344,53 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	}
 	result.RegistryDataSize = uint64(len(result.ProductShards))
 	result.RegistrySHA256 = sha256.Sum256(result.ProductShards)
-	commandEntries, err := commandLookupToProto(lookup)
-	if err != nil {
-		return BuiltSchemaCache{}, fmt.Errorf("build Schema Meta command entries: %w", err)
+	commandEntries := commandLookupToProto(lookup)
+	payloadByProduct := make(map[string][]*schemacachepb.CommandPayloadEntry, len(registry.Products))
+	for path, meta := range lookup {
+		payloadByProduct[meta.Identity.ProductID] = append(payloadByProduct[meta.Identity.ProductID],
+			commandPayloadToProto(path, meta))
 	}
+	result.PayloadDescriptors = make([]CommandPayloadDescriptor, 0, len(payloadByProduct))
+	for _, productID := range sortedMapKeys(payloadByProduct) {
+		entries := payloadByProduct[productID]
+		sort.Slice(entries, func(i, j int) bool { return entries[i].LookupPath < entries[j].LookupPath })
+		root := &schemacachepb.SchemaCommandPayloadCache{
+			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V4,
+			ProductId:  productID,
+			Entries:    &schemacachepb.CommandPayloadEntryList{Items: entries},
+		}
+		payload, marshalErr := MarshalSchemaCacheDeterministic(root)
+		if marshalErr != nil {
+			return BuiltSchemaCache{}, fmt.Errorf("marshal command payloads for product %q: %w", productID, marshalErr)
+		}
+		if len(payload) == 0 || len(payload) > MaxSchemaProductBytes {
+			return BuiltSchemaCache{}, fmt.Errorf("command payload shard %q length %d is outside 1..%d", productID, len(payload), MaxSchemaProductBytes)
+		}
+		digest := sha256.Sum256(payload)
+		result.PayloadDescriptors = append(result.PayloadDescriptors, CommandPayloadDescriptor{
+			ProductID: productID,
+			Offset:    uint64(len(result.PayloadShards)),
+			Length:    uint64(len(payload)),
+			SHA256:    digest,
+		})
+		result.PayloadShards = append(result.PayloadShards, payload...)
+	}
+	result.PayloadDataSize = uint64(len(result.PayloadShards))
+	result.PayloadSHA256 = sha256.Sum256(result.PayloadShards)
 	meta := &schemacachepb.SchemaMetaCache{
-		DtoVersion:         schemacachepb.DTOVersion_DTO_VERSION_V3,
-		Registry:           registryFieldsToProto(registry),
-		CommandEntries:     commandEntries,
-		Overview:           overviewToProto(overview),
-		Locators:           locatorsToProto(locators),
-		ProductDescriptors: descriptorsToProto(result.Descriptors),
-		RegistryDataLength: result.RegistryDataSize,
-		RegistryDataSha256: cloneBytes(result.RegistrySHA256[:]),
-		SourceSha256:       cloneBytes(hashes.SourceSHA256[:]),
-		SurfaceSha256:      cloneBytes(hashes.SurfaceSHA256[:]),
+		DtoVersion:                schemacachepb.DTOVersion_DTO_VERSION_V4,
+		Registry:                  registryFieldsToProto(registry),
+		CommandEntries:            commandEntries,
+		Overview:                  overviewToProto(overview),
+		Locators:                  locatorsToProto(locators),
+		ProductDescriptors:        descriptorsToProto(result.Descriptors),
+		CommandPayloadDescriptors: payloadDescriptorsToProto(result.PayloadDescriptors),
+		RegistryDataLength:        result.RegistryDataSize,
+		RegistryDataSha256:        cloneBytes(result.RegistrySHA256[:]),
+		SourceSha256:              cloneBytes(hashes.SourceSHA256[:]),
+		SurfaceSha256:             cloneBytes(hashes.SurfaceSHA256[:]),
+		PayloadDataLength:         result.PayloadDataSize,
+		PayloadSha256:             cloneBytes(result.PayloadSHA256[:]),
 	}
 	result.Meta, err = MarshalSchemaCacheDeterministic(meta)
 	if err != nil {
@@ -414,7 +462,7 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
 		return DecodedSchemaProduct{}, err
 	}
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V3 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V4 {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q DTO version is %d, want %d", descriptor.ProductID, root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetProduct() == nil {
@@ -444,7 +492,7 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	wantLookup := BuildCommandMetaLookup(registry)
 	count, present := meta.commandCountByProduct[descriptor.ProductID]
 	meta.MaterializeCommandMeta()
-	if !present || count != len(wantLookup) || !commandMetaSubsetEqual(meta.CommandMetaByPath, wantLookup) {
+	if !present || count != len(wantLookup) || !commandIdentitySubsetEqual(meta.CommandMetaByPath, wantLookup) {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q CommandMeta entries disagree with shard", descriptor.ProductID)
 	}
 	wantLocators, err := buildSchemaProductLocatorsUnchecked(registry)
@@ -460,6 +508,62 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q overview entry disagrees with shard", descriptor.ProductID)
 	}
 	return DecodedSchemaProduct{Registry: registry, Index: index}, nil
+}
+
+// DecodedCommandPayloads holds the Safety and Selection halves for one
+// product's commands, decoded from its payload shard.
+type DecodedCommandPayloads struct {
+	ProductID string
+	Safety    map[string]CommandSafety
+	Selection map[string]CommandSelection
+}
+
+// metaPayloadDescriptor finds the payload descriptor authenticated by the Meta.
+func metaPayloadDescriptor(meta DecodedSchemaMeta, productID string) (CommandPayloadDescriptor, bool) {
+	i := sort.Search(len(meta.PayloadDescriptors), func(i int) bool { return meta.PayloadDescriptors[i].ProductID >= productID })
+	if i == len(meta.PayloadDescriptors) || meta.PayloadDescriptors[i].ProductID != productID {
+		return CommandPayloadDescriptor{}, false
+	}
+	return meta.PayloadDescriptors[i], true
+}
+
+// DecodeSchemaCommandPayloadCache authenticates a command payload shard against
+// the Meta's descriptor, then decodes its Safety and Selection rows.
+func DecodeSchemaCommandPayloadCache(payload []byte, descriptor CommandPayloadDescriptor, meta DecodedSchemaMeta) (DecodedCommandPayloads, error) {
+	authenticated, ok := metaPayloadDescriptor(meta, descriptor.ProductID)
+	if !ok || authenticated != descriptor {
+		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload descriptor is not authenticated by Schema Meta", descriptor.ProductID)
+	}
+	if uint64(len(payload)) != descriptor.Length {
+		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload length %d, want %d", descriptor.ProductID, len(payload), descriptor.Length)
+	}
+	if sha256.Sum256(payload) != descriptor.SHA256 {
+		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload SHA-256 mismatch", descriptor.ProductID)
+	}
+	var root schemacachepb.SchemaCommandPayloadCache
+	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(payload, &root); err != nil {
+		return DecodedCommandPayloads{}, fmt.Errorf("decode product %q command payload protobuf: %w", descriptor.ProductID, err)
+	}
+	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
+		return DecodedCommandPayloads{}, err
+	}
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V4 {
+		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload DTO version is %d, want %d", descriptor.ProductID, root.GetDtoVersion(), SchemaCacheDTOVersion)
+	}
+	if root.GetProductId() != descriptor.ProductID || root.GetEntries() == nil {
+		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload identity does not match descriptor", descriptor.ProductID)
+	}
+	result := DecodedCommandPayloads{
+		ProductID: descriptor.ProductID,
+		Safety:    make(map[string]CommandSafety, len(root.Entries.Items)),
+		Selection: make(map[string]CommandSelection, len(root.Entries.Items)),
+	}
+	for _, entry := range root.Entries.Items {
+		safety, selection := commandPayloadFromProto(entry)
+		result.Safety[entry.GetLookupPath()] = safety
+		result.Selection[entry.GetLookupPath()] = selection
+	}
+	return result, nil
 }
 
 // DecodeSchemaProductFromShards checks aggregate identity and a descriptor range.
@@ -509,7 +613,7 @@ func DecodeAllSchemaProducts(shards []byte, meta DecodedSchemaMeta) (SchemaRegis
 }
 
 func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaMeta, error) {
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V3 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V4 {
 		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta DTO version is %d, want %d", root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetOverview() == nil || root.GetCommandEntries() == nil || root.GetLocators() == nil || root.GetProductDescriptors() == nil {
@@ -544,10 +648,13 @@ func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaM
 		Overview:             overviewFromProto(root.Overview),
 		LocatorProductByPath: make(map[string]string, len(root.Locators.Items)),
 		ProductDescriptors:   descriptorsFromProto(root.ProductDescriptors),
+		PayloadDescriptors:   payloadDescriptorsFromProto(root.CommandPayloadDescriptors),
 		RegistryDataLength:   root.GetRegistryDataLength(),
+		PayloadDataLength:    root.GetPayloadDataLength(),
 		commandIdentityByPath: make(map[string]CommandIdentity,
 			len(root.CommandEntries.Items)),
 	}
+	copy(result.PayloadSHA256[:], root.GetPayloadSha256())
 	copy(result.RegistryDataSHA256[:], root.GetRegistryDataSha256())
 	copy(result.Hashes.SourceSHA256[:], root.GetSourceSha256())
 	copy(result.Hashes.SurfaceSHA256[:], root.GetSurfaceSha256())

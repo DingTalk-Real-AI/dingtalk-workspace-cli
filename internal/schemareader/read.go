@@ -58,6 +58,47 @@ func ReadProduct(cache *schemacache.Cache, identity Identity, meta schemaruntime
 	return schemaruntime.DecodeSchemaProductCache(payload, descriptor, meta)
 }
 
+// PayloadDescriptor selects only a command payload range from previously
+// authenticated Meta.
+func PayloadDescriptor(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.CommandPayloadDescriptor, bool) {
+	i := sort.Search(len(meta.PayloadDescriptors), func(i int) bool { return meta.PayloadDescriptors[i].ProductID >= productID })
+	if i == len(meta.PayloadDescriptors) || meta.PayloadDescriptors[i].ProductID != productID {
+		return schemaruntime.CommandPayloadDescriptor{}, false
+	}
+	return meta.PayloadDescriptors[i], true
+}
+
+// ReadCommandPayload authenticates the command payload range before any
+// protobuf decoding. It reads the payload file, which is deliberately
+// independent of the registry so a corrupted registry cannot affect it. The
+// payload expectation is derived from the Meta, which is itself authenticated.
+func ReadCommandPayload(cache *schemacache.Cache, identity Identity, meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+	descriptor, ok := PayloadDescriptor(meta, productID)
+	if !ok {
+		return schemaruntime.DecodedCommandPayloads{}, fmt.Errorf("unknown Schema command payload product %q", productID)
+	}
+	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), payloadExpectation(meta))
+	if err != nil {
+		return schemaruntime.DecodedCommandPayloads{}, err
+	}
+	defer payloads.Close()
+	payload, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: descriptor.Offset, Length: descriptor.Length, SHA256: descriptor.SHA256})
+	if err != nil {
+		return schemaruntime.DecodedCommandPayloads{}, err
+	}
+	return schemaruntime.DecodeSchemaCommandPayloadCache(payload, descriptor, meta)
+}
+
+// payloadExpectation derives the payload file expectation from the Meta, which
+// is itself authenticated by the pinned identity.
+func payloadExpectation(meta schemaruntime.DecodedSchemaMeta) schemacache.ArtifactExpectation {
+	return schemacache.ArtifactExpectation{
+		Kind: schemacache.KindPayloads, Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
+		FormatVersion: schemacache.DTOFormatVersion, EncodedLength: meta.PayloadDataLength, DecodedLength: meta.PayloadDataLength,
+		EncodedSHA256: meta.PayloadSHA256,
+	}
+}
+
 func Locator(meta schemaruntime.DecodedSchemaMeta, raw string) (string, bool) {
 	tokens := schemaruntime.SplitPathTokens(raw)
 	candidates := []string{strings.TrimSpace(raw), schemaruntime.NormalizeQueryCLIPath(raw), strings.Join(tokens, ".")}

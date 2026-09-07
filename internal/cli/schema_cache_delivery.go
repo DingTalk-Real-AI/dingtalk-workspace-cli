@@ -75,7 +75,7 @@ func RegisterSchemaCacheOptions(options SchemaCacheOptions) error {
 	if options.LockTimeout == 0 {
 		options.LockTimeout = defaultSchemaCacheLockTimeout
 	}
-	r := &schemaCacheRuntime{options: options, products: make(map[string]*schemaCacheProductLoad)}
+	r := &schemaCacheRuntime{options: options, products: make(map[string]*schemaCacheProductLoad), payloads: make(map[string]*schemaCachePayloadLoad)}
 	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{options: options, runtime: r})
 	return nil
 }
@@ -126,6 +126,8 @@ type schemaCacheRuntime struct {
 	freshMeta atomic.Pointer[schemaruntime.DecodedSchemaMeta]
 	productMu sync.Mutex
 	products  map[string]*schemaCacheProductLoad
+	payloadMu sync.Mutex
+	payloads  map[string]*schemaCachePayloadLoad
 	allOnce   sync.Once
 	all       loadedSchemaCatalog
 	allErr    error
@@ -138,6 +140,12 @@ type schemaCacheProductLoad struct {
 	ready   atomic.Bool
 	product schemaruntime.DecodedSchemaProduct
 	err     error
+}
+
+type schemaCachePayloadLoad struct {
+	ready    atomic.Bool
+	payloads schemaruntime.DecodedCommandPayloads
+	err      error
 }
 
 func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
@@ -200,6 +208,61 @@ func (r *schemaCacheRuntime) loadProduct(meta schemaruntime.DecodedSchemaMeta, p
 		load.ready.Store(true)
 	})
 	return load.product, load.err
+}
+
+func (r *schemaCacheRuntime) readCommandPayload(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+	cache, err := r.opened()
+	if err != nil {
+		return schemaruntime.DecodedCommandPayloads{}, err
+	}
+	return schemareader.ReadCommandPayload(cache, r.options.Identity, meta, productID)
+}
+
+// loadCommandPayload caches only a success. A failed read during a concurrent
+// repair must not freeze in; the next call retries so ResolveMeta stays
+// deterministic.
+func (r *schemaCacheRuntime) loadCommandPayload(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+	r.payloadMu.Lock()
+	load := r.payloads[productID]
+	if load == nil {
+		load = &schemaCachePayloadLoad{}
+		r.payloads[productID] = load
+	}
+	r.payloadMu.Unlock()
+	if load.ready.Load() {
+		return load.payloads, load.err
+	}
+	r.payloadMu.Lock()
+	defer r.payloadMu.Unlock()
+	if load.ready.Load() {
+		return load.payloads, load.err
+	}
+	payloads, err := r.readCommandPayload(meta, productID)
+	if err != nil {
+		return schemaruntime.DecodedCommandPayloads{}, err
+	}
+	load.payloads = payloads
+	load.ready.Store(true)
+	return load.payloads, nil
+}
+
+// enrichCommandMeta fills an identity-only CommandMeta with the Safety and
+// Selection from its product's payload shard. It reports whether the payload
+// was read so a transient failure during a concurrent repair can fall through
+// to the repair path rather than silently returning an incomplete value.
+func (r *schemaCacheRuntime) enrichCommandMeta(meta schemaruntime.DecodedSchemaMeta, m schemaruntime.CommandMeta) (schemaruntime.CommandMeta, bool) {
+	payloads, err := r.loadCommandPayload(meta, m.Identity.ProductID)
+	if err != nil {
+		return m, false
+	}
+	lookupPath := m.Identity.CLIPath
+	if safety, ok := payloads.Safety[lookupPath]; ok {
+		m.Safety = safety
+	}
+	if selection, ok := payloads.Selection[lookupPath]; ok {
+		m.Selection = selection
+	}
+	return m, true
 }
 
 func (r *schemaCacheRuntime) trustedHashes() schemaruntime.TrustedHashes {
@@ -397,7 +460,7 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 				return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
 			}
 			if artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded); err == nil && artifacts.match(r.options.Identity) {
-				_ = cache.Publish(r.options.Identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact())
+				_ = cache.Publish(r.options.Identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact())
 			}
 			return nil, loaded, nil
 		}
@@ -419,9 +482,11 @@ type SchemaCacheArtifacts struct {
 	SurfaceHash        string
 	Meta               []byte
 	Registry           []byte
+	Payload            []byte
 	ProductCount       int
 	MetaSHA256         [sha256.Size]byte
 	RegistrySHA256     [sha256.Size]byte
+	PayloadSHA256      [sha256.Size]byte
 	ProductDescriptors []schemaruntime.ProductDescriptor
 	registry           SchemaRegistry
 	index              SchemaIndex
@@ -477,7 +542,9 @@ func buildSchemaCacheArtifacts(registry SchemaRegistry, sourceHash, surfaceHash 
 	return SchemaCacheArtifacts{
 		Version: SchemaCatalogSnapshotVersion, SourceHash: sourceHash, SurfaceHash: surfaceHash,
 		Meta: append([]byte(nil), built.Meta...), Registry: append([]byte(nil), built.ProductShards...),
+		Payload:      append([]byte(nil), built.PayloadShards...),
 		ProductCount: len(built.Descriptors), MetaSHA256: sha256.Sum256(built.Meta), RegistrySHA256: built.RegistrySHA256,
+		PayloadSHA256:      built.PayloadSHA256,
 		ProductDescriptors: append([]schemaruntime.ProductDescriptor(nil), built.Descriptors...),
 		registry:           registry, index: index, locators: locators,
 	}, nil
@@ -601,8 +668,17 @@ func (a SchemaCacheArtifacts) ValidateRoundTrip() error {
 		return fmt.Errorf("decode generated Meta: %w", err)
 	}
 	meta.MaterializeCommandMeta()
-	if !reflect.DeepEqual(meta.CommandMetaByPath, schemaruntime.BuildCommandMetaLookup(a.registry)) ||
-		!reflect.DeepEqual(meta.LocatorProductByPath, a.locators) ||
+	wantLookup := schemaruntime.BuildCommandMetaLookup(a.registry)
+	if len(meta.CommandMetaByPath) != len(wantLookup) {
+		return fmt.Errorf("generated Meta command count %d differs from authoritative Registry %d", len(meta.CommandMetaByPath), len(wantLookup))
+	}
+	for path, expected := range wantLookup {
+		actual, ok := meta.CommandMetaByPath[path]
+		if !ok || !reflect.DeepEqual(actual.Identity, expected.Identity) {
+			return fmt.Errorf("generated Meta command identity differs at %q", path)
+		}
+	}
+	if !reflect.DeepEqual(meta.LocatorProductByPath, a.locators) ||
 		!reflect.DeepEqual(meta.ProductDescriptors, a.ProductDescriptors) {
 		return fmt.Errorf("generated Meta projection differs from authoritative Registry")
 	}
@@ -675,4 +751,11 @@ func (a SchemaCacheArtifacts) RegistryArtifact() schemacache.Artifact {
 		Kind: schemacache.KindRegistry, Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
 		FormatVersion: schemacache.DTOFormatVersion, EncodedLength: uint64(len(a.Registry)), DecodedLength: uint64(len(a.Registry)), EncodedSHA256: a.RegistrySHA256,
 	}, Payload: append([]byte(nil), a.Registry...)}
+}
+
+func (a SchemaCacheArtifacts) PayloadArtifact() schemacache.Artifact {
+	return schemacache.Artifact{Expectation: schemacache.ArtifactExpectation{
+		Kind: schemacache.KindPayloads, Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
+		FormatVersion: schemacache.DTOFormatVersion, EncodedLength: uint64(len(a.Payload)), DecodedLength: uint64(len(a.Payload)), EncodedSHA256: a.PayloadSHA256,
+	}, Payload: append([]byte(nil), a.Payload...)}
 }
