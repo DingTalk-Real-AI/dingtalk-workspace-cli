@@ -57,7 +57,7 @@ func TestSchemaCacheRuntimeFieldInventory(t *testing.T) {
 }
 
 func TestSchemaCacheDescriptorContract(t *testing.T) {
-	const expectedProtoSHA256 = "a3db67d69fbd326f96473ee594b4482a038c7a1dbe2a1544968a90e9333b0c68"
+	const expectedProtoSHA256 = "e52681aa593764b70a92bb5abd4e5eb9789ff217ff5def8174ba5bc67fa0df4e"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {
 		t.Fatal(err)
@@ -70,9 +70,16 @@ func TestSchemaCacheDescriptorContract(t *testing.T) {
 		t.Fatal("private DTO package version drift")
 	}
 	entry := (&schemacachepb.CommandMetaEntry{}).ProtoReflect().Descriptor()
-	assertFieldNumbers(t, entry, []protoreflect.FieldNumber{1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18})
-	if !entry.ReservedRanges().Has(2) || !entry.ReservedNames().Has("meta") {
-		t.Fatal("retired nested metadata field must stay reserved")
+	assertFieldNumbers(t, entry, []protoreflect.FieldNumber{1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 19})
+	for _, number := range []protoreflect.FieldNumber{2, 11, 13, 14, 15, 16, 17} {
+		if !entry.ReservedRanges().Has(number) {
+			t.Fatalf("retired field %d must stay reserved", number)
+		}
+	}
+	for _, name := range []protoreflect.Name{"meta", "agent_summary", "use_when", "avoid_when", "prerequisites", "tips", "examples"} {
+		if !entry.ReservedNames().Has(name) {
+			t.Fatalf("retired field name %q must stay reserved", name)
+		}
 	}
 	for i := 0; i < file.Messages().Len(); i++ {
 		assertNoProtoMaps(t, file.Messages().Get(i))

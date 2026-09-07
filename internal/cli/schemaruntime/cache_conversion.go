@@ -11,6 +11,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"google.golang.org/protobuf/proto"
 )
 
 func registryFieldsToProto(in SchemaRegistry) *schemacachepb.RegistryFields {
@@ -26,60 +27,88 @@ func registryFromProductProto(in *schemacachepb.SchemaProductCache) SchemaRegist
 	}
 }
 
-func commandLookupToProto(in map[string]CommandMeta) *schemacachepb.CommandMetaEntryList {
+func commandLookupToProto(in map[string]CommandMeta) (*schemacachepb.CommandMetaEntryList, error) {
 	keys := sortedMapKeys(in)
 	out := &schemacachepb.CommandMetaEntryList{Items: make([]*schemacachepb.CommandMetaEntry, len(keys))}
 	for i, key := range keys {
-		out.Items[i] = commandMetaToProto(in[key])
-		out.Items[i].LookupPath = key
+		entry, err := commandMetaToProto(in[key])
+		if err != nil {
+			return nil, fmt.Errorf("command %q: %w", key, err)
+		}
+		entry.LookupPath = key
+		out.Items[i] = entry
 	}
+	return out, nil
+}
+
+const commandMetaSelectionListCount = 5
+
+// aliasesPresentBit is the only presence bit on a row; it marks Identity.Aliases
+// present-empty versus nil. The five Selection lists carry their own bits inside
+// the serialized selection payload.
+const aliasesPresentBit = uint32(1)
+
+// cloneList copies into a runtime-owned slice so no generated backing slice
+// escapes, and preserves present-empty: protobuf collapses an empty repeated
+// field to absent, so only the presence bit can restore the distinction.
+func cloneList(values []string) []string {
+	out := make([]string, len(values))
+	copy(out, values)
 	return out
 }
 
-const commandMetaListCount = 6
+func selectionProtoLists(in *schemacachepb.CommandSelectionPayload) [commandMetaSelectionListCount][]string {
+	return [commandMetaSelectionListCount][]string{in.UseWhen, in.AvoidWhen, in.Prerequisites, in.Tips, in.Examples}
+}
 
-func commandMetaToProto(in CommandMeta) *schemacachepb.CommandMetaEntry {
+func commandMetaToProto(in CommandMeta) (*schemacachepb.CommandMetaEntry, error) {
+	selection := &schemacachepb.CommandSelectionPayload{
+		AgentSummary:  in.Selection.AgentSummary,
+		UseWhen:       slices.Clone(in.Selection.UseWhen),
+		AvoidWhen:     slices.Clone(in.Selection.AvoidWhen),
+		Prerequisites: slices.Clone(in.Selection.Prerequisites),
+		Tips:          slices.Clone(in.Selection.Tips),
+		Examples:      slices.Clone(in.Selection.Examples),
+	}
+	for bit, list := range selectionProtoLists(selection) {
+		if list != nil {
+			selection.ListsPresent |= 1 << bit
+		}
+	}
+	encoded, err := proto.Marshal(selection)
+	if err != nil {
+		return nil, fmt.Errorf("encode command selection: %w", err)
+	}
 	out := &schemacachepb.CommandMetaEntry{
 		CliPath: in.Identity.CLIPath, Canonical: in.Identity.Canonical, ProductId: in.Identity.ProductID, Title: in.Identity.Title,
 		Effect: in.Safety.Effect, Risk: in.Safety.Risk, Confirmation: in.Safety.Confirmation, Idempotency: in.Safety.Idempotency,
-		AgentSummary: in.Selection.AgentSummary,
-		Aliases:      slices.Clone(in.Identity.Aliases), UseWhen: slices.Clone(in.Selection.UseWhen), AvoidWhen: slices.Clone(in.Selection.AvoidWhen),
-		Prerequisites: slices.Clone(in.Selection.Prerequisites), Tips: slices.Clone(in.Selection.Tips), Examples: slices.Clone(in.Selection.Examples),
+		Aliases: slices.Clone(in.Identity.Aliases), Selection: encoded,
 	}
-	for bit, list := range commandMetaProtoLists(out) {
-		if list != nil {
-			out.ListsPresent |= 1 << bit
-		}
+	if in.Identity.Aliases != nil {
+		out.ListsPresent = aliasesPresentBit
 	}
-	return out
+	return out, nil
 }
 
-func commandMetaProtoLists(in *schemacachepb.CommandMetaEntry) [commandMetaListCount][]string {
-	return [commandMetaListCount][]string{in.Aliases, in.UseWhen, in.AvoidWhen, in.Prerequisites, in.Tips, in.Examples}
-}
-
-// commandIdentityFromProto decodes only the Identity half of a row. Meta
-// validation reads Identity and never Safety or Selection, so a cache read can
-// validate every row without copying the five Selection string lists. The full
-// value stays available on demand through commandMetaFromProto.
+// commandIdentityFromProto decodes only the Identity half of a row and never
+// touches the serialized selection payload, so a cache read can validate every
+// row without decoding Selection strings for all of them.
 func commandIdentityFromProto(in *schemacachepb.CommandMetaEntry) CommandIdentity {
 	identity := CommandIdentity{
 		CLIPath: in.CliPath, Canonical: in.Canonical, ProductID: in.ProductId, Title: in.Title,
 	}
-	if in.ListsPresent&1 != 0 {
-		identity.Aliases = slices.Clone(in.Aliases)
+	if in.ListsPresent&aliasesPresentBit != 0 {
+		identity.Aliases = cloneList(in.Aliases)
 	}
 	return identity
 }
 
 func validateCommandMetaListPresence(in *schemacachepb.CommandMetaEntry) error {
-	if in.ListsPresent & ^uint32((1<<commandMetaListCount)-1) != 0 {
+	if in.ListsPresent&^aliasesPresentBit != 0 {
 		return fmt.Errorf("unknown metadata list presence bits")
 	}
-	for bit, list := range commandMetaProtoLists(in) {
-		if len(list) != 0 && in.ListsPresent&(1<<bit) == 0 {
-			return fmt.Errorf("nonempty metadata list %d has no presence bit", bit)
-		}
+	if len(in.Aliases) != 0 && in.ListsPresent&aliasesPresentBit == 0 {
+		return fmt.Errorf("nonempty metadata list has no presence bit")
 	}
 	return nil
 }
@@ -87,18 +116,28 @@ func validateCommandMetaListPresence(in *schemacachepb.CommandMetaEntry) error {
 // Copy into runtime-owned slices; no generated pointer or backing slice escapes.
 // An explicit set bit restores present-empty even when protobuf omits its values.
 func commandMetaFromProto(in *schemacachepb.CommandMetaEntry) CommandMeta {
-	var lists [commandMetaListCount][]string
-	for bit, values := range commandMetaProtoLists(in) {
-		if in.ListsPresent&(1<<bit) != 0 {
-			lists[bit] = make([]string, len(values))
-			copy(lists[bit], values)
+	meta := CommandMeta{
+		Identity: commandIdentityFromProto(in),
+		Safety:   CommandSafety{Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency},
+	}
+	if len(in.Selection) == 0 {
+		return meta
+	}
+	var payload schemacachepb.CommandSelectionPayload
+	if err := proto.Unmarshal(in.Selection, &payload); err != nil {
+		return meta
+	}
+	var lists [commandMetaSelectionListCount][]string
+	for bit, values := range selectionProtoLists(&payload) {
+		if payload.ListsPresent&(1<<bit) != 0 {
+			lists[bit] = cloneList(values)
 		}
 	}
-	return CommandMeta{
-		Identity:  CommandIdentity{CLIPath: in.CliPath, Canonical: in.Canonical, Aliases: lists[0], ProductID: in.ProductId, Title: in.Title},
-		Safety:    CommandSafety{Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency},
-		Selection: CommandSelection{AgentSummary: in.AgentSummary, UseWhen: lists[1], AvoidWhen: lists[2], Prerequisites: lists[3], Tips: lists[4], Examples: lists[5]},
+	meta.Selection = CommandSelection{
+		AgentSummary: payload.AgentSummary, UseWhen: lists[0], AvoidWhen: lists[1],
+		Prerequisites: lists[2], Tips: lists[3], Examples: lists[4],
 	}
+	return meta
 }
 
 func overviewToProto(in SchemaOverview) *schemacachepb.SchemaOverviewCache {

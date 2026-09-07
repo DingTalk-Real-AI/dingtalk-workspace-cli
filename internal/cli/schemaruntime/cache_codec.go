@@ -19,7 +19,7 @@ import (
 
 const (
 	// SchemaCacheDTOVersion is the independently validated private DTO version.
-	SchemaCacheDTOVersion = 2
+	SchemaCacheDTOVersion = 3
 	MaxSchemaMetaBytes    = 4 << 20
 	MaxSchemaProductBytes = 8 << 20
 	MaxSchemaShardData    = 64<<20 - 208
@@ -303,7 +303,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 			return BuiltSchemaCache{}, fmt.Errorf("convert product %q: %w", registry.Products[i].ID, conversionErr)
 		}
 		root := &schemacachepb.SchemaProductCache{
-			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V2,
+			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V3,
 			Registry:   registryFieldsToProto(registry),
 			Product:    product,
 		}
@@ -328,10 +328,14 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	}
 	result.RegistryDataSize = uint64(len(result.ProductShards))
 	result.RegistrySHA256 = sha256.Sum256(result.ProductShards)
+	commandEntries, err := commandLookupToProto(lookup)
+	if err != nil {
+		return BuiltSchemaCache{}, fmt.Errorf("build Schema Meta command entries: %w", err)
+	}
 	meta := &schemacachepb.SchemaMetaCache{
-		DtoVersion:         schemacachepb.DTOVersion_DTO_VERSION_V2,
+		DtoVersion:         schemacachepb.DTOVersion_DTO_VERSION_V3,
 		Registry:           registryFieldsToProto(registry),
-		CommandEntries:     commandLookupToProto(lookup),
+		CommandEntries:     commandEntries,
 		Overview:           overviewToProto(overview),
 		Locators:           locatorsToProto(locators),
 		ProductDescriptors: descriptorsToProto(result.Descriptors),
@@ -410,7 +414,7 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
 		return DecodedSchemaProduct{}, err
 	}
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V2 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V3 {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q DTO version is %d, want %d", descriptor.ProductID, root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetProduct() == nil {
@@ -505,7 +509,7 @@ func DecodeAllSchemaProducts(shards []byte, meta DecodedSchemaMeta) (SchemaRegis
 }
 
 func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaMeta, error) {
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V2 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V3 {
 		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta DTO version is %d, want %d", root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetOverview() == nil || root.GetCommandEntries() == nil || root.GetLocators() == nil || root.GetProductDescriptors() == nil {

@@ -35,8 +35,11 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 			}
 			states /= 3
 		}
-		encodedRow := commandMetaToProto(want)
-		if encodedRow.ListsPresent != wantMask {
+		encodedRow, encodeErr := commandMetaToProto(want)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		if encodedRow.ListsPresent != wantMask&aliasesPresentBit {
 			t.Fatalf("combination %d changed presence bit ordering", combination)
 		}
 		encoded, err := proto.Marshal(encodedRow)
@@ -54,9 +57,18 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("combination %d lost metadata or list presence", combination)
 		}
-		for _, values := range commandMetaProtoLists(&row) {
-			if len(values) > 0 {
-				values[0] = "mutated protobuf"
+		if len(row.Aliases) > 0 {
+			row.Aliases[0] = "mutated protobuf"
+		}
+		var payload schemacachepb.CommandSelectionPayload
+		if len(row.Selection) != 0 {
+			if err := proto.Unmarshal(row.Selection, &payload); err != nil {
+				t.Fatal(err)
+			}
+			for _, values := range selectionProtoLists(&payload) {
+				if len(values) > 0 {
+					values[0] = "mutated protobuf"
+				}
 			}
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -66,15 +78,11 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 }
 
 func TestCrossPlatformCoverageFlatMetaRejectsInconsistentListPresence(t *testing.T) {
-	for bit := 0; bit < commandMetaListCount; bit++ {
-		row := &schemacachepb.CommandMetaEntry{}
-		fields := []*[]string{&row.Aliases, &row.UseWhen, &row.AvoidWhen, &row.Prerequisites, &row.Tips, &row.Examples}
-		*fields[bit] = []string{"value"}
-		if err := validateCommandMetaListPresence(row); err == nil {
-			t.Fatalf("list %d without presence accepted", bit)
-		}
+	row := &schemacachepb.CommandMetaEntry{Aliases: []string{"value"}}
+	if err := validateCommandMetaListPresence(row); err == nil {
+		t.Fatal("aliases without presence bit accepted")
 	}
-	for _, mask := range []uint32{1 << commandMetaListCount, 1 << 31, ^uint32(0)} {
+	for _, mask := range []uint32{1 << 1, 1 << 31, ^uint32(0)} {
 		if err := validateCommandMetaListPresence(&schemacachepb.CommandMetaEntry{ListsPresent: mask}); err == nil {
 			t.Fatalf("unknown presence mask %x accepted", mask)
 		}

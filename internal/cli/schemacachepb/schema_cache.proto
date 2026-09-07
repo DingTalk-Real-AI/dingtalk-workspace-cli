@@ -7,7 +7,8 @@ option go_package = "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal
 enum DTOVersion {
   DTO_VERSION_UNSPECIFIED = 0;
   DTO_VERSION_V1 = 1; // Recognized only so readers can explicitly reject retired DTOs.
-  DTO_VERSION_V2 = 2;
+  DTO_VERSION_V2 = 2; // Recognized only so readers can explicitly reject retired DTOs.
+  DTO_VERSION_V3 = 3;
 }
 
 enum OverviewSummaryKind {
@@ -71,8 +72,21 @@ message RegistryFields {
 }
 
 message CommandMetaEntryList { repeated CommandMetaEntry items = 1; }
-// DTO v2 stores one complete metadata value in each row. The retired v1
-// nested meta field is reserved, never reinterpreted as a scalar.
+// DTO v3 stores Identity and Safety inline and serializes Selection separately,
+// so a reader validating every row does not decode Selection strings for all of
+// them. The retired v1 nested meta field and the v2 inline Selection fields are
+// reserved, never reinterpreted.
+message CommandSelectionPayload {
+  string agent_summary = 1;
+  repeated string use_when = 2;
+  repeated string avoid_when = 3;
+  repeated string prerequisites = 4;
+  repeated string tips = 5;
+  repeated string examples = 6;
+  // Bits 0..4 correspond to the five lists above. A set bit distinguishes
+  // present-empty from nil; nonempty lists require their bit. Other bits fail.
+  uint32 lists_present = 7;
+}
 message CommandMetaEntry {
   string lookup_path = 1;
   reserved 2;
@@ -85,16 +99,14 @@ message CommandMetaEntry {
   string risk = 8;
   string confirmation = 9;
   string idempotency = 10;
-  string agent_summary = 11;
+  reserved 11;
+  reserved "agent_summary";
   repeated string aliases = 12;
-  repeated string use_when = 13;
-  repeated string avoid_when = 14;
-  repeated string prerequisites = 15;
-  repeated string tips = 16;
-  repeated string examples = 17;
-  // Bits 0..5 correspond to the six lists above. A set bit distinguishes
-  // present-empty from nil; nonempty lists require their bit. Other bits fail.
+  reserved 13, 14, 15, 16, 17;
+  reserved "use_when", "avoid_when", "prerequisites", "tips", "examples";
+  // Bit 0 marks aliases present-empty versus nil. Other bits fail.
   uint32 lists_present = 18;
+  bytes selection = 19;
 }
 
 message SchemaOverviewCache {

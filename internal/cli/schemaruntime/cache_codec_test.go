@@ -211,11 +211,11 @@ func TestSchemaCacheRejectsMalformedMeta(t *testing.T) {
 			message.CommandEntries.Items[0].ProtoReflect().SetUnknown([]byte{0x12, 0x00})
 		}),
 		"unknown-list-presence-bit": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
-			message.CommandEntries.Items[0].ListsPresent |= 1 << 6
+			message.CommandEntries.Items[0].ListsPresent |= 1 << 1
 		}),
 		"nonempty-list-without-presence": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
-			message.CommandEntries.Items[0].Tips = []string{"tip"}
-			message.CommandEntries.Items[0].ListsPresent &^= 1 << 4
+			message.CommandEntries.Items[0].Aliases = []string{"alias"}
+			message.CommandEntries.Items[0].ListsPresent &^= aliasesPresentBit
 		}),
 		"duplicate-command-key": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
 			message.CommandEntries.Items = append(message.CommandEntries.Items, proto.Clone(message.CommandEntries.Items[0]).(*schemacachepb.CommandMetaEntry))
