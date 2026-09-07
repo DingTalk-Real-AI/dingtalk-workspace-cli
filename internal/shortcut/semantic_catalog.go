@@ -70,6 +70,9 @@ var devdocSemanticCatalogJSON []byte
 //go:embed semantic_catalog_hrbrain.json
 var hrbrainSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_hrmregister.json
+var hrmregisterSemanticCatalogJSON []byte
+
 //go:embed semantic_catalog_pat.json
 var patSemanticCatalogJSON []byte
 
@@ -122,6 +125,7 @@ func semanticCatalogSources() [][]byte {
 		whiteboardSemanticCatalogJSON,
 		devdocSemanticCatalogJSON,
 		hrbrainSemanticCatalogJSON,
+		hrmregisterSemanticCatalogJSON,
 		patSemanticCatalogJSON,
 		devAppSemanticCatalogJSON,
 		agoalSemanticCatalogJSON,
