@@ -42,7 +42,7 @@ func devMCPDestructiveSafety() contract.SafetySpec {
 	}
 }
 
-func devMCPContract(cmd *cobra.Command, tool, cliPath, description string, dryRun bool) LeafContract {
+func devMCPContract(cmd *cobra.Command, tool, cliPath, description string, dryRun bool, requiredFlags ...string) LeafContract {
 	example := ""
 	if cmd != nil {
 		for _, line := range strings.Split(cmd.Example, "\n") {
@@ -76,6 +76,9 @@ func devMCPContract(cmd *cobra.Command, tool, cliPath, description string, dryRu
 			AvoidWhen:    []string{"只需调用已发布 MCP 工具时使用 dws mcp published，而不是开发配置命令"},
 			Examples:     []string{example},
 		},
+	}
+	for _, name := range requiredFlags {
+		decl.Parameters = append(decl.Parameters, contract.ParamDecl{Name: name, Required: boolPtr(true)})
 	}
 	if dryRun {
 		decl.DryRun = &contract.DryRunSpec{

@@ -246,7 +246,7 @@ var Fetch = shortcut.Shortcut{
 		return nil
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"node", "query"}, Description: fetchTargetConstraint},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"node", "query"}, Description: fetchTargetConstraint},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"scope", "keyword"}, Description: "--scope keyword 时 --keyword 不能为空"},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {

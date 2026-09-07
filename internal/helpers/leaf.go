@@ -46,11 +46,11 @@ const contractConfirmDeferredAnnotation = "dws.contract.confirm_deferred"
 //
 //   - 完全托管模式 NewLeafCommand：声明 + 执行都归 corecmd（flag 注册、
 //     参数投影、ConfirmSafety、派发）。新命令默认走此模式。
-//   - 声明元数据模式 DeclareLeafMetadata：声明 Safety + Contract（AttachContract），
-//     不注册 flag、不接管参数投影；可选 Validate 与 ConfirmSafety 同挂在
-//     RunE 包装器内（Validate 在前，不是 PreRunE——直接调 RunE /
-//     proxySubCmd 会跳过 PreRunE）。当 Safety.Confirmation=user_required 时
-//     用**同一份** SafetySpec 包一层 ConfirmSafety，保证执行门禁与 Catalog
+//   - 声明元数据模式 DeclareLeafMetadata：声明 Constraints + Safety + Contract
+//     （AttachContract），不注册 flag、不接管参数投影；Constraints 引用既有
+//     Cobra flag，并与可选 Validate、ConfirmSafety 同挂在 RunE 包装器内
+//     （声明约束先于 Validate）。当 Safety.Confirmation=user_required 时用
+//     **同一份** SafetySpec 包一层 ConfirmSafety，保证执行门禁与 Catalog
 //     同源。用于执行体必须冻结的既有命令补声明，是迁移态。
 //
 // 每个 API 各自声明：
@@ -209,8 +209,9 @@ func NewLeafCommand(spec LeafSpec) *cobra.Command {
 //     副作用叶必须补 Validate，或把副作用放进 gated CallTool。
 //
 // 该模式是迁移态而非终态：命令具备条件时应升级为 NewLeafCommand。传入
-// Flags/Constraints/ConstParams/Call/RunE/PostMount 或空 Contract 会 panic，
-// 防止误用成半接管（Validate 是唯一允许的执行钩子）。
+// Flags/ConstParams/Call/RunE/PostMount 或空 Contract 会 panic，防止误用成
+// 半接管。Constraints 是声明字段：只能引用已经由该 Cobra leaf 注册的 flag，
+// 并由 corecmd 同时负责运行时校验、Schema 投影与帮助渲染。
 func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	if cmd == nil {
 		panic("DeclareLeafMetadata: cmd is nil")
@@ -218,9 +219,6 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	name := cmd.Name()
 	if len(spec.Flags) > 0 {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Flags must be empty (metadata-only mode)", name))
-	}
-	if len(spec.Constraints) > 0 {
-		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Constraints must be empty (metadata-only mode)", name))
 	}
 	if len(spec.ConstParams) > 0 {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): ConstParams must be empty (metadata-only mode)", name))
@@ -246,9 +244,27 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	if spec.Contract.Empty() {
 		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Contract is required", name))
 	}
+	constraintFlags := metadataConstraintFlagSpecs(cmd, spec.Constraints)
+	corecmd.ValidateConstraintDecls(cmd.Use, constraintFlags, spec.Constraints)
 	corecmd.AttachContract(cmd, spec.Safety, spec.Contract, cmd.Short, cmd.Long)
+	corecmd.AnnotateConstraints(cmd, spec.Constraints)
+	if help := corecmd.ConstraintHelp(spec.Constraints); help != "" {
+		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
+	}
 	if spec.OutputRollout != "" {
 		output.SetCommandRollout(cmd, spec.OutputRollout)
+	}
+	if len(spec.Constraints) > 0 {
+		declaredValidate := spec.Validate
+		spec.Validate = func(c *cobra.Command, args []string) error {
+			if err := corecmd.ValidateConstraints(c, constraintFlags, spec.Constraints); err != nil {
+				return err
+			}
+			if declaredValidate != nil {
+				return declaredValidate(c, args)
+			}
+			return nil
+		}
 	}
 
 	confirm := strings.TrimSpace(spec.Safety.Confirmation) == "user_required"
@@ -271,6 +287,41 @@ func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
 	storeContractRuntime(cmd, rt)
 	installContractRunEPipeline(cmd, rt)
 	return cmd
+}
+
+// metadataConstraintFlagSpecs projects pre-existing Cobra flags into the
+// minimal FlagSpec set needed by corecmd's typed constraint validator. Tier2
+// commands keep ownership of flag registration, while the relationship rule
+// remains a first-class declaration instead of a runtime-only fmt.Errorf.
+func metadataConstraintFlagSpecs(cmd *cobra.Command, constraints []LeafConstraint) []LeafFlag {
+	seen := map[string]bool{}
+	flags := make([]LeafFlag, 0)
+	for _, constraint := range constraints {
+		for _, name := range constraint.Flags {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			flag := cmd.Flags().Lookup(name)
+			if flag == nil {
+				flag = cmd.InheritedFlags().Lookup(name)
+			}
+			if flag == nil {
+				panic(fmt.Sprintf("command %q: constraint %s references undeclared flag %q", cmd.Use, constraint.Kind, name))
+			}
+			kind := LeafString
+			switch flag.Value.Type() {
+			case "bool":
+				kind = LeafBool
+			case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "count":
+				kind = LeafInt
+			case "stringSlice", "stringArray":
+				kind = LeafStringSlice
+			}
+			flags = append(flags, LeafFlag{Name: name, Kind: kind})
+		}
+	}
+	return flags
 }
 
 // installContractRunEPipeline wraps RunE so Validate and ConfirmSafety share

@@ -491,7 +491,7 @@ func TestConnectorMCPToolUpsertMetadataValidation(t *testing.T) {
 				"--tool-id", "G-ACT-1",
 				"--dry-run",
 			},
-			wantErr: "至少提供一项待更新字段",
+			wantErr: "请至少指定 --name",
 		},
 		{
 			name: "rejects invalid server name",
@@ -574,7 +574,7 @@ func TestConnectorMCPLegacyFlagRenameHints(t *testing.T) {
 				"--value", `{"city":"杭州"}`,
 				"--dry-run",
 			},
-			wantErr: "调试需指定本次运行时凭证，二选一",
+			wantErr: "请指定 --credential-id、--no-credential 之一",
 		},
 		{
 			name:    "tool get rejects action-id",

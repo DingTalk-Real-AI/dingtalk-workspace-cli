@@ -99,7 +99,6 @@ func TestCrossPlatformCoverageDeclareLeafMetadataPanicsOnExecutionFields(t *test
 	}{
 		{"nil cmd", nil, LeafSpec{}, "cmd is nil"},
 		{"flags", &cobra.Command{Use: "leaf"}, LeafSpec{Flags: []LeafFlag{{Name: "x", Usage: "x"}}}, "Flags must be empty"},
-		{"constraints", &cobra.Command{Use: "leaf"}, LeafSpec{Constraints: []LeafConstraint{{Kind: LeafAtLeastOne, Flags: []string{"a", "b"}}}}, "Constraints must be empty"},
 		{"const params", &cobra.Command{Use: "leaf"}, LeafSpec{ConstParams: map[string]any{"k": true}}, "ConstParams must be empty"},
 		{"call", &cobra.Command{Use: "leaf"}, LeafSpec{Call: func(*cobra.Command, string, map[string]any) error { return nil }}, "Call must be nil"},
 		{"runE", &cobra.Command{Use: "leaf"}, LeafSpec{RunE: func(*cobra.Command, []string) error { return nil }}, "RunE must be nil"},
@@ -122,6 +121,54 @@ func TestCrossPlatformCoverageDeclareLeafMetadataPanicsOnExecutionFields(t *test
 			}()
 			DeclareLeafMetadata(c.cmd, c.spec)
 		})
+	}
+}
+
+func TestCrossPlatformCoverageDeclareLeafMetadataConstraints(t *testing.T) {
+	build := func() (*cobra.Command, *bool) {
+		ran := false
+		cmd := &cobra.Command{
+			Use: "lookup",
+			RunE: func(*cobra.Command, []string) error {
+				ran = true
+				return nil
+			},
+		}
+		cmd.Flags().String("id", "", "stable ID")
+		cmd.Flags().String("query", "", "search query")
+		DeclareLeafMetadata(cmd, LeafSpec{
+			Safety: contract.SafetySpec{
+				Effect: "read", Risk: "low",
+				Confirmation: "not_required", Idempotency: "idempotent",
+			},
+			Constraints: []LeafConstraint{{Kind: LeafExactlyOne, Flags: []string{"id", "query"}}},
+			Contract:    contractCoverageSchema("test constrained lookup"),
+		})
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		return cmd, &ran
+	}
+
+	missing, missingRan := build()
+	if err := missing.Execute(); err == nil || !strings.Contains(err.Error(), "请指定 --id、--query 之一") {
+		t.Fatalf("missing constraint error = %v", err)
+	}
+	if *missingRan {
+		t.Fatal("inner RunE must not run when the declared constraint fails")
+	}
+	if !strings.Contains(missing.Long, "参数约束") {
+		t.Fatalf("Long help does not render declared constraints: %q", missing.Long)
+	}
+
+	valid, validRan := build()
+	valid.SetArgs([]string{"--id", "id-1"})
+	if err := valid.Execute(); err != nil {
+		t.Fatalf("valid constrained leaf error = %v", err)
+	}
+	if !*validRan {
+		t.Fatal("inner RunE did not run after declared constraints passed")
 	}
 }
 

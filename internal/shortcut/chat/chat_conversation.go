@@ -65,6 +65,10 @@ var ConversationInfo = shortcut.Shortcut{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群聊 openConversationId"},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方 openDingTalkId"},
 	},
+	Constraints: []shortcut.Constraint{{
+		Kind:  shortcut.ConstraintExactlyOne,
+		Flags: []string{"group", "open-dingtalk-id"},
+	}},
 	Tips: []string{`dws chat +conversation-info --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}

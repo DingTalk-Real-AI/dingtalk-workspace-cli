@@ -125,7 +125,11 @@ func TestConnectDaemonFamilyRequiresLocatorIdentity(t *testing.T) {
 		cmd.SetErr(&errBuf)
 		cmd.SetArgs(nil)
 		err := cmd.Execute()
-		if err == nil || !strings.Contains(err.Error(), "需要 --robot-client-id 或 --unified-app-id") {
+		want := "需要 --robot-client-id 或 --unified-app-id"
+		if cmd.Name() == "restart" {
+			want = "请至少指定 --robot-client-id、--unified-app-id 之一"
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("%s without locator error = %v, want 定位守护进程 validation", cmd.Name(), err)
 		}
 		if out.Len() != 0 {

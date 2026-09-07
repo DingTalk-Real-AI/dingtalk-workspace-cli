@@ -469,9 +469,10 @@ func newDevAppGetCommand(runner executor.Runner) *cobra.Command {
 			{Name: "unified-app-id", Usage: "开放平台统一应用 ID（与 --app-key 二选一）", Bind: "unifiedAppId", Trim: true, OmitEmpty: true},
 			{Name: "app-key", Usage: "按 appKey/clientId 查询应用详情（与 --unified-app-id 二选一）", Bind: "appKey", Trim: true, OmitEmpty: true},
 		},
-		// 二选一走 Validate 而非类型化 Constraints：发布 constraints 会改变已
-		// 交付的 Schema 契约（merge-base 为 null），本 PR 承诺零契约变更。
-		// 声明化发布留给独立的契约变更 PR。
+		Constraints: []LeafConstraint{{
+			Kind:  LeafAtLeastOne,
+			Flags: []string{"unified-app-id", "app-key"},
+		}},
 		Validate: func(cmd *cobra.Command, args []string) error {
 			if devAppStringFlag(cmd, "unified-app-id") == "" && devAppStringFlag(cmd, "app-key") == "" {
 				return apperrors.NewValidation("请传入 --unified-app-id 或 --app-key")
