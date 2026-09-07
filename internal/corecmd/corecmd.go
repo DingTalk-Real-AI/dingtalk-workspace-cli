@@ -417,21 +417,42 @@ func New(spec Spec) *cobra.Command {
 		}
 		cmd.Annotations[ConfirmFirstAnnotation] = "true"
 	}
-	// Only execution facts need to survive with RunE. Contract/help/build facts
-	// have already been validated and attached to Cobra or ContractFinal above;
-	// retaining them in every closure duplicates the full typed catalog for the
-	// lifetime of the command tree.
-	spec.Use = ""
-	spec.Short = ""
-	spec.Long = ""
-	spec.Example = ""
-	spec.Hidden = false
-	spec.OutputRollout = ""
-	spec.Contract = ContractDecl{}
-	spec.PostMount = nil
+	installExecution(cmd, executionSpec{
+		Flags:        spec.Flags,
+		Constraints:  spec.Constraints,
+		Safety:       spec.Safety,
+		ConfirmFirst: spec.ConfirmFirst,
+		ConstParams:  spec.ConstParams,
+		Validate:     spec.Validate,
+		RunE:         spec.RunE,
+		Invoke:       spec.Invoke,
+		ResultInvoke: spec.ResultInvoke,
+		Orchestrate:  spec.Orchestrate,
+	})
+	return cmd
+}
+
+// executionSpec is private retained state for the existing RunE pipeline, not
+// another authoring surface. Build-only fields stay on Cobra/ContractFinal.
+// Keeping this separate from Spec also avoids allocating space for zeroed help
+// and Contract fields in every command's execution closure.
+type executionSpec struct {
+	Flags        []FlagSpec
+	Constraints  []Constraint
+	Safety       contract.SafetySpec
+	ConfirmFirst bool
+	ConstParams  map[string]any
+	Validate     func(*cobra.Command, []string) error
+	RunE         func(*cobra.Command, []string) error
+	Invoke       func(*Ctx, map[string]any) error
+	ResultInvoke func(*Ctx, map[string]any) (output.CommandResult, error)
+	Orchestrate  func(*Ctx) error
+}
+
+func installExecution(cmd *cobra.Command, spec executionSpec) {
 	if spec.RunE != nil {
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if err := runDeclaredPreflight(cmd, args, spec); err != nil {
+			if err := runDeclaredPreflight(cmd, args, &spec); err != nil {
 				return err
 			}
 			if !spec.ConfirmFirst {
@@ -441,10 +462,10 @@ func New(spec Spec) *cobra.Command {
 			}
 			return spec.RunE(cmd, args)
 		}
-		return cmd
+		return
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := runDeclaredPreflight(cmd, args, spec); err != nil {
+		if err := runDeclaredPreflight(cmd, args, &spec); err != nil {
 			return err
 		}
 		ctx := newCtx(cmd, args, spec.Flags)
@@ -480,7 +501,6 @@ func New(spec Spec) *cobra.Command {
 		}
 		return spec.Invoke(ctx, toolArgs)
 	}
-	return cmd
 }
 
 func cloneConstParams(params map[string]any) map[string]any {
@@ -512,7 +532,7 @@ func HasDeclaredConfirmFirst(cmd *cobra.Command) bool {
 // known. Keeping this in one function is deliberate — when the RunE escape
 // hatch carried its own copy it silently dropped every declared check, so a
 // spec could publish Required flags that nothing enforced.
-func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
+func runDeclaredPreflight(cmd *cobra.Command, args []string, spec *executionSpec) error {
 	if spec.ConfirmFirst {
 		if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 			return err

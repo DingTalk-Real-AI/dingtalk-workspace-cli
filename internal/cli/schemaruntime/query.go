@@ -172,11 +172,37 @@ func SplitPathTokens(raw string) []string {
 
 // NormalizeCLIPath normalizes authored space-separated CLI paths.
 func NormalizeCLIPath(path string) string {
-	parts := strings.Fields(strings.TrimSpace(path))
-	if len(parts) > 0 && parts[0] == "dws" {
-		parts = parts[1:]
+	path = strings.TrimSpace(path)
+	if needsFieldsNormalization(path) {
+		parts := strings.Fields(path)
+		if len(parts) > 0 && parts[0] == "dws" {
+			parts = parts[1:]
+		}
+		return strings.Join(parts, " ")
 	}
-	return strings.Join(parts, " ")
+	// Cobra and generated declarations already use single ASCII spaces, so the
+	// normalized form is a substring of the input. Returning it avoids the
+	// token slice and re-join that Fields allocates for every tree node.
+	if path == "dws" {
+		return ""
+	}
+	return strings.TrimPrefix(path, "dws ")
+}
+
+// needsFieldsNormalization reports whether strings.Fields would collapse or
+// drop anything: non-ASCII runes, whitespace other than a single space, or a
+// repeated space.
+func needsFieldsNormalization(path string) bool {
+	for i := 0; i < len(path); i++ {
+		c := path[i]
+		if c >= 0x80 {
+			return true
+		}
+		if c <= ' ' && (c != ' ' || (i > 0 && path[i-1] == ' ')) {
+			return true
+		}
+	}
+	return false
 }
 
 // NormalizeQueryCLIPath accepts historical dot/slash/space query spellings.
