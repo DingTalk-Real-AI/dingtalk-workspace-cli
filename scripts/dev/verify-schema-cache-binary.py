@@ -202,7 +202,7 @@ def main():
                   ["schema", "--all", "-f", "json"]]
         expected = [json.loads(invoke(binary, route, disabled, home)[0]) for route in routes]
         for path in cache.iterdir():
-            if path.name not in {"meta.cache", "registry.shards.cache", "rebuild.lock"}:
+            if path.name not in {"meta.cache", "registry.shards.cache", "payloads.shards.cache", "rebuild.lock"}:
                 raise RuntimeError(f"unexpected cache artifact before cold-start probe: {path.name}")
             path.unlink()
         for directory in (cache, *list(cache.parents)[:3]):
