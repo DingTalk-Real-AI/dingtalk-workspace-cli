@@ -254,7 +254,11 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 第 2 层已落地（提交 `e50f53d1`）：`BuildSchemaCache`（`cache_codec.go:232`）在 `DeepEqual` 确认 lookup 与权威 registry 一致后立即执行 `validMetaAliasExpansion`。读取侧的同一校验**刻意保留**——在没有惰性解码时移除它只削弱保障而无收益，应与第 3 层一并移除。`schemaruntime` / `cli` / `app` 三包全量测试通过。
 
-第 3 层还有一条原方案漏掉的前置约束：`DecodedSchemaMeta` 目前是**按值返回**的（`DecodeSchemaMetaCache` 返回值类型），而按需解码加记忆化需要指针接收者方法，值语义与记忆化天然冲突。因此第 3 层必须连带把 `DecodedSchemaMeta` 的传递方式从值改为指针，波及面比上面列出的四个消费方更大。另一条不可行的捷径是把 `CommandMetaByPath` 填成 identity-only 的不完整值：`command_meta.go:161` 的 `ResolveMeta` 调用方 `RenderHelpAffordances` 要用 `Selection` 渲染 help，值不完整会直接导致 help 文本缺失。
+第 3 层的一条前置约束曾被误判为「值语义障碍」，现已更正：`CommandMetaByPath` 是 **map，属引用类型**，即使 `DecodedSchemaMeta` 按值传递，副本也共享同一个底层 map。因此只要在解码时把它初始化成非 nil 的空 map，惰性填充就能在值副本上正常生效，**不需要把类型改为指针传递**。`schema_cache_delivery.go:126` 也已用 `atomic.Pointer[schemaruntime.DecodedSchemaMeta]` 持有 meta，指针化的必要性进一步降低。
+
+真正需要处理的约束是并发：`freshMeta` 是 `atomic.Pointer`，说明 meta 会被并发访问，惰性填充共享 map 必须加锁或按条目 `sync.Once`，否则构成数据竞争。这是第 3 层的实际难点，不是值语义。
+
+另一条不可行的捷径仍然是把 `CommandMetaByPath` 填成 identity-only 的不完整值：`command_meta.go:161` 的 `ResolveMeta` 调用方 `RenderHelpAffordances` 要用 `Selection` 渲染 help，值不完整会直接导致 help 文本缺失。惰性解码必须产出完整值，只是推迟到命中时才产出。
 
 ## 4. 验收矩阵
 
