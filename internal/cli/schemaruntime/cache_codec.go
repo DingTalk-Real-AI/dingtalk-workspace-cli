@@ -130,6 +130,46 @@ type DecodedSchemaMeta struct {
 	Hashes                CacheHashes
 	commandCountByProduct map[string]int
 	locatorCountByProduct map[string]int
+	// commandEntries stays sorted by lookup path so CommandMeta can binary
+	// search a single row. Both this slice and commandIdentityByPath are
+	// immutable after decode, so sharing them between value copies needs no
+	// locking.
+	commandEntries        []*schemacachepb.CommandMetaEntry
+	commandIdentityByPath map[string]CommandIdentity
+}
+
+// CommandMeta resolves one command row. While CommandMetaByPath is fully
+// populated this is a plain lookup; once decoding becomes on-demand it falls
+// back to a binary search over the retained rows.
+func (m DecodedSchemaMeta) CommandMeta(path string) (CommandMeta, bool) {
+	if meta, ok := m.CommandMetaByPath[path]; ok {
+		return meta, true
+	}
+	if len(m.commandEntries) == 0 {
+		return CommandMeta{}, false
+	}
+	position := sort.Search(len(m.commandEntries), func(i int) bool {
+		return m.commandEntries[i].GetLookupPath() >= path
+	})
+	if position == len(m.commandEntries) || m.commandEntries[position].GetLookupPath() != path {
+		return CommandMeta{}, false
+	}
+	return commandMetaFromProto(m.commandEntries[position]), true
+}
+
+// MaterializeCommandMeta decodes every row into CommandMetaByPath. Only
+// verification paths that compare the complete lookup need this; ordinary
+// single-path resolution should use CommandMeta.
+func (m DecodedSchemaMeta) MaterializeCommandMeta() {
+	if m.CommandMetaByPath == nil {
+		return
+	}
+	for _, entry := range m.commandEntries {
+		path := entry.GetLookupPath()
+		if _, ok := m.CommandMetaByPath[path]; !ok {
+			m.CommandMetaByPath[path] = commandMetaFromProto(entry)
+		}
+	}
 }
 
 // DecodedSchemaProduct contains the exact shard conversion and its typed index.

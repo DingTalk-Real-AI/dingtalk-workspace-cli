@@ -158,7 +158,7 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 	if runtime := activeSchemaCacheRuntime(); runtime != nil {
 		meta, err := runtime.loadMeta()
 		if err == nil {
-			m, ok := meta.CommandMetaByPath[cliPath]
+			m, ok := meta.CommandMeta(cliPath)
 			return m, ok
 		}
 		value, _, repairErr := repairSchemaCache(runtime, func() (any, error) {
@@ -167,7 +167,7 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 				return nil, freshErr
 			}
 			runtime.seedMeta(fresh)
-			m, ok := fresh.CommandMetaByPath[cliPath]
+			m, ok := fresh.CommandMeta(cliPath)
 			return resolvedMeta{Meta: m, OK: ok}, nil
 		})
 		if repairErr == nil && value != nil {
