@@ -12,6 +12,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	aitablePsqlAgentSummary      = "使用 PostgreSQL 语法进行多表关联和分析查询。"
+	aitablePsqlUseWhen           = "多表关联、跨表分析、SQL 聚合、分组或窗口计算时使用。"
+	aitablePsqlAvoidRecordQuery  = "单表按 recordId、关键词或字段条件读取记录时使用 record query。"
+	aitablePsqlAvoidWriteOrDDL   = "新增、更新、删除记录或执行 DDL 时不可使用。"
+	aitablePsqlAvoidMixedResults = "禁止静默降级为 record query 模拟 JOIN 或 SQL 聚合，也不得混用两者的结果模型。"
+)
+
 func newAitablePsqlCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "psql",
@@ -51,10 +59,14 @@ func newAitablePsqlCommand() *cobra.Command {
 				Reason:       "命令根据 -l、-t 和 -c 路由到表清单、表结构或统一 SQL 执行 MCP Tool。",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "使用 PostgreSQL 语法查询 AI 表格。",
-				UseWhen:      []string{"需要查看逻辑表结构或执行只读 PostgreSQL SELECT 时"},
-				AvoidWhen:    []string{"需要新增、更新、删除记录或执行 DDL 时"},
-				Examples:     []string{"dws aitable psql -d <BASE_ID> -l", "dws aitable psql -d <BASE_ID> -c 'SELECT * FROM 表名'"},
+				AgentSummary: aitablePsqlAgentSummary,
+				UseWhen:      []string{aitablePsqlUseWhen},
+				AvoidWhen: []string{
+					aitablePsqlAvoidRecordQuery,
+					aitablePsqlAvoidWriteOrDDL,
+					aitablePsqlAvoidMixedResults,
+				},
+				Examples: []string{"dws aitable psql -d <BASE_ID> -l", "dws aitable psql -d <BASE_ID> -c 'SELECT * FROM 表名'"},
 			},
 		},
 	})

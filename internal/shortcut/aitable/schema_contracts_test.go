@@ -41,6 +41,8 @@ func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormali
 		"nextCursor 显式续页",
 		"完整读取全表时不要使用本 Shortcut",
 		"--all --page-limit 0",
+		"不是同一结果模型",
+		"禁止相互拼接、转换或混合推导",
 	} {
 		if !strings.Contains(item.Intent, required) {
 			t.Errorf("RecordQuery intent missing %q", required)
