@@ -11,6 +11,7 @@
 | 以 current-user / bot / webhook 身份发消息 | `dws chat +messages-send --as <identity> ...`；Bot 多群用 `--groups/--groups-file` |
 | 拉取单个群聊或单聊的消息 | `dws chat +chat-messages ...`；全量加 `--page-all`，导出加 `--output` |
 | 按关键词、发送者、@对象、会话、类型或时间组合搜索 | `dws chat +search-msg ...` |
+| 查询指定时间以来有新消息的去重会话摘要 | `dws chat +active-conversations --start <时间>`；自动翻页并返回名称、类型和最新消息时间 |
 | 查询 @我的消息 | `dws chat +at-me ...` |
 | 根据消息 ID 批量取详情与 reaction | `dws chat +messages-mget ...` |
 | 读取已知 thread/topic 的全部回复 | `dws chat +thread-replies ...` |
@@ -21,6 +22,9 @@
 - `+chat-messages --page-all` 连续读取 typed `nextPage.time`，按消息 ID 去重并受 `--page-limit/--max-results` 约束；`--output` 将同一完整性 ledger 原子写入工作目录内 JSON。
 - `+messages-send` 会自动规范化并补齐 @ 占位符。user 使用 `<@id>` / `<@all>`；bot/webhook 使用 `@id` / `@手机号` / `@all`。声明 `--at-*` / `--at-all` 即可，不要为统一 Shortcut 手工拼 `@10`。
 - `+search-msg --page-all` 连续翻页并默认按消息 ID 批量富化；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger。
+- `+active-conversations` 最少只需 `--start`，会固定默认结束时间、自动翻页并按 `openConversationId` 去重；`--page-delay` 默认 200ms（0–60000ms，等待可取消）。会话总有 `name` 和 `nameKnown`，未知名称为 `""` / `false`。成功及页数上限结果在 `data`，需检查 `complete` 和 `meta.pagination`；`pageSize` 记录 `--limit`。
+- `+active-conversations` 的 `--start/--end` 仅支持整秒，显式传入非零小数秒会在参数校验时失败。默认 `end` 是本次查询取到的当前时间向下取整秒，不包含当前尚未结束的这一秒；最终有效区间必须满足 `end > start`。同一 `end` 用于所有页请求、结果返回和续查；消息 `latestMessageTime` 仍保留毫秒精度。
+- `+active-conversations` 后续页失败返回 `partial_failure`（退出码 7）：已成功页面摘要在 `data.succeeded[0]`（`id=completed-pages`，`complete=false`），失败项在 `data.failed[0]`（`id=page:N`，其 `error.details.failedPage/failedCursor` 保留失败位置），`meta.pagination.next_token` 指向失败页输入游标；首个请求页失败返回普通 `failure`。先排查错误，不自动重试。续查必须使用同一 profile，并复用摘要中的 `start/end/pageSize` 作为 `--start/--end/--limit`；前后批次按 `conversationId` 合并、保留更大的 `latestMessageTime`。续页批次自身不标记全量完整；只有从首页起无遗漏地接续所有批次、处理完失败页且 endpoint 耗尽，才能报告全量结果。
 - `+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 可用 `--download-resources` 下载资源。引用、回复、合并转发中的资源使用结果 `resourceRefs` 自带的子消息 `messageId`；仅当子消息缺会话 ID 时继承父消息 `openConversationId`。
 - 上述五个查询 Shortcut 与 `+messages-resource-download` 都沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
 - 下载器仅接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。新官方域名被拒绝时记录错误中的 host 供审查，不要放宽为任意 HTTPS。
@@ -2127,7 +2131,8 @@ Flags:
 用户说"某人发给我的消息/指定发送者的消息/某人最近的消息" → `chat message list-by-sender --sender-user-id <userId>` 或 `--sender-open-dingtalk-id <openDingTalkId>`（跨单聊+群聊）
 用户说"和某人的单聊聊天记录/拉某人单聊历史" → `chat message list --user <userId>` 或 `--open-dingtalk-id <openDingTalkId>`
 用户说"某个群的聊天记录" → `chat message list --group <openConversationId>`
-用户说"我最近所有消息/我今天的消息" → `chat message list-all --start <ISO> --end <ISO>`
+用户说"指定时间以来哪些单聊或群聊有新消息/最近活跃会话" → `chat +active-conversations --start <ISO>`
+用户说"我最近所有消息正文/我今天的消息正文" → `chat message list-all --start <ISO> --end <ISO>`
 用户说"@我的消息/提及我的" → `chat message list-mentions --start <ISO> --end <ISO>`
 用户说"搜索消息里的关键词/包含XX的消息" → `chat message search-advanced --query "<关键词>"`（首选，严格超集）
 用户说"我和某人的共同群" → `chat search-common --nicks "<昵称1>,<昵称2>"`
@@ -2163,7 +2168,8 @@ Flags:
 用户说"回复话题" → `chat thread reply --conversation-id <openConvThreadId>`
 用户说"把普通群已有消息转成Thread/升级成群内话题" → `chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`
 用户说"查看话题回复/拉取话题回复/列出每条回复内容/核实某条回复是否还在" → `chat thread list-replies`
-用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息" → `chat message list-all`
+用户说"指定时间以来有消息的会话/最近活跃会话/哪些单聊群聊有新消息" → `chat +active-conversations`
+用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息正文/我的消息正文/我今天的消息正文/查我的钉钉消息正文" → `chat message list-all`
 用户说"特别关注人的消息/关注的人的消息/星标联系人的消息" → `chat message list-focused`
 用户说"消息已读未读/谁看了消息/查读状态/消息读取状态" → `chat message read-status`
 用户说"查看我的机器人" → `chat bot search`

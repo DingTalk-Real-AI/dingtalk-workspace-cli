@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-01T12:32:11.441411",
-  "count": 439,
+  "generated_at": "2026-09-07T10:56:17.380807",
+  "count": 440,
   "results": [
     {
       "suite": "semantic",
@@ -1410,6 +1410,16 @@
       "status": "reviewed_available",
       "disposition": "primary_smart",
       "semantic_delta": "查询并按日期整理本周日程。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+active-conversations",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
       "availability": "available"
     },
     {
@@ -3779,7 +3789,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID with stop/continue partial-write ledgers and explicit acknowledgements.",
+      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID or organization staffId with stop/continue partial-write ledgers and explicit acknowledgements.",
       "availability": "available"
     },
     {
