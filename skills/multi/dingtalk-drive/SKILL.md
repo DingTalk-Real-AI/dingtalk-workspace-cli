@@ -46,6 +46,7 @@ metadata:
 | 上传新文件或覆盖普通文件 | `dws drive +upload --file <相对路径>` | 新建可加 folder；覆盖改加 node，二者互斥 |
 | 管理普通文件全局评论 | `dws drive comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply` | 复用 Doc/Sheet 新评论链路；旧 `list/create` 已 deprecated；固定全文 `global`，不支持划词、单元格或 mention |
 | 创建文件夹 | `dws drive +create-folder --name <名称> [--folder <ID>]` | Shortcut 已提交并读回 |
+| 创建普通文件的独立副本 | `dws drive +download --node <源ID> --output <相对路径>` → `dws drive +upload --file <同一相对路径> [--folder <目标ID>]` | 经用户授权后执行；已知是普通文件时不试 `+copy`；新建上传不传 `--node`，避免覆盖；完成证据见下方副本规则 |
 | 复制在线文档节点 | `dws drive +copy --node <ID> [--folder <目标ID>]` | 普通钉盘文件会被拒绝；Base 结构复制走 AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` |
 | 移动节点 | `dws drive +move --node <ID> --folder <目标ID>` | 破坏性变更，按 Runtime confirmation |
 | 重命名节点 | `dws drive +rename --node <ID> --name <新名称>` | 写后检查最终名称 |
@@ -53,6 +54,8 @@ metadata:
 | 钉盘文件夹拉到本地 | `dws drive pull --local-folder <绝对路径> --remote-folder <folderId> --if-exists skip` | 安全默认不覆盖；先以相同参数 `--dry-run`，再按确认执行 |
 | 本地文件夹推到钉盘 | `dws drive push --local-folder <绝对路径> --remote-folder <folderId> --if-exists skip` | 安全默认不覆盖；先 dry-run；不会删除远端多余文件 |
 | 双向补齐文件夹 | `dws drive sync --local-folder <绝对路径> --remote-folder <folderId> --on-conflict skip` | 先 dry-run；冲突策略必须显式保留 |
+
+普通文件副本规则：复用已有可靠回执中的节点类型和源 ID；类型不明时先 inspect，不用失败的 copy 探测类型。下载成功后，按用户授权的目标位置新建上传；确认返回的新节点 ID 与源 ID 不同，并按任务要求核对名称、大小或内容。只给出操作说明不算已创建副本；该路径不承诺复制权限、版本历史或其他在线协作元数据。
 
 ### 低频入口
 
@@ -115,7 +118,7 @@ Golden Route 参数足够时禁止读取 reference。其余最多读取一个精
 3. 普通下载遇到在线文档类型：切 `doc +export`，不重复尝试 Drive download。
 4. 传输中断：保留本地临时状态或 checkpoint；先判断能否续传。
 5. 写入效果未知：按 nodeId 回读；无法证明时报告 unknown。
-6. 普通文件 `+copy` 被拒绝时不要重试或伪装成功；独立副本改走经用户授权的 download→upload。AITable 结构复制缺少或无法验证目标文件夹时停止，不猜 ID或创建测试文件夹。
+6. 已知是普通文件且需要独立副本时，直接按 Golden Route 的 download→upload 执行，不以 `+copy` 失败作为前置探测。若仍收到普通文件 copy 不支持的错误，不重试或宣称已完成；确认授权与目标后按副本规则继续。AITable 结构复制缺少或无法验证目标文件夹时停止，不猜 ID 或创建测试文件夹。
 
 ## 跨产品边界
 
