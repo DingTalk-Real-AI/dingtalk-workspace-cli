@@ -378,8 +378,8 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 		{name: "changed interface mode", want: "changed interface_mode", mutate: func(contract *schemaContract) {
 			mutateTool(contract, func(tool *toolSchema) { tool.InterfaceMode = "mcp" })
 		}},
-		{name: "changed constraints", want: "changed constraints", mutate: func(contract *schemaContract) {
-			mutateTool(contract, func(tool *toolSchema) { tool.Constraints = `{}` })
+		{name: "new mandatory group", want: "changed constraints", mutate: func(contract *schemaContract) {
+			mutateTool(contract, func(tool *toolSchema) { tool.Constraints = `{"require_one_of":[["new-required-input"]]}` })
 		}},
 		{name: "changed positionals", want: "changed positionals", mutate: func(contract *schemaContract) {
 			mutateTool(contract, func(tool *toolSchema) { tool.Positionals[0].Name = "id" })
@@ -1066,8 +1066,8 @@ func TestCrossPlatformCoverageSchemaCompatAdditiveConstraintEvolution(t *testing
 	}
 	removedOldGroup := compatible
 	removedOldGroup.Constraints = `{"mutually_exclusive":[["new-a","new-b"]]}`
-	if compatibleAdditiveConstraintEvolution(oldTool, removedOldGroup) {
-		t.Fatal("removing a historical group must fail")
+	if !compatibleAdditiveConstraintEvolution(oldTool, removedOldGroup) {
+		t.Fatal("removing a required group preserves historical invocations")
 	}
 	invalid := compatible
 	invalid.Constraints = "{"

@@ -27,8 +27,10 @@ Flags:
 
 ## 自动翻页（--all + --page-limit）
 
-- 用户要求“全部/完整/汇总/统计/导出/逐条处理”时，必须传 `--all`，由 CLI 循环获取并合并记录；不要让 Agent 手写分页循环。
-- 要求完整结果时使用 `--page-limit 0`；默认值 50 只适用于允许最多读取约 5000 条的有界场景。
+- 用户要求“完整逐行明细”或需要“逐条处理”时，必须传 `--all`，由 CLI 循环获取并合并记录；不要让 Agent 手写分页循环。
+- 用户需要汇总、统计、分组、同 Base JOIN、派生指标或排名时，优先使用 `dws aitable psql` 在服务端计算；不要因为出现“汇总/统计”就自动全量拉取记录。
+- 用户需要导出完整数据时，优先使用 `dws aitable export data`。
+- 确需完整逐行结果时使用 `--page-limit 0`；默认值 50 只适用于允许最多读取约 5000 条的有界场景。
 - CLI 首次请求不传 cursor，后续原样使用上一页 `data.nextCursor`，并检测 cursor 循环；页间间隔 200ms。
 - 同一分页会话的 `base-id/table-id/filters/sort/query/field-ids/limit` 必须保持不变，禁止重发第一页、复用旧会话 cursor、修改排序或自行构造 cursor。
 - 只有自动分页输出 `complete=true`，或手动分页时 `data.nextCursor` 为空，才表示完整结束。普通扫描某页恰好返回 `limit` 条时，服务端可能返回 `nextCursor`；用它续页后若调用成功、`records=[]` 且 `nextCursor` 为空，这是正常的末页探测，应正常完成，不能报错、重试或判定漏查。
@@ -86,7 +88,7 @@ dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --so
 - `--sort` 用 `"order":"desc"` → 必须用 `"direction":"desc"`
 - 不加 `--field-ids` 拉全字段 → 大表响应体积过大
 - 只读取第一页或以 `records=[]` 判定结束 → 必须检查 `nextCursor`，完整任务优先 `--all --page-limit 0`
-- 全量拉取后在 context 里手动统计 → 应优先用 `--filters` 服务端过滤
+- 全量拉取后在 context 里手动统计 → 聚合、分组、同 Base JOIN、派生指标和排名应优先用 `aitable psql`；原始记录筛选再使用 `--filters`
 
 ## record query-empty — 找空行
 

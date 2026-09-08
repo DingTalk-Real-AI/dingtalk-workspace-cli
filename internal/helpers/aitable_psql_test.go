@@ -75,6 +75,26 @@ func TestAitablePsqlExecuteExpanded(t *testing.T) {
 	}
 }
 
+func TestAitablePsqlWarnsWhenResultIsTruncated(t *testing.T) {
+	for _, expanded := range []bool{false, true} {
+		t.Run(map[bool]string{false: "table", true: "expanded"}[expanded], func(t *testing.T) {
+			caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{{result: textToolResult(
+				`{"status":"success","data":{"columns":[{"columnName":"名称","pgType":"text"}],"rows":[["记录1"]],"rowCount":1,"truncated":true}}`)}}}
+			args := []string{"-d", "base1", "-c", "SELECT 名称 FROM 项目表"}
+			if expanded {
+				args = append(args, "-x")
+			}
+			out, err := runPsqlCLI(t, caller, args...)
+			if err != nil {
+				t.Fatalf("psql execute failed: %v", err)
+			}
+			if !strings.Contains(out, "Warning: result truncated") || !strings.Contains(out, "increase --limit") {
+				t.Fatalf("missing truncation warning: %s", out)
+			}
+		})
+	}
+}
+
 func TestAitablePsqlRejectsAmbiguousMode(t *testing.T) {
 	out, err := runPsqlCLI(t, &recordQueryE2ECaller{}, "-d", "base1", "-l", "-t", "tbl1")
 	if err == nil || !strings.Contains(err.Error(), "exactly one mode") {
