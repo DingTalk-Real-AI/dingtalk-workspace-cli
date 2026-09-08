@@ -28,6 +28,7 @@ import (
 //      queryContractDetails, queryContractQuantityByType,
 //      batchImportContractAsync, getBatchImportContractResult,
 //      queryContractProcessContent, getAllFileDirectory,
+//      (review CLI leaves kept as compatibility stubs; old MCP tools retired)
 //      createAccountInfo, updateAccountInfo, getAccountEntryInfo,
 //      listAccountInfo, deleteAccountEntryInfo, contractOpenArchive
 //      addProject, deleteProject, updateProject, setProjectStatus,
@@ -59,13 +60,14 @@ func newContractCommand() *cobra.Command {
 				"通用钉盘文件查找、上传、下载走 drive；合同文件的钉盘元数据也从 drive 取",
 				"AI 听记内容查询走 minutes；仅从听记获取 taskUuid 后回本产品调用 draft",
 				"OA 审批实例的查询、同意、拒绝、转交、撤销走 misc，不要与 process-templates 混淆",
+				"合同 AI 审核新链不走本产品的 contract review；开源 dws contract review 仅为历史 argv 兼容入口",
 			},
 		},
 	})
 	root := newGroupCommand(&cobra.Command{
 		Use:   "contract",
 		Short: "智能合同管理",
-		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、项目管理、相对方管理。`,
+		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、合同审查（权益、任务、解析、结果）、项目管理、相对方管理。`,
 		RunE:  groupRunE,
 	})
 
@@ -302,6 +304,128 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 		},
 	}
 
+	// ── review ────────────────────────────────────────────────
+
+	reviewCmd := newGroupCommand(&cobra.Command{
+		Use:   "review",
+		Short: "合同审查（历史兼容）",
+		Long:  `历史 argv 兼容入口。旧 MCP 审查工具已退役；命令仍保留 Interface/Schema 表面，执行时仅返回兼容说明。新审核请使用产品侧 dws contract-review（千问办公等）。`,
+		RunE:  groupRunE,
+	})
+
+	reviewBenefitCmd := &cobra.Command{
+		Use:     "benefit",
+		Short:   "查询合同审查权益",
+		Long:    `查询用户组织的合同审查的权益数据（MCP queryContractReviewBenefit）。`,
+		Example: `  dws contract review benefit --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return printContractReviewCompatNotice(cmd, "dws contract review benefit")
+		},
+	}
+
+	reviewCreateCmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建合同审查任务",
+		Long: `创建合同审查任务（MCP createContractReviewTask）。
+JSON 须符合 IntelligentContractReviewClientRequest 结构。
+
+【字段说明】
+source              来源标识（字符串，可选）
+fileInfo            文件信息对象（可选，与 fileId/spaceId 方式二选一）
+  fileId            云盘文件 ID
+  spaceId           云盘空间 ID
+  fileName          文件名（须带扩展名，如 合同.pdf）
+  fileSize          文件大小（字节数，整数）
+  fileType          文件类型（如 pdf、docx）
+reviewType          审查类型标识（如 AI_REVIEW，可选）
+companyList         审查方公司列表（数组，可选）
+  reviewPosition    审查方在合同中的位置（字符串）
+reviewPosition      默认审查位置（字符串，可选）
+reviewResultType    审查结果类型（字符串，可选）
+customReviewRules   自定义审查规则（字符串，可选）`,
+		Example: `  dws contract review create --file ./review_request.json --format json
+  cat review_request.json | dws contract review create --file - --format json
+
+示例 review_request.json：
+{
+  "source": "OPEN_CLAW",
+  "fileInfo": {
+    "fileId": "xxx",
+    "spaceId": "yyy",
+    "fileName": "采购合同.pdf",
+    "fileSize": "102400",
+    "fileType": "pdf"
+  },
+  "reviewType": "AI_REVIEW",
+  "reviewPosition": "甲方",
+  "reviewResultType": "standard",
+  "companyList": [{"reviewPosition": "乙方"}]
+}`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Keep historical --file validation so Interface/Schema requiredness stays intact,
+			// then return the compatibility notice instead of calling retired MCP tools.
+			if _, err := readContractJSONPayload(cmd); err != nil {
+				return err
+			}
+			return printContractReviewCompatNotice(cmd, "dws contract review create")
+		},
+	}
+
+	reviewAnalysisCmd := &cobra.Command{
+		Use:   "analysis",
+		Short: "解析合同文件",
+		Long: `解析合同文件，返回合同摘要和审查推荐模型（MCP contractAnalysis）。
+JSON 须包含文件信息，可包括 fileInfo（fileId/spaceId/fileName/fileSize/fileType）或直接传文件字段。
+
+【字段说明】
+fileInfo            文件信息对象（可选）
+  fileId            云盘文件 ID
+  spaceId           云盘空间 ID
+  fileName          文件名（须带扩展名，如 合同.pdf）
+  fileSize          文件大小（字节数，整数）
+  fileType          文件类型（如 pdf、docx）
+source              来源标识（字符串，可选）`,
+		Example: `  dws contract review analysis --file ./analysis_request.json --format json
+  cat analysis_request.json | dws contract review analysis --file - --format json
+
+示例 analysis_request.json：
+{
+  "fileInfo": {
+    "fileId": "xxx",
+    "spaceId": "yyy",
+    "fileName": "采购合同.pdf",
+    "fileSize": "102400",
+    "fileType": "pdf"
+  }
+}`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := readContractJSONPayload(cmd); err != nil {
+				return err
+			}
+			return printContractReviewCompatNotice(cmd, "dws contract review analysis")
+		},
+	}
+
+	reviewResultCmd := &cobra.Command{
+		Use:   "result",
+		Short: "查询合同审查结果",
+		Long: `查询合同审查结果（MCP queryContractReviewResult）。
+必填：--task-id（审查任务 ID，由 review create 返回）、--review-type（审查类型，如 AI_REVIEW）。
+入参包裹在 IntelligentLegalContractReviewClientRequest 下。`,
+		Example: `  dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			taskID := strings.TrimSpace(MustGetStringFlag(cmd, "task-id"))
+			if taskID == "" {
+				return fmt.Errorf("--task-id 为必填参数")
+			}
+			reviewType := strings.TrimSpace(MustGetStringFlag(cmd, "review-type"))
+			if reviewType == "" {
+				return fmt.Errorf("--review-type 为必填参数")
+			}
+			return printContractReviewCompatNotice(cmd, "dws contract review result")
+		},
+	}
+
 	// flags
 	recordListCmd.Flags().String("start", "", "合同创建时间范围起点（ISO-8601，如 2026-03-10T14:00:00+08:00）")
 	recordListCmd.Flags().String("end", "", "合同创建时间范围终点（ISO-8601，须晚于 --start）")
@@ -323,12 +447,18 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	draftCmd.Flags().String("template-url", "", "合同模版 URL（与 --template-content 至少填一项；对应 MCP templateUrl）")
 	draftCmd.Flags().String("template-content", "", "合同模版全文（与 --template-url 至少填一项；对应 MCP templateContent）")
 
+	reviewCreateCmd.Flags().String("file", "", "IntelligentContractReviewClientRequest JSON 文件路径，\"-\" 表示 stdin（必填）")
+	reviewAnalysisCmd.Flags().String("file", "", "contractAnalysis 请求 JSON 文件路径，\"-\" 表示 stdin（必填）")
+	reviewResultCmd.Flags().String("task-id", "", "审查任务 ID（必填）")
+	reviewResultCmd.Flags().String("review-type", "", "审查类型，如 AI_REVIEW（必填）")
+
 	recordCmd.AddCommand(
 		recordListCmd,
 		recordGetCmd,
 		recordQuantityByTypeCmd,
 		recordCreateCmd,
 	)
+	reviewCmd.AddCommand(reviewBenefitCmd, reviewCreateCmd, reviewAnalysisCmd, reviewResultCmd)
 
 	// ── account ───────────────────────────────────────────────
 
@@ -1406,6 +1536,7 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 		processTemplatesCmd,
 		fileDirectoriesCmd,
 		draftCmd,
+		reviewCmd,
 		accountCmd,
 		archCmd,
 		projectCmd,
@@ -1425,6 +1556,10 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 		ProcessTemplates:      processTemplatesCmd,
 		FileDirectories:       fileDirectoriesCmd,
 		Draft:                 draftCmd,
+		ReviewBenefit:         reviewBenefitCmd,
+		ReviewCreate:          reviewCreateCmd,
+		ReviewAnalysis:        reviewAnalysisCmd,
+		ReviewResult:          reviewResultCmd,
 		AccountCreate:         accountCreateCmd,
 		AccountUpdate:         accountUpdateCmd,
 		AccountGet:            accountGetCmd,
@@ -1462,6 +1597,45 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 }
 
 // ── shared helpers ────────────────────────────────────────
+
+const contractReviewUnsupportedMessage = "dws contract review 不再调用旧版审查 MCP（queryContractReviewBenefit/createContractReviewTask/contractAnalysis/queryContractReviewResult）；本命令仅为历史 argv 兼容入口。"
+
+const contractReviewReplacementHint = "新合同审核请使用产品侧 dws contract-review（prepare-upload/upload/confirm/get-status/get-result），对应 MCP contract_review_*。"
+
+type contractReviewCompatNotice struct {
+	Status      string `json:"status"`
+	Command     string `json:"command"`
+	Message     string `json:"message"`
+	Replacement string `json:"replacement,omitempty"`
+}
+
+func printContractReviewCompatNotice(cmd *cobra.Command, command string) error {
+	notice := contractReviewCompatNotice{
+		Status:      "deprecated",
+		Command:     command,
+		Message:     contractReviewUnsupportedMessage,
+		Replacement: contractReviewReplacementHint,
+	}
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "", "json", "pretty":
+		if deps != nil {
+			return deps.Out.PrintJSON(notice)
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		if strings.EqualFold(strings.TrimSpace(format), "pretty") {
+			enc.SetIndent("", "  ")
+		}
+		return enc.Encode(notice)
+	default:
+		w := cmd.OutOrStdout()
+		if deps != nil {
+			w = deps.Out.w
+		}
+		_, err := fmt.Fprintf(w, "%s: %s\n%s\n", notice.Command, notice.Message, notice.Replacement)
+		return err
+	}
+}
 
 // readContractJSONPayload reads the path from flag "file" (file path or "-" for stdin) into a JSON object.
 func readContractJSONPayload(cmd *cobra.Command) (map[string]any, error) {

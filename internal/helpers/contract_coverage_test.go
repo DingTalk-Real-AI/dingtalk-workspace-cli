@@ -200,6 +200,116 @@ func TestCrossPlatformCoverageContractDraftCommand(t *testing.T) {
 	}
 }
 
+// TestCrossPlatformCoverageContractReviewCommands covers review create/analysis/result.
+func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
+	assertReviewCompat := func(t *testing.T, caller *contractDefectCaller, out string) {
+		t.Helper()
+		if len(caller.calls) != 0 {
+			t.Fatalf("compat stub must not call MCP: %#v", caller.calls)
+		}
+		if !strings.Contains(out, `"status": "deprecated"`) && !strings.Contains(out, `"status":"deprecated"`) {
+			t.Fatalf("missing deprecated status: %s", out)
+		}
+		if !strings.Contains(out, "不再调用旧版审查 MCP") {
+			t.Fatalf("missing compat message: %s", out)
+		}
+	}
+
+	// review benefit: compatibility notice
+	caller := &contractDefectCaller{}
+	out, err := executeContractDefectCommand(t, caller, newContractCommand, "review", "benefit")
+	if err != nil {
+		t.Fatalf("review benefit: %v", err)
+	}
+	assertReviewCompat(t, caller, out)
+
+	// review create: missing --file
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "create"); err == nil {
+		t.Fatal("review create without --file should fail")
+	}
+
+	// review create: file open error (nonexistent file)
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "create", "--file", "/nonexistent/path/file.json"); err == nil {
+		t.Fatal("review create with nonexistent file should fail")
+	}
+
+	// review create: JSON parse error
+	badPath := writeTempJSON(t, "bad.json", `{invalid`)
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "create", "--file", badPath); err == nil {
+		t.Fatal("review create with invalid JSON should fail")
+	}
+
+	// review create: compatibility notice after flag validation
+	goodPath := writeTempJSON(t, "review.json", `{"source":"OPEN_CLAW","reviewType":"AI_REVIEW"}`)
+	caller = &contractDefectCaller{}
+	out, err = executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "create", "--file", goodPath)
+	if err != nil {
+		t.Fatalf("review create: %v", err)
+	}
+	assertReviewCompat(t, caller, out)
+
+	// review analysis: missing --file
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "analysis"); err == nil {
+		t.Fatal("review analysis without --file should fail")
+	}
+
+	// review analysis: file open error
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "analysis", "--file", "/nonexistent/file.json"); err == nil {
+		t.Fatal("review analysis with nonexistent file should fail")
+	}
+
+	// review analysis: JSON parse error
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "analysis", "--file", badPath); err == nil {
+		t.Fatal("review analysis with invalid JSON should fail")
+	}
+
+	// review analysis: compatibility notice
+	analysisPath := writeTempJSON(t, "analysis.json", `{"fileInfo":{"fileId":"xxx"}}`)
+	caller = &contractDefectCaller{}
+	out, err = executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "analysis", "--file", analysisPath)
+	if err != nil {
+		t.Fatalf("review analysis: %v", err)
+	}
+	assertReviewCompat(t, caller, out)
+
+	// review result: missing --task-id
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "result", "--review-type", "AI_REVIEW"); err == nil {
+		t.Fatal("review result without --task-id should fail")
+	}
+
+	// review result: missing --review-type
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "result", "--task-id", "task_xxx"); err == nil {
+		t.Fatal("review result without --review-type should fail")
+	}
+
+	// review result: compatibility notice
+	caller = &contractDefectCaller{}
+	out, err = executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "result", "--task-id", "task_xxx", "--review-type", "AI_REVIEW")
+	if err != nil {
+		t.Fatalf("review result: %v", err)
+	}
+	assertReviewCompat(t, caller, out)
+}
+
 // TestCrossPlatformCoverageContractMiscCommands covers process-templates, file-directories, archive.
 func TestCrossPlatformCoverageContractMiscCommands(t *testing.T) {
 	// process-templates: success
@@ -1091,8 +1201,22 @@ func TestCrossPlatformCoverageContractHelperEdges(t *testing.T) {
 func TestCrossPlatformCoverageContractRemainingEdges(t *testing.T) {
 	dir := t.TempDir() // a directory, to trigger io.ReadAll "is a directory" error
 
-	// readContractJSONPayload: io.ReadAll error (directory as --file)
+	// review create: io.ReadAll error (directory as --file)
 	caller := &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "create", "--file", dir); err == nil {
+		t.Fatal("review create with directory as --file should fail (io.ReadAll error)")
+	}
+
+	// review analysis: io.ReadAll error (directory as --file)
+	caller = &contractDefectCaller{}
+	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
+		"review", "analysis", "--file", dir); err == nil {
+		t.Fatal("review analysis with directory as --file should fail (io.ReadAll error)")
+	}
+
+	// readContractJSONPayload: io.ReadAll error (directory as --file)
+	caller = &contractDefectCaller{}
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
 		"record", "create", "--file", dir); err == nil {
 		t.Fatal("record create with directory as --file should fail (io.ReadAll error)")
@@ -1223,6 +1347,51 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
 		"record", "list", "--end", "not-a-date"); err == nil {
 		t.Fatal("record list with invalid --end should fail")
+	}
+
+	// review create: stdin path (--file -) still validates JSON then emits compat notice
+	caller = &contractDefectCaller{}
+	root := newContractCommand()
+	root.PersistentFlags().Bool("yes", false, "confirm")
+	root.PersistentFlags().Bool("dry-run", false, "preview")
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetIn(strings.NewReader(`{"source":"test"}`))
+	root.SetArgs([]string{"review", "create", "--file", "-"})
+	InitDeps(caller)
+	var stdout bytes.Buffer
+	deps.Out.w = &stdout
+	deps.Out.errW = io.Discard
+	if err := root.Execute(); err != nil {
+		t.Fatalf("review create from stdin: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("stdin create must not call MCP: %#v", caller.calls)
+	}
+	if !strings.Contains(stdout.String(), "deprecated") {
+		t.Fatalf("stdin create missing compat notice: %s", stdout.String())
+	}
+
+	// review analysis: stdin path (--file -) still validates JSON then emits compat notice
+	caller = &contractDefectCaller{}
+	root2 := newContractCommand()
+	root2.PersistentFlags().Bool("yes", false, "confirm")
+	root2.PersistentFlags().Bool("dry-run", false, "preview")
+	root2.SilenceErrors = true
+	root2.SilenceUsage = true
+	root2.SetIn(strings.NewReader(`{"fileInfo":{"fileId":"xxx"}}`))
+	root2.SetArgs([]string{"review", "analysis", "--file", "-"})
+	InitDeps(caller)
+	deps.Out.w = &stdout
+	deps.Out.errW = io.Discard
+	if err := root2.Execute(); err != nil {
+		t.Fatalf("review analysis from stdin: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("stdin analysis must not call MCP: %#v", caller.calls)
+	}
+	if !strings.Contains(stdout.String(), "deprecated") {
+		t.Fatalf("stdin analysis missing compat notice: %s", stdout.String())
 	}
 
 	// account list: invalid --exec-start

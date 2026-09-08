@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// contractSchemaRefs holds pointers to all 40 contract leaf commands so
+// contractSchemaRefs holds pointers to all 44 contract leaf commands so
 // declareContractSchema can attach ContractDecl metadata without inflating
 // contract.go with inline declarations.
 type contractSchemaRefs struct {
@@ -31,6 +31,10 @@ type contractSchemaRefs struct {
 	ProcessTemplates      *cobra.Command
 	FileDirectories       *cobra.Command
 	Draft                 *cobra.Command
+	ReviewBenefit         *cobra.Command
+	ReviewCreate          *cobra.Command
+	ReviewAnalysis        *cobra.Command
+	ReviewResult          *cobra.Command
 	AccountCreate         *cobra.Command
 	AccountUpdate         *cobra.Command
 	AccountGet            *cobra.Command
@@ -275,6 +279,89 @@ func declareContractSchema(r *contractSchemaRefs) {
 				{Name: "task-uuids", Property: "taskUuids", Required: boolPtr(true)},
 				{Name: "template-url", Property: "templateUrl"},
 				{Name: "template-content", Property: "templateContent"},
+			},
+		},
+	})
+
+	// ── review ──────────────────────────────────────────────
+	DeclareLeafMetadata(r.ReviewBenefit, LeafSpec{
+		Safety: safetyRead,
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: "contract", Name: "review_benefit", CanonicalPath: "contract.review_benefit",
+				CLIPath: "contract review benefit", PrimaryCLIPath: "contract review benefit",
+			},
+			Description: "查询用户组织的合同审查权益数据。",
+			Interface:   contractCompositeIface,
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询合同审查权益。",
+				UseWhen:      []string{"用户要查看合同审查的权益额度或使用情况"},
+				AvoidWhen:    []string{"创建审查任务用 review create；查审查结果用 review result"},
+				Examples:     []string{"dws contract review benefit --format json"},
+			},
+		},
+	})
+
+	DeclareLeafMetadata(r.ReviewCreate, LeafSpec{
+		Safety: safetyWrite,
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: "contract", Name: "review_create", CanonicalPath: "contract.review_create",
+				CLIPath: "contract review create", PrimaryCLIPath: "contract review create",
+			},
+			Description: "创建合同审查任务。",
+			Interface:   contractCompositeIface,
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建合同审查任务，提交合同文件进行 AI 审查。",
+				UseWhen:      []string{"用户要对合同文件发起 AI 审查"},
+				AvoidWhen:    []string{"解析合同文件用 review analysis；查审查结果用 review result"},
+				Examples:     []string{"dws contract review create --file ./review_request.json --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "file", Property: "IntelligentContractReviewClientRequest", Required: boolPtr(true)},
+			},
+		},
+	})
+
+	DeclareLeafMetadata(r.ReviewAnalysis, LeafSpec{
+		Safety: safetyRead,
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: "contract", Name: "review_analysis", CanonicalPath: "contract.review_analysis",
+				CLIPath: "contract review analysis", PrimaryCLIPath: "contract review analysis",
+			},
+			Description: "解析合同文件，返回合同摘要和审查推荐模型。",
+			Interface:   contractCompositeIface,
+			Selection: contract.SelectionSpec{
+				AgentSummary: "解析合同文件并返回摘要和审查推荐。",
+				UseWhen:      []string{"用户要解析合同文件获取摘要和审查建议"},
+				AvoidWhen:    []string{"创建正式审查任务用 review create；查审查结果用 review result"},
+				Examples:     []string{"dws contract review analysis --file ./analysis_request.json --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "file", Property: "AnalysisContractApiRequest", Required: boolPtr(true)},
+			},
+		},
+	})
+
+	DeclareLeafMetadata(r.ReviewResult, LeafSpec{
+		Safety: safetyRead,
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: "contract", Name: "review_result", CanonicalPath: "contract.review_result",
+				CLIPath: "contract review result", PrimaryCLIPath: "contract review result",
+			},
+			Description: "查询合同审查结果。",
+			Interface:   contractCompositeIface,
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按任务 ID 查询合同审查结果。",
+				UseWhen:      []string{"用户已创建审查任务后要查询审查结果"},
+				AvoidWhen:    []string{"创建审查任务用 review create"},
+				Examples:     []string{`dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "task-id", Property: "taskId", Required: boolPtr(true)},
+				{Name: "review-type", Property: "reviewType", Required: boolPtr(true)},
 			},
 		},
 	})
