@@ -291,6 +291,8 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 
 本地实测（M3 Pro，同 HOME 暖缓存 25 次取中位）：leaf-help 相对 root help 的额外 wall +1.76 → **+0.46 ms**，schema-compact +1.28 → **+0.70 ms**；help/version 无回归。`TestPersistentSchemaCachePrewarm` 断言缺失缓存时探测零 mkdir/零写、预热后快路径仍是恰好三次认证 range 读且与活体渲染逐字节一致。
 
+收官 CI（run 34272576441，head `7bb3e64c`，pinned Lark 1.0.85，wall p50）**两平台五负载全胜**：linux-amd64 help −3.51 / version −2.51 / leaf-help −1.54 / schema −2.17 / dry-run −3.02 ms；darwin-arm64 help −5.33 / version −5.22 / leaf-help −3.12 / schema −11.66 / dry-run −7.41 ms；字节级一致性与全部回归门禁通过。过程中对 CI 测量做了三处稳健化（不改变门禁语义）：default-entry 采样 30 → 60（p95 次序统计量在共享 runner 上 30 样本会被个别 80 ms 尖峰掀翻，两次失败均为 opt-out 惰性路径的纯噪声）、native 作业超时 75 → 120 分钟（macOS runner 慢窗口 39 → 80 分钟）、-race cli 子集 go test 超时 15 → 30 分钟（并发修复 DeepEqual 链在 instrumented 下常态约 10 分钟）。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |
