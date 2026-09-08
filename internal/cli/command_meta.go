@@ -146,8 +146,9 @@ func registerCommandMetaAliases(lookup map[string]CommandMeta, metas []CommandMe
 // for "report inbox list"). Returns ok=false for commands not in the Schema
 // surface (utility commands, hidden commands, shortcuts).
 //
-// A persistent hit authenticates and decodes Meta only, then performs an O(1)
-// map lookup. Misses and corruption use the shared authoritative repair path.
+// A persistent hit authenticates the payload file's index and one product
+// shard header — Meta and the registry are never read on this path. Misses and
+// corruption use the shared authoritative repair path.
 func ResolveMeta(cliPath string) (CommandMeta, bool) {
 	auditSchemaDeliveryAccess("ResolveMeta")
 	cliPath = strings.TrimSpace(cliPath)
@@ -156,33 +157,12 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 		return m, ok
 	}
 	if runtime := activeSchemaCacheRuntime(); runtime != nil {
-		meta, err := runtime.loadMeta()
+		m, ok, err := runtime.resolveCommandMetaFromPayload(cliPath)
 		if err == nil {
-			m, ok := meta.CommandMeta(cliPath)
-			if !ok {
-				return m, false
-			}
-			if enriched, enrichedOK := runtime.enrichCommandMeta(meta, m); enrichedOK {
-				return enriched, true
-			}
-			// Payload unreadable, e.g. a concurrently repairing registry; fall
-			// through to the repair path so ResolveMeta never returns a partial value.
+			return m, ok
 		}
 		value, _, repairErr := repairSchemaCache(runtime, func() (any, error) {
-			fresh, freshErr := runtime.readMeta()
-			if freshErr != nil {
-				return nil, freshErr
-			}
-			runtime.seedMeta(fresh)
-			m, ok := fresh.CommandMeta(cliPath)
-			if !ok {
-				return resolvedMeta{Meta: m, OK: false}, nil
-			}
-			enriched, enrichedOK := runtime.enrichCommandMeta(fresh, m)
-			if !enrichedOK {
-				return nil, fmt.Errorf("read command payload for %q", cliPath)
-			}
-			return resolvedMeta{Meta: enriched, OK: true}, nil
+			return runtime.readCommandMetaFromPayloadFresh(cliPath)
 		})
 		if repairErr == nil && value != nil {
 			result := value.(resolvedMeta)

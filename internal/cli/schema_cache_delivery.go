@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -125,15 +126,21 @@ type schemaCacheRuntime struct {
 	meta      schemaruntime.DecodedSchemaMeta
 	metaErr   error
 	freshMeta atomic.Pointer[schemaruntime.DecodedSchemaMeta]
-	productMu sync.Mutex
-	products  map[string]*schemaCacheProductLoad
-	payloadMu sync.Mutex
-	payloads  map[string]*schemaCachePayloadLoad
-	allOnce   sync.Once
-	all       loadedSchemaCatalog
-	allErr    error
-	allMu     sync.RWMutex
-	freshAll  map[string]any
+	indexOnce sync.Once
+	index     schemaruntime.DecodedSchemaPayloadIndex
+	indexErr  error
+	// freshIndex is seeded by the repair path after a republish so the next
+	// read uses the rebuilt generation without reopening.
+	freshIndex atomic.Pointer[schemaruntime.DecodedSchemaPayloadIndex]
+	productMu  sync.Mutex
+	products   map[string]*schemaCacheProductLoad
+	payloadMu  sync.Mutex
+	payloads   map[string]*schemaCachePayloadLoad
+	allOnce    sync.Once
+	all        loadedSchemaCatalog
+	allErr     error
+	allMu      sync.RWMutex
+	freshAll   map[string]any
 }
 
 type schemaCacheProductLoad struct {
@@ -184,6 +191,29 @@ func (r *schemaCacheRuntime) seedMeta(meta schemaruntime.DecodedSchemaMeta) {
 	r.freshMeta.Store(&fresh)
 }
 
+func (r *schemaCacheRuntime) readPayloadIndex() (schemaruntime.DecodedSchemaPayloadIndex, error) {
+	cache, err := r.opened()
+	if err != nil {
+		return schemaruntime.DecodedSchemaPayloadIndex{}, err
+	}
+	return schemareader.ReadPayloadIndex(cache, r.options.Identity)
+}
+
+func (r *schemaCacheRuntime) loadPayloadIndex() (schemaruntime.DecodedSchemaPayloadIndex, error) {
+	if index := r.freshIndex.Load(); index != nil {
+		return *index, nil
+	}
+	r.indexOnce.Do(func() {
+		r.index, r.indexErr = r.readPayloadIndex()
+	})
+	return r.index, r.indexErr
+}
+
+func (r *schemaCacheRuntime) seedPayloadIndex(index schemaruntime.DecodedSchemaPayloadIndex) {
+	fresh := index
+	r.freshIndex.Store(&fresh)
+}
+
 func (r *schemaCacheRuntime) descriptor(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.ProductDescriptor, bool) {
 	return schemareader.Descriptor(meta, productID)
 }
@@ -211,18 +241,18 @@ func (r *schemaCacheRuntime) loadProduct(meta schemaruntime.DecodedSchemaMeta, p
 	return load.product, load.err
 }
 
-func (r *schemaCacheRuntime) readCommandPayload(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+func (r *schemaCacheRuntime) readCommandPayload(index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
 	cache, err := r.opened()
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
-	return schemareader.ReadCommandPayload(cache, r.options.Identity, meta, productID)
+	return schemareader.ReadCommandPayload(cache, r.options.Identity, index, productID)
 }
 
 // loadCommandPayload caches only a success. A failed read during a concurrent
 // repair must not freeze in; the next call retries so ResolveMeta stays
 // deterministic.
-func (r *schemaCacheRuntime) loadCommandPayload(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+func (r *schemaCacheRuntime) loadCommandPayload(index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
 	r.payloadMu.Lock()
 	load := r.payloads[productID]
 	if load == nil {
@@ -238,7 +268,7 @@ func (r *schemaCacheRuntime) loadCommandPayload(meta schemaruntime.DecodedSchema
 	if load.ready.Load() {
 		return load.payloads, load.err
 	}
-	payloads, err := r.readCommandPayload(meta, productID)
+	payloads, err := r.readCommandPayload(index, productID)
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
@@ -247,22 +277,64 @@ func (r *schemaCacheRuntime) loadCommandPayload(meta schemaruntime.DecodedSchema
 	return load.payloads, nil
 }
 
+// resolveCommandMetaFromPayload resolves a complete CommandMeta using only the
+// payload file: the pinned index locates the product and the shard header
+// carries the full identity, Safety, and Selection. Meta is never read.
+// ok=false with a nil error means the path is not a Schema command; any read
+// failure surfaces an error so the caller can fall through to the repair path.
+func (r *schemaCacheRuntime) resolveCommandMetaFromPayload(cliPath string) (schemaruntime.CommandMeta, bool, error) {
+	index, err := r.loadPayloadIndex()
+	if err != nil {
+		return schemaruntime.CommandMeta{}, false, err
+	}
+	productID, ok := schemareader.IndexLocator(index, cliPath)
+	if !ok {
+		return schemaruntime.CommandMeta{}, false, nil
+	}
+	payloads, err := r.loadCommandPayload(index, productID)
+	if err != nil {
+		return schemaruntime.CommandMeta{}, false, err
+	}
+	m, ok := payloads.Commands[cliPath]
+	return m, ok, nil
+}
+
+// readCommandMetaFromPayloadFresh re-reads the payload index after a repair and
+// seeds it before resolving, mirroring the meta repair flow.
+func (r *schemaCacheRuntime) readCommandMetaFromPayloadFresh(cliPath string) (any, error) {
+	index, err := r.readPayloadIndex()
+	if err != nil {
+		return nil, err
+	}
+	r.seedPayloadIndex(index)
+	productID, ok := schemareader.IndexLocator(index, cliPath)
+	if !ok {
+		return resolvedMeta{OK: false}, nil
+	}
+	payloads, err := r.readCommandPayload(index, productID)
+	if err != nil {
+		return nil, fmt.Errorf("read command payload for %q: %w", cliPath, err)
+	}
+	m, ok := payloads.Commands[cliPath]
+	return resolvedMeta{Meta: m, OK: ok}, nil
+}
+
 // renderedCompactLeaf serves one canonical compact leaf query from the command
-// payload shard without opening the registry. Any miss or read failure reports
-// false so the caller falls through to the registry-backed path, which owns
-// repair semantics. Alias queries miss deliberately: their render differs
+// payload file without opening the registry or Meta. Any miss or read failure
+// reports false so the caller falls through to the registry-backed path, which
+// owns repair semantics. Alias queries miss deliberately: their render differs
 // (is_alias/cli_path), so only the canonical dot path or a primary CLI path
 // may be answered here.
 func (r *schemaCacheRuntime) renderedCompactLeaf(raw string) ([]byte, bool) {
-	meta, err := r.loadMeta()
+	index, err := r.loadPayloadIndex()
 	if err != nil {
 		return nil, false
 	}
-	productID, ok := schemaCacheLocator(meta, raw)
+	productID, ok := schemareader.IndexLocator(index, raw)
 	if !ok {
 		return nil, false
 	}
-	payloads, err := r.loadCommandPayload(meta, productID)
+	payloads, err := r.loadCommandPayload(index, productID)
 	if err != nil {
 		return nil, false
 	}
@@ -270,45 +342,26 @@ func (r *schemaCacheRuntime) renderedCompactLeaf(raw string) ([]byte, bool) {
 	ref, ok := payloads.RenderedLeaf(canonical)
 	if !ok {
 		path := schemaruntime.NormalizeQueryCLIPath(raw)
-		if m, found := meta.CommandMeta(path); found && m.Identity.CLIPath == path {
+		if m, found := payloads.Commands[path]; found && m.Identity.CLIPath == path {
 			ref, ok = payloads.RenderedLeaf(m.Identity.Canonical)
 		}
 		if !ok {
 			return nil, false
 		}
 	}
-	blob, err := r.readRenderedLeaf(meta, productID, ref)
+	blob, err := r.readRenderedLeaf(index, productID, ref)
 	if err != nil {
 		return nil, false
 	}
 	return blob, true
 }
 
-func (r *schemaCacheRuntime) readRenderedLeaf(meta schemaruntime.DecodedSchemaMeta, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
+func (r *schemaCacheRuntime) readRenderedLeaf(index schemaruntime.DecodedSchemaPayloadIndex, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
 	cache, err := r.opened()
 	if err != nil {
 		return nil, err
 	}
-	return schemareader.ReadRenderedLeaf(cache, r.options.Identity, meta, productID, ref)
-}
-
-// enrichCommandMeta fills an identity-only CommandMeta with the Safety and
-// Selection from its product's payload shard. It reports whether the payload
-// was read so a transient failure during a concurrent repair can fall through
-// to the repair path rather than silently returning an incomplete value.
-func (r *schemaCacheRuntime) enrichCommandMeta(meta schemaruntime.DecodedSchemaMeta, m schemaruntime.CommandMeta) (schemaruntime.CommandMeta, bool) {
-	payloads, err := r.loadCommandPayload(meta, m.Identity.ProductID)
-	if err != nil {
-		return m, false
-	}
-	lookupPath := m.Identity.CLIPath
-	if safety, ok := payloads.Safety[lookupPath]; ok {
-		m.Safety = safety
-	}
-	if selection, ok := payloads.Selection[lookupPath]; ok {
-		m.Selection = selection
-	}
-	return m, true
+	return schemareader.ReadRenderedLeaf(cache, r.options.Identity, index, productID, ref)
 }
 
 func (r *schemaCacheRuntime) trustedHashes() schemaruntime.TrustedHashes {
@@ -817,7 +870,22 @@ func (a SchemaCacheArtifacts) match(identity SchemaCacheIdentity) bool {
 		"sha256:"+hex.EncodeToString(identity.SourceSHA256[:]) == a.SourceHash &&
 		"sha256:"+hex.EncodeToString(identity.SurfaceSHA256[:]) == a.SurfaceHash &&
 		uint64(len(a.Meta)) == identity.Meta.EncodedLength && a.MetaSHA256 == identity.Meta.EncodedSHA256 &&
-		uint64(len(a.Registry)) == identity.Registry.EncodedLength && a.RegistrySHA256 == identity.Registry.EncodedSHA256
+		uint64(len(a.Registry)) == identity.Registry.EncodedLength && a.RegistrySHA256 == identity.Registry.EncodedSHA256 &&
+		uint64(len(a.Payload)) == identity.Payload.EncodedLength && a.PayloadSHA256 == identity.Payload.EncodedSHA256
+}
+
+// PayloadIndexPins derives the pinned payload index region identity from the
+// artifact's self-describing prefix: the region length including the 4-byte
+// prefix, and the region digest.
+func (a SchemaCacheArtifacts) PayloadIndexPins() (uint64, [sha256.Size]byte, error) {
+	if len(a.Payload) < 4 {
+		return 0, [sha256.Size]byte{}, fmt.Errorf("payload artifact is shorter than its index prefix")
+	}
+	length := uint64(binary.BigEndian.Uint32(a.Payload[:4])) + 4
+	if length > uint64(len(a.Payload)) {
+		return 0, [sha256.Size]byte{}, fmt.Errorf("payload index region %d exceeds payload length %d", length, len(a.Payload))
+	}
+	return length, sha256.Sum256(a.Payload[:length]), nil
 }
 
 func (a SchemaCacheArtifacts) MetaArtifact() schemacache.Artifact {

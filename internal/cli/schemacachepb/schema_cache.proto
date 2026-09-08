@@ -127,6 +127,8 @@ message CommandMetaEntry {
   uint32 lists_present = 18;
 }
 // One command's Safety and Selection, held in its product's payload shard.
+// Since DTO v5 the entry also carries the full identity, so the shard header
+// alone resolves a complete CommandMeta without reading the Meta file.
 message CommandPayloadEntry {
   string lookup_path = 1;
   string effect = 2;
@@ -134,8 +136,19 @@ message CommandPayloadEntry {
   string confirmation = 4;
   string idempotency = 5;
   CommandSelectionPayload selection = 6;
+  CommandMetaEntry identity = 7;
 }
 message CommandPayloadEntryList { repeated CommandPayloadEntry items = 1; }
+// The payload file opens with a 4-byte big-endian length prefix and this
+// self-describing index, authenticated by the binary-pinned identity, so
+// command-metadata reads (ResolveMeta, schema leaf queries) never touch the
+// Meta or registry files on the hot path. Locators mirror the Meta's and are
+// cross-checked at build time.
+message SchemaPayloadIndex {
+  DTOVersion dto_version = 1;
+  LocatorEntryList locators = 2;
+  CommandPayloadDescriptorList products = 3;
+}
 // One canonical command's rendered compact leaf descriptor. The leaf bytes
 // live in the shard's raw blob region right after the header, so a leaf query
 // reads only the small header and its own blob instead of the whole shard.

@@ -390,8 +390,8 @@ func TestPersistentSchemaCacheRenderedLeafFastPath(t *testing.T) {
 	if snap.RegistryReadOps != 0 || snap.RegistryReadBytes != 0 {
 		t.Fatalf("compact leaf fast path touched the registry: %#v", snap)
 	}
-	if snap.PayloadReadOps != 2 {
-		t.Fatalf("compact leaf fast path payload reads = %d, want 2 (header + leaf blob)", snap.PayloadReadOps)
+	if snap.PayloadReadOps != 3 {
+		t.Fatalf("compact leaf fast path payload reads = %d, want 3 (index + shard header + leaf blob)", snap.PayloadReadOps)
 	}
 
 	// The primary CLI-path spelling renders the same canonical bytes.
@@ -451,11 +451,17 @@ func configureSchemaCacheTestHome(t *testing.T) {
 
 func testSchemaCacheIdentity(t *testing.T, artifacts cli.SchemaCacheArtifacts) cli.SchemaCacheIdentity {
 	t.Helper()
+	indexLength, indexDigest, err := artifacts.PayloadIndexPins()
+	if err != nil {
+		t.Fatal(err)
+	}
 	return cli.SchemaCacheIdentity{
 		Edition: "open", CatalogSnapshotVersion: uint32(artifacts.Version),
 		SourceSHA256: decodeTestSchemaDigest(t, artifacts.SourceHash), SurfaceSHA256: decodeTestSchemaDigest(t, artifacts.SurfaceHash),
 		BuildID: sha256.Sum256([]byte("persistent-cache-real-delivery-test")),
 		Meta:    artifacts.MetaArtifact().Expectation, Registry: artifacts.RegistryArtifact().Expectation,
+		Payload:            artifacts.PayloadArtifact().Expectation,
+		PayloadIndexLength: indexLength, PayloadIndexSHA256: indexDigest,
 	}
 }
 

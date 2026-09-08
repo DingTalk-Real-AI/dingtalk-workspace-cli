@@ -15,8 +15,10 @@ import (
 func TestCrossPlatformCoverageBinaryIdentityRejectsUnsupportedAndUnboundedValues(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	valid := RawIdentity{Edition: "open", SourceSHA256: digest, SurfaceSHA256: digest, BuildID: digest, MetaSHA256: digest, RegistrySHA256: digest,
+		PayloadSHA256: digest, PayloadIndexSHA256: digest,
 		MetaLength:     strconv.FormatUint(schemacache.MaxMetaFileSize-schemacache.HeaderSize, 10),
-		RegistryLength: strconv.FormatUint(schemacache.MaxRegistryPayloadSize, 10)}
+		RegistryLength: strconv.FormatUint(schemacache.MaxRegistryPayloadSize, 10),
+		PayloadLength:  strconv.FormatUint(schemacache.MaxRegistryPayloadSize, 10), PayloadIndexLength: "1"}
 	identity, err := ParseIdentity(valid)
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +61,8 @@ func TestCrossPlatformCoverageOptionalIdentityDistinguishesDisabledAndInvalid(t 
 	}
 	digest := strings.Repeat("a", 64)
 	valid := RawIdentity{Edition: "open", SourceSHA256: digest, SurfaceSHA256: digest, BuildID: digest,
-		MetaLength: "1", MetaSHA256: digest, RegistryLength: "1", RegistrySHA256: digest}
+		MetaLength: "1", MetaSHA256: digest, RegistryLength: "1", RegistrySHA256: digest,
+		PayloadLength: "1", PayloadSHA256: digest, PayloadIndexLength: "1", PayloadIndexSHA256: digest}
 	identity, err := ParseOptionalIdentity(valid)
 	if err != nil || identity == nil || identity.Edition != "open" {
 		t.Fatalf("valid optional identity = %#v, %v", identity, err)

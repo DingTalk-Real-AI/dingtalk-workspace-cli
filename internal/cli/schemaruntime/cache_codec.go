@@ -132,6 +132,12 @@ type BuiltSchemaCache struct {
 	RegistryDataSize   uint64
 	PayloadSHA256      [sha256.Size]byte
 	PayloadDataSize    uint64
+	// The payload file opens with the length-prefixed SchemaPayloadIndex
+	// region; these pins let the binary authenticate that region without
+	// reading Meta first. Payload descriptor offsets are relative to the first
+	// byte after the index region.
+	PayloadIndexLength uint64
+	PayloadIndexSHA256 [sha256.Size]byte
 }
 
 // DecodedSchemaMeta is a fully validated runtime Meta cache.
@@ -538,6 +544,22 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 		})
 		result.PayloadShards = append(result.PayloadShards, payload...)
 	}
+	indexRoot := &schemacachepb.SchemaPayloadIndex{
+		DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V5,
+		Locators:   locatorsToProto(locators),
+		Products:   payloadDescriptorsToProto(result.PayloadDescriptors),
+	}
+	indexBytes, marshalErr := MarshalSchemaCacheDeterministic(indexRoot)
+	if marshalErr != nil {
+		return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
+	}
+	indexRegion, marshalErr := assembleCommandPayloadShard(indexBytes, nil)
+	if marshalErr != nil {
+		return BuiltSchemaCache{}, fmt.Errorf("marshal Schema payload index: %w", marshalErr)
+	}
+	result.PayloadShards = append(indexRegion, result.PayloadShards...)
+	result.PayloadIndexLength = uint64(len(indexRegion))
+	result.PayloadIndexSHA256 = sha256.Sum256(indexRegion)
 	result.PayloadDataSize = uint64(len(result.PayloadShards))
 	result.PayloadSHA256 = sha256.Sum256(result.PayloadShards)
 	meta := &schemacachepb.SchemaMetaCache{
@@ -673,12 +695,13 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	return DecodedSchemaProduct{Registry: registry, Index: index}, nil
 }
 
-// DecodedCommandPayloads holds the Safety and Selection halves for one
+// DecodedCommandPayloads holds the complete CommandMeta rows for one
 // product's commands, decoded from its payload shard header.
 type DecodedCommandPayloads struct {
 	ProductID string
-	Safety    map[string]CommandSafety
-	Selection map[string]CommandSelection
+	// Commands maps each lookup path (primary and alias) to the complete
+	// CommandMeta: identity, Safety, and Selection.
+	Commands map[string]CommandMeta
 	// LeafIndex locates each canonical path's pre-rendered compact leaf bytes
 	// inside the shard's blob region, sorted by canonical path.
 	LeafIndex []RenderedLeafRef
@@ -746,14 +769,21 @@ func decodeCommandPayloadHeader(header []byte, descriptor CommandPayloadDescript
 	}
 	result := DecodedCommandPayloads{
 		ProductID: descriptor.ProductID,
-		Safety:    make(map[string]CommandSafety, len(root.Entries.Items)),
-		Selection: make(map[string]CommandSelection, len(root.Entries.Items)),
+		Commands:  make(map[string]CommandMeta, len(root.Entries.Items)),
 		LeafIndex: make([]RenderedLeafRef, len(root.RenderedLeafIndex.Items)),
 	}
 	for _, entry := range root.Entries.Items {
-		safety, selection := commandPayloadFromProto(entry)
-		result.Safety[entry.GetLookupPath()] = safety
-		result.Selection[entry.GetLookupPath()] = selection
+		if entry.GetIdentity() == nil {
+			return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload entry %q is missing its identity", descriptor.ProductID, entry.GetLookupPath())
+		}
+		if err := validateCommandMetaListPresence(entry.GetIdentity()); err != nil {
+			return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload entry %q: %w", descriptor.ProductID, entry.GetLookupPath(), err)
+		}
+		meta := commandPayloadFromProto(entry)
+		if meta.Identity.CLIPath == "" || meta.Identity.Canonical == "" || meta.Identity.ProductID != descriptor.ProductID {
+			return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload entry %q has an incomplete identity", descriptor.ProductID, entry.GetLookupPath())
+		}
+		result.Commands[entry.GetLookupPath()] = meta
 	}
 	last := ""
 	for i, leaf := range root.RenderedLeafIndex.Items {
@@ -770,14 +800,79 @@ func decodeCommandPayloadHeader(header []byte, descriptor CommandPayloadDescript
 	return result, nil
 }
 
-// DecodeSchemaCommandPayloadHeader authenticates only the shard's header
-// prefix against the descriptor, so Safety/Selection reads never pull the
-// rendered leaf blob region.
-func DecodeSchemaCommandPayloadHeader(payload []byte, descriptor CommandPayloadDescriptor, meta DecodedSchemaMeta) (DecodedCommandPayloads, error) {
+// DecodedSchemaPayloadIndex is the payload file's self-describing global
+// header: the locator table plus the per-product shard descriptors.
+type DecodedSchemaPayloadIndex struct {
+	LocatorProductByPath map[string]string
+	PayloadDescriptors   []CommandPayloadDescriptor
+}
+
+// DecodeSchemaPayloadIndex decodes and validates the payload index region,
+// including the 4-byte length prefix the pinned digest covers. The region
+// bytes must already be authenticated by the caller against the binary-pinned
+// payload index digest.
+func DecodeSchemaPayloadIndex(region []byte) (DecodedSchemaPayloadIndex, error) {
+	if len(region) == 0 || len(region) > MaxSchemaMetaBytes {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index length %d is outside 1..%d", len(region), MaxSchemaMetaBytes)
+	}
+	payload, blobs, err := splitCommandPayloadShard(region)
+	if err != nil {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index: %w", err)
+	}
+	if len(blobs) != 0 {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index carries %d unexpected trailing bytes", len(blobs))
+	}
+	var root schemacachepb.SchemaPayloadIndex
+	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(payload, &root); err != nil {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("decode Schema payload index protobuf: %w", err)
+	}
+	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
+		return DecodedSchemaPayloadIndex{}, err
+	}
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V5 {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index DTO version is %d, want %d", root.GetDtoVersion(), SchemaCacheDTOVersion)
+	}
+	if root.GetLocators() == nil || root.GetProducts() == nil {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index is missing a required presence wrapper")
+	}
+	if len(root.Locators.Items) > maxSchemaMetaEntries || len(root.Products.Items) > maxSchemaProducts {
+		return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index exceeds semantic collection limits")
+	}
+	result := DecodedSchemaPayloadIndex{
+		LocatorProductByPath: make(map[string]string, len(root.Locators.Items)),
+		PayloadDescriptors:   payloadDescriptorsFromProto(root.Products),
+	}
+	last := ""
+	for i, entry := range root.Locators.Items {
+		if entry == nil || entry.GetLookupPath() == "" || entry.GetProductId() == "" || (i > 0 && entry.GetLookupPath() <= last) {
+			return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index locator keys are incomplete, duplicate, or unsorted at %q", entry.GetLookupPath())
+		}
+		last = entry.GetLookupPath()
+		result.LocatorProductByPath[entry.GetLookupPath()] = entry.GetProductId()
+	}
+	for i, descriptor := range root.Products.Items {
+		if descriptor == nil || len(descriptor.GetSha256()) != sha256.Size || len(descriptor.GetHeaderSha256()) != sha256.Size || descriptor.GetHeaderLength() == 0 {
+			return DecodedSchemaPayloadIndex{}, fmt.Errorf("Schema payload index descriptor %d is incomplete", i)
+		}
+	}
+	return result, nil
+}
+
+// AuthenticateCommandPayloadDescriptor binds a command payload descriptor to
+// the Meta's authenticated copy.
+func AuthenticateCommandPayloadDescriptor(meta DecodedSchemaMeta, descriptor CommandPayloadDescriptor) error {
 	authenticated, ok := metaPayloadDescriptor(meta, descriptor.ProductID)
 	if !ok || authenticated != descriptor {
-		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload descriptor is not authenticated by Schema Meta", descriptor.ProductID)
+		return fmt.Errorf("product %q command payload descriptor is not authenticated by Schema Meta", descriptor.ProductID)
 	}
+	return nil
+}
+
+// DecodeSchemaCommandPayloadHeader authenticates only the shard's header
+// prefix against the descriptor, so command reads never pull the rendered leaf
+// blob region. The descriptor must come from an already authenticated source
+// (Meta or the pinned payload index).
+func DecodeSchemaCommandPayloadHeader(payload []byte, descriptor CommandPayloadDescriptor) (DecodedCommandPayloads, error) {
 	if uint64(len(payload)) != descriptor.HeaderLength {
 		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload header length %d, want %d", descriptor.ProductID, len(payload), descriptor.HeaderLength)
 	}

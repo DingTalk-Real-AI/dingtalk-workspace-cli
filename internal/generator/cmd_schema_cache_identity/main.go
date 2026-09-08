@@ -49,6 +49,10 @@ type identityProof struct {
 	MetaSHA256             string `json:"meta_sha256"`
 	RegistryLength         uint64 `json:"registry_length"`
 	RegistrySHA256         string `json:"registry_sha256"`
+	PayloadLength          uint64 `json:"payload_length"`
+	PayloadSHA256          string `json:"payload_sha256"`
+	PayloadIndexLength     uint64 `json:"payload_index_length"`
+	PayloadIndexSHA256     string `json:"payload_index_sha256"`
 	ProductCount           int    `json:"product_count"`
 	GoRuntimeVersion       string `json:"go_runtime_version"`
 	ProtoSHA256            string `json:"proto_sha256"`
@@ -74,6 +78,10 @@ type buildIDInput struct {
 	MetaSHA256             [sha256.Size]byte
 	RegistryLength         uint64
 	RegistrySHA256         [sha256.Size]byte
+	PayloadLength          uint64
+	PayloadSHA256          [sha256.Size]byte
+	PayloadIndexLength     uint64
+	PayloadIndexSHA256     [sha256.Size]byte
 	ProductCount           uint64
 	GoRuntimeVersion       string
 	ProtoSHA256            [sha256.Size]byte
@@ -171,6 +179,10 @@ func generateIdentityProofFromDeclarations(rootPath, editionName string) (identi
 	if err != nil {
 		return identityProof{}, err
 	}
+	indexLength, indexDigest, err := artifacts.PayloadIndexPins()
+	if err != nil {
+		return identityProof{}, fmt.Errorf("derive Schema payload index pins: %w", err)
+	}
 	protobufVersion := protobufRuntimeVersion()
 	if protobufVersion == "unknown" {
 		return identityProof{}, fmt.Errorf("resolve protobuf runtime version from Go build info")
@@ -180,7 +192,10 @@ func generateIdentityProofFromDeclarations(rootPath, editionName string) (identi
 		SchemaCacheDTOVersion: schemaruntime.SchemaCacheDTOVersion, CatalogSnapshotVersion: uint32(artifacts.Version),
 		Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
 		SourceSHA256: source, SurfaceSHA256: surface, MetaLength: uint64(len(artifacts.Meta)), MetaSHA256: artifacts.MetaSHA256,
-		RegistryLength: uint64(len(artifacts.Registry)), RegistrySHA256: artifacts.RegistrySHA256, ProductCount: uint64(artifacts.ProductCount),
+		RegistryLength: uint64(len(artifacts.Registry)), RegistrySHA256: artifacts.RegistrySHA256,
+		PayloadLength: uint64(len(artifacts.Payload)), PayloadSHA256: artifacts.PayloadSHA256,
+		PayloadIndexLength: indexLength, PayloadIndexSHA256: indexDigest,
+		ProductCount:     uint64(artifacts.ProductCount),
 		GoRuntimeVersion: runtime.Version(), ProtoSHA256: sha256.Sum256(protoBytes), GeneratedPBGoSHA256: sha256.Sum256(pbGoBytes),
 		DescriptorSHA256: sha256.Sum256(descriptorBytes), ProtocVersion: protocVersion, ProtocGenGoVersion: protocGenGoVersion,
 		ProtobufRuntimeVersion: protobufVersion,
@@ -192,6 +207,8 @@ func generateIdentityProofFromDeclarations(rootPath, editionName string) (identi
 		CatalogSnapshotVersion: int(input.CatalogSnapshotVersion), Serializer: input.Serializer, Codec: input.Codec,
 		SourceSHA256: digestHex(source), SurfaceSHA256: digestHex(surface), MetaLength: input.MetaLength,
 		MetaSHA256: digestHex(input.MetaSHA256), RegistryLength: input.RegistryLength, RegistrySHA256: digestHex(input.RegistrySHA256),
+		PayloadLength: input.PayloadLength, PayloadSHA256: digestHex(input.PayloadSHA256),
+		PayloadIndexLength: input.PayloadIndexLength, PayloadIndexSHA256: digestHex(input.PayloadIndexSHA256),
 		ProductCount: int(input.ProductCount), GoRuntimeVersion: input.GoRuntimeVersion, ProtoSHA256: digestHex(input.ProtoSHA256),
 		GeneratedPBGoSHA256: digestHex(input.GeneratedPBGoSHA256), DescriptorSHA256: digestHex(input.DescriptorSHA256),
 		ProtocVersion: input.ProtocVersion, ProtocGenGoVersion: input.ProtocGenGoVersion,
@@ -233,6 +250,10 @@ func deterministicBuildID(input buildIDInput) [sha256.Size]byte {
 	field(19, []byte(input.ProtocVersion))
 	field(20, []byte(input.ProtocGenGoVersion))
 	field(21, []byte(input.ProtobufRuntimeVersion))
+	uintField(22, input.PayloadLength)
+	field(23, input.PayloadSHA256[:])
+	uintField(24, input.PayloadIndexLength)
+	field(25, input.PayloadIndexSHA256[:])
 	return sha256.Sum256(canonical.Bytes())
 }
 
@@ -276,6 +297,8 @@ func encodeIdentityProof(proof identityProof, format string) ([]byte, error) {
 			{"SCHEMA_CACHE_SURFACE_SHA256", proof.SurfaceSHA256}, {"SCHEMA_CACHE_BUILD_ID", proof.BuildID},
 			{"SCHEMA_CACHE_META_LENGTH", strconv.FormatUint(proof.MetaLength, 10)}, {"SCHEMA_CACHE_META_SHA256", proof.MetaSHA256},
 			{"SCHEMA_CACHE_REGISTRY_LENGTH", strconv.FormatUint(proof.RegistryLength, 10)}, {"SCHEMA_CACHE_REGISTRY_SHA256", proof.RegistrySHA256},
+			{"SCHEMA_CACHE_PAYLOAD_LENGTH", strconv.FormatUint(proof.PayloadLength, 10)}, {"SCHEMA_CACHE_PAYLOAD_SHA256", proof.PayloadSHA256},
+			{"SCHEMA_CACHE_PAYLOAD_INDEX_LENGTH", strconv.FormatUint(proof.PayloadIndexLength, 10)}, {"SCHEMA_CACHE_PAYLOAD_INDEX_SHA256", proof.PayloadIndexSHA256},
 		}
 		var output strings.Builder
 		for _, value := range values {

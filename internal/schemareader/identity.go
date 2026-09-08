@@ -30,12 +30,19 @@ type Identity struct {
 	BuildID                [sha256.Size]byte
 	Meta                   schemacache.ArtifactExpectation
 	Registry               schemacache.ArtifactExpectation
+	Payload                schemacache.ArtifactExpectation
+	// PayloadIndex pins the payload file's self-describing index region (its
+	// 4-byte length prefix plus the SchemaPayloadIndex proto), so command
+	// lookups can authenticate it without reading Meta.
+	PayloadIndexLength uint64
+	PayloadIndexSHA256 [sha256.Size]byte
 }
 
 // RawIdentity contains only linker-pinned values, never file or environment data.
 type RawIdentity struct {
-	Edition, SourceSHA256, SurfaceSHA256, BuildID          string
-	MetaLength, MetaSHA256, RegistryLength, RegistrySHA256 string
+	Edition, SourceSHA256, SurfaceSHA256, BuildID                        string
+	MetaLength, MetaSHA256, RegistryLength, RegistrySHA256               string
+	PayloadLength, PayloadSHA256, PayloadIndexLength, PayloadIndexSHA256 string
 }
 
 // ParseOptionalIdentity distinguishes an intentionally disabled build (every
@@ -45,6 +52,7 @@ func ParseOptionalIdentity(raw RawIdentity) (*Identity, error) {
 	values := []string{
 		raw.Edition, raw.SourceSHA256, raw.SurfaceSHA256, raw.BuildID,
 		raw.MetaLength, raw.MetaSHA256, raw.RegistryLength, raw.RegistrySHA256,
+		raw.PayloadLength, raw.PayloadSHA256, raw.PayloadIndexLength, raw.PayloadIndexSHA256,
 	}
 	present := 0
 	for _, value := range values {
@@ -72,16 +80,23 @@ func ParseIdentity(raw RawIdentity) (Identity, error) {
 	buildID, buildOK := parseSchemaCacheLowerHex(raw.BuildID)
 	metaHash, metaHashOK := parseSchemaCacheLowerHex(raw.MetaSHA256)
 	registryHash, registryHashOK := parseSchemaCacheLowerHex(raw.RegistrySHA256)
+	payloadHash, payloadHashOK := parseSchemaCacheLowerHex(raw.PayloadSHA256)
+	indexHash, indexHashOK := parseSchemaCacheLowerHex(raw.PayloadIndexSHA256)
 	metaLength, metaLengthOK := parseSchemaCachePositiveDecimal(raw.MetaLength)
 	registryLength, registryLengthOK := parseSchemaCachePositiveDecimal(raw.RegistryLength)
-	if editionName == "" || !sourceOK || !surfaceOK || !buildOK || !metaHashOK || !registryHashOK || !metaLengthOK || !registryLengthOK {
+	payloadLength, payloadLengthOK := parseSchemaCachePositiveDecimal(raw.PayloadLength)
+	indexLength, indexLengthOK := parseSchemaCachePositiveDecimal(raw.PayloadIndexLength)
+	if editionName == "" || !sourceOK || !surfaceOK || !buildOK || !metaHashOK || !registryHashOK || !payloadHashOK || !indexHashOK || !metaLengthOK || !registryLengthOK || !payloadLengthOK || !indexLengthOK {
 		return Identity{}, fmt.Errorf("incomplete Schema cache identity")
 	}
 	identity := Identity{
 		Edition: editionName, CatalogSnapshotVersion: CatalogSnapshotVersion,
 		SourceSHA256: source, SurfaceSHA256: surface, BuildID: buildID,
-		Meta:     schemaCacheArtifactExpectation(schemacache.KindMeta, metaLength, metaHash),
-		Registry: schemaCacheArtifactExpectation(schemacache.KindRegistry, registryLength, registryHash),
+		Meta:               schemaCacheArtifactExpectation(schemacache.KindMeta, metaLength, metaHash),
+		Registry:           schemaCacheArtifactExpectation(schemacache.KindRegistry, registryLength, registryHash),
+		Payload:            schemaCacheArtifactExpectation(schemacache.KindPayloads, payloadLength, payloadHash),
+		PayloadIndexLength: indexLength,
+		PayloadIndexSHA256: indexHash,
 	}
 	return identity, identity.Validate()
 }
@@ -98,7 +113,7 @@ func (i Identity) Validate() error {
 	if editionDigest != identity.EditionSHA256 {
 		return fmt.Errorf("Schema cache edition identity mismatch")
 	}
-	for _, expectation := range []schemacache.ArtifactExpectation{i.Meta, i.Registry} {
+	for _, expectation := range []schemacache.ArtifactExpectation{i.Meta, i.Registry, i.Payload} {
 		envelope := schemacache.Envelope{
 			Kind: expectation.Kind, Serializer: expectation.Serializer, Codec: expectation.Codec,
 			FormatVersion: expectation.FormatVersion, CatalogSnapshotVersion: identity.CatalogSnapshotVersion,
@@ -110,7 +125,7 @@ func (i Identity) Validate() error {
 			return fmt.Errorf("invalid Schema cache identity: %w", err)
 		}
 	}
-	if i.Meta.Kind != schemacache.KindMeta || i.Registry.Kind != schemacache.KindRegistry {
+	if i.Meta.Kind != schemacache.KindMeta || i.Registry.Kind != schemacache.KindRegistry || i.Payload.Kind != schemacache.KindPayloads {
 		return fmt.Errorf("invalid Schema cache artifact kinds")
 	}
 	return nil

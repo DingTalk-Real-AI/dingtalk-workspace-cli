@@ -21,8 +21,10 @@ func TestDeterministicBuildIDFixedVector(t *testing.T) {
 		ProtoSHA256: sha256.Sum256([]byte("proto")), GeneratedPBGoSHA256: sha256.Sum256([]byte("pb.go")),
 		DescriptorSHA256: sha256.Sum256([]byte("descriptor")), ProtocVersion: "protoc-test",
 		ProtocGenGoVersion: "protoc-gen-go-test", ProtobufRuntimeVersion: "protobuf-test",
+		PayloadLength: 789, PayloadSHA256: sha256.Sum256([]byte("payload")),
+		PayloadIndexLength: 12, PayloadIndexSHA256: sha256.Sum256([]byte("payload-index")),
 	}
-	const want = "29e35e4b63ca4ff32e617e6cf31b0db23f33f851773811b7681e43b875a59012"
+	const want = "151de3385e20b04ea2502ab329cdd9b74d3b03fdb5d50b71cc0df6ac11cc9dd2"
 	if got := digestHex(deterministicBuildID(input)); got != want {
 		t.Fatalf("BuildID = %s, want %s", got, want)
 	}
@@ -32,7 +34,8 @@ func TestDeterministicBuildIDFixedVector(t *testing.T) {
 }
 
 func TestEncodeIdentityProofDeterministic(t *testing.T) {
-	proof := identityProof{Version: 1, Edition: "open", SourceSHA256: "aa", SurfaceSHA256: "bb", BuildID: "cc", MetaLength: 1, MetaSHA256: "dd", RegistryLength: 2, RegistrySHA256: "ee"}
+	proof := identityProof{Version: 1, Edition: "open", SourceSHA256: "aa", SurfaceSHA256: "bb", BuildID: "cc", MetaLength: 1, MetaSHA256: "dd", RegistryLength: 2, RegistrySHA256: "ee",
+		PayloadLength: 3, PayloadSHA256: "ff", PayloadIndexLength: 4, PayloadIndexSHA256: "00"}
 	first, err := encodeIdentityProof(proof, "json")
 	if err != nil {
 		t.Fatal(err)

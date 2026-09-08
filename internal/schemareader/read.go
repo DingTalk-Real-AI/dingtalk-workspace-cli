@@ -1,6 +1,9 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
 
+// Package schemareader composes authenticated cache I/O with the shared typed
+// Schema decoder. It owns no declarations, process globals, repair or rendering
+// policy; the CLI consumes these immutable identities.
 package schemareader
 
 import (
@@ -58,66 +61,69 @@ func ReadProduct(cache *schemacache.Cache, identity Identity, meta schemaruntime
 	return schemaruntime.DecodeSchemaProductCache(payload, descriptor, meta)
 }
 
-// PayloadDescriptor selects only a command payload range from previously
-// authenticated Meta.
-func PayloadDescriptor(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.CommandPayloadDescriptor, bool) {
-	i := sort.Search(len(meta.PayloadDescriptors), func(i int) bool { return meta.PayloadDescriptors[i].ProductID >= productID })
-	if i == len(meta.PayloadDescriptors) || meta.PayloadDescriptors[i].ProductID != productID {
+// PayloadDescriptor selects one product's command payload range from an
+// authenticated payload index.
+func PayloadDescriptor(index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.CommandPayloadDescriptor, bool) {
+	i := sort.Search(len(index.PayloadDescriptors), func(i int) bool { return index.PayloadDescriptors[i].ProductID >= productID })
+	if i == len(index.PayloadDescriptors) || index.PayloadDescriptors[i].ProductID != productID {
 		return schemaruntime.CommandPayloadDescriptor{}, false
 	}
-	return meta.PayloadDescriptors[i], true
+	return index.PayloadDescriptors[i], true
 }
 
-// ReadCommandPayload authenticates the command payload header prefix before
-// any protobuf decoding. It reads the payload file, which is deliberately
-// independent of the registry so a corrupted registry cannot affect it. The
-// payload expectation is derived from the Meta, which is itself authenticated.
-// Only the header (Safety/Selection plus the rendered leaf index) is read;
-// rendered leaf blobs are pulled per leaf by ReadRenderedLeaf.
-func ReadCommandPayload(cache *schemacache.Cache, identity Identity, meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
-	descriptor, ok := PayloadDescriptor(meta, productID)
+// ReadPayloadIndex reads and authenticates the payload file's self-describing
+// index region using only the binary-pinned identity; Meta is never involved.
+func ReadPayloadIndex(cache *schemacache.Cache, identity Identity) (schemaruntime.DecodedSchemaPayloadIndex, error) {
+	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
+	if err != nil {
+		return schemaruntime.DecodedSchemaPayloadIndex{}, err
+	}
+	defer payloads.Close()
+	region, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: 0, Length: identity.PayloadIndexLength, SHA256: identity.PayloadIndexSHA256})
+	if err != nil {
+		return schemaruntime.DecodedSchemaPayloadIndex{}, err
+	}
+	return schemaruntime.DecodeSchemaPayloadIndex(region)
+}
+
+// ReadCommandPayload authenticates and decodes one product's command payload
+// header (complete CommandMeta rows plus the rendered leaf index), located
+// through the pinned payload index. The payload file is deliberately
+// independent of the registry so a corrupted registry cannot affect it.
+func ReadCommandPayload(cache *schemacache.Cache, identity Identity, index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+	descriptor, ok := PayloadDescriptor(index, productID)
 	if !ok {
 		return schemaruntime.DecodedCommandPayloads{}, fmt.Errorf("unknown Schema command payload product %q", productID)
 	}
-	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), payloadExpectation(meta))
+	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
 	defer payloads.Close()
-	payload, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: descriptor.Offset, Length: descriptor.HeaderLength, SHA256: descriptor.HeaderSHA256})
+	payload, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: identity.PayloadIndexLength + descriptor.Offset, Length: descriptor.HeaderLength, SHA256: descriptor.HeaderSHA256})
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
-	return schemaruntime.DecodeSchemaCommandPayloadHeader(payload, descriptor, meta)
+	return schemaruntime.DecodeSchemaCommandPayloadHeader(payload, descriptor)
 }
 
 // ReadRenderedLeaf reads one pre-rendered leaf blob from the product's payload
-// shard blob region. The ref comes from the already authenticated header.
-func ReadRenderedLeaf(cache *schemacache.Cache, identity Identity, meta schemaruntime.DecodedSchemaMeta, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
-	descriptor, ok := PayloadDescriptor(meta, productID)
+// shard blob region. The ref comes from the already authenticated shard header.
+func ReadRenderedLeaf(cache *schemacache.Cache, identity Identity, index schemaruntime.DecodedSchemaPayloadIndex, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
+	descriptor, ok := PayloadDescriptor(index, productID)
 	if !ok {
 		return nil, fmt.Errorf("unknown Schema command payload product %q", productID)
 	}
-	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), payloadExpectation(meta))
+	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
 	if err != nil {
 		return nil, err
 	}
 	defer payloads.Close()
 	return payloads.ReadRange(schemacache.RangeDescriptor{
-		Offset: descriptor.Offset + descriptor.HeaderLength + ref.Offset,
+		Offset: identity.PayloadIndexLength + descriptor.Offset + descriptor.HeaderLength + ref.Offset,
 		Length: ref.Length,
 		SHA256: ref.SHA256,
 	})
-}
-
-// payloadExpectation derives the payload file expectation from the Meta, which
-// is itself authenticated by the pinned identity.
-func payloadExpectation(meta schemaruntime.DecodedSchemaMeta) schemacache.ArtifactExpectation {
-	return schemacache.ArtifactExpectation{
-		Kind: schemacache.KindPayloads, Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
-		FormatVersion: schemacache.DTOFormatVersion, EncodedLength: meta.PayloadDataLength, DecodedLength: meta.PayloadDataLength,
-		EncodedSHA256: meta.PayloadSHA256,
-	}
 }
 
 func Locator(meta schemaruntime.DecodedSchemaMeta, raw string) (string, bool) {
@@ -125,6 +131,19 @@ func Locator(meta schemaruntime.DecodedSchemaMeta, raw string) (string, bool) {
 	candidates := []string{strings.TrimSpace(raw), schemaruntime.NormalizeQueryCLIPath(raw), strings.Join(tokens, ".")}
 	for _, candidate := range candidates {
 		if product, ok := meta.LocatorProductByPath[candidate]; ok {
+			return product, true
+		}
+	}
+	return "", false
+}
+
+// IndexLocator resolves a raw query path to its product through the payload
+// index, accepting the same spellings as Locator.
+func IndexLocator(index schemaruntime.DecodedSchemaPayloadIndex, raw string) (string, bool) {
+	tokens := schemaruntime.SplitPathTokens(raw)
+	candidates := []string{strings.TrimSpace(raw), schemaruntime.NormalizeQueryCLIPath(raw), strings.Join(tokens, ".")}
+	for _, candidate := range candidates {
+		if product, ok := index.LocatorProductByPath[candidate]; ok {
 			return product, true
 		}
 	}

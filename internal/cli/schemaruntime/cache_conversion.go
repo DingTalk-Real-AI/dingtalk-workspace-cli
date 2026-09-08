@@ -134,27 +134,32 @@ func commandPayloadToProto(path string, in CommandMeta) *schemacachepb.CommandPa
 		Confirmation: in.Safety.Confirmation,
 		Idempotency:  in.Safety.Idempotency,
 		Selection:    selection,
+		Identity:     commandMetaToProto(in),
 	}
 }
 
-// commandPayloadFromProto restores the Safety and Selection half of a command.
-func commandPayloadFromProto(in *schemacachepb.CommandPayloadEntry) (CommandSafety, CommandSelection) {
-	safety := CommandSafety{
-		Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency,
-	}
+// commandPayloadFromProto restores one complete CommandMeta row: identity from
+// the embedded entry, Safety and Selection from the payload fields.
+func commandPayloadFromProto(in *schemacachepb.CommandPayloadEntry) CommandMeta {
 	selection := in.GetSelection()
-	if selection == nil {
-		return safety, CommandSelection{}
-	}
 	var lists [commandMetaSelectionListCount][]string
-	for bit, values := range selectionProtoLists(selection) {
-		if selection.ListsPresent&(1<<bit) != 0 {
-			lists[bit] = cloneList(values)
+	if selection != nil {
+		for bit, values := range selectionProtoLists(selection) {
+			if selection.ListsPresent&(1<<bit) != 0 {
+				lists[bit] = cloneList(values)
+			}
 		}
 	}
-	return safety, CommandSelection{
-		AgentSummary: selection.AgentSummary, UseWhen: lists[0], AvoidWhen: lists[1],
-		Prerequisites: lists[2], Tips: lists[3], Examples: lists[4],
+	identity := commandIdentityFromProto(in.GetIdentity())
+	return CommandMeta{
+		Identity: identity,
+		Safety: CommandSafety{
+			Effect: in.Effect, Risk: in.Risk, Confirmation: in.Confirmation, Idempotency: in.Idempotency,
+		},
+		Selection: CommandSelection{
+			AgentSummary: selection.GetAgentSummary(), UseWhen: lists[0], AvoidWhen: lists[1],
+			Prerequisites: lists[2], Tips: lists[3], Examples: lists[4],
+		},
 	}
 }
 

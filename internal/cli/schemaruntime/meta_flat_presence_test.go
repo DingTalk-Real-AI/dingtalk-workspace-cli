@@ -63,9 +63,12 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 		if err := proto.Unmarshal(payloadBytes, &decodedPayload); err != nil {
 			t.Fatal(err)
 		}
-		gotSafety, gotSelection := commandPayloadFromProto(&decodedPayload)
-		if !reflect.DeepEqual(gotSafety, want.Safety) || !reflect.DeepEqual(gotSelection, want.Selection) {
+		gotPayload := commandPayloadFromProto(&decodedPayload)
+		if !reflect.DeepEqual(gotPayload.Safety, want.Safety) || !reflect.DeepEqual(gotPayload.Selection, want.Selection) {
 			t.Fatalf("combination %d lost safety or selection presence", combination)
+		}
+		if !reflect.DeepEqual(gotPayload.Identity, want.Identity) {
+			t.Fatalf("combination %d lost identity presence", combination)
 		}
 		if len(row.Aliases) > 0 {
 			row.Aliases[0] = "mutated protobuf"
@@ -76,8 +79,8 @@ func TestCrossPlatformCoverageFlatMetaPreservesAllListPresenceCombinations(t *te
 			}
 		}
 		if !reflect.DeepEqual(gotIdentity.Identity, want.Identity) ||
-			!reflect.DeepEqual(gotSafety, want.Safety) ||
-			!reflect.DeepEqual(gotSelection, want.Selection) {
+			!reflect.DeepEqual(gotPayload.Safety, want.Safety) ||
+			!reflect.DeepEqual(gotPayload.Selection, want.Selection) {
 			t.Fatalf("combination %d retained protobuf backing slices", combination)
 		}
 	}

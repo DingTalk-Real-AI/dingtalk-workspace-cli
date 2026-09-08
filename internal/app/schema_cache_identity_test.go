@@ -55,6 +55,10 @@ func TestProductionSchemaCacheIdentityParsingFailsClosed(t *testing.T) {
 	schemaCacheMetaSHA256 = valid
 	schemaCacheRegistryLength = "456"
 	schemaCacheRegistrySHA256 = valid
+	schemaCachePayloadLength = "789"
+	schemaCachePayloadSHA256 = valid
+	schemaCachePayloadIndexLength = "12"
+	schemaCachePayloadIndexSHA256 = valid
 	schemaCacheGOOS, schemaCacheGOARCH = "linux", "amd64"
 
 	options, ok := productionSchemaCacheOptions()
@@ -102,6 +106,7 @@ func TestProductionSchemaCacheIdentityParsingFailsClosed(t *testing.T) {
 		{"all empty", func() {
 			schemaCacheEdition, schemaCacheSourceSHA256, schemaCacheSurfaceSHA256, schemaCacheBuildID = "", "", "", ""
 			schemaCacheMetaLength, schemaCacheMetaSHA256, schemaCacheRegistryLength, schemaCacheRegistrySHA256 = "", "", "", ""
+			schemaCachePayloadLength, schemaCachePayloadSHA256, schemaCachePayloadIndexLength, schemaCachePayloadIndexSHA256 = "", "", "", ""
 		}},
 		{"unsupported target", func() { schemaCacheGOOS, schemaCacheGOARCH = "windows", "amd64" }},
 	} {
@@ -130,6 +135,10 @@ func TestProductionSchemaCacheRuntimeEligibility(t *testing.T) {
 	schemaCacheMetaSHA256 = valid
 	schemaCacheRegistryLength = "1"
 	schemaCacheRegistrySHA256 = valid
+	schemaCachePayloadLength = "1"
+	schemaCachePayloadSHA256 = valid
+	schemaCachePayloadIndexLength = "1"
+	schemaCachePayloadIndexSHA256 = valid
 	schemaCacheGOOS, schemaCacheGOARCH = "darwin", "arm64"
 	options, ok := productionSchemaCacheOptions()
 	if !ok || options.RuntimeEligible == nil || !options.RuntimeEligible() {
@@ -156,11 +165,15 @@ func saveSchemaCacheBuildVars() func() {
 	editionValue, source, surface, buildID := schemaCacheEdition, schemaCacheSourceSHA256, schemaCacheSurfaceSHA256, schemaCacheBuildID
 	metaLength, metaHash := schemaCacheMetaLength, schemaCacheMetaSHA256
 	registryLength, registryHash := schemaCacheRegistryLength, schemaCacheRegistrySHA256
+	payloadLength, payloadHash := schemaCachePayloadLength, schemaCachePayloadSHA256
+	indexLength, indexHash := schemaCachePayloadIndexLength, schemaCachePayloadIndexSHA256
 	goos, goarch := schemaCacheGOOS, schemaCacheGOARCH
 	return func() {
 		schemaCacheEdition, schemaCacheSourceSHA256, schemaCacheSurfaceSHA256, schemaCacheBuildID = editionValue, source, surface, buildID
 		schemaCacheMetaLength, schemaCacheMetaSHA256 = metaLength, metaHash
 		schemaCacheRegistryLength, schemaCacheRegistrySHA256 = registryLength, registryHash
+		schemaCachePayloadLength, schemaCachePayloadSHA256 = payloadLength, payloadHash
+		schemaCachePayloadIndexLength, schemaCachePayloadIndexSHA256 = indexLength, indexHash
 		schemaCacheGOOS, schemaCacheGOARCH = goos, goarch
 	}
 }

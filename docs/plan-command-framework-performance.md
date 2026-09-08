@@ -277,9 +277,11 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 - payload 分片 = 4 字节头长 + 头 proto（Safety/Selection entries + 叶子索引 `{canonical_path, offset, length, sha256}`）+ 原始叶子 blob 区。`schema <leaf> --compact -f json` 快路径只做两次小 range 读（头 + 一条 blob），**完全不打开 registry 分片**；leaf-help 的 ResolveMeta 只读头（不再为一条命令的 Safety 拉全部叶子字节）。别名、分组、产品、非 compact 查询仍走原 registry 路径（别名渲染会改 `cli_path`/`is_alias`，不能用 canonical 字节）。
 - Meta 的 `command_entries` 退役为按产品的 `command_entry_shards`（每条是序列化的 `CommandMetaEntryList`，带 `entry_count`）：Meta 解码不再解析全部 1370 行，`CommandMeta(path)` 经 locator 定位产品后只解码该产品的分片；按行的一致性校验移到分片访问时，完整交叉校验保留在写入方与 round-trip 测试。
 
-正确性不变量：写入方要求 rendered 集合精确覆盖全部非空 canonical 路径且每条是换行结尾的合法 JSON；读取方对描述符/header/叶子 blob 逐级 SHA-256 认证，叶子索引有序唯一；`TestPersistentSchemaCacheRenderedLeafFastPath` 断言快路径零 Registry I/O、恰好两次 payload 读（头 + blob），并与同二进制禁缓存的活体渲染**逐字节一致**；CLI 路径拼写与 canonical 查询产出相同字节。
+正确性不变量：写入方要求 rendered 集合精确覆盖全部非空 canonical 路径且每条是换行结尾的合法 JSON；读取方对描述符/header/叶子 blob 逐级 SHA-256 认证，叶子索引有序唯一；`TestPersistentSchemaCacheRenderedLeafFastPath` 断言快路径零 Registry I/O、恰好三次 payload 读（索引区 + 分片头 + 叶子 blob），并与同二进制禁缓存的活体渲染**逐字节一致**；CLI 路径拼写与 canonical 查询产出相同字节。
 
 本地实测（M3 Pro，进程内、每次 op 新建 runtime 模拟冷进程）：单叶 schema 命令从 5.74 ms / 6.07 MB / 79.7k allocs 降到 **3.31 ms / 1.98 MB / 19.7k allocs**；真实二进制相对 `--help` 的额外 user CPU：schema compact 从 +14.64 ms 降到 **+1.42 ms**，leaf-help 从 v4 的 +1.19 ms（v5 内联 blob 版一度回到 +2.51 ms）降到 **+0.96 ms**；Meta 阶段基准 1.58 → 1.28 ms（分配 1.64 MB → 1.16 MB）。
+
+第三轮 CI（v5 分片版）显示 linux 上 leaf-help（+1.81 ms）与 schema（+0.94 ms）仍落后 Lark——两者共同的剩余成本是 Meta 读取（286 KB 读 + SHA + 解码）。因此再加一层：**payload 文件开头放置自描述的全局索引区**（4 字节长度 + `SchemaPayloadIndex`：locator 表 + 各产品分片描述符），该区域由二进制链接期直接钉住（新增 payload/payload-index 共 4 个 -X 身份字段），认证链变为 二进制 → 索引区 → 分片头 → 叶子 blob。分片头的命令行同时携带完整 identity（内嵌 `CommandMetaEntry`），`ResolveMeta` 与 schema 叶子快路径从此只读 payload 文件，**完全不读 Meta**。真实二进制相对 `--help`：schema-compact 的额外 wall 降到 **+0.2 ms**，leaf-help 甚至比 root help 更快（渲染内容更少）。Meta 文件保持原样（overview、registry 描述符与 entry 分片继续服务 `--all`、分组/产品查询与写入方校验）。
 
 ## 4. 验收矩阵
 

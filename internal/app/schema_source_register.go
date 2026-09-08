@@ -30,16 +30,20 @@ var registerSchemaRuntimeDeliveryOnce sync.Once
 // Release builds inject all fields together. Empty is the safe development
 // default: malformed or partial values leave persistent Schema delivery off.
 var (
-	schemaCacheEdition        string
-	schemaCacheSourceSHA256   string
-	schemaCacheSurfaceSHA256  string
-	schemaCacheBuildID        string
-	schemaCacheMetaLength     string
-	schemaCacheMetaSHA256     string
-	schemaCacheRegistryLength string
-	schemaCacheRegistrySHA256 string
-	schemaCacheGOOS           = runtime.GOOS
-	schemaCacheGOARCH         = runtime.GOARCH
+	schemaCacheEdition            string
+	schemaCacheSourceSHA256       string
+	schemaCacheSurfaceSHA256      string
+	schemaCacheBuildID            string
+	schemaCacheMetaLength         string
+	schemaCacheMetaSHA256         string
+	schemaCacheRegistryLength     string
+	schemaCacheRegistrySHA256     string
+	schemaCachePayloadLength      string
+	schemaCachePayloadSHA256      string
+	schemaCachePayloadIndexLength string
+	schemaCachePayloadIndexSHA256 string
+	schemaCacheGOOS               = runtime.GOOS
+	schemaCacheGOARCH             = runtime.GOARCH
 )
 
 const schemaCacheDisableEnv = "DWS_SCHEMA_CACHE_DISABLE"
@@ -92,6 +96,8 @@ func productionSchemaCacheRawIdentity() schemareader.RawIdentity {
 		SurfaceSHA256: schemaCacheSurfaceSHA256, BuildID: schemaCacheBuildID,
 		MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
 		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
+		PayloadLength: schemaCachePayloadLength, PayloadSHA256: schemaCachePayloadSHA256,
+		PayloadIndexLength: schemaCachePayloadIndexLength, PayloadIndexSHA256: schemaCachePayloadIndexSHA256,
 	}
 }
 

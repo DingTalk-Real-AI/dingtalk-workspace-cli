@@ -16,6 +16,10 @@ FIELDS = {
     'schemaCacheMetaSHA256': 'meta_sha256',
     'schemaCacheRegistryLength': 'registry_length',
     'schemaCacheRegistrySHA256': 'registry_sha256',
+    'schemaCachePayloadLength': 'payload_length',
+    'schemaCachePayloadSHA256': 'payload_sha256',
+    'schemaCachePayloadIndexLength': 'payload_index_length',
+    'schemaCachePayloadIndexSHA256': 'payload_index_sha256',
 }
 
 def validate_identity(proof):
@@ -25,10 +29,10 @@ def validate_identity(proof):
             raise RuntimeError(f'invalid Schema identity field: {key}')
     if proof['edition'] != 'open' or proof.get('go_runtime_version') != 'go1.25.9':
         raise RuntimeError('Schema identity must use open edition and Go 1.25.9')
-    for key in ('source_sha256', 'surface_sha256', 'build_id', 'meta_sha256', 'registry_sha256'):
+    for key in ('source_sha256', 'surface_sha256', 'build_id', 'meta_sha256', 'registry_sha256', 'payload_sha256', 'payload_index_sha256'):
         if not re.fullmatch(r'[0-9a-f]{64}', str(proof[key])):
             raise RuntimeError(f'invalid Schema identity digest: {key}')
-    for key in ('meta_length', 'registry_length'):
+    for key in ('meta_length', 'registry_length', 'payload_length', 'payload_index_length'):
         if not str(proof[key]).isdigit() or int(proof[key]) <= 0:
             raise RuntimeError(f'invalid Schema identity length: {key}')
     return proof
