@@ -221,8 +221,8 @@ func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 4 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 4: %#v", len(parameters), parameters)
+	if len(parameters) != 16 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 16: %#v", len(parameters), parameters)
 	}
 	for name, property := range map[string]string{
 		"agent-uuid": "agentUuid", "channel": "channel", "profile-only": "profileOnly", "client-id": "clientId",
@@ -237,7 +237,7 @@ func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
 		}
 	}
 	channel := parameters["channel"]
-	if got := schemaContractString(channel["required_when"]); got != "未指定 --profile-only 时必填" {
+	if got := schemaContractString(channel["required_when"]); got != "" {
 		t.Errorf("dingtalk-tag.connect channel required_when = %q", got)
 	}
 	if required, _ := channel["required"].(bool); required {

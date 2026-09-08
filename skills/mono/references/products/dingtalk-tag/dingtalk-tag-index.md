@@ -7,7 +7,7 @@ DingTalk Tag 数字员工的管理、执行查询和能力资源命令，命令�
 | 管理态：创建 / 详情 / 列表 / 临时 DWS 授权码 / 草稿覆写 / 发布 / 删除 | `dws dingtalk-tag manage` | 授权码高敏感；其余含高影响写与不可逆删除 | [`manage.md`](./manage.md) |
 | 执行态：执行状态 / 执行 trace | `dws dingtalk-tag run` | 全部只读；trace 含完整对话内容 | [`run.md`](./run.md) |
 | 能力资源：Skill / MCP 创建与查询 | `dws dingtalk-tag capability` | 创建为高影响写；资源不会自动关联数字员工 | [`capability.md`](./capability.md) |
-| 本地接入：已有已发布员工落盘 Profile 或接入 DSH | `dws dingtalk-tag connect` | 受管换票与 Profile 落盘；可选 DSH 幂等注册 | [`manage-and-connect.md`](./manage-and-connect.md) |
+| 本地接入：已有已发布员工落盘 Profile 或接入本地 Agent/DSH | `dws dingtalk-tag connect` | 受管换票与 Profile 落盘；可选本地 Agent 运行或 DSH 幂等注册 | [`manage-and-connect.md`](./manage-and-connect.md) |
 
 ## 意图路由
 
@@ -24,6 +24,8 @@ DingTalk Tag 数字员工的管理、执行查询和能力资源命令，命令�
 | 为什么这么回答 / 看提示词 / 看工具调用 / 完整链路 | `dws dingtalk-tag run trace` |
 | 手上只有 dws 发消息返回的 openTaskId | 先换成 openMessageId，见 [`run.md`](./run.md) |
 | 只把已有 local_agent 数字员工转换成本地 Profile | `dws dingtalk-tag connect --agent-uuid ... --profile-only`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
+| 管理普通 Agent 的连接进程 | `dws dingtalk-tag connection list/status/stop/restart`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
+| 把已有 local_agent 数字员工接入普通本地 Agent | `dws dingtalk-tag connect --agent-uuid ... --channel codex --daemon --alwayson`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
 | 把已有 local_agent 数字员工接入 DSH | `dws dingtalk-tag connect --agent-uuid ... --channel dsh`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
 
 ## 全局约束

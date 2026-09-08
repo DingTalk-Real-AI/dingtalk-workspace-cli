@@ -199,6 +199,7 @@ func TestDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelope(t *testing.T) {
 }
 
 func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
+	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
 		"chat/send_personal_message": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
@@ -273,6 +274,7 @@ func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *
 }
 
 func TestDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
+	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
 		"chat/send_personal_message": {`{"result":{"openTaskId":"task-1"}}`},
@@ -498,7 +500,7 @@ func TestDingTalkTagConnectRequiresOneExplicitMode(t *testing.T) {
 		profileOnly bool
 		want        string
 	}{
-		{name: "missing mode", want: "--channel dsh 或 --profile-only"},
+		{name: "missing mode", want: "无法选择受支持的数字员工 Agent"},
 		{name: "conflicting modes", channel: "dsh", profileOnly: true, want: "不能同时使用"},
 	}
 	for _, tc := range tests {

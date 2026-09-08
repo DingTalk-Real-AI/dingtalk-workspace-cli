@@ -88,7 +88,7 @@ cli_version: ">=1.0.61"
 | `contract`        | 法务智能合同：台账、批量导入、听记起草、合同审查、归档、项目、相对方与账款管理 | [contract.md](./references/products/contract.md)               |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
-| `dingtalk-tag`    | DingTalk Tag 数字员工：管理生命周期、Skill/MCP、执行状态与 trace，以及已有员工落盘 Profile 或接入 DSH | [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md) |
+| `dingtalk-tag`    | DingTalk Tag 数字员工：管理生命周期、Skill/MCP、执行状态与 trace，以及员工 Profile、普通本地 Agent 或 DSH 接入与运行管理 | [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md) |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
