@@ -36,8 +36,8 @@ func TestCrossPlatformCoverageAttendanceSemanticCatalogExactlyCoversRegisteredSu
 		}
 		registered[item.Command] = item
 	}
-	if len(registered) != 35 || len(source.Shortcuts) != 35 {
-		t.Fatalf("registered/catalog = %d/%d, want 35/35", len(registered), len(source.Shortcuts))
+	if len(registered) != 38 || len(source.Shortcuts) != 38 {
+		t.Fatalf("registered/catalog = %d/%d, want 38/38", len(registered), len(source.Shortcuts))
 	}
 	public := 0
 	compatibilityVisible := 0
@@ -108,7 +108,7 @@ func TestCrossPlatformCoverageAttendanceSemanticCatalogExactlyCoversRegisteredSu
 	if len(missing) > 0 || len(stale) > 0 {
 		t.Fatalf("catalog mismatch: missing=%v stale=%v", missing, stale)
 	}
-	if public != 8 || compatibilityVisible != 11 {
-		t.Fatalf("public/compatibility-visible attendance shortcuts = %d/%d, want 8/11", public, compatibilityVisible)
+	if public != 11 || compatibilityVisible != 11 {
+		t.Fatalf("public/compatibility-visible attendance shortcuts = %d/%d, want 11/11", public, compatibilityVisible)
 	}
 }

@@ -34,6 +34,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
 )
@@ -158,6 +159,30 @@ var approveTemplateTypeMapping = map[string]string{
 	"overtime": "OVERTIME", "加班": "OVERTIME",
 	"travel": "TRAVEL", "外出": "TRAVEL",
 	"out": "OUT", "trip": "OUT", "business_trip": "OUT", "business-trip": "OUT", "出差": "OUT",
+}
+
+func attendanceApproveDurationResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema:     json.RawMessage(`{"type":"object","description":"考勤审批时长计算结果","properties":{"value":{"type":"object","description":"服务端按排班与考勤规则计算的完整结果","properties":{"durationUnit":{"type":"string","description":"计算结果的时长单位"},"durationInDay":{"type":"number","description":"按天表示的审批时长"},"durationInHour":{"type":"number","description":"按小时表示的审批时长"},"durationInMinutes":{"type":"number","description":"按分钟表示的审批时长"},"calculateMode":{"type":"integer","description":"服务端采用的计算模式"},"detailList":{"type":"array","description":"逐日或逐时段的计算明细","items":{"type":"object","description":"单个审批时长明细","additionalProperties":true}},"compressedValue":{"type":"string","description":"后续审批提交链路使用的压缩计算值"},"message":{"type":"string","description":"服务端返回的业务提示"},"modifiable":{"type":"boolean","description":"总时长是否允许用户修改"},"excludePrincipalUserIds":{"type":"array","description":"不允许批量提交的同行人用户 ID","items":{"type":"string","description":"同行人用户 ID"}}},"additionalProperties":true}},"required":["value"],"additionalProperties":false}`),
+		SensitivePaths: []string{"value.compressedValue", "value.detailList", "value.excludePrincipalUserIds", "value.featureMap"},
+	}
+}
+
+func attendanceCompanionScheduleResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema:     json.RawMessage(`{"type":"object","description":"出差或外出同行人班次校验结果","properties":{"value":{"type":"object","description":"同行人班次是否允许提交的业务校验结果","properties":{"valid":{"type":"boolean","description":"是否允许继续提交；false 是正常业务拒绝，不是系统异常"},"userIds":{"type":"array","description":"存在班次冲突的同行人用户 ID","items":{"type":"string","description":"冲突用户 ID"}},"title":{"type":"string","description":"业务提示标题"},"alertInfo":{"type":"string","description":"班次冲突的详细提示"}},"required":["valid"],"additionalProperties":true}},"required":["value"],"additionalProperties":false}`),
+		SensitivePaths: []string{"value.userIds", "value.title", "value.alertInfo"},
+	}
+}
+
+func attendanceComplexOvertimeSettingResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema:     json.RawMessage(`{"type":"object","description":"指定员工适用的复杂加班规则","properties":{"value":{"type":"object","description":"服务端返回的完整加班交互模式和规则配置","properties":{"interactMode":{"type":"integer","enum":[1,2,3],"description":"前端交互单位：1-天，2-半天，3-小时"},"interactModeMap":{"type":"object","description":"不同日期类型对应的交互单位映射","additionalProperties":{"type":"integer","description":"日期类型对应的交互单位编码"}},"overtimeSettingVO":{"type":"object","description":"完整加班规则明细","additionalProperties":true}},"additionalProperties":true}},"required":["value"],"additionalProperties":false}`),
+		SensitivePaths: []string{"value.interactModeMap", "value.overtimeSettingVO"},
+	}
 }
 
 // ── record ──────────────────────────────────────────────────
@@ -545,6 +570,341 @@ var GetApproveTemplate = shortcut.Shortcut{
 		}, "templates", true, nil, func(items []map[string]any) error {
 			return attendanceValidateApproveTemplates(items, serverWukong+"/query_at_approve_template", approveType)
 		}, "result")
+	},
+}
+
+// CalculateApproveDuration 按考勤规则计算审批时长（calculate_approve_duration）。
+var CalculateApproveDuration = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "attendance",
+	Command:       "+calculate-approve-duration",
+	Product:       serverWukong,
+	Description:   "计算加班/请假/外出等考勤审批时长",
+	Intent:        "当用户已确定考勤审批类型和起止时间，需要在提交前按企业排班及考勤规则计算审批时长、每日明细和后续提交所需数据时使用；支持天、半天、小时、半小时和分钟模式。本命令只计算，不提交审批。",
+	Risk:          shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_calculate_approve_duration",
+			CanonicalPath:  "attendance.shortcut_calculate_approve_duration",
+			CLIPath:        "attendance +calculate-approve-duration",
+			PrimaryCLIPath: "attendance +calculate-approve-duration",
+		},
+		Description: "计算加班/请假/外出等考勤审批时长",
+		Parameters: []contract.ParamDecl{
+			{Name: "biz-type", Property: "bizType"},
+			{Name: "approve-biz-type", Property: "approveBizType"},
+			{Name: "duration-mode", Property: "durationMode"},
+			{Name: "start", Property: "fromDate"},
+			{Name: "end", Property: "toDate"},
+			{Name: "half-start", Property: "halfFromDate"},
+			{Name: "half-end", Property: "halfToDate"},
+			{Name: "push-tag", Property: "pushTag"},
+			{Name: "request-id", Property: "requestId"},
+			{Name: "new-overtime", Property: "newOvertime"},
+			{Name: "principal-users", Property: "principalUserIds"},
+			{Name: "nature-day", Property: "natureDay"},
+		},
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI converts readable local date-times into MCP millisecond timestamps, validates half-day dependencies, and preserves the complete calculation result.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按排班和考勤规则计算审批时长，不提交审批",
+			UseWhen:      []string{"已知审批业务类型、时长模式和起止时间，需要获取准确审批时长或提交所需压缩值时使用"},
+			AvoidWhen:    []string{"只需查询已提交审批记录时使用 +list-approve；需要实际提交审批时使用对应提交流程"},
+			Examples:     []string{`dws attendance +calculate-approve-duration --biz-type 1 --duration-mode 3 --start "2026-08-31 09:00:00" --end "2026-08-31 18:00:00" --new-overtime`},
+		},
+		Result: attendanceApproveDurationResult(),
+	},
+	Flags: []shortcut.Flag{
+		{Name: "biz-type", Type: shortcut.FlagInt, Desc: "审批业务类型：1-加班，2-普通审批，3-请假，4-补卡，5-外出，6-换班，7-考勤证明，8-单次外出", Required: true},
+		{Name: "approve-biz-type", Type: shortcut.FlagString, Desc: "普通审批场景的原始审批子类型，用于区分外出、出差等；不确定时不传"},
+		{Name: "duration-mode", Type: shortcut.FlagInt, Desc: "时长模式：1-天，2-半天，3-小时，4-半小时，5-分钟", Required: true},
+		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间，YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
+		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间，格式同 --start，且不得早于开始时间", Required: true},
+		{Name: "half-start", Type: shortcut.FlagString, Enum: []string{"AM", "PM"}, RequiredWhen: "duration-mode=2", Desc: "半天模式开始时段：AM 或 PM"},
+		{Name: "half-end", Type: shortcut.FlagString, Enum: []string{"AM", "PM"}, RequiredWhen: "duration-mode=2", Desc: "半天模式结束时段：AM 或 PM"},
+		{Name: "push-tag", Type: shortcut.FlagString, Desc: "可选审批业务标签"},
+		{Name: "request-id", Type: shortcut.FlagString, Desc: "可选业务请求唯一标识"},
+		{Name: "new-overtime", Type: shortcut.FlagBool, Desc: "是否使用新版加班规则；仅明确为新版加班时传"},
+		{Name: "principal-users", Type: shortcut.FlagStringSlice, Desc: "出差、外出等场景的同行人员工 userId，逗号分隔"},
+		{Name: "nature-day", Type: shortcut.FlagBool, Desc: "是否按自然日计算；不传时沿用业务默认规则"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"biz-type"}, Description: "--biz-type 必须在 1 到 8 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-mode", "half-start", "half-end"}, Description: "--duration-mode 必须在 1 到 5 之间；半天模式必须同时提供 --half-start 和 --half-end"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "起止时间格式必须正确，且 --end 不得早于 --start"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("biz-type") < 1 || rt.Int("biz-type") > 8 {
+			return fmt.Errorf("--biz-type 必须在 1 到 8 之间")
+		}
+		mode := rt.Int("duration-mode")
+		if mode < 1 || mode > 5 {
+			return fmt.Errorf("--duration-mode 必须在 1 到 5 之间")
+		}
+		start, err := flexMillis(rt.Str("start"))
+		if err != nil {
+			return fmt.Errorf("--start %w", err)
+		}
+		end, err := flexMillis(rt.Str("end"))
+		if err != nil {
+			return fmt.Errorf("--end %w", err)
+		}
+		if end < start {
+			return fmt.Errorf("--end 不能早于 --start")
+		}
+		hasHalfStart := rt.Str("half-start") != ""
+		hasHalfEnd := rt.Str("half-end") != ""
+		if mode == 2 && (!hasHalfStart || !hasHalfEnd) {
+			return fmt.Errorf("半天模式必须同时提供 --half-start 和 --half-end")
+		}
+		if mode != 2 && (hasHalfStart || hasHalfEnd) {
+			return fmt.Errorf("--half-start 和 --half-end 仅适用于 --duration-mode 2")
+		}
+		if users := rt.StrSlice("principal-users"); len(users) > 0 {
+			return attendanceValidateUserIDs(users, 0)
+		}
+		return nil
+	},
+	Tips: []string{`dws attendance +calculate-approve-duration --biz-type 3 --duration-mode 2 --start 2026-09-01 --end 2026-09-01 --half-start AM --half-end PM`},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		fromDate, err := flexMillis(rt.Str("start"))
+		if err != nil {
+			return err
+		}
+		toDate, err := flexMillis(rt.Str("end"))
+		if err != nil {
+			return err
+		}
+		params := map[string]any{
+			"bizType":      rt.Int("biz-type"),
+			"durationMode": rt.Int("duration-mode"),
+			"fromDate":     fromDate,
+			"toDate":       toDate,
+		}
+		optionalStrings := map[string]string{
+			"approveBizType": rt.Str("approve-biz-type"),
+			"halfFromDate":   rt.Str("half-start"),
+			"halfToDate":     rt.Str("half-end"),
+			"pushTag":        rt.Str("push-tag"),
+			"requestId":      rt.Str("request-id"),
+		}
+		for key, value := range optionalStrings {
+			if value != "" {
+				params[key] = value
+			}
+		}
+		if users := rt.StrSlice("principal-users"); len(users) > 0 {
+			params["principalUserIds"] = users
+		}
+		if rt.Changed("new-overtime") {
+			params["newOvertime"] = rt.Bool("new-overtime")
+		}
+		if rt.Changed("nature-day") {
+			params["natureDay"] = rt.Bool("nature-day")
+		}
+		return attendanceCallObject(rt, serverWukong, "calculate_approve_duration", params)
+	},
+}
+
+// CheckCompanionSchedules 校验出差/外出同行人班次（check_companion_schedules）。
+var CheckCompanionSchedules = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "attendance",
+	Command:       "+check-companion-schedules",
+	Product:       serverWukong,
+	Description:   "校验出差/外出同行人的班次是否允许一起提交",
+	Intent:        "当发起出差或外出审批并已选同行人时，在提交前校验同行人的班次是否与申请时间段兼容；返回 valid、冲突用户和提示文案。valid=false 是正常业务校验结果，不代表接口异常。",
+	Risk:          shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_check_companion_schedules",
+			CanonicalPath:  "attendance.shortcut_check_companion_schedules",
+			CLIPath:        "attendance +check-companion-schedules",
+			PrimaryCLIPath: "attendance +check-companion-schedules",
+		},
+		Description: "校验出差/外出同行人的班次是否允许一起提交",
+		Parameters: []contract.ParamDecl{
+			{Name: "approve-type", Property: "approveType"},
+			{Name: "starts", Property: "workDateList[].startTimestampMs"},
+			{Name: "ends", Property: "workDateList[].endTimestampMs"},
+			{Name: "principal-users", Property: "principalUserIds"},
+			{Name: "duration-unit", Property: "durationUnit"},
+		},
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI pairs readable start/end lists, converts them to the MCP time-range model, and preserves valid=false as a successful business response.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "提交出差或外出审批前校验同行人班次",
+			UseWhen:      []string{"出差或外出审批包含同行人，需要确认这些同行人的班次是否允许共同提交时使用"},
+			AvoidWhen:    []string{"没有同行人时无需调用；本命令不校验重复审批单，也不提交审批"},
+			Examples:     []string{`dws attendance +check-companion-schedules --approve-type 2 --starts "2026-08-31 09:00:00" --ends "2026-08-31 18:00:00" --principal-users userId1,userId2 --duration-unit HOUR`},
+		},
+		Result: attendanceCompanionScheduleResult(),
+	},
+	Flags: []shortcut.Flag{
+		{Name: "approve-type", Type: shortcut.FlagInt, Desc: "审批类型：1-出差，2-外出", Required: true},
+		{Name: "starts", Type: shortcut.FlagStringSlice, Desc: "申请时间段开始时间列表，YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss；与 --ends 按位置一一对应", Required: true},
+		{Name: "ends", Type: shortcut.FlagStringSlice, Desc: "申请时间段结束时间列表，格式同 --starts；与 --starts 数量必须一致", Required: true},
+		{Name: "principal-users", Type: shortcut.FlagStringSlice, Desc: "同行人员工 userId 列表，逗号分隔"},
+		{Name: "duration-unit", Type: shortcut.FlagString, Enum: []string{"DAY", "HOUR"}, Desc: "审批时长单位：DAY 或 HOUR", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"approve-type"}, Description: "--approve-type 只能为 1（出差）或 2（外出）"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"starts", "ends"}, Description: "起止列表不能为空、数量必须一致，且每个结束时间不得早于对应开始时间"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("approve-type") != 1 && rt.Int("approve-type") != 2 {
+			return fmt.Errorf("--approve-type 只能为 1（出差）或 2（外出）")
+		}
+		starts := rt.StrSlice("starts")
+		ends := rt.StrSlice("ends")
+		if len(starts) == 0 || len(ends) == 0 || len(starts) != len(ends) {
+			return fmt.Errorf("--starts 与 --ends 不能为空且数量必须一致")
+		}
+		for index := range starts {
+			start, err := flexMillis(starts[index])
+			if err != nil {
+				return fmt.Errorf("--starts 第 %d 项 %w", index+1, err)
+			}
+			end, err := flexMillis(ends[index])
+			if err != nil {
+				return fmt.Errorf("--ends 第 %d 项 %w", index+1, err)
+			}
+			if end < start {
+				return fmt.Errorf("第 %d 个时间段的结束时间不能早于开始时间", index+1)
+			}
+		}
+		if users := rt.StrSlice("principal-users"); len(users) > 0 {
+			return attendanceValidateUserIDs(users, 0)
+		}
+		return nil
+	},
+	Tips: []string{`多个时间段可按相同顺序传入：--starts "2026-08-31 09:00:00,2026-09-01 09:00:00" --ends "2026-08-31 18:00:00,2026-09-01 18:00:00"`},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		starts := rt.StrSlice("starts")
+		ends := rt.StrSlice("ends")
+		workDateList := make([]map[string]any, 0, len(starts))
+		for index := range starts {
+			start, err := flexMillis(starts[index])
+			if err != nil {
+				return err
+			}
+			end, err := flexMillis(ends[index])
+			if err != nil {
+				return err
+			}
+			workDateList = append(workDateList, map[string]any{
+				"startTimestampMs": start,
+				"endTimestampMs":   end,
+			})
+		}
+		params := map[string]any{
+			"approveType":  rt.Int("approve-type"),
+			"workDateList": workDateList,
+			"durationUnit": rt.Str("duration-unit"),
+		}
+		if users := rt.StrSlice("principal-users"); len(users) > 0 {
+			params["principalUserIds"] = users
+		}
+		data, err := rt.CallMCPData(serverWukong, "check_companion_schedules", params)
+		if err != nil {
+			return err
+		}
+		value, err := responsecheck.RequireSingleObjectResult(data, serverWukong+"/check_companion_schedules")
+		if err != nil {
+			return err
+		}
+		if _, ok := value["valid"].(bool); !ok {
+			return responsecheck.Error(serverWukong+"/check_companion_schedules", "invalid_business_result", "返回结果缺少 boolean 类型的 valid 字段")
+		}
+		return rt.Output(map[string]any{"value": value})
+	},
+}
+
+// GetComplexOvertimeSetting 查询复杂加班规则（get_complex_overtime_setting）。
+var GetComplexOvertimeSetting = shortcut.Shortcut{
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "attendance",
+	Command:       "+get-complex-overtime-setting",
+	Product:       serverWukong,
+	Description:   "查询员工在指定日期适用的复杂加班规则",
+	Intent:        "当计算或填写加班审批前，需要查询一名或多名员工在指定日期适用的加班交互单位及完整规则配置时使用；不传日期时由服务端使用当前时间。",
+	Risk:          shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_complex_overtime_setting",
+			CanonicalPath:  "attendance.shortcut_get_complex_overtime_setting",
+			CLIPath:        "attendance +get-complex-overtime-setting",
+			PrimaryCLIPath: "attendance +get-complex-overtime-setting",
+		},
+		Description: "查询员工在指定日期适用的复杂加班规则",
+		Parameters: []contract.ParamDecl{
+			{Name: "users", Property: "userIds"},
+			{Name: "work-date", Property: "workDate"},
+		},
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI validates employee IDs, converts an optional readable work date to the MCP millisecond value, and returns the complete rule object.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询员工指定日期适用的加班交互单位和完整规则",
+			UseWhen:      []string{"填写或计算加班审批前，需要知道员工适用的天、半天或小时交互模式及加班规则时使用"},
+			AvoidWhen:    []string{"按规则 ID 查询管理侧规则详情时使用 +get-overtime-rule；本命令不创建或修改规则"},
+			Examples:     []string{`dws attendance +get-complex-overtime-setting --users userId1,userId2 --work-date 2026-08-31`},
+		},
+		Result: attendanceComplexOvertimeSettingResult(),
+	},
+	Flags: []shortcut.Flag{
+		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "员工 userId 列表，不能为空、不能重复，逗号分隔", Required: true},
+		{Name: "work-date", Type: shortcut.FlagString, Desc: "规则生效日期，YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss；不传时使用服务端当前时间"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"users"}, Description: "--users 不能为空且用户 ID 不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"work-date"}, Description: "--work-date 如传入，必须为 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := attendanceValidateUserIDs(rt.StrSlice("users"), 0); err != nil {
+			return err
+		}
+		if rt.Str("work-date") != "" {
+			if _, err := flexMillis(rt.Str("work-date")); err != nil {
+				return fmt.Errorf("--work-date %w", err)
+			}
+		}
+		return nil
+	},
+	Tips: []string{`dws attendance +get-complex-overtime-setting --users userId1`},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		params := map[string]any{"userIds": rt.StrSlice("users")}
+		if rt.Str("work-date") != "" {
+			workDate, err := flexMillis(rt.Str("work-date"))
+			if err != nil {
+				return err
+			}
+			params["workDate"] = workDate
+		}
+		return attendanceCallObject(rt, serverWukong, "get_complex_overtime_setting", params)
 	},
 }
 
@@ -2327,6 +2687,9 @@ func init() {
 		CheckRecord,
 		ListApprove,
 		GetApproveTemplate,
+		CalculateApproveDuration,
+		CheckCompanionSchedules,
+		GetComplexOvertimeSetting,
 		GetSchedule,
 		ImportSchedule,
 		SearchClass,
