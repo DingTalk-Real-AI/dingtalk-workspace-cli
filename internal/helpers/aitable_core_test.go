@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -74,6 +75,10 @@ func TestCrossPlatformCoverageAitableFlagAndJSONNormalizers(t *testing.T) {
 	if _, err := parseBoolFlag(cmd, "enabled"); err == nil {
 		t.Fatal("invalid boolean should fail")
 	}
+	_ = cmd.Flags().Set("enabled", "1")
+	if got, err := parseBoolFlag(cmd, "enabled"); err != nil || !got {
+		t.Fatalf("legacy numeric boolean alias = %v, %v", got, err)
+	}
 
 	if _, err := resolveRecordsFlag(cmd); err == nil {
 		t.Fatal("missing records should fail")
@@ -123,13 +128,53 @@ func TestCrossPlatformCoverageAitableFlagAndJSONNormalizers(t *testing.T) {
 	}
 	for index, value := range filterCases {
 		err := validateFiltersStructure(value, "unused")
-		if index == 0 || index == len(filterCases)-1 || index == 7 {
+		if index == 0 || index == len(filterCases)-1 {
 			if err != nil {
 				t.Errorf("valid filter case %d: %v", index, err)
 			}
 		} else if err == nil {
 			t.Errorf("invalid filter case %d should fail", index)
 		}
+	}
+	viewDateScheme := map[string]any{"operator": "and", "operands": []any{
+		map[string]any{"operator": "date_eq", "operands": []any{"fldDate", map[string]any{"type": "relative", "period": "month", "offset": 0}}},
+	}}
+	if err := validateFiltersStructure(viewDateScheme, "unused"); err == nil || !strings.Contains(err.Error(), "relative/exact objects belong to view update filter") {
+		t.Fatalf("record query accepted View date Scheme: %v", err)
+	}
+	recordDate := map[string]any{"operator": "and", "operands": []any{
+		map[string]any{"operator": "date_eq", "operands": []any{"fldDate", "2026-08-20"}},
+	}}
+	if err := validateFiltersStructure(recordDate, "unused"); err != nil {
+		t.Fatalf("record query rejected date string protocol: %v", err)
+	}
+	nestedUnknown := map[string]any{"operator": "and", "operands": []any{
+		map[string]any{"operator": "or", "operands": []any{map[string]any{"operator": "bogus", "operands": []any{"fldDate", "x"}}}},
+	}}
+	if err := validateFiltersStructure(nestedUnknown, "unused"); err == nil || !strings.Contains(err.Error(), "unsupported filter operator") {
+		t.Fatalf("nested unsupported operator should fail: %v", err)
+	}
+	for name, nestedOperands := range map[string]any{
+		"missing": nil,
+		"scalar":  "bad",
+		"empty":   []any{},
+	} {
+		nestedLogical := map[string]any{"operator": "and", "operands": []any{
+			map[string]any{"operator": "or"},
+		}}
+		child := nestedLogical["operands"].([]any)[0].(map[string]any)
+		if name != "missing" {
+			child["operands"] = nestedOperands
+		}
+		if err := validateFiltersStructure(nestedLogical, "unused"); err == nil || !strings.Contains(err.Error(), "logical operator or requires") {
+			t.Errorf("nested logical %s operands should fail: %v", name, err)
+		}
+	}
+	fractionalDate := map[string]any{"operator": "and", "operands": []any{
+		map[string]any{"operator": "date_eq", "operands": []any{"fldDate", 1786896000000.5}},
+	}}
+	if err := validateFiltersStructure(fractionalDate, "unused"); err == nil || !strings.Contains(err.Error(), "JSON number") {
+		t.Fatalf("fractional Unix milliseconds should fail: %v", err)
 	}
 
 	input := map[string]any{"operator": "and", "operands": []any{
@@ -172,8 +217,8 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	}
 	if err := normalizeViewConfigBlock(map[string]any{
 		"filter": []any{map[string]any{"operator": "and", "operands": []any{}}},
-	}); err == nil || !strings.Contains(err.Error(), "不接受 and/or") {
-		t.Fatalf("logical view filter wrapper was accepted: %v", err)
+	}); err == nil || !strings.Contains(err.Error(), "requires at least one condition") {
+		t.Fatalf("empty logical view filter wrapper was accepted: %v", err)
 	}
 	if err := normalizeViewConfigBlock(map[string]any{
 		"filter": []any{map[string]any{"operator": "neq", "operands": []any{"f", "v"}}},
@@ -292,6 +337,78 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitableViewConfigUsesFieldAndEntityValidation(t *testing.T) {
+	t.Run("config without filter needs no field lookup", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		installAitableDeps(t, caller)
+		config := map[string]any{"sort": []any{}}
+		if err := normalizeAndValidateViewConfig(context.Background(), "base", "table", config); err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("unexpected calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("empty filter needs no field lookup", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		installAitableDeps(t, caller)
+		config := map[string]any{"filter": []any{}}
+		if err := normalizeAndValidateViewConfig(context.Background(), "base", "table", config); err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("unexpected calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("unknown field is rejected", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{`{"data":{"fields":[{"fieldId":"fldText","type":"text"}]}}`}}
+		installAitableDeps(t, caller)
+		config := map[string]any{"filter": []any{map[string]any{
+			"operator": "eq", "operands": []any{"fldMissing", "value"},
+		}}}
+		err := normalizeAndValidateViewConfig(context.Background(), "base", "table", config)
+		if err == nil || !strings.Contains(err.Error(), "unknown fieldId") || len(caller.calls) != 1 {
+			t.Fatalf("error=%v calls=%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("entity name is resolved before write", func(t *testing.T) {
+		caller := &aitableTestCaller{responses: []string{
+			`{"data":{"fields":[{"fieldId":"fldDept","type":"department"}]}}`,
+			`{"data":{"candidates":[{"name":"客户成功部","department":{"departmentId":"dept-1"}}],"hasMore":false}}`,
+		}}
+		installAitableDeps(t, caller)
+		config := map[string]any{"filter": []any{map[string]any{
+			"operator": "eq", "operands": []any{"fldDept", map[string]any{"entityName": "客户成功部"}},
+		}}}
+		if err := normalizeAndValidateViewConfig(context.Background(), "base", "table", config); err != nil {
+			t.Fatal(err)
+		}
+		filter := config["filter"].([]any)
+		value := filter[0].(map[string]any)["operands"].([]any)[1]
+		if !reflect.DeepEqual(value, map[string]any{"departmentId": "dept-1"}) || len(caller.calls) != 2 {
+			t.Fatalf("value=%#v calls=%#v", value, caller.calls)
+		}
+	})
+
+	t.Run("entity lookup errors are returned", func(t *testing.T) {
+		caller := &aitableTestCaller{
+			responses: []string{`{"data":{"fields":[{"fieldId":"fldDept","type":"department"}]}}`},
+			errors:    []error{nil, context.Canceled},
+		}
+		installAitableDeps(t, caller)
+		config := map[string]any{"filter": []any{map[string]any{
+			"operator": "eq", "operands": []any{"fldDept", map[string]any{"entityName": "客户成功部"}},
+		}}}
+		err := normalizeAndValidateViewConfig(context.Background(), "base", "table", config)
+		if !errors.Is(err, context.Canceled) || len(caller.calls) != 2 {
+			t.Fatalf("error=%v calls=%#v", err, caller.calls)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageAitableViewConfigFilterShorthandLeaves(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -327,7 +444,7 @@ func TestCrossPlatformCoverageAitableViewConfigFilterShorthandLeaves(t *testing.
 	}
 
 	invalid := normalizeViewConfigFilter([]any{map[string]any{"fieldId": "fldText", "operator": "equals", "value": "done"}})
-	if err := validateViewConfigFilter(invalid); err == nil || !strings.Contains(err.Error(), "不支持") {
+	if err := validateViewConfigFilter(invalid); err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("invalid shorthand operator must still fail strict validation: %v", err)
 	}
 }
@@ -407,5 +524,163 @@ func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing
 				t.Fatalf("explicitEmptyRecordQueryPage(%#v) = %v, want %v", tc.response, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageDashboardGetPreservesSchemaVersionTypeEvidence(t *testing.T) {
+	tests := []struct {
+		name          string
+		schemaVersion string
+	}{
+		{name: "number", schemaVersion: `2`},
+		{name: "string", schemaVersion: `"2"`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := `{"status":"success","data":{"dashboardId":"dashboard","meta":{"schemaVersion":` + test.schemaVersion + `,"schemaVersionTypeVerified":true},"charts":[]}}`
+			caller := &aitableTestCaller{responses: []string{response}}
+			out := installAitableDeps(t, caller)
+			root := newAitableCommand()
+			installExampleGlobalFlags(root)
+			root.SilenceErrors = true
+			root.SilenceUsage = true
+			root.SetArgs([]string{"dashboard", "get", "--base-id=base", "--dashboard-id=dashboard", "--format=json"})
+			if err := root.ExecuteContext(context.Background()); err != nil {
+				t.Fatalf("dashboard get error = %v", err)
+			}
+			for _, want := range []string{`"schemaVersion": ` + test.schemaVersion, `"schemaVersionTypeVerified": true`} {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("dashboard output missing %s: %s", want, out.String())
+				}
+			}
+			if len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard" {
+				t.Fatalf("dashboard calls = %#v", caller.calls)
+			}
+		})
+	}
+	if spec := aitableDashboardGetResultSpec(); spec == nil || !strings.Contains(string(spec.DataSchema), "schemaVersionTypeVerified") {
+		t.Fatalf("dashboard result contract is missing schemaVersion type evidence: %#v", spec)
+	}
+}
+
+func TestCrossPlatformCoverageChartHelpUsesDashboardGridMetadata(t *testing.T) {
+	root := newAitableCommand()
+	for _, path := range [][]string{{"chart", "create"}, {"chart", "update"}} {
+		command, _, err := root.Find(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"完整", "name", "大写 chartType", "sheet", "$CONFIG_JSON"} {
+			if !strings.Contains(command.Long+"\n"+command.Example, want) {
+				t.Fatalf("%v help missing %q:\n%s\n%s", path, want, command.Long, command.Example)
+			}
+		}
+		for _, obsolete := range []string{"chartName", `"chartType":"bar"`, "@chart-config.json"} {
+			if strings.Contains(command.Long+"\n"+command.Example, obsolete) {
+				t.Fatalf("%v help contains obsolete config form %q:\n%s\n%s", path, obsolete, command.Long, command.Example)
+			}
+		}
+	}
+	create, _, _ := root.Find([]string{"chart", "create"})
+	for _, want := range []string{"自动调用 get_dashboard", "--is-app-mode=true", "schemaVersionTypeVerified=true", "JSON number 2", "48 列", "12 列", "root-responsive-layout", "非根 parentId"} {
+		if !strings.Contains(create.Long, want) {
+			t.Fatalf("chart create help missing %q:\n%s", want, create.Long)
+		}
+	}
+	if strings.Contains(create.Long, "仪表盘是网格布局共 12 列") {
+		t.Fatalf("chart create help still fixes every dashboard to 12 columns:\n%s", create.Long)
+	}
+}
+
+func TestCrossPlatformCoverageChartWritesPublishCompositeRuntimeInterface(t *testing.T) {
+	root := newAitableCommand()
+	for _, path := range []string{"aitable chart create", "aitable chart update"} {
+		leaf := findCLIPath(root, path)
+		if leaf == nil {
+			t.Fatalf("missing leaf %q", path)
+		}
+		final, ok := contractfinal.RuntimeContractFinal(leaf)
+		if !ok || final.Interface == nil || final.Interface.Mode != "composite" ||
+			final.Interface.Ref != nil || strings.TrimSpace(final.Interface.Reason) == "" {
+			t.Fatalf("%s interface = %#v", path, final.Interface)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageFormRuntimeInterfacesDoNotPublishWrongPinnedRef(t *testing.T) {
+	root := newAitableCommand()
+	paths := []string{
+		"aitable form list",
+		"aitable form delete",
+		"aitable form update",
+		"aitable form field list",
+		"aitable form field update",
+		"aitable form field hide",
+		"aitable form share get",
+		"aitable form share update",
+	}
+	for _, path := range paths {
+		leaf := findCLIPath(root, path)
+		if leaf == nil {
+			t.Fatalf("missing leaf %q", path)
+		}
+		final, ok := contractfinal.RuntimeContractFinal(leaf)
+		if !ok || final.Interface == nil || final.Interface.Mode != "composite" ||
+			final.Interface.Ref != nil || !strings.Contains(final.Interface.Reason, "remote helper that is absent") {
+			t.Errorf("%s interface = %#v, want unpinned remote-helper composite", path, final.Interface)
+		}
+	}
+
+	get := findCLIPath(root, "aitable form get")
+	final, ok := contractfinal.RuntimeContractFinal(get)
+	if !ok || final.Interface == nil || final.Interface.Mode != "composite" ||
+		!strings.Contains(final.Interface.Reason, "unpinned aitable-helper/list_form_views") {
+		t.Fatalf("aitable form get interface = %#v", final.Interface)
+	}
+}
+
+func TestCrossPlatformCoveragePrimaryDocHelpExplainsAbsentState(t *testing.T) {
+	root := newAitableCommand()
+	command, _, err := root.Find([]string{"base", "get-primary-doc-id"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"data.exists", "exists=true", "data.nodeId", "exists=false", "record primary-doc-create"} {
+		if !strings.Contains(command.Long, want) {
+			t.Fatalf("primary doc help missing %q:\n%s", want, command.Long)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageViewFilterHelpPublishesVerifiedDateScheme(t *testing.T) {
+	root := newAitableCommand()
+	command, _, err := root.Find([]string{"view", "update", "filter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"date_eq", "from_now", `"type":"relative"`, `"type":"exact"`,
+		"JSON number", "JSON string", "Unix毫秒JSON整数", "record query",
+		"openConversationId", "二选一", "MCP 负责",
+	} {
+		if !strings.Contains(command.Long, want) {
+			t.Fatalf("view update filter help missing %q:\n%s", want, command.Long)
+		}
+	}
+	if flag := command.Flags().Lookup("json"); flag == nil || !strings.Contains(flag.Usage, "offset/timestamp") {
+		t.Fatalf("view update filter --json schema description is incomplete: %#v", flag)
+	}
+}
+
+func TestCrossPlatformCoverageRecordCreateHelpPublishesGroupIdentifierCompatibility(t *testing.T) {
+	root := newAitableCommand()
+	command, _, err := root.Find([]string{"record", "create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"cid", "openConversationId", "二选一", "MCP"} {
+		if !strings.Contains(command.Long, want) {
+			t.Fatalf("record create help missing %q:\n%s", want, command.Long)
+		}
 	}
 }

@@ -11,7 +11,7 @@
 | `+datasource-create` | 创建数据源表并触发首次全量同步 | 写 |
 | `+datasource-update` | 更新已有数据源表的同步配置 | 写 |
 | `+datasource-sync` | 手动触发一次同步（最多 5 张表） | 写 |
-| `+datasource-sync-status` | 查询同步任务状态（RUNNING/FINISHED/FAILED） | 读 |
+| `+datasource-sync-status` | 查询同步任务状态（含未找到、未知状态） | 读 |
 | `+datasource-get-config` | 获取数据源表当前同步配置 | 读 |
 
 ## 典型工作流
@@ -39,7 +39,7 @@ Step 2    创建数据源           +datasource-create --base-id <B> --datasourc
                               → 返回 tableId + taskId
 
 Step 3    查询同步结果         +datasource-sync-status --base-id <B> --table-id <T> --task-ids <TASK_ID>
-                              → FINISHED=完成，FAILED=看 errorCode 排查，RUNNING=轮询
+                              → 仅 RUNNING 轮询；其他状态停止并按 tasks[] 逐项处理
 
 Step 4    (后续) 手动触发同步   +datasource-sync --base-id <B> --table-ids <T1>,<T2>
                               → 返回新 taskId，再用 sync-status 查结果
@@ -227,7 +227,7 @@ dws aitable +datasource-sync-status --base-id BASE_ID --table-id TABLE_ID --task
 | `--table-id` | 是 | 数据源表 ID（sync=true） |
 | `--task-ids` | 是 | 同步任务 ID 列表（由 create/update/sync 返回），1-5 个 |
 
-任务状态：`RUNNING`（进行中）、`FINISHED`（完成）、`FAILED`（失败，含 errorCode + errorMessage）。
+任务状态：`RUNNING`（进行中，需继续轮询）、`FINISHED`（完成）、`FAILED`（失败）、`NOT_FOUND`（任务不存在或已过期）、`UNKNOWN`（查询链路失败，状态不可断言）、`IDLE`（未提供 taskId）。仅 `RUNNING` 继续轮询；批量返回整体为 success 时仍必须遍历 `tasks[]`，检查每项 `status/errorCode/errorMessage`。DWS 为避免无意义的 `IDLE` 查询，仍要求传入 1-5 个 taskId。
 
 ### +datasource-get-config — 获取数据源配置
 
@@ -269,4 +269,5 @@ dws aitable +datasource-get-config --base-id BASE_ID --table-id TABLE_ID --forma
 - create/update 后自动触发一次同步，返回 taskId；用 sync-status 查最终结果
 - sync 单次最多 5 张表，超出拆分多次调用
 - sync-status 单次最多 5 个 taskId，超出拆分多次调用
+- sync-status 仅在单项状态为 `RUNNING` 时继续轮询；`UNKNOWN` 停止轮询并报告状态不可断言
 - get-config 仅适用于数据源表（sync=true），普通表会报错

@@ -38,6 +38,139 @@ func (r *resolverReader) CallMCPData(product, tool string, params map[string]any
 	return r.steps[index].data, r.steps[index].err
 }
 
+func TestCrossPlatformCoverageResolveAITableEntityPrefersExactDuplicateAcrossPages(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{
+		{data: map[string]any{
+			"data": map[string]any{
+				"candidates": []any{map[string]any{
+					"name":       "客户成功部（旧）",
+					"department": map[string]any{"departmentId": "52528700"},
+				}},
+				"hasMore": true, "nextCursor": "next",
+			},
+		}},
+		{data: map[string]any{
+			"data": map[string]any{
+				"candidates": []any{map[string]any{
+					"name":        "<em>客户成功部</em>",
+					"description": "集团/业务中心/客户成功部",
+					"department":  map[string]any{"departmentId": "52528700"},
+				}},
+				"hasMore": false,
+			},
+		}},
+	}}
+
+	resolved, err := ResolveEntity(reader, EntityDepartment, " 客户成功部 ")
+	if err != nil {
+		t.Fatalf("ResolveEntity() error = %v", err)
+	}
+	if resolved.Selected.Reference.DepartmentID != "52528700" || resolved.MatchType != "exact" {
+		t.Fatalf("resolution = %#v", resolved)
+	}
+	if len(reader.calls) != 2 || reader.calls[1]["cursor"] != "next" {
+		t.Fatalf("calls = %#v", reader.calls)
+	}
+}
+
+func TestCrossPlatformCoverageResolveAITableEntityNeverSelectsSingleFuzzyCandidate(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{{data: map[string]any{
+		"data": map[string]any{
+			"candidates": []any{map[string]any{
+				"name":       "华东客户成功部",
+				"department": map[string]any{"departmentId": "52528700"},
+			}},
+			"hasMore": false,
+		},
+	}}}}
+
+	_, err := ResolveEntity(reader, EntityDepartment, "客户成功部")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "resolution_not_found" ||
+		typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageResolveAITableEntityKeepsExactNamesakesAmbiguous(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{{data: map[string]any{
+		"data": map[string]any{
+			"candidates": []any{
+				map[string]any{"name": "客户成功部", "department": map[string]any{"departmentId": "1"}},
+				map[string]any{"name": "客户成功部", "department": map[string]any{"departmentId": "2"}},
+			},
+			"hasMore": false,
+		},
+	}}}}
+
+	_, err := ResolveEntity(reader, EntityDepartment, "客户成功部")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "resolution_ambiguous" ||
+		typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSearchAITableEntitiesFailsClosedOnIncompletePage(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{{data: map[string]any{
+		"data": map[string]any{
+			"candidates": []any{map[string]any{
+				"name":  "项目群",
+				"group": map[string]any{"cid": "74577067501"},
+			}},
+			"hasMore": true,
+		},
+	}}}}
+
+	_, err := SearchEntities(reader, EntityGroup, "项目群")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "resolution_incomplete" ||
+		typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSearchAITableEntitiesRequiresPaginationCompleteness(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{{data: map[string]any{
+		"candidates": []any{map[string]any{
+			"name":       "研发部",
+			"department": map[string]any{"departmentId": "dept-1"},
+		}},
+	}}}}
+
+	_, err := SearchEntities(reader, EntityDepartment, "研发部")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "resolution_incomplete" || typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSearchAITableEntitiesUsesCentralMissingToolClassifier(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "structured MCP diagnostics",
+			err: apperrors.NewAPI("call failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+				ServerErrorCode: "TOOL_NOT_FOUND",
+			})),
+		},
+		{name: "localized MCP error", err: errors.New("MCP 工具不存在: search_entities")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &resolverReader{steps: []resolverStep{{err: test.err}}}
+			_, err := SearchEntities(reader, EntityDepartment, "研发部")
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != "capability_unavailable" ||
+				typed.ExecutionStarted == nil || *typed.ExecutionStarted || typed.Retryable {
+				t.Fatalf("error = %#v", err)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageParseAITableURL(t *testing.T) {
 	tests := []struct {
 		name string
