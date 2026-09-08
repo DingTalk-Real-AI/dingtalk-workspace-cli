@@ -79,6 +79,11 @@ func ReadPayloadIndex(cache *schemacache.Cache, identity Identity) (schemaruntim
 		return schemaruntime.DecodedSchemaPayloadIndex{}, err
 	}
 	defer payloads.Close()
+	return ReadPayloadIndexRange(payloads, identity)
+}
+
+// ReadPayloadIndexRange is ReadPayloadIndex on an already authenticated handle.
+func ReadPayloadIndexRange(payloads *schemacache.Registry, identity Identity) (schemaruntime.DecodedSchemaPayloadIndex, error) {
 	region, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: 0, Length: identity.PayloadIndexLength, SHA256: identity.PayloadIndexSHA256})
 	if err != nil {
 		return schemaruntime.DecodedSchemaPayloadIndex{}, err
@@ -91,15 +96,20 @@ func ReadPayloadIndex(cache *schemacache.Cache, identity Identity) (schemaruntim
 // through the pinned payload index. The payload file is deliberately
 // independent of the registry so a corrupted registry cannot affect it.
 func ReadCommandPayload(cache *schemacache.Cache, identity Identity, index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
-	descriptor, ok := PayloadDescriptor(index, productID)
-	if !ok {
-		return schemaruntime.DecodedCommandPayloads{}, fmt.Errorf("unknown Schema command payload product %q", productID)
-	}
 	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
 	defer payloads.Close()
+	return ReadCommandPayloadRange(payloads, identity, index, productID)
+}
+
+// ReadCommandPayloadRange is ReadCommandPayload on an already authenticated handle.
+func ReadCommandPayloadRange(payloads *schemacache.Registry, identity Identity, index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+	descriptor, ok := PayloadDescriptor(index, productID)
+	if !ok {
+		return schemaruntime.DecodedCommandPayloads{}, fmt.Errorf("unknown Schema command payload product %q", productID)
+	}
 	payload, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: identity.PayloadIndexLength + descriptor.Offset, Length: descriptor.HeaderLength, SHA256: descriptor.HeaderSHA256})
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
@@ -110,15 +120,20 @@ func ReadCommandPayload(cache *schemacache.Cache, identity Identity, index schem
 // ReadRenderedLeaf reads one pre-rendered leaf blob from the product's payload
 // shard blob region. The ref comes from the already authenticated shard header.
 func ReadRenderedLeaf(cache *schemacache.Cache, identity Identity, index schemaruntime.DecodedSchemaPayloadIndex, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
-	descriptor, ok := PayloadDescriptor(index, productID)
-	if !ok {
-		return nil, fmt.Errorf("unknown Schema command payload product %q", productID)
-	}
 	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
 	if err != nil {
 		return nil, err
 	}
 	defer payloads.Close()
+	return ReadRenderedLeafRange(payloads, identity, index, productID, ref)
+}
+
+// ReadRenderedLeafRange is ReadRenderedLeaf on an already authenticated handle.
+func ReadRenderedLeafRange(payloads *schemacache.Registry, identity Identity, index schemaruntime.DecodedSchemaPayloadIndex, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
+	descriptor, ok := PayloadDescriptor(index, productID)
+	if !ok {
+		return nil, fmt.Errorf("unknown Schema command payload product %q", productID)
+	}
 	return payloads.ReadRange(schemacache.RangeDescriptor{
 		Offset: identity.PayloadIndexLength + descriptor.Offset + descriptor.HeaderLength + ref.Offset,
 		Length: ref.Length,

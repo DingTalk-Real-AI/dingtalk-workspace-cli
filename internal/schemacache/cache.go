@@ -47,12 +47,21 @@ type registryBackend interface {
 
 type lockBackend interface{ release() error }
 
-type openOptions struct{ counters *Counters }
+type openOptions struct {
+	counters *Counters
+	noCreate bool
+}
 
 type Option func(*openOptions)
 
 func WithCounters(c *Counters) Option {
 	return func(o *openOptions) { o.counters = c }
+}
+
+// WithNoCreate turns a missing cache ancestry into ErrNotFound instead of
+// creating it. Speculative readers must never mutate the filesystem.
+func WithNoCreate() Option {
+	return func(o *openOptions) { o.noCreate = true }
 }
 
 // Cache is a securely opened edition-specific cache directory.
@@ -77,7 +86,7 @@ func Open(edition string, options ...Option) (*Cache, error) {
 	if opts.counters == nil {
 		opts.counters = &Counters{}
 	}
-	b, err := openPlatform(edition, opts.counters)
+	b, err := openPlatform(edition, opts.counters, opts.noCreate)
 	if err != nil {
 		return nil, err
 	}

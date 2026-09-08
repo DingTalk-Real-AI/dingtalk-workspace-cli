@@ -106,6 +106,19 @@ func RestorePackageCLISchemaDeliveryForTest() {
 	resetSchemaDeliveryState()
 }
 
+// AwaitSchemaCachePrewarmForTest blocks until the registered runtime's
+// speculative prewarm (if any) settles, so counter and filesystem assertions
+// are deterministic.
+func AwaitSchemaCachePrewarmForTest() {
+	registration := schemaCacheRegistrationValue.Load()
+	if registration == nil || registration.runtime == nil {
+		return
+	}
+	if pw := registration.runtime.prewarm; pw != nil {
+		<-pw.done
+	}
+}
+
 // restorePackageCLISchemaDeliveryHook is installed by package-cli TestMain so
 // external cli_test helpers can restore the assembled-delivery stub.
 var restorePackageCLISchemaDeliveryHook func()

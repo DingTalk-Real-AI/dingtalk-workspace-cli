@@ -412,6 +412,87 @@ func TestPersistentSchemaCacheRenderedLeafFastPath(t *testing.T) {
 	}
 }
 
+// TestPersistentSchemaCachePrewarm covers the speculative payload probe: it is
+// read-only when the cache is missing, and when it succeeds the compact leaf
+// fast path serves identical bytes through the same three authenticated range
+// reads (index during the probe, then shard header and leaf blob).
+func TestPersistentSchemaCachePrewarm(t *testing.T) {
+	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+		t.Skip("persistent cache backend is intentionally disabled on this target")
+	}
+	configureSchemaCacheTestHome(t)
+	// A prior test's live render populates the live catalog, which disables
+	// the persistent fast path; reset so this test is order-independent.
+	cli.RestorePackageCLISchemaDeliveryForTest()
+	resolved, err := cli.ResolveSchemaBuild(app.NewSchemaSourceRootCommand())
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := testSchemaCacheIdentity(t, artifacts)
+
+	// A missing cache must leave the filesystem untouched.
+	probeCounters := &schemacache.Counters{}
+	if err := cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{
+		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Counters: probeCounters,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cli.PrewarmSchemaCache()
+	cli.AwaitSchemaCachePrewarmForTest()
+	if snap := probeCounters.Snapshot(); snap.MkdirOps != 0 || snap.WriteOps != 0 {
+		t.Fatalf("speculative probe mutated the cache: %#v", snap)
+	}
+	cacheBase := filepath.Join(os.Getenv("HOME"), ".cache")
+	if runtime.GOOS == "darwin" {
+		cacheBase = filepath.Join(os.Getenv("HOME"), "Library", "Caches")
+	}
+	if _, err := os.Stat(filepath.Join(cacheBase, "dws")); !os.IsNotExist(err) {
+		t.Fatalf("speculative probe created cache ancestry: %v", err)
+	}
+
+	cache, err := schemacache.Open(identity.Edition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Close(); err != nil {
+		t.Fatal(err)
+	}
+	counters := &schemacache.Counters{}
+	if err := cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{
+		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Counters: counters,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}) })
+	cli.PrewarmSchemaCache()
+
+	fastOut := executeSchemaLeafCommand(t, "calendar.list_calendars", "--compact")
+	snap := counters.Snapshot()
+	if snap.RegistryReadOps != 0 || snap.RegistryReadBytes != 0 {
+		t.Fatalf("prewarmed compact leaf fast path touched the registry: %#v", snap)
+	}
+	if snap.PayloadReadOps != 3 {
+		t.Fatalf("prewarmed compact leaf payload reads = %d, want 3 (index + shard header + leaf blob)", snap.PayloadReadOps)
+	}
+
+	if err := cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	liveOut := executeSchemaLeafCommand(t, "calendar.list_calendars", "--compact")
+	if !bytes.Equal(fastOut, liveOut) {
+		t.Fatal("prewarmed compact leaf fast path output differs from the live render")
+	}
+}
+
 func executeSchemaLeafCommand(t *testing.T, args ...string) []byte {
 	t.Helper()
 	cmd := cli.NewSchemaCommand()

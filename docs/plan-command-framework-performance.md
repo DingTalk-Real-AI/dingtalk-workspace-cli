@@ -283,6 +283,14 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 
 第三轮 CI（v5 分片版）显示 linux 上 leaf-help（+1.81 ms）与 schema（+0.94 ms）仍落后 Lark——两者共同的剩余成本是 Meta 读取（286 KB 读 + SHA + 解码）。因此再加一层：**payload 文件开头放置自描述的全局索引区**（4 字节长度 + `SchemaPayloadIndex`：locator 表 + 各产品分片描述符），该区域由二进制链接期直接钉住（新增 payload/payload-index 共 4 个 -X 身份字段），认证链变为 二进制 → 索引区 → 分片头 → 叶子 blob。分片头的命令行同时携带完整 identity（内嵌 `CommandMetaEntry`），`ResolveMeta` 与 schema 叶子快路径从此只读 payload 文件，**完全不读 Meta**。真实二进制相对 `--help`：schema-compact 的额外 wall 降到 **+0.2 ms**，leaf-help 甚至比 root help 更快（渲染内容更少）。Meta 文件保持原样（overview、registry 描述符与 entry 分片继续服务 `--all`、分组/产品查询与写入方校验）。
 
+### 3.8 投机预热：把缓存 I/O 移出关键路径（2026-09-08）
+
+第四轮 CI（pinned-index 版，head `4136d162`）：darwin-arm64 五个负载全胜（leaf-help −6.31 ms、schema −7.19 ms），linux-amd64 4/5——leaf-help 48.36 vs Lark 47.74 落后 +0.62 ms。分解显示 dws 的 user CPU 已经更低（56.39 vs 57.82 ms），差距全在 sys（12.33 vs 7.62 ms）：安全目录遍历 + 每次调用各开一次 payload 文件的串行 I/O 排在关键路径上，而缓存命令与 root help 的 wall 差恒定约 +1.5 ms。
+
+响应（纯运行时改动，无格式变化、无新 pin）：**在 root 命令构建时投机预热 payload**——`PrewarmSchemaCache` 用 `WithNoCreate` 只读探测（缓存缺失时 ErrNotFound，绝不建目录）并发完成 打开缓存目录 → 认证索引区 → 预开 payload 句柄，与 Cobra 建树/解析参数重叠；关键路径只剩一次分片头 range 读。同时三处 range 读（索引、分片头、叶子 blob）共用**进程级单一 payload 句柄**（原先每次调用各自 open+fstat+header 认证）。repair 入口在锁内丢弃共享句柄，修复复核仍走每次新开的读（其他进程替换文件后立即可见）；同二进制重发布内容逐字节相同，句柄残留最坏只是 SHA 不通过并回落 repair。
+
+本地实测（M3 Pro，同 HOME 暖缓存 25 次取中位）：leaf-help 相对 root help 的额外 wall +1.76 → **+0.46 ms**，schema-compact +1.28 → **+0.70 ms**；help/version 无回归。`TestPersistentSchemaCachePrewarm` 断言缺失缓存时探测零 mkdir/零写、预热后快路径仍是恰好三次认证 range 读且与活体渲染逐字节一致。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |

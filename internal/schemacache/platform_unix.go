@@ -93,20 +93,20 @@ type fileState struct {
 	nlink uint64
 }
 
-func openPlatform(edition string, counters *Counters) (backend, error) {
+func openPlatform(edition string, counters *Counters, noCreate bool) (backend, error) {
 	base, err := userCacheDir()
 	if err != nil {
 		return nil, fmt.Errorf("%w: user cache directory: %v", ErrDisabled, err)
 	}
 	digest := sha256.Sum256([]byte(edition))
-	dirfd, path, err := openCacheDirectory(base, hex.EncodeToString(digest[:]), counters, platformIO)
+	dirfd, path, err := openCacheDirectory(base, hex.EncodeToString(digest[:]), counters, platformIO, noCreate)
 	if err != nil {
 		return nil, err
 	}
 	return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO}, nil
 }
 
-func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO) (int, string, error) {
+func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO, noCreate bool) (int, string, error) {
 	if !filepath.IsAbs(base) || filepath.Clean(base) != base {
 		return -1, "", fmt.Errorf("%w: cache base must be a clean absolute path", ErrUnsafePath)
 	}
@@ -140,6 +140,10 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO)
 		next, openErr := ops.openat(current, part, secureDirectoryFlags, 0)
 		counters.rootOpenOps.Add(1)
 		if errors.Is(openErr, unix.ENOENT) {
+			if noCreate {
+				closeCurrent()
+				return -1, "", fmt.Errorf("%w: cache ancestry %s", ErrNotFound, part)
+			}
 			// os.UserCacheDir returns a location, not an existing directory.
 			// Bootstrap it only below an already authenticated user-owned
 			// parent; never create missing system ancestry on the user's behalf.
@@ -175,6 +179,10 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO)
 		next, openErr := ops.openat(current, part, secureDirectoryFlags, 0)
 		counters.rootOpenOps.Add(1)
 		if errors.Is(openErr, unix.ENOENT) {
+			if noCreate {
+				closeCurrent()
+				return -1, "", fmt.Errorf("%w: cache directory %s", ErrNotFound, part)
+			}
 			counters.mkdirOps.Add(1)
 			if mkdirErr := ops.mkdirat(current, part, 0o700); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
 				closeCurrent()

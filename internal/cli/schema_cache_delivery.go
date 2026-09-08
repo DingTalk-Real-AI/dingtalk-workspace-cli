@@ -132,15 +132,76 @@ type schemaCacheRuntime struct {
 	// freshIndex is seeded by the repair path after a republish so the next
 	// read uses the rebuilt generation without reopening.
 	freshIndex atomic.Pointer[schemaruntime.DecodedSchemaPayloadIndex]
-	productMu  sync.Mutex
-	products   map[string]*schemaCacheProductLoad
-	payloadMu  sync.Mutex
-	payloads   map[string]*schemaCachePayloadLoad
-	allOnce    sync.Once
-	all        loadedSchemaCatalog
-	allErr     error
-	allMu      sync.RWMutex
-	freshAll   map[string]any
+	// prewarm holds the speculative read started at root-command build. It is
+	// assigned before its goroutine starts and published by closing done, so
+	// readers that observe a non-nil prewarm may read the fields after done.
+	prewarm *schemaCachePrewarm
+	// payloadHandle caches one open payloads file for the process lifetime so
+	// the hot path pays one open instead of one open per range. Failures are
+	// never cached: a repair must be able to retry the open.
+	payloadHandleMu sync.Mutex
+	payloadHandle   *schemacache.Registry
+	productMu       sync.Mutex
+	products        map[string]*schemaCacheProductLoad
+	payloadMu       sync.Mutex
+	payloads        map[string]*schemaCachePayloadLoad
+	allOnce         sync.Once
+	all             loadedSchemaCatalog
+	allErr          error
+	allMu           sync.RWMutex
+	freshAll        map[string]any
+}
+
+// schemaCachePrewarm is the result of the speculative read-only cache probe
+// started while Cobra builds and parses. It never creates directories.
+type schemaCachePrewarm struct {
+	done     chan struct{}
+	cache    *schemacache.Cache
+	index    schemaruntime.DecodedSchemaPayloadIndex
+	indexErr error
+	payloads *schemacache.Registry
+}
+
+// PrewarmSchemaCache starts the speculative payload read for the registered
+// runtime. It is a no-op unless an enabled, eligible runtime is registered.
+// The probe opens noCreate: a missing cache is left for the synchronous path.
+func PrewarmSchemaCache() {
+	registration := schemaCacheRegistrationValue.Load()
+	if registration == nil || registration.runtime == nil || !registration.options.Enabled || schemaCacheRuntimeUncertain.Load() {
+		return
+	}
+	if eligible := registration.options.RuntimeEligible; eligible != nil && !eligible() {
+		return
+	}
+	r := registration.runtime
+	if r.prewarm != nil {
+		return
+	}
+	pw := &schemaCachePrewarm{done: make(chan struct{})}
+	r.prewarm = pw
+	go func() {
+		defer close(pw.done)
+		options := []schemacache.Option{schemacache.WithNoCreate()}
+		if r.options.Counters != nil {
+			options = append(options, schemacache.WithCounters(r.options.Counters))
+		}
+		cache, err := schemacache.Open(r.options.Identity.Edition, options...)
+		if err != nil {
+			pw.indexErr = err
+			return
+		}
+		index, err := schemareader.ReadPayloadIndex(cache, r.options.Identity)
+		if err != nil {
+			_ = cache.Close()
+			pw.indexErr = err
+			return
+		}
+		pw.cache, pw.index = cache, index
+		// The handle is a bonus: a failure leaves the synchronous open in charge.
+		if payloads, handleErr := cache.OpenPayloads(r.options.Identity.ExpectedIdentity(), r.options.Identity.Payload); handleErr == nil {
+			pw.payloads = payloads
+		}
+	}()
 }
 
 type schemaCacheProductLoad struct {
@@ -157,6 +218,12 @@ type schemaCachePayloadLoad struct {
 }
 
 func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
+	if pw := r.prewarm; pw != nil {
+		<-pw.done
+		if pw.cache != nil {
+			return pw.cache, nil
+		}
+	}
 	r.openOnce.Do(func() {
 		options := []schemacache.Option{}
 		if r.options.Counters != nil {
@@ -203,6 +270,12 @@ func (r *schemaCacheRuntime) loadPayloadIndex() (schemaruntime.DecodedSchemaPayl
 	if index := r.freshIndex.Load(); index != nil {
 		return *index, nil
 	}
+	if pw := r.prewarm; pw != nil {
+		<-pw.done
+		if pw.indexErr == nil {
+			return pw.index, nil
+		}
+	}
 	r.indexOnce.Do(func() {
 		r.index, r.indexErr = r.readPayloadIndex()
 	})
@@ -241,12 +314,56 @@ func (r *schemaCacheRuntime) loadProduct(meta schemaruntime.DecodedSchemaMeta, p
 	return load.product, load.err
 }
 
-func (r *schemaCacheRuntime) readCommandPayload(index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+// payloadsHandle returns the process-lifetime payloads handle: the prewarmed
+// one when the speculative probe succeeded, otherwise one authenticated open.
+// Failures are not cached so a repair can retry.
+func (r *schemaCacheRuntime) payloadsHandle() (*schemacache.Registry, error) {
+	r.payloadHandleMu.Lock()
+	defer r.payloadHandleMu.Unlock()
+	if r.payloadHandle != nil {
+		return r.payloadHandle, nil
+	}
+	if pw := r.prewarm; pw != nil {
+		<-pw.done
+		if pw.payloads != nil {
+			r.payloadHandle = pw.payloads
+			return r.payloadHandle, nil
+		}
+	}
 	cache, err := r.opened()
+	if err != nil {
+		return nil, err
+	}
+	handle, err := cache.OpenPayloads(r.options.Identity.ExpectedIdentity(), r.options.Identity.Payload)
+	if err != nil {
+		return nil, err
+	}
+	r.payloadHandle = handle
+	return handle, nil
+}
+
+// resetPayloadsHandle drops the shared handle after a repair publish: the
+// handle may reference a replaced inode, and the next read must reopen the
+// freshly published file.
+func (r *schemaCacheRuntime) resetPayloadsHandle() {
+	r.payloadHandleMu.Lock()
+	defer r.payloadHandleMu.Unlock()
+	if r.payloadHandle != nil {
+		_ = r.payloadHandle.Close()
+		r.payloadHandle = nil
+	}
+	if pw := r.prewarm; pw != nil {
+		<-pw.done
+		pw.payloads = nil
+	}
+}
+
+func (r *schemaCacheRuntime) readCommandPayload(index schemaruntime.DecodedSchemaPayloadIndex, productID string) (schemaruntime.DecodedCommandPayloads, error) {
+	handle, err := r.payloadsHandle()
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
-	return schemareader.ReadCommandPayload(cache, r.options.Identity, index, productID)
+	return schemareader.ReadCommandPayloadRange(handle, r.options.Identity, index, productID)
 }
 
 // loadCommandPayload caches only a success. A failed read during a concurrent
@@ -300,7 +417,8 @@ func (r *schemaCacheRuntime) resolveCommandMetaFromPayload(cliPath string) (sche
 }
 
 // readCommandMetaFromPayloadFresh re-reads the payload index after a repair and
-// seeds it before resolving, mirroring the meta repair flow.
+// seeds it before resolving, mirroring the meta repair flow. Every read opens
+// the file afresh so a generation replaced by another process is observed.
 func (r *schemaCacheRuntime) readCommandMetaFromPayloadFresh(cliPath string) (any, error) {
 	index, err := r.readPayloadIndex()
 	if err != nil {
@@ -311,7 +429,11 @@ func (r *schemaCacheRuntime) readCommandMetaFromPayloadFresh(cliPath string) (an
 	if !ok {
 		return resolvedMeta{OK: false}, nil
 	}
-	payloads, err := r.readCommandPayload(index, productID)
+	cache, err := r.opened()
+	if err != nil {
+		return nil, err
+	}
+	payloads, err := schemareader.ReadCommandPayload(cache, r.options.Identity, index, productID)
 	if err != nil {
 		return nil, fmt.Errorf("read command payload for %q: %w", cliPath, err)
 	}
@@ -357,11 +479,11 @@ func (r *schemaCacheRuntime) renderedCompactLeaf(raw string) ([]byte, bool) {
 }
 
 func (r *schemaCacheRuntime) readRenderedLeaf(index schemaruntime.DecodedSchemaPayloadIndex, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
-	cache, err := r.opened()
+	handle, err := r.payloadsHandle()
 	if err != nil {
 		return nil, err
 	}
-	return schemareader.ReadRenderedLeaf(cache, r.options.Identity, index, productID, ref)
+	return schemareader.ReadRenderedLeafRange(handle, r.options.Identity, index, productID, ref)
 }
 
 func (r *schemaCacheRuntime) trustedHashes() schemaruntime.TrustedHashes {
@@ -551,6 +673,9 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 		lock, lockErr := cache.AcquireLock(context.Background(), r.options.LockTimeout)
 		if lockErr == nil {
 			defer lock.Release()
+			// The shared handle may reference an inode another process
+			// replaced; drop it before rechecking so later reads reopen.
+			r.resetPayloadsHandle()
 			if value, err := recheck(); err == nil {
 				return value, loadedSchemaCatalog{}, nil
 			}

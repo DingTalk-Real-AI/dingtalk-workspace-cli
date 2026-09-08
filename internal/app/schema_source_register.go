@@ -64,6 +64,10 @@ func registerSchemaRuntimeDelivery() {
 			return
 		}
 		_ = cli.RegisterSchemaCacheOptions(options)
+		// Overlap the authenticated payload probe with the remaining tree
+		// build and argument parsing; the read is speculative and never
+		// creates cache directories.
+		cli.PrewarmSchemaCache()
 	})
 }
 

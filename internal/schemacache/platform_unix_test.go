@@ -260,7 +260,13 @@ func TestCrossPlatformCoverageCacheBootstrapsMissingUserCacheDirectory(t *testin
 	for _, suffix := range []string{".cache", "Library/Caches"} {
 		t.Run(suffix, func(t *testing.T) {
 			base := filepath.Join(parent, suffix)
-			fd, path, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{})
+			if _, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, true); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("no-create probe on a missing base = %v, want ErrNotFound", err)
+			}
+			if _, err := os.Stat(base); !os.IsNotExist(err) {
+				t.Fatalf("no-create probe mutated the filesystem: %v", err)
+			}
+			fd, path, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -282,7 +288,7 @@ func TestCrossPlatformCoverageCacheBootstrapsMissingUserCacheDirectory(t *testin
 		t.Fatal(err)
 	}
 	base := filepath.Join(unsafe, "missing")
-	if fd, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}); !errors.Is(err, ErrUnsafePath) {
+	if fd, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false); !errors.Is(err, ErrUnsafePath) {
 		if fd >= 0 {
 			unix.Close(fd)
 		}
