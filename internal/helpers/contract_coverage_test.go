@@ -11,6 +11,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/spf13/cobra"
 )
 
 // writeTempJSON writes a JSON file to a temp dir and returns its path.
@@ -1413,5 +1416,119 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
 		"project", "add", "--name", "test", "--end-date", "bad"); err == nil {
 		t.Fatal("project add with invalid --end-date should fail")
+	}
+}
+
+// TestCrossPlatformCoverageContractReviewCompatNoticeFormats covers the
+// deps-nil JSON/pretty encoder path and the non-JSON text fallback.
+func TestCrossPlatformCoverageContractReviewCompatNoticeFormats(t *testing.T) {
+	prev := deps
+	t.Cleanup(func() { deps = prev })
+	deps = nil
+
+	for _, format := range []string{"", "json", "pretty", "table", "text"} {
+		var buf bytes.Buffer
+		parent := &cobra.Command{Use: "dws"}
+		parent.PersistentFlags().String("format", format, "")
+		parent.SetOut(&buf)
+		sub := &cobra.Command{Use: "review"}
+		parent.AddCommand(sub)
+		if err := printContractReviewCompatNotice(sub, "dws contract review benefit"); err != nil {
+			t.Fatalf("format=%q: %v", format, err)
+		}
+		got := buf.String()
+		if !strings.Contains(got, "不再调用旧版审查 MCP") {
+			t.Fatalf("format=%q missing notice:\n%s", format, got)
+		}
+		switch strings.ToLower(format) {
+		case "", "json", "pretty":
+			if !strings.Contains(got, `"status":"deprecated"`) && !strings.Contains(got, `"status": "deprecated"`) {
+				t.Fatalf("format=%q missing deprecated JSON status:\n%s", format, got)
+			}
+		default:
+			if !strings.Contains(got, "dws contract review benefit:") {
+				t.Fatalf("format=%q missing text prefix:\n%s", format, got)
+			}
+		}
+	}
+
+	// deps != nil text fallback (covers deps.Out.w branch)
+	caller := &contractDefectCaller{}
+	InitDeps(caller)
+	var out bytes.Buffer
+	deps.Out.w = &out
+	deps.Out.errW = io.Discard
+	parent := &cobra.Command{Use: "dws"}
+	parent.PersistentFlags().String("format", "table", "")
+	sub := &cobra.Command{Use: "review"}
+	parent.AddCommand(sub)
+	if err := printContractReviewCompatNotice(sub, "dws contract review result"); err != nil {
+		t.Fatalf("deps text path: %v", err)
+	}
+	if !strings.Contains(out.String(), "dws contract review result:") {
+		t.Fatalf("deps text path missing notice: %s", out.String())
+	}
+}
+
+// TestContractReviewDeprecatedCompatSurfaceKeepsArgvButNotBusinessSelection
+// locks the CR contract: review* remain executable Deprecated shims, while
+// assembled ContractFinal Selection must not claim retired MCP capabilities.
+func TestContractReviewDeprecatedCompatSurfaceKeepsArgvButNotBusinessSelection(t *testing.T) {
+	root := newContractCommand()
+	group, _, err := root.Find([]string{"review"})
+	if err != nil || group == nil {
+		t.Fatalf("find review group: %v", err)
+	}
+	if group.Hidden || group.Deprecated == "" {
+		t.Fatalf("review group must be visible Deprecated: hidden=%v deprecated=%q", group.Hidden, group.Deprecated)
+	}
+	if group.IsAvailableCommand() {
+		t.Fatal("deprecated review group must not be IsAvailableCommand")
+	}
+
+	forbiddenBusinessClaims := []string{
+		"查询合同审查权益",
+		"创建合同审查任务，提交合同文件进行 AI 审查",
+		"解析合同文件并返回摘要和审查推荐",
+		"按任务 ID 查询合同审查结果",
+		"用户要查看合同审查的权益额度或使用情况",
+		"用户要对合同文件发起 AI 审查",
+		"用户要解析合同文件获取摘要和审查建议",
+		"用户已创建审查任务后要查询审查结果",
+	}
+
+	for _, leaf := range []string{"benefit", "create", "analysis", "result"} {
+		cmd, _, err := root.Find([]string{"review", leaf})
+		if err != nil || cmd == nil {
+			t.Fatalf("find review %s: %v", leaf, err)
+		}
+		if cmd.Hidden || cmd.Deprecated == "" || !cmd.Runnable() {
+			t.Fatalf("review %s contract: hidden=%v deprecated=%q runnable=%v", leaf, cmd.Hidden, cmd.Deprecated, cmd.Runnable())
+		}
+		if cmd.IsAvailableCommand() {
+			t.Fatalf("deprecated review %s must not be IsAvailableCommand", leaf)
+		}
+		final, ok := contractfinal.RuntimeContractFinal(cmd)
+		if !ok || final.Identity == nil || final.Selection == nil {
+			t.Fatalf("review %s missing ContractFinal identity/selection: ok=%v final=%#v", leaf, ok, final)
+		}
+		joined := strings.Join([]string{
+			final.Description,
+			final.Selection.AgentSummary,
+			strings.Join(final.Selection.UseWhen, "\n"),
+		}, "\n")
+		if !strings.Contains(joined, "弃用") && !strings.Contains(joined, "兼容") {
+			t.Fatalf("review %s Selection must be deprecation/compat oriented:\n%s", leaf, joined)
+		}
+		for _, claim := range forbiddenBusinessClaims {
+			if strings.Contains(joined, claim) {
+				t.Fatalf("review %s still claims retired business capability %q:\n%s", leaf, claim, joined)
+			}
+		}
+		for _, use := range final.Selection.UseWhen {
+			if !strings.Contains(use, "弃用兼容说明") {
+				t.Fatalf("review %s UseWhen must be deprecation-notice only, got %q", leaf, use)
+			}
+		}
 	}
 }

@@ -67,7 +67,7 @@ func newContractCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "contract",
 		Short: "智能合同管理",
-		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、合同审查（权益、任务、解析、结果）、项目管理、相对方管理。`,
+		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、项目管理、相对方管理。旧版 contract review* 仅为历史 argv 兼容入口（已标记 Deprecated）。`,
 		RunE:  groupRunE,
 	})
 
@@ -304,63 +304,39 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 		},
 	}
 
-	// ── review ────────────────────────────────────────────────
+	// ── review（历史 argv 兼容；旧 MCP 已退役）────────────────
+	// Keep the command tree for Interface Integrity, mark Deprecated so help /
+	// public completeness exclude them, and publish Schema Selection only as
+	// deprecation-migration guidance (no positive business UseWhen).
+
+	const reviewDeprecated = "不再支持旧版审查 MCP；" + contractReviewUnsupportedMessage
 
 	reviewCmd := newGroupCommand(&cobra.Command{
-		Use:   "review",
-		Short: "合同审查（历史兼容）",
-		Long:  `历史 argv 兼容入口。旧 MCP 审查工具已退役；命令仍保留 Interface/Schema 表面，执行时仅返回兼容说明。新审核请使用产品侧 dws contract-review（千问办公等）。`,
-		RunE:  groupRunE,
+		Use:        "review",
+		Short:      "不再支持：旧版合同审查兼容入口",
+		Long:       `历史 argv 兼容入口。旧 MCP 审查工具已退役；执行仅返回弃用说明，不能完成审查业务。新审核请使用产品侧 dws contract-review（千问办公等）。`,
+		Deprecated: reviewDeprecated,
+		RunE:       groupRunE,
 	})
 
 	reviewBenefitCmd := &cobra.Command{
-		Use:     "benefit",
-		Short:   "查询合同审查权益",
-		Long:    `查询用户组织的合同审查的权益数据（MCP queryContractReviewBenefit）。`,
-		Example: `  dws contract review benefit --format json`,
+		Use:        "benefit",
+		Short:      "不再支持：旧版审查权益查询兼容入口",
+		Long:       `历史兼容入口。旧 MCP queryContractReviewBenefit 已退役；执行仅返回弃用说明，不能查询审查权益。`,
+		Deprecated: reviewDeprecated,
+		Example:    `  dws contract review benefit --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return printContractReviewCompatNotice(cmd, "dws contract review benefit")
 		},
 	}
 
 	reviewCreateCmd := &cobra.Command{
-		Use:   "create",
-		Short: "创建合同审查任务",
-		Long: `创建合同审查任务（MCP createContractReviewTask）。
-JSON 须符合 IntelligentContractReviewClientRequest 结构。
-
-【字段说明】
-source              来源标识（字符串，可选）
-fileInfo            文件信息对象（可选，与 fileId/spaceId 方式二选一）
-  fileId            云盘文件 ID
-  spaceId           云盘空间 ID
-  fileName          文件名（须带扩展名，如 合同.pdf）
-  fileSize          文件大小（字节数，整数）
-  fileType          文件类型（如 pdf、docx）
-reviewType          审查类型标识（如 AI_REVIEW，可选）
-companyList         审查方公司列表（数组，可选）
-  reviewPosition    审查方在合同中的位置（字符串）
-reviewPosition      默认审查位置（字符串，可选）
-reviewResultType    审查结果类型（字符串，可选）
-customReviewRules   自定义审查规则（字符串，可选）`,
+		Use:        "create",
+		Short:      "不再支持：旧版创建审查任务兼容入口",
+		Long:       `历史兼容入口。旧 MCP createContractReviewTask 已退役；仍校验 --file JSON 形状，但只返回弃用说明，不能创建审查任务。`,
+		Deprecated: reviewDeprecated,
 		Example: `  dws contract review create --file ./review_request.json --format json
-  cat review_request.json | dws contract review create --file - --format json
-
-示例 review_request.json：
-{
-  "source": "OPEN_CLAW",
-  "fileInfo": {
-    "fileId": "xxx",
-    "spaceId": "yyy",
-    "fileName": "采购合同.pdf",
-    "fileSize": "102400",
-    "fileType": "pdf"
-  },
-  "reviewType": "AI_REVIEW",
-  "reviewPosition": "甲方",
-  "reviewResultType": "standard",
-  "companyList": [{"reviewPosition": "乙方"}]
-}`,
+  cat review_request.json | dws contract review create --file - --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Keep historical --file validation so Interface/Schema requiredness stays intact,
 			// then return the compatibility notice instead of calling retired MCP tools.
@@ -372,32 +348,12 @@ customReviewRules   自定义审查规则（字符串，可选）`,
 	}
 
 	reviewAnalysisCmd := &cobra.Command{
-		Use:   "analysis",
-		Short: "解析合同文件",
-		Long: `解析合同文件，返回合同摘要和审查推荐模型（MCP contractAnalysis）。
-JSON 须包含文件信息，可包括 fileInfo（fileId/spaceId/fileName/fileSize/fileType）或直接传文件字段。
-
-【字段说明】
-fileInfo            文件信息对象（可选）
-  fileId            云盘文件 ID
-  spaceId           云盘空间 ID
-  fileName          文件名（须带扩展名，如 合同.pdf）
-  fileSize          文件大小（字节数，整数）
-  fileType          文件类型（如 pdf、docx）
-source              来源标识（字符串，可选）`,
+		Use:        "analysis",
+		Short:      "不再支持：旧版合同解析兼容入口",
+		Long:       `历史兼容入口。旧 MCP contractAnalysis 已退役；仍校验 --file JSON 形状，但只返回弃用说明，不能解析合同或返回推荐模型。`,
+		Deprecated: reviewDeprecated,
 		Example: `  dws contract review analysis --file ./analysis_request.json --format json
-  cat analysis_request.json | dws contract review analysis --file - --format json
-
-示例 analysis_request.json：
-{
-  "fileInfo": {
-    "fileId": "xxx",
-    "spaceId": "yyy",
-    "fileName": "采购合同.pdf",
-    "fileSize": "102400",
-    "fileType": "pdf"
-  }
-}`,
+  cat analysis_request.json | dws contract review analysis --file - --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := readContractJSONPayload(cmd); err != nil {
 				return err
@@ -407,12 +363,11 @@ source              来源标识（字符串，可选）`,
 	}
 
 	reviewResultCmd := &cobra.Command{
-		Use:   "result",
-		Short: "查询合同审查结果",
-		Long: `查询合同审查结果（MCP queryContractReviewResult）。
-必填：--task-id（审查任务 ID，由 review create 返回）、--review-type（审查类型，如 AI_REVIEW）。
-入参包裹在 IntelligentLegalContractReviewClientRequest 下。`,
-		Example: `  dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`,
+		Use:        "result",
+		Short:      "不再支持：旧版审查结果查询兼容入口",
+		Long:       `历史兼容入口。旧 MCP queryContractReviewResult 已退役；仍校验必填 flag，但只返回弃用说明，不能查询审查结果。`,
+		Deprecated: reviewDeprecated,
+		Example:    `  dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID := strings.TrimSpace(MustGetStringFlag(cmd, "task-id"))
 			if taskID == "" {
