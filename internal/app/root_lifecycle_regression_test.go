@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
@@ -236,4 +237,26 @@ func TestErrorInfoProjectionKeepsTraceIDDistinctFromRequestID(t *testing.T) {
 	if info.TraceID != "trace-1" || info.RequestID != "" {
 		t.Fatalf("projection trace_id=%q request_id=%q", info.TraceID, info.RequestID)
 	}
+}
+
+func TestCrossPlatformCoverageRootAssemblyFailsClosedOnPreparedMount(t *testing.T) {
+	// A mount prepared on its own cannot be adapted a second time, so assembly
+	// must fail closed rather than hand back a half-adapted root.
+	prepared := &cobra.Command{Use: "already-prepared", RunE: func(*cobra.Command, []string) error { return nil }}
+	if err := corecmd.PrepareCommandTree(prepared); err != nil {
+		t.Fatalf("prepare standalone mount: %v", err)
+	}
+	defer func() {
+		recovered := recover()
+		message, ok := recovered.(string)
+		if !ok {
+			t.Fatalf("assembly did not fail closed on a prepared mount; recovered %v", recovered)
+		}
+		if !strings.Contains(message, "prepare command tree") || !strings.Contains(message, "is already prepared") {
+			t.Fatalf("panic = %q", message)
+		}
+	}()
+	newRootCommandWithAssembly(context.Background(), nil, func(root *cobra.Command) {
+		root.AddCommand(prepared)
+	})
 }

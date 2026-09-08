@@ -75,7 +75,7 @@ func TestFrameworkResultInvokeErrorLegacyAndStoreEdges(t *testing.T) {
 	}
 }
 
-func TestLegacyResultInvokeIsRejectedBeforeBusinessDispatch(t *testing.T) {
+func TestCrossPlatformCoverageLegacyResultInvokeIsRejectedBeforeBusinessDispatch(t *testing.T) {
 	calls := 0
 	cmd := New(Spec{
 		Use:           "result",

@@ -618,6 +618,25 @@ func TestCrossPlatformCoverageExecuteForTestNil(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageExecuteCForTestPropagatesPrepareFailure(t *testing.T) {
+	// The root carries no prepared annotation, so ExecuteCForTest attempts
+	// preparation; an already-prepared descendant makes it fail closed instead
+	// of silently executing an unadapted tree.
+	root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
+	root.AddCommand(&cobra.Command{
+		Use:         "prepared-descendant",
+		Annotations: map[string]string{preparedCommandAnnotation: "true"},
+		RunE:        func(*cobra.Command, []string) error { return nil },
+	})
+	cmd, err := ExecuteCForTest(root)
+	if cmd != nil || err == nil {
+		t.Fatalf("result = %v, %v", cmd, err)
+	}
+	if !strings.Contains(err.Error(), "is already prepared") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageNativeValidationAdapter(t *testing.T) {
 	t.Run("Find legacy Args", func(t *testing.T) {
 		root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
