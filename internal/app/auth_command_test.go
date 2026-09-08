@@ -32,6 +32,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -1804,7 +1805,7 @@ func TestAuthLoginDefaultTUIModeSkipsSelectorWhenAllGranted(t *testing.T) {
 	if fake.tools[0] != "pat.batch_plan" {
 		t.Fatalf("tool sequence = %v, want only plan", fake.tools)
 	}
-	if !strings.Contains(out.String(), "推荐权限已全部授权或没有可授权项") {
+	if !strings.Contains(out.String(), i18n.T("推荐权限已全部授权或没有可授权项")) {
 		t.Fatalf("output = %q, want all-granted message", out.String())
 	}
 }
@@ -1862,7 +1863,7 @@ func TestAuthLoginDefaultTUIModeRecommendedAlreadyGrantedSkipsTUIAndAuthorizatio
 	if fake.tools[0] != "pat.batch_plan" {
 		t.Fatalf("tool sequence = %v, want only plan", fake.tools)
 	}
-	if !strings.Contains(out.String(), "推荐权限已全部授权或没有可授权项") {
+	if !strings.Contains(out.String(), i18n.T("推荐权限已全部授权或没有可授权项")) {
 		t.Fatalf("output = %q, want already-granted message", out.String())
 	}
 }

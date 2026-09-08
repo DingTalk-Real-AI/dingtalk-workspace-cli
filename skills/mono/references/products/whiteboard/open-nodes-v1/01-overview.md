@@ -50,8 +50,11 @@ V1 采用严格校验：
 
 | 命令 | 所需权限 | 效果 |
 | --- | --- | --- |
-| `dws whiteboard query --node ... --part-id ...` | 可查看白板 | 读取单页白板，不修改内容。 |
-| `dws whiteboard update --node ... --part-id ... --source ... --yes` | 可编辑白板 | 追加节点或整页重建；所有更新都需先取得用户确认。 |
+| `dws whiteboard query --node ... [--part-id ...] [--view ...]` | 可查看白板 | 有 partId 读取内嵌单页；无 partId 读取独立白板。 |
+| `dws whiteboard update --node ... [--part-id ...] --source ... --yes` | 可编辑白板 | 有 partId 更新内嵌白板；无 partId 按 revision 更新独立白板。 |
+| `dws whiteboard create-with-content --name ... --source 'JSON' --request-id ...`（长内容也可用 `--source ./whiteboard.json`） | 可创建白板 | source 是 OpenNodes V1 JSON String 或保存相同 JSON 的文件路径；`nodes: []` 表示空白创建，nodes 不可缺失或为 null；不接受 checkpoint。 |
 
-DWS 当前只支持文字文档中已有的单页内嵌白板。命令不接收 `pageId`，也不提供
-创建页面、切换页面或按既有节点 ID 局部修改的能力。
+分流只由 `--part-id` 是否显式提供决定：非空值走内嵌接口，完全省略走独立接口；
+显式空值和纯空白会在本地失败。内嵌分支保持原有单页参数和输出，不接收 pageId。
+独立分支支持 summary/page/all 视图；写入使用 expectedRevision 与稳定 requestId 做
+并发和幂等保护，overwrite 明确指定 pageId。服务错误不会触发另一分支。

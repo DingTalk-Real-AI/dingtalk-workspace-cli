@@ -15,7 +15,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
-func TestWhiteboardInjectedEncodingFailures(t *testing.T) {
+func TestCrossPlatformCoverageWhiteboardInjectedEncodingFailures(t *testing.T) {
 	previousMarshal := whiteboardJSONMarshal
 	whiteboardJSONMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal") }
 	if got := buildWhiteboardCardJSONML("b", "w"); got != "" {
@@ -42,7 +42,7 @@ func TestWhiteboardInjectedEncodingFailures(t *testing.T) {
 	}
 }
 
-func TestDocWhiteboardInsertDryRun(t *testing.T) {
+func TestCrossPlatformCoverageDocWhiteboardInsertDryRun(t *testing.T) {
 	caller := &whiteboardTestCaller{dry: true}
 	installWhiteboardTestCaller(t, caller)
 	cmd := newDocWhiteboardCommand()
@@ -61,7 +61,7 @@ func writeWhiteboardFixture(t *testing.T, content string) string {
 	return path
 }
 
-func TestLoadWhiteboardUpdateFileRejectsInvalidInputs(t *testing.T) {
+func TestCrossPlatformCoverageLoadWhiteboardUpdateFileRejectsInvalidInputs(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
@@ -101,7 +101,7 @@ func TestLoadWhiteboardUpdateFileRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
-func TestWhiteboardOutputFiltersAndToolResponseErrors(t *testing.T) {
+func TestCrossPlatformCoverageWhiteboardOutputFiltersAndToolResponseErrors(t *testing.T) {
 	for _, name := range []string{"jq", "fields"} {
 		t.Run(name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
@@ -119,6 +119,7 @@ func TestWhiteboardOutputFiltersAndToolResponseErrors(t *testing.T) {
 		`{`,
 		`{} {}`,
 		`null`,
+		`{"resultJson":"   "}`,
 		`{"resultJson":"{"}`,
 		`{"resultJson":"{} {}"}`,
 	}
@@ -140,9 +141,16 @@ func TestWhiteboardOutputFiltersAndToolResponseErrors(t *testing.T) {
 	if err := callWhiteboardTool(&cobra.Command{}, whiteboardQueryTool, nil); err != nil {
 		t.Fatal(err)
 	}
+	for _, response := range []string{`{"resultJson":"{}"}`, `{"resultJson":"[]"}`} {
+		caller = &whiteboardTestCaller{response: func(whiteboardTestCall, int) string { return response }}
+		installWhiteboardTestCaller(t, caller)
+		if err := callWhiteboardTool(&cobra.Command{}, standaloneWhiteboardQueryTool, nil); err == nil {
+			t.Fatalf("standalone response %q should fail", response)
+		}
+	}
 }
 
-func TestWhiteboardDocumentQueryValidation(t *testing.T) {
+func TestCrossPlatformCoverageWhiteboardDocumentQueryValidation(t *testing.T) {
 	tests := []struct {
 		name     string
 		response string
@@ -177,11 +185,13 @@ func TestWhiteboardDocumentQueryValidation(t *testing.T) {
 	}
 }
 
-func TestWhiteboardCommandValidationBranches(t *testing.T) {
+func TestCrossPlatformCoverageWhiteboardCommandValidationBranches(t *testing.T) {
 	caller := &whiteboardTestCaller{format: "json"}
 	installWhiteboardTestCaller(t, caller)
 	for _, args := range [][]string{
-		{"query", "--node", "n"},
+		{"query"},
+		{"query", "--node", "n", "--view", "page"},
+		{"query", "--node", "n", "--part-id", ""},
 		{"query", "--node", "n", "--part-id", "p", "--jq", "."},
 		{"update", "--node", "n", "--part-id", "p"},
 		{"update", "--node", "n", "--part-id", "p", "--fields", "result"},
@@ -196,7 +206,7 @@ func TestWhiteboardCommandValidationBranches(t *testing.T) {
 	}
 }
 
-func TestWhiteboardUpdateOverwriteAndSourceErrors(t *testing.T) {
+func TestCrossPlatformCoverageWhiteboardUpdateOverwriteAndSourceErrors(t *testing.T) {
 	caller := &whiteboardTestCaller{format: "json"}
 	installWhiteboardTestCaller(t, caller)
 	cmd := newWhiteboardCommand()
@@ -216,7 +226,7 @@ func TestWhiteboardUpdateOverwriteAndSourceErrors(t *testing.T) {
 	}
 }
 
-func TestDocMediaUploadValidationAndSuccess(t *testing.T) {
+func TestCrossPlatformCoverageDocMediaUploadValidationAndSuccess(t *testing.T) {
 	caller := &whiteboardTestCaller{response: func(whiteboardTestCall, int) string {
 		return `{"uploadUrl":"https://upload.example.test/token","resourceId":"r","resourceUrl":"https://resource.example.test/icon"}`
 	}}
@@ -247,7 +257,7 @@ func TestDocMediaUploadValidationAndSuccess(t *testing.T) {
 	}
 }
 
-func TestDocMediaUploadRemainingBranches(t *testing.T) {
+func TestCrossPlatformCoverageDocMediaUploadRemainingBranches(t *testing.T) {
 	file := writeWhiteboardFixture(t, "svg")
 
 	caller := &whiteboardTestCaller{dry: true}
@@ -279,7 +289,7 @@ func TestDocMediaUploadRemainingBranches(t *testing.T) {
 	}
 }
 
-func TestDocWhiteboardInsertCallerError(t *testing.T) {
+func TestCrossPlatformCoverageDocWhiteboardInsertCallerError(t *testing.T) {
 	caller := &whiteboardTestCaller{err: func(call whiteboardTestCall, index int) error {
 		if index == 0 {
 			return errors.New("insert")
@@ -294,7 +304,7 @@ func TestDocWhiteboardInsertCallerError(t *testing.T) {
 	}
 }
 
-func TestExtractWhiteboardIDAndJSONEOF(t *testing.T) {
+func TestCrossPlatformCoverageExtractWhiteboardIDAndJSONEOF(t *testing.T) {
 	if got := extractWhiteboardID(nil); got != "" {
 		t.Fatalf("got %q", got)
 	}

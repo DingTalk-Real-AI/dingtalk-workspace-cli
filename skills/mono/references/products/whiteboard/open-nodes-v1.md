@@ -6,9 +6,11 @@
 ## DWS 使用规则
 
 - 只通过 `dws whiteboard query/update` 读写白板。
-- 每次调用必须提供承载白板的文档 `--node` 和目标白板 `--part-id`。
-- DWS 当前只支持单页白板：命令没有 `--page-id`，update 文件禁止包含
-  `pageId`。
+- 每次调用必须提供 `--node`。显式非空 `--part-id` 选择文档内嵌白板；完全省略
+  `--part-id` 选择独立白板。显式空值报错，任一分支失败后都不得跨类型回退。
+- 内嵌白板是单页目标，不接收 `--page-id`。独立白板 query 可用
+  `--view summary|page|all` 和 `--page-id`；update 必须提供
+  `--expected-revision`、稳定 `--request-id`，overwrite 还必须提供 `--page-id`。
 - `query` 不接收请求体；CLI 会把返回的 `resultJson` 解析成对象。
 - 白板命令不支持使用全局 `--jq` 或 `--fields` 过滤输出；传入任一参数都会报错，
   Agent 直接读取 CLI 返回的结构化 JSON。
@@ -20,7 +22,8 @@
   waypoints 组合，拒绝自环及已识别的 query-only/推导字段。本地校验失败不会调用服务。
   其余节点字段、枚举、层级和业务约束仍由白板服务完整校验；远端提交后的连接中断或
   读回失败不代表未写入，必须保留回执和稳定 ID，不能盲目重发。
-- 原子命令返回 `success`、`nodeId`、`partId`、`resultJson` 和可选的 `resultSummary`。
+- 内嵌原子命令继续返回 `success`、`nodeId`、`partId`、`resultJson` 和可选的
+  `resultSummary`；独立分支返回详情或带 revision/requestId 的更新回执。
   `+query/+update` 使用统一结果信封；`+update` 的 `data.receipt` 区分真实终态回执与
   `dryRun=true/executed=false` 预览，真实成功经独立读回验证且不重复返回完整快照。
 

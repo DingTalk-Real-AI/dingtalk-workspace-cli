@@ -218,7 +218,8 @@ multi 模式支持按产品挑选：
 不带 --mode 时进入交互式询问；Skill 统一安装到 ~/.agents/skills。
 DWS 会自动适配本机上检测到的 Agent；共享安装方式不可用时会自动改用兼容安装，
 无需用户手动处理，也不会让同一个 Skill 重复出现。
-skill 源默认取二进制内嵌的版本（升级二进制即升级 skill）；--source / DWS_SKILL_SOURCE 可显式覆盖。`,
+skill 源默认取二进制内嵌的版本（升级二进制即升级 skill）；--source / DWS_SKILL_SOURCE 可显式覆盖，
+既可指向 mono/multi 模式目录，也可指向 dws-skills.zip 解压根目录或包含 skills/ 的源码仓库根目录。`,
 		Example: `  dws skill setup --mode multi --target claude --dry-run
   dws skill setup --mode multi --target claude`,
 		DisableAutoGenTag: true,
@@ -226,7 +227,7 @@ skill 源默认取二进制内嵌的版本（升级二进制即升级 skill）�
 	}
 	cmd.Flags().String("mode", "", "skill 模式：mono | multi（不指定则交互询问）")
 	cmd.Flags().String("target", "all", "目标 Agent：all | "+supportedTargets())
-	cmd.Flags().String("source", "", "skill 源目录（默认使用二进制内嵌的 skill 源，与当前版本一致）")
+	cmd.Flags().String("source", "", "skill 源、dws-skills.zip 解压或源码仓库目录（默认使用当前二进制内嵌版本）")
 	cmd.Flags().Bool("yes", false, "跳过确认提示（仅供脚本使用；删除操作仍会先备份到 ~/.dws/skill-backups/）")
 	cmd.Flags().StringSliceP("skill", "s", nil, "multi 模式：仅安装指定子 skill（可重复，接受短名 aitable 或全名 dingtalk-aitable）")
 	cmd.Flags().StringSliceP("exclude", "x", nil, "multi 模式：从全装中剔除指定子 skill（可重复，与 --skill 互斥）")
@@ -830,8 +831,9 @@ func filterMultiSkillNames(all, include, exclude []string) ([]string, error) {
 	return all, nil
 }
 
-// listMultiSkillNames returns sorted names of subdirectories under src that
-// contain a SKILL.md file (i.e. valid multi-mode skill bundles).
+// listMultiSkillNames returns sorted names of installable subdirectories under
+// src that contain a SKILL.md file. Release-layout container directories are
+// not installable MultiSkills themselves.
 func listMultiSkillNames(src string) ([]string, error) {
 	entries, err := skillSetupReadDir(src)
 	if err != nil {
@@ -839,7 +841,7 @@ func listMultiSkillNames(src string) ([]string, error) {
 	}
 	var names []string
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || isSkillReleaseLayoutDir(e.Name()) {
 			continue
 		}
 		if _, err := skillSetupStat(filepath.Join(src, e.Name(), "SKILL.md")); err == nil {
@@ -848,6 +850,10 @@ func listMultiSkillNames(src string) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+func isSkillReleaseLayoutDir(name string) bool {
+	return strings.EqualFold(name, skillSetupModeMono) || strings.EqualFold(name, skillSetupModeMulti)
 }
 
 // resolveSkillSetupMode resolves the mode either from the flag or via an
@@ -901,10 +907,10 @@ func resolveSkillSetupSource(explicit, mode string) (string, error) {
 	// silent fallback to another source the user did not ask for.
 	var overrides []string
 	if explicit != "" {
-		overrides = append(overrides, explicit, filepath.Join(explicit, "skills", subdir))
+		overrides = append(overrides, skillSourceOverrideCandidates(explicit, subdir)...)
 	}
 	if env := strings.TrimSpace(os.Getenv("DWS_SKILL_SOURCE")); env != "" {
-		overrides = append(overrides, env, filepath.Join(env, "skills", subdir))
+		overrides = append(overrides, skillSourceOverrideCandidates(env, subdir)...)
 	}
 	if len(overrides) > 0 {
 		for _, c := range overrides {
@@ -928,7 +934,23 @@ func resolveSkillSetupSource(explicit, mode string) (string, error) {
 	}
 
 	hint := strings.Join(candidates, "\n  - ")
-	return "", fmt.Errorf("未找到 %s 模式的 skill 源目录，已尝试：\n  - %s\n\n请用 --source 显式指定包含 skills/%s 的仓库根目录", mode, hint, mode)
+	return "", fmt.Errorf("未找到 %s 模式的 skill 源目录，已尝试：\n  - %s\n\n请用 --source 指定模式目录、dws-skills.zip 解压根目录，或包含 skills/%s 的仓库根目录", mode, hint, mode)
+}
+
+// skillSourceOverrideCandidates supports the three public on-disk shapes in
+// specificity order. The raw root must come last: a release bundle root also
+// contains mono/SKILL.md for compatibility and must not be mistaken for a
+// one-entry MultiSkill source before <root>/multi is considered.
+func skillSourceOverrideCandidates(root, subdir string) []string {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(root, subdir),
+		filepath.Join(root, "skills", subdir),
+		root,
+	}
 }
 
 // skillSourceCandidates returns the ordered list of paths to probe for a
@@ -937,11 +959,10 @@ func resolveSkillSetupSource(explicit, mode string) (string, error) {
 func skillSourceCandidates(explicit, subdir string) []string {
 	var roots []string
 	if explicit != "" {
-		// allow either repo root or already-resolved skills/<mode> dir
-		roots = append(roots, explicit, filepath.Join(explicit, "skills", subdir))
+		roots = append(roots, skillSourceOverrideCandidates(explicit, subdir)...)
 	}
 	if env := strings.TrimSpace(os.Getenv("DWS_SKILL_SOURCE")); env != "" {
-		roots = append(roots, env, filepath.Join(env, "skills", subdir))
+		roots = append(roots, skillSourceOverrideCandidates(env, subdir)...)
 	}
 	if exe, err := skillSetupExecutable(); err == nil {
 		exeDir := filepath.Dir(exe)
@@ -972,18 +993,8 @@ func isSkillSourceRoot(path, mode string) bool {
 		fi, err := skillSetupStat(filepath.Join(path, "SKILL.md"))
 		return err == nil && !fi.IsDir()
 	case skillSetupModeMulti:
-		entries, err := skillSetupReadDir(path)
-		if err != nil {
-			return false
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				if _, err := skillSetupStat(filepath.Join(path, e.Name(), "SKILL.md")); err == nil {
-					return true
-				}
-			}
-		}
-		return false
+		names, err := listMultiSkillNames(path)
+		return err == nil && len(names) > 0
 	}
 	return false
 }

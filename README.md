@@ -425,16 +425,16 @@ dws skill setup --mode mono --target all
 dws skill setup --mode multi --target cursor --dry-run
 dws skill setup --mode multi --target cursor
 
-# Point at a local source tree (e.g. a fork or work-in-progress), preview first
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi --dry-run
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+# Point at a local source (an extracted dws-skills.zip root, its multi/ directory, or a source checkout), preview first
+DWS_SKILL_SOURCE=/absolute/path/to/extracted-dws-skills dws skill setup --mode multi --dry-run
+DWS_SKILL_SOURCE=/absolute/path/to/extracted-dws-skills dws skill setup --mode multi
 ```
 
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--mode` | `mono` \| `multi` | Skill layout; defaults to interactive prompt |
 | `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home, including ZCode at `~/.zcode/skills` |
-| `--source` | path | Local source directory (overrides bundled skills) |
+| `--source` | path | Local source directory (overrides bundled skills); accepts a mode directory, an extracted `dws-skills.zip` root, or a source checkout containing `skills/` |
 | `--yes` | — | Scripting-only: skip the confirmation prompt. Removals are still backed up to `~/.dws/skill-backups/` first |
 
 > The setup command can remove the opposite-mode layout (`dws/` for multi, DWS-managed multi Skills for mono) and stale managed Skills not in the bundle. DWS records ownership, installer version, source, and content digest centrally in `~/.dws/skills-state.json` (or `$DWS_CONFIG_DIR/skills-state.json`). Exact official names shipped before the centralized state remain a frozen migration list. A `dingtalk-*` prefix alone never authorizes cleanup, so other same-prefix market/user Skills are preserved. Every removal is previewed before confirmation and preserved under `~/.dws/skill-backups/<timestamp>/`; a directory that cannot be backed up is never removed. In a non-interactive shell, first run `--dry-run` and inspect its output; only then may the caller explicitly choose the scripting-only confirmation bypass.
