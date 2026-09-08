@@ -11,6 +11,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
+const wikiCopySourceIDRequirement = "--node 必须是稳定节点 ID；不接受 http(s) URL，请先通过 +node-get 取得真实 nodeId"
+
 var NodeList = readShortcut("+node-list", "严格分页列出知识库节点", "浏览知识库根目录或指定文件夹；只有显式 nodes:[] 才表示空目录，并完整保留 nextCursor/hasMore。", "nodes", "dws wiki +node-list --workspace <workspaceId> --format json", []shortcut.Flag{
 	{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "父节点 ID"}, {Name: "limit", Type: shortcut.FlagInt, Default: "50", Desc: "每页数量 1-50"}, {Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}, AliasesVisible: true},
 }, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "folder", Property: "folderId"}, {Name: "limit", Property: "pageSize"}, {Name: "cursor", Property: "pageToken"}}, func(rt *shortcut.RuntimeContext) error {
@@ -93,7 +95,7 @@ var NodeCreate = writeShortcut("+node-create", "创建知识库节点并读回�
 	return rt.Output(map[string]any{"success": true, "nodeId": id, "node": verified})
 })
 
-var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并读回验证", "复制现有在线节点到目标知识库/文件夹；确认后要求副本 ID 不同于源 ID，并读回核对知识库及显式父目录。", "dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --format json", shortcut.RiskHighWrite, contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"}, []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "源节点稳定 ID；不接受 http(s) URL，请先通过 +node-get 取得真实 nodeId"}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error {
+var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并读回验证", "复制现有在线节点到目标知识库/文件夹；确认后要求副本 ID 不同于源 ID，并读回核对知识库及显式父目录。", "dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --format json", shortcut.RiskHighWrite, contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"}, []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: wikiCopySourceIDRequirement}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error {
 	params := map[string]any{"workspaceId": rt.Str("workspace"), "nodeId": rt.Str("node")}
 	if rt.Changed("folder") {
 		params["targetFolderId"] = rt.Str("folder")
@@ -229,7 +231,7 @@ var FeedList = readShortcut("+feed-list", "严格分页列出知识库动态", "
 
 func init() {
 	NodeCopy.Validate = validateWikiCopySourceID
-	NodeCopy.Constraints = []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"node"}, Description: "--node 必须是稳定节点 ID；不接受 http(s) URL，请先通过 +node-get 取得真实 nodeId"}}
+	NodeCopy.Constraints = []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"node"}, Description: wikiCopySourceIDRequirement}}
 	Move.Aliases = []string{"+node-move"}
 	for _, item := range []*shortcut.Shortcut{&NodeList, &FeedList} {
 		enableWikiAutoPage(item)
