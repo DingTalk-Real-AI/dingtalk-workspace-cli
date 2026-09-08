@@ -74,7 +74,7 @@ var NodeSearch = readShortcut("+node-search", "严格搜索知识库节点", "�
 	return rt.Output(out)
 })
 
-var NodeCreate = writeShortcut("+node-create", "创建知识库节点并读回验证", "在知识库根目录或文件夹中创建文档、表格、白板、脑图或文件夹；取得 nodeId 并读回后才成功。", "dws wiki +node-create --workspace <workspaceId> --name \"新文档\" --format json", shortcut.RiskWrite, wikiWriteSafety(false), []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID"}, {Name: "name", Type: shortcut.FlagString, Required: true, Desc: "节点名称"}, {Name: "type", Type: shortcut.FlagString, Default: "adoc", Desc: "节点类型", Enum: []string{"adoc", "axls", "able", "appt", "adraw", "amind", "folder"}}, {Name: "folder", Type: shortcut.FlagString, Desc: "父文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "name", Property: "name"}, {Name: "type", Property: "type"}, {Name: "folder", Property: "folderId"}}, func(rt *shortcut.RuntimeContext) error {
+var NodeCreate = writeShortcut("+node-create", "创建知识库节点并读回验证", "在知识库根目录或文件夹中创建文档、表格、白板、脑图或文件夹；读回核对 nodeId、知识库及显式父目录后才成功。", "dws wiki +node-create --workspace <workspaceId> --name \"新文档\" --format json", shortcut.RiskWrite, wikiWriteSafety(false), []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID"}, {Name: "name", Type: shortcut.FlagString, Required: true, Desc: "节点名称"}, {Name: "type", Type: shortcut.FlagString, Default: "adoc", Desc: "节点类型", Enum: []string{"adoc", "axls", "able", "appt", "adraw", "amind", "folder"}}, {Name: "folder", Type: shortcut.FlagString, Desc: "父文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "name", Property: "name"}, {Name: "type", Property: "type"}, {Name: "folder", Property: "folderId"}}, func(rt *shortcut.RuntimeContext) error {
 	params := map[string]any{"workspaceId": rt.Str("workspace"), "name": rt.Str("name"), "type": rt.Str("type")}
 	if rt.Changed("folder") {
 		params["folderId"] = rt.Str("folder")
@@ -86,29 +86,14 @@ var NodeCreate = writeShortcut("+node-create", "创建知识库节点并读回�
 	if err != nil {
 		return err
 	}
-	written, err = requireWikiWrite(written, "doc/create_file")
+	id, verified, err := verifyWikiNodeWrite(rt, written, "doc/create_file", "")
 	if err != nil {
 		return err
-	}
-	id := nestedWikiString(written, "nodeId", "fileId", "id")
-	if id == "" {
-		return wikiResponseError("doc/create_file", "missing_created_id", "创建响应没有 nodeId；远端效果未知")
-	}
-	verified, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": id})
-	if err != nil {
-		return err
-	}
-	verified, err = requireWikiObject(verified, "doc/get_document_info")
-	if err != nil {
-		return err
-	}
-	if firstWikiString(verified, "nodeId", "id", "fileId") != id {
-		return wikiResponseError("doc/create_file", "readback_id_mismatch", "创建后读回节点 ID 不一致")
 	}
 	return rt.Output(map[string]any{"success": true, "nodeId": id, "node": verified})
 })
 
-var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并读回验证", "复制现有在线节点到目标知识库/文件夹；高风险确认后要求新 nodeId 并读取副本元数据。", "dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --format json", shortcut.RiskHighWrite, contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"}, []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "源节点 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error {
+var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并读回验证", "复制现有在线节点到目标知识库/文件夹；确认后要求副本 ID 不同于源 ID，并读回核对知识库及显式父目录。", "dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --format json", shortcut.RiskHighWrite, contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"}, []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "源节点稳定 ID；不接受 http(s) URL，请先通过 +node-get 取得真实 nodeId"}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error {
 	params := map[string]any{"workspaceId": rt.Str("workspace"), "nodeId": rt.Str("node")}
 	if rt.Changed("folder") {
 		params["targetFolderId"] = rt.Str("folder")
@@ -120,24 +105,9 @@ var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并读回验证
 	if err != nil {
 		return err
 	}
-	written, err = requireWikiWrite(written, "doc/copy_document")
+	id, verified, err := verifyWikiNodeWrite(rt, written, "doc/copy_document", rt.Str("node"))
 	if err != nil {
 		return err
-	}
-	id := nestedWikiString(written, "nodeId", "fileId", "id")
-	if id == "" {
-		return wikiResponseError("doc/copy_document", "missing_created_id", "复制响应没有新 nodeId；远端效果未知")
-	}
-	verified, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": id})
-	if err != nil {
-		return err
-	}
-	verified, err = requireWikiObject(verified, "doc/get_document_info")
-	if err != nil {
-		return err
-	}
-	if firstWikiString(verified, "nodeId", "id", "fileId") != id {
-		return wikiResponseError("doc/copy_document", "readback_id_mismatch", "复制后读回节点 ID 不一致")
 	}
 	return rt.Output(map[string]any{"success": true, "sourceNodeId": rt.Str("node"), "nodeId": id, "copy": verified})
 })
@@ -258,6 +228,7 @@ var FeedList = readShortcut("+feed-list", "严格分页列出知识库动态", "
 })
 
 func init() {
+	NodeCopy.Validate = validateWikiCopySourceID
 	Move.Aliases = []string{"+node-move"}
 	for _, item := range []*shortcut.Shortcut{&NodeList, &FeedList} {
 		enableWikiAutoPage(item)
