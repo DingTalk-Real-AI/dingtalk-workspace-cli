@@ -186,6 +186,9 @@ def main():
             broken_shortcut.unlink()
             shortcut_directory.rmdir()
         # Corruption must synchronously repair from declarations, preserving output.
+        # The compact schema leaf reads only the payload store (Meta is no
+        # longer on its path), so a corrupt Meta must not change its output;
+        # Meta repair is then exercised through a route that reads Meta.
         with (cache / "meta.cache").open("r+b") as target:
             target.seek(208)
             first = target.read(1)
@@ -193,7 +196,23 @@ def main():
             target.write(bytes([first[0] ^ 1]))
         repaired, report["repair_leaf"] = invoke(binary, leaf, environment, home)
         if json.loads(repaired) != canonical_leaf:
-            raise RuntimeError("repair changed leaf output")
+            raise RuntimeError("corrupt Meta changed the payload-only leaf output")
+        repaired_all, _ = invoke(binary, ["schema", "--all", "-f", "json"], environment, home)
+        live_all, _ = invoke(binary, ["schema", "--all", "-f", "json"], disabled, home)
+        if json.loads(repaired_all) != json.loads(live_all):
+            raise RuntimeError("Meta repair changed --all output")
+        verify_artifacts()
+        # The payload store repairs through leaf help, which resolves
+        # CommandMeta through ResolveMeta's payload-only path.
+        with (cache / "payloads.shards.cache").open("r+b") as target:
+            target.seek(208)
+            first = target.read(1)
+            target.seek(208)
+            target.write(bytes([first[0] ^ 1]))
+        repaired_help, _ = invoke(binary, ["calendar", "book", "list", "--help"], environment, home)
+        live_help, _ = invoke(binary, ["calendar", "book", "list", "--help"], disabled, home)
+        if repaired_help != live_help:
+            raise RuntimeError("payload repair changed leaf help output")
         verify_artifacts()
         # Independent processes share the same HOME/cache. Exercise directory
         # bootstrap as well as both publication phases, without assuming a
