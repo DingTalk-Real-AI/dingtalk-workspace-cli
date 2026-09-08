@@ -229,6 +229,7 @@ var FeedList = readShortcut("+feed-list", "严格分页列出知识库动态", "
 
 func init() {
 	NodeCopy.Validate = validateWikiCopySourceID
+	NodeCopy.Constraints = []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"node"}, Description: "--node 必须是稳定节点 ID；不接受 http(s) URL，请先通过 +node-get 取得真实 nodeId"}}
 	Move.Aliases = []string{"+node-move"}
 	for _, item := range []*shortcut.Shortcut{&NodeList, &FeedList} {
 		enableWikiAutoPage(item)
