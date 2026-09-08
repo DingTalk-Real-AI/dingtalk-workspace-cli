@@ -28,8 +28,6 @@ import (
 //      queryContractDetails, queryContractQuantityByType,
 //      batchImportContractAsync, getBatchImportContractResult,
 //      queryContractProcessContent, getAllFileDirectory,
-//      queryContractReviewBenefit, createContractReviewTask,
-//      contractAnalysis, queryContractReviewResult
 //      createAccountInfo, updateAccountInfo, getAccountEntryInfo,
 //      listAccountInfo, deleteAccountEntryInfo, contractOpenArchive
 //      addProject, deleteProject, updateProject, setProjectStatus,
@@ -51,11 +49,10 @@ func newContractCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "钉钉智能合同：台账查询、批量导入、听记+模版起草、审查、归档、项目、相对方、账款管理",
+			AgentSummary: "钉钉智能合同：台账查询、批量导入、听记+模版起草、归档、项目、相对方、账款管理",
 			UseWhen: []string{
 				"用户要查合同台账列表、详情或状态统计，创建、批量导入、归档合同",
 				"用户要按 AI 听记和模版起草合同",
-				"用户要发起合同审查（权益、解析、任务、结果）",
 				"用户要管理合同项目、相对方、工商信息或收付款账款",
 			},
 			AvoidWhen: []string{
@@ -68,7 +65,7 @@ func newContractCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "contract",
 		Short: "智能合同管理",
-		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、合同审查（权益、任务、解析、结果）、项目管理、相对方管理。`,
+		Long:  `智能合同：台账查询/详情/分类统计、批量导入、审批模板与台账分类、听记+模版起草、项目管理、相对方管理。`,
 		RunE:  groupRunE,
 	})
 
@@ -305,175 +302,6 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 		},
 	}
 
-	// ── review ────────────────────────────────────────────────
-
-	reviewCmd := newGroupCommand(&cobra.Command{
-		Use:   "review",
-		Short: "合同审查",
-		Long:  `合同审查相关操作：权益查询、创建审查任务、解析合同文件、查询审查结果。`,
-		RunE:  groupRunE,
-	})
-
-	reviewBenefitCmd := &cobra.Command{
-		Use:     "benefit",
-		Short:   "查询合同审查权益",
-		Long:    `查询用户组织的合同审查的权益数据（MCP queryContractReviewBenefit）。`,
-		Example: `  dws contract review benefit --format json`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return callMCPToolOnServer("contract", "queryContractReviewBenefit", map[string]any{})
-		},
-	}
-
-	reviewCreateCmd := &cobra.Command{
-		Use:   "create",
-		Short: "创建合同审查任务",
-		Long: `创建合同审查任务（MCP createContractReviewTask）。
-JSON 须符合 IntelligentContractReviewClientRequest 结构。
-
-【字段说明】
-source              来源标识（字符串，可选）
-fileInfo            文件信息对象（可选，与 fileId/spaceId 方式二选一）
-  fileId            云盘文件 ID
-  spaceId           云盘空间 ID
-  fileName          文件名（须带扩展名，如 合同.pdf）
-  fileSize          文件大小（字节数，整数）
-  fileType          文件类型（如 pdf、docx）
-reviewType          审查类型标识（如 AI_REVIEW，可选）
-companyList         审查方公司列表（数组，可选）
-  reviewPosition    审查方在合同中的位置（字符串）
-reviewPosition      默认审查位置（字符串，可选）
-reviewResultType    审查结果类型（字符串，可选）
-customReviewRules   自定义审查规则（字符串，可选）`,
-		Example: `  dws contract review create --file ./review_request.json --format json
-  cat review_request.json | dws contract review create --file - --format json
-
-示例 review_request.json：
-{
-  "source": "OPEN_CLAW",
-  "fileInfo": {
-    "fileId": "xxx",
-    "spaceId": "yyy",
-    "fileName": "采购合同.pdf",
-    "fileSize": "102400",
-    "fileType": "pdf"
-  },
-  "reviewType": "AI_REVIEW",
-  "reviewPosition": "甲方",
-  "reviewResultType": "standard",
-  "companyList": [{"reviewPosition": "乙方"}]
-}`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path, _ := cmd.Flags().GetString("file")
-			if strings.TrimSpace(path) == "" {
-				return fmt.Errorf("--file 为必填（JSON 路径，或 \"-\" 表示 stdin）")
-			}
-			var r io.Reader
-			if path == "-" {
-				r = cmd.InOrStdin()
-			} else {
-				f, err := os.Open(path)
-				if err != nil {
-					return fmt.Errorf("打开 JSON 文件: %w", err)
-				}
-				defer f.Close()
-				r = f
-			}
-			b, err := io.ReadAll(r)
-			if err != nil {
-				return fmt.Errorf("读取 JSON: %w", err)
-			}
-			var payload map[string]any
-			if err := json.Unmarshal(b, &payload); err != nil {
-				return fmt.Errorf("JSON 解析失败: %w", err)
-			}
-			return callMCPToolOnServer("contract", "createContractReviewTask", map[string]any{
-				"IntelligentContractReviewClientRequest": payload,
-			})
-		},
-	}
-
-	reviewAnalysisCmd := &cobra.Command{
-		Use:   "analysis",
-		Short: "解析合同文件",
-		Long: `解析合同文件，返回合同摘要和审查推荐模型（MCP contractAnalysis）。
-JSON 须包含文件信息，可包括 fileInfo（fileId/spaceId/fileName/fileSize/fileType）或直接传文件字段。
-
-【字段说明】
-fileInfo            文件信息对象（可选）
-  fileId            云盘文件 ID
-  spaceId           云盘空间 ID
-  fileName          文件名（须带扩展名，如 合同.pdf）
-  fileSize          文件大小（字节数，整数）
-  fileType          文件类型（如 pdf、docx）
-source              来源标识（字符串，可选）`,
-		Example: `  dws contract review analysis --file ./analysis_request.json --format json
-  cat analysis_request.json | dws contract review analysis --file - --format json
-
-示例 analysis_request.json：
-{
-  "fileInfo": {
-    "fileId": "xxx",
-    "spaceId": "yyy",
-    "fileName": "采购合同.pdf",
-    "fileSize": "102400",
-    "fileType": "pdf"
-  }
-}`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path, _ := cmd.Flags().GetString("file")
-			if strings.TrimSpace(path) == "" {
-				return fmt.Errorf("--file 为必填（JSON 路径，或 \"-\" 表示 stdin）")
-			}
-			var r io.Reader
-			if path == "-" {
-				r = cmd.InOrStdin()
-			} else {
-				f, err := os.Open(path)
-				if err != nil {
-					return fmt.Errorf("打开 JSON 文件: %w", err)
-				}
-				defer f.Close()
-				r = f
-			}
-			b, err := io.ReadAll(r)
-			if err != nil {
-				return fmt.Errorf("读取 JSON: %w", err)
-			}
-			var payload map[string]any
-			if err := json.Unmarshal(b, &payload); err != nil {
-				return fmt.Errorf("JSON 解析失败: %w", err)
-			}
-			return callMCPToolOnServer("contract", "contractAnalysis", map[string]any{
-				"AnalysisContractApiRequest": payload,
-			})
-		},
-	}
-
-	reviewResultCmd := &cobra.Command{
-		Use:   "result",
-		Short: "查询合同审查结果",
-		Long: `查询合同审查结果（MCP queryContractReviewResult）。
-必填：--task-id（审查任务 ID，由 review create 返回）、--review-type（审查类型，如 AI_REVIEW）。
-入参包裹在 IntelligentLegalContractReviewClientRequest 下。`,
-		Example: `  dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			taskID := strings.TrimSpace(MustGetStringFlag(cmd, "task-id"))
-			if taskID == "" {
-				return fmt.Errorf("--task-id 为必填参数")
-			}
-			reviewType := strings.TrimSpace(MustGetStringFlag(cmd, "review-type"))
-			if reviewType == "" {
-				return fmt.Errorf("--review-type 为必填参数")
-			}
-			return callMCPToolOnServer("contract", "queryContractReviewResult", map[string]any{
-				"IntelligentLegalContractReviewClientRequest": map[string]any{
-					"taskId":     taskID,
-					"reviewType": reviewType,
-				},
-			})
-		},
-	}
-
 	// flags
 	recordListCmd.Flags().String("start", "", "合同创建时间范围起点（ISO-8601，如 2026-03-10T14:00:00+08:00）")
 	recordListCmd.Flags().String("end", "", "合同创建时间范围终点（ISO-8601，须晚于 --start）")
@@ -495,18 +323,12 @@ source              来源标识（字符串，可选）`,
 	draftCmd.Flags().String("template-url", "", "合同模版 URL（与 --template-content 至少填一项；对应 MCP templateUrl）")
 	draftCmd.Flags().String("template-content", "", "合同模版全文（与 --template-url 至少填一项；对应 MCP templateContent）")
 
-	reviewCreateCmd.Flags().String("file", "", "IntelligentContractReviewClientRequest JSON 文件路径，\"-\" 表示 stdin（必填）")
-	reviewAnalysisCmd.Flags().String("file", "", "contractAnalysis 请求 JSON 文件路径，\"-\" 表示 stdin（必填）")
-	reviewResultCmd.Flags().String("task-id", "", "审查任务 ID（必填）")
-	reviewResultCmd.Flags().String("review-type", "", "审查类型，如 AI_REVIEW（必填）")
-
 	recordCmd.AddCommand(
 		recordListCmd,
 		recordGetCmd,
 		recordQuantityByTypeCmd,
 		recordCreateCmd,
 	)
-	reviewCmd.AddCommand(reviewBenefitCmd, reviewCreateCmd, reviewAnalysisCmd, reviewResultCmd)
 
 	// ── account ───────────────────────────────────────────────
 
@@ -1584,7 +1406,6 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 		processTemplatesCmd,
 		fileDirectoriesCmd,
 		draftCmd,
-		reviewCmd,
 		accountCmd,
 		archCmd,
 		projectCmd,
@@ -1604,10 +1425,6 @@ JSON 中须包含 subjectId, partyType, name 等必填字段。`,
 		ProcessTemplates:      processTemplatesCmd,
 		FileDirectories:       fileDirectoriesCmd,
 		Draft:                 draftCmd,
-		ReviewBenefit:         reviewBenefitCmd,
-		ReviewCreate:          reviewCreateCmd,
-		ReviewAnalysis:        reviewAnalysisCmd,
-		ReviewResult:          reviewResultCmd,
 		AccountCreate:         accountCreateCmd,
 		AccountUpdate:         accountUpdateCmd,
 		AccountGet:            accountGetCmd,

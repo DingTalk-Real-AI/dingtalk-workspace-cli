@@ -200,116 +200,6 @@ func TestCrossPlatformCoverageContractDraftCommand(t *testing.T) {
 	}
 }
 
-// TestCrossPlatformCoverageContractReviewCommands covers review create/analysis/result.
-func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
-	// review benefit: success
-	caller := &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "benefit"); err != nil {
-		t.Fatalf("review benefit: %v", err)
-	}
-	call := onlyContractCall(t, caller)
-	if call.toolName != "queryContractReviewBenefit" {
-		t.Fatalf("tool = %q, want queryContractReviewBenefit", call.toolName)
-	}
-
-	// review create: missing --file
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "create"); err == nil {
-		t.Fatal("review create without --file should fail")
-	}
-
-	// review create: file open error (nonexistent file)
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "create", "--file", "/nonexistent/path/file.json"); err == nil {
-		t.Fatal("review create with nonexistent file should fail")
-	}
-
-	// review create: JSON parse error
-	badPath := writeTempJSON(t, "bad.json", `{invalid`)
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "create", "--file", badPath); err == nil {
-		t.Fatal("review create with invalid JSON should fail")
-	}
-
-	// review create: success
-	goodPath := writeTempJSON(t, "review.json", `{"source":"OPEN_CLAW","reviewType":"AI_REVIEW"}`)
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "create", "--file", goodPath); err != nil {
-		t.Fatalf("review create: %v", err)
-	}
-	call = onlyContractCall(t, caller)
-	if call.toolName != "createContractReviewTask" {
-		t.Fatalf("tool = %q, want createContractReviewTask", call.toolName)
-	}
-	req, ok := call.args["IntelligentContractReviewClientRequest"].(map[string]any)
-	if !ok || req["source"] != "OPEN_CLAW" {
-		t.Fatalf("request = %#v", call.args["IntelligentContractReviewClientRequest"])
-	}
-
-	// review analysis: missing --file
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "analysis"); err == nil {
-		t.Fatal("review analysis without --file should fail")
-	}
-
-	// review analysis: file open error
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "analysis", "--file", "/nonexistent/file.json"); err == nil {
-		t.Fatal("review analysis with nonexistent file should fail")
-	}
-
-	// review analysis: JSON parse error
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "analysis", "--file", badPath); err == nil {
-		t.Fatal("review analysis with invalid JSON should fail")
-	}
-
-	// review analysis: success
-	analysisPath := writeTempJSON(t, "analysis.json", `{"fileInfo":{"fileId":"xxx"}}`)
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "analysis", "--file", analysisPath); err != nil {
-		t.Fatalf("review analysis: %v", err)
-	}
-	call = onlyContractCall(t, caller)
-	if call.toolName != "contractAnalysis" {
-		t.Fatalf("tool = %q, want contractAnalysis", call.toolName)
-	}
-
-	// review result: missing --task-id
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "result", "--review-type", "AI_REVIEW"); err == nil {
-		t.Fatal("review result without --task-id should fail")
-	}
-
-	// review result: missing --review-type
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "result", "--task-id", "task_xxx"); err == nil {
-		t.Fatal("review result without --review-type should fail")
-	}
-
-	// review result: success
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "result", "--task-id", "task_xxx", "--review-type", "AI_REVIEW"); err != nil {
-		t.Fatalf("review result: %v", err)
-	}
-	call = onlyContractCall(t, caller)
-	if call.toolName != "queryContractReviewResult" {
-		t.Fatalf("tool = %q, want queryContractReviewResult", call.toolName)
-	}
-}
-
 // TestCrossPlatformCoverageContractMiscCommands covers process-templates, file-directories, archive.
 func TestCrossPlatformCoverageContractMiscCommands(t *testing.T) {
 	// process-templates: success
@@ -1201,22 +1091,8 @@ func TestCrossPlatformCoverageContractHelperEdges(t *testing.T) {
 func TestCrossPlatformCoverageContractRemainingEdges(t *testing.T) {
 	dir := t.TempDir() // a directory, to trigger io.ReadAll "is a directory" error
 
-	// review create: io.ReadAll error (directory as --file)
-	caller := &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "create", "--file", dir); err == nil {
-		t.Fatal("review create with directory as --file should fail (io.ReadAll error)")
-	}
-
-	// review analysis: io.ReadAll error (directory as --file)
-	caller = &contractDefectCaller{}
-	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
-		"review", "analysis", "--file", dir); err == nil {
-		t.Fatal("review analysis with directory as --file should fail (io.ReadAll error)")
-	}
-
 	// readContractJSONPayload: io.ReadAll error (directory as --file)
-	caller = &contractDefectCaller{}
+	caller := &contractDefectCaller{}
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
 		"record", "create", "--file", dir); err == nil {
 		t.Fatal("record create with directory as --file should fail (io.ReadAll error)")
@@ -1347,47 +1223,6 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	if _, err := executeContractDefectCommand(t, caller, newContractCommand,
 		"record", "list", "--end", "not-a-date"); err == nil {
 		t.Fatal("record list with invalid --end should fail")
-	}
-
-	// review create: stdin path (--file -)
-	caller = &contractDefectCaller{}
-	root := newContractCommand()
-	root.PersistentFlags().Bool("yes", false, "confirm")
-	root.PersistentFlags().Bool("dry-run", false, "preview")
-	root.SilenceErrors = true
-	root.SilenceUsage = true
-	root.SetIn(strings.NewReader(`{"source":"test"}`))
-	root.SetArgs([]string{"review", "create", "--file", "-"})
-	InitDeps(caller)
-	var stdout bytes.Buffer
-	deps.Out.w = &stdout
-	deps.Out.errW = io.Discard
-	if err := root.Execute(); err != nil {
-		t.Fatalf("review create from stdin: %v", err)
-	}
-	call := onlyContractCall(t, caller)
-	if call.toolName != "createContractReviewTask" {
-		t.Fatalf("tool = %q, want createContractReviewTask", call.toolName)
-	}
-
-	// review analysis: stdin path (--file -)
-	caller = &contractDefectCaller{}
-	root2 := newContractCommand()
-	root2.PersistentFlags().Bool("yes", false, "confirm")
-	root2.PersistentFlags().Bool("dry-run", false, "preview")
-	root2.SilenceErrors = true
-	root2.SilenceUsage = true
-	root2.SetIn(strings.NewReader(`{"fileInfo":{"fileId":"xxx"}}`))
-	root2.SetArgs([]string{"review", "analysis", "--file", "-"})
-	InitDeps(caller)
-	deps.Out.w = &stdout
-	deps.Out.errW = io.Discard
-	if err := root2.Execute(); err != nil {
-		t.Fatalf("review analysis from stdin: %v", err)
-	}
-	call = onlyContractCall(t, caller)
-	if call.toolName != "contractAnalysis" {
-		t.Fatalf("tool = %q, want contractAnalysis", call.toolName)
 	}
 
 	// account list: invalid --exec-start

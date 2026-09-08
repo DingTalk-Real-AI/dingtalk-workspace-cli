@@ -27,7 +27,7 @@ func TestCrossPlatformCoverageContractCommandTreeIncludesWukongCommands(t *testi
 	paths := []string{
 		"record list", "record get", "record quantity-by-type", "record create",
 		"import batch", "import batch-result", "process-templates", "file-directories",
-		"draft", "review benefit", "review create", "review analysis", "review result",
+		"draft",
 		"account create", "account update", "account get", "account list", "account delete",
 		"archive",
 		"project add", "project delete", "project update", "project set-status", "project list",
