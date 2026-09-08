@@ -235,12 +235,33 @@ func newCalendarCommand() *cobra.Command {
 		Long: `创建日程。
 
 全天日程使用 --is-all-day，--start/--end 必须为 yyyy-MM-dd 日期，结束日期不包含当天（例如 2030-01-01 至 2030-01-02 表示 1 月 1 日全天），无需设置时区。
+roomId 必须来自 dws calendar room search 返回；--calendar-id 可指定共享日历本。
 默认由服务端添加视频会议；无需添加时传 --add-online-meeting=false。单人会议或全天日程通常不需要视频会议，建议设置 --add-online-meeting=false。
 
 周期日程说明：--recurrence-* 不是彼此独立的参数。一旦指定任一 --recurrence-* 标志，就必须一次性提供**完整**的循环规则，
 至少包含 --recurrence-type、--recurrence-interval(>0) 与 --recurrence-range-type，否则命令会被拒绝执行。`,
-		Example: `  dws calendar event create --title "Q1 复盘会" --start "2030-01-01T09:00:00+08:00" --end "2030-01-01T10:00:00+08:00"
-  dws calendar event create --title "全天安排" --is-all-day --start 2030-01-01 --end 2030-01-02 --add-online-meeting=false`,
+		Example: `  dws calendar event create --title "Q1 复盘会" \
+  --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00"
+  dws calendar event create --title "周会" \
+  --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
+  --attendees userId1,userId2
+  dws calendar event create --title "项目评审" \
+  --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
+  --rooms roomId1,roomId2
+  dws calendar event create --title "每日站会" \
+  --start "2026-03-10T09:00:00+08:00" --end "2026-03-10T09:30:00+08:00" \
+  --recurrence-type daily --recurrence-interval 1 --recurrence-range-type numbered --recurrence-count 10
+  dws calendar event create --title "团队周会" \
+  --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
+  --calendar-id <SHARED_CALENDAR_ID>
+  dws calendar event create --title "全天安排" \
+  --is-all-day --start 2030-01-01 --end 2030-01-02 --add-online-meeting=false
+  dws calendar event create --title "个人专注时间" \
+  --start "2030-01-01T09:00:00+08:00" --end "2030-01-01T10:00:00+08:00" \
+  --add-online-meeting=false
+  dws calendar event create --title "远程评审" \
+  --start "2030-01-01T14:00:00+08:00" --end "2030-01-01T15:00:00+08:00" \
+  --attendees userId1,userId2 --add-online-meeting=true`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			title, err := mustFlagOrFallback(cmd, "title", "summary")
 			if err != nil {
@@ -329,8 +350,8 @@ func newCalendarCommand() *cobra.Command {
 					"只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令",
 				},
 				Examples: []string{
-					"dws calendar event create --title \"Q1 复盘会\" --start \"2030-01-01T09:00:00+08:00\" --end \"2030-01-01T10:00:00+08:00\"",
-					"dws calendar event create --title \"全天安排\" --is-all-day --start 2030-01-01 --end 2030-01-02 --add-online-meeting=false",
+					"dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+					"dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2",
 				},
 			},
 			Parameters: append([]contract.ParamDecl{
@@ -355,13 +376,21 @@ func newCalendarCommand() *cobra.Command {
 		Long: `支持修改标题、描述、时间、地点、忙碌状态、全天状态和视频会议。
 --is-all-day=true 时，传入的 --start/--end 必须为 yyyy-MM-dd 日期；false 显式设置为非全天。
 --add-online-meeting=true 表示重新添加并覆盖已有视频会议，false 不创建且保留已有视频会议；不传时沿用服务端原有更新逻辑。
+eventId 可通过 dws calendar event list 查询。
 如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。
 
 		修改周期日程的循环规则时，--recurrence-* 系列必须整体传入：只传其中一个（比如只改 --recurrence-count）会把循环规则覆盖成不完整的状态。
 		至少包含 --recurrence-type、--recurrence-interval(>0) 与 --recurrence-range-type，否则命令会被拒绝执行。
 		如果只想微调已有周期日程的某一个循环字段，请先通过 dws calendar event get --id <ID> 读取现有 recurrence，然后在命令中重新提供完整的 pattern + range 字段集合。`,
-		Example: `  dws calendar event update --id EVENT_ID --is-all-day --start 2030-01-01 --end 2030-01-02
-  dws calendar event update --id EVENT_ID --add-online-meeting=true`,
+		Example: `  dws calendar event update --id EVENT_ID --title "新标题"
+  dws calendar event update --id EVENT_ID --desc "新描述" --timezone Asia/Tokyo
+  dws calendar event update --id EVENT_ID --recurrence-type daily --recurrence-interval 1 --recurrence-range-type numbered --recurrence-count 5
+  dws calendar event update --id EVENT_ID --calendar-id <SHARED_CALENDAR_ID> --title "新标题"
+  dws calendar event update --id EVENT_ID --is-all-day --start 2030-01-01 --end 2030-01-02
+  dws calendar event update --id EVENT_ID --is-all-day=false \
+  --start "2030-01-01T09:00:00+08:00" --end "2030-01-01T10:00:00+08:00"
+  dws calendar event update --id EVENT_ID --add-online-meeting=true
+  dws calendar event update --id EVENT_ID --title "新标题" --add-online-meeting=false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eventID, err := mustFlagOrFallback(cmd, "id", "event", "event-id", "eventId")
 			if err != nil {
@@ -435,8 +464,8 @@ func newCalendarCommand() *cobra.Command {
 					"目标字段未确认时不要更新",
 				},
 				Examples: []string{
-					"dws calendar event update --id <EVENT_ID> --is-all-day --start 2030-01-01 --end 2030-01-02",
-					"dws calendar event update --id <EVENT_ID> --add-online-meeting=true",
+					"dws calendar event update --id <EVENT_ID> --title \"新标题\"",
+					"dws calendar event update --id <EVENT_ID> --desc \"新描述\" --timezone Asia/Tokyo",
 				},
 			},
 			Parameters: append([]contract.ParamDecl{
