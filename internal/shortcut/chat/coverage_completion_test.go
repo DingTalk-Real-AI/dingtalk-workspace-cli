@@ -4,7 +4,9 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -90,6 +93,202 @@ func TestCrossPlatformCoverageConversationAndGroupListExecution(t *testing.T) {
 		if err := root.Execute(); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageCategoryProjectionRequiresExplicitCollectionEvidence(t *testing.T) {
+	if categories, err := categoryListProject(map[string]any{"result": []any{}}); err != nil || len(categories) != 0 {
+		t.Fatalf("explicit empty categories = %#v, %v", categories, err)
+	}
+	categories, err := categoryListProject(map[string]any{
+		"data": map[string]any{"items": []any{map[string]any{"category_id": 7, "name": "工作群"}}},
+	})
+	if err != nil || len(categories) != 1 || categories[0]["categoryId"] != 7 || categories[0]["title"] != "工作群" {
+		t.Fatalf("nested categories = %#v, %v", categories, err)
+	}
+	if conversations, err := categoryConversationsProject(map[string]any{"result": map[string]any{"list": []any{}}}); err != nil || len(conversations) != 0 {
+		t.Fatalf("explicit empty conversations = %#v, %v", conversations, err)
+	}
+	conversations, err := categoryConversationsProject(map[string]any{
+		"data": map[string]any{"items": []any{map[string]any{"id": "cid-a", "title": "项目群", "type": "group"}}},
+	})
+	if err != nil || len(conversations) != 1 || conversations[0]["openConversationId"] != "cid-a" ||
+		conversations[0]["conversationName"] != "项目群" || conversations[0]["conversationType"] != "group" {
+		t.Fatalf("nested conversations = %#v, %v", conversations, err)
+	}
+
+	for _, run := range []func() error{
+		func() error {
+			_, err := categoryListProject(map[string]any{"success": true})
+			return err
+		},
+		func() error {
+			_, err := categoryListProject(map[string]any{"result": []any{"not-an-object"}})
+			return err
+		},
+		func() error {
+			_, err := categoryListProject(map[string]any{"result": []any{map[string]any{"title": "工作群"}}})
+			return err
+		},
+		func() error {
+			_, err := categoryConversationsProject(map[string]any{"result": []any{map[string]any{"conversationName": "项目群"}}})
+			return err
+		},
+		func() error {
+			_, err := categoryConversationsProject(map[string]any{"result": []any{"not-an-object"}})
+			return err
+		},
+	} {
+		err := run()
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" || typed.Retryable {
+			t.Fatalf("invalid category response error = %#v", err)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageCategoryListExecutionAndFailureBranches(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_user_define_conv_categories": `{"result":[{"categoryId":7,"title":"工作群"}]}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+category-list"})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil || payload["count"] != float64(1) {
+			t.Fatalf("category list payload = %#v, %v", payload, err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		caller *larkAlignmentCaller
+	}{
+		{name: "read failure", caller: &larkAlignmentCaller{failProductTool: "im/list_user_define_conv_categories"}},
+		{name: "invalid response", caller: &larkAlignmentCaller{responses: map[string]string{
+			"im/list_user_define_conv_categories": `{"result":{}}`,
+		}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			helpers.InitDeps(tc.caller)
+			root := newPlatformCoverageRoot()
+			root.SetArgs([]string{"chat", "+category-list"})
+			if err := root.Execute(); err == nil {
+				t.Fatal("category list failure branch succeeded")
+			}
+		})
+	}
+
+	t.Run("output failure", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_user_define_conv_categories": `{"result":[]}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetOut(chatOutputErrorWriter{err: errors.New("category output failed")})
+		root.SetArgs([]string{"chat", "+category-list"})
+		if err := root.Execute(); err == nil || err.Error() != "category output failed" {
+			t.Fatalf("category output error = %v", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageCategoryListConversationsRejectsUnknownEnvelope(t *testing.T) {
+	fake := &larkAlignmentCaller{category: `{"result":{"hasMore":false}}`}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+	err := root.Execute()
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
+		t.Fatalf("unknown category envelope error = %#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageCategoryListConversationsRequiresExhaustion(t *testing.T) {
+	t.Run("read failure", func(t *testing.T) {
+		fake := &larkAlignmentCaller{failProductTool: "im/list_conversations_by_category"}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("category conversation read failure succeeded")
+		}
+	})
+
+	t.Run("missing pagination", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[]}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		err := root.Execute()
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
+			t.Fatalf("missing pagination error = %#v", err)
+		}
+	})
+
+	t.Run("more pages without continuation", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[{"openConversationId":"cid-a","conversationName":"A"}],"hasMore":true}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		err := root.Execute()
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "chat_category_pagination_incomplete" || typed.Retryable {
+			t.Fatalf("incomplete pagination error = %#v", err)
+		}
+		if output.Len() != 0 {
+			t.Fatalf("incomplete category response emitted success-like payload: %s", output.String())
+		}
+	})
+
+	t.Run("success output failure", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[{"openConversationId":"cid-a"}],"hasMore":false}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetOut(chatOutputErrorWriter{err: errors.New("category output failed")})
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		if err := root.Execute(); err == nil || err.Error() != "category output failed" {
+			t.Fatalf("category output error = %v", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageFeedGroupQueryRejectsUnknownConversationEnvelope(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		category string
+	}{
+		{name: "missing collection", category: `{"result":{"hasMore":false}}`},
+		{name: "missing pagination fact", category: `{"result":{"list":[{"openConversationId":"cid-a"}]}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{category: tc.category}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			var output bytes.Buffer
+			root.SetOut(&output)
+			root.SetArgs([]string{
+				"chat", "+feed-group-query-item", "--category-id", "1", "--conversation-ids", "cid-a,cid-later",
+			})
+			err := root.Execute()
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
+				t.Fatalf("feed group invalid response error = %#v", err)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("invalid source emitted a success-like payload: %s", output.String())
+			}
+		})
 	}
 }
 

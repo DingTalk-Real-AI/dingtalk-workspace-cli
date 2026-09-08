@@ -103,7 +103,7 @@ dws chat clear-messages --conversation-id <openConversationId>
 | `+category-list` | 获取用户自定义会话分组 | 无 |
 | `+category-create` | 创建会话分组 | `--title` |
 | `+category-add-conversation` | 将会话加入分组 | `--group` `--category-ids` |
-| `+category-list-conversations` | 拉取指定分组下会话 | `--category-id`，可选 `--exclude-muted` |
+| <!-- dws-intent: chat.category.list-conversations -->`dws chat +category-list` → `dws chat +category-list-conversations` | 先解析真实分组，再按稳定 ID 列出其中会话 | 第二步必填 `--category-id`；可选 `--exclude-muted` |
 | `+category-remove-conversation` | 将会话移出分组 | `--group` `--category-ids` |
 | `+category-rename` | 修改分组名称 | `--category-id` `--title` |
 | `+category-delete` | 删除会话分组 | `--category-id` |
@@ -111,14 +111,18 @@ dws chat clear-messages --conversation-id <openConversationId>
 ```bash
 dws chat +category-create --title "工作群" --format json
 dws chat +category-add-conversation --group <openConversationId> --category-ids 123,456 --format json
+dws chat +category-list --format json
 dws chat +category-list-conversations --category-id 123 --format json
 dws chat +category-delete --category-id 123 --format json
 ```
+
+只有分类标题时，先在 `+category-list` 的明确 `categories[]` 中做完整标题唯一匹配，再把该项的稳定 `categoryId` 传给第二步。零命中或重名时停止；只有用户明确授权“任意一个”时，才按服务端返回顺序选择首项。
 
 只有 Shortcut 尚未覆盖的低频查询和智能规则才使用原子 `category list-by-conv`、
 `category batch-info`、`category create-smart`。`create-smart --keywords` 是群名关键词列表，
 `--members` 是群成员 openDingTalkId 列表，两者可单独或组合使用。写操作在首次调用前按
 Runtime gate 完成确认；上述示例不代表可以绕过确认。
+
 
 ## 常见工作流
 
