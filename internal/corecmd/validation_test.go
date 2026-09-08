@@ -637,6 +637,33 @@ func TestCrossPlatformCoverageExecuteCForTestPropagatesPrepareFailure(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageExecuteContextForTestAssignsSuppliedContext(t *testing.T) {
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "marker")
+	var seen any
+	leaf := &cobra.Command{
+		Use: "context-leaf", SilenceErrors: true, SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			seen = cmd.Context().Value(ctxKey{})
+			return nil
+		},
+	}
+	executed, err := ExecuteContextCForTest(leaf, ctx)
+	if err != nil {
+		t.Fatalf("ExecuteContextCForTest: %v", err)
+	}
+	if executed != leaf {
+		t.Fatalf("executed = %v, want the leaf", executed)
+	}
+	if seen != "marker" {
+		t.Fatalf("leaf context value = %v, want marker", seen)
+	}
+	second := &cobra.Command{Use: "second", SilenceErrors: true, SilenceUsage: true, RunE: func(*cobra.Command, []string) error { return nil }}
+	if err := ExecuteContextForTest(second, ctx); err != nil {
+		t.Fatalf("ExecuteContextForTest: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageNativeValidationAdapter(t *testing.T) {
 	t.Run("Find legacy Args", func(t *testing.T) {
 		root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
