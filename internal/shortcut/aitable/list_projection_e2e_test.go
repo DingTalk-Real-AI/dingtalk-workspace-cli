@@ -17,7 +17,7 @@ func TestCrossPlatformCoverageAITableListProjectionExplicitEmptyIsSuccessE2E(t *
 	}{
 		{name: "base list", command: "+base-list", payload: `{"bases":[]}`},
 		{name: "base search", command: "+base-search", args: []string{"--query", "none"}, payload: `{"data":{"bases":[]}}`},
-		{name: "template search", command: "+template-search", payload: `{"data":{"templates":[]}}`},
+		{name: "template search", command: "+template-search", args: []string{"--query", "none"}, payload: `{"data":{"templates":[],"hasMore":false}}`},
 		{name: "view get", command: "+view-get", args: []string{"--base-id", "base", "--table-id", "table"}, payload: `{"views":[]}`},
 		{name: "form list", command: "+form-list", args: []string{"--base-id", "base", "--table-id", "table"}, payload: `{"data":{"formViews":[]}}`},
 		{name: "workflow list", command: "+workflow-list", args: []string{"--base-id", "base"}, payload: `{"data":{"list":[]}}`},
@@ -55,7 +55,7 @@ func TestCrossPlatformCoverageAITableListProjectionUnknownIsNotEmptySuccessE2E(t
 	}{
 		{name: "base list", command: "+base-list"},
 		{name: "base search", command: "+base-search", args: []string{"--query", "none"}},
-		{name: "template search", command: "+template-search"},
+		{name: "template search", command: "+template-search", args: []string{"--query", "none"}},
 		{name: "view get", command: "+view-get", args: []string{"--base-id", "base", "--table-id", "table"}},
 		{name: "form list", command: "+form-list", args: []string{"--base-id", "base", "--table-id", "table"}},
 		{name: "workflow list", command: "+workflow-list", args: []string{"--base-id", "base"}},
@@ -89,7 +89,7 @@ func TestCrossPlatformCoverageAITableListProjectionMalformedItemIsNotSilentlyDro
 		payload string
 	}{
 		{name: "base without id", command: "+base-list", payload: `{"bases":[{"baseName":"orphan"}]}`},
-		{name: "template scalar", command: "+template-search", payload: `{"templates":["bad"]}`},
+		{name: "template scalar", command: "+template-search", args: []string{"--query", "none"}, payload: `{"templates":["bad"],"hasMore":false}`},
 		{name: "view without id", command: "+view-get", args: []string{"--base-id", "base", "--table-id", "table"}, payload: `{"views":[{"viewName":"orphan"}]}`},
 		{name: "form without id", command: "+form-list", args: []string{"--base-id", "base", "--table-id", "table"}, payload: `{"forms":[{"viewName":"orphan"}]}`},
 		{name: "workflow without id", command: "+workflow-list", args: []string{"--base-id", "base"}, payload: `{"workflows":[{"name":"orphan"}]}`},

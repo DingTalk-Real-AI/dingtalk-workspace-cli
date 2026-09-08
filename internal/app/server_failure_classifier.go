@@ -14,6 +14,7 @@
 package app
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -34,6 +35,7 @@ type serverFailureClass struct {
 	operation        string
 	retryable        *bool
 	executionStarted *bool
+	serverDiag       *apperrors.ServerDiagnostics
 }
 
 func classifyServerFailure(message, serverKey, tool string, diag apperrors.ServerDiagnostics) (serverFailureClass, bool) {
@@ -41,6 +43,33 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 	detail := strings.ToLower(strings.TrimSpace(diag.TechnicalDetail))
 	text := strings.ToLower(strings.TrimSpace(message))
 	combined := text + " " + detail
+
+	// The AITable get_base service returns this exact typed code after a Base
+	// has been deleted (or when the caller supplies an otherwise valid but
+	// nonexistent Base ID). Keep the match scoped to the owning read leaf: an
+	// English "does not exist" phrase, BASE_NOT_FOUND from another tool, or a
+	// different AITable input error is not enough to claim resource absence.
+	if envelopeDiag, ok := aitableGetBaseNotFoundEnvelope(message); ok &&
+		strings.EqualFold(strings.TrimSpace(serverKey), "aitable") &&
+		strings.EqualFold(strings.TrimSpace(tool), "get_base") {
+		mergedDiag := diag
+		mergedDiag.ServerErrorCode = envelopeDiag.ServerErrorCode
+		mergedDiag.ServerRetryable = envelopeDiag.ServerRetryable
+		if envelopeDiag.TraceID != "" {
+			mergedDiag.TraceID = envelopeDiag.TraceID
+		}
+		retryable := false
+		return serverFailureClass{
+			message:    "AI Table Base not found",
+			reason:     "not_found",
+			origin:     "aitable_service",
+			stage:      "resource_lookup",
+			operation:  "aitable/get_base",
+			retryable:  &retryable,
+			hint:       "Confirm the stable Base ID, or use aitable +base-search with the known Base name.",
+			serverDiag: &mergedDiag,
+		}, true
+	}
 
 	if strings.EqualFold(strings.TrimSpace(serverKey), "ding") &&
 		(strings.EqualFold(strings.TrimSpace(tool), "send_ding_message") ||
@@ -128,6 +157,33 @@ func classifyServerFailure(message, serverKey, tool string, diag apperrors.Serve
 	return serverFailureClass{}, false
 }
 
+func aitableGetBaseNotFoundEnvelope(message string) (apperrors.ServerDiagnostics, bool) {
+	var body map[string]any
+	if json.Unmarshal([]byte(message), &body) != nil {
+		return apperrors.ServerDiagnostics{}, false
+	}
+	status, statusOK := body["status"].(string)
+	success, successOK := body["success"].(bool)
+	errorBody, errorOK := body["error"].(map[string]any)
+	if !statusOK || !strings.EqualFold(strings.TrimSpace(status), "error") ||
+		!successOK || !success || !errorOK {
+		return apperrors.ServerDiagnostics{}, false
+	}
+	code, _ := errorBody["code"].(string)
+	errorType, _ := errorBody["type"].(string)
+	retryable, retryableOK := errorBody["retryable"].(bool)
+	if strings.TrimSpace(code) != "BASE_NOT_FOUND" ||
+		strings.TrimSpace(errorType) != "INPUT_ERROR" || !retryableOK || retryable {
+		return apperrors.ServerDiagnostics{}, false
+	}
+	notRetryable := false
+	diag := apperrors.ServerDiagnostics{ServerErrorCode: "BASE_NOT_FOUND", ServerRetryable: &notRetryable}
+	if traceID, ok := body["trace_id"].(string); ok {
+		diag.TraceID = strings.TrimSpace(traceID)
+	}
+	return diag, true
+}
+
 func newServerFailureAPIError(
 	message string,
 	fallbackReason string,
@@ -161,6 +217,9 @@ func newServerFailureAPIError(
 		}
 		if classified.executionStarted != nil {
 			opts = append(opts, apperrors.WithExecutionStarted(*classified.executionStarted))
+		}
+		if classified.serverDiag != nil {
+			opts = append(opts, apperrors.WithServerDiag(*classified.serverDiag))
 		}
 	}
 	return apperrors.NewAPI(message, opts...)

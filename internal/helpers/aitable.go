@@ -3751,15 +3751,22 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 		Long: `按名称关键词搜索 AI 表格模板，支持分页。
 返回每个模板的 templateId、name、description，以及分页信息 hasMore / nextCursor。
 返回的 templateId 可直接用于 base create。
-模板预览链接可通过 https://docs.dingtalk.com/table/template/{templateId} 拼接得到
-不传关键词时返回热门模板。`,
-		Example: `  dws aitable template search --query "项目管理"
-  dws aitable template search`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs := map[string]any{}
-			if q := flagOrFallback(cmd, "query", "keyword"); q != "" {
-				toolArgs["query"] = q
+模板预览链接可通过 https://docs.dingtalk.com/table/template/{templateId} 拼接得到。
+--query 必填且去除首尾空白后不能为空；当前下层不支持省略关键词浏览热门模板。`,
+		Example: `  dws aitable template search --query "项目管理"`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			query := strings.TrimSpace(flagOrFallback(cmd, "query", "keyword"))
+			if query == "" {
+				return apperrors.NewValidation("--query 去除首尾空白后不能为空", apperrors.WithReason("missing_required_flags"))
 			}
+			if err := cmd.Flags().Set("query", query); err != nil {
+				return err
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			q := strings.TrimSpace(mustGetFlag(cmd, "query"))
+			toolArgs := map[string]any{"query": q}
 			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
 				toolArgs["limit"] = v
 			}
@@ -8236,7 +8243,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordCmd.AddCommand(recordGetCmd)
 
 	// template
-	templateSearchCmd.Flags().String("query", "", "模板名称关键词 (必填)")
+	templateSearchCmd.Flags().String("query", "", "模板名称关键词（每次调用必须提供；兼容接口保持 optional）")
 	templateSearchCmd.Flags().String("keyword", "", "--query alias")
 	_ = templateSearchCmd.Flags().MarkHidden("keyword")
 	templateSearchCmd.Flags().Int("limit", 0, "每页返回数量。默认 10，最大 30")

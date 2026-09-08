@@ -29,6 +29,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
@@ -1038,12 +1040,13 @@ var RecordPrimaryDocCreate = shortcut.Shortcut{
 
 // TemplateSearch 搜索模板（search_templates）。
 var TemplateSearch = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+template-search",
-	Product:     serverMain,
-	Description: "按名称关键词搜索 AI 表格模板",
-	Intent:      "当你要新建表格并想套用现成模板、需要先按关键词找模板（不传关键词则返回热门）时使用；返回模板列表及其模板 ID。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+template-search",
+	Product:       serverMain,
+	Description:   "按名称关键词搜索 AI 表格模板",
+	Intent:        "当你要新建表格并想套用现成模板、需要先按非空关键词找模板时使用；返回当前页模板列表、稳定模板 ID 和可继续读取的游标。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -1064,22 +1067,58 @@ var TemplateSearch = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按名称关键词搜索 AI 表格模板",
-			UseWhen:      []string{"当你要新建表格并想套用现成模板、需要先按关键词找模板（不传关键词则返回热门）时使用；返回模板列表及其模板 ID。"},
+			UseWhen:      []string{"当你要新建表格并想套用现成模板、需要先按非空关键词找模板时使用；返回当前页模板列表、稳定模板 ID 和可继续读取的游标。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +template-search --query \"项目管理\""},
 		},
+		Parameters: []contract.ParamDecl{{Name: "query", Property: "query"}},
+		Result: &contract.ResultSpec{
+			Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+			DataSchema: json.RawMessage(`{
+				"type":"object",
+				"description":"按非空关键词搜索得到的当前页 AI 表格模板",
+				"properties":{
+					"count":{"type":"integer","description":"当前页模板数量"},
+					"templates":{"type":"array","description":"当前页模板列表","items":{"type":"object","description":"带稳定 templateId 的模板","properties":{"templateId":{"type":"string","description":"可用于创建 Base 的稳定模板 ID"},"templateName":{"type":"string","description":"模板名称"}},"required":["templateId"],"additionalProperties":false}}
+				},
+				"required":["count","templates"],
+				"additionalProperties":false
+			}`),
+			SensitivePaths: []string{"templates.templateName"},
+		},
+		Pagination: &contract.PaginationSpec{
+			Kind:                  contract.PaginationKindCursor,
+			CursorParameter:       "cursor",
+			MetaPath:              contract.PaginationMetaPath,
+			EndpointExhaustedPath: contract.PaginationExhaustedPath,
+			NextTokenPath:         contract.PaginationNextTokenPath,
+		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词（可选，不传返回热门）"},
+		{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词；每次调用必须提供且去除首尾空白后不能为空（兼容接口保持 optional）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 10，最大 30（可选）"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）"},
 	},
+	Constraints: []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"query"},
+		Description: "--query 去除首尾空白后不能为空",
+	}},
 	Tips: []string{`dws aitable +template-search --query "项目管理"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{}
-		if rt.Changed("query") {
-			params["query"] = rt.Str("query")
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Str("query") == "" {
+			return apperrors.NewValidation("--query 去除首尾空白后不能为空")
 		}
+		if rt.Changed("cursor") && rt.Str("cursor") == "" {
+			return apperrors.NewValidation("--cursor 显式提供时去除首尾空白后不能为空")
+		}
+		if rt.Changed("limit") && (rt.Int("limit") < 1 || rt.Int("limit") > 30) {
+			return apperrors.NewValidation("--limit 必须在 1 到 30 之间")
+		}
+		return nil
+	},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		params := map[string]any{"query": rt.Str("query")}
 		if rt.Changed("limit") {
 			params["limit"] = rt.Int("limit")
 		}
@@ -1090,12 +1129,127 @@ var TemplateSearch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		templates, err := templateSearchProject(data)
+		page, err := templateSearchProjectPage(data, rt.Str("cursor"))
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"count": len(templates), "templates": templates})
+		return outputTemplateSearchPage(rt, page)
 	},
+}
+
+type templateSearchPage struct {
+	Templates  []map[string]any
+	HasMore    bool
+	NextCursor string
+}
+
+func templateSearchProjectPage(data map[string]any, requestCursor string) (templateSearchPage, error) {
+	envelope, err := templateSearchPageEnvelope(data)
+	if err != nil {
+		return templateSearchPage{}, err
+	}
+	rawTemplates, ok := envelope["templates"].([]any)
+	if !ok {
+		return templateSearchPage{}, fmt.Errorf("search_templates page envelope must contain a templates array")
+	}
+	for _, key := range []string{"list", "items", "result", "data"} {
+		if _, duplicate := envelope[key].([]any); duplicate {
+			return templateSearchPage{}, fmt.Errorf("search_templates page envelope contains multiple candidate lists")
+		}
+	}
+	templates, err := projectTemplateSearchItems(rawTemplates)
+	if err != nil {
+		return templateSearchPage{}, err
+	}
+	hasMore, known := envelope["hasMore"].(bool)
+	if !known {
+		return templateSearchPage{}, fmt.Errorf("search_templates response is missing hasMore pagination evidence")
+	}
+	nextCursor := ""
+	if value, exists := envelope["nextCursor"]; exists {
+		cursor, stringOK := value.(string)
+		if !stringOK {
+			return templateSearchPage{}, fmt.Errorf("search_templates nextCursor must be a string")
+		}
+		nextCursor = strings.TrimSpace(cursor)
+	}
+	if hasMore {
+		if nextCursor == "" {
+			return templateSearchPage{}, fmt.Errorf("search_templates response hasMore=true without nextCursor")
+		}
+		if requestCursor != "" && nextCursor == requestCursor {
+			return templateSearchPage{}, fmt.Errorf("search_templates response returned a non-advancing nextCursor")
+		}
+	} else {
+		nextCursor = ""
+	}
+	return templateSearchPage{Templates: templates, HasMore: hasMore, NextCursor: nextCursor}, nil
+}
+
+func templateSearchPageEnvelope(response map[string]any) (map[string]any, error) {
+	if response == nil {
+		return nil, fmt.Errorf("search_templates response is nil")
+	}
+	type candidate struct {
+		name  string
+		value map[string]any
+	}
+	candidates := make([]candidate, 0, 3)
+	if templateSearchHasPageFacts(response) {
+		candidates = append(candidates, candidate{name: "top", value: response})
+	}
+	for _, key := range []string{"data", "result"} {
+		value, exists := response[key]
+		if !exists {
+			continue
+		}
+		nested, ok := value.(map[string]any)
+		if !ok {
+			if key == "data" || templateSearchHasPageFacts(response) {
+				return nil, fmt.Errorf("search_templates %s envelope must be an object", key)
+			}
+			continue
+		}
+		if templateSearchHasPageFacts(nested) {
+			candidates = append(candidates, candidate{name: key, value: nested})
+		}
+	}
+	if len(candidates) != 1 {
+		names := make([]string, 0, len(candidates))
+		for _, item := range candidates {
+			names = append(names, item.name)
+		}
+		return nil, fmt.Errorf("search_templates response must contain exactly one page envelope; found %v", names)
+	}
+	return candidates[0].value, nil
+}
+
+func templateSearchHasPageFacts(value map[string]any) bool {
+	for _, key := range []string{"templates", "hasMore", "nextCursor", "cursor", "list", "items"} {
+		if _, exists := value[key]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func outputTemplateSearchPage(rt *shortcut.RuntimeContext, page templateSearchPage) error {
+	business := map[string]any{"count": len(page.Templates), "templates": page.Templates}
+	if !output.UsesUnifiedResult(rt.Command()) {
+		business["hasMore"] = page.HasMore
+		if page.NextCursor != "" {
+			business["nextCursor"] = page.NextCursor
+		}
+		return rt.Output(business)
+	}
+	pagination, err := output.NewPagination(!page.HasMore, page.NextCursor)
+	if err != nil {
+		return err
+	}
+	return output.StoreResult(rt.Command().Context(), output.Success(business, output.WithMeta(&output.Meta{
+		Count:      output.NewCount(len(page.Templates)),
+		Pagination: pagination,
+	})))
 }
 
 // templateSearchProject reshapes the raw search_templates response into a clean
@@ -1107,6 +1261,10 @@ func templateSearchProject(data map[string]any) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return projectTemplateSearchItems(raw)
+}
+
+func projectTemplateSearchItems(raw []any) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(raw))
 	for index, item := range raw {
 		m, ok := item.(map[string]any)
@@ -1114,11 +1272,20 @@ func templateSearchProject(data map[string]any) ([]map[string]any, error) {
 			return nil, fmt.Errorf("search_templates response item %d must be an object, got %T", index, item)
 		}
 		row := map[string]any{}
-		if v, ok := templateSearchFirst(m, "templateId", "template_id", "id"); ok {
-			row["templateId"] = v
+		if value, ok := templateSearchFirst(m, "templateId", "template_id", "id"); ok {
+			templateID, stringOK := value.(string)
+			templateID = strings.TrimSpace(templateID)
+			if !stringOK || templateID == "" {
+				return nil, fmt.Errorf("search_templates response item %d has invalid templateId", index)
+			}
+			row["templateId"] = templateID
 		}
-		if v, ok := templateSearchFirst(m, "templateName", "template_name", "name", "title"); ok {
-			row["templateName"] = v
+		if value, ok := templateSearchFirst(m, "templateName", "template_name", "name", "title"); ok {
+			templateName, stringOK := value.(string)
+			if !stringOK {
+				return nil, fmt.Errorf("search_templates response item %d has invalid templateName", index)
+			}
+			row["templateName"] = strings.TrimSpace(templateName)
 		}
 		if _, ok := row["templateId"]; !ok {
 			return nil, fmt.Errorf("search_templates response item %d is missing templateId", index)
@@ -3159,6 +3326,7 @@ func init() {
 		RecordPrimaryDocGet,
 		RecordPrimaryDocCreate,
 		TemplateSearch,
+		AIFieldRun,
 		AttachmentUpload,
 		AttachmentPut,
 		AttachmentRemove,

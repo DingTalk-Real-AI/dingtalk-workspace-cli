@@ -309,6 +309,9 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 				if patErr := classifyPATError(errBody); patErr != nil {
 					return "", patErr
 				}
+				if serviceErr := classifyServiceBusinessError(errBody, serverID, toolName); serviceErr != nil {
+					return "", serviceErr
+				}
 				if isBusinessError(errBody) {
 					return "", &CLIError{
 						Code: CodeMCPToolError,
@@ -539,6 +542,9 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 				// PAT（个人访问令牌）相关错误
 				if patErr := classifyPATError(errBody); patErr != nil {
 					return patErr
+				}
+				if serviceErr := classifyServiceBusinessError(errBody, serverID, toolName); serviceErr != nil {
+					return serviceErr
 				}
 				// 业务逻辑错误
 				if isBusinessError(errBody) {
@@ -803,6 +809,49 @@ func isErrorCodeValue(v any) bool {
 	default:
 		return false
 	}
+}
+
+// classifyServiceBusinessError maps only reviewed, structured service errors
+// whose resource semantics are unambiguous. It deliberately takes the owning
+// server and tool so a generic English phrase or a same-named code from another
+// operation cannot become a false not-found result.
+func classifyServiceBusinessError(body map[string]any, serverID, toolName string) error {
+	if !strings.EqualFold(strings.TrimSpace(serverID), "aitable") ||
+		!strings.EqualFold(strings.TrimSpace(toolName), "get_base") {
+		return nil
+	}
+	if status, ok := body["status"].(string); !ok || !strings.EqualFold(strings.TrimSpace(status), "error") {
+		return nil
+	}
+	if success, ok := body["success"].(bool); !ok || !success {
+		return nil
+	}
+	errorBody, ok := body["error"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	code, _ := errorBody["code"].(string)
+	errorType, _ := errorBody["type"].(string)
+	retryable, retryableOK := errorBody["retryable"].(bool)
+	if strings.TrimSpace(code) != "BASE_NOT_FOUND" ||
+		strings.TrimSpace(errorType) != "INPUT_ERROR" ||
+		!retryableOK || retryable {
+		return nil
+	}
+	diag := apperrors.ServerDiagnostics{ServerErrorCode: "BASE_NOT_FOUND"}
+	if traceID, ok := body["trace_id"].(string); ok {
+		diag.TraceID = strings.TrimSpace(traceID)
+	}
+	return apperrors.NewAPI("AI Table Base not found",
+		apperrors.WithReason("not_found"),
+		apperrors.WithOperation("aitable/get_base"),
+		apperrors.WithServerKey("aitable"),
+		apperrors.WithOrigin("aitable_service"),
+		apperrors.WithFailureStage("resource_lookup"),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("Confirm the stable Base ID, or use aitable +base-search with the known Base name."),
+		apperrors.WithServerDiag(diag),
+	)
 }
 
 // isNotLoggedInError checks if the error body indicates missing authentication.

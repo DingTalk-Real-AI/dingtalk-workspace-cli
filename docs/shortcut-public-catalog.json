@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-27T10:19:25.811119",
-  "count": 439,
+  "generated_at": "2026-09-03T10:43:33.803569",
+  "count": 440,
   "results": [
     {
       "suite": "semantic",
@@ -80,6 +80,16 @@
       "status": "reviewed_available",
       "disposition": "schema_leaf",
       "semantic_delta": "开启 Base 高级权限总开关的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+ai-field-run",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "先精确验证一个 AI 字段与 1–100 条显式记录身份，再唯一调用 run_ai_field；只发布 submitted pending 回执，verified 固定 false。",
       "availability": "available"
     },
     {
@@ -879,7 +889,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "按名称关键词搜索 AI 表格模板并返回可用于创建的 templateId。",
+      "semantic_delta": "按非空名称关键词搜索 AI 表格模板，稳定投影 templateId，并将严格校验后的 nextCursor 发布到 meta.pagination；拒绝无关键词和不可续分页。",
       "availability": "available"
     },
     {
@@ -3779,7 +3789,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID with stop/continue partial-write ledgers and explicit acknowledgements.",
+      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID or organization staffId with stop/continue partial-write ledgers and explicit acknowledgements.",
       "availability": "available"
     },
     {
