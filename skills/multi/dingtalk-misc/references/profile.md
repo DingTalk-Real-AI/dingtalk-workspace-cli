@@ -18,7 +18,8 @@ dws 可同时登录多个钉钉账号，同一组织也可保留多个账号。�
 - `dws profile list --format json` — 默认列出全部账号；`profile` 是稳定选择器 `corpId:userId`，Token 状态现场读取且不刷新
 - `dws profile switch <selector|->` — 持久切换账号；`-` 切回上一个
 - 全局 `--profile <selector>` — 单次指定身份，不改当前 profile
-- `dws auth login` — 新账号新增 profile；同一 `corpId + userId` 重登只刷新该账号
+- `dws auth login` — 国内版（`.com`）新账号新增 profile；同一 `corpId + userId` 重登只刷新该账号
+- `dws auth login --intl` — 国际版 / 海外版（`.io`）登录；该参数只用于登录，业务命令按所选 profile 自动路由（`--international` 为兼容别名，新命令优先使用 `--intl`）
 - `dws auth status [--profile <selector>]` — 查看并按需刷新指定身份；刷新失败返回未认证和真实原因
 
 `selector` 支持 `corpId:userId`、`corpId:userName`、`corpName:userId`、`corpName:userName`，也兼容单独的 corpId、唯一 corpName 和本地 profile 名。名称只用于输入；重名时必须按报错候选改用 `profile list` 返回的稳定 `corpId:userId`。

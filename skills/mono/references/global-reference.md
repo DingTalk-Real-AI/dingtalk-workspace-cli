@@ -6,6 +6,10 @@
 # 首次: OAuth 设备流登录 (钉钉扫码授权)
 dws auth login
 
+# 钉钉国际版 / 海外版（.io）；无头环境追加 --device
+dws auth login --intl
+dws auth login --intl --device
+
 # 查看状态
 dws auth status
 
@@ -21,6 +25,8 @@ dws auth reset
 ```
 
 登录后自动管理 token 刷新，日常使用无需重复登录。
+用户明确国际版、海外版或 `.io` 登录意图时必须加 `--intl`，不得回退到国内 `.com`。
+`--intl` 只用于 `auth login`；后续业务命令根据当前或 `--profile` 指定的账号自动路由。
 
 ### 多账号 profile
 

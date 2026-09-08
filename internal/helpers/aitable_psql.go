@@ -261,6 +261,9 @@ func renderPgQuery(out io.Writer, data any, expanded bool) error {
 		return err
 	}
 	fmt.Fprintf(out, "(%s rows)\n", stringValue(result["rowCount"]))
+	if truncated, _ := result["truncated"].(bool); truncated {
+		fmt.Fprintln(out, "Warning: result truncated; add stricter filters or aggregation, or increase --limit within 1-1000 before treating it as complete.")
+	}
 	return nil
 }
 
