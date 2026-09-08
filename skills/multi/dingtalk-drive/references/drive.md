@@ -39,7 +39,11 @@ dws drive +recycle-list --limit 20
 dws drive +recycle-restore --id <recycleItemId>
 ```
 
-删除前核对名称、类型和 ID；恢复从列表真实返回取 `id`。恢复后使用返回的新 nodeId，不沿用旧 ID。
+删除前核对名称、类型和 ID；恢复从回收站列表真实返回取 `id`，不要使用删除前的 nodeId 发起恢复。
+
+- 恢复成功并读回确认后，使用返回的新 nodeId，不沿用旧 ID。
+- 若错误回执表明 `accepted=true`、`readbackComplete=false`，表示恢复已受理但尚未确认完成，不得宣称恢复成功，也不得重复执行 restore。
+- 保留回执中的回收项 ID、原路径及其他定位信息；有确切父目录 ID 时，可在原位置有界列表核对。不得仅凭同名结果认定恢复节点；无法确认身份或达到读取预算时，报告“恢复已受理，尚未确认完成”，并保留回执供后续核查。
 
 ## 普通文件历史版本
 
