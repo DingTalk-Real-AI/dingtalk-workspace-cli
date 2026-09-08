@@ -49,7 +49,7 @@ func runEmployeeDSHControl(ctx context.Context, b digitalEmployeeBinding, action
 	for _, value := range os.Environ() {
 		key, _, _ := strings.Cut(value, "=")
 		upper := strings.ToUpper(key)
-		if strings.Contains(upper, "TOKEN") || strings.Contains(upper, "SECRET") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "CREDENTIAL") || upper == "DWS_CLIENT_ID" || upper == "DWS_DUMP_RAW" {
+		if strings.Contains(upper, "TOKEN") || strings.Contains(upper, "SECRET") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "CREDENTIAL") || strings.Contains(upper, "AUTH_CODE") || upper == "DWS_CLIENT_ID" || upper == "DWS_DUMP_RAW" {
 			continue
 		}
 		cmd.Env = append(cmd.Env, value)
@@ -96,7 +96,7 @@ func stopEmployeeRuntime(ctx context.Context, b digitalEmployeeBinding) error {
 		if !s.Released || s.RuntimeState != "stopped" {
 			return fmt.Errorf("DSH 尚未释放该员工")
 		}
-		return confirmEmployeeRuntimeReleased(ctx, b)
+		return confirmEmployeeRuntimeReleased(ctx, b, s.RuntimeInstanceID)
 	}
 	dir := digitalEmployeeRuntimeDir(b.DWSProfile)
 	activation, err := auth.AcquireDualLock(ctx, filepath.Join(dir, "activation"))
@@ -136,15 +136,15 @@ func stopEmployeeRuntime(ctx context.Context, b digitalEmployeeBinding) error {
 	return fmt.Errorf("等待员工释放超时；保留绑定，禁止启动新 Adapter")
 }
 
-func confirmEmployeeRuntimeReleased(ctx context.Context, b digitalEmployeeBinding) error {
+func confirmEmployeeRuntimeReleased(ctx context.Context, b digitalEmployeeBinding, instance string) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	lock, err := auth.AcquireDualLock(ctx, filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "worker"))
 	if err != nil {
 		return fmt.Errorf("员工 Profile 运行锁仍被占用，未确认释放")
 	}
-	lock.Release()
-	return nil
+	defer lock.Release()
+	return clearEmployeeLeaseGuard(b, instance)
 }
 
 func employeeLifecycleStatus(ctx context.Context, b digitalEmployeeBinding) map[string]any {
@@ -251,28 +251,31 @@ func newEmployeeBindingCommand() *cobra.Command {
 	})
 }
 
-func newEmployeeBindingMutationCommand(action string) *cobra.Command {
+func newEmployeeUnbindCommand() *cobra.Command {
+	return NewLeafCommand(LeafSpec{Use: "unbind", Short: "解绑数字员工并保留本地身份", PostMount: deapAgentNoArgs,
+		Flags: []LeafFlag{{Name: "agent-uuid", Required: true, Usage: "本地已绑定员工 ID"}}, OutputRollout: output.RolloutUnifiedActive,
+		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
+		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_unbind", CanonicalPath: "dingtalk-tag.connect_unbind", CLIPath: "dingtalk-tag connect unbind", PrimaryCLIPath: "dingtalk-tag connect unbind", Group: "connect"}, Description: "停止并确认员工实例释放后解绑；保留 Profile、凭据、审计和去重记录。未知实例不强行解绑。", Parameters: []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}}, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全解除已有数字员工的本机 Adapter 绑定", UseWhen: []string{"解绑数字员工并保留 Profile"}, AvoidWhen: []string{"仅暂停使用 connect stop；换绑使用 connect rebind；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect unbind --agent-uuid <agentUuid>"}}},
+		RunE:     func(cmd *cobra.Command, _ []string) error { return mutateEmployeeBinding(cmd, "unbind") },
+	})
+}
+
+func newEmployeeRebindCommand() *cobra.Command {
 	flags := []LeafFlag{{Name: "agent-uuid", Required: true, Usage: "本地已绑定员工 ID"}}
 	params := []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}}
-	if action == "rebind" {
-		flags = append(flags, LeafFlag{Name: "channel", Required: true, Enum: digitalEmployeeChannels(), Usage: "目标 Adapter"})
-		for _, flag := range digitalEmployeeAgentFlags() {
-			if !flag.Hidden {
-				flags = append(flags, flag)
-			}
+	flags = append(flags, LeafFlag{Name: "channel", Required: true, Enum: digitalEmployeeChannels(), Usage: "目标 Adapter"})
+	for _, flag := range digitalEmployeeAgentFlags() {
+		if !flag.Hidden {
+			flags = append(flags, flag)
 		}
-		params = append(params, []contract.ParamDecl{
-			{Name: "channel", Property: "channel"}, {Name: "agent-cmd", Property: "agentCommand"}, {Name: "agent-model", Property: "agentModel"}, {Name: "agent-workdir", Property: "agentWorkdir"}, {Name: "agent-memory", Property: "agentMemory"}, {Name: "agent-timeout", Property: "agentTimeout"}, {Name: "agent-permission-mode", Property: "agentPermissionMode"}, {Name: "agent-approval-mode", Property: "agentApprovalMode"}, {Name: "yolo", Property: "yolo"}, {Name: "allowed-users", Property: "allowedUsers"}, {Name: "allowed-groups", Property: "allowedGroups"}, {Name: "daemon", Property: "daemon"}, {Name: "alwayson", Property: "alwayson"},
-		}...)
 	}
-	example := "dws dingtalk-tag connect " + action + " --agent-uuid <agentUuid>"
-	if action == "rebind" {
-		example += " --channel qoder"
-	}
-	return NewLeafCommand(LeafSpec{Use: action, Short: "数字员工连接 " + action, PostMount: deapAgentNoArgs, Flags: flags, OutputRollout: output.RolloutUnifiedActive,
+	params = append(params, []contract.ParamDecl{
+		{Name: "channel", Property: "channel"}, {Name: "agent-cmd", Property: "agentCommand"}, {Name: "agent-model", Property: "agentModel"}, {Name: "agent-workdir", Property: "agentWorkdir"}, {Name: "agent-memory", Property: "agentMemory"}, {Name: "agent-timeout", Property: "agentTimeout"}, {Name: "agent-permission-mode", Property: "agentPermissionMode"}, {Name: "agent-approval-mode", Property: "agentApprovalMode"}, {Name: "yolo", Property: "yolo"}, {Name: "allowed-users", Property: "allowedUsers"}, {Name: "allowed-groups", Property: "allowedGroups"}, {Name: "daemon", Property: "daemon"}, {Name: "alwayson", Property: "alwayson"},
+	}...)
+	return NewLeafCommand(LeafSpec{Use: "rebind", Short: "安全更换数字员工的本机 Adapter", PostMount: deapAgentNoArgs, Flags: flags, OutputRollout: output.RolloutUnifiedActive,
 		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
-		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_" + action, CanonicalPath: "dingtalk-tag.connect_" + action, CLIPath: "dingtalk-tag connect " + action, PrimaryCLIPath: "dingtalk-tag connect " + action, Group: "connect"}, Description: "预检目标，停止并确认旧员工实例释放后解绑或换绑；保留 Profile、凭据、审计和去重记录。失败保留可恢复状态，不强行覆盖未知实例。", Parameters: params, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "已有数字员工安全" + action, UseWhen: []string{"对已有员工执行" + action}, AvoidWhen: []string{"首次接入使用 connect；仅暂停使用 connect stop；机器人使用 dev connect"}, Examples: []string{example}}},
-		RunE:     func(cmd *cobra.Command, _ []string) error { return mutateEmployeeBinding(cmd, action) },
+		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_rebind", CanonicalPath: "dingtalk-tag.connect_rebind", CLIPath: "dingtalk-tag connect rebind", PrimaryCLIPath: "dingtalk-tag connect rebind", Group: "connect"}, Description: "预检目标，停止并确认旧员工实例释放后换绑；保留 Profile、凭据、审计和去重记录。失败保留可恢复状态，不强行覆盖未知实例。", Parameters: params, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "员工身份与目标预检、本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全将已有数字员工换绑到另一个 Adapter", UseWhen: []string{"将已有员工从当前 Adapter 换绑到另一个本地 Agent 或 DSH"}, AvoidWhen: []string{"首次接入使用 connect；仅暂停使用 connect stop；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --channel qoder"}}},
+		RunE:     func(cmd *cobra.Command, _ []string) error { return mutateEmployeeBinding(cmd, "rebind") },
 	})
 }
 
@@ -389,7 +392,9 @@ func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
 	if err := updateEmployeeBinding(next.Binding); err != nil {
 		return err
 	}
-	lock.Release()
+	if next.Binding.Channel != "dsh" {
+		lock.Release()
+	}
 	adapter, err := digitalEmployeeAdapterFor(next.Binding.Channel)
 	if err != nil {
 		return err
@@ -398,6 +403,13 @@ func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
 }
 
 func prepareEmployeeRebind(cmd *cobra.Command, old digitalEmployeeBinding, next digitalEmployeeAdapterConfig) (digitalEmployeeAdapterConfig, error) {
+	if data, err := os.ReadFile(filepath.Join(digitalEmployeeRuntimeDir(old.DWSProfile), "adapter.json")); err == nil {
+		var saved digitalEmployeeAdapterConfig
+		if json.Unmarshal(data, &saved) == nil && sameEmployeeBinding(saved.Binding, old) {
+			next.SelfOpenDingTalkID = saved.SelfOpenDingTalkID
+			next.Name = saved.Name
+		}
+	}
 	if next.Binding.Channel == "dsh" {
 		r, err := employeeDSHControl(cmd.Context(), next.Binding, "prepare")
 		if err != nil {
@@ -407,13 +419,6 @@ func prepareEmployeeRebind(cmd *cobra.Command, old digitalEmployeeBinding, next 
 			return next, fmt.Errorf("DSH executor 未就绪")
 		}
 		return next, nil
-	}
-	if data, err := os.ReadFile(filepath.Join(digitalEmployeeRuntimeDir(old.DWSProfile), "adapter.json")); err == nil {
-		var saved digitalEmployeeAdapterConfig
-		if json.Unmarshal(data, &saved) == nil && sameEmployeeBinding(saved.Binding, old) {
-			next.SelfOpenDingTalkID = saved.SelfOpenDingTalkID
-			next.Name = saved.Name
-		}
 	}
 	if !validMachineString(next.SelfOpenDingTalkID) {
 		published, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": old.AgentUUID, "type": "published"}, false)

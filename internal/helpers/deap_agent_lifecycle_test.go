@@ -26,6 +26,7 @@ func TestEmployeeLeaseHoldsTheSameProfileLockUntilStdinCloses(t *testing.T) {
 	_ = cmd.Flags().Set("agent-uuid", b.AgentUUID)
 	_ = cmd.Flags().Set("channel", "dsh")
 	_ = cmd.Flags().Set("binding-revision", "7")
+	_ = cmd.Flags().Set("runtime-instance-id", "00000000-0000-4000-8000-000000000001")
 	input, writer := io.Pipe()
 	defer input.Close()
 	defer writer.Close()
@@ -46,11 +47,12 @@ func TestEmployeeLeaseHoldsTheSameProfileLockUntilStdinCloses(t *testing.T) {
 		lock.Release()
 		t.Fatal("DSH lease did not exclude a worker")
 	}
+	_, _ = io.WriteString(writer, "released\n")
 	_ = writer.Close()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if err := confirmEmployeeRuntimeReleased(context.Background(), b); err != nil {
+	if err := confirmEmployeeRuntimeReleased(context.Background(), b, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -65,9 +67,86 @@ func lifecycleFixture(t *testing.T) (string, digitalEmployeeBinding) {
 	}
 	return dir, b
 }
+
+func TestEmployeeLostLeaseIsQuarantinedUntilExactHostRelease(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	guard := employeeLeaseGuard{AgentUUID: b.AgentUUID, Revision: b.BindingRevision, InstanceID: "old-host-instance"}
+	if err := writeEmployeeJSON(employeeLeaseGuardPath(b.DWSProfile), guard); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkEmployeeLeaseGuard(b.DWSProfile); err == nil {
+		t.Fatal("crashed lease must not allow another worker")
+	}
+	for _, instance := range []string{"", "another-host"} {
+		if err := confirmEmployeeRuntimeReleased(context.Background(), b, instance); err == nil {
+			t.Fatal("foreign or empty runtime confirmation cleared quarantine")
+		}
+	}
+	if err := confirmEmployeeRuntimeReleased(context.Background(), b, guard.InstanceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkEmployeeLeaseGuard(b.DWSProfile); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEmployeeRebindToDSHAndRestartRepairsFailedRegistration(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	b.Channel = "custom"
+	if err := updateEmployeeBinding(b); err != nil {
+		t.Fatal(err)
+	}
+	registered := false
+	failRegistration := true
+	testseam.Swap(t, &deapConnectRegisterDSH, func(_ context.Context, payload map[string]any) (string, error) {
+		if payload["bindingRevision"] != uint64(8) {
+			t.Fatal("registration must use new revision")
+		}
+		if failRegistration {
+			return "", fmt.Errorf("injected registration failure")
+		}
+		registered = true
+		return "created", nil
+	})
+	testseam.Swap(t, &employeeDSHControl, func(_ context.Context, got digitalEmployeeBinding, action string) (employeeDSHState, error) {
+		if action == "prepare" {
+			return employeeDSHState{Prepared: true}, nil
+		}
+		if action == "start" && !registered {
+			t.Fatal("restart must register before start")
+		}
+		if action == "stop" {
+			return employeeDSHState{Released: true, RuntimeState: "stopped"}, nil
+		}
+		return employeeDSHState{RuntimeState: "running", TransportReady: true, ExecutorReady: true}, nil
+	})
+	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
+	_ = cmd.Flags().Set("channel", "dsh")
+	if err := mutateEmployeeBinding(cmd, "rebind"); err == nil {
+		t.Fatal("expected registration failure")
+	}
+	current, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
+	if err != nil || current.Channel != "dsh" || current.BindingRevision != 8 || employeeBindingState(current) != "bound" {
+		t.Fatalf("committed binding lost: %+v %v", current, err)
+	}
+	failRegistration = false
+	restart := newDigitalEmployeeRestartCommand()
+	restart.SetContext(context.Background())
+	restart.SetOut(io.Discard)
+	_ = restart.Flags().Set("agent-uuid", b.AgentUUID)
+	if err := runDigitalEmployeeLifecycle(restart, "restart"); err != nil {
+		t.Fatal(err)
+	}
+	if !registered {
+		t.Fatal("registration not recovered")
+	}
+}
 func lifecycleCmd(t *testing.T, action, id string) *cobra.Command {
 	t.Helper()
-	cmd := newEmployeeBindingMutationCommand(action)
+	cmd := newEmployeeUnbindCommand()
+	if action == "rebind" {
+		cmd = newEmployeeRebindCommand()
+	}
 	cmd.SetContext(context.Background())
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})

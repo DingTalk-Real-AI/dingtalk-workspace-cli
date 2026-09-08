@@ -77,7 +77,7 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --yes --format j
 
 前置条件同上。该模式会保存数字员工独立 Profile、保持主管 Profile 当前激活，并继续解析 operator、保存 DSH binding 和幂等注册 DSH；它不会修改或发布员工，也不会自动重启 DSH。
 
-成功结果在 DWS envelope 的 `data` 中返回 `status`、`agentUuid`、`dwsProfile`、`operatorOpenDingTalkId`、`protocolVersion` 和 `restartRequired`。若 Profile 已落盘但 DSH 注册失败，重新执行同一 connect 获取新授权码并幂等重试，不要重新创建员工。
+成功结果在 DWS envelope 的 `data` 中返回身份与运行结果。宿主确认启动时返回实际运行状态和 readiness；仅注册时返回 `restartRequired=true`，不能视为已在线。若 Profile 和绑定已落盘但 DSH 注册失败，使用 `connect restart --agent-uuid <agentUuid>` 幂等补注册并启动，无需换票，也不要重新创建员工。
 
 ## 创建并接入的一次请求
 

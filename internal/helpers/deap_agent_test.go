@@ -697,12 +697,12 @@ func TestDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
 	root := deapHandler{}.Command(&captureRunner{})
 
 	wantGroups := map[string][]string{
-		"connect": {"status", "list", "stop", "restart"},
+		"connect": {"status", "list", "stop", "restart", "unbind", "rebind"},
 		"manage":  {"create", "detail", "list", "get-dws-auth-code", "save-draft", "publish", "delete"},
 		"run":     {"run-status", "trace"},
 	}
-	if got := len(root.Commands()); got != len(wantGroups)+3 {
-		t.Fatalf("dingtalk-tag direct child count = %d, want %d", got, len(wantGroups)+3)
+	if got := len(root.Commands()); got != len(wantGroups)+2 {
+		t.Fatalf("dingtalk-tag direct child count = %d, want %d", got, len(wantGroups)+2)
 	}
 	for groupName, wantLeaves := range wantGroups {
 		group, remaining, err := root.Find([]string{groupName})

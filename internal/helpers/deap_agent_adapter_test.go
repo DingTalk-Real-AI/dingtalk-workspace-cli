@@ -323,7 +323,12 @@ func TestEmployeeConsumerFaultsFailClosed(t *testing.T) {
 			dir := t.TempDir()
 			testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 			t.Setenv("DWS_EMPLOYEE_EVENT_FIXTURE", tc.mode)
-			testseam.Swap(t, &digitalEmployeeReadyTimeout, 300*time.Millisecond)
+			// race 二进制冷启动可能超过 300ms；只有超时用例缩短 ready 窗口。
+			readyTimeout := 3 * time.Second
+			if tc.mode == "no-ready" {
+				readyTimeout = 300 * time.Millisecond
+			}
+			testseam.Swap(t, &digitalEmployeeReadyTimeout, readyTimeout)
 			testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
 				return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestEmployeeSubprocessFixture$", "--", "employee-consume-fixture")
 			})
@@ -338,7 +343,7 @@ func TestEmployeeConsumerFaultsFailClosed(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
 			err := runEmployeeWorker(ctx, cfg, 0)
 			if err == nil || err.Error() != tc.code {

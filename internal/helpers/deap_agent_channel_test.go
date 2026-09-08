@@ -667,7 +667,7 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 		})
 		leaf := newConnectTestCommand(t, false)
 		err := leaf.RunE(leaf, nil)
-		if err == nil || !strings.Contains(err.Error(), "employee-corp:employee-user") || !strings.Contains(err.Error(), "幂等重试") {
+		if err == nil || !strings.Contains(err.Error(), "employee-corp:employee-user") || !strings.Contains(err.Error(), "connect restart --agent-uuid agent-1") {
 			t.Fatalf("DSH retry error = %v", err)
 		}
 		if !saved {

@@ -283,6 +283,9 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 					return err
 				}
 				if bindingChannel(b) == "dsh" {
+					if _, err := registerEmployeeDSH(cmd.Context(), digitalEmployeeAdapterConfig{Binding: b}); err != nil {
+						return err
+					}
 					r, err := employeeDSHControl(cmd.Context(), b, "start")
 					if err != nil {
 						return err

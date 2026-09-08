@@ -5,8 +5,10 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"io"
 	"os"
@@ -24,7 +26,9 @@ func runEmployeeLease(cmd *cobra.Command) error {
 	defer cancel()
 	profile := auth.RuntimeProfile()
 	revision, err := strconv.ParseUint(devAppStringFlag(cmd, "binding-revision"), 10, 64)
-	if err != nil || profile == "" {
+	instance := devAppStringFlag(cmd, "runtime-instance-id")
+	_, instanceErr := uuid.Parse(instance)
+	if err != nil || profile == "" || instanceErr != nil {
 		return fmt.Errorf("invalid lease identity")
 	}
 	waitCtx, stopWait := context.WithTimeout(ctx, 10*time.Second)
@@ -34,19 +38,63 @@ func runEmployeeLease(cmd *cobra.Command) error {
 		return fmt.Errorf("employee runtime lock unavailable")
 	}
 	defer lock.Release()
+	if err := checkEmployeeLeaseGuard(profile); err != nil {
+		return err
+	}
 	b, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), profile)
 	if err != nil || b.AgentUUID != devAppStringFlag(cmd, "agent-uuid") || b.BindingRevision != revision || bindingChannel(b) != "dsh" || employeeBindingState(b) != "bound" || employeeDesiredState(b) != "running" {
 		return fmt.Errorf("employee lease binding not authorized")
 	}
+	// 锁进程异常退出后仍保留隔离标记；文件锁消失不是旧宿主已释放的证明。
+	guard := employeeLeaseGuard{AgentUUID: b.AgentUUID, Revision: revision, InstanceID: instance}
+	if err := writeEmployeeJSON(employeeLeaseGuardPath(profile), guard); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintln(cmd.ErrOrStderr(), "[employee] leased"); err != nil {
 		return err
 	}
-	done := make(chan struct{})
-	go func() { _, _ = io.Copy(io.Discard, cmd.InOrStdin()); close(done) }()
+	done := make(chan bool, 1)
+	go func() {
+		data, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), 64))
+		done <- err == nil && string(data) == "released\n"
+	}()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-done:
+	case released := <-done:
+		if !released {
+			return fmt.Errorf("employee release unconfirmed; runtime remains quarantined")
+		}
+		return os.Remove(employeeLeaseGuardPath(profile))
+	}
+}
+
+type employeeLeaseGuard struct {
+	AgentUUID  string `json:"agentUuid"`
+	Revision   uint64 `json:"bindingRevision"`
+	InstanceID string `json:"runtimeInstanceId"`
+}
+
+func employeeLeaseGuardPath(profile string) string {
+	return filepath.Join(digitalEmployeeRuntimeDir(profile), "lease-guard.json")
+}
+
+// 调用方必须持有 worker 锁；不按 PID 或超时猜测旧宿主是否已释放。
+func checkEmployeeLeaseGuard(profile string) error {
+	if _, err := os.Lstat(employeeLeaseGuardPath(profile)); os.IsNotExist(err) {
 		return nil
 	}
+	return employeeTerminal("previous_host_release_unconfirmed")
+}
+
+func clearEmployeeLeaseGuard(b digitalEmployeeBinding, instance string) error {
+	data, err := os.ReadFile(employeeLeaseGuardPath(b.DWSProfile))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	var guard employeeLeaseGuard
+	if err != nil || json.Unmarshal(data, &guard) != nil || instance == "" || guard.AgentUUID != b.AgentUUID || guard.Revision != b.BindingRevision || guard.InstanceID != instance {
+		return fmt.Errorf("旧宿主实例未精确确认释放，保留隔离标记")
+	}
+	return os.Remove(employeeLeaseGuardPath(b.DWSProfile))
 }

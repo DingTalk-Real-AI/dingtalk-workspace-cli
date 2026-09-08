@@ -336,6 +336,9 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		return employeeTerminal("worker_already_running")
 	}
 	defer lock.Release()
+	if err := checkEmployeeLeaseGuard(cfg.Binding.DWSProfile); err != nil {
+		return err
+	}
 	activation, err := auth.AcquireDualLock(ctx, filepath.Join(dir, "activation"))
 	if err != nil {
 		return err

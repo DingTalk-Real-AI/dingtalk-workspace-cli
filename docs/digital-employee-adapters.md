@@ -1,5 +1,7 @@
 # 数字员工本地 Agent Adapter
 
+异常 lease 退出会留下私有 `lease-guard.json` 隔离标记。文件锁释放不代表宿主已释放；只有原 `runtimeInstanceId` 的停止确认才能清除标记。未知宿主不可按 PID、超时或空实例响应接管。宿主崩溃后无法取得原实例确认时保持 blocked，需要先核验旧进程全部退出后进行人工恢复；本期不提供强制接管。
+
 ## 目标与边界
 
 本改造基于 haoxiao 测试分支 build 15.1（`a36bc7885f20c58426d80cc9dcb70feecdb4828f`），不改动公开 auth exchange、DEAP manage/run/capability 或机器人 Stream 收发协议。

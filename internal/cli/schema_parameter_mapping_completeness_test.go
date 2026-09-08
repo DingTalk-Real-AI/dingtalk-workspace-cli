@@ -69,6 +69,7 @@ func TestDeliveryCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) 
 
 func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
+		"dingtalk-tag.connect_unbind":  "本机绑定事务及宿主控制",
 		"dingtalk-tag.connect_status":  "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_list":    "读取本地绑定并管理所属进程",
 		"dingtalk-tag.connect_stop":    "读取本地绑定并管理所属进程",

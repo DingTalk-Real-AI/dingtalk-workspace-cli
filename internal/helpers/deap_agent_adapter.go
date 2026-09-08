@@ -56,19 +56,28 @@ func digitalEmployeeAdapterFor(channel string) (digitalEmployeeAdapter, error) {
 
 func (digitalEmployeeDSHAdapter) Connect(cmd *cobra.Command, cfg digitalEmployeeAdapterConfig) error {
 	b := cfg.Binding
-	registration := map[string]any{"schemaVersion": 1, "agentUuid": b.AgentUUID, "dwsProfile": b.DWSProfile, "operatorOpenDingTalkId": b.OperatorOpenDingTalkID, "protocolVersion": 1}
-	registration["bindingRevision"] = b.BindingRevision
-	if cfg.Name != "" {
-		registration["name"] = cfg.Name
-	}
-	status, err := deapConnectRegisterDSH(cmd.Context(), registration)
+	status, err := registerEmployeeDSH(cmd.Context(), cfg)
 	if err != nil {
-		return fmt.Errorf("数字员工 Profile 已保存为 %s，但 DSH 注册失败；请重新运行同一条 connect 命令以获取新授权码并幂等重试注册: %w", b.DWSProfile, err)
+		return err
 	}
 	if runtime, e := employeeDSHControl(cmd.Context(), b, "start"); e == nil && runtime.RuntimeState == "running" && runtime.TransportReady && runtime.ExecutorReady {
 		return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
 	}
 	return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{Status: status, AgentUUID: b.AgentUUID, Channel: "dsh", DWSProfile: b.DWSProfile, OperatorOpenDingTalkID: b.OperatorOpenDingTalkID, ProtocolVersion: 1, RestartRequired: true})
+}
+
+func registerEmployeeDSH(ctx context.Context, cfg digitalEmployeeAdapterConfig) (string, error) {
+	b := cfg.Binding
+	registration := map[string]any{"schemaVersion": 1, "agentUuid": b.AgentUUID, "dwsProfile": b.DWSProfile, "operatorOpenDingTalkId": b.OperatorOpenDingTalkID, "protocolVersion": 1}
+	registration["bindingRevision"] = b.BindingRevision
+	if cfg.Name != "" {
+		registration["name"] = cfg.Name
+	}
+	status, err := deapConnectRegisterDSH(ctx, registration)
+	if err != nil {
+		return "", fmt.Errorf("数字员工 Profile 已保存为 %s，但 DSH 注册失败；请运行 dingtalk-tag connect restart --agent-uuid %s 幂等补注册并启动，无需重新换票: %w", b.DWSProfile, b.AgentUUID, err)
+	}
+	return status, nil
 }
 
 func digitalEmployeeScope(profile string) string {
@@ -208,6 +217,7 @@ func digitalEmployeeAgentFlags() []LeafFlag {
 	return []LeafFlag{
 		{Name: "local-lease", Kind: LeafBool, Hidden: true, Usage: "internal: DSH 员工占用凭据无关的本地运行锁"},
 		{Name: "binding-revision", Hidden: true, Usage: "internal: 精确绑定版本"},
+		{Name: "runtime-instance-id", Hidden: true, Usage: "internal: DSH 宿主运行实例"},
 		{Name: "agent-cmd", Usage: "custom 命令；问题作为末参，stdout 作为回复"},
 		{Name: "agent-model", Usage: "Agent 模型；同 dev connect"},
 		{Name: "agent-workdir", Usage: "Agent 工作目录；同 dev connect"},

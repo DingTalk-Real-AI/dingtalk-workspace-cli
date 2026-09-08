@@ -77,7 +77,7 @@ func newDeapConnectCommand() *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Use:           "connect",
 		Short:         "为已发布数字员工落盘 Profile 并接入本地 Agent 或 DSH",
-		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--profile-only 仅落盘；--channel dsh 仅注册并提示重启；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。运行管理使用 dingtalk-tag connect status/list/stop/restart。",
+		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--profile-only 仅落盘；--channel dsh 注册并请求当前宿主启动该员工，宿主不可用时提示升级或启动宿主；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。运行及绑定管理使用 dingtalk-tag connect status/list/stop/restart/unbind/rebind。",
 		Flags: append([]LeafFlag{
 			{Name: "agent-uuid", Usage: "已存在且已发布的数字员工 ID", Required: true, Trim: true},
 			{Name: "channel", Usage: "本地 Agent 类型；省略或 auto 时自动探测；profile-only 时省略", Trim: true, Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
@@ -148,7 +148,7 @@ func newDeapConnectCommand() *cobra.Command {
 			},
 		},
 	})
-	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeBindingMutationCommand("unbind"), newEmployeeBindingMutationCommand("rebind"))
+	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeUnbindCommand(), newEmployeeRebindCommand())
 	corecmd.ApplyGroupPolicy(cmd, corecmd.GroupPolicy{Mode: corecmd.GroupHybrid, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling})
 	return cmd
 }
@@ -317,7 +317,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	// 前台 worker 不得把注册事务锁占用整个运行生命周期。
-	if releaseRegistration != nil {
+	if releaseRegistration != nil && channel != "dsh" {
 		releaseRegistration()
 	}
 	return adapter.Connect(cmd, cfg)
