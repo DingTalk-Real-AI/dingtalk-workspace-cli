@@ -88,6 +88,7 @@ metadata:
 - copy/move/rename/create-folder 检查 `ok/outcome` 和读回；`partial_success` 不是完成。
 - status 检查分类集合；pull/push/sync 检查 summary 和逐项结果，failed/unknown 必须保留。
 - 分页未结束时返回 continuation；目录树或大列表必须有最大深度、页数和条目数。
+- 同一查询续页时，若 nextCursor 重复且没有新增节点，停止继续翻页，保留已取得结果并报告分页未完成，不将重复结果计作新增。
 - 未知写入效果先 inspect/list 回读，不盲目重放写操作。
 
 ## 参数与安全边界
