@@ -66,11 +66,11 @@ func startDigitalEmployeeDaemon(cmd *cobra.Command, cfg digitalEmployeeAdapterCo
 				return fmt.Errorf("数字员工后台启动失败: %s", s.Code)
 			}
 		case exitErr := <-done:
-			return fmt.Errorf("数字员工后台进程退出（%v）；Profile 已保留，请检查 connection status；若被系统终止，请检查主机执行策略", exitErr)
+			return fmt.Errorf("数字员工后台进程退出（%v）；Profile 已保留，请检查 connect status；若被系统终止，请检查主机执行策略", exitErr)
 		case <-cmd.Context().Done():
 			return cmd.Context().Err()
 		case <-timer.C:
-			return fmt.Errorf("数字员工尚未 ready；后台可能在等待服务端重试窗口，请检查 connection status 或 stop")
+			return fmt.Errorf("数字员工尚未 ready；后台可能在等待服务端重试窗口，请检查 connect status 或 stop")
 		}
 	}
 }
@@ -252,73 +252,54 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 	if action != "list" && len(bindings) != 1 {
 		return fmt.Errorf("agent-uuid 必须对应唯一的本地员工绑定")
 	}
-	items := []digitalEmployeeRunState{}
+	items := []map[string]any{}
 	for _, b := range bindings {
-		s := digitalEmployeeRunState{Status: "stopped", AgentUUID: b.AgentUUID, Profile: b.DWSProfile, Channel: bindingChannel(b)}
-		if bindingChannel(b) == "dsh" {
-			s.Status = "external_managed"
-			if action == "stop" || action == "restart" {
-				return fmt.Errorf("DSH 由外部宿主管理，请使用 DSH 的停止或重启操作")
+		if action == "stop" || action == "restart" {
+			lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "operation"))
+			if err != nil {
+				return err
 			}
-		} else {
-			dir := digitalEmployeeRuntimeDir(b.DWSProfile)
-			if saved, e := readDigitalEmployeeState(dir); e == nil {
-				if saved.Profile != b.DWSProfile || saved.AgentUUID != b.AgentUUID {
-					return fmt.Errorf("employee runtime identity mismatch")
-				}
-				s = saved
-				pid := s.PID
-				if s.SupervisorPID > 0 {
-					pid = s.SupervisorPID
-				}
-				if !processAlive(pid) && s.Status != "blocked" {
-					s.Status = "stopped"
-				}
-			} else if !os.IsNotExist(e) {
-				return e
+			defer lock.Release()
+			b, err = loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
+			if err != nil {
+				return err
 			}
-			if action == "stop" || action == "restart" {
-				if employeeStateAlive(s) {
-					if s.RunID == "" {
-						return fmt.Errorf("运行状态缺少实例 ID，拒绝停止不确定的进程")
-					}
-					if err = writeEmployeeJSON(filepath.Join(dir, "stop.json"), map[string]string{"runId": s.RunID}); err != nil {
+			if employeeBindingState(b) == "unbound" {
+				return fmt.Errorf("员工已解绑，请重新 connect")
+			}
+			b.DesiredState = "stopped"
+			if err := updateEmployeeBinding(b); err != nil {
+				return err
+			}
+			if err := stopEmployeeRuntime(cmd.Context(), b); err != nil {
+				return err
+			}
+			if action == "restart" {
+				if employeeBindingState(b) != "bound" {
+					return fmt.Errorf("绑定操作未完成，请重试原 unbind/rebind")
+				}
+				b.DesiredState = "running"
+				if err := updateEmployeeBinding(b); err != nil {
+					return err
+				}
+				if bindingChannel(b) == "dsh" {
+					r, err := employeeDSHControl(cmd.Context(), b, "start")
+					if err != nil {
 						return err
 					}
-					deadline := time.Now().Add(15 * time.Second)
-					for time.Now().Before(deadline) {
-						current, e := readDigitalEmployeeState(dir)
-						if e == nil && employeeStopComplete(current, s.SupervisorPID) {
-							break
-						}
-						if err = waitForDigitalEmployeeReceipt(cmd.Context(), 100*time.Millisecond); err != nil {
-							return err
-						}
+					if r.RuntimeState != "running" || !r.TransportReady || !r.ExecutorReady {
+						return fmt.Errorf("DSH 未确认运行就绪")
 					}
-					current, e := readDigitalEmployeeState(dir)
-					if e != nil || !employeeStopComplete(current, s.SupervisorPID) {
-						return fmt.Errorf("等待员工进程优雅退出超时")
-					}
-				}
-				s.Status = "stopped"
-				if action == "restart" {
-					lock, e := auth.AcquireDualLock(cmd.Context(), filepath.Join(dir, "registration"))
-					if e != nil {
-						return e
-					}
-					defer lock.Release()
-					if latest, _ := readDigitalEmployeeState(dir); employeeStateAlive(latest) {
-						return fmt.Errorf("员工连接已被其他请求启动，请先查询状态")
-					}
-					cfg, e := loadDigitalEmployeeConfig(b.DWSProfile)
-					if e != nil {
-						return e
+				} else {
+					cfg, err := loadDigitalEmployeeConfig(b.DWSProfile)
+					if err != nil {
+						return err
 					}
 					return startDigitalEmployeeDaemon(cmd, cfg)
 				}
 			}
 		}
-		items = append(items, s)
+		items = append(items, employeeLifecycleStatus(cmd.Context(), b))
 	}
 	if action == "list" {
 		return writeDWSMachineEnvelope(cmd, map[string]any{"items": items})

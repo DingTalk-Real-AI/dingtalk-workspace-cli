@@ -7,7 +7,7 @@
 - 创建/管理数字员工与本地接入独立；connect 不创建、修改或发布数字员工。
 - 支持 Qoder、QoderWork、WorkBuddy、Claude Code、CodeBuddy、Codex、Gemini、OpenCode、custom 和 DSH。
 - 普通 Agent 复用 dev connect 的调用、模型、目录、会话及权限实现；传输改为员工 Event Consumer 上行、员工 Profile 引用回复下行。第一阶段仅文本。
-- DSH 只交接注册配置，由其宿主管理 Event Consumer 和 Agent；仍兼容旧 DSH binding。
+- DWS 统一管理本机 binding 和运行期望；DSH 实际管理自己的 Event Consumer、Agent 和回合，提供员工级释放确认。兼容读取旧 DSH binding（revision 0）。
 - OpenClaw、Hermes、卡片、多媒体、知识库及远程审计扩展不属于本次数字员工新链路。
 
 ## 命令
@@ -16,15 +16,29 @@
 dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --agent-workdir <directory> --daemon --alwayson
-dws dingtalk-tag connection status --agent-uuid <agentUuid> --format json
-dws dingtalk-tag connection list --format json
-dws dingtalk-tag connection stop --agent-uuid <agentUuid> --format json
-dws dingtalk-tag connection restart --agent-uuid <agentUuid> --format json
+dws dingtalk-tag connect status --agent-uuid <agentUuid> --format json
+dws dingtalk-tag connect list --format json
+dws dingtalk-tag connect stop --agent-uuid <agentUuid> --format json
+dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
+dws dingtalk-tag connect unbind --agent-uuid <agentUuid> --dry-run
+dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --channel qoder --daemon --alwayson --dry-run
 ```
 
 真实 connect 需汇总确认；可先用 `--dry-run`。默认前台，daemon 仅在 Event ready 且 Agent 初始化完成后报告运行成功。初始化成功不代表模型授权或真实消息已经验收。
 
-运行管理单独放在 `connection` 组，保留 connect 作为 Schema 可发现的叶子。该基线的 Schema 身份收集不支持 hybrid 父命令；本次不修改全局框架或机器人命令的目录结构。
+未发布的 `connection` 组已收拢到 `connect`。`connect` 是同时拥有业务执行和子命令的显式 hybrid；CLI、Help 与 Schema 均保留裸 connect。Schema 精确路径优先返回父工具自身，子工具通过产品导航或各自精确路径查询。机器人 `dev connect` 路径不变。
+
+## 统一生命周期（本次需求）
+
+- `stop` 保存 stopped 期望，停止该员工，保留 binding 与 Profile；`restart` 复用保存的 Profile，不向主管重新换票。
+- `unbind` 先停止并确认释放，随后写入 unbound 墓碑；保留 Profile、Token、去重记录、会话及审计。
+- `rebind` 先预检目标；旧 binding 标为 rebinding，停旧实例并等待释放；提交新 bindingRevision 后才启动新 Adapter。预检失败不改旧绑定；提交后启动失败用 restart 恢复，不再次创建员工。
+- 状态区分 `bindingState`（bound/unbound/rebinding/unbinding）、`desiredState`（running/stopped）、`runtimeState`，并返回绑定版本、实例、transportReady、executorReady、observedAt 和阻塞原因。旧 `status` 保留兼容。
+- DSH 通过私有本机 IPC 处理 prepare/start/status/stop/release；宿主失联或停止超时为 unknown/未释放，不强制换绑。
+- DSH 持有与 DWS 原生 worker 相同的 Profile 运行锁，最后才释放。两个宿主或跨 Adapter 并发不能同时取得锁。此保证仅限同机、同配置目录、受管理的运行入口，不是跨机器在线状态服务。
+- 回复带 bindingRevision；旧版本不能在换绑提交后继续调用 Channel 下行。
+- `--profile-only` 不创建 binding、不操作 DSH。DSH 首次注册后若宿主尚未运行，返回 restartRequired；宿主已运行则员工级启动，不重启整个宿主。
+- 升级旧版 DSH 时先正常停止旧宿主，再启用新版。旧宿主没有释放协议，不能凭心跳或 PID 猜测已停；不提供强制覆盖入口。
 
 ## 身份、状态与恢复
 
@@ -42,4 +56,4 @@ connect 使用主管取得一次性授权码，严格使用返回的 Client ID �
 
 必须分别记录数字员工链路与 dev connect 回归。真实消息往返、群白名单、双员工隔离、Agent 授权、后台恢复及 DSH 的实机结果不能用 mock 替代。构建、focused/race、Schema、完整 Go 测试分别记录；因主机执行策略、缺测试身份或发布审批未完成的项目标为 NOT VERIFIED。
 
-回滚本地连接时先使用 connection stop，仅停止本员工；回滚代码使用 PR revert。不删除已创建员工、Profile 或历史 DSH 配置，不自动合并或发布 tag。
+回滚本地连接时先使用 connect stop，仅停止本员工；回滚代码使用 PR revert。回滚前停止新版宿主；旧二进制不应读取新绑定版本后继续启动。无需删除员工或 Profile，不自动合并或发布 tag。

@@ -24,7 +24,7 @@ DingTalk Tag 数字员工的管理、执行查询和能力资源命令，命令�
 | 为什么这么回答 / 看提示词 / 看工具调用 / 完整链路 | `dws dingtalk-tag run trace` |
 | 手上只有 dws 发消息返回的 openTaskId | 先换成 openMessageId，见 [`run.md`](./run.md) |
 | 只把已有 local_agent 数字员工转换成本地 Profile | `dws dingtalk-tag connect --agent-uuid ... --profile-only`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
-| 管理普通 Agent 的连接进程 | `dws dingtalk-tag connection list/status/stop/restart`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
+| 管理普通 Agent 的连接进程 | `dws dingtalk-tag connect list/status/stop/restart`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
 | 把已有 local_agent 数字员工接入普通本地 Agent | `dws dingtalk-tag connect --agent-uuid ... --channel codex --daemon --alwayson`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
 | 把已有 local_agent 数字员工接入 DSH | `dws dingtalk-tag connect --agent-uuid ... --channel dsh`，见 [`manage-and-connect.md`](./manage-and-connect.md) |
 

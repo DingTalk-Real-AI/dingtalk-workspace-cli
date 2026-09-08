@@ -21,7 +21,9 @@ metadata:
 | 只把已有、已发布的本地数字员工转换为本地 Profile | `dws dingtalk-tag connect --agent-uuid ... --profile-only` |
 | 把已有、已发布的本地数字员工接入 DSH | `dws dingtalk-tag connect --agent-uuid ... --channel dsh` |
 | 把数字员工接入当前本地 Agent | `dws dingtalk-tag connect --agent-uuid ... --channel auto --daemon --alwayson` |
-| 查询、停止或重启数字员工本地连接 | `dws dingtalk-tag connection list/status/stop/restart` |
+| 查询、停止或重启数字员工本地连接 | `dws dingtalk-tag connect list/status/stop/restart` |
+| 解除本机连接，但保留员工和 Profile | `dws dingtalk-tag connect unbind --agent-uuid ...` |
+| 将已有连接换为其他本地 Agent 或 DSH | `dws dingtalk-tag connect rebind --agent-uuid ... --channel ...` |
 | 创建或查询 Skill / MCP 资源 | `dws dingtalk-tag capability ...` |
 | 查一次执行的状态或完整 trace | `dws dingtalk-tag run ...` |
 
@@ -36,8 +38,9 @@ metadata:
 - 用户可以只创建/管理数字员工、只把已有员工转换为本地 Profile，或继续接入 DSH；三种操作互不强绑定。
 - 所有 ID 统一使用 `agentUuid` / `--agent-uuid`，不得猜测。
 - 普通本地 Agent 接入使用 Event Consume，默认仅主管可触发；白名单中的用户必须先在员工身份下精确解析。支持 Codex、Qoder/QoderWork、Claude Code、CodeBuddy/WorkBuddy、Gemini、OpenCode 和 custom。OpenClaw/Hermes 暂未适配，不要回退到机器人创建流程。
-- 自然语言“创建发布并接入本机”在发布后显式使用 `--daemon --alwayson`；命令行默认前台。DSH 只注册配置，不加这两个参数，由宿主启动或重启。connect 不提供开机自启，也不能在电脑休眠期间处理消息。
-- connect 失败后保留员工 ID 和已落盘 Profile，检查 `connection status` 再恢复；不要重复 create、不要清除事件重试预算、不要隐式覆盖另一个 Adapter 的绑定。
+- 自然语言“创建发布并接入本机”在发布后显式使用 `--daemon --alwayson`；命令行默认前台。DSH 不加这两个参数，由运行中的宿主员工级启动；宿主不可用时按 restartRequired 提示启动宿主。connect 不提供开机自启，也不能在电脑休眠期间处理消息。
+- connect 失败后保留员工 ID 和已落盘 Profile，检查 `connect status` 再恢复；不要重复 create、不要清除事件重试预算、不要隐式覆盖另一个 Adapter 的绑定。
+- “暂停”使用 stop（保留绑定）；“解绑”使用 unbind（保留 Profile）；“换成本地另一个 Agent”使用 rebind，先 dry-run 并汇总确认。换绑先确认旧实例释放，unknown 或超时不得手动删绑定来绕过。新绑定已提交但启动失败使用 restart；旧绑定仍在 rebinding/unbinding 时重试原操作。
 
 ## 安全
 

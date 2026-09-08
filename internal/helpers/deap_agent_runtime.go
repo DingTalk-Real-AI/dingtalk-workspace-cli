@@ -295,7 +295,7 @@ func (r *employeeRuntime) process(e employeeEvent) error {
 		if err = writeEmployeeJSON(r.recordPath(e), record); err != nil {
 			return employeeTerminal("ledger_unavailable")
 		}
-		payload := digitalEmployeeReplyInput{SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: r.cfg.Binding.AgentUUID, EventID: e.EventID, ConversationID: e.ConversationID, ReferenceMessageID: e.MessageID, Text: answer, IdempotencyKey: record.IdempotencyKey}
+		payload := digitalEmployeeReplyInput{BindingRevision: r.cfg.Binding.BindingRevision, SchemaVersion: 1, ProtocolVersion: 1, AgentUUID: r.cfg.Binding.AgentUUID, EventID: e.EventID, ConversationID: e.ConversationID, ReferenceMessageID: e.MessageID, Text: answer, IdempotencyKey: record.IdempotencyKey}
 		result, sendErr := employeeMachineCall(r.ctx, r.cfg.Binding.DWSProfile, payload, "dingtalk-tag", "channel", "reply", "--channel", r.cfg.Binding.Channel, "--stdin", "--format", "json")
 		record.Status = "needs_review"
 		if sendErr == nil {
@@ -336,6 +336,15 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		return employeeTerminal("worker_already_running")
 	}
 	defer lock.Release()
+	activation, err := auth.AcquireDualLock(ctx, filepath.Join(dir, "activation"))
+	if err != nil {
+		return err
+	}
+	defer activation.Release()
+	binding, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), cfg.Binding.DWSProfile)
+	if err != nil || !sameEmployeeBinding(binding, cfg.Binding) || employeeBindingState(binding) != "bound" || employeeDesiredState(binding) != "running" {
+		return employeeTerminal("binding_not_authorized")
+	}
 	state := digitalEmployeeRunState{Status: "starting", PID: os.Getpid(), SupervisorPID: supervisorPID, AgentUUID: cfg.Binding.AgentUUID, Profile: cfg.Binding.DWSProfile, Channel: cfg.Binding.Channel, LogPath: filepath.Join(dir, "runtime.log"), UpdatedAt: time.Now()}
 	state.RunID = os.Getenv("DWS_EMPLOYEE_RUN_ID")
 	if state.RunID == "" {
@@ -346,6 +355,7 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	if err := persist(); err != nil {
 		return employeeTerminal("state_unavailable")
 	}
+	activation.Release()
 	defer func() {
 		state.Status = "stopped"
 		if runErr != nil {

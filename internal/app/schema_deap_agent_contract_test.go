@@ -8,6 +8,31 @@ import (
 	"testing"
 )
 
+func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
+	root := NewRootCommand()
+	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
+	for _, action := range []string{"status", "list", "stop", "restart"} {
+		wants["dingtalk-tag.connect_"+action] = "dingtalk-tag connect " + action
+	}
+	var names []string
+	for name := range wants {
+		names = append(names, name)
+	}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, names...)
+	for name, path := range wants {
+		if got := schemaContractString(payload.Tools[name]["primary_cli_path"]); got != path {
+			t.Errorf("%s path = %q, want %q", name, got, path)
+		}
+	}
+	cmd, args, err := root.Find([]string{"dingtalk-tag", "connect", "list"})
+	if err != nil || len(args) != 0 || cmd.Name() != "list" {
+		t.Fatalf("list resolution: %v %v", args, err)
+	}
+	if cmd.Flags().Lookup("agent-uuid") != nil {
+		t.Fatal("list must not inherit connect's required employee flag")
+	}
+}
+
 func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
 	wants := map[string]struct {
 		cliPath      string

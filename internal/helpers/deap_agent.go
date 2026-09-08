@@ -117,7 +117,6 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 		newDeapRunCommand(),
 		newDeapCapabilityCommand(),
 		newDeapConnectCommand(),
-		newDigitalEmployeeConnectionCommand(),
 		newDeapChannelCommand(),
 	)
 	return root

@@ -796,6 +796,9 @@ func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string, pr
 }
 
 func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *testing.T) {
+	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
+		return employeeDSHState{}, fmt.Errorf("host unavailable")
+	})
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,

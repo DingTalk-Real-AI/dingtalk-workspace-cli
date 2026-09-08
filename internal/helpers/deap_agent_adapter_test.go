@@ -194,7 +194,7 @@ func TestEmployeeConnectRegistrationLockPrecedesAuthorizationAndBinding(t *testi
 	InitDepsForTest(t, caller)
 	setupConnectSupervisorSeams(t)
 	dir := deapConnectConfigDir()
-	lock, err := auth.AcquireDualLock(context.Background(), filepath.Join(digitalEmployeeRuntimeDir("employee-corp:employee-user"), "registration"))
+	lock, err := auth.AcquireDualLock(context.Background(), filepath.Join(digitalEmployeeRuntimeDir("employee-corp:employee-user"), "operation"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +329,10 @@ func TestEmployeeConsumerFaultsFailClosed(t *testing.T) {
 			})
 			fwd := &employeeTestForwarder{}
 			testseam.Swap(t, &digitalEmployeeNewForwarder, func(context.Context, digitalEmployeeAdapterConfig) (forwarder, error) { return fwd, nil })
-			cfg := digitalEmployeeAdapterConfig{Binding: digitalEmployeeBinding{AgentUUID: "agent", DWSProfile: "corp:employee", Channel: "custom"}}
+			cfg := digitalEmployeeAdapterConfig{Binding: digitalEmployeeBinding{SchemaVersion: 1, OperatorOpenDingTalkID: "owner", AgentUUID: "agent", DWSProfile: "corp:employee", Channel: "custom"}}
+			if err := saveDigitalEmployeeBinding(dir, cfg.Binding); err != nil {
+				t.Fatal(err)
+			}
 			if tc.mode == "audit" {
 				if err := os.MkdirAll(filepath.Join(digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile), "audit.jsonl"), 0700); err != nil {
 					t.Fatal(err)
@@ -416,6 +419,9 @@ func TestEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
 	fwd := &employeeTestForwarder{}
 	testseam.Swap(t, &digitalEmployeeNewForwarder, func(context.Context, digitalEmployeeAdapterConfig) (forwarder, error) { return fwd, nil })
 	cfg := digitalEmployeeAdapterConfig{Binding: digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "agent", DWSProfile: "corp:employee", Channel: "custom", OperatorOpenDingTalkID: "owner"}, Options: connectAgentOptions{AllowedUsers: []string{"owner"}}}
+	if err := saveDigitalEmployeeBinding(dir, cfg.Binding); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)

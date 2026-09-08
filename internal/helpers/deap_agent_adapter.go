@@ -57,12 +57,16 @@ func digitalEmployeeAdapterFor(channel string) (digitalEmployeeAdapter, error) {
 func (digitalEmployeeDSHAdapter) Connect(cmd *cobra.Command, cfg digitalEmployeeAdapterConfig) error {
 	b := cfg.Binding
 	registration := map[string]any{"schemaVersion": 1, "agentUuid": b.AgentUUID, "dwsProfile": b.DWSProfile, "operatorOpenDingTalkId": b.OperatorOpenDingTalkID, "protocolVersion": 1}
+	registration["bindingRevision"] = b.BindingRevision
 	if cfg.Name != "" {
 		registration["name"] = cfg.Name
 	}
 	status, err := deapConnectRegisterDSH(cmd.Context(), registration)
 	if err != nil {
 		return fmt.Errorf("数字员工 Profile 已保存为 %s，但 DSH 注册失败；请重新运行同一条 connect 命令以获取新授权码并幂等重试注册: %w", b.DWSProfile, err)
+	}
+	if runtime, e := employeeDSHControl(cmd.Context(), b, "start"); e == nil && runtime.RuntimeState == "running" && runtime.TransportReady && runtime.ExecutorReady {
+		return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
 	}
 	return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{Status: status, AgentUUID: b.AgentUUID, Channel: "dsh", DWSProfile: b.DWSProfile, OperatorOpenDingTalkID: b.OperatorOpenDingTalkID, ProtocolVersion: 1, RestartRequired: true})
 }
@@ -90,6 +94,9 @@ func checkDigitalEmployeeBinding(dir, profile, uuid, channel string) error {
 	if err != nil {
 		return err
 	}
+	if employeeBindingState(b) == "unbound" {
+		return nil
+	}
 	if b.AgentUUID != uuid || bindingChannel(b) != channel {
 		return fmt.Errorf("数字员工已有 %s binding；不能覆盖不同员工或 Adapter 的绑定", bindingChannel(b))
 	}
@@ -111,6 +118,12 @@ func resolveDigitalEmployeeChannel(cmd *cobra.Command) (string, error) {
 }
 
 func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
+	if commandBoolFlag(cmd, "local-lease") {
+		if devAppStringFlag(cmd, "channel") != "dsh" || commandBoolFlag(cmd, "local-worker") || commandBoolFlag(cmd, "local-supervise") || commandBoolFlag(cmd, "profile-only") || commandBoolFlag(cmd, "daemon") || commandDryRun(cmd) {
+			return fmt.Errorf("invalid lease options")
+		}
+		return nil
+	}
 	if commandBoolFlag(cmd, "local-worker") || commandBoolFlag(cmd, "local-supervise") {
 		if commandBoolFlag(cmd, "local-worker") && commandBoolFlag(cmd, "local-supervise") {
 			return fmt.Errorf("invalid worker mode")
@@ -193,6 +206,8 @@ func digitalEmployeeOptions(cmd *cobra.Command) (connectAgentOptions, error) {
 
 func digitalEmployeeAgentFlags() []LeafFlag {
 	return []LeafFlag{
+		{Name: "local-lease", Kind: LeafBool, Hidden: true, Usage: "internal: DSH 员工占用凭据无关的本地运行锁"},
+		{Name: "binding-revision", Hidden: true, Usage: "internal: 精确绑定版本"},
 		{Name: "agent-cmd", Usage: "custom 命令；问题作为末参，stdout 作为回复"},
 		{Name: "agent-model", Usage: "Agent 模型；同 dev connect"},
 		{Name: "agent-workdir", Usage: "Agent 工作目录；同 dev connect"},
@@ -208,12 +223,6 @@ func digitalEmployeeAgentFlags() []LeafFlag {
 		{Name: "local-worker", Kind: LeafBool, Hidden: true, Usage: "internal: 从员工 Profile 的已保存配置运行"},
 		{Name: "local-supervise", Kind: LeafBool, Hidden: true, Usage: "internal: 监督员工 worker"},
 	}
-}
-
-func newDigitalEmployeeConnectionCommand() *cobra.Command {
-	cmd := newGroupCommand(&cobra.Command{Use: "connection", Short: "数字员工本地连接运行管理"})
-	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand())
-	return cmd
 }
 
 func prepareDigitalEmployeeLocal(cmd *cobra.Command, binding digitalEmployeeBinding, accessToken string) (connectAgentOptions, error) {
@@ -238,9 +247,6 @@ func (digitalEmployeeLocalAdapter) Connect(cmd *cobra.Command, cfg digitalEmploy
 	dir := digitalEmployeeRuntimeDir(binding.DWSProfile)
 	if s, _ := readDigitalEmployeeState(dir); employeeStateAlive(s) {
 		return fmt.Errorf("数字员工连接已运行，请先停止后修改配置")
-	}
-	if err := writeEmployeeJSON(filepath.Join(dir, "adapter.json"), cfg); err != nil {
-		return err
 	}
 	// 只有显式 connect 完成新一轮主管授权后开始新预算；worker/restart 不重置。
 	if err := writeEmployeeJSON(filepath.Join(dir, "retry.json"), employeeRetryState{}); err != nil {
@@ -277,14 +283,14 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 		return cfg, fmt.Errorf("adapter 缺少自身开放 ID，请重新 connect 初始化，不能跳过自消息过滤")
 	}
 	b, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), profile)
-	if err != nil || b != cfg.Binding || b.DWSProfile != profile || bindingChannel(b) == "dsh" {
+	if err != nil || !sameEmployeeBinding(b, cfg.Binding) || b.DWSProfile != profile || bindingChannel(b) == "dsh" || employeeBindingState(b) != "bound" || employeeDesiredState(b) != "running" {
 		return cfg, fmt.Errorf("adapter configuration does not match employee binding")
 	}
 	return cfg, nil
 }
 
 func digitalEmployeeResultSpec() *contract.ResultSpec {
-	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","description":"连接状态"},"agentUuid":{"type":"string","description":"数字员工 ID"},"channel":{"type":"string","description":"Adapter 类型"},"dwsProfile":{"type":"string","description":"员工精确 Profile"},"pid":{"type":"integer","description":"本地运行进程"},"logPath":{"type":"string","description":"无正文运行日志"},"restartRequired":{"type":"boolean","description":"是否需要外部宿主重启"},"items":{"type":"array","description":"连接列表","items":{"type":"object"}}}}`)}
+	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","description":"连接状态"},"agentUuid":{"type":"string","description":"数字员工 ID"},"channel":{"type":"string","description":"Adapter 类型"},"dwsProfile":{"type":"string","description":"员工精确 Profile"},"pid":{"type":"integer","description":"本地运行进程"},"logPath":{"type":"string","description":"无正文运行日志"},"restartRequired":{"type":"boolean","description":"是否需要外部宿主重启"},"items":{"type":"array","description":"连接列表","items":{"type":"object"}},"bindingState":{"type":"string","description":"本机绑定状态"},"desiredState":{"type":"string","description":"期望运行状态"},"runtimeState":{"type":"string","description":"实际运行状态或 unknown"},"bindingRevision":{"type":"integer","description":"绑定版本"},"runtimeInstanceId":{"type":"string","description":"运行实例标识"},"transportReady":{"type":"boolean","description":"事件传输就绪"},"executorReady":{"type":"boolean","description":"Agent 初始化就绪"},"observedAt":{"type":"string","description":"状态观察时间"},"operationId":{"type":"string","description":"解绑或换绑操作 ID"},"reasonCode":{"type":"string","description":"稳定阻塞原因"},"nextAction":{"type":"string","description":"安全恢复建议"}}}`)}
 }
 
 func digitalEmployeeMachineResultSpec(capabilities bool) *contract.ResultSpec {
@@ -302,12 +308,12 @@ func newDigitalEmployeeStatusCommand() *cobra.Command {
 		Safety:        contract.SafetySpec{Effect: "read", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "status") },
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_status", CanonicalPath: "dingtalk-tag.connect_status", CLIPath: "dingtalk-tag connection status", PrimaryCLIPath: "dingtalk-tag connection status", Group: "connection"},
-			Description: "管理已绑定数字员工的本地进程；DSH 显示外部管理状态；不重新获取主管授权码。",
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_status", CanonicalPath: "dingtalk-tag.connect_status", CLIPath: "dingtalk-tag connect status", PrimaryCLIPath: "dingtalk-tag connect status", Group: "connect"},
+			Description: "管理已绑定数字员工的本地进程；DSH 通过本机宿主执行员工级控制；不重新获取主管授权码。",
 			Result:      digitalEmployeeResultSpec(),
 			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "读取本地绑定并管理所属进程"},
 			Parameters:  []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}},
-			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 status", UseWhen: []string{"需要对数字员工连接执行 status"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connection status --agent-uuid <agentUuid>"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 status", UseWhen: []string{"需要对数字员工连接执行 status"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connect status --agent-uuid <agentUuid>"}},
 		},
 	})
 }
@@ -320,12 +326,12 @@ func newDigitalEmployeeListCommand() *cobra.Command {
 		Safety:        contract.SafetySpec{Effect: "read", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "list") },
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_list", CanonicalPath: "dingtalk-tag.connect_list", CLIPath: "dingtalk-tag connection list", PrimaryCLIPath: "dingtalk-tag connection list", Group: "connection"},
-			Description: "管理已绑定数字员工的本地进程；DSH 显示外部管理状态；不重新获取主管授权码。",
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_list", CanonicalPath: "dingtalk-tag.connect_list", CLIPath: "dingtalk-tag connect list", PrimaryCLIPath: "dingtalk-tag connect list", Group: "connect"},
+			Description: "管理已绑定数字员工的本地进程；DSH 通过本机宿主执行员工级控制；不重新获取主管授权码。",
 			Result:      digitalEmployeeResultSpec(),
 			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "读取本地绑定并管理所属进程"},
 			Parameters:  nil,
-			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 list", UseWhen: []string{"需要对数字员工连接执行 list"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connection list"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 list", UseWhen: []string{"需要对数字员工连接执行 list"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connect list"}},
 		},
 	})
 }
@@ -338,12 +344,12 @@ func newDigitalEmployeeStopCommand() *cobra.Command {
 		Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "stop") },
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_stop", CanonicalPath: "dingtalk-tag.connect_stop", CLIPath: "dingtalk-tag connection stop", PrimaryCLIPath: "dingtalk-tag connection stop", Group: "connection"},
-			Description: "管理已绑定数字员工的本地进程；DSH 显示外部管理状态；不重新获取主管授权码。",
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_stop", CanonicalPath: "dingtalk-tag.connect_stop", CLIPath: "dingtalk-tag connect stop", PrimaryCLIPath: "dingtalk-tag connect stop", Group: "connect"},
+			Description: "管理已绑定数字员工的本地进程；DSH 通过本机宿主执行员工级控制；不重新获取主管授权码。",
 			Result:      digitalEmployeeResultSpec(),
 			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "读取本地绑定并管理所属进程"},
 			Parameters:  []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}},
-			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 stop", UseWhen: []string{"需要对数字员工连接执行 stop"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connection stop --agent-uuid <agentUuid>"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 stop", UseWhen: []string{"需要对数字员工连接执行 stop"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connect stop --agent-uuid <agentUuid>"}},
 		},
 	})
 }
@@ -356,12 +362,12 @@ func newDigitalEmployeeRestartCommand() *cobra.Command {
 		Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "restart") },
 		Contract: LeafContract{
-			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_restart", CanonicalPath: "dingtalk-tag.connect_restart", CLIPath: "dingtalk-tag connection restart", PrimaryCLIPath: "dingtalk-tag connection restart", Group: "connection"},
-			Description: "管理已绑定数字员工的本地进程；DSH 显示外部管理状态；不重新获取主管授权码。",
+			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_restart", CanonicalPath: "dingtalk-tag.connect_restart", CLIPath: "dingtalk-tag connect restart", PrimaryCLIPath: "dingtalk-tag connect restart", Group: "connect"},
+			Description: "管理已绑定数字员工的本地进程；DSH 通过本机宿主执行员工级控制；不重新获取主管授权码。",
 			Result:      digitalEmployeeResultSpec(),
 			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "读取本地绑定并管理所属进程"},
 			Parameters:  []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}},
-			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 restart", UseWhen: []string{"需要对数字员工连接执行 restart"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connection restart --agent-uuid <agentUuid>"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "数字员工本地连接 restart", UseWhen: []string{"需要对数字员工连接执行 restart"}, AvoidWhen: []string{"机器人连接管理使用 dev connect；创建员工使用 manage"}, Examples: []string{"dws dingtalk-tag connect restart --agent-uuid <agentUuid>"}},
 		},
 	})
 }
