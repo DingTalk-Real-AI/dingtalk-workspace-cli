@@ -6,6 +6,35 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.5] - 2026-09-07
+
+### Added
+
+- **AI 表格应用模式命令** (#1264) — 新增 `dws aitable app` 及 `page`/`widget` 子命令，支持 App 获取与更新、页面和 Widget 的创建、查询、更新、删除与排序。
+
+- **文档块批量删除** — `doc block delete` 的 `--block-id` 支持逗号分隔一次删除多个块
+  （单次最多 50 个）。采用尽力而为语义：单个 blockId 未找到不阻塞其余块的删除，
+  未找到的在 `notFoundBlockIds` 中列出；仅当全部未找到时整体失败。
+
+### Fixed
+
+- **markdown @人 写后回读误报** — 写入含 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=…)` 的 markdown 时，`doc +create` 与 `doc +update --command append|overwrite` 会以 `doc_write_verification_failed` 报错，而内容其实已正确写入。原因是写后回读把写入原文与服务端改写后的正文比对，而服务端会把该私有协议改写成钉钉个人资料链接。现在写后回读改为**按位置配对**：只有预期正文中写了 mention 私有协议的那个位置，才允许回读侧是个人资料链接；其余链接——包括作者自己写的普通个人资料链接——仍保留完整目标并严格比对。显示文本与节点顺序照旧参与比对，漏写、改标签或顺序错乱依旧判定失败。原子命令 `doc update` 无写后回读，行为不变。
+- **@人 目标身份不再被隐含声明为已验证** — 回读能证明 mention 链接落在作者写的位置、显示文本未变，但证明不了它解析到了哪个人：`openDingTalkId` 与改写后的 `staffId` 是不同值且无本地映射。含 mention 的写入结果因此在与 `verified` 同级处声明作用域：`verificationScope="partial"`、`unverified=["mention_targets"]`，verify 步骤状态由 `success` 降为 `partial` 并带 `scope="partial"`（只按 `steps[].status` 推进、不认识 scope 字段的既有消费者因此也不会再把它读成完整核验成功），另有 `verification.mentionTargetsVerified=false` 与一条说明性 warning，并把 `verified` 置为 `false`（操作本身仍 `status=success`）：回读无法确定 @ 到了谁，就不宣称已验证。另有 `unverifiableLocally=["mention_targets"]` 表明该缺口不是"还没查"而是"回读查不出来"，重读文档不会得到新信息。warning 只透两条事实：@人链接指向的具体人员需用户自行核对，正文其余部分（含该链接的位置与显示文本）均已通过回读校验。不含 mention 的写入输出完全不变。
+
+- **Chat message decrypt fallback** — skips crypto policy lookups and decrypt failure ledger fields on chat read paths when the DWS binary does not include the SafeChat backend, while preserving policy-driven decryption after `chat message list --page-all` aggregates its pages.
+
+- **AI Table view OR filters** — allows `aitable view update filter` to persist
+  a single top-level `or` group while preserving flat-array AND behavior,
+  rejecting nested logical groups, and verifying equivalent service readback
+  shapes.
+
+- **OA 空页分页兼容** — 待审批、已处理和已发起审批列表兼容成功响应中 `values:[]` 省略 `hasMore` 的终页编码，避免空列表误报 `missing_pagination`；保留显式分页值及业务状态、数组结构和其他接口的严格校验。
+
+- **自动合并**：修复 Reviewer Router 将可合并但显示 `blocked` 的 PR 持续跳过的问题；恢复 App 的同步合并尝试，并继续由 GitHub 强制执行审批和必需 CI 检查。
+
+- **Schema compatibility checks** — accept a new `require_one_of` group when a historical unconditional required parameter without a default already guarantees a supplied member. Other incompatible parameter changes remain rejected; CLI runtime behavior is unchanged.
+
+
 ## [1.0.62-beta.4] - 2026-09-04
 
 ### Fixed

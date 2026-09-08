@@ -95,7 +95,7 @@ func init() {
 	RegisterRuntimeSchemaParameterMetadata("aitable.view_update_filter", RuntimeSchemaParameterMetadata{
 		Required: []string{"json"},
 		Formats:  map[string]string{"json": "json"},
-		Examples: map[string]string{"json": `[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]`},
+		Examples: map[string]string{"json": `[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`},
 	})
 	RegisterRuntimeSchemaParameterMetadata("aitable.view_update_group", RuntimeSchemaParameterMetadata{
 		Required: []string{"json"},

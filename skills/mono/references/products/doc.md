@@ -276,10 +276,13 @@ Usage:
   dws doc block delete [flags]
 Example:
   dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
+  dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --block-id string    目标块 ID (必填)
+      --block-id string    目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个
 ```
+
+> **批量删除**：需要删多个块时用逗号一次传入，定位基于 blockId。
 
 ### 查询文档评论列表
 ```
@@ -934,6 +937,9 @@ dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "修改后�
 
 # 5. 删除块
 dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
+
+# 5b. 一次删多个块（逗号分隔，单次最多 50 个；不要循环调用，返回后检查 notFoundBlockIds）
+dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
 
 # ── 工作流 8: 复制/移动/重命名文档 ──
 

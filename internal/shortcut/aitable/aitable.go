@@ -674,13 +674,21 @@ var FieldDelete = shortcut.Shortcut{
 // record: 记录管理（server: aitable / aitable-helper）
 // ─────────────────────────────────────────────────────────────
 
+const (
+	recordQueryDescription = "查询单表记录（按 ID / 条件 / 关键词，并支持字段投影和分页）"
+	recordQueryIntent      = "用于单张表的单页行数据读取：按 recordId、已归一化字段条件或关键词查询，支持字段投影和 nextCursor 显式续页；filters 中字段和值必须先按字段类型解析。" +
+		"完整读取全表时不要使用本 Shortcut，改用 dws aitable record query --all --page-limit 0。多表关联、跨表分析或 SQL 聚合/窗口计算使用 psql；两者不是同一结果模型，禁止相互拼接、转换或混合推导。"
+	recordQueryAvoidPsql = "多表关联、跨表分析或 SQL 聚合/窗口计算时使用 psql。"
+	recordQueryAvoidAll  = "需要全部、完整、汇总、统计、导出或逐条处理全表数据时，改用 dws aitable record query --all --page-limit 0；不要手写 cursor 循环或把当前页当全量。"
+)
+
 // RecordQuery 获取行记录（query_records）。
 var RecordQuery = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+record-query",
 	Product:     serverMain,
-	Description: "查询表格记录（按 ID / 条件 / 关键词，并支持字段投影和分页）",
-	Intent:      "读取表格行数据；可按 recordId 精确取、按条件筛选、按关键词搜索，并用 fieldIds 只返回用户要求的字段以避免无关数据和 token 消耗；服务端未返回的计算字段不会由 CLI 本地补算。",
+	Description: recordQueryDescription,
+	Intent:      recordQueryIntent,
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -694,16 +702,16 @@ var RecordQuery = shortcut.Shortcut{
 			CLIPath:        "aitable +record-query",
 			PrimaryCLIPath: "aitable +record-query",
 		},
-		Description: "查询表格记录（按 ID / 条件 / 关键词，并支持字段投影和分页）",
+		Description: recordQueryDescription,
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "查询表格记录（按 ID / 条件 / 关键词，并支持字段投影和分页）",
-			UseWhen:      []string{"读取表格行数据；可按 recordId 精确取、按条件筛选、按关键词搜索，并用 fieldIds 只返回用户要求的字段以避免无关数据和 token 消耗；服务端未返回的计算字段不会由 CLI 本地补算。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			AgentSummary: recordQueryDescription,
+			UseWhen:      []string{recordQueryIntent},
+			AvoidWhen:    []string{recordQueryAvoidPsql, recordQueryAvoidAll},
 			Examples: []string{
 				"dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50",
 				"dws aitable +record-query --base-id B --table-id T --record-ids R1,R2 --field-ids F_NAME,F_STATUS",
@@ -714,12 +722,12 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "记录 ID 列表，单次最多 100（可选）"},
-		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "返回字段 ID 列表（可选）"},
-		{Name: "filters", Type: shortcut.FlagString, Desc: "结构化过滤条件 JSON（可选）"},
-		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）"},
+		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "返回字段 ID 列表（可选）；必须先通过 field get 获取真实 fieldId，不要传字段中文名"},
+		{Name: "filters", Type: shortcut.FlagString, Desc: "结构化过滤条件 JSON（可选）；先用 field get 完整读一遍表头，确定用户条件对应的字段和类型后再传值。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
+		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）；fieldId 必须来自 field get，direction 仅用 asc/desc"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "单次最大记录数，默认 100（可选）"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）"},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造"},
 	},
 	Tips: []string{
 		`dws aitable +record-query --base-id B --table-id T --query "关键词" --limit 50`,
@@ -835,7 +843,7 @@ var RecordQueryEmpty = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "单次扫描预算，范围 [1,100]（可选）"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）"},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续原样使用上一页 nextCursor；records 为空不是错误，nextCursor 非空则继续扫，为空表示已扫完全表并正常完成"},
 	},
 	Tips: []string{`dws aitable +record-query-empty --base-id B --table-id T`},
 	Execute: func(rt *shortcut.RuntimeContext) error {

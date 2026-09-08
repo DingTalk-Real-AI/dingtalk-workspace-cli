@@ -35,6 +35,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/validate"
@@ -76,6 +77,7 @@ const (
 	HeaderExecutionId  = "X-Cli-Execution-Id"
 	HeaderAgentVersion = "x-dws-agent-ver"
 	HeaderAgentExt     = "x-dws-agent-ext"
+	HeaderMCPSessionID = "Mcp-Session-Id"
 	SourceValue        = "dws-cli"
 )
 
@@ -99,6 +101,8 @@ type Client struct {
 	FileLogger       *slog.Logger // Structured file logger for diagnostics (nil-safe).
 	sleep            func(context.Context, time.Duration) error
 	wildcardOnce     sync.Once
+	sessionMu        sync.RWMutex
+	sessionID        string
 	// Stderr is the writer for warning messages. Defaults to os.Stderr.
 	Stderr io.Writer
 }
@@ -666,6 +670,11 @@ func (c *Client) CallTool(ctx context.Context, endpoint, tool string, arguments 
 	if err := validateCallArguments(arguments); err != nil {
 		return ToolCallResult{}, apperrors.NewValidation(err.Error())
 	}
+	if requiresStreamableHTTPSession(endpoint) {
+		if err := c.ensureStreamableHTTPSession(ctx, endpoint); err != nil {
+			return ToolCallResult{}, err
+		}
+	}
 	var payload ToolCallResult
 	if err := c.callJSONRPC(ctx, endpoint, requestEnvelope{
 		JSONRPC: "2.0",
@@ -728,6 +737,9 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		return err
 	}
 	defer resp.Body.Close()
+	if request.Method == "initialize" {
+		c.setSessionID(resp.Header.Get(HeaderMCPSessionID))
+	}
 
 	// Extract trace ID from response headers for correlation.
 	headerTraceID := ExtractTraceIDFromHeaders(resp.Header)
@@ -765,6 +777,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		return nil
 	}
 
+	data = normalizeJSONRPCResponseBody(data, resp.Header.Get("Content-Type"))
 	if err := jsonutil.RejectDuplicateObjectKeys(data); err != nil {
 		return apperrors.NewDiscovery(
 			fmt.Sprintf("unexpected protocol response from %s", RedactURL(endpoint)),
@@ -864,7 +877,14 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+		if requiresStreamableHTTPSession(endpoint) {
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			if sessionID := c.getSessionID(); sessionID != "" {
+				req.Header.Set(HeaderMCPSessionID, sessionID)
+			}
+		} else {
+			req.Header.Set("Accept", "application/json")
+		}
 		// Set security headers for request tracing
 		req.Header.Set(HeaderSource, SourceValue)
 		if c.ExecutionId != "" {
@@ -973,6 +993,80 @@ func (c *Client) ValidateTrustedEndpoint(endpoint string) error {
 		)
 	}
 	return nil
+}
+
+func requiresStreamableHTTPSession(endpoint string) bool {
+	productionEndpoint, ok := aitableProductionEndpoint()
+	return ok && sameStreamableHTTPSessionEndpoint(endpoint, productionEndpoint)
+}
+
+func sameStreamableHTTPSessionEndpoint(endpoint, productionEndpoint string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil {
+		return false
+	}
+	productionParsed, err := url.Parse(productionEndpoint)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, productionParsed.Scheme) &&
+		strings.EqualFold(parsed.Hostname(), productionParsed.Hostname()) &&
+		parsed.EscapedPath() == productionParsed.EscapedPath()
+}
+
+func aitableProductionEndpoint() (string, bool) {
+	return aitableEndpointFromServers(syncdata.StaticServers())
+}
+
+func aitableEndpointFromServers(servers []syncdata.ServerInfo) (string, bool) {
+	for _, server := range servers {
+		if server.ID == "aitable" {
+			return server.Endpoint, true
+		}
+	}
+	return "", false
+}
+
+func (c *Client) ensureStreamableHTTPSession(ctx context.Context, endpoint string) error {
+	if c.getSessionID() != "" {
+		return nil
+	}
+	if _, err := c.Initialize(ctx, endpoint); err != nil {
+		return err
+	}
+	if c.getSessionID() == "" {
+		return apperrors.NewDiscovery("MCP initialize response did not include a session ID")
+	}
+	return c.NotifyInitialized(ctx, endpoint)
+}
+
+func (c *Client) getSessionID() string {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.sessionID
+}
+
+func (c *Client) setSessionID(sessionID string) {
+	c.sessionMu.Lock()
+	defer c.sessionMu.Unlock()
+	c.sessionID = strings.TrimSpace(sessionID)
+}
+
+func normalizeJSONRPCResponseBody(data []byte, contentType string) []byte {
+	if !strings.Contains(strings.ToLower(contentType), "text/event-stream") {
+		return data
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload != "" && payload != "[DONE]" {
+			return []byte(payload)
+		}
+	}
+	return data
 }
 
 func sanitizeJSONRPCEndpoint(endpoint string) string {

@@ -80,7 +80,7 @@ const mergePreflightHelper = `function classifyMergePreflight(pullRequest) {
   }
   if (
     pullRequest.mergeable !== true ||
-    ['blocked', 'dirty', 'draft'].includes(pullRequest.mergeable_state)
+    ['dirty', 'draft'].includes(pullRequest.mergeable_state)
   ) {
     return 'not_ready';
   }
@@ -137,6 +137,8 @@ const mergeAttemptRecoveryHelper = `function classifyMergeAttemptRecovery(
     latestPull.base?.ref === 'main' &&
     baseRepository === expectedBaseRepository &&
     (latestMergePreflight === 'behind' ||
+      (latestPull.mergeable === true &&
+        latestPull.mergeable_state === 'blocked') ||
       (latestMergePreflight === 'not_ready' && hasExplicitNotReadyState))
   ) {
     return {outcome: 'not_ready'};
@@ -276,7 +278,8 @@ for (const [name, pull, expected] of [
   ['unknown', {mergeable: null, mergeable_state: 'unknown'}, 'unknown'],
   ['clean', {mergeable: true, mergeable_state: 'clean'}, 'attempt'],
   ['dirty', {mergeable: false, mergeable_state: 'dirty'}, 'not_ready'],
-  ['blocked', {mergeable: true, mergeable_state: 'blocked'}, 'not_ready'],
+  ['blocked', {mergeable: true, mergeable_state: 'blocked'}, 'attempt'],
+  ['false blocked', {mergeable: false, mergeable_state: 'blocked'}, 'not_ready'],
   ['draft', {mergeable: true, mergeable_state: 'draft'}, 'not_ready'],
   ['null blocked', {mergeable: null, mergeable_state: 'blocked'}, 'not_ready'],
   ['missing mergeable', {mergeable_state: 'unknown'}, 'not_ready'],

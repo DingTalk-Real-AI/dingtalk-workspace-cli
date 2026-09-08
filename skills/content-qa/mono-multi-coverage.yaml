@@ -168,6 +168,9 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: references/products/aitable/aitable-psql.md
+    multi: dingtalk-aitable/references/aitable/aitable-psql.md
+    mode: identical
   - mono: references/products/contract.md
     multi: dingtalk-misc/references/contract.md
     mode: identical

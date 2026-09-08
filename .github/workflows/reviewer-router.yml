@@ -1316,6 +1316,8 @@ jobs:
               return mergeResult.sha;
             }
 
+            // blocked 可能来自主干写入限制；可合并的 PR 仍需由 App 调用同步接口，
+            // 让 GitHub 执行 App 无权绕过的审批和必需检查。
             function classifyMergePreflight(pullRequest) {
               if (
                 pullRequest.mergeable === true &&
@@ -1331,7 +1333,7 @@ jobs:
               }
               if (
                 pullRequest.mergeable !== true ||
-                ['blocked', 'dirty', 'draft'].includes(pullRequest.mergeable_state)
+                ['dirty', 'draft'].includes(pullRequest.mergeable_state)
               ) {
                 return 'not_ready';
               }
@@ -1388,6 +1390,8 @@ jobs:
                 latestPull.base?.ref === 'main' &&
                 baseRepository === expectedBaseRepository &&
                 (latestMergePreflight === 'behind' ||
+                  (latestPull.mergeable === true &&
+                    latestPull.mergeable_state === 'blocked') ||
                   (latestMergePreflight === 'not_ready' && hasExplicitNotReadyState))
               ) {
                 return {outcome: 'not_ready'};
