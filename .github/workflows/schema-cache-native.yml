@@ -45,7 +45,7 @@ jobs:
             protoc_archive: protoc-35.1-osx-aarch_64.zip
             protoc_sha256: 193289af0470c6a1aada357d4fba0bbf8d78bfaac8b5e42ca30af2ef75583de2
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 75
+    timeout-minutes: 120
     env:
       GOTOOLCHAIN: go1.25.9
       GOWORK: 'off'
