@@ -6,6 +6,21 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.6] - 2026-09-08
+
+### Added
+
+- **AI 表格 PostgreSQL 只读查询** — 新增 `dws aitable psql`，支持发现逻辑表和列类型，并执行只读 `SELECT`，包括同一 Base 内的多表 JOIN。
+
+- **Native Markdown themes** — adds `--theme` to `markdown create` and
+  `markdown overwrite`, preserving existing Front Matter while safely writing
+  the selected we-markdown theme into a private upload copy.
+
+### Fixed
+
+- **AI 表格应用模式输入校验错误分类** (#1314) — 将 icon、background、config、layout 等字段的校验失败从 `internal` 错误和退出码 `5` 修正为 `validation` 错误和退出码 `3`；校验仍在 MCP 调用前完成。
+
+
 ## [1.0.62-beta.5] - 2026-09-07
 
 ### Added
