@@ -297,6 +297,9 @@ func TestPagedMCPCommandStringCursorAggregatesAndPageLimit(t *testing.T) {
 	if len(items) != 2 || paging["truncated"] != true || paging["pages"].(float64) != 2 {
 		t.Fatalf("result = %#v", got)
 	}
+	if paging["requestSatisfied"] != false || paging["sourceExhausted"] != false {
+		t.Fatalf("paging=%#v, want an unsatisfied page-budget stop", paging)
+	}
 	if result["hasMore"] != true || result["nextCursor"] != "c3" {
 		t.Fatalf("result=%#v, want final page-limit cursor state", result)
 	}
@@ -324,9 +327,12 @@ func TestPagedMCPCommandStringCursorAggregatesAndSyncsCompletionFields(t *testin
 	if paging["truncated"] != false || paging["hasMore"] != false || paging["lastCursor"] != "" {
 		t.Fatalf("paging=%#v, want complete pagination metadata", paging)
 	}
+	if paging["requestSatisfied"] != true || paging["sourceExhausted"] != true {
+		t.Fatalf("paging=%#v, want a satisfied source-exhausted request", paging)
+	}
 }
 
-func TestPagedMCPCommandConversationMessagesMergeSameConversation(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandConversationMessagesMergeSameConversation(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"conversationMessagesList":[{"openConversationId":"cid1","title":"群1","messages":[{"id":"m1"}]}],"hasMore":true,"nextCursor":"c2"}}`},
 		{text: `{"result":{"conversationMessagesList":[{"openConversationId":"cid1","title":"ignored","messages":[{"id":"m2"}]}],"hasMore":false,"nextCursor":""}}`},
@@ -370,7 +376,7 @@ func TestPagedMCPCommandConversationMessagesPreserveFirstConversationOrder(t *te
 	}
 }
 
-func TestPagedMCPCommandConversationMessagesMaxItemsTruncatesMessages(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandConversationMessagesMaxItemsTruncatesMessages(t *testing.T) {
 	caller := &pagedCommandCaller{steps: []scriptedToolStep{
 		{text: `{"result":{"conversationMessagesList":[{"openConversationId":"cid1","messages":[{"id":"m1"},{"id":"m2"}]},{"openConversationId":"cid2","messages":[{"id":"m3"},{"id":"m4"}]}],"hasMore":true,"nextCursor":"c2"}}`},
 	}}
@@ -419,7 +425,7 @@ func TestPagedMCPCommandConversationMessagesLaterFailureOutputsPartial(t *testin
 	}
 }
 
-func TestPagedMCPCommandConversationMessagesAddErrorsOutputPartial(t *testing.T) {
+func TestCrossPlatformCoveragePagedMCPCommandConversationMessagesAddErrorsOutputPartial(t *testing.T) {
 	tests := []struct {
 		name     string
 		response string
@@ -624,6 +630,107 @@ func TestPagedMCPCommandMaxItemsStopsWhenPageExactlyReachesLimit(t *testing.T) {
 	}
 	if _, ok := paging["truncatedWithinPage"]; ok {
 		t.Fatalf("paging=%#v, want no within-page truncation marker", paging)
+	}
+}
+
+func TestCrossPlatformCoveragePagedMCPCommandIdentityDedupAndRequestSatisfaction(t *testing.T) {
+	cfg := pagedCommandMessagesConfig(nil)
+	cfg.ItemIdentityPath = "id"
+	caller := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"messages":[{"id":"m1"}],"hasMore":true,"nextCursor":"c2"}}`},
+		{text: `{"result":{"messages":[{"id":"m1"},{"id":"m2"}],"hasMore":true,"nextCursor":"c3"}}`},
+	}}
+
+	got, _, err := runPagedCommandTest(t, caller, cfg, "--page-all", "--max-items", "2", "--page-delay", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := got["result"].(map[string]any)["messages"].([]any)
+	paging := got["paging"].(map[string]any)
+	if len(caller.calls) != 2 || len(items) != 2 || items[0].(map[string]any)["id"] != "m1" || items[1].(map[string]any)["id"] != "m2" {
+		t.Fatalf("calls=%#v items=%#v, want stable two-page dedupe", caller.calls, items)
+	}
+	if paging["requestSatisfied"] != true || paging["sourceExhausted"] != false || paging["hasMore"] != true {
+		t.Fatalf("paging=%#v, want satisfied bounded request without source exhaustion", paging)
+	}
+
+	missingIdentity := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"messages":[{"text":"missing id"}],"hasMore":false,"nextCursor":""}}`},
+	}}
+	got, _, err = runPagedCommandTest(t, missingIdentity, cfg, "--page-all", "--page-delay", "0")
+	if err == nil || !strings.Contains(err.Error(), "missing identity path id") {
+		t.Fatalf("result=%#v err=%v, want fail-closed identity error", got, err)
+	}
+	failedPaging := got["paging"].(map[string]any)
+	if failedPaging["requestSatisfied"] != false || failedPaging["itemsFetched"] != float64(0) {
+		t.Fatalf("paging=%#v, want unsatisfied request with no accepted items", failedPaging)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		response string
+		want     string
+	}{
+		{
+			name:     "non-object item",
+			response: `{"result":{"messages":["bad"],"hasMore":false,"nextCursor":""}}`,
+			want:     "item must be object",
+		},
+		{
+			name:     "empty identity",
+			response: `{"result":{"messages":[{"id":"  "}],"hasMore":false,"nextCursor":""}}`,
+			want:     "must be non-empty",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &pagedCommandCaller{steps: []scriptedToolStep{{text: tc.response}}}
+			if _, _, err := runPagedCommandTest(t, caller, cfg, "--page-all", "--page-delay", "0"); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err=%v, want %q", err, tc.want)
+			}
+		})
+	}
+
+	collection := newPagedCollection(cfg)
+	if err := collection.Add([]any{map[string]any{"id": "m1"}, map[string]any{"id": "m2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if collection.Truncate(0) || !collection.Truncate(1) || collection.Total() != 1 {
+		t.Fatalf("collection=%#v, want generic truncation to one item", collection.Values())
+	}
+}
+
+func TestCrossPlatformCoverageChatSearchCommonOwnsBoundedPagination(t *testing.T) {
+	caller := &pagedCommandCaller{steps: []scriptedToolStep{
+		{text: `{"result":{"groups":[{"openConversationId":"cid-1","title":"one"}],"hasMore":true,"nextCursor":"c2"}}`},
+		{text: `{"result":{"groups":[{"openConversationId":"cid-1","title":"duplicate"},{"openConversationId":"cid-2","title":"two"}],"hasMore":true,"nextCursor":"c3"}}`},
+	}}
+	InitDepsForTest(t, caller)
+	var output bytes.Buffer
+	deps.Out.w = &output
+	cmd := newChatCommand()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetArgs([]string{
+		"search-common", "--nicks", "one,two", "--match-mode", "AND",
+		"--limit", "100", "--page-all", "--max-items", "2", "--page-delay", "0",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("stdout=%q err=%v", output.String(), err)
+	}
+	groups := payload["result"].(map[string]any)["groups"].([]any)
+	paging := payload["paging"].(map[string]any)
+	if len(groups) != 2 || len(caller.calls) != 2 || caller.calls[0].args["cursor"] != "0" || caller.calls[1].args["cursor"] != "c2" {
+		t.Fatalf("groups=%#v calls=%#v", groups, caller.calls)
+	}
+	if caller.calls[0].server != "chat" || caller.calls[0].tool != "search_common_groups" {
+		t.Fatalf("first call=%#v", caller.calls[0])
+	}
+	if paging["requestSatisfied"] != true || paging["sourceExhausted"] != false || paging["total"].(float64) != 2 {
+		t.Fatalf("paging=%#v", paging)
 	}
 }
 

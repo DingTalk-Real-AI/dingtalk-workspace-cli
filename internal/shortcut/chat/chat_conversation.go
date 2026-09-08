@@ -872,23 +872,37 @@ var CategoryList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		categories := categoryListProject(data)
+		categories, err := categoryListProject(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(categories), "categories": categories})
 	},
 }
 
 // categoryListProject reshapes the raw list_user_define_conv_categories response
 // into a clean {categoryId, title} list — clean output projection.
-// Both the list container and the per-item field names are probed defensively
-// across candidate keys, so an unknown/empty shape yields an empty list rather
-// than a crash or fabricated data.
-func categoryListProject(data map[string]any) []map[string]any {
-	raw := categoryListResolveList(data)
+// Both the list container and the per-item field names are probed defensively.
+// Only an explicit array can represent a legitimate empty result; an unknown
+// envelope or malformed item fails closed instead of being projected as [].
+func categoryListProject(data map[string]any) ([]map[string]any, error) {
+	raw, found := categoryListResolveList(data)
+	if !found {
+		return nil, invalidCategoryResponse(
+			"im/list_user_define_conv_categories",
+			"响应中缺少明确的会话分组数组",
+			nil,
+		)
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, invalidCategoryResponse(
+				"im/list_user_define_conv_categories",
+				"会话分组条目不是对象",
+				map[string]any{"index": index},
+			)
 		}
 		row := map[string]any{}
 		if v, ok := categoryListFirst(m, "categoryId", "category_id", "id"); ok {
@@ -897,33 +911,38 @@ func categoryListProject(data map[string]any) []map[string]any {
 		if v, ok := categoryListFirst(m, "title", "categoryName", "name"); ok {
 			row["title"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if !categoryValuePresent(row["categoryId"]) || !categoryValuePresent(row["title"]) {
+			return nil, invalidCategoryResponse(
+				"im/list_user_define_conv_categories",
+				"会话分组条目缺少稳定 categoryId 或标题",
+				map[string]any{"index": index},
+			)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // categoryListResolveList locates the category array inside the response,
 // tolerating a bare top-level list or nesting one level under a common envelope.
-func categoryListResolveList(data map[string]any) []any {
+func categoryListResolveList(data map[string]any) ([]any, bool) {
 	for _, key := range []string{"categoryList", "categories", "result", "data", "list", "items"} {
 		v, ok := data[key]
 		if !ok {
 			continue
 		}
 		if arr, ok := v.([]any); ok {
-			return arr
+			return arr, true
 		}
 		if inner, ok := v.(map[string]any); ok {
 			for _, ik := range []string{"categoryList", "categories", "list", "items", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
-					return arr
+					return arr, true
 				}
 			}
 		}
 	}
-	return []any{}
+	return nil, false
 }
 
 // categoryListFirst returns the first present candidate key's value.
@@ -936,47 +955,131 @@ func categoryListFirst(m map[string]any, keys ...string) (any, bool) {
 	return nil, false
 }
 
+const categoryListConversationsIntent = "当已有稳定 categoryId、需要列出该自定义会话分组中的会话时使用。若只有标题或用户明确授权任选一个分组，先用 chat +category-list 得到真实 categoryId，再调用本命令；本命令严格校验 conversations 数组、稳定会话身份和分页耗尽。"
+
 // CategoryListConversations lists conversations in a category (list_conversations_by_category, im).
 var CategoryListConversations = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+category-list-conversations",
 	Product:     "im",
-	Description: "拉取指定自定义会话分组下的会话",
-	Intent:      "当你想查看某个自定义会话分组里都归入了哪些会话时使用；只读，需传 categoryId，可用 --exclude-muted 排除已免打扰会话。",
+	Description: "按稳定 categoryId 列出会话分组中的会话",
+	Intent:      categoryListConversationsIntent,
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_category_list_conversations",
+			CanonicalPath:  "chat.shortcut_category_list_conversations",
+			CLIPath:        "chat +category-list-conversations",
+			PrimaryCLIPath: "chat +category-list-conversations",
+		},
+		Description: "按稳定 categoryId 列出会话分组中的会话",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed category reader: it preserves the published stable-ID input while validating the collection shape, stable conversation identity, and source exhaustion.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按稳定 categoryId 列出会话分组中的会话",
+			UseWhen:      []string{categoryListConversationsIntent},
+			AvoidWhen: []string{
+				"只需列出分组本身时使用 chat +category-list；需要群成员或聊天消息时分别使用 chat +chat-members-list 或 chat +chat-messages",
+			},
+			Examples: []string{
+				"dws chat +category-list-conversations --category-id <categoryId>",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "category-id", Type: shortcut.FlagInt, Desc: "会话分组 ID", Required: true},
+		{Name: "category-id", Type: shortcut.FlagInt, Desc: "稳定会话分组 ID", Required: true},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
 	},
-	Tips: []string{`dws chat +category-list-conversations --category-id <分组ID>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"categoryId": rt.Int("category-id")}
-		if rt.Bool("exclude-muted") {
-			params["excludeMuted"] = true
-		}
-		data, err := rt.CallMCPData("im", "list_conversations_by_category", params)
-		if err != nil {
-			return err
-		}
-		convs := categoryConversationsProject(data)
-		payload := map[string]any{"count": len(convs), "conversations": convs}
-		chatmsg.ApplyPagination(payload, data)
-		return rt.Output(payload)
+	Tips: []string{
+		`dws chat +category-list-conversations --category-id <分组ID>`,
 	},
+	Execute: executeCategoryListConversations,
+}
+
+func executeCategoryListConversations(rt *shortcut.RuntimeContext) error {
+	categoryID := rt.Int("category-id")
+	params := map[string]any{"categoryId": categoryID}
+	if rt.Bool("exclude-muted") {
+		params["excludeMuted"] = true
+	}
+	data, err := rt.CallMCPData("im", "list_conversations_by_category", params)
+	if err != nil {
+		return err
+	}
+	conversations, err := categoryConversationsProject(data)
+	if err != nil {
+		return err
+	}
+	hasMore, err := requireCategoryConversationsPagination(data)
+	if err != nil {
+		return err
+	}
+	if hasMore {
+		return apperrors.NewAPI(
+			"会话分组仍有后续页，但下层未提供可执行 continuation",
+			apperrors.WithOperation("im/list_conversations_by_category"),
+			apperrors.WithReason("chat_category_pagination_incomplete"),
+			apperrors.WithOrigin("mcp_gateway"),
+			apperrors.WithFailureStage("pagination"),
+			apperrors.WithRetryable(false),
+			apperrors.WithDetails(map[string]any{
+				"categoryId": categoryID,
+				"count":      len(conversations),
+			}),
+		)
+	}
+	payload := map[string]any{
+		"count":           len(conversations),
+		"conversations":   conversations,
+		"complete":        true,
+		"paginationKnown": true,
+	}
+	return rt.Output(payload)
+}
+
+func requireCategoryConversationsPagination(data map[string]any) (bool, error) {
+	page := chatmsg.Pagination(data)
+	hasMore, paginationKnown := page["hasMore"].(bool)
+	if !paginationKnown {
+		return false, invalidCategoryResponse(
+			"im/list_conversations_by_category",
+			"响应未返回 hasMore，无法证明分组会话结果完整",
+			nil,
+		)
+	}
+	return hasMore, nil
 }
 
 // categoryConversationsProject reshapes the raw list_conversations_by_category
 // response into a clean conversation list — clean output projection.
-// Both the list container and the per-item field names are probed defensively
-// across candidate keys, so an unknown/empty shape yields an empty list rather
-// than a crash or fabricated data.
-func categoryConversationsProject(data map[string]any) []map[string]any {
-	raw := categoryConversationsResolveList(data)
+// Both the list container and per-item field names are probed defensively.
+// Missing collection evidence and malformed rows fail closed.
+func categoryConversationsProject(data map[string]any) ([]map[string]any, error) {
+	raw, found := categoryConversationsResolveList(data)
+	if !found {
+		return nil, invalidCategoryResponse(
+			"im/list_conversations_by_category",
+			"响应中缺少明确的会话数组",
+			nil,
+		)
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, invalidCategoryResponse(
+				"im/list_conversations_by_category",
+				"分组会话条目不是对象",
+				map[string]any{"index": index},
+			)
 		}
 		row := map[string]any{}
 		if v, ok := categoryConversationsFirst(m, "openConversationId", "conversationId", "id"); ok {
@@ -988,34 +1091,59 @@ func categoryConversationsProject(data map[string]any) []map[string]any {
 		if v, ok := categoryConversationsFirst(m, "conversationType", "type"); ok {
 			row["conversationType"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if !categoryValuePresent(row["openConversationId"]) {
+			return nil, invalidCategoryResponse(
+				"im/list_conversations_by_category",
+				"分组会话条目缺少稳定 openConversationId",
+				map[string]any{"index": index},
+			)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // categoryConversationsResolveList locates the conversation array inside the
 // response, tolerating a bare top-level list or nesting one level under a
 // common envelope.
-func categoryConversationsResolveList(data map[string]any) []any {
+func categoryConversationsResolveList(data map[string]any) ([]any, bool) {
 	for _, key := range []string{"conversationList", "conversations", "result", "data", "list", "items"} {
 		v, ok := data[key]
 		if !ok {
 			continue
 		}
 		if arr, ok := v.([]any); ok {
-			return arr
+			return arr, true
 		}
 		if inner, ok := v.(map[string]any); ok {
 			for _, ik := range []string{"conversationList", "conversations", "list", "items", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
-					return arr
+					return arr, true
 				}
 			}
 		}
 	}
-	return []any{}
+	return nil, false
+}
+
+func invalidCategoryResponse(operation, message string, details map[string]any) error {
+	return apperrors.NewAPI(
+		message,
+		apperrors.WithOperation(operation),
+		apperrors.WithReason("chat_category_response_invalid"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithFailureStage("response_validation"),
+		apperrors.WithRetryable(false),
+		apperrors.WithDetails(details),
+	)
+}
+
+func categoryValuePresent(value any) bool {
+	if value == nil {
+		return false
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	return text != "" && text != "<nil>"
 }
 
 // categoryConversationsFirst returns the first present candidate key's value.

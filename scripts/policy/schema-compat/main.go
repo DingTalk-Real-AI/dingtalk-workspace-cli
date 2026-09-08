@@ -1222,8 +1222,9 @@ func compatibleInterfaceRefRedirect(toolPath string, oldTool, newTool toolSchema
 
 // compatibleAdditiveConstraintEvolution accepts constraint evolution that
 // cannot invalidate an invocation expressible by the historical public
-// parameter contract. Existing groups may only gain members; additions to a
-// mutually-exclusive or require-together group must not be historical public
+// parameter contract. Require-one-of groups may be removed: accepting omitted
+// inputs cannot invalidate an old invocation. Other existing groups may only
+// gain members; additions to a mutually-exclusive or require-together group must not be historical public
 // parameters, because that would reject an invocation expressible by the old
 // contract. Adding a member to require-one-of only loosens the group. A newly
 // added mutually-exclusive group is safe when it contains at most one
@@ -1233,8 +1234,8 @@ func compatibleInterfaceRefRedirect(toolPath string, oldTool, newTool toolSchema
 // require-one-of group is safe only if a historical unconditional required
 // parameter without a default already guarantees one of its members is supplied.
 func compatibleAdditiveConstraintEvolution(oldTool, newTool toolSchema) bool {
-	oldGroups, okOld := parseConstraintGroups(oldTool.Constraints)
-	newGroups, okNew := parseConstraintGroups(newTool.Constraints)
+	oldGroups, okOld := parseMigrationConstraintsStrict(oldTool.Constraints)
+	newGroups, okNew := parseMigrationConstraintsStrict(newTool.Constraints)
 	if !okOld || !okNew {
 		return false
 	}
@@ -1242,9 +1243,6 @@ func compatibleAdditiveConstraintEvolution(oldTool, newTool toolSchema) bool {
 		used := make([]bool, len(newGroups[key]))
 		for _, oldGroup := range oldGroups[key] {
 			oldSet := stringSet(oldGroup)
-			if len(oldSet) == 0 {
-				return false
-			}
 			matched := false
 			for index, newGroup := range newGroups[key] {
 				newSet := stringSet(newGroup)
@@ -1270,7 +1268,7 @@ func compatibleAdditiveConstraintEvolution(oldTool, newTool toolSchema) bool {
 				matched = true
 				break
 			}
-			if !matched {
+			if !matched && key != "require_one_of" {
 				return false
 			}
 		}
