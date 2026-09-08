@@ -234,22 +234,13 @@ func newCalendarCommand() *cobra.Command {
 		Short: "创建日程",
 		Long: `创建日程。
 
+全天日程使用 --is-all-day，--start/--end 必须为 yyyy-MM-dd 日期，结束日期不包含当天（例如 2030-01-01 至 2030-01-02 表示 1 月 1 日全天），无需设置时区。
+默认由服务端添加视频会议；无需添加时传 --add-online-meeting=false。
+
 周期日程说明：--recurrence-* 不是彼此独立的参数。一旦指定任一 --recurrence-* 标志，就必须一次性提供**完整**的循环规则，
 至少包含 --recurrence-type、--recurrence-interval(>0) 与 --recurrence-range-type，否则命令会被拒绝执行。`,
-		Example: `  dws calendar event create --title "Q1 复盘会" \
-    --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00"
-  dws calendar event create --title "周会" \
-    --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
-    --attendees userId1,userId2
-  dws calendar event create --title "项目评审" \
-    --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
-    --rooms roomId1,roomId2  # roomId 必须来自 dws calendar room search 返回
-  dws calendar event create --title "每日站会" \
-    --start "2026-03-10T09:00:00+08:00" --end "2026-03-10T09:30:00+08:00" \
-    --recurrence-type daily --recurrence-interval 1 --recurrence-range-type numbered --recurrence-count 10
-  dws calendar event create --title "团队周会" \
-    --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" \
-    --calendar-id <SHARED_CALENDAR_ID>  # 在指定日历本（如共享日历）下创建日程`,
+		Example: `  dws calendar event create --title "Q1 复盘会" --start "2030-01-01T09:00:00+08:00" --end "2030-01-01T10:00:00+08:00"
+  dws calendar event create --title "全天安排" --is-all-day --start 2030-01-01 --end 2030-01-02 --add-online-meeting=false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			title, err := mustFlagOrFallback(cmd, "title", "summary")
 			if err != nil {
@@ -305,6 +296,9 @@ func newCalendarCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("remind-minutes"); v != "" {
 				toolArgs["reminders"] = buildReminders(v)
 			}
+			if err := applyCalendarEventOptions(cmd, toolArgs); err != nil {
+				return err
+			}
 			return callMCPTool("create_calendar_event", toolArgs)
 		},
 	}
@@ -329,17 +323,19 @@ func newCalendarCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建日程",
-				UseWhen:      []string{"需要创建新日程（时间、可选参会人/提醒/会议室/循环规则）并提取 eventId 时"},
+				UseWhen:      []string{"需要创建新日程（含全天日程、视频会议，可选参会人/提醒/会议室/循环规则）并提取 eventId 时"},
 				AvoidWhen: []string{
 					"只需查询日程列表或详情时改用 event list/get",
 					"只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令",
 				},
 				Examples: []string{
-					"dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
-					"dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2",
+					"dws calendar event create --title \"Q1 复盘会\" --start \"2030-01-01T09:00:00+08:00\" --end \"2030-01-01T10:00:00+08:00\"",
+					"dws calendar event create --title \"全天安排\" --is-all-day --start 2030-01-01 --end 2030-01-02 --add-online-meeting=false",
 				},
 			},
 			Parameters: append([]contract.ParamDecl{
+				{Name: "is-all-day", Property: "isAllDay", InterfaceType: "boolean"},
+				{Name: "add-online-meeting", Property: "onlineMeeting.add", InterfaceType: "boolean"},
 				{Name: "title", Property: "summary", Required: boolPtr(true)},
 				{Name: "start", Property: "startDateTime", Required: boolPtr(true)},
 				{Name: "end", Property: "endDateTime", Required: boolPtr(true)},
@@ -356,14 +352,16 @@ func newCalendarCommand() *cobra.Command {
 	eventUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "修改日程",
-		Long: `支持修改标题、描述、时间、地点、忙碌状态等。如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。
+		Long: `支持修改标题、描述、时间、地点、忙碌状态、全天状态和视频会议。
+--is-all-day=true 时，传入的 --start/--end 必须为 yyyy-MM-dd 日期；false 显式设置为非全天。
+--add-online-meeting=true 表示重新添加并覆盖已有视频会议，false 不创建且保留已有视频会议；不传时沿用服务端原有更新逻辑。
+如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。
 
 		修改周期日程的循环规则时，--recurrence-* 系列必须整体传入：只传其中一个（比如只改 --recurrence-count）会把循环规则覆盖成不完整的状态。
 		至少包含 --recurrence-type、--recurrence-interval(>0) 与 --recurrence-range-type，否则命令会被拒绝执行。
 		如果只想微调已有周期日程的某一个循环字段，请先通过 dws calendar event get --id <ID> 读取现有 recurrence，然后在命令中重新提供完整的 pattern + range 字段集合。`,
-		Example: `  dws calendar event update --id EVENT_ID --title "新标题"  # 查询 eventId: dws calendar event list
-  dws calendar event update --id EVENT_ID --desc "新描述" --timezone Asia/Tokyo
-  dws calendar event update --id EVENT_ID --recurrence-type daily --recurrence-interval 1 --recurrence-range-type numbered --recurrence-count 5`,
+		Example: `  dws calendar event update --id EVENT_ID --is-all-day --start 2030-01-01 --end 2030-01-02
+  dws calendar event update --id EVENT_ID --add-online-meeting=true`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eventID, err := mustFlagOrFallback(cmd, "id", "event", "event-id", "eventId")
 			if err != nil {
@@ -404,6 +402,9 @@ func newCalendarCommand() *cobra.Command {
 			if v := flagOrFallback(cmd, "calendar-id", "calendarId", "calendar"); v != "" {
 				toolArgs["calendarId"] = v
 			}
+			if err := applyCalendarEventOptions(cmd, toolArgs); err != nil {
+				return err
+			}
 			return callMCPTool("update_calendar_event", toolArgs)
 		},
 	}
@@ -428,17 +429,19 @@ func newCalendarCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "修改日程",
-				UseWhen:      []string{"已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述等字段时"},
+				UseWhen:      []string{"已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述、全天状态或重新添加视频会议时"},
 				AvoidWhen: []string{
 					"改参会人请用 attendee add/delete；改会议室请用 room add/delete",
 					"目标字段未确认时不要更新",
 				},
 				Examples: []string{
-					"dws calendar event update --id <EVENT_ID> --title \"新标题\"",
-					"dws calendar event update --id <EVENT_ID> --desc \"新描述\" --timezone Asia/Tokyo",
+					"dws calendar event update --id <EVENT_ID> --is-all-day --start 2030-01-01 --end 2030-01-02",
+					"dws calendar event update --id <EVENT_ID> --add-online-meeting=true",
 				},
 			},
 			Parameters: append([]contract.ParamDecl{
+				{Name: "is-all-day", Property: "isAllDay", InterfaceType: "boolean"},
+				{Name: "add-online-meeting", Property: "onlineMeeting.add", InterfaceType: "boolean"},
 				{Name: "desc", Property: "description"},
 				{Name: "end", Property: "endDateTime"},
 				{Name: "id", Property: "eventId"},
@@ -1689,8 +1692,8 @@ func newCalendarCommand() *cobra.Command {
 	eventCreateCmd.Flags().String("title", "", "日程标题 (必填，最大2048字符)")
 	eventCreateCmd.Flags().String("summary", "", "")
 	_ = eventCreateCmd.Flags().MarkHidden("summary")
-	eventCreateCmd.Flags().String("start", "", "开始时间 ISO-8601 (必填，例如 2026-03-10T14:00:00+08:00)")
-	eventCreateCmd.Flags().String("end", "", "结束时间 ISO-8601 (必填，例如 2026-03-10T15:00:00+08:00)")
+	eventCreateCmd.Flags().String("start", "", "开始时间 (必填；全天为 yyyy-MM-dd，否则为 ISO-8601，如 2026-03-10T14:00:00+08:00)")
+	eventCreateCmd.Flags().String("end", "", "结束时间 (必填；全天为 yyyy-MM-dd 且不包含当天，否则为 ISO-8601，如 2026-03-10T15:00:00+08:00)")
 	eventCreateCmd.Flags().String("start-time", "", "")
 	_ = eventCreateCmd.Flags().MarkHidden("start-time")
 	eventCreateCmd.Flags().String("end-time", "", "")
@@ -1711,6 +1714,8 @@ func newCalendarCommand() *cobra.Command {
 	_ = eventCreateCmd.Flags().MarkHidden("startDate")
 	eventCreateCmd.Flags().String("endDate", "", "")
 	_ = eventCreateCmd.Flags().MarkHidden("endDate")
+	eventCreateCmd.Flags().Bool("is-all-day", false, "全天日程；true 时起止时间使用 yyyy-MM-dd，不传则不发送此字段")
+	eventCreateCmd.Flags().Bool("add-online-meeting", true, "添加视频会议（不传沿用服务端默认添加；无需添加时传 false）")
 	eventCreateCmd.Flags().String("timezone", "", "时区 IANA 格式 (例如 Asia/Shanghai，默认 Asia/Shanghai)")
 	eventCreateCmd.Flags().String("desc", "", "日程描述 (最大5000字符)")
 	eventCreateCmd.Flags().String("description", "", "")
@@ -1778,8 +1783,8 @@ func newCalendarCommand() *cobra.Command {
 	eventUpdateCmd.Flags().String("title", "", "新标题")
 	eventUpdateCmd.Flags().String("summary", "", "")
 	_ = eventUpdateCmd.Flags().MarkHidden("summary")
-	eventUpdateCmd.Flags().String("start", "", "新开始时间 ISO-8601")
-	eventUpdateCmd.Flags().String("end", "", "新结束时间 ISO-8601")
+	eventUpdateCmd.Flags().String("start", "", "新开始时间 (全天为 yyyy-MM-dd，否则为 ISO-8601)")
+	eventUpdateCmd.Flags().String("end", "", "新结束时间 (全天为 yyyy-MM-dd 且不包含当天，否则为 ISO-8601)")
 	eventUpdateCmd.Flags().String("start-time", "", "")
 	_ = eventUpdateCmd.Flags().MarkHidden("start-time")
 	eventUpdateCmd.Flags().String("end-time", "", "")
@@ -1803,6 +1808,8 @@ func newCalendarCommand() *cobra.Command {
 	eventUpdateCmd.Flags().String("desc", "", "新描述 (最大5000字符)")
 	eventUpdateCmd.Flags().String("description", "", "")
 	_ = eventUpdateCmd.Flags().MarkHidden("description")
+	eventUpdateCmd.Flags().Bool("is-all-day", false, "全天日程；true 时起止时间使用 yyyy-MM-dd，不传则不发送此字段")
+	eventUpdateCmd.Flags().Bool("add-online-meeting", true, "添加视频会议（不传沿用原有更新逻辑；true 重新添加并覆盖已有会议，false 保留已有会议）")
 	eventUpdateCmd.Flags().String("timezone", "", "时区 IANA 格式 (例如 Asia/Shanghai)")
 	eventUpdateCmd.Flags().String("recurrence-type", "", "[recurrence整体必填] 循环类型: daily|weekly|absoluteMonthly|relativeMonthly|absoluteYearly；MCP 不合并部分字段，修改任一循环字段都要重传完整 pattern+range")
 	eventUpdateCmd.Flags().Int("recurrence-interval", 0, "[recurrence整体必填] 循环间隔 (>0；如 daily 时表示每N天，weekly 时表示每N周)")
@@ -3007,4 +3014,39 @@ func buildRecurrence(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	return map[string]any{"pattern": pattern, "range": r}, nil
+}
+
+// Only explicit flags belong in an update; local defaults must not reset an
+// existing event or cause a new online meeting when changing another field.
+func applyCalendarEventOptions(cmd *cobra.Command, params map[string]any) error {
+	if cmd.Flags().Changed("is-all-day") {
+		allDay, _ := cmd.Flags().GetBool("is-all-day")
+		if allDay {
+			for _, field := range []struct{ flag, property string }{{"start", "startDateTime"}, {"end", "endDateTime"}} {
+				value, present := params[field.property].(string)
+				if !present {
+					continue
+				}
+				parsed, err := time.Parse("2006-01-02", value)
+				if err != nil || parsed.Format("2006-01-02") != value {
+					return &CLIError{
+						Code:       CodeInvalidParam,
+						Message:    "--" + field.flag + " must be a valid yyyy-MM-dd date when --is-all-day=true",
+						Suggestion: "例如 --is-all-day --start 2030-01-01 --end 2030-01-02",
+					}
+				}
+			}
+			start, hasStart := params["startDateTime"].(string)
+			end, hasEnd := params["endDateTime"].(string)
+			if hasStart && hasEnd && end <= start {
+				return &CLIError{Code: CodeInvalidParam, Message: "--end must be after --start for an all-day event (exclusive end date)", Suggestion: "单日全天日程的结束日期应为开始日期的下一天"}
+			}
+		}
+		params["isAllDay"] = allDay
+	}
+	if cmd.Flags().Changed("add-online-meeting") {
+		add, _ := cmd.Flags().GetBool("add-online-meeting")
+		params["onlineMeeting"] = map[string]any{"add": add}
+	}
+	return nil
 }
