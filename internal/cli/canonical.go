@@ -102,6 +102,18 @@ func NewSchemaCommand() *cobra.Command {
 			if err := schemaCommandCatalogError(); err != nil {
 				return fmt.Errorf("load typed Schema registry: %w", err)
 			}
+			if !all && compact && len(args) == 1 &&
+				output.ResolveFormat(cmd, output.FormatJSON) == output.FormatJSON &&
+				output.ResolveFields(cmd) == "" && output.ResolveJQ(cmd) == "" &&
+				runtimeDeliveryLiveCatalog.Load() == nil {
+				auditSchemaDeliveryAccess("query loader")
+				if runtime := activeSchemaCacheRuntime(); runtime != nil {
+					if data, ok := runtime.renderedCompactLeaf(args[0]); ok {
+						_, err := cmd.OutOrStdout().Write(data)
+						return err
+					}
+				}
+			}
 			var payload map[string]any
 			var err error
 			if all {

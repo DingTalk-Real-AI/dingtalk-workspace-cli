@@ -264,6 +264,20 @@ CI 门禁绿不代表「比 Lark 快」：Lark 对比是诊断项，不是 relea
 
 另一条不可行的捷径仍然是把 `CommandMetaByPath` 填成 identity-only 的不完整值：`command_meta.go:161` 的 `ResolveMeta` 调用方 `RenderHelpAffordances` 要用 `Selection` 渲染 help，值不完整会直接导致 help 文本缺失。惰性解码必须产出完整值，只是推迟到命中时才产出。
 
+### 3.7 DTO v5：预渲染 compact 叶子快路径（2026-09-08）
+
+v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落后：linux 55.69 vs Lark 46.25（+9.44 ms），darwin 51.73 vs 48.46（+3.27 ms）。分解定位（CI 报告 user p50 是关键证据：schema 比 help 多 21.3 ms user CPU，而 wall 只差 11.5 ms，说明差距几乎全是 CPU+GC）：
+
+- `selected-open-locator-authenticate-decode-index` 阶段 6.5 ms（linux CI）：calendar 分片 549 KB 的读取 + SHA-256 + 44 个 ToolSpec 的 protobuf 解码 + 校验 + 转换 + 索引构建，全部与命中工具数成正比；
+- 进程内渲染尾部（`ToPayload` + compact 投影 + `MarshalIndent`）实测只有约 0.12 ms，不是差距来源；
+- 真正的浪费是「为输出一个工具的字节而解码整个产品分片」。
+
+方案（落地于本节提交）：**payload 分片按 canonical 路径携带预渲染的 compact 叶子 JSON 字节**（`SchemaCommandPayloadCache.rendered_leaves`，DTO v5）。写入方（`buildSchemaCacheArtifacts`）用与线上一致的渲染链（`RenderQueryWithProjectors` → `stripSchemaPayloadCompact` → `jsonutil.MarshalIndent` + `\n`）在构建期生成每个 canonical 工具的精确 stdout 字节；`schema <leaf> --compact -f json` 在无 fields/jq、格式为 JSON 时直接写出缓存字节，**完全不打开 registry 分片**。别名、分组、产品、非 compact 查询仍走原 registry 路径（别名渲染会改 `cli_path`/`is_alias`，不能用 canonical 字节）。
+
+正确性不变量：写入方要求 rendered 集合精确覆盖全部非空 canonical 路径且每条是换行结尾的合法 JSON；读取方按描述符 SHA-256 认证分片后校验叶子有序、唯一、JSON 合法；`TestPersistentSchemaCacheRenderedLeafFastPath` 断言快路径零 Registry I/O、恰好一次 payload 读，并与同二进制禁缓存的活体渲染**逐字节一致**。
+
+本地实测（M3 Pro，进程内、每次 op 新建 runtime 模拟冷进程）：单叶 schema 命令从 5.74 ms / 6.07 MB / 79.7k allocs 降到 **3.31 ms / 1.98 MB / 19.7k allocs**；真实二进制里 `schema calendar.list_calendars --compact -f json` 相对 `--help` 的额外 user CPU 从 **+14.64 ms 降到 +1.64 ms**（低于 leaf-help 的 +2.51 ms）。
+
 ## 4. 验收矩阵
 
 | 场景 | 树 | 必须保持的行为 |

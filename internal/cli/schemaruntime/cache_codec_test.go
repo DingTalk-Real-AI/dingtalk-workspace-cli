@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -82,7 +83,8 @@ func TestSchemaCacheDeterministicAndDeepCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	hashes := fixtureHashes()
-	first, err := BuildSchemaCache(registry, lookup, overview, locators, hashes)
+	rendered := fixtureRenderedLeaves(lookup)
+	first, err := BuildSchemaCache(registry, lookup, overview, locators, hashes, rendered)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,11 +98,11 @@ func TestSchemaCacheDeterministicAndDeepCopies(t *testing.T) {
 	for i := len(locatorKeys) - 1; i >= 0; i-- {
 		reversedLocators[locatorKeys[i]] = locators[locatorKeys[i]]
 	}
-	second, err := BuildSchemaCache(registry, reversedLookup, overview, reversedLocators, hashes)
+	second, err := BuildSchemaCache(registry, reversedLookup, overview, reversedLocators, hashes, rendered)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(first.Meta, second.Meta) || !bytes.Equal(first.ProductShards, second.ProductShards) {
+	if !bytes.Equal(first.Meta, second.Meta) || !bytes.Equal(first.ProductShards, second.ProductShards) || !bytes.Equal(first.PayloadShards, second.PayloadShards) {
 		t.Fatal("deterministic build changed with map insertion order")
 	}
 	meta, err := DecodeSchemaMetaCache(first.Meta)
@@ -159,14 +161,14 @@ func TestSchemaCacheBuildRejectsProjectionDrift(t *testing.T) {
 			bad[key] = value
 		}
 		delete(bad, "sample zzz")
-		if _, err := BuildSchemaCache(registry, bad, overview, locators, fixtureHashes()); err == nil {
+		if _, err := BuildSchemaCache(registry, bad, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
 			t.Fatal("drifted lookup unexpectedly succeeded")
 		}
 	})
 	t.Run("overview", func(t *testing.T) {
 		bad := overview
 		bad.ToolCount++
-		if _, err := BuildSchemaCache(registry, lookup, bad, locators, fixtureHashes()); err == nil {
+		if _, err := BuildSchemaCache(registry, lookup, bad, locators, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
 			t.Fatal("drifted overview unexpectedly succeeded")
 		}
 	})
@@ -176,7 +178,7 @@ func TestSchemaCacheBuildRejectsProjectionDrift(t *testing.T) {
 			bad[key] = value
 		}
 		delete(bad, "sample.zzz")
-		if _, err := BuildSchemaCache(registry, lookup, overview, bad, fixtureHashes()); err == nil {
+		if _, err := BuildSchemaCache(registry, lookup, overview, bad, fixtureHashes(), fixtureRenderedLeaves(lookup)); err == nil {
 			t.Fatal("drifted locator unexpectedly succeeded")
 		}
 	})
@@ -337,7 +339,8 @@ func buildFixtureCache(t *testing.T, registry SchemaRegistry) (BuiltSchemaCache,
 	if err != nil {
 		t.Fatal(err)
 	}
-	built, err := BuildSchemaCache(registry, BuildCommandMetaLookup(registry), overview, locators, fixtureHashes())
+	lookup := BuildCommandMetaLookup(registry)
+	built, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), fixtureRenderedLeaves(lookup))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,6 +349,20 @@ func buildFixtureCache(t *testing.T, registry SchemaRegistry) (BuiltSchemaCache,
 		t.Fatal(err)
 	}
 	return built, meta
+}
+
+// fixtureRenderedLeaves produces syntactically valid rendered leaf payloads for
+// every canonical Schema path; content equality against a live render is covered
+// by the real-registry round-trip tests instead.
+func fixtureRenderedLeaves(lookup map[string]CommandMeta) map[string][]byte {
+	rendered := make(map[string][]byte)
+	for path, meta := range lookup {
+		if path != meta.Identity.CLIPath || meta.Identity.Canonical == "" {
+			continue
+		}
+		rendered[meta.Identity.Canonical] = []byte("{\"canonical\":" + strconv.Quote(meta.Identity.Canonical) + "}\n")
+	}
+	return rendered
 }
 
 func fixtureHashes() CacheHashes {

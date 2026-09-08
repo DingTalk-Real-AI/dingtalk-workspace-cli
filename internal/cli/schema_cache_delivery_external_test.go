@@ -348,6 +348,83 @@ type parityError struct{ path string }
 
 func (e *parityError) Error() string { return "Schema cache parity mismatch for " + e.path }
 
+// TestPersistentSchemaCacheRenderedLeafFastPath covers the compact leaf fast
+// path: pre-rendered payload bytes served without registry I/O, byte-identical
+// to the live render, with alias and non-compact queries falling through to the
+// registry-backed path.
+func TestPersistentSchemaCacheRenderedLeafFastPath(t *testing.T) {
+	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+		t.Skip("persistent cache backend is intentionally disabled on this target")
+	}
+	configureSchemaCacheTestHome(t)
+	resolved, err := cli.ResolveSchemaBuild(app.NewSchemaSourceRootCommand())
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := testSchemaCacheIdentity(t, artifacts)
+	cache, err := schemacache.Open(identity.Edition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Close(); err != nil {
+		t.Fatal(err)
+	}
+	counters := &schemacache.Counters{}
+	if err := cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{
+		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Counters: counters,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}) })
+
+	fastOut := executeSchemaLeafCommand(t, "calendar.list_calendars", "--compact")
+	snap := counters.Snapshot()
+	if snap.RegistryReadOps != 0 || snap.RegistryReadBytes != 0 {
+		t.Fatalf("compact leaf fast path touched the registry: %#v", snap)
+	}
+	if snap.PayloadReadOps != 1 {
+		t.Fatalf("compact leaf fast path payload reads = %d, want 1", snap.PayloadReadOps)
+	}
+
+	// The primary CLI-path spelling renders the same canonical bytes.
+	primaryOut := executeSchemaLeafCommand(t, "calendar book list", "--compact")
+	if !bytes.Equal(fastOut, primaryOut) {
+		t.Fatal("primary CLI path spelling changed the compact leaf output")
+	}
+	if after := counters.Snapshot(); after.RegistryReadOps != 0 {
+		t.Fatal("primary CLI path spelling touched the registry")
+	}
+
+	if err := cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	liveOut := executeSchemaLeafCommand(t, "calendar.list_calendars", "--compact")
+	if !bytes.Equal(fastOut, liveOut) {
+		t.Fatal("compact leaf fast path output differs from the live render")
+	}
+}
+
+func executeSchemaLeafCommand(t *testing.T, args ...string) []byte {
+	t.Helper()
+	cmd := cli.NewSchemaCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("schema %v: %v", args, err)
+	}
+	return out.Bytes()
+}
+
 func configureSchemaCacheTestHome(t *testing.T) {
 	t.Helper()
 	home, err := os.UserHomeDir()

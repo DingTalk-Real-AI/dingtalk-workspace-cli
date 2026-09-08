@@ -19,7 +19,7 @@ import (
 
 const (
 	// SchemaCacheDTOVersion is the independently validated private DTO version.
-	SchemaCacheDTOVersion = 4
+	SchemaCacheDTOVersion = 5
 	MaxSchemaMetaBytes    = 4 << 20
 	MaxSchemaProductBytes = 8 << 20
 	MaxSchemaShardData    = 64<<20 - 208
@@ -194,6 +194,39 @@ type DecodedSchemaProduct struct {
 	Index    SchemaIndex
 }
 
+// validateRenderedSchemaLeaves requires the pre-rendered compact leaf payloads
+// to exactly cover the distinct canonical paths of the lookup's primary tools,
+// so a cached leaf query never partially falls back to the registry shard.
+func validateRenderedSchemaLeaves(lookup map[string]CommandMeta, rendered map[string][]byte) error {
+	if len(rendered) > maxSchemaMetaEntries {
+		return fmt.Errorf("rendered Schema leaf count %d exceeds semantic collection limits", len(rendered))
+	}
+	canonical := make(map[string]bool, len(lookup))
+	for path, meta := range lookup {
+		if path == meta.Identity.CLIPath && meta.Identity.Canonical != "" {
+			canonical[meta.Identity.Canonical] = true
+		}
+	}
+	for path := range canonical {
+		blob, ok := rendered[path]
+		if !ok {
+			return fmt.Errorf("rendered Schema leaves are missing canonical path %q", path)
+		}
+		if len(blob) < 2 || blob[len(blob)-1] != '\n' || !json.Valid(blob[:len(blob)-1]) {
+			return fmt.Errorf("rendered Schema leaf %q is not newline-terminated JSON", path)
+		}
+	}
+	if len(rendered) != len(canonical) {
+		for path := range rendered {
+			if !canonical[path] {
+				return fmt.Errorf("rendered Schema leaf %q is not a canonical Schema path", path)
+			}
+		}
+		return fmt.Errorf("rendered Schema leaf count %d, want %d", len(rendered), len(canonical))
+	}
+	return nil
+}
+
 // BuildSchemaOverview creates the typed no-argument projection without maps.
 func BuildSchemaOverview(registry SchemaRegistry) (SchemaOverview, error) {
 	if _, err := registry.Index(); err != nil {
@@ -274,8 +307,10 @@ func buildSchemaProductLocatorsUnchecked(registry SchemaRegistry) (map[string]st
 }
 
 // BuildSchemaCache builds stable product-sorted shards and the authenticating Meta.
-// The supplied projections must exactly match the validated Registry.
-func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, overview SchemaOverview, locators map[string]string, hashes CacheHashes) (BuiltSchemaCache, error) {
+// The supplied projections must exactly match the validated Registry. rendered
+// carries each canonical CLI path's exact pre-rendered compact leaf payload
+// (indented JSON plus trailing newline) for the payload shard's rendered leaves.
+func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, overview SchemaOverview, locators map[string]string, hashes CacheHashes, rendered map[string][]byte) (BuiltSchemaCache, error) {
 	if _, err := registry.Index(); err != nil {
 		return BuiltSchemaCache{}, fmt.Errorf("validate Schema Registry: %w", err)
 	}
@@ -295,6 +330,9 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	// integrity on read is already covered by the hash checks.
 	if !validMetaAliasExpansion(lookup) {
 		return BuiltSchemaCache{}, fmt.Errorf("CommandMeta entries are not an exact primary/alias expansion")
+	}
+	if err := validateRenderedSchemaLeaves(lookup, rendered); err != nil {
+		return BuiltSchemaCache{}, err
 	}
 	wantOverview, err := BuildSchemaOverview(registry)
 	if err != nil {
@@ -319,7 +357,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 			return BuiltSchemaCache{}, fmt.Errorf("convert product %q: %w", registry.Products[i].ID, conversionErr)
 		}
 		root := &schemacachepb.SchemaProductCache{
-			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V4,
+			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V5,
 			Registry:   registryFieldsToProto(registry),
 			Product:    product,
 		}
@@ -346,18 +384,30 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	result.RegistrySHA256 = sha256.Sum256(result.ProductShards)
 	commandEntries := commandLookupToProto(lookup)
 	payloadByProduct := make(map[string][]*schemacachepb.CommandPayloadEntry, len(registry.Products))
+	renderedByProduct := make(map[string][]*schemacachepb.RenderedSchemaLeaf, len(registry.Products))
+	canonicalProduct := make(map[string]string, len(lookup))
 	for path, meta := range lookup {
 		payloadByProduct[meta.Identity.ProductID] = append(payloadByProduct[meta.Identity.ProductID],
 			commandPayloadToProto(path, meta))
+		if path == meta.Identity.CLIPath && meta.Identity.Canonical != "" {
+			canonicalProduct[meta.Identity.Canonical] = meta.Identity.ProductID
+		}
+	}
+	for path, blob := range rendered {
+		renderedByProduct[canonicalProduct[path]] = append(renderedByProduct[canonicalProduct[path]],
+			&schemacachepb.RenderedSchemaLeaf{LookupPath: path, CompactJson: blob})
 	}
 	result.PayloadDescriptors = make([]CommandPayloadDescriptor, 0, len(payloadByProduct))
 	for _, productID := range sortedMapKeys(payloadByProduct) {
 		entries := payloadByProduct[productID]
 		sort.Slice(entries, func(i, j int) bool { return entries[i].LookupPath < entries[j].LookupPath })
+		leaves := renderedByProduct[productID]
+		sort.Slice(leaves, func(i, j int) bool { return leaves[i].LookupPath < leaves[j].LookupPath })
 		root := &schemacachepb.SchemaCommandPayloadCache{
-			DtoVersion: schemacachepb.DTOVersion_DTO_VERSION_V4,
-			ProductId:  productID,
-			Entries:    &schemacachepb.CommandPayloadEntryList{Items: entries},
+			DtoVersion:     schemacachepb.DTOVersion_DTO_VERSION_V5,
+			ProductId:      productID,
+			Entries:        &schemacachepb.CommandPayloadEntryList{Items: entries},
+			RenderedLeaves: &schemacachepb.RenderedSchemaLeafList{Items: leaves},
 		}
 		payload, marshalErr := MarshalSchemaCacheDeterministic(root)
 		if marshalErr != nil {
@@ -378,7 +428,7 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	result.PayloadDataSize = uint64(len(result.PayloadShards))
 	result.PayloadSHA256 = sha256.Sum256(result.PayloadShards)
 	meta := &schemacachepb.SchemaMetaCache{
-		DtoVersion:                schemacachepb.DTOVersion_DTO_VERSION_V4,
+		DtoVersion:                schemacachepb.DTOVersion_DTO_VERSION_V5,
 		Registry:                  registryFieldsToProto(registry),
 		CommandEntries:            commandEntries,
 		Overview:                  overviewToProto(overview),
@@ -462,7 +512,7 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
 		return DecodedSchemaProduct{}, err
 	}
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V4 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V5 {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q DTO version is %d, want %d", descriptor.ProductID, root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetProduct() == nil {
@@ -516,6 +566,10 @@ type DecodedCommandPayloads struct {
 	ProductID string
 	Safety    map[string]CommandSafety
 	Selection map[string]CommandSelection
+	// RenderedLeaves maps a canonical CLI path to that leaf's exact
+	// pre-rendered compact JSON output bytes, so a single-leaf schema query
+	// never opens the registry shard.
+	RenderedLeaves map[string][]byte
 }
 
 // metaPayloadDescriptor finds the payload descriptor authenticated by the Meta.
@@ -547,21 +601,37 @@ func DecodeSchemaCommandPayloadCache(payload []byte, descriptor CommandPayloadDe
 	if err := rejectUnknownFieldsAndEnums(&root); err != nil {
 		return DecodedCommandPayloads{}, err
 	}
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V4 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V5 {
 		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload DTO version is %d, want %d", descriptor.ProductID, root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
-	if root.GetProductId() != descriptor.ProductID || root.GetEntries() == nil {
+	if root.GetProductId() != descriptor.ProductID || root.GetEntries() == nil || root.GetRenderedLeaves() == nil {
 		return DecodedCommandPayloads{}, fmt.Errorf("product %q command payload identity does not match descriptor", descriptor.ProductID)
 	}
 	result := DecodedCommandPayloads{
-		ProductID: descriptor.ProductID,
-		Safety:    make(map[string]CommandSafety, len(root.Entries.Items)),
-		Selection: make(map[string]CommandSelection, len(root.Entries.Items)),
+		ProductID:      descriptor.ProductID,
+		Safety:         make(map[string]CommandSafety, len(root.Entries.Items)),
+		Selection:      make(map[string]CommandSelection, len(root.Entries.Items)),
+		RenderedLeaves: make(map[string][]byte, len(root.RenderedLeaves.Items)),
 	}
 	for _, entry := range root.Entries.Items {
 		safety, selection := commandPayloadFromProto(entry)
 		result.Safety[entry.GetLookupPath()] = safety
 		result.Selection[entry.GetLookupPath()] = selection
+	}
+	last := ""
+	for i, leaf := range root.RenderedLeaves.Items {
+		if leaf == nil || leaf.GetLookupPath() == "" || (i > 0 && leaf.GetLookupPath() <= last) {
+			return DecodedCommandPayloads{}, fmt.Errorf("product %q rendered Schema leaves are empty, duplicate, or unsorted at %q", descriptor.ProductID, leaf.GetLookupPath())
+		}
+		last = leaf.GetLookupPath()
+		blob := leaf.GetCompactJson()
+		if len(blob) < 2 || blob[len(blob)-1] != '\n' || !json.Valid(blob[:len(blob)-1]) {
+			return DecodedCommandPayloads{}, fmt.Errorf("product %q rendered Schema leaf %q is not newline-terminated JSON", descriptor.ProductID, leaf.GetLookupPath())
+		}
+		result.RenderedLeaves[leaf.GetLookupPath()] = blob
+	}
+	if len(result.RenderedLeaves) != len(root.RenderedLeaves.Items) {
+		return DecodedCommandPayloads{}, fmt.Errorf("product %q rendered Schema leaves contain duplicate paths", descriptor.ProductID)
 	}
 	return result, nil
 }
@@ -613,7 +683,7 @@ func DecodeAllSchemaProducts(shards []byte, meta DecodedSchemaMeta) (SchemaRegis
 }
 
 func validateAndConvertMeta(root *schemacachepb.SchemaMetaCache) (DecodedSchemaMeta, error) {
-	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V4 {
+	if root.GetDtoVersion() != schemacachepb.DTOVersion_DTO_VERSION_V5 {
 		return DecodedSchemaMeta{}, fmt.Errorf("Schema Meta DTO version is %d, want %d", root.GetDtoVersion(), SchemaCacheDTOVersion)
 	}
 	if root.GetRegistry() == nil || root.GetOverview() == nil || root.GetCommandEntries() == nil || root.GetLocators() == nil || root.GetProductDescriptors() == nil {

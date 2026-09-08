@@ -9,7 +9,8 @@ enum DTOVersion {
   DTO_VERSION_V1 = 1; // Recognized only so readers can explicitly reject retired DTOs.
   DTO_VERSION_V2 = 2; // Recognized only so readers can explicitly reject retired DTOs.
   DTO_VERSION_V3 = 3; // Recognized only so readers can explicitly reject retired DTOs.
-  DTO_VERSION_V4 = 4;
+  DTO_VERSION_V4 = 4; // Recognized only so readers can explicitly reject retired DTOs.
+  DTO_VERSION_V5 = 5;
 }
 
 enum OverviewSummaryKind {
@@ -118,10 +119,22 @@ message CommandPayloadEntry {
   CommandSelectionPayload selection = 6;
 }
 message CommandPayloadEntryList { repeated CommandPayloadEntry items = 1; }
+// One canonical command's pre-rendered `schema <leaf> --compact -f json`
+// stdout bytes (indented JSON plus the trailing newline). Rendered at cache
+// build time through the same render, compact projection, and JSON writer the
+// live command path uses, so a cached read is byte-identical to the live
+// render. Only canonical CLI paths are stored; alias and non-leaf queries fall
+// back to the registry shard path.
+message RenderedSchemaLeaf {
+  string lookup_path = 1;
+  bytes compact_json = 2;
+}
+message RenderedSchemaLeafList { repeated RenderedSchemaLeaf items = 1; }
 message SchemaCommandPayloadCache {
   DTOVersion dto_version = 1;
   string product_id = 2;
   CommandPayloadEntryList entries = 3;
+  RenderedSchemaLeafList rendered_leaves = 4;
 }
 message CommandPayloadDescriptor {
   string product_id = 1;

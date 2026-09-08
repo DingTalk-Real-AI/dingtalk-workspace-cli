@@ -22,6 +22,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 )
@@ -244,6 +245,37 @@ func (r *schemaCacheRuntime) loadCommandPayload(meta schemaruntime.DecodedSchema
 	load.payloads = payloads
 	load.ready.Store(true)
 	return load.payloads, nil
+}
+
+// renderedCompactLeaf serves one canonical compact leaf query from the command
+// payload shard without opening the registry. Any miss or read failure reports
+// false so the caller falls through to the registry-backed path, which owns
+// repair semantics. Alias queries miss deliberately: their render differs
+// (is_alias/cli_path), so only the canonical dot path or a primary CLI path
+// may be answered here.
+func (r *schemaCacheRuntime) renderedCompactLeaf(raw string) ([]byte, bool) {
+	meta, err := r.loadMeta()
+	if err != nil {
+		return nil, false
+	}
+	productID, ok := schemaCacheLocator(meta, raw)
+	if !ok {
+		return nil, false
+	}
+	payloads, err := r.loadCommandPayload(meta, productID)
+	if err != nil {
+		return nil, false
+	}
+	canonical := strings.TrimSpace(raw)
+	if blob, ok := payloads.RenderedLeaves[canonical]; ok {
+		return blob, true
+	}
+	path := schemaruntime.NormalizeQueryCLIPath(raw)
+	if m, ok := meta.CommandMeta(path); ok && m.Identity.CLIPath == path {
+		blob, ok := payloads.RenderedLeaves[m.Identity.Canonical]
+		return blob, ok
+	}
+	return nil, false
 }
 
 // enrichCommandMeta fills an identity-only CommandMeta with the Safety and
@@ -535,7 +567,11 @@ func buildSchemaCacheArtifacts(registry SchemaRegistry, sourceHash, surfaceHash 
 	if err != nil {
 		return SchemaCacheArtifacts{}, err
 	}
-	built, err := schemaruntime.BuildSchemaCache(registry, schemaruntime.BuildCommandMetaLookup(registry), overview, locators, hashes)
+	rendered, err := renderCompactSchemaLeaves(registry, index)
+	if err != nil {
+		return SchemaCacheArtifacts{}, err
+	}
+	built, err := schemaruntime.BuildSchemaCache(registry, schemaruntime.BuildCommandMetaLookup(registry), overview, locators, hashes, rendered)
 	if err != nil {
 		return SchemaCacheArtifacts{}, err
 	}
@@ -548,6 +584,37 @@ func buildSchemaCacheArtifacts(registry SchemaRegistry, sourceHash, surfaceHash 
 		ProductDescriptors: append([]schemaruntime.ProductDescriptor(nil), built.Descriptors...),
 		registry:           registry, index: index, locators: locators,
 	}, nil
+}
+
+// renderCompactSchemaLeaves pre-renders every canonical leaf's compact JSON
+// output bytes through the same render, projection, and writer semantics as
+// the schema command, so a cached leaf query is byte-identical to the live
+// render without opening the registry shard.
+func renderCompactSchemaLeaves(registry SchemaRegistry, index SchemaIndex) (map[string][]byte, error) {
+	projectors := schemaruntime.QueryProjectors{
+		ProductSummary: renderSchemaProductSummary,
+		ToolSummary:    renderSchemaToolSummary,
+	}
+	rendered := make(map[string][]byte)
+	for _, product := range registry.Products {
+		for _, tool := range product.Tools {
+			path := strings.TrimSpace(tool.Identity.CLIPath)
+			canonical := strings.TrimSpace(tool.Identity.CanonicalPath)
+			if path == "" || canonical == "" {
+				continue
+			}
+			payload, err := schemaruntime.RenderQueryWithProjectors(registry, index, path, projectors)
+			if err != nil {
+				return nil, fmt.Errorf("render Schema leaf %q: %w", path, err)
+			}
+			data, err := jsonutil.MarshalIndent(stripSchemaPayloadCompact(payload), "", "  ")
+			if err != nil {
+				return nil, fmt.Errorf("render Schema leaf %q: %w", path, err)
+			}
+			rendered[canonical] = append(data, '\n')
+		}
+	}
+	return rendered, nil
 }
 
 // canonicalSchemaCacheRegistry removes irrelevant JSON object insertion order

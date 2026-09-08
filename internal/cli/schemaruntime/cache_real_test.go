@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
@@ -157,6 +158,20 @@ func assembleRealRegistry(t testFataler) cli.SchemaRegistry {
 	return registry
 }
 
+// fixtureRenderedLeaves produces syntactically valid rendered leaf payloads for
+// every canonical Schema path; byte parity with the live render is asserted by
+// the package-cli real-delivery tests.
+func fixtureRenderedLeaves(lookup map[string]schemaruntime.CommandMeta) map[string][]byte {
+	rendered := make(map[string][]byte)
+	for path, meta := range lookup {
+		if path != meta.Identity.CLIPath || meta.Identity.Canonical == "" {
+			continue
+		}
+		rendered[meta.Identity.Canonical] = []byte("{\"canonical\":" + strconv.Quote(meta.Identity.Canonical) + "}\n")
+	}
+	return rendered
+}
+
 func buildRealCache(t testFataler, registry cli.SchemaRegistry) (schemaruntime.BuiltSchemaCache, schemaruntime.DecodedSchemaMeta) {
 	t.Helper()
 	overview, err := schemaruntime.BuildSchemaOverview(registry)
@@ -168,7 +183,8 @@ func buildRealCache(t testFataler, registry cli.SchemaRegistry) (schemaruntime.B
 		t.Fatal(err)
 	}
 	hashes := schemaruntime.CacheHashes{SourceSHA256: sha256.Sum256([]byte("real-source")), SurfaceSHA256: sha256.Sum256([]byte("real-surface"))}
-	built, err := schemaruntime.BuildSchemaCache(registry, schemaruntime.BuildCommandMetaLookup(registry), overview, locators, hashes)
+	lookup := schemaruntime.BuildCommandMetaLookup(registry)
+	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, fixtureRenderedLeaves(lookup))
 	if err != nil {
 		t.Fatal(err)
 	}
