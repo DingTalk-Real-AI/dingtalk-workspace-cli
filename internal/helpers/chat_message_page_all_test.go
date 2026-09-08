@@ -12,6 +12,7 @@ import (
 	"time"
 
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -291,7 +292,7 @@ func TestCrossPlatformCoverageChatMessageListPageAllAggregatesAndDedups(t *testi
 }
 
 func TestCrossPlatformCoverageChatMessageListPageAllDecryptsAfterAggregation(t *testing.T) {
-	old := chatCryptoClient
+	old := chatmsg.MessageDecryptClient()
 	SetChatCryptoClient(&messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
@@ -302,7 +303,7 @@ func TestCrossPlatformCoverageChatMessageListPageAllDecryptsAfterAggregation(t *
 		BackendReady: func() bool { return true },
 		PolicyCache:  messagecrypto.NewPolicyCache(nil),
 	})
-	t.Cleanup(func() { chatCryptoClient = old })
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 
 	const cipher1 = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
 	const cipher2 = "TWzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"

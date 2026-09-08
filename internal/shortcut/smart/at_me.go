@@ -154,6 +154,7 @@ func executeAtMe(rt *shortcut.RuntimeContext) error {
 	var items []map[string]any
 	var payload map[string]any
 	var readErr error
+	var decryptLedger map[string]any
 	if rt.Bool("page-all") {
 		payload, items, readErr = readAllAtMePages(rt, params)
 		if payload == nil {
@@ -165,6 +166,8 @@ func executeAtMe(rt *shortcut.RuntimeContext) error {
 			return err
 		}
 		items = atMeMessageItems(data)
+		decryptLedger = chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+			chatmsg.MessageDecryptClient(), items, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 		payload = atMePayload(items, !rt.Bool("no-reactions"))
 		chatmsg.ApplyPagination(payload, data)
 		payload["pagesFetched"] = 1
@@ -174,6 +177,7 @@ func executeAtMe(rt *shortcut.RuntimeContext) error {
 			payload["stopReason"] = "single_page"
 		}
 	}
+	chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 
 	results := make([]map[string]any, 0, len(items))
 	if projected, ok := payload["messages"].([]map[string]any); ok {
@@ -341,7 +345,10 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 		stopReason = "page_limit"
 	}
 
+	decryptLedger := chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+		chatmsg.MessageDecryptClient(), allItems, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 	payload := atMePayload(allItems, !rt.Bool("no-reactions"))
+	chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = true
 	payload["complete"] = complete && len(failures) == 0
@@ -497,6 +504,10 @@ func atMeToMaps(arr []any) []map[string]any {
 	return out
 }
 
+// messageDecryptFailedOriginalKeyForAtMe mirrors chatmsg's private decrypt
+// fallback key; the shared decrypt layer writes it onto failed raw messages.
+const messageDecryptFailedOriginalKeyForAtMe = "_contentDecryptFailedOriginal"
+
 // atMeProject reshapes one @me message into {sender, time, text, conversation},
 // running text through the shared chatmsg cleaning (card/auto-reply JSON →
 // readable, ciphertext → marker) and recursively expanding any forwarded chat
@@ -511,6 +522,14 @@ func atMeProjectWithReactions(m map[string]any, includeReactions bool) map[strin
 		"time":         atMeTime(m),
 		"text":         atMeCleanText(m),
 		"conversation": atMeConversation(m),
+	}
+	if original, ok := m[messageDecryptFailedOriginalKeyForAtMe].(string); ok && strings.TrimSpace(original) != "" {
+		row["text"] = original
+	}
+	for _, key := range []string{"contentDecrypted", "cryptoLayer", "dingKeyVersion"} {
+		if value, ok := m[key]; ok && value != nil {
+			row[key] = value
+		}
 	}
 	if messageID := chatmsg.MessageID(m); messageID != nil {
 		row["messageId"] = messageID

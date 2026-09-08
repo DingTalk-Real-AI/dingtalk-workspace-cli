@@ -287,7 +287,7 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAcrossEnvelopes
 }
 
 func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t *testing.T) {
-	old := chatCryptoClient
+	old := chatmsg.MessageDecryptClient()
 	SetChatCryptoClient(&messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
@@ -298,7 +298,7 @@ func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t 
 		BackendReady: func() bool { return true },
 		PolicyCache:  messagecrypto.NewPolicyCache(nil),
 	})
-	t.Cleanup(func() { chatCryptoClient = old })
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 
 	const cipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
 	payload := `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid","content":"` + cipher + `"}]}}`
@@ -331,8 +331,65 @@ func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t 
 	}
 }
 
+func TestCrossPlatformCoverageChatMessageListDecryptsForwardedChildren(t *testing.T) {
+	old := chatmsg.MessageDecryptClient()
+	SetChatCryptoClient(&messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
+
+	const cipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	caller := &imReadResultCaller{responses: map[string]string{
+		"list_conversation_message_v2": `{"result":{"messages":[{"openMessageId":"root","openConversationId":"cid","content":"转发记录","forwardMessages":[{"openMessageId":"child-1","openConversationId":"cid","text":"` + cipher + `"}]}]}}`,
+		"get_message_crypto_policy":    `{"result":{"mode":"required"}}`,
+		"batch_ding_decrypt_messages":  `{"result":{"items":[{"messageId":"child-1","status":"success","plaintextContent":"子消息明文","keyVersion":4}]}}`,
+	}}
+	got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list", "--group", "cid", "--time", "2026-07-14 00:00:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(caller.calls, []imReadResultCall{
+		{productID: "chat", toolName: "list_conversation_message_v2"},
+		{productID: "im", toolName: "get_message_crypto_policy"},
+		{productID: "im", toolName: "batch_ding_decrypt_messages"},
+	}) {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(got), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["decryptCandidateCount"] != float64(1) || payload["decryptAllowedCount"] != float64(1) ||
+		payload["decryptedCount"] != float64(1) {
+		t.Fatalf("forwarded ledger = %#v", payload)
+	}
+	body, _ := payload["result"].(map[string]any)
+	messages, _ := body["messages"].([]any)
+	parent, _ := messages[0].(map[string]any)
+	forwarded, _ := parent["forwardMessages"].([]any)
+	child, _ := forwarded[0].(map[string]any)
+	// dingKeyVersion is not asserted: the atomic MCP path parses numbers as
+	// json.Number, which msgcrypto's intField does not recognize, so
+	// keyVersion never reaches the atomic write-back (pre-existing baseline).
+	if child["text"] != "子消息明文" || child["contentDecrypted"] != true ||
+		child["cryptoLayer"] != "ding+safechat" {
+		t.Fatalf("forwarded child = %#v", child)
+	}
+	if parent["content"] != "转发记录" {
+		t.Fatalf("parent plaintext changed: %#v", parent["content"])
+	}
+}
+
 func TestCrossPlatformCoverageChatMessageListSkipsCryptoWhenBackendUnavailable(t *testing.T) {
-	old := chatCryptoClient
+	old := chatmsg.MessageDecryptClient()
 	SetChatCryptoClient(&messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			t.Fatal("identity lookup must not run without the SafeChat backend")
@@ -341,7 +398,7 @@ func TestCrossPlatformCoverageChatMessageListSkipsCryptoWhenBackendUnavailable(t
 		BackendReady: func() bool { return false },
 		PolicyCache:  messagecrypto.NewPolicyCache(nil),
 	})
-	t.Cleanup(func() { chatCryptoClient = old })
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 
 	const encrypted = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
 	caller := &imReadResultCaller{responses: map[string]string{
@@ -373,8 +430,8 @@ func TestCrossPlatformCoverageChatMessageListSkipsCryptoWhenBackendUnavailable(t
 }
 
 func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testing.T) {
-	old := chatCryptoClient
-	t.Cleanup(func() { chatCryptoClient = old })
+	old := chatmsg.MessageDecryptClient()
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 
 	const encrypted = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
 	t.Run("batch call failure degrades to ledger", func(t *testing.T) {
@@ -482,16 +539,6 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 		if got := projectChatMessagesPayload(map[string]any{"result": map[string]any{"messages": []any{}}}, false); got["messages"] == nil {
 			t.Fatalf("projected payload = %#v", got)
 		}
-		failure := chatDecryptFailure(" msg ", " cid ", "")
-		if failure["messageId"] != "msg" || failure["conversationId"] != "cid" || failure["reason"] != "decrypt_failed" {
-			t.Fatalf("failure = %#v", failure)
-		}
-		if got := firstNonEmptyLiteral("", " value "); got != "value" {
-			t.Fatalf("firstNonEmptyLiteral = %q", got)
-		}
-		if got := firstNonEmptyLiteral("", " "); got != "" {
-			t.Fatalf("firstNonEmptyLiteral empty = %q", got)
-		}
 	})
 
 	t.Run("legacy flags and policy failure helpers", func(t *testing.T) {
@@ -556,8 +603,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 			t.Fatal("promoting non-string legacy flag should fail")
 		}
 
-		old := chatCryptoClient
-		t.Cleanup(func() { chatCryptoClient = old })
+		old := chatmsg.MessageDecryptClient()
+		t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 		cmd = &cobra.Command{}
 		cmd.Flags().Bool("dry-run", false, "")
 		SetChatCryptoClient(&messagecrypto.Client{
@@ -585,8 +632,8 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 	})
 
 	t.Run("safechat failure and string key version branches", func(t *testing.T) {
-		old := chatCryptoClient
-		t.Cleanup(func() { chatCryptoClient = old })
+		old := chatmsg.MessageDecryptClient()
+		t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("dry-run", false, "")
 

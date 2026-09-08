@@ -62,6 +62,21 @@
 Favorite、消息 Pin、消息 Top 与会话 Top 是四种对象，不能互换。
 个人收藏表情与消息 reaction/文字回应不同；发送收藏表情使用 `chat emotion send`，给已有消息贴表情使用 `chat message add-emoji` 或 `chat message add-text-emotion`。
 
+## 解密
+
+`-tags safechat` 构建且组织开启三方消息解密策略时，以下读消息命令自动解密，无新增 flag：
+
+| 命令 | 覆盖 |
+|---|---|
+| `+chat-messages` / `+messages-list` / `+messages-list-direct` / `+messages-mget` | 会话消息读取；`--page-all`（`+chat-messages` / `+messages-list-direct`）聚合后统一解密 |
+| `+at-me` / `+search-msg` / `+thread-replies` | @我、条件搜索、话题回复；单页与自动分页聚合路径均已接线 |
+
+- 解密成功的行 `text` 为明文，并带运行时调试标记 `contentDecrypted=true`、`cryptoLayer="ding+safechat"`、`dingKeyVersion`（仅 >0 时出现）；三标记是运行时 ledger/调试字段，不在消息契约声明面内。
+- 解密 ledger 在输出顶层，与原子命令对齐：`decryptCandidateCount` / `decryptAllowedCount` / `decryptedCount` / `decryptFailedCount` / `decryptFailures`（逐条 `stage` / `messageId` / `conversationId` / `reason`），有失败时 `partial=true`。读法：先看 `decryptFailedCount` 是否非零，再到 `decryptFailures` 按 `messageId` 查原因；`policy_disabled` 表示组织策略未放行该会话。
+- 失败行的 `text` 恢复为原密文（不是 `[加密消息，无法解码]` marker），可复制到 `dws chat crypto decrypt --text <密文>` 手工解密排障；单条失败不影响其它消息。
+- 非 safechat 构建或解密后端不可用时整段跳过：零解密字段，输出与未接线前一致。
+- 原子命令（`chat message list` 等）的失败行形状不同：`content`=密文 + `text`=marker；两层投影残差属预期，跨层比对以 ledger 为准。
+
 ## 群与成员底层能力
 
 | 原子命令 | 用途 |

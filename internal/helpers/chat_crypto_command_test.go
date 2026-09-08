@@ -14,17 +14,18 @@ import (
 	"testing"
 
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageChatCryptoCommand(t *testing.T) {
-	old := chatCryptoClient
-	t.Cleanup(func() { chatCryptoClient = old })
+	old := chatmsg.MessageDecryptClient()
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 
 	t.Run("set_nil_client_restores_default", func(t *testing.T) {
 		SetChatCryptoClient(nil)
-		if chatCryptoClient == nil || chatCryptoClient.PolicyCache == nil {
-			t.Fatalf("chatCryptoClient = %#v", chatCryptoClient)
+		if chatmsg.MessageDecryptClient() == nil || chatmsg.MessageDecryptClient().PolicyCache == nil {
+			t.Fatalf("chatCryptoClient = %#v", chatmsg.MessageDecryptClient())
 		}
 	})
 	t.Run("encrypt_command_is_not_registered", func(t *testing.T) {

@@ -14,18 +14,15 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/spf13/cobra"
 )
 
-var chatCryptoClient = messagecrypto.DefaultClient()
-
-// SetChatCryptoClient injects the app-owned SafeChat/Ding crypto client.
+// SetChatCryptoClient injects the app-owned SafeChat/Ding crypto client into
+// the shared chatmsg store. Reading always goes through chatmsg so the atomic
+// commands and the shortcuts share one client and one policy cache.
 func SetChatCryptoClient(client *messagecrypto.Client) {
-	if client == nil {
-		chatCryptoClient = messagecrypto.DefaultClient()
-		return
-	}
-	chatCryptoClient = client
+	chatmsg.SetMessageDecryptClient(client)
 }
 
 type chatCryptoRuntime struct {
@@ -117,7 +114,7 @@ func runChatCryptoDecrypt(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	layer, _ := cmd.Flags().GetString("layer")
-	result, err := chatCryptoClient.DecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{
+	result, err := chatmsg.MessageDecryptClient().DecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{
 		Layer:      layer,
 		Ciphertext: string(ciphertext),
 	})

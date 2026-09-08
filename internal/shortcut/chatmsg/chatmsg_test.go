@@ -14,6 +14,7 @@
 package chatmsg
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +79,84 @@ func TestCrossPlatformCoverageProjectMessageV1PublishesSharedIdentityAndContext(
 		if row[key] != want {
 			t.Errorf("%s = %#v, want %#v; row=%#v", key, row[key], want, row)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageProjectMessageV1PassesDecryptMarkersAndRestoresOriginal(t *testing.T) {
+	const original = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+
+	marked := ProjectMessageV1(map[string]any{
+		"openMessageId":    "msg-1",
+		"content":          "明文",
+		"contentDecrypted": true,
+		"cryptoLayer":      "ding+safechat",
+		"dingKeyVersion":   8,
+	}, false)
+	if marked["contentDecrypted"] != true || marked["cryptoLayer"] != "ding+safechat" || marked["dingKeyVersion"] != 8 {
+		t.Fatalf("decrypt markers lost: %#v", marked)
+	}
+
+	fallback := ProjectMessageV1(map[string]any{
+		"openMessageId":                        "msg-2",
+		"content":                              original,
+		messageDecryptFailedOriginalContentKey: original,
+	}, false)
+	if fallback["text"] != original {
+		t.Fatalf("text fallback = %#v, want original ciphertext", fallback["text"])
+	}
+	if _, has := fallback["contentDecrypted"]; has {
+		t.Fatalf("fallback row must not carry decrypt markers: %#v", fallback)
+	}
+
+	plain := ProjectMessageV1(map[string]any{
+		"openMessageId": "msg-3",
+		"content":       "你好",
+	}, false)
+	if plain["text"] != "你好" {
+		t.Fatalf("plain row text = %#v, want 你好", plain["text"])
+	}
+	if _, has := plain["contentDecrypted"]; has {
+		t.Fatalf("plain row unexpectedly has contentDecrypted: %#v", plain)
+	}
+	if _, has := plain["cryptoLayer"]; has {
+		t.Fatalf("plain row unexpectedly has cryptoLayer: %#v", plain)
+	}
+	if _, has := plain["dingKeyVersion"]; has {
+		t.Fatalf("plain row unexpectedly has dingKeyVersion: %#v", plain)
+	}
+}
+
+func TestCrossPlatformCoverageForwardedChildDecryptFailureRestoresProjectedText(t *testing.T) {
+	rt := &decryptTestRuntime{
+		batchData: `{"result":{"items":[{"messageId":"child","status":"failed","reason":"bad_key"}]}}`,
+	}
+	parent := map[string]any{
+		"openMessageId":      "root",
+		"openConversationId": "cid",
+		"content":            "plain root",
+		"forwardMessages": []any{
+			map[string]any{"openMessageId": "child", "openConversationId": "cid", "text": decryptTestCipher},
+		},
+	}
+	ledger := DecryptMessagesByPolicy(context.Background(), rt, decryptTestClient(true),
+		[]map[string]any{parent}, DecryptOptions{MarkFailedOriginal: true})
+	if ledger["decryptCandidateCount"] != 1 || ledger["decryptAllowedCount"] != 1 ||
+		ledger["decryptedCount"] != 0 || ledger["decryptFailedCount"] != 1 || ledger["partial"] != true {
+		t.Fatalf("forwarded failure ledger = %#v", ledger)
+	}
+	child, _ := parent["forwardMessages"].([]any)[0].(map[string]any)
+	if child["text"] != decryptTestCipher {
+		t.Fatalf("failed child must keep ciphertext: %#v", child)
+	}
+	if child[messageDecryptFailedOriginalContentKey] != decryptTestCipher {
+		t.Fatalf("failed child must be marked with the original ciphertext: %#v", child)
+	}
+	row := ProjectMessageV1(child, false)
+	if row["text"] != decryptTestCipher {
+		t.Fatalf("projected child text = %#v, want original ciphertext", row["text"])
+	}
+	if _, has := row["contentDecrypted"]; has {
+		t.Fatalf("failed child row must not carry decrypt markers: %#v", row)
 	}
 }
 

@@ -293,6 +293,8 @@ var SearchMsg = shortcut.Shortcut{
 			order = "desc"
 		}
 		sortMessagesByCreateTimeStable(messages, order)
+		decryptLedger := chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+			chatmsg.MessageDecryptClient(), messages, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 		results := make([]map[string]any, 0, len(messages))
 		for _, m := range messages {
 			results = append(results, searchMsgProjectWithReactions(m, !rt.Bool("no-reactions")))
@@ -313,6 +315,7 @@ var SearchMsg = shortcut.Shortcut{
 			"timeCoverage":    searchMessageTimeCoverage(rt),
 			"conclusionGuard": searchMessageConclusionGuard(rt, complete, len(results)),
 		}
+		chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 		if len(resolvedFilters.Chats) > 0 || len(resolvedFilters.Senders) > 0 {
 			payload["resolvedFilters"] = resolvedFilters
 		}

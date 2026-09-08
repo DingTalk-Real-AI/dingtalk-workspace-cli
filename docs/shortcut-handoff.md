@@ -221,3 +221,29 @@ DWS_USAGE_TRACKING=0 dws contact +search-user --query <名>   # 投影输出示�
 ## 9. 未提交提醒
 
 所有工作在 `feature/shortcut`，**未 commit**。建议尽快分语义化 commit 留存（框架 / 511封装 / smart层 / 保真度升级 / P2 / 文档）。
+
+---
+
+## 10. 三方密文消息解密（2026-09-07 T9 文档同步）
+
+> 分支 `feat/86480181-im-shortcut-msg-decrypt`。三方消息解密已与原子命令同层接线，本节是后续会话/维护者的速查入口。
+
+### 已接解密命令清单（3→7）
+
+| 层 | 命令 | 备注 |
+|---|---|---|
+| 已有（chat 包） | `dws chat +messages-list` / `+messages-list-direct` / `+messages-mget` | 早前批次已接；`+messages-list-direct` 的 `--page-all` 全量聚合后统一解密 |
+| 新增（smart 包） | `dws chat +chat-messages` / `+at-me` / `+search-msg` / `+thread-replies` | b404f111 接线；`+chat-messages` 的 `--page-all` 聚合后统一解密；`+at-me` / `+thread-replies` 单页与自动分页聚合两路径均已接线 |
+
+原子命令先行支持：`dws chat message list` / `list-all` / `search` 等 helpers 投影读命令。
+
+### 行为与契约
+
+- **策略驱动自动生效**：`-tags safechat` 构建且组织开启三方消息解密策略时自动解密，**不新增任何 flag**（命令面零变化）；策略判定按会话缓存（TTL），候选收集递归 `forwardMessages` 子消息。
+- **门控跳过**：非 safechat 构建、解密后端不可用、`--dry-run` 时整段跳过——零策略调用、零解密字段，输出与接线前一致。
+- **ledger 字段与原子命令对齐**（输出顶层）：`decryptCandidateCount` / `decryptAllowedCount` / `decryptedCount` / `decryptFailedCount` / `decryptFailures`（逐条含 `stage="message-decrypt"`、`messageId`、`conversationId`、`reason`），有失败时 `partial=true`。解密管线运行时四计数恒出现（无候选即全零）；门控跳过时不出现。`reason` 例：`policy_disabled`（组织策略未放行该会话）、`empty_plaintext`、策略/后端调用错误文本。
+- **失败行 text=原密文**：解密失败或策略禁用的消息行，投影 `text` 恢复为原密文（而非 marker），便于直接取 `text` 走排障入口；单条失败不影响其它消息与退出码。
+- **解密成功行**：`text`=明文，并带逐条标记 `contentDecrypted=true`、`cryptoLayer="ding+safechat"`、`dingKeyVersion`（仅 >0 时出现）。三标记是运行时 ledger/调试字段，**不纳入** `messageResultContractV1.MessageFields`（MINOR-2 显式处置：沿用 Schema 零变化裁决，仅文档表述，不进契约声明面）。
+- **两层投影残差声明**（架构报告 §3.3）：解密未发生时，原子行同时含 `content`（密文）与 `text`（marker「[加密消息，无法解码]」）；shortcut 投影行仅 `text`（失败时恢复为原密文）。两层投影形状本就不同，接受该残差，跨层比对以 ledger 为准。
+- **排障入口**：`dws chat crypto decrypt --text <ciphertext> --format json` 手工解密单条密文。
+- **构建前提**：`-tags safechat`；默认构建零解密行为。

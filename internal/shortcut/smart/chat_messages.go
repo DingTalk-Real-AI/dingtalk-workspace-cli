@@ -655,9 +655,12 @@ func collectOneChatMessagesPage(rt *shortcut.RuntimeContext, request chatMessage
 	rawItems := chatMessageItems(data)
 	items, terminalReached, rangeFailures := request.timeRange.filter(rawItems)
 	sortMessagesByCreateTimeStable(items, request.timeRange.order)
+	decryptLedger := chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+		chatmsg.MessageDecryptClient(), items, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 	results := projectChatMessages(items, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(results)
 	chatmsg.ApplyMessagePagination(payload, data, rawItems, request.direction)
+	chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 	if metadata := request.timeRange.metadata(); metadata != nil {
 		payload["queryRange"] = metadata
 	}
@@ -864,8 +867,11 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	}
 
 	sortMessagesByCreateTimeStable(allItems, request.timeRange.order)
+	decryptLedger := chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+		chatmsg.MessageDecryptClient(), allItems, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 	results := projectChatMessages(allItems, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(results)
+	chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 	if metadata := request.timeRange.metadata(); metadata != nil {
 		payload["queryRange"] = metadata
 	}

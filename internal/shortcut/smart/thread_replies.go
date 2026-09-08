@@ -314,7 +314,10 @@ func collectOneThreadRepliesPage(rt *shortcut.RuntimeContext, params map[string]
 		return nil, nil, err
 	}
 	items := threadReplyItems(data)
+	decryptLedger := chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+		chatmsg.MessageDecryptClient(), items, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 	payload := newThreadRepliesPayload(items, !rt.Bool("no-reactions"))
+	chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 	applyOneThreadRepliesPagination(payload, data)
 	if payload["complete"] == true {
 		payload["stopReason"] = "source_complete"
@@ -456,7 +459,10 @@ func collectAllThreadReplies(rt *shortcut.RuntimeContext, params map[string]any)
 		truncatedByPageLimit = true
 		stopReason = "page_limit"
 	}
+	decryptLedger := chatmsg.DecryptMessagesByPolicy(rt.Command().Context(), rt,
+		chatmsg.MessageDecryptClient(), allItems, chatmsg.DecryptOptions{MarkFailedOriginal: true})
 	payload := newThreadRepliesPayload(allItems, !rt.Bool("no-reactions"))
+	chatmsg.ApplyDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = paginationKnown
 	payload["complete"] = complete && len(failures) == 0

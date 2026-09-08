@@ -21,12 +21,15 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -958,4 +961,276 @@ func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T
 			t.Fatalf("error=%v", err)
 		}
 	})
+}
+
+const chatMessagesDecryptCipherText = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+
+type chatMessagesDecryptCipher struct{}
+
+func (chatMessagesDecryptCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, stderrors.New("not used")
+}
+
+func (chatMessagesDecryptCipher) DecryptMessage(_ context.Context, _, _ string, ciphertext []byte) ([]byte, error) {
+	return []byte("ding:" + string(ciphertext)), nil
+}
+
+type chatMessagesDecryptCall struct {
+	product string
+	tool    string
+	args    map[string]any
+}
+
+type chatMessagesDecryptCaller struct {
+	calls     []chatMessagesDecryptCall
+	responses map[string]string
+	listPages []string
+	pageTool  string
+	failTool  string
+}
+
+func (c *chatMessagesDecryptCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
+	c.calls = append(c.calls, chatMessagesDecryptCall{product: product, tool: tool, args: args})
+	key := product + "/" + tool
+	if c.failTool == key {
+		return nil, stderrors.New("fixture decrypt failure")
+	}
+	pagedKey := "chat/list_conversation_message_v2"
+	if c.pageTool != "" {
+		pagedKey = c.pageTool
+	}
+	if key == pagedKey && len(c.listPages) > 0 {
+		pagedTool := strings.TrimPrefix(pagedKey, "chat/")
+		index := 0
+		for _, call := range c.calls {
+			if call.product == "chat" && call.tool == pagedTool {
+				index++
+			}
+		}
+		if index > len(c.listPages) {
+			index = len(c.listPages)
+		}
+		return &edition.ToolResult{Content: []edition.ContentBlock{{
+			Type: "text",
+			Text: c.listPages[index-1],
+		}}}, nil
+	}
+	if text, ok := c.responses[key]; ok {
+		return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true}`}}}, nil
+}
+
+func (c *chatMessagesDecryptCaller) CallReadTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return c.CallTool(ctx, product, tool, args)
+}
+
+func (*chatMessagesDecryptCaller) Format() string { return "json" }
+func (*chatMessagesDecryptCaller) DryRun() bool   { return false }
+func (*chatMessagesDecryptCaller) Fields() string { return "" }
+func (*chatMessagesDecryptCaller) JQ() string     { return "" }
+
+func swapChatMessagesDecryptClient(t *testing.T, client *messagecrypto.Client) {
+	t.Helper()
+	old := chatmsg.MessageDecryptClient()
+	chatmsg.SetMessageDecryptClient(client)
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
+}
+
+func chatMessagesDecryptReadyClient() *messagecrypto.Client {
+	return &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: chatMessagesDecryptCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	}
+}
+
+func runChatMessagesDecrypt(t *testing.T, caller *chatMessagesDecryptCaller, args ...string) map[string]any {
+	t.Helper()
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func chatMessagesDecryptListResponse(content string) string {
+	return `{"result":{"hasMore":false,"messages":[{"openMessageId":"m1","openConversationId":"cid","sender":"张三","content":"` + content + `","createTime":"2026-01-02 00:00:00"}]}}`
+}
+
+func TestCrossPlatformCoverageChatMessagesDecryptSinglePage(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_conversation_message_v2": chatMessagesDecryptListResponse(chatMessagesDecryptCipherText),
+		"im/get_message_crypto_policy":      `{"result":{"mode":"required"}}`,
+		"im/batch_ding_decrypt_messages":    `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"hello decrypted","keyVersion":8}]}}`,
+	}}
+	payload := runChatMessagesDecrypt(t, caller,
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-01-03 00:00:00")
+	if len(caller.calls) != 3 ||
+		caller.calls[0].tool != "list_conversation_message_v2" ||
+		caller.calls[1].tool != "get_message_crypto_policy" ||
+		caller.calls[2].tool != "batch_ding_decrypt_messages" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(1) ||
+		payload["decryptedCount"] != float64(1) ||
+		payload["decryptFailedCount"] != float64(0) {
+		t.Fatalf("decrypt ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "hello decrypted" || first["contentDecrypted"] != true ||
+		first["cryptoLayer"] != "ding+safechat" || first["dingKeyVersion"] != float64(8) {
+		t.Fatalf("decrypted message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesDecryptPolicyOff(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_conversation_message_v2": chatMessagesDecryptListResponse(chatMessagesDecryptCipherText),
+		"im/get_message_crypto_policy":      `{"result":{"mode":"off"}}`,
+	}}
+	payload := runChatMessagesDecrypt(t, caller,
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-01-03 00:00:00")
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(0) ||
+		payload["decryptFailedCount"] != float64(1) ||
+		payload["partial"] != true {
+		t.Fatalf("policy-off ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != chatMessagesDecryptCipherText || first["contentDecrypted"] == true {
+		t.Fatalf("policy-off message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesDecryptBatchFailureFallsBackToOriginal(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{
+		responses: map[string]string{
+			"chat/list_conversation_message_v2": chatMessagesDecryptListResponse(chatMessagesDecryptCipherText),
+			"im/get_message_crypto_policy":      `{"result":{"mode":"required"}}`,
+		},
+		failTool: "im/batch_ding_decrypt_messages",
+	}
+	payload := runChatMessagesDecrypt(t, caller,
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-01-03 00:00:00")
+	if payload["decryptFailedCount"] != float64(1) || payload["partial"] != true {
+		t.Fatalf("batch-failure ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != chatMessagesDecryptCipherText || first["contentDecrypted"] == true {
+		t.Fatalf("batch-failure message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesDecryptSkipsWhenBackendUnavailable(t *testing.T) {
+	swapChatMessagesDecryptClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			t.Fatal("identity lookup must not run without the SafeChat backend")
+			return messagecrypto.Identity{}, nil
+		},
+		BackendReady: func() bool { return false },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_conversation_message_v2": chatMessagesDecryptListResponse(chatMessagesDecryptCipherText),
+	}}
+	payload := runChatMessagesDecrypt(t, caller,
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-01-03 00:00:00")
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %#v, want list only", caller.calls)
+	}
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount", "decryptFailures"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("unavailable backend emitted %q: %#v", key, payload)
+		}
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "[加密消息，无法解码]" {
+		t.Fatalf("message changed without backend: %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesDecryptPageAllSinglePolicyAndBatch(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{
+		listPages: []string{
+			`{"result":{"hasMore":true,"nextCursor":1767225600123,"messages":[{"openMessageId":"m1","openConversationId":"cid","content":"` + chatMessagesDecryptCipherText + `","createTime":"2026-01-02 00:00:00"}]}}`,
+			`{"result":{"hasMore":false,"messages":[{"openMessageId":"m2","openConversationId":"cid","content":"` + chatMessagesDecryptCipherText + `","createTime":"2026-01-01 00:00:00"}]}}`,
+		},
+		responses: map[string]string{
+			"im/get_message_crypto_policy":   `{"result":{"mode":"required","ttlSeconds":60}}`,
+			"im/batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"明文一"},{"messageId":"m2","status":"success","plaintextContent":"明文二"}]}}`,
+		},
+	}
+	payload := runChatMessagesDecrypt(t, caller,
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-01-03 00:00:00",
+		"--page-all", "--page-limit", "5")
+	listCalls, policyCalls, batchCalls := 0, 0, 0
+	for _, call := range caller.calls {
+		switch call.tool {
+		case "list_conversation_message_v2":
+			listCalls++
+		case "get_message_crypto_policy":
+			policyCalls++
+		case "batch_ding_decrypt_messages":
+			batchCalls++
+		}
+	}
+	if listCalls != 2 || policyCalls != 1 || batchCalls != 1 {
+		t.Fatalf("calls = %d list / %d policy / %d batch, want 2/1/1", listCalls, policyCalls, batchCalls)
+	}
+	if payload["decryptCandidateCount"] != float64(2) ||
+		payload["decryptAllowedCount"] != float64(2) ||
+		payload["decryptedCount"] != float64(2) {
+		t.Fatalf("page-all decrypt ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	if len(messages) != 2 {
+		t.Fatalf("messages = %#v", messages)
+	}
+	first, _ := messages[0].(map[string]any)
+	second, _ := messages[1].(map[string]any)
+	if first["text"] != "明文一" || second["text"] != "明文二" {
+		t.Fatalf("page-all decrypted messages = %#v/%#v", first, second)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesDecryptDryRunSkipsDecrypt(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_conversation_message_v2": chatMessagesDecryptListResponse(chatMessagesDecryptCipherText),
+	}}
+	payload := runChatMessagesDecrypt(t, caller,
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-01-03 00:00:00", "--dry-run")
+	for _, call := range caller.calls {
+		if call.tool == "get_message_crypto_policy" || call.tool == "batch_ding_decrypt_messages" {
+			t.Fatalf("dry-run must not call decrypt tools: %#v", caller.calls)
+		}
+	}
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("dry-run emitted %q: %#v", key, payload)
+		}
+	}
 }

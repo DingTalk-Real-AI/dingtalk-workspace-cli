@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 type messageReadFakeCipher struct{}
@@ -26,18 +26,6 @@ func (messageReadFakeCipher) DecryptMessage(_ context.Context, _, _ string, ciph
 	return []byte("ding:" + string(ciphertext)), nil
 }
 
-type messageReadSessionCipher struct{}
-
-func (messageReadSessionCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
-	return nil, errors.New("not used")
-}
-
-func (messageReadSessionCipher) DecryptMessage(context.Context, string, string, []byte) ([]byte, error) {
-	return nil, errors.New("not used")
-}
-
-func (messageReadSessionCipher) Close() error { return nil }
-
 type messageReadFailingCipher struct{}
 
 func (messageReadFailingCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
@@ -48,11 +36,11 @@ func (messageReadFailingCipher) DecryptMessage(context.Context, string, string, 
 	return nil, errors.New("safechat failed")
 }
 
-func swapMessageReadCryptoClient(t *testing.T, client *messagecrypto.Client) {
+func swapMessageDecryptClient(t *testing.T, client *messagecrypto.Client) {
 	t.Helper()
-	old := messageReadCryptoClient
-	messageReadCryptoClient = client
-	t.Cleanup(func() { messageReadCryptoClient = old })
+	old := chatmsg.MessageDecryptClient()
+	chatmsg.SetMessageDecryptClient(client)
+	t.Cleanup(func() { chatmsg.SetMessageDecryptClient(old) })
 }
 
 func TestCrossPlatformCoverageListMessageRichProjection(t *testing.T) {
@@ -92,7 +80,7 @@ func TestCrossPlatformCoverageListMessageRichProjection(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageMessagesMgetDecryptsEncryptedMessagesInBatch(t *testing.T) {
-	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+	swapMessageDecryptClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 		},
@@ -133,6 +121,7 @@ func TestCrossPlatformCoverageMessagesMgetDecryptsEncryptedMessagesInBatch(t *te
 		t.Fatal(err)
 	}
 	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(1) ||
 		payload["decryptedCount"] != float64(1) ||
 		payload["decryptFailedCount"] != float64(0) {
 		t.Fatalf("decrypt ledger = %#v", payload)
@@ -145,7 +134,7 @@ func TestCrossPlatformCoverageMessagesMgetDecryptsEncryptedMessagesInBatch(t *te
 }
 
 func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *testing.T) {
-	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+	swapMessageDecryptClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 		},
@@ -173,7 +162,9 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload["decryptFailedCount"] != float64(1) || payload["partial"] != true {
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(0) ||
+		payload["decryptFailedCount"] != float64(1) || payload["partial"] != true {
 		t.Fatalf("decrypt fallback ledger = %#v", payload)
 	}
 	messages, _ := payload["messages"].([]any)
@@ -184,7 +175,7 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *
 }
 
 func TestCrossPlatformCoverageMessagesMgetSkipsCryptoWhenBackendUnavailable(t *testing.T) {
-	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+	swapMessageDecryptClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			t.Fatal("identity lookup must not run without the SafeChat backend")
 			return messagecrypto.Identity{}, nil
@@ -223,7 +214,7 @@ func TestCrossPlatformCoverageMessagesMgetSkipsCryptoWhenBackendUnavailable(t *t
 }
 
 func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenBatchDecryptFails(t *testing.T) {
-	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+	swapMessageDecryptClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 		},
@@ -253,6 +244,7 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenBatchDecryptFai
 		t.Fatal(err)
 	}
 	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(1) ||
 		payload["decryptedCount"] != float64(0) ||
 		payload["decryptFailedCount"] != float64(1) ||
 		payload["partial"] != true {
@@ -265,88 +257,89 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenBatchDecryptFai
 	}
 }
 
-func TestCrossPlatformCoverageMessageDecryptHelperEdges(t *testing.T) {
-	t.Run("new read crypto client default paths", func(t *testing.T) {
-		oldIdentity := messageReadCurrentIdentity
-		oldOpen := messageReadOpenSession
-		oldAvailable := messageReadAvailable
-		t.Cleanup(func() {
-			messageReadCurrentIdentity = oldIdentity
-			messageReadOpenSession = oldOpen
-			messageReadAvailable = oldAvailable
-		})
-		messageReadCurrentIdentity = func(context.Context, string) (msgcrypto.Identity, error) {
-			return msgcrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
-		}
-		messageReadOpenSession = func(context.Context, msgcrypto.SessionOptions) (*msgcrypto.Session, error) {
-			return &msgcrypto.Session{Cipher: messageReadSessionCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
-		}
-		messageReadAvailable = func() bool { return true }
-		client := newMessageReadCryptoClient()
-		if client == nil || client.PolicyCache == nil {
-			t.Fatalf("client = %#v", client)
-		}
-		if !client.BackendReady() {
-			t.Fatal("BackendReady() = false")
-		}
-		identity, err := client.Identity(context.Background(), t.TempDir())
-		if err != nil || identity.CorpID != "corp-1" || identity.StaffID != "staff-1" {
-			t.Fatalf("identity = %#v, %v", identity, err)
-		}
-		session, err := client.OpenSession(context.Background(), messagecrypto.SessionOptions{
-			ConfigDir:           t.TempDir(),
-			KeyServer:           "https://key.example.test",
-			AllowedRedirectHost: "redirect.example.test",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if session.CorpID != "corp-1" || session.StaffID != "staff-1" || session.Cipher == nil {
-			t.Fatalf("session = %#v", session)
-		}
-
-		messageReadOpenSession = func(context.Context, msgcrypto.SessionOptions) (*msgcrypto.Session, error) {
-			return nil, errors.New("open failed")
-		}
-		if _, err := client.OpenSession(context.Background(), messagecrypto.SessionOptions{}); err == nil || err.Error() != "open failed" {
-			t.Fatalf("OpenSession error = %v", err)
-		}
-	})
-
-	messages := []map[string]any{
-		{
-			"openMessageId":      "root",
-			"openConversationId": "cid-root",
-			"content":            testCipher,
-			"forwardMessages": []any{
-				map[string]any{"openMessageId": "child", "text": testCipher},
-				"ignored",
-				map[string]any{"openMessageId": "", "content": testCipher},
-			},
+func TestCrossPlatformCoverageMessagesMgetPolicyOffRestoresOriginalText(t *testing.T) {
+	swapMessageDecryptClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 		},
-		{"messageId": "<nil>", "content": testCipher},
-		{"openMessageId": "plain", "content": "plain text"},
-	}
-	items := collectEncryptedMessageItems(messages)
-	if len(items) != 3 || items[0].MessageID != "root" || items[1].MessageID != "child" {
-		t.Fatalf("items = %#v", items)
-	}
-	index := indexMessageMapsByID(messages)
-	if len(index["root"]) != 1 || len(index["child"]) != 1 {
-		t.Fatalf("index = %#v", index)
-	}
-	markMessageDecryptFailures(messages, []map[string]any{
-		messageDecryptFailure("root", "cid-root", ""),
-		{"messageId": ""},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: messageReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
 	})
-	if got := messages[0][messageDecryptFailedOriginalContentKey]; got != testCipher {
-		t.Fatalf("original encrypted content = %#v", got)
+	fake := &larkAlignmentCaller{
+		responses: map[string]string{
+			"im/list_messages_by_ids":      `{"result":[{"openMessageId":"m1","openConversationId":"cid","content":"` + testCipher + `"}]}`,
+			"im/get_message_crypto_policy": `{"result":{"mode":"off"}}`,
+		},
 	}
-	if got := firstNonEmptyShortcutString("", " fallback "); got != "fallback" {
-		t.Fatalf("firstNonEmptyShortcutString = %q", got)
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
 	}
-	if got := firstNonEmptyShortcutString("", " "); got != "" {
-		t.Fatalf("firstNonEmptyShortcutString empty = %q", got)
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(0) ||
+		payload["decryptFailedCount"] != float64(1) ||
+		payload["partial"] != true {
+		t.Fatalf("policy-off ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != testCipher || first["contentDecrypted"] == true {
+		t.Fatalf("policy-off message = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageMessagesListZeroCandidatesPublishesZeroCounters(t *testing.T) {
+	swapMessageDecryptClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			t.Fatal("zero candidates must not query identity")
+			return messagecrypto.Identity{}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"chat/list_conversation_message_v2": `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid","content":"plain text"}]}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+messages-list", "--group", "cid", "--time", "2026-07-14 00:00:00",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]float64{
+		"decryptCandidateCount": 0,
+		"decryptAllowedCount":   0,
+		"decryptedCount":        0,
+		"decryptFailedCount":    0,
+	} {
+		if payload[key] != want {
+			t.Fatalf("%s = %#v, want %v; payload = %#v", key, payload[key], want, payload)
+		}
+	}
+	if _, ok := payload["decryptFailures"]; ok {
+		t.Fatalf("zero-candidate payload must not carry failures: %#v", payload)
+	}
+	if _, ok := payload["partial"]; ok {
+		t.Fatalf("zero-candidate payload must not carry partial: %#v", payload)
 	}
 }
 
@@ -402,7 +395,7 @@ func TestCrossPlatformCoverageMessageProjectionHelperEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageMessagesMgetDecryptItemFailureEdges(t *testing.T) {
-	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+	swapMessageDecryptClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 		},
@@ -439,7 +432,7 @@ func TestCrossPlatformCoverageMessagesMgetDecryptItemFailureEdges(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageMessagesMgetRecordsSafeChatFailures(t *testing.T) {
-	swapMessageReadCryptoClient(t, &messagecrypto.Client{
+	swapMessageDecryptClient(t, &messagecrypto.Client{
 		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
 			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
 		},

@@ -15,6 +15,7 @@ package smart
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	stderrors "errors"
 	"math"
@@ -23,6 +24,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 )
 
 func TestCrossPlatformCoverageThreadRepliesResolvesRootMessageIDBeforeReadingReplies(t *testing.T) {
@@ -489,4 +491,183 @@ func decodeThreadRepliesPayload(t *testing.T, raw []byte) map[string]any {
 		t.Fatalf("decode thread replies payload: %v\n%s", err, raw)
 	}
 	return payload
+}
+
+func threadRepliesDecryptResponse(content string, hasMore bool, extra string) string {
+	return `{"result":{"hasMore":` + boolToString(hasMore) + extra + `,"messages":[{"openMessageId":"m1","openConversationId":"cid","content":"` + content + `","createTime":"2026-08-05 19:46:00"}]}}`
+}
+
+func boolToString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
+
+func TestCrossPlatformCoverageThreadRepliesDecryptSinglePage(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_topic_replies":        threadRepliesDecryptResponse(chatMessagesDecryptCipherText, false, ""),
+		"im/get_message_crypto_policy":   `{"result":{"mode":"required"}}`,
+		"im/batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"hello decrypted","keyVersion":8}]}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 3 ||
+		caller.calls[0].tool != "list_topic_replies" ||
+		caller.calls[1].tool != "get_message_crypto_policy" ||
+		caller.calls[2].tool != "batch_ding_decrypt_messages" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	payload := decodeThreadRepliesPayload(t, output.Bytes())
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(1) ||
+		payload["decryptedCount"] != float64(1) ||
+		payload["decryptFailedCount"] != float64(0) {
+		t.Fatalf("decrypt ledger = %#v", payload)
+	}
+	replies, _ := payload["replies"].([]any)
+	first, _ := replies[0].(map[string]any)
+	if first["text"] != "hello decrypted" || first["contentDecrypted"] != true ||
+		first["cryptoLayer"] != "ding+safechat" || first["dingKeyVersion"] != float64(8) {
+		t.Fatalf("decrypted reply = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageThreadRepliesDecryptPolicyOff(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_topic_replies":      threadRepliesDecryptResponse(chatMessagesDecryptCipherText, false, ""),
+		"im/get_message_crypto_policy": `{"result":{"mode":"off"}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	payload := decodeThreadRepliesPayload(t, output.Bytes())
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptAllowedCount"] != float64(0) ||
+		payload["decryptFailedCount"] != float64(1) ||
+		payload["partial"] != true {
+		t.Fatalf("policy-off ledger = %#v", payload)
+	}
+	replies, _ := payload["replies"].([]any)
+	first, _ := replies[0].(map[string]any)
+	if first["text"] != chatMessagesDecryptCipherText || first["contentDecrypted"] == true {
+		t.Fatalf("policy-off reply = %#v", first)
+	}
+}
+
+func TestCrossPlatformCoverageThreadRepliesDecryptSkipsWhenBackendUnavailable(t *testing.T) {
+	swapChatMessagesDecryptClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			t.Fatal("identity lookup must not run without the SafeChat backend")
+			return messagecrypto.Identity{}, nil
+		},
+		BackendReady: func() bool { return false },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_topic_replies": threadRepliesDecryptResponse(chatMessagesDecryptCipherText, false, ""),
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %#v, want replies read only", caller.calls)
+	}
+	payload := decodeThreadRepliesPayload(t, output.Bytes())
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount", "decryptFailures"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("unavailable backend emitted %q: %#v", key, payload)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageThreadRepliesDecryptPageAllSinglePolicyAndBatch(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{
+		pageTool: "chat/list_topic_replies",
+		listPages: []string{
+			`{"result":{"hasMore":true,"nextCursor":1786022919361,"messages":[{"openMessageId":"m1","openConversationId":"cid","content":"` + chatMessagesDecryptCipherText + `","createTime":"2026-08-06 21:28:40"}]}}`,
+			`{"result":{"hasMore":false,"messages":[{"openMessageId":"m2","openConversationId":"cid","content":"` + chatMessagesDecryptCipherText + `","createTime":"2026-08-05 19:46:00"}]}}`,
+		},
+		responses: map[string]string{
+			"im/get_message_crypto_policy":   `{"result":{"mode":"required","ttlSeconds":60}}`,
+			"im/batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"明文一"},{"messageId":"m2","status":"success","plaintextContent":"明文二"}]}}`,
+		},
+	}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all", "--page-limit", "5"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	listCalls, policyCalls, batchCalls := 0, 0, 0
+	for _, call := range caller.calls {
+		switch call.tool {
+		case "list_topic_replies":
+			listCalls++
+		case "get_message_crypto_policy":
+			policyCalls++
+		case "batch_ding_decrypt_messages":
+			batchCalls++
+		}
+	}
+	if listCalls != 2 || policyCalls != 1 || batchCalls != 1 {
+		t.Fatalf("calls = %d list / %d policy / %d batch, want 2/1/1", listCalls, policyCalls, batchCalls)
+	}
+	payload := decodeThreadRepliesPayload(t, output.Bytes())
+	if payload["decryptCandidateCount"] != float64(2) ||
+		payload["decryptAllowedCount"] != float64(2) ||
+		payload["decryptedCount"] != float64(2) {
+		t.Fatalf("page-all decrypt ledger = %#v", payload)
+	}
+	replies, _ := payload["replies"].([]any)
+	if len(replies) != 2 {
+		t.Fatalf("replies = %#v", replies)
+	}
+}
+
+func TestCrossPlatformCoverageThreadRepliesDecryptDryRunSkipsDecrypt(t *testing.T) {
+	swapChatMessagesDecryptClient(t, chatMessagesDecryptReadyClient())
+	caller := &chatMessagesDecryptCaller{responses: map[string]string{
+		"chat/list_topic_replies": threadRepliesDecryptResponse(chatMessagesDecryptCipherText, false, ""),
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--dry-run"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range caller.calls {
+		if call.tool == "get_message_crypto_policy" || call.tool == "batch_ding_decrypt_messages" {
+			t.Fatalf("dry-run must not call decrypt tools: %#v", caller.calls)
+		}
+	}
+	payload := decodeThreadRepliesPayload(t, output.Bytes())
+	for _, key := range []string{"decryptCandidateCount", "decryptAllowedCount", "decryptedCount", "decryptFailedCount"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("dry-run emitted %q: %#v", key, payload)
+		}
+	}
 }

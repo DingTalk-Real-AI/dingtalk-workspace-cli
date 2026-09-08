@@ -21,7 +21,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -307,144 +306,11 @@ func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledg
 }
 
 func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string]any) map[string]any {
-	if cmd == nil || commandBoolFlag(cmd, "dry-run") ||
-		chatCryptoClient == nil || chatCryptoClient.BackendReady == nil || !chatCryptoClient.BackendReady() {
+	if cmd == nil || commandBoolFlag(cmd, "dry-run") {
 		return nil
 	}
-	batchItems := make([]messagecrypto.BatchDecryptItem, 0)
-	for _, item := range items {
-		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(item)))
-		if messageID == "" || messageID == "<nil>" {
-			continue
-		}
-		content := strings.TrimSpace(fmt.Sprint(firstChatMapValue(item, "content", "text")))
-		if chatmsg.IsEncrypted(content) {
-			conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(item)))
-			if conversationID == "<nil>" {
-				conversationID = ""
-			}
-			batchItems = append(batchItems, messagecrypto.BatchDecryptItem{
-				MessageID:      messageID,
-				ConversationID: conversationID,
-				Ciphertext:     content,
-			})
-		}
-	}
-	decryptCandidateCount := len(batchItems)
-	batchItems, policyFailures := filterProjectedDecryptItemsByPolicy(cmd, batchItems)
-	ledger := map[string]any{
-		"decryptCandidateCount": decryptCandidateCount,
-		"decryptAllowedCount":   len(batchItems),
-		"decryptedCount":        0,
-		"decryptFailedCount":    len(policyFailures),
-	}
-	if len(policyFailures) > 0 {
-		ledger["decryptFailures"] = policyFailures
-		ledger["partial"] = true
-	}
-	if len(batchItems) == 0 {
-		return ledger
-	}
-	result, err := chatCryptoClient.BatchDecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{}, batchItems)
-	if err != nil {
-		failures := append([]map[string]any{}, policyFailures...)
-		failures = append(failures, map[string]any{"stage": "message-decrypt", "reason": err.Error()})
-		ledger["decryptFailedCount"] = len(failures)
-		ledger["decryptFailures"] = failures
-		ledger["partial"] = true
-		return ledger
-	}
-	byID := map[string][]map[string]any{}
-	for _, item := range items {
-		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(item)))
-		if messageID != "" && messageID != "<nil>" {
-			byID[messageID] = append(byID[messageID], item)
-		}
-	}
-	decryptedCount := 0
-	failures := make([]map[string]any, 0)
-	for _, item := range result.Items {
-		if item.Status != "" && item.Status != "success" {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
-			continue
-		}
-		if strings.TrimSpace(item.PlaintextContent) == "" {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
-			continue
-		}
-		for _, message := range byID[item.MessageID] {
-			message["content"] = item.PlaintextContent
-			message["contentDecrypted"] = true
-			message["cryptoLayer"] = "ding+safechat"
-			if item.KeyVersion > 0 {
-				message["dingKeyVersion"] = item.KeyVersion
-			}
-		}
-		decryptedCount++
-	}
-	for _, item := range result.Failures {
-		failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
-	}
-	failures = append(policyFailures, failures...)
-	ledger["decryptedCount"] = decryptedCount
-	ledger["decryptFailedCount"] = len(failures)
-	if len(failures) > 0 {
-		ledger["decryptFailures"] = failures
-		ledger["partial"] = true
-	}
-	return ledger
-}
-
-func filterProjectedDecryptItemsByPolicy(cmd *cobra.Command, items []messagecrypto.BatchDecryptItem) ([]messagecrypto.BatchDecryptItem, []map[string]any) {
-	filtered := make([]messagecrypto.BatchDecryptItem, 0, len(items))
-	failures := make([]map[string]any, 0)
-	for _, item := range items {
-		decision, err := chatCryptoClient.PolicyDecision(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{
-			Identity:           "user",
-			MsgType:            "text",
-			OpenConversationID: item.ConversationID,
-		})
-		if err != nil {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
-			continue
-		}
-		if !decision.Enabled {
-			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
-			continue
-		}
-		filtered = append(filtered, item)
-	}
-	return filtered, failures
-}
-
-func chatDecryptFailure(messageID, conversationID, reason string) map[string]any {
-	failure := map[string]any{
-		"stage":     "message-decrypt",
-		"messageId": strings.TrimSpace(messageID),
-		"reason":    firstNonEmptyLiteral(reason, "decrypt_failed"),
-	}
-	if strings.TrimSpace(conversationID) != "" {
-		failure["conversationId"] = strings.TrimSpace(conversationID)
-	}
-	return failure
-}
-
-func firstChatMapValue(message map[string]any, keys ...string) any {
-	for _, key := range keys {
-		if value, ok := message[key]; ok {
-			return value
-		}
-	}
-	return nil
-}
-
-func firstNonEmptyLiteral(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
+	return chatmsg.DecryptMessagesByPolicy(cmd.Context(), chatCryptoRuntime{cmd: cmd},
+		chatmsg.MessageDecryptClient(), items, chatmsg.DecryptOptions{})
 }
 
 func projectExistingChatMessageCollections(data map[string]any) map[string]any {
