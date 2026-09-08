@@ -147,6 +147,7 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"calendar\u0000+tomorrow":                       {},
 		"calendar\u0000+update":                         {},
 		"calendar\u0000+week":                           {},
+		"chat\u0000+active-conversations":               {},
 		"chat\u0000+at-me":                              {},
 		"chat\u0000+bot-find":                           {},
 		"chat\u0000+bot-search":                         {},

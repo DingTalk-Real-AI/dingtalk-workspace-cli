@@ -93,6 +93,23 @@
       ]
     },
     {
+      "id": "chat.conversation.active-since",
+      "preferred_tool": "chat.shortcut_active_conversations",
+      "allowed_fallbacks": [
+        {
+          "tool": "chat.search_messages_by_time_range",
+          "reason_code": "raw_message_details"
+        }
+      ],
+      "forbidden_default_tools": [
+        "chat.search_messages_by_time_range"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/chat/message-query.md"
+      ]
+    },
+    {
       "id": "chat.create.group",
       "preferred_tool": "chat.shortcut_chat_create",
       "forbidden_default_tools": [

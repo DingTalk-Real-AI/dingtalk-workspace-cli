@@ -5,6 +5,7 @@
   "featured_shortcuts": [
     "+messages-resource-download",
     "+at-me",
+    "+active-conversations",
     "+broadcast",
     "+chat-messages",
     "+dm",
@@ -88,6 +89,7 @@
     "chat message send-card": "+messages-send-card",
     "chat message reply": "+messages-reply",
     "chat message list": "+chat-messages",
+    "chat message list-all": "+active-conversations",
     "chat message search": "+search-msg",
     "chat message search-advanced": "+search-msg",
     "chat message list-mentions": "+at-me",
@@ -116,6 +118,13 @@
     "chat thread list-replies": "+thread-replies"
   },
   "shortcuts": {
+    "+active-conversations": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
     "+bot-search": {
       "disposition": "schema_leaf",
       "semantic_delta": "仅绑定并投影当前用户创建的机器人搜索；无跨工具编排，默认由 bot Schema leaf 承担。",
