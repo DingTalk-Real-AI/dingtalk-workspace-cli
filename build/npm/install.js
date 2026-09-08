@@ -1853,34 +1853,45 @@ function main() {
   }
 
   extractArchive(archivePath, vendorDir);
-  extractSkills(skillsPath, skillsStaging);
 
-  // For backward compatibility, the zip root carries a copy of mono content
-  // (SKILL.md + references/ + scripts/). Prefer the explicit mono/ subdir
-  // when present; fall back to the staging root otherwise.
-  const monoRoot = fs.existsSync(path.join(skillsStaging, "mono", "SKILL.md"))
-    ? path.join(skillsStaging, "mono")
-    : skillsStaging;
-  // A mono install requires an actual SKILL.md at the root of monoRoot. On a
-  // multi-only zip monoRoot would degrade to the staging root and copy the
-  // whole bundle (multi/ included) into a dws/ directory — skip instead.
-  const monoHasSkill = fs.existsSync(path.join(monoRoot, "SKILL.md"));
-  const multiRoot = path.join(skillsStaging, "multi");
-  const skillMode = resolveSkillMode();
-  if (skillMode === "multi" && multiTreeHasSkills(multiRoot)) {
-    console.log(`Skill mode: multi — installing per-product skills`);
-    installMultiSkillsToHomes(multiRoot);
-  } else {
-    if (skillMode === "multi") {
-      console.log("multi skill tree not found or empty in bundle; falling back to mono.");
-    }
-    if (monoHasSkill) {
-      installSkillsToHomes(monoRoot);
-    } else {
-      console.log("mono skill tree not found in bundle; skipping skill install.");
-    }
+  if ((process.env.DWS_NO_SKILLS || "").trim() === "1") {
+    console.log("[dws] DWS_NO_SKILLS=1; skipping skill installation.");
+    return;
   }
-  cacheUserSkills(skillsStaging);
+
+  try {
+    extractSkills(skillsPath, skillsStaging);
+
+    // For backward compatibility, the zip root carries a copy of mono content
+    // (SKILL.md + references/ + scripts/). Prefer the explicit mono/ subdir
+    // when present; fall back to the staging root otherwise.
+    const monoRoot = fs.existsSync(path.join(skillsStaging, "mono", "SKILL.md"))
+      ? path.join(skillsStaging, "mono")
+      : skillsStaging;
+    // A mono install requires an actual SKILL.md at the root of monoRoot. On a
+    // multi-only zip monoRoot would degrade to the staging root and copy the
+    // whole bundle (multi/ included) into a dws/ directory — skip instead.
+    const monoHasSkill = fs.existsSync(path.join(monoRoot, "SKILL.md"));
+    const multiRoot = path.join(skillsStaging, "multi");
+    const skillMode = resolveSkillMode();
+    if (skillMode === "multi" && multiTreeHasSkills(multiRoot)) {
+      console.log(`Skill mode: multi — installing per-product skills`);
+      installMultiSkillsToHomes(multiRoot);
+    } else {
+      if (skillMode === "multi") {
+        console.log("multi skill tree not found or empty in bundle; falling back to mono.");
+      }
+      if (monoHasSkill) {
+        installSkillsToHomes(monoRoot);
+      } else {
+        console.log("mono skill tree not found in bundle; skipping skill install.");
+      }
+    }
+    cacheUserSkills(skillsStaging);
+  } catch (err) {
+    console.warn(`[dws] skill installation failed (non-fatal): ${err.message}`);
+    console.warn("[dws] CLI is functional. Run 'dws skill setup' to retry skill installation.");
+  }
 }
 
 if (require.main === module) {
