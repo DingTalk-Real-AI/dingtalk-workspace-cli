@@ -273,6 +273,9 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("invalid adapter configuration")
 	}
+	if !validMachineString(cfg.SelfOpenDingTalkID) {
+		return cfg, fmt.Errorf("adapter 缺少自身开放 ID，请重新 connect 初始化，不能跳过自消息过滤")
+	}
 	b, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), profile)
 	if err != nil || b != cfg.Binding || b.DWSProfile != profile || bindingChannel(b) == "dsh" {
 		return cfg, fmt.Errorf("adapter configuration does not match employee binding")

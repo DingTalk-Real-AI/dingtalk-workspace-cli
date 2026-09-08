@@ -38,9 +38,10 @@ type digitalEmployeeConnectResult struct {
 }
 
 type digitalEmployeePublishedIdentity struct {
-	CorpID   string
-	RobotUID string
-	StaffID  string
+	CorpID         string
+	RobotUID       string
+	StaffID        string
+	OpenDingTalkID string
 }
 
 var (
@@ -272,7 +273,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	cfg := digitalEmployeeAdapterConfig{Binding: binding, Name: findJSONScalar(draft, "name"), AlwaysOn: commandBoolFlag(cmd, "alwayson")}
 	if channel != "dsh" {
-		cfg.SelfOpenDingTalkID = findJSONScalar(published, "openDingTalkId")
+		cfg.SelfOpenDingTalkID = publishedIdentity.OpenDingTalkID
 		if !validMachineString(cfg.SelfOpenDingTalkID) {
 			return fmt.Errorf("数字员工发布详情缺少自身 openDingTalkId，无法安全过滤自发消息")
 		}
@@ -645,9 +646,10 @@ func publishedDigitalEmployeeIdentity(value map[string]any) (digitalEmployeePubl
 		return digitalEmployeePublishedIdentity{}, false
 	}
 	identity := digitalEmployeePublishedIdentity{
-		CorpID:   jsonScalar(profile["corpId"]),
-		RobotUID: jsonScalar(profile["robotUid"]),
-		StaffID:  jsonScalar(profile["staffId"]),
+		CorpID:         jsonScalar(profile["corpId"]),
+		RobotUID:       jsonScalar(profile["robotUid"]),
+		StaffID:        jsonScalar(profile["staffId"]),
+		OpenDingTalkID: jsonScalar(profile["openDingTalkId"]),
 	}
 	return identity, identity.CorpID != "" && identity.RobotUID != "" && identity.StaffID != ""
 }
