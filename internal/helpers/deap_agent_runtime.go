@@ -203,6 +203,9 @@ func employeeContains(ids []string, id string) bool {
 }
 
 func (r *employeeRuntime) accept(e employeeEvent) bool {
+	if e.SenderID == r.cfg.SelfOpenDingTalkID {
+		return false
+	}
 	if !validMachineString(e.EventID) || !validMachineString(e.MessageID) || !validMachineString(e.ConversationID) || !validMachineString(e.SenderID) || strings.TrimSpace(e.Content) == "" {
 		return false
 	}

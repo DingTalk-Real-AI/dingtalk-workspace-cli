@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
@@ -30,10 +29,11 @@ func digitalEmployeeChannels() []string {
 }
 
 type digitalEmployeeAdapterConfig struct {
-	Binding  digitalEmployeeBinding `json:"binding"`
-	Options  connectAgentOptions    `json:"options"`
-	AlwaysOn bool                   `json:"alwaysOn"`
-	Name     string                 `json:"name,omitempty"`
+	SelfOpenDingTalkID string                 `json:"selfOpenDingTalkId,omitempty"`
+	Binding            digitalEmployeeBinding `json:"binding"`
+	Options            connectAgentOptions    `json:"options"`
+	AlwaysOn           bool                   `json:"alwaysOn"`
+	Name               string                 `json:"name,omitempty"`
 }
 
 // digitalEmployeeAdapter 接收已经完成身份准备的非敏感配置。
@@ -236,11 +236,6 @@ func prepareDigitalEmployeeLocal(cmd *cobra.Command, binding digitalEmployeeBind
 func (digitalEmployeeLocalAdapter) Connect(cmd *cobra.Command, cfg digitalEmployeeAdapterConfig) error {
 	binding := cfg.Binding
 	dir := digitalEmployeeRuntimeDir(binding.DWSProfile)
-	lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(dir, "registration"))
-	if err != nil {
-		return err
-	}
-	defer lock.Release()
 	if s, _ := readDigitalEmployeeState(dir); employeeStateAlive(s) {
 		return fmt.Errorf("数字员工连接已运行，请先停止后修改配置")
 	}
@@ -298,7 +293,8 @@ func digitalEmployeeMachineResultSpec(capabilities bool) *contract.ResultSpec {
 
 func newDigitalEmployeeStatusCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "status", Short: "数字员工连接 status", Flags: []LeafFlag{{Name: "agent-uuid", Usage: "本地已绑定的数字员工 ID", Required: true}},
+		PostMount: deapAgentNoArgs,
+		Use:       "status", Short: "数字员工连接 status", Flags: []LeafFlag{{Name: "agent-uuid", Usage: "本地已绑定的数字员工 ID", Required: true}},
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "read", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "status") },
@@ -315,7 +311,8 @@ func newDigitalEmployeeStatusCommand() *cobra.Command {
 
 func newDigitalEmployeeListCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "list", Short: "数字员工连接 list", Flags: nil,
+		PostMount: deapAgentNoArgs,
+		Use:       "list", Short: "数字员工连接 list", Flags: nil,
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "read", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "list") },
@@ -332,7 +329,8 @@ func newDigitalEmployeeListCommand() *cobra.Command {
 
 func newDigitalEmployeeStopCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "stop", Short: "数字员工连接 stop", Flags: []LeafFlag{{Name: "agent-uuid", Usage: "本地已绑定的数字员工 ID", Required: true}},
+		PostMount: deapAgentNoArgs,
+		Use:       "stop", Short: "数字员工连接 stop", Flags: []LeafFlag{{Name: "agent-uuid", Usage: "本地已绑定的数字员工 ID", Required: true}},
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "stop") },
@@ -349,7 +347,8 @@ func newDigitalEmployeeStopCommand() *cobra.Command {
 
 func newDigitalEmployeeRestartCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "restart", Short: "数字员工连接 restart", Flags: []LeafFlag{{Name: "agent-uuid", Usage: "本地已绑定的数字员工 ID", Required: true}},
+		PostMount: deapAgentNoArgs,
+		Use:       "restart", Short: "数字员工连接 restart", Flags: []LeafFlag{{Name: "agent-uuid", Usage: "本地已绑定的数字员工 ID", Required: true}},
 		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE:          func(cmd *cobra.Command, _ []string) error { return runDigitalEmployeeLifecycle(cmd, "restart") },

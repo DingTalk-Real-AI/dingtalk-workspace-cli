@@ -161,8 +161,58 @@ func TestEmployeeRuntimeOwnerAndGroupACL(t *testing.T) {
 		t.Fatal("allowed group denied")
 	}
 	e.SenderID = "employee"
+	r.cfg.SelfOpenDingTalkID = "employee"
+	r.cfg.Options.AllowedUsers = append(r.cfg.Options.AllowedUsers, "employee")
 	if r.accept(e) {
 		t.Fatal("self message allowed")
+	}
+}
+
+func TestEmployeePrivateDiagnosticsReachOpenCode(t *testing.T) {
+	fwd := newOpencodeForwarder("opencode", nil, time.Second, connectAgentOptions{WorkDir: t.TempDir(), PrivateDiagnostics: true}, "isolated")
+	if !fwd.(*opencodeForwarder).server.privateDiagnostics {
+		t.Fatal("OpenCode diagnostics bypass private boundary")
+	}
+	dev := newOpencodeForwarder("opencode", nil, time.Second, connectAgentOptions{WorkDir: t.TempDir()}, "robot")
+	if dev.(*opencodeForwarder).server.privateDiagnostics {
+		t.Fatal("changed dev connect diagnostics")
+	}
+}
+
+func TestEmployeeStopWaitsForSupervisorExit(t *testing.T) {
+	state := digitalEmployeeRunState{Status: "stopped"}
+	if employeeStopComplete(state, os.Getpid()) {
+		t.Fatal("reported stop before supervisor exited")
+	}
+	if !employeeStopComplete(state, 0) {
+		t.Fatal("foreground stopped was not complete")
+	}
+}
+
+func TestEmployeeConnectRegistrationLockPrecedesAuthorizationAndBinding(t *testing.T) {
+	caller := newSuccessfulConnectCaller(successfulAuthResponse(), "")
+	InitDepsForTest(t, caller)
+	setupConnectSupervisorSeams(t)
+	dir := deapConnectConfigDir()
+	lock, err := auth.AcquireDualLock(context.Background(), filepath.Join(digitalEmployeeRuntimeDir("employee-corp:employee-user"), "registration"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	cmd := newConnectTestCommand(t, false)
+	cmd.SetContext(ctx)
+	if err := cmd.RunE(cmd, nil); err == nil {
+		t.Fatal("concurrent registration bypassed lock")
+	}
+	for _, call := range caller.calls {
+		if call.toolName == deapAgentAuthCodeTool {
+			t.Fatal("obtained authorization before registration lock")
+		}
+	}
+	if _, err := os.Stat(digitalEmployeeBindingPath(dir, "employee-corp:employee-user")); !os.IsNotExist(err) {
+		t.Fatalf("binding changed: %v", err)
 	}
 }
 

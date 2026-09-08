@@ -288,7 +288,7 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 					deadline := time.Now().Add(15 * time.Second)
 					for time.Now().Before(deadline) {
 						current, e := readDigitalEmployeeState(dir)
-						if e == nil && current.Status == "stopped" && (s.SupervisorPID == 0 || !processAlive(s.SupervisorPID)) {
+						if e == nil && employeeStopComplete(current, s.SupervisorPID) {
 							break
 						}
 						if err = waitForDigitalEmployeeReceipt(cmd.Context(), 100*time.Millisecond); err != nil {
@@ -296,12 +296,20 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 						}
 					}
 					current, e := readDigitalEmployeeState(dir)
-					if e != nil || current.Status != "stopped" {
+					if e != nil || !employeeStopComplete(current, s.SupervisorPID) {
 						return fmt.Errorf("等待员工进程优雅退出超时")
 					}
 				}
 				s.Status = "stopped"
 				if action == "restart" {
+					lock, e := auth.AcquireDualLock(cmd.Context(), filepath.Join(dir, "registration"))
+					if e != nil {
+						return e
+					}
+					defer lock.Release()
+					if latest, _ := readDigitalEmployeeState(dir); employeeStateAlive(latest) {
+						return fmt.Errorf("员工连接已被其他请求启动，请先查询状态")
+					}
 					cfg, e := loadDigitalEmployeeConfig(b.DWSProfile)
 					if e != nil {
 						return e
@@ -316,4 +324,8 @@ func runDigitalEmployeeLifecycle(cmd *cobra.Command, action string) error {
 		return writeDWSMachineEnvelope(cmd, map[string]any{"items": items})
 	}
 	return writeDWSMachineEnvelope(cmd, items[0])
+}
+
+func employeeStopComplete(state digitalEmployeeRunState, supervisorPID int) bool {
+	return state.Status == "stopped" && (supervisorPID == 0 || !processAlive(supervisorPID))
 }

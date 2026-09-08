@@ -734,7 +734,8 @@ func setupConnectSupervisorSeams(t *testing.T) {
 	t.Helper()
 	auth.SetRuntimeProfile("")
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapConnectConfigDir, func() string { return "/test/config" })
+	configDir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return configDir })
 	testseam.Swap(t, &deapConnectLoadProfiles, func(string) (*auth.ProfilesConfig, error) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})
@@ -810,7 +811,8 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	t.Setenv("DWS_DUMP_RAW", "1")
 	auth.SetRuntimeProfile("")
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapConnectConfigDir, func() string { return "/test/config" })
+	configDir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return configDir })
 	testseam.Swap(t, &deapConnectLoadProfiles, func(string) (*auth.ProfilesConfig, error) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})

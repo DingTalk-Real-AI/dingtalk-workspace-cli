@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -204,6 +205,12 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	if !profileOnly {
 		profile := auth.ProfileSelector(auth.Profile{CorpID: publishedIdentity.CorpID, UserID: publishedIdentity.StaffID})
+		// 同一员工的检查、换票、binding 和 Adapter 提交必须在同一注册事务内。
+		lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(digitalEmployeeRuntimeDir(profile), "registration"))
+		if err != nil {
+			return err
+		}
+		defer lock.Release()
 		if err := checkDigitalEmployeeBinding(configDir, profile, agentUUID, channel); err != nil {
 			return err
 		}
@@ -265,6 +272,10 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	cfg := digitalEmployeeAdapterConfig{Binding: binding, Name: findJSONScalar(draft, "name"), AlwaysOn: commandBoolFlag(cmd, "alwayson")}
 	if channel != "dsh" {
+		cfg.SelfOpenDingTalkID = findJSONScalar(published, "openDingTalkId")
+		if !validMachineString(cfg.SelfOpenDingTalkID) {
+			return fmt.Errorf("数字员工发布详情缺少自身 openDingTalkId，无法安全过滤自发消息")
+		}
 		cfg.Options, err = prepareDigitalEmployeeLocal(cmd, binding, token.AccessToken)
 		if err != nil {
 			return err
