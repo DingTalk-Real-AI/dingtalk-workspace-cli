@@ -1,13 +1,14 @@
 package helpers
 
 import (
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
-	"github.com/spf13/cobra"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageCalendarEventOptions(t *testing.T) {
@@ -34,7 +35,7 @@ func TestCrossPlatformCoverageCalendarEventOptions(t *testing.T) {
 					args = append(args, "--id", "event-1")
 					want["eventId"] = "event-1"
 				}
-				if action == "create" || tc.want["isAllDay"] == true {
+				if _, explicitAllDay := tc.want["isAllDay"]; action == "create" || explicitAllDay {
 					start, end := "2030-01-01T09:00:00+08:00", "2030-01-01T10:00:00+08:00"
 					if tc.want["isAllDay"] == true {
 						start, end = "2030-01-01", "2030-01-02"
@@ -96,23 +97,31 @@ func TestCrossPlatformCoverageCalendarAllDayDates(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageCalendarEventOptionsPartialUpdate(t *testing.T) {
-	for _, flags := range [][]string{
-		{"--is-all-day"},
-		{"--is-all-day", "--start", "2030-01-01"},
-		{"--is-all-day", "--end", "2030-01-02"},
-		{"--is-all-day=false", "--start", "2030-01-01T09:00:00+08:00"},
-	} {
-		t.Run(strings.Join(flags, " "), func(t *testing.T) {
+	for _, allDay := range []string{"true", "false"} {
+		for _, timeFlags := range [][]string{nil, {"--start-date", "2030-01-01"}, {"--end-time", "2030-01-02"}} {
+			t.Run(allDay+strings.Join(timeFlags, " "), func(t *testing.T) {
+				caller := &scriptedToolCaller{}
+				installScriptedCaller(t, caller)
+				if allDay == "false" && len(timeFlags) > 0 {
+					timeFlags = []string{timeFlags[0], "2030-01-01T09:00:00+08:00"}
+				}
+				args := append([]string{"event", "update", "--id", "event-1", "--is-all-day=" + allDay}, timeFlags...)
+				err := executeCalendarOptionsTest(t, newCalendarCommand(), args...)
+				if err == nil || !strings.Contains(err.Error(), "is required") || caller.calls != 0 {
+					t.Fatalf("err=%v calls=%d", err, caller.calls)
+				}
+			})
+		}
+	}
+	for _, flag := range []string{"--start", "--end"} {
+		t.Run("time_only_"+flag, func(t *testing.T) {
 			caller := &scriptedToolCaller{}
 			installScriptedCaller(t, caller)
-			if err := executeCalendarOptionsTest(t, newCalendarCommand(), append([]string{"event", "update", "--id", "event-1"}, flags...)...); err != nil {
+			if err := executeCalendarOptionsTest(t, newCalendarCommand(), "event", "update", "--id", "event-1", flag, "2030-01-01T09:00:00+08:00"); err != nil {
 				t.Fatal(err)
 			}
-			if caller.calls != 1 {
-				t.Fatalf("calls=%d", caller.calls)
-			}
-			if _, ok := caller.args["onlineMeeting"]; ok {
-				t.Fatal("injected onlineMeeting")
+			if caller.calls != 1 || len(caller.args) != 2 {
+				t.Fatalf("calls=%d args=%v", caller.calls, caller.args)
 			}
 		})
 	}
@@ -121,6 +130,33 @@ func TestCrossPlatformCoverageCalendarEventOptionsPartialUpdate(t *testing.T) {
 			caller := &scriptedToolCaller{}
 			installScriptedCaller(t, caller)
 			if err := executeCalendarOptionsTest(t, newCalendarCommand(), "event", "update", "--id", "event-1", flag); err == nil || caller.calls != 0 {
+				t.Fatalf("err=%v calls=%d", err, caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageCalendarEventOptionsTimedDates(t *testing.T) {
+	for _, tc := range []struct {
+		start, end string
+		valid      bool
+	}{
+		{"2030-01-01T09:00:00+08:00", "2030-01-01T10:00:00+08:00", true},
+		{"2030-01-01T01:00:00Z", "2030-01-01T10:00:00+08:00", true},
+		{"2030-01-01", "2030-01-01T10:00:00+08:00", false},
+		{"2030-01-01T09:00:00+08:00", "2030-01-02", false},
+		{"2030-01-01T09:00:00", "2030-01-01T10:00:00+08:00", false},
+		{"2030-01-01T09:00:00Z", "2030-01-01T10:00:00+08:00", false},
+	} {
+		t.Run(tc.start+"/"+tc.end, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			installScriptedCaller(t, caller)
+			err := executeCalendarOptionsTest(t, newCalendarCommand(), "event", "update", "--id", "event-1", "--is-all-day=false", "--start-date", tc.start, "--end-time", tc.end)
+			if tc.valid {
+				if err != nil || caller.calls != 1 || caller.args["startDateTime"] != tc.start || caller.args["endDateTime"] != tc.end {
+					t.Fatalf("err=%v calls=%d args=%v", err, caller.calls, caller.args)
+				}
+			} else if err == nil || caller.calls != 0 || (!strings.Contains(err.Error(), "--start") && !strings.Contains(err.Error(), "--end")) {
 				t.Fatalf("err=%v calls=%d", err, caller.calls)
 			}
 		})

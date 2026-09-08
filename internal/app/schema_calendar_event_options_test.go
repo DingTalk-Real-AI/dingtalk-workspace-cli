@@ -29,13 +29,19 @@ func TestCrossPlatformCoverageCalendarEventOptionsFinalSchema(t *testing.T) {
 			}
 		}
 		meeting := parameters["add-online-meeting"]
-		if schemaContractString(meeting["default"]) != "true" {
+		if action == "create" && schemaContractString(meeting["default"]) != "true" {
 			t.Fatalf("%s meeting default=%v", action, meeting["default"])
+		}
+		if _, exists := meeting["default"]; action == "update" && exists {
+			t.Fatal("update must not publish a meeting default")
 		}
 		if !strings.Contains(schemaContractString(meeting["description"]), "不传") {
 			t.Fatalf("%s missing omission semantics", action)
 		}
 		for _, name := range []string{"start", "end"} {
+			if action == "update" && schemaContractString(parameters[name]["required_when"]) != "is-all-day is explicitly provided (true or false)" {
+				t.Fatalf("%s missing conditional time requirement", name)
+			}
 			if !strings.Contains(schemaContractString(parameters[name]["description"]), "yyyy-MM-dd") {
 				t.Fatalf("%s %s missing all-day date format", action, name)
 			}

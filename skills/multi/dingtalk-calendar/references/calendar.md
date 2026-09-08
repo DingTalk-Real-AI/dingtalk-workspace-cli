@@ -207,7 +207,7 @@ Flags:
       --add-online-meeting              添加视频会议（默认 true；不传沿用服务端默认添加，false 不添加）
       --title string                    日程标题 (必填，最大2048字符)
       --start string                    开始时间 (必填；全天为 yyyy-MM-dd，否则为 ISO-8601)
-      --end string                      结束时间 (必填；全天为 yyyy-MM-dd，否则为 ISO-8601)
+      --end string                      结束时间 (必填；全天为 yyyy-MM-dd 且不包含当天，否则为 ISO-8601)
       --calendar-id string              日历 ID (可选，默认 primary 主日历；仅在共享/订阅日历本下创建时填写，通过 `book list` 获取)
       --timezone string                 时区 IANA 格式 (例如 Asia/Shanghai，默认 Asia/Shanghai)
       --desc string                     日程描述 (最大5000字符)
@@ -247,6 +247,7 @@ dws calendar event update --id <EVENT_ID> --add-online-meeting=true
 创建时默认由服务端添加视频会议，无需添加时使用 `--add-online-meeting=false`。单人会议或全天日程通常不需要视频会议，建议设置 `--add-online-meeting=false`。
 更新时显式 `true` 表示创建新的视频会议并覆盖已有会议；`false` 不创建且保留已有视频会议。
 两个布尔参数均仅在显式传入时发送，更新标题等其他字段不会自动补发它们。
+更新时显式设置 `--is-all-day`（true 或 false），必须同时重新提供 `--start` 和 `--end`；true 使用日期，false 使用带时区的 ISO-8601 时间。只修改起止时间、不设置全天状态时，仍支持单独更新一个时间字段。
 需要新增能力时使用上述原子命令；`+create` 等快捷指令未暴露这些参数。
 修改已有日程时沿用其 eventId，不要重新创建日程。
 
@@ -263,7 +264,7 @@ Example:
 Flags:
       --id string                       日程 ID (必填)
       --calendar-id string              日历 ID (可选，默认 primary 主日历；指定其他日历本时填写，可通过 `book list` 获取)
-      --is-all-day                      全天状态；true 时传入的起止时间为 yyyy-MM-dd，false 显式设置为非全天
+      --is-all-day                      全天状态；显式设置时必须重传 --start/--end，true 使用 yyyy-MM-dd，false 使用带时区 ISO-8601
       --add-online-meeting              添加视频会议（true 重新添加并覆盖已有会议，false 保留已有会议；不传沿用原有更新逻辑）
       --title string                    新标题
       --start string                    新开始时间 (全天为 yyyy-MM-dd，否则为 ISO-8601)

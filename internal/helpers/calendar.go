@@ -374,7 +374,7 @@ roomId 必须来自 dws calendar room search 返回；--calendar-id 可指定共
 		Use:   "update",
 		Short: "修改日程",
 		Long: `支持修改标题、描述、时间、地点、忙碌状态、全天状态和视频会议。
---is-all-day=true 时，传入的 --start/--end 必须为 yyyy-MM-dd 日期；false 显式设置为非全天。
+显式设置 --is-all-day（true 或 false）时，必须同时重新提供 --start 和 --end。true 使用 yyyy-MM-dd 日期；false 使用带时区的 ISO-8601 时间。
 --add-online-meeting=true 表示重新添加并覆盖已有视频会议，false 不创建且保留已有视频会议；不传时沿用服务端原有更新逻辑。
 eventId 可通过 dws calendar event list 查询。
 如需修改会议室，请使用 dws calendar room [add|delete]；如需修改参会人，请使用 dws calendar attendee [add|delete]。
@@ -472,10 +472,10 @@ eventId 可通过 dws calendar event list 查询。
 				{Name: "is-all-day", Property: "isAllDay", InterfaceType: "boolean"},
 				{Name: "add-online-meeting", Property: "onlineMeeting.add", InterfaceType: "boolean"},
 				{Name: "desc", Property: "description"},
-				{Name: "end", Property: "endDateTime"},
+				{Name: "end", Property: "endDateTime", RequiredWhen: "is-all-day is explicitly provided (true or false)"},
 				{Name: "id", Property: "eventId"},
 				{Name: "rich-text-desc", Property: "richTextDescription"},
-				{Name: "start", Property: "startDateTime"},
+				{Name: "start", Property: "startDateTime", RequiredWhen: "is-all-day is explicitly provided (true or false)"},
 				{Name: "timezone", Property: "timeZone"},
 				{Name: "title", Property: "summary"},
 			}, calendarRecurrenceParamDecls()...),
@@ -1837,8 +1837,9 @@ eventId 可通过 dws calendar event list 查询。
 	eventUpdateCmd.Flags().String("desc", "", "新描述 (最大5000字符)")
 	eventUpdateCmd.Flags().String("description", "", "")
 	_ = eventUpdateCmd.Flags().MarkHidden("description")
-	eventUpdateCmd.Flags().Bool("is-all-day", false, "全天日程；true 时起止时间使用 yyyy-MM-dd，不传则不发送此字段")
-	eventUpdateCmd.Flags().Bool("add-online-meeting", true, "添加视频会议（不传沿用原有更新逻辑；true 重新添加并覆盖已有会议，false 保留已有会议）")
+	eventUpdateCmd.Flags().Bool("is-all-day", false, "全天状态；显式设置时必须重传 --start/--end，true 使用 yyyy-MM-dd，false 使用带时区 ISO-8601")
+	// Omission has no default update effect; a bare bool flag still means true.
+	eventUpdateCmd.Flags().Bool("add-online-meeting", false, "添加视频会议（不传沿用原有更新逻辑；true 重新添加并覆盖已有会议，false 保留已有会议）")
 	eventUpdateCmd.Flags().String("timezone", "", "时区 IANA 格式 (例如 Asia/Shanghai)")
 	eventUpdateCmd.Flags().String("recurrence-type", "", "[recurrence整体必填] 循环类型: daily|weekly|absoluteMonthly|relativeMonthly|absoluteYearly；MCP 不合并部分字段，修改任一循环字段都要重传完整 pattern+range")
 	eventUpdateCmd.Flags().Int("recurrence-interval", 0, "[recurrence整体必填] 循环间隔 (>0；如 daily 时表示每N天，weekly 时表示每N周)")
@@ -3050,26 +3051,36 @@ func buildRecurrence(cmd *cobra.Command) (map[string]any, error) {
 func applyCalendarEventOptions(cmd *cobra.Command, params map[string]any) error {
 	if cmd.Flags().Changed("is-all-day") {
 		allDay, _ := cmd.Flags().GetBool("is-all-day")
-		if allDay {
-			for _, field := range []struct{ flag, property string }{{"start", "startDateTime"}, {"end", "endDateTime"}} {
-				value, present := params[field.property].(string)
-				if !present {
-					continue
-				}
-				parsed, err := time.Parse("2006-01-02", value)
-				if err != nil || parsed.Format("2006-01-02") != value {
-					return &CLIError{
-						Code:       CodeInvalidParam,
-						Message:    "--" + field.flag + " must be a valid yyyy-MM-dd date when --is-all-day=true",
-						Suggestion: "例如 --is-all-day --start 2030-01-01 --end 2030-01-02",
-					}
+		var times [2]time.Time
+		for i, field := range []struct{ flag, property string }{{"start", "startDateTime"}, {"end", "endDateTime"}} {
+			value, present := params[field.property].(string)
+			if !present || value == "" {
+				return &CLIError{
+					Code:       CodeMissingParam,
+					Message:    "flag --" + field.flag + " is required when --is-all-day is explicitly provided",
+					Suggestion: "设置 --is-all-day（true 或 false）时，必须同时重新提供 --start 和 --end",
 				}
 			}
-			start, hasStart := params["startDateTime"].(string)
-			end, hasEnd := params["endDateTime"].(string)
-			if hasStart && hasEnd && end <= start {
-				return &CLIError{Code: CodeInvalidParam, Message: "--end must be after --start for an all-day event (exclusive end date)", Suggestion: "单日全天日程的结束日期应为开始日期的下一天"}
+			layout, format := time.RFC3339, "ISO-8601 date-time with timezone"
+			if allDay {
+				layout, format = "2006-01-02", "yyyy-MM-dd date"
 			}
+			parsed, err := time.Parse(layout, value)
+			if err != nil || (allDay && parsed.Format(layout) != value) {
+				return &CLIError{
+					Code:       CodeInvalidParam,
+					Message:    "--" + field.flag + " must be a valid " + format + " when --is-all-day=" + strconv.FormatBool(allDay),
+					Suggestion: "全天示例 2030-01-01；定时示例 2030-01-01T09:00:00+08:00",
+				}
+			}
+			times[i] = parsed
+		}
+		if !times[1].After(times[0]) {
+			message := "--end must be after --start"
+			if allDay {
+				message += " for an all-day event (exclusive end date)"
+			}
+			return &CLIError{Code: CodeInvalidParam, Message: message, Suggestion: "调整起止时间；单日全天日程的结束日期应为开始日期的下一天"}
 		}
 		params["isAllDay"] = allDay
 	}
