@@ -33,8 +33,10 @@ dws wiki +node-list --workspace <ID> --page-all --max-items 500 --format json
 dws wiki +feed-list --workspace <ID> --page-all --format json
 ```
 
-- `--page-all` 才启用自动翻页；`--page-limit/--max-items/--page-delay` 不能单独使用。
-- `autoPageComplete=true` 且 endpoint exhausted 才表示端点取完；达到 page/items 上限必须保留 continuation/stop reason。
+- `--page-all` 才启用自动翻页；`--max-items/--page-delay` 必须配合它使用，`--page-limit` 只在自动翻页时生效。
+- `autoPageComplete=true` 且 endpoint exhausted 才表示端点取完。
+- 达到 `--max-items` 返回部分结果，标记 `autoPageComplete=false`、`autoPageStopReason=max_items`，不能宣称全量。
+- 达到 `--page-limit` 返回 `page_limit_reached` 错误，不返回累计结果或续页游标；需要继续时提高页数上限重新查询。
 - 游标缺失、停滞、循环或后续页失败均不能返回“全部”。
 - `+node-search` 当前保留服务端单页 cursor；需要续页时使用真实 `nextCursor`，不手工猜 token。
 
