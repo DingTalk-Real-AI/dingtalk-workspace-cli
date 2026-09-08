@@ -177,6 +177,7 @@ jobs:
             --baseline "$RUNNER_TEMP/schema-entry-baseline/dws-baseline" \
             --baseline-proof "$RUNNER_TEMP/schema-entry-baseline/baseline-build.json" \
             --output "$RUNNER_TEMP/schema-evidence/default-entry-report.json" \
+            --samples 60 \
             2>&1 | tee "$RUNNER_TEMP/schema-evidence/default-entry.txt"
       - name: Check identity with isolated files and network
         if: ${{ !cancelled() && steps.candidate_build.outcome == 'success' }}
