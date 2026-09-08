@@ -203,7 +203,7 @@ func TestCrossPlatformCoverageWikiMemberWritesUseTerminalEvidenceOnly(t *testing
 	}{
 		{command: "+member-add", tool: "add_member", extra: []string{"--role", "READER"}},
 		{command: "+member-update", tool: "update_member", extra: []string{"--role", "EDITOR"}},
-		{command: "+member-remove", tool: "remove_member"},
+		{command: "+member-remove", tool: "remove_member", extra: []string{"--yes"}},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
 			caller := &wikiCoverageCaller{responses: map[string][]string{"wiki/" + tc.tool: {`{"success":true}`}}}
@@ -242,7 +242,7 @@ func TestCrossPlatformCoverageWikiMemberWritesUseTerminalEvidenceOnly(t *testing
 		many[index] = fmt.Sprintf("u%d", index)
 	}
 	caller := &wikiCoverageCaller{}
-	if _, err := runWikiCoverageCLI(t, caller, "+member-remove", "--workspace", "w", "--users", strings.Join(many, ",")); err == nil || len(caller.calls) != 0 {
+	if _, err := runWikiCoverageCLI(t, caller, "+member-remove", "--workspace", "w", "--users", strings.Join(many, ","), "--yes"); err == nil || len(caller.calls) != 0 {
 		t.Fatal("more than 30 members reached MCP")
 	}
 }
@@ -477,7 +477,7 @@ func TestCrossPlatformCoverageWikiResponseValidationBranches(t *testing.T) {
 
 func TestCrossPlatformCoverageWikiAliasAndCancellationBranches(t *testing.T) {
 	caller := &wikiCoverageCaller{responses: map[string][]string{"wiki/remove_member": {`{"success":true}`}}}
-	out, err := runWikiCoverageCLI(t, caller, "+member-remove", "--workspace", "w", "--user", "u1")
+	out, err := runWikiCoverageCLI(t, caller, "+member-remove", "--workspace", "w", "--user", "u1", "--yes")
 	if err != nil || out["userCount"] != float64(1) {
 		t.Fatalf("visible member alias output=%#v err=%v calls=%#v", out, err, caller.calls)
 	}

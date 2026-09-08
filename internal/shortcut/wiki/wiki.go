@@ -156,12 +156,12 @@ func memberFlags(withRole bool) []shortcut.Flag {
 	return flags
 }
 
-func memberWrite(command, tool, description, intent, example string, withRole bool) shortcut.Shortcut {
+func memberWrite(command, tool, description, intent, example string, withRole bool, safety contract.SafetySpec) shortcut.Shortcut {
 	params := []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "users", Property: "userIds"}}
 	if withRole {
 		params = append(params, contract.ParamDecl{Name: "role", Property: "roleId"})
 	}
-	return writeShortcut(command, description, intent, example, shortcut.RiskWrite, wikiWriteSafety(false), memberFlags(withRole), params, func(rt *shortcut.RuntimeContext) error {
+	return writeShortcut(command, description, intent, example, shortcut.RiskWrite, safety, memberFlags(withRole), params, func(rt *shortcut.RuntimeContext) error {
 		users := wikiStringSliceFirst(rt, "users", "user")
 		if len(users) == 0 || len(users) > 30 {
 			return fmt.Errorf("--users 必须包含 1-30 个 userId")
@@ -193,9 +193,9 @@ func memberWrite(command, tool, description, intent, example string, withRole bo
 	})
 }
 
-var MemberAdd = memberWrite("+member-add", "add_member", "添加知识库成员", "向知识库授予一个或多个用户容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-add --workspace <workspaceId> --users <userId> --role READER --format json", true)
-var MemberUpdate = memberWrite("+member-update", "update_member", "更新知识库成员角色", "调整已有成员的知识库容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-update --workspace <workspaceId> --users <userId> --role EDITOR --format json", true)
-var MemberRemove = memberWrite("+member-remove", "remove_member", "移除知识库成员", "移除一个或多个用户的知识库容器级访问；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-remove --workspace <workspaceId> --users <userId> --format json", false)
+var MemberAdd = memberWrite("+member-add", "add_member", "添加知识库成员", "向知识库授予一个或多个用户容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-add --workspace <workspaceId> --users <userId> --role READER --format json", true, wikiWriteSafety(false))
+var MemberUpdate = memberWrite("+member-update", "update_member", "更新知识库成员角色", "调整已有成员的知识库容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-update --workspace <workspaceId> --users <userId> --role EDITOR --format json", true, wikiWriteSafety(false))
+var MemberRemove = memberWrite("+member-remove", "remove_member", "移除知识库成员", "移除一个或多个用户的知识库容器级访问；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-remove --workspace <workspaceId> --users <userId> --format json", false, wikiWriteSafety(true))
 
 var MemberList = readShortcut("+member-list", "严格列出知识库成员", "列出知识库成员及角色；后端不提供可续游标且单次真实上限为 50，不伪造 page-all。", "members", "dws wiki +member-list --workspace <workspaceId> --format json", []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}, {Name: "limit", Type: shortcut.FlagInt, Default: "30", Desc: "返回上限 1-50"}, {Name: "filter-role", Type: shortcut.FlagStringSlice, Desc: "角色过滤"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "limit", Property: "maxResults"}, {Name: "filter-role", Property: "filterRoleIds"}}, func(rt *shortcut.RuntimeContext) error {
 	if rt.Int("limit") < 1 || rt.Int("limit") > 50 {
