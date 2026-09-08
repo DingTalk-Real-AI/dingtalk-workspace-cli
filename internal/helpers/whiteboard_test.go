@@ -154,7 +154,7 @@ func TestCrossPlatformCoverageWhiteboardStandaloneQueryPromotesResultJSONToSourc
 	output := installWhiteboardTestCaller(t, caller)
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "wb-1", "--view", "all"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != standaloneWhiteboardQueryTool {
@@ -215,7 +215,7 @@ func TestCrossPlatformCoverageWhiteboardQueryDeterministicallyRoutesBothKinds(t 
 
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "wb-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != standaloneWhiteboardQueryTool {
@@ -228,7 +228,7 @@ func TestCrossPlatformCoverageWhiteboardQueryDeterministicallyRoutesBothKinds(t 
 	caller.calls = nil
 	cmd = newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "doc-1", "--part-id", "part-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != whiteboardQueryTool {
@@ -243,7 +243,7 @@ func TestCrossPlatformCoverageWhiteboardQueryDeterministicallyRoutesBothKinds(t 
 		caller.calls = nil
 		cmd = newWhiteboardCommand()
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("args %v unexpectedly succeeded", args)
 		}
 		if len(caller.calls) != 0 {
@@ -264,7 +264,7 @@ func TestCrossPlatformCoverageWhiteboardStandaloneUpdateRoutesExactCASArgs(t *te
 		"update", "--node", "wb-1", "--source", path, "--page-id", "page-1",
 		"--expected-revision", "12", "--request-id", "req-1", "--yes",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != standaloneWhiteboardUpdateTool {
@@ -286,7 +286,7 @@ func TestCrossPlatformCoverageWhiteboardStandaloneUpdateRoutesExactCASArgs(t *te
 		caller.calls = nil
 		cmd = newWhiteboardCommand()
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("args %v unexpectedly succeeded", args)
 		}
 		if len(caller.calls) != 0 {
@@ -315,7 +315,7 @@ func TestCrossPlatformCoverageWhiteboardCreateWithContentValidatesAndRedactsDryR
 	cmd.SetContext(ctx)
 	cmd.SetOut(output)
 	cmd.SetArgs([]string{"create-with-content", "--name", "Board", "--source", sourcePath, "--request-id", "create-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	leaf, _, err := cmd.Find([]string{"create-with-content"})
@@ -398,7 +398,7 @@ func TestCrossPlatformCoverageWhiteboardCreateWithContentValidatesAndRedactsDryR
 	cmd.SetContext(ctx)
 	cmd.SetOut(output)
 	cmd.SetArgs([]string{"create-with-content", "--name", "Board", "--source", sourcePath, "--request-id", "create-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	leaf, _, err = cmd.Find([]string{"create-with-content"})
@@ -460,7 +460,7 @@ func TestCrossPlatformCoverageWhiteboardCreateEmptySource(t *testing.T) {
 			cmd.SetContext(ctx)
 			cmd.SetOut(buf)
 			cmd.SetArgs([]string{"create-with-content", "--name", "Empty", "--source", path, "--request-id", "empty-1"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatal(err)
 			}
 			leaf, _, _ := cmd.Find([]string{"create-with-content"})
