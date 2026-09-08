@@ -21,7 +21,7 @@
 | `base list` | 列出最近访问的 Base | — | 仅返回最近访问过的，优先用 `base search` |
 | `base search` | 按名称搜索 Base（别名 `aitable search`） | — | `--query` help 标必填但实际可省略：不传时返回最近访问的 Base 列表。`--keyword` 是 `--query` 的隐藏别名，同义 |
 | `base get` | 获取 Base 信息（含 tables 列表） | `--base-id` | 用户给 URL 时提取末尾 ID |
-| `base copy` | 复制整个 Base 到目标文件夹 | `--base-id` `--target-folder-id` | 默认全量复制；`--only-struct` 仅复制结构不含数据 |
+| `base copy` | 复制整个 Base | `--base-id` | `--target-folder-id` 可传文件夹 ID 或 URL，省略时使用源 Base 工作区根目录；`--only-struct` 仅复制结构 |
 | `base get-primary-doc-id` | 获取某记录的主键文档 ID | `--base-id` `--table-id` `--record-id` | 等价 `record primary-doc-get` 的取 ID 视角 |
 | `base create` | 创建 Base | `--name` | 创建后直接用返回的 baseId |
 | `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
@@ -81,7 +81,7 @@
 | `record list` | 获取记录（`record query` 的别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 与 `record query` 等价 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
-| `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 小写；group 为 JSON 数组字符串；最多 1000 个分组 |
+| `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；group/sort 为 JSON 数组字符串；最多 1000 个分组 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |

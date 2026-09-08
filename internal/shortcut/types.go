@@ -155,6 +155,8 @@ type Constraint struct {
 	Kind        ConstraintKind `json:"kind"`
 	Flags       []string       `json:"flags"`
 	Description string         `json:"description,omitempty"`
+	// PresenceOnly permits explicit empty values in partial-update constraints.
+	PresenceOnly bool `json:"presence_only,omitempty"`
 }
 
 // Shortcut is the declarative definition of a single high-fidelity command.

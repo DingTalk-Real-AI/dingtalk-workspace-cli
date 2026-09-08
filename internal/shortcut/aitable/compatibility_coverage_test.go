@@ -115,3 +115,136 @@ func TestCrossPlatformCoverageImportUploadRequiresPositiveFileSize(t *testing.T)
 		})
 	}
 }
+
+func TestCrossPlatformCoverageShareFormShortcutMatchesPublishedSchema(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"aitable", "+form-share-update",
+		"--base-id", "base-smoke", "--table-id", "table-smoke", "--view-id", "view-smoke",
+		"--enabled", "false", "--auth-type-code=2", "--auth-data=u1,u2",
+		"--submit-times-limit=0", "--submit-times-user-limit=3",
+		"--form-start-time=1788307200000", "--form-end-time=1788393600000",
+		"--form-name", "活动报名", "--form-desc", "请填写", "--anonymous-submit", "true",
+		"--load-last-submit", "false", "--reply-notice", "true", "--share-uid-list=u1,u2", "--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.called || fake.product != "aitable" || fake.tool != "update_share_form" {
+		t.Fatalf("tool call = called:%v %s/%s, want aitable/update_share_form", fake.called, fake.product, fake.tool)
+	}
+	expected := map[string]any{
+		"enabled": false, "authTypeCode": 2, "authData": "u1,u2",
+		"submitTimesLimit": 0, "submitTimesUserLimit": 3,
+		"formStartTime": 1788307200000, "formEndTime": 1788393600000,
+		"formName": "活动报名", "formDesc": "请填写", "anonymousSubmit": true,
+		"loadLastSubmit": false, "replyNotice": true, "shareUidList": "u1,u2",
+	}
+	for key, want := range expected {
+		if fake.args[key] != want {
+			t.Fatalf("share form arg %s = %#v, want %#v; all args = %#v", key, fake.args[key], want, fake.args)
+		}
+	}
+
+	fake.reset()
+	root = newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"aitable", "+form-share-update",
+		"--base-id", "base-smoke", "--table-id", "table-smoke", "--view-id", "view-smoke",
+	})
+	if err := root.Execute(); err == nil || fake.called {
+		t.Fatalf("missing partial update must fail before MCP call: err=%v called=%v", err, fake.called)
+	}
+}
+
+func TestCrossPlatformCoverageShareFormShortcutExplicitEmptyUpdate(t *testing.T) {
+	for flag, property := range map[string]string{"form-desc": "formDesc", "auth-data": "authData", "share-uid-list": "shareUidList"} {
+		t.Run(flag, func(t *testing.T) {
+			fake := &platformCoverageCaller{}
+			helpers.InitDepsForTest(t, fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs([]string{"aitable", "+form-share-update", "--base-id=b", "--table-id=t", "--view-id=v", "--" + flag + "=", "--yes"})
+			if err := root.Execute(); err != nil || !fake.called || fake.args[property] != "" || len(fake.args) != 4 {
+				t.Fatalf("err=%v called=%v args=%#v", err, fake.called, fake.args)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableShortcutDeleteConfirmationMatchesSnapshot(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+	tests := []struct {
+		tool string
+		args []string
+	}{
+		{tool: "delete_base", args: []string{"aitable", "+base-delete", "--base-id=b", "--yes"}},
+		{tool: "delete_table", args: []string{"aitable", "+table-delete", "--base-id=b", "--table-id=t", "--yes"}},
+		{tool: "delete_field", args: []string{"aitable", "+field-delete", "--base-id=b", "--table-id=t", "--field-id=f", "--yes"}},
+		{tool: "delete_view", args: []string{"aitable", "+view-delete", "--base-id=b", "--table-id=t", "--view-id=v", "--yes"}},
+		{tool: "delete_dashboard", args: []string{"aitable", "+dashboard-delete", "--base-id=b", "--dashboard-id=d", "--yes"}},
+		{tool: "delete_chart", args: []string{"aitable", "+chart-delete", "--base-id=b", "--dashboard-id=d", "--chart-id=c", "--yes"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.tool, func(t *testing.T) {
+			fake.reset()
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if !fake.called || fake.product != "aitable" || fake.tool != tc.tool {
+				t.Fatalf("call = called:%v %s/%s %#v", fake.called, fake.product, fake.tool, fake.args)
+			}
+			if confirm, ok := fake.args["confirm"].(bool); !ok || !confirm {
+				t.Fatalf("confirm = %#v", fake.args["confirm"])
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableShortcutUpdatesDoNotSendDeleteConfirmation(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+	for _, tc := range []struct {
+		tool string
+		args []string
+	}{
+		{tool: "update_table", args: []string{"aitable", "+table-update", "--base-id=b", "--table-id=t", "--name=n", "--yes"}},
+		{tool: "update_chart", args: []string{"aitable", "+chart-update", "--base-id=b", "--dashboard-id=d", "--chart-id=c", `--config={"chartName":"n"}`, "--yes"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			fake.reset()
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if !fake.called || fake.tool != tc.tool {
+				t.Fatalf("call = called:%v %s/%s %#v", fake.called, fake.product, fake.tool, fake.args)
+			}
+			if _, exists := fake.args["confirm"]; exists {
+				t.Fatalf("update must not send delete-only confirm: %#v", fake.args)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableShortcutFieldNameFailsBeforeMCP(t *testing.T) {
+	fake := &platformCoverageCaller{}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"aitable", "+field-update", "--base-id=b", "--table-id=t", "--field-id=f",
+		"--name=" + strings.Repeat("😀", 76),
+	})
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected UTF-16 field-name validation error")
+	}
+	if fake.called {
+		t.Fatalf("invalid field name reached MCP: %s/%s %#v", fake.product, fake.tool, fake.args)
+	}
+}

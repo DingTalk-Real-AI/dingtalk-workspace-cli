@@ -283,7 +283,7 @@ var DatasourceSyncStatus = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+datasource-sync-status",
 	Product:     serverMain,
-	Description: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用：这些指令触发同步后返回 taskId，本指令通过 taskId 查询最终结果。支持批量查询（单次最多 5 个 taskId），整体仍返回 success；需遍历 tasks 数组按单条 status 判断真实结果。任务状态包括：RUNNING（同步进行中）、FINISHED（同步完成）、FAILED（同步失败）。失败时会返回 errorCode 和 errorMessage 供排查。",
+	Description: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用，单次最多 5 个 taskId。仅 RUNNING 需要继续轮询；FINISHED、FAILED、NOT_FOUND 为终态；UNKNOWN 表示状态不可断言，也不应继续轮询。批量查询整体 success 时仍需逐项检查 tasks[].status 和 errorCode。",
 	Intent:      "当用户触发同步后需要按 taskId 查询同步是否完成、成功或失败时使用。支持批量查询（单次最多 5 个任务 ID）。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
@@ -298,14 +298,14 @@ var DatasourceSyncStatus = shortcut.Shortcut{
 			CLIPath:        "aitable +datasource-sync-status",
 			PrimaryCLIPath: "aitable +datasource-sync-status",
 		},
-		Description: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用：这些指令触发同步后返回 taskId，本指令通过 taskId 查询最终结果。支持批量查询（单次最多 5 个 taskId），整体仍返回 success；需遍历 tasks 数组按单条 status 判断真实结果。任务状态包括：RUNNING（同步进行中）、FINISHED（同步完成）、FAILED（同步失败）。失败时会返回 errorCode 和 errorMessage 供排查。",
+		Description: "按任务 ID 查询数据源同步状态。仅 RUNNING 继续轮询；FINISHED、FAILED、NOT_FOUND 为终态；UNKNOWN 不可断言且不继续轮询。整体 success 时仍需逐项检查 tasks[]。",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用：这些指令触发同步后返回 taskId，本指令通过 taskId 查询最终结果。支持批量查询（单次最多 5 个 taskId），整体仍返回 success；需遍历 tasks 数组按单条 status 判断真实结果。任务状态包括：RUNNING（同步进行中）、FINISHED（同步完成）、FAILED（同步失败）。失败时会返回 errorCode 和 errorMessage 供排查。",
+			AgentSummary: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用，单次最多 5 个 taskId。仅 RUNNING 需要继续轮询；FINISHED、FAILED、NOT_FOUND 为终态；UNKNOWN 表示状态不可断言，也不应继续轮询。批量查询整体 success 时仍需逐项检查 tasks[].status 和 errorCode。",
 			UseWhen:      []string{"当用户触发同步后需要按 taskId 查询同步是否完成、成功或失败时使用。支持批量查询（单次最多 5 个任务 ID）。"},
 			AvoidWhen: []string{
 				"需要触发同步时（改用 +datasource-sync）",
