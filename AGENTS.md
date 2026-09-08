@@ -55,7 +55,10 @@ Schema contract) keep separate authorities — do not merge them with
   `corecmd.New` 只构造命令；独立执行前必须在完成挂载后调用一次
   `corecmd.PrepareCommandTree(root)`，再使用 Cobra `Execute` / `ExecuteC`。
   app root 工厂已完成准备，不重复准备，也不在其返回后追加命令或替换校验钩子。
-  测试扩展通过组装回调挂载；独立命令测试可使用 `corecmd.*ForTest` 执行辅助函数。
+  测试扩展通过组装回调挂载；独立命令测试必须通过 `corecmd.*ForTest` 执行辅助函数运行，
+  不得直接调用 Cobra `Execute` / `ExecuteC`：裸执行不安装准备阶段的校验适配器，断言会落在
+  未适配路径上，参数校验回归随之静默失效。从 main 合并进来的新测试同样适用，合并后须检查
+  新增的独立命令测试是否仍走该辅助函数。
   重复执行保持 Cobra 的 flag 值和 Changed 状态；需要独立参数状态时从工厂创建新树。
   错误保留规则统一使用 `internal/errors.PreserveClassification`。
 - 准备阶段安装 Cobra 原生 `ValidationErrorFunc`，仅在 Args/required/group 失败时分类；
