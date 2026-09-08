@@ -57,7 +57,7 @@ func TestSchemaCacheRuntimeFieldInventory(t *testing.T) {
 }
 
 func TestSchemaCacheDescriptorContract(t *testing.T) {
-	const expectedProtoSHA256 = "94a6914cbbcd16df006d4107ced6a28339204efbab17b1762b0758f5641c787b"
+	const expectedProtoSHA256 = "a90be1f15f87701f9987cb33aaf92120c6a162ac2fc938826693144df92be53b"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {
 		t.Fatal(err)
@@ -84,10 +84,15 @@ func TestSchemaCacheDescriptorContract(t *testing.T) {
 	for i := 0; i < file.Messages().Len(); i++ {
 		assertNoProtoMaps(t, file.Messages().Get(i))
 	}
-	assertFieldNumbers(t, (&schemacachepb.SchemaMetaCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13})
+	assertFieldNumbers(t, (&schemacachepb.SchemaMetaCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14})
+	if meta := (&schemacachepb.SchemaMetaCache{}).ProtoReflect().Descriptor(); !meta.ReservedRanges().Has(3) || !meta.ReservedNames().Has("command_entries") {
+		t.Fatal("retired inline command_entries field 3 must stay reserved")
+	}
 	assertFieldNumbers(t, (&schemacachepb.SchemaProductCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3})
 	assertFieldNumbers(t, (&schemacachepb.SchemaCommandPayloadCache{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4})
-	assertFieldNumbers(t, (&schemacachepb.RenderedSchemaLeaf{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2})
+	assertFieldNumbers(t, (&schemacachepb.RenderedSchemaLeafRef{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4})
+	assertFieldNumbers(t, (&schemacachepb.CommandPayloadDescriptor{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3, 4, 5, 6})
+	assertFieldNumbers(t, (&schemacachepb.CommandMetaEntryShard{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{1, 2, 3})
 }
 
 func shortTypeName(value reflect.Type) string {

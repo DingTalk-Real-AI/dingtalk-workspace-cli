@@ -26,14 +26,29 @@ func registryFromProductProto(in *schemacachepb.SchemaProductCache) SchemaRegist
 	}
 }
 
-func commandLookupToProto(in map[string]CommandMeta) *schemacachepb.CommandMetaEntryList {
-	keys := sortedMapKeys(in)
-	out := &schemacachepb.CommandMetaEntryList{Items: make([]*schemacachepb.CommandMetaEntry, len(keys))}
-	for i, key := range keys {
-		out.Items[i] = commandMetaToProto(in[key])
-		out.Items[i].LookupPath = key
+// commandLookupToShards groups the lookup by product and serializes each
+// product's CommandMetaEntryList once, so meta decode can keep the rows as
+// opaque bytes until a single product's shard is actually needed.
+func commandLookupToShards(in map[string]CommandMeta) (*schemacachepb.CommandMetaEntryShardList, error) {
+	byProduct := make(map[string][]*schemacachepb.CommandMetaEntry)
+	for key, meta := range in {
+		row := commandMetaToProto(meta)
+		row.LookupPath = key
+		byProduct[meta.Identity.ProductID] = append(byProduct[meta.Identity.ProductID], row)
 	}
-	return out
+	out := &schemacachepb.CommandMetaEntryShardList{Items: make([]*schemacachepb.CommandMetaEntryShard, 0, len(byProduct))}
+	for _, productID := range sortedMapKeys(byProduct) {
+		rows := byProduct[productID]
+		sort.Slice(rows, func(i, j int) bool { return rows[i].LookupPath < rows[j].LookupPath })
+		blob, err := MarshalSchemaCacheDeterministic(&schemacachepb.CommandMetaEntryList{Items: rows})
+		if err != nil {
+			return nil, fmt.Errorf("marshal command entries for product %q: %w", productID, err)
+		}
+		out.Items = append(out.Items, &schemacachepb.CommandMetaEntryShard{
+			ProductId: productID, EntryCount: uint64(len(rows)), Entries: blob,
+		})
+	}
+	return out, nil
 }
 
 const commandMetaSelectionListCount = 5
@@ -237,6 +252,7 @@ func payloadDescriptorsToProto(in []CommandPayloadDescriptor) *schemacachepb.Com
 	for i, descriptor := range in {
 		out.Items[i] = &schemacachepb.CommandPayloadDescriptor{
 			ProductId: descriptor.ProductID, Offset: descriptor.Offset, Length: descriptor.Length, Sha256: cloneBytes(descriptor.SHA256[:]),
+			HeaderLength: descriptor.HeaderLength, HeaderSha256: cloneBytes(descriptor.HeaderSHA256[:]),
 		}
 	}
 	return out
@@ -248,8 +264,9 @@ func payloadDescriptorsFromProto(in *schemacachepb.CommandPayloadDescriptorList)
 	}
 	out := make([]CommandPayloadDescriptor, len(in.Items))
 	for i, descriptor := range in.Items {
-		out[i] = CommandPayloadDescriptor{ProductID: descriptor.GetProductId(), Offset: descriptor.GetOffset(), Length: descriptor.GetLength()}
+		out[i] = CommandPayloadDescriptor{ProductID: descriptor.GetProductId(), Offset: descriptor.GetOffset(), Length: descriptor.GetLength(), HeaderLength: descriptor.GetHeaderLength()}
 		copy(out[i].SHA256[:], descriptor.GetSha256())
+		copy(out[i].HeaderSHA256[:], descriptor.GetHeaderSha256())
 	}
 	return out
 }

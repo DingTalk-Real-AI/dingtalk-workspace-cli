@@ -199,6 +199,27 @@ func TestSchemaCacheRejectsMalformedMeta(t *testing.T) {
 		}
 		return payload
 	}
+	// mutateEntry rewrites the first row inside the first product's deferred
+	// entry shard; meta decode must keep working and the access path must fail.
+	mutateEntry := func(t *testing.T, edit func(*schemacachepb.CommandMetaEntry)) ([]byte, string) {
+		t.Helper()
+		var path string
+		payload := mutate(t, func(message *schemacachepb.SchemaMetaCache) {
+			shard := message.CommandEntryShards.Items[0]
+			var list schemacachepb.CommandMetaEntryList
+			if err := proto.Unmarshal(shard.Entries, &list); err != nil {
+				t.Fatal(err)
+			}
+			path = list.Items[0].GetLookupPath()
+			edit(list.Items[0])
+			blob, err := MarshalSchemaCacheDeterministic(&list)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shard.Entries = blob
+		})
+		return payload, path
+	}
 	tests := map[string][]byte{
 		"unknown-root-field": append(append([]byte(nil), built.Meta...), 0xf8, 0x07, 0x01),
 		"unknown-enum": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
@@ -210,18 +231,8 @@ func TestSchemaCacheRejectsMalformedMeta(t *testing.T) {
 		"retired-dto-version": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
 			message.DtoVersion = schemacachepb.DTOVersion_DTO_VERSION_V1
 		}),
-		"retired-nested-meta-field": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
-			message.CommandEntries.Items[0].ProtoReflect().SetUnknown([]byte{0x12, 0x00})
-		}),
-		"unknown-list-presence-bit": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
-			message.CommandEntries.Items[0].ListsPresent |= 1 << 1
-		}),
-		"nonempty-list-without-presence": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
-			message.CommandEntries.Items[0].Aliases = []string{"alias"}
-			message.CommandEntries.Items[0].ListsPresent &^= aliasesPresentBit
-		}),
-		"duplicate-command-key": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
-			message.CommandEntries.Items = append(message.CommandEntries.Items, proto.Clone(message.CommandEntries.Items[0]).(*schemacachepb.CommandMetaEntry))
+		"empty-entry-shard-product": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
+			message.CommandEntryShards.Items[0].ProductId = ""
 		}),
 		"unsorted-locator": mutate(t, func(message *schemacachepb.SchemaMetaCache) {
 			if len(message.Locators.Items) > 1 {
@@ -248,6 +259,35 @@ func TestSchemaCacheRejectsMalformedMeta(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if _, err := DecodeSchemaMetaCache(payload); err == nil {
 				t.Fatal("DecodeSchemaMetaCache() unexpectedly succeeded")
+			}
+		})
+	}
+	// Deferred entry shards stay opaque at meta decode; corrupted rows fail on
+	// access instead.
+	accessCases := map[string]func(*schemacachepb.CommandMetaEntry){
+		"retired-nested-meta-field": func(row *schemacachepb.CommandMetaEntry) {
+			row.ProtoReflect().SetUnknown([]byte{0x12, 0x00})
+		},
+		"unknown-list-presence-bit": func(row *schemacachepb.CommandMetaEntry) {
+			row.ListsPresent |= 1 << 1
+		},
+		"nonempty-list-without-presence": func(row *schemacachepb.CommandMetaEntry) {
+			row.Aliases = []string{"alias"}
+			row.ListsPresent &^= aliasesPresentBit
+		},
+		"unsorted-or-duplicate-key": func(row *schemacachepb.CommandMetaEntry) {
+			row.LookupPath = "000 sorts first"
+		},
+	}
+	for name, edit := range accessCases {
+		t.Run(name, func(t *testing.T) {
+			payload, path := mutateEntry(t, edit)
+			meta, err := DecodeSchemaMetaCache(payload)
+			if err != nil {
+				t.Fatalf("DecodeSchemaMetaCache() = %v; entry shards must stay opaque to meta decode", err)
+			}
+			if _, ok := meta.CommandMeta(path); ok {
+				t.Fatal("corrupted entry shard resolved successfully")
 			}
 		})
 	}

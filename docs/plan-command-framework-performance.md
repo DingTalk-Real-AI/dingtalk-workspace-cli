@@ -272,11 +272,14 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 - 进程内渲染尾部（`ToPayload` + compact 投影 + `MarshalIndent`）实测只有约 0.12 ms，不是差距来源；
 - 真正的浪费是「为输出一个工具的字节而解码整个产品分片」。
 
-方案（落地于本节提交）：**payload 分片按 canonical 路径携带预渲染的 compact 叶子 JSON 字节**（`SchemaCommandPayloadCache.rendered_leaves`，DTO v5）。写入方（`buildSchemaCacheArtifacts`）用与线上一致的渲染链（`RenderQueryWithProjectors` → `stripSchemaPayloadCompact` → `jsonutil.MarshalIndent` + `\n`）在构建期生成每个 canonical 工具的精确 stdout 字节；`schema <leaf> --compact -f json` 在无 fields/jq、格式为 JSON 时直接写出缓存字节，**完全不打开 registry 分片**。别名、分组、产品、非 compact 查询仍走原 registry 路径（别名渲染会改 `cli_path`/`is_alias`，不能用 canonical 字节）。
+方案（落地于本节提交）：**payload 分片携带按 canonical 路径寻址的预渲染 compact 叶子**，且 Meta 的 CommandMeta 行推迟为按产品的字节分片（DTO v5）：
 
-正确性不变量：写入方要求 rendered 集合精确覆盖全部非空 canonical 路径且每条是换行结尾的合法 JSON；读取方按描述符 SHA-256 认证分片后校验叶子有序、唯一、JSON 合法；`TestPersistentSchemaCacheRenderedLeafFastPath` 断言快路径零 Registry I/O、恰好一次 payload 读，并与同二进制禁缓存的活体渲染**逐字节一致**。
+- payload 分片 = 4 字节头长 + 头 proto（Safety/Selection entries + 叶子索引 `{canonical_path, offset, length, sha256}`）+ 原始叶子 blob 区。`schema <leaf> --compact -f json` 快路径只做两次小 range 读（头 + 一条 blob），**完全不打开 registry 分片**；leaf-help 的 ResolveMeta 只读头（不再为一条命令的 Safety 拉全部叶子字节）。别名、分组、产品、非 compact 查询仍走原 registry 路径（别名渲染会改 `cli_path`/`is_alias`，不能用 canonical 字节）。
+- Meta 的 `command_entries` 退役为按产品的 `command_entry_shards`（每条是序列化的 `CommandMetaEntryList`，带 `entry_count`）：Meta 解码不再解析全部 1370 行，`CommandMeta(path)` 经 locator 定位产品后只解码该产品的分片；按行的一致性校验移到分片访问时，完整交叉校验保留在写入方与 round-trip 测试。
 
-本地实测（M3 Pro，进程内、每次 op 新建 runtime 模拟冷进程）：单叶 schema 命令从 5.74 ms / 6.07 MB / 79.7k allocs 降到 **3.31 ms / 1.98 MB / 19.7k allocs**；真实二进制里 `schema calendar.list_calendars --compact -f json` 相对 `--help` 的额外 user CPU 从 **+14.64 ms 降到 +1.64 ms**（低于 leaf-help 的 +2.51 ms）。
+正确性不变量：写入方要求 rendered 集合精确覆盖全部非空 canonical 路径且每条是换行结尾的合法 JSON；读取方对描述符/header/叶子 blob 逐级 SHA-256 认证，叶子索引有序唯一；`TestPersistentSchemaCacheRenderedLeafFastPath` 断言快路径零 Registry I/O、恰好两次 payload 读（头 + blob），并与同二进制禁缓存的活体渲染**逐字节一致**；CLI 路径拼写与 canonical 查询产出相同字节。
+
+本地实测（M3 Pro，进程内、每次 op 新建 runtime 模拟冷进程）：单叶 schema 命令从 5.74 ms / 6.07 MB / 79.7k allocs 降到 **3.31 ms / 1.98 MB / 19.7k allocs**；真实二进制相对 `--help` 的额外 user CPU：schema compact 从 +14.64 ms 降到 **+1.42 ms**，leaf-help 从 v4 的 +1.19 ms（v5 内联 blob 版一度回到 +2.51 ms）降到 **+0.96 ms**；Meta 阶段基准 1.58 → 1.28 ms（分配 1.64 MB → 1.16 MB）。
 
 ## 4. 验收矩阵
 

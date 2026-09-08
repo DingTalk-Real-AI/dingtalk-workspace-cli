@@ -68,10 +68,12 @@ func PayloadDescriptor(meta schemaruntime.DecodedSchemaMeta, productID string) (
 	return meta.PayloadDescriptors[i], true
 }
 
-// ReadCommandPayload authenticates the command payload range before any
-// protobuf decoding. It reads the payload file, which is deliberately
+// ReadCommandPayload authenticates the command payload header prefix before
+// any protobuf decoding. It reads the payload file, which is deliberately
 // independent of the registry so a corrupted registry cannot affect it. The
 // payload expectation is derived from the Meta, which is itself authenticated.
+// Only the header (Safety/Selection plus the rendered leaf index) is read;
+// rendered leaf blobs are pulled per leaf by ReadRenderedLeaf.
 func ReadCommandPayload(cache *schemacache.Cache, identity Identity, meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedCommandPayloads, error) {
 	descriptor, ok := PayloadDescriptor(meta, productID)
 	if !ok {
@@ -82,11 +84,30 @@ func ReadCommandPayload(cache *schemacache.Cache, identity Identity, meta schema
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
 	defer payloads.Close()
-	payload, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: descriptor.Offset, Length: descriptor.Length, SHA256: descriptor.SHA256})
+	payload, err := payloads.ReadRange(schemacache.RangeDescriptor{Offset: descriptor.Offset, Length: descriptor.HeaderLength, SHA256: descriptor.HeaderSHA256})
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
-	return schemaruntime.DecodeSchemaCommandPayloadCache(payload, descriptor, meta)
+	return schemaruntime.DecodeSchemaCommandPayloadHeader(payload, descriptor, meta)
+}
+
+// ReadRenderedLeaf reads one pre-rendered leaf blob from the product's payload
+// shard blob region. The ref comes from the already authenticated header.
+func ReadRenderedLeaf(cache *schemacache.Cache, identity Identity, meta schemaruntime.DecodedSchemaMeta, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
+	descriptor, ok := PayloadDescriptor(meta, productID)
+	if !ok {
+		return nil, fmt.Errorf("unknown Schema command payload product %q", productID)
+	}
+	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), payloadExpectation(meta))
+	if err != nil {
+		return nil, err
+	}
+	defer payloads.Close()
+	return payloads.ReadRange(schemacache.RangeDescriptor{
+		Offset: descriptor.Offset + descriptor.HeaderLength + ref.Offset,
+		Length: ref.Length,
+		SHA256: ref.SHA256,
+	})
 }
 
 // payloadExpectation derives the payload file expectation from the Meta, which

@@ -390,8 +390,8 @@ func TestPersistentSchemaCacheRenderedLeafFastPath(t *testing.T) {
 	if snap.RegistryReadOps != 0 || snap.RegistryReadBytes != 0 {
 		t.Fatalf("compact leaf fast path touched the registry: %#v", snap)
 	}
-	if snap.PayloadReadOps != 1 {
-		t.Fatalf("compact leaf fast path payload reads = %d, want 1", snap.PayloadReadOps)
+	if snap.PayloadReadOps != 2 {
+		t.Fatalf("compact leaf fast path payload reads = %d, want 2 (header + leaf blob)", snap.PayloadReadOps)
 	}
 
 	// The primary CLI-path spelling renders the same canonical bytes.

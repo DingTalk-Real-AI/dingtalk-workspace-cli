@@ -267,15 +267,29 @@ func (r *schemaCacheRuntime) renderedCompactLeaf(raw string) ([]byte, bool) {
 		return nil, false
 	}
 	canonical := strings.TrimSpace(raw)
-	if blob, ok := payloads.RenderedLeaves[canonical]; ok {
-		return blob, true
+	ref, ok := payloads.RenderedLeaf(canonical)
+	if !ok {
+		path := schemaruntime.NormalizeQueryCLIPath(raw)
+		if m, found := meta.CommandMeta(path); found && m.Identity.CLIPath == path {
+			ref, ok = payloads.RenderedLeaf(m.Identity.Canonical)
+		}
+		if !ok {
+			return nil, false
+		}
 	}
-	path := schemaruntime.NormalizeQueryCLIPath(raw)
-	if m, ok := meta.CommandMeta(path); ok && m.Identity.CLIPath == path {
-		blob, ok := payloads.RenderedLeaves[m.Identity.Canonical]
-		return blob, ok
+	blob, err := r.readRenderedLeaf(meta, productID, ref)
+	if err != nil {
+		return nil, false
 	}
-	return nil, false
+	return blob, true
+}
+
+func (r *schemaCacheRuntime) readRenderedLeaf(meta schemaruntime.DecodedSchemaMeta, productID string, ref schemaruntime.RenderedLeafRef) ([]byte, error) {
+	cache, err := r.opened()
+	if err != nil {
+		return nil, err
+	}
+	return schemareader.ReadRenderedLeaf(cache, r.options.Identity, meta, productID, ref)
 }
 
 // enrichCommandMeta fills an identity-only CommandMeta with the Safety and
