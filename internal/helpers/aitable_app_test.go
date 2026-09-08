@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -208,6 +209,9 @@ func TestCrossPlatformCoverageAitableAppModeRejectsInvalidInputBeforeMCP(t *test
 			}
 			if len(caller.calls) != 0 {
 				t.Fatalf("invalid input reached MCP: %#v", caller.calls)
+			}
+			if code := apperrors.ExitCode(err); code != apperrors.ExitCodeValidation {
+				t.Fatalf("exit code = %d, want validation (%d): %v", code, apperrors.ExitCodeValidation, err)
 			}
 		})
 	}
