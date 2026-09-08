@@ -68,7 +68,7 @@ metadata:
 ## 当前最短路径
 
 - 已知 dentryUuid：直接执行 inspect/download/list/move/rename，禁止先 search；仅确认是受支持的在线文档节点后才执行 copy。
-- 目标 Drive 空间未知：先明确企业空间 `orgSpace` 或“我的文件”`mySpace`，用 `dws wiki space list --type <类型> --format json` 发现空间；`orgSpace` 在 `nextToken` 非空时以 `--cursor <nextToken>` 续页，`mySpace` 固定单条且不分页。按后续命令取真实 spaceId 或 rootFolderId 后立即回到 Drive；已知这些 ID 时不做空间发现。
+- 当前命令需要定位空间且缺少目标 ID 时：先明确企业空间 `orgSpace` 或“我的文件”`mySpace`，用 `dws wiki space list --type <类型> --format json` 发现空间；`orgSpace` 在 `nextToken` 非空时以 `--cursor <nextToken>` 续页，`mySpace` 固定单条且不分页。按后续命令取真实 spaceId 或 rootFolderId 后立即回到 Drive；已知这些 ID 时不做空间发现。
 - 只有名称：`+search` → 唯一候选的 nodeId → 目标命令；不得自动选择第一项。
 - 只有文件夹层级：从最近的已知 folder ID 开始 `+list`，不要从根目录无界递归。
 - 上传新文件：单条 `+upload`；不要退回 upload-info + 手写 HTTP + commit。
