@@ -91,6 +91,9 @@ func TestCrossPlatformCoverageTypedValidationErrorGateRepresentativeCommands(t *
 
 func TestCrossPlatformCoverageTypedValidationErrorGateExtensions(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	// Executing the runtime root opens <config dir>/logs/dws.log and holds it for
+	// the process lifetime; Windows cannot remove the temp dir until it is closed.
+	t.Cleanup(CloseFileLogger)
 	oldEdition := edition.Get()
 	t.Cleanup(func() { edition.Override(oldEdition) })
 	businessCalls := 0
