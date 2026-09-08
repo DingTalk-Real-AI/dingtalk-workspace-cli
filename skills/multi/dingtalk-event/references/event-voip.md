@@ -27,6 +27,16 @@ dws event schema user_voip_call_receive_invite --flatten
 dws event consume user_voip_call_receive_invite --flatten -f ndjson
 ```
 
+数字员工需要使用动态 MeetingSDK 凭证自动入会时，必须显式允许凭证进入
+stdout，并把输出直接通过受控管道交给入会进程；不要使用 `tee` 或写日志：
+
+```bash
+dws event consume user_voip_call_receive_invite \
+  --flatten \
+  --include-voip-sdk-token \
+  -f ndjson
+```
+
 测试时先由被叫用户登录并启动监听，等待 `[event] ready`；再由另一用户呼叫该被叫用户。需要有界取样时可加 `--max-events 1`。
 
 ## Output contract
@@ -50,6 +60,8 @@ dws event consume user_voip_call_receive_invite --flatten -f ndjson
   "callee_corp_id": "ding...",
   "call_type": "conference",
   "room_id": "...",
+  "sdk_app_id": "meeting-sdk-app-id",
+  "sdk_expire_time": 1780634079,
   "create_time": 0,
   "event_time": 0
 }
@@ -57,11 +69,13 @@ dws event consume user_voip_call_receive_invite --flatten -f ndjson
 
 - `event_id` 是 transport 事件 ID；`biz_id` 是业务事件唯一 ID，同一事件重试时保持不变，业务去重优先使用 `biz_id`。
 - `target_uid` 是订阅并接收邀请的用户；正常情况下与 `callee_uid` 指向同一被叫用户。
-- `caller_uid` 与 `callee_uid` 按服务端协议以字符串输出，必须保留前导 `0`、连字符等原始内容，不要转换为数字。滚动发布期间 DWS 仍兼容旧的 Long payload，并统一投影为字符串。
+- `caller_uid` 读取服务端 `body.callerUserId`；滚动发布期间仍兼容旧的 `body.callerUid`。它与 `callee_uid` 均以字符串输出，必须保留前导 `0`、连字符等原始内容，不要转换为数字。
+- `sdk_app_id` 与 `sdk_expire_time` 来自非敏感的 `body.sdkAuth`；`sdk_expire_time` 是 Unix 秒。
+- 完整 `sdkToken` 来自消息属性 `X-Mozi-Agent-Sdk-Token`。默认输出会删除该 header，`--flatten` 也不输出 `sdk_token`；只有显式 `--include-voip-sdk-token` 才会提供它。数字员工使用 `sdk_app_id + sdk_token` 登录 MeetingSDK，并应在 `sdk_expire_time` 前完成使用。
 - `--flatten` 默认不输出敏感入会码 `room_code`，避免终端记录、`tee` 文件或 Agent 上下文意外泄露。
 - `create_time` 与 `event_time` 都是毫秒时间戳；前者是通话邀请创建时间，后者是业务事件时间。
 - payload 缺失、body 缺失、`bizid` 为空或无法解析时，consume 会在 stderr 输出 warning，并只把不含业务 payload 的基础事件字段写到 stdout，避免敏感值从异常回退路径泄露。
-- 不传 `--flatten` 时仍保持 transport envelope，但 DWS 会从 `.data` 中移除敏感 `roomCode`。只有服务端联调确需检查原始 payload 时，才显式添加 `--debug-raw-events`；不要持久化或传播入会码。
+- 不传 `--flatten` 时仍保持 transport envelope，但 DWS 会从 `.data` 中移除敏感 `roomCode`，并从 `.headers` 中移除 MeetingSDK token。显式 `--include-voip-sdk-token` 会保留 token header；只有服务端联调确需检查全部原始事件时才使用 `--debug-raw-events`，不要持久化或传播凭证。
 - VoIP 事件的 `-f raw` 同样必须和 `--debug-raw-events` 一起使用，避免绕过默认脱敏。
 
 ## Boundary

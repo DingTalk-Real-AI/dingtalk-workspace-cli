@@ -232,8 +232,12 @@ payload.body.actionData.context，完整字段先用 event schema 查看。
 			if personalOpts.DebugRawEvents {
 				return fmt.Errorf("event consume: --debug-raw-events is only supported with --as user")
 			}
+			if personalOpts.IncludeVoIPSDKToken {
+				return fmt.Errorf("event consume: --include-voip-sdk-token is only supported with --as user")
+			}
 			if err := rejectChangedFlags(c, "user",
 				"flatten",
+				"include-voip-sdk-token",
 				"subscribe-id",
 				"rule",
 				"name",
@@ -401,6 +405,8 @@ payload.body.actionData.context，完整字段先用 event schema 查看。
 		"个人事件控制面 base URL；默认由 MCP base 派生 /dws")
 	f.BoolVar(&personalOpts.DebugRawEvents, "debug-raw-events", false,
 		"个人事件联调：绕过本地 event type/subscribe_id 过滤，输出当前 personal stream bus 收到的所有事件")
+	f.BoolVar(&personalOpts.IncludeVoIPSDKToken, "include-voip-sdk-token", false,
+		"显式输出 VoIP MeetingSDK sdkToken（敏感；仅将 stdout 安全管道传给入会进程）")
 	f.StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
 		"个人 Stream 建联模式；默认 normal")
 	f.StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),

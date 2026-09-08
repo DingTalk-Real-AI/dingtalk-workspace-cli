@@ -66,30 +66,31 @@ type commonConsumeOptions struct {
 }
 
 type personalConsumeOptions struct {
-	Common           commonConsumeOptions
-	EventKey         string
-	EventKeys        []string
-	Flatten          bool
-	DebugRawEvents   bool
-	SubscribeID      string
-	Rule             string
-	Name             string
-	FilterJSON       string
-	QueryCSV         string
-	TTL              time.Duration
-	Ephemeral        bool
-	UserID           string
-	OpenDingTalkID   string
-	GroupID          string
-	RoleTypes        []string
-	CalendarIDs      []string
-	ChangeTypes      []string
-	ControlBaseURL   string
-	StreamTicketMode string
-	StreamTicketURL  string
-	StreamSourceID   string
-	ExplicitToken    string
-	ClientIDOverride string
+	Common              commonConsumeOptions
+	EventKey            string
+	EventKeys           []string
+	Flatten             bool
+	DebugRawEvents      bool
+	IncludeVoIPSDKToken bool
+	SubscribeID         string
+	Rule                string
+	Name                string
+	FilterJSON          string
+	QueryCSV            string
+	TTL                 time.Duration
+	Ephemeral           bool
+	UserID              string
+	OpenDingTalkID      string
+	GroupID             string
+	RoleTypes           []string
+	CalendarIDs         []string
+	ChangeTypes         []string
+	ControlBaseURL      string
+	StreamTicketMode    string
+	StreamTicketURL     string
+	StreamSourceID      string
+	ExplicitToken       string
+	ClientIDOverride    string
 }
 
 type personalListOptions struct {
@@ -520,10 +521,10 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode([]string{opts.EventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputModeWithOptions([]string{opts.EventKey}, opts.Flatten, opts.DebugRawEvents, opts.IncludeVoIPSDKToken, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
-	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
+	projector := personalEventProjectorWithOptions(opts.DebugRawEvents, opts.Flatten, opts.IncludeVoIPSDKToken)
 
 	configDir := defaultConfigDir()
 	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, personalIdentityOptions{ClientID: opts.ClientIDOverride, TicketMode: opts.StreamTicketMode})
@@ -562,7 +563,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			if err != nil {
 				return fmt.Errorf("event consume --as user: %w", err)
 			}
-			if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+			if err := validatePersonalEventOutputModeWithOptions([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, opts.IncludeVoIPSDKToken, normalised); err != nil {
 				return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 			}
 			opts.EventKey = eventKey
@@ -695,7 +696,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	if err := validatePersonalEventOutputMode([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputModeWithOptions([]string{eventKey}, opts.Flatten, opts.DebugRawEvents, opts.IncludeVoIPSDKToken, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
 	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
@@ -788,10 +789,10 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	if fellback && !opts.Common.Quiet {
 		fmt.Fprintf(c.ErrOrStderr(), "WARN: --format %q has no meaning for event stream; using ndjson\n", rawFormat)
 	}
-	if err := validatePersonalEventOutputMode(opts.EventKeys, opts.Flatten, opts.DebugRawEvents, normalised); err != nil {
+	if err := validatePersonalEventOutputModeWithOptions(opts.EventKeys, opts.Flatten, opts.DebugRawEvents, opts.IncludeVoIPSDKToken, normalised); err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
-	projector := personalEventProjector(false, opts.Flatten)
+	projector := personalEventProjectorWithOptions(false, opts.Flatten, opts.IncludeVoIPSDKToken)
 
 	ctx := c.Context()
 	configDir := defaultConfigDir()
@@ -1104,21 +1105,52 @@ func printPersonalMultiDryRun(w io.Writer, cfg consume.Config, plans []personalC
 }
 
 func personalEventProjector(debugRawEvents, flatten bool) consume.Projector {
+	return personalEventProjectorWithOptions(debugRawEvents, flatten, false)
+}
+
+func personalEventProjectorWithOptions(debugRawEvents, flatten, includeVoIPSDKToken bool) consume.Projector {
 	if debugRawEvents {
 		return func(ev transport.Event) (any, error) { return ev, nil }
 	}
+	options := personal.ProjectionOptions{IncludeVoIPSDKToken: includeVoIPSDKToken}
 	if flatten {
-		return personal.ProjectOutput
+		return func(ev transport.Event) (any, error) {
+			return personal.ProjectOutputWithOptions(ev, options)
+		}
 	}
-	return personal.ProjectTransportOutput
+	return func(ev transport.Event) (any, error) {
+		return personal.ProjectTransportOutputWithOptions(ev, options)
+	}
 }
 
 func validatePersonalEventOutputMode(eventKeys []string, flatten, debugRawEvents bool, format consume.Format) error {
+	return validatePersonalEventOutputModeWithOptions(eventKeys, flatten, debugRawEvents, false, format)
+}
+
+func validatePersonalEventOutputModeWithOptions(eventKeys []string, flatten, debugRawEvents, includeVoIPSDKToken bool, format consume.Format) error {
 	if flatten && debugRawEvents {
 		return fmt.Errorf("--flatten and --debug-raw-events are mutually exclusive")
 	}
+	if includeVoIPSDKToken && debugRawEvents {
+		return fmt.Errorf("--include-voip-sdk-token and --debug-raw-events are mutually exclusive")
+	}
 	if flatten && format == consume.FormatRaw {
 		return fmt.Errorf("--flatten and --format raw are mutually exclusive")
+	}
+	if includeVoIPSDKToken && format == consume.FormatRaw {
+		return fmt.Errorf("--include-voip-sdk-token is not supported with --format raw; use ndjson, json, pretty, or compact")
+	}
+	if includeVoIPSDKToken {
+		hasVoIP := false
+		for _, eventKey := range eventKeys {
+			if strings.TrimSpace(eventKey) == personal.EventVoIPCallReceiveInvite {
+				hasVoIP = true
+				break
+			}
+		}
+		if !hasVoIP {
+			return fmt.Errorf("--include-voip-sdk-token requires event %s", personal.EventVoIPCallReceiveInvite)
+		}
 	}
 	if format == consume.FormatRaw && !debugRawEvents {
 		for _, eventKey := range eventKeys {

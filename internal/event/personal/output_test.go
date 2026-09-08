@@ -223,13 +223,14 @@ func personalVoIPData() string {
 			"filterSubId":"internal-filter",
 			"body":{
 				"callId":"call-1",
-				"callerUid":"0147333457361236773",
+				"callerUserId":"0147333457361236773",
 				"callerCorpId":"ding-caller-corp",
 				"calleeUid":"digital-3559506650",
 				"calleeCorpId":"ding-callee-corp",
 				"callType":"conference",
 				"roomId":"room-1",
 				"roomCode":"sensitive-code",
+				"sdkAuth":{"appId":"meeting-sdk-app","expireTime":1780634079},
 				"createTime":1780630479000
 			}
 		}
@@ -243,6 +244,10 @@ func TestCrossPlatformCoverageProjectTransportOutput(t *testing.T) {
 		EventBornTime: 1780630479000,
 		EventType:     EventVoIPCallReceiveInvite,
 		SubscribeID:   "outer-sub",
+		Headers: map[string]string{
+			"X-Mozi-Agent-Sdk-Token": "sensitive-sdk-token",
+			"keep":                   "value",
+		},
 		Data: `{
 			"eventId":"inner-event",
 			"eventKey":"user_voip_call_receive_invite",
@@ -275,6 +280,21 @@ func TestCrossPlatformCoverageProjectTransportOutput(t *testing.T) {
 	}
 	if !strings.Contains(safe.Data, `"callId":"call-1"`) || !strings.Contains(safe.Data, `"keep":true`) {
 		t.Fatalf("ProjectTransportOutput(VoIP) dropped non-sensitive payload: %s", safe.Data)
+	}
+	if _, ok := safe.Headers["X-Mozi-Agent-Sdk-Token"]; ok || strings.Contains(fmt.Sprint(safe.Headers), "sensitive-sdk-token") {
+		t.Fatalf("ProjectTransportOutput(VoIP) leaked sdkToken header: %#v", safe.Headers)
+	}
+	if safe.Headers["keep"] != "value" {
+		t.Fatalf("ProjectTransportOutput(VoIP) dropped non-sensitive header: %#v", safe.Headers)
+	}
+
+	withCredentials, err := ProjectTransportOutputWithOptions(voip, ProjectionOptions{IncludeVoIPSDKToken: true})
+	if err != nil {
+		t.Fatalf("ProjectTransportOutputWithOptions(VoIP) error = %v", err)
+	}
+	credentialEnvelope, ok := withCredentials.(transport.Event)
+	if !ok || credentialEnvelope.Headers["X-Mozi-Agent-Sdk-Token"] != "sensitive-sdk-token" {
+		t.Fatalf("ProjectTransportOutputWithOptions(VoIP) headers = %#v, want explicit sdkToken", withCredentials)
 	}
 
 	dataKeyOnly := voip
@@ -789,23 +809,25 @@ func TestCrossPlatformCoverageProjectOutputVoIPCallReceiveInvite(t *testing.T) {
 		t.Fatalf("ProjectOutput() error = %v", err)
 	}
 	want := VoIPCallReceiveInviteOutput{
-		Type:         EventVoIPCallReceiveInvite,
-		EventID:      "voip-event",
-		Timestamp:    1780630479124,
-		SubscribeID:  "outer-sub",
-		BizID:        "VOIP_room-1_3559506650",
-		CorpID:       "ding-callee-corp",
-		OrgID:        21001,
-		TargetUID:    3559506650,
-		CallID:       "call-1",
-		CallerUID:    "0147333457361236773",
-		CallerCorpID: "ding-caller-corp",
-		CalleeUID:    "digital-3559506650",
-		CalleeCorpID: "ding-callee-corp",
-		CallType:     "conference",
-		RoomID:       "room-1",
-		CreateTime:   1780630479000,
-		EventTime:    1780630479123,
+		Type:          EventVoIPCallReceiveInvite,
+		EventID:       "voip-event",
+		Timestamp:     1780630479124,
+		SubscribeID:   "outer-sub",
+		BizID:         "VOIP_room-1_3559506650",
+		CorpID:        "ding-callee-corp",
+		OrgID:         21001,
+		TargetUID:     3559506650,
+		CallID:        "call-1",
+		CallerUID:     "0147333457361236773",
+		CallerCorpID:  "ding-caller-corp",
+		CalleeUID:     "digital-3559506650",
+		CalleeCorpID:  "ding-callee-corp",
+		CallType:      "conference",
+		RoomID:        "room-1",
+		SDKAppID:      "meeting-sdk-app",
+		SDKExpireTime: 1780634079,
+		CreateTime:    1780630479000,
+		EventTime:     1780630479123,
 	}
 	if !reflect.DeepEqual(projected, want) {
 		t.Fatalf("ProjectOutput() = %#v, want %#v", projected, want)
@@ -821,10 +843,26 @@ func TestCrossPlatformCoverageProjectOutputVoIPCallReceiveInvite(t *testing.T) {
 	if !strings.Contains(string(encoded), `"caller_uid":"0147333457361236773"`) || !strings.Contains(string(encoded), `"callee_uid":"digital-3559506650"`) {
 		t.Fatalf("flattened VoIP output = %s, want string caller_uid/callee_uid", encoded)
 	}
+	if !strings.Contains(string(encoded), `"sdk_app_id":"meeting-sdk-app"`) || !strings.Contains(string(encoded), `"sdk_expire_time":1780634079`) || strings.Contains(string(encoded), "sdk_token") {
+		t.Fatalf("flattened VoIP output = %s, want sdkAuth without sdkToken by default", encoded)
+	}
+
+	withToken, err := ProjectOutputWithOptions(transport.Event{
+		EventType: EventVoIPCallReceiveInvite,
+		Data:      personalVoIPData(),
+		Headers:   map[string]string{"x-mozi-agent-sdk-token": "dynamic-sdk-token"},
+	}, ProjectionOptions{IncludeVoIPSDKToken: true})
+	if err != nil {
+		t.Fatalf("ProjectOutputWithOptions() error = %v", err)
+	}
+	withTokenOutput, ok := withToken.(VoIPCallReceiveInviteOutput)
+	if !ok || withTokenOutput.SDKToken != "dynamic-sdk-token" {
+		t.Fatalf("ProjectOutputWithOptions() = %#v, want explicit sdkToken", withToken)
+	}
 }
 
 func TestCrossPlatformCoverageProjectOutputVoIPAcceptsLegacyNumericUserIdentifiers(t *testing.T) {
-	legacy := strings.Replace(personalVoIPData(), `"callerUid":"0147333457361236773"`, `"callerUid":1000000001`, 1)
+	legacy := strings.Replace(personalVoIPData(), `"callerUserId":"0147333457361236773"`, `"callerUid":1000000001`, 1)
 	legacy = strings.Replace(legacy, `"calleeUid":"digital-3559506650"`, `"calleeUid":3559506650`, 1)
 
 	projected, err := ProjectOutput(transport.Event{EventType: EventVoIPCallReceiveInvite, Data: legacy})
@@ -849,7 +887,7 @@ func TestCrossPlatformCoverageProjectOutputRejectsInvalidVoIPPayload(t *testing.
 		{name: "missing", want: "payload is missing"},
 		{name: "missing body", payload: `,"payload":{"bizid":"biz-1"}`, want: "payload body is missing"},
 		{name: "missing bizid", payload: `,"payload":{"body":{"callId":"call-1","roomCode":"sensitive-code"}}`, want: "bizid is required"},
-		{name: "invalid caller uid type", payload: `,"payload":{"bizid":"biz-1","body":{"callerUid":{}}}`, want: "VoIP user identifier must be a string or legacy integer"},
+		{name: "invalid caller user id type", payload: `,"payload":{"bizid":"biz-1","body":{"callerUserId":{}}}`, want: "VoIP user identifier must be a string or legacy integer"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
