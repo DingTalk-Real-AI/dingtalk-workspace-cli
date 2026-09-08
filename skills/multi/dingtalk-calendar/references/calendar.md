@@ -244,7 +244,7 @@ dws calendar event update --id <EVENT_ID> --is-all-day=false --start "2030-01-01
 dws calendar event update --id <EVENT_ID> --add-online-meeting=true
 ```
 
-创建时默认由服务端添加视频会议，无需添加时使用 `--add-online-meeting=false`。
+创建时默认由服务端添加视频会议，无需添加时使用 `--add-online-meeting=false`。单人会议或全天日程通常不需要视频会议，建议设置 `--add-online-meeting=false`。
 更新时显式 `true` 表示创建新的视频会议并覆盖已有会议；`false` 不创建且保留已有视频会议。
 两个布尔参数均仅在显式传入时发送，更新标题等其他字段不会自动补发它们。
 需要新增能力时使用上述原子命令；`+create` 等快捷指令未暴露这些参数。

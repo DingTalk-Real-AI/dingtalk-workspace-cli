@@ -235,7 +235,7 @@ func newCalendarCommand() *cobra.Command {
 		Long: `创建日程。
 
 全天日程使用 --is-all-day，--start/--end 必须为 yyyy-MM-dd 日期，结束日期不包含当天（例如 2030-01-01 至 2030-01-02 表示 1 月 1 日全天），无需设置时区。
-默认由服务端添加视频会议；无需添加时传 --add-online-meeting=false。
+默认由服务端添加视频会议；无需添加时传 --add-online-meeting=false。单人会议或全天日程通常不需要视频会议，建议设置 --add-online-meeting=false。
 
 周期日程说明：--recurrence-* 不是彼此独立的参数。一旦指定任一 --recurrence-* 标志，就必须一次性提供**完整**的循环规则，
 至少包含 --recurrence-type、--recurrence-interval(>0) 与 --recurrence-range-type，否则命令会被拒绝执行。`,
