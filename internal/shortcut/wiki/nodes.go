@@ -207,7 +207,21 @@ var NodeDelete = writeShortcut("+node-delete", "删除知识库节点", "明确�
 	if err != nil {
 		return err
 	}
-	if workspace := firstWikiString(preflight, "workspaceId", "spaceId"); workspace != "" && workspace != rt.Str("workspace") {
+	if _, err = requireWikiResponse(preflight, "doc/get_document_info"); err != nil {
+		return err
+	}
+	nodeID := firstWikiString(preflight, "nodeId", "id", "fileId")
+	if nodeID == "" {
+		return wikiResponseError("doc/delete_document", "missing_preflight_node_id", "删除预检缺少节点 ID，未发送删除请求")
+	}
+	if nodeID != rt.Str("node") {
+		return wikiResponseError("doc/delete_document", "node_preflight_mismatch", "删除预检返回的节点与请求不一致，未发送删除请求")
+	}
+	workspaceID := firstWikiString(preflight, "workspaceId", "spaceId")
+	if workspaceID == "" {
+		return wikiResponseError("doc/delete_document", "missing_preflight_workspace", "删除预检缺少知识库归属，未发送删除请求")
+	}
+	if workspaceID != rt.Str("workspace") {
 		return wikiResponseError("doc/delete_document", "workspace_preflight_mismatch", "节点不属于请求确认的知识库")
 	}
 	if rt.DryRun() {
