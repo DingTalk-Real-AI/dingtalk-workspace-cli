@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -422,7 +422,7 @@ func projectRuntimeSchemaConstraints(cmd *cobra.Command, parameters []ParameterS
 					// so require_together and other cross-parameter rules do not
 					// lose a distinct public member. Undeclared legacy spellings
 					// remain executable-only and are omitted from Agent Schema.
-					targetName, reviewed, aliasErr := runtimeannotate.ReviewedHiddenAliasTarget(cmd, flag)
+					targetName, reviewed, aliasErr := corecmd.ReviewedHiddenAliasTarget(cmd, flag.Name)
 					if aliasErr != nil {
 						return nil, fmt.Errorf("constraint %s[%d] %w", kind, groupIndex, aliasErr)
 					}

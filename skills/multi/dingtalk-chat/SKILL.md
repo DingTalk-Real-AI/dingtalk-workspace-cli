@@ -64,7 +64,7 @@ metadata:
 | 撤回/转发 | `+messages-recall`；`+messages-forward` / `+messages-combine-forward` / `+messages-forward-topic` | 不复制正文冒充原生转发 |
 | Pin/消息 Top/Favorite | `+messages-set-pin` / `+messages-unset-pin`；`+messages-set-top` / `+messages-unset-top`；`+flag-create` / `+flag-cancel` | 对象互不替代；用对应查询验证 |
 | 添加/移除 reaction | `+messages-add-emoji` / `+messages-remove-emoji` | 扩展动作读 `message-actions` |
-| 会话置顶/免打扰/隐藏 | `+conversation-set-top` / `+conversation-mute` / `+conversation-hide` | 用真实 CID；会话 Top 非消息 Top |
+| 会话置顶/免打扰/隐藏 | [chat-conversation](references/chat/chat-conversation.md) | 用真实 CID；会话 Top 非消息 Top |
 | 已读/未读/清红点/清空 | `+conversation-mark-read` / `+conversation-mark-unread` / `+conversation-clear-red-point` / `+conversation-clear-all-red-point` / `+conversation-clear-messages` | 已读需消息 ID；清空按 Runtime 确认 |
 | 下载消息资源 | 查询加 `--download-resources --output-dir <目录>`；已有引用用 `+messages-resource-download` | 不猜 ID；保留 ledger；临时 URL 不交付 |
 

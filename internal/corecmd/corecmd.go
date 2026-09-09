@@ -661,6 +661,45 @@ func AnnotateFlagAlias(cmd *cobra.Command, aliasName, canonicalName string) {
 	)
 }
 
+// ReviewedHiddenAliasTarget resolves framework-owned alias evidence. Only
+// aliases declared through FlagSpec/AnnotateFlagAlias may rewrite a hidden
+// executable spelling to a public Schema parameter.
+func ReviewedHiddenAliasTarget(cmd *cobra.Command, flagName string) (string, bool, error) {
+	flag := runtimeannotate.CommandFlag(cmd, flagName)
+	if flag == nil || !flag.Hidden {
+		return "", false, nil
+	}
+	aliasOf, hasAliasOf := flag.Annotations[runtimeannotate.AnnotationFlagAliasOf]
+	origin, hasOrigin := flag.Annotations[runtimeannotate.AnnotationFlagAliasOrigin]
+	if !hasAliasOf && !hasOrigin {
+		return "", false, nil
+	}
+	if !hasOrigin || len(origin) != 1 || origin[0] != runtimeannotate.FlagAliasOriginCorecmdV1 {
+		return "", false, nil
+	}
+	if !hasAliasOf || len(aliasOf) != 1 || aliasOf[0] == "" || aliasOf[0] != strings.TrimSpace(aliasOf[0]) {
+		return "", false, fmt.Errorf("hidden input %q has malformed reviewed alias target", flag.Name)
+	}
+	targetName := aliasOf[0]
+	if targetName == flag.Name {
+		return "", false, fmt.Errorf("hidden input %q cannot alias itself", flag.Name)
+	}
+	target := runtimeannotate.CommandFlag(cmd, targetName)
+	if target == nil {
+		return "", false, fmt.Errorf("hidden alias %q targets unknown executable input %q", flag.Name, targetName)
+	}
+	if target.Hidden {
+		return "", false, fmt.Errorf("hidden alias %q targets hidden input %q", flag.Name, targetName)
+	}
+	if values := target.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(values) > 0 {
+		return "", false, fmt.Errorf("hidden alias %q targets alias input %q", flag.Name, targetName)
+	}
+	if flag.Value == nil || target.Value == nil || flag.Value.Type() != target.Value.Type() {
+		return "", false, fmt.Errorf("hidden alias %q and public input %q have incompatible types", flag.Name, targetName)
+	}
+	return targetName, true, nil
+}
+
 // RegisterFlag registers one flag by Kind. Default is applied at registration
 // for every kind so --help DefValue matches the declared fallback.
 // Malformed KindInt / KindBool Default values panic at registration (fail-closed)
