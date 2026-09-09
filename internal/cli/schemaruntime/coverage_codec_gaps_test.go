@@ -586,7 +586,7 @@ func TestCrossPlatformCoverageRejectUnknownFieldsAndEnumsRemaining(t *testing.T)
 	if err := validateProductProto(&schemacachepb.ProductSpec{}); err == nil {
 		t.Fatal("empty product proto accepted")
 	}
-	if err := validateProductProto(&schemacachepb.ProductSpec{Id: "p", FieldProvenance: &schemacachepb.ProvenanceList{Items: []*schemacachepb.ProvenanceEntry{{Key: ""}}}}); err == nil {
+	if err := validateProductProto(&schemacachepb.ProductSpec{Id: "p", Selection: &schemacachepb.Selection{}, FieldProvenance: &schemacachepb.ProvenanceList{Items: []*schemacachepb.ProvenanceEntry{{Key: ""}}}}); err == nil {
 		t.Fatal("invalid product provenance accepted")
 	}
 	if err := validateProductProto(&schemacachepb.ProductSpec{
@@ -682,7 +682,8 @@ func TestCrossPlatformCoverageModelPaginationAndProvenanceRemaining(t *testing.T
 
 func TestCrossPlatformCoverageLocatorPathAndDotPrefixCollisions(t *testing.T) {
 	alpha := allFieldsRegistry()
-	alpha.Products[0].Tools[0].Identity.Aliases = []string{"omega.run"}
+	alpha.Products[0].Tools[0].Identity.Aliases = []string{"shared.tool"}
+	alpha.Products[0].Tools[0].Identity.SourceProductID = ""
 	omega := allFieldsRegistry().Products[0]
 	omega.ID = "omega"
 	omega.Name = "Omega"
@@ -693,7 +694,7 @@ func TestCrossPlatformCoverageLocatorPathAndDotPrefixCollisions(t *testing.T) {
 	ot.Identity.Name = "run"
 	ot.Identity.CLIName = "run"
 	ot.Identity.CanonicalPath = "omega.run"
-	ot.Identity.Path = "omega.run"
+	ot.Identity.Path = "shared.tool"
 	ot.Identity.CLIPath = "omega run"
 	ot.Identity.PrimaryCLIPath = "omega run"
 	ot.Identity.Aliases = nil
@@ -727,8 +728,8 @@ func TestCrossPlatformCoverageLocatorPathAndDotPrefixCollisions(t *testing.T) {
 	bt.Identity.CLIName = "xy"
 	bt.Identity.CanonicalPath = "beta.xy"
 	bt.Identity.Path = "foo.bar"
-	bt.Identity.CLIPath = "foo bar"
-	bt.Identity.PrimaryCLIPath = "foo bar"
+	bt.Identity.CLIPath = "beta xy"
+	bt.Identity.PrimaryCLIPath = "beta xy"
 	bt.Identity.Aliases = nil
 	bt.Identity.Group = ""
 	bt.Identity.SourceProductID = ""

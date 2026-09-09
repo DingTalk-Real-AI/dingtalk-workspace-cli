@@ -210,6 +210,12 @@ func TestCrossPlatformCoverageUnixReadWriteLockRemainingFaults(t *testing.T) {
 	}
 
 	if err := validateArtifactPayload(identity3, Artifact{
+		Payload:     []byte("xy"),
+		Expectation: ArtifactExpectation{Kind: KindMeta, Serializer: SerializerProtobuf, Codec: CodecRaw, FormatVersion: DTOFormatVersion, EncodedLength: 1, DecodedLength: 1, EncodedSHA256: sha256.Sum256([]byte("x"))},
+	}); err == nil {
+		t.Fatal("length mismatch validateArtifactPayload accepted")
+	}
+	if err := validateArtifactPayload(identity3, Artifact{
 		Payload:     []byte("x"),
 		Expectation: ArtifactExpectation{Kind: KindMeta, Serializer: SerializerProtobuf, Codec: CodecRaw, FormatVersion: DTOFormatVersion, EncodedLength: 1, DecodedLength: 1, EncodedSHA256: sha256.Sum256([]byte("y"))},
 	}); err == nil {

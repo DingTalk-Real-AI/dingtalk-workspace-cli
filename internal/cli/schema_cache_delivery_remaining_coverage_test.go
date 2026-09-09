@@ -19,6 +19,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/spf13/cobra"
 )
 
 func coverageSchemaCacheHome(t *testing.T) {
@@ -90,20 +91,6 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 		t.Fatal("no payload products")
 	}
 	productID := index.PayloadDescriptors[0].ProductID
-	first, err := runtimeCache.loadCommandPayload(index, productID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cliPath, canonical string
-	for path, command := range first.Commands {
-		cliPath, canonical = path, command.Identity.Canonical
-		if command.Identity.CLIPath == path && canonical != "" {
-			break
-		}
-	}
-	if cliPath == "" {
-		t.Fatal("no command in payload")
-	}
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -124,6 +111,21 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 		if err != nil {
 			t.Fatalf("concurrent loadCommandPayload: %v", err)
 		}
+	}
+
+	first, err := runtimeCache.loadCommandPayload(index, productID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cliPath, canonical string
+	for path, command := range first.Commands {
+		cliPath, canonical = path, command.Identity.Canonical
+		if command.Identity.CLIPath == path && canonical != "" {
+			break
+		}
+	}
+	if cliPath == "" {
+		t.Fatal("no command in payload")
 	}
 
 	if _, err := runtimeCache.readCommandMetaFromPayloadFresh(cliPath); err != nil {
@@ -153,8 +155,9 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if int(identity.PayloadIndexLength)+8 < len(body) {
-		body[int(identity.PayloadIndexLength)+8] ^= 0xff
+	headerOff := int(identity.PayloadIndexLength + index.PayloadDescriptors[0].Offset)
+	if headerOff+8 < len(body) {
+		body[headerOff+8] ^= 0xff
 		if err := os.WriteFile(payloadPath, body, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -172,6 +175,19 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 	meta, err := runtimeCache.readMeta()
 	if err != nil {
 		t.Fatal(err)
+	}
+	runtimeCache.seedMeta(meta)
+	if _, err := runtimeCache.loadMeta(); err != nil {
+		t.Fatal(err)
+	}
+	ghostMeta := meta
+	ghostMeta.LocatorProductByPath = map[string]string{}
+	for path, id := range meta.LocatorProductByPath {
+		ghostMeta.LocatorProductByPath[path] = id
+	}
+	ghostMeta.LocatorProductByPath["ghost-path-xyz"] = productID
+	if _, err := runtimeCache.queryPayload(ghostMeta, "ghost-path-xyz", false); err == nil {
+		t.Fatal("unknown located query succeeded")
 	}
 	testseam.Swap(t, &renderSchemaProductSummary, func(schemaruntime.ProductSpec) (map[string]any, error) {
 		return nil, errors.New("forced product summary remaining")
@@ -327,7 +343,7 @@ func TestCrossPlatformCoverageSchemaCacheArtifactsRemainingFailures(t *testing.T
 	descDrift := artifacts
 	descProducts := append([]ProductSpec(nil), artifacts.registry.Products...)
 	descTools := append([]ToolSpec(nil), descProducts[0].Tools...)
-	descTools[0].Description = "drifted-description"
+	descTools[0].Display = "drifted-display"
 	descProducts[0].Tools = descTools
 	descDrift.registry.Products = descProducts
 	if err := descDrift.ValidateRoundTrip(); err == nil {
@@ -342,25 +358,14 @@ func TestCrossPlatformCoverageSchemaCacheArtifactsRemainingFailures(t *testing.T
 
 func TestCrossPlatformCoverageSchemaCatalogRepairRecheckFailures(t *testing.T) {
 	runtimeCache, _, _ := publishCoverageSchemaRuntime(t)
-	opened, err := runtimeCache.opened()
-	if err != nil {
-		t.Fatal(err)
-	}
-	metaPath := filepath.Join(opened.Directory(), "meta.cache")
-	body, err := os.ReadFile(metaPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body[len(body)-1] ^= 0xff
-	if err := os.WriteFile(metaPath, body, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	runtimeCache.metaOnce.Do(func() { runtimeCache.metaErr = errors.New("poison meta") })
-	assembleDeliverySchemaCatalogFn = assembleSchemaCatalogFromRoot
-	RegisterSchemaSourceRoot(nil)
+	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-for-repair"))
+	assembleDeliverySchemaCatalogFn = func(*cobra.Command) (loadedSchemaCatalog, error) {
+		return loadedSchemaCatalog{}, errors.New("forced catalog err")
+	}
 	resetDeliverySchemaCatalogStateForTest()
 	runtimeDeliveryLiveCatalog.Store(nil)
-	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	if _, err := deliverySchemaOverviewPayload(); err == nil {
 		t.Fatal("overview repair with failed live catalog succeeded")
 	}

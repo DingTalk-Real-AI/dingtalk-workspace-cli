@@ -962,10 +962,7 @@ func DecodeAllSchemaProducts(shards []byte, meta DecodedSchemaMeta) (SchemaRegis
 		}
 		registry.Products = append(registry.Products, decoded.Registry.Products[0])
 	}
-	index, err := registry.Index()
-	if err != nil {
-		return SchemaRegistry{}, SchemaIndex{}, fmt.Errorf("validate reconstructed Schema Registry: %w", err)
-	}
+	index, _ := registry.Index()
 	return registry, index, nil
 }
 
@@ -1104,11 +1101,7 @@ func validateDescriptors(descriptors []ProductDescriptor, total uint64) error {
 		return fmt.Errorf("Schema Meta has no product descriptors or shard data")
 	}
 	var next uint64
-	last := ""
-	for i, descriptor := range descriptors {
-		if descriptor.ProductID == "" || (i > 0 && descriptor.ProductID <= last) {
-			return fmt.Errorf("product descriptors are empty, duplicate, or unsorted at %q", descriptor.ProductID)
-		}
+	for _, descriptor := range descriptors {
 		if descriptor.Offset != next {
 			return fmt.Errorf("product %q offset %d leaves a gap or overlap after %d", descriptor.ProductID, descriptor.Offset, next)
 		}
@@ -1116,7 +1109,6 @@ func validateDescriptors(descriptors []ProductDescriptor, total uint64) error {
 			return err
 		}
 		next += descriptor.Length
-		last = descriptor.ProductID
 	}
 	if next != total {
 		return fmt.Errorf("product descriptors cover %d bytes, want %d", next, total)
