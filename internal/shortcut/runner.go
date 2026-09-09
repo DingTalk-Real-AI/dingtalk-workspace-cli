@@ -334,11 +334,24 @@ func (rt *RuntimeContext) commandContext() context.Context {
 // composed result instead of the raw MCP response — the output-projection
 // output-formatting capability.
 func (rt *RuntimeContext) Output(payload any) error {
+	return rt.outputPayload(payload)
+}
+
+// OutputWithMeta publishes the same business payload as Output while attaching
+// framework-owned metadata to the unified result (or to the dual-validation
+// shadow). Legacy and dual-validation renderers still write the established
+// business payload bytes, so adding pagination evidence here does not change
+// their public output contract.
+func (rt *RuntimeContext) OutputWithMeta(payload any, meta *output.Meta) error {
+	return rt.outputPayload(payload, output.WithMeta(meta))
+}
+
+func (rt *RuntimeContext) outputPayload(payload any, options ...output.ResultOption) error {
 	if output.UsesUnifiedResult(rt.cmd) {
-		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload))
+		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload, options...))
 	}
 	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
-		if err := validateShadowResult(rt.resultForPayload("", payload)); err != nil {
+		if err := validateShadowResult(rt.resultForPayload("", payload, options...)); err != nil {
 			return err
 		}
 	}
@@ -366,11 +379,11 @@ func (rt *RuntimeContext) storePayload(tool string, payload any) error {
 	return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
 }
 
-func (rt *RuntimeContext) resultForPayload(tool string, payload any) output.CommandResult {
+func (rt *RuntimeContext) resultForPayload(tool string, payload any, additionalOptions ...output.ResultOption) output.CommandResult {
 	if rt.shortcut.product() == "devapp" {
 		return helpers.DevAppCommandResultFromPayload(tool, payload, rt.DryRun())
 	}
-	options := []output.ResultOption{}
+	options := append([]output.ResultOption(nil), additionalOptions...)
 	if rt.DryRun() {
 		options = append(options, output.WithDryRun())
 	}

@@ -532,6 +532,18 @@ func (t ToolSpec) Validate() error {
 			return err
 		}
 	}
+	publishedInputs := make(map[string]bool, len(seen)+len(t.Positionals))
+	for name := range seen {
+		publishedInputs[name] = true
+	}
+	for _, positional := range t.Positionals {
+		if name := strings.TrimSpace(positional.Name); name != "" {
+			publishedInputs[name] = true
+		}
+	}
+	if err := validateConstraintInputClosure(id.CanonicalPath, publishedInputs, t.Constraints); err != nil {
+		return err
+	}
 	if t.Interface.Ref != nil {
 		if strings.TrimSpace(t.Interface.Ref.ProductID) == "" || strings.TrimSpace(t.Interface.Ref.RPCName) == "" {
 			return fmt.Errorf("tool %s has incomplete interface_ref", id.CanonicalPath)
@@ -573,6 +585,32 @@ func (t ToolSpec) Validate() error {
 			if value, ok := parameter.provenanceValue(field); ok {
 				if err := validateFinalFieldProvenance(id.CanonicalPath+" parameter "+parameter.Name, field, provenance, value); err != nil {
 					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// validateConstraintInputClosure fails closed when any delivered relationship
+// names an input absent from the same ToolSpec's public parameters and
+// positionals. Runtime may accept additional hidden compatibility flags, but
+// they are deliberately not part of this public typed contract and therefore
+// cannot appear here.
+func validateConstraintInputClosure(canonicalPath string, publishedInputs map[string]bool, constraints RuntimeSchemaConstraints) error {
+	for _, constraint := range []struct {
+		name   string
+		groups [][]string
+	}{
+		{name: "mutually_exclusive", groups: constraints.MutuallyExclusive},
+		{name: "require_one_of", groups: constraints.RequireOneOf},
+		{name: "require_together", groups: constraints.RequireTogether},
+	} {
+		for groupIndex, group := range constraint.groups {
+			for _, rawName := range group {
+				name := strings.TrimSpace(rawName)
+				if !publishedInputs[name] {
+					return fmt.Errorf("tool %s constraint %s[%d] references unpublished input %q", canonicalPath, constraint.name, groupIndex, name)
 				}
 			}
 		}

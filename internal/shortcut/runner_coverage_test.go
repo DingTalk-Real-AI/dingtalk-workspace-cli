@@ -291,3 +291,39 @@ func TestCrossPlatformCoverageRuntimeOutputForToolRollouts(t *testing.T) {
 		}
 	})
 }
+
+func TestCrossPlatformCoverageOutputWithMetaDualValidatesShadowAndPreservesLegacyBytes(t *testing.T) {
+	var validated *output.Envelope
+	testseam.Swap(t, &validateShadowResult, func(result output.CommandResult) error {
+		var err error
+		validated, err = output.EnvelopeFromResult(result)
+		return err
+	})
+	cmd := &cobra.Command{Use: "+paged"}
+	cmd.SetContext(context.Background())
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	output.SetCommandRollout(cmd, output.RolloutDualValidate)
+	rt := RuntimeContextForTest(cmd, Shortcut{
+		Service: "chat", Command: "+paged", Safety: contract.SafetySpec{Effect: "read"},
+	})
+	pagination, err := output.NewPagination(false, "cursor-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagination.Pages = 1
+	pagination.Items = 1
+	if err := rt.OutputWithMeta(
+		map[string]any{"id": "m1"},
+		&output.Meta{Count: output.NewCount(1), Pagination: pagination},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "{\n  \"id\": \"m1\"\n}\n"; got != want {
+		t.Fatalf("dual success bytes = %q, want legacy %q", got, want)
+	}
+	if validated == nil || validated.Meta == nil || validated.Meta.Pagination == nil ||
+		validated.Meta.Pagination.NextToken != "cursor-2" || validated.Meta.Count == nil || *validated.Meta.Count != 1 {
+		t.Fatalf("shadow pagination metadata = %#v", validated)
+	}
+}

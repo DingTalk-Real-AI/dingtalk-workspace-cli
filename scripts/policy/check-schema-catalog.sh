@@ -158,21 +158,22 @@ if ! jq -e '
 	exit 1
 fi
 
-# declare≡execute may project hidden execute-side siblings into constraint
-# groups. Require every group to touch at least one published parameter/positional;
-# unpublished members are allowed as hidden companions.
+# Runtime may retain hidden execute-side compatibility siblings, but delivered
+# Agent Schema is a closed public contract: every constraint member must name a
+# published parameter or positional. A public require_one_of singleton is
+# meaningful; mutually-exclusive and require-together groups still need two.
 if ! jq -e '
   [.tools[] | select(.constraints != null)] as $tools |
   ($tools | length) >= 21 and
   all($tools[];
     (((.parameters // {}) | keys) + ((.positionals // []) | map(.name))) as $names |
-    def ok_group:
-      length > 1 and
+    def closed_group($minimum):
+      length >= $minimum and
       all(.[]; type == "string" and length > 0) and
-      any(.[]; IN($names[]));
-    all((.constraints.mutually_exclusive // [])[]; ok_group) and
-    all((.constraints.require_one_of // [])[]; ok_group) and
-    all((.constraints.require_together // [])[]; ok_group)
+      all(.[]; IN($names[]));
+    all((.constraints.mutually_exclusive // [])[]; closed_group(2)) and
+    all((.constraints.require_one_of // [])[]; closed_group(1)) and
+    all((.constraints.require_together // [])[]; closed_group(2))
   )
 ' "$catalog" >/dev/null; then
 	printf '%s\n' 'schema command constraints are incomplete or reference unknown parameters' >&2

@@ -21,6 +21,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -371,17 +372,12 @@ func TestCrossPlatformCoverageChatMessagesPageAllFailsClosedOnStalledBoundary(t 
 	err := root.Execute()
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryAPI ||
-		typed.Reason != "chat_messages_incomplete" || !typed.Retryable ||
+		typed.Reason != "chat_messages_incomplete" || !typed.RetryableSet || typed.Retryable ||
 		typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
 		t.Fatalf("error = %#v", err)
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["complete"] != false || payload["failedCount"] != float64(1) ||
-		payload["stopReason"] != "pagination_error" {
-		t.Fatalf("stalled payload = %#v", payload)
+	if output.Len() != 0 {
+		t.Fatalf("failed unified command leaked success data: %s", output.String())
 	}
 }
 
@@ -409,24 +405,37 @@ func TestCrossPlatformCoverageChatMessagesFailedPageDoesNotExportPartialLedger(t
 	if _, statErr := os.Lstat("exports/partial.json"); !os.IsNotExist(statErr) {
 		t.Fatalf("partial export exists: %v", statErr)
 	}
-	var ledger map[string]any
-	if err := json.Unmarshal(output.Bytes(), &ledger); err != nil {
-		t.Fatal(err)
+	if output.Len() != 0 {
+		t.Fatalf("failed unified command leaked success data: %s", output.String())
 	}
-	if ledger["partial"] != true || ledger["failedCount"] != float64(1) || ledger["count"] != float64(1) {
-		t.Fatalf("failure ledger = %#v", ledger)
+	if typed.Details["failedCount"] != 1 {
+		t.Fatalf("failure details = %#v", typed.Details)
+	}
+	partialResult, ok := typed.Details["partialResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("partialResult = %#v", typed.Details["partialResult"])
+	}
+	messages, ok := partialResult["messages"].([]map[string]any)
+	if !ok || len(messages) != 1 || messages[0]["messageId"] != "m1" {
+		t.Fatalf("partial messages = %#v", partialResult["messages"])
+	}
+	if partialResult["complete"] != false || partialResult["hasMore"] != true {
+		t.Fatalf("partial completeness = %#v", partialResult)
+	}
+	if partialResult["partial"] != true {
+		t.Fatalf("canonical partial ledger = %#v", partialResult)
 	}
 }
 
 func TestCrossPlatformCoverageChatMessagesFailureLedgerOutputErrorIsNonZero(t *testing.T) {
 	caller := &chatMessagesPagingCaller{responses: []string{
-		`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1"}]}}`,
+		`{"result":{"hasMore":false,"messages":[{"openMessageId":"m1"}]}}`,
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetOut(chatMessagesFailWriter{})
 	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all"})
-	if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "fixture output failure") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -654,8 +663,8 @@ func TestCrossPlatformCoverageChatMessagesSenderFilterFailureEdges(t *testing.T)
 				{"openMessageId": "other", "senderUserId": "other-user"},
 			}, &filter,
 		)
-		if len(filtered) != 1 || payload["complete"] != false || payload["partial"] != true ||
-			payload["failedCount"] != 1 || len(payload["failures"].([]map[string]any)) != 1 {
+		if len(filtered) != 1 || payload["complete"] != false ||
+			len(payload["failures"].([]map[string]any)) != 0 || payload["warningCount"] != 1 {
 			t.Fatalf("filtered=%#v payload=%#v", filtered, payload)
 		}
 		identity := payload["identityResult"].(map[string]any)
@@ -689,7 +698,8 @@ func TestCrossPlatformCoverageChatMessagesSenderFilterFailureEdges(t *testing.T)
 			chatMessagesRuntimeForTest(t, nil), payload,
 			[]map[string]any{{"openMessageId": "other", "senderUserId": "other-user"}}, &filter,
 		)
-		if len(filtered) != 0 || payload["complete"] != false || payload["failedCount"] != 1 {
+		if len(filtered) != 0 || payload["complete"] != false ||
+			len(payload["failures"].([]map[string]any)) != 0 || payload["warningCount"] != 1 {
 			t.Fatalf("filtered=%#v payload=%#v", filtered, payload)
 		}
 		identity := payload["identityResult"].(map[string]any)
@@ -786,7 +796,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFilterFailureEdges(t *testing.T)
 }
 
 func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T) {
-	t.Run("ambiguous direct sender prioritizes output error", func(t *testing.T) {
+	t.Run("ambiguous direct sender does not publish a success result", func(t *testing.T) {
 		caller := &platformCoverageCaller{contactSearchResult: `{"result":[
 			{"userId":"fixture-user-1","name":"测试同名发送者"},
 			{"userId":"fixture-user-2","name":"测试同名发送者"}
@@ -795,7 +805,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T)
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatMessagesFailWriter{})
 		root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--sender", "测试同名发送者"})
-		if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+		if err := root.Execute(); err == nil || err.Error() == "fixture output failure" {
 			t.Fatalf("error=%v", err)
 		}
 	})
@@ -819,7 +829,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T)
 			}
 		})
 
-		t.Run(tc.name+" prioritizes output error", func(t *testing.T) {
+		t.Run(tc.name+" does not publish a success result", func(t *testing.T) {
 			caller := &chatMessagesPagingCaller{responses: []string{
 				`{"result":{"hasMore":false,"messages":[{"openMessageId":"m-without-sender"}]}}`,
 			}}
@@ -827,7 +837,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T)
 			root := newPlatformCoverageRoot()
 			root.SetOut(chatMessagesFailWriter{})
 			root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--sender", tc.sender})
-			if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+			if err := root.Execute(); err == nil || err.Error() == "fixture output failure" {
 				t.Fatalf("error=%v", err)
 			}
 		})
@@ -889,6 +899,10 @@ func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T
 		if err == nil || payload["stopReason"] != "time_filter_error" {
 			t.Fatalf("payload=%#v err=%v", payload, err)
 		}
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) || !typed.RetryableSet || typed.Retryable {
+			t.Fatalf("deterministic time-filter retry contract = %#v", err)
+		}
 	})
 
 	t.Run("terminal result limit and unsafe continuation", func(t *testing.T) {
@@ -948,12 +962,12 @@ func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T
 		}
 	})
 
-	t.Run("first failure ledger output error", func(t *testing.T) {
+	t.Run("first failure does not publish a success result", func(t *testing.T) {
 		helpers.InitDeps(&chatMessagesPagingCaller{failAt: 1})
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatMessagesFailWriter{})
 		root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all"})
-		if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+		if err := root.Execute(); err == nil || err.Error() == "fixture output failure" {
 			t.Fatalf("error=%v", err)
 		}
 	})

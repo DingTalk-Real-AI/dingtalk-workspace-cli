@@ -277,7 +277,7 @@ Definition（仅声明；不可编译）
 | **非叶声明（group declare）** | owning Cobra 命令上的完整 `corecmd.GroupPolicy`；不是 leaf `Spec` 字段 | `Mode` / `Positionals` / `Recovery` 经 `corecmd.ApplyGroupPolicy` 一次编译为 Cobra 行为与私有框架元数据 |
 | **框架转换** | 类型转换并注册（**禁止** JSON 注解桥） | `embedContractDecl` → `corecmd/contractfinal.RegisterRuntimeContractFinal`（annotate + store；全部调用方直调，`corecmd.New` 内部注册） |
 | **注解 seam** | Cobra `dws.schema.*` 写入 | `internal/corecmd/runtimeannotate.AnnotateRuntime*`（框架侧；`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/runtimeannotate` 垫片包已删，一律直引 corecmd） |
-| **Schema 透传** / 交付 | 组装读取注册表，原样投影为 `ToolSpec`；`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`（`ResolveMeta` 自同一组装投影）；go:embed 仅限 reviewed 输入（MCP meta / `param_concepts` 等；reviewed `schema_command_registry/` 已退役，identity 由 collector 收集），映射排除走 Go ledger（`schema_parameter_mapping_ledger.go`），不得 embed Catalog | `internal/cli` 根（交付边界）；ContractFinal store 在 `corecmd/contractfinal`（`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/contractfinal` 垫片包已删） |
+| **Schema 透传** / 交付 | 组装读取注册表并投影为 `ToolSpec`；声明字段原则上原样交付，关系约束先将评审 hidden alias 归一到公开主参数并去重，再按关系类型对公开 parameters/positionals 做 fail-closed 闭包（`mutually_exclusive` 可过滤不可见成员；`require_one_of` 不得投影为空；`require_together` 不得混合公开成员与非可信 hidden 成员；Runtime 仍保留完整兼容约束）；`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`（`ResolveMeta` 自同一组装投影）；go:embed 仅限 reviewed 输入（MCP meta / `param_concepts` 等；reviewed `schema_command_registry/` 已退役，identity 由 collector 收集），映射排除走 Go ledger（`schema_parameter_mapping_ledger.go`），不得 embed Catalog | `internal/cli` 根（交付边界）；ContractFinal store 在 `corecmd/contractfinal`（`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/contractfinal` 垫片包已删） |
 | **执行（execute）** | 钩子不发明表面 | `Validate` / `Call` / `RunE` / `PostMount` |
 
 依赖方向硬规则：`internal/corecmd`（含子包）**不得** import 任何 `internal/cli` 包；annotate 与 ContractFinal store 归属框架侧。
@@ -373,7 +373,7 @@ Definition（仅声明；不可编译）
 | | `property`（载荷键） | 声明 | `FlagSpec.Bind`（空则 Name） | **是**（载荷映射） |
 | | `enum`, `format`, `example`, `required_when` | 声明或评审 annotate | 今日部分仍手工 annotate；目标进 Contract / reviewed 约束（`schema_hints/` 已退役） | 有则须 declare 或 reviewed annotate |
 | | `interface_description`, `interface_type`, `interface_default` | 评审源（interface） | ParamDecl / mapping ledger exclusions（`schema_mcp_metadata` 已退役） | 否；**不得创建 CLI flag**（`HOM-I1`） |
-| **Constraints** | `require_one_of`, `mutually_exclusive`, `require_together` | **声明** | `Constraints` → `AnnotateConstraints` | **是** |
+| **Constraints** | `require_one_of`, `mutually_exclusive`, `require_together` | **声明** | `Constraints` → Runtime 完整 `AnnotateConstraints` → 评审 alias 归一化、去重与按关系类型 fail-closed 的公开输入闭包投影 | **是**（仅引用同一 ToolSpec 的公开 parameters/positionals） |
 | **Positionals** | 位置参数名/必填/说明 | **声明** 或显式 annotate | 目标 `Args`/`PositionalSpec`；今日少量 cobra Args + 注解 | 受管命令应声明，禁止推断 |
 | **Safety** | `effect`, `risk`, `confirmation`, `idempotency` | **声明**（完整 `contract.SafetySpec`）**或标注**（`runtime_gate`） | `Safety` / `AnnotateRuntimeGate`（metadata 壳 `tools: {}`，不再承载 reviewed Safety） | 四字段独立；confirmation 单独驱动运行时 |
 | | `idempotency` | 评审源（或未来 Contract） | reviewed metadata | 今日非框架声明；不得推断 |

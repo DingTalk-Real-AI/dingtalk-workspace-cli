@@ -141,6 +141,18 @@ func TestCrossPlatformCoverageToolSpecValidationRemainingEdges(t *testing.T) {
 			v.Parameters = []ParameterSpec{{Name: "id", InterfaceDefault: json.RawMessage(`{`)}}
 		}, want: "invalid JSON interface_default"},
 		{name: "example json", mutate: func(v *ToolSpec) { v.Parameters = []ParameterSpec{{Name: "id", Example: json.RawMessage(`{`)}} }, want: "invalid JSON example"},
+		{name: "mutually exclusive unpublished parameter", mutate: func(v *ToolSpec) {
+			v.Parameters = []ParameterSpec{{Name: "id"}}
+			v.Constraints.MutuallyExclusive = [][]string{{"id", "legacy-id"}}
+		}, want: `constraint mutually_exclusive[0] references unpublished input "legacy-id"`},
+		{name: "require one of unpublished parameter", mutate: func(v *ToolSpec) {
+			v.Parameters = []ParameterSpec{{Name: "id"}}
+			v.Constraints.RequireOneOf = [][]string{{"legacy-id"}}
+		}, want: `constraint require_one_of[0] references unpublished input "legacy-id"`},
+		{name: "require together unpublished parameter", mutate: func(v *ToolSpec) {
+			v.Parameters = []ParameterSpec{{Name: "id"}}
+			v.Constraints.RequireTogether = [][]string{{"id", "legacy-id"}}
+		}, want: `constraint require_together[0] references unpublished input "legacy-id"`},
 		{name: "interface ref", mutate: func(v *ToolSpec) { v.Interface.Ref = &contract.InterfaceRefSpec{} }, want: "incomplete interface_ref"},
 		{name: "dry run", mutate: func(v *ToolSpec) { v.DryRun = &contract.DryRunSpec{} }, want: "preview_kind"},
 		{name: "interface", mutate: func(v *ToolSpec) { v.Interface.Mode = "unknown" }, want: "unknown interface mode"},
@@ -159,6 +171,18 @@ func TestCrossPlatformCoverageToolSpecValidationRemainingEdges(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageToolSpecConstraintClosureAcceptsPublishedPositionals(t *testing.T) {
+	tool := contractCoverageTool("sample", "consume", "sample consume")
+	tool.Parameters = []ParameterSpec{{Name: "subscribe-id"}}
+	tool.Positionals = []contract.RuntimeSchemaPositional{{Name: "event_key", Index: 0}}
+	tool.Constraints = RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"event_key", "subscribe-id"}},
+	}
+	if err := tool.Validate(); err != nil {
+		t.Fatalf("Validate() rejected constraint over published positional: %v", err)
 	}
 }
 
@@ -265,6 +289,7 @@ func TestCrossPlatformCoverageContractModelPayloadErrorEdges(t *testing.T) {
 		t.Fatalf("tool parameter render error = %v", err)
 	}
 	withDetails := validTool
+	withDetails.Parameters = []ParameterSpec{{Name: "id"}}
 	withDetails.Constraints = RuntimeSchemaConstraints{RequireOneOf: [][]string{{"id"}}}
 	withDetails.Positionals = []contract.RuntimeSchemaPositional{{Index: 0, Name: "id"}}
 	withDetails.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan}

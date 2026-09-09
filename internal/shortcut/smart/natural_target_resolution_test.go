@@ -281,25 +281,8 @@ func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureStopsWithoutUnf
 		t.Fatalf("calls = %#v, want message read followed by failed resolve", fake.calls)
 	}
 
-	var payload map[string]any
-	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
-		t.Fatalf("decode output: %v\n%s", err, output.String())
-	}
-	if payload["count"] != float64(0) || payload["complete"] != false ||
-		payload["partial"] != false || payload["failedCount"] != float64(1) ||
-		payload["stopReason"] != "sender_resolution_failed" {
-		t.Fatalf("fail-closed payload = %#v", payload)
-	}
-	messages, ok := payload["messages"].([]any)
-	if !ok || len(messages) != 0 {
-		t.Fatalf("failed resolution leaked unfiltered messages: %#v", payload["messages"])
-	}
-	if _, exists := payload["resolvedFilters"]; exists {
-		t.Fatalf("failed resolution unexpectedly published resolvedFilters: %#v", payload)
-	}
-	failures, ok := payload["failures"].([]any)
-	if !ok || len(failures) != 1 || failures[0].(map[string]any)["stage"] != "sender_resolution" {
-		t.Fatalf("resolution failures = %#v", payload["failures"])
+	if output.Len() != 0 {
+		t.Fatalf("failed resolution leaked unfiltered success data: %s", output.String())
 	}
 }
 

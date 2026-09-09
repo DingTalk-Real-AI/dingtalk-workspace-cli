@@ -77,7 +77,9 @@ func TestCrossPlatformCoverageConversationValidationAndTypeVariants(t *testing.T
 }
 
 func TestCrossPlatformCoverageConversationAndGroupListExecution(t *testing.T) {
-	fake := &larkAlignmentCaller{}
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":false}}`,
+	}}
 	helpers.InitDeps(fake)
 	for _, args := range [][]string{
 		{"chat", "+conversation-set-top", "--conversation-id", "cid", "--yes"},
@@ -407,10 +409,10 @@ func TestCrossPlatformCoverageConversationListFailureBoundaries(t *testing.T) {
 		{name: "later read failure", caller: &larkAlignmentCaller{
 			sequenceResponses: map[string][]string{"im/list_all_conversations": {`{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}},
 			failProductToolAt: map[string]int{"im/list_all_conversations": 2},
-		}, args: []string{"--page-all"}},
-		{name: "missing pagination", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[]}}`}}},
-		{name: "invalid cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":"bad"}}`}}},
-		{name: "stalled cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--cursor", "2"}},
+		}, args: []string{"--page-all"}, wantError: true},
+		{name: "missing pagination", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[]}}`}}, wantError: true},
+		{name: "invalid cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":"bad"}}`}}, wantError: true},
+		{name: "stalled cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--cursor", "2"}, wantError: true},
 		{name: "page limit", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--page-limit", "1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

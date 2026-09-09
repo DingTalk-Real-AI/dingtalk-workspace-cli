@@ -45,6 +45,28 @@ func TestCrossPlatformCoverageChatCatalogSafetyMetadataIsExplicit(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageChatRoleAndCategoryAtomicWritesRequireConfirmation(t *testing.T) {
+	root := newChatCommand()
+	for _, path := range [][]string{
+		{"category", "create"},
+		{"group-role", "add"},
+		{"group-role", "update"},
+		{"group-role", "remove"},
+		{"group-role", "set-user"},
+		{"group-role", "remove-user"},
+	} {
+		cmd, remaining, err := root.Find(path)
+		if err != nil || len(remaining) != 0 {
+			t.Fatalf("find %v: remaining=%v err=%v", path, remaining, err)
+		}
+		final, ok := contractfinal.RuntimeContractFinal(cmd)
+		if !ok || final.Safety == nil || final.Safety.Confirmation != "user_required" ||
+			final.Safety.Effect != "write" || final.Safety.Risk != "medium" {
+			t.Fatalf("%v safety = %#v", path, final.Safety)
+		}
+	}
+}
+
 func walkChatCatalogLeaves(cmd *cobra.Command, fn func(*cobra.Command)) {
 	if cmd == nil {
 		return

@@ -14,7 +14,9 @@
 package smart
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
@@ -43,13 +46,18 @@ const (
 )
 
 var SearchMsg = shortcut.Shortcut{
-	Service:     "chat",
-	Command:     "+search-msg",
-	Aliases:     []string{"+messages-search"},
-	Product:     "im",
-	Description: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
-	Intent:      searchMsgIntent,
-	Risk:        shortcut.RiskRead,
+	// Preserve the legacy success bytes during the mandatory first rollout
+	// step. The Result and cursor metadata are still shadow-validated so a
+	// later release can activate the unified envelope without another contract
+	// redesign.
+	OutputRollout: output.RolloutDualValidate,
+	Service:       "chat",
+	Command:       "+search-msg",
+	Aliases:       []string{"+messages-search"},
+	Product:       "im",
+	Description:   "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
+	Intent:        searchMsgIntent,
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -80,6 +88,14 @@ var SearchMsg = shortcut.Shortcut{
 				"dws chat +search-msg --senders <openDingTalkId1>,<openDingTalkId2> --query \"项目更新\" --days 30 --page-all",
 				"dws chat +search-msg --group <openConversationId> --has-reactions --page-all",
 			},
+		},
+		Result: chatMessageLedgerResult("消息搜索命中、实际查询范围、完整性账本和安全续页动作"),
+		Pagination: &contract.PaginationSpec{
+			Kind:                  contract.PaginationKindCursor,
+			CursorParameter:       "cursor",
+			MetaPath:              contract.PaginationMetaPath,
+			EndpointExhaustedPath: contract.PaginationExhaustedPath,
+			NextTokenPath:         contract.PaginationNextTokenPath,
 		},
 	},
 	Flags: append([]shortcut.Flag{
@@ -174,14 +190,22 @@ var SearchMsg = shortcut.Shortcut{
 			pageLimit = rt.Int("page-limit")
 		}
 		cursor := rt.StrFirst("page-token", "cursor")
+		seenCursors := map[string]bool{}
+		if cursor != "" {
+			seenCursors[cursor] = true
+		}
 		messages := make([]map[string]any, 0)
 		seen := map[string]bool{}
 		failures := make([]map[string]any, 0)
+		warnings := make([]map[string]any, 0)
 		pagesFetched := 0
 		complete := true
 		hasMore := false
 		nextCursor := ""
 		paginationKnown := true
+		stopReason := "source_complete"
+		truncatedByPageLimit := false
+		var terminalCause error
 
 		for pagesFetched < pageLimit {
 			params["cursor"] = cursor
@@ -195,7 +219,9 @@ var SearchMsg = shortcut.Shortcut{
 					"cursor": cursor,
 					"error":  callErr.Error(),
 				})
+				terminalCause = callErr
 				complete = false
+				stopReason = "read_failure"
 				break
 			}
 			pagesFetched++
@@ -223,50 +249,76 @@ var SearchMsg = shortcut.Shortcut{
 
 			page := chatmsg.Pagination(data)
 			hasMoreValue, hasMoreKnown := page["hasMore"].(bool)
-			nextCursor = strings.TrimSpace(fmt.Sprint(page["nextCursor"]))
+			candidateCursor, cursorValid := searchMsgContinuationCursor(page["nextCursor"])
 			if !hasMoreKnown {
-				if nextCursor != "" && nextCursor != "<nil>" {
-					hasMoreValue = true
+				paginationFailure := fmt.Errorf("下层未返回 hasMore，无法证明结果完整")
+				paginationKnown = false
+				complete = false
+				if cursorValid && !seenCursors[candidateCursor] {
+					hasMore = true
+					nextCursor = candidateCursor
 				} else {
-					failures = append(failures, map[string]any{
-						"stage": "search-pagination",
-						"error": "下层未返回 hasMore 或 nextCursor，无法证明结果完整",
-					})
-					paginationKnown = false
-					complete = false
-					break
+					hasMore = false
+					nextCursor = ""
 				}
+				failures = append(failures, map[string]any{
+					"stage": "search-pagination",
+					"error": paginationFailure.Error(),
+				})
+				terminalCause = paginationFailure
+				stopReason = "pagination_error"
+				break
 			}
 			hasMore = hasMoreValue
-			if !scanAllPages || !hasMore {
-				complete = !hasMore
+			if !hasMore {
+				complete = true
+				nextCursor = ""
+				stopReason = "source_complete"
 				break
 			}
-			if nextCursor == "" || nextCursor == "<nil>" || nextCursor == cursor {
+			if !cursorValid || seenCursors[candidateCursor] {
+				paginationFailure := fmt.Errorf("下层返回 hasMore=true，但缺少可继续且会前进的 nextCursor")
 				failures = append(failures, map[string]any{
-					"stage": "search-page",
-					"error": "下层返回 hasMore=true，但缺少可继续且会前进的 nextCursor",
+					"stage": "search-pagination",
+					"error": paginationFailure.Error(),
 				})
+				terminalCause = paginationFailure
 				complete = false
+				stopReason = "pagination_error"
+				nextCursor = ""
 				break
 			}
+			nextCursor = candidateCursor
+			if !scanAllPages {
+				complete = false
+				stopReason = "single_page"
+				break
+			}
+			seenCursors[nextCursor] = true
 			cursor = nextCursor
 		}
 		if scanAllPages && hasMore && pagesFetched == pageLimit {
-			failures = append(failures, map[string]any{
-				"stage": "search-page-limit",
-				"error": fmt.Sprintf("达到 --page-limit=%d，仍有更多结果", pageLimit),
-			})
 			complete = false
+			if len(failures) == 0 {
+				stopReason = "page_limit"
+				truncatedByPageLimit = true
+			}
 		}
 
 		enrichedCount := 0
 		if !rt.Bool("no-enrich") && len(messages) > 0 {
 			var enrichFailures []map[string]any
-			messages, enrichedCount, enrichFailures = enrichSearchMessages(rt, messages)
+			var enrichCause error
+			messages, enrichedCount, enrichFailures, enrichCause = enrichSearchMessages(rt, messages)
 			failures = append(failures, enrichFailures...)
+			if terminalCause == nil {
+				terminalCause = enrichCause
+			}
 			if len(enrichFailures) > 0 {
 				complete = false
+				if stopReason == "source_complete" || stopReason == "single_page" || stopReason == "page_limit" {
+					stopReason = "enrichment_failure"
+				}
 			}
 		}
 		if scopedSearch {
@@ -288,12 +340,15 @@ var SearchMsg = shortcut.Shortcut{
 		}
 		unverifiedSenderInputs := searchUnverifiedSenderInputs(resolvedFilters.Senders)
 		if len(unverifiedSenderInputs) > 0 {
-			failures = append(failures, map[string]any{
-				"stage":  "sender_identity_verification",
-				"inputs": unverifiedSenderInputs,
-				"error":  "通讯录未能确认这些混合发送者参数是姓名还是 userId；已按精确 userId 执行，但不能据此作完整否定结论",
+			warnings = append(warnings, map[string]any{
+				"kind":    "sender_identity_unverified",
+				"inputs":  unverifiedSenderInputs,
+				"message": "通讯录未能确认这些混合发送者参数是姓名还是 userId；已按精确 userId 执行，但不能据此作完整否定结论",
 			})
 			complete = false
+			if stopReason == "source_complete" {
+				stopReason = "identity_unverified"
+			}
 		}
 		reactionSourceCount := len(messages)
 		if rt.Bool("has-reactions") {
@@ -336,24 +391,31 @@ var SearchMsg = shortcut.Shortcut{
 			results = append(results, row)
 		}
 		payload := map[string]any{
-			"contractVersion": chatmsg.MessageListContractVersion,
-			"count":           len(results),
-			"messages":        results,
-			"pagesFetched":    pagesFetched,
-			"enrichedCount":   enrichedCount,
-			"complete":        complete,
-			"hasMore":         hasMore,
-			"nextCursor":      "",
-			"paginationKnown": paginationKnown,
-			"failedCount":     len(failures),
-			"failures":        failures,
-			"queryRange":      searchMessageQueryRange(params, order),
-			"timeCoverage":    searchMessageTimeCoverage(rt),
-			"conclusionGuard": searchMessageConclusionGuard(rt, complete, len(results)),
+			"contractVersion":        chatmsg.MessageListContractVersion,
+			"count":                  len(results),
+			"messages":               results,
+			"pagesFetched":           pagesFetched,
+			"enrichedCount":          enrichedCount,
+			"complete":               complete,
+			"hasMore":                hasMore,
+			"nextCursor":             "",
+			"paginationKnown":        paginationKnown,
+			"stopReason":             stopReason,
+			"truncatedByPageLimit":   truncatedByPageLimit,
+			"truncatedByResultLimit": false,
+			"failedCount":            len(failures),
+			"failures":               failures,
+			"warningCount":           len(warnings),
+			"warnings":               warnings,
+			"partial":                len(failures) > 0 && len(results) > 0,
+			"queryRange":             searchMessageQueryRange(params, order),
+			"timeCoverage":           searchMessageTimeCoverage(rt),
+			"conclusionGuard":        searchMessageConclusionGuard(rt, complete, len(results)),
 		}
 		if detailLedger != nil {
 			payload["enrichment"] = detailLedger
 		}
+		chatmsg.ApplyTruncation(payload)
 		if len(resolvedFilters.Chats) > 0 || len(resolvedFilters.Senders) > 0 {
 			payload["resolvedFilters"] = resolvedFilters
 		}
@@ -383,19 +445,47 @@ var SearchMsg = shortcut.Shortcut{
 		if hasMore && nextCursor != "" && nextCursor != "<nil>" {
 			payload["nextCursor"] = nextCursor
 		}
+		attachChatMessageContinuation(payload, "chat +search-msg")
+		attachSearchMsgEnrichmentRetries(payload, failures)
+		failureCountBeforeDownloads := len(failures)
 		if rt.Bool("download-resources") {
+			resourceLedger, resourceCause := chatshortcut.DownloadMessageResourcesWithCause(rt, messages, "")
 			chatshortcut.AttachMessageResourceDownloads(
 				payload,
-				chatshortcut.DownloadMessageResources(rt, messages, ""),
+				resourceLedger,
+			)
+			if terminalCause == nil {
+				terminalCause = resourceCause
+			}
+		}
+		failures, _ = payload["failures"].([]map[string]any)
+		if len(failures) > failureCountBeforeDownloads && failureCountBeforeDownloads == 0 {
+			stopReason = "resource_download_failure"
+			payload["stopReason"] = stopReason
+		}
+		payload["failedCount"] = len(failures)
+		payload["partial"] = len(failures) > 0 && len(results) > 0
+		if len(failures) > 0 {
+			return searchMsgIncompleteError(payload, failures, terminalCause)
+		}
+		pagination, paginationErr := output.NewPagination(paginationKnown && !hasMore, nextCursor)
+		if paginationErr != nil {
+			return apperrors.NewInternal(
+				"消息搜索生成了不可发布的分页元数据",
+				apperrors.WithOperation("im/search_messages"),
+				apperrors.WithReason("invalid_result_pagination"),
+				apperrors.WithOrigin("shortcut"),
+				apperrors.WithFailureStage("result_projection"),
+				apperrors.WithExecutionStarted(pagesFetched > 0),
+				apperrors.WithRetryable(false),
+				apperrors.WithCause(paginationErr),
 			)
 		}
-		if err := rt.Output(payload); err != nil {
-			return err
-		}
-		if len(failures) > 0 {
-			return apperrors.NewAPI("搜索结果不完整，请检查failures", apperrors.WithReason("incomplete_result"))
-		}
-		return nil
+		pagination.Pages = pagesFetched
+		pagination.Items = len(results)
+		return rt.OutputWithMeta(payload, &output.Meta{
+			Count: output.NewCount(len(results)), Pagination: pagination,
+		})
 	},
 }
 
@@ -455,6 +545,7 @@ func executeScopedConversationReactionSearch(
 	sourceComplete := true
 	hasMore := false
 	paginationKnown := true
+	var terminalCause error
 
 	for _, conversationID := range conversationIDs {
 		request := chatMessagesRequest{
@@ -475,6 +566,9 @@ func executeScopedConversationReactionSearch(
 		pagesFetched += pageCount
 		if readErr != nil && pageCount == 0 {
 			return readErr
+		}
+		if readErr != nil && terminalCause == nil {
+			terminalCause = readErr
 		}
 		if pagePayload["complete"] != true {
 			sourceComplete = false
@@ -509,8 +603,11 @@ func executeScopedConversationReactionSearch(
 		}
 	}
 
-	enrichedMessages, enrichedCount, enrichFailures := enrichSearchMessages(rt, allMessages)
+	enrichedMessages, enrichedCount, enrichFailures, enrichCause := enrichSearchMessages(rt, allMessages)
 	failures = append(failures, enrichFailures...)
+	if terminalCause == nil {
+		terminalCause = enrichCause
+	}
 	for _, message := range enrichedMessages {
 		messageConversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
 		if messageConversationID != "" && messageConversationID != "<nil>" {
@@ -537,24 +634,38 @@ func executeScopedConversationReactionSearch(
 		results = append(results, searchMsgProjectWithReactions(message, !rt.Bool("no-reactions")))
 	}
 	finalComplete := sourceComplete && len(failures) == 0
+	stopReason := "source_complete"
+	if len(failures) > 0 {
+		stopReason = "read_failure"
+	} else if hasMore {
+		stopReason = "page_limit"
+	}
 	scope := searchScopePayload(conversationIDs, sourceComplete)
 	scope["filterMode"] = "source"
 	payload := map[string]any{
-		"contractVersion": chatmsg.MessageListContractVersion,
-		"searchStrategy":  "conversation_stream",
-		"count":           len(results),
-		"messages":        results,
-		"pagesFetched":    pagesFetched,
-		"enrichedCount":   enrichedCount,
-		"complete":        finalComplete,
-		"hasMore":         hasMore,
-		"nextCursor":      "",
-		"paginationKnown": paginationKnown,
-		"failedCount":     len(failures),
-		"failures":        failures,
-		"queryRange":      searchMessageQueryRange(params, order),
-		"timeCoverage":    searchMessageTimeCoverage(rt),
-		"scope":           scope,
+		"contractVersion":        chatmsg.MessageListContractVersion,
+		"searchStrategy":         "conversation_stream",
+		"count":                  len(results),
+		"messages":               results,
+		"pagesFetched":           pagesFetched,
+		"enrichedCount":          enrichedCount,
+		"complete":               finalComplete,
+		"hasMore":                hasMore,
+		"nextCursor":             "",
+		"paginationKnown":        paginationKnown,
+		"stopReason":             stopReason,
+		"truncated":              hasMore && len(failures) == 0,
+		"truncatedByPageLimit":   hasMore && len(failures) == 0,
+		"truncatedByResultLimit": false,
+		"failedCount":            len(failures),
+		"failures":               failures,
+		"warningCount":           0,
+		"warnings":               []map[string]any{},
+		"partial":                len(failures) > 0 && len(results) > 0,
+		"nextActions":            []map[string]any{},
+		"queryRange":             searchMessageQueryRange(params, order),
+		"timeCoverage":           searchMessageTimeCoverage(rt),
+		"scope":                  scope,
 		"reactionFilter": map[string]any{
 			"predicate":    "present",
 			"sourceCount":  reactionSourceCount,
@@ -570,10 +681,17 @@ func executeScopedConversationReactionSearch(
 		payload["continuations"] = continuations
 	}
 	if rt.Bool("download-resources") {
-		chatshortcut.AttachMessageResourceDownloads(
-			payload,
-			chatshortcut.DownloadMessageResources(rt, validatedMessages, ""),
-		)
+		resourceLedger, resourceCause := chatshortcut.DownloadMessageResourcesWithCause(rt, validatedMessages, "")
+		chatshortcut.AttachMessageResourceDownloads(payload, resourceLedger)
+		if terminalCause == nil {
+			terminalCause = resourceCause
+		}
+		failures, _ = payload["failures"].([]map[string]any)
+		payload["failedCount"] = len(failures)
+		payload["partial"] = len(failures) > 0 && len(results) > 0
+	}
+	if len(failures) > 0 {
+		return searchMsgIncompleteError(payload, failures, terminalCause)
 	}
 	return rt.Output(payload)
 }
@@ -597,6 +715,9 @@ func appendScopedConversationFailures(
 	if payload["complete"] == true || len(failures) > failureCountBefore {
 		return failures
 	}
+	if stopReason, _ := payload["stopReason"].(string); stopReason == "page_limit" || stopReason == "result_limit" {
+		return failures
+	}
 	failure := map[string]any{
 		"stage":          "conversation-stream",
 		"conversationId": conversationID,
@@ -604,6 +725,123 @@ func appendScopedConversationFailures(
 		"error":          "会话消息流未在安全预算内完成",
 	}
 	return append(failures, failure)
+}
+
+// searchMsgContinuationCursor validates the downstream continuation value
+// without stringifying arbitrary JSON into an executable cursor.
+func searchMsgContinuationCursor(value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		value := strings.TrimSpace(typed)
+		return value, value != "" && value != "0"
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil || parsed <= 0 {
+			return "", false
+		}
+		return strconv.FormatInt(parsed, 10), true
+	case int:
+		if typed <= 0 {
+			return "", false
+		}
+		return strconv.Itoa(typed), true
+	case int64:
+		if typed <= 0 {
+			return "", false
+		}
+		return strconv.FormatInt(typed, 10), true
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed <= 0 || math.Trunc(typed) != typed || typed >= float64(math.MaxInt64) {
+			return "", false
+		}
+		return strconv.FormatInt(int64(typed), 10), true
+	default:
+		return "", false
+	}
+}
+
+func attachSearchMsgEnrichmentRetries(payload map[string]any, failures []map[string]any) {
+	actions, _ := payload["nextActions"].([]map[string]any)
+	for _, failure := range failures {
+		if failure["stage"] != "message-enrichment" {
+			continue
+		}
+		ids, _ := failure["messageIds"].([]string)
+		if len(ids) == 0 {
+			ids, _ = failure["missingMessageIds"].([]string)
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		actions = append(actions, map[string]any{
+			"cliPath":   "chat +messages-mget",
+			"arguments": map[string]any{"msg-ids": append([]string(nil), ids...)},
+			"ready":     true,
+			"when":      "只重试未完成的消息详情富化，不重复搜索已取得的命中",
+		})
+	}
+	payload["nextActions"] = actions
+}
+
+func searchMsgIncompleteError(payload map[string]any, failures []map[string]any, cause error) error {
+	hasReadFailure := false
+	hasPaginationFailure := false
+	hasEnrichmentFailure := false
+	hasResourceFailure := false
+	for _, failure := range failures {
+		switch failure["stage"] {
+		case "search-page":
+			hasReadFailure = true
+		case "search-pagination":
+			hasPaginationFailure = true
+		case "message-enrichment":
+			hasEnrichmentFailure = true
+		case "resource-download":
+			hasResourceFailure = true
+		}
+	}
+	failureStage := "read"
+	operation := "im/search_messages"
+	origin := "mcp_gateway"
+	retryable := strings.TrimSpace(fmt.Sprint(payload["nextCursor"])) != ""
+	switch {
+	case hasPaginationFailure:
+		failureStage = "pagination"
+		origin = "shortcut"
+		nextCursor, _ := payload["nextCursor"].(string)
+		retryable = strings.TrimSpace(nextCursor) != ""
+	case hasReadFailure:
+		failureStage = "read"
+	case hasEnrichmentFailure:
+		failureStage = "enrichment"
+		operation = "im/list_messages_by_ids"
+		retryable = true
+	case hasResourceFailure:
+		failureStage = "resource_download"
+		operation = "chat/message_resource_download"
+		origin = "shortcut"
+		retryable = true
+	}
+	pagesFetched, _ := payload["pagesFetched"].(int)
+	count, _ := payload["count"].(int)
+	return helpers.NewIncompleteResultError(
+		fmt.Sprintf("消息搜索未完成：保留 %d 条命中和 %d 个失败项", count, len(failures)),
+		cause,
+		retryable,
+		apperrors.WithOperation(operation),
+		apperrors.WithReason("search_messages_incomplete"),
+		apperrors.WithOrigin(origin),
+		apperrors.WithFailureStage(failureStage),
+		apperrors.WithExecutionStarted(pagesFetched > 0),
+		apperrors.WithHint("请保留 details.partialResult 中已取得的消息，并按 failures 与 nextActions 只重试失败阶段"),
+		apperrors.WithDetails(map[string]any{
+			"count":         count,
+			"pagesFetched":  pagesFetched,
+			"failedCount":   len(failures),
+			"stopReason":    payload["stopReason"],
+			"partialResult": payload,
+		}),
+	)
 }
 
 func searchMessageTimeCoverage(rt *shortcut.RuntimeContext) map[string]any {
@@ -1027,9 +1265,10 @@ func searchSenderScopeUnverifiedError(
 	)
 }
 
-func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any) ([]map[string]any, int, []map[string]any) {
+func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any) ([]map[string]any, int, []map[string]any, error) {
 	detailsByID := map[string]map[string]any{}
 	failures := make([]map[string]any, 0)
+	var firstCause error
 	ids := make([]string, 0, len(messages))
 	for _, message := range messages {
 		if id := strings.TrimSpace(fmt.Sprint(searchMsgMessageID(message))); id != "" && id != "<nil>" {
@@ -1045,6 +1284,9 @@ func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any
 		chunk := ids[start:end]
 		data, err := rt.CallMCPData("im", "list_messages_by_ids", map[string]any{"openMsgIds": chunk})
 		if err != nil {
+			if firstCause == nil {
+				firstCause = err
+			}
 			failures = append(failures, map[string]any{
 				"stage":      "message-enrichment",
 				"messageIds": chunk,
@@ -1066,6 +1308,9 @@ func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any
 			}
 		}
 		if len(missing) > 0 {
+			if firstCause == nil {
+				firstCause = fmt.Errorf("mget 未返回全部请求消息")
+			}
 			failures = append(failures, map[string]any{
 				"stage":             "message-enrichment",
 				"missingMessageIds": missing,
@@ -1093,7 +1338,7 @@ func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any
 		out = append(out, merged)
 		enriched++
 	}
-	return out, enriched, failures
+	return out, enriched, failures, firstCause
 }
 
 // searchMsgItems locates the message list inside a search_messages_by_keyword

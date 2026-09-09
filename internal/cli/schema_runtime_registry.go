@@ -11,8 +11,10 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 type runtimeSchemaMetadataSources struct {
@@ -216,6 +218,20 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	if err != nil {
 		return ToolSpec{}, fmt.Errorf("resolve Contract Schema parameters for %s: %w", canonicalPath, err)
 	}
+	positionals := final.Positionals
+	if len(positionals) == 0 {
+		positionals = runtimeCommandPositionals(entry.Command)
+	}
+	// Runtime constraints intentionally include hidden compatibility flags so
+	// Cobra can continue accepting legacy argv. The Agent contract publishes
+	// only visible ParameterSpecs and declared positionals, so project each
+	// relationship onto that same public input set before constructing ToolSpec.
+	// This keeps Schema closed without weakening or rewriting the executable
+	// Runtime constraints.
+	publicConstraints, err := projectRuntimeSchemaConstraints(entry.Command, parameters, positionals, constraints)
+	if err != nil {
+		return ToolSpec{}, fmt.Errorf("project Runtime Schema constraints for %s: %w", canonicalPath, err)
+	}
 
 	identity := contract.ToolIdentitySpec{
 		ProductID:       entry.ProductID,
@@ -295,11 +311,6 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		safety = applyContractGateToSafety(safety, gate)
 	}
 
-	positionals := final.Positionals
-	if len(positionals) == 0 {
-		positionals = runtimeCommandPositionals(entry.Command)
-	}
-
 	var interfaceSpec contract.InterfaceSpec
 	if final.Interface != nil {
 		interfaceSpec = *final.Interface
@@ -351,7 +362,7 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		Description:     description,
 		MetadataSource:  "corecmd.contract",
 		Parameters:      parameters,
-		Constraints:     constraints,
+		Constraints:     publicConstraints,
 		Positionals:     positionals,
 		DryRun:          final.DryRun,
 		Result:          result,
@@ -361,6 +372,149 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		Selection:       selection,
 		FieldProvenance: provenance,
 	})
+}
+
+// projectRuntimeSchemaConstraints narrows executable constraints to the
+// parameters and positionals published in Schema. Projection happens only
+// after parameter resolution so hidden compatibility flags can still
+// contribute to required inference, while the final Agent contract never
+// references an undisclosed name. A reviewed hidden alias is first rewritten
+// to its public primary and deduplicated. Other hidden inputs are handled by
+// relationship semantics: mutually_exclusive may safely omit them;
+// require_one_of must retain at least one public alternative; and
+// require_together rejects a mix of public and unreviewed hidden members. A
+// missing input or visible flag omitted from Schema is declaration drift and
+// always fails closed.
+func projectRuntimeSchemaConstraints(cmd *cobra.Command, parameters []ParameterSpec, positionals []contract.RuntimeSchemaPositional, constraints RuntimeSchemaConstraints) (RuntimeSchemaConstraints, error) {
+	published := make(map[string]bool, len(parameters)+len(positionals))
+	for _, parameter := range parameters {
+		if name := strings.TrimSpace(parameter.Name); name != "" {
+			published[name] = true
+		}
+	}
+	for _, positional := range positionals {
+		if name := strings.TrimSpace(positional.Name); name != "" {
+			published[name] = true
+		}
+	}
+	reviewedAliasTarget := func(flag *pflag.Flag) (string, bool, error) {
+		if flag == nil || !flag.Hidden {
+			return "", false, nil
+		}
+		aliasOf, hasAliasOf := flag.Annotations[runtimeannotate.AnnotationFlagAliasOf]
+		origin, hasOrigin := flag.Annotations[runtimeannotate.AnnotationFlagAliasOrigin]
+		if !hasAliasOf && !hasOrigin {
+			return "", false, nil
+		}
+		// A compatibility spelling that does not carry the framework-owned
+		// origin remains executable-only. It is not sufficient evidence for a
+		// public rewrite, even when another package happens to set alias_of.
+		if !hasOrigin || len(origin) != 1 || origin[0] != runtimeannotate.FlagAliasOriginCorecmdV1 {
+			return "", false, nil
+		}
+		if !hasAliasOf || len(aliasOf) != 1 || aliasOf[0] == "" || aliasOf[0] != strings.TrimSpace(aliasOf[0]) {
+			return "", false, fmt.Errorf("hidden input %q has malformed reviewed alias target", flag.Name)
+		}
+		targetName := aliasOf[0]
+		if targetName == flag.Name {
+			return "", false, fmt.Errorf("hidden input %q cannot alias itself", flag.Name)
+		}
+		target := runtimeCommandFlag(cmd, targetName)
+		if target == nil {
+			return "", false, fmt.Errorf("hidden alias %q targets unknown executable input %q", flag.Name, targetName)
+		}
+		if target.Hidden {
+			return "", false, fmt.Errorf("hidden alias %q targets hidden input %q", flag.Name, targetName)
+		}
+		if values := target.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(values) > 0 {
+			return "", false, fmt.Errorf("hidden alias %q targets alias input %q", flag.Name, targetName)
+		}
+		if flag.Value == nil || target.Value == nil || flag.Value.Type() != target.Value.Type() {
+			return "", false, fmt.Errorf("hidden alias %q and public input %q have incompatible types", flag.Name, targetName)
+		}
+		return targetName, true, nil
+	}
+	projectGroups := func(kind string, groups [][]string) ([][]string, error) {
+		projected := make([][]string, 0, len(groups))
+		for groupIndex, group := range groups {
+			publicNames := make([]string, 0, len(group))
+			unreviewedHiddenNames := make([]string, 0, len(group))
+			seenPublic := make(map[string]bool, len(group))
+			seenUnreviewedHidden := make(map[string]bool, len(group))
+			for _, rawName := range group {
+				name := strings.TrimSpace(rawName)
+				if name == "" {
+					continue
+				}
+				if !published[name] {
+					flag := runtimeCommandFlag(cmd, name)
+					if flag == nil {
+						return nil, fmt.Errorf("constraint %s[%d] references unknown executable input %q", kind, groupIndex, name)
+					}
+					if !flag.Hidden {
+						return nil, fmt.Errorf("constraint %s[%d] references visible executable input %q absent from public Schema", kind, groupIndex, name)
+					}
+					// A reviewed alias_of annotation proves that the hidden
+					// spelling has the same value semantics as its public
+					// canonical flag. Rewrite that relationship before filtering
+					// so require_together and other cross-parameter rules do not
+					// lose a distinct public member. Undeclared legacy spellings
+					// remain executable-only and are omitted from Agent Schema.
+					targetName, reviewed, aliasErr := reviewedAliasTarget(flag)
+					if aliasErr != nil {
+						return nil, fmt.Errorf("constraint %s[%d] %w", kind, groupIndex, aliasErr)
+					}
+					if !reviewed {
+						if !seenUnreviewedHidden[name] {
+							seenUnreviewedHidden[name] = true
+							unreviewedHiddenNames = append(unreviewedHiddenNames, name)
+						}
+						continue
+					}
+					name = targetName
+					if !published[name] {
+						return nil, fmt.Errorf("constraint %s[%d] hidden alias %q targets unpublished input %q", kind, groupIndex, flag.Name, name)
+					}
+				}
+				// Canonicalize reviewed aliases before cardinality decisions.
+				// This ensures {primary, legacy-primary} represents one public
+				// input instead of manufacturing a two-member relationship.
+				if !seenPublic[name] {
+					seenPublic[name] = true
+					publicNames = append(publicNames, name)
+				}
+			}
+			switch kind {
+			case "require_one_of":
+				if len(publicNames) == 0 && len(unreviewedHiddenNames) > 0 {
+					return nil, fmt.Errorf("constraint %s[%d] has no published alternative after filtering unreviewed hidden inputs %q", kind, groupIndex, unreviewedHiddenNames)
+				}
+			case "require_together":
+				if len(publicNames) > 0 && len(unreviewedHiddenNames) > 0 {
+					return nil, fmt.Errorf("constraint %s[%d] mixes published inputs %q with unreviewed hidden inputs %q", kind, groupIndex, publicNames, unreviewedHiddenNames)
+				}
+			}
+			projected = append(projected, publicNames)
+		}
+		return projected, nil
+	}
+	mutuallyExclusive, err := projectGroups("mutually_exclusive", constraints.MutuallyExclusive)
+	if err != nil {
+		return RuntimeSchemaConstraints{}, err
+	}
+	requireOneOf, err := projectGroups("require_one_of", constraints.RequireOneOf)
+	if err != nil {
+		return RuntimeSchemaConstraints{}, err
+	}
+	requireTogether, err := projectGroups("require_together", constraints.RequireTogether)
+	if err != nil {
+		return RuntimeSchemaConstraints{}, err
+	}
+	return normalizeRuntimeSchemaConstraints(RuntimeSchemaConstraints{
+		MutuallyExclusive: mutuallyExclusive,
+		RequireOneOf:      requireOneOf,
+		RequireTogether:   requireTogether,
+	}), nil
 }
 
 // contractFinalTextProvenance picks delivered title/description text and the

@@ -24,7 +24,9 @@ import (
 type searchMsgExecutionCaller struct {
 	calls                 []platformCoverageCall
 	failSecondPage        bool
+	secondPageError       error
 	failEnrichment        bool
+	enrichmentError       error
 	omitPagination        bool
 	omitMgetItem          bool
 	failPreflight         bool
@@ -109,6 +111,9 @@ func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool str
 		}
 		if args["cursor"] == "c2" {
 			if f.failSecondPage {
+				if f.secondPageError != nil {
+					return nil, f.secondPageError
+				}
 				return nil, errors.New("second page unavailable")
 			}
 			return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m2","openConversationId":"cid-2","senderOpenDingTalkId":"` + testCurrentDOpenID + `","content":"sparse-2"}],"hasMore":false}}`), nil
@@ -119,6 +124,9 @@ func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool str
 		return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","senderOpenDingTalkId":"` + testCurrentDOpenID + `","content":"sparse-1"}],"hasMore":true,"nextCursor":"c2"}}`), nil
 	case "list_messages_by_ids":
 		if f.failEnrichment {
+			if f.enrichmentError != nil {
+				return nil, f.enrichmentError
+			}
 			return nil, errors.New("mget unavailable")
 		}
 		if f.wrongMgetScope {
@@ -186,6 +194,23 @@ func executeSearchMsgResult(caller *searchMsgExecutionCaller, args ...string) (m
 		return nil, err
 	}
 	return payload, runErr
+}
+
+func executeSearchMsgIncomplete(t *testing.T, caller *searchMsgExecutionCaller, args ...string) (*apperrors.Error, map[string]any) {
+	t.Helper()
+	payload, err := executeSearchMsgResult(caller, args...)
+	if payload != nil {
+		t.Fatalf("incomplete command leaked success payload: %#v", payload)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "search_messages_incomplete" {
+		t.Fatalf("incomplete error = %#v", err)
+	}
+	partial, ok := typed.Details["partialResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("partialResult = %#v", typed.Details["partialResult"])
+	}
+	return typed, partial
 }
 
 func TestSearchMsgMixedSenderClassifiesFormatWithoutIDPreflight(t *testing.T) {
@@ -412,7 +437,7 @@ func TestCrossPlatformCoverageScopedReactionSearchCompletenessBranches(t *testin
 
 	t.Run("first page failure", func(t *testing.T) {
 		caller := &searchMsgExecutionCaller{failConversationCall: 1}
-		if _, err := executeSearchMsgResult(caller, baseArgs...); err == nil || !strings.Contains(err.Error(), "0 页成功") {
+		if _, err := executeSearchMsgResult(caller, baseArgs...); err == nil || !strings.Contains(err.Error(), "fixture conversation stream failure") {
 			t.Fatalf("err=%v, want first-page failure", err)
 		}
 	})
@@ -431,7 +456,7 @@ func TestCrossPlatformCoverageScopedReactionSearchCompletenessBranches(t *testin
 		}
 		continuations := payload["continuations"].([]any)
 		failures := payload["failures"].([]any)
-		if len(continuations) != 1 || len(failures) != 1 || failures[0].(map[string]any)["stage"] != "conversation-stream" {
+		if len(continuations) != 1 || len(failures) != 0 {
 			t.Fatalf("continuations=%#v failures=%#v", continuations, failures)
 		}
 	})
@@ -444,11 +469,11 @@ func TestCrossPlatformCoverageScopedReactionSearchCompletenessBranches(t *testin
 			)},
 			mgetResponse: reactionDetail,
 		}
-		payload := executeSearchMsg(t, caller, baseArgs...)
-		if payload["complete"] != false || payload["paginationKnown"] != false || payload["failedCount"] != float64(1) {
+		_, payload := executeSearchMsgIncomplete(t, caller, baseArgs...)
+		if payload["complete"] != false || payload["paginationKnown"] != false || payload["failedCount"] != 1 {
 			t.Fatalf("payload=%#v", payload)
 		}
-		failure := payload["failures"].([]any)[0].(map[string]any)
+		failure := payload["failures"].([]map[string]any)[0]
 		if failure["stage"] != "pagination" || failure["conversationId"] != "cid-target" {
 			t.Fatalf("failure=%#v", failure)
 		}
@@ -463,11 +488,11 @@ func TestCrossPlatformCoverageScopedReactionSearchCompletenessBranches(t *testin
 			failConversationCall: 2,
 			mgetResponse:         reactionDetail,
 		}
-		payload := executeSearchMsg(t, caller, baseArgs...)
-		if payload["complete"] != false || payload["failedCount"] != float64(1) {
+		_, payload := executeSearchMsgIncomplete(t, caller, baseArgs...)
+		if payload["complete"] != false || payload["failedCount"] != 1 {
 			t.Fatalf("payload=%#v", payload)
 		}
-		failure := payload["failures"].([]any)[0].(map[string]any)
+		failure := payload["failures"].([]map[string]any)[0]
 		if failure["stage"] != "read" || failure["conversationId"] != "cid-target" {
 			t.Fatalf("failure=%#v", failure)
 		}
@@ -614,7 +639,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 				{"openMessageId":"other","senderUserId":"other-user","content":"drop"}
 			],"hasMore":false}}`,
 		}
-		payload := executePartialSearchMsg(t, caller, "--sender", "fixture-user-id", "--no-enrich")
+		payload := executeSearchMsg(t, caller, "--sender", "fixture-user-id", "--no-enrich")
 		if len(caller.calls) != 2 || caller.calls[0].tool != "search_contact_by_key_word" ||
 			caller.calls[1].tool != "search_messages" {
 			t.Fatalf("calls=%#v", caller.calls)
@@ -626,7 +651,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 			t.Fatalf("unrelated candidate leaked into request: %#v", caller.calls[1].args)
 		}
 		if payload["complete"] != false || payload["count"] != float64(1) ||
-			payload["failedCount"] != float64(1) {
+			payload["failedCount"] != float64(0) || payload["warningCount"] != float64(1) {
 			t.Fatalf("payload=%#v", payload)
 		}
 		scope := payload["senderScope"].(map[string]any)
@@ -643,7 +668,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 				{"openMessageId":"other","senderUserId":"other-user","content":"drop"}
 			],"hasMore":false}}`,
 		}
-		payload := executePartialSearchMsg(t, caller, "--sender", "stable-user-id", "--no-enrich")
+		payload := executeSearchMsg(t, caller, "--sender", "stable-user-id", "--no-enrich")
 		if len(caller.calls) != 2 || caller.calls[0].tool != "search_contact_by_key_word" ||
 			caller.calls[1].tool != "search_messages" {
 			t.Fatalf("calls=%#v", caller.calls)
@@ -651,7 +676,8 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 		if got := caller.calls[1].args["senderUserIds"]; !reflect.DeepEqual(got, []string{"stable-user-id"}) {
 			t.Fatalf("senderUserIds=%#v", got)
 		}
-		if payload["count"] != float64(1) || payload["complete"] != false || payload["failedCount"] != float64(1) {
+		if payload["count"] != float64(1) || payload["complete"] != false ||
+			payload["failedCount"] != float64(0) || payload["warningCount"] != float64(1) {
 			t.Fatalf("payload=%#v", payload)
 		}
 		scope := payload["senderScope"].(map[string]any)
@@ -665,8 +691,9 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 			failContactKeyword: "possibly-a-name",
 			searchResponse:     `{"result":{"messages":[],"hasMore":false}}`,
 		}
-		payload := executePartialSearchMsg(t, caller, "--sender", "possibly-a-name", "--no-enrich")
-		if payload["count"] != float64(0) || payload["complete"] != false || payload["failedCount"] != float64(1) {
+		payload := executeSearchMsg(t, caller, "--sender", "possibly-a-name", "--no-enrich")
+		if payload["count"] != float64(0) || payload["complete"] != false ||
+			payload["failedCount"] != float64(0) || payload["warningCount"] != float64(1) {
 			t.Fatalf("payload=%#v", payload)
 		}
 		scope := payload["senderScope"].(map[string]any)
@@ -832,40 +859,63 @@ func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *te
 
 func TestCrossPlatformCoverageSearchMsgLaterPageFailurePublishesPartialLedger(t *testing.T) {
 	caller := &searchMsgExecutionCaller{failSecondPage: true}
-	payload := executePartialSearchMsg(t, caller,
+	_, payload := executeSearchMsgIncomplete(t, caller,
 		"--query", "周报",
 		"--page-all",
 		"--no-enrich",
 	)
-	if payload["complete"] != false || payload["count"] != float64(1) ||
-		payload["failedCount"] != float64(1) {
+	if payload["complete"] != false || payload["count"] != 1 ||
+		payload["failedCount"] != 1 {
 		t.Fatalf("payload = %#v", payload)
 	}
-	failures, _ := payload["failures"].([]any)
-	failure, _ := failures[0].(map[string]any)
+	failures, _ := payload["failures"].([]map[string]any)
+	failure := failures[0]
 	if failure["stage"] != "search-page" {
 		t.Fatalf("failure = %#v", failure)
 	}
 }
 
+func TestCrossPlatformCoverageSearchMsgIncompletePreservesTypedRetryDiagnostics(t *testing.T) {
+	cause := apperrors.NewAPI(
+		"search page rate limited",
+		apperrors.WithRetryable(true),
+		apperrors.WithRetryAfterSeconds(13),
+		apperrors.WithRPCCode(-32029),
+		apperrors.WithTraceID("trace-search-page"),
+	)
+	typed, payload := executeSearchMsgIncomplete(t, &searchMsgExecutionCaller{
+		failSecondPage:  true,
+		secondPageError: cause,
+	}, "--query", "周报", "--page-all", "--no-enrich")
+	if !errors.Is(typed, cause) || typed.Category != apperrors.CategoryAPI ||
+		!typed.RetryableSet || !typed.Retryable || typed.RetryAfterSeconds == nil || *typed.RetryAfterSeconds != 13 ||
+		typed.RPCCode != -32029 || typed.ServerDiag.TraceID != "trace-search-page" ||
+		typed.FailureStage != "read" || payload["count"] != 1 {
+		t.Fatalf("typed retry contract = %#v, partial=%#v", typed, payload)
+	}
+	if _, duplicated := typed.Details["failures"]; duplicated {
+		t.Fatalf("error details duplicated canonical failure ledger: %#v", typed.Details)
+	}
+}
+
 func TestCrossPlatformCoverageSearchMsgEnrichmentFailureKeepsSearchHits(t *testing.T) {
 	caller := &searchMsgExecutionCaller{failEnrichment: true}
-	payload := executePartialSearchMsg(t, caller, "--query", "周报")
-	if payload["complete"] != false || payload["count"] != float64(1) ||
-		payload["enrichedCount"] != float64(0) || payload["failedCount"] != float64(1) {
+	_, payload := executeSearchMsgIncomplete(t, caller, "--query", "周报")
+	if payload["complete"] != false || payload["count"] != 1 ||
+		payload["enrichedCount"] != 0 || payload["failedCount"] != 1 {
 		t.Fatalf("payload = %#v", payload)
 	}
 }
 
 func TestCrossPlatformCoverageSearchMsgMissingPaginationCannotClaimComplete(t *testing.T) {
 	caller := &searchMsgExecutionCaller{omitPagination: true}
-	payload := executePartialSearchMsg(t, caller, "--query", "周报", "--no-enrich")
-	if payload["complete"] != false || payload["count"] != float64(1) ||
-		payload["failedCount"] != float64(1) {
+	_, payload := executeSearchMsgIncomplete(t, caller, "--query", "周报", "--no-enrich")
+	if payload["complete"] != false || payload["count"] != 1 ||
+		payload["failedCount"] != 1 {
 		t.Fatalf("payload = %#v", payload)
 	}
-	failures, _ := payload["failures"].([]any)
-	failure, _ := failures[0].(map[string]any)
+	failures, _ := payload["failures"].([]map[string]any)
+	failure := failures[0]
 	if failure["stage"] != "search-pagination" {
 		t.Fatalf("failure = %#v", failure)
 	}
@@ -884,17 +934,17 @@ func TestCrossPlatformCoverageSearchMsgNumericZeroCursorIsComplete(t *testing.T)
 
 func TestCrossPlatformCoverageSearchMsgMissingMgetItemPublishesFailureLedger(t *testing.T) {
 	caller := &searchMsgExecutionCaller{omitMgetItem: true}
-	payload := executePartialSearchMsg(t, caller, "--query", "周报", "--page-all")
-	if payload["complete"] != false || payload["count"] != float64(2) ||
-		payload["enrichedCount"] != float64(1) || payload["failedCount"] != float64(1) {
+	_, payload := executeSearchMsgIncomplete(t, caller, "--query", "周报", "--page-all")
+	if payload["complete"] != false || payload["count"] != 2 ||
+		payload["enrichedCount"] != 1 || payload["failedCount"] != 1 {
 		t.Fatalf("payload = %#v", payload)
 	}
-	failures, _ := payload["failures"].([]any)
-	failure, _ := failures[0].(map[string]any)
+	failures, _ := payload["failures"].([]map[string]any)
+	failure := failures[0]
 	if failure["stage"] != "message-enrichment" {
 		t.Fatalf("failure = %#v", failure)
 	}
-	if missing, _ := failure["missingMessageIds"].([]any); len(missing) != 1 || missing[0] != "m2" {
+	if missing, _ := failure["missingMessageIds"].([]string); len(missing) != 1 || missing[0] != "m2" {
 		t.Fatalf("failure = %#v", failure)
 	}
 }
@@ -948,19 +998,18 @@ func TestSearchMsgScopedEmptyPartialScanCannotClaimComplete(t *testing.T) {
 			"nextCursor": "c2"
 		}
 	}`}
-	payload := executePartialSearchMsg(t, caller,
+	payload := executeSearchMsg(t, caller,
 		"--group", "cid-target", "--query", "周报", "--no-enrich", "--page-limit", "1")
-	if payload["count"] != float64(0) || payload["complete"] != false || payload["failedCount"] != float64(1) {
+	if payload["count"] != float64(0) || payload["complete"] != false || payload["failedCount"] != float64(0) ||
+		payload["stopReason"] != "page_limit" || payload["truncatedByPageLimit"] != true {
 		t.Fatalf("payload = %#v", payload)
 	}
 	scope, _ := payload["scope"].(map[string]any)
 	if scope["sourceComplete"] != false {
 		t.Fatalf("scope = %#v", scope)
 	}
-	failures, _ := payload["failures"].([]any)
-	failure, _ := failures[0].(map[string]any)
-	if failure["stage"] != "search-page-limit" {
-		t.Fatalf("failure = %#v", failure)
+	if failures, _ := payload["failures"].([]any); len(failures) != 0 {
+		t.Fatalf("normal page-limit published failure = %#v", failures)
 	}
 }
 

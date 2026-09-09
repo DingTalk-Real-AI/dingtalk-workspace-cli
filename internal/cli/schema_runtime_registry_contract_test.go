@@ -4,13 +4,269 @@
 package cli
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/spf13/cobra"
 )
+
+func TestCrossPlatformCoverageProjectRuntimeSchemaConstraintsPublishesOnlyResolvedParameters(t *testing.T) {
+	cmd := &cobra.Command{Use: "run"}
+	cmd.Flags().String("primary", "", "primary")
+	cmd.Flags().String("secondary", "", "secondary")
+	cmd.Flags().String("legacy-primary", "", "legacy primary")
+	cmd.Flags().String("legacy-secondary", "", "legacy secondary")
+	cmd.Flags().String("spoofed-secondary", "", "unreviewed alias")
+	_ = cmd.Flags().MarkHidden("legacy-primary")
+	_ = cmd.Flags().MarkHidden("legacy-secondary")
+	_ = cmd.Flags().MarkHidden("spoofed-secondary")
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("legacy-primary"), runtimeannotate.AnnotationFlagAliasOf, "primary")
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("legacy-primary"), runtimeannotate.AnnotationFlagAliasOrigin, runtimeannotate.FlagAliasOriginCorecmdV1)
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("legacy-secondary"), runtimeannotate.AnnotationFlagAliasOf, "secondary")
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("legacy-secondary"), runtimeannotate.AnnotationFlagAliasOrigin, runtimeannotate.FlagAliasOriginCorecmdV1)
+	// alias_of without the framework-owned origin is not sufficient evidence
+	// to rewrite an executable-only spelling into the public contract.
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("spoofed-secondary"), runtimeannotate.AnnotationFlagAliasOf, "secondary")
+
+	parameters := []ParameterSpec{{Name: "primary"}, {Name: "secondary"}}
+	runtimeConstraints := RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{
+			{"primary", "legacy-primary"},
+			{"primary", "secondary", "legacy-primary", "spoofed-secondary"},
+		},
+		RequireOneOf: [][]string{
+			{"primary", "legacy-primary", "spoofed-secondary"},
+		},
+		RequireTogether: [][]string{
+			{"primary", "legacy-secondary"},
+		},
+	}
+
+	got, err := projectRuntimeSchemaConstraints(cmd, parameters, nil, runtimeConstraints)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"primary", "secondary"}},
+		RequireOneOf:      [][]string{{"primary"}},
+		RequireTogether:   [][]string{{"primary", "secondary"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("public constraints = %#v, want %#v", got, want)
+	}
+	if got := runtimeConstraints.MutuallyExclusive[0]; !reflect.DeepEqual(got, []string{"primary", "legacy-primary"}) {
+		t.Fatalf("projection mutated executable constraints: %#v", runtimeConstraints)
+	}
+}
+
+func TestCrossPlatformCoverageProjectRuntimeSchemaConstraintsFailsClosedByConstraintKind(t *testing.T) {
+	newCommand := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "run"}
+		cmd.Flags().String("primary", "", "primary")
+		cmd.Flags().String("secondary", "", "secondary")
+		cmd.Flags().String("hidden-only", "", "unreviewed hidden alias")
+		_ = cmd.Flags().MarkHidden("hidden-only")
+		// alias_of without the framework-owned origin remains untrusted.
+		runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("hidden-only"), runtimeannotate.AnnotationFlagAliasOf, "secondary")
+		return cmd
+	}
+	parameters := []ParameterSpec{{Name: "primary"}, {Name: "secondary"}}
+
+	t.Run("mutually exclusive filters unreviewed hidden members", func(t *testing.T) {
+		got, err := projectRuntimeSchemaConstraints(
+			newCommand(),
+			parameters,
+			nil,
+			RuntimeSchemaConstraints{MutuallyExclusive: [][]string{{"primary", "hidden-only", "secondary"}}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := normalizeRuntimeSchemaConstraints(RuntimeSchemaConstraints{MutuallyExclusive: [][]string{{"primary", "secondary"}}})
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("projected constraints = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("require one of keeps a public alternative", func(t *testing.T) {
+		got, err := projectRuntimeSchemaConstraints(
+			newCommand(),
+			parameters,
+			nil,
+			RuntimeSchemaConstraints{RequireOneOf: [][]string{{"hidden-only", "primary"}}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := normalizeRuntimeSchemaConstraints(RuntimeSchemaConstraints{RequireOneOf: [][]string{{"primary"}}})
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("projected constraints = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("require one of rejects an empty public projection", func(t *testing.T) {
+		_, err := projectRuntimeSchemaConstraints(
+			newCommand(),
+			parameters,
+			nil,
+			RuntimeSchemaConstraints{RequireOneOf: [][]string{{"hidden-only"}}},
+		)
+		if err == nil || !strings.Contains(err.Error(), "has no published alternative after filtering unreviewed hidden inputs") {
+			t.Fatalf("empty public require_one_of error = %v", err)
+		}
+	})
+
+	t.Run("require together rejects mixed public and hidden members", func(t *testing.T) {
+		_, err := projectRuntimeSchemaConstraints(
+			newCommand(),
+			parameters,
+			nil,
+			RuntimeSchemaConstraints{RequireTogether: [][]string{{"primary", "hidden-only"}}},
+		)
+		if err == nil || !strings.Contains(err.Error(), "mixes published inputs") {
+			t.Fatalf("mixed public/hidden require_together error = %v", err)
+		}
+	})
+
+	t.Run("require together may omit an executable-only relationship", func(t *testing.T) {
+		cmd := newCommand()
+		cmd.Flags().String("hidden-peer", "", "another unreviewed hidden input")
+		_ = cmd.Flags().MarkHidden("hidden-peer")
+		got, err := projectRuntimeSchemaConstraints(
+			cmd,
+			parameters,
+			nil,
+			RuntimeSchemaConstraints{RequireTogether: [][]string{{"hidden-only", "hidden-peer"}}},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !runtimeSchemaConstraintsEmpty(got) {
+			t.Fatalf("projected constraints = %#v, want empty", got)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageProjectRuntimeSchemaConstraintsRetainsPublishedPositionals(t *testing.T) {
+	got, err := projectRuntimeSchemaConstraints(
+		&cobra.Command{Use: "consume"},
+		[]ParameterSpec{{Name: "subscribe-id"}},
+		[]contract.RuntimeSchemaPositional{{Name: "event_key", Index: 0}},
+		RuntimeSchemaConstraints{RequireOneOf: [][]string{{"event_key", "subscribe-id"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := normalizeRuntimeSchemaConstraints(RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"event_key", "subscribe-id"}},
+	})
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("positional constraint projection = %#v, want %#v", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageProjectRuntimeSchemaConstraintsRejectsUnknownInput(t *testing.T) {
+	cmd := &cobra.Command{Use: "run"}
+	cmd.Flags().String("primary", "", "primary")
+
+	_, err := projectRuntimeSchemaConstraints(
+		cmd,
+		[]ParameterSpec{{Name: "primary"}},
+		nil,
+		RuntimeSchemaConstraints{RequireOneOf: [][]string{{"primary", "primray"}}},
+	)
+	if err == nil || !strings.Contains(err.Error(), `constraint require_one_of[0] references unknown executable input "primray"`) {
+		t.Fatalf("unknown constraint input error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageProjectRuntimeSchemaConstraintsRejectsVisibleUnpublishedInput(t *testing.T) {
+	cmd := &cobra.Command{Use: "run"}
+	cmd.Flags().String("primary", "", "primary")
+	cmd.Flags().String("secondary", "", "secondary")
+
+	_, err := projectRuntimeSchemaConstraints(
+		cmd,
+		[]ParameterSpec{{Name: "primary"}},
+		nil,
+		RuntimeSchemaConstraints{RequireTogether: [][]string{{"primary", "secondary"}}},
+	)
+	if err == nil || !strings.Contains(err.Error(), `constraint require_together[0] references visible executable input "secondary" absent from public Schema`) {
+		t.Fatalf("visible unpublished constraint input error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageProjectRuntimeSchemaConstraintsRejectsInvalidReviewedAlias(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		prepare func(*cobra.Command)
+		want    string
+	}{
+		{
+			name: "missing target",
+			prepare: func(cmd *cobra.Command) {
+				annotateReviewedAliasForTest(cmd, "legacy", "missing")
+			},
+			want: `hidden alias "legacy" targets unknown executable input "missing"`,
+		},
+		{
+			name: "hidden target",
+			prepare: func(cmd *cobra.Command) {
+				_ = cmd.Flags().MarkHidden("primary")
+				annotateReviewedAliasForTest(cmd, "legacy", "primary")
+			},
+			want: `hidden alias "legacy" targets hidden input "primary"`,
+		},
+		{
+			name: "type mismatch",
+			prepare: func(cmd *cobra.Command) {
+				cmd.Flags().Int("legacy-int", 0, "legacy int")
+				_ = cmd.Flags().MarkHidden("legacy-int")
+				annotateReviewedAliasForTest(cmd, "legacy-int", "primary")
+			},
+			want: `hidden alias "legacy-int" and public input "primary" have incompatible types`,
+		},
+		{
+			name: "malformed target annotation",
+			prepare: func(cmd *cobra.Command) {
+				runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("legacy"), runtimeannotate.AnnotationFlagAliasOf, " primary ")
+				runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup("legacy"), runtimeannotate.AnnotationFlagAliasOrigin, runtimeannotate.FlagAliasOriginCorecmdV1)
+			},
+			want: `hidden input "legacy" has malformed reviewed alias target`,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "run"}
+			cmd.Flags().String("primary", "", "primary")
+			cmd.Flags().String("legacy", "", "legacy")
+			_ = cmd.Flags().MarkHidden("legacy")
+			testCase.prepare(cmd)
+
+			constraintName := "legacy"
+			if testCase.name == "type mismatch" {
+				constraintName = "legacy-int"
+			}
+			_, err := projectRuntimeSchemaConstraints(
+				cmd,
+				[]ParameterSpec{{Name: "primary"}},
+				nil,
+				RuntimeSchemaConstraints{RequireOneOf: [][]string{{constraintName}}},
+			)
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("invalid reviewed alias error = %v, want %q", err, testCase.want)
+			}
+		})
+	}
+}
+
+func annotateReviewedAliasForTest(cmd *cobra.Command, aliasName, targetName string) {
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup(aliasName), runtimeannotate.AnnotationFlagAliasOf, targetName)
+	runtimeannotate.SetFlagAnnotation(cmd.Flags().Lookup(aliasName), runtimeannotate.AnnotationFlagAliasOrigin, runtimeannotate.FlagAliasOriginCorecmdV1)
+}
 
 func TestValidateSchemaRegistryAgainstCommandRegistryChecksFullIdentity(t *testing.T) {
 	tool := ToolSpec{Identity: contract.ToolIdentitySpec{

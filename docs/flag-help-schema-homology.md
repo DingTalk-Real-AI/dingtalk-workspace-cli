@@ -79,7 +79,7 @@ command/Leaf 不再写 `dws.schema.risk`；SafetySpec 走类型化 Final 载荷�
 | 字段 | 声明什么 | 运行时 | 嵌入 Schema / help |
 |---|---|---|---|
 | `Flags[]`（`FlagSpec` / `LeafFlag`） | 用户可见参数面：名、类型、默认、必填、usage | 注册 cobra flag；装配 toolArgs | `dws.schema.property` / `type` / `required`；`--help` Flags |
-| `Constraints[]` | 跨 flag 关系：`at_least_one` / `exactly_one` / `mutually_exclusive`；`custom` 记录钩子校验 | 通用关系由 `ValidateConstraints` 执行；`custom` 由 `Validate` 执行 | `dws.schema.constraints`；`--help`「参数约束」 |
+| `Constraints[]` | 跨 flag 关系：`at_least_one` / `exactly_one` / `mutually_exclusive`；`custom` 记录钩子校验 | 通用关系由 `ValidateConstraints` 执行；`custom` 由 `Validate` 执行 | Runtime 完整关系写入 `dws.schema.constraints`；Catalog 先将评审 hidden alias 归一到公开主参数并去重，再按关系类型做 fail-closed 投影，最终只引用公开 parameters/positionals；`--help`「参数约束」 |
 | `Safety`（`contract.SafetySpec`） | effect/risk/confirmation/idempotency 四个独立事实 | `confirmation=user_required` 时 `ConfirmSafety`；`--yes` / `--dry-run` 跳过 | 同一个 SafetySpec 原样进入 Contract Final（`HOM-S1`） |
 | `ConstParams` | 固定载荷（不上 flag 表） | 并入 toolArgs；不满足 Required | **不**投影为用户 parameter |
 | `Use` / `Short` / `Long` / `Example` | 命令身份文案与示例 | cobra 自身 | help；identity 以 collector 收集的 `ContractFinal.Identity` 声明为准（reviewed registry 已退役） |
@@ -202,7 +202,7 @@ Selection **刻意不**由单命令 Contract 取代（RFC 决策 8 / schema 设�
 
 - Flags / ConstParams / Constraints → 注册、校验与 `ConstraintHelp`；SafetySpec → 运行时 `ConfirmSafety`（command）；
 - Call / Execute 作为执行体；业务参数不得在 Call 内装配（helpers 门禁）；
-- **Contract → Schema 嵌入**：参数/约束写原生 annotation，SafetySpec 与 ContractDecl 注册为类型化 Contract Final 并由 Schema 组装透传；
+- **Contract → Schema 嵌入**：参数/约束写原生 annotation，SafetySpec 与 ContractDecl 注册为类型化 Contract Final；Schema 组装透传声明值，并仅对约束执行评审 alias 归一化、去重与公开输入闭包投影。`mutually_exclusive` 可过滤不可见成员；`require_one_of` 过滤后必须仍有公开候选；`require_together` 若混合公开成员与非可信 hidden 成员则拒绝装配；
 - Selection 权威为 `ContractDecl.Selection` / `ProductDecl`（`contract_final`）；`schema_hints/` 已退役。
 
 已进 CI（`make policy` → `check-schema-catalog.sh` / `check-runtime-confirmation-truth.sh`）：
@@ -216,7 +216,7 @@ Selection **刻意不**由单命令 Contract 取代（RFC 决策 8 / schema 设�
 
 仍缺（未宣称全量 CI 覆盖）：
 
-1. 独立可执行的 `HOM-P3`（constraints ≡ AnnotateConstraints）与 `HOM-S3`（read 不得误投影 user_required）全量 gate；
+1. 独立可执行的 `HOM-P3`（constraints ≡ Runtime 完整约束经评审 alias 归一化与公开输入闭包后的投影）与 `HOM-S3`（read 不得误投影 user_required）全量 gate；
 2. `HOM-I1` 作为单独 gate ID 的显式用例（MCP bindings ⊆ Contract flags 已有映射审计子集，但未钉 `HOM-I1` 标签）。
 
 已落地（写命令确认语义，`HOM-S2`）：
@@ -233,7 +233,7 @@ Selection **刻意不**由单命令 Contract 取代（RFC 决策 8 / schema 设�
 |---|---|---|---|
 | `HOM-P1` | 受管 leaf 的 schema `parameters[].name` 集合 ≡ cobra 本地 flag 名集合（排除全局 persistent） | LeafSpec / Contract 编译命令 | **已进**（app help↔schema） |
 | `HOM-P2` | schema parameter `type` / `required` / `default` 与 cobra DefValue / MarkFlagRequired / FlagSpec 一致；不得用已退役 hints overlay 改写这三项 | 同上 | **部分**（bindings/mapping 门禁） |
-| `HOM-P3` | schema 关系约束（require_one_of / mutually_exclusive）≡ Contract/Leaf `Constraints` 投影（与 `AnnotateConstraints` 同构） | 声明了 Constraints 的命令 | 规划 |
+| `HOM-P3` | schema 关系约束（require_one_of / mutually_exclusive / require_together）≡ Contract/Leaf Runtime 完整约束经评审 alias 归一化、去重并对公开 parameters/positionals 做引用闭包后的投影；`mutually_exclusive` 可过滤不可见成员，`require_one_of` 不得投影为空，`require_together` 不得混合公开成员与非可信 hidden 成员；隐藏兼容参数仍保留在 Runtime，不得进入 Agent Schema | 声明了 Constraints 的命令 | 规划 |
 | `HOM-S1` | Contract/Leaf `user_required` Safety 与运行时 Confirm/gate 同源，且 help Safety 行同语义 | 受管写/破坏性命令 | **已进** |
 | `HOM-S2` | 若命令走显式 write guard（如 `devAppRequireWriteGuard`）而非完整 SafetySpec，则必须人工标注 `dws.schema.runtime_gate`；Schema 不得呈 `confirmation=not_required`；符合 §1.1 declare OR annotate | 今日 devapp 写命令 | **已进**（同源测试含 gate 路径） |
 | `HOM-S3` | `Risk=read`（或空→read）不得投影为 `user_required`，除非有 reviewed exclusion reason | 受管读命令 | 规划 |

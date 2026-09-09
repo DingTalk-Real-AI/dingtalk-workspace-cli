@@ -30,6 +30,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -1238,6 +1239,18 @@ func DownloadMessageResources(
 	messages []map[string]any,
 	fallbackConversationID string,
 ) map[string]any {
+	ledger, _ := DownloadMessageResourcesWithCause(rt, messages, fallbackConversationID)
+	return ledger
+}
+
+// DownloadMessageResourcesWithCause returns the public ledger together with
+// the first concrete failure that produced it. The cause stays out of business
+// data and is used only by the typed incomplete-result wrapper.
+func DownloadMessageResourcesWithCause(
+	rt *shortcut.RuntimeContext,
+	messages []map[string]any,
+	fallbackConversationID string,
+) (map[string]any, error) {
 	resources := make([]map[string]any, 0)
 	for _, message := range messages {
 		resources = append(resources, chatmsg.ResourcesDeep(message)...)
@@ -1278,7 +1291,7 @@ func DownloadMessageResources(
 			"requestedCount":    len(resources),
 			"deduplicatedCount": discoveredCount - len(resources),
 			"resources":         resources,
-		}
+		}, nil
 	}
 	if len(resources) == 0 {
 		return map[string]any{
@@ -1291,11 +1304,15 @@ func DownloadMessageResources(
 			"failedCount":       0,
 			"downloads":         []map[string]any{},
 			"failures":          []map[string]any{},
-		}
+		}, nil
 	}
 
 	cwd, err := resourceGetwd()
 	if err != nil {
+		failureCause := apperrors.NewInternal(
+			fmt.Sprintf("读取工作目录失败: %v", err),
+			apperrors.WithCause(err),
+		)
 		return map[string]any{
 			"ok":                false,
 			"partial":           false,
@@ -1310,11 +1327,12 @@ func DownloadMessageResources(
 				"affectedCount": len(resources),
 				"error":         fmt.Sprintf("读取工作目录失败: %v", err),
 			}},
-		}
+		}, failureCause
 	}
 	outputDir := strings.TrimRight(rt.Str("output-dir"), `/\`)
 	downloads := make([]map[string]any, 0, len(resources))
 	failures := make([]map[string]any, 0)
+	var firstCause error
 	downloadedNames := map[string]bool{}
 	for _, resource := range resources {
 		resourceType := strings.TrimSpace(fmt.Sprint(resource["type"]))
@@ -1336,6 +1354,10 @@ func DownloadMessageResources(
 			(messageID == "" || messageID == "<nil>" ||
 				conversationID == "" || conversationID == "<nil>")
 		if resourceID == "" || resourceID == "<nil>" || missingMediaContext {
+			failureCause := apperrors.NewValidation("资源引用缺少 resource-id，或 mediaId 缺少 message-id/open-conversation-id")
+			if firstCause == nil {
+				firstCause = failureCause
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1348,6 +1370,9 @@ func DownloadMessageResources(
 		data, callErr := resolveMessageResourceDownloadData(
 			rt, resourceType, resourceID, messageID, conversationID)
 		if callErr != nil {
+			if firstCause == nil {
+				firstCause = callErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1358,6 +1383,9 @@ func DownloadMessageResources(
 		}
 		resourceURL, headers, infoErr := resourceDownloadInfo(data)
 		if infoErr != nil {
+			if firstCause == nil {
+				firstCause = infoErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1382,6 +1410,9 @@ func DownloadMessageResources(
 			preferredName,
 		)
 		if pathErr != nil {
+			if firstCause == nil {
+				firstCause = pathErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1393,6 +1424,9 @@ func DownloadMessageResources(
 		size, downloadErr := resourceDownload(
 			rt.Command().Context(), nil, resourceURL, headers, destPath, rt.Bool("overwrite"))
 		if downloadErr != nil {
+			if firstCause == nil {
+				firstCause = downloadErr
+			}
 			failures = append(failures, map[string]any{
 				"resourceType": resourceType,
 				"resourceId":   resourceID,
@@ -1420,7 +1454,7 @@ func DownloadMessageResources(
 		"failedCount":       len(failures),
 		"downloads":         downloads,
 		"failures":          failures,
-	}
+	}, firstCause
 }
 
 // AttachMessageResourceDownloads publishes the download ledger and folds any
@@ -1433,18 +1467,28 @@ func AttachMessageResourceDownloads(payload, ledger map[string]any) {
 		return
 	}
 	payload["complete"] = false
-	payload["failedCount"] = messageLedgerInt(payload["failedCount"]) + failed
 	taskFailures, _ := payload["failures"].([]map[string]any)
 	resourceFailures, _ := ledger["failures"].([]map[string]any)
 	for _, failure := range resourceFailures {
-		row := make(map[string]any, len(failure)+1)
-		row["stage"] = "resource-download"
+		row := make(map[string]any, len(failure)+2)
 		for key, value := range failure {
 			row[key] = value
 		}
+		if stage, ok := row["stage"]; ok {
+			row["resourceStage"] = stage
+		}
+		row["stage"] = "resource-download"
 		taskFailures = append(taskFailures, row)
 	}
+	if len(resourceFailures) == 0 {
+		taskFailures = append(taskFailures, map[string]any{
+			"stage":         "resource-download",
+			"affectedCount": failed,
+			"error":         "资源下载账本报告失败，但未返回逐项失败详情",
+		})
+	}
 	payload["failures"] = taskFailures
+	payload["failedCount"] = len(taskFailures)
 }
 
 func messageLedgerInt(value any) int {
@@ -2115,12 +2159,41 @@ func cardUpdateVerificationError(bizID string, verifyErr error) error {
 
 // MessagesResourceURL gets a message resource download url (get_resource_download_url, im).
 var MessagesResourceURL = shortcut.Shortcut{
-	Service:     "chat",
-	Command:     "+messages-resource-url",
-	Product:     "im",
-	Description: "获取消息资源（图片/视频/语音）下载链接",
-	Intent:      "当你想下载消息里的图片/视频/语音等资源时使用；只读换取临时下载链接，需传资源 mediaId、消息 openMessageId 和会话 openConversationId。",
-	Risk:        shortcut.RiskRead,
+	// Preserve the established legacy URL payload while the sensitive Result
+	// declaration is exercised in the mandatory dual-validation rollout step.
+	OutputRollout: output.RolloutDualValidate,
+	Service:       "chat",
+	Command:       "+messages-resource-url",
+	Product:       "im",
+	Description:   "获取消息资源（图片/视频/语音）下载链接",
+	Intent:        "仅当调用方明确需要短时下载凭据、而不是资源文件本身时使用；返回地址及请求头可能包含签名，视为敏感信息，不复制到脚本、日志或最终答复。实际下载图片/视频/语音时使用 +messages-resource-download，由 CLI 在内部消费临时地址。",
+	Risk:          shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_resource_url",
+			CanonicalPath:  "chat.shortcut_messages_resource_url",
+			CLIPath:        "chat +messages-resource-url",
+			PrimaryCLIPath: "chat +messages-resource-url",
+		},
+		Description: "获取短时有效的消息资源下载凭据",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       reviewedChatShortcutInterfaceReason,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取短时有效的消息资源下载凭据",
+			UseWhen:      []string{"调用方明确要求取得临时下载 URL 或请求头，并会按敏感凭据处理时"},
+			AvoidWhen:    []string{"需要实际下载资源时使用 chat +messages-resource-download；不要把临时签名 URL 复制到 shell、脚本、日志或最终答复"},
+			Examples:     []string{"dws chat +messages-resource-url --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId>"},
+		},
+		Result: messageResourceURLResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型", Enum: []string{"mediaId"}},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "资源 ID（消息中的 mediaId）", Required: true},
