@@ -15,6 +15,9 @@ dws wiki +member-remove --workspace <workspaceId> --users <userId> --format json
 - 成员接口仅用于组织知识库。`myWikiSpace` 是个人空间，不支持容器级成员管理；若用户只想分享其中某个节点，改走 Drive 节点级权限。
 - `OWNER` 不在成员写入角色枚举中，不能通过 add/update/remove 创建、降级或移除所有者；所有权变更必须走对应所有者转移能力并遵守其独立确认约束。
 - 调用者须满足知识库配置的最低权限角色；权限不足时如实返回，不切账号或改用节点权限绕过容器规则。
+- 部门、群聊、角色组、逐成员角色或通知需求，使用原生 `wiki member` 的 `add/update/remove`，传 `--members` JSON 数组，不与 `--users` 混用。
+- 每项须有 `type/id`；`USER`、`DEPT`、`TAG` 还需 `corpId`。添加/修改每项带 `roleId`，移除不带角色，每批最多 30 项。
+- 添加/修改需要通知时显式传 `--notify`，仅 `USER`、`CONVERSATION` 生效；移除无此参数。
 
 ## 列表完整性
 

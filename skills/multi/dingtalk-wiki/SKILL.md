@@ -55,7 +55,7 @@ metadata:
 | 复制、移入知识库或移出到我的文档 | `+node-copy` / `+move` / `+move-to-drive` | 使用真实 nodeId/workspaceId/folderId；按 Runtime confirmation |
 | 知识库首页放独立普通附件 | `dws drive upload --file <本地文件> --workspace <ID> --format json` | 不加 `--convert`；子目录加 `--folder <目录nodeId>`。正文内附件切 Doc 媒体，转换在线文档切 Doc 导入 |
 | 删除库内节点 | `+node-delete --workspace <ID> --node <ID>` | 删除前核对归属并确认 |
-| 列出、添加、修改或移除知识库成员 | `member list` / `+member-add` / `+member-update` / `+member-remove` | 写入 users 为 1-30 个；添加/修改须指定角色，移除不传角色 |
+| 列出、添加、修改或移除知识库成员 | `member list` / `+member-add` / `+member-update` / `+member-remove` | 写入 users 为 1-30 个；添加/修改须指定角色，移除不传角色；多类型、逐成员角色或通知用原生 member |
 | 查看知识库动态 | `+feed-list --workspace <ID> [--exclude-file]` | 全部动态加 `--page-all`；仅用户明确要求核对过滤效果时比较两组结果，未过滤结果须实际包含该文件事件 |
 
 ## 当前最短路径
