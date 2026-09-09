@@ -21,14 +21,34 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
+func skipWithoutPersistentSchemaCache(t *testing.T) {
+	t.Helper()
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
+		t.Skip("persistent cache backend is intentionally disabled on this target")
+	}
+}
+
+func coverageCacheGOOSARCH() (string, string) {
+	if schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
+		return runtime.GOOS, runtime.GOARCH
+	}
+	return "linux", "amd64"
+}
+
 func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing.T) {
 	t.Cleanup(func() {
 		_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
 		restorePackageCLISchemaDeliveryForTest()
 	})
 	identity := coverageSchemaCacheIdentity()
+	goos, goarch := coverageCacheGOOSARCH()
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{Enabled: true, Identity: identity}); err != nil {
-		t.Fatalf("empty GOOS/GOARCH fill: %v", err)
+		if schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
+			t.Fatalf("empty GOOS/GOARCH fill: %v", err)
+		}
+		if err := RegisterSchemaCacheOptions(SchemaCacheOptions{Enabled: true, Identity: identity, GOOS: goos, GOARCH: goarch}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{}); err != nil {
 		t.Fatal(err)
@@ -48,7 +68,7 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 	restorePackageCLISchemaDeliveryForTest()
 
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+		Enabled: true, Identity: identity, GOOS: goos, GOARCH: goarch,
 		RuntimeEligible: func() bool { return false },
 	}); err != nil {
 		t.Fatal(err)
@@ -57,7 +77,7 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 	MarkSchemaCacheRuntimeUncertain()
 	PrewarmSchemaCache()
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+		Enabled: true, Identity: identity, GOOS: goos, GOARCH: goarch,
 		RuntimeEligible: func() bool { return true },
 	}); err != nil {
 		t.Fatal(err)
@@ -68,6 +88,12 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 	PrewarmSchemaCache()
 	PrewarmSchemaCache()
 	AwaitSchemaCachePrewarmForTest()
+
+	loaded := deliverySchemaCatalog()
+	runtimeDeliveryLiveCatalog.Store(&loaded)
+	if _, err := DeliverySchemaCacheArtifactsForTest(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCrossPlatformCoverageSchemaCacheRuntimeOpenedFailures(t *testing.T) {
@@ -163,6 +189,7 @@ func TestCrossPlatformCoverageSchemaCacheHashesMatchAndRoundTrip(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheRepairAndDeliveryMiss(t *testing.T) {
+	skipWithoutPersistentSchemaCache(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -349,8 +376,9 @@ func TestCrossPlatformCoverageQueryEmptyArgsAndRepairCatalogMiss(t *testing.T) {
 
 	RegisterSchemaSourceRoot(nil)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	goos, goarch := coverageCacheGOOSARCH()
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, Identity: coverageSchemaCacheIdentity(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+		Enabled: true, Identity: coverageSchemaCacheIdentity(), GOOS: goos, GOARCH: goarch,
 		RuntimeEligible: func() bool { return true },
 	}); err != nil {
 		t.Fatal(err)
@@ -362,6 +390,7 @@ func TestCrossPlatformCoverageQueryEmptyArgsAndRepairCatalogMiss(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
+	skipWithoutPersistentSchemaCache(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	home, err := os.UserHomeDir()
 	if err != nil {

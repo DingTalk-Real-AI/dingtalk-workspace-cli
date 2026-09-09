@@ -184,6 +184,7 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 }
 
 func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T) {
+	skipWithoutPersistentSchemaCache(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 	r := &schemaCacheRuntime{options: SchemaCacheOptions{AllowGenerate: true, Edition: "open"}}

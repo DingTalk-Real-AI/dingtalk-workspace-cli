@@ -49,6 +49,7 @@ func coverageSchemaCacheHome(t *testing.T) {
 
 func publishCoverageSchemaRuntime(t *testing.T) (*schemaCacheRuntime, SchemaCacheIdentity, SchemaCacheArtifacts) {
 	t.Helper()
+	skipWithoutPersistentSchemaCache(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	coverageSchemaCacheHome(t)
 	restorePackageCLISchemaDeliveryForTest()

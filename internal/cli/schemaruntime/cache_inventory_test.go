@@ -4,6 +4,7 @@
 package schemaruntime
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -62,6 +63,7 @@ func TestCrossPlatformCoverageSchemaCacheDescriptorContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	source = bytes.ReplaceAll(source, []byte("\r\n"), []byte("\n"))
 	if got := fmt.Sprintf("%x", sha256.Sum256(source)); got != expectedProtoSHA256 {
 		t.Fatalf("schema_cache.proto changed without DTO/version/visitor review: got %s want %s", got, expectedProtoSHA256)
 	}

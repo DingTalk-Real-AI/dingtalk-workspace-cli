@@ -4,7 +4,6 @@
 package app
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -19,7 +18,8 @@ func TestCrossPlatformCoverageProductionSchemaCacheOptionsRemaining(t *testing.T
 		t.Fatal("windows persistent backend enabled")
 	}
 
-	testseam.Swap(t, &schemaCacheGOOS, runtime.GOOS)
+	testseam.Swap(t, &schemaCacheGOOS, "linux")
+	testseam.Swap(t, &schemaCacheGOARCH, "amd64")
 	t.Setenv(schemaCacheDisableEnv, "1")
 	options, ok := productionSchemaCacheOptions()
 	if !ok {

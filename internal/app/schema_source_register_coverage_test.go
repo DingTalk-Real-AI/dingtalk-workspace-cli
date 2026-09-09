@@ -4,7 +4,6 @@
 package app
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
@@ -40,8 +39,8 @@ func TestCrossPlatformCoverageProductionSchemaCacheOptionsPlatformAndDisable(t *
 	if _, ok := productionSchemaCacheOptions(); ok {
 		t.Fatal("windows cache options enabled")
 	}
-	testseam.Swap(t, &schemaCacheGOOS, runtime.GOOS)
-	testseam.Swap(t, &schemaCacheGOARCH, runtime.GOARCH)
+	testseam.Swap(t, &schemaCacheGOOS, "linux")
+	testseam.Swap(t, &schemaCacheGOARCH, "amd64")
 	t.Setenv(schemaCacheTestEnv, "1")
 	t.Setenv(schemaCacheDisableEnv, "1")
 	options, ok := productionSchemaCacheOptions()

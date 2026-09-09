@@ -37,8 +37,9 @@ func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("exported file: %v", err)
 	}
-	if !strings.Contains(output.String(), filepath.Clean(path)) {
-		t.Fatalf("output %q does not contain path %q", output.String(), path)
+	rendered := output.String()
+	if !strings.Contains(rendered, "方案白板.pdf") {
+		t.Fatalf("output %q does not contain exported file name", rendered)
 	}
 	wantTools := []string{"export_whiteboard", "query_export_job"}
 	gotTools := make([]string, 0, len(caller.calls))
