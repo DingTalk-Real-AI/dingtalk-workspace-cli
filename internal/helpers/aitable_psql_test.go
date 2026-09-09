@@ -95,6 +95,15 @@ func TestAitablePsqlWarnsWhenResultIsTruncated(t *testing.T) {
 	}
 }
 
+func TestAitablePsqlSelectionForbidsLocalAnalysis(t *testing.T) {
+	if !strings.Contains(aitablePsqlAgentSummary, "服务端") || !strings.Contains(aitablePsqlUseWhen, "派生指标") {
+		t.Fatalf("selection does not describe server-side analysis: %q / %q", aitablePsqlAgentSummary, aitablePsqlUseWhen)
+	}
+	if !strings.Contains(aitablePsqlAvoidLocalAnalysis, "record query --all") || !strings.Contains(aitablePsqlAvoidLocalAnalysis, "本地工具") || !strings.Contains(aitablePsqlAvoidFallbackOnFailure, "明确许可") {
+		t.Fatalf("selection rules do not guard record-query fallback: %q / %q", aitablePsqlAvoidLocalAnalysis, aitablePsqlAvoidFallbackOnFailure)
+	}
+}
+
 func TestAitablePsqlRejectsAmbiguousMode(t *testing.T) {
 	out, err := runPsqlCLI(t, &recordQueryE2ECaller{}, "-d", "base1", "-l", "-t", "tbl1")
 	if err == nil || !strings.Contains(err.Error(), "exactly one mode") {

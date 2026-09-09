@@ -7,11 +7,13 @@
 ## 1. 固定约束
 
 1. 工作目录由操作者替换为自己的本地仓库路径：`<DWS_REPO_DIR>`。
-2. 使用仓库根目录构建出的 `./dws`；不得使用 PATH 中已安装的 `dws`。
+2. 使用仓库根目录构建出的 `./dws`；不得使用 PATH 中已安装的 `dws`。全程固定同一已验证入口，不得混用内置 shim、本地版或其他版本。
 3. 默认沿用 `~/.dws`；只有需要隔离认证、缓存或 MCP 配置时，才按团队要求设置 `DWS_CONFIG_DIR`。
 4. Agent 是否可以执行远程命令由当前会话的授权范围决定；未获得明确授权时，Agent 只提供完整命令，由操作者执行后回传结果。
-5. `-c` 传入的 SQL 末尾不得包含分号（`;`）；服务会将 SQL 封装为子查询，尾部分号会导致 PostgreSQL 语法错误。
-6. 避免在回复、文档或提交记录中暴露 token、密码和敏感业务数据。
+5. 凡能由 psql 完成的过滤、JOIN、聚合、排序、分档、日期处理、窗口计算和派生指标，必须在服务端 SQL 完成；禁止拉取明细后用 Python、jq、JavaScript、电子表格或其他本地工具做等价加工。
+6. `-c` 传入的 SQL 末尾不得包含分号（`;`）；服务会将 SQL 封装为子查询，尾部分号会导致 PostgreSQL 语法错误。
+7. 未获用户明确许可，禁止 `record query --all`、无限制分页、整表导出或拉取大量字段作为分析降级；psql 失败必须先分类、修复并重试。
+8. 避免在回复、文档或提交记录中暴露 token、密码和敏感业务数据。
 
 ## 2. 目标 AITable MCP 配置
 
@@ -112,10 +114,10 @@ Agent 让用户执行：
 ```bash
 ./dws aitable psql \
   -d '<BASE_ID>' \
-  -c 'SELECT "<GROUP_COLUMN>", "<STATUS_COLUMN>", "<DATE_COLUMN>" FROM "<TABLE_NAME>" LIMIT 10'
+  -c 'SELECT "<GROUP_COLUMN>", "<STATUS_COLUMN>", "<DATE_COLUMN>" FROM "<TABLE_NAME>" LIMIT 3'
 ```
 
-最小查询成功后，再添加日期过滤、聚合、排序和窗口函数。每次只增加一个复杂度层级，便于定位失败点。
+最小查询成功后，再添加日期过滤、聚合、排序和窗口函数。按业务主题拆分 SQL；同一事实粒度、同一关联链的过滤、JOIN、聚合和派生指标合并到一条服务端 SQL。关键结果必须用独立 SQL 在服务端复核。
 
 ## 6. 聚合查询模板
 
@@ -170,11 +172,12 @@ SQL 是否可执行还取决于 PostgreSQL 语法、AI 表格逻辑列类型、�
 
 | 返回现象 | Agent 的下一步 |
 | --- | --- |
-| `Function is not allowed: <函数>` | 记录完整错误并核对当前服务版本；该错误来自服务端 SQL 校验策略，需确认目标环境是否已部署支持该函数的版本。 |
-| `Invalid PostgreSQL query` | 回退到最小查询；先核对 `-l` 和 `-t` 的真实表、列与类型，再逐步恢复 SQL。 |
+| `pending-post-tool-use`、`host-side execution`、`PostToolUse hook did not activate` 或 `real result was not produced` | 这是客户端或宿主执行失败；切换到正确的固定 DWS 入口后重试原 psql 命令，禁止降级。 |
+| `Function is not allowed: <函数>` | 记录完整错误并核对当前服务版本；先尝试等价 SQL 改写或拆成多条服务端 SQL，不得改为本地计算。 |
+| `Invalid PostgreSQL query` | 回退到最小查询；先核对 `-l` 和 `-t` 的真实表、列与类型，再逐步恢复 WHERE、JOIN、GROUP BY 和窗口计算。 |
 | 未知表/表名歧义 | 让用户重新执行 `-l`；SQL 中使用真实逻辑表名并加双引号。 |
 | 未知列 | 让用户重新执行 `-t <TABLE_ID> --all-properties`；禁止用猜测的英文名或 Field ID。 |
-| 权限或结果为空 | 核对用户当前身份、表级/字段级/行级高级权限；不要将其误判为 SQL 语法错误。 |
+| 网络、认证或权限失败 | 先修复连接、认证或权限后重试 psql；不要用全量记录接口绕过。 |
 | 超时 | 缩小日期范围、增加 `WHERE`、减少 JOIN，并在用户允许时设置 `--timeout`（1～60 秒）。 |
 
 ## 8. Agent 回复规范
