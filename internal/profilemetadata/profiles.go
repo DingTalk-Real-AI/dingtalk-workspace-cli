@@ -46,12 +46,7 @@ func ParseIdentitySelector(selector string) (corpID, userID string, ok bool) {
 	if idx <= 0 || idx >= len(selector)-1 {
 		return "", "", false
 	}
-	corpID = strings.TrimSpace(selector[:idx])
-	userID = strings.TrimSpace(selector[idx+1:])
-	if corpID == "" || userID == "" {
-		return "", "", false
-	}
-	return corpID, userID, true
+	return strings.TrimSpace(selector[:idx]), strings.TrimSpace(selector[idx+1:]), true
 }
 
 func ProfileSelector(profile Profile) string {

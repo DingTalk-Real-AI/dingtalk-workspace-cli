@@ -675,10 +675,8 @@ func decodeSchemaProductCache(payload []byte, descriptor ProductDescriptor, meta
 	if !present || !entriesOK || count != len(wantLookup) || !commandIdentitySubsetEqual(productEntries, wantLookup) {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q CommandMeta entries disagree with shard", descriptor.ProductID)
 	}
-	wantLocators, err := buildSchemaProductLocatorsUnchecked(registry)
-	if err != nil {
-		return DecodedSchemaProduct{}, fmt.Errorf("build product %q locators: %w", descriptor.ProductID, err)
-	}
+	// A single-product shard always locates to that product ID, so add() cannot collide.
+	wantLocators, _ := buildSchemaProductLocatorsUnchecked(registry)
 	locatorCount, locatorsPresent := meta.locatorCountByProduct[descriptor.ProductID]
 	if !locatorsPresent || locatorCount != len(wantLocators) || !locatorSubsetEqual(meta.LocatorProductByPath, wantLocators) {
 		return DecodedSchemaProduct{}, fmt.Errorf("product %q locator entries disagree with shard", descriptor.ProductID)

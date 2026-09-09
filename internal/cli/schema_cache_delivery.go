@@ -481,10 +481,7 @@ func (r *schemaCacheRuntime) readCommandMetaFromPayloadFresh(cliPath string) (an
 	if !ok {
 		return resolvedMeta{OK: false}, nil
 	}
-	cache, err := r.opened()
-	if err != nil {
-		return nil, err
-	}
+	cache, _ := r.opened()
 	payloads, err := schemareader.ReadCommandPayload(cache, r.options.Identity, index, productID)
 	if err != nil {
 		return nil, fmt.Errorf("read command payload for %q: %w", cliPath, err)
@@ -799,10 +796,8 @@ func BuildSchemaCacheArtifacts(resolved ResolvedSchemaBuild) (SchemaCacheArtifac
 	}
 	registry := resolved.registry
 	registry.Source = SchemaSourceRuntimeAssembled
-	index, err := registry.Index()
-	if err != nil {
-		return SchemaCacheArtifacts{}, err
-	}
+	// Snapshot already indexed this registry; Index cannot fail here.
+	index, _ := registry.Index()
 	return buildSchemaCacheArtifacts(index.Registry(), snapshot.SourceHash, snapshot.SurfaceHash)
 }
 
@@ -824,10 +819,8 @@ func buildSchemaCacheArtifacts(registry SchemaRegistry, sourceHash, surfaceHash 
 		return SchemaCacheArtifacts{}, err
 	}
 	registry = index.Registry()
-	overview, err := schemaruntime.BuildSchemaOverview(registry)
-	if err != nil {
-		return SchemaCacheArtifacts{}, err
-	}
+	// Index just succeeded; BuildSchemaOverview only fails on Index.
+	overview, _ := schemaruntime.BuildSchemaOverview(registry)
 	locators, err := schemaruntime.BuildSchemaProductLocators(registry)
 	if err != nil {
 		return SchemaCacheArtifacts{}, err

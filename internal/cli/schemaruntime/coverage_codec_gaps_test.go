@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -676,5 +677,320 @@ func TestCrossPlatformCoverageModelPaginationAndProvenanceRemaining(t *testing.T
 	registry.Products[0].FieldProvenance["unknown"] = contract.FieldProvenance{Value: json.RawMessage(`{`)}
 	if _, err := registry.ToPayload(); err == nil {
 		t.Fatal("invalid extra product provenance payload accepted")
+	}
+}
+
+func TestCrossPlatformCoverageLocatorPathAndDotPrefixCollisions(t *testing.T) {
+	alpha := allFieldsRegistry()
+	alpha.Products[0].Tools[0].Identity.Aliases = []string{"omega.run"}
+	omega := allFieldsRegistry().Products[0]
+	omega.ID = "omega"
+	omega.Name = "Omega"
+	omega.FieldProvenance = nil
+	omega.Selection = contract.SelectionSpec{}
+	ot := omega.Tools[0]
+	ot.Identity.ProductID = "omega"
+	ot.Identity.Name = "run"
+	ot.Identity.CLIName = "run"
+	ot.Identity.CanonicalPath = "omega.run"
+	ot.Identity.Path = "omega.run"
+	ot.Identity.CLIPath = "omega run"
+	ot.Identity.PrimaryCLIPath = "omega run"
+	ot.Identity.Aliases = nil
+	ot.Identity.Group = ""
+	ot.Identity.SourceProductID = ""
+	ot.FieldProvenance = nil
+	oz := omega.Tools[1]
+	oz.Identity.ProductID = "omega"
+	oz.Identity.CanonicalPath = "omega.zzz"
+	oz.Identity.Path = "omega.zzz"
+	oz.Identity.CLIPath = "omega zzz"
+	oz.Identity.PrimaryCLIPath = "omega zzz"
+	oz.Identity.SourceProductID = ""
+	omega.Tools = []ToolSpec{ot, oz}
+	alpha.Products = append(alpha.Products, omega)
+	if _, err := alpha.Index(); err != nil {
+		t.Fatalf("alias/canonical locator registry must still Index: %v", err)
+	}
+	if _, err := buildSchemaProductLocatorsUnchecked(alpha); err == nil {
+		t.Fatal("full-path locator collision accepted")
+	}
+
+	beta := allFieldsRegistry()
+	beta.Products[0].ID = "beta"
+	beta.Products[0].Name = "Beta"
+	beta.Products[0].FieldProvenance = nil
+	beta.Products[0].Selection = contract.SelectionSpec{}
+	bt := beta.Products[0].Tools[0]
+	bt.Identity.ProductID = "beta"
+	bt.Identity.Name = "xy"
+	bt.Identity.CLIName = "xy"
+	bt.Identity.CanonicalPath = "beta.xy"
+	bt.Identity.Path = "foo.bar"
+	bt.Identity.CLIPath = "foo bar"
+	bt.Identity.PrimaryCLIPath = "foo bar"
+	bt.Identity.Aliases = nil
+	bt.Identity.Group = ""
+	bt.Identity.SourceProductID = ""
+	bt.FieldProvenance = nil
+	bz := beta.Products[0].Tools[1]
+	bz.Identity.ProductID = "beta"
+	bz.Identity.CanonicalPath = "beta.zzz"
+	bz.Identity.Path = "beta.zzz"
+	bz.Identity.CLIPath = "beta zzz"
+	bz.Identity.PrimaryCLIPath = "beta zzz"
+	bz.Identity.SourceProductID = ""
+	beta.Products[0].Tools = []ToolSpec{bt, bz}
+	sample := allFieldsRegistry()
+	sample.Products[0].Tools[0].Identity.Aliases = []string{"foo.bar extra"}
+	sample.Products[0].Tools[0].Identity.SourceProductID = ""
+	beta.Products = append(beta.Products, sample.Products[0])
+	if _, err := beta.Index(); err != nil {
+		t.Fatalf("dot-prefix locator registry must still Index: %v", err)
+	}
+	if _, err := buildSchemaProductLocatorsUnchecked(beta); err == nil {
+		t.Fatal("dot-prefix locator collision accepted")
+	}
+}
+
+func TestCrossPlatformCoverageBuildSchemaCacheRenderedLeafDrift(t *testing.T) {
+	registry := allFieldsRegistry()
+	lookup := BuildCommandMetaLookup(registry)
+	overview, err := BuildSchemaOverview(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locators, err := BuildSchemaProductLocators(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := fixtureRenderedLeaves(lookup)
+	delete(rendered, "sample.run")
+	if _, err := BuildSchemaCache(registry, lookup, overview, locators, fixtureHashes(), rendered); err == nil {
+		t.Fatal("missing rendered leaf accepted")
+	}
+}
+
+func TestCrossPlatformCoverageDecodeRemainingMetaPayloadAndReflect(t *testing.T) {
+	built, meta := buildFixtureCache(t, allFieldsRegistry())
+	desc := meta.ProductDescriptors[0]
+	payloadDesc := meta.PayloadDescriptors[0]
+	fullPayload := extractProductPayload(t, built, payloadDesc)
+
+	countDrift := meta
+	countDrift.locatorCountByProduct = map[string]int{"sample": 1}
+	offset, length, err := ProductShardBounds(desc, uint64(len(built.ProductShards)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := built.ProductShards[int(offset) : int(offset)+length]
+	if _, err := DecodeSchemaProductCache(raw, desc, countDrift); err == nil {
+		t.Fatal("locator count drift accepted")
+	}
+	overviewDrift := meta
+	overviewDrift.Overview.Products = append([]OverviewProduct(nil), meta.Overview.Products...)
+	overviewDrift.Overview.Products[0].ToolCount = 0
+	if _, err := DecodeSchemaProductCache(raw, desc, overviewDrift); err == nil {
+		t.Fatal("overview tool count drift accepted")
+	}
+
+	headerOnly := append([]byte(nil), fullPayload[:payloadDesc.HeaderLength]...)
+	if _, err := DecodeSchemaCommandPayloadHeader(headerOnly[:4], payloadDesc); err == nil {
+		t.Fatal("short command payload header accepted")
+	}
+
+	splitHeader, blobs, err := splitCommandPayloadShard(fullPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payloadRoot schemacachepb.SchemaCommandPayloadCache
+	if err := proto.Unmarshal(splitHeader, &payloadRoot); err != nil {
+		t.Fatal(err)
+	}
+	cloned := proto.Clone(&payloadRoot).(*schemacachepb.SchemaCommandPayloadCache)
+	cloned.Entries.Items[0].Identity.ListsPresent = 1 << 5
+	encoded, err := proto.MarshalOptions{Deterministic: true}.Marshal(cloned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembled, err := assembleCommandPayloadShard(encoded, blobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := payloadDesc
+	updated.Length = uint64(len(assembled))
+	updated.SHA256 = sha256.Sum256(assembled)
+	h, _, _ := splitCommandPayloadShard(assembled)
+	updated.HeaderLength = uint64(4 + len(h))
+	updated.HeaderSHA256 = sha256.Sum256(assembled[:updated.HeaderLength])
+	updatedMeta := meta
+	updatedMeta.PayloadDescriptors = append([]CommandPayloadDescriptor(nil), meta.PayloadDescriptors...)
+	updatedMeta.PayloadDescriptors[0] = updated
+	if _, err := DecodeSchemaCommandPayloadCache(assembled, updated, updatedMeta); err == nil {
+		t.Fatal("unknown command meta presence bits accepted")
+	}
+
+	zeroPrefix := make([]byte, int(payloadDesc.Length))
+	badSplit := payloadDesc
+	badSplit.SHA256 = sha256.Sum256(zeroPrefix)
+	badSplitMeta := meta
+	badSplitMeta.PayloadDescriptors = append([]CommandPayloadDescriptor(nil), meta.PayloadDescriptors...)
+	badSplitMeta.PayloadDescriptors[0] = badSplit
+	if _, err := DecodeSchemaCommandPayloadCache(zeroPrefix, badSplit, badSplitMeta); err == nil {
+		t.Fatal("zero header prefix accepted")
+	}
+	wrongHeader := payloadDesc
+	wrongHeader.HeaderLength = payloadDesc.Length
+	wrongHeader.HeaderSHA256 = sha256.Sum256(fullPayload)
+	wrongHeaderMeta := meta
+	wrongHeaderMeta.PayloadDescriptors = append([]CommandPayloadDescriptor(nil), meta.PayloadDescriptors...)
+	wrongHeaderMeta.PayloadDescriptors[0] = wrongHeader
+	if _, err := DecodeSchemaCommandPayloadCache(fullPayload, wrongHeader, wrongHeaderMeta); err == nil {
+		t.Fatal("header length disagreement with matching meta accepted")
+	}
+
+	indexRegion := append([]byte(nil), built.PayloadShards[:built.PayloadIndexLength]...)
+	header, _, err := splitCommandPayloadShard(indexRegion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var indexRoot schemacachepb.SchemaPayloadIndex
+	if err := proto.Unmarshal(header, &indexRoot); err != nil {
+		t.Fatal(err)
+	}
+	clonedIndex := proto.Clone(&indexRoot).(*schemacachepb.SchemaPayloadIndex)
+	items := make([]*schemacachepb.CommandPayloadDescriptor, maxSchemaProducts+1)
+	for i := range items {
+		items[i] = proto.Clone(indexRoot.Products.Items[0]).(*schemacachepb.CommandPayloadDescriptor)
+		items[i].ProductId = fmt.Sprintf("p%04d", i)
+	}
+	clonedIndex.Products.Items = items
+	blob, err := proto.MarshalOptions{Deterministic: true}.Marshal(clonedIndex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	region, err := assembleCommandPayloadShard(blob, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeSchemaPayloadIndex(region); err == nil {
+		t.Fatal("oversized payload index product list accepted")
+	}
+
+	unknown := meta
+	unknown.RegistryDataLength = uint64(len(built.ProductShards))
+	if _, err := DecodeSchemaProductFromShards(built.ProductShards, unknown, "sample"); err != nil {
+		t.Fatalf("valid product from shards: %v", err)
+	}
+	oob := meta
+	oob.ProductDescriptors = append([]ProductDescriptor(nil), meta.ProductDescriptors...)
+	oob.ProductDescriptors[0].Offset = uint64(len(built.ProductShards))
+	oob.ProductDescriptors[0].Length = 1
+	if _, err := DecodeSchemaProductFromShards(built.ProductShards, oob, "sample"); err == nil {
+		t.Fatal("out-of-bounds product shard accepted")
+	}
+
+	countMeta := meta
+	countMeta.commandCountByProduct = map[string]int{"sample": 999}
+	if _, _, err := DecodeAllSchemaProducts(built.ProductShards, countMeta); err == nil {
+		t.Fatal("command count drift in DecodeAll accepted")
+	}
+	dup := meta
+	dup.RegistryDataLength = uint64(len(raw) * 2)
+	combined := append(append([]byte(nil), raw...), raw...)
+	dup.RegistryDataSHA256 = sha256.Sum256(combined)
+	second := desc
+	second.Offset = desc.Length
+	dup.ProductDescriptors = []ProductDescriptor{desc, second}
+	if _, _, err := DecodeAllSchemaProducts(combined, dup); err == nil {
+		t.Fatal("duplicate reconstructed product accepted")
+	}
+
+	var metaRoot schemacachepb.SchemaMetaCache
+	if err := proto.Unmarshal(built.Meta, &metaRoot); err != nil {
+		t.Fatal(err)
+	}
+	mutateMeta := func(edit func(*schemacachepb.SchemaMetaCache)) {
+		t.Helper()
+		cloned := proto.Clone(&metaRoot).(*schemacachepb.SchemaMetaCache)
+		edit(cloned)
+		payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(cloned)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecodeSchemaMetaCache(payload); err == nil {
+			t.Fatal("mutated meta accepted")
+		}
+	}
+	mutateMeta(func(m *schemacachepb.SchemaMetaCache) {
+		m.ProductDescriptors.Items = nil
+		m.Overview.Products.Items = nil
+		m.Overview.ToolCount = 0
+		m.Locators.Items = nil
+		m.CommandEntryShards.Items = nil
+		m.RegistryDataLength = 0
+	})
+	mutateMeta(func(m *schemacachepb.SchemaMetaCache) {
+		first := proto.Clone(m.Overview.Products.Items[0]).(*schemacachepb.OverviewProduct)
+		second := proto.Clone(first).(*schemacachepb.OverviewProduct)
+		second.Id = "zzz"
+		second.SchemaPath = "zzz"
+		first.ToolCount = math.MaxUint64
+		second.ToolCount = 1
+		m.Overview.Products.Items = []*schemacachepb.OverviewProduct{first, second}
+		m.Overview.ToolCount = 0
+		d2 := proto.Clone(m.ProductDescriptors.Items[0]).(*schemacachepb.ProductDescriptor)
+		d2.ProductId = "zzz"
+		d2.Offset = m.ProductDescriptors.Items[0].GetLength()
+		m.ProductDescriptors.Items = append(m.ProductDescriptors.Items, d2)
+	})
+	mutateMeta(func(m *schemacachepb.SchemaMetaCache) {
+		d2 := proto.Clone(m.ProductDescriptors.Items[0]).(*schemacachepb.ProductDescriptor)
+		d2.ProductId = "aaa"
+		m.ProductDescriptors.Items = append([]*schemacachepb.ProductDescriptor{d2}, m.ProductDescriptors.Items...)
+	})
+	mutateMeta(func(m *schemacachepb.SchemaMetaCache) {
+		m.ProductDescriptors.Items[0].Length = m.GetRegistryDataLength() + 1
+	})
+
+	poison := func(message proto.Message) {
+		t.Helper()
+		message.ProtoReflect().SetUnknown([]byte{0xc8, 0x3e, 0x00})
+	}
+	mustReject := func(message proto.Message) {
+		t.Helper()
+		if err := rejectUnknownFieldsAndEnums(message); err == nil {
+			t.Fatal("unknown child fields accepted")
+		}
+	}
+	loc := &schemacachepb.LocatorEntry{LookupPath: "x"}
+	poison(loc)
+	mustReject(&schemacachepb.LocatorEntryList{Items: []*schemacachepb.LocatorEntry{loc}})
+	pd := &schemacachepb.ProductDescriptor{ProductId: "p"}
+	poison(pd)
+	mustReject(&schemacachepb.ProductDescriptorList{Items: []*schemacachepb.ProductDescriptor{pd}})
+	param := &schemacachepb.ParameterSpec{Name: "n"}
+	poison(param)
+	mustReject(&schemacachepb.ParameterList{Items: []*schemacachepb.ParameterSpec{param}})
+	inner := &schemacachepb.StringList{Items: []string{"a"}}
+	poison(inner)
+	mustReject(&schemacachepb.StringListList{Items: []*schemacachepb.StringList{inner}})
+	pos := &schemacachepb.Positional{Name: "p"}
+	poison(pos)
+	mustReject(&schemacachepb.PositionalList{Items: []*schemacachepb.Positional{pos}})
+	disp := &schemacachepb.ExampleDisposition{}
+	poison(disp)
+	mustReject(&schemacachepb.ExampleDispositionList{Items: []*schemacachepb.ExampleDisposition{disp}})
+	prov := &schemacachepb.ProvenanceEntry{Key: "k"}
+	poison(prov)
+	mustReject(&schemacachepb.ProvenanceList{Items: []*schemacachepb.ProvenanceEntry{prov}})
+	cand := &schemacachepb.FieldCandidate{}
+	poison(cand)
+	mustReject(&schemacachepb.CandidateList{Items: []*schemacachepb.FieldCandidate{cand}})
+
+	root := &schemacachepb.SchemaProductCache{Product: &schemacachepb.ProductSpec{Id: "p"}}
+	root.Product.ProtoReflect().SetUnknown([]byte{0xc8, 0x3e, 0x00})
+	if err := rejectUnknownFieldsAndEnumsReflect(root.ProtoReflect()); err == nil {
+		t.Fatal("nested unknown message fields accepted")
 	}
 }

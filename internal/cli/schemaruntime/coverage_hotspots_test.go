@@ -707,6 +707,10 @@ func TestCrossPlatformCoverageModelValidationAndQuery(t *testing.T) {
 	if err := paged.Validate(); err == nil {
 		t.Fatal("missing cursor parameter accepted")
 	}
+	paged.Pagination = &contract.PaginationSpec{Kind: "offset", CursorParameter: "other"}
+	if err := paged.Validate(); err == nil {
+		t.Fatal("unsupported pagination kind accepted")
+	}
 	paged.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"bad"}, DataSchema: json.RawMessage(`{"type":"object"}`)}
 	paged.Pagination = nil
 	if err := paged.Validate(); err == nil {

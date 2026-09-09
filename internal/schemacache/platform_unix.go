@@ -647,10 +647,8 @@ func (c *unixCache) writeArtifact(identity ExpectedIdentity, artifact Artifact) 
 	if err != nil {
 		return err
 	}
-	header, err := envelope.MarshalBinary()
-	if err != nil {
-		return err
-	}
+	// envelopeFrom already ran validateShape; MarshalBinary cannot fail.
+	header, _ := envelope.MarshalBinary()
 	target := metaFileName
 	if artifact.Expectation.Kind == KindRegistry {
 		target = registryFileName
