@@ -47,7 +47,10 @@ func TestCrossPlatformCoverageMainRunsThroughCLITracker(t *testing.T) {
 				if !cfg.NoCommandLine || !cfg.NoCwd || !cfg.NoAutomaticDimensions || cfg.NoFlushWait || cfg.CaptureOutput {
 					t.Fatalf("tracker behavior config = NoCommandLine %v NoCwd %v NoAutomaticDimensions %v NoFlushWait %v CaptureOutput %v", cfg.NoCommandLine, cfg.NoCwd, cfg.NoAutomaticDimensions, cfg.NoFlushWait, cfg.CaptureOutput)
 				}
-				if cfg.Env != "" || cfg.EventID != "" || cfg.Endpoint != "" || cfg.FlushTimeout != 0 || cfg.OutputMaxLen != 0 {
+				if cfg.FlushTimeout != 50*time.Millisecond {
+					t.Fatalf("tracker FlushTimeout = %v, want 50ms", cfg.FlushTimeout)
+				}
+				if cfg.Env != "" || cfg.EventID != "" || cfg.Endpoint != "" || cfg.OutputMaxLen != 0 {
 					t.Fatalf("tracker SDK defaults were overridden: %#v", cfg)
 				}
 				if cfg.UID != "user-1" || cfg.Username != "Alice" || cfg.UserType != "" {

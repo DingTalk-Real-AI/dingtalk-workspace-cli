@@ -7,6 +7,7 @@ package clitelemetry
 
 import (
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"gitlab.alibaba-inc.com/aes/aem-go-sdk/clitrack"
@@ -47,6 +48,7 @@ func Configuration(version string, identity Identity, commandPath, errorMessage 
 	return Config{
 		PID: "wcCRwZ", App: "dws", Version: version, UID: identity.UserID, Username: identity.UserName,
 		NoCommandLine: true, NoCwd: true, NoAutomaticDimensions: true,
+		FlushTimeout: 50 * time.Millisecond,
 		ExtraFields: func() map[string]string {
 			fields := map[string]string{"c9": *commandPath}
 			if identity.CorpID != "" {
