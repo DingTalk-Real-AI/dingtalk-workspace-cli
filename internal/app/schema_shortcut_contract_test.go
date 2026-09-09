@@ -650,11 +650,19 @@ func assertDeliveryShortcutIdentityAndSelection(
 	if got, want := schemaContractString(tool["primary_cli_path"]), declared.Service+" "+declared.Command; got != want {
 		t.Errorf("%s primary_cli_path = %q, want %q", canonical, got, want)
 	}
-	if got, want := schemaContractString(tool["agent_summary"]), declared.Description; got != want {
-		t.Errorf("%s agent_summary = %q, want %q", canonical, got, want)
+	wantSummary := strings.TrimSpace(declared.Contract.Selection.AgentSummary)
+	if wantSummary == "" {
+		wantSummary = declared.Description
 	}
-	if got, want := schemaContractStringSlice(tool["use_when"]), []string{declared.Intent}; !schemaContractJSONEqual(got, want) {
-		t.Errorf("%s use_when = %#v, want %#v", canonical, got, want)
+	if got := schemaContractString(tool["agent_summary"]); got != wantSummary {
+		t.Errorf("%s agent_summary = %q, want %q", canonical, got, wantSummary)
+	}
+	wantUseWhen := declared.Contract.Selection.UseWhen
+	if len(wantUseWhen) == 0 && strings.TrimSpace(declared.Intent) != "" {
+		wantUseWhen = []string{declared.Intent}
+	}
+	if got := schemaContractStringSlice(tool["use_when"]); !schemaContractJSONEqual(got, wantUseWhen) {
+		t.Errorf("%s use_when = %#v, want %#v", canonical, got, wantUseWhen)
 	}
 	if len(schemaContractStringSlice(tool["avoid_when"])) == 0 {
 		t.Errorf("%s has no reviewed avoid_when", canonical)

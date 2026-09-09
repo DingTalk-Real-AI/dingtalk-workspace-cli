@@ -339,7 +339,8 @@ func TestCrossPlatformCoverageSearchPaginationFailureModes(t *testing.T) {
 				`{"result":{"messages":[{"openMessageId":"m1"},{"openMessageId":"m1"}],"nextCursor":"c2"}}`,
 				`{"result":{"messages":[],"hasMore":false}}`,
 			},
-			args: []string{"--query", "x", "--page-all", "--no-enrich"},
+			args:      []string{"--query", "x", "--page-all", "--no-enrich"},
+			wantError: true,
 		},
 		{
 			name: "stalled cursor", wantError: true,
@@ -347,7 +348,7 @@ func TestCrossPlatformCoverageSearchPaginationFailureModes(t *testing.T) {
 			args:      []string{"--query", "x", "--cursor", "same", "--page-all", "--no-enrich"},
 		},
 		{
-			name: "page limit", wantError: true,
+			name:      "page limit",
 			responses: []string{`{"result":{"messages":[],"hasMore":true,"nextCursor":"next"}}`},
 			args:      []string{"--query", "x", "--page-all", "--page-limit", "1", "--no-enrich"},
 		},

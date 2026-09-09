@@ -216,7 +216,10 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	if err != nil {
 		return ToolSpec{}, fmt.Errorf("resolve Contract Schema parameters for %s: %w", canonicalPath, err)
 	}
-
+	positionals := final.Positionals
+	if len(positionals) == 0 {
+		positionals = runtimeCommandPositionals(entry.Command)
+	}
 	identity := contract.ToolIdentitySpec{
 		ProductID:       entry.ProductID,
 		SourceProductID: strings.TrimSpace(entry.SourceProductID),
@@ -295,11 +298,6 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		safety = applyContractGateToSafety(safety, gate)
 	}
 
-	positionals := final.Positionals
-	if len(positionals) == 0 {
-		positionals = runtimeCommandPositionals(entry.Command)
-	}
-
 	var interfaceSpec contract.InterfaceSpec
 	if final.Interface != nil {
 		interfaceSpec = *final.Interface
@@ -363,9 +361,6 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	})
 }
 
-// contractFinalTextProvenance picks delivered title/description text and the
-// provenance that matches the real winner. preferCobra=true implements the
-// Long-over-declared-Description rule; preferCobra=false keeps declared Title
 // over Short.
 func contractFinalTextProvenance(declared, cobra string, preferCobra bool) (string, contract.FieldProvenance) {
 	decl := strings.TrimSpace(declared)

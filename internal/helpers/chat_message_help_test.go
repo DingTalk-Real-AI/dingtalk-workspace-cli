@@ -77,6 +77,28 @@ func TestCrossPlatformCoverageChatGroupBotsKeepsLegacyGroupFlag(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageChatLegacyGroupSurfaceStaysVisibleWithoutApprovedMigration(t *testing.T) {
+	root := newChatCommand()
+	for _, path := range [][]string{
+		{"conversation-info"},
+		{"message", "list"},
+		{"message", "send"},
+	} {
+		leaf, _, err := root.Find(path)
+		if err != nil {
+			t.Fatalf("find %v: %v", path, err)
+		}
+		canonical := leaf.Flags().Lookup("conversation-id")
+		legacy := leaf.Flags().Lookup("group")
+		if canonical == nil || canonical.Hidden {
+			t.Errorf("%v conversation-id = %#v, want visible", path, canonical)
+		}
+		if legacy == nil || legacy.Hidden {
+			t.Errorf("%v group = %#v, want visible compatibility surface", path, legacy)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageChatPendingMigrationAliasesMatchManifest(t *testing.T) {
 	cmd := newChatCommand()
 	leaf, _, err := cmd.Find([]string{"group", "dismiss"})
@@ -225,6 +247,8 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsOptionalTimeDefaults(t *te
 				"--start 和 --end 可选，不传时默认最近 1 天到当前时间",
 				"默认当前时间前 1 天",
 				"默认当前时间",
+				"--no-reactions",
+				"正文、资源引用和完整性字段仍保留",
 			},
 			absent: []string{"起始时间，格式: yyyy-MM-dd HH:mm:ss (必填)", "结束时间，格式: yyyy-MM-dd HH:mm:ss (必填)"},
 		},
