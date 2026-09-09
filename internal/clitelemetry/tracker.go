@@ -28,6 +28,8 @@ func IdentityFromProfile(profile *profilemetadata.ProfileMetadata) Identity {
 	return Identity{UserID: strings.TrimSpace(profile.UserID), UserName: strings.TrimSpace(profile.UserName), CorpID: strings.TrimSpace(profile.CorpID)}
 }
 
+var resolveReadOnlyProfile = profilemetadata.ResolveReadOnly
+
 // DefaultIdentity is only for invocations with no profile flag. The general
 // argv/profile resolver remains with the CLI. No credentials are opened,
 // refreshed or written: this reads the same metadata-only auth API as core.
@@ -37,7 +39,7 @@ func DefaultIdentity(configDir string) (identity Identity) {
 			identity = Identity{}
 		}
 	}()
-	profile, err := profilemetadata.ResolveReadOnly(configDir, "")
+	profile, err := resolveReadOnlyProfile(configDir, "")
 	if err != nil {
 		return Identity{}
 	}

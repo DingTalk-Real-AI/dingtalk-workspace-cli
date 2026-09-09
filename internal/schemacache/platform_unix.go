@@ -29,8 +29,11 @@ const (
 )
 
 var (
-	userCacheDir        = os.UserCacheDir
-	platformIO   unixIO = realUnixIO{}
+	userCacheDir                       = os.UserCacheDir
+	platformIO                  unixIO = realUnixIO{}
+	currentGOOS                        = runtime.GOOS
+	linuxSystemSchemaCacheBase         = "/var/cache/dws"
+	darwinSystemSchemaCacheBase        = "/Library/Caches/dws"
 )
 
 type unixIO interface {
@@ -104,11 +107,11 @@ type fileState struct {
 // The runtime never creates it; only the installer does. When present, every
 // user reuses the same cache so switching users never re-pays assembly.
 func systemSchemaCacheBase() string {
-	switch runtime.GOOS {
+	switch currentGOOS {
 	case "linux":
-		return "/var/cache/dws"
+		return linuxSystemSchemaCacheBase
 	case "darwin":
-		return "/Library/Caches/dws"
+		return darwinSystemSchemaCacheBase
 	default:
 		return ""
 	}

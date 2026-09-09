@@ -195,6 +195,10 @@ func TestCrossPlatformCoverageRunnerPureCoverage(t *testing.T) {
 	if report := created.ScanPayload(map[string]any{"text": "benign"}); !report.Scanned || lazy.scanner == nil {
 		t.Fatalf("lazy scanner did not initialize on first payload: %#v", report)
 	}
+	var unset *lazyRuntimeContentScanner
+	if report := unset.ScanPayload(map[string]any{"text": "x"}); report.Scanned {
+		t.Fatalf("nil lazy scanner scanned: %#v", report)
+	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	inv := executor.Invocation{CanonicalProduct: "doc", Tool: "get"}

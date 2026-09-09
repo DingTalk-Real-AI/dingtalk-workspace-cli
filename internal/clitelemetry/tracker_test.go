@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageDefaultIdentityIsReadOnly(t *testing.T) {
@@ -46,5 +49,14 @@ func TestCrossPlatformCoverageDefaultIdentityIsReadOnly(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageDefaultIdentityRecoversFromPanic(t *testing.T) {
+	testseam.Swap(t, &resolveReadOnlyProfile, func(string, string) (*profilemetadata.ProfileMetadata, error) {
+		panic("metadata lookup exploded")
+	})
+	if got := DefaultIdentity(t.TempDir()); got != (Identity{}) {
+		t.Fatalf("recovered identity = %#v", got)
 	}
 }

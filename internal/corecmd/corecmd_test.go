@@ -150,6 +150,13 @@ func TestCrossPlatformCoverageStringSliceMatchesPflagSemantics(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageStringSliceSetRejectsInvalidCSV(t *testing.T) {
+	var value commandStringSliceValue
+	if err := value.Set(`"`); err == nil {
+		t.Fatal("unbalanced quote accepted")
+	}
+}
+
 func TestCrossPlatformCoverageAnnotateFlagAliasIgnoresMissingInputs(t *testing.T) {
 	AnnotateFlagAlias(nil, "alias", "canonical")
 

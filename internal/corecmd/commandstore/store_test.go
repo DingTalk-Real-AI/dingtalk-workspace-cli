@@ -95,3 +95,22 @@ func TestCrossPlatformCoverageCommandMetadataConcurrentGC(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestCrossPlatformCoverageCommandMetadataRangePrunesExpired(t *testing.T) {
+	var store Map
+	discarded := storeDiscardedTree(&store)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		runtime.GC()
+		store.Range(func(_, _ any) bool { return true })
+		if discarded.Value() == nil {
+			count := 0
+			store.entries.Range(func(_, _ any) bool { count++; return true })
+			if count == 0 {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("Range did not prune expired command metadata")
+}

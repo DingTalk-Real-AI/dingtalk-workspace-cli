@@ -33,6 +33,12 @@ func signalSelf(t *testing.T, sig syscall.Signal) {
 	}
 }
 
+func TestCrossPlatformCoverageInterruptionExitCodeDelegates(t *testing.T) {
+	if interruptionExitCode(os.Interrupt) != 130 || interruptionExitCode(syscall.SIGTERM) != 143 {
+		t.Fatal("interruptionExitCode diverged from clisignal.ExitCode")
+	}
+}
+
 func TestCrossPlatformCoverageFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
 	testseam.Swap(t, &rootFindProcess, func(int) (*os.Process, error) { return nil, errors.New("find failed") })
 	exitCode := 0

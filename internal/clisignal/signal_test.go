@@ -97,3 +97,15 @@ func TestCrossPlatformCoverageSignalRedeliverExitCodesAndDetail(t *testing.T) {
 		t.Fatalf("state outcome = %#v completed=%v", got, completed)
 	}
 }
+
+func TestCrossPlatformCoverageInstallStopAndEscalateIgnoredSignal(t *testing.T) {
+	ctx, state, stop := Install(context.Background(), func() bool { return false })
+	if ctx == nil || state == nil {
+		t.Fatal("Install returned a nil context or state")
+	}
+	stop()
+	stop()
+	// SIGWINCH is ignored by default, so in-process escalation covers
+	// Escalate → Redeliver without terminating the test binary.
+	Escalate(syscall.SIGWINCH)
+}

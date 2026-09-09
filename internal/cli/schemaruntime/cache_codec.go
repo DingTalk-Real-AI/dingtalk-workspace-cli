@@ -587,12 +587,19 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	return result, nil
 }
 
+// marshalSchemaCacheMessage is the protobuf encoder used by cache builds. Tests
+// swap it to force marshal and length-limit failures that a well-formed DTO
+// cannot otherwise produce.
+var marshalSchemaCacheMessage = func(message proto.Message) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(message)
+}
+
 // MarshalSchemaCacheDeterministic is the only production protobuf encoder.
 func MarshalSchemaCacheDeterministic(message proto.Message) ([]byte, error) {
 	if message == nil || !message.ProtoReflect().IsValid() {
 		return nil, fmt.Errorf("cannot marshal nil Schema cache message")
 	}
-	return proto.MarshalOptions{Deterministic: true}.Marshal(message)
+	return marshalSchemaCacheMessage(message)
 }
 
 // DecodeSchemaMetaCache rejects unbounded, unknown, unordered, or inconsistent DTOs.

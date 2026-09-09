@@ -105,14 +105,10 @@ func (i Identity) Validate() error {
 	if i.CatalogSnapshotVersion != CatalogSnapshotVersion {
 		return fmt.Errorf("unsupported Schema catalog snapshot version %d", i.CatalogSnapshotVersion)
 	}
-	editionDigest, err := schemacache.EditionSHA256(i.Edition)
-	if err != nil {
+	if _, err := schemacache.EditionSHA256(i.Edition); err != nil {
 		return err
 	}
 	identity := i.ExpectedIdentity()
-	if editionDigest != identity.EditionSHA256 {
-		return fmt.Errorf("Schema cache edition identity mismatch")
-	}
 	for _, expectation := range []schemacache.ArtifactExpectation{i.Meta, i.Registry, i.Payload} {
 		envelope := schemacache.Envelope{
 			Kind: expectation.Kind, Serializer: expectation.Serializer, Codec: expectation.Codec,
@@ -156,10 +152,7 @@ func parseSchemaCacheLowerHex(raw string) ([sha256.Size]byte, bool) {
 			return result, false
 		}
 	}
-	decoded, err := hex.DecodeString(raw)
-	if err != nil || len(decoded) != len(result) {
-		return result, false
-	}
+	decoded, _ := hex.DecodeString(raw)
 	copy(result[:], decoded)
 	return result, true
 }

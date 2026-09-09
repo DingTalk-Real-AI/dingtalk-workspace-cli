@@ -220,3 +220,10 @@ func TestCrossPlatformCoverageStoreProductDeclRawForTest(t *testing.T) {
 	ClearProductDeclForTest(" ")
 	ClearProductDeclForTest(id)
 }
+
+func TestCrossPlatformCoverageCanonicalJSONObjectRejectsNull(t *testing.T) {
+	spec := &ResultSpec{Outcomes: []ResultOutcome{ResultOutcomeSuccess}, DataSchema: json.RawMessage("null")}
+	if _, err := NormalizeResultSpec(spec, "sample.run"); err == nil {
+		t.Fatal("null data_schema accepted")
+	}
+}

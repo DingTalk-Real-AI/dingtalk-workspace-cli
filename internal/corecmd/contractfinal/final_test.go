@@ -265,3 +265,7 @@ func TestCrossPlatformCoverageOwnedRuntimeContractFinalKeepsReadIsolation(t *tes
 		t.Fatalf("owned payload read aliased store: %#v", second)
 	}
 }
+
+func TestCrossPlatformCoverageRegisterOwnedRuntimeContractFinalNilCommand(t *testing.T) {
+	RegisterOwnedRuntimeContractFinal(nil, contract.ContractFinalPayload{Title: "ignored"})
+}
