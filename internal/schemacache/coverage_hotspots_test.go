@@ -405,4 +405,92 @@ func TestCrossPlatformCoverageValidateSharedCacheFileAndDirectory(t *testing.T) 
 	if err := validateCacheFile(fileState{mode: reg | 0o644, uid: uid + 1, nlink: 1}, true); err == nil {
 		t.Fatal("other-user shared file accepted")
 	}
+
+	file, err := os.CreateTemp(privateTestBase(t), "not-dir-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	fd, err := unix.Open(file.Name(), unix.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+	if err := validateOwnedDirectory(fd, &Counters{}, realUnixIO{}, true); err == nil {
+		t.Fatal("regular file accepted as shared cache directory")
+	}
+
+	base := privateTestBase(t)
+	if err := os.Chmod(base, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	dirfd, err := unix.Open(base, unix.O_RDONLY|unix.O_DIRECTORY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(dirfd)
+	if err := validateOwnedDirectory(dirfd, &Counters{}, realUnixIO{}, true); err == nil {
+		t.Fatal("world-writable shared directory accepted")
+	}
 }
+
+func TestCrossPlatformCoverageOpenAndReadFaults(t *testing.T) {
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "/tmp/dws-cache/../unsafe")
+	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("unclean override = %v", err)
+	}
+
+	var rootIO unixIO = failRootOpenIO{}
+	testseam.Swap(t, &platformIO, rootIO)
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+	if _, err := Open("official"); err == nil {
+		t.Fatal("root open failure accepted")
+	}
+
+	cache, _, identity := openTestCache(t, nil)
+	meta := testArtifact(KindMeta, []byte("meta-bytes"))
+	reg := testArtifact(KindRegistry, []byte("registry-bytes"))
+	payloads := testArtifact(KindPayloads, []byte("payload-bytes"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cache.Directory(), metaFileName)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body[len(body)-1] ^= 0xff
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("corrupt Meta digest accepted")
+	}
+
+	closeCache, _, closeIdentity := openTestCache(t, nil)
+	if err := closeCache.Publish(closeIdentity, testArtifact(KindRegistry, []byte("reg")), testArtifact(KindMeta, []byte("meta"))); err != nil {
+		t.Fatal(err)
+	}
+	closeCache.backend.(*unixCache).ops = failCloseIO{unixIO: realUnixIO{}}
+	if _, err := closeCache.ReadMeta(closeIdentity, testArtifact(KindMeta, []byte("meta")).Expectation); err == nil {
+		t.Fatal("Meta close failure accepted")
+	}
+
+	live, _, _ := openTestCache(t, failFlockCloseIO{unlockErr: unix.EPERM})
+	if _, err := live.AcquireLock(context.Background(), time.Millisecond); err == nil {
+		t.Fatal("non-EWOULDBLOCK flock accepted")
+	}
+}
+
+type failRootOpenIO struct{ realUnixIO }
+
+func (failRootOpenIO) open(path string, flags int, mode uint32) (int, error) {
+	if path == string(filepath.Separator) {
+		return -1, errors.New("root open failed")
+	}
+	return realUnixIO{}.open(path, flags, mode)
+}
+
+type failCloseIO struct{ unixIO }
+
+func (f failCloseIO) close(int) error { return errors.New("close failed") }

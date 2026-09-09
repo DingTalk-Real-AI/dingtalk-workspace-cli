@@ -489,6 +489,9 @@ func TestCrossPlatformCoverageConversionNilAndEnumDefaults(t *testing.T) {
 	if descriptorsFromProto(nil) != nil || payloadDescriptorsFromProto(nil) != nil || provenanceFromProto(nil) != nil {
 		t.Fatal("nil descriptor conversion")
 	}
+	if toolsFromProto(nil) != nil {
+		t.Fatal("nil tools from proto")
+	}
 	if got, err := toolsToProto(nil); err != nil || got != nil {
 		t.Fatalf("nil tools = %v, %v", got, err)
 	}
@@ -649,37 +652,48 @@ func TestCrossPlatformCoverageModelValidationAndQuery(t *testing.T) {
 	}); err == nil {
 		t.Fatal("tool projector failure ignored")
 	}
+	wantJSON := json.RawMessage(`"v"`)
 	selected := true
-	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{Source: "", Precedence: "1", Resolution: "x"}, "v"); err == nil {
+	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{Value: wantJSON, Source: "", Precedence: "1", Resolution: "x"}, "v"); err == nil {
 		t.Fatal("incomplete winner accepted")
 	}
-	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{Source: "s", Precedence: "1", Resolution: "x"}, "v"); err == nil {
+	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{Value: wantJSON, Source: "s", Precedence: "1", Resolution: "x"}, "v"); err == nil {
 		t.Fatal("no candidates accepted")
 	}
 	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{
-		Source: "s", Precedence: "1", Resolution: "x",
+		Value: wantJSON, Source: "s", Precedence: "1", Resolution: "x",
 		Candidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage("{"), Selected: &selected}},
 	}, "v"); err == nil {
 		t.Fatal("invalid candidate accepted")
 	}
 	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{
-		Source: "s", Precedence: "1", Resolution: "x",
+		Value: wantJSON, Source: "s", Precedence: "1", Resolution: "x",
 		Candidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"other"`), Selected: &selected}},
-	}, json.RawMessage(`"want"`)); err == nil {
+	}, "v"); err == nil {
 		t.Fatal("mismatched selected candidate accepted")
 	}
 	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{
-		Source: "s", Precedence: "1", Resolution: "x",
-		Candidates:           []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"want"`), Selected: &selected}},
+		Value: wantJSON, Source: "s", Precedence: "1", Resolution: "x",
+		Candidates:           []contract.FieldCandidateProvenance{{Value: wantJSON, Selected: &selected}},
+		OverriddenCandidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage("{")}},
+	}, "v"); err == nil {
+		t.Fatal("invalid overridden candidate accepted")
+	}
+	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{
+		Value: wantJSON, Source: "s", Precedence: "1", Resolution: "x",
+		Candidates:           []contract.FieldCandidateProvenance{{Value: wantJSON, Selected: &selected}},
 		OverriddenCandidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"old"`), Selected: &selected}},
-	}, json.RawMessage(`"want"`)); err == nil {
+	}, "v"); err == nil {
 		t.Fatal("selected overridden candidate accepted")
 	}
 	if err := validateFinalFieldProvenance("owner", "title", contract.FieldProvenance{
-		Source: "s", Precedence: "1", Resolution: "x",
-		Candidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"want"`)}},
-	}, json.RawMessage(`"want"`)); err == nil {
+		Value: wantJSON, Source: "s", Precedence: "1", Resolution: "x",
+		Candidates: []contract.FieldCandidateProvenance{{Value: wantJSON}},
+	}, "v"); err == nil {
 		t.Fatal("zero selected candidates accepted")
+	}
+	if equalJSONValues([]byte("{"), []byte("{")) {
+		t.Fatal("invalid identical bytes must not compare equal")
 	}
 	if err := spec.Validate(); err != nil {
 		// may fail without full identity; still exercise pagination cursor check below
@@ -702,6 +716,9 @@ func TestCrossPlatformCoverageModelValidationAndQuery(t *testing.T) {
 		t.Fatal("canonical mismatch accepted")
 	}
 	primary := CommandMeta{Identity: CommandIdentity{CLIPath: "sample run", Canonical: "sample.run", Aliases: []string{"sample alt"}}}
+	if !commandMetaSubsetEqual(map[string]CommandMeta{"a": primary}, map[string]CommandMeta{"a": primary}) {
+		t.Fatal("equal subset")
+	}
 	if validMetaAliasExpansion(nil) {
 		t.Fatal("nil lookup accepted")
 	}

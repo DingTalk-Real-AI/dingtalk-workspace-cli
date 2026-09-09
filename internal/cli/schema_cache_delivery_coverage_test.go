@@ -60,6 +60,9 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if handle := SchemaCachePrewarmPayloadsHandleForTest(); handle != nil {
+		t.Fatal("enabled runtime without prewarm published a handle")
+	}
 	PrewarmSchemaCache()
 	PrewarmSchemaCache()
 	AwaitSchemaCachePrewarmForTest()
