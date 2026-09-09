@@ -36,7 +36,10 @@ before reading protobuf. A missing sidecar generates then uses the cache;
 it is not a permanent live-only mode. Plugins that change the command
 surface still disable persistent I/O. Tests may also inject identity via
 `RegisterSchemaCacheOptions`.
-See `docs/rfc-schema-runtime-cache.md` for the local-identity shipping model.
+See `docs/rfc-schema-runtime-cache.md` for the single RFC covering the
+local-identity shipping model, complete-tree performance contract, cache
+delivery, and telemetry `FlushTimeout=50ms`. Related plan/design/performance
+pages under `docs/` are stubs that only point at that RFC.
 There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;
