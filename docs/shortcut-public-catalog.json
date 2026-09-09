@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-27T10:19:25.811119",
-  "count": 439,
+  "generated_at": "2026-09-08T20:09:46.464623",
+  "count": 440,
   "results": [
     {
       "suite": "semantic",
@@ -1498,8 +1498,8 @@
       "command": "+category-list-conversations",
       "risk": "read",
       "status": "reviewed_available",
-      "disposition": "schema_leaf",
-      "semantic_delta": "按分组列会话是一对一分页读取；无跨工具编排。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "保留稳定 categoryId 输入合同，并严格校验 conversations 数组、稳定会话身份和分页耗尽；按名称或显式任选时先用 +category-list 发现真实 ID。",
       "availability": "available"
     },
     {
@@ -2355,11 +2355,21 @@
     {
       "suite": "semantic",
       "service": "chat",
+      "command": "+recent-conversations",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
       "command": "+search-msg",
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化，可选安全下载命中消息资源，并以 failure ledger 显式报告截断、富化或下载失败。",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型、机器人来源和 reaction 存在性谓词；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化、稳定身份复核和安全资源下载，并以 failure ledger 显式报告截断、富化或下载失败。",
       "availability": "available"
     },
     {
@@ -3779,7 +3789,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID with stop/continue partial-write ledgers and explicit acknowledgements.",
+      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID or organization staffId with stop/continue partial-write ledgers and explicit acknowledgements.",
       "availability": "available"
     },
     {
@@ -4179,7 +4189,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "严格投影要求 success=true、OpenNodes V1、显式 pages 数组、每页稳定 id 与显式 nodes 数组，并校验跨页节点身份及服务端完整性摘要。",
+      "semantic_delta": "按 --part-id 是否显式提供确定性分流到内嵌或独立白板；严格投影校验 OpenNodes V1、稳定节点身份、独立白板 revision 及服务端完整性摘要，失败后不跨类型回退。",
       "availability": "available"
     },
     {
@@ -4189,7 +4199,7 @@
       "risk": "high-risk-write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "首次远端调用前完成 OpenNodes V1 校验与用户确认；写后要求 success=true、同一目标、非空终态回执、createdNodeIds/idMap 精确映射，再按真实节点身份独立 query 读回请求关键字段。",
+      "semantic_delta": "首次远端调用前完成分支参数、OpenNodes V1 与用户确认校验；内嵌分支保持旧接口，独立分支使用 revision/requestId 写入，两者均校验终态回执、节点映射并只从同类接口精确读回。",
       "availability": "available"
     },
     {

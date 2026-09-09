@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -544,5 +545,470 @@ func TestCrossPlatformCoverageDocReadbackDefensiveEdges(t *testing.T) {
 	}
 	if !isGeneratedTextSpan(nil) || isGeneratedTextSpan(map[string]any{"a": 1, "b": 2}) || isGeneratedTextSpan(map[string]any{"data-type": 3}) || isGeneratedTextSpan(map[string]any{"data-type": "other"}) {
 		t.Fatal("generated span classification failed")
+	}
+}
+
+// The document service rewrites [@name](alidocs-mcp://doc/mention?openDingTalkId=X)
+// into a profile link while committing markdown, so the authored destination can
+// never appear in a readback. Before mention canonicalization every verified
+// write path reported doc_write_verification_failed even though the content had
+// landed, which pushed agents into retrying and duplicating content.
+//
+// Only the link shape matters here, so every identifier below is synthetic. Real
+// user names and real openDingTalkId / corpId / staffId values must never be
+// committed as fixtures.
+const (
+	docMentionAuthored = "请 [@测试甲](alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEMENTIONIDAAAA) 跟进。"
+	docMentionServer   = "请 [@测试甲](dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100001) 跟进。"
+)
+
+func TestCrossPlatformCoverageDocMentionRewritePassesVerifiedWrites(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		readback string
+		args     []string
+	}{
+		{
+			name:     "append",
+			readback: "锚点段落\n\n" + docMentionServer,
+			args:     []string{"--node", "n", "--command", "append", "--content", docMentionAuthored, "--yes"},
+		},
+		{
+			name:     "overwrite",
+			readback: docMentionServer,
+			args:     []string{"--node", "n", "--command", "overwrite", "--content", docMentionAuthored, "--yes"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": tc.readback}},
+			}}
+			if err := runDocCoverage(t, Update, caller, tc.args...); err != nil {
+				t.Fatalf("verified %s write with a rewritten mention must succeed: %v", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocMentionRewritePassesVerifiedCreate(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"create_document":      {{"nodeId": "created-node"}},
+		"get_document_content": {{"markdown": docMentionServer}},
+	}}
+	if err := runDocCoverage(t, Create, caller,
+		"--name", "周报", "--content", docMentionAuthored, "--yes"); err != nil {
+		t.Fatalf("verified create with a rewritten mention must succeed: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDocMentionCanonicalizationStillDetectsDrift(t *testing.T) {
+	// Canonicalization drops only the rewritten destination. Label text, node
+	// order and the presence of the link stay in the fingerprint, so a write
+	// that did not actually land must still fail.
+	for _, tc := range []struct {
+		name     string
+		readback string
+	}{
+		{"mention dropped entirely", "请 跟进。"},
+		{"label changed", "请 [@测试乙](dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100002) 跟进。"},
+		{"link degraded to plain text", "请 @测试甲 跟进。"},
+		{"surrounding prose lost", docMentionServer + "\n多写了一段"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": tc.readback}},
+			}}
+			err := runDocCoverage(t, Update, caller,
+				"--node", "n", "--command", "overwrite", "--content", docMentionAuthored, "--yes")
+			var typed *apperrors.Error
+			if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" {
+				t.Fatalf("readback %q must still fail verification, got %v", tc.readback, err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocMentionCanonicalizationScopedToMentionWrites(t *testing.T) {
+	// The relaxation is gated on the authored side carrying the mention
+	// protocol. A write with no mention must keep the strict comparison, so a
+	// server that silently rewrote an ordinary link still fails.
+	authored := "见 [钉钉](https://www.dingtalk.com) 说明。"
+	server := "见 [钉钉](https://example.com/rewritten) 说明。"
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": server}},
+	}}
+	err := runDocCoverage(t, Update, caller,
+		"--node", "n", "--command", "overwrite", "--content", authored, "--yes")
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" {
+		t.Fatalf("non-mention writes must keep strict destination comparison, got %v", err)
+	}
+
+	if _, ok := markdownServiceSemanticTokens(strings.Repeat("x", docMarkdownVerifyMax+1)); ok {
+		t.Fatal("oversized input must not produce fingerprint tokens")
+	}
+	if docContentHasMentionLink(authored) || !docContentHasMentionLink(docMentionAuthored) {
+		t.Fatal("mention protocol detection failed")
+	}
+	ordinary := docFingerprintLinkTokenPrefix + "https://www.dingtalk.com"
+	if isMentionProtocolLinkToken(ordinary) || isProfileLinkToken(ordinary) {
+		t.Fatal("ordinary destinations must not be treated as mention or profile links")
+	}
+}
+
+// Mention pairing is positional: only a position where the author wrote the
+// mention protocol may hold a profile link on readback. An earlier revision
+// collapsed every profile-shaped link instead, which silently stopped verifying
+// an ordinary profile link the author wrote themselves.
+func TestCrossPlatformCoverageDocMentionVerificationPairing(t *testing.T) {
+	const (
+		mentionA = "alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEAAAA"
+		mentionB = "alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEBBBB"
+		profile1 = "dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100001"
+		profile2 = "dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100002"
+	)
+
+	for _, tc := range []struct {
+		name     string
+		expected string
+		actual   string
+		mode     string
+		want     bool
+	}{
+		// Service-side normalization that must stay tolerated, with and without
+		// a mention in the body.
+		{"overwrite tolerates an added document title", "正文段落。", "# 文档标题\n\n正文段落。", "overwrite", true},
+		{
+			"overwrite tolerates an added title alongside a mention",
+			"请 [@测试甲](" + mentionA + ") 跟进。",
+			"# 文档标题\n\n请 [@测试甲](" + profile1 + ") 跟进。",
+			"overwrite", true,
+		},
+		{"append tolerates preceding content", "新增段落。", "旧段落。\n\n新增段落。", "append", true},
+		{
+			"append tolerates preceding content alongside a mention",
+			"追加 [@测试甲](" + mentionA + ") 完。",
+			"旧段落。\n\n追加 [@测试甲](" + profile1 + ") 完。",
+			"append", true,
+		},
+
+		// A mention and an ordinary profile link coexisting: the mention may be
+		// rewritten, the ordinary link may not drift.
+		{
+			"mention rewrite beside an intact ordinary profile link",
+			"请 [@测试甲](" + mentionA + ") 跟进，负责人 [某人](" + profile1 + ")。",
+			"请 [@测试甲](" + profile2 + ") 跟进，负责人 [某人](" + profile1 + ")。",
+			"overwrite", true,
+		},
+		{
+			"ordinary profile link drifting to another target is rejected",
+			"请 [@测试甲](" + mentionA + ") 跟进，负责人 [某人](" + profile1 + ")。",
+			"请 [@测试甲](" + profile2 + ") 跟进，负责人 [某人](" + profile2 + ")。",
+			"overwrite", false,
+		},
+
+		// Drift at the mention position itself.
+		{"dropped mention is rejected", "请 [@测试甲](" + mentionA + ") 跟进。", "请 跟进。", "overwrite", false},
+		{
+			"changed mention label is rejected",
+			"请 [@测试甲](" + mentionA + ") 跟进。",
+			"请 [@测试乙](" + profile1 + ") 跟进。",
+			"overwrite", false,
+		},
+		{
+			"mention degraded to plain text is rejected",
+			"请 [@测试甲](" + mentionA + ") 跟进。", "请 @测试甲 跟进。", "overwrite", false,
+		},
+
+		// Without an authored mention nothing is relaxed.
+		{
+			"profile link drift without any mention is rejected",
+			"负责人 [某人](" + profile1 + ")。", "负责人 [某人](" + profile2 + ")。", "overwrite", false,
+		},
+		{
+			"ordinary link drift without any mention is rejected",
+			"见 [钉钉](https://www.dingtalk.com)。", "见 [钉钉](https://example.com)。", "overwrite", false,
+		},
+
+		// The comparison layer accepts any profile destination at a mention
+		// position — targets are simply not compared, whether there is one mention
+		// or several, same label or not. That is why the envelope reports
+		// mentionTargetsVerified=false instead of claiming target verification;
+		// see TestCrossPlatformCoverageDocMentionTargetsReportedUnverified.
+		{
+			"swapped mention targets pass the comparison (targets are not compared)",
+			"[@同名](" + mentionA + ") 与 [@同名](" + mentionB + ")",
+			"[@同名](" + profile2 + ") 与 [@同名](" + profile1 + ")",
+			"overwrite", true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := verifyUpdatedDocumentContent(
+				map[string]any{"markdown": tc.actual}, tc.expected, tc.mode, "markdown")
+			if got != tc.want {
+				t.Fatalf("verify = %v, want %v\nexpected=%q\nactual=%q", got, tc.want, tc.expected, tc.actual)
+			}
+		})
+	}
+}
+
+// Readback cannot tell which user a mention resolved to: the service rewrites
+// openDingTalkId into a profile link and the two identifiers have no local
+// mapping. Rather than failing an otherwise correct write, or letting "verified"
+// imply more than it checked, the result says so explicitly.
+func TestCrossPlatformCoverageDocMentionTargetsReportedUnverified(t *testing.T) {
+	const mention = "alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEAAAA"
+	const profile = "dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100001"
+
+	withMention := "请 [@测试甲](" + mention + ") 跟进。"
+	summary := compactDocVerification(
+		map[string]any{"markdown": "请 [@测试甲](" + profile + ") 跟进。"},
+		withMention, "overwrite", "markdown", nil)
+	// A mention write cannot be fully verified, so the summary must not claim it.
+	if summary["verified"] != false {
+		t.Fatalf("a mention write must not report itself as verified: %#v", summary)
+	}
+	if summary["mentionTargetsVerified"] != false {
+		t.Fatalf("mention targets must be reported as unverified: %#v", summary)
+	}
+
+	plain := "普通段落，无 @人。"
+	plainSummary := compactDocVerification(
+		map[string]any{"markdown": plain}, plain, "overwrite", "markdown", nil)
+	if _, present := plainSummary["mentionTargetsVerified"]; present {
+		t.Fatalf("a write without mentions must not carry the flag: %#v", plainSummary)
+	}
+
+	warnings := withMentionTargetWarning([]string{"既有告警"}, withMention)
+	if len(warnings) != 2 || warnings[0] != "既有告警" ||
+		!strings.Contains(warnings[1], "需用户自行核对") {
+		t.Fatalf("mention warning must be appended after existing ones: %#v", warnings)
+	}
+	if got := withMentionTargetWarning(nil, plain); got != nil {
+		t.Fatalf("no mention means no warning: %#v", got)
+	}
+
+	// The scope marker sits beside "verified" so the top level qualifies itself,
+	// and the verify step carries the same scope.
+	data := map[string]any{"verified": true}
+	steps := []map[string]any{{"name": "update_document", "status": "success"},
+		{"name": "verify", "status": "success"}}
+	annotateMentionVerificationScope(data, steps, withMention)
+	if data["verified"] != false {
+		t.Fatalf("top level must not claim verified for a mention write: %#v", data)
+	}
+	if data["verificationScope"] != "partial" {
+		t.Fatalf("top level must declare a partial scope: %#v", data)
+	}
+	local, _ := data["unverifiableLocally"].([]string)
+	if len(local) != 1 || local[0] != "mention_targets" {
+		t.Fatalf("the gap must be marked as not checkable locally: %#v", data["unverifiableLocally"])
+	}
+	gaps, _ := data["unverified"].([]string)
+	if len(gaps) != 1 || gaps[0] != "mention_targets" {
+		t.Fatalf("the gap must be named explicitly: %#v", data["unverified"])
+	}
+	if steps[1]["scope"] != "partial" {
+		t.Fatalf("verify step must carry the scope: %#v", steps)
+	}
+	// A consumer that only switches on steps[].status must not read this as a
+	// fully verified readback, so the status itself stops saying "success".
+	if steps[1]["status"] != "partial" {
+		t.Fatalf("verify step must not stay success for a mention write: %#v", steps)
+	}
+	if _, present := steps[0]["scope"]; present {
+		t.Fatalf("only the verify step is scoped: %#v", steps[0])
+	}
+	if steps[0]["status"] != "success" {
+		t.Fatalf("the write step keeps its own status: %#v", steps[0])
+	}
+
+	plainData := map[string]any{"verified": true}
+	plainSteps := []map[string]any{{"name": "verify", "status": "success"}}
+	annotateMentionVerificationScope(plainData, plainSteps, plain)
+	if plainData["verified"] != true {
+		t.Fatalf("a write without mentions stays fully verified: %#v", plainData)
+	}
+	if _, present := plainData["verificationScope"]; present {
+		t.Fatalf("a write without mentions stays unqualified: %#v", plainData)
+	}
+	if _, present := plainSteps[0]["scope"]; present {
+		t.Fatalf("a write without mentions leaves steps untouched: %#v", plainSteps[0])
+	}
+	if plainSteps[0]["status"] != "success" {
+		t.Fatalf("a write without mentions keeps a successful verify: %#v", plainSteps[0])
+	}
+
+	// The warning carries exactly two facts: what the caller must check itself,
+	// and that the rest was verified.
+	for _, fact := range []string{"需用户自行核对", "均已通过回读校验"} {
+		if !strings.Contains(docMentionTargetUnverifiedWarning, fact) {
+			t.Fatalf("warning must state %q: %q", fact, docMentionTargetUnverifiedWarning)
+		}
+	}
+}
+
+// The scope disclosure only matters if it survives to what the commands
+// actually publish, so assert the delivered envelope of every content-write
+// path rather than just that execution succeeded.
+func TestCrossPlatformCoverageDocMentionUnverifiedReachesEveryWriteEnvelope(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		declaration shortcut.Shortcut
+		responses   map[string][]map[string]any
+		args        []string
+	}{
+		{
+			name:        "create",
+			declaration: Create,
+			responses: map[string][]map[string]any{
+				"create_document":      {{"nodeId": "created-node"}},
+				"get_document_content": {{"markdown": docMentionServer}},
+			},
+			args: []string{"--name", "周报", "--content", docMentionAuthored, "--yes"},
+		},
+		{
+			name:        "update append",
+			declaration: Update,
+			responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": "锚点段落\n\n" + docMentionServer}},
+			},
+			args: []string{"--node", "n", "--command", "append", "--content", docMentionAuthored, "--yes"},
+		},
+		{
+			name:        "update overwrite",
+			declaration: Update,
+			responses: map[string][]map[string]any{
+				"get_document_content": {{"markdown": docMentionServer}},
+			},
+			args: []string{"--node", "n", "--command", "overwrite", "--content", docMentionAuthored, "--yes"},
+		},
+		{
+			name:        "checkpoint update",
+			declaration: CheckpointUpdate,
+			responses: map[string][]map[string]any{
+				"save_doc_version":     {{"version": 9.0}},
+				"get_document_content": {{"markdown": docMentionServer}},
+			},
+			args: []string{"--node", "n", "--content", docMentionAuthored, "--yes"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			envelope := runDocCoverageEnvelope(t, tc.declaration,
+				&docCoverageCaller{responses: tc.responses}, tc.args...)
+
+			// The write itself succeeded; only its verification scope is narrower.
+			if envelope["ok"] != true || envelope["status"] != "success" {
+				t.Fatalf("a mention write is still a successful operation: %#v", envelope)
+			}
+			data, _ := envelope["data"].(map[string]any)
+			if data["verified"] != false {
+				t.Fatalf("delivered data must not claim verified: %#v", data)
+			}
+			if data["verificationScope"] != "partial" {
+				t.Fatalf("delivered data must declare a partial scope: %#v", data)
+			}
+
+			steps, _ := envelope["steps"].([]any)
+			var verify map[string]any
+			for _, entry := range steps {
+				step, _ := entry.(map[string]any)
+				if step["name"] == "verify" {
+					verify = step
+				}
+			}
+			if verify == nil {
+				t.Fatalf("every content write publishes a verify step: %#v", steps)
+			}
+			if verify["status"] == "success" {
+				t.Fatalf("delivered verify step must not report success: %#v", verify)
+			}
+			if verify["status"] != "partial" || verify["scope"] != "partial" {
+				t.Fatalf("delivered verify step must be marked partial: %#v", verify)
+			}
+
+			warnings, _ := envelope["warnings"].([]any)
+			if len(warnings) == 0 {
+				t.Fatalf("the caller must be told what to check itself: %#v", envelope)
+			}
+		})
+	}
+}
+
+// The append comparison has three layers: rendered HTML, the layout-tolerant
+// service fingerprint, and mention-aware token pairing. Each needs its own
+// input shape, otherwise a layer silently stops being exercised.
+func TestCrossPlatformCoverageDocMentionSuffixComparisonLayers(t *testing.T) {
+	// Whitespace collapse is layout-only: the rendered-HTML suffix differs, the
+	// service fingerprint does not, so the append still verifies.
+	if !markdownSemanticallyEndsWith("intro\n\ndone   now", "done now") {
+		t.Fatal("layout-only whitespace difference must still match as a suffix")
+	}
+
+	mention := "[@测试甲](alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEAAAA)"
+	if markdownSemanticallyEndsWith("", mention) {
+		t.Fatal("an empty readback cannot contain an appended mention")
+	}
+	if markdownSemanticallyEndsWith(strings.Repeat("x", docMarkdownVerifyMax+1), mention) {
+		t.Fatal("an oversized readback must not be accepted")
+	}
+}
+
+// Mention pairing must form a consistent bijection. Neither check needs an
+// identity lookup, so both are enforced locally; a permutation of two distinct
+// targets stays undetectable because the authored side carries no staffId.
+func TestCrossPlatformCoverageDocMentionPairingRequiresBijection(t *testing.T) {
+	const (
+		mentionA = "alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEAAAA"
+		mentionB = "alidocs-mcp://doc/mention?openDingTalkId=DEXAMPLEBBBB"
+		profile1 = "dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100001"
+		profile2 = "dingtalk://dingtalkclient/page/profile?corp_id=dingexamplecorpid&staff_id=100002"
+	)
+
+	for _, tc := range []struct {
+		name     string
+		expected string
+		actual   string
+		want     bool
+	}{
+		{
+			"one id resolving to one target twice is accepted",
+			"[@甲](" + mentionA + ") 与 [@甲](" + mentionA + ")",
+			"[@甲](" + profile1 + ") 与 [@甲](" + profile1 + ")",
+			true,
+		},
+		{
+			"the same id resolving to two different targets is rejected",
+			"[@甲](" + mentionA + ") 与 [@甲](" + mentionA + ")",
+			"[@甲](" + profile1 + ") 与 [@甲](" + profile2 + ")",
+			false,
+		},
+		{
+			"two different ids collapsing onto one target is rejected",
+			"[@甲](" + mentionA + ") 与 [@乙](" + mentionB + ")",
+			"[@甲](" + profile1 + ") 与 [@乙](" + profile1 + ")",
+			false,
+		},
+		{
+			"two different ids resolving to two different targets is accepted",
+			"[@甲](" + mentionA + ") 与 [@乙](" + mentionB + ")",
+			"[@甲](" + profile1 + ") 与 [@乙](" + profile2 + ")",
+			true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := verifyUpdatedDocumentContent(
+				map[string]any{"markdown": tc.actual}, tc.expected, "overwrite", "markdown")
+			if got != tc.want {
+				t.Fatalf("verify = %v, want %v\nexpected=%q\nactual=%q", got, tc.want, tc.expected, tc.actual)
+			}
+		})
+	}
+
+	if got := docFingerprintLinkDestination(docFingerprintLinkTokenPrefix + profile1 + "\x00"); got != profile1 {
+		t.Fatalf("destination extraction = %q", got)
+	}
+	if got := docFingerprintLinkDestination("open\x00link:bare"); got != "bare" {
+		t.Fatalf("a token without a title separator must still yield its destination: %q", got)
 	}
 }

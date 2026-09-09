@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -505,6 +507,56 @@ func TestCallToolUsesJSONRPCMethod(t *testing.T) {
 	}
 	if result.Content["documentId"] != "doc-123" {
 		t.Fatalf("CallTool() content = %#v", result.Content)
+	}
+}
+
+func TestAITableProductionCallUsesPlainJSONRPC(t *testing.T) {
+	t.Parallel()
+
+	endpoint := ""
+	for _, server := range syncdata.StaticServers() {
+		if server.ID == "aitable" {
+			endpoint = server.Endpoint
+			break
+		}
+	}
+	if endpoint == "" {
+		t.Fatal("AI 表格生产 MCP endpoint is missing from syncdata.StaticServers")
+	}
+
+	calls := 0
+	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if got := req.Header.Get("Accept"); got != "application/json" {
+			t.Fatalf("Accept = %q", got)
+		}
+		if got := req.Header.Get("Mcp-Session-Id"); got != "" {
+			t.Fatalf("unexpected MCP session header %q", got)
+		}
+		var envelope requestEnvelope
+		if err := json.NewDecoder(req.Body).Decode(&envelope); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if envelope.Method != "tools/call" {
+			t.Fatalf("method = %q, want tools/call", envelope.Method)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"ok"}]}}`)),
+		}, nil
+	})})
+	client.MaxRetries = 0
+
+	result, err := client.CallTool(context.Background(), endpoint, "otable_pg_list_tables", map[string]any{"baseId": "base"})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("request count = %d, want 1", calls)
+	}
+	if len(result.Blocks) != 1 || result.Blocks[0].Text != "ok" {
+		t.Fatalf("result = %#v", result)
 	}
 }
 

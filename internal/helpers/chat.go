@@ -1699,23 +1699,34 @@ func newChatGroupSearchCommand(hidden bool) *cobra.Command {
 }
 
 func runChatSearchCommon(cmd *cobra.Command, _ []string) error {
-	if err := validateRequiredFlags(cmd, "nicks"); err != nil {
-		return err
-	}
-	nicks := parseCSVValues(mustGetFlag(cmd, "nicks"))
-	limit := chatIntFlagOrFallback(cmd, "limit", "size")
-	cursor, _ := cmd.Flags().GetString("cursor")
-	matchMode, _ := cmd.Flags().GetString("match-mode")
-	toolArgs := map[string]any{
-		"nicks":     nicks,
-		"matchMode": matchMode,
-		"limit":     limit,
-		"cursor":    cursor,
-	}
-	if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
-		toolArgs["excludeMuted"] = true
-	}
-	return callMCPTool("search_common_groups", toolArgs)
+	return RunPagedMCPCommand(cmd, PagedMCPCommandConfig{
+		ServerID:         "chat",
+		ToolName:         "search_common_groups",
+		ItemPath:         "result.groups",
+		ItemIdentityPath: "openConversationId",
+		CursorPath:       "result.nextCursor",
+		HasMorePath:      "result.hasMore",
+		CursorArg:        "cursor",
+		CursorKind:       PagedCursorString,
+		BuildArgs: func(cmd *cobra.Command) (map[string]any, error) {
+			if err := validateRequiredFlags(cmd, "nicks"); err != nil {
+				return nil, err
+			}
+			toolArgs := map[string]any{
+				"nicks":     parseCSVValues(mustGetFlag(cmd, "nicks")),
+				"matchMode": mustGetFlag(cmd, "match-mode"),
+				"limit":     chatIntFlagOrFallback(cmd, "limit", "size"),
+				"cursor":    mustGetFlag(cmd, "cursor"),
+			}
+			if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
+				toolArgs["excludeMuted"] = true
+			}
+			return toolArgs, nil
+		},
+		Fallback: func(args map[string]any) error {
+			return callMCPTool("search_common_groups", args)
+		},
+	})
 }
 
 // sanitizeTitleFromText derives a safe title from message text.
@@ -2913,9 +2924,10 @@ func newChatCommand() *cobra.Command {
 			AgentSummary: "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
 			UseWhen: []string{
 				"请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人",
+				"资源范围仅为 IM，答案需要可枚举消息记录，或要按消息原生谓词进行结构化检索",
 			},
 			AvoidWhen: []string{
-				"实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
+				"跨文档、邮件和消息按主题发现内容用 aisearch enterprise；查询当前用户参与的跨源行为轨迹用 aisearch behavior；实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
 			},
 		},
 	})
@@ -5204,10 +5216,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatSearchCommonCmd := &cobra.Command{
 		Use:   "search-common",
 		Short: "搜索共同群（查询指定人共同所在的群聊）",
-		Long:  `根据昵称列表搜索共同群聊。--nicks 指定要搜索的人员昵称（逗号分隔，必填）。--match-mode 控制匹配模式：AND 表示所有人都在群里，OR 表示任一人在群里（默认 AND）。分页参数 --limit（默认 20）和 --cursor（默认 "0"）始终传递；hasMore=true 时用返回的 nextCursor 作为下次 --cursor 继续翻页。`,
+		Long:  `根据昵称列表搜索共同群聊。--nicks 指定要搜索的人员昵称（逗号分隔，必填）。--match-mode 控制匹配模式：AND 表示所有人都在群里，OR 表示任一人在群里（默认 AND）。--limit 是每页数量，--cursor 是单页续游标；要求“最多 N 个”时使用 --page-all --max-items N，CLI 会自动续页、按 openConversationId 去重，并通过 paging.requestSatisfied/sourceExhausted 区分“已满足用户上限”和“已穷尽服务端”。`,
 		Example: `  dws chat search-common --nicks "风雷,山乔" --limit 20 --cursor 0
-  dws chat search-common --nicks "天鸡,乐函" --match-mode OR --limit 20 --cursor 0
-  dws chat search-common --nicks "风雷,山乔,天鸡" --limit 10 --cursor <nextCursor>`,
+  dws chat search-common --nicks "天鸡,乐函" --match-mode OR --limit 100 --page-all --max-items 20 --page-delay 0`,
 		RunE: runChatSearchCommon,
 	}
 	DeclareLeafMetadata(chatSearchCommonCmd, LeafSpec{
@@ -5233,8 +5244,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 				AgentSummary: "查询指定人员共同所在的群聊",
 				UseWhen:      []string{"需要找两人或多人共同群聊时"},
 				AvoidWhen:    []string{"按群名称搜索时使用 chat search"},
-				Examples:     []string{"dws chat search-common --nicks \"张三,李四\" --match-mode all --limit 20"},
+				Examples:     []string{"dws chat search-common --nicks \"张三,李四\" --match-mode AND --limit 100 --page-all --max-items 20 --page-delay 0"},
 			},
+			Parameters: pagedMCPParamDecls(),
 		},
 	})
 
@@ -5579,6 +5591,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatSearchCommonCmd.Flags().MarkHidden("size")
 	chatSearchCommonCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"，翻页传 nextCursor）")
 	chatSearchCommonCmd.Flags().Bool("exclude-muted", false, "是否排除已设置免打扰的群聊（默认 false）")
+	AddPagedMCPFlags(chatSearchCommonCmd)
 	chatMessageSearchCommonCmd.Flags().String("nicks", "", "要搜索的昵称列表，逗号分隔 (必填)")
 	_ = chatMessageSearchCommonCmd.MarkFlagRequired("nicks")
 	chatMessageSearchCommonCmd.Flags().String("match-mode", "AND", "匹配模式：AND=所有人都在群里，OR=任一人在群里（默认 AND）")
@@ -5587,6 +5600,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatMessageSearchCommonCmd.Flags().MarkHidden("size")
 	chatMessageSearchCommonCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"，翻页传 nextCursor）")
 	chatMessageSearchCommonCmd.Flags().Bool("exclude-muted", false, "是否排除已设置免打扰的群聊（默认 false）")
+	AddPagedMCPFlags(chatMessageSearchCommonCmd)
 	chatMessageSearchCommonCmd.Flags().String("group", "", "")
 	_ = chatMessageSearchCommonCmd.Flags().MarkHidden("group")
 

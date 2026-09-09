@@ -2771,17 +2771,28 @@ newFieldName、config、aiConfig 至少传入一项。
           lt gt lte gte(数值比较) contain exclusive(文本)
           all_of any_of none_of(多选)
           date_eq before after not_before not_after(日期)
-  注意：singleSelect/multipleSelect 字段过滤值 必须 传选项名称的字面量（比如 "本科"），不要传 option ID！
+  注意：查询指定数据前必须先用 field get（不加 --field-ids）完整读一遍表头，
+        拿到所有字段的 fieldId/name/type/config，先确定用户条件对应哪个字段，
+        再按该字段类型解析值并传入查询条件；禁止跳过读表头凭猜测选字段。
+  注意：singleSelect/multipleSelect 过滤前必须先通过 field get 或 field search-options 唯一解析，filter 传稳定 option ID；multipleSelect 的比较值必须传 option ID 数组。
+  注意：人员、部门、群组字段禁止直接传姓名、部门名或群名。必须先分别调用
+        dws aisearch person --keyword "<姓名>" --dimension name、
+        dws contact +resolve-dept --name "<部门名>"、
+        dws chat +chat-search --query "<群名>"
+        唯一解析 userId、deptId、openConversationId，再按字段协议传结构化 ID 数组，
+        例如 [{"userId":"u1"}]、[{"departmentId":"d1"}]、[{"cid":"cid1"}]；零命中或多命中必须先消歧。
   注意：date 日期字段 只能用 date_eq/before/after/not_before/not_after，值传日期串(如 "2026-05-22")；
         通用 eq/gte/lte/contain 对日期字段无效会返回 0 条；不支持区间(date_between)和相对(from_now)，
         范围用 not_before+not_after 组合。
+
+分页说明：普通扫描某页恰好返回 limit 条时可能带 nextCursor；用它续页后若查询成功且 records=[]、nextCursor 为空，这是正常末页，不是异常或漏查。成功空页若 nextCursor 非空则继续，nextCursor 为空则正常完成。
 
 --sort 结构：[{"fieldId":"<fieldId>","direction":"asc|desc"}]
   示例：[{"fieldId":"fldPriorityId","direction":"asc"},{"fieldId":"fldDueDateId","direction":"desc"}]
   注意：排序方向字段必须使用 direction（值为 asc 或 desc）`,
 		Example: `  dws aitable record query --base-id BASE_ID --table-id TABLE_ID
   dws aitable record query --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2
-  dws aitable record query --base-id BASE_ID --table-id TABLE_ID --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fld_xxx","本科"]}]}'
+  dws aitable record query --base-id BASE_ID --table-id TABLE_ID --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fld_user",[{"userId":"u1"}]]}]}'
   dws aitable record query --base-id BASE_ID --table-id TABLE_ID --query "关键词" --limit 50
   dws aitable record query --base-id BASE_ID --table-id TABLE_ID --field-ids "fldTextId,fldFormulaId,fldLookupId"
   # 查询 baseId: dws aitable base list
@@ -3387,7 +3398,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 		Long: `按表内顺序扫描一页，过滤出"完全没填用户字段"的空行。
 - 空行定义：除系统字段（recordId / 创建人 / 创建时间 / 修改人 / 修改时间）外，所有 cell 都是 null、空字符串、空集合或空 Map。
 - --limit 是扫描预算（不是返回数）：可能扫了 100 条但全部非空，本页返回空数组。
-- 翻页：返回 nextCursor 非空时把它传回继续扫；nextCursor 为空才表示扫完全表。
+- 翻页：返回 nextCursor 非空时把它传回继续扫；nextCursor 为空才表示扫完全表。成功返回 records 为空且 nextCursor 为空属于正常完成，不是异常。
 
 返回 data: {records: [...], nextCursor: "..."}。`,
 		Example: `  dws aitable record query-empty --base-id BASE_ID --table-id TABLE_ID
@@ -8063,7 +8074,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordQueryCmd.Flags().Int("limit", 0, "单次返回的最大记录数，默认 100，最大 100")
 	recordQueryCmd.Flags().Int("page-size", 0, "--limit 的别名（兼容 LLM 常见误用）")
 	_ = recordQueryCmd.Flags().MarkHidden("page-size")
-	recordQueryCmd.Flags().String("cursor", "", "分页游标，首次查询不传；cursor 为空表示已取完全部记录")
+	recordQueryCmd.Flags().String("cursor", "", "分页游标，首次查询不传；普通扫描满 limit 后可能出现成功空续页，records 为空不是错误，仍以本页 nextCursor 是否为空判断继续或完成；nextCursor 为空表示已取完全部记录")
 	recordQueryCmd.Flags().Bool("all", false, "自动翻页获取完整记录集；达到 --page-limit 且仍有更多页时返回非零结构化错误，不把不完整结果作为成功输出")
 	recordQueryCmd.Flags().Int("page-limit", 50, "自动翻页最大页数（仅 --all 时生效）。默认 50 页（约 5000 条）；设为 0 表示显式不限页数；超限时错误详情保留已取记录和续传 cursor")
 	recordQueryCmd.Flags().String("view-id", "", "视图 ID（record query 不支持按视图过滤，此参数会被忽略并给出提示）")
@@ -9174,6 +9185,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	// 独立注册 flags（不能用 copyFlags 共享指针，cobra 不支持同一 flag 绑多个命令）
 	infoAliasCmd.Flags().String("base-id", "", "Base 唯一标识。优先使用 base search / base list 返回值 (必填)")
 	root.AddCommand(infoAliasCmd)
+	root.AddCommand(newAitablePsqlCommand())
 	// hint: dws aitable doc search → dws aitable base search
 	root.AddCommand(hintSubCmd("doc", "use: dws aitable base search --query <关键词>"))
 	// NOTE: "create" and "info" are registered as real alias commands above

@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/google/uuid"
 )
@@ -446,6 +447,7 @@ func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
 func buildAuthURLForRegion(clientID, redirectURI, targetCorpID string, region LoginRegion) string {
 	params := url.Values{
 		"client_id":     {clientID},
+		"lang":          {oauthLoginLanguage()},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
 		"scope":         {DefaultScopes},
@@ -457,11 +459,18 @@ func buildAuthURLForRegion(clientID, redirectURI, targetCorpID string, region Lo
 	return AuthorizeURLForLoginRegion(region) + "?" + params.Encode()
 }
 
-const successHTML = `<!doctype html>
-<html>
+func oauthLoginLanguage() string {
+	if i18n.Lang() == "zh" {
+		return "zh-CN"
+	}
+	return "en-US"
+}
+
+const successHTMLTemplate = `<!doctype html>
+<html lang="__LANG__">
   <head>
     <meta charset="utf-8" />
-    <title>钉钉 CLI</title>
+    <title>__TITLE__</title>
     <style>
       body {
         font-family:
@@ -542,11 +551,20 @@ const successHTML = `<!doctype html>
         src="https://img.alicdn.com/imgextra/i4/O1CN01fS3xxz1vbzZSGjbe0_!!6000000006192-2-tps-480-480.png"
         alt="lock icon"
       />
-      <h1>授权成功</h1>
-      <p>请返回终端继续操作。此页面可以关闭。</p>
+      <h1>__HEADING__</h1>
+      <p>__MESSAGE__</p>
     </div>
   </body>
 </html>`
+
+func renderSuccessHTML() string {
+	return strings.NewReplacer(
+		"__LANG__", html.EscapeString(i18n.Lang()),
+		"__TITLE__", html.EscapeString(i18n.T("钉钉 CLI")),
+		"__HEADING__", html.EscapeString(i18n.T("授权成功")),
+		"__MESSAGE__", html.EscapeString(i18n.T("请返回终端继续操作。此页面可以关闭。")),
+	).Replace(successHTMLTemplate)
+}
 
 const notEnabledHTML = `<!doctype html>
 <html lang="zh-CN">

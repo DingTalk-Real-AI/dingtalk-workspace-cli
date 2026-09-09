@@ -5,6 +5,7 @@
   "featured_shortcuts": [
     "+messages-resource-download",
     "+at-me",
+    "+recent-conversations",
     "+broadcast",
     "+chat-messages",
     "+dm",
@@ -88,6 +89,7 @@
     "chat message send-card": "+messages-send-card",
     "chat message reply": "+messages-reply",
     "chat message list": "+chat-messages",
+    "chat message list-all": "+recent-conversations",
     "chat message search": "+search-msg",
     "chat message search-advanced": "+search-msg",
     "chat message list-mentions": "+at-me",
@@ -116,6 +118,21 @@
     "chat thread list-replies": "+thread-replies"
   },
   "shortcuts": {
+    "+active-conversations": {
+      "disposition": "alias_internal",
+      "semantic_delta": "保留旧命令的静默执行兼容性；公开入口为 +recent-conversations，两者共用参数、校验和查询实现。",
+      "primary": "+recent-conversations",
+      "risk": "read",
+      "public": false,
+      "reviewed": true
+    },
+    "+recent-conversations": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
     "+bot-search": {
       "disposition": "schema_leaf",
       "semantic_delta": "仅绑定并投影当前用户创建的机器人搜索；无跨工具编排，默认由 bot Schema leaf 承担。",
@@ -259,8 +276,8 @@
       "reviewed": true
     },
     "+category-list-conversations": {
-      "disposition": "schema_leaf",
-      "semantic_delta": "按分组列会话是一对一分页读取；无跨工具编排。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "保留稳定 categoryId 输入合同，并严格校验 conversations 数组、稳定会话身份和分页耗尽；按名称或显式任选时先用 +category-list 发现真实 ID。",
       "risk": "read",
       "public": true,
       "reviewed": true
@@ -797,7 +814,7 @@
     },
     "+search-msg": {
       "disposition": "primary_smart",
-      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化，可选安全下载命中消息资源，并以 failure ledger 显式报告截断、富化或下载失败。",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型、机器人来源和 reaction 存在性谓词；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化、稳定身份复核和安全资源下载，并以 failure ledger 显式报告截断、富化或下载失败。",
       "risk": "read",
       "public": true,
       "reviewed": true

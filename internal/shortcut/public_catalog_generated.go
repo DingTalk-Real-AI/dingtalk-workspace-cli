@@ -241,6 +241,7 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"chat\u0000+messages-unset-top":                 {},
 		"chat\u0000+messages-update-card":               {},
 		"chat\u0000+my-groups":                          {},
+		"chat\u0000+recent-conversations":               {},
 		"chat\u0000+search-msg":                         {},
 		"chat\u0000+send-to-group":                      {},
 		"chat\u0000+thread-replies":                     {},

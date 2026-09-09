@@ -86,7 +86,10 @@ skills/mono/
 | `<root>/mono/` | 与 `skills/mono/` 同构 |
 | `<root>/multi/` | 与 `skills/multi/` 同构 |
 
-质检可断言源树形状；**不**断言安装器默认解压哪棵。
+质检可断言源树形状；**不**断言安装器默认解压哪棵。显式执行
+`dws skill setup --source <path> --mode <mode>` 时，`<path>` 可以是这棵 Zip
+的解压根目录、对应的 `<root>/<mode>` 目录，或源码仓库根目录；安装器按所选
+mode 解析到唯一的实际内容树。
 
 ## 6. 变更流程
 
