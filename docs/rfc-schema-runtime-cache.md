@@ -53,11 +53,11 @@ Schema 的唯一语义源是 declarations，经 `ResolveSchemaBuild` 生成 type
 - root help/version 不创建 Schema cache 文件；
 - 缓存命中和 live assembly 的 wire output 必须逐字节等价。
 
-### 1.4 Telemetry 不阻塞退出
+### 1.4 Telemetry 退出等待与 main 对齐
 
-命令完成事件仍进入官方 SDK 的异步队列。`NoFlushWait` 使主进程不等待最后一次网络发送；后台 `Close` 不改变命令结果。
+命令完成事件仍进入官方 SDK 的异步队列。默认不设置 `NoFlushWait`，因此主进程在退出前最多等待 SDK 的 `FlushTimeout`（默认约 300ms）做 best-effort flush，与 `main` 一致。超时即放弃，不会无限挂起。`NoFlushWait` 仍保留在 SDK `Config` 上，供明确接受末条事件丢失的可选接入使用；本 CLI 默认路径不启用。
 
-这是产品合同：接受进程退出时最后一条分析事件可能丢失。本 RFC 不承诺 at-least-once。统一结果提交、output sink 关闭、stdio child 停止、audit drain、signal handler 卸载和 timing report 仍同步完成。
+本 RFC 不承诺 at-least-once。统一结果提交、output sink 关闭、stdio child 停止、audit drain、signal handler 卸载和 timing report 仍同步完成。
 
 ### 1.5 Prepare 只凭证据去重
 
@@ -117,7 +117,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 | Schema | 发运走 live declaration assembly（不嵌入 compile-time identity）；cache-hit 数字仅作测试注入参考，不是发布门禁 |
 | 业务命令 | dry-run、mock/get、config 的 p50/p95 相对固定 main 不回退 |
 | 正确性 | help bytes、flags、aliases、validation、Safety、Schema wire、输出和错误分类不变 |
-| 清理 | telemetry 不等待网络；业务 cleanup、signal 和退出码测试通过 |
+| 清理 | telemetry 退出前最多等待 SDK FlushTimeout（默认约 300ms）；业务 cleanup、signal 和退出码测试通过 |
 
 旧的 `launcher ≤ core +5%`、calendar ≤ full-tree 70%、config ≤ full-tree 10% 和 full/selective equivalence gate 全部废止，不得与本口径并存。
 
@@ -141,11 +141,11 @@ Lxxx 软件的完整构树只用于结构和单位节点资源参考；Gxx 软�
 - [x] root help snapshot/model package 删除；公开 help 直接遍历完整 runtime tree。
 - [x] ContractFinal ownership transfer、build-only closure 清理、lazy Safety scanner 和低分配 string-slice builder 落地。
 - [x] 测试钉住 process invocation 总是包含完整产品面。
-- [x] telemetry no-wait 明确接受末条事件丢失，并有阻塞 collector 测试。
+- [x] telemetry 默认恢复为与 main 相同的有界 flush wait；`NoFlushWait` 仅作为 SDK 可选字段保留。
 - [x] 两平台完整测试与 race 通过（head `a8376f92`，run `34080469082`）。
 - [x] 两平台固定 main 性能矩阵通过；root help p50/p95 均低于 50/55 MiB，且相对 main 降低。
 - [ ] 首次正式 release 的签名、最终制品与安装验证；阻挡正式发布。
 
 ## 7. 回滚
 
-完整树优化按独立提交回滚，不改变 Schema/Safety 的权威源。生产不依赖 compile-time identity；测试注入的 cache 无法被未注入 identity 的二进制命中。若 telemetry 丢失率不可接受，可回滚 `NoFlushWait` 并恢复退出等待；可靠且不阻塞的投递需要另立持久 outbox RFC。
+完整树优化按独立提交回滚，不改变 Schema/Safety 的权威源。生产不依赖 compile-time identity；测试注入的 cache 无法被未注入 identity 的二进制命中。telemetry 默认与 main 对齐；若需牺牲末条事件完整性以降低退出延迟，可显式启用 SDK `NoFlushWait`。可靠且不阻塞的投递需要另立持久 outbox RFC。

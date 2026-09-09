@@ -46,7 +46,7 @@ func DefaultIdentity(configDir string) (identity Identity) {
 func Configuration(version string, identity Identity, commandPath, errorMessage *string) Config {
 	return Config{
 		PID: "wcCRwZ", App: "dws", Version: version, UID: identity.UserID, Username: identity.UserName,
-		NoCommandLine: true, NoCwd: true, NoAutomaticDimensions: true, NoFlushWait: true,
+		NoCommandLine: true, NoCwd: true, NoAutomaticDimensions: true,
 		ExtraFields: func() map[string]string {
 			fields := map[string]string{"c9": *commandPath}
 			if identity.CorpID != "" {
