@@ -75,6 +75,10 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	}
 
 	testseam.Swap(t, &marshalSchemaCacheFileDescriptor, marshalSchemaCacheFileDescriptorDefault)
+	testseam.Swap(t, &readSchemaCacheBuildInfo, func() (*debug.BuildInfo, bool) { return nil, false })
+	if _, err := IdentityFromArtifacts("open", artifacts); err != nil {
+		t.Fatal(err)
+	}
 	testseam.Swap(t, &readSchemaCacheBuildInfo, func() (*debug.BuildInfo, bool) {
 		return &debug.BuildInfo{Deps: []*debug.Module{{Path: "google.golang.org/protobuf", Version: "v1.36.11"}}}, true
 	})
@@ -89,6 +93,7 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	if LocalSchemaCacheIdentityFileName("  ") != "identity.unknown.json" {
 		t.Fatal("empty fingerprint file name")
 	}
+	ensureSchemaCacheOpenable(t)
 	if _, ok := TryLoadLocalSchemaCacheIdentity("  "); ok {
 		t.Fatal("blank edition loaded")
 	}
@@ -96,8 +101,24 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	if _, ok := TryLoadLocalSchemaCacheIdentity("open"); ok {
 		t.Fatal("missing cache loaded")
 	}
+	created, err := schemacache.Open("open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := created.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := TryLoadLocalSchemaCacheIdentity("open"); ok {
+		t.Fatal("empty cache sidecar loaded")
+	}
 
 	t.Setenv(schemaCacheFingerprintEnv, "")
+	if exe, exeErr := os.Executable(); exeErr == nil {
+		testseam.Swap(t, &schemaCacheExecutable, func() (string, error) { return exe, nil })
+		if SchemaCacheBinaryFingerprint() == "" {
+			t.Fatal("empty fingerprint from real executable")
+		}
+	}
 	testseam.Swap(t, &schemaCacheExecutable, func() (string, error) { return "", errors.New("no exe") })
 	testseam.Swap(t, &readSchemaCacheBuildInfo, func() (*debug.BuildInfo, bool) {
 		return &debug.BuildInfo{
@@ -150,6 +171,34 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	if err := persistLocalSchemaCacheIdentity(dir, SchemaCacheIdentity{}); err == nil {
 		t.Fatal("invalid persist succeeded")
 	}
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadLocalSchemaCacheIdentity(dir); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := schemacache.Open("open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := persistLocalSchemaCacheIdentity(opened.Directory(), identity); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, ok := TryLoadLocalSchemaCacheIdentity("open"); !ok || loaded.Edition != identity.Edition {
+		t.Fatalf("TryLoad after persist = %#v ok=%v", loaded, ok)
+	}
+	testseam.Swap(t, &createLocalIdentityTempFile, func(string, string) (localIdentityTempFile, error) {
+		return nil, errors.New("create")
+	})
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err == nil {
+		t.Fatal("create persist succeeded")
+	}
+	testseam.Swap(t, &createLocalIdentityTempFile, func(dir, pattern string) (localIdentityTempFile, error) {
+		return os.CreateTemp(dir, pattern)
+	})
 	testseam.Swap(t, &schemaCacheJSONMarshal, func(any) ([]byte, error) { return nil, errors.New("forced json") })
 	if err := persistLocalSchemaCacheIdentity(dir, identity); err == nil {
 		t.Fatal("forced json persist succeeded")
@@ -184,7 +233,7 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 }
 
 func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T) {
-	skipWithoutPersistentSchemaCache(t)
+	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 	r := &schemaCacheRuntime{options: SchemaCacheOptions{AllowGenerate: true, Edition: "open"}}
@@ -192,13 +241,30 @@ func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T)
 	r.publishGeneratedOrMatching(&schemacache.Cache{}, loadedSchemaCatalog{})
 
 	loaded := deliverySchemaCatalog()
-	r.options.Edition = "NOT VALID"
 	coverageSchemaCacheHome(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	registered := activeSchemaCacheRuntime()
+	if registered == nil {
+		t.Fatal("allow-generate runtime missing")
+	}
 	cache, err := schemacache.Open("open")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cache.Close() })
+	registered.publishGeneratedOrMatching(cache, loaded)
+	if !schemaCacheIdentityReady(registered.options.Identity) {
+		t.Fatal("generated identity was not adopted")
+	}
+
+	r.options.Edition = "NOT VALID"
 	r.publishGeneratedOrMatching(cache, loaded)
 
 	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)

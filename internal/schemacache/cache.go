@@ -94,12 +94,17 @@ func Open(edition string, options ...Option) (*Cache, error) {
 	if opts.counters == nil {
 		opts.counters = &Counters{}
 	}
-	b, err := openPlatform(edition, opts.counters, opts.noCreate)
+	b, err := openPlatformImpl(edition, opts.counters, opts.noCreate)
 	if err != nil {
 		return nil, err
 	}
 	return &Cache{backend: b}, nil
 }
+
+// openPlatformImpl is the platform Open seam. Production points at openPlatform.
+// Tests may swap it (via UseMemoryOpenForTest) so Windows coverage can exercise
+// Publish/Read without compiling the unix backend.
+var openPlatformImpl = openPlatform
 
 func EditionSHA256(edition string) ([32]byte, error) {
 	if !editionPattern.MatchString(edition) {

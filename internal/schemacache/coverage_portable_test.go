@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -11,8 +13,9 @@ import (
 // stubBackend exercises Cache/Registry/Lock facades on platforms where the
 // persistent unix backend is not compiled, including Windows coverage gate.
 type stubBackend struct {
-	closed bool
-	dir    string
+	closed   bool
+	dir      string
+	writeErr error
 }
 
 func (s *stubBackend) close() error {
@@ -50,7 +53,12 @@ func (s *stubBackend) openPayloads(ExpectedIdentity, ArtifactExpectation) (regis
 	return &stubRegistry{}, nil
 }
 
-func (s *stubBackend) writeArtifact(ExpectedIdentity, Artifact) error { return s.guard() }
+func (s *stubBackend) writeArtifact(ExpectedIdentity, Artifact) error {
+	if s.writeErr != nil {
+		return s.writeErr
+	}
+	return s.guard()
+}
 
 func (s *stubBackend) acquire(context.Context, time.Duration) (lockBackend, error) {
 	if err := s.guard(); err != nil {
@@ -220,6 +228,22 @@ func TestCrossPlatformCoverageCacheFacadeWithoutPersistentBackend(t *testing.T) 
 	if _, err := opened.OpenPayloads(identity, meta.Expectation); err == nil {
 		t.Fatal("OpenPayloads kind mismatch accepted")
 	}
+	mismatchLen := meta
+	mismatchLen.Expectation.EncodedLength = uint64(len(mismatchLen.Payload) + 4)
+	mismatchLen.Expectation.DecodedLength = mismatchLen.Expectation.EncodedLength
+	if err := opened.WriteArtifact(identity, mismatchLen); err == nil {
+		t.Fatal("matching encoded/decoded length still accepted a different payload")
+	}
+	mismatchExtra := payloads
+	mismatchExtra.Expectation.EncodedLength = uint64(len(mismatchExtra.Payload) + 4)
+	mismatchExtra.Expectation.DecodedLength = mismatchExtra.Expectation.EncodedLength
+	if err := opened.Publish(identity, reg, meta, mismatchExtra); err == nil {
+		t.Fatal("publish accepted a length-mismatched extra")
+	}
+	failing := &Cache{backend: &stubBackend{dir: "fail-write", writeErr: errors.New("forced write")}}
+	if err := failing.Publish(identity, reg, meta, payloads); err == nil {
+		t.Fatal("publish ignored write failure")
+	}
 	if err := opened.Publish(identity, reg, meta, payloads); err != nil {
 		t.Fatal(err)
 	}
@@ -275,5 +299,189 @@ func TestCrossPlatformCoverageCacheFacadeWithoutPersistentBackend(t *testing.T) 
 	}
 	if _, err := opened.AcquireLock(context.Background(), 0); !errors.Is(err, ErrClosed) {
 		t.Fatal(err)
+	}
+}
+
+func TestCrossPlatformCoveragePortableFileOpen(t *testing.T) {
+	UseMemoryOpenForTest(t)
+	if _, err := Open("open", WithNoCreate()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("noCreate missing = %v", err)
+	}
+	cache, err := Open("open", WithCounters(&Counters{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := portableIdentity()
+	identity.EditionSHA256 = sha256.Sum256([]byte("open"))
+	meta := portableArtifact(KindMeta, []byte("meta-bytes"))
+	reg := portableArtifact(KindRegistry, []byte("registry-bytes"))
+	payloads := portableArtifact(KindPayloads, []byte("payload-bytes"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err != nil {
+		t.Fatal(err)
+	}
+	wrong := identity
+	wrong.SourceSHA256 = sha256.Sum256([]byte("wrong-source"))
+	if _, err := cache.ReadMeta(wrong, meta.Expectation); err == nil {
+		t.Fatal("source mismatch accepted")
+	}
+	wrongEdition := identity
+	wrongEdition.EditionSHA256 = sha256.Sum256([]byte("other-edition"))
+	if _, err := cache.ReadMeta(wrongEdition, meta.Expectation); err == nil {
+		t.Fatal("edition mismatch accepted")
+	}
+	if err := cache.WriteArtifact(wrongEdition, meta); err == nil {
+		t.Fatal("write edition mismatch accepted")
+	}
+	openedReg, err := cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeDigest := sha256.Sum256([]byte("registry-bytes")[:1])
+	if _, err := openedReg.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openedReg.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: sha256.Sum256([]byte("nope"))}); err == nil {
+		t.Fatal("range digest mismatch accepted")
+	}
+	if _, err := openedReg.ReadRange(RangeDescriptor{Offset: 100, Length: 1, SHA256: rangeDigest}); err == nil {
+		t.Fatal("out of range accepted")
+	}
+	if err := openedReg.ValidateAggregate(); err != nil {
+		t.Fatal(err)
+	}
+	openedPayloads, err := cache.OpenPayloads(identity, payloads.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadDigest := sha256.Sum256([]byte("payload-bytes")[:1])
+	if _, err := openedPayloads.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: payloadDigest}); err != nil {
+		t.Fatal(err)
+	}
+	if err := openedPayloads.ValidateAggregate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := openedPayloads.Close(); err != nil {
+		t.Fatal(err)
+	}
+	held, err := cache.AcquireLock(context.Background(), time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.AcquireLock(context.Background(), 0); !errors.Is(err, ErrLockTimeout) {
+		t.Fatalf("busy lock = %v", err)
+	}
+	if _, err := cache.AcquireLock(context.Background(), time.Millisecond); !errors.Is(err, ErrLockTimeout) {
+		t.Fatalf("timer lock = %v", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := cache.AcquireLock(cancelled, time.Second); err == nil {
+		t.Fatal("cancelled lock succeeded")
+	}
+	timed, timeoutCancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer timeoutCancel()
+	if _, err := cache.AcquireLock(timed, 50*time.Millisecond); err == nil {
+		t.Fatal("timeout lock succeeded")
+	}
+	if err := held.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.AcquireLock(context.Background(), 0); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := cache.Directory()
+	metaPath := filepath.Join(dir, metaFileName)
+	metaBody, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flipped := append([]byte{}, metaBody...)
+	flipped[len(flipped)-1] ^= 0xff
+	if err := os.WriteFile(metaPath, flipped, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("payload digest mismatch accepted")
+	}
+	if err := os.WriteFile(filepath.Join(dir, metaFileName), []byte("short"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("short meta accepted")
+	}
+	junk := make([]byte, HeaderSize)
+	if err := os.WriteFile(filepath.Join(dir, metaFileName), junk, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("junk header accepted")
+	}
+	if err := os.WriteFile(filepath.Join(dir, registryFileName), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	regHandle, err := cache.OpenRegistry(identity, reg.Expectation)
+	if err == nil {
+		t.Fatal("corrupt registry opened")
+	}
+	_ = regHandle
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	openedReg, err = cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	regPath := filepath.Join(dir, registryFileName)
+	regBody, err := os.ReadFile(regPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	regFlipped := append([]byte{}, regBody...)
+	regFlipped[len(regFlipped)-1] ^= 0xff
+	if err := os.WriteFile(regPath, regFlipped, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := openedReg.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate digest mismatch accepted")
+	}
+	if err := os.Remove(regPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := openedReg.ValidateAggregate(); err == nil {
+		t.Fatal("missing shard aggregate accepted")
+	}
+	if err := os.WriteFile(filepath.Join(dir, registryFileName), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := openedReg.ValidateAggregate(); err == nil {
+		t.Fatal("short aggregate accepted")
+	}
+	if _, err := openedReg.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeDigest}); err == nil {
+		t.Fatal("short range read accepted")
+	}
+	if err := openedReg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openedReg.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeDigest}); err == nil {
+		t.Fatal("closed range read succeeded")
+	}
+	if err := os.Remove(filepath.Join(dir, payloadFileName)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.OpenPayloads(identity, payloads.Expectation); err == nil {
+		t.Fatal("missing payloads opened")
+	}
+	if err := cache.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed portable ReadMeta = %v", err)
+	}
+	if _, err := cache.AcquireLock(context.Background(), time.Millisecond); !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed lock = %v", err)
 	}
 }

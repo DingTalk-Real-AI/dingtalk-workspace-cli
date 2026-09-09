@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"syscall"
 	"testing"
@@ -65,6 +66,18 @@ func TestCrossPlatformCoverageSignalRedeliverExitCodesAndDetail(t *testing.T) {
 	Redeliver(syscall.SIGTERM, func(int) (*os.Process, error) { return nil, errors.New("missing process") }, func(code int) { exited = code })
 	if exited != 143 {
 		t.Fatalf("term fallback exit = %d", exited)
+	}
+
+	signal.Ignore(os.Interrupt)
+	t.Cleanup(func() { signal.Reset(os.Interrupt) })
+	exited = 0
+	live, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	Redeliver(os.Interrupt, func(int) (*os.Process, error) { return live, nil }, func(code int) { exited = code })
+	if exited != 0 && exited != 130 {
+		t.Fatalf("live process Redeliver exit = %d", exited)
 	}
 
 	interrupt := NewInterruption(os.Interrupt)

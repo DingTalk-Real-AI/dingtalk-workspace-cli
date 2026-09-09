@@ -94,6 +94,7 @@ func TestCrossPlatformCoverageSchemaCacheAllowGenerateEmptyIdentity(t *testing.T
 	if _, ok := SchemaCacheFastPathIdentity(); ok {
 		t.Fatal("generate-pending identity must not be a fast-path authority")
 	}
+	PrewarmSchemaCache()
 	if activeSchemaCacheRuntime() == nil {
 		t.Fatal("allow-generate runtime was not registered")
 	}

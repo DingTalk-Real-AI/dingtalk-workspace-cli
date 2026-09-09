@@ -49,8 +49,9 @@ func coverageSchemaCacheHome(t *testing.T) {
 
 func publishCoverageSchemaRuntime(t *testing.T) (*schemaCacheRuntime, SchemaCacheIdentity, SchemaCacheArtifacts) {
 	t.Helper()
-	skipWithoutPersistentSchemaCache(t)
+	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	goos, goarch := coverageCacheGOOSARCH()
 	coverageSchemaCacheHome(t)
 	restorePackageCLISchemaDeliveryForTest()
 	loaded := deliverySchemaCatalog()
@@ -70,7 +71,7 @@ func publishCoverageSchemaRuntime(t *testing.T) (*schemaCacheRuntime, SchemaCach
 		t.Fatal(err)
 	}
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+		Enabled: true, Identity: identity, GOOS: goos, GOARCH: goarch,
 		RuntimeEligible: func() bool { return true },
 	}); err != nil {
 		t.Fatal(err)
