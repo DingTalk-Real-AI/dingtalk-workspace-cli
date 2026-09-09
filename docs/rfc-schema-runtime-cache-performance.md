@@ -1,6 +1,6 @@
 # RFC 附件：CLI 性能提升报告
 
-状态：Draft，2026-09-07 单树架构 clean-head 报告。设计见[主 RFC](rfc-schema-runtime-cache.md)，机器证据见 [`native-a8376f92/evidence.json`](benchmarks/schema-cache/native-a8376f92/evidence.json)。
+状态：Draft，2026-09-07 单树架构 clean-head 报告。设计见[主 RFC](rfc-schema-runtime-cache.md)。中间测量 dump 不入库；复跑方法见 [schema-cache README](benchmarks/schema-cache/README.md)，当时 native 记录见 [Actions run 34080469082](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082)。
 
 ## 1. 当前结论
 

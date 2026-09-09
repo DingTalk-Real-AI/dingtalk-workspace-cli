@@ -1,7 +1,0 @@
-goos: darwin
-goarch: arm64
-pkg: github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime
-cpu: Apple M1 (Virtual)
-BenchmarkRealSchemaFileHit/meta-open-authenticate-decode-lookup-3         	     838	   4079672 ns/op	 3478057 B/op	   40701 allocs/op
-PASS
-ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime	4.260s

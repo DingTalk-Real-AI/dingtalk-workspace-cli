@@ -1,9 +1,0 @@
-{
-  "passed": false,
-  "release_eligible": false,
-  "core_sha256": "697c01442d94ef1e84a06081d6249cdddbbbde62ffdd077de55790520235a702",
-  "source_commit": "f2a8b9d7d87cab102dbdc9a872f7f432b4c89391",
-  "generator_sha256": "1aaa862e132d216d6eb7829e338627854800daf53e1908c8880474fd4ef28851",
-  "locales": {},
-  "error": "en help projection differs from finalized core"
-}

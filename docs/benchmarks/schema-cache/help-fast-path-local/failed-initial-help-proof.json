@@ -1,9 +1,0 @@
-{
-  "passed": false,
-  "release_eligible": false,
-  "core_sha256": "5669c41ffab6bcb5f08bff2f595184f8726e0fc085c86280c0eaf9885e1788cc",
-  "source_commit": "decb45a741de47204aa0f7cf4ea98ea1a07e21f5",
-  "generator_sha256": "fcf2b636e3b75e91b4318aa1ec4c9afc5ab33efe7d68720ae0152e098278441d",
-  "locales": {},
-  "error": "Command '['/private/tmp/dws-schema-help-candidate-20260906/root-help-generator', '-commit', 'decb45a741de47204aa0f7cf4ea98ea1a07e21f5', '-core-sha256', '5669c41ffab6bcb5f08bff2f595184f8726e0fc085c86280c0eaf9885e1788cc']' died with <Signals.SIGKILL: 9>."
-}
