@@ -344,7 +344,8 @@ func (r *schemaCacheRuntime) payloadsHandle() (*schemacache.Registry, error) {
 
 // resetPayloadsHandle drops the shared handle after a repair publish: the
 // handle may reference a replaced inode, and the next read must reopen the
-// freshly published file.
+// freshly published file. A prewarmed handle never adopted by payloadsHandle
+// is closed here as well; Registry close is idempotent.
 func (r *schemaCacheRuntime) resetPayloadsHandle() {
 	r.payloadHandleMu.Lock()
 	defer r.payloadHandleMu.Unlock()
@@ -354,7 +355,10 @@ func (r *schemaCacheRuntime) resetPayloadsHandle() {
 	}
 	if pw := r.prewarm; pw != nil {
 		<-pw.done
-		pw.payloads = nil
+		if pw.payloads != nil {
+			_ = pw.payloads.Close()
+			pw.payloads = nil
+		}
 	}
 }
 

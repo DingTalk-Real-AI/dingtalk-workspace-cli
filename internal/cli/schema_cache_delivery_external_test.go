@@ -462,6 +462,7 @@ func TestPersistentSchemaCachePrewarm(t *testing.T) {
 	if err := cache.Publish(testExpectedIdentity(t, identity), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
 		t.Fatal(err)
 	}
+	cacheDirectory := cache.Directory()
 	if err := cache.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -490,6 +491,38 @@ func TestPersistentSchemaCachePrewarm(t *testing.T) {
 	liveOut := executeSchemaLeafCommand(t, "calendar.list_calendars", "--compact")
 	if !bytes.Equal(fastOut, liveOut) {
 		t.Fatal("prewarmed compact leaf fast path output differs from the live render")
+	}
+
+	// A repair entered before any payload read must release the prewarmed
+	// handle that was never adopted by the hot path. Reset the live catalog
+	// populated by the parity check above, or --all answers from memory and
+	// never touches the corrupted Meta.
+	cli.RestorePackageCLISchemaDeliveryForTest()
+	if err := cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{
+		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Counters: &schemacache.Counters{},
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cli.PrewarmSchemaCache()
+	cli.AwaitSchemaCachePrewarmForTest()
+	metaPath := filepath.Join(cacheDirectory, "meta.cache")
+	if err := os.WriteFile(metaPath, []byte("corrupt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gotAll, err := cli.DeliverySchemaAllPayloadForTest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := gotAll["tool_count"].(int); got != resolved.CommandCount() {
+		t.Fatalf("repaired --all tool_count = %d, want %d", got, resolved.CommandCount())
+	}
+	info, err := os.Stat(metaPath)
+	if err != nil || info.Size() != int64(identity.Meta.EncodedLength+schemacache.HeaderSize) {
+		t.Fatalf("Meta was not republished to its pinned size: info=%v err=%v", info, err)
+	}
+	if meta, ok := cli.ResolveMeta("calendar book list"); !ok || meta.Identity.Canonical != "calendar.list_calendars" {
+		t.Fatalf("ResolveMeta after repair with a fresh handle = %#v, %v", meta, ok)
 	}
 }
 
