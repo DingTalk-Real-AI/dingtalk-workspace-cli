@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -606,8 +608,34 @@ func executeShortcutSchemaQuery(t testing.TB, args ...string) map[string]any {
 }
 
 func shortcutSchemaCanonical(declared shortcut.Shortcut) string {
-	name := strings.ReplaceAll(strings.TrimPrefix(declared.Command, "+"), "-", "_")
-	return declared.Service + ".shortcut_" + name
+	// A CLI rename need not change the stable Schema identity. Read the
+	// declaration, not the command spelling or the delivery under test.
+	return declared.Contract.Identity.CanonicalPath
+}
+
+func TestCrossPlatformCoverageShortcutSchemaCanonicalUsesDeclaredIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		command   string
+		canonical string
+	}{
+		{"unchanged", "+active-conversations", "chat.shortcut_active_conversations"},
+		{"renamed", "+recent-conversations", "chat.shortcut_active_conversations"},
+		{"missing_identity_is_not_inferred", "+recent-conversations", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			declared := shortcut.Shortcut{
+				Service: "chat",
+				Command: tc.command,
+				Contract: corecmd.ContractDecl{
+					Identity: contract.ToolIdentitySpec{CanonicalPath: tc.canonical},
+				},
+			}
+			if got := shortcutSchemaCanonical(declared); got != tc.canonical {
+				t.Fatalf("canonical = %q, want declared identity %q", got, tc.canonical)
+			}
+		})
+	}
 }
 
 func assertDeliveryShortcutIdentityAndSelection(

@@ -848,7 +848,7 @@ var FeedGroupQueryItem = shortcut.Shortcut{
 	Command:     "+feed-group-query-item",
 	Product:     "im",
 	Description: "在会话分组结果中按会话 ID 精确查询多项",
-	Intent:      "当你已知一个钉钉会话分组 ID 和若干 openConversationId、想精确取回这些分组项时使用；先读取该分组，再按 ID 本地过滤并返回未找到清单。若下层表明结果仍有后续页但未提供可执行游标，本命令会把缺失项标为 unresolved 并返回失败 ledger，不会误报 notFound。它不提供 Lark deleted_items 或服务端多 ID 查询语义。",
+	Intent:      "当你已知一个钉钉会话分组 ID 和若干 openConversationId、想精确取回这些分组项时使用；先读取该分组，再按 ID 本地过滤并返回未找到清单。下层接口没有续页参数且未返回分页信号时，明确数组按单响应集合处理；若下层表明仍有后续页但未提供可执行游标，本命令会把缺失项标为 unresolved 并返回失败 ledger，不会误报 notFound。它不提供 Lark deleted_items 或服务端多 ID 查询语义。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
 		{Name: "category-id", Type: shortcut.FlagInt, Desc: "钉钉会话分组 ID", Required: true},
@@ -871,14 +871,17 @@ var FeedGroupQueryItem = shortcut.Shortcut{
 		}
 		payload := feedGroupQueryProject(conversations, rt.StrSlice("conversation-ids"))
 		chatmsg.ApplyPagination(payload, data)
-		hasMore, err := requireCategoryConversationsPagination(data)
+		hasMore, paginationMode, err := resolveCategoryConversationsPagination(data)
 		if err != nil {
 			return err
 		}
+		payload["paginationKnown"] = true
+		payload["paginationMode"] = paginationMode
 		if hasMore {
 			unresolved, _ := payload["notFoundConversationIds"].([]string)
 			payload["ok"] = false
 			payload["complete"] = false
+			payload["sourceExhausted"] = false
 			payload["notFoundCount"] = 0
 			payload["notFoundConversationIds"] = []string{}
 			payload["unresolvedCount"] = len(unresolved)
@@ -890,6 +893,8 @@ var FeedGroupQueryItem = shortcut.Shortcut{
 			}}
 		} else {
 			payload["complete"] = true
+			payload["hasMore"] = false
+			payload["sourceExhausted"] = true
 			payload["unresolvedCount"] = 0
 			payload["unresolvedConversationIds"] = []string{}
 		}

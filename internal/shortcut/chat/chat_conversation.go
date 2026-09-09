@@ -955,7 +955,7 @@ func categoryListFirst(m map[string]any, keys ...string) (any, bool) {
 	return nil, false
 }
 
-const categoryListConversationsIntent = "当已有稳定 categoryId、需要列出该自定义会话分组中的会话时使用。若只有标题或用户明确授权任选一个分组，先用 chat +category-list 得到真实 categoryId，再调用本命令；本命令严格校验 conversations 数组、稳定会话身份和分页耗尽。"
+const categoryListConversationsIntent = "当已有稳定 categoryId、需要列出该自定义会话分组中的会话时使用。若只有标题或用户明确授权任选一个分组，先用 chat +category-list 得到真实 categoryId，再调用本命令；本命令严格校验 conversations 数组和稳定会话身份。下层接口没有续页参数且未返回分页信号时，明确数组按单响应集合处理；一旦出现分页信号，则严格验证 hasMore 和可继续性。"
 
 // CategoryListConversations lists conversations in a category (list_conversations_by_category, im).
 var CategoryListConversations = shortcut.Shortcut{
@@ -981,7 +981,7 @@ var CategoryListConversations = shortcut.Shortcut{
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
-			Reason:       "Reviewed category reader: it preserves the published stable-ID input while validating the collection shape, stable conversation identity, and source exhaustion.",
+			Reason:       "Reviewed category reader: it preserves the published stable-ID input while validating the collection shape and stable conversation identity. The bound lower interface has no continuation input, so an explicit collection without pagination signals is one complete response; any reported pagination signal is validated strictly.",
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按稳定 categoryId 列出会话分组中的会话",
@@ -1018,7 +1018,7 @@ func executeCategoryListConversations(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	hasMore, err := requireCategoryConversationsPagination(data)
+	hasMore, paginationMode, err := resolveCategoryConversationsPagination(data)
 	if err != nil {
 		return err
 	}
@@ -1040,22 +1040,114 @@ func executeCategoryListConversations(rt *shortcut.RuntimeContext) error {
 		"count":           len(conversations),
 		"conversations":   conversations,
 		"complete":        true,
+		"hasMore":         false,
 		"paginationKnown": true,
+		"paginationMode":  paginationMode,
+		"sourceExhausted": true,
 	}
 	return rt.Output(payload)
 }
 
-func requireCategoryConversationsPagination(data map[string]any) (bool, error) {
-	page := chatmsg.Pagination(data)
-	hasMore, paginationKnown := page["hasMore"].(bool)
-	if !paginationKnown {
-		return false, invalidCategoryResponse(
+const (
+	categoryPaginationModeSingleResponse = "single_response"
+	categoryPaginationModeReported       = "reported"
+)
+
+// resolveCategoryConversationsPagination follows the capability contract of
+// im/list_conversations_by_category. The interface exposes categoryId and
+// excludeMuted only: it has no limit, cursor, or page-token input. Therefore
+// an explicit conversations array with no pagination signal is one complete
+// response, not an unknown page. If the lower layer does start reporting any
+// continuation signal, hasMore becomes authoritative and must be present.
+func resolveCategoryConversationsPagination(data map[string]any) (bool, string, error) {
+	type paginationScope struct {
+		name string
+		data map[string]any
+	}
+	scopes := []paginationScope{{name: "root", data: data}}
+	for _, key := range []string{"result", "data"} {
+		if inner, ok := data[key].(map[string]any); ok {
+			scopes = append(scopes, paginationScope{name: key, data: inner})
+		}
+	}
+
+	sawPaginationSignal := false
+	sawHasMore := false
+	hasMore := false
+	continuationPresent := false
+	for _, scope := range scopes {
+		for _, key := range []string{"hasMore", "has_more"} {
+			value, exists := scope.data[key]
+			if !exists {
+				continue
+			}
+			sawPaginationSignal = true
+			resolved, ok := value.(bool)
+			if !ok {
+				return false, "", invalidCategoryResponse(
+					"im/list_conversations_by_category",
+					"响应中的 hasMore 不是布尔值，无法判断分组会话是否完整",
+					map[string]any{"field": key, "scope": scope.name, "actualType": fmt.Sprintf("%T", value)},
+				)
+			}
+			if sawHasMore && resolved != hasMore {
+				return false, "", invalidCategoryResponse(
+					"im/list_conversations_by_category",
+					"响应中的 hasMore 分页信号相互冲突",
+					map[string]any{"field": key, "scope": scope.name},
+				)
+			}
+			sawHasMore = true
+			hasMore = resolved
+		}
+		for _, key := range []string{"nextCursor", "next_cursor", "nextToken", "next_token", "pageToken", "page_token"} {
+			if value, exists := scope.data[key]; exists {
+				sawPaginationSignal = true
+				continuationPresent = continuationPresent || categoryPaginationValuePresent(value)
+			}
+		}
+	}
+
+	if !sawPaginationSignal {
+		return false, categoryPaginationModeSingleResponse, nil
+	}
+	if !sawHasMore {
+		return false, "", invalidCategoryResponse(
 			"im/list_conversations_by_category",
-			"响应未返回 hasMore，无法证明分组会话结果完整",
+			"响应返回了 continuation 但缺少 hasMore，无法判断分组会话是否完整",
 			nil,
 		)
 	}
-	return hasMore, nil
+	if !hasMore && continuationPresent {
+		return false, "", invalidCategoryResponse(
+			"im/list_conversations_by_category",
+			"响应同时返回 hasMore=false 和非空 continuation，分页信号相互冲突",
+			nil,
+		)
+	}
+	return hasMore, categoryPaginationModeReported, nil
+}
+
+func categoryPaginationValuePresent(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		text := strings.TrimSpace(typed)
+		return text != "" && text != "0"
+	case int:
+		return typed != 0
+	case int32:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case float32:
+		return typed != 0
+	case float64:
+		return typed != 0
+	default:
+		return true
+	}
 }
 
 // categoryConversationsProject reshapes the raw list_conversations_by_category

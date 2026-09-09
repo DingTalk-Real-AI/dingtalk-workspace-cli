@@ -211,7 +211,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRejectsUnknownEnvelope(t 
 	}
 }
 
-func TestCrossPlatformCoverageCategoryListConversationsRequiresExhaustion(t *testing.T) {
+func TestCrossPlatformCoverageCategoryListConversationsRespectsInterfacePagination(t *testing.T) {
 	t.Run("read failure", func(t *testing.T) {
 		fake := &larkAlignmentCaller{failProductTool: "im/list_conversations_by_category"}
 		helpers.InitDeps(fake)
@@ -222,15 +222,74 @@ func TestCrossPlatformCoverageCategoryListConversationsRequiresExhaustion(t *tes
 		}
 	})
 
-	t.Run("missing pagination", func(t *testing.T) {
+	t.Run("single response interface omits pagination", func(t *testing.T) {
 		fake := &larkAlignmentCaller{category: `{"result":{"list":[]}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["complete"] != true ||
+			payload["hasMore"] != false ||
+			payload["paginationKnown"] != true ||
+			payload["paginationMode"] != categoryPaginationModeSingleResponse ||
+			payload["sourceExhausted"] != true {
+			t.Fatalf("single response payload = %#v", payload)
+		}
+	})
+
+	t.Run("continuation without has more", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[],"nextCursor":"cursor"}}`}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
 		err := root.Execute()
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
-			t.Fatalf("missing pagination error = %#v", err)
+			t.Fatalf("partial pagination error = %#v", err)
+		}
+	})
+
+	t.Run("non boolean has more", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[],"hasMore":"true"}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		err := root.Execute()
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
+			t.Fatalf("non-boolean pagination error = %#v", err)
+		}
+	})
+
+	t.Run("conflicting terminal continuation", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[],"hasMore":false,"nextCursor":"cursor"}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		err := root.Execute()
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
+			t.Fatalf("conflicting pagination error = %#v", err)
+		}
+	})
+
+	t.Run("conflicting envelope has more", func(t *testing.T) {
+		fake := &larkAlignmentCaller{category: `{"hasMore":false,"result":{"list":[],"hasMore":true}}`}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+category-list-conversations", "--category-id", "1"})
+		err := root.Execute()
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "chat_category_response_invalid" {
+			t.Fatalf("conflicting envelope pagination error = %#v", err)
 		}
 	})
 
@@ -252,7 +311,7 @@ func TestCrossPlatformCoverageCategoryListConversationsRequiresExhaustion(t *tes
 	})
 
 	t.Run("success output failure", func(t *testing.T) {
-		fake := &larkAlignmentCaller{category: `{"result":{"list":[{"openConversationId":"cid-a"}],"hasMore":false}}`}
+		fake := &larkAlignmentCaller{category: `{"result":{"list":[{"openConversationId":"cid-a"}]}}`}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatOutputErrorWriter{err: errors.New("category output failed")})
@@ -263,13 +322,44 @@ func TestCrossPlatformCoverageCategoryListConversationsRequiresExhaustion(t *tes
 	})
 }
 
+func TestCrossPlatformCoverageCategoryPaginationValuePresence(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{name: "nil", value: nil, want: false},
+		{name: "empty string", value: "", want: false},
+		{name: "zero string", value: "0", want: false},
+		{name: "string", value: "cursor", want: true},
+		{name: "int zero", value: int(0), want: false},
+		{name: "int", value: int(1), want: true},
+		{name: "int32 zero", value: int32(0), want: false},
+		{name: "int32", value: int32(1), want: true},
+		{name: "int64 zero", value: int64(0), want: false},
+		{name: "int64", value: int64(1), want: true},
+		{name: "float32 zero", value: float32(0), want: false},
+		{name: "float32", value: float32(1), want: true},
+		{name: "float64 zero", value: float64(0), want: false},
+		{name: "float64", value: float64(1), want: true},
+		{name: "invalid object", value: map[string]any{}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := categoryPaginationValuePresent(tc.value); got != tc.want {
+				t.Fatalf("categoryPaginationValuePresent(%#v) = %t, want %t", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageFeedGroupQueryRejectsUnknownConversationEnvelope(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		category string
 	}{
 		{name: "missing collection", category: `{"result":{"hasMore":false}}`},
-		{name: "missing pagination fact", category: `{"result":{"list":[{"openConversationId":"cid-a"}]}}`},
+		{name: "continuation without has more", category: `{"result":{"list":[{"openConversationId":"cid-a"}],"nextCursor":"cursor"}}`},
+		{name: "non boolean has more", category: `{"result":{"list":[{"openConversationId":"cid-a"}],"hasMore":"true"}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &larkAlignmentCaller{category: tc.category}
@@ -578,9 +668,11 @@ func TestCrossPlatformCoverageRecallCardAndLedgerBoundaries(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageFeedCompleteAndExcludeMuted(t *testing.T) {
-	fake := &larkAlignmentCaller{category: `{"result":{"hasMore":false,"list":[{"openConversationId":"cid"}]}}`}
+	fake := &larkAlignmentCaller{category: `{"result":{"list":[{"openConversationId":"cid"}]}}`}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
 	root.SetArgs([]string{
 		"chat", "+feed-group-query-item",
 		"--category-id", "1",
@@ -592,6 +684,19 @@ func TestCrossPlatformCoverageFeedCompleteAndExcludeMuted(t *testing.T) {
 	}
 	if len(fake.calls) != 1 || fake.calls[0].args["excludeMuted"] != true {
 		t.Fatalf("feed calls = %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["complete"] != true ||
+		payload["hasMore"] != false ||
+		payload["paginationKnown"] != true ||
+		payload["paginationMode"] != categoryPaginationModeSingleResponse ||
+		payload["sourceExhausted"] != true ||
+		payload["foundCount"] != float64(1) ||
+		payload["notFoundCount"] != float64(0) {
+		t.Fatalf("feed single response payload = %#v", payload)
 	}
 }
 

@@ -83,3 +83,24 @@ func TestCrossPlatformCoverageFilteredIMSearchUsesResourceAndAnswerShapeBoundary
 		t.Fatalf("chat +search-msg final selection does not encode the resource/answer/predicate decision: %#v", search.Selection)
 	}
 }
+
+func TestCrossPlatformCoverageCategorySingleResponseCapabilityContract(t *testing.T) {
+	root := NewRootCommand()
+	atomic, remaining, err := root.Find([]string{"chat", "category", "list-conversations"})
+	if err != nil || atomic == nil || len(remaining) != 0 || !atomic.Runnable() {
+		t.Fatalf("category atomic command is not runnable: command=%v remaining=%v err=%v", atomic, remaining, err)
+	}
+	for _, name := range []string{"limit", "page-size", "cursor", "page-token"} {
+		if flag := atomic.LocalNonPersistentFlags().Lookup(name); flag != nil {
+			t.Errorf("category atomic unexpectedly exposes continuation flag --%s", name)
+		}
+	}
+
+	meta, ok := cli.ResolveMeta("chat +category-list-conversations")
+	useWhen := strings.Join(meta.Selection.UseWhen, "\n")
+	if !ok ||
+		!strings.Contains(useWhen, "没有续页参数") ||
+		!strings.Contains(useWhen, "分页信号") {
+		t.Fatalf("category Shortcut selection does not publish the capability boundary: %#v", meta.Selection)
+	}
+}

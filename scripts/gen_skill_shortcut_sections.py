@@ -171,6 +171,24 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
 {PRODUCT_END}"""
 
 
+def chat_compatibility_counts(source: dict[str, Any]) -> Counter[str]:
+    """Count callable aliases by catalog membership and actual CLI visibility."""
+    counts: Counter[str] = Counter()
+    default_availability = source.get("default_availability", "available")
+    for record in source.get("shortcuts", {}).values():
+        if record.get("disposition") != "alias_internal":
+            continue
+        if record.get("availability", default_availability) != "available":
+            continue
+        if record.get("public", False):
+            counts["public"] += 1
+        elif record.get("compatibility_visible", False):
+            counts["compatibility_visible"] += 1
+        else:
+            counts["hidden"] += 1
+    return counts
+
+
 def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
     # Compact skills intentionally do not depend on the source parser's ability
     # to recover every runtime-normalized declaration. The reviewed public
@@ -189,10 +207,11 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
             and record.get("disposition") != "alias_internal"
         }
         catalog_count = len(canonical - featured)
-        compatibility_count = sum(
-            1
-            for record in shortcuts.values()
-            if record.get("disposition") == "alias_internal"
+        compatibility_counts = chat_compatibility_counts(source)
+        visible_compatibility_note = (
+            f"；{compatibility_counts['compatibility_visible']} 条兼容入口仅 CLI 可见、不在 public Catalog"
+            if compatibility_counts["compatibility_visible"]
+            else ""
         )
         unavailable_count = sum(
             1
@@ -202,7 +221,7 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
         return f"""{PRODUCT_START}
 ## Shortcut 发现（Shortcut-first）
 
-`chat` 有 {len(canonical)} 条 canonical Shortcut：根 Help 展示 {len(featured)} 条 Featured，另 {catalog_count} 条在 Catalog、Schema 和精确 Help；{compatibility_count} 条 public 兼容入口从根 Help 省略，{unavailable_count} 条 unavailable 不参与默认选路。
+`chat` 有 {len(canonical)} 条 canonical Shortcut：根 Help 展示 {len(featured)} 条 Featured，另 {catalog_count} 条在 Catalog、Schema 和精确 Help；{compatibility_counts['public']} 条 public 兼容入口从根 Help 省略{visible_compatibility_note}；{compatibility_counts['hidden']} 条隐藏兼容入口仍可执行但不参与默认选路；{unavailable_count} 条 unavailable 不参与默认选路。
 
 优先按 Golden Route、意图表或 reference 选 Shortcut；仅在所需底层参数或原始响应未覆盖时使用 atomic。低频发现用 `dws shortcut list --service chat --format json`；参数/安全查 compact leaf Schema，flags 查所选 Shortcut 的精确 Help。
 {PRODUCT_END}"""

@@ -91,10 +91,10 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 		registered[item.Command] = item
 		helpTierCounts[item.HelpTier]++
 	}
-	if got, want := len(registered), 101; got != want {
+	if got, want := len(registered), 102; got != want {
 		t.Fatalf("registered Chat Shortcuts = %d, want %d", got, want)
 	}
-	if got, want := len(source.Shortcuts), 101; got != want {
+	if got, want := len(source.Shortcuts), 102; got != want {
 		t.Fatalf("reviewed Chat Shortcut records = %d, want %d", got, want)
 	}
 	if got, want := len(source.FeaturedShortcuts), 27; got != want {
@@ -103,7 +103,7 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 	for tier, want := range map[shortcut.HelpTier]int{
 		shortcut.HelpTierFeatured:      27,
 		shortcut.HelpTierCatalog:       67,
-		shortcut.HelpTierCompatibility: 5,
+		shortcut.HelpTierCompatibility: 6,
 		shortcut.HelpTierUnavailable:   2,
 	} {
 		if got := helpTierCounts[tier]; got != want {
@@ -164,6 +164,12 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 			if item.Hidden || !item.CompatibilityVisible || record.Public || reviewedAvailability != shortcut.AvailabilityAvailable {
 				t.Errorf("%s: compatibility-visible delivery = hidden:%v compatibility:%v public:%v availability:%s",
 					command, item.Hidden, item.CompatibilityVisible, record.Public, reviewedAvailability)
+			}
+		} else if command == "+active-conversations" {
+			// Approved command_move: a hidden executable compatibility entry,
+			// not a second public tool or an unavailable command.
+			if record.Public || !item.Hidden || item.Disposition != shortcut.DispositionAliasInternal || item.PrimaryCommand != "+recent-conversations" || reviewedAvailability != shortcut.AvailabilityAvailable {
+				t.Errorf("%s: invalid hidden compatibility entry: %#v", command, item)
 			}
 		} else if reviewedAvailability == shortcut.AvailabilityAvailable && (!record.Public || item.Hidden) {
 			t.Errorf("%s: available reviewed Chat Shortcut must be public or compatibility-visible", command)

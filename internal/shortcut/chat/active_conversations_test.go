@@ -218,7 +218,7 @@ func TestCrossPlatformCoverageActiveConversationsValidationAndContract(t *testin
 	if ActiveConversations.OutputRollout != output.RolloutUnifiedActive || ActiveConversations.Contract.Result == nil || ActiveConversations.Contract.Pagination == nil || ActiveConversations.Safety.Effect != "read" {
 		t.Fatalf("declaration is incomplete: %#v", ActiveConversations)
 	}
-	if !json.Valid(ActiveConversations.Contract.Result.DataSchema) || ActiveConversations.Contract.Identity.CLIPath != "chat +active-conversations" {
+	if !json.Valid(ActiveConversations.Contract.Result.DataSchema) || ActiveConversations.Contract.Identity.CLIPath != "chat +recent-conversations" {
 		t.Fatal("result schema or command identity is invalid")
 	}
 	tests := []struct {

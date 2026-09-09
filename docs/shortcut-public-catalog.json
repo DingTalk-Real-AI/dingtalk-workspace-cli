@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-07T10:56:17.380807",
+  "generated_at": "2026-09-08T20:09:46.464623",
   "count": 440,
   "results": [
     {
@@ -1415,16 +1415,6 @@
     {
       "suite": "semantic",
       "service": "chat",
-      "command": "+active-conversations",
-      "risk": "read",
-      "status": "reviewed_available",
-      "disposition": "semantic_adapter",
-      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
-      "availability": "available"
-    },
-    {
-      "suite": "semantic",
-      "service": "chat",
       "command": "+at-me",
       "risk": "read",
       "status": "reviewed_available",
@@ -2360,6 +2350,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "提供稳定群字段、本地类型过滤和可继续的分页完整性，替代重复群列表入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+recent-conversations",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
       "availability": "available"
     },
     {
