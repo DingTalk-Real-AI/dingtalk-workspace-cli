@@ -79,6 +79,9 @@ func productProvenanceValue(product ProductSpec, field string) (any, bool) {
 	return schemaruntime.ProductProvenanceValue(product, field)
 }
 func normalizeToolSpec(tool ToolSpec) ToolSpec { return schemaruntime.NormalizeToolSpec(tool) }
+func normalizeParameterSpec(parameter ParameterSpec) ParameterSpec {
+	return schemaruntime.NormalizeParameterSpec(parameter)
+}
 
 func normalizeSchemaCLIPath(path string) string  { return schemaruntime.NormalizeCLIPath(path) }
 func splitSchemaPathTokens(path string) []string { return schemaruntime.SplitPathTokens(path) }

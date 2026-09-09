@@ -83,6 +83,7 @@ type ParameterSpec struct {
 	Default              json.RawMessage
 	InterfaceDefault     json.RawMessage
 	Example              json.RawMessage
+	AnyOf                []contract.FormatAlternative
 	Format               string
 	Enum                 []string
 	InterfaceDescription string
@@ -248,6 +249,8 @@ func (p ParameterSpec) provenanceValue(field string) (any, bool) {
 		return p.InterfaceDefault, true
 	case "example":
 		return p.Example, true
+	case "anyOf":
+		return p.AnyOf, true
 	case "format":
 		return p.Format, true
 	case "enum":
@@ -788,7 +791,13 @@ func (p ParameterSpec) normalized() ParameterSpec {
 	out.Type = strings.TrimSpace(out.Type)
 	out.Property = strings.TrimSpace(out.Property)
 	out.Enum = stableUniqueStrings(out.Enum)
+	out.AnyOf = append([]contract.FormatAlternative(nil), out.AnyOf...)
 	return out
+}
+
+// NormalizeParameterSpec returns a detached copy of one parameter.
+func NormalizeParameterSpec(parameter ParameterSpec) ParameterSpec {
+	return parameter.normalized()
 }
 
 func stableUniqueStrings(values []string) []string {
@@ -1093,6 +1102,16 @@ func (p ParameterSpec) ToPayload() (map[string]any, error) {
 		return nil, err
 	}
 	setOptionalString(payload, "format", p.Format)
+	if len(p.AnyOf) > 0 {
+		if p.Format != "" || p.Type != "string" {
+			return nil, fmt.Errorf("parameter %q anyOf requires string type and no top-level format", p.Name)
+		}
+		branches := make([]any, len(p.AnyOf))
+		for i, branch := range p.AnyOf {
+			branches[i] = map[string]any{"format": branch.Format}
+		}
+		payload["anyOf"] = branches
+	}
 	if len(p.Enum) > 0 {
 		payload["enum"] = append([]string(nil), p.Enum...)
 	}

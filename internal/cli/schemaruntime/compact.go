@@ -20,7 +20,7 @@ var compactParamKeys = map[string]bool{
 	"type": true, "description": true, "required": true,
 	"cli_required": true, "required_when": true,
 	"default": true, "interface_default": true, "example": true,
-	"format": true, "enum": true,
+	"format": true, "enum": true, "anyOf": true,
 }
 
 // Compact projects a Schema payload onto the reviewed positive Agent allowlist.
