@@ -41,18 +41,18 @@ var WikiNewDoc = shortcut.Shortcut{
 	Service:       "wiki",
 	Command:       "+wiki-new-doc",
 	Product:       "wiki",
-	Description:   "在指定名称的知识库下新建一个文档节点（自动按空间名解析 workspaceId）",
+	Description:   "在指定名称的知识库下新建一个文档节点（按单次名称搜索解析 workspaceId）",
 	Intent: "当你只知道知识库（知识空间）的名字、想直接在它下面新建一篇文档，却不想先搜索空间、复制 workspaceId 再建节点时使用；" +
-		"内部先按空间名搜索知识库，若唯一命中则拿到它的 workspaceId，再在该库根目录下创建一个在线文档节点。" +
-		"如果这个名字没有匹配到任何知识库，或匹配到多个，会报错让你用更精确的名字，绝不乱猜。" +
+		"内部按空间名搜索一次，优先精确同名；无精确匹配时也会接受唯一候选，再在该库根目录创建文档，不证明全局唯一。" +
+		"无候选或无法消歧时，会报错让你用更精确的名字。" +
 		"这会真实创建一个新的文档节点。",
 	Risk:   shortcut.RiskWrite,
 	Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "non_idempotent"},
 	Contract: corecmd.ContractDecl{
-		Description: "在指定名称的知识库下新建一个文档节点（自动按空间名解析 workspaceId）",
+		Description: "在指定名称的知识库下新建一个文档节点（按单次名称搜索解析 workspaceId）",
 		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"已验证的新建 Wiki 文档","properties":{"success":{"type":"boolean","description":"是否成功"},"nodeId":{"type":"string","description":"新文档节点 ID"},"space":{"type":"string","description":"请求的知识库名称"},"title":{"type":"string","description":"请求的文档标题"},"document":{"type":"object","description":"读回的文档元数据","additionalProperties":true}},"required":["success","nodeId","space","title","document"],"additionalProperties":true}`)},
 		Interface:   &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "Reviewed Wiki smart Shortcut: the executable CLI strictly resolves one exact space, creates a document, and verifies it through a metadata read-back."},
-		Selection:   contract.SelectionSpec{AgentSummary: "在指定名称的知识库下新建一个文档节点（自动按空间名解析 workspaceId）", UseWhen: []string{"当你只知道知识库（知识空间）的名字、想直接在它下面新建一篇文档，却不想先搜索空间、复制 workspaceId 再建节点时使用；内部先按空间名搜索知识库，若唯一命中则拿到它的 workspaceId，再在该库根目录下创建一个在线文档节点。如果这个名字没有匹配到任何知识库，或匹配到多个，会报错让你用更精确的名字，绝不乱猜。这会真实创建一个新的文档节点。"}, AvoidWhen: []string{"已知 workspaceId 时用 wiki +node-create；空间名不唯一时先用 wiki +space-search"}, Examples: []string{`dws wiki +wiki-new-doc --space "产品文档库" --title "需求评审纪要"`}},
+		Selection:   contract.SelectionSpec{AgentSummary: "在指定名称的知识库下新建一个文档节点（按单次名称搜索解析 workspaceId）", UseWhen: []string{"当你只知道知识库（知识空间）的名字、想直接在它下面新建一篇文档，却不想先搜索空间、复制 workspaceId 再建节点时使用；内部按空间名搜索一次，优先精确同名；无精确匹配时也会接受唯一候选，再在该库根目录创建文档，不证明全局唯一。无候选或无法消歧时，会报错让你用更精确的名字。这会真实创建一个新的文档节点。"}, AvoidWhen: []string{"已知 workspaceId 时用 wiki +node-create；空间名不唯一时先用 wiki +space-search；写入前须确认目标"}, Examples: []string{`dws wiki +wiki-new-doc --space "产品文档库" --title "需求评审纪要"`}},
 		Identity:    contract.ToolIdentitySpec{ProductID: "wiki", Name: "shortcut_wiki_new_doc", CanonicalPath: "wiki.shortcut_wiki_new_doc", CLIPath: "wiki +wiki-new-doc", PrimaryCLIPath: "wiki +wiki-new-doc"},
 		Parameters:  []contract.ParamDecl{{Name: "space", Property: "keyword"}, {Name: "title", Property: "name"}},
 	},

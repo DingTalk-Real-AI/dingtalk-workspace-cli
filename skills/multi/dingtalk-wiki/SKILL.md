@@ -34,8 +34,8 @@ metadata:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws wiki +resolve-space` | read | 按名称搜索知识空间并解析出唯一 spaceId（只读） |
-| `dws wiki +wiki-new-doc` | write | 在指定名称的知识库下新建一个文档节点（自动按空间名解析 workspaceId） |
+| `dws wiki +resolve-space` | read | 按名称搜索知识空间并解析单次结果中的唯一 spaceId（只读） |
+| `dws wiki +wiki-new-doc` | write | 在指定名称的知识库下新建一个文档节点（按单次名称搜索解析 workspaceId） |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## Golden Route
