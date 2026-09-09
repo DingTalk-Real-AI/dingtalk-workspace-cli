@@ -77,6 +77,15 @@ var contractCompositeIface = &contract.InterfaceSpec{
 	Reason:       "命令通过智能合同 MCP 服务器分派并包裹在 *OpenRequest 结构中，不能绑定为单一 interface_ref",
 }
 
+// contractReviewRetiredIface is the Schema disposition for legacy review
+// argv shims: they remain discoverable for migration, but must not claim an
+// available MCP/composite business interface.
+var contractReviewRetiredIface = &contract.InterfaceSpec{
+	Mode:         contract.InterfaceModeComposite,
+	Availability: contract.InterfaceUnavailable,
+	Reason:       "旧版合同审查 MCP 已退役；本叶子仅为历史 argv 兼容入口，不再通过智能合同 MCP 分派业务请求",
+}
+
 var (
 	safetyRead        = contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}
 	safetyWrite       = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
@@ -292,7 +301,7 @@ func declareContractSchema(r *contractSchemaRefs) {
 				CLIPath: "contract review benefit", PrimaryCLIPath: "contract review benefit",
 			},
 			Description: "历史兼容入口：旧版审查权益 MCP 已退役；执行仅返回弃用说明，不能查询审查权益。",
-			Interface:   contractCompositeIface,
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
 				AgentSummary: "仅用于旧版 dws contract review benefit 的弃用/兼容提示，不能查询审查权益。",
 				UseWhen:      []string{"用户明确只要旧版 dws contract review benefit 命令的弃用兼容说明"},
@@ -313,7 +322,7 @@ func declareContractSchema(r *contractSchemaRefs) {
 				CLIPath: "contract review create", PrimaryCLIPath: "contract review create",
 			},
 			Description: "历史兼容入口：旧版创建审查任务 MCP 已退役；执行仅返回弃用说明，不能创建审查任务。",
-			Interface:   contractCompositeIface,
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
 				AgentSummary: "仅用于旧版 dws contract review create 的弃用/兼容提示，不能发起 AI 审查。",
 				UseWhen:      []string{"用户明确只要旧版 dws contract review create 命令的弃用兼容说明"},
@@ -337,7 +346,7 @@ func declareContractSchema(r *contractSchemaRefs) {
 				CLIPath: "contract review analysis", PrimaryCLIPath: "contract review analysis",
 			},
 			Description: "历史兼容入口：旧版合同解析 MCP 已退役；执行仅返回弃用说明，不能解析合同或返回推荐模型。",
-			Interface:   contractCompositeIface,
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
 				AgentSummary: "仅用于旧版 dws contract review analysis 的弃用/兼容提示，不能解析合同。",
 				UseWhen:      []string{"用户明确只要旧版 dws contract review analysis 命令的弃用兼容说明"},
@@ -361,7 +370,7 @@ func declareContractSchema(r *contractSchemaRefs) {
 				CLIPath: "contract review result", PrimaryCLIPath: "contract review result",
 			},
 			Description: "历史兼容入口：旧版审查结果 MCP 已退役；执行仅返回弃用说明，不能查询审查结果。",
-			Interface:   contractCompositeIface,
+			Interface:   contractReviewRetiredIface,
 			Selection: contract.SelectionSpec{
 				AgentSummary: "仅用于旧版 dws contract review result 的弃用/兼容提示，不能查询审查结果。",
 				UseWhen:      []string{"用户明确只要旧版 dws contract review result 命令的弃用兼容说明"},

@@ -54,6 +54,12 @@ func TestAssembledSchemaContractReviewToolsAreDeprecationOnly(t *testing.T) {
 				t.Fatalf("assembled %s UseWhen must be deprecation-notice only, got %q", canonical, use)
 			}
 		}
+		if schemaContractString(tool["availability"]) != "unavailable" {
+			t.Fatalf("assembled %s availability = %q, want unavailable", canonical, tool["availability"])
+		}
+		if !strings.Contains(schemaContractString(tool["interface_reason"]), "已退役") {
+			t.Fatalf("assembled %s interface_reason must explain retirement: %#v", canonical, tool["interface_reason"])
+		}
 	}
 
 	root := NewRootCommand()

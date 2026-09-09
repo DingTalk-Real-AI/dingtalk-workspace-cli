@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
@@ -314,7 +315,7 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	reviewCmd := newGroupCommand(&cobra.Command{
 		Use:        "review",
 		Short:      "不再支持：旧版合同审查兼容入口",
-		Long:       `历史 argv 兼容入口。旧 MCP 审查工具已退役；执行仅返回弃用说明，不能完成审查业务。新审核请使用产品侧 dws contract-review（千问办公等）。`,
+		Long:       `历史 argv 兼容入口。旧 MCP 审查工具已退役；执行以非零退出返回 command_retired，不能完成审查业务。新审核请使用产品侧 dws contract-review（千问办公等）。`,
 		Deprecated: reviewDeprecated,
 		RunE:       groupRunE,
 	})
@@ -322,35 +323,35 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	reviewBenefitCmd := &cobra.Command{
 		Use:        "benefit",
 		Short:      "不再支持：旧版审查权益查询兼容入口",
-		Long:       `历史兼容入口。旧 MCP queryContractReviewBenefit 已退役；执行仅返回弃用说明，不能查询审查权益。`,
+		Long:       `历史兼容入口。旧 MCP queryContractReviewBenefit 已退役；执行以非零退出返回 command_retired，不能查询审查权益。`,
 		Deprecated: reviewDeprecated,
 		Example:    `  dws contract review benefit --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return printContractReviewCompatNotice(cmd, "dws contract review benefit")
+			return retiredContractReviewError("dws contract review benefit")
 		},
 	}
 
 	reviewCreateCmd := &cobra.Command{
 		Use:        "create",
 		Short:      "不再支持：旧版创建审查任务兼容入口",
-		Long:       `历史兼容入口。旧 MCP createContractReviewTask 已退役；仍校验 --file JSON 形状，但只返回弃用说明，不能创建审查任务。`,
+		Long:       `历史兼容入口。旧 MCP createContractReviewTask 已退役；仍校验 --file JSON 形状，但以非零退出返回 command_retired，不能创建审查任务。`,
 		Deprecated: reviewDeprecated,
 		Example: `  dws contract review create --file ./review_request.json --format json
   cat review_request.json | dws contract review create --file - --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Keep historical --file validation so Interface/Schema requiredness stays intact,
-			// then return the compatibility notice instead of calling retired MCP tools.
+			// then fail closed instead of calling retired MCP tools.
 			if _, err := readContractJSONPayload(cmd); err != nil {
 				return err
 			}
-			return printContractReviewCompatNotice(cmd, "dws contract review create")
+			return retiredContractReviewError("dws contract review create")
 		},
 	}
 
 	reviewAnalysisCmd := &cobra.Command{
 		Use:        "analysis",
 		Short:      "不再支持：旧版合同解析兼容入口",
-		Long:       `历史兼容入口。旧 MCP contractAnalysis 已退役；仍校验 --file JSON 形状，但只返回弃用说明，不能解析合同或返回推荐模型。`,
+		Long:       `历史兼容入口。旧 MCP contractAnalysis 已退役；仍校验 --file JSON 形状，但以非零退出返回 command_retired，不能解析合同或返回推荐模型。`,
 		Deprecated: reviewDeprecated,
 		Example: `  dws contract review analysis --file ./analysis_request.json --format json
   cat analysis_request.json | dws contract review analysis --file - --format json`,
@@ -358,14 +359,14 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 			if _, err := readContractJSONPayload(cmd); err != nil {
 				return err
 			}
-			return printContractReviewCompatNotice(cmd, "dws contract review analysis")
+			return retiredContractReviewError("dws contract review analysis")
 		},
 	}
 
 	reviewResultCmd := &cobra.Command{
 		Use:        "result",
 		Short:      "不再支持：旧版审查结果查询兼容入口",
-		Long:       `历史兼容入口。旧 MCP queryContractReviewResult 已退役；仍校验必填 flag，但只返回弃用说明，不能查询审查结果。`,
+		Long:       `历史兼容入口。旧 MCP queryContractReviewResult 已退役；仍校验必填 flag，但以非零退出返回 command_retired，不能查询审查结果。`,
 		Deprecated: reviewDeprecated,
 		Example:    `  dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -377,7 +378,7 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 			if reviewType == "" {
 				return fmt.Errorf("--review-type 为必填参数")
 			}
-			return printContractReviewCompatNotice(cmd, "dws contract review result")
+			return retiredContractReviewError("dws contract review result")
 		},
 	}
 
@@ -1557,39 +1558,14 @@ const contractReviewUnsupportedMessage = "dws contract review 不再调用旧版
 
 const contractReviewReplacementHint = "新合同审核请使用产品侧 dws contract-review（prepare-upload/upload/confirm/get-status/get-result），对应 MCP contract_review_*。"
 
-type contractReviewCompatNotice struct {
-	Status      string `json:"status"`
-	Command     string `json:"command"`
-	Message     string `json:"message"`
-	Replacement string `json:"replacement,omitempty"`
-}
-
-func printContractReviewCompatNotice(cmd *cobra.Command, command string) error {
-	notice := contractReviewCompatNotice{
-		Status:      "deprecated",
-		Command:     command,
-		Message:     contractReviewUnsupportedMessage,
-		Replacement: contractReviewReplacementHint,
-	}
-	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	switch strings.ToLower(strings.TrimSpace(format)) {
-	case "", "json", "pretty":
-		if deps != nil {
-			return deps.Out.PrintJSON(notice)
-		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		if strings.EqualFold(strings.TrimSpace(format), "pretty") {
-			enc.SetIndent("", "  ")
-		}
-		return enc.Encode(notice)
-	default:
-		w := cmd.OutOrStdout()
-		if deps != nil {
-			w = deps.Out.w
-		}
-		_, err := fmt.Fprintf(w, "%s: %s\n%s\n", notice.Command, notice.Message, notice.Replacement)
-		return err
-	}
+// retiredContractReviewError fails closed with a non-zero exit so historical
+// scripts cannot treat a silent no-op as a successful create/query.
+func retiredContractReviewError(command string) error {
+	return apperrors.NewValidation(
+		fmt.Sprintf("%s: %s", command, contractReviewUnsupportedMessage),
+		apperrors.WithReason("command_retired"),
+		apperrors.WithHint(contractReviewReplacementHint),
+	)
 }
 
 // readContractJSONPayload reads the path from flag "file" (file path or "-" for stdin) into a JSON object.

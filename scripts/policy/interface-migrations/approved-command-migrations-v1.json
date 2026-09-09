@@ -148,6 +148,70 @@
       },
       "state": "pending",
       "reason": "Fail closed until a safe second-member fixture proves exact removal readback and restoration."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review benefit",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_benefit",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Legacy contract review MCP is retired; keep argv compatibility but fail-close Schema availability so Agents cannot treat the shim as an executable review tool."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_create",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Legacy contract review MCP is retired; keep argv compatibility but fail-close Schema availability so Agents cannot treat create as a successful business write."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review analysis",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_analysis",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Legacy contract review MCP is retired; keep argv compatibility but fail-close Schema availability for analysis."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws contract review result",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "contract",
+        "source_tool_id": "contract.review_result",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Legacy contract review MCP is retired; keep argv compatibility but fail-close Schema availability for result queries."
     }
   ]
 }

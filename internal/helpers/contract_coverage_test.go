@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,8 +13,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
-	"github.com/spf13/cobra"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 // writeTempJSON writes a JSON file to a temp dir and returns its path.
@@ -205,26 +208,27 @@ func TestCrossPlatformCoverageContractDraftCommand(t *testing.T) {
 
 // TestCrossPlatformCoverageContractReviewCommands covers review create/analysis/result.
 func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
-	assertReviewCompat := func(t *testing.T, caller *contractDefectCaller, out string) {
+	assertReviewRetired := func(t *testing.T, caller *contractDefectCaller, err error) {
 		t.Helper()
 		if len(caller.calls) != 0 {
 			t.Fatalf("compat stub must not call MCP: %#v", caller.calls)
 		}
-		if !strings.Contains(out, `"status": "deprecated"`) && !strings.Contains(out, `"status":"deprecated"`) {
-			t.Fatalf("missing deprecated status: %s", out)
+		if err == nil {
+			t.Fatal("retired review leaf must return a non-zero error")
 		}
-		if !strings.Contains(out, "不再调用旧版审查 MCP") {
-			t.Fatalf("missing compat message: %s", out)
+		var appErr *apperrors.Error
+		if !errors.As(err, &appErr) || appErr.Reason != "command_retired" {
+			t.Fatalf("error = %#v, want validation command_retired", err)
+		}
+		if !strings.Contains(err.Error(), "不再调用旧版审查 MCP") {
+			t.Fatalf("missing retired message: %v", err)
 		}
 	}
 
-	// review benefit: compatibility notice
+	// review benefit: retired error, no MCP
 	caller := &contractDefectCaller{}
-	out, err := executeContractDefectCommand(t, caller, newContractCommand, "review", "benefit")
-	if err != nil {
-		t.Fatalf("review benefit: %v", err)
-	}
-	assertReviewCompat(t, caller, out)
+	_, err := executeContractDefectCommand(t, caller, newContractCommand, "review", "benefit")
+	assertReviewRetired(t, caller, err)
 
 	// review create: missing --file
 	caller = &contractDefectCaller{}
@@ -248,15 +252,12 @@ func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
 		t.Fatal("review create with invalid JSON should fail")
 	}
 
-	// review create: compatibility notice after flag validation
+	// review create: retired after flag validation
 	goodPath := writeTempJSON(t, "review.json", `{"source":"OPEN_CLAW","reviewType":"AI_REVIEW"}`)
 	caller = &contractDefectCaller{}
-	out, err = executeContractDefectCommand(t, caller, newContractCommand,
+	_, err = executeContractDefectCommand(t, caller, newContractCommand,
 		"review", "create", "--file", goodPath)
-	if err != nil {
-		t.Fatalf("review create: %v", err)
-	}
-	assertReviewCompat(t, caller, out)
+	assertReviewRetired(t, caller, err)
 
 	// review analysis: missing --file
 	caller = &contractDefectCaller{}
@@ -279,15 +280,12 @@ func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
 		t.Fatal("review analysis with invalid JSON should fail")
 	}
 
-	// review analysis: compatibility notice
+	// review analysis: retired after flag validation
 	analysisPath := writeTempJSON(t, "analysis.json", `{"fileInfo":{"fileId":"xxx"}}`)
 	caller = &contractDefectCaller{}
-	out, err = executeContractDefectCommand(t, caller, newContractCommand,
+	_, err = executeContractDefectCommand(t, caller, newContractCommand,
 		"review", "analysis", "--file", analysisPath)
-	if err != nil {
-		t.Fatalf("review analysis: %v", err)
-	}
-	assertReviewCompat(t, caller, out)
+	assertReviewRetired(t, caller, err)
 
 	// review result: missing --task-id
 	caller = &contractDefectCaller{}
@@ -303,14 +301,11 @@ func TestCrossPlatformCoverageContractReviewCommands(t *testing.T) {
 		t.Fatal("review result without --review-type should fail")
 	}
 
-	// review result: compatibility notice
+	// review result: retired after flag validation
 	caller = &contractDefectCaller{}
-	out, err = executeContractDefectCommand(t, caller, newContractCommand,
+	_, err = executeContractDefectCommand(t, caller, newContractCommand,
 		"review", "result", "--task-id", "task_xxx", "--review-type", "AI_REVIEW")
-	if err != nil {
-		t.Fatalf("review result: %v", err)
-	}
-	assertReviewCompat(t, caller, out)
+	assertReviewRetired(t, caller, err)
 }
 
 // TestCrossPlatformCoverageContractMiscCommands covers process-templates, file-directories, archive.
@@ -1352,7 +1347,7 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 		t.Fatal("record list with invalid --end should fail")
 	}
 
-	// review create: stdin path (--file -) still validates JSON then emits compat notice
+	// review create: stdin path (--file -) still validates JSON then returns retired error
 	caller = &contractDefectCaller{}
 	root := newContractCommand()
 	root.PersistentFlags().Bool("yes", false, "confirm")
@@ -1361,21 +1356,24 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	root.SilenceUsage = true
 	root.SetIn(strings.NewReader(`{"source":"test"}`))
 	root.SetArgs([]string{"review", "create", "--file", "-"})
+	testseam.Protect(t, &deps)
 	InitDeps(caller)
 	var stdout bytes.Buffer
 	deps.Out.w = &stdout
 	deps.Out.errW = io.Discard
-	if err := root.Execute(); err != nil {
-		t.Fatalf("review create from stdin: %v", err)
+	if err := root.Execute(); err == nil {
+		t.Fatal("review create from stdin must return retired error")
+	} else {
+		var appErr *apperrors.Error
+		if !errors.As(err, &appErr) || appErr.Reason != "command_retired" {
+			t.Fatalf("stdin create error = %#v, want command_retired", err)
+		}
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("stdin create must not call MCP: %#v", caller.calls)
 	}
-	if !strings.Contains(stdout.String(), "deprecated") {
-		t.Fatalf("stdin create missing compat notice: %s", stdout.String())
-	}
 
-	// review analysis: stdin path (--file -) still validates JSON then emits compat notice
+	// review analysis: stdin path (--file -) still validates JSON then returns retired error
 	caller = &contractDefectCaller{}
 	root2 := newContractCommand()
 	root2.PersistentFlags().Bool("yes", false, "confirm")
@@ -1384,17 +1382,20 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	root2.SilenceUsage = true
 	root2.SetIn(strings.NewReader(`{"fileInfo":{"fileId":"xxx"}}`))
 	root2.SetArgs([]string{"review", "analysis", "--file", "-"})
+	testseam.Protect(t, &deps)
 	InitDeps(caller)
 	deps.Out.w = &stdout
 	deps.Out.errW = io.Discard
-	if err := root2.Execute(); err != nil {
-		t.Fatalf("review analysis from stdin: %v", err)
+	if err := root2.Execute(); err == nil {
+		t.Fatal("review analysis from stdin must return retired error")
+	} else {
+		var appErr *apperrors.Error
+		if !errors.As(err, &appErr) || appErr.Reason != "command_retired" {
+			t.Fatalf("stdin analysis error = %#v, want command_retired", err)
+		}
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("stdin analysis must not call MCP: %#v", caller.calls)
-	}
-	if !strings.Contains(stdout.String(), "deprecated") {
-		t.Fatalf("stdin analysis missing compat notice: %s", stdout.String())
 	}
 
 	// account list: invalid --exec-start
@@ -1419,54 +1420,21 @@ func TestCrossPlatformCoverageContractFinalEdges(t *testing.T) {
 	}
 }
 
-// TestCrossPlatformCoverageContractReviewCompatNoticeFormats covers the
-// deps-nil JSON/pretty encoder path and the non-JSON text fallback.
-func TestCrossPlatformCoverageContractReviewCompatNoticeFormats(t *testing.T) {
-	prev := deps
-	t.Cleanup(func() { deps = prev })
+// TestCrossPlatformCoverageContractReviewRetiredErrorFailsClosed covers the
+// non-zero exit contract for retired review leaves (no MCP calls).
+func TestCrossPlatformCoverageContractReviewRetiredErrorFailsClosed(t *testing.T) {
+	testseam.Protect(t, &deps)
 	deps = nil
-
-	for _, format := range []string{"", "json", "pretty", "table", "text"} {
-		var buf bytes.Buffer
-		parent := &cobra.Command{Use: "dws"}
-		parent.PersistentFlags().String("format", format, "")
-		parent.SetOut(&buf)
-		sub := &cobra.Command{Use: "review"}
-		parent.AddCommand(sub)
-		if err := printContractReviewCompatNotice(sub, "dws contract review benefit"); err != nil {
-			t.Fatalf("format=%q: %v", format, err)
-		}
-		got := buf.String()
-		if !strings.Contains(got, "不再调用旧版审查 MCP") {
-			t.Fatalf("format=%q missing notice:\n%s", format, got)
-		}
-		switch strings.ToLower(format) {
-		case "", "json", "pretty":
-			if !strings.Contains(got, `"status":"deprecated"`) && !strings.Contains(got, `"status": "deprecated"`) {
-				t.Fatalf("format=%q missing deprecated JSON status:\n%s", format, got)
-			}
-		default:
-			if !strings.Contains(got, "dws contract review benefit:") {
-				t.Fatalf("format=%q missing text prefix:\n%s", format, got)
-			}
-		}
+	err := retiredContractReviewError("dws contract review create")
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Reason != "command_retired" {
+		t.Fatalf("error = %#v, want command_retired", err)
 	}
-
-	// deps != nil text fallback (covers deps.Out.w branch)
-	caller := &contractDefectCaller{}
-	InitDeps(caller)
-	var out bytes.Buffer
-	deps.Out.w = &out
-	deps.Out.errW = io.Discard
-	parent := &cobra.Command{Use: "dws"}
-	parent.PersistentFlags().String("format", "table", "")
-	sub := &cobra.Command{Use: "review"}
-	parent.AddCommand(sub)
-	if err := printContractReviewCompatNotice(sub, "dws contract review result"); err != nil {
-		t.Fatalf("deps text path: %v", err)
+	if !strings.Contains(err.Error(), "不再调用旧版审查 MCP") {
+		t.Fatalf("missing retired message: %v", err)
 	}
-	if !strings.Contains(out.String(), "dws contract review result:") {
-		t.Fatalf("deps text path missing notice: %s", out.String())
+	if !strings.Contains(appErr.Hint, "dws contract-review") {
+		t.Fatalf("missing replacement hint: %#v", appErr)
 	}
 }
 
@@ -1509,8 +1477,14 @@ func TestContractReviewDeprecatedCompatSurfaceKeepsArgvButNotBusinessSelection(t
 			t.Fatalf("deprecated review %s must not be IsAvailableCommand", leaf)
 		}
 		final, ok := contractfinal.RuntimeContractFinal(cmd)
-		if !ok || final.Identity == nil || final.Selection == nil {
-			t.Fatalf("review %s missing ContractFinal identity/selection: ok=%v final=%#v", leaf, ok, final)
+		if !ok || final.Identity == nil || final.Selection == nil || final.Interface == nil {
+			t.Fatalf("review %s missing ContractFinal identity/selection/interface: ok=%v final=%#v", leaf, ok, final)
+		}
+		if final.Interface.Availability != contract.InterfaceUnavailable {
+			t.Fatalf("review %s interface availability = %q, want unavailable", leaf, final.Interface.Availability)
+		}
+		if !strings.Contains(final.Interface.Reason, "已退役") {
+			t.Fatalf("review %s interface reason must explain retirement: %q", leaf, final.Interface.Reason)
 		}
 		joined := strings.Join([]string{
 			final.Description,
