@@ -235,3 +235,60 @@ func TestCrossPlatformCoverageSchemaCacheDeliveryRemainder(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCrossPlatformCoverageSchemaCacheRepairLiveFallbacks(t *testing.T) {
+	_, identity, _ := publishCoverageSchemaRuntime(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	register := func() *schemaCacheRuntime {
+		t.Helper()
+		restorePackageCLISchemaDeliveryForTest()
+		resetDeliverySchemaCatalogStateForTest()
+		if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+			Enabled: true, Identity: identity, GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true },
+		}); err != nil {
+			t.Fatal(err)
+		}
+		runtimeCache := activeSchemaCacheRuntime()
+		if runtimeCache == nil {
+			t.Fatal("runtime not registered")
+		}
+		return runtimeCache
+	}
+
+	runtimeCache := register()
+	runtimeCache.allOnce.Do(func() { runtimeCache.allErr = errors.New("poison all") })
+	if _, err := deliverySchemaAllPayload(); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCache = register()
+	runtimeCache.metaOnce.Do(func() { runtimeCache.metaErr = errors.New("poison meta") })
+	if _, err := deliverySchemaOverviewPayload(); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCache = register()
+	runtimeCache.metaOnce.Do(func() { runtimeCache.metaErr = errors.New("poison meta") })
+	if _, err := queryDeliverySchemaPayload([]string{"calendar event create"}); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCache = register()
+	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-hit"))
+	if _, err := deliverySchemaAllPayload(); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCache = register()
+	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-overview"))
+	if _, err := deliverySchemaOverviewPayload(); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCache = register()
+	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-query"))
+	if _, err := queryDeliverySchemaPayload([]string{"calendar event create"}); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -420,6 +420,12 @@ func TestCrossPlatformCoveragePortableFileOpen(t *testing.T) {
 	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
 		t.Fatal("junk header accepted")
 	}
+	if err := os.WriteFile(filepath.Join(dir, registryFileName), junk, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.OpenRegistry(identity, reg.Expectation); err == nil {
+		t.Fatal("junk registry header opened")
+	}
 	if err := os.WriteFile(filepath.Join(dir, registryFileName), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -428,6 +434,15 @@ func TestCrossPlatformCoveragePortableFileOpen(t *testing.T) {
 		t.Fatal("corrupt registry opened")
 	}
 	_ = regHandle
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, metaFileName)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("missing meta accepted")
+	}
 	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
 		t.Fatal(err)
 	}
@@ -477,6 +492,9 @@ func TestCrossPlatformCoveragePortableFileOpen(t *testing.T) {
 	}
 	if err := cache.Close(); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := cache.OpenRegistry(identity, reg.Expectation); err == nil {
+		t.Fatal("closed OpenRegistry succeeded")
 	}
 	if _, err := cache.ReadMeta(identity, meta.Expectation); !errors.Is(err, ErrClosed) {
 		t.Fatalf("closed portable ReadMeta = %v", err)
