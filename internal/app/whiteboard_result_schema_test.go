@@ -112,3 +112,22 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 		t.Fatalf("create source file flag type=%v, want string", got)
 	}
 }
+
+func TestCrossPlatformCoverageWhiteboardExportDryRunContractsDelivered(t *testing.T) {
+	for _, path := range []string{"whiteboard export", "whiteboard export-get"} {
+		full := executeShortcutSchemaQuery(t, "--cli-path", path)
+		compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+		if full["dry_run"] == nil {
+			t.Fatalf("%s missing dry-run declaration", path)
+		}
+		// Export still emits legacy bytes; the assembly intentionally withholds
+		// its internal Result declaration until unified output is enabled.
+		if full["result"] != nil || compact["result"] != nil {
+			t.Fatalf("%s publishes unified Result before runtime rollout", path)
+		}
+		dryRun, ok := full["dry_run"].(map[string]any)
+		if !ok || dryRun["preview_kind"] != "request" || dryRun["remote_reads"] == true {
+			t.Fatalf("%s invalid dry-run contract: %#v", path, full["dry_run"])
+		}
+	}
+}

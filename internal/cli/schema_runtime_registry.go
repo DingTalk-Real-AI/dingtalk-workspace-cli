@@ -739,6 +739,9 @@ func validateFinalSchemaProvenanceCoverage(registry SchemaRegistry) error {
 				if parameter.InterfaceType != "" {
 					require(owner, "interface_type", parameter.FieldProvenance)
 				}
+				if len(parameter.AnyOf) > 0 {
+					require(owner, "anyOf", parameter.FieldProvenance)
+				}
 				if parameter.Format != "" {
 					require(owner, "format", parameter.FieldProvenance)
 				}
