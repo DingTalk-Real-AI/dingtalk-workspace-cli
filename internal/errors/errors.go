@@ -354,15 +354,38 @@ func NewValidation(message string, opts ...Option) error {
 	return newError(CategoryValidation, message, opts...)
 }
 
-// PreserveClassification reports whether adapting err must preserve its original
-// identity, category and exit code. It follows wrapped errors; nil is false.
-func PreserveClassification(err error) bool {
+// DeclaresClassification reports whether err already carries an explicit error
+// contract of its own: a repository *Error with a stable category, reason and
+// actions, or an ExitCoder that states its own exit code. It follows wrapped
+// errors; nil is false.
+//
+// Sentinel cancellation and deadline errors do not qualify. They declare no
+// category, so a classification boundary that owns them must still classify
+// them; only a validation boundary needs their identity preserved, which is
+// what PreserveClassification adds.
+func DeclaresClassification(err error) bool {
 	if err == nil {
 		return false
 	}
 	var typed *Error
 	var exitCoder ExitCoder
-	return stderrors.As(err, &typed) || stderrors.As(err, &exitCoder) ||
+	return stderrors.As(err, &typed) || stderrors.As(err, &exitCoder)
+}
+
+// PreserveClassification reports whether adapting err must preserve its original
+// identity, category and exit code. It follows wrapped errors; nil is false.
+//
+// Beyond DeclaresClassification this also covers cancellation and deadline
+// errors, whose identity a validation boundary must not rewrite into a
+// parameter failure. Business classification boundaries should use
+// DeclaresClassification instead: a bare context.DeadlineExceeded carries no
+// category of its own, and passing it through there forfeits the caller's own
+// network-timeout classification.
+func PreserveClassification(err error) bool {
+	if err == nil {
+		return false
+	}
+	return DeclaresClassification(err) ||
 		stderrors.Is(err, context.Canceled) || stderrors.Is(err, context.DeadlineExceeded)
 }
 

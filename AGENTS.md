@@ -61,7 +61,12 @@ Schema contract) keep separate authorities — do not merge them with
   （`NewRootCommand` 等）已完成准备，对其直接 `Execute` 走的就是已适配路径，不需要该辅助函数。
   从 main 合并进来的新测试同样适用，合并后须检查新增的自行构造命令是否仍走该辅助函数。
   重复执行保持 Cobra 的 flag 值和 Changed 状态；需要独立参数状态时从工厂创建新树。
-  错误保留规则统一使用 `internal/errors.PreserveClassification`。
+  错误保留分两种边界，不可混用。**校验边界**（`NormalizeValidation` 及其调用方）用
+  `internal/errors.PreserveClassification`：它额外保留取消/截止错误的身份，避免把超时
+  误判成参数错误。**业务分类边界**（如 `helpers.WrapErrorWithOperation`）必须用
+  `internal/errors.DeclaresClassification`：它只认自带契约的错误（结构化 `*Error` 或
+  `ExitCoder`）。裸 `context.DeadlineExceeded` 不声明任何类别，在业务边界透传会跳过既有的
+  `NETWORK_TIMEOUT` 分类，退化成 internal/退出码 5 并丢掉重试提示。
 - 准备阶段安装 Cobra 原生 `ValidationErrorFunc`，仅在 Args/required/group 失败时分类；
   延迟生成的 help/completion 命令继承该边界。保留业务 Args/PreRun 钩子和原生约束注解，
   required/group 由 Cobra 在业务 PreRun 后检查一次，不再安装提前重复检查。

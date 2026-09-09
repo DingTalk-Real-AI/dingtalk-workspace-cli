@@ -73,3 +73,35 @@ func TestCrossPlatformCoveragePreserveClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestCrossPlatformCoverageDeclaresClassification(t *testing.T) {
+	for _, err := range []error{
+		nil,
+		stderrors.New("raw business error"),
+		context.Canceled,
+		context.DeadlineExceeded,
+		fmt.Errorf("outer: %w", context.DeadlineExceeded),
+	} {
+		if DeclaresClassification(err) {
+			t.Fatalf("error carrying no contract of its own claimed one: %v", err)
+		}
+	}
+	for _, err := range []error{
+		NewAPI("api"),
+		validationTestExitError{},
+		fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", NewAPI("api"))),
+		fmt.Errorf("outer: %w", validationTestExitError{}),
+	} {
+		if !DeclaresClassification(err) {
+			t.Fatalf("error carrying its own contract was not recognized: %v", err)
+		}
+	}
+	// The two predicates differ exactly on the cancellation and deadline
+	// sentinels: a validation boundary preserves their identity, while a
+	// classification boundary still owns them and must classify them itself.
+	for _, err := range []error{context.Canceled, context.DeadlineExceeded} {
+		if !PreserveClassification(err) || DeclaresClassification(err) {
+			t.Fatalf("predicate boundary drifted for %v", err)
+		}
+	}
+}
