@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestDeterministicBuildIDFixedVector(t *testing.T) {
+func TestCrossPlatformCoverageDeterministicBuildIDFixedVector(t *testing.T) {
 	input := buildIDInput{
 		Edition: "open", EnvelopeVersion: 1, DTOFormatVersion: 1, SchemaCacheDTOVersion: 1,
 		CatalogSnapshotVersion: 1, Serializer: 2, Codec: 0,
@@ -33,7 +33,7 @@ func TestDeterministicBuildIDFixedVector(t *testing.T) {
 	}
 }
 
-func TestEncodeIdentityProofDeterministic(t *testing.T) {
+func TestCrossPlatformCoverageEncodeIdentityProofDeterministic(t *testing.T) {
 	proof := identityProof{Version: 1, Edition: "open", SourceSHA256: "aa", SurfaceSHA256: "bb", BuildID: "cc", MetaLength: 1, MetaSHA256: "dd", RegistryLength: 2, RegistrySHA256: "ee",
 		PayloadLength: 3, PayloadSHA256: "ff", PayloadIndexLength: 4, PayloadIndexSHA256: "00"}
 	first, err := encodeIdentityProof(proof, "json")
@@ -52,7 +52,7 @@ func TestEncodeIdentityProofDeterministic(t *testing.T) {
 	}
 }
 
-func TestIdentityProofRejectsUnprovenEditionBeforeAssembly(t *testing.T) {
+func TestCrossPlatformCoverageIdentityProofRejectsUnprovenEditionBeforeAssembly(t *testing.T) {
 	previous := edition.Get()
 	t.Cleanup(func() { edition.Override(previous) })
 	for _, hooks := range []*edition.Hooks{

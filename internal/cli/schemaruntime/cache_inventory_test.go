@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-func TestSchemaCacheRuntimeFieldInventory(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheRuntimeFieldInventory(t *testing.T) {
 	tests := []struct {
 		value any
 		want  []string
@@ -56,7 +56,7 @@ func TestSchemaCacheRuntimeFieldInventory(t *testing.T) {
 	}
 }
 
-func TestSchemaCacheDescriptorContract(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheDescriptorContract(t *testing.T) {
 	const expectedProtoSHA256 = "84dc8887c600817b6b916e184ba6d6ba75c8e83c41dd970399e5ff2c372d6447"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {

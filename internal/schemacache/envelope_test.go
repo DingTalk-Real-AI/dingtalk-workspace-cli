@@ -25,7 +25,7 @@ func testEnvelope() Envelope {
 	}
 }
 
-func TestEnvelopeExactRoundTrip(t *testing.T) {
+func TestCrossPlatformCoverageEnvelopeExactRoundTrip(t *testing.T) {
 	want := testEnvelope()
 	b, err := want.MarshalBinary()
 	if err != nil {
@@ -48,7 +48,7 @@ func TestEnvelopeExactRoundTrip(t *testing.T) {
 	}
 }
 
-func TestEnvelopeRejectsEveryFixedFieldViolation(t *testing.T) {
+func TestCrossPlatformCoverageEnvelopeRejectsEveryFixedFieldViolation(t *testing.T) {
 	valid, err := testEnvelope().MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestEnvelopeRejectsEveryFixedFieldViolation(t *testing.T) {
 	}
 }
 
-func TestEnvelopeBoundsAndOverflow(t *testing.T) {
+func TestCrossPlatformCoverageEnvelopeBoundsAndOverflow(t *testing.T) {
 	tests := []struct {
 		name   string
 		kind   ArtifactKind
@@ -107,7 +107,7 @@ func TestEnvelopeBoundsAndOverflow(t *testing.T) {
 	}
 }
 
-func TestExpectedIdentityIsTrustAnchor(t *testing.T) {
+func TestCrossPlatformCoverageExpectedIdentityIsTrustAnchor(t *testing.T) {
 	e := testEnvelope()
 	expected := ArtifactExpectation{
 		Kind: KindMeta, Serializer: SerializerProtobuf, Codec: CodecRaw,

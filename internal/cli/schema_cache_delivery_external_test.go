@@ -23,14 +23,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestPersistentSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
 	testPersistentSchemaCacheRealDelivery(t, true)
 }
 
 // This runs the same real-data loader/repair/lock assertions under -race without
 // repeating exhaustive, serial build-time projection checks for every locator.
 // Native CI runs the exhaustive test separately, without race instrumentation.
-func TestPersistentSchemaCacheRealConcurrentRepair(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheRealConcurrentRepair(t *testing.T) {
 	testPersistentSchemaCacheRealDelivery(t, false)
 }
 
@@ -352,7 +352,7 @@ func (e *parityError) Error() string { return "Schema cache parity mismatch for 
 // path: pre-rendered payload bytes served without registry I/O, byte-identical
 // to the live render, with alias and non-compact queries falling through to the
 // registry-backed path.
-func TestPersistentSchemaCacheRenderedLeafFastPath(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
 	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
@@ -416,7 +416,7 @@ func TestPersistentSchemaCacheRenderedLeafFastPath(t *testing.T) {
 // read-only when the cache is missing, and when it succeeds the compact leaf
 // fast path serves identical bytes through the same three authenticated range
 // reads (index during the probe, then shard header and leaf blob).
-func TestPersistentSchemaCachePrewarm(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
 	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}

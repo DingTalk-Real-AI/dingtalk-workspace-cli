@@ -15,7 +15,7 @@ import (
 // Even authenticated bytes must reject malformed JSON, including provenance
 // fields that are not projected into a known runtime field. Diagnostics retain
 // the exact location while valid values avoid constructing it.
-func TestSchemaCacheInvalidJSONLocations(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheInvalidJSONLocations(t *testing.T) {
 	built, meta := buildFixtureCache(t, allFieldsRegistry())
 	for _, test := range []struct {
 		name     string

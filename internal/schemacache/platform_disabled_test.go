@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestDisabledPlatformDoesNoCacheIO(t *testing.T) {
+func TestCrossPlatformCoverageDisabledPlatformDoesNoCacheIO(t *testing.T) {
 	counters := &Counters{}
 	cache, err := Open("official", WithCounters(counters))
 	if cache != nil || !errors.Is(err, ErrDisabled) {

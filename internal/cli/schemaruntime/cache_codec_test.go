@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestSchemaCacheAllFieldsExactRoundTrip(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheAllFieldsExactRoundTrip(t *testing.T) {
 	registry := allFieldsRegistry()
 	built, meta := buildFixtureCache(t, registry)
 	decoded, index, err := DecodeAllSchemaProducts(built.ProductShards, meta)
@@ -71,7 +71,7 @@ func TestSchemaCacheAllFieldsExactRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSchemaCacheDeterministicAndDeepCopies(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheDeterministicAndDeepCopies(t *testing.T) {
 	registry := allFieldsRegistry()
 	lookup := BuildCommandMetaLookup(registry)
 	overview, err := BuildSchemaOverview(registry)
@@ -126,7 +126,7 @@ func TestSchemaCacheDeterministicAndDeepCopies(t *testing.T) {
 	}
 }
 
-func TestSchemaCacheStableProductSort(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheStableProductSort(t *testing.T) {
 	product := func(id string) ProductSpec {
 		return ProductSpec{ID: id, Tools: []ToolSpec{{Identity: contract.ToolIdentitySpec{
 			ProductID: id, Name: "run", CanonicalPath: id + ".run", Path: id + ".run", CLIPath: id + " run", PrimaryCLIPath: id + " run",
@@ -144,7 +144,7 @@ func TestSchemaCacheStableProductSort(t *testing.T) {
 	}
 }
 
-func TestSchemaCacheBuildRejectsProjectionDrift(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheBuildRejectsProjectionDrift(t *testing.T) {
 	registry := allFieldsRegistry()
 	lookup := BuildCommandMetaLookup(registry)
 	overview, err := BuildSchemaOverview(registry)
@@ -184,7 +184,7 @@ func TestSchemaCacheBuildRejectsProjectionDrift(t *testing.T) {
 	})
 }
 
-func TestSchemaCacheRejectsMalformedMeta(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheRejectsMalformedMeta(t *testing.T) {
 	built, _ := buildFixtureCache(t, allFieldsRegistry())
 	mutate := func(t *testing.T, edit func(*schemacachepb.SchemaMetaCache)) []byte {
 		t.Helper()
@@ -296,7 +296,7 @@ func TestSchemaCacheRejectsMalformedMeta(t *testing.T) {
 	}
 }
 
-func TestSchemaCacheRejectsMalformedProductBeforeRuntimeUse(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheRejectsMalformedProductBeforeRuntimeUse(t *testing.T) {
 	built, meta := buildFixtureCache(t, allFieldsRegistry())
 	descriptor := meta.ProductDescriptors[0]
 	if _, err := DecodeSchemaProductCache(built.ProductShards[:len(built.ProductShards)-1], descriptor, meta); err == nil {

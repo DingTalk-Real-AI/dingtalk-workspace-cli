@@ -25,7 +25,7 @@ func realSchemaToolCount(registry schemaruntime.SchemaRegistry) int {
 	return count
 }
 
-func TestRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
+func TestCrossPlatformCoverageRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
 	registry := assembleRealRegistry(t)
 	wantTools := realSchemaToolCount(registry)
 	built, meta := buildRealCache(t, registry)

@@ -89,7 +89,7 @@ func openTestCache(t *testing.T, ops unixIO) (*Cache, *Counters, ExpectedIdentit
 	return cache, counters, testIdentity(t, "official")
 }
 
-func TestSecureReadPathsAndCounters(t *testing.T) {
+func TestCrossPlatformCoverageSecureReadPathsAndCounters(t *testing.T) {
 	cache, counters, identity := openTestCache(t, nil)
 	meta := testArtifact(KindMeta, []byte("authenticated meta"))
 	registry := testArtifact(KindRegistry, []byte("alpha-product-beta-product"))
@@ -139,7 +139,7 @@ func TestSecureReadPathsAndCounters(t *testing.T) {
 	}
 }
 
-func TestReadMetaRejectsPartialTrailingAndUntrustedSelfDigest(t *testing.T) {
+func TestCrossPlatformCoverageReadMetaRejectsPartialTrailingAndUntrustedSelfDigest(t *testing.T) {
 	cache, _, identity := openTestCache(t, nil)
 	meta := testArtifact(KindMeta, []byte("trusted"))
 	registry := testArtifact(KindRegistry, []byte("registry"))
@@ -184,7 +184,7 @@ func TestReadMetaRejectsPartialTrailingAndUntrustedSelfDigest(t *testing.T) {
 	}
 }
 
-func TestSecureFileAndDirectoryRejections(t *testing.T) {
+func TestCrossPlatformCoverageSecureFileAndDirectoryRejections(t *testing.T) {
 	t.Run("invalid edition traversal", func(t *testing.T) {
 		if _, err := Open("../escape"); !errors.Is(err, ErrUnsafePath) {
 			t.Fatalf("Open error = %v", err)
@@ -236,7 +236,7 @@ func TestSecureFileAndDirectoryRejections(t *testing.T) {
 	}
 }
 
-func TestSecureRootRejectsSymlinkAndWritableOwnedSuffix(t *testing.T) {
+func TestCrossPlatformCoverageSecureRootRejectsSymlinkAndWritableOwnedSuffix(t *testing.T) {
 	for name, prepare := range map[string]func(*testing.T, string){
 		"symlink": func(t *testing.T, base string) {
 			destination := t.TempDir()
@@ -330,7 +330,7 @@ func (s *shortPreadIO) pread(fd int, p []byte, offset int64) (int, error) {
 	return s.unixIO.pread(fd, p, offset)
 }
 
-func TestReadMetaRejectsShortPread(t *testing.T) {
+func TestCrossPlatformCoverageReadMetaRejectsShortPread(t *testing.T) {
 	ops := &shortPreadIO{unixIO: realUnixIO{}}
 	cache, _, identity := openTestCache(t, ops)
 	meta := testArtifact(KindMeta, []byte("long enough payload"))
@@ -356,7 +356,7 @@ func (c *chmodDuringPreadIO) pread(fd int, p []byte, offset int64) (int, error) 
 	return n, err
 }
 
-func TestReadMetaRejectsFileChangedDuringRead(t *testing.T) {
+func TestCrossPlatformCoverageReadMetaRejectsFileChangedDuringRead(t *testing.T) {
 	ops := &chmodDuringPreadIO{unixIO: realUnixIO{}}
 	cache, _, identity := openTestCache(t, ops)
 	meta := testArtifact(KindMeta, []byte("meta"))
@@ -373,7 +373,7 @@ type failWriteIO struct{ unixIO }
 
 func (f failWriteIO) write(int, []byte) (int, error) { return 0, io.ErrShortWrite }
 
-func TestAtomicFailureKeepsOldArtifactAndCleansTemp(t *testing.T) {
+func TestCrossPlatformCoverageAtomicFailureKeepsOldArtifactAndCleansTemp(t *testing.T) {
 	cache, _, identity := openTestCache(t, nil)
 	oldMeta := testArtifact(KindMeta, []byte("old meta"))
 	registry := testArtifact(KindRegistry, []byte("registry"))
@@ -479,7 +479,7 @@ func (f *stagedFaultIO) renameat(olddirfd int, oldpath string, newdirfd int, new
 	return nil
 }
 
-func TestAtomicWriterFaultMatrix(t *testing.T) {
+func TestCrossPlatformCoverageAtomicWriterFaultMatrix(t *testing.T) {
 	for _, stage := range []string{"write", "file sync", "close", "rename", "directory sync"} {
 		t.Run(stage, func(t *testing.T) {
 			cache, counters, identity := openTestCache(t, nil)
@@ -553,7 +553,7 @@ func (w *wrongOwnerIO) fstat(fd int, stat *unix.Stat_t) error {
 	return nil
 }
 
-func TestSecureReadRejectsWrongOwnerThroughIOSeam(t *testing.T) {
+func TestCrossPlatformCoverageSecureReadRejectsWrongOwnerThroughIOSeam(t *testing.T) {
 	cache, _, identity := openTestCache(t, nil)
 	meta := testArtifact(KindMeta, []byte("meta"))
 	if err := cache.WriteArtifact(identity, meta); err != nil {
@@ -582,7 +582,7 @@ func (r *recordingIO) renameat(olddirfd int, oldpath string, newdirfd int, newpa
 	return r.unixIO.renameat(olddirfd, oldpath, newdirfd, newpath)
 }
 
-func TestPublishRegistryFirstMetaLastAndStopsOnFailure(t *testing.T) {
+func TestCrossPlatformCoveragePublishRegistryFirstMetaLastAndStopsOnFailure(t *testing.T) {
 	for _, failRegistry := range []bool{false, true} {
 		t.Run(fmt.Sprintf("fail=%v", failRegistry), func(t *testing.T) {
 			recorder := &recordingIO{unixIO: realUnixIO{}}
@@ -610,7 +610,7 @@ func TestPublishRegistryFirstMetaLastAndStopsOnFailure(t *testing.T) {
 	}
 }
 
-func TestRegistryRangeBoundsAndDigest(t *testing.T) {
+func TestCrossPlatformCoverageRegistryRangeBoundsAndDigest(t *testing.T) {
 	cache, _, identity := openTestCache(t, nil)
 	registry := testArtifact(KindRegistry, []byte("registry"))
 	meta := testArtifact(KindMeta, []byte("meta"))
@@ -636,7 +636,7 @@ func TestRegistryRangeBoundsAndDigest(t *testing.T) {
 	}
 }
 
-func TestRegistryRejectsChangedOpenFile(t *testing.T) {
+func TestCrossPlatformCoverageRegistryRejectsChangedOpenFile(t *testing.T) {
 	cache, _, identity := openTestCache(t, nil)
 	registry := testArtifact(KindRegistry, []byte("registry"))
 	if err := cache.WriteArtifact(identity, registry); err != nil {
@@ -658,7 +658,7 @@ func TestRegistryRejectsChangedOpenFile(t *testing.T) {
 	}
 }
 
-func TestConcurrentAtomicReplacementNeverExposesPartialArtifact(t *testing.T) {
+func TestCrossPlatformCoverageConcurrentAtomicReplacementNeverExposesPartialArtifact(t *testing.T) {
 	cache, _, identity := openTestCache(t, nil)
 	oldMeta := testArtifact(KindMeta, []byte("old payload"))
 	newMeta := testArtifact(KindMeta, []byte("new payload"))
@@ -711,7 +711,7 @@ func TestConcurrentAtomicReplacementNeverExposesPartialArtifact(t *testing.T) {
 	}
 }
 
-func TestLockTimeoutIsDistinctAndLockRemainsUsable(t *testing.T) {
+func TestCrossPlatformCoverageLockTimeoutIsDistinctAndLockRemainsUsable(t *testing.T) {
 	cache, _, _ := openTestCache(t, nil)
 	first, err := cache.AcquireLock(context.Background(), time.Second)
 	if err != nil {
@@ -732,7 +732,7 @@ func TestLockTimeoutIsDistinctAndLockRemainsUsable(t *testing.T) {
 	}
 }
 
-func TestCrossProcessFlockTimeout(t *testing.T) {
+func TestCrossPlatformCoverageCrossProcessFlockTimeout(t *testing.T) {
 	cache, _, _ := openTestCache(t, nil)
 	path := filepath.Join(cache.Directory(), lockFileName)
 	fd, err := unix.Open(path, unix.O_CREAT|unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0o600)

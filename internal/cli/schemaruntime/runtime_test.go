@@ -12,7 +12,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
-func TestRuntimeRenderingBoundary(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRenderingBoundary(t *testing.T) {
 	tool := ToolSpec{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "sample",

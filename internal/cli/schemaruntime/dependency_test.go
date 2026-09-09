@@ -44,7 +44,7 @@ func TestCrossPlatformCoverageThinSchemaDependencyClosure(t *testing.T) {
 	}
 }
 
-func TestProductionImportsStayFrameworkFree(t *testing.T) {
+func TestCrossPlatformCoverageProductionImportsStayFrameworkFree(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)

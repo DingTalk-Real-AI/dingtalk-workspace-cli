@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestNormalizeCLIPathMatchesFieldsReference(t *testing.T) {
+func TestCrossPlatformCoverageNormalizeCLIPathMatchesFieldsReference(t *testing.T) {
 	cases := []string{
 		"",
 		"dws",
@@ -41,7 +41,7 @@ func TestNormalizeCLIPathMatchesFieldsReference(t *testing.T) {
 	}
 }
 
-func TestNormalizeCLIPathReturnsSubstringOfInput(t *testing.T) {
+func TestCrossPlatformCoverageNormalizeCLIPathReturnsSubstringOfInput(t *testing.T) {
 	path := "dws calendar event list"
 	got := NormalizeCLIPath(path)
 	if want := "calendar event list"; got != want {
