@@ -69,6 +69,11 @@ var ChatSearch = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
+		{Name: "member-ids", Type: shortcut.FlagStringSlice, Desc: "候选群必须包含全部指定OpenID；最多核验100个候选，自动有界扫描"},
+		{Name: "is-manager", Type: shortcut.FlagBool, Desc: "仅本人为群主或管理员的候选群；自动有界扫描"},
+		{Name: "chat-modes", Type: shortcut.FlagStringSlice, Desc: "按已验证channel筛选group/topic；未知模式报错"},
+		{Name: "sort", Type: shortcut.FlagString, Enum: []string{"create_time", "member_count"}, Desc: "已取候选按创建时间或成员数降序；不承诺全局完整"},
+		{Name: "page-delay", Type: shortcut.FlagInt, Default: "0", Desc: "后续页间隔毫秒（0–60000）"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "群名称关键词"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量；显式页大小必须在 1-100 之间"},
@@ -96,6 +101,17 @@ var ChatSearch = shortcut.Shortcut{
 }
 
 func validateChatSearch(rt *shortcut.RuntimeContext) error {
+	if rt.Int("page-delay") < 0 || rt.Int("page-delay") > 60000 {
+		return apperrors.NewValidation("--page-delay 必须在0–60000之间")
+	}
+	for _, m := range rt.StrSlice("chat-modes") {
+		if m != "group" && m != "topic" {
+			return apperrors.NewValidation("--chat-modes 只支持group/topic")
+		}
+	}
+	if err := validateExplicitOpenIDs("--member-ids", rt.StrSlice("member-ids")); err != nil {
+		return err
+	}
 	if size := chatSearchPageSize(rt); size < 1 || size > 100 {
 		return apperrors.NewValidation("--limit/--page-size/--size 必须在 1-100 之间")
 	}
@@ -149,7 +165,7 @@ func executeChatSearch(rt *shortcut.RuntimeContext) error {
 	pageSize := chatSearchPageSize(rt)
 	requestPageSize := pageSize
 	pageLimit := 1
-	if rt.Bool("page-all") {
+	if groupSearchNeedsScan(rt) {
 		pageLimit = rt.Int("page-limit")
 	}
 	cursor := chatSearchStartCursor(rt)
@@ -172,6 +188,13 @@ func executeChatSearch(rt *shortcut.RuntimeContext) error {
 	completionEvidence := ""
 
 	for pagesFetched < pageLimit {
+		if pagesFetched > 0 {
+			if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+				failures = append(failures, map[string]any{"stage": "delay", "error": err.Error()})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
 		params := chatSearchRequestParams(query, requestPageSize, cursor, rt.Bool("exclude-muted"))
 		data, err := rt.CallMCPData("im", "search_groups", params)
 		if err != nil {
@@ -185,7 +208,15 @@ func executeChatSearch(rt *shortcut.RuntimeContext) error {
 			break
 		}
 		pagesFetched++
+		if _, shapeErr := StrictChatCollection(data, "groups", "chats", "items", "list"); shapeErr != nil {
+			return shapeErr
+		}
 		pageItems := chatSearchItems(data)
+		for _, row := range pageItems {
+			if shortcutString(row, "openConversationId") == "" {
+				return apperrors.NewAPI("群搜索结果缺少稳定会话ID")
+			}
+		}
 		for _, chat := range pageItems {
 			id := strings.TrimSpace(fmt.Sprint(chat["openConversationId"]))
 			if id != "" && id != "<nil>" && seenChats[id] {
@@ -230,14 +261,14 @@ func executeChatSearch(rt *shortcut.RuntimeContext) error {
 				(pagesFetched == 1 || (maxWindowProbeUsed && pagesFetched == 2))
 			if fullPageWithoutCursor {
 				paginationKnown = false
-				if rt.Bool("page-all") && initialCursor == "0" && !maxWindowProbeUsed && requestPageSize < chatSearchMaxWindowSize && pagesFetched < pageLimit {
+				if groupSearchNeedsScan(rt) && initialCursor == "0" && !maxWindowProbeUsed && requestPageSize < chatSearchMaxWindowSize && pagesFetched < pageLimit {
 					maxWindowProbeUsed = true
 					requestPageSize = chatSearchMaxWindowSize
 					cursor = initialCursor
 					stopReason = "max_window_probe"
 					continue
 				}
-				if !rt.Bool("page-all") {
+				if !groupSearchNeedsScan(rt) {
 					complete = false
 					stopReason = "single_page_full_untrusted"
 					break
@@ -276,7 +307,7 @@ func executeChatSearch(rt *shortcut.RuntimeContext) error {
 			stopReason = "pagination_error"
 			break
 		}
-		if !rt.Bool("page-all") {
+		if !groupSearchNeedsScan(rt) {
 			stopReason = "single_page"
 			break
 		}
@@ -285,13 +316,21 @@ func executeChatSearch(rt *shortcut.RuntimeContext) error {
 	}
 
 	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
-		truncatedByPageLimit = rt.Bool("page-all")
+		truncatedByPageLimit = groupSearchNeedsScan(rt)
 		if truncatedByPageLimit {
 			stopReason = "page_limit"
 		}
 	}
+	chats, filterErr := filterVerifiedGroups(rt, chats)
+	if filterErr != nil {
+		return filterErr
+	}
+	if err := sortVerifiedGroups(chats, rt.Str("sort"), false); err != nil {
+		return err
+	}
 	payload := map[string]any{
 		"query":                query,
+		"sortScope":            "returned_items",
 		"count":                len(chats),
 		"chats":                chats,
 		"pagesFetched":         pagesFetched,

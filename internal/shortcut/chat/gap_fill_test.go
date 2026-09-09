@@ -78,7 +78,7 @@ func TestCrossPlatformCoverageMessagesSendIdentityDescriptorMatchesRuntimeSurfac
 		t.Fatalf("user capability = %#v", byIdentity["user"])
 	}
 	if !byIdentity["bot"].BatchLedger || byIdentity["bot"].IdempotencyKeys ||
-		!reflect.DeepEqual(byIdentity["bot"].ContentTypes, []string{"text", "markdown"}) {
+		!reflect.DeepEqual(byIdentity["bot"].ContentTypes, []string{"text", "markdown", "image-url", "file"}) {
 		t.Fatalf("bot capability = %#v", byIdentity["bot"])
 	}
 	if byIdentity["webhook"].BatchLedger || byIdentity["webhook"].IdempotencyKeys {
@@ -114,12 +114,12 @@ func TestCrossPlatformCoverageIMWorkflowContractsPublishRealPositiveAndNegativeB
 			t.Errorf("boundary %s lacks alternative", boundary.Capability)
 		}
 	}
-	for _, unsupported := range []string{"thread-write", "bot-rich-media", "card-action-callback", "resource-resume"} {
+	for _, unsupported := range []string{"card-action-callback", "resource-resume"} {
 		if byName[unsupported] {
 			t.Errorf("unsupported boundary %s was advertised", unsupported)
 		}
 	}
-	for _, supported := range []string{"group-member-full-pagination", "group-owner-selection"} {
+	for _, supported := range []string{"group-member-full-pagination", "group-owner-selection", "thread-write", "bot-rich-media"} {
 		if !byName[supported] {
 			t.Errorf("supported boundary %s was hidden", supported)
 		}
@@ -756,7 +756,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 			args := append([]string{"chat", "+messages-send"}, tc.args...)
 			args = append(args, "--yes")
 			command.SetArgs(args)
-			if err := corecmd.ExecuteForTest(command); err == nil {
+			if err := command.Execute(); err == nil {
 				t.Fatalf("invalid args succeeded: %v", tc.args)
 			}
 		})
@@ -797,7 +797,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 				"--file", "./fixture.bin",
 				"--yes",
 			})
-			if err := corecmd.ExecuteForTest(command); err == nil {
+			if err := command.Execute(); err == nil {
 				t.Fatal("file failure scenario unexpectedly succeeded")
 			}
 		})
@@ -1693,7 +1693,7 @@ func TestCrossPlatformCoverageMessageResourceDownloadRequiresMediaContextOnly(t 
 		"--resource-id", "@media",
 	})
 	if err := corecmd.ExecuteForTest(root); err == nil ||
-		!strings.Contains(err.Error(), "--type mediaId") {
+		!strings.Contains(err.Error(), "--message-id") {
 		t.Fatalf("missing media context error = %v", err)
 	}
 

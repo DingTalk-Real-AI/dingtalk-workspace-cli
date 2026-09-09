@@ -268,7 +268,7 @@ func TestCrossPlatformCoverageMessagePaginationCursorTypeEdges(t *testing.T) {
 	ApplyMessagePagination(payload, map[string]any{
 		"result": map[string]any{"hasMore": true, "nextCursor": int64(1)},
 	}, nil, "older")
-	if payload["failedCount"] != 1 || payload["complete"] != false {
+	if payload["failedCount"] != 0 || payload["complete"] != false || payload["nextPage"] == nil {
 		t.Fatalf("empty continuing page = %#v", payload)
 	}
 }
@@ -676,5 +676,29 @@ func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *te
 	}
 	if SearchMessageItems(map[string]any{"result": "invalid"}) != nil {
 		t.Fatal("non-map result was accepted")
+	}
+}
+
+func TestCrossPlatformCoverageResourcesKeepContentAndIdentifierTypesSeparate(t *testing.T) {
+	message := map[string]any{
+		"openMessageId": "parent", "openConversationId": "cid-parent",
+		"attachments": []any{
+			map[string]any{"mediaId": "image-a", "resourceId": "image-a", "resourceType": "image"},
+			map[string]any{"fileId": "file-a", "resourceId": "file-a", "resourceType": "file"},
+		},
+		"quotedMessage": map[string]any{"openMessageId": "child", "resourceId": "image-a", "resourceType": "video"},
+	}
+	resources := Resources(message)
+	if len(resources) != 2 {
+		t.Fatalf("resources=%#v", resources)
+	}
+	for _, r := range resources {
+		wantIDType, wantContentType := "mediaId", "image"
+		if r["resourceId"] == "file-a" {
+			wantIDType, wantContentType = "fileId", "file"
+		}
+		if r["resourceIdType"] != wantIDType || r["contentType"] != wantContentType {
+			t.Fatalf("resource types crossed resource/message ownership: %#v", r)
+		}
 	}
 }

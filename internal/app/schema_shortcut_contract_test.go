@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 439
+	publicShortcutCount = 442
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 496
+	schemaPublishedShortcutCount = 499
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 439
+	publiclyDeliveredShortcutCount = 442
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -117,7 +117,6 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 		t.Fatal("public --conversation-id must stay optional when hidden siblings still satisfy the declared exactly_one group")
 	}
 	wantMessagesConstraints := map[string]any{
-		"require_one_of":     [][]string{{"conversation-id", "group", "id"}},
 		"mutually_exclusive": [][]string{{"conversation-id", "group", "id"}},
 	}
 	if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantMessagesConstraints) {
@@ -134,7 +133,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 237; got != want {
+	if got, want := int(product["count"].(float64)), 240; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -146,8 +145,8 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 			shortcutCount++
 		}
 	}
-	if shortcutCount != 99 {
-		t.Fatalf("schema chat shortcut summaries = %d, want 99", shortcutCount)
+	if shortcutCount != 102 {
+		t.Fatalf("schema chat shortcut summaries = %d, want 102", shortcutCount)
 	}
 	for _, cliPath := range missingChatCatalogCoveragePaths() {
 		if summaryByCLIPath[cliPath] == nil {

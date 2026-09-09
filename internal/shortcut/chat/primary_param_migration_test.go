@@ -140,6 +140,7 @@ func TestPrimaryParamMigrationMessagesReplyPayloadCompatibility(t *testing.T) {
 	for _, spelling := range spellings {
 		t.Run(spelling.name, func(t *testing.T) {
 			fake := &larkAlignmentCaller{responses: map[string]string{
+				"im/list_messages_by_ids":    `{"result":[{"openMessageId":"msg","openConversationId":"legacy-cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`,
 				"chat/send_personal_message": `{"result":{"openMessageId":"new-msg"}}`,
 			}}
 			helpers.InitDeps(fake)
@@ -156,10 +157,10 @@ func TestPrimaryParamMigrationMessagesReplyPayloadCompatibility(t *testing.T) {
 			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("execute %v: %v", args, err)
 			}
-			if len(fake.calls) != 1 {
-				t.Fatalf("calls = %#v, want one", fake.calls)
+			if len(fake.calls) != 2 {
+				t.Fatalf("calls = %#v, want read and write", fake.calls)
 			}
-			call := fake.calls[0]
+			call := fake.calls[1]
 			if call.product != "chat" || call.tool != "send_personal_message" {
 				t.Fatalf("reply call = %#v", call)
 			}
@@ -183,7 +184,7 @@ func TestPrimaryParamMigrationMessagesReplyPayloadCompatibility(t *testing.T) {
 	}
 
 	t.Run("dry-run-both-different-old-wins", func(t *testing.T) {
-		fake := &larkAlignmentCaller{}
+		fake := &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"legacy-cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`}}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		var output bytes.Buffer
@@ -197,7 +198,7 @@ func TestPrimaryParamMigrationMessagesReplyPayloadCompatibility(t *testing.T) {
 		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
-		if len(fake.calls) != 0 {
+		if len(fake.calls) != 1 || fake.calls[0].tool != "list_messages_by_ids" {
 			t.Fatalf("dry-run reached transport: %#v", fake.calls)
 		}
 		var payload map[string]any
@@ -247,7 +248,7 @@ func TestPrimaryParamMigrationChatSurfaceAndContract(t *testing.T) {
 		{
 			command: "+messages-reply",
 			params: []chatPrimaryParamExpectation{
-				{name: "group", legacy: "conversation-id", property: "conversationId"},
+				{name: "group", legacy: "conversation-id", property: "conversationId", optional: true},
 				{name: "content", legacy: "text", property: "text"},
 			},
 		},
@@ -289,13 +290,17 @@ func TestPrimaryParamMigrationChatSurfaceAndContract(t *testing.T) {
 			}
 
 			spec := chatRegisteredShortcut(t, test.command)
-			if len(spec.Contract.Parameters) != len(test.params) {
+			wantParams := len(test.params)
+			if test.command == "+messages-reply" {
+				wantParams += 2
+			}
+			if len(spec.Contract.Parameters) != wantParams {
 				t.Fatalf("ParamDecls = %#v, want %d", spec.Contract.Parameters, len(test.params))
 			}
 			for i, want := range test.params {
 				param := spec.Contract.Parameters[i]
 				if param.Name != want.name || param.Property != want.property ||
-					param.Required == nil || !*param.Required || param.InterfaceType != "" {
+					param.Required == nil || *param.Required == want.optional || param.InterfaceType != "" {
 					t.Fatalf("ParamDecl[%d] = %#v, want %#v", i, param, want)
 				}
 			}
@@ -311,6 +316,7 @@ func TestPrimaryParamMigrationChatSurfaceAndContract(t *testing.T) {
 }
 
 type chatPrimaryParamExpectation struct {
+	optional bool
 	name     string
 	legacy   string
 	property string

@@ -102,11 +102,11 @@ func TestCrossPlatformCoverageRichMessageProjections(t *testing.T) {
 
 func TestCrossPlatformCoverageChatMessagesOpenIDRoute(t *testing.T) {
 	caller := &smartCoverageCaller{responses: map[string][]string{
-		"chat/list_individual_chat_message": {`{"result":{"messages":[]}}`},
+		"chat/list_individual_chat_message": {`{"result":{"messages":[],"hasMore":false}}`},
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", testCurrentDOpenID, "--limit", "1", "--yes"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--open-dingtalk-id", testCurrentDOpenID, "--limit", "1", "--yes"})
 	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,6 @@ func TestCrossPlatformCoverageChatMembersGroupResolutionAndProjection(t *testing
 func TestCrossPlatformCoverageSearchValidationAndTimeErrors(t *testing.T) {
 	cases := [][]string{
 		{},
-		{"--query", "x", "--start", "2026-07-01T00:00:00Z"},
 		{"--query", "x", "--days", "0"},
 		{"--query", "x", "--limit", "101"},
 		{"--query", "x", "--page-limit", "0"},
@@ -319,7 +318,7 @@ func TestCrossPlatformCoverageSearchValidationAndTimeErrors(t *testing.T) {
 	for _, tail := range cases {
 		helpers.InitDeps(&smartCoverageCaller{})
 		root := newPlatformCoverageRoot()
-		root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, tail...))
+		root.SetArgs(append([]string{"chat", "+search-msg", "--no-reactions", "--yes"}, tail...))
 		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid search args succeeded: %v", tail)
 		}
@@ -344,12 +343,12 @@ func TestCrossPlatformCoverageSearchPaginationFailureModes(t *testing.T) {
 			args: []string{"--query", "x", "--page-all", "--no-enrich"},
 		},
 		{
-			name:      "stalled cursor",
+			name: "stalled cursor", wantError: true,
 			responses: []string{`{"result":{"messages":[],"hasMore":true,"nextCursor":"same"}}`},
 			args:      []string{"--query", "x", "--cursor", "same", "--page-all", "--no-enrich"},
 		},
 		{
-			name:      "page limit",
+			name: "page limit", wantError: true,
 			responses: []string{`{"result":{"messages":[],"hasMore":true,"nextCursor":"next"}}`},
 			args:      []string{"--query", "x", "--page-all", "--page-limit", "1", "--no-enrich"},
 		},
@@ -364,7 +363,7 @@ func TestCrossPlatformCoverageSearchPaginationFailureModes(t *testing.T) {
 			root := newPlatformCoverageRoot()
 			var output bytes.Buffer
 			root.SetOut(&output)
-			root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, tc.args...))
+			root.SetArgs(append([]string{"chat", "+search-msg", "--no-reactions", "--yes"}, tc.args...))
 			err := corecmd.ExecuteForTest(root)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error = %v, wantError=%v", err, tc.wantError)
@@ -444,7 +443,7 @@ func TestCrossPlatformCoverageChatMessagesValidationAndFailureBoundaries(t *test
 	for _, tail := range invalid {
 		helpers.InitDeps(&smartCoverageCaller{})
 		root := newPlatformCoverageRoot()
-		root.SetArgs(append([]string{"chat", "+chat-messages"}, tail...))
+		root.SetArgs(append([]string{"chat", "+chat-messages", "--no-reactions"}, tail...))
 		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid chat messages args succeeded: %v", tail)
 		}
@@ -472,7 +471,7 @@ func TestCrossPlatformCoverageChatMessagesValidationAndFailureBoundaries(t *test
 			}
 			helpers.InitDeps(caller)
 			root := newPlatformCoverageRoot()
-			root.SetArgs(append([]string{"chat", "+chat-messages"}, tc.args...))
+			root.SetArgs(append([]string{"chat", "+chat-messages", "--no-reactions"}, tc.args...))
 			err := corecmd.ExecuteForTest(root)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error = %v, wantError=%v", err, tc.wantError)
@@ -485,7 +484,7 @@ func TestCrossPlatformCoverageChatMessagesValidationAndFailureBoundaries(t *test
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid123456789", "--output", "messages.json", "--dry-run"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--group", "cid123456789", "--output", "messages.json", "--dry-run"})
 	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +519,7 @@ func TestCrossPlatformCoverageGroupMemberAndAtMeFailureBoundaries(t *testing.T) 
 	}
 
 	for _, args := range [][]string{
-		{"chat", "+chat-messages", "--user", "u1"},
+		{"chat", "+chat-messages", "--no-reactions", "--user", "u1"},
 		{"chat", "+unread-chats", "--count", "1"},
 	} {
 		helpers.InitDeps(&smartCoverageCaller{responses: map[string][]string{
@@ -536,7 +535,7 @@ func TestCrossPlatformCoverageGroupMemberAndAtMeFailureBoundaries(t *testing.T) 
 
 	helpers.InitDeps(&smartCoverageCaller{})
 	root = newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+search-msg", "--query", "x", "--chat-query", "missing", "--yes"})
+	root.SetArgs([]string{"chat", "+search-msg", "--no-reactions", "--query", "x", "--chat-query", "missing", "--yes"})
 	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("missing search chat query unexpectedly resolved")
 	}
@@ -546,7 +545,7 @@ func TestCrossPlatformCoverageGroupMemberAndAtMeFailureBoundaries(t *testing.T) 
 		"im/search_messages":                 {`{"result":{"messages":[],"hasMore":false}}`},
 	}})
 	root = newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+search-msg", "--query", "x", "--sender-query", "甲", "--yes"})
+	root.SetArgs([]string{"chat", "+search-msg", "--no-reactions", "--query", "x", "--sender-query", "甲", "--yes"})
 	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
