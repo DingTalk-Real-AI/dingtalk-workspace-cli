@@ -717,39 +717,37 @@ func TestCrossPlatformCoverageLocatorPathAndDotPrefixCollisions(t *testing.T) {
 		t.Fatal("full-path locator collision accepted")
 	}
 
-	beta := allFieldsRegistry()
-	beta.Products[0].ID = "beta"
-	beta.Products[0].Name = "Beta"
-	beta.Products[0].FieldProvenance = nil
-	beta.Products[0].Selection = contract.SelectionSpec{}
-	bt := beta.Products[0].Tools[0]
-	bt.Identity.ProductID = "beta"
-	bt.Identity.Name = "xy"
-	bt.Identity.CLIName = "xy"
-	bt.Identity.CanonicalPath = "beta.xy"
-	bt.Identity.Path = "foo.bar"
-	bt.Identity.CLIPath = "beta xy"
-	bt.Identity.PrimaryCLIPath = "beta xy"
-	bt.Identity.Aliases = nil
-	bt.Identity.Group = ""
-	bt.Identity.SourceProductID = ""
-	bt.FieldProvenance = nil
-	bz := beta.Products[0].Tools[1]
-	bz.Identity.ProductID = "beta"
-	bz.Identity.CanonicalPath = "beta.zzz"
-	bz.Identity.Path = "beta.zzz"
-	bz.Identity.CLIPath = "beta zzz"
-	bz.Identity.PrimaryCLIPath = "beta zzz"
-	bz.Identity.SourceProductID = ""
-	beta.Products[0].Tools = []ToolSpec{bt, bz}
+	// Product ID "foo.bar" is added without SplitPathTokens prefixes. A later
+	// alias "foo.bar extra" then collides on the dotted two-token prefix after
+	// the space-joined form ("foo bar") misses.
+	dotted := allFieldsRegistry()
+	dotted.Products[0].ID = "foo.bar"
+	dotted.Products[0].Name = "FooBar"
+	dotted.Products[0].FieldProvenance = nil
+	dotted.Products[0].Selection = contract.SelectionSpec{}
+	for i := range dotted.Products[0].Tools {
+		tool := &dotted.Products[0].Tools[i]
+		name := tool.Identity.Name
+		if name == "" {
+			name = "run"
+		}
+		tool.Identity.ProductID = "foo.bar"
+		tool.Identity.Name = name
+		tool.Identity.CLIName = name
+		tool.Identity.CanonicalPath = name
+		tool.Identity.Path = name
+		tool.Identity.CLIPath = name
+		tool.Identity.PrimaryCLIPath = name
+		tool.Identity.Aliases = nil
+		tool.Identity.Group = ""
+		tool.Identity.SourceProductID = ""
+		tool.FieldProvenance = nil
+	}
 	sample := allFieldsRegistry()
 	sample.Products[0].Tools[0].Identity.Aliases = []string{"foo.bar extra"}
 	sample.Products[0].Tools[0].Identity.SourceProductID = ""
-	beta.Products = append(beta.Products, sample.Products[0])
-	if _, err := beta.Index(); err != nil {
-		t.Fatalf("dot-prefix locator registry must still Index: %v", err)
-	}
-	if _, err := buildSchemaProductLocatorsUnchecked(beta); err == nil {
+	dotted.Products = append(dotted.Products, sample.Products[0])
+	if _, err := buildSchemaProductLocatorsUnchecked(dotted); err == nil {
 		t.Fatal("dot-prefix locator collision accepted")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
@@ -79,6 +80,46 @@ func publishCoverageSchemaRuntime(t *testing.T) (*schemaCacheRuntime, SchemaCach
 		t.Fatal("runtime not registered")
 	}
 	return runtimeCache, identity, artifacts
+}
+
+func TestCrossPlatformCoverageSchemaCachePayloadInnerReadyReturn(t *testing.T) {
+	runtimeCache, _, _ := publishCoverageSchemaRuntime(t)
+	index, err := runtimeCache.readPayloadIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.PayloadDescriptors) == 0 {
+		t.Fatal("no payload products")
+	}
+	productID := index.PayloadDescriptors[0].ProductID
+
+	var passed atomic.Int32
+	firstBlocked := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	testseam.Swap(t, &schemaCachePayloadLoadBeforeInnerLock, func() {
+		if passed.Add(1) == 1 {
+			close(firstBlocked)
+			<-releaseFirst
+		}
+	})
+
+	done := make(chan error, 2)
+	go func() {
+		_, loadErr := runtimeCache.loadCommandPayload(index, productID)
+		done <- loadErr
+	}()
+	<-firstBlocked
+	go func() {
+		_, loadErr := runtimeCache.loadCommandPayload(index, productID)
+		done <- loadErr
+	}()
+	if err := <-done; err != nil {
+		t.Fatalf("second payload load: %v", err)
+	}
+	close(releaseFirst)
+	if err := <-done; err != nil {
+		t.Fatalf("first payload load: %v", err)
+	}
 }
 
 func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing.T) {
@@ -155,12 +196,17 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	headerOff := int(identity.PayloadIndexLength + index.PayloadDescriptors[0].Offset)
-	if headerOff+8 < len(body) {
-		body[headerOff+8] ^= 0xff
-		if err := os.WriteFile(payloadPath, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
+	desc, ok := schemareader.PayloadDescriptor(index, productID)
+	if !ok {
+		t.Fatalf("missing payload descriptor for %q", productID)
+	}
+	headerOff := schemacache.HeaderSize + int(identity.PayloadIndexLength+desc.Offset)
+	if headerOff >= len(body) {
+		t.Fatalf("payload header offset %d outside file %d", headerOff, len(body))
+	}
+	body[headerOff] ^= 0xff
+	if err := os.WriteFile(payloadPath, body, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := runtimeCache.readCommandMetaFromPayloadFresh(cliPath); err == nil {
 		t.Fatal("corrupt payload fresh read succeeded")

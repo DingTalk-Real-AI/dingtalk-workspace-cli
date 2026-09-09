@@ -33,6 +33,11 @@ const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 var (
 	canonicalJSONMarshal = json.Marshal
 	compactLeafMarshal   = jsonutil.MarshalIndent
+	// schemaCachePayloadLoadBeforeInnerLock is the test seam between the
+	// unlocked ready check and the inner lock in loadCommandPayload. Production
+	// leaves it empty; coverage holds the first caller here so a second caller
+	// can complete the load and hit the inner ready return.
+	schemaCachePayloadLoadBeforeInnerLock = func() {}
 )
 
 // SchemaCacheIdentity is the complete identity of one cache generation. No
@@ -432,6 +437,7 @@ func (r *schemaCacheRuntime) loadCommandPayload(index schemaruntime.DecodedSchem
 	if load.ready.Load() {
 		return load.payloads, load.err
 	}
+	schemaCachePayloadLoadBeforeInnerLock()
 	r.payloadMu.Lock()
 	defer r.payloadMu.Unlock()
 	if load.ready.Load() {
