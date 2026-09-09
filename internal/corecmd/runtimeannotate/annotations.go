@@ -32,5 +32,6 @@ const (
 	AnnotationFlagReqWhen  = "dws.schema.required_when"
 	AnnotationFlagExample  = "dws.schema.example"
 	AnnotationFlagFormat   = "x-cli-format"
+	AnnotationFlagAnyOf    = "dws.schema.anyOf"
 	AnnotationFlagEnum     = "x-cli-enum"
 )
