@@ -521,6 +521,9 @@ func TestPersistentSchemaCachePrewarm(t *testing.T) {
 	if err != nil || info.Size() != int64(identity.Meta.EncodedLength+schemacache.HeaderSize) {
 		t.Fatalf("Meta was not republished to its pinned size: info=%v err=%v", info, err)
 	}
+	// The repair populated the live catalog; reset it so ResolveMeta must
+	// resolve through the payload file with a handle opened after the reset.
+	cli.RestorePackageCLISchemaDeliveryForTest()
 	if meta, ok := cli.ResolveMeta("calendar book list"); !ok || meta.Identity.Canonical != "calendar.list_calendars" {
 		t.Fatalf("ResolveMeta after repair with a fresh handle = %#v, %v", meta, ok)
 	}
