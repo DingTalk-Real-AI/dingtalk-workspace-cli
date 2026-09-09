@@ -132,7 +132,24 @@ func (c *portableCache) openPayloads(identity ExpectedIdentity, expected Artifac
 func (c *portableCache) openShard(identity ExpectedIdentity, expected ArtifactExpectation, name string, payloads bool) (registryBackend, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if _, err := c.decodeArtifact(identity, expected, name); err != nil {
+	if err := c.guard(identity); err != nil {
+		return nil, err
+	}
+	body, err := c.readFile(name)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) < HeaderSize {
+		return nil, fmt.Errorf("%w: short artifact", ErrInvalidArtifact)
+	}
+	c.counters.headerReadOps.Add(1)
+	envelope, err := ParseEnvelope(body[:HeaderSize])
+	if err != nil {
+		return nil, err
+	}
+	// Authenticate the header only, matching the unix backend: payload digest
+	// belongs to ValidateAggregate so a corrupt shard can fail there after Open.
+	if err := envelope.authenticate(identity, expected); err != nil {
 		return nil, err
 	}
 	return &portableRegistry{cache: c, name: name, expected: expected, payloads: payloads}, nil

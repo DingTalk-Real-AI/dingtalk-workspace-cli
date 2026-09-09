@@ -207,6 +207,9 @@ func TestCrossPlatformCoverageEnvelopeFromAndCheckedFileSize(t *testing.T) {
 	if _, err := envelopeFrom(zeroIdentity, expected); !errors.Is(err, ErrIdentityMismatch) {
 		t.Fatalf("incomplete identity error = %v, want ErrIdentityMismatch", err)
 	}
+	if _, err := envelopeFrom(identity, ArtifactExpectation{Kind: KindMeta, Serializer: 99}); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("invalid artifact error = %v, want ErrIdentityMismatch", err)
+	}
 }
 
 func TestCrossPlatformCoveragePersistentBackendEnabled(t *testing.T) {
