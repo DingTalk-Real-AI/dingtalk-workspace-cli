@@ -295,7 +295,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 
 	if authResp.VerificationURIComplete != "" && !p.NoBrowser {
 		snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
-		browserURL, _ := snapshot.AttachToURL(authResp.VerificationURIComplete)
+		browserURL, _ := snapshot.AttachToURL(authResp.VerificationURIComplete, TrustedLoginHostsForRegion(p.LoginRegion))
 		if bErr := deviceOpenBrowser(browserURL); bErr != nil && p.logger != nil {
 			p.logger.Debug("could not open browser", "error_category", "browser_open_failed")
 		}

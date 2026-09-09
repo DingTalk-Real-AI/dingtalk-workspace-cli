@@ -66,11 +66,15 @@ flowchart TD
 
 ## Browser login URLs
 
-`Result.AttachToURL(rawURL string) (string, bool)` attaches `callerUmt` and
-`caller=dws` together only when the context is ready and its value is valid.
-It uses URL encoding, preserves other query parameters and fragments, and
-replaces duplicate parameters with one value each. Invalid HTTP(S) URLs or an
-unavailable context return the original URL and `false`.
+`Result.AttachToURL(rawURL string, allowedHosts []string) (string, bool)` attaches `callerUmt` and
+`caller=dws` together only when the context is ready, the URL is HTTPS, and the
+hostname is on the current login region's auth-host allowlist (derived from
+that region's authorize and device-login bases). HTTP, userinfo, empty
+allowlists, and other hosts fail open: the original URL is returned without
+private parameters. `redirect_uri` / `redirect` values must be loopback or the
+same HTTPS allowlist; otherwise attachment is skipped. It uses URL encoding,
+preserves other query parameters and fragments, and replaces duplicate
+parameters with one value each.
 
 OAuth's initial browser URL and `/api/status` reauthorization URL use one
 snapshot. The page consumes the complete `authorizeUrl` directly. Device Flow

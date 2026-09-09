@@ -87,9 +87,19 @@ func (r Result) HeaderValue() (string, bool) {
 	return string(payload), true
 }
 
-// AttachToURL attaches the private runtime value only to a browser login URL.
+const (
+	loginRedirectURIKey = "redirect_uri"
+	loginRedirectKey    = "redirect"
+)
+
+// AttachToURL attaches the private runtime value only to a trusted HTTPS
+// browser login URL. allowedHosts are hostname-only (no port), compared
+// case-insensitively, and must match the current login region's auth hosts.
+// HTTP, empty allowlists, userinfo, and untrusted hosts fail open: the
+// original URL is returned without private parameters. Query redirects
+// (redirect_uri / redirect) must be loopback or the same HTTPS allowlist.
 // Callers must never log or persist the returned URL.
-func (r Result) AttachToURL(rawURL string) (string, bool) {
+func (r Result) AttachToURL(rawURL string, allowedHosts []string) (string, bool) {
 	if r.State != StateReady {
 		return rawURL, false
 	}
@@ -97,17 +107,65 @@ func (r Result) AttachToURL(rawURL string) (string, bool) {
 		return rawURL, false
 	}
 	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil {
+	if err != nil || parsed.Host == "" || parsed.Scheme != "https" || parsed.User != nil {
+		return rawURL, false
+	}
+	if !hostAllowed(parsed.Hostname(), allowedHosts) {
 		return rawURL, false
 	}
 	query, err := url.ParseQuery(parsed.RawQuery)
 	if err != nil {
 		return rawURL, false
 	}
+	for _, key := range []string{loginRedirectURIKey, loginRedirectKey} {
+		for _, redirect := range query[key] {
+			if !loginRedirectAllowed(redirect, allowedHosts) {
+				return rawURL, false
+			}
+		}
+	}
 	query.Set("callerUmt", r.token)
 	query.Set("caller", "dws")
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), true
+}
+
+func hostAllowed(hostname string, allowedHosts []string) bool {
+	host := canonicalHostname(hostname)
+	if host == "" {
+		return false
+	}
+	for _, allowed := range allowedHosts {
+		if host == canonicalHostname(allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalHostname(hostname string) string {
+	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(hostname)), ".")
+}
+
+func loginRedirectAllowed(raw string, allowedHosts []string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return false
+	}
+	host := canonicalHostname(parsed.Hostname())
+	if isLoopbackHost(host) {
+		return parsed.Scheme == "http" || parsed.Scheme == "https"
+	}
+	return parsed.Scheme == "https" && hostAllowed(host, allowedHosts)
+}
+
+func isLoopbackHost(host string) bool {
+	switch canonicalHostname(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
 // DiagnosticDetail returns redacted, stable diagnostic fields.
