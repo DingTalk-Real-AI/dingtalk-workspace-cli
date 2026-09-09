@@ -55,6 +55,7 @@ func formatDingTalkMessageBoundary(now time.Time) string {
 var ChatMessages = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+chat-messages",
+	Aliases:     []string{"+chat-messages-list"},
 	Product:     "chat",
 	Description: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
 	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选的姓名、userId 或 openDingTalkId 混合入口：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。--sender-query 只按姓名唯一解析，解析失败会抑制未过滤消息并返回错误。不传发送者条件时原样读取会话且不查询发送者身份。sender 展示名不参与身份比较；" +
@@ -74,6 +75,7 @@ var ChatMessages = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_chat_messages",
 			CLIPath:        "chat +chat-messages",
 			PrimaryCLIPath: "chat +chat-messages",
+			Aliases:        []string{"chat +chat-messages-list"},
 		},
 		Description: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
 		Interface: &contract.InterfaceSpec{
@@ -97,7 +99,7 @@ var ChatMessages = shortcut.Shortcut{
 	},
 	Flags: append([]shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称或 openConversationId，与单聊目标互斥"},
-		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Aliases: []string{"chat-id"}, Desc: "--group 的别名", Hidden: true},
 		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
 		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
 		{Name: "chat-query", Type: shortcut.FlagString, Desc: "按群名唯一解析目标会话（可选，与其他会话目标参数互斥）"},
@@ -106,13 +108,15 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方的 openDingTalkId，与 --group/--user 互斥"},
 		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录无法分类时按原值 userId 筛选并保留身份未验证状态"},
 		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析发送者的兼容入口；解析失败时抑制未过滤消息并返回错误（可选，可重复或逗号分隔）"},
+		{Name: "page-token", Type: shortcut.FlagString, Desc: "恢复nextPageToken；绑定会话、方向、时间范围与发送者，需重复原筛选；不接受Lark token"},
+		{Name: "with-threads", Type: shortcut.FlagBool, Desc: "有界补查Thread回复，每Thread10条/总计500条，独立披露enrichment完整性"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "时间边界，如 \"2025-03-01 00:00:00\"；--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD；省略时从当前时间向前读取最近消息"},
 		{Name: "start", Type: shortcut.FlagString, Desc: "范围开始时间（可选、包含），支持 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD"},
 		{Name: "start-time", Type: shortcut.FlagString, Desc: "--start 的 lark-cli 对齐别名（可选、包含）"},
 		{Name: "end", Type: shortcut.FlagString, Desc: "范围结束时间（可选、不包含）；仅传开始时间时默认为当前时间"},
 		{Name: "end-time", Type: shortcut.FlagString, Desc: "--end 的 lark-cli 对齐别名（可选、不包含）"},
-		{Name: "order", Type: shortcut.FlagString, Enum: []string{"asc", "desc"}, Desc: "结果及范围遍历顺序 asc/desc（可选，默认 desc；asc 必须指定 --start/--start-time）"},
-		{Name: "sort", Type: shortcut.FlagString, Enum: []string{"asc", "desc"}, Desc: "--order 的 lark-cli 对齐别名（可选；asc 必须指定 --start/--start-time）"},
+		{Name: "order", Type: shortcut.FlagString, Aliases: []string{"sort-order"}, Enum: []string{"asc", "desc"}, Desc: "结果及范围遍历顺序 asc/desc（可选，默认 desc；群聊asc未给start时按已验证创建时间起读；单聊asc仍需start）"},
+		{Name: "sort", Type: shortcut.FlagString, Enum: []string{"asc", "desc"}, Desc: "--order 的 lark-cli 对齐别名（可选；群聊asc未给start时按已验证创建时间起读；单聊asc仍需start）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页拉取的消息条数；显式页大小必须大于 0"},
 		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 		{Name: "page-size", Type: shortcut.FlagInt, Desc: "--limit 的兼容别名", Hidden: true},
@@ -139,7 +143,7 @@ var ChatMessages = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "end", "end-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "order", "sort"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"time"}, Description: "--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD"},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"order", "sort"}, Description: "asc 必须指定 --start/--start-time"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"order", "sort"}, Description: "群聊asc未给start时按已验证创建时间起读；单聊asc仍需start"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式页大小必须大于 0"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-items"}, Description: "--max-items 仅与 --page-all 一起使用且不能为负数"},
@@ -498,7 +502,7 @@ func attachUnfilteredSenderIdentitySemantics(payload map[string]any, filter chat
 }
 
 func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesRequest, error) {
-	groupID := strings.TrimSpace(rt.StrFirst("conversation-id", "id", "open-conversation-id"))
+	groupID := strings.TrimSpace(rt.StrFirst("conversation-id", "chat-id", "id", "open-conversation-id"))
 	userID := rt.Str("user")
 	openID := rt.Str("open-dingtalk-id")
 	if targetresolver.LooksLikeOpenConversationID(openID) {
@@ -531,6 +535,19 @@ func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesReques
 	if err != nil {
 		return chatMessagesRequest{}, err
 	}
+	if timeRange.order == "asc" && timeRange.start == nil {
+		if groupID == "" {
+			return chatMessagesRequest{}, apperrors.NewValidation("单聊升序仍需明确--start")
+		}
+		created, err := verifiedGroupCreationTime(rt, groupID)
+		if err != nil {
+			return chatMessagesRequest{}, err
+		}
+		timeRange.start = &created
+		if timeRange.end == nil {
+			timeRange.end = &now
+		}
+	}
 	direction := strings.TrimSpace(strings.ToLower(rt.Str("direction")))
 	if direction == "" {
 		direction = timeRange.direction()
@@ -553,6 +570,7 @@ func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesReques
 	case groupID != "":
 		request.tool = "list_conversation_message_v2"
 		request.params["openconversation_id"] = groupID
+		request.params["mark_as_read"] = false
 		request.fallbackConversationID = groupID
 	case openID != "":
 		request.tool = "list_individual_chat_message"
@@ -567,6 +585,9 @@ func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesReques
 func executeChatMessages(rt *shortcut.RuntimeContext) error {
 	request, err := resolveChatMessagesRequest(rt)
 	if err != nil {
+		return err
+	}
+	if err = restoreHistoryCursor(rt, &request); err != nil {
 		return err
 	}
 	var payload map[string]any
@@ -587,9 +608,42 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 		}
 		return err
 	}
+	if err == nil && payload != nil {
+		if failures, ok := payload["failures"].([]map[string]any); ok && len(failures) > 0 {
+			err = apperrors.NewAPI("消息查询未完整完成，请检查failures", apperrors.WithReason("incomplete_result"))
+		}
+	}
+	attachHistoryCursor(rt, request, payload)
 	senderFilter := resolveOptionalChatMessagesSenderFilter(rt)
 	rawItems = applyOptionalChatMessagesSenderFilter(rt, payload, rawItems, &senderFilter)
 	attachUnfilteredSenderIdentitySemantics(payload, senderFilter)
+	if err == nil && rt.Bool("with-threads") {
+		ledger, views, _ := chatshortcut.EnrichMessageDetails(rt, rawItems)
+		payload["enrichment"] = ledger
+		projected := projectChatMessages(rawItems, !rt.Bool("no-reactions"))
+		for _, row := range projected {
+			if v := views[chatmsg.StableMessageID(row)]; v != nil {
+				row["thread"] = v
+			}
+		}
+		payload["messages"] = projected
+		if ledger["complete"] != true {
+			payload["complete"] = false
+		}
+		if count, _ := ledger["failedCount"].(int); count > 0 {
+			err = apperrors.NewAPI("Thread/Reaction补查失败")
+		}
+	} else if err == nil && !rt.Bool("no-reactions") {
+		_, _, reactionFailures := chatshortcut.EnrichMessageReactions(rt, rawItems)
+		payload["messages"] = projectChatMessages(rawItems, true)
+		if len(reactionFailures) > 0 {
+			prior, _ := payload["failures"].([]map[string]any)
+			prior = append(prior, reactionFailures...)
+			payload["failures"], payload["failedCount"], payload["complete"] = prior, len(prior), false
+			err = apperrors.NewAPI("消息Reaction补查未完成")
+		}
+	}
+
 	if err != nil {
 		// Full-page collection returns its failure ledger together with a
 		// non-zero error. Publish that ledger for diagnosis, but stop before
@@ -651,6 +705,9 @@ func collectOneChatMessagesPage(rt *shortcut.RuntimeContext, request chatMessage
 	data, err := rt.CallMCPData("chat", request.tool, request.params)
 	if err != nil {
 		return nil, nil, err
+	}
+	if _, shapeErr := chatshortcut.StrictChatCollection(data, "messages", "items", "list"); shapeErr != nil {
+		return nil, nil, shapeErr
 	}
 	rawItems := chatMessageItems(data)
 	items, terminalReached, rangeFailures := request.timeRange.filter(rawItems)
@@ -731,6 +788,11 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 				"error": err.Error(),
 			})
 			stopReason = "read_failure"
+			break
+		}
+		if _, shapeErr := chatshortcut.StrictChatCollection(data, "messages", "items", "list"); shapeErr != nil {
+			failures = append(failures, map[string]any{"page": pagesFetched + 1, "stage": "response_shape", "error": shapeErr.Error()})
+			stopReason = "response_shape_error"
 			break
 		}
 		pagesFetched++
@@ -820,15 +882,6 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 			complete = true
 			hasMore = false
 			stopReason = "source_complete"
-			break
-		}
-		if len(rawItems) == 0 {
-			failures = append(failures, map[string]any{
-				"page":  pagesFetched,
-				"stage": "pagination",
-				"error": "下层返回 hasMore=true 但当前页没有消息",
-			})
-			stopReason = "pagination_error"
 			break
 		}
 		cursorKey, boundary, cursorErr := chatMessagesNextCursorBoundary(page["nextCursor"])

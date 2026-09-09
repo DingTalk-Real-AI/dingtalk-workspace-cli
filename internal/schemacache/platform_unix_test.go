@@ -272,13 +272,13 @@ func TestCrossPlatformCoverageCacheBootstrapsMissingUserCacheDirectory(t *testin
 	for _, suffix := range []string{".cache", "Library/Caches"} {
 		t.Run(suffix, func(t *testing.T) {
 			base := filepath.Join(parent, suffix)
-			if _, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, true); !errors.Is(err, ErrNotFound) {
+			if _, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, true, false); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("no-create probe on a missing base = %v, want ErrNotFound", err)
 			}
 			if _, err := os.Stat(base); !os.IsNotExist(err) {
 				t.Fatalf("no-create probe mutated the filesystem: %v", err)
 			}
-			fd, path, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false)
+			fd, path, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -300,7 +300,7 @@ func TestCrossPlatformCoverageCacheBootstrapsMissingUserCacheDirectory(t *testin
 		t.Fatal(err)
 	}
 	base := filepath.Join(unsafe, "missing")
-	if fd, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false); !errors.Is(err, ErrUnsafePath) {
+	if fd, _, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false, false); !errors.Is(err, ErrUnsafePath) {
 		if fd >= 0 {
 			unix.Close(fd)
 		}
@@ -746,5 +746,32 @@ func TestCrossPlatformCoverageCrossProcessFlockTimeout(t *testing.T) {
 	defer unix.Flock(fd, unix.LOCK_UN)
 	if _, err := cache.AcquireLock(context.Background(), 20*time.Millisecond); !errors.Is(err, ErrLockTimeout) {
 		t.Fatalf("AcquireLock error = %v", err)
+	}
+}
+
+func TestValidateCacheFileSharedOwnership(t *testing.T) {
+	uid := uint32(unix.Geteuid())
+	reg := uint32(unix.S_IFREG)
+	cases := []struct {
+		name   string
+		state  fileState
+		shared bool
+		wantOK bool
+	}{
+		{"shared root-owned 0644", fileState{mode: reg | 0o644, uid: 0, nlink: 1}, true, true},
+		{"shared current-user 0644", fileState{mode: reg | 0o644, uid: uid, nlink: 1}, true, true},
+		{"shared world-writable rejected", fileState{mode: reg | 0o666, uid: 0, nlink: 1}, true, false},
+		{"shared other-user rejected", fileState{mode: reg | 0o644, uid: uid + 1, nlink: 1}, true, false},
+		{"shared multi-link rejected", fileState{mode: reg | 0o644, uid: 0, nlink: 2}, true, false},
+		{"shared non-regular rejected", fileState{mode: unix.S_IFDIR | 0o644, uid: 0, nlink: 1}, true, false},
+		{"strict root-owned rejected", fileState{mode: reg | 0o644, uid: 0, nlink: 1}, false, false},
+		{"strict current-user 0600", fileState{mode: reg | 0o600, uid: uid, nlink: 1}, false, true},
+		{"strict current-user 0644 rejected", fileState{mode: reg | 0o644, uid: uid, nlink: 1}, false, false},
+	}
+	for _, tc := range cases {
+		err := validateCacheFile(tc.state, tc.shared)
+		if (err == nil) != tc.wantOK {
+			t.Errorf("%s: validateCacheFile err=%v, wantOK=%v", tc.name, err, tc.wantOK)
+		}
 	}
 }

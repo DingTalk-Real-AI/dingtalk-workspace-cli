@@ -3,8 +3,8 @@ set -eu
 
 # post-goreleaser.sh — Post-build packaging for npm and Homebrew.
 #
-# Run after `goreleaser release` or `goreleaser release --snapshot` to stage
-# the npm package and render the Homebrew formula from goreleaser's dist/ output.
+# Run after scripts/release/run-goreleaser-cross.sh to stage the npm package and
+# render the Homebrew formula from GoReleaser's dist/ output.
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 DIST_DIR="${DWS_PACKAGE_DIST_DIR:-$ROOT/dist}"
@@ -312,7 +312,7 @@ write_runtime_manifest() {
   cat > "$runtime_root/manifest.json" <<EOF
 {
   "format_version": 1,
-  "payload_version": "20260825",
+  "payload_version": "20260908",
   "target": "$target_os/$target_arch",
   "library": "$library_name",
   "library_sha256": "$library_sha",
@@ -385,7 +385,7 @@ prepare_runtime_archives() {
     seal_schema_binary "$binary" "$target_os" "$target_arch"
     "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
     if [ "$target_os" != darwin ]; then
-      attach_runtime_payload "$binary" "$stage/.dws-runtime/20260825"
+      attach_runtime_payload "$binary" "$stage/.dws-runtime/20260908"
       rm -rf "$stage/.dws-runtime"
     fi
     repack_platform_archive "$stage" "$archive"
@@ -477,7 +477,7 @@ sign_darwin_archives() {
     if [ ! -f "$bin" ]; then
       err "dws binary not found inside $name after extraction"
     fi
-    runtime_root="$stage/.dws-runtime/20260825"
+    runtime_root="$stage/.dws-runtime/20260908"
     runtime_library="$runtime_root/x7k2m9p4q1w8.dylib"
     [ -f "$runtime_library" ] || err "runtime library not found inside $name after extraction"
     sign_one_darwin_binary "$runtime_library"

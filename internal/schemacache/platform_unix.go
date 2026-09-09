@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -82,6 +83,11 @@ type unixCache struct {
 	counters *Counters
 	ops      unixIO
 	closed   bool
+	// shared marks a system-level cache shared across users. Its files may be
+	// root-owned and merely readable; safety rests on the binary-pinned
+	// SHA-256 identity (a tampered file fails the digest), so the strict
+	// current-user/0600 ownership check relaxes to readable-not-world-writable.
+	shared bool
 }
 
 type fileState struct {
@@ -93,20 +99,55 @@ type fileState struct {
 	nlink uint64
 }
 
+// systemSchemaCacheBase returns the system-level shared cache base directory
+// (read-only, shared across users), or "" when the platform has no convention.
+// The runtime never creates it; only the installer does. When present, every
+// user reuses the same cache so switching users never re-pays assembly.
+func systemSchemaCacheBase() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "/var/cache/dws"
+	case "darwin":
+		return "/Library/Caches/dws"
+	default:
+		return ""
+	}
+}
+
 func openPlatform(edition string, counters *Counters, noCreate bool) (backend, error) {
+	digest := sha256.Sum256([]byte(edition))
+	editionHex := hex.EncodeToString(digest[:])
+	// Explicit override: the installer sets DWS_SCHEMA_CACHE_DIR to the system
+	// shared location and builds the cache there. Treat it as shared (relaxed
+	// ownership; integrity rests on the pinned SHA-256) with the caller's
+	// create flag so the installer can populate it.
+	if override := os.Getenv("DWS_SCHEMA_CACHE_DIR"); override != "" {
+		dirfd, path, err := openCacheDirectory(override, editionHex, counters, platformIO, noCreate, true)
+		if err != nil {
+			return nil, err
+		}
+		return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil
+	}
+	// Prefer the system-level shared cache (read-only). The runtime never
+	// creates it (noCreate semantics), so a missing shared cache falls back to
+	// the per-user cache without side effects.
+	if systemBase := systemSchemaCacheBase(); systemBase != "" {
+		if dirfd, path, err := openCacheDirectory(systemBase, editionHex, counters, platformIO, true, true); err == nil {
+			return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil
+		}
+	}
 	base, err := userCacheDir()
 	if err != nil {
 		return nil, fmt.Errorf("%w: user cache directory: %v", ErrDisabled, err)
 	}
-	digest := sha256.Sum256([]byte(edition))
-	dirfd, path, err := openCacheDirectory(base, hex.EncodeToString(digest[:]), counters, platformIO, noCreate)
+	dirfd, path, err := openCacheDirectory(base, editionHex, counters, platformIO, noCreate, false)
 	if err != nil {
 		return nil, err
 	}
-	return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO}, nil
+	return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO, shared: false}, nil
 }
 
-func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO, noCreate bool) (int, string, error) {
+func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO, noCreate bool, shared bool) (int, string, error) {
 	if !filepath.IsAbs(base) || filepath.Clean(base) != base {
 		return -1, "", fmt.Errorf("%w: cache base must be a clean absolute path", ErrUnsafePath)
 	}
@@ -195,7 +236,7 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO,
 			closeCurrent()
 			return -1, "", fmt.Errorf("%w: open cache directory: %v", ErrUnsafePath, openErr)
 		}
-		if err := validateOwnedDirectory(next, counters, ops); err != nil {
+		if err := validateOwnedDirectory(next, counters, ops, shared); err != nil {
 			_ = ops.close(next)
 			counters.closeOps.Add(1)
 			closeCurrent()
@@ -220,12 +261,24 @@ func validateAncestryDirectory(fd int, counters *Counters, ops unixIO) error {
 	return nil
 }
 
-func validateOwnedDirectory(fd int, counters *Counters, ops unixIO) error {
+func validateOwnedDirectory(fd int, counters *Counters, ops unixIO, shared bool) error {
 	state, err := statFD(fd, counters, ops)
 	if err != nil {
 		return err
 	}
-	if state.mode&unix.S_IFMT != unix.S_IFDIR || state.uid != uint32(unix.Geteuid()) || state.mode&0o7777 != 0o700 {
+	uid := uint32(unix.Geteuid())
+	if state.mode&unix.S_IFMT != unix.S_IFDIR {
+		return fmt.Errorf("%w: cache directory must be a directory", ErrUnsafePath)
+	}
+	if shared {
+		// System-level shared cache: root- or current-user-owned, readable, and
+		// never world-writable. Integrity rests on the binary-pinned SHA-256.
+		if (state.uid != 0 && state.uid != uid) || state.mode&0o022 != 0 {
+			return fmt.Errorf("%w: shared cache directory has unsafe ownership or mode", ErrUnsafePath)
+		}
+		return nil
+	}
+	if state.uid != uid || state.mode&0o7777 != 0o700 {
 		return fmt.Errorf("%w: cache directory must be owned by the current user with mode 0700", ErrUnsafePath)
 	}
 	return nil
@@ -247,9 +300,20 @@ func statFD(fd int, counters *Counters, ops unixIO) (fileState, error) {
 	}, nil
 }
 
-func validateCacheFile(state fileState) error {
-	if state.mode&unix.S_IFMT != unix.S_IFREG || state.uid != uint32(unix.Geteuid()) ||
-		state.mode&0o7777 != 0o600 || state.nlink != 1 {
+func validateCacheFile(state fileState, shared bool) error {
+	uid := uint32(unix.Geteuid())
+	if state.mode&unix.S_IFMT != unix.S_IFREG || state.nlink != 1 {
+		return fmt.Errorf("%w: cache file must be a single-link regular file", ErrUnsafePath)
+	}
+	if shared {
+		// System-level shared cache: root- or current-user-owned, readable, and
+		// never world-writable. Integrity rests on the binary-pinned SHA-256.
+		if (state.uid != 0 && state.uid != uid) || state.mode&0o022 != 0 {
+			return fmt.Errorf("%w: shared cache file has unsafe ownership or mode", ErrUnsafePath)
+		}
+		return nil
+	}
+	if state.uid != uid || state.mode&0o7777 != 0o600 {
 		return fmt.Errorf("%w: cache file must be a single-link regular file owned by the current user with mode 0600", ErrUnsafePath)
 	}
 	return nil
@@ -284,7 +348,7 @@ func (c *unixCache) secureOpen(name string, flags int, mode uint32) (int, fileSt
 	}
 	state, err := statFD(fd, c.counters, c.ops)
 	if err == nil {
-		err = validateCacheFile(state)
+		err = validateCacheFile(state, c.shared)
 	}
 	if err != nil {
 		_ = c.ops.close(fd)
@@ -623,7 +687,7 @@ func (c *unixCache) atomicReplace(target string, header, payload []byte) error {
 	}
 	state, err := statFD(fd, c.counters, c.ops)
 	if err == nil {
-		err = validateCacheFile(state)
+		err = validateCacheFile(state, c.shared)
 	}
 	if err != nil {
 		cleanup()

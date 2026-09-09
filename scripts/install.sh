@@ -789,6 +789,32 @@ detect_arch() {
   esac
 }
 
+# The Linux release binaries are CGO builds linked against glibc, so they need
+# the glibc dynamic loader. musl cannot load them, and the failure would only
+# surface after install as an opaque loader error, so refuse up front.
+#
+# ldd is the authority on which libc the system actually uses. A glibc
+# distribution that has musl or musl-tools installed also carries
+# /lib/ld-musl-*.so.1 while its default loader stays glibc, so the loader file
+# alone must not decide. It remains the fallback for musl distributions whose
+# ldd reports no version, notably Alpine where BusyBox ldd only forwards to the
+# loader.
+require_glibc_on_linux() {
+  [ "$os" = "linux" ] || return 0
+  if command -v ldd >/dev/null 2>&1; then
+    ldd_version="$(ldd --version 2>&1)"
+    if printf '%s' "$ldd_version" | grep -qi musl; then
+      err "This Linux distribution uses musl libc, but ${BIN_NAME} release binaries are built against glibc and cannot run here. Use a glibc-based distribution."
+    fi
+    if printf '%s' "$ldd_version" | grep -qiE 'gnu libc|glibc'; then
+      return 0
+    fi
+  fi
+  if ls /lib/ld-musl-*.so.1 >/dev/null 2>&1; then
+    err "This Linux distribution uses musl libc, but ${BIN_NAME} release binaries are built against glibc and cannot run here. Use a glibc-based distribution."
+  fi
+}
+
 # Decide the download source. An explicit DWS_GITEE_REPO always wins. Otherwise
 # probe GitHub Releases; if it is unreachable (typical in mainland China), switch
 # GITEE_REPO to the mirror so every subsequent resolve/download uses Gitee.
@@ -1546,6 +1572,7 @@ _copy_skill() {
 install_binary() {
   os="$(detect_os)"
   arch="$(detect_arch)"
+  require_glibc_on_linux
   resolve_version
 
   archive_name="${BIN_NAME}-${os}-${arch}.tar.gz"
@@ -1594,6 +1621,37 @@ install_binary() {
       say "   Or add this line to your ~/.bashrc / ~/.zshrc"
       ;;
   esac
+}
+
+# ── Build shared schema cache ────────────────────────────────────────────────
+# The schema cache is version-tied (identity-pinned to the binary), so it is the
+# same for every user. Build it once at the system shared location so every user
+# reuses it and never re-pays the ~1.5s cold assembly on their first command.
+# Only builds when the installer can write to the system location (root install);
+# otherwise it silently skips and the runtime falls back to the per-user cache.
+# The cache is made world-readable because integrity rests on the binary-pinned
+# SHA-256 (a tampered file fails the digest), not on file ownership.
+build_shared_schema_cache() {
+  os="$(detect_os)"
+  case "$os" in
+    linux) shared_dir="/var/cache/dws" ;;
+    darwin) shared_dir="/Library/Caches/dws" ;;
+    *) return 0 ;;
+  esac
+  # Skip silently when we cannot write to the system location (non-root install).
+  if ! mkdir -p "$shared_dir" 2>/dev/null; then
+    return 0
+  fi
+  say "🔧 Building shared schema cache (version-tied, shared across users)..."
+  # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
+  # and populate it. Any schema command triggers the full cache build.
+  if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1; then
+    # World-readable: integrity rests on the pinned SHA-256, not ownership.
+    chmod -R a+rX "$shared_dir" 2>/dev/null || true
+    say "✅ Shared schema cache built: ${shared_dir}"
+  else
+    say "⚠️  Shared schema cache build skipped; first command will build it per-user."
+  fi
 }
 
 # ── Install Skills ───────────────────────────────────────────────────────────
@@ -1720,6 +1778,13 @@ main() {
   else
     install_binary
     install_skills
+  fi
+
+  # Build the version-tied shared schema cache once so every user reuses it and
+  # never re-pays the cold assembly on their first command. Skipped for
+  # skills-only installs (no binary) and non-root installs (no system write).
+  if [ "$SKILLS_ONLY" != "1" ]; then
+    build_shared_schema_cache
   fi
 
   # Every transaction of this run has finished, so old stamped archives can no

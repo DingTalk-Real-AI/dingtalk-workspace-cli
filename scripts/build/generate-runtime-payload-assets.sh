@@ -27,7 +27,7 @@ for target in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 windows-amd64 wi
   target_root="$work/$target"
   "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$target_root" >/dev/null
   (cd "$ROOT" && go run ./scripts/build/runtime-payload generate \
-    "$generated/$target.payload" "$target_root/.dws-runtime/20260825" "$capacity")
+    "$generated/$target.payload" "$target_root/.dws-runtime/20260908" "$capacity")
 done
 
 if [ "$CHECK" -eq 1 ]; then
