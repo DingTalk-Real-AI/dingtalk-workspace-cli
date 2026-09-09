@@ -14,6 +14,7 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -84,7 +86,30 @@ func (f *muteMemberResolutionCaller) Fields() string { return "" }
 func (f *muteMemberResolutionCaller) JQ() string     { return "" }
 
 func newPlatformCoverageRoot() *cobra.Command {
-	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{
+		Use:           "dws",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, _ := output.WithResultStore(cmd.Context())
+			cmd.SetContext(ctx)
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			if !output.UsesUnifiedResult(cmd) {
+				return nil
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				return err
+			}
+			if cmd.Name() == "+conversation-list" {
+				unwrapPlatformCoverageResult(cmd.OutOrStdout())
+			}
+			return nil
+		},
+	}
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.PersistentFlags().Bool("yes", false, "")
@@ -92,6 +117,24 @@ func newPlatformCoverageRoot() *cobra.Command {
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
 	return root
+}
+
+func unwrapPlatformCoverageResult(writer io.Writer) {
+	buffer, ok := writer.(*bytes.Buffer)
+	if !ok || buffer.Len() == 0 {
+		return
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(buffer.Bytes(), &envelope); err != nil {
+		return
+	}
+	data, ok := envelope["data"]
+	if !ok || len(data) == 0 || string(data) == "null" {
+		return
+	}
+	buffer.Reset()
+	buffer.Write(data)
+	buffer.WriteByte('\n')
 }
 
 func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {

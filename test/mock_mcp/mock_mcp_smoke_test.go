@@ -413,7 +413,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			"--page-all", "--no-enrich", "--no-reactions",
 		)
 		if err == nil {
-			t.Fatalf("partial search must return nonzero: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+			t.Fatalf("partial search unexpectedly succeeded\nstdout=%s\nstderr=%s", stdout, stderr)
 		}
 		calls := snapshot()
 		if got := recordedToolNames(calls); !reflect.DeepEqual(got, []string{"search_messages", "search_messages"}) {
@@ -421,15 +421,34 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		}
 		var payload map[string]any
 		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
-			t.Fatalf("search output is not JSON: %v\n%s", err, stdout)
+			t.Fatalf("search legacy output is not JSON: %v\n%s", err, stdout)
 		}
-		if payload["complete"] != false || payload["count"] != float64(1) ||
-			payload["pagesFetched"] != float64(1) || payload["failedCount"] != float64(1) {
+		business := payload
+		if business["complete"] != false || business["count"] != float64(1) ||
+			business["pagesFetched"] != float64(1) || business["failedCount"] != float64(1) {
+			t.Fatalf("partial search legacy contract = %#v", business)
+		}
+
+		payload = nil
+		if err := json.Unmarshal([]byte(stderr), &payload); err != nil {
+			t.Fatalf("search error is not JSON: %v\n%s", err, stderr)
+		}
+		errorPayload, _ := payload["error"].(map[string]any)
+		details, _ := errorPayload["details"].(map[string]any)
+		shadow, _ := details["partialResult"].(map[string]any)
+		if errorPayload["reason"] != "search_messages_incomplete" || shadow == nil {
+			t.Fatalf("partial search error envelope = %#v", payload)
+		}
+		if shadow["complete"] != false || shadow["count"] != float64(1) ||
+			shadow["pagesFetched"] != float64(1) || shadow["failedCount"] != float64(1) {
 			t.Fatalf("partial search contract = %#v", payload)
 		}
-		failures, _ := payload["failures"].([]any)
+		failures, _ := shadow["failures"].([]any)
 		if len(failures) != 1 || failures[0].(map[string]any)["stage"] != "search-page" {
 			t.Fatalf("partial search failures = %#v", failures)
+		}
+		if !reflect.DeepEqual(business, shadow) {
+			t.Fatalf("legacy output and structured error partial result diverged:\nlegacy=%#v\nshadow=%#v", business, shadow)
 		}
 	})
 

@@ -52,15 +52,15 @@ func newWhiteboardCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "创建独立白板，或按 partId 是否提供查询和更新独立/文档内嵌白板",
-			UseWhen:      []string{"用户要读取或写入白板/画布中的 OpenNodes，或使用 OpenNodes 初始内容创建独立白板时；没有文档内嵌证据时默认独立白板"},
+			AgentSummary: "创建或导出独立白板，或按 partId 是否提供查询和更新独立/文档内嵌白板",
+			UseWhen:      []string{"用户要读取或写入白板/画布中的 OpenNodes，或使用 OpenNodes 初始内容创建独立白板，或将独立白板导出到本地时；没有文档内嵌证据时默认独立白板"},
 			AvoidWhen:    []string{"普通文档正文和块使用 doc；只创建或删除文档内白板卡片使用 doc whiteboard insert / doc block delete"},
 		},
 	})
 	root := newGroupCommand(&cobra.Command{
 		Use:   "whiteboard",
 		Short: "钉钉白板管理",
-		Long: `创建独立白板，或读取和更新独立/文档内嵌白板。
+		Long: `创建或导出独立白板，或读取和更新独立/文档内嵌白板。
 
 	显式提供非空 --part-id 时操作文档内嵌白板；完全未提供 --part-id 时默认操作
 	独立 .adraw 白板。接口失败后不会自动切换另一类白板。文档内插入白板卡片请使用
@@ -247,7 +247,8 @@ func newWhiteboardCommand() *cobra.Command {
 		},
 	})
 
-	root.AddCommand(queryCmd, updateCmd, newStandaloneWhiteboardCreateCommand())
+	exportCmd, exportGetCmd := newStandaloneWhiteboardExportCommands()
+	root.AddCommand(queryCmd, updateCmd, newStandaloneWhiteboardCreateCommand(), exportCmd, exportGetCmd)
 	return root
 }
 
