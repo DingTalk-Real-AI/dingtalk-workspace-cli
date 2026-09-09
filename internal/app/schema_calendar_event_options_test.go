@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -39,6 +40,14 @@ func TestCrossPlatformCoverageCalendarEventOptionsFinalSchema(t *testing.T) {
 			t.Fatalf("%s missing omission semantics", action)
 		}
 		for _, name := range []string{"start", "end"} {
+			if _, exists := parameters[name]["format"]; exists {
+				t.Fatalf("%s %s must not restrict all-day dates to date-time", action, name)
+			}
+			union, err := json.Marshal(parameters[name]["anyOf"])
+			if err != nil || string(union) != `[{"format":"date"},{"format":"date-time"}]` {
+				t.Fatalf("%s %s format alternatives = %s, err = %v", action, name, union, err)
+			}
+
 			if action == "update" && schemaContractString(parameters[name]["required_when"]) != "is-all-day is explicitly provided (true or false)" {
 				t.Fatalf("%s missing conditional time requirement", name)
 			}
