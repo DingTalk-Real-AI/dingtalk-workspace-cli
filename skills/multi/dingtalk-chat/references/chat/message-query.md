@@ -13,7 +13,7 @@ Favorite、Pin 和 reaction。只读任务优先使用 Shortcut；只有 Shortcu
 | <!-- dws-intent: chat.read.conversation -->浏览或导出一个指定群聊/单聊 | `dws chat +chat-messages` |
 | <!-- dws-intent: chat.read.reactions -->筛选指定会话中存在 reaction 的消息 | `dws chat +search-msg --group <群名或ID> --has-reactions --page-all` |
 | <!-- dws-intent: chat.search.filtered -->发送者、关键词、@对象或消息类型是主要条件 | `dws chat +search-msg` |
-| <!-- dws-intent: chat.conversation.active-since -->指定时间以来哪些会话有新消息，只要会话摘要 | `dws chat +active-conversations --start <时间>` |
+| <!-- dws-intent: chat.conversation.active-since -->最近 24 小时或指定时间以来哪些会话有新消息，只要会话摘要 | `dws chat +recent-conversations`；可选 `--start/--end` |
 | 已知消息 IDs 读取详情 | `dws chat +messages-mget` |
 | 查看 @我的消息 | `dws chat +at-me` |
 | 查看 Favorite | `dws chat +flag-list` |
@@ -22,15 +22,20 @@ Favorite、Pin 和 reaction。只读任务优先使用 Shortcut；只有 Shortcu
 `+chat-messages` 是指定会话的粗粒度读取；`+search-msg` 是目标条件明确的单/跨会话检索。
 不要先读完整会话再补跑搜索，也不要把群名或姓名直接填入只接受稳定 ID 的参数。
 
-`+active-conversations` 不返回消息正文。它自动沿 `nextCursor` 翻页，按 `openConversationId`
+旧名 `+active-conversations` 保留为隐藏但可执行的兼容入口；新调用使用 `+recent-conversations`。
+两者共用实现、参数和结果，使用旧名不会额外告警。
+
+`+recent-conversations` 不返回消息正文。它自动沿 `nextCursor` 翻页，按 `openConversationId`
 去重，并返回 `conversationId`、`name`、
 `nameKnown`、`direct/group/unknown` 类型及时间窗内的最大消息时间。名称未知时仍返回
-`name=""`、`nameKnown=false`。正常调用只需 `--start`；
-`--page-delay` 默认 200ms，范围 0–60000ms，分页等待可被取消。
+`name=""`、`nameKnown=false`。两个时间参数都省略时查询最近 24 小时；仅传 `--end` 时，
+默认 `start=end-24h`，不是当天零点。显式 `--start` 保持原有时间解析规则，空值或纯空白仍报错；
+`--page-delay` 默认 200ms，范围 0–60000ms，分页等待可被取消。`--total-timeout` 默认
+300 秒（1–3600），约束本次所有页、重试和等待共用的查询预算；全局 `--timeout` 仍是单次请求上限。
 
 查询边界 `--start/--end` 仅支持整秒；显式传入非零小数秒会在参数校验时失败。省略
 `--end` 时，将本次查询取到的当前时间向下取整秒后固定，因此不包含当前尚未结束的
-这一秒。最终有效整秒区间必须满足 `end > start`；同一 `end` 用于所有页请求、结果返回
+这一秒，再从有效 `end` 倒推默认 `start`。最终有效整秒区间必须满足 `end > start`；同一 `start/end` 用于所有页请求、结果返回
 和续查。该限制只作用于查询边界，消息 `latestMessageTime` 仍保留毫秒精度。
 
 成功时会话摘要位于 `data`，其中 `pageSize` 记录本次 `--limit`。达到 `--page-limit` 仍有
@@ -41,14 +46,20 @@ Favorite、Pin 和 reaction。只读任务优先使用 Shortcut；只有 Shortcu
 游标，`meta.pagination.next_token` 也指向该失败页。首个请求页失败时返回普通 `failure`。
 遇到分页错误先按真实错误排查，不自动重试；不能只因拿到部分数据就报告查询完成。
 
+本命令不保存磁盘进度，进程强制终止后需要重新查询。`pagesFetched` 仅计本次已验证页面。
+分页耗尽不保证服务端索引无延迟或提供一致性快照。
+
+`--cursor` 用于手工续查，CLI 不能跨次校验参数绑定或游标循环，也不自动恢复历史聚合。
 使用 `--cursor` 续查时，必须保持同一 profile，并显式复用上次摘要中的 `start`、`end`
-和 `pageSize`（分别传给 `--start/--end/--limit`）。续页响应不包含此前批次，所以即使
+和 `pageSize`（分别传给 `--start/--end/--limit`）；非首页游标缺少显式 `--start` 或 `--end` 会报错，不能重新使用滚动默认窗口。续页响应不包含此前批次，所以即使
 `meta.pagination.endpoint_exhausted=true`，该批自身的 `complete` 仍为 `false`。调用方应将
 前后批次按 `conversationId` 合并，保留更大的 `latestMessageTime`；只有从首页起无遗漏地
-接续全部批次、处理完失败页且最终确认 endpoint 耗尽，才能将合并结果称为全量。
+接续全部批次、处理完失败页且最终确认 endpoint 耗尽，才能将合并结果称为全量。游标过期时需从首页重查。
 
 ```bash
-dws chat +active-conversations --start "2026-09-07T00:00:00+08:00" --format json
+dws chat +recent-conversations --format json
+dws chat +recent-conversations --end "2026-09-08T15:30:00+08:00" --format json
+dws chat +recent-conversations --start "2026-09-07T00:00:00+08:00" --format json
 ```
 
 ## 指定会话读取
@@ -143,7 +154,7 @@ Favorite、消息 Pin、消息 Top 和会话 Top 是不同对象。写入或取�
 | 原子命令 | 仅用于 |
 |---|---|
 | `message list` | 指定会话原始响应或显式手工 continuation |
-| `message list-all` | 需要时间范围内全部会话的原始消息明细或手工 continuation；只要会话摘要使用 `+active-conversations` |
+| `message list-all` | 需要时间范围内全部会话的原始消息明细或手工 continuation；只要会话摘要使用 `+recent-conversations` |
 | `message list-by-sender` | 已有稳定发送者 ID 且需要底层原始响应 |
 | `message list-mentions` / `list-focused` | @我或特别关注的原始列表 |
 | `message search` / `search-advanced` | Shortcut 未发布的真实过滤字段 |

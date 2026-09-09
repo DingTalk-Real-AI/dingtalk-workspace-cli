@@ -30,6 +30,8 @@ const (
 	activeConversationsMaxPages      = 500
 	activeConversationsDefaultDelay  = 200
 	activeConversationsMaxDelay      = 60000
+	activeConversationsTotalTimeout  = 300
+	activeConversationsMaxTimeout    = 3600
 	activeConversationsRangeSemantic = "[start,end)"
 )
 
@@ -46,10 +48,10 @@ var activeConversationsNonzeroFraction = regexp.MustCompile(`[.,]0*[1-9]`)
 var ActiveConversations = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "chat",
-	Command:       "+active-conversations",
+	Command:       "+recent-conversations",
 	Product:       "chat",
 	Description:   "列出指定时间以来有新消息的单聊和群聊",
-	Intent:        "当你只需要知道从某个时间开始哪些单聊或群聊出现了新消息，而不需要读取消息正文时使用；最少只传 --start，CLI 会固定本次查询的结束时间、自动翻页、按 openConversationId 去重，并返回会话名称、类型和时间窗内最新消息时间。",
+	Intent:        "当你只需要知道最近 24 小时或指定时间范围内哪些单聊或群聊出现了新消息，而不需要读取消息正文时使用；省略 --start 时从有效 --end 往前推 24 小时，省略 --end 时固定为当前时间取整秒；CLI 自动翻页、按 openConversationId 去重，并返回会话名称、类型和时间窗内最新消息时间。",
 	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -57,11 +59,13 @@ var ActiveConversations = shortcut.Shortcut{
 	},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
-			ProductID:      "chat",
+			ProductID: "chat",
+			// Keep the stable Schema identity while changing the preferred CLI spelling.
 			Name:           "shortcut_active_conversations",
 			CanonicalPath:  "chat.shortcut_active_conversations",
-			CLIPath:        "chat +active-conversations",
-			PrimaryCLIPath: "chat +active-conversations",
+			CLIPath:        "chat +recent-conversations",
+			PrimaryCLIPath: "chat +recent-conversations",
+			Aliases:        []string{"chat +active-conversations"},
 		},
 		Description: "列出指定时间以来有新消息的单聊和群聊",
 		Interface: &contract.InterfaceSpec{
@@ -71,11 +75,11 @@ var ActiveConversations = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "列出指定时间以来有新消息的单聊和群聊",
-			UseWhen:      []string{"当你只需要知道从某个时间开始哪些单聊或群聊出现了新消息，而不需要读取消息正文时使用；最少只传 --start，CLI 会固定本次查询的结束时间、自动翻页、按 openConversationId 去重，并返回会话名称、类型和时间窗内最新消息时间。"},
+			UseWhen:      []string{"当你只需要知道最近 24 小时或指定时间范围内哪些单聊或群聊出现了新消息，而不需要读取消息正文时使用；省略 --start 时从有效 --end 往前推 24 小时，省略 --end 时固定为当前时间取整秒；CLI 自动翻页、按 openConversationId 去重，并返回会话名称、类型和时间窗内最新消息时间。"},
 			AvoidWhen:    []string{"需要读取消息正文或按发送者、关键词、@对象筛选时使用 +search-msg；需要不区分是否有新消息的全部会话时使用 +conversation-list；监听未来消息时使用 event +listen-im"},
 			Examples: []string{
-				"dws chat +active-conversations --start \"2026-09-07T00:00:00+08:00\"",
-				"dws chat +active-conversations --start \"2026-09-07T00:00:00+08:00\" --end \"2026-09-08T00:00:00+08:00\"",
+				"dws chat +recent-conversations",
+				"dws chat +recent-conversations --start \"2026-09-07T00:00:00+08:00\" --end \"2026-09-08T00:00:00+08:00\"",
 			},
 		},
 		Parameters: []contract.ParamDecl{
@@ -101,27 +105,30 @@ var ActiveConversations = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "start", Type: shortcut.FlagString, Required: true, Desc: "开始时间（包含），支持 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD；查询时间边界仅支持整秒，拒绝非零小数秒；--start 不能为空白；--end 必须晚于 --start"},
-		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间（不包含），格式同 --start；查询时间边界仅支持整秒，拒绝非零小数秒；不传时固定为本次查询当前时间向下取整秒，不包含当前未结束秒；有效整秒区间的 --end 必须晚于 --start；使用非首页 --cursor 时必须显式复用原查询的 --end"},
+		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间（包含），选填；省略时从有效 --end 往前推 24 小时，两个时间参数都省略时查询最近 24 小时；支持 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD；查询时间边界仅支持整秒，拒绝非零小数秒；显式传入 --start 时不能为空白；--end 必须晚于 --start；使用非首页 --cursor 时必须显式复用原查询的 --start 和 --end"},
+		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间（不包含），格式同 --start；查询时间边界仅支持整秒，拒绝非零小数秒；不传时固定为本次查询当前时间向下取整秒，不包含当前未结束秒；有效整秒区间的 --end 必须晚于 --start；使用非首页 --cursor 时必须显式复用原查询的 --start 和 --end"},
 		{Name: "limit", Type: shortcut.FlagInt, Default: strconv.Itoa(activeConversationsDefaultLimit), Desc: "底层每页消息数量；--limit 必须在 1-100 之间"},
-		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "续页游标；使用非首页 --cursor 时必须显式复用原查询的 --end；续页应保持同一 profile、--start、--end 和 --limit（结果 pageSize）；续页批次不包含此前结果，complete 始终为 false"},
+		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "续页游标；使用非首页 --cursor 时必须显式复用原查询的 --start 和 --end，不重新计算默认窗口；续页应保持同一 profile、--start、--end 和 --limit（结果 pageSize）；续页批次不包含此前结果，complete 始终为 false"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: strconv.Itoa(activeConversationsDefaultPages), Desc: "自动分页安全上限；--page-limit 必须在 1-500 之间；达到上限仍有下一页时返回 complete=false 和 next_token"},
 		{Name: "page-delay", Type: shortcut.FlagInt, Default: strconv.Itoa(activeConversationsDefaultDelay), Desc: "自动分页间隔毫秒数；--page-delay 必须在 0-60000 之间；默认 200，0 表示不等待；等待可取消"},
+		{Name: "total-timeout", Type: shortcut.FlagInt, Default: strconv.Itoa(activeConversationsTotalTimeout), Desc: "本次执行的总查询预算（秒，含所有页、重试和分页等待）；--total-timeout 必须在 1-3600 之间；默认 300；不同于全局 --timeout 的单请求上限；超时保留已验证页面"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"start"}, Description: "--start 不能为空白"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start"}, Description: "显式传入 --start 时不能为空白"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "--end 必须晚于 --start"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "查询时间边界仅支持整秒，拒绝非零小数秒"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-100 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-limit"}, Description: "--page-limit 必须在 1-500 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-delay"}, Description: "--page-delay 必须在 0-60000 之间"},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor", "end"}, Description: "使用非首页 --cursor 时必须显式复用原查询的 --end"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor", "start", "end"}, Description: "使用非首页 --cursor 时必须显式复用原查询的 --start 和 --end"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"total-timeout"}, Description: "--total-timeout 必须在 1-3600 之间"},
 	},
 	Tips: []string{
-		`dws chat +active-conversations --start "2026-09-07T00:00:00+08:00"`,
-		`dws chat +active-conversations --start "2026-09-07 00:00:00" --end "2026-09-08 00:00:00"`,
-		"分页中途失败返回 partial_failure（退出码 7）；已验证页面聚合保存在 data.succeeded[0]，失败页和原始诊断在 data.failed[0].error；处理错误后可用 meta.pagination.next_token 和相同 profile、start/end/limit 续查。",
+		`dws chat +recent-conversations`,
+		`dws chat +recent-conversations --start "2026-09-07 00:00:00" --end "2026-09-08 00:00:00"`,
+		"分页中途失败返回 partial_failure（退出码 7）；已验证页面聚合保存在 data.succeeded[0]，失败页和原始诊断在 data.failed[0].error；先处理错误，再用 meta.pagination.next_token 和相同 profile、start/end/limit 手工续查并合并。",
 		"会话 name 始终返回；下层未提供名称时 name 为空字符串、nameKnown=false。",
+		"--cursor 续查不自动合并此前结果，也不能跨次校验查询绑定或检测游标循环；本命令不保存磁盘进度，进程强制终止后需重新查询。",
 	},
 	Validate: validateActiveConversations,
 	Execute:  executeActiveConversations,
@@ -155,10 +162,16 @@ func validateActiveConversations(rt *shortcut.RuntimeContext) error {
 	if delay := rt.Int("page-delay"); delay < 0 || delay > activeConversationsMaxDelay {
 		return apperrors.NewValidation("--page-delay 必须在 0-60000 之间")
 	}
+	if timeout := rt.Int("total-timeout"); timeout < 1 || timeout > activeConversationsMaxTimeout {
+		return apperrors.NewValidation("--total-timeout 必须在 1-3600 之间")
+	}
 	if cursor := strings.TrimSpace(rt.Str("cursor")); cursor != "" && cursor != "0" && (!rt.Changed("end") || strings.TrimSpace(rt.Str("end")) == "") {
 		return apperrors.NewValidation("使用非首页 --cursor 时必须显式传入上次结果中的同一 --end")
 	}
-	// Keep the validated default end unchanged through execution and all pages.
+	if cursor := strings.TrimSpace(rt.Str("cursor")); cursor != "" && cursor != "0" && !rt.Changed("start") {
+		return apperrors.NewValidation("使用非首页 --cursor 时必须显式传入上次结果中的同一 --start")
+	}
+	// Keep both validated boundaries unchanged through execution and all pages.
 	// Each validation replaces it, including when a Cobra command is reused.
 	ctx := rt.Command().Context()
 	if ctx == nil {
@@ -169,6 +182,14 @@ func validateActiveConversations(rt *shortcut.RuntimeContext) error {
 }
 
 func executeActiveConversations(rt *shortcut.RuntimeContext) error {
+	parent := rt.Command().Context()
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, time.Duration(rt.Int("total-timeout"))*time.Second)
+	defer cancel()
+	rt.Command().SetContext(ctx)
+	defer rt.Command().SetContext(parent)
 	queryRange, err := activeConversationExecutionRange(rt)
 	if err != nil {
 		return err
@@ -184,6 +205,7 @@ func executeActiveConversations(rt *shortcut.RuntimeContext) error {
 	endpointExhausted := false
 	nextCursor := ""
 	var pageFailure error
+	pageSize := rt.Int("limit")
 
 	for pagesFetched < rt.Int("page-limit") {
 		delay := time.Duration(0)
@@ -197,11 +219,15 @@ func executeActiveConversations(rt *shortcut.RuntimeContext) error {
 		data, callErr := rt.CallMCPReadData("chat", "search_messages_by_time_range", map[string]any{
 			"startTime": queryRange.start.In(activeConversationsLocation).Format("2006-01-02 15:04:05"),
 			"endTime":   queryRange.end.In(activeConversationsLocation).Format("2006-01-02 15:04:05"),
-			"limit":     rt.Int("limit"),
+			"limit":     pageSize,
 			"cursor":    cursor,
 		})
 		if callErr != nil {
 			pageFailure = callErr
+			break
+		}
+		if err := ctx.Err(); err != nil {
+			pageFailure = err
 			break
 		}
 		groups, more, next, pageErr := parseActiveConversationPage(data)
@@ -251,7 +277,7 @@ func executeActiveConversations(rt *shortcut.RuntimeContext) error {
 		"count":            len(rows),
 		"complete":         complete,
 		"pagesFetched":     pagesFetched,
-		"pageSize":         rt.Int("limit"),
+		"pageSize":         pageSize,
 		"unknownTypeCount": unknownTypes,
 		"conversations":    rows,
 	}
@@ -312,6 +338,11 @@ func mergeActiveConversationPage(states map[string]*activeConversationState, gro
 }
 
 func activeConversationTimeRange(rt *shortcut.RuntimeContext) (activeConversationRange, error) {
+	// Only omission enables the rolling default; explicit blank input is still
+	// invalid, including when Execute is called without Validate.
+	if rt.Changed("start") && strings.TrimSpace(rt.Str("start")) == "" {
+		return activeConversationRange{}, apperrors.NewValidation("--start 不能为空白")
+	}
 	return resolveActiveConversationTimeRange(rt.Str("start"), rt.Str("end"), time.Now())
 }
 
@@ -327,12 +358,13 @@ func activeConversationExecutionRange(rt *shortcut.RuntimeContext) (activeConver
 
 func resolveActiveConversationTimeRange(startRaw, endRaw string, now time.Time) (activeConversationRange, error) {
 	startRaw = strings.TrimSpace(startRaw)
-	if startRaw == "" {
-		return activeConversationRange{}, apperrors.NewValidation("--start 不能为空白")
-	}
-	start, err := parseActiveConversationBoundary(startRaw, "--start")
-	if err != nil {
-		return activeConversationRange{}, err
+	var start time.Time
+	var err error
+	if startRaw != "" {
+		start, err = parseActiveConversationBoundary(startRaw, "--start")
+		if err != nil {
+			return activeConversationRange{}, err
+		}
 	}
 	end := now.Truncate(time.Second)
 	if endRaw = strings.TrimSpace(endRaw); endRaw != "" {
@@ -340,6 +372,9 @@ func resolveActiveConversationTimeRange(startRaw, endRaw string, now time.Time) 
 		if err != nil {
 			return activeConversationRange{}, err
 		}
+	}
+	if startRaw == "" {
+		start = end.Add(-24 * time.Hour)
 	}
 	if !end.After(start) {
 		return activeConversationRange{}, apperrors.NewValidation("--end 必须晚于 --start")
@@ -620,5 +655,16 @@ func activeConversationResponseError(reason, message string) error {
 }
 
 func init() {
-	shortcut.Register(ActiveConversations)
+	shortcut.Register(ActiveConversations, legacyActiveConversations())
+}
+
+// A distinct hidden leaf supplies the approved command_move after-state.
+// Share all executable flags, constraints, safety and query hooks. The hidden
+// compatibility leaf does not publish a second Agent contract/identity.
+func legacyActiveConversations() shortcut.Shortcut {
+	legacy := ActiveConversations
+	legacy.Command = "+active-conversations"
+	legacy.Hidden = true
+	legacy.Contract = corecmd.ContractDecl{}
+	return legacy
 }
