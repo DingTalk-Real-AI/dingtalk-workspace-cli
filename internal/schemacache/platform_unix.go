@@ -117,8 +117,10 @@ func systemSchemaCacheBase() string {
 func openPlatform(edition string, counters *Counters, noCreate bool) (backend, error) {
 	digest := sha256.Sum256([]byte(edition))
 	editionHex := hex.EncodeToString(digest[:])
-	// Explicit override for tests and local experiments. Production does not
-	// populate a sealed identity cache at install time.
+	// DWS_SCHEMA_CACHE_DIR is the installer/test override. Production never
+	// embeds compile-time identity; this directory is created when the
+	// caller is allowed to write (install or explicit override), not by the
+	// default runtime walk of /var/cache/dws or /Library/Caches/dws.
 	if override := os.Getenv("DWS_SCHEMA_CACHE_DIR"); override != "" {
 		dirfd, path, err := openCacheDirectory(override, editionHex, counters, platformIO, noCreate, true)
 		if err != nil {
@@ -253,7 +255,17 @@ func validateAncestryDirectory(fd int, counters *Counters, ops unixIO) error {
 		return err
 	}
 	uid := uint32(unix.Geteuid())
-	if state.mode&unix.S_IFMT != unix.S_IFDIR || (state.uid != 0 && state.uid != uid) || state.mode&0o022 != 0 {
+	if state.mode&unix.S_IFMT != unix.S_IFDIR || (state.uid != 0 && state.uid != uid) {
+		return fmt.Errorf("%w: unsafe cache ancestry ownership or mode", ErrUnsafePath)
+	}
+	if state.mode&0o022 == 0 {
+		return nil
+	}
+	// Root- or current-user-owned sticky directories (/tmp, /Library/Caches)
+	// are a platform convention: others can create files but cannot replace a
+	// different owner's dws directory. World-writable ancestry without the
+	// sticky bit remains unsafe.
+	if state.mode&unix.S_ISVTX == 0 {
 		return fmt.Errorf("%w: unsafe cache ancestry ownership or mode", ErrUnsafePath)
 	}
 	return nil

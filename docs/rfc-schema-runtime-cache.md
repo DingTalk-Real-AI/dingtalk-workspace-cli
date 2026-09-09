@@ -67,27 +67,30 @@ Schema 的唯一语义源是 declarations，经 `ResolveSchemaBuild` 生成 type
 
 ### 2.1 数据与身份
 
-Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 / 发布期不生产、不嵌入 Schema identity**；发运二进制不钉 ldflags digest。测试仍可注入完整 identity 以行使认证 I/O，生产路径不依赖封印身份。
+Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 / 发布期不生产、不嵌入 Schema identity**；发运二进制不钉 ldflags digest。每个受支持端（darwin/arm64、linux/amd64）在安装或首次 `dws schema` 时，从本机二进制的 live declarations 生成 identity，写入认证磁盘 cache；后续命中先校验摘要再读 protobuf shards。空/缺失本地 identity 表示 generate then use，不是永久 live-only。测试仍可注入完整 identity。
 
 依赖边界：
 
 - `internal/cli/schemaruntime`：typed decode，不依赖 Cobra/app/auth/network；
-- `internal/schemacache`：有界认证 I/O 与原子发布（测试注入 identity 时使用）；
-- `internal/schemareader`：identity 解析，供测试与可选运行时注入；
-- `internal/cli`：repair、process memoization 和 handler delivery；
-- `internal/app`：注册完整声明源和公开 Schema command；生产不注册 compile-time cache identity。
+- `internal/schemacache`：有界认证 I/O 与原子发布；
+- `internal/schemareader`：identity 解析，供本地 sidecar 与测试注入；
+- `internal/cli`：本地 identity 生成、repair、process memoization 和 handler delivery；
+- `internal/app`：注册完整声明源和公开 Schema command；生产注册 **local generate** cache，不注册 compile-time cache identity。
 
 ### 2.2 状态语义
 
 | 状态 | 行为 |
 |---|---|
-| 生产 / 空 identity | schema handler 走 live declarations；不读写封印 cache |
+| 生产，本地 identity 缺失 | 首次 schema 路径从 live declarations 生成 identity，原子发布 shards 与 sidecar |
+| 生产，本地 identity 命中且认证通过 | handler 读取所需 Meta 或产品 shard |
+| 生产，cache 缺失/损坏 | 同步重建并原子发布（与本机 identity 对齐） |
 | 测试注入完整 identity，cache 缺失 | 同步重建并原子发布 |
 | 测试注入完整 identity，cache 认证通过 | handler 读取所需 Meta 或产品 shard |
 | 用户 cache 截断、摘要不符或 protobuf 非法 | 丢弃结果并从 declarations 自愈，不输出部分结果 |
 | live build 失败 | 返回原有分类错误，不发布新 cache |
+| 插件等改变命令面 | 本进程禁用持久 cache I/O |
 
-不发明新的未认证加密方案。空 identity 不启用封印 cache。
+不发明新的未认证加密方案。Identity sidecar 用当前可执行文件指纹命名，避免升级后误用旧二进制的 cache。macOS `/Library/Caches` 的 sticky 祖先目录被接受；装不上共享 cache 时回退到用户 cache，安装器不得在未写出文件时宣称共享 cache 成功。
 
 ## 3. 构建与发布
 
@@ -97,8 +100,9 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 2. GoReleaser 生成原有单二进制归档；`post-goreleaser.sh` 只做 runtime payload、签名和重打包，不再按 identity 重建 `dws`。
 3. `go build ./cmd` 与正式包均不生成或嵌入 Schema identity。
 4. 最终归档继续经过 checksum、签名、安装器、npm、Homebrew 和 smoke 验证。
+5. 安装器在 darwin/arm64 与 linux/amd64 上尝试写入共享 cache（Linux `/var/cache/dws`，macOS `/Library/Caches/dws`）；仅当 Meta/Registry/Payloads 与 identity sidecar 均已写出才宣称成功。其他 os/arch 跳过（后端按 build tag 编译掉）。
 
-所有公开 target 都发布单个 `dws`，由正常 schema handler 走 live declaration assembly。
+所有公开 target 都发布单个 `dws`。Schema handler 优先走本机认证 cache，否则 live declaration assembly。
 
 ## 4. 性能验收
 
@@ -114,7 +118,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 | 完整构树 | 相对本专项父提交，warm `B/op` 至少降低 20%，`allocs/op` 至少降低 8%；ns/op 不得超过 `max(parent ×105%, parent + 1 ms)` |
 | help/version | candidate p50 ≤ `max(main ×105%, main + 3 ms)`；p95 ≤ `max(main ×110%, main + 3 ms)` |
 | root help RSS | native p50 ≤50 MiB、p95 ≤55 MiB，且相对固定 main 的 p50/p95 不回退；同机 Lxxx 的绝对值和按 command 归一化结果必须进入报告，但因公开节点数不同不作为 release gate |
-| Schema | 发运走 live declaration assembly（不嵌入 compile-time identity）；cache-hit 数字仅作测试注入参考，不是发布门禁 |
+| Schema | 发运不嵌入 compile-time identity；安装/首次 schema 在本机生成 identity 并写 cache；后续命中走认证 shards。cache-hit 数字可作本机参考，不是发布门禁 |
 | 业务命令 | dry-run、mock/get、config 的 p50/p95 相对固定 main 不回退 |
 | 正确性 | help bytes、flags、aliases、validation、Safety、Schema wire、输出和错误分类不变 |
 | 清理 | telemetry 退出前最多等待 SDK FlushTimeout（默认约 300ms）；业务 cleanup、signal 和退出码测试通过 |
@@ -148,4 +152,4 @@ Lxxx 软件的完整构树只用于结构和单位节点资源参考；Gxx 软�
 
 ## 7. 回滚
 
-完整树优化按独立提交回滚，不改变 Schema/Safety 的权威源。生产不依赖 compile-time identity；测试注入的 cache 无法被未注入 identity 的二进制命中。telemetry 默认与 main 对齐；若需牺牲末条事件完整性以降低退出延迟，可显式启用 SDK `NoFlushWait`。可靠且不阻塞的投递需要另立持久 outbox RFC。
+完整树优化按独立提交回滚，不改变 Schema/Safety 的权威源。生产不依赖 compile-time identity；本机生成的 identity 只命中同一二进制指纹下的 cache。telemetry 默认与 main 对齐；若需牺牲末条事件完整性以降低退出延迟，可显式启用 SDK `NoFlushWait`。可靠且不阻塞的投递需要另立持久 outbox RFC。

@@ -14,7 +14,7 @@ flowchart LR
     C --> D[统一 PreParse / validation / auth / Safety]
     D --> E[Schema handler 或业务 handler]
     E --> F[统一 output / cleanup]
-    F --> G[telemetry enqueue; no flush wait]
+    F --> G[telemetry enqueue; bounded flush wait]
 ```
 
 所有公开调用共享 B～G。Schema cache 只改变 Schema handler 的 catalog 数据源。公开 help 直接从 B 得到的树渲染。不存在 launcher、argv 产品路由、utility-only tree、Schema 前置 handler 或 help projection。
@@ -281,7 +281,7 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 
 本地实测（M3 Pro，进程内、每次 op 新建 runtime 模拟冷进程）：单叶 schema 命令从 5.74 ms / 6.07 MB / 79.7k allocs 降到 **3.31 ms / 1.98 MB / 19.7k allocs**；真实二进制相对 `--help` 的额外 user CPU：schema compact 从 +14.64 ms 降到 **+1.42 ms**，leaf-help 从 v4 的 +1.19 ms（v5 内联 blob 版一度回到 +2.51 ms）降到 **+0.96 ms**；Meta 阶段基准 1.58 → 1.28 ms（分配 1.64 MB → 1.16 MB）。
 
-第三轮 CI（v5 分片版）显示 linux 上 leaf-help（+1.81 ms）与 schema（+0.94 ms）仍落后 Lark——两者共同的剩余成本是 Meta 读取（286 KB 读 + SHA + 解码）。当时曾用链接期钉住 payload/payload-index 身份字段缩短认证链。**发运模型已改为不在编译期生产 Schema identity**；该认证链仅保留给测试注入 identity 的 cache 路径，生产 schema 走 live declaration assembly。
+第三轮 CI（v5 分片版）显示 linux 上 leaf-help（+1.81 ms）与 schema（+0.94 ms）仍落后 Lark——两者共同的剩余成本是 Meta 读取（286 KB 读 + SHA + 解码）。当时曾用链接期钉住 payload/payload-index 身份字段缩短认证链。**发运模型已改为不在编译期生产 Schema identity**；各端在安装/首次 schema 生成本机 identity 并走认证 cache，缺失时 live assembly 后修复发布。
 
 ### 3.8 投机预热：把缓存 I/O 移出关键路径（2026-09-08）
 
@@ -298,7 +298,7 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 | 场景 | 树 | 必须保持的行为 |
 |---|---|---|
 | root help / version | 完整 runtime tree | 同一 public flags、服务/utility 列表、locale、startup diagnostics |
-| Schema hit/miss/repair | 完整 runtime tree | Cobra parsing、shortcut/plugin diagnostics、wire parity；生产走 live assembly |
+| Schema hit/miss/repair | 完整 runtime tree | Cobra parsing、shortcut/plugin diagnostics、wire parity；生产走本机 identity+cache，miss 时 live assembly |
 | leaf help / dry-run / mock | 完整 runtime tree | aliases、required/groups、Safety、无多余 RPC、统一输出 |
 | config / event utility | 完整 runtime tree | shared caller、profile、PreParse 和 cleanup 不缺失 |
 | completion | 完整 runtime tree | 候选、描述、directive、alias 与 shell script contract |

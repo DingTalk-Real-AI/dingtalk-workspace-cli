@@ -57,6 +57,22 @@ func TestCrossPlatformCoverageSchemaProductMemoizationRepair(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageSchemaCacheAllowGenerateEmptyIdentity(t *testing.T) {
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open",
+		GOOS: "linux", GOARCH: "amd64",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("generate-pending identity must not be a fast-path authority")
+	}
+	if activeSchemaCacheRuntime() == nil {
+		t.Fatal("allow-generate runtime was not registered")
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCacheOptionsRejectUnsupportedPlatform(t *testing.T) {
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	err := RegisterSchemaCacheOptions(SchemaCacheOptions{
@@ -82,16 +98,21 @@ func TestCrossPlatformCoverageSchemaCacheFastPathIdentityRequiresEligibleRuntime
 		t.Fatal("disabled cache exposed a fast-path identity")
 	}
 	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{
-		options: SchemaCacheOptions{Enabled: true, Identity: SchemaCacheIdentity{Edition: "open"}},
-		runtime: &schemaCacheRuntime{options: SchemaCacheOptions{Enabled: true, Identity: SchemaCacheIdentity{Edition: "open"}}},
+		options: SchemaCacheOptions{Enabled: true, AllowGenerate: true, Edition: "open"},
+		runtime: &schemaCacheRuntime{options: SchemaCacheOptions{Enabled: true, AllowGenerate: true, Edition: "open"}},
 	})
-	id, ok := SchemaCacheFastPathIdentity()
-	if !ok || id.Edition != "open" {
-		t.Fatalf("eligible runtime identity = %#v, %v", id, ok)
+	if _, ok := SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("generate-pending identity must not be a fast-path authority")
+	}
+	if activeSchemaCacheRuntime() == nil {
+		t.Fatal("generate-pending runtime should remain active")
 	}
 	MarkSchemaCacheRuntimeUncertain()
 	if _, ok := SchemaCacheFastPathIdentity(); ok {
 		t.Fatal("uncertain runtime still exposed a fast-path identity")
+	}
+	if activeSchemaCacheRuntime() != nil {
+		t.Fatal("uncertain runtime still active")
 	}
 }
 

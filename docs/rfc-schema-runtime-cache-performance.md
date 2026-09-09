@@ -6,7 +6,7 @@
 
 PR 已撤回 selective tree、Schema 前置执行和 root help projection。旧 head 中 calendar 0.85 ms、config 0.36 ms、root help 比 Lxxx 软件慢 2.5% 等数字描述的是已删除结构，全部标记为历史结果，不能用于当前 Ready 结论。
 
-完整构树本地父子对照中，DWS 始终构造约 1,825 个 command，B/op 降低 **22.8%**，allocs/op 降低 **9.8%**，ns/op 变化为 **+0.3%**。clean head `a8376f92` 的 [native workflow](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082) 已在 Darwin/arm64 与 Linux/amd64 全绿，完整 Go suite、race 与五维测量均完成。Compile-time Schema identity 已从发运模型中移除；下列 cache-hit 数字仅作历史/测试参考。
+完整构树本地父子对照中，DWS 始终构造约 1,825 个 command，B/op 降低 **22.8%**，allocs/op 降低 **9.8%**，ns/op 变化为 **+0.3%**。clean head `a8376f92` 的 [native workflow](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082) 已在 Darwin/arm64 与 Linux/amd64 全绿，完整 Go suite、race 与五维测量均完成。Compile-time Schema identity 已从发运模型中移除；生产改为安装/首次 schema 的本机 identity+cache。下列 cache-hit 数字仍作历史参考。
 
 root help 延迟已在两平台快于 Lxxx 软件。RSS 相对固定 main 在 Linux 降低 **7.7%**、Darwin 降低 **8.3%**，p50/p95 均低于 RFC 的 50/55 MiB 产品预算。Darwin 的绝对 RSS 也低于 Lxxx 软件；Linux 为 47.68 MiB，对比 Lxxx 42.85 MiB，仍高 **11.3%**。该差值继续公开，但 Lxxx 软件只有约一半节点，不能作为绝对 release gate，否则会激励 projection/裁树。后续通过更紧凑的通用 typed service builder 继续压缩；不允许恢复 projection、selective tree 或 launcher。
 

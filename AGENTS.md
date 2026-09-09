@@ -27,13 +27,16 @@ unrelated work, and use `gofmt` for every modified Go file.
 Schema Catalog delivery is **声明即 Catalog**: production assembles via
 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` (factory registered in
 `internal/app`). Schema identity is **not** produced at compile or release
-time; shipping binaries do not embed binary-pinned cache digests. Persistent
-Schema cache machinery may still be injected in tests, but production schema
-handlers use live declaration assembly. A miss or empty identity uses the same
-authoritative assembly. The old `RegisterSchemaSourceRoot` API clears previous
-persistent identity, so tests and replacement factories cannot inherit another
-authority's cache.
-See `docs/rfc-schema-runtime-cache.md` for the live-assembly shipping model.
+time; shipping binaries do not embed binary-pinned cache digests. On
+supported platforms (darwin/arm64, linux/amd64) production enables the
+persistent cache: install or the first schema-consuming path generates
+identity from this binary's live declarations, writes authenticated disk
+shards, and later processes load that local identity then verify digests
+before reading protobuf. A missing sidecar generates then uses the cache;
+it is not a permanent live-only mode. Plugins that change the command
+surface still disable persistent I/O. Tests may also inject identity via
+`RegisterSchemaCacheOptions`.
+See `docs/rfc-schema-runtime-cache.md` for the local-identity shipping model.
 There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;
