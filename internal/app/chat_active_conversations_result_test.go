@@ -31,10 +31,17 @@ func TestCrossPlatformCoverageChatActiveConversationsResultDeliveredInFullAndCom
 	}{{name: "full"}, {name: "compact", compact: true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := NewRootCommand()
+			leaf, _, err := root.Find([]string{"chat", "+recent-conversations"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := leaf.ValidateRequiredFlags(); err != nil {
+				t.Fatalf("Cobra still requires an explicit start: %v", err)
+			}
 			var stdout, stderr bytes.Buffer
 			root.SetOut(&stdout)
 			root.SetErr(&stderr)
-			args := []string{"schema", "--cli-path", "chat +active-conversations", "--format", "json"}
+			args := []string{"schema", "--cli-path", "chat +recent-conversations", "--format", "json"}
 			if tc.compact {
 				args = append(args, "--compact")
 			}
@@ -47,6 +54,8 @@ func TestCrossPlatformCoverageChatActiveConversationsResultDeliveredInFullAndCom
 				Pagination *contract.PaginationSpec `json:"pagination"`
 				Parameters map[string]struct {
 					Type        string          `json:"type"`
+					Required    bool            `json:"required"`
+					CLIRequired bool            `json:"cli_required"`
 					Default     json.RawMessage `json:"default"`
 					Description string          `json:"description"`
 				} `json:"parameters"`
@@ -83,10 +92,27 @@ func TestCrossPlatformCoverageChatActiveConversationsResultDeliveredInFullAndCom
 			if !strings.Contains(delay.Description, "0-60000") {
 				t.Fatalf("page-delay range is not discoverable: %q", delay.Description)
 			}
+			for _, name := range []string{"checkpoint", "resume"} {
+				if _, ok := payload.Parameters[name]; ok || leaf.Flags().Lookup(name) != nil {
+					t.Fatalf("removed persistence flag still exposed in Schema or Cobra: %s", name)
+				}
+			}
+			budget, ok := payload.Parameters["total-timeout"]
+			if !ok || budget.Type != "integer" || string(budget.Default) != `"300"` || !strings.Contains(budget.Description, "1-3600") {
+				t.Fatalf("shared total timeout is not discoverable: %#v", budget)
+			}
 			if !strings.Contains(payload.Parameters["start"].Description, "整秒") ||
 				!strings.Contains(payload.Parameters["start"].Description, "非零小数秒") ||
 				!strings.Contains(payload.Parameters["end"].Description, "向下取整秒") {
 				t.Fatalf("query time precision is not discoverable: start=%q end=%q", payload.Parameters["start"].Description, payload.Parameters["end"].Description)
+			}
+			start, ok := payload.Parameters["start"]
+			if !ok || start.Type != "string" || start.Required || start.CLIRequired || !strings.Contains(start.Description, "24 小时") {
+				t.Fatalf("optional rolling start is not discoverable: %#v", start)
+			}
+			// A rolling default must never be frozen into a concrete Schema date.
+			if len(start.Default) != 0 && string(start.Default) != `""` {
+				t.Fatalf("rolling start published a static default: %s", start.Default)
 			}
 
 			partialSupported := false
@@ -107,6 +133,11 @@ func TestCrossPlatformCoverageChatActiveConversationsResultDeliveredInFullAndCom
 				property := activeConversationsDeliveredSchemaProperty(dataSchema, name)
 				if property == nil || property["type"] != wantType {
 					t.Errorf("result property %s is not discoverable as %s: %#v", name, wantType, property)
+				}
+			}
+			for _, name := range []string{"checkpointFile", "totalPagesFetched"} {
+				if property := activeConversationsDeliveredSchemaProperty(dataSchema, name); property != nil {
+					t.Errorf("removed persistence result property is still published: %s", name)
 				}
 			}
 		})

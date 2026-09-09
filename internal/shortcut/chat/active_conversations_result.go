@@ -85,12 +85,12 @@ func activeConversationsResultSchema() json.RawMessage {
 
 func activeConversationAggregateSchema(partial bool) map[string]any {
 	properties := map[string]any{
-		"start":            map[string]any{"type": "string", "format": "date-time", "description": "整秒精度的查询开始时间（包含）；续页时保持不变"},
+		"start":            map[string]any{"type": "string", "format": "date-time", "description": "整秒精度的有效查询开始时间（包含）；省略 --start 时从有效 end 往前推 24 小时；续页时显式复用该值"},
 		"end":              map[string]any{"type": "string", "format": "date-time", "description": "整秒精度的固定查询结束时间（不包含）；默认将本次执行开始时间向下取整到当前秒；续页时保持不变"},
 		"rangeSemantics":   map[string]any{"type": "string", "enum": []string{"[start,end)"}, "description": "查询时间范围为左闭右开区间"},
 		"count":            map[string]any{"type": "integer", "minimum": 0, "description": "按 openConversationId 去重后的会话数量"},
-		"complete":         map[string]any{"type": "boolean", "description": "是否从首页开始并已观察到服务端分页耗尽；续页和部分失败批次始终为 false"},
-		"pagesFetched":     map[string]any{"type": "integer", "minimum": 1, "description": "本次成功读取且完整校验的消息分页数量，不包含失败页面"},
+		"complete":         map[string]any{"type": "boolean", "description": "是否从首页开始并已观察到服务端分页耗尽；--cursor 续页和部分失败批次始终为 false；不保证服务端索引无延迟或一致性快照"},
+		"pagesFetched":     map[string]any{"type": "integer", "minimum": 1, "description": "本次成功读取且完整校验的消息分页数量，不包含失败页面或此前执行的页面"},
 		"pageSize":         map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "description": "本次底层每页消息数量；续页时使用同一 --limit"},
 		"unknownTypeCount": map[string]any{"type": "integer", "minimum": 0, "description": "下层未返回 singleChat 因而类型未知的会话数量"},
 		"conversations": map[string]any{

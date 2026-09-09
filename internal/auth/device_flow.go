@@ -334,15 +334,10 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if denialReason != "" {
 		_, _ = fmt.Fprintln(p.output(), "")
 		switch denialReason {
-		case "user_forbidden":
-			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织已禁止所有成员使用 CLI")))
+		case "user_forbidden", "user_not_allowed":
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织尚未开启CLI数据访问权限")))
 			_, _ = fmt.Fprintln(p.output(), "")
-			return nil, errors.New(i18n.T("该组织已禁止所有成员使用 CLI"))
-		case "user_not_allowed":
-			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  您不在该组织的 CLI 授权人员范围内")))
-			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织管理员将您加入 CLI 授权人员名单。"))
-			_, _ = fmt.Fprintln(p.output(), "")
-			return nil, errors.New(i18n.T("您不在该组织的 CLI 授权人员范围内，请联系组织管理员"))
+			return nil, errors.New(i18n.T("该组织尚未开启CLI数据访问权限"))
 		case "channel_not_allowed":
 			ch := os.Getenv("DWS_CHANNEL")
 			_, _ = fmt.Fprintf(p.output(), dfRed(i18n.T("⚠️  当前渠道 %s 未获得该组织授权"))+"\n", ch)
@@ -369,8 +364,8 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			return nil, errors.New(i18n.T("认证已失效，请执行 dws auth 重新登录"))
 		default:
 			// cli_not_enabled or unknown — show existing admin-apply flow
-			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织尚未开启 CLI 数据访问权限")))
-			_, _ = fmt.Fprintln(p.output(), i18n.T("   你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。"))
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  您暂无 CLI 数据访问权限")))
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   当前组织未授权您通过 CLI 访问个人数据。"))
 			_, _ = fmt.Fprintln(p.output(), "")
 
 			admins, adminErr := deviceGetAdminsForLoginRegion(ctx, tokenData.AccessToken, p.LoginRegion)
@@ -390,7 +385,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			_, _ = fmt.Fprintln(p.output(), "")
 			_, _ = fmt.Fprintf(p.output(), "   %s%s\n", i18n.T("管理员操作入口："), config.GetDeveloperSettingsURL())
 			_, _ = fmt.Fprintln(p.output(), "")
-			return nil, errors.New(i18n.T("该组织尚未开启 CLI 数据访问权限，请联系管理员开启"))
+			return nil, errors.New(i18n.T("您暂无 CLI 数据访问权限，请联系管理员开启"))
 		}
 	}
 

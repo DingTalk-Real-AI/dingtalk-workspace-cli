@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-07T10:56:17.380807",
+  "generated_at": "2026-09-08T20:09:46.464623",
   "count": 440,
   "results": [
     {
@@ -1415,16 +1415,6 @@
     {
       "suite": "semantic",
       "service": "chat",
-      "command": "+active-conversations",
-      "risk": "read",
-      "status": "reviewed_available",
-      "disposition": "semantic_adapter",
-      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
-      "availability": "available"
-    },
-    {
-      "suite": "semantic",
-      "service": "chat",
       "command": "+at-me",
       "risk": "read",
       "status": "reviewed_available",
@@ -1508,8 +1498,8 @@
       "command": "+category-list-conversations",
       "risk": "read",
       "status": "reviewed_available",
-      "disposition": "schema_leaf",
-      "semantic_delta": "按分组列会话是一对一分页读取；无跨工具编排。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "保留稳定 categoryId 输入合同，并严格校验 conversations 数组、稳定会话身份和分页耗尽；按名称或显式任选时先用 +category-list 发现真实 ID。",
       "availability": "available"
     },
     {
@@ -2365,11 +2355,21 @@
     {
       "suite": "semantic",
       "service": "chat",
+      "command": "+recent-conversations",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将跨会话消息明细查询收口为按 openConversationId 去重的活跃会话列表；自动翻页并计算时间窗内最新消息时间，同时发布可续跑的分页完整性证据。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
       "command": "+search-msg",
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化，可选安全下载命中消息资源，并以 failure ledger 显式报告截断、富化或下载失败。",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型、机器人来源和 reaction 存在性谓词；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化、稳定身份复核和安全资源下载，并以 failure ledger 显式报告截断、富化或下载失败。",
       "availability": "available"
     },
     {
