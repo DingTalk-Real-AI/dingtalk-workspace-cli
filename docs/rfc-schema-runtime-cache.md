@@ -28,9 +28,9 @@ root help 直接遍历刚构造完成的公开树。Schema cache 命中改变的
 
 `NewSchemaSourceRootCommand` 仍可作为声明审计与离线 catalog assembly 的完整 distribution tree。它不是进程入口，不处理用户 argv，也不构成第二套公开运行时。
 
-### 1.2 参考 Lark 的完整树优化方式
+### 1.2 参考 Lxxx 软件的完整树优化方式
 
-Lark CLI 1.0.85 在生产 Build 中每次挂载 utility、service catalog 和 shortcuts，并由同一命令树处理 help 与业务命令。固定源码 `13305ae51b62833c6cd07368be48ae523bb491df` 的本机暖构树约为 905 个 command、7 ms、10.3 MB/op、84.6k allocs/op。
+Lxxx CLI v1.0.85 在生产 Build 中每次挂载 utility、service catalog 和 shortcuts，并由同一命令树处理 help 与业务命令。`Lxxx` 源码（匿名化，不挂公开链接）的本机暖构树约为 905 个 command、7 ms、10.3 MB/op、84.6k allocs/op。
 
 DWS 采用相同的结构选择，并针对约 1,825 个 command 优化完整树：
 
@@ -115,7 +115,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。embedded ide
 | 单树结构 | help/version/schema/config/业务/completion 的进程 root 均包含完整公开产品；不存在 argv 产品路由、Schema 前置执行或 help projection |
 | 完整构树 | 相对本专项父提交，warm `B/op` 至少降低 20%，`allocs/op` 至少降低 8%；ns/op 不得超过 `max(parent ×105%, parent + 1 ms)` |
 | help/version | candidate p50 ≤ `max(main ×105%, main + 3 ms)`；p95 ≤ `max(main ×110%, main + 3 ms)` |
-| root help RSS | native p50 ≤50 MiB、p95 ≤55 MiB，且相对固定 main 的 p50/p95 不回退；同机 Lark 的绝对值和按 command 归一化结果必须进入报告，但因公开节点数不同不作为 release gate |
+| root help RSS | native p50 ≤50 MiB、p95 ≤55 MiB，且相对固定 main 的 p50/p95 不回退；同机 Lxxx 的绝对值和按 command 归一化结果必须进入报告，但因公开节点数不同不作为 release gate |
 | Schema cache | warm leaf 相对 live assembly 的 user CPU p50 至少降低 80%；有效样本 peak RSS ≤100 MiB |
 | 业务命令 | dry-run、mock/get、config 的 p50/p95 相对固定 main 不回退 |
 | 正确性 | help bytes、flags、aliases、validation、Safety、Schema wire、输出和错误分类不变 |
@@ -125,12 +125,12 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。embedded ide
 
 ### 4.3 竞品边界
 
-Lark 的完整构树只用于结构和单位节点资源参考；GWS 用于观察更小程序映像/init 的上限。DWS 约 1,825 个公开节点，Lark 约 905 个，命令面与输出合同也不同，因此竞品绝对 RSS 不替代 DWS 的固定预算和 main 回归门禁。报告必须同时列出节点数、B/op、allocs/op 和端到端 RSS，不能只比较 wall time。
+Lxxx 软件的完整构树只用于结构和单位节点资源参考；Gxx 软件用于观察更小程序映像/init 的上限。DWS 约 1,825 个公开节点，Lxxx 约 905 个，命令面与输出合同也不同，因此竞品绝对 RSS 不替代 DWS 的固定预算和 main 回归门禁。报告必须同时列出节点数、B/op、allocs/op 和端到端 RSS，不能只比较 wall time。
 
 ## 5. 非目标
 
 - 不在本 RFC 内裁剪 open edition 的产品面。
-- 不以 daemon、常驻进程或语言重写追求 GWS 3～4 ms。
+- 不以 daemon、常驻进程或语言重写追求 Gxx 软件 3～4 ms。
 - 不提交生成 Catalog，也不让 cache 成为声明源。
 - 不为 completion 增加尚不存在的 callback 门闩。
 - 不凭代码阅读删除 auth、Safety、Prepare 或业务 cleanup。

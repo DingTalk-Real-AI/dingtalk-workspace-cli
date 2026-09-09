@@ -4,11 +4,11 @@
 
 ## 1. 当前结论
 
-PR 已撤回 selective tree、Schema 前置执行和 root help projection。旧 head 中 calendar 0.85 ms、config 0.36 ms、root help 比 Lark 慢 2.5% 等数字描述的是已删除结构，全部标记为历史结果，不能用于当前 Ready 结论。
+PR 已撤回 selective tree、Schema 前置执行和 root help projection。旧 head 中 calendar 0.85 ms、config 0.36 ms、root help 比 Lxxx 软件慢 2.5% 等数字描述的是已删除结构，全部标记为历史结果，不能用于当前 Ready 结论。
 
 完整构树本地父子对照中，DWS 始终构造约 1,825 个 command，B/op 降低 **22.8%**，allocs/op 降低 **9.8%**，ns/op 变化为 **+0.3%**。clean head `a8376f92` 的 [native workflow](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34080469082) 已在 Darwin/arm64 与 Linux/amd64 全绿，Schema cache、完整 Go suite、race、身份一致性和五维测量均完成。
 
-root help 延迟已在两平台快于 Lark。RSS 相对固定 main 在 Linux 降低 **7.7%**、Darwin 降低 **8.3%**，p50/p95 均低于 RFC 的 50/55 MiB 产品预算。Darwin 的绝对 RSS 也低于 Lark；Linux 为 47.68 MiB，对比 Lark 42.85 MiB，仍高 **11.3%**。该差值继续公开，但 Lark 只有约一半节点，不能作为绝对 release gate，否则会激励 projection/裁树。后续通过更紧凑的通用 typed service builder 继续压缩；不允许恢复 projection、selective tree 或 launcher。
+root help 延迟已在两平台快于 Lxxx 软件。RSS 相对固定 main 在 Linux 降低 **7.7%**、Darwin 降低 **8.3%**，p50/p95 均低于 RFC 的 50/55 MiB 产品预算。Darwin 的绝对 RSS 也低于 Lxxx 软件；Linux 为 47.68 MiB，对比 Lxxx 42.85 MiB，仍高 **11.3%**。该差值继续公开，但 Lxxx 软件只有约一半节点，不能作为绝对 release gate，否则会激励 projection/裁树。后续通过更紧凑的通用 typed service builder 继续压缩；不允许恢复 projection、selective tree 或 launcher。
 
 ## 2. 方法与版本
 
@@ -21,11 +21,11 @@ root help 延迟已在两平台快于 Lark。RSS 相对固定 main 在 Linux 降
 - 两边均构造完整公开 Cobra tree，不执行 handler；
 - 端到端 macOS wall time 受本机安全扫描影响，本轮不采用。
 
-Lark 参考固定在 v1.0.85 源码 SHA `13305ae51b62833c6cd07368be48ae523bb491df`：
+Lxxx 参考固定在 v1.0.85，`Lxxx` 源码（匿名化，不挂公开链接）：
 
-- [生产 Build 挂载完整 utility/service/shortcut tree](https://github.com/larksuite/cli/blob/13305ae51b62833c6cd07368be48ae523bb491df/cmd/build.go#L273-L294)
-- [completion 只按 invocation 开启 callback 注册](https://github.com/larksuite/cli/blob/13305ae51b62833c6cd07368be48ae523bb491df/internal/cmdutil/completion.go#L12-L37)
-- [v1.0.85 release 使用 Go 1.23](https://github.com/larksuite/cli/blob/13305ae51b62833c6cd07368be48ae523bb491df/.github/workflows/release.yml#L98-L105)
+- 生产 Build 挂载完整 utility/service/shortcut tree
+- completion 只按 invocation 开启 callback 注册
+- v1.0.85 release 使用 Go 1.23
 
 ## 3. 完整命令树
 
@@ -34,14 +34,14 @@ Lark 参考固定在 v1.0.85 源码 SHA `13305ae51b62833c6cd07368be48ae523bb491d
 | DWS 父提交 `c0131d35` | ≈1,825 | 13,503,654 | 16,431,941 | 164,227 |
 | DWS implementation commit `34ce7493` | ≈1,825 | 13,544,096 | 12,681,568 | 148,166 |
 | DWS 变化 | — | **+0.3%** | **-22.8%** | **-9.8%** |
-| Lark v1.0.85 本机参考 | ≈905 | ≈7,000,000 | ≈10,300,000 | ≈84,600 |
+| Lxxx v1.0.85 本机参考 | ≈905 | ≈7,000,000 | ≈10,300,000 | ≈84,600 |
 
-DWS 当前完整树总 B/op 约为 Lark 的 1.23 倍、allocs/op 约 1.75 倍，而 command 数约 2.02 倍。粗略每节点为：
+DWS 当前完整树总 B/op 约为 Lxxx 的 1.23 倍、allocs/op 约 1.75 倍，而 command 数约 2.02 倍。粗略每节点为：
 
 | 实现 | KiB / command | alloc / command |
 |---|---:|---:|
 | DWS 当前 | ≈6.95 | ≈81.2 |
-| Lark 参考 | ≈11.4 | ≈93.5 |
+| Lxxx 参考 | ≈11.4 | ≈93.5 |
 
 每节点数据只能说明 DWS 的主要总量差距来自更大的公开命令面，不能证明单个节点复杂度等价。DWS 仍需继续 profile annotations、result-schema normalization 和 pflag maps，但不应通过减少 runtime tree 或复制 help surface 降低总量。
 
@@ -73,7 +73,7 @@ root help 与 version 现在都构造完整 tree。帮助直接从同一 runtime
 
 30 次交错 native 样本：
 
-| 平台 | DWS help wall p50/p95 | Lark help wall p50/p95 | DWS RSS p50/p95 | Lark RSS p50/p95 | 结论 |
+| 平台 | DWS help wall p50/p95 | Lxxx help wall p50/p95 | DWS RSS p50/p95 | Lxxx RSS p50/p95 | 结论 |
 |---|---:|---:|---:|---:|---|
 | Linux/amd64 | 44.05 / 45.99 ms | 47.11 / 48.88 ms | 47.68 / 49.88 MiB | 42.85 / 43.35 MiB | wall 快 6.5%；RSS 高 11.3%，产品预算通过 |
 | Darwin/arm64 | 37.26 / 51.45 ms | 45.06 / 53.49 ms | 41.91 / 42.17 MiB | 44.43 / 44.91 MiB | wall 快 17.3%；RSS 低 5.7%，通过 |
@@ -101,19 +101,19 @@ calendar list/get、dry-run、mock、config 和 event utility 均承担同一完
 
 ## 7. 整体运行内存
 
-wait4 native 数据确认，完整树优化相对固定 main 将 root help RSS p50 从 51.66 降到 47.68 MiB（Linux，-7.7%），从 45.70 降到 41.91 MiB（Darwin，-8.3%）。B/op 的下降确实传导到了进程 RSS。两平台 p50/p95 都通过 50/55 MiB 预算；Linux 仍未压过节点数约为一半的 Lark。
+wait4 native 数据确认，完整树优化相对固定 main 将 root help RSS p50 从 51.66 降到 47.68 MiB（Linux，-7.7%），从 45.70 降到 41.91 MiB（Darwin，-8.3%）。B/op 的下降确实传导到了进程 RSS。两平台 p50/p95 都通过 50/55 MiB 预算；Linux 仍未压过节点数约为一半的 Lxxx 软件。
 
 下一阶段只优化同一完整树：把分散的 helper 构造逐步收敛到紧凑 typed service descriptors 与通用 builder，减少每节点 Cobra/pflag/annotation 常驻对象和构造期触达的代码页。GC 参数实验没有采用：本机 `GOGC/GOMEMLIMIT` 只降低约 0.5 MiB，且增加延迟，不能解决结构性差距。
 
-## 8. Lark 与 GWS
+## 8. Lxxx 与 Gxx
 
-Lark 证明了“每次完整构树”本身不是 root help projection 的理由。它的优势来自较小的命令面、紧凑 typed metadata、统一 service builder，以及执行期工作不进入 Build。
+Lxxx 软件证明了“每次完整构树”本身不是 root help projection 的理由。它的优势来自较小的命令面、紧凑 typed metadata、统一 service builder，以及执行期工作不进入 Build。
 
-GWS 0.22.5 的历史同机 native 启动约 3～4 ms、RSS 约 8～11 MiB。其优势主要在更小的 executable/init/runtime 与命令面。本 RFC 不通过减少 DWS 产品面、增加第二 runtime 或 daemon 追这个区间。
+Gxx 软件 0.22.5 的历史同机 native 启动约 3～4 ms、RSS 约 8～11 MiB。其优势主要在更小的 executable/init/runtime 与命令面。本 RFC 不通过减少 DWS 产品面、增加第二 runtime 或 daemon 追这个区间。
 
 clean-head native p50 对比：
 
-| 平台/场景 | DWS | Lark 1.0.85 | GWS 0.22.5 |
+| 平台/场景 | DWS | Lxxx 1.0.85 | Gxx 0.22.5 |
 |---|---:|---:|---:|
 | Linux Schema | 58.32 ms / 54.42 MiB | 47.08 ms / 43.11 MiB | 4.08 ms / 9.05 MiB |
 | Linux root help | 44.05 ms / 47.68 MiB | 47.11 ms / 42.85 MiB | 3.03 ms / 6.90 MiB |
@@ -122,7 +122,7 @@ clean-head native p50 对比：
 | Darwin root help | 37.26 ms / 41.91 MiB | 45.06 ms / 44.43 MiB | 8.08 ms / 8.00 MiB |
 | Darwin dry-run | 38.47 ms / 41.93 MiB | 45.07 ms / 44.41 MiB | 9.07 ms / 10.81 MiB |
 
-每格为 wall p50 / RSS p50。Lark/GWS 是诊断；固定 main 回归仍是产品 release gate。DWS Schema 还包含完整树与认证 cache read；竞品 Schema/业务输出合同不等价。
+每格为 wall p50 / RSS p50。Lxxx/Gxx 是诊断；固定 main 回归仍是产品 release gate。DWS Schema 还包含完整树与认证 cache read；竞品 Schema/业务输出合同不等价。
 
 ## 9. 当前验收状态
 
@@ -133,7 +133,7 @@ clean-head native p50 对比：
 - [x] clean head Go 1.25.9 双平台完整 suite、race、cache 与性能 workflow。
 - [x] Darwin/arm64 native full/race/performance artifact。
 - [x] Linux/amd64 native full/race/performance artifact。
-- [x] root help RSS 与 Lark 的新 head 对比已记录。
+- [x] root help RSS 与 Lxxx 的新 head 对比已记录。
 - [x] root help RSS 两平台 p50 ≤50 MiB、p95 ≤55 MiB，且相对固定 main 降低。
-- [x] Lark 差值与节点数差异已记录；Linux +11.3% 作为后续压缩诊断，不替代产品预算。
+- [x] Lxxx 差值与节点数差异已记录；Linux +11.3% 作为后续压缩诊断，不替代产品预算。
 - [ ] 正式 release 最终签名制品与安装验证。

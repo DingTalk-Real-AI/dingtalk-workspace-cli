@@ -6,9 +6,9 @@
 
 ## 1. 问题
 
-CI run `34097698630`（head `9e52edcc`，两平台 `complete=true`、0 失败）实测 DWS 对固定 Lark 1.0.85 的 wall p50：
+CI run `34097698630`（head `9e52edcc`，两平台 `complete=true`、0 失败）实测 DWS 对固定 Lxxx 1.0.85 的 wall p50：
 
-| 负载 | linux DWS / Lark | darwin DWS / Lark |
+| 负载 | linux DWS / Lxxx | darwin DWS / Lxxx |
 |---|---|---|
 | help | 43.98 / 47.26 | 44.39 / 49.27 |
 | version | 43.37 / 46.00 | 41.27 / 50.38 |
@@ -16,13 +16,13 @@ CI run `34097698630`（head `9e52edcc`，两平台 `complete=true`、0 失败）
 | schema | **57.78 / 47.07** | **52.35 / 50.15** |
 | dry-run | 43.49 / 46.88 | 46.17 / 49.35 |
 
-help / version / dry-run 两平台都快于 Lark，但 leaf-help（linux）与 schema（两平台）慢。需关闭的差距：linux schema 10.71 ms、linux leaf-help 4.29 ms、darwin schema 2.20 ms。
+help / version / dry-run 两平台都快于 Lxxx 软件，但 leaf-help（linux）与 schema（两平台）慢。需关闭的差距：linux schema 10.71 ms、linux leaf-help 4.29 ms、darwin schema 2.20 ms。
 
 ## 2. 为什么增量优化不够
 
 差距的构成已量化到阶段级（见 plan §3.5）：
 
-- 完整树构造基线约 44 ms（linux），两平台的 help 都已快于 Lark，说明这一层不是差距来源
+- 完整树构造基线约 44 ms（linux），两平台的 help 都已快于 Lxxx 软件，说明这一层不是差距来源
 - leaf-help 与 schema 的额外成本来自 Schema Meta 读取，与 `BenchmarkRealSchemaFileHit` 的两个阶段耗时精确吻合：linux `selected-...-decode-index` 6.517 ms ≈ leaf-help 差距 6.60 ms；linux `meta-...-decode-lookup` 4.536 ms 是 schema 差距 13.80 ms 的主要部分
 
 关闭 linux leaf-help 需削减 4.29 ms，而整笔 Meta 读取只有 4.536 ms——**需要削减约 95%**。而 protobuf 的 unmarshal 本身就会解码全部字符串字段（约 950 KB/op），只跳过 Go 侧的 `CommandMeta` 转换最多省约 20% 分配。要省 95%，必须让单叶查询根本不解码 Selection 字符串，这需要改 DTO；且即便如此也只是把一条链路削薄，基线仍在。
@@ -32,7 +32,7 @@ help / version / dry-run 两平台都快于 Lark，但 leaf-help（linux）与 s
 1. **「声明即 Catalog」运行时装配**。AGENTS.md 明确无 `cmd_schema_catalog` 的 `//go:generate` 交付步骤，生产必须走 `RegisterSchemaSourceRoot → ResolveSchemaBuild`。装配昂贵 → 需要 verified cache → cache 需要哈希校验 + protobuf 解码 + 全量 `CommandMeta` 转换。**Meta 读取链路的存在本身就是这条决定的代价。**
 2. **每次进程调用构造完整 Cobra 树**。AGENTS.md 禁止 argv-selected product trees、pre-Cobra Schema execution、separate root-help projection。1825 个节点每次全建。
 
-Lark 的 `schema`（47.07 ms）≈ 它的 `help`（47.26 ms），额外成本接近零：命令面约一半（905 vs 1370），且读取时无逐次验证负担。
+Lxxx 软件的 `schema`（47.07 ms）≈ 它的 `help`（47.26 ms），额外成本接近零：命令面约一半（905 vs 1370），且读取时无逐次验证负担。
 
 ## 3. 方案
 
@@ -78,6 +78,6 @@ A 与 C 直接违反 AGENTS.md 的明文规定，必须先修订契约：
 
 ## 6. 验收
 
-目标是两平台全部五个负载的 wall p50 都低于固定 Lark 1.0.85。当前 3/5 达标，A 落地后预期 5/5。
+目标是两平台全部五个负载的 wall p50 都低于固定 Lxxx 1.0.85。当前 3/5 达标，A 落地后预期 5/5。
 
 不通过减少产品面、增加第二 runtime 或 daemon 达成——这条约束继续保留。
