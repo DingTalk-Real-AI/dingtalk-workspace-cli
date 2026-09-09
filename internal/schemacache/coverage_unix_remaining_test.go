@@ -136,6 +136,10 @@ func TestCrossPlatformCoverageUnixReadWriteLockRemainingFaults(t *testing.T) {
 		t.Fatal("ReadRange pread failure accepted")
 	}
 	digest := sha256.Sum256(reg3.Payload[:1])
+	ur.ops = &countingFstatIO{failAt: 1, err: errors.New("range before fstat")}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: digest}); err == nil {
+		t.Fatal("ReadRange before fstat failure accepted")
+	}
 	ur.ops = &countingFstatIO{failAt: 2, err: errors.New("range fstat")}
 	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: digest}); err == nil {
 		t.Fatal("ReadRange final fstat failure accepted")

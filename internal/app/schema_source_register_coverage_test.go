@@ -4,9 +4,11 @@
 package app
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 // TestCrossPlatformCoverageRegisterSchemaRuntimeDelivery covers the production
@@ -28,5 +30,25 @@ func TestCrossPlatformCoverageRegisterSchemaRuntimeDelivery(t *testing.T) {
 	registerSchemaRuntimeDelivery()
 	if !cli.SchemaSourceRootRegistered() {
 		t.Fatal("second registerSchemaRuntimeDelivery cleared Schema source root")
+	}
+}
+
+func TestCrossPlatformCoverageProductionSchemaCacheOptionsPlatformAndDisable(t *testing.T) {
+	t.Setenv(schemaCacheTestEnv, "1")
+	testseam.Swap(t, &schemaCacheGOOS, "windows")
+	testseam.Swap(t, &schemaCacheGOARCH, "amd64")
+	if _, ok := productionSchemaCacheOptions(); ok {
+		t.Fatal("windows cache options enabled")
+	}
+	testseam.Swap(t, &schemaCacheGOOS, runtime.GOOS)
+	testseam.Swap(t, &schemaCacheGOARCH, runtime.GOARCH)
+	t.Setenv(schemaCacheTestEnv, "1")
+	t.Setenv(schemaCacheDisableEnv, "1")
+	options, ok := productionSchemaCacheOptions()
+	if !ok {
+		t.Fatal("supported platform should still return options")
+	}
+	if options.RuntimeEligible == nil || options.RuntimeEligible() {
+		t.Fatal("disable env still eligible")
 	}
 }
