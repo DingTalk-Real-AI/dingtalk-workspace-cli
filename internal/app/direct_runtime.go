@@ -46,6 +46,8 @@ const (
 	defaultPATServerID    = "abc3c880fb90f04b52d1426aaf093766e5fc9ec38411688cbb74df42a584d374"
 	devappProductID       = "devapp"
 	devappServerPath      = "/server/op-app"
+	mcpdevProductID       = "mcpdev"
+	mcpdevServerPath      = "/server/62445d67b5b7971653fbd0f7c8092ee3b9ca59ce51a15ad0a1e0c0d7aac4ede5"
 	recruitProductID      = "recruit"
 )
 
@@ -54,6 +56,13 @@ const (
 // (production by default, pre when ~/.dws/mcp_url points at the pre gateway).
 func devappMCPEndpoint() string {
 	return defaultPATGatewayBaseURL() + devappServerPath
+}
+
+// mcpdevMCPEndpoint resolves the MCP development scaffold endpoint. It follows
+// the configured gateway base URL rather than pinning one environment, matching
+// devapp; the server path is the same registration on both gateways.
+func mcpdevMCPEndpoint() string {
+	return defaultPATGatewayBaseURL() + mcpdevServerPath
 }
 
 func defaultPATServerDescriptor() mcptypes.ServerDescriptor {
@@ -249,11 +258,14 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 		}
 	}
 
-	// Hardcoded built-in: devapp is pinned to the open-platform app-management
-	// MCP server in source (NOT service discovery), per product decision.
+	// Hardcoded built-in: devapp and mcpdev are helper-only products pinned to
+	// their MCP servers in source (NOT service discovery), per product decision.
 	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
-		if candidate == devappProductID {
+		switch candidate {
+		case devappProductID:
 			return devappMCPEndpoint(), true
+		case mcpdevProductID:
+			return mcpdevMCPEndpoint(), true
 		}
 	}
 
@@ -401,9 +413,10 @@ func DirectRuntimeProductIDs() map[string]bool {
 	dynamicMu.RLock()
 	defer dynamicMu.RUnlock()
 
-	ids := make(map[string]bool, len(dynamicProducts)+3)
+	ids := make(map[string]bool, len(dynamicProducts)+4)
 	ids[defaultPATProductID] = true
 	ids[devappProductID] = true
+	ids[mcpdevProductID] = true
 	ids[recruitProductID] = true
 	for key := range dynamicProducts {
 		ids[key] = true
