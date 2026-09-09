@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
@@ -39,7 +38,21 @@ type localSchemaCacheIdentityRecord struct {
 	PayloadIndexSHA256 string `json:"payload_index_sha256"`
 }
 
-var schemaCacheExecutable = os.Executable
+type localIdentityTempFile interface {
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+	Name() string
+}
+
+var (
+	schemaCacheExecutable       = os.Executable
+	schemaCacheJSONMarshal      = json.Marshal
+	createLocalIdentityTempFile = func(dir, pattern string) (localIdentityTempFile, error) {
+		return os.CreateTemp(dir, pattern)
+	}
+)
 
 // SchemaCacheBinaryFingerprint identifies the running executable so a persisted
 // local identity cannot be reused by a different binary. Tests may pin the
@@ -57,7 +70,7 @@ func SchemaCacheBinaryFingerprint() string {
 	if info, statErr := os.Stat(exe); statErr == nil {
 		fmt.Fprintf(&canonical, "\x00%d\x00%d", info.Size(), info.ModTime().UnixNano())
 	}
-	if bi, ok := debug.ReadBuildInfo(); ok {
+	if bi, ok := readSchemaCacheBuildInfo(); ok {
 		canonical.WriteByte(0)
 		canonical.WriteString(bi.GoVersion)
 		canonical.WriteByte(0)
@@ -163,13 +176,13 @@ func persistLocalSchemaCacheIdentity(directory string, identity SchemaCacheIdent
 		PayloadIndexLength: raw.PayloadIndexLength,
 		PayloadIndexSHA256: raw.PayloadIndexSHA256,
 	}
-	payload, err := json.Marshal(record)
+	payload, err := schemaCacheJSONMarshal(record)
 	if err != nil {
 		return err
 	}
 	payload = append(payload, '\n')
 	finalName := LocalSchemaCacheIdentityFileName(fingerprint)
-	staging, err := os.CreateTemp(directory, ".identity-*.tmp")
+	staging, err := createLocalIdentityTempFile(directory, ".identity-*.tmp")
 	if err != nil {
 		return err
 	}

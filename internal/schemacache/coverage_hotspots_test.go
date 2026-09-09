@@ -248,6 +248,18 @@ func TestCrossPlatformCoverageSharedValidationAndIOFaults(t *testing.T) {
 	if err := validateAncestryDirectory(fd, counters, failFstatIO{err: errors.New("fstat failed")}); err == nil {
 		t.Fatal("ancestry fstat failure accepted")
 	}
+	notDir := filepath.Join(base, "ancestry-not-dir")
+	if err := os.WriteFile(notDir, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileFD, err := unix.Open(notDir, unix.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateAncestryDirectory(fileFD, counters, realUnixIO{}); err == nil {
+		t.Fatal("non-directory ancestry accepted")
+	}
+	_ = unix.Close(fileFD)
 
 	cache, _, identity := openTestCache(t, nil)
 	meta := testArtifact(KindMeta, []byte("eintr-meta"))

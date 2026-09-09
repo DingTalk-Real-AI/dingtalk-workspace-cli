@@ -21,6 +21,15 @@ import (
 	"google.golang.org/protobuf/reflect/protodesc"
 )
 
+var (
+	marshalSchemaCacheFileDescriptor = marshalSchemaCacheFileDescriptorDefault
+	readSchemaCacheBuildInfo         = debug.ReadBuildInfo
+)
+
+func marshalSchemaCacheFileDescriptorDefault() ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(protodesc.ToFileDescriptorProto(schemacachepb.File_schema_cache_proto))
+}
+
 // IdentityFromArtifacts derives the authenticated Schema cache identity of one
 // live declaration assembly. Production never embeds this at compile time;
 // each machine generates it from the running binary's declarations.
@@ -41,7 +50,7 @@ func IdentityFromArtifacts(edition string, artifacts SchemaCacheArtifacts) (Sche
 	if err != nil {
 		return SchemaCacheIdentity{}, fmt.Errorf("payload index pins: %w", err)
 	}
-	descriptorBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(protodesc.ToFileDescriptorProto(schemacachepb.File_schema_cache_proto))
+	descriptorBytes, err := marshalSchemaCacheFileDescriptor()
 	if err != nil {
 		return SchemaCacheIdentity{}, fmt.Errorf("marshal Schema cache descriptor: %w", err)
 	}
@@ -142,7 +151,7 @@ func localSchemaCacheBuildID(input localSchemaCacheBuildIDInput) [sha256.Size]by
 }
 
 func protobufModuleVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
+	if info, ok := readSchemaCacheBuildInfo(); ok {
 		for _, dependency := range info.Deps {
 			if dependency.Path == "google.golang.org/protobuf" {
 				return dependency.Version
