@@ -41,7 +41,7 @@ func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
 			},
 		},
 		"dingtalk-tag.get_dws_auth_code": {
-			"dingtalk-tag manage get-dws-auth-code", "get_dws_auth_code", "read", "high", "not_required",
+			"dingtalk-tag manage login", "get_dws_auth_code", "read", "high", "not_required",
 			map[string]string{"agent-uuid": "agentUuid", "client-id": "clientId"},
 		},
 		"dingtalk-tag.update_digital_employee_draft": {

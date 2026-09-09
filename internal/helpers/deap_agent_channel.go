@@ -54,8 +54,8 @@ type digitalEmployeeBinding struct {
 func newDeapConnectCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:   "connect",
-		Short: "把已发布的本地数字员工接入 DSH",
-		Long:  "校验已发布数字员工的 mainProgramType=local_agent，以当前主管身份获取一次性授权信息，使用响应中的 dwsClientId 换票并保存独立 Profile，再通过 stdin 幂等注册到 DSH。connect 不创建、修改或发布数字员工，也不会切换当前主管 Profile；注册后由用户或宿主重启 DSH。",
+		Short: "把已发布的数字员工接入本地 Agent/DSH",
+		Long:  "用于企业本地 Agent 接入：校验已发布数字员工的 mainProgramType=local_agent，以当前主管身份获取一次性授权信息，使用响应中的 dwsClientId 换票并保存独立 Profile，再通过 stdin 幂等注册到 DSH。A2A 或其他需要登录数字员工 DWS 的场景不要使用 connect，应使用 dws dingtalk-tag manage login。connect 不创建、修改或发布数字员工，也不会切换当前主管 Profile；注册后由用户或宿主重启 DSH。",
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "已存在且已发布的数字员工 ID", Required: true, Trim: true},
 			{Name: "channel", Usage: "本地 Agent 渠道；第一期固定为 dsh", Required: true, Trim: true, Enum: []string{"dsh"}},
@@ -79,13 +79,13 @@ func newDeapConnectCommand() *cobra.Command {
 				ProductID: dingtalkTagProductID, Name: "connect",
 				CanonicalPath: "dingtalk-tag.connect", CLIPath: "dingtalk-tag connect", PrimaryCLIPath: "dingtalk-tag connect",
 			},
-			Description: "把一个已发布的 local_agent 数字员工安全接入 DSH；只编排授权、Profile 落盘和 DSH 注册。",
+			Description: "把一个已发布的 local_agent 数字员工安全接入企业本地 Agent/DSH；只编排授权、Profile 落盘和 DSH 注册。",
 			DryRun:      deapAgentDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "DEAP 授权、DWS managed exchange 与本地 DSH 注册的受控编排"},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "把已有且已发布的 local_agent 数字员工接入本地 DSH",
-				UseWhen:      []string{"用户要把已有数字员工接入 DSH，或创建发布后继续完成 DSH 接入"},
-				AvoidWhen:    []string{"只创建、修改或发布数字员工时使用 manage；connect 本身不会更改数字员工配置"},
+				AgentSummary: "把已有且已发布的 local_agent 数字员工接入企业本地 Agent/DSH",
+				UseWhen:      []string{"企业要把已有数字员工接入本地 Agent/DSH，或创建发布后继续完成本地 DSH 接入"},
+				AvoidWhen:    []string{"A2A 或其他需要登录数字员工 DWS 的场景使用 manage login；只创建、修改或发布数字员工时使用 manage；connect 本身不会更改数字员工配置"},
 				Examples:     []string{"dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --dry-run --format json"},
 			},
 			Parameters: []contract.ParamDecl{

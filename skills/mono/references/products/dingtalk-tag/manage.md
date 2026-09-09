@@ -44,17 +44,17 @@ Example:
 
 `detail` 的 `--type` 默认为 `draft`；需要核对已发布配置时显式传 `--type published`。所有数字员工 ID 统一使用 `agentUuid` / `--agent-uuid`，不要混用其它旧 ID 命名。
 
-## get-dws-auth-code — 获取临时 DWS 授权码
+## login — 登录数字员工 DWS
 
 ```
 Usage:
-  dws dingtalk-tag manage get-dws-auth-code --agent-uuid <agentUuid> [--client-id <appId>]
+  dws dingtalk-tag manage login --agent-uuid <agentUuid> [--client-id <appId>]
 Flags:
   --agent-uuid   必填，数字员工 ID
   --client-id    可选，用于授权的应用 ID；不传时由服务端选择默认应用
 ```
 
-固定调用 MCP 工具 `get_dws_auth_code`。服务端响应结构为：
+`login` 用于 A2A 或其他需要登录数字员工 DWS 的场景。企业接入本地 Agent/DSH 应使用 `dws dingtalk-tag connect`，不要使用 `manage login`。该命令底层仍固定调用 MCP 工具 `get_dws_auth_code`，服务端响应结构为：
 
 ```json
 {
