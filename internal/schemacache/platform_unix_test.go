@@ -318,8 +318,15 @@ func TestCrossPlatformCoverageStickyWorldWritableAncestryIsAccepted(t *testing.T
 	if err := os.MkdirAll(sticky, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(sticky, 0o1777); err != nil {
+	if err := os.Chmod(sticky, os.ModeSticky|0o777); err != nil {
 		t.Fatal(err)
+	}
+	var st unix.Stat_t
+	if err := unix.Stat(sticky, &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode&unix.S_ISVTX == 0 {
+		t.Fatalf("test setup did not set Unix sticky on %s: mode=%#o", sticky, st.Mode)
 	}
 	base := filepath.Join(sticky, "dws-shared")
 	fd, path, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false, true)
