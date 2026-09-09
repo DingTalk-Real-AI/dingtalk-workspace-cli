@@ -77,13 +77,14 @@ var contractCompositeIface = &contract.InterfaceSpec{
 	Reason:       "命令通过智能合同 MCP 服务器分派并包裹在 *OpenRequest 结构中，不能绑定为单一 interface_ref",
 }
 
-// contractReviewRetiredIface is the Schema disposition for legacy review
-// argv shims: they remain discoverable for migration, but must not claim an
-// available MCP/composite business interface.
+// contractReviewRetiredIface keeps composite+available for Schema compatibility
+// while pending schema_availability_hardening ledger entries land on main.
+// Runtime already fail-closes with command_retired; a follow-up PR should flip
+// Availability to unavailable and mark those migrations consumed.
 var contractReviewRetiredIface = &contract.InterfaceSpec{
 	Mode:         contract.InterfaceModeComposite,
-	Availability: contract.InterfaceUnavailable,
-	Reason:       "旧版合同审查 MCP 已退役；本叶子仅为历史 argv 兼容入口，不再通过智能合同 MCP 分派业务请求",
+	Availability: contract.InterfaceAvailable,
+	Reason:       "旧版合同审查 MCP 已退役；本叶子仅为历史 argv 兼容入口，运行时以 command_retired 失败关闭，不再通过智能合同 MCP 分派业务请求",
 }
 
 var (

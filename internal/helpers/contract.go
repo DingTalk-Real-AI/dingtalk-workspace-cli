@@ -334,16 +334,11 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	reviewCreateCmd := &cobra.Command{
 		Use:        "create",
 		Short:      "不再支持：旧版创建审查任务兼容入口",
-		Long:       `历史兼容入口。旧 MCP createContractReviewTask 已退役；仍校验 --file JSON 形状，但以非零退出返回 command_retired，不能创建审查任务。`,
+		Long:       `历史兼容入口。旧 MCP createContractReviewTask 已退役；进入 RunE 后立即以非零退出返回 command_retired，不再读取 --file / stdin。`,
 		Deprecated: reviewDeprecated,
 		Example: `  dws contract review create --file ./review_request.json --format json
   cat review_request.json | dws contract review create --file - --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Keep historical --file validation so Interface/Schema requiredness stays intact,
-			// then fail closed instead of calling retired MCP tools.
-			if _, err := readContractJSONPayload(cmd); err != nil {
-				return err
-			}
 			return retiredContractReviewError("dws contract review create")
 		},
 	}
@@ -351,14 +346,11 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	reviewAnalysisCmd := &cobra.Command{
 		Use:        "analysis",
 		Short:      "不再支持：旧版合同解析兼容入口",
-		Long:       `历史兼容入口。旧 MCP contractAnalysis 已退役；仍校验 --file JSON 形状，但以非零退出返回 command_retired，不能解析合同或返回推荐模型。`,
+		Long:       `历史兼容入口。旧 MCP contractAnalysis 已退役；进入 RunE 后立即以非零退出返回 command_retired，不再读取 --file / stdin。`,
 		Deprecated: reviewDeprecated,
 		Example: `  dws contract review analysis --file ./analysis_request.json --format json
   cat analysis_request.json | dws contract review analysis --file - --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := readContractJSONPayload(cmd); err != nil {
-				return err
-			}
 			return retiredContractReviewError("dws contract review analysis")
 		},
 	}
@@ -366,18 +358,10 @@ sealTypes（印章类型）: contract_seal(合同章), common_seal(公章), lega
 	reviewResultCmd := &cobra.Command{
 		Use:        "result",
 		Short:      "不再支持：旧版审查结果查询兼容入口",
-		Long:       `历史兼容入口。旧 MCP queryContractReviewResult 已退役；仍校验必填 flag，但以非零退出返回 command_retired，不能查询审查结果。`,
+		Long:       `历史兼容入口。旧 MCP queryContractReviewResult 已退役；进入 RunE 后立即以非零退出返回 command_retired，不再校验旧业务参数。`,
 		Deprecated: reviewDeprecated,
 		Example:    `  dws contract review result --task-id "MjIzODAwMkFJX1JFVklFVw==" --review-type AI_REVIEW --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			taskID := strings.TrimSpace(MustGetStringFlag(cmd, "task-id"))
-			if taskID == "" {
-				return fmt.Errorf("--task-id 为必填参数")
-			}
-			reviewType := strings.TrimSpace(MustGetStringFlag(cmd, "review-type"))
-			if reviewType == "" {
-				return fmt.Errorf("--review-type 为必填参数")
-			}
 			return retiredContractReviewError("dws contract review result")
 		},
 	}
