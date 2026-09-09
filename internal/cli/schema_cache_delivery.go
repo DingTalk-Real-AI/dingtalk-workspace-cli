@@ -170,10 +170,10 @@ type schemaCacheRuntime struct {
 	// freshIndex is seeded by the repair path after a republish so the next
 	// read uses the rebuilt generation without reopening.
 	freshIndex atomic.Pointer[schemaruntime.DecodedSchemaPayloadIndex]
-	// prewarm holds the speculative read started at root-command build. It is
-	// assigned before its goroutine starts and published by closing done, so
-	// readers that observe a non-nil prewarm may read the fields after done.
-	prewarm *schemaCachePrewarm
+	// prewarm is published exactly once with CompareAndSwap. The probe
+	// goroutine writes cache/index/payloads before closing done, so readers
+	// that observe a non-nil pointer may read those fields after done.
+	prewarm atomic.Pointer[schemaCachePrewarm]
 	// payloadHandle caches one open payloads file for the process lifetime so
 	// the hot path pays one open instead of one open per range. Failures are
 	// never cached: a repair must be able to retry the open.
@@ -212,11 +212,13 @@ func PrewarmSchemaCache() {
 		return
 	}
 	r := registration.runtime
-	if r.prewarm != nil || !schemaCacheIdentityReady(r.options.Identity) {
+	if !schemaCacheIdentityReady(r.options.Identity) {
 		return
 	}
 	pw := &schemaCachePrewarm{done: make(chan struct{})}
-	r.prewarm = pw
+	if !r.prewarm.CompareAndSwap(nil, pw) {
+		return
+	}
 	go func() {
 		defer close(pw.done)
 		options := []schemacache.Option{schemacache.WithNoCreate()}
@@ -270,12 +272,18 @@ func (r *schemaCacheRuntime) adoptGeneratedIdentity(identity SchemaCacheIdentity
 	}
 }
 
+func (r *schemaCacheRuntime) settledPrewarm() *schemaCachePrewarm {
+	pw := r.prewarm.Load()
+	if pw == nil {
+		return nil
+	}
+	<-pw.done
+	return pw
+}
+
 func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
-	if pw := r.prewarm; pw != nil {
-		<-pw.done
-		if pw.cache != nil {
-			return pw.cache, nil
-		}
+	if pw := r.settledPrewarm(); pw != nil && pw.cache != nil {
+		return pw.cache, nil
 	}
 	r.openOnce.Do(func() {
 		options := []schemacache.Option{}
@@ -323,11 +331,8 @@ func (r *schemaCacheRuntime) loadPayloadIndex() (schemaruntime.DecodedSchemaPayl
 	if index := r.freshIndex.Load(); index != nil {
 		return *index, nil
 	}
-	if pw := r.prewarm; pw != nil {
-		<-pw.done
-		if pw.indexErr == nil {
-			return pw.index, nil
-		}
+	if pw := r.settledPrewarm(); pw != nil && pw.indexErr == nil {
+		return pw.index, nil
 	}
 	r.indexOnce.Do(func() {
 		r.index, r.indexErr = r.readPayloadIndex()
@@ -376,12 +381,9 @@ func (r *schemaCacheRuntime) payloadsHandle() (*schemacache.Registry, error) {
 	if r.payloadHandle != nil {
 		return r.payloadHandle, nil
 	}
-	if pw := r.prewarm; pw != nil {
-		<-pw.done
-		if pw.payloads != nil {
-			r.payloadHandle = pw.payloads
-			return r.payloadHandle, nil
-		}
+	if pw := r.settledPrewarm(); pw != nil && pw.payloads != nil {
+		r.payloadHandle = pw.payloads
+		return r.payloadHandle, nil
 	}
 	cache, err := r.opened()
 	if err != nil {
@@ -406,12 +408,9 @@ func (r *schemaCacheRuntime) resetPayloadsHandle() {
 		_ = r.payloadHandle.Close()
 		r.payloadHandle = nil
 	}
-	if pw := r.prewarm; pw != nil {
-		<-pw.done
-		if pw.payloads != nil {
-			_ = pw.payloads.Close()
-			pw.payloads = nil
-		}
+	if pw := r.settledPrewarm(); pw != nil && pw.payloads != nil {
+		_ = pw.payloads.Close()
+		pw.payloads = nil
 	}
 }
 

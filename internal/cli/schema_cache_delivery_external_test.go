@@ -25,6 +25,9 @@ import (
 )
 
 func TestCrossPlatformCoverageSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
+	if schemaCacheRaceInstrumentation {
+		t.Skip("race:cli uses TestCrossPlatformCoverageSchemaCacheRealConcurrentRepair to stay inside the 25m shard budget")
+	}
 	testPersistentSchemaCacheRealDelivery(t, true)
 }
 
@@ -41,14 +44,7 @@ func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	configureSchemaCacheTestHome(t)
-	resolved, err := cli.ResolveSchemaBuild(app.NewSchemaSourceRootCommand())
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolved, artifacts := loadSharedRealSchemaCacheArtifacts(t)
 	if exhaustive {
 		if err := artifacts.ValidateRoundTrip(); err != nil {
 			t.Fatal(err)
@@ -358,14 +354,7 @@ func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	configureSchemaCacheTestHome(t)
-	resolved, err := cli.ResolveSchemaBuild(app.NewSchemaSourceRootCommand())
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, artifacts := loadSharedRealSchemaCacheArtifacts(t)
 	identity := testSchemaCacheIdentity(t, artifacts)
 	cache, err := schemacache.Open(identity.Edition)
 	if err != nil {
@@ -425,14 +414,7 @@ func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
 	// A prior test's live render populates the live catalog, which disables
 	// the persistent fast path; reset so this test is order-independent.
 	cli.RestorePackageCLISchemaDeliveryForTest()
-	resolved, err := cli.ResolveSchemaBuild(app.NewSchemaSourceRootCommand())
-	if err != nil {
-		t.Fatal(err)
-	}
-	artifacts, err := cli.BuildSchemaCacheArtifacts(resolved)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolved, artifacts := loadSharedRealSchemaCacheArtifacts(t)
 	identity := testSchemaCacheIdentity(t, artifacts)
 
 	// A missing cache must leave the filesystem untouched.
@@ -548,6 +530,28 @@ func executeSchemaLeafCommand(t *testing.T, args ...string) []byte {
 		t.Fatalf("schema %v: %v", args, err)
 	}
 	return out.Bytes()
+}
+
+var (
+	sharedRealSchemaCacheArtifactsOnce sync.Once
+	sharedRealSchemaCacheResolved      cli.ResolvedSchemaBuild
+	sharedRealSchemaCacheArtifacts     cli.SchemaCacheArtifacts
+	sharedRealSchemaCacheArtifactsErr  error
+)
+
+func loadSharedRealSchemaCacheArtifacts(t *testing.T) (cli.ResolvedSchemaBuild, cli.SchemaCacheArtifacts) {
+	t.Helper()
+	sharedRealSchemaCacheArtifactsOnce.Do(func() {
+		sharedRealSchemaCacheResolved, sharedRealSchemaCacheArtifactsErr = cli.ResolveSchemaBuild(app.NewSchemaSourceRootCommand())
+		if sharedRealSchemaCacheArtifactsErr != nil {
+			return
+		}
+		sharedRealSchemaCacheArtifacts, sharedRealSchemaCacheArtifactsErr = cli.BuildSchemaCacheArtifacts(sharedRealSchemaCacheResolved)
+	})
+	if sharedRealSchemaCacheArtifactsErr != nil {
+		t.Fatal(sharedRealSchemaCacheArtifactsErr)
+	}
+	return sharedRealSchemaCacheResolved, sharedRealSchemaCacheArtifacts
 }
 
 func configureSchemaCacheTestHome(t *testing.T) {

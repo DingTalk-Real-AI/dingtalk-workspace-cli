@@ -7,6 +7,7 @@ import (
 	"errors"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
@@ -54,6 +55,31 @@ func TestCrossPlatformCoverageSchemaProductMemoizationRepair(t *testing.T) {
 	got, err := r.cachedProduct("calendar")
 	if err != nil || len(got.Registry.Products) != 1 || got.Registry.Products[0].ID != "calendar" {
 		t.Fatalf("successful repair did not replace failed memoization: %#v, %v", got, err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheConcurrentPrewarmPublish(t *testing.T) {
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	identity := coverageSchemaCacheIdentity()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, Identity: identity, GOOS: "linux", GOARCH: "amd64",
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var wait sync.WaitGroup
+	for range 16 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			PrewarmSchemaCache()
+		}()
+	}
+	wait.Wait()
+	AwaitSchemaCachePrewarmForTest()
+	runtimeCache := activeSchemaCacheRuntime()
+	if runtimeCache == nil || runtimeCache.prewarm.Load() == nil {
+		t.Fatal("concurrent prewarm did not publish exactly one probe")
 	}
 }
 

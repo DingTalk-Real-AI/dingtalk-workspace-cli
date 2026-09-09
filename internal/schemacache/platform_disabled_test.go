@@ -9,7 +9,7 @@ import (
 
 func TestCrossPlatformCoverageDisabledPlatformDoesNoCacheIO(t *testing.T) {
 	counters := &Counters{}
-	cache, err := Open("official", WithCounters(counters))
+	cache, err := Open("official", nil, WithCounters(counters), WithNoCreate())
 	if cache != nil || !errors.Is(err, ErrDisabled) {
 		t.Fatalf("Open = (%v, %v), want disabled", cache, err)
 	}

@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageSignalLifecycle(t *testing.T) {
@@ -105,7 +107,16 @@ func TestCrossPlatformCoverageInstallStopAndEscalateIgnoredSignal(t *testing.T) 
 	}
 	stop()
 	stop()
-	// SIGWINCH is ignored by default, so in-process escalation covers
-	// Escalate → Redeliver without terminating the test binary.
-	Escalate(syscall.SIGWINCH)
+	// Swap the live process/exit seams so Escalate → Redeliver is covered
+	// in-process on every GOOS, including Windows where SIGWINCH is undefined
+	// and os.Process.Signal is not a safe way to ignore a second signal.
+	testseam.Swap(t, &escalateFindProcess, func(int) (*os.Process, error) {
+		return nil, errors.New("skip live signal")
+	})
+	exited := 0
+	testseam.Swap(t, &escalateExit, func(code int) { exited = code })
+	Escalate(os.Interrupt)
+	if exited != 130 {
+		t.Fatalf("Escalate fallback exit = %d, want 130", exited)
+	}
 }

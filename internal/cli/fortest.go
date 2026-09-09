@@ -115,9 +115,7 @@ func AwaitSchemaCachePrewarmForTest() {
 	if registration == nil || registration.runtime == nil {
 		return
 	}
-	if pw := registration.runtime.prewarm; pw != nil {
-		<-pw.done
-	}
+	_ = registration.runtime.settledPrewarm()
 }
 
 // SchemaCachePrewarmPayloadsHandleForTest returns the never-adopted prewarm
@@ -127,8 +125,7 @@ func SchemaCachePrewarmPayloadsHandleForTest() *schemacache.Registry {
 	if registration == nil || registration.runtime == nil {
 		return nil
 	}
-	if pw := registration.runtime.prewarm; pw != nil {
-		<-pw.done
+	if pw := registration.runtime.settledPrewarm(); pw != nil {
 		return pw.payloads
 	}
 	return nil
