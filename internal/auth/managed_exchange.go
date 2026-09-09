@@ -13,10 +13,12 @@ import (
 // ManagedExchangeRequest 描述一次受管身份的短期授权码换票。ClientID 必须来自
 // 同一份授权响应，PreserveProfile 是发起操作的主管精确 Profile。
 type ManagedExchangeRequest struct {
-	ClientID        string
-	AuthCode        string
-	UID             string
-	ExpectedOrgID   string
+	ClientID string
+	AuthCode string
+	// ExpectedUserID 是 DEAP 授权响应 staffId 对应的钉钉 Profile userId。
+	ExpectedUserID string
+	// ExpectedCorpID 来自已发布数字员工的 profile.corpId。
+	ExpectedCorpID  string
 	PreserveProfile string
 	ResolveIdentity ManagedIdentityResolver
 }
@@ -31,8 +33,8 @@ type ManagedIdentity struct {
 }
 
 // ManagedIdentityResolver 使用尚未落盘的 Access Token 查询当前用户身份。
-// expectedOrgID 用于调用方在多组织响应中做精确选择。
-type ManagedIdentityResolver func(ctx context.Context, accessToken, expectedOrgID string) (ManagedIdentity, error)
+// expectedCorpID 用于调用方在多组织响应中做精确选择。
+type ManagedIdentityResolver func(ctx context.Context, accessToken, expectedCorpID string) (ManagedIdentity, error)
 
 var (
 	managedExchangePreparePersistence = prepareLoginPersistence
@@ -45,11 +47,11 @@ var (
 func ExchangeManagedAuthCode(ctx context.Context, configDir string, request ManagedExchangeRequest) (*TokenData, error) {
 	clientID := strings.TrimSpace(request.ClientID)
 	authCode := strings.TrimSpace(request.AuthCode)
-	uid := strings.TrimSpace(request.UID)
-	expectedOrgID := strings.TrimSpace(request.ExpectedOrgID)
+	expectedUserID := strings.TrimSpace(request.ExpectedUserID)
+	expectedCorpID := strings.TrimSpace(request.ExpectedCorpID)
 	preserveProfile := strings.TrimSpace(request.PreserveProfile)
-	if clientID == "" || authCode == "" || uid == "" || expectedOrgID == "" || preserveProfile == "" || request.ResolveIdentity == nil {
-		return nil, fmt.Errorf("managed exchange requires clientId, authCode, uid, expected orgId, supervisor profile and identity resolver")
+	if clientID == "" || authCode == "" || expectedUserID == "" || expectedCorpID == "" || preserveProfile == "" || request.ResolveIdentity == nil {
+		return nil, fmt.Errorf("managed exchange requires clientId, authCode, expected userId, expected corpId, supervisor profile and identity resolver")
 	}
 	if err := managedExchangePreparePersistence(configDir); err != nil {
 		return nil, fmt.Errorf("local login state cannot be safely updated: %w", err)
@@ -69,25 +71,26 @@ func ExchangeManagedAuthCode(ctx context.Context, configDir string, request Mana
 	if data == nil {
 		return nil, fmt.Errorf("managed token exchange returned no token data")
 	}
-	returnedOrgID := strings.TrimSpace(data.CorpID)
-	if returnedOrgID == "" || returnedOrgID != expectedOrgID {
-		return nil, fmt.Errorf("managed token organization does not match the authorization response")
+	returnedCorpID := strings.TrimSpace(data.CorpID)
+	if returnedCorpID == "" || returnedCorpID != expectedCorpID {
+		return nil, fmt.Errorf("managed token organization does not match the published digital employee")
 	}
-	identity, err := request.ResolveIdentity(ctx, data.AccessToken, expectedOrgID)
+	identity, err := request.ResolveIdentity(ctx, data.AccessToken, expectedCorpID)
 	if err != nil {
 		return nil, fmt.Errorf("managed token identity lookup failed")
 	}
 	resolvedUID := strings.TrimSpace(identity.UserID)
-	if resolvedUID == "" || resolvedUID != uid {
+	if resolvedUID == "" || resolvedUID != expectedUserID {
 		return nil, fmt.Errorf("managed token identity does not match the authorized digital employee")
 	}
-	resolvedOrgID := strings.TrimSpace(identity.CorpID)
-	if resolvedOrgID == "" || resolvedOrgID != expectedOrgID || resolvedOrgID != returnedOrgID {
-		return nil, fmt.Errorf("managed identity organization does not match the authorization response")
+	resolvedCorpID := strings.TrimSpace(identity.CorpID)
+	if resolvedCorpID == "" || resolvedCorpID != expectedCorpID || resolvedCorpID != returnedCorpID {
+		return nil, fmt.Errorf("managed identity organization does not match the published digital employee")
 	}
 	if tokenUID := strings.TrimSpace(data.UserID); tokenUID != "" && tokenUID != resolvedUID {
 		return nil, fmt.Errorf("managed token identity does not match the resolved current user")
 	}
+	data.CorpID = returnedCorpID
 	data.UserID = resolvedUID
 	data.UserName = strings.TrimSpace(identity.UserName)
 	if corpName := strings.TrimSpace(identity.CorpName); corpName != "" {

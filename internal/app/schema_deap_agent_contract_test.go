@@ -40,8 +40,8 @@ func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				"page": "page", "page-size": "pageSize",
 			},
 		},
-		"dingtalk-tag.get_dws_auth_code": {
-			"dingtalk-tag manage login", "get_dws_auth_code", "read", "high", "not_required",
+		"dingtalk-tag.login": {
+			"dingtalk-tag manage login", "", "write", "high", "not_required",
 			map[string]string{"agent-uuid": "agentUuid", "client-id": "clientId"},
 		},
 		"dingtalk-tag.update_digital_employee_draft": {
@@ -92,12 +92,21 @@ func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
 				t.Errorf("%s %s = %q, want %q", canonical, field, got, expected)
 			}
 		}
-		ref := schemaInterfaceObject(tool["interface_ref"])
-		if got := schemaContractString(ref["product_id"]); got != "deap-dev" {
-			t.Errorf("%s interface product = %q, want deap-dev", canonical, got)
-		}
-		if got := schemaContractString(ref["rpc_name"]); got != want.tool {
-			t.Errorf("%s interface rpc = %q, want %q", canonical, got, want.tool)
+		if want.tool == "" {
+			if got := schemaContractString(tool["interface_mode"]); got != "composite" {
+				t.Errorf("%s interface_mode = %q, want composite", canonical, got)
+			}
+			if ref := schemaInterfaceObject(tool["interface_ref"]); len(ref) != 0 {
+				t.Errorf("%s composite unexpectedly exposes interface_ref %#v", canonical, ref)
+			}
+		} else {
+			ref := schemaInterfaceObject(tool["interface_ref"])
+			if got := schemaContractString(ref["product_id"]); got != "deap-dev" {
+				t.Errorf("%s interface product = %q, want deap-dev", canonical, got)
+			}
+			if got := schemaContractString(ref["rpc_name"]); got != want.tool {
+				t.Errorf("%s interface rpc = %q, want %q", canonical, got, want.tool)
+			}
 		}
 		parameters := schemaContractMap(tool["parameters"])
 		if len(parameters) != len(want.parameters) {

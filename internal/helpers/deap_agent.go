@@ -85,7 +85,7 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: dingtalkTagProductID,
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "创建和管理数字员工、登录数字员工 DWS、查询执行状态，并把已有本地数字员工接入 DSH",
+			AgentSummary: "创建和管理数字员工、登录数字员工 DWS 并保存独立 Profile、查询执行状态，并把已有本地数字员工接入 DSH",
 			UseWhen: []string{
 				"创建、修改、发布或删除 DEAP 数字员工",
 				"A2A 或其他场景需要登录指定数字员工的 DWS",
@@ -101,7 +101,7 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 	root := &cobra.Command{
 		Use:               "dingtalk-tag",
 		Short:             "DEAP 平台",
-		Long:              "钉钉数字员工命令组：manage 负责数字员工生命周期，并通过 login 为 A2A 或其他场景获取数字员工 DWS 登录信息；run 负责执行状态与 trace，capability 负责 Skill/MCP 能力资源，connect 只用于把已有且已发布的 local_agent 数字员工接入本地 DSH，channel 提供 DSH 受限机器协议。固定调用 MCP product/server deap-dev；identity.corpId/userId 由可信登录态注入且不对 CLI 暴露。端点跟随当前 MCP 环境自动选择规范网关；DINGTALK_DEAP_DEV_MCP_URL 仅用于本地调试覆盖。",
+		Long:              "钉钉数字员工命令组：manage 负责数字员工生命周期，并通过 login 为 A2A 或其他场景完成数字员工 DWS 登录和独立 Profile 落盘；run 负责执行状态与 trace，capability 负责 Skill/MCP 能力资源，connect 只用于把已有且已发布的 local_agent 数字员工接入本地 DSH，channel 提供 DSH 受限机器协议。固定调用 MCP product/server deap-dev；identity.corpId/userId 由可信登录态注入且不对 CLI 暴露。端点跟随当前 MCP 环境自动选择规范网关；DINGTALK_DEAP_DEV_MCP_URL 仅用于本地调试覆盖。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -123,7 +123,7 @@ func newDeapManageCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "manage",
 		Short:             "数字员工生命周期管理",
-		Long:              "钉钉数字员工管理：创建草稿、查询详情与列表、通过 login 获取数字员工 DWS 登录信息、全量覆写草稿、发布与删除。login 用于 A2A 或其他需要登录数字员工 DWS 的场景；企业本地 Agent 接入使用顶层 connect。登录授权码属于高敏感凭证；save-draft / publish / delete 均为高影响写操作，先 --dry-run 确认再加 --yes。",
+		Long:              "钉钉数字员工管理：创建草稿、查询详情与列表、通过 login 完成数字员工 DWS 登录并保存独立 Profile、全量覆写草稿、发布与删除。login 用于 A2A 或其他需要登录数字员工 DWS 的场景；企业本地 Agent 接入使用顶层 connect。login 内部消费高敏感授权码且不输出凭证；save-draft / publish / delete 均为高影响写操作，先 --dry-run 确认再加 --yes。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -142,34 +142,41 @@ func newDeapManageCommand() *cobra.Command {
 	return cmd
 }
 
-// newDeapAgentLoginCommand 获取指定数字员工的短期 DWS 登录授权信息。
-// dwsAuthCode 等字段由服务端在 data 中返回，CLI 不解析、不缓存，也不改变响应 envelope。
+// newDeapAgentLoginCommand 为指定数字员工完成一次受管 DWS 登录。
 func newDeapAgentLoginCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:       "login",
-		Short:     "登录数字员工的 DWS",
-		Long:      "按 agentUuid 获取登录数字员工 DWS 所需的临时授权信息，适用于 A2A 或其他需要以数字员工身份登录 DWS 的场景。企业接入本地 Agent/DSH 时不要使用 login，应使用 dws dingtalk-tag connect。clientId 是可选的授权应用 ID；不传时由服务端选择默认应用。服务端响应中的 success、errorCode、errorMsg 和 data 会原样输出；data 包含 dwsClientId、uid、dwsAuthCode、staffId、orgId。dwsAuthCode 是高敏感短期凭证，不得写入文档、日志、命令历史、缓存或代码库。",
-		Tool:      deapAgentAuthCodeTool,
-		Server:    deapAgentServerID,
+		Short:     "登录数字员工的 DWS 并保存独立 Profile",
+		Long:      "按 agentUuid 为已发布数字员工完成一步登录：内部申请临时 AuthCode，使用同次响应中的 dwsClientId 换票，在线核验员工身份，并保存精确 corpId:userId Profile。命令不会输出 AuthCode 或 Token，也不会切换当前主管 Profile。单次使用通过 dws --profile <corpId:userId> <command>；需要切换默认账号时执行 dws profile use <corpId:userId>。适用于 A2A 或其他数字员工 DWS 登录场景，不绑定 local_agent、DSH 或 Bridge；企业接入本地 Agent/DSH 应使用 dws dingtalk-tag connect。",
 		PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
 			{Name: "client-id", Usage: "用于授权的应用 ID；不传时由服务端选择默认应用", Bind: "clientId", Trim: true, OmitEmpty: true},
 		},
 		Safety: contract.SafetySpec{
-			Effect: "read", Risk: "high",
+			Effect: "write", Risk: "high",
 			Confirmation: "not_required", Idempotency: "idempotent",
 		},
+		Validate: func(cmd *cobra.Command, _ []string) error {
+			if commandDryRun(cmd) {
+				return nil
+			}
+			if deps == nil || deps.Caller == nil {
+				return apperrors.NewInternal("MCP caller is not initialized")
+			}
+			return nil
+		},
+		RunE: runDeapAgentLogin,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
-				ProductID: dingtalkTagProductID, Name: deapAgentAuthCodeTool,
-				CanonicalPath: "dingtalk-tag.get_dws_auth_code",
+				ProductID: dingtalkTagProductID, Name: "login",
+				CanonicalPath: "dingtalk-tag.login",
 				CLIPath:       "dingtalk-tag manage login", PrimaryCLIPath: "dingtalk-tag manage login",
 				Group: "manage",
 			},
-			Description: "按 agentUuid 获取登录数字员工 DWS 所需的临时授权信息；用于 A2A 或其他数字员工 DWS 登录场景，clientId 可选。服务端返回 success、errorCode、errorMsg，以及包含 dwsClientId、uid、dwsAuthCode、staffId、orgId 的 data。",
+			Description: "按 agentUuid 完成数字员工受管登录、在线身份核验并保存精确 DWS Profile；AuthCode 与 Token 不进入普通输出。",
 			DryRun:      deapAgentDryRun,
-			Interface:   deapAgentMCPInterface(deapAgentAuthCodeTool),
+			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "发布详情、DEAP 授权、DWS managed exchange、在线身份核验与本地 Profile 持久化的受控编排"},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "为 A2A 或其他场景登录指定数字员工的 DWS",
 				UseWhen:      []string{"已知 agentUuid，A2A 或其他场景需要登录该数字员工的 DWS"},

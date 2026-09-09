@@ -17,12 +17,12 @@ type managedIdentityTokenCaller interface {
 }
 
 // resolveDigitalEmployeeManagedIdentity 使用刚换取、尚未落盘的 Access Token
-// 查询当前用户。它只接受 expectedOrgID 下唯一且带精确 userId 的在线身份，
+// 查询当前用户。它只接受 expectedCorpID 下唯一且带精确 userId 的在线身份，
 // 不使用主管 Profile 或本地历史记录兜底。
-func resolveDigitalEmployeeManagedIdentity(ctx context.Context, accessToken, expectedOrgID string) (auth.ManagedIdentity, error) {
+func resolveDigitalEmployeeManagedIdentity(ctx context.Context, accessToken, expectedCorpID string) (auth.ManagedIdentity, error) {
 	accessToken = strings.TrimSpace(accessToken)
-	expectedOrgID = strings.TrimSpace(expectedOrgID)
-	if accessToken == "" || expectedOrgID == "" || deps == nil || deps.Caller == nil {
+	expectedCorpID = strings.TrimSpace(expectedCorpID)
+	if accessToken == "" || expectedCorpID == "" || deps == nil || deps.Caller == nil {
 		return auth.ManagedIdentity{}, fmt.Errorf("managed identity lookup is unavailable")
 	}
 	caller, ok := deps.Caller.(managedIdentityTokenCaller)
@@ -34,7 +34,7 @@ func resolveDigitalEmployeeManagedIdentity(ctx context.Context, accessToken, exp
 		return auth.ManagedIdentity{}, fmt.Errorf("managed identity lookup failed")
 	}
 
-	identity, err := auth.ManagedIdentityFromToolResult(result, expectedOrgID)
+	identity, err := auth.ManagedIdentityFromToolResult(result, expectedCorpID)
 	if err != nil {
 		return auth.ManagedIdentity{}, fmt.Errorf("managed identity lookup returned no unique identity")
 	}

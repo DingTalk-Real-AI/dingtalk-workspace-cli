@@ -390,7 +390,7 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 			if request.ResolveIdentity == nil {
 				return nil, errors.New("managed identity resolver is missing")
 			}
-			_, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedOrgID)
+			_, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedCorpID)
 			return nil, err
 		})
 		leaf := newConnectTestCommand(t, false)
@@ -441,7 +441,7 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 	return &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
-			`{"success":true,"data":{"status":"online"}}`,
+			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
 		},
 		"deap-dev/get_dws_auth_code":        {authResponse},
 		"contact/get_user_info_by_user_ids": {contactResponse},
@@ -449,7 +449,7 @@ func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEm
 }
 
 func successfulAuthResponse() string {
-	return `{"success":true,"data":{"dwsClientId":"returned-client","uid":"employee-user","dwsAuthCode":"one-time-secret","orgId":"employee-corp"}}`
+	return `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`
 }
 
 func setupConnectSupervisorSeams(t *testing.T) {
@@ -469,7 +469,7 @@ func setupSuccessfulConnectSeams(t *testing.T) {
 	t.Helper()
 	setupConnectSupervisorSeams(t)
 	testseam.Swap(t, &deapConnectManagedExchange, func(_ context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
-		return &auth.TokenData{CorpID: request.ExpectedOrgID, UserID: request.UID, ClientID: request.ClientID, Source: "mcp"}, nil
+		return &auth.TokenData{CorpID: request.ExpectedCorpID, UserID: request.ExpectedUserID, ClientID: request.ClientID, Source: "mcp"}, nil
 	})
 	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error { return nil })
 	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) { return "created", nil })
@@ -505,9 +505,9 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
-			`{"success":true,"data":{"status":"online"}}`,
+			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
 		},
-		"deap-dev/get_dws_auth_code":        {`{"success":true,"data":{"dwsClientId":"returned-client","uid":"employee-user","dwsAuthCode":"one-time-secret","orgId":"employee-corp"}}`},
+		"deap-dev/get_dws_auth_code":        {`{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`},
 		"contact/get_current_user_profile":  {`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`},
 		"contact/get_user_info_by_user_ids": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`},
 	}}
@@ -531,7 +531,10 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		if request.ResolveIdentity == nil {
 			return nil, errors.New("managed identity resolver is missing")
 		}
-		identity, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedOrgID)
+		if request.ExpectedCorpID != "employee-corp" || request.ExpectedUserID != "employee-user" {
+			return nil, errors.New("managed exchange received wrong published identity")
+		}
+		identity, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedCorpID)
 		if err != nil {
 			return nil, err
 		}

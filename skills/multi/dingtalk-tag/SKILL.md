@@ -36,6 +36,6 @@ metadata:
 
 ## 安全
 
-- `manage login` 返回的 `dwsAuthCode` 是一次性高敏感凭证，不得复制到对话、日志、文档、argv 或缓存。企业本地 Agent 接入只调用 `connect`；A2A 或其他需要登录数字员工 DWS 的场景调用 `manage login`。
+- `manage login` 在内部完成 AuthCode 换票、在线身份核验，并保存精确 `corpId:userId` Profile；不得输出或转存 AuthCode/Token。企业本地 Agent 接入只调用 `connect`；A2A 或其他需要登录数字员工 DWS 的场景调用 `manage login`。
 - 删除不可逆；修改、发布、删除和 connect 按 Schema 的确认要求执行。
 - Channel 的 `reply` / `operator-private` 只供 DSH 机器协议使用，正文只能走受限 stdin；不要为普通用户消息直接调用。

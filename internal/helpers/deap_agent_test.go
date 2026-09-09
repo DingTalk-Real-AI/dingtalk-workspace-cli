@@ -814,16 +814,6 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			},
 		},
 		{
-			leaf: "login", tool: "get_dws_auth_code",
-			flags:    map[string]string{"agent-uuid": "agent-1"},
-			wantArgs: map[string]any{"agentUuid": "agent-1"},
-		},
-		{
-			leaf: "login", tool: "get_dws_auth_code",
-			flags:    map[string]string{"agent-uuid": "agent-1", "client-id": "client-1"},
-			wantArgs: map[string]any{"agentUuid": "agent-1", "clientId": "client-1"},
-		},
-		{
 			leaf: "save-draft", tool: "update_digital_employee_draft", confirmed: true,
 			flags: map[string]string{
 				"agent-uuid": "agent-1", "name": "新名称", "prompt": "你是值班助手",
@@ -1112,15 +1102,13 @@ func TestDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	login := deapFindLeaf(t, root, "login")
-	for _, field := range []string{"dwsClientId", "uid", "dwsAuthCode", "staffId", "orgId"} {
-		if !strings.Contains(login.Long, field) {
-			t.Fatalf("login help is missing response field %s: %q", field, login.Long)
-		}
-	}
-	for _, scenario := range []string{"A2A", "dws dingtalk-tag connect"} {
+	for _, scenario := range []string{"A2A", "dws dingtalk-tag connect", "dws --profile", "dws profile use", "不会输出 AuthCode 或 Token"} {
 		if !strings.Contains(login.Long, scenario) {
 			t.Fatalf("login help is missing scenario guidance %q: %q", scenario, login.Long)
 		}
+	}
+	if strings.Contains(login.Long, "原样输出") {
+		t.Fatalf("login help still describes raw credential output: %q", login.Long)
 	}
 
 	publish := deapFindLeaf(t, root, "publish")
