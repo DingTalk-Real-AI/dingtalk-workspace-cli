@@ -30,7 +30,7 @@ func TestCrossPlatformCoverageProductionSchemaCacheIsNotCompileTimeEnabled(t *te
 }
 
 func TestCrossPlatformCoverageSchemaCacheLocalGenerateWriteHitCorruptRepair(t *testing.T) {
-	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	isolateSchemaCacheHome(t)

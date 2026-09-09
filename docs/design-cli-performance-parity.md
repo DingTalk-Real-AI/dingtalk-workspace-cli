@@ -40,5 +40,5 @@ root help 直接遍历 `T`；version、completion、Schema、config 和业务命
 - 公开 command、flags、aliases、help、validation、Safety、错误分类和输出不变。
 - Schema identity 不在编译期或发布期生产。受支持端在安装或首次 schema 从本机 declarations 生成 identity 并写认证 cache；后续命中先校验摘要。测试仍可注入 identity。
 - 正式 release 仍是一个 `dws`；不重新引入 launcher/双二进制。
-- telemetry 明确接受最后一条分析事件可能丢失；业务 cleanup 继续同步。
+- telemetry 默认 `FlushTimeout=50ms` 且不设置 `NoFlushWait`；超时后末条事件可能丢失；业务 cleanup 继续同步。
 - Lark 用于验证“完整树也可足够快”的结构选择；GWS 只用于观察更小映像/init 的上限。

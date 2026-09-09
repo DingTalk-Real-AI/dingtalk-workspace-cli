@@ -28,7 +28,7 @@ Schema Catalog delivery is **声明即 Catalog**: production assembles via
 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` (factory registered in
 `internal/app`). Schema identity is **not** produced at compile or release
 time; shipping binaries do not embed binary-pinned cache digests. On
-supported platforms (darwin/arm64, linux/amd64) production enables the
+supported platforms (darwin/linux amd64/arm64; Windows stays live-only) production enables the
 persistent cache: install or the first schema-consuming path generates
 identity from this binary's live declarations, writes authenticated disk
 shards, and later processes load that local identity then verify digests

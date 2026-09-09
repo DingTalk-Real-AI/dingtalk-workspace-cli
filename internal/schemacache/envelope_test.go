@@ -208,3 +208,22 @@ func TestCrossPlatformCoverageEnvelopeFromAndCheckedFileSize(t *testing.T) {
 		t.Fatalf("incomplete identity error = %v, want ErrIdentityMismatch", err)
 	}
 }
+
+func TestCrossPlatformCoveragePersistentBackendEnabled(t *testing.T) {
+	for _, tt := range []struct {
+		goos, goarch string
+		want         bool
+	}{
+		{"darwin", "arm64", true},
+		{"darwin", "amd64", true},
+		{"linux", "amd64", true},
+		{"linux", "arm64", true},
+		{"windows", "amd64", false},
+		{"windows", "arm64", false},
+		{"linux", "386", false},
+	} {
+		if got := PersistentBackendEnabled(tt.goos, tt.goarch); got != tt.want {
+			t.Fatalf("PersistentBackendEnabled(%s, %s) = %v, want %v", tt.goos, tt.goarch, got, tt.want)
+		}
+	}
+}

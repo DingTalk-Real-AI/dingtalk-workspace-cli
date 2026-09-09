@@ -36,9 +36,9 @@ const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 type SchemaCacheIdentity = schemareader.Identity
 
 // SchemaCacheOptions configures production cache delivery. Enabled options are
-// accepted only for the two v1 targets (darwin/arm64, linux/amd64); tests may
-// inject GOOS/GOARCH. AllowGenerate lets an empty identity be derived from the
-// running binary's declarations on first schema use.
+// accepted for darwin/linux on amd64/arm64; tests may inject GOOS/GOARCH.
+// AllowGenerate lets an empty identity be derived from the running binary's
+// declarations on first schema use.
 type SchemaCacheOptions struct {
 	Enabled         bool
 	AllowGenerate   bool
@@ -115,7 +115,7 @@ func SchemaCacheFastPathIdentity() (SchemaCacheIdentity, bool) {
 }
 
 func schemaCacheSupportedTarget(goos, goarch string) bool {
-	return (goos == "darwin" && goarch == "arm64") || (goos == "linux" && goarch == "amd64")
+	return schemacache.PersistentBackendEnabled(goos, goarch)
 }
 
 func validateSchemaCacheOptions(options SchemaCacheOptions) error {

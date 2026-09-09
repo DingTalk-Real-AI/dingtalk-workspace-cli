@@ -17,7 +17,7 @@ import (
 // authentication, payload reads/hashes, protobuf conversion and lookup/index.
 // Files stay in the OS page cache; no assembled products are reused per sample.
 func BenchmarkRealSchemaFileHit(b *testing.B) {
-	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		b.Skip("persistent cache backend is disabled on this target")
 	}
 	home, err := os.UserHomeDir()

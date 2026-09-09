@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -73,7 +74,7 @@ func productionSchemaCacheOptions() (cli.SchemaCacheOptions, bool) {
 	if testing.Testing() && strings.TrimSpace(os.Getenv(schemaCacheTestEnv)) == "" {
 		return cli.SchemaCacheOptions{}, false
 	}
-	if !((schemaCacheGOOS == "darwin" && schemaCacheGOARCH == "arm64") || (schemaCacheGOOS == "linux" && schemaCacheGOARCH == "amd64")) {
+	if !schemacache.PersistentBackendEnabled(schemaCacheGOOS, schemaCacheGOARCH) {
 		return cli.SchemaCacheOptions{}, false
 	}
 	hooks := edition.Get()

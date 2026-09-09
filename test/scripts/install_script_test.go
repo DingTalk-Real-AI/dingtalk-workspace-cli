@@ -250,8 +250,8 @@ func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
 		shared := filepath.Join(root, "shared")
 		writeFakeBinary(t, binDir, "dws-test", "#!/bin/sh\nexit 0\n")
 		harness := string(scriptData[:cut]) + `
-detect_os() { printf '%s\n' darwin; }
-detect_arch() { printf '%s\n' amd64; }
+		detect_os() { printf '%s\n' windows; }
+		detect_arch() { printf '%s\n' amd64; }
 INSTALL_DIR="` + binDir + `"
 INSTALL_NAME=dws-test
 build_shared_schema_cache

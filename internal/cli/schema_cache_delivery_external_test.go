@@ -37,7 +37,7 @@ func TestCrossPlatformCoverageSchemaCacheRealConcurrentRepair(t *testing.T) {
 
 func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
 	t.Helper()
-	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	configureSchemaCacheTestHome(t)
@@ -354,7 +354,7 @@ func (e *parityError) Error() string { return "Schema cache parity mismatch for 
 // to the live render, with alias and non-compact queries falling through to the
 // registry-backed path.
 func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
-	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	configureSchemaCacheTestHome(t)
@@ -418,7 +418,7 @@ func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
 // fast path serves identical bytes through the same three authenticated range
 // reads (index during the probe, then shard header and leaf blob).
 func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
-	if !((runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "linux" && runtime.GOARCH == "amd64")) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	configureSchemaCacheTestHome(t)

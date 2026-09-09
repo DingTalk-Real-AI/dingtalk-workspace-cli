@@ -1626,8 +1626,8 @@ install_binary() {
 # ── Build shared schema cache ────────────────────────────────────────────────
 # The schema cache is generated on this machine from the installed binary's
 # live declarations (no compile-time identity seal). Build it once at the
-# system shared location so every user reuses it. Only the two v1 cache
-# backends are compiled in: darwin/arm64 and linux/amd64. Other ends skip
+# system shared location so every user reuses it. Persistent backends are
+# compiled in for darwin/linux on amd64/arm64. Windows and other ends skip
 # silently and never claim success. Root-owned sticky ancestry such as
 # macOS /Library/Caches is accepted by the runtime; if the shared base is not
 # writable the installer leaves per-user cache generation to the first schema
@@ -1636,8 +1636,8 @@ build_shared_schema_cache() {
   os="$(detect_os)"
   arch="$(detect_arch)"
   case "$os/$arch" in
-    linux/amd64) shared_dir="/var/cache/dws" ;;
-    darwin/arm64) shared_dir="/Library/Caches/dws" ;;
+    linux/amd64|linux/arm64) shared_dir="/var/cache/dws" ;;
+    darwin/amd64|darwin/arm64) shared_dir="/Library/Caches/dws" ;;
     *) return 0 ;;
   esac
   if [ -n "${DWS_SCHEMA_CACHE_SHARED_DIR:-}" ]; then

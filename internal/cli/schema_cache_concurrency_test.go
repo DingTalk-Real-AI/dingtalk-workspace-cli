@@ -73,6 +73,21 @@ func TestCrossPlatformCoverageSchemaCacheAllowGenerateEmptyIdentity(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageSchemaCacheOptionsAcceptUnixTargets(t *testing.T) {
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	for _, target := range []struct{ goos, goarch string }{
+		{"darwin", "arm64"}, {"darwin", "amd64"},
+		{"linux", "amd64"}, {"linux", "arm64"},
+	} {
+		if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: "open",
+			GOOS: target.goos, GOARCH: target.goarch,
+		}); err != nil {
+			t.Fatalf("%s/%s: %v", target.goos, target.goarch, err)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCacheOptionsRejectUnsupportedPlatform(t *testing.T) {
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	err := RegisterSchemaCacheOptions(SchemaCacheOptions{

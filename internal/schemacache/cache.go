@@ -27,6 +27,14 @@ var (
 	ErrClosed           = errors.New("schema cache handle closed")
 )
 
+// PersistentBackendEnabled is the reviewed v1 disk-cache surface: darwin and
+// linux on amd64/arm64. Each machine generates identity locally, so the
+// backend is not limited to the old compile-time proof pair. Windows and
+// other targets stay live-only.
+func PersistentBackendEnabled(goos, goarch string) bool {
+	return (goos == "darwin" || goos == "linux") && (goarch == "amd64" || goarch == "arm64")
+}
+
 var editionPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
 type backend interface {
