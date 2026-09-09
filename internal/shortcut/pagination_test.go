@@ -89,3 +89,15 @@ func TestCrossPlatformCoverageWaitAutoPageDelayNoopAndCancellation(t *testing.T)
 		t.Fatalf("canceled delay = %v, want context.Canceled", err)
 	}
 }
+
+func TestCrossPlatformCoverageWaitAutoPageDelayCancelledContextAlwaysWins(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		rt := autoPageRuntimeForTest(t, true, "", "1")
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		rt.Command().SetContext(ctx)
+		if err := WaitAutoPageDelay(rt); err != context.Canceled {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+	}
+}
