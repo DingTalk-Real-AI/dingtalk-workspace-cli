@@ -10,20 +10,21 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 // UseMemoryOpenForTest swaps Open onto a portable file backend under t.TempDir
 // so targets without the unix backend (Windows coverage) can Publish and Read
 // the same artifacts. Production must not call this; the ForTest suffix is the
-// boundary.
+// boundary. The swap is inlined (not testseam) so schemacache stays out of the
+// thin Schema dependency closure.
 func UseMemoryOpenForTest(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
-	testseam.Swap(t, &openPlatformImpl, func(edition string, counters *Counters, noCreate bool) (backend, error) {
+	previous := openPlatformImpl
+	openPlatformImpl = func(edition string, counters *Counters, noCreate bool) (backend, error) {
 		return openPortableBackend(root, edition, counters, noCreate)
-	})
+	}
+	t.Cleanup(func() { openPlatformImpl = previous })
 }
 
 func openPortableBackend(root, edition string, counters *Counters, noCreate bool) (backend, error) {
