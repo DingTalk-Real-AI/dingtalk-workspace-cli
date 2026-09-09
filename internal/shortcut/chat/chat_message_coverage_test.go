@@ -113,7 +113,7 @@ func TestCrossPlatformCoverageMessagesMgetDecryptsEncryptedMessagesInBatch(t *te
 	root.SetOut(&output)
 	root.SetArgs([]string{
 		"chat", "+messages-mget",
-		"--msg-ids", "m1,m2",
+		"--msg-ids", "m1,m2", "--no-reactions",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenPolicyFails(t *
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1", "--no-reactions"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestCrossPlatformCoverageMessagesMgetSkipsCryptoWhenBackendUnavailable(t *t
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1", "--no-reactions"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestCrossPlatformCoverageMessagesMgetFallsBackToOriginalWhenBatchDecryptFai
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1", "--no-reactions"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +457,7 @@ func TestCrossPlatformCoverageMessagesMgetRecordsSafeChatFailures(t *testing.T) 
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1"})
+	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "m1", "--no-reactions"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -621,7 +621,7 @@ func TestCrossPlatformCoverageMgetDownloadRunsWithoutConfirmation(t *testing.T) 
 	root.SetArgs([]string{
 		"chat", "+messages-mget",
 		"--msg-ids", "msg",
-		"--download-resources",
+		"--download-resources", "--no-reactions",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)

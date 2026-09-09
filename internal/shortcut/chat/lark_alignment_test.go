@@ -74,6 +74,17 @@ func (f *larkAlignmentCaller) CallTool(_ context.Context, product, tool string, 
 			},
 		})
 		text = string(payload)
+	case "chat/get_conversation_info":
+		encoded, _ := json.Marshal(map[string]any{"result": map[string]any{"openConversationId": args["openConversationId"], "createAt": "2026-01-01T00:00:00+08:00"}})
+		text = string(encoded)
+	case "chat/list_top_conversations":
+		text = `{"result":{"conversations":[],"hasMore":false}}`
+	case "im/list_user_define_conv_categories":
+		text = `{"result":{"categories":[]}}`
+	case "im/list_message_favorites":
+		text = `{"result":{"items":[],"hasMore":false}}`
+	case "im/list_conv_categories_by_conv":
+		text = `{"result":{"categories":[]}}`
 	case "im/create_group_conversation":
 		text = `{"result":{"cid":"internal-cid","openCid":"open-cid"}}`
 	case "im/create_and_send_card":
@@ -595,7 +606,7 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 		},
 		{
 			name:    "flag-list",
-			args:    []string{"chat", "+flag-list", "--cursor", "3", "--size", "30"},
+			args:    []string{"chat", "+flag-list", "--no-enrich", "--cursor", "3", "--size", "30"},
 			product: "im",
 			tool:    "list_message_favorites",
 			wantArgs: map[string]any{
@@ -613,10 +624,17 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 			if err := root.Execute(); err != nil {
 				t.Fatal(err)
 			}
-			if len(fake.calls) != 1 {
+			wantCalls := 1
+			if tt.name == "flag-create" || tt.name == "flag-cancel" {
+				wantCalls = 2
+				if fake.calls[0].tool != "list_messages_by_ids" {
+					t.Fatal("source validation missing")
+				}
+			}
+			if len(fake.calls) != wantCalls {
 				t.Fatalf("calls = %#v, want 1", fake.calls)
 			}
-			call := fake.calls[0]
+			call := fake.calls[len(fake.calls)-1]
 			if call.product != tt.product || call.tool != tt.tool || !reflect.DeepEqual(call.args, tt.wantArgs) {
 				t.Fatalf("call = %#v, want %s/%s %#v", call, tt.product, tt.tool, tt.wantArgs)
 			}
@@ -644,6 +662,7 @@ func TestCrossPlatformCoverageObservedChatRenameAliasResolvesNameBeforeWrite(t *
 
 func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids":    `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`,
 		"chat/send_personal_message": `{"result":{"openMessageId":"new-msg","openConvThreadId":"thread-1","sendStatus":"accepted"}}`,
 	}}
 	helpers.InitDeps(fake)
@@ -662,10 +681,10 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 1 {
-		t.Fatalf("calls = %#v, want 1", fake.calls)
+	if len(fake.calls) != 2 {
+		t.Fatalf("calls = %#v, want 2", fake.calls)
 	}
-	call := fake.calls[0]
+	call := fake.calls[1]
 	if call.product != "chat" || call.tool != "send_personal_message" {
 		t.Fatalf("reply call = %#v", call)
 	}
@@ -701,7 +720,7 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 }
 
 func TestCrossPlatformCoverageMessagesReplyDryRunStopsBeforeWrite(t *testing.T) {
-	fake := &larkAlignmentCaller{}
+	fake := &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
@@ -716,13 +735,13 @@ func TestCrossPlatformCoverageMessagesReplyDryRunStopsBeforeWrite(t *testing.T) 
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 0 {
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_messages_by_ids" {
 		t.Fatalf("reply dry-run reached write transport: %#v", fake.calls)
 	}
 }
 
 func TestCrossPlatformCoverageFlagBatchContinuesAndPublishesFailureLedger(t *testing.T) {
-	fake := &larkAlignmentCaller{failTarget: "m2"}
+	fake := &larkAlignmentCaller{failTarget: "m2", sequenceResponses: map[string][]string{"im/list_messages_by_ids": {`{"result":[{"openMessageId":"m1","openConversationId":"cid"}]}`, `{"result":[{"openMessageId":"m2","openConversationId":"cid"}]}`}}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
@@ -736,7 +755,7 @@ func TestCrossPlatformCoverageFlagBatchContinuesAndPublishesFailureLedger(t *tes
 	if err := root.Execute(); err == nil {
 		t.Fatal("partial batch failure returned success")
 	}
-	if len(fake.calls) != 2 {
+	if len(fake.calls) != 4 {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
 	var payload map[string]any
@@ -792,7 +811,7 @@ func TestCrossPlatformCoverageMessagesMgetDryRunPublishesMultiResourceDownloadPl
 		"chat", "+messages-mget",
 		"--msg-ids", "msg",
 		"--download-resources",
-		"--dry-run",
+		"--dry-run", "--no-reactions",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -813,7 +832,7 @@ func TestCrossPlatformCoverageMessagesMgetDryRunPublishesMultiResourceDownloadPl
 }
 
 func TestCrossPlatformCoverageMessagesReplyResolvesUserIDBeforeExecution(t *testing.T) {
-	fake := &larkAlignmentCaller{}
+	fake := &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + "D-resolved" + `"}]}`}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
@@ -827,14 +846,14 @@ func TestCrossPlatformCoverageMessagesReplyResolvesUserIDBeforeExecution(t *test
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 2 ||
-		fake.calls[0].product != "contact" ||
-		fake.calls[0].tool != "search_contact_by_key_word" ||
-		fake.calls[1].tool != "send_personal_message" {
+	if len(fake.calls) != 3 ||
+		fake.calls[1].product != "contact" ||
+		fake.calls[1].tool != "search_contact_by_key_word" ||
+		fake.calls[2].tool != "send_personal_message" {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
 	var content map[string]string
-	if err := json.Unmarshal([]byte(fake.calls[1].args["content"].(string)), &content); err != nil {
+	if err := json.Unmarshal([]byte(fake.calls[2].args["content"].(string)), &content); err != nil {
 		t.Fatal(err)
 	}
 	if content["srcMsgSendOpenDingTalkId"] != "D-resolved" {
@@ -1050,8 +1069,8 @@ func TestCrossPlatformCoverageFeedGroupQueryDoesNotMisreportMissingItemWhenSourc
 		"--category-id", "1",
 		"--conversation-ids", "cid-a,cid-later",
 	})
-	if err := root.Execute(); err != nil {
-		t.Fatal(err)
+	if err := root.Execute(); err == nil {
+		t.Fatal("unknown membership must be nonzero")
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {

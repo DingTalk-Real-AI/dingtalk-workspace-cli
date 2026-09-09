@@ -72,7 +72,8 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 		text = `{"success":true,"result":{"todoDetailModel":{"taskId":"todo-created","subject":"交周报","isDone":false}}}`
 	case "im/search_groups":
 		text = `{"result":[{"openConversationId":"cid-1","title":"项目冲刺"}]}`
-	case "chat/list_conversation_message_v2":
+	case "chat/list_conversation_message_v2", "chat/list_individual_chat_message":
+		text = `{"result":{"messages":[],"hasMore":false}}`
 		if f.chatMessagesResult != "" {
 			text = f.chatMessagesResult
 		}

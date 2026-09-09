@@ -1712,16 +1712,16 @@ function Install-BinaryFromSource {
         if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
 
         $targetArch = Get-Arch
-        $payloadSource = Join-Path $Root "third_party\runtimepayload\20260825\windows\$targetArch\x7k2m9p4q1w864.dll"
-        $psSource = Join-Path $Root "third_party\runtimepayload\20260825\ps"
-        $preparedPayload = Join-Path $tmpPayloadRoot "20260825"
+        $payloadSource = Join-Path $Root "third_party\runtimepayload\20260908\windows\$targetArch\x7k2m9p4q1w864.dll"
+        $psSource = Join-Path $Root "third_party\runtimepayload\20260908\ps"
+        $preparedPayload = Join-Path $tmpPayloadRoot "20260908"
         New-Item -ItemType Directory -Path (Join-Path $preparedPayload "ps") -Force | Out-Null
         $preparedLibrary = Join-Path $preparedPayload "x7k2m9p4q1w864.dll"
         Copy-Item -LiteralPath $payloadSource -Destination $preparedLibrary -Force
         Copy-Item -Path (Join-Path $psSource "*") -Destination (Join-Path $preparedPayload "ps") -Recurse -Force
         $manifest = [ordered]@{
             format_version = 1
-            payload_version = "20260825"
+            payload_version = "20260908"
             target = "windows/$targetArch"
             library = "x7k2m9p4q1w864.dll"
             library_sha256 = (Get-FileHash -LiteralPath $preparedLibrary -Algorithm SHA256).Hash.ToLowerInvariant()

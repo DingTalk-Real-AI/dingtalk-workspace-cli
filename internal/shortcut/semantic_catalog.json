@@ -326,7 +326,7 @@
     },
     "+chat-create": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "自动解析当前用户并加入初始成员以满足群主约束，规范化创建结果，同时明确不支持 Lark-only owner/description/bot/visibility 语义。",
+      "semantic_delta": "自动解析当前用户并加入初始成员以满足群主约束，规范化创建结果，同时明确不支持 Lark-only owner/description/bot/visibility 语义。 可选初始机器人在建群后逐个加入；非原子，记录部分失败与已创建群 ID，保留旧入口。",
       "risk": "write",
       "public": true,
       "reviewed": true
@@ -565,14 +565,14 @@
     },
     "+messages-reply": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "提供当前用户纯文本引用回复的稳定入口、幂等键和 AI 标记，并通过 mget 自动补全原发送者；明确不支持 bot、富媒体或 thread writer。",
+      "semantic_delta": "保留个人引用入口，新增精确源消息核实后的个人单聊引用、个人 Thread 直接追加与 Bot 普通群引用；Bot Thread 与富媒体引用仍不支持。",
       "risk": "write",
       "public": true,
       "reviewed": true
     },
     "+messages-send": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 发送；current-user 支持文本、Markdown、mediaId 图片、安全相对路径本地文件上传、userId 姓名解析与幂等键，bot/webhook 仍只暴露下层真实支持的文本/Markdown 能力。",
+      "semantic_delta": "统一 user/bot/webhook 入口；user 支持文本、Markdown、图片、文件、名片、群邀请及 A2UI 创建；bot 支持文本/Markdown、图片 URL、多群图片 ledger 与单目标本地文件；webhook 仅文本/Markdown。原生音视频与任意互动卡片仍未接入。",
       "risk": "write",
       "public": true,
       "reviewed": true
@@ -837,6 +837,27 @@
       "disposition": "semantic_adapter",
       "semantic_delta": "把未读会话投影为会话身份、名称和未读计数，并保留下层分页完整性。",
       "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+feed-shortcut-create": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "调用同一置顶 RPC，但固定 top=true；不接受 off，不宣称支持 head/tail 或非会话 Feed。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+feed-shortcut-remove": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "调用同一置顶 RPC，但固定 top=false；无需 off，统一输出保留成功/未知会话 ledger。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-edit": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "复用 im/edit_message，先精确核实源消息与会话，再编辑个人 Markdown；不等同 Bot text/post 编辑。",
+      "risk": "write",
       "public": true,
       "reviewed": true
     }

@@ -377,7 +377,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		workdir := t.TempDir()
 		stdout, stderr, err := runCLIInDir(t, env, workdir,
 			"--token", "ci-smoke-token", "--format", "json",
-			"chat", "+chat-messages", "--chat-query", "资源群",
+			"chat", "+chat-messages", "--no-reactions", "--chat-query", "资源群",
 			"--download-resources", "--output-dir", "./downloads",
 		)
 		if err != nil {
@@ -410,10 +410,10 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		stdout, stderr, err := runCLI(t, env,
 			"--token", "ci-smoke-token", "--format", "json",
 			"chat", "+search-msg", "--query", "分页失败",
-			"--page-all", "--no-enrich",
+			"--page-all", "--no-enrich", "--no-reactions",
 		)
-		if err != nil {
-			t.Fatalf("partial search failed as a command: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+		if err == nil {
+			t.Fatalf("partial search must return nonzero: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
 		if got := recordedToolNames(calls); !reflect.DeepEqual(got, []string{"search_messages", "search_messages"}) {
@@ -465,7 +465,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("natural read failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 2 || calls[0].tool != "search_groups" || calls[1].tool != "list_conversation_message_v2" {
+		if len(calls) != 3 || calls[0].tool != "search_groups" || calls[1].tool != "list_conversation_message_v2" || calls[2].tool != "list_message_emotion_replies" {
 			t.Fatalf("read calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -519,7 +519,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("reply failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 1 || calls[0].tool != "send_personal_message" {
+		if len(calls) != 2 || calls[0].tool != "list_messages_by_ids" || calls[1].tool != "send_personal_message" {
 			t.Fatalf("reply calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -535,6 +535,16 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 
 func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, resourceURL string) string {
 	switch tool {
+	case "list_message_emotion_replies":
+		rows := []map[string]any{}
+		ids, _ := arguments["openMessageIds"].([]any)
+		for _, id := range ids {
+			rows = append(rows, map[string]any{"openMessageId": id, "emotionReplyList": []any{}})
+		}
+		body, _ := json.Marshal(map[string]any{"result": rows})
+		return string(body)
+	case "list_messages_by_ids":
+		return `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","senderOpenDingTalkId":"` + mockCurrentDOpenID + `","content":"fixture source"}]}}`
 	case "search_contact_by_key_word":
 		if arguments["keyword"] == "同名用户" {
 			return `{"result":[{"name":"同名用户","userId":"u1","openDingTalkId":"D1"},{"name":"同名用户","userId":"u2","openDingTalkId":"D2"}]}`
