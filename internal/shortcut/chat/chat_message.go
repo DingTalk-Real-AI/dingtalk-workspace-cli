@@ -1096,13 +1096,18 @@ var MessagesMget = shortcut.Shortcut{
 	Command:     "+messages-mget",
 	Product:     "im",
 	Description: "根据消息 ID 批量查询消息（最多 50 条）",
-	Intent:      "当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。",
+	Intent:      "当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条；ID 参数错误会有界拆分隔离，其他错误停止拆分；默认主动补查 Reaction 和每个 Thread 最多 10 条回复，使用 complete、messagesComplete、enrichment 披露完整性。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
 	},
 	Contract: corecmd.ContractDecl{
+		Parameters: []contract.ParamDecl{
+			{Name: "msg-ids", Property: "msgIds"},
+			{Name: "no-reactions", Property: "noReactions"},
+			{Name: "no-threads", Property: "noThreads"},
+		},
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "chat",
 			Name:           "shortcut_messages_mget",
@@ -1118,14 +1123,15 @@ var MessagesMget = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "根据消息 ID 批量查询消息（最多 50 条）",
-			UseWhen:      []string{"当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。"},
+			UseWhen:      []string{"当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条；ID 参数错误会有界拆分隔离，其他错误停止拆分；默认主动补查 Reaction 和每个 Thread 最多 10 条回复，使用 complete、messagesComplete、enrichment 披露完整性。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +messages-mget --msg-ids msgId1,msgId2"},
 		},
 	},
 	Flags: append([]shortcut.Flag{
-		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表；--msg-ids 去重后必须包含 1-50 条消息 ID", Required: true},
-		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
+		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表，兼容 --message-ids / --message-id；--msg-ids 去重后必须包含 1-50 条消息 ID", Required: true, Aliases: []string{"message-ids", "message-id"}},
+		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "跳过主动 Reaction 补查并不输出 Reaction（默认补查，每批最多 20 条）"},
+		{Name: "no-threads", Type: shortcut.FlagBool, Desc: "跳过 Thread 回复补查（默认每个 Thread 最多 10 条、总计最多 500 条；需要完整回复请用 +thread-replies）"},
 	}, MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
 		{
@@ -1136,39 +1142,35 @@ var MessagesMget = shortcut.Shortcut{
 	}, MessageResourceDownloadConstraints()...),
 	Tips: []string{`dws chat +messages-mget --msg-ids msgId1,msgId2`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
-		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
+		ids := mgetRequestedIDs(rt)
 		if len(ids) < 1 || len(ids) > 50 {
 			return fmt.Errorf("--msg-ids 去重后必须包含 1-50 条消息 ID，当前 %d 条", len(ids))
 		}
 		return ValidateMessageResourceDownload(rt)
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
-		data, err := rt.CallMCPData("im", "list_messages_by_ids", map[string]any{"openMsgIds": ids})
+		ids := mgetRequestedIDs(rt)
+		batch, err := readMessagesMget(rt, ids)
 		if err != nil {
 			return err
 		}
-		rawMessages := listMessagesResolveMaps(data)
-		decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+		rawMessages := batch.messages
+		var decryptLedger messageDecryptLedger
+		enrichment := map[string]any{"complete": false, "enrichedCount": 0, "stopReason": "query_aborted"}
+		threadViews := map[string]map[string]any{}
+		resourceMessages := rawMessages
+		if !batch.aborted {
+			decryptLedger = decryptMessageItemsIfRequested(rt, rawMessages)
+			enrichment, threadViews, resourceMessages = enrichMessagesMget(rt, rawMessages)
+		}
 		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
-		found := map[string]bool{}
-		for _, message := range rawMessages {
-			if id := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message))); id != "" && id != "<nil>" {
-				found[id] = true
+		for i, raw := range rawMessages {
+			if view, ok := threadViews[mgetID(chatmsg.MessageID(raw))]; ok {
+				messages[i]["thread"] = view
 			}
 		}
-		notFound := make([]string, 0)
-		failures := make([]map[string]any, 0)
-		for _, id := range ids {
-			if !found[id] {
-				notFound = append(notFound, id)
-				failures = append(failures, map[string]any{
-					"stage":     "mget",
-					"messageId": id,
-					"error":     "下层未返回该消息",
-				})
-			}
-		}
+		notFound := batch.missing
+		failures := batch.failures
 		payload := map[string]any{
 			"contractVersion":    chatmsg.MessageListContractVersion,
 			"requestedCount":     len(ids),
@@ -1176,18 +1178,24 @@ var MessagesMget = shortcut.Shortcut{
 			"notFoundCount":      len(notFound),
 			"notFoundMessageIds": notFound,
 			"messages":           messages,
-			"complete":           len(notFound) == 0,
+			"complete":           len(notFound) == 0 && enrichment["complete"] == true,
+			"messagesComplete":   len(notFound) == 0,
+			"enrichment":         enrichment,
+			"batchRequests":      batch.requests,
 			"hasMore":            false,
 			"nextCursor":         "",
 			"paginationKnown":    true,
 			"pagesFetched":       1,
-			"enrichedCount":      0,
+			"enrichedCount":      enrichment["enrichedCount"],
 			"failedCount":        len(failures),
 			"failures":           failures,
 		}
 		applyMessageDecryptLedger(payload, decryptLedger)
-		if rt.Bool("download-resources") {
-			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, rawMessages, ""))
+		if len(decryptLedger.failures) > 0 {
+			payload["complete"] = false
+		}
+		if rt.Bool("download-resources") && !batch.aborted {
+			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, resourceMessages, ""))
 		}
 		return rt.Output(payload)
 	},
@@ -1534,9 +1542,10 @@ var MessagesQuerySendStatus = shortcut.Shortcut{
 var MessagesReadStatus = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-read-status",
+	Aliases:     []string{"+message-read-users"},
 	Product:     "im",
 	Description: "查询消息的已读/未读状态",
-	Intent:      "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。",
+	Intent:      "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，按消息 ID 自动解析会话，显式会话必须与消息匹配，可指定目标成员列表。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1549,6 +1558,7 @@ var MessagesReadStatus = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_messages_read_status",
 			CLIPath:        "chat +messages-read-status",
 			PrimaryCLIPath: "chat +messages-read-status",
+			Aliases:        []string{"chat +message-read-users"},
 		},
 		Description: "查询消息的已读/未读状态",
 		Interface: &contract.InterfaceSpec{
@@ -1558,7 +1568,7 @@ var MessagesReadStatus = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询消息的已读/未读状态",
-			UseWhen:      []string{"当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。"},
+			UseWhen:      []string{"当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，按消息 ID 自动解析会话，显式会话必须与消息匹配，可指定目标成员列表。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>"},
 		},
@@ -1571,25 +1581,10 @@ var MessagesReadStatus = shortcut.Shortcut{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "目标 userId 或 openDingTalkId 列表（不传返回全部接收者）"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"conversation-id", "group", "id"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"conversation-id", "group", "id"}},
 	},
-	Tips: []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"openConversationId": rt.StrFirst("conversation-id", "group", "id"),
-			"openMessageId":      rt.Str("message-id"),
-		}
-		if v := rt.StrSlice("users"); len(v) > 0 {
-			userIDs, openIDs := splitIDs(v)
-			if len(userIDs) > 0 {
-				params["targetUserIds"] = userIDs
-			}
-			if len(openIDs) > 0 {
-				params["targetOpenDingTalkIds"] = openIDs
-			}
-		}
-		return rt.CallMCP("query_msg_read_status", params)
-	},
+	Tips:    []string{`dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>`},
+	Execute: executeOptimizedReadStatus,
 }
 
 // MessagesAddEmoji adds an emoji reaction (add_emoji_reaction, im).

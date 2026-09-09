@@ -161,20 +161,31 @@ func executeSearchMsg(t *testing.T, caller *searchMsgExecutionCaller, args ...st
 	return payload
 }
 
+func executePartialSearchMsg(t *testing.T, caller *searchMsgExecutionCaller, args ...string) map[string]any {
+	t.Helper()
+	p, err := executeSearchMsgResult(caller, args...)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "incomplete_result" || p == nil {
+		t.Fatalf("expected retained partial payload and typed error: %v %#v", err, p)
+	}
+	return p
+}
+
 func executeSearchMsgResult(caller *searchMsgExecutionCaller, args ...string) (map[string]any, error) {
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs(append([]string{"chat", "+search-msg", "--yes"}, args...))
-	if err := root.Execute(); err != nil {
-		return nil, err
+	root.SetArgs(append([]string{"chat", "+search-msg", "--no-reactions", "--yes"}, args...))
+	runErr := root.Execute()
+	if output.Len() == 0 {
+		return nil, runErr
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
 		return nil, err
 	}
-	return payload, nil
+	return payload, runErr
 }
 
 func TestSearchMsgMixedSenderClassifiesFormatWithoutIDPreflight(t *testing.T) {
@@ -603,7 +614,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 				{"openMessageId":"other","senderUserId":"other-user","content":"drop"}
 			],"hasMore":false}}`,
 		}
-		payload := executeSearchMsg(t, caller, "--sender", "fixture-user-id", "--no-enrich")
+		payload := executePartialSearchMsg(t, caller, "--sender", "fixture-user-id", "--no-enrich")
 		if len(caller.calls) != 2 || caller.calls[0].tool != "search_contact_by_key_word" ||
 			caller.calls[1].tool != "search_messages" {
 			t.Fatalf("calls=%#v", caller.calls)
@@ -632,7 +643,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 				{"openMessageId":"other","senderUserId":"other-user","content":"drop"}
 			],"hasMore":false}}`,
 		}
-		payload := executeSearchMsg(t, caller, "--sender", "stable-user-id", "--no-enrich")
+		payload := executePartialSearchMsg(t, caller, "--sender", "stable-user-id", "--no-enrich")
 		if len(caller.calls) != 2 || caller.calls[0].tool != "search_contact_by_key_word" ||
 			caller.calls[1].tool != "search_messages" {
 			t.Fatalf("calls=%#v", caller.calls)
@@ -654,7 +665,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 			failContactKeyword: "possibly-a-name",
 			searchResponse:     `{"result":{"messages":[],"hasMore":false}}`,
 		}
-		payload := executeSearchMsg(t, caller, "--sender", "possibly-a-name", "--no-enrich")
+		payload := executePartialSearchMsg(t, caller, "--sender", "possibly-a-name", "--no-enrich")
 		if payload["count"] != float64(0) || payload["complete"] != false || payload["failedCount"] != float64(1) {
 			t.Fatalf("payload=%#v", payload)
 		}
@@ -684,7 +695,7 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 
 func TestCrossPlatformCoverageSearchMsgSenderScopeFailureEdges(t *testing.T) {
 	t.Run("execute rejects senderless backend rows", func(t *testing.T) {
-		caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[{"content":"missing identity"}],"hasMore":false}}`}
+		caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[{"openMessageId":"senderless","content":"missing identity"}],"hasMore":false}}`}
 		_, err := executeSearchMsgResult(caller, "--sender", testCurrentDOpenID, "--no-enrich")
 		var typed *apperrors.Error
 		if !errors.As(err, &typed) || typed.Reason != "search_sender_scope_unverified" {
@@ -751,14 +762,14 @@ func TestCrossPlatformCoverageSearchMsgGroupNameAndDefaultWindowMetadata(t *test
 }
 
 func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *testing.T) {
-	caller := &searchMsgExecutionCaller{mgetResponse: `{"result":[{"openMessageId":"m1","content":"detail-1","messageAiSendFlag":"DWS"},{"openMessageId":"m2","content":"detail-2"}]}`}
+	caller := &searchMsgExecutionCaller{mgetResponse: `{"result":[{"openMessageId":"m1","singleChat":false,"resources":[{"resourceId":"file1","resourceType":"file","resourceIdType":"fileId"}],"content":"detail-1","messageAiSendFlag":"DWS"},{"openMessageId":"m2","singleChat":false,"resources":[{"resourceId":"file2","resourceType":"file","resourceIdType":"fileId"}],"content":"detail-2"}]}`}
 	payload := executeSearchMsg(t, caller,
 		"--query", "周报",
 		"--chat-id", "cid-1,cid-2",
 		"--sender", testCurrentDOpenID,
 		"--at-ids", testCurrentDOpenID2,
 		"--is-at-me",
-		"--message-type", "text",
+		"--message-type", "file",
 		"--only-robot",
 		"--chat-type", "group",
 		"--start", "2026-07-01T00:00:00+08:00",
@@ -783,9 +794,9 @@ func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *te
 	for key, want := range map[string]any{
 		"senderOpenDingTakIds": []string{testCurrentDOpenID},
 		"atOpenDingTakIds":     []string{testCurrentDOpenID2},
-		"messageType":          "text",
+		"messageType":          "file",
 		"onlyRobotMessages":    true,
-		"searchConvType":       "group",
+		"searchConvType":       "group_chat",
 	} {
 		if !reflect.DeepEqual(first.args[key], want) {
 			t.Errorf("%s = %#v, want %#v", key, first.args[key], want)
@@ -821,7 +832,7 @@ func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *te
 
 func TestCrossPlatformCoverageSearchMsgLaterPageFailurePublishesPartialLedger(t *testing.T) {
 	caller := &searchMsgExecutionCaller{failSecondPage: true}
-	payload := executeSearchMsg(t, caller,
+	payload := executePartialSearchMsg(t, caller,
 		"--query", "周报",
 		"--page-all",
 		"--no-enrich",
@@ -839,7 +850,7 @@ func TestCrossPlatformCoverageSearchMsgLaterPageFailurePublishesPartialLedger(t 
 
 func TestCrossPlatformCoverageSearchMsgEnrichmentFailureKeepsSearchHits(t *testing.T) {
 	caller := &searchMsgExecutionCaller{failEnrichment: true}
-	payload := executeSearchMsg(t, caller, "--query", "周报")
+	payload := executePartialSearchMsg(t, caller, "--query", "周报")
 	if payload["complete"] != false || payload["count"] != float64(1) ||
 		payload["enrichedCount"] != float64(0) || payload["failedCount"] != float64(1) {
 		t.Fatalf("payload = %#v", payload)
@@ -848,7 +859,7 @@ func TestCrossPlatformCoverageSearchMsgEnrichmentFailureKeepsSearchHits(t *testi
 
 func TestCrossPlatformCoverageSearchMsgMissingPaginationCannotClaimComplete(t *testing.T) {
 	caller := &searchMsgExecutionCaller{omitPagination: true}
-	payload := executeSearchMsg(t, caller, "--query", "周报", "--no-enrich")
+	payload := executePartialSearchMsg(t, caller, "--query", "周报", "--no-enrich")
 	if payload["complete"] != false || payload["count"] != float64(1) ||
 		payload["failedCount"] != float64(1) {
 		t.Fatalf("payload = %#v", payload)
@@ -873,7 +884,7 @@ func TestCrossPlatformCoverageSearchMsgNumericZeroCursorIsComplete(t *testing.T)
 
 func TestCrossPlatformCoverageSearchMsgMissingMgetItemPublishesFailureLedger(t *testing.T) {
 	caller := &searchMsgExecutionCaller{omitMgetItem: true}
-	payload := executeSearchMsg(t, caller, "--query", "周报", "--page-all")
+	payload := executePartialSearchMsg(t, caller, "--query", "周报", "--page-all")
 	if payload["complete"] != false || payload["count"] != float64(2) ||
 		payload["enrichedCount"] != float64(1) || payload["failedCount"] != float64(1) {
 		t.Fatalf("payload = %#v", payload)
@@ -937,7 +948,7 @@ func TestSearchMsgScopedEmptyPartialScanCannotClaimComplete(t *testing.T) {
 			"nextCursor": "c2"
 		}
 	}`}
-	payload := executeSearchMsg(t, caller,
+	payload := executePartialSearchMsg(t, caller,
 		"--group", "cid-target", "--query", "周报", "--no-enrich", "--page-limit", "1")
 	if payload["count"] != float64(0) || payload["complete"] != false || payload["failedCount"] != float64(1) {
 		t.Fatalf("payload = %#v", payload)

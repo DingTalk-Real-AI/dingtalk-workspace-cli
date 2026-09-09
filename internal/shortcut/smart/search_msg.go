@@ -45,6 +45,7 @@ const (
 var SearchMsg = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+search-msg",
+	Aliases:     []string{"+messages-search"},
 	Product:     "im",
 	Description: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
 	Intent:      searchMsgIntent,
@@ -60,6 +61,7 @@ var SearchMsg = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_search_msg",
 			CLIPath:        "chat +search-msg",
 			PrimaryCLIPath: "chat +search-msg",
+			Aliases:        []string{"chat +messages-search"},
 		},
 		Description: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
 		Interface: &contract.InterfaceSpec{
@@ -96,17 +98,18 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析的兼容入口（可选，可重复或逗号分隔）"},
 		{Name: "at-me", Type: shortcut.FlagBool, Desc: "只搜索 @我 的消息"},
 		{Name: "is-at-me", Type: shortcut.FlagBool, Desc: "--at-me 的 lark-cli 对齐别名"},
-		{Name: "at-ids", Type: shortcut.FlagStringSlice, Desc: "@对象 userId/openDingTalkId 列表"},
-		{Name: "message-type", Type: shortcut.FlagString, Desc: "下层消息类型过滤值（以当前 IM Schema 为准）"},
+		{Name: "at-ids", Type: shortcut.FlagStringSlice, Aliases: []string{"at-chatter-ids"}, Desc: "@对象 userId/openDingTalkId 列表"},
+		{Name: "message-type", Type: shortcut.FlagString, Desc: "已验证的消息类型筛选：file；其他枚举下游可能忽略，暂不开放"},
 		{Name: "only-robot", Type: shortcut.FlagBool, Desc: "只搜索机器人消息"},
 		{Name: "has-reactions", Type: shortcut.FlagBool, Desc: "只返回存在 reaction 的消息；由默认详情富化提供 reaction 证据；" + searchMsgReactionConstraint},
 		{Name: "conversation-type", Type: shortcut.FlagString, Desc: "下层会话类型过滤值（以当前 IM Schema 为准）"},
 		{Name: "chat-type", Type: shortcut.FlagString, Desc: "--conversation-type 的 lark-cli 对齐别名"},
+		{Name: "all-time", Type: shortcut.FlagBool, Desc: "不向搜索接口附加默认时间范围；不承诺服务端覆盖全部历史"},
 		{Name: "days", Type: shortcut.FlagInt, Desc: "默认时间窗的回溯天数", Default: "7"},
-		{Name: "start", Type: shortcut.FlagString, Desc: "精确开始时间（RFC3339，需与 --end/--end-time 一起传）"},
-		{Name: "start-time", Type: shortcut.FlagString, Desc: "--start 的 lark-cli 对齐别名（RFC3339，需与 --end/--end-time 一起传）"},
-		{Name: "end", Type: shortcut.FlagString, Desc: "精确结束时间（RFC3339，需与 --start/--start-time 一起传）"},
-		{Name: "end-time", Type: shortcut.FlagString, Desc: "--end 的 lark-cli 对齐别名（RFC3339，需与 --start/--start-time 一起传）"},
+		{Name: "start", Type: shortcut.FlagString, Desc: "精确开始时间（RFC3339，可独立指定；未指定结束时由服务定义上界）"},
+		{Name: "start-time", Type: shortcut.FlagString, Desc: "--start 的 lark-cli 对齐别名（RFC3339，可独立指定；未指定结束时由服务定义上界）"},
+		{Name: "end", Type: shortcut.FlagString, Desc: "精确结束时间（RFC3339，可独立指定；未指定开始时由服务定义下界）"},
+		{Name: "end-time", Type: shortcut.FlagString, Desc: "--end 的 lark-cli 对齐别名（RFC3339，可独立指定；未指定开始时由服务定义下界）"},
 		{Name: "order", Type: shortcut.FlagString, Enum: []string{"asc", "desc"}, Desc: "按消息创建时间稳定排列输出 asc/desc（可选，默认 desc）"},
 		{Name: "sort", Type: shortcut.FlagString, Enum: []string{"asc", "desc"}, Desc: "--order 的 lark-cli 对齐别名（可选）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量（1-100）", Default: "100"},
@@ -116,23 +119,14 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动连续拉取所有游标页；" + searchMsgReactionConstraint},
 		{Name: "page-limit", Type: shortcut.FlagInt, Desc: "--page-all 或显式会话范围本地扫描的最大页数（1-40）", Default: "20"},
 		{Name: "no-enrich", Type: shortcut.FlagBool, Desc: "不再按消息 ID 批量查询完整详情；" + searchMsgReactionConstraint},
+		{Name: "with-threads", Type: shortcut.FlagBool, Desc: "有界补查Thread回复，每Thread10条/总计500条；不可与no-enrich并用"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出命中消息的 reaction（默认输出）"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
 		{
 			Kind:        shortcut.ConstraintAtLeastOne,
-			Flags:       []string{"query", "keyword", "text", "text-query", "group", "conversation-id", "id", "groups", "chat-id", "chat-query", "senders", "sender", "sender-query", "at-me", "is-at-me", "at-ids", "message-type", "only-robot", "has-reactions", "conversation-type", "chat-type"},
+			Flags:       []string{"query", "keyword", "text", "text-query", "group", "conversation-id", "id", "groups", "chat-id", "chat-query", "senders", "sender", "sender-query", "at-me", "is-at-me", "at-ids", "message-type", "only-robot", "has-reactions", "conversation-type", "chat-type", "start", "start-time", "end", "end-time", "all-time"},
 			Description: "至少指定一个内容、身份、会话或消息类型过滤条件",
-		},
-		{
-			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"start", "start-time"},
-			Description: "需与 --end/--end-time 一起传",
-		},
-		{
-			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"end", "end-time"},
-			Description: "需与 --start/--start-time 一起传",
 		},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"start", "start-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"end", "end-time"}},
@@ -144,6 +138,7 @@ var SearchMsg = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"query", "keyword", "text", "text-query"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"limit", "page-size"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"cursor", "page-token"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"with-threads", "no-enrich"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"has-reactions", "page-all", "no-enrich"}, Description: searchMsgReactionConstraint},
 	}, chatshortcut.MessageResourceDownloadConstraints()...),
 	Tips: []string{
@@ -174,7 +169,7 @@ var SearchMsg = shortcut.Shortcut{
 		}
 
 		pageLimit := 1
-		scanAllPages := rt.Bool("page-all") || scopedSearch
+		scanAllPages := rt.Bool("page-all") || scopedSearch || rt.Changed("page-limit")
 		if scanAllPages {
 			pageLimit = rt.Int("page-limit")
 		}
@@ -204,7 +199,10 @@ var SearchMsg = shortcut.Shortcut{
 				break
 			}
 			pagesFetched++
-			pageMessages := searchMsgItems(data)
+			pageMessages, shapeErr := verifiedSearchItems(data)
+			if shapeErr != nil {
+				return shapeErr
+			}
 			if scopedSearch {
 				var unverifiableMessageIDs []string
 				pageMessages, unverifiableMessageIDs = chatmsg.FilterConversationScope(pageMessages, requestedConversationIDs)
@@ -302,6 +300,28 @@ var SearchMsg = shortcut.Shortcut{
 			messages = filterSearchMessagesWithReactions(messages)
 		}
 
+		var filterErr error
+		messages, filterErr = verifySearchResultFilters(rt, params, messages)
+		if filterErr != nil {
+			return filterErr
+		}
+		var detailLedger map[string]any
+		var threadViews map[string]map[string]any
+		if rt.Bool("with-threads") {
+			detailLedger, threadViews, _ = chatshortcut.EnrichMessageDetails(rt, messages)
+			if fs, ok := detailLedger["failures"].([]map[string]any); ok {
+				failures = append(failures, fs...)
+			}
+			if detailLedger["complete"] != true {
+				complete = false
+			}
+		} else if !rt.Bool("no-reactions") {
+			_, _, reactionFailures := chatshortcut.EnrichMessageReactions(rt, messages)
+			failures = append(failures, reactionFailures...)
+			if len(reactionFailures) > 0 {
+				complete = false
+			}
+		}
 		order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
 		if order == "" {
 			order = "desc"
@@ -309,7 +329,11 @@ var SearchMsg = shortcut.Shortcut{
 		sortMessagesByCreateTimeStable(messages, order)
 		results := make([]map[string]any, 0, len(messages))
 		for _, m := range messages {
-			results = append(results, searchMsgProjectWithReactions(m, !rt.Bool("no-reactions")))
+			row := searchMsgProjectWithReactions(m, !rt.Bool("no-reactions"))
+			if v := threadViews[chatmsg.StableMessageID(m)]; v != nil {
+				row["thread"] = v
+			}
+			results = append(results, row)
 		}
 		payload := map[string]any{
 			"contractVersion": chatmsg.MessageListContractVersion,
@@ -326,6 +350,9 @@ var SearchMsg = shortcut.Shortcut{
 			"queryRange":      searchMessageQueryRange(params, order),
 			"timeCoverage":    searchMessageTimeCoverage(rt),
 			"conclusionGuard": searchMessageConclusionGuard(rt, complete, len(results)),
+		}
+		if detailLedger != nil {
+			payload["enrichment"] = detailLedger
 		}
 		if len(resolvedFilters.Chats) > 0 || len(resolvedFilters.Senders) > 0 {
 			payload["resolvedFilters"] = resolvedFilters
@@ -362,7 +389,13 @@ var SearchMsg = shortcut.Shortcut{
 				chatshortcut.DownloadMessageResources(rt, messages, ""),
 			)
 		}
-		return rt.Output(payload)
+		if err := rt.Output(payload); err != nil {
+			return err
+		}
+		if len(failures) > 0 {
+			return apperrors.NewAPI("搜索结果不完整，请检查failures", apperrors.WithReason("incomplete_result"))
+		}
+		return nil
 	},
 }
 
@@ -372,7 +405,10 @@ var SearchMsg = shortcut.Shortcut{
 // structured predicates stay on search_messages until the conversation list
 // interface exposes equally strong typed facts for them.
 func scopedConversationReactionStreamEligible(rt *shortcut.RuntimeContext) bool {
+	startSet := strings.TrimSpace(rt.StrFirst("start", "start-time")) != ""
+	endSet := strings.TrimSpace(rt.StrFirst("end", "end-time")) != ""
 	return rt.Bool("has-reactions") &&
+		!rt.Bool("with-threads") && !rt.Bool("all-time") && startSet == endSet &&
 		!rt.Changed("cursor") &&
 		!rt.Changed("page-token") &&
 		rt.StrFirst("query", "keyword", "text", "text-query", "message-type", "conversation-type", "chat-type") == "" &&
@@ -425,6 +461,7 @@ func executeScopedConversationReactionSearch(
 			tool: "list_conversation_message_v2",
 			params: map[string]any{
 				"openconversation_id": conversationID,
+				"mark_as_read":        false,
 				"time":                formatDingTalkMessageBoundary(endTime),
 				"forward":             false,
 				"limit":               pageSize,
@@ -571,6 +608,9 @@ func appendScopedConversationFailures(
 
 func searchMessageTimeCoverage(rt *shortcut.RuntimeContext) map[string]any {
 	source := "implicit_default"
+	if rt.Bool("all-time") {
+		return map[string]any{"source": "server_default", "allHistory": false}
+	}
 	if rt.Changed("start") || rt.Changed("start-time") || rt.Changed("end") || rt.Changed("end-time") {
 		source = "explicit_range"
 	} else if rt.Changed("days") {
@@ -610,14 +650,17 @@ func validateSearchMsgWithResources(rt *shortcut.RuntimeContext) error {
 }
 
 func validateSearchMsg(rt *shortcut.RuntimeContext) error {
-	hasFilter := rt.StrFirst("query", "keyword", "text", "text-query", "group", "conversation-id", "id", "message-type", "conversation-type", "chat-type") != "" ||
+	if kind := rt.Str("message-type"); kind != "" && kind != "file" {
+		return apperrors.NewValidation("--message-type 当前仅支持已验证的file；其他枚举尚无可靠筛选合同")
+	}
+	hasFilter := rt.Bool("all-time") || rt.Changed("start") || rt.Changed("start-time") || rt.Changed("end") || rt.Changed("end-time") || rt.StrFirst("query", "keyword", "text", "text-query", "group", "conversation-id", "id", "message-type", "conversation-type", "chat-type") != "" ||
 		len(rt.StrSlice("groups")) > 0 ||
 		len(rt.StrSlice("chat-id")) > 0 ||
 		len(rt.StrSlice("chat-query")) > 0 ||
 		len(rt.StrSlice("senders")) > 0 ||
 		len(rt.StrSlice("sender")) > 0 ||
 		len(rt.StrSlice("sender-query")) > 0 ||
-		len(rt.StrSlice("at-ids")) > 0 ||
+		len(append(rt.StrSlice("at-ids"), rt.StrSlice("at-chatter-ids")...)) > 0 ||
 		rt.Bool("at-me") ||
 		rt.Bool("is-at-me") ||
 		rt.Bool("only-robot") ||
@@ -625,10 +668,8 @@ func validateSearchMsg(rt *shortcut.RuntimeContext) error {
 	if !hasFilter {
 		return apperrors.NewValidation("至少指定一个过滤条件，例如 --query、--group、--senders、--at-me 或 --message-type")
 	}
-	startChanged := rt.Changed("start") || rt.Changed("start-time")
-	endChanged := rt.Changed("end") || rt.Changed("end-time")
-	if startChanged != endChanged {
-		return apperrors.NewValidation("--start/--start-time 与 --end/--end-time 必须同时指定")
+	if rt.Bool("all-time") && (rt.Changed("days") || rt.Changed("start") || rt.Changed("start-time") || rt.Changed("end") || rt.Changed("end-time")) {
+		return apperrors.NewValidation("--all-time 与显式时间范围互斥")
 	}
 	if days := rt.Int("days"); days < 1 || days > 3650 {
 		return apperrors.NewValidation("--days 必须在 1-3650 之间")
@@ -757,7 +798,7 @@ func searchMsgParams(rt *shortcut.RuntimeContext) (map[string]any, searchResolve
 		resolvedFilters.Senders = append(resolvedFilters.Senders, resolvedUsers...)
 	}
 	appendResolvedSearchActorIDs(params, resolvedFilters.Senders, "senderUserIds", "senderOpenDingTakIds")
-	atUsers := resolveSearchStableActorTargets(rt, rt.StrSlice("at-ids"))
+	atUsers := resolveSearchStableActorTargets(rt, append(rt.StrSlice("at-ids"), rt.StrSlice("at-chatter-ids")...))
 	appendResolvedSearchActorIDs(params, atUsers, "atUserIds", "atOpenDingTakIds")
 	if rt.Bool("at-me") || rt.Bool("is-at-me") {
 		params["atMe"] = true
@@ -769,30 +810,42 @@ func searchMsgParams(rt *shortcut.RuntimeContext) (map[string]any, searchResolve
 		params["onlyRobotMessages"] = rt.Bool("only-robot")
 	}
 	if value := rt.StrFirst("conversation-type", "chat-type"); value != "" {
-		params["searchConvType"] = value
+		kind, err := normalizeSearchConversationType(value)
+		if err != nil {
+			return nil, searchResolvedFilters{}, err
+		}
+		params["searchConvType"] = kind
 	}
 
 	startValue := rt.StrFirst("start", "start-time")
 	endValue := rt.StrFirst("end", "end-time")
-	if startValue != "" && endValue != "" {
-		start, err := time.Parse(time.RFC3339, startValue)
-		if err != nil {
-			return nil, searchResolvedFilters{}, apperrors.NewValidation(fmt.Sprintf("--start/--start-time 必须是 RFC3339 时间: %v", err))
+	if startValue != "" || endValue != "" {
+		var start, end time.Time
+		if startValue != "" {
+			var err error
+			start, err = time.Parse(time.RFC3339, startValue)
+			if err != nil {
+				return nil, searchResolvedFilters{}, apperrors.NewValidation("--start 必须是RFC3339时间")
+			}
+			params["startTime"] = start.UnixMilli()
 		}
-		end, err := time.Parse(time.RFC3339, endValue)
-		if err != nil {
-			return nil, searchResolvedFilters{}, apperrors.NewValidation(fmt.Sprintf("--end/--end-time 必须是 RFC3339 时间: %v", err))
+		if endValue != "" {
+			var err error
+			end, err = time.Parse(time.RFC3339, endValue)
+			if err != nil {
+				return nil, searchResolvedFilters{}, apperrors.NewValidation("--end 必须是RFC3339时间")
+			}
+			params["endTime"] = end.UnixMilli()
 		}
-		if !end.After(start) {
+		if !start.IsZero() && !end.IsZero() && !end.After(start) {
 			return nil, searchResolvedFilters{}, apperrors.NewValidation("--end 必须晚于 --start")
 		}
-		params["startTime"] = start.UnixMilli()
-		params["endTime"] = end.UnixMilli()
-	} else {
+	} else if !rt.Bool("all-time") {
 		now := time.Now()
 		params["startTime"] = now.AddDate(0, 0, -rt.Int("days")).UnixMilli()
 		params["endTime"] = now.UnixMilli()
 	}
+
 	return params, resolvedFilters, nil
 }
 

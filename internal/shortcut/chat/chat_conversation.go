@@ -135,7 +135,9 @@ var ConversationSetTop = shortcut.Shortcut{
 
 func conversationSetTopIDs(rt *shortcut.RuntimeContext) []string {
 	values := append([]string{}, rt.StrSlice("conversation-ids")...)
-	if value := rt.Str("conversation-id"); value != "" {
+	values = append(values, rt.StrSlice("chat-ids")...)
+	values = append(values, rt.StrSlice("chat-id")...)
+	if value := rt.StrFirst("conversation-id", "chat-id"); value != "" {
 		values = append(values, value)
 	}
 	return uniqueShortcutStrings(values)
@@ -577,6 +579,7 @@ func conversationListFirst(m map[string]any, keys ...string) (any, bool) {
 var ConversationListTop = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+conversation-list-top",
+	Aliases:     []string{"+feed-shortcut-list"},
 	Description: "拉取置顶会话列表，可只看群聊或单聊",
 	Intent:      "当你只想查看被置顶的那些会话时使用；只读分页返回置顶会话列表，并把下层 singleChat 规范化为 conversationType=group|direct。可用 --type group 只看群聊、--type direct 只看单聊，或用 --exclude-muted 排除已免打扰会话。",
 	Risk:        shortcut.RiskRead,
@@ -591,6 +594,7 @@ var ConversationListTop = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_conversation_list_top",
 			CLIPath:        "chat +conversation-list-top",
 			PrimaryCLIPath: "chat +conversation-list-top",
+			Aliases:        []string{"chat +feed-shortcut-list"},
 		},
 		Description: "拉取置顶会话列表，可只看群聊或单聊",
 		Interface: &contract.InterfaceSpec{
@@ -610,7 +614,8 @@ var ConversationListTop = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量"},
-		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标（首次不传或 0）"},
+		{Name: "no-detail", Type: shortcut.FlagBool, Desc: "跳过会话详情补查（默认补查并精确核对ID）"},
+		{Name: "cursor", Type: shortcut.FlagInt, Aliases: []string{"page-token"}, Desc: "分页游标（首次不传或 0）"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
 		{Name: "type", Type: shortcut.FlagString, Default: "all", Desc: "会话类型：all 全部 / group 群聊 / direct 单聊（当前页本地过滤）", Enum: []string{"all", "group", "direct"}},
 	},
@@ -623,14 +628,17 @@ var ConversationListTop = shortcut.Shortcut{
 		if rt.Int("limit") > 0 {
 			params["limit"] = rt.Int("limit")
 		}
-		if rt.Int("cursor") > 0 {
-			params["cursor"] = rt.Int("cursor")
+		if rt.IntFirst("cursor", "page-token") > 0 {
+			params["cursor"] = rt.IntFirst("cursor", "page-token")
 		}
 		if rt.Bool("exclude-muted") {
 			params["excludeMuted"] = true
 		}
 		data, err := rt.CallMCPData("chat", "list_top_conversations", params)
 		if err != nil {
+			return err
+		}
+		if _, err := StrictChatCollection(data, "conversations", "items", "list"); err != nil {
 			return err
 		}
 		convs := conversationListTopProject(data)
@@ -642,6 +650,11 @@ var ConversationListTop = shortcut.Shortcut{
 			"conversations": convs,
 		}
 		chatmsg.ApplyPagination(payload, data)
+		if !rt.Bool("no-detail") {
+			if err := attachConversationDetails(rt, payload, convs); err != nil {
+				return err
+			}
+		}
 		return rt.Output(payload)
 	},
 }
@@ -659,7 +672,7 @@ func conversationListTopProject(data map[string]any) []map[string]any {
 		if !ok {
 			continue
 		}
-		row := map[string]any{}
+		row := copyChatBusinessFields(m, "notificationOff", "unreadPoint", "lastMsgCreateAt", "singleChat")
 		if v, ok := conversationListTopFirst(m, "openConversationId", "conversationId", "id"); ok {
 			row["openConversationId"] = v
 		}
@@ -837,6 +850,7 @@ var ConversationHide = shortcut.Shortcut{
 var CategoryList = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+category-list",
+	Aliases:     []string{"+feed-group-list"},
 	Product:     "im",
 	Description: "获取用户自定义会话分组",
 	Intent:      "当你想查看当前用户自建了哪些会话分组（如'工作群''项目群'）时使用；只读返回分组列表及其 categoryId，供后续按分组拉会话或增删。",
@@ -852,6 +866,7 @@ var CategoryList = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_category_list",
 			CLIPath:        "chat +category-list",
 			PrimaryCLIPath: "chat +category-list",
+			Aliases:        []string{"chat +feed-group-list"},
 		},
 		Description: "获取用户自定义会话分组",
 		Interface: &contract.InterfaceSpec{
@@ -904,7 +919,7 @@ func categoryListProject(data map[string]any) ([]map[string]any, error) {
 				map[string]any{"index": index},
 			)
 		}
-		row := map[string]any{}
+		row := copyChatBusinessFields(m, "createAt")
 		if v, ok := categoryListFirst(m, "categoryId", "category_id", "id"); ok {
 			row["categoryId"] = v
 		}
@@ -961,6 +976,7 @@ const categoryListConversationsIntent = "当已有稳定 categoryId、需要列�
 var CategoryListConversations = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+category-list-conversations",
+	Aliases:     []string{"+feed-group-list-item"},
 	Product:     "im",
 	Description: "按稳定 categoryId 列出会话分组中的会话",
 	Intent:      categoryListConversationsIntent,
@@ -995,7 +1011,7 @@ var CategoryListConversations = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "category-id", Type: shortcut.FlagInt, Desc: "稳定会话分组 ID", Required: true},
+		{Name: "category-id", Type: shortcut.FlagInt, Aliases: []string{"feed-group-id"}, Desc: "稳定会话分组 ID", Required: true},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
 	},
 	Tips: []string{
@@ -1005,7 +1021,7 @@ var CategoryListConversations = shortcut.Shortcut{
 }
 
 func executeCategoryListConversations(rt *shortcut.RuntimeContext) error {
-	categoryID := rt.Int("category-id")
+	categoryID := rt.IntFirst("category-id", "feed-group-id")
 	params := map[string]any{"categoryId": categoryID}
 	if rt.Bool("exclude-muted") {
 		params["excludeMuted"] = true
@@ -1173,7 +1189,7 @@ func categoryConversationsProject(data map[string]any) ([]map[string]any, error)
 				map[string]any{"index": index},
 			)
 		}
-		row := map[string]any{}
+		row := copyChatBusinessFields(m, "singleChat", "notificationOff", "unreadPoint", "lastMsgCreateAt")
 		if v, ok := categoryConversationsFirst(m, "openConversationId", "conversationId", "id"); ok {
 			row["openConversationId"] = v
 		}
@@ -1182,6 +1198,9 @@ func categoryConversationsProject(data map[string]any) ([]map[string]any, error)
 		}
 		if v, ok := categoryConversationsFirst(m, "conversationType", "type"); ok {
 			row["conversationType"] = v
+		}
+		if kind, ok := conversationListTopType(m); ok {
+			row["conversationType"] = kind
 		}
 		if !categoryValuePresent(row["openConversationId"]) {
 			return nil, invalidCategoryResponse(

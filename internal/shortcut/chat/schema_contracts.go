@@ -106,9 +106,12 @@ func reviewedChatPrimaryParamDecls(command string) []contract.ParamDecl {
 	case "+messages-send-by-bot", "+messages-batch-send-by-bot", "+messages-send-by-webhook":
 		return []contract.ParamDecl{renamedRequiredChatParam("content", "text")}
 	case "+messages-reply":
+		optional := false
 		return []contract.ParamDecl{
-			renamedRequiredChatParam("group", "conversationId"),
+			{Name: "group", Property: "conversationId", Required: &optional},
 			renamedRequiredChatParam("content", "text"),
+			{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds"},
+			{Name: "at-all", Property: "atAll"},
 		}
 	default:
 		return nil

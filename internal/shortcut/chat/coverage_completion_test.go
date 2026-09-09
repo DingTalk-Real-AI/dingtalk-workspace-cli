@@ -489,15 +489,15 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 			name:      "referenced message lookup",
 			caller:    &larkAlignmentCaller{failProductTool: "im/list_messages_by_ids"},
 			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--text", "收到", "--yes"},
-			wantError: "读取被引用消息",
+			wantError: "fixture lower call failed",
 		},
 		{
 			name: "referenced message missing sender",
 			caller: &larkAlignmentCaller{responses: map[string]string{
-				"im/list_messages_by_ids": `{"result":[{"openMessageId":"other","senderOpenDingTalkId":"D-other"},{"openMessageId":"msg"}]}`,
+				"im/list_messages_by_ids": `{"result":[{"openMessageId":"other","senderOpenDingTalkId":"D-other"},{"openMessageId":"msg","openConversationId":"cid"}]}`,
 			}},
 			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--text", "收到", "--yes"},
-			wantError: "未返回 senderOpenDingTalkId",
+			wantError: "缺少发送者",
 		},
 		{
 			name:      "feed source",
@@ -513,7 +513,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 		},
 		{
 			name:      "reply write",
-			caller:    &larkAlignmentCaller{failProductTool: "chat/send_personal_message"},
+			caller:    &larkAlignmentCaller{failProductTool: "chat/send_personal_message", responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`}},
 			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--ref-sender", fixtureCurrentDOpenID, "--text", "收到", "--yes"},
 			wantError: "fixture lower call failed",
 		},
@@ -604,8 +604,8 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	}
 	cases := [][]string{
 		{"chat", "+flag-create", "--message-ids", strings.Join(tooMany, ","), "--conversation-id", "cid", "--yes"},
-		{"chat", "+flag-list", "--cursor", "-1"},
-		{"chat", "+flag-list", "--size", "31"},
+		{"chat", "+flag-list", "--no-enrich", "--cursor", "-1"},
+		{"chat", "+flag-list", "--no-enrich", "--size", "31"},
 		{"chat", "+messages-mget", "--msg-ids", strings.Join(makeIDs(51), ",")},
 		{"chat", "+messages-mget", "--msg-ids", "msg", "--download-resources", "--output-dir", "../escape"},
 	}
@@ -682,7 +682,7 @@ func TestCrossPlatformCoverageFeedCompleteAndExcludeMuted(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].args["excludeMuted"] != true {
+	if len(fake.calls) != 2 || fake.calls[0].args["excludeMuted"] != true {
 		t.Fatalf("feed calls = %#v", fake.calls)
 	}
 	var payload map[string]any

@@ -31,6 +31,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 )
 
 // oauthHTTPClient is a dedicated HTTP client for OAuth operations with
@@ -40,18 +41,19 @@ var oauthHTTPClient = &http.Client{
 }
 
 var (
-	oauthListen          = net.Listen
-	oauthOpenBrowser     = openBrowser
-	oauthLoginTimeout    = 5 * time.Minute
-	oauthApprovalTimeout = 10 * time.Minute
-	oauthPollInterval    = 5 * time.Second
-	oauthSuccessPause    = 2 * time.Second
-	oauthLoadToken       = LoadTokenData
-	oauthLoadTokenLocked = loadTokenDataForProfileLocked
-	oauthAcquireLock     = AcquireDualLock
-	oauthMarkProfile     = MarkProfileStatus
-	oauthFetchClientID   = FetchClientIDFromMCP
-	oauthExchange        = func(p *OAuthProvider, ctx context.Context, code string) (*TokenData, error) {
+	oauthListen               = net.Listen
+	oauthOpenBrowser          = openBrowser
+	resolveAuthRuntimeContext = runtimecontext.Resolve
+	oauthLoginTimeout         = 5 * time.Minute
+	oauthApprovalTimeout      = 10 * time.Minute
+	oauthPollInterval         = 5 * time.Second
+	oauthSuccessPause         = 2 * time.Second
+	oauthLoadToken            = LoadTokenData
+	oauthLoadTokenLocked      = loadTokenDataForProfileLocked
+	oauthAcquireLock          = AcquireDualLock
+	oauthMarkProfile          = MarkProfileStatus
+	oauthFetchClientID        = FetchClientIDFromMCP
+	oauthExchange             = func(p *OAuthProvider, ctx context.Context, code string) (*TokenData, error) {
 		return p.exchangeCode(ctx, code)
 	}
 	oauthCheckStatus = func(p *OAuthProvider, ctx context.Context, token string) (*CLIAuthStatus, error) {
@@ -297,6 +299,10 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		callbackCodeInProgress  string // Code currently being processed (to prevent concurrent exchange)
 		callbackTokenMu         sync.Mutex
 	)
+
+	runtimeSnapshot := resolveAuthRuntimeContext()
+	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
+	browserURL, _ := runtimeSnapshot.AttachToURL(authURL)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(CallbackPath, func(w http.ResponseWriter, r *http.Request) {
@@ -568,7 +574,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		callbackTokenMu.Unlock()
 		data, _ := json.Marshal(map[string]any{
 			"clientId":        p.clientID,
-			"authorizeUrl":    AuthorizeURLForLoginRegion(p.LoginRegion),
+			"authorizeUrl":    browserURL,
 			"applySent":       applySent,
 			"hasDwsApply":     hasDwsApply,
 			"selectedAdminId": selectedAdminId,
@@ -634,13 +640,12 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
 	if !p.NoBrowser {
-		if err := oauthOpenBrowser(authURL); err != nil && p.logger != nil {
-			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error", err)
+		if err := oauthOpenBrowser(browserURL); err != nil && p.logger != nil {
+			p.logger.Warn(i18n.T("无法自动打开浏览器"), "error_category", "browser_open_failed")
 		}
 	}
 
