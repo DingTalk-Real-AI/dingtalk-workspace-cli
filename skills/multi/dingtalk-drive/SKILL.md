@@ -114,7 +114,7 @@ Golden Route 参数足够时禁止读取 reference。其余最多读取一个精
 
 ## 错误最短路径
 
-1. 零/多候选、类型不明或分页不完整：停止写入，返回候选或 continuation。
+1. 零/多候选、类型不明或分页不完整：停止写入，返回候选或 continuation；分页读取可在有效游标和预算内继续。
 2. `unknown flag`：只查一次当前 leaf Help；`unknown command`：只查一次 Drive shortcut 清单。
 3. 普通下载遇到在线文档类型：切 `doc +export`，不重复尝试 Drive download。
 4. 传输中断：保留本地临时状态或 checkpoint；先判断能否续传。
