@@ -12,16 +12,18 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 const (
-	publicShortcutCount = 439
+	publicShortcutCount = 442
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 496
+	schemaPublishedShortcutCount = 499
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 439
+	publiclyDeliveredShortcutCount = 442
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -115,7 +117,6 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 		t.Fatal("public --conversation-id must stay optional when hidden siblings still satisfy the declared exactly_one group")
 	}
 	wantMessagesConstraints := map[string]any{
-		"require_one_of":     [][]string{{"conversation-id", "group", "id"}},
 		"mutually_exclusive": [][]string{{"conversation-id", "group", "id"}},
 	}
 	if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantMessagesConstraints) {
@@ -132,7 +133,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 237; got != want {
+	if got, want := int(product["count"].(float64)), 240; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -144,8 +145,8 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 			shortcutCount++
 		}
 	}
-	if shortcutCount != 99 {
-		t.Fatalf("schema chat shortcut summaries = %d, want 99", shortcutCount)
+	if shortcutCount != 102 {
+		t.Fatalf("schema chat shortcut summaries = %d, want 102", shortcutCount)
 	}
 	for _, cliPath := range missingChatCatalogCoveragePaths() {
 		if summaryByCLIPath[cliPath] == nil {
@@ -606,8 +607,34 @@ func executeShortcutSchemaQuery(t testing.TB, args ...string) map[string]any {
 }
 
 func shortcutSchemaCanonical(declared shortcut.Shortcut) string {
-	name := strings.ReplaceAll(strings.TrimPrefix(declared.Command, "+"), "-", "_")
-	return declared.Service + ".shortcut_" + name
+	// A CLI rename need not change the stable Schema identity. Read the
+	// declaration, not the command spelling or the delivery under test.
+	return declared.Contract.Identity.CanonicalPath
+}
+
+func TestCrossPlatformCoverageShortcutSchemaCanonicalUsesDeclaredIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		command   string
+		canonical string
+	}{
+		{"unchanged", "+active-conversations", "chat.shortcut_active_conversations"},
+		{"renamed", "+recent-conversations", "chat.shortcut_active_conversations"},
+		{"missing_identity_is_not_inferred", "+recent-conversations", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			declared := shortcut.Shortcut{
+				Service: "chat",
+				Command: tc.command,
+				Contract: corecmd.ContractDecl{
+					Identity: contract.ToolIdentitySpec{CanonicalPath: tc.canonical},
+				},
+			}
+			if got := shortcutSchemaCanonical(declared); got != tc.canonical {
+				t.Fatalf("canonical = %q, want declared identity %q", got, tc.canonical)
+			}
+		})
+	}
 }
 
 func assertDeliveryShortcutIdentityAndSelection(

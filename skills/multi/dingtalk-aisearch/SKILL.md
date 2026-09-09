@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aisearch
-description: AI搜问：人员语义搜索、跨源内容定位与行为回溯。Use when 按姓名/工号/部门/职责/上下级找人；按主题跨文档/消息/邮件/待办/听记/日志/图片/链接/AI表格检索；或询问我/某人发送、收到、创建、编辑、分享过什么。即使请求点名某一内容类型，只要目标是“按主题找记录”而非读取已知对象，也优先本 skill。完整手机号反查走 dingtalk-contact；命中后要读取或修改原对象才切对应产品。命令前缀：dws aisearch。
+description: AI搜问：人员语义搜索、跨源内容发现与当前用户行为轨迹。Use when 按姓名/工号/部门/职责/上下级找人，跨文档/消息/邮件/待办/听记等来源按主题发现记录，或查询当前用户参与的发送、接收及创建、编辑、分享行为。若资源只限 IM、答案必须是逐条消息且带结构化消息谓词，走 dingtalk-chat；完整手机号反查走 dingtalk-contact，稳定 ID 后的读写走对应产品。命令前缀：dws aisearch。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -26,11 +26,12 @@ metadata:
 |---|---|---|
 | 姓名/工号/部门/职位/职责/上下级/手机号线索找人 | `dws aisearch person` | `--query` + `--dimension` |
 | 按主题找文档、消息、邮件、待办、听记等内容 | `dws aisearch enterprise` | `--queries` + `--types` + 可选 `--time-range` |
-| 我/某人发送、收到、创建、编辑或分享过什么 | `dws aisearch behavior` | 上述内容槽位 + `--behavior-type` + 可选 `--direction/--chat-scope` |
+| 以我为关系端点的发送/接收，或我创建、编辑、分享过什么 | `dws aisearch behavior` | 上述内容槽位 + `--behavior-type` + 可选 `--direction/--chat-scope` |
+| <!-- dws-intent: chat.search.filtered -->资源只限 IM，答案是逐条消息并带结构化消息谓词 | `dws chat +search-msg` | 发送者、会话、关键词、@、类型、reaction、时间和完整分页由 Chat 负责 |
 | 完整手机号精确反查 | `dws contact user search-mobile --mobile "<完整手机号>" --format json` | `--mobile` |
 | 已知稳定 ID 后读取/修改原对象 | 对应产品 Skill | 不再用 AISearch 重搜 |
 
-只要任务仍是“定位记录”，即使只点名邮件、消息或文档，也由 AISearch 完成；不要提前切 Mail、Chat、Doc、Drive、Wiki、Todo、Minutes 或 Report 重做搜索。
+选路先判断：①资源范围是跨来源还是仅 IM；②答案形态是发现结果、行为轨迹还是逐条消息；③是否依赖消息原生谓词。跨来源发现走 enterprise，当前用户行为轨迹走 behavior，仅 IM 的消息记录过滤走 Chat。
 
 ## 1. 人员搜索
 
@@ -64,8 +65,9 @@ dws aisearch enterprise --queries "<主题>" --types <类型CSV> [--time-range "
 dws aisearch behavior --queries "<主题>" --types <类型CSV> --behavior-type <all|send|receive|create|edit|share> [--time-range "<时间>"] [--direction "我->某人|某人->我|我<->某人"] [--chat-scope "<完整群名>"] --format json
 ```
 
-- 每个不同的“动作＋方向＋时间”组合调用一次；同一组合的多个类型可用 CSV 合并。`chat-scope` 仅用于 `im`，方向保留用户原文姓名，不先查邮箱或 userId。
+- 每个不同的“动作＋方向＋时间”组合调用一次；同一组合的多个类型可用 CSV 合并。`chat-scope` 仅用于 `im`，方向保留用户原文姓名，不先查邮箱或 userId。方向是当前用户参与的关系约束，不是对某个发送者全部消息的集合定义。
 - “我在某群发过”＝`types=im, behavior-type=send, chat-scope=<完整群名>`；“我发给某人的邮件”＝`types=mail, behavior-type=send, direction=我->某人`；“某人发给我的文档”＝`types=document, behavior-type=receive, direction=某人->我`。
+- 资源只限 IM、答案要求逐条消息并按发送者、会话、关键词、reaction 或精确时间范围过滤时，改用 `dws chat +search-msg`；已解析出的稳定身份直接作为消息谓词输入。
 - `success=true,result=[]` 后按该分类如实汇报并停止；不要改走 Chat/Mail/Doc/Drive recent，也不要缩短群名反复试探。
 - 只有命中后还要读取或修改原对象时才切下游 Skill；分类汇总不需要下游调用。
 

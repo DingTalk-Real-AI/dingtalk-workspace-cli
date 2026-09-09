@@ -15,6 +15,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"reflect"
 	"strings"
@@ -39,6 +40,15 @@ type platformCoverageCaller struct {
 
 func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
 	f.product, f.tool, f.args = product, tool, args
+	if tool == "list_messages_by_ids" {
+		ids, _ := args["openMsgIds"].([]string)
+		rows := []map[string]any{}
+		for _, id := range ids {
+			rows = append(rows, map[string]any{"openMessageId": id, "openConversationId": "cid-1"})
+		}
+		data, _ := json.Marshal(map[string]any{"result": rows})
+		return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: string(data)}}}, nil
+	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"result":[]}`}}}, nil
 }
 

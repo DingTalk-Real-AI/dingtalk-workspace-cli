@@ -34,7 +34,7 @@ func TestCrossPlatformCoverageThreadRepliesResolvesRootMessageIDBeforeReadingRep
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+thread-replies", "--message-id", "root-message"})
+	root.SetArgs([]string{"chat", "+thread-replies", "--no-reactions", "--message-id", "root-message"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestCrossPlatformCoverageThreadRepliesMessageResolutionFailsClosedWithoutTh
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+thread-replies", "--message-id", "ordinary-message"})
+	root.SetArgs([]string{"chat", "+thread-replies", "--no-reactions", "--message-id", "ordinary-message"})
 	err := root.Execute()
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryAPI || typed.Reason != "thread_context_missing" {
@@ -75,7 +75,7 @@ func TestCrossPlatformCoverageThreadRepliesMessageResolutionRejectsConversationM
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--message-id", "root-message", "--group", "different-cid",
+		"chat", "+thread-replies", "--no-reactions", "--message-id", "root-message", "--group", "different-cid",
 	})
 	err := root.Execute()
 	var typed *apperrors.Error
@@ -97,7 +97,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllOrdersCompleteResultAscending(
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread",
 		"--page-all", "--sort", "asc",
 	})
 	if err := root.Execute(); err != nil {
@@ -118,7 +118,7 @@ func TestCrossPlatformCoverageThreadRepliesAscendingRequiresPageAll(t *testing.T
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--order", "asc",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread", "--order", "asc",
 	})
 	if err := root.Execute(); err == nil {
 		t.Fatal("single-page asc unexpectedly succeeded")
@@ -132,7 +132,7 @@ func TestCrossPlatformCoverageThreadRepliesThreadSelectorRequiresGroup(t *testin
 	caller := &chatMessagesPagingCaller{responses: []string{`{"result":{"hasMore":false,"messages":[]}}`}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+thread-replies", "--thread-id", "thread"})
+	root.SetArgs([]string{"chat", "+thread-replies", "--no-reactions", "--thread-id", "thread"})
 	if err := root.Execute(); err == nil {
 		t.Fatal("thread selector without group unexpectedly succeeded")
 	}
@@ -151,7 +151,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllUsesMillisecondCursorAndDedupl
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread",
 		"--page-size", "2", "--page-all", "--page-limit", "5", "--no-reactions",
 	})
 	if err := root.Execute(); err != nil {
@@ -184,7 +184,7 @@ func TestCrossPlatformCoverageThreadRepliesSinglePagePublishesMillisecondContinu
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-size", "1",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread", "--page-size", "1",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -208,7 +208,7 @@ func TestCrossPlatformCoverageThreadRepliesSinglePageFailsClosedWithoutCursor(t 
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-size", "1",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread", "--page-size", "1",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -231,7 +231,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllAcceptsEmptyTerminalPage(t *te
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread",
 		"--limit", "1", "--page-all", "--page-limit", "5",
 	})
 	if err := root.Execute(); err != nil {
@@ -253,7 +253,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllPublishesBoundedContinuation(t
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread",
 		"--page-all", "--page-limit", "1",
 	})
 	if err := root.Execute(); err != nil {
@@ -281,7 +281,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllReturnsPartialLedgerOnLaterFai
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread", "--page-all",
 	})
 	err := root.Execute()
 	var typed *apperrors.Error
@@ -307,7 +307,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllFailsClosedWithoutCursor(t *te
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread", "--page-all",
 	})
 	err := root.Execute()
 	var typed *apperrors.Error
@@ -331,7 +331,7 @@ func TestCrossPlatformCoverageThreadRepliesPageAllFailsClosedOnStalledCursor(t *
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread", "--page-all",
+		"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread", "--page-all",
 	})
 	err := root.Execute()
 	var typed *apperrors.Error
@@ -394,7 +394,7 @@ func TestCrossPlatformCoverageThreadRepliesAdditionalEdges(t *testing.T) {
 		} else {
 			root.SetOut(&output)
 		}
-		root.SetArgs(append([]string{"chat", "+thread-replies"}, args...))
+		root.SetArgs(append([]string{"chat", "+thread-replies", "--no-reactions"}, args...))
 		err := root.Execute()
 		if output.Len() == 0 {
 			return nil, err
@@ -471,7 +471,7 @@ func TestCrossPlatformCoverageThreadRepliesPaginationValidationStopsBeforeRead(t
 		helpers.InitDeps(caller)
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{
-			"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread",
+			"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread",
 		}, args...))
 		if err := root.Execute(); err == nil {
 			t.Errorf("invalid pagination succeeded: %v", args)

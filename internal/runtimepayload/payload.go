@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	PayloadVersion    = "20260825"
+	PayloadVersion    = "20260908"
 	containerHeader   = 64
 	formatVersion     = uint32(1)
 	maxContainerBytes = 32 << 20
@@ -401,6 +401,10 @@ func validateRoot(root, targetOS, targetArch string) error {
 	if err != nil {
 		return err
 	}
+	return validateRootManifest(root, metadata, targetOS, targetArch)
+}
+
+func validateRootManifest(root string, metadata manifest, targetOS, targetArch string) error {
 	name, err := LibraryName(targetOS, targetArch)
 	if err != nil {
 		return err

@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-PAYLOAD="$ROOT/third_party/runtimepayload/20260825"
+PAYLOAD="$ROOT/third_party/runtimepayload/20260908"
 ALLOW_UNSUPPORTED_TOOLS=0
 
 if [ "${1:-}" = "--allow-unsupported-tools" ]; then
@@ -84,8 +84,8 @@ check_pe_arch() {
 check_hash darwin/universal/x7k2m9p4q1w8.dylib a6f92e7ea30eadb68ff6e5f425166d7644842003abc72a27ec8186145f36b1f9
 check_hash linux/amd64/libx7k2m9p4q1w8.so 174b59ba2e46195e81dbcbe3aac83dedbf5baaceec41d02a684e623ddaace481
 check_hash linux/arm64/libx7k2m9p4q1w8.so aa81cd1c19493ead17e54a61b1845acd0e2f28fb61a3a7914e5e6a669bcaa83d
-check_hash windows/amd64/x7k2m9p4q1w864.dll 7a19607bfda0dc827e1005cd3601d297fa380eedd9c8a3f17a15637fc1b6e6bf
-check_hash windows/arm64/x7k2m9p4q1w864.dll 1faf52132bda5e64051610e08bab40c9be4df4c873c4694db6d4489ab5efec9a
+check_hash windows/amd64/x7k2m9p4q1w864.dll 7b8b06f1776eb02f7101c0999e53eec04984cc51334ca2795b3bfdb44a4f449b
+check_hash windows/arm64/x7k2m9p4q1w864.dll 057854bb037509659b1daab239de16e28a88e327cf302cd3312c8c72c5d05dfb
 
 checksum_count="$(wc -l < "$PAYLOAD/SHA256SUMS" | tr -d ' ')"
 [ "$checksum_count" = 128 ] || fail "expected 128 SHA-256 entries, found $checksum_count"

@@ -124,7 +124,10 @@ func TestCrossPlatformCoverageActiveConversationsKeepsValidatedDefaultEnd(t *tes
 func TestCrossPlatformCoverageActiveConversationsStandaloneExecuteValidatesTime(t *testing.T) {
 	cmd := corecmd.New(shortcut.FromShortcut(ActiveConversations))
 	rt := shortcut.RuntimeContextForTest(cmd, ActiveConversations)
-	// A command without a prepared context still fails closed on invalid time.
+	// Explicit blank input without a prepared context still fails closed.
+	if err := cmd.Flags().Set("start", ""); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := activeConversationExecutionRange(rt); err == nil {
 		t.Fatal("blank start accepted")
 	}

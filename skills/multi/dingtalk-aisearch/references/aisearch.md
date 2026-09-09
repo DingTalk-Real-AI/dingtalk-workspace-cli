@@ -70,7 +70,7 @@ dws aisearch behavior [--queries <主题CSV>] [--types <类型CSV>] [--behavior-
 
 ## 产品边界
 
-- 搜索和行为回溯由 AISearch 负责；不要用 Doc/Drive/Chat/Mail 等逐源替代。
+- 跨来源主题发现和当前用户参与的行为轨迹由 AISearch 负责；资源只限 IM、答案必须是逐条消息并带结构化消息谓词时使用 `dws chat +search-msg`。行为方向不能替代消息集合过滤。
 - 已知 `userId` 后查通讯录详情执行 `dws contact user get --ids <userId> --format json`。
 - 已知文档、听记、待办等稳定 ID 后读取原对象，才切对应产品。
 - 只需列出搜索命中时不加载下游 Skill。
