@@ -510,15 +510,15 @@ func cloneExampleDispositions(in []ExampleDisposition) []ExampleDisposition {
 	return out
 }
 
-// ParamDecl is one parameter-level Schema fact declared on a command. It is
-// stored at DeclareLeafMetadata time and applied as annotations at assembly
-// time, when all flags are guaranteed to exist on the fully-built command tree.
 // FormatAlternative is a format-only JSON Schema anyOf branch. The parameter
 // owns its type; branches describe alternative accepted string formats.
 type FormatAlternative struct {
 	Format string `json:"format"`
 }
 
+// ParamDecl is one parameter-level Schema fact declared on a command. It is
+// stored at DeclareLeafMetadata time and applied as annotations at assembly
+// time, when all flags are guaranteed to exist on the fully-built command tree.
 type ParamDecl struct {
 	Name          string
 	Property      string

@@ -52,3 +52,41 @@ func TestCrossPlatformCoverageSchemaFormatAlternatives(t *testing.T) {
 		t.Fatal("normalization aliases format alternatives")
 	}
 }
+
+func TestCrossPlatformCoverageCatalogFormatAlternatives(t *testing.T) {
+	valid := []any{map[string]any{"format": "date"}, map[string]any{"format": "date-time"}}
+	for _, tc := range []struct {
+		name      string
+		value     any
+		typ       string
+		topFormat bool
+		wantError bool
+	}{
+		{"valid", valid, "string", false, false},
+		{"nonstring", valid, "integer", false, true},
+		{"top format", valid, "string", true, true},
+		{"null", nil, "string", false, true},
+		{"object", map[string]any{"format": "date"}, "string", false, true},
+		{"empty", []any{}, "string", false, true},
+		{"single", valid[:1], "string", false, true},
+		{"empty branch", []any{valid[0], map[string]any{}}, "string", false, true},
+		{"unknown branch field", []any{valid[0], map[string]any{"format": "date-time", "pattern": ".*"}}, "string", false, true},
+		{"duplicate", []any{valid[0], valid[0]}, "string", false, true},
+		{"whitespace", []any{valid[0], map[string]any{"format": " date-time"}}, "string", false, true},
+		{"nonstring format", []any{valid[0], map[string]any{"format": true}}, "string", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validCatalogToolEntry()
+			param := entry["parameters"].(map[string]any)["base-id"].(map[string]any)
+			param["anyOf"] = tc.value
+			param["type"] = tc.typ
+			if tc.topFormat {
+				param["format"] = "date-time"
+			}
+			err := ValidateCatalogStructure(catalogPayload(t, entry))
+			if (err != nil) != tc.wantError {
+				t.Fatalf("validation error = %v, want error %v", err, tc.wantError)
+			}
+		})
+	}
+}
