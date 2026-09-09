@@ -9,7 +9,7 @@
 - [x] 删除 Schema 的 Cobra 前置执行路径；cache 接入正常 schema handler。
 - [x] 明确 telemetry no-wait 与末条分析事件可能丢失的取舍。
 - [x] 完整树 B/op 和 allocs/op 达到本地父提交门槛。
-- [x] 撤回 compile-time Schema identity 生产与发布封印；发运走 live assembly。
+- [x] 撤回 compile-time Schema identity 生产与发布封印；各端在安装/首次 schema 生成本机 identity 并写 cache。
 - [x] 固定 PR-base main `6f71222b9b07c760cdb5f376b24dab9155e62094`。
 - [ ] 完成 app/helpers/shortcut/corecmd/cli、packaging 与全仓测试。
 - [ ] 完成 Darwin/arm64、Linux/amd64 race。

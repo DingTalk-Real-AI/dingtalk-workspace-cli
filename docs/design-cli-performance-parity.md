@@ -16,14 +16,14 @@ flowchart LR
     T --> C[Cobra parse / Find]
     C --> P[统一 PreParse / validation / auth / Safety]
     P --> H{normal handler}
-    H -->|schema| S[live declarations assembly]
+    H -->|schema| S[本机 identity + 认证 cache，miss 则 live assembly]
     H -->|utility / business| B[既有 handler / transport]
     S --> O[统一 output / cleanup]
     B --> O
-    O --> Q[telemetry enqueue，不等待网络]
+    O --> Q[telemetry enqueue，有界 flush wait]
 ```
 
-root help 直接遍历 `T`；version、completion、Schema、config 和业务命令都使用同一棵树。Schema 查询由正常 schema handler 从 live declarations 组装；测试注入的认证 cache 不是发运路径。
+root help 直接遍历 `T`；version、completion、Schema、config 和业务命令都使用同一棵树。Schema 查询由正常 schema handler 处理：受支持端先校验本机 identity 再读 protobuf shards；miss/损坏则 live assembly 并修复发布。测试仍可注入 identity。
 
 ## 完整树优化
 
@@ -38,7 +38,7 @@ root help 直接遍历 `T`；version、completion、Schema、config 和业务命
 ## 正确性与发布边界
 
 - 公开 command、flags、aliases、help、validation、Safety、错误分类和输出不变。
-- Schema identity 不在编译期或发布期生产；schema handler 走 live declaration assembly。测试仍可注入认证 cache，但不作为发运模型。
+- Schema identity 不在编译期或发布期生产。受支持端在安装或首次 schema 从本机 declarations 生成 identity 并写认证 cache；后续命中先校验摘要。测试仍可注入 identity。
 - 正式 release 仍是一个 `dws`；不重新引入 launcher/双二进制。
-- telemetry 明确接受最后一条分析事件可能丢失；业务 cleanup 继续同步。
+- telemetry 默认 `FlushTimeout=50ms` 且不设置 `NoFlushWait`；超时后末条事件可能丢失；业务 cleanup 继续同步。
 - Lark 用于验证“完整树也可足够快”的结构选择；GWS 只用于观察更小映像/init 的上限。

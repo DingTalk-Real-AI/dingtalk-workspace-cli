@@ -30,21 +30,35 @@ import (
 
 const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 
-// SchemaCacheIdentity is the complete injected identity of one cache
-// generation. No value is learned from an on-disk envelope. Production does
-// not embed this at compile time.
+// SchemaCacheIdentity is the complete identity of one cache generation. No
+// value is learned from an on-disk envelope. Production does not embed this at
+// compile time; each supported machine generates it from live declarations.
 type SchemaCacheIdentity = schemareader.Identity
 
 // SchemaCacheOptions configures production cache delivery. Enabled options are
-// accepted only for the two v1 release targets; tests may inject GOOS/GOARCH.
+// accepted for darwin/linux on amd64/arm64; tests may inject GOOS/GOARCH.
+// AllowGenerate lets an empty identity be derived from the running binary's
+// declarations on first schema use.
 type SchemaCacheOptions struct {
 	Enabled         bool
+	AllowGenerate   bool
+	Edition         string
 	Identity        SchemaCacheIdentity
 	GOOS            string
 	GOARCH          string
 	LockTimeout     time.Duration
 	Counters        *schemacache.Counters
 	RuntimeEligible func() bool
+}
+
+func (o SchemaCacheOptions) cacheEdition() string {
+	if o.Identity.Edition != "" {
+		return o.Identity.Edition
+	}
+	if strings.TrimSpace(o.Edition) != "" {
+		return strings.TrimSpace(o.Edition)
+	}
+	return "open"
 }
 
 type schemaCacheRegistration struct {
@@ -94,15 +108,28 @@ func MarkSchemaCacheRuntimeUncertain() { schemaCacheRuntimeUncertain.Store(true)
 func SchemaCacheFastPathIdentity() (SchemaCacheIdentity, bool) {
 	auditSchemaDeliveryAccess("fast path identity")
 	runtime := activeSchemaCacheRuntime()
-	if runtime == nil {
+	if runtime == nil || !schemaCacheIdentityReady(runtime.options.Identity) {
 		return SchemaCacheIdentity{}, false
 	}
 	return runtime.options.Identity, true
 }
 
+func schemaCacheSupportedTarget(goos, goarch string) bool {
+	return schemacache.PersistentBackendEnabled(goos, goarch)
+}
+
 func validateSchemaCacheOptions(options SchemaCacheOptions) error {
-	if !((options.GOOS == "darwin" && options.GOARCH == "arm64") || (options.GOOS == "linux" && options.GOARCH == "amd64")) {
+	if !schemaCacheSupportedTarget(options.GOOS, options.GOARCH) {
 		return fmt.Errorf("Schema cache v1 is disabled for %s/%s", options.GOOS, options.GOARCH)
+	}
+	if schemaCacheIdentityReady(options.Identity) {
+		return nil
+	}
+	if options.AllowGenerate && schemaCacheIdentityAbsent(options.Identity) {
+		if _, err := schemacache.EditionSHA256(options.cacheEdition()); err != nil {
+			return err
+		}
+		return nil
 	}
 	return options.Identity.Validate()
 }
@@ -175,7 +202,7 @@ func PrewarmSchemaCache() {
 		return
 	}
 	r := registration.runtime
-	if r.prewarm != nil {
+	if r.prewarm != nil || !schemaCacheIdentityReady(r.options.Identity) {
 		return
 	}
 	pw := &schemaCachePrewarm{done: make(chan struct{})}
@@ -186,7 +213,7 @@ func PrewarmSchemaCache() {
 		if r.options.Counters != nil {
 			options = append(options, schemacache.WithCounters(r.options.Counters))
 		}
-		cache, err := schemacache.Open(r.options.Identity.Edition, options...)
+		cache, err := schemacache.Open(r.cacheEdition(), options...)
 		if err != nil {
 			pw.indexErr = err
 			return
@@ -218,6 +245,21 @@ type schemaCachePayloadLoad struct {
 	err      error
 }
 
+func (r *schemaCacheRuntime) cacheEdition() string { return r.options.cacheEdition() }
+
+func (r *schemaCacheRuntime) adoptGeneratedIdentity(identity SchemaCacheIdentity) {
+	r.options.Identity = identity
+	r.options.AllowGenerate = false
+	r.options.Edition = identity.Edition
+	if registration := schemaCacheRegistrationValue.Load(); registration != nil && registration.runtime == r {
+		updated := *registration
+		updated.options.Identity = identity
+		updated.options.AllowGenerate = false
+		updated.options.Edition = identity.Edition
+		schemaCacheRegistrationValue.Store(&updated)
+	}
+}
+
 func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
 	if pw := r.prewarm; pw != nil {
 		<-pw.done
@@ -230,7 +272,7 @@ func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
 		if r.options.Counters != nil {
 			options = append(options, schemacache.WithCounters(r.options.Counters))
 		}
-		r.cache, r.openErr = schemacache.Open(r.options.Identity.Edition, options...)
+		r.cache, r.openErr = schemacache.Open(r.cacheEdition(), options...)
 	})
 	return r.cache, r.openErr
 }
@@ -688,9 +730,7 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 			if runtimeDeliverySchemaCatalogErr != nil {
 				return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
 			}
-			if artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded); err == nil && artifacts.match(r.options.Identity) {
-				_ = cache.Publish(r.options.Identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact())
-			}
+			r.publishGeneratedOrMatching(cache, loaded)
 			return nil, loaded, nil
 		}
 		// Timeout and lock failures both preserve authoritative availability and
@@ -701,6 +741,29 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 		return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
 	}
 	return nil, loaded, nil
+}
+
+func (r *schemaCacheRuntime) publishGeneratedOrMatching(cache *schemacache.Cache, loaded loadedSchemaCatalog) {
+	if cache == nil {
+		return
+	}
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		return
+	}
+	identity := r.options.Identity
+	if !artifacts.match(identity) {
+		generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
+		if genErr != nil {
+			return
+		}
+		identity = generated
+		r.adoptGeneratedIdentity(identity)
+	} else if !schemaCacheIdentityReady(identity) {
+		return
+	}
+	_ = persistLocalSchemaCacheIdentity(cache.Directory(), identity)
+	_ = cache.Publish(identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact())
 }
 
 // SchemaCacheArtifacts is the deterministic cache hand-off used by the

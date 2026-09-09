@@ -89,7 +89,7 @@ func resetSchemaDeliveryState() {
 // Passing nil clears the factory (tests only) and resets lazy delivery / Meta state.
 func RegisterSchemaSourceRoot(factory func() *cobra.Command) {
 	// A new authority must never inherit the previous factory's persistent
-	// identity. Production does not re-enable a compile-time cache after this.
+	// identity. Production re-applies local cache options after this clear.
 	_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
 	storeSchemaSourceRootFn(factory)
 	resetSchemaDeliveryState()

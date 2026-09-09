@@ -218,6 +218,125 @@ install_binary
 	}
 }
 
+func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	writeFakeBinary := func(t *testing.T, binDir, name, body string) {
+		t.Helper()
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, name), []byte(body), 0o755)
+	}
+
+	t.Run("unsupported arch never claims success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", "#!/bin/sh\nexit 0\n")
+		harness := string(scriptData[:cut]) + `
+		detect_os() { printf '%s\n' windows; }
+		detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("unsupported arch installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("unsupported arch claimed shared cache success:\n%s", text)
+		}
+		if _, err := os.Stat(shared); !os.IsNotExist(err) {
+			t.Fatalf("unsupported arch created shared cache dir: %v", err)
+		}
+	})
+
+	t.Run("zero files is not success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", "#!/bin/sh\nexit 0\n")
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("empty cache installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("empty write claimed shared cache success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not written") {
+			t.Fatalf("empty write missing skip warning:\n%s", text)
+		}
+	})
+
+	t.Run("success requires artifacts", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", `#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.test.json"
+`)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("populated cache installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("populated write did not claim success:\n%s", text)
+		}
+	})
+}
+
 func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
 	if err != nil {

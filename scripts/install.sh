@@ -1623,6 +1623,62 @@ install_binary() {
   esac
 }
 
+# ── Build shared schema cache ────────────────────────────────────────────────
+# The schema cache is generated on this machine from the installed binary's
+# live declarations (no compile-time identity seal). Build it once at the
+# system shared location so every user reuses it. Persistent backends are
+# compiled in for darwin/linux on amd64/arm64. Windows and other ends skip
+# silently and never claim success. Root-owned sticky ancestry such as
+# macOS /Library/Caches is accepted by the runtime; if the shared base is not
+# writable the installer leaves per-user cache generation to the first schema
+# command.
+build_shared_schema_cache() {
+  os="$(detect_os)"
+  arch="$(detect_arch)"
+  case "$os/$arch" in
+    linux/amd64|linux/arm64) shared_dir="/var/cache/dws" ;;
+    darwin/amd64|darwin/arm64) shared_dir="/Library/Caches/dws" ;;
+    *) return 0 ;;
+  esac
+  if [ -n "${DWS_SCHEMA_CACHE_SHARED_DIR:-}" ]; then
+    shared_dir="$DWS_SCHEMA_CACHE_SHARED_DIR"
+  fi
+  # Skip silently when we cannot write to the system location (non-root install
+  # or an unusable shared ancestry). The runtime then uses the per-user cache.
+  if ! mkdir -p "$shared_dir" 2>/dev/null; then
+    return 0
+  fi
+  if ! touch "$shared_dir/.dws-schema-cache-write-test" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$shared_dir/.dws-schema-cache-write-test"
+  say "🔧 Building shared schema cache (local identity, shared across users)..."
+  # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
+  # and populate it. Any schema command triggers generate + publish.
+  if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
+    schema_cache_artifacts_present "$shared_dir"; then
+    # World-readable: integrity rests on the locally generated identity plus
+    # shard digests, not on file ownership.
+    chmod -R a+rX "$shared_dir" 2>/dev/null || true
+    say "✅ Shared schema cache built: ${shared_dir}"
+  else
+    say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
+  fi
+}
+
+schema_cache_artifacts_present() {
+  _sc_dir="$1"
+  [ -d "$_sc_dir" ] || return 1
+  _sc_meta="$(find "$_sc_dir" -name 'meta.cache' -type f 2>/dev/null | head -n 1)"
+  _sc_registry="$(find "$_sc_dir" -name 'registry.shards.cache' -type f 2>/dev/null | head -n 1)"
+  _sc_payloads="$(find "$_sc_dir" -name 'payloads.shards.cache' -type f 2>/dev/null | head -n 1)"
+  _sc_identity="$(find "$_sc_dir" -name 'identity.*.json' -type f 2>/dev/null | head -n 1)"
+  [ -n "$_sc_meta" ] && [ -s "$_sc_meta" ] &&
+    [ -n "$_sc_registry" ] && [ -s "$_sc_registry" ] &&
+    [ -n "$_sc_payloads" ] && [ -s "$_sc_payloads" ] &&
+    [ -n "$_sc_identity" ] && [ -s "$_sc_identity" ]
+}
+
 # ── Install Skills ───────────────────────────────────────────────────────────
 
 install_skills() {
@@ -1747,6 +1803,13 @@ main() {
   else
     install_binary
     install_skills
+  fi
+
+  # Generate the local Schema identity and shared cache once so every user
+  # reuses it. Skipped for skills-only installs (no binary), unsupported
+  # os/arch (cache backend compiled out), and non-root installs (no system write).
+  if [ "$SKILLS_ONLY" != "1" ]; then
+    build_shared_schema_cache
   fi
 
   # Every transaction of this run has finished, so old stamped archives can no

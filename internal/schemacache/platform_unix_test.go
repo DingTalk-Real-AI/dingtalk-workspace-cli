@@ -1,4 +1,4 @@
-//go:build (darwin && arm64) || (linux && amd64)
+//go:build (darwin || linux) && (amd64 || arm64)
 
 package schemacache
 
@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -308,6 +309,50 @@ func TestCrossPlatformCoverageCacheBootstrapsMissingUserCacheDirectory(t *testin
 	}
 	if _, err := os.Stat(base); !os.IsNotExist(err) {
 		t.Fatalf("created cache below an unsafe ancestor: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageStickyWorldWritableAncestryIsAccepted(t *testing.T) {
+	parent := privateTestBase(t)
+	sticky := filepath.Join(parent, "Library", "Caches")
+	if err := os.MkdirAll(sticky, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sticky, os.ModeSticky|0o777); err != nil {
+		t.Fatal(err)
+	}
+	var st unix.Stat_t
+	if err := unix.Stat(sticky, &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode&unix.S_ISVTX == 0 {
+		t.Fatalf("test setup did not set Unix sticky on %s: mode=%#o", sticky, st.Mode)
+	}
+	base := filepath.Join(sticky, "dws-shared")
+	fd, path, err := openCacheDirectory(base, "edition", &Counters{}, realUnixIO{}, false, true)
+	if err != nil {
+		cur := string(filepath.Separator)
+		for _, part := range strings.Split(strings.TrimPrefix(base, string(filepath.Separator)), string(filepath.Separator)) {
+			cur = filepath.Join(cur, part)
+			info, statErr := os.Stat(cur)
+			mode := "missing"
+			if statErr == nil {
+				mode = info.Mode().String()
+			}
+			t.Logf("ancestry %s mode=%s err=%v", cur, mode, statErr)
+		}
+		t.Fatalf("sticky world-writable ancestry rejected: %v", err)
+	}
+	defer unix.Close(fd)
+	if path != filepath.Join(base, "dws/schema/edition/v1") {
+		t.Fatalf("unexpected cache path: %s", path)
+	}
+	info, err := os.Stat(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o022 != 0 {
+		t.Fatalf("shared cache base must not stay world-writable: %v", info.Mode())
 	}
 }
 
