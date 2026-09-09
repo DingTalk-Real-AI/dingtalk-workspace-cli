@@ -1051,11 +1051,13 @@ func (p ParameterSpec) ToPayload() (map[string]any, error) {
 		if p.Format != "" || p.Type != "string" {
 			return nil, fmt.Errorf("parameter %q anyOf requires string type and no top-level format", p.Name)
 		}
-		value, err := typedJSONValue(p.AnyOf)
-		if err != nil {
-			return nil, err
+		// FormatAlternative contains only a string: project the JSON shape
+		// directly instead of introducing an impossible marshal-error path.
+		branches := make([]any, len(p.AnyOf))
+		for i, branch := range p.AnyOf {
+			branches[i] = map[string]any{"format": branch.Format}
 		}
-		payload["anyOf"] = value
+		payload["anyOf"] = branches
 	}
 	if len(p.Enum) > 0 {
 		payload["enum"] = append([]string(nil), p.Enum...)

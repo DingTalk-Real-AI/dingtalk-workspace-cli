@@ -671,10 +671,9 @@ func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
 	if err := json.Unmarshal(raw, &schema); err != nil {
 		return parameterSchema{}, err
 	}
-	anyOf, err := canonicalRawJSON(parameter.AnyOf)
-	if err != nil {
-		return parameterSchema{}, err
-	}
+	// Both decodes above already validated this RawMessage as JSON.
+	// Canonicalizing that validated fragment cannot fail.
+	anyOf, _ := canonicalRawJSON(parameter.AnyOf)
 	parameterType := schemaType(schema)
 	if parameterType == "unspecified" {
 		return parameterSchema{}, fmt.Errorf("type is missing")

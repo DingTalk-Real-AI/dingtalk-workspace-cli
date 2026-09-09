@@ -57,3 +57,19 @@ func TestCrossPlatformCoverageParamFormatAlternativesClone(t *testing.T) {
 		t.Fatal("read exposed stored slice")
 	}
 }
+
+func TestCrossPlatformCoverageParamFormatAlternativesAnnotation(t *testing.T) {
+	cmd := &cobra.Command{Use: "sample"}
+	cmd.Flags().String("time", "", "")
+	branches := []contract.FormatAlternative{{Format: "date-time"}, {Format: "date"}}
+	if err := ApplyParamDecls(cmd, []contract.ParamDecl{{Name: "time", AnyOf: branches}}); err != nil {
+		t.Fatal(err)
+	}
+	got := cmd.Flags().Lookup("time").Annotations[runtimeannotate.AnnotationFlagAnyOf]
+	if len(got) != 1 || got[0] != `[{"format":"date"},{"format":"date-time"}]` {
+		t.Fatalf("annotation=%v", got)
+	}
+	if branches[0].Format != "date-time" {
+		t.Fatal("annotation sorting mutated declaration")
+	}
+}

@@ -3,10 +3,12 @@ package cli
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/spf13/cobra"
 )
 
@@ -88,5 +90,58 @@ func TestCrossPlatformCoverageCatalogFormatAlternatives(t *testing.T) {
 				t.Fatalf("validation error = %v, want error %v", err, tc.wantError)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaFormatAlternativesRejectInvalidAnnotations(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		values []string
+		format string
+		want   string
+	}{
+		{"missing value", nil, "", "invalid or conflicting"},
+		{"multiple values", []string{"[]", "[]"}, "", "invalid or conflicting"},
+		{"explicit format", []string{`[{"format":"date"},{"format":"date-time"}]`}, "date-time", "invalid or conflicting"},
+		{"invalid json", []string{"["}, "", "anyOf:"},
+		{"unknown branch field", []string{`[{"pattern":".*"}]`}, "", "unknown field"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "sample"}
+			cmd.Flags().String("time", "", "time")
+			cmd.Flags().Lookup("time").Annotations = map[string][]string{runtimeannotate.AnnotationFlagAnyOf: tc.values}
+			if tc.format != "" {
+				runtimeannotate.AnnotateRuntimeFlagFormat(cmd, "time", tc.format)
+			}
+			_, err := runtimeCommandParameterSpecs(cmd, "sample.run", RuntimeSchemaConstraints{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaFormatAlternativesPayloadAndProvenance(t *testing.T) {
+	union := []contract.FormatAlternative{{Format: "date"}, {Format: "date-time"}}
+	for _, p := range []ParameterSpec{{Name: "time", Type: "integer", AnyOf: union}, {Name: "time", Type: "string", Format: "date-time", AnyOf: union}} {
+		if _, err := p.ToPayload(); err == nil || !strings.Contains(err.Error(), "no top-level format") {
+			t.Fatalf("invalid combination accepted: %v", err)
+		}
+	}
+	p := ParameterSpec{Name: "time", Type: "string", Property: "startDateTime", AnyOf: union}
+	value, ok := p.provenanceValue("anyOf")
+	if !ok || !reflect.DeepEqual(value, union) {
+		t.Fatalf("provenance value: %v, %v", value, ok)
+	}
+	p.FieldProvenance = schemaDeliveryTestProvenance(map[string]any{
+		"type": "string", "description": "", "property": "startDateTime", "required": false, "required_when": "", "anyOf": union,
+	})
+	registry := schemaDeliveryTestRegistry(schemaDeliveryTestTool{Canonical: "sample.run", CLIPath: "sample run", Parameters: []ParameterSpec{p}})
+	if err := validateFinalSchemaProvenanceCoverage(registry); err != nil {
+		t.Fatalf("valid provenance rejected: %v", err)
+	}
+	delete(registry.Products[0].Tools[0].Parameters[0].FieldProvenance, "anyOf")
+	if err := validateFinalSchemaProvenanceCoverage(registry); err == nil || !strings.Contains(err.Error(), "has no provenance for anyOf") {
+		t.Fatalf("missing provenance accepted: %v", err)
 	}
 }
