@@ -494,3 +494,197 @@ func (failRootOpenIO) open(path string, flags int, mode uint32) (int, error) {
 type failCloseIO struct{ unixIO }
 
 func (f failCloseIO) close(int) error { return errors.New("close failed") }
+
+func TestCrossPlatformCoverageUnixRemainingIOFaults(t *testing.T) {
+	edition, err := EditionSHA256("official")
+	if err != nil {
+		t.Fatal(err)
+	}
+	editionHex := hex.EncodeToString(edition[:])
+	if _, _, err := openCacheDirectory("/", editionHex, &Counters{}, realUnixIO{}, true, false); err == nil {
+		t.Fatal("filesystem root cache base succeeded")
+	}
+
+	base := privateTestBase(t)
+	missing := filepath.Join(base, "missing-child")
+	if _, _, err := openCacheDirectory(missing, editionHex, &Counters{}, failMkdirIO{}, false, false); err == nil {
+		t.Fatal("mkdir failure accepted")
+	}
+	if _, _, err := openCacheDirectory(missing, editionHex, &Counters{}, realUnixIO{}, true, false); err == nil {
+		t.Fatal("noCreate missing ancestry succeeded")
+	}
+
+	cache, _, identity := openTestCache(t, nil)
+	meta := testArtifact(KindMeta, []byte("meta-remaining"))
+	reg := testArtifact(KindRegistry, []byte("registry-remaining-bytes"))
+	payloads := testArtifact(KindPayloads, []byte("payload-remaining-bytes"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Publish(identity, reg, meta, testArtifact(KindMeta, []byte("not-payload"))); err == nil {
+		t.Fatal("non-payload extra accepted")
+	}
+	badDigest := payloads
+	badDigest.Expectation.EncodedSHA256 = sha256.Sum256([]byte("other"))
+	if err := cache.Publish(identity, reg, meta, badDigest); err == nil {
+		t.Fatal("payload digest mismatch accepted")
+	}
+
+	headerPath := filepath.Join(cache.Directory(), metaFileName)
+	originalMeta, err := os.ReadFile(headerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt := append([]byte(nil), originalMeta...)
+	corrupt[0] ^= 0xff
+	if err := os.WriteFile(headerPath, corrupt, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("corrupt envelope accepted")
+	}
+	if err := os.WriteFile(headerPath, originalMeta, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	uc := cache.backend.(*unixCache)
+	uc.ops = failPreadIO{err: unix.EIO}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("pread error accepted")
+	}
+	uc.ops = failPreadIO{}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("short pread accepted")
+	}
+
+	uc.ops = realUnixIO{}
+	if err := os.WriteFile(headerPath, originalMeta, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	regPath := filepath.Join(cache.Directory(), registryFileName)
+	original, err := os.ReadFile(regPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = original
+	opened, err := cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	opened, err = cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc.ops = failFstatIO{err: unix.EIO}
+	opened.backend.(*unixRegistry).ops = failFstatIO{err: unix.EIO}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 4, SHA256: sha256.Sum256(reg.Payload[:4])}); err == nil {
+		t.Fatal("fstat failure accepted")
+	}
+	_ = opened.Close()
+	uc.ops = realUnixIO{}
+
+	opened, err = cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened.backend.(*unixRegistry).ops = failPreadIO{err: unix.EIO}
+	if err := opened.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate pread failure accepted")
+	}
+	_ = opened.Close()
+
+	opened, err = cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 4, SHA256: sha256.Sum256([]byte("xxxx"))}); err == nil {
+		t.Fatal("range digest mismatch accepted")
+	}
+	_ = opened.Close()
+
+	opened, err = cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := append([]byte(nil), original...)
+	tampered[len(tampered)-1] ^= 0xff
+	if err := os.WriteFile(regPath, tampered, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate digest mismatch accepted")
+	}
+	_ = opened.Close()
+
+	opened, err = cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(regPath, append(original, 'x'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.ValidateAggregate(); err == nil {
+		t.Fatal("changed aggregate accepted")
+	}
+	_ = opened.Close()
+	if err := os.WriteFile(regPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cache.backend.(*unixCache).writeArtifact(ExpectedIdentity{}, Artifact{}); err == nil {
+		t.Fatal("invalid writeArtifact identity accepted")
+	}
+	zeroCache, _, zeroIdentity := openTestCache(t, zeroWriteIO{})
+	if err := zeroCache.WriteArtifact(zeroIdentity, testArtifact(KindMeta, []byte("zero"))); err == nil {
+		t.Fatal("zero write accepted")
+	}
+
+	closed, _, _ := openTestCache(t, nil)
+	ucClosed := closed.backend.(*unixCache)
+	if err := closed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ucClosed.acquire(context.Background(), time.Millisecond); !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed acquire = %v", err)
+	}
+
+	sizeCache, _, sizeIdentity := openTestCache(t, nil)
+	if err := sizeCache.Publish(sizeIdentity, testArtifact(KindRegistry, []byte("r")), testArtifact(KindMeta, []byte("m"))); err != nil {
+		t.Fatal(err)
+	}
+	wrongSize := testArtifact(KindMeta, []byte("m"))
+	wrongSize.Expectation.EncodedLength = 99
+	if _, err := sizeCache.ReadMeta(sizeIdentity, wrongSize.Expectation); err == nil {
+		t.Fatal("size mismatch accepted")
+	}
+	if _, err := sizeCache.OpenRegistry(sizeIdentity, testArtifact(KindRegistry, []byte("nope")).Expectation); err == nil {
+		t.Fatal("registry identity mismatch accepted")
+	}
+}
+
+type failMkdirIO struct{ realUnixIO }
+
+func (failMkdirIO) mkdirat(int, string, uint32) error { return unix.EPERM }
+
+type failPreadIO struct {
+	realUnixIO
+	err error
+}
+
+func (f failPreadIO) pread(int, []byte, int64) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	return 0, nil
+}
+
+type zeroWriteIO struct{ realUnixIO }
+
+func (zeroWriteIO) write(int, []byte) (int, error) { return 0, nil }

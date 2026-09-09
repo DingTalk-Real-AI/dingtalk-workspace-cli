@@ -30,6 +30,11 @@ import (
 
 const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 
+var (
+	canonicalJSONMarshal = json.Marshal
+	compactLeafMarshal   = jsonutil.MarshalIndent
+)
+
 // SchemaCacheIdentity is the complete identity of one cache generation. No
 // value is learned from an on-disk envelope. Production does not embed this at
 // compile time; each supported machine generates it from live declarations.
@@ -867,7 +872,7 @@ func renderCompactSchemaLeaves(registry SchemaRegistry, index SchemaIndex) (map[
 			if err != nil {
 				return nil, fmt.Errorf("render Schema leaf %q: %w", path, err)
 			}
-			data, err := jsonutil.MarshalIndent(stripSchemaPayloadCompact(payload), "", "  ")
+			data, err := compactLeafMarshal(stripSchemaPayloadCompact(payload), "", "  ")
 			if err != nil {
 				return nil, fmt.Errorf("render Schema leaf %q: %w", path, err)
 			}
@@ -899,7 +904,7 @@ func canonicalSchemaCacheRegistry(registry SchemaRegistry) (SchemaRegistry, erro
 			err = fmt.Errorf("canonicalize %s: multiple JSON values", path)
 			return nil
 		}
-		encoded, encodeErr := json.Marshal(value)
+		encoded, encodeErr := canonicalJSONMarshal(value)
 		if encodeErr != nil {
 			err = fmt.Errorf("canonicalize %s: %w", path, encodeErr)
 			return nil

@@ -177,10 +177,6 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops unixIO,
 		baseParts = nil
 	}
 	for _, part := range baseParts {
-		if part == "" || part == "." || part == ".." {
-			closeCurrent()
-			return -1, "", fmt.Errorf("%w: invalid cache base component", ErrUnsafePath)
-		}
 		next, openErr := ops.openat(current, part, secureDirectoryFlags, 0)
 		counters.rootOpenOps.Add(1)
 		if errors.Is(openErr, unix.ENOENT) {

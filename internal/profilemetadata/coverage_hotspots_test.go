@@ -6,8 +6,11 @@ package profilemetadata
 import "testing"
 
 func TestCrossPlatformCoverageSelectorAndIndexEdges(t *testing.T) {
-	if _, _, ok := ParseIdentitySelector("corp:"); ok {
-		t.Fatal("empty user accepted")
+	if _, _, ok := ParseIdentitySelector(" :user"); ok {
+		t.Fatal("whitespace corp accepted")
+	}
+	if _, _, ok := ParseIdentitySelector("corp: "); ok {
+		t.Fatal("whitespace user accepted")
 	}
 	if _, _, ok := ParseIdentitySelector(":user"); ok {
 		t.Fatal("empty corp accepted")

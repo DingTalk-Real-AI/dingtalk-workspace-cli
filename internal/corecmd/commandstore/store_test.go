@@ -114,3 +114,28 @@ func TestCrossPlatformCoverageCommandMetadataRangePrunesExpired(t *testing.T) {
 	}
 	t.Fatal("Range did not prune expired command metadata")
 }
+
+func TestCrossPlatformCoverageCommandMetadataRangePrunesDanglingWeakKeys(t *testing.T) {
+	var store Map
+	cmd := &cobra.Command{Use: "gone"}
+	key := weak.Make(cmd)
+	store.entries.Store(key, "stale")
+	cmd = nil
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		runtime.GC()
+		if key.Value() == nil {
+			visited := 0
+			store.Range(func(_, _ any) bool {
+				visited++
+				return true
+			})
+			if visited != 0 {
+				t.Fatalf("pruned range visited %d live commands", visited)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("weak command key never expired")
+}

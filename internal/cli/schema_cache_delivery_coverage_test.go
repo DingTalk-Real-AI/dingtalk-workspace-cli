@@ -11,12 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing.T) {
@@ -357,4 +359,291 @@ func TestCrossPlatformCoverageQueryEmptyArgsAndRepairCatalogMiss(t *testing.T) {
 	if _, err := deliverySchemaAllPayload(); err == nil {
 		t.Fatal("nil source root repair succeeded")
 	}
+}
+
+func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	testHome, err := os.MkdirTemp(home, ".dws-schema-cache-runtime-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(testHome) })
+	t.Setenv("HOME", testHome)
+	cacheBase := filepath.Join(testHome, ".cache")
+	if runtime.GOOS == "darwin" {
+		cacheBase = filepath.Join(testHome, "Library", "Caches")
+	}
+	if err := os.MkdirAll(cacheBase, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "linux" {
+		t.Setenv("XDG_CACHE_HOME", cacheBase)
+	}
+
+	restorePackageCLISchemaDeliveryForTest()
+	loaded := deliverySchemaCatalog()
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := coverageIdentityFromArtifacts(t, artifacts)
+	cache, err := schemacache.Open(identity.Edition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Publish(identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := schemareader.ReadMeta(cache, identity); err != nil {
+		t.Fatalf("ReadMeta: %v", err)
+	}
+	wrong := identity
+	wrong.SourceSHA256 = sha256.Sum256([]byte("coverage-wrong-source"))
+	if _, err := schemareader.ReadMeta(cache, wrong); err == nil {
+		t.Fatal("ReadMeta accepted identity hash mismatch")
+	}
+	if err := cache.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, Identity: identity, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+
+	runtimeCache := activeSchemaCacheRuntime()
+	if runtimeCache == nil {
+		t.Fatal("runtime not registered")
+	}
+	meta, err := runtimeCache.readMeta()
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := runtimeCache.readPayloadIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.PayloadDescriptors) == 0 {
+		t.Fatal("no payload products")
+	}
+	productID := index.PayloadDescriptors[0].ProductID
+	first, err := runtimeCache.loadCommandPayload(index, productID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtimeCache.loadCommandPayload(index, productID); err != nil {
+		t.Fatal(err)
+	}
+	var cliPath, canonical string
+	for path, command := range first.Commands {
+		cliPath, canonical = path, command.Identity.Canonical
+		if command.Identity.CLIPath == path && canonical != "" {
+			break
+		}
+	}
+	if cliPath == "" {
+		t.Fatal("no command in payload")
+	}
+	if _, ok, err := runtimeCache.resolveCommandMetaFromPayload(cliPath); err != nil || !ok {
+		t.Fatalf("resolveCommandMetaFromPayload = %v, %v", ok, err)
+	}
+	if _, ok, err := runtimeCache.resolveCommandMetaFromPayload("definitely-not-a-schema-path"); err != nil || ok {
+		t.Fatalf("unknown resolve = %v, %v", ok, err)
+	}
+	if _, ok := runtimeCache.renderedCompactLeaf(canonical); !ok {
+		t.Fatal("canonical compact leaf missed")
+	}
+	if _, ok := runtimeCache.renderedCompactLeaf(cliPath); !ok {
+		t.Fatal("primary CLI compact leaf missed")
+	}
+	if _, ok := runtimeCache.renderedCompactLeaf("definitely-not-a-schema-path"); ok {
+		t.Fatal("unknown compact leaf hit")
+	}
+	if _, err := runtimeCache.readAllPayload(meta, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtimeCache.readQueryPayload(cliPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtimeCache.readQueryPayload(productID); err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &renderSchemaProductSummary, func(schemaruntime.ProductSpec) (map[string]any, error) {
+		return nil, errors.New("forced product summary")
+	})
+	if _, err := runtimeCache.queryPayload(meta, productID, true); err == nil {
+		t.Fatal("forced product summary succeeded")
+	}
+	if _, err := schemaPayloadFromLoadedCatalog(loaded, []string{productID}); err == nil {
+		t.Fatal("forced catalog product summary succeeded")
+	}
+
+	if _, err := runtimeCache.readCommandMetaFromPayloadFresh("definitely-not-a-schema-path"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := schemareader.ReadProduct(nil, identity, meta, productID); err == nil {
+		t.Fatal("nil cache ReadProduct succeeded")
+	}
+	reopened, err := schemacache.Open(identity.Edition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	if _, err := schemareader.ReadProduct(reopened, identity, meta, productID); err != nil {
+		t.Fatalf("ReadProduct: %v", err)
+	}
+	var leafRef schemaruntime.RenderedLeafRef
+	for _, ref := range first.LeafIndex {
+		leafRef = ref
+		break
+	}
+	if _, err := schemareader.ReadRenderedLeaf(reopened, identity, index, productID, leafRef); err != nil {
+		t.Fatalf("ReadRenderedLeaf: %v", err)
+	}
+
+	fakeIndex := index
+	fakeIndex.LocatorProductByPath = map[string]string{"missing-product-path": "no-such-product"}
+	if _, err := runtimeCache.loadCommandPayload(fakeIndex, "no-such-product"); err == nil {
+		t.Fatal("missing payload product succeeded")
+	}
+	if _, ok, err := runtimeCache.resolveCommandMetaFromPayload("missing-product-path"); err == nil && ok {
+		t.Fatal("missing payload resolve succeeded")
+	}
+	if _, ok := runtimeCache.renderedCompactLeaf("missing-product-path"); ok {
+		t.Fatal("missing payload leaf succeeded")
+	}
+
+	aliasPath := ""
+	for path, command := range first.Commands {
+		if path != command.Identity.CLIPath && path != command.Identity.Canonical {
+			aliasPath = path
+			break
+		}
+	}
+	if aliasPath != "" {
+		if _, ok := runtimeCache.renderedCompactLeaf(aliasPath); ok {
+			t.Fatal("alias compact leaf must miss")
+		}
+	}
+
+	brokenIdentity := identity
+	brokenIdentity.Payload.EncodedSHA256 = sha256.Sum256([]byte("wrong-payload"))
+	broken := &schemaCacheRuntime{
+		options:  SchemaCacheOptions{Identity: brokenIdentity},
+		products: make(map[string]*schemaCacheProductLoad),
+		payloads: make(map[string]*schemaCachePayloadLoad),
+	}
+	if _, err := broken.payloadsHandle(); err == nil {
+		t.Fatal("mismatched payload identity opened")
+	}
+	if _, ok := broken.renderedCompactLeaf(canonical); ok {
+		t.Fatal("broken identity compact leaf succeeded")
+	}
+	if _, err := broken.readRenderedLeaf(index, productID, leafRef); err == nil {
+		t.Fatal("broken identity rendered leaf succeeded")
+	}
+	brokenRegistry := identity
+	brokenRegistry.Registry.EncodedSHA256 = sha256.Sum256([]byte("wrong-registry"))
+	brokenReg := &schemaCacheRuntime{
+		options:  SchemaCacheOptions{Identity: brokenRegistry},
+		products: make(map[string]*schemaCacheProductLoad),
+		payloads: make(map[string]*schemaCachePayloadLoad),
+	}
+	if _, err := brokenReg.readAllPayload(meta, false); err == nil {
+		t.Fatal("mismatched registry identity readAll succeeded")
+	}
+
+	RegisterSchemaSourceRoot(nil)
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	failOpen := &schemaCacheRuntime{
+		options:  SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}},
+		products: make(map[string]*schemaCacheProductLoad),
+		payloads: make(map[string]*schemaCachePayloadLoad),
+	}
+	if _, _, err := repairSchemaCache(failOpen, func() (any, error) { return nil, errors.New("recheck") }); err == nil {
+		t.Fatal("nil source root repair succeeded")
+	}
+	if _, err := failOpen.readQueryPayload(cliPath); err == nil {
+		t.Fatal("invalid edition readQuery succeeded")
+	}
+	if _, err := failOpen.readAllPayload(meta, false); err == nil {
+		t.Fatal("invalid edition readAll succeeded")
+	}
+	if _, err := failOpen.readCommandMetaFromPayloadFresh(cliPath); err == nil {
+		t.Fatal("invalid edition fresh payload succeeded")
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheArtifactsAndCanonicalRemaining(t *testing.T) {
+	if _, err := BuildSchemaCacheArtifacts(ResolvedSchemaBuild{}); err == nil {
+		t.Fatal("empty resolved build accepted")
+	}
+	if _, err := schemaCacheHashes("sha256:"+strings.Repeat("z", 64), "sha256:"+hex.EncodeToString(make([]byte, 32))); err == nil {
+		t.Fatal("non-hex source hash accepted")
+	}
+	selected := false
+	if _, err := canonicalSchemaCacheRegistry(SchemaRegistry{Products: []ProductSpec{{
+		ID: "p", FieldProvenance: map[string]contract.FieldProvenance{
+			"agent_summary": {Value: json.RawMessage(`"x"`), OverriddenCandidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"y"`), Selected: &selected}}},
+		},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	loaded := deliverySchemaCatalog()
+	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	brokenMeta := artifacts
+	brokenMeta.Meta = []byte("nope")
+	if err := brokenMeta.ValidateRoundTrip(); err == nil {
+		t.Fatal("invalid meta round trip succeeded")
+	}
+	countMismatch := artifacts
+	countMismatch.registry.Products = nil
+	if err := countMismatch.ValidateRoundTrip(); err == nil {
+		t.Fatal("empty registry round trip succeeded")
+	}
+	identityMismatch := artifacts
+	identityMismatch.locators = map[string]string{"drift": "x"}
+	if err := identityMismatch.ValidateRoundTrip(); err == nil {
+		t.Fatal("locator drift round trip succeeded")
+	}
+	if _, err := buildSchemaCacheArtifacts(SchemaRegistry{AgentMetadata: json.RawMessage("{")}, "sha256:"+hex.EncodeToString(make([]byte, 32)), "sha256:"+hex.EncodeToString(make([]byte, 32))); err == nil {
+		t.Fatal("invalid agent metadata artifacts accepted")
+	}
+	if _, err := buildSchemaCacheArtifacts(SchemaRegistry{}, "nope", "sha256:"+hex.EncodeToString(make([]byte, 32))); err == nil {
+		t.Fatal("invalid hashes accepted")
+	}
+	emptyProduct := SchemaRegistry{Kind: "schema", Level: "catalog", Products: []ProductSpec{{ID: ""}}}
+	digest := "sha256:" + hex.EncodeToString(make([]byte, 32))
+	if _, err := buildSchemaCacheArtifacts(emptyProduct, digest, digest); err == nil {
+		t.Fatal("empty product id artifacts accepted")
+	}
+
+	t.Run("canonical-marshal", func(t *testing.T) {
+		testseam.Swap(t, &canonicalJSONMarshal, func(any) ([]byte, error) { return nil, errors.New("forced marshal") })
+		if _, err := canonicalSchemaCacheRegistry(SchemaRegistry{AgentMetadata: json.RawMessage(`{"k":1}`)}); err == nil {
+			t.Fatal("forced canonical marshal succeeded")
+		}
+	})
+	t.Run("compact-marshal", func(t *testing.T) {
+		testseam.Swap(t, &compactLeafMarshal, func(any, string, string) ([]byte, error) { return nil, errors.New("forced leaf") })
+		if _, err := renderCompactSchemaLeaves(loaded.Registry, loaded.Index); err == nil {
+			t.Fatal("forced compact leaf marshal succeeded")
+		}
+	})
+	t.Run("compact-render", func(t *testing.T) {
+		if _, err := renderCompactSchemaLeaves(loaded.Registry, SchemaIndex{}); err == nil {
+			t.Fatal("empty index compact leaf render succeeded")
+		}
+	})
 }

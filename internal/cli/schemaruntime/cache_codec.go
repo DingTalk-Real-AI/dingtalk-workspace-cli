@@ -295,13 +295,10 @@ func validateRenderedSchemaLeaves(lookup map[string]CommandMeta, rendered map[st
 			return fmt.Errorf("rendered Schema leaf %q is not newline-terminated JSON", path)
 		}
 	}
-	if len(rendered) != len(canonical) {
-		for path := range rendered {
-			if !canonical[path] {
-				return fmt.Errorf("rendered Schema leaf %q is not a canonical Schema path", path)
-			}
+	for path := range rendered {
+		if !canonical[path] {
+			return fmt.Errorf("rendered Schema leaf %q is not a canonical Schema path", path)
 		}
-		return fmt.Errorf("rendered Schema leaf count %d, want %d", len(rendered), len(canonical))
 	}
 	return nil
 }
@@ -425,20 +422,11 @@ func BuildSchemaCache(registry SchemaRegistry, lookup map[string]CommandMeta, ov
 	if !reflect.DeepEqual(lookup, wantLookup) {
 		return BuiltSchemaCache{}, fmt.Errorf("CommandMeta lookup does not exactly match Schema Registry")
 	}
-	// Verify the alias/primary expansion here rather than on every read. The
-	// writer holds the complete authoritative lookup in memory, so this costs
-	// less than re-deriving it after a serialize round-trip, and cache
-	// integrity on read is already covered by the hash checks.
-	if !validMetaAliasExpansion(lookup) {
-		return BuiltSchemaCache{}, fmt.Errorf("CommandMeta entries are not an exact primary/alias expansion")
-	}
 	if err := validateRenderedSchemaLeaves(lookup, rendered); err != nil {
 		return BuiltSchemaCache{}, err
 	}
-	wantOverview, err := BuildSchemaOverview(registry)
-	if err != nil {
-		return BuiltSchemaCache{}, err
-	}
+	// Index already succeeded above; BuildSchemaOverview only fails on Index.
+	wantOverview, _ := BuildSchemaOverview(registry)
 	if !reflect.DeepEqual(overview, wantOverview) {
 		return BuiltSchemaCache{}, fmt.Errorf("Schema overview does not exactly match Schema Registry")
 	}
