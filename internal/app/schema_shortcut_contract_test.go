@@ -117,7 +117,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 		t.Fatal("public --conversation-id must stay optional when hidden siblings still satisfy the declared exactly_one group")
 	}
 	wantMessagesConstraints := map[string]any{
-		"mutually_exclusive": [][]string{{"conversation-id", "group", "id"}},
+		"require_one_of": [][]string{{"conversation-id"}},
 	}
 	if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantMessagesConstraints) {
 		t.Fatalf("shortcut leaf constraints = %#v, want %#v", got, wantMessagesConstraints)
@@ -431,8 +431,7 @@ func assertChatCatalogCompleteLeafContracts(t testing.TB) {
 		leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
 		assertSchemaLeafParameterRequired(t, leaf, cliPath, "conversation-id", false)
 		assertSchemaLeafConstraints(t, leaf, cliPath, map[string]any{
-			"require_one_of":     [][]string{{"conversation-id", "id", "chat"}},
-			"mutually_exclusive": [][]string{{"conversation-id", "id", "chat"}},
+			"require_one_of": [][]string{{"conversation-id"}},
 		})
 	}
 
@@ -650,11 +649,19 @@ func assertDeliveryShortcutIdentityAndSelection(
 	if got, want := schemaContractString(tool["primary_cli_path"]), declared.Service+" "+declared.Command; got != want {
 		t.Errorf("%s primary_cli_path = %q, want %q", canonical, got, want)
 	}
-	if got, want := schemaContractString(tool["agent_summary"]), declared.Description; got != want {
-		t.Errorf("%s agent_summary = %q, want %q", canonical, got, want)
+	wantSummary := strings.TrimSpace(declared.Contract.Selection.AgentSummary)
+	if wantSummary == "" {
+		wantSummary = declared.Description
 	}
-	if got, want := schemaContractStringSlice(tool["use_when"]), []string{declared.Intent}; !schemaContractJSONEqual(got, want) {
-		t.Errorf("%s use_when = %#v, want %#v", canonical, got, want)
+	if got := schemaContractString(tool["agent_summary"]); got != wantSummary {
+		t.Errorf("%s agent_summary = %q, want %q", canonical, got, wantSummary)
+	}
+	wantUseWhen := declared.Contract.Selection.UseWhen
+	if len(wantUseWhen) == 0 && strings.TrimSpace(declared.Intent) != "" {
+		wantUseWhen = []string{declared.Intent}
+	}
+	if got := schemaContractStringSlice(tool["use_when"]); !schemaContractJSONEqual(got, wantUseWhen) {
+		t.Errorf("%s use_when = %#v, want %#v", canonical, got, wantUseWhen)
 	}
 	if len(schemaContractStringSlice(tool["avoid_when"])) == 0 {
 		t.Errorf("%s has no reviewed avoid_when", canonical)
@@ -830,11 +837,10 @@ func assertDeliveryShortcutConstraints(
 	canonical string,
 ) {
 	t.Helper()
-	public := make(map[string]bool, len(declared.Flags))
-	for _, flag := range declared.Flags {
-		if !flag.Hidden {
-			public[flag.Name] = true
-		}
+	parameters := schemaContractMap(tool["parameters"])
+	public := make(map[string]bool, len(parameters))
+	for name := range parameters {
+		public[name] = true
 	}
 	want := map[string][][]string{}
 	for _, constraint := range declared.Constraints {
@@ -844,29 +850,25 @@ func assertDeliveryShortcutConstraints(
 				visible = append(visible, flagName)
 			}
 		}
-		// Match AnnotateConstraints declare≡execute projection: keep the full
-		// declared group when any hidden sibling remains.
-		flags := visible
-		if len(visible) < len(constraint.Flags) {
-			flags = append([]string(nil), constraint.Flags...)
-		}
 		switch constraint.Kind {
 		case shortcut.ConstraintAtLeastOne:
-			if len(flags) > 1 {
-				want["require_one_of"] = append(want["require_one_of"], flags)
+			if len(visible) > 0 {
+				want["require_one_of"] = append(want["require_one_of"], visible)
 			}
 		case shortcut.ConstraintExactlyOne:
-			if len(flags) > 1 {
-				want["require_one_of"] = append(want["require_one_of"], flags)
-				want["mutually_exclusive"] = append(want["mutually_exclusive"], flags)
+			if len(visible) > 0 {
+				want["require_one_of"] = append(want["require_one_of"], visible)
+			}
+			if len(visible) > 1 {
+				want["mutually_exclusive"] = append(want["mutually_exclusive"], visible)
 			}
 		case shortcut.ConstraintMutuallyExclusive:
-			if len(flags) > 1 {
-				want["mutually_exclusive"] = append(want["mutually_exclusive"], flags)
+			if len(visible) > 1 {
+				want["mutually_exclusive"] = append(want["mutually_exclusive"], visible)
 			}
 		case shortcut.ConstraintCustom:
-			for _, flagName := range flags {
-				description := schemaContractString(schemaContractMap(tool["parameters"])[flagName]["description"])
+			for _, flagName := range visible {
+				description := schemaContractString(parameters[flagName]["description"])
 				for _, evidence := range shortcutCustomConstraintEvidence(constraint.Description) {
 					if !strings.Contains(description, evidence) {
 						t.Errorf("%s --%s description does not publish custom constraint evidence %q: %q", canonical, flagName, evidence, description)

@@ -17,7 +17,7 @@ metadata:
 - 只用 `dws`；结构化读取加 `--format json`，按真实返回判断。
 - 已知命令直调；参数/约束/安全不明查 leaf 窄 Schema。Schema 不可用才读已知 leaf Help 一次；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 不查 Help：优先错误中的明确 suggestion，其次已加载 Skill/reference 中的明确兼容入口；均无则报漂移并停，禁全 Catalog。低频 reference 不默认 Help，禁 root/parent/product Help。发现后必须执行或说明阻塞。
 - 不猜命令/flag/字段/ID/账号/业务事实；ID 来自真实返回。目标零命中/多候选/类型不明先消歧；仅可选时间/展示范围用契约默认，缺必需信息即停。
-- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁选第一/最近账号。
+- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出/记录 token、refresh token、appSecret、webhook token；已注入认证时不索要。
 - 写须符合明确意图；确认以最终 Runtime gate/Schema 为准，确认后才加 `--yes`。
 - 写后验证结果，不凭退出码宣称成功。退出须最终答复，区分完成、部分、阻塞、待确认、失败；保留已有数据及 `complete/hasMore/stopReason/failures`。
@@ -43,23 +43,23 @@ metadata:
 | 用户终点 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
 | <!-- dws-intent: chat.read.conversation -->读取指定群聊/单聊 | `dws chat +chat-messages --no-reactions` | 全部时加 `--page-all` |
-| <!-- dws-intent: chat.search.filtered -->按关键词/发送者/@/类型/会话过滤 | `dws chat +search-msg --no-reactions` | 默认 7 天；精确范围成对用 `--start/--end` |
+| <!-- dws-intent: chat.search.filtered --><!-- dws-intent: chat.read.reactions -->按关键词/发送者/@/类型/reaction 过滤 | `dws chat +search-msg`（reaction 加 `--has-reactions`） | 默认 7 天；范围用 `--start/--end` |
 | 跨会话读取/总结/统计 | `dws chat message list-all --start <开始> --end <结束> --page-all --no-reactions` | 不先列会话逐群循环 |
-| <!-- dws-intent: chat.conversation.active-since -->查看时间后活跃会话 | `dws chat +recent-conversations --start <时间>` | 会话摘要；检查 `complete`；旧名 `+active-conversations` 仅作兼容入口 |
+| <!-- dws-intent: chat.conversation.active-since -->时间后活跃会话 | `dws chat +recent-conversations --start <时间>` | 摘要；查 `complete`；`+active-conversations` 仅兼容 |
 | 查看 @我的消息 | `dws chat +at-me [--group <群名或ID>] --page-all --no-reactions` | 未指定群则跨会话；默认 7 天 |
 | 查看未读消息 | `dws chat +unread-chats` | 需正文时沿 CID 读消息 |
 | 已知消息 ID 批量取详情 | `dws chat +messages-mget` | 看 leaf Schema；保留会话上下文 |
 | <!-- dws-intent: chat.send.dm -->按姓名发文本/Markdown | `dws chat +dm --to <姓名> --content <内容>` | 唯一解析；多候选停止 |
 | <!-- dws-intent: chat.send.group -->按群名/ID 发文本/Markdown | `dws chat +send-to-group --group <群名或ID> --content <内容>` | 多候选停止 |
 | <!-- dws-intent: chat.send.advanced -->文件/Bot/Webhook/复杂 @ | `dws chat +messages-send` | Bot 多群检查逐项 ledger |
-| 查看全部会话 | `dws chat +conversation-list --page-all` | 含群聊/单聊，不是消息正文 |
+| 全部会话 | `dws chat +conversation-list --page-all` | 含群聊/单聊，非正文 |
 | 查加入/管理的群 | `+my-groups --page-all` / `+chat-list-mine` | 后者无 `--page-all`；flag 不跨 leaf |
 | 搜群或查看全部成员 | `+chat-search --query <词>` / `+chat-members-list --group <群名或ID>` | 多候选停止；检查 buckets/完整性 |
 | 查群资料/Bot/邀请链接 | `+conversation-info` / `+chat-bots` / `+chat-invite-url` | 只读 |
 | <!-- dws-intent: chat.create.group -->创建/清理临时群 | `dws chat +chat-create --name <名称> --member-query <姓名列表>` → 保存 CID → `+chat-dismiss --group <cid>` | 已知 ID 用 `--users`；清理须确认、验证 |
 | 改群资料/设置/禁言/管理员 | `+chat-update` / `+chat-update-settings` / `+chat-mute` / `+chat-mute-member` / `+chat-set-admin` | 用真实群/用户 ID；写后读回 |
 | 管理群身份 | 读 [group-admin](references/chat/group-admin.md) 角色 family | 角色 CRUD、成员绑定/解绑/查询；不切 atomic，写后回读 |
-| 会话分组/分类 | 读 [chat-conversation](references/chat/chat-conversation.md) 的 category family | 分类 CRUD、会话加入/移出/列出；分类不是群，名称≤15字 |
+| <!-- dws-intent: chat.category.list-conversations -->列分类内会话 | `dws chat +category-list-conversations --category-id <ID>` | 分类≠群；先取 ID |
 | <!-- dws-intent: chat.reply.quote -->引用回复 | `dws chat +messages-reply` | 用真实消息/CID；未知投递状态非成功 |
 | 撤回/转发 | `+messages-recall`；`+messages-forward` / `+messages-combine-forward` / `+messages-forward-topic` | 不复制正文冒充原生转发 |
 | Pin/消息 Top/Favorite | `+messages-set-pin` / `+messages-unset-pin`；`+messages-set-top` / `+messages-unset-top`；`+flag-create` / `+flag-cancel` | 对象互不替代；用对应查询验证 |
@@ -68,7 +68,7 @@ metadata:
 | 已读/未读/清红点/清空 | `+conversation-mark-read` / `+conversation-mark-unread` / `+conversation-clear-red-point` / `+conversation-clear-all-red-point` / `+conversation-clear-messages` | 已读需消息 ID；清空按 Runtime 确认 |
 | 下载消息资源 | 查询加 `--download-resources --output-dir <目录>`；已有引用用 `+messages-resource-download` | 不猜 ID；保留 ledger；临时 URL 不交付 |
 
-次级：Thread `+thread-replies`；<!-- dws-intent: chat.conversation.list-top -->置顶会话 `+conversation-list-top`；会话空间上传 `conversation-file upload`；未来 IM 事件走 [`dingtalk-event`](../dingtalk-event/SKILL.md)。
+次级：Thread `+thread-replies`；<!-- dws-intent: chat.conversation.list-top -->置顶 `dws chat +conversation-list-top`；上传 `conversation-file upload`；IM 事件走 [`dingtalk-event`](../dingtalk-event/SKILL.md)。
 
 ## 关键结果语义
 

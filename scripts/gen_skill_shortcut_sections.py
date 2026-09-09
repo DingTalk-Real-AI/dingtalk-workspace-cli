@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import gen_shortcut_comparison as shortcut_source  # noqa: E402
 
 CATALOG_PATH = ROOT / "docs" / "shortcut-public-catalog.json"
+CHAT_SEMANTIC_CATALOG = ROOT / "internal" / "shortcut" / "semantic_catalog.json"
 MONO_SKILL = ROOT / "skills" / "mono" / "SKILL.md"
 SHARED_SKILL = ROOT / "skills" / "multi" / "dingtalk-shared" / "SKILL.md"
 RUNTIME_CONTRACT_SOURCE = (
@@ -50,6 +51,7 @@ SERVICE_TO_SKILL = {
     "wiki": ROOT / "skills" / "multi" / "dingtalk-wiki" / "SKILL.md",
 }
 SERVICE_TO_SKILL_MIRRORS = {
+    "sheet": [ROOT / "skills" / "mono" / "references" / "products" / "sheet.md"],
     "whiteboard": [ROOT / "skills" / "mono" / "references" / "products" / "whiteboard.md"],
 }
 

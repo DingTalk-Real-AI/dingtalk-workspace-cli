@@ -17,7 +17,7 @@ metadata:
 - 只用 `dws`；结构化读取加 `--format json`，按真实返回判断。
 - 已知命令直调；参数/约束/安全不明查 leaf 窄 Schema。Schema 不可用才读已知 leaf Help 一次；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 不查 Help：优先错误中的明确 suggestion，其次已加载 Skill/reference 中的明确兼容入口；均无则报漂移并停，禁全 Catalog。低频 reference 不默认 Help，禁 root/parent/product Help。发现后必须执行或说明阻塞。
 - 不猜命令/flag/字段/ID/账号/业务事实；ID 来自真实返回。目标零命中/多候选/类型不明先消歧；仅可选时间/展示范围用契约默认，缺必需信息即停。
-- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁选第一/最近账号。
+- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出/记录 token、refresh token、appSecret、webhook token；已注入认证时不索要。
 - 写须符合明确意图；确认以最终 Runtime gate/Schema 为准，确认后才加 `--yes`。
 - 写后验证结果，不凭退出码宣称成功。退出须最终答复，区分完成、部分、阻塞、待确认、失败；保留已有数据及 `complete/hasMore/stopReason/failures`。
@@ -44,12 +44,12 @@ ID/URL 直用；标题唯一命中后执行。顺序：稳定 ID → shortcut �
 | 已知 alidocs 文档目录 URL，列出当前层 | `dws doc +list --folder <URL> --page-all` | 复用完整 URL；不要改用 `drive +list` |
 | <!-- dws-intent: doc.content.read -->已知 ID/URL 读取正文或局部内容 | `dws doc +fetch --node <ID或URL>` | 术语用 `keyword`;章节 `outline` → `section`;整篇才用 `full` |
 | 聚合查看信息、权限、版本、媒体或评论 | `dws doc +inspect --node <ID或URL>` | 基础元信息默认返回；样式、权限、历史、媒体、评论才用对应 `--include-*`，无 `--include-info` |
-| 新建文档并写入 | `dws doc +create --name <标题> --content <文本\|-\|@文件> [--folder <ID>\|--workspace <ID>]` | 位置用真实 ID，二者互斥；`-`=stdin，禁 `@-`；Runtime 分片回读、不拆写 |
+| 新建文档并写入 | `dws doc +create --name <标题> --content <文本\|-\|@文件> [--folder <ID>\|--workspace <ID>]` | 指定位置复用真实 ID，二者互斥；`-`=stdin，禁 `@-`；Runtime 分片回读、不拆写 |
 | <!-- dws-intent: doc.content.update -->追加、覆盖或精确编辑 block | `dws doc +update --node <ID或URL> --command <动作>` | 唯一文本 `str_replace`;章节/block 局部取 ID;整篇才 overwrite |
 | 重要内容更新且需要恢复点 | `dws doc +checkpoint-update` | 自动保存版本,更新并回读;检查 `steps` 和 `compensation` |
 | 版本操作 | `dws doc +version-save --node` / `dws doc +version-list --node` / `dws doc +version-revert --node --version` | 快照/列表/回滚 |
 | <!-- dws-intent: doc.export.format -->导出为 docx/markdown/pdf | `dws doc +export --export-format <格式>` | 格式必须显式指定;普通文件下载切 `dingtalk-drive` |
-| <!-- dws-intent: doc.import.local_file -->本地文件转在线文档 | `dws doc +import --file <相对路径> [--folder <ID>\|--workspace <ID>] [--name <文档名>]` | folder/workspace 互斥且用真实 ID；已定知识库必带 workspaceId，未定才用 Runtime 默认根并回读落点；`+create` 不代替库内导入；仅保原文件走 Drive |
+| <!-- dws-intent: doc.import.local_file -->本地文件转在线文档 | `dws doc +import --file <相对路径> [--folder <ID>\|--workspace <ID>] [--name <文档名>]` | 指定位置复用真实 ID，二者互斥；知识库用 workspaceId；未指定才由 Runtime 取默认根并回读；`+create` 不代替库内导入；仅保原文件走 Drive |
 | 封面/背景 | `+resource-update/+resource-delete`；`+background-update/+background-delete` | 写后 `+inspect --include-style`；禁查 Catalog |
 | 浏览模板 | `dws doc +template-list [--source MY\|PUBLIC] [--page-all]` | “我的/我这边”只查 MY；明确公开才查 PUBLIC；“有哪些/全部”加 `--page-all` 并检查 `complete` |
 | 搜索模板 | `dws doc +template-search --query <名称或关键词>` | 来源可选 MY/PUBLIC；零命中停止，禁止拿无关模板替代；多候选消歧 |

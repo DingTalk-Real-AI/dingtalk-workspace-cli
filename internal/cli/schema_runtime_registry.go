@@ -14,7 +14,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 type runtimeSchemaMetadataSources struct {
@@ -397,43 +396,6 @@ func projectRuntimeSchemaConstraints(cmd *cobra.Command, parameters []ParameterS
 			published[name] = true
 		}
 	}
-	reviewedAliasTarget := func(flag *pflag.Flag) (string, bool, error) {
-		if flag == nil || !flag.Hidden {
-			return "", false, nil
-		}
-		aliasOf, hasAliasOf := flag.Annotations[runtimeannotate.AnnotationFlagAliasOf]
-		origin, hasOrigin := flag.Annotations[runtimeannotate.AnnotationFlagAliasOrigin]
-		if !hasAliasOf && !hasOrigin {
-			return "", false, nil
-		}
-		// A compatibility spelling that does not carry the framework-owned
-		// origin remains executable-only. It is not sufficient evidence for a
-		// public rewrite, even when another package happens to set alias_of.
-		if !hasOrigin || len(origin) != 1 || origin[0] != runtimeannotate.FlagAliasOriginCorecmdV1 {
-			return "", false, nil
-		}
-		if !hasAliasOf || len(aliasOf) != 1 || aliasOf[0] == "" || aliasOf[0] != strings.TrimSpace(aliasOf[0]) {
-			return "", false, fmt.Errorf("hidden input %q has malformed reviewed alias target", flag.Name)
-		}
-		targetName := aliasOf[0]
-		if targetName == flag.Name {
-			return "", false, fmt.Errorf("hidden input %q cannot alias itself", flag.Name)
-		}
-		target := runtimeCommandFlag(cmd, targetName)
-		if target == nil {
-			return "", false, fmt.Errorf("hidden alias %q targets unknown executable input %q", flag.Name, targetName)
-		}
-		if target.Hidden {
-			return "", false, fmt.Errorf("hidden alias %q targets hidden input %q", flag.Name, targetName)
-		}
-		if values := target.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(values) > 0 {
-			return "", false, fmt.Errorf("hidden alias %q targets alias input %q", flag.Name, targetName)
-		}
-		if flag.Value == nil || target.Value == nil || flag.Value.Type() != target.Value.Type() {
-			return "", false, fmt.Errorf("hidden alias %q and public input %q have incompatible types", flag.Name, targetName)
-		}
-		return targetName, true, nil
-	}
 	projectGroups := func(kind string, groups [][]string) ([][]string, error) {
 		projected := make([][]string, 0, len(groups))
 		for groupIndex, group := range groups {
@@ -460,7 +422,7 @@ func projectRuntimeSchemaConstraints(cmd *cobra.Command, parameters []ParameterS
 					// so require_together and other cross-parameter rules do not
 					// lose a distinct public member. Undeclared legacy spellings
 					// remain executable-only and are omitted from Agent Schema.
-					targetName, reviewed, aliasErr := reviewedAliasTarget(flag)
+					targetName, reviewed, aliasErr := runtimeannotate.ReviewedHiddenAliasTarget(cmd, flag)
 					if aliasErr != nil {
 						return nil, fmt.Errorf("constraint %s[%d] %w", kind, groupIndex, aliasErr)
 					}

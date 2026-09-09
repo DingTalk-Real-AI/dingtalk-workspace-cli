@@ -5,6 +5,7 @@ package runtimeannotate
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -163,5 +164,82 @@ func TestCrossPlatformCoverageNormalizeConstraintsEdges(t *testing.T) {
 	}
 	if !ConstraintsEmpty(RuntimeSchemaConstraints{}) {
 		t.Fatal("empty constraints must report empty")
+	}
+}
+
+func TestCrossPlatformCoverageReviewedHiddenAliasTarget(t *testing.T) {
+	newCommand := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "run"}
+		cmd.Flags().String("public", "", "public")
+		cmd.Flags().String("alias", "", "alias")
+		_ = cmd.Flags().MarkHidden("alias")
+		return cmd
+	}
+	annotate := func(cmd *cobra.Command, alias, target, origin string) {
+		flag := cmd.Flags().Lookup(alias)
+		if target != "" {
+			SetFlagAnnotation(flag, AnnotationFlagAliasOf, target)
+		}
+		if origin != "" {
+			SetFlagAnnotation(flag, AnnotationFlagAliasOrigin, origin)
+		}
+	}
+
+	if _, ok, err := ReviewedHiddenAliasTarget(nil, nil); ok || err != nil {
+		t.Fatalf("nil alias = ok %v, err %v", ok, err)
+	}
+	cmd := newCommand()
+	if _, ok, err := ReviewedHiddenAliasTarget(cmd, cmd.Flags().Lookup("public")); ok || err != nil {
+		t.Fatalf("public flag = ok %v, err %v", ok, err)
+	}
+	if _, ok, err := ReviewedHiddenAliasTarget(cmd, cmd.Flags().Lookup("alias")); ok || err != nil {
+		t.Fatalf("unannotated hidden flag = ok %v, err %v", ok, err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		target string
+		origin string
+		setup  func(*cobra.Command)
+		want   string
+	}{
+		{name: "unreviewed origin", target: "public", origin: "other"},
+		{name: "missing target", origin: FlagAliasOriginCorecmdV1, want: "malformed reviewed alias target"},
+		{name: "self", target: "alias", origin: FlagAliasOriginCorecmdV1, want: "cannot alias itself"},
+		{name: "unknown target", target: "missing", origin: FlagAliasOriginCorecmdV1, want: "unknown executable input"},
+		{name: "hidden target", target: "hidden", origin: FlagAliasOriginCorecmdV1, setup: func(cmd *cobra.Command) {
+			cmd.Flags().String("hidden", "", "hidden")
+			_ = cmd.Flags().MarkHidden("hidden")
+		}, want: "targets hidden input"},
+		{name: "alias target", target: "public", origin: FlagAliasOriginCorecmdV1, setup: func(cmd *cobra.Command) {
+			SetFlagAnnotation(cmd.Flags().Lookup("public"), AnnotationFlagAliasOf, "other")
+		}, want: "targets alias input"},
+		{name: "type mismatch", target: "number", origin: FlagAliasOriginCorecmdV1, setup: func(cmd *cobra.Command) {
+			cmd.Flags().Int("number", 0, "number")
+		}, want: "incompatible types"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := newCommand()
+			if tc.setup != nil {
+				tc.setup(cmd)
+			}
+			annotate(cmd, "alias", tc.target, tc.origin)
+			_, ok, err := ReviewedHiddenAliasTarget(cmd, cmd.Flags().Lookup("alias"))
+			if tc.want == "" {
+				if ok || err != nil {
+					t.Fatalf("ok = %v, err = %v", ok, err)
+				}
+				return
+			}
+			if ok || err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ok = %v, err = %v, want %q", ok, err, tc.want)
+			}
+		})
+	}
+
+	cmd = newCommand()
+	annotate(cmd, "alias", "public", FlagAliasOriginCorecmdV1)
+	if target, ok, err := ReviewedHiddenAliasTarget(cmd, cmd.Flags().Lookup("alias")); target != "public" || !ok || err != nil {
+		t.Fatalf("reviewed alias = %q, %v, %v", target, ok, err)
 	}
 }
