@@ -16,6 +16,7 @@ package cli
 import (
 	"sync/atomic"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/spf13/cobra"
 )
 
@@ -117,6 +118,20 @@ func AwaitSchemaCachePrewarmForTest() {
 	if pw := registration.runtime.prewarm; pw != nil {
 		<-pw.done
 	}
+}
+
+// SchemaCachePrewarmPayloadsHandleForTest returns the never-adopted prewarm
+// payloads handle after it settles, so tests can assert repair reset closes it.
+func SchemaCachePrewarmPayloadsHandleForTest() *schemacache.Registry {
+	registration := schemaCacheRegistrationValue.Load()
+	if registration == nil || registration.runtime == nil {
+		return nil
+	}
+	if pw := registration.runtime.prewarm; pw != nil {
+		<-pw.done
+		return pw.payloads
+	}
+	return nil
 }
 
 // restorePackageCLISchemaDeliveryHook is installed by package-cli TestMain so

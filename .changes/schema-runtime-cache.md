@@ -2,7 +2,7 @@
 category: Changed
 ---
 
-- Introduce release-identity-verified Schema caching with live declaration fallback in the existing single `dws` executable.
-- Reduce command startup work by mounting only the selected product when the runtime command surface is static.
-- Stop waiting for telemetry delivery after command completion; the final queued event is best effort and may be lost when the process exits.
+- Introduce release-identity-verified Schema caching inside the existing Schema command of the single `dws` executable. Cache hits authenticate binary-pinned digests before decode; a miss, corruption, or empty identity falls back to live declaration assembly. Persistent cache is unused when plugins or other runtime extensions change the command surface.
+- Keep one complete Cobra tree for every public invocation. Compact typed metadata and shared builders reduce complete-tree allocations; process argv does not select a product factory or a utility-only tree.
+- Do not wait for telemetry delivery when the process exits. The tracker is configured not to flush, so a one-shot invocation may exit before the queued HTTP send completes; business cleanup, signals, and exit codes remain synchronous.
 - Reduce temporary allocations during Schema validation and command initialization.

@@ -33,7 +33,7 @@ func signalSelf(t *testing.T, sig syscall.Signal) {
 	}
 }
 
-func TestFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkSignalRedeliveryFallbackAndInterruptionMethods(t *testing.T) {
 	testseam.Swap(t, &rootFindProcess, func(int) (*os.Process, error) { return nil, errors.New("find failed") })
 	exitCode := 0
 	testseam.Swap(t, &rootExitProcess, func(code int) { exitCode = code })
@@ -87,7 +87,7 @@ func TestCrossPlatformCoverageProcessInterruptionRejectsNestedDetail(t *testing.
 	}
 }
 
-func TestFrameworkManageProcessSignalsNilAndEscalation(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkManageProcessSignalsNilAndEscalation(t *testing.T) {
 	signals := make(chan os.Signal, 3)
 	stopped, escalated := false, make(chan os.Signal, 1)
 	ctx, _, stop := manageProcessSignals(context.Background(), nil, signals, func() { stopped = true }, func(sig os.Signal) { escalated <- sig })
@@ -230,7 +230,7 @@ func TestCrossPlatformCoverageExecuteSignalPreservesCancellationRecoveryCommand(
 	}
 }
 
-func TestExecuteSignalLegacyExitCodes(t *testing.T) {
+func TestCrossPlatformCoverageExecuteSignalLegacyExitCodes(t *testing.T) {
 	for _, tc := range []struct {
 		signal syscall.Signal
 		code   int
@@ -249,7 +249,7 @@ func TestExecuteSignalLegacyExitCodes(t *testing.T) {
 	}
 }
 
-func TestExecuteDeadlineIsNotSignalCancellation(t *testing.T) {
+func TestCrossPlatformCoverageExecuteDeadlineIsNotSignalCancellation(t *testing.T) {
 	var stdout bytes.Buffer
 	installSignalExecuteSeams(t, true, &stdout, io.Discard)
 	testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -267,7 +267,7 @@ func TestExecuteDeadlineIsNotSignalCancellation(t *testing.T) {
 	}
 }
 
-func TestSignalAfterFailedEmissionAttemptPreservesPublicationExitCode(t *testing.T) {
+func TestCrossPlatformCoverageSignalAfterFailedEmissionAttemptPreservesPublicationExitCode(t *testing.T) {
 	var stdout bytes.Buffer
 	installSignalExecuteSeams(t, true, &stdout, io.Discard)
 	testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -342,7 +342,7 @@ func TestCrossPlatformCoverageSignalAfterCompletedPrimaryPreservesEstablishedOut
 	}
 }
 
-func TestExecuteSignalSubprocessExitStatus(t *testing.T) {
+func TestCrossPlatformCoverageExecuteSignalSubprocessExitStatus(t *testing.T) {
 	if os.Getenv("DWS_SIGNAL_HELPER") == "1" {
 		installSignalExecuteSeams(t, true, os.Stdout, os.Stderr)
 		testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -363,7 +363,7 @@ func TestExecuteSignalSubprocessExitStatus(t *testing.T) {
 		{name: "SIGTERM", signal: syscall.SIGTERM, code: 143, subtype: "terminated"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command(os.Args[0], "-test.run=^TestExecuteSignalSubprocessExitStatus$")
+			cmd := exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoverageExecuteSignalSubprocessExitStatus$")
 			cmd.Env = append(os.Environ(), "DWS_SIGNAL_HELPER=1")
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
@@ -404,7 +404,7 @@ func TestExecuteSignalSubprocessExitStatus(t *testing.T) {
 	}
 }
 
-func TestSecondSignalUsesEscalationSeam(t *testing.T) {
+func TestCrossPlatformCoverageSecondSignalUsesEscalationSeam(t *testing.T) {
 	signals := make(chan os.Signal, 2)
 	escalated := make(chan os.Signal, 1)
 	ctx, _, stop := manageProcessSignals(context.Background(), nil, signals, func() {}, func(sig os.Signal) {

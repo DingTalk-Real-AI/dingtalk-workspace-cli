@@ -1048,8 +1048,9 @@ jobs:
     # across three physical app lanes. The lane names and their exact partition
     # union are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper.
     # This preserves memory release between Go test processes while reducing
-    # hosted-runner fan-out by six jobs per focused run.
-    timeout-minutes: 20
+    # hosted-runner fan-out by six jobs per focused run. Job wall time is 30m
+    # so the cli/smoke package timeout of 25m still has setup headroom.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -1172,6 +1173,8 @@ jobs:
           fi
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # internal/cli under -race exceeded 15m (CI run 34334461549 timed
+          # out after 990s with no DATA RACE); 25m is the intentional budget.
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
@@ -1246,10 +1249,12 @@ jobs:
           esac
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # Match the focused-job budget: 15m timed out internal/cli under
+          # -race (990s) without a data race.
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=25m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 

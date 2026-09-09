@@ -2707,12 +2707,19 @@ func TestPostGoreleaserSealsSchemaIntoSingleBinary(t *testing.T) {
 		`SCHEMA_IDENTITY_PROOF="${DWS_SCHEMA_IDENTITY_PROOF:-}"`,
 		`[ "$(git -C "$ROOT" rev-parse HEAD)" = "$RELEASE_COMMIT" ]`,
 		`--scope core --identity "$SCHEMA_IDENTITY_PROOF" --version "v$version"`,
-		`go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$binary" ./cmd`,
-		`grep -aFq "$schema_build_id" "$binary"`,
+		`CGO_ENABLED=1 GOOS="$target_os" GOARCH="$target_arch"`,
+		`cc='oa64-clang'`,
+		`cc='/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17'`,
+		`"$ROOT/scripts/release/run-goreleaser-cross.sh" --exec`,
+		`go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$sealed" ./cmd`,
+		`grep -aFq "$schema_build_id" "$sealed"`,
 	} {
 		if !strings.Contains(script, required) {
 			t.Errorf("single-binary Schema sealing is missing %q", required)
 		}
+	}
+	if strings.Contains(script, "CGO_ENABLED=0") {
+		t.Fatal("Schema seal rebuild must not drop the SafeChat CGO backend")
 	}
 	for _, forbidden := range []string{"dws-core", "internal/launcher", "package-manifest.json"} {
 		if strings.Contains(script, forbidden) {
@@ -3452,6 +3459,14 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	if strings.Contains(goreleaser, "CGO_ENABLED=0") {
 		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
 	}
+	postGoreleaser := read("scripts/release/post-goreleaser.sh")
+	if strings.Contains(postGoreleaser, "CGO_ENABLED=0") {
+		t.Fatal("Schema seal rebuild must not produce CGO-disabled stub binaries")
+	}
+	crossWrapper := read("scripts/release/run-goreleaser-cross.sh")
+	if !strings.Contains(crossWrapper, `[ "${1:-}" = "--exec" ]`) {
+		t.Fatal("cross-release wrapper must accept --exec so Schema seal can reuse CGO toolchains")
+	}
 
 	windowsCompat := read("third_party/safechat-go-sdk/msvcrt_compat_windows.c")
 	for _, required := range []string{
@@ -3483,7 +3498,9 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		"goreleaser_Linux_${archive_arch}.tar.gz",
 		"archive checksum mismatch",
 		`--platform "linux/$docker_arch"`,
-		"--entrypoint /usr/local/bin/goreleaser",
+		"entrypoint=/usr/local/bin/goreleaser",
+		"entrypoint=/usr/bin/env",
+		`--entrypoint "$entrypoint"`,
 	} {
 		if !strings.Contains(wrapper, required) {
 			t.Errorf("pinned cross-release wrapper is missing %q", required)

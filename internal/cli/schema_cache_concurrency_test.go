@@ -6,6 +6,7 @@ package cli
 import (
 	"errors"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
@@ -53,6 +54,44 @@ func TestCrossPlatformCoverageSchemaProductMemoizationRepair(t *testing.T) {
 	got, err := r.cachedProduct("calendar")
 	if err != nil || len(got.Registry.Products) != 1 || got.Registry.Products[0].ID != "calendar" {
 		t.Fatalf("successful repair did not replace failed memoization: %#v, %v", got, err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheOptionsRejectUnsupportedPlatform(t *testing.T) {
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, GOOS: "windows", GOARCH: "amd64",
+	})
+	if err == nil || !strings.Contains(err.Error(), "windows/amd64") {
+		t.Fatalf("unsupported platform error = %v", err)
+	}
+	if _, ok := SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("rejected options still exposed a fast-path identity")
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCacheFastPathIdentityRequiresEligibleRuntime(t *testing.T) {
+	t.Cleanup(func() {
+		schemaCacheRuntimeUncertain.Store(false)
+		_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
+	})
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("disabled cache exposed a fast-path identity")
+	}
+	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{
+		options: SchemaCacheOptions{Enabled: true, Identity: SchemaCacheIdentity{Edition: "open"}},
+		runtime: &schemaCacheRuntime{options: SchemaCacheOptions{Enabled: true, Identity: SchemaCacheIdentity{Edition: "open"}}},
+	})
+	id, ok := SchemaCacheFastPathIdentity()
+	if !ok || id.Edition != "open" {
+		t.Fatalf("eligible runtime identity = %#v, %v", id, ok)
+	}
+	MarkSchemaCacheRuntimeUncertain()
+	if _, ok := SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("uncertain runtime still exposed a fast-path identity")
 	}
 }
 

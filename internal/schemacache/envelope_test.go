@@ -160,3 +160,51 @@ func FuzzParseEnvelope(f *testing.F) {
 		}
 	})
 }
+
+func TestCrossPlatformCoverageMarshalEnvelopeMatchesBinary(t *testing.T) {
+	want := testEnvelope()
+	viaMethod, err := want.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	viaPackage, err := MarshalEnvelope(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(viaMethod) != string(viaPackage) {
+		t.Fatal("MarshalEnvelope diverged from MarshalBinary")
+	}
+}
+
+func TestCrossPlatformCoverageEnvelopeFromAndCheckedFileSize(t *testing.T) {
+	e := testEnvelope()
+	identity := ExpectedIdentity{
+		CatalogSnapshotVersion: e.CatalogSnapshotVersion,
+		EditionSHA256:          e.EditionSHA256, SourceSHA256: e.SourceSHA256,
+		SurfaceSHA256: e.SurfaceSHA256, BuildID: e.BuildID,
+	}
+	expected := ArtifactExpectation{
+		Kind: KindMeta, Serializer: SerializerProtobuf, Codec: CodecRaw,
+		FormatVersion: DTOFormatVersion, EncodedLength: e.EncodedLength, DecodedLength: e.DecodedLength,
+		EncodedSHA256: e.EncodedSHA256,
+	}
+	got, err := envelopeFrom(identity, expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != e {
+		t.Fatalf("envelopeFrom = %#v, want %#v", got, e)
+	}
+	size, err := checkedFileSize(e.EncodedLength)
+	if err != nil || size != int64(HeaderSize)+int64(e.EncodedLength) {
+		t.Fatalf("checkedFileSize = %d, %v", size, err)
+	}
+	if _, err := checkedFileSize(math.MaxUint64); !errors.Is(err, ErrInvalidArtifact) {
+		t.Fatalf("overflow error = %v, want ErrInvalidArtifact", err)
+	}
+	zeroIdentity := identity
+	zeroIdentity.BuildID = [32]byte{}
+	if _, err := envelopeFrom(zeroIdentity, expected); !errors.Is(err, ErrIdentityMismatch) {
+		t.Fatalf("incomplete identity error = %v, want ErrIdentityMismatch", err)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -506,6 +507,10 @@ func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
 	}
 	cli.PrewarmSchemaCache()
 	cli.AwaitSchemaCachePrewarmForTest()
+	prewarmHandle := cli.SchemaCachePrewarmPayloadsHandleForTest()
+	if prewarmHandle == nil {
+		t.Fatal("prewarm did not open a payloads handle to close on repair")
+	}
 	metaPath := filepath.Join(cacheDirectory, "meta.cache")
 	if err := os.WriteFile(metaPath, []byte("corrupt"), 0o600); err != nil {
 		t.Fatal(err)
@@ -520,6 +525,9 @@ func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
 	info, err := os.Stat(metaPath)
 	if err != nil || info.Size() != int64(identity.Meta.EncodedLength+schemacache.HeaderSize) {
 		t.Fatalf("Meta was not republished to its pinned size: info=%v err=%v", info, err)
+	}
+	if _, err := prewarmHandle.ReadRange(schemacache.RangeDescriptor{Offset: 0, Length: 1, SHA256: [32]byte{1}}); !errors.Is(err, schemacache.ErrClosed) {
+		t.Fatalf("never-adopted prewarm handle ReadRange after repair = %v, want ErrClosed", err)
 	}
 	// The repair populated the live catalog; reset it so ResolveMeta must
 	// resolve through the payload file with a handle opened after the reset.

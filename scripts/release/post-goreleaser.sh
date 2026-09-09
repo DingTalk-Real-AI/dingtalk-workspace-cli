@@ -348,13 +348,37 @@ seal_schema_binary() {
     --scope core --identity "$SCHEMA_IDENTITY_PROOF" --version "v$version" \
     --commit "$RELEASE_COMMIT" --build-time "$build_time")" \
     || err "could not create the single-binary Schema build contract"
-  (cd "$ROOT" && env CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+  case "$target_os/$target_arch" in
+    darwin/arm64)
+      cc='oa64-clang'
+      cxx='oa64-clang++'
+      ;;
+    linux/amd64)
+      cc='/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17'
+      cxx='/opt/dws-zig/zig c++ -target x86_64-linux-gnu.2.17'
+      ;;
+  esac
+  # Rebuild with the same CGO cross toolchains as GoReleaser so the sealed
+  # binary keeps the SafeChat backend. verify-release-artifacts.sh requires
+  # CGO_ENABLED=1 and dep safechat-go-sdk. Write under $ROOT/dist so the
+  # cross container, which only mounts the repository root, can emit the
+  # result; $binary may live in an unmounted staging directory.
+  mkdir -p "$ROOT/dist"
+  sealed="$ROOT/dist/.schema-seal-$target_os-$target_arch"
+  rm -f "$sealed"
+  (cd "$ROOT" && CGO_ENABLED=1 GOOS="$target_os" GOARCH="$target_arch" \
+    CC="$cc" CXX="$cxx" \
     GOTOOLCHAIN=go1.25.9 GOFLAGS='' GOEXPERIMENT='' GOWORK=off GOAMD64=v1 GOARM64=v8.0 \
-    go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$binary" ./cmd)
+    "$ROOT/scripts/release/run-goreleaser-cross.sh" --exec \
+      go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$sealed" ./cmd) \
+    || err "could not seal Schema identity into $target_os/$target_arch"
+  [ -f "$sealed" ] && [ ! -L "$sealed" ] \
+    || err "sealed Schema binary was not written for $target_os/$target_arch"
   schema_build_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build_id"])' "$SCHEMA_IDENTITY_PROOF")" \
     || err "could not read Schema build ID"
-  LC_ALL=C grep -aFq "$schema_build_id" "$binary" \
+  LC_ALL=C grep -aFq "$schema_build_id" "$sealed" \
     || err "single dws binary lacks the sealed Schema identity"
+  mv "$sealed" "$binary"
 }
 
 prepare_runtime_archives() {

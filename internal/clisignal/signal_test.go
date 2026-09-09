@@ -3,7 +3,9 @@ package clisignal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -45,5 +47,53 @@ func TestCrossPlatformCoverageSignalLifecycle(t *testing.T) {
 				t.Fatal("second signal replaced the first cause")
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageSignalRedeliverExitCodesAndDetail(t *testing.T) {
+	if ExitCode(os.Interrupt) != 130 || ExitCode(syscall.SIGTERM) != 143 {
+		t.Fatal("signal exit codes")
+	}
+	exited := 0
+	Redeliver(os.Interrupt, func(int) (*os.Process, error) { return nil, errors.New("missing process") }, func(code int) { exited = code })
+	if exited != 130 {
+		t.Fatalf("interrupt fallback exit = %d", exited)
+	}
+	exited = 0
+	Redeliver(syscall.SIGTERM, func(int) (*os.Process, error) { return nil, errors.New("missing process") }, func(code int) { exited = code })
+	if exited != 143 {
+		t.Fatalf("term fallback exit = %d", exited)
+	}
+
+	interrupt := NewInterruption(os.Interrupt)
+	if interrupt.Subtype() != "cancelled_by_user" || interrupt.Unwrap() != context.Canceled {
+		t.Fatalf("interrupt interruption: %#v", interrupt)
+	}
+	term := NewInterruption(syscall.SIGTERM)
+	if term.Subtype() != "terminated" {
+		t.Fatalf("term subtype = %q", term.Subtype())
+	}
+	if interrupt.WithCancellationDetail(nil) != interrupt || interrupt.WithCancellationDetail(context.Canceled) != interrupt {
+		t.Fatal("plain cancellation must not add detail")
+	}
+	nested := NewInterruption(syscall.SIGTERM)
+	if interrupt.WithCancellationDetail(nested) != interrupt {
+		t.Fatal("nested interruption must not override the first signal")
+	}
+	detailed := interrupt.WithCancellationDetail(fmt.Errorf("command stopped: %w", context.Canceled))
+	if detailed == interrupt || !strings.Contains(detailed.Error(), "command stopped") || detailed.Unwrap() != context.Canceled {
+		t.Fatalf("detailed interruption = %v", detailed)
+	}
+
+	var state State
+	if !state.Record(os.Interrupt, func() bool { return true }) {
+		t.Fatal("first record must succeed")
+	}
+	if state.Record(syscall.SIGTERM, nil) {
+		t.Fatal("second record must be ignored")
+	}
+	got, completed := state.Outcome()
+	if got == nil || got.ExitCode() != 130 || !completed {
+		t.Fatalf("state outcome = %#v completed=%v", got, completed)
 	}
 }

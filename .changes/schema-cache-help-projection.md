@@ -2,4 +2,4 @@
 category: Fixed
 ---
 
-- Keep explicitly registered supplement-backed commands visible in declaration-derived root help, matching a fresh runtime command tree.
+- Root help renders the live complete Cobra tree, so explicitly registered supplement-backed commands stay visible alongside products and utilities. There is no separate declaration-derived help snapshot.

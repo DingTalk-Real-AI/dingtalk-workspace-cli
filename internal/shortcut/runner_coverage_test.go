@@ -83,7 +83,7 @@ func TestCrossPlatformCoverageRuntimeMCPCallsPreserveCommandContext(t *testing.T
 	}
 }
 
-func TestShortcutCommandResultRejectsStringSuccess(t *testing.T) {
+func TestCrossPlatformCoverageShortcutCommandResultRejectsStringSuccess(t *testing.T) {
 	result := shortcutCommandResult(map[string]any{"success": "false"})
 	env, err := output.EnvelopeFromResult(result)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestShortcutCommandResultRejectsStringSuccess(t *testing.T) {
 	}
 }
 
-func TestGenericWriteProjectionRequiresExplicitSuccessEvidence(t *testing.T) {
+func TestCrossPlatformCoverageGenericWriteProjectionRequiresExplicitSuccessEvidence(t *testing.T) {
 	rt := RuntimeContextForTest(&cobra.Command{Use: "+write"}, Shortcut{
 		Service: "sample",
 		Command: "+write",
@@ -155,7 +155,7 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 	}
 }
 
-func TestFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
 	oldCaller := helpers.GetCaller()
 	t.Cleanup(func() { helpers.InitDeps(oldCaller) })
 	ctx, _ := output.WithResultStore(context.Background())

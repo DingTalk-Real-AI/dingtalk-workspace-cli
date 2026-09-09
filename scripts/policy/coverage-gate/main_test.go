@@ -541,7 +541,7 @@ func TestEvaluateOverallTargetCanBeEnabled(t *testing.T) {
 	}
 }
 
-func TestExemptNonExecutableFiles(t *testing.T) {
+func TestCrossPlatformCoverageExemptNonExecutableFiles(t *testing.T) {
 	changed := map[string][]lineRange{
 		"internal/cli/gen.go":  {{Start: 1, End: 5}},
 		"internal/cli/doc.go":  {{Start: 1, End: 2}},
@@ -560,7 +560,7 @@ func TestExemptNonExecutableFiles(t *testing.T) {
 	}
 }
 
-func TestFileHasExecutableStatements(t *testing.T) {
+func TestCrossPlatformCoverageFileHasExecutableStatements(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, source string) string {
 		path := filepath.Join(dir, name)
@@ -612,7 +612,7 @@ func TestFileHasExecutableStatements(t *testing.T) {
 	}
 }
 
-func TestExemptGeneratedFiles(t *testing.T) {
+func TestCrossPlatformCoverageExemptGeneratedFiles(t *testing.T) {
 	changed := map[string][]lineRange{
 		"internal/cli/schemacachepb/schema_cache.pb.go": {{Start: 1, End: 100}},
 		"internal/cli/schemaruntime/cache_codec.go":     {{Start: 10, End: 12}},
@@ -633,7 +633,7 @@ func TestExemptGeneratedFiles(t *testing.T) {
 	}
 }
 
-func TestFileIsGenerated(t *testing.T) {
+func TestCrossPlatformCoverageFileIsGenerated(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, source string) string {
 		path := filepath.Join(dir, name)
@@ -680,7 +680,7 @@ func TestFileIsGenerated(t *testing.T) {
 	}
 }
 
-func TestRunLogsExemptedNonExecutableFiles(t *testing.T) {
+func TestCrossPlatformCoverageRunLogsExemptedNonExecutableFiles(t *testing.T) {
 	dir := t.TempDir()
 	pragmaOnly := filepath.Join(dir, "gen.go")
 	if err := os.WriteFile(pragmaOnly, []byte("// pragma carrier\npackage cli\n\n//go:generate echo hi\n"), 0o600); err != nil {
@@ -740,6 +740,22 @@ func TestCrossPlatformCoverageGoListBuildableFilesIncludesSelfPackage(t *testing
 	}
 	if !buildable["scripts/policy/coverage-gate/main.go"] {
 		t.Fatalf("buildable files missing self package; sample keys: %v", firstKeys(buildable, 3))
+	}
+}
+
+func TestCrossPlatformCoverageStringListFlagValue(t *testing.T) {
+	var values stringList
+	if values.String() != "" {
+		t.Fatalf("empty String = %q", values.String())
+	}
+	if err := values.Set("a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := values.Set("b"); err != nil {
+		t.Fatal(err)
+	}
+	if values.String() != "a,b" {
+		t.Fatalf("String = %q, want a,b", values.String())
 	}
 }
 

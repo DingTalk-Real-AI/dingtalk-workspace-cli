@@ -156,7 +156,7 @@ func generateIdentityProofFromDeclarations(rootPath, editionName string) (identi
 	if err != nil {
 		return identityProof{}, fmt.Errorf("repeat Schema cache encoding: %w", err)
 	}
-	if !bytes.Equal(artifacts.Meta, second.Meta) || !bytes.Equal(artifacts.Registry, second.Registry) {
+	if !bytes.Equal(artifacts.Meta, second.Meta) || !bytes.Equal(artifacts.Registry, second.Registry) || !bytes.Equal(artifacts.Payload, second.Payload) {
 		return identityProof{}, fmt.Errorf("Schema cache artifact encoding is not deterministic")
 	}
 	protoBytes, err := os.ReadFile(filepath.Join(rootPath, "internal", "cli", "schemacachepb", "schema_cache.proto"))

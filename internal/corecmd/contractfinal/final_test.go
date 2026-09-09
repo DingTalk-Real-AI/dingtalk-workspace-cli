@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
+func TestCrossPlatformCoverageContractFinalTypedRegistryNoJSON(t *testing.T) {
 	cmd := &cobra.Command{Use: "x"}
 	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
 	result := &contract.ResultSpec{

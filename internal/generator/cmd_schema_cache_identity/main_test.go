@@ -5,6 +5,10 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -63,5 +67,49 @@ func TestCrossPlatformCoverageIdentityProofRejectsUnprovenEditionBeforeAssembly(
 		if _, err := generateIdentityProof("missing-source-root", "open"); err == nil {
 			t.Fatal("unproven edition was allowed to mint a cache identity")
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWriteAtomicReplacesDestination(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "subdir", "proof.json")
+	if err := writeAtomic(path, []byte("first\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeAtomic(path, []byte("second\n")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "second\n" {
+		t.Fatalf("writeAtomic contents = %q, err=%v", got, err)
+	}
+}
+
+func TestCrossPlatformCoverageExactProofDigestAndShellSafety(t *testing.T) {
+	sum := sha256.Sum256([]byte("payload"))
+	encoded := hex.EncodeToString(sum[:])
+	got, err := exactProofDigest("sha256:" + encoded)
+	if err != nil || got != sum {
+		t.Fatalf("exactProofDigest = %x, %v", got, err)
+	}
+	if _, err := exactProofDigest("sha256:zz"); err == nil {
+		t.Fatal("invalid hex succeeded")
+	}
+	if _, err := exactProofDigest("not-a-digest"); err == nil {
+		t.Fatal("malformed hash succeeded")
+	}
+	proof := identityProof{Version: 1, Edition: "open space", SourceSHA256: "aa", SurfaceSHA256: "bb", BuildID: "cc", MetaLength: 1, MetaSHA256: "dd", RegistryLength: 2, RegistrySHA256: "ee",
+		PayloadLength: 3, PayloadSHA256: "ff", PayloadIndexLength: 4, PayloadIndexSHA256: "00"}
+	if _, err := encodeIdentityProof(proof, "shell"); err == nil || !strings.Contains(err.Error(), "SCHEMA_CACHE_EDITION") {
+		t.Fatalf("unsafe shell edition error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageIdentityProofComparesPayloadBytes(t *testing.T) {
+	source, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), "!bytes.Equal(artifacts.Payload, second.Payload)") {
+		t.Fatal("identity proof must compare Payload across the two encodes")
 	}
 }
