@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -84,6 +85,29 @@ func (r Result) HeaderValue() (string, bool) {
 		return "", false
 	}
 	return string(payload), true
+}
+
+// AttachToURL attaches the private runtime value only to a browser login URL.
+// Callers must never log or persist the returned URL.
+func (r Result) AttachToURL(rawURL string) (string, bool) {
+	if r.State != StateReady {
+		return rawURL, false
+	}
+	if _, err := validateToken([]byte(r.token)); err != nil {
+		return rawURL, false
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil {
+		return rawURL, false
+	}
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return rawURL, false
+	}
+	query.Set("callerUmt", r.token)
+	query.Set("caller", "dws")
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), true
 }
 
 // DiagnosticDetail returns redacted, stable diagnostic fields.
@@ -247,37 +271,26 @@ var (
 	materializeRuntimePayload = func(cacheDir, goos, goarch string) (string, error) {
 		return runtimepayload.Materialize(runtimepayload.Embedded(), cacheDir, goos, goarch)
 	}
+	materializeAdjacentPayload = func(root, goos, goarch string) (string, error) {
+		return runtimepayload.MaterializeAdjacent(runtimepayload.Embedded(), root, goos, goarch)
+	}
 	currentGOOS   = runtime.GOOS
 	currentGOARCH = runtime.GOARCH
 )
 
 func resolveLibraryPath() (string, error) {
-	name, err := libraryName(currentGOOS, currentGOARCH)
-	if err != nil {
+	if _, err := libraryName(currentGOOS, currentGOARCH); err != nil {
 		return "", err
 	}
-	executable, err := osExecutable()
-	if err != nil {
-		return "", fmt.Errorf("executable path: %w", err)
-	}
-	executables := []string{executable}
-	if resolved, resolveErr := evalSymlinks(executable); resolveErr == nil {
-		if resolved != executables[0] {
-			executables = append(executables, resolved)
+	if executable, err := osExecutable(); err == nil {
+		if resolved, err := evalSymlinks(executable); err == nil {
+			if path, err := materializeAdjacentPayload(filepath.Dir(resolved), currentGOOS, currentGOARCH); err == nil {
+				return path, nil
+			}
 		}
 	}
-	if cacheDir, cacheErr := userCacheDir(); cacheErr == nil {
-		if path, materializeErr := materializeRuntimePayload(cacheDir, currentGOOS, currentGOARCH); materializeErr == nil {
-			return path, nil
-		}
-	}
-	// Retain sidecar discovery as a compatibility fallback for older installs
-	// and direct development fixtures. New packages carry the payload in dws.
-	for _, candidate := range executables {
-		executableDir := filepath.Dir(candidate)
-		root := filepath.Join(executableDir, ".dws-runtime", PayloadVersion)
-		path := filepath.Join(root, name)
-		if regularFile(path) && directory(filepath.Join(root, "ps")) && regularFile(filepath.Join(root, "manifest.json")) {
+	if cacheDir, err := userCacheDir(); err == nil {
+		if path, err := materializeRuntimePayload(cacheDir, currentGOOS, currentGOARCH); err == nil {
 			return path, nil
 		}
 	}
@@ -286,16 +299,6 @@ func resolveLibraryPath() (string, error) {
 
 func libraryName(goos, goarch string) (string, error) {
 	return runtimepayload.LibraryName(goos, goarch)
-}
-
-func regularFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
-}
-
-func directory(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
 
 func classifyLocationError(err error) string {

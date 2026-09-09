@@ -19,7 +19,7 @@ esac
 work="$(mktemp -d "${TMPDIR:-/tmp}/dws-runtime-bundle.XXXXXX")"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 "$ROOT/scripts/build/prepare-runtime-payload.sh" "$GOOS" "$GOARCH" "$work"
-payload="$work/.dws-runtime/20260825"
+payload="$work/.dws-runtime/20260908"
 
 hash_file() {
   if command -v sha256sum >/dev/null 2>&1; then

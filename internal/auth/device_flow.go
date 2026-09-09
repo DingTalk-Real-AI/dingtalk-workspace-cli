@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
@@ -264,6 +265,7 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 		}
 	}
 
+	ctx = context.WithValue(ctx, loginRuntimeContextKey{}, resolveAuthRuntimeContext())
 	const maxAttempts = 3
 	for attempt := 1; ; attempt++ {
 		tokenData, err := deviceLoginOnce(p, ctx, attempt)
@@ -279,6 +281,8 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 	}
 }
 
+type loginRuntimeContextKey struct{}
+
 func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*TokenData, error) {
 	dfPrintStep(p.output(), 1, i18n.T("请求设备授权码..."), attempt)
 	_, _ = fmt.Fprintln(p.output(), "")
@@ -290,8 +294,10 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	dfPrintDeviceCodeBox(p.output(), authResp)
 
 	if authResp.VerificationURIComplete != "" && !p.NoBrowser {
-		if bErr := deviceOpenBrowser(authResp.VerificationURIComplete); bErr != nil && p.logger != nil {
-			p.logger.Debug("could not open browser", "error", bErr)
+		snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
+		browserURL, _ := snapshot.AttachToURL(authResp.VerificationURIComplete)
+		if bErr := deviceOpenBrowser(browserURL); bErr != nil && p.logger != nil {
+			p.logger.Debug("could not open browser", "error_category", "browser_open_failed")
 		}
 	}
 

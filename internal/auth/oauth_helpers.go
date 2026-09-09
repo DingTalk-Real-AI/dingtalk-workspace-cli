@@ -1069,17 +1069,8 @@ const notEnabledHTML = `<!doctype html>
           selectedAdminId = status.selectedAdminId || "";
           const authorizeUrl = status.authorizeUrl || "";
 
-          if (clientId && authorizeUrl) {
-            const port = location.port;
-            const redirectUri = encodeURIComponent(
-              "http://127.0.0.1:" + port + "/callback"
-            );
-            backLink.href =
-              authorizeUrl + "?client_id=" +
-              clientId +
-              "&prompt=consent&redirect_uri=" +
-              redirectUri +
-              "&response_type=code&scope=openid+corpid";
+          if (authorizeUrl) {
+            backLink.href = authorizeUrl;
           }
 
           // The apply request is either already sent or the server knows
