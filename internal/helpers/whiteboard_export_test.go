@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -39,8 +40,12 @@ func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("exported file: %v", err)
 	}
-	if !strings.Contains(output.String(), filepath.Clean(path)) {
-		t.Fatalf("output %q does not contain path %q", output.String(), path)
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("output = %q: %v", output.String(), err)
+	}
+	if payload["outputPath"] != filepath.Clean(path) {
+		t.Fatalf("outputPath = %q, want %q", payload["outputPath"], path)
 	}
 	wantTools := []string{"export_whiteboard", "query_export_job"}
 	gotTools := make([]string, 0, len(caller.calls))
