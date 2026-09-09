@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 )
 
@@ -134,7 +135,7 @@ func TestDevMCPMappingReferenceLintRejects(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("Execute() error = %v, want %q\noutput:\n%s", err, tc.wantErr, out.String())
 			}
@@ -185,7 +186,7 @@ func TestDevMCPMappingReferenceLintAccepts(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 		})
@@ -270,7 +271,7 @@ func TestConnectorMCPToolPublishPreflight(t *testing.T) {
 		root.SetErr(&out)
 		root.SetArgs(publishArgs)
 
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if err == nil || !strings.Contains(err.Error(), "发布被拦截") {
 			t.Fatalf("Execute() error = %v, want 发布被拦截\noutput:\n%s", err, out.String())
 		}
@@ -289,7 +290,7 @@ func TestConnectorMCPToolPublishPreflight(t *testing.T) {
 		root.SetErr(&out)
 		root.SetArgs(publishArgs)
 
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 		}
 		if !runner.called(devMCPToolPublishTool) {

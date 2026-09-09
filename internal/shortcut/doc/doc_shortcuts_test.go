@@ -150,7 +150,7 @@ func runDocCoverageWriter(t *testing.T, declaration shortcut.Shortcut, caller *d
 		root.SetContext(caller.ctx)
 	}
 	root.SetArgs(append([]string{"doc", commandPath}, args...))
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageCommentReplyRejectsUnsupportedEmojiBeforeRPC(t *testing.T) {

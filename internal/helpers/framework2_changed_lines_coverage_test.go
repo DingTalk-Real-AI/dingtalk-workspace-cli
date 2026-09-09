@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -130,7 +131,7 @@ func TestCrossPlatformCoverageFramework2LeafResultEdges(t *testing.T) {
 		Use: "result", Tool: "get_thing", OutputRollout: output.RolloutUnifiedActive, ResultCall: resultCall,
 	}))
 	cmd.SetOut(&bytes.Buffer{})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("ResultCall command: %v", err)
 	}
 }

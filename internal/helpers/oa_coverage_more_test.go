@@ -1,12 +1,17 @@
 package helpers
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeOACommand(t *testing.T, caller *scriptedToolCaller, args ...string) error {
@@ -29,7 +34,63 @@ func executeOACommand(t *testing.T, caller *scriptedToolCaller, args ...string) 
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
+}
+
+func TestOAListByAdminPreservesCallerError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "typed", err: apperrors.NewAPI("caller failed", apperrors.WithReason("remote_failure"))},
+		{name: "exit coder", err: &helperExitCoderError{}},
+		{name: "canceled", err: context.Canceled},
+		{name: "deadline", err: context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: tc.err}}}
+			err := executeOACommand(t, caller,
+				"approval", "list-by-admin",
+				"--process-code", "PROC",
+				"--start", "2030-01-01T09:00:00+08:00",
+			)
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("Execute error = %v, want caller error %v", err, tc.err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageOAListByAdminValidationErrorsAreTyped(t *testing.T) {
+	for _, args := range [][]string{
+		{"approval", "list-by-admin", "--request", "{"},
+		{"approval", "list-by-admin", "--request", `{"startTime":"2030-01-01 09:00:00"}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","pageSize":"bad"}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC"}`},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", ""},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--cursor", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--cursor", "NaN"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--cursor", "+Inf"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "NaN"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "-Inf"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "21"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
+	} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := executeOACommand(t, caller, args...)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Category != apperrors.CategoryValidation || typed.ExitCode() != apperrors.ExitCodeValidation {
+				t.Fatalf("Execute error = %#v, want validation exit 3", typed)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("invalid args made %d MCP calls", caller.calls)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {

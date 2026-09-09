@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestDevMCPCommandTree(t *testing.T) {
@@ -427,7 +429,7 @@ func TestDevMCPCommandsBuildToolParams(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
 
@@ -551,7 +553,7 @@ func TestConnectorMCPToolUpsertMetadataValidation(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("Execute() error = %v, want %q\noutput:\n%s", err, tc.wantErr, out.String())
 			}
@@ -615,7 +617,7 @@ func TestConnectorMCPLegacyFlagRenameHints(t *testing.T) {
 			root.SetErr(&out)
 			root.SetArgs(tc.args)
 
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("Execute() error = %v, want %q\noutput:\n%s", err, tc.wantErr, out.String())
 			}
@@ -650,7 +652,7 @@ func TestConnectorMCPWriteGuard(t *testing.T) {
 	root.SetErr(&out)
 	root.SetArgs([]string{"dev", "mcp", "service", "create", "--name", "客户服务", "--description", "查询客户"})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("Execute() error = %v, want --yes guard\noutput:\n%s", err, out.String())
 	}
@@ -670,7 +672,7 @@ func TestConnectorMCPInvalidJSON(t *testing.T) {
 		"--dry-run",
 	})
 
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	if err == nil || !strings.Contains(err.Error(), "--http-info 必须是 JSON 对象") {
 		t.Fatalf("Execute() error = %v, want JSON object validation\noutput:\n%s", err, out.String())
 	}
@@ -687,7 +689,7 @@ func TestConnectorMCPCredentialDryRunRedactsContent(t *testing.T) {
 		"--dry-run",
 	})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	want := map[string]any{"redacted": true}
@@ -708,7 +710,7 @@ func TestConnectorMCPCredentialContentFromStdin(t *testing.T) {
 		"--yes",
 	})
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	want := map[string]any{"username": "api-user", "password": "secret"}

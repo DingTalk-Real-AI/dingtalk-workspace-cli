@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -35,7 +36,7 @@ func executeDriveEdge(t *testing.T, caller *scriptedToolCaller, args ...string) 
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "drive"}, args...)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return err
 	}

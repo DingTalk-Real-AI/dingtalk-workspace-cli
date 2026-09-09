@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeTodoEdge(t *testing.T, caller *scriptedToolCaller, args ...string) error {
@@ -39,7 +41,7 @@ func executeTodoEdge(t *testing.T, caller *scriptedToolCaller, args ...string) e
 	cmd.SetErr(io.Discard)
 	cmd.SetIn(os.Stdin)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageTodoCreateAndListCommandEdges(t *testing.T) {

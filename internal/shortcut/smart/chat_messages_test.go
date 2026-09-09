@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -166,7 +167,7 @@ func TestCrossPlatformCoverageChatMessagesPageAllUsesTypedBoundaryAndDeduplicate
 		"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid",
 		"--time", "2026-01-03 00:00:00", "--page-all", "--page-limit", "5",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
@@ -198,7 +199,7 @@ func TestCrossPlatformCoverageChatMessagesMillisecondCursorDoesNotSkipSameSecond
 		"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--time", "2026-08-05 16:49:00",
 		"--page-size", "3", "--page-all", "--page-limit", "5",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
@@ -229,7 +230,7 @@ func TestCrossPlatformCoverageChatMessagesDescendingRangeStopsAtInclusiveStart(t
 		"--start", "2026-01-01 12:00:00", "--end", "2026-01-04 00:00:00",
 		"--order", "desc", "--page-all", "--page-limit", "5",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
@@ -269,7 +270,7 @@ func TestCrossPlatformCoverageChatMessagesAscendingRangeStopsAtExclusiveEnd(t *t
 		"--start-time", "2026-01-01 12:00:00", "--end-time", "2026-01-03 00:00:00",
 		"--sort", "asc", "--page-all",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.args) != 1 || caller.args[0]["time"] != "2026-01-01T04:00:00Z" ||
@@ -303,7 +304,7 @@ func TestCrossPlatformCoverageChatMessagesFirstReadFailureSkipsOptionalSenderRes
 		"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all",
 		"--sender-query", "张三",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("first-page failure unexpectedly succeeded")
 	}
 	if len(caller.args) != 1 {
@@ -322,7 +323,7 @@ func TestCrossPlatformCoverageChatMessagesRangeValidationStopsBeforeRead(t *test
 		helpers.InitDeps(caller)
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid"}, args...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Errorf("invalid range succeeded: %v", args)
 		}
 		if len(caller.args) != 0 {
@@ -344,7 +345,7 @@ func TestCrossPlatformCoverageChatMessagesPageAllPublishesBoundedContinuation(t 
 		"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid",
 		"--page-all", "--page-limit", "1",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -369,7 +370,7 @@ func TestCrossPlatformCoverageChatMessagesPageAllFailsClosedOnStalledBoundary(t 
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryAPI ||
 		typed.Reason != "chat_messages_incomplete" || !typed.RetryableSet || typed.Retryable ||
@@ -401,7 +402,7 @@ func TestCrossPlatformCoverageChatMessagesFailedPageDoesNotExportPartialLedger(t
 		"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all",
 		"--output", "exports/partial.json",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if !stderrors.As(err, &typed) || typed.Reason != "chat_messages_incomplete" {
 		t.Fatalf("error = %#v", err)
@@ -443,7 +444,7 @@ func TestCrossPlatformCoverageChatMessagesFailureLedgerOutputErrorIsNonZero(t *t
 	root := newPlatformCoverageRoot()
 	root.SetOut(chatMessagesFailWriter{})
 	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "fixture output failure") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "fixture output failure") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -464,7 +465,7 @@ func TestCrossPlatformCoverageChatMessagesExportIsAtomicAndNoClobber(t *testing.
 			args = append(args, "--overwrite")
 		}
 		root.SetArgs(args)
-		return root.Execute()
+		return corecmd.ExecuteForTest(root)
 	}
 	if err := run(false); err != nil {
 		t.Fatal(err)
@@ -498,7 +499,7 @@ func TestCrossPlatformCoverageChatMessagesExportRejectsNonJSONPlaceholder(t *tes
 	root.SetArgs([]string{
 		"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--output", "{}",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("non-JSON placeholder output unexpectedly succeeded")
 	}
 	if _, err := os.Lstat("{}"); !os.IsNotExist(err) {
@@ -813,7 +814,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T)
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatMessagesFailWriter{})
 		root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--sender", "测试同名发送者"})
-		if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+		if err := corecmd.ExecuteForTest(root); err == nil || err.Error() != "fixture output failure" {
 			t.Fatalf("error=%v", err)
 		}
 	})
@@ -832,7 +833,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T)
 			helpers.InitDeps(caller)
 			root := newPlatformCoverageRoot()
 			root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--sender", tc.sender})
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("sender failure unexpectedly succeeded")
 			}
 		})
@@ -845,7 +846,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T)
 			root := newPlatformCoverageRoot()
 			root.SetOut(chatMessagesFailWriter{})
 			root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--sender", tc.sender})
-			if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+			if err := corecmd.ExecuteForTest(root); err == nil || err.Error() != "fixture output failure" {
 				t.Fatalf("error=%v", err)
 			}
 		})
@@ -975,7 +976,7 @@ func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatMessagesFailWriter{})
 		root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--page-all"})
-		if err := root.Execute(); err == nil || err.Error() == "fixture output failure" {
+		if err := corecmd.ExecuteForTest(root); err == nil || err.Error() == "fixture output failure" {
 			t.Fatalf("error=%v", err)
 		}
 	})
@@ -990,7 +991,7 @@ func TestCrossPlatformCoverageChatMessagesTerminalIncompleteResultKinds(t *testi
 		var stdout bytes.Buffer
 		root.SetOut(&stdout)
 		root.SetArgs(append([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--yes"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		var typed *apperrors.Error
 		if !stderrors.As(err, &typed) || typed.Reason != "chat_messages_incomplete" {
 			t.Fatalf("error = %#v, want chat_messages_incomplete", err)

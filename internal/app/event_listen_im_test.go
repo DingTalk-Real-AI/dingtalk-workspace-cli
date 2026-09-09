@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
@@ -142,7 +143,7 @@ func TestCrossPlatformCoverageEventListenIMCommandDelegatesOneCompiledConsumeLif
 		"--duration", "30s",
 		"--dry-run",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
@@ -223,7 +224,7 @@ func TestCrossPlatformCoverageListenIMCompletionBranches(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--kind", "sender"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "event +listen-im") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "event +listen-im") {
 		t.Fatalf("command compile error = %v", err)
 	}
 }
@@ -295,7 +296,7 @@ func TestCrossPlatformCoverageEventListenIME2ELifecycleCleansAndRollsBack(t *tes
 			"--kind", "group", "--events", "message,reaction",
 			"--chat-query", "项目群", "--max-events", "1",
 		})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatal(err)
 		}
 		wantEvents := []string{personal.EventInChat, personal.EventReactionGroup}
@@ -349,7 +350,7 @@ func TestCrossPlatformCoverageEventListenIME2ELifecycleCleansAndRollsBack(t *tes
 			"--kind", "group", "--events", "message,reaction",
 			"--chat-query", "项目群",
 		})
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		if err == nil || !strings.Contains(err.Error(), wantErr.Error()) {
 			t.Fatalf("error = %v, want %v", err, wantErr)
 		}

@@ -79,7 +79,7 @@ func runHRbrainCoverageOutput(t *testing.T, declaration shortcut.Shortcut, calle
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
 	root.SetArgs(append([]string{"hrbrain", declaration.Command}, args...))
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil {
 		_, _, err = output.EmitStoredResult(executed)
 	}

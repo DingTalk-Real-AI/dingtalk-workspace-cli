@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -76,7 +77,7 @@ func TestCrossPlatformCoverageDriveSyncSuffixedRel(t *testing.T) {
 // ──────────────────────────────────────────────────────────
 
 // runDriveSyncTest 用 mock caller 执行 `drive sync`，注入 opened-file PUT / GET 为
-// 可控 no-op，避免真实 OSS 传输。返回 root.Execute() 的结果。
+// 可控 no-op，避免真实 OSS 传输。返回 corecmd.ExecuteForTest(root) 的结果。
 func runDriveSyncTest(t *testing.T, caller *driveSyncMockCaller, localDir string, args ...string) error {
 	// 默认下载：把远端内容写到目标路径，模拟成功落盘。
 	return runDriveSyncTestWithGet(t, caller, func(_ context.Context, _ string, _ map[string]string, dest string) error {
@@ -102,7 +103,7 @@ func runDriveSyncTestWithGet(t *testing.T, caller *driveSyncMockCaller, getFn fu
 	testseam.Swap(t, &os.Args, append([]string{"dws", "drive"}, full...))
 	root.SetArgs(append([]string{"drive"}, full...))
 
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 // 双向：本地独有 local.txt 应上传；远端独有 remote.txt 应下载到本地。

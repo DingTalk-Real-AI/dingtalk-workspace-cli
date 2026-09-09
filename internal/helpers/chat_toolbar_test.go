@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -39,7 +40,7 @@ func TestCrossPlatformCoverageChatToolbarMountedThroughParentDeps(t *testing.T) 
 	}
 
 	root.SetArgs([]string{"toolbar", "list", "--conversation-id", "cidX"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("chat toolbar list returned error: %v", err)
 	}
 	if caller.product != "im" || caller.tool != "list_chat_toolbar_shortcuts" {

@@ -725,6 +725,9 @@ func driveDepthItemID(item map[string]any) string {
 }
 
 func driveDepthUnrecoverable(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
 	var cliErr *CLIError
 	if errors.As(err, &cliErr) {
 		switch cliErr.Code {

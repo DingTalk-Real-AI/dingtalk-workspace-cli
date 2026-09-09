@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
@@ -45,7 +46,7 @@ func executeOAAttachmentCommandCapturingOutput(t *testing.T, caller *scriptedToo
 	cmd.SetOut(&stdout)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	return stdout.String(), err
 }
 

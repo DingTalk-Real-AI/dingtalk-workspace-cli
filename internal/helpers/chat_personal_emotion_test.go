@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -63,7 +64,7 @@ func executePersonalEmotionCommand(t *testing.T, caller *personalEmotionCaller, 
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	return corecmd.ExecuteContextForTest(root, context.Background())
 }
 
 func requirePersonalEmotionCall(t *testing.T, caller *personalEmotionCaller, tool string, want map[string]any) {
@@ -436,7 +437,7 @@ func executePersonalEmotionCallerCommand(t *testing.T, caller edition.ToolCaller
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	return corecmd.ExecuteContextForTest(root, context.Background())
 }
 
 func TestChatEmotionFavoriteFilePathUploadsThenFavorites(t *testing.T) {
@@ -450,7 +451,7 @@ func TestChatEmotionFavoriteFilePathUploadsThenFavorites(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"emotion", "favorite", "--file-path", imagePath, "--name", "本地表情"})
-	err := root.ExecuteContext(context.Background())
+	err := corecmd.ExecuteContextForTest(root, context.Background())
 	if err != nil {
 		t.Fatalf("chat emotion favorite --file-path returned error: %v", err)
 	}
@@ -508,7 +509,7 @@ func TestChatEmotionFavoriteFilePathKeepsFavoriteMediaIDWhenReturned(t *testing.
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"emotion", "favorite", "--file-path", imagePath})
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, context.Background()); err != nil {
 		t.Fatalf("chat emotion favorite --file-path returned error: %v", err)
 	}
 	if !strings.Contains(out.String(), `"mediaId": "@favorite-media"`) {
@@ -767,7 +768,7 @@ func TestChatEmotionFavoriteFilePathDryRunStaysLocal(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"emotion", "favorite", "--file-path", imagePath, "--dry-run"})
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, context.Background()); err != nil {
 		t.Fatalf("dry-run returned error: %v", err)
 	}
 	if caller.uploadCalls != 0 || len(caller.favoriteCalls) != 0 {
@@ -790,7 +791,7 @@ func TestChatEmotionFavoriteFilePathDryRunReportsCompression(t *testing.T) {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"emotion", "favorite", "--file-path", imagePath, "--dry-run"})
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(root, context.Background()); err != nil {
 		t.Fatalf("dry-run compressed image returned error: %v", err)
 	}
 	if !strings.Contains(out.String(), "已自动压缩到 2MB 以内") {

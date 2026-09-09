@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -309,7 +310,7 @@ func TestCrossPlatformCoverageDevAppConnectCommandRemainingCoverage(t *testing.T
 		root.SetErr(&out)
 		root.SetIn(strings.NewReader(""))
 		root.SetArgs(append([]string{"dev", "connect"}, args...))
-		return out.String(), root.Execute()
+		return out.String(), corecmd.ExecuteForTest(root)
 	}
 
 	clearChannelEnv(t)

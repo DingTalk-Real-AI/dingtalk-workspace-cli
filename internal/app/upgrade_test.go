@@ -16,6 +16,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestCrossPlatformCoverageUpgradeHelpDoesNotMakeFullSkillRefreshForceOnly(t *testing.T) {
@@ -428,7 +430,7 @@ func TestNewUpgradeCommand_NoArgs(t *testing.T) {
 	cmd := newUpgradeCommand()
 	// Simulate passing positional args - should error with cobra.NoArgs
 	cmd.SetArgs([]string{"rollback"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Error("expected error for positional args (NoArgs)")
 	}
@@ -439,7 +441,7 @@ func TestNewUpgradeCommand_Help(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetArgs([]string{"--help"})
-	cmd.Execute()
+	corecmd.ExecuteForTest(cmd)
 	help := buf.String()
 
 	if !strings.Contains(help, "upgrade") {
@@ -464,7 +466,7 @@ func TestNewUpgradeCommand_Help(t *testing.T) {
 func TestNewUpgradeCommand_BetaAndVersionAreMutuallyExclusive(t *testing.T) {
 	cmd := newUpgradeCommand()
 	cmd.SetArgs([]string{"--beta", "--version", "v1.0.8-beta.1"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Fatal("expected error for --beta with --version")
 	}

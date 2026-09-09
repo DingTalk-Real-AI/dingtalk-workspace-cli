@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -66,7 +67,7 @@ func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, 
 	}
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		return err
 	}
@@ -173,7 +174,7 @@ func executeGuardedMailMutationCommand(t *testing.T, caller edition.ToolCaller, 
 		root.SetIn(strings.NewReader(""))
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestMailMessageShareToChatRequiresConfirmationBeforeToolCall(t *testing.T) {
@@ -537,7 +538,7 @@ func executeGuardedPermissionRemoveCommand(t *testing.T, caller *guardedMutation
 		root.SetIn(strings.NewReader(""))
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 // TestPermissionMemberRemoveRequiresConfirmationBeforeToolCall pins the

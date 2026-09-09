@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
@@ -36,7 +37,7 @@ func TestOutputSinkAtomicallyReplacesExistingTargetWithMode0600(t *testing.T) {
 		return err
 	})
 	root.SetArgs([]string{"atomic-output", "--output", target})
-	if _, err := root.ExecuteC(); err != nil {
+	if _, err := corecmd.ExecuteCForTest(root); err != nil {
 		t.Fatalf("ExecuteC: %v", err)
 	}
 
@@ -59,7 +60,7 @@ func TestOutputSinkHandlerFailurePreservesTarget(t *testing.T) {
 		return errors.New("handler failed")
 	})
 	root.SetArgs([]string{"atomic-output", "--output", target})
-	if _, err := root.ExecuteC(); err == nil {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil {
 		t.Fatal("ExecuteC succeeded")
 	}
 
@@ -79,9 +80,6 @@ func TestExecuteUnifiedRunEFailureWithOutputRestoresStdoutAndPreservesTarget(t *
 	testseam.Swap(t, &rootStopAllStdioClients, func() {})
 	var stdout, stderr bytes.Buffer
 	testseam.Swap(t, &rootNewRootCommandWithEngine, func(ctx context.Context, engine *pipeline.Engine) *cobra.Command {
-		root := NewRootCommandWithEngine(ctx, engine)
-		root.SetOut(&stdout)
-		root.SetErr(&stderr)
 		leaf := &cobra.Command{
 			Use: "atomic-output-unified-failure",
 			RunE: func(*cobra.Command, []string) error {
@@ -89,7 +87,9 @@ func TestExecuteUnifiedRunEFailureWithOutputRestoresStdoutAndPreservesTarget(t *
 			},
 		}
 		output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-		root.AddCommand(leaf)
+		root := newRootCommandWithAssembly(ctx, engine, func(root *cobra.Command) { root.AddCommand(leaf) })
+		root.SetOut(&stdout)
+		root.SetErr(&stderr)
 		return root
 	})
 
@@ -149,7 +149,7 @@ func TestOutputSinkRenameFailurePreservesTarget(t *testing.T) {
 		return err
 	})
 	root.SetArgs([]string{"atomic-output", "--output", target})
-	if _, err := root.ExecuteC(); err == nil || err.Error() == "" {
+	if _, err := corecmd.ExecuteCForTest(root); err == nil || err.Error() == "" {
 		t.Fatalf("ExecuteC error=%v, want publication failure", err)
 	}
 
@@ -192,7 +192,7 @@ func TestOutputSinkSyncAndCloseFailuresPreserveTarget(t *testing.T) {
 				return err
 			})
 			root.SetArgs([]string{"atomic-output", "--output", target})
-			if _, err := root.ExecuteC(); err == nil {
+			if _, err := corecmd.ExecuteCForTest(root); err == nil {
 				t.Fatal("ExecuteC succeeded")
 			}
 
@@ -209,7 +209,6 @@ func TestOutputSinkUnifiedPublicationFailureFailsAndLeavesNoFinalFile(t *testing
 	dir := t.TempDir()
 	target := filepath.Join(dir, "result.json")
 
-	root := NewRootCommand()
 	leaf := &cobra.Command{
 		Use: "atomic-output-unified",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -217,7 +216,8 @@ func TestOutputSinkUnifiedPublicationFailureFailsAndLeavesNoFinalFile(t *testing
 		},
 	}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(nil, nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 	root.SetArgs([]string{"atomic-output-unified", "--output", target})
 	if _, err := root.ExecuteC(); err == nil {
 		t.Fatal("unified ExecuteC succeeded without publishing its output")
@@ -251,9 +251,6 @@ func TestCrossPlatformCoverageExecuteUnifiedPublicationFailureEmitsFailureOnOrig
 	testseam.Swap(t, &rootStopAllStdioClients, func() {})
 	var stdout, stderr bytes.Buffer
 	testseam.Swap(t, &rootNewRootCommandWithEngine, func(ctx context.Context, engine *pipeline.Engine) *cobra.Command {
-		root := NewRootCommandWithEngine(ctx, engine)
-		root.SetOut(&stdout)
-		root.SetErr(&stderr)
 		leaf := &cobra.Command{
 			Use: "atomic-output-unified-publication",
 			RunE: func(cmd *cobra.Command, _ []string) error {
@@ -261,7 +258,9 @@ func TestCrossPlatformCoverageExecuteUnifiedPublicationFailureEmitsFailureOnOrig
 			},
 		}
 		output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-		root.AddCommand(leaf)
+		root := newRootCommandWithAssembly(ctx, engine, func(root *cobra.Command) { root.AddCommand(leaf) })
+		root.SetOut(&stdout)
+		root.SetErr(&stderr)
 		return root
 	})
 
@@ -295,7 +294,6 @@ func TestOutputSinkEmissionFailurePreservesTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	root := NewRootCommand()
 	leaf := &cobra.Command{
 		Use: "atomic-emission-failure",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -306,7 +304,8 @@ func TestOutputSinkEmissionFailurePreservesTarget(t *testing.T) {
 		},
 	}
 	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(nil, nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 	root.SetArgs([]string{"atomic-emission-failure", "--output", target})
 	if _, err := root.ExecuteC(); err == nil {
 		t.Fatal("ExecuteC succeeded after emission failure")
@@ -323,11 +322,11 @@ func TestOutputSinkValidationFailureDoesNotCreateTemp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	root := NewRootCommand()
 	leaf := &cobra.Command{Use: "atomic-validation", RunE: func(*cobra.Command, []string) error { return nil }}
 	leaf.Flags().String("required", "", "")
 	_ = leaf.MarkFlagRequired("required")
-	root.AddCommand(leaf)
+	root := newRootCommandWithAssembly(nil, nil, func(root *cobra.Command) { root.AddCommand(leaf) })
+
 	root.SetArgs([]string{"atomic-validation", "--output", target})
 	if _, err := root.ExecuteC(); err == nil {
 		t.Fatal("ExecuteC succeeded without required flag")
@@ -338,19 +337,19 @@ func TestOutputSinkValidationFailureDoesNotCreateTemp(t *testing.T) {
 }
 
 func newAtomicOutputTestRoot(run func(*cobra.Command) error) *cobra.Command {
-	root := NewRootCommand()
-	root.AddCommand(&cobra.Command{
-		Use: "atomic-output",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return run(cmd)
-		},
+	return newRootCommandWithAssembly(nil, nil, func(root *cobra.Command) {
+		root.AddCommand(&cobra.Command{
+			Use: "atomic-output",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return run(cmd)
+			},
+		})
 	})
-	return root
 }
 
 func executeAndRecover(cmd *cobra.Command) (recovered any) {
 	defer func() { recovered = recover() }()
-	_, _ = cmd.ExecuteC()
+	_, _ = corecmd.ExecuteCForTest(cmd)
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -38,7 +39,7 @@ func executeUnifiedProductCommand(t *testing.T, root *cobra.Command, caller *scr
 	root.SetArgs(args)
 
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err != nil {
 		t.Fatalf("ExecuteContextC(%v): %v\nstderr:\n%s", args, err, stderr.String())
 	}

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/builtin"
@@ -355,7 +356,7 @@ func TestAllShortcutsAssemble(t *testing.T) {
 				}
 			}()
 			root.SetArgs(args)
-			return root.Execute()
+			return corecmd.ExecuteForTest(root)
 		}()
 
 		switch {
@@ -404,7 +405,7 @@ func TestAllShortcutsHandleRepresentativeResponseShapes(t *testing.T) {
 						t.Errorf("payload mode %d panicked in %s %s: %v", mode, s.Service, s.Command, recovered)
 					}
 				}()
-				_ = root.Execute()
+				_ = corecmd.ExecuteForTest(root)
 			}()
 			if fake.called {
 				called++
@@ -425,7 +426,7 @@ func TestCrossPlatformCoverageReplaceBatchDryRunDoesNotCallTool(t *testing.T) {
 		"minutes", "+replace-batch", "--id", "task-1",
 		"--pair", "Q2=>第二季度", "--dry-run", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if fake.called {

@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeMailEdge(t *testing.T, caller *scriptedToolCaller, args ...string) error {
@@ -31,7 +33,7 @@ func executeMailEdge(t *testing.T, caller *scriptedToolCaller, args ...string) e
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageMailSearchSendAndThreadEdges(t *testing.T) {

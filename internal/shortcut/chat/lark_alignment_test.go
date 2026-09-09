@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -134,7 +135,7 @@ func TestCrossPlatformCoverageNaturalGroupTargetsAndRecallInference(t *testing.T
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-bots", "--group", "项目群"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "list_group_bots" || fake.calls[1].args["openConversationId"] != "cid-project" {
@@ -150,7 +151,7 @@ func TestCrossPlatformCoverageNaturalGroupTargetsAndRecallInference(t *testing.T
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-role-list", "--group", "项目群"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "list_custom_group_roles" ||
@@ -166,7 +167,7 @@ func TestCrossPlatformCoverageNaturalGroupTargetsAndRecallInference(t *testing.T
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-invite-url", "--chat-query", "项目群"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "get_group_invite_url" || fake.calls[1].args["openConversationId"] != "cid-project" {
@@ -179,7 +180,7 @@ func TestCrossPlatformCoverageNaturalGroupTargetsAndRecallInference(t *testing.T
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-invite-url", "--chat-query", "cid-fixture-chat-0001"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "get_group_invite_url" ||
@@ -193,7 +194,7 @@ func TestCrossPlatformCoverageNaturalGroupTargetsAndRecallInference(t *testing.T
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+messages-recall", "--message-ids", "msg", "--yes"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 2 || fake.calls[0].tool != "list_messages_by_ids" || fake.calls[1].tool != "recall_message" || fake.calls[1].args["openConversationId"] != "cid" {
@@ -231,7 +232,7 @@ func TestCrossPlatformCoverageChatRoleSetUserRejectsEmptyRolesBeforeAnyCall(t *t
 				args = append(args, "--yes")
 			}
 			root.SetArgs(args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("empty role IDs unexpectedly accepted")
 			}
 			if len(fake.calls) != 0 {
@@ -250,7 +251,7 @@ func TestCrossPlatformCoverageChatRoleRemoveUserRejectsEmptyRolesAndDeduplicates
 			"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1",
 			"--role-ids", roleIDs, "--yes",
 		})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("role IDs %q unexpectedly accepted", roleIDs)
 		}
 		if len(fake.calls) != 0 {
@@ -268,7 +269,7 @@ func TestCrossPlatformCoverageChatRoleRemoveUserRejectsEmptyRolesAndDeduplicates
 		"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1",
 		"--role-ids", " role-1,role-1,role-2 ", "--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := fake.calls[1].args["openRoleIds"], []string{"role-1", "role-2"}; !reflect.DeepEqual(got, want) {
@@ -290,7 +291,7 @@ func TestCrossPlatformCoverageChatRoleSetUserConfirmedPassesExactParams(t *testi
 		"--role-ids", " role-1 ,role-2 ",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != "set_custom_user_roles" || fake.calls[2].tool != "query_custom_user_roles" {
@@ -356,7 +357,7 @@ func TestCrossPlatformCoverageChatRoleCommandsResolveNamesToExactBusinessCalls(t
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			wantCalls := 2
@@ -385,7 +386,7 @@ func TestCrossPlatformCoverageChatRoleSetUserFailsClosedWhenReadbackDiffers(t *t
 		"chat", "+chat-role-set-user", "--group", "项目群", "--user", "user-1",
 		"--role-ids", "role-1", "--yes",
 	})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	var typed *apperrors.Error
 	if err == nil || !errors.As(err, &typed) || typed.Reason != "chat_role_assignment_unverified" || typed.Retryable {
 		t.Fatalf("error = %#v, want terminal postcondition failure", err)
@@ -442,7 +443,7 @@ func TestCrossPlatformCoverageChatRoleReadbackAndFailureBoundaries(t *testing.T)
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-role-list", "--group", "项目群"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("role list lower failure returned nil")
 		}
 	})
@@ -451,7 +452,7 @@ func TestCrossPlatformCoverageChatRoleReadbackAndFailureBoundaries(t *testing.T)
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-role-set-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--dry-run"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "search_groups" {
@@ -477,7 +478,7 @@ func TestCrossPlatformCoverageChatRoleReadbackAndFailureBoundaries(t *testing.T)
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs([]string{"chat", tc.command, "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--yes"})
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("failed or unverifiable role write returned nil")
 			}
 			if len(fake.calls) != tc.wantCalls {
@@ -508,7 +509,7 @@ func TestCrossPlatformCoverageChatRoleCommandsStopAmbiguousNamesBeforeBusinessCa
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("ambiguous group name unexpectedly reached a role operation")
 			}
 			if len(fake.calls) != 1 || fake.calls[0].tool != "search_groups" {
@@ -530,7 +531,7 @@ func TestCrossPlatformCoverageChatCreateAddsCurrentUserAndNormalizesResult(t *te
 		"--thread",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -571,7 +572,7 @@ func TestCrossPlatformCoverageChatCreateResolvesEveryNaturalMemberBeforeCreating
 		"--member-query", "张三",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 {
@@ -599,7 +600,7 @@ func TestCrossPlatformCoverageChatCreateNaturalMemberAmbiguityStopsBeforeProfile
 		"--member-query", "张三",
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("ambiguous member unexpectedly created a group")
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "search_contact_by_key_word" {
@@ -620,7 +621,7 @@ func TestCrossPlatformCoverageChatCreateNaturalMemberDryRunUsesSameResolutionCha
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 ||
@@ -675,7 +676,7 @@ func TestCrossPlatformCoverageMessagesSendRoutesIdentitySpecificTransports(t *te
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			if len(fake.calls) != 1 {
@@ -725,7 +726,7 @@ func TestCrossPlatformCoverageMessagesSendRejectsUnsupportedIdentityCapability(t
 		"--uuid", "unsupported",
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("bot uuid unexpectedly accepted")
 	}
 	if len(fake.calls) != 0 {
@@ -788,7 +789,7 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 			helpers.InitDeps(fake)
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tt.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			wantCalls := 1
@@ -816,7 +817,7 @@ func TestCrossPlatformCoverageChatRenameAliasResolvesNameBeforeWrite(t *testing.
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-rename", "--group", "项目旧群", "--name", "项目讨论群", "--yes"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != "update_group_name" {
@@ -845,7 +846,7 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 		"--idempotency-key", "reply-uuid",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 {
@@ -899,7 +900,7 @@ func TestCrossPlatformCoverageMessagesReplyDryRunStopsBeforeWrite(t *testing.T) 
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_messages_by_ids" {
@@ -919,7 +920,7 @@ func TestCrossPlatformCoverageFlagBatchContinuesAndPublishesFailureLedger(t *tes
 		"--conversation-id", "cid",
 		"--yes",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("partial batch failure returned success")
 	}
 	if len(fake.calls) != 4 {
@@ -950,7 +951,7 @@ func TestCrossPlatformCoverageConversationSetTopBatchDryRunPublishesActionsWitho
 		"--dry-run",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 0 {
@@ -980,7 +981,7 @@ func TestCrossPlatformCoverageMessagesMgetDryRunPublishesMultiResourceDownloadPl
 		"--download-resources",
 		"--dry-run", "--no-reactions",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 ||
@@ -1010,7 +1011,7 @@ func TestCrossPlatformCoverageMessagesReplyResolvesUserIDBeforeExecution(t *test
 		"--text", "收到",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 3 ||
@@ -1039,7 +1040,7 @@ func TestCrossPlatformCoverageMessagesReplyInfersSenderFromReferencedMessage(t *
 		"--text", "收到",
 		"--yes",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 ||
@@ -1098,7 +1099,7 @@ func TestCrossPlatformCoverageChatListDefaultsToGroupsAndSupportsLarkAliases(t *
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--exclude-muted", "--page-size", "20"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_all_conversations" {
@@ -1143,7 +1144,7 @@ func TestCrossPlatformCoverageChatListIncludesP2PAndRejectsInvalidTypes(t *testi
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "group,p2p", "--page-token", "3"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if fake.calls[0].args["cursor"] != 3 || fake.calls[0].args["limit"] != 20 {
@@ -1165,7 +1166,7 @@ func TestCrossPlatformCoverageChatListIncludesP2PAndRejectsInvalidTypes(t *testi
 	helpers.InitDeps(&larkAlignmentCaller{})
 	root = newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "channel"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("invalid --types unexpectedly accepted")
 	}
 }
@@ -1186,7 +1187,7 @@ func TestCrossPlatformCoverageChatListP2POnlyDropsGroups(t *testing.T) {
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "p2p", "--limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if fake.calls[0].args["limit"] != 5 {
@@ -1236,7 +1237,7 @@ func TestCrossPlatformCoverageFeedGroupQueryDoesNotMisreportMissingItemWhenSourc
 		"--category-id", "1",
 		"--conversation-ids", "cid-a,cid-later",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("unknown membership must be nonzero")
 	}
 	var payload map[string]any

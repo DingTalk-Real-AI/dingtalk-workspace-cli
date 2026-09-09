@@ -21,6 +21,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,7 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetArgs(tc.args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			got := out.String()
@@ -75,7 +76,7 @@ func TestEventListDefaultsToUser(t *testing.T) {
 	cmd.SilenceErrors = true
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := out.String()
@@ -108,7 +109,7 @@ func TestEventPublicHelpHidesAppMode(t *testing.T) {
 			if tc.name == "schema" {
 				tc.cmd.SetArgs([]string{personal.EventSingleChat, "--help"})
 			}
-			if err := tc.cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(tc.cmd); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			got := out.String()
@@ -126,7 +127,7 @@ func TestEventListAppOnlyFlagsRejectedForPersonalEvents(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--all"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "--all are not supported for personal events") {
 		t.Fatalf("Execute() error = %v, want unsupported flag validation", err)
 	}
@@ -147,7 +148,7 @@ func TestEventAsAppRejected(t *testing.T) {
 		if cmd.Use == "schema <event_key>" {
 			cmd.SetArgs([]string{personal.EventSingleChat, "--as", "app"})
 		}
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
 			t.Fatalf("%s Execute() error = %v, want public availability guard", cmd.Use, err)
 		}
@@ -159,7 +160,7 @@ func TestEventStatusAppOnlyFlagsRejectedForPersonalEvents(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--all", "--fail-on-orphan"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil ||
 		!strings.Contains(err.Error(), "--all") ||
 		!strings.Contains(err.Error(), "--fail-on-orphan") ||
@@ -183,7 +184,7 @@ func TestPersonalEventSchemaHidesSchemaIDs(t *testing.T) {
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetArgs(tc.args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			assertPersonalOutputHidesSchemaIDs(t, out.String())
@@ -201,7 +202,7 @@ func TestPersonalEventSchemaDefaultsToTransportEnvelope(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{personal.EventSingleChat})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	var doc map[string]any
@@ -246,7 +247,7 @@ func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetArgs([]string{eventKey, "--flatten"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			got := out.String()
@@ -340,7 +341,7 @@ func TestPersonalGroupLifecycleEventSchemaUsesConservativePayload(t *testing.T) 
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetArgs([]string{eventKey, "--flatten"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatal(err)
 			}
 			var doc map[string]any
@@ -380,7 +381,7 @@ func TestPersonalGroupMemberEventSchemaMatchesFlatOutput(t *testing.T) {
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			cmd.SetArgs([]string{eventKey, "--flatten"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatal(err)
 			}
 			var doc map[string]any
@@ -461,7 +462,7 @@ func TestPersonalActionEventSchemaMatchesFlatOutput(t *testing.T) {
 				var out bytes.Buffer
 				cmd.SetOut(&out)
 				cmd.SetArgs([]string{eventKey, "--flatten"})
-				if err := cmd.Execute(); err != nil {
+				if err := corecmd.ExecuteForTest(cmd); err != nil {
 					t.Fatal(err)
 				}
 				var doc map[string]any
@@ -501,7 +502,7 @@ func TestEventSchemaDefaultsToUser(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{personal.EventSingleChat})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	var doc map[string]any
@@ -527,7 +528,7 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	var schemaOut bytes.Buffer
 	schemaCmd.SetOut(&schemaOut)
 	schemaCmd.SetArgs([]string{personal.EventFromUser})
-	if err := schemaCmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(schemaCmd); err != nil {
 		t.Fatalf("schema Execute() error = %v", err)
 	}
 	var doc map[string]any
@@ -553,14 +554,14 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	consumeCmd.SilenceUsage = true
 	consumeCmd.SilenceErrors = true
 	consumeCmd.SetArgs([]string{personal.EventFromUser, "--user", "test-user-001", "--dry-run"})
-	if err := consumeCmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(consumeCmd); err != nil {
 		t.Fatalf("consume dry-run Execute() error = %v", err)
 	}
 	openIDConsumeCmd := newEventConsumeCommand()
 	openIDConsumeCmd.SilenceUsage = true
 	openIDConsumeCmd.SilenceErrors = true
 	openIDConsumeCmd.SetArgs([]string{personal.EventFromUser, "--open-dingtalk-id", "open-user-1", "--dry-run"})
-	if err := openIDConsumeCmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(openIDConsumeCmd); err != nil {
 		t.Fatalf("consume openDingtalkId dry-run Execute() error = %v", err)
 	}
 
@@ -568,7 +569,7 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	conflictingTargetCmd.SilenceUsage = true
 	conflictingTargetCmd.SilenceErrors = true
 	conflictingTargetCmd.SetArgs([]string{personal.EventFromUser, "--user", "test-user-001", "--open-dingtalk-id", "open-user-1", "--dry-run"})
-	err := conflictingTargetCmd.Execute()
+	err := corecmd.ExecuteForTest(conflictingTargetCmd)
 	if err == nil || !strings.Contains(err.Error(), "--user and --open-dingtalk-id are mutually exclusive for "+personal.EventFromUser) {
 		t.Fatalf("conflicting target identity error = %v", err)
 	}
@@ -577,7 +578,7 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	groupOpenIDCmd.SilenceUsage = true
 	groupOpenIDCmd.SilenceErrors = true
 	groupOpenIDCmd.SetArgs([]string{personal.EventInChat, "--group", "cid-1", "--open-dingtalk-id", "open-user-1", "--dry-run"})
-	err = groupOpenIDCmd.Execute()
+	err = corecmd.ExecuteForTest(groupOpenIDCmd)
 	if err == nil || !strings.Contains(err.Error(), "--open-dingtalk-id is not supported for "+personal.EventInChat+"; use --group") {
 		t.Fatalf("group openDingtalkId error = %v", err)
 	}
@@ -586,7 +587,7 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	missingUserCmd.SilenceUsage = true
 	missingUserCmd.SilenceErrors = true
 	missingUserCmd.SetArgs([]string{personal.EventFromUser})
-	err = missingUserCmd.Execute()
+	err = corecmd.ExecuteForTest(missingUserCmd)
 	if err == nil || !strings.Contains(err.Error(), "one of --user or --open-dingtalk-id is required for "+personal.EventFromUser) {
 		t.Fatalf("missing target identity error = %v", err)
 	}
@@ -623,7 +624,7 @@ func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 			cmd.SetArgs(append([]string{test.eventKey}, append(test.args, "--dry-run")...))
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("dry-run Execute() error = %v", err)
 			}
 		})
@@ -634,7 +635,7 @@ func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true
 		cmd.SetArgs([]string{eventKey, "--user", "test-user-001", "--dry-run"})
-		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+eventKey) {
+		if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+eventKey) {
 			t.Fatalf("%s scoped user error = %v", eventKey, err)
 		}
 	}
@@ -644,7 +645,7 @@ func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true
 		cmd.SetArgs([]string{eventKey, "--dry-run"})
-		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
+		if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
 			t.Fatalf("%s missing group error = %v", eventKey, err)
 		}
 	}
@@ -730,7 +731,7 @@ func TestPersonalEventSchemaRejectsTableFormat(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{personal.EventSingleChat, "--format", "table"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "event schema only supports json output") {
 		t.Fatalf("Execute() error = %v, want json-only format validation", err)
 	}
@@ -741,7 +742,7 @@ func TestEventAsBotRejected(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--as", "bot"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "app event is not publicly available yet") {
 		t.Fatalf("Execute() error = %v, want public availability guard", err)
 	}

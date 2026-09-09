@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // 同步自闭源 MR 28965577（知识库/节点权限增删改查改造）：
@@ -358,7 +360,7 @@ func TestNotifyFlagParsing(t *testing.T) {
 	t.Run("equals form sets false", func(t *testing.T) {
 		cmd := newNotifyCmd()
 		cmd.SetArgs([]string{"--notify=false"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got, _ := cmd.Flags().GetBool("notify"); got {
@@ -371,7 +373,7 @@ func TestNotifyFlagParsing(t *testing.T) {
 	t.Run("bare flag defaults true via NoOptDefVal", func(t *testing.T) {
 		cmd := newNotifyCmd()
 		cmd.SetArgs([]string{"--notify"})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got, _ := cmd.Flags().GetBool("notify"); !got {
@@ -386,7 +388,7 @@ func TestNotifyFlagParsing(t *testing.T) {
 		// "--notify false" 被 pflag 解析为 notify=true（NoOptDefVal）+ 位置参数 "false"。
 		// Args: cobra.NoArgs 拒绝位置参数，防止用户误以为传了 false。
 		cmd.SetArgs([]string{"--notify", "false"})
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatal("expected error for '--notify false' (space form) with NoArgs, got nil")
 		}
 		if got, _ := cmd.Flags().GetBool("notify"); !got {
@@ -396,7 +398,7 @@ func TestNotifyFlagParsing(t *testing.T) {
 	t.Run("omitted stays unchanged", func(t *testing.T) {
 		cmd := newNotifyCmd()
 		cmd.SetArgs([]string{})
-		if err := cmd.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(cmd); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if cmd.Flags().Changed("notify") {

@@ -486,7 +486,11 @@ func validateRecruitList(cmd *cobra.Command, _ []string) error {
 func loadRecruitJobFile(path string) (any, error) {
 	data, err := os.ReadFile(strings.TrimSpace(path))
 	if err != nil {
-		return nil, fmt.Errorf("读取职位 JSON 失败: %w", err)
+		return nil, apperrors.NewInternal(
+			fmt.Sprintf("读取职位 JSON 失败: %v", err),
+			apperrors.WithReason("file_read_failed"),
+			apperrors.WithCause(err),
+		)
 	}
 	var job map[string]any
 	if err := json.Unmarshal(data, &job); err != nil {

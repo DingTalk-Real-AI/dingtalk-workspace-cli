@@ -215,6 +215,9 @@ func TestCrossPlatformCoverageDriveDepthUnrecoverable(t *testing.T) {
 			t.Fatalf("%s not unrecoverable", code)
 		}
 	}
+	if !driveDepthUnrecoverable(context.Canceled) || !driveDepthUnrecoverable(context.DeadlineExceeded) {
+		t.Fatal("context cancellation and deadline should be unrecoverable")
+	}
 	if driveDepthUnrecoverable(&CLIError{Code: CodeMCPToolError}) {
 		t.Fatal("tool error marked unrecoverable")
 	}

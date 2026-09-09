@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -56,7 +57,7 @@ func executeChatFavoritesCommand(t *testing.T, caller *chatFavoritesCaller, args
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestChatFavoritesCommandsRegistered(t *testing.T) {

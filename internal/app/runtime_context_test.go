@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -79,7 +80,7 @@ func TestCrossPlatformCoverageRawAPIAttachesRuntimeContext(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"GET", "/v1.0/test"})
-	if err := cmd.ExecuteContext(context.Background()); err != nil {
+	if err := corecmd.ExecuteContextForTest(cmd, context.Background()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -94,7 +95,7 @@ func TestCrossPlatformCoverageRawAPIDryRunDoesNotResolveRuntimeContext(t *testin
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"GET", "/v1.0/test"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 0 {

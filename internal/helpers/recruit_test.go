@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -87,7 +88,7 @@ func TestRecruitJobListWrapsQueryParameters(t *testing.T) {
 		"--keyword", "Java", "--status", "open,draft", "--creator-user-ids", "u1,u2",
 		"--campus=false", "--required-edu", "9", "--cursor", "10", "--size", "30",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if caller.productID != recruitServerID || caller.tool != recruitListJobsTool {
@@ -117,7 +118,7 @@ func TestRecruitJobListCursorRoundTrip(t *testing.T) {
 	caller := withRecruitCaller(t)
 	cmd := prepareRecruitTestCommand(newRecruitJobListCommand())
 	cmd.SetArgs([]string{"--cursor", "9223372036854775807"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if got := caller.args["cursor"]; got != int64(9223372036854775807) {
@@ -127,7 +128,7 @@ func TestRecruitJobListCursorRoundTrip(t *testing.T) {
 	for _, cursor := range []string{"not-a-cursor", "9223372036854775808"} {
 		invalid := prepareRecruitTestCommand(newRecruitJobListCommand())
 		invalid.SetArgs([]string{"--cursor", cursor})
-		if err := invalid.Execute(); err == nil || !strings.Contains(err.Error(), "大于或等于 0 的整数") {
+		if err := corecmd.ExecuteForTest(invalid); err == nil || !strings.Contains(err.Error(), "大于或等于 0 的整数") {
 			t.Fatalf("cursor %q error = %v", cursor, err)
 		}
 	}
@@ -157,7 +158,7 @@ func TestRecruitJobListResponseCursorRoundTrip(t *testing.T) {
 	caller.text = `{"jobs":[],"hasMore":false}`
 	cmd = prepareRecruitTestCommand(newRecruitJobListCommand())
 	cmd.SetArgs([]string{"--cursor", meta.Pagination.NextToken})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if got := caller.args["cursor"]; got != int64(9223372036854775807) {
@@ -168,7 +169,7 @@ func TestRecruitJobListResponseCursorRoundTrip(t *testing.T) {
 func TestRecruitJobListDefaultsAndValidation(t *testing.T) {
 	caller := withRecruitCaller(t)
 	cmd := prepareRecruitTestCommand(newRecruitJobListCommand())
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if caller.args["size"] != 20 {
@@ -180,13 +181,13 @@ func TestRecruitJobListDefaultsAndValidation(t *testing.T) {
 
 	badStatus := prepareRecruitTestCommand(newRecruitJobListCommand())
 	badStatus.SetArgs([]string{"--status", "unknown"})
-	if err := badStatus.Execute(); err == nil || !strings.Contains(err.Error(), "draft/open/invalid/closed") {
+	if err := corecmd.ExecuteForTest(badStatus); err == nil || !strings.Contains(err.Error(), "draft/open/invalid/closed") {
 		t.Fatalf("invalid status error = %v", err)
 	}
 
 	badSize := prepareRecruitTestCommand(newRecruitJobListCommand())
 	badSize.SetArgs([]string{"--size", "101"})
-	if err := badSize.Execute(); err == nil || !strings.Contains(err.Error(), "1 到 100") {
+	if err := corecmd.ExecuteForTest(badSize); err == nil || !strings.Contains(err.Error(), "1 到 100") {
 		t.Fatalf("invalid size error = %v", err)
 	}
 
@@ -195,7 +196,7 @@ func TestRecruitJobListDefaultsAndValidation(t *testing.T) {
 			caller := withRecruitCaller(t)
 			invalid := prepareRecruitTestCommand(newRecruitJobListCommand())
 			invalid.SetArgs([]string{"--required-edu", requiredEdu})
-			if err := invalid.Execute(); err == nil || !strings.Contains(err.Error(), "1 到 9") {
+			if err := corecmd.ExecuteForTest(invalid); err == nil || !strings.Contains(err.Error(), "1 到 9") {
 				t.Fatalf("required edu %s error = %v", requiredEdu, err)
 			}
 			if len(caller.calls) != 0 {
@@ -209,7 +210,7 @@ func TestRecruitJobGetDispatchesJobID(t *testing.T) {
 	caller := withRecruitCaller(t)
 	cmd := prepareRecruitTestCommand(newRecruitJobGetCommand())
 	cmd.SetArgs([]string{"--job-id", "job-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if caller.productID != recruitServerID || caller.tool != recruitGetJobTool || caller.args["jobId"] != "job-1" {
@@ -246,7 +247,7 @@ func TestRecruitJobCreateRequiresConfirmationBeforeRemoteCall(t *testing.T) {
 	cmd.Flags().Bool("yes", false, "确认创建")
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetArgs([]string{"--from", path})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	var appErr *apperrors.Error
 	if !stderrors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
 		t.Fatalf("create without confirmation error = %T %v, want confirmation_required", err, err)
@@ -262,7 +263,7 @@ func TestRecruitJobCreateCallsRemoteOnceWhenConfirmed(t *testing.T) {
 	cmd := prepareRecruitTestCommand(newRecruitJobCreateCommand())
 	cmd.Flags().Bool("yes", false, "确认创建")
 	cmd.SetArgs([]string{"--from", path, "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 {
@@ -295,7 +296,7 @@ func TestRecruitCreateValidatesJobFile(t *testing.T) {
 	bad := prepareRecruitTestCommand(newRecruitJobCreateCommand())
 	bad.Flags().Bool("yes", false, "确认创建")
 	bad.SetArgs([]string{"--from", badPath, "--yes"})
-	if err := bad.Execute(); err == nil || !strings.Contains(err.Error(), "description") {
+	if err := corecmd.ExecuteForTest(bad); err == nil || !strings.Contains(err.Error(), "description") {
 		t.Fatalf("missing field error = %v", err)
 	}
 }
@@ -319,7 +320,7 @@ func TestRecruitCreateRejectsInvalidCreatorBeforeRemoteCall(t *testing.T) {
 			cmd := prepareRecruitTestCommand(newRecruitJobCreateCommand())
 			cmd.Flags().Bool("yes", false, "确认创建")
 			cmd.SetArgs([]string{"--from", path, "--yes"})
-			if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "creatorUserId") {
+			if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "creatorUserId") {
 				t.Fatalf("creator validation error = %v, want creatorUserId error", err)
 			}
 			if len(caller.calls) != 0 {
@@ -348,7 +349,7 @@ func TestRecruitCreateAllowsOptionalOwners(t *testing.T) {
 			cmd := prepareRecruitTestCommand(newRecruitJobCreateCommand())
 			cmd.Flags().Bool("yes", false, "确认创建")
 			cmd.SetArgs([]string{"--from", path, "--yes"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("optional owner create error = %v, want nil", err)
 			}
 			if len(caller.calls) != 1 {
@@ -366,7 +367,7 @@ func TestRecruitValidationBranches(t *testing.T) {
 
 	negativeCursor := prepareRecruitTestCommand(newRecruitJobListCommand())
 	negativeCursor.SetArgs([]string{"--cursor", "-1"})
-	if err := negativeCursor.Execute(); err == nil || !strings.Contains(err.Error(), "大于或等于 0") {
+	if err := corecmd.ExecuteForTest(negativeCursor); err == nil || !strings.Contains(err.Error(), "大于或等于 0") {
 		t.Fatalf("negative cursor error = %v", err)
 	}
 
@@ -379,6 +380,11 @@ func TestRecruitValidationBranches(t *testing.T) {
 	}
 	if _, err := loadRecruitJobFile(filepath.Join(t.TempDir(), "missing.json")); err == nil || !strings.Contains(err.Error(), "读取职位 JSON 失败") {
 		t.Fatalf("missing job file error = %v", err)
+	} else {
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryInternal || typed.Reason != "file_read_failed" {
+			t.Fatalf("missing job file error = %#v, want internal file_read_failed", typed)
+		}
 	}
 	invalidPath := filepath.Join(t.TempDir(), "invalid.json")
 	if err := os.WriteFile(invalidPath, []byte("{"), 0o600); err != nil {
@@ -498,6 +504,14 @@ func TestRecruitValidationBranches(t *testing.T) {
 	completeAddress["district"] = "330110"
 	if err := validateRecruitJob(completeAddress); err != nil {
 		t.Fatalf("complete job validation error = %v, want nil", err)
+	}
+}
+
+func TestCrossPlatformCoverageRecruitJobFileReadErrorIsInternal(t *testing.T) {
+	_, err := loadRecruitJobFile(filepath.Join(t.TempDir(), "missing.json"))
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) || typed.Category != apperrors.CategoryInternal || typed.Reason != "file_read_failed" {
+		t.Fatalf("loadRecruitJobFile() error = %#v, want internal file_read_failed", typed)
 	}
 }
 
@@ -746,7 +760,7 @@ func TestRecruitCommandsPublishUnwrappedConnectorResult(t *testing.T) {
 			var stdout bytes.Buffer
 			root.SetOut(&stdout)
 			root.SetArgs(append([]string{leaf.Name()}, test.args(t)...))
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatal(err)
 			}
 			var envelope struct {

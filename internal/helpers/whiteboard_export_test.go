@@ -2,13 +2,16 @@ package helpers
 
 import (
 	"context"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing.T) {
@@ -30,15 +33,19 @@ func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing
 	directory := t.TempDir()
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"export", "--node", "board-1", "--export-format", "pdf", "--output", directory})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(directory, "方案白板.pdf")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("exported file: %v", err)
 	}
-	if !strings.Contains(output.String(), filepath.Clean(path)) {
-		t.Fatalf("output %q does not contain path %q", output.String(), path)
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("output = %q: %v", output.String(), err)
+	}
+	if payload["outputPath"] != filepath.Clean(path) {
+		t.Fatalf("outputPath = %q, want %q", payload["outputPath"], path)
 	}
 	wantTools := []string{"export_whiteboard", "query_export_job"}
 	gotTools := make([]string, 0, len(caller.calls))
@@ -81,7 +88,7 @@ func TestCrossPlatformCoverageWhiteboardExportPollsAndValidates(t *testing.T) {
 
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"export", "--node", "board-2", "--output", t.TempDir()})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if queryCount != 2 {
@@ -90,7 +97,7 @@ func TestCrossPlatformCoverageWhiteboardExportPollsAndValidates(t *testing.T) {
 
 	bad := newWhiteboardCommand()
 	bad.SetArgs([]string{"export", "--node", "board-2", "--output", t.TempDir(), "--export-format", "svg"})
-	if err := bad.Execute(); err == nil || !strings.Contains(err.Error(), "png or pdf") {
+	if err := corecmd.ExecuteForTest(bad); err == nil || !strings.Contains(err.Error(), "png or pdf") {
 		t.Fatalf("invalid format error = %v", err)
 	}
 }
@@ -110,7 +117,7 @@ func TestCrossPlatformCoverageWhiteboardExportGetUnwrapsResultJSON(t *testing.T)
 	directory := t.TempDir()
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"export-get", "--job-id", "wb-wrapped", "--export-format", "png", "--output", directory})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(directory, "wrapped.png")); err != nil {
@@ -135,7 +142,7 @@ func TestCrossPlatformCoverageWhiteboardExportGetRejectsFormatMismatchBeforeDown
 	outputDir := filepath.Join(t.TempDir(), "must-not-be-created")
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"export-get", "--job-id", "wb-pdf", "--export-format", "png", "--output", outputDir})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "任务格式不匹配") || !strings.Contains(err.Error(), "pdf") || !strings.Contains(err.Error(), "png") {
 		t.Fatalf("format mismatch error = %v", err)
 	}
@@ -161,7 +168,7 @@ func TestCrossPlatformCoverageWhiteboardExportDryRunDoesNotCallOrWrite(t *testin
 			}
 			cmd := newWhiteboardCommand()
 			cmd.SetArgs(args)
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatal(err)
 			}
 			if len(caller.calls) != 0 {
@@ -243,7 +250,7 @@ func TestCrossPlatformCoverageWhiteboardExportRejectsFileDirectoryBeforeSubmissi
 			}
 			cmd := newWhiteboardCommand()
 			cmd.SetArgs(args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || len(caller.calls) != 0 {
 				t.Fatalf("error=%v calls=%v", err, caller.calls)
 			}
@@ -269,7 +276,7 @@ func TestCrossPlatformCoverageWhiteboardExportPollingFailuresPreserveRecovery(t 
 			cmd.SetContext(ctx)
 			dir := filepath.Join(t.TempDir(), "space ' directory")
 			cmd.SetArgs([]string{"export-get", "--job-id", "job", "--export-format", "pdf", "--output", dir})
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil {
 				t.Fatal("expected failure")
 			}
@@ -296,7 +303,7 @@ func TestCrossPlatformCoverageWhiteboardExportErrorBranches(t *testing.T) {
 		installWhiteboardTestCaller(t, &whiteboardTestCaller{format: "json"})
 		cmd := newWhiteboardCommand()
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatal("invalid args accepted")
 		}
 	}
@@ -304,7 +311,7 @@ func TestCrossPlatformCoverageWhiteboardExportErrorBranches(t *testing.T) {
 		installWhiteboardTestCaller(t, &whiteboardTestCaller{format: "json", response: func(whiteboardTestCall, int) string { return response }})
 		cmd := newWhiteboardCommand()
 		cmd.SetArgs([]string{"export", "--node", "board", "--output", t.TempDir()})
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatal("invalid receipt accepted")
 		}
 	}
@@ -312,7 +319,7 @@ func TestCrossPlatformCoverageWhiteboardExportErrorBranches(t *testing.T) {
 		installWhiteboardTestCaller(t, &whiteboardTestCaller{format: "json", response: func(whiteboardTestCall, int) string { return response }})
 		cmd := newWhiteboardCommand()
 		cmd.SetArgs([]string{"export-get", "--job-id", "job", "--output", t.TempDir()})
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatal("invalid query accepted")
 		}
 	}
@@ -381,7 +388,7 @@ func TestCrossPlatformCoverageWhiteboardExportFilesystemAndCancellation(t *testi
 		cmd := newWhiteboardCommand()
 		cmd.SetContext(ctx)
 		cmd.SetArgs([]string{"export-get", "--job-id", "job", "--output", t.TempDir()})
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatal("cancel lost")
 		}
 	})
@@ -397,7 +404,7 @@ func TestCrossPlatformCoverageWhiteboardExportFilesystemAndCancellation(t *testi
 		cmd := newWhiteboardCommand()
 		cmd.SetContext(ctx)
 		cmd.SetArgs([]string{"export-get", "--job-id", "job", "--output", t.TempDir()})
-		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "轮询被取消") {
+		if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "轮询被取消") {
 			t.Fatalf("cancellation error = %v", err)
 		}
 		if len(caller.calls) != 1 {

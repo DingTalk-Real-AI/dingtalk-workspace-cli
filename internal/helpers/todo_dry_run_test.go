@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -42,7 +43,7 @@ func TestTodoRemoveAttachmentDryRunSkipsConfirmationAndRemoteCall(t *testing.T) 
 		"--dry-run", "task", "remove-attachment",
 		"--task-id", "task-1", "--attachment-id", "attachment-1",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("todo task remove-attachment dry-run failed: %v", err)
 	}
 	if caller.calls != 0 {

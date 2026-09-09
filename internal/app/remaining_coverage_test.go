@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -32,12 +33,12 @@ func TestCrossPlatformCoverageEventStopPreviewConfirmationAndStdinCoverage(t *te
 	}
 	root, output := newStopRoot(true, false)
 	root.SetArgs([]string{"stop"})
-	if err := root.Execute(); err != nil || !strings.Contains(output.String(), "dry_run") {
+	if err := corecmd.ExecuteForTest(root); err != nil || !strings.Contains(output.String(), "dry_run") {
 		t.Fatalf("event stop dry-run = %v, %q", err, output.String())
 	}
 	root, _ = newStopRoot(false, false)
 	root.SetArgs([]string{"stop"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--yes") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("event stop confirmation error = %v", err)
 	}
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -109,7 +110,7 @@ func executeChatMessagePageAllCommandRaw(t *testing.T, caller edition.ToolCaller
 	root.SetOut(out)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	err := root.ExecuteContext(ctx)
+	err := corecmd.ExecuteContextForTest(root, ctx)
 	buffer, _ := out.(*bytes.Buffer)
 	if buffer == nil || buffer.Len() == 0 {
 		return nil, err

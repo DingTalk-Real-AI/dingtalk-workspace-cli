@@ -43,6 +43,39 @@ Schema contract) keep separate authorities — do not merge them with
 
 ## Command framework declaration
 
+- 第三阶段 CI 门禁覆盖框架拥有的参数校验边界：Cobra `Args`、flag parser、
+  required/group constraint、`corecmd.Spec.Validate` 和 metadata-only
+  `LeafSpec.Validate` 均须保持 `validation` / exit code 3。命令自有的
+  `PreRunE` / `RunE` 不是自动归类边界，其中的参数校验必须显式使用
+  `internal/errors.NewValidation`；框架权威校验阶段可通过
+  `internal/errors.NormalizeValidation` 统一转换。禁止在输出层根据错误文案
+  猜测类别，已分类错误及取消/超时错误必须原样透传。
+- 参数校验执行由 `corecmd.WithValidation(validate, next)` 编排：Validate 失败时
+  不调用 next，next 的业务错误原样透传。Tier1 与 metadata-only Tier2 共用该边界。
+  `corecmd.New` 只构造命令；独立执行前必须在完成挂载后调用一次
+  `corecmd.PrepareCommandTree(root)`，再使用 Cobra `Execute` / `ExecuteC`。
+  app root 工厂已完成准备，不重复准备，也不在其返回后追加命令或替换校验钩子。
+  测试扩展通过组装回调挂载。测试**自行构造**的命令必须通过 `corecmd.*ForTest` 执行辅助函数
+  运行，不得直接调用 Cobra `Execute` / `ExecuteC`：自行构造的树未经准备，裸执行不安装准备
+  阶段的校验适配器，断言会落在未适配路径上，参数校验回归随之静默失效。app 工厂返回的 root
+  （`NewRootCommand` 等）已完成准备，对其直接 `Execute` 走的就是已适配路径，不需要该辅助函数。
+  从 main 合并进来的新测试同样适用，合并后须检查新增的自行构造命令是否仍走该辅助函数。
+  重复执行保持 Cobra 的 flag 值和 Changed 状态；需要独立参数状态时从工厂创建新树。
+  错误保留分两种边界，不可混用。**校验边界**（`NormalizeValidation` 及其调用方）用
+  `internal/errors.PreserveClassification`：它额外保留取消/截止错误的身份，避免把超时
+  误判成参数错误。**业务分类边界**（如 `helpers.WrapErrorWithOperation`）必须用
+  `internal/errors.DeclaresClassification`：它只认自带契约的错误（结构化 `*Error` 或
+  `ExitCoder`）。裸 `context.DeadlineExceeded` 不声明任何类别，在业务边界透传会跳过既有的
+  `NETWORK_TIMEOUT` 分类，退化成 internal/退出码 5 并丢掉重试提示。
+- 准备阶段安装 Cobra 原生 `ValidationErrorFunc`，仅在 Args/required/group 失败时分类；
+  延迟生成的 help/completion 命令继承该边界。保留业务 Args/PreRun 钩子和原生约束注解，
+  required/group 由 Cobra 在业务 PreRun 后检查一次，不再安装提前重复检查。
+  手动 Cobra 解析必须经过 prepared `FlagErrorFunc`，并更新手动解析调用清单门禁。
+- Cobra v1.10.2 的本地依赖替换修复 `Traverse` 父级 flag handler、失败节点归属和根级静默行为，
+  并提供原生校验失败回调；
+  来源、补丁和升级约束见 `third_party/cobra/PATCHES.md`。修改依赖或统一校验框架时运行
+  `scripts/policy/check-typed-validation-errors.sh`（包含原始源码完整性与 Cobra 全量测试）。
+  根模块 `go test ./...` 不会覆盖该嵌套模块，不能替代依赖专项门禁。
 - Framework definition: `docs/rfc-command-framework-convergence.md` **§5.0**
 - Today (leaf): `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
 - Today (non-leaf): owning Cobra command → complete `corecmd.GroupPolicy{Mode, Positionals, Recovery}` → `corecmd.ApplyGroupPolicy`; the final assembled-tree gate rejects undeclared groups and stale group declarations on leaves

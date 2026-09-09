@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -61,7 +62,7 @@ func executeChatMessagePaginationCommand(t *testing.T, caller *chatMessagePagina
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
+	executed, err := corecmd.ExecuteContextCForTest(root, ctx)
 	if err == nil && out.Len() == 0 && executed != nil {
 		if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
 			t.Fatalf("emit result: %v", emitErr)

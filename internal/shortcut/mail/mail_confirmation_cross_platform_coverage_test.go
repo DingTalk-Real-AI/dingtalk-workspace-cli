@@ -8,6 +8,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -40,7 +41,7 @@ func runUnconfirmedMailWrite(t *testing.T, caller *mailConfirmationCaller, args 
 	root.SetErr(io.Discard)
 	root.AddCommand(shortcut.Commands()...)
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageMailConfirmationPrecedesRemoteCall(t *testing.T) {

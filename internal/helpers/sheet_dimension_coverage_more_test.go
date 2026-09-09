@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func dimensionCoverageCommand(t *testing.T, name string) *cobra.Command {
@@ -27,7 +29,7 @@ func executeDimensionCoverage(t *testing.T, name string, args ...string) error {
 	t.Helper()
 	cmd := dimensionCoverageCommand(t, name)
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func TestCrossPlatformCoverageDimensionValidationRemainingCoverage(t *testing.T) {

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +30,7 @@ func executeDevAppEdge(runner executor.Runner, args ...string) (string, error) {
 	root.SetOut(&out)
 	root.SetErr(&out)
 	root.SetArgs(append([]string{"dev", "app"}, args...))
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return out.String(), err
 }
 

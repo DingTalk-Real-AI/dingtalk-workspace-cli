@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -37,7 +38,7 @@ func executeDriveListCapture(t *testing.T, caller edition.ToolCaller, args ...st
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return buf, err
 }
 

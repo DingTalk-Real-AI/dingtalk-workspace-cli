@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
@@ -88,7 +89,7 @@ func runMinutesAlignmentCLI(t *testing.T, caller *minutesE2ECaller, args ...stri
 	root.SetOut(&stdout)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(args)
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil && output.UsesUnifiedResult(executed) {
 		code, _, emitErr := output.EmitStoredResult(executed)
 		if emitErr != nil {

@@ -119,7 +119,7 @@ func TestPluginLeafExecutionErrorsAndBodyWrapper(t *testing.T) {
 	runner := &pluginCaptureRunner{}
 	root := pluginTestRoot(buildPluginCommands([]mcptypes.ServerDescriptor{base}, runner, nil)...)
 	root.SetArgs([]string{"conference", "wrapped", "--value", "ok", "--params", `{"body":{"old":1},"_meta":"kept"}`})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("wrapped command: %v", err)
 	}
 	want := map[string]any{
@@ -143,7 +143,7 @@ func TestPluginLeafExecutionErrorsAndBodyWrapper(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			commandRoot := pluginTestRoot(buildPluginCommands([]mcptypes.ServerDescriptor{base}, testCase.runner, nil)...)
 			commandRoot.SetArgs(testCase.args)
-			if err := commandRoot.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(commandRoot); err == nil {
 				t.Fatal("expected command error")
 			}
 		})
@@ -156,7 +156,7 @@ func TestPluginLeafExecutionErrorsAndBodyWrapper(t *testing.T) {
 			leaf.Flags().Lookup(flagName).Value = pluginWrongFlagValue{}
 			commandRoot := pluginTestRoot(commands...)
 			commandRoot.SetArgs([]string{"conference", "wrapped", "--value", "ok"})
-			if err := commandRoot.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(commandRoot); err == nil {
 				t.Fatal("expected unreadable flag error")
 			}
 		})

@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +44,7 @@ func executeJSONOutputContractCommand(t *testing.T, caller *scriptedToolCaller, 
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		return stdout.String(), stderr.String(), err
 	}
 	return stdout.String(), stderr.String(), nil

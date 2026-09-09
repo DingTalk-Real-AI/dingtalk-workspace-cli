@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // ---------- formatFeedTime unit tests ----------
@@ -377,7 +379,7 @@ func TestCrossPlatformCoverageWikiFeedListFormatIntegration(t *testing.T) {
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -469,7 +471,7 @@ func TestCrossPlatformCoverageWikiFeedListRawFormat(t *testing.T) {
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -512,7 +514,7 @@ func TestCrossPlatformCoverageWikiFeedListTableFormatMatchesDispatcher(t *testin
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -555,7 +557,7 @@ func TestCrossPlatformCoverageWikiFeedListEmptyResponse(t *testing.T) {
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
 
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 }

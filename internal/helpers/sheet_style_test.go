@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -50,7 +51,7 @@ func TestCrossPlatformCoverageRangeBatchSetStyleDryRunNeverCallsRemote(t *testin
 
 			cmd := newRangeBatchSetStyleCmd()
 			cmd.SetArgs([]string{"--node", "NODE_ID", "--batch", batchPath})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatalf("batch-set-style dry-run error: %v", err)
 			}
 			if caller.calls != 0 {
@@ -102,7 +103,7 @@ func TestRangeBatchSetStylePropagatesJSONWriteFailure(t *testing.T) {
 
 	cmd := newRangeBatchSetStyleCmd()
 	cmd.SetArgs([]string{"--node", "NODE_ID", "--batch", batchPath})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "forced JSON output failure") {
 		t.Fatalf("error = %v, want JSON write failure", err)
 	}
@@ -201,7 +202,7 @@ func TestBorderStyleRejectionHappensBeforeAnyRemoteCall(t *testing.T) {
 			}
 			cmd.SetArgs(tc.args)
 			cmd.SilenceUsage, cmd.SilenceErrors = true, true
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), `未知字段 "colour"`) {
 				t.Fatalf("err = %v, want the unknown border field rejected", err)
 			}

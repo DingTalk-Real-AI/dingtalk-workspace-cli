@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // ── inferExportFilename：URL 推断本地文件名 ──
@@ -256,7 +258,7 @@ func executeDriveExportFailingWriter(t *testing.T, caller *scriptedToolCaller, a
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageRunDriveExportFlow(t *testing.T) {

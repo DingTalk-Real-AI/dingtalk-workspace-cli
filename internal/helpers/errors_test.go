@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,6 +9,11 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
+
+type helperExitCoderError struct{}
+
+func (*helperExitCoderError) Error() string { return "explicit exit" }
+func (*helperExitCoderError) ExitCode() int { return 42 }
 
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 	cause := errors.New("root cause")
@@ -129,6 +135,62 @@ func TestCrossPlatformCoverageWrapErrorPreservesFrameworkClassification(t *testi
 
 	if got := WrapErrorWithOperation(want, "contact/get_current_user_profile"); got != want {
 		t.Fatalf("WrapErrorWithOperation() = %v, want typed framework error passed through unchanged", got)
+	}
+
+	// Only errors that state their own contract are passed through. Cancellation
+	// and deadline sentinels are not: they declare no category, so this boundary
+	// owns classifying them.
+	for _, authoritative := range []error{
+		&helperExitCoderError{},
+		fmt.Errorf("shortcut call: %w", &helperExitCoderError{}),
+	} {
+		if got := WrapErrorWithOperation(authoritative, "contact/get_current_user_profile"); got != authoritative {
+			t.Fatalf("WrapErrorWithOperation() = %v, want authoritative error %v unchanged", got, authoritative)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWrapErrorClassifiesDeadlineSentinel(t *testing.T) {
+	// The real sentinel, not an error whose text merely mentions a deadline:
+	// errors.Is matches only the former, which is why the message-shaped case in
+	// the table above never exercised this path. Preserving the sentinel here
+	// would skip the network-timeout branch and leave ExitCode reporting
+	// internal/5 without the retry hint.
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"bare", context.DeadlineExceeded},
+		{"wrapped", fmt.Errorf("resolveFileDomain: %w", context.DeadlineExceeded)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := WrapErrorWithOperation(tc.err, "drive/resolve_file_domain")
+			if got == tc.err {
+				t.Fatal("deadline sentinel was passed through instead of classified")
+			}
+			cli, ok := got.(*CLIError)
+			if !ok || cli.Code != CodeNetworkTimeout {
+				t.Fatalf("WrapErrorWithOperation() = %#v (%v), want NETWORK_TIMEOUT", got, got)
+			}
+			if cli.Operation != "drive/resolve_file_domain" {
+				t.Fatalf("operation = %q", cli.Operation)
+			}
+			if !strings.Contains(cli.Error(), "timed out") {
+				t.Fatalf("message = %q, want the timeout hint", cli.Error())
+			}
+			if cli.ExitCode() != ExitAPI || apperrors.ExitCode(got) != ExitAPI {
+				t.Fatalf("exit code = %d/%d, want ExitAPI (%d)", cli.ExitCode(), apperrors.ExitCode(got), ExitAPI)
+			}
+		})
+	}
+
+	// Cancellation has no dedicated branch, so it lands on the unclassified
+	// fallback rather than being mistaken for a timeout. Pinning that keeps the
+	// two sentinels from being conflated again.
+	got := WrapErrorWithOperation(fmt.Errorf("shortcut call: %w", context.Canceled), "chat/send")
+	cli, ok := got.(*CLIError)
+	if !ok || cli.Code != CodeUnclassified {
+		t.Fatalf("WrapErrorWithOperation() = %#v (%v), want UNCLASSIFIED", got, got)
 	}
 }
 

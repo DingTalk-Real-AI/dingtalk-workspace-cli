@@ -125,7 +125,10 @@ func proxySubCmd(use, targetProduct, targetPath string, flagRenames map[string]s
 				}
 			} else {
 				if err := targetCmd.ParseFlags(finalArgs); err != nil {
-					return fmt.Errorf("proxy flag parse error for %q: %w", targetCmd.CommandPath(), err)
+					// Manual parsing does not invoke Cobra's error handler. Use the
+					// target's prepared boundary so aliases retain its classification
+					// and suggestions, just as direct execution does.
+					return targetCmd.FlagErrorFunc()(targetCmd, err)
 				}
 				targetArgs := targetCmd.Flags().Args()
 				if targetCmd.RunE != nil {

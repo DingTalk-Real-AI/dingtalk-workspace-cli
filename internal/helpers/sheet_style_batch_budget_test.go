@@ -15,6 +15,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 // 跨 range 累计单元格预算（对齐飞书 checkBatchStampBudget）。
@@ -188,7 +190,7 @@ func TestBatchSetStyleRejectsStyleFlagsInBatchMode(t *testing.T) {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs([]string{"--node", "NODE_ID", "--batch", batchPath, "--bg-color", "#FFF2CC", "--font-family", "Arial"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil {
 		t.Fatal("--batch 搭配命令行样式 flag 必须报错，而不是静默忽略")
 	}
@@ -339,7 +341,7 @@ func TestBlankSheetIdentifierIsRejectedBeforeAnyRemoteCall(t *testing.T) {
 			cmd := tc.cmd()
 			cmd.SetArgs(tc.args(t))
 			cmd.SilenceUsage, cmd.SilenceErrors = true, true
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want contains %q", err, tc.want)
 			}

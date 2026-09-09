@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -83,7 +84,7 @@ func runShortcut(t *testing.T, fake *stubMailboxCaller, argv ...string) string {
 	root.SetOut(&buf)
 	root.SetErr(io.Discard)
 	root.SetArgs(argv)
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err != nil {
 		t.Fatalf("execute %v: %v", argv, err)
 	}
@@ -106,7 +107,7 @@ func runShortcutErr(t *testing.T, fake *stubMailboxCaller, argv ...string) error
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(argv)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 // TestSmartSearchMailNoMailbox covers the empty-mailbox path: when

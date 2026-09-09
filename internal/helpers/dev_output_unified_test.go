@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -51,7 +52,7 @@ func TestDevAppUnifiedActiveExecutesOnceAndReturnsFrameworkResult(t *testing.T) 
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"dev", "app", "list"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if runner.calls != 1 {
@@ -69,7 +70,7 @@ func TestMigratedDevAppDefaultsToUnifiedFramework(t *testing.T) {
 	root.SetOut(&stdout)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs([]string{"dev", "app", "list"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if runner.calls != 1 {
@@ -131,7 +132,7 @@ func TestDevConnectStatusPreservesPublishedHumanAndJSONShapes(t *testing.T) {
 	var humanOut bytes.Buffer
 	humanRoot.SetOut(&humanOut)
 	humanRoot.SetArgs([]string{"dev", "connect", "status", "--robot-client-id", "missing"})
-	if err := humanRoot.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(humanRoot); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Contains(humanOut.Bytes(), []byte("not_running")) || bytes.Contains(humanOut.Bytes(), []byte(`"outcome"`)) {
@@ -142,7 +143,7 @@ func TestDevConnectStatusPreservesPublishedHumanAndJSONShapes(t *testing.T) {
 	var jsonOut bytes.Buffer
 	jsonRoot.SetOut(&jsonOut)
 	jsonRoot.SetArgs([]string{"dev", "connect", "status", "--robot-client-id", "missing", "--json"})
-	if err := jsonRoot.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(jsonRoot); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any

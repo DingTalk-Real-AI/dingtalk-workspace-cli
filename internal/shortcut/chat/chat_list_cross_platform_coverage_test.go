@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -36,7 +37,7 @@ func TestCrossPlatformCoverageChatListDefaultsAndLarkAliases(t *testing.T) {
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--exclude-muted", "--page-size", "20"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_all_conversations" {
@@ -82,7 +83,7 @@ func TestCrossPlatformCoverageChatListTypesPaginationAndValidation(t *testing.T)
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+chat-list", "--types", "group,p2p", "--page-token", "3"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if fake.calls[0].args["cursor"] != 3 || fake.calls[0].args["limit"] != 20 {
@@ -117,7 +118,7 @@ func TestCrossPlatformCoverageChatListTypesPaginationAndValidation(t *testing.T)
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+chat-list", "--types", "p2p", "--limit", "5"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if fake.calls[0].args["limit"] != 5 {
@@ -140,7 +141,7 @@ func TestCrossPlatformCoverageChatListTypesPaginationAndValidation(t *testing.T)
 		root := newPlatformCoverageRoot()
 		root.SetOut(&bytes.Buffer{})
 		root.SetArgs([]string{"chat", "+chat-list", "--cursor", "2"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if fake.calls[0].args["cursor"] != 2 {
@@ -164,7 +165,7 @@ func TestCrossPlatformCoverageChatListTypesPaginationAndValidation(t *testing.T)
 			helpers.InitDeps(&larkAlignmentCaller{})
 			root := newPlatformCoverageRoot()
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatal("expected validation error")
 			}
 		})
@@ -178,7 +179,7 @@ func TestCrossPlatformCoverageChatListTypesPaginationAndValidation(t *testing.T)
 		root := newPlatformCoverageRoot()
 		root.SetOut(&bytes.Buffer{})
 		root.SetArgs([]string{"chat", "+chat-list", "--page-size", "15"})
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 		if fake.calls[0].args["limit"] != 15 {
@@ -190,7 +191,7 @@ func TestCrossPlatformCoverageChatListTypesPaginationAndValidation(t *testing.T)
 		helpers.InitDeps(&larkAlignmentCaller{failProductTool: "im/list_all_conversations"})
 		root := newPlatformCoverageRoot()
 		root.SetArgs([]string{"chat", "+chat-list"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("expected MCP error")
 		}
 	})
@@ -345,7 +346,7 @@ func TestCrossPlatformCoverageChatListPageAllMergesBeforeTypeFilter(t *testing.T
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--types", "group", "--page-size", "1", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[1].args["cursor"] != 2 {
@@ -376,7 +377,7 @@ func TestCrossPlatformCoverageChatListProbesMaximumWindowWhenBackendFalselyEndsF
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--page-size", "1", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[0].args["limit"] != 1 || fake.calls[1].args["limit"] != 100 {
@@ -401,7 +402,7 @@ func TestCrossPlatformCoverageChatListPageLimitPublishesContinuation(t *testing.
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--page-all", "--page-limit", "1"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -426,7 +427,7 @@ func TestCrossPlatformCoverageChatListLaterPageFailureKeepsPartialLedger(t *test
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list", "--page-all"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("expected later-page error")
 	}
 	var payload map[string]any
@@ -448,7 +449,7 @@ func TestCrossPlatformCoverageChatListPaginationValidation(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+chat-list"}, args...))
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
 	}
@@ -469,7 +470,7 @@ func TestCrossPlatformCoverageChatListAdditionalPaginationEdges(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(append([]string{"chat", "+chat-list"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -605,7 +606,7 @@ func TestCrossPlatformCoverageChatListAdditionalPaginationEdges(t *testing.T) {
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
 		root.SetArgs([]string{"chat", "+chat-list", "--exclude-muted"})
-		if err := root.Execute(); err == nil || fake.calls[0].args["excludeMuted"] != true {
+		if err := corecmd.ExecuteForTest(root); err == nil || fake.calls[0].args["excludeMuted"] != true {
 			t.Fatalf("calls=%#v err=%v", fake.calls, err)
 		}
 	})

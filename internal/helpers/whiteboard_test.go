@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	outputpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -125,7 +126,7 @@ func TestCrossPlatformCoverageWhiteboardQueryRoutesAndDecodesResultJSON(t *testi
 	output := installWhiteboardTestCaller(t, caller)
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "doc-1", "--part-id", "part-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].server != "whiteboard" || caller.calls[0].tool != whiteboardQueryTool {
@@ -153,7 +154,7 @@ func TestCrossPlatformCoverageWhiteboardStandaloneQueryPromotesResultJSONToSourc
 	output := installWhiteboardTestCaller(t, caller)
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "wb-1", "--view", "all"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != standaloneWhiteboardQueryTool {
@@ -188,7 +189,7 @@ func TestCrossPlatformCoverageWhiteboardUpdateValidatesSourceAndRequiresConfirma
 	cmd := newWhiteboardCommand()
 	cmd.SetIn(strings.NewReader("no\n"))
 	cmd.SetArgs([]string{"update", "--node", "doc-1", "--part-id", "part-1", "--source", path})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+	if err := corecmd.ExecuteForTest(cmd); err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
 		t.Fatalf("err = %v, want cancellation", err)
 	}
 	if len(caller.calls) != 0 {
@@ -197,7 +198,7 @@ func TestCrossPlatformCoverageWhiteboardUpdateValidatesSourceAndRequiresConfirma
 
 	cmd = newWhiteboardCommand()
 	cmd.SetArgs([]string{"update", "--node", "doc-1", "--part-id", "part-1", "--source", path, "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != whiteboardUpdateTool {
@@ -214,7 +215,7 @@ func TestCrossPlatformCoverageWhiteboardQueryDeterministicallyRoutesBothKinds(t 
 
 	cmd := newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "wb-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != standaloneWhiteboardQueryTool {
@@ -227,7 +228,7 @@ func TestCrossPlatformCoverageWhiteboardQueryDeterministicallyRoutesBothKinds(t 
 	caller.calls = nil
 	cmd = newWhiteboardCommand()
 	cmd.SetArgs([]string{"query", "--node", "doc-1", "--part-id", "part-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != whiteboardQueryTool {
@@ -242,7 +243,7 @@ func TestCrossPlatformCoverageWhiteboardQueryDeterministicallyRoutesBothKinds(t 
 		caller.calls = nil
 		cmd = newWhiteboardCommand()
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("args %v unexpectedly succeeded", args)
 		}
 		if len(caller.calls) != 0 {
@@ -263,7 +264,7 @@ func TestCrossPlatformCoverageWhiteboardStandaloneUpdateRoutesExactCASArgs(t *te
 		"update", "--node", "wb-1", "--source", path, "--page-id", "page-1",
 		"--expected-revision", "12", "--request-id", "req-1", "--yes",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != standaloneWhiteboardUpdateTool {
@@ -285,7 +286,7 @@ func TestCrossPlatformCoverageWhiteboardStandaloneUpdateRoutesExactCASArgs(t *te
 		caller.calls = nil
 		cmd = newWhiteboardCommand()
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("args %v unexpectedly succeeded", args)
 		}
 		if len(caller.calls) != 0 {
@@ -314,7 +315,7 @@ func TestCrossPlatformCoverageWhiteboardCreateWithContentValidatesAndRedactsDryR
 	cmd.SetContext(ctx)
 	cmd.SetOut(output)
 	cmd.SetArgs([]string{"create-with-content", "--name", "Board", "--source", sourcePath, "--request-id", "create-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	leaf, _, err := cmd.Find([]string{"create-with-content"})
@@ -397,7 +398,7 @@ func TestCrossPlatformCoverageWhiteboardCreateWithContentValidatesAndRedactsDryR
 	cmd.SetContext(ctx)
 	cmd.SetOut(output)
 	cmd.SetArgs([]string{"create-with-content", "--name", "Board", "--source", sourcePath, "--request-id", "create-1"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	leaf, _, err = cmd.Find([]string{"create-with-content"})
@@ -459,7 +460,7 @@ func TestCrossPlatformCoverageWhiteboardCreateEmptySource(t *testing.T) {
 			cmd.SetContext(ctx)
 			cmd.SetOut(buf)
 			cmd.SetArgs([]string{"create-with-content", "--name", "Empty", "--source", path, "--request-id", "empty-1"})
-			if err := cmd.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(cmd); err != nil {
 				t.Fatal(err)
 			}
 			leaf, _, _ := cmd.Find([]string{"create-with-content"})
@@ -621,7 +622,7 @@ func TestCrossPlatformCoverageDocWhiteboardInsertBuildsCardAndReturnsPersistedPa
 
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "doc-1", "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 2 || caller.calls[0].tool != "insert_document_block" || caller.calls[1].tool != "list_document_blocks" {
@@ -738,7 +739,7 @@ func TestCrossPlatformCoverageDocWhiteboardInsertFailsClosedWhenVerificationQuer
 
 			cmd := newDocWhiteboardCommand()
 			cmd.SetArgs([]string{"insert", "--node", "doc-1", "--yes"})
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), "回查验证失败") {
 				t.Fatalf("err = %v, want fail-closed verification error", err)
 			}
@@ -770,7 +771,7 @@ func TestCrossPlatformCoverageDocWhiteboardInsertSoftSucceedsWhenBlockNotYetVisi
 
 	cmd := newDocWhiteboardCommand()
 	cmd.SetArgs([]string{"insert", "--node", "doc-1", "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("block-not-visible must stay a soft success: %v", err)
 	}
 	// 1 次插入 + 3 次回查（attempt 0..2），其间休眠 2 次。
@@ -815,7 +816,7 @@ func TestCrossPlatformCoverageDocWhiteboardInsertRejectsConflictingBlockAnchors(
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 			cmd.SetArgs(test.args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil {
 				t.Fatalf("args %v must be rejected as mutually exclusive", test.args)
 			}
@@ -844,7 +845,7 @@ func TestCrossPlatformCoverageDocMediaUploadReturnsStableResourceContract(t *tes
 
 	cmd := newDocCommand()
 	cmd.SetArgs([]string{"media", "upload", "--node", "doc-1", "--file", file, "--yes"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].server != "doc" || caller.calls[0].tool != "get_doc_attachment_upload_info" {
@@ -880,7 +881,7 @@ func TestCrossPlatformCoverageDocMediaUploadRedactsTemporaryURLFromUploadError(t
 
 	cmd := newDocCommand()
 	cmd.SetArgs([]string{"media", "upload", "--node", "doc-1", "--file", file, "--yes"})
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || strings.Contains(err.Error(), uploadURL) || !strings.Contains(err.Error(), "<redacted upload URL>") {
 		t.Fatalf("err = %v, want redacted temporary upload URL", err)
 	}

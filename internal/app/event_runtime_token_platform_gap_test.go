@@ -13,6 +13,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
@@ -42,7 +43,7 @@ func TestCrossPlatformCoverageRuntimeTokenBusRejectsIncompleteIdentity(t *testin
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs(tc.args)
-			err := cmd.Execute()
+			err := corecmd.ExecuteForTest(cmd)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
 			}

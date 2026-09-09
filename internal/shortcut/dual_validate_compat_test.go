@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -39,7 +40,7 @@ func TestFrameworkDualValidateBackendAndShadowErrors(t *testing.T) {
 	cmd := mount(Shortcut{Service: "sample", Command: "+compat", OutputRollout: output.RolloutDualValidate, Execute: func(rt *RuntimeContext) error { return rt.CallMCP("get", nil) }})
 	root.AddCommand(cmd)
 	root.SetArgs([]string{cmd.Name()})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("backend error swallowed")
 	}
 
@@ -54,13 +55,13 @@ func TestFrameworkDualValidateBackendAndShadowErrors(t *testing.T) {
 	}
 	caller.err = nil
 	root.SetArgs([]string{cmd.Name()})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("shadow validation error swallowed")
 	}
 	caller.dryRun = true
 	root.SetArgs([]string{cmd.Name(), "--dry-run"})
 	root.PersistentFlags().Bool("dry-run", false, "")
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("dry-run shadow validation error swallowed")
 	}
 }
@@ -90,7 +91,7 @@ func runDualValidateShortcut(t *testing.T, caller *dualValidateCaller, args ...s
 	cmd.SetOut(&stdout)
 	root.AddCommand(cmd)
 	root.SetArgs(append([]string{cmd.Name()}, args...))
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	return stdout.String(), stderr.String()

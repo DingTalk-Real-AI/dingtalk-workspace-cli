@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	upgradepkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -133,7 +134,7 @@ func TestCrossPlatformCoverageUpgradeRollbackAndCommandBranchesCoverage(t *testi
 
 	edition.Override(&edition.Hooks{IsEmbedded: true})
 	embedded := newUpgradeCommand()
-	if err := embedded.Execute(); err == nil || !strings.Contains(err.Error(), "embedded") {
+	if err := corecmd.ExecuteForTest(embedded); err == nil || !strings.Contains(err.Error(), "embedded") {
 		t.Fatalf("unnamed embedded upgrade error = %v", err)
 	}
 	edition.Override(&edition.Hooks{})
@@ -144,7 +145,7 @@ func TestCrossPlatformCoverageUpgradeRollbackAndCommandBranchesCoverage(t *testi
 		}
 		command.SetOut(io.Discard)
 		command.SetArgs(args)
-		if err := command.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(command); err != nil {
 			t.Fatalf("upgrade command %v = %v", args, err)
 		}
 	}

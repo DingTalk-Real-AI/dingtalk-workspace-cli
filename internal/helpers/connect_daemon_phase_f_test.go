@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
@@ -53,7 +54,7 @@ func TestConnectDaemonFamilyMissingDaemonErrorPaths(t *testing.T) {
 	status.SetOut(&statusOut)
 	status.SetErr(&statusErr)
 	status.SetArgs([]string{"--robot-client-id", "ghost", "--json"})
-	if err := status.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(status); err != nil {
 		t.Fatalf("status on missing daemon must not error, got %v\nstderr:\n%s", err, statusErr.String())
 	}
 	var statusReport connectHealthReport
@@ -73,7 +74,7 @@ func TestConnectDaemonFamilyMissingDaemonErrorPaths(t *testing.T) {
 	stop.SetOut(&stopOut)
 	stop.SetErr(&stopErr)
 	stop.SetArgs([]string{"--unified-app-id", "ghost"})
-	if err := stop.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(stop); err != nil {
 		t.Fatalf("stop on missing daemon must not error, got %v\nstderr:\n%s", err, stopErr.String())
 	}
 	stopEnv := decodePhaseFEnvelope(t, stopOut.Bytes())
@@ -97,7 +98,7 @@ func TestConnectDaemonFamilyMissingDaemonErrorPaths(t *testing.T) {
 	restart.SetOut(&restartOut)
 	restart.SetErr(&restartErr)
 	restart.SetArgs([]string{"--robot-client-id", "ghost"})
-	err := restart.Execute()
+	err := corecmd.ExecuteForTest(restart)
 	if err == nil || !strings.Contains(err.Error(), "未找到连接器记录") {
 		t.Fatalf("restart on missing daemon error = %v, want 未找到连接器记录", err)
 	}
@@ -124,7 +125,7 @@ func TestConnectDaemonFamilyRequiresLocatorIdentity(t *testing.T) {
 		cmd.SetOut(&out)
 		cmd.SetErr(&errBuf)
 		cmd.SetArgs(nil)
-		err := cmd.Execute()
+		err := corecmd.ExecuteForTest(cmd)
 		if err == nil || !strings.Contains(err.Error(), "需要 --robot-client-id 或 --unified-app-id") {
 			t.Fatalf("%s without locator error = %v, want 定位守护进程 validation", cmd.Name(), err)
 		}

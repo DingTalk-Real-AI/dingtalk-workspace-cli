@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -65,7 +66,7 @@ func executeSheetTableCommand(t *testing.T, caller *sheetTableCaller, stdin io.R
 		root.SetIn(stdin)
 	}
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestSheetTableCommandsRegistered(t *testing.T) {

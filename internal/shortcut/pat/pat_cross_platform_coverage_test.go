@@ -80,7 +80,7 @@ func runPATShortcut(t *testing.T, declaration shortcut.Shortcut, caller *patShor
 	root.SetErr(io.Discard)
 	root.SetIn(strings.NewReader(input))
 	root.SetArgs(append([]string{"pat", declaration.Command}, args...))
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil {
 		_, _, err = output.EmitStoredResult(executed)
 	}
@@ -106,7 +106,7 @@ func runPATAtomicRoute(t *testing.T, caller *patAtomicFixtureCaller, args ...str
 		t.Fatal(err)
 	}
 	os.Stdout = writePipe
-	_, runErr := root.ExecuteC()
+	_, runErr := corecmd.ExecuteCForTest(root)
 	_ = writePipe.Close()
 	os.Stdout = oldStdout
 	outputBytes, readErr := io.ReadAll(readPipe)
@@ -130,7 +130,7 @@ func runPATNativeBrowserPolicy(t *testing.T, caller *patAtomicFixtureCaller, arg
 	root.SetErr(io.Discard)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(append([]string{"pat", "browser-policy"}, args...))
-	_, err := root.ExecuteC()
+	_, err := corecmd.ExecuteCForTest(root)
 	return stdout.String(), err
 }
 

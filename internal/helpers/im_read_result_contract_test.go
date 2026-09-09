@@ -27,6 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
@@ -195,7 +196,7 @@ func executeIMReadCommand(t *testing.T, caller *imReadResultCaller, processArgs 
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetArgs(args)
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 	return stdout.String(), err
 }
 

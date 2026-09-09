@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func executeAuditVerifyJSON(t *testing.T, verify func(string) (bool, int, error)) (map[string]any, int, error) {
@@ -31,7 +33,7 @@ func executeAuditVerifyJSON(t *testing.T, verify func(string) (bool, int, error)
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"verify", "--file", "/tmp/audit.jsonl"})
-	err := root.Execute()
+	err := corecmd.ExecuteForTest(root)
 
 	var payload map[string]any
 	if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {

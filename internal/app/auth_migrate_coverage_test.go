@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/spf13/cobra"
 )
@@ -31,20 +32,20 @@ func TestAuthMigrateKeychainRemainingBranches(t *testing.T) {
 	authMigrateTarget = func(*cobra.Command) (string, error) { return "", errors.New("flag") }
 	root, _ := newRoot("text")
 	root.SetArgs([]string{"migrate-keychain", "--dry-run"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--to") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "--to") {
 		t.Fatalf("target flag error = %v", err)
 	}
 	authMigrateTarget = originalTarget
 	root, _ = newRoot("text")
 	root.SetArgs([]string{"migrate-keychain", "--to", "other", "--dry-run"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "file-dek") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "file-dek") {
 		t.Fatalf("unsupported target error = %v", err)
 	}
 
 	migrateKeychainToFileDEK = func(string, bool) (int, error) { return 0, errors.New("backend") }
 	root, _ = newRoot("text")
 	root.SetArgs([]string{"migrate-keychain", "--dry-run"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "backend") {
+	if err := corecmd.ExecuteForTest(root); err == nil || !strings.Contains(err.Error(), "backend") {
 		t.Fatalf("migration backend error = %v", err)
 	}
 	migrateKeychainToFileDEK = func(string, bool) (int, error) { return 3, nil }
@@ -57,7 +58,7 @@ func TestAuthMigrateKeychainRemainingBranches(t *testing.T) {
 	} {
 		root, output := newRoot("text")
 		root.SetArgs(test.args)
-		if err := root.Execute(); err != nil || !strings.Contains(output.String(), test.want) {
+		if err := corecmd.ExecuteForTest(root); err != nil || !strings.Contains(output.String(), test.want) {
 			t.Fatalf("migrate %v = %v, %q", test.args, err, output.String())
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -202,7 +203,7 @@ func TestCrossPlatformCoverageProductCommandExamplesAreExecutableContracts(t *te
 			resetCommandFlags(root)
 			root.SetArgs(invocation)
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-			err := root.ExecuteContext(ctx)
+			err := corecmd.ExecuteContextForTest(root, ctx)
 			cancel()
 			if isCommandSyntaxError(err) {
 				t.Errorf("dws %s %s: %v", root.Name(), strings.Join(invocation, " "), err)
@@ -213,7 +214,7 @@ func TestCrossPlatformCoverageProductCommandExamplesAreExecutableContracts(t *te
 				resetCommandFlags(root)
 				root.SetArgs(invocation)
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-				_ = root.ExecuteContext(ctx)
+				_ = corecmd.ExecuteContextForTest(root, ctx)
 				cancel()
 			}
 			caller.mode = ""
@@ -223,7 +224,7 @@ func TestCrossPlatformCoverageProductCommandExamplesAreExecutableContracts(t *te
 				resetCommandFlags(root)
 				root.SetArgs(malformed)
 				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-				_ = root.ExecuteContext(ctx)
+				_ = corecmd.ExecuteContextForTest(root, ctx)
 				cancel()
 			}
 		}

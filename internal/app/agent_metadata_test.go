@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	outputpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -206,7 +207,7 @@ func TestCrossPlatformCoverageAgentMetadataConfigRegistrationAndMasking(t *testi
 	var output strings.Builder
 	command.SetOut(&output)
 	command.SetArgs([]string{"--category", string(configmeta.CategoryExternal), "--show-values", "--json"})
-	if err := command.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(command); err != nil {
 		t.Fatalf("config list failed: %v", err)
 	}
 	rawOutput := output.String()

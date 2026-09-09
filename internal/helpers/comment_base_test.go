@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -79,7 +80,7 @@ func executeCommentBaseCommand(t *testing.T, caller *docCommentMutationCaller, s
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	return cmd.Execute()
+	return corecmd.ExecuteForTest(cmd)
 }
 
 func executeCommentRepliesCommand(t *testing.T, caller *commentRepliesCaller, surface string, args ...string) (map[string]any, error) {
@@ -117,7 +118,7 @@ func executeCommentRepliesCommand(t *testing.T, caller *commentRepliesCaller, su
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)
-	err := cmd.ExecuteContext(ctx)
+	err := corecmd.ExecuteContextForTest(cmd, ctx)
 	if stdout.Len() == 0 {
 		return nil, err
 	}

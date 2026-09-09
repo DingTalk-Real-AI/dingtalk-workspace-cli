@@ -164,18 +164,18 @@ func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T
 		t.Fatalf("historically public flag alias = %#v, want visible", alias)
 	}
 	cmd.SetArgs([]string{"项目群"})
-	if err := cmd.Execute(); err != nil || executed != "项目群" {
+	if err := corecmd.ExecuteForTest(cmd); err != nil || executed != "项目群" {
 		t.Fatalf("positional execute err=%v value=%q", err, executed)
 	}
 
 	conflict := mount(s)
 	conflict.SetArgs([]string{"项目群", "--query", "另一个群"})
-	if err := conflict.Execute(); err == nil || !strings.Contains(err.Error(), "不能同时提供") {
+	if err := corecmd.ExecuteForTest(conflict); err == nil || !strings.Contains(err.Error(), "不能同时提供") {
 		t.Fatalf("positional/flag conflict err = %v", err)
 	}
 	tooMany := mount(s)
 	tooMany.SetArgs([]string{"one", "two"})
-	if err := tooMany.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(tooMany); err == nil {
 		t.Fatal("multiple positional aliases unexpectedly accepted")
 	}
 
@@ -184,7 +184,7 @@ func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T
 		SinglePositionalAliasFor: "query", Execute: func(*RuntimeContext) error { return nil },
 	})
 	missing.SetArgs([]string{"value"})
-	if err := missing.Execute(); err == nil || !strings.Contains(err.Error(), "is not registered") {
+	if err := corecmd.ExecuteForTest(missing); err == nil || !strings.Contains(err.Error(), "is not registered") {
 		t.Fatalf("missing positional flag err = %v", err)
 	}
 	invalid := mount(Shortcut{
@@ -192,7 +192,7 @@ func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T
 		SinglePositionalAliasFor: "query", Flags: []Flag{{Name: "query", Type: FlagInt}}, Execute: func(*RuntimeContext) error { return nil },
 	})
 	invalid.SetArgs([]string{"not-an-int"})
-	if err := invalid.Execute(); err == nil || !strings.Contains(err.Error(), "无法写入") {
+	if err := corecmd.ExecuteForTest(invalid); err == nil || !strings.Contains(err.Error(), "无法写入") {
 		t.Fatalf("invalid positional value err = %v", err)
 	}
 }
@@ -271,7 +271,7 @@ func TestCrossPlatformCoverageFromShortcutWithoutExecuteFailsClosed(t *testing.T
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(nil)
-	err := cmd.Execute()
+	err := corecmd.ExecuteForTest(cmd)
 	if err == nil || !strings.Contains(err.Error(), "未实现 Execute") {
 		t.Fatalf("missing Execute err = %v, want 未实现 Execute internal error", err)
 	}

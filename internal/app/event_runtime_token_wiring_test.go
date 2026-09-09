@@ -19,6 +19,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
@@ -104,7 +105,7 @@ func TestCrossPlatformCoverageEventConsumeParsesRootRuntimeTokenBeforeAndAfterSu
 				return nil
 			}
 			root.SetArgs(tc.args)
-			if err := root.Execute(); err != nil {
+			if err := corecmd.ExecuteForTest(root); err != nil {
 				t.Fatalf("Execute() error = %v", err)
 			}
 			want := "runtime-" + tc.name
@@ -696,7 +697,7 @@ func TestCrossPlatformCoverageRuntimeTokenBusModeSkipsLocalOAuthIdentity(t *test
 		"--stream-source-id", "runtime-source",
 		"--idle-timeout", "0",
 	})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("event _bus runtime mode error = %v", err)
 	}
 	if resolvedLocal {
