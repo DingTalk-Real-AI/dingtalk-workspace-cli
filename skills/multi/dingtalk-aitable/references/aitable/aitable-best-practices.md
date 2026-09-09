@@ -5,7 +5,7 @@
 | 字段类型 | 可写 | 正确方式 |
 |----------|------|----------|
 | 文本/数字/日期/单选/多选/复选框/URL | ✅ | record create/update |
-| 附件 | ⚠️ | 必须先走 [attachment upload 流程](./aitable-attachment.md) |
+| 附件 | ✅ | 本地文件上传获取 fileToken；在线 URL 可直接写入，见 [附件流程](./aitable-attachment.md) |
 | 创建人/修改人/创建时间/修改时间 | ❌ | 系统字段，只读 |
 | 公式/查找引用 | ❌ | 单元格只读，由系统计算；字段定义能否创建/更新以当前 leaf Schema 为准 |
 | AI 字段 | ❌ | 只读，由 AI 自动计算 |
@@ -28,7 +28,7 @@
 | 分组/去重统计 | `record group-stats` | 不要先拉全量再本地 groupby |
 | 全量导出为文件 | `export data` | 不要 `--all` 拉全量再写文件 |
 | 批量写入 | `record create`（分批 100 条） | 不要一次传超过 100 条 |
-| 附件/图片上传 | `attachment upload` 获取 fileToken → `record create/update` 用 fileToken 写入 | **严禁直接传图片 URL 到附件字段**（服务端同步下载会超时） |
+| 附件/图片上传 | 本地文件用 `+attachment-put`；在线 URL 通过原子 `record create/update` 写入 | URL 转存异步执行，受理回执不代表附件已可下载，需独立验证 |
 | 文件级导入 | `import upload` + `import data` | 不要手动解析 xlsx 再逐条写入 |
 
 ## 4. 创建/修改后回读确认

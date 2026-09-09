@@ -79,11 +79,11 @@
 
 ### date（日期）
 
-**写入**：日期字符串、RFC3339 字符串、或毫秒时间戳
+**写入**：日期字符串、含时区 RFC3339 字符串、或整数毫秒时间戳。含时区字符串和毫秒时间戳按固定 UTC+8 转为分钟精度写入，秒和毫秒部分不保留；时间戳转换后的年份须在 0001–9999。不要按数值大小猜测秒单位。
 ```json
 {"fldDateId": "2026-03-15"}
 {"fldDateId": "2026-03-15 09:00"}
-{"fldDateId": "2026-03-15T09:00+08:00"}
+{"fldDateId": "2026-03-15T09:00:00+08:00"}
 ```
 
 **读取**：RFC3339 字符串（带时区）
@@ -242,14 +242,13 @@
 
 ### attachment（附件）
 
-**写入**：对象数组，**必须使用 `fileToken`**
+**写入**：对象数组，可使用 `fileToken`、可下载在线 URL，或 snapshot 定义的完整附件对象。
 
 ```json
 {"fldAttachId": [{"fileToken": "ft_xxx"}]}
 ```
 
-> ⚠️ **必须先通过 [attachment upload 流程](./aitable-attachment.md) 上传文件获取 `fileToken`，再将 `fileToken` 写入 cells。**
-> ❌ **严禁直接传 `{"url": "https://..."}` 形式写入附件/图片字段** — 服务端会同步下载图片，10 条记录即触发 TIMEOUT_ERROR 超时。
+> 本地文件先通过 [attachment upload 流程](./aitable-attachment.md) 获取 `fileToken`；在线 URL 可直接写入 `[{"url":"https://..."}]`。URL 转存异步执行，写入成功仅表示已受理，应回读并确认附件可用。
 > 写入会**整体覆盖**原附件列表，不是追加。
 
 **读取**：对象数组（含下载链接、文件名、大小）
@@ -340,7 +339,7 @@
 |------|----------|
 | cells key 用字段名称 `"课程名称"` | 用 fieldId `"fldXXX"` |
 | progress 写入 `75` | 写入 `0.75`（范围 0~1） |
-| attachment 直接传文件路径或图片 URL | 必须先 `attachment upload` 获取 fileToken，再用 fileToken 写入（直传 URL 会超时） |
+| attachment 直接传本地文件路径 | 本地文件先上传获得 fileToken；在线 URL 使用 `[{"url":"https://..."}]`，写后验证异步转存结果 |
 | user 字段传用户名字符串 | 传对象数组 `[{"userId":"...", "corpId":"..."}]` |
 | group 字段同时传 `cid` 和 `openConversationId` | 每项只传其中一个，转换由 MCP 负责 |
 | singleSelect 传 option id 字符串 | 传 name 字符串或 `{"id":"...", "name":"..."}` 对象 |

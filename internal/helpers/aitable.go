@@ -3639,7 +3639,7 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   number → 123 或 123.45（也接受字符串 "123"）
   singleSelect → "选项名称"，或 {"id":"opt_xxx","name":"进行中"}；id 为准
   multipleSelect → ["选项名1","选项名2"]，或 [{"id":"opt_a","name":"标签A"},...]
-  date → "2026-03-15" 或 "2026-03-15T09:00+08:00"（RFC3339）；亦支持毫秒时间戳
+  date → "2026-03-15"、"2026-03-15 09:00"、"2026-03-15T09:00:00+08:00" 或整数毫秒时间戳；含时区字符串和毫秒时间戳按 UTC+8 转为分钟精度，秒和毫秒不保留，时间戳转换后的年份须在 0001–9999
   checkbox → true | false
   user → [{"userId":"staff_001","corpId":"dingxxxxxxxx"}]
   department → [{"deptId":"52528700"}]
@@ -3647,7 +3647,7 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   url → {"text":"显示文字","link":"https://..."}；也兼容直接传 URL 字符串
   richText → {"markdown":"**加粗**\n普通文字\n"}
   telephone/email/barcode/idCard → 字符串
-  attachment → 使用 dws aitable +attachment-put 上传文件并写入已有记录；新记录可先创建再上传附件
+  attachment → 本地文件用 dws aitable +attachment-put 上传并写入已有记录；也可传 [{"fileToken":"ft_xxx"}] 或 [{"url":"https://..."}]；URL 转存异步执行，需回读确认附件可用
   unidirectionalLink/bidirectionalLink → {"linkedRecordIds":["recXXX","recYYY"]}
   creator/lastModifier/createdTime/lastModifiedTime → 系统自动回填，不建议手动写入
 

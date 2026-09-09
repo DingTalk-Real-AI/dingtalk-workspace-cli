@@ -69,7 +69,7 @@ dws aitable +record-delete --base-id <B> --table-id <T> --record-ids <R1,R2>
 | 日期 | 按字段配置要求的时间值；不凭展示文本猜格式 |
 | URL | 按当前字段 Schema 要求的对象或字符串 |
 | 人员、关联记录 | 使用真实 userId/recordId，不用姓名代替 |
-| 附件 | 先用 `+attachment-put` 获得 AITable 附件 token，再写字段 |
+| 附件 | 本地文件用 `+attachment-put` 完成上传和记录写入；在线 URL 通过原子 `record create/update` 传 `[{"url":"https://..."}]`，独立回读验证异步转存结果 |
 
 公式、查找引用、创建人/时间、修改人/时间等只读字段不得写入。字段类型不明时只读取目标字段配置一次。
 

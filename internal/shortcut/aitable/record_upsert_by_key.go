@@ -347,8 +347,9 @@ func verifyRecordCells(record map[string]any, expected map[string]any, fieldType
 
 // recordCellValueEqual accepts scalar projections only for proven field types.
 // Comparison is intentionally asymmetric: a scalar write may read
-// back as {id,name}, but an object write must never be verified by a scalar
-// response that dropped the requested ID or other identity fields. Notable may
+// back as {id,name}; an ID object may gain a current name. An object write
+// must never be verified by a scalar response that dropped the requested ID
+// or other identity fields. Notable may
 // omit or return null for an empty multi-select, so that projection is accepted
 // only after get_fields proves the field type.
 func recordCellValueEqual(got, want any, fieldType string) bool {
@@ -365,9 +366,11 @@ func recordCellValueEqual(got, want any, fieldType string) bool {
 		return actualOK && expectedOK && actual.Cmp(expected) == 0
 	case "date":
 		return recordDateValueEqual(got, want)
+	case "url":
+		return recordURLValueEqual(got, want)
 	}
 	if strings.EqualFold(fieldType, "singleSelect") {
-		return selectionObjectMatchesScalar(got, want)
+		return selectionObjectMatchesValue(got, want)
 	}
 	if !isMultiSelectFieldType(fieldType) {
 		return false
@@ -381,7 +384,7 @@ func recordCellValueEqual(got, want any, fieldType string) bool {
 	for _, wantItem := range wantList {
 		matched := false
 		for index, gotItem := range gotList {
-			if used[index] || (!reflect.DeepEqual(gotItem, wantItem) && !selectionObjectMatchesScalar(gotItem, wantItem)) {
+			if used[index] || (!reflect.DeepEqual(gotItem, wantItem) && !selectionObjectMatchesValue(gotItem, wantItem)) {
 				continue
 			}
 			used[index] = true
@@ -430,26 +433,6 @@ func recordNumericValue(value any) (*big.Rat, bool) {
 	return new(big.Rat).SetString(text)
 }
 
-// Date-only writes read back at local midnight. Preserve the returned calendar
-// date; timestamp writes must match the full instant, not merely the same day.
-func recordDateValueEqual(got, want any) bool {
-	actual, actualOK := got.(string)
-	expected, expectedOK := want.(string)
-	if !actualOK || !expectedOK {
-		return false
-	}
-	readTime, err := time.Parse(time.RFC3339Nano, actual)
-	if err != nil {
-		return false
-	}
-	if _, err := time.Parse("2006-01-02", expected); err == nil {
-		return readTime.Format("2006-01-02") == expected && readTime.Hour() == 0 &&
-			readTime.Minute() == 0 && readTime.Second() == 0 && readTime.Nanosecond() == 0
-	}
-	writeTime, err := time.Parse(time.RFC3339Nano, expected)
-	return err == nil && readTime.Equal(writeTime)
-}
-
 func recordCellsMayNeedFieldTypes(record map[string]any, expected map[string]any) bool {
 	actual, ok := record["cells"].(map[string]any)
 	if !ok {
@@ -487,12 +470,17 @@ func scalarProjectionShapes(got, want any) bool {
 		return numeric
 	}
 	_, err := time.Parse(time.RFC3339Nano, actual)
-	_, text := want.(string)
-	return err == nil && text
+	_, validDate := recordDateWriteTime(want)
+	return err == nil && validDate
 }
 
 func selectionProjectionShapes(got, want any) bool {
-	if _, gotObject := got.(map[string]any); gotObject {
+	if object, gotObject := got.(map[string]any); gotObject {
+		if expected, wantObject := want.(map[string]any); wantObject {
+			_, gotID := object["id"].(string)
+			_, wantID := expected["id"].(string)
+			return gotID && wantID
+		}
 		_, wantScalar := want.(string)
 		return wantScalar
 	}
@@ -567,6 +555,40 @@ func recordFieldTypesFromFields(fields []map[string]any) map[string]string {
 		}
 	}
 	return fieldTypes
+}
+
+// selectionObjectMatchesValue accepts the server's current option name only
+// when the requested stable ID survives. Unrecognized requested keys and scalar
+// responses cannot prove an object write.
+func selectionObjectMatchesValue(got, want any) bool {
+	if expected, ok := want.(map[string]any); ok {
+		actual, ok := got.(map[string]any)
+		if !ok {
+			return false
+		}
+		id, ok := expected["id"].(string)
+		if !ok || strings.TrimSpace(id) == "" || actual["id"] != id {
+			return false
+		}
+		for key := range expected {
+			if key != "id" && key != "name" {
+				return false
+			}
+		}
+		return true
+	}
+	return selectionObjectMatchesScalar(got, want)
+}
+
+// recordURLValueEqual recognizes only the documented string-to-{text,link}
+// conversion, after get_fields has established that this is a URL field.
+func recordURLValueEqual(got, want any) bool {
+	expected, ok := want.(string)
+	if !ok {
+		return false
+	}
+	actual, ok := got.(map[string]any)
+	return ok && actual["text"] == expected && actual["link"] == expected
 }
 
 func selectionObjectMatchesScalar(objectValue, scalarValue any) bool {

@@ -5,7 +5,7 @@
 | 字段类型 | 可写 | 正确方式 |
 |----------|------|----------|
 | 文本/数字/日期/单选/多选/复选框/URL | ✅ | record create/update |
-| 附件 | ⚠️ | 必须先走 [attachment upload 流程](./aitable-attachment.md) |
+| 附件 | ✅ | 本地文件上传获取 fileToken；在线 URL 可直接写入，见 [附件流程](./aitable-attachment.md) |
 | 创建人/修改人/创建时间/修改时间 | ❌ | 系统字段，只读 |
 | 公式/查找引用 | ❌ | 单元格只读，由系统计算；字段定义能否创建/更新以当前 leaf Schema 为准 |
 | AI 字段 | ❌ | 只读，由 AI 自动计算 |
