@@ -114,11 +114,12 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	}
 	conversationID := schemaContractMap(leaf["parameters"])["conversation-id"]
 	if required, _ := conversationID["required"].(bool); required {
-		t.Fatal("public --conversation-id must stay optional when hidden siblings still satisfy the declared exactly_one group")
+		t.Fatal("public --conversation-id must stay optional because --message-id can resolve the conversation")
 	}
-	wantMessagesConstraints := map[string]any{
-		"require_one_of": [][]string{{"conversation-id"}},
-	}
+	// The explicit conversation is optional because the shortcut can resolve it
+	// from --message-id. Once the hidden compatibility spellings are removed
+	// from the public mutually-exclusive group, no public relationship remains.
+	var wantMessagesConstraints any
 	if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantMessagesConstraints) {
 		t.Fatalf("shortcut leaf constraints = %#v, want %#v", got, wantMessagesConstraints)
 	}
