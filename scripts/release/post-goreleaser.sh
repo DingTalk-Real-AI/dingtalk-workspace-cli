@@ -13,8 +13,6 @@ RELEASE_BASE_URL="${DWS_RELEASE_BASE_URL:-}"
 APPLE_CERTIFICATE_P12="${DWS_APPLE_CERTIFICATE_P12:-}"
 APPLE_CERTIFICATE_PASSWORD_FILE="${DWS_APPLE_CERTIFICATE_PASSWORD_FILE:-}"
 REQUIRE_DEVELOPER_ID_SIGNING="${DWS_REQUIRE_DEVELOPER_ID_SIGNING:-false}"
-SCHEMA_IDENTITY_PROOF="${DWS_SCHEMA_IDENTITY_PROOF:-}"
-RELEASE_COMMIT="${DWS_RELEASE_COMMIT:-}"
 
 export LANG=C
 export LC_ALL=C
@@ -328,59 +326,6 @@ attach_runtime_payload() {
   (cd "$ROOT" && go run ./scripts/build/runtime-payload inject "$binary" "$runtime_root")
 }
 
-seal_schema_binary() {
-  binary="$1"
-  target_os="$2"
-  target_arch="$3"
-  case "$target_os/$target_arch" in
-    darwin/arm64|linux/amd64) ;;
-    *) return 0 ;;
-  esac
-  [ -n "$SCHEMA_IDENTITY_PROOF" ] || return 0
-  [ -f "$SCHEMA_IDENTITY_PROOF" ] && [ ! -L "$SCHEMA_IDENTITY_PROOF" ] \
-    || err "DWS_SCHEMA_IDENTITY_PROOF must name a regular file"
-  printf '%s\n' "$RELEASE_COMMIT" | grep -Eq '^[0-9a-f]{40}$' \
-    || err "DWS_RELEASE_COMMIT must be a full lowercase commit when sealing Schema"
-  [ "$(git -C "$ROOT" rev-parse HEAD)" = "$RELEASE_COMMIT" ] \
-    || err "DWS_RELEASE_COMMIT must equal the checked-out release source"
-  build_time="$(sh "$ROOT/scripts/build/release-build-time.sh" "$RELEASE_COMMIT")"
-  ldflags="$(python3 "$ROOT/scripts/build/schema_package_contract.py" ldflags \
-    --scope core --identity "$SCHEMA_IDENTITY_PROOF" --version "v$version" \
-    --commit "$RELEASE_COMMIT" --build-time "$build_time")" \
-    || err "could not create the single-binary Schema build contract"
-  case "$target_os/$target_arch" in
-    darwin/arm64)
-      cc='oa64-clang'
-      cxx='oa64-clang++'
-      ;;
-    linux/amd64)
-      cc='/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17'
-      cxx='/opt/dws-zig/zig c++ -target x86_64-linux-gnu.2.17'
-      ;;
-  esac
-  # Rebuild with the same CGO cross toolchains as GoReleaser so the sealed
-  # binary keeps the SafeChat backend. verify-release-artifacts.sh requires
-  # CGO_ENABLED=1 and dep safechat-go-sdk. Write under $ROOT/dist so the
-  # cross container, which only mounts the repository root, can emit the
-  # result; $binary may live in an unmounted staging directory.
-  mkdir -p "$ROOT/dist"
-  sealed="$ROOT/dist/.schema-seal-$target_os-$target_arch"
-  rm -f "$sealed"
-  (cd "$ROOT" && CGO_ENABLED=1 GOOS="$target_os" GOARCH="$target_arch" \
-    CC="$cc" CXX="$cxx" \
-    GOTOOLCHAIN=go1.25.9 GOFLAGS='' GOEXPERIMENT='' GOWORK=off GOAMD64=v1 GOARM64=v8.0 \
-    "$ROOT/scripts/release/run-goreleaser-cross.sh" --exec \
-      go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$sealed" ./cmd) \
-    || err "could not seal Schema identity into $target_os/$target_arch"
-  [ -f "$sealed" ] && [ ! -L "$sealed" ] \
-    || err "sealed Schema binary was not written for $target_os/$target_arch"
-  schema_build_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build_id"])' "$SCHEMA_IDENTITY_PROOF")" \
-    || err "could not read Schema build ID"
-  LC_ALL=C grep -aFq "$schema_build_id" "$sealed" \
-    || err "single dws binary lacks the sealed Schema identity"
-  mv "$sealed" "$binary"
-}
-
 prepare_runtime_archives() {
   "$ROOT/scripts/policy/check-runtime-payload.sh" --allow-unsupported-tools
   work="$(mktemp -d)"
@@ -406,7 +351,6 @@ prepare_runtime_archives() {
       *) binary="$stage/dws" ;;
     esac
     [ -f "$binary" ] || err "dws binary not found inside $name after extraction"
-    seal_schema_binary "$binary" "$target_os" "$target_arch"
     "$ROOT/scripts/build/prepare-runtime-payload.sh" "$target_os" "$target_arch" "$stage"
     if [ "$target_os" != darwin ]; then
       attach_runtime_payload "$binary" "$stage/.dws-runtime/20260908"

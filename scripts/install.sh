@@ -1623,37 +1623,6 @@ install_binary() {
   esac
 }
 
-# ── Build shared schema cache ────────────────────────────────────────────────
-# The schema cache is version-tied (identity-pinned to the binary), so it is the
-# same for every user. Build it once at the system shared location so every user
-# reuses it and never re-pays the ~1.5s cold assembly on their first command.
-# Only builds when the installer can write to the system location (root install);
-# otherwise it silently skips and the runtime falls back to the per-user cache.
-# The cache is made world-readable because integrity rests on the binary-pinned
-# SHA-256 (a tampered file fails the digest), not on file ownership.
-build_shared_schema_cache() {
-  os="$(detect_os)"
-  case "$os" in
-    linux) shared_dir="/var/cache/dws" ;;
-    darwin) shared_dir="/Library/Caches/dws" ;;
-    *) return 0 ;;
-  esac
-  # Skip silently when we cannot write to the system location (non-root install).
-  if ! mkdir -p "$shared_dir" 2>/dev/null; then
-    return 0
-  fi
-  say "🔧 Building shared schema cache (version-tied, shared across users)..."
-  # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
-  # and populate it. Any schema command triggers the full cache build.
-  if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1; then
-    # World-readable: integrity rests on the pinned SHA-256, not ownership.
-    chmod -R a+rX "$shared_dir" 2>/dev/null || true
-    say "✅ Shared schema cache built: ${shared_dir}"
-  else
-    say "⚠️  Shared schema cache build skipped; first command will build it per-user."
-  fi
-}
-
 # ── Install Skills ───────────────────────────────────────────────────────────
 
 install_skills() {
@@ -1778,13 +1747,6 @@ main() {
   else
     install_binary
     install_skills
-  fi
-
-  # Build the version-tied shared schema cache once so every user reuses it and
-  # never re-pays the cold assembly on their first command. Skipped for
-  # skills-only installs (no binary) and non-root installs (no system write).
-  if [ "$SKILLS_ONLY" != "1" ]; then
-    build_shared_schema_cache
   fi
 
   # Every transaction of this run has finished, so old stamped archives can no

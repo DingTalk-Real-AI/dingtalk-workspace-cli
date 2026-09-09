@@ -281,7 +281,7 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 
 本地实测（M3 Pro，进程内、每次 op 新建 runtime 模拟冷进程）：单叶 schema 命令从 5.74 ms / 6.07 MB / 79.7k allocs 降到 **3.31 ms / 1.98 MB / 19.7k allocs**；真实二进制相对 `--help` 的额外 user CPU：schema compact 从 +14.64 ms 降到 **+1.42 ms**，leaf-help 从 v4 的 +1.19 ms（v5 内联 blob 版一度回到 +2.51 ms）降到 **+0.96 ms**；Meta 阶段基准 1.58 → 1.28 ms（分配 1.64 MB → 1.16 MB）。
 
-第三轮 CI（v5 分片版）显示 linux 上 leaf-help（+1.81 ms）与 schema（+0.94 ms）仍落后 Lark——两者共同的剩余成本是 Meta 读取（286 KB 读 + SHA + 解码）。因此再加一层：**payload 文件开头放置自描述的全局索引区**（4 字节长度 + `SchemaPayloadIndex`：locator 表 + 各产品分片描述符），该区域由二进制链接期直接钉住（新增 payload/payload-index 共 4 个 -X 身份字段），认证链变为 二进制 → 索引区 → 分片头 → 叶子 blob。分片头的命令行同时携带完整 identity（内嵌 `CommandMetaEntry`），`ResolveMeta` 与 schema 叶子快路径从此只读 payload 文件，**完全不读 Meta**。真实二进制相对 `--help`：schema-compact 的额外 wall 降到 **+0.2 ms**，leaf-help 甚至比 root help 更快（渲染内容更少）。Meta 文件保持原样（overview、registry 描述符与 entry 分片继续服务 `--all`、分组/产品查询与写入方校验）。
+第三轮 CI（v5 分片版）显示 linux 上 leaf-help（+1.81 ms）与 schema（+0.94 ms）仍落后 Lark——两者共同的剩余成本是 Meta 读取（286 KB 读 + SHA + 解码）。当时曾用链接期钉住 payload/payload-index 身份字段缩短认证链。**发运模型已改为不在编译期生产 Schema identity**；该认证链仅保留给测试注入 identity 的 cache 路径，生产 schema 走 live declaration assembly。
 
 ### 3.8 投机预热：把缓存 I/O 移出关键路径（2026-09-08）
 
@@ -298,7 +298,7 @@ v4（payload 文件）落地后 CI（head `ddc84f1c`）仅剩 schema 负载落�
 | 场景 | 树 | 必须保持的行为 |
 |---|---|---|
 | root help / version | 完整 runtime tree | 同一 public flags、服务/utility 列表、locale、startup diagnostics |
-| Schema hit/miss/repair | 完整 runtime tree | Cobra parsing、shortcut/plugin diagnostics、wire parity、identity fail-closed |
+| Schema hit/miss/repair | 完整 runtime tree | Cobra parsing、shortcut/plugin diagnostics、wire parity；生产走 live assembly |
 | leaf help / dry-run / mock | 完整 runtime tree | aliases、required/groups、Safety、无多余 RPC、统一输出 |
 | config / event utility | 完整 runtime tree | shared caller、profile、PreParse 和 cleanup 不缺失 |
 | completion | 完整 runtime tree | 候选、描述、directive、alias 与 shell script contract |

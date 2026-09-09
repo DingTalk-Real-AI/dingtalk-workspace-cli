@@ -117,10 +117,8 @@ func systemSchemaCacheBase() string {
 func openPlatform(edition string, counters *Counters, noCreate bool) (backend, error) {
 	digest := sha256.Sum256([]byte(edition))
 	editionHex := hex.EncodeToString(digest[:])
-	// Explicit override: the installer sets DWS_SCHEMA_CACHE_DIR to the system
-	// shared location and builds the cache there. Treat it as shared (relaxed
-	// ownership; integrity rests on the pinned SHA-256) with the caller's
-	// create flag so the installer can populate it.
+	// Explicit override for tests and local experiments. Production does not
+	// populate a sealed identity cache at install time.
 	if override := os.Getenv("DWS_SCHEMA_CACHE_DIR"); override != "" {
 		dirfd, path, err := openCacheDirectory(override, editionHex, counters, platformIO, noCreate, true)
 		if err != nil {

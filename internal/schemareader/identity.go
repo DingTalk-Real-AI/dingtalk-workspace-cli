@@ -18,8 +18,8 @@ import (
 
 const CatalogSnapshotVersion = 1
 
-// ErrInvalidIdentity is the stable boundary classification for a linker-pinned
-// identity that is present but incomplete or malformed.
+// ErrInvalidIdentity is the stable boundary classification for an injected
+// cache identity that is present but incomplete or malformed.
 var ErrInvalidIdentity = errors.New("invalid_schema_identity")
 
 type Identity struct {
@@ -38,7 +38,7 @@ type Identity struct {
 	PayloadIndexSHA256 [sha256.Size]byte
 }
 
-// RawIdentity contains only linker-pinned values, never file or environment data.
+// RawIdentity contains injected identity fields, never file or environment data.
 type RawIdentity struct {
 	Edition, SourceSHA256, SurfaceSHA256, BuildID                        string
 	MetaLength, MetaSHA256, RegistryLength, RegistrySHA256               string
@@ -46,8 +46,8 @@ type RawIdentity struct {
 }
 
 // ParseOptionalIdentity distinguishes an intentionally disabled build (every
-// linker field is empty) from a partially injected or malformed release. A
-// broken sealed identity must never be treated as an ordinary cache miss.
+// field is empty) from a partially injected or malformed identity. A
+// broken identity must never be treated as an ordinary cache miss.
 func ParseOptionalIdentity(raw RawIdentity) (*Identity, error) {
 	values := []string{
 		raw.Edition, raw.SourceSHA256, raw.SurfaceSHA256, raw.BuildID,

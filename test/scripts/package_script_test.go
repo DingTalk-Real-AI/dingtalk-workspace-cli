@@ -2440,26 +2440,14 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 		{
 			name:      "release contract",
 			start:     "  release-contract:\n",
-			end:       "\n  schema-release-native-proof:\n",
-			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}`,
-		},
-		{
-			name:      "native Schema proof",
-			start:     "  schema-release-native-proof:\n",
-			end:       "\n  compare-schema-release-proofs:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
-		},
-		{
-			name:      "Schema proof comparison",
-			start:     "  compare-schema-release-proofs:\n",
 			end:       "\n  release:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.schema-release-native-proof.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && (github.event_name == 'push' || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'recover_release') || (needs.dispatch-contract.result == 'success' && needs.dispatch-contract.outputs.mode == 'create_release' && needs.governance-preflight.result == 'success' && needs.release-plan.result == 'success' && needs.seal-release.result == 'success')) }}`,
 		},
 		{
 			name:      "build",
 			start:     "  release:\n",
 			end:       "\n  verify-darwin-signatures:\n",
-			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.compare-schema-release-proofs.result == 'success' }}`,
+			condition: `if: ${{ !cancelled() && needs.release-contract.result == 'success' }}`,
 		},
 		{
 			name:      "Darwin verification",
@@ -2497,13 +2485,32 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 	}
 	release := releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n")
 	for _, required := range []string{
-		"needs: [release-contract, compare-schema-release-proofs]",
-		"name: schema-release-identity-verified",
-		"DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}",
-		"DWS_SCHEMA_IDENTITY_PROOF: ${{ runner.temp }}/schema-release-identity/identity.json",
+		"needs: [release-contract]",
+		"DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}",
 	} {
 		if !strings.Contains(release, required) {
-			t.Errorf("build must fail closed on native Schema proof via %q", required)
+			t.Errorf("build is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"schema-release-native-proof",
+		"compare-schema-release-proofs",
+		"schema-release-identity",
+		"DWS_SCHEMA_IDENTITY_PROOF",
+		"generate-schema-cache-identity",
+	} {
+		if strings.Contains(release, forbidden) {
+			t.Errorf("build must not produce compile-time Schema identity via %q", forbidden)
+		}
+	}
+	for _, forbidden := range []string{
+		"schema-release-native-proof",
+		"compare-schema-release-proofs",
+		"generate-schema-cache-identity",
+		"DWS_SCHEMA_IDENTITY_PROOF",
+	} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("release workflow must not generate Schema identity before shipping: %q", forbidden)
 		}
 	}
 }
@@ -2691,7 +2698,7 @@ func TestPostGoreleaserSupportsDeveloperIDSigning(t *testing.T) {
 	}
 }
 
-func TestPostGoreleaserSealsSchemaIntoSingleBinary(t *testing.T) {
+func TestPostGoreleaserDoesNotEmbedSchemaIdentity(t *testing.T) {
 	t.Parallel()
 
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
@@ -2703,27 +2710,18 @@ func TestPostGoreleaserSealsSchemaIntoSingleBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := string(data)
-	for _, required := range []string{
-		`SCHEMA_IDENTITY_PROOF="${DWS_SCHEMA_IDENTITY_PROOF:-}"`,
-		`[ "$(git -C "$ROOT" rev-parse HEAD)" = "$RELEASE_COMMIT" ]`,
-		`--scope core --identity "$SCHEMA_IDENTITY_PROOF" --version "v$version"`,
-		`CGO_ENABLED=1 GOOS="$target_os" GOARCH="$target_arch"`,
-		`cc='oa64-clang'`,
-		`cc='/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17'`,
-		`"$ROOT/scripts/release/run-goreleaser-cross.sh" --exec`,
-		`go build -buildmode=pie -trimpath -ldflags "$ldflags" -o "$sealed" ./cmd`,
-		`grep -aFq "$schema_build_id" "$sealed"`,
+	for _, forbidden := range []string{
+		"SCHEMA_IDENTITY_PROOF",
+		"DWS_SCHEMA_IDENTITY_PROOF",
+		"seal_schema_binary",
+		"schema_package_contract.py",
+		"schemaCacheEdition",
+		"dws-core",
+		"internal/launcher",
+		"package-manifest.json",
 	} {
-		if !strings.Contains(script, required) {
-			t.Errorf("single-binary Schema sealing is missing %q", required)
-		}
-	}
-	if strings.Contains(script, "CGO_ENABLED=0") {
-		t.Fatal("Schema seal rebuild must not drop the SafeChat CGO backend")
-	}
-	for _, forbidden := range []string{"dws-core", "internal/launcher", "package-manifest.json"} {
 		if strings.Contains(script, forbidden) {
-			t.Errorf("single-binary packager still references %q", forbidden)
+			t.Errorf("post-goreleaser.sh must not produce compile-time Schema identity via %q", forbidden)
 		}
 	}
 }
@@ -3461,11 +3459,11 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	}
 	postGoreleaser := read("scripts/release/post-goreleaser.sh")
 	if strings.Contains(postGoreleaser, "CGO_ENABLED=0") {
-		t.Fatal("Schema seal rebuild must not produce CGO-disabled stub binaries")
+		t.Fatal("post-goreleaser must not produce CGO-disabled stub binaries")
 	}
 	crossWrapper := read("scripts/release/run-goreleaser-cross.sh")
 	if !strings.Contains(crossWrapper, `[ "${1:-}" = "--exec" ]`) {
-		t.Fatal("cross-release wrapper must accept --exec so Schema seal can reuse CGO toolchains")
+		t.Fatal("cross-release wrapper must accept --exec so CGO rebuilds can reuse pinned toolchains")
 	}
 
 	windowsCompat := read("third_party/safechat-go-sdk/msvcrt_compat_windows.c")

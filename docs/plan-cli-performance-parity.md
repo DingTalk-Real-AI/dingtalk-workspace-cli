@@ -9,10 +9,10 @@
 - [x] 删除 Schema 的 Cobra 前置执行路径；cache 接入正常 schema handler。
 - [x] 明确 telemetry no-wait 与末条分析事件可能丢失的取舍。
 - [x] 完整树 B/op 和 allocs/op 达到本地父提交门槛。
-- [x] candidate 和正式发布共用 Schema identity linker contract。
+- [x] 撤回 compile-time Schema identity 生产与发布封印；发运走 live assembly。
 - [x] 固定 PR-base main `6f71222b9b07c760cdb5f376b24dab9155e62094`。
 - [ ] 完成 app/helpers/shortcut/corecmd/cli、packaging 与全仓测试。
-- [ ] 完成 Darwin/arm64、Linux/amd64 race 与发布身份证明。
+- [ ] 完成 Darwin/arm64、Linux/amd64 race。
 - [ ] 完成固定 main 的 default/opt-out 端到端对照（结论写入 RFC 附件；dump 不入库）。
 - [ ] 完成 Schema、help、业务命令、整体 RSS 与 Lark/GWS 五维对照（结论写入 RFC 附件；dump 不入库）。
 - [ ] 验证 root help RSS 相对父提交不回退，且与 Lark 的差值满足 RFC。

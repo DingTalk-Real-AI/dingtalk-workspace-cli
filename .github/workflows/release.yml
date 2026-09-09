@@ -921,128 +921,10 @@ jobs:
             printf 'from_beta_commit=%s\n' "$from_beta_commit"
           } >> "$GITHUB_OUTPUT"
 
-  schema-release-native-proof:
-    name: Schema release proof (${{ matrix.target }})
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' }}
-    needs: [release-contract]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            target: linux-amd64
-          - runner: macos-latest
-            target: darwin-arm64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    env:
-      GOTOOLCHAIN: go1.25.9
-      GOWORK: 'off'
-      GOFLAGS: ''
-      GOEXPERIMENT: ''
-      CGO_ENABLED: '0'
-      DO_NOT_TRACK: '1'
-      RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
-      EXPECTED_TARGET: ${{ matrix.target }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-contract.outputs.release_commit }}
-          persist-credentials: false
-      - uses: actions/setup-go@v5
-        with:
-          go-version: 1.25.9
-          cache: false
-      - name: Generate deterministic native identity twice
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(go env GOHOSTOS)-$(go env GOHOSTARCH)" = "$EXPECTED_TARGET"
-          test "$(go env GOVERSION)" = go1.25.9
-          mkdir -p "$RUNNER_TEMP/schema-release-proof"
-          ./scripts/build/generate-schema-cache-identity.sh -edition open \
-            -output "$RUNNER_TEMP/schema-release-proof/identity.json"
-          ./scripts/build/generate-schema-cache-identity.sh -edition open \
-            -output "$RUNNER_TEMP/schema-release-proof/identity-repeat.json"
-          cmp "$RUNNER_TEMP/schema-release-proof/identity.json" \
-            "$RUNNER_TEMP/schema-release-proof/identity-repeat.json"
-          IDENTITY_PATH="$RUNNER_TEMP/schema-release-proof/identity.json" \
-          python3 - <<'PY'
-          import hashlib, json, os, pathlib, platform
-          identity = pathlib.Path(os.environ['IDENTITY_PATH']).read_bytes()
-          record = {
-              'source_commit': os.environ['RELEASE_COMMIT'],
-              'target': os.environ['EXPECTED_TARGET'],
-              'platform': platform.platform(),
-              'go_version': 'go1.25.9',
-              'cgo_enabled': os.environ['CGO_ENABLED'],
-              'goflags': os.environ['GOFLAGS'],
-              'goexperiment': os.environ['GOEXPERIMENT'],
-              'gowork': os.environ['GOWORK'],
-              'identity_sha256': hashlib.sha256(identity).hexdigest(),
-          }
-          pathlib.Path(os.environ['RUNNER_TEMP'], 'schema-release-proof', 'native-proof.json').write_text(
-              json.dumps(record, sort_keys=True) + '\n')
-          PY
-          test -z "$(git status --porcelain)"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: schema-release-identity-${{ matrix.target }}
-          path: ${{ runner.temp }}/schema-release-proof/
-          if-no-files-found: error
-          retention-days: 14
-
-  compare-schema-release-proofs:
-    name: Compare Schema release proofs
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.schema-release-native-proof.result == 'success' }}
-    needs: [release-contract, schema-release-native-proof]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: schema-release-identity-*
-          path: ${{ runner.temp }}/schema-release-inputs
-      - name: Require byte-identical target proofs
-        env:
-          RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
-        run: |
-          python3 - <<'PY'
-          import hashlib, json, os, pathlib
-          root = pathlib.Path(os.environ['RUNNER_TEMP'], 'schema-release-inputs')
-          proofs = {}
-          for directory in root.iterdir():
-              record = json.loads((directory / 'native-proof.json').read_text())
-              identity = (directory / 'identity.json').read_bytes()
-              if record['source_commit'] != os.environ['RELEASE_COMMIT'] or record['go_version'] != 'go1.25.9':
-                  raise SystemExit('native Schema proof has wrong source/toolchain')
-              if {key: record[key] for key in ('cgo_enabled', 'goflags', 'goexperiment', 'gowork')} != {
-                      'cgo_enabled': '0', 'goflags': '', 'goexperiment': '', 'gowork': 'off'}:
-                  raise SystemExit('native Schema proof has wrong build environment')
-              if hashlib.sha256(identity).hexdigest() != record['identity_sha256']:
-                  raise SystemExit('native Schema proof identity digest mismatch')
-              proofs[record['target']] = identity
-          if set(proofs) != {'darwin-arm64', 'linux-amd64'} or len(set(proofs.values())) != 1:
-              raise SystemExit('enabled target Schema identities are missing or differ')
-          output = pathlib.Path(os.environ['RUNNER_TEMP'], 'schema-release-verified')
-          output.mkdir()
-          (output / 'identity.json').write_bytes(proofs['linux-amd64'])
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: schema-release-identity-verified
-          path: ${{ runner.temp }}/schema-release-verified/identity.json
-          if-no-files-found: error
-          retention-days: 1
-
   release:
     name: Build signed release artifacts
-    if: ${{ !cancelled() && needs.release-contract.result == 'success' && needs.compare-schema-release-proofs.result == 'success' }}
-    needs: [release-contract, compare-schema-release-proofs]
+    if: ${{ !cancelled() && needs.release-contract.result == 'success' }}
+    needs: [release-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -1096,12 +978,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Download verified native Schema identity
-        uses: actions/download-artifact@v4
-        with:
-          name: schema-release-identity-verified
-          path: ${{ runner.temp }}/schema-release-identity
 
       - name: Install rcodesign (sign darwin binaries from Linux)
         run: |
@@ -1187,8 +1063,6 @@ jobs:
         env:
           DWS_PACKAGE_VERSION: ${{ needs.release-contract.outputs.release_version }}
           DWS_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.release-contract.outputs.release_version }}
-          DWS_RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}
-          DWS_SCHEMA_IDENTITY_PROOF: ${{ runner.temp }}/schema-release-identity/identity.json
           DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
 
       - name: Remove Apple Developer ID certificate

@@ -14,98 +14,28 @@
 package app
 
 import (
-	"os"
-	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemareader"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
 
 var registerSchemaRuntimeDeliveryOnce sync.Once
-
-// Release builds inject all fields together. Empty is the safe development
-// default: malformed or partial values leave persistent Schema delivery off.
-var (
-	schemaCacheEdition            string
-	schemaCacheSourceSHA256       string
-	schemaCacheSurfaceSHA256      string
-	schemaCacheBuildID            string
-	schemaCacheMetaLength         string
-	schemaCacheMetaSHA256         string
-	schemaCacheRegistryLength     string
-	schemaCacheRegistrySHA256     string
-	schemaCachePayloadLength      string
-	schemaCachePayloadSHA256      string
-	schemaCachePayloadIndexLength string
-	schemaCachePayloadIndexSHA256 string
-	schemaCacheGOOS               = runtime.GOOS
-	schemaCacheGOARCH             = runtime.GOARCH
-)
-
-const schemaCacheDisableEnv = "DWS_SCHEMA_CACHE_DISABLE"
 
 // registerSchemaRuntimeDelivery installs the ResolveSchemaBuild root factory
 // for production Catalog / ResolveMeta delivery. Called from NewRootCommand
 // (and optionally cmd entrypoints). Intentionally NOT an init() side effect:
 // importing app from package cli_test must not flip package-cli tests onto
 // the assembly path.
+//
+// Schema identity is not produced at compile or release time. Production
+// binaries keep the persistent cache registration empty, so schema handlers
+// assemble from live declarations. Tests may still inject an authenticated
+// cache via RegisterSchemaCacheOptions.
 func registerSchemaRuntimeDelivery() {
 	registerSchemaRuntimeDeliveryOnce.Do(func() {
 		cli.RegisterSchemaSourceRoot(func() *cobra.Command {
 			return NewSchemaSourceRootCommand()
 		})
-		options, ok := productionSchemaCacheOptions()
-		if !ok {
-			_ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{})
-			return
-		}
-		_ = cli.RegisterSchemaCacheOptions(options)
-		// Overlap the authenticated payload probe with the remaining tree
-		// build and argument parsing; the read is speculative and never
-		// creates cache directories.
-		cli.PrewarmSchemaCache()
 	})
-}
-
-func productionSchemaCacheOptions() (cli.SchemaCacheOptions, bool) {
-	if !((schemaCacheGOOS == "darwin" && schemaCacheGOARCH == "arm64") || (schemaCacheGOOS == "linux" && schemaCacheGOARCH == "amd64")) {
-		return cli.SchemaCacheOptions{}, false
-	}
-
-	identity, err := schemareader.ParseOptionalIdentity(productionSchemaCacheRawIdentity())
-	if err != nil || identity == nil {
-		return cli.SchemaCacheOptions{}, false
-	}
-	editionName := identity.Edition
-
-	return cli.SchemaCacheOptions{
-		Enabled: true, Identity: *identity, GOOS: schemaCacheGOOS, GOARCH: schemaCacheGOARCH,
-		RuntimeEligible: func() bool {
-			if strings.TrimSpace(os.Getenv(schemaCacheDisableEnv)) != "" {
-				return false
-			}
-			hooks := edition.Get()
-			return hooks != nil && hooks.Name == editionName && hooks.RegisterExtraCommands == nil
-		},
-	}, true
-}
-
-func productionSchemaCacheRawIdentity() schemareader.RawIdentity {
-	return schemareader.RawIdentity{
-		Edition: schemaCacheEdition, SourceSHA256: schemaCacheSourceSHA256,
-		SurfaceSHA256: schemaCacheSurfaceSHA256, BuildID: schemaCacheBuildID,
-		MetaLength: schemaCacheMetaLength, MetaSHA256: schemaCacheMetaSHA256,
-		RegistryLength: schemaCacheRegistryLength, RegistrySHA256: schemaCacheRegistrySHA256,
-		PayloadLength: schemaCachePayloadLength, PayloadSHA256: schemaCachePayloadSHA256,
-		PayloadIndexLength: schemaCachePayloadIndexLength, PayloadIndexSHA256: schemaCachePayloadIndexSHA256,
-	}
-}
-
-func productionSchemaCacheIdentityError() error {
-	_, err := schemareader.ParseOptionalIdentity(productionSchemaCacheRawIdentity())
-	return err
 }

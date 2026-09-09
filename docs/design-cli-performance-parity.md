@@ -11,19 +11,19 @@
 ```mermaid
 flowchart LR
     W[可选 npm wrapper] --> D[单一 dws 进程]
-    D --> I[identity / metadata preflight]
+    D --> I[metadata preflight]
     I --> T[构造完整 Cobra runtime tree]
     T --> C[Cobra parse / Find]
     C --> P[统一 PreParse / validation / auth / Safety]
     P --> H{normal handler}
-    H -->|schema| S[verified cache 或 declarations rebuild]
+    H -->|schema| S[live declarations assembly]
     H -->|utility / business| B[既有 handler / transport]
     S --> O[统一 output / cleanup]
     B --> O
     O --> Q[telemetry enqueue，不等待网络]
 ```
 
-root help 直接遍历 `T`；version、completion、Schema、config 和业务命令都使用同一棵树。Schema cache 是 `schema` handler 的 typed 数据源，不是进程级 argv fast path。
+root help 直接遍历 `T`；version、completion、Schema、config 和业务命令都使用同一棵树。Schema 查询由正常 schema handler 从 live declarations 组装；测试注入的认证 cache 不是发运路径。
 
 ## 完整树优化
 
@@ -38,7 +38,7 @@ root help 直接遍历 `T`；version、completion、Schema、config 和业务命
 ## 正确性与发布边界
 
 - 公开 command、flags、aliases、help、validation、Safety、错误分类和输出不变。
-- embedded identity 缺失走 normal handler 的 live build；非法 identity 在制品预检 fail-closed 125；用户 cache 损坏可修复。
-- candidate 和正式 release 使用相同 identity linker contract，发布物仍是一个 `dws`。
+- Schema identity 不在编译期或发布期生产；schema handler 走 live declaration assembly。测试仍可注入认证 cache，但不作为发运模型。
+- 正式 release 仍是一个 `dws`；不重新引入 launcher/双二进制。
 - telemetry 明确接受最后一条分析事件可能丢失；业务 cleanup 继续同步。
 - Lark 用于验证“完整树也可足够快”的结构选择；GWS 只用于观察更小映像/init 的上限。

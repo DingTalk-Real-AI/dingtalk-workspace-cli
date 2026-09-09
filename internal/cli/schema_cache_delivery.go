@@ -30,8 +30,9 @@ import (
 
 const defaultSchemaCacheLockTimeout = 250 * time.Millisecond
 
-// SchemaCacheIdentity is the complete binary-pinned identity of one cache
-// generation. No value is learned from an on-disk envelope.
+// SchemaCacheIdentity is the complete injected identity of one cache
+// generation. No value is learned from an on-disk envelope. Production does
+// not embed this at compile time.
 type SchemaCacheIdentity = schemareader.Identity
 
 // SchemaCacheOptions configures production cache delivery. Enabled options are
