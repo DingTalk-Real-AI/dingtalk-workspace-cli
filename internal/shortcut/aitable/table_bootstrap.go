@@ -195,11 +195,7 @@ func createAndVerifyTableStructure(rt *shortcut.RuntimeContext, baseID, tableNam
 			created.Warnings = append(created.Warnings, fmt.Sprintf("create_fields offset %d returned an error; final read-back decides success: %v", offset, fieldErr))
 		}
 	}
-	detail, err := rt.CallMCPData(serverMain, "get_tables", map[string]any{"baseId": baseID, "tableIds": []string{created.TableID}})
-	if err != nil || !deepContainsString(detail, created.TableID) {
-		if err == nil {
-			err = fmt.Errorf("get_tables does not identify created tableId %s", created.TableID)
-		}
+	if err := verifyCreatedTableEventually(rt, baseID, created.TableID); err != nil {
 		return created, err
 	}
 	fieldsData, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": created.TableID})

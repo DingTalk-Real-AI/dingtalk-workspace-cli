@@ -1256,8 +1256,8 @@ var ViewGet = shortcut.Shortcut{
 	},
 }
 
-// viewGetProject reshapes the raw get_views response into a clean
-// {viewId, viewName, viewType} list — clean output projection. Both
+// viewGetProject preserves the full get_views configuration while normalizing
+// identity aliases. Both
 // the list container and the per-item field names are probed defensively across
 // candidate keys. Only an explicit array can establish a successful result.
 func viewGetProject(data map[string]any) ([]map[string]any, error) {
@@ -1271,7 +1271,10 @@ func viewGetProject(data map[string]any) ([]map[string]any, error) {
 		if !ok {
 			return nil, fmt.Errorf("get_views response item %d must be an object, got %T", index, item)
 		}
-		row := map[string]any{}
+		row := make(map[string]any, len(m)+3)
+		for key, value := range m {
+			row[key] = value
+		}
 		if v, ok := viewGetFirst(m, "viewId", "view_id", "id"); ok {
 			row["viewId"] = v
 		}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging"
@@ -1434,6 +1435,9 @@ func isAitableRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
+	if retryable, explicit := aitableExplicitRetryable(err); explicit {
+		return retryable
+	}
 	msg := strings.ToLower(err.Error())
 
 	// 网络瞬态错误
@@ -1453,11 +1457,6 @@ func isAitableRetryableError(err error) bool {
 	// 服务端 5xx（网关/内部错误）
 	if strings.Contains(msg, "system_error") || strings.Contains(msg, "internal_error") ||
 		strings.Contains(msg, "service_unavailable") || strings.Contains(msg, "gateway_timeout") {
-		return true
-	}
-
-	// MCP 框架层返回的 retryable 标记
-	if strings.Contains(msg, "retryable") && strings.Contains(msg, "true") {
 		return true
 	}
 
@@ -3648,7 +3647,7 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   url → {"text":"显示文字","link":"https://..."}；也兼容直接传 URL 字符串
   richText → {"markdown":"**加粗**\n普通文字\n"}
   telephone/email/barcode/idCard → 字符串
-  attachment → 推荐通过 prepare_attachment_upload + append_uploaded_file_to_record 写入
+  attachment → 使用 dws aitable +attachment-put 上传文件并写入已有记录；新记录可先创建再上传附件
   unidirectionalLink/bidirectionalLink → {"linkedRecordIds":["recXXX","recYYY"]}
   creator/lastModifier/createdTime/lastModifiedTime → 系统自动回填，不建议手动写入
 
@@ -7935,10 +7934,8 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 				"chartId":     chartID,
 				"confirm":     true,
 			}
-			if v, _ := cmd.Flags().GetString("reason"); v != "" {
-				toolArgs["reason"] = v
-			}
-			return callAitableTool("delete_chart", toolArgs)
+			ctx := audit.WithLocalReason(cmd.Context(), mustGetFlag(cmd, "reason"))
+			return callAitableToolContext(ctx, "delete_chart", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(chartDeleteCmd, LeafSpec{
@@ -9657,7 +9654,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	chartDeleteCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartDeleteCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartDeleteCmd.Flags().String("chart-id", "", "目标 Chart ID (必填)")
-	chartDeleteCmd.Flags().String("reason", "", "删除原因")
+	chartDeleteCmd.Flags().String("reason", "", "本地命令审计备注，不发送给 MCP")
 	chartShareGetCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartShareGetCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartShareGetCmd.Flags().String("chart-id", "", "目标 Chart ID (必填)")
@@ -9883,7 +9880,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			Interface:   aitableMCPInterface("get_datasource_fields"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键）。",
-				UseWhen:      []string{"创建或更新数据源前需要查看可同步字段以决定 field-ids 时"},
+				UseWhen:      []string{"创建或更新数据源前需要查看来源的字段结构时（当前仅支持全量同步）"},
 				AvoidWhen:    []string{"列出可用来源用 datasource list-sources"},
 				Examples:     []string{`dws aitable datasource get-fields --base-id <BASE_ID> --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`},
 			},
@@ -9898,6 +9895,9 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		Short:   "创建数据源表并触发首次同步",
 		Example: `  dws aitable datasource create --base-id BASE_ID --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("field-ids") {
+				return apperrors.NewValidation("--field-ids 不受支持：当前数据源仅支持全量同步，请移除此参数")
+			}
 			if err := validateRequiredFlags(cmd, "datasource-type", "source-config"); err != nil {
 				return err
 			}
@@ -9914,9 +9914,6 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				"datasourceType": mustGetFlag(cmd, "datasource-type"),
 				"sourceConfig":   mustGetFlag(cmd, "source-config"),
 				"auto":           auto,
-			}
-			if v, _ := cmd.Flags().GetString("field-ids"); v != "" {
-				toolArgs["fieldIds"] = parseCSVValues(v)
 			}
 			if v, _ := cmd.Flags().GetString("auto-sync-setting"); v != "" {
 				if err := validateAutoSyncSetting(v); err != nil {
@@ -9950,7 +9947,6 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				{Name: "datasource-type", Property: "datasourceType", Required: boolPtr(true)},
 				{Name: "source-config", Property: "sourceConfig", Required: boolPtr(true)},
 				{Name: "auto", Property: "auto"},
-				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
 				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
 			},
 		},
@@ -9959,15 +9955,18 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	datasourceCreateCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
 	datasourceCreateCmd.Flags().String("source-config", "", "源配置 JSON 字符串，须从 list-sources 原样透传 processCode/name/iconUrl/url，并设置 dataType 及对应时间字段 (必填)")
 	datasourceCreateCmd.Flags().Bool("auto", false, "是否开启自动同步，默认 false；创建新数据源表时始终下发给下游")
-	datasourceCreateCmd.Flags().String("field-ids", "", "需要同步的字段 ID 列表，逗号分隔；不传时同步全部字段")
+	datasourceCreateCmd.Flags().String("field-ids", "", "不受支持：当前仅支持全量同步，请勿传入")
 	datasourceCreateCmd.Flags().String("auto-sync-setting", "", "自动同步频率配置 JSON 字符串，仅在 --auto=true 时生效。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
 
 	datasourceUpdateCmd := &cobra.Command{
 		Use:     "update",
 		Short:   "更新数据源表同步配置并触发同步",
-		Example: `  dws aitable datasource update --base-id BASE_ID --table-id TABLE_ID --auto`,
+		Example: `  dws aitable datasource update --base-id BASE_ID --table-id TABLE_ID --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}' --auto`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "table-id"); err != nil {
+			if cmd.Flags().Changed("field-ids") {
+				return apperrors.NewValidation("--field-ids 不受支持：当前数据源仅支持全量同步，请移除此参数")
+			}
+			if err := validateRequiredFlags(cmd, "table-id", "source-config"); err != nil {
 				return err
 			}
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
@@ -9988,13 +9987,6 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				auto, _ := cmd.Flags().GetBool("auto")
 				toolArgs["auto"] = auto
 			}
-			if cmd.Flags().Changed("field-ids") {
-				v := mustGetFlag(cmd, "field-ids")
-				if v == "" {
-					return fmt.Errorf("--field-ids 显式提供时不能为空，如需保持默认请勿传入")
-				}
-				toolArgs["fieldIds"] = parseCSVValues(v)
-			}
 			if cmd.Flags().Changed("auto-sync-setting") {
 				v := mustGetFlag(cmd, "auto-sync-setting")
 				if v == "" {
@@ -10004,9 +9996,6 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 					return err
 				}
 				toolArgs["autoSyncSetting"] = v
-			}
-			if !cmd.Flags().Changed("source-config") && !cmd.Flags().Changed("auto") && !cmd.Flags().Changed("field-ids") && !cmd.Flags().Changed("auto-sync-setting") {
-				return fmt.Errorf("至少需要一个配置变更：--source-config、--auto、--field-ids 或 --auto-sync-setting；仅触发同步请使用 datasource sync")
 			}
 			return callAitableTool("update_datasource_config", toolArgs)
 		},
@@ -10025,28 +10014,26 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			Interface:   aitableMCPInterface("update_datasource_config"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新已有数据源表的同步配置并触发一次同步。",
-				UseWhen:      []string{"需要修改已有数据源表的配置（更换模板、调整字段、开关自动同步）时"},
+				UseWhen:      []string{"需要修改已有数据源表的完整源配置或自动同步设置时"},
 				AvoidWhen:    []string{"创建新数据源表用 datasource create；仅触发同步用 datasource sync"},
 				Examples: []string{
-					"dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --auto",
 					`dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --source-config '{"processCode":"PROC-YYYY","name":"出差申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
 				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
 				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
-				{Name: "source-config", Property: "sourceConfig"},
+				{Name: "source-config", Property: "sourceConfig", Required: boolPtr(true)},
 				{Name: "auto", Property: "auto"},
-				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
 				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
 			},
 		},
 	})
 	datasourceUpdateCmd.Flags().String("base-id", "", "Base ID (必填)")
 	datasourceUpdateCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
-	datasourceUpdateCmd.Flags().String("source-config", "", "可选。新的源配置 JSON 字符串，不传时保持原配置；传入时整体覆盖，须含 processCode、name、iconUrl、url、dataType 及对应时间字段")
+	datasourceUpdateCmd.Flags().String("source-config", "", "必填。完整源配置 JSON 字符串，整体覆盖，须含 processCode、name、iconUrl、url、dataType 及对应时间字段")
 	datasourceUpdateCmd.Flags().Bool("auto", false, "可选。是否开启自动同步；仅显式设置时下发给下游，省略时保持原设置")
-	datasourceUpdateCmd.Flags().String("field-ids", "", "需要同步的字段 ID 列表，逗号分隔；不传时保持现有配置（创建时默认为全部字段）")
+	datasourceUpdateCmd.Flags().String("field-ids", "", "不受支持：当前仅支持全量同步，请勿传入")
 	datasourceUpdateCmd.Flags().String("auto-sync-setting", "", "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
 
 	datasourceSyncCmd := &cobra.Command{

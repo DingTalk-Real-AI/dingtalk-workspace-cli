@@ -264,11 +264,8 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("create_fields offset %d returned an error; checking final field state: %v", offset, fieldErr))
 			}
 		}
-		detail, verifyErr := rt.CallMCPData(serverMain, "get_tables", map[string]any{"baseId": baseID, "tableIds": []string{tableID}})
-		if verifyErr != nil || !deepContainsString(detail, tableID) {
-			if verifyErr == nil {
-				verifyErr = fmt.Errorf("get_tables does not identify created tableId %s", tableID)
-			}
+		verifyErr := verifyCreatedTableEventually(rt, baseID, tableID)
+		if verifyErr != nil {
 			result.Status = "partial_success"
 			result.CompletedCount = index
 			result.FailedCount = len(tables) - index

@@ -531,7 +531,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
-		emitAudit(auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
+		emitAudit(ctx, auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
 
 	// Check whether this product belongs to an HTTP plugin. Every accepted

@@ -7,7 +7,7 @@
 | 命令 | 用途 | 读/写 |
 |------|------|-------|
 | `+datasource-list-sources` | 列出可用数据源条目，获取 processCode/name/iconUrl/url | 读 |
-| `+datasource-get-fields` | 获取可同步字段列表，用于决定 field-ids | 读 |
+| `+datasource-get-fields` | 查看来源字段结构；当前仅支持全量同步 | 读 |
 | `+datasource-create` | 创建数据源表并触发首次全量同步 | 写 |
 | `+datasource-update` | 更新已有数据源表的同步配置 | 写 |
 | `+datasource-sync` | 手动触发一次同步（最多 5 张表） | 写 |
@@ -32,7 +32,7 @@ Step 0.5  (OA 审批) 选择模板  list-sources 返回的 approvals 数组通�
                               不一定需要选择步骤。
 
 Step 1    (可选) 获取可同步字段  +datasource-get-fields --base-id <B> --datasource-type OA --source-config '<JSON>'
-                              → 决定需要同步哪些字段，得到 field-ids
+                              → 了解来源字段结构；创建和更新均为全量同步，不传 --field-ids
 
 Step 2    创建数据源           +datasource-create --base-id <B> --datasource-type OA --source-config '<JSON>'
                               → sourceConfig 中的 processCode/name/iconUrl/url 来自 Step 0.5 选中的模板
@@ -152,7 +152,7 @@ dws aitable +datasource-get-fields --base-id BASE_ID --datasource-type OA \
 | `--datasource-type` | 是 | 数据源类型，当前仅支持 `OA` |
 | `--source-config` | 是 | 源配置 JSON 字符串，结构同 create 的 --source-config |
 
-返回字段列表（字段 ID、名称、类型等），用于在 create/update 中指定 `--field-ids`。
+返回字段列表（字段 ID、名称、类型等），用于了解来源结构；当前仅支持全量同步。
 
 ### +datasource-create — 创建数据源表
 
@@ -175,15 +175,17 @@ dws aitable +datasource-create --base-id BASE_ID --datasource-type OA \
 | `--source-config` | 是 | 源配置 JSON 字符串（见上方字段协议） |
 | `--auto` | 否 | 是否开启自动同步，默认 false；无论是否传入，CLI 都会把该字段下发给下游 |
 | `--auto-sync-setting` | 否 | 自动同步频率配置 JSON 字符串，仅 --auto=true 时生效 |
-| `--field-ids` | 否 | 需要同步的字段 ID 列表，不传时同步全部字段 |
+| `--field-ids` | 否 | 不受支持；当前仅支持全量同步，传入时在本地拒绝 |
 
 返回新建数据源表 tableId 和同步任务 taskId。创建后自动触发一次全量同步，需用 `+datasource-sync-status` 查最终结果。
 
 ### +datasource-update — 更新数据源配置
 
 ```bash
-# 仅开启自动同步
-dws aitable +datasource-update --base-id BASE_ID --table-id TABLE_ID --auto --format json
+# 开启自动同步时也必须提供完整源配置
+dws aitable +datasource-update --base-id BASE_ID --table-id TABLE_ID \
+  --source-config '{"processCode":"PROC-xxxx","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"...","url":"..."}' \
+  --auto --format json
 
 # 更新源配置
 dws aitable +datasource-update --base-id BASE_ID --table-id TABLE_ID \
@@ -195,10 +197,10 @@ dws aitable +datasource-update --base-id BASE_ID --table-id TABLE_ID \
 |------|------|------|
 | `--base-id` | 是 | 目标 Base ID |
 | `--table-id` | 是 | 已有数据源表 ID（sync=true） |
-| `--source-config` | 否 | 新的源配置 JSON 字符串，不传时保持原配置；传入时整体覆盖 |
+| `--source-config` | 是 | 完整源配置 JSON 字符串，整体覆盖；可先 get-config 获取当前配置 |
 | `--auto` | 否 | 是否开启自动同步，不传时保持原设置 |
 | `--auto-sync-setting` | 否 | 自动同步频率配置 JSON 字符串，仅 --auto=true 时生效；不传时保持原频率配置 |
-| `--field-ids` | 否 | 需要同步的字段 ID 列表，不传时保持现有字段配置 |
+| `--field-ids` | 否 | 不受支持；当前仅支持全量同步，传入时在本地拒绝 |
 
 更新后自动触发一次全量同步，返回新 taskId。
 

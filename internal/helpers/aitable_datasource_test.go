@@ -267,22 +267,20 @@ func TestAitableDatasourceCreateWithAuto(t *testing.T) {
 	}
 }
 
-func TestAitableDatasourceCreateWithFieldIDsAndAutoSyncSetting(t *testing.T) {
+func TestAitableDatasourceCreateWithAutoSyncSetting(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "create",
 		"--base-id", "BASE123", "--datasource-type", "OA",
 		"--source-config", `{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}`,
 		"--auto",
-		"--field-ids", "fldAAA,fldBBB",
 		"--auto-sync-setting", `{"syncType":"scheduled","scheduleType":"daily","timeValue":"09:00"}`)
 	if err != nil {
-		t.Fatalf("create with field-ids and auto-sync-setting should succeed: %v", err)
+		t.Fatalf("create with auto-sync-setting should succeed: %v", err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != "create_datasource" {
 		t.Fatalf("unexpected calls: %#v", caller.calls)
 	}
-	fieldIDs, ok := caller.calls[0].args["fieldIds"].([]string)
-	if !ok || len(fieldIDs) != 2 || fieldIDs[0] != "fldAAA" || fieldIDs[1] != "fldBBB" {
-		t.Fatalf("fieldIds = %v, want [fldAAA fldBBB]", caller.calls[0].args["fieldIds"])
+	if _, exists := caller.calls[0].args["fieldIds"]; exists {
+		t.Fatal("fieldIds must not be sent")
 	}
 	if caller.calls[0].args["autoSyncSetting"] != `{"syncType":"scheduled","scheduleType":"daily","timeValue":"09:00"}` {
 		t.Fatalf("autoSyncSetting not passed as raw string: %v", caller.calls[0].args["autoSyncSetting"])
@@ -330,7 +328,7 @@ func TestAitableDatasourceUpdateRejectsNonObjectSourceConfig(t *testing.T) {
 func TestAitableDatasourceUpdateRejectsNoChanges(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "update",
 		"--base-id", "BASE123", "--table-id", "TBL456")
-	if err == nil || !strings.Contains(err.Error(), "至少需要一个配置变更") {
+	if err == nil || !strings.Contains(err.Error(), "source-config") {
 		t.Fatalf("error = %v, want at least one config change required", err)
 	}
 	if len(caller.calls) != 0 {
@@ -339,16 +337,9 @@ func TestAitableDatasourceUpdateRejectsNoChanges(t *testing.T) {
 }
 
 func TestAitableDatasourceUpdateWithAutoOnly(t *testing.T) {
-	caller, err := runAitableDatasourceCommand(t, "update",
-		"--base-id", "BASE123", "--table-id", "TBL456", "--auto")
-	if err != nil {
-		t.Fatalf("update with --auto only should succeed: %v", err)
-	}
-	if len(caller.calls) != 1 || caller.calls[0].tool != "update_datasource_config" {
-		t.Fatalf("unexpected calls: %#v", caller.calls)
-	}
-	if v, ok := caller.calls[0].args["auto"]; !ok || v != true {
-		t.Fatalf("auto = %v, want true", v)
+	caller, err := runAitableDatasourceCommand(t, "update", "--base-id", "BASE123", "--table-id", "TBL456", "--auto")
+	if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.calls) != 0 {
+		t.Fatalf("missing sourceConfig: err=%v calls=%v", err, caller.calls)
 	}
 }
 
@@ -369,7 +360,7 @@ func TestAitableDatasourceUpdateWithSourceConfig(t *testing.T) {
 
 func TestAitableDatasourceUpdateWithAutoFalse(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "update",
-		"--base-id", "BASE123", "--table-id", "TBL456", "--auto=false")
+		"--base-id", "BASE123", "--table-id", "TBL456", "--source-config", `{}`, "--auto=false")
 	if err != nil {
 		t.Fatalf("update with --auto=false should succeed: %v", err)
 	}
@@ -378,20 +369,18 @@ func TestAitableDatasourceUpdateWithAutoFalse(t *testing.T) {
 	}
 }
 
-func TestAitableDatasourceUpdateWithFieldIDsAndAutoSyncSetting(t *testing.T) {
+func TestAitableDatasourceUpdateWithAutoSyncSetting(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "update",
-		"--base-id", "BASE123", "--table-id", "TBL456",
-		"--field-ids", "fldAAA,fldBBB",
+		"--base-id", "BASE123", "--table-id", "TBL456", "--source-config", `{}`,
 		"--auto-sync-setting", `{"syncType":"scheduled","scheduleType":"daily","timeValue":"09:00"}`)
 	if err != nil {
-		t.Fatalf("update with field-ids and auto-sync-setting should succeed: %v", err)
+		t.Fatalf("update with auto-sync-setting should succeed: %v", err)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != "update_datasource_config" {
 		t.Fatalf("unexpected calls: %#v", caller.calls)
 	}
-	fieldIDs, ok := caller.calls[0].args["fieldIds"].([]string)
-	if !ok || len(fieldIDs) != 2 || fieldIDs[0] != "fldAAA" || fieldIDs[1] != "fldBBB" {
-		t.Fatalf("fieldIds = %v, want [fldAAA fldBBB]", caller.calls[0].args["fieldIds"])
+	if _, exists := caller.calls[0].args["fieldIds"]; exists {
+		t.Fatal("fieldIds must not be sent")
 	}
 	if caller.calls[0].args["autoSyncSetting"] != `{"syncType":"scheduled","scheduleType":"daily","timeValue":"09:00"}` {
 		t.Fatalf("autoSyncSetting not passed as raw string: %v", caller.calls[0].args["autoSyncSetting"])
@@ -400,7 +389,7 @@ func TestAitableDatasourceUpdateWithFieldIDsAndAutoSyncSetting(t *testing.T) {
 
 func TestAitableDatasourceUpdateRejectsInvalidAutoSyncSetting(t *testing.T) {
 	_, err := runAitableDatasourceCommand(t, "update",
-		"--base-id", "BASE123", "--table-id", "TBL456",
+		"--base-id", "BASE123", "--table-id", "TBL456", "--source-config", `{}`,
 		"--auto-sync-setting", `not-json`)
 	if err == nil || !strings.Contains(err.Error(), "auto-sync-setting") {
 		t.Fatalf("error = %v, want auto-sync-setting validation error", err)
@@ -411,7 +400,7 @@ func TestAitableDatasourceUpdateRejectsNonObjectAutoSyncSetting(t *testing.T) {
 	cases := []string{`[]`, `"text"`, `1`, `true`, `null`}
 	for _, raw := range cases {
 		_, err := runAitableDatasourceCommand(t, "update",
-			"--base-id", "BASE123", "--table-id", "TBL456",
+			"--base-id", "BASE123", "--table-id", "TBL456", "--source-config", `{}`,
 			"--auto-sync-setting", raw)
 		if err == nil || !strings.Contains(err.Error(), "auto-sync-setting") {
 			t.Fatalf("auto-sync-setting %q: error = %v, want auto-sync-setting validation error", raw, err)
@@ -421,7 +410,7 @@ func TestAitableDatasourceUpdateRejectsNonObjectAutoSyncSetting(t *testing.T) {
 
 func TestAitableDatasourceUpdateRejectsEmptyExplicitFieldIDs(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "update",
-		"--base-id", "BASE123", "--table-id", "TBL456",
+		"--base-id", "BASE123", "--table-id", "TBL456", "--source-config", `{}`,
 		"--field-ids", "")
 	if err == nil || !strings.Contains(err.Error(), "field-ids") {
 		t.Fatalf("error = %v, want field-ids empty error", err)
@@ -433,7 +422,7 @@ func TestAitableDatasourceUpdateRejectsEmptyExplicitFieldIDs(t *testing.T) {
 
 func TestAitableDatasourceUpdateRejectsEmptyExplicitAutoSyncSetting(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "update",
-		"--base-id", "BASE123", "--table-id", "TBL456",
+		"--base-id", "BASE123", "--table-id", "TBL456", "--source-config", `{}`,
 		"--auto-sync-setting", "")
 	if err == nil || !strings.Contains(err.Error(), "auto-sync-setting") {
 		t.Fatalf("error = %v, want auto-sync-setting empty error", err)
