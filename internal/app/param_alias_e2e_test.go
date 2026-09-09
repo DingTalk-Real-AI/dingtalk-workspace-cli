@@ -113,6 +113,8 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return string(encoded)
 	case "get_current_user_profile":
 		return `{"success":true,"result":{"userId":"user-1","name":"Fixture Current User"}}`
+	case "list_conversations_by_category":
+		return `{"success":true,"result":{"list":[],"hasMore":false}}`
 	case "query_records":
 		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":

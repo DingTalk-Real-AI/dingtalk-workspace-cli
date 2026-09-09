@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
 )
@@ -47,5 +49,58 @@ func TestCrossPlatformCoverageChatDiscoveryDefensiveBranches(t *testing.T) {
 	renderChatHelpCommandSection(&output, "Empty:", nil)
 	if output.Len() != 0 {
 		t.Fatalf("empty Help command section rendered output: %q", output.String())
+	}
+}
+
+func TestCrossPlatformCoverageFilteredIMSearchUsesResourceAndAnswerShapeBoundary(t *testing.T) {
+	_ = NewRootCommand()
+	contains := func(values []string, needle string) bool {
+		for _, value := range values {
+			if strings.Contains(value, needle) {
+				return true
+			}
+		}
+		return false
+	}
+
+	aisearch, ok := contract.LookupProductDecl("aisearch")
+	if !ok || !contains(aisearch.Selection.AvoidWhen, "答案形态") || !contains(aisearch.Selection.AvoidWhen, "逐条消息记录") {
+		t.Fatalf("aisearch ProductDecl does not defer message-record outcomes to Chat: %#v", aisearch.Selection)
+	}
+	chat, ok := contract.LookupProductDecl("chat")
+	if !ok || !contains(chat.Selection.UseWhen, "资源范围仅为 IM") || !contains(chat.Selection.UseWhen, "可枚举消息记录") {
+		t.Fatalf("chat ProductDecl does not own structured IM records: %#v", chat.Selection)
+	}
+
+	for _, path := range []string{"aisearch enterprise", "aisearch behavior"} {
+		meta, ok := cli.ResolveMeta(path)
+		if !ok || !contains(meta.Selection.AvoidWhen, "chat +search-msg") || !contains(meta.Selection.AvoidWhen, "消息") {
+			t.Errorf("%s final selection does not defer structured IM records: %#v", path, meta.Selection)
+		}
+	}
+	search, ok := cli.ResolveMeta("chat +search-msg")
+	if !ok || !contains(search.Selection.UseWhen, "资源范围仅为 IM") || !contains(search.Selection.UseWhen, "结构化谓词") {
+		t.Fatalf("chat +search-msg final selection does not encode the resource/answer/predicate decision: %#v", search.Selection)
+	}
+}
+
+func TestCrossPlatformCoverageCategorySingleResponseCapabilityContract(t *testing.T) {
+	root := NewRootCommand()
+	atomic, remaining, err := root.Find([]string{"chat", "category", "list-conversations"})
+	if err != nil || atomic == nil || len(remaining) != 0 || !atomic.Runnable() {
+		t.Fatalf("category atomic command is not runnable: command=%v remaining=%v err=%v", atomic, remaining, err)
+	}
+	for _, name := range []string{"limit", "page-size", "cursor", "page-token"} {
+		if flag := atomic.LocalNonPersistentFlags().Lookup(name); flag != nil {
+			t.Errorf("category atomic unexpectedly exposes continuation flag --%s", name)
+		}
+	}
+
+	meta, ok := cli.ResolveMeta("chat +category-list-conversations")
+	useWhen := strings.Join(meta.Selection.UseWhen, "\n")
+	if !ok ||
+		!strings.Contains(useWhen, "没有续页参数") ||
+		!strings.Contains(useWhen, "分页信号") {
+		t.Fatalf("category Shortcut selection does not publish the capability boundary: %#v", meta.Selection)
 	}
 }

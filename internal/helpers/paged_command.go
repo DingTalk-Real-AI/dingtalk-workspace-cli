@@ -33,17 +33,18 @@ const (
 )
 
 type PagedMCPCommandConfig struct {
-	ServerID        string
-	ToolName        string
-	ItemPath        string
-	CursorPath      string
-	HasMorePath     string
-	CursorArg       string
-	CursorKind      PagedCursorKind
-	AggregationMode PagedAggregationMode
-	BuildArgs       func(*cobra.Command) (map[string]any, error)
-	Fallback        func(map[string]any) error
-	ProjectResult   func(map[string]any) map[string]any
+	ServerID         string
+	ToolName         string
+	ItemPath         string
+	ItemIdentityPath string
+	CursorPath       string
+	HasMorePath      string
+	CursorArg        string
+	CursorKind       PagedCursorKind
+	AggregationMode  PagedAggregationMode
+	BuildArgs        func(*cobra.Command) (map[string]any, error)
+	Fallback         func(map[string]any) error
+	ProjectResult    func(map[string]any) map[string]any
 }
 
 type pagedCommandOptions struct {
@@ -169,6 +170,7 @@ func runPagedMCPCommand(cmd *cobra.Command, cfg PagedMCPCommandConfig, opts page
 			return writePagedCommandResult(envelope, cfg, items, pagingMetadata{
 				Truncated:           true,
 				HasMore:             true,
+				RequestSatisfied:    true,
 				LastCursor:          pageCursor,
 				Pages:               page,
 				Total:               items.Total(),
@@ -178,20 +180,22 @@ func runPagedMCPCommand(cmd *cobra.Command, cfg PagedMCPCommandConfig, opts page
 		lastCursor = nextCursor
 		if opts.maxItems > 0 && items.Total() == opts.maxItems && hasMore {
 			return writePagedCommandResult(envelope, cfg, items, pagingMetadata{
-				Truncated:  true,
-				HasMore:    true,
-				LastCursor: lastCursor,
-				Pages:      page,
-				Total:      items.Total(),
+				Truncated:        true,
+				HasMore:          true,
+				RequestSatisfied: true,
+				LastCursor:       lastCursor,
+				Pages:            page,
+				Total:            items.Total(),
 			})
 		}
 		if !hasMore {
 			return writePagedCommandResult(envelope, cfg, items, pagingMetadata{
-				Truncated:  false,
-				HasMore:    false,
-				LastCursor: lastCursor,
-				Pages:      page,
-				Total:      items.Total(),
+				Truncated:        false,
+				HasMore:          false,
+				RequestSatisfied: true,
+				LastCursor:       lastCursor,
+				Pages:            page,
+				Total:            items.Total(),
 			})
 		}
 		nextKey := cursorValueKey(nextCursor, cfg.CursorKind)
@@ -256,6 +260,7 @@ func parsePagedCommandPage(text string, cfg PagedMCPCommandConfig) (map[string]a
 type pagingMetadata struct {
 	Truncated           bool
 	HasMore             bool
+	RequestSatisfied    bool
 	LastCursor          any
 	Pages               int
 	Total               int
@@ -296,11 +301,13 @@ func writePagedCommandResult(envelope map[string]any, cfg PagedMCPCommandConfig,
 	_ = setJSONPath(envelope, cfg.HasMorePath, meta.HasMore)
 	_ = setJSONPath(envelope, cfg.CursorPath, meta.LastCursor)
 	paging := map[string]any{
-		"truncated":  meta.Truncated,
-		"hasMore":    meta.HasMore,
-		"lastCursor": meta.LastCursor,
-		"pages":      meta.Pages,
-		"total":      meta.Total,
+		"truncated":        meta.Truncated,
+		"hasMore":          meta.HasMore,
+		"sourceExhausted":  !meta.HasMore,
+		"requestSatisfied": meta.RequestSatisfied && !meta.Partial,
+		"lastCursor":       meta.LastCursor,
+		"pages":            meta.Pages,
+		"total":            meta.Total,
 	}
 	if meta.Partial {
 		paging["partial"] = true
@@ -331,22 +338,38 @@ func sleepPagedCommandDelay(ctx context.Context, delay time.Duration) error {
 }
 
 type pagedCollection struct {
-	mode              PagedAggregationMode
-	items             []any
-	conversationIndex map[string]int
-	total             int
+	mode               PagedAggregationMode
+	itemIdentityPath   string
+	items              []any
+	seenItemIdentities map[string]bool
+	conversationIndex  map[string]int
+	total              int
 }
 
 func newPagedCollection(cfg PagedMCPCommandConfig) *pagedCollection {
 	return &pagedCollection{
-		mode:              cfg.AggregationMode,
-		conversationIndex: map[string]int{},
+		mode:               cfg.AggregationMode,
+		itemIdentityPath:   strings.TrimSpace(cfg.ItemIdentityPath),
+		seenItemIdentities: map[string]bool{},
+		conversationIndex:  map[string]int{},
 	}
 }
 
 func (c *pagedCollection) Add(items []any) error {
 	if c.mode != PagedAggregationConversationMessages {
-		c.items = append(c.items, items...)
+		for _, item := range items {
+			if c.itemIdentityPath != "" {
+				identity, err := pagedItemIdentity(item, c.itemIdentityPath)
+				if err != nil {
+					return err
+				}
+				if c.seenItemIdentities[identity] {
+					continue
+				}
+				c.seenItemIdentities[identity] = true
+			}
+			c.items = append(c.items, item)
+		}
 		c.total = len(c.items)
 		return nil
 	}
@@ -356,6 +379,22 @@ func (c *pagedCollection) Add(items []any) error {
 		}
 	}
 	return nil
+}
+
+func pagedItemIdentity(item any, path string) (string, error) {
+	object, ok := item.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("paged response item must be object when identity path %s is configured", path)
+	}
+	value, ok := getJSONPath(object, path)
+	if !ok {
+		return "", fmt.Errorf("paged response item missing identity path %s", path)
+	}
+	identity := strings.TrimSpace(fmt.Sprint(value))
+	if identity == "" || identity == "<nil>" {
+		return "", fmt.Errorf("paged response item identity path %s must be non-empty", path)
+	}
+	return identity, nil
 }
 
 func (c *pagedCollection) Values() []any {
