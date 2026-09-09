@@ -12,11 +12,11 @@
 - [x] candidate 和正式发布共用 Schema identity linker contract。
 - [x] 固定 PR-base main `6f71222b9b07c760cdb5f376b24dab9155e62094`。
 - [ ] 完成 app/helpers/shortcut/corecmd/cli、packaging 与全仓测试。
-- [ ] 完成 Darwin/arm64、Linux/amd64 race 与 native candidate proof。
-- [ ] 生成固定 main 的 default/opt-out 端到端报告。
-- [ ] 生成 Schema、help、业务命令、整体 RSS 与 Lark/GWS 五维报告。
+- [ ] 完成 Darwin/arm64、Linux/amd64 race 与发布身份证明。
+- [ ] 完成固定 main 的 default/opt-out 端到端对照（结论写入 RFC 附件；dump 不入库）。
+- [ ] 完成 Schema、help、业务命令、整体 RSS 与 Lark/GWS 五维对照（结论写入 RFC 附件；dump 不入库）。
 - [ ] 验证 root help RSS 相对父提交不回退，且与 Lark 的差值满足 RFC。
-- [ ] 将 clean head 证据链接写入性能附件和 PR 正文。
+- [ ] 将 clean head 的 CI/RFC 证据链接写入性能附件和 PR 正文。
 
 ## 测量要求
 

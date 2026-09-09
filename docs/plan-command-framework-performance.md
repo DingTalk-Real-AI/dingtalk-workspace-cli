@@ -166,7 +166,7 @@ DWS_PACKAGE_VERSION=0.0.0-test <binary> -test.run '^$' \
 
 ### 3.4 darwin-arm64 本机对 Lark 的五维实测（2026-09-07）
 
-在本机用 CI 完全相同的口径复现了 `measure-cli-five-dimensions.py`：候选由 `build-schema-cache-candidate.py` 从本次框架优化提交构建（go1.25.9、darwin-arm64、工作树干净），基线用 CI 指定的固定提交 `6f71222b`（go1.25.9），竞品固定 `@larksuite/cli@1.0.85` 与 `@googleworkspace/cli@0.22.5`，venv + psutil 7.2.2，harness 自检 7 项通过。报告 `complete=true`、0 失败、44 用例 × 30 样本 × 延迟与内存两阶段全部齐备。
+在本机用当时 CI 相同口径做了五维对照：候选从本次框架优化提交构建（go1.25.9、darwin-arm64、工作树干净），基线用 CI 指定的固定提交 `6f71222b`（go1.25.9），竞品固定 `@larksuite/cli@1.0.85` 与 `@googleworkspace/cli@0.22.5`，venv + psutil 7.2.2，harness 自检 7 项通过。报告 complete、0 失败、44 用例 × 30 样本 × 延迟与内存两阶段全部齐备。过程化测量脚本与 dump 已从仓库清除，下列数字只作为当时结论保留。
 
 wall p50 / p95（ms），DWS 对 Lark：
 
@@ -189,7 +189,7 @@ wall p50 / p95（ms），DWS 对 Lark：
 
 ### 3.5 CI 双平台对 Lark 的实测差距与根因归因（2026-09-07，head `9e52edcc`）
 
-CI native feedback run `34097698630` 全绿（Schema policy、两平台 Full Go suite、identity comparison 均 success），两平台 `five-dimensions-report.json` 均 `complete=true`、0 失败。wall p50（ms）：
+CI native feedback run `34097698630` 全绿（Schema policy、两平台 Full Go suite、identity comparison 均 success），两平台五维报告均 complete、0 失败。wall p50（ms）：
 
 | 负载 | linux DWS | linux Lark | 判定 | darwin DWS | darwin Lark | 判定 |
 |---|---|---|---|---|---|---|
