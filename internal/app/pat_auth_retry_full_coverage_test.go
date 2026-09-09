@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -281,5 +282,18 @@ func TestCrossPlatformCoveragePATRetryRemainingPollAndBrowserCoverage(t *testing
 	patBrowserOpenCommand = func(string, string) *exec.Cmd { return exec.Command("definitely-not-a-real-dws-command") }
 	if err := tryOpenBrowser("https://example.test"); err == nil {
 		t.Fatal("missing browser command started")
+	}
+	patBrowserOpenCommand = func(string, string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoveragePATBrowserHelperProcess$")
+	}
+	if err := tryOpenBrowser("https://example.test"); err != nil {
+		t.Fatalf("helper browser start = %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestCrossPlatformCoveragePATBrowserHelperProcess(t *testing.T) {
+	if os.Getenv("DWS_PAT_BROWSER_HELPER") == "1" {
+		return
 	}
 }

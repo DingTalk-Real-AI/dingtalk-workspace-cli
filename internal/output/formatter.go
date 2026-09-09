@@ -14,10 +14,12 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -62,6 +64,49 @@ var (
 	marshalJSONOutput = jsonutil.Marshal
 	marshalJSONIndent = jsonutil.MarshalIndent
 )
+
+func unmarshalJSONUseNumber(data []byte, out *any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("unexpected trailing JSON value")
+		}
+		return err
+	}
+	*out = normalizeSafeJSONNumbers(*out)
+	return nil
+}
+
+func normalizeSafeJSONNumbers(value any) any {
+	switch typed := value.(type) {
+	case json.Number:
+		text := typed.String()
+		if strings.ContainsAny(text, ".eE") {
+			return typed
+		}
+		integer, err := strconv.ParseInt(text, 10, 64)
+		if err == nil && integer >= -(1<<53) && integer <= 1<<53 {
+			return float64(integer)
+		}
+		return typed
+	case []any:
+		for index := range typed {
+			typed[index] = normalizeSafeJSONNumbers(typed[index])
+		}
+		return typed
+	case map[string]any:
+		for key := range typed {
+			typed[key] = normalizeSafeJSONNumbers(typed[key])
+		}
+		return typed
+	default:
+		return value
+	}
+}
 
 func ResolveFormat(cmd *cobra.Command, fallback Format) Format {
 	format, _ := resolveFormatWithWarning(cmd, fallback)
@@ -408,7 +453,7 @@ func normalizePayload(payload any) (any, error) {
 		return nil, apperrors.NewInternal("failed to normalize command output")
 	}
 	var normalized any
-	if err := unmarshalJSON(data, &normalized); err != nil {
+	if err := unmarshalJSONUseNumber(data, &normalized); err != nil {
 		return nil, apperrors.NewInternal("failed to decode normalized command output")
 	}
 	return normalized, nil

@@ -34,6 +34,7 @@ func TestCrossPlatformCoverageMinutesWorkflowValidationAndDefaults(t *testing.T)
 		{"minutes", "+speaker-insights", "--id", "u1", "--interval", "0"},
 		{"minutes", "+export-pack", "--id", "u1", "--output", "pack", "--page-limit", "0"},
 		{"minutes", "+share", "--id", "u1", "--member-uids", strings.Repeat("m,", 51), "--permission", "view"},
+		{"minutes", "+share", "--id", "u1", "--member-staff-ids", strings.Repeat("0m,", 51), "--permission", "view"},
 	}
 	for _, args := range invalid {
 		if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, args...); err == nil || payload != nil || output != "" {
@@ -341,8 +342,30 @@ func TestCrossPlatformCoverageMinutesPermissionLedgerBranchesE2E(t *testing.T) {
 		t.Fatalf("share payload=%#v err=%v", payload, err)
 	}
 	args := share.arguments["minutes/add_member_permission"][0]
-	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 {
+	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 || args["memberUids"].([]string)[0] != "m1" {
 		t.Fatalf("share args=%#v", args)
+	}
+	if _, exists := args["memberStaffIds"]; exists {
+		t.Fatalf("UID share unexpectedly sent memberStaffIds: %#v", args)
+	}
+	staffShare := &minutesE2ECaller{responses: map[string][]string{"minutes/add_member_permission": {`{"success":true,"result":{}}`}}}
+	payload, _, err = runMinutesAlignmentCLI(t, staffShare, "minutes", "+share", "--id", "u1", "--member-staff-ids", "074360", "--permission", "view", "--yes")
+	if err != nil || payload["complete"] != true {
+		t.Fatalf("staffId share payload=%#v err=%v", payload, err)
+	}
+	staffArgs := staffShare.arguments["minutes/add_member_permission"][0]
+	staffIDs, ok := staffArgs["memberStaffIds"].([]string)
+	if !ok || len(staffIDs) != 1 || staffIDs[0] != "074360" {
+		t.Fatalf("staffId share lost leading zero: %#v", staffArgs)
+	}
+	if _, exists := staffArgs["memberUids"]; exists {
+		t.Fatalf("staffId share unexpectedly sent memberUids: %#v", staffArgs)
+	}
+	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+share", "--id", "u1", "--member-uids", "m1", "--member-staff-ids", "074360", "--permission", "view", "--yes"); err == nil || payload != nil || output != "" {
+		t.Fatalf("share accepted both member identifier types payload=%#v output=%q err=%v", payload, output, err)
+	}
+	if payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{}, "minutes", "+share", "--id", "u1", "--permission", "view", "--yes"); err == nil || payload != nil || output != "" {
+		t.Fatalf("share accepted no member identifier payload=%#v output=%q err=%v", payload, output, err)
 	}
 	continueFailure := &minutesE2ECaller{responses: map[string][]string{
 		"minutes/get_minutes_basic_info": {`{"success":true,"result":{"taskUuid":"u1"}}`},

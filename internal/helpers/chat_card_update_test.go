@@ -15,7 +15,9 @@ package helpers
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -160,6 +162,129 @@ func TestCrossPlatformCoverageNativeMessageUpdateCardVerifiesWrite(t *testing.T)
 		}
 		if caller.calls != 0 {
 			t.Fatalf("dry-run made %d calls", caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageNativeMessageUpdateCardA2UIEngine(t *testing.T) {
+	t.Run("a2ui payload uses a2ui update tool", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runNativeCardUpdate(t, caller,
+			"message", "update-a2ui-card",
+			"--biz-id", "biz-1",
+			"--content", "[\"message1\",\"message2\"]",
+			"--flow-status", "FINISH",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		messages, ok := caller.args["a2uiMessages"].([]string)
+		wantArgs := map[string]any{
+			"bizId":        "biz-1",
+			"flowStatus":   "FINISH",
+			"a2uiMessages": []string{"message1", "message2"},
+		}
+		if caller.calls != 1 || caller.server != "im" || caller.tool != "update_a2ui_card" || !ok || !reflect.DeepEqual(messages, wantArgs["a2uiMessages"]) {
+			t.Fatalf("a2ui call = count:%d server:%q tool:%q args:%#v", caller.calls, caller.server, caller.tool, caller.args)
+		}
+		if caller.args["bizId"] != wantArgs["bizId"] || caller.args["flowStatus"] != wantArgs["flowStatus"] || caller.args["requestId"] == "" {
+			t.Fatalf("a2ui args = %#v", caller.args)
+		}
+		if annotations, ok := caller.args["a2uiAnnotations"].([]any); !ok || len(annotations) != 0 {
+			t.Fatalf("a2uiAnnotations = %#v", caller.args["a2uiAnnotations"])
+		}
+	})
+
+	t.Run("a2ui maps numeric flow status to enum", func(t *testing.T) {
+		for status, want := range map[int]string{
+			1: "PROCESSING", 2: "INPUTTING", 3: "FINISH", 4: "EXECUTING", 5: "ERROR",
+			6: "ABORTED", 7: "TIMEOUT", 8: "CONFIRMING", 9: "CONFIRMED",
+		} {
+			caller := &scriptedToolCaller{}
+			err := runNativeCardUpdate(t, caller,
+				"message", "update-a2ui-card",
+				"--biz-id", "biz-1",
+				"--content", "[\"message\"]",
+				"--flow-status", fmt.Sprintf("%d", status),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if caller.calls != 1 || caller.tool != "update_a2ui_card" || caller.args["flowStatus"] != want {
+				t.Fatalf("status %d: call = count:%d tool:%q flowStatus:%#v", status, caller.calls, caller.tool, caller.args["flowStatus"])
+			}
+		}
+	})
+
+	t.Run("streaming keeps old status range", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runNativeCardUpdate(t, caller,
+			"message", "update-card",
+			"--biz-id", "biz-1",
+			"--content", "完成",
+			"--flow-status", "6",
+		)
+		if err == nil || !strings.Contains(err.Error(), "1-5") {
+			t.Fatalf("error = %v, want streaming status range", err)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("invalid streaming status made %d calls", caller.calls)
+		}
+	})
+
+	t.Run("streaming preserves native int spellings", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":{"bizId":"biz-1","updated":true}}`}}}
+		err := runNativeCardUpdate(t, caller,
+			"message", "update-card",
+			"--biz-id", "biz-1",
+			"--content", "完成",
+			"--flow-status", "0x3",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 1 || caller.tool != "update_streaming_card" || caller.args["flowStatus"] != 3 {
+			t.Fatalf("call = count:%d tool:%q flowStatus:%#v", caller.calls, caller.tool, caller.args["flowStatus"])
+		}
+	})
+
+	t.Run("a2ui validates content and status before call", func(t *testing.T) {
+		tests := [][]string{
+			{"--content", "plain", "--flow-status", "1"},
+			{"--content", "[\"message\"]", "--flow-status", "0"},
+			{"--content", "[\"message\"]", "--flow-status", "10"},
+			{"--content", "[1]", "--flow-status", "1"},
+			{"--content", "[]", "--flow-status", "1"},
+		}
+		for _, extra := range tests {
+			caller := &scriptedToolCaller{}
+			args := []string{"message", "update-a2ui-card", "--biz-id", "biz-1"}
+			args = append(args, extra...)
+			err := runNativeCardUpdate(t, caller, args...)
+			if err == nil {
+				t.Fatalf("args %v unexpectedly succeeded", args)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("args %v made %d calls", args, caller.calls)
+			}
+		}
+		for _, args := range [][]string{
+			{"message", "update-a2ui-card", "--biz-id", "biz-1", "--content", "[\"message\"]"},
+			{"message", "update-a2ui-card", "--biz-id", "<bizId>", "--content", "[\"message\"]", "--flow-status", "1"},
+		} {
+			caller := &scriptedToolCaller{}
+			if err := runNativeCardUpdate(t, caller, args...); err == nil {
+				t.Fatalf("args %v unexpectedly succeeded", args)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("args %v made %d calls", args, caller.calls)
+			}
+		}
+		if _, err := normalizeA2UIUpdateFlowStatus(""); err == nil || !strings.Contains(err.Error(), "PROCESSING") {
+			t.Fatalf("empty a2ui status error = %v, want enum list", err)
+		}
+		if _, err := normalizeA2UIUpdateFlowStatus("BAD_STATUS"); err == nil || !strings.Contains(err.Error(), "PROCESSING") {
+			t.Fatalf("bad a2ui status error = %v, want enum list", err)
 		}
 	})
 }

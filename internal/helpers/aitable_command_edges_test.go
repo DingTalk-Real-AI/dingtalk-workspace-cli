@@ -383,11 +383,31 @@ func TestCrossPlatformCoverageAitableViewFilterValidationAndReadBack(t *testing.
 		}
 	})
 
-	t.Run("logical groups fail closed before write", func(t *testing.T) {
-		caller := &aitableTestCaller{responses: []string{fields}}
-		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", `--json=[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`)
-		if err == nil || !strings.Contains(err.Error(), "不接受 and/or") || len(caller.calls) != 0 {
-			t.Fatalf("logical filter group fail-closed = err:%v calls:%#v", err, caller.calls)
+	t.Run("OR root is written then verified from canonical read-back", func(t *testing.T) {
+		input := `[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]`
+		readBack := `{"data":{"views":[{"viewId":"view","viewType":"Grid","filter":{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}}]}}`
+		caller := &aitableTestCaller{responses: []string{fields, `{"success":true}`, readBack}}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json="+input)
+		if err != nil || len(caller.calls) != 3 || caller.calls[1].tool != "update_view" || caller.calls[2].tool != "get_views" {
+			t.Fatalf("OR filter verified = err:%v calls:%#v", err, caller.calls)
+		}
+		config, _ := caller.calls[1].args["config"].(map[string]any)
+		filter, ok := config["filter"].([]any)
+		if !ok || len(filter) != 1 {
+			t.Fatalf("update_view OR encoding = %#v", caller.calls[1].args)
+		}
+		root, ok := filter[0].(map[string]any)
+		operands, operandsOK := root["operands"].([]any)
+		if !ok || root["operator"] != "or" || !operandsOK || len(operands) != 2 {
+			t.Fatalf("update_view OR root = %#v", filter[0])
+		}
+	})
+
+	t.Run("mixed nested logical groups fail closed before write", func(t *testing.T) {
+		caller := &aitableTestCaller{}
+		err := runAitableCoverageCommand(t, caller, "view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", `--json=[{"operator":"and","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"or","operands":[{"operator":"eq","operands":["fldB","y"]}]}]}]`)
+		if err == nil || !strings.Contains(err.Error(), "不支持嵌套逻辑组") || len(caller.calls) != 0 {
+			t.Fatalf("nested logical filter fail-closed = err:%v calls:%#v", err, caller.calls)
 		}
 	})
 
@@ -478,6 +498,46 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 	fields := `{"data":{"fields":[{"fieldId":"fldA","type":"text"}]}}`
 	filter := `[{"operator":"eq","operands":["fldA","x"]}]`
 	args := []string{"view", "update", "filter", "--base-id=b", "--table-id=t", "--view-id=view", "--json=" + filter}
+
+	t.Run("logical root shape validation", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			input any
+			want  string
+		}{
+			{name: "non-object condition", input: []any{"bad"}, want: "每项必须"},
+			{name: "root is not sole element", input: []any{
+				map[string]any{"operator": "or", "operands": []any{}},
+				map[string]any{"operator": "eq", "operands": []any{"fldA", "x"}},
+			}, want: "唯一元素"},
+			{name: "root operands are not an array", input: []any{
+				map[string]any{"operator": "or", "operands": "bad"},
+			}, want: "必须是叶子条件数组"},
+			{name: "root operand is not an object", input: []any{
+				map[string]any{"operator": "or", "operands": []any{"bad"}},
+			}, want: "必须是叶子条件对象"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				if _, _, err := normalizeAitableViewUpdateFilter(tc.input); err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("normalize filter error = %v, want %q", err, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("canonical single leaf object uses implicit AND", func(t *testing.T) {
+		leaf := map[string]any{"operator": "eq", "operands": []any{"fldA", "x"}}
+		root, ok := canonicalViewFilter(leaf)
+		operands, operandsOK := root["operands"].([]any)
+		if !ok || root["operator"] != "and" || !operandsOK || len(operands) != 1 {
+			t.Fatalf("canonical leaf = %#v, %v", root, ok)
+		}
+		wrappedLeaf, wrappedOK := operands[0].(map[string]any)
+		if !wrappedOK || wrappedLeaf["operator"] != "eq" {
+			t.Fatalf("canonical wrapped leaf = %#v", operands[0])
+		}
+	})
 
 	t.Run("update transport error", func(t *testing.T) {
 		caller := &aitableTestCaller{responses: []string{fields}, errors: []error{nil, context.Canceled}}

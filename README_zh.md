@@ -419,16 +419,16 @@ dws skill setup --mode mono --target all
 dws skill setup --mode multi --target cursor --dry-run
 dws skill setup --mode multi --target cursor
 
-# 指定本地源目录（比如 fork 或正在改的版本），先预览
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi --dry-run
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+# 指定本地源目录（支持 dws-skills.zip 解压根目录、其 multi/ 目录或源码仓库根目录），先预览
+DWS_SKILL_SOURCE=/绝对路径/dws-skills-解压目录 dws skill setup --mode multi --dry-run
+DWS_SKILL_SOURCE=/绝对路径/dws-skills-解压目录 dws skill setup --mode multi
 ```
 
 | 参数 | 取值 | 说明 |
 |------|------|------|
 | `--mode` | `mono` \| `multi` | skill 布局，不指定则交互式询问 |
 | `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | 安装目标；`all` 表示铺到检测到的具体 Agent home（ZCode 为 `~/.zcode/skills`），仅在未检测到具体 Agent 时回退到 `~/.agents/skills` |
-| `--source` | 路径 | 本地源目录（覆盖内置 skills） |
+| `--source` | 路径 | 本地源目录（覆盖内置 skills）；支持模式目录、`dws-skills.zip` 解压根目录或包含 `skills/` 的源码仓库根目录 |
 | `--yes` | — | 仅供脚本使用：跳过确认提示。删除操作仍会先备份到 `~/.dws/skill-backups/` |
 
 > setup 命令可能移除对面模式残留（装 multi 删 `dws/`，装 mono 清理统一状态中登记或属于状态上线前精确官方名称集合的 multi Skill）以及不在 bundle 内的过期受管 Skill。DWS 在 `~/.dws/skills-state.json`（或 `$DWS_CONFIG_DIR/skills-state.json`）集中记录所有权、安装版本、来源和内容摘要。仅有 `dingtalk-*` 前缀不能触发清理，因此其他同前缀市场/用户 Skill 会保留。所有删除都会先列入确认预览，并备份到 `~/.dws/skill-backups/<时间戳>/`；备份失败的目录会保留原样、绝不删除。非交互环境应先用 `--dry-run` 核对输出，再由调用方显式决定是否使用仅供脚本的确认跳过参数。

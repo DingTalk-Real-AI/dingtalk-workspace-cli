@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/requestmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -177,7 +178,11 @@ func TestCrossPlatformCoverageJSONAtFileAndMultipartStreaming(t *testing.T) {
 	}
 
 	client := NewClient("app-token", "")
+	client.DingTalkExt = `{"umid":"multipart-value"}`
 	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get(requestmeta.DingTalkExtHeader); got != client.DingTalkExt {
+			t.Fatalf("multipart runtime extension = %q", got)
+		}
 		if err := req.ParseMultipartForm(1 << 20); err != nil {
 			t.Fatal(err)
 		}

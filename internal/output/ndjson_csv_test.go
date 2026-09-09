@@ -15,6 +15,7 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -25,6 +26,17 @@ func TestNormalizeFormatRecognizesNDJSONAndCSV(t *testing.T) {
 	}
 	if got := normalizeFormat("CSV", FormatJSON); got != FormatCSV {
 		t.Errorf("normalizeFormat(CSV) = %q, want %q", got, FormatCSV)
+	}
+}
+
+func TestCrossPlatformCoverageNDJSONPreservesExactNumbers(t *testing.T) {
+	var buf bytes.Buffer
+	payload := json.RawMessage(`[{"large":9007199254740993,"decimal":1.2300}]`)
+	if err := Write(&buf, FormatNDJSON, payload); err != nil {
+		t.Fatalf("Write(ndjson) error = %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != `{"decimal":1.2300,"large":9007199254740993}` {
+		t.Fatalf("NDJSON changed numeric literals: %s", got)
 	}
 }
 

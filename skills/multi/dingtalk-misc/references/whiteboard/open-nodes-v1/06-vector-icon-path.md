@@ -107,8 +107,9 @@ V1 vector update 不接受 `style`。既有节点包含 V1 无法表达的 fill�
 opacity、effect 或 adjustments 时，query 仍可读取资源和几何，但节点会标为只读。
 不影响资源内容的兼容性装饰不会单独令节点变为只读。
 
-DWS 会校验资源引用。上传与 `whiteboard update` 必须使用同一个文档
-`nodeId`；不要跨文档复用资源，也不要使用临时 `uploadUrl`。
+DWS 会校验资源引用。上传与 `whiteboard update` 必须使用同一个稳定目标和 profile：
+内嵌白板使用承载文档 `nodeId/partId`，独立白板使用白板 `nodeId`。不要跨目标复用
+资源，也不要使用临时 `uploadUrl`。
 
 ### 7.10 Icon（内置图标）
 

@@ -1401,7 +1401,8 @@ func newDocCommand() *cobra.Command {
 	infoCmd := &cobra.Command{
 		Use:   "info",
 		Short: "获取文档元信息",
-		Long:  `获取文档标题、类型、创建者、创建时间、权限等元信息 (不含内容)。`,
+		Long: `获取文档标题、类型、创建者、创建时间、权限等元信息 (不含内容)。
+节点为快捷方式 (extension=dlink) 时，响应额外返回一跳目标的 linkSourceInfo；字段名沿用服务端定义，语义是链接目标。`,
 		Example: `  dws doc info --node DOC_ID
   dws doc info --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1425,17 +1426,18 @@ func newDocCommand() *cobra.Command {
 				CLIPath:        "doc info",
 				PrimaryCLIPath: "doc info",
 			},
-			Description: "获取文档元信息（标题/类型/创建者/权限等）",
+			Description: "获取节点元信息；dlink 快捷方式额外返回一跳目标 linkSourceInfo",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "get_document_info"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "获取文档元信息（标题/类型/创建者/权限等）",
+				AgentSummary: "获取节点元信息；dlink 快捷方式额外返回一跳目标 linkSourceInfo，供内容类型路由",
 				UseWhen: []string{
 					"用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
-					"准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时",
+					"准备内容读取、编辑、导出或类型路由，需先看 contentType/extension；extension=dlink 时改用 linkSourceInfo.nodeId 继续解析时",
+					"需要区分快捷方式入口与目标时：内容操作使用 linkSourceInfo.nodeId，明确移动/重命名/删除快捷方式入口本身仍使用顶层 nodeId",
 				},
 				AvoidWhen: []string{
 					"已确认是 adoc 且只要正文改用 dws doc read",
@@ -2397,21 +2399,29 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	})
 
 	blockDeleteCmd := &cobra.Command{
-		Use:     "delete",
-		Short:   "删除块元素",
-		Example: `  dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>`,
+		Use:   "delete",
+		Short: "删除块元素",
+		Long: `删除文档中的块元素。
+
+--block-id 支持逗号分隔一次删除多个块，如 --block-id a,b,c，单次最多 50 个。
+`,
+		Example: `  dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>
+  dws doc block delete --node DOC_ID --block-id BLOCK_A,BLOCK_B,BLOCK_C --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "block-id"); err != nil {
 				return err
 			}
-			blockID := mustGetFlag(cmd, "block-id")
+			blockIDs, err := NormalizeBlockIDs(mustGetFlag(cmd, "block-id"))
+			if err != nil {
+				return err
+			}
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
 			return callMCPTool("delete_document_block", map[string]any{
 				"nodeId":  nodeID,
-				"blockId": blockID,
+				"blockId": strings.Join(blockIDs, ","),
 			})
 		},
 	}
@@ -2428,20 +2438,27 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				CLIPath:        "doc block delete",
 				PrimaryCLIPath: "doc block delete",
 			},
-			Description: "删除块元素（不可逆）",
+			Description: "删除块元素（不可逆），--block-id 支持逗号分隔一次删多个",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "delete_document_block"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "删除块元素（不可逆）",
-				UseWhen:      []string{"用户确认后删除文档中指定块元素时"},
+				AgentSummary: "删除块元素（不可逆），支持逗号分隔一次删除多个块",
+				UseWhen: []string{
+					"用户确认后删除文档中指定块元素时",
+					"需要删除多个块时用逗号分隔一次传入，不要循环调用",
+				},
 				AvoidWhen: []string{
 					"未确认或 blockId 不明时不要删；先 block list",
 					"删整篇文档用 doc/drive delete",
+					"单次超过 50 个块时拆成多次调用",
 				},
-				Examples: []string{"dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json"},
+				Examples: []string{
+					"dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json",
+					"dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B> --format json",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId"},
@@ -2820,7 +2837,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 
 	// block delete
 	blockDeleteCmd.Flags().String("node", "", "文档 ID 或 URL (必填)")
-	blockDeleteCmd.Flags().String("block-id", "", "目标块 ID (必填)")
+	blockDeleteCmd.Flags().String("block-id", "", "目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个")
 
 	blockCmd.AddCommand(blockListCmd, blockInsertCmd, blockUpdateCmd, blockDeleteCmd)
 

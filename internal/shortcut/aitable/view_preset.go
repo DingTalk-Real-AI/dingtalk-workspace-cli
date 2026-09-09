@@ -104,6 +104,9 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	writeData, writeErr := rt.CallMCPWriteDataStrict(serverMain, tool, params)
 	if action == "create" {
 		viewID = findStringByKeys(writeData, "viewId")
+		if viewID != "" {
+			result.Resolved["viewId"] = viewID
+		}
 	}
 	var verifiedMatches []map[string]any
 	var verifyErr error
@@ -132,17 +135,25 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 			actualID := stringValue(verifiedMatches[0], "viewId", "id")
 			if actualID == "" || (viewID != "" && actualID != viewID) {
 				verifyErr = fmt.Errorf("view read-back identity mismatch: got %q, response %q", actualID, viewID)
-			} else if !presetViewMatches(verifiedMatches[0], viewType, config) {
-				verifyErr = fmt.Errorf("view read-back does not contain the declared type/config")
 			} else {
 				viewID = actualID
+				result.Resolved["viewId"] = viewID
+			}
+			if verifyErr == nil && !presetViewMatches(verifiedMatches[0], viewType, config) {
+				verifyErr = fmt.Errorf("view read-back does not contain the declared type/config")
+			} else if verifyErr == nil {
 				break
 			}
 		}
 	}
 	if verifyErr != nil {
-		result.Status = "unknown"
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "viewId": viewID, "name": name})
+		effectConfirmed := (action == "create" && viewID != "") || (action == "update" && writeErr == nil)
+		if effectConfirmed {
+			result.Status = "partial_success"
+			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "viewId": viewID, "name": name})
+		} else {
+			result.Status = "unknown"
+		}
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 		}
@@ -190,7 +201,71 @@ func presetViewMatches(view map[string]any, viewType string, config map[string]a
 			actualConfig["visibleFieldIds"] = visible
 		}
 	}
-	return mapContains(actualConfig, config)
+	expected := normalizePresetViewConfig(config)
+	actual := normalizePresetViewConfig(actualConfig)
+	for _, key := range []string{"filter", "sort", "group"} {
+		want, wanted := expected[key]
+		if !wanted {
+			continue
+		}
+		if _, exists := actual[key]; !exists && emptyPresetViewConfigValue(key, want) {
+			actual[key] = want
+		}
+	}
+	return mapContains(actual, expected)
+}
+
+func normalizePresetViewConfig(config map[string]any) map[string]any {
+	out := make(map[string]any, len(config))
+	for key, value := range config {
+		switch key {
+		case "filter":
+			out[key] = normalizePresetViewFilter(value)
+		case "sort", "group":
+			if value == nil {
+				out[key] = []any{}
+			} else {
+				out[key] = value
+			}
+		default:
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func normalizePresetViewFilter(value any) any {
+	switch typed := value.(type) {
+	case nil:
+		return map[string]any{"operator": "and", "operands": []any{}}
+	case []any:
+		if len(typed) == 0 {
+			return map[string]any{"operator": "and", "operands": []any{}}
+		}
+		if len(typed) == 1 {
+			if group, ok := typed[0].(map[string]any); ok {
+				return group
+			}
+		}
+	}
+	return value
+}
+
+func emptyPresetViewConfigValue(key string, value any) bool {
+	switch key {
+	case "sort", "group":
+		items, ok := value.([]any)
+		return ok && len(items) == 0
+	case "filter":
+		group, ok := value.(map[string]any)
+		if !ok || !strings.EqualFold(stringValue(group, "operator"), "and") {
+			return false
+		}
+		operands, ok := group["operands"].([]any)
+		return ok && len(operands) == 0
+	default:
+		return false
+	}
 }
 
 // get_views projects visible fields as columns plus hiddenFields instead of

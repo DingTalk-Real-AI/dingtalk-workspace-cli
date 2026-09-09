@@ -1316,7 +1316,9 @@ function Install-Binary {
         }
 
         $destBin = Join-Path $InstallDir "${BinName}.exe"
-        Copy-Item -Path $binFile.FullName -Destination $destBin -Force
+        $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"
+        Copy-Item -Path $binFile.FullName -Destination $stagedBin -Force
+        Move-Item -Path $stagedBin -Destination $destBin -Force
 
         Write-Say "✅ Binary installed:"
         Write-Say "   → $destBin"
@@ -1704,14 +1706,51 @@ function Install-BinaryFromSource {
     }
 
     $tmpBin = Join-Path ([System.IO.Path]::GetTempPath()) "dws-build-$PID.exe"
+    $tmpPayloadRoot = Join-Path ([System.IO.Path]::GetTempPath()) "dws-runtime-build-$PID"
     try {
         & go build -ldflags="-s -w" -o $tmpBin "$Root/cmd"
+        if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+
+        $targetArch = Get-Arch
+        $payloadSource = Join-Path $Root "third_party\runtimepayload\20260825\windows\$targetArch\x7k2m9p4q1w864.dll"
+        $psSource = Join-Path $Root "third_party\runtimepayload\20260825\ps"
+        $preparedPayload = Join-Path $tmpPayloadRoot "20260825"
+        New-Item -ItemType Directory -Path (Join-Path $preparedPayload "ps") -Force | Out-Null
+        $preparedLibrary = Join-Path $preparedPayload "x7k2m9p4q1w864.dll"
+        Copy-Item -LiteralPath $payloadSource -Destination $preparedLibrary -Force
+        Copy-Item -Path (Join-Path $psSource "*") -Destination (Join-Path $preparedPayload "ps") -Recurse -Force
+        $manifest = [ordered]@{
+            format_version = 1
+            payload_version = "20260825"
+            target = "windows/$targetArch"
+            library = "x7k2m9p4q1w864.dll"
+            library_sha256 = (Get-FileHash -LiteralPath $preparedLibrary -Algorithm SHA256).Hash.ToLowerInvariant()
+            ps_file_count = 123
+            ps_manifest_sha256 = "45ae147697c1f8683df3f232d0ba792b807179bbe22fdac8225a0cf25fc33e7e"
+        }
+        $manifestJson = $manifest | ConvertTo-Json
+        [System.IO.File]::WriteAllText(
+            (Join-Path $preparedPayload "manifest.json"),
+            $manifestJson,
+            (New-Object System.Text.UTF8Encoding($false))
+        )
+        Push-Location $Root
+        try {
+            & go run ./scripts/build/runtime-payload inject $tmpBin $preparedPayload
+            if ($LASTEXITCODE -ne 0) { throw "runtime payload attachment failed with exit code $LASTEXITCODE" }
+        } finally {
+            Pop-Location
+        }
+
         $destBin = Join-Path $InstallDir "${BinName}.exe"
-        Copy-Item -Path $tmpBin -Destination $destBin -Force
+        $stagedBin = Join-Path $InstallDir ".${BinName}.tmp-$PID.exe"
+        Copy-Item -LiteralPath $tmpBin -Destination $stagedBin -Force
+        Move-Item -LiteralPath $stagedBin -Destination $destBin -Force
         Write-Say "✅ Binary installed:"
         Write-Say "   → $destBin"
     } finally {
         Remove-Item -Path $tmpBin -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmpPayloadRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 

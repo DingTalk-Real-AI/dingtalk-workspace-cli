@@ -23,7 +23,18 @@ import (
 )
 
 var browserStartCommand = func(name string, args ...string) error {
-	return exec.Command(name, args...).Start()
+	cmd := exec.Command(name, args...)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Wait for process to prevent resource leak
+	// Run in goroutine to avoid blocking browser launch
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
 }
 
 func openBrowser(rawURL string) error {

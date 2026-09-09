@@ -2,6 +2,27 @@
   "version": 1,
   "migrations": [
     {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat +active-conversations",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat +recent-conversations",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.shortcut_active_conversations",
+        "replacement_tool_id": "chat.shortcut_active_conversations",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Make recent-conversations the public time-window query entry while retaining active-conversations as a hidden executable compatibility command without deprecation warnings; preserve the stable Schema tool identity and do not rename parameters."
+    },
+    {
       "kind": "flag_extraction",
       "legacy": {
         "command": "dws chat group create",

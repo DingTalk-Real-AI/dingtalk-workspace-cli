@@ -350,7 +350,10 @@ func TestCrossPlatformCoverageDriveCommandRemainingEdges(t *testing.T) {
 
 func TestCrossPlatformCoverageDriveDownloadDirectoryCoverage(t *testing.T) {
 	oldGet := httpGetFile
-	httpGetFile = func(context.Context, string, map[string]string, string) error { return nil }
+	// 下载引擎现在先写 <dest>.dwspart 再原子发布；stub 必须履约写入目标路径。
+	httpGetFile = func(_ context.Context, _ string, _ map[string]string, destPath string) error {
+		return os.WriteFile(destPath, []byte("payload"), 0o644)
+	}
 	t.Cleanup(func() { httpGetFile = oldGet })
 	dir := t.TempDir()
 	for _, payload := range []string{

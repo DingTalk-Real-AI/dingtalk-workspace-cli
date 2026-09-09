@@ -81,28 +81,28 @@ func TestChatMessagePaginationDefaultSinglePageUnchanged(t *testing.T) {
 		{
 			name:   "list-all",
 			args:   []string{"message", "list-all", "--start", "2026-08-01 00:00:00", "--end", "2026-08-02 00:00:00"},
-			server: "",
+			server: "chat",
 			tool:   "search_messages_by_time_range",
 			want:   map[string]any{"startTime": "2026-08-01 00:00:00", "endTime": "2026-08-02 00:00:00", "limit": 50, "cursor": "0"},
 		},
 		{
 			name:   "list-by-sender",
 			args:   []string{"message", "list-by-sender", "--sender-user-id", "u1", "--start", "2026-08-01T00:00:00+08:00", "--end", "2026-08-02T00:00:00+08:00"},
-			server: "",
+			server: "chat",
 			tool:   "search_messages_by_sender",
 			want:   map[string]any{"senderUserId": "u1", "startTime": float64(1785513600000), "endTime": float64(1785600000000), "limit": 50, "cursor": "0"},
 		},
 		{
 			name:   "list-mentions",
 			args:   []string{"message", "list-mentions", "--group", "cid1", "--start", "2026-08-01T00:00:00+08:00", "--end", "2026-08-02T00:00:00+08:00"},
-			server: "",
+			server: "chat",
 			tool:   "search_at_me_message",
 			want:   map[string]any{"openConversationId": "cid1", "startTime": float64(1785513600000), "endTime": float64(1785600000000), "limit": 50, "cursor": "0"},
 		},
 		{
 			name:   "list-focused",
 			args:   []string{"message", "list-focused"},
-			server: "",
+			server: "chat",
 			tool:   "list_special_focus_messages",
 			want:   map[string]any{"limit": 50},
 		},
@@ -570,6 +570,13 @@ func TestChatMessagePaginationPageAllAggregatesSevenCommands(t *testing.T) {
 				if len(items) != 1 || len(messages) != 2 {
 					t.Fatalf("conversation items = %#v", items)
 				}
+				for i, wantID := range []string{"m1", "m2"} {
+					message, ok := messages[i].(map[string]any)
+					if !ok || message["messageId"] != wantID || message["openMessageId"] != wantID ||
+						message["conversationId"] != "cid1" {
+						t.Fatalf("projected nested message %d = %#v", i, messages[i])
+					}
+				}
 				if tt.name == "search" {
 					projected, ok := got["messages"].([]any)
 					if !ok || len(projected) != 2 {
@@ -585,8 +592,18 @@ func TestChatMessagePaginationPageAllAggregatesSevenCommands(t *testing.T) {
 						}
 					}
 				}
-			} else if len(items) != 2 {
-				t.Fatalf("items = %#v", items)
+			} else {
+				if len(items) != 2 {
+					t.Fatalf("items = %#v", items)
+				}
+				if tt.name == "list-focused" {
+					for i, wantID := range []string{"m1", "m2"} {
+						message, ok := items[i].(map[string]any)
+						if !ok || message["messageId"] != wantID || message["openMessageId"] != wantID {
+							t.Fatalf("projected focused message %d = %#v", i, items[i])
+						}
+					}
+				}
 			}
 			if len(caller.calls) != 2 {
 				t.Fatalf("calls = %#v, want two pages", caller.calls)

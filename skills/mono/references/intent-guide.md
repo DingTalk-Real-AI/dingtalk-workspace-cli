@@ -174,6 +174,7 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 
 判断关键：
 - 未知 alidocs URL → 必须先 `dws doc info --node <URL> --format json` 探测 `contentType` 与 `extension`
+- `extension=dlink` → 先消费 `linkSourceInfo` 目标；内容操作按目标继续路由，入口自身移动/重命名/删除仍用顶层 nodeId
 - `contentType=ALIDOC` + `extension=axls` → `sheet`
 - `contentType=DOCUMENT` + `extension=xlsx` / `xls` / `xlsm` / `csv` → `dws drive download`
 - 用户说"把在线表格导出为 xlsx 文件" → `dws sheet export`（axls → xlsx 的格式转换，不是读取 xlsx）
@@ -377,6 +378,19 @@ dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type
 - 提交考勤审批单走 `attendance approve templates --type leave|overtime|repair-check|travel`（请假/加班/补卡/出差外出，出差外出用 `--type travel`，返回 approveType=TRAVEL/OUT 的模板；具体哪几类有模板取决于组织配置，返回空列表即该组织未配该类），命令会返回审批表单的 submitUrl 跳转链接，由用户点击链接跳转到钉钉客户端的提交页面完成填写与提交。**展示链接时必须用 Markdown 可点击格式 `[表单名称](submitUrl)`，不要裸露 URL**。
 - 提交诉求的辅助查询：可用假期余额走 `attendance vacation balance`、历史已提交记录走 `attendance approve list`。
 - 任何场景下都**不要误用 `oa approval` 代替** —— 该命令组只能查/审/撤已存在的审批单，考勤业务审批单走考勤自己的逻辑便于区分。
+
+### 6.2 contract vs oa / agoal / drive / minutes / contact — 智能合同边界
+
+| 用户动作 | 路由 | 原因 |
+|---|---|---|
+| 查询或创建合同台账、起草、审查、归档、管理合同项目/相对方/账款 | `contract` | 法务智能合同正式产品面 |
+| 查询、同意、拒绝、撤销或转交已有合同审批实例 | `oa` | 动作对象是审批任务或实例，不是合同台账 |
+| 管理经营合约、目标、计分卡或 OKR | `agoal` | “经营合约”属于目标管理 |
+| 搜索、上传或下载合同文件 | `drive` | 动作是通用文件存储与传输 |
+| 查询听记内容或取得 `taskUuid` | `minutes` | 取得真实 ID 后才调用 `contract draft` |
+| 查询花名册中的劳动合同等员工基础字段 | `contact` | 动作是通讯录档案查询 |
+
+仅说“合同”或“法务”且没有动作时先询问目标；不要默认落到 OA 或智能合同。
 
 ---
 

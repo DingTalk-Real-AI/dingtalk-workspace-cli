@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉在线文字文档（adoc）本体及其内容的操作：查找、创建、读取、文档信息、编辑、块、评论、附件与媒体、白板卡片容器插入删除、导入、导出(docx/markdown/pdf)、版本、模板、协作者权限、分享及Markdown/JSONML写入。不包括：白板/画布内的 OpenNodes 图形、文本、分组、连线、Vector 和布局读写（归 dingtalk-misc 的 Whiteboard）、文档空间与钉盘的文件管理（归 dingtalk-drive，doc 同名原子命令已弃用）、知识库空间与节点管理（归 dingtalk-wiki）、原生 .md 文件读写（归 dingtalk-misc）、电子表格 axls（归 dingtalk-misc）、AI 表格 able（归 dingtalk-aitable）。命令前缀：dws doc。
+description: 钉钉在线文字文档（adoc）本体及其内容：查找、创建、读取、文档信息、编辑、块、评论、附件与媒体、白板卡片容器插入删除、导入、导出(docx/markdown/pdf)、版本、模板、协作者权限、分享及Markdown/JSONML写入。不包括：白板/画布内的 OpenNodes 图形、文本、分组、连线、Vector 和布局读写（归 dingtalk-misc 的 Whiteboard）、文档空间与钉盘的文件管理（归 dingtalk-drive，doc 同名原子命令已弃用）、知识库空间与节点管理（归 dingtalk-wiki）、原生 .md 文件读写（归 dingtalk-misc）、电子表格 axls（归 dingtalk-misc）、AI 表格 able（归 dingtalk-aitable）。命令前缀：dws doc。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -41,6 +41,7 @@ ID/URL 直用;标题先搜索,唯一命中再执行.顺序:稳定 ID → shortcu
 |---|---|---|
 | <!-- dws-intent: doc.search.by_title -->按标题或主题定位文档 | `dws doc +search --query <精确标题>` | `complete=true,count=0,failures=[]` 即权威零命中：如实报告；禁缩词、跨产品、无 query/无端 `--page-all` |
 | 最近访问或最近编辑文档 | 加载 `dingtalk-drive`，执行 `dws drive +recent [--operate-type 1] --limit <N>` | 默认最近访问，`1` 为最近编辑；不要用 `doc +search` 替代最近列表 |
+| 已知 alidocs 文档目录 URL，列出当前层 | `dws doc +list --folder <URL> --page-all` | 复用完整 URL；不要改用 `drive +list` |
 | <!-- dws-intent: doc.content.read -->已知 ID/URL 读取正文或局部内容 | `dws doc +fetch --node <ID或URL>` | 术语用 `keyword`;章节 `outline` → `section`;整篇才用 `full` |
 | 聚合查看信息、权限、版本、媒体或评论 | `dws doc +inspect --node <ID或URL>` | 基础元信息默认返回；样式、权限、历史、媒体、评论才用对应 `--include-*`，无 `--include-info` |
 | 新建在线文字文档并写入内容 | `dws doc +create --name <标题> --content <文本\|-\|@文件> [--folder <ID>\|--workspace <ID>]` | 指定位置复用真实 ID，二者互斥;`-`=stdin,禁 `@-`;Runtime 分片回读,不拆写 |
@@ -62,12 +63,13 @@ ID/URL 直用;标题先搜索,唯一命中再执行.顺序:稳定 ID → shortcu
 ## 关键结果语义
 
 - 保留真实 `nodeId`/URL/类型/容器；复用 ID，禁标题/钉盘重搜。
-- 用完整回执；Runtime 回读后不复读；仅局部验收、`partial_success`/commit-unknown 再 `+fetch`。
+- `extension=dlink`：内容用 `linkSourceInfo.nodeId`；嵌套逐跳，失败/缺失/循环即停；入口移动/改名/删除用顶层 ID。
+- 复用 Runtime 回执；仅局部验收、`partial_success`/commit-unknown 再 `+fetch`。
 - 恢复：`partial_success` 只补未完成；`unknown` 先回读、禁重写；`retryable` 仅限明确未开始；权限/参数/认证失败即停。
-- 结果明确且回读匹配才报完成。
+- 回读匹配才报完成。
 - 搜索/列表检查 `complete`/`hasMore`/cursor/失败项；“全部”翻完页，前 N 条须声明范围。
 - `+import` 检查 `success=true`、`verified=true`、`taskId/nodeId/documentUrl`；复用返回 ID，禁 Drive 重找；中断查原任务，禁重导。
-- 跨产品任务“新知识库内导入后再移到我的文档”：先用 Wiki 创建返回的 workspaceId 执行 `doc +import --workspace`，再把导入 nodeId 交给 `wiki +move-to-drive --workspace`；禁止在个人域创建后用 Drive 移动伪造入库步骤。
+- 知识库导入再移到我的文档：`doc +import --workspace <Wiki ID>` → `wiki +move-to-drive`，复用 nodeId；禁先建在个人域。
 - 导出/下载用 cwd 相对路径；`+export` 有 `localPath` 且 `sizeBytes>0` 即终态，禁 `ls/stat`。
 
 ## 参数与安全边界
@@ -95,7 +97,7 @@ Golden Route 已给出命令且参数足够时，禁止读取 reference；其余
 ## 错误最短路径
 
 1. 零命中、多候选、类型不明或分页不完整：停止写入，展示候选或 continuation；禁止默认第一项。
-2. Help 不参与选路；先读一次精确 leaf Schema。仅真实 `unknown flag`/契约漂移查一次 leaf Help；`unknown command` 只查一次 shortcut 清单，禁止试探后缀和 `dws doc --help | grep/head`。
+2. `+fetch` 若确认目标是目录，浏览请求复用完整 URL 执行 `+list --folder`，不要改用 `drive +list`。Help 不参与选路；先读一次精确 leaf Schema。仅真实 `unknown flag`/契约漂移查一次 leaf Help；`unknown command` 只查一次 shortcut 清单，禁止试探后缀和 `dws doc --help | grep/head`。
 3. `REVISION_CONFLICT`：重新读取当前 revision，展示差异；未经用户确认不得改成无 revision 覆盖。
 4. `doc_write_commit_unknown`：先回读；禁止自动重试创建或追加。
 5. 认证、权限或 profile 错误：只读 `dingtalk-shared` 对应 reference，禁底层命令绕过。

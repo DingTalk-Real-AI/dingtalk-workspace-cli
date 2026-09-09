@@ -524,6 +524,9 @@ func atMeProjectWithReactions(m map[string]any, includeReactions bool) map[strin
 	if messageType := chatmsg.MessageType(m); messageType != nil {
 		row["messageType"] = messageType
 	}
+	if aiSendFlag := chatmsg.MessageAISendFlag(m); aiSendFlag != nil {
+		row["messageAiSendFlag"] = aiSendFlag
+	}
 	if updateTime := chatmsg.UpdateTime(m); updateTime != nil {
 		row["updateTime"] = updateTime
 	}

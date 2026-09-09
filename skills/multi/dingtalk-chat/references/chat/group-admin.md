@@ -121,9 +121,11 @@ dws chat group user-settings set \
 
 - `list/add/update/remove` 管理身份定义；
 - `set-user/remove-user/query-user` 管理成员身份；
-- `openRoleId` 必须来自真实身份列表。
+- Shortcut 的 `--group` 可传群名或 `openConversationId`，群名多候选时在业务调用前停止；
+- 删除一个身份定义使用单数 `--role-id`；整体设置或移除成员身份使用复数 `--role-ids`；
+- `set-user --role-ids` 必须至少包含一个真实 `openRoleId`，只撤销指定身份使用 `remove-user`，不传空字符串猜“清空”。
 
-覆盖或清除成员身份前确认用户、群和完整角色集合，不能用展示名称猜 `openRoleId`。
+整体覆盖或撤销成员身份前确认用户、群和完整角色集合，不能用展示名称猜 `openRoleId`。
 
 ## 退出、解散与外部群升级
 

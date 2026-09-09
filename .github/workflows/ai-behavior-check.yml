@@ -32,6 +32,9 @@ jobs:
           script: |
             const pullRequest = context.payload.pull_request;
             const sha = context.eventName === 'push' ? context.sha : pullRequest.head.sha;
+            const statusTargetUrl = context.eventName === 'push'
+              ? `https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${sha}`
+              : `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${context.issue.number}`;
             const setStatus = (state, description) =>
               github.rest.repos.createCommitStatus({
                 owner: context.repo.owner,
@@ -40,6 +43,7 @@ jobs:
                 state,
                 context: 'AI Behavior',
                 description,
+                target_url: statusTargetUrl,
               });
 
             await setStatus('pending', 'Evaluating AI-generated PR boundaries');

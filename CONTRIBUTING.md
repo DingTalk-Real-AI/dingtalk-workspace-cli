@@ -52,11 +52,17 @@ Select the PR risk tier before choosing checks:
 |---|---|---|---|
 | Documentation-only | Prose and documentation assets with no executable, generated, workflow, packaging, or interface change | Links/content/rendering plus repository asset checks | Lightweight documentation validation; all nine named contexts still report |
 | Standard | Ordinary implementation work with a stable package graph | Focused unit/integration tests and observable behavior for the changed path | Race tests for changed packages and their reverse dependencies, scope-matched HEAD/base coverage, and representative Darwin/Windows compilation |
-| High-risk | Workflow/policy, package graph, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure change | Relevant full or domain suite plus focused behavior evidence | Complete race suite, native platform tests, and all affected domain gates; protected `main` uses this tier |
+| High-risk | Workflow/policy, package graph, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure change | Relevant full or domain suite plus focused behavior evidence | Complete race suite, native platform tests, and all affected domain gates; protected `main` uses this tier unless an exact two-parent merge can reuse a complete, base-owned PR admission |
 
 Classification fails closed: an incomplete diff, package add/remove/rename, or
 uncertain dependency graph selects the high-risk suite. Native changed-code
 coverage is additionally selected for platform-sensitive code.
+An eligible protected-main merge keeps all nine required contexts but records
+the already successful full-suite PR evidence instead of repeating it. The
+merge tree, PR identity, base-owned workflow blobs, check/status timestamps,
+workflow runs, and coverage artifact must all bind exactly; otherwise main runs
+the complete high-risk suite. Main-only Runtime Payload and integration checks
+still execute against the merge SHA.
 
 ## Pull Request Checklist
 

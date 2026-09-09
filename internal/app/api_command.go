@@ -274,6 +274,9 @@ func runAPI(cmd *cobra.Command, args []string, gf *GlobalFlags, af *apiFlags) er
 
 	// 11. Create client with timeout.
 	client := newRawAPIClient(token, baseURL)
+	if value, ok := runtimeContextResolve().HeaderValue(); ok {
+		client.DingTalkExt = value
+	}
 	if gf.Timeout > 0 {
 		client.HTTPClient.Timeout = time.Duration(gf.Timeout) * time.Second
 	}

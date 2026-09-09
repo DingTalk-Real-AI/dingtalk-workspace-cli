@@ -21,12 +21,55 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
+
+const defaultA2UIFlowStatus = "PROCESSING"
+
+func normalizeA2UIUpdateFlowStatus(raw string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "1", "PROCESSING":
+		return "PROCESSING", nil
+	case "2", "INPUTTING":
+		return "INPUTTING", nil
+	case "3", "FINISH":
+		return "FINISH", nil
+	case "4", "EXECUTING":
+		return "EXECUTING", nil
+	case "5", "ERROR":
+		return "ERROR", nil
+	case "6", "ABORTED":
+		return "ABORTED", nil
+	case "7", "TIMEOUT":
+		return "TIMEOUT", nil
+	case "8", "CONFIRMING":
+		return "CONFIRMING", nil
+	case "9", "CONFIRMED":
+		return "CONFIRMED", nil
+	default:
+		return "", fmt.Errorf("--flow-status must be one of PROCESSING, INPUTTING, FINISH, EXECUTING, ERROR, ABORTED, TIMEOUT, CONFIRMING, CONFIRMED")
+	}
+}
+
+func parseA2UIMessages(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("--content is required")
+	}
+	var messages []string
+	if err := json.Unmarshal([]byte(raw), &messages); err != nil {
+		return nil, fmt.Errorf("--content must be a JSON string array")
+	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("--content must contain at least one message")
+	}
+	return messages, nil
+}
 
 func normalizeChatGroupCreateResponse(resp map[string]any) {
 	result, ok := resp["result"].(map[string]any)
@@ -87,23 +130,113 @@ func promoteLegacyChatString(cmd *cobra.Command, canonical, legacy string) error
 	return cmd.Flags().Set(canonical, value)
 }
 
-func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
+func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool, paginationDirection string) error {
+	return callProjectedMessagesOnServer(cmd, "chat", toolName, args, search, paginationDirection)
+}
+
+func callProjectedMessagesOnServer(cmd *cobra.Command, serverID, toolName string, args map[string]any, search bool, paginationDirection string) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer(serverID, toolName, args)
+	}
+	operation := serverID + "/" + toolName
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), serverID, toolName, args)
+	if err != nil {
+		return withProjectedChatOperation(operation, err)
+	}
+	return writeProjectedChatPayload(cmd, operation, text, func(data map[string]any) map[string]any {
+		payload := projectChatMessagesPayloadForCommand(cmd, data, search)
+		applyProjectedChatPagination(payload, data, paginationDirection)
+		return payload
+	})
+}
+
+func callProjectedAtomicChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
 	if deps.Caller.DryRun() {
 		return callMCPToolOnServer("chat", toolName, args)
 	}
 	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "chat", toolName, args)
 	if err != nil {
-		var cliErr *CLIError
-		if errors.As(err, &cliErr) && cliErr.Operation == "" {
-			withOperation := *cliErr
-			withOperation.Operation = "chat/" + toolName
-			return &withOperation
-		}
-		return err
+		return withProjectedChatOperation("chat/"+toolName, err)
 	}
+	return writeProjectedChatPayload(cmd, "chat/"+toolName, text, func(data map[string]any) map[string]any {
+		return projectExistingChatMessageCollectionsForCommand(cmd, data, search)
+	})
+}
+
+func applyProjectedChatPagination(payload, source map[string]any, paginationDirection string) {
+	if paginationDirection == "" {
+		return
+	}
+	messages, _ := payload["messages"].([]map[string]any)
+	preserved := make(map[string]any)
+	for _, key := range []string{"count", "enrichedCount", "failedCount", "failures", "partial", "truncated"} {
+		if value, exists := payload[key]; exists {
+			preserved[key] = value
+		}
+	}
+	for key, value := range chatmsg.NewMessageListPayload(messages) {
+		if _, exists := payload[key]; !exists {
+			payload[key] = value
+		}
+	}
+	delete(payload, "nextPage")
+	chatmsg.ApplyMessagePagination(payload, source, messages, paginationDirection)
+	for key, value := range preserved {
+		payload[key] = value
+	}
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
+}
+
+func callProjectedAtomicIMMessages(cmd *cobra.Command, toolName string, args map[string]any) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer("im", toolName, args)
+	}
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", toolName, args)
+	if err != nil {
+		return withProjectedChatOperation("im/"+toolName, err)
+	}
+	return writeProjectedChatPayload(cmd, "im/"+toolName, text, func(data map[string]any) map[string]any {
+		return projectExistingChatMessageCollectionsForCommand(cmd, data, true)
+	})
+}
+
+func callProjectedIMMessageSendStatus(cmd *cobra.Command, openTaskID string) error {
+	const toolName = "query_message_send_status"
+	args := map[string]any{"openTaskId": openTaskID}
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer("im", toolName, args)
+	}
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", toolName, args)
+	if err != nil {
+		return withProjectedChatOperation("im/"+toolName, err)
+	}
+	return writeProjectedChatPayload(cmd, "im/"+toolName, text, func(data map[string]any) map[string]any {
+		return chatmsg.ProjectMessageSendStatus(data, openTaskID)
+	})
+}
+
+func withProjectedChatOperation(operation string, err error) error {
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) && cliErr.Operation == "" {
+		withOperation := *cliErr
+		withOperation.Operation = operation
+		return &withOperation
+	}
+	return err
+}
+
+func writeProjectedChatPayload(
+	cmd *cobra.Command,
+	operation, text string,
+	project func(map[string]any) map[string]any,
+) error {
 	if strings.TrimSpace(text) == "" {
 		return apperrors.NewAPI("MCP read tool returned no non-empty text content",
-			apperrors.WithOperation("chat/"+toolName),
+			apperrors.WithOperation(operation),
 			apperrors.WithOrigin("mcp"),
 			apperrors.WithFailureStage("response_validation"),
 			apperrors.WithRetryable(true),
@@ -116,48 +249,48 @@ func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[str
 		return nil
 	}
 
-	return writeCommandPayload(cmd, projectChatMessagesPayload(data, search))
+	return writeCommandPayload(cmd, project(data))
 }
 
 func projectChatMessagesPayload(data map[string]any, search bool) map[string]any {
+	return projectChatMessagesPayloadWithLedger(data, search, nil)
+}
+
+func projectChatMessagesPayloadForCommand(cmd *cobra.Command, data map[string]any, search bool) map[string]any {
 	items := chatmsg.ListMessageItems(data)
 	if search {
 		items = chatmsg.SearchItems(data)
 	}
-	messages := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		projected := make(map[string]any, len(item)+8)
-		for key, value := range item {
-			projected[key] = value
-		}
-		for key, value := range chatmsg.ProjectMessageV1(item, true) {
-			if key == "messageId" || key == "text" {
-				projected[key] = value
-				continue
-			}
-			if _, exists := projected[key]; !exists {
-				projected[key] = value
-			}
-		}
-		if value, exists := item["openMessageId"]; exists {
-			projected["openMessageId"] = value
-		} else if value, exists := projected["messageId"]; exists {
-			projected["openMessageId"] = value
-		}
-		if value, exists := item["content"]; exists {
-			projected["content"] = value
-		} else if value, exists := projected["text"]; exists {
-			projected["content"] = value
-		}
-		messages = append(messages, projected)
-	}
+	ledger := decryptProjectedChatMessagesByPolicy(cmd, items)
+	return projectChatMessagesPayloadWithLedger(data, search, ledger)
+}
 
-	payload := make(map[string]any, len(data)+1)
-	for key, value := range data {
+func projectExistingChatMessageCollectionsForCommand(cmd *cobra.Command, data map[string]any, search bool) map[string]any {
+	items := chatmsg.ListMessageItems(data)
+	if search {
+		items = chatmsg.SearchItems(data)
+	}
+	ledger := decryptProjectedChatMessagesByPolicy(cmd, items)
+	payload := projectExistingChatMessageCollections(data)
+	for key, value := range ledger {
 		payload[key] = value
 	}
+	return payload
+}
+
+func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledger map[string]any) map[string]any {
+	payload := projectExistingChatMessageCollections(data)
+	items := chatmsg.ListMessageItems(payload)
+	if search {
+		items = chatmsg.SearchItems(payload)
+	}
+	messages := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		messages = append(messages, projectChatMessageItem(item, nil))
+	}
+
 	payload["messages"] = messages
-	if result, ok := data["result"].(map[string]any); ok {
+	if result, ok := payload["result"].(map[string]any); ok {
 		if _, exists := result["messages"]; exists {
 			projectedResult := make(map[string]any, len(result))
 			for key, value := range result {
@@ -167,7 +300,265 @@ func projectChatMessagesPayload(data map[string]any, search bool) map[string]any
 			payload["result"] = projectedResult
 		}
 	}
+	for key, value := range ledger {
+		payload[key] = value
+	}
 	return payload
+}
+
+func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string]any) map[string]any {
+	if cmd == nil || commandBoolFlag(cmd, "dry-run") ||
+		chatCryptoClient == nil || chatCryptoClient.BackendReady == nil || !chatCryptoClient.BackendReady() {
+		return nil
+	}
+	batchItems := make([]messagecrypto.BatchDecryptItem, 0)
+	for _, item := range items {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(item)))
+		if messageID == "" || messageID == "<nil>" {
+			continue
+		}
+		content := strings.TrimSpace(fmt.Sprint(firstChatMapValue(item, "content", "text")))
+		if chatmsg.IsEncrypted(content) {
+			conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(item)))
+			if conversationID == "<nil>" {
+				conversationID = ""
+			}
+			batchItems = append(batchItems, messagecrypto.BatchDecryptItem{
+				MessageID:      messageID,
+				ConversationID: conversationID,
+				Ciphertext:     content,
+			})
+		}
+	}
+	decryptCandidateCount := len(batchItems)
+	batchItems, policyFailures := filterProjectedDecryptItemsByPolicy(cmd, batchItems)
+	ledger := map[string]any{
+		"decryptCandidateCount": decryptCandidateCount,
+		"decryptAllowedCount":   len(batchItems),
+		"decryptedCount":        0,
+		"decryptFailedCount":    len(policyFailures),
+	}
+	if len(policyFailures) > 0 {
+		ledger["decryptFailures"] = policyFailures
+		ledger["partial"] = true
+	}
+	if len(batchItems) == 0 {
+		return ledger
+	}
+	result, err := chatCryptoClient.BatchDecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{}, batchItems)
+	if err != nil {
+		failures := append([]map[string]any{}, policyFailures...)
+		failures = append(failures, map[string]any{"stage": "message-decrypt", "reason": err.Error()})
+		ledger["decryptFailedCount"] = len(failures)
+		ledger["decryptFailures"] = failures
+		ledger["partial"] = true
+		return ledger
+	}
+	byID := map[string][]map[string]any{}
+	for _, item := range items {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(item)))
+		if messageID != "" && messageID != "<nil>" {
+			byID[messageID] = append(byID[messageID], item)
+		}
+	}
+	decryptedCount := 0
+	failures := make([]map[string]any, 0)
+	for _, item := range result.Items {
+		if item.Status != "" && item.Status != "success" {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+			continue
+		}
+		if strings.TrimSpace(item.PlaintextContent) == "" {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
+			continue
+		}
+		for _, message := range byID[item.MessageID] {
+			message["content"] = item.PlaintextContent
+			message["contentDecrypted"] = true
+			message["cryptoLayer"] = "ding+safechat"
+			if item.KeyVersion > 0 {
+				message["dingKeyVersion"] = item.KeyVersion
+			}
+		}
+		decryptedCount++
+	}
+	for _, item := range result.Failures {
+		failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+	}
+	failures = append(policyFailures, failures...)
+	ledger["decryptedCount"] = decryptedCount
+	ledger["decryptFailedCount"] = len(failures)
+	if len(failures) > 0 {
+		ledger["decryptFailures"] = failures
+		ledger["partial"] = true
+	}
+	return ledger
+}
+
+func filterProjectedDecryptItemsByPolicy(cmd *cobra.Command, items []messagecrypto.BatchDecryptItem) ([]messagecrypto.BatchDecryptItem, []map[string]any) {
+	filtered := make([]messagecrypto.BatchDecryptItem, 0, len(items))
+	failures := make([]map[string]any, 0)
+	for _, item := range items {
+		decision, err := chatCryptoClient.PolicyDecision(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{
+			Identity:           "user",
+			MsgType:            "text",
+			OpenConversationID: item.ConversationID,
+		})
+		if err != nil {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			continue
+		}
+		if !decision.Enabled {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered, failures
+}
+
+func chatDecryptFailure(messageID, conversationID, reason string) map[string]any {
+	failure := map[string]any{
+		"stage":     "message-decrypt",
+		"messageId": strings.TrimSpace(messageID),
+		"reason":    firstNonEmptyLiteral(reason, "decrypt_failed"),
+	}
+	if strings.TrimSpace(conversationID) != "" {
+		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func firstChatMapValue(message map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := message[key]; ok {
+			return value
+		}
+	}
+	return nil
+}
+
+func firstNonEmptyLiteral(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func projectExistingChatMessageCollections(data map[string]any) map[string]any {
+	payload := cloneStringAnyMap(data)
+	if messages, exists := payload["messages"]; exists {
+		payload["messages"] = projectChatMessageItems(messages, nil)
+	}
+	if groups, exists := payload["conversationMessagesList"]; exists {
+		payload["conversationMessagesList"] = projectChatConversationMessageGroups(groups)
+	}
+
+	switch result := payload["result"].(type) {
+	case map[string]any:
+		projectedResult := cloneStringAnyMap(result)
+		if messages, exists := projectedResult["messages"]; exists {
+			projectedResult["messages"] = projectChatMessageItems(messages, nil)
+		}
+		if groups, exists := projectedResult["conversationMessagesList"]; exists {
+			projectedResult["conversationMessagesList"] = projectChatConversationMessageGroups(groups)
+		}
+		payload["result"] = projectedResult
+	case []any, []map[string]any:
+		payload["result"] = projectChatMessageItems(result, nil)
+	}
+	return payload
+}
+
+func projectChatConversationMessageGroups(value any) any {
+	groups, ok := chatMessageMapItems(value)
+	if !ok {
+		return value
+	}
+	projected := make([]any, 0, len(groups))
+	for _, group := range groups {
+		projectedGroup := cloneStringAnyMap(group)
+		context := map[string]any{}
+		if conversationID, exists := group["openConversationId"]; exists {
+			context["openConversationId"] = conversationID
+		}
+		if title, exists := group["title"]; exists {
+			context["conversationTitle"] = title
+		}
+		if singleChat, exists := group["singleChat"]; exists {
+			context["singleChat"] = singleChat
+		}
+		if messages, exists := group["messages"]; exists {
+			projectedGroup["messages"] = projectChatMessageItems(messages, context)
+		}
+		projected = append(projected, projectedGroup)
+	}
+	return projected
+}
+
+func projectChatMessageItems(value any, context map[string]any) any {
+	items, ok := chatMessageMapItems(value)
+	if !ok {
+		return value
+	}
+	projected := make([]any, 0, len(items))
+	for _, item := range items {
+		projected = append(projected, projectChatMessageItem(item, context))
+	}
+	return projected
+}
+
+func chatMessageMapItems(value any) ([]map[string]any, bool) {
+	switch items := value.(type) {
+	case []map[string]any:
+		return items, true
+	case []any:
+		mapped := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			message, ok := item.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			mapped = append(mapped, message)
+		}
+		return mapped, true
+	default:
+		return nil, false
+	}
+}
+
+func projectChatMessageItem(item map[string]any, context map[string]any) map[string]any {
+	projected := make(map[string]any, len(item)+len(context)+8)
+	for key, value := range item {
+		projected[key] = value
+	}
+	for key, value := range context {
+		if _, exists := projected[key]; !exists {
+			projected[key] = value
+		}
+	}
+	for key, value := range chatmsg.ProjectMessageV1(projected, true) {
+		if key == "messageId" || key == "text" {
+			projected[key] = value
+			continue
+		}
+		if _, exists := projected[key]; !exists {
+			projected[key] = value
+		}
+	}
+	if value, exists := item["openMessageId"]; exists {
+		projected["openMessageId"] = value
+	} else if value, exists := projected["messageId"]; exists {
+		projected["openMessageId"] = value
+	}
+	if value, exists := item["content"]; exists {
+		projected["content"] = value
+	} else if value, exists := projected["text"]; exists {
+		projected["content"] = value
+	}
+	return projected
 }
 
 func sendPersonalMessageForCommand(cmd *cobra.Command, params map[string]any) error {
@@ -1195,11 +1586,27 @@ func pagedChatConversationMessagesConfig(toolName string, build func(*cobra.Comm
 func pagedProjectedChatSearchConfig(cmd *cobra.Command, toolName string, build func(*cobra.Command) (map[string]any, error)) PagedMCPCommandConfig {
 	cfg := pagedChatConversationMessagesConfig(toolName, build)
 	cfg.Fallback = func(args map[string]any) error {
-		return callProjectedChatMessages(cmd, toolName, args, true)
+		return callProjectedChatMessages(cmd, toolName, args, true, "")
 	}
 	cfg.ProjectResult = func(payload map[string]any) map[string]any {
-		return projectChatMessagesPayload(payload, true)
+		return projectChatMessagesPayloadForCommand(cmd, payload, true)
 	}
+	return cfg
+}
+
+func pagedProjectedAtomicChatMessagesConfig(cmd *cobra.Command, cfg PagedMCPCommandConfig) PagedMCPCommandConfig {
+	cfg.Fallback = func(args map[string]any) error {
+		return callProjectedAtomicChatMessages(cmd, cfg.ToolName, args, true)
+	}
+	cfg.ProjectResult = projectExistingChatMessageCollections
+	return cfg
+}
+
+func pagedProjectedAtomicIMMessagesConfig(cmd *cobra.Command, cfg PagedMCPCommandConfig) PagedMCPCommandConfig {
+	cfg.Fallback = func(args map[string]any) error {
+		return callProjectedAtomicIMMessages(cmd, cfg.ToolName, args)
+	}
+	cfg.ProjectResult = projectExistingChatMessageCollections
 	return cfg
 }
 
@@ -1292,23 +1699,34 @@ func newChatGroupSearchCommand(hidden bool) *cobra.Command {
 }
 
 func runChatSearchCommon(cmd *cobra.Command, _ []string) error {
-	if err := validateRequiredFlags(cmd, "nicks"); err != nil {
-		return err
-	}
-	nicks := parseCSVValues(mustGetFlag(cmd, "nicks"))
-	limit := chatIntFlagOrFallback(cmd, "limit", "size")
-	cursor, _ := cmd.Flags().GetString("cursor")
-	matchMode, _ := cmd.Flags().GetString("match-mode")
-	toolArgs := map[string]any{
-		"nicks":     nicks,
-		"matchMode": matchMode,
-		"limit":     limit,
-		"cursor":    cursor,
-	}
-	if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
-		toolArgs["excludeMuted"] = true
-	}
-	return callMCPTool("search_common_groups", toolArgs)
+	return RunPagedMCPCommand(cmd, PagedMCPCommandConfig{
+		ServerID:         "chat",
+		ToolName:         "search_common_groups",
+		ItemPath:         "result.groups",
+		ItemIdentityPath: "openConversationId",
+		CursorPath:       "result.nextCursor",
+		HasMorePath:      "result.hasMore",
+		CursorArg:        "cursor",
+		CursorKind:       PagedCursorString,
+		BuildArgs: func(cmd *cobra.Command) (map[string]any, error) {
+			if err := validateRequiredFlags(cmd, "nicks"); err != nil {
+				return nil, err
+			}
+			toolArgs := map[string]any{
+				"nicks":     parseCSVValues(mustGetFlag(cmd, "nicks")),
+				"matchMode": mustGetFlag(cmd, "match-mode"),
+				"limit":     chatIntFlagOrFallback(cmd, "limit", "size"),
+				"cursor":    mustGetFlag(cmd, "cursor"),
+			}
+			if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
+				toolArgs["excludeMuted"] = true
+			}
+			return toolArgs, nil
+		},
+		Fallback: func(args map[string]any) error {
+			return callMCPTool("search_common_groups", args)
+		},
+	})
 }
 
 // sanitizeTitleFromText derives a safe title from message text.
@@ -2024,6 +2442,14 @@ func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
 	return toolArgs, nil
 }
 
+func runChatCrossOrgDataAuth(cmd *cobra.Command) error {
+	toolArgs, err := buildChatCrossOrgDataAuthArgs(cmd)
+	if err != nil {
+		return err
+	}
+	return callMCPToolOnServer("im", "chat_permission_grant", toolArgs)
+}
+
 func buildChatGroupShareInviteArgs(cmd *cobra.Command) (map[string]any, error) {
 	if err := validateRequiredFlags(cmd, "source"); err != nil {
 		return nil, err
@@ -2498,9 +2924,10 @@ func newChatCommand() *cobra.Command {
 			AgentSummary: "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
 			UseWhen: []string{
 				"请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人",
+				"资源范围仅为 IM，答案需要可枚举消息记录，或要按消息原生谓词进行结构化检索",
 			},
 			AvoidWhen: []string{
-				"实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
+				"跨文档、邮件和消息按主题发现内容用 aisearch enterprise；查询当前用户参与的跨源行为轨迹用 aisearch behavior；实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
 			},
 		},
 	})
@@ -2620,11 +3047,7 @@ func newChatCommand() *cobra.Command {
   dws chat data-auth cross-org --all --grant-type timed --ttl 24h`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs, err := buildChatCrossOrgDataAuthArgs(cmd)
-			if err != nil {
-				return err
-			}
-			return callMCPToolOnServer("im", "chat_permission_grant", toolArgs)
+			return runChatCrossOrgDataAuth(cmd)
 		},
 	}
 	chatDataAuthCrossOrgCmd.Flags().String("target-org-id", "", "目标组织 ID（与 --all 二选一）")
@@ -3142,6 +3565,10 @@ func newChatCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			paginationDirection := "older"
+			if forward {
+				paginationDirection = "newer"
+			}
 			if groupID != "" {
 				toolArgs := map[string]any{
 					"openconversation_id": groupID,
@@ -3151,7 +3578,7 @@ func newChatCommand() *cobra.Command {
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
 				}
-				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false)
+				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false, paginationDirection)
 			}
 			toolArgs := map[string]any{
 				"time":    timeVal,
@@ -3165,7 +3592,7 @@ func newChatCommand() *cobra.Command {
 			if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
+			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false, paginationDirection)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListCmd, LeafSpec{
@@ -3251,7 +3678,7 @@ func newChatCommand() *cobra.Command {
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callMCPTool("list_individual_chat_message", toolArgs)
+			return callProjectedAtomicChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListDirectCmd, LeafSpec{
@@ -4083,8 +4510,8 @@ func newChatCommand() *cobra.Command {
   dws chat message list-all --start "2025-03-01 00:00:00" --end "2025-03-31 23:59:59" --limit 50 --cursor "abc123token"
   dws chat message list-all --start "2025-03-01 00:00:00" --end "2025-03-31 23:59:59" --limit 100 --page-all --page-limit 20 --max-items 500 --page-delay 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatConversationMessagesConfig(
-				"search_messages_by_time_range", chatMessageListAllArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatConversationMessagesConfig("search_messages_by_time_range", chatMessageListAllArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListAllCmd, LeafSpec{
@@ -4134,8 +4561,8 @@ func newChatCommand() *cobra.Command {
   # 查询 userId: dws contact user search --query "姓名"
   # 查询 openDingTalkId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatConversationMessagesConfig(
-				"search_messages_by_sender", chatMessageListBySenderArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatConversationMessagesConfig("search_messages_by_sender", chatMessageListBySenderArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListBySenderCmd, LeafSpec{
@@ -4185,8 +4612,8 @@ func newChatCommand() *cobra.Command {
   dws chat message list-mentions --conversation-id <openconversation_id> --start "2026-03-10T00:00:00+08:00" --end "2026-03-11T00:00:00+08:00" --limit 50 --page-all --max-items 200 --page-delay 0
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatConversationMessagesConfig(
-				"search_at_me_message", chatMessageListMentionsArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatConversationMessagesConfig("search_at_me_message", chatMessageListMentionsArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListMentionsCmd, LeafSpec{
@@ -4233,8 +4660,8 @@ func newChatCommand() *cobra.Command {
   dws chat message list-focused --limit 20 --cursor <nextCursor>
   dws chat message list-focused --limit 50 --page-all --page-limit 10 --page-delay 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatMessagesInt64Config(
-				"list_special_focus_messages", chatMessageListFocusedArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatMessagesInt64Config("list_special_focus_messages", chatMessageListFocusedArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListFocusedCmd, LeafSpec{
@@ -4438,9 +4865,25 @@ func newChatCommand() *cobra.Command {
 	  # 查询人员: dws contact user search --keyword "姓名" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conversationIDs := parseCSVValues(flagOrFallback(cmd, "conversation-ids", "groups", "group"))
+			cfg := pagedChatConversationMessagesOnServerConfig("im", "search_messages", chatMessageSearchAdvancedArgs)
+			cfg.Fallback = func(args map[string]any) error {
+				if deps.Caller.DryRun() {
+					return callMCPToolOnServer("im", "search_messages", args)
+				}
+				text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", "search_messages", args)
+				if err != nil {
+					return withProjectedChatOperation("im/search_messages", err)
+				}
+				return writeProjectedChatPayload(cmd, "im/search_messages", text, func(data map[string]any) map[string]any {
+					return projectExistingChatMessageCollectionsForCommand(cmd, data, true)
+				})
+			}
+			cfg.ProjectResult = func(payload map[string]any) map[string]any {
+				return projectExistingChatMessageCollectionsForCommand(cmd, payload, true)
+			}
 			return runConversationScopedPagedMessageSearch(
 				cmd,
-				pagedChatConversationMessagesOnServerConfig("im", "search_messages", chatMessageSearchAdvancedArgs),
+				cfg,
 				"openConversationIds",
 				conversationIDs,
 			)
@@ -4509,9 +4952,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			if err := validateRequiredFlags(cmd, "open-task-id"); err != nil {
 				return err
 			}
-			return callMCPToolOnServer("im", "query_message_send_status", map[string]any{
-				"openTaskId": mustGetFlag(cmd, "open-task-id"),
-			})
+			openTaskID := mustGetFlag(cmd, "open-task-id")
+			return callProjectedIMMessageSendStatus(cmd, openTaskID)
 		},
 	}
 	DeclareLeafMetadata(chatMessageQuerySendStatusCmd, LeafSpec{
@@ -4774,10 +5216,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatSearchCommonCmd := &cobra.Command{
 		Use:   "search-common",
 		Short: "搜索共同群（查询指定人共同所在的群聊）",
-		Long:  `根据昵称列表搜索共同群聊。--nicks 指定要搜索的人员昵称（逗号分隔，必填）。--match-mode 控制匹配模式：AND 表示所有人都在群里，OR 表示任一人在群里（默认 AND）。分页参数 --limit（默认 20）和 --cursor（默认 "0"）始终传递；hasMore=true 时用返回的 nextCursor 作为下次 --cursor 继续翻页。`,
+		Long:  `根据昵称列表搜索共同群聊。--nicks 指定要搜索的人员昵称（逗号分隔，必填）。--match-mode 控制匹配模式：AND 表示所有人都在群里，OR 表示任一人在群里（默认 AND）。--limit 是每页数量，--cursor 是单页续游标；要求“最多 N 个”时使用 --page-all --max-items N，CLI 会自动续页、按 openConversationId 去重，并通过 paging.requestSatisfied/sourceExhausted 区分“已满足用户上限”和“已穷尽服务端”。`,
 		Example: `  dws chat search-common --nicks "风雷,山乔" --limit 20 --cursor 0
-  dws chat search-common --nicks "天鸡,乐函" --match-mode OR --limit 20 --cursor 0
-  dws chat search-common --nicks "风雷,山乔,天鸡" --limit 10 --cursor <nextCursor>`,
+  dws chat search-common --nicks "天鸡,乐函" --match-mode OR --limit 100 --page-all --max-items 20 --page-delay 0`,
 		RunE: runChatSearchCommon,
 	}
 	DeclareLeafMetadata(chatSearchCommonCmd, LeafSpec{
@@ -4803,8 +5244,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 				AgentSummary: "查询指定人员共同所在的群聊",
 				UseWhen:      []string{"需要找两人或多人共同群聊时"},
 				AvoidWhen:    []string{"按群名称搜索时使用 chat search"},
-				Examples:     []string{"dws chat search-common --nicks \"张三,李四\" --match-mode all --limit 20"},
+				Examples:     []string{"dws chat search-common --nicks \"张三,李四\" --match-mode AND --limit 100 --page-all --max-items 20 --page-delay 0"},
 			},
+			Parameters: pagedMCPParamDecls(),
 		},
 	})
 
@@ -5149,6 +5591,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatSearchCommonCmd.Flags().MarkHidden("size")
 	chatSearchCommonCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"，翻页传 nextCursor）")
 	chatSearchCommonCmd.Flags().Bool("exclude-muted", false, "是否排除已设置免打扰的群聊（默认 false）")
+	AddPagedMCPFlags(chatSearchCommonCmd)
 	chatMessageSearchCommonCmd.Flags().String("nicks", "", "要搜索的昵称列表，逗号分隔 (必填)")
 	_ = chatMessageSearchCommonCmd.MarkFlagRequired("nicks")
 	chatMessageSearchCommonCmd.Flags().String("match-mode", "AND", "匹配模式：AND=所有人都在群里，OR=任一人在群里（默认 AND）")
@@ -5157,6 +5600,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatMessageSearchCommonCmd.Flags().MarkHidden("size")
 	chatMessageSearchCommonCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"，翻页传 nextCursor）")
 	chatMessageSearchCommonCmd.Flags().Bool("exclude-muted", false, "是否排除已设置免打扰的群聊（默认 false）")
+	AddPagedMCPFlags(chatMessageSearchCommonCmd)
 	chatMessageSearchCommonCmd.Flags().String("group", "", "")
 	_ = chatMessageSearchCommonCmd.Flags().MarkHidden("group")
 
@@ -5980,7 +6424,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			if len(msgIds) > 50 {
 				return fmt.Errorf("--msg-ids 最多支持 50 条，当前 %d 条", len(msgIds))
 			}
-			return callMCPToolOnServer("im", "list_messages_by_ids", map[string]any{
+			return callProjectedAtomicIMMessages(cmd, "list_messages_by_ids", map[string]any{
 				"openMsgIds": msgIds,
 			})
 		},
@@ -6441,7 +6885,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatMessageCreateTextEmotionCmd.MarkFlagRequired("text")
 	chatMessageCreateTextEmotionCmd.Flags().String("background-id", "", "背景 ID（可选，不传则由服务端默认分配）")
 
-	// ── 流式卡片命令 ──────────────────────────────────────────
+	// ── 卡片命令 ──────────────────────────────────────────────
 
 	chatMessageSendCardCmd := &cobra.Command{
 		Use:   "send-card",
@@ -6539,6 +6983,85 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RequireOneOf:      [][]string{{"group", "receiver"}},
 	})
 
+	chatMessageSendA2UICardCmd := &cobra.Command{
+		Use:     "send-a2ui-card",
+		Short:   "创建并推送 A2UI 卡片",
+		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组，创建时默认 flowStatus=PROCESSING。",
+		Example: `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			groupID := mustGetFlag(cmd, "conversation-id")
+			receiver := mustGetFlag(cmd, "open-dingtalk-id")
+			if groupID == "" && receiver == "" {
+				return fmt.Errorf("--conversation-id or --open-dingtalk-id is required")
+			}
+			if groupID != "" && receiver != "" {
+				return fmt.Errorf("--conversation-id and --open-dingtalk-id are mutually exclusive")
+			}
+			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"requestId":       uuid.NewString(),
+				"bizCardId":       uuid.NewString(),
+				"protocolVersion": "1.0",
+				"flowStatus":      defaultA2UIFlowStatus,
+				"a2uiMessages":    messages,
+				"summary":         strings.Join(messages, "\n"),
+			}
+			if groupID != "" {
+				toolArgs["openConversationId"] = groupID
+				return callMCPToolOnServer("im", "create_and_send_a2ui_card", toolArgs)
+			}
+			resolved, err := resolveOpenDingTalkID(cmd.Context(), receiver)
+			if err != nil {
+				return err
+			}
+			toolArgs["receiverOpenDingTalkId"] = resolved
+			return callMCPToolOnServer("im", "create_and_send_a2ui_card", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(chatMessageSendA2UICardCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "create_and_send_a2ui_card",
+				CanonicalPath:  "chat.create_and_send_a2ui_card",
+				CLIPath:        "chat message send-a2ui-card",
+				PrimaryCLIPath: "chat message send-a2ui-card",
+			},
+			Description: "创建并向群聊或单聊发送 A2UI 卡片",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "create_and_send_a2ui_card"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建并向群聊或单聊发送 A2UI 卡片",
+				UseWhen:      []string{"已准备 A2UI 消息数组，需要创建并发送 A2UI 卡片时"},
+				AvoidWhen:    []string{"创建 streaming 卡片或需要 @成员时使用 chat message send-card；只发送普通文本时使用 send 或 send-by-bot"},
+				Examples:     []string{`dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
+				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId", Required: boolPtr(false)},
+			},
+		},
+	})
+	chatMessageSendA2UICardCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时必填，与 --open-dingtalk-id 互斥）")
+	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
+	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	_ = chatMessageSendA2UICardCmd.MarkFlagRequired("content")
+	cli.AnnotateRuntimeConstraints(chatMessageSendA2UICardCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"conversation-id", "open-dingtalk-id"}},
+		RequireOneOf:      [][]string{{"conversation-id", "open-dingtalk-id"}},
+	})
+
 	chatMessageUpdateCardCmd := &cobra.Command{
 		Use:   "update-card",
 		Short: "流式更新卡片内容",
@@ -6549,20 +7072,18 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		Example: `  dws chat message update-card --biz-id <bizId> --content "更新的卡片内容" --flow-status 2
   dws chat message update-card --biz-id <bizId> --content "最终内容" --flow-status 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "biz-id", "content"); err != nil {
+			if err := validateRequiredFlags(cmd, "biz-id", "content", "flow-status"); err != nil {
 				return err
-			}
-			if !cmd.Flags().Changed("flow-status") {
-				return fmt.Errorf("flag --flow-status is required")
 			}
 			bizID, err := chatmsg.NormalizeCardBizID(mustGetFlag(cmd, "biz-id"))
 			if err != nil {
 				return err
 			}
-			flowStatus, _ := cmd.Flags().GetInt("flow-status")
-			if flowStatus < 1 || flowStatus > 5 {
+			parsedFlowStatus, err := strconv.ParseInt(strings.TrimSpace(mustGetFlag(cmd, "flow-status")), 0, 64)
+			if err != nil || parsedFlowStatus < 1 || parsedFlowStatus > 5 {
 				return fmt.Errorf("--flow-status 必须在 1-5 之间")
 			}
+			flowStatus := int(parsedFlowStatus)
 			params := map[string]any{
 				"bizId":      bizID,
 				"msgContent": mustGetFlag(cmd, "content"),
@@ -6639,7 +7160,78 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatMessageUpdateCardCmd.MarkFlagRequired("biz-id")
 	chatMessageUpdateCardCmd.Flags().String("content", "", "卡片消息内容 (必填)")
 	_ = chatMessageUpdateCardCmd.MarkFlagRequired("content")
-	chatMessageUpdateCardCmd.Flags().Int("flow-status", 0, "流式状态 (必填)")
+	chatMessageUpdateCardCmd.Flags().String("flow-status", "", "流式状态 (必填)")
+
+	chatMessageUpdateA2UICardCmd := &cobra.Command{
+		Use:   "update-a2ui-card",
+		Short: "更新 A2UI 卡片内容和状态",
+		Long: `更新已发送的 A2UI 卡片。--content 必须是非空 JSON 字符串数组。
+--flow-status 接受 PROCESSING、INPUTTING、FINISH、EXECUTING、ERROR、ABORTED、TIMEOUT、CONFIRMING、CONFIRMED，兼容数字 1-9。`,
+		Example: `  dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"finished\"}}"]' --flow-status FINISH`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "biz-id", "content", "flow-status"); err != nil {
+				return err
+			}
+			bizID, err := chatmsg.NormalizeCardBizID(mustGetFlag(cmd, "biz-id"))
+			if err != nil {
+				return err
+			}
+			flowStatus, err := normalizeA2UIUpdateFlowStatus(mustGetFlag(cmd, "flow-status"))
+			if err != nil {
+				return err
+			}
+			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
+			if err != nil {
+				return err
+			}
+			params := map[string]any{
+				"requestId":       uuid.NewString(),
+				"bizId":           bizID,
+				"flowStatus":      flowStatus,
+				"a2uiMessages":    messages,
+				"a2uiAnnotations": []any{},
+			}
+			return callMCPToolOnServer("im", "update_a2ui_card", params)
+		},
+	}
+	DeclareLeafMetadata(chatMessageUpdateA2UICardCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "update_a2ui_card",
+				CanonicalPath:  "chat.update_a2ui_card",
+				CLIPath:        "chat message update-a2ui-card",
+				PrimaryCLIPath: "chat message update-a2ui-card",
+			},
+			Description: "更新已发送 A2UI 卡片的内容和状态",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "update_a2ui_card"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新已发送 A2UI 卡片的内容和状态",
+				UseWhen:      []string{"已有 A2UI 卡片 bizId，需要更新 A2UI 消息数组和流转状态时"},
+				AvoidWhen:    []string{"更新 streaming 卡片时使用 chat message update-card；创建新 A2UI 卡片时使用 chat message send-a2ui-card"},
+				Examples:     []string{`dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\"}"]' --flow-status FINISH`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "biz-id", Property: "bizId", Required: boolPtr(true)},
+				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "flow-status", Property: "flowStatus", Required: boolPtr(true), InterfaceType: "string", Enum: []string{"PROCESSING", "INPUTTING", "FINISH", "EXECUTING", "ERROR", "ABORTED", "TIMEOUT", "CONFIRMING", "CONFIRMED", "1", "2", "3", "4", "5", "6", "7", "8", "9"}},
+			},
+		},
+	})
+	chatMessageUpdateA2UICardCmd.Flags().String("biz-id", "", "卡片业务 ID (必填)")
+	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("biz-id")
+	chatMessageUpdateA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("content")
+	chatMessageUpdateA2UICardCmd.Flags().String("flow-status", "", "A2UI 状态枚举或兼容数字 1-9 (必填)")
+	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("flow-status")
 
 	// ── download-media：下载消息中的媒体资源（走 IM MCP）──────
 	chatMessageDownloadMediaCmd := &cobra.Command{
@@ -6815,7 +7407,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageDownloadMediaCmd.Flags().String("output", "", "本地保存路径，文件或目录 (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("output")
 
-	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageUpdateTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageUpdateCardCmd, chatMessageDownloadMediaCmd)
+	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageUpdateTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageSendA2UICardCmd, chatMessageUpdateCardCmd, chatMessageUpdateA2UICardCmd, chatMessageDownloadMediaCmd)
 	chatBotCmd.AddCommand(chatBotSearchCmd)
 	chatCategoryCmd.AddCommand(chatCategoryListCmd, chatCategoryConvsCmd, chatCategoryCreateCmd, chatCategoryDeleteCmd, chatCategoryRenameCmd, chatCategoryAddConvCmd, chatCategoryRemoveConvCmd, chatCategoryListByConvCmd, chatCategoryBatchInfoCmd)
 	chatGroupCmd.AddCommand(chatGroupInfoByIdCmd)
@@ -10753,7 +11345,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)
 	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
-	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, newChatThreadCommand(chatMessageSendRunE), chatFileCmd, chatConversationFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand())
+	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, newChatThreadCommand(chatMessageSendRunE), chatFileCmd, chatConversationFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand(), newChatCryptoCommand())
 
 	// Keep the v1.0.56 command surface recognizable while directing callers to
 	// the supported nested commands. The chat root's "im" alias makes these

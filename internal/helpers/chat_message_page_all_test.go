@@ -11,13 +11,15 @@ import (
 	"testing"
 	"time"
 
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 type chatMessagePageAllCaller struct {
-	steps []scriptedToolStep
-	dry   bool
-	calls []pagedCommandCall
+	steps     []scriptedToolStep
+	responses map[string]string
+	dry       bool
+	calls     []pagedCommandCall
 }
 
 func (c *chatMessagePageAllCaller) CallTool(_ context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -26,6 +28,9 @@ func (c *chatMessagePageAllCaller) CallTool(_ context.Context, serverID, toolNam
 		copied[k] = v
 	}
 	c.calls = append(c.calls, pagedCommandCall{server: serverID, tool: toolName, args: copied})
+	if response, ok := c.responses[serverID+"/"+toolName]; ok {
+		return textToolResult(response), nil
+	}
 	if len(c.steps) == 0 {
 		return textToolResult(`{"result":{"messages":[],"hasMore":false}}`), nil
 	}
@@ -168,24 +173,35 @@ func TestCrossPlatformCoverageChatMessageListPageAllHelpUsesAuthoritativeCursor(
 	}
 }
 
-func TestCrossPlatformCoverageChatMessageListPageAllSinglePageUnchanged(t *testing.T) {
-	response := `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":false}}`
+func TestCrossPlatformCoverageChatMessageListSinglePagePublishesPaginationLedger(t *testing.T) {
 	tests := []struct {
-		name string
-		args []string
+		name             string
+		args             []string
+		response         string
+		wantComplete     bool
+		wantHasMore      bool
+		wantStopReason   string
+		wantNextPageTime string
 	}{
 		{
-			name: "no paging flags",
-			args: []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older"},
+			name:           "terminal page",
+			args:           []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older"},
+			response:       `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":false}}`,
+			wantComplete:   true,
+			wantStopReason: "source_complete",
 		},
 		{
-			name: "paging flags without page-all stay single page",
-			args: []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older", "--page-limit", "20", "--max-items", "5", "--page-delay", "0"},
+			name:             "continuing page",
+			args:             []string{"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older", "--page-limit", "20", "--max-items", "5", "--page-delay", "0"},
+			response:         `{"result":{"messages":[{"openMessageId":"m1","content":"hello"}],"hasMore":true,"nextCursor":1787000000123}}`,
+			wantHasMore:      true,
+			wantStopReason:   "single_page",
+			wantNextPageTime: time.UnixMilli(1787000000123).UTC().Format(time.RFC3339Nano),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caller := &chatMessagePageAllCaller{steps: []scriptedToolStep{{text: response}}}
+			caller := &chatMessagePageAllCaller{steps: []scriptedToolStep{{text: tt.response}}}
 			got, err := executeChatMessagePageAllCommand(t, caller, tt.args...)
 			if err != nil {
 				t.Fatal(err)
@@ -203,10 +219,19 @@ func TestCrossPlatformCoverageChatMessageListPageAllSinglePageUnchanged(t *testi
 			if _, exists := call.args["page-all"]; exists {
 				t.Fatalf("single-page request leaked paging args: %#v", call.args)
 			}
-			for _, key := range []string{"stopReason", "pagesFetched", "truncatedByPageLimit", "truncatedByResultLimit", "paging", "complete"} {
-				if _, exists := got[key]; exists {
-					t.Fatalf("single-page output gained aggregate field %q: %#v", key, got[key])
+			if got["complete"] != tt.wantComplete || got["hasMore"] != tt.wantHasMore || got["paginationKnown"] != true || got["pagesFetched"] != float64(1) || got["stopReason"] != tt.wantStopReason {
+				t.Fatalf("pagination ledger = complete %#v, hasMore %#v, known %#v, pages %#v, stop %#v", got["complete"], got["hasMore"], got["paginationKnown"], got["pagesFetched"], got["stopReason"])
+			}
+			if got["count"] != float64(1) || got["failedCount"] != float64(0) || got["partial"] != false || got["truncated"] != false {
+				t.Fatalf("result ledger = count %#v, failed %#v, partial %#v, truncated %#v", got["count"], got["failedCount"], got["partial"], got["truncated"])
+			}
+			nextPage, hasNextPage := got["nextPage"].(map[string]any)
+			if tt.wantNextPageTime == "" {
+				if hasNextPage {
+					t.Fatalf("nextPage = %#v, want absent", nextPage)
 				}
+			} else if !hasNextPage || nextPage["time"] != tt.wantNextPageTime || nextPage["direction"] != "older" || nextPage["nextCursor"] != float64(1787000000123) {
+				t.Fatalf("nextPage = %#v, want reusable older boundary %q", got["nextPage"], tt.wantNextPageTime)
 			}
 			ids := pageAllMessageIDs(t, got)
 			if len(ids) != 1 || ids[0] != "m1" {
@@ -262,6 +287,66 @@ func TestCrossPlatformCoverageChatMessageListPageAllAggregatesAndDedups(t *testi
 	}
 	if _, exists := got["nextPage"]; exists {
 		t.Fatalf("nextPage = %#v, want absent when source complete", got["nextPage"])
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListPageAllDecryptsAfterAggregation(t *testing.T) {
+	old := chatCryptoClient
+	SetChatCryptoClient(&messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	t.Cleanup(func() { chatCryptoClient = old })
+
+	const cipher1 = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	const cipher2 = "TWzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	caller := &chatMessagePageAllCaller{
+		steps: []scriptedToolStep{
+			{text: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cidAAAAAAAAAA1","content":"` + cipher1 + `"}],"hasMore":true,"nextCursor":1787000000123}}`},
+			{text: `{"result":{"messages":[{"openMessageId":"m2","openConversationId":"cidAAAAAAAAAA1","content":"` + cipher2 + `"}],"hasMore":false}}`},
+		},
+		responses: map[string]string{
+			"im/get_message_crypto_policy": `{"result":{"mode":"required","ttlSeconds":60}}`,
+			"im/batch_ding_decrypt_messages": `{"result":{"items":[` +
+				`{"messageId":"m1","status":"success","plaintextContent":"明文一","keyVersion":5},` +
+				`{"messageId":"m2","status":"success","plaintextContent":"明文二","keyVersion":5}` +
+				`]}}`,
+		},
+	}
+	got, err := executeChatMessagePageAllCommand(t, caller,
+		"message", "list", "--conversation-id", "cidAAAAAAAAAA1", "--time", "2025-03-01 00:00:00", "--direction", "older", "--page-all", "--page-delay", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCalls := []string{
+		"chat/list_conversation_message_v2",
+		"chat/list_conversation_message_v2",
+		"im/get_message_crypto_policy",
+		"im/get_message_crypto_policy",
+		"im/batch_ding_decrypt_messages",
+	}
+	if len(caller.calls) != len(wantCalls) {
+		t.Fatalf("calls = %#v, want %v", caller.calls, wantCalls)
+	}
+	for i, call := range caller.calls {
+		if gotCall := call.server + "/" + call.tool; gotCall != wantCalls[i] {
+			t.Fatalf("call[%d] = %q, want %q", i, gotCall, wantCalls[i])
+		}
+	}
+	messages := pageAllMessages(t, got)
+	if messages[0]["text"] != "明文一" || messages[1]["text"] != "明文二" ||
+		messages[0]["contentDecrypted"] != true || messages[1]["contentDecrypted"] != true {
+		t.Fatalf("messages = %#v, want decrypted page aggregation", messages)
+	}
+	if got["decryptCandidateCount"] != float64(2) || got["decryptAllowedCount"] != float64(2) ||
+		got["decryptedCount"] != float64(2) || got["decryptFailedCount"] != float64(0) || got["partial"] != false {
+		t.Fatalf("decrypt ledger = %#v", got)
 	}
 }
 

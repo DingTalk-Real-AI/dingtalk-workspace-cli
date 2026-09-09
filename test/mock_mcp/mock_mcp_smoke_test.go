@@ -35,6 +35,9 @@ const (
 	mockMCPSmokeCAEnv           = "DWS_MOCK_MCP_SMOKE_CA_FILE"
 	mockMCPSmokeDownloadDialEnv = "DWS_MOCK_MCP_SMOKE_DOWNLOAD_DIAL"
 	mockCurrentDOpenID          = "DAAAAAAAAAAAiE"
+	// helper 会启动第二个启用 race 的测试进程。保持有界，同时为 remaining
+	// shard 与其他 CI race 包并行时的调度抖动预留空间。
+	mockMCPCLIExecutionTimeout = 30 * time.Second
 )
 
 type recordedToolCall struct {
@@ -906,7 +909,7 @@ func runCLI(t *testing.T, env []string, args ...string) (string, string, error) 
 func runCLIInDir(t *testing.T, env []string, dir string, args ...string) (string, string, error) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), mockMCPCLIExecutionTimeout)
 	defer cancel()
 	processArgs := append([]string{"-test.run=^TestCLIHelperProcess$", "--"}, args...)
 	cmd := exec.CommandContext(ctx, os.Args[0], processArgs...)

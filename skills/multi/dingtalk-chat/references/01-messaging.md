@@ -53,6 +53,7 @@ dws chat +chat-messages --group <openConversationId> \
 - 群名 + 文件/高级控制：`+messages-send --as user --chat-query <群名> --file <相对路径>`。
 - Bot 多群文本/Markdown：`+messages-send --as bot --robot-code <code> --groups <cid1,cid2>`；
   Runtime 去重并返回 `im.batch-write.v1` 逐目标 ledger，最多 100 个稳定群 ID。
+- Markdown 中的公网图片必须写成 `![图片标题](https://example.com/image.png)` 才会内联；省略 `!` 只显示链接。
 
 `--user-query` 和 `--chat-query` 会在 CLI 内运行真实只读解析；零命中或多候选时在上传或发送前停止。Bot/Webhook 不接受这两个自然目标参数。
 

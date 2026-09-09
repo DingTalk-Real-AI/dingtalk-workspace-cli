@@ -35,10 +35,12 @@ import (
 // search hits through list_messages_by_ids in chunks of 50. A later-page or
 // enrichment failure never turns a partial result into a false success: the
 // output carries an explicit failure ledger and complete=false.
-const searchMsgIntent = "当你要按关键词、发送者、@对象、消息类型、机器人来源或会话范围组合搜索 IM 消息时使用；可搜索单个、多个或全部会话。--group/--groups 接受群名或 openConversationId，--sender/--senders 接受姓名、userId 或 openDingTalkId：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 执行并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。默认查询近 7 天，也可指定精确起止时间和输出顺序。" +
-	"显式指定会话时会先验证 CID，再执行有界全局扫描并在本地精确过滤，避免下层忽略非法 CID 或群聊 CID。" +
-	"--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。" +
-	"--download-resources 使用安全本地路径、默认不覆盖和原子落盘。"
+const (
+	searchMsgIntent = "当资源范围仅为 IM、答案需要可枚举的消息记录，并以发送者、会话、关键词、@对象、消息类型、机器人来源、reaction 或精确时间范围作为结构化谓词时使用。" +
+		"自然名称由命令解析为唯一稳定身份；显式会话范围会校验并在客户端复核，防止下层忽略过滤条件。" +
+		"要求完整集合时使用 --page-all；结果中的 complete、hasMore、nextCursor 和 failures 决定能否作完整或零命中结论。"
+	searchMsgReactionConstraint = "--has-reactions 必须与 --page-all 一起使用，且不能与 --no-enrich 组合"
+)
 
 var SearchMsg = shortcut.Shortcut{
 	Service:     "chat",
@@ -63,15 +65,18 @@ var SearchMsg = shortcut.Shortcut{
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
-			Reason:       "Reviewed search adapter: it combines filters, cursor pagination, batched mget enrichment, stable projection, completeness accounting, and optional safe resource downloads.",
+			Reason:       "Reviewed message-query adapter: it combines structured predicates, cursor pagination, batched detail enrichment, stable identity checks, completeness accounting, and optional safe resource downloads.",
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
 			UseWhen:      []string{searchMsgIntent},
-			AvoidWhen:    []string{"只想查看或导出一个指定会话的消息记录、且没有发送者、关键词、@对象或消息类型等主要筛选条件时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"},
+			AvoidWhen: []string{
+				"跨文档、邮件和消息按主题发现内容时使用 aisearch enterprise；查询当前用户参与的发送、接收、创建或分享行为轨迹时使用 aisearch behavior",
+				"只按时间浏览一个已知会话且没有结构化消息谓词时使用 chat +chat-messages；已有精确消息 ID 时使用 chat +messages-mget",
+			},
 			Examples: []string{
-				"dws chat +search-msg --group \"项目群\" --sender \"测试用户甲\" --page-all",
-				"dws chat +search-msg --query \"周报\" --senders <openDingTalkId> --days 3 --page-all",
+				"dws chat +search-msg --senders <openDingTalkId1>,<openDingTalkId2> --query \"项目更新\" --days 30 --page-all",
+				"dws chat +search-msg --group <openConversationId> --has-reactions --page-all",
 			},
 		},
 	},
@@ -94,6 +99,7 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "at-ids", Type: shortcut.FlagStringSlice, Desc: "@对象 userId/openDingTalkId 列表"},
 		{Name: "message-type", Type: shortcut.FlagString, Desc: "下层消息类型过滤值（以当前 IM Schema 为准）"},
 		{Name: "only-robot", Type: shortcut.FlagBool, Desc: "只搜索机器人消息"},
+		{Name: "has-reactions", Type: shortcut.FlagBool, Desc: "只返回存在 reaction 的消息；由默认详情富化提供 reaction 证据；" + searchMsgReactionConstraint},
 		{Name: "conversation-type", Type: shortcut.FlagString, Desc: "下层会话类型过滤值（以当前 IM Schema 为准）"},
 		{Name: "chat-type", Type: shortcut.FlagString, Desc: "--conversation-type 的 lark-cli 对齐别名"},
 		{Name: "days", Type: shortcut.FlagInt, Desc: "默认时间窗的回溯天数", Default: "7"},
@@ -107,15 +113,15 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "page-size", Type: shortcut.FlagInt, Desc: "--limit 的 lark-cli 对齐别名（1-100）"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传上次的 nextCursor", Default: "0"},
 		{Name: "page-token", Type: shortcut.FlagString, Desc: "--cursor 的 lark-cli 对齐别名"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动连续拉取所有游标页"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动连续拉取所有游标页；" + searchMsgReactionConstraint},
 		{Name: "page-limit", Type: shortcut.FlagInt, Desc: "--page-all 或显式会话范围本地扫描的最大页数（1-40）", Default: "20"},
-		{Name: "no-enrich", Type: shortcut.FlagBool, Desc: "不再按消息 ID 批量查询完整详情"},
+		{Name: "no-enrich", Type: shortcut.FlagBool, Desc: "不再按消息 ID 批量查询完整详情；" + searchMsgReactionConstraint},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出命中消息的 reaction（默认输出）"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
 		{
 			Kind:        shortcut.ConstraintAtLeastOne,
-			Flags:       []string{"query", "keyword", "text", "text-query", "group", "conversation-id", "id", "groups", "chat-id", "chat-query", "senders", "sender", "sender-query", "at-me", "is-at-me", "at-ids", "message-type", "only-robot", "conversation-type", "chat-type"},
+			Flags:       []string{"query", "keyword", "text", "text-query", "group", "conversation-id", "id", "groups", "chat-id", "chat-query", "senders", "sender", "sender-query", "at-me", "is-at-me", "at-ids", "message-type", "only-robot", "has-reactions", "conversation-type", "chat-type"},
 			Description: "至少指定一个内容、身份、会话或消息类型过滤条件",
 		},
 		{
@@ -138,12 +144,13 @@ var SearchMsg = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"query", "keyword", "text", "text-query"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"limit", "page-size"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"cursor", "page-token"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"has-reactions", "page-all", "no-enrich"}, Description: searchMsgReactionConstraint},
 	}, chatshortcut.MessageResourceDownloadConstraints()...),
 	Tips: []string{
 		`dws chat +search-msg --group "项目群" --sender "测试用户甲" --page-all`,
 		`dws chat +search-msg --group <openConversationId> --query "changefree"`,
 		`dws chat +search-msg --senders <openDingTalkId> --at-me --days 3 --page-all`,
-		`dws chat +search-msg --group <openConversationId> --query "changefree" --jq '.messages[] | {messageId, text}'`,
+		`dws chat +search-msg --group <openConversationId> --has-reactions --page-all`,
 	},
 	Validate: validateSearchMsgWithResources,
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -156,6 +163,9 @@ var SearchMsg = shortcut.Shortcut{
 		if scopedSearch {
 			if err := validateSearchConversationScope(rt, requestedConversationIDs); err != nil {
 				return err
+			}
+			if scopedConversationReactionStreamEligible(rt) {
+				return executeScopedConversationReactionSearch(rt, params, resolvedFilters, requestedConversationIDs)
 			}
 			// The downstream search currently drops invalid CID filters and does
 			// not return group-scoped hits reliably. Scan the same filtered global
@@ -287,6 +297,10 @@ var SearchMsg = shortcut.Shortcut{
 			})
 			complete = false
 		}
+		reactionSourceCount := len(messages)
+		if rt.Bool("has-reactions") {
+			messages = filterSearchMessagesWithReactions(messages)
+		}
 
 		order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
 		if order == "" {
@@ -331,6 +345,14 @@ var SearchMsg = shortcut.Shortcut{
 		if scopedSearch {
 			payload["scope"] = searchScopePayload(requestedConversationIDs, paginationKnown && !hasMore)
 		}
+		if rt.Bool("has-reactions") {
+			payload["reactionFilter"] = map[string]any{
+				"predicate":    "present",
+				"sourceCount":  reactionSourceCount,
+				"matchedCount": len(messages),
+				"evidence":     "message_detail_enrichment",
+			}
+		}
 		if hasMore && nextCursor != "" && nextCursor != "<nil>" {
 			payload["nextCursor"] = nextCursor
 		}
@@ -342,6 +364,209 @@ var SearchMsg = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+// scopedConversationReactionStreamEligible selects the exact-conversation
+// message stream only when every requested predicate can be evaluated from
+// that stream without weakening the established search contract. More complex
+// structured predicates stay on search_messages until the conversation list
+// interface exposes equally strong typed facts for them.
+func scopedConversationReactionStreamEligible(rt *shortcut.RuntimeContext) bool {
+	return rt.Bool("has-reactions") &&
+		!rt.Changed("cursor") &&
+		!rt.Changed("page-token") &&
+		rt.StrFirst("query", "keyword", "text", "text-query", "message-type", "conversation-type", "chat-type") == "" &&
+		len(rt.StrSlice("senders")) == 0 &&
+		len(rt.StrSlice("sender")) == 0 &&
+		len(rt.StrSlice("sender-query")) == 0 &&
+		len(rt.StrSlice("at-ids")) == 0 &&
+		!rt.Bool("at-me") &&
+		!rt.Bool("is-at-me") &&
+		!rt.Bool("only-robot")
+}
+
+// executeScopedConversationReactionSearch uses the narrowest source that owns
+// every requested predicate. Each validated conversation is read through its
+// native time-boundary stream, then details are enriched and reactions are
+// filtered. The source endpoint itself enforces conversation scope, so
+// unrelated account history does not consume the global search safety budget.
+func executeScopedConversationReactionSearch(
+	rt *shortcut.RuntimeContext,
+	params map[string]any,
+	resolvedFilters searchResolvedFilters,
+	conversationIDs []string,
+) error {
+	startMillis, startOK := numericMillis(params["startTime"])
+	endMillis, endOK := numericMillis(params["endTime"])
+	if !startOK || !endOK {
+		return apperrors.NewInternal("会话消息流缺少有效的搜索时间范围")
+	}
+	startTime := time.UnixMilli(startMillis)
+	endTime := time.UnixMilli(endMillis)
+	streamRange := chatMessageTimeRange{
+		configured: true,
+		start:      &startTime,
+		end:        &endTime,
+		order:      "desc",
+	}
+	pageSize := rt.IntFirst("limit", "page-size")
+	allMessages := make([]map[string]any, 0)
+	messageScopes := map[string]string{}
+	seenMessages := map[string]bool{}
+	failures := make([]map[string]any, 0)
+	continuations := make([]map[string]any, 0)
+	pagesFetched := 0
+	sourceComplete := true
+	hasMore := false
+	paginationKnown := true
+
+	for _, conversationID := range conversationIDs {
+		request := chatMessagesRequest{
+			tool: "list_conversation_message_v2",
+			params: map[string]any{
+				"openconversation_id": conversationID,
+				"time":                formatDingTalkMessageBoundary(endTime),
+				"forward":             false,
+				"limit":               pageSize,
+			},
+			direction:              "older",
+			fallbackConversationID: conversationID,
+			timeRange:              streamRange,
+		}
+		pagePayload, pageMessages, readErr := collectAllChatMessages(rt, request)
+		pageCount, _ := pagePayload["pagesFetched"].(int)
+		pagesFetched += pageCount
+		if readErr != nil && pageCount == 0 {
+			return readErr
+		}
+		if pagePayload["complete"] != true {
+			sourceComplete = false
+		}
+		if pagePayload["hasMore"] == true {
+			hasMore = true
+		}
+		if known, ok := pagePayload["paginationKnown"].(bool); !ok || !known {
+			paginationKnown = false
+		}
+		failures = appendScopedConversationFailures(failures, pagePayload, conversationID)
+		if nextPage, ok := pagePayload["nextPage"].(map[string]any); ok && len(nextPage) > 0 {
+			continuations = append(continuations, map[string]any{
+				"conversationId": conversationID,
+				"nextPage":       nextPage,
+			})
+		}
+		for _, message := range pageMessages {
+			messageConversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
+			if messageConversationID == "" || messageConversationID == "<nil>" {
+				message["openConversationId"] = conversationID
+			}
+			messageID := strings.TrimSpace(fmt.Sprint(searchMsgMessageID(message)))
+			if messageID != "" && messageID != "<nil>" {
+				if seenMessages[messageID] {
+					continue
+				}
+				seenMessages[messageID] = true
+				messageScopes[messageID] = conversationID
+			}
+			allMessages = append(allMessages, message)
+		}
+	}
+
+	enrichedMessages, enrichedCount, enrichFailures := enrichSearchMessages(rt, allMessages)
+	failures = append(failures, enrichFailures...)
+	for _, message := range enrichedMessages {
+		messageConversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
+		if messageConversationID != "" && messageConversationID != "<nil>" {
+			continue
+		}
+		messageID := strings.TrimSpace(fmt.Sprint(searchMsgMessageID(message)))
+		if conversationID := messageScopes[messageID]; conversationID != "" {
+			message["openConversationId"] = conversationID
+		}
+	}
+	validatedMessages, _ := chatmsg.FilterConversationScope(enrichedMessages, conversationIDs)
+	if len(validatedMessages) != len(enrichedMessages) {
+		return searchScopeViolationError(conversationIDs, enrichedMessages)
+	}
+	reactionSourceCount := len(validatedMessages)
+	validatedMessages = filterSearchMessagesWithReactions(validatedMessages)
+	order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
+	if order == "" {
+		order = "desc"
+	}
+	sortMessagesByCreateTimeStable(validatedMessages, order)
+	results := make([]map[string]any, 0, len(validatedMessages))
+	for _, message := range validatedMessages {
+		results = append(results, searchMsgProjectWithReactions(message, !rt.Bool("no-reactions")))
+	}
+	finalComplete := sourceComplete && len(failures) == 0
+	scope := searchScopePayload(conversationIDs, sourceComplete)
+	scope["filterMode"] = "source"
+	payload := map[string]any{
+		"contractVersion": chatmsg.MessageListContractVersion,
+		"searchStrategy":  "conversation_stream",
+		"count":           len(results),
+		"messages":        results,
+		"pagesFetched":    pagesFetched,
+		"enrichedCount":   enrichedCount,
+		"complete":        finalComplete,
+		"hasMore":         hasMore,
+		"nextCursor":      "",
+		"paginationKnown": paginationKnown,
+		"failedCount":     len(failures),
+		"failures":        failures,
+		"queryRange":      searchMessageQueryRange(params, order),
+		"timeCoverage":    searchMessageTimeCoverage(rt),
+		"scope":           scope,
+		"reactionFilter": map[string]any{
+			"predicate":    "present",
+			"sourceCount":  reactionSourceCount,
+			"matchedCount": len(results),
+			"evidence":     "conversation_stream_and_message_detail_enrichment",
+		},
+		"conclusionGuard": searchMessageConclusionGuard(rt, finalComplete, len(results)),
+	}
+	if len(resolvedFilters.Chats) > 0 {
+		payload["resolvedFilters"] = resolvedFilters
+	}
+	if len(continuations) > 0 {
+		payload["continuations"] = continuations
+	}
+	if rt.Bool("download-resources") {
+		chatshortcut.AttachMessageResourceDownloads(
+			payload,
+			chatshortcut.DownloadMessageResources(rt, validatedMessages, ""),
+		)
+	}
+	return rt.Output(payload)
+}
+
+func appendScopedConversationFailures(
+	failures []map[string]any,
+	payload map[string]any,
+	conversationID string,
+) []map[string]any {
+	failureCountBefore := len(failures)
+	if pageFailures, ok := payload["failures"].([]map[string]any); ok {
+		for _, failure := range pageFailures {
+			copyFailure := make(map[string]any, len(failure)+1)
+			for key, value := range failure {
+				copyFailure[key] = value
+			}
+			copyFailure["conversationId"] = conversationID
+			failures = append(failures, copyFailure)
+		}
+	}
+	if payload["complete"] == true || len(failures) > failureCountBefore {
+		return failures
+	}
+	failure := map[string]any{
+		"stage":          "conversation-stream",
+		"conversationId": conversationID,
+		"stopReason":     payload["stopReason"],
+		"error":          "会话消息流未在安全预算内完成",
+	}
+	return append(failures, failure)
 }
 
 func searchMessageTimeCoverage(rt *shortcut.RuntimeContext) map[string]any {
@@ -395,7 +620,8 @@ func validateSearchMsg(rt *shortcut.RuntimeContext) error {
 		len(rt.StrSlice("at-ids")) > 0 ||
 		rt.Bool("at-me") ||
 		rt.Bool("is-at-me") ||
-		rt.Bool("only-robot")
+		rt.Bool("only-robot") ||
+		rt.Bool("has-reactions")
 	if !hasFilter {
 		return apperrors.NewValidation("至少指定一个过滤条件，例如 --query、--group、--senders、--at-me 或 --message-type")
 	}
@@ -414,10 +640,26 @@ func validateSearchMsg(rt *shortcut.RuntimeContext) error {
 	if pageLimit := rt.Int("page-limit"); pageLimit < 1 || pageLimit > 40 {
 		return apperrors.NewValidation("--page-limit 必须在 1-40 之间")
 	}
+	if rt.Bool("has-reactions") && !rt.Bool("page-all") {
+		return apperrors.NewValidation("--has-reactions 必须与 --page-all 一起使用，避免把首屏 reaction 命中称为完整结果")
+	}
+	if rt.Bool("has-reactions") && rt.Bool("no-enrich") {
+		return apperrors.NewValidation("--has-reactions 不能与 --no-enrich 组合；reaction 谓词需要消息详情作为证据")
+	}
 	if err := validateSearchMsgStrictConversationAliases(rt); err != nil {
 		return err
 	}
 	return nil
+}
+
+func filterSearchMessagesWithReactions(messages []map[string]any) []map[string]any {
+	filtered := make([]map[string]any, 0, len(messages))
+	for _, message := range messages {
+		if len(chatmsg.Reactions(message)) > 0 {
+			filtered = append(filtered, message)
+		}
+	}
+	return filtered
 }
 
 // The conventional --group/--groups flags are intentionally dual-form. Only

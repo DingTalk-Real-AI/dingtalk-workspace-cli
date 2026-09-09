@@ -440,7 +440,7 @@ var paramAliasCandidateCompleteCommands = map[string][]string{
 	"oa +list-cc":                          {"oa", "+list-cc", "--page", "2"},
 	"oa +list-executed":                    {"oa", "+list-executed", "--limit", "7", "--page", "2"},
 	"oa +list-forms":                       {"oa", "+list-forms", "--cursor", "2"},
-	"oa +list-pending":                     {"oa", "+list-pending", "--start", "1773072000000", "--end", "1773158399000", "--page", "2"},
+	"oa +list-pending":                     {"oa", "+list-pending", "--create-time-from", "2026-03-10", "--create-time-to", "2026-03-11", "--page", "2"},
 	"oa +list-submitted":                   {"oa", "+list-submitted", "--page", "2"},
 	"oa +my-initiated":                     {"oa", "+my-initiated", "--page", "2"},
 	"report +outbox-list":                  {"report", "+outbox-list", "--size", "7"},

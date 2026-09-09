@@ -905,8 +905,10 @@ install_binary_from_source() {
   fi
 
   mkdir -p "$INSTALL_DIR"
-  cp "$built_bin" "$INSTALL_DIR/$INSTALL_NAME"
-  chmod +x "$INSTALL_DIR/$INSTALL_NAME"
+  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
+  cp "$built_bin" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
 
   say "✅ Binary installed:"
   say "   → ${INSTALL_DIR}/${INSTALL_NAME}"
@@ -1564,22 +1566,20 @@ install_binary() {
 
   mkdir -p "$INSTALL_DIR"
 
-  # The archive may contain a top-level directory or just the binary
+  # The archive may contain a top-level directory or just the binary.
   if [ -f "$tmpdir/$BIN_NAME" ]; then
-    cp "$tmpdir/$BIN_NAME" "$INSTALL_DIR/$INSTALL_NAME"
+    found="$tmpdir/$BIN_NAME"
   elif [ -f "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" ]; then
-    cp "$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME" "$INSTALL_DIR/$INSTALL_NAME"
+    found="$tmpdir/${BIN_NAME}-${os}-${arch}/$BIN_NAME"
   else
-    # Search for the binary
     found="$(find "$tmpdir" -name "$BIN_NAME" -type f | head -1)"
-    if [ -n "$found" ]; then
-      cp "$found" "$INSTALL_DIR/$INSTALL_NAME"
-    else
-      err "Could not find the ${BIN_NAME} binary in the downloaded archive."
-    fi
+    [ -n "$found" ] || err "Could not find the ${BIN_NAME} binary in the downloaded archive."
   fi
 
-  chmod +x "$INSTALL_DIR/$INSTALL_NAME"
+  staged_bin="$INSTALL_DIR/.${INSTALL_NAME}.tmp.$$"
+  cp "$found" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "$INSTALL_DIR/$INSTALL_NAME"
 
   say "✅ Binary installed: ${INSTALL_DIR}/${INSTALL_NAME}"
 

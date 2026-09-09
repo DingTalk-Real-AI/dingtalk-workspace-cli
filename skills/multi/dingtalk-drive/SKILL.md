@@ -43,6 +43,7 @@ metadata:
 | 查看最近访问/编辑 | `dws drive +recent [--operate-type 1] --limit <N>` | 1=最近编辑；默认最近访问 |
 | 查看节点类型和元数据 | `dws drive +inspect --node <dentryUuid>` | 按需加 stats/publish/cover，不为普通列表强制调用 |
 | 下载普通文件 | `dws drive +download --node <dentryUuid> --output <相对路径>` | 当前 shortcut 接受 ID；在线文档用 `doc +export` |
+| 只要临时下载地址不落盘 | `dws drive download --node <dentryUuid> --url-only --format json` | Agent 沙箱/外部系统自行下载时用；与 `--output/--overwrite` 等落盘参数互斥 |
 | 上传普通文件到钉盘或知识库 | `dws drive +upload --file <相对路径> [--workspace <ID>]` | 默认进钉盘；指定 workspace 时成为知识库/文档空间中的独立文件节点；folder 与 node、workspace 与 space-id 分别互斥 |
 | 管理普通文件全局评论 | `dws drive comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply` | 复用 Doc/Sheet 新评论链路；旧 `list/create` 已 deprecated；固定全文 `global`，不支持划词、单元格或 mention |
 | 创建文件夹 | `dws drive +create-folder --name <名称> [--folder <ID>]` | Shortcut 已提交并读回 |
@@ -75,7 +76,8 @@ metadata:
 - 已知 nodeId 的重命名直接 `+rename`，不先 Catalog、Help 或 search；ALIDOC 的逻辑标题由 shortcut 内部文档读回验证。
 - 文件夹方向已明确时直接 `status/pull/push/sync`，不先 status；写操作先用完全相同参数 dry-run，再正式执行。
 - 搜索结果 `type=able` 后按业务动词重路由：结构复制/删除/Base 内操作走 AITable。结构复制按当前 leaf 提供源 Base ID 和真实 `--target-folder-id`；缺少目标 ID 时停止，不猜根 ID或发明 `--target-root`。
-- `+inspect/+download/+list` 只保证 dentryUuid；只有 URL 时先用 `dws drive info --node <URL> --format json` 解析并核对 nodeId。
+- `+inspect/+download/+list` 只保证 dentryUuid；只有 URL 时先用 `dws drive info --node <URL> --format json` 解析并核对 `result.fileId`（即 dentryUuid）。
+- `drive info` 返回 `extension=dlink` 时，将 `result.fileId` 保存为快捷方式入口 ID，先用 `dws doc info --node <result.fileId> --format json` 读取 `linkSourceInfo`。内容读取、编辑、导出和类型路由改用目标 `linkSourceInfo.nodeId`；目标仍为 dlink 时逐跳解析并记录已访问 ID，解析失败、字段缺失或 ID 重复即停。用户明确移动、重命名或删除快捷方式入口本身时仍使用最初的 `result.fileId`。
 
 最短路径不省略类型检查、确认、传输验证或写后校验。
 

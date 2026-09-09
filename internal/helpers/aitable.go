@@ -362,7 +362,18 @@ func parseRecordQueryPage(text string) (paging.Page, error) {
 
 	rawRecords, exists := payload["records"]
 	if !exists {
-		return paging.Page{}, fmt.Errorf("query_records response is missing records")
+		nextCursor := firstNonEmptyString(payload, "nextCursor", "cursor")
+		if nextCursor != "" {
+			return paging.Page{}, fmt.Errorf("query_records response is missing records")
+		}
+		if hasMore, ok := payload["hasMore"].(bool); ok && hasMore {
+			return paging.Page{}, fmt.Errorf("query_records reported hasMore=true without a next cursor")
+		}
+		totalCount, err := parseOptionalNonNegativeInt(payload["totalCount"])
+		if err != nil {
+			return paging.Page{}, fmt.Errorf("query_records totalCount: %w", err)
+		}
+		return paging.Page{Records: nil, NextCursor: "", TotalCount: totalCount}, nil
 	}
 	records, ok := rawRecords.([]any)
 	if !ok {
@@ -717,7 +728,7 @@ func validateAitableArrayDSL(name, raw string) error {
 // 兼容输入格式：
 //   - 传入单个叶子对象 {"operator":"eq","operands":[...]} → 自动 wrap 为 [对象]
 //   - 叶子条件使用 MCP 简写格式 {fieldId,operator,value} → 自动 normalize 为 operands 格式
-//   - and/or 逻辑组不属于 view filter 契约，由 validateViewConfigFilter 明确拒绝
+//   - and/or 逻辑组不属于通用 view config 校验契约；专用 view update filter 入口单独处理
 func normalizeViewConfigFilter(filterVal any) any {
 	switch v := filterVal.(type) {
 	case []any:
@@ -892,6 +903,59 @@ func validateViewConfigFilter(filterVal any) error {
 		}
 	}
 	return nil
+}
+
+// normalizeAitableViewUpdateFilter 只服务于 view update filter 专用入口。
+// 它保留服务端需要的根 AND/OR 结构，同时返回叶子数组供原有校验逻辑使用。
+func normalizeAitableViewUpdateFilter(filterVal any) (filter []any, leaves []any, err error) {
+	normalized := normalizeViewConfigFilter(filterVal)
+	filter, ok := normalized.([]any)
+	if !ok {
+		return nil, nil, apperrors.NewValidation("invalid config.filter: view filter 必须是 JSON 数组或对象",
+			apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+	}
+
+	leaves = filter
+	for index, raw := range filter {
+		condition, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		operator, _ := condition["operator"].(string)
+		operator = strings.TrimSpace(operator)
+		if operator != "and" && operator != "or" {
+			continue
+		}
+		if len(filter) != 1 || index != 0 {
+			return nil, nil, apperrors.NewValidation(fmt.Sprintf("invalid config.filter: %s 逻辑根节点必须是 filter 数组中的唯一元素", operator),
+				apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+		}
+		operands, ok := condition["operands"].([]any)
+		if !ok {
+			return nil, nil, apperrors.NewValidation("invalid config.filter[0].operands: 必须是叶子条件数组",
+				apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+		}
+		for operandIndex, operand := range operands {
+			leaf, ok := operand.(map[string]any)
+			if !ok {
+				return nil, nil, apperrors.NewValidation(fmt.Sprintf("invalid config.filter[0].operands[%d]: 必须是叶子条件对象", operandIndex),
+					apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+			}
+			childOperator, _ := leaf["operator"].(string)
+			childOperator = strings.TrimSpace(childOperator)
+			if childOperator == "and" || childOperator == "or" {
+				return nil, nil, apperrors.NewValidation(fmt.Sprintf("invalid config.filter[0].operands[%d]: 不支持嵌套逻辑组 %q；当前只支持一层统一 AND 或 OR", operandIndex, childOperator),
+					apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+			}
+		}
+		condition["operator"] = operator
+		leaves = operands
+		break
+	}
+	if err := validateViewConfigFilter(leaves); err != nil {
+		return nil, nil, err
+	}
+	return filter, leaves, nil
 }
 
 // validFilterOperators 是 MCP 支持的合法过滤操作符集合
@@ -1354,16 +1418,15 @@ func runAitableViewUpdateFilter(cmd *cobra.Command) error {
 	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
 		return fmt.Errorf("--json 解析失败: %v", err)
 	}
-	cfgMap := map[string]any{"filter": parsed}
-	if err := normalizeViewConfigBlock(cfgMap); err != nil {
+	filter, leaves, err := normalizeAitableViewUpdateFilter(parsed)
+	if err != nil {
 		return err
 	}
-	filter, _ := cfgMap["filter"].([]any)
 	fieldTypes, err := loadAitableFieldTypes(context.Background(), baseID, tableID)
 	if err != nil {
 		return err
 	}
-	if err := validateAitableViewFilter(filter, fieldTypes); err != nil {
+	if err := validateAitableViewFilter(leaves, fieldTypes); err != nil {
 		return err
 	}
 	toolArgs := map[string]any{
@@ -1419,15 +1482,36 @@ const aitableViewFilterReadbackAttempts = 6
 var aitableViewFilterReadbackSleep = time.Sleep
 
 func persistedViewFilterMatches(actual any, expected []any) bool {
-	if reflect.DeepEqual(actual, expected) {
-		return true
+	actualRoot, actualOK := canonicalViewFilter(actual)
+	expectedRoot, expectedOK := canonicalViewFilter(expected)
+	return actualOK && expectedOK && reflect.DeepEqual(actualRoot, expectedRoot)
+}
+
+// canonicalViewFilter 把写入使用的数组形态和 get_views 返回的根对象形态
+// 投影为同一份逻辑表达式，以便正确校验 AND、OR 与空筛选。
+func canonicalViewFilter(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		if len(typed) == 1 {
+			if root, ok := typed[0].(map[string]any); ok {
+				operator, _ := root["operator"].(string)
+				operator = strings.TrimSpace(operator)
+				if operator == "and" || operator == "or" {
+					return root, true
+				}
+			}
+		}
+		return map[string]any{"operator": "and", "operands": typed}, true
+	case map[string]any:
+		operator, _ := typed["operator"].(string)
+		operator = strings.TrimSpace(operator)
+		if operator == "and" || operator == "or" {
+			return typed, true
+		}
+		return map[string]any{"operator": "and", "operands": []any{typed}}, true
+	default:
+		return nil, false
 	}
-	root, ok := actual.(map[string]any)
-	if !ok || root["operator"] != "and" {
-		return false
-	}
-	operands, ok := root["operands"].([]any)
-	return ok && reflect.DeepEqual(operands, expected)
 }
 
 func loadAitableFieldTypes(ctx context.Context, baseID, tableID string) (map[string]string, error) {
@@ -1637,9 +1721,9 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
 			UseWhen: []string{
-				"需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时",
+				"需要读取或管理 AI 表格中的结构、数据、应用模式、视图、权限、导入导出或工作流时",
 			},
 			AvoidWhen: []string{
 				"目标是在线电子表格单元格读写时用 sheet；普通文档用 doc",
@@ -1649,10 +1733,11 @@ func newAitableCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
-		Long: `管理钉钉 AI 表格：Base 管理、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
+		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
 
 命令结构:
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
+  dws aitable app        [get|update|page|widget]                                       应用模式管理
   dws aitable table      [get|create|update|delete]                                     数据表管理
   dws aitable field      [get|create|update|delete|search-options]                      字段管理
   dws aitable record     [query|stats|group-stats|create|update|delete]                 记录管理
@@ -2686,17 +2771,28 @@ newFieldName、config、aiConfig 至少传入一项。
           lt gt lte gte(数值比较) contain exclusive(文本)
           all_of any_of none_of(多选)
           date_eq before after not_before not_after(日期)
-  注意：singleSelect/multipleSelect 字段过滤值 必须 传选项名称的字面量（比如 "本科"），不要传 option ID！
+  注意：查询指定数据前必须先用 field get（不加 --field-ids）完整读一遍表头，
+        拿到所有字段的 fieldId/name/type/config，先确定用户条件对应哪个字段，
+        再按该字段类型解析值并传入查询条件；禁止跳过读表头凭猜测选字段。
+  注意：singleSelect/multipleSelect 过滤前必须先通过 field get 或 field search-options 唯一解析，filter 传稳定 option ID；multipleSelect 的比较值必须传 option ID 数组。
+  注意：人员、部门、群组字段禁止直接传姓名、部门名或群名。必须先分别调用
+        dws aisearch person --keyword "<姓名>" --dimension name、
+        dws contact +resolve-dept --name "<部门名>"、
+        dws chat +chat-search --query "<群名>"
+        唯一解析 userId、deptId、openConversationId，再按字段协议传结构化 ID 数组，
+        例如 [{"userId":"u1"}]、[{"departmentId":"d1"}]、[{"cid":"cid1"}]；零命中或多命中必须先消歧。
   注意：date 日期字段 只能用 date_eq/before/after/not_before/not_after，值传日期串(如 "2026-05-22")；
         通用 eq/gte/lte/contain 对日期字段无效会返回 0 条；不支持区间(date_between)和相对(from_now)，
         范围用 not_before+not_after 组合。
+
+分页说明：普通扫描某页恰好返回 limit 条时可能带 nextCursor；用它续页后若查询成功且 records=[]、nextCursor 为空，这是正常末页，不是异常或漏查。成功空页若 nextCursor 非空则继续，nextCursor 为空则正常完成。
 
 --sort 结构：[{"fieldId":"<fieldId>","direction":"asc|desc"}]
   示例：[{"fieldId":"fldPriorityId","direction":"asc"},{"fieldId":"fldDueDateId","direction":"desc"}]
   注意：排序方向字段必须使用 direction（值为 asc 或 desc）`,
 		Example: `  dws aitable record query --base-id BASE_ID --table-id TABLE_ID
   dws aitable record query --base-id BASE_ID --table-id TABLE_ID --record-ids rec1,rec2
-  dws aitable record query --base-id BASE_ID --table-id TABLE_ID --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fld_xxx","本科"]}]}'
+  dws aitable record query --base-id BASE_ID --table-id TABLE_ID --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fld_user",[{"userId":"u1"}]]}]}'
   dws aitable record query --base-id BASE_ID --table-id TABLE_ID --query "关键词" --limit 50
   dws aitable record query --base-id BASE_ID --table-id TABLE_ID --field-ids "fldTextId,fldFormulaId,fldLookupId"
   # 查询 baseId: dws aitable base list
@@ -3302,7 +3398,7 @@ CLI 行为：客户端把 --record-ids 拆开后构造 [{recordId, cells}, ...] 
 		Long: `按表内顺序扫描一页，过滤出"完全没填用户字段"的空行。
 - 空行定义：除系统字段（recordId / 创建人 / 创建时间 / 修改人 / 修改时间）外，所有 cell 都是 null、空字符串、空集合或空 Map。
 - --limit 是扫描预算（不是返回数）：可能扫了 100 条但全部非空，本页返回空数组。
-- 翻页：返回 nextCursor 非空时把它传回继续扫；nextCursor 为空才表示扫完全表。
+- 翻页：返回 nextCursor 非空时把它传回继续扫；nextCursor 为空才表示扫完全表。成功返回 records 为空且 nextCursor 为空属于正常完成，不是异常。
 
 返回 data: {records: [...], nextCursor: "..."}。`,
 		Example: `  dws aitable record query-empty --base-id BASE_ID --table-id TABLE_ID
@@ -4519,10 +4615,12 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 	viewUpdateFilterCmd := &cobra.Command{
 		Use:   "filter",
 		Short: "更新视图 filter 配置",
-		Long: `按属性更新视图的 filter 数组（整组替换）。每项必须是叶子条件 {operator,operands}；外层数组表示 AND，不接受 and/or 逻辑组。
-[{"operator":"eq","operands":["fldX","value"]}]
+		Long: `按属性更新视图的 filter 数组（整组替换）。
+平铺叶子条件数组隐式按 AND 连接；需要 OR 时，数组中只传一个 {"operator":"or","operands":[叶子条件...]} 根节点。
+也接受显式 AND 根节点，但不支持 AND/OR 混合嵌套；空数组 [] 清空筛选。
 若传单个叶子对象会自动 wrap 为数组；neq/not_eq 会明确提示改用 ne；其他非法格式拒绝。`,
-		Example: `  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldX","value"]}]'`,
+		Example: `  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]'
+  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"or","operands":[{"operator":"eq","operands":["fldA","x"]},{"operator":"eq","operands":["fldB","y"]}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateFilter(cmd)
 		},
@@ -4543,7 +4641,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图筛选",
 				UseWhen:      []string{"固化视图筛选条件时"},
 				AvoidWhen:    []string{"一次性查询过滤用 record query --filters"},
-				Examples:     []string{"dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]'"},
+				Examples:     []string{"dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"operator\":\"or\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldA\",\"x\"]},{\"operator\":\"eq\",\"operands\":[\"fldB\",\"y\"]}]}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.filter"},
@@ -7976,7 +8074,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordQueryCmd.Flags().Int("limit", 0, "单次返回的最大记录数，默认 100，最大 100")
 	recordQueryCmd.Flags().Int("page-size", 0, "--limit 的别名（兼容 LLM 常见误用）")
 	_ = recordQueryCmd.Flags().MarkHidden("page-size")
-	recordQueryCmd.Flags().String("cursor", "", "分页游标，首次查询不传；cursor 为空表示已取完全部记录")
+	recordQueryCmd.Flags().String("cursor", "", "分页游标，首次查询不传；普通扫描满 limit 后可能出现成功空续页，records 为空不是错误，仍以本页 nextCursor 是否为空判断继续或完成；nextCursor 为空表示已取完全部记录")
 	recordQueryCmd.Flags().Bool("all", false, "自动翻页获取完整记录集；达到 --page-limit 且仍有更多页时返回非零结构化错误，不把不完整结果作为成功输出")
 	recordQueryCmd.Flags().Int("page-limit", 50, "自动翻页最大页数（仅 --all 时生效）。默认 50 页（约 5000 条）；设为 0 表示显式不限页数；超限时错误详情保留已取记录和续传 cursor")
 	recordQueryCmd.Flags().String("view-id", "", "视图 ID（record query 不支持按视图过滤，此参数会被忽略并给出提示）")
@@ -8919,7 +9017,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 
 	// 组装 aitable 命令树
 	root.AddCommand(
-		baseCmd, tableCmd, fieldCmd,
+		baseCmd, newAitableAppCommand(), tableCmd, fieldCmd,
 		recordCmd, viewCmd, formCmd,
 		workflowCmd,
 		dashboardCmd, chartCmd,
@@ -9087,6 +9185,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	// 独立注册 flags（不能用 copyFlags 共享指针，cobra 不支持同一 flag 绑多个命令）
 	infoAliasCmd.Flags().String("base-id", "", "Base 唯一标识。优先使用 base search / base list 返回值 (必填)")
 	root.AddCommand(infoAliasCmd)
+	root.AddCommand(newAitablePsqlCommand())
 	// hint: dws aitable doc search → dws aitable base search
 	root.AddCommand(hintSubCmd("doc", "use: dws aitable base search --query <关键词>"))
 	// NOTE: "create" and "info" are registered as real alias commands above

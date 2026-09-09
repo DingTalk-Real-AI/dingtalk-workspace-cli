@@ -4,12 +4,15 @@
 package aitable
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageRecordBulkPatchPaginatesChunksAndVerifiesE2E(t *testing.T) {
@@ -102,17 +105,25 @@ func sourceFieldFixture() map[string]any {
 	return map[string]any{"fieldId": "sf1", "fieldName": "状态", "type": "text"}
 }
 
+func sourcePrimaryDocFixture() map[string]any {
+	return map[string]any{"fieldId": "sp0", "fieldName": "主文档", "type": "primaryDoc"}
+}
+
 func targetFieldFixture() map[string]any {
 	return map[string]any{"fieldId": "tf1", "fieldName": "状态", "type": "text"}
 }
 
+func targetPrimaryDocFixture() map[string]any {
+	return map[string]any{"fieldId": "tp0", "fieldName": "主文档", "type": "primaryDoc"}
+}
+
 func TestCrossPlatformCoverageTableCopyStructureAndRecordsE2E(t *testing.T) {
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-		{text: mustJSONText(t, map[string]any{"fields": []any{sourceFieldFixture()}})},
+		{text: mustJSONText(t, map[string]any{"fields": []any{sourcePrimaryDocFixture(), sourceFieldFixture()}})},
 		{text: `{"records":[{"recordId":"sr1","cells":{"sf1":"完成"}}]}`},
 		{text: `{"data":{"tableId":"target-table"}}`},
-		{text: mustJSONText(t, map[string]any{"fields": []any{targetFieldFixture()}})},
-		{text: `{"createdRecords":[{"recordId":"tr1"}]}`},
+		{text: mustJSONText(t, map[string]any{"fields": []any{targetPrimaryDocFixture(), targetFieldFixture()}})},
+		{text: `{"data":{"newRecordIds":["tr1"]}}`},
 		{text: `{"records":[{"recordId":"tr1","cells":{"tf1":"完成"}}]}`},
 	}}
 	out, err := runAITableCompositeCLI(t, caller, "+table-copy",
@@ -121,7 +132,7 @@ func TestCrossPlatformCoverageTableCopyStructureAndRecordsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("table copy error = %v", err)
 	}
-	for _, want := range []string{`"targetTableId": "target-table"`, `"fieldCount": 1`, `"recordCount": 1`, `"status": "verified"`} {
+	for _, want := range []string{`"targetTableId": "target-table"`, `"fieldCount": 2`, `"recordCount": 1`, `"status": "verified"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("table copy output missing %s: %s", want, out)
 		}
@@ -132,6 +143,126 @@ func TestCrossPlatformCoverageTableCopyStructureAndRecordsE2E(t *testing.T) {
 	written := caller.calls[4].args["records"].([]any)[0].(map[string]any)["cells"].(map[string]any)
 	if written["tf1"] != "完成" || written["sf1"] != nil {
 		t.Fatalf("mapped record cells = %#v", written)
+	}
+}
+
+func TestCrossPlatformCoverageTableCopyRetriesEventuallyConsistentRecordReadbackE2E(t *testing.T) {
+	waits := make([]time.Duration, 0)
+	testseam.Swap(t, &tableCopyRecordReadbackWait, func(_ context.Context, delay time.Duration) error {
+		waits = append(waits, delay)
+		return nil
+	})
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: mustJSONText(t, map[string]any{"fields": []any{sourcePrimaryDocFixture(), sourceFieldFixture()}})},
+		{text: `{"records":[{"recordId":"sr1","cells":{"sf1":"完成"}}]}`},
+		{text: `{"data":{"tableId":"target-table"}}`},
+		{text: mustJSONText(t, map[string]any{"fields": []any{targetPrimaryDocFixture(), targetFieldFixture()}})},
+		{text: `{"data":{"newRecordIds":["tr1"]}}`},
+		{text: `{"records":[]}`},
+		{text: `{"records":[{"recordId":"tr1","cells":{"tf1":"完成"}}]}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+table-copy",
+		"--source-base-id", "source-base", "--source-table-id", "source-table",
+		"--target-base-id", "target-base", "--new-name", "任务副本", "--include-records", "--yes")
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || !strings.Contains(out, `"recordCount": 1`) {
+		t.Fatalf("eventual record read-back = output:%q err:%v", out, err)
+	}
+	if len(waits) != 1 || waits[0] != tableCopyRecordReadbackDelays[0] {
+		t.Fatalf("read-back waits = %v", waits)
+	}
+	createCalls := 0
+	for _, call := range caller.calls {
+		if call.tool == "create_records" {
+			createCalls++
+		}
+	}
+	if createCalls != 1 {
+		t.Fatalf("create_records calls = %d, want 1", createCalls)
+	}
+}
+
+func TestCrossPlatformCoverageTableCopyReadbackWaitFailureStopsSafelyE2E(t *testing.T) {
+	waitErr := errors.New("read-back wait cancelled")
+	testseam.Swap(t, &tableCopyRecordReadbackWait, func(context.Context, time.Duration) error {
+		return waitErr
+	})
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: mustJSONText(t, map[string]any{"fields": []any{sourceFieldFixture()}})},
+		{text: `{"records":[{"recordId":"sr1","cells":{"sf1":"完成"}}]}`},
+		{text: `{"data":{"tableId":"target-table"}}`},
+		{text: mustJSONText(t, map[string]any{"fields": []any{targetFieldFixture()}})},
+		{text: `{"data":{"newRecordIds":["tr1"]}}`},
+		{text: `{"records":[]}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+table-copy",
+		"--source-base-id", "source-base", "--source-table-id", "source-table",
+		"--target-base-id", "target-base", "--new-name", "任务副本", "--include-records", "--yes")
+	if err == nil || out != "" || !errors.Is(err, waitErr) {
+		t.Fatalf("read-back wait failure = output:%q err:%v", out, err)
+	}
+}
+
+func TestCrossPlatformCoverageTableCopyReadbackExhaustionPreservesKnownCreatedIDsE2E(t *testing.T) {
+	waits := make([]time.Duration, 0)
+	testseam.Swap(t, &tableCopyRecordReadbackWait, func(_ context.Context, delay time.Duration) error {
+		waits = append(waits, delay)
+		return nil
+	})
+	steps := []upsertByKeyStep{
+		{text: mustJSONText(t, map[string]any{"fields": []any{sourceFieldFixture()}})},
+		{text: `{"records":[{"recordId":"sr1","cells":{"sf1":"完成"}}]}`},
+		{text: `{"data":{"tableId":"target-table"}}`},
+		{text: mustJSONText(t, map[string]any{"fields": []any{targetFieldFixture()}})},
+		{text: `{"data":{"newRecordIds":["tr1"]}}`},
+	}
+	for range len(tableCopyRecordReadbackDelays) + 1 {
+		steps = append(steps, upsertByKeyStep{text: `{"records":[]}`})
+	}
+	caller := &upsertByKeyCaller{steps: steps}
+	out, err := runAITableCompositeCLI(t, caller, "+table-copy",
+		"--source-base-id", "source-base", "--source-table-id", "source-table",
+		"--target-base-id", "target-base", "--new-name", "任务副本", "--include-records", "--yes")
+	if err == nil || out != "" {
+		t.Fatalf("exhausted record read-back = output:%q err:%v", out, err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "aitable_composite_partial_success" || typed.Retryable {
+		t.Fatalf("exhausted record read-back error = %#v", err)
+	}
+	result, ok := typed.Details["result"].(compositeResult)
+	if !ok {
+		t.Fatalf("composite result details = %#v", typed.Details)
+	}
+	checkpointIDs, _ := result.Checkpoint["createdRecordIds"].([]string)
+	if len(checkpointIDs) != 1 || checkpointIDs[0] != "tr1" || !strings.Contains(result.Checkpoint["nextStep"].(string), "do not rerun create_records") {
+		t.Fatalf("safe recovery checkpoint = %#v", result.Checkpoint)
+	}
+	knownIDs, _ := result.KnownEffects[len(result.KnownEffects)-1]["recordIds"].([]string)
+	if len(knownIDs) != 1 || knownIDs[0] != "tr1" {
+		t.Fatalf("known created IDs = %#v", result.KnownEffects)
+	}
+	if len(waits) != len(tableCopyRecordReadbackDelays) {
+		t.Fatalf("read-back waits = %v", waits)
+	}
+	createCalls := 0
+	for _, call := range caller.calls {
+		if call.tool == "create_records" {
+			createCalls++
+		}
+	}
+	if createCalls != 1 {
+		t.Fatalf("create_records calls = %d, want 1", createCalls)
+	}
+}
+
+func TestCrossPlatformCoverageTableCopyReadbackWaitHonorsContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := tableCopyRecordReadbackWait(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait error = %v", err)
+	}
+	if err := tableCopyRecordReadbackWait(context.Background(), 0); err != nil {
+		t.Fatalf("zero wait error = %v", err)
 	}
 }
 
@@ -158,7 +289,7 @@ func TestCrossPlatformCoverageTableCopyUnknownResponsesAreNotSuccessE2E(t *testi
 			{text: `{"records":[{"recordId":"sr1","cells":{"sf1":"完成"}}]}`},
 			{text: `{"tableId":"target"}`},
 			{text: mustJSONText(t, map[string]any{"fields": []any{targetFieldFixture()}})},
-			{text: `{}`},
+			{text: `{"data":{"newRecordIds":[]}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+table-copy",
 			"--source-base-id", "b1", "--source-table-id", "t1", "--target-base-id", "b2", "--new-name", "copy", "--include-records", "--yes")

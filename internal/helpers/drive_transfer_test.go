@@ -626,7 +626,7 @@ func TestCrossPlatformCoverageDownloadSingleWithAuthRetry(t *testing.T) {
 		return "https://new.example.com/f", map[string]string{"dentry-token": "new-token"}, 0, nil
 	}
 	dest := filepath.Join(t.TempDir(), "auth.bin")
-	if err := downloadSingleWithAuthRetry(context.Background(), fetch, "https://old.example.com/f", nil, dest); err != nil {
+	if err := downloadSingleWithAuthRetry(context.Background(), fetch, "https://old.example.com/f", nil, dest, false); err != nil {
 		t.Fatalf("401 重试后应成功: %v", err)
 	}
 	if !fetched || calls.Load() != 2 {
@@ -644,7 +644,7 @@ func TestCrossPlatformCoverageDownloadSingleWithAuthRetry_StillFails(t *testing.
 	fetch := func(ctx context.Context) (string, map[string]string, int, error) {
 		return "https://new.example.com/f", nil, 0, nil
 	}
-	err := downloadSingleWithAuthRetry(context.Background(), fetch, "https://old.example.com/f", nil, filepath.Join(t.TempDir(), "x"))
+	err := downloadSingleWithAuthRetry(context.Background(), fetch, "https://old.example.com/f", nil, filepath.Join(t.TempDir(), "x"), false)
 	if err == nil || !isAuthStatusError(err) {
 		t.Fatalf("应返回原始鉴权错误: %v", err)
 	}
@@ -1247,7 +1247,7 @@ func TestCrossPlatformCoverageDownloadSingleWithAuthRetry_NilFetch(t *testing.T)
 	})
 	defer SetHTTPGetFile(nil)
 	// fetch==nil → 不重试，直接返回原始错误
-	err := downloadSingleWithAuthRetry(context.Background(), nil, "https://old.example.com/f", nil, filepath.Join(t.TempDir(), "x"))
+	err := downloadSingleWithAuthRetry(context.Background(), nil, "https://old.example.com/f", nil, filepath.Join(t.TempDir(), "x"), false)
 	if err == nil || !isAuthStatusError(err) {
 		t.Fatalf("fetch==nil 应直接返回鉴权错误: %v", err)
 	}
@@ -1264,7 +1264,7 @@ func TestCrossPlatformCoverageDownloadSingleWithAuthRetry_FetchError(t *testing.
 	fetch := func(ctx context.Context) (string, map[string]string, int, error) {
 		return "", nil, 0, fmt.Errorf("fetch failed")
 	}
-	err := downloadSingleWithAuthRetry(context.Background(), fetch, "https://old.example.com/f", nil, filepath.Join(t.TempDir(), "x"))
+	err := downloadSingleWithAuthRetry(context.Background(), fetch, "https://old.example.com/f", nil, filepath.Join(t.TempDir(), "x"), false)
 	if err == nil || !isAuthStatusError(err) {
 		t.Fatalf("fetch 报错应返回原始鉴权错误: %v", err)
 	}
@@ -1388,7 +1388,7 @@ func TestCrossPlatformCoverageProbeRangeSupport_ContentRangeParseError(t *testin
 
 func TestCrossPlatformCoverageWriteStreamToFile_CreateError(t *testing.T) {
 	// 写入不存在目录下的文件 → os.Create 失败
-	err := writeStreamToFile(strings.NewReader("data"), "/no-such-dir/sub/file.bin")
+	err := writeStreamToFile(strings.NewReader("data"), "/no-such-dir/sub/file.bin", false)
 	if err == nil {
 		t.Fatal("不存在路径应失败")
 	}
@@ -1397,10 +1397,23 @@ func TestCrossPlatformCoverageWriteStreamToFile_CreateError(t *testing.T) {
 func TestCrossPlatformCoverageWriteStreamToFile_CopyError(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "copy-err.bin")
 	errReader := &errReaderHelper{err: fmt.Errorf("read broken")}
-	err := writeStreamToFile(errReader, dest)
+	err := writeStreamToFile(errReader, dest, false)
 	if err == nil || !strings.Contains(err.Error(), "read broken") {
 		t.Fatalf("io.Copy 错误应传播: %v", err)
 	}
+}
+
+func TestCrossPlatformCoverageWriteStreamToFile_StreamCreateError(t *testing.T) {
+	// 预创建临时文件后重开失败（被外部移除等）：错误必须传播并清理。
+	testseam.Swap(t, &driveOsCreate, func(string) (*os.File, error) {
+		return nil, fmt.Errorf("stream create failed")
+	})
+	dest := filepath.Join(t.TempDir(), "stream-create-err.bin")
+	err := writeStreamToFile(strings.NewReader("data"), dest, false)
+	if err == nil || !strings.Contains(err.Error(), "stream create failed") {
+		t.Fatalf("os.Create 错误应传播: %v", err)
+	}
+	assertNoStreamTempLeftovers(t, dest)
 }
 
 type errReaderHelper struct{ err error }
@@ -1426,14 +1439,35 @@ func TestCrossPlatformCoverageCheckpointSave_WriteError(t *testing.T) {
 // downloadRangedParts: 文件操作失败、上下文取消、logf 分支
 // ──────────────────────────────────────────────────────────
 
-func TestCrossPlatformCoverageDownloadRangedParts_OpenFileError(t *testing.T) {
+func TestCrossPlatformCoverageDownloadRangedParts_LockCreateError(t *testing.T) {
 	creds := &driveCredentialState{url: "http://x.example.com"}
-	// destPath 指向不存在的目录 → OpenFile 失败
+	// destPath 指向不存在的目录 → 锁文件创建失败
 	dest := "/no-such-dir/sub/out.bin"
 	opts := driveDownloadOptions{partSize: 10, parallel: 1, resume: false}
 	err := downloadRangedParts(context.Background(), creds, dest, 100, opts)
+	if err == nil || !strings.Contains(err.Error(), "锁文件") {
+		t.Fatalf("锁创建失败应报错: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDownloadRangedParts_OpenFileError(t *testing.T) {
+	creds := &driveCredentialState{url: "http://x.example.com"}
+	// 锁可正常创建；partPath 被只读文件占用 → O_RDWR 打开失败（EACCES）
+	dest := filepath.Join(t.TempDir(), "out.bin")
+	partPath := dest + drivePartFileSuffix
+	if err := os.WriteFile(partPath, nil, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(partPath, 0o644) })
+	// resume=true：不触发 --no-resume 清理分支，直接在 OpenFile 撞只读占用
+	opts := driveDownloadOptions{partSize: 10, parallel: 1, resume: true}
+	err := downloadRangedParts(context.Background(), creds, dest, 100, opts)
 	if err == nil || !strings.Contains(err.Error(), "分片临时文件失败") {
 		t.Fatalf("OpenFile 失败应报错: %v", err)
+	}
+	// 失败路径同样必须释放锁
+	if _, statErr := os.Stat(dest + drivePartLockSuffix); !os.IsNotExist(statErr) {
+		t.Fatal("失败后锁文件应被释放")
 	}
 }
 
@@ -2253,7 +2287,7 @@ func TestCrossPlatformCoverageDriveTransferFinalRenameFailure(t *testing.T) {
 
 	creds := &driveCredentialState{url: srv.URL}
 	dest := filepath.Join(t.TempDir(), "rename-fail.bin")
-	opts := driveDownloadOptions{partSize: 30, parallel: 2, resume: false, knownSize: 100}
+	opts := driveDownloadOptions{partSize: 30, parallel: 2, resume: false, knownSize: 100, overwrite: true}
 	err := downloadRangedParts(context.Background(), creds, dest, 100, opts)
 	if err == nil || !strings.Contains(err.Error(), "重命名下载文件失败") {
 		t.Fatalf("最终 rename 失败应报错: %v", err)

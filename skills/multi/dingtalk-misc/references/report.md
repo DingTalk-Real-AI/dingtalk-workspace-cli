@@ -2,6 +2,8 @@
 
 > 本文件是 Report 已知任务的唯一必读 reference，覆盖模板、收件箱、发件箱、详情、统计、提交与验证。不要再预读 `dingtalk-shared`、Report intent/lite/conventions 或父级 Help。
 
+> **审批边界**：请求中出现审批人、抄送人、审批路径或审批单时，立即停止 Report 路径并改读 [oa.md](oa.md)，不得执行任何 `dws report` 命令。Report 的 `--to-user-ids` 表示日志收件人，不是审批人或抄送人；OA 没有同名模板也不能用 Report 替代。
+
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
 
@@ -73,7 +75,7 @@ Report 查询优先使用下方严格 Shortcut；它们会校验响应、稳定 
 
 ## 模板列表与比较
 
-- 用户要查看当前全部模板时，调用一次 `template list`，优先加 `--jq '[.result[] | {name: .report_template_name, templateId: .report_template_id}]'` 仅保留名称和 ID，降低输出体积。
+- 用户要查看当前全部模板时，调用一次 `template list`，优先加 `--jq '[.items[] | {name: .report_template_name, templateId: .report_template_id}]'` 仅保留名称和 ID，降低输出体积。
 - 如果输出被截断、分页状态未知或工具没有给出完整性证据，不得声称“共 N 个且已全部列出”；应说明已取得的范围并继续取得完整结果。
 - 比较两个模板字段时：模板列表只取一次；确认两个精确名称后，两次 `template get` 可并行；最终按字段名、字段类型、必填/选项（若响应提供）比较。
 - `template get` 没返回的属性就是未知，不自行推断“必填”“默认值”或提交格式。

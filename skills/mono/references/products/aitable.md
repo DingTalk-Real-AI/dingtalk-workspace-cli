@@ -10,7 +10,7 @@
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
 > **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
-> 补充：如果 URL 不是来自 `aitable` 命令返回，而是用户直接贴的原始 `alidocs` URL，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe，确认是 `able` 后再按 AI 表格处理。
+> 补充：如果 URL/节点 ID 不是来自当前 `aitable` 调用的已验证返回，而是用户直接提供，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe；`extension=dlink` 时逐跳消费目标 `linkSourceInfo`，确认最终目标为 `able` 后再按 AI 表格处理。
 
 ## 命令索引表
 
@@ -26,6 +26,23 @@
 | `base create` | 创建 Base | `--name` | 创建后直接用返回的 baseId |
 | `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
 | `base delete` | 删除 Base | `--base-id` | 不可逆 |
+
+### app (应用模式管理)
+
+> 应用模式是 AI 表格面向使用者的 App：一个 Base 只有一个 App，App 下按导航顺序组织 Page，Page 中放置 Widget。应用 Page 的 `pageId` 同时是对应 Dashboard ID，但 `appId`、`pageId`、`widgetId` 不能互换。
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `app get` | 获取 App 信息 | `--base-id` | 无 App 时会幂等初始化默认 App，并返回 `created=true` |
+| `app update` | 更新 App 名称、图标、外观、导航或主题 | `--base-id` + 至少一个修改项 | `--icon` 是完整 JSON 对象；主题类字符串按服务端枚举透传 |
+| `app page list/get` | 列出页面 / 获取页面详情 | `--base-id`；get 另需 `--page-id` | list 无 App 时会初始化默认 App；最多 100 个 Page |
+| `app page create` | 创建应用页面及同 ID Dashboard | `--base-id` `--name` | 非幂等，不自动重试；`--before-page-id` 省略时追加到末尾 |
+| `app page update/move` | 更新页面元数据 / 调整导航顺序 | `--base-id` `--page-id` | `--hidden-menu=false` 可明确重新显示；move 省略目标时移到末尾 |
+| `app page delete` | 删除页面及其全部 Widget | `--base-id` `--page-id` `--yes` | 不可逆；保留 App 本体 |
+| `app widget list/get` | 列出 / 获取页面 Widget | `--base-id` `--page-id`；get 另需 `--widget-id` | list 只读已有 App；单页最多返回 1000 个 Widget |
+| `app widget create` | 创建 Widget 并写入页面布局 | `--base-id` `--page-id` `--config` `--layout` | config 需 `chartType`；layout 需 `x/y/w/h`，根布局是 48 列；非幂等，不自动重试 |
+| `app widget update` | 更新 Widget 名称、完整配置或布局 | `--base-id` `--page-id` `--widget-id` + 至少一个修改项 | config/layout 均为全量对象，先 get 再更新 |
+| `app widget delete` | 删除 Widget 及其布局项 | `--base-id` `--page-id` `--widget-id` `--yes` | 不可逆 |
 
 ### table (数据表管理)
 
@@ -48,18 +65,26 @@
 | `field delete` | 删除字段 | `--base-id` `--table-id` `--field-id` | 不可逆 |
 | `field search-options` | 搜索单选/多选字段的选项 | `--base-id` `--table-id` `--field-id` | 仅 singleSelect/multipleSelect；`--keyword` 模糊过滤，不传返回全部 |
 
+### psql (PostgreSQL 只读查询) → 详见 [aitable-psql.md](./aitable/aitable-psql.md)
+
+| 命令模式 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `psql -l` | 列出可查询的 PostgreSQL 逻辑表 | `-d <baseId>` | 数据查询前的表发现；输出为 psql 文本，不加 `--format json` |
+| `psql -t` | 查看逻辑列名和 PostgreSQL 类型 | `-d <baseId>` `-t <tableId>` | SQL 前核对列；全部属性列加 `--all-properties` |
+| `psql -c` | 执行一条只读 PostgreSQL SELECT | `-d <baseId>` `-c <SQL>` | SQL 的 `FROM` / `JOIN` 自动确定主表；支持单表及同 Base 多表 JOIN；只读；输出为 psql 文本 |
+
 ### record (记录管理)
 
 | 命令 | 用途 | 必读 reference | 路由提醒 |
 |------|------|----------------|----------|
-| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `table get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference；`--query`（隐藏别名 `--keyword`）全文搜索 |
+| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId 与类型；完整结果必须用 `--all --page-limit 0` 自动翻页；filters 中的实体展示名须先解析为稳定 ID/结构化值；`--query`（隐藏别名 `--keyword`）全文搜索 |
 | `record list` | 获取记录（`record query` 的别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 与 `record query` 等价 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
 | `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 小写；group 为 JSON 数组字符串；最多 1000 个分组 |
-| `record query-empty` | 查询完全没填用户字段的空行 | — | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]，`--cursor` 翻页 |
+| `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
-| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；**没有** `--record-id` `--cells` flag |
+| `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
 | `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
 | `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |
 | `record delete` | 删除记录 | [aitable-record-delete.md](./aitable/aitable-record-delete.md) | 不可逆，需先 query 确认 |
@@ -288,6 +313,21 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 - `chart share get` 稳定返回 `success + data`（含 `enabled`），从未分享时 `enabled=false`，不会 404。
 - `dashboard share update` 开 ORG 分享后 `shareType` 回显 `"[1]"`（服务端已知问题）；`chart share update` 正确回显 `ORG`。详见 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)。
 
+### 应用模式（建议顺序）
+
+```bash
+# 1) 获取或初始化 App，再发现 pageId
+dws aitable app get --base-id <BASE_ID> --format json
+dws aitable app page list --base-id <BASE_ID> --format json
+
+# 2) 读取 Page 和 Widget；修改完整 config/layout 前先读回
+dws aitable app page get --base-id <BASE_ID> --page-id <PAGE_ID> --format json
+dws aitable app widget list --base-id <BASE_ID> --page-id <PAGE_ID> --format json
+dws aitable app widget get --base-id <BASE_ID> --page-id <PAGE_ID> --widget-id <WIDGET_ID> --format json
+```
+
+创建 Widget 的最小形状为 `--config '{"chartType":"AI_ANALYZE"}' --layout '{"x":0,"y":0,"w":48,"h":8}'`。创建 Page/Widget 返回状态不明时先 list/get 回读，不能自动重放；删除 Page 会级联删除其中全部 Widget。
+
 ### 导出数据（两阶段轮询）
 
 `export data` 常见为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
@@ -336,6 +376,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 - 修改/更新 → `record update`（读 [aitable-record-update.md](./aitable/aitable-record-update.md)）
 - 删除 → `record delete`
 
+用户说"查看可查询表/SQL 表结构/SQL 字段类型/查询前 N 条/按列查询/SQL/PostgreSQL/SELECT/JOIN/两表关联" → 读 [aitable-psql.md](./aitable/aitable-psql.md)。数据查询前的表清单和逻辑列发现走 `psql`；普通按记录 ID、关键词或 filters 查行仍走 `record query`；两表关联不得误路由为 LOOKUP/FILTER_UP 公式配置。
+
 用户说"筛选/过滤/filter" → 读 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md)
 
 用户说"统计/分析/聚合/TOP N/全量" → 先读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)，聚合参数见 [aitable-record-stats.md](./aitable/aitable-record-stats.md)
@@ -345,6 +387,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 用户说"查找引用/lookup/filterUp/跨表" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)（§5.4 跨表引用）
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
+
+用户说"应用模式/App 页面/Widget" → `app get` 后按 `app page` / `app widget` 子命令处理；不要混同普通 Base 信息或开放平台应用
 
 用户说"附件/上传文件" → 读 [aitable-attachment.md](./aitable/aitable-attachment.md)
 
@@ -387,19 +431,21 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 | `record query` | `recordId` | record update/delete；按 ID 反查字段值用 `record get` |
 | `template search` | `templateId` | base create --template-id，拼接模板预览 URI |
 
-## URL → baseId 提取
+## URL/节点 ID → baseId 规范化
 
-用户提供 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 链接时：
-1. 提取 `/nodes/` 后的路径段作为 `baseId`
-2. 去掉尾部的查询参数（`?` 及其后内容）
-3. 传入 `--base-id` 参数
+用户提供 `https://alidocs.dingtalk.com/i/nodes/{id}` 或来源未验证的 nodeId 时：
+1. 先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 执行 `dws drive info`
+2. 若为 `extension=dlink`，执行 `dws doc info` 并逐跳消费目标 `linkSourceInfo`；记录已访问 ID，失败、字段缺失或 ID 重复即停
+3. 只有最终目标 `extension=able` 时，才将最终目标 nodeId 作为 `baseId`
+4. 已确认的 AITable URL 如含 table/view 参数，再解析并复用这些稳定 ID
 
 > 如果该 URL 来自 `dws aitable` 返回或已在当前链路 probe 过，可直接复用；
-> 如果是用户直接提供的原始 `alidocs` URL，则先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe，确认 `extension=able` 后再继续。
+> 禁止直接把 dlink 快捷方式入口的路径段当作 baseId。明确移动、重命名或删除快捷方式入口本身时才保留顶层 nodeId，并改走对应的 Drive 入口管理命令。
 
 ## 注意事项
 
-- 所有操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称
+- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
 - records 的 cells key 是 fieldId，不是字段名称
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)

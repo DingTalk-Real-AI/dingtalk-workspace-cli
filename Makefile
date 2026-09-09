@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -18,6 +18,8 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make build         - Build the dws CLI binary\n"
 	@printf "  make test          - Run the Go test suite\n"
+	@printf "  make check-safechat - Compile and vet the SafeChat message-crypto backend (needs CGO)\n"
+	@printf "  make test-safechat - Run the message-crypto tests against the SafeChat backend\n"
 	@printf "  make test-plan     - Verify CI test and full-suite coverage package plans cover their scopes exactly once\n"
 	@printf "  make test-auth-legacy-compat - Run stable legacy authentication compatibility regressions\n"
 	@printf "  make shortcut-public-e2e-proof - Prove every reviewed Devdoc/HRbrain/PAT public Shortcut through exact and owning raw execution\n"
@@ -52,6 +54,16 @@ build:
 
 rebuild:
 	@./scripts/dev/build.sh
+
+# No dws command imports internal/msgcrypto yet, so a tagged CLI build would
+# link nothing extra and look identical to the default binary. Gate the package
+# itself until a caller wires it in.
+check-safechat:
+	@CGO_ENABLED=1 $(GO) build -tags safechat ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) vet -tags safechat ./internal/msgcrypto/...
+
+test-safechat:
+	@CGO_ENABLED=1 $(GO) test -count=1 -tags safechat ./internal/msgcrypto/...
 
 test:
 	@DWS_PACKAGE_VERSION="$(DWS_PACKAGE_VERSION)" $(GO) test -count=1 -timeout=10m ./...
