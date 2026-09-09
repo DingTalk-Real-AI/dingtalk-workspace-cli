@@ -44,15 +44,33 @@ func testArtifact(kind ArtifactKind, payload []byte) Artifact {
 	}
 }
 
-func openTestCache(t *testing.T, ops unixIO) (*Cache, *Counters, ExpectedIdentity) {
+// privateTestBase creates a 0700 temp directory under the user's home so the
+// secure ancestry walk succeeds. t.TempDir() lands under /tmp (1777,
+// world-writable) on CI runners, which validateAncestryDirectory rejects.
+func privateTestBase(t *testing.T) string {
 	t.Helper()
-	base, err := filepath.EvalSymlinks(t.TempDir())
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := os.MkdirTemp(home, ".dws-schemacache-test-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(base, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	resolved, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
+}
+
+func openTestCache(t *testing.T, ops unixIO) (*Cache, *Counters, ExpectedIdentity) {
+	t.Helper()
+	base := privateTestBase(t)
 	oldUserCacheDir, oldPlatformIO := userCacheDir, platformIO
 	userCacheDir = func() (string, error) { return base, nil }
 	if ops == nil {
@@ -237,10 +255,7 @@ func TestSecureRootRejectsSymlinkAndWritableOwnedSuffix(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			base, err := filepath.EvalSymlinks(t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
+			base := privateTestBase(t)
 			prepare(t, base)
 			old := userCacheDir
 			userCacheDir = func() (string, error) { return base, nil }
@@ -253,10 +268,7 @@ func TestSecureRootRejectsSymlinkAndWritableOwnedSuffix(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageCacheBootstrapsMissingUserCacheDirectory(t *testing.T) {
-	parent, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	parent := privateTestBase(t)
 	for _, suffix := range []string{".cache", "Library/Caches"} {
 		t.Run(suffix, func(t *testing.T) {
 			base := filepath.Join(parent, suffix)

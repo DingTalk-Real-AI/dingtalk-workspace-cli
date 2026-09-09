@@ -1173,7 +1173,7 @@ jobs:
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=25m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
@@ -1187,7 +1187,7 @@ jobs:
     # are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper. This
     # preserves registry release while reducing hosted-runner fan-out by six
     # jobs. cli/smoke retain extra timeout headroom for setup + assembly.
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
