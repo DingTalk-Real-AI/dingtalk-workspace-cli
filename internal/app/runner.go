@@ -33,6 +33,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -147,6 +148,105 @@ type runtimeRunner struct {
 	includeScanReport  bool
 	auditSink          audit.Sink
 	agentMetadata      *agentMetadataSnapshot
+}
+
+var runnerListProductTools = (*runtimeRunner).listProductTools
+
+// ResolveToolProduct discovers the exact tool before dispatch and returns the
+// first compatible product in caller-supplied preference order. Discovery is
+// read-only; callers must execute the subsequent tools/call only once.
+func (r *runtimeRunner) ResolveToolProduct(ctx context.Context, productIDs []string, toolName string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return "", apperrors.NewValidation("MCP tool name is required for capability routing")
+	}
+	if r != nil && r.globalFlags != nil && r.globalFlags.Mock {
+		if len(productIDs) == 0 {
+			return "", apperrors.NewDiscovery(fmt.Sprintf("no MCP product candidates for tool %q", toolName))
+		}
+		return productIDs[0], nil
+	}
+	// Tool capabilities are server-scoped, not account-scoped. For a
+	// multi-profile invocation, discover once with the first resolved profile;
+	// the subsequent runner still executes exactly once per selected profile.
+	rawProfile := authpkg.RuntimeProfile()
+	selections, multi, err := runnerResolveMultiProfileSelections(defaultConfigDir(), rawProfile)
+	if err != nil {
+		return "", apperrors.NewValidation(err.Error())
+	}
+	if multi {
+		if len(selections) == 0 {
+			return "", apperrors.NewValidation("multi-profile capability routing has no resolved profile")
+		}
+		authpkg.SetRuntimeProfile(profileRuntimeSelector(selections[0].Profile, selections[0].Selector))
+		defer authpkg.SetRuntimeProfile(rawProfile)
+	}
+	checked := make([]string, 0, len(productIDs))
+	discoveryFailures := make([]string, 0, len(productIDs))
+	for _, productID := range productIDs {
+		productID = strings.TrimSpace(productID)
+		if productID == "" {
+			continue
+		}
+		checked = append(checked, productID)
+		tools, err := runnerListProductTools(r, ctx, productID, toolName)
+		if err != nil {
+			var typed *apperrors.Error
+			if errors.As(err, &typed) && typed.Reason == "endpoint_not_resolved" {
+				continue
+			}
+			discoveryFailures = append(discoveryFailures, fmt.Sprintf("%s: %v", productID, err))
+			continue
+		}
+		for _, tool := range tools {
+			if tool.Name == toolName {
+				return productID, nil
+			}
+		}
+	}
+	if len(discoveryFailures) > 0 {
+		return "", apperrors.NewDiscovery(
+			fmt.Sprintf("cannot establish a compatible route for tool %q after tools/list failures: %s", toolName, strings.Join(discoveryFailures, "; ")),
+			apperrors.WithOperation("tools/list"),
+			apperrors.WithReason("mcp_tool_discovery_failed"),
+		)
+	}
+	return "", apperrors.NewDiscovery(
+		fmt.Sprintf("tool %q is not exposed by compatible MCP products %v", toolName, checked),
+		apperrors.WithOperation("tools/list"),
+		apperrors.WithReason("mcp_tool_not_found"),
+	)
+}
+
+func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName string) ([]transport.ToolDescriptor, error) {
+	if r == nil || r.transport == nil {
+		return nil, fmt.Errorf("runtime transport is not configured")
+	}
+	// Resolve by product only. Tool-level fallback would make a missing helper
+	// product appear to own a tool merely because another product registered it.
+	endpoint, ok := directRuntimeEndpoint(productID, "")
+	if !ok {
+		return nil, endpointNotResolvedError(productID, toolName, "capability discovery endpoint is unavailable")
+	}
+	snapshot, err := runnerResolveAuthSnapshot(r, ctx)
+	if err != nil {
+		return nil, tokenResolutionError(err)
+	}
+	if !hasDirectRuntimeEndpointOverride(productID) && isDingTalkMCPGatewayEndpoint(endpoint) &&
+		(snapshot.LoginRegionKnown || authpkg.MCPBaseURLOverride() != "") {
+		endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, snapshot.LoginRegion)
+	}
+	invocation := executor.NewHelperInvocation("overlay."+productID+".tools-list", productID, toolName, nil)
+	headers := resolveMCPRequestHeadersForInvocation(invocation)
+	client := publishedmcp.New(r.transport, snapshot.AccessToken, headers)
+	tools, err := client.Tools(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return tools.Tools, nil
 }
 
 var (

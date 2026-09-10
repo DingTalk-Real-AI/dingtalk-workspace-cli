@@ -37,8 +37,11 @@ import (
 // serverMain is the primary aitable MCP server id.
 const serverMain = "aitable"
 
-// Historical helper tools have moved into the public aitable snapshot.
-const serverHelper = serverMain
+// serverHelper is the historical split-service route. The shared helper
+// dispatch boundary capability-checks this route against serverMain at runtime,
+// so old split deployments and new unified deployments both execute exactly
+// one tool call.
+const serverHelper = "aitable-helper"
 
 // parseJSONAny parses an arbitrary JSON string (object or array) into any.
 func parseJSONAny(flag, s string) (any, error) {

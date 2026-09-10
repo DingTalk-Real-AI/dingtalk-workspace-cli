@@ -133,8 +133,8 @@ func TestCrossPlatformCoverageShareFormShortcutMatchesPublishedSchema(t *testing
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !fake.called || fake.product != "aitable" || fake.tool != "update_share_form" {
-		t.Fatalf("tool call = called:%v %s/%s, want aitable/update_share_form", fake.called, fake.product, fake.tool)
+	if !fake.called || fake.product != "aitable-helper" || fake.tool != "update_share_form" {
+		t.Fatalf("tool call = called:%v %s/%s, want legacy-compatible aitable-helper/update_share_form", fake.called, fake.product, fake.tool)
 	}
 	expected := map[string]any{
 		"enabled": false, "authTypeCode": 2, "authData": "u1,u2",

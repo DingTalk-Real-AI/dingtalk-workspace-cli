@@ -202,8 +202,33 @@ func callMCPToolReturnText(ctx context.Context, toolName string, args map[string
 }
 
 func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
+	if err != nil {
+		return "", err
+	}
+	serverID = resolvedServerID
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
 	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+type compatibleToolRouteResolver interface {
+	ResolveToolProduct(context.Context, []string, string) (string, error)
+}
+
+// resolveCompatibleToolServer preserves the historical aitable-helper route
+// for callers and deployments that do not expose capability discovery. The
+// production caller discovers the tool on the split and unified services
+// before any tools/call request, which is required for writes: an error after a
+// write-shaped tools/call is never used as permission to replay it elsewhere.
+func resolveCompatibleToolServer(ctx context.Context, serverID, toolName string) (string, error) {
+	if serverID != "aitable-helper" || deps == nil || deps.Caller == nil {
+		return serverID, nil
+	}
+	resolver, ok := deps.Caller.(compatibleToolRouteResolver)
+	if !ok {
+		return serverID, nil
+	}
+	return resolver.ResolveToolProduct(ctx, []string{"aitable", "aitable-helper"}, toolName)
 }
 
 // CallMCPReadToolTextOnServer performs a read-only lookup needed to construct a
@@ -242,6 +267,11 @@ func callMCPReadToolReturnTextOnServer(ctx context.Context, serverID, toolName s
 	if !deps.Caller.DryRun() {
 		return callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
 	}
+	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
+	if err != nil {
+		return "", err
+	}
+	serverID = resolvedServerID
 	readCaller, ok := deps.Caller.(edition.ReadToolCaller)
 	if !ok {
 		return "", &CLIError{
@@ -490,6 +520,11 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 	if serverID == "" {
 		serverID = resolveProductID()
 	}
+	resolvedServerID, err := resolveCompatibleToolServer(ctx, serverID, toolName)
+	if err != nil {
+		return err
+	}
+	serverID = resolvedServerID
 
 	// 调用 MCP Server
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
