@@ -438,3 +438,161 @@ func TestCrossPlatformCoverageCompactProvenanceQueryAndIndexGaps(t *testing.T) {
 	norm.Identity.Name = "zzz"
 	_ = norm.normalized()
 }
+
+func TestCrossPlatformCoverageModelIndexValidateAndPayloadRemainders(t *testing.T) {
+	// Index: product/tool mismatch after Validate succeeds (canonical matches the tool's own ProductID).
+	mismatch := allFieldsRegistry()
+	tool := mismatch.Products[0].Tools[0]
+	tool.Identity.ProductID = "other"
+	tool.Identity.CanonicalPath = "other.run"
+	tool.Identity.Path = "other.run"
+	mismatch.Products[0].Tools[0] = tool
+	if _, err := mismatch.Index(); err == nil {
+		t.Fatal("foreign product tool accepted")
+	}
+
+	// Canonical path already registered as another tool's contract path.
+	canonConflict := allFieldsRegistry()
+	canonConflict.Products[0].Tools[0].Identity.Path = "sample.zzz"
+	canonConflict.Products[0].Tools[0].Identity.SourceProductID = ""
+	if _, err := canonConflict.Index(); err == nil {
+		t.Fatal("canonical/contract path collision accepted")
+	}
+
+	// Contract path collides with an already indexed canonical path.
+	pathConflict := allFieldsRegistry()
+	pathConflict.Products[0].Tools[1].Identity.Path = "sample.run"
+	pathConflict.Products[0].Tools[1].Identity.SourceProductID = ""
+	if _, err := pathConflict.Index(); err == nil {
+		t.Fatal("contract path vs canonical accepted")
+	}
+
+	bad := allFieldsRegistry().Products[0].Tools[0]
+	bad.Parameters[0].InterfaceDefault = json.RawMessage(`{`)
+	if err := bad.Validate(); err == nil {
+		t.Fatal("bad interface_default json")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Parameters[0].Example = json.RawMessage(`{`)
+	if err := bad.Validate(); err == nil {
+		t.Fatal("bad example json")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.DryRun = &contract.DryRunSpec{}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("empty dry_run accepted")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Result = &contract.ResultSpec{}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("empty result accepted")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Interface = contract.InterfaceSpec{Mode: "not-a-mode"}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("unknown interface mode accepted")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Parameters[0].FieldProvenance = map[string]contract.FieldProvenance{
+		"name": {Value: json.RawMessage(`"nope"`), Source: "s", Precedence: "1", Resolution: "x"},
+	}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("mismatched parameter provenance accepted")
+	}
+	if err := ValidateFinalFieldProvenance("o", "f", contract.FieldProvenance{}, make(chan int)); err == nil {
+		t.Fatal("unmarshalable provenance value accepted")
+	}
+	selected := true
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.FieldProvenance["title"] = contract.FieldProvenance{
+		Value: json.RawMessage(`"Run sample"`), Source: "contract_final", Precedence: "100", Resolution: "selected",
+		Candidates: []contract.FieldCandidateProvenance{{
+			Value: json.RawMessage(`"Run sample"`), Source: "contract_final", Precedence: "100", Selected: &selected,
+		}},
+		OverriddenCandidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage(`{`)}},
+	}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("invalid overridden provenance accepted")
+	}
+	if EqualJSONValues([]byte(`"a"`), []byte(`{`)) {
+		t.Fatal("invalid JSON compared equal")
+	}
+	if !EqualJSONValues([]byte(`{"a":1}`), []byte(`{ "a" : 1 }`)) {
+		t.Fatal("semantic JSON equality failed")
+	}
+
+	sorted := allFieldsRegistry().Products[0].Tools[0]
+	sorted.Positionals = []contract.RuntimeSchemaPositional{
+		{Name: "b", Type: "string", Description: "B", Index: 1},
+		{Name: "a", Type: "string", Description: "A", Index: 1},
+	}
+	if got := NormalizeToolSpec(sorted); got.Positionals[0].Name != "a" || got.Positionals[1].Name != "b" {
+		t.Fatalf("positional name sort = %#v", got.Positionals)
+	}
+	_ = NormalizeParameterSpec(ParameterSpec{Name: " x ", Type: " string ", Enum: []string{"b", "a", "b"}})
+
+	empty := SchemaRegistry{Products: []ProductSpec{{}}}
+	if _, err := empty.ToPayload(); err == nil {
+		t.Fatal("empty product ToPayload")
+	}
+	if _, err := empty.ToOverviewPayload(); err == nil {
+		t.Fatal("empty product ToOverview")
+	}
+
+	useWhen := allFieldsRegistry()
+	useWhen.Products[0].Selection.AgentSummary = ""
+	useWhen.Products[0].FieldProvenance = nil
+	overview, err := useWhen.ToOverviewPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview["products"].([]map[string]any)[0]["use_when"] == nil {
+		t.Fatalf("use_when overview = %#v", overview["products"])
+	}
+
+	invalidTool := allFieldsRegistry().Products[0].Tools[0]
+	invalidTool.Identity.Name = ""
+	if _, err := (ProductSpec{ID: "p", Name: "P", Tools: []ToolSpec{invalidTool}}).ToPayload(); err == nil {
+		t.Fatal("invalid tool envelope")
+	}
+	if _, err := invalidTool.ToPayload(); err == nil {
+		t.Fatal("invalid tool payload")
+	}
+	if _, err := invalidTool.ToSummaryPayload(); err == nil {
+		t.Fatal("invalid tool summary")
+	}
+
+	anyOf := allFieldsRegistry().Products[0].Tools[0]
+	anyOf.Parameters[0].Type = "int"
+	anyOf.Parameters[0].AnyOf = []contract.FormatAlternative{{Format: "email"}}
+	if _, err := anyOf.ToPayload(); err == nil {
+		t.Fatal("anyOf parameter payload")
+	}
+
+	badProv := allFieldsRegistry().Products[0].Tools[0]
+	badProv.FieldProvenance["unknown"] = contract.FieldProvenance{Value: json.RawMessage(`{`)}
+	if _, err := badProv.ToPayload(); err == nil {
+		t.Fatal("invalid tool provenance payload")
+	}
+	paramProv := ParameterSpec{Name: "x", Type: "string", Description: "d", FieldProvenance: map[string]contract.FieldProvenance{"unknown": {Value: json.RawMessage(`{`)}}}
+	if _, err := paramProv.ToPayload(); err == nil {
+		t.Fatal("invalid param provenance payload")
+	}
+
+	if (CommandSafety{}).ShouldRender() {
+		t.Fatal("empty safety rendered")
+	}
+	if !(CommandSafety{Effect: "read"}).ShouldRender() || !(CommandSafety{Risk: "low"}).ShouldRender() ||
+		!(CommandSafety{Confirmation: "none"}).ShouldRender() || !(CommandSafety{Idempotency: "yes"}).ShouldRender() {
+		t.Fatal("populated safety skipped")
+	}
+	blank := allFieldsRegistry()
+	blank.Products[0].Tools[0].Identity.CLIPath = ""
+	if _, ok := BuildCommandMetaLookup(blank)[""]; ok {
+		t.Fatal("empty cli path leaked")
+	}
+	view := AliasView(allFieldsRegistry().Products[0].Tools[0], "not-an-alias")
+	if view.Identity.IsAlias {
+		t.Fatal("unknown alias flipped is_alias")
+	}
+}

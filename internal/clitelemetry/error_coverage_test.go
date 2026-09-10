@@ -88,6 +88,9 @@ func TestCrossPlatformCoverageErrorSummarySanitizeAndConfig(t *testing.T) {
 	if _, ok := fields["c5"]; ok {
 		t.Fatal("empty error emitted")
 	}
+	if got := SanitizeErrorText("id ABCDEFGH12345678 leftover"); !strings.Contains(got, "<id>") {
+		t.Fatalf("mixed token = %q", got)
+	}
 	Run(cfg, func() error { return nil }, func(error) int { return 0 })
 }
 

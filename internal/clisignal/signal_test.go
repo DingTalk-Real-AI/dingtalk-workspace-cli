@@ -123,9 +123,13 @@ func TestCrossPlatformCoverageInterruptionDetailAndNilSignal(t *testing.T) {
 	if !strings.Contains(err, "stopped") {
 		t.Fatalf("detail error = %q", err)
 	}
+	if !strings.Contains(NewInterruption(os.Interrupt).Error(), "interrupted") {
+		t.Fatal("plain interruption error missing signal")
+	}
 	signals := make(chan os.Signal, 1)
 	ctx, state, stop := Manage(context.Background(), func() bool { return false }, signals, func() {}, func(os.Signal) {})
 	signals <- nil
+	time.Sleep(50 * time.Millisecond)
 	stop()
 	if ctx == nil || state == nil {
 		t.Fatal("nil manage state")

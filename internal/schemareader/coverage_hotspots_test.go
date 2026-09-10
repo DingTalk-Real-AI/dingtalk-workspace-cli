@@ -4,10 +4,15 @@
 package schemareader
 
 import (
+	"crypto/sha256"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 )
 
@@ -98,4 +103,184 @@ func TestCrossPlatformCoverageLocatorAndIndexLocator(t *testing.T) {
 	if _, ok := IndexLocator(index, "missing"); ok {
 		t.Fatal("missing index locator")
 	}
+}
+
+func TestCrossPlatformCoverageReaderAuthenticatedDecodeAndRangeFaults(t *testing.T) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
+		t.Skip("persistent cache backend is intentionally disabled on this target")
+	}
+	cache, identity := publishReaderFixture(t)
+	t.Cleanup(func() { _ = cache.Close() })
+
+	garbage := identity
+	if _, err := ReadMeta(cache, garbage); err == nil {
+		t.Fatal("garbage meta decoded")
+	}
+
+	validCache, validIdentity, meta, index := publishValidReaderFixture(t)
+	t.Cleanup(func() { _ = validCache.Close() })
+	got, err := ReadMeta(validCache, validIdentity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = got
+	if _, err := ReadProduct(validCache, validIdentity, meta, "sample"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadPayloadIndex(validCache, validIdentity); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadCommandPayload(validCache, validIdentity, index, "sample"); err != nil {
+		t.Fatal(err)
+	}
+	mismatch := validIdentity
+	mismatch.Registry.EncodedSHA256 = sha256.Sum256([]byte("other-reg"))
+	if _, err := ReadMeta(validCache, mismatch); err == nil {
+		t.Fatal("registry hash mismatch accepted")
+	}
+
+	badMeta := meta
+	badMeta.ProductDescriptors = append([]schemaruntime.ProductDescriptor(nil), meta.ProductDescriptors...)
+	badMeta.ProductDescriptors[0].SHA256 = sha256.Sum256([]byte("nope"))
+	if _, err := ReadProduct(validCache, validIdentity, badMeta, "sample"); err == nil {
+		t.Fatal("product range mismatch accepted")
+	}
+
+	badIndex := validIdentity
+	badIndex.PayloadIndexSHA256 = sha256.Sum256([]byte("nope"))
+	if _, err := ReadPayloadIndex(validCache, badIndex); err == nil {
+		t.Fatal("payload index mismatch accepted")
+	}
+	if _, err := ReadCommandPayload(validCache, validIdentity, schemaruntime.DecodedSchemaPayloadIndex{}, "missing"); err == nil {
+		t.Fatal("missing command payload accepted")
+	}
+	if _, err := ReadRenderedLeaf(validCache, validIdentity, schemaruntime.DecodedSchemaPayloadIndex{}, "missing", schemaruntime.RenderedLeafRef{}); err == nil {
+		t.Fatal("missing rendered leaf accepted")
+	}
+	if _, err := ReadRenderedLeafRange(mustOpenPayloads(t, validCache, validIdentity), validIdentity, index, "sample", schemaruntime.RenderedLeafRef{
+		Offset: 0, Length: 4, SHA256: sha256.Sum256([]byte("leaf")),
+	}); err == nil {
+		t.Fatal("rendered leaf range mismatch accepted")
+	}
+}
+
+func mustOpenPayloads(t *testing.T, cache *schemacache.Cache, identity Identity) *schemacache.Registry {
+	t.Helper()
+	payloads, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = payloads.Close() })
+	return payloads
+}
+
+func readerArtifact(kind schemacache.ArtifactKind, payload []byte) schemacache.Artifact {
+	return schemacache.Artifact{
+		Expectation: schemacache.ArtifactExpectation{
+			Kind: kind, Serializer: schemacache.SerializerProtobuf, Codec: schemacache.CodecRaw,
+			FormatVersion: schemacache.DTOFormatVersion, EncodedLength: uint64(len(payload)),
+			DecodedLength: uint64(len(payload)), EncodedSHA256: sha256.Sum256(payload),
+		},
+		Payload: append([]byte(nil), payload...),
+	}
+}
+
+func readerIdentity(edition string, source, surface, build [32]byte, meta, registry, payload schemacache.Artifact, indexLength uint64, indexSHA [32]byte) Identity {
+	return Identity{
+		Edition: edition, CatalogSnapshotVersion: CatalogSnapshotVersion,
+		SourceSHA256: source, SurfaceSHA256: surface, BuildID: build,
+		Meta: meta.Expectation, Registry: registry.Expectation, Payload: payload.Expectation,
+		PayloadIndexLength: indexLength, PayloadIndexSHA256: indexSHA,
+	}
+}
+
+func openReaderCache(t *testing.T, edition string) *schemacache.Cache {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := os.MkdirTemp(home, ".dws-schemareader-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.Abs(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", filepath.Clean(resolved))
+	cache, err := schemacache.Open(edition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cache
+}
+
+func publishReaderFixture(t *testing.T) (*schemacache.Cache, Identity) {
+	t.Helper()
+	meta := readerArtifact(schemacache.KindMeta, []byte("not-a-schema-meta"))
+	reg := readerArtifact(schemacache.KindRegistry, []byte("not-a-registry"))
+	payload := readerArtifact(schemacache.KindPayloads, []byte("not-a-payload"))
+	source, surface, build := sha256.Sum256([]byte("source")), sha256.Sum256([]byte("surface")), sha256.Sum256([]byte("build"))
+	identity := readerIdentity("covread", source, surface, build, meta, reg, payload, 1, sha256.Sum256([]byte("idx")))
+	cache := openReaderCache(t, identity.Edition)
+	if err := cache.Publish(identity.ExpectedIdentity(), reg, meta, payload); err != nil {
+		t.Fatal(err)
+	}
+	return cache, identity
+}
+
+func publishValidReaderFixture(t *testing.T) (*schemacache.Cache, Identity, schemaruntime.DecodedSchemaMeta, schemaruntime.DecodedSchemaPayloadIndex) {
+	t.Helper()
+	registry := schemaruntime.SchemaRegistry{
+		Kind: "schema", Level: "catalog", Source: "test",
+		Products: []schemaruntime.ProductSpec{{
+			ID: "sample", Name: "Sample", Description: "Sample",
+			Tools: []schemaruntime.ToolSpec{{
+				Identity: contract.ToolIdentitySpec{
+					ProductID: "sample", Name: "run", CLIName: "run",
+					CanonicalPath: "sample.run", Path: "sample.run",
+					CLIPath: "sample run", PrimaryCLIPath: "sample run", Source: "runtime",
+				},
+				Title: "Run", Description: "Run it",
+			}},
+		}},
+	}
+	overview, err := schemaruntime.BuildSchemaOverview(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locators, err := schemaruntime.BuildSchemaProductLocators(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lookup := schemaruntime.BuildCommandMetaLookup(registry)
+	hashes := schemaruntime.CacheHashes{SourceSHA256: sha256.Sum256([]byte("source")), SurfaceSHA256: sha256.Sum256([]byte("surface"))}
+	built, err := schemaruntime.BuildSchemaCache(registry, lookup, overview, locators, hashes, map[string][]byte{
+		"sample.run": []byte("{\"ok\":true}\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaArt := readerArtifact(schemacache.KindMeta, built.Meta)
+	regArt := readerArtifact(schemacache.KindRegistry, built.ProductShards)
+	payloadArt := readerArtifact(schemacache.KindPayloads, built.PayloadShards)
+	identity := readerIdentity("covvalid", hashes.SourceSHA256, hashes.SurfaceSHA256, sha256.Sum256([]byte("build")), metaArt, regArt, payloadArt, built.PayloadIndexLength, built.PayloadIndexSHA256)
+	cache := openReaderCache(t, identity.Edition)
+	if err := cache.Publish(identity.ExpectedIdentity(), regArt, metaArt, payloadArt); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := schemaruntime.DecodeSchemaMetaCache(built.Meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := schemaruntime.DecodeSchemaPayloadIndex(built.PayloadShards[:built.PayloadIndexLength])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cache, identity, decoded, index
 }

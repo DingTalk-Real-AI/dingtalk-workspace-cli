@@ -278,6 +278,13 @@ func TestCrossPlatformCoverageProfileMetadataRules(t *testing.T) {
 	if UnresolvedProfileForLocalName(multi, "safe") == nil {
 		t.Fatal("safe local unresolved missing")
 	}
+	if !ProfileSelectorReferenceExists(multi, "safe") {
+		t.Fatal("safe local name reference missing")
+	}
+	unsafe := &ProfilesConfig{Profiles: []Profile{{CorpID: "m", Name: "m"}, {CorpID: "m", UserID: "u", Name: "other"}}}
+	if StoredProfileSelector(unsafe, &unsafe.Profiles[0]) != UnresolvedProfileSelector("m") {
+		t.Fatalf("unsafe stored selector = %q", StoredProfileSelector(unsafe, &unsafe.Profiles[0]))
+	}
 }
 
 func TestCrossPlatformCoverageResolveReadOnly(t *testing.T) {
