@@ -33,6 +33,20 @@ dws aitable record create --base-id <B> --table-id <T> \
 
 长 JSON 写到 cwd 内相对文件后使用 `--records-file ./records.json`。从真实返回的 `data.newRecordIds[]` 取 recordId，再用 `+record-query --record-ids` 回读；用户限定返回列时同时传 `--field-ids`。不要从输入顺序、名称或行号推断 ID。
 
+在某条父记录下创建层级子记录（同一命令，加 `--parent-record-id`）：
+
+```bash
+dws aitable record create --base-id <B> --table-id <T> --parent-record-id <PARENT_R> \
+  --records '[{"cells":{"fldText":"子记录"}}]'
+```
+
+- 子记录模式单次最多 100 条；`cells` 无需手写层级字段，服务端自动注入指向父记录的关联。
+- 表尚未配置层级字段时，服务端会新增 1 个自关联字段（默认名 `父记录`，`type=unidirectionalLink`，`config.linkedTableId` 指向本表）并更新视图配置（首次调用会改变表结构）；已有层级字段时直接复用，不再加字段。
+- `--view-id` 可选：指定从哪个视图读取层级配置；仅在子记录模式下有效，单独使用会被 CLI 拒绝。
+- 返回 `data.newRecordIds[]`（子记录 ID，与普通模式同名），额外附带 `data.hierarchyFieldId` 和 `data.parentRecordId`；表上已有承载 `hierarchyConfig` 的视图时还回显 `data.viewId`，只有首次自动创建层级字段的那一次不带（同一张表后续调用都会带），不要当必填字段断言。
+- 查某父记录的子记录用 `record list --filters` 的 `any_of`：`{"operator":"and","operands":[{"operator":"any_of","operands":["<HIERARCHY_FIELD_ID>",["<PARENT_RECORD_ID>"]]}]}`，多个父就把 ID 都放进数组（结果为并集）。关联字段用 `contain`/`eq` 匹配父记录 ID 会静默 0 命中。`any_of` 只返回**直接子记录**，不含孙记录；层级为**单向关联**，父记录 cells 看不到子记录；判断「是否子记录」用 `exist`。删父记录不级联清理，子记录会残留悬挂关联。
+- `<HIERARCHY_FIELD_ID>` 三种取法（实测一致）：`view get` 读 `views[].custom.hierarchyConfig.fieldId`（纯只读、最语义化，优先）；`field list` 过滤 `type==unidirectionalLink && config.linkedTableId==本表`（纯只读，若命中多个需用前者消歧）；或刚建过子记录则直接用响应里的 `data.hierarchyFieldId`。
+
 ## 更新、同步与批量修改
 
 已知 recordId：

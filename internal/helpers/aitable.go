@@ -106,6 +106,51 @@ func resolveRecordsFlag(cmd *cobra.Command) (string, error) {
 	return "", fmt.Errorf("missing required flag(s): --records (example: --records '[{\"cells\":{\"fldTextId\":\"文本内容\"}}]')\n  hint: for large payloads or Windows, use --records-file ./path/to/records.json")
 }
 
+// validateSubRecordModeFlags rejects sub-record-only flags (--view-id) when
+// --parent-record-id is absent, so users get an actionable error instead of
+// silently creating flat records.
+func validateSubRecordModeFlags(cmd *cobra.Command) error {
+	parentRecordID, _ := cmd.Flags().GetString("parent-record-id")
+	for _, name := range []string{"view-id"} {
+		if v, _ := cmd.Flags().GetString(name); v != "" && parentRecordID == "" {
+			return fmt.Errorf("--%s requires --parent-record-id\n  hint: it only applies to sub-record (hierarchy) creation via record create", name)
+		}
+	}
+	return nil
+}
+
+// dispatchRecordCreate sends the create request for `record create`. It always
+// projects onto the single pinned aitable/create_records RPC: passing
+// --parent-record-id simply adds the optional parentRecordId/viewId properties,
+// and the MCP server routes to hierarchy (sub-record) creation internally. The
+// CLI therefore stays a parameter-equivalent projection onto one RPC and never
+// selects a different tool at the command layer. Uses callMCPTool (no automatic
+// retry) because retried creates would duplicate rows.
+func dispatchRecordCreate(cmd *cobra.Command, records []any) error {
+	baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+	if err != nil {
+		return err
+	}
+	args := map[string]any{
+		"baseId":  baseID,
+		"tableId": mustGetFlag(cmd, "table-id"),
+		"records": records,
+	}
+	if parentRecordID, _ := cmd.Flags().GetString("parent-record-id"); parentRecordID != "" {
+		// Sub-record mode caps a single call at 100 records; fail client-side with
+		// an actionable message instead of a server round-trip.
+		if len(records) > 100 {
+			return fmt.Errorf("--records exceeds sub-record limit: got %d, max 100\n  hint: split into multiple record create --parent-record-id calls", len(records))
+		}
+		args["parentRecordId"] = parentRecordID
+		// Optional pass-through: viewId selects the view carrying hierarchyConfig.
+		if viewID, _ := cmd.Flags().GetString("view-id"); viewID != "" {
+			args["viewId"] = viewID
+		}
+	}
+	return callMCPTool("create_records", args)
+}
+
 // resolveWorkflowDSL reads --dsl from inline JSON, @file, or stdin (-), then
 // decodes the MCP-facing workflow-dsl/v1 object. Detailed DSL validation stays
 // on the workflow service so callers receive its structured issues response.
@@ -3655,10 +3700,19 @@ records 为待创建的记录列表 JSON 数组，单次最多 100 条。
   unidirectionalLink/bidirectionalLink → {"linkedRecordIds":["recXXX","recYYY"]}
   creator/lastModifier/createdTime/lastModifiedTime → 系统自动回填，不建议手动写入
 
+子记录模式：传入 --parent-record-id 时，新记录将作为该父记录的子记录创建（仍调用 create_records，服务端按 hierarchy 子记录语义内部处理）。
+  - 无需手动写 hierarchy 字段值，服务端自动注入指向父记录的关联
+  - 表未配置层级字段时，服务端会新增一个自关联字段（默认名「父记录」，type=unidirectionalLink，linkedTableId 指向本表）并写入视图的 hierarchyConfig；已有层级字段的表直接复用、不再加字段
+  - --view-id 可选：指定视图优先读取 hierarchyConfig；该视图未配置时自动回退到第一个已配置的 Grid 视图
+  - 子记录模式单次最多 100 条
+  - 层级为单向关联：父记录本身看不到子记录，查某父记录的子记录用 record list --filters 的 any_of 匹配父记录 ID
+  - 层级字段 ID 的取法：view get 读 custom.hierarchyConfig.fieldId（只读优先）、field list 过滤 type=unidirectionalLink 且 linkedTableId=本表，或直接用上本次响应的 data.hierarchyFieldId
+
 Windows 用户注意：如果 --records JSON 很长（超过命令行长度限制），请使用 --records-file 参数指定一个 JSON 文件路径，
 CLI 会自动从文件中读取内容作为 --records 的值。这样可以避免 shell 引号转义和命令行截断问题。`,
 		Example: `  dws aitable record create --base-id BASE_ID --table-id TABLE_ID --records '[{"cells":{"fldTextId":"文本内容","fldNumId":123}}]'
   dws aitable record create --base-id BASE_ID --table-id TABLE_ID --records-file ./data/records.json
+  dws aitable record create --base-id BASE_ID --table-id TABLE_ID --parent-record-id recPARENT --records '[{"cells":{"fldTextId":"子记录"}}]'
   # 查询 baseId: dws aitable base list
   # 查询 tableId: dws aitable table get --base-id <baseId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3669,6 +3723,12 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 			clientToken = strings.TrimSpace(clientToken)
 			if err := aitableprotocol.ValidateClientToken(clientToken); err != nil {
 				return fmt.Errorf("--client-token: %w", err)
+			}
+			// 子记录模式校验：--view-id 必须与 --parent-record-id 同时使用
+			parentRecordID, _ := cmd.Flags().GetString("parent-record-id")
+			viewID, _ := cmd.Flags().GetString("view-id")
+			if viewID != "" && parentRecordID == "" {
+				return fmt.Errorf("--view-id 仅在 --parent-record-id 模式下生效，请同时指定父记录 ID")
 			}
 			// Hidden shortcut: --cells → auto-construct --records '[{"cells":...}]'
 			if singleCells, _ := cmd.Flags().GetString("cells"); singleCells != "" {
@@ -3691,6 +3751,12 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 					}
 					if clientToken != "" {
 						toolArgs["clientToken"] = clientToken
+					}
+					if parentRecordID != "" {
+						toolArgs["parentRecordId"] = parentRecordID
+					}
+					if viewID != "" {
+						toolArgs["viewId"] = viewID
 					}
 					return callMCPTool("create_records", toolArgs)
 				}
@@ -3715,6 +3781,12 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 			if clientToken != "" {
 				toolArgs["clientToken"] = clientToken
 			}
+			if parentRecordID != "" {
+				toolArgs["parentRecordId"] = parentRecordID
+			}
+			if viewID != "" {
+				toolArgs["viewId"] = viewID
+			}
 			return callMCPTool("create_records", toolArgs)
 		},
 	}
@@ -3728,13 +3800,13 @@ CLI 会自动从文件中读取内容作为 --records 的值。这样可以避�
 				CLIPath:        "aitable record create",
 				PrimaryCLIPath: "aitable record create",
 			},
-			Description: "新增记录（cells 的 key 必须是 fieldId）。",
+			Description: "新增记录（cells 的 key 必须是 fieldId）；传 --parent-record-id 时在父记录下创建子记录。",
 			Interface:   aitableMCPInterface("create_records"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "新增记录（cells 的 key 必须是 fieldId）。",
-				UseWhen:      []string{"需要插入新行数据时"},
+				AgentSummary: "新增记录（cells 的 key 必须是 fieldId）；传 --parent-record-id 时在父记录下创建子记录。",
+				UseWhen:      []string{"需要插入新行数据时", "需要在某条父记录下创建层级子记录时（--parent-record-id）"},
 				AvoidWhen:    []string{"更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"},
-				Examples:     []string{"dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'"},
+				Examples:     []string{"dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'", "dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --parent-record-id <PARENT_RECORD_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "client-token", Property: "clientToken"},
@@ -9202,6 +9274,8 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	_ = recordCreateSubCmd.Flags().MarkHidden("fields")
 	recordCreateSubCmd.Flags().String("view-id", "", "可选视图 ID；指定时从该视图读取 hierarchyConfig")
 	recordCreateSubCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键；超时重试时必须复用同一值")
+	recordCreateCmd.Flags().String("parent-record-id", "", "父记录 ID；传入后新记录将作为它的子记录创建（仍走 create_records，服务端内部按 hierarchy 处理，单次最多 100 条）")
+	recordCreateCmd.Flags().String("view-id", "", "子记录模式可选：指定视图优先读取 hierarchyConfig，该视图未配置时自动回退到第一个已配置的 Grid 视图（仅与 --parent-record-id 同时使用）")
 	recordUpdateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordUpdateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordUpdateCmd.Flags().String("records", "", "待更新的记录内容列表 JSON 数组，单次最多 100 条 (必填)")
