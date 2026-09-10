@@ -36,6 +36,7 @@ func TestCrossPlatformCoverageImportUploadRejectsOtherBucketsBeforePUT(t *testin
 		"attacker.oss-ap-southeast-1.aliyuncs.com" + importUploadTestObjectPath,
 		"attacker.ap-southeast-1.oss.aliyuncs.com" + importUploadTestObjectPath,
 		"attacker.alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com" + importUploadTestObjectPath,
+		"ALİDOCS-NOTABLE.cn-zhangjiakou.oss.aliyuncs.com" + importUploadTestObjectPath,
 		"alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com.attacker.example" + importUploadTestObjectPath,
 		"alidocs-notable.ap-southeast-1.oss.aliyuncs.com" + importUploadTestObjectPath,
 		"cn-zhangjiakou.oss.aliyuncs.com/attacker" + importUploadTestObjectPath,
@@ -126,6 +127,7 @@ func TestCrossPlatformCoverageImportUploadHostAndDialPolicy(t *testing.T) {
 		"alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com.",
 		"alidocs-notable-sg.cn-zhangjiakou.oss.aliyuncs.com",
 		"alidocs-notable-test.ap-southeast-1.oss.aliyuncs.com",
+		"ALİDOCS-NOTABLE.cn-zhangjiakou.oss.aliyuncs.com",
 	} {
 		t.Run(host, func(t *testing.T) {
 			if isTrustedImportUploadHost(host) || validateImportUploadURL("https://"+host+importUploadTestObjectPath) == nil {

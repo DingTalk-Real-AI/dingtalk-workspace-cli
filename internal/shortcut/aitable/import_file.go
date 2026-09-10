@@ -413,6 +413,13 @@ func validateImportUploadURL(raw string) error {
 }
 
 func isTrustedImportUploadHost(host string) bool {
+	// Match only ASCII DNS names: Unicode case folding can disagree with the
+	// HTTP transport's IDNA conversion (for example, capital dotted I).
+	for i := 0; i < len(host); i++ {
+		if host[i] >= 0x80 {
+			return false
+		}
+	}
 	// Exact bucket hosts from the service's production/staging, Singapore and
 	// local-test profiles. A region suffix proves nothing about bucket ownership.
 	switch strings.ToLower(host) {
