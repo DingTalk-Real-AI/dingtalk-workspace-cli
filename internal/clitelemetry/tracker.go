@@ -7,7 +7,6 @@ package clitelemetry
 
 import (
 	"strings"
-	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"gitlab.alibaba-inc.com/aes/aem-go-sdk/clitrack"
@@ -50,7 +49,10 @@ func Configuration(version string, identity Identity, commandPath, errorMessage 
 	return Config{
 		PID: "wcCRwZ", App: "dws", Version: version, UID: identity.UserID, Username: identity.UserName,
 		NoCommandLine: true, NoCwd: true, NoAutomaticDimensions: true,
-		FlushTimeout: 50 * time.Millisecond,
+		// Exit latency over delivery: the completion event is enqueued and the
+		// process returns without waiting for the flush, so the last event is
+		// expected to be lost. Reliable delivery is the durable outbox RFC.
+		NoFlushWait: true,
 		ExtraFields: func() map[string]string {
 			fields := map[string]string{"c9": *commandPath}
 			if identity.CorpID != "" {
