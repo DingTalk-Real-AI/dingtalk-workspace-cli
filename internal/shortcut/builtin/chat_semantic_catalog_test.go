@@ -30,7 +30,7 @@ type chatSemanticCatalogFixture struct {
 	} `json:"shortcuts"`
 }
 
-func TestCrossPlatformCoverageChatGoldenRoutePrefersReviewedShortcutOwners(t *testing.T) {
+func TestCrossPlatformCoverageChatRoutineRoutesPreferReviewedShortcutOwners(t *testing.T) {
 	raw, err := os.ReadFile("../semantic_catalog.json")
 	if err != nil {
 		t.Fatal(err)
@@ -47,11 +47,11 @@ func TestCrossPlatformCoverageChatGoldenRoutePrefersReviewedShortcutOwners(t *te
 	skill := string(skillRaw)
 	start := strings.Index(skill, "## Golden Route")
 	if start < 0 {
-		t.Fatal("chat Skill lacks Golden Route section")
+		t.Fatal("chat Skill lacks routine route section")
 	}
-	endOffset := strings.Index(skill[start:], "\n以下次级入口")
+	endOffset := strings.Index(skill[start:], "\n## 关键结果语义")
 	if endOffset < 0 {
-		t.Fatal("chat Skill lacks primary Golden Route terminator")
+		t.Fatal("chat Skill lacks routine route terminator")
 	}
 	primaryRoutes := skill[start : start+endOffset]
 	codeSpans := strings.Split(primaryRoutes, "`")
@@ -60,8 +60,49 @@ func TestCrossPlatformCoverageChatGoldenRoutePrefersReviewedShortcutOwners(t *te
 		for index := 1; index < len(codeSpans); index += 2 {
 			code := strings.TrimSpace(codeSpans[index])
 			if code == invocation || strings.HasPrefix(code, invocation+" ") {
-				t.Errorf("Golden Route uses reviewed atomic path %q; use owner dws %s", atomicPath, owner)
+				t.Errorf("routine routes use reviewed atomic path %q; use owner dws %s", atomicPath, owner)
 			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatRoutineFamiliesRemainDiscoverable(t *testing.T) {
+	skillRaw, err := os.ReadFile("../../../skills/multi/dingtalk-chat/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(skillRaw)
+	start := strings.Index(skill, "## Golden Route")
+	if start < 0 {
+		t.Fatal("chat Skill lacks routine route section")
+	}
+	endOffset := strings.Index(skill[start:], "\n## 关键结果语义")
+	if endOffset < 0 {
+		t.Fatal("chat Skill lacks routine route terminator")
+	}
+	primaryRoutes := skill[start : start+endOffset]
+
+	// Keep frequent entry points in the root while handing broad management
+	// families to one precise reference instead of spelling synthetic commands.
+	for _, route := range []string{
+		"dws chat +chat-messages",
+		"dws chat +search-msg",
+		"dws chat message list-all",
+		"dws chat +conversation-list",
+		"dws chat +chat-create",
+		"+messages-recall",
+		"+messages-resource-download",
+	} {
+		if !strings.Contains(primaryRoutes, route) {
+			t.Errorf("frequent route %q is missing from the root route table", route)
+		}
+	}
+	for _, family := range []string{
+		"[group-admin](references/chat/group-admin.md)",
+		"[chat-conversation](references/chat/chat-conversation.md)",
+	} {
+		if !strings.Contains(primaryRoutes, family) {
+			t.Errorf("routine family handoff %q is missing from the root route table", family)
 		}
 	}
 }
@@ -91,10 +132,10 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 		registered[item.Command] = item
 		helpTierCounts[item.HelpTier]++
 	}
-	if got, want := len(registered), 102; got != want {
+	if got, want := len(registered), 105; got != want {
 		t.Fatalf("registered Chat Shortcuts = %d, want %d", got, want)
 	}
-	if got, want := len(source.Shortcuts), 102; got != want {
+	if got, want := len(source.Shortcuts), 105; got != want {
 		t.Fatalf("reviewed Chat Shortcut records = %d, want %d", got, want)
 	}
 	if got, want := len(source.FeaturedShortcuts), 27; got != want {
@@ -102,7 +143,7 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 	}
 	for tier, want := range map[shortcut.HelpTier]int{
 		shortcut.HelpTierFeatured:      27,
-		shortcut.HelpTierCatalog:       67,
+		shortcut.HelpTierCatalog:       70,
 		shortcut.HelpTierCompatibility: 6,
 		shortcut.HelpTierUnavailable:   2,
 	} {

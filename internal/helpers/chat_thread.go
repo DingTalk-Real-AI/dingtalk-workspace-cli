@@ -457,12 +457,9 @@ func newChatThreadListRepliesCommand() *cobra.Command {
 			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "chat", RPCName: "list_topic_replies"}},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页读取指定 Thread 的回复",
-				UseWhen: []string{
-					"已知父会话 ID 与 openConvThreadId 并需要查看回复内容时",
-					"需要逐条列出某个话题当前存在的回复或核实具体回复是否仍存在时",
-				},
-				AvoidWhen: []string{"只浏览 Thread 主消息而不读取回复时使用 chat thread list"},
-				Examples:  []string{"dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>"},
+				UseWhen:      []string{"明确需要 chat +thread-replies 未公开的底层字段或原始响应，并读取 Thread 回复时"},
+				AvoidWhen:    []string{"常规读取 Thread 回复使用 chat +thread-replies；只浏览主消息使用 chat thread list"},
+				Examples:     []string{"dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>"},
 			},
 			Parameters: []contract.ParamDecl{{Name: "conversation-id", Property: "openconversationId"}, {Name: "topic-id", Property: "topicId"}, {Name: "time", Property: "startTime"}, {Name: "direction", Property: "forward"}, {Name: "limit", Property: "pageSize"}},
 			Result: &contract.ResultSpec{
@@ -1066,7 +1063,7 @@ func newChatThreadForwardCommand() *cobra.Command {
 			Identity:    contract.ToolIdentitySpec{ProductID: "chat", Name: "forward_topic", CanonicalPath: "chat.forward_topic", CLIPath: "chat thread forward", PrimaryCLIPath: "chat thread forward"},
 			Description: "把一条话题转发到目标会话",
 			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "im", RPCName: "forward_topic"}},
-			Selection:   contract.SelectionSpec{AgentSummary: "把一条 Thread 转发到目标会话", UseWhen: []string{"需要保留 Thread 上下文转发到另一个会话时"}, AvoidWhen: []string{"普通单条消息转发使用 chat message forward"}, Examples: []string{"dws chat thread forward --src-msg-id <messageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "把一条 Thread 转发到目标会话", UseWhen: []string{"明确需要 chat +messages-forward-topic 未公开的底层字段或原始响应，并转发 Thread 时"}, AvoidWhen: []string{"常规 Thread 转发使用 chat +messages-forward-topic；普通单条消息使用 chat +messages-forward"}, Examples: []string{"dws chat thread forward --src-msg-id <messageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>"}},
 			Parameters:  []contract.ParamDecl{{Name: "src-msg-id", Property: "srcOpenMessageId"}, {Name: "src-conversation-id", Property: "srcOpenConversationId"}, {Name: "src-thread-id", Property: "srcOpenConvThreadId"}, {Name: "dest-conversation-id", Property: "destOpenConversationId"}},
 			Result: &contract.ResultSpec{
 				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},

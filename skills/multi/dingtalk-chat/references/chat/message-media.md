@@ -37,7 +37,7 @@ dws chat message send --conversation-id <openConversationId> \
 用户要求真实发送结果时，保留发送返回的 `openTaskId`，再执行：
 
 ```bash
-dws chat message query-send-status --open-task-id <openTaskId> --format json
+dws chat +messages-query-send-status --open-task-id <openTaskId> --format json
 ```
 
 检查真实 `sendStatus`、`openMessageId` 和 `openConversationId`。
@@ -56,13 +56,15 @@ dws chat message query-send-status --open-task-id <openTaskId> --format json
 若 `fileId` 返回 `RESOURCE_NOT_FOUND`，不得把同一个 ID 改称 `mediaId` 重试，也不得原样
 重复调用；应回到消息查询并使用 `--download-resources`。
 
-底层 fallback：
+已有完整资源引用时使用公开 Shortcut：
 
 ```bash
-dws chat message download-media --type mediaId --resource-id <mediaId> \
+dws chat +messages-resource-download --type mediaId --resource-id <mediaId> \
   --message-id <openMessageId> --open-conversation-id <openConversationId> \
   --output ./downloads/
 ```
+
+原子 `message download-media` 仅用于 Shortcut 未发布的底层字段或原始响应。
 
 `resource-id`、`message-id` 和会话 ID 必须来自同一 profile 下的真实消息查询结果。
 当前没有 Range/断点续传；失败时保留 ledger 或错误，显式重试整个文件，不拼接残片。

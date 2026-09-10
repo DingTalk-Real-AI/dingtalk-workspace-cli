@@ -61,6 +61,7 @@ func cloneContractFinalPayload(in contract.ContractFinalPayload) contract.Contra
 	out.Parameters = cloneSlice(in.Parameters)
 	for i := range out.Parameters {
 		out.Parameters[i].Enum = cloneSlice(in.Parameters[i].Enum)
+		out.Parameters[i].AnyOf = cloneSlice(in.Parameters[i].AnyOf)
 		if in.Parameters[i].Required != nil {
 			required := *in.Parameters[i].Required
 			out.Parameters[i].Required = &required

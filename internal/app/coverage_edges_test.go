@@ -382,7 +382,7 @@ func TestCrossPlatformCoverageDirectRuntimeCoverage(t *testing.T) {
 	if normalizeDirectRuntimeProductID("alias") != "one" || normalizeDirectRuntimeProductID("tb") != "teambition" || normalizeDirectRuntimeProductID("plain") != "plain" {
 		t.Fatal("direct runtime alias mismatch")
 	}
-	if ids := DirectRuntimeProductIDs(); !ids["one"] || !ids[defaultPATProductID] || !ids[devappProductID] || !ids[recruitProductID] {
+	if ids := DirectRuntimeProductIDs(); !ids["one"] || !ids[defaultPATProductID] || !ids[devappProductID] || !ids[mcpdevProductID] || !ids[recruitProductID] {
 		t.Fatalf("direct runtime IDs = %#v", ids)
 	}
 
