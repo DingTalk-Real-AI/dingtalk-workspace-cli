@@ -6,6 +6,8 @@ package buildversion
 import (
 	"crypto/sha256"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageFormatKnownAndUnknownBuild(t *testing.T) {
@@ -37,5 +39,36 @@ func TestCrossPlatformCoverageBinaryDigestChangesWithStamp(t *testing.T) {
 	Set("", "", "") // empty inputs keep prior
 	if Digest() != b {
 		t.Fatal("empty Set must leave stamp unchanged")
+	}
+}
+
+func TestCrossPlatformCoverageUnstampedDigestFoldsExecutableMaterial(t *testing.T) {
+	oldV, oldC, oldT := stampVersion, stampCommit, stampBuildTime
+	t.Cleanup(func() { stampVersion, stampCommit, stampBuildTime = oldV, oldC, oldT })
+	stampVersion, stampCommit, stampBuildTime = "dev", "unknown", "unknown"
+
+	testseam.Swap(t, &ExecutableMaterial, func() []byte { return []byte("exe-material-A") })
+	a := Digest()
+	testseam.Swap(t, &ExecutableMaterial, func() []byte { return []byte("exe-material-B") })
+	b := Digest()
+	if a == b {
+		t.Fatal("unstamped Digest must change when executable material changes")
+	}
+	if a == ([sha256.Size]byte{}) || b == ([sha256.Size]byte{}) {
+		t.Fatal("Digest must be non-zero")
+	}
+}
+
+func TestCrossPlatformCoverageStampedDigestIgnoresExecutableMaterial(t *testing.T) {
+	oldV, oldC, oldT := stampVersion, stampCommit, stampBuildTime
+	t.Cleanup(func() { stampVersion, stampCommit, stampBuildTime = oldV, oldC, oldT })
+	Set("1.2.3", "deadbeef", "2026-01-02T03:04:05Z")
+
+	testseam.Swap(t, &ExecutableMaterial, func() []byte { return []byte("exe-material-A") })
+	a := Digest()
+	testseam.Swap(t, &ExecutableMaterial, func() []byte { return []byte("exe-material-B") })
+	b := Digest()
+	if a != b {
+		t.Fatal("stamped Digest must stay stamp-only and ignore executable material")
 	}
 }

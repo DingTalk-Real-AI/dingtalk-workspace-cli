@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 )
 
@@ -193,5 +194,82 @@ func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t
 	}
 	if record.BinaryBuildID != hex.EncodeToString(stampB[:]) {
 		t.Fatalf("regenerated binary_build_id = %q want stamp B", record.BinaryBuildID)
+	}
+}
+
+func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *testing.T) {
+	// Real Digest path: unstamped stamp + swapped exe material must miss A's
+	// sidecar without calling Invalidate*.
+	prevDigest := schemaCacheBinaryDigest
+	t.Cleanup(func() { schemaCacheBinaryDigest = prevDigest })
+	schemaCacheBinaryDigest = buildversion.Digest
+
+	prevMaterial := buildversion.ExecutableMaterial
+	t.Cleanup(func() { buildversion.ExecutableMaterial = prevMaterial })
+
+	v, c, bt := buildversion.CurrentStampForTest()
+	t.Cleanup(func() { buildversion.Set(v, c, bt) })
+	buildversion.Set("dev", "unknown", "unknown")
+
+	dir := t.TempDir()
+	buildversion.ExecutableMaterial = func() []byte { return []byte("process-exe-A") }
+	sealA := buildversion.Digest()
+	identity := coverageSchemaCacheIdentity()
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+	identityPath := filepath.Join(dir, LocalSchemaCacheIdentityFileName())
+	payload, err := os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record localSchemaCacheIdentityRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.BinaryBuildID != hex.EncodeToString(sealA[:]) {
+		t.Fatalf("persisted binary_build_id = %q want seal A", record.BinaryBuildID)
+	}
+	if loaded, err := loadLocalSchemaCacheIdentity(dir); err != nil {
+		t.Fatalf("exe A must load its own sidecar: %v", err)
+	} else if loaded.BuildID != identity.BuildID {
+		t.Fatalf("loaded build %x want %x", loaded.BuildID, identity.BuildID)
+	}
+
+	// Replace process as binary B: keep identity.json + artifacts on disk; do
+	// not call InvalidatePersistedSchemaCacheIdentities.
+	buildversion.ExecutableMaterial = func() []byte { return []byte("process-exe-B") }
+	sealB := buildversion.Digest()
+	if sealA == sealB {
+		t.Fatal("unstamped Digest must differ across exe materials")
+	}
+	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
+		t.Fatal("binary B must not load binary A's identity sidecar")
+	}
+	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
+		t.Fatalf("mismatched identity.json should be removed on load: %v", err)
+	}
+
+	identityB := coverageSchemaCacheIdentity()
+	identityB.BuildID = sha256.Sum256([]byte("binary-B-build-from-exe"))
+	if err := persistLocalSchemaCacheIdentity(dir, identityB); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := loadLocalSchemaCacheIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.BuildID != identityB.BuildID {
+		t.Fatalf("regenerated build %x want %x", refreshed.BuildID, identityB.BuildID)
+	}
+	payload, err = os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.BinaryBuildID != hex.EncodeToString(sealB[:]) {
+		t.Fatalf("regenerated binary_build_id = %q want seal B", record.BinaryBuildID)
 	}
 }

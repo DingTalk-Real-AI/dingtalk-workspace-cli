@@ -3,7 +3,13 @@
 
 package buildversion
 
-import "crypto/sha256"
+import (
+	"crypto/sha256"
+	"encoding/binary"
+	"io"
+	"os"
+	"sync"
+)
 
 // Stamp material for the running binary. Release builds inject version/commit/
 // buildTime via ldflags on internal/app; app.SetVersion (and init) syncs them
@@ -12,6 +18,23 @@ var (
 	stampVersion   = "dev"
 	stampCommit    = "unknown"
 	stampBuildTime = "unknown"
+)
+
+// ExecutableMaterial supplies bytes folded into Digest when the stamp is still
+// the default unstamped triple (dev/unknown/unknown). Production uses a
+// process-cached fingerprint of os.Executable(); tests may swap this seam.
+//
+// Behavior:
+//   - Stamped builds (any non-default version/commit/buildTime): Digest is
+//     stamp-only so identical release binaries share one seal regardless of
+//     install path.
+//   - Unstamped local builds: Digest = hash(stamp || exe material) so replacing
+//     a rebuilt binary changes the seal without ldflags.
+var ExecutableMaterial = cachedExecutableMaterial
+
+var (
+	exeMaterialOnce   sync.Once
+	exeMaterialCached []byte
 )
 
 // Set updates the binary stamp material. Empty inputs leave the prior value.
@@ -27,16 +50,74 @@ func Set(version, commit, buildTime string) {
 	}
 }
 
+func unstamped() bool {
+	return stampVersion == "dev" && stampCommit == "unknown" && stampBuildTime == "unknown"
+}
+
 // Digest returns the binary-owned seal that persisted Schema cache identity
 // sidecars must match. A sidecar alone cannot invent this value for a different
-// binary: it is derived from this process's version/commit/buildTime stamp.
+// binary. Release stamps use stamp-only material; unstamped builds also fold
+// ExecutableMaterial so two different local binaries do not share a seal.
 func Digest() [sha256.Size]byte {
-	payload := make([]byte, 0, 64+len(stampVersion)+len(stampCommit)+len(stampBuildTime))
+	payload := make([]byte, 0, 96+len(stampVersion)+len(stampCommit)+len(stampBuildTime))
 	payload = append(payload, "dws-binary-build-id-v1\x00"...)
 	payload = append(payload, stampVersion...)
 	payload = append(payload, 0)
 	payload = append(payload, stampCommit...)
 	payload = append(payload, 0)
 	payload = append(payload, stampBuildTime...)
+	if unstamped() {
+		material := ExecutableMaterial()
+		payload = append(payload, 0)
+		payload = append(payload, "exe-material-v1\x00"...)
+		payload = append(payload, material...)
+	}
 	return sha256.Sum256(payload)
 }
+
+func cachedExecutableMaterial() []byte {
+	exeMaterialOnce.Do(func() {
+		exeMaterialCached = computeExecutableMaterial()
+	})
+	return exeMaterialCached
+}
+
+func computeExecutableMaterial() []byte {
+	path, err := os.Executable()
+	if err != nil {
+		return []byte("exe-unavailable")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fingerprintStatOnly(path)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fingerprintStatOnly(path)
+	}
+	return h.Sum(nil)
+}
+
+func fingerprintStatOnly(path string) []byte {
+	h := sha256.New()
+	h.Write([]byte(path))
+	h.Write([]byte{0})
+	info, err := os.Stat(path)
+	if err != nil {
+		return h.Sum(nil)
+	}
+	var sizeBuf [8]byte
+	binary.LittleEndian.PutUint64(sizeBuf[:], uint64(info.Size()))
+	h.Write(sizeBuf[:])
+	var timeBuf [8]byte
+	binary.LittleEndian.PutUint64(timeBuf[:], uint64(info.ModTime().UnixNano()))
+	h.Write(timeBuf[:])
+	return h.Sum(nil)
+}
+
+// CurrentStampForTest returns the active stamp triple for test restore.
+func CurrentStampForTest() (version, commit, buildTime string) {
+	return stampVersion, stampCommit, stampBuildTime
+}
+
