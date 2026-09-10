@@ -666,7 +666,6 @@ Write-Output "ARTIFACT_HELPER_OK"
 	})
 }
 
-
 func TestInstallPowerShellSharedSchemaCacheApplyThenValidateACL(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows ACL apply-then-validate requires a Windows host")

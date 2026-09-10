@@ -120,4 +120,3 @@ func fingerprintStatOnly(path string) []byte {
 func CurrentStampForTest() (version, commit, buildTime string) {
 	return stampVersion, stampCommit, stampBuildTime
 }
-

@@ -79,7 +79,7 @@ func TestCrossPlatformCoverageApplyProductionSchemaCachePrewarm(t *testing.T) {
 		"version": 1, "edition": editionName,
 		"source_sha256": hexDigest, "surface_sha256": hexDigest, "build_id": hexDigest,
 		"binary_build_id": hex.EncodeToString(running[:]),
-		"meta_length": "1", "meta_sha256": hexDigest,
+		"meta_length":     "1", "meta_sha256": hexDigest,
 		"registry_length": "1", "registry_sha256": hexDigest,
 		"payload_length": "1", "payload_sha256": hexDigest,
 		"payload_index_length": "1", "payload_index_sha256": hexDigest,
