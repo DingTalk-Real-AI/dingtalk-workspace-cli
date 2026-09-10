@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -73,9 +74,11 @@ func TestCrossPlatformCoverageApplyProductionSchemaCachePrewarm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	running := buildversion.Digest()
 	record := map[string]any{
 		"version": 1, "edition": editionName,
 		"source_sha256": hexDigest, "surface_sha256": hexDigest, "build_id": hexDigest,
+		"binary_build_id": hex.EncodeToString(running[:]),
 		"meta_length": "1", "meta_sha256": hexDigest,
 		"registry_length": "1", "registry_sha256": hexDigest,
 		"payload_length": "1", "payload_sha256": hexDigest,

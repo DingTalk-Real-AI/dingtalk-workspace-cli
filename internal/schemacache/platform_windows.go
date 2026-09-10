@@ -200,6 +200,13 @@ func openPlatform(edition string, counters *Counters, noCreate bool) (backend, e
 		}
 		return &windowsCache{path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil
 	}
+	// Honor install-time DWS_SCHEMA_CACHE_SHARED_DIR at runtime so a custom
+	// shared base warmed by the installer is consumed (matches invalidation).
+	if sharedOverride := strings.TrimSpace(os.Getenv("DWS_SCHEMA_CACHE_SHARED_DIR")); sharedOverride != "" {
+		if path, err := openCacheDirectory(sharedOverride, editionHex, counters, platformIO, true, true); err == nil {
+			return &windowsCache{path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil
+		}
+	}
 	if systemBase := systemSchemaCacheBase(); systemBase != "" {
 		if path, err := openCacheDirectory(systemBase, editionHex, counters, platformIO, true, true); err == nil {
 			return &windowsCache{path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil

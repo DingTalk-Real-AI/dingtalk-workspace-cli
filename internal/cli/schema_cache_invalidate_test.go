@@ -273,3 +273,57 @@ func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *tes
 		t.Fatalf("regenerated binary_build_id = %q want seal B", record.BinaryBuildID)
 	}
 }
+
+func TestCrossPlatformCoverageLegacyBinaryBuildIDRejected(t *testing.T) {
+	dir := t.TempDir()
+	oldDigest := schemaCacheBinaryDigest
+	t.Cleanup(func() { schemaCacheBinaryDigest = oldDigest })
+	stamp := sha256.Sum256([]byte("running-binary-stamp"))
+	schemaCacheBinaryDigest = func() [sha256.Size]byte { return stamp }
+
+	identity := coverageSchemaCacheIdentity()
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+	identityPath := filepath.Join(dir, LocalSchemaCacheIdentityFileName())
+	payload, err := os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record localSchemaCacheIdentityRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	// Legacy sidecar: omit binary_build_id (pre-stamp field).
+	record.BinaryBuildID = ""
+	legacy, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(identityPath, append(legacy, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
+		t.Fatal("legacy sidecar without binary_build_id must be rejected")
+	}
+	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy identity.json should be removed on load: %v", err)
+	}
+
+	// Explicit mismatch without going through persist (tampered stamp).
+	other := sha256.Sum256([]byte("other-binary"))
+	record.BinaryBuildID = hex.EncodeToString(other[:])
+	tampered, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(identityPath, append(tampered, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
+		t.Fatal("mismatched binary_build_id must be rejected")
+	}
+	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
+		t.Fatalf("mismatched identity.json should be removed on load: %v", err)
+	}
+}

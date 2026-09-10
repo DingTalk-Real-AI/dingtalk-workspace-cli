@@ -21,9 +21,11 @@
 #   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
 #                       Gitee API instead of GitHub (China mirror)
 #   DWS_SCHEMA_CACHE_SHARED_DIR — optional shared schema-cache base (default:
-#                       %ProgramData%\dws). Installer initializes/protects ACL
-#                       (Admins/SYSTEM write, Users read) or falls back to
-#                       %LOCALAPPDATA% when the shared root is untrusted.
+#                       %ProgramData%\dws). Installer initializes a created root
+#                       and protects only the dws\schema subtree (Admins/SYSTEM
+#                       write, Users read); falls back to %LOCALAPPDATA% when the
+#                       shared root is untrusted. Runtime selection honors the
+#                       same variable when set.
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -1944,10 +1946,12 @@ function Test-SharedSchemaCachePathTrusted {
             if (-not $isOrdinary) {
                 continue
             }
+            # Check only real write/delete/ACL-owner bits. Do NOT OR Modify or
+            # FullControl — those composites include ReadAndExecute, so the
+            # Builtin Users ReadAndExecute ACE we grant would always look writable.
             $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
-                [System.Security.AccessControl.FileSystemRights]::Modify -bor `
-                [System.Security.AccessControl.FileSystemRights]::FullControl -bor `
                 [System.Security.AccessControl.FileSystemRights]::Delete -bor `
+                [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor `
                 [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor `
                 [System.Security.AccessControl.FileSystemRights]::TakeOwnership
             if (($rule.FileSystemRights -band $writeRights) -ne 0) {
@@ -2039,7 +2043,9 @@ function Initialize-SharedSchemaCacheRoot {
         if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
             throw "shared schema cache root is untrusted (owner/DACL): $Path"
         }
-        Set-SharedSchemaCacheAcl -Path $Path
+        # Pre-existing base (including custom DWS_SCHEMA_CACHE_SHARED_DIR): trust
+        # check only. Do not replace DACL/owner on a caller-owned tree that may
+        # hold unrelated files; recursive harden is limited to dws\schema.
         return $Path
     }
     $parent = Split-Path -Parent $Path
@@ -2047,6 +2053,7 @@ function Initialize-SharedSchemaCacheRoot {
         New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
     }
     New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
+    # Harden only the dedicated root this installer just created.
     Set-SharedSchemaCacheAcl -Path $Path
     if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
         throw "shared schema cache root remained untrusted after initialize: $Path"
@@ -2139,7 +2146,9 @@ function Build-SharedSchemaCache {
     if ($ok) {
         if ($shared) {
             try {
-                Protect-SharedSchemaCacheTree -Path $cacheDir
+                # Recursively protect only the DWS-owned dws\schema subtree —
+                # never the wide shared base (custom SHARED_DIR may hold other apps).
+                Protect-SharedSchemaCacheTree -Path $schemaTree
             } catch {
                 Write-Say "⚠️  Shared schema cache built but ACL protect failed; falling back warning."
                 Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,27 @@ func TestCrossPlatformCoverageSystemCacheBaseAndOverrides(t *testing.T) {
 		t.Fatalf("system shared Open: %v (base %s)", err, shared)
 	}
 	_ = sharedCache.Close()
+
+	// Custom SHARED_DIR must be selected at runtime (same env installers honor).
+	customShared := privateTestBase(t)
+	officialDigest := sha256.Sum256([]byte("official"))
+	editionHex2 := hex.EncodeToString(officialDigest[:])
+	if err := os.MkdirAll(filepath.Join(customShared, "dws", "schema", editionHex2, "v1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", customShared)
+	testseam.Swap(t, &linuxSystemSchemaCacheBase, filepath.Join(t.TempDir(), "unused-system"))
+	testseam.Swap(t, &currentGOOS, "linux")
+	customCache, err := Open("official", WithNoCreate())
+	if err != nil {
+		t.Fatalf("SHARED_DIR Open: %v", err)
+	}
+	if !strings.HasPrefix(customCache.Directory(), customShared) {
+		t.Fatalf("SHARED_DIR directory = %q want under %q", customCache.Directory(), customShared)
+	}
+	_ = customCache.Close()
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
 }
 
 func TestCrossPlatformCoverageNilCacheAndEnvelopeValidation(t *testing.T) {

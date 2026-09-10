@@ -1668,13 +1668,33 @@ build_shared_schema_cache() {
   # and populate it. Any schema command triggers generate + publish.
   if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
     schema_cache_artifacts_present "$schema_tree"; then
-    # World-readable: integrity rests on the locally generated identity plus
-    # shard digests, not on file ownership.
-    chmod -R a+rX "$schema_tree" 2>/dev/null || true
-    say "✅ Shared schema cache built: ${shared_dir}"
+    # World-readable/traversable: integrity rests on the locally generated
+    # identity plus shard digests, not on file ownership. umask 077 would
+    # otherwise leave $shared_dir and $shared_dir/dws at 0700 while only the
+    # schema tree is 0755 — other users could not reach the cache.
+    dws_intermediate="$(dirname "$schema_tree")"
+    if chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null &&
+      chmod -R a+rX "$schema_tree" 2>/dev/null &&
+      shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+      say "✅ Shared schema cache built: ${shared_dir}"
+    else
+      # Caller-owned custom ancestor we cannot safely change: do not claim success.
+      say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
+    fi
   else
     say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
   fi
+}
+
+# True when each listed directory is other-readable and other-executable so
+# non-owner users can traverse into the shared schema cache.
+shared_schema_ancestors_traversable() {
+  for _sc_anc in "$@"; do
+    [ -d "$_sc_anc" ] || return 1
+    # find -perm -005: other has read+execute (portable across GNU/BSD find).
+    [ "$(find "$_sc_anc" -maxdepth 0 -perm -005 2>/dev/null)" = "$_sc_anc" ] || return 1
+  done
+  return 0
 }
 
 schema_cache_artifacts_present() {

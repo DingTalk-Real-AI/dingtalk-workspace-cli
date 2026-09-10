@@ -131,6 +131,13 @@ func openPlatform(edition string, counters *Counters, noCreate bool) (backend, e
 		}
 		return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil
 	}
+	// Honor install-time DWS_SCHEMA_CACHE_SHARED_DIR at runtime so a custom
+	// shared base warmed by the installer is consumed (matches invalidation).
+	if sharedOverride := strings.TrimSpace(os.Getenv("DWS_SCHEMA_CACHE_SHARED_DIR")); sharedOverride != "" {
+		if dirfd, path, err := openCacheDirectory(sharedOverride, editionHex, counters, platformIO, true, true); err == nil {
+			return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO, shared: true}, nil
+		}
+	}
 	// Prefer the system-level shared cache (read-only). The runtime never
 	// creates it (noCreate semantics), so a missing shared cache falls back to
 	// the per-user cache without side effects.
