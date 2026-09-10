@@ -5,11 +5,13 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"os"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // ExternalExchangeRequest logs in with a code obtained on another device. No
@@ -85,8 +87,9 @@ func resolveExternalExchangeClient(ctx context.Context, configDir, requestedID, 
 		return "", "", "", fmt.Errorf("cannot read authorization application configuration")
 	}
 	if cfg != nil && strings.TrimSpace(cfg.ClientID) != "" {
-		secret, err := ResolveSecret(cfg.ClientSecret)
-		if err != nil {
+		// 复用应用凭据的绑定与冲突校验，但换票前不得迁移或修改凭据。
+		_, secret, _, _, err := resolveAppConfigCredentialsMode(configDir, false)
+		if err != nil && !(errors.Is(err, ErrClientSecretEmpty) && cfg.ClientSecret.IsZero()) {
 			return "", "", "", fmt.Errorf("cannot resolve authorization application credentials")
 		}
 		candidates = append(candidates, credentials{cfg.ClientID, secret, "app", false})

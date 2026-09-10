@@ -78,7 +78,7 @@ discovering applications, exchanging codes, or writing credentials.
 | --- | --- |
 | `auth exchange` | The host already obtained a code and supplies it to the employee's sandbox. |
 | `dingtalk-tag manage login` | A logged-in supervisor uses `agentUuid` to request authorization and save the employee profile. |
-| `dingtalk-tag connect` | Connect a published local agent to the DWS DSH bridge. |
+| `dingtalk-tag connect` | Connect a published local employee to DSH or another supported local Agent; `--profile-only` saves the employee profile without binding a runtime. |
 
 Like other authentication controls, `auth exchange` is public in CLI help but
 explicitly excluded from the stable Agent Schema catalog. Its reviewed exact

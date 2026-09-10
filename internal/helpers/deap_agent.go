@@ -91,13 +91,13 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "创建和管理数字员工、登录数字员工 DWS 并保存独立 Profile、查询执行状态，并把已有本地数字员工接入 DSH",
+			AgentSummary: "创建和管理数字员工、登录数字员工 DWS 并保存独立 Profile、查询执行状态，并把已有本地数字员工接入 DSH 或其他本地 Agent",
 			UseWhen: []string{
 				"创建、修改、发布或删除 DEAP 数字员工",
 				"A2A 或其他场景需要登录指定数字员工的 DWS",
 				"查数字员工某次执行的状态或完整模型链路",
 				"创建或查询可配置到数字员工草稿的 Skill/MCP 资源",
-				"把已有且已发布的 local_agent 数字员工接入本地 DSH",
+				"把已有且已发布的 local_agent 数字员工接入 DSH 或其他支持的本地 Agent，或通过 profile-only 仅保存身份",
 			},
 			AvoidWhen: []string{
 				"开放平台应用、机器人配置与版本发布用 dev；普通企业消息收发用 chat",
@@ -107,7 +107,7 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 	root := &cobra.Command{
 		Use:               "dingtalk-tag",
 		Short:             "DEAP 平台",
-		Long:              "钉钉数字员工命令组：manage 负责数字员工生命周期，并通过 login 为 A2A 或其他场景完成数字员工 DWS 登录和独立 Profile 落盘；run 负责执行状态与 trace，capability 负责 Skill/MCP 能力资源，connect 只用于把已有且已发布的 local_agent 数字员工接入本地 DSH，channel 提供 DSH 受限机器协议。固定调用 MCP product/server deap-dev；identity.corpId/userId 由可信登录态注入且不对 CLI 暴露。端点跟随当前 MCP 环境自动选择规范网关；DINGTALK_DEAP_DEV_MCP_URL 仅用于本地调试覆盖。",
+		Long:              "钉钉数字员工命令组：manage 负责数字员工生命周期，并通过 login 为 A2A 或其他场景完成数字员工 DWS 登录和独立 Profile 落盘；run 负责执行状态与 trace，capability 负责 Skill/MCP 能力资源。connect 将已有且已发布的 local_agent 数字员工接入 DSH 或其他支持的本地 Agent，profile-only 仅保存身份，status/list/stop/restart/unbind 管理本机绑定；channel 提供受限机器协议。固定调用 MCP product/server deap-dev；identity.corpId/userId 由可信登录态注入且不对 CLI 暴露。端点跟随当前 MCP 环境自动选择规范网关；DINGTALK_DEAP_DEV_MCP_URL 仅用于本地调试覆盖。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,

@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	oauthSaveClientSecret = SaveClientSecret
+	oauthSaveClientSecret = saveClientSecretTransactional
 	oauthSaveTokenLocked  = saveTokenDataLocked
 	oauthRetryAfter       = time.After
 	oauthNewRequest       = http.NewRequestWithContext

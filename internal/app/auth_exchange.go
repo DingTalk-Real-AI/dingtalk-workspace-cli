@@ -32,6 +32,8 @@ func newAuthExchangeCommand(caller edition.ToolCaller) *cobra.Command {
 		Example: "  dws auth exchange --code-stdin --client-id default --format json\n  dws auth exchange --code-stdin --client-id <dwsClientId> --format json",
 		Args:    cobra.NoArgs, DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Cobra 保留 flag 值；授权码及应用参数只能属于本次调用，失败也必须清理。
+			defer resetAuthExchangeInvocationFlags(cmd)
 			code, err := cmd.Flags().GetString("code")
 			if err != nil {
 				return apperrors.NewInternal("failed to read --code")
@@ -136,6 +138,28 @@ func newAuthExchangeCommand(caller edition.ToolCaller) *cobra.Command {
 		_ = cmd.Flags().MarkHidden(name)
 	}
 	return cmd
+}
+
+func isAuthExchangeCommand(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Name() == "exchange" && cmd.Parent() != nil && cmd.Parent().Name() == "auth"
+}
+
+func resetAuthExchangeInvocationFlags(cmd *cobra.Command) {
+	if !isAuthExchangeCommand(cmd) {
+		return
+	}
+	for _, name := range []string{"code", "code-stdin", "client-id", "expected-user-id", "expected-corp-id", "uid", "authorize-url", "token-url", "refresh-url", "redirect-url", "scopes"} {
+		if flag := cmd.Flags().Lookup(name); flag != nil {
+			_ = flag.Value.Set(flag.DefValue)
+			flag.Changed = false
+		}
+	}
+	for _, name := range []string{"client-id", "client-secret"} {
+		if flag := cmd.Root().PersistentFlags().Lookup(name); flag != nil {
+			_ = flag.Value.Set(flag.DefValue)
+			flag.Changed = false
+		}
+	}
 }
 
 // Cobra permits persistent options before the command. Respect both positions
