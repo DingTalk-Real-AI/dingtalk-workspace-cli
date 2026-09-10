@@ -99,14 +99,38 @@ func TestCrossPlatformCoverageAitableCompatibleRouteSplitAndUnified(t *testing.T
 
 func TestCrossPlatformCoverageAitableCompatibleRouteFailsBeforeWrite(t *testing.T) {
 	wantErr := errors.New("capability discovery failed")
-	caller := &aitableCompatibleRouteCaller{resolveErr: wantErr}
-	InitDepsForTest(t, caller)
-	if _, err := callMCPToolReturnTextOnServer(t.Context(), "aitable-helper", "create_role", nil); !errors.Is(err, wantErr) {
-		t.Fatalf("route error = %v, want %v", err, wantErr)
-	}
-	if len(caller.calls) != 0 {
-		t.Fatalf("capability failure reached write tools/call: %#v", caller.calls)
-	}
+	t.Run("text result write", func(t *testing.T) {
+		caller := &aitableCompatibleRouteCaller{resolveErr: wantErr}
+		InitDepsForTest(t, caller)
+		if _, err := callMCPToolReturnTextOnServer(t.Context(), "aitable-helper", "create_role", nil); !errors.Is(err, wantErr) {
+			t.Fatalf("route error = %v, want %v", err, wantErr)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("capability failure reached write tools/call: %#v", caller.calls)
+		}
+	})
+
+	t.Run("dry-run read", func(t *testing.T) {
+		caller := &aitableCompatibleRouteCaller{resolveErr: wantErr, dryRun: true}
+		InitDepsForTest(t, caller)
+		if _, err := callMCPReadToolReturnTextOnServer(t.Context(), "aitable-helper", "list_roles", nil); !errors.Is(err, wantErr) {
+			t.Fatalf("dry-run read route error = %v, want %v", err, wantErr)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("capability failure reached dry-run read tools/call: %#v", caller.calls)
+		}
+	})
+
+	t.Run("formatted write", func(t *testing.T) {
+		caller := &aitableCompatibleRouteCaller{resolveErr: wantErr}
+		InitDepsForTest(t, caller)
+		if err := callMCPToolInternalOptsContext(t.Context(), "aitable-helper", "create_role", nil, false); !errors.Is(err, wantErr) {
+			t.Fatalf("formatted write route error = %v, want %v", err, wantErr)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("capability failure reached formatted write tools/call: %#v", caller.calls)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageAitableCompatibleDryRunReadUsesUnifiedRoute(t *testing.T) {

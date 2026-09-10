@@ -105,14 +105,15 @@ func TestCrossPlatformCoverageAitableCapabilityRouteFailsClosed(t *testing.T) {
 
 func TestCrossPlatformCoverageAitableCapabilityRouteValidationAndMultiProfile(t *testing.T) {
 	runner := &runtimeRunner{}
-	if _, err := runner.ResolveToolProduct(nil, nil, " "); err == nil {
+	var nilContext context.Context
+	if _, err := runner.ResolveToolProduct(nilContext, nil, " "); err == nil {
 		t.Fatal("blank tool name succeeded")
 	}
 	runner.globalFlags = &GlobalFlags{Mock: true}
-	if _, err := runner.ResolveToolProduct(nil, nil, "create_role"); err == nil {
+	if _, err := runner.ResolveToolProduct(t.Context(), nil, "create_role"); err == nil {
 		t.Fatal("mock route without candidates succeeded")
 	}
-	if got, err := runner.ResolveToolProduct(nil, []string{"aitable-helper"}, "create_role"); err != nil || got != "aitable-helper" {
+	if got, err := runner.ResolveToolProduct(t.Context(), []string{"aitable-helper"}, "create_role"); err != nil || got != "aitable-helper" {
 		t.Fatalf("mock route = (%q, %v)", got, err)
 	}
 	runner.globalFlags = nil
@@ -121,7 +122,7 @@ func TestCrossPlatformCoverageAitableCapabilityRouteValidationAndMultiProfile(t 
 	testseam.Swap(t, &runnerResolveMultiProfileSelections, func(string, string) ([]multiProfileSelection, bool, error) {
 		return nil, false, wantProfilesErr
 	})
-	if _, err := runner.ResolveToolProduct(nil, []string{"aitable"}, "create_role"); err == nil || !strings.Contains(err.Error(), wantProfilesErr.Error()) {
+	if _, err := runner.ResolveToolProduct(t.Context(), []string{"aitable"}, "create_role"); err == nil || !strings.Contains(err.Error(), wantProfilesErr.Error()) {
 		t.Fatalf("profile resolution error = %v", err)
 	}
 }
@@ -139,7 +140,7 @@ func TestCrossPlatformCoverageAitableCapabilityRouteUsesOneMultiProfileIdentity(
 		profileDuringDiscovery = authpkg.RuntimeProfile()
 		return []transport.ToolDescriptor{{Name: "create_role"}}, nil
 	})
-	got, err := (&runtimeRunner{}).ResolveToolProduct(nil, []string{"aitable-helper"}, "create_role")
+	got, err := (&runtimeRunner{}).ResolveToolProduct(t.Context(), []string{"aitable-helper"}, "create_role")
 	if err != nil || got != "aitable-helper" {
 		t.Fatalf("multi-profile route = (%q, %v)", got, err)
 	}
@@ -152,7 +153,7 @@ func TestCrossPlatformCoverageAitableCapabilityRouteRejectsEmptyMultiProfile(t *
 	testseam.Swap(t, &runnerResolveMultiProfileSelections, func(string, string) ([]multiProfileSelection, bool, error) {
 		return nil, true, nil
 	})
-	if _, err := (&runtimeRunner{}).ResolveToolProduct(nil, []string{"aitable"}, "create_role"); err == nil {
+	if _, err := (&runtimeRunner{}).ResolveToolProduct(t.Context(), []string{"aitable"}, "create_role"); err == nil {
 		t.Fatal("empty multi-profile selection succeeded")
 	}
 }
