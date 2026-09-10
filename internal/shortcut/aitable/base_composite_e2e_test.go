@@ -22,6 +22,11 @@ import (
 
 func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command string, args ...string) (string, error) {
 	t.Helper()
+	return runAITableCompositeCLIContext(t, context.Background(), caller, command, args...)
+}
+
+func runAITableCompositeCLIContext(t *testing.T, ctx context.Context, caller *upsertByKeyCaller, command string, args ...string) (string, error) {
+	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -31,7 +36,7 @@ func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command str
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
-	ctx, _ := output.WithResultStore(context.Background())
+	ctx, _ = output.WithResultStore(ctx)
 	root.SetContext(ctx)
 	root.SetOut(stdout)
 	root.SetErr(stderr)

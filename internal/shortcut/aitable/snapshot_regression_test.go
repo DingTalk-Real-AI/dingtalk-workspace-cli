@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
@@ -92,6 +93,71 @@ func TestCrossPlatformCoverageBootstrapReadbackWaitHonorsCancellation(t *testing
 	cancel()
 	if err := bootstrapReadbackWait(ctx, time.Hour); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestCrossPlatformCoverageBootstrapCancellationStopsReadbackWithoutRecreating(t *testing.T) {
+	for _, command := range []string{"+base-bootstrap", "+table-bootstrap"} {
+		for _, stage := range []string{"after create", "during wait"} {
+			t.Run(command+"/"+stage, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				waits := 0
+				testseam.Swap(t, &bootstrapReadbackWait, func(ctx context.Context, _ time.Duration) error {
+					waits++
+					cancel()
+					return ctx.Err()
+				})
+				caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, _ map[string]any) (string, error) {
+					switch tool {
+					case "create_base", "get_base":
+						return `{"baseId":"b"}`, nil
+					case "create_table":
+						if stage == "after create" {
+							cancel()
+						}
+						return `{"tableId":"t"}`, nil
+					case "get_tables":
+						return `{"tables":[]}`, nil
+					default:
+						t.Fatalf("unexpected tool after cancellation: %s", tool)
+						return "", errors.New("unexpected tool")
+					}
+				}}
+				args := []string{"--base-id", "b", "--name", "任务", "--fields", `[]`, "--yes"}
+				if command == "+base-bootstrap" {
+					args = []string{"--name", "测试", "--tables", marshalBootstrapTables(t, nil), "--yes"}
+				}
+				_, err := runAITableCompositeCLIContext(t, ctx, caller, command, args...)
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation error = %v", err)
+				}
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) {
+					t.Fatalf("missing structured cancellation recovery: %v", err)
+				}
+				result, ok := typed.Details["result"].(compositeResult)
+				if !ok || result.Status != "partial_success" || result.Retryable || result.NextCommand == "" {
+					t.Fatalf("created table recovery was lost: %#v", typed.Details)
+				}
+				creates, reads := 0, 0
+				for _, call := range caller.calls {
+					if call.tool == "create_table" {
+						creates++
+					}
+					if call.tool == "get_tables" {
+						reads++
+					}
+				}
+				wantReads := 0
+				if stage == "during wait" {
+					wantReads = 1
+				}
+				if creates != 1 || reads != wantReads || waits != wantReads {
+					t.Fatalf("creates=%d reads=%d waits=%d, want 1/%d/%d", creates, reads, waits, wantReads, wantReads)
+				}
+			})
+		}
 	}
 }
 

@@ -90,3 +90,19 @@ func TestCrossPlatformCoverageAttachmentRemovalRequiresRetainedIdentity(t *testi
 		t.Fatal(err)
 	}
 }
+
+func TestCrossPlatformCoverageAttachmentRemovalMatchesEachRetainedIdentityOnce(t *testing.T) {
+	first := map[string]any{"resourceId": "first", "filename": "same.pdf"}
+	second := map[string]any{"resourceId": "second", "filename": "same.pdf"}
+	plan := attachmentRemovalPlan{remaining: []map[string]any{first, second}}
+	if err := verifyAttachmentRemoval([]map[string]any{first, second}, plan, "removed.pdf"); err != nil {
+		t.Fatalf("two distinct retained files rejected: %v", err)
+	}
+	if err := verifyAttachmentRemoval([]map[string]any{first, first}, plan, "removed.pdf"); err == nil {
+		t.Fatal("duplicate first identity must not replace the second retained file")
+	}
+	plan.remaining = []map[string]any{first, first}
+	if err := verifyAttachmentRemoval([]map[string]any{first, second}, plan, "removed.pdf"); err == nil {
+		t.Fatal("one read-back attachment must not satisfy two retained occurrences")
+	}
+}

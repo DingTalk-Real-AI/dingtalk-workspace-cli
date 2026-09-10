@@ -36,6 +36,7 @@ func TestCrossPlatformCoverageRecordSnapshotProjections(t *testing.T) {
 		{"non-select object", "text", `{"id":"a"}`, `{"id":"a","name":"A"}`, false},
 		{"wrong URL", "url", `"https://example.com"`, `{"text":"https://example.com","link":"https://other.example.com"}`, false},
 		{"wrong URL label", "url", `"https://example.com"`, `{"text":"Other","link":"https://example.com"}`, false},
+		{"non-string URL expectation", "url", `123`, `{"text":"123","link":"123"}`, false},
 		{"non-URL object", "text", `"https://example.com"`, `{"text":"https://example.com","link":"https://example.com"}`, false},
 	}
 	for _, tc := range cases {

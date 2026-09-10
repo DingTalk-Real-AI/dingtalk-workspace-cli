@@ -101,3 +101,15 @@ func TestCrossPlatformCoverageAitableExplicitRetryableFalseStopsRead(t *testing.
 		t.Fatal("unrelated true is not a retry instruction")
 	}
 }
+
+func TestCrossPlatformCoverageAitableRetryEnvelopeDepthIsBounded(t *testing.T) {
+	for _, depth := range []int{8, 9, 64} {
+		payload := `{"retryable":true}`
+		for i := 0; i < depth; i++ {
+			payload = `{"error":` + payload + `}`
+		}
+		if got := isAitableRetryableError(errors.New(payload)); got != (depth == 8) {
+			t.Fatalf("retryable at envelope depth %d = %v", depth, got)
+		}
+	}
+}
