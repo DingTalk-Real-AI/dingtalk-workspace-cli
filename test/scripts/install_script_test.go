@@ -848,7 +848,7 @@ build_shared_schema_cache
 		if strings.Contains(text, "Shared schema cache built") {
 			t.Fatalf("private 0700 custom root must not claim shared success:\n%s", text)
 		}
-		if !strings.Contains(text, "Shared schema cache not written") {
+		if !strings.Contains(text, "Shared schema cache not shared") {
 			t.Fatalf("private 0700 custom root missing fallback warning:\n%s", text)
 		}
 		info, err := os.Stat(shared)
@@ -920,6 +920,116 @@ build_shared_schema_cache
 		}
 		if _, err := os.Stat(filepath.Join(foreign, "identity.json")); err != nil {
 			t.Fatalf("foreign identity.json must survive: %v", err)
+		}
+	})
+
+	t.Run("pre-existing caller-owned dws level is not broadened", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		privateDws := filepath.Join(shared, "dws")
+		if err := os.MkdirAll(privateDws, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		secret := filepath.Join(privateDws, "caller-secret")
+		mustWriteFile(t, secret, []byte("secret\n"), 0o600)
+		if err := os.Chmod(privateDws, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-dws-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private dws harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("private pre-existing dws level must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private pre-existing dws level missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(privateDws)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("pre-existing dws level mode = %04o; want 0700 (must not broaden)", info.Mode().Perm())
+		}
+		secretInfo, err := os.Stat(secret)
+		if err != nil {
+			t.Fatalf("caller child under dws must survive: %v", err)
+		}
+		if secretInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller child under dws mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("pre-existing caller-owned dws/schema level is not recursively broadened", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		privateSchema := filepath.Join(shared, "dws", "schema")
+		if err := os.MkdirAll(privateSchema, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		secret := filepath.Join(privateSchema, "caller-secret")
+		mustWriteFile(t, secret, []byte("secret\n"), 0o600)
+		if err := os.Chmod(privateSchema, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-schema-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private schema harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("private pre-existing dws/schema level must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private pre-existing dws/schema level missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(privateSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("pre-existing dws/schema level mode = %04o; want 0700 (must not broaden)", info.Mode().Perm())
+		}
+		secretInfo, err := os.Stat(secret)
+		if err != nil {
+			t.Fatalf("caller child under dws/schema must survive: %v", err)
+		}
+		if secretInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller child under dws/schema mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
 		}
 	})
 }
