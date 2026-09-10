@@ -32,7 +32,7 @@ var ChatCreate = shortcut.Shortcut{
 	Command:     "+chat-create",
 	Product:     "im",
 	Description: "按成员和可选群主全量预检后创建一个钉钉群聊",
-	Intent:      "当你要创建钉钉群聊时使用；成员可传稳定 ID 或 --member-query 姓名，成员省略时仅当前用户；名称省略由服务端生成默认群名。群主默认当前用户，也可用 --owner-open-dingtalk-id 或 --owner-query 明确指定。所有自然身份会在唯一解析并去重后才执行一次创建，任一零命中或多命中都会整体停止。--bots 可在建群后逐个添加机器人（最多10个 robotCode）；权限由添加接口校验，非原子操作，失败保留已建群并报告恢复上下文。",
+	Intent:      "当你要创建真实钉钉群聊/聊天群时使用；不是创建会话分组/分类容器。成员可传稳定 ID 或 --member-query 姓名，成员省略时仅当前用户；名称省略由服务端生成默认群名。群主默认当前用户，也可用 --owner-open-dingtalk-id 或 --owner-query 明确指定。所有自然身份会在唯一解析并去重后才执行一次创建，任一零命中或多命中都会整体停止。--bots 可在建群后逐个添加机器人（最多10个 robotCode）；权限由添加接口校验，非原子操作，失败保留已建群并报告恢复上下文。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "群名称；省略或空白时不传 groupName，由服务端生成默认群名"},

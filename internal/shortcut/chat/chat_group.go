@@ -14,6 +14,7 @@
 package chat
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ var ChatSearch = shortcut.Shortcut{
 	SinglePositionalAliasFor: "query",
 	Product:                  "im",
 	Description:              "按关键词分页搜索群聊，支持有界自动翻页和完整性检查",
-	Intent:                   "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；默认读取一页，明确要求全部候选时加 --page-all，并用 --page-limit 保持有界。结果按 openConversationId 去重，并公开 complete、hasMore、nextCursor、stopReason 和 failures，避免把截断或失败结果误当完整候选集。",
+	Intent:                   "当你只记得真实群聊/聊天群名称关键词、需要拿到群 openConversationId 时使用；不是搜索会话分组/分类名。默认读取一页，明确要求全部候选时加 --page-all，并用 --page-limit 保持有界。结果按 openConversationId 去重，并公开 complete、hasMore、nextCursor、stopReason 和 failures，避免把截断或失败结果误当完整候选集。",
 	Risk:                     shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -63,7 +64,7 @@ var ChatSearch = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按关键词分页搜索群聊，支持有界自动翻页和完整性检查",
-			UseWhen:      []string{"当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；默认读取一页，明确要求全部候选时加 --page-all，并用 --page-limit 保持有界。结果按 openConversationId 去重，并公开 complete、hasMore、nextCursor、stopReason 和 failures，避免把截断或失败结果误当完整候选集。"},
+			UseWhen:      []string{"当你只记得真实群聊/聊天群名称关键词、需要拿到群 openConversationId 时使用；不是搜索会话分组/分类名。默认读取一页，明确要求全部候选时加 --page-all，并用 --page-limit 保持有界。结果按 openConversationId 去重，并公开 complete、hasMore、nextCursor、stopReason 和 failures，避免把截断或失败结果误当完整候选集。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +chat-search --query \"项目冲刺\""},
 		},
@@ -1770,7 +1771,7 @@ var ChatRoleList = shortcut.Shortcut{
 		}
 		data, err := rt.CallMCPData("im", "list_custom_group_roles", map[string]any{"openConversationId": groupID})
 		if err != nil {
-			return err
+			return convergeChatRoleError("list_custom_group_roles", err)
 		}
 		roles := chatRoleListProject(data)
 		return rt.Output(map[string]any{"count": len(roles), "roles": roles})
@@ -1847,10 +1848,11 @@ var ChatRoleAdd = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("add_custom_group_role", map[string]any{
+		err = rt.CallMCP("add_custom_group_role", map[string]any{
 			"openConversationId": groupID,
 			"name":               rt.Str("name"),
 		})
+		return convergeChatRoleError("add_custom_group_role", err)
 	},
 }
 
@@ -1898,11 +1900,12 @@ var ChatRoleUpdate = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("update_custom_group_role", map[string]any{
+		err = rt.CallMCP("update_custom_group_role", map[string]any{
 			"openConversationId": groupID,
 			"openRoleId":         rt.Str("role-id"),
 			"name":               rt.Str("name"),
 		})
+		return convergeChatRoleError("update_custom_group_role", err)
 	},
 }
 
@@ -1924,11 +1927,53 @@ var ChatRoleRemove = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("remove_custom_group_role", map[string]any{
+		err = rt.CallMCP("remove_custom_group_role", map[string]any{
 			"openConversationId": groupID,
 			"openRoleId":         rt.Str("role-id"),
 		})
+		return convergeChatRoleError("remove_custom_group_role", err)
 	},
+}
+
+// convergeChatRoleError makes the stop condition explicit for role APIs. The
+// service has historically returned opaque 1001/1002 failures; without a
+// stable retry signal an Agent may incorrectly switch between the Shortcut and
+// its atomic alias. Preserve auth/discovery/validation errors, and only retain
+// retryability when the lower layer explicitly published retryable=true.
+func convergeChatRoleError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) {
+		return apperrors.NewInternal(
+			"群身份操作失败；未获得可安全重试的错误契约",
+			apperrors.WithOperation("im/"+operation),
+			apperrors.WithRetryable(false),
+			apperrors.WithReason("chat_role_operation_failed"),
+			apperrors.WithHint("不要查询 Help 或切换 Shortcut/atomic；保留当前群、成员、openRoleId 和 Trace ID 后停止"),
+			apperrors.WithCause(err),
+		)
+	}
+	if typed.Category == apperrors.CategoryAuth ||
+		typed.Category == apperrors.CategoryValidation ||
+		typed.Category == apperrors.CategoryDiscovery {
+		return err
+	}
+	if strings.TrimSpace(typed.Operation) == "" {
+		typed.Operation = "im/" + operation
+	}
+	if !typed.RetryableSet {
+		typed.RetryableSet = true
+		typed.Retryable = false
+	}
+	if strings.TrimSpace(typed.Reason) == "" {
+		typed.Reason = "chat_role_operation_failed"
+	}
+	if strings.TrimSpace(typed.Hint) == "" {
+		typed.Hint = "不要查询 Help 或切换 Shortcut/atomic；仅 retryable=true 时才以相同参数重试一次"
+	}
+	return err
 }
 
 func validateChatRoleIDs(values []string) error {
@@ -1945,10 +1990,177 @@ func validateChatRoleIDs(values []string) error {
 
 func normalizeChatRoleIDs(values []string) []string {
 	normalized := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
 	for _, value := range values {
-		normalized = append(normalized, strings.TrimSpace(value))
+		value = strings.TrimSpace(value)
+		if !seen[value] {
+			seen[value] = true
+			normalized = append(normalized, value)
+		}
 	}
 	return normalized
+}
+
+func chatRoleUserParams(groupID, user string) map[string]any {
+	params := map[string]any{"openConversationId": groupID}
+	if isOpenID(user) {
+		params["openDingTalkId"] = user
+	} else {
+		params["userId"] = user
+	}
+	return params
+}
+
+func chatRoleIDsFromUserQuery(data map[string]any) ([]string, bool) {
+	var raw any = data
+	if result, exists := data["result"]; exists {
+		raw = result
+	}
+	if object, ok := raw.(map[string]any); ok {
+		found := false
+		for _, key := range []string{"roles", "list", "items", "openRoleIds", "roleIds"} {
+			if value, exists := object[key]; exists {
+				raw = value
+				found = true
+				break
+			}
+		}
+		if !found {
+			if roleID := strings.TrimSpace(fmt.Sprint(object["openRoleId"])); roleID != "" && roleID != "<nil>" {
+				return []string{roleID}, true
+			}
+			return nil, false
+		}
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		if roleIDs, ok := raw.([]string); ok {
+			return normalizeChatRoleIDs(roleIDs), true
+		}
+		return nil, false
+	}
+	roleIDs := make([]string, 0, len(items))
+	for _, item := range items {
+		switch value := item.(type) {
+		case string:
+			if roleID := strings.TrimSpace(value); roleID != "" {
+				roleIDs = append(roleIDs, roleID)
+			}
+		case map[string]any:
+			for _, key := range []string{"openRoleId", "roleId", "id"} {
+				if roleID := strings.TrimSpace(fmt.Sprint(value[key])); roleID != "" && roleID != "<nil>" {
+					roleIDs = append(roleIDs, roleID)
+					break
+				}
+			}
+		}
+	}
+	return normalizeChatRoleIDs(roleIDs), true
+}
+
+func sameChatRoleIDSet(left, right []string) bool {
+	left = normalizeChatRoleIDs(left)
+	right = normalizeChatRoleIDs(right)
+	if len(left) != len(right) {
+		return false
+	}
+	rightSet := make(map[string]bool, len(right))
+	for _, value := range right {
+		rightSet[value] = true
+	}
+	for _, value := range left {
+		if !rightSet[value] {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyChatRoleUserWrite(
+	rt *shortcut.RuntimeContext,
+	writeTool string,
+	groupID, user string,
+	requestedRoleIDs []string,
+	remove bool,
+) error {
+	writeParams := chatRoleUserParams(groupID, user)
+	writeParams["openRoleIds"] = requestedRoleIDs
+	if rt.DryRun() {
+		return rt.Output(map[string]any{
+			"dry_run": true, "executed": false, "verified": false,
+			"writeTool": writeTool, "writeArguments": writeParams,
+			"verifyTool": "query_custom_user_roles",
+		})
+	}
+	writeResult, err := rt.CallMCPWriteData("im", writeTool, writeParams)
+	if err != nil {
+		return convergeChatRoleError(writeTool, err)
+	}
+	current, err := rt.CallMCPData("im", "query_custom_user_roles", chatRoleUserParams(groupID, user))
+	if err != nil {
+		return chatRoleUserVerificationError(writeTool, groupID, user, requestedRoleIDs, nil, writeResult, "群身份写入已发出，但回读失败: "+err.Error(), err)
+	}
+	currentRoleIDs, known := chatRoleIDsFromUserQuery(current)
+	verified := known && sameChatRoleIDSet(requestedRoleIDs, currentRoleIDs)
+	if remove && known {
+		verified = true
+		currentSet := make(map[string]bool, len(currentRoleIDs))
+		for _, roleID := range currentRoleIDs {
+			currentSet[roleID] = true
+		}
+		for _, roleID := range requestedRoleIDs {
+			if currentSet[roleID] {
+				verified = false
+				break
+			}
+		}
+	}
+	if !verified {
+		reason := "回读未返回可识别的 openRoleId 列表"
+		if known {
+			reason = "回读的成员群身份与请求后的预期状态不一致"
+		}
+		return chatRoleUserVerificationError(writeTool, groupID, user, requestedRoleIDs, currentRoleIDs, writeResult, reason, nil)
+	}
+	return rt.Output(map[string]any{
+		"ok": true, "verified": true, "writeTool": writeTool,
+		"openConversationId": groupID, "user": user,
+		"requestedRoleIds": requestedRoleIDs, "currentRoleIds": currentRoleIDs,
+		"writeResult": writeResult,
+	})
+}
+
+func chatRoleUserVerificationError(
+	writeTool, groupID, user string,
+	requestedRoleIDs, currentRoleIDs []string,
+	writeResult map[string]any,
+	reason string,
+	cause error,
+) error {
+	options := []apperrors.Option{
+		apperrors.WithOperation("im/" + writeTool),
+		apperrors.WithOrigin("client_postcondition"),
+		apperrors.WithFailureStage("verify_role_assignment"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason("chat_role_assignment_unverified"),
+		apperrors.WithHint("不要切换到同义命令或盲目重试；请核对群、成员和 openRoleId 后再决定是否重试"),
+		apperrors.WithDetails(map[string]any{
+			"openConversationId": groupID,
+			"user":               user,
+			"requestedRoleIds":   requestedRoleIDs,
+			"currentRoleIds":     currentRoleIDs,
+			"writeResult":        writeResult,
+			"verification":       reason,
+		}),
+	}
+	if cause != nil {
+		options = append(options, apperrors.WithCause(cause))
+	}
+	return apperrors.NewAPI(
+		"群身份写入结果无法通过回读验证；CLI 不会把本次操作声明为成功",
+		options...,
+	)
 }
 
 // ChatRoleSetUser overwrites a user's group roles (set_custom_user_roles, im).
@@ -2003,16 +2215,7 @@ var ChatRoleSetUser = shortcut.Shortcut{
 			return err
 		}
 		user := rt.Str("user")
-		params := map[string]any{
-			"openConversationId": groupID,
-			"openRoleIds":        roleIDs,
-		}
-		if isOpenID(user) {
-			params["openDingTalkId"] = user
-		} else {
-			params["userId"] = user
-		}
-		return rt.CallMCP("set_custom_user_roles", params)
+		return verifyChatRoleUserWrite(rt, "set_custom_user_roles", groupID, user, roleIDs, false)
 	},
 }
 
@@ -2024,28 +2227,36 @@ var ChatRoleRemoveUser = shortcut.Shortcut{
 	Description: "移除用户的指定群身份",
 	Intent:      "当你只想撤销某成员的部分群身份、保留其余时使用；--group 可传群名或 openConversationId；会实际移除指定的群身份，需传用户和 openRoleId 列表。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "用户 userId 或 openDingTalkId", Required: true},
-		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要移除的群身份 openRoleId 列表", Required: true},
+		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要移除的群身份 openRoleId 列表；必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"role-ids"}, Description: "必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素"},
 	},
 	Tips: []string{`dws chat +chat-role-remove-user --group <openConversationId> --user <userId> --role-ids roleId1`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateChatRoleIDs(rt.StrSlice("role-ids"))
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		groupID, err := resolveStableOrNamedChat(rt)
 		if err != nil {
 			return err
 		}
 		user := rt.Str("user")
-		params := map[string]any{
-			"openConversationId": groupID,
-			"openRoleIds":        rt.StrSlice("role-ids"),
-		}
-		if isOpenID(user) {
-			params["openDingTalkId"] = user
-		} else {
-			params["userId"] = user
-		}
-		return rt.CallMCP("remove_custom_user_roles", params)
+		return verifyChatRoleUserWrite(
+			rt,
+			"remove_custom_user_roles",
+			groupID,
+			user,
+			normalizeChatRoleIDs(rt.StrSlice("role-ids")),
+			true,
+		)
 	},
 }
 
@@ -2099,7 +2310,8 @@ var ChatRoleQueryUser = shortcut.Shortcut{
 		} else {
 			params["userId"] = user
 		}
-		return rt.CallMCP("query_custom_user_roles", params)
+		err = rt.CallMCP("query_custom_user_roles", params)
+		return convergeChatRoleError("query_custom_user_roles", err)
 	},
 }
 

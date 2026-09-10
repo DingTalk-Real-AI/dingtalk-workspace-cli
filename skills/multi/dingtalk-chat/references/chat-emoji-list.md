@@ -10,8 +10,8 @@
 > Schema/Skill 生成器不得机械重写它。最后复核：2026-08-03。
 >
 > 使用规则：
-> - 用户描述的表情命中下表中的 `name` → 使用 `chat message add-emoji --emoji <name>` 贴 emoji 回应
-> - 用户描述的表情未命中下表 → 先 `chat message create-text-emotion` 创建文字表情获取 emotionId，再 `chat message add-text-emotion` 贴文字表情回应
+> - 用户描述的表情命中下表中的 `name` → 使用 `+messages-add-emoji --emoji <name>` 贴 emoji 回应
+> - 用户描述的表情未命中下表 → 先 `+messages-create-text-emotion` 获取 emotionId，再用 `+messages-add-text-emotion` 贴文字表情回应
 
 | # | emotionId | name | en_US |
 |---|-----------|------|-------|
