@@ -18,6 +18,7 @@ metadata:
 |---|---|
 | 创建草稿 / 创建并发布 / 查询 / 修改 / 上线 / 删除 | `dws dingtalk-tag manage ...` |
 | 下线 | 当前版本无独立下线命令；明确说明限制，不得用 delete 冒充下线 |
+| A2A 或其他仅登录场景 | `dws dingtalk-tag manage login --agent-uuid ...` |
 | 只把已有、已发布的本地数字员工转换为本地 Profile | `dws dingtalk-tag connect --agent-uuid ... --profile-only` |
 | 把已有、已发布的本地数字员工接入 DSH | `dws dingtalk-tag connect --agent-uuid ... --channel dsh` |
 | 把数字员工接入当前本地 Agent | `dws dingtalk-tag connect --agent-uuid ... --channel auto --daemon --alwayson` |
@@ -44,6 +45,6 @@ metadata:
 
 ## 安全
 
-- `get-dws-auth-code` 的 `dwsAuthCode` 是一次性高敏感凭证，不得复制到对话、日志、文档、argv 或缓存。普通自然语言接入应只调用 `connect`，不要手工拆解换票链路。
+- `manage login` 在内部完成 AuthCode 换票、在线身份核验，并保存精确 `corpId:userId` Profile；不得输出或转存 AuthCode/Token。企业本地 Agent 接入只调用 `connect`；A2A 或其他需要登录数字员工 DWS 的场景调用 `manage login`。
 - 删除不可逆；修改、发布、删除和 connect 按 Schema 的确认要求执行。
 - Channel 的 `reply` / `operator-private` 只供已绑定的本地 Adapter/DSH 机器协议使用，必须指定员工 Profile，正文只能走受限 stdin；不要为普通用户消息直接调用。

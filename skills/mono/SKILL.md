@@ -120,7 +120,7 @@ cli_version: ">=1.0.61"
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"未封装 OpenAPI/llms.txt/dws api/Raw API/API 逃生舱" → `dws api`（先查现有产品命令，再读官方 llms.txt）
 用户提到"DING/紧急消息/电话提醒" → `ding`
-用户提到"DingTalk Tag/DEAP 数字员工/创建发布数字员工/修改数字员工人设/响应模式/获取数字员工临时 DWS 授权码/给数字员工挂 Skill 或 MCP/数字员工运行状态或 trace/落盘本地 Profile/接入 DSH" → `dingtalk-tag`，先读 [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md)
+用户提到"DingTalk Tag/DEAP 数字员工/创建发布数字员工/修改数字员工人设/响应模式/为 A2A 等场景安全登录数字员工 DWS/给数字员工挂 Skill 或 MCP/数字员工运行状态或 trace/落盘本地 Profile/接入 DSH" → `dingtalk-tag`，先读 [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md)
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
 用户提到"云盘/文件存储/文件上传下载/文件夹/互联网公开/分享链接密码/公开有效期" → `drive`
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）

@@ -979,7 +979,13 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			// bound flag's value and Changed bit after ExecuteC returns, so consume
 			// credential flags at the execution boundary before any validation or
 			// hook can observe state left by a previous invocation.
-			consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			if cmd.Name() == "exchange" && cmd.Parent() != nil && cmd.Parent().Name() == "auth" {
+				// 外部换票自行按请求解析应用参数；不能把这些参数写入全局应用。
+				// 保留 Changed 到 RunE，退出处理仍会清除本次参数。
+				credentialInvocationSeen = false
+			} else {
+				consumeCredentialInvocationFlags(cmd.Root(), flags, &credentialInvocationSeen)
+			}
 
 			// A public root may be reused by embedding callers through multiple
 			// ExecuteC invocations. Begin each invocation with an empty result

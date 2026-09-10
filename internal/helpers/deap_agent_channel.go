@@ -193,10 +193,6 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 
 	configDir := deapConnectConfigDir()
-	supervisorSelector, supervisor, err := currentSupervisorProfile(configDir)
-	if err != nil {
-		return err
-	}
 	draft, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "type": "draft"}, false)
 	if err != nil {
 		return fmt.Errorf("query digital employee draft: %w", err)
@@ -238,49 +234,18 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	authArgs := map[string]any{"agentUuid": agentUUID}
-	if requestedClientID != "" {
-		authArgs["clientId"] = requestedClientID
-	}
-	authorization, err := callDeapJSON(cmd.Context(), deapAgentAuthCodeTool, authArgs, true)
-	if err != nil {
-		return fmt.Errorf("request digital employee authorization: %w", err)
-	}
-	authData := businessDataMap(authorization)
-	dwsClientID := requiredJSONScalar(authData, "dwsClientId")
-	authorizedRobotUID := requiredJSONScalar(authData, "uid")
-	authorizedStaffID := requiredJSONScalar(authData, "staffId")
-	dwsAuthCode := requiredJSONScalar(authData, "dwsAuthCode")
-	authorizationOrgID := requiredJSONScalar(authData, "orgId")
-	if dwsClientID == "" || authorizedRobotUID == "" || authorizedStaffID == "" || dwsAuthCode == "" || authorizationOrgID == "" {
-		return apperrors.NewInternal("数字员工授权响应缺少 dwsClientId、uid、staffId、dwsAuthCode 或 orgId")
-	}
-	if authorizedRobotUID != publishedIdentity.RobotUID {
-		return apperrors.NewInternal("数字员工授权响应 uid 与发布详情 profile.robotUid 不一致")
-	}
-	if authorizedStaffID != publishedIdentity.StaffID {
-		return apperrors.NewInternal("数字员工授权响应 staffId 与发布详情 profile.staffId 不一致")
-	}
-	token, err := deapConnectManagedExchange(cmd.Context(), configDir, auth.ManagedExchangeRequest{
-		ClientID: dwsClientID, AuthCode: dwsAuthCode, ExpectedUserID: authorizedStaffID, ExpectedCorpID: publishedIdentity.CorpID, PreserveProfile: supervisorSelector,
-		ResolveIdentity: resolveDigitalEmployeeManagedIdentity,
-	})
-	// 尽早清空本地变量，后续所有错误和输出都不再接触授权码。
-	dwsAuthCode = ""
+	session, err := loginDigitalEmployee(cmd.Context(), configDir, agentUUID, requestedClientID, published)
 	if err != nil {
 		return err
 	}
-	digitalProfile := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
-	if digitalProfile == "" || token.UserID != authorizedStaffID || token.CorpID != publishedIdentity.CorpID {
-		return apperrors.NewInternal("数字员工 Profile 身份校验失败")
-	}
+	digitalProfile, token := session.DigitalProfile, session.DigitalToken
 	if profileOnly {
 		return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{
 			Status: "profile_saved", AgentUUID: agentUUID, DWSProfile: digitalProfile, ProfileOnly: true,
 			ProtocolVersion: digitalEmployeeProtocolVersion, RestartRequired: false,
 		})
 	}
-	operatorID, err := resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, supervisor.UserID)
+	operatorID, err := resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, session.SupervisorToken.UserID)
 	if err != nil {
 		return err
 	}
@@ -340,7 +305,7 @@ func currentSupervisorProfile(configDir string) (string, *auth.TokenData, error)
 		return "", nil, fmt.Errorf("load supervisor profile: %w", err)
 	}
 	if token == nil || strings.TrimSpace(token.CorpID) == "" || strings.TrimSpace(token.UserID) == "" {
-		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全接入数字员工")
+		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全登录数字员工")
 	}
 	exact := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
 	return exact, token, nil

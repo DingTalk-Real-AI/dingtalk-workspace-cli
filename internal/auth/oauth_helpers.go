@@ -34,9 +34,10 @@ import (
 )
 
 var (
-	oauthSaveTokenLocked = saveTokenDataLocked
-	oauthRetryAfter      = time.After
-	oauthNewRequest      = http.NewRequestWithContext
+	oauthSaveClientSecret = SaveClientSecret
+	oauthSaveTokenLocked  = saveTokenDataLocked
+	oauthRetryAfter       = time.After
+	oauthNewRequest       = http.NewRequestWithContext
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
@@ -49,8 +50,16 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	if err != nil {
 		return nil, err
 	}
-	clientID := pair.ClientID
-	clientSecret := pair.ClientSecret
+	data, err := p.exchangeCodeWithClient(ctx, code, pair.ClientID, pair.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+	data.Source = pair.Source
+	return data, nil
+}
+
+// exchangeCodeWithClient does not persist credentials before identity validation.
+func (p *OAuthProvider) exchangeCodeWithClient(ctx context.Context, code, clientID, clientSecret string) (*TokenData, error) {
 	body := map[string]string{
 		"clientId":     clientID,
 		"clientSecret": clientSecret,
@@ -67,8 +76,9 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	}
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
-	data.Source = pair.Source
 	p.applyLoginRegionToToken(data)
+	// The caller supplies the resolved provenance; explicit arguments alone do not
+	// imply credentials originated from command-line flags.
 	return data, nil
 }
 

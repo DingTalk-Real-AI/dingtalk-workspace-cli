@@ -837,6 +837,9 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		if request.ResolveIdentity == nil {
 			return nil, errors.New("managed identity resolver is missing")
 		}
+		if request.ExpectedCorpID != "employee-corp" || request.ExpectedUserID != "employee-user" {
+			return nil, errors.New("managed exchange received wrong published identity")
+		}
 		identity, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedCorpID)
 		if err != nil {
 			return nil, err
