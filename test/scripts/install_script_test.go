@@ -236,6 +236,16 @@ func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
 	if cut < 0 {
 		t.Fatal("install.sh main section not found")
 	}
+	scriptText := string(scriptData)
+	if !strings.Contains(scriptText, `schema_tree="${shared_dir}/dws/schema"`) {
+		t.Fatal("install.sh must resolve schema_tree under dws/schema before identity cleanup")
+	}
+	if !strings.Contains(scriptText, `find "$schema_tree" -name 'identity.json'`) {
+		t.Fatal("install.sh must delete identity.json only under schema_tree")
+	}
+	if strings.Contains(scriptText, `find "$shared_dir" -name 'identity.json'`) {
+		t.Fatal("install.sh must not recursively delete identity.json under the wide shared_dir")
+	}
 
 	writeFakeBinary := func(t *testing.T, binDir, name, body string) {
 		t.Helper()
@@ -387,6 +397,7 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	text := string(scriptData)
 	for _, want := range []string{
 		"function Test-SchemaCacheArtifactsPresent",
+		"function Get-SchemaCacheTree",
 		"function Build-SharedSchemaCache",
 		"function Initialize-SharedSchemaCacheRoot",
 		"function Protect-SharedSchemaCacheTree",
@@ -413,6 +424,15 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	}
 	if !strings.Contains(buildFn, "Initialize-SharedSchemaCacheRoot") {
 		t.Fatal("Build-SharedSchemaCache must Initialize-SharedSchemaCacheRoot instead of bare New-Item")
+	}
+	if !strings.Contains(buildFn, "Get-SchemaCacheTree") {
+		t.Fatal("Build-SharedSchemaCache must resolve the precise dws\\schema tree before cleanup")
+	}
+	if !strings.Contains(buildFn, "Get-SchemaCacheTree -Base $cacheDir") {
+		t.Fatal("Build-SharedSchemaCache must derive schemaTree from cache base, not delete under bare cacheDir")
+	}
+	if strings.Contains(buildFn, "Get-ChildItem -LiteralPath $cacheDir -Recurse -Filter \"identity.json\"") {
+		t.Fatal("Build-SharedSchemaCache must not recurse identity cleanup under bare $cacheDir")
 	}
 	if !strings.Contains(buildFn, "Protect-SharedSchemaCacheTree") {
 		t.Fatal("Build-SharedSchemaCache must Protect-SharedSchemaCacheTree after a successful warm")
@@ -582,11 +602,13 @@ $BinName = "dws"
 		mustWriteFile(t, filepath.Join(legacy, "identity.legacyfp.json"), []byte("{}"), 0o600)
 		harness := prefix + `
 $empty = Test-SchemaCacheArtifactsPresent -Dir "` + empty + `"
-$full = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full") + `"
-$legacy = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "legacy") + `"
+$full = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full", "dws", "schema") + `"
+$legacy = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "legacy", "dws", "schema") + `"
+$wide = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full") + `"
 if ($empty) { Write-Output "EMPTY_TRUE"; exit 1 }
 if (-not $full) { Write-Output "FULL_FALSE"; exit 1 }
 if ($legacy) { Write-Output "LEGACY_TRUE"; exit 1 }
+if ($wide) { Write-Output "WIDE_TRUE"; exit 1 }
 Write-Output "ARTIFACT_HELPER_OK"
 `
 		harnessPath := filepath.Join(root, "artifact-helper.ps1")

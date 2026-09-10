@@ -1846,9 +1846,22 @@ function Install-Skills {
 # and Builtin Users read+traverse; otherwise warm the per-user cache under
 # %LOCALAPPDATA%. Never claim success without artifacts.
 
+function Get-SchemaCacheTree {
+    param([string]$Base)
+    if (-not $Base) { return $null }
+    return (Join-Path $Base "dws\schema")
+}
+
 function Test-SchemaCacheArtifactsPresent {
     param([string]$Dir)
+    # Require the precise DWS schema tree (...\dws\schema), never a wide base
+    # such as %LOCALAPPDATA% or an arbitrary SHARED_DIR root.
     if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) {
+        return $false
+    }
+    $leaf = Split-Path -Leaf $Dir
+    $parentLeaf = Split-Path -Leaf (Split-Path -Parent $Dir)
+    if ($leaf -ne 'schema' -or $parentLeaf -ne 'dws') {
         return $false
     }
     $meta = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "meta.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -2079,9 +2092,16 @@ function Build-SharedSchemaCache {
     }
 
     Write-Say "🔧 Building schema cache (local identity)..."
-    if (Test-Path -LiteralPath $cacheDir) {
-        Get-ChildItem -LiteralPath $cacheDir -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-        Get-ChildItem -LiteralPath $cacheDir -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    # Runtime layout under any base is dws\schema\<edition>\v1. Only clear
+    # sidecars inside that tree — never recurse %LOCALAPPDATA% or a wide
+    # DWS_SCHEMA_CACHE_SHARED_DIR root (could delete other apps' identity.json).
+    $schemaTree = Get-SchemaCacheTree -Base $cacheDir
+    if ($schemaTree) {
+        New-Item -ItemType Directory -Path $schemaTree -Force -ErrorAction SilentlyContinue | Out-Null
+        if (Test-Path -LiteralPath $schemaTree) {
+            Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
     }
     $exe = Join-Path $InstallDir "$BinName.exe"
     $previous = $env:DWS_SCHEMA_CACHE_DIR
@@ -2094,7 +2114,7 @@ function Build-SharedSchemaCache {
     try {
         if (Test-Path -LiteralPath $exe) {
             & $exe schema --all --format json | Out-Null
-            if ($LASTEXITCODE -eq 0 -and (Test-SchemaCacheArtifactsPresent -Dir $cacheDir)) {
+            if ($LASTEXITCODE -eq 0 -and (Test-SchemaCacheArtifactsPresent -Dir $schemaTree)) {
                 $ok = $true
             }
         }
