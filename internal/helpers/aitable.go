@@ -9968,7 +9968,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			if cmd.Flags().Changed("field-ids") {
 				return apperrors.NewValidation("--field-ids 不受支持：当前数据源仅支持全量同步，请移除此参数")
 			}
-			if err := validateRequiredFlags(cmd, "table-id", "source-config"); err != nil {
+			if err := validateRequiredFlags(cmd, "table-id"); err != nil {
 				return err
 			}
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
@@ -9999,7 +9999,20 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 				}
 				toolArgs["autoSyncSetting"] = v
 			}
-			return callAitableTool("update_datasource_config", toolArgs)
+			if !cmd.Flags().Changed("source-config") {
+				if !cmd.Flags().Changed("auto") && !cmd.Flags().Changed("auto-sync-setting") {
+					return apperrors.NewValidation("至少需要一个配置变更：--source-config、--auto 或 --auto-sync-setting；仅触发同步请使用 datasource sync")
+				}
+				config, err := readAitableDatasourceSourceConfig(cmd.Context(), baseID, mustGetFlag(cmd, "table-id"))
+				if err != nil {
+					return err
+				}
+				toolArgs["sourceConfig"] = config
+			}
+			if err := cmd.Context().Err(); err != nil {
+				return err
+			}
+			return callAitableToolContext(cmd.Context(), "update_datasource_config", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(datasourceUpdateCmd, LeafSpec{
@@ -10016,7 +10029,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			Interface:   aitableMCPInterface("update_datasource_config"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新已有数据源表的同步配置并触发一次同步。",
-				UseWhen:      []string{"需要修改已有数据源表的完整源配置或自动同步设置时"},
+				UseWhen:      []string{"需要修改已有数据源表的完整源配置或自动同步设置时；省略 source-config 会先读取并原样提交现有配置"},
 				AvoidWhen:    []string{"创建新数据源表用 datasource create；仅触发同步用 datasource sync"},
 				Examples: []string{
 					`dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --source-config '{"processCode":"PROC-YYYY","name":"出差申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
@@ -10025,7 +10038,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			Parameters: []contract.ParamDecl{
 				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
 				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
-				{Name: "source-config", Property: "sourceConfig", Required: boolPtr(true)},
+				{Name: "source-config", Property: "sourceConfig", Required: boolPtr(false)},
 				{Name: "auto", Property: "auto"},
 				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
 			},
@@ -10033,7 +10046,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	})
 	datasourceUpdateCmd.Flags().String("base-id", "", "Base ID (必填)")
 	datasourceUpdateCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
-	datasourceUpdateCmd.Flags().String("source-config", "", "必填。完整源配置 JSON 字符串，整体覆盖，须含 processCode、name、iconUrl、url、dataType 及对应时间字段")
+	datasourceUpdateCmd.Flags().String("source-config", "", "可选。完整源配置 JSON 字符串，显式传入时整体覆盖；省略时先读取当前 sourceConfig 并原样提交，读取失败则不更新")
 	datasourceUpdateCmd.Flags().Bool("auto", false, "可选。是否开启自动同步；仅显式设置时下发给下游，省略时保持原设置")
 	datasourceUpdateCmd.Flags().String("field-ids", "", "不受支持：当前仅支持全量同步，请勿传入")
 	datasourceUpdateCmd.Flags().String("auto-sync-setting", "", "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")

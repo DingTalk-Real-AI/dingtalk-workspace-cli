@@ -95,10 +95,10 @@ func TestCrossPlatformCoverageBootstrapReadbackWaitHonorsCancellation(t *testing
 	}
 }
 
-func TestCrossPlatformCoverageDatasourceUpdateRequiresSourceConfig(t *testing.T) {
+func TestCrossPlatformCoverageDatasourceUpdateRejectsIncompleteReadback(t *testing.T) {
 	caller := &datasourceCoverageCaller{}
 	err := runDatasourceShortcutCLI(t, caller, "+datasource-update", "--base-id", "b", "--table-id", "t", "--auto")
-	if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.argLog) != 0 {
+	if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.argLog) != 1 || caller.toolLog[0] != "get_datasource_config" {
 		t.Fatalf("err=%v calls=%v", err, caller.argLog)
 	}
 }

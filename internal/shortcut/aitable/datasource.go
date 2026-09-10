@@ -23,6 +23,7 @@ package aitable
 import (
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -121,7 +122,7 @@ var DatasourceUpdate = shortcut.Shortcut{
 	Command:     "+datasource-update",
 	Product:     serverMain,
 	Description: "更新已有数据源表的完整源配置或自动同步设置，并触发一次全量同步。仅适用于数据源表，当前不支持选择同步字段。",
-	Intent:      "当用户需要更换审批模板、调整同步时间范围或开关自动同步时使用；须提供完整 source-config，当前仅支持全量同步。",
+	Intent:      "当用户需要更换审批模板、调整同步时间范围或开关自动同步时使用；source-config 可省略，此时先读取当前配置并原样提交，当前仅支持全量同步。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -139,16 +140,17 @@ var DatasourceUpdate = shortcut.Shortcut{
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
-			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+			Reason:       "The CLI reads aitable/get_datasource_config when --source-config is omitted, preserves its complete sourceConfig, and then calls aitable/update_datasource_config; no single direct MCP interface represents this compatibility adapter.",
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "更新已有数据源表的完整源配置或自动同步设置，并触发一次全量同步。仅适用于数据源表，当前不支持选择同步字段。",
-			UseWhen:      []string{"当用户需要更换审批模板、调整同步时间范围或开关自动同步时使用；须提供完整 source-config，当前仅支持全量同步。"},
+			UseWhen:      []string{"当用户需要更换审批模板、调整同步时间范围或开关自动同步时使用；source-config 可省略，此时先读取当前配置并原样提交，当前仅支持全量同步。"},
 			AvoidWhen: []string{
 				"需要创建新数据源表时（改用 +datasource-create）",
 				"仅需触发同步不改配置时（改用 +datasource-sync）",
 			},
 			Examples: []string{
+				`dws aitable +datasource-update --base-id BASE123 --table-id TBL456 --auto`,
 				`dws aitable +datasource-update --base-id BASE123 --table-id TBL456 --source-config '{"processCode":"PROC-YYYY","name":"出差申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
 			},
 		},
@@ -156,12 +158,13 @@ var DatasourceUpdate = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "已存在的数据源表 ID（通过 +base-get / +table-list 获取，仅允许传入 sync=true 的数据源表）", Required: true},
-		{Name: "source-config", Type: shortcut.FlagString, Desc: "必填。完整源配置 JSON 字符串，整体覆盖。字段分为两类：须从 +datasource-list-sources 结果原样透传的字段（必填）：processCode（审批流程编码）、name（展示名称）、iconUrl（图标 URL）、url（跳转链接）；调用方自行设置的字段：dataType（必填，time_range/start_time/recent_time）、recentDays（dataType=recent_time 时有效，7d/30d/1y，默认 30d）、startDate（dataType=time_range/start_time 时有效，yyyy-MM-dd，默认 30 天前）、endDate（dataType=time_range 时有效，yyyy-MM-dd，默认当天）、keepRemovedFields（默认 false）。约定：syncAll 固定为 true；splitParentTableField 与 enableDataSyncOaDetailList 为下游内部字段，无需传入", Required: true},
+		{Name: "source-config", Type: shortcut.FlagString, Desc: "可选。省略时先读取当前 sourceConfig 并原样提交，读取失败则不更新；显式传入时整体覆盖。字段分为两类：须从 +datasource-list-sources 结果原样透传的字段（必填）：processCode（审批流程编码）、name（展示名称）、iconUrl（图标 URL）、url（跳转链接）；调用方自行设置的字段：dataType（必填，time_range/start_time/recent_time）、recentDays（dataType=recent_time 时有效，7d/30d/1y，默认 30d）、startDate（dataType=time_range/start_time 时有效，yyyy-MM-dd，默认 30 天前）、endDate（dataType=time_range 时有效，yyyy-MM-dd，默认当天）、keepRemovedFields（默认 false）。约定：syncAll 固定为 true；splitParentTableField 与 enableDataSyncOaDetailList 为下游内部字段，无需传入"},
 		{Name: "auto", Type: shortcut.FlagBool, Desc: "可选。是否开启自动同步；仅显式设置时下发给下游，省略时保持原有自动同步开关不变"},
 		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "不受支持：当前仅支持全量同步，请勿传入"},
 		{Name: "auto-sync-setting", Type: shortcut.FlagString, Desc: "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly=按小时间隔，scheduled=定时触发）、hourlyInterval（syncType=hourly 时必填，正整数小时）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（syncType=scheduled 时必填，HH:mm）、selectedMonthDays（scheduleType=monthly 时必填，每月几号触发，1-31）、selectedWeekdays（scheduleType=weekly 时必填，每周哪几天触发，1=周一…7=周日）、skipNonWorkingDay（可选，默认 false）"},
 	},
 	Tips: []string{
+		`dws aitable +datasource-update --base-id BASE123 --table-id TBL456 --auto`,
 		`dws aitable +datasource-update --base-id BASE123 --table-id TBL456 --source-config '{"processCode":"PROC-YYYY","name":"出差申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -192,7 +195,31 @@ var DatasourceUpdate = shortcut.Shortcut{
 			params["autoSyncSetting"] = v
 		}
 
-		data, err := rt.CallMCPData(serverMain, "update_datasource_config", params)
+		if !rt.Changed("source-config") {
+			if !rt.Changed("auto") && !rt.Changed("auto-sync-setting") {
+				return apperrors.NewValidation("至少需要一个配置变更：--source-config、--auto 或 --auto-sync-setting；仅触发同步请使用 +datasource-sync")
+			}
+			current, err := rt.CallMCPReadData(serverMain, "get_datasource_config", map[string]any{
+				"baseId": rt.Str("base-id"), "tableId": rt.Str("table-id"),
+			})
+			if err != nil {
+				return err
+			}
+			config, err := aitableprotocol.DatasourceSourceConfig(current)
+			if err != nil {
+				return apperrors.NewAPI(err.Error()+"；未执行数据源更新，请显式提供完整 --source-config",
+					apperrors.WithOperation("aitable/get_datasource_config"),
+					apperrors.WithReason("datasource_config_unavailable"),
+					apperrors.WithFailureStage("response_validation"),
+					apperrors.WithExecutionStarted(false),
+					apperrors.WithRetryable(false))
+			}
+			params["sourceConfig"] = config
+		}
+		if err := rt.Command().Context().Err(); err != nil {
+			return err
+		}
+		data, err := rt.CallMCPWriteData(serverMain, "update_datasource_config", params)
 		if err != nil {
 			return err
 		}

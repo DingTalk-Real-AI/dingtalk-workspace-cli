@@ -15,35 +15,54 @@ import (
 )
 
 type aitableDatasourceCaller struct {
-	calls []aitableTestCall
+	calls   []aitableTestCall
+	respond func(context.Context, string) (string, error)
+	dryRun  bool
 }
 
-func (c *aitableDatasourceCaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+func (c *aitableDatasourceCaller) CallTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, aitableTestCall{server: server, tool: tool, args: args})
+	text := `{"status":"success","data":{"tableId":"tbl_test","taskId":"task_test"}}`
+	if c.respond != nil {
+		var err error
+		text, err = c.respond(ctx, tool)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{
 		Type: "text",
-		Text: `{"status":"success","data":{"tableId":"tbl_test","taskId":"task_test"}}`,
+		Text: text,
 	}}}, nil
 }
 
+func (c *aitableDatasourceCaller) CallReadTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return c.CallTool(ctx, server, tool, args)
+}
 func (*aitableDatasourceCaller) Format() string { return "json" }
-func (*aitableDatasourceCaller) DryRun() bool   { return false }
+func (c *aitableDatasourceCaller) DryRun() bool { return c.dryRun }
 func (*aitableDatasourceCaller) Fields() string { return "" }
 func (*aitableDatasourceCaller) JQ() string     { return "" }
 
 func runAitableDatasourceCommand(t *testing.T, args ...string) (*aitableDatasourceCaller, error) {
+	caller := &aitableDatasourceCaller{}
+	return caller, runAitableDatasourceCommandWithCaller(t, context.Background(), caller, args...)
+}
+
+func runAitableDatasourceCommandWithCaller(t *testing.T, ctx context.Context, caller *aitableDatasourceCaller, args ...string) error {
 	t.Helper()
 	testseam.Protect(t, &os.Args)
 
-	caller := &aitableDatasourceCaller{}
 	InitDepsForTest(t, caller)
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
 	os.Args = append([]string{"dws", "aitable", "datasource"}, args...)
 
 	root := newAitableCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
 	root.SetArgs(append([]string{"datasource"}, args...))
-	return caller, root.Execute()
+	return root.ExecuteContext(ctx)
 }
 
 func TestAitableDatasourceSyncRejectsMissingTableIDs(t *testing.T) {
@@ -336,9 +355,9 @@ func TestAitableDatasourceUpdateRejectsNoChanges(t *testing.T) {
 	}
 }
 
-func TestAitableDatasourceUpdateWithAutoOnly(t *testing.T) {
+func TestAitableDatasourceUpdateWithAutoOnlyRejectsIncompleteReadback(t *testing.T) {
 	caller, err := runAitableDatasourceCommand(t, "update", "--base-id", "BASE123", "--table-id", "TBL456", "--auto")
-	if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.calls) != 0 {
+	if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.calls) != 1 || caller.calls[0].tool != "get_datasource_config" {
 		t.Fatalf("missing sourceConfig: err=%v calls=%v", err, caller.calls)
 	}
 }

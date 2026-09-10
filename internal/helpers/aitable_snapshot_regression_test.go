@@ -59,8 +59,8 @@ func TestCrossPlatformCoverageAitableSnapshotDatasourceContract(t *testing.T) {
 		t.Run(strings.Join(extra, " "), func(t *testing.T) {
 			args := append([]string{"update", "--base-id", "b", "--table-id", "t"}, extra...)
 			caller, err := runAitableDatasourceCommand(t, args...)
-			if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.calls) != 0 {
-				t.Fatalf("missing sourceConfig: err=%v calls=%v", err, caller.calls)
+			if err == nil || !strings.Contains(err.Error(), "source-config") || len(caller.calls) != 1 || caller.calls[0].tool != "get_datasource_config" {
+				t.Fatalf("incomplete sourceConfig readback: err=%v calls=%v", err, caller.calls)
 			}
 		})
 	}

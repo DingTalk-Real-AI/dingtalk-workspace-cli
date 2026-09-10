@@ -10,6 +10,29 @@ import (
 	"testing"
 )
 
+func TestAITableDatasourceUpdateDocumentsOptionalConfigPreservation(t *testing.T) {
+	data, err := FS.ReadFile("multi/dingtalk-aitable/references/aitable/aitable-datasource.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, update, ok := strings.Cut(string(data), "### +datasource-update")
+	if !ok {
+		t.Fatal("missing datasource update guide")
+	}
+	update, _, _ = strings.Cut(update, "### +datasource-sync")
+	for _, required := range []string{
+		"| `--source-config` | 否 |",
+		"省略时先读取当前 sourceConfig 并原样提交",
+		"读取失败、配置缺失或格式异常时不执行更新",
+		"显式提供配置时不进行这次读取",
+		"dws aitable datasource update",
+	} {
+		if !strings.Contains(update, required) {
+			t.Errorf("datasource update guide missing %q", required)
+		}
+	}
+}
+
 func TestAITableImportGoldenRoutesDoNotBypassConfirmation(t *testing.T) {
 	unsafeExample := regexp.MustCompile("dws aitable \\+import-file[^`\\n]*--yes")
 	if err := fs.WalkDir(FS, ".", func(path string, entry fs.DirEntry, err error) error {

@@ -14,13 +14,19 @@ import (
 )
 
 type datasourceCoverageCaller struct {
-	err    error
-	resp   string
-	argLog []map[string]any
+	err       error
+	resp      string
+	argLog    []map[string]any
+	toolLog   []string
+	serverLog []string
+	respond   func(context.Context, string) (string, error)
+	dryRun    bool
 }
 
-func (c *datasourceCoverageCaller) CallTool(_ context.Context, _, _ string, args map[string]any) (*edition.ToolResult, error) {
+func (c *datasourceCoverageCaller) CallTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
 	c.argLog = append(c.argLog, args)
+	c.toolLog = append(c.toolLog, tool)
+	c.serverLog = append(c.serverLog, server)
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -28,20 +34,35 @@ func (c *datasourceCoverageCaller) CallTool(_ context.Context, _, _ string, args
 	if text == "" {
 		text = `{"status":"success","data":{}}`
 	}
+	if c.respond != nil {
+		var err error
+		text, err = c.respond(ctx, tool)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
 func (c *datasourceCoverageCaller) Format() string { return "json" }
-func (c *datasourceCoverageCaller) DryRun() bool   { return false }
+func (c *datasourceCoverageCaller) DryRun() bool   { return c.dryRun }
 func (c *datasourceCoverageCaller) Fields() string { return "" }
 func (c *datasourceCoverageCaller) JQ() string     { return "" }
 
 func runDatasourceShortcutCLI(t *testing.T, caller *datasourceCoverageCaller, args ...string) error {
+	return runDatasourceShortcutCLIContext(t, context.Background(), caller, args...)
+}
+
+func (c *datasourceCoverageCaller) CallReadTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return c.CallTool(ctx, server, tool, args)
+}
+
+func runDatasourceShortcutCLIContext(t *testing.T, ctx context.Context, caller *datasourceCoverageCaller, args ...string) error {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs(append([]string{"aitable"}, args...))
-	return root.Execute()
+	return root.ExecuteContext(ctx)
 }
 
 // ── DatasourceCreate error paths ─────────────────────────────────────────────

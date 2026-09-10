@@ -182,9 +182,8 @@ dws aitable +datasource-create --base-id BASE_ID --datasource-type OA \
 ### +datasource-update — 更新数据源配置
 
 ```bash
-# 开启自动同步时也必须提供完整源配置
+# 开启自动同步，CLI 自动读取并保留现有源配置
 dws aitable +datasource-update --base-id BASE_ID --table-id TABLE_ID \
-  --source-config '{"processCode":"PROC-xxxx","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"...","url":"..."}' \
   --auto --format json
 
 # 更新源配置
@@ -197,12 +196,16 @@ dws aitable +datasource-update --base-id BASE_ID --table-id TABLE_ID \
 |------|------|------|
 | `--base-id` | 是 | 目标 Base ID |
 | `--table-id` | 是 | 已有数据源表 ID（sync=true） |
-| `--source-config` | 是 | 完整源配置 JSON 字符串，整体覆盖；可先 get-config 获取当前配置 |
+| `--source-config` | 否 | 省略时先读取当前 sourceConfig 并原样提交；显式传入时须提供完整 JSON 对象字符串，整体覆盖 |
 | `--auto` | 否 | 是否开启自动同步，不传时保持原设置 |
 | `--auto-sync-setting` | 否 | 自动同步频率配置 JSON 字符串，仅 --auto=true 时生效；不传时保持原频率配置 |
 | `--field-ids` | 否 | 不受支持；当前仅支持全量同步，传入时在本地拒绝 |
 
-更新后自动触发一次全量同步，返回新 taskId。
+更新至少需要显式提供 `--source-config`、`--auto` 或 `--auto-sync-setting` 中的一项；仅触发同步使用 `+datasource-sync`。
+
+省略 `--source-config` 时，CLI 先对同一 Base 和数据源表调用 `get-config`，保留返回的完整源配置（包括未知字段），再提交更新。读取失败、配置缺失或格式异常时不执行更新，可显式提供完整 `--source-config` 后重试。显式提供配置时不进行这次读取。原生命令 `dws aitable datasource update` 使用相同行为。
+
+读取与更新是两次请求，不提供版本锁；避免同时修改同一数据源配置。更新后自动触发一次全量同步，返回新 taskId。
 
 ### +datasource-sync — 手动触发同步
 
