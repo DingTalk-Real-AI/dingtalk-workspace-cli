@@ -1,8 +1,10 @@
 # Runtime context
 
-DWS embeds runtime payload `20260908` in its single executable. Five libraries
+DWS embeds runtime payload `20260909` in its single executable. Five libraries
 cover macOS, Linux, and Windows on amd64 and arm64; macOS shares a universal
-library. Each target includes 123 data files. Win32 is not supported.
+library. Each target contains only its library and a format-2 manifest. The
+retired `ps/` directory and Win32 DLL are not distributed. Payload slots reserve
+1 MiB on macOS/Linux and 4 MiB on Windows, including room for signed libraries.
 
 ## Materialization and recovery
 
@@ -14,7 +16,6 @@ directory. Homebrew therefore uses the real binary in `libexec`, not the link in
 <resolved-executable-directory>/
   dws (or dws.exe)
   <platform-library>
-  ps/<123 files>
   .dws-runtime-manifest.json
   .dws-runtime.lock
 ```
@@ -30,6 +31,9 @@ directory beside the executable. The dedicated ownership manifest reserves the f
 names before publication (`pending`) and commits the verified result afterward
 (`ready`). Existing valid resources are reused. Owned, interrupted or damaged
 resources can be repaired; unknown files and symbolic links are never replaced.
+Valid format-1 ownership records from `20260825` and `20260908` authorize a
+library upgrade. Their old `ps/` directories are left untouched: this version
+does not publish, traverse, hash, repair, or require those files.
 Interrupted staging directories are not load sources.
 
 If the directory cannot be resolved or written, another publisher holds its
@@ -37,19 +41,21 @@ lock, or publication fails (including a loaded Windows DLL), DWS uses a verified
 content-addressed cache:
 
 ```text
-<user-cache>/dws/runtime-context/20260908/<payload-sha256>/
+<user-cache>/dws/runtime-context/20260909/<payload-sha256>/
 ```
 
-Both paths verify the manifest, library checksum, all 123 data files, and their
-aggregate digest before returning a library. Previous-version caches are left
+Both paths compare the manifest with the embedded bundle and verify the library
+checksum before returning a library. A cache cannot authorize replacement bytes
+by changing its own manifest. Dedicated build/cache roots contain exactly those two files; adjacent
+publication preserves unrelated files beside the executable. Previous-version caches are left
 alone and are not used. Failure of both locations leaves the context unavailable
 without blocking login or business requests.
 
 ```mermaid
 flowchart TD
-    A[Embedded payload] --> B[Resolve executable symlinks]
+    A[20260909 library and format-2 manifest, no ps] --> B[Resolve executable symlinks]
     B --> C[Lock and verify existing adjacent resources]
-    C --> L{Ready bundle matches embedded manifest?}
+    C --> L{Ready library matches embedded manifest?}
     L -- Yes --> F[Load verified library]
     L -- No --> M[Stage, verify and publish owned resources]
     M --> D{Publication succeeds?}
