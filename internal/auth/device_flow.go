@@ -291,12 +291,16 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("请求设备授权码失败"), err)
 	}
-	dfPrintDeviceCodeBox(p.output(), authResp)
+	// Display the same snapshot used for browser authorization, including when
+	// browser launch is disabled. Keep the server response intact for polling.
+	snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
+	displayAuth := *authResp
+	displayAuth.VerificationURI, _ = snapshot.AttachToURL(authResp.VerificationURI)
+	displayAuth.VerificationURIComplete, _ = snapshot.AttachToURL(authResp.VerificationURIComplete)
+	dfPrintDeviceCodeBox(p.output(), &displayAuth)
 
-	if authResp.VerificationURIComplete != "" && !p.NoBrowser {
-		snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
-		browserURL, _ := snapshot.AttachToURL(authResp.VerificationURIComplete)
-		if bErr := deviceOpenBrowser(browserURL); bErr != nil && p.logger != nil {
+	if displayAuth.VerificationURIComplete != "" && !p.NoBrowser {
+		if bErr := deviceOpenBrowser(displayAuth.VerificationURIComplete); bErr != nil && p.logger != nil {
 			p.logger.Debug("could not open browser", "error_category", "browser_open_failed")
 		}
 	}

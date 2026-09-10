@@ -67,10 +67,10 @@ flowchart TD
     F --> H[Initialize once and retain immutable Result]
     H --> I[Redacted doctor diagnostics]
     H --> J[Existing business request header]
-    H --> K[Browser login URL]
+    H --> K[Browser and manual login URLs]
 ```
 
-## Browser login URLs
+## Login authorization URLs
 
 `Result.AttachToURL(rawURL string) (string, bool)` attaches `callerUmt` and
 `caller=dws` together only when the context is ready and its value is valid.
@@ -78,15 +78,20 @@ It uses URL encoding, preserves other query parameters and fragments, and
 replaces duplicate parameters with one value each. Invalid HTTP(S) URLs or an
 unavailable context return the original URL and `false`.
 
-OAuth's initial browser URL and `/api/status` reauthorization URL use one
-snapshot. The page consumes the complete `authorizeUrl` directly. Device Flow
-resolves one snapshot before its retry loop and reuses it for up to three
-attempts. The original verification response remains unchanged.
+OAuth's initial browser URL, terminal manual link, and `/api/status`
+reauthorization URL use one snapshot. The page consumes the complete
+`authorizeUrl` directly. Device Flow resolves one snapshot before its retry
+loop and reuses it for up to three attempts. Both displayed verification URLs
+include the parameters; the complete link is also used for automatic browser
+launch. This applies to `--no-browser` as well. The original verification
+response remains unchanged for polling and token exchange.
 
-Terminal output, manual links and logs use original URLs. Browser-launch errors
+The terminal intentionally includes the runtime value in copyable manual login
+links when initialization succeeds. SDK failure or invalid URLs keep the
+original links. Diagnostic logs use original URLs; browser-launch errors
 report a neutral category instead of the launcher's error text. The private
-value is not persisted or exposed by a token getter. Doctor reports only state,
-payload version, length and a short fingerprint.
+value is not persisted as application state or exposed by a token getter.
+Doctor reports only state, payload version, length and a short fingerprint.
 
 Callback and redirect URIs, device-code requests, polling, token exchange and
 refresh do not receive these query parameters. The existing business-request

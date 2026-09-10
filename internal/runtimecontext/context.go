@@ -87,8 +87,9 @@ func (r Result) HeaderValue() (string, bool) {
 	return string(payload), true
 }
 
-// AttachToURL attaches the private runtime value only to a browser login URL.
-// Callers must never log or persist the returned URL.
+// AttachToURL attaches the private runtime value to a login authorization URL.
+// The URL may be opened in a browser or shown as a manual login link. Callers
+// must never send it to diagnostic logs or persist it as application state.
 func (r Result) AttachToURL(rawURL string) (string, bool) {
 	if r.State != StateReady {
 		return rawURL, false

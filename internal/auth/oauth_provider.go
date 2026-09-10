@@ -653,7 +653,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	_, _ = fmt.Fprintln(p.output(), i18n.T("🔐 登录钉钉"))
 	_, _ = fmt.Fprintln(p.output(), "")
 	_, _ = fmt.Fprintln(p.output(), i18n.T("请在浏览器中完成扫码授权。"))
-	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), authURL)
+	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), browserURL)
 	_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 等待授权中..."))
 
 	timeout := time.NewTimer(oauthLoginTimeout)
