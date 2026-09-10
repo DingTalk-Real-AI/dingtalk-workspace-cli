@@ -1616,7 +1616,6 @@ func TestCrossPlatformCoverageWindowsSharedOpenRejectsWritableDACLAndFallsBack(t
 	}
 }
 
-
 func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 	t.Cleanup(func() {
 		windowsCreateWellKnownSid = windows.CreateWellKnownSid
@@ -1729,7 +1728,13 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 	windowsCreateWellKnownSid = func(windows.WELL_KNOWN_SID_TYPE) (*windows.SID, error) {
 		return nil, errors.New("forced trusted")
 	}
-	if err := validateSecurity(securityState{owner: func() *windows.SID { s, err := currentUserSID(); if err != nil { t.Fatal(err) }; return s }(), daclPresent: true}, true); err == nil {
+	if err := validateSecurity(securityState{owner: func() *windows.SID {
+		s, err := currentUserSID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}(), daclPresent: true}, true); err == nil {
 		t.Fatal("trustedSIDs failure accepted")
 	}
 	windowsCreateWellKnownSid = oldWell
@@ -1771,4 +1776,3 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 	}
 	_ = c.Close()
 }
-
