@@ -7,10 +7,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
@@ -94,29 +94,13 @@ func TestCrossPlatformCoverageExecutableMaterialFaultPaths(t *testing.T) {
 		}
 	})
 
-	t.Run("open fails falls back to stat fingerprint", func(t *testing.T) {
+	t.Run("missing path falls through to fingerprintStatOnly", func(t *testing.T) {
 		missing := filepath.Join(t.TempDir(), "missing-binary")
 		testseam.Swap(t, &osExecutable, func() (string, error) { return missing, nil })
 		got := computeExecutableMaterial()
 		want := fingerprintStatOnly(missing)
 		if !bytes.Equal(got, want) {
-			t.Fatal("open-fail path must equal fingerprintStatOnly")
-		}
-	})
-
-	t.Run("copy fails falls back to successful stat fingerprint", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "readable-binary")
-		if err := os.WriteFile(path, []byte("payload"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		testseam.Swap(t, &osExecutable, func() (string, error) { return path, nil })
-		testseam.Swap(t, &ioCopy, func(dst io.Writer, src io.Reader) (int64, error) {
-			return 0, errors.New("copy failed")
-		})
-		got := computeExecutableMaterial()
-		want := fingerprintStatOnly(path)
-		if !bytes.Equal(got, want) {
-			t.Fatal("copy-fail path must equal fingerprintStatOnly with successful Stat")
+			t.Fatal("missing-path material must equal fingerprintStatOnly")
 		}
 	})
 
@@ -135,18 +119,48 @@ func TestCrossPlatformCoverageExecutableMaterialFaultPaths(t *testing.T) {
 		}
 	})
 
-	t.Run("happy path hashes a readable executable", func(t *testing.T) {
+	t.Run("default path uses metadata fingerprint not full-file hash", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "ok-binary")
 		if err := os.WriteFile(path, []byte("ok-payload"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		testseam.Swap(t, &osExecutable, func() (string, error) { return path, nil })
 		got := computeExecutableMaterial()
-		if len(got) != sha256.Size {
-			t.Fatalf("happy-path material len = %d", len(got))
+		want := fingerprintStatOnly(path)
+		if !bytes.Equal(got, want) {
+			t.Fatal("unstamped default material must equal fingerprintStatOnly(path)")
 		}
 		// Also exercise the process-cached seam entrypoint once.
 		testseam.Swap(t, &ExecutableMaterial, cachedExecutableMaterial)
 		_ = cachedExecutableMaterial()
+	})
+
+	t.Run("size and mtime changes alter fingerprint", func(t *testing.T) {
+		dir := t.TempDir()
+		aPath := filepath.Join(dir, "bin-a")
+		bPath := filepath.Join(dir, "bin-b")
+		if err := os.WriteFile(aPath, []byte("small"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(bPath, []byte("much-larger-payload"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Ensure mtime differs even on coarse filesystems.
+		past := time.Now().Add(-2 * time.Hour)
+		if err := os.Chtimes(aPath, past, past); err != nil {
+			t.Fatal(err)
+		}
+		fa := fingerprintStatOnly(aPath)
+		fb := fingerprintStatOnly(bPath)
+		if bytes.Equal(fa, fb) {
+			t.Fatal("different size/mtime/path binaries must fingerprint differently")
+		}
+		testseam.Swap(t, &osExecutable, func() (string, error) { return aPath, nil })
+		gotA := computeExecutableMaterial()
+		testseam.Swap(t, &osExecutable, func() (string, error) { return bPath, nil })
+		gotB := computeExecutableMaterial()
+		if bytes.Equal(gotA, gotB) {
+			t.Fatal("computeExecutableMaterial must track metadata replace A→B")
+		}
 	})
 }

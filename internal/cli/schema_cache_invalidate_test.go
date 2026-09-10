@@ -209,8 +209,9 @@ func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t
 }
 
 func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *testing.T) {
-	// Real Digest path: unstamped stamp + swapped exe material must miss A's
-	// sidecar without calling Invalidate*.
+	// Real Digest path: unstamped stamp + injected ExecutableMaterial (stands in
+	// for path/size/mtime metadata fingerprints A vs B) must miss A's sidecar
+	// without calling Invalidate* and without reading whole executables.
 	prevDigest := schemaCacheBinaryDigest
 	t.Cleanup(func() { schemaCacheBinaryDigest = prevDigest })
 	schemaCacheBinaryDigest = buildversion.Digest

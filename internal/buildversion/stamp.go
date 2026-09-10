@@ -6,7 +6,6 @@ package buildversion
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"io"
 	"os"
 	"sync"
 )
@@ -22,14 +21,22 @@ var (
 
 // ExecutableMaterial supplies bytes folded into Digest when the stamp is still
 // the default unstamped triple (dev/unknown/unknown). Production uses a
-// process-cached fingerprint of os.Executable(); tests may swap this seam.
+// process-cached lightweight replace-detector over os.Executable() metadata
+// (path + size + mtime); tests may swap this seam.
 //
 // Behavior:
 //   - Stamped builds (any non-default version/commit/buildTime): Digest is
 //     stamp-only so identical release binaries share one seal regardless of
-//     install path.
-//   - Unstamped local builds: Digest = hash(stamp || exe material) so replacing
-//     a rebuilt binary changes the seal without ldflags.
+//     install path. Release ldflags stamp is the sole identity; no exe I/O.
+//   - Unstamped local builds: Digest = hash(stamp || exe material) where exe
+//     material is a metadata fingerprint (path/size/mtime), NOT a full-file
+//     sha256. Short CLI invocations must not pay whole-binary I/O on every
+//     process when productionSchemaCacheOptions loads identity. Replacing a
+//     local go-build binary (A→B) still changes the seal via size/mtime/path
+//     without calling Invalidate*.
+//
+// Residual risk: two different binaries that collide on path+size+mtime can
+// share an unstamped seal; that edge case is accepted for startup cost.
 var ExecutableMaterial = cachedExecutableMaterial
 
 var (
@@ -38,9 +45,7 @@ var (
 
 	// Process seams for ExecutableMaterial fault paths (tests swap via testseam).
 	osExecutable = os.Executable
-	osOpen       = os.Open
 	osStat       = os.Stat
-	ioCopy       = io.Copy
 )
 
 // Set updates the binary stamp material. Empty inputs leave the prior value.
@@ -88,21 +93,16 @@ func cachedExecutableMaterial() []byte {
 	return exeMaterialCached
 }
 
+// computeExecutableMaterial returns a lightweight stable replace-detector for
+// the running binary. Unstamped Digests intentionally avoid hashing the entire
+// os.Executable() contents: every short CLI process would otherwise pay full
+// file I/O when loading schema-cache identity (sync.Once is per-process only).
 func computeExecutableMaterial() []byte {
 	path, err := osExecutable()
 	if err != nil {
 		return []byte("exe-unavailable")
 	}
-	f, err := osOpen(path)
-	if err != nil {
-		return fingerprintStatOnly(path)
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := ioCopy(h, f); err != nil {
-		return fingerprintStatOnly(path)
-	}
-	return h.Sum(nil)
+	return fingerprintStatOnly(path)
 }
 
 func fingerprintStatOnly(path string) []byte {
