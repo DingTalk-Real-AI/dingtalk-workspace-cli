@@ -302,13 +302,13 @@ func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
 	if err := os.WriteFile(registryPath, []byte("corrupt"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(cacheDirectory, 0o500); err != nil {
-		t.Fatal(err)
-	}
+	// Unix chmod 0500 denies creating/replacing artifacts. Windows ignores
+	// FILE_ATTRIBUTE_READONLY on directories, and production readers share
+	// WRITE+DELETE so Publish can install a new snapshot while they stay
+	// open; block publication with a directory ACL instead.
+	unblockPublication := blockSchemaCachePublication(t, cacheDirectory)
 	gotAfterWriteFailure, writeFailureErr := cli.DeliverySchemaQueryPayloadForTest("calendar event create")
-	if err := os.Chmod(cacheDirectory, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	unblockPublication()
 	if writeFailureErr != nil || !reflect.DeepEqual(gotAfterWriteFailure, wantLeaf) {
 		t.Fatalf("failed-publication fallback: err=%v equal=%v", writeFailureErr, reflect.DeepEqual(gotAfterWriteFailure, wantLeaf))
 	}
