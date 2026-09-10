@@ -118,10 +118,11 @@ fi
 "$ROOT/scripts/policy/check-schema-assembly.sh"
 
 # Schema-cache protobuf must match scripts/generate-schema-cache-proto.sh.
-# Required in CI (and when SCHEMA_CACHE_PROTO_CHECK=1); locally runs when the
-# pinned protoc toolchain is already installed.
+# Policy CI sets SCHEMA_CACHE_PROTO_CHECK=1 after installing pinned protoc.
+# Do not require the check merely because GITHUB_ACTIONS=true — workflow /
+# release contract jobs invoke this script without protoc installed.
 schema_cache_proto_check() {
-	if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${SCHEMA_CACHE_PROTO_CHECK:-}" = "1" ]; then
+	if [ "${SCHEMA_CACHE_PROTO_CHECK:-}" = "1" ]; then
 		"$ROOT/scripts/generate-schema-cache-proto.sh" --check
 		return
 	fi

@@ -1624,6 +1624,7 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 		windowsSecurityOwner = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) { return sd.Owner() }
 		windowsSecurityDACL = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) { return sd.DACL() }
 		windowsSIDCopy = func(sid *windows.SID) (*windows.SID, error) { return sid.Copy() }
+		windowsOpenProcessToken = windows.OpenProcessToken
 		platformIO = realWindowsIO{}
 		programDataDir = func() string { return os.Getenv("ProgramData") }
 		userCacheDir = os.UserCacheDir
@@ -1647,14 +1648,9 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 		}
 		windowsCreateWellKnownSid = windows.CreateWellKnownSid
 	}
-	oldUser := windowsOpenProcessToken
-	windowsOpenProcessToken = func(windows.Handle, uint32, *windows.Token) error {
-		return errors.New("forced token")
-	}
-	if err := restrictSharedReadOnly(privateTestBase(t)); err == nil {
-		t.Fatal("restrictSharedReadOnly current-user failure accepted")
-	}
-	windowsOpenProcessToken = oldUser
+	// Shared ACL no longer consults the current user SID (writable only by
+	// Admins/SYSTEM so every reader trusts the tree). Current-user token
+	// faults belong to trustedSIDs / restrictOwnerWrite coverage instead.
 
 	// readHandleSecurity error branches via GetSecurityInfo / GetAce hooks.
 	target := privateTestBase(t)

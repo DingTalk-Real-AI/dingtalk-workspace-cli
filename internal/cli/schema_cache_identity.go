@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemacachepb"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
@@ -24,6 +25,7 @@ import (
 var (
 	marshalSchemaCacheFileDescriptor = marshalSchemaCacheFileDescriptorDefault
 	readSchemaCacheBuildInfo         = debug.ReadBuildInfo
+	schemaCacheBinaryDigest          = buildversion.Digest
 )
 
 func marshalSchemaCacheFileDescriptorDefault() ([]byte, error) {
@@ -76,6 +78,7 @@ func IdentityFromArtifacts(edition string, artifacts SchemaCacheArtifacts) (Sche
 		GoRuntimeVersion:       runtime.Version(),
 		DescriptorSHA256:       sha256.Sum256(descriptorBytes),
 		ProtobufRuntimeVersion: protobufModuleVersion(),
+		BinaryDigest:           schemaCacheBinaryDigest(),
 	})
 	identity := SchemaCacheIdentity{
 		Edition:                edition,
@@ -111,6 +114,7 @@ type localSchemaCacheBuildIDInput struct {
 	GoRuntimeVersion                        string
 	DescriptorSHA256                        [sha256.Size]byte
 	ProtobufRuntimeVersion                  string
+	BinaryDigest                            [sha256.Size]byte
 }
 
 func localSchemaCacheBuildID(input localSchemaCacheBuildIDInput) [sha256.Size]byte {
@@ -147,6 +151,7 @@ func localSchemaCacheBuildID(input localSchemaCacheBuildIDInput) [sha256.Size]by
 	field(19, input.PayloadSHA256[:])
 	uintField(20, input.PayloadIndexLength)
 	field(21, input.PayloadIndexSHA256[:])
+	field(22, input.BinaryDigest[:])
 	return sha256.Sum256(canonical.Bytes())
 }
 

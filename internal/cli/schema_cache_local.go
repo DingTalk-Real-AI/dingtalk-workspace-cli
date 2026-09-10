@@ -4,6 +4,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,6 +29,7 @@ type localSchemaCacheIdentityRecord struct {
 	SourceSHA256       string `json:"source_sha256"`
 	SurfaceSHA256      string `json:"surface_sha256"`
 	BuildID            string `json:"build_id"`
+	BinaryBuildID      string `json:"binary_build_id"`
 	MetaLength         string `json:"meta_length"`
 	MetaSHA256         string `json:"meta_sha256"`
 	RegistryLength     string `json:"registry_length"`
@@ -58,8 +61,9 @@ var (
 
 // LocalSchemaCacheIdentityFileName is the stable per-edition identity sidecar
 // stored next to protobuf shards. Cache identity is the content hashes inside
-// the record (source/surface/build_id and artifact digests), not a binary
-// fingerprint and not a per-fingerprint filename.
+// the record (source/surface/build_id and artifact digests) plus binary_build_id,
+// which must match the running binary's buildversion.Digest. Sidecars are not
+// keyed by a per-fingerprint filename.
 func LocalSchemaCacheIdentityFileName() string {
 	return localSchemaCacheIdentityName
 }
@@ -85,7 +89,8 @@ func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool)
 }
 
 func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error) {
-	payload, err := os.ReadFile(filepath.Join(directory, LocalSchemaCacheIdentityFileName()))
+	identityPath := filepath.Join(directory, LocalSchemaCacheIdentityFileName())
+	payload, err := os.ReadFile(identityPath)
 	if err != nil {
 		return SchemaCacheIdentity{}, err
 	}
@@ -95,6 +100,12 @@ func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error)
 	}
 	if record.Version != localSchemaCacheIdentityVersion {
 		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity sidecar version %d is unsupported", record.Version)
+	}
+	running := schemaCacheBinaryDigest()
+	if !binaryBuildIDMatches(record.BinaryBuildID, running) {
+		// Old binary's sidecar must not authenticate as the current process.
+		_ = os.Remove(identityPath)
+		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity binary build id mismatch")
 	}
 	identity, err := schemareader.ParseIdentity(schemareader.RawIdentity{
 		Edition:            record.Edition,
@@ -116,17 +127,26 @@ func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error)
 	return identity, nil
 }
 
+func binaryBuildIDMatches(stored string, running [sha256.Size]byte) bool {
+	if stored == "" {
+		return false
+	}
+	return stored == hex.EncodeToString(running[:])
+}
+
 func persistLocalSchemaCacheIdentity(directory string, identity SchemaCacheIdentity) error {
 	if err := identity.Validate(); err != nil {
 		return err
 	}
 	raw := identityToRaw(identity)
+	running := schemaCacheBinaryDigest()
 	record := localSchemaCacheIdentityRecord{
 		Version:            localSchemaCacheIdentityVersion,
 		Edition:            raw.Edition,
 		SourceSHA256:       raw.SourceSHA256,
 		SurfaceSHA256:      raw.SurfaceSHA256,
 		BuildID:            raw.BuildID,
+		BinaryBuildID:      hex.EncodeToString(running[:]),
 		MetaLength:         raw.MetaLength,
 		MetaSHA256:         raw.MetaSHA256,
 		RegistryLength:     raw.RegistryLength,

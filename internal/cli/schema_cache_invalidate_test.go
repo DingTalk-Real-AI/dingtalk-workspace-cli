@@ -4,6 +4,9 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,13 +36,19 @@ func TestCrossPlatformCoverageInvalidateSchemaCacheIdentitiesScopedToDWSSchema(t
 	}
 
 	oldGOOS, oldUser := schemaCacheRuntimeGOOS, schemaCacheUserCacheDir
-	schemaCacheRuntimeGOOS = func() string { return runtime.GOOS }
 	schemaCacheUserCacheDir = func() (string, error) { return root, nil }
 	t.Cleanup(func() {
 		schemaCacheRuntimeGOOS, schemaCacheUserCacheDir = oldGOOS, oldUser
 	})
 	t.Setenv("DWS_SCHEMA_CACHE_DIR", root)
 	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
+	t.Setenv("ProgramData", filepath.Join(root, "ProgramData"))
+
+	for _, goos := range []string{"linux", "darwin", "windows", runtime.GOOS, "plan9"} {
+		schemaCacheRuntimeGOOS = func() string { return goos }
+		_ = schemaCacheInvalidationBases()
+	}
+	schemaCacheRuntimeGOOS = func() string { return runtime.GOOS }
 
 	InvalidatePersistedSchemaCacheIdentities()
 
@@ -122,4 +131,67 @@ func TestCrossPlatformCoverageUpgradeInvalidationClearsPersistedIdentityForABReg
 		t.Fatalf("regenerated identity.json missing: %v", err)
 	}
 	_ = identity
+}
+
+func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t *testing.T) {
+	dir := t.TempDir()
+	oldDigest := schemaCacheBinaryDigest
+	t.Cleanup(func() { schemaCacheBinaryDigest = oldDigest })
+
+	stampA := sha256.Sum256([]byte("binary-stamp-A"))
+	stampB := sha256.Sum256([]byte("binary-stamp-B"))
+	schemaCacheBinaryDigest = func() [sha256.Size]byte { return stampA }
+
+	identity := coverageSchemaCacheIdentity()
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+	identityPath := filepath.Join(dir, LocalSchemaCacheIdentityFileName())
+	payload, err := os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record localSchemaCacheIdentityRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.BinaryBuildID != hex.EncodeToString(stampA[:]) {
+		t.Fatalf("persisted binary_build_id = %q want stamp A", record.BinaryBuildID)
+	}
+	if _, err := loadLocalSchemaCacheIdentity(dir); err != nil {
+		t.Fatalf("stamp A must load its own sidecar: %v", err)
+	}
+
+	// Keep cache artifacts + identity.json written by binary A; run as binary B.
+	schemaCacheBinaryDigest = func() [sha256.Size]byte { return stampB }
+	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
+		t.Fatal("binary B must not load binary A's identity sidecar")
+	}
+	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
+		t.Fatalf("mismatched identity.json should be invalidated: %v", err)
+	}
+
+	// Binary B regenerates a sidecar bound to its own stamp (not A's schema seal).
+	identityB := coverageSchemaCacheIdentity()
+	identityB.BuildID = sha256.Sum256([]byte("binary-B-build"))
+	if err := persistLocalSchemaCacheIdentity(dir, identityB); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := loadLocalSchemaCacheIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.BuildID != identityB.BuildID {
+		t.Fatalf("regenerated build %x want %x", refreshed.BuildID, identityB.BuildID)
+	}
+	payload, err = os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.BinaryBuildID != hex.EncodeToString(stampB[:]) {
+		t.Fatalf("regenerated binary_build_id = %q want stamp B", record.BinaryBuildID)
+	}
 }

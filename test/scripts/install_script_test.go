@@ -219,6 +219,31 @@ install_binary
 	}
 }
 
+func TestInstallScriptRepoFileIsExecutable(t *testing.T) {
+	repoScript, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatalf("Abs(install.sh) error = %v", err)
+	}
+	info, err := os.Stat(repoScript)
+	if err != nil {
+		t.Fatalf("Stat(install.sh) error = %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("scripts/install.sh mode = %s; want executable bit (main ships 100755)", info.Mode())
+	}
+
+	cmd := exec.Command("git", "ls-files", "-s", "--", "scripts/install.sh")
+	cmd.Dir = filepath.Join("..", "..")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git ls-files scripts/install.sh: %v", err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) < 1 || fields[0] != "100755" {
+		t.Fatalf("git index mode for scripts/install.sh = %q; want 100755", strings.TrimSpace(string(out)))
+	}
+}
+
 func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell semantics are unavailable")

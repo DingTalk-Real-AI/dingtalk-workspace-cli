@@ -17,6 +17,11 @@ import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion
 
 var version = "dev"
 
+func init() {
+	// ldflags may have overwritten version/buildTime/gitCommit before init.
+	buildversion.Set(version, gitCommit, buildTime)
+}
+
 // SetVersion overrides the version, build time and git commit strings.
 // Called by pkg/cli.SetVersion for overlay modules that inject their own
 // version info via ldflags.
@@ -30,6 +35,7 @@ func SetVersion(v, bt, gc string) {
 	if gc != "" {
 		gitCommit = gc
 	}
+	buildversion.Set(version, gitCommit, buildTime)
 }
 
 // Version returns the current CLI version string, including build metadata
