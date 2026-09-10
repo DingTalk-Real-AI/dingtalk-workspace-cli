@@ -45,18 +45,18 @@ var ResolveSpace = shortcut.Shortcut{
 	Service:       "wiki",
 	Command:       "+resolve-space",
 	Product:       "wiki",
-	Description:   "按名称搜索知识空间并解析出唯一 spaceId（只读）",
+	Description:   "按名称搜索知识空间并解析单次结果中的唯一 spaceId（只读）",
 	Intent: "当你只知道某个知识空间（wiki space）的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 spaceId 时使用；" +
 		"内部按 --name 关键词调用 search_wikiSpaces 搜索知识空间，再在本地投影出每个候选的 spaceId 和 name。" +
-		"如果只命中一个知识空间就直接返回它的 spaceId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。" +
+		"如果本次搜索仅命中一个知识空间就返回其 spaceId，不证明全局唯一；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。" +
 		"这是纯只读操作，只做搜索与本地投影，不会修改任何知识空间。",
 	Risk:   shortcut.RiskRead,
 	Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: corecmd.ContractDecl{
-		Description: "按名称搜索知识空间并解析出唯一 spaceId（只读）",
+		Description: "按名称搜索知识空间并解析单次结果中的唯一 spaceId（只读）",
 		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"知识库名称解析结果","properties":{"resolved":{"type":"boolean","description":"是否唯一解析"},"spaceId":{"type":"string","description":"唯一知识库 ID"},"name":{"type":"string","description":"唯一知识库名称"},"count":{"type":"integer","description":"候选数量"},"candidates":{"type":"array","description":"需要消歧的候选知识库","items":{"type":"object","description":"知识库候选","additionalProperties":true}}},"required":["resolved"],"additionalProperties":true}`)},
 		Interface:   &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "Reviewed Wiki resolver: the executable CLI strictly validates search results and refuses to guess when multiple spaces match."},
-		Selection:   contract.SelectionSpec{AgentSummary: "按名称搜索知识空间并解析出唯一 spaceId（只读）", UseWhen: []string{"当你只知道某个知识空间（wiki space）的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 spaceId 时使用；内部按 --name 关键词调用 search_wikiSpaces 搜索知识空间，再在本地投影出每个候选的 spaceId 和 name。如果只命中一个知识空间就直接返回它的 spaceId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何知识空间。"}, AvoidWhen: []string{"只想浏览所有匹配项用 wiki +space-search；已知 workspaceId 时无需解析"}, Examples: []string{`dws wiki +resolve-space --name "产品文档"`}},
+		Selection:   contract.SelectionSpec{AgentSummary: "按名称搜索知识空间并解析单次结果中的唯一 spaceId（只读）", UseWhen: []string{"当你只知道某个知识空间（wiki space）的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 spaceId 时使用；内部按 --name 关键词调用 search_wikiSpaces 搜索知识空间，再在本地投影出每个候选的 spaceId 和 name。如果本次搜索仅命中一个知识空间就返回其 spaceId，不证明全局唯一；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何知识空间。"}, AvoidWhen: []string{"只想浏览搜索候选用 wiki +space-search；已知 workspaceId 时无需解析；写入前须确认目标"}, Examples: []string{`dws wiki +resolve-space --name "产品文档"`}},
 		Identity:    contract.ToolIdentitySpec{ProductID: "wiki", Name: "shortcut_resolve_space", CanonicalPath: "wiki.shortcut_resolve_space", CLIPath: "wiki +resolve-space", PrimaryCLIPath: "wiki +resolve-space"},
 		Parameters:  []contract.ParamDecl{{Name: "name", Property: "keyword"}},
 	},

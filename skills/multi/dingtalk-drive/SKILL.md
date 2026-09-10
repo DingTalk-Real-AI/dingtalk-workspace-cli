@@ -47,6 +47,7 @@ metadata:
 | 上传普通文件到钉盘或知识库 | `dws drive +upload --file <相对路径> [--workspace <ID>]` | 默认进钉盘；指定 workspace 时成为知识库/文档空间中的独立文件节点；folder 与 node、workspace 与 space-id 分别互斥 |
 | 管理普通文件全局评论 | `dws drive comment list-v2/create-v2/reply/update/delete/batch-query/list-replies/resolve/restore/react-reply` | 复用 Doc/Sheet 新评论链路；旧 `list/create` 已 deprecated；固定全文 `global`，不支持划词、单元格或 mention |
 | 创建文件夹 | `dws drive +create-folder --name <名称> [--folder <ID>]` | Shortcut 已提交并读回 |
+| 创建普通文件的独立副本 | `dws drive +download --node <源ID> --output <相对路径>` → `dws drive +upload --file <同一相对路径> [--folder <目标ID>]` | 经用户授权后执行；已知是普通文件时不试 `+copy`；新建上传不传 `--node`，避免覆盖；完成证据见下方副本规则 |
 | 复制在线文档节点 | `dws drive +copy --node <ID> [--folder <目标ID>]` | 普通钉盘文件会被拒绝；Base 结构复制走 AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` |
 | 移动节点 | `dws drive +move --node <ID> --folder <目标ID>` | 破坏性变更，按 Runtime confirmation |
 | 重命名节点 | `dws drive +rename --node <ID> --name <新名称>` | 写后检查最终名称 |
@@ -54,6 +55,8 @@ metadata:
 | 钉盘文件夹拉到本地 | `dws drive pull --local-folder <绝对路径> --remote-folder <folderId> --if-exists skip` | 安全默认不覆盖；先以相同参数 `--dry-run`，再按确认执行 |
 | 本地文件夹推到钉盘 | `dws drive push --local-folder <绝对路径> --remote-folder <folderId> --if-exists skip` | 安全默认不覆盖；先 dry-run；不会删除远端多余文件 |
 | 双向补齐文件夹 | `dws drive sync --local-folder <绝对路径> --remote-folder <folderId> --on-conflict skip` | 先 dry-run；冲突策略必须显式保留 |
+
+普通文件副本规则：复用已有可靠回执中的节点类型和源 ID；类型不明时先 inspect，不用失败的 copy 探测类型。下载成功后，按用户授权的目标位置新建上传；确认返回的新节点 ID 与源 ID 不同，并按任务要求核对名称、大小或内容。只给出操作说明不算已创建副本；该路径不承诺复制权限、版本历史或其他在线协作元数据。
 
 ### 低频入口
 
@@ -67,7 +70,7 @@ metadata:
 
 - 已知 dentryUuid：直接执行 inspect/download/list/move/rename，禁止先 search；仅确认是受支持的在线文档节点后才执行 copy。
 - 任务若明确要求“在新知识库用本地文件建在线文档，再移到我的文档”，不属于 Drive 根目录整理：禁止预查 `mySpace/rootFolderId`，禁止 `doc +create` 后 `drive +move`；应由 Wiki 创建空间，Doc `+import --workspace <新workspaceId>`，再 Wiki `+move-to-drive --workspace <新workspaceId>`。
-- 目标 Drive 空间未知：先明确企业空间 `orgSpace` 或“我的文件”`mySpace`，用 `dws wiki space list --type <类型> --format json` 发现空间；`orgSpace` 在 `nextToken` 非空时以 `--cursor <nextToken>` 续页，`mySpace` 固定单条且不分页。按后续命令取真实 spaceId 或 rootFolderId 后立即回到 Drive；已知这些 ID 时不做空间发现。
+- 当前命令需要定位空间且缺少目标 ID 时：先明确企业空间 `orgSpace` 或“我的文件”`mySpace`，用 `dws wiki space list --type <类型> --format json` 发现空间；`orgSpace` 在 `nextToken` 非空时以 `--cursor <nextToken>` 续页，`mySpace` 固定单条且不分页。按后续命令取真实 spaceId 或 rootFolderId 后立即回到 Drive；已知这些 ID 时不做空间发现。
 - 只有名称：`+search` → 唯一候选的 nodeId → 目标命令；不得自动选择第一项。
 - 只有文件夹层级：从最近的已知 folder ID 开始 `+list`，不要从根目录无界递归。
 - 上传普通文件：单条 `+upload`；知识库/文档空间目标显式加 `--workspace`，不要退回 upload-info + 手写 HTTP + commit。转换为在线文档走 Doc `+import`，插入正文附件走 Doc `+media-insert`。
@@ -88,6 +91,7 @@ metadata:
 - copy/move/rename/create-folder 检查 `ok/outcome` 和读回；`partial_success` 不是完成。
 - status 检查分类集合；pull/push/sync 检查 summary 和逐项结果，failed/unknown 必须保留。
 - 分页未结束时返回 continuation；目录树或大列表必须有最大深度、页数和条目数。
+- 同一查询续页时，若 nextCursor 重复且没有新增节点，停止继续翻页，保留已取得结果并报告分页未完成，不将重复结果计作新增。
 - 未知写入效果先 inspect/list 回读，不盲目重放写操作。
 
 ## 参数与安全边界
@@ -113,12 +117,12 @@ Golden Route 参数足够时禁止读取 reference。其余最多读取一个精
 
 ## 错误最短路径
 
-1. 零/多候选、类型不明或分页不完整：停止写入，返回候选或 continuation。
+1. 零/多候选、类型不明或分页不完整：停止写入，返回候选或 continuation；分页读取可在有效游标和预算内继续。
 2. `unknown flag`：只查一次当前 leaf Help；`unknown command`：只查一次 Drive shortcut 清单。
 3. 普通下载遇到在线文档类型：切 `doc +export`，不重复尝试 Drive download。
 4. 传输中断：保留本地临时状态或 checkpoint；先判断能否续传。
 5. 写入效果未知：按 nodeId 回读；无法证明时报告 unknown。
-6. 普通文件 `+copy` 被拒绝时不要重试或伪装成功；独立副本改走经用户授权的 download→upload。AITable 结构复制缺少或无法验证目标文件夹时停止，不猜 ID或创建测试文件夹。
+6. 已知是普通文件且需要独立副本时，直接按 Golden Route 的 download→upload 执行，不以 `+copy` 失败作为前置探测。若仍收到普通文件 copy 不支持的错误，不重试或宣称已完成；确认授权与目标后按副本规则继续。AITable 结构复制缺少或无法验证目标文件夹时停止，不猜 ID 或创建测试文件夹。
 
 ## 跨产品边界
 
