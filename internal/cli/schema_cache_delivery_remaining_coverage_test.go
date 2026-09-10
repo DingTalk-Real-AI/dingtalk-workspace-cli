@@ -211,6 +211,9 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 		t.Fatalf("payload header offset %d outside file %d", headerOff, len(body))
 	}
 	body[headerOff] ^= 0xff
+	// Drop the process-lifetime handle before truncating so Windows can
+	// WriteFile while another snapshot is still mapped elsewhere.
+	runtimeCache.resetPayloadsHandle()
 	if err := os.WriteFile(payloadPath, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +222,9 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 	}
 
 	runtimeCache.resetPayloadsHandle()
-	runtimeCache.options.Identity.Payload.EncodedSHA256 = sha256.Sum256([]byte("wrong-payload-leaf"))
+	poisonSchemaCacheIdentity(runtimeCache, func(identity *SchemaCacheIdentity) {
+		identity.Payload.EncodedSHA256 = sha256.Sum256([]byte("wrong-payload-leaf"))
+	})
 	if _, ok := runtimeCache.renderedCompactLeaf(canonical); ok {
 		t.Fatal("poisoned identity compact leaf succeeded")
 	}
@@ -412,7 +417,9 @@ func TestCrossPlatformCoverageSchemaCatalogRepairRecheckFailures(t *testing.T) {
 	runtimeCache, _, _ := publishCoverageSchemaRuntime(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	runtimeCache.metaOnce.Do(func() { runtimeCache.metaErr = errors.New("poison meta") })
-	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-for-repair"))
+	poisonSchemaCacheIdentity(runtimeCache, func(identity *SchemaCacheIdentity) {
+		identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-for-repair"))
+	})
 	assembleDeliverySchemaCatalogFn = func(*cobra.Command) (loadedSchemaCatalog, error) {
 		return loadedSchemaCatalog{}, errors.New("forced catalog err")
 	}

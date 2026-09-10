@@ -25,8 +25,14 @@ const (
 	aggregateBufferSize   = 128 << 10
 	lockfileExclusive     = 0x00000002
 	lockfileFailImmediate = 0x00000001
-	secureShareRead       = windows.FILE_SHARE_READ
-	secureShareLock       = windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE
+	// Readers keep process-lifetime handles. Windows cannot POSIX-rename over
+	// an open inode, so read handles must share write+delete:
+	//   - os.WriteFile (repair / corrupt-recovery) needs FILE_SHARE_WRITE
+	//   - Publish's MoveFileEx(REPLACE_EXISTING) needs FILE_SHARE_DELETE
+	// Readers re-stat + re-digest before serving; same-UID mutate is already
+	// in the threat model.
+	secureShareRead = windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE | windows.FILE_SHARE_DELETE
+	secureShareLock = windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE | windows.FILE_SHARE_DELETE
 )
 
 var (

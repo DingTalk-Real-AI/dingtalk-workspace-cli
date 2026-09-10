@@ -89,11 +89,7 @@ func TestCrossPlatformCoverageSchemaCacheDeliveryRemainder(t *testing.T) {
 		t.Fatal("compact leaf write was empty")
 	}
 
-	failOpen := &schemaCacheRuntime{
-		options:  SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}},
-		products: make(map[string]*schemaCacheProductLoad),
-		payloads: make(map[string]*schemaCachePayloadLoad),
-	}
+	failOpen := newSchemaCacheRuntime(SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}})
 	meta, err := runtimeCache.readMeta()
 	if err != nil {
 		t.Fatal(err)
@@ -102,12 +98,10 @@ func TestCrossPlatformCoverageSchemaCacheDeliveryRemainder(t *testing.T) {
 		t.Fatal("invalid edition queryPayload succeeded")
 	}
 
-	broken := &schemaCacheRuntime{
-		options:  SchemaCacheOptions{Identity: identity},
-		products: make(map[string]*schemaCacheProductLoad),
-		payloads: make(map[string]*schemaCachePayloadLoad),
-	}
-	broken.options.Identity.Registry.EncodedSHA256 = sha256.Sum256([]byte("wrong-registry-remainder"))
+	broken := newSchemaCacheRuntime(SchemaCacheOptions{Identity: identity})
+	brokenOpts := broken.optionsSnapshot()
+	brokenOpts.Identity.Registry.EncodedSHA256 = sha256.Sum256([]byte("wrong-registry-remainder"))
+	broken.storeOptions(brokenOpts)
 	broken.seedMeta(meta)
 	if _, err := broken.loadAllPayload(); err == nil {
 		t.Fatal("broken registry loadAllPayload succeeded")
@@ -129,7 +123,9 @@ func TestCrossPlatformCoverageSchemaCacheDeliveryRemainder(t *testing.T) {
 	if poisoned == nil {
 		t.Fatal("runtime missing before repair remainder")
 	}
-	poisoned.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-remainder"))
+	poisonSchemaCacheIdentity(poisoned, func(identity *SchemaCacheIdentity) {
+		identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-remainder"))
+	})
 	if _, err := deliverySchemaAllPayload(); err != nil {
 		t.Fatal(err)
 	}
@@ -275,19 +271,25 @@ func TestCrossPlatformCoverageSchemaCacheRepairLiveFallbacks(t *testing.T) {
 	}
 
 	runtimeCache = register()
-	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-hit"))
+	poisonSchemaCacheIdentity(runtimeCache, func(identity *SchemaCacheIdentity) {
+		identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-hit"))
+	})
 	if _, err := deliverySchemaAllPayload(); err != nil {
 		t.Fatal(err)
 	}
 
 	runtimeCache = register()
-	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-overview"))
+	poisonSchemaCacheIdentity(runtimeCache, func(identity *SchemaCacheIdentity) {
+		identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-overview"))
+	})
 	if _, err := deliverySchemaOverviewPayload(); err != nil {
 		t.Fatal(err)
 	}
 
 	runtimeCache = register()
-	runtimeCache.options.Identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-query"))
+	poisonSchemaCacheIdentity(runtimeCache, func(identity *SchemaCacheIdentity) {
+		identity.SourceSHA256 = sha256.Sum256([]byte("wrong-source-repair-query"))
+	})
 	if _, err := queryDeliverySchemaPayload([]string{"calendar event create"}); err != nil {
 		t.Fatal(err)
 	}

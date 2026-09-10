@@ -503,3 +503,59 @@ func TestCrossPlatformCoveragePortableFileOpen(t *testing.T) {
 		t.Fatalf("closed lock = %v", err)
 	}
 }
+
+func TestCrossPlatformCoveragePortableOpenAuthenticatesHeader(t *testing.T) {
+	UseMemoryOpenForTest(t)
+	cache, err := Open("open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+	identity := portableIdentity()
+	identity.EditionSHA256 = sha256.Sum256([]byte("open"))
+	meta := portableArtifact(KindMeta, []byte("meta-auth"))
+	reg := portableArtifact(KindRegistry, []byte("registry-auth"))
+	payloads := portableArtifact(KindPayloads, []byte("payload-auth"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	wrong := identity
+	wrong.SourceSHA256 = sha256.Sum256([]byte("wrong-source-open"))
+	if _, err := cache.OpenRegistry(wrong, reg.Expectation); err == nil {
+		t.Fatal("OpenRegistry authenticate mismatch accepted")
+	}
+	if _, err := cache.OpenPayloads(wrong, payloads.Expectation); err == nil {
+		t.Fatal("OpenPayloads authenticate mismatch accepted")
+	}
+
+	zeroIdentity := ExpectedIdentity{}
+	if err := zeroIdentity.Authenticate(Envelope{}, ArtifactExpectation{}); err == nil {
+		t.Fatal("zero identity Authenticate accepted")
+	}
+	validEnvelope := Envelope{
+		Kind: KindMeta, Serializer: SerializerProtobuf, Codec: CodecRaw,
+		FormatVersion: DTOFormatVersion, CatalogSnapshotVersion: 1,
+		EncodedLength: 1, DecodedLength: 1,
+		EditionSHA256: identity.EditionSHA256, SourceSHA256: identity.SourceSHA256,
+		SurfaceSHA256: identity.SurfaceSHA256, BuildID: identity.BuildID,
+		EncodedSHA256: sha256.Sum256([]byte("x")),
+	}
+	if err := validEnvelope.authenticate(ExpectedIdentity{}, meta.Expectation); err == nil {
+		t.Fatal("authenticate accepted a zero identity")
+	}
+	if err := validEnvelope.authenticate(identity, ArtifactExpectation{
+		Kind: KindRegistry, Serializer: SerializerProtobuf, Codec: CodecRaw,
+		FormatVersion: DTOFormatVersion, EncodedLength: 1, DecodedLength: 1,
+		EncodedSHA256: sha256.Sum256([]byte("x")),
+	}); err == nil {
+		t.Fatal("authenticate accepted a kind mismatch")
+	}
+	if err := meta.Expectation.validate(KindMeta); err != nil {
+		t.Fatal(err)
+	}
+	zeroDigest := meta.Expectation
+	zeroDigest.EncodedSHA256 = [32]byte{}
+	if err := zeroDigest.validate(KindMeta); err == nil {
+		t.Fatal("zero digest expectation accepted")
+	}
+}

@@ -339,6 +339,86 @@ type failRandomIO struct{ realUnixIO }
 
 func (failRandomIO) random([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
+func TestCrossPlatformCoverageUnixPayloadOpenAndStagingRetry(t *testing.T) {
+	existOnce := &existThenCreateIO{name: metaFileName}
+	cache, _, identity := openTestCache(t, existOnce)
+	meta := testArtifact(KindMeta, []byte("meta-payload-open"))
+	regPayload := make([]byte, aggregateBufferSize+8)
+	for i := range regPayload {
+		regPayload[i] = byte(i)
+	}
+	reg := testArtifact(KindRegistry, regPayload)
+	payloads := testArtifact(KindPayloads, []byte("payload-open-bytes"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	if existOnce.n.Load() < 1 {
+		t.Fatal("staging EEXIST retry was not exercised")
+	}
+	opened, err := cache.OpenPayloads(identity, payloads.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(payloads.Payload)
+	got, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: uint64(len(payloads.Payload)), SHA256: digest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(payloads.Payload) {
+		t.Fatalf("payload range = %q", got)
+	}
+	if err := opened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: digest}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed payload range = %v", err)
+	}
+	regHandle, err := cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := regHandle.ValidateAggregate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := regHandle.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Remove(filepath.Join(cache.Directory(), payloadFileName)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.OpenPayloads(identity, payloads.Expectation); err == nil {
+		t.Fatal("missing payloads OpenPayloads accepted")
+	}
+
+	permCache, _, permIdentity := openTestCache(t, failStagingOpenIO{})
+	if err := permCache.WriteArtifact(permIdentity, testArtifact(KindMeta, []byte("stage-perm"))); err == nil {
+		t.Fatal("non-EEXIST staging open accepted")
+	}
+}
+
+type existThenCreateIO struct {
+	realUnixIO
+	name string
+	n    atomic.Int32
+}
+
+func (e *existThenCreateIO) openat(dirfd int, path string, flags int, mode uint32) (int, error) {
+	if e.name != "" && len(path) > len(e.name)+1 && path[0] == '.' && path[1:1+len(e.name)] == e.name && e.n.Add(1) == 1 {
+		return -1, unix.EEXIST
+	}
+	return e.realUnixIO.openat(dirfd, path, flags, mode)
+}
+
+type failStagingOpenIO struct{ realUnixIO }
+
+func (failStagingOpenIO) openat(dirfd int, path string, flags int, mode uint32) (int, error) {
+	if len(path) > 0 && path[0] == '.' && len(path) > 4 && path[len(path)-4:] == ".tmp" {
+		return -1, unix.EPERM
+	}
+	return realUnixIO{}.openat(dirfd, path, flags, mode)
+}
+
 type failLockOpenIO struct{ realUnixIO }
 
 func (f failLockOpenIO) openat(dirfd int, path string, flags int, mode uint32) (int, error) {

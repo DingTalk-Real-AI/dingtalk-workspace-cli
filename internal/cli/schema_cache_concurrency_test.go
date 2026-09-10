@@ -140,9 +140,10 @@ func TestCrossPlatformCoverageSchemaCacheFastPathIdentityRequiresEligibleRuntime
 	if _, ok := SchemaCacheFastPathIdentity(); ok {
 		t.Fatal("disabled cache exposed a fast-path identity")
 	}
+	pending := SchemaCacheOptions{Enabled: true, AllowGenerate: true, Edition: "open"}
 	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{
-		options: SchemaCacheOptions{Enabled: true, AllowGenerate: true, Edition: "open"},
-		runtime: &schemaCacheRuntime{options: SchemaCacheOptions{Enabled: true, AllowGenerate: true, Edition: "open"}},
+		options: pending,
+		runtime: newSchemaCacheRuntime(pending),
 	})
 	if _, ok := SchemaCacheFastPathIdentity(); ok {
 		t.Fatal("generate-pending identity must not be a fast-path authority")
@@ -159,11 +160,108 @@ func TestCrossPlatformCoverageSchemaCacheFastPathIdentityRequiresEligibleRuntime
 	}
 }
 
+func TestCrossPlatformCoverageSchemaCacheAdoptGeneratedIdentityRace(t *testing.T) {
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	ensureSchemaCacheOpenable(t)
+	coverageSchemaCacheHome(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open",
+		GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runtimeCache := activeSchemaCacheRuntime()
+	if runtimeCache == nil {
+		t.Fatal("allow-generate runtime missing")
+	}
+	if snap := runtimeCache.optionsSnapshot(); !snap.AllowGenerate || schemaCacheIdentityReady(snap.Identity) {
+		t.Fatal("expected generate-pending snapshot")
+	}
+	if _, ok := SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("generate-pending identity must not be a fast-path authority")
+	}
+
+	empty := &schemaCacheRuntime{}
+	if snap := empty.optionsSnapshot(); snap.Enabled || snap.AllowGenerate || snap.Edition != "" {
+		t.Fatalf("nil options snapshot = %#v", snap)
+	}
+	if edition := empty.cacheEdition(); edition != "open" {
+		t.Fatalf("nil snapshot edition = %q", edition)
+	}
+
+	generated := coverageSchemaCacheIdentity()
+	unregistered := newSchemaCacheRuntime(SchemaCacheOptions{AllowGenerate: true, Edition: "open"})
+	unregistered.adoptGeneratedIdentity(generated)
+	if snap := unregistered.optionsSnapshot(); !schemaCacheIdentityReady(snap.Identity) || snap.AllowGenerate || snap.Edition != generated.Edition {
+		t.Fatalf("unregistered adopt snapshot = %#v", snap)
+	}
+
+	var wait sync.WaitGroup
+	start := make(chan struct{})
+	for range 8 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			for i := 0; i < 32; i++ {
+				runtimeCache.adoptGeneratedIdentity(generated)
+			}
+		}()
+	}
+	for range 8 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			for i := 0; i < 32; i++ {
+				_, _ = SchemaCacheFastPathIdentity()
+				PrewarmSchemaCache()
+				opts := runtimeCache.optionsSnapshot()
+				_ = schemaCacheIdentityReady(opts.Identity)
+				_ = runtimeCache.cacheEdition()
+				_ = runtimeCache.trustedHashes()
+				if i == 0 {
+					_, _ = runtimeCache.loadPayloadIndex()
+					_, _ = runtimeCache.payloadsHandle()
+				}
+				if registration := schemaCacheRegistrationValue.Load(); registration != nil {
+					_ = registration.options.Identity
+					_ = registration.options.AllowGenerate
+					_ = registration.options.Edition
+				}
+			}
+		}()
+	}
+	wait.Add(2)
+	go func() {
+		defer wait.Done()
+		<-start
+		_, _ = ResolveMeta("calendar event create")
+	}()
+	go func() {
+		defer wait.Done()
+		<-start
+		_, _ = DeliverySchemaOverviewPayloadForTest()
+	}()
+	close(start)
+	wait.Wait()
+	identity, ok := SchemaCacheFastPathIdentity()
+	if !ok || !schemaCacheIdentityReady(identity) {
+		t.Fatalf("adopted identity = %#v, ok=%v", identity, ok)
+	}
+	if snap := runtimeCache.optionsSnapshot(); snap.AllowGenerate {
+		t.Fatalf("AllowGenerate remained true after adopt: %#v", snap)
+	}
+}
+
 func TestCrossPlatformCoverageSchemaSourceRegistrationClearsCache(t *testing.T) {
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	defer schemaCacheRegistrationValue.Store(&schemaCacheRegistration{})
 	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{
-		options: SchemaCacheOptions{Enabled: true}, runtime: &schemaCacheRuntime{},
+		options: SchemaCacheOptions{Enabled: true},
+		runtime: newSchemaCacheRuntime(SchemaCacheOptions{Enabled: true}),
 	})
 	RegisterSchemaSourceRoot(nil)
 	if activeSchemaCacheRuntime() != nil {

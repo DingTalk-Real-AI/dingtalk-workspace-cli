@@ -35,6 +35,12 @@ func coverageCacheGOOSARCH() (string, string) {
 	return "linux", "amd64"
 }
 
+func poisonSchemaCacheIdentity(r *schemaCacheRuntime, mutate func(*SchemaCacheIdentity)) {
+	opts := r.optionsSnapshot()
+	mutate(&opts.Identity)
+	r.storeOptions(opts)
+}
+
 func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing.T) {
 	t.Cleanup(func() {
 		_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
@@ -42,6 +48,12 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 	})
 	identity := coverageSchemaCacheIdentity()
 	goos, goarch := coverageCacheGOOSARCH()
+	disabled := newSchemaCacheRuntime(SchemaCacheOptions{})
+	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{runtime: disabled})
+	if activeSchemaCacheRuntime() != nil {
+		t.Fatal("disabled snapshot remained active")
+	}
+	PrewarmSchemaCache()
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{Enabled: true, Identity: identity}); err != nil {
 		if schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 			t.Fatalf("empty GOOS/GOARCH fill: %v", err)
@@ -97,11 +109,7 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing
 }
 
 func TestCrossPlatformCoverageSchemaCacheRuntimeOpenedFailures(t *testing.T) {
-	r := &schemaCacheRuntime{
-		options:  SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}},
-		products: make(map[string]*schemaCacheProductLoad),
-		payloads: make(map[string]*schemaCachePayloadLoad),
-	}
+	r := newSchemaCacheRuntime(SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}})
 	if _, err := r.readMeta(); err == nil {
 		t.Fatal("invalid edition readMeta succeeded")
 	}
@@ -593,11 +601,7 @@ func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
 
 	brokenIdentity := identity
 	brokenIdentity.Payload.EncodedSHA256 = sha256.Sum256([]byte("wrong-payload"))
-	broken := &schemaCacheRuntime{
-		options:  SchemaCacheOptions{Identity: brokenIdentity},
-		products: make(map[string]*schemaCacheProductLoad),
-		payloads: make(map[string]*schemaCachePayloadLoad),
-	}
+	broken := newSchemaCacheRuntime(SchemaCacheOptions{Identity: brokenIdentity})
 	if _, err := broken.payloadsHandle(); err == nil {
 		t.Fatal("mismatched payload identity opened")
 	}
@@ -609,22 +613,14 @@ func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
 	}
 	brokenRegistry := identity
 	brokenRegistry.Registry.EncodedSHA256 = sha256.Sum256([]byte("wrong-registry"))
-	brokenReg := &schemaCacheRuntime{
-		options:  SchemaCacheOptions{Identity: brokenRegistry},
-		products: make(map[string]*schemaCacheProductLoad),
-		payloads: make(map[string]*schemaCachePayloadLoad),
-	}
+	brokenReg := newSchemaCacheRuntime(SchemaCacheOptions{Identity: brokenRegistry})
 	if _, err := brokenReg.readAllPayload(meta, false); err == nil {
 		t.Fatal("mismatched registry identity readAll succeeded")
 	}
 
 	RegisterSchemaSourceRoot(nil)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
-	failOpen := &schemaCacheRuntime{
-		options:  SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}},
-		products: make(map[string]*schemaCacheProductLoad),
-		payloads: make(map[string]*schemaCachePayloadLoad),
-	}
+	failOpen := newSchemaCacheRuntime(SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "!!!invalid"}})
 	if _, _, err := repairSchemaCache(failOpen, func() (any, error) { return nil, errors.New("recheck") }); err == nil {
 		t.Fatal("nil source root repair succeeded")
 	}

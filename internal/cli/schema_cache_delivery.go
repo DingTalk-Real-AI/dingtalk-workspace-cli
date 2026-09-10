@@ -102,7 +102,7 @@ func RegisterSchemaCacheOptions(options SchemaCacheOptions) error {
 	if options.LockTimeout == 0 {
 		options.LockTimeout = defaultSchemaCacheLockTimeout
 	}
-	r := &schemaCacheRuntime{options: options, products: make(map[string]*schemaCacheProductLoad), payloads: make(map[string]*schemaCachePayloadLoad)}
+	r := newSchemaCacheRuntime(options)
 	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{options: options, runtime: r})
 	return nil
 }
@@ -118,10 +118,14 @@ func MarkSchemaCacheRuntimeUncertain() { schemaCacheRuntimeUncertain.Store(true)
 func SchemaCacheFastPathIdentity() (SchemaCacheIdentity, bool) {
 	auditSchemaDeliveryAccess("fast path identity")
 	runtime := activeSchemaCacheRuntime()
-	if runtime == nil || !schemaCacheIdentityReady(runtime.options.Identity) {
+	if runtime == nil {
 		return SchemaCacheIdentity{}, false
 	}
-	return runtime.options.Identity, true
+	identity := runtime.optionsSnapshot().Identity
+	if !schemaCacheIdentityReady(identity) {
+		return SchemaCacheIdentity{}, false
+	}
+	return identity, true
 }
 
 func schemaCacheSupportedTarget(goos, goarch string) bool {
@@ -146,17 +150,21 @@ func validateSchemaCacheOptions(options SchemaCacheOptions) error {
 
 func activeSchemaCacheRuntime() *schemaCacheRuntime {
 	registration := schemaCacheRegistrationValue.Load()
-	if registration == nil || registration.runtime == nil || !registration.options.Enabled || schemaCacheRuntimeUncertain.Load() {
+	if registration == nil || registration.runtime == nil || schemaCacheRuntimeUncertain.Load() {
 		return nil
 	}
-	if eligible := registration.options.RuntimeEligible; eligible != nil && !eligible() {
+	opts := registration.runtime.optionsSnapshot()
+	if !opts.Enabled {
+		return nil
+	}
+	if eligible := opts.RuntimeEligible; eligible != nil && !eligible() {
 		return nil
 	}
 	return registration.runtime
 }
 
 type schemaCacheRuntime struct {
-	options   SchemaCacheOptions
+	options   atomic.Pointer[SchemaCacheOptions]
 	openOnce  sync.Once
 	cache     *schemacache.Cache
 	openErr   error
@@ -190,6 +198,27 @@ type schemaCacheRuntime struct {
 	freshAll        map[string]any
 }
 
+func newSchemaCacheRuntime(options SchemaCacheOptions) *schemaCacheRuntime {
+	r := &schemaCacheRuntime{
+		products: make(map[string]*schemaCacheProductLoad),
+		payloads: make(map[string]*schemaCachePayloadLoad),
+	}
+	r.storeOptions(options)
+	return r
+}
+
+func (r *schemaCacheRuntime) storeOptions(options SchemaCacheOptions) {
+	snapshot := options
+	r.options.Store(&snapshot)
+}
+
+func (r *schemaCacheRuntime) optionsSnapshot() SchemaCacheOptions {
+	if snapshot := r.options.Load(); snapshot != nil {
+		return *snapshot
+	}
+	return SchemaCacheOptions{}
+}
+
 // schemaCachePrewarm is the result of the speculative read-only cache probe
 // started while Cobra builds and parses. It never creates directories.
 type schemaCachePrewarm struct {
@@ -205,14 +234,18 @@ type schemaCachePrewarm struct {
 // The probe opens noCreate: a missing cache is left for the synchronous path.
 func PrewarmSchemaCache() {
 	registration := schemaCacheRegistrationValue.Load()
-	if registration == nil || registration.runtime == nil || !registration.options.Enabled || schemaCacheRuntimeUncertain.Load() {
-		return
-	}
-	if eligible := registration.options.RuntimeEligible; eligible != nil && !eligible() {
+	if registration == nil || registration.runtime == nil || schemaCacheRuntimeUncertain.Load() {
 		return
 	}
 	r := registration.runtime
-	if !schemaCacheIdentityReady(r.options.Identity) {
+	opts := r.optionsSnapshot()
+	if !opts.Enabled {
+		return
+	}
+	if eligible := opts.RuntimeEligible; eligible != nil && !eligible() {
+		return
+	}
+	if !schemaCacheIdentityReady(opts.Identity) {
 		return
 	}
 	pw := &schemaCachePrewarm{done: make(chan struct{})}
@@ -222,15 +255,15 @@ func PrewarmSchemaCache() {
 	go func() {
 		defer close(pw.done)
 		options := []schemacache.Option{schemacache.WithNoCreate()}
-		if r.options.Counters != nil {
-			options = append(options, schemacache.WithCounters(r.options.Counters))
+		if opts.Counters != nil {
+			options = append(options, schemacache.WithCounters(opts.Counters))
 		}
-		cache, err := schemacache.Open(r.cacheEdition(), options...)
+		cache, err := schemacache.Open(opts.cacheEdition(), options...)
 		if err != nil {
 			pw.indexErr = err
 			return
 		}
-		index, err := schemareader.ReadPayloadIndex(cache, r.options.Identity)
+		index, err := schemareader.ReadPayloadIndex(cache, opts.Identity)
 		if err != nil {
 			_ = cache.Close()
 			pw.indexErr = err
@@ -238,7 +271,7 @@ func PrewarmSchemaCache() {
 		}
 		pw.cache, pw.index = cache, index
 		// The handle is a bonus: a failure leaves the synchronous open in charge.
-		if payloads, handleErr := cache.OpenPayloads(r.options.Identity.ExpectedIdentity(), r.options.Identity.Payload); handleErr == nil {
+		if payloads, handleErr := cache.OpenPayloads(opts.Identity.ExpectedIdentity(), opts.Identity.Payload); handleErr == nil {
 			pw.payloads = payloads
 		}
 	}()
@@ -257,18 +290,18 @@ type schemaCachePayloadLoad struct {
 	err      error
 }
 
-func (r *schemaCacheRuntime) cacheEdition() string { return r.options.cacheEdition() }
+func (r *schemaCacheRuntime) cacheEdition() string { return r.optionsSnapshot().cacheEdition() }
 
 func (r *schemaCacheRuntime) adoptGeneratedIdentity(identity SchemaCacheIdentity) {
-	r.options.Identity = identity
-	r.options.AllowGenerate = false
-	r.options.Edition = identity.Edition
+	updated := r.optionsSnapshot()
+	updated.Identity = identity
+	updated.AllowGenerate = false
+	updated.Edition = identity.Edition
+	r.storeOptions(updated)
 	if registration := schemaCacheRegistrationValue.Load(); registration != nil && registration.runtime == r {
-		updated := *registration
-		updated.options.Identity = identity
-		updated.options.AllowGenerate = false
-		updated.options.Edition = identity.Edition
-		schemaCacheRegistrationValue.Store(&updated)
+		next := *registration
+		next.options = updated
+		schemaCacheRegistrationValue.Store(&next)
 	}
 }
 
@@ -286,11 +319,12 @@ func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
 		return pw.cache, nil
 	}
 	r.openOnce.Do(func() {
+		opts := r.optionsSnapshot()
 		options := []schemacache.Option{}
-		if r.options.Counters != nil {
-			options = append(options, schemacache.WithCounters(r.options.Counters))
+		if opts.Counters != nil {
+			options = append(options, schemacache.WithCounters(opts.Counters))
 		}
-		r.cache, r.openErr = schemacache.Open(r.cacheEdition(), options...)
+		r.cache, r.openErr = schemacache.Open(opts.cacheEdition(), options...)
 	})
 	return r.cache, r.openErr
 }
@@ -300,7 +334,7 @@ func (r *schemaCacheRuntime) readMeta() (schemaruntime.DecodedSchemaMeta, error)
 	if err != nil {
 		return schemaruntime.DecodedSchemaMeta{}, err
 	}
-	return schemareader.ReadMeta(cache, r.options.Identity)
+	return schemareader.ReadMeta(cache, r.optionsSnapshot().Identity)
 }
 
 func (r *schemaCacheRuntime) loadMeta() (schemaruntime.DecodedSchemaMeta, error) {
@@ -324,7 +358,7 @@ func (r *schemaCacheRuntime) readPayloadIndex() (schemaruntime.DecodedSchemaPayl
 	if err != nil {
 		return schemaruntime.DecodedSchemaPayloadIndex{}, err
 	}
-	return schemareader.ReadPayloadIndex(cache, r.options.Identity)
+	return schemareader.ReadPayloadIndex(cache, r.optionsSnapshot().Identity)
 }
 
 func (r *schemaCacheRuntime) loadPayloadIndex() (schemaruntime.DecodedSchemaPayloadIndex, error) {
@@ -354,7 +388,7 @@ func (r *schemaCacheRuntime) readProduct(meta schemaruntime.DecodedSchemaMeta, p
 	if err != nil {
 		return schemaruntime.DecodedSchemaProduct{}, err
 	}
-	return schemareader.ReadProduct(cache, r.options.Identity, meta, productID)
+	return schemareader.ReadProduct(cache, r.optionsSnapshot().Identity, meta, productID)
 }
 
 func (r *schemaCacheRuntime) loadProduct(meta schemaruntime.DecodedSchemaMeta, productID string) (schemaruntime.DecodedSchemaProduct, error) {
@@ -389,7 +423,8 @@ func (r *schemaCacheRuntime) payloadsHandle() (*schemacache.Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	handle, err := cache.OpenPayloads(r.options.Identity.ExpectedIdentity(), r.options.Identity.Payload)
+	identity := r.optionsSnapshot().Identity
+	handle, err := cache.OpenPayloads(identity.ExpectedIdentity(), identity.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +454,7 @@ func (r *schemaCacheRuntime) readCommandPayload(index schemaruntime.DecodedSchem
 	if err != nil {
 		return schemaruntime.DecodedCommandPayloads{}, err
 	}
-	return schemareader.ReadCommandPayloadRange(handle, r.options.Identity, index, productID)
+	return schemareader.ReadCommandPayloadRange(handle, r.optionsSnapshot().Identity, index, productID)
 }
 
 // loadCommandPayload caches only a success. A failed read during a concurrent
@@ -487,7 +522,7 @@ func (r *schemaCacheRuntime) readCommandMetaFromPayloadFresh(cliPath string) (an
 		return resolvedMeta{OK: false}, nil
 	}
 	cache, _ := r.opened()
-	payloads, err := schemareader.ReadCommandPayload(cache, r.options.Identity, index, productID)
+	payloads, err := schemareader.ReadCommandPayload(cache, r.optionsSnapshot().Identity, index, productID)
 	if err != nil {
 		return nil, fmt.Errorf("read command payload for %q: %w", cliPath, err)
 	}
@@ -537,13 +572,14 @@ func (r *schemaCacheRuntime) readRenderedLeaf(index schemaruntime.DecodedSchemaP
 	if err != nil {
 		return nil, err
 	}
-	return schemareader.ReadRenderedLeafRange(handle, r.options.Identity, index, productID, ref)
+	return schemareader.ReadRenderedLeafRange(handle, r.optionsSnapshot().Identity, index, productID, ref)
 }
 
 func (r *schemaCacheRuntime) trustedHashes() schemaruntime.TrustedHashes {
+	identity := r.optionsSnapshot().Identity
 	return schemaruntime.TrustedHashes{
-		CatalogHash: "sha256:" + hex.EncodeToString(r.options.Identity.SourceSHA256[:]),
-		SurfaceHash: "sha256:" + hex.EncodeToString(r.options.Identity.SurfaceSHA256[:]),
+		CatalogHash: "sha256:" + hex.EncodeToString(identity.SourceSHA256[:]),
+		SurfaceHash: "sha256:" + hex.EncodeToString(identity.SurfaceSHA256[:]),
 	}
 }
 
@@ -622,7 +658,8 @@ func (r *schemaCacheRuntime) readAllPayload(meta schemaruntime.DecodedSchemaMeta
 	if err != nil {
 		return nil, err
 	}
-	registryFile, err := cache.OpenRegistry(r.options.Identity.ExpectedIdentity(), r.options.Identity.Registry)
+	identity := r.optionsSnapshot().Identity
+	registryFile, err := cache.OpenRegistry(identity.ExpectedIdentity(), identity.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +761,7 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 	}
 	cache, openErr := r.opened()
 	if openErr == nil {
-		lock, lockErr := cache.AcquireLock(context.Background(), r.options.LockTimeout)
+		lock, lockErr := cache.AcquireLock(context.Background(), r.optionsSnapshot().LockTimeout)
 		if lockErr == nil {
 			defer lock.Release()
 			// The shared handle may reference an inode another process
@@ -758,7 +795,7 @@ func (r *schemaCacheRuntime) publishGeneratedOrMatching(cache *schemacache.Cache
 	if err != nil {
 		return
 	}
-	identity := r.options.Identity
+	identity := r.optionsSnapshot().Identity
 	if !artifacts.match(identity) {
 		generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
 		if genErr != nil {

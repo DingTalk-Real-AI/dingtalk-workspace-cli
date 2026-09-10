@@ -236,7 +236,7 @@ func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T)
 	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
-	r := &schemaCacheRuntime{options: SchemaCacheOptions{AllowGenerate: true, Edition: "open"}}
+	r := newSchemaCacheRuntime(SchemaCacheOptions{AllowGenerate: true, Edition: "open"})
 	r.publishGeneratedOrMatching(nil, loadedSchemaCatalog{})
 	r.publishGeneratedOrMatching(&schemacache.Cache{}, loadedSchemaCatalog{})
 
@@ -260,11 +260,13 @@ func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T)
 	}
 	t.Cleanup(func() { _ = cache.Close() })
 	registered.publishGeneratedOrMatching(cache, loaded)
-	if !schemaCacheIdentityReady(registered.options.Identity) {
+	if !schemaCacheIdentityReady(registered.optionsSnapshot().Identity) {
 		t.Fatal("generated identity was not adopted")
 	}
 
-	r.options.Edition = "NOT VALID"
+	invalid := r.optionsSnapshot()
+	invalid.Edition = "NOT VALID"
+	r.storeOptions(invalid)
 	r.publishGeneratedOrMatching(cache, loaded)
 
 	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)
@@ -274,7 +276,9 @@ func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T)
 	matching := coverageIdentityFromArtifacts(t, artifacts)
 	matching.Edition = ""
 	matching.BuildID = [sha256.Size]byte{}
-	r.options.Identity = matching
+	matched := r.optionsSnapshot()
+	matched.Identity = matching
+	r.storeOptions(matched)
 	r.publishGeneratedOrMatching(cache, loaded)
 }
 
