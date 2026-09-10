@@ -429,15 +429,15 @@ func boolField(data map[string]any, keys ...string) (bool, bool) {
 var Upload = shortcut.Shortcut{
 	Service: "drive", Command: "+upload", Product: "drive",
 	Description: "从工作目录上传普通文件到钉盘或文档空间并读回验证",
-	Intent:      "把工作目录内普通文件上传到钉盘，或用 --workspace 上传为知识库/文档空间中的独立文件节点，并验证远端节点 ID、名称和目标空间；服务端提供大小时同时校验大小。",
+	Intent:      "把工作目录内普通文件上传到钉盘，或用 --workspace 上传为知识库/文档空间中的独立文件节点，并验证远端节点 ID、最终名称和目标空间；普通钉盘新建上传发生重名时，以服务端自动重命名后的实际名称成功返回；服务端提供大小时同时校验大小。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: driveContract(
 		"+upload", "从工作目录上传普通文件到钉盘或文档空间并读回验证",
-		"把工作目录内普通文件上传到钉盘，或用 --workspace 上传为知识库/文档空间中的独立文件节点，并验证远端节点 ID、名称和目标空间；服务端提供大小时同时校验大小。",
+		"把工作目录内普通文件上传到钉盘，或用 --workspace 上传为知识库/文档空间中的独立文件节点，并验证远端节点 ID、最终名称和目标空间；普通钉盘新建上传发生重名时，以服务端自动重命名后的实际名称成功返回；服务端提供大小时同时校验大小。",
 		[]string{"在线文档导入转换使用 doc +import；作为在线文档正文附件使用 doc +media-insert；--space-id 与 --workspace 属于不同目标域，不可同时使用；--mime-type 仅适用于钉盘上传，不能与 --workspace 同时使用；覆盖已有文件必须显式 --node"},
 		[]string{`dws drive +upload --file report.pdf`, `dws drive +upload --file notes.txt --workspace <workspaceId>`},
-		driveObjectResult("上传并读回验证后的远端文件"), nil,
+		driveObjectResult("上传并读回验证后的远端文件或只读预览"), nil,
 		contract.ParamDecl{Name: "workspace", Property: "workspaceId"},
 		contract.ParamDecl{Name: "folder", Property: "parentId"},
 		contract.ParamDecl{Name: "node", Property: "overwriteFileId"},
@@ -550,7 +550,20 @@ var Upload = shortcut.Shortcut{
 				return driveResponseError(operation, "readback_workspace_mismatch", fmt.Sprintf("上传后读回 workspaceId %q 与请求 %q 不一致", remoteWorkspaceID, workspaceID))
 			}
 		}
-		if remoteName := firstString(verified, "name", "fileName"); !driveReadbackNameMatches(verified, name) {
+		remoteName := driveReadbackName(verified)
+		if remoteName == "" {
+			return driveCommittedWriteMismatch(
+				operation,
+				"readback_missing_name",
+				"上传后读回缺少完整文件名称；无法确定服务端最终名称",
+				nodeID,
+				name,
+				"",
+				verified,
+			)
+		}
+		renamed := remoteName != name
+		if renamed && (workspaceID != "" || rt.Str("node") != "") {
 			return driveCommittedWriteMismatch(
 				operation,
 				"readback_mismatch",
@@ -568,7 +581,15 @@ var Upload = shortcut.Shortcut{
 		if hasRemoteSize && remoteSize != info.Size() {
 			return driveResponseError(operation, "readback_size_mismatch", fmt.Sprintf("上传后读回大小 %d 与本地文件大小 %d 不一致", remoteSize, info.Size()))
 		}
-		out := map[string]any{"success": true, "nodeId": nodeID, "sizeBytes": info.Size(), "file": verified}
+		out := map[string]any{
+			"success":       true,
+			"nodeId":        nodeID,
+			"sizeBytes":     info.Size(),
+			"requestedName": name,
+			"actualName":    remoteName,
+			"renamed":       renamed,
+			"file":          verified,
+		}
 		if spaceID := rt.Str("space-id"); spaceID != "" {
 			out["spaceId"] = spaceID
 		}
