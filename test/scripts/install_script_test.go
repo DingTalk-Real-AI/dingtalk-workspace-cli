@@ -314,7 +314,7 @@ mkdir -p "$dir"
 printf x >"$dir/meta.cache"
 printf x >"$dir/registry.shards.cache"
 printf x >"$dir/payloads.shards.cache"
-printf '{}' >"$dir/identity.test.json"
+printf '{}' >"$dir/identity.json"
 `)
 		harness := string(scriptData[:cut]) + `
 detect_os() { printf '%s\n' linux; }
@@ -336,6 +336,43 @@ build_shared_schema_cache
 			t.Fatalf("populated write did not claim success:\n%s", text)
 		}
 	})
+
+	t.Run("fingerprint leftover is not success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		writeFakeBinary(t, binDir, "dws-test", `#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.legacyfp.json"
+`)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("legacy fingerprint installer: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("legacy fingerprint sidecar claimed shared cache success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not written") {
+			t.Fatalf("legacy fingerprint sidecar missing skip warning:\n%s", text)
+		}
+	})
 }
 
 func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
@@ -353,7 +390,7 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 		"function Build-SharedSchemaCache",
 		"DWS_SCHEMA_CACHE_DIR",
 		"schema --all",
-		"identity.*.json",
+		"identity.json",
 		"meta.cache",
 		"registry.shards.cache",
 		"payloads.shards.cache",
@@ -487,7 +524,7 @@ func main() {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		os.Exit(1)
 	}
-	for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.test.json"} {
+	for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.json"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
 			os.Exit(1)
 		}
@@ -508,21 +545,31 @@ $BinName = "dws"
 		root := t.TempDir()
 		empty := filepath.Join(root, "empty")
 		full := filepath.Join(root, "full", "dws", "schema", "open", "v1")
+		legacy := filepath.Join(root, "legacy", "dws", "schema", "open", "v1")
 		if err := os.MkdirAll(empty, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.MkdirAll(full, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.MkdirAll(legacy, 0o755); err != nil {
+			t.Fatal(err)
+		}
 		mustWriteFile(t, filepath.Join(full, "meta.cache"), []byte("x"), 0o600)
 		mustWriteFile(t, filepath.Join(full, "registry.shards.cache"), []byte("x"), 0o600)
 		mustWriteFile(t, filepath.Join(full, "payloads.shards.cache"), []byte("x"), 0o600)
-		mustWriteFile(t, filepath.Join(full, "identity.test.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "meta.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "registry.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "payloads.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(legacy, "identity.legacyfp.json"), []byte("{}"), 0o600)
 		harness := prefix + `
 $empty = Test-SchemaCacheArtifactsPresent -Dir "` + empty + `"
 $full = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full") + `"
+$legacy = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "legacy") + `"
 if ($empty) { Write-Output "EMPTY_TRUE"; exit 1 }
 if (-not $full) { Write-Output "FULL_FALSE"; exit 1 }
+if ($legacy) { Write-Output "LEGACY_TRUE"; exit 1 }
 Write-Output "ARTIFACT_HELPER_OK"
 `
 		harnessPath := filepath.Join(root, "artifact-helper.ps1")

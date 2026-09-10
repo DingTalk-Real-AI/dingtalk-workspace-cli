@@ -22,6 +22,7 @@ func TestCrossPlatformCoverageSignalLifecycle(t *testing.T) {
 			ctx, state, stop := Manage(context.Background(), nil, signals,
 				func() { stopped++ }, func(value os.Signal) { escalated <- value })
 			t.Cleanup(stop)
+			signals <- nil
 			signals <- sig
 			select {
 			case <-ctx.Done():
@@ -80,6 +81,10 @@ func TestCrossPlatformCoverageSignalRedeliverExitCodesAndDetail(t *testing.T) {
 		t.Fatalf("live process Redeliver exit = %d", exited)
 	}
 
+	plain := NewInterruption(os.Interrupt)
+	if !strings.Contains(plain.Error(), "interrupted") || strings.Contains(plain.Error(), ":") {
+		t.Fatalf("plain interruption error = %q", plain.Error())
+	}
 	interrupt := NewInterruption(os.Interrupt)
 	if interrupt.Subtype() != "cancelled_by_user" || interrupt.Unwrap() != context.Canceled {
 		t.Fatalf("interrupt interruption: %#v", interrupt)

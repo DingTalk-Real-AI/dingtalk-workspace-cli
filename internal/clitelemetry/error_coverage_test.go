@@ -1,3 +1,6 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+
 package clitelemetry
 
 import (
@@ -9,61 +12,86 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 )
 
-func TestCrossPlatformCoverageErrorSummaryAndSanitize(t *testing.T) {
+func TestCrossPlatformCoverageErrorSummarySanitizeAndConfig(t *testing.T) {
 	if ErrorSummary(nil) != "" {
-		t.Fatal("nil error")
+		t.Fatal("nil error summary")
 	}
-	if ErrorSummary(&apperrors.PATError{}) != "permission error" {
-		t.Fatal("PATError")
+	if got := ErrorSummary(&apperrors.PATError{RawJSON: "{}"}); got != "permission error" {
+		t.Fatalf("pat = %q", got)
 	}
-	if ErrorSummary(rawStderrStub{}) != "raw stderr error" {
-		t.Fatal("RawStderrError")
+	if got := ErrorSummary(coverageRawStderr("raw")); got != "raw stderr error" {
+		t.Fatalf("raw stderr = %q", got)
 	}
-	if ErrorSummary(errors.New("unknown command foo")) != "unknown command" {
-		t.Fatal("unknown command")
+	if got := ErrorSummary(errors.New("unknown command \"foo\"")); got != "unknown command" {
+		t.Fatalf("unknown command = %q", got)
 	}
 	if got := ErrorSummary(errors.New("unknown flag: --weird-flag")); got != "unknown flag: --weird-flag" {
 		t.Fatalf("unknown flag = %q", got)
 	}
-	got := ErrorSummary(errors.New(`bearer abcdef Authorization: secret --token xyz https://example.com {"a":1} '/tmp/x' C:\Windows\a ./rel/path user@ex.com +1 555 123 4567 abcdefghijklmnop12`))
-	if got == "" || strings.Contains(got, "https://") || strings.Contains(got, "bearer ") {
-		t.Fatalf("sanitize = %q", got)
-	}
 	display, summary := PanicMessages("boom")
-	if display == "" || summary != "internal panic" {
-		t.Fatalf("panic = %q %q", display, summary)
+	if !strings.Contains(display, "boom") || summary != "internal panic" {
+		t.Fatalf("panic messages = %q %q", display, summary)
 	}
-	if TruncateText("abc", 0) != "" || TruncateText("abc", 3) != "abc" || TruncateText("abcd", 3) != "abc" {
-		t.Fatal("truncate short")
+	if TruncateText("abc", 0) != "" {
+		t.Fatal("zero max")
 	}
-	if !strings.HasSuffix(TruncateText(strings.Repeat("x", 10), 6), "...") {
-		t.Fatal("truncate ellipsis")
+	if TruncateText("ab", 5) != "ab" {
+		t.Fatal("short text")
+	}
+	if got := TruncateText("abcd", 3); got != "abc" {
+		t.Fatalf("tiny max = %q", got)
+	}
+	if got := TruncateText("abcdefghij", 7); !strings.HasSuffix(got, "...") {
+		t.Fatalf("ellipsis = %q", got)
+	}
+
+	sanitized := SanitizeErrorText(`Bearer abcdef Bearer tok --token hunter2 authorization: secretval https://example.test/path {"k":1} 'quoted' "also" ` + "`tick`" + ` ~/secret/file C:\Windows\Temp ../rel/path user@example.com +1 415 555 1212 abcdefghijklmnop12`)
+	for _, leak := range []string{"hunter2", "secretval", "example.test", "quoted", "Windows", "user@example.com"} {
+		if strings.Contains(sanitized, leak) {
+			t.Fatalf("sanitize leaked %q in %q", leak, sanitized)
+		}
+	}
+	if !strings.Contains(SanitizeErrorText(`token `+strings.Repeat("a", 20)), strings.Repeat("a", 20)) {
+		t.Fatal("letters-only opaque token should stay")
+	}
+	if got := ErrorSummary(errors.New(`failed --access-token=xyz https://h/a`)); strings.Contains(got, "xyz") || strings.Contains(got, "https") {
+		t.Fatalf("sanitized summary leaked: %q", got)
+	}
+	escaped := SanitizeErrorText(`prefix "inner\"still" tail`)
+	if !strings.Contains(escaped, "<redacted>") {
+		t.Fatalf("escaped quote = %q", escaped)
 	}
 	_ = redactTelemetryQuotedText(`ok 'a\'b' "c\"d" ` + "`e`")
-}
 
-func TestCrossPlatformCoverageConfigurationExtraFields(t *testing.T) {
 	if IdentityFromProfile(nil) != (Identity{}) {
 		t.Fatal("nil profile identity")
 	}
-	cmd := "schema list"
-	errMsg := "boom"
-	cfg := Configuration("1.0", Identity{UserID: "u", UserName: "n", CorpID: "c"}, &cmd, &errMsg)
+	if got := IdentityFromProfile(&profilemetadata.ProfileMetadata{UserID: " u ", UserName: " n ", CorpID: " c "}); got != (Identity{UserID: "u", UserName: "n", CorpID: "c"}) {
+		t.Fatalf("trimmed identity = %#v", got)
+	}
+	if (RenderedError{}).Error() != "" {
+		t.Fatal("rendered error text")
+	}
+
+	cmd, errText := "calendar event create", "failed"
+	cfg := Configuration("1.0.0", Identity{UserID: "u", UserName: "n", CorpID: "corp"}, &cmd, &errText)
 	fields := cfg.ExtraFields()
-	if fields["c9"] != cmd || fields["c10"] != "c" || fields["c5"] != errMsg {
-		t.Fatalf("fields = %#v", fields)
+	if fields["c9"] != cmd || fields["c10"] != "corp" || fields["c5"] != "failed" {
+		t.Fatalf("extra fields = %#v", fields)
 	}
 	empty := ""
-	cfg = Configuration("1.0", Identity{}, &cmd, &empty)
+	cfg = Configuration("1.0.0", Identity{}, &cmd, &empty)
 	fields = cfg.ExtraFields()
-	if _, ok := fields["c10"]; ok || fields["c5"] != "" && fields["c5"] == "x" {
-		t.Fatalf("empty fields = %#v", fields)
+	if _, ok := fields["c10"]; ok {
+		t.Fatal("empty corp emitted")
 	}
-	_ = RenderedError{}.Error()
-	_ = profilemetadata.ProfileMetadata{}
+	if _, ok := fields["c5"]; ok {
+		t.Fatal("empty error emitted")
+	}
+	Run(cfg, func() error { return nil }, func(error) int { return 0 })
 }
 
-type rawStderrStub struct{}
+type coverageRawStderr string
 
-func (rawStderrStub) Error() string     { return "raw" }
-func (rawStderrStub) RawStderr() string { return "raw" }
+func (e coverageRawStderr) Error() string     { return string(e) }
+func (e coverageRawStderr) RawStderr() string { return string(e) }

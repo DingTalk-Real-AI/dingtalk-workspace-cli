@@ -4,8 +4,6 @@
 package cli
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,12 +16,12 @@ import (
 
 const (
 	localSchemaCacheIdentityVersion = 1
-	schemaCacheFingerprintEnv       = "DWS_SCHEMA_CACHE_FINGERPRINT"
+	localSchemaCacheIdentityName    = "identity.json"
+	legacyIdentitySidecarGlob       = "identity.*.json"
 )
 
 type localSchemaCacheIdentityRecord struct {
 	Version            int    `json:"version"`
-	Fingerprint        string `json:"fingerprint"`
 	Edition            string `json:"edition"`
 	SourceSHA256       string `json:"source_sha256"`
 	SurfaceSHA256      string `json:"surface_sha256"`
@@ -47,63 +45,25 @@ type localIdentityTempFile interface {
 }
 
 var (
-	schemaCacheExecutable       = os.Executable
 	schemaCacheJSONMarshal      = json.Marshal
 	createLocalIdentityTempFile = func(dir, pattern string) (localIdentityTempFile, error) {
 		return os.CreateTemp(dir, pattern)
 	}
+	removeLegacyIdentitySidecar = os.Remove
+	globLegacyIdentitySidecars  = filepath.Glob
 )
 
-// SchemaCacheBinaryFingerprint identifies the running executable so a persisted
-// local identity cannot be reused by a different binary. Tests may pin the
-// value with DWS_SCHEMA_CACHE_FINGERPRINT.
-func SchemaCacheBinaryFingerprint() string {
-	if override := strings.TrimSpace(os.Getenv(schemaCacheFingerprintEnv)); override != "" {
-		return override
-	}
-	exe, err := schemaCacheExecutable()
-	if err != nil {
-		exe = "unknown-executable"
-	}
-	var canonical strings.Builder
-	canonical.WriteString(exe)
-	if info, statErr := os.Stat(exe); statErr == nil {
-		fmt.Fprintf(&canonical, "\x00%d\x00%d", info.Size(), info.ModTime().UnixNano())
-	}
-	if bi, ok := readSchemaCacheBuildInfo(); ok {
-		canonical.WriteByte(0)
-		canonical.WriteString(bi.GoVersion)
-		canonical.WriteByte(0)
-		canonical.WriteString(bi.Main.Path)
-		canonical.WriteByte(0)
-		canonical.WriteString(bi.Main.Version)
-		canonical.WriteByte(0)
-		canonical.WriteString(bi.Main.Sum)
-		for _, setting := range bi.Settings {
-			if setting.Key == "vcs.revision" || setting.Key == "vcs.time" || setting.Key == "vcs.modified" {
-				canonical.WriteByte(0)
-				canonical.WriteString(setting.Key)
-				canonical.WriteByte('=')
-				canonical.WriteString(setting.Value)
-			}
-		}
-	}
-	sum := sha256.Sum256([]byte(canonical.String()))
-	return hex.EncodeToString(sum[:])
+// LocalSchemaCacheIdentityFileName is the stable per-edition identity sidecar
+// stored next to protobuf shards. Cache identity is the content hashes inside
+// the record (source/surface/build_id and artifact digests), not a binary
+// fingerprint and not a per-fingerprint filename.
+func LocalSchemaCacheIdentityFileName() string {
+	return localSchemaCacheIdentityName
 }
 
-// LocalSchemaCacheIdentityFileName is the authenticated identity sidecar stored
-// next to protobuf shards. The fingerprint binds the record to this binary.
-func LocalSchemaCacheIdentityFileName(fingerprint string) string {
-	fingerprint = strings.TrimSpace(fingerprint)
-	if fingerprint == "" {
-		fingerprint = "unknown"
-	}
-	return "identity." + fingerprint + ".json"
-}
-
-// TryLoadLocalSchemaCacheIdentity reads the identity sidecar for this binary
-// from the edition cache directory. Missing files are a miss, not an error.
+// TryLoadLocalSchemaCacheIdentity reads the per-edition identity sidecar from
+// the edition cache directory. Missing files are a miss, not an error. Leftover
+// fingerprint-suffixed sidecars are ignored and never used as a lookup key.
 func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool) {
 	edition = strings.TrimSpace(edition)
 	if edition == "" {
@@ -122,8 +82,7 @@ func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool)
 }
 
 func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error) {
-	fingerprint := SchemaCacheBinaryFingerprint()
-	payload, err := os.ReadFile(filepath.Join(directory, LocalSchemaCacheIdentityFileName(fingerprint)))
+	payload, err := os.ReadFile(filepath.Join(directory, LocalSchemaCacheIdentityFileName()))
 	if err != nil {
 		return SchemaCacheIdentity{}, err
 	}
@@ -131,8 +90,8 @@ func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error)
 	if err := json.Unmarshal(payload, &record); err != nil {
 		return SchemaCacheIdentity{}, err
 	}
-	if record.Version != localSchemaCacheIdentityVersion || record.Fingerprint != fingerprint {
-		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity sidecar does not match this binary")
+	if record.Version != localSchemaCacheIdentityVersion {
+		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity sidecar version %d is unsupported", record.Version)
 	}
 	identity, err := schemareader.ParseIdentity(schemareader.RawIdentity{
 		Edition:            record.Edition,
@@ -158,11 +117,9 @@ func persistLocalSchemaCacheIdentity(directory string, identity SchemaCacheIdent
 	if err := identity.Validate(); err != nil {
 		return err
 	}
-	fingerprint := SchemaCacheBinaryFingerprint()
 	raw := identityToRaw(identity)
 	record := localSchemaCacheIdentityRecord{
 		Version:            localSchemaCacheIdentityVersion,
-		Fingerprint:        fingerprint,
 		Edition:            raw.Edition,
 		SourceSHA256:       raw.SourceSHA256,
 		SurfaceSHA256:      raw.SurfaceSHA256,
@@ -181,7 +138,6 @@ func persistLocalSchemaCacheIdentity(directory string, identity SchemaCacheIdent
 		return err
 	}
 	payload = append(payload, '\n')
-	finalName := LocalSchemaCacheIdentityFileName(fingerprint)
 	staging, err := createLocalIdentityTempFile(directory, ".identity-*.tmp")
 	if err != nil {
 		return err
@@ -203,5 +159,26 @@ func persistLocalSchemaCacheIdentity(directory string, identity SchemaCacheIdent
 	if err := staging.Close(); err != nil {
 		return err
 	}
-	return os.Rename(stagingPath, filepath.Join(directory, finalName))
+	if err := os.Rename(stagingPath, filepath.Join(directory, LocalSchemaCacheIdentityFileName())); err != nil {
+		return err
+	}
+	removeLegacyFingerprintIdentitySidecars(directory)
+	return nil
+}
+
+// removeLegacyFingerprintIdentitySidecars deletes leftover
+// identity.<fingerprint>.json files. identity.json itself never matches this
+// glob. Failures are ignored so a leftover cannot block a successful persist.
+func removeLegacyFingerprintIdentitySidecars(directory string) {
+	matches, err := globLegacyIdentitySidecars(filepath.Join(directory, legacyIdentitySidecarGlob))
+	if err != nil {
+		return
+	}
+	canonical := LocalSchemaCacheIdentityFileName()
+	for _, name := range matches {
+		if filepath.Base(name) == canonical {
+			continue
+		}
+		_ = removeLegacyIdentitySidecar(name)
+	}
 }

@@ -63,7 +63,6 @@ func TestCrossPlatformCoverageSchemaCacheLocalGenerateWriteHitCorruptRepair(t *t
 	}
 	isolateSchemaCacheHome(t)
 	t.Setenv(schemaCacheTestEnv, "1")
-	t.Setenv("DWS_SCHEMA_CACHE_FINGERPRINT", "coverage-local-generate")
 	t.Cleanup(func() { _ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}) })
 
 	cli.RegisterSchemaSourceRoot(func() *cobra.Command {
@@ -181,7 +180,7 @@ func assertSchemaCacheArtifactsPresent(t *testing.T, cacheDir string, identity c
 			t.Fatalf("missing schema cache artifact %s: info=%v err=%v", name, info, err)
 		}
 	}
-	sidecar := filepath.Join(cacheDir, cli.LocalSchemaCacheIdentityFileName(cli.SchemaCacheBinaryFingerprint()))
+	sidecar := filepath.Join(cacheDir, cli.LocalSchemaCacheIdentityFileName())
 	if info, err := os.Stat(sidecar); err != nil || info.Size() == 0 {
 		t.Fatalf("missing local identity sidecar %s: info=%v err=%v", sidecar, info, err)
 	}

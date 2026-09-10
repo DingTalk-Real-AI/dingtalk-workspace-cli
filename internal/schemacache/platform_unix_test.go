@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"golang.org/x/sys/unix"
 )
 
@@ -625,6 +626,61 @@ func (r *recordingIO) renameat(olddirfd int, oldpath string, newdirfd int, newpa
 		return errors.New("injected rename failure")
 	}
 	return r.unixIO.renameat(olddirfd, oldpath, newdirfd, newpath)
+}
+
+func TestCrossPlatformCoverageRuntimeDoesNotCreateMissingSystemCacheBase(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "system-dws-must-not-appear")
+	userBase := privateTestBase(t)
+	testseam.Swap(t, &linuxSystemSchemaCacheBase, missing)
+	testseam.Swap(t, &currentGOOS, "linux")
+	testseam.Swap(t, &userCacheDir, func() (string, error) { return userBase, nil })
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+	cache, err := Open("official")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Fatalf("runtime created system cache base %s: %v", missing, err)
+	}
+	if !strings.HasPrefix(cache.Directory(), userBase) {
+		t.Fatalf("expected user cache under %s, got %s", userBase, cache.Directory())
+	}
+}
+
+func TestCrossPlatformCoveragePublishMetaLastReadersRejectPartialGeneration(t *testing.T) {
+	cache, _, oldID := openTestCache(t, nil)
+	oldReg := testArtifact(KindRegistry, []byte("old-registry-bytes"))
+	oldMeta := testArtifact(KindMeta, []byte("old-meta-bytes"))
+	oldPay := testArtifact(KindPayloads, []byte("old-payload-bytes"))
+	if err := cache.Publish(oldID, oldReg, oldMeta, oldPay); err != nil {
+		t.Fatal(err)
+	}
+	newID := oldID
+	newID.BuildID = sha256.Sum256([]byte("next-generation"))
+	newReg := testArtifact(KindRegistry, []byte("new-registry-bytes"))
+	newMeta := testArtifact(KindMeta, []byte("new-meta-bytes"))
+	newPay := testArtifact(KindPayloads, []byte("new-payload-bytes"))
+	recorder := &recordingIO{unixIO: realUnixIO{}, failOn: metaFileName}
+	cache.backend.(*unixCache).ops = recorder
+	if err := cache.Publish(newID, newReg, newMeta, newPay); err == nil {
+		t.Fatal("meta-last failure succeeded")
+	}
+	if !slices.Contains(recorder.renames, registryFileName) {
+		t.Fatalf("registry was not committed before Meta: %v", recorder.renames)
+	}
+	if !slices.Contains(recorder.renames, metaFileName) {
+		t.Fatalf("Meta rename was not attempted: %v", recorder.renames)
+	}
+	if _, err := cache.ReadMeta(newID, newMeta.Expectation); err == nil {
+		t.Fatal("new identity observed uncommitted Meta")
+	}
+	if payload, err := cache.ReadMeta(oldID, oldMeta.Expectation); err != nil || string(payload) != string(oldMeta.Payload) {
+		t.Fatalf("old meta after partial publish = %q %v", payload, err)
+	}
+	if _, err := cache.OpenRegistry(oldID, oldReg.Expectation); err == nil {
+		t.Fatal("old identity read mixed new registry as a consistent generation")
+	}
 }
 
 func TestCrossPlatformCoveragePublishRegistryFirstMetaLastAndStopsOnFailure(t *testing.T) {

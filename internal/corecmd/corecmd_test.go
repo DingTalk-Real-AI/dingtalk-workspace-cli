@@ -152,6 +152,12 @@ func TestCrossPlatformCoverageStringSliceMatchesPflagSemantics(t *testing.T) {
 
 func TestCrossPlatformCoverageStringSliceSetRejectsInvalidCSV(t *testing.T) {
 	var value commandStringSliceValue
+	if err := value.Set(""); err != nil {
+		t.Fatalf("empty set: %v", err)
+	}
+	if got := value.GetSlice(); got == nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v", got)
+	}
 	if err := value.Set(`"`); err == nil {
 		t.Fatal("unbalanced quote accepted")
 	}

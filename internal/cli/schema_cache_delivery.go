@@ -806,8 +806,14 @@ func (r *schemaCacheRuntime) publishGeneratedOrMatching(cache *schemacache.Cache
 	} else if !schemaCacheIdentityReady(identity) {
 		return
 	}
+	// Publish is Registry/Payloads then Meta-last. Persist identity.json only
+	// after that commit so readers never observe a new sidecar pointing at a
+	// half-published generation. Upgrade invalidation is ExpectedIdentity
+	// digest/auth plus this live-artifact match, not a fingerprint filename.
+	if err := cache.Publish(identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact()); err != nil {
+		return
+	}
 	_ = persistLocalSchemaCacheIdentity(cache.Directory(), identity)
-	_ = cache.Publish(identity.ExpectedIdentity(), artifacts.RegistryArtifact(), artifacts.MetaArtifact(), artifacts.PayloadArtifact())
 }
 
 // SchemaCacheArtifacts is the deterministic cache hand-off used by the

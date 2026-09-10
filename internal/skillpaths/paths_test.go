@@ -1,14 +1,21 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+
 package skillpaths
 
 import "testing"
 
-func TestCrossPlatformCoverageAgentHomes(t *testing.T) {
+func TestCrossPlatformCoverageAgentHomesIsDetachedCopy(t *testing.T) {
 	homes := AgentHomes()
 	if len(homes) == 0 {
-		t.Fatal("AgentHomes empty")
+		t.Fatal("empty agent homes")
 	}
 	homes[0] = "mutated"
-	if AgentHomes()[0] == "mutated" {
-		t.Fatal("AgentHomes shares backing array")
+	again := AgentHomes()
+	if again[0] == "mutated" {
+		t.Fatal("AgentHomes returned shared storage")
+	}
+	if again[0] != ".agents/skills" {
+		t.Fatalf("first home = %q", again[0])
 	}
 }

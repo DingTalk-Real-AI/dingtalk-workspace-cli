@@ -90,8 +90,8 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 		t.Fatal("valid identity reported absent")
 	}
 
-	if LocalSchemaCacheIdentityFileName("  ") != "identity.unknown.json" {
-		t.Fatal("empty fingerprint file name")
+	if LocalSchemaCacheIdentityFileName() != "identity.json" {
+		t.Fatal("stable identity file name")
 	}
 	ensureSchemaCacheOpenable(t)
 	if _, ok := TryLoadLocalSchemaCacheIdentity("  "); ok {
@@ -112,46 +112,33 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 		t.Fatal("empty cache sidecar loaded")
 	}
 
-	t.Setenv(schemaCacheFingerprintEnv, "")
-	if exe, exeErr := os.Executable(); exeErr == nil {
-		testseam.Swap(t, &schemaCacheExecutable, func() (string, error) { return exe, nil })
-		if SchemaCacheBinaryFingerprint() == "" {
-			t.Fatal("empty fingerprint from real executable")
-		}
-	}
-	testseam.Swap(t, &schemaCacheExecutable, func() (string, error) { return "", errors.New("no exe") })
-	testseam.Swap(t, &readSchemaCacheBuildInfo, func() (*debug.BuildInfo, bool) {
-		return &debug.BuildInfo{
-			GoVersion: "go1.25",
-			Main:      debug.Module{Path: "example.com/mod", Version: "v0.0.0", Sum: "h1:x"},
-			Settings:  []debug.BuildSetting{{Key: "vcs.revision", Value: "abc"}, {Key: "vcs.time", Value: "t"}, {Key: "vcs.modified", Value: "true"}},
-		}, true
-	})
-	if SchemaCacheBinaryFingerprint() == "" {
-		t.Fatal("empty fingerprint")
-	}
-
 	dir := t.TempDir()
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("missing sidecar loaded")
 	}
-	t.Setenv(schemaCacheFingerprintEnv, "coverage-sidecar")
-	name := filepath.Join(dir, LocalSchemaCacheIdentityFileName(SchemaCacheBinaryFingerprint()))
+	legacy := filepath.Join(dir, "identity.legacyfp.json")
+	if err := os.WriteFile(legacy, []byte(`{"version":1,"edition":"open"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
+		t.Fatal("legacy fingerprint sidecar loaded as primary identity")
+	}
+	name := filepath.Join(dir, LocalSchemaCacheIdentityFileName())
 	if err := os.WriteFile(name, []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("garbage sidecar loaded")
 	}
-	if err := os.WriteFile(name, []byte(`{"version":99,"fingerprint":"coverage-sidecar"}`), 0o600); err != nil {
+	if err := os.WriteFile(name, []byte(`{"version":99,"fingerprint":"ignored"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
-		t.Fatal("fingerprint mismatch sidecar loaded")
+		t.Fatal("unsupported sidecar version loaded")
 	}
 	raw := identityToRaw(identity)
 	record := localSchemaCacheIdentityRecord{
-		Version: localSchemaCacheIdentityVersion, Fingerprint: SchemaCacheBinaryFingerprint(),
+		Version: localSchemaCacheIdentityVersion,
 		Edition: raw.Edition, SourceSHA256: "nope", SurfaceSHA256: raw.SurfaceSHA256, BuildID: raw.BuildID,
 		MetaLength: raw.MetaLength, MetaSHA256: raw.MetaSHA256, RegistryLength: raw.RegistryLength,
 		RegistrySHA256: raw.RegistrySHA256, PayloadLength: raw.PayloadLength, PayloadSHA256: raw.PayloadSHA256,
@@ -176,6 +163,12 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	}
 	if _, err := loadLocalSchemaCacheIdentity(dir); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy fingerprint sidecar not cleaned: %v", err)
+	}
+	if info, err := os.Stat(name); err != nil || info.Size() == 0 {
+		t.Fatalf("stable identity.json missing after persist: info=%v err=%v", info, err)
 	}
 	opened, err := schemacache.Open("open")
 	if err != nil {
@@ -230,6 +223,35 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	if err := persistLocalSchemaCacheIdentity(dir, identity); err == nil {
 		t.Fatal("close persist succeeded")
 	}
+	testseam.Swap(t, &createLocalIdentityTempFile, osCreateLocalIdentityTemp)
+	testseam.Swap(t, &globLegacyIdentitySidecars, func(string) ([]string, error) {
+		return nil, errors.New("glob")
+	})
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+	blocked := filepath.Join(t.TempDir(), "blocked-identity")
+	if err := os.Mkdir(blocked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(blocked, LocalSchemaCacheIdentityFileName()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := persistLocalSchemaCacheIdentity(blocked, identity); err == nil {
+		t.Fatal("rename onto identity.json directory succeeded")
+	}
+	testseam.Swap(t, &globLegacyIdentitySidecars, filepath.Glob)
+	testseam.Swap(t, &globLegacyIdentitySidecars, func(string) ([]string, error) {
+		return []string{filepath.Join(dir, LocalSchemaCacheIdentityFileName()), filepath.Join(dir, "identity.stale.json")}, nil
+	})
+	testseam.Swap(t, &removeLegacyIdentitySidecar, func(string) error { return errors.New("remove") })
+	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func osCreateLocalIdentityTemp(dir, pattern string) (localIdentityTempFile, error) {
+	return os.CreateTemp(dir, pattern)
 }
 
 func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T) {
@@ -280,6 +302,58 @@ func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T)
 	matched.Identity = matching
 	r.storeOptions(matched)
 	r.publishGeneratedOrMatching(cache, loaded)
+}
+
+func TestCrossPlatformCoverageLocalIdentityIgnoresFingerprintLeftoversAndRepublishes(t *testing.T) {
+	ensureSchemaCacheOpenable(t)
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	coverageSchemaCacheHome(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	cache, err := schemacache.Open("open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+	legacy := filepath.Join(cache.Directory(), "identity.oldfingerprint.json")
+	if err := os.WriteFile(legacy, []byte(`{"version":1,"fingerprint":"old"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadLocalSchemaCacheIdentity(cache.Directory()); err == nil {
+		t.Fatal("legacy fingerprint sidecar loaded")
+	}
+	loaded := deliverySchemaCatalog()
+	activeSchemaCacheRuntime().publishGeneratedOrMatching(cache, loaded)
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy sidecar remained: %v", err)
+	}
+	identity, err := loadLocalSchemaCacheIdentity(cache.Directory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := identity
+	stale.SourceSHA256 = sha256.Sum256([]byte("stale-live-declarations"))
+	if err := persistLocalSchemaCacheIdentity(cache.Directory(), stale); err != nil {
+		t.Fatal(err)
+	}
+	activeSchemaCacheRuntime().publishGeneratedOrMatching(cache, loaded)
+	refreshed, err := loadLocalSchemaCacheIdentity(cache.Directory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.SourceSHA256 == stale.SourceSHA256 {
+		t.Fatal("live mismatch did not regenerate identity.json")
+	}
+	if refreshed.BuildID != identity.BuildID {
+		t.Fatalf("regenerated build %x want %x", refreshed.BuildID, identity.BuildID)
+	}
 }
 
 type failLocalIdentityTemp struct {

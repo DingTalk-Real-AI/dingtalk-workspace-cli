@@ -1,12 +1,22 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+
 package localename
 
 import "testing"
 
-func TestCrossPlatformCoverageResolve(t *testing.T) {
-	if got := Resolve("zh-CN"); got != "zh" {
-		t.Fatalf("zh = %q", got)
-	}
-	if got := Resolve(" EN "); got != "en" {
-		t.Fatalf("en = %q", got)
+func TestCrossPlatformCoverageResolveChineseAndDefault(t *testing.T) {
+	for raw, want := range map[string]string{
+		"zh":      "zh",
+		" ZH-CN ": "zh",
+		"zh_TW":   "zh",
+		"en":      "en",
+		"en-US":   "en",
+		"":        "en",
+		"fr":      "en",
+	} {
+		if got := Resolve(raw); got != want {
+			t.Fatalf("Resolve(%q) = %q want %q", raw, got, want)
+		}
 	}
 }

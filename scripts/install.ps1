@@ -1851,7 +1851,7 @@ function Test-SchemaCacheArtifactsPresent {
     $meta = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "meta.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
     $registry = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "registry.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
     $payloads = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "payloads.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    $identity = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $identity = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1
     return (
         $null -ne $meta -and $meta.Length -gt 0 -and
         $null -ne $registry -and $registry.Length -gt 0 -and
@@ -1908,6 +1908,10 @@ function Build-SharedSchemaCache {
     }
 
     Write-Say "🔧 Building schema cache (local identity)..."
+    if (Test-Path -LiteralPath $cacheDir) {
+        Get-ChildItem -LiteralPath $cacheDir -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath $cacheDir -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    }
     $exe = Join-Path $InstallDir "$BinName.exe"
     $previous = $env:DWS_SCHEMA_CACHE_DIR
     if ($shared) {

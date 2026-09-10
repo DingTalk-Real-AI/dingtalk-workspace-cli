@@ -1654,6 +1654,11 @@ build_shared_schema_cache() {
   fi
   rm -f "$shared_dir/.dws-schema-cache-write-test"
   say "🔧 Building shared schema cache (local identity, shared across users)..."
+  # Drop the previous per-edition sidecar and leftover fingerprint-suffixed
+  # files so upgrade always generate-then-use from this binary's live
+  # declarations. identity.json is the only success marker.
+  find "$shared_dir" -name 'identity.json' -type f -delete 2>/dev/null || true
+  find "$shared_dir" -name 'identity.*.json' -type f -delete 2>/dev/null || true
   # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
   # and populate it. Any schema command triggers generate + publish.
   if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
@@ -1673,7 +1678,7 @@ schema_cache_artifacts_present() {
   _sc_meta="$(find "$_sc_dir" -name 'meta.cache' -type f 2>/dev/null | head -n 1)"
   _sc_registry="$(find "$_sc_dir" -name 'registry.shards.cache' -type f 2>/dev/null | head -n 1)"
   _sc_payloads="$(find "$_sc_dir" -name 'payloads.shards.cache' -type f 2>/dev/null | head -n 1)"
-  _sc_identity="$(find "$_sc_dir" -name 'identity.*.json' -type f 2>/dev/null | head -n 1)"
+  _sc_identity="$(find "$_sc_dir" -name 'identity.json' -type f 2>/dev/null | head -n 1)"
   [ -n "$_sc_meta" ] && [ -s "$_sc_meta" ] &&
     [ -n "$_sc_registry" ] && [ -s "$_sc_registry" ] &&
     [ -n "$_sc_payloads" ] && [ -s "$_sc_payloads" ] &&

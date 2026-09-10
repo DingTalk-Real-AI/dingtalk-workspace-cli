@@ -127,7 +127,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 | live build 失败 | 返回原有分类错误，不发布新 cache |
 | 插件等改变命令面 | 本进程禁用持久 cache I/O |
 
-不发明新的未认证加密方案。Identity sidecar 用当前可执行文件指纹命名，避免升级后误用旧二进制的 cache。macOS `/Library/Caches` 的 sticky 祖先目录被接受；装不上共享 cache 时回退到用户 cache，安装器不得在未写出文件时宣称共享 cache 成功。
+不发明新的未认证加密方案。每个 edition cache 目录只写一份稳定 sidecar `identity.json`；**不以二进制 fingerprint 作为缓存维度**（不再使用 `identity.<fingerprint>.json` 作为主键或查找键）。Sidecar 内的 source/surface/build_id 与 shard 摘要即代际身份。升级失效靠：安装器在预热前清除旧 sidecar、Publish 的 ExpectedIdentity digest/auth，以及 live declarations 与 sidecar 哈希不一致时重新生成。遗留的 `identity.*.json` 只忽略或清理，不参与查找。macOS `/Library/Caches` 的 sticky 祖先目录被接受；装不上共享 cache 时回退到用户 cache，安装器不得在未写出文件时宣称共享 cache 成功。运行时不得创建系统共享 cache 目录。
 
 Windows（amd64/arm64）使用同一套 envelope / Publish / OpenRegistry / OpenPayloads / ReadMeta 合同与本机 identity，不引入 compile-time seal：
 
@@ -147,8 +147,8 @@ Windows（amd64/arm64）使用同一套 envelope / Publish / OpenRegistry / Open
 3. `go build ./cmd` 与正式包均不生成或嵌入 Schema identity。
 4. 最终归档继续经过 checksum、签名、安装器、npm、Homebrew 和 smoke 验证。
 5. 安装器在受支持端尝试预热 cache，且**未写出产物不得宣称成功**：
-   - darwin/linux amd64/arm64：`install.sh` 写共享 cache（Linux `/var/cache/dws`，macOS `/Library/Caches/dws`）；仅当 Meta/Registry/Payloads 与 `identity.*.json` 均已写出才宣称成功。
-   - windows amd64/arm64：`install.ps1` 在二进制安装后调用 `Build-SharedSchemaCache`。优先写 `%ProgramData%\dws`（可用 `DWS_SCHEMA_CACHE_SHARED_DIR` 覆盖）；不可写则预热 `%LOCALAPPDATA%` 下的用户 cache。同样只在 sidecar + 三个 shard 均存在时宣称成功，否则警告首次 schema 命令会建 per-user cache。
+   - darwin/linux amd64/arm64：`install.sh` 写共享 cache（Linux `/var/cache/dws`，macOS `/Library/Caches/dws`）；预热前删除 `identity.json` 与遗留 `identity.*.json`，仅当 Meta/Registry/Payloads 与 `identity.json` 均已写出才宣称成功。遗留 fingerprint 文件不得算成功。
+   - windows amd64/arm64：`install.ps1` 在二进制安装后调用 `Build-SharedSchemaCache`。优先写 `%ProgramData%\dws`（可用 `DWS_SCHEMA_CACHE_SHARED_DIR` 覆盖）；不可写则预热 `%LOCALAPPDATA%` 下的用户 cache。同样在预热前清除旧 sidecar，只在 `identity.json` + 三个 shard 均存在时宣称成功，否则警告首次 schema 命令会建 per-user cache。
 
 所有公开 target 都发布单个 `dws`。Schema handler 优先走本机认证 cache，否则 live declaration assembly。
 
