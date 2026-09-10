@@ -55,6 +55,9 @@ var (
 	windowsACLFromEntries     = windows.ACLFromEntries
 	windowsGetSecurityInfo    = windows.GetSecurityInfo
 	windowsGetAce             = windows.GetAce
+	windowsSecurityOwner      = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) { return sd.Owner() }
+	windowsSecurityDACL       = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) { return sd.DACL() }
+	windowsSIDCopy            = func(sid *windows.SID) (*windows.SID, error) { return sid.Copy() }
 )
 
 type windowsIO interface {
@@ -419,18 +422,18 @@ func readHandleSecurity(h windows.Handle) (securityState, error) {
 	if err != nil {
 		return securityState{}, err
 	}
-	owner, _, err := sd.Owner()
+	owner, _, err := windowsSecurityOwner(sd)
 	if err != nil || owner == nil {
 		if err == nil {
 			err = errors.New("missing owner")
 		}
 		return securityState{}, err
 	}
-	ownerCopy, err := owner.Copy()
+	ownerCopy, err := windowsSIDCopy(owner)
 	if err != nil {
 		return securityState{}, err
 	}
-	dacl, _, err := sd.DACL()
+	dacl, _, err := windowsSecurityDACL(sd)
 	if errors.Is(err, windows.ERROR_OBJECT_NOT_FOUND) {
 		return securityState{owner: ownerCopy, daclPresent: false}, nil
 	}
@@ -448,7 +451,7 @@ func readHandleSecurity(h windows.Handle) (securityState, error) {
 			return securityState{}, err
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		sidCopy, err := sid.Copy()
+		sidCopy, err := windowsSIDCopy(sid)
 		if err != nil {
 			return securityState{}, err
 		}

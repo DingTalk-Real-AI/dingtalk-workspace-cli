@@ -1621,6 +1621,9 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 		windowsCreateWellKnownSid = windows.CreateWellKnownSid
 		windowsGetSecurityInfo = windows.GetSecurityInfo
 		windowsGetAce = windows.GetAce
+		windowsSecurityOwner = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) { return sd.Owner() }
+		windowsSecurityDACL = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) { return sd.DACL() }
+		windowsSIDCopy = func(sid *windows.SID) (*windows.SID, error) { return sid.Copy() }
 		platformIO = realWindowsIO{}
 		programDataDir = func() string { return os.Getenv("ProgramData") }
 		userCacheDir = os.UserCacheDir
@@ -1775,4 +1778,154 @@ func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = c.Close()
+}
+
+func TestCrossPlatformCoverageWindowsSecurityResidualBranches(t *testing.T) {
+	t.Cleanup(func() {
+		windowsCreateWellKnownSid = windows.CreateWellKnownSid
+		windowsGetSecurityInfo = windows.GetSecurityInfo
+		windowsGetAce = windows.GetAce
+		windowsSecurityOwner = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) { return sd.Owner() }
+		windowsSecurityDACL = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) { return sd.DACL() }
+		windowsSIDCopy = func(sid *windows.SID) (*windows.SID, error) { return sid.Copy() }
+		windowsOpenProcessToken = windows.OpenProcessToken
+		platformIO = realWindowsIO{}
+		programDataDir = func() string { return os.Getenv("ProgramData") }
+		userCacheDir = os.UserCacheDir
+	})
+
+	target := privateTestBase(t)
+	fd, err := realWindowsIO{}.open(target, windows.READ_CONTROL, secureShareRead, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = realWindowsIO{}.close(fd) })
+	realSD, err := windows.GetSecurityInfo(fd, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// missing owner (err == nil && owner == nil)
+	windowsGetSecurityInfo = func(windows.Handle, windows.SE_OBJECT_TYPE, windows.SECURITY_INFORMATION) (*windows.SECURITY_DESCRIPTOR, error) {
+		return realSD, nil
+	}
+	windowsSecurityOwner = func(*windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) {
+		return nil, false, nil
+	}
+	if _, err := readHandleSecurity(fd); err == nil || err.Error() != "missing owner" {
+		t.Fatalf("missing owner = %v", err)
+	}
+
+	// owner lookup error
+	windowsSecurityOwner = func(*windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) {
+		return nil, false, errors.New("forced owner")
+	}
+	if _, err := readHandleSecurity(fd); err == nil {
+		t.Fatal("owner error accepted")
+	}
+
+	user, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowsSecurityOwner = func(*windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) {
+		return user, false, nil
+	}
+
+	// owner SID copy failure
+	windowsSIDCopy = func(*windows.SID) (*windows.SID, error) {
+		return nil, errors.New("forced owner copy")
+	}
+	if _, err := readHandleSecurity(fd); err == nil {
+		t.Fatal("owner copy failure accepted")
+	}
+	windowsSIDCopy = func(sid *windows.SID) (*windows.SID, error) { return sid.Copy() }
+
+	// DACL ERROR_OBJECT_NOT_FOUND
+	windowsSecurityDACL = func(*windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) {
+		return nil, false, windows.ERROR_OBJECT_NOT_FOUND
+	}
+	sec, err := readHandleSecurity(fd)
+	if err != nil || sec.daclPresent {
+		t.Fatalf("missing DACL = sec(%v) err(%v)", sec, err)
+	}
+
+	// DACL other error
+	windowsSecurityDACL = func(*windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) {
+		return nil, false, errors.New("forced dacl")
+	}
+	if _, err := readHandleSecurity(fd); err == nil {
+		t.Fatal("dacl error accepted")
+	}
+
+	// present but nil DACL
+	windowsSecurityDACL = func(*windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) {
+		return nil, false, nil
+	}
+	sec, err = readHandleSecurity(fd)
+	if err != nil || sec.daclPresent {
+		t.Fatalf("nil DACL = sec(%v) err(%v)", sec, err)
+	}
+
+	// ACE SID copy failure after a successful GetAce
+	windowsSecurityDACL = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) { return sd.DACL() }
+	copyCalls := 0
+	windowsSIDCopy = func(sid *windows.SID) (*windows.SID, error) {
+		copyCalls++
+		if copyCalls == 1 {
+			return sid.Copy() // owner copy
+		}
+		return nil, errors.New("forced ace sid copy")
+	}
+	if _, err := readHandleSecurity(fd); err == nil {
+		t.Fatal("ace sid copy failure accepted")
+	}
+	windowsSIDCopy = func(sid *windows.SID) (*windows.SID, error) { return sid.Copy() }
+	windowsGetSecurityInfo = windows.GetSecurityInfo
+	windowsSecurityOwner = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.SID, bool, error) { return sd.Owner() }
+	windowsSecurityDACL = func(sd *windows.SECURITY_DESCRIPTOR) (*windows.ACL, bool, error) { return sd.DACL() }
+
+	// trustedSIDs: currentUserSID failure
+	oldToken := windowsOpenProcessToken
+	windowsOpenProcessToken = func(windows.Handle, uint32, *windows.Token) error {
+		return errors.New("forced token for trustedSIDs")
+	}
+	if err := validateSecurity(securityState{owner: user, daclPresent: true}, true); err == nil {
+		t.Fatal("trustedSIDs currentUser failure accepted")
+	}
+	windowsOpenProcessToken = oldToken
+
+	// trustedSIDs: WinLocalSystemSid failure (admins succeeds)
+	windowsCreateWellKnownSid = func(sidType windows.WELL_KNOWN_SID_TYPE) (*windows.SID, error) {
+		if sidType == windows.WinLocalSystemSid {
+			return nil, errors.New("forced system sid")
+		}
+		return windows.CreateWellKnownSid(sidType)
+	}
+	if err := validateSecurity(securityState{owner: user, daclPresent: true}, true); err == nil {
+		t.Fatal("trustedSIDs system sid failure accepted")
+	}
+	windowsCreateWellKnownSid = windows.CreateWellKnownSid
+
+	// openCacheDirectory owned-loop validateDirectorySecurity failure (lines 310-312)
+	base := privateTestBase(t)
+	ops := wrapIO{
+		windowsIO: realWindowsIO{},
+		securityFn: func(windows.Handle) (securityState, error) {
+			return securityState{}, errors.New("forced owned-dir security")
+		},
+	}
+	if _, err := openCacheDirectory(base, "deadbeef", &Counters{}, ops, false, false); err == nil {
+		t.Fatal("owned validateDirectorySecurity failure accepted")
+	}
+
+	// atomicReplace staging info failure (lines 970-973)
+	cache, _, identity := openTestCache(t, nil)
+	uc := cache.backend.(*windowsCache)
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(windows.Handle) (windows.ByHandleFileInformation, error) {
+		return windows.ByHandleFileInformation{}, errors.New("forced staging info")
+	}}
+	if err := cache.WriteArtifact(identity, testArtifact(KindMeta, []byte("residual-meta"))); err == nil {
+		t.Fatal("staging info failure accepted")
+	}
 }
