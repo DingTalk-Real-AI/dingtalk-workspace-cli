@@ -767,8 +767,8 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 }
 
 // ProjectOutput converts the transport envelope into the stable personal
-// event output. On malformed VoIP data it returns metadata-only output so
-// sensitive invitation fields cannot leak through the projection fallback;
+// event output. On malformed VoIP or card data it returns a safe typed output
+// so sensitive transport fields cannot leak through the projection fallback;
 // legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
@@ -779,6 +779,15 @@ func ProjectOutput(ev transport.Event) (any, error) {
 				EventID:     ev.EventID,
 				Timestamp:   ev.EventBornTime,
 				SubscribeID: ev.SubscribeID,
+			}, fmt.Errorf("decode personal event data: %w", err)
+		}
+		if isCardActionEvent(ev.EventType) {
+			return CardActionEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+				Payload:     map[string]any{},
 			}, fmt.Errorf("decode personal event data: %w", err)
 		}
 		return ev, fmt.Errorf("decode personal event data: %w", err)
@@ -856,7 +865,13 @@ func ProjectOutput(ev transport.Event) (any, error) {
 	case isCardActionEvent(eventType):
 		payload, err := decodeConservativePayload(data.Payload)
 		if err != nil {
-			return ev, fmt.Errorf("decode personal card action payload: %w", err)
+			return CardActionEventOutput{
+				Type:        base.Type,
+				EventID:     base.EventID,
+				Timestamp:   base.Timestamp,
+				SubscribeID: base.SubscribeID,
+				Payload:     map[string]any{},
+			}, fmt.Errorf("decode personal card action payload: %w", err)
 		}
 		return CardActionEventOutput{
 			Type:        base.Type,
@@ -1004,7 +1019,9 @@ func decodeConservativePayload(raw json.RawMessage) (map[string]any, error) {
 		return nil, fmt.Errorf("payload is missing")
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(trimmed, &payload); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, err
 	}
 	if len(payload) == 0 {

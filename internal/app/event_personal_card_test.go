@@ -14,6 +14,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -81,6 +82,18 @@ func TestPersonalCardEventListSchemaDryRunAndValidation(t *testing.T) {
 	if categoryFlag == nil || !strings.Contains(categoryFlag.Usage, "card") || !strings.Contains(list.Long, "--category card") {
 		t.Fatalf("event list --category help = %#v, want card", categoryFlag)
 	}
+	productSchema := NewRootCommand()
+	productSchema.SilenceUsage = true
+	productSchema.SilenceErrors = true
+	var productOut bytes.Buffer
+	productSchema.SetOut(&productOut)
+	productSchema.SetArgs([]string{"schema", "event", "--compact", "--format", "json"})
+	if err := productSchema.Execute(); err != nil {
+		t.Fatalf("schema event --compact error = %v", err)
+	}
+	if !strings.Contains(productOut.String(), personal.EventCardAction) || !strings.Contains(productOut.String(), "互动卡片") {
+		t.Fatalf("product event schema missing card routing:\n%s", productOut.String())
+	}
 
 	if err := validatePersonalBusinessEventOptions(personal.EventCardAction, personalConsumeOptions{}); err != nil {
 		t.Fatalf("card event without target/filter options error = %v", err)
@@ -115,6 +128,45 @@ func TestPersonalCardEventListSchemaDryRunAndValidation(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "event_key="+personal.EventCardAction+" rule_type=all rule_param={}") {
 		t.Fatalf("card dry-run did not use empty-object rule_param:\n%s", stderr.String())
+	}
+}
+
+func TestPersonalCardMalformedPayloadFlattenDoesNotLeakTransportEnvelope(t *testing.T) {
+	var warnings bytes.Buffer
+	formatter, err := consume.NewFormatter(
+		consume.FormatNDJSON,
+		consume.WithProjector(personalEventProjector(false, true)),
+		consume.WithProjectionWarnings(&warnings),
+	)
+	if err != nil {
+		t.Fatalf("NewFormatter() error = %v", err)
+	}
+	rendered, err := formatter.Render(transport.Event{
+		Seq:           42,
+		EventID:       "outer-card-event",
+		EventBornTime: 1788200000000,
+		EventType:     personal.EventCardAction,
+		SubscribeID:   "outer-card-sub",
+		Data:          `{"eventId":"inner-card-event","eventKey":"user_card_action_triggered"}`,
+		Headers:       map[string]string{"sensitive": "transport-only"},
+	})
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(rendered), &got); err != nil {
+		t.Fatalf("decode flattened fallback: %v\n%s", err, rendered)
+	}
+	if len(got) != 5 || got["event_id"] != "inner-card-event" || len(got["payload"].(map[string]any)) != 0 {
+		t.Fatalf("flattened fallback = %#v", got)
+	}
+	for _, transportOnly := range []string{"data", "headers", "seq", "event_corp_id"} {
+		if _, exists := got[transportOnly]; exists {
+			t.Fatalf("flattened fallback leaked %q: %s", transportOnly, rendered)
+		}
+	}
+	if !strings.Contains(warnings.String(), "projection failed") {
+		t.Fatalf("projection warning = %q", warnings.String())
 	}
 }
 

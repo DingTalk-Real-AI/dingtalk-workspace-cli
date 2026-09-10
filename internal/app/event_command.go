@@ -84,12 +84,13 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 			RelatedSkills: []string{"dingtalk-event"},
 			Documentation: []contract.HelpDocumentation{
 				contract.SkillDocumentation("事件订阅深度指南", "dingtalk-event", "references/event-im.md"),
+				contract.SkillDocumentation("互动卡片回调事件", "dingtalk-event", "references/event-card.md"),
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批与待办事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM、OA 审批、VoIP、待办与互动卡片回调事件，并管理订阅生命周期",
 			UseWhen: []string{
-				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例或待办创建/更新/删除事件，或管理个人事件订阅生命周期",
+				"需要实时监听未来发生的个人消息、消息动作、群生命周期、OA 审批任务/实例、VoIP 通话邀请、待办创建/更新/删除或 user_card_action_triggered 互动卡片回调事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
 				"查历史聊天或主动发消息用 chat；查询或处理审批实例/任务用 oa；配置开放平台应用事件回调用 dev app event",

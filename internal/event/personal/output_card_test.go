@@ -6,6 +6,7 @@ package personal
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -87,11 +88,11 @@ func TestCardActionEventOutputPreservesReviewedCallbackShapeAndTypes(t *testing.
 	if got.Type != EventCardAction || got.EventID != "card-event-example" || got.Timestamp != 1788441872239 || got.SubscribeID != "sub-card-example" {
 		t.Fatalf("common fields = %#v", got)
 	}
-	if got.Payload["event_time"] != float64(1788441872152) || got.Payload["futurePayload"] != "kept" {
+	if got.Payload["event_time"] != json.Number("1788441872152") || got.Payload["futurePayload"] != "kept" {
 		t.Fatalf("payload fields = %#v", got.Payload)
 	}
 	body := requireCardMap(t, got.Payload["body"], "payload.body")
-	if body["spaceId"] != "space-example" || body["spaceType"] != "im_single" || body["triggerTimestamp"] != float64(1788441872151) {
+	if body["spaceId"] != "space-example" || body["spaceType"] != "im_single" || body["triggerTimestamp"] != json.Number("1788441872151") {
 		t.Fatalf("body routing/time fields = %#v", body)
 	}
 	if !reflect.DeepEqual(body["futureBody"], map[string]any{"kept": true}) {
@@ -142,7 +143,7 @@ func TestCardActionEventOutputPreservesReviewedCallbackShapeAndTypes(t *testing.
 		t.Fatalf("stringified context changed: %#v", legacyContext)
 	}
 	operator := requireCardMap(t, body["operatorDTO"], "payload.body.operatorDTO")
-	if operator["uid"] != float64(10001) || operator["operatorUserAgent"] != "TestClient/1.0" {
+	if operator["uid"] != json.Number("10001") || operator["operatorUserAgent"] != "TestClient/1.0" {
 		t.Fatalf("operator = %#v", operator)
 	}
 	if _, ok := context["createUid"].(string); !ok {
@@ -151,7 +152,7 @@ func TestCardActionEventOutputPreservesReviewedCallbackShapeAndTypes(t *testing.
 	if _, ok := context["orgId"].(string); !ok {
 		t.Fatalf("orgId type = %T, want string", context["orgId"])
 	}
-	if _, ok := operator["uid"].(float64); !ok {
+	if _, ok := operator["uid"].(json.Number); !ok {
 		t.Fatalf("operatorDTO.uid decoded type = %T, want JSON number", operator["uid"])
 	}
 	bizInfo := requireCardMap(t, body["bizInfoDTO"], "payload.body.bizInfoDTO")
@@ -205,6 +206,7 @@ func TestCardActionEventOutputPreservesUnknownBusinessPayload(t *testing.T) {
 			"payload":{
 				"callbackType":"future_callback_type",
 				"futureField":{"nested":true},
+				"futureLargeId":9007199254740993,
 				"uid":"transport-user",
 				"clientId":"transport-client",
 				"body":{"uid":"business-user","unknown":42}
@@ -226,6 +228,9 @@ func TestCardActionEventOutputPreservesUnknownBusinessPayload(t *testing.T) {
 	if got.Payload["callbackType"] != "future_callback_type" || !reflect.DeepEqual(got.Payload["futureField"], map[string]any{"nested": true}) {
 		t.Fatalf("unknown business fields were not preserved: %#v", got.Payload)
 	}
+	if got.Payload["futureLargeId"] != json.Number("9007199254740993") {
+		t.Fatalf("large integer changed: %#v (%T)", got.Payload["futureLargeId"], got.Payload["futureLargeId"])
+	}
 	if _, ok := got.Payload["uid"]; ok {
 		t.Fatalf("payload retained top-level transport uid: %#v", got.Payload)
 	}
@@ -233,8 +238,15 @@ func TestCardActionEventOutputPreservesUnknownBusinessPayload(t *testing.T) {
 		t.Fatalf("payload retained top-level transport clientId: %#v", got.Payload)
 	}
 	body, ok := got.Payload["body"].(map[string]any)
-	if !ok || body["uid"] != "business-user" || body["unknown"] != float64(42) {
+	if !ok || body["uid"] != "business-user" || body["unknown"] != json.Number("42") {
 		t.Fatalf("nested business payload changed: %#v", got.Payload["body"])
+	}
+	rendered, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(rendered), `"futureLargeId":9007199254740993`) {
+		t.Fatalf("large integer literal was not preserved: %s", rendered)
 	}
 
 	transportProjected, err := ProjectTransportOutput(ev)
@@ -243,5 +255,52 @@ func TestCardActionEventOutputPreservesUnknownBusinessPayload(t *testing.T) {
 	}
 	if !reflect.DeepEqual(transportProjected, ev) {
 		t.Fatalf("default transport envelope changed: %#v", transportProjected)
+	}
+}
+
+func TestCardActionMalformedDataUsesSafeFlattenFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data string
+	}{
+		{name: "missing payload", data: `{"eventId":"inner-event","eventKey":"user_card_action_triggered"}`},
+		{name: "malformed envelope", data: `not-json`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := transport.Event{
+				EventID:       "outer-event",
+				EventBornTime: 1788200000000,
+				EventType:     EventCardAction,
+				SubscribeID:   "outer-sub",
+				Data:          tc.data,
+			}
+			projected, err := ProjectOutput(ev)
+			if err == nil {
+				t.Fatal("ProjectOutput() error = nil, want malformed card error")
+			}
+			got, ok := projected.(CardActionEventOutput)
+			if !ok {
+				t.Fatalf("ProjectOutput() type = %T, want CardActionEventOutput", projected)
+			}
+			if got.Type != EventCardAction || got.SubscribeID != "outer-sub" || len(got.Payload) != 0 {
+				t.Fatalf("safe fallback = %#v", got)
+			}
+			rendered, marshalErr := json.Marshal(got)
+			if marshalErr != nil {
+				t.Fatalf("Marshal() error = %v", marshalErr)
+			}
+			var flattened map[string]json.RawMessage
+			if unmarshalErr := json.Unmarshal(rendered, &flattened); unmarshalErr != nil {
+				t.Fatalf("Unmarshal() error = %v", unmarshalErr)
+			}
+			if len(flattened) != 5 || string(flattened["payload"]) != "{}" {
+				t.Fatalf("flattened fallback = %s", rendered)
+			}
+			for _, transportOnly := range []string{"data", "headers", "seq", "event_corp_id"} {
+				if _, exists := flattened[transportOnly]; exists {
+					t.Fatalf("flattened fallback leaked %q: %s", transportOnly, rendered)
+				}
+			}
+		})
 	}
 }
