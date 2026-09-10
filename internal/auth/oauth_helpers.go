@@ -45,6 +45,19 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	// Direct mode with client secret
 	clientID := ClientID()
 	clientSecret := ClientSecret()
+	data, err := p.exchangeCodeWithClient(ctx, code, clientID, clientSecret)
+	if err != nil {
+		return nil, err
+	}
+	data.Source = resolveCredentialSource()
+	if err := oauthSaveClientSecret(clientID, clientSecret); err != nil {
+		fmt.Fprintf(p.Output, "Warning: failed to save client secret: %v\n", err)
+	}
+	return data, nil
+}
+
+// exchangeCodeWithClient does not persist credentials before identity validation.
+func (p *OAuthProvider) exchangeCodeWithClient(ctx context.Context, code, clientID, clientSecret string) (*TokenData, error) {
 	body := map[string]string{
 		"clientId":     clientID,
 		"clientSecret": clientSecret,
@@ -61,12 +74,8 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	}
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
-	data.Source = resolveCredentialSource()
-	// Save clientSecret for future refresh (even if env changes)
-	if err := oauthSaveClientSecret(clientID, clientSecret); err != nil {
-		// Log warning but don't fail login
-		fmt.Fprintf(p.Output, "Warning: failed to save client secret: %v\n", err)
-	}
+	// The caller supplies the resolved provenance; explicit arguments alone do not
+	// imply credentials originated from command-line flags.
 	return data, nil
 }
 

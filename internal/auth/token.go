@@ -346,7 +346,20 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 // saveTokenDataLockedForSelector 在已持有 auth 锁时按显式主管选择器计算写计划。
 // 受管数字员工因此可以写入自己的精确 identity slot，同时不成为当前 Profile。
 func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSelector string) error {
+	return saveTokenDataLockedForSelectorAndSecret(configDir, data, runtimeSelector, "")
+}
+
+// Caller holds the auth lock. The direct-login secret participates in the same
+// snapshot and rollback as the profile and token slots, never a separate write.
+func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, runtimeSelector, clientSecret string) error {
+	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || data.UserID == "") {
+		return fmt.Errorf("direct login persistence requires a complete identity and application")
+	}
+
 	if h := edition.Get(); h.SaveToken != nil {
+		if clientSecret != "" {
+			return fmt.Errorf("edition token hook does not support transactional client credentials")
+		}
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
@@ -405,6 +418,13 @@ func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSe
 		if err != nil {
 			return err
 		}
+		if clientSecret != "" {
+			previous, err := authKeychainGet(keychain.Service, clientSecretPrefix+data.ClientID)
+			if err != nil {
+				return fmt.Errorf("cannot snapshot application credentials")
+			}
+			snapshot.clientID, snapshot.clientSecret = data.ClientID, previous
+		}
 		preserveManualDefault := !plan.MakeCurrent &&
 			snapshot.marker.known &&
 			snapshot.marker.exists &&
@@ -414,6 +434,11 @@ func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSe
 				return errors.Join(operationErr, fmt.Errorf("rollback token persistence: %w", rollbackErr))
 			}
 			return operationErr
+		}
+		if clientSecret != "" {
+			if err := oauthSaveClientSecret(data.ClientID, clientSecret); err != nil {
+				return rollback(fmt.Errorf("save application credentials failed"))
+			}
 		}
 		if plan.WriteIdentity {
 			if err := tokenSaveKeychainForIdentity(corpID, userID, data); err != nil {
@@ -917,13 +942,15 @@ type tokenMarkerSnapshot struct {
 }
 
 type tokenPersistenceSnapshot struct {
-	profiles *ProfilesConfig
-	corpID   string
-	userID   string
-	identity tokenSlotSnapshot
-	org      tokenSlotSnapshot
-	legacy   tokenSlotSnapshot
-	marker   tokenMarkerSnapshot
+	clientID     string
+	clientSecret string
+	profiles     *ProfilesConfig
+	corpID       string
+	userID       string
+	identity     tokenSlotSnapshot
+	org          tokenSlotSnapshot
+	legacy       tokenSlotSnapshot
+	marker       tokenMarkerSnapshot
 }
 
 func cloneProfilesConfig(cfg *ProfilesConfig) *ProfilesConfig {
@@ -1114,6 +1141,18 @@ func snapshotTokenPersistence(
 
 func restoreTokenPersistence(configDir string, snapshot tokenPersistenceSnapshot) error {
 	var rollbackErr error
+	if snapshot.clientID != "" {
+		var err error
+		if snapshot.clientSecret == "" {
+			err = DeleteClientSecret(snapshot.clientID)
+		} else {
+			err = SaveClientSecret(snapshot.clientID, snapshot.clientSecret)
+		}
+		if err != nil {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("restore application credentials failed"))
+		}
+	}
+
 	if err := tokenSaveProfiles(configDir, cloneProfilesConfig(snapshot.profiles)); err != nil {
 		rollbackErr = errors.Join(rollbackErr, err)
 	}
