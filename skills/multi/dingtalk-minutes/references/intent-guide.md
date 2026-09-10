@@ -42,6 +42,14 @@ dws minutes tag query --tag-id <tagId> --limit 10 --cursor <nextToken> --format 
 - 不按标签名称猜 `tagId`；`tag list` 明确返回空数组时直接交付“当前无标签”，不再查 Help 或拿其他分组补位。
 - `tag query` 是单页原子查询；返回真实 `nextToken` 时继续续拉，或明确说明当前结果不完整。
 
+## 逐字稿与行动项落盘
+
+```text
+dws minutes +detail --id <taskUuid> --artifacts transcript,todos --transcript-output file --output-dir <安全相对目录> --format json
+```
+
+`file` 只自动保存逐字稿，其他所需产物或失败说明按真实返回另存文件，不能说全部自动落盘。逐字稿优先复用命令返回的文件，不手抄终端片段；按真实 `direction/pages/complete` 和文件内容核对顺序与覆盖，不凭文件名判断。默认正序，只有用户要求倒序才加 `--direction 1`；待办未知不能保存成“0条”。额外要求的摘要/关键词按需加入 `--artifacts`。
+
 ## 本地归档
 
 ```text
@@ -52,6 +60,8 @@ dws minutes +export-pack --id <taskUuid> --output ./minutes-export --include-med
 - `--output` 必须是工作目录内尚不存在的安全相对目录；命令拒绝目录穿越和静默覆盖。
 - 默认归档 `basic,summary,keywords,transcript,todos`；如用 `--artifacts` 缩小集合，只能声称已交付实际选择并验证通过的产物。
 - `--include-media` 只决定是否附带媒体，不降低逐字稿完整性要求；manifest 不保存短期签名 URL。
+- 全部文本产物（basic/summary/keywords/transcript/todos，含 JSON 内嵌字符串）清理已识别 OSS/AWS 签名 URL，目标替换为 `[signed-url-removed]`，独立凭据字段替换为 `[credential-removed]`；普通链接保持不变。发布前凭据扫描失败则不发布目录。
+- manifest 和返回值包含 `sanitized/redactionCount/redactionKinds/sanitizationScope`；文本文件有各自清理次数。`complete=true` 不代表原始图片可离线访问，当前 `offlineImagesComplete=false`；清理范围为 `text_artifacts`，不扫描二进制媒体内容，也不提供文件 hash/内容一致性读回。
 - 只有响应中的 `published=true`、真实 `path/manifest/files` 和所选产物均完整，才能称归档已生成；任一产物 unknown/pending/failed 时不得宣称成功。
 
 ## 目标匹配

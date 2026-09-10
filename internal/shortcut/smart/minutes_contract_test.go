@@ -50,6 +50,13 @@ func TestCrossPlatformCoverageMinutesResultContracts(t *testing.T) {
 	if _, err := contract.NormalizeResultSpec(MinutesDetail.Contract.Result, "minutes.shortcut_detail"); err != nil {
 		t.Fatalf("normalize detail result: %v", err)
 	}
+	actionResult, err := contract.NormalizeResultSpec(ActionItems.Contract.Result, "minutes.shortcut_action_items")
+	if err != nil {
+		t.Fatalf("normalize action-items result: %v", err)
+	}
+	if actionResult == nil || !strings.Contains(string(actionResult.DataSchema), `"known_empty"`) || !strings.Contains(string(actionResult.DataSchema), `"observedTypes"`) {
+		t.Fatalf("action-items result=%#v", actionResult)
+	}
 }
 
 func TestCrossPlatformCoverageMinutesTranscriptResultDefensiveBranches(t *testing.T) {
