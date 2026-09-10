@@ -312,13 +312,22 @@ func TestCrossPlatformCoverageWindowsSystemAndOverridePaths(t *testing.T) {
 	sharedRoot := privateTestBase(t)
 	programDataDir = func() string { return sharedRoot }
 	systemBase := filepath.Join(sharedRoot, "dws")
-	if err := os.MkdirAll(filepath.Join(systemBase, "dws", "schema", hex.EncodeToString(digest[:]), "v1"), 0o700); err != nil {
+	editionDir := filepath.Join(systemBase, "dws", "schema", hex.EncodeToString(digest[:]), "v1")
+	if err := os.MkdirAll(editionDir, 0o700); err != nil {
 		t.Fatal(err)
+	}
+	for _, p := range []string{systemBase, filepath.Join(systemBase, "dws"), filepath.Join(systemBase, "dws", "schema"), filepath.Join(systemBase, "dws", "schema", hex.EncodeToString(digest[:])), editionDir} {
+		if err := restrictSharedReadOnly(p); err != nil {
+			t.Fatalf("restrict shared %s: %v", p, err)
+		}
 	}
 	userCacheDir = func() (string, error) { return privateTestBase(t), nil }
 	sharedCache, err := Open("official", WithNoCreate())
 	if err != nil {
 		t.Fatalf("shared Open: %v", err)
+	}
+	if !strings.HasPrefix(sharedCache.Directory(), systemBase) {
+		t.Fatalf("shared directory = %s", sharedCache.Directory())
 	}
 	_ = sharedCache.Close()
 }
@@ -418,6 +427,7 @@ type wrapIO struct {
 	mkdirFn    func(string) error
 	openFn     func(string, uint32, uint32, uint32, uint32) (windows.Handle, error)
 	infoFn     func(windows.Handle) (windows.ByHandleFileInformation, error)
+	securityFn func(windows.Handle) (securityState, error)
 	readFn     func(windows.Handle, []byte, int64) (int, error)
 	writeFn    func(windows.Handle, []byte) (int, error)
 	flushFn    func(windows.Handle) error
@@ -426,7 +436,7 @@ type wrapIO struct {
 	removeFn   func(string) error
 	lockFn     func(windows.Handle) error
 	unlockFn   func(windows.Handle) error
-	restrictFn func(string) error
+	restrictFn func(string, bool) error
 	randomFn   func([]byte) (int, error)
 }
 
@@ -453,6 +463,12 @@ func (w wrapIO) info(h windows.Handle) (windows.ByHandleFileInformation, error) 
 		return w.infoFn(h)
 	}
 	return w.windowsIO.info(h)
+}
+func (w wrapIO) security(h windows.Handle) (securityState, error) {
+	if w.securityFn != nil {
+		return w.securityFn(h)
+	}
+	return w.windowsIO.security(h)
 }
 func (w wrapIO) readAt(h windows.Handle, p []byte, offset int64) (int, error) {
 	if w.readFn != nil {
@@ -490,11 +506,11 @@ func (w wrapIO) lock(h windows.Handle) error {
 	}
 	return w.windowsIO.lock(h)
 }
-func (w wrapIO) restrictACL(path string) error {
+func (w wrapIO) restrictACL(path string, shared bool) error {
 	if w.restrictFn != nil {
-		return w.restrictFn(path)
+		return w.restrictFn(path, shared)
 	}
-	return w.windowsIO.restrictACL(path)
+	return w.windowsIO.restrictACL(path, shared)
 }
 func (w wrapIO) unlock(h windows.Handle) error {
 	if w.unlockFn != nil {
@@ -585,7 +601,7 @@ func TestCrossPlatformCoverageWindowsInjectedFaults(t *testing.T) {
 		t.Fatal("dest rename failure accepted")
 	}
 
-	uc.ops = wrapIO{windowsIO: realWindowsIO{}, restrictFn: func(string) error {
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, restrictFn: func(string, bool) error {
 		return errors.New("forced acl")
 	}}
 	if err := cache.WriteArtifact(identity, meta); err == nil {
@@ -691,15 +707,15 @@ func TestCrossPlatformCoverageWindowsBootstrapAndSecureOpenName(t *testing.T) {
 	}
 
 	info := windows.ByHandleFileInformation{FileAttributes: windows.FILE_ATTRIBUTE_REPARSE_POINT, NumberOfLinks: 1}
-	if err := validateCacheFile(info, false); !errors.Is(err, ErrUnsafePath) {
+	if err := validateCacheFile(info, securityState{}, false); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("reparse file = %v", err)
 	}
 	info = windows.ByHandleFileInformation{FileAttributes: windows.FILE_ATTRIBUTE_DIRECTORY, NumberOfLinks: 1}
-	if err := validateCacheFile(info, false); !errors.Is(err, ErrUnsafePath) {
+	if err := validateCacheFile(info, securityState{}, false); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("dir file = %v", err)
 	}
 	info = windows.ByHandleFileInformation{NumberOfLinks: 2}
-	if err := validateCacheFile(info, false); !errors.Is(err, ErrUnsafePath) {
+	if err := validateCacheFile(info, securityState{}, false); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("hardlink file = %v", err)
 	}
 	if !isNotFound(windows.ERROR_PATH_NOT_FOUND) || isNotFound(errors.New("other")) {
@@ -952,7 +968,7 @@ func TestCrossPlatformCoverageWindowsAncestryAttrFaults(t *testing.T) {
 	}
 	if err := validateAncestryPath(`Z:\missing-drive-path-dws`, &Counters{}, wrapIO{windowsIO: realWindowsIO{}, attrFn: func(string) (uint32, error) {
 		return 0, windows.ERROR_PATH_NOT_FOUND
-	}}); err == nil {
+	}}, false, false); err == nil {
 		t.Fatal("missing ancestry accepted")
 	}
 }
@@ -1103,11 +1119,11 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 		t.Fatalf("owned mkdir = %v", err)
 	}
 
-	platformIO = wrapIO{windowsIO: realWindowsIO{}, restrictFn: func(path string) error {
+	platformIO = wrapIO{windowsIO: realWindowsIO{}, restrictFn: func(path string, shared bool) error {
 		if filepath.Base(path) == "dws" {
 			return errors.New("forced dws acl")
 		}
-		return realWindowsIO{}.restrictACL(path)
+		return realWindowsIO{}.restrictACL(path, shared)
 	}}
 	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("owned acl = %v", err)
@@ -1430,5 +1446,172 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 	}}
 	if _, err := cache.AcquireLock(context.Background(), time.Millisecond); err == nil {
 		t.Fatal("lock open failure accepted")
+	}
+}
+
+func TestWindowsValidateSecuritySharedVsPersonal(t *testing.T) {
+	user, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users, err := windows.CreateWellKnownSid(windows.WinBuiltinUsersSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	world, err := windows.CreateWellKnownSid(windows.WinWorldSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	personalOK := securityState{
+		owner:       user,
+		daclPresent: true,
+		aces: []securityACE{
+			{allowed: true, mask: windows.GENERIC_ALL, sid: user},
+			{allowed: true, mask: windows.GENERIC_ALL, sid: system},
+		},
+	}
+	if err := validateSecurity(personalOK, false); err != nil {
+		t.Fatalf("personal owner+SYSTEM: %v", err)
+	}
+	personalUsers := securityState{
+		owner:       user,
+		daclPresent: true,
+		aces: []securityACE{
+			{allowed: true, mask: windows.GENERIC_ALL, sid: user},
+			{allowed: true, mask: windows.GENERIC_READ, sid: users},
+		},
+	}
+	if err := validateSecurity(personalUsers, false); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("personal Users ACE = %v", err)
+	}
+
+	sharedRead := securityState{
+		owner:       admins,
+		daclPresent: true,
+		aces: []securityACE{
+			{allowed: true, mask: windows.GENERIC_ALL, sid: admins},
+			{allowed: true, mask: windows.GENERIC_ALL, sid: system},
+			{allowed: true, mask: windows.GENERIC_READ | windows.GENERIC_EXECUTE, sid: users},
+		},
+	}
+	if err := validateSecurity(sharedRead, true); err != nil {
+		t.Fatalf("shared Users read: %v", err)
+	}
+	sharedWrite := securityState{
+		owner:       admins,
+		daclPresent: true,
+		aces: []securityACE{
+			{allowed: true, mask: windows.GENERIC_ALL, sid: admins},
+			{allowed: true, mask: windows.GENERIC_WRITE, sid: users},
+		},
+	}
+	if err := validateSecurity(sharedWrite, true); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("shared Users write = %v", err)
+	}
+	untrustedOwner := securityState{
+		owner:       world,
+		daclPresent: true,
+		aces:        []securityACE{{allowed: true, mask: windows.GENERIC_ALL, sid: world}},
+	}
+	if err := validateSecurity(untrustedOwner, true); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("untrusted owner = %v", err)
+	}
+	if err := validateSecurity(securityState{owner: user}, true); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("missing DACL = %v", err)
+	}
+
+	info := windows.ByHandleFileInformation{NumberOfLinks: 1}
+	if err := validateCacheFile(info, sharedRead, true); err != nil {
+		t.Fatalf("validateCacheFile shared read: %v", err)
+	}
+	if err := validateCacheFile(info, sharedWrite, true); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("validateCacheFile shared write = %v", err)
+	}
+}
+
+func TestWindowsSharedRestrictACLAllowsUsersRead(t *testing.T) {
+	dir := privateTestBase(t)
+	target := filepath.Join(dir, "shared-root")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := restrictSharedReadOnly(target); err != nil {
+		t.Fatal(err)
+	}
+	fd, err := (realWindowsIO{}).open(target, windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer (realWindowsIO{}).close(fd)
+	sec, err := (realWindowsIO{}).security(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateSecurity(sec, true); err != nil {
+		t.Fatalf("shared ACL validate: %v", err)
+	}
+	users, err := windows.CreateWellKnownSid(windows.WinBuiltinUsersSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundUsersRead := false
+	for _, ace := range sec.aces {
+		if ace.allowed && ace.sid.Equals(users) {
+			if ace.mask&dangerousWriteMask != 0 {
+				t.Fatalf("Users write mask %#x", ace.mask)
+			}
+			foundUsersRead = true
+		}
+	}
+	if !foundUsersRead {
+		t.Fatal("Builtin Users read ACE missing")
+	}
+}
+
+func TestWindowsSharedOpenRejectsWritableDACLAndFallsBack(t *testing.T) {
+	sharedRoot := privateTestBase(t)
+	userBase := privateTestBase(t)
+	systemBase := filepath.Join(sharedRoot, "dws")
+	digest := sha256.Sum256([]byte("official"))
+	editionDir := filepath.Join(systemBase, "dws", "schema", hex.EncodeToString(digest[:]), "v1")
+	if err := os.MkdirAll(editionDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	world, err := windows.CreateWellKnownSid(windows.WinWorldSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := setProtectedDACL(systemBase, []windows.EXPLICIT_ACCESS{
+		explicitAccess(world, windows.TRUSTEE_IS_WELL_KNOWN_GROUP, windows.GENERIC_ALL),
+	}); err != nil {
+		t.Fatalf("seed writable shared root: %v", err)
+	}
+	oldProgram, oldUser, oldIO := programDataDir, userCacheDir, platformIO
+	programDataDir = func() string { return sharedRoot }
+	userCacheDir = func() (string, error) { return userBase, nil }
+	platformIO = realWindowsIO{}
+	t.Cleanup(func() { programDataDir, userCacheDir, platformIO = oldProgram, oldUser, oldIO })
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+
+	cache, err := Open("official")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+	if !strings.HasPrefix(cache.Directory(), userBase) {
+		t.Fatalf("expected fallback to user cache under %s, got %s", userBase, cache.Directory())
+	}
+	backend := cache.backend.(*windowsCache)
+	if backend.shared {
+		t.Fatal("fallback cache marked shared")
 	}
 }

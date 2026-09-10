@@ -388,6 +388,10 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	for _, want := range []string{
 		"function Test-SchemaCacheArtifactsPresent",
 		"function Build-SharedSchemaCache",
+		"function Initialize-SharedSchemaCacheRoot",
+		"function Protect-SharedSchemaCacheTree",
+		"function Set-SharedSchemaCacheAcl",
+		"function Test-SharedSchemaCachePathTrusted",
 		"DWS_SCHEMA_CACHE_DIR",
 		"schema --all",
 		"identity.json",
@@ -407,10 +411,23 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	if !strings.Contains(buildFn, "Test-SchemaCacheArtifactsPresent") {
 		t.Fatal("Build-SharedSchemaCache must verify artifacts before claiming success")
 	}
+	if !strings.Contains(buildFn, "Initialize-SharedSchemaCacheRoot") {
+		t.Fatal("Build-SharedSchemaCache must Initialize-SharedSchemaCacheRoot instead of bare New-Item")
+	}
+	if !strings.Contains(buildFn, "Protect-SharedSchemaCacheTree") {
+		t.Fatal("Build-SharedSchemaCache must Protect-SharedSchemaCacheTree after a successful warm")
+	}
+	if strings.Contains(buildFn, "New-Item -ItemType Directory -Path $sharedDir -Force") {
+		t.Fatal("Build-SharedSchemaCache must not blindly New-Item -Force the shared root")
+	}
 	successIdx := strings.Index(buildFn, "Shared schema cache built")
 	verifyIdx := strings.Index(buildFn, "Test-SchemaCacheArtifactsPresent")
+	protectIdx := strings.Index(buildFn, "Protect-SharedSchemaCacheTree")
 	if successIdx < 0 || verifyIdx < 0 || verifyIdx > successIdx {
 		t.Fatal("success message must follow artifact verification")
+	}
+	if protectIdx < 0 || protectIdx > successIdx {
+		t.Fatal("Protect-SharedSchemaCacheTree must run before claiming shared success")
 	}
 	if strings.Count(text, "Build-SharedSchemaCache") < 4 {
 		t.Fatal("install.ps1 must invoke Build-SharedSchemaCache after binary install paths")

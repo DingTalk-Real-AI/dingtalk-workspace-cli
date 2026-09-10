@@ -21,7 +21,9 @@
 #   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
 #                       Gitee API instead of GitHub (China mirror)
 #   DWS_SCHEMA_CACHE_SHARED_DIR — optional shared schema-cache base (default:
-#                       %ProgramData%\dws). Installer warms this when writable.
+#                       %ProgramData%\dws). Installer initializes/protects ACL
+#                       (Admins/SYSTEM write, Users read) or falls back to
+#                       %LOCALAPPDATA% when the shared root is untrusted.
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -1840,8 +1842,9 @@ function Install-Skills {
 # ── Build schema cache ───────────────────────────────────────────────────────
 # Persistent backends are compiled in for windows amd64/arm64. Identity is
 # generated on this machine from the installed binary (no compile-time seal).
-# Prefer a writable shared location (%ProgramData%\dws), otherwise warm the
-# per-user cache under %LOCALAPPDATA%. Never claim success without artifacts.
+# Prefer a hardened shared location (%ProgramData%\dws) with Admins/SYSTEM write
+# and Builtin Users read+traverse; otherwise warm the per-user cache under
+# %LOCALAPPDATA%. Never claim success without artifacts.
 
 function Test-SchemaCacheArtifactsPresent {
     param([string]$Dir)
@@ -1858,6 +1861,176 @@ function Test-SchemaCacheArtifactsPresent {
         $null -ne $payloads -and $payloads.Length -gt 0 -and
         $null -ne $identity -and $identity.Length -gt 0
     )
+}
+
+function Test-IsWindowsHost {
+    if ($PSVersionTable.PSEdition -eq 'Desktop') { return $true }
+    if ($null -ne (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) -and $IsWindows) { return $true }
+    return ($env:OS -eq 'Windows_NT')
+}
+
+function Test-SharedSchemaCachePathTrusted {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        try {
+            $probe = Join-Path $Path ".dws-schema-cache-trust-probe"
+            [System.IO.File]::WriteAllText($probe, "ok")
+            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            return $true
+        } catch {
+            return $false
+        }
+    }
+    try {
+        $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+        $owner = $acl.Owner
+        $trustedOwners = @(
+            'BUILTIN\Administrators',
+            'NT AUTHORITY\SYSTEM',
+            ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
+        )
+        $ownerTrusted = $false
+        foreach ($candidate in $trustedOwners) {
+            if ($owner -and ($owner -ieq $candidate)) {
+                $ownerTrusted = $true
+                break
+            }
+        }
+        # Account for localized BUILTIN\Administrators via SID when possible.
+        if (-not $ownerTrusted) {
+            try {
+                $ownerSid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+                if ($ownerSid -eq 'S-1-5-32-544' -or $ownerSid -eq 'S-1-5-18') {
+                    $ownerTrusted = $true
+                }
+            } catch {
+                $ownerTrusted = $false
+            }
+        }
+        if (-not $ownerTrusted) {
+            return $false
+        }
+
+        $usersSid = 'S-1-5-32-545'
+        $worldSid = 'S-1-1-0'
+        $authenticatedSid = 'S-1-5-11'
+        foreach ($rule in $acl.Access) {
+            if ($rule.AccessControlType -ne 'Allow') {
+                continue
+            }
+            $sid = $null
+            try {
+                $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+            } catch {
+                continue
+            }
+            $isOrdinary = ($sid -eq $usersSid -or $sid -eq $worldSid -or $sid -eq $authenticatedSid)
+            if (-not $isOrdinary) {
+                continue
+            }
+            $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
+                [System.Security.AccessControl.FileSystemRights]::Modify -bor `
+                [System.Security.AccessControl.FileSystemRights]::FullControl -bor `
+                [System.Security.AccessControl.FileSystemRights]::Delete -bor `
+                [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor `
+                [System.Security.AccessControl.FileSystemRights]::TakeOwnership
+            if (($rule.FileSystemRights -band $writeRights) -ne 0) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Set-SharedSchemaCacheItemAcl {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        throw "shared schema cache path missing: $Path"
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return
+    }
+    $isContainer = (Get-Item -LiteralPath $Path -Force).PSIsContainer
+    if ($isContainer) {
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor `
+            [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+        $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    } else {
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]::None
+        $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    }
+    $acl.SetAccessRuleProtection($true, $false)
+    $full = [System.Security.AccessControl.FileSystemRights]::FullControl
+    $readExec = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute -bor `
+        [System.Security.AccessControl.FileSystemRights]::Synchronize
+    $allow = [System.Security.AccessControl.AccessControlType]::Allow
+    $admins = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+    $system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+    $users = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-545')
+    $current = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    foreach ($sid in @($admins, $system, $current)) {
+        if ($isContainer) {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $inheritance, $propagation, $allow)))
+        } else {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $allow)))
+        }
+    }
+    if ($isContainer) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $inheritance, $propagation, $allow)))
+    } else {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $allow)))
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+}
+
+function Set-SharedSchemaCacheAcl {
+    param([string]$Path)
+    Set-SharedSchemaCacheItemAcl -Path $Path
+}
+
+function Protect-SharedSchemaCacheTree {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        throw "shared schema cache tree missing: $Path"
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return
+    }
+    Set-SharedSchemaCacheItemAcl -Path $Path
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Set-SharedSchemaCacheItemAcl -Path $_.FullName
+    }
+}
+
+function Initialize-SharedSchemaCacheRoot {
+    param([string]$Path)
+    if (-not $Path) {
+        throw "shared schema cache path is empty"
+    }
+    if (Test-Path -LiteralPath $Path) {
+        if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
+            throw "shared schema cache root is untrusted (owner/DACL): $Path"
+        }
+        Set-SharedSchemaCacheAcl -Path $Path
+        return $Path
+    }
+    $parent = Split-Path -Parent $Path
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
+    }
+    New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
+    Set-SharedSchemaCacheAcl -Path $Path
+    if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
+        throw "shared schema cache root remained untrusted after initialize: $Path"
+    }
+    return $Path
 }
 
 function Build-SharedSchemaCache {
@@ -1877,13 +2050,11 @@ function Build-SharedSchemaCache {
     $shared = $false
     if ($sharedDir) {
         try {
-            New-Item -ItemType Directory -Path $sharedDir -Force -ErrorAction Stop | Out-Null
-            $probe = Join-Path $sharedDir ".dws-schema-cache-write-test"
-            [System.IO.File]::WriteAllText($probe, "ok")
-            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            Initialize-SharedSchemaCacheRoot -Path $sharedDir | Out-Null
             $cacheDir = $sharedDir
             $shared = $true
         } catch {
+            Write-Say "⚠️  Shared schema cache root unsafe or unusable ($sharedDir); falling back to per-user cache."
             $cacheDir = $null
         }
     }
@@ -1939,6 +2110,13 @@ function Build-SharedSchemaCache {
 
     if ($ok) {
         if ($shared) {
+            try {
+                Protect-SharedSchemaCacheTree -Path $cacheDir
+            } catch {
+                Write-Say "⚠️  Shared schema cache built but ACL protect failed; falling back warning."
+                Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                return
+            }
             Write-Say "✅ Shared schema cache built: $cacheDir"
         } else {
             Write-Say "✅ Schema cache built: $cacheDir"

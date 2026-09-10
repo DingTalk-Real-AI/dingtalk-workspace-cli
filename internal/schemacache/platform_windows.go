@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -33,6 +34,13 @@ const (
 	// in the threat model.
 	secureShareRead = windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE | windows.FILE_SHARE_DELETE
 	secureShareLock = windows.FILE_SHARE_READ | windows.FILE_SHARE_WRITE | windows.FILE_SHARE_DELETE
+	// fileDeleteChild is FILE_DELETE_CHILD (not exported by x/sys/windows).
+	fileDeleteChild = 0x00000040
+	// dangerousWriteMask is the rights ordinary users must not hold on a shared
+	// schema cache. Read/traverse (GENERIC_READ|EXECUTE / FILE_GENERIC_*) are OK.
+	dangerousWriteMask = windows.FILE_WRITE_DATA | windows.FILE_APPEND_DATA | windows.FILE_WRITE_EA |
+		windows.FILE_WRITE_ATTRIBUTES | fileDeleteChild | windows.DELETE |
+		windows.WRITE_DAC | windows.WRITE_OWNER | windows.GENERIC_WRITE | windows.GENERIC_ALL
 )
 
 var (
@@ -52,6 +60,7 @@ type windowsIO interface {
 	mkdir(path string) error
 	open(path string, access, share, disposition, flags uint32) (windows.Handle, error)
 	info(h windows.Handle) (windows.ByHandleFileInformation, error)
+	security(h windows.Handle) (securityState, error)
 	readAt(h windows.Handle, p []byte, offset int64) (int, error)
 	write(h windows.Handle, p []byte) (int, error)
 	flush(h windows.Handle) error
@@ -60,7 +69,7 @@ type windowsIO interface {
 	remove(path string) error
 	lock(h windows.Handle) error
 	unlock(h windows.Handle) error
-	restrictACL(path string) error
+	restrictACL(path string, shared bool) error
 	random(p []byte) (int, error)
 }
 
@@ -125,7 +134,16 @@ func (realWindowsIO) unlock(h windows.Handle) error {
 	return windows.UnlockFileEx(h, 0, 1, 0, ol)
 }
 
-func (realWindowsIO) restrictACL(path string) error { return restrictOwnerWrite(path) }
+func (realWindowsIO) restrictACL(path string, shared bool) error {
+	if shared {
+		return restrictSharedReadOnly(path)
+	}
+	return restrictOwnerWrite(path)
+}
+
+func (realWindowsIO) security(h windows.Handle) (securityState, error) {
+	return readHandleSecurity(h)
+}
 
 func (realWindowsIO) random(p []byte) (int, error) { return rand.Read(p) }
 
@@ -218,10 +236,12 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 	}
 	current += `\`
 	counters.rootOpenOps.Add(1)
-	if err := validateAncestryPath(current, counters, ops); err != nil {
+	// Volume roots and ordinary LOCALAPPDATA / ProgramData parents are attrs-only.
+	// Enforcing a DACL here falsely rejects normal personal trees and ProgramData.
+	if err := validateAncestryPath(current, counters, ops, false, shared); err != nil {
 		return "", err
 	}
-	for _, part := range parts {
+	for i, part := range parts {
 		next := filepath.Join(current, part)
 		counters.rootOpenOps.Add(1)
 		attrs, err := ops.attributes(next)
@@ -229,14 +249,19 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 			if noCreate {
 				return "", fmt.Errorf("%w: cache ancestry %s", ErrNotFound, part)
 			}
-			if err := validateAncestryPath(current, counters, ops); err != nil {
+			if err := validateAncestryPath(current, counters, ops, false, shared); err != nil {
 				return "", fmt.Errorf("%w: missing cache ancestry requires a safe parent", ErrUnsafePath)
 			}
 			counters.mkdirOps.Add(1)
 			if mkdirErr := ops.mkdir(next); mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
 				return "", fmt.Errorf("%w: create cache ancestry: %v", ErrUnsafePath, mkdirErr)
 			}
-			_ = ops.restrictACL(next)
+			// Harden only the shared-root leaf (final base component), not ProgramData.
+			if shared && i == len(parts)-1 {
+				_ = ops.restrictACL(next, true)
+			} else if !shared {
+				_ = ops.restrictACL(next, false)
+			}
 			attrs, err = ops.attributes(next)
 		}
 		if err != nil {
@@ -246,6 +271,16 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 			return "", err
 		}
 		current = next
+	}
+	if shared {
+		// Shared root (e.g. %ProgramData%\dws or DWS_SCHEMA_CACHE_DIR): require a
+		// trusted owner and no ordinary-user write. Creating paths may harden first.
+		if !noCreate {
+			_ = ops.restrictACL(current, true)
+		}
+		if err := validateDirectorySecurity(current, counters, ops, true); err != nil {
+			return "", err
+		}
 	}
 	for _, part := range []string{"dws", "schema", editionHex, "v1"} {
 		next := filepath.Join(current, part)
@@ -259,7 +294,7 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 			if mkdirErr := ops.mkdir(next); mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
 				return "", fmt.Errorf("%w: create cache directory: %v", ErrUnsafePath, mkdirErr)
 			}
-			if aclErr := ops.restrictACL(next); aclErr != nil {
+			if aclErr := ops.restrictACL(next, shared); aclErr != nil {
 				return "", fmt.Errorf("%w: restrict cache directory ACL: %v", ErrUnsafePath, aclErr)
 			}
 			attrs, err = ops.attributes(next)
@@ -268,6 +303,9 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 			return "", fmt.Errorf("%w: open cache directory: %v", ErrUnsafePath, err)
 		}
 		if err := validateAttrsDirectory(attrs, true); err != nil {
+			return "", err
+		}
+		if err := validateDirectorySecurity(next, counters, ops, shared); err != nil {
 			return "", err
 		}
 		current = next
@@ -281,13 +319,19 @@ func isNotFound(err error) bool {
 		errors.Is(err, os.ErrNotExist)
 }
 
-func validateAncestryPath(path string, counters *Counters, ops windowsIO) error {
+func validateAncestryPath(path string, counters *Counters, ops windowsIO, enforceACL bool, shared bool) error {
 	counters.statOps.Add(1)
 	attrs, err := ops.attributes(path)
 	if err != nil {
 		return fmt.Errorf("%w: cache ancestry: %v", ErrUnsafePath, err)
 	}
-	return validateAttrsDirectory(attrs, false)
+	if err := validateAttrsDirectory(attrs, false); err != nil {
+		return err
+	}
+	if !enforceACL {
+		return nil
+	}
+	return validateDirectorySecurity(path, counters, ops, shared)
 }
 
 func validateAttrsDirectory(attrs uint32, owned bool) error {
@@ -303,7 +347,31 @@ func validateAttrsDirectory(attrs uint32, owned bool) error {
 	return nil
 }
 
-func validateCacheFile(info windows.ByHandleFileInformation, shared bool) error {
+func validateDirectorySecurity(path string, counters *Counters, ops windowsIO, shared bool) error {
+	counters.rootOpenOps.Add(1)
+	fd, err := ops.open(
+		path,
+		windows.READ_CONTROL,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS,
+	)
+	if err != nil {
+		return fmt.Errorf("%w: open cache directory security: %v", ErrUnsafePath, err)
+	}
+	sec, err := ops.security(fd)
+	closeErr := ops.close(fd)
+	counters.closeOps.Add(1)
+	if err != nil {
+		return fmt.Errorf("%w: read cache directory security: %v", ErrUnsafePath, err)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("%w: close cache directory security: %v", ErrUnsafePath, closeErr)
+	}
+	return validateSecurity(sec, shared)
+}
+
+func validateCacheFile(info windows.ByHandleFileInformation, sec securityState, shared bool) error {
 	if info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
 		return fmt.Errorf("%w: cache file is a reparse point", ErrUnsafePath)
 	}
@@ -313,8 +381,7 @@ func validateCacheFile(info windows.ByHandleFileInformation, shared bool) error 
 	if info.NumberOfLinks != 1 {
 		return fmt.Errorf("%w: cache file must be a single-link regular file", ErrUnsafePath)
 	}
-	_ = shared
-	return nil
+	return validateSecurity(sec, shared)
 }
 
 func sameFileState(a, b fileState) bool {
@@ -333,6 +400,118 @@ func fileStateFrom(info windows.ByHandleFileInformation) fileState {
 	}
 }
 
+type securityACE struct {
+	allowed bool
+	mask    windows.ACCESS_MASK
+	sid     *windows.SID
+}
+
+type securityState struct {
+	owner       *windows.SID
+	daclPresent bool
+	aces        []securityACE
+}
+
+func readHandleSecurity(h windows.Handle) (securityState, error) {
+	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return securityState{}, err
+	}
+	owner, _, err := sd.Owner()
+	if err != nil || owner == nil {
+		if err == nil {
+			err = errors.New("missing owner")
+		}
+		return securityState{}, err
+	}
+	ownerCopy, err := owner.Copy()
+	if err != nil {
+		return securityState{}, err
+	}
+	dacl, _, err := sd.DACL()
+	if errors.Is(err, windows.ERROR_OBJECT_NOT_FOUND) {
+		return securityState{owner: ownerCopy, daclPresent: false}, nil
+	}
+	if err != nil {
+		return securityState{}, err
+	}
+	// A present but nil DACL is treated as missing protection (fully open).
+	if dacl == nil {
+		return securityState{owner: ownerCopy, daclPresent: false}, nil
+	}
+	aces := make([]securityACE, 0, dacl.AceCount)
+	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(dacl, i, &ace); err != nil {
+			return securityState{}, err
+		}
+		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		sidCopy, err := sid.Copy()
+		if err != nil {
+			return securityState{}, err
+		}
+		aces = append(aces, securityACE{
+			allowed: ace.Header.AceType == windows.ACCESS_ALLOWED_ACE_TYPE,
+			mask:    ace.Mask,
+			sid:     sidCopy,
+		})
+	}
+	return securityState{owner: ownerCopy, daclPresent: true, aces: aces}, nil
+}
+
+func trustedSIDs() ([]*windows.SID, error) {
+	user, err := currentUserSID()
+	if err != nil {
+		return nil, err
+	}
+	admins, err := windowsCreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		return nil, err
+	}
+	system, err := windowsCreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		return nil, err
+	}
+	return []*windows.SID{user, admins, system}, nil
+}
+
+func sidTrusted(sid *windows.SID, trusted []*windows.SID) bool {
+	if sid == nil {
+		return false
+	}
+	for _, candidate := range trusted {
+		if candidate != nil && sid.Equals(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateSecurity(sec securityState, shared bool) error {
+	if sec.owner == nil || !sec.daclPresent {
+		return fmt.Errorf("%w: cache security descriptor missing owner or DACL", ErrUnsafePath)
+	}
+	trusted, err := trustedSIDs()
+	if err != nil {
+		return fmt.Errorf("%w: resolve trusted SIDs: %v", ErrUnsafePath, err)
+	}
+	if !sidTrusted(sec.owner, trusted) {
+		return fmt.Errorf("%w: cache path has untrusted owner", ErrUnsafePath)
+	}
+	for _, ace := range sec.aces {
+		if !ace.allowed || sidTrusted(ace.sid, trusted) {
+			continue
+		}
+		if !shared {
+			return fmt.Errorf("%w: personal cache ACL includes non-trusted SID", ErrUnsafePath)
+		}
+		if ace.mask&dangerousWriteMask != 0 {
+			return fmt.Errorf("%w: shared cache ACL grants write to untrusted SID", ErrUnsafePath)
+		}
+	}
+	return nil
+}
+
 func restrictOwnerWrite(path string) error {
 	user, err := currentUserSID()
 	if err != nil {
@@ -343,9 +522,39 @@ func restrictOwnerWrite(path string) error {
 		return err
 	}
 	access := []windows.EXPLICIT_ACCESS{
-		explicitAccess(user, windows.TRUSTEE_IS_USER),
-		explicitAccess(system, windows.TRUSTEE_IS_USER),
+		explicitAccess(user, windows.TRUSTEE_IS_USER, windows.GENERIC_ALL),
+		explicitAccess(system, windows.TRUSTEE_IS_USER, windows.GENERIC_ALL),
 	}
+	return setProtectedDACL(path, access)
+}
+
+func restrictSharedReadOnly(path string) error {
+	user, err := currentUserSID()
+	if err != nil {
+		return err
+	}
+	admins, err := windowsCreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		return err
+	}
+	system, err := windowsCreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		return err
+	}
+	users, err := windowsCreateWellKnownSid(windows.WinBuiltinUsersSid)
+	if err != nil {
+		return err
+	}
+	access := []windows.EXPLICIT_ACCESS{
+		explicitAccess(admins, windows.TRUSTEE_IS_GROUP, windows.GENERIC_ALL),
+		explicitAccess(system, windows.TRUSTEE_IS_USER, windows.GENERIC_ALL),
+		explicitAccess(user, windows.TRUSTEE_IS_USER, windows.GENERIC_ALL),
+		explicitAccess(users, windows.TRUSTEE_IS_WELL_KNOWN_GROUP, windows.GENERIC_READ|windows.GENERIC_EXECUTE),
+	}
+	return setProtectedDACL(path, access)
+}
+
+func setProtectedDACL(path string, access []windows.EXPLICIT_ACCESS) error {
 	acl, err := windowsACLFromEntries(access, nil)
 	if err != nil {
 		return err
@@ -358,9 +567,9 @@ func restrictOwnerWrite(path string) error {
 	)
 }
 
-func explicitAccess(sid *windows.SID, trusteeType windows.TRUSTEE_TYPE) windows.EXPLICIT_ACCESS {
+func explicitAccess(sid *windows.SID, trusteeType windows.TRUSTEE_TYPE, mask windows.ACCESS_MASK) windows.EXPLICIT_ACCESS {
 	return windows.EXPLICIT_ACCESS{
-		AccessPermissions: windows.GENERIC_ALL,
+		AccessPermissions: mask,
 		AccessMode:        windows.GRANT_ACCESS,
 		Inheritance:       windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 		Trustee: windows.TRUSTEE{
@@ -408,10 +617,18 @@ func (c *windowsCache) secureOpen(name string, access, share, disposition uint32
 	}
 	c.counters.statOps.Add(1)
 	info, err := c.ops.info(fd)
-	if err == nil {
-		err = validateCacheFile(info, c.shared)
-	}
 	if err != nil {
+		_ = c.ops.close(fd)
+		c.counters.closeOps.Add(1)
+		return 0, fileState{}, err
+	}
+	sec, err := c.ops.security(fd)
+	if err != nil {
+		_ = c.ops.close(fd)
+		c.counters.closeOps.Add(1)
+		return 0, fileState{}, fmt.Errorf("%w: read security: %v", ErrUnsafePath, err)
+	}
+	if err := validateCacheFile(info, sec, c.shared); err != nil {
 		_ = c.ops.close(fd)
 		c.counters.closeOps.Add(1)
 		return 0, fileState{}, err
@@ -748,16 +965,24 @@ func (c *windowsCache) atomicReplace(target string, header, payload []byte) erro
 	}
 	c.counters.statOps.Add(1)
 	info, err := c.ops.info(fd)
-	if err == nil {
-		err = validateCacheFile(info, c.shared)
-	}
 	if err != nil {
 		cleanup()
 		return err
 	}
-	if err := c.ops.restrictACL(stagingPath); err != nil {
+	// Restrict before DACL validation: a fresh CREATE_NEW handle may still carry
+	// inherited Users-write ACEs until we replace them with the protected ACL.
+	if err := c.ops.restrictACL(stagingPath, c.shared); err != nil {
 		cleanup()
 		return fmt.Errorf("restrict staging ACL: %w", err)
+	}
+	sec, err := c.ops.security(fd)
+	if err != nil {
+		cleanup()
+		return fmt.Errorf("%w: read staging security: %v", ErrUnsafePath, err)
+	}
+	if err := validateCacheFile(info, sec, c.shared); err != nil {
+		cleanup()
+		return err
 	}
 	if err := c.writeFull(fd, header); err != nil {
 		cleanup()
@@ -868,7 +1093,7 @@ func (c *windowsCache) acquire(ctx context.Context, timeout time.Duration) (lock
 	if err != nil {
 		return nil, err
 	}
-	_ = c.ops.restrictACL(filepath.Join(c.path, lockFileName))
+	_ = c.ops.restrictACL(filepath.Join(c.path, lockFileName), c.shared)
 	closeFD := func() {
 		_ = c.ops.close(fd)
 		c.counters.closeOps.Add(1)
