@@ -765,6 +765,12 @@ func isBusinessError(body map[string]any) bool {
 	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
 	}
+	if isNotFoundStatus(body["status"]) {
+		return true
+	}
+	if data, ok := body["data"].(map[string]any); ok && isNotFoundStatus(data["status"]) {
+		return true
+	}
 	for _, key := range []string{"errorCode", "error_code", "errcode", "err_code", "code"} {
 		if isErrorCodeValue(body[key]) {
 			return true
@@ -777,6 +783,11 @@ func isBusinessError(body map[string]any) bool {
 		return true
 	}
 	return false
+}
+
+func isNotFoundStatus(v any) bool {
+	s, ok := v.(string)
+	return ok && strings.EqualFold(strings.TrimSpace(s), "not_found")
 }
 
 func isErrorCodeValue(v any) bool {

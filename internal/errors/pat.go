@@ -222,8 +222,19 @@ func isNotLoggedInError(body map[string]any) bool {
 	return false
 }
 
+func isNotFoundStatus(v any) bool {
+	s, ok := v.(string)
+	return ok && strings.EqualFold(strings.TrimSpace(s), "not_found")
+}
+
 // isBusinessError checks if a parsed JSON body represents a business-level error.
 func isBusinessError(body map[string]any) bool {
+	if isNotFoundStatus(body["status"]) {
+		return true
+	}
+	if data, ok := body["data"].(map[string]any); ok && isNotFoundStatus(data["status"]) {
+		return true
+	}
 	if _, ok := body["error"].(string); ok {
 		return true
 	}
