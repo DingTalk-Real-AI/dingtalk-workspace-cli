@@ -155,6 +155,10 @@ func TestCrossPlatformCoverageStringSliceSetRejectsInvalidCSV(t *testing.T) {
 	if err := value.Set(`"`); err == nil {
 		t.Fatal("unbalanced quote accepted")
 	}
+	got, err := readCommandStringSlice("")
+	if err != nil || len(got) != 0 {
+		t.Fatalf("empty slice = %#v %v", got, err)
+	}
 }
 
 func TestCrossPlatformCoverageAnnotateFlagAliasIgnoresMissingInputs(t *testing.T) {

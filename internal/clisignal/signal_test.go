@@ -113,6 +113,20 @@ func TestCrossPlatformCoverageSignalRedeliverExitCodesAndDetail(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageInterruptionDetailAndNilSignal(t *testing.T) {
+	err := (&Interruption{signal: os.Interrupt, detail: errors.New("stopped")}).Error()
+	if !strings.Contains(err, "stopped") {
+		t.Fatalf("detail error = %q", err)
+	}
+	signals := make(chan os.Signal, 1)
+	ctx, state, stop := Manage(context.Background(), func() bool { return false }, signals, func() {}, func(os.Signal) {})
+	signals <- nil
+	stop()
+	if ctx == nil || state == nil {
+		t.Fatal("nil manage state")
+	}
+}
+
 func TestCrossPlatformCoverageInstallStopAndEscalateIgnoredSignal(t *testing.T) {
 	ctx, state, stop := Install(context.Background(), func() bool { return false })
 	if ctx == nil || state == nil {

@@ -3,6 +3,7 @@ package schemaruntime
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"math"
 	"testing"
 
@@ -204,4 +205,236 @@ func TestCrossPlatformCoverageProductProvenanceIndexFailure(t *testing.T) {
 	if _, err := registry.Index(); err == nil {
 		t.Fatal("mismatched product provenance accepted")
 	}
+}
+
+func TestCrossPlatformCoverageCompactProvenanceQueryAndIndexGaps(t *testing.T) {
+	if Compact(nil) != nil {
+		t.Fatal("nil compact")
+	}
+	payload := Compact(map[string]any{
+		"kind": "schema", "ignored": 1,
+		"product":  map[string]any{"kind": "schema", "id": "p"},
+		"products": []map[string]any{{"kind": "schema", "id": "a"}},
+		"tools":    []any{map[string]any{"id": "t"}, "plain"},
+		"parameters": map[string]any{
+			"ok":   map[string]any{"type": "string", "required": true, "secret": 1},
+			"raw":  "leaf",
+			"nest": map[string]any{"type": "object"},
+		},
+	})
+	if payload["kind"] != "schema" || payload["ignored"] != nil {
+		t.Fatalf("compact payload = %#v", payload)
+	}
+	if Compact(map[string]any{"product": "not-map"})["product"] != "not-map" {
+		t.Fatal("non-map product")
+	}
+	_ = CompactCollection("x")
+	_ = CompactCollection([]map[string]any{{"kind": "schema"}})
+	_ = CompactCollection([]any{map[string]any{"kind": "schema"}, 1})
+	_ = CompactParameters("x")
+	_ = CompactParameters(map[string]any{"n": 1})
+	_ = CompactValue(map[string]any{"description": "x"})
+	_ = CompactValue([]map[string]any{{"kind": "schema"}})
+	_ = CompactValue([]any{1, map[string]any{"type": "string"}})
+	_ = CompactValue(3)
+	_ = CompactParameter(map[string]any{"type": "string", "extra": true})
+
+	tool := allFieldsRegistry().Products[0].Tools[0]
+	for _, field := range []string{
+		"description", "metadata_source", "dry_run", "effect", "effect_source", "risk", "confirmation", "idempotency",
+		"interface_ref", "interface_mode", "availability", "interface_reason", "agent_summary", "use_when", "avoid_when",
+		"prerequisites", "tips", "workflow_refs", "examples", "reviewed", "missing",
+	} {
+		ToolProvenanceValue(tool, field)
+	}
+	param := tool.Parameters[0]
+	for _, field := range []string{
+		"name", "type", "description", "property", "required", "cli_required", "required_when", "default",
+		"interface_default", "example", "anyOf", "format", "enum", "interface_description", "interface_type", "missing",
+	} {
+		ParameterProvenanceValue(param, field)
+	}
+	ProductProvenanceValue(allFieldsRegistry().Products[0], "agent_summary")
+	ProductProvenanceValue(allFieldsRegistry().Products[0], "use_when")
+	ProductProvenanceValue(allFieldsRegistry().Products[0], "avoid_when")
+	ProductProvenanceValue(allFieldsRegistry().Products[0], "missing")
+
+	emptyID := allFieldsRegistry()
+	emptyID.Products[0].ID = ""
+	if _, err := emptyID.Index(); err == nil {
+		t.Fatal("empty product id")
+	}
+	dup := allFieldsRegistry()
+	dup.Products = append(dup.Products, dup.Products[0])
+	if _, err := dup.Index(); err == nil {
+		t.Fatal("duplicate product")
+	}
+	mismatch := allFieldsRegistry()
+	mismatch.Products[0].Tools[0].Identity.ProductID = "other"
+	if _, err := mismatch.Index(); err == nil {
+		t.Fatal("product mismatch")
+	}
+	dupCanon := allFieldsRegistry()
+	dupCanon.Products[0].Tools[1].Identity = dupCanon.Products[0].Tools[0].Identity
+	dupCanon.Products[0].Tools[1].Identity.Name = "run"
+	dupCanon.Products[0].Tools[1].Identity.CanonicalPath = "sample.run"
+	if _, err := dupCanon.Index(); err == nil {
+		t.Fatal("duplicate canonical")
+	}
+	cliConflict := allFieldsRegistry()
+	cliConflict.Products[0].Tools[1].Identity.CLIPath = cliConflict.Products[0].Tools[0].Identity.CLIPath
+	cliConflict.Products[0].Tools[1].Identity.PrimaryCLIPath = cliConflict.Products[0].Tools[0].Identity.PrimaryCLIPath
+	if _, err := cliConflict.Index(); err == nil {
+		t.Fatal("cli path conflict")
+	}
+	aliasCanon := allFieldsRegistry()
+	aliasCanon.Products[0].Tools[0].Identity.IsAlias = true
+	if err := validateCanonicalToolIdentity(aliasCanon.Products[0].Tools[0]); err == nil {
+		t.Fatal("alias canonical accepted")
+	}
+	cliDrift := allFieldsRegistry()
+	cliDrift.Products[0].Tools[0].Identity.CLIPath = "other path"
+	if err := validateCanonicalToolIdentity(cliDrift.Products[0].Tools[0]); err == nil {
+		t.Fatal("cli drift accepted")
+	}
+
+	bad := allFieldsRegistry().Products[0].Tools[0]
+	bad.Identity.ProductID = ""
+	if err := bad.Validate(); err == nil {
+		t.Fatal("empty product_id")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Identity.Name = ""
+	if err := bad.Validate(); err == nil {
+		t.Fatal("empty name")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Identity.CanonicalPath = "nope"
+	if err := bad.Validate(); err == nil {
+		t.Fatal("canonical mismatch")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Identity.CLIPath = ""
+	if err := bad.Validate(); err == nil {
+		t.Fatal("empty cli")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Parameters = append(append([]ParameterSpec(nil), bad.Parameters...), ParameterSpec{})
+	if err := bad.Validate(); err == nil {
+		t.Fatal("empty parameter")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Parameters = append(append([]ParameterSpec(nil), bad.Parameters...), bad.Parameters[0])
+	if err := bad.Validate(); err == nil {
+		t.Fatal("duplicate parameter")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Parameters[0].Default = json.RawMessage(`{`)
+	if err := bad.Validate(); err == nil {
+		t.Fatal("bad default json")
+	}
+	bad = allFieldsRegistry().Products[0].Tools[0]
+	bad.Interface.Ref = &contract.InterfaceRefSpec{}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("incomplete interface_ref")
+	}
+
+	if _, err := ToSnapshotPayloadWithProjectors(emptyID, SnapshotProjectors{}); err == nil {
+		t.Fatal("snapshot index failure")
+	}
+	fail := errors.New("proj")
+	if _, err := ToSnapshotPayloadWithProjectors(allFieldsRegistry(), SnapshotProjectors{ToolSummary: func(ToolSpec) (map[string]any, error) { return nil, fail }}); err == nil {
+		t.Fatal("summary projector")
+	}
+	if _, err := ToSnapshotPayloadWithProjectors(allFieldsRegistry(), SnapshotProjectors{ToolPayload: func(ToolSpec) (map[string]any, error) { return nil, fail }}); err == nil {
+		t.Fatal("tool projector")
+	}
+	if _, err := ToSnapshotPayloadWithProjectors(allFieldsRegistry(), SnapshotProjectors{ProductSummary: func(ProductSpec) (map[string]any, error) { return nil, fail }}); err == nil {
+		t.Fatal("product projector")
+	}
+
+	p := ParameterSpec{Name: "x", Type: "string", Description: "d", CLIRequired: true, RequiredWhen: "always", Default: json.RawMessage(`{`)}
+	if _, err := p.ToPayload(); err == nil {
+		t.Fatal("param default json")
+	}
+	p = ParameterSpec{Name: "x", Type: "string", Description: "d", InterfaceDefault: json.RawMessage(`{`)}
+	if _, err := p.ToPayload(); err == nil {
+		t.Fatal("param interface default json")
+	}
+	p = ParameterSpec{Name: "x", Type: "string", Description: "d", Example: json.RawMessage(`{`)}
+	if _, err := p.ToPayload(); err == nil {
+		t.Fatal("param example json")
+	}
+	p = ParameterSpec{Name: "x", Type: "int", Description: "d", AnyOf: []contract.FormatAlternative{{Format: "email"}}}
+	if _, err := p.ToPayload(); err == nil {
+		t.Fatal("anyOf type")
+	}
+	p = ParameterSpec{Name: "x", Type: "string", Description: "d", AnyOf: []contract.FormatAlternative{{Format: "email"}}, Format: "uuid"}
+	if _, err := p.ToPayload(); err == nil {
+		t.Fatal("anyOf format")
+	}
+	p = ParameterSpec{Name: "x", Type: "string", Description: "d", AnyOf: []contract.FormatAlternative{{Format: "email"}}, Enum: []string{"a"}, FieldProvenance: map[string]contract.FieldProvenance{"name": {}}}
+	if _, err := p.ToPayload(); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = DefaultString("", "fb")
+	_ = DefaultString("x", "fb")
+	if _, err := RawJSONValue(json.RawMessage(`{`)); err == nil {
+		t.Fatal("invalid raw json")
+	}
+	if _, err := RawJSONValue(json.RawMessage(`1`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := TypedJSONValue(map[string]int{"a": 1}); err != nil {
+		t.Fatal(err)
+	}
+	_ = StableUniqueStrings([]string{"b", "a", "b"})
+	_ = SortedUniqueStrings([]string{"b", "a"})
+	_ = CloneOptionalStrings(nil)
+	_ = CloneOptionalStrings([]string{"a"})
+	_ = ValidateFinalFieldProvenance("o", "f", contract.FieldProvenance{Value: json.RawMessage(`1`)}, 1)
+	_ = EqualJSONValues([]byte("1"), []byte("1"))
+
+	decoded := DecodedCommandPayloads{LeafIndex: []RenderedLeafRef{{CanonicalPath: "a"}, {CanonicalPath: "c"}}}
+	if _, ok := decoded.RenderedLeaf("missing"); ok {
+		t.Fatal("missing leaf")
+	}
+	if _, ok := decoded.RenderedLeaf("c"); !ok {
+		t.Fatal("leaf c")
+	}
+
+	reg := allFieldsRegistry()
+	index, err := reg.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenderQueryWithProjectors(reg, index, "sample group", QueryProjectors{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenderQueryWithProjectors(reg, index, "sample group", QueryProjectors{ToolSummary: func(ToolSpec) (map[string]any, error) { return nil, fail }}); err == nil {
+		t.Fatal("group projector")
+	}
+	view := AliasView(reg.Products[0].Tools[0], "sample legacy run")
+	if !view.Identity.IsAlias {
+		t.Fatal("alias view")
+	}
+	_ = AliasView(reg.Products[0].Tools[0], "")
+	_ = AliasView(reg.Products[0].Tools[0], "sample group run")
+	_ = ToolUnderGroup(reg.Products[0].Tools[0], "sample group")
+	_ = ToolUnderGroup(reg.Products[0].Tools[1], "sample group")
+	hashed := map[string]any{}
+	StampTrustedHashes(hashed, TrustedHashes{CatalogHash: "c", SurfaceHash: "s"})
+	if hashed["surface_hash"] != "s" {
+		t.Fatalf("hashes = %#v", hashed)
+	}
+	_ = sourceOrDefault("")
+	_ = sourceOrDefault(" custom ")
+	_ = UnknownPathError{Path: `say "hi"`}.Error()
+
+	norm := allFieldsRegistry().Products[0].Tools[1]
+	norm.Identity.CanonicalPath = ""
+	norm.Identity.ProductID = "sample"
+	norm.Identity.Name = "zzz"
+	_ = norm.normalized()
 }

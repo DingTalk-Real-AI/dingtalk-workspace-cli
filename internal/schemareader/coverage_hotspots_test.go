@@ -82,3 +82,20 @@ func TestCrossPlatformCoverageParseIdentityEmptyEdition(t *testing.T) {
 		t.Fatal("empty edition accepted")
 	}
 }
+
+func TestCrossPlatformCoverageLocatorAndIndexLocator(t *testing.T) {
+	meta := schemaruntime.DecodedSchemaMeta{LocatorProductByPath: map[string]string{"sample.run": "sample", "sample run": "sample"}}
+	if product, ok := Locator(meta, "sample.run"); !ok || product != "sample" {
+		t.Fatalf("locator = %q %v", product, ok)
+	}
+	if _, ok := Locator(meta, "missing"); ok {
+		t.Fatal("missing locator")
+	}
+	index := schemaruntime.DecodedSchemaPayloadIndex{LocatorProductByPath: map[string]string{"sample.run": "sample"}}
+	if product, ok := IndexLocator(index, "sample.run"); !ok || product != "sample" {
+		t.Fatalf("index locator = %q %v", product, ok)
+	}
+	if _, ok := IndexLocator(index, "missing"); ok {
+		t.Fatal("missing index locator")
+	}
+}
