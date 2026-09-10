@@ -568,7 +568,7 @@ func setProtectedSecurity(path string, owner *windows.SID, access []windows.EXPL
 	if err != nil {
 		return err
 	}
-	flags := windows.DACL_SECURITY_INFORMATION | windows.PROTECTED_DACL_SECURITY_INFORMATION
+	var flags windows.SECURITY_INFORMATION = windows.DACL_SECURITY_INFORMATION | windows.PROTECTED_DACL_SECURITY_INFORMATION
 	if owner != nil {
 		flags |= windows.OWNER_SECURITY_INFORMATION
 	}
