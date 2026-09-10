@@ -1641,8 +1641,17 @@ build_shared_schema_cache() {
     darwin/amd64|darwin/arm64) shared_dir="/Library/Caches/dws" ;;
     *) return 0 ;;
   esac
+  custom_shared_root=0
   if [ -n "${DWS_SCHEMA_CACHE_SHARED_DIR:-}" ]; then
     shared_dir="$DWS_SCHEMA_CACHE_SHARED_DIR"
+    custom_shared_root=1
+  fi
+  # Distinguish installer-created dedicated roots from pre-existing custom
+  # DWS_SCHEMA_CACHE_SHARED_DIR ancestors. Only the former may be chmod'd at
+  # the root; a private caller-owned base (e.g. 0700) must not be broadened.
+  shared_dir_preexisted=0
+  if [ -d "$shared_dir" ]; then
+    shared_dir_preexisted=1
   fi
   # Skip silently when we cannot write to the system location (non-root install
   # or an unusable shared ancestry). The runtime then uses the per-user cache.
@@ -1668,18 +1677,31 @@ build_shared_schema_cache() {
   # and populate it. Any schema command triggers generate + publish.
   if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
     schema_cache_artifacts_present "$schema_tree"; then
-    # World-readable/traversable: integrity rests on the locally generated
-    # identity plus shard digests, not on file ownership. umask 077 would
-    # otherwise leave $shared_dir and $shared_dir/dws at 0700 while only the
-    # schema tree is 0755 — other users could not reach the cache.
+    # World-readable/traversable on DWS-owned paths only: integrity rests on the
+    # locally generated identity plus shard digests, not on file ownership.
+    # Recursive chmod is limited to dws/schema. Never chmod a+rX a pre-existing
+    # custom SHARED_DIR root (repro: 0700 → 0755 exposing unrelated children).
     dws_intermediate="$(dirname "$schema_tree")"
-    if chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null &&
-      chmod -R a+rX "$schema_tree" 2>/dev/null &&
-      shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then
-      say "✅ Shared schema cache built: ${shared_dir}"
+    if [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
+      # Pre-existing custom ancestor: require safe traversal as-is, or fall back.
+      if chmod a+rX "$dws_intermediate" 2>/dev/null &&
+        chmod -R a+rX "$schema_tree" 2>/dev/null &&
+        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+        say "✅ Shared schema cache built: ${shared_dir}"
+      else
+        say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
+      fi
     else
-      # Caller-owned custom ancestor we cannot safely change: do not claim success.
-      say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
+      # Installer-created dedicated root (or default system base): umask 077 would
+      # otherwise leave $shared_dir and $shared_dir/dws at 0700 while only the
+      # schema tree is 0755 — other users could not reach the cache.
+      if chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null &&
+        chmod -R a+rX "$schema_tree" 2>/dev/null &&
+        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+        say "✅ Shared schema cache built: ${shared_dir}"
+      else
+        say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
+      fi
     fi
   else
     say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."

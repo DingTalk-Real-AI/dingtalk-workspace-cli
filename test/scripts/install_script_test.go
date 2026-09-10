@@ -271,6 +271,15 @@ func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
 	if strings.Contains(scriptText, `find "$shared_dir" -name 'identity.json'`) {
 		t.Fatal("install.sh must not recursively delete identity.json under the wide shared_dir")
 	}
+	if !strings.Contains(scriptText, "shared_dir_preexisted=0") || !strings.Contains(scriptText, "custom_shared_root=0") {
+		t.Fatal("install.sh must distinguish installer-created dedicated roots from pre-existing custom SHARED_DIR roots")
+	}
+	if !strings.Contains(scriptText, `custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1`) {
+		t.Fatal("install.sh must gate root chmod behind custom+pre-existing shared root checks")
+	}
+	if strings.Count(scriptText, `chmod a+rX "$shared_dir"`) != 1 {
+		t.Fatal(`install.sh must chmod a+rX "$shared_dir" only on the installer-created/dedicated-root branch`)
+	}
 
 	writeFakeBinary := func(t *testing.T, binDir, name, body string) {
 		t.Helper()
@@ -772,6 +781,147 @@ build_shared_schema_cache
 			t.Fatalf("%s mode %04o missing other r+x after shared success", dir, info.Mode().Perm())
 		}
 	}
+}
+
+func TestInstallScriptSharedSchemaCachePreservesPreexistingCustomRootMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	writeFake := func(t *testing.T, binDir string) {
+		t.Helper()
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+	}
+
+	t.Run("private 0700 custom root is not broadened", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(shared, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		secret := filepath.Join(shared, "unrelated-secret")
+		mustWriteFile(t, secret, []byte("secret\n"), 0o600)
+		if err := os.Chmod(shared, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-private-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private custom root harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("private 0700 custom root must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not written") {
+			t.Fatalf("private 0700 custom root missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(shared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("pre-existing custom root mode = %04o; want 0700 (must not broaden)", info.Mode().Perm())
+		}
+		secretInfo, err := os.Stat(secret)
+		if err != nil {
+			t.Fatalf("unrelated child must survive: %v", err)
+		}
+		if secretInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("unrelated child mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("already-traversable custom root succeeds without root chmod", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		foreign := filepath.Join(shared, "other-app")
+		if err := os.MkdirAll(foreign, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(foreign, "identity.json"), []byte("keep\n"), 0o600)
+		if err := os.Chmod(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-open-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("open custom root harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("traversable custom root did not claim success:\n%s", text)
+		}
+		info, err := os.Stat(shared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o755 {
+			t.Fatalf("pre-existing custom root mode = %04o; want unchanged 0755", info.Mode().Perm())
+		}
+		for _, dir := range []string{filepath.Join(shared, "dws"), filepath.Join(shared, "dws", "schema")} {
+			di, err := os.Stat(dir)
+			if err != nil {
+				t.Fatalf("stat %s: %v", dir, err)
+			}
+			if di.Mode().Perm()&0o005 != 0o005 {
+				t.Fatalf("%s mode %04o missing other r+x", dir, di.Mode().Perm())
+			}
+		}
+		if _, err := os.Stat(filepath.Join(foreign, "identity.json")); err != nil {
+			t.Fatalf("foreign identity.json must survive: %v", err)
+		}
+	})
 }
 
 func lookPowerShellForScriptsOptional() (string, error) {

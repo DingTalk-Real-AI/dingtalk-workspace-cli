@@ -14,6 +14,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageInvalidateSchemaCacheIdentitiesScopedToDWSSchema(t *testing.T) {
@@ -147,12 +148,10 @@ func TestCrossPlatformCoverageUpgradeInvalidationClearsPersistedIdentityForABReg
 
 func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t *testing.T) {
 	dir := t.TempDir()
-	oldDigest := schemaCacheBinaryDigest
-	t.Cleanup(func() { schemaCacheBinaryDigest = oldDigest })
 
 	stampA := sha256.Sum256([]byte("binary-stamp-A"))
 	stampB := sha256.Sum256([]byte("binary-stamp-B"))
-	schemaCacheBinaryDigest = func() [sha256.Size]byte { return stampA }
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [sha256.Size]byte { return stampA })
 
 	identity := coverageSchemaCacheIdentity()
 	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
@@ -175,7 +174,7 @@ func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t
 	}
 
 	// Keep cache artifacts + identity.json written by binary A; run as binary B.
-	schemaCacheBinaryDigest = func() [sha256.Size]byte { return stampB }
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [sha256.Size]byte { return stampB })
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("binary B must not load binary A's identity sidecar")
 	}
@@ -212,19 +211,14 @@ func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *tes
 	// Real Digest path: unstamped stamp + injected ExecutableMaterial (stands in
 	// for path/size/mtime metadata fingerprints A vs B) must miss A's sidecar
 	// without calling Invalidate* and without reading whole executables.
-	prevDigest := schemaCacheBinaryDigest
-	t.Cleanup(func() { schemaCacheBinaryDigest = prevDigest })
-	schemaCacheBinaryDigest = buildversion.Digest
-
-	prevMaterial := buildversion.ExecutableMaterial
-	t.Cleanup(func() { buildversion.ExecutableMaterial = prevMaterial })
+	testseam.Swap(t, &schemaCacheBinaryDigest, buildversion.Digest)
 
 	v, c, bt := buildversion.CurrentStampForTest()
 	t.Cleanup(func() { buildversion.Set(v, c, bt) })
 	buildversion.Set("dev", "unknown", "unknown")
 
 	dir := t.TempDir()
-	buildversion.ExecutableMaterial = func() []byte { return []byte("process-exe-A") }
+	testseam.Swap(t, &buildversion.ExecutableMaterial, func() []byte { return []byte("process-exe-A") })
 	sealA := buildversion.Digest()
 	identity := coverageSchemaCacheIdentity()
 	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {
@@ -250,7 +244,7 @@ func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *tes
 
 	// Replace process as binary B: keep identity.json + artifacts on disk; do
 	// not call InvalidatePersistedSchemaCacheIdentities.
-	buildversion.ExecutableMaterial = func() []byte { return []byte("process-exe-B") }
+	testseam.Swap(t, &buildversion.ExecutableMaterial, func() []byte { return []byte("process-exe-B") })
 	sealB := buildversion.Digest()
 	if sealA == sealB {
 		t.Fatal("unstamped Digest must differ across exe materials")
@@ -288,10 +282,8 @@ func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *tes
 
 func TestCrossPlatformCoverageLegacyBinaryBuildIDRejected(t *testing.T) {
 	dir := t.TempDir()
-	oldDigest := schemaCacheBinaryDigest
-	t.Cleanup(func() { schemaCacheBinaryDigest = oldDigest })
 	stamp := sha256.Sum256([]byte("running-binary-stamp"))
-	schemaCacheBinaryDigest = func() [sha256.Size]byte { return stamp }
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [sha256.Size]byte { return stamp })
 
 	identity := coverageSchemaCacheIdentity()
 	if err := persistLocalSchemaCacheIdentity(dir, identity); err != nil {

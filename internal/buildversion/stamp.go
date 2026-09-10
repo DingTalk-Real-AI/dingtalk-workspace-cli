@@ -121,8 +121,3 @@ func fingerprintStatOnly(path string) []byte {
 	h.Write(timeBuf[:])
 	return h.Sum(nil)
 }
-
-// CurrentStampForTest returns the active stamp triple for test restore.
-func CurrentStampForTest() (version, commit, buildTime string) {
-	return stampVersion, stampCommit, stampBuildTime
-}
