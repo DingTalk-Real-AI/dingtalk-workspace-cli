@@ -19,15 +19,15 @@ func TestCrossPlatformCoverageWikiNodeWriteTargets(t *testing.T) {
 			name, body, reason string
 			folder             bool
 		}{
-			{"wrong workspace", `{"nodeId":"created","workspaceId":"other"}`, "workspace_readback_mismatch", false},
-			{"missing workspace", `{"success":true,"nodeId":"created"}`, "workspace_readback_mismatch", false},
-			{"wrong folder", `{"nodeId":"created","workspaceId":"w","folderId":"other"}`, "folder_readback_mismatch", true},
-			{"missing folder", `{"nodeId":"created","workspaceId":"w"}`, "folder_readback_mismatch", true},
-			{"wrong node", `{"nodeId":"other","workspaceId":"w"}`, "readback_id_mismatch", false},
-			{"missing node", `{"success":true,"workspaceId":"w"}`, "readback_id_mismatch", false},
-			{"nested failure", `{"success":true,"result":{"success":false,"nodeId":"created","workspaceId":"w"}}`, "remote_failure", false},
-			{"default root", `{"nodeId":"created","workspaceId":"w","folderId":"real-root"}`, "", false},
-			{"explicit folder", `{"nodeId":"created","workspaceId":"w","folderId":"f"}`, "", true},
+			{"wrong workspace", `{"nodeId":"created","workspaceId":"other","name":"Doc","extension":"adoc"}`, "workspace_readback_mismatch", false},
+			{"missing workspace", `{"success":true,"nodeId":"created","name":"Doc","extension":"adoc"}`, "workspace_readback_mismatch", false},
+			{"wrong folder", `{"nodeId":"created","workspaceId":"w","folderId":"other","name":"Doc","extension":"adoc"}`, "folder_readback_mismatch", true},
+			{"missing folder", `{"nodeId":"created","workspaceId":"w","name":"Doc","extension":"adoc"}`, "folder_readback_mismatch", true},
+			{"wrong node", `{"nodeId":"other","workspaceId":"w","name":"Doc","extension":"adoc"}`, "readback_id_mismatch", false},
+			{"missing node", `{"success":true,"workspaceId":"w","name":"Doc","extension":"adoc"}`, "readback_id_mismatch", false},
+			{"nested failure", `{"success":true,"result":{"success":false,"nodeId":"created","workspaceId":"w","name":"Doc","extension":"adoc"}}`, "remote_failure", false},
+			{"default root", `{"nodeId":"created","workspaceId":"w","folderId":"real-root","name":"Doc","extension":"adoc"}`, "", false},
+			{"explicit folder", `{"nodeId":"created","workspaceId":"w","folderId":"f","name":"Doc","extension":"adoc"}`, "", true},
 		} {
 			t.Run(command+"/"+tc.name, func(t *testing.T) {
 				tool, args := "create_file", []string{command, "--workspace", "w", "--name", "Doc"}
@@ -37,12 +37,20 @@ func TestCrossPlatformCoverageWikiNodeWriteTargets(t *testing.T) {
 				if tc.folder {
 					args = append(args, "--folder", "f")
 				}
+				readbacks := []string{tc.body}
+				if command == "+node-copy" {
+					readbacks = append([]string{`{"nodeId":"source","workspaceId":"source-w","name":"Source","extension":"adoc"}`}, readbacks...)
+				}
 				caller := &wikiCoverageCaller{responses: map[string][]string{
 					"doc/" + tool:           {`{"success":true,"nodeId":"created","token":"WRITE_SECRET_CANARY"}`},
-					"doc/get_document_info": {tc.body},
+					"doc/get_document_info": readbacks,
 				}}
 				out, err := runWikiCoverageCLI(t, caller, args...)
-				if len(caller.calls) != 2 || caller.calls[0].tool != tool || caller.calls[1].tool != "get_document_info" {
+				if command == "+node-copy" {
+					if len(caller.calls) != 3 || caller.calls[0].tool != "get_document_info" || caller.calls[1].tool != tool || caller.calls[2].tool != "get_document_info" {
+						t.Fatalf("expected source read, one write, and copy read, calls=%#v", caller.calls)
+					}
+				} else if len(caller.calls) != 2 || caller.calls[0].tool != tool || caller.calls[1].tool != "get_document_info" {
 					t.Fatalf("expected one write and one read, calls=%#v", caller.calls)
 				}
 				if tc.reason == "" {
@@ -72,10 +80,13 @@ func TestCrossPlatformCoverageWikiNodeWriteTargets(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageWikiCopyDistinctIDAndInputBoundary(t *testing.T) {
-	caller := &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"success":true,"nodeId":"source"}`}}}
+	caller := &wikiCoverageCaller{responses: map[string][]string{
+		"doc/get_document_info": {`{"nodeId":"source","workspaceId":"source-w","name":"Source","extension":"adoc"}`},
+		"doc/copy_document":     {`{"success":true,"nodeId":"source"}`},
+	}}
 	_, err := runWikiCoverageCLI(t, caller, "+node-copy", "--workspace", "w", "--node", "source", "--yes")
 	var typed *apperrors.Error
-	if !errors.As(err, &typed) || typed.Reason != "copy_id_not_new" || len(caller.calls) != 1 {
+	if !errors.As(err, &typed) || typed.Reason != "copy_id_not_new" || len(caller.calls) != 2 {
 		t.Fatalf("same-ID copy err=%#v calls=%#v", err, caller.calls)
 	}
 	receipt, _ := typed.Details["writeReceipt"].(map[string]any)
@@ -90,9 +101,12 @@ func TestCrossPlatformCoverageWikiCopyDistinctIDAndInputBoundary(t *testing.T) {
 		}
 	}
 	rejected := errors.New("API rejected opaque source fixture")
-	caller = &wikiCoverageCaller{errors: map[string][]error{"doc/copy_document": {rejected}}}
+	caller = &wikiCoverageCaller{
+		responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"opaque/id?part","workspaceId":"source-w","name":"Source","extension":"adoc"}`}},
+		errors:    map[string][]error{"doc/copy_document": {rejected}},
+	}
 	_, err = runWikiCoverageCLI(t, caller, "+node-copy", "--workspace", "w", "--node", "opaque/id?part", "--yes")
-	if !errors.Is(err, rejected) || len(caller.calls) != 1 || caller.calls[0].args["nodeId"] != "opaque/id?part" {
+	if !errors.Is(err, rejected) || len(caller.calls) != 2 || caller.calls[1].args["nodeId"] != "opaque/id?part" {
 		t.Fatalf("opaque ID validation moved out of API: err=%v calls=%#v", err, caller.calls)
 	}
 }

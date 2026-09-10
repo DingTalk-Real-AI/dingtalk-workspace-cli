@@ -23,7 +23,7 @@ import (
 func TestCrossPlatformCoverageWikiNodeWriteFailureEnvelopeKeepsReceipt(t *testing.T) {
 	caller := &paramAliasCaptureCaller{}
 	_, err := executeParamAliasE2E(t, caller, "wiki", "+node-copy", "--workspace", "wrong-target", "--node", "node-1", "--yes")
-	if err == nil || len(caller.calls) != 2 {
+	if err == nil || len(caller.calls) != 3 {
 		t.Fatalf("wrong-target copy err=%v calls=%#v", err, caller.calls)
 	}
 	cmd := &cobra.Command{Use: "failure"}
@@ -53,6 +53,9 @@ type wikiLegacyReadbackCaller struct {
 }
 
 func (c *wikiLegacyReadbackCaller) CallTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
+	if product == "doc" && tool == "get_document_info" && c.writes == 0 {
+		return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"nodeId":"source","workspaceId":"source-w","name":"Source","extension":"adoc"}`}}}, nil
+	}
 	if product == "doc" && tool == "copy_document" {
 		c.writes++
 		return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"success":true,"nodeId":"copy-legacy"}`}}}, nil

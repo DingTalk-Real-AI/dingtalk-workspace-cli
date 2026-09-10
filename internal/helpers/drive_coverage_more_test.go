@@ -488,7 +488,7 @@ func TestCrossPlatformCoverageUploadToDocSpaceStep1Args(t *testing.T) {
 		old := httpPutFile
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 		t.Cleanup(func() { httpPutFile = old })
-		if err := executeDriveEdge(t, caller, "upload", "--file", file, "--workspace", "ws-1", "--folder", "f1"); err != nil {
+		if err := executeDriveEdge(t, caller, "upload", "--file", file, "--workspace", "ws-1", "--folder", "f1", "--yes"); err != nil {
 			t.Fatal(err)
 		}
 		if len(caller.argsLog) < 2 {
