@@ -767,10 +767,30 @@ func (c *windowsCache) atomicReplace(target string, header, payload []byte) erro
 		return fmt.Errorf("close staging file: %w", err)
 	}
 	opened = false
+	// MoveFileEx(REPLACE_EXISTING) returns ACCESS_DENIED while any reader
+	// still holds the destination, even with FILE_SHARE_DELETE. Move the live
+	// file aside first (the open handle follows that name), then install the
+	// staging file into the vacated name.
+	destPath := filepath.Join(c.path, target)
+	var asidePath string
+	if _, attrErr := c.ops.attributes(destPath); attrErr == nil {
+		asidePath = filepath.Join(c.path, "."+target+"."+hex.EncodeToString(randomBytes[:])+".old")
+		c.counters.renameOps.Add(1)
+		if err := c.ops.rename(destPath, asidePath); err != nil {
+			cleanup()
+			return fmt.Errorf("replace %s: %w", target, err)
+		}
+	}
 	c.counters.renameOps.Add(1)
-	if err := c.ops.rename(stagingPath, filepath.Join(c.path, target)); err != nil {
+	if err := c.ops.rename(stagingPath, destPath); err != nil {
+		if asidePath != "" {
+			_ = c.ops.rename(asidePath, destPath)
+		}
 		cleanup()
 		return fmt.Errorf("replace %s: %w", target, err)
+	}
+	if asidePath != "" {
+		_ = c.ops.remove(asidePath)
 	}
 	staged = false
 	c.counters.directorySyncOps.Add(1)

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -573,6 +574,16 @@ func TestCrossPlatformCoverageWindowsInjectedFaults(t *testing.T) {
 		t.Fatal("rename failure accepted")
 	}
 
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, renameFn: func(oldpath, newpath string) error {
+		if filepath.Base(newpath) == metaFileName && strings.HasSuffix(oldpath, ".tmp") {
+			return errors.New("forced dest rename")
+		}
+		return realWindowsIO{}.rename(oldpath, newpath)
+	}}
+	if err := cache.WriteArtifact(identity, meta); err == nil {
+		t.Fatal("dest rename failure accepted")
+	}
+
 	uc.ops = wrapIO{windowsIO: realWindowsIO{}, restrictFn: func(string) error {
 		return errors.New("forced acl")
 	}}
@@ -819,6 +830,39 @@ func TestCrossPlatformCoverageWindowsConcurrentLocalLock(t *testing.T) {
 	}
 	if err := held.Release(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCrossPlatformCoverageWindowsReplaceWhileReaderOpen(t *testing.T) {
+	cache, _, identity := openTestCache(t, nil)
+	meta := testArtifact(KindMeta, []byte("replace-open-meta"))
+	reg := testArtifact(KindRegistry, []byte("replace-open-registry"))
+	payloads := testArtifact(KindPayloads, []byte("replace-open-payloads"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	handle, err := cache.OpenPayloads(identity, payloads.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = handle.Close() })
+	nextMeta := testArtifact(KindMeta, []byte("replace-open-meta-2"))
+	nextReg := testArtifact(KindRegistry, []byte("replace-open-registry-2"))
+	nextPayloads := testArtifact(KindPayloads, []byte("replace-open-payloads-2"))
+	if err := cache.Publish(identity, nextReg, nextMeta, nextPayloads); err != nil {
+		t.Fatalf("replace while reader open: %v", err)
+	}
+	reopened, err := cache.OpenPayloads(identity, nextPayloads.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	got, err := reopened.ReadRange(RangeDescriptor{Offset: 0, Length: uint64(len(nextPayloads.Payload)), SHA256: nextPayloads.Expectation.EncodedSHA256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(nextPayloads.Payload) {
+		t.Fatalf("replaced payload = %q", got)
 	}
 }
 
