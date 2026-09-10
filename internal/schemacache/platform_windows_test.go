@@ -913,6 +913,9 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 	if _, err := openCacheDirectory(`C:\foo\\bar`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry component") {
 		t.Fatalf("empty ancestry = %v", err)
 	}
+	if _, err := openCacheDirectory(`C:/unclean-slash`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "clean absolute path") {
+		t.Fatalf("forward-slash unclean = %v", err)
+	}
 	if err := validateAttrsDirectory(windows.FILE_ATTRIBUTE_ARCHIVE, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry") {
 		t.Fatalf("unowned file ancestry = %v", err)
 	}
@@ -922,6 +925,9 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 	t.Cleanup(func() { windowsOpenProcessToken = oldSID })
 	if _, err := currentUserSID(); err == nil {
 		t.Fatal("OpenProcessToken failure accepted")
+	}
+	if err := restrictOwnerWrite(`C:\`); err == nil {
+		t.Fatal("restrictOwnerWrite token failure accepted")
 	}
 	windowsOpenProcessToken = oldSID
 	oldUser := windowsTokenUser
@@ -1147,6 +1153,14 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, readFn: func(windows.Handle, []byte, int64) (int, error) {
+		return 0, errors.New("header pread")
+	}}
+	if _, err := cache.OpenRegistry(identity, reg.Expectation); err == nil {
+		t.Fatal("Registry header pread failure accepted")
+	}
+	uc.ops = realWindowsIO{}
+
 	openInfo := 0
 	uc.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
 		info, err := realWindowsIO{}.info(h)
@@ -1170,6 +1184,17 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 	}
 	wr := opened.backend.(*windowsRegistry)
 	rangeSHA := sha256.Sum256(reg.Payload[:1])
+	wr.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		info.FileSizeLow++
+		return info, nil
+	}}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeSHA}); err == nil {
+		t.Fatal("ReadRange file-changed before read accepted")
+	}
 	wr.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(windows.Handle) (windows.ByHandleFileInformation, error) {
 		return windows.ByHandleFileInformation{}, errors.New("range info")
 	}}
@@ -1219,6 +1244,17 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	wa := openedAgg.backend.(*windowsRegistry)
+	wa.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		info.FileSizeLow++
+		return info, nil
+	}}
+	if err := openedAgg.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate file-changed before read accepted")
+	}
 	wa.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(windows.Handle) (windows.ByHandleFileInformation, error) {
 		return windows.ByHandleFileInformation{}, errors.New("agg info")
 	}}
