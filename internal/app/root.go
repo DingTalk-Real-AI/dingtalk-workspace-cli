@@ -426,10 +426,11 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 
 			authpkg.SetRuntimeProfile(flags.Profile)
 			// Apply OAuth credential overrides from CLI flags (highest priority).
-			if flags.ClientID != "" {
+			isExternalExchange := cmd.Name() == "exchange" && cmd.Parent() != nil && cmd.Parent().Name() == "auth"
+			if flags.ClientID != "" && !isExternalExchange {
 				authpkg.SetClientID(flags.ClientID)
 			}
-			if flags.ClientSecret != "" {
+			if flags.ClientSecret != "" && !isExternalExchange {
 				authpkg.SetClientSecret(flags.ClientSecret)
 			}
 
