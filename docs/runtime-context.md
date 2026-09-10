@@ -86,6 +86,11 @@ include the parameters; the complete link is also used for automatic browser
 launch. This applies to `--no-browser` as well. The original verification
 response remains unchanged for polling and token exchange.
 
+Device instructions show the authorization code and expiry together, followed
+by the complete link and then the manual-entry link when available. Each URL
+occupies its own unstyled logical line outside any frame. Terminal soft wrapping
+keeps long links readable without adding hard breaks or truncating parameters.
+
 The terminal intentionally includes the runtime value in copyable manual login
 links when initialization succeeds. SDK failure or invalid URLs keep the
 original links. Diagnostic logs use original URLs; browser-launch errors
