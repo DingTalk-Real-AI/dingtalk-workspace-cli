@@ -9,7 +9,7 @@
 | 1 | **并行查详情**：拿到多个 ID 后，用 `&` 合并到同一条 Shell 命令并行执行 + `wait`，**严禁逐条串行** |
 | 2 | **翻页**：分页接口须拉全直至无更多 |
 | 3 | **优先批量 API**：有批量接口则用批量；无则按 #1 并行 |
-| 4 | **群消息**：必须先 `chat search --query` 得 `openConversationId`，再 `chat message list --group <openConversationId> --time "<yyyy-MM-dd HH:mm:ss>" --direction older`；多群同条命令并行 |
+| 4 | **群消息**：按 dingtalk-chat 当前 Golden Route 选择指定会话读取或跨会话搜索；只用真实会话/发送者身份，不把抽样会话、@我或身份未验证的零结果当全部聊天 |
 | 5 | **列表少轮次**：带条件搜索/列表 → 一次采全详情；**禁止**无新参数时重复同一 `list` / `search` |
 
 ## 多源并行采集（公共模式）
@@ -18,6 +18,7 @@
 
 - 同条 Shell：`&` 并行 + `wait`；分页须采全。
 - 只保留与主题相关的数据，无关丢弃。
+- 各来源使用用户指定的同一时间范围，按产品支持的时间字段过滤并说明其含义；文档访问/更新时间不直接证明工作在该期完成。逐来源保留已覆盖范围和缺口，再交付有依据的部分结果。
 - 有批量详情接口优先；否则并行拉详情（见上表 #1）。
 - 具体采哪些产品列表由对应 **行动指南 recipe** 与当前产品参考决定；不要引入本文档未覆盖的产品路线。
 
@@ -34,7 +35,7 @@
 | `nodeId` | `wiki node list` 中的 folder 类型节点 / `wiki node create --type folder` | `wiki node list --folder`、`wiki node create --folder`、`drive upload --folder`、`drive copy/move --folder` |
 | `eventId` | `calendar event list` | `calendar event get/update --id` |
 | `processInstanceId` | `oa approval list-*` | `oa approval detail/approve --instance-id` |
-| `openConversationId` | `chat search` | `chat message list/send --group` |
+| `openConversationId` | dingtalk-chat 会话解析的真实返回 | 传给该 Skill 已选中的会话读取/发送入口，不把会话 ID 当成员 ID |
 | `todoTaskId` | `todo task list` | `todo task update/done --task-id` |
 | `reportId` | `report inbox list` / `report outbox list` | `report entry get/stats --report-id` |
 | `baseId` / `tableId` | `aitable base search` | `aitable record query --base-id --table-id` |

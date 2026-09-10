@@ -9,10 +9,10 @@
 
 | 树 | 路径 | 角色 |
 |---|---|---|
-| **mono**（单 skill） | `skills/mono/` | 单一 `SKILL.md` 入口 + `references/products/*` 产品面 + 全局协议 |
-| **multi**（多 skill） | `skills/multi/` | 平铺 `dingtalk-*` 产品 skill + 必选 `dingtalk-shared` |
+| **mono**（单 skill） | `skills/mono/` | 单一 `SKILL.md` 入口 + `references/products/*` 产品面 + 全局协议。对公共 `npx skills add` 隐藏（`metadata.internal: true`）；`dws skill setup --mode mono` 仍安装 |
+| **multi**（多 skill） | `skills/multi/` | 平铺 `dingtalk-*` 产品 skill + 必选 `dingtalk-shared`。公共 Agent Skills CLI 与 `dws skill setup` 的默认源 |
 
-Agent / 安装面选哪棵树由**行为分支**决定；本文件只规定树内合同。
+Agent / 安装面选哪棵树由**行为分支**决定；本文件只规定树内合同。`npx skills add` 在 `skills/` 内最多走三层，因此 `skills/multi/<name>/SKILL.md` 可被发现，无需再扁平到 `skills/<name>/`。
 
 ## 2. Multi 目录合同（如何新增一个产品 skill）
 
