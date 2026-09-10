@@ -44,10 +44,11 @@ const (
 )
 
 var (
-	userCacheDir             = os.UserCacheDir
-	programDataDir           = func() string { return os.Getenv("ProgramData") }
-	platformIO     windowsIO = realWindowsIO{}
-	currentGOOS              = runtime.GOOS
+	userCacheDir                    = os.UserCacheDir
+	programDataDir                  = func() string { return os.Getenv("ProgramData") }
+	platformIO            windowsIO = realWindowsIO{}
+	currentGOOS                     = runtime.GOOS
+	resolveCurrentUserSID           = currentUserSID
 
 	windowsOpenProcessToken   = windows.OpenProcessToken
 	windowsTokenUser          = func(token windows.Token) (*windows.Tokenuser, error) { return token.GetTokenUser() }
@@ -465,7 +466,7 @@ func readHandleSecurity(h windows.Handle) (securityState, error) {
 }
 
 func trustedSIDs() ([]*windows.SID, error) {
-	user, err := currentUserSID()
+	user, err := resolveCurrentUserSID()
 	if err != nil {
 		return nil, err
 	}
@@ -534,10 +535,9 @@ func restrictOwnerWrite(path string) error {
 }
 
 func restrictSharedReadOnly(path string) error {
-	user, err := currentUserSID()
-	if err != nil {
-		return err
-	}
+	// Shared trees must be writable only by identities every reader trusts
+	// (Administrators + SYSTEM). Granting the creator GENERIC_ALL makes a later
+	// reader reject the tree because trustedSIDs is {reader, Admins, SYSTEM}.
 	admins, err := windowsCreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	if err != nil {
 		return err
@@ -553,22 +553,30 @@ func restrictSharedReadOnly(path string) error {
 	access := []windows.EXPLICIT_ACCESS{
 		explicitAccess(admins, windows.TRUSTEE_IS_GROUP, windows.GENERIC_ALL),
 		explicitAccess(system, windows.TRUSTEE_IS_USER, windows.GENERIC_ALL),
-		explicitAccess(user, windows.TRUSTEE_IS_USER, windows.GENERIC_ALL),
 		explicitAccess(users, windows.TRUSTEE_IS_WELL_KNOWN_GROUP, windows.GENERIC_READ|windows.GENERIC_EXECUTE),
 	}
-	return setProtectedDACL(path, access)
+	// Owner must also be Admins/SYSTEM so a foreign reader trusts the tree.
+	return setProtectedSecurity(path, admins, access)
 }
 
 func setProtectedDACL(path string, access []windows.EXPLICIT_ACCESS) error {
+	return setProtectedSecurity(path, nil, access)
+}
+
+func setProtectedSecurity(path string, owner *windows.SID, access []windows.EXPLICIT_ACCESS) error {
 	acl, err := windowsACLFromEntries(access, nil)
 	if err != nil {
 		return err
 	}
+	flags := windows.DACL_SECURITY_INFORMATION | windows.PROTECTED_DACL_SECURITY_INFORMATION
+	if owner != nil {
+		flags |= windows.OWNER_SECURITY_INFORMATION
+	}
 	return windows.SetNamedSecurityInfo(
 		path,
 		windows.SE_FILE_OBJECT,
-		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
-		nil, nil, acl, nil,
+		flags,
+		owner, nil, acl, nil,
 	)
 }
 

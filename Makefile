@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema check-schema-cache-proto fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -231,6 +231,9 @@ generate-schema:
 # Optional local/CI dump of an assembled Catalog under artifacts/ by default.
 # Override SCHEMA_CATALOG_OUTPUT and SCHEMA_META_INDEX_OUTPUT as needed. This
 # is not a go:generate or production delivery step.
+check-schema-cache-proto:
+	@SCHEMA_CACHE_PROTO_CHECK=1 ./scripts/generate-schema-cache-proto.sh --check
+
 generate-schema-catalog:
 	$(GO) run -a ./internal/generator/cmd_schema_catalog \
 		-root . \

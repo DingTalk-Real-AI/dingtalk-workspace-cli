@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
@@ -51,6 +52,8 @@ var (
 	}
 	removeLegacyIdentitySidecar = os.Remove
 	globLegacyIdentitySidecars  = filepath.Glob
+	schemaCacheRuntimeGOOS      = func() string { return runtime.GOOS }
+	schemaCacheUserCacheDir     = os.UserCacheDir
 )
 
 // LocalSchemaCacheIdentityFileName is the stable per-edition identity sidecar
@@ -181,4 +184,72 @@ func removeLegacyFingerprintIdentitySidecars(directory string) {
 		}
 		_ = removeLegacyIdentitySidecar(name)
 	}
+}
+
+// InvalidatePersistedSchemaCacheIdentities deletes identity.json and legacy
+// identity.*.json files under every candidate .../dws/schema tree. It never
+// recurses a wide cache base (LOCALAPPDATA, ProgramData root, /var/cache) so
+// unrelated apps' identity files stay untouched. dws upgrade calls this after
+// replacing the executable so binary B cannot keep serving binary A's Schema.
+func InvalidatePersistedSchemaCacheIdentities() {
+	for _, base := range schemaCacheInvalidationBases() {
+		clearSchemaTreeIdentities(filepath.Join(base, "dws", "schema"))
+	}
+}
+
+func schemaCacheInvalidationBases() []string {
+	seen := make(map[string]struct{})
+	var bases []string
+	add := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		cleaned := filepath.Clean(raw)
+		if !filepath.IsAbs(cleaned) {
+			return
+		}
+		if _, ok := seen[cleaned]; ok {
+			return
+		}
+		seen[cleaned] = struct{}{}
+		bases = append(bases, cleaned)
+	}
+	add(os.Getenv("DWS_SCHEMA_CACHE_DIR"))
+	add(os.Getenv("DWS_SCHEMA_CACHE_SHARED_DIR"))
+	switch schemaCacheRuntimeGOOS() {
+	case "linux":
+		add("/var/cache/dws")
+	case "darwin":
+		add("/Library/Caches/dws")
+	case "windows":
+		if pd := strings.TrimSpace(os.Getenv("ProgramData")); pd != "" {
+			add(filepath.Join(pd, "dws"))
+		}
+	}
+	if cache, err := schemaCacheUserCacheDir(); err == nil {
+		add(cache)
+	}
+	return bases
+}
+
+func clearSchemaTreeIdentities(schemaTree string) {
+	info, err := os.Stat(schemaTree)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	// Require the precise .../dws/schema leaf pair before deleting anything.
+	if filepath.Base(schemaTree) != "schema" || filepath.Base(filepath.Dir(schemaTree)) != "dws" {
+		return
+	}
+	_ = filepath.WalkDir(schemaTree, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if name == localSchemaCacheIdentityName || (strings.HasPrefix(name, "identity.") && strings.HasSuffix(name, ".json")) {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
 }

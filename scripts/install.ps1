@@ -1987,8 +1987,10 @@ function Set-SharedSchemaCacheItemAcl {
     $admins = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
     $system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
     $users = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-545')
-    $current = [Security.Principal.WindowsIdentity]::GetCurrent().User
-    foreach ($sid in @($admins, $system, $current)) {
+    # Writable only by identities every reader trusts (Admins/SYSTEM). Do not
+    # grant the installer/current user GENERIC_ALL — a later reader trusts only
+    # its own SID + Admins + SYSTEM and would reject a foreign write ACE.
+    foreach ($sid in @($admins, $system)) {
         if ($isContainer) {
             $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $inheritance, $propagation, $allow)))
         } else {
@@ -1999,6 +2001,12 @@ function Set-SharedSchemaCacheItemAcl {
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $inheritance, $propagation, $allow)))
     } else {
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $allow)))
+    }
+    try {
+        $acl.SetOwner($admins)
+    } catch {
+        # Non-elevated hosts may lack SeTakeOwnershipPrivilege; DACL alone still
+        # omits the creator write ACE. Owner trust is re-checked by the runtime.
     }
     Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
 }

@@ -117,4 +117,20 @@ fi
 # Assembly determinism validates fresh CI/local Catalog dumps.
 "$ROOT/scripts/policy/check-schema-assembly.sh"
 
+# Schema-cache protobuf must match scripts/generate-schema-cache-proto.sh.
+# Required in CI (and when SCHEMA_CACHE_PROTO_CHECK=1); locally runs when the
+# pinned protoc toolchain is already installed.
+schema_cache_proto_check() {
+	if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ "${SCHEMA_CACHE_PROTO_CHECK:-}" = "1" ]; then
+		"$ROOT/scripts/generate-schema-cache-proto.sh" --check
+		return
+	fi
+	if command -v protoc >/dev/null 2>&1 && [ "$(protoc --version 2>/dev/null || true)" = "libprotoc 35.1" ]; then
+		"$ROOT/scripts/generate-schema-cache-proto.sh" --check
+		return
+	fi
+	printf '%s\n' 'schema cache proto check: skipped (install libprotoc 35.1 or set SCHEMA_CACHE_PROTO_CHECK=1)'
+}
+schema_cache_proto_check
+
 printf 'generated drift check: ok\n'

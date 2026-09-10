@@ -189,3 +189,65 @@ func assertSchemaCacheArtifactsPresent(t *testing.T, cacheDir string, identity c
 		t.Fatalf("loaded local identity = %#v ready=%v", loaded, ok)
 	}
 }
+
+func TestCrossPlatformCoverageSchemaCacheUpgradeInvalidationABRegression(t *testing.T) {
+	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
+		t.Skip("persistent cache backend is intentionally disabled on this target")
+	}
+	isolateSchemaCacheHome(t)
+	t.Setenv(schemaCacheTestEnv, "1")
+	t.Cleanup(func() { _ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{}) })
+
+	cli.RegisterSchemaSourceRoot(func() *cobra.Command {
+		return NewSchemaSourceRootCommand()
+	})
+	applyProductionSchemaCache()
+	meta, ok := cli.ResolveMeta("calendar event create")
+	if !ok || meta.Identity.Canonical != "calendar.create_calendar_event" {
+		t.Fatalf("seed ResolveMeta = %#v, %v", meta, ok)
+	}
+	identity, ok := cli.SchemaCacheFastPathIdentity()
+	if !ok {
+		t.Fatal("seed identity missing")
+	}
+	cache, err := schemacache.Open(identity.Edition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityPath := filepath.Join(cache.Directory(), cli.LocalSchemaCacheIdentityFileName())
+	_ = cache.Close()
+	if _, err := os.Stat(identityPath); err != nil {
+		t.Fatalf("seed identity.json missing: %v", err)
+	}
+
+	// Without invalidation, a reloaded process would keep serving A's sidecar.
+	cli.RestorePackageCLISchemaDeliveryForTest()
+	cli.RegisterSchemaSourceRoot(func() *cobra.Command {
+		return NewSchemaSourceRootCommand()
+	})
+	applyProductionSchemaCache()
+	if hit, hitOK := cli.SchemaCacheFastPathIdentity(); !hitOK || hit.BuildID != identity.BuildID {
+		t.Fatalf("persisted A identity not reloaded: %#v ready=%v", hit, hitOK)
+	}
+
+	// Upgrade invalidation drops the sidecar; binary B regenerates.
+	cli.InvalidatePersistedSchemaCacheIdentities()
+	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
+		t.Fatalf("identity.json survived upgrade invalidation: %v", err)
+	}
+	cli.RestorePackageCLISchemaDeliveryForTest()
+	cli.RegisterSchemaSourceRoot(func() *cobra.Command {
+		return NewSchemaSourceRootCommand()
+	})
+	applyProductionSchemaCache()
+	if _, ok := cli.SchemaCacheFastPathIdentity(); ok {
+		t.Fatal("fast path still active after upgrade invalidation")
+	}
+	meta, ok = cli.ResolveMeta("calendar event create")
+	if !ok || meta.Identity.Canonical != "calendar.create_calendar_event" {
+		t.Fatalf("post-upgrade ResolveMeta = %#v, %v", meta, ok)
+	}
+	if _, ok := cli.SchemaCacheFastPathIdentity(); !ok {
+		t.Fatal("binary B did not regenerate Schema identity after upgrade")
+	}
+}

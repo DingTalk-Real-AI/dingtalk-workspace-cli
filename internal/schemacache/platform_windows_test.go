@@ -1929,3 +1929,77 @@ func TestCrossPlatformCoverageWindowsSecurityResidualBranches(t *testing.T) {
 		t.Fatal("staging info failure accepted")
 	}
 }
+
+func TestCrossPlatformCoverageWindowsSharedACLAcceptsDistinctReaderSID(t *testing.T) {
+	dir := privateTestBase(t)
+	target := filepath.Join(dir, "shared-cross-user")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := restrictSharedReadOnly(target); err != nil {
+		t.Fatal(err)
+	}
+	fd, err := (realWindowsIO{}).open(target, windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer (realWindowsIO{}).close(fd)
+	sec, err := (realWindowsIO{}).security(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creator, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ace := range sec.aces {
+		if ace.allowed && ace.sid.Equals(creator) && ace.mask&dangerousWriteMask != 0 {
+			t.Fatalf("shared ACL still grants creator write mask %#x", ace.mask)
+		}
+	}
+	if err := validateSecurity(sec, true); err != nil {
+		t.Fatalf("creator-as-reader validate: %v", err)
+	}
+
+	// Foreign reader SID ≠ creator SID. Shared ACL must still validate because
+	// write rights are only on Admins/SYSTEM, which every reader trusts.
+	reader, err := windows.CreateWellKnownSid(windows.WinNetworkServiceSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reader.Equals(creator) {
+		t.Fatal("reader SID unexpectedly equals creator")
+	}
+	old := resolveCurrentUserSID
+	resolveCurrentUserSID = func() (*windows.SID, error) { return reader, nil }
+	t.Cleanup(func() { resolveCurrentUserSID = old })
+	if err := validateSecurity(sec, true); err != nil {
+		t.Fatalf("foreign reader rejected trusted shared ACL: %v", err)
+	}
+
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users, err := windows.CreateWellKnownSid(windows.WinBuiltinUsersSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyCreatorWritable := securityState{
+		owner:       admins,
+		daclPresent: true,
+		aces: []securityACE{
+			{allowed: true, mask: windows.GENERIC_ALL, sid: admins},
+			{allowed: true, mask: windows.GENERIC_ALL, sid: system},
+			{allowed: true, mask: windows.GENERIC_ALL, sid: creator},
+			{allowed: true, mask: windows.GENERIC_READ | windows.GENERIC_EXECUTE, sid: users},
+		},
+	}
+	if err := validateSecurity(legacyCreatorWritable, true); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("foreign reader accepted creator write ACE: %v", err)
+	}
+}
