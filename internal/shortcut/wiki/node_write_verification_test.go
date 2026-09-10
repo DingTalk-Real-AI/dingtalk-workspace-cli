@@ -11,6 +11,8 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageWikiNodeWriteTargets(t *testing.T) {
@@ -112,12 +114,20 @@ func TestCrossPlatformCoverageWikiCopyDistinctIDAndInputBoundary(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageWikiWriteReadbackErrorIdentity(t *testing.T) {
+	cmd := &cobra.Command{Use: "probe"}
+	cmd.Flags().String("workspace", "w", "")
+	rt := shortcut.RuntimeContextForTest(cmd, NodeCreate)
+	plain := errors.New("readback transport unavailable")
+	wrapped := wikiNodeWriteError(rt, "created", "", plain)
+	if !errors.Is(wrapped, plain) || apperrors.ExitCode(wrapped) != apperrors.ExitCode(plain) || !strings.Contains(wrapped.Error(), `"returnedNodeId":"created"`) || !strings.Contains(wrapped.Error(), "禁止直接重试") {
+		t.Fatalf("plain error identity or recovery receipt lost: %v", wrapped)
+	}
 	typedCause := apperrors.NewValidation("readback invalid", apperrors.WithReason("readback_parameter"), apperrors.WithRPCCode(40017), apperrors.WithDetails(map[string]any{"existing": "detail"})).(*apperrors.Error)
 	raw := &apperrors.PATError{RawJSON: `{"code":"PAT_NO_PERMISSION"}`}
 	if got := wikiNodeWriteError(nil, "created", "", raw); got != raw {
 		t.Fatal("host-owned raw error must remain untouched")
 	}
-	for _, cause := range []error{typedCause, &helpers.CLIError{Code: helpers.CodeAuthTokenExpired, Message: "expired"}} {
+	for _, cause := range []error{errors.New("readback transport unavailable"), typedCause, &helpers.CLIError{Code: helpers.CodeAuthTokenExpired, Message: "expired"}} {
 		caller := &wikiCoverageCaller{responses: map[string][]string{"doc/create_file": {`{"success":true,"nodeId":"created"}`}}, errors: map[string][]error{"doc/get_document_info": {cause}}}
 		_, err := runWikiCoverageCLI(t, caller, "+node-create", "--workspace", "w", "--name", "Doc")
 		if !errors.Is(err, cause) || apperrors.ExitCode(err) != apperrors.ExitCode(cause) || len(caller.calls) != 2 {

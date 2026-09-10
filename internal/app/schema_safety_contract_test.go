@@ -56,7 +56,7 @@ func TestDrivePublishGetSafetyReachesFinalSchema(t *testing.T) {
 func TestDriveUploadSafetyReachesFinalSchema(t *testing.T) {
 	assertFinalSchemaSafety(t, []finalSchemaSafetyWant{{
 		canonical: "drive.upload", effect: "write", risk: "medium",
-		confirmation: "user_required", idempotency: "unknown",
+		confirmation: "not_required", idempotency: "unknown",
 	}})
 }
 

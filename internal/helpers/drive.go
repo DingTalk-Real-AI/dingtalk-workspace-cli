@@ -161,6 +161,10 @@ func runDriveUpload(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
+	if overwriteNodeID != "" && !confirmDangerousAction(cmd, "overwrite drive file", overwriteNodeID) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -217,6 +221,10 @@ func runDriveUploadToDocSpace(cmd *cobra.Command, filePath, fileName string, fil
 		if overwriteNodeID != "" {
 			deps.Out.PrintKeyValue("覆盖目标", overwriteNodeID)
 		}
+		return nil
+	}
+
+	if overwriteNodeID != "" && !confirmDangerousAction(cmd, "overwrite document-space file", overwriteNodeID) {
 		return nil
 	}
 
@@ -1488,7 +1496,7 @@ result.fileId。`,
 	DeclareLeafMetadata(driveUploadCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
-			Confirmation: "user_required", Idempotency: "unknown",
+			Confirmation: "not_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{

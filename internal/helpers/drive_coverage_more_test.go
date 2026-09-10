@@ -96,18 +96,24 @@ func TestCrossPlatformCoverageDriveUploadValidationAndDryRunCoverage(t *testing.
 	}
 }
 
-func TestCrossPlatformCoverageDriveUploadRequiresConfirmation(t *testing.T) {
+func TestCrossPlatformCoverageDriveNewUploadDoesNotRequireConfirmation(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "fixture.txt")
 	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	caller := &scriptedToolCaller{}
-	err := executeDriveEdge(t, caller, "upload", "--file", file)
-	if err == nil || !strings.Contains(err.Error(), "需要用户确认") {
-		t.Fatalf("upload error = %v, want confirmation_required", err)
-	}
-	if caller.calls != 0 {
-		t.Fatalf("unconfirmed upload made %d tool calls", caller.calls)
+	for _, workspace := range []string{"", "workspace-1"} {
+		t.Run("workspace="+workspace, func(t *testing.T) {
+			cause := errors.New("credential request reached")
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: cause}}}
+			args := []string{"upload", "--file", file}
+			if workspace != "" {
+				args = append(args, "--workspace", workspace)
+			}
+			err := executeDriveEdge(t, caller, args...)
+			if !errors.Is(err, cause) || caller.calls != 1 {
+				t.Fatalf("new upload must reach credentials without confirmation: err=%v calls=%d", err, caller.calls)
+			}
+		})
 	}
 }
 
@@ -118,12 +124,12 @@ func TestCrossPlatformCoverageDriveUploadTransportCoverage(t *testing.T) {
 	}
 	boom := errors.New("boom")
 	t.Run("drive credentials error", func(t *testing.T) {
-		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{err: boom}}}, "upload", "--file", file, "--yes"); !errors.Is(err, boom) {
+		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{err: boom}}}, "upload", "--file", file); !errors.Is(err, boom) {
 			t.Fatalf("error=%v", err)
 		}
 	})
 	t.Run("drive credentials parse error", func(t *testing.T) {
-		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}, "upload", "--file", file, "--yes"); err == nil {
+		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}, "upload", "--file", file); err == nil {
 			t.Fatal("parse error returned nil")
 		}
 	})
@@ -132,7 +138,7 @@ func TestCrossPlatformCoverageDriveUploadTransportCoverage(t *testing.T) {
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return boom }
 		t.Cleanup(func() { httpPutFile = old })
 		payload := `{"uploadId":"u","resourceUrl":"https://upload.invalid"}`
-		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: payload}}}, "upload", "--file", file, "--yes"); !errors.Is(err, boom) {
+		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: payload}}}, "upload", "--file", file); !errors.Is(err, boom) {
 			t.Fatalf("error=%v", err)
 		}
 	})
@@ -141,12 +147,12 @@ func TestCrossPlatformCoverageDriveUploadTransportCoverage(t *testing.T) {
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 		t.Cleanup(func() { httpPutFile = old })
 		payload := `{"uploadId":"u","resourceUrl":"https://upload.invalid"}`
-		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: payload}, {text: `{}`}}}, "upload", "--file", file, "--space-id", "space", "--folder", "uuid", "--yes"); err != nil {
+		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: payload}, {text: `{}`}}}, "upload", "--file", file, "--space-id", "space", "--folder", "uuid"); err != nil {
 			t.Fatalf("error=%v", err)
 		}
 	})
 
-	docArgs := []string{"upload", "--file", file, "--workspace", "space", "--folder", "uuid", "--convert", "--yes"}
+	docArgs := []string{"upload", "--file", file, "--workspace", "space", "--folder", "uuid", "--convert"}
 	t.Run("doc credentials error", func(t *testing.T) {
 		if err := executeDriveEdge(t, &scriptedToolCaller{steps: []scriptedToolStep{{err: boom}}}, docArgs...); !errors.Is(err, boom) {
 			t.Fatalf("error=%v", err)

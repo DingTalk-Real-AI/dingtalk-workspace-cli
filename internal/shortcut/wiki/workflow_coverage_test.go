@@ -1032,3 +1032,21 @@ func TestCrossPlatformCoverageWikiSecondPageFailures(t *testing.T) {
 		t.Fatal("second-page malformed collection was swallowed")
 	}
 }
+
+func TestCrossPlatformCoverageWikiZeroPageBudgetMakesNoRequest(t *testing.T) {
+	cmd := &cobra.Command{Use: "page"}
+	cmd.Flags().Bool("page-all", true, "")
+	cmd.Flags().Int("page-limit", 0, "")
+	cmd.Flags().String("cursor", "", "")
+	cmd.Flags().String("page-token", "", "")
+	rt := shortcut.RuntimeContextForTest(cmd, SpaceList)
+	calls := 0
+	items, page, err := collectWikiPages(rt, "probe", 1, []string{"items"}, func(string, int) (map[string]any, error) {
+		calls++
+		return nil, errors.New("unexpected fetch")
+	})
+	var typed *apperrors.Error
+	if calls != 0 || items != nil || page != nil || !errors.As(err, &typed) || typed.Reason != "page_limit_reached" {
+		t.Fatalf("zero budget must fail without requests or partial data: calls=%d items=%v page=%v err=%v", calls, items, page, err)
+	}
+}
