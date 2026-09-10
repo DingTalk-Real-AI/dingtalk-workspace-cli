@@ -96,7 +96,7 @@ Schema 的唯一语义源是 declarations，经 `ResolveSchemaBuild` 生成 type
 
 ### 2.1 数据与身份
 
-Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 / 发布期不生产、不嵌入 Schema identity**；发运二进制不钉 ldflags digest。每个受支持端（darwin/linux 的 amd64/arm64）在安装或首次 `dws schema` 时，从本机二进制的 live declarations 生成 identity，写入认证磁盘 cache；后续命中先校验摘要再读 protobuf shards。空/缺失本地 identity 表示 generate then use，不是永久 live-only。测试仍可注入完整 identity。
+Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 / 发布期不生产、不嵌入 Schema identity**；发运二进制不钉 ldflags digest。每个受支持端（darwin/linux/windows 的 amd64/arm64）在安装或首次 `dws schema` 时，从本机二进制的 live declarations 生成 identity，写入认证磁盘 cache；后续命中先校验摘要再读 protobuf shards。空/缺失本地 identity 表示 generate then use，不是永久 live-only。测试仍可注入完整 identity。
 
 依赖边界：
 
@@ -127,7 +127,16 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 | live build 失败 | 返回原有分类错误，不发布新 cache |
 | 插件等改变命令面 | 本进程禁用持久 cache I/O |
 
-不发明新的未认证加密方案。Identity sidecar 用当前可执行文件指纹命名，避免升级后误用旧二进制的 cache。macOS `/Library/Caches` 的 sticky 祖先目录被接受；装不上共享 cache 时回退到用户 cache，安装器不得在未写出文件时宣称共享 cache 成功。Windows 及其他 os/arch 跳过（后端按 build tag 编译掉），保持 live-only。
+不发明新的未认证加密方案。Identity sidecar 用当前可执行文件指纹命名，避免升级后误用旧二进制的 cache。macOS `/Library/Caches` 的 sticky 祖先目录被接受；装不上共享 cache 时回退到用户 cache，安装器不得在未写出文件时宣称共享 cache 成功。
+
+Windows（amd64/arm64）使用同一套 envelope / Publish / OpenRegistry / OpenPayloads / ReadMeta 合同与本机 identity，不引入 compile-time seal：
+
+- 用户 cache：`os.UserCacheDir()`，即 `%LOCALAPPDATA%\dws\schema\<edition-sha256>\v1`。
+- 可选共享 cache：`%ProgramData%\dws`（再拼 `dws\schema\<edition-sha256>\v1`），仅安装器创建；运行时只读探测，不可写或缺失则回退用户 cache。
+- 安装器/测试可用 `DWS_SCHEMA_CACHE_DIR` 覆盖基目录（按共享 cache 语义打开）。
+- 安全近似：拒绝意外 reparse point、owner+SYSTEM 的保护 DACL（仅所有者可写）、temp+rename 原子发布；读取仍用 ExpectedIdentity 与 SHA-256 pin 认证，篡改即 digest 失败。
+
+其他 os/arch 仍按 build tag 编译掉，保持 live-only。
 
 ## 3. 构建与发布
 
@@ -137,7 +146,9 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 2. GoReleaser 生成原有单二进制归档；`post-goreleaser.sh` 只做 runtime payload、签名和重打包，不再按 identity 重建 `dws`。
 3. `go build ./cmd` 与正式包均不生成或嵌入 Schema identity。
 4. 最终归档继续经过 checksum、签名、安装器、npm、Homebrew 和 smoke 验证。
-5. 安装器在 darwin/linux 的 amd64/arm64 上尝试写入共享 cache（Linux `/var/cache/dws`，macOS `/Library/Caches/dws`）；仅当 Meta/Registry/Payloads 与 identity sidecar 均已写出才宣称成功。Windows 及其他 os/arch 跳过。
+5. 安装器在受支持端尝试预热 cache，且**未写出产物不得宣称成功**：
+   - darwin/linux amd64/arm64：`install.sh` 写共享 cache（Linux `/var/cache/dws`，macOS `/Library/Caches/dws`）；仅当 Meta/Registry/Payloads 与 `identity.*.json` 均已写出才宣称成功。
+   - windows amd64/arm64：`install.ps1` 在二进制安装后调用 `Build-SharedSchemaCache`。优先写 `%ProgramData%\dws`（可用 `DWS_SCHEMA_CACHE_SHARED_DIR` 覆盖）；不可写则预热 `%LOCALAPPDATA%` 下的用户 cache。同样只在 sidecar + 三个 shard 均存在时宣称成功，否则警告首次 schema 命令会建 per-user cache。
 
 所有公开 target 都发布单个 `dws`。Schema handler 优先走本机认证 cache，否则 live declaration assembly。
 
@@ -190,7 +201,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 
 ### P5：两平台证据与发布
 
-- Darwin/arm64、Linux/amd64 使用 Go 1.25.9 跑完整测试、受影响 race、generate/drift/schema gates。
+- Darwin/arm64、Linux/amd64 使用 Go 1.25.9 跑完整测试、受影响 race、generate/drift/schema gates。Windows amd64/arm64 编译并跑 persistent schema-cache 单测与 coverage-windows 门禁。
 - 端到端随机交错测 root help/version/Schema/dry-run/mock/config。
 - Lxxx 同机 root help/完整 Build 作为诊断，写清 commit、node count 和入口；绝对 RSS 不是 release gate。
 - 首次正式 release 的签名、最终制品与安装验证仍阻挡正式发布。

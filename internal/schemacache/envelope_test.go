@@ -221,8 +221,9 @@ func TestCrossPlatformCoveragePersistentBackendEnabled(t *testing.T) {
 		{"darwin", "amd64", true},
 		{"linux", "amd64", true},
 		{"linux", "arm64", true},
-		{"windows", "amd64", false},
-		{"windows", "arm64", false},
+		{"windows", "amd64", true},
+		{"windows", "arm64", true},
+		{"windows", "386", false},
 		{"linux", "386", false},
 	} {
 		if got := PersistentBackendEnabled(tt.goos, tt.goarch); got != tt.want {

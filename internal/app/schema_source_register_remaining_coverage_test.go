@@ -22,8 +22,9 @@ import (
 func TestCrossPlatformCoverageProductionSchemaCacheOptionsRemaining(t *testing.T) {
 	t.Setenv(schemaCacheTestEnv, "1")
 	testseam.Swap(t, &schemaCacheGOOS, "windows")
+	testseam.Swap(t, &schemaCacheGOARCH, "386")
 	if _, ok := productionSchemaCacheOptions(); ok {
-		t.Fatal("windows persistent backend enabled")
+		t.Fatal("windows/386 persistent backend enabled")
 	}
 
 	testseam.Swap(t, &schemaCacheGOOS, "linux")

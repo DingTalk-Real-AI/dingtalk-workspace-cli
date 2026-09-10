@@ -15,6 +15,34 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestCrossPlatformCoverageProductionSchemaCacheEnablesOnWindows(t *testing.T) {
+	oldOS, oldArch := schemaCacheGOOS, schemaCacheGOARCH
+	t.Cleanup(func() {
+		schemaCacheGOOS, schemaCacheGOARCH = oldOS, oldArch
+		_ = cli.RegisterSchemaCacheOptions(cli.SchemaCacheOptions{})
+	})
+	t.Setenv(schemaCacheTestEnv, "1")
+	for _, target := range []struct{ goos, goarch string }{
+		{"windows", "amd64"}, {"windows", "arm64"},
+	} {
+		schemaCacheGOOS, schemaCacheGOARCH = target.goos, target.goarch
+		opts, ok := productionSchemaCacheOptions()
+		if !ok || !opts.Enabled || !opts.AllowGenerate {
+			t.Fatalf("%s/%s options = %#v ok=%v", target.goos, target.goarch, opts, ok)
+		}
+		if opts.GOOS != target.goos || opts.GOARCH != target.goarch {
+			t.Fatalf("%s/%s target = %s/%s", target.goos, target.goarch, opts.GOOS, opts.GOARCH)
+		}
+		if err := cli.RegisterSchemaCacheOptions(opts); err != nil {
+			t.Fatalf("%s/%s register: %v", target.goos, target.goarch, err)
+		}
+	}
+	schemaCacheGOOS, schemaCacheGOARCH = "windows", "386"
+	if opts, ok := productionSchemaCacheOptions(); ok {
+		t.Fatalf("windows/386 must stay disabled: %#v", opts)
+	}
+}
+
 func TestCrossPlatformCoverageProductionSchemaCacheIsNotCompileTimeEnabled(t *testing.T) {
 	registerSchemaRuntimeDelivery()
 	if identity, ok := cli.SchemaCacheFastPathIdentity(); ok {
@@ -129,6 +157,10 @@ func isolateSchemaCacheHome(t *testing.T) {
 	cacheBase := filepath.Join(testHome, ".cache")
 	if runtime.GOOS == "darwin" {
 		cacheBase = filepath.Join(testHome, "Library", "Caches")
+	}
+	if runtime.GOOS == "windows" {
+		cacheBase = filepath.Join(testHome, "AppData", "Local")
+		t.Setenv("LOCALAPPDATA", cacheBase)
 	}
 	if err := os.MkdirAll(cacheBase, 0o700); err != nil {
 		t.Fatal(err)

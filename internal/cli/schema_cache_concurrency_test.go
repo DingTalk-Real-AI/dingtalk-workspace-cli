@@ -100,11 +100,12 @@ func TestCrossPlatformCoverageSchemaCacheAllowGenerateEmptyIdentity(t *testing.T
 	}
 }
 
-func TestCrossPlatformCoverageSchemaCacheOptionsAcceptUnixTargets(t *testing.T) {
+func TestCrossPlatformCoverageSchemaCacheOptionsAcceptSupportedTargets(t *testing.T) {
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	for _, target := range []struct{ goos, goarch string }{
 		{"darwin", "arm64"}, {"darwin", "amd64"},
 		{"linux", "amd64"}, {"linux", "arm64"},
+		{"windows", "amd64"}, {"windows", "arm64"},
 	} {
 		if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
 			Enabled: true, AllowGenerate: true, Edition: "open",
@@ -118,9 +119,9 @@ func TestCrossPlatformCoverageSchemaCacheOptionsAcceptUnixTargets(t *testing.T) 
 func TestCrossPlatformCoverageSchemaCacheOptionsRejectUnsupportedPlatform(t *testing.T) {
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, GOOS: "windows", GOARCH: "amd64",
+		Enabled: true, GOOS: "js", GOARCH: "wasm",
 	})
-	if err == nil || !strings.Contains(err.Error(), "windows/amd64") {
+	if err == nil || !strings.Contains(err.Error(), "js/wasm") {
 		t.Fatalf("unsupported platform error = %v", err)
 	}
 	if _, ok := SchemaCacheFastPathIdentity(); ok {

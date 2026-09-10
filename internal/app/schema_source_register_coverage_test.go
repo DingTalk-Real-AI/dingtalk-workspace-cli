@@ -35,9 +35,9 @@ func TestCrossPlatformCoverageRegisterSchemaRuntimeDelivery(t *testing.T) {
 func TestCrossPlatformCoverageProductionSchemaCacheOptionsPlatformAndDisable(t *testing.T) {
 	t.Setenv(schemaCacheTestEnv, "1")
 	testseam.Swap(t, &schemaCacheGOOS, "windows")
-	testseam.Swap(t, &schemaCacheGOARCH, "amd64")
+	testseam.Swap(t, &schemaCacheGOARCH, "386")
 	if _, ok := productionSchemaCacheOptions(); ok {
-		t.Fatal("windows cache options enabled")
+		t.Fatal("windows/386 cache options enabled")
 	}
 	testseam.Swap(t, &schemaCacheGOOS, "linux")
 	testseam.Swap(t, &schemaCacheGOARCH, "amd64")

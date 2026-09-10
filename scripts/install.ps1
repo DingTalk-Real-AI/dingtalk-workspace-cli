@@ -20,6 +20,8 @@
 #   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else multi)
 #   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
 #                       Gitee API instead of GitHub (China mirror)
+#   DWS_SCHEMA_CACHE_SHARED_DIR — optional shared schema-cache base (default:
+#                       %ProgramData%\dws). Installer warms this when writable.
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -1835,6 +1837,113 @@ function Install-Skills {
     }
 }
 
+# ── Build schema cache ───────────────────────────────────────────────────────
+# Persistent backends are compiled in for windows amd64/arm64. Identity is
+# generated on this machine from the installed binary (no compile-time seal).
+# Prefer a writable shared location (%ProgramData%\dws), otherwise warm the
+# per-user cache under %LOCALAPPDATA%. Never claim success without artifacts.
+
+function Test-SchemaCacheArtifactsPresent {
+    param([string]$Dir)
+    if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) {
+        return $false
+    }
+    $meta = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "meta.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $registry = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "registry.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $payloads = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "payloads.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $identity = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    return (
+        $null -ne $meta -and $meta.Length -gt 0 -and
+        $null -ne $registry -and $registry.Length -gt 0 -and
+        $null -ne $payloads -and $payloads.Length -gt 0 -and
+        $null -ne $identity -and $identity.Length -gt 0
+    )
+}
+
+function Build-SharedSchemaCache {
+    $arch = Get-Arch
+    if ($arch -ne "amd64" -and $arch -ne "arm64") {
+        return
+    }
+
+    $sharedDir = $env:DWS_SCHEMA_CACHE_SHARED_DIR
+    if (-not $sharedDir) {
+        if ($env:ProgramData) {
+            $sharedDir = Join-Path $env:ProgramData "dws"
+        }
+    }
+
+    $cacheDir = $null
+    $shared = $false
+    if ($sharedDir) {
+        try {
+            New-Item -ItemType Directory -Path $sharedDir -Force -ErrorAction Stop | Out-Null
+            $probe = Join-Path $sharedDir ".dws-schema-cache-write-test"
+            [System.IO.File]::WriteAllText($probe, "ok")
+            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            $cacheDir = $sharedDir
+            $shared = $true
+        } catch {
+            $cacheDir = $null
+        }
+    }
+
+    $userCacheBase = $null
+    if (-not $cacheDir) {
+        $userCacheBase = [Environment]::GetFolderPath("LocalApplicationData")
+        if (-not $userCacheBase) { $userCacheBase = $env:LOCALAPPDATA }
+        if ($userCacheBase) {
+            try {
+                New-Item -ItemType Directory -Path $userCacheBase -Force -ErrorAction Stop | Out-Null
+                $cacheDir = $userCacheBase
+            } catch {
+                $cacheDir = $null
+            }
+        }
+    }
+
+    if (-not $cacheDir) {
+        Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+        return
+    }
+
+    Write-Say "🔧 Building schema cache (local identity)..."
+    $exe = Join-Path $InstallDir "$BinName.exe"
+    $previous = $env:DWS_SCHEMA_CACHE_DIR
+    if ($shared) {
+        $env:DWS_SCHEMA_CACHE_DIR = $cacheDir
+    } else {
+        $env:DWS_SCHEMA_CACHE_DIR = $null
+    }
+    $ok = $false
+    try {
+        if (Test-Path -LiteralPath $exe) {
+            & $exe schema --all --format json | Out-Null
+            if ($LASTEXITCODE -eq 0 -and (Test-SchemaCacheArtifactsPresent -Dir $cacheDir)) {
+                $ok = $true
+            }
+        }
+    } catch {
+        $ok = $false
+    } finally {
+        if ($null -ne $previous) {
+            $env:DWS_SCHEMA_CACHE_DIR = $previous
+        } else {
+            Remove-Item Env:DWS_SCHEMA_CACHE_DIR -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($ok) {
+        if ($shared) {
+            Write-Say "✅ Shared schema cache built: $cacheDir"
+        } else {
+            Write-Say "✅ Schema cache built: $cacheDir"
+        }
+    } else {
+        Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+    }
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 $SourceRoot = Resolve-SourceRoot
@@ -1854,13 +1963,16 @@ if ($SourceRoot -and !$SkillsOnly -and ($Version -eq "latest")) {
     if (!$NoSkills) {
         Install-SkillsLocal -Root $SourceRoot
     }
+    Build-SharedSchemaCache
 } elseif ($SkillsOnly) {
     Install-Skills
 } elseif ($NoSkills) {
     Install-Binary
+    Build-SharedSchemaCache
 } else {
     Install-Binary
     Install-Skills
+    Build-SharedSchemaCache
 }
 
 Write-Host ""

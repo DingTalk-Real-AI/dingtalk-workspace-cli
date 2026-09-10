@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -335,6 +336,215 @@ build_shared_schema_cache
 			t.Fatalf("populated write did not claim success:\n%s", text)
 		}
 	})
+}
+
+func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(scriptData)
+	for _, want := range []string{
+		"function Test-SchemaCacheArtifactsPresent",
+		"function Build-SharedSchemaCache",
+		"DWS_SCHEMA_CACHE_DIR",
+		"schema --all",
+		"identity.*.json",
+		"meta.cache",
+		"registry.shards.cache",
+		"payloads.shards.cache",
+		"first schema command will build a per-user cache",
+		"Shared schema cache built",
+		"Schema cache not written",
+		"Build-SharedSchemaCache",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("install.ps1 missing schema-cache contract %q", want)
+		}
+	}
+	buildFn := extractPowerShellFunction(t, text, "Build-SharedSchemaCache")
+	if !strings.Contains(buildFn, "Test-SchemaCacheArtifactsPresent") {
+		t.Fatal("Build-SharedSchemaCache must verify artifacts before claiming success")
+	}
+	successIdx := strings.Index(buildFn, "Shared schema cache built")
+	verifyIdx := strings.Index(buildFn, "Test-SchemaCacheArtifactsPresent")
+	if successIdx < 0 || verifyIdx < 0 || verifyIdx > successIdx {
+		t.Fatal("success message must follow artifact verification")
+	}
+	if strings.Count(text, "Build-SharedSchemaCache") < 4 {
+		t.Fatal("install.ps1 must invoke Build-SharedSchemaCache after binary install paths")
+	}
+}
+
+func TestInstallPowerShellSchemaCacheVerifyBeforeClaim(t *testing.T) {
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := string(scriptData[:cut])
+
+	writeFakeGo := func(t *testing.T, exePath, source string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(exePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		src := filepath.Join(t.TempDir(), "fake-dws.go")
+		mustWriteFile(t, src, []byte(source), 0o644)
+		cmd := exec.Command("go", "build", "-o", exePath, src)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("build fake dws: %v\n%s", err, out)
+		}
+	}
+
+	runHarness := func(t *testing.T, extra, envShared, envLocal string) string {
+		t.Helper()
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		harness := prefix + extra + "\nBuild-SharedSchemaCache\n"
+		harnessPath := filepath.Join(root, "schema-cache-harness.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		cmd.Env = append(os.Environ(),
+			"DWS_SCHEMA_CACHE_SHARED_DIR="+envShared,
+			"LOCALAPPDATA="+envLocal,
+			"ProgramData="+filepath.Join(root, "programdata-empty"),
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("schema-cache harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("unsupported arch never claims success", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		local := filepath.Join(root, "local")
+		text := runHarness(t, `
+function Get-Arch { return "386" }
+$InstallDir = "`+filepath.Join(root, "bin")+`"
+$BinName = "dws"
+`, shared, local)
+		if strings.Contains(text, "schema cache built") || strings.Contains(text, "Schema cache built") {
+			t.Fatalf("unsupported arch claimed success:\n%s", text)
+		}
+	})
+
+	t.Run("zero files is not success", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		local := filepath.Join(root, "local")
+		writeFakeGo(t, filepath.Join(binDir, "dws.exe"), "package main\nfunc main() {}\n")
+		text := runHarness(t, `
+function Get-Arch { return "amd64" }
+$InstallDir = "`+binDir+`"
+$BinName = "dws"
+`, shared, local)
+		if strings.Contains(text, "Shared schema cache built") || strings.Contains(text, "✅ Schema cache built") {
+			t.Fatalf("empty write claimed success:\n%s", text)
+		}
+		if !strings.Contains(text, "Schema cache not written") {
+			t.Fatalf("empty write missing skip warning:\n%s", text)
+		}
+	})
+
+	t.Run("success requires artifacts", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		local := filepath.Join(root, "local")
+		writeFakeGo(t, filepath.Join(binDir, "dws.exe"), `package main
+import (
+	"os"
+	"path/filepath"
+)
+func main() {
+	base := os.Getenv("DWS_SCHEMA_CACHE_DIR")
+	if base == "" {
+		os.Exit(1)
+	}
+	dir := filepath.Join(base, "dws", "schema", "open", "v1")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		os.Exit(1)
+	}
+	for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.test.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			os.Exit(1)
+		}
+	}
+}
+`)
+		text := runHarness(t, `
+function Get-Arch { return "amd64" }
+$InstallDir = "`+binDir+`"
+$BinName = "dws"
+`, shared, local)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("populated write did not claim success:\n%s", text)
+		}
+	})
+
+	t.Run("artifact helper requires sidecar and shards", func(t *testing.T) {
+		root := t.TempDir()
+		empty := filepath.Join(root, "empty")
+		full := filepath.Join(root, "full", "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(empty, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(full, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(full, "meta.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "registry.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "payloads.shards.cache"), []byte("x"), 0o600)
+		mustWriteFile(t, filepath.Join(full, "identity.test.json"), []byte("{}"), 0o600)
+		harness := prefix + `
+$empty = Test-SchemaCacheArtifactsPresent -Dir "` + empty + `"
+$full = Test-SchemaCacheArtifactsPresent -Dir "` + filepath.Join(root, "full") + `"
+if ($empty) { Write-Output "EMPTY_TRUE"; exit 1 }
+if (-not $full) { Write-Output "FULL_FALSE"; exit 1 }
+Write-Output "ARTIFACT_HELPER_OK"
+`
+		harnessPath := filepath.Join(root, "artifact-helper.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("artifact helper: %v\n%s", err, output)
+		}
+		if !strings.Contains(string(output), "ARTIFACT_HELPER_OK") {
+			t.Fatalf("artifact helper output:\n%s", output)
+		}
+	})
+}
+
+func lookPowerShellForScriptsOptional() (string, error) {
+	for _, name := range []string{"pwsh", "powershell"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", errors.New("PowerShell is not available")
 }
 
 func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {

@@ -221,6 +221,10 @@ func TestCrossPlatformCoverageSchemaCacheRepairAndDeliveryMiss(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		cacheBase = filepath.Join(testHome, "Library", "Caches")
 	}
+	if runtime.GOOS == "windows" {
+		cacheBase = filepath.Join(testHome, "AppData", "Local")
+		t.Setenv("LOCALAPPDATA", cacheBase)
+	}
 	if err := os.MkdirAll(cacheBase, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -422,6 +426,10 @@ func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
 	cacheBase := filepath.Join(testHome, ".cache")
 	if runtime.GOOS == "darwin" {
 		cacheBase = filepath.Join(testHome, "Library", "Caches")
+	}
+	if runtime.GOOS == "windows" {
+		cacheBase = filepath.Join(testHome, "AppData", "Local")
+		t.Setenv("LOCALAPPDATA", cacheBase)
 	}
 	if err := os.MkdirAll(cacheBase, 0o700); err != nil {
 		t.Fatal(err)

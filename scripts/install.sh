@@ -1627,8 +1627,9 @@ install_binary() {
 # The schema cache is generated on this machine from the installed binary's
 # live declarations (no compile-time identity seal). Build it once at the
 # system shared location so every user reuses it. Persistent backends are
-# compiled in for darwin/linux on amd64/arm64. Windows and other ends skip
-# silently and never claim success. Root-owned sticky ancestry such as
+# compiled in for darwin/linux/windows on amd64/arm64. This POSIX installer
+# only warms darwin/linux shared locations; Windows uses install.ps1.
+# Other ends skip silently and never claim success. Root-owned sticky ancestry such as
 # macOS /Library/Caches is accepted by the runtime; if the shared base is not
 # writable the installer leaves per-user cache generation to the first schema
 # command.

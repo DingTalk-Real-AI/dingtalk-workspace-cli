@@ -46,7 +46,7 @@ var (
 type SchemaCacheIdentity = schemareader.Identity
 
 // SchemaCacheOptions configures production cache delivery. Enabled options are
-// accepted for darwin/linux on amd64/arm64; tests may inject GOOS/GOARCH.
+// accepted for darwin/linux/windows on amd64/arm64; tests may inject GOOS/GOARCH.
 // AllowGenerate lets an empty identity be derived from the running binary's
 // declarations on first schema use.
 type SchemaCacheOptions struct {

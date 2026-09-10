@@ -434,6 +434,9 @@ func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		cacheBase = filepath.Join(os.Getenv("HOME"), "Library", "Caches")
 	}
+	if runtime.GOOS == "windows" {
+		cacheBase = os.Getenv("LOCALAPPDATA")
+	}
 	if _, err := os.Stat(filepath.Join(cacheBase, "dws")); !os.IsNotExist(err) {
 		t.Fatalf("speculative probe created cache ancestry: %v", err)
 	}
@@ -569,6 +572,10 @@ func configureSchemaCacheTestHome(t *testing.T) {
 	cacheBase := filepath.Join(testHome, ".cache")
 	if runtime.GOOS == "darwin" {
 		cacheBase = filepath.Join(testHome, "Library", "Caches")
+	}
+	if runtime.GOOS == "windows" {
+		cacheBase = filepath.Join(testHome, "AppData", "Local")
+		t.Setenv("LOCALAPPDATA", cacheBase)
 	}
 	if err := os.MkdirAll(cacheBase, 0o700); err != nil {
 		t.Fatal(err)
