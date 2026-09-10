@@ -198,6 +198,58 @@ func TestMockMCPSmoke_CLIRoutesSerializedArgumentsAndPrintsJSON(t *testing.T) {
 	}
 }
 
+func TestMockMCPSmoke_DatasourceUpdateDoesNotReplayGatewayFailures(t *testing.T) {
+	for _, status := range []int{http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout} {
+		for _, path := range [][]string{{"datasource", "update"}, {"+datasource-update"}} {
+			t.Run(fmt.Sprintf("%s/%d", strings.Join(path, "_"), status), func(t *testing.T) {
+				var mu sync.Mutex
+				var calls []string
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var request struct {
+						ID     int `json:"id"`
+						Params struct {
+							Name string `json:"name"`
+						} `json:"params"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						t.Errorf("decode MCP request: %v", err)
+						http.Error(w, "invalid request", http.StatusBadRequest)
+						return
+					}
+					mu.Lock()
+					calls = append(calls, request.Params.Name)
+					mu.Unlock()
+					if request.Params.Name == "get_datasource_config" {
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"jsonrpc": "2.0", "id": request.ID,
+							"result": map[string]any{"content": []map[string]any{{
+								"type": "text",
+								"text": `{"status":"success","data":{"datasourceType":"OA","sourceConfig":"{\"processCode\":\"TEST-OA\"}"}}`,
+							}}},
+						})
+						return
+					}
+					http.Error(w, "upstream gateway failed after accepting the request", status)
+				}))
+				defer server.Close()
+				env := isolatedCLIEnv(t, map[string]string{"DINGTALK_AITABLE_MCP_URL": server.URL})
+				args := append([]string{"--token", "ci-smoke-token", "--format", "json", "aitable"}, path...)
+				args = append(args, "--base-id", "mock-base", "--table-id", "mock-table", "--auto=false", "--yes")
+				stdout, stderr, err := runCLI(t, env, args...)
+				if err == nil {
+					t.Fatalf("gateway failure was reported as success: stdout=%s stderr=%s", stdout, stderr)
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if want := []string{"get_datasource_config", "update_datasource_config"}; !reflect.DeepEqual(calls, want) {
+					t.Fatalf("MCP calls = %v, want %v; stdout=%s stderr=%s", calls, want, stdout, stderr)
+				}
+			})
+		}
+	}
+}
+
 func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 	var requestsMu sync.Mutex
 	var requests []recordedToolCall

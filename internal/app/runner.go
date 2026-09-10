@@ -654,7 +654,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	}
 
 	callStart := time.Now()
-	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
+	// tools/call can mutate remote state even when the gateway returns an error.
+	// Only callers with a reviewed read/reconciliation policy may replay it;
+	// keep discovery and the shared transport's retry budget unchanged.
+	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
 		if isRefreshableTransportAuthError(err) {
