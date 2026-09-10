@@ -166,6 +166,41 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 		t.Fatal(err)
 	}
 	clearSchemaTreeIdentities(filePath)
+	// Real directory that is not .../dws/schema must hit the path-shape guard.
+	wrongShape := filepath.Join(dir, "not-dws-schema")
+	if err := os.MkdirAll(wrongShape, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(wrongShape, "identity.json")
+	if err := os.WriteFile(keep, []byte(`{"version":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clearSchemaTreeIdentities(wrongShape)
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("non-dws/schema identity.json was deleted: %v", err)
+	}
+	// schema under a non-dws parent is also rejected by the same guard.
+	schemaNotUnderDWS := filepath.Join(dir, "other", "schema")
+	if err := os.MkdirAll(schemaNotUnderDWS, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	clearSchemaTreeIdentities(schemaNotUnderDWS)
+
+	// Relative cache env values must be ignored by invalidation base discovery.
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "relative/cache")
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "also/relative")
+	bases := schemaCacheInvalidationBases()
+	for _, base := range bases {
+		if !filepath.IsAbs(base) {
+			t.Fatalf("relative invalidation base leaked: %q", base)
+		}
+		if base == "relative/cache" || base == "also/relative" {
+			t.Fatalf("relative env base accepted: %q", base)
+		}
+	}
+	// Clear relative overrides so later Open() uses coverageSchemaCacheHome again.
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
 
 	if err := persistLocalSchemaCacheIdentity(dir, SchemaCacheIdentity{}); err == nil {
 		t.Fatal("invalid persist succeeded")

@@ -51,6 +51,17 @@ func TestCrossPlatformCoverageInvalidateSchemaCacheIdentitiesScopedToDWSSchema(t
 	}
 	schemaCacheRuntimeGOOS = func() string { return runtime.GOOS }
 
+	// Relative env values must be rejected by IsAbs before they enter the base list.
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "relative/cache")
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "./also-relative")
+	for _, base := range schemaCacheInvalidationBases() {
+		if !filepath.IsAbs(base) {
+			t.Fatalf("relative invalidation base leaked: %q", base)
+		}
+	}
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", root)
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
+
 	InvalidatePersistedSchemaCacheIdentities()
 
 	if _, err := os.Stat(drop); !os.IsNotExist(err) {
