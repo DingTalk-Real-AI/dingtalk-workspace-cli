@@ -126,7 +126,7 @@ func TestCrossPlatformCoverageDocMultiCopyPreflightOrderAndFailureDetails(t *tes
 	args := []string{"--node", "n", "--command", "block_copy_insert_after", "--block-id", "a,b", "--after-block-id", "ref", "--yes"}
 	c := &docCoverageCaller{responses: map[string][]map[string]any{
 		"get_document_content":  {parityFullJSONML([]string{"a", "b", "ref"}, []string{"A", "B", "R"})},
-		"insert_document_block": {{"blockId": "new1"}, {"blockId": "new2"}},
+		"insert_document_block": {{"blockId": "new1"}, {"elementId": "new2"}},
 		"list_document_blocks":  {parityBlockRead([]string{"a", "b", "ref", "new1"}, []string{"A", "B", "R", "A"}), parityBlockRead([]string{"a", "b", "ref", "new1", "new2"}, []string{"A", "B", "R", "A", "B"})},
 	}}
 	result := runDocCoverageEnvelope(t, Update, c, args...)
@@ -331,5 +331,39 @@ func TestCrossPlatformCoverageDocAttachmentViewOptionsAndReadback(t *testing.T) 
 		if err := runDocCoverage(t, s, c, args...); err == nil || c.calls != 0 {
 			t.Fatal("invalid attachment view reached RPC", err)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageDocCopyAnchorSecondRowAndWrongPosition(t *testing.T) {
+	for _, good := range []bool{true, false} {
+		ids, texts := []string{"source", "ref", "new1", "tail"}, []string{"A", "R", "A", "T"}
+		if !good {
+			ids, texts = []string{"source", "ref", "tail", "new1"}, []string{"A", "R", "T", "A"}
+		}
+		read := parityBlockRead(ids, texts)
+		actual := orderedJSONMLBlocks(read)
+		if len(actual) != 4 {
+			t.Fatalf("blocks list was mistaken for a JSONML node: count=%d", len(actual))
+		}
+		expected := canonicalBlockContent([]any{"p", map[string]any{}, "A"}, "jsonml")
+		if got := verifyInsertedCanonicalBlock(map[string]any{"blockId": "new1"}, read, "ref", "after", expected, "jsonml", 0); got != good {
+			t.Fatal("wrong anchored position verdict", got)
+		}
+	}
+	if jsonMLBlockIdentity([]any{map[string]any{"blockId": "source"}, map[string]any{"blockId": "ref"}}) != "" {
+		t.Fatal("wrapper list has false identity")
+	}
+	c := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content":  {parityFullJSONML([]string{"a", "b", "ref"}, []string{"A", "B", "R"})},
+		"insert_document_block": {{"blockId": "new1"}},
+		"list_document_blocks":  {parityBlockRead([]string{"a", "new1", "b", "ref"}, []string{"A", "A", "B", "R"})},
+	}}
+	err := runDocCoverage(t, Update, c, "--node", "n", "--command", "block_copy_insert_after", "--src-block-ids", "a,b", "--after-block-id", "ref", "--yes")
+	if err == nil {
+		t.Fatal("mispositioned copy was accepted")
+	}
+	encoded, _ := json.Marshal(err)
+	if !bytes.Contains(encoded, []byte("new1")) {
+		t.Fatalf("partial copy lost its known receipt: %s", encoded)
 	}
 }

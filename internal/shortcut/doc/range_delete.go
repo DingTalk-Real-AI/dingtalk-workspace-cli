@@ -114,9 +114,13 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 			return verifyInsertedCanonicalBlock(result, read, ref, "after", expected, "jsonml", 0)
 		})
 		if err != nil {
-			return docPartialWriteError("doc.multi_copy", "doc_multi_copy_partial", "copy", fmt.Sprintf("第%d个源块复制未确认；不要重试整个序列", i+1), err, map[string]any{"nodeId": node, "completed": completed, "failedSourceId": ids[i]}, nil, map[string]any{"available": false, "reason": "inspect completed/new IDs before retrying remaining sources"})
+			progress := map[string]any{"nodeId": node, "completed": completed, "failedSourceId": ids[i]}
+			if step != nil {
+				progress["lastStep"] = step
+			}
+			return docPartialWriteError("doc.multi_copy", "doc_multi_copy_partial", "copy", fmt.Sprintf("第%d个源块复制未确认；不要重试整个序列", i+1), err, progress, nil, map[string]any{"available": false, "reason": "inspect completed/new IDs before retrying remaining sources"})
 		}
-		newID := nestedString(step, "blockId")
+		newID := nestedString(step, "blockId", "elementId")
 		if newID == "" {
 			return docPartialWriteError("doc.multi_copy", "doc_multi_copy_missing_id", "resolve_inserted_id", "已写入但响应缺少新块ID，停止后续复制", nil, map[string]any{"completed": completed, "lastStep": step}, nil, nil)
 		}

@@ -923,10 +923,10 @@ func runVerifiedDocMutation(
 		return verify == nil || verify(result, data)
 	})
 	if err != nil {
-		return nil, docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	if verify != nil && !verify(result, verification) {
-		return nil, docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
 	verificationSummary := compactDocVerification(verification, "", "", "", params)
@@ -1897,6 +1897,11 @@ func findJSONMLBlock(value any, target string) []any {
 
 func jsonMLBlockIdentity(element []any) string {
 	if len(element) < 2 {
+		return ""
+	}
+	// A blocks array whose second entry happens to contain blockId is not a
+	// JSONML element. Accept only [tag, attributes, ...] before reading identity.
+	if tag, ok := element[0].(string); !ok || strings.TrimSpace(tag) == "" {
 		return ""
 	}
 	attributes, ok := element[1].(map[string]any)
