@@ -5,6 +5,7 @@ package cli
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -137,12 +138,15 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 		t.Fatal("unsupported sidecar version loaded")
 	}
 	raw := identityToRaw(identity)
+	running := schemaCacheBinaryDigest()
 	record := localSchemaCacheIdentityRecord{
 		Version: localSchemaCacheIdentityVersion,
 		Edition: raw.Edition, SourceSHA256: "nope", SurfaceSHA256: raw.SurfaceSHA256, BuildID: raw.BuildID,
 		MetaLength: raw.MetaLength, MetaSHA256: raw.MetaSHA256, RegistryLength: raw.RegistryLength,
 		RegistrySHA256: raw.RegistrySHA256, PayloadLength: raw.PayloadLength, PayloadSHA256: raw.PayloadSHA256,
 		PayloadIndexLength: raw.PayloadIndexLength, PayloadIndexSHA256: raw.PayloadIndexSHA256,
+		// Matching binary_build_id is required to reach ParseIdentity validation.
+		BinaryBuildID: hex.EncodeToString(running[:]),
 	}
 	body, err := json.Marshal(record)
 	if err != nil {
@@ -154,6 +158,14 @@ func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T)
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("invalid parsed sidecar loaded")
 	}
+
+	// clearSchemaTreeIdentities must no-op when the tree is missing or not a directory.
+	clearSchemaTreeIdentities(filepath.Join(dir, "missing", "dws", "schema"))
+	filePath := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clearSchemaTreeIdentities(filePath)
 
 	if err := persistLocalSchemaCacheIdentity(dir, SchemaCacheIdentity{}); err == nil {
 		t.Fatal("invalid persist succeeded")

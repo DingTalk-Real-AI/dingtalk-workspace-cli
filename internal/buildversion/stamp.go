@@ -35,6 +35,12 @@ var ExecutableMaterial = cachedExecutableMaterial
 var (
 	exeMaterialOnce   sync.Once
 	exeMaterialCached []byte
+
+	// Process seams for ExecutableMaterial fault paths (tests swap via testseam).
+	osExecutable = os.Executable
+	osOpen       = os.Open
+	osStat       = os.Stat
+	ioCopy       = io.Copy
 )
 
 // Set updates the binary stamp material. Empty inputs leave the prior value.
@@ -83,17 +89,17 @@ func cachedExecutableMaterial() []byte {
 }
 
 func computeExecutableMaterial() []byte {
-	path, err := os.Executable()
+	path, err := osExecutable()
 	if err != nil {
 		return []byte("exe-unavailable")
 	}
-	f, err := os.Open(path)
+	f, err := osOpen(path)
 	if err != nil {
 		return fingerprintStatOnly(path)
 	}
 	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	if _, err := ioCopy(h, f); err != nil {
 		return fingerprintStatOnly(path)
 	}
 	return h.Sum(nil)
@@ -103,7 +109,7 @@ func fingerprintStatOnly(path string) []byte {
 	h := sha256.New()
 	h.Write([]byte(path))
 	h.Write([]byte{0})
-	info, err := os.Stat(path)
+	info, err := osStat(path)
 	if err != nil {
 		return h.Sum(nil)
 	}

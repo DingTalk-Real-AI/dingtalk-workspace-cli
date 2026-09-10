@@ -4,7 +4,12 @@
 package buildversion
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -71,4 +76,77 @@ func TestCrossPlatformCoverageStampedDigestIgnoresExecutableMaterial(t *testing.
 	if a != b {
 		t.Fatal("stamped Digest must stay stamp-only and ignore executable material")
 	}
+}
+
+func TestCrossPlatformCoverageExecutableMaterialFaultPaths(t *testing.T) {
+	v, c, bt := CurrentStampForTest()
+	if v == "" || c == "" || bt == "" {
+		t.Fatalf("CurrentStampForTest empty: %q %q %q", v, c, bt)
+	}
+
+	t.Run("executable unavailable", func(t *testing.T) {
+		testseam.Swap(t, &osExecutable, func() (string, error) {
+			return "", errors.New("no executable")
+		})
+		got := computeExecutableMaterial()
+		if string(got) != "exe-unavailable" {
+			t.Fatalf("Executable error material = %q", got)
+		}
+	})
+
+	t.Run("open fails falls back to stat fingerprint", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "missing-binary")
+		testseam.Swap(t, &osExecutable, func() (string, error) { return missing, nil })
+		got := computeExecutableMaterial()
+		want := fingerprintStatOnly(missing)
+		if !bytes.Equal(got, want) {
+			t.Fatal("open-fail path must equal fingerprintStatOnly")
+		}
+	})
+
+	t.Run("copy fails falls back to successful stat fingerprint", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "readable-binary")
+		if err := os.WriteFile(path, []byte("payload"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &osExecutable, func() (string, error) { return path, nil })
+		testseam.Swap(t, &ioCopy, func(dst io.Writer, src io.Reader) (int64, error) {
+			return 0, errors.New("copy failed")
+		})
+		got := computeExecutableMaterial()
+		want := fingerprintStatOnly(path)
+		if !bytes.Equal(got, want) {
+			t.Fatal("copy-fail path must equal fingerprintStatOnly with successful Stat")
+		}
+	})
+
+	t.Run("stat fingerprint miss and hit", func(t *testing.T) {
+		missing := fingerprintStatOnly(filepath.Join(t.TempDir(), "gone"))
+		path := filepath.Join(t.TempDir(), "present")
+		if err := os.WriteFile(path, []byte("abc"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		present := fingerprintStatOnly(path)
+		if len(missing) != sha256.Size || len(present) != sha256.Size {
+			t.Fatal("fingerprint length")
+		}
+		if bytes.Equal(missing, present) {
+			t.Fatal("missing and present fingerprints must differ")
+		}
+	})
+
+	t.Run("happy path hashes a readable executable", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "ok-binary")
+		if err := os.WriteFile(path, []byte("ok-payload"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		testseam.Swap(t, &osExecutable, func() (string, error) { return path, nil })
+		got := computeExecutableMaterial()
+		if len(got) != sha256.Size {
+			t.Fatalf("happy-path material len = %d", len(got))
+		}
+		// Also exercise the process-cached seam entrypoint once.
+		testseam.Swap(t, &ExecutableMaterial, cachedExecutableMaterial)
+		_ = cachedExecutableMaterial()
+	})
 }

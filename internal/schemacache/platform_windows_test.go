@@ -330,6 +330,37 @@ func TestCrossPlatformCoverageWindowsSystemAndOverridePaths(t *testing.T) {
 		t.Fatalf("shared directory = %s", sharedCache.Directory())
 	}
 	_ = sharedCache.Close()
+
+	// Custom SHARED_DIR must win over ProgramData system base at runtime.
+	customShared := privateTestBase(t)
+	editionHex := hex.EncodeToString(digest[:])
+	if err := os.MkdirAll(filepath.Join(customShared, "dws", "schema", editionHex, "v1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{
+		customShared,
+		filepath.Join(customShared, "dws"),
+		filepath.Join(customShared, "dws", "schema"),
+		filepath.Join(customShared, "dws", "schema", editionHex),
+		filepath.Join(customShared, "dws", "schema", editionHex, "v1"),
+	} {
+		if err := restrictSharedReadOnly(p); err != nil {
+			t.Fatalf("restrict custom shared %s: %v", p, err)
+		}
+	}
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", customShared)
+	programDataDir = func() string { return privateTestBase(t) }
+	userCacheDir = func() (string, error) { return privateTestBase(t), nil }
+	customCache, err := Open("official", WithNoCreate())
+	if err != nil {
+		t.Fatalf("SHARED_DIR Open: %v", err)
+	}
+	if !strings.HasPrefix(customCache.Directory(), customShared) {
+		t.Fatalf("SHARED_DIR directory = %q want under %q", customCache.Directory(), customShared)
+	}
+	_ = customCache.Close()
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
 }
 
 func TestCrossPlatformCoverageWindowsReparseAndRegularFileRejection(t *testing.T) {
