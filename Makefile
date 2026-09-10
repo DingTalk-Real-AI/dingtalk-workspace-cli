@@ -55,15 +55,12 @@ build:
 rebuild:
 	@./scripts/dev/build.sh
 
-# No dws command imports internal/msgcrypto yet, so a tagged CLI build would
-# link nothing extra and look identical to the default binary. Gate the package
-# itself until a caller wires it in.
 check-safechat:
-	@CGO_ENABLED=1 $(GO) build -tags safechat ./internal/msgcrypto/...
-	@CGO_ENABLED=1 $(GO) vet -tags safechat ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) build ./cmd ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) vet ./internal/msgcrypto/...
 
 test-safechat:
-	@CGO_ENABLED=1 $(GO) test -count=1 -tags safechat ./internal/msgcrypto/...
+	@CGO_ENABLED=1 $(GO) test -count=1 ./internal/msgcrypto/...
 
 test:
 	@DWS_PACKAGE_VERSION="$(DWS_PACKAGE_VERSION)" $(GO) test -count=1 -timeout=10m ./...
@@ -102,6 +99,8 @@ fmt:
 
 policy: test-auth-legacy-compat shortcut-public-e2e-proof
 	@mkdir -p "$(POLICY_GOTMPDIR)"
+	@$(POLICY_ENV) ./scripts/policy/check-runtime-payload.sh --allow-unsupported-tools
+	@$(POLICY_ENV) ./scripts/build/generate-runtime-payload-assets.sh --check
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
 	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh
 	@$(POLICY_ENV) ./scripts/policy/check-multi-im-skill-chain.sh

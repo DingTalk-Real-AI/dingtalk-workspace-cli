@@ -293,50 +293,25 @@ func TestCrossPlatformCoverageCopyCString(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageResolveLibraryPathUsesResolvedExecutable(t *testing.T) {
-	testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) {
-		return "", errors.New("embedded payload disabled for sidecar test")
-	})
 	root := t.TempDir()
-	realDir := filepath.Join(root, "real")
-	payloadDir := filepath.Join(realDir, ".dws-runtime", PayloadVersion)
-	if err := os.MkdirAll(filepath.Join(payloadDir, "ps"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	name, err := libraryName(runtimeGOOS(), runtimeGOARCH())
-	if err != nil {
-		t.Skip(err)
-	}
-	for _, path := range []string{filepath.Join(payloadDir, name), filepath.Join(payloadDir, "manifest.json")} {
-		if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	realDir := filepath.Join(root, "libexec")
+	expected := filepath.Join(realDir, "library")
 	testseam.Swap(t, &osExecutable, func() (string, error) { return filepath.Join(root, "bin", "dws"), nil })
 	testseam.Swap(t, &evalSymlinks, func(string) (string, error) { return filepath.Join(realDir, "dws"), nil })
-	got, err := resolveLibraryPath()
-	if err != nil || got != filepath.Join(payloadDir, name) {
-		t.Fatalf("resolveLibraryPath = %q, %v", got, err)
-	}
-
-	t.Run("missing payload", func(t *testing.T) {
-		missingDir := filepath.Join(root, "missing")
-		testseam.Swap(t, &osExecutable, func() (string, error) { return filepath.Join(missingDir, "dws"), nil })
-		testseam.Swap(t, &evalSymlinks, func(string) (string, error) { return filepath.Join(missingDir, "dws"), nil })
-		if _, err := resolveLibraryPath(); err == nil || classifyLocationError(err) != "payload_unavailable" {
-			t.Fatalf("resolveLibraryPath error = %v", err)
+	testseam.Swap(t, &materializeAdjacentPayload, func(dir, goos, goarch string) (string, error) {
+		if dir != realDir {
+			t.Fatalf("adjacent directory = %q", dir)
 		}
+		return expected, nil
 	})
-
-	t.Run("unsupported platform", func(t *testing.T) {
+	testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) { t.Fatal("unexpected cache fallback"); return "", nil })
+	if got, err := resolveLibraryPath(); err != nil || got != expected {
+		t.Fatalf("path = %q, %v", got, err)
+	}
+	t.Run("unsupported", func(t *testing.T) {
 		testseam.Swap(t, &currentGOOS, "plan9")
 		if _, err := resolveLibraryPath(); err == nil || classifyLocationError(err) != "unsupported_platform" {
-			t.Fatalf("resolveLibraryPath error = %v", err)
-		}
-	})
-	t.Run("executable path", func(t *testing.T) {
-		testseam.Swap(t, &osExecutable, func() (string, error) { return "", errors.New("executable") })
-		if _, err := resolveLibraryPath(); err == nil || !strings.Contains(err.Error(), "executable path") {
-			t.Fatalf("resolveLibraryPath error = %v", err)
+			t.Fatalf("error = %v", err)
 		}
 	})
 }
@@ -346,12 +321,32 @@ func TestCrossPlatformCoverageResolveLibraryPathUsesEmbeddedPayload(t *testing.T
 		t.Fatal(err)
 	}
 	expected := filepath.Join(t.TempDir(), "library")
-	testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) {
-		return expected, nil
-	})
+	testseam.Swap(t, &materializeAdjacentPayload, func(string, string, string) (string, error) { return "", errors.New("unwritable directory") })
+	testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) { return expected, nil })
 	testseam.Swap(t, &userCacheDir, func() (string, error) { return t.TempDir(), nil })
-	if path, err := resolveLibraryPath(); err != nil || path != expected {
-		t.Fatalf("resolveLibraryPath = %q, %v", path, err)
+	for _, scenario := range []string{"adjacent failure", "executable failure", "symlink failure", "both fail", "no cache directory"} {
+		t.Run(scenario, func(t *testing.T) {
+			switch scenario {
+			case "executable failure":
+				testseam.Swap(t, &osExecutable, func() (string, error) { return "", errors.New("private/path") })
+			case "symlink failure":
+				testseam.Swap(t, &evalSymlinks, func(string) (string, error) { return "", errors.New("private/path") })
+			case "both fail":
+				testseam.Swap(t, &materializeRuntimePayload, func(string, string, string) (string, error) { return "", errors.New("private/path") })
+			case "no cache directory":
+				testseam.Swap(t, &userCacheDir, func() (string, error) { return "", errors.New("private/path") })
+			}
+			got, err := resolveLibraryPath()
+			if scenario == "both fail" || scenario == "no cache directory" {
+				if err == nil || got != "" || err.Error() != "runtime payload unavailable" {
+					t.Fatalf("path = %q, %v", got, err)
+				}
+				return
+			}
+			if err != nil || got != expected {
+				t.Fatalf("path = %q, %v", got, err)
+			}
+		})
 	}
 }
 
@@ -367,3 +362,44 @@ func mapValues(input map[string]any) []string {
 
 func runtimeGOOS() string   { return runtime.GOOS }
 func runtimeGOARCH() string { return runtime.GOARCH }
+
+func TestCrossPlatformCoverageAdjacentActualSymlinkAndWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	realDir := filepath.Join(root, "libexec")
+	binDir := filepath.Join(root, "bin")
+	for _, dir := range []string{realDir, binDir} {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	realExecutable := filepath.Join(realDir, "dws")
+	if err := os.WriteFile(realExecutable, []byte("fixture"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(binDir, "dws")
+	if err := os.Symlink(realExecutable, link); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	testseam.Swap(t, &osExecutable, func() (string, error) { return link, nil })
+	got, err := resolveLibraryPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, _ := filepath.EvalSymlinks(realDir)
+	if filepath.Dir(got) != resolved {
+		t.Fatal("resources not beside resolved executable")
+	}
+	for _, dir := range []string{cwd, binDir} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if entry.Name() != "dws" {
+				t.Fatal("wrote outside real executable directory")
+			}
+		}
+	}
+}

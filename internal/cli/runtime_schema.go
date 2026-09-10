@@ -766,6 +766,23 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, cons
 			fieldProvenance["format"] = runtimeSchemaFieldProvenance(formatWinner)
 		}
 
+		if values, declared := flag.Annotations[runtimeannotate.AnnotationFlagAnyOf]; declared {
+			if len(values) != 1 || (parameter.Format != "" && formatWinner.Source != "usage_format_inference") {
+				resolveErr = fmt.Errorf("parameter %s has invalid or conflicting anyOf annotation", flag.Name)
+				return
+			}
+			decoder := json.NewDecoder(strings.NewReader(values[0]))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&parameter.AnyOf); err != nil {
+				resolveErr = fmt.Errorf("parameter %s anyOf: %w", flag.Name, err)
+				return
+			}
+			// Explicit format alternatives replace help-derived single-format inference.
+			parameter.Format = ""
+			delete(fieldProvenance, "format")
+			fieldProvenance["anyOf"] = runtimeSchemaFieldProvenance(runtimeSchemaCandidate(parameter.AnyOf, true, "native_annotation"))
+		}
+
 		enumWinner, ok := resolveField("enum", fieldCtx.enumCandidates())
 		if !ok {
 			return

@@ -15,7 +15,10 @@ import (
 // hands the request to the time-boundary sweep instead. The single-page path
 // stays byte-identical in the command's RunE.
 func runChatMessageListPageAll(cmd *cobra.Command, opts pagedCommandOptions) error {
-	groupID := flagOrFallback(cmd, "conversation-id", "group", "id", "chat")
+	groupID, err := chatFlagOrAlias(cmd, "conversation-id", "group", "id", "chat")
+	if err != nil {
+		return apperrors.NewValidation(err.Error(), apperrors.WithReason("conflicting_aliases"))
+	}
 	userID, _ := cmd.Flags().GetString("user")
 	openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 	specified := 0

@@ -12,12 +12,10 @@
 // limitations under the License.
 
 // The constraint below must stay in sync with cipher_stub.go, which negates it
-// verbatim. It encodes the platforms the vendor ships a libsafechat.a for:
-// darwin and linux on amd64/arm64, plus windows/amd64. windows/arm64 is
-// deliberately excluded because the vendor has not delivered that static
-// library, and DWS does release that target.
+// verbatim. SafeChat is the default backend on every platform for which the
+// vendor ships libsafechat.a. CGO-disabled builds retain the fail-closed stub.
 
-//go:build safechat && cgo && (((darwin || linux) && (amd64 || arm64)) || (windows && amd64))
+//go:build cgo && (darwin || linux || windows) && (amd64 || arm64)
 
 package msgcrypto
 

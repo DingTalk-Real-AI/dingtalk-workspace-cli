@@ -18,7 +18,9 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -77,7 +79,9 @@ func TestCrossPlatformCoverageConversationValidationAndTypeVariants(t *testing.T
 }
 
 func TestCrossPlatformCoverageConversationAndGroupListExecution(t *testing.T) {
-	fake := &larkAlignmentCaller{}
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":false}}`,
+	}}
 	helpers.InitDeps(fake)
 	for _, args := range [][]string{
 		{"chat", "+conversation-set-top", "--conversation-id", "cid", "--yes"},
@@ -407,10 +411,10 @@ func TestCrossPlatformCoverageConversationListFailureBoundaries(t *testing.T) {
 		{name: "later read failure", caller: &larkAlignmentCaller{
 			sequenceResponses: map[string][]string{"im/list_all_conversations": {`{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}},
 			failProductToolAt: map[string]int{"im/list_all_conversations": 2},
-		}, args: []string{"--page-all"}},
-		{name: "missing pagination", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[]}}`}}},
-		{name: "invalid cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":"bad"}}`}}},
-		{name: "stalled cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--cursor", "2"}},
+		}, args: []string{"--page-all"}, wantError: true},
+		{name: "missing pagination", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[]}}`}}, wantError: true},
+		{name: "invalid cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":"bad"}}`}}, wantError: true},
+		{name: "stalled cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--cursor", "2"}, wantError: true},
 		{name: "page limit", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--page-limit", "1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -436,6 +440,105 @@ func TestCrossPlatformCoverageConversationListFailureBoundaries(t *testing.T) {
 	if got := unwrapConversationTuple(nil); got != nil {
 		t.Fatalf("empty tuple = %#v", got)
 	}
+}
+
+func TestCrossPlatformCoverageConversationListIncompleteProjectionBoundaries(t *testing.T) {
+	run := func(t *testing.T, response string, args ...string) (map[string]any, error) {
+		t.Helper()
+		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
+			"im/list_all_conversations": response,
+		}})
+		root := newPlatformCoverageRoot()
+		var stdout bytes.Buffer
+		root.SetOut(&stdout)
+		root.SetArgs(append([]string{"chat", "+conversation-list"}, args...))
+		err := root.Execute()
+		var payload map[string]any
+		if stdout.Len() > 0 {
+			if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {
+				t.Fatalf("decode partial output: %v\n%s", decodeErr, stdout.String())
+			}
+		}
+		return payload, err
+	}
+
+	for _, tc := range []struct {
+		name     string
+		response string
+		args     []string
+		stop     string
+	}{
+		{
+			name:     "malformed tuple metadata",
+			response: `{"result":[[{"openConversationId":"g1"}]]}`,
+			args:     []string{"--page-all"},
+			stop:     "pagination_error",
+		},
+		{
+			name:     "missing hasMore retains safe cursor evidence",
+			response: `{"result":{"conversationList":[{"openConversationId":"g1"}],"nextCursor":2}}`,
+			args:     []string{"--page-all"},
+			stop:     "pagination_error",
+		},
+		{
+			name:     "invalid projected rows",
+			response: `{"result":{"conversationList":["bad",{"name":"missing id"}],"hasMore":false}}`,
+			args:     []string{"--page-all"},
+			stop:     "projection_error",
+		},
+		{
+			name:     "lower page exceeds remaining item budget",
+			response: `{"result":{"conversationList":[{"openConversationId":"g1"},{"openConversationId":"g2"}],"hasMore":true,"nextCursor":2}}`,
+			args:     []string{"--page-all", "--max-items", "1"},
+			stop:     "pagination_error",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := run(t, tc.response, tc.args...)
+			if err == nil || payload == nil || payload["stopReason"] != tc.stop || payload["failedCount"] == float64(0) {
+				t.Fatalf("payload = %#v, err = %v", payload, err)
+			}
+		})
+	}
+
+	for _, value := range []any{
+		int(-1), int64(-1), float64(-1), float64(1.5), json.Number("-1"), json.Number("invalid"), "-1", "invalid",
+	} {
+		if _, err := conversationPaginationCursor(value); err == nil {
+			t.Errorf("invalid cursor %#v unexpectedly succeeded", value)
+		}
+	}
+	if got, err := conversationPaginationCursor(json.Number("7")); err != nil || got != 7 {
+		t.Fatalf("JSON cursor = %d, %v; want 7", got, err)
+	}
+	if got, err := conversationPaginationCursor(" "); err != nil || got != 0 {
+		t.Fatalf("empty cursor = %d, %v; want zero", got, err)
+	}
+
+	rows, failures, cause := conversationListProjectChecked(map[string]any{
+		"result": map[string]any{"conversationList": []any{"bad", map[string]any{"name": "missing"}}, "hasMore": false},
+	})
+	if len(rows) != 0 || len(failures) != 2 || cause == nil {
+		t.Fatalf("rows = %#v, failures = %#v, cause = %v", rows, failures, cause)
+	}
+	rows, failures, cause = conversationListProjectChecked(map[string]any{
+		"result": map[string]any{"conversationList": []any{map[string]any{"name": "missing"}}, "hasMore": false},
+	})
+	if len(rows) != 0 || len(failures) != 1 || cause == nil {
+		t.Fatalf("missing identity rows = %#v, failures = %#v, cause = %v", rows, failures, cause)
+	}
+
+	t.Run("pagination construction failure", func(t *testing.T) {
+		injected := errors.New("pagination construction failed")
+		testseam.Swap(t, &newConversationResultPagination, func(bool, string) (*output.Pagination, error) {
+			return nil, injected
+		})
+		_, err := run(t, `{"result":{"conversationList":[],"hasMore":false}}`)
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "invalid_result_pagination" || !errors.Is(err, injected) {
+			t.Fatalf("error = %#v, want injected pagination failure", err)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
@@ -489,15 +592,15 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 			name:      "referenced message lookup",
 			caller:    &larkAlignmentCaller{failProductTool: "im/list_messages_by_ids"},
 			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--text", "收到", "--yes"},
-			wantError: "读取被引用消息",
+			wantError: "fixture lower call failed",
 		},
 		{
 			name: "referenced message missing sender",
 			caller: &larkAlignmentCaller{responses: map[string]string{
-				"im/list_messages_by_ids": `{"result":[{"openMessageId":"other","senderOpenDingTalkId":"D-other"},{"openMessageId":"msg"}]}`,
+				"im/list_messages_by_ids": `{"result":[{"openMessageId":"other","senderOpenDingTalkId":"D-other"},{"openMessageId":"msg","openConversationId":"cid"}]}`,
 			}},
 			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--text", "收到", "--yes"},
-			wantError: "未返回 senderOpenDingTalkId",
+			wantError: "缺少发送者",
 		},
 		{
 			name:      "feed source",
@@ -513,7 +616,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 		},
 		{
 			name:      "reply write",
-			caller:    &larkAlignmentCaller{failProductTool: "chat/send_personal_message"},
+			caller:    &larkAlignmentCaller{failProductTool: "chat/send_personal_message", responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`}},
 			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--ref-sender", fixtureCurrentDOpenID, "--text", "收到", "--yes"},
 			wantError: "fixture lower call failed",
 		},
@@ -604,8 +707,8 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	}
 	cases := [][]string{
 		{"chat", "+flag-create", "--message-ids", strings.Join(tooMany, ","), "--conversation-id", "cid", "--yes"},
-		{"chat", "+flag-list", "--cursor", "-1"},
-		{"chat", "+flag-list", "--size", "31"},
+		{"chat", "+flag-list", "--no-enrich", "--cursor", "-1"},
+		{"chat", "+flag-list", "--no-enrich", "--size", "31"},
 		{"chat", "+messages-mget", "--msg-ids", strings.Join(makeIDs(51), ",")},
 		{"chat", "+messages-mget", "--msg-ids", "msg", "--download-resources", "--output-dir", "../escape"},
 	}
@@ -682,7 +785,7 @@ func TestCrossPlatformCoverageFeedCompleteAndExcludeMuted(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].args["excludeMuted"] != true {
+	if len(fake.calls) != 2 || fake.calls[0].args["excludeMuted"] != true {
 		t.Fatalf("feed calls = %#v", fake.calls)
 	}
 	var payload map[string]any

@@ -5,7 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 GOOS="${1:-}"
 GOARCH="${2:-}"
 DEST_ROOT="${3:-}"
-VERSION=20260825
+VERSION=20260908
 SOURCE="$ROOT/third_party/runtimepayload/$VERSION"
 
 [ -n "$GOOS" ] && [ -n "$GOARCH" ] && [ -n "$DEST_ROOT" ] || {

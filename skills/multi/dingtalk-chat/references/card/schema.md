@@ -4,7 +4,7 @@ DWS 公开两类卡片命令契约：
 
 - `chat +messages-send-card` / `chat +messages-update-card`：仍是 `im.streaming-card.v1`
   Shortcut 工作流，只处理 streaming text。
-- `chat message send-card` / `chat message update-card`：streaming 原子命令。
+- `chat message send-card` / `chat message update-card`：仅保留 Shortcut 未发布字段或原始响应的 streaming 原子 fallback。
 - `chat message send-a2ui-card` / `chat message update-a2ui-card`：A2UI 原子命令。
 
 streaming 不是任意组件 Schema：

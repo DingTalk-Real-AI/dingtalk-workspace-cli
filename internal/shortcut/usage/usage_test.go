@@ -122,8 +122,8 @@ func TestCrossPlatformCoverageChatCompatibilityHelpTierKeepsPublicCatalogSemanti
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Count != 99 || len(payload.Shortcuts) != 99 {
-		t.Fatalf("default Chat public Catalog = count:%d rows:%d, want 99/99", payload.Count, len(payload.Shortcuts))
+	if payload.Count != 102 || len(payload.Shortcuts) != 102 {
+		t.Fatalf("default Chat public Catalog = count:%d rows:%d, want 102/102", payload.Count, len(payload.Shortcuts))
 	}
 	compatibility := 0
 	for _, row := range payload.Shortcuts {

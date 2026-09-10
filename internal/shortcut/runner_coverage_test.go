@@ -25,6 +25,12 @@ type runtimeContextCaller struct {
 	value any
 }
 
+type runtimeOutputFailWriter struct {
+	err error
+}
+
+func (w runtimeOutputFailWriter) Write([]byte) (int, error) { return 0, w.err }
+
 func (c *runtimeContextCaller) CallTool(ctx context.Context, _ string, _ string, _ map[string]any) (*edition.ToolResult, error) {
 	c.value = ctx.Value(runtimeContextKey{})
 	return nil, errors.New("stop after context capture")
@@ -288,6 +294,91 @@ func TestCrossPlatformCoverageRuntimeOutputForToolRollouts(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), `"id"`) {
 			t.Fatalf("legacy output=%q", stdout.String())
+		}
+	})
+}
+
+func TestCrossPlatformCoverageOutputWithMetaDualValidatesShadowAndPreservesLegacyBytes(t *testing.T) {
+	var validated *output.Envelope
+	testseam.Swap(t, &validateShadowResult, func(result output.CommandResult) error {
+		var err error
+		validated, err = output.EnvelopeFromResult(result)
+		return err
+	})
+	cmd := &cobra.Command{Use: "+paged"}
+	cmd.SetContext(context.Background())
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	output.SetCommandRollout(cmd, output.RolloutDualValidate)
+	rt := RuntimeContextForTest(cmd, Shortcut{
+		Service: "chat", Command: "+paged", Safety: contract.SafetySpec{Effect: "read"},
+	})
+	pagination, err := output.NewPagination(false, "cursor-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pagination.Pages = 1
+	pagination.Items = 1
+	if err := rt.OutputWithMeta(
+		map[string]any{"id": "m1"},
+		&output.Meta{Count: output.NewCount(1), Pagination: pagination},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "{\n  \"id\": \"m1\"\n}\n"; got != want {
+		t.Fatalf("dual success bytes = %q, want legacy %q", got, want)
+	}
+	if validated == nil || validated.Meta == nil || validated.Meta.Pagination == nil ||
+		validated.Meta.Pagination.NextToken != "cursor-2" || validated.Meta.Count == nil || *validated.Meta.Count != 1 {
+		t.Fatalf("shadow pagination metadata = %#v", validated)
+	}
+}
+
+func TestCrossPlatformCoverageOutputIncompleteHonorsRolloutContract(t *testing.T) {
+	terminalErr := apperrors.NewAPI("partial read", apperrors.WithReason("incomplete_result"))
+	payload := map[string]any{"complete": false, "items": []string{"item-1"}}
+
+	t.Run("dual validates, writes legacy bytes, and returns terminal error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+partial"}
+		cmd.SetContext(context.Background())
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		output.SetCommandRollout(cmd, output.RolloutDualValidate)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "chat", Command: "+partial"})
+		if err := rt.OutputIncomplete(payload, terminalErr); !errors.Is(err, terminalErr) {
+			t.Fatalf("terminal error = %v", err)
+		}
+		if !strings.Contains(stdout.String(), `"item-1"`) {
+			t.Fatalf("stdout=%q", stdout.String())
+		}
+	})
+
+	t.Run("unified returns only the error envelope input", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "+partial"}
+		ctx, _ := output.WithResultStore(context.Background())
+		cmd.SetContext(ctx)
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "chat", Command: "+partial"})
+		if err := rt.OutputIncomplete(payload, terminalErr); err != terminalErr {
+			t.Fatalf("terminal error = %v", err)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("unified incomplete result wrote legacy bytes: %q", stdout.String())
+		}
+	})
+
+	t.Run("legacy output failure keeps historical precedence", func(t *testing.T) {
+		outputErr := errors.New("fixture output failure")
+		cmd := &cobra.Command{Use: "+partial"}
+		cmd.SetContext(context.Background())
+		cmd.SetOut(runtimeOutputFailWriter{err: outputErr})
+		output.SetCommandRollout(cmd, output.RolloutLegacyOnly)
+		rt := RuntimeContextForTest(cmd, Shortcut{Service: "chat", Command: "+partial"})
+		err := rt.OutputIncomplete(payload, terminalErr)
+		if err != outputErr {
+			t.Fatalf("output error = %v", err)
 		}
 	})
 }
