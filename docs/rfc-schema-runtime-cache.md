@@ -8,11 +8,7 @@
 | 固定基线 | `main` at `6f71222b9b07c760cdb5f376b24dab9155e62094` |
 | 范围 | CLI 入口、完整命令树、Schema cache、telemetry 退出策略、发布与性能验收 |
 
-本文是 PR #1296 的**唯一规范性文档**。设计、实施阶段、性能数字、编译期交付讨论与进展均收束于此。下列路径仅为指向本文的短指针，不再维护独立正文：
-
-- [CLI 性能专项计划指针](plan-cli-performance-parity.md)
-- [CLI 性能专项技术方案指针](design-cli-performance-parity.md)
-- [性能优化进展指针](performance-optimization-progress.md)
+本文是 PR #1296 的**唯一规范性文档**。设计、实施阶段、性能数字、编译期交付讨论与进展均收束于此。
 
 **当前产品事实：**
 
