@@ -80,7 +80,9 @@ unavailable context return the original URL and `false`.
 
 OAuth's initial browser URL, terminal manual link, and `/api/status`
 reauthorization URL use one snapshot. The page consumes the complete
-`authorizeUrl` directly. Device Flow resolves one snapshot before its retry
+`authorizeUrl` directly. CLI locale selection does not add a `lang` query
+parameter to login URLs, including displayed manual links and `--no-browser`.
+Device Flow resolves one snapshot before its retry
 loop and reuses it for up to three attempts. Both displayed verification URLs
 include the parameters; the complete link is also used for automatic browser
 launch. This applies to `--no-browser` as well. The original verification

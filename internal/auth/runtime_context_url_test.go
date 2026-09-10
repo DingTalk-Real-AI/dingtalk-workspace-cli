@@ -71,6 +71,9 @@ func TestCrossPlatformCoverageOAuthRuntimeURLs(t *testing.T) {
 					t.Fatal("invalid authorization URL")
 				}
 				q := parsed.Query()
+				if q.Has("lang") {
+					t.Fatal("browser, manual, and reauthorization URLs must not override the login page language")
+				}
 				if state == runtimecontext.StateReady {
 					if q.Get("callerUmt") != secret || q.Get("caller") != "dws" || len(q["callerUmt"]) != 1 || len(q["caller"]) != 1 {
 						t.Fatal("wrong authorization runtime context")
@@ -102,7 +105,7 @@ func TestCrossPlatformCoverageDeviceRuntimeURLRetrySnapshot(t *testing.T) {
 	for _, state := range []runtimecontext.State{runtimecontext.StateReady, runtimecontext.StateUnavailable, runtimecontext.StateTimeout, runtimecontext.StateError} {
 		for _, noBrowser := range []bool{false, true} {
 			for _, links := range []struct{ name, base, complete string }{
-				{"complete", "https://example.test/verify?lang=zh-CN#manual", "https://example.test/verify?user_code=ABCD&callerUmt=old&callerUmt=duplicate&caller=old#section"},
+				{"complete", "https://example.test/verify?source=cli#manual", "https://example.test/verify?user_code=ABCD&callerUmt=old&callerUmt=duplicate&caller=old#section"},
 				{"base_only", "https://example.test/verify#manual", ""},
 				{"invalid", "https://example.test/verify?bad=%zz#manual", "https://example.test/verify?bad=%zz#section"},
 			} {
