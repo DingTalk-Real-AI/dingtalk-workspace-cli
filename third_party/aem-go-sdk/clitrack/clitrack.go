@@ -21,6 +21,11 @@ const (
 // 到点未发完就放弃上报直接退出——宁可丢这条埋点,也不让用户等。
 const defaultFlushTimeout = 300 * time.Millisecond
 
+// attrTimeout 是上报时等待血缘探测结果的最长时间。实测一次 `ps` 全表
+// 查询约 50ms;等待上限取 100ms 留余量,到点未就绪则本次事件缺 p3。
+// (env 探测是同步的,不受此超时影响——p2 恒可靠。)
+const attrTimeout = 100 * time.Millisecond
+
 // Config 是 clitrack 接入配置。只有 PID 必填,其余都有合理默认值。
 type Config struct {
 	// —— 必填 ——
@@ -52,15 +57,23 @@ type Config struct {
 	// —— 字段级隐私开关(给接入开发者的编译期选项,默认采集)——
 	NoCommandLine bool // 不采 c2 完整命令行(命令行常带敏感参数时设 true)
 	NoCwd         bool // 不采 c7 工作目录
-	// NoAutomaticDimensions 只保留接入方显式配置的公共维度，并关闭
-	// device_id、os、os_version、timezone_offset、pv_id、sdk_version、sid、
-	// ext.language 与 c6 Shell 自动采集。
+	// NoAutomaticDimensions is a DWS extension that suppresses device, OS,
+	// session, locale, and shell dimensions. Attribution is controlled separately.
 	NoAutomaticDimensions bool
+	// NoAttribution is a DWS extension: do not probe or publish p2/p3.
+	NoAttribution bool
 
 	// —— 扩展钩子 ——
 	// ExtraFields 返回的字段会合并进事件,用于补充 c9/c10/ext 等自定义维度。
-	// 不要覆盖 c1~c8 的约定语义,否则破坏跨 CLI 聚合。空值字段会被忽略。
+	// 协议保留键(p1~p4、c1~c8)即使返回也不会被写入——语义固定,覆盖会破坏
+	// 跨 CLI 聚合。空值字段会被忽略。
 	ExtraFields func() map[string]string
+}
+
+// attributionResult 是执行环境归因的两路独立探测结果(不做融合)。
+type attributionResult struct {
+	executor string // p2:env 匹配到的执行环境,恒有值(无命中为 "none")
+	ancestry string // p3:进程血缘完整链,空表示采集失败/超时/平台不支持
 }
 
 // Tracker 是埋点实例,通过 New 创建,通过 Run 执行 CLI 并自动上报。
@@ -73,8 +86,18 @@ type Tracker struct {
 	flushTimeout          time.Duration
 	noCommandLine         bool
 	noCwd                 bool
-	noAutomaticDimensions bool
 	extraFields           func() map[string]string
+	noAutomaticDimensions bool
+	noAttribution         bool
+
+	executor   string              // env 探测结果(微秒级,在 New 同步完成)
+	ancestryCh chan ancestrySignal // 血缘探测结果(一次 ps,异步)
+}
+
+// ancestrySignal 是血缘探测的一次结果。
+type ancestrySignal struct {
+	chain    string // p3 内容;空表示采集失败
+	qodercli bool   // 链上命中 qodercli(其主判定是进程路径,见 matchQoderCLI)
 }
 
 // New 根据配置创建 Tracker。
@@ -150,6 +173,28 @@ func New(cfg Config) *Tracker {
 		}
 	}
 
+	var ancestryCh chan ancestrySignal
+	var executor string
+	if !cfg.NoAttribution {
+		executor = detectExecutor()
+		ancestryCh = make(chan ancestrySignal, 1)
+		ps := psTable // 快照,避免 goroutine 并发读全局变量
+		go func() {
+			// 探测解析的是系统外部输入,必须兜底:未捕获的 panic 会崩掉整个
+			// CLI 进程,击穿"埋点绝不影响 CLI"红线。panic 按采集失败处理。
+			defer func() {
+				if recover() != nil {
+					ancestryCh <- ancestrySignal{}
+				}
+			}()
+			paths := collectAncestry(ps)
+			ancestryCh <- ancestrySignal{
+				chain:    joinAncestry(paths),
+				qodercli: matchQoderCLI(paths),
+			}
+		}()
+
+	}
 	return &Tracker{
 		inner:                 aem.NewTracker(aemCfg),
 		eventID:               eventID,
@@ -158,8 +203,11 @@ func New(cfg Config) *Tracker {
 		flushTimeout:          flushTimeout,
 		noCommandLine:         cfg.NoCommandLine,
 		noCwd:                 cfg.NoCwd,
-		noAutomaticDimensions: cfg.NoAutomaticDimensions,
 		extraFields:           cfg.ExtraFields,
+		executor:              executor,
+		ancestryCh:            ancestryCh,
+		noAutomaticDimensions: cfg.NoAutomaticDimensions,
+		noAttribution:         cfg.NoAttribution,
 	}
 }
 
@@ -210,14 +258,52 @@ func (t *Tracker) trackExec(exitCode int, duration time.Duration, errMsg, output
 	if t.inner == nil {
 		return
 	}
+	attr := t.takeAttribution()
 	_ = t.inner.Track(aem.Event{
 		Type:   "event",
-		Fields: t.buildFields(exitCode, duration, errMsg, output),
+		Fields: t.buildFields(exitCode, duration, errMsg, output, attr),
 	})
 }
 
+// takeAttribution 组装归因结果:executor 是同步结果恒可靠;
+// 血缘超过 attrTimeout 未就绪则本次缺 p3(并失去 Qoder CLI 回补)。
+// 血缘命中 qodercli 时 executor 回补为 Qoder CLI——对照表钦定
+// Qoder CLI 的主判定是进程路径,这是"不做融合"原则的唯一例外。
+// no-op 实例(ancestryCh 为 nil)只有 executor。
+func (t *Tracker) takeAttribution() attributionResult {
+	if t.noAttribution {
+		return attributionResult{}
+	}
+	r := attributionResult{executor: t.executor}
+	if r.executor == "" {
+		r.executor = executorNone
+	}
+	if t.ancestryCh == nil {
+		return r
+	}
+	var sig ancestrySignal
+	select {
+	case sig = <-t.ancestryCh:
+	case <-time.After(attrTimeout):
+		return r
+	}
+	r.ancestry = sig.chain
+	if sig.qodercli {
+		r.executor = executorQoderCLI
+	}
+	return r
+}
+
+// reservedFieldKeys 是协议保留键,ExtraFields 不得覆盖。
+// 覆盖会破坏跨 CLI 聚合的字段语义(与 c1~c8 红线同理,扩展到 p1~p4)。
+var reservedFieldKeys = map[string]bool{
+	"p1": true, "p2": true, "p3": true, "p4": true,
+	"c1": true, "c2": true, "c3": true, "c4": true,
+	"c5": true, "c6": true, "c7": true, "c8": true,
+}
+
 // buildFields 按字段约定组装一次命令执行的事件字段(纯函数,便于测试)。
-func (t *Tracker) buildFields(exitCode int, duration time.Duration, errMsg, output string) map[string]string {
+func (t *Tracker) buildFields(exitCode int, duration time.Duration, errMsg, output string, attr attributionResult) map[string]string {
 	fields := map[string]string{
 		"p1": t.eventID,
 		"p4": eventTypeSys,
@@ -227,6 +313,12 @@ func (t *Tracker) buildFields(exitCode int, duration time.Duration, errMsg, outp
 	}
 	if !t.noAutomaticDimensions {
 		fields["c6"] = shellType()
+	}
+	if !t.noAttribution && attr.executor != "" {
+		fields["p2"] = attr.executor
+	}
+	if !t.noAttribution && attr.ancestry != "" {
+		fields["p3"] = attr.ancestry
 	}
 	if !t.noCommandLine {
 		fields["c2"] = commandLine()
@@ -242,9 +334,10 @@ func (t *Tracker) buildFields(exitCode int, duration time.Duration, errMsg, outp
 	}
 	if t.extraFields != nil {
 		for k, v := range t.extraFields() {
-			if v != "" {
-				fields[k] = v
+			if v == "" || reservedFieldKeys[k] {
+				continue
 			}
+			fields[k] = v
 		}
 	}
 	return fields
