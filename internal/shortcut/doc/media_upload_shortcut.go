@@ -37,7 +37,7 @@ var MediaUpload = shortcut.Shortcut{
 func mediaUploadContract() corecmd.ContractDecl {
 	d := docContract("+media-upload", "上传可复用媒体并校验字节", "仅上传同文档资源；下载核验成功后返回稳定ID，不插入正文", []string{`dws doc +media-upload --node <DOC_ID> --file ./image.png`})
 	d.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false}
-	d.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","properties":{"nodeId":{"type":"string","description":"资源所属文档"},"resourceId":{"type":"string","description":"已上传资源ID"},"resourceUrl":{"type":"string","description":"同文档可引用的资源URL"},"fileName":{"type":"string","description":"资源名称"},"mimeType":{"type":"string","description":"资源MIME类型"},"size":{"type":"integer","description":"资源字节数"},"sha256":{"type":"string","description":"上传前与下载后相同的SHA256"},"verified":{"type":"boolean","description":"是否独立下载核对字节"},"executed":{"type":"boolean","description":"是否执行上传"},"inserted":{"type":"boolean","description":"是否插入正文，本入口恒false"}}}`), SensitivePaths: []string{"resourceUrl"}}
+	d.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","properties":{"preview_kind":{"type":"string","description":"dry-run的计划类型plan"},"nodeId":{"type":"string","description":"资源所属文档"},"resourceId":{"type":"string","description":"已上传资源ID"},"resourceUrl":{"type":"string","description":"同文档可引用的资源URL"},"fileName":{"type":"string","description":"资源名称"},"mimeType":{"type":"string","description":"资源MIME类型"},"size":{"type":"integer","description":"资源字节数"},"sha256":{"type":"string","description":"上传前与下载后相同的SHA256"},"verified":{"type":"boolean","description":"是否独立下载核对字节"},"executed":{"type":"boolean","description":"是否执行上传"},"inserted":{"type":"boolean","description":"是否插入正文，本入口恒false"}}}`), SensitivePaths: []string{"resourceUrl"}}
 	return d
 }
 func hashDocFile(path string) (string, error) {
@@ -54,7 +54,7 @@ func hashDocFile(path string) (string, error) {
 }
 func executeMediaUpload(rt *shortcut.RuntimeContext) error {
 	if rt.DryRun() {
-		return rt.Output(map[string]any{"nodeId": rt.Str("node"), "executed": false, "inserted": false, "verified": false})
+		return rt.Output(map[string]any{"nodeId": rt.Str("node"), "executed": false, "preview_kind": "plan", "inserted": false, "verified": false})
 	}
 	expected, err := hashDocFile(rt.Str("file"))
 	if err != nil {

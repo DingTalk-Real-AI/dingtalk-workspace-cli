@@ -440,6 +440,9 @@ var Update = shortcut.Shortcut{
 		contract.ParamDecl{Name: "old", Property: "old"},
 		contract.ParamDecl{Name: "new", Property: "new"},
 		contract.ParamDecl{Name: "expected-revision", Property: "expectedRevision"},
+		contract.ParamDecl{Name: "start-block-id", Property: "startBlockId"},
+		contract.ParamDecl{Name: "end-block-id", Property: "endBlockId"},
+		contract.ParamDecl{Name: "src-block-ids", Property: "srcBlockIds"},
 		contract.ParamDecl{Name: "doc", Property: "node"},
 		contract.ParamDecl{Name: "text", Property: "content"}),
 	Flags: []shortcut.Flag{

@@ -42,7 +42,7 @@ var Script = shortcut.Shortcut{
 func scriptContract() corecmd.ContractDecl {
 	d := docContract("+script", "初始化本地草稿或检查文档结构", "本地准备Markdown/JSONML草稿、检查字数与必需块；没有上传写入", []string{`dws doc +script --command init-draft`, `dws doc +script --command parse --content @draft.md --required-blocks heading`})
 	d.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false}
-	d.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","properties":{"command":{"type":"string","description":"本地操作"},"executed":{"type":"boolean","description":"是否执行实际动作"},"workspace":{"type":"string","description":"新建的相对草稿目录"},"draft_path":{"type":"string","description":"可编辑的相对草稿路径"},"profile":{"type":"object","description":"字数和块结构统计"},"assessment":{"type":"string","description":"结构检查状态passed或failed"}}}`)}
+	d.Result = &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}, DataSchema: json.RawMessage(`{"type":"object","properties":{"preview_kind":{"type":"string","description":"dry-run的计划类型plan"},"command":{"type":"string","description":"本地操作"},"executed":{"type":"boolean","description":"是否执行实际动作"},"workspace":{"type":"string","description":"新建的相对草稿目录"},"draft_path":{"type":"string","description":"可编辑的相对草稿路径"},"profile":{"type":"object","description":"字数和块结构统计"},"assessment":{"type":"string","description":"结构检查状态passed或failed"}}}`)}
 	return d
 }
 func validateDocScript(rt *shortcut.RuntimeContext) error {
@@ -65,7 +65,7 @@ func validateDocScript(rt *shortcut.RuntimeContext) error {
 }
 func executeDocScript(rt *shortcut.RuntimeContext) error {
 	if rt.DryRun() {
-		return rt.Output(map[string]any{"command": rt.Str("command"), "executed": false})
+		return rt.Output(map[string]any{"command": rt.Str("command"), "executed": false, "preview_kind": "plan"})
 	}
 	if rt.Str("command") == "init-draft" {
 		cwd, err := docGetwd()
