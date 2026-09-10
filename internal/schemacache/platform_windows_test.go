@@ -1449,7 +1449,7 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 	}
 }
 
-func TestWindowsValidateSecuritySharedVsPersonal(t *testing.T) {
+func TestCrossPlatformCoverageWindowsValidateSecuritySharedVsPersonal(t *testing.T) {
 	user, err := currentUserSID()
 	if err != nil {
 		t.Fatal(err)
@@ -1538,7 +1538,7 @@ func TestWindowsValidateSecuritySharedVsPersonal(t *testing.T) {
 	}
 }
 
-func TestWindowsSharedRestrictACLAllowsUsersRead(t *testing.T) {
+func TestCrossPlatformCoverageWindowsSharedRestrictACLAllowsUsersRead(t *testing.T) {
 	dir := privateTestBase(t)
 	target := filepath.Join(dir, "shared-root")
 	if err := os.Mkdir(target, 0o700); err != nil {
@@ -1577,7 +1577,7 @@ func TestWindowsSharedRestrictACLAllowsUsersRead(t *testing.T) {
 	}
 }
 
-func TestWindowsSharedOpenRejectsWritableDACLAndFallsBack(t *testing.T) {
+func TestCrossPlatformCoverageWindowsSharedOpenRejectsWritableDACLAndFallsBack(t *testing.T) {
 	sharedRoot := privateTestBase(t)
 	userBase := privateTestBase(t)
 	systemBase := filepath.Join(sharedRoot, "dws")
@@ -1615,3 +1615,160 @@ func TestWindowsSharedOpenRejectsWritableDACLAndFallsBack(t *testing.T) {
 		t.Fatal("fallback cache marked shared")
 	}
 }
+
+
+func TestCrossPlatformCoverageWindowsACLErrorBranches(t *testing.T) {
+	t.Cleanup(func() {
+		windowsCreateWellKnownSid = windows.CreateWellKnownSid
+		windowsGetSecurityInfo = windows.GetSecurityInfo
+		windowsGetAce = windows.GetAce
+		platformIO = realWindowsIO{}
+		programDataDir = func() string { return os.Getenv("ProgramData") }
+		userCacheDir = os.UserCacheDir
+	})
+
+	// restrictSharedReadOnly SID failures (each CreateWellKnownSid site).
+	for _, failKind := range []windows.WELL_KNOWN_SID_TYPE{
+		windows.WinBuiltinAdministratorsSid,
+		windows.WinLocalSystemSid,
+		windows.WinBuiltinUsersSid,
+	} {
+		kind := failKind
+		windowsCreateWellKnownSid = func(sidType windows.WELL_KNOWN_SID_TYPE) (*windows.SID, error) {
+			if sidType == kind {
+				return nil, errors.New("forced sid")
+			}
+			return windows.CreateWellKnownSid(sidType)
+		}
+		if err := restrictSharedReadOnly(privateTestBase(t)); err == nil {
+			t.Fatalf("restrictSharedReadOnly should fail for %v", kind)
+		}
+		windowsCreateWellKnownSid = windows.CreateWellKnownSid
+	}
+	oldUser := windowsOpenProcessToken
+	windowsOpenProcessToken = func(windows.Handle, uint32, *windows.Token) error {
+		return errors.New("forced token")
+	}
+	if err := restrictSharedReadOnly(privateTestBase(t)); err == nil {
+		t.Fatal("restrictSharedReadOnly current-user failure accepted")
+	}
+	windowsOpenProcessToken = oldUser
+
+	// readHandleSecurity error branches via GetSecurityInfo / GetAce hooks.
+	target := privateTestBase(t)
+	fd, err := realWindowsIO{}.open(target, windows.READ_CONTROL, secureShareRead, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = realWindowsIO{}.close(fd) })
+
+	windowsGetSecurityInfo = func(windows.Handle, windows.SE_OBJECT_TYPE, windows.SECURITY_INFORMATION) (*windows.SECURITY_DESCRIPTOR, error) {
+		return nil, errors.New("forced get security")
+	}
+	if _, err := readHandleSecurity(fd); err == nil {
+		t.Fatal("GetSecurityInfo failure accepted")
+	}
+
+	// Owner nil / missing
+	windowsGetSecurityInfo = func(h windows.Handle, ot windows.SE_OBJECT_TYPE, si windows.SECURITY_INFORMATION) (*windows.SECURITY_DESCRIPTOR, error) {
+		return windows.GetSecurityInfo(h, ot, si)
+	}
+	// Force ERROR_OBJECT_NOT_FOUND on DACL by stubbing after a real SD is hard;
+	// instead exercise validateSecurity missing DACL / untrusted / write paths
+	// (already in ValidateSecurity test) and GetAce failure:
+	realSD, err := windows.GetSecurityInfo(fd, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal(err)
+	}
+	windowsGetSecurityInfo = func(windows.Handle, windows.SE_OBJECT_TYPE, windows.SECURITY_INFORMATION) (*windows.SECURITY_DESCRIPTOR, error) {
+		return realSD, nil
+	}
+	windowsGetAce = func(*windows.ACL, uint32, **windows.ACCESS_ALLOWED_ACE) error {
+		return errors.New("forced get ace")
+	}
+	if _, err := readHandleSecurity(fd); err == nil {
+		t.Fatal("GetAce failure accepted")
+	}
+	windowsGetAce = windows.GetAce
+	windowsGetSecurityInfo = windows.GetSecurityInfo
+
+	// validateDirectorySecurity open / security / close faults
+	base := privateTestBase(t)
+	counters := &Counters{}
+	if err := validateDirectorySecurity(base, counters, wrapIO{windowsIO: realWindowsIO{}, openFn: func(string, uint32, uint32, uint32, uint32) (windows.Handle, error) {
+		return 0, errors.New("forced open")
+	}}, false); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("open fault = %v", err)
+	}
+	if err := validateDirectorySecurity(base, counters, wrapIO{windowsIO: realWindowsIO{}, securityFn: func(windows.Handle) (securityState, error) {
+		return securityState{}, errors.New("forced security")
+	}}, false); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("security fault = %v", err)
+	}
+	if err := validateDirectorySecurity(base, counters, wrapIO{windowsIO: realWindowsIO{}, closeFn: func(windows.Handle) error {
+		return errors.New("forced close")
+	}}, false); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("close fault = %v", err)
+	}
+
+	// validateAncestryPath with enforceACL + bad attrs
+	if err := validateAncestryPath(base, counters, wrapIO{windowsIO: realWindowsIO{}, attrFn: func(string) (uint32, error) {
+		return windows.FILE_ATTRIBUTE_REPARSE_POINT | windows.FILE_ATTRIBUTE_DIRECTORY, nil
+	}}, true, true); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("enforceACL reparse = %v", err)
+	}
+	if err := validateAncestryPath(base, counters, realWindowsIO{}, true, false); err != nil {
+		t.Fatalf("enforceACL personal ok = %v", err)
+	}
+
+	// trustedSIDs / sidTrusted / validateSecurity residual branches
+	if sidTrusted(nil, nil) {
+		t.Fatal("nil sid trusted")
+	}
+	oldWell := windowsCreateWellKnownSid
+	windowsCreateWellKnownSid = func(windows.WELL_KNOWN_SID_TYPE) (*windows.SID, error) {
+		return nil, errors.New("forced trusted")
+	}
+	if err := validateSecurity(securityState{owner: func() *windows.SID { s, err := currentUserSID(); if err != nil { t.Fatal(err) }; return s }(), daclPresent: true}, true); err == nil {
+		t.Fatal("trustedSIDs failure accepted")
+	}
+	windowsCreateWellKnownSid = oldWell
+
+	// secureOpen + staging security failures
+	cache, _, identity := openTestCache(t, nil)
+	uc := cache.backend.(*windowsCache)
+	meta := testArtifact(KindMeta, []byte("acl-meta"))
+	reg := testArtifact(KindRegistry, []byte("acl-registry"))
+	if err := cache.Publish(identity, reg, meta); err != nil {
+		t.Fatal(err)
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, securityFn: func(windows.Handle) (securityState, error) {
+		return securityState{}, errors.New("forced secureOpen security")
+	}}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("secureOpen security failure accepted")
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, securityFn: func(h windows.Handle) (securityState, error) {
+		// allow restrictACL path to run then fail security on staging handle
+		return securityState{}, errors.New("forced staging security")
+	}, restrictFn: func(path string, shared bool) error {
+		return realWindowsIO{}.restrictACL(path, shared)
+	}}
+	if err := cache.WriteArtifact(identity, testArtifact(KindMeta, []byte("acl-meta-2"))); err == nil {
+		t.Fatal("staging security failure accepted")
+	}
+
+	// Shared create path hardens final base leaf (shared && i == len(parts)-1).
+	sharedRoot := privateTestBase(t)
+	leaf := filepath.Join(sharedRoot, "leaf")
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", leaf)
+	programDataDir = func() string { return "" }
+	userCacheDir = func() (string, error) { return privateTestBase(t), nil }
+	platformIO = realWindowsIO{}
+	c, err := Open("official")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Close()
+}
+

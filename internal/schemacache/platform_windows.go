@@ -53,6 +53,8 @@ var (
 	windowsTokenUser          = func(token windows.Token) (*windows.Tokenuser, error) { return token.GetTokenUser() }
 	windowsCreateWellKnownSid = windows.CreateWellKnownSid
 	windowsACLFromEntries     = windows.ACLFromEntries
+	windowsGetSecurityInfo    = windows.GetSecurityInfo
+	windowsGetAce             = windows.GetAce
 )
 
 type windowsIO interface {
@@ -413,7 +415,7 @@ type securityState struct {
 }
 
 func readHandleSecurity(h windows.Handle) (securityState, error) {
-	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	sd, err := windowsGetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return securityState{}, err
 	}
@@ -442,7 +444,7 @@ func readHandleSecurity(h windows.Handle) (securityState, error) {
 	aces := make([]securityACE, 0, dacl.AceCount)
 	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
-		if err := windows.GetAce(dacl, i, &ace); err != nil {
+		if err := windowsGetAce(dacl, i, &ace); err != nil {
 			return securityState{}, err
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
