@@ -88,7 +88,7 @@ func resolveExternalExchangeClient(ctx context.Context, configDir, requestedID, 
 	}
 	if cfg != nil && strings.TrimSpace(cfg.ClientID) != "" {
 		// 复用应用凭据的绑定与冲突校验，但换票前不得迁移或修改凭据。
-		_, secret, _, _, err := resolveAppConfigCredentialsMode(configDir, false)
+		_, secret, _, _, err := resolveAppConfigCredentialsSnapshot(configDir, cfg, false)
 		if err != nil && !(errors.Is(err, ErrClientSecretEmpty) && cfg.ClientSecret.IsZero()) {
 			return "", "", "", fmt.Errorf("cannot resolve authorization application credentials")
 		}

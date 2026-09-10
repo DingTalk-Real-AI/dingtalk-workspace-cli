@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,23 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
+
+func TestCrossPlatformCoverageExternalExchangeIntegrationOutputFailureClearsCode(t *testing.T) {
+	root := newExternalExchangeIntegrationRoot(t)
+	testseam.Swap(t, &rootCreateTemp, func(string, string) (*os.File, error) { return nil, errors.New("injected output failure") })
+	testseam.Swap(t, &authExternalExchange, func(context.Context, string, authpkg.ExternalExchangeRequest) (*authpkg.TokenData, error) {
+		t.Fatal("reused code after output initialization failure")
+		return nil, nil
+	})
+	root.SetArgs([]string{"auth", "exchange", "--code", "first-code", "--output", filepath.Join(t.TempDir(), "result.json")})
+	if _, err := root.ExecuteC(); err == nil {
+		t.Fatal("expected output initialization failure")
+	}
+	root.SetArgs([]string{"auth", "exchange", "--output", ""})
+	if _, err := root.ExecuteC(); err == nil {
+		t.Fatal("missing code accepted")
+	}
+}
 
 // 使用真实可复用 root；换票由 seam 截断，不读真实凭据、不访问网络。
 func newExternalExchangeIntegrationRoot(t *testing.T) *cobra.Command {

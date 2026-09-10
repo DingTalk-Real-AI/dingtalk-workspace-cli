@@ -1672,6 +1672,8 @@ func installOutputSinkRunBoundary(cmd *cobra.Command) {
 	}
 	openSinkAndRun := func(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
+			// 输出初始化也可能早退；它必须处于一次性授权参数的清理边界内。
+			defer resetAuthExchangeInvocationFlags(cmd)
 			if err := configureOutputSink(cmd); err != nil {
 				return err
 			}

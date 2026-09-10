@@ -21,6 +21,20 @@ func TestExternalExchangeIntegrationRejectsMismatchedSecretReference(t *testing.
 	}
 }
 
+func TestExternalExchangeIntegrationConfigurationSnapshotIsPaired(t *testing.T) {
+	dir := externalExchangeTestConfig(t)
+	writeCredentialConfig(t, dir, "first-app", PlainSecret("first-secret"))
+	snapshot, err := LoadAppConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCredentialConfig(t, dir, "second-app", PlainSecret("second-secret"))
+	id, secret, _, _, err := resolveAppConfigCredentialsSnapshot(dir, snapshot, false)
+	if err != nil || id != "first-app" || secret != "first-secret" {
+		t.Fatal("mixed credentials from different config snapshots")
+	}
+}
+
 func TestExternalExchangeIntegrationDerivedSecretDoesNotMigrate(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
 		t.Run(fmt.Sprint(legacy), func(t *testing.T) {
