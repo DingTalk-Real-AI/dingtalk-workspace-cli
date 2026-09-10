@@ -193,19 +193,16 @@ func openPlatform(edition string, counters *Counters, noCreate bool) (backend, e
 }
 
 func openCacheDirectory(base, editionHex string, counters *Counters, ops windowsIO, noCreate bool, shared bool) (string, error) {
-	if !filepath.IsAbs(base) || filepath.Clean(base) != base {
-		return "", fmt.Errorf("%w: cache base must be a clean absolute path", ErrUnsafePath)
-	}
+	// VolumeName is independent of IsAbs: a drive-relative path like `\no-volume`
+	// has an empty volume and is not absolute on modern Go Windows filepath.
 	current := filepath.VolumeName(base)
 	if current == "" {
 		return "", fmt.Errorf("%w: cache base missing volume", ErrUnsafePath)
 	}
-	current += `\`
-	counters.rootOpenOps.Add(1)
-	if err := validateAncestryPath(current, counters, ops); err != nil {
-		return "", err
+	if !filepath.IsAbs(base) {
+		return "", fmt.Errorf("%w: cache base must be a clean absolute path", ErrUnsafePath)
 	}
-	rest := strings.TrimPrefix(base, filepath.VolumeName(base))
+	rest := strings.TrimPrefix(base, current)
 	rest = strings.TrimPrefix(rest, `\`)
 	var parts []string
 	if rest != "" {
@@ -215,6 +212,16 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 		if part == "" || part == "." || part == ".." {
 			return "", fmt.Errorf("%w: unsafe cache ancestry component", ErrUnsafePath)
 		}
+	}
+	if filepath.Clean(base) != base {
+		return "", fmt.Errorf("%w: cache base must be a clean absolute path", ErrUnsafePath)
+	}
+	current += `\`
+	counters.rootOpenOps.Add(1)
+	if err := validateAncestryPath(current, counters, ops); err != nil {
+		return "", err
+	}
+	for _, part := range parts {
 		next := filepath.Join(current, part)
 		counters.rootOpenOps.Add(1)
 		attrs, err := ops.attributes(next)

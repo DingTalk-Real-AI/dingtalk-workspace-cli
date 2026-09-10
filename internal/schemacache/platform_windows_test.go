@@ -904,8 +904,14 @@ func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
 	if _, err := openCacheDirectory(`\no-volume`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "missing volume") {
 		t.Fatalf("empty volume = %v", err)
 	}
-	if _, err := openCacheDirectory(`\\?\C:\foo\..\bar`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !errors.Is(err, ErrUnsafePath) {
+	if _, err := openCacheDirectory(`\\?\C:\foo\..\bar`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry component") {
 		t.Fatalf("dotdot ancestry = %v", err)
+	}
+	if _, err := openCacheDirectory(`C:\foo\.\bar`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry component") {
+		t.Fatalf("dot ancestry = %v", err)
+	}
+	if _, err := openCacheDirectory(`C:\foo\\bar`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry component") {
+		t.Fatalf("empty ancestry = %v", err)
 	}
 	if err := validateAttrsDirectory(windows.FILE_ATTRIBUTE_ARCHIVE, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry") {
 		t.Fatalf("unowned file ancestry = %v", err)
