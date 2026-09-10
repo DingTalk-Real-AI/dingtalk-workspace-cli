@@ -3,6 +3,7 @@
 package schemacache
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -888,5 +889,439 @@ func TestCrossPlatformCoverageWindowsAncestryAttrFaults(t *testing.T) {
 		return 0, windows.ERROR_PATH_NOT_FOUND
 	}}); err == nil {
 		t.Fatal("missing ancestry accepted")
+	}
+}
+
+func TestCrossPlatformCoverageWindowsRemainderFaults(t *testing.T) {
+	nul := "C:\\x\x00y"
+	if _, err := (realWindowsIO{}).attributes(nul); err == nil {
+		t.Fatal("NUL attributes succeeded")
+	}
+	if _, err := (realWindowsIO{}).open(nul, windows.GENERIC_READ, 0, windows.OPEN_EXISTING, 0); err == nil {
+		t.Fatal("NUL open succeeded")
+	}
+
+	if _, err := openCacheDirectory(`\no-volume`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !strings.Contains(err.Error(), "missing volume") {
+		t.Fatalf("empty volume = %v", err)
+	}
+	if _, err := openCacheDirectory(`\\?\C:\foo\..\bar`, "edition", &Counters{}, realWindowsIO{}, true, false); err == nil || !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("dotdot ancestry = %v", err)
+	}
+	if err := validateAttrsDirectory(windows.FILE_ATTRIBUTE_ARCHIVE, false); err == nil || !strings.Contains(err.Error(), "unsafe cache ancestry") {
+		t.Fatalf("unowned file ancestry = %v", err)
+	}
+
+	oldSID := windowsOpenProcessToken
+	windowsOpenProcessToken = func(windows.Handle, uint32, *windows.Token) error { return errors.New("token") }
+	t.Cleanup(func() { windowsOpenProcessToken = oldSID })
+	if _, err := currentUserSID(); err == nil {
+		t.Fatal("OpenProcessToken failure accepted")
+	}
+	windowsOpenProcessToken = oldSID
+	oldUser := windowsTokenUser
+	windowsTokenUser = func(windows.Token) (*windows.Tokenuser, error) { return nil, errors.New("token user") }
+	t.Cleanup(func() { windowsTokenUser = oldUser })
+	if _, err := currentUserSID(); err == nil {
+		t.Fatal("GetTokenUser failure accepted")
+	}
+	windowsTokenUser = oldUser
+	oldWellKnown := windowsCreateWellKnownSid
+	windowsCreateWellKnownSid = func(windows.WELL_KNOWN_SID_TYPE) (*windows.SID, error) { return nil, errors.New("sid") }
+	t.Cleanup(func() { windowsCreateWellKnownSid = oldWellKnown })
+	if err := restrictOwnerWrite(`C:\`); err == nil {
+		t.Fatal("CreateWellKnownSid failure accepted")
+	}
+	windowsCreateWellKnownSid = oldWellKnown
+	oldACL := windowsACLFromEntries
+	windowsACLFromEntries = func([]windows.EXPLICIT_ACCESS, *windows.ACL) (*windows.ACL, error) {
+		return nil, errors.New("acl")
+	}
+	t.Cleanup(func() { windowsACLFromEntries = oldACL })
+	if err := restrictOwnerWrite(`C:\`); err == nil {
+		t.Fatal("ACLFromEntries failure accepted")
+	}
+	windowsACLFromEntries = oldACL
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForRetry(cancelled, time.Now().Add(time.Second)); err == nil {
+		t.Fatal("cancelled waitForRetry succeeded")
+	}
+	if err := waitForRetry(context.Background(), time.Now().Add(-time.Millisecond)); !errors.Is(err, ErrLockTimeout) {
+		t.Fatalf("expired waitForRetry = %v", err)
+	}
+	if err := waitForRetry(context.Background(), time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("long waitForRetry = %v", err)
+	}
+	if err := waitForRetry(context.Background(), time.Now().Add(2*time.Millisecond)); !errors.Is(err, ErrLockTimeout) && err != nil {
+		t.Fatalf("short waitForRetry = %v", err)
+	}
+
+	base := privateTestBase(t)
+	parent := filepath.Join(base, "parent")
+	if err := os.Mkdir(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	seenParent := 0
+	platformIO = wrapIO{windowsIO: realWindowsIO{}, attrFn: func(path string) (uint32, error) {
+		if filepath.Base(path) == "child" {
+			return 0, windows.ERROR_PATH_NOT_FOUND
+		}
+		if path == parent {
+			seenParent++
+			if seenParent > 1 {
+				return 0, errors.New("parent vanished")
+			}
+		}
+		return realWindowsIO{}.attributes(path)
+	}}
+	userCacheDir = func() (string, error) { return filepath.Join(parent, "child"), nil }
+	programDataDir = func() string { return "" }
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", "")
+	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("missing ancestry parent = %v", err)
+	}
+
+	ghostParent := filepath.Join(base, "ghost-parent")
+	if err := os.Mkdir(ghostParent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	attrCalls := map[string]int{}
+	platformIO = wrapIO{windowsIO: realWindowsIO{},
+		mkdirFn: func(string) error { return nil },
+		attrFn: func(path string) (uint32, error) {
+			attrCalls[path]++
+			if filepath.Base(path) == "ghost" && attrCalls[path] == 1 {
+				return 0, windows.ERROR_PATH_NOT_FOUND
+			}
+			if filepath.Base(path) == "ghost" {
+				return 0, errors.New("attr after mkdir")
+			}
+			return realWindowsIO{}.attributes(path)
+		},
+	}
+	userCacheDir = func() (string, error) { return filepath.Join(ghostParent, "ghost"), nil }
+	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("attr after mkdir = %v", err)
+	}
+
+	fileParent := filepath.Join(base, "file-parent")
+	if err := os.WriteFile(fileParent, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	platformIO = realWindowsIO{}
+	userCacheDir = func() (string, error) { return filepath.Join(fileParent, "child"), nil }
+	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("file ancestry = %v", err)
+	}
+
+	platformIO = wrapIO{windowsIO: realWindowsIO{}, mkdirFn: func(path string) error {
+		if filepath.Base(path) == "dws" {
+			return errors.New("forced dws mkdir")
+		}
+		return realWindowsIO{}.mkdir(path)
+	}}
+	userCacheDir = func() (string, error) { return privateTestBase(t), nil }
+	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("owned mkdir = %v", err)
+	}
+
+	platformIO = wrapIO{windowsIO: realWindowsIO{}, restrictFn: func(path string) error {
+		if filepath.Base(path) == "dws" {
+			return errors.New("forced dws acl")
+		}
+		return realWindowsIO{}.restrictACL(path)
+	}}
+	if _, err := Open("official"); !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("owned acl = %v", err)
+	}
+
+	ownedAttr := map[string]int{}
+	platformIO = wrapIO{windowsIO: realWindowsIO{}, attrFn: func(path string) (uint32, error) {
+		ownedAttr[path]++
+		if filepath.Base(path) == "dws" && ownedAttr[path] > 1 {
+			return 0, errors.New("owned attr")
+		}
+		return realWindowsIO{}.attributes(path)
+	}}
+	if _, err := Open("official"); err == nil {
+		t.Fatal("owned attr after create accepted")
+	}
+
+	cache, _, identity := openTestCache(t, nil)
+	meta := testArtifact(KindMeta, []byte("remainder-meta"))
+	reg := testArtifact(KindRegistry, []byte("remainder-registry-bytes"))
+	payloads := testArtifact(KindPayloads, []byte("remainder-payload-bytes"))
+	if err := cache.Publish(identity, reg, meta, payloads); err != nil {
+		t.Fatal(err)
+	}
+	uc := cache.backend.(*windowsCache)
+
+	header, err := os.ReadFile(filepath.Join(uc.path, metaFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	junk := bytes.Repeat([]byte("J"), len(header))
+	if err := os.WriteFile(filepath.Join(uc.path, metaFileName), junk, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("junk Meta envelope accepted")
+	}
+	if err := os.WriteFile(filepath.Join(uc.path, metaFileName), header, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	flipped := append([]byte{}, header...)
+	flipped[len(flipped)-1] ^= 0xff
+	if err := os.WriteFile(filepath.Join(uc.path, metaFileName), flipped, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("Meta digest mismatch accepted")
+	}
+	if err := os.WriteFile(filepath.Join(uc.path, metaFileName), header, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, readFn: func(h windows.Handle, p []byte, off int64) (int, error) {
+		if off >= HeaderSize {
+			return 0, errors.New("payload pread")
+		}
+		return realWindowsIO{}.readAt(h, p, off)
+	}}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("Meta payload pread failure accepted")
+	}
+
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, readFn: func(windows.Handle, []byte, int64) (int, error) {
+		return 0, io.EOF
+	}}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("Meta EOF pread accepted")
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, readFn: func(windows.Handle, []byte, int64) (int, error) {
+		return 0, nil
+	}}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("Meta zero pread accepted")
+	}
+
+	infoCalls := 0
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		infoCalls++
+		if infoCalls >= 2 {
+			return windows.ByHandleFileInformation{}, errors.New("meta after info")
+		}
+		return realWindowsIO{}.info(h)
+	}}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("Meta after-info failure accepted")
+	}
+
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, closeFn: func(h windows.Handle) error {
+		_ = realWindowsIO{}.close(h)
+		return errors.New("meta close")
+	}}
+	if _, err := cache.ReadMeta(identity, meta.Expectation); err == nil {
+		t.Fatal("Meta close failure accepted")
+	}
+	uc.ops = realWindowsIO{}
+
+	regBody, err := os.ReadFile(filepath.Join(uc.path, registryFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(uc.path, registryFileName), bytes.Repeat([]byte("R"), len(regBody)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.OpenRegistry(identity, reg.Expectation); err == nil {
+		t.Fatal("junk Registry envelope accepted")
+	}
+	if err := os.WriteFile(filepath.Join(uc.path, registryFileName), regBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	openInfo := 0
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		openInfo++
+		if openInfo >= 2 {
+			info.FileSizeLow++
+		}
+		return info, nil
+	}}
+	if _, err := cache.OpenRegistry(identity, reg.Expectation); err == nil {
+		t.Fatal("Registry changed during open accepted")
+	}
+	uc.ops = realWindowsIO{}
+
+	opened, err := cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wr := opened.backend.(*windowsRegistry)
+	rangeSHA := sha256.Sum256(reg.Payload[:1])
+	wr.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(windows.Handle) (windows.ByHandleFileInformation, error) {
+		return windows.ByHandleFileInformation{}, errors.New("range info")
+	}}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeSHA}); err == nil {
+		t.Fatal("ReadRange info failure accepted")
+	}
+	wr.ops = wrapIO{windowsIO: realWindowsIO{}, readFn: func(windows.Handle, []byte, int64) (int, error) {
+		return 0, errors.New("range pread")
+	}}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeSHA}); err == nil {
+		t.Fatal("ReadRange pread failure accepted")
+	}
+	afterInfo := 0
+	wr.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		afterInfo++
+		if afterInfo >= 2 {
+			return windows.ByHandleFileInformation{}, errors.New("range after info")
+		}
+		return info, nil
+	}}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeSHA}); err == nil {
+		t.Fatal("ReadRange after-info failure accepted")
+	}
+	changeAfter := 0
+	wr.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		changeAfter++
+		if changeAfter >= 2 {
+			info.FileSizeLow++
+		}
+		return info, nil
+	}}
+	if _, err := opened.ReadRange(RangeDescriptor{Offset: 0, Length: 1, SHA256: rangeSHA}); err == nil {
+		t.Fatal("ReadRange file-changed accepted")
+	}
+	_ = opened.Close()
+
+	openedAgg, err := cache.OpenRegistry(identity, reg.Expectation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wa := openedAgg.backend.(*windowsRegistry)
+	wa.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(windows.Handle) (windows.ByHandleFileInformation, error) {
+		return windows.ByHandleFileInformation{}, errors.New("agg info")
+	}}
+	if err := openedAgg.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate info failure accepted")
+	}
+	wa.ops = wrapIO{windowsIO: realWindowsIO{}, readFn: func(windows.Handle, []byte, int64) (int, error) {
+		return 0, errors.New("agg pread")
+	}}
+	if err := openedAgg.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate pread failure accepted")
+	}
+	aggAfter := 0
+	wa.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		aggAfter++
+		if aggAfter >= 2 {
+			return windows.ByHandleFileInformation{}, errors.New("agg after info")
+		}
+		return info, nil
+	}}
+	if err := openedAgg.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate after-info failure accepted")
+	}
+	aggChange := 0
+	wa.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		aggChange++
+		if aggChange >= 2 {
+			info.FileSizeLow++
+		}
+		return info, nil
+	}}
+	if err := openedAgg.ValidateAggregate(); err == nil {
+		t.Fatal("aggregate file-changed accepted")
+	}
+	_ = openedAgg.Close()
+
+	zeroVer := identity
+	zeroVer.CatalogSnapshotVersion = 0
+	if err := uc.writeArtifact(zeroVer, meta); err == nil {
+		t.Fatal("zero snapshot writeArtifact accepted")
+	}
+
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, openFn: func(path string, access, share, disposition, flags uint32) (windows.Handle, error) {
+		if strings.Contains(filepath.Base(path), ".tmp") {
+			return 0, windows.ERROR_FILE_EXISTS
+		}
+		return realWindowsIO{}.open(path, access, share, disposition, flags)
+	}}
+	if err := cache.WriteArtifact(identity, meta); err == nil {
+		t.Fatal("exhausted staging accepted")
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, infoFn: func(h windows.Handle) (windows.ByHandleFileInformation, error) {
+		info, err := realWindowsIO{}.info(h)
+		if err != nil {
+			return info, err
+		}
+		info.NumberOfLinks = 2
+		return info, nil
+	}}
+	if err := cache.WriteArtifact(identity, meta); err == nil {
+		t.Fatal("staging hardlink accepted")
+	}
+	writes := 0
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, writeFn: func(h windows.Handle, p []byte) (int, error) {
+		writes++
+		if writes >= 2 {
+			return 0, errors.New("payload write")
+		}
+		return realWindowsIO{}.write(h, p)
+	}}
+	if err := cache.WriteArtifact(identity, meta); err == nil {
+		t.Fatal("payload write failure accepted")
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, closeFn: func(h windows.Handle) error {
+		_ = realWindowsIO{}.close(h)
+		return errors.New("staging close")
+	}}
+	if err := cache.WriteArtifact(identity, meta); err == nil {
+		t.Fatal("staging close failure accepted")
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, writeFn: func(windows.Handle, []byte) (int, error) {
+		return 0, nil
+	}}
+	if err := cache.WriteArtifact(identity, meta); err == nil {
+		t.Fatal("zero write accepted")
+	}
+
+	held, err := cache.AcquireLock(context.Background(), -time.Second)
+	if err != nil {
+		t.Fatalf("negative timeout = %v", err)
+	}
+	if err := held.Release(); err != nil {
+		t.Fatal(err)
+	}
+	uc.ops = wrapIO{windowsIO: realWindowsIO{}, openFn: func(path string, access, share, disposition, flags uint32) (windows.Handle, error) {
+		if filepath.Base(path) == lockFileName {
+			return 0, windows.ERROR_ACCESS_DENIED
+		}
+		return realWindowsIO{}.open(path, access, share, disposition, flags)
+	}}
+	if _, err := cache.AcquireLock(context.Background(), time.Millisecond); err == nil {
+		t.Fatal("lock open failure accepted")
 	}
 }

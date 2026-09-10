@@ -40,6 +40,11 @@ var (
 	programDataDir           = func() string { return os.Getenv("ProgramData") }
 	platformIO     windowsIO = realWindowsIO{}
 	currentGOOS              = runtime.GOOS
+
+	windowsOpenProcessToken   = windows.OpenProcessToken
+	windowsTokenUser          = func(token windows.Token) (*windows.Tokenuser, error) { return token.GetTokenUser() }
+	windowsCreateWellKnownSid = windows.CreateWellKnownSid
+	windowsACLFromEntries     = windows.ACLFromEntries
 )
 
 type windowsIO interface {
@@ -326,7 +331,7 @@ func restrictOwnerWrite(path string) error {
 	if err != nil {
 		return err
 	}
-	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	system, err := windowsCreateWellKnownSid(windows.WinLocalSystemSid)
 	if err != nil {
 		return err
 	}
@@ -334,7 +339,7 @@ func restrictOwnerWrite(path string) error {
 		explicitAccess(user, windows.TRUSTEE_IS_USER),
 		explicitAccess(system, windows.TRUSTEE_IS_USER),
 	}
-	acl, err := windows.ACLFromEntries(access, nil)
+	acl, err := windowsACLFromEntries(access, nil)
 	if err != nil {
 		return err
 	}
@@ -361,11 +366,11 @@ func explicitAccess(sid *windows.SID, trusteeType windows.TRUSTEE_TYPE) windows.
 
 func currentUserSID() (*windows.SID, error) {
 	var token windows.Token
-	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
+	if err := windowsOpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
 		return nil, err
 	}
 	defer token.Close()
-	tu, err := token.GetTokenUser()
+	tu, err := windowsTokenUser(token)
 	if err != nil {
 		return nil, err
 	}
