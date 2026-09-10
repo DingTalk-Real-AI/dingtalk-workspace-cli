@@ -873,7 +873,10 @@ func TestCrossPlatformCoverageWindowsPublishMetaLastReadersRejectPartialGenerati
 	uc := cache.backend.(*windowsCache)
 	uc.ops = wrapIO{windowsIO: realWindowsIO{}, renameFn: func(oldpath, newpath string) error {
 		base := filepath.Base(newpath)
-		if base == metaFileName {
+		if base == metaFileName && strings.HasSuffix(oldpath, ".tmp") {
+			// Fail only the staging→meta.cache install. Dest→aside and
+			// aside→dest restore must still run so a Meta-last abort keeps
+			// the previous generation readable.
 			committed = append(committed, base)
 			return errors.New("injected meta rename failure")
 		}
