@@ -98,7 +98,7 @@ for service in $(jq -r '.products[].service' "$MANIFEST"); do
     SEMANTIC_PUBLIC="${SEMANTIC_PUBLIC}${semantic_lines}"$'\n'
   fi
 
-  runtime_output="$($BINARY shortcut list --service "$service" --format json)"
+  runtime_output="$("$BINARY" shortcut list --service "$service" --format json)"
   printf '%s' "$runtime_output" | jq -e --arg service "$service" '
     type == "object" and
     (.count | type == "number") and
@@ -136,7 +136,7 @@ printf 'CURRENT-HEAD-PUBLIC-SURFACE-PASS head=%s source=%d public=%d unavailable
   fail "PAT exact/raw zero-call structural proof failed"
 
 run_pat_browser_policy_default() {
-  schema_output="$($BINARY schema --cli-path 'pat +browser-policy' --compact --format json)"
+  schema_output="$("$BINARY" schema --cli-path 'pat +browser-policy' --compact --format json)"
   printf '%s' "$schema_output" | jq -e '
     type == "object" and
     .cli_path == "pat +browser-policy" and

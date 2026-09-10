@@ -457,12 +457,9 @@ func newChatThreadListRepliesCommand() *cobra.Command {
 			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "chat", RPCName: "list_topic_replies"}},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页读取指定 Thread 的回复",
-				UseWhen: []string{
-					"已知父会话 ID 与 openConvThreadId 并需要查看回复内容时",
-					"需要逐条列出某个话题当前存在的回复或核实具体回复是否仍存在时",
-				},
-				AvoidWhen: []string{"只浏览 Thread 主消息而不读取回复时使用 chat thread list"},
-				Examples:  []string{"dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>"},
+				UseWhen:      []string{"明确需要 chat +thread-replies 未公开的底层字段或原始响应，并读取 Thread 回复时"},
+				AvoidWhen:    []string{"常规读取 Thread 回复使用 chat +thread-replies；只浏览主消息使用 chat thread list"},
+				Examples:     []string{"dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>"},
 			},
 			Parameters: []contract.ParamDecl{{Name: "conversation-id", Property: "openconversationId"}, {Name: "topic-id", Property: "topicId"}, {Name: "time", Property: "startTime"}, {Name: "direction", Property: "forward"}, {Name: "limit", Property: "pageSize"}},
 			Result: &contract.ResultSpec{
@@ -1066,7 +1063,7 @@ func newChatThreadForwardCommand() *cobra.Command {
 			Identity:    contract.ToolIdentitySpec{ProductID: "chat", Name: "forward_topic", CanonicalPath: "chat.forward_topic", CLIPath: "chat thread forward", PrimaryCLIPath: "chat thread forward"},
 			Description: "把一条话题转发到目标会话",
 			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "im", RPCName: "forward_topic"}},
-			Selection:   contract.SelectionSpec{AgentSummary: "把一条 Thread 转发到目标会话", UseWhen: []string{"需要保留 Thread 上下文转发到另一个会话时"}, AvoidWhen: []string{"普通单条消息转发使用 chat message forward"}, Examples: []string{"dws chat thread forward --src-msg-id <messageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>"}},
+			Selection:   contract.SelectionSpec{AgentSummary: "把一条 Thread 转发到目标会话", UseWhen: []string{"明确需要 chat +messages-forward-topic 未公开的底层字段或原始响应，并转发 Thread 时"}, AvoidWhen: []string{"常规 Thread 转发使用 chat +messages-forward-topic；普通单条消息使用 chat +messages-forward"}, Examples: []string{"dws chat thread forward --src-msg-id <messageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>"}},
 			Parameters:  []contract.ParamDecl{{Name: "src-msg-id", Property: "srcOpenMessageId"}, {Name: "src-conversation-id", Property: "srcOpenConversationId"}, {Name: "src-thread-id", Property: "srcOpenConvThreadId"}, {Name: "dest-conversation-id", Property: "destOpenConversationId"}},
 			Result: &contract.ResultSpec{
 				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
@@ -1112,11 +1109,32 @@ func guardTopicQuoteReply(cmd *cobra.Command, openConversationID, openMessageID 
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		return topicQuoteGuardUnavailable("chat/get_conversation_info", "会话信息响应无法解析，已阻止发送")
 	}
-	switch detectTopicContainerState(data) {
+	inspection := inspectTopicContainerState(data, openConversationID)
+	switch inspection.state {
 	case topicContainerTopic:
 		return topicQuoteReplyDisabledError()
 	case topicContainerUnknown:
-		return topicQuoteGuardUnavailable("chat/get_conversation_info", "会话信息未明确返回 convThreadEnabled，无法确认引用回复目标是否属于话题圈，已阻止发送")
+		if !inspection.needsChannelLookup {
+			return topicQuoteGuardUnavailable("chat/get_conversation_info", "会话信息无法确认有效的话题圈标识，已阻止发送")
+		}
+		raw, err = callMCPToolReturnTextOnServer(cmd.Context(), "im", "search_groups", map[string]any{
+			"keyword": inspection.conversationTitle,
+			"limit":   100,
+			"cursor":  "0",
+		})
+		if err != nil {
+			return topicQuoteGuardUnavailable("im/search_groups", "无法读取会话类型，已阻止发送")
+		}
+		var searchData any
+		if err := json.Unmarshal([]byte(raw), &searchData); err != nil {
+			return topicQuoteGuardUnavailable("im/search_groups", "会话类型响应无法解析，已阻止发送")
+		}
+		switch detectTopicChannelState(searchData, openConversationID, inspection.conversationTitle) {
+		case topicContainerTopic:
+			return topicQuoteReplyDisabledError()
+		case topicContainerUnknown:
+			return topicQuoteGuardUnavailable("im/search_groups", "群搜索无法确认同一会话的 channel 标识，已阻止发送")
+		}
 	}
 	return nil
 }
@@ -1147,52 +1165,143 @@ const (
 	topicContainerTopic
 )
 
-func detectTopicContainerState(value any) topicContainerState {
+type topicContainerInspection struct {
+	state              topicContainerState
+	conversationTitle  string
+	needsChannelLookup bool
+}
+
+func detectTopicContainerState(value any, openConversationID string) topicContainerState {
+	return inspectTopicContainerState(value, openConversationID).state
+}
+
+func inspectTopicContainerState(value any, openConversationID string) topicContainerInspection {
+	envelope, ok := value.(map[string]any)
+	if !ok {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+	success, ok := envelope["success"].(bool)
+	if !ok || !success {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+	result, ok := envelope["result"].(map[string]any)
+	if !ok {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+	conversation, ok := result["conversationInfo"].(map[string]any)
+	if !ok {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+	wantConversationID := strings.TrimSpace(openConversationID)
+	conversationID, ok := conversation["openConversationId"].(string)
+	if !ok || strings.TrimSpace(conversationID) != wantConversationID {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+
+	sawTrue := false
 	sawFalse := false
 	sawInvalid := false
-	var visit func(any) bool
-	visit = func(current any) bool {
-		switch typed := current.(type) {
-		case map[string]any:
-			for key, child := range typed {
-				if key != "convThreadEnabled" && key != "topicGroup" && key != "isTopicGroup" {
-					if visit(child) {
-						return true
-					}
-					continue
-				}
-				switch enabled := child.(type) {
-				case bool:
-					if enabled {
-						return true
-					}
-					sawFalse = true
-				case string:
-					switch strings.ToLower(strings.TrimSpace(enabled)) {
-					case "true", "1":
-						return true
-					case "false", "0":
-						sawFalse = true
-					default:
-						sawInvalid = true
-					}
-				default:
-					sawInvalid = true
-				}
-			}
-		case []any:
-			for _, child := range typed {
-				if visit(child) {
-					return true
-				}
-			}
+	for _, key := range []string{"convThreadEnabled", "topicGroup", "isTopicGroup"} {
+		raw, present := conversation[key]
+		if !present {
+			continue
 		}
-		return false
+		switch enabled := raw.(type) {
+		case bool:
+			if enabled {
+				sawTrue = true
+			} else {
+				sawFalse = true
+			}
+		case string:
+			switch strings.ToLower(strings.TrimSpace(enabled)) {
+			case "true", "1":
+				sawTrue = true
+			case "false", "0":
+				sawFalse = true
+			default:
+				sawInvalid = true
+			}
+		default:
+			sawInvalid = true
+		}
 	}
-	if visit(value) {
+	if sawInvalid || (sawTrue && sawFalse) {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+	if sawTrue {
+		return topicContainerInspection{state: topicContainerTopic}
+	}
+	if sawFalse {
+		return topicContainerInspection{state: topicContainerNonTopic}
+	}
+	title, ok := conversation["title"].(string)
+	title = strings.TrimSpace(title)
+	if !ok || title == "" {
+		return topicContainerInspection{state: topicContainerUnknown}
+	}
+	// Missing topic-only fields is not positive ordinary-group evidence. The
+	// caller must bind this exact conversation to search_groups.channel before
+	// allowing a write.
+	return topicContainerInspection{
+		state:              topicContainerUnknown,
+		conversationTitle:  title,
+		needsChannelLookup: true,
+	}
+}
+
+func detectTopicChannelState(value any, openConversationID, conversationTitle string) topicContainerState {
+	envelope, ok := value.(map[string]any)
+	if !ok {
+		return topicContainerUnknown
+	}
+	success, ok := envelope["success"].(bool)
+	if !ok || !success {
+		return topicContainerUnknown
+	}
+	result, ok := envelope["result"].(map[string]any)
+	if !ok {
+		return topicContainerUnknown
+	}
+	groups, ok := result["groups"].([]any)
+	if !ok {
+		return topicContainerUnknown
+	}
+
+	wantConversationID := strings.TrimSpace(openConversationID)
+	wantTitle := strings.TrimSpace(conversationTitle)
+	sawTopic := false
+	sawNonTopic := false
+	for _, item := range groups {
+		group, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		conversationID, ok := group["openConversationId"].(string)
+		if !ok || strings.TrimSpace(conversationID) != wantConversationID {
+			continue
+		}
+		title, ok := group["title"].(string)
+		if !ok || strings.TrimSpace(title) != wantTitle {
+			return topicContainerUnknown
+		}
+		channel, ok := group["channel"].(bool)
+		if !ok {
+			return topicContainerUnknown
+		}
+		if channel {
+			sawTopic = true
+		} else {
+			sawNonTopic = true
+		}
+	}
+	if sawTopic && sawNonTopic {
+		return topicContainerUnknown
+	}
+	if sawTopic {
 		return topicContainerTopic
 	}
-	if sawFalse && !sawInvalid {
+	if sawNonTopic {
 		return topicContainerNonTopic
 	}
 	return topicContainerUnknown

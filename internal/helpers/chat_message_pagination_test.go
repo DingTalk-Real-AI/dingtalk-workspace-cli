@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -56,16 +57,25 @@ func executeChatMessagePaginationCommand(t *testing.T, caller *chatMessagePagina
 	root := newChatCommand()
 	root.SilenceErrors = true
 	root.SilenceUsage = true
-	root.SetOut(io.Discard)
+	root.SetOut(out)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	err := root.ExecuteContext(context.Background())
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err == nil && out.Len() == 0 && executed != nil {
+		if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
+			t.Fatalf("emit result: %v", emitErr)
+		}
+	}
 	if out.Len() == 0 {
 		return nil, err
 	}
 	var parsed map[string]any
 	if unmarshalErr := json.Unmarshal(out.Bytes(), &parsed); unmarshalErr != nil {
 		t.Fatalf("stdout JSON = %q, err = %v", out.String(), unmarshalErr)
+	}
+	if data, ok := parsed["data"].(map[string]any); ok {
+		parsed = data
 	}
 	return parsed, err
 }
@@ -81,28 +91,28 @@ func TestChatMessagePaginationDefaultSinglePageUnchanged(t *testing.T) {
 		{
 			name:   "list-all",
 			args:   []string{"message", "list-all", "--start", "2026-08-01 00:00:00", "--end", "2026-08-02 00:00:00"},
-			server: "",
+			server: "chat",
 			tool:   "search_messages_by_time_range",
 			want:   map[string]any{"startTime": "2026-08-01 00:00:00", "endTime": "2026-08-02 00:00:00", "limit": 50, "cursor": "0"},
 		},
 		{
 			name:   "list-by-sender",
 			args:   []string{"message", "list-by-sender", "--sender-user-id", "u1", "--start", "2026-08-01T00:00:00+08:00", "--end", "2026-08-02T00:00:00+08:00"},
-			server: "",
+			server: "chat",
 			tool:   "search_messages_by_sender",
 			want:   map[string]any{"senderUserId": "u1", "startTime": float64(1785513600000), "endTime": float64(1785600000000), "limit": 50, "cursor": "0"},
 		},
 		{
 			name:   "list-mentions",
 			args:   []string{"message", "list-mentions", "--group", "cid1", "--start", "2026-08-01T00:00:00+08:00", "--end", "2026-08-02T00:00:00+08:00"},
-			server: "",
+			server: "chat",
 			tool:   "search_at_me_message",
 			want:   map[string]any{"openConversationId": "cid1", "startTime": float64(1785513600000), "endTime": float64(1785600000000), "limit": 50, "cursor": "0"},
 		},
 		{
 			name:   "list-focused",
 			args:   []string{"message", "list-focused"},
-			server: "",
+			server: "chat",
 			tool:   "list_special_focus_messages",
 			want:   map[string]any{"limit": 50},
 		},
@@ -146,6 +156,184 @@ func TestChatMessagePaginationDefaultSinglePageUnchanged(t *testing.T) {
 				t.Fatalf("call = %#v, want server=%s tool=%s args=%#v", got, tt.server, tt.tool, tt.want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListAllPreservesLegacyBytesWhileShadowingCompleteRange(t *testing.T) {
+	caller := &chatMessagePaginationCaller{steps: []scriptedToolStep{{text: `{
+		"result":{
+			"conversationMessagesList":[{
+				"openConversationId":"cid-1",
+				"title":"项目群",
+				"messages":[{"openMessageId":"msg-1","senderName":"测试用户甲","content":"进展","createTime":"2026-08-01 10:00:00","reactions":[{"emoji":"like","count":2}],"resourceRefs":[{"resourceId":"res-1"}]}]
+			}],
+			"hasMore":false,
+			"nextCursor":"0"
+		}
+	}`}}}
+	payload, err := executeChatMessagePaginationCommand(
+		t,
+		caller,
+		"message", "list-all",
+		"--start", "2026-08-01 00:00:00",
+		"--end", "2026-08-02 00:00:00",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exposed := payload["complete"]; exposed {
+		t.Fatalf("dual validation changed legacy bytes: %#v", payload)
+	}
+	result := payload["result"].(map[string]any)
+	group := result["conversationMessagesList"].([]any)[0].(map[string]any)
+	message := group["messages"].([]any)[0].(map[string]any)
+	if message["messageId"] != "msg-1" || message["conversationId"] != "cid-1" || message["sender"] != "测试用户甲" || message["text"] != "进展" {
+		t.Fatalf("stable message fields = %#v", message)
+	}
+	if _, ok := message["reactions"]; !ok {
+		t.Fatalf("default projection dropped reactions: %#v", message)
+	}
+	if _, ok := message["resourceRefs"]; !ok {
+		t.Fatalf("default projection dropped resource references: %#v", message)
+	}
+	if _, exposed := payload["nextActions"]; exposed {
+		t.Fatalf("dual validation exposed shadow continuation: %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListAllNoReactionsPreservesBusinessEvidence(t *testing.T) {
+	caller := &chatMessagePaginationCaller{steps: []scriptedToolStep{{text: `{
+		"result":{
+			"conversationMessagesList":[{
+				"openConversationId":"cid-1",
+				"title":"项目群",
+				"messages":[{
+					"openMessageId":"msg-1",
+					"senderName":"测试用户甲",
+					"content":"关键业务正文",
+					"reactions":[{"emoji":"like","count":20}],
+					"resourceRefs":[{"resourceId":"res-1","name":"evidence.pdf"}],
+					"quotedMessage":{"content":"被引用的业务正文","reactions":[{"emoji":"ok","count":3}]}
+				}]
+			}],
+			"hasMore":false,
+			"nextCursor":"0"
+		}
+	}`}}}
+	payload, err := executeChatMessagePaginationCommand(
+		t,
+		caller,
+		"message", "list-all",
+		"--start", "2026-08-01 00:00:00",
+		"--end", "2026-08-02 00:00:00",
+		"--no-reactions",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %#v, want one", caller.calls)
+	}
+	if _, leaked := caller.calls[0].args["no-reactions"]; leaked {
+		t.Fatalf("local projection flag leaked to MCP args: %#v", caller.calls[0].args)
+	}
+	message := payload["result"].(map[string]any)["conversationMessagesList"].([]any)[0].(map[string]any)["messages"].([]any)[0].(map[string]any)
+	if _, leaked := message["reactions"]; leaked {
+		t.Fatalf("top-level reactions leaked: %#v", message)
+	}
+	quoted := message["quotedMessage"].(map[string]any)
+	if _, leaked := quoted["reactions"]; leaked {
+		t.Fatalf("nested reactions leaked: %#v", quoted)
+	}
+	if message["text"] != "关键业务正文" || quoted["content"] != "被引用的业务正文" {
+		t.Fatalf("business text was not preserved: %#v", message)
+	}
+	if _, ok := message["resourceRefs"]; !ok {
+		t.Fatalf("resource references were not preserved: %#v", message)
+	}
+	if _, exposed := payload["complete"]; exposed {
+		t.Fatalf("dual validation exposed shadow completeness ledger: %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListAllShadowPublishesSafeContinuation(t *testing.T) {
+	payload := projectChatMessageRangeAllPayload(
+		map[string]any{
+			"result": map[string]any{
+				"conversationMessagesList": []any{},
+				"hasMore":                  true,
+				"nextCursor":               "cursor-2",
+			},
+		},
+		map[string]any{
+			"startTime": "2026-08-01 00:00:00",
+			"endTime":   "2026-08-02 00:00:00",
+		},
+		false,
+	)
+	if payload["complete"] != false || payload["hasMore"] != true || payload["stopReason"] != "single_page" {
+		t.Fatalf("range ledger = %#v", payload)
+	}
+	actions := payload["nextActions"].([]map[string]any)
+	if len(actions) != 1 {
+		t.Fatalf("nextActions = %#v", actions)
+	}
+	action := actions[0]
+	if action["cliPath"] != "chat message list-all" || action["reuseArguments"] != true || action["ready"] != false {
+		t.Fatalf("continuation = %#v", action)
+	}
+	if action["arguments"].(map[string]any)["cursor"] != "cursor-2" {
+		t.Fatalf("continuation arguments = %#v", action["arguments"])
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageRangeProjectionBoundaryMetadata(t *testing.T) {
+	partial := projectChatMessageRangeAllPayload(
+		map[string]any{
+			"result": map[string]any{
+				"conversationMessagesList": []any{map[string]any{
+					"messages": []any{map[string]any{"openMessageId": "m1"}},
+				}},
+			},
+			"paging": map[string]any{
+				"pages":                float64(2),
+				"hasMore":              true,
+				"partial":              true,
+				"resumeCursorReliable": false,
+				"failedPage":           2,
+				"failedCursor":         "c2",
+				"error":                "page failed",
+			},
+		},
+		map[string]any{"startTime": "start", "endTime": "end"},
+		false,
+	)
+	if partial["pagesFetched"] != 2 || partial["stopReason"] != "pagination_error" || partial["failedCount"] != 1 || partial["partial"] != true {
+		t.Fatalf("partial projection = %#v", partial)
+	}
+	if actions := partial["nextActions"].([]map[string]any); len(actions) != 0 {
+		t.Fatalf("unreliable partial cursor published continuation: %#v", actions)
+	}
+
+	truncated := projectChatMessageRangeAllPayload(
+		map[string]any{
+			"result": map[string]any{"conversationMessagesList": []any{}},
+			"paging": map[string]any{"hasMore": true, "truncated": true, "lastCursor": "c2"},
+		},
+		map[string]any{},
+		false,
+	)
+	if truncated["stopReason"] != "local_limit" || truncated["complete"] != false {
+		t.Fatalf("truncated projection = %#v", truncated)
+	}
+
+	nested := []map[string]any{{
+		"content":   "critical business text",
+		"reactions": []any{map[string]any{"emoji": "like"}},
+	}}
+	stripChatReactionFields(nested)
+	if _, exists := nested[0]["reactions"]; exists || nested[0]["content"] != "critical business text" {
+		t.Fatalf("reaction projection lost or retained wrong fields: %#v", nested)
 	}
 }
 
@@ -570,6 +758,13 @@ func TestChatMessagePaginationPageAllAggregatesSevenCommands(t *testing.T) {
 				if len(items) != 1 || len(messages) != 2 {
 					t.Fatalf("conversation items = %#v", items)
 				}
+				for i, wantID := range []string{"m1", "m2"} {
+					message, ok := messages[i].(map[string]any)
+					if !ok || message["messageId"] != wantID || message["openMessageId"] != wantID ||
+						message["conversationId"] != "cid1" {
+						t.Fatalf("projected nested message %d = %#v", i, messages[i])
+					}
+				}
 				if tt.name == "search" {
 					projected, ok := got["messages"].([]any)
 					if !ok || len(projected) != 2 {
@@ -585,8 +780,18 @@ func TestChatMessagePaginationPageAllAggregatesSevenCommands(t *testing.T) {
 						}
 					}
 				}
-			} else if len(items) != 2 {
-				t.Fatalf("items = %#v", items)
+			} else {
+				if len(items) != 2 {
+					t.Fatalf("items = %#v", items)
+				}
+				if tt.name == "list-focused" {
+					for i, wantID := range []string{"m1", "m2"} {
+						message, ok := items[i].(map[string]any)
+						if !ok || message["messageId"] != wantID || message["openMessageId"] != wantID {
+							t.Fatalf("projected focused message %d = %#v", i, items[i])
+						}
+					}
+				}
 			}
 			if len(caller.calls) != 2 {
 				t.Fatalf("calls = %#v, want two pages", caller.calls)

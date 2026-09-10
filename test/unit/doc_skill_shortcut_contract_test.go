@@ -23,6 +23,10 @@ func TestDocSkillPinsRequiredShortcutArguments(t *testing.T) {
 	text := string(content)
 
 	for _, required := range []string{
+		"dws doc +list --folder <URL> --page-all",
+		"复用完整 URL",
+		"`+fetch` 若确认目标是目录",
+		"不要改用 `drive +list`",
 		"dws doc +create --name <标题> --content <文本\\|-\\|@文件> [--folder <ID>\\|--workspace <ID>]",
 		"dws doc +import --file <相对路径> [--folder <ID>\\|--workspace <ID>]",
 		"指定位置复用真实 ID，二者互斥",

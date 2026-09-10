@@ -8,12 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -103,6 +105,12 @@ func TestCrossPlatformCoverageDINGContractsAreStrictTypedAndUnified(t *testing.T
 	}
 	if List.Contract.Pagination == nil {
 		t.Fatal("+list lacks cursor pagination")
+	}
+	if RecallPersonal.Validate == nil || len(RecallPersonal.Constraints) != 1 ||
+		RecallPersonal.Constraints[0].Kind != shortcut.ConstraintCustom ||
+		strings.Join(RecallPersonal.Constraints[0].Flags, ",") != "id" ||
+		strings.TrimSpace(RecallPersonal.Constraints[0].Description) == "" {
+		t.Fatal("recall ID validation must be published as a bound custom constraint")
 	}
 }
 
@@ -407,6 +415,58 @@ func TestCrossPlatformCoverageDINGCompatibilityWritesRequireConfirmationAndExecu
 	}
 	if strings.Join(confirmedRecall.history, ",") != "recall_personal_ding" || confirmedRecall.arguments[0]["openDingId"] != "ding-fixture" {
 		t.Fatalf("confirmed recall calls=%v args=%v", confirmedRecall.history, confirmedRecall.arguments)
+	}
+
+	for _, id := range []string{"msgOpaque+/==", "cidOpaque-123", "MSG", "cid"} {
+		unconfirmed := &dingCoverageCaller{}
+		if err := runDingRoot(t, RecallPersonal, unconfirmed, false, "--id", id); err == nil || len(unconfirmed.history) != 0 {
+			t.Fatalf("opaque ID bypassed confirmation: id=%q err=%v calls=%v", id, err, unconfirmed.history)
+		}
+		confirmed := &dingCoverageCaller{responses: map[string][]string{
+			"recall_personal_ding": {`{"success":true,"result":true}`},
+		}}
+		if err := runDingRoot(t, RecallPersonal, confirmed, true, "--id", id); err != nil {
+			t.Fatalf("opaque DING ID %q rejected: %v", id, err)
+		}
+		if len(confirmed.history) != 1 || confirmed.history[0] != "recall_personal_ding" || confirmed.arguments[0]["openDingId"] != id {
+			t.Fatalf("opaque ID changed or recall replayed: id=%q calls=%v args=%v", id, confirmed.history, confirmed.arguments)
+		}
+	}
+	blankRecall := &dingCoverageCaller{}
+	if err := runDingRoot(t, RecallPersonal, blankRecall, true, "--id", " \t"); err == nil || len(blankRecall.history) != 0 {
+		t.Fatalf("blank ID reached MCP: err=%v calls=%v", err, blankRecall.history)
+	}
+}
+
+func TestCrossPlatformCoverageDINGRecallIDValidationBoundary(t *testing.T) {
+	for _, id := range []string{"", " \t\n"} {
+		if err := validateDingRecallID(id); err == nil {
+			t.Fatalf("blank recall ID %q was accepted", id)
+		}
+	}
+	for _, id := range []string{"msgOpaque+/==", "cidOpaque-123", "MSG", "cid", "ding-fixture"} {
+		if err := validateDingRecallID(id); err != nil {
+			t.Fatalf("opaque recall ID %q was rejected: %v", id, err)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDINGRecallExecuteRejectsBlankID(t *testing.T) {
+	// Validate rejects these through Cobra; Execute also defends direct callers.
+	for _, id := range []string{"", " \t\n"} {
+		t.Run(fmt.Sprintf("id=%q", id), func(t *testing.T) {
+			caller := &dingCoverageCaller{}
+			helpers.InitDepsForTest(t, caller)
+			cmd := corecmd.New(shortcut.FromShortcut(RecallPersonal))
+			if err := cmd.Flags().Set("id", id); err != nil {
+				t.Fatal(err)
+			}
+			err := RecallPersonal.Execute(shortcut.RuntimeContextForTest(cmd, RecallPersonal))
+			var failure *apperrors.Error
+			if !errors.As(err, &failure) || failure.Category != apperrors.CategoryValidation || len(caller.history) != 0 {
+				t.Fatalf("blank ID reached execution: err=%v calls=%v", err, caller.history)
+			}
+		})
 	}
 }
 

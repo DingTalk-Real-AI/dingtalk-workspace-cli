@@ -276,10 +276,13 @@ Usage:
   dws doc block delete [flags]
 Example:
   dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
+  dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --block-id string    目标块 ID (必填)
+      --block-id string    目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个
 ```
+
+> **批量删除**：需要删多个块时用逗号一次传入，定位基于 blockId。
 
 ### 查询文档评论列表
 ```
@@ -370,12 +373,13 @@ Usage:
 
 | contentType | extension | 操作 | 命令 |
 |-------------|-----------|------|------|
+| 任意 | dlink | 解析快捷方式目标后重新路由 | 从 `linkSourceInfo` 取目标；目标仍为 dlink 时再次执行 `dws doc info --node <目标nodeId>` |
 | ALIDOC | adoc | 在线获取 Markdown 内容 | `dws doc read --node <ID>` |
 | ALIDOC | axls | 在线读取表格数据 | `dws sheet list --node <ID>` → `dws sheet range read --node <ID>` |
 | ALIDOC | able | 在线查询多维表格记录 | `dws aitable table get --base-id <BASE_ID>` → `dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>` |
 | 非 ALIDOC | — | **不支持在线分析** | 告知用户需下载到本地后查看 |
 
-**关键规则**：非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
+**关键规则**：先处理 `extension=dlink`，再判断目标是否为 ALIDOC。`linkSourceInfo` 实际表示快捷方式目标：内容读取、编辑、导出和类型路由使用其 `nodeId`；目标仍为 dlink 时逐跳 `doc info` 并记录已访问 ID，解析失败、字段缺失或 ID 重复即停。只有明确移动、重命名或删除快捷方式入口本身时才使用顶层 nodeId。非 ALIDOC 类型文件（PDF/Word/图片/视频等）不支持在线分析，用户可以选择下载后本地查看。
 
 ### 格式保留度声明（adoc ↔ markdown lossy projection）
 
@@ -934,6 +938,9 @@ dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "修改后�
 # 5. 删除块
 dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
 
+# 5b. 一次删多个块（逗号分隔，单次最多 50 个；不要循环调用，返回后检查 notFoundBlockIds）
+dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B>,<BLOCK_C> --yes
+
 # ── 工作流 8: 复制/移动/重命名文档 ──
 
 # 获取 nodeId 的三种方式（按场景选择，无需全部执行）:
@@ -1016,6 +1023,7 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `drive list`（原 `doc list`，已弃用） | `nodes[].nodeId` / folder 类型 `nodeId` | read / info / update / block 的 --node；folder 用作 `--folder` |
 | `drive search`（原 `doc search`，已弃用） | 文档 `nodeId` / URL / `createTime` / `creatorUid` | read / info / update 的 --node；创建时间与创建者信息 |
 | `create` | `nodeId` | update / block 操作的 --node |
+| `info`（`extension=dlink`） | `linkSourceInfo.nodeId` + 目标类型字段；保留顶层 `nodeId` | 内容读写/导出/类型路由走目标；明确移动/重命名/删除快捷方式入口走顶层节点 |
 | `import` | `nodeId` / `documentUrl` / `documentName` / `documentType`；中断时提取 `taskId` | 后续 read / info / sheet 操作；中断后用 `doc import get --task-id` |
 | `drive mkdir`（原 `doc folder create`，已弃用） | `nodeId` | create 的 --folder |
 | `block list` | `blockId` | block insert 的 --ref-block, block update/delete 的 --block-id |

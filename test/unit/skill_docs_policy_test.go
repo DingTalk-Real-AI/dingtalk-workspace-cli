@@ -581,6 +581,32 @@ func TestMinutesPermissionAddRequiresExplicitPolicy(t *testing.T) {
 	}
 }
 
+func TestAITablePsqlSkillDocumentsReadOnlyDiscoveryFlow(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "references", "aitable.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-aitable", "references", "aitable", "aitable-psql.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "aitable.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{"psql", "PostgreSQL", "只读"} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing PostgreSQL query contract %q", path, required)
+			}
+		}
+	}
+}
+
 func hasAny(s string, needles []string) bool {
 	for _, needle := range needles {
 		if strings.Contains(s, needle) {

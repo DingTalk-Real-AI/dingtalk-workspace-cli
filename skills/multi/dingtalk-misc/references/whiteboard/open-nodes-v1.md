@@ -6,18 +6,26 @@
 ## DWS 使用规则
 
 - 只通过 `dws whiteboard query/update` 读写白板。
-- 每次调用必须提供承载白板的文档 `--node` 和目标白板 `--part-id`。
-- DWS 当前只支持单页白板：命令没有 `--page-id`，update 文件禁止包含
-  `pageId`。
+- 每次调用必须提供 `--node`。显式非空 `--part-id` 选择文档内嵌白板；完全省略
+  `--part-id` 选择独立白板。显式空值报错，任一分支失败后都不得跨类型回退。
+- 内嵌白板是单页目标，不接收 `--page-id`。独立白板 query 可用
+  `--view summary|page|all` 和 `--page-id`；update 必须提供
+  `--expected-revision`、稳定 `--request-id`，overwrite 还必须提供 `--page-id`。
 - `query` 不接收请求体；CLI 会把返回的 `resultJson` 解析成对象。
 - 白板命令不支持使用全局 `--jq` 或 `--fields` 过滤输出；传入任一参数都会报错，
   Agent 直接读取 CLI 返回的结构化 JSON。
 - `update --source` 使用 `overwrite + source` 信封；append 和 overwrite 都是
   远端写入，获得用户确认后必须通过 `--yes` 显式确认。
-- CLI 只预检 JSON、信封、版本和 `nodes` 数组等外层结构；节点字段、枚举、层级、
-  引用和业务约束由白板服务完整校验。任一层失败都不会保留部分更新。
-- DWS 返回以 `success`、`nodeId`、`partId`、`resultJson` 和可选的
-  `resultSummary` 为准。
+- 原子 `whiteboard update` 本地预检 JSON、信封、版本、`nodes` 对象数组和 append 非空。
+  首选的 `whiteboard +update` 还在调用服务前校验节点 ID 唯一且 type 非空，以及 connector 的
+  端点类型/有限坐标、同请求 `nodeRef` 引用及目标可用性、anchor、marker、routing 和
+  waypoints 组合，拒绝自环及已识别的 query-only/推导字段。本地校验失败不会调用服务。
+  其余节点字段、枚举、层级和业务约束仍由白板服务完整校验；远端提交后的连接中断或
+  读回失败不代表未写入，必须保留回执和稳定 ID，不能盲目重发。
+- 内嵌原子命令继续返回 `success`、`nodeId`、`partId`、`resultJson` 和可选的
+  `resultSummary`；独立分支返回详情或带 revision/requestId 的更新回执。
+  `+query/+update` 使用统一结果信封；`+update` 的 `data.receipt` 区分真实终态回执与
+  `dryRun=true/executed=false` 预览，真实成功经独立读回验证且不重复返回完整快照。
 
 ## 按任务读取
 
@@ -34,12 +42,16 @@
 
 ## 强制读取规则
 
-- 使用 `shape.geometry` 前必须读取 [08-catalogs](open-nodes-v1/08-catalogs.md)，
-  不得猜测 geometry。
-- 使用 `icon.catalogId` 前必须读取 [06-vector-icon-path](open-nodes-v1/06-vector-icon-path.md)
-  和 [08-catalogs](open-nodes-v1/08-catalogs.md)。
-- 使用 `path` 前必须读取 [06-vector-icon-path](open-nodes-v1/06-vector-icon-path.md)，
-  不得把它当作通用 SVG Path。
+- [构图 Reference](compose.md) 已评审并内嵌
+  `dml:rect` / `dml:roundRect` / `dml:diamond`、三种 connector marker、
+  `task/task-done` 和一条合法 Path 模板；原样复用这些值时不重复读取目录章节。
+- 使用安全子集之外的 `shape.geometry` 前必须读取
+  [08-catalogs](open-nodes-v1/08-catalogs.md)，不得猜测 geometry。
+- 使用安全子集之外的 `icon.catalogId` 前必须读取
+  [06-vector-icon-path](open-nodes-v1/06-vector-icon-path.md) 和
+  [08-catalogs](open-nodes-v1/08-catalogs.md)。
+- 原样复用 `compose.md` 的安全 Path 无需额外读取；其他 Path 必须读取
+  [06-vector-icon-path](open-nodes-v1/06-vector-icon-path.md)，不得把它当作通用 SVG Path。
 - Query 结果不能直接作为 update source；转换前必须读取
   [03-update](open-nodes-v1/03-update.md) 和
   [07-examples-errors-write-support](open-nodes-v1/07-examples-errors-write-support.md)。

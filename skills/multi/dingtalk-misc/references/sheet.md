@@ -5,15 +5,15 @@
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
 
-- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
-- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
-- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
-- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
-- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
-- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
-- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
-- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+- 只用 `dws`；结构化读取加 `--format json`，按真实返回判断。
+- 已知命令直调；参数/约束/安全不明查 leaf 窄 Schema。Schema 不可用才读已知 leaf Help 一次；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 不查 Help：优先错误中的明确 suggestion，其次已加载 Skill/reference 中的明确兼容入口；均无则报漂移并停，禁全 Catalog。低频 reference 不默认 Help，禁 root/parent/product Help。发现后必须执行或说明阻塞。
+- 不猜命令/flag/字段/ID/账号/业务事实；ID 来自真实返回。目标零命中/多候选/类型不明先消歧；仅可选时间/展示范围用契约默认，缺必需信息即停。
+- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出/记录 token、refresh token、appSecret、webhook token；已注入认证时不索要。
+- 写须符合明确意图；确认以最终 Runtime gate/Schema 为准，确认后才加 `--yes`。
+- 写后验证结果，不凭退出码宣称成功。退出须最终答复，区分完成、部分、阻塞、待确认、失败；保留已有数据及 `complete/hasMore/stopReason/failures`。
+- 时间戳按会话时区展示，必要时保留原值。
+- 认证/权限/profile/confirmation/未知错误只读 `dingtalk-shared` 对应 reference，禁连续猜替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
 Sheet 操作先读必要范围、做最小修改，再用匹配读命令回读；已有原生命令时不要用本地脚本或多次客户端读写模拟。
@@ -29,9 +29,9 @@ Sheet 操作先读必要范围、做最小修改，再用匹配读命令回读�
 | Drive 中的 xlsx/xls，用户要转换为在线表格 | 先用 `dws drive download` 下载到本地相对路径，再执行 `dws sheet import create`；不要把二进制节点传给工作表命令 |
 | 只做本地分析，或文件是 xlsm/csv | 留在本地处理；当前 `sheet import` 不支持 xlsm/csv |
 
-`sheet` 仅支持在线电子表格（`contentType=ALIDOC`、`extension=axls`）。只有用户给出未知类型 URL/ID 时才调用一次 `dws drive info --node <URL_OR_ID> --format json` 探测；刚由 `sheet create` 返回的资源无需再次 probe。`spreadsheetv2` URL 原样传入 `--node`，不要截短。
+`sheet` 仅支持在线电子表格（`contentType=ALIDOC`、`extension=axls`）。用户直接提供的 `/i/nodes/` URL 或来源未验证的 nodeId，先执行 `dws drive info --node <URL_OR_ID> --format json`。若返回 `extension=dlink`，将 `result.fileId` 保存为快捷方式入口 ID，再用 `dws doc info --node <result.fileId> --format json` 读取目标 `linkSourceInfo`；目标仍为 dlink 时逐跳解析并记录已访问 ID。只有最终目标 `extension=axls` 时才继续 Sheet 操作，并将 `linkSourceInfo.nodeId` 作为后续 `--node`。解析失败、目标字段缺失、ID 重复或最终类型不是 axls 时停止，禁止把快捷方式入口当作表格或普通文件。刚由 `sheet create` 返回且类型已知的资源无需再次 probe；`spreadsheetv2` URL 原样传入 `--node`，不要截短。
 
-只有运行时仍无法识别 URL 形态时才按需查看 [链接规范](../../dingtalk-shared/references/url-patterns.md)；只有上表无法判定的低频产品歧义才查看 [局部意图消歧](sheet-intent-guide.md)。这两份都不是冷启动必读项。
+dlink 的完整递归、异常和“入口管理仍用最初 `result.fileId`”边界，以及运行时无法识别的 URL 形态，见 [链接规范](../../dingtalk-shared/references/url-patterns.md)；只有上表无法判定的低频产品歧义才查看 [局部意图消歧](sheet-intent-guide.md)。普通已确认 axls 任务不需要加载这两份 reference。
 
 ## 常用闭环
 
@@ -101,7 +101,7 @@ dws drive +delete --node <NODE_ID> --format json
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "sheet +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws sheet <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service sheet --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "sheet +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service sheet --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

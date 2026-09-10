@@ -80,13 +80,14 @@ dws doc read --node "https://alidocs.dingtalk.com/i/p/Y7kmbokZp3pgGLq2/docs/AY39
 ```
 Step 1 → dws doc info --node "<URL>" --format json
 Step 2 → 从返回中提取 contentType、extension、nodeType 字段
-Step 3 → 按下方路由规则映射到对应产品
+Step 3 → 若 extension=dlink，取 linkSourceInfo 目标并逐跳解析；否则按下方规则映射到对应产品
 ```
 
 ### 路由映射表
 
 | 条件 | 路由到产品 | 后续操作 |
 |------|-----------|---------|
+| `extension=dlink` | — | 不把快捷方式当普通文件；按下方“快捷方式解析边界”解析目标后重新匹配本表 |
 | `contentType=ALIDOC`, `extension=adoc` | `doc` | 按 [doc.md](./products/doc.md) 操作 |
 | `contentType=ALIDOC`, `extension=axls` | `sheet` | 按 [sheet.md](./products/sheet.md) 操作（仅 `axls` 在线电子表格） |
 | `contentType=ALIDOC`, `extension=able` | `aitable` | 将 nodeId 作为 baseId，按 [aitable.md](./products/aitable.md) 操作 |
@@ -94,6 +95,12 @@ Step 3 → 按下方路由规则映射到对应产品
 | `contentType≠ALIDOC`, `nodeType=file` | `doc` | 调用 `dws drive download` 下载，返回文件下载链接 |
 | `nodeType=folder` | `doc` | 调用 `dws doc list --folder <ID>` 列出指定文件夹直接子节点列表 |
 | 以上均不匹配 | — | 告知用户当前暂不支持该类型 |
+
+### 快捷方式解析边界
+
+- `linkSourceInfo` 的字段名沿用服务端定义，实际语义是快捷方式的**目标节点**。内容读取、编辑、导出和类型路由使用 `linkSourceInfo.nodeId`，并以其中的 `contentType`、`extension`、`nodeType` 重新匹配上表。
+- 若目标的 `extension` 仍为 `dlink`，以目标 `nodeId` 再调用一次 `dws doc info`，逐跳解析并记录所有已访问 nodeId。请求失败、`linkSourceInfo`/目标 nodeId 缺失或 nodeId 重复时立即停止，不把 dlink 降级成普通文件。
+- 用户明确要移动、重命名或删除**快捷方式入口本身**时，使用第一次 `doc info` 的顶层 nodeId；不要把这类入口管理操作改到目标节点。
 
 > axls vs xlsx 关键区分：
 > - `axls`（钉钉在线电子表格，`contentType=ALIDOC`）→ 走 `sheet` 产品线（读/写/筛选/导出等服务端原子操作）
@@ -109,6 +116,9 @@ dws doc info --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format json
 # 返回 contentType=ALIDOC, extension=axls → 在线电子表格，路由到 sheet
 dws sheet list --node "https://alidocs.dingtalk.com/i/nodes/abc123" --format json
 
+# 返回 extension=dlink → 内容操作改用 linkSourceInfo.nodeId；若目标仍是 dlink 则继续 doc info
+dws doc info --node "https://alidocs.dingtalk.com/i/nodes/shortcut123" --format json
+
 # 返回 contentType≠ALIDOC, extension=xlsx/xls/csv → 本地表格文件，必须下载处理（禁止走 sheet）
 dws drive download --node "https://alidocs.dingtalk.com/i/nodes/xlsx456"
 
@@ -121,10 +131,9 @@ dws doc list --folder "https://alidocs.dingtalk.com/i/nodes/ghi789" --format jso
 
 ### 何时可跳过探测
 
-当用户指令中已明确指定产品（如"帮我读这个文档"、"看下这个表格的数据"），可结合用户意图**跳过探测**直接路由。仅在以下情况**必须执行探测**：
-- 用户只粘贴 URL，无其他上下文
-- 用户指令与 URL 实际类型可能不一致（如说"文档"但实际是表格）
-- 用户直接粘贴的是原始 `alidocs` URL，且没有上游命令返回来确认类型
+只有 nodeId 来自当前调用链中已验证类型的创建、搜索或读取结果时，才能跳过探测并复用。用户明确说“文档”“表格”只决定候选产品，不能作为跳过原始 `/i/nodes/` URL 或来源未验证 nodeId 规范化的理由。
+
+任何阶段一旦得到 `extension=dlink`，都必须按“快捷方式解析边界”处理；禁止将快捷方式入口 ID 直接传给内容读取、编辑、导出或目标产品命令。
 
 ---
 

@@ -3,6 +3,7 @@
 package keychain
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -246,6 +247,45 @@ func TestCrossPlatformCoverageDarwinDEKKeyringEdges(t *testing.T) {
 	if got, err := getOrCreateDEK("generate-missing"); err != nil || len(got) != dekBytes {
 		t.Fatalf("generate missing = %d, %v", len(got), err)
 	}
+
+	existing := bytesOf(7, dekBytes)
+	setCalls := 0
+	keyringGet = func(string, string) (string, error) {
+		return base64.StdEncoding.EncodeToString(existing), nil
+	}
+	keyringSet = func(string, string, string) error {
+		setCalls++
+		return errors.New("duplicate write must not replace an existing DEK")
+	}
+	got, err := getOrCreateDEK("reuse-existing")
+	if err != nil || !bytes.Equal(got, existing) {
+		t.Fatalf("reuse existing = %d, %v", len(got), err)
+	}
+	if setCalls != 0 {
+		t.Fatalf("reuse existing set calls = %d, want 0", setCalls)
+	}
+
+	gets := 0
+	setCalls = 0
+	keyringGet = func(string, string) (string, error) {
+		gets++
+		if gets == 1 {
+			return "", keyring.ErrNotFound
+		}
+		return encoded, nil
+	}
+	keyringSet = func(string, string, string) error {
+		setCalls++
+		return errors.New("already exists")
+	}
+	got, err = getOrCreateDEK("create-race")
+	if err != nil || !bytes.Equal(got, valid) {
+		t.Fatalf("create race = %d, %v", len(got), err)
+	}
+	if setCalls != 1 {
+		t.Fatalf("create race set calls = %d, want 1", setCalls)
+	}
+	keyringGet = func(string, string) (string, error) { return "", keyring.ErrNotFound }
 	keychainRandRead = func([]byte) (int, error) { return 0, errKeychainInjected }
 	if _, err := getOrCreateDEK("rand"); err == nil {
 		t.Fatal("rand error expected")

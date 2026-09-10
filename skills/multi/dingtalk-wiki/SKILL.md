@@ -14,15 +14,15 @@ metadata:
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
 
-- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
-- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
-- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
-- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
-- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
-- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
-- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
-- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+- 只用 `dws`；结构化读取加 `--format json`，按真实返回判断。
+- 已知命令直调；参数/约束/安全不明查 leaf 窄 Schema。Schema 不可用才读已知 leaf Help 一次；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 不查 Help：优先错误中的明确 suggestion，其次已加载 Skill/reference 中的明确兼容入口；均无则报漂移并停，禁全 Catalog。低频 reference 不默认 Help，禁 root/parent/product Help。发现后必须执行或说明阻塞。
+- 不猜命令/flag/字段/ID/账号/业务事实；ID 来自真实返回。目标零命中/多候选/类型不明先消歧；仅可选时间/展示范围用契约默认，缺必需信息即停。
+- 解析/读/写同一 profile，ID 不跨组织。多账号只用唯一 `isOrgCurrent=true`；否则用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出/记录 token、refresh token、appSecret、webhook token；已注入认证时不索要。
+- 写须符合明确意图；确认以最终 Runtime gate/Schema 为准，确认后才加 `--yes`。
+- 写后验证结果，不凭退出码宣称成功。退出须最终答复，区分完成、部分、阻塞、待确认、失败；保留已有数据及 `complete/hasMore/stopReason/failures`。
+- 时间戳按会话时区展示，必要时保留原值。
+- 认证/权限/profile/confirmation/未知错误只读 `dingtalk-shared` 对应 reference，禁连续猜替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
 下方自动清单的“唯一”仅指单页匹配；`+resolve-space/+wiki-new-doc` 不承担写入前的权威唯一解析，按 Golden Route 解析后使用真实 workspaceId。
@@ -30,7 +30,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "wiki +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws wiki <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service wiki --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "wiki +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service wiki --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -42,17 +42,17 @@ metadata:
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
-| 组织知识库按名称唯一解析 | `+space-list --type orgWikiSpace --limit 50 --page-all` 后精确匹配名称 | 仅 `autoPageComplete=true` 且全量中恰好一个同名项时取 workspaceId |
-| 个人知识空间入口或名称核对 | `dws wiki space list --type myWikiSpace --format json` | 固定单例；核对成功回执中的真实 workspaceId，按名称解析还须精确同名；不要求 `autoPageComplete` |
-| 搜索知识库或列出组织知识库 | `dws wiki +space-search --query <关键词>` / `+space-list --type orgWikiSpace` | 搜索只浏览候选；全量列表加 `--page-all`，名称唯一解析按上方分支 |
+| 按名称解析唯一知识库 | `+space-list --type <orgWikiSpace\|myWikiSpace> --limit 50 --page-all` 后精确匹配名称 | 先明确组织/个人范围；结果的 requestedType 必须等于请求范围；仅 `autoPageComplete=true` 且全量中恰好一个同名项时取 workspaceId |
+| 搜索或列出知识库 | `+space-search --query <关键词>` / `+space-list [--type orgWikiSpace\|myWikiSpace]` | 用户要求全部时加 `--page-all`；个人知识库必须明确语义 |
 | 为 Drive 发现钉盘存储空间 | `dws wiki space list --type <orgSpace\|mySpace> --format json` | managed 只读前置；返回 spaceId/rootFolderId 后切回 Drive，不进入 Wiki node/member 路由 |
 | 已知 workspace 查看详情 | `dws wiki +space-get --workspace <ID或URL>` | 已知 ID 不重复搜索 |
-| 创建或删除知识库 | `+space-create --name <名称> [--desc <说明>]` / `+delete-space --workspace <ID>` | 创建会读回；删除整个空间是高风险操作 |
-| 浏览或搜索库内节点 | `+node-list --workspace <ID> [--folder <ID>]` / `+node-search --workspace <ID> --query <词>` | 列目录与关键词搜索分开；全量列表加 `--page-all` |
+| 创建或删除知识库 | `+space-create --name <名称>` / `+delete-space --workspace <ID>` | 创建会读回并验证空间类型；仅 `spaceTypeVerified=true` 时可断言类型。删除整个空间是高风险操作 |
+| 浏览或搜索库内节点 | `+node-list --workspace <ID> [--folder <ID>]` / `+node-search --workspace <ID> --query <词>` | 列目录与关键词搜索分开；需要完整列表或完整搜索结果都加 `--page-all` |
 | 查看节点元数据 | `dws wiki +node-get --node <ID或URL>` | 正文读写随后切 Doc |
-| 已知 workspace 创建节点 | `+node-create --workspace <ID> --name <名称> [--type <类型>]` | 支持 adoc/axls/able/appt/adraw/amind/folder；创建后读回 |
-| 只有知识库名称时新建空文档 | 先按组织/个人分支唯一解析，再 `+node-create --workspace <ID> --name <标题> --type adoc` | 不用单页 `+wiki-new-doc` 猜空间；正文另走 Doc |
-| 复制、移入知识库或移出到我的文档 | `+node-copy` / `+move` / `+move-to-drive` | 使用真实 nodeId/workspaceId/folderId；按 Runtime confirmation |
+| 已知 workspace 创建节点 | `+node-create --workspace <ID> --name <名称> [--type <类型>]` | 支持 adoc/axls/able/appt/adraw/amind/folder；创建后验证 ID、workspace、名称、类型及显式父文件夹 |
+| 只有知识库名称时新建空文档 | 先按全量 `+space-list` 唯一解析，再 `+node-create --workspace <ID> --name <标题> --type adoc` | 不用单页 `+wiki-new-doc` 猜空间；正文另走 Doc |
+| 用本地文件在新知识库建文档后移到“我的文档” | `+space-create` → `doc +import --file <相对路径> --workspace <新workspaceId>` → `+move-to-drive --workspace <新workspaceId> --node <导入nodeId>` | 必须先把文档真实导入新知识库再移出；禁止先查 `mySpace`、禁止 `doc +create` 在个人域创建后用 `drive +move` 冒充该流程 |
+| 复制、移入知识库或将 Wiki 在线节点移出到“我的文档” | `+node-copy` / `+move` / `+move-to-drive` | “Wiki 节点 → 我的文档”固定使用 `+move-to-drive`，已知来源 workspace 时可传 `--workspace` 作写前归属断言；不可改用 mySpace/rootFolderId + `drive +move` |
 | 知识库首页放独立普通附件 | `dws drive upload --file <本地文件> --workspace <ID> --format json` | 不加 `--convert`；子目录加 `--folder <目录nodeId>`。正文内附件切 Doc 媒体，转换在线文档切 Doc 导入 |
 | 删除库内节点 | `+node-delete --workspace <ID> --node <ID>` | 删除前核对归属并确认 |
 | 列出、添加、修改或移除知识库成员 | `member list` / `+member-add` / `+member-update` / `+member-remove` | 写入 users 为 1-30 个；添加/修改须指定角色，移除不传角色；多类型、逐成员角色或通知用原生 member |
@@ -64,19 +64,23 @@ metadata:
 - 只有知识库名称：先明确组织/个人范围，按 Golden Route 对应分支核对完整名称；未知范围先消歧，不同时扫描两个范围并猜测。
 - `+space-search` 只用于快速浏览候选；当前 `+resolve-space/+wiki-new-doc` 不暴露名称搜索的分页完成证据，不作为权威唯一解析或写入 Golden Route。
 - 已知 nodeId/URL：元数据直接 `+node-get`；正文直接切 Doc，不先 list/search。
-- 创建节点后返回的 nodeId 直接传给 Doc；不通过同名搜索重新定位。创建文件夹的 `nodeId` 才是后续 `--folder`，回执 `folderId` 是它的父目录；`+node-copy/+move` 的“本库首页”使用当前 workspace 并省略 `--folder`，不切到个人空间；移出另用 `+move-to-drive`。
+- 创建节点后返回的 nodeId 直接传给 Doc；不通过同名搜索重新定位。创建文件夹的 `nodeId` 才是后续 `--folder`，回执 `folderId` 是它的父目录；`+node-copy/+move` 的“本库首页”使用当前 workspace 并省略 `--folder`，移出另用 `+move-to-drive`。
+- “本地文件 → 新知识库 → 我的文档”是有序跨产品流程：创建空间返回 workspaceId 后，必须 `doc +import --workspace` 取得库内 nodeId，再 `wiki +move-to-drive --workspace`；任何一步都不得在个人域提前创建或用 Drive 根目录移动替代。
 - move/copy/delete 已含预检或读回时，不由 Agent 重复拼装原子命令。
-- 普通“文档空间/我的文档”的文件操作按存储意图走 Drive；仅当缺少 Drive spaceId/rootFolderId、需要发现 `orgSpace/mySpace` 时调用 managed `wiki space list`。`orgSpace` 以返回的 nextToken 续页，`mySpace` 不分页；取 ID 后立即回到 Drive。
-- “个人知识库/个人知识空间入口”按上方个人分支读取，不追加 `--page-all`；“钉盘我的文件入口”用 `mySpace`。仅说“我的文档入口”且上下文不明时先消歧，不同时扫描两域后猜。
+- 普通“文档空间/我的文档”的文件操作按存储意图走 Drive；但源对象已确定是 Wiki workspace 中的在线节点、目标是移出到“我的文档”时是明确例外，直接用 `wiki +move-to-drive`，不查询 `mySpace`、不调用 `drive +move`。仅普通 Drive 节点缺少 spaceId/rootFolderId 时才用 managed `wiki space list --type orgSpace|mySpace` 发现空间。
 
 ## 关键结果语义
 
-- 组织 `+space-list`、`+node-list/+feed-list` 默认单页；全量请求显式加 `--page-all`，并检查 `autoPageComplete/autoPageStopReason/pagesFetched` 与分页元数据。
+- `+space-list/+node-list/+node-search/+feed-list` 默认单页；全量请求显式加 `--page-all`，并检查 `autoPageComplete/autoPageStopReason/pagesFetched` 与分页元数据。
+- `+space-list` 顶层 `requestedType` 是本次服务端查询的类型范围；条目级 `spaceType` 只在服务端真实返回时出现，不能用请求值伪造。用列表缺席证明空间不存在前，必须同时满足范围正确和 `autoPageComplete=true`。
+- `+space-create` 只有返回 `spaceTypeVerified=true` 时才能使用 `spaceType`；类型验证失败会保留已创建的 workspaceId，禁止重试创建或按名称猜类型。
 - `+space-search/+node-search` 缺少业务数组不是零命中；只有显式空数组才可报告空结果。
 - 组织名称解析须列表取完且唯一精确同名；个人名称解析须原生成功回执中恰好一条且精确同名，不要求自动分页字段。空/畸形响应、0 条、多条、名称不符或组织分页未完成都停止。
 - `+space-search`、`+resolve-space` 的单页结果不能证明全局唯一；不得把首页唯一候选直接用于写入。
-- 创建空间/节点和复制节点必须取得新 ID 并读回；移动必须验证 workspace/folder；删除必须有 `success=true`。
-- 原生 `wiki member list` 支持 `--next-token` 续页，`+member-list` 无续页入口；成员写 shortcut 的回执仍是 `terminal_response_only`，后续名单核对单独记录，完整性边界见成员 Reference。
+- `+node-list/+node-search/+node-get` 会保留服务端 `extension/type/hasChildren` 并规范化 `parentFolderId`；字段缺席表示服务端未提供，不能靠名称推断类型或层级。
+- 创建节点必须验证新 ID、workspace、名称、类型和显式父文件夹；复制必须先读源节点，再证明新 ID 与源 ID 不同且副本进入目标 workspace/folder。
+- `+move/+move-to-drive` 返回 `source/target`、前后 workspace 和目标域；移到我的文档还会用 `myWikiSpace` 范围列表验证目标 workspace。删除必须有 `success=true`。
+- 成员列表服务端没有续页游标且最多 50，不能把上限内结果宣称为全量；成员写只具备终态响应证据，不虚构精确读回。
 - `partial_failure`、分页未完成或写入效果未知都不是成功。
 
 ## 参数与安全边界
@@ -111,6 +115,6 @@ Golden Route 参数足够时不读 reference；否则最多读取一个：
 
 - 明确知识库容器、成员、库内层级与动态 → Wiki。
 - 锁定库内 adoc 节点后的正文读写/导出 → Doc；axls 内容 → Sheet；able 记录/字段 → AITable。
-- 普通文件、文件夹、“我的文档/文档空间”的存储搜索、传输和整理 → Drive。
+- 普通文件、文件夹、“我的文档/文档空间”的存储搜索、传输和整理 → Drive；已知源是 Wiki 在线节点且动作是“移出到我的文档”则走 Wiki `+move-to-drive`。
 - Drive 存储空间发现可复用 managed `wiki space list --type orgSpace|mySpace`；结果是 spaceId/rootFolderId，不能交给 Wiki node/member。知识库 `orgWikiSpace/myWikiSpace` 仍返回 workspaceId。
 - Wiki 节点移入/移出使用 `+move/+move-to-drive`；不要把 workspaceId 当普通 Drive folderId。

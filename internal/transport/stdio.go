@@ -25,6 +25,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 // StdioClient manages a local MCP server subprocess, communicating via
@@ -241,26 +244,42 @@ func (s *StdioClient) call(ctx context.Context, method string, params any, resul
 
 	// Read response line (respects context cancellation).
 	type readResult struct {
-		line []byte
-		err  error
+		line     []byte
+		err      error
+		tooLarge bool
 	}
 	ch := make(chan readResult, 1)
 	go func() {
-		line, err := s.stdout.ReadBytes('\n')
-		ch <- readResult{line, err}
+		line, tooLarge, err := readBoundedStdioLine(s.stdout, config.MaxResponseBodySize)
+		ch <- readResult{line: line, err: err, tooLarge: tooLarge}
 	}()
 
 	select {
 	case <-ctx.Done():
+		s.invalidateProcessLocked()
 		return fmt.Errorf("stdio: %w", ctx.Err())
 	case rr := <-ch:
+		if rr.tooLarge {
+			s.invalidateProcessLocked()
+			return fmt.Errorf("stdio: response exceeds safety limit of %d bytes", config.MaxResponseBodySize)
+		}
 		if rr.err != nil {
 			return fmt.Errorf("stdio: read response: %w", rr.err)
 		}
 
+		if err := jsonutil.RejectDuplicateObjectKeys(rr.line); err != nil {
+			return fmt.Errorf("stdio: invalid response: %w", err)
+		}
+		if err := jsonutil.RejectNonCanonicalObjectKeys(rr.line, "jsonrpc", "id", "result", "error"); err != nil {
+			return fmt.Errorf("stdio: invalid response: %w", err)
+		}
 		var resp responseEnvelope
 		if err := json.Unmarshal(rr.line, &resp); err != nil {
 			return fmt.Errorf("stdio: unmarshal response: %w", err)
+		}
+		if resp.JSONRPC != "2.0" || resp.ID != int(id) {
+			s.invalidateProcessLocked()
+			return fmt.Errorf("stdio: response envelope does not match request id %d", id)
 		}
 
 		if resp.Error != nil {
@@ -271,10 +290,45 @@ func (s *StdioClient) call(ctx context.Context, method string, params any, resul
 			if err := json.Unmarshal(resp.Result, result); err != nil {
 				return fmt.Errorf("stdio: unmarshal result: %w", err)
 			}
+			if tools, ok := result.(*ToolsListResult); ok {
+				tools.RawResponseBytes = len(rr.line)
+			}
 		}
 
 		return nil
 	}
+}
+
+func readBoundedStdioLine(reader *bufio.Reader, limit int) ([]byte, bool, error) {
+	line := make([]byte, 0, min(limit, 64*1024))
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		if len(fragment) > limit-len(line) {
+			return nil, true, nil
+		}
+		line = append(line, fragment...)
+		switch err {
+		case nil:
+			return line, false, nil
+		case bufio.ErrBufferFull:
+			continue
+		default:
+			return nil, false, err
+		}
+	}
+}
+
+func (s *StdioClient) invalidateProcessLocked() {
+	if s.stdin != nil {
+		_ = s.stdin.Close()
+	}
+	if s.cmd != nil && s.cmd.Process != nil {
+		_ = s.cmd.Process.Kill()
+		_ = s.cmd.Wait()
+	}
+	s.started = false
+	s.initialized = false
+	s.initResult = InitializeResult{}
 }
 
 // drainStderr reads stderr in the background and logs lines at debug level.

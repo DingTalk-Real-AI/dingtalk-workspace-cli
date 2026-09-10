@@ -4,13 +4,32 @@
 package aitable
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
+
+var tableCopyRecordReadbackDelays = [...]time.Duration{
+	250 * time.Millisecond,
+	750 * time.Millisecond,
+	1500 * time.Millisecond,
+}
+
+var tableCopyRecordReadbackWait = func(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
 
 var TableCopy = shortcut.Shortcut{
 	Service:     "aitable",
@@ -193,24 +212,52 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset}
 			return compositeError(result, writeErr, false)
 		}
-		actual, verifyErr := queryRecordsByIDs(rt, targetBase, targetTable, createdIDs)
-		if verifyErr == nil {
-			verifyErr = matchCreatedCells(batch, actual, recordVerifier)
-		}
+		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_records", "offset": offset, "recordIds": createdIDs})
+		verifyErr := verifyTableCopyRecordsEventually(rt, targetBase, targetTable, createdIDs, batch, recordVerifier)
 		if verifyErr != nil {
 			result.Status = "partial_success"
 			result.CompletedCount = createdCount
 			result.FailedCount = len(sourceRecords) - createdCount
-			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset}
+			result.Checkpoint = map[string]any{
+				"targetTableId":    targetTable,
+				"createdRecordIds": createdIDs,
+				"nextRecordOffset": offset,
+				"nextStep":         "verify the created record IDs and cells before copying any remaining records; do not rerun create_records for this batch",
+			}
 			return compositeError(result, verifyErr, false)
 		}
 		createdCount = end
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_records", "offset": offset, "recordIds": createdIDs})
 	}
 	result.CompletedCount = createdCount
 	result.Verification = map[string]any{"status": "verified", "fieldCount": len(createFields), "recordCount": createdCount}
 	result.Result = map[string]any{"targetBaseId": targetBase, "targetTableId": targetTable, "fieldCount": len(createFields), "recordCount": createdCount}
 	return rt.Output(result)
+}
+
+func verifyTableCopyRecordsEventually(
+	rt *shortcut.RuntimeContext,
+	baseID, tableID string,
+	createdIDs []string,
+	expected []map[string]any,
+	resolver *recordFieldTypeResolver,
+) error {
+	var lastErr error
+	for attempt := 0; attempt <= len(tableCopyRecordReadbackDelays); attempt++ {
+		actual, err := queryRecordsByIDs(rt, baseID, tableID, createdIDs)
+		if err != nil {
+			return err
+		}
+		lastErr = matchCreatedCells(expected, actual, resolver)
+		if lastErr == nil {
+			return nil
+		}
+		if attempt < len(tableCopyRecordReadbackDelays) {
+			if err := tableCopyRecordReadbackWait(rt.Command().Context(), tableCopyRecordReadbackDelays[attempt]); err != nil {
+				return err
+			}
+		}
+	}
+	return lastErr
 }
 
 func mapCopiedFieldIDs(source, target []map[string]any) (map[string]string, error) {

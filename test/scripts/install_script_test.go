@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,7 +72,6 @@ func newInstallSourceFixture(t *testing.T) *installSourceFixture {
 	mustWriteFile(t, filepath.Join(root, "skills", "mono", "SKILL.md"), []byte("# Test skill\n"), 0o644)
 	mustWriteFile(t, filepath.Join(root, "skills", "multi", "dingtalk-test", "SKILL.md"), []byte("# Test split skill\n"), 0o644)
 	mustWriteFile(t, filepath.Join(root, "skills", "multi", "dws-shared", "SKILL.md"), []byte("# Test shared skill\n"), 0o644)
-
 	stubRoot := filepath.Join(root, "stubs")
 	makeStub := `#!/bin/sh
 set -eu
@@ -159,6 +159,79 @@ func TestInstallScriptSourceModeInstallsBinary(t *testing.T) {
 	}
 	if string(binaryData) != "fake-binary\n" {
 		t.Fatalf("installed binary content = %q, want fake-binary", string(binaryData))
+	}
+	if _, err := os.Stat(filepath.Join(installDir, ".dws-runtime")); !os.IsNotExist(err) {
+		t.Fatalf("source install published a legacy sidecar: %v", err)
+	}
+}
+
+func TestInstallScriptRemoteModeAllowsArchiveWithoutRuntimePayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "legacy-release.tar.gz")
+	writeTarGz(t, archivePath, map[string]string{"dws": "legacy-binary\n"})
+	harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+resolve_version() { VERSION=v0.0.0-legacy; }
+asset_url() { printf '%s\n' fixture; }
+download() { cp "$DWS_TEST_ARCHIVE" "$2"; }
+verify_release_asset_checksum() { :; }
+install_binary
+`
+	harnessPath := filepath.Join(root, "install-legacy-harness.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	installDir := filepath.Join(root, "bin")
+	cmd := exec.Command("sh", harnessPath)
+	cmd.Env = append(os.Environ(),
+		"HOME="+filepath.Join(root, "home"),
+		"DWS_INSTALL_DIR="+installDir,
+		"DWS_INSTALL_NAME=dws-test",
+		"DWS_TEST_ARCHIVE="+archivePath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("install legacy archive: %v\n%s", err, output)
+	}
+	installed, err := os.ReadFile(filepath.Join(installDir, "dws-test"))
+	if err != nil || string(installed) != "legacy-binary\n" {
+		t.Fatalf("installed legacy binary = %q, %v", installed, err)
+	}
+	if _, err := os.Stat(filepath.Join(installDir, ".dws-runtime")); !os.IsNotExist(err) {
+		t.Fatalf("legacy archive unexpectedly published a runtime payload: %v", err)
+	}
+}
+
+func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(scriptData)
+	for _, forbidden := range []string{"Publish-RuntimePayload", `Join-Path $InstallDir ".dws-runtime"`} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("PowerShell installer retains sidecar behavior %q", forbidden)
+		}
 	}
 }
 
@@ -4899,5 +4972,122 @@ func mustWriteFile(t *testing.T, path string, data []byte, mode os.FileMode) {
 	}
 	if err := os.WriteFile(path, data, mode); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
+}
+
+// TestInstallScriptRefusesMuslLinux pins that every installer that fetches the
+// glibc-linked dws release asset rejects musl-based Linux before downloading.
+func TestInstallScriptRefusesMuslLinux(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	for _, installer := range []struct {
+		script      string
+		entry       string
+		downloadsAt string
+	}{
+		{script: "install.sh", entry: "install_binary", downloadsAt: "resolve_version"},
+		{script: "install-event.sh", entry: "install_binary", downloadsAt: "releases/download"},
+		{script: "install-devapp.sh", entry: "main", downloadsAt: "releases/download"},
+	} {
+		t.Run(installer.script, func(t *testing.T) {
+			scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", installer.script))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			body := extractShellFunction(t, scriptPath, "require_glibc_on_linux")
+			// The loader probe covers musl distributions whose ldd does not
+			// report a version, notably Alpine where BusyBox ldd only forwards
+			// to the loader.
+			if !strings.Contains(body, "/lib/ld-musl-") {
+				t.Error("musl detection does not probe the musl dynamic loader")
+			}
+			// ldd must decide first. A glibc distribution with musl or
+			// musl-tools installed also carries the loader file, so consulting
+			// the glob before ldd refuses a system that can run the binary.
+			lddAt := strings.Index(body, "ldd --version")
+			globAt := strings.Index(body, "/lib/ld-musl-")
+			if lddAt < 0 {
+				t.Error("musl detection does not consult ldd --version")
+			} else if lddAt > globAt {
+				t.Errorf("ldd --version must be consulted before the loader-file fallback (ldd=%d, glob=%d)", lddAt, globAt)
+			}
+
+			entry := extractShellFunction(t, scriptPath, installer.entry)
+			guardAt := strings.Index(entry, "require_glibc_on_linux")
+			downloadAt := strings.Index(entry, installer.downloadsAt)
+			if guardAt < 0 {
+				t.Fatalf("%s does not call require_glibc_on_linux", installer.entry)
+			}
+			if downloadAt < 0 || guardAt > downloadAt {
+				t.Errorf("%s must run require_glibc_on_linux before %q (guard=%d, download=%d)",
+					installer.entry, installer.downloadsAt, guardAt, downloadAt)
+			}
+
+			run := func(t *testing.T, targetOS, lddOutput string, muslLoaderPresent bool) (string, error) {
+				t.Helper()
+				binDir := filepath.Join(t.TempDir(), "bin")
+				mustWriteFile(t, filepath.Join(binDir, "ldd"),
+					[]byte(fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' %q\n", lddOutput)), 0o755)
+				if muslLoaderPresent {
+					// Simulate a system carrying the musl loader without
+					// writing to the host /lib. When the glob matches nothing a
+					// POSIX shell passes the literal pattern to ls, so a stub
+					// that succeeds on it reproduces the file being present and
+					// delegates to the real ls otherwise.
+					mustWriteFile(t, filepath.Join(binDir, "ls"),
+						[]byte("#!/bin/sh\ncase \"$*\" in\n*ld-musl-*) exit 0 ;;\nesac\nexec /bin/ls \"$@\"\n"), 0o755)
+				}
+				harness := fmt.Sprintf(`err() { printf '%%s\n' "$@" >&2; exit 1; }
+BIN_NAME=dws
+os=%q
+%s
+require_glibc_on_linux
+printf 'accepted\n'
+`, targetOS, body)
+				cmd := exec.Command("sh", "-c", harness)
+				cmd.Env = append(os.Environ(), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+				output, err := cmd.CombinedOutput()
+				return string(output), err
+			}
+
+			for _, tc := range []struct {
+				name       string
+				targetOS   string
+				lddOutput  string
+				muslLoader bool
+				wantAccept bool
+			}{
+				{name: "glibc linux", targetOS: "linux", lddOutput: "ldd (GNU libc) 2.31", wantAccept: true},
+				{name: "musl linux", targetOS: "linux", lddOutput: "musl libc 1.2.5", wantAccept: false},
+				{name: "darwin skips the probe", targetOS: "darwin", lddOutput: "musl libc 1.2.5", wantAccept: true},
+				// A glibc distribution with musl or musl-tools installed
+				// carries the loader file but still runs glibc binaries.
+				{name: "glibc linux with musl loader present", targetOS: "linux", lddOutput: "ldd (GNU libc) 2.31", muslLoader: true, wantAccept: true},
+				{name: "ubuntu glibc with musl loader present", targetOS: "linux", lddOutput: "ldd (Ubuntu GLIBC 2.39-0ubuntu8) 2.39", muslLoader: true, wantAccept: true},
+				// Alpine's BusyBox ldd reports no version, so the loader file
+				// is still the only signal available there.
+				{name: "inconclusive ldd with musl loader present", targetOS: "linux", lddOutput: "", muslLoader: true, wantAccept: false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					output, err := run(t, tc.targetOS, tc.lddOutput, tc.muslLoader)
+					if tc.wantAccept {
+						if err != nil {
+							t.Fatalf("require_glibc_on_linux rejected %s: %v\noutput:\n%s", tc.name, err, output)
+						}
+						return
+					}
+					if err == nil {
+						t.Fatalf("require_glibc_on_linux accepted %s:\n%s", tc.name, output)
+					}
+					if !strings.Contains(output, "musl libc") {
+						t.Fatalf("rejection output does not name musl libc:\n%s", output)
+					}
+				})
+			}
+		})
 	}
 }

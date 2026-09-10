@@ -292,7 +292,7 @@ func TestDriveUploadOverwriteRoutesAndConfirms(t *testing.T) {
 		if len(caller.calls) != 2 {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		wantStep1 := map[string]any{"workspaceId": "workspace-1", "overwriteNodeId": "node-1", "name": "renamed.md"}
+		wantStep1 := map[string]any{"workspaceId": "workspace-1", "overwriteNodeId": "node-1", "name": "renamed.md", "fileSize": float64(4)}
 		if !reflect.DeepEqual(caller.calls[0].args, wantStep1) {
 			t.Fatalf("step1 args = %#v, want %#v", caller.calls[0].args, wantStep1)
 		}
@@ -385,6 +385,7 @@ func TestMarkdownGlobalAndLocalDryRunAreDistinct(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.md"}`},
 				{text: `{"downloadUrl":"https://download.test/current.md","fileName":"current.md"}`},
 			},
 		}
@@ -397,7 +398,8 @@ func TestMarkdownGlobalAndLocalDryRunAreDistinct(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
+		if len(caller.calls) != 2 || caller.calls[0].tool != "get_file_info" ||
+			caller.calls[1].tool != "download_file" {
 			t.Fatalf("local preview calls = %#v", caller.calls)
 		}
 		var payload map[string]any
@@ -575,7 +577,7 @@ func TestCrossPlatformCoverageMarkdownCreateFolderAutoRouting(t *testing.T) {
 
 func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProbe(t *testing.T) {
 	t.Run("conflicting explicit routes fail closed", func(t *testing.T) {
-		got, err := resolveMarkdownCreateTarget(context.Background(), "folder", "space", "workspace")
+		got, err := resolveTextCreateTarget(context.Background(), markdownTextFileSpec, "folder", "space", "workspace")
 		if err == nil || got {
 			t.Fatalf("useDoc=%v err=%v, want false with an error", got, err)
 		}
@@ -596,7 +598,7 @@ func TestCrossPlatformCoverageMarkdownCreateTargetExplicitRoutesBypassFolderProb
 		t.Run(test.name, func(t *testing.T) {
 			caller := &markdownDriveCaller{format: "json"}
 			installMarkdownDriveDeps(t, caller)
-			got, err := resolveMarkdownCreateTarget(context.Background(), test.folderID, test.spaceID, test.workspaceID)
+			got, err := resolveTextCreateTarget(context.Background(), markdownTextFileSpec, test.folderID, test.spaceID, test.workspaceID)
 			if err != nil || got != test.wantDoc {
 				t.Fatalf("useDoc=%v err=%v, want useDoc=%v", got, err, test.wantDoc)
 			}
@@ -702,7 +704,7 @@ func TestMarkdownOutputPathRejectsRemoteSymlink(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
-	if _, err := resolveMarkdownOutputPath(dir, "../../remote.md"); err == nil || !strings.Contains(err.Error(), "符号链接") {
+	if _, err := resolveTextOutputPath(dir, "../../remote.md", markdownTextFileSpec); err == nil || !strings.Contains(err.Error(), "符号链接") {
 		t.Fatalf("expected symlink rejection, got %v", err)
 	}
 	if data, err := os.ReadFile(target); err != nil || string(data) != "keep" {
@@ -715,6 +717,7 @@ func TestMarkdownOverwriteAndPatchWrites(t *testing.T) {
 		caller := &markdownDriveCaller{
 			format: "json",
 			steps: []markdownDriveStep{
+				{text: `{"fileName":"current.md"}`},
 				{text: `{"uploadId":"upload-1","resourceUrls":[{"url":"https://upload.test/drive"}]}`},
 				{text: `{"updated":true}`},
 			},
@@ -735,10 +738,14 @@ func TestMarkdownOverwriteAndPatchWrites(t *testing.T) {
 		if uploaded != "# changed" {
 			t.Fatalf("uploaded content = %q", uploaded)
 		}
-		if len(caller.calls) != 2 {
+		if len(caller.calls) != 3 {
 			t.Fatalf("calls = %#v", caller.calls)
 		}
-		for _, call := range caller.calls {
+		// The remote target type is probed even with an explicit --name.
+		if caller.calls[0].server != "drive" || caller.calls[0].tool != "get_file_info" {
+			t.Fatalf("target probe call = %#v", caller.calls[0])
+		}
+		for _, call := range caller.calls[1:] {
 			if call.server != "drive" || call.args["overwriteFileId"] != "file-1" {
 				t.Fatalf("overwrite call = %#v", call)
 			}
@@ -1077,11 +1084,11 @@ func TestMarkdownContentSourcesAndHumanDiffs(t *testing.T) {
 
 	longBefore := strings.Repeat("old\n", 25)
 	longAfter := strings.Repeat("new\n", 25)
-	overwriteDiff := renderMarkdownOverwriteDiff("node-1", longBefore, longAfter)
+	overwriteDiff := renderTextOverwriteDiff("node-1", longBefore, longAfter, markdownTextFileSpec)
 	if !strings.Contains(overwriteDiff, "... (") || !strings.Contains(overwriteDiff, "No write performed") {
 		t.Fatalf("overwrite diff did not truncate safely:\n%s", overwriteDiff)
 	}
-	if err := printMarkdownPatchDiff("node-1", "old", "new", 1); err != nil {
+	if err := printTextPatchDiff("node-1", "old", "new", 1, markdownTextFileSpec); err != nil {
 		t.Fatal(err)
 	}
 	if text := stdout.String(); !strings.Contains(text, "markdown patch") || !strings.Contains(text, "- old") || !strings.Contains(text, "+ new") {

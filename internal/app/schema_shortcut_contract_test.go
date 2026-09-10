@@ -12,16 +12,18 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 const (
-	publicShortcutCount = 438
+	publicShortcutCount = 442
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 495
+	schemaPublishedShortcutCount = 499
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 438
+	publiclyDeliveredShortcutCount = 442
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -115,7 +117,6 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 		t.Fatal("public --conversation-id must stay optional when hidden siblings still satisfy the declared exactly_one group")
 	}
 	wantMessagesConstraints := map[string]any{
-		"require_one_of":     [][]string{{"conversation-id", "group", "id"}},
 		"mutually_exclusive": [][]string{{"conversation-id", "group", "id"}},
 	}
 	if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantMessagesConstraints) {
@@ -132,7 +133,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 233; got != want {
+	if got, want := int(product["count"].(float64)), 240; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
@@ -144,8 +145,8 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 			shortcutCount++
 		}
 	}
-	if shortcutCount != 98 {
-		t.Fatalf("schema chat shortcut summaries = %d, want 98", shortcutCount)
+	if shortcutCount != 102 {
+		t.Fatalf("schema chat shortcut summaries = %d, want 102", shortcutCount)
 	}
 	for _, cliPath := range missingChatCatalogCoveragePaths() {
 		if summaryByCLIPath[cliPath] == nil {
@@ -249,6 +250,24 @@ func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
 		if got := schemaContractString(parameter["property"]); got != want {
 			t.Fatalf("wiki +space-search --%s property = %q, want compatibility value %q", name, got, want)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiSpaceCreatePublishesVerifiedTypeResult(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-create")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "partial_failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, property := range []string{"success", "workspaceId", "space", "spaceType", "spaceTypeVerified", "spaceTypeEvidence"} {
+		if properties[property] == nil {
+			t.Errorf("wiki +space-create Result data_schema is missing %q", property)
+		}
+	}
+	if got, want := schemaContractStringSlice(properties["spaceType"]["enum"]), []string{"orgWikiSpace", "myWikiSpace"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create spaceType enum = %#v, want %#v", got, want)
 	}
 }
 
@@ -588,8 +607,34 @@ func executeShortcutSchemaQuery(t testing.TB, args ...string) map[string]any {
 }
 
 func shortcutSchemaCanonical(declared shortcut.Shortcut) string {
-	name := strings.ReplaceAll(strings.TrimPrefix(declared.Command, "+"), "-", "_")
-	return declared.Service + ".shortcut_" + name
+	// A CLI rename need not change the stable Schema identity. Read the
+	// declaration, not the command spelling or the delivery under test.
+	return declared.Contract.Identity.CanonicalPath
+}
+
+func TestCrossPlatformCoverageShortcutSchemaCanonicalUsesDeclaredIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		command   string
+		canonical string
+	}{
+		{"unchanged", "+active-conversations", "chat.shortcut_active_conversations"},
+		{"renamed", "+recent-conversations", "chat.shortcut_active_conversations"},
+		{"missing_identity_is_not_inferred", "+recent-conversations", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			declared := shortcut.Shortcut{
+				Service: "chat",
+				Command: tc.command,
+				Contract: corecmd.ContractDecl{
+					Identity: contract.ToolIdentitySpec{CanonicalPath: tc.canonical},
+				},
+			}
+			if got := shortcutSchemaCanonical(declared); got != tc.canonical {
+				t.Fatalf("canonical = %q, want declared identity %q", got, tc.canonical)
+			}
+		})
+	}
 }
 
 func assertDeliveryShortcutIdentityAndSelection(
@@ -605,11 +650,19 @@ func assertDeliveryShortcutIdentityAndSelection(
 	if got, want := schemaContractString(tool["primary_cli_path"]), declared.Service+" "+declared.Command; got != want {
 		t.Errorf("%s primary_cli_path = %q, want %q", canonical, got, want)
 	}
-	if got, want := schemaContractString(tool["agent_summary"]), declared.Description; got != want {
-		t.Errorf("%s agent_summary = %q, want %q", canonical, got, want)
+	wantSummary := strings.TrimSpace(declared.Contract.Selection.AgentSummary)
+	if wantSummary == "" {
+		wantSummary = declared.Description
 	}
-	if got, want := schemaContractStringSlice(tool["use_when"]), []string{declared.Intent}; !schemaContractJSONEqual(got, want) {
-		t.Errorf("%s use_when = %#v, want %#v", canonical, got, want)
+	if got := schemaContractString(tool["agent_summary"]); got != wantSummary {
+		t.Errorf("%s agent_summary = %q, want %q", canonical, got, wantSummary)
+	}
+	wantUseWhen := declared.Contract.Selection.UseWhen
+	if len(wantUseWhen) == 0 && strings.TrimSpace(declared.Intent) != "" {
+		wantUseWhen = []string{declared.Intent}
+	}
+	if got := schemaContractStringSlice(tool["use_when"]); !schemaContractJSONEqual(got, wantUseWhen) {
+		t.Errorf("%s use_when = %#v, want %#v", canonical, got, wantUseWhen)
 	}
 	if len(schemaContractStringSlice(tool["avoid_when"])) == 0 {
 		t.Errorf("%s has no reviewed avoid_when", canonical)

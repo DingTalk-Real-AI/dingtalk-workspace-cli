@@ -158,9 +158,20 @@ var RecallPersonal = compatibilityDingWrite(
 	[]contract.ParamDecl{{Name: "id", Property: "id"}},
 	"dws ding +recall-personal --id <DING_ID>",
 	func(rt *shortcut.RuntimeContext) error {
+		if err := validateDingRecallID(rt.Str("id")); err != nil {
+			return err
+		}
 		return rt.CallMCP("recall_personal_ding", map[string]any{"openDingId": rt.Str("id")})
 	},
 )
+
+func validateDingRecallID(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return apperrors.NewValidation("openDingId 不能为空")
+	}
+	// Prefixes are not a resource-type contract for an opaque openDingId.
+	return nil
+}
 
 func compatibilityDingWrite(command, description, intent string, risk shortcut.Risk, destructive bool, flags []shortcut.Flag, params []contract.ParamDecl, example string, execute func(*shortcut.RuntimeContext) error) shortcut.Shortcut {
 	declaration := dingContract(command, description, intent, true, nil, nil, params, example)
@@ -201,5 +212,12 @@ func dingPersonalRemindType(value string) (string, error) {
 }
 
 func init() {
+	RecallPersonal.Constraints = []shortcut.Constraint{{
+		Kind: shortcut.ConstraintCustom, Flags: []string{"id"},
+		Description: "--id 去除空白后不能为空；openDingId 是不透明标识，不按前缀推断资源类型",
+	}}
+	RecallPersonal.Validate = func(rt *shortcut.RuntimeContext) error {
+		return validateDingRecallID(rt.Str("id"))
+	}
 	shortcut.Register(List, ReceiverStatus, SendPersonal, SendByMessage, RecallPersonal)
 }

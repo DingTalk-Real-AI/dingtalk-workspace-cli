@@ -48,7 +48,7 @@ var PendingApprovals = shortcut.Shortcut{
 		"兼容旧的待审批摘要入口；新调用优先使用支持显式时间和页码的 +list-pending。",
 		true,
 		oaCollectionResult("pending", "严格验证的待审批摘要"), nil,
-		[]contract.ParamDecl{{Name: "limit", Property: "limit"}}, "dws oa +pending --limit 10",
+		[]contract.ParamDecl{{Name: "limit"}}, "dws oa +pending --limit 10",
 	),
 	Flags:       []shortcut.Flag{{Name: "limit", Type: shortcut.FlagInt, Desc: "最多列出多少条（可选）"}},
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式 --limit 必须在 1-100"}},
@@ -61,11 +61,17 @@ var PendingApprovals = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		now := time.Now()
-		params := map[string]any{"starTime": float64(now.AddDate(0, 0, -90).UnixMilli()), "endTime": float64(now.UnixMilli())}
+		limit := 20
 		if rt.Changed("limit") {
-			params["pageSize"] = float64(rt.Int("limit"))
+			limit = rt.Int("limit")
 		}
-		return oaFirstPageOnly(rt, "list_pending_approvals", "pending", params)
+		params := map[string]any{
+			"pageNumber":     1,
+			"pageSize":       limit,
+			"createTimeFrom": now.AddDate(0, 0, -90).Format(oaApprovalListDateLayout),
+			"createTimeTo":   now.Format(oaApprovalListDateLayout),
+		}
+		return oaFirstPageOnly(rt, "get_todo_tasks", "pending", params)
 	},
 }
 
@@ -81,7 +87,7 @@ var DoneApprovals = shortcut.Shortcut{
 		"兼容旧的已处理审批摘要入口；需要翻页或搜索时使用 +list-executed。",
 		true,
 		oaCollectionResult("done", "严格验证的已处理审批摘要"), nil,
-		[]contract.ParamDecl{{Name: "limit", Property: "limit"}}, "dws oa +done-approvals --limit 10",
+		[]contract.ParamDecl{{Name: "limit"}}, "dws oa +done-approvals --limit 10",
 	),
 	Flags:       []shortcut.Flag{{Name: "limit", Type: shortcut.FlagInt, Desc: "最多列出多少条（可选）"}},
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式 --limit 必须在 1-100"}},
@@ -97,7 +103,7 @@ var DoneApprovals = shortcut.Shortcut{
 		if rt.Changed("limit") {
 			limit = rt.Int("limit")
 		}
-		return oaFirstPageOnly(rt, "get_done_tasks", "done", map[string]any{"pageNumber": float64(1), "pageSize": float64(limit)})
+		return oaFirstPageOnly(rt, "get_done_tasks", "done", map[string]any{"pageNumber": 1, "pageSize": limit})
 	},
 }
 
@@ -113,7 +119,7 @@ var MyInitiated = shortcut.Shortcut{
 		"需要兼容旧的 initiated 输出字段时使用；一般列表与分页可直接使用 +list-submitted。",
 		true,
 		oaCollectionResult("initiated", "严格验证的已发起审批实例页"), oaPagePagination("page"),
-		[]contract.ParamDecl{{Name: "query", Property: "query"}, {Name: "page", Property: "page"}, {Name: "limit", Property: "limit"}},
+		[]contract.ParamDecl{{Name: "query", Property: "query"}, {Name: "page"}, {Name: "limit"}},
 		"dws oa +my-initiated --page 1 --limit 20", "dws oa +my-initiated --query 报销",
 	),
 	Flags: []shortcut.Flag{
@@ -200,23 +206,26 @@ var Approve = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		keyword := strings.TrimSpace(rt.Str("keyword"))
 		now := time.Now()
-		pending, err := rt.CallMCPData("oa", "list_pending_approvals", map[string]any{
-			"starTime": float64(now.AddDate(0, 0, -90).UnixMilli()), "endTime": float64(now.UnixMilli()), "query": keyword,
+		pending, err := rt.CallMCPData("oa", "get_todo_tasks", map[string]any{
+			"pageNumber": 1, "pageSize": 20,
+			"createTimeFrom": now.AddDate(0, 0, -90).Format(oaApprovalListDateLayout),
+			"createTimeTo":   now.Format(oaApprovalListDateLayout),
+			"query":          keyword,
 		})
 		if err != nil {
 			return err
 		}
-		items, err := oaProjectInstances(pending, "oa/list_pending_approvals", "result.values")
+		items, err := oaProjectInstances(pending, "oa/get_todo_tasks", "result.values")
 		if err != nil {
 			return err
 		}
 		result, _ := pending["result"].(map[string]any)
-		page, err := oaHasMorePage(result, "oa/list_pending_approvals", 1)
+		page, err := oaHasMorePage(result, "oa/get_todo_tasks", 1)
 		if err != nil {
 			return err
 		}
 		if page.HasMore {
-			return oaResponseError("oa/list_pending_approvals", "ambiguous_incomplete_search", "待办搜索仍有后续页，无法证明关键词唯一")
+			return oaResponseError("oa/get_todo_tasks", "ambiguous_incomplete_search", "待办搜索仍有后续页，无法证明关键词唯一")
 		}
 		matches := oaMatchApprovals(items, keyword)
 		if len(matches) != 1 {

@@ -14,9 +14,11 @@ import (
 )
 
 type chatSemanticCatalogFixture struct {
-	Service      string                `json:"service"`
-	Availability shortcut.Availability `json:"default_availability"`
-	Shortcuts    map[string]struct {
+	Service           string                `json:"service"`
+	Availability      shortcut.Availability `json:"default_availability"`
+	FeaturedShortcuts []string              `json:"featured_shortcuts"`
+	AtomicOwners      map[string]string     `json:"atomic_owners"`
+	Shortcuts         map[string]struct {
 		Disposition          shortcut.SemanticDisposition `json:"disposition"`
 		SemanticDelta        string                       `json:"semantic_delta"`
 		Risk                 shortcut.Risk                `json:"risk"`
@@ -26,6 +28,83 @@ type chatSemanticCatalogFixture struct {
 		CompatibilityVisible bool                         `json:"compatibility_visible"`
 		Reviewed             bool                         `json:"reviewed"`
 	} `json:"shortcuts"`
+}
+
+func TestCrossPlatformCoverageChatRoutineRoutesPreferReviewedShortcutOwners(t *testing.T) {
+	raw, err := os.ReadFile("../semantic_catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source chatSemanticCatalogFixture
+	if err := json.Unmarshal(raw, &source); err != nil {
+		t.Fatal(err)
+	}
+
+	skillRaw, err := os.ReadFile("../../../skills/multi/dingtalk-chat/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(skillRaw)
+	start := strings.Index(skill, "## Golden Route")
+	if start < 0 {
+		t.Fatal("chat Skill lacks routine route section")
+	}
+	endOffset := strings.Index(skill[start:], "\n## 关键结果语义")
+	if endOffset < 0 {
+		t.Fatal("chat Skill lacks routine route terminator")
+	}
+	primaryRoutes := skill[start : start+endOffset]
+	codeSpans := strings.Split(primaryRoutes, "`")
+	for atomicPath, owner := range source.AtomicOwners {
+		invocation := "dws " + atomicPath
+		for index := 1; index < len(codeSpans); index += 2 {
+			code := strings.TrimSpace(codeSpans[index])
+			if code == invocation || strings.HasPrefix(code, invocation+" ") {
+				t.Errorf("routine routes use reviewed atomic path %q; use owner dws %s", atomicPath, owner)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatRoutineFamiliesRemainDiscoverable(t *testing.T) {
+	skillRaw, err := os.ReadFile("../../../skills/multi/dingtalk-chat/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skill := string(skillRaw)
+	start := strings.Index(skill, "## Golden Route")
+	if start < 0 {
+		t.Fatal("chat Skill lacks routine route section")
+	}
+	endOffset := strings.Index(skill[start:], "\n## 关键结果语义")
+	if endOffset < 0 {
+		t.Fatal("chat Skill lacks routine route terminator")
+	}
+	primaryRoutes := skill[start : start+endOffset]
+
+	// Keep frequent entry points in the root while handing broad management
+	// families to one precise reference instead of spelling synthetic commands.
+	for _, route := range []string{
+		"dws chat +chat-messages",
+		"dws chat +search-msg",
+		"dws chat message list-all",
+		"dws chat +conversation-list",
+		"dws chat +chat-create",
+		"+messages-recall",
+		"+messages-resource-download",
+	} {
+		if !strings.Contains(primaryRoutes, route) {
+			t.Errorf("frequent route %q is missing from the root route table", route)
+		}
+	}
+	for _, family := range []string{
+		"[group-admin](references/chat/group-admin.md)",
+		"[chat-conversation](references/chat/chat-conversation.md)",
+	} {
+		if !strings.Contains(primaryRoutes, family) {
+			t.Errorf("routine family handoff %q is missing from the root route table", family)
+		}
+	}
 }
 
 func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
@@ -42,6 +121,7 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 	}
 
 	registered := make(map[string]shortcut.Shortcut)
+	helpTierCounts := map[shortcut.HelpTier]int{}
 	for _, item := range shortcut.All() {
 		if item.Service != "chat" {
 			continue
@@ -50,12 +130,26 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 			t.Fatalf("duplicate registered Chat Shortcut %s", item.Command)
 		}
 		registered[item.Command] = item
+		helpTierCounts[item.HelpTier]++
 	}
-	if got, want := len(registered), 100; got != want {
+	if got, want := len(registered), 105; got != want {
 		t.Fatalf("registered Chat Shortcuts = %d, want %d", got, want)
 	}
-	if got, want := len(source.Shortcuts), 100; got != want {
+	if got, want := len(source.Shortcuts), 105; got != want {
 		t.Fatalf("reviewed Chat Shortcut records = %d, want %d", got, want)
+	}
+	if got, want := len(source.FeaturedShortcuts), 27; got != want {
+		t.Fatalf("reviewed Chat featured Shortcuts = %d, want %d", got, want)
+	}
+	for tier, want := range map[shortcut.HelpTier]int{
+		shortcut.HelpTierFeatured:      27,
+		shortcut.HelpTierCatalog:       70,
+		shortcut.HelpTierCompatibility: 6,
+		shortcut.HelpTierUnavailable:   2,
+	} {
+		if got := helpTierCounts[tier]; got != want {
+			t.Errorf("Chat help tier %q = %d, want %d", tier, got, want)
+		}
 	}
 
 	var missing, stale []string
@@ -104,11 +198,22 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 		if got := shortcut.InPublicCatalog("chat", command); got != record.Public {
 			t.Errorf("%s: InPublicCatalog = %v, want %v", command, got, record.Public)
 		}
-		if record.Public != !item.Hidden {
-			t.Errorf("%s: delivered public = %v, catalog public = %v", command, !item.Hidden, record.Public)
+		if record.Public != shortcut.InPublicCatalog("chat", command) {
+			t.Errorf("%s: delivered public catalog membership differs from record", command)
 		}
-		if reviewedAvailability == shortcut.AvailabilityAvailable && (!record.Public || item.Hidden) {
-			t.Errorf("%s: available reviewed Chat Shortcut must be public", command)
+		if record.CompatibilityVisible {
+			if item.Hidden || !item.CompatibilityVisible || record.Public || reviewedAvailability != shortcut.AvailabilityAvailable {
+				t.Errorf("%s: compatibility-visible delivery = hidden:%v compatibility:%v public:%v availability:%s",
+					command, item.Hidden, item.CompatibilityVisible, record.Public, reviewedAvailability)
+			}
+		} else if command == "+active-conversations" {
+			// Approved command_move: a hidden executable compatibility entry,
+			// not a second public tool or an unavailable command.
+			if record.Public || !item.Hidden || item.Disposition != shortcut.DispositionAliasInternal || item.PrimaryCommand != "+recent-conversations" || reviewedAvailability != shortcut.AvailabilityAvailable {
+				t.Errorf("%s: invalid hidden compatibility entry: %#v", command, item)
+			}
+		} else if reviewedAvailability == shortcut.AvailabilityAvailable && (!record.Public || item.Hidden) {
+			t.Errorf("%s: available reviewed Chat Shortcut must be public or compatibility-visible", command)
 		}
 		if reviewedAvailability != shortcut.AvailabilityAvailable && (record.Public || !item.Hidden) {
 			t.Errorf("%s: %s reviewed Chat Shortcut must be hidden", command, reviewedAvailability)

@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 )
 
 // ─── endpoints.go ──────────────────────────────────────────────────────
@@ -429,6 +432,41 @@ func TestCrossPlatformCoverageBuildAuthURLForInternationalRegion(t *testing.T) {
 	if !strings.HasPrefix(authURL, InternationalAuthorizeURL+"?") {
 		t.Fatalf("auth URL = %s, want international authorize host", authURL)
 	}
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	if got := parsed.Query().Get("lang"); got != oauthLoginLanguage() {
+		t.Fatalf("auth URL lang = %q, want %q", got, oauthLoginLanguage())
+	}
+}
+
+func TestCrossPlatformCoverageOAuthLoginLanguageUsesChineseLocale(t *testing.T) {
+	previous := i18n.Lang()
+	i18n.SetLang("zh")
+	t.Cleanup(func() { i18n.SetLang(previous) })
+
+	if got := oauthLoginLanguage(); got != "zh-CN" {
+		t.Fatalf("OAuth login language = %q, want zh-CN", got)
+	}
+}
+
+func TestCrossPlatformCoverageRenderSuccessHTMLUsesActiveLanguage(t *testing.T) {
+	page := renderSuccessHTML()
+	wants := []string{
+		`<html lang="` + i18n.Lang() + `">`,
+		"<title>" + i18n.T("钉钉 CLI") + "</title>",
+		"<h1>" + i18n.T("授权成功") + "</h1>",
+		"<p>" + i18n.T("请返回终端继续操作。此页面可以关闭。") + "</p>",
+	}
+	for _, want := range wants {
+		if !strings.Contains(page, want) {
+			t.Errorf("success page missing %q", want)
+		}
+	}
+	if strings.Contains(page, "__") {
+		t.Fatalf("success page contains an unresolved template marker: %q", page)
+	}
 }
 
 func TestCrossPlatformCoverageNotEnabledHTMLUsesRegionAwareAuthorizeURL(t *testing.T) {
@@ -437,6 +475,57 @@ func TestCrossPlatformCoverageNotEnabledHTMLUsesRegionAwareAuthorizeURL(t *testi
 	}
 	if strings.Contains(notEnabledHTML, `"https://login.dingtalk.com/oauth2/auth?client_id="`) {
 		t.Fatal("not-enabled page must not hard-code the domestic authorize URL")
+	}
+}
+
+func TestCrossPlatformCoverageCLIAuthDisabledCopy(t *testing.T) {
+	if !strings.Contains(notEnabledHTML, "您暂无 CLI 数据访问权限") {
+		t.Fatal("not-enabled page missing the new title copy")
+	}
+	if !strings.Contains(notEnabledHTML, "当前组织未授权您通过 CLI 访问个人数据。") {
+		t.Fatal("not-enabled page missing the new body copy")
+	}
+	if !strings.Contains(notEnabledHTML, "status.hasDwsApply") {
+		t.Fatal("not-enabled page must read the server-side hasDwsApply from the status API")
+	}
+	if !strings.Contains(notEnabledHTML, `location.href = "/applyPending"`) {
+		t.Fatal("not-enabled page must navigate to the dedicated apply-pending page")
+	}
+	if !strings.Contains(notEnabledHTML, "let applying = false;") {
+		t.Fatal("not-enabled page missing the duplicate-submit guard")
+	}
+	if !strings.Contains(notEnabledHTML, `"DWS_USE_APPLY_DUPLICATE"`) {
+		t.Fatal("not-enabled page must land on the pending page when the server reports an existing application")
+	}
+	if !strings.Contains(applyPendingHTML, "访问权限申请中") {
+		t.Fatal("apply-pending page missing the pending title copy")
+	}
+	if !strings.Contains(applyPendingHTML, "已向管理员发送权限申请，正在等待审核") {
+		t.Fatal("apply-pending page missing the awaiting review copy")
+	}
+	if !strings.Contains(applyPendingHTML, "审核通过后，将在工作通知中提示") {
+		t.Fatal("apply-pending page missing the notification copy")
+	}
+	if !strings.Contains(applyPendingHTML, `fetch("/api/cliAuthEnabled")`) {
+		t.Fatal("apply-pending page must poll the CLI auth status")
+	}
+	if !strings.Contains(accessDeniedHTML, "该组织尚未开启CLI数据访问权限") {
+		t.Fatal("user-denied page missing the new title copy")
+	}
+	if !strings.Contains(accessDeniedHTML, "你所在组织的管理员尚未开启") {
+		t.Fatal("user-denied page missing the new body copy")
+	}
+}
+
+func TestCrossPlatformCoverageIsAlreadyAppliedErrorGuard(t *testing.T) {
+	if isAlreadyAppliedError(nil) {
+		t.Fatal("nil send-apply response must not be treated as already applied")
+	}
+	if isAlreadyAppliedError(&SendApplyResponse{Success: true}) {
+		t.Fatal("successful send-apply response must not be treated as already applied")
+	}
+	if !isAlreadyAppliedError(&SendApplyResponse{Success: false, ErrorCode: "dws_use_apply_duplicate"}) {
+		t.Fatal("case-insensitive duplicate error code must match")
 	}
 }
 

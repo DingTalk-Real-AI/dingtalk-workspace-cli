@@ -99,10 +99,12 @@ func runWikiCoverageCLI(t *testing.T, caller *wikiCoverageCaller, args ...string
 func TestCrossPlatformCoverageWikiSpaceWorkflows(t *testing.T) {
 	t.Run("list default string limit", func(t *testing.T) {
 		caller := &wikiCoverageCaller{responses: map[string][]string{
-			"wiki/list_wikiSpaces": {`{"success":true,"result":{"wikiSpaces":[{"workspaceId":"w1","name":"Docs"}],"hasMore":false}}`},
+			"wiki/list_wikiSpaces": {`{"success":true,"result":{"wikiSpaces":[{"workspaceId":"w1","name":"Docs","wikiSpaceType":"orgWikiSpace"}],"hasMore":false}}`},
 		}}
 		out, err := runWikiCoverageCLI(t, caller, "+space-list")
-		if err != nil || out["count"] != float64(1) || caller.calls[0].args["pageSize"] != 20 {
+		spaces, _ := out["spaces"].([]any)
+		space, _ := spaces[0].(map[string]any)
+		if err != nil || out["count"] != float64(1) || out["requestedType"] != "orgWikiSpace" || space["spaceType"] != "orgWikiSpace" || caller.calls[0].args["pageSize"] != 20 {
 			t.Fatalf("list output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
 	})
@@ -112,7 +114,7 @@ func TestCrossPlatformCoverageWikiSpaceWorkflows(t *testing.T) {
 			"wiki/list_wikiSpaces": {`{"wikiSpaces":[],"hasMore":false}`},
 		}}
 		out, err := runWikiCoverageCLI(t, caller, "+space-list", "--type", "myWikiSpace", "--limit", "7", "--page-token", "next")
-		if err != nil || out["count"] != float64(0) || caller.calls[0].args["pageSize"] != 7 || caller.calls[0].args["pageToken"] != "next" {
+		if err != nil || out["count"] != float64(0) || out["requestedType"] != "myWikiSpace" || caller.calls[0].args["pageSize"] != 7 || caller.calls[0].args["pageToken"] != "next" {
 			t.Fatalf("list output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
 	})
@@ -163,11 +165,62 @@ func TestCrossPlatformCoverageWikiSpaceWorkflows(t *testing.T) {
 	t.Run("create and exact readback", func(t *testing.T) {
 		caller := &wikiCoverageCaller{responses: map[string][]string{
 			"wiki/create_wikiSpace": {`{"success":true,"result":{"workspaceId":"w3"}}`},
-			"wiki/get_wikiSpace":    {`{"success":true,"data":{"workspaceId":"w3","name":"Docs"}}`},
+			"wiki/get_wikiSpace":    {`{"success":true,"data":{"workspaceId":"w3","name":"Docs","wikiSpaceType":"orgWikiSpace"}}`},
 		}}
 		out, err := runWikiCoverageCLI(t, caller, "+space-create", "--name", "Docs")
-		if err != nil || out["workspaceId"] != "w3" || len(caller.calls) != 2 {
+		if err != nil || out["workspaceId"] != "w3" || out["spaceType"] != "orgWikiSpace" || out["spaceTypeVerified"] != true || out["spaceTypeEvidence"] != "get_wikiSpace.wikiSpaceType" || len(caller.calls) != 2 {
 			t.Fatalf("create output=%#v err=%v calls=%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("create verifies type through scoped paginated lists", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"wiki/create_wikiSpace": {`{"success":true,"result":{"workspaceId":"w3"}}`},
+			"wiki/get_wikiSpace":    {`{"success":true,"data":{"workspaceId":"w3","name":"Docs"}}`},
+			"wiki/list_wikiSpaces": {
+				`{"wikiSpaces":[],"hasMore":true,"nextCursor":"org-2"}`,
+				`{"wikiSpaces":[],"hasMore":false}`,
+				`{"wikiSpaces":[{"workspaceId":"w3","name":"Docs"}],"hasMore":false}`,
+			},
+		}}
+		out, err := runWikiCoverageCLI(t, caller, "+space-create", "--name", "Docs")
+		if err != nil || out["spaceType"] != "myWikiSpace" || out["spaceTypeVerified"] != true || out["spaceTypeEvidence"] != "list_wikiSpaces.myWikiSpace.workspaceId_match" {
+			t.Fatalf("create scoped type output=%#v err=%v calls=%#v", out, err, caller.calls)
+		}
+		if len(caller.calls) != 5 || caller.calls[2].args["wikiSpaceType"] != "orgWikiSpace" || caller.calls[3].args["pageToken"] != "org-2" || caller.calls[4].args["wikiSpaceType"] != "myWikiSpace" {
+			t.Fatalf("create scoped type calls=%#v", caller.calls)
+		}
+	})
+
+	t.Run("create preserves id when type cannot be verified", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"wiki/create_wikiSpace": {`{"success":true,"result":{"workspaceId":"w3"}}`},
+			"wiki/get_wikiSpace":    {`{"success":true,"data":{"workspaceId":"w3","name":"Docs"}}`},
+			"wiki/list_wikiSpaces": {
+				`{"wikiSpaces":[],"hasMore":false}`,
+				`{"wikiSpaces":[],"hasMore":false}`,
+			},
+		}}
+		_, err := runWikiCoverageCLI(t, caller, "+space-create", "--name", "Docs")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "space_type_unverified" || typed.Details["workspaceId"] != "w3" || typed.Details["spaceTypeVerified"] != false || typed.Details["status"] != "partial_success" {
+			t.Fatalf("unverified type err=%#v calls=%#v", err, caller.calls)
+		}
+	})
+
+	t.Run("create rejects conflicting scoped type evidence", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"wiki/create_wikiSpace": {`{"success":true,"result":{"workspaceId":"w3"}}`},
+			"wiki/get_wikiSpace":    {`{"success":true,"data":{"workspaceId":"w3","name":"Docs"}}`},
+			"wiki/list_wikiSpaces": {
+				`{"wikiSpaces":[{"workspaceId":"w3"}],"hasMore":false}`,
+				`{"wikiSpaces":[{"workspaceId":"w3"}],"hasMore":false}`,
+			},
+		}}
+		_, err := runWikiCoverageCLI(t, caller, "+space-create", "--name", "Docs")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "space_type_unverified" || typed.Details["workspaceId"] != "w3" || !strings.Contains(fmt.Sprint(typed.Details["verificationFailure"]), "同时出现在") {
+			t.Fatalf("conflicting type err=%#v calls=%#v", err, caller.calls)
 		}
 	})
 
@@ -192,6 +245,119 @@ func TestCrossPlatformCoverageWikiSpaceWorkflows(t *testing.T) {
 		if _, err := runWikiCoverageCLI(t, caller, append([]string{"+space-create"}, args...)...); err == nil || len(caller.calls) != 0 {
 			t.Fatalf("invalid create args succeeded: %v", args)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiSpaceTypeVerificationFailureModes(t *testing.T) {
+	runCreate := func(t *testing.T, caller *wikiCoverageCaller, want string) {
+		t.Helper()
+		_, err := runWikiCoverageCLI(t, caller, "+space-create", "--name", "Docs")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "space_type_unverified" || !strings.Contains(fmt.Sprint(typed.Details["verificationFailure"]), want) {
+			t.Fatalf("verification error=%#v details=%#v, want %q", err, typed, want)
+		}
+	}
+
+	t.Run("conflicting direct type fields", func(t *testing.T) {
+		runCreate(t, &wikiCoverageCaller{responses: map[string][]string{
+			"wiki/create_wikiSpace": {`{"success":true,"workspaceId":"w"}`},
+			"wiki/get_wikiSpace":    {`{"workspaceId":"w","spaceType":"orgWikiSpace","wikiSpaceType":"myWikiSpace"}`},
+		}}, "互相冲突")
+	})
+	t.Run("scoped list transport error", func(t *testing.T) {
+		runCreate(t, &wikiCoverageCaller{
+			responses: map[string][]string{
+				"wiki/create_wikiSpace": {`{"success":true,"workspaceId":"w"}`},
+				"wiki/get_wikiSpace":    {`{"workspaceId":"w","name":"Docs"}`},
+			},
+			errors: map[string][]error{"wiki/list_wikiSpaces": {errors.New("scoped list failed")}},
+		}, "scoped list failed")
+	})
+
+	for _, tc := range []struct {
+		name      string
+		responses []string
+		want      string
+	}{
+		{name: "malformed scoped collection", responses: []string{`{"success":true}`}, want: "缺少声明的业务数组"},
+		{name: "missing has more", responses: []string{`{"wikiSpaces":[]}`}, want: "提供 hasMore"},
+		{name: "malformed has more", responses: []string{`{"wikiSpaces":[],"hasMore":"yes"}`}, want: "不是布尔值"},
+		{name: "missing next cursor", responses: []string{`{"wikiSpaces":[],"hasMore":true}`}, want: "缺少游标"},
+		{name: "stalled cursor", responses: []string{
+			`{"wikiSpaces":[],"hasMore":true,"nextCursor":"same"}`,
+			`{"wikiSpaces":[],"hasMore":true,"nextCursor":"same"}`,
+		}, want: "未变化"},
+		{name: "cyclic cursor", responses: []string{
+			`{"wikiSpaces":[],"hasMore":true,"nextCursor":"first"}`,
+			`{"wikiSpaces":[],"hasMore":true,"nextCursor":"second"}`,
+			`{"wikiSpaces":[],"hasMore":true,"nextCursor":"first"}`,
+		}, want: "形成循环"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runCreate(t, &wikiCoverageCaller{responses: map[string][]string{
+				"wiki/create_wikiSpace": {`{"success":true,"workspaceId":"w"}`},
+				"wiki/get_wikiSpace":    {`{"workspaceId":"w","name":"Docs"}`},
+				"wiki/list_wikiSpaces":  tc.responses,
+			}}, tc.want)
+		})
+	}
+
+	t.Run("scoped list page limit", func(t *testing.T) {
+		pages := make([]string, 20)
+		for index := range pages {
+			pages[index] = fmt.Sprintf(`{"wikiSpaces":[],"hasMore":true,"nextCursor":"page-%02d"}`, index+1)
+		}
+		runCreate(t, &wikiCoverageCaller{responses: map[string][]string{
+			"wiki/create_wikiSpace": {`{"success":true,"workspaceId":"w"}`},
+			"wiki/get_wikiSpace":    {`{"workspaceId":"w","name":"Docs"}`},
+			"wiki/list_wikiSpaces":  pages,
+		}}, "超过 20 页")
+	})
+}
+
+func TestCrossPlatformCoverageWikiNodeSearchAutoPagination(t *testing.T) {
+	caller := &wikiCoverageCaller{responses: map[string][]string{
+		"doc/search_documents": {
+			`{"documents":[{"nodeId":"n1","name":"Plan A"}],"hasMore":true,"nextCursor":"cursor-2"}`,
+			`{"documents":[{"nodeId":"n2","name":"Plan B"}],"hasMore":false}`,
+		},
+	}}
+	out, err := runWikiCoverageCLI(t, caller, "+node-search", "--workspace", "w1", "--query", "Plan", "--extensions", "adoc,txt", "--limit", "1", "--page-all", "--page-limit", "2")
+	if err != nil || out["count"] != float64(2) || out["autoPageComplete"] != true {
+		t.Fatalf("node-search output=%#v err=%v calls=%#v", out, err, caller.calls)
+	}
+	if len(caller.calls) != 2 || caller.calls[1].args["pageToken"] != "cursor-2" {
+		t.Fatalf("node-search pagination calls=%#v", caller.calls)
+	}
+	for index, call := range caller.calls {
+		if call.product != "doc" || call.tool != "search_documents" || call.args["pageSize"] != 1 {
+			t.Fatalf("node-search call[%d]=%#v", index, call)
+		}
+		extensions, ok := call.args["extensions"].([]string)
+		if !ok || len(extensions) != 2 || extensions[0] != "adoc" || extensions[1] != "txt" {
+			t.Fatalf("node-search extensions[%d]=%#v", index, call.args["extensions"])
+		}
+	}
+
+	for _, value := range []string{"0", "31"} {
+		caller := &wikiCoverageCaller{}
+		if _, err := runWikiCoverageCLI(t, caller, "+node-search", "--workspace", "w1", "--query", "Plan", "--limit", value); err == nil || len(caller.calls) != 0 {
+			t.Fatalf("node-search limit %s accepted: err=%v calls=%#v", value, err, caller.calls)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiAutoPaginationRejectsCursorCycles(t *testing.T) {
+	caller := &wikiCoverageCaller{responses: map[string][]string{
+		"doc/search_documents": {
+			`{"documents":[],"hasMore":true,"nextCursor":"cursor-a"}`,
+			`{"documents":[],"hasMore":true,"nextCursor":"cursor-b"}`,
+			`{"documents":[],"hasMore":true,"nextCursor":"cursor-a"}`,
+		},
+	}}
+	_, err := runWikiCoverageCLI(t, caller, "+node-search", "--workspace", "w1", "--query", "Plan", "--page-all", "--page-limit", "4")
+	if err == nil || !strings.Contains(err.Error(), "游标形成循环") || len(caller.calls) != 3 {
+		t.Fatalf("cursor cycle err=%v calls=%#v", err, caller.calls)
 	}
 }
 
@@ -286,10 +452,26 @@ func TestCrossPlatformCoverageWikiReadWorkflows(t *testing.T) {
 	}
 
 	t.Run("node get", func(t *testing.T) {
-		caller := &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"success":true,"result":{"nodeId":"n","title":"Doc"}}`}}}
+		caller := &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"success":true,"result":{"nodeId":"n","title":"Doc","nodeType":"file","extension":"adoc","parentId":"f","hasChildren":false,"futureField":"keep"}}`}}}
 		out, err := runWikiCoverageCLI(t, caller, "+node-get", "--node", "n")
-		if err != nil || out["nodeId"] != "n" {
+		if err != nil || out["nodeId"] != "n" || out["name"] != "Doc" || out["type"] != "file" || out["extension"] != "adoc" || out["parentFolderId"] != "f" || out["hasChildren"] != false || out["futureField"] != "keep" {
 			t.Fatalf("node get output=%#v err=%v", out, err)
+		}
+	})
+
+	t.Run("node list preserves type and hierarchy evidence", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"doc/list_nodes": {`{"nodes":[{"nodeId":"folder","name":"资料区","nodeType":"folder","hasChildren":true,"workspaceId":"w"},{"nodeId":"doc","name":"方案","nodeType":"file","extension":"adoc","parentId":"folder","hasChildren":false,"workspaceId":"w"}],"hasMore":false}`},
+		}}
+		out, err := runWikiCoverageCLI(t, caller, "+node-list", "--workspace", "w")
+		if err != nil || out["count"] != float64(2) {
+			t.Fatalf("node list output=%#v err=%v", out, err)
+		}
+		nodes := out["nodes"].([]any)
+		folder := nodes[0].(map[string]any)
+		doc := nodes[1].(map[string]any)
+		if folder["type"] != "folder" || folder["hasChildren"] != true || doc["extension"] != "adoc" || doc["parentFolderId"] != "folder" || doc["hasChildren"] != false {
+			t.Fatalf("node hierarchy evidence folder=%#v doc=%#v", folder, doc)
 		}
 	})
 }
@@ -351,10 +533,10 @@ func TestCrossPlatformCoverageWikiWriteWorkflows(t *testing.T) {
 		}
 		caller := &wikiCoverageCaller{responses: map[string][]string{
 			"doc/create_file":       {`{"success":true,"data":{"fileId":"n"}}`},
-			"doc/get_document_info": {`{"success":true,"nodeId":"n","workspaceId":"w","folderId":"f"}`},
+			"doc/get_document_info": {`{"success":true,"nodeId":"n","workspaceId":"w","folderId":"f","name":"Doc","nodeType":"file","extension":"adoc"}`},
 		}}
 		out, err = runWikiCoverageCLI(t, caller, "+node-create", "--workspace", "w", "--folder", "f", "--name", "Doc")
-		if err != nil || out["nodeId"] != "n" || len(caller.calls) != 2 {
+		if err != nil || out["nodeId"] != "n" || out["workspaceId"] != "w" || out["requestedType"] != "adoc" || len(caller.calls) != 2 {
 			t.Fatalf("create output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
 	})
@@ -366,31 +548,50 @@ func TestCrossPlatformCoverageWikiWriteWorkflows(t *testing.T) {
 			t.Fatalf("copy dry output=%#v err=%v calls=%#v", out, err, dry.calls)
 		}
 		caller := &wikiCoverageCaller{responses: map[string][]string{
-			"doc/copy_document":     {`{"success":true,"nodeId":"copy"}`},
-			"doc/get_document_info": {`{"success":true,"nodeId":"copy","workspaceId":"w"}`},
+			"doc/copy_document": {`{"success":true,"nodeId":"copy"}`},
+			"doc/get_document_info": {
+				`{"success":true,"nodeId":"source","workspaceId":"source-w","name":"Doc","extension":"adoc"}`,
+				`{"success":true,"nodeId":"copy","workspaceId":"w","name":"Doc 副本","extension":"adoc"}`,
+			},
 		}}
 		out, err = runWikiCoverageCLI(t, caller, "+node-copy", "--workspace", "w", "--node", "source", "--yes")
-		if err != nil || out["nodeId"] != "copy" || len(caller.calls) != 2 {
+		if err != nil || out["nodeId"] != "copy" || out["sourceNodeId"] != "source" || out["targetWorkspaceId"] != "w" || len(caller.calls) != 3 {
 			t.Fatalf("copy output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
 	})
 
 	t.Run("move within wiki and to drive", func(t *testing.T) {
 		caller := &wikiCoverageCaller{responses: map[string][]string{
-			"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old","folderId":"old-f"}`, `{"nodeId":"n","workspaceId":"target","folderId":"f"}`},
+			"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old","folderId":"old-f"}`, `{"nodeId":"n","workspaceId":"target","parentFolderId":"f"}`},
 			"doc/move_document":     {`{"success":true}`},
 		}}
 		out, err := runWikiCoverageCLI(t, caller, "+move", "--workspace", "target", "--folder", "f", "--node", "n", "--yes")
-		if err != nil || out["nodeId"] != "n" || len(caller.calls) != 3 {
+		if err != nil || out["nodeId"] != "n" || out["targetFolderId"] != "f" || len(caller.calls) != 3 {
 			t.Fatalf("move output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
 		caller = &wikiCoverageCaller{responses: map[string][]string{
 			"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`, `{"nodeId":"n","workspaceId":"drive"}`},
 			"doc/move_document":     {`{"success":true}`},
+			"wiki/list_wikiSpaces":  {`{"wikiSpaces":[{"workspaceId":"drive","name":"我的文档"}],"hasMore":false}`},
 		}}
-		out, err = runWikiCoverageCLI(t, caller, "+move-to-drive", "--node", "n", "--yes")
-		if err != nil || out["nodeId"] != "n" {
+		out, err = runWikiCoverageCLI(t, caller, "+move-to-drive", "--workspace", "old", "--node", "n", "--yes")
+		if err != nil || out["nodeId"] != "n" || out["targetDomain"] != "my_documents" || out["sourceWorkspaceId"] != "old" || out["targetWorkspaceId"] != "drive" || len(caller.calls) != 4 {
 			t.Fatalf("move-to-drive output=%#v err=%v calls=%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("move to drive follows my documents space pagination", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`, `{"nodeId":"n","workspaceId":"drive","folderId":"root"}`},
+			"doc/move_document":     {`{"success":true}`},
+			"wiki/list_wikiSpaces": {
+				`{"wikiSpaces":[{"workspaceId":"other"}],"hasMore":true,"nextCursor":"next"}`,
+				`{"wikiSpaces":[{"workspaceId":"drive","name":"我的文档"}],"hasMore":false}`,
+			},
+		}}
+		out, err := runWikiCoverageCLI(t, caller, "+move-to-drive", "--node", "n", "--yes")
+		if err != nil || out["targetWorkspaceId"] != "drive" || out["targetFolderId"] != "root" || len(caller.calls) != 5 || caller.calls[4].args["pageToken"] != "next" {
+			t.Fatalf("paginated move-to-drive output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
 	})
 
@@ -416,6 +617,81 @@ func TestCrossPlatformCoverageWikiWriteWorkflows(t *testing.T) {
 		if err != nil || out["deleted"] != true || len(caller.calls) != 2 {
 			t.Fatalf("delete output=%#v err=%v calls=%#v", out, err, caller.calls)
 		}
+	})
+}
+
+func TestCrossPlatformCoverageWikiNodeVerificationEdges(t *testing.T) {
+	if got := wikiNodeType(map[string]any{"type": "FOLDER"}); got != "folder" {
+		t.Fatalf("fallback node type = %q", got)
+	}
+	if err := requireWikiNodeIdentity(map[string]any{"name": "Doc"}, "doc/get_document_info", "n"); err == nil || !strings.Contains(err.Error(), "缺少 nodeId") {
+		t.Fatalf("missing node identity error = %v", err)
+	}
+
+	assertErr := func(name string, caller *wikiCoverageCaller, args ...string) {
+		t.Helper()
+		t.Run(name, func(t *testing.T) {
+			if _, err := runWikiCoverageCLI(t, caller, args...); err == nil {
+				t.Fatalf("%s unexpectedly succeeded; calls=%#v", name, caller.calls)
+			}
+		})
+	}
+
+	copyArgs := []string{"+node-copy", "--workspace", "w", "--node", "source", "--yes"}
+	assertErr("copy source identity mismatch", &wikiCoverageCaller{responses: map[string][]string{
+		"doc/get_document_info": {`{"nodeId":"other","name":"Doc"}`},
+	}}, copyArgs...)
+	assertErr("copy source workspace missing", &wikiCoverageCaller{responses: map[string][]string{
+		"doc/get_document_info": {`{"nodeId":"source","name":"Doc"}`},
+	}}, copyArgs...)
+
+	t.Run("copy reports verified target folder", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"doc/get_document_info": {
+				`{"nodeId":"source","workspaceId":"source-w","name":"Doc","extension":"adoc"}`,
+				`{"nodeId":"copy","workspaceId":"w","folderId":"f","name":"Doc copy","extension":"adoc"}`,
+			},
+			"doc/copy_document": {`{"success":true,"nodeId":"copy"}`},
+		}}
+		out, err := runWikiCoverageCLI(t, caller, "+node-copy", "--workspace", "w", "--folder", "f", "--node", "source", "--yes")
+		if err != nil || out["targetFolderId"] != "f" {
+			t.Fatalf("copy output=%#v err=%v", out, err)
+		}
+	})
+
+	assertErr("move source workspace missing", &wikiCoverageCaller{responses: map[string][]string{
+		"doc/get_document_info": {`{"nodeId":"n","name":"Doc"}`},
+	}}, "+move", "--workspace", "target", "--node", "n", "--yes")
+
+	t.Run("move to drive dry run records domain and folder", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"doc/get_document_info": {`{"nodeId":"n","workspaceId":"source","name":"Doc"}`},
+		}}
+		out, err := runWikiCoverageCLI(t, caller, "+move-to-drive", "--node", "n", "--folder", "f", "--dry-run", "--yes")
+		if err != nil || out["executed"] != false {
+			t.Fatalf("move-to-drive dry output=%#v err=%v", out, err)
+		}
+	})
+
+	moveCaller := func(spaces []string, listErrors []error) *wikiCoverageCaller {
+		return &wikiCoverageCaller{
+			responses: map[string][]string{
+				"doc/get_document_info": {`{"nodeId":"n","workspaceId":"source"}`, `{"nodeId":"n","workspaceId":"target"}`},
+				"doc/move_document":     {`{"success":true}`},
+				"wiki/list_wikiSpaces":  spaces,
+			},
+			errors: map[string][]error{"wiki/list_wikiSpaces": listErrors},
+		}
+	}
+	assertErr("my documents list transport", moveCaller(nil, []error{errors.New("my documents list failed")}), "+move-to-drive", "--node", "n", "--yes")
+	assertErr("my documents malformed collection", moveCaller([]string{`{"success":true}`}, nil), "+move-to-drive", "--node", "n", "--yes")
+	assertErr("my documents missing cursor", moveCaller([]string{`{"wikiSpaces":[],"hasMore":true}`}, nil), "+move-to-drive", "--node", "n", "--yes")
+	t.Run("my documents list page limit", func(t *testing.T) {
+		pages := make([]string, 20)
+		for index := range pages {
+			pages[index] = fmt.Sprintf(`{"wikiSpaces":[],"hasMore":true,"nextCursor":"page-%02d"}`, index+1)
+		}
+		assertErr("limit", moveCaller(pages, nil), "+move-to-drive", "--node", "n", "--yes")
 	})
 }
 
@@ -564,7 +840,6 @@ func TestCrossPlatformCoverageWikiPaginationFailureModes(t *testing.T) {
 		{name: "malformed has more", response: `{"wikiSpaces":[],"hasMore":"yes"}`, args: []string{"--page-all"}},
 		{name: "missing cursor", response: `{"wikiSpaces":[],"hasMore":true}`, args: []string{"--page-all"}},
 		{name: "stalled cursor", response: `{"wikiSpaces":[],"hasMore":true,"nextCursor":"same"}`, args: []string{"--cursor", "same", "--page-all"}},
-		{name: "page limit", response: `{"wikiSpaces":[],"hasMore":true,"nextCursor":"next"}`, args: []string{"--page-all", "--page-limit", "1"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -574,6 +849,21 @@ func TestCrossPlatformCoverageWikiPaginationFailureModes(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("page limit preserves cursor and accumulated items", func(t *testing.T) {
+		caller := &wikiCoverageCaller{responses: map[string][]string{
+			"wiki/list_wikiSpaces": {`{"wikiSpaces":[{"workspaceId":"w1"}],"hasMore":true,"nextCursor":"next"}`},
+		}}
+		_, err := runWikiCoverageCLI(t, caller, "+space-list", "--limit", "1", "--page-all", "--page-limit", "1")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "page_limit_reached" || typed.Details["nextCursor"] != "next" || typed.Details["pagesFetched"] != 1 || typed.Details["itemsFetched"] != 1 || typed.Details["status"] != "partial_success" {
+			t.Fatalf("page-limit error=%#v details=%#v", err, typed)
+		}
+		items, ok := typed.Details["items"].([]any)
+		if !ok || len(items) != 1 {
+			t.Fatalf("page-limit items=%#v", typed.Details["items"])
+		}
+	})
 
 	for _, args := range [][]string{{"--page-limit", "0", "--page-all"}, {"--max-items", "1"}, {"--page-delay", "1"}} {
 		caller := &wikiCoverageCaller{}
@@ -675,21 +965,39 @@ func TestCrossPlatformCoverageWikiNodeFailureBranches(t *testing.T) {
 	if _, err := runWikiCoverageCLI(t, createMismatch, createArgs...); err == nil || !strings.Contains(err.Error(), "不一致") {
 		t.Fatalf("create mismatch error=%v calls=%#v", err, createMismatch.calls)
 	}
+	validCreated := func(overrides string) string {
+		return `{"nodeId":"n","workspaceId":"w","name":"Doc","extension":"adoc"` + overrides + `}`
+	}
+	assertErr("create missing workspace", &wikiCoverageCaller{responses: map[string][]string{"doc/create_file": {`{"success":true,"fileId":"n"}`}, "doc/get_document_info": {`{"nodeId":"n","name":"Doc","extension":"adoc"}`}}}, createArgs...)
+	assertErr("create name mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/create_file": {`{"success":true,"fileId":"n"}`}, "doc/get_document_info": {validCreated(`,"name":"Other"`)}}}, createArgs...)
+	assertErr("create type mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/create_file": {`{"success":true,"fileId":"n"}`}, "doc/get_document_info": {validCreated(`,"extension":"axls"`)}}}, createArgs...)
+	assertErr("create folder mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/create_file": {`{"success":true,"fileId":"n"}`}, "doc/get_document_info": {validCreated(`,"folderId":"other"`)}}}, append(createArgs, "--folder", "f")...)
 
 	copyArgs := []string{"+node-copy", "--workspace", "w", "--node", "source", "--yes"}
-	assertErr("copy write", &wikiCoverageCaller{errors: map[string][]error{"doc/copy_document": {backend}}}, copyArgs...)
-	assertErr("copy terminal", &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"result":{"fileId":"n"}}`}}}, copyArgs...)
-	assertErr("copy id", &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"success":true}`}}}, copyArgs...)
-	assertErr("copy readback call", &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"success":true,"fileId":"n"}`}}, errors: map[string][]error{"doc/get_document_info": {backend}}}, copyArgs...)
-	assertErr("copy readback object", &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"success":true,"fileId":"n"}`}, "doc/get_document_info": {`{"success":true}`}}}, copyArgs...)
-	copyMismatch := &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"success":true,"result":{"fileId":"n"}}`}, "doc/get_document_info": {`{"success":true,"result":{"nodeId":"other"}}`}}}
+	source := `{"nodeId":"source","workspaceId":"source-w","name":"Doc","extension":"adoc"}`
+	assertErr("copy source preflight call", &wikiCoverageCaller{errors: map[string][]error{"doc/get_document_info": {backend}}}, copyArgs...)
+	assertErr("copy source preflight object", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"success":true}`}}}, copyArgs...)
+	assertErr("copy source id", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"other"}`}}}, copyArgs...)
+	assertErr("copy source workspace", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"source"}`}}}, copyArgs...)
+	assertErr("copy write", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source}}, errors: map[string][]error{"doc/copy_document": {backend}}}, copyArgs...)
+	assertErr("copy terminal", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source}, "doc/copy_document": {`{"result":{"fileId":"n"}}`}}}, copyArgs...)
+	assertErr("copy id", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source}, "doc/copy_document": {`{"success":true}`}}}, copyArgs...)
+	assertErr("copy reused source id", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source}, "doc/copy_document": {`{"success":true,"fileId":"source"}`}}}, copyArgs...)
+	assertErr("copy readback call", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source}, "doc/copy_document": {`{"success":true,"fileId":"n"}`}}, errors: map[string][]error{"doc/get_document_info": {nil, backend}}}, copyArgs...)
+	assertErr("copy readback object", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source, `{"success":true}`}, "doc/copy_document": {`{"success":true,"fileId":"n"}`}}}, copyArgs...)
+	copyMismatch := &wikiCoverageCaller{responses: map[string][]string{"doc/copy_document": {`{"success":true,"result":{"fileId":"n"}}`}, "doc/get_document_info": {source, `{"success":true,"result":{"nodeId":"other"}}`}}}
 	if _, err := runWikiCoverageCLI(t, copyMismatch, copyArgs...); err == nil || !strings.Contains(err.Error(), "不一致") {
 		t.Fatalf("copy mismatch error=%v calls=%#v", err, copyMismatch.calls)
 	}
+	assertErr("copy workspace mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source, `{"nodeId":"n","workspaceId":"other","extension":"adoc"}`}, "doc/copy_document": {`{"success":true,"fileId":"n"}`}}}, copyArgs...)
+	assertErr("copy folder mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source, `{"nodeId":"n","workspaceId":"w","folderId":"other","extension":"adoc"}`}, "doc/copy_document": {`{"success":true,"fileId":"n"}`}}}, append(copyArgs, "--folder", "f")...)
+	assertErr("copy type mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {source, `{"nodeId":"n","workspaceId":"w","extension":"axls"}`}, "doc/copy_document": {`{"success":true,"fileId":"n"}`}}}, copyArgs...)
 
 	moveArgs := []string{"+move", "--workspace", "target", "--node", "n", "--yes"}
 	assertErr("move preflight call", &wikiCoverageCaller{errors: map[string][]error{"doc/get_document_info": {backend}}}, moveArgs...)
 	assertErr("move preflight object", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"success":true}`}}}, moveArgs...)
+	assertErr("move preflight id", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"other","workspaceId":"old"}`}}}, moveArgs...)
+	assertErr("move preflight workspace", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n"}`}}}, moveArgs...)
 	assertErr("move write", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`}}, errors: map[string][]error{"doc/move_document": {backend}}}, moveArgs...)
 	assertErr("move terminal", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`}, "doc/move_document": {`{"result":{}}`}}}, moveArgs...)
 	assertErr("move readback call", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`}, "doc/move_document": {`{"success":true}`}}, errors: map[string][]error{"doc/get_document_info": {nil, backend}}}, moveArgs...)
@@ -698,6 +1006,9 @@ func TestCrossPlatformCoverageWikiNodeFailureBranches(t *testing.T) {
 	assertErr("move workspace mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`, `{"nodeId":"n","workspaceId":"other"}`}, "doc/move_document": {`{"success":true}`}}}, moveArgs...)
 	assertErr("move folder mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`, `{"nodeId":"n","workspaceId":"target","folderId":"other"}`}, "doc/move_document": {`{"success":true}`}}}, append(moveArgs, "--folder", "f")...)
 	assertErr("drive move unchanged", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"same"}`, `{"nodeId":"n","workspaceId":"same"}`}, "doc/move_document": {`{"success":true}`}}}, "+move-to-drive", "--node", "n", "--yes")
+	assertErr("drive move source workspace mismatch", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"actual"}`}}}, "+move-to-drive", "--workspace", "expected", "--node", "n", "--yes")
+	assertErr("drive target is not my documents", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`, `{"nodeId":"n","workspaceId":"drive"}`}, "doc/move_document": {`{"success":true}`}, "wiki/list_wikiSpaces": {`{"wikiSpaces":[{"workspaceId":"other"}],"hasMore":false}`}}}, "+move-to-drive", "--node", "n", "--yes")
+	assertErr("drive target space cursor cycle", &wikiCoverageCaller{responses: map[string][]string{"doc/get_document_info": {`{"nodeId":"n","workspaceId":"old"}`, `{"nodeId":"n","workspaceId":"drive"}`}, "doc/move_document": {`{"success":true}`}, "wiki/list_wikiSpaces": {`{"wikiSpaces":[],"hasMore":true,"nextCursor":"next"}`, `{"wikiSpaces":[],"hasMore":true,"nextCursor":"next"}`}}}, "+move-to-drive", "--node", "n", "--yes")
 
 	deleteArgs := []string{"+node-delete", "--workspace", "w", "--node", "n", "--yes"}
 	assertErr("delete preflight call", &wikiCoverageCaller{errors: map[string][]error{"doc/get_document_info": {backend}}}, deleteArgs...)

@@ -57,6 +57,8 @@
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install.sh | sh
 ```
 
+> Linux 产物链接 glibc（基线 2.17）。不支持 musl 发行版（如 Alpine），安装脚本会识别并提前中止，而不是装上一个无法启动的二进制。
+
 **Windows（PowerShell）：**
 
 ```powershell
@@ -133,7 +135,10 @@ go build -o dws ./cmd       # 编译到当前目录
 cp dws ~/.local/bin/         # 安装到 PATH
 ```
 
-> 需要 Go 1.25+。也可以用 `make package` 构建所有平台产物（macOS / Linux / Windows × amd64 / arm64）。
+> 需要 Go 1.25+。在支持的 macOS、Linux、Windows amd64/arm64 平台上，默认
+> CGO 构建无需 build tag 即包含 SafeChat 后端，因此本机构建需要可用的 C 编译器。
+> 只有明确需要 stub 时才设置 `CGO_ENABLED=0`。使用 `make package` 和 Docker
+> 可通过仓库固定的交叉编译工具链构建全部六个平台产物。
 > 静态端点数据由悟空基线生成并提交在本仓库 `internal/syncdata`，源码构建不需要额外 checkout 数据仓库。
 
 </details>
@@ -419,16 +424,16 @@ dws skill setup --mode mono --target all
 dws skill setup --mode multi --target cursor --dry-run
 dws skill setup --mode multi --target cursor
 
-# 指定本地源目录（比如 fork 或正在改的版本），先预览
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi --dry-run
-DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
+# 指定本地源目录（支持 dws-skills.zip 解压根目录、其 multi/ 目录或源码仓库根目录），先预览
+DWS_SKILL_SOURCE=/绝对路径/dws-skills-解压目录 dws skill setup --mode multi --dry-run
+DWS_SKILL_SOURCE=/绝对路径/dws-skills-解压目录 dws skill setup --mode multi
 ```
 
 | 参数 | 取值 | 说明 |
 |------|------|------|
 | `--mode` | `mono` \| `multi` | skill 布局，不指定则交互式询问 |
 | `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | 安装目标；`all` 表示铺到检测到的具体 Agent home（ZCode 为 `~/.zcode/skills`），仅在未检测到具体 Agent 时回退到 `~/.agents/skills` |
-| `--source` | 路径 | 本地源目录（覆盖内置 skills） |
+| `--source` | 路径 | 本地源目录（覆盖内置 skills）；支持模式目录、`dws-skills.zip` 解压根目录或包含 `skills/` 的源码仓库根目录 |
 | `--yes` | — | 仅供脚本使用：跳过确认提示。删除操作仍会先备份到 `~/.dws/skill-backups/` |
 
 > setup 命令可能移除对面模式残留（装 multi 删 `dws/`，装 mono 清理统一状态中登记或属于状态上线前精确官方名称集合的 multi Skill）以及不在 bundle 内的过期受管 Skill。DWS 在 `~/.dws/skills-state.json`（或 `$DWS_CONFIG_DIR/skills-state.json`）集中记录所有权、安装版本、来源和内容摘要。仅有 `dingtalk-*` 前缀不能触发清理，因此其他同前缀市场/用户 Skill 会保留。所有删除都会先列入确认预览，并备份到 `~/.dws/skill-backups/<时间戳>/`；备份失败的目录会保留原样、绝不删除。非交互环境应先用 `--dry-run` 核对输出，再由调用方显式决定是否使用仅供脚本的确认跳过参数。

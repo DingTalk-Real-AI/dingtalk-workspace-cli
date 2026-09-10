@@ -437,7 +437,7 @@ func createdRecordIDs(data map[string]any) []string {
 			}
 			for key, child := range typed {
 				lower := strings.ToLower(key)
-				nextContext := createdContext || strings.Contains(lower, "created")
+				nextContext := createdContext || strings.Contains(lower, "created") || lower == "newrecordids"
 				walk(child, nextContext)
 			}
 		case []any:

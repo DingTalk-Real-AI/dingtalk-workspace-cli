@@ -35,6 +35,9 @@ const (
 	mockMCPSmokeCAEnv           = "DWS_MOCK_MCP_SMOKE_CA_FILE"
 	mockMCPSmokeDownloadDialEnv = "DWS_MOCK_MCP_SMOKE_DOWNLOAD_DIAL"
 	mockCurrentDOpenID          = "DAAAAAAAAAAAiE"
+	// helper 会启动第二个启用 race 的测试进程。保持有界，同时为 remaining
+	// shard 与其他 CI race 包并行时的调度抖动预留空间。
+	mockMCPCLIExecutionTimeout = 30 * time.Second
 )
 
 type recordedToolCall struct {
@@ -374,7 +377,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		workdir := t.TempDir()
 		stdout, stderr, err := runCLIInDir(t, env, workdir,
 			"--token", "ci-smoke-token", "--format", "json",
-			"chat", "+chat-messages", "--chat-query", "资源群",
+			"chat", "+chat-messages", "--no-reactions", "--chat-query", "资源群",
 			"--download-resources", "--output-dir", "./downloads",
 		)
 		if err != nil {
@@ -407,10 +410,10 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		stdout, stderr, err := runCLI(t, env,
 			"--token", "ci-smoke-token", "--format", "json",
 			"chat", "+search-msg", "--query", "分页失败",
-			"--page-all", "--no-enrich",
+			"--page-all", "--no-enrich", "--no-reactions",
 		)
-		if err != nil {
-			t.Fatalf("partial search failed as a command: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+		if err == nil {
+			t.Fatalf("partial search unexpectedly succeeded\nstdout=%s\nstderr=%s", stdout, stderr)
 		}
 		calls := snapshot()
 		if got := recordedToolNames(calls); !reflect.DeepEqual(got, []string{"search_messages", "search_messages"}) {
@@ -418,15 +421,34 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		}
 		var payload map[string]any
 		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
-			t.Fatalf("search output is not JSON: %v\n%s", err, stdout)
+			t.Fatalf("search legacy output is not JSON: %v\n%s", err, stdout)
 		}
-		if payload["complete"] != false || payload["count"] != float64(1) ||
-			payload["pagesFetched"] != float64(1) || payload["failedCount"] != float64(1) {
+		business := payload
+		if business["complete"] != false || business["count"] != float64(1) ||
+			business["pagesFetched"] != float64(1) || business["failedCount"] != float64(1) {
+			t.Fatalf("partial search legacy contract = %#v", business)
+		}
+
+		payload = nil
+		if err := json.Unmarshal([]byte(stderr), &payload); err != nil {
+			t.Fatalf("search error is not JSON: %v\n%s", err, stderr)
+		}
+		errorPayload, _ := payload["error"].(map[string]any)
+		details, _ := errorPayload["details"].(map[string]any)
+		shadow, _ := details["partialResult"].(map[string]any)
+		if errorPayload["reason"] != "search_messages_incomplete" || shadow == nil {
+			t.Fatalf("partial search error envelope = %#v", payload)
+		}
+		if shadow["complete"] != false || shadow["count"] != float64(1) ||
+			shadow["pagesFetched"] != float64(1) || shadow["failedCount"] != float64(1) {
 			t.Fatalf("partial search contract = %#v", payload)
 		}
-		failures, _ := payload["failures"].([]any)
+		failures, _ := shadow["failures"].([]any)
 		if len(failures) != 1 || failures[0].(map[string]any)["stage"] != "search-page" {
 			t.Fatalf("partial search failures = %#v", failures)
+		}
+		if !reflect.DeepEqual(business, shadow) {
+			t.Fatalf("legacy output and structured error partial result diverged:\nlegacy=%#v\nshadow=%#v", business, shadow)
 		}
 	})
 
@@ -462,7 +484,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("natural read failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 2 || calls[0].tool != "search_groups" || calls[1].tool != "list_conversation_message_v2" {
+		if len(calls) != 3 || calls[0].tool != "search_groups" || calls[1].tool != "list_conversation_message_v2" || calls[2].tool != "list_message_emotion_replies" {
 			t.Fatalf("read calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -516,7 +538,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("reply failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 1 || calls[0].tool != "send_personal_message" {
+		if len(calls) != 2 || calls[0].tool != "list_messages_by_ids" || calls[1].tool != "send_personal_message" {
 			t.Fatalf("reply calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -532,6 +554,16 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 
 func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, resourceURL string) string {
 	switch tool {
+	case "list_message_emotion_replies":
+		rows := []map[string]any{}
+		ids, _ := arguments["openMessageIds"].([]any)
+		for _, id := range ids {
+			rows = append(rows, map[string]any{"openMessageId": id, "emotionReplyList": []any{}})
+		}
+		body, _ := json.Marshal(map[string]any{"result": rows})
+		return string(body)
+	case "list_messages_by_ids":
+		return `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","senderOpenDingTalkId":"` + mockCurrentDOpenID + `","content":"fixture source"}]}}`
 	case "search_contact_by_key_word":
 		if arguments["keyword"] == "同名用户" {
 			return `{"result":[{"name":"同名用户","userId":"u1","openDingTalkId":"D1"},{"name":"同名用户","userId":"u2","openDingTalkId":"D2"}]}`
@@ -906,7 +938,7 @@ func runCLI(t *testing.T, env []string, args ...string) (string, string, error) 
 func runCLIInDir(t *testing.T, env []string, dir string, args ...string) (string, string, error) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), mockMCPCLIExecutionTimeout)
 	defer cancel()
 	processArgs := append([]string{"-test.run=^TestCLIHelperProcess$", "--"}, args...)
 	cmd := exec.CommandContext(ctx, os.Args[0], processArgs...)

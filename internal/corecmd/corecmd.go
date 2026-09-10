@@ -750,7 +750,10 @@ func ValidateRequired(cmd *cobra.Command, flags []FlagSpec) error {
 		}
 	}
 	if err := cmdutil.MissingRequiredFlagsError(cmd, plain...); err != nil {
-		return err
+		return apperrors.NewValidation(
+			err.Error(),
+			apperrors.WithReason("missing_required_flags"),
+		)
 	}
 	for _, flag := range flags {
 		if !flag.Required || flag.ValidationMode == ValidationShortcut ||
@@ -1558,14 +1561,16 @@ func flagKindSchemaType(kind FlagKind) string {
 	}
 }
 
-// AnnotateConstraints projects the relationship constraints into the Agent
-// Runtime Schema: exactly_one decomposes into require_one_of + mutually_exclusive
+// AnnotateConstraints records executable relationship constraints for Schema
+// assembly: exactly_one decomposes into require_one_of + mutually_exclusive
 // (matching the handwritten commands' use of AnnotateRuntimeConstraints).
 //
 // When a group still has hidden siblings, the full declared flag list is
-// projected (not collapsed to a single visible "required"). ValidateConstraints
-// accepts any member of the declared group — including hidden — so marking the
-// sole visible flag required would falsely claim declare ≡ execute.
+// retained here (not collapsed to a single visible "required").
+// ValidateConstraints accepts any member of the declared group — including
+// hidden — so marking the sole visible flag required would falsely claim
+// declare ≡ execute. Final Schema assembly separately canonicalizes reviewed
+// aliases and projects this executable contract onto published inputs.
 func AnnotateConstraints(cmd *cobra.Command, constraints []Constraint) {
 	var projected runtimeannotate.RuntimeSchemaConstraints
 	var required []string

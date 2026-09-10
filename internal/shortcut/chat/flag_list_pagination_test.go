@@ -18,7 +18,7 @@ func TestCrossPlatformCoverageFlagListDryRunStopsBeforeRead(t *testing.T) {
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+flag-list", "--page-size", "20", "--cursor", "0", "--dry-run",
+		"chat", "+flag-list", "--no-enrich", "--page-size", "20", "--cursor", "0", "--dry-run",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestCrossPlatformCoverageFlagListPageAllUsesNumericCursorAndDeduplicates(t 
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+flag-list", "--page-size", "1", "--page-all", "--page-limit", "5"})
+	root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-size", "1", "--page-all", "--page-limit", "5"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestCrossPlatformCoverageFlagListPageTokenAndPageLimit(t *testing.T) {
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+flag-list", "--page-token", "7", "--page-all", "--page-limit", "1"})
+	root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-token", "7", "--page-all", "--page-limit", "1"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestCrossPlatformCoverageFlagListMaxItemsPublishesStableTruncation(t *testi
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-all", "--max-items", "1", "--page-delay", "0"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestCrossPlatformCoverageFlagListLegacyFullRemainingPageFailsClosed(t *test
 	root := newPlatformCoverageRoot()
 	var output bytes.Buffer
 	root.SetOut(&output)
-	root.SetArgs([]string{"chat", "+flag-list", "--page-size", "2", "--page-all", "--max-items", "3"})
+	root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-size", "2", "--page-all", "--max-items", "3"})
 	if err := root.Execute(); err == nil {
 		t.Fatal("full remaining-budget legacy page unexpectedly declared a complete result")
 	}
@@ -142,7 +142,7 @@ func TestCrossPlatformCoverageFlagListFailsClosedOnOversizeAndCanceledDelay(t *t
 		root := newPlatformCoverageRoot()
 		var output bytes.Buffer
 		root.SetOut(&output)
-		root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--max-items", "1"})
+		root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-all", "--max-items", "1"})
 		if err := root.Execute(); err == nil {
 			t.Fatal("oversized lower page unexpectedly published a continuation")
 		}
@@ -169,7 +169,7 @@ func TestCrossPlatformCoverageFlagListFailsClosedOnOversizeAndCanceledDelay(t *t
 		root.SetContext(ctx)
 		var output bytes.Buffer
 		root.SetOut(&output)
-		root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--page-delay", "1"})
+		root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-all", "--page-delay", "1"})
 		if err := root.Execute(); err == nil {
 			t.Fatal("canceled delay unexpectedly succeeded")
 		}
@@ -195,7 +195,7 @@ func TestCrossPlatformCoverageFlagListFailureModes(t *testing.T) {
 		root := newPlatformCoverageRoot()
 		var output bytes.Buffer
 		root.SetOut(&output)
-		root.SetArgs([]string{"chat", "+flag-list", "--page-all"})
+		root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-all"})
 		if err := root.Execute(); err == nil {
 			t.Fatal("expected later-page error")
 		}
@@ -215,7 +215,7 @@ func TestCrossPlatformCoverageFlagListFailureModes(t *testing.T) {
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetOut(&bytes.Buffer{})
-		root.SetArgs([]string{"chat", "+flag-list", "--cursor", "7", "--page-all"})
+		root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--cursor", "7", "--page-all"})
 		if err := root.Execute(); err == nil {
 			t.Fatal("stalled cursor unexpectedly succeeded")
 		}
@@ -228,7 +228,7 @@ func TestCrossPlatformCoverageFlagListFailureModes(t *testing.T) {
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
 		root.SetOut(&bytes.Buffer{})
-		root.SetArgs([]string{"chat", "+flag-list", "--page-size", "1"})
+		root.SetArgs([]string{"chat", "+flag-list", "--no-enrich", "--page-size", "1"})
 		if err := root.Execute(); err == nil {
 			t.Fatal("full legacy page unexpectedly succeeded")
 		}
@@ -252,7 +252,7 @@ func TestCrossPlatformCoverageFlagListPaginationValidation(t *testing.T) {
 	} {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
-		root.SetArgs(append([]string{"chat", "+flag-list"}, args...))
+		root.SetArgs(append([]string{"chat", "+flag-list", "--no-enrich"}, args...))
 		if err := root.Execute(); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
@@ -272,7 +272,7 @@ func TestCrossPlatformCoverageFlagListAdditionalEdges(t *testing.T) {
 		root := newPlatformCoverageRoot()
 		var output bytes.Buffer
 		root.SetOut(&output)
-		root.SetArgs(append([]string{"chat", "+flag-list"}, args...))
+		root.SetArgs(append([]string{"chat", "+flag-list", "--no-enrich"}, args...))
 		err := root.Execute()
 		if output.Len() == 0 {
 			return nil, err

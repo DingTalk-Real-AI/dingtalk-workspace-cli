@@ -22,6 +22,30 @@ import (
 	"syscall"
 )
 
+var (
+	browserWindowsCommand = func(rawURL string) *exec.Cmd {
+		cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: 0x08000000,
+		}
+		return cmd
+	}
+	browserWindowsStartCommand = func(cmd *exec.Cmd) error {
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+
+		// Wait for process to prevent resource leak
+		// Run in goroutine to avoid blocking browser launch
+		go func() {
+			_ = cmd.Wait()
+		}()
+
+		return nil
+	}
+)
+
 func openBrowser(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -31,10 +55,5 @@ func openBrowser(rawURL string) error {
 		return fmt.Errorf("refused to open URL with disallowed scheme %q", parsed.Scheme)
 	}
 
-	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000,
-	}
-	return cmd.Start()
+	return browserWindowsStartCommand(browserWindowsCommand(rawURL))
 }

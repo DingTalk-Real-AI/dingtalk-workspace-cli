@@ -21,12 +21,55 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
+
+const defaultA2UIFlowStatus = "PROCESSING"
+
+func normalizeA2UIUpdateFlowStatus(raw string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "1", "PROCESSING":
+		return "PROCESSING", nil
+	case "2", "INPUTTING":
+		return "INPUTTING", nil
+	case "3", "FINISH":
+		return "FINISH", nil
+	case "4", "EXECUTING":
+		return "EXECUTING", nil
+	case "5", "ERROR":
+		return "ERROR", nil
+	case "6", "ABORTED":
+		return "ABORTED", nil
+	case "7", "TIMEOUT":
+		return "TIMEOUT", nil
+	case "8", "CONFIRMING":
+		return "CONFIRMING", nil
+	case "9", "CONFIRMED":
+		return "CONFIRMED", nil
+	default:
+		return "", fmt.Errorf("--flow-status must be one of PROCESSING, INPUTTING, FINISH, EXECUTING, ERROR, ABORTED, TIMEOUT, CONFIRMING, CONFIRMED")
+	}
+}
+
+func parseA2UIMessages(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("--content is required")
+	}
+	var messages []string
+	if err := json.Unmarshal([]byte(raw), &messages); err != nil {
+		return nil, fmt.Errorf("--content must be a JSON string array")
+	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("--content must contain at least one message")
+	}
+	return messages, nil
+}
 
 func normalizeChatGroupCreateResponse(resp map[string]any) {
 	result, ok := resp["result"].(map[string]any)
@@ -48,7 +91,7 @@ func resolveChatGroupRoleSetUserRoleIDs(cmd *cobra.Command) ([]string, error) {
 		// PreRunE rejects callers that explicitly pass both flags. Reaching this
 		// branch means the hidden legacy flag was promoted to satisfy Cobra's
 		// required marker on the public canonical flag.
-		return parseCSVValues(mustGetFlag(cmd, "role-ids")), nil
+		return validatedChatRoleIDs(mustGetFlag(cmd, "role-ids"), "--role-ids")
 	case roleIDChanged:
 		roleIDs := parseCSVValues(mustGetFlag(cmd, "role-id"))
 		if len(roleIDs) == 0 {
@@ -59,10 +102,36 @@ func resolveChatGroupRoleSetUserRoleIDs(cmd *cobra.Command) ([]string, error) {
 		}
 		return roleIDs, nil
 	case roleIDsChanged:
-		return parseCSVValues(mustGetFlag(cmd, "role-ids")), nil
+		return validatedChatRoleIDs(mustGetFlag(cmd, "role-ids"), "--role-ids")
 	default:
 		return nil, apperrors.NewValidation("缺少必填参数 --role-id")
 	}
+}
+
+func validatedChatRoleIDs(raw, flagName string) ([]string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, apperrors.NewValidation(flagName + " 必须包含至少一个非空的群身份 openRoleId")
+	}
+	// Reject empty list members before parseCSVValues removes them. Silently
+	// accepting "role-1,,role-2" makes Runtime looser than the Shortcut and
+	// hides malformed writes from callers.
+	for _, value := range strings.Split(strings.Trim(trimmed, "[]"), ",") {
+		if strings.TrimSpace(strings.Trim(strings.TrimSpace(value), `"'`)) == "" {
+			return nil, apperrors.NewValidation(flagName + " 不能包含空值或仅含空白的群身份 openRoleId")
+		}
+	}
+	roleIDs := parseCSVValues(trimmed)
+	seen := make(map[string]bool, len(roleIDs))
+	normalized := make([]string, 0, len(roleIDs))
+	for _, roleID := range roleIDs {
+		roleID = strings.TrimSpace(roleID)
+		if !seen[roleID] {
+			seen[roleID] = true
+			normalized = append(normalized, roleID)
+		}
+	}
+	return normalized, nil
 }
 
 func prepareChatGroupRoleSetUserRoleID(cmd *cobra.Command) error {
@@ -87,23 +156,113 @@ func promoteLegacyChatString(cmd *cobra.Command, canonical, legacy string) error
 	return cmd.Flags().Set(canonical, value)
 }
 
-func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
+func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool, paginationDirection string) error {
+	return callProjectedMessagesOnServer(cmd, "chat", toolName, args, search, paginationDirection)
+}
+
+func callProjectedMessagesOnServer(cmd *cobra.Command, serverID, toolName string, args map[string]any, search bool, paginationDirection string) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer(serverID, toolName, args)
+	}
+	operation := serverID + "/" + toolName
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), serverID, toolName, args)
+	if err != nil {
+		return withProjectedChatOperation(operation, err)
+	}
+	return writeProjectedChatPayload(cmd, operation, text, func(data map[string]any) map[string]any {
+		payload := projectChatMessagesPayloadForCommand(cmd, data, search)
+		applyProjectedChatPagination(payload, data, paginationDirection)
+		return payload
+	})
+}
+
+func callProjectedAtomicChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
 	if deps.Caller.DryRun() {
 		return callMCPToolOnServer("chat", toolName, args)
 	}
 	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "chat", toolName, args)
 	if err != nil {
-		var cliErr *CLIError
-		if errors.As(err, &cliErr) && cliErr.Operation == "" {
-			withOperation := *cliErr
-			withOperation.Operation = "chat/" + toolName
-			return &withOperation
-		}
-		return err
+		return withProjectedChatOperation("chat/"+toolName, err)
 	}
+	return writeProjectedChatPayload(cmd, "chat/"+toolName, text, func(data map[string]any) map[string]any {
+		return projectExistingChatMessageCollectionsForCommand(cmd, data, search)
+	})
+}
+
+func applyProjectedChatPagination(payload, source map[string]any, paginationDirection string) {
+	if paginationDirection == "" {
+		return
+	}
+	messages, _ := payload["messages"].([]map[string]any)
+	preserved := make(map[string]any)
+	for _, key := range []string{"count", "enrichedCount", "failedCount", "failures", "partial", "truncated"} {
+		if value, exists := payload[key]; exists {
+			preserved[key] = value
+		}
+	}
+	for key, value := range chatmsg.NewMessageListPayload(messages) {
+		if _, exists := payload[key]; !exists {
+			payload[key] = value
+		}
+	}
+	delete(payload, "nextPage")
+	chatmsg.ApplyMessagePagination(payload, source, messages, paginationDirection)
+	for key, value := range preserved {
+		payload[key] = value
+	}
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
+}
+
+func callProjectedAtomicIMMessages(cmd *cobra.Command, toolName string, args map[string]any) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer("im", toolName, args)
+	}
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", toolName, args)
+	if err != nil {
+		return withProjectedChatOperation("im/"+toolName, err)
+	}
+	return writeProjectedChatPayload(cmd, "im/"+toolName, text, func(data map[string]any) map[string]any {
+		return projectExistingChatMessageCollectionsForCommand(cmd, data, true)
+	})
+}
+
+func callProjectedIMMessageSendStatus(cmd *cobra.Command, openTaskID string) error {
+	const toolName = "query_message_send_status"
+	args := map[string]any{"openTaskId": openTaskID}
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer("im", toolName, args)
+	}
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", toolName, args)
+	if err != nil {
+		return withProjectedChatOperation("im/"+toolName, err)
+	}
+	return writeProjectedChatPayload(cmd, "im/"+toolName, text, func(data map[string]any) map[string]any {
+		return chatmsg.ProjectMessageSendStatus(data, openTaskID)
+	})
+}
+
+func withProjectedChatOperation(operation string, err error) error {
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) && cliErr.Operation == "" {
+		withOperation := *cliErr
+		withOperation.Operation = operation
+		return &withOperation
+	}
+	return err
+}
+
+func writeProjectedChatPayload(
+	cmd *cobra.Command,
+	operation, text string,
+	project func(map[string]any) map[string]any,
+) error {
 	if strings.TrimSpace(text) == "" {
 		return apperrors.NewAPI("MCP read tool returned no non-empty text content",
-			apperrors.WithOperation("chat/"+toolName),
+			apperrors.WithOperation(operation),
 			apperrors.WithOrigin("mcp"),
 			apperrors.WithFailureStage("response_validation"),
 			apperrors.WithRetryable(true),
@@ -112,52 +271,66 @@ func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[str
 	}
 	data := map[string]any{}
 	if err := unmarshalJSONUseNumber(text, &data); err != nil {
+		if output.UsesUnifiedResult(cmd) {
+			return apperrors.NewAPI("MCP read tool returned malformed JSON",
+				apperrors.WithOperation(operation),
+				apperrors.WithOrigin("mcp"),
+				apperrors.WithFailureStage("response_validation"),
+				apperrors.WithRetryable(true),
+				apperrors.WithReason("malformed_tool_response"),
+				apperrors.WithCause(err),
+			)
+		}
 		deps.Out.PrintRaw(text)
 		return nil
 	}
 
-	return writeCommandPayload(cmd, projectChatMessagesPayload(data, search))
+	projected := project(data)
+	if output.UsesUnifiedResult(cmd) {
+		return output.StoreResult(cmd.Context(), output.Success(projected))
+	}
+	return writeCommandPayload(cmd, projected)
 }
 
 func projectChatMessagesPayload(data map[string]any, search bool) map[string]any {
+	return projectChatMessagesPayloadWithLedger(data, search, nil)
+}
+
+func projectChatMessagesPayloadForCommand(cmd *cobra.Command, data map[string]any, search bool) map[string]any {
 	items := chatmsg.ListMessageItems(data)
 	if search {
 		items = chatmsg.SearchItems(data)
 	}
-	messages := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		projected := make(map[string]any, len(item)+8)
-		for key, value := range item {
-			projected[key] = value
-		}
-		for key, value := range chatmsg.ProjectMessageV1(item, true) {
-			if key == "messageId" || key == "text" {
-				projected[key] = value
-				continue
-			}
-			if _, exists := projected[key]; !exists {
-				projected[key] = value
-			}
-		}
-		if value, exists := item["openMessageId"]; exists {
-			projected["openMessageId"] = value
-		} else if value, exists := projected["messageId"]; exists {
-			projected["openMessageId"] = value
-		}
-		if value, exists := item["content"]; exists {
-			projected["content"] = value
-		} else if value, exists := projected["text"]; exists {
-			projected["content"] = value
-		}
-		messages = append(messages, projected)
-	}
+	ledger := decryptProjectedChatMessagesByPolicy(cmd, items)
+	return projectChatMessagesPayloadWithLedger(data, search, ledger)
+}
 
-	payload := make(map[string]any, len(data)+1)
-	for key, value := range data {
+func projectExistingChatMessageCollectionsForCommand(cmd *cobra.Command, data map[string]any, search bool) map[string]any {
+	items := chatmsg.ListMessageItems(data)
+	if search {
+		items = chatmsg.SearchItems(data)
+	}
+	ledger := decryptProjectedChatMessagesByPolicy(cmd, items)
+	payload := projectExistingChatMessageCollections(data)
+	for key, value := range ledger {
 		payload[key] = value
 	}
+	return payload
+}
+
+func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledger map[string]any) map[string]any {
+	payload := projectExistingChatMessageCollections(data)
+	items := chatmsg.ListMessageItems(payload)
+	if search {
+		items = chatmsg.SearchItems(payload)
+	}
+	messages := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		messages = append(messages, projectChatMessageItem(item, nil))
+	}
+
 	payload["messages"] = messages
-	if result, ok := data["result"].(map[string]any); ok {
+	if result, ok := payload["result"].(map[string]any); ok {
 		if _, exists := result["messages"]; exists {
 			projectedResult := make(map[string]any, len(result))
 			for key, value := range result {
@@ -167,7 +340,265 @@ func projectChatMessagesPayload(data map[string]any, search bool) map[string]any
 			payload["result"] = projectedResult
 		}
 	}
+	for key, value := range ledger {
+		payload[key] = value
+	}
 	return payload
+}
+
+func decryptProjectedChatMessagesByPolicy(cmd *cobra.Command, items []map[string]any) map[string]any {
+	if cmd == nil || commandBoolFlag(cmd, "dry-run") ||
+		chatCryptoClient == nil || chatCryptoClient.BackendReady == nil || !chatCryptoClient.BackendReady() {
+		return nil
+	}
+	batchItems := make([]messagecrypto.BatchDecryptItem, 0)
+	for _, item := range items {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(item)))
+		if messageID == "" || messageID == "<nil>" {
+			continue
+		}
+		content := strings.TrimSpace(fmt.Sprint(firstChatMapValue(item, "content", "text")))
+		if chatmsg.IsEncrypted(content) {
+			conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(item)))
+			if conversationID == "<nil>" {
+				conversationID = ""
+			}
+			batchItems = append(batchItems, messagecrypto.BatchDecryptItem{
+				MessageID:      messageID,
+				ConversationID: conversationID,
+				Ciphertext:     content,
+			})
+		}
+	}
+	decryptCandidateCount := len(batchItems)
+	batchItems, policyFailures := filterProjectedDecryptItemsByPolicy(cmd, batchItems)
+	ledger := map[string]any{
+		"decryptCandidateCount": decryptCandidateCount,
+		"decryptAllowedCount":   len(batchItems),
+		"decryptedCount":        0,
+		"decryptFailedCount":    len(policyFailures),
+	}
+	if len(policyFailures) > 0 {
+		ledger["decryptFailures"] = policyFailures
+		ledger["partial"] = true
+	}
+	if len(batchItems) == 0 {
+		return ledger
+	}
+	result, err := chatCryptoClient.BatchDecryptInbound(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{}, batchItems)
+	if err != nil {
+		failures := append([]map[string]any{}, policyFailures...)
+		failures = append(failures, map[string]any{"stage": "message-decrypt", "reason": err.Error()})
+		ledger["decryptFailedCount"] = len(failures)
+		ledger["decryptFailures"] = failures
+		ledger["partial"] = true
+		return ledger
+	}
+	byID := map[string][]map[string]any{}
+	for _, item := range items {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(item)))
+		if messageID != "" && messageID != "<nil>" {
+			byID[messageID] = append(byID[messageID], item)
+		}
+	}
+	decryptedCount := 0
+	failures := make([]map[string]any, 0)
+	for _, item := range result.Items {
+		if item.Status != "" && item.Status != "success" {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+			continue
+		}
+		if strings.TrimSpace(item.PlaintextContent) == "" {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
+			continue
+		}
+		for _, message := range byID[item.MessageID] {
+			message["content"] = item.PlaintextContent
+			message["contentDecrypted"] = true
+			message["cryptoLayer"] = "ding+safechat"
+			if item.KeyVersion > 0 {
+				message["dingKeyVersion"] = item.KeyVersion
+			}
+		}
+		decryptedCount++
+	}
+	for _, item := range result.Failures {
+		failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+	}
+	failures = append(policyFailures, failures...)
+	ledger["decryptedCount"] = decryptedCount
+	ledger["decryptFailedCount"] = len(failures)
+	if len(failures) > 0 {
+		ledger["decryptFailures"] = failures
+		ledger["partial"] = true
+	}
+	return ledger
+}
+
+func filterProjectedDecryptItemsByPolicy(cmd *cobra.Command, items []messagecrypto.BatchDecryptItem) ([]messagecrypto.BatchDecryptItem, []map[string]any) {
+	filtered := make([]messagecrypto.BatchDecryptItem, 0, len(items))
+	failures := make([]map[string]any, 0)
+	for _, item := range items {
+		decision, err := chatCryptoClient.PolicyDecision(cmd.Context(), chatCryptoRuntime{cmd: cmd}, messagecrypto.Options{
+			Identity:           "user",
+			MsgType:            "text",
+			OpenConversationID: item.ConversationID,
+		})
+		if err != nil {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			continue
+		}
+		if !decision.Enabled {
+			failures = append(failures, chatDecryptFailure(item.MessageID, item.ConversationID, "policy_disabled"))
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered, failures
+}
+
+func chatDecryptFailure(messageID, conversationID, reason string) map[string]any {
+	failure := map[string]any{
+		"stage":     "message-decrypt",
+		"messageId": strings.TrimSpace(messageID),
+		"reason":    firstNonEmptyLiteral(reason, "decrypt_failed"),
+	}
+	if strings.TrimSpace(conversationID) != "" {
+		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func firstChatMapValue(message map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := message[key]; ok {
+			return value
+		}
+	}
+	return nil
+}
+
+func firstNonEmptyLiteral(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func projectExistingChatMessageCollections(data map[string]any) map[string]any {
+	payload := cloneStringAnyMap(data)
+	if messages, exists := payload["messages"]; exists {
+		payload["messages"] = projectChatMessageItems(messages, nil)
+	}
+	if groups, exists := payload["conversationMessagesList"]; exists {
+		payload["conversationMessagesList"] = projectChatConversationMessageGroups(groups)
+	}
+
+	switch result := payload["result"].(type) {
+	case map[string]any:
+		projectedResult := cloneStringAnyMap(result)
+		if messages, exists := projectedResult["messages"]; exists {
+			projectedResult["messages"] = projectChatMessageItems(messages, nil)
+		}
+		if groups, exists := projectedResult["conversationMessagesList"]; exists {
+			projectedResult["conversationMessagesList"] = projectChatConversationMessageGroups(groups)
+		}
+		payload["result"] = projectedResult
+	case []any, []map[string]any:
+		payload["result"] = projectChatMessageItems(result, nil)
+	}
+	return payload
+}
+
+func projectChatConversationMessageGroups(value any) any {
+	groups, ok := chatMessageMapItems(value)
+	if !ok {
+		return value
+	}
+	projected := make([]any, 0, len(groups))
+	for _, group := range groups {
+		projectedGroup := cloneStringAnyMap(group)
+		context := map[string]any{}
+		if conversationID, exists := group["openConversationId"]; exists {
+			context["openConversationId"] = conversationID
+		}
+		if title, exists := group["title"]; exists {
+			context["conversationTitle"] = title
+		}
+		if singleChat, exists := group["singleChat"]; exists {
+			context["singleChat"] = singleChat
+		}
+		if messages, exists := group["messages"]; exists {
+			projectedGroup["messages"] = projectChatMessageItems(messages, context)
+		}
+		projected = append(projected, projectedGroup)
+	}
+	return projected
+}
+
+func projectChatMessageItems(value any, context map[string]any) any {
+	items, ok := chatMessageMapItems(value)
+	if !ok {
+		return value
+	}
+	projected := make([]any, 0, len(items))
+	for _, item := range items {
+		projected = append(projected, projectChatMessageItem(item, context))
+	}
+	return projected
+}
+
+func chatMessageMapItems(value any) ([]map[string]any, bool) {
+	switch items := value.(type) {
+	case []map[string]any:
+		return items, true
+	case []any:
+		mapped := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			message, ok := item.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			mapped = append(mapped, message)
+		}
+		return mapped, true
+	default:
+		return nil, false
+	}
+}
+
+func projectChatMessageItem(item map[string]any, context map[string]any) map[string]any {
+	projected := make(map[string]any, len(item)+len(context)+8)
+	for key, value := range item {
+		projected[key] = value
+	}
+	for key, value := range context {
+		if _, exists := projected[key]; !exists {
+			projected[key] = value
+		}
+	}
+	for key, value := range chatmsg.ProjectMessageV1(projected, true) {
+		if key == "messageId" || key == "text" {
+			projected[key] = value
+			continue
+		}
+		if _, exists := projected[key]; !exists {
+			projected[key] = value
+		}
+	}
+	if value, exists := item["openMessageId"]; exists {
+		projected["openMessageId"] = value
+	} else if value, exists := projected["messageId"]; exists {
+		projected["openMessageId"] = value
+	}
+	if value, exists := item["content"]; exists {
+		projected["content"] = value
+	} else if value, exists := projected["text"]; exists {
+		projected["content"] = value
+	}
+	return projected
 }
 
 func sendPersonalMessageForCommand(cmd *cobra.Command, params map[string]any) error {
@@ -1195,11 +1626,294 @@ func pagedChatConversationMessagesConfig(toolName string, build func(*cobra.Comm
 func pagedProjectedChatSearchConfig(cmd *cobra.Command, toolName string, build func(*cobra.Command) (map[string]any, error)) PagedMCPCommandConfig {
 	cfg := pagedChatConversationMessagesConfig(toolName, build)
 	cfg.Fallback = func(args map[string]any) error {
-		return callProjectedChatMessages(cmd, toolName, args, true)
+		return callProjectedChatMessages(cmd, toolName, args, true, "")
 	}
 	cfg.ProjectResult = func(payload map[string]any) map[string]any {
-		return projectChatMessagesPayload(payload, true)
+		return projectChatMessagesPayloadForCommand(cmd, payload, true)
 	}
+	return cfg
+}
+
+func pagedProjectedAtomicChatMessagesConfig(cmd *cobra.Command, cfg PagedMCPCommandConfig) PagedMCPCommandConfig {
+	cfg.Fallback = func(args map[string]any) error {
+		return callProjectedAtomicChatMessages(cmd, cfg.ToolName, args, true)
+	}
+	cfg.ProjectResult = projectExistingChatMessageCollections
+	return cfg
+}
+
+func pagedChatMessageRangeAllConfig(cmd *cobra.Command) PagedMCPCommandConfig {
+	cfg := pagedProjectedAtomicChatMessagesConfig(cmd,
+		pagedChatConversationMessagesConfig("search_messages_by_time_range", chatMessageListAllArgs))
+	cfg.PageSizeArg = "limit"
+	omitReactions, _ := cmd.Flags().GetBool("no-reactions")
+	baseBuildArgs := cfg.BuildArgs
+	var requestArgs map[string]any
+	cfg.BuildArgs = func(cmd *cobra.Command) (map[string]any, error) {
+		args, err := baseBuildArgs(cmd)
+		if err == nil {
+			requestArgs = cloneStringAnyMap(args)
+		}
+		return args, err
+	}
+	cfg.Fallback = func(args map[string]any) error {
+		if deps.Caller.DryRun() {
+			return callMCPToolOnServer("chat", cfg.ToolName, args)
+		}
+		text, err := callMCPToolReturnTextOnServer(cmd.Context(), "chat", cfg.ToolName, args)
+		if err != nil {
+			return withProjectedChatOperation("chat/"+cfg.ToolName, err)
+		}
+		if strings.TrimSpace(text) == "" {
+			return apperrors.NewAPI("MCP read tool returned no non-empty text content",
+				apperrors.WithOperation("chat/"+cfg.ToolName),
+				apperrors.WithOrigin("mcp"),
+				apperrors.WithFailureStage("response_validation"),
+				apperrors.WithRetryable(true),
+				apperrors.WithReason("empty_tool_response"),
+			)
+		}
+		data := map[string]any{}
+		if err := unmarshalJSONUseNumber(text, &data); err != nil {
+			// dual_validate must keep the historical malformed-response bytes;
+			// only an activated unified release may replace them with a typed
+			// failure envelope.
+			if output.UsesUnifiedResult(cmd) {
+				return apperrors.NewAPI("MCP read tool returned malformed JSON",
+					apperrors.WithOperation("chat/"+cfg.ToolName),
+					apperrors.WithOrigin("mcp"),
+					apperrors.WithFailureStage("response_validation"),
+					apperrors.WithRetryable(true),
+					apperrors.WithReason("malformed_tool_response"),
+					apperrors.WithCause(err),
+				)
+			}
+			deps.Out.PrintRaw(text)
+			return nil
+		}
+		legacyProjected := projectExistingChatMessageCollections(data)
+		if omitReactions {
+			stripChatReactionFields(legacyProjected)
+		}
+		projected := pagedCommandResultProjection(legacyProjected, cfg)
+		meta, metaErr := chatMessageRangeAllFrameworkMeta(projected)
+		if metaErr != nil {
+			typedErr := NewIncompleteResultError(
+				"时间范围消息结果缺少可安全发布的分页状态",
+				metaErr,
+				false,
+				apperrors.WithOperation("chat/"+cfg.ToolName),
+				apperrors.WithOrigin("shortcut"),
+				apperrors.WithFailureStage("result_projection"),
+				apperrors.WithExecutionStarted(true),
+				apperrors.WithReason("invalid_result_pagination"),
+				apperrors.WithDetails(map[string]any{"partialResult": projected}),
+			)
+			return ReturnIncompleteResult(
+				cmd,
+				output.Success(projected),
+				typedErr,
+				nil,
+				func() error { return writeCommandPayload(cmd, legacyProjected) },
+			)
+		}
+		result := output.Success(projected, output.WithMeta(meta))
+		if output.UsesUnifiedResult(cmd) {
+			return output.StoreResult(cmd.Context(), result)
+		}
+		if output.CommandRollout(cmd) == output.RolloutDualValidate {
+			if err := validateRuntimeResult(result); err != nil {
+				return err
+			}
+		}
+		return writeCommandPayload(cmd, legacyProjected)
+	}
+	legacyProject := cfg.ProjectResult
+	cfg.ProjectResult = func(payload map[string]any) map[string]any {
+		payload = legacyProject(payload)
+		if omitReactions {
+			stripChatReactionFields(payload)
+		}
+		return payload
+	}
+	cfg.ResultProjection = func(payload map[string]any) map[string]any {
+		return projectChatMessageRangeAllPayload(payload, requestArgs, omitReactions)
+	}
+	return cfg
+}
+
+func projectChatMessageRangeAllPayload(payload, requestArgs map[string]any, omitReactions bool) map[string]any {
+	payload = projectExistingChatMessageCollections(payload)
+	if omitReactions {
+		stripChatReactionFields(payload)
+	}
+	result, _ := payload["result"].(map[string]any)
+	groups, _ := result["conversationMessagesList"].([]any)
+	messageCount := 0
+	for _, rawGroup := range groups {
+		group, _ := rawGroup.(map[string]any)
+		messages, _ := group["messages"].([]any)
+		messageCount += len(messages)
+	}
+
+	hasMore, paginationKnown := result["hasMore"].(bool)
+	nextCursor := result["nextCursor"]
+	pagesFetched := 1
+	truncated := false
+	partial := false
+	resumeCursorReliable := true
+	failures := make([]map[string]any, 0)
+	if paging, ok := payload["paging"].(map[string]any); ok {
+		if value, ok := paging["pages"].(int); ok {
+			pagesFetched = value
+		} else if value, ok := paging["pages"].(float64); ok {
+			pagesFetched = int(value)
+		}
+		if value, ok := paging["hasMore"].(bool); ok {
+			hasMore = value
+			paginationKnown = true
+		}
+		truncated, _ = paging["truncated"].(bool)
+		partial, _ = paging["partial"].(bool)
+		if value, ok := paging["resumeCursorReliable"].(bool); ok {
+			resumeCursorReliable = value
+		}
+		if cursor, exists := paging["lastCursor"]; exists {
+			nextCursor = cursor
+		}
+		if partial {
+			failures = append(failures, map[string]any{
+				"page":   paging["failedPage"],
+				"cursor": paging["failedCursor"],
+				"stage":  "pagination",
+				"error":  paging["error"],
+			})
+		}
+	}
+	if !paginationKnown {
+		failures = append(failures, map[string]any{
+			"stage": "pagination",
+			"error": "下层未返回可靠的 hasMore，无法证明时间范围已完整读取",
+		})
+	}
+	complete := paginationKnown && !hasMore && !truncated && !partial && len(failures) == 0
+	stopReason := "single_page"
+	switch {
+	case partial:
+		stopReason = "pagination_error"
+	case truncated:
+		stopReason = "local_limit"
+	case complete:
+		stopReason = "source_complete"
+	case !paginationKnown:
+		stopReason = "pagination_unknown"
+	}
+	payload["contractVersion"] = chatmsg.MessageListContractVersion
+	payload["count"] = messageCount
+	payload["conversationCount"] = len(groups)
+	payload["pagesFetched"] = pagesFetched
+	payload["paginationKnown"] = paginationKnown
+	payload["complete"] = complete
+	payload["hasMore"] = hasMore
+	payload["stopReason"] = stopReason
+	payload["truncated"] = truncated
+	payload["failedCount"] = len(failures)
+	payload["failures"] = failures
+	payload["partial"] = partial || (len(failures) > 0 && messageCount > 0)
+	payload["queryRange"] = map[string]any{
+		"start": requestArgs["startTime"],
+		"end":   requestArgs["endTime"],
+	}
+	actions := make([]map[string]any, 0, 1)
+	if hasMore && resumeCursorReliable && strings.TrimSpace(fmt.Sprint(nextCursor)) != "" && fmt.Sprint(nextCursor) != "<nil>" {
+		actions = append(actions, map[string]any{
+			"cliPath":        "chat message list-all",
+			"arguments":      map[string]any{"cursor": nextCursor},
+			"reuseArguments": true,
+			"ready":          false,
+			"when":           "复用原 start/end/limit，并从安全游标继续读取",
+		})
+	}
+	payload["nextActions"] = actions
+	return payload
+}
+
+func chatMessageRangeAllFrameworkMeta(payload map[string]any) (*output.Meta, error) {
+	count := chatResultInt(payload["count"])
+	meta := &output.Meta{Count: output.NewCount(count)}
+	hasMore, _ := payload["hasMore"].(bool)
+	paginationKnown, _ := payload["paginationKnown"].(bool)
+	nextToken := ""
+	if result, ok := payload["result"].(map[string]any); ok && hasMore {
+		nextToken = cleanSearchCursor(result["nextCursor"])
+	}
+	if !paginationKnown {
+		return meta, apperrors.NewAPI(
+			"时间范围消息结果缺少可靠分页状态",
+			apperrors.WithReason("invalid_result_pagination"),
+			apperrors.WithFailureStage("result_projection"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+		)
+	}
+	pagination, err := output.NewPagination(!hasMore, nextToken)
+	if err != nil {
+		return meta, apperrors.NewAPI(
+			"时间范围消息结果缺少可安全执行的续页游标",
+			apperrors.WithReason("invalid_result_pagination"),
+			apperrors.WithFailureStage("result_projection"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+			apperrors.WithCause(err),
+		)
+	}
+	pagination.Pages = chatResultInt(payload["pagesFetched"])
+	pagination.Items = count
+	meta.Pagination = pagination
+	return meta, nil
+}
+
+func chatResultInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		parsed, _ := strconv.Atoi(typed.String())
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func stripChatReactionFields(value any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		delete(typed, "reactions")
+		for _, child := range typed {
+			stripChatReactionFields(child)
+		}
+	case []any:
+		for _, child := range typed {
+			stripChatReactionFields(child)
+		}
+	case []map[string]any:
+		for _, child := range typed {
+			stripChatReactionFields(child)
+		}
+	}
+}
+
+func pagedProjectedAtomicIMMessagesConfig(cmd *cobra.Command, cfg PagedMCPCommandConfig) PagedMCPCommandConfig {
+	cfg.Fallback = func(args map[string]any) error {
+		return callProjectedAtomicIMMessages(cmd, cfg.ToolName, args)
+	}
+	cfg.ProjectResult = projectExistingChatMessageCollections
 	return cfg
 }
 
@@ -1292,23 +2006,34 @@ func newChatGroupSearchCommand(hidden bool) *cobra.Command {
 }
 
 func runChatSearchCommon(cmd *cobra.Command, _ []string) error {
-	if err := validateRequiredFlags(cmd, "nicks"); err != nil {
-		return err
-	}
-	nicks := parseCSVValues(mustGetFlag(cmd, "nicks"))
-	limit := chatIntFlagOrFallback(cmd, "limit", "size")
-	cursor, _ := cmd.Flags().GetString("cursor")
-	matchMode, _ := cmd.Flags().GetString("match-mode")
-	toolArgs := map[string]any{
-		"nicks":     nicks,
-		"matchMode": matchMode,
-		"limit":     limit,
-		"cursor":    cursor,
-	}
-	if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
-		toolArgs["excludeMuted"] = true
-	}
-	return callMCPTool("search_common_groups", toolArgs)
+	return RunPagedMCPCommand(cmd, PagedMCPCommandConfig{
+		ServerID:         "chat",
+		ToolName:         "search_common_groups",
+		ItemPath:         "result.groups",
+		ItemIdentityPath: "openConversationId",
+		CursorPath:       "result.nextCursor",
+		HasMorePath:      "result.hasMore",
+		CursorArg:        "cursor",
+		CursorKind:       PagedCursorString,
+		BuildArgs: func(cmd *cobra.Command) (map[string]any, error) {
+			if err := validateRequiredFlags(cmd, "nicks"); err != nil {
+				return nil, err
+			}
+			toolArgs := map[string]any{
+				"nicks":     parseCSVValues(mustGetFlag(cmd, "nicks")),
+				"matchMode": mustGetFlag(cmd, "match-mode"),
+				"limit":     chatIntFlagOrFallback(cmd, "limit", "size"),
+				"cursor":    mustGetFlag(cmd, "cursor"),
+			}
+			if v, _ := cmd.Flags().GetBool("exclude-muted"); v {
+				toolArgs["excludeMuted"] = true
+			}
+			return toolArgs, nil
+		},
+		Fallback: func(args map[string]any) error {
+			return callMCPTool("search_common_groups", args)
+		},
+	})
 }
 
 // sanitizeTitleFromText derives a safe title from message text.
@@ -2024,6 +2749,14 @@ func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
 	return toolArgs, nil
 }
 
+func runChatCrossOrgDataAuth(cmd *cobra.Command) error {
+	toolArgs, err := buildChatCrossOrgDataAuthArgs(cmd)
+	if err != nil {
+		return err
+	}
+	return callMCPToolOnServer("im", "chat_permission_grant", toolArgs)
+}
+
 func buildChatGroupShareInviteArgs(cmd *cobra.Command) (map[string]any, error) {
 	if err := validateRequiredFlags(cmd, "source"); err != nil {
 		return nil, err
@@ -2495,12 +3228,14 @@ func newChatCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
+			AgentSummary: "管理钉钉会话、真实群聊/聊天群、群成员、会话分组/分类、机器人及消息检索与发送",
 			UseWhen: []string{
 				"请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人",
+				"资源范围仅为 IM，答案需要可枚举消息记录，或要按消息原生谓词进行结构化检索",
+				"会话分组/分类使用 chat category；真实群聊/聊天群使用 chat group",
 			},
 			AvoidWhen: []string{
-				"实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
+				"跨文档、邮件和消息按主题发现内容用 aisearch enterprise；查询当前用户参与的跨源行为轨迹用 aisearch behavior；实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
 			},
 		},
 	})
@@ -2620,11 +3355,7 @@ func newChatCommand() *cobra.Command {
   dws chat data-auth cross-org --all --grant-type timed --ttl 24h`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			toolArgs, err := buildChatCrossOrgDataAuthArgs(cmd)
-			if err != nil {
-				return err
-			}
-			return callMCPToolOnServer("im", "chat_permission_grant", toolArgs)
+			return runChatCrossOrgDataAuth(cmd)
 		},
 	}
 	chatDataAuthCrossOrgCmd.Flags().String("target-org-id", "", "目标组织 ID（与 --all 二选一）")
@@ -2766,13 +3497,10 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建群聊并可指定群名与初始成员",
-				UseWhen: []string{
-					"需要新建内部/外部群，并带上初始成员",
-					"用户明确要建群且已给出群名与成员标识",
-				},
+				UseWhen:      []string{"明确需要 +chat-create 未公开的底层字段或原始响应，且要创建真实群聊/聊天群时"},
 				AvoidWhen: []string{
+					"常规创建真实群聊/聊天群使用 chat +chat-create；创建会话分组/分类使用 chat +category-create",
 					"已有群只需加人时使用 chat group members add",
-					"只是搜索已有群时使用 chat search",
 				},
 				Examples: []string{"dws chat group create --name \"Q1 项目冲刺群\" --users userId1,userId2,userId3"},
 			},
@@ -2823,8 +3551,9 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按关键词搜索群聊并拿到 openConversationId",
-				UseWhen:      []string{"只知道群名关键词，需要定位群并提取 openConversationId"},
+				UseWhen:      []string{"明确需要 +chat-search 未公开的底层字段或原始响应，并按真实群聊/聊天群名称定位 openConversationId 时"},
 				AvoidWhen: []string{
+					"常规搜索真实群聊/聊天群使用 chat +chat-search；查看会话分组/分类使用 chat +category-list",
 					"已有群号时用 chat group get-by-group-id",
 					"查我创建/管理的群用 chat group list-my-groups",
 					"查与某人的共同群用 chat search-common",
@@ -2899,8 +3628,9 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "把企业机器人拉进我有管理权限的群",
-				UseWhen:      []string{"需要把已有企业机器人加入指定群"},
+				UseWhen:      []string{"明确需要 chat +chat-add-bot 未公开的底层字段或原始响应，并把机器人加入群时"},
 				AvoidWhen: []string{
+					"常规把机器人加入群使用 chat +chat-add-bot",
 					"添加普通成员时使用 chat group members add",
 					"移除群内机器人时使用 chat group members remove-bot",
 				},
@@ -2948,8 +3678,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "修改指定群聊的名称",
-				UseWhen:      []string{"需要给已有群聊重命名时"},
-				AvoidWhen:    []string{"只修改个人可见备注时不要使用群名称更新"},
+				UseWhen:      []string{"明确需要 chat +chat-update 未公开的底层字段或原始响应，并修改群名称时"},
+				AvoidWhen:    []string{"常规修改群名称使用 chat +chat-update；只修改个人可见备注使用 chat +chat-update-alias"},
 				Examples:     []string{"dws chat group rename --id <openConversationId> --name \"新群名\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -3078,17 +3808,30 @@ func newChatCommand() *cobra.Command {
 	chatMessageListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "拉取会话消息内容",
-		Long:  `拉取指定群聊或单聊的会话消息内容。输出顶层 messages，稳定字段为 messageId 和 text；兼容保留 openMessageId 和 content。--conversation-id 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。--time 可选，不传时默认上海时间当前时间并向旧消息拉取。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat thread list-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
+		Long: `拉取指定群聊或单聊的会话消息内容。输出顶层 messages，稳定字段为 messageId 和 text；兼容保留 openMessageId 和 content。--conversation-id 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。--time 可选，不传时默认上海时间当前时间并向旧消息拉取。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时，CLI 将服务端返回的毫秒级 nextCursor 转换为下一次请求的精确 --time 边界；不会使用只有秒级精度的消息 createTime 推算下一页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat thread list-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。
+
+默认只读取单页；只有显式传 --page-all 才会按上述服务端游标自动翻页、按稳定 messageId 去重并聚合 messages。只传 --page-limit、--max-items 或 --page-delay 仍保持单页调用。自动翻页时 --page-limit 控制最多请求页数（默认 50），--max-items 精确截断返回条数，--page-delay 控制页间等待毫秒数；--limit 是每页数量，总量控制请用 --max-items。输出公开 complete、hasMore、nextPage、stopReason、截断及失败信息；缺少 hasMore、nextCursor 无效、游标停滞或 hasMore=true 但当前页为空时，不会把部分结果称为完整。大会话全量拉取可能产生很大输出，建议配合 --max-items 或 --jq/--fields 控制输出体积。`,
 		Example: `  dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00"
   dws chat message list --conversation-id <openconversation_id>
   dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00" --direction older
   dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00" --jq '.messages[] | {messageId, text}'
+  dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00" --direction older --page-all --page-limit 10 --max-items 200
 		# 查询群 ID: dws chat search --query "群名"
 		# 查询 userId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "conversation-id", "group", "id", "chat")
+			opts, err := readPagedCommandOptions(cmd)
+			if err != nil {
+				return err
+			}
+			if opts.pageAll {
+				return runChatMessageListPageAll(cmd, opts)
+			}
+			groupID, err := chatFlagOrAlias(cmd, "conversation-id", "group", "id", "chat")
+			if err != nil {
+				return apperrors.NewValidation(err.Error(), apperrors.WithReason("conflicting_aliases"))
+			}
 			userID, _ := cmd.Flags().GetString("user")
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			specified := 0
@@ -3102,10 +3845,16 @@ func newChatCommand() *cobra.Command {
 				specified++
 			}
 			if specified > 1 {
-				return fmt.Errorf("--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one")
+				return apperrors.NewValidation(
+					"--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one",
+					apperrors.WithReason("mutually_exclusive"),
+				)
 			}
 			if specified == 0 {
-				return fmt.Errorf("--conversation-id, --user or --open-dingtalk-id is required")
+				return apperrors.NewValidation(
+					"--conversation-id, --user or --open-dingtalk-id is required",
+					apperrors.WithReason("require_one_of"),
+				)
 			}
 			if openDingTalkID != "" {
 				if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openDingTalkID); err != nil {
@@ -3126,6 +3875,10 @@ func newChatCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			paginationDirection := "older"
+			if forward {
+				paginationDirection = "newer"
+			}
 			if groupID != "" {
 				toolArgs := map[string]any{
 					"openconversation_id": groupID,
@@ -3135,7 +3888,7 @@ func newChatCommand() *cobra.Command {
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
 				}
-				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false)
+				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false, paginationDirection)
 			}
 			toolArgs := map[string]any{
 				"time":    timeVal,
@@ -3149,7 +3902,7 @@ func newChatCommand() *cobra.Command {
 			if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
+			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false, paginationDirection)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListCmd, LeafSpec{
@@ -3173,17 +3926,17 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页读取指定会话消息及其引用上下文",
-				UseWhen:      []string{"用户明确指定某个会话，并要读取消息或追溯引用回复中的原消息上下文时"},
-				AvoidWhen:    []string{"跨全部会话按时间查询时使用 chat message list-all"},
+				UseWhen:      []string{"明确需要 +chat-messages 未公开的底层字段、原始响应或手工 continuation，并读取指定会话消息时"},
+				AvoidWhen:    []string{"常规读取指定会话使用 chat +chat-messages；跨全部会话按时间查询使用 chat message list-all"},
 				Examples: []string{
 					"dws chat message list --group <openConversationId> --limit 50",
 					"dws chat message list --group <openConversationId> --time \"2026-07-01 00:00:00\" --limit 50 --jq '.messages[] | {messageId, text}'",
 				},
 			},
-			Parameters: []contract.ParamDecl{
+			Parameters: append([]contract.ParamDecl{
 				{Name: "direction", Property: "forward"},
 				{Name: "group", Property: "openconversation_id", Required: boolPtr(false)},
-			},
+			}, pagedMCPParamDecls()...),
 		},
 	})
 
@@ -3235,7 +3988,7 @@ func newChatCommand() *cobra.Command {
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callMCPTool("list_individual_chat_message", toolArgs)
+			return callProjectedAtomicChatMessages(cmd, "list_individual_chat_message", toolArgs, false)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListDirectCmd, LeafSpec{
@@ -3318,7 +4071,10 @@ func newChatCommand() *cobra.Command {
 # 查询用户 ID: dws contact user search --query "姓名"`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "conversation-id", "group", "id", "chat")
+			groupID, err := chatFlagOrAlias(cmd, "conversation-id", "group", "id", "chat")
+			if err != nil {
+				return apperrors.NewValidation(err.Error(), apperrors.WithReason("conflicting_aliases"))
+			}
 			userID, _ := cmd.Flags().GetString("user")
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			msgUuid := flagOrFallback(cmd, "idempotency-key", "uuid")
@@ -3333,10 +4089,16 @@ func newChatCommand() *cobra.Command {
 				specified++
 			}
 			if specified > 1 {
-				return fmt.Errorf("--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one")
+				return apperrors.NewValidation(
+					"--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one",
+					apperrors.WithReason("mutually_exclusive"),
+				)
 			}
 			if specified == 0 {
-				return fmt.Errorf("--conversation-id, --user or --open-dingtalk-id is required")
+				return apperrors.NewValidation(
+					"--conversation-id, --user or --open-dingtalk-id is required",
+					apperrors.WithReason("require_one_of"),
+				)
 			}
 			if openDingTalkID != "" {
 				if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openDingTalkID); err != nil {
@@ -3385,7 +4147,10 @@ func newChatCommand() *cobra.Command {
 				switch msgType {
 				case "image":
 					if mediaId == "" {
-						return fmt.Errorf("--media-id is required for msgType=image")
+						return apperrors.NewValidation(
+							"--media-id is required for msgType=image",
+							apperrors.WithReason("missing_required_flag"),
+						)
 					}
 					contentJSON = fmt.Sprintf(`{"mediaId":"%s"}`, mediaId)
 				case "file", "audio", "video":
@@ -3394,7 +4159,10 @@ func newChatCommand() *cobra.Command {
 					dentryId, _ := cmd.Flags().GetInt64("dentry-id")
 					spaceId, _ := cmd.Flags().GetInt64("space-id")
 					if (dentryId == 0) != (spaceId == 0) {
-						return fmt.Errorf("--dentry-id and --space-id must be specified together")
+						return apperrors.NewValidation(
+							"--dentry-id and --space-id must be specified together",
+							apperrors.WithReason("require_together"),
+						)
 					}
 					if filePath != "" {
 						meta, err := buildConversationLocalFileMeta(filePath, "", "")
@@ -3433,7 +4201,11 @@ func newChatCommand() *cobra.Command {
 							}
 							contentJSON, _ = buildConversationFileContent(dentryId, spaceId, meta)
 						} else if dentryId == 0 || spaceId == 0 {
-							return fmt.Errorf("--file must be a readable local file, or pass legacy --dentry-id and --space-id: %w", err)
+							return apperrors.NewValidation(
+								"--file must be a readable local file, or pass legacy --dentry-id and --space-id: "+err.Error(),
+								apperrors.WithReason("invalid_file"),
+								apperrors.WithCause(err),
+							)
 						}
 					}
 					if contentJSON == "" {
@@ -3441,7 +4213,10 @@ func newChatCommand() *cobra.Command {
 						fileType, _ := cmd.Flags().GetString("file-type")
 						fileSize, _ := cmd.Flags().GetInt64("file-size")
 						if dentryId == 0 || spaceId == 0 || fileName == "" {
-							return fmt.Errorf("readable local --file is required for msgType=file; legacy flags --dentry-id, --space-id, --file-name are still supported")
+							return apperrors.NewValidation(
+								"readable local --file is required for msgType=file; legacy flags --dentry-id, --space-id, --file-name are still supported",
+								apperrors.WithReason("missing_required_flags"),
+							)
 						}
 						contentJSON = fmt.Sprintf(`{"dentryId":%d,"spaceId":%d,"fileName":"%s","fileType":"%s","filePath":"%s","fileSize":%d}`,
 							dentryId, spaceId, fileName, fileType, filePath, fileSize)
@@ -3452,17 +4227,26 @@ func newChatCommand() *cobra.Command {
 					locationName, _ := cmd.Flags().GetString("location-name")
 					mapThumbnailUrl, _ := cmd.Flags().GetString("map-thumbnail-url")
 					if latitude == "" || longitude == "" || locationName == "" || mapThumbnailUrl == "" {
-						return fmt.Errorf("--latitude, --longitude, --location-name, --map-thumbnail-url are all required for msgType=location")
+						return apperrors.NewValidation(
+							"--latitude, --longitude, --location-name, --map-thumbnail-url are all required for msgType=location",
+							apperrors.WithReason("missing_required_flags"),
+						)
 					}
 					contentJSON = fmt.Sprintf(`{"locationName":"%s","longitude":"%s","latitude":"%s","mapThumbnailUrl":"%s"}`, locationName, longitude, latitude, mapThumbnailUrl)
 				case "profile":
 					contactID, _ := cmd.Flags().GetString("contact-id")
 					if contactID == "" {
-						return fmt.Errorf("--contact-id is required for msgType=profile")
+						return apperrors.NewValidation(
+							"--contact-id is required for msgType=profile",
+							apperrors.WithReason("missing_required_flag"),
+						)
 					}
 					contentJSON = fmt.Sprintf(`{"openDingTalkId":"%s"}`, contactID)
 				default:
-					return fmt.Errorf("unsupported --msg-type: %s (supported: image, file, audio, video, location, profile)", msgType)
+					return apperrors.NewValidation(
+						fmt.Sprintf("unsupported --msg-type: %s (supported: image, file, audio, video, location, profile)", msgType),
+						apperrors.WithReason("invalid_enum"),
+					)
 				}
 
 				params := map[string]any{
@@ -3487,7 +4271,10 @@ func newChatCommand() *cobra.Command {
 				text = args[0]
 			}
 			if text == "" {
-				return fmt.Errorf("message content required (use --content or positional arg, or --media-id for image)")
+				return apperrors.NewValidation(
+					"message content required (use --content or positional arg, or --media-id for image)",
+					apperrors.WithReason("require_one_of"),
+				)
 			}
 			title, _ := cmd.Flags().GetString("title")
 			if title == "" {
@@ -3526,6 +4313,7 @@ func newChatCommand() *cobra.Command {
 	}
 	chatMessageSendRunE := chatMessageSendCmd.RunE
 	DeclareLeafMetadata(chatMessageSendCmd, LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
 			Confirmation: "not_required", Idempotency: "unknown",
@@ -3546,8 +4334,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "以当前用户身份发送群聊或单聊消息",
-				UseWhen:      []string{"用户明确要以个人身份发送文本或媒体消息时；响应返回 openTaskId 后用 chat message query-send-status 确认投递并取得后续操作所需的消息 ID"},
-				AvoidWhen:    []string{"机器人身份或 Webhook 发送应使用对应命令"},
+				UseWhen:      []string{"明确需要 chat +messages-send 未公开的底层字段、原始响应或不同执行语义，并以个人身份发送消息时"},
+				AvoidWhen:    []string{"常规个人/Bot/Webhook 或高级发送使用 chat +messages-send"},
 				Examples:     []string{"dws chat message send --group <openConversationId> --content \"项目已更新\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -3556,6 +4344,25 @@ func newChatCommand() *cobra.Command {
 				{Name: "group", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "idempotency-key", Property: "uuid"},
 				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId"},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{
+					contract.ResultOutcomeSuccess,
+					contract.ResultOutcomePending,
+					contract.ResultOutcomeFailure,
+				},
+				DataSchema: json.RawMessage(`{
+					"type":"object",
+					"description":"个人消息发送的下游响应；标识可能位于顶层或 result 对象中",
+					"properties":{
+						"success":{"type":"boolean","description":"下游是否接受发送请求"},
+						"result":{"type":"object","description":"下游返回的发送结果对象","additionalProperties":true},
+						"openTaskId":{"type":"string","description":"异步发送任务 ID"},
+						"openMessageId":{"type":"string","description":"发送成功后的消息 ID"},
+						"openConversationId":{"type":"string","description":"消息所在会话 ID"}
+					},
+					"additionalProperties":true
+				}`),
 			},
 		},
 	})
@@ -3787,8 +4594,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "以应用机器人身份发送 Markdown、图片或文件群消息、群聊引用回复或批量单聊",
-				UseWhen:      []string{"已有 robotCode 且需要机器人身份投递 Markdown、图片或文件时", "需要机器人在群聊中引用回复一条已有消息时"},
-				AvoidWhen:    []string{"个人身份发送或自定义 Webhook 告警不要使用"},
+				UseWhen:      []string{"明确需要 chat +messages-send 未公开的 Bot 底层字段、原始响应或不同执行语义时"},
+				AvoidWhen:    []string{"常规 Bot/个人/Webhook 或高级发送使用 chat +messages-send"},
 				Examples: []string{
 					"dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --title \"日报\" --text \"今日进展\"",
 					"dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --reply <openMessageId> --ref-sender <openDingTalkId> --text \"收到\"",
@@ -3862,8 +4669,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "撤回指定机器人发送的消息",
-				UseWhen:      []string{"持有 robotCode 和发送结果 key，需要撤回机器人消息时"},
-				AvoidWhen:    []string{"个人身份消息撤回使用 chat message recall"},
+				UseWhen:      []string{"明确需要 chat +messages-recall-by-bot 未公开的底层字段或原始响应，并撤回机器人消息时"},
+				AvoidWhen:    []string{"常规撤回机器人消息使用 chat +messages-recall-by-bot；个人消息使用 chat +messages-recall"},
 				Examples:     []string{"dws chat message recall-by-bot --robot-code <robotCode> --conversation-id <openConversationId> --keys <processQueryKey>"},
 			},
 		},
@@ -3960,10 +4767,9 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "用自定义机器人 Webhook 向群发送消息",
-				UseWhen:      []string{"已有自定义机器人 webhook token，需要向群发告警或通知"},
+				UseWhen:      []string{"明确需要 chat +messages-send 未公开的 Webhook 底层字段、原始响应或不同执行语义时"},
 				AvoidWhen: []string{
-					"使用企业机器人 robot-code 发消息时用 chat message send-by-bot",
-					"以个人身份发消息时用 chat message send",
+					"常规 Webhook/Bot/个人或高级发送使用 chat +messages-send",
 				},
 				Examples: []string{"dws chat message send-by-webhook --token <webhook-token> --title \"告警\" --content \"CPU 超 90%\" --at-all"},
 			},
@@ -4011,16 +4817,18 @@ func newChatCommand() *cobra.Command {
 	chatMessageListAllCmd := &cobra.Command{
 		Use:   "list-all",
 		Short: "拉取指定时间范围内当前用户的所有会话消息",
-		Long:  `分页拉取当前登录用户在指定时间范围内的所有会话消息。--start 和 --end 可选，不传时默认最近 1 天到当前时间，避免跨全部会话范围过大；--limit 指定每页数量，--cursor 传分页游标（首页传 0）。服务端按 cursor 分页返回，hasMore=true 时用返回的 nextCursor 值继续翻页。默认只读取单页；只有显式传 --page-all 才会自动翻页并保留、合并 result.conversationMessagesList，同一会话跨页合并 messages。只传 --page-limit、--max-items 或 --page-delay 仍保持单页调用。自动翻页时 --page-limit 控制最多请求页数，--max-items 按消息数精确截断，--page-delay 控制页间等待毫秒数。如果当前账号没有消息搜索权益，CLI 会保留服务端返回的友好提示与开通入口；不要把权限错误解释为时间范围内没有消息。`,
+		Long:  `分页拉取当前登录用户在指定时间范围内的所有会话消息。--start 和 --end 可选，不传时默认最近 1 天到当前时间，避免跨全部会话范围过大；--limit 指定每页数量，--cursor 传分页游标（首页传 0）。服务端按 cursor 分页返回，hasMore=true 时用返回的 nextCursor 值继续翻页。默认只读取单页；只有显式传 --page-all 才会自动翻页并保留、合并 result.conversationMessagesList，同一会话跨页合并 messages。只传 --page-limit、--max-items 或 --page-delay 仍保持单页调用。自动翻页时 --page-limit 控制最多请求页数，--max-items 按消息数精确截断，--page-delay 控制页间等待毫秒数。加 --no-reactions 可省略 reaction，正文、资源引用和完整性字段仍保留。如果当前账号没有消息搜索权益，CLI 会保留服务端返回的友好提示与开通入口；不要把权限错误解释为时间范围内没有消息。`,
 		Example: `  dws chat message list-all --start "2025-03-01 00:00:00" --end "2025-03-31 23:59:59" --limit 50
   dws chat message list-all --start "2025-03-01 00:00:00" --end "2025-03-31 23:59:59" --limit 50 --cursor "abc123token"
   dws chat message list-all --start "2025-03-01 00:00:00" --end "2025-03-31 23:59:59" --limit 100 --page-all --page-limit 20 --max-items 500 --page-delay 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatConversationMessagesConfig(
-				"search_messages_by_time_range", chatMessageListAllArgs))
+			return RunPagedMCPCommand(cmd, pagedChatMessageRangeAllConfig(cmd))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListAllCmd, LeafSpec{
+		// This command is entering the result framework from legacy_only. Shadow
+		// validate first so this release keeps its established success bytes.
+		OutputRollout: output.RolloutDualValidate,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -4045,13 +4853,22 @@ func newChatCommand() *cobra.Command {
 				AvoidWhen:    []string{"已指定单个会话时优先使用 chat message list"},
 				Examples: []string{
 					"dws chat message list-all --start \"2026-07-01 00:00:00\" --end \"2026-07-02 00:00:00\" --limit 50",
-					"dws chat message list-all --start \"2026-07-01 00:00:00\" --end \"2026-07-02 00:00:00\" --limit 100 --page-all --page-limit 20",
+					"dws chat message list-all --start \"2026-07-01 00:00:00\" --end \"2026-07-02 00:00:00\" --limit 100 --page-all --page-limit 20 --no-reactions",
 				},
 			},
 			Parameters: append([]contract.ParamDecl{
 				{Name: "end", Property: "endTime"},
 				{Name: "start", Property: "startTime"},
+				{Name: "no-reactions", InterfaceType: "boolean"},
 			}, pagedMCPParamDecls()...),
+			Result: chatMessageRangeAllResult(),
+			Pagination: &contract.PaginationSpec{
+				Kind:                  contract.PaginationKindCursor,
+				CursorParameter:       "cursor",
+				MetaPath:              contract.PaginationMetaPath,
+				EndpointExhaustedPath: contract.PaginationExhaustedPath,
+				NextTokenPath:         contract.PaginationNextTokenPath,
+			},
 		},
 	})
 
@@ -4067,8 +4884,8 @@ func newChatCommand() *cobra.Command {
   # 查询 userId: dws contact user search --query "姓名"
   # 查询 openDingTalkId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatConversationMessagesConfig(
-				"search_messages_by_sender", chatMessageListBySenderArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatConversationMessagesConfig("search_messages_by_sender", chatMessageListBySenderArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListBySenderCmd, LeafSpec{
@@ -4118,8 +4935,8 @@ func newChatCommand() *cobra.Command {
   dws chat message list-mentions --conversation-id <openconversation_id> --start "2026-03-10T00:00:00+08:00" --end "2026-03-11T00:00:00+08:00" --limit 50 --page-all --max-items 200 --page-delay 0
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatConversationMessagesConfig(
-				"search_at_me_message", chatMessageListMentionsArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatConversationMessagesConfig("search_at_me_message", chatMessageListMentionsArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListMentionsCmd, LeafSpec{
@@ -4143,8 +4960,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定时间范围内提及当前用户的消息",
-				UseWhen:      []string{"需要找出 @我的消息和待关注事项时"},
-				AvoidWhen:    []string{"查询全部消息时使用 chat message list-all"},
+				UseWhen:      []string{"明确需要 chat +at-me 未公开的底层字段或原始响应，并查看 @我的消息时"},
+				AvoidWhen:    []string{"常规查看 @我的消息使用 chat +at-me；查询全部消息使用 chat message list-all"},
 				Examples: []string{
 					"dws chat message list-mentions --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-02T00:00:00+08:00\" --limit 50",
 					"dws chat message list-mentions --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-02T00:00:00+08:00\" --limit 50 --page-all --max-items 200",
@@ -4166,8 +4983,8 @@ func newChatCommand() *cobra.Command {
   dws chat message list-focused --limit 20 --cursor <nextCursor>
   dws chat message list-focused --limit 50 --page-all --page-limit 10 --page-delay 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return RunPagedMCPCommand(cmd, pagedChatMessagesInt64Config(
-				"list_special_focus_messages", chatMessageListFocusedArgs))
+			return RunPagedMCPCommand(cmd, pagedProjectedAtomicChatMessagesConfig(cmd,
+				pagedChatMessagesInt64Config("list_special_focus_messages", chatMessageListFocusedArgs)))
 		},
 	}
 	DeclareLeafMetadata(chatMessageListFocusedCmd, LeafSpec{
@@ -4243,8 +5060,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出当前用户置顶的会话",
-				UseWhen:      []string{"需要查看现有置顶会话清单时"},
-				AvoidWhen:    []string{"设置或取消某个会话置顶时使用 chat set-top"},
+				UseWhen:      []string{"明确需要 +conversation-list-top 未投影的底层原始响应，并查看置顶会话清单时"},
+				AvoidWhen:    []string{"常规查看置顶会话使用 chat +conversation-list-top；设置或取消置顶使用 chat +conversation-set-top"},
 				Examples:     []string{"dws chat list-top-conversations --limit 100"},
 			},
 		},
@@ -4288,8 +5105,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出当前用户存在未读消息的会话",
-				UseWhen:      []string{"需要定位哪些会话还有未读内容时"},
-				AvoidWhen:    []string{"查询某条消息的已读人员时使用 chat message read-status"},
+				UseWhen:      []string{"明确需要 +unread-chats 未投影的底层原始响应，并列出未读会话时"},
+				AvoidWhen:    []string{"常规定位未读会话使用 chat +unread-chats；查询消息已读人员使用 chat +messages-read-status"},
 				Examples:     []string{"dws chat message list-unread-conversations --count 50"},
 			},
 		},
@@ -4336,8 +5153,8 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按关键词和时间范围搜索消息",
-				UseWhen:      []string{"需要用关键词查找消息且过滤条件较简单时"},
-				AvoidWhen:    []string{"需要多会话、发送者或 @维度组合时使用 search-advanced"},
+				UseWhen:      []string{"明确需要 +search-msg 未公开的底层字段、原始响应或手工 continuation，并按关键词搜索消息时"},
+				AvoidWhen:    []string{"常规关键词或组合条件检索使用 chat +search-msg"},
 				Examples: []string{
 					"dws chat message search --query \"发布计划\" --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-10T00:00:00+08:00\"",
 					"dws chat message search --query \"发布计划\" --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-10T00:00:00+08:00\" --page-all --max-items 300 --jq '.messages[] | {messageId, text}'",
@@ -4371,9 +5188,25 @@ func newChatCommand() *cobra.Command {
 	  # 查询人员: dws contact user search --keyword "姓名" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conversationIDs := parseCSVValues(flagOrFallback(cmd, "conversation-ids", "groups", "group"))
+			cfg := pagedChatConversationMessagesOnServerConfig("im", "search_messages", chatMessageSearchAdvancedArgs)
+			cfg.Fallback = func(args map[string]any) error {
+				if deps.Caller.DryRun() {
+					return callMCPToolOnServer("im", "search_messages", args)
+				}
+				text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", "search_messages", args)
+				if err != nil {
+					return withProjectedChatOperation("im/search_messages", err)
+				}
+				return writeProjectedChatPayload(cmd, "im/search_messages", text, func(data map[string]any) map[string]any {
+					return projectExistingChatMessageCollectionsForCommand(cmd, data, true)
+				})
+			}
+			cfg.ProjectResult = func(payload map[string]any) map[string]any {
+				return projectExistingChatMessageCollectionsForCommand(cmd, payload, true)
+			}
 			return runConversationScopedPagedMessageSearch(
 				cmd,
-				pagedChatConversationMessagesOnServerConfig("im", "search_messages", chatMessageSearchAdvancedArgs),
+				cfg,
 				"openConversationIds",
 				conversationIDs,
 			)
@@ -4400,10 +5233,10 @@ func newChatCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按时间、关键词、发送者、@ 或会话等多维度搜索消息",
-				UseWhen:      []string{"需要组合时间范围、关键词、发送者、@我/@某人、指定会话等条件搜消息"},
+				UseWhen:      []string{"明确需要 +search-msg 未公开的底层过滤字段或原始响应，并组合多个条件搜索消息时"},
 				AvoidWhen: []string{
-					"只需按关键词在会话里搜时优先评估 chat message search",
-					"只需拉取某会话时间线时使用 chat message list",
+					"常规关键词、发送者、@、类型或会话组合检索使用 chat +search-msg",
+					"只需拉取某会话时间线时使用 chat +chat-messages",
 					"只需某人发给我的消息时使用 chat message list-by-sender",
 				},
 				Examples: []string{
@@ -4442,9 +5275,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			if err := validateRequiredFlags(cmd, "open-task-id"); err != nil {
 				return err
 			}
-			return callMCPToolOnServer("im", "query_message_send_status", map[string]any{
-				"openTaskId": mustGetFlag(cmd, "open-task-id"),
-			})
+			openTaskID := mustGetFlag(cmd, "open-task-id")
+			return callProjectedIMMessageSendStatus(cmd, openTaskID)
 		},
 	}
 	DeclareLeafMetadata(chatMessageQuerySendStatusCmd, LeafSpec{
@@ -4469,8 +5301,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询异步消息发送任务的状态",
-				UseWhen:      []string{"发送命令返回 openTaskId 后需要确认投递结果，或后续 edit/recall/read-status 需要先取得 openMessageId 和 openConversationId 时"},
-				AvoidWhen:    []string{"没有 openTaskId、已经有消息 ID，或只需查历史消息内容时不要使用"},
+				UseWhen:      []string{"明确需要 chat +messages-query-send-status 未公开的底层字段或原始响应，并查询发送任务时"},
+				AvoidWhen:    []string{"常规查询发送任务使用 chat +messages-query-send-status；无 openTaskId 时不要使用"},
 				Examples:     []string{"dws chat message query-send-status --open-task-id <openTaskId>"},
 			},
 		},
@@ -4522,8 +5354,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "撤回当前用户已发送的单条消息",
-				UseWhen:      []string{"已知会话与消息 ID，需要撤回自己发出的那条消息"},
+				UseWhen:      []string{"明确需要 +messages-recall 未公开的底层字段或原始响应，并撤回已知消息时"},
 				AvoidWhen: []string{
+					"常规撤回当前用户消息使用 chat +messages-recall",
 					"撤回机器人消息时使用 chat message recall-by-bot",
 					"消息 ID 未确认时先用消息查询/搜索拿到 openMessageId",
 				},
@@ -4692,8 +5525,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定消息的已读状态和人员",
-				UseWhen:      []string{"已知会话 ID 与消息 ID，需要核对阅读情况时"},
-				AvoidWhen:    []string{"查看哪些会话未读时使用 chat message list-unread-conversations"},
+				UseWhen:      []string{"明确需要 chat +messages-read-status 未公开的底层字段或原始响应，并查询消息已读状态时"},
+				AvoidWhen:    []string{"常规查询消息已读状态使用 chat +messages-read-status；查看未读会话使用 chat +unread-chats"},
 				Examples:     []string{"dws chat message read-status --conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -4707,10 +5540,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatSearchCommonCmd := &cobra.Command{
 		Use:   "search-common",
 		Short: "搜索共同群（查询指定人共同所在的群聊）",
-		Long:  `根据昵称列表搜索共同群聊。--nicks 指定要搜索的人员昵称（逗号分隔，必填）。--match-mode 控制匹配模式：AND 表示所有人都在群里，OR 表示任一人在群里（默认 AND）。分页参数 --limit（默认 20）和 --cursor（默认 "0"）始终传递；hasMore=true 时用返回的 nextCursor 作为下次 --cursor 继续翻页。`,
+		Long:  `根据昵称列表搜索共同群聊。--nicks 指定要搜索的人员昵称（逗号分隔，必填）。--match-mode 控制匹配模式：AND 表示所有人都在群里，OR 表示任一人在群里（默认 AND）。--limit 是每页数量，--cursor 是单页续游标；要求“最多 N 个”时使用 --page-all --max-items N，CLI 会自动续页、按 openConversationId 去重，并通过 paging.requestSatisfied/sourceExhausted 区分“已满足用户上限”和“已穷尽服务端”。`,
 		Example: `  dws chat search-common --nicks "风雷,山乔" --limit 20 --cursor 0
-  dws chat search-common --nicks "天鸡,乐函" --match-mode OR --limit 20 --cursor 0
-  dws chat search-common --nicks "风雷,山乔,天鸡" --limit 10 --cursor <nextCursor>`,
+  dws chat search-common --nicks "天鸡,乐函" --match-mode OR --limit 100 --page-all --max-items 20 --page-delay 0`,
 		RunE: runChatSearchCommon,
 	}
 	DeclareLeafMetadata(chatSearchCommonCmd, LeafSpec{
@@ -4736,8 +5568,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 				AgentSummary: "查询指定人员共同所在的群聊",
 				UseWhen:      []string{"需要找两人或多人共同群聊时"},
 				AvoidWhen:    []string{"按群名称搜索时使用 chat search"},
-				Examples:     []string{"dws chat search-common --nicks \"张三,李四\" --match-mode all --limit 20"},
+				Examples:     []string{"dws chat search-common --nicks \"张三,李四\" --match-mode AND --limit 100 --page-all --max-items 20 --page-delay 0"},
 			},
+			Parameters: pagedMCPParamDecls(),
 		},
 	})
 
@@ -4805,8 +5638,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "搜索我创建的企业机器人并提取 robot-code",
-				UseWhen:      []string{"需要我自己创建的机器人及其 robot-code"},
-				AvoidWhen:    []string{"搜索全部可用企业机器人时使用 chat bot find"},
+				UseWhen:      []string{"明确需要 chat +bot-search 未公开的底层字段或原始响应，并搜索自己创建的机器人时"},
+				AvoidWhen:    []string{"常规搜索自己创建的机器人使用 chat +bot-search；搜索全部可用机器人使用 chat +bot-find"},
 				Examples:     []string{"dws chat bot search --page 1 --size 10 --name \"日报\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -4865,6 +5698,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageListCmd.Flags().Int("limit", 0, "返回数量，不传则不限制")
 	chatMessageListCmd.Flags().Int("size", 0, "--limit 的旧版别名")
 	_ = chatMessageListCmd.Flags().MarkHidden("size")
+	AddPagedMCPFlags(chatMessageListCmd)
 	cli.AnnotateRuntimeConstraints(chatMessageListCmd, cli.RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{{"group", "user", "open-dingtalk-id"}},
 		RequireOneOf:      [][]string{{"group", "user", "open-dingtalk-id"}},
@@ -5002,6 +5836,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageListAllCmd.Flags().Int("size", 0, "--limit 的旧版别名")
 	_ = chatMessageListAllCmd.Flags().MarkHidden("size")
 	chatMessageListAllCmd.Flags().String("cursor", "0", "分页游标（首页传 \"0\"，后续从响应中获取）")
+	chatMessageListAllCmd.Flags().Bool("no-reactions", false, "不输出消息 reaction（默认输出）")
 	AddPagedMCPFlags(chatMessageListAllCmd)
 
 	// list-by-sender flags
@@ -5081,6 +5916,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatSearchCommonCmd.Flags().MarkHidden("size")
 	chatSearchCommonCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"，翻页传 nextCursor）")
 	chatSearchCommonCmd.Flags().Bool("exclude-muted", false, "是否排除已设置免打扰的群聊（默认 false）")
+	AddPagedMCPFlags(chatSearchCommonCmd)
 	chatMessageSearchCommonCmd.Flags().String("nicks", "", "要搜索的昵称列表，逗号分隔 (必填)")
 	_ = chatMessageSearchCommonCmd.MarkFlagRequired("nicks")
 	chatMessageSearchCommonCmd.Flags().String("match-mode", "AND", "匹配模式：AND=所有人都在群里，OR=任一人在群里（默认 AND）")
@@ -5089,6 +5925,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatMessageSearchCommonCmd.Flags().MarkHidden("size")
 	chatMessageSearchCommonCmd.Flags().String("cursor", "0", "分页游标（默认 \"0\"，翻页传 nextCursor）")
 	chatMessageSearchCommonCmd.Flags().Bool("exclude-muted", false, "是否排除已设置免打扰的群聊（默认 false）")
+	AddPagedMCPFlags(chatMessageSearchCommonCmd)
 	chatMessageSearchCommonCmd.Flags().String("group", "", "")
 	_ = chatMessageSearchCommonCmd.Flags().MarkHidden("group")
 
@@ -5163,7 +6000,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 		RequireOneOf:      [][]string{{"text", "content"}},
 	})
 
-	// 别名注册: --conversation-id/--id/--chat → --group (chat message 子命令)
+	// 隐藏兼容别名统一指向公开主参数 --conversation-id；少数历史公开别名由 manifest 单独恢复。
 	groupAliasCmds := []*cobra.Command{
 		chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd,
 		chatMessageRecallByBotCmd, chatMessageListTopicRepliesCmd, chatMessageListMentionsCmd,
@@ -5172,12 +6009,15 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	for _, c := range groupAliasCmds {
 		c.Flags().String("group", "", "--conversation-id 的别名")
 		_ = c.Flags().MarkHidden("group")
+		corecmd.AnnotateFlagAlias(c, "group", "conversation-id")
 		if c.Flags().Lookup("id") == nil {
-			c.Flags().String("id", "", "--group 的别名")
+			c.Flags().String("id", "", "--conversation-id 的别名")
 			_ = c.Flags().MarkHidden("id")
+			corecmd.AnnotateFlagAlias(c, "id", "conversation-id")
 		}
-		c.Flags().String("chat", "", "--group 的别名")
+		c.Flags().String("chat", "", "--conversation-id 的别名")
 		_ = c.Flags().MarkHidden("chat")
+		corecmd.AnnotateFlagAlias(c, "chat", "conversation-id")
 	}
 
 	// conversation-info: 获取会话基础信息
@@ -5190,7 +6030,10 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
   dws chat conversation-info --user <userId> --format json
   dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "conversation-id", "group", "id", "chat")
+			groupID, err := chatFlagOrAlias(cmd, "conversation-id", "group", "id", "chat")
+			if err != nil {
+				return apperrors.NewValidation(err.Error(), apperrors.WithReason("conflicting_aliases"))
+			}
 			rawOpenDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			rawUserID := flagOrFallback(cmd, "user", "userId")
 			specified := 0
@@ -5200,10 +6043,10 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 				}
 			}
 			if specified > 1 {
-				return fmt.Errorf("--group, --user and --open-dingtalk-id are mutually exclusive, specify exactly one")
+				return fmt.Errorf("--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one")
 			}
 			if specified == 0 {
-				return fmt.Errorf("--group, --user or --open-dingtalk-id is required")
+				return fmt.Errorf("--conversation-id, --user or --open-dingtalk-id is required")
 			}
 
 			userID := rawUserID
@@ -5258,8 +6101,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取群聊或单聊会话的详细信息",
-				UseWhen:      []string{"已知群 ID 或用户标识并需要解析会话详情时"},
-				AvoidWhen:    []string{"按群名查找会话时使用 chat search"},
+				UseWhen:      []string{"明确需要 +conversation-info 未公开的 --user 解析、底层字段或原始响应，并读取会话详情时"},
+				AvoidWhen:    []string{"常规读取会话详情使用 chat +conversation-info；按群名定位使用 chat +chat-search"},
 				Examples:     []string{"dws chat conversation-info --group <openConversationId> --format json"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5271,14 +6114,18 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	})
 	chatConversationInfoCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时使用）")
 	chatConversationInfoCmd.Flags().String("group", "", "--conversation-id 的别名")
-	chatConversationInfoCmd.Flags().String("id", "", "--group 的别名")
-	chatConversationInfoCmd.Flags().String("chat", "", "--group 的别名")
+	chatConversationInfoCmd.Flags().String("id", "", "--conversation-id 的别名")
+	chatConversationInfoCmd.Flags().String("chat", "", "--conversation-id 的别名")
 	_ = chatConversationInfoCmd.Flags().MarkHidden("group")
 	_ = chatConversationInfoCmd.Flags().MarkHidden("id")
 	_ = chatConversationInfoCmd.Flags().MarkHidden("chat")
+	corecmd.AnnotateFlagAlias(chatConversationInfoCmd, "group", "conversation-id")
+	corecmd.AnnotateFlagAlias(chatConversationInfoCmd, "id", "conversation-id")
+	corecmd.AnnotateFlagAlias(chatConversationInfoCmd, "chat", "conversation-id")
 	chatConversationInfoCmd.Flags().String("user", "", "单聊对方 userId（单聊时使用）")
 	chatConversationInfoCmd.Flags().String("userId", "", "--user 的别名")
 	_ = chatConversationInfoCmd.Flags().MarkHidden("userId")
+	corecmd.AnnotateFlagAlias(chatConversationInfoCmd, "userId", "user")
 	chatConversationInfoCmd.Flags().String("open-dingtalk-id", "", "单聊对方 openDingTalkId（单聊时使用）")
 	cli.AnnotateRuntimeConstraints(chatConversationInfoCmd, cli.RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{{"group", "user", "open-dingtalk-id"}},
@@ -5428,8 +6275,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出当前用户的自定义会话分组",
-				UseWhen:      []string{"需要取得分组 ID 或浏览分组配置时"},
-				AvoidWhen:    []string{"需要查看某个分组内会话时使用 chat category list-conversations"},
+				UseWhen:      []string{"明确需要 +category-list 未投影的底层原始响应时，列出会话分组/分类容器"},
+				AvoidWhen:    []string{"常规查看会话分组/分类使用 chat +category-list；查看真实群聊/聊天群使用 chat +my-groups"},
 				Examples:     []string{"dws chat category list"},
 			},
 		},
@@ -5472,8 +6319,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出指定会话分组中的会话",
-				UseWhen:      []string{"已知分组 ID 并需要查看其中会话时"},
-				AvoidWhen:    []string{"只需列出分组本身时使用 chat category list"},
+				UseWhen:      []string{"明确需要 +category-list-conversations 未投影的底层原始响应，并查看指定会话分组内会话时"},
+				AvoidWhen:    []string{"常规查看分组内会话使用 chat +category-list-conversations；只列分组使用 chat +category-list"},
 				Examples:     []string{"dws chat category list-conversations --category-id 123"},
 			},
 		},
@@ -5518,8 +6365,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建用户自定义会话分组",
-				UseWhen:      []string{"需要新建一个手工维护的会话分组时"},
-				AvoidWhen:    []string{"需要按规则自动归集会话时使用 chat category create-smart"},
+				UseWhen:      []string{"明确需要底层原始响应或 Shortcut 未公开参数，并要新建手工维护的会话分组时"},
+				AvoidWhen:    []string{"常规创建会话分组优先使用 chat +category-create；按规则自动归集使用 chat category create-smart"},
 				Examples:     []string{"dws chat category create --title \"工作群\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5573,8 +6420,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "删除用户自定义会话分组",
-				UseWhen:      []string{"用户明确要删除某个自定义会话分组，且已确认不影响会话本身"},
-				AvoidWhen:    []string{"只是从分组移出某个会话时使用 chat category remove-conv"},
+				UseWhen:      []string{"明确需要 +category-delete 未公开的底层字段或原始响应，并删除会话分组/分类时"},
+				AvoidWhen:    []string{"常规删除会话分组/分类使用 chat +category-delete；移出会话使用 chat +category-remove-conversation"},
 				Examples:     []string{"dws chat category delete --category-id 123"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5628,8 +6475,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新用户自定义会话分组的名称",
-				UseWhen:      []string{"需要给已有自定义会话分组改名时"},
-				AvoidWhen:    []string{"需要新建分组时使用 chat category create"},
+				UseWhen:      []string{"明确需要 +category-rename 未公开的底层字段或原始响应，并重命名会话分组/分类时"},
+				AvoidWhen:    []string{"常规重命名会话分组/分类使用 chat +category-rename；新建分组使用 chat +category-create"},
 				Examples:     []string{"dws chat category rename --category-id 123 --title \"新名称\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5685,8 +6532,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将会话加入一个或多个自定义会话分组",
-				UseWhen:      []string{"已有会话 openConversationId 和目标 categoryId，需要把会话归入分组时"},
-				AvoidWhen:    []string{"从分组移除会话时使用 chat category remove-conv"},
+				UseWhen:      []string{"明确需要 +category-add-conversation 未公开的底层字段或原始响应，并把会话加入分组时"},
+				AvoidWhen:    []string{"常规加入分组使用 chat +category-add-conversation；移出分组使用 chat +category-remove-conversation"},
 				Examples:     []string{"dws chat category add-conv --conversation-id <openConversationId> --category-ids 123,456"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5744,8 +6591,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将会话从一个或多个自定义会话分组移出",
-				UseWhen:      []string{"已有会话 openConversationId 和 categoryId，需要取消会话分组归属时"},
-				AvoidWhen:    []string{"向分组加入会话时使用 chat category add-conv"},
+				UseWhen:      []string{"明确需要 +category-remove-conversation 未公开的底层字段或原始响应，并把会话移出分组时"},
+				AvoidWhen:    []string{"常规移出分组使用 chat +category-remove-conversation；加入分组使用 chat +category-add-conversation"},
 				Examples:     []string{"dws chat category remove-conv --conversation-id <openConversationId> --category-ids 123,456"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5890,8 +6737,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "把数字群号解析为群聊信息",
-				UseWhen:      []string{"用户只提供数字群号且需要 openConversationId 时"},
-				AvoidWhen:    []string{"已经持有 openConversationId 时直接使用目标命令"},
+				UseWhen:      []string{"明确需要 chat +chat-get-by-id 未公开的底层字段或原始响应，并从数字群号取得 openConversationId 时"},
+				AvoidWhen:    []string{"常规按数字群号取群信息使用 chat +chat-get-by-id；已有 openConversationId 时直接使用目标命令"},
 				Examples:     []string{"dws chat group get-by-group-id --group-id 12345678"},
 			},
 		},
@@ -5912,7 +6759,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			if len(msgIds) > 50 {
 				return fmt.Errorf("--msg-ids 最多支持 50 条，当前 %d 条", len(msgIds))
 			}
-			return callMCPToolOnServer("im", "list_messages_by_ids", map[string]any{
+			return callProjectedAtomicIMMessages(cmd, "list_messages_by_ids", map[string]any{
 				"openMsgIds": msgIds,
 			})
 		},
@@ -5938,8 +6785,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按消息 ID 批量获取消息详情",
-				UseWhen:      []string{"已经持有一组 msgId 并需要精确取回消息时"},
-				AvoidWhen:    []string{"只有关键词或时间范围时使用 search 或 list 命令"},
+				UseWhen:      []string{"明确需要 chat +messages-mget 未公开的底层字段或原始响应，并按 ID 批量取消息时"},
+				AvoidWhen:    []string{"常规按 ID 批量取消息使用 chat +messages-mget；关键词检索使用 chat +search-msg"},
 				Examples:     []string{"dws chat message list-by-ids --msg-ids msgId1,msgId2"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -5993,8 +6840,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "给指定消息添加表情回应",
-				UseWhen:      []string{"需要对已有消息添加一个 emoji reaction 时"},
-				AvoidWhen:    []string{"发送文本消息或文字表情时不要使用"},
+				UseWhen:      []string{"明确需要 +messages-add-emoji 未公开的底层字段或原始响应，并添加 emoji reaction 时"},
+				AvoidWhen:    []string{"常规添加 emoji reaction 使用 chat +messages-add-emoji"},
 				Examples:     []string{"dws chat message add-emoji --conversation-id <openConversationId> --message-id <openMessageId> --emoji \"赞\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6062,8 +6909,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "移除指定消息上的表情回应",
-				UseWhen:      []string{"需要取消此前添加的 emoji reaction 时"},
-				AvoidWhen:    []string{"移除文字表情时使用 chat message remove-text-emotion"},
+				UseWhen:      []string{"明确需要 +messages-remove-emoji 未公开的底层字段或原始响应，并移除 emoji reaction 时"},
+				AvoidWhen:    []string{"常规移除 emoji reaction 使用 chat +messages-remove-emoji"},
 				Examples:     []string{"dws chat message remove-emoji --conversation-id <openConversationId> --message-id <openMessageId> --emoji \"赞\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6133,8 +6980,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "给指定消息添加已定义的文字表情",
-				UseWhen:      []string{"已有文字表情定义并要附加到消息时"},
-				AvoidWhen:    []string{"需要先创建文字表情资源时使用 chat message create-text-emotion"},
+				UseWhen:      []string{"明确需要 chat +messages-add-text-emotion 未公开的底层字段或原始响应，并添加文字表情时"},
+				AvoidWhen:    []string{"常规添加文字表情使用 chat +messages-add-text-emotion；创建定义使用 chat +messages-create-text-emotion"},
 				Examples:     []string{"dws chat message add-text-emotion --conversation-id <openConversationId> --message-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6206,8 +7053,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "移除指定消息上的文字表情回应",
-				UseWhen:      []string{"需要取消已添加的文字表情时"},
-				AvoidWhen:    []string{"移除普通 emoji reaction 时使用 chat message remove-emoji"},
+				UseWhen:      []string{"明确需要 chat +messages-remove-text-emotion 未公开的底层字段或原始响应，并移除文字表情时"},
+				AvoidWhen:    []string{"常规移除文字表情使用 chat +messages-remove-text-emotion；移除 emoji 使用 chat +messages-remove-emoji"},
 				Examples:     []string{"dws chat message remove-text-emotion --conversation-id <openConversationId> --message-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6361,8 +7208,8 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建可用于消息回应的文字表情",
-				UseWhen:      []string{"需要定义新的文字表情资源时"},
-				AvoidWhen:    []string{"已有 emotionId 并要回应消息时使用 chat message add-text-emotion"},
+				UseWhen:      []string{"明确需要 chat +messages-create-text-emotion 未公开的底层字段或原始响应，并创建文字表情定义时"},
+				AvoidWhen:    []string{"常规创建文字表情使用 chat +messages-create-text-emotion；添加回应使用 chat +messages-add-text-emotion"},
 				Examples:     []string{"dws chat message create-text-emotion --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
 			},
 		},
@@ -6373,7 +7220,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatMessageCreateTextEmotionCmd.MarkFlagRequired("text")
 	chatMessageCreateTextEmotionCmd.Flags().String("background-id", "", "背景 ID（可选，不传则由服务端默认分配）")
 
-	// ── 流式卡片命令 ──────────────────────────────────────────
+	// ── 卡片命令 ──────────────────────────────────────────────
 
 	chatMessageSendCardCmd := &cobra.Command{
 		Use:   "send-card",
@@ -6446,8 +7293,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建并向群聊或单聊发送互动卡片；群聊创建时可 @成员或 @所有人",
-				UseWhen:      []string{"需要创建卡片且已准备接收会话或用户时；群聊创建可同时指定 @成员或 @所有人"},
-				AvoidWhen:    []string{"只发送普通文本时使用 send 或 send-by-bot"},
+				UseWhen:      []string{"明确需要 chat +messages-send-card 未公开的底层字段或原始响应，并发送卡片时"},
+				AvoidWhen:    []string{"常规发送卡片使用 chat +messages-send-card；普通文本或媒体使用 chat +messages-send"},
 				Examples:     []string{"dws chat message send-card --group <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6471,6 +7318,85 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RequireOneOf:      [][]string{{"group", "receiver"}},
 	})
 
+	chatMessageSendA2UICardCmd := &cobra.Command{
+		Use:     "send-a2ui-card",
+		Short:   "创建并推送 A2UI 卡片",
+		Long:    "向群聊或单聊创建并推送 A2UI 卡片。--content 必须是非空 JSON 字符串数组，创建时默认 flowStatus=PROCESSING。",
+		Example: `  dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			groupID := mustGetFlag(cmd, "conversation-id")
+			receiver := mustGetFlag(cmd, "open-dingtalk-id")
+			if groupID == "" && receiver == "" {
+				return fmt.Errorf("--conversation-id or --open-dingtalk-id is required")
+			}
+			if groupID != "" && receiver != "" {
+				return fmt.Errorf("--conversation-id and --open-dingtalk-id are mutually exclusive")
+			}
+			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"requestId":       uuid.NewString(),
+				"bizCardId":       uuid.NewString(),
+				"protocolVersion": "1.0",
+				"flowStatus":      defaultA2UIFlowStatus,
+				"a2uiMessages":    messages,
+				"summary":         strings.Join(messages, "\n"),
+			}
+			if groupID != "" {
+				toolArgs["openConversationId"] = groupID
+				return callMCPToolOnServer("im", "create_and_send_a2ui_card", toolArgs)
+			}
+			resolved, err := resolveOpenDingTalkID(cmd.Context(), receiver)
+			if err != nil {
+				return err
+			}
+			toolArgs["receiverOpenDingTalkId"] = resolved
+			return callMCPToolOnServer("im", "create_and_send_a2ui_card", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(chatMessageSendA2UICardCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "create_and_send_a2ui_card",
+				CanonicalPath:  "chat.create_and_send_a2ui_card",
+				CLIPath:        "chat message send-a2ui-card",
+				PrimaryCLIPath: "chat message send-a2ui-card",
+			},
+			Description: "创建并向群聊或单聊发送 A2UI 卡片",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "create_and_send_a2ui_card"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建并向群聊或单聊发送 A2UI 卡片",
+				UseWhen:      []string{"已准备 A2UI 消息数组，需要创建并发送 A2UI 卡片时"},
+				AvoidWhen:    []string{"创建 streaming 卡片或需要 @成员时使用 chat message send-card；只发送普通文本时使用 send 或 send-by-bot"},
+				Examples:     []string{`dws chat message send-a2ui-card --conversation-id <openConversationId> --content '["{\"version\":\"v1.0\"}"]'`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
+				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId", Required: boolPtr(false)},
+			},
+		},
+	})
+	chatMessageSendA2UICardCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时必填，与 --open-dingtalk-id 互斥）")
+	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
+	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	_ = chatMessageSendA2UICardCmd.MarkFlagRequired("content")
+	cli.AnnotateRuntimeConstraints(chatMessageSendA2UICardCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"conversation-id", "open-dingtalk-id"}},
+		RequireOneOf:      [][]string{{"conversation-id", "open-dingtalk-id"}},
+	})
+
 	chatMessageUpdateCardCmd := &cobra.Command{
 		Use:   "update-card",
 		Short: "流式更新卡片内容",
@@ -6481,20 +7407,18 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		Example: `  dws chat message update-card --biz-id <bizId> --content "更新的卡片内容" --flow-status 2
   dws chat message update-card --biz-id <bizId> --content "最终内容" --flow-status 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "biz-id", "content"); err != nil {
+			if err := validateRequiredFlags(cmd, "biz-id", "content", "flow-status"); err != nil {
 				return err
-			}
-			if !cmd.Flags().Changed("flow-status") {
-				return fmt.Errorf("flag --flow-status is required")
 			}
 			bizID, err := chatmsg.NormalizeCardBizID(mustGetFlag(cmd, "biz-id"))
 			if err != nil {
 				return err
 			}
-			flowStatus, _ := cmd.Flags().GetInt("flow-status")
-			if flowStatus < 1 || flowStatus > 5 {
+			parsedFlowStatus, err := strconv.ParseInt(strings.TrimSpace(mustGetFlag(cmd, "flow-status")), 0, 64)
+			if err != nil || parsedFlowStatus < 1 || parsedFlowStatus > 5 {
 				return fmt.Errorf("--flow-status 必须在 1-5 之间")
 			}
+			flowStatus := int(parsedFlowStatus)
 			params := map[string]any{
 				"bizId":      bizID,
 				"msgContent": mustGetFlag(cmd, "content"),
@@ -6556,7 +7480,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新已发送流式卡片的内容和状态",
-				UseWhen:      []string{"需要直接调用底层原子更新，并由调用方自行管理确认与更新节奏时"},
+				UseWhen:      []string{"明确需要 chat +messages-update-card 未公开的底层字段、原始响应或不同执行语义时"},
 				AvoidWhen:    []string{"面向 Agent 的默认快速通道使用 chat +messages-update-card；创建新卡片时使用 chat message send-card"},
 				Examples:     []string{"dws chat message update-card --biz-id <bizId> --content \"处理完成\" --flow-status 2"},
 			},
@@ -6571,7 +7495,78 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatMessageUpdateCardCmd.MarkFlagRequired("biz-id")
 	chatMessageUpdateCardCmd.Flags().String("content", "", "卡片消息内容 (必填)")
 	_ = chatMessageUpdateCardCmd.MarkFlagRequired("content")
-	chatMessageUpdateCardCmd.Flags().Int("flow-status", 0, "流式状态 (必填)")
+	chatMessageUpdateCardCmd.Flags().String("flow-status", "", "流式状态 (必填)")
+
+	chatMessageUpdateA2UICardCmd := &cobra.Command{
+		Use:   "update-a2ui-card",
+		Short: "更新 A2UI 卡片内容和状态",
+		Long: `更新已发送的 A2UI 卡片。--content 必须是非空 JSON 字符串数组。
+--flow-status 接受 PROCESSING、INPUTTING、FINISH、EXECUTING、ERROR、ABORTED、TIMEOUT、CONFIRMING、CONFIRMED，兼容数字 1-9。`,
+		Example: `  dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\",\"updateDataModel\":{\"surfaceId\":\"surface\",\"path\":\"/status\",\"value\":\"finished\"}}"]' --flow-status FINISH`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "biz-id", "content", "flow-status"); err != nil {
+				return err
+			}
+			bizID, err := chatmsg.NormalizeCardBizID(mustGetFlag(cmd, "biz-id"))
+			if err != nil {
+				return err
+			}
+			flowStatus, err := normalizeA2UIUpdateFlowStatus(mustGetFlag(cmd, "flow-status"))
+			if err != nil {
+				return err
+			}
+			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
+			if err != nil {
+				return err
+			}
+			params := map[string]any{
+				"requestId":       uuid.NewString(),
+				"bizId":           bizID,
+				"flowStatus":      flowStatus,
+				"a2uiMessages":    messages,
+				"a2uiAnnotations": []any{},
+			}
+			return callMCPToolOnServer("im", "update_a2ui_card", params)
+		},
+	}
+	DeclareLeafMetadata(chatMessageUpdateA2UICardCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "chat",
+				Name:           "update_a2ui_card",
+				CanonicalPath:  "chat.update_a2ui_card",
+				CLIPath:        "chat message update-a2ui-card",
+				PrimaryCLIPath: "chat message update-a2ui-card",
+			},
+			Description: "更新已发送 A2UI 卡片的内容和状态",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "update_a2ui_card"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新已发送 A2UI 卡片的内容和状态",
+				UseWhen:      []string{"已有 A2UI 卡片 bizId，需要更新 A2UI 消息数组和流转状态时"},
+				AvoidWhen:    []string{"更新 streaming 卡片时使用 chat message update-card；创建新 A2UI 卡片时使用 chat message send-a2ui-card"},
+				Examples:     []string{`dws chat message update-a2ui-card --biz-id <bizId> --content '["{\"version\":\"v1.0\"}"]' --flow-status FINISH`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "biz-id", Property: "bizId", Required: boolPtr(true)},
+				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "flow-status", Property: "flowStatus", Required: boolPtr(true), InterfaceType: "string", Enum: []string{"PROCESSING", "INPUTTING", "FINISH", "EXECUTING", "ERROR", "ABORTED", "TIMEOUT", "CONFIRMING", "CONFIRMED", "1", "2", "3", "4", "5", "6", "7", "8", "9"}},
+			},
+		},
+	})
+	chatMessageUpdateA2UICardCmd.Flags().String("biz-id", "", "卡片业务 ID (必填)")
+	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("biz-id")
+	chatMessageUpdateA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
+	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("content")
+	chatMessageUpdateA2UICardCmd.Flags().String("flow-status", "", "A2UI 状态枚举或兼容数字 1-9 (必填)")
+	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("flow-status")
 
 	// ── download-media：下载消息中的媒体资源（走 IM MCP）──────
 	chatMessageDownloadMediaCmd := &cobra.Command{
@@ -6721,8 +7716,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "下载消息中的媒体资源到本地",
-				UseWhen:      []string{"已知消息、会话和资源 ID，需要保存媒体文件时"},
-				AvoidWhen:    []string{"只查看文本消息内容时使用对应消息查询命令", "资源是钉盘 fileId 时使用钉盘/drive 下载命令"},
+				UseWhen:      []string{"明确需要 chat +messages-resource-download 未公开的底层字段或原始响应，并下载消息资源时"},
+				AvoidWhen:    []string{"常规下载消息资源使用 chat +messages-resource-download；钉盘 fileId 使用 drive"},
 				Examples:     []string{"dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ."},
 			},
 		},
@@ -6747,7 +7742,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageDownloadMediaCmd.Flags().String("output", "", "本地保存路径，文件或目录 (必填)")
 	_ = chatMessageDownloadMediaCmd.MarkFlagRequired("output")
 
-	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageUpdateTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageUpdateCardCmd, chatMessageDownloadMediaCmd)
+	chatMessageCmd.AddCommand(chatMessageListCmd, chatMessageSendCmd, chatMessageSendByBotCmd, chatMessageRecallByBotCmd, chatMessageSendByWebhookCmd, chatMessageListTopicRepliesCmd, chatMessageListAllCmd, chatMessageListBySenderCmd, chatMessageListMentionsCmd, chatMessageListFocusedCmd, chatMessageListUnreadConversationsCmd, chatMessageSearchCmd, chatMessageListByIdsCmd, chatMessageAddEmojiCmd, chatMessageRemoveEmojiCmd, chatMessageAddTextEmotionCmd, chatMessageRemoveTextEmotionCmd, chatMessageUpdateTextEmotionCmd, chatMessageCreateTextEmotionCmd, chatMessageSearchAdvancedCmd, chatMessageQuerySendStatusCmd, chatMessageRecallCmd, chatMessageEditCmd, chatMessageReadStatusCmd, chatMessageSendCardCmd, chatMessageSendA2UICardCmd, chatMessageUpdateCardCmd, chatMessageUpdateA2UICardCmd, chatMessageDownloadMediaCmd)
 	chatBotCmd.AddCommand(chatBotSearchCmd)
 	chatCategoryCmd.AddCommand(chatCategoryListCmd, chatCategoryConvsCmd, chatCategoryCreateCmd, chatCategoryDeleteCmd, chatCategoryRenameCmd, chatCategoryAddConvCmd, chatCategoryRemoveConvCmd, chatCategoryListByConvCmd, chatCategoryBatchInfoCmd)
 	chatGroupCmd.AddCommand(chatGroupInfoByIdCmd)
@@ -6811,8 +7806,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "把群主身份转让给指定群成员",
-				UseWhen:      []string{"现群主明确指定新群主时"},
-				AvoidWhen:    []string{"只是授予管理员权限时使用 chat group set-admin"},
+				UseWhen:      []string{"明确需要 chat +chat-transfer-owner 未公开的底层字段或原始响应，并转让群主时"},
+				AvoidWhen:    []string{"常规转让群主使用 chat +chat-transfer-owner；授予管理员使用 chat +chat-set-admin"},
 				Examples:     []string{"dws chat group transfer-owner --conversation-id <openConversationId> --new-owner <openDingTalkId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6870,8 +7865,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取指定群聊的邀请链接",
-				UseWhen:      []string{"需要生成群邀请链接或设置有效期时"},
-				AvoidWhen:    []string{"需要直接添加已知成员时使用 chat group members add"},
+				UseWhen:      []string{"明确需要 chat +chat-invite-url 未公开的底层字段或原始响应，并生成群邀请链接时"},
+				AvoidWhen:    []string{"常规获取群邀请链接使用 chat +chat-invite-url；直接添加成员使用 chat group members add"},
 				Examples:     []string{"dws chat group invite-url --conversation-id <openConversationId> --expires-seconds 86400"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6924,8 +7919,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "开启或关闭指定会话的免打扰",
-				UseWhen:      []string{"用户明确要静音或恢复某个会话通知时"},
-				AvoidWhen:    []string{"群成员禁言属于发言权限，应使用 group-mute 命令"},
+				UseWhen:      []string{"明确需要 +conversation-mute 未公开的底层字段或原始响应，并切换会话免打扰时"},
+				AvoidWhen:    []string{"常规会话免打扰使用 chat +conversation-mute；群成员禁言使用 chat +chat-mute-member"},
 				Examples:     []string{"dws chat mute --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -6979,8 +7974,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "当前用户退出群聊，群本身保留",
-				UseWhen:      []string{"用户只要自己离开某个群，不需要解散群"},
+				UseWhen:      []string{"明确需要 chat +chat-quit 未公开的底层字段或原始响应，并退出群聊时"},
 				AvoidWhen: []string{
+					"常规退出群聊使用 chat +chat-quit",
 					"需要永久解散整个群时使用 chat group dismiss",
 					"需要踢出其他成员时使用 chat group members remove",
 				},
@@ -7035,8 +8031,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "使用真实媒体 ID 更新群头像",
-				UseWhen:      []string{"已有上传后的头像 mediaId 并要修改群头像时"},
-				AvoidWhen:    []string{"没有真实可用 mediaId 时先完成媒体上传"},
+				UseWhen:      []string{"明确需要 chat +chat-update-icon 未公开的底层字段或原始响应，并更新群头像时"},
+				AvoidWhen:    []string{"常规更新群头像使用 chat +chat-update-icon；无真实 mediaId 时先上传"},
 				Examples:     []string{"dws chat group update-icon --conversation-id <openConversationId> --icon-media-id @mediaId"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7111,8 +8107,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新指定群聊的一项设置开关",
-				UseWhen:      []string{"需要调整 searchable、入群验证或群权限等设置时"},
-				AvoidWhen:    []string{"全员禁言和成员禁言使用专门的 mute 命令"},
+				UseWhen:      []string{"明确需要 chat +chat-update-settings 未公开的底层字段或原始响应，并更新群设置时"},
+				AvoidWhen:    []string{"常规更新群设置使用 chat +chat-update-settings；禁言使用对应 chat +chat-mute Shortcut"},
 				Examples:     []string{"dws chat group update-settings --conversation-id <openConversationId> --setting-key searchable --status 1"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7222,8 +8218,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "引用指定消息发送个人回复",
-				UseWhen:      []string{"用户要针对某条已有消息进行引用回复时"},
-				AvoidWhen:    []string{"无需引用上下文的普通消息使用 chat message send"},
+				UseWhen:      []string{"明确需要 +messages-reply 未公开的底层字段或原始响应，并引用回复已知消息时"},
+				AvoidWhen:    []string{"常规引用回复使用 chat +messages-reply；普通发送使用 chat +messages-send"},
 				Examples:     []string{"dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content \"收到\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7307,8 +8303,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "把一条已有消息转发到另一个会话",
-				UseWhen:      []string{"已知源消息与源、目标会话 ID 时"},
-				AvoidWhen:    []string{"合并转发多条消息时使用 chat message combine-forward"},
+				UseWhen:      []string{"明确需要 +messages-forward 未公开的底层字段或原始响应，并转发单条消息时"},
+				AvoidWhen:    []string{"常规单条转发使用 chat +messages-forward；合并转发使用 chat +messages-combine-forward"},
 				Examples:     []string{"dws chat message forward --src-conversation-id <srcConversationId> --message-id <openMessageId> --dest-conversation-id <destConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7371,8 +8367,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "设置或取消指定会话置顶",
-				UseWhen:      []string{"需要改变某个会话在列表中的置顶状态时"},
-				AvoidWhen:    []string{"只查看置顶清单时使用 chat list-top-conversations"},
+				UseWhen:      []string{"明确需要 +conversation-set-top 未公开的底层字段或原始响应，并改变单个会话置顶状态时"},
+				AvoidWhen:    []string{"常规单个或批量会话置顶使用 chat +conversation-set-top；查看置顶清单使用 chat +conversation-list-top"},
 				Examples:     []string{"dws chat set-top --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7477,8 +8473,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "开启或关闭群聊全员禁言",
-				UseWhen:      []string{"需要控制整个群的发言权限时"},
-				AvoidWhen:    []string{"只禁言指定成员时使用 chat group-mute-member"},
+				UseWhen:      []string{"明确需要 +chat-mute 未公开的底层字段或原始响应，并切换真实群聊的全员禁言时"},
+				AvoidWhen:    []string{"常规全员禁言使用 chat +chat-mute；指定成员禁言使用 chat +chat-mute-member"},
 				Examples:     []string{"dws chat group-mute --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7572,8 +8568,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "禁言或解除禁言指定群成员",
-				UseWhen:      []string{"需要按成员设置禁言时长或解除禁言时"},
-				AvoidWhen:    []string{"需要全员禁言时使用 chat group-mute"},
+				UseWhen:      []string{"明确需要 +chat-mute-member 未公开的底层字段或原始响应，并设置成员禁言时"},
+				AvoidWhen:    []string{"常规成员禁言使用 chat +chat-mute-member；全员禁言使用 chat +chat-mute"},
 				Examples:     []string{"dws chat group-mute-member --conversation-id <openConversationId> --users userId1,userId2 --mute-time 3600000"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7652,8 +8648,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "设置或取消群管理员角色",
-				UseWhen:      []string{"需要变更指定成员的群管理员身份时"},
-				AvoidWhen:    []string{"自定义业务角色应使用 chat group-role 系列命令"},
+				UseWhen:      []string{"明确需要 +chat-set-admin 未公开的底层字段或原始响应，并变更群管理员身份时"},
+				AvoidWhen:    []string{"常规设置群管理员使用 chat +chat-set-admin；自定义群身份使用 chat +chat-role-*"},
 				Examples:     []string{"dws chat group set-admin --conversation-id <openConversationId> --users userId1,userId2"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7767,8 +8763,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出群聊中的自定义角色",
-				UseWhen:      []string{"需要取得角色 ID 或查看角色定义时"},
-				AvoidWhen:    []string{"查询某个成员已分配角色时使用 chat group-role query-user"},
+				UseWhen:      []string{"明确需要 +chat-role-list 未投影的底层原始响应，并列出群身份定义时"},
+				AvoidWhen:    []string{"常规列出群身份使用 chat +chat-role-list；查询成员身份使用 chat +chat-role-query-user"},
 				Examples:     []string{"dws chat group-role list --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7814,8 +8810,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "在群聊中创建自定义角色",
-				UseWhen:      []string{"需要新增可分配给群成员的业务角色时"},
-				AvoidWhen:    []string{"设置系统管理员角色时使用 chat group set-admin"},
+				UseWhen:      []string{"明确需要底层原始响应或 Shortcut 未公开参数时，创建可分配给群成员的业务角色"},
+				AvoidWhen:    []string{"常规创建群身份优先使用 chat +chat-role-add；设置系统管理员角色时使用 chat group set-admin"},
 				Examples:     []string{"dws chat group-role add --conversation-id <openConversationId> --name \"值班负责人\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7864,8 +8860,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "更新群聊自定义角色的名称",
-				UseWhen:      []string{"已知角色 ID 并需要重命名该角色时"},
-				AvoidWhen:    []string{"需要变更成员角色分配时使用 set-user 或 remove-user"},
+				UseWhen:      []string{"明确需要底层原始响应或 Shortcut 未公开参数，且已知角色 ID 并需要重命名时"},
+				AvoidWhen:    []string{"常规重命名群身份优先使用 chat +chat-role-update；变更成员角色分配使用 set-user 或 remove-user"},
 				Examples:     []string{"dws chat group-role update --conversation-id <openConversationId> --role-id <openRoleId> --name \"新名称\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7916,8 +8912,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "删除群聊中的自定义角色",
-				UseWhen:      []string{"明确要移除整个自定义角色定义时"},
-				AvoidWhen:    []string{"只取消某个成员的角色时使用 chat group-role remove-user"},
+				UseWhen:      []string{"明确需要底层原始响应或 Shortcut 未公开参数，并要移除整个自定义角色定义时"},
+				AvoidWhen:    []string{"常规删除群身份优先使用 chat +chat-role-remove；只取消成员角色时使用 chat group-role remove-user"},
 				Examples:     []string{"dws chat group-role remove --conversation-id <openConversationId> --role-id <openRoleId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7985,8 +8981,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "为指定群成员设置自定义角色",
-				UseWhen:      []string{"需要把一个已有角色分配给成员时"},
-				AvoidWhen:    []string{"创建新角色定义时使用 chat group-role add"},
+				UseWhen:      []string{"明确需要底层原始响应或 Shortcut 未公开参数，并要覆盖成员的群身份时"},
+				AvoidWhen:    []string{"常规成员群身份覆盖优先使用 chat +chat-role-set-user；创建角色定义使用 chat group-role add"},
 				Examples:     []string{"dws chat group-role set-user --conversation-id <openConversationId> --user <userId> --role-id <openRoleId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8018,7 +9014,10 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
 				return err
 			}
-			roleIDs := parseCSVValues(mustGetFlag(cmd, "role-ids"))
+			roleIDs, err := validatedChatRoleIDs(mustGetFlag(cmd, "role-ids"), "--role-ids")
+			if err != nil {
+				return err
+			}
 			user := flagOrFallback(cmd, "user", "userId")
 			toolArgs := map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
@@ -8053,8 +9052,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "取消指定成员的一个或多个自定义角色",
-				UseWhen:      []string{"需要保留角色定义但解除成员角色时"},
-				AvoidWhen:    []string{"删除角色定义本身时使用 chat group-role remove"},
+				UseWhen:      []string{"明确需要底层原始响应或 Shortcut 未公开参数，并要保留角色定义但解除成员角色时"},
+				AvoidWhen:    []string{"常规解除成员群身份优先使用 chat +chat-role-remove-user；删除角色定义本身使用 chat group-role remove"},
 				Examples:     []string{"dws chat group-role remove-user --conversation-id <openConversationId> --user <userId> --role-ids roleId1,roleId2"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8116,8 +9115,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定群成员的自定义角色",
-				UseWhen:      []string{"需要核对某个成员在群内的业务角色时"},
-				AvoidWhen:    []string{"列出全部角色定义时使用 chat group-role list"},
+				UseWhen:      []string{"明确需要 +chat-role-query-user 未投影的底层原始响应，并查询成员群身份时"},
+				AvoidWhen:    []string{"常规查询成员群身份使用 chat +chat-role-query-user；列出身份定义使用 chat +chat-role-list"},
 				Examples:     []string{"dws chat group-role query-user --conversation-id <openConversationId> --user <userId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8184,8 +9183,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出群内机器人",
-				UseWhen:      []string{"需要查看某群已安装哪些机器人或提取 openBotId"},
-				AvoidWhen:    []string{"搜索企业内机器人目录时使用 chat bot find"},
+				UseWhen:      []string{"明确需要 chat +chat-bots 未公开的底层字段或原始响应，并列出群内机器人时"},
+				AvoidWhen:    []string{"常规列出群内机器人使用 chat +chat-bots；搜索机器人目录使用 chat +bot-find"},
 				Examples:     []string{"dws chat group bots --group <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8234,8 +9233,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "从群内移除指定机器人",
-				UseWhen:      []string{"需要把某个机器人踢出指定群"},
+				UseWhen:      []string{"明确需要 chat +chat-remove-bot 未公开的底层字段或原始响应，并移除群机器人时"},
 				AvoidWhen: []string{
+					"常规移除群机器人使用 chat +chat-remove-bot",
 					"移除普通成员时使用 chat group members remove",
 					"解散整个群时使用 chat group dismiss",
 				},
@@ -8307,9 +9307,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按关键词搜索企业机器人并拿到 openDingTalkId",
-				UseWhen:      []string{"要找可用机器人并提取 openDingTalkId（例如后续单聊机器人）"},
+				UseWhen:      []string{"明确需要 chat +bot-find 未公开的底层字段或原始响应，并搜索全部可用机器人时"},
 				AvoidWhen: []string{
-					"只查我创建的机器人时使用 chat bot search",
+					"常规搜索全部可用机器人使用 chat +bot-find；只查自己创建的机器人使用 chat +bot-search",
 					"已有 robot-code 直接发消息时不要先搜",
 				},
 				Examples: []string{"dws chat bot find --query \"日报\""},
@@ -8361,11 +9361,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "永久解散指定群聊（不可恢复，仅群主）",
-				UseWhen: []string{
-					"群主明确要求永久解散整个群，而不是自己退出",
-					"已确认 openConversationId，且用户接受群与历史消息一并消失",
-				},
+				UseWhen:      []string{"明确需要 +chat-dismiss 未公开的底层字段或原始响应，并永久解散已确认的真实群聊/聊天群时"},
 				AvoidWhen: []string{
+					"常规解散群聊使用 chat +chat-dismiss",
 					"当前用户只想自己离开群时使用 chat group quit",
 					"仍需保留群供他人继续使用时不要解散",
 					"目标群未确认或用户未明确同意不可恢复后果时不要执行",
@@ -8427,8 +9425,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "设置新成员可见的群历史消息范围",
-				UseWhen:      []string{"需要调整新成员入群后的历史消息可见性时"},
-				AvoidWhen:    []string{"普通消息查询或群设置的其他开关不要使用"},
+				UseWhen:      []string{"明确需要 chat +chat-set-history 未公开的底层字段或原始响应，并设置群历史可见范围时"},
+				AvoidWhen:    []string{"常规设置群历史可见范围使用 chat +chat-set-history；其他群设置使用对应 Shortcut"},
 				Examples:     []string{"dws chat group set-history --conversation-id <openConversationId> --option RECENT_100"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8488,8 +9486,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "把多条消息合并转发到目标会话",
-				UseWhen:      []string{"需要保留多条源消息并作为合集转发时"},
-				AvoidWhen:    []string{"只转发单条消息时使用 chat message forward"},
+				UseWhen:      []string{"明确需要 +messages-combine-forward 未公开的底层字段或原始响应，并合并转发消息时"},
+				AvoidWhen:    []string{"常规合并转发使用 chat +messages-combine-forward；单条转发使用 chat +messages-forward"},
 				Examples:     []string{"dws chat message combine-forward --src-conversation-id <srcConversationId> --msg-ids <id1>,<id2> --dest-conversation-id <destConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8589,8 +9587,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "把指定消息设为会话置顶消息",
-				UseWhen:      []string{"需要在会话中置顶一条已知消息时"},
-				AvoidWhen:    []string{"取消置顶使用 chat message unset-pin-msg"},
+				UseWhen:      []string{"明确需要 +messages-set-pin 未公开的底层字段或原始响应，并 Pin 已知消息时"},
+				AvoidWhen:    []string{"常规 Pin 使用 chat +messages-set-pin；取消 Pin 使用 chat +messages-unset-pin"},
 				Examples:     []string{"dws chat message set-pin-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8646,8 +9644,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "取消指定消息的会话置顶",
-				UseWhen:      []string{"需要移除一条已知置顶消息时"},
-				AvoidWhen:    []string{"新增置顶使用 chat message set-pin-msg"},
+				UseWhen:      []string{"明确需要 +messages-unset-pin 未公开的底层字段或原始响应，并取消消息 Pin 时"},
+				AvoidWhen:    []string{"常规取消 Pin 使用 chat +messages-unset-pin；设置 Pin 使用 chat +messages-set-pin"},
 				Examples:     []string{"dws chat message unset-pin-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8708,8 +9706,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出指定会话中的置顶消息",
-				UseWhen:      []string{"需要查看群聊当前置顶的消息时"},
-				AvoidWhen:    []string{"设置或取消置顶时使用 set-pin-msg 或 unset-pin-msg"},
+				UseWhen:      []string{"明确需要 chat +messages-list-pin 未公开的底层字段或原始响应，并列出消息 Pin 时"},
+				AvoidWhen:    []string{"常规列出消息 Pin 使用 chat +messages-list-pin；设置或取消使用对应 Shortcut"},
 				Examples:     []string{"dws chat message list-pin-msg --open-conversation-id <openConversationId> --size 50"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8762,8 +9760,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将指定会话中的一条消息加入当前用户的收藏。",
-				UseWhen:      []string{"用户明确要收藏一条已知消息，且已取得消息 ID 与所属会话 ID 时。"},
-				AvoidWhen:    []string{"需要给消息添加表情、置顶消息或发送新消息时不要使用；本命令只修改当前用户的收藏状态。"},
+				UseWhen:      []string{"明确需要 +flag-create 未公开的底层字段或原始响应，并收藏已知消息时"},
+				AvoidWhen:    []string{"常规收藏消息使用 chat +flag-create；添加表情或置顶使用对应 Shortcut"},
 				Examples:     []string{"dws chat message add-favorite --open-message-id MSG_ID --open-conversation-id CONVERSATION_ID"},
 			},
 		},
@@ -8811,8 +9809,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "取消当前用户对指定消息的收藏标记，不删除原消息。",
-				UseWhen:      []string{"用户明确要从个人收藏中移除一条已知消息时。"},
-				AvoidWhen:    []string{"需要撤回或删除原消息、移除表情回应或取消消息置顶时不要使用。"},
+				UseWhen:      []string{"明确需要 +flag-cancel 未公开的底层字段或原始响应，并取消收藏已知消息时"},
+				AvoidWhen:    []string{"常规取消收藏使用 chat +flag-cancel；撤回、移除 reaction 或取消 Pin 使用对应 Shortcut"},
 				Examples:     []string{"dws chat message remove-favorite --open-message-id MSG_ID --open-conversation-id CONVERSATION_ID"},
 			},
 		},
@@ -8861,8 +9859,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页查询当前用户收藏的消息列表。",
-				UseWhen:      []string{"需要查看当前用户已经收藏的消息，或使用 nextCursor 继续翻页时。"},
-				AvoidWhen:    []string{"需要搜索普通聊天记录、置顶消息或修改收藏状态时不要使用。"},
+				UseWhen:      []string{"明确需要 chat +flag-list 未公开的底层字段或原始响应，并查看 Favorite 时"},
+				AvoidWhen:    []string{"常规查看 Favorite 使用 chat +flag-list；修改收藏使用 chat +flag-create 或 chat +flag-cancel"},
 				Examples: []string{
 					"dws chat message list-favorites --cursor 0 --size 20",
 					"dws chat message list-favorites --size 20 --page-all --page-limit 10",
@@ -8926,8 +9924,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出当前用户创建或管理的群聊",
-				UseWhen:      []string{"需要按群主或管理员角色盘点群聊时"},
-				AvoidWhen:    []string{"按名称搜索任意可见群时使用 chat search"},
+				UseWhen:      []string{"明确需要 chat +chat-list-mine 未公开的底层字段或原始响应，并列出创建或管理的群时"},
+				AvoidWhen:    []string{"常规列出创建或管理的群使用 chat +chat-list-mine；按名称搜索使用 chat +chat-search"},
 				Examples:     []string{"dws chat group list-my-groups --role OWNER --limit 100"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -8984,8 +9982,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页获取当前用户加入的所有群聊列表",
-				UseWhen:      []string{"需要完整翻页盘点当前用户加入的所有群聊时"},
-				AvoidWhen:    []string{"只按群主/管理员角色列群时使用 chat group list-my-groups"},
+				UseWhen:      []string{"明确需要 chat +my-groups 未公开的底层字段或原始响应，并列出加入的全部群时"},
+				AvoidWhen:    []string{"常规列出加入的全部群使用 chat +my-groups；只看创建或管理的群使用 chat +chat-list-mine"},
 				Examples:     []string{"dws chat group list-all --limit 100"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9039,8 +10037,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页拉取当前用户相关的入群验证记录",
-				UseWhen:      []string{"需要查看待处理、被拒绝或已处理的入群申请记录时"},
-				AvoidWhen:    []string{"需要审批某条记录时使用 chat group audit-join-validation"},
+				UseWhen:      []string{"明确需要 chat +chat-list-join-requests 未公开的底层字段或原始响应，并查看入群申请时"},
+				AvoidWhen:    []string{"常规查看入群申请使用 chat +chat-list-join-requests；审批使用 chat +chat-audit-join"},
 				Examples:     []string{"dws chat group list-join-validations --limit 20"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9131,8 +10129,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "审批入群验证记录",
-				UseWhen:      []string{"需要对已知入群申请记录执行通过或删除审批动作时"},
-				AvoidWhen:    []string{"还没有 record-id 时先用 chat group list-join-validations 查询"},
+				UseWhen:      []string{"明确需要 chat +chat-audit-join 未公开的底层字段或原始响应，并审批入群申请时"},
+				AvoidWhen:    []string{"常规审批入群申请使用 chat +chat-audit-join；缺 record-id 时先用 chat +chat-list-join-requests"},
 				Examples:     []string{"dws chat group audit-join-validation --conversation-id <openConversationId> --record-id 123456 --applicant <userId> --inviter <userId> --status AuditApprove"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9194,8 +10192,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将指定会话标记为未读",
-				UseWhen:      []string{"用户明确要把某个群聊或单聊标记为未读时"},
-				AvoidWhen:    []string{"需要标记某条消息及之前消息已读时使用 chat mark-read"},
+				UseWhen:      []string{"明确需要 +conversation-mark-unread 未公开的底层字段或原始响应，并标记会话未读时"},
+				AvoidWhen:    []string{"常规标记会话未读使用 chat +conversation-mark-unread；标记消息已读使用 chat +conversation-mark-read"},
 				Examples:     []string{"dws chat mark-unread --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9254,8 +10252,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "清除指定会话未读红点",
-				UseWhen:      []string{"用户只想清掉某个会话的未读红点时"},
-				AvoidWhen:    []string{"需要清除所有会话红点时使用 chat clear-all-red-point"},
+				UseWhen:      []string{"明确需要 +conversation-clear-red-point 未公开的底层字段或原始响应，并清除单会话红点时"},
+				AvoidWhen:    []string{"常规清除单会话红点使用 chat +conversation-clear-red-point；清除全部使用 chat +conversation-clear-all-red-point"},
 				Examples:     []string{"dws chat clear-red-point --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9298,8 +10296,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "清除当前用户所有会话未读红点",
-				UseWhen:      []string{"用户明确要求一键清除所有会话未读红点或全部已读时"},
-				AvoidWhen:    []string{"只处理单个会话红点时使用 chat clear-red-point"},
+				UseWhen:      []string{"明确需要 +conversation-clear-all-red-point 未公开的底层字段或原始响应，并清除全部会话红点时"},
+				AvoidWhen:    []string{"常规清除全部会话红点使用 chat +conversation-clear-all-red-point；只处理单个会话使用 chat +conversation-clear-red-point"},
 				Examples:     []string{"dws chat clear-all-red-point"},
 			},
 		},
@@ -9358,8 +10356,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页获取当前用户的全部会话列表",
-				UseWhen:      []string{"需要枚举当前用户全部单聊和群聊会话并按 cursor 翻页时"},
-				AvoidWhen:    []string{"只搜索群聊时使用 chat search；只查某个会话详情时使用 chat conversation-info"},
+				UseWhen:      []string{"明确需要 +conversation-list 未投影的底层原始响应或手工 cursor，并枚举全部会话时"},
+				AvoidWhen:    []string{"常规枚举全部会话使用 chat +conversation-list；只搜索群聊使用 chat +chat-search"},
 				Examples:     []string{"dws chat list-all-conversations --limit 100"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9426,8 +10424,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "清空当前用户指定会话中的聊天记录",
-				UseWhen:      []string{"用户明确要求清空某个会话在当前用户视角的聊天记录，并已确认不可逆影响时"},
-				AvoidWhen:    []string{"只清除未读红点时使用 chat clear-red-point 或 chat clear-all-red-point"},
+				UseWhen:      []string{"明确需要 +conversation-clear-messages 未公开的底层字段或原始响应，并清空当前用户的会话记录时"},
+				AvoidWhen:    []string{"常规清空会话记录使用 chat +conversation-clear-messages；清除红点使用 chat +conversation-clear-red-point"},
 				Examples:     []string{"dws chat clear-messages --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9495,8 +10493,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将指定消息及之前消息标记为已读",
-				UseWhen:      []string{"已有会话和消息 ID，需要把该消息及之前消息标记已读时"},
-				AvoidWhen:    []string{"只标记会话为未读时使用 chat mark-unread"},
+				UseWhen:      []string{"明确需要 +conversation-mark-read 未公开的底层字段或原始响应，并标记消息及之前消息已读时"},
+				AvoidWhen:    []string{"常规标记消息已读使用 chat +conversation-mark-read；标记会话未读使用 chat +conversation-mark-unread"},
 				Examples:     []string{"dws chat mark-read --conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9557,8 +10555,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将指定会话消息设置为置顶",
-				UseWhen:      []string{"需要把群聊或单聊中的某条消息置顶展示时"},
-				AvoidWhen:    []string{"取消消息置顶时使用 chat message unset-top-msg"},
+				UseWhen:      []string{"明确需要 +messages-set-top 未公开的底层字段或原始响应，并设置消息 Top 时"},
+				AvoidWhen:    []string{"常规消息 Top 使用 chat +messages-set-top；取消 Top 使用 chat +messages-unset-top"},
 				Examples:     []string{"dws chat message set-top-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9617,8 +10615,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "取消指定会话消息的置顶",
-				UseWhen:      []string{"需要取消某条消息的置顶状态时"},
-				AvoidWhen:    []string{"设置消息置顶时使用 chat message set-top-msg"},
+				UseWhen:      []string{"明确需要 +messages-unset-top 未公开的底层字段或原始响应，并取消消息 Top 时"},
+				AvoidWhen:    []string{"常规取消消息 Top 使用 chat +messages-unset-top；设置 Top 使用 chat +messages-set-top"},
 				Examples:     []string{"dws chat message unset-top-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9672,8 +10670,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "设置或清除当前用户在指定群内的昵称",
-				UseWhen:      []string{"用户要求修改自己的群昵称，或明确要求清除群昵称"},
-				AvoidWhen:    []string{"修改群名称应使用 chat group rename；修改其他成员信息不应使用本命令"},
+				UseWhen:      []string{"明确需要 chat +chat-update-nick 未公开的底层字段或原始响应，并修改自己的群昵称时"},
+				AvoidWhen:    []string{"常规修改自己的群昵称使用 chat +chat-update-nick；修改群名使用 chat +chat-update"},
 				Examples: []string{
 					"dws chat group update-nick --conversation-id <openConversationId> --nick \"项目昵称\"",
 					"dws chat group update-nick --conversation-id <openConversationId>",
@@ -9732,8 +10730,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "设置当前用户可见的群备注名称",
-				UseWhen:      []string{"用户要求给指定群设置仅自己可见的备注名时"},
-				AvoidWhen:    []string{"修改群公开名称应使用 chat group rename"},
+				UseWhen:      []string{"明确需要 chat +chat-update-alias 未公开的底层字段或原始响应，并修改个人群备注时"},
+				AvoidWhen:    []string{"常规修改个人群备注使用 chat +chat-update-alias；修改群公开名称使用 chat +chat-update"},
 				Examples:     []string{"dws chat group update-alias --conversation-id <openConversationId> --alias-title \"项目A群\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9789,8 +10787,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "在会话列表中隐藏指定会话",
-				UseWhen:      []string{"用户要求从当前会话列表隐藏某个单聊或群聊时"},
-				AvoidWhen:    []string{"只想关闭通知提醒时使用 chat mute 或 chat mute-at-all"},
+				UseWhen:      []string{"明确需要 +conversation-hide 未公开的底层字段或原始响应，并隐藏指定会话时"},
+				AvoidWhen:    []string{"常规隐藏会话使用 chat +conversation-hide；关闭普通通知使用 chat +conversation-mute"},
 				Examples:     []string{"dws chat hide --conversation-id <openConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -9968,8 +10966,8 @@ status 可选值:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按成员 openDingTalkId 批量查询群成员详情",
-				UseWhen:      []string{"已知群 ID 和一组成员 openDingTalkId，需要批量查看这些成员资料时"},
-				AvoidWhen:    []string{"需要列出群内全部成员时使用 chat group members list"},
+				UseWhen:      []string{"明确需要 chat +chat-members-get 未公开的底层字段或原始响应，并按 ID 批量查群成员时"},
+				AvoidWhen:    []string{"常规按 ID 批量查群成员使用 chat +chat-members-get；列全部成员使用 chat +chat-members-list"},
 				Examples:     []string{"dws chat group members list-by-ids --id <openConversationId> --users openDingTalkId1,openDingTalkId2"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -10685,7 +11683,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)
 	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
-	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, newChatThreadCommand(chatMessageSendRunE), chatFileCmd, chatConversationFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand())
+	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, newChatThreadCommand(chatMessageSendRunE), chatFileCmd, chatConversationFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand(), newChatCryptoCommand())
 
 	// Keep the v1.0.56 command surface recognizable while directing callers to
 	// the supported nested commands. The chat root's "im" alias makes these

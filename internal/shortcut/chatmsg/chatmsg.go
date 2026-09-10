@@ -66,6 +66,7 @@ var messageResultContractV1 = MessageResultContract{
 		"senderId",
 		"senderType",
 		"messageType",
+		"messageAiSendFlag",
 		"text",
 		"createTime",
 		"updateTime",
@@ -300,6 +301,14 @@ func MessageType(m map[string]any) any {
 	return firstMessageValue(m, "msgType", "messageType", "message_type", "type")
 }
 
+// MessageAISendFlag preserves the lower IM marker that identifies a message
+// sent through an AI client. The service currently publishes the exact
+// messageAiSendFlag field (for example "DWS"); readers must not infer it from
+// sender type, robot status, clawType request metadata, or message content.
+func MessageAISendFlag(m map[string]any) any {
+	return firstMessageValue(m, "messageAiSendFlag")
+}
+
 // SenderID preserves the stable sender identity without replacing the legacy
 // scalar sender display field. Nested sender records and both userId families
 // are accepted because list/search/mget currently expose different shapes.
@@ -359,6 +368,9 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	}
 	if value := MessageType(m); value != nil {
 		row["messageType"] = value
+	}
+	if value := MessageAISendFlag(m); value != nil {
+		row["messageAiSendFlag"] = value
 	}
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
@@ -420,6 +432,9 @@ func QuotedMessage(m map[string]any) map[string]any {
 	}
 	if value := MessageType(quoted); value != nil {
 		out["messageType"] = value
+	}
+	if value := MessageAISendFlag(quoted); value != nil {
+		out["messageAiSendFlag"] = value
 	}
 	if len(resources) > 0 {
 		out["resourceRefs"] = resources
@@ -526,6 +541,10 @@ func Resources(m map[string]any) []map[string]any {
 			resource["name"] = candidate.name
 		}
 		out = append(out, resource)
+	}
+	for _, resource := range out {
+		resource["resourceIdType"] = resource["type"]
+		attachResourceContentType(m, fmt.Sprint(resource["resourceId"]), resource)
 	}
 	return out
 }
@@ -653,7 +672,7 @@ func collectResourceNames(value any, targetKey string, out map[string]resourceNa
 
 func directResourceIDs(value map[string]any, targetKey string) []string {
 	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
-		firstMessageValue(value, "resourceType", "resource_type"))))
+		firstMessageValue(value, "resourceIdType", "resource_id_type", "resourceType", "resource_type"))))
 	keys := make([]string, 0, len(value))
 	for key := range value {
 		keys = append(keys, key)
@@ -683,7 +702,7 @@ func directResourceName(value map[string]any, targetKey string) string {
 	// Message rows also commonly contain a sender/group name, which must never
 	// become the attachment filename merely because the row has a resource ID.
 	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
-		firstMessageValue(value, "resourceType", "resource_type"))))
+		firstMessageValue(value, "resourceIdType", "resource_id_type", "resourceType", "resource_type"))))
 	if resourceType == targetKey && directResourceString(value, "resourceid") != "" {
 		return directResourceString(value, "name")
 	}
@@ -726,7 +745,7 @@ func recordResourceName(
 func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp, out *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
-		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceType", "resource_type")))
+		resourceType := strings.TrimSpace(fmt.Sprint(firstMessageValue(typed, "resourceIdType", "resource_id_type", "resourceType", "resource_type")))
 		for key, child := range typed {
 			normalizedKey := normalizeMessageKey(key)
 			if normalizedKey == targetKey ||
@@ -1039,14 +1058,9 @@ func ApplyMessagePagination(payload, data map[string]any, messages []map[string]
 	if !hasMore {
 		return
 	}
-	if len(messages) == 0 {
-		payload["failedCount"] = 1
-		payload["failures"] = []map[string]any{{
-			"stage": "pagination",
-			"error": "下层返回 hasMore=true 但当前页没有消息",
-		}}
-		return
-	}
+	// Empty visible pages may still carry an authoritative advancing cursor
+	// (for example, filtered system messages). Validate the cursor normally;
+	// callers retain bounds and never treat hasMore=true as exhaustion.
 	_, boundary, err := messagePaginationCursorBoundary(page["nextCursor"])
 	if err != nil {
 		payload["failedCount"] = 1
@@ -1083,6 +1097,12 @@ func messagePaginationCursorBoundary(value any) (string, string, error) {
 			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
 		}
 		millis = int64(typed)
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
 	case string:
 		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
 		if err != nil {
@@ -1328,4 +1348,30 @@ func IsEncrypted(s string) bool {
 		}
 	}
 	return true
+}
+
+// attachResourceContentType joins only the exact owned resource, never a
+// neighbouring attachment or a quoted child's type.
+func attachResourceContentType(value any, id string, target map[string]any) {
+	switch v := value.(type) {
+	case map[string]any:
+		if fmt.Sprint(v["resourceId"]) == id {
+			if kind, ok := v["resourceType"].(string); ok && kind != "mediaId" && kind != "fileId" && kind != "" {
+				target["contentType"] = kind
+			}
+		}
+		for key, child := range v {
+			if !isNestedMessageBoundaryKey(normalizeMessageKey(key)) {
+				attachResourceContentType(child, id, target)
+			}
+		}
+	case []any:
+		for _, child := range v {
+			attachResourceContentType(child, id, target)
+		}
+	case []map[string]any:
+		for _, child := range v {
+			attachResourceContentType(child, id, target)
+		}
+	}
 }

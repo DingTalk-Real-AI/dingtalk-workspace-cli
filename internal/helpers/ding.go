@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -19,12 +21,110 @@ var dingRemindTypeMap = map[string]int{"app": 1, "sms": 2, "call": 3}
 
 var dingPersonalRemindTypeMap = map[string]string{"app": "APP", "sms": "SMS", "call": "PHONE"}
 
+// Kept injectable so receipt encoding failures can be tested without a write.
+var dingReceiptMarshal = json.Marshal
+
+func resolveDingRobotCode(explicit string) (string, error) {
+	robotCode := strings.TrimSpace(explicit)
+	if robotCode == "" {
+		robotCode = strings.TrimSpace(os.Getenv("DINGTALK_DING_ROBOT_CODE"))
+	}
+	if robotCode != "" {
+		return robotCode, nil
+	}
+
+	return "", apperrors.NewValidation(
+		"缺少企业机器人凭据",
+		apperrors.WithOperation("ding/resolve_robot"),
+		apperrors.WithReason("robot_credentials_missing"),
+		apperrors.WithOrigin("client"),
+		apperrors.WithFailureStage("preflight"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("请提供当前组织内有效且已发布机器人的 --robot-code 后重新发起请求。"),
+		apperrors.WithActions("停止本次机器人 DING；禁止尝试或替换为其他机器人（包括其他 robot-code）；不要搜索 dev/devapp、配置、环境变量、其他 profile 或替换发送通道"),
+	)
+}
+
 func dingPersonalRemindType(value string) (string, error) {
 	remindType, ok := dingPersonalRemindTypeMap[strings.ToLower(strings.TrimSpace(value))]
 	if !ok {
 		return "", fmt.Errorf("--type must be one of app, sms, call")
 	}
 	return remindType, nil
+}
+
+func validateDingRecallTarget(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return apperrors.NewValidation("openDingId 不能为空")
+	}
+	// openDingId is opaque. A bare --id has no resource-type evidence;
+	// preserve it verbatim and let the service validate the target.
+	return nil
+}
+
+func enrichDingConversionReceipt(text, conversationID, sourceMessageID string) (string, error) {
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(text), &envelope); err != nil || envelope == nil {
+		return "", apperrors.NewAPI("消息转 DING 返回了无法验证的响应",
+			apperrors.WithOperation("im/send_ding_by_message"),
+			apperrors.WithReason("malformed_conversion_receipt"),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithRetryable(false),
+		)
+	}
+	success, ok := envelope["success"].(bool)
+	if !ok || !success {
+		message := "消息转 DING 未返回明确成功状态"
+		for _, key := range []string{"errorMsg", "errorMessage", "message"} {
+			if value, present := envelope[key].(string); present && strings.TrimSpace(value) != "" {
+				message = strings.TrimSpace(value)
+				break
+			}
+		}
+		return "", apperrors.NewAPI(message,
+			apperrors.WithOperation("im/send_ding_by_message"),
+			apperrors.WithReason("conversion_failed"),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+		)
+	}
+	result, ok := envelope["result"].(map[string]any)
+	if !ok || result == nil {
+		return "", apperrors.NewAPI("消息转 DING 成功响应缺少 result 对象",
+			apperrors.WithOperation("im/send_ding_by_message"),
+			apperrors.WithReason("missing_conversion_receipt"),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithRetryable(false),
+		)
+	}
+	openDingID, ok := result["openDingId"].(string)
+	openDingID = strings.TrimSpace(openDingID)
+	if !ok || openDingID == "" {
+		return "", apperrors.NewAPI("消息转 DING 成功响应缺少 openDingId，不能安全执行后续撤回",
+			apperrors.WithOperation("im/send_ding_by_message"),
+			apperrors.WithReason("missing_ding_identity"),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithRetryable(false),
+		)
+	}
+	result["openDingId"] = openDingID
+	result["resourceType"] = "ding"
+	result["sourceMessageId"] = strings.TrimSpace(sourceMessageID)
+	result["sourceConversationId"] = strings.TrimSpace(conversationID)
+	result["recallTarget"] = map[string]any{
+		"resourceType": "ding",
+		"openDingId":   openDingID,
+	}
+	envelope["result"] = result
+	encoded, err := dingReceiptMarshal(envelope)
+	if err != nil {
+		return "", apperrors.NewInternal(fmt.Sprintf("编码消息转 DING 回执失败: %v", err))
+	}
+	return string(encoded), nil
 }
 
 func newDingCommand() *cobra.Command {
@@ -39,12 +139,14 @@ func newDingCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "以企业机器人发送或撤回应用内/短信/电话 DING",
+			AgentSummary: "查询 DING，或按明确的用户/机器人身份发送与撤回应用内、短信、电话 DING",
 			UseWhen: []string{
-				"需要机器人身份发送或撤回 DING",
+				"需要查询 DING 历史或接收状态",
+				"需要以当前用户身份发送、消息转 DING 或撤回个人 DING",
+				"明确指定企业机器人发送或撤回 DING",
 			},
 			AvoidWhen: []string{
-				"普通聊天消息用 chat；用户身份 DING 不要走机器人命令",
+				"普通聊天消息、建群、群消息和解散群由 chat 拥有；跨产品流程只把稳定消息 ID 交给 DING 步骤",
 			},
 		},
 	})
@@ -71,12 +173,9 @@ func newDingCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "users", "content"); err != nil {
 				return err
 			}
-			robotCode := mustGetFlag(cmd, "robot-code")
-			if robotCode == "" {
-				robotCode = os.Getenv("DINGTALK_DING_ROBOT_CODE")
-			}
-			if robotCode == "" {
-				return fmt.Errorf("flag --robot-code is required (or set DINGTALK_DING_ROBOT_CODE env var)")
+			robotCode, err := resolveDingRobotCode(mustGetFlag(cmd, "robot-code"))
+			if err != nil {
+				return err
 			}
 			typeStr := mustGetFlag(cmd, "type")
 			remindType, ok := dingRemindTypeMap[typeStr]
@@ -147,12 +246,12 @@ func newDingCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "id"); err != nil {
 				return err
 			}
-			robotCode := mustGetFlag(cmd, "robot-code")
-			if robotCode == "" {
-				robotCode = os.Getenv("DINGTALK_DING_ROBOT_CODE")
+			if err := validateDingRecallTarget(mustGetFlag(cmd, "id")); err != nil {
+				return err
 			}
-			if robotCode == "" {
-				return fmt.Errorf("flag --robot-code is required (or set DINGTALK_DING_ROBOT_CODE env var)")
+			robotCode, err := resolveDingRobotCode(mustGetFlag(cmd, "robot-code"))
+			if err != nil {
+				return err
 			}
 			return callMCPTool("recall_ding_message", map[string]any{
 				"robotCode":  robotCode,
@@ -296,7 +395,19 @@ func newDingCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
 			}
-			return callMCPToolOnServer("im", "send_ding_by_message", toolArgs)
+			if deps.Caller.DryRun() {
+				return callMCPToolOnServer("im", "send_ding_by_message", toolArgs)
+			}
+			text, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", "send_ding_by_message", toolArgs)
+			if err != nil {
+				return err
+			}
+			dumpRawToolResponse("im", "send_ding_by_message", text)
+			receipt, err := enrichDingConversionReceipt(text, mustGetFlag(cmd, "group"), mustGetFlag(cmd, "message-id"))
+			if err != nil {
+				return err
+			}
+			return RenderLegacyMCPText("send_ding_by_message", receipt)
 		},
 	}
 
@@ -310,6 +421,9 @@ func newDingCommand() *cobra.Command {
   # 查询 openDingId: dws ding message list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "id"); err != nil {
+				return err
+			}
+			if err := validateDingRecallTarget(mustGetFlag(cmd, "id")); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "recall_personal_ding", map[string]any{

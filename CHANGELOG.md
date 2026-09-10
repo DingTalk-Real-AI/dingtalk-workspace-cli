@@ -6,6 +6,320 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.7] - 2026-09-09
+
+### Added
+
+- **Chat active conversations** — adds `dws chat +active-conversations --start <time>` to auto-page cross-conversation messages and return deduplicated conversation summaries with stable name fields, latest-message time, and completeness metadata. Query boundaries use whole seconds: explicit nonzero fractional seconds are rejected, and the default end is rounded down to exclude the current unfinished second. The effective end must be later than the start and remains fixed across pages, results, and continuation; latest-message timestamps retain millisecond precision. Returned messages are filtered to the fixed `[start,end)` window before aggregation; pages with no matching messages still follow server pagination. Pagination waits 200ms between pages by default; later-page failures preserve completed summaries and a continuation cursor as `partial_failure` (exit 7). Resume with the original time window, page size, and profile, then merge batches by conversation ID.
+
+- **Chat shortcut 对齐与查询校验** — 补充兼容别名、创建默认值、消息上下文定位、文本与 Thread 回复、筛选排序及分页控制，保留原入口；共享消息富化并严格区分空集合、不完整结果与失败，增加资源分段重试、版本校验和原子落盘。下游尚未支持或未实测的身份、消息类型与权限范围单独列明。
+
+- **Contact invite/apply administration** — adds `dws contact exclusive-account
+  disable|enable` for enterprise-account status, a `dws contact org`
+  invite/apply group (`invite-switch`, `invite-audit`, `invite-info`,
+  `invite-list`, `apply-list`, `apply-approve`, `apply-reject`, `apply-block`,
+  `apply-remove`), and `dws contact dept invite-audit` for department-level
+  join-request auditing.
+
+- **Standalone whiteboards** — adds OpenNodes-based `whiteboard create-with-content` and extends
+  the existing `whiteboard query` / `whiteboard update` entry points to operate
+  on standalone boards when `--part-id` is omitted, while preserving the
+  document-embedded flow when it is explicitly supplied. Standalone reads
+  decode the service `resultJson`, and writes enforce revision and stable
+  request-ID guards with compatible receipt validation and same-type read-back.
+
+### Changed
+
+- **CLI auth apply pending page** (#1285) — the browser apply flow now lands on a
+  dedicated approval-pending page that polls and auto-redirects after approval;
+  duplicate apply requests are idempotent, and all local callback pages and API
+  responses are served with `Cache-Control: no-store` to avoid stale state after
+  a page refresh.
+- **CLI access denial copy** (#1285) — terminal denial reasons are now split by
+  whether the path is applyable. `cli_not_enabled` keeps the apply flow and shows
+  a personal-scope message ("you do not yet have CLI data access") with the
+  approver picker relabeled to "select approver"; the inline success message was
+  replaced by a redirect to the pending page. The non-applyable `user_forbidden`
+  and `user_not_allowed` reasons now share a single consolidated terminal message
+  ("this organization has not enabled CLI data access") across the browser page and
+  both login transports (OAuth browser flow and device flow).
+
+- **Chat recent conversations** — makes `--start` optional for `dws chat +recent-conversations`. Omission selects the 24 hours before the effective `--end`; omitting both boundaries selects the latest 24 hours ending at the current time rounded down to a whole second. Explicit `--start` retains the existing time formats, whole-second validation, and blank-input rejection. Both effective boundaries stay fixed across pagination and are returned in the result. Non-initial `--cursor` requests must explicitly reuse the previous `--start` and `--end` to preserve the original query window.
+
+- **Chat recent conversations** — makes `dws chat +recent-conversations` the preferred entry and retains `+active-conversations` as a hidden executable compatibility entry sharing the same implementation, without deprecation warnings in execution, Help, or Schema. Public Help, Schema primary CLI paths/examples, and Mono/Multi Skills recommend the new name; the stable Schema identity `chat.shortcut_active_conversations` and old CLI-path lookup remain supported. Query windows, pagination, and result semantics are unchanged by this rename.
+
+- **Runtime context** — Refresh the embedded payload to `20260908`, verify and materialize owned resources beside the resolved executable with cache fallback, and attach the process context to browser login URLs while keeping terminal links and diagnostics redacted.
+
+### Removed
+
+- **移除顶层 `dws safechat` 命令（破坏性变更）** — 删除 `dws safechat selftest` 与 `dws safechat decrypt`。这两个命令在 `1.0.62-beta.3` (#1051) 交付，但只在显式 `-tags safechat` 的源码构建中存在：官方 Release 一直是 `CGO_ENABLED=0`，stub 的 `newSafeChatCommand()` 返回 `nil`，因此官方二进制从未包含该命令，受影响的只有自行打 tag 构建并升级的用户。SafeChat 现在是 `internal/msgcrypto` 的内部后端，仅通过聊天消息加解密路径暴露，不再提供独立顶层命令。
+- **迁移方式** — `dws safechat decrypt` 的等价入口是 `dws chat crypto decrypt`，它走同一套 SafeChat 后端并按策略解密。`dws safechat selftest`（真实取码与密钥获取的端到端自检）没有等价命令；需要验证后端可用性时改用 `dws chat crypto decrypt` 对一条真实密文做一次解密。
+
+### Fixed
+
+- **Contact apply-list safety semantics** — `dws contact org apply-list` marks
+  unread join applications as read on the server; its schema safety effect is
+  now declared as `write` (risk stays `low`, confirmation stays
+  `not_required`) and the selection guidance discloses the read-marking side
+  effect so Agents no longer treat it as a pure read.
+
+- **Contact apply-remove safety semantics** — `dws contact org apply-remove`
+  deletes organization join application records irreversibly; its schema safety
+  effect is now declared as `destructive` (risk `high`, confirmation
+  `user_required`) and the selection guidance discloses that the deletion is
+  not recoverable so Agents no longer treat it as an ordinary write.
+
+- **Contact org list pagination contract** — `dws contact org invite-list` and
+  `dws contact org apply-list` now declare the unified cursor Pagination contract
+  (`cursor` parameter, `meta.pagination` metadata) and their result data schemas
+  no longer leak `hasMore`/`nextCursor`. Runtime responses project the server-side
+  cursor fields into `meta.pagination` so Agents can resume paging from the
+  standard contract.
+
+- **Chat recent conversations pagination** — adds a shared `--total-timeout` budget (default 300 seconds, range 1–3600) across all requests, retries and page delays in one invocation. A timeout preserves validated pages in the partial-failure result and returns the failed page's input cursor. Cursor continuation remains caller-managed: reuse the same profile, time window and page size, and merge batches by conversation ID. Progress is not persisted to disk; forcibly terminated queries must be restarted.
+
+- **Chat conversation categories** — treat `im/list_conversations_by_category` as the declared single-response interface when its explicit conversation array contains no pagination signal, while continuing to fail closed on partial or non-resumable pagination metadata. `+category-list-conversations` and `+feed-group-query-item` now publish the resolved pagination mode and source-exhaustion facts instead of rejecting every live response that omits `hasMore`.
+
+- **SafeChat 默认构建与官方产物** — 支持平台的 CGO 构建无需额外 build tag
+  即包含 SafeChat 后端，官方六平台 Release 固定使用可校验的交叉编译工具链并拒绝
+  发布 CGO-disabled stub 二进制。
+- 本地 `make build` / `make rebuild` 默认启用 CGO，并保留显式
+  `CGO_ENABLED=0` 的 stub 构建选择。
+- Linux 官方构建显式使用 glibc 2.17 链接目标，并校验 ELF 符号版本，
+  防止交叉编译镜像升级隐式提高 Linux 系统要求。
+- `install.sh` / `install-event.sh` / `install-devapp.sh` 在下载前识别 musl
+  发行版（如 Alpine）并明确中止。Linux 产物依赖 glibc 动态加载器，此前这类环境
+  会安装成功但连 `dws version` 都无法启动。判定以 `ldd --version` 为准，musl
+  加载器文件只在 `ldd` 不报版本时兜底（Alpine 的 BusyBox `ldd` 仅转发给加载器），
+  因此额外安装了 `musl` / `musl-tools` 的 glibc 发行版不会被误拒。
+- SafeChat cipher 关闭时会等待进行中的加解密结束，不再与 `Close` 并发访问
+  vendor client 的初始化状态（`go test -race` 下可复现的数据竞态）。
+
+- **Schema 向后兼容检查** — 允许删除 `require_one_of` 必填组，以支持具备默认值或可自动解析参数的命令；保留新增约束、互斥、参数类型和身份安全检查，并通过基线拥有的两阶段评审机制交付。
+
+- **Skill setup source resolution** — accepts an extracted `dws-skills.zip`
+  root for `--source` / `DWS_SKILL_SOURCE`, selects its `mono` or `multi`
+  subtree by mode, and no longer mistakes the compatibility `mono` directory
+  for a single MultiSkill.
+
+
+## [1.0.62-beta.6] - 2026-09-08
+
+### Added
+
+- **AI 表格 PostgreSQL 只读查询** — 新增 `dws aitable psql`，支持发现逻辑表和列类型，并执行只读 `SELECT`，包括同一 Base 内的多表 JOIN。
+
+- **Native Markdown themes** — adds `--theme` to `markdown create` and
+  `markdown overwrite`, preserving existing Front Matter while safely writing
+  the selected we-markdown theme into a private upload copy.
+
+### Fixed
+
+- **AI 表格应用模式输入校验错误分类** (#1314) — 将 icon、background、config、layout 等字段的校验失败从 `internal` 错误和退出码 `5` 修正为 `validation` 错误和退出码 `3`；校验仍在 MCP 调用前完成。
+
+
+## [1.0.62-beta.5] - 2026-09-07
+
+### Added
+
+- **AI 表格应用模式命令** (#1264) — 新增 `dws aitable app` 及 `page`/`widget` 子命令，支持 App 获取与更新、页面和 Widget 的创建、查询、更新、删除与排序。
+
+- **文档块批量删除** — `doc block delete` 的 `--block-id` 支持逗号分隔一次删除多个块
+  （单次最多 50 个）。采用尽力而为语义：单个 blockId 未找到不阻塞其余块的删除，
+  未找到的在 `notFoundBlockIds` 中列出；仅当全部未找到时整体失败。
+
+### Fixed
+
+- **markdown @人 写后回读误报** — 写入含 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=…)` 的 markdown 时，`doc +create` 与 `doc +update --command append|overwrite` 会以 `doc_write_verification_failed` 报错，而内容其实已正确写入。原因是写后回读把写入原文与服务端改写后的正文比对，而服务端会把该私有协议改写成钉钉个人资料链接。现在写后回读改为**按位置配对**：只有预期正文中写了 mention 私有协议的那个位置，才允许回读侧是个人资料链接；其余链接——包括作者自己写的普通个人资料链接——仍保留完整目标并严格比对。显示文本与节点顺序照旧参与比对，漏写、改标签或顺序错乱依旧判定失败。原子命令 `doc update` 无写后回读，行为不变。
+- **@人 目标身份不再被隐含声明为已验证** — 回读能证明 mention 链接落在作者写的位置、显示文本未变，但证明不了它解析到了哪个人：`openDingTalkId` 与改写后的 `staffId` 是不同值且无本地映射。含 mention 的写入结果因此在与 `verified` 同级处声明作用域：`verificationScope="partial"`、`unverified=["mention_targets"]`，verify 步骤状态由 `success` 降为 `partial` 并带 `scope="partial"`（只按 `steps[].status` 推进、不认识 scope 字段的既有消费者因此也不会再把它读成完整核验成功），另有 `verification.mentionTargetsVerified=false` 与一条说明性 warning，并把 `verified` 置为 `false`（操作本身仍 `status=success`）：回读无法确定 @ 到了谁，就不宣称已验证。另有 `unverifiableLocally=["mention_targets"]` 表明该缺口不是"还没查"而是"回读查不出来"，重读文档不会得到新信息。warning 只透两条事实：@人链接指向的具体人员需用户自行核对，正文其余部分（含该链接的位置与显示文本）均已通过回读校验。不含 mention 的写入输出完全不变。
+
+- **Chat message decrypt fallback** — skips crypto policy lookups and decrypt failure ledger fields on chat read paths when the DWS binary does not include the SafeChat backend, while preserving policy-driven decryption after `chat message list --page-all` aggregates its pages.
+
+- **AI Table view OR filters** — allows `aitable view update filter` to persist
+  a single top-level `or` group while preserving flat-array AND behavior,
+  rejecting nested logical groups, and verifying equivalent service readback
+  shapes.
+
+- **OA 空页分页兼容** — 待审批、已处理和已发起审批列表兼容成功响应中 `values:[]` 省略 `hasMore` 的终页编码，避免空列表误报 `missing_pagination`；保留显式分页值及业务状态、数组结构和其他接口的严格校验。
+
+- **自动合并**：修复 Reviewer Router 将可合并但显示 `blocked` 的 PR 持续跳过的问题；恢复 App 的同步合并尝试，并继续由 GitHub 强制执行审批和必需 CI 检查。
+
+- **Schema compatibility checks** — accept a new `require_one_of` group when a historical unconditional required parameter without a default already guarantees a supplied member. Other incompatible parameter changes remain rejected; CLI runtime behavior is unchanged.
+
+
+## [1.0.62-beta.4] - 2026-09-04
+
+### Fixed
+
+- **Release dependency checksums** (#1288) — removes stale module checksum records so release validation remains reproducible after `go mod tidy`.
+
+
+## [1.0.62-beta.3] - 2026-09-04
+
+### Added
+
+- **SafeChat message encryption/decryption** (#1051) — `dws safechat` commands enable AnHeng SafeDing (安恒密盾) message encryption and decryption. Available only in builds with `-tags safechat` (requires CGO and platform-specific static libraries). Commands include `safechat selftest` for end-to-end self-check (real authCode fetch and key retrieval) and `safechat decrypt` to decrypt ciphertext messages. The PR also adds `internal/msgcrypto` package with cipher operations, vendorAuthCode portal integration, and key server client supporting both in-memory and file-based keystores with 0600 permissions on Unix and warning logs on Windows.
+
+- **Chat third-party message decrypt** (#1150) — adds policy-driven Ding + SafeChat message decryption for core chat read paths, explicit `dws chat crypto decrypt` diagnostics, and IM MCP wiring for policy lookup plus Ding batch decrypt. Outbound send encryption and `dws chat crypto encrypt` are intentionally not enabled in this PR.
+
+- **html fetch / create / overwrite / patch** — full native `.html` / `.htm` file support in DingPan or the doc space, mirroring the markdown domain. `create` accepts a literal string, `@file`, stdin (`-`), or an existing local HTML file via `--file`. `fetch` downloads and prints the remote content (optional sanitized `--output`). `overwrite` replaces the whole file with before/after preview on command-level `--dry-run`; `patch` applies literal or RE2 replacements with zero-match never writing and an empty result aborting. Routing matches the markdown leaves: explicit `--space-id` / `--workspace`, auto domain probe, `--folder` read-only probe on create. Drive uploads submit the `text/html` MIME type. Implemented on a shared textfile engine extracted from the markdown leaves (pure refactor, behavior unchanged).
+
+### Changed
+
+- **Bounded CI app race fan-out** (#1278) — keeps all nine reviewed
+  `internal/app` race-test partitions process-isolated while balancing them
+  across three physical jobs, reducing focused and full-suite runner demand by
+  six jobs without weakening partition coverage or increasing the 20-minute
+  job limit.
+
+- **Chat Shortcut-first discovery** — prioritizes Featured Shortcuts in
+  `dws chat --help`, keeps the complete canonical Shortcut catalog discoverable,
+  and points overlapping atomic command help to the reviewed Shortcut owner.
+
+### Fixed
+
+- **`aitable record query --all`** (#1016) — an empty final page that omits the `records` key now ends pagination normally instead of failing with `query_records response is missing records`.
+
+- **Post-merge CI admission reuse** — reuses exact successful full-suite
+  PR evidence for tree-identical protected-main merges and promotes the
+  verified coverage artifact to the merge SHA cache, reducing duplicate runner
+  work without adding jobs or weakening required contexts.
+
+- **Chat role and category routing** — resolves natural group names before group-role operations, aligns role assignment guidance with required non-empty role IDs, and publishes a compact shortcut-first category workflow to reduce Help and Catalog discovery without dropping result, safety, or identity constraints.
+
+- **Contract command safety and Skill routing** — Contract destructive operations (`archive`, `subject delete`, `subject batch-delete`, `project delete`, and `account delete`) now require explicit user confirmation (`--yes`) before executing, with Schema Safety `confirmation=user_required`. Batch project/subject deletion rejects empty parsed ID lists, subject deletion enforces the 1000-ID service limit, and required project/subject pagination rejects non-positive values before calling MCP. Account-list execution-time filters are documented consistently as ISO-8601 CLI inputs converted to MCP milliseconds. Legal smart-contract guidance is delivered through `dingtalk-misc` instead of a standalone first-level Skill, and the retired `edu-contact` endpoint is no longer registered as a supplement server.
+
+- **Coverage baseline reliability** — balances the existing app test
+  partitions across the current coverage runners and reuses the same bounded
+  path for trusted cold-cache recovery, avoiding the long-lived app test
+  process without adding CI matrix jobs.
+
+- **Dlink target routing** — teaches Doc, Drive, Sheet, AITable, shared URL
+  routing, and the `doc info` Schema to resolve shortcut targets through
+  `linkSourceInfo` for content operations while preserving the top-level node
+  for explicit shortcut-entry management.
+
+- **Main integration reliability** — keeps main and release multi-profile E2E
+  validation focused on the isolated profile chain while existing CI shards own
+  the complete Go regressions, avoiding the long-lived runner shutdown window
+  without adding CI jobs.
+
+- **Minutes permission sharing** — adds `--member-staff-ids` to
+  `minutes permission add` and `minutes +share`, preserving leading-zero staff
+  IDs while keeping `--member-uids` for DingTalk UIDs.
+
+- **Reviewer Router reconciliation** — keeps blocked, conflicting, draft, and
+  otherwise unproven merge candidates retriable without letting one expected
+  not-ready PR fail the repository-wide reconciliation batch.
+
+### Security
+
+- **Published MCP invocation** (#1261) - validates fresh bounded input schemas,
+  restricts endpoint trust and redirects, and prevents automatic call replay.
+
+
+## [1.0.62-beta.2] - 2026-09-02
+
+### Added
+
+- **Chat A2UI cards** (#1140) — adds `chat message send-a2ui-card` and
+  `chat message update-a2ui-card` as dedicated A2UI commands while preserving
+  the existing streaming card commands. A2UI content is delivered as a JSON
+  string array, and update status accepts enum names plus compatible numbers
+  1-9. The streaming update status flag is published as a string while
+  preserving its numeric 1-5 inputs and integer RPC payload.
+
+## [1.0.62-beta.1] - 2026-09-01
+
+### Added
+
+- **Runtime request context** (#1221) — packages an optional runtime payload, reports redacted readiness in `dws doctor`, and attaches compact context metadata to supported business requests.
+
+- **hrbrain talent-pool save** — creates or updates a talent pool. Omit `--pool-code` to create a new pool (only `--pool-name` is required) or pass `--pool-code` to update an existing one; optional `--pool-desc`, `--rule-json` (auto in/out rule, validated as a JSON object), and `--pool-tags` (validated as a non-empty JSON array) are forwarded to the `create_or_update_pool` MCP tool. The write is gated by a confirmation prompt (`--yes` to skip).
+- **hrbrain talent-pool move-members** — batch-moves staff into or out of a talent pool via the `entering_or_leaving_pool` MCP tool. Requires `--pool-code`, `--opt-type` (`ENTERING`/`LEAVING`), and `--staff-ids` (comma-separated work numbers), with an optional `--remark`. The write is gated by a confirmation prompt (`--yes` to skip).
+
+### Changed
+
+- **Single-executable runtime payload** (#1233) — bundles the platform payload into `dws`, removes the sidecar tree from new archives and installers, and retains sidecar discovery for existing installations.
+
+### Fixed
+
+- **Chat atomic message results** — normalizes message fields across atomic list and search commands, keeps nested search results aligned with top-level messages, and exposes stable send-status workflow references without removing raw response fields.
+
+- **IM message AI provenance** — preserves the lower `messageAiSendFlag` value across message search, list, mget, @-mention, Pin, quoted-message, forwarded-message, and thread-reply projections.
+
+
+## [1.0.61] - 2026-08-31
+
+This release promotes the sealed `v1.0.61-beta.3` contents to stable.
+
+### Changed
+
+- **Agent-ready command contracts** — expands reviewed Help, Schema, safety,
+  selection, result, pagination, and recovery guidance across the CLI, and
+  moves static MCP authoring and published-tool invocation onto explicit
+  `dws dev mcp` and `dws mcp published` command surfaces.
+
+- **Collaboration and event workflows** — adds Chat Thread promotion,
+  conversation-file upload, bounded message pagination, safer quoted replies,
+  DingTalk task lifecycle events, and VoIP invite event consumption.
+
+- **Document and data operations** — broadens Sheet batch and CSV controls,
+  strengthens AI Table routing and composite verification, hardens Drive and
+  Wiki shortcuts, and adds safer delegated authorization plus URL-only,
+  optional-output, overwrite-protected, and concurrent-writer-safe downloads.
+
+- **Organization and automation commands** — adds contact label and custom
+  field management, tightens attendance date handling and DingTalk task
+  workflows, and improves login, Windows Skill installation, and executable
+  doctor recovery guidance.
+
+- **Runtime and connector reliability** — preserves compatible document,
+  Markdown, chat, and shortcut result shapes while improving DING, Whiteboard,
+  Qoder Stream, and cross-product verification and failure evidence.
+
+### Changes since `v1.0.61-beta.3`
+
+### Added
+
+- **Chat conversation-file upload** — adds `chat conversation-file upload` for local files, returning reusable `dentryId` and `spaceId` without sending a chat message while leaving the retired `chat file upload` path unchanged.
+
+- **Chat message list page-all** — `dws chat message list` now accepts `--page-all` to iterate the time-boundary pagination automatically and return one merged `messages` array (with `pagesFetched`, `stopReason`, `nextPage`, and per-page failure diagnostics). `--page-limit` (default 50), `--max-items`, and `--page-delay` tune the sweep; without `--page-all` the command keeps its exact single-page behavior.
+
+- **Delegation auth capability options** — when `--principal-user-id` is set, the per-tool `check_capability` verification now carries a tool-specific `options` payload so the server can authorize the exact operation. `create` sends the create action parameters (name/type/target folder or workspace), `upload`/`get_file_upload_info` send the upload action parameters (file name and size), `import`/`create_import_session` send the target node together with file name, suffix, and size, `copy`/`move` send the resolved source node, permission management sends the target members, and `drive publish` (`set_file_publish`) sends the share-scope target (`shareScopeSetParam`) so making a file internet-public (WEB) is pre-checked. Tools without a mapping continue to check without an `options` key.
+- **Permission target members mapping** — permission-management delegation checks normalize both the new structured member format and the legacy `--users` list. Legacy user ids are converted into the structured target-member shape using the current logged-in enterprise corpId (resolved through the `$corpId` runtime default), keeping old and new invocations equivalent.
+- **Import and upload dry-run delegation parity** — `doc import` and `doc upload` now run the delegation pre-check on their dry-run previews, matching the execution path. A dry-run combined with `--principal-user-id` is verified against the command's real first delegated call (`create_import_session` / `get_file_upload_info`) before any preview is rendered, and a denied principal blocks the preview.
+- **Import target folder node resolution** — `extractNodeId` now recognizes `targetFolderId` (the key `doc import --folder` uses to carry its destination), so folder-targeted imports resolve a node id and are gated correctly. `copy`/`move` remain unaffected because an explicit `nodeId` still takes precedence over the folder keys.
+
+- **Drive download URL-only mode** — `dws drive download` and `dws drive download-version` accept `--url-only`, a non-downloading mode that returns the temporary signed download URL and required request headers (`downloadUrl`/`headers`, plus optional `fileName`/`fileSize`/`version`) without writing any file locally; the caller (Agent runtime / external system) performs the download itself. Signed URLs keep literal `&` separators in JSON output so they are copy-paste usable. `--url-only` is mutually exclusive with `--output`/`--overwrite`/`--part-size`/`--parallel`/`--no-resume` (explicit combinations fail fast) and stays effective through the `download --version N` compatibility routing.
+
+### Changed
+
+- **Drive download optional output** — `dws drive download` and `dws drive download-version` no longer require `--output`: when omitted, files are saved to the current directory with the filename inferred from the response `fileName` (falling back to the download URL); explicit `--output` behavior (file path or directory) is unchanged.
+
+- **Drive download overwrite guard** — `dws drive download` and `dws drive download-version` now reject downloads when the target file already exists, returning a structured `INPUT_FILE_ALREADY_EXISTS` error with recovery guidance; pass `--overwrite` to proceed. Re-running the same download used to silently overwrite the existing file. The guard is enforced both before the transfer starts and atomically at publish time (no-replace link), so a file that appears during a long download is never silently overwritten. Resume artifacts (`.dwspart`/`.dwspart.meta`) are not treated as conflicts.
+
+### Fixed
+
+- **AI Table composite verification** — accepts the service's real `newRecordIds`, view-filter, and workflow-detail response shapes, and retries only idempotent table-copy read-backs so delayed visibility no longer reports a false partial success.
+- **Workflow deployment status reporting** — replaces `resolved.enable` with `resolved.enableRequested`; `verification.running` now reports the workflow's observed remote state instead of mirroring whether `--enable` was requested.
+
+- **Chat message reply** (#1210) — allows personal and bot quoted replies in ordinary groups when conversation metadata omits `convThreadEnabled`, using the matching group search `channel=false` as positive evidence while continuing to block topic-circle targets.
+
+- **DING failure handling and resource identity** — stop when robot credentials are missing or the selected robot is invalid, and preserve source message IDs separately from DING IDs. Recall accepts opaque server-returned DING IDs without guessing resource type from their prefixes; callers check identity provenance in the receipt.
+- **Whiteboard verification and recovery** — validate connector payloads locally, normalize numeric coordinate comparisons, return compact successful update receipts, and preserve committed-write evidence on readback failure without recommending duplicate append operations.
+- **DING and Whiteboard guidance** — align mono/multi references, clarify product ownership, and reduce redundant discovery and readback without dropping business information.
+
+- **Drive download concurrent-writer safety** — `dws drive download` and `dws drive download-version` no longer risk publishing corrupted mixed content when two processes download to the same target concurrently. Streamed (non-ranged) downloads now write to a uniquely created temp file in the target directory instead of the shared `<target>.dwspart`, so concurrent writers can no longer truncate each other. Ranged/resume downloads keep the fixed `.dwspart` path (required for checkpoint reuse) and take a cross-process lock (`<target>.dwspart.lock`): a second concurrent writer fails fast with holder diagnostics (pid/host/start time) instead of interleaving writes; the atomic no-replace publish still guards the final target either way.
+
+- **Drive shortcut verification** — adds bounded automatic pagination for list, search, and recent results, preserves existing data fields alongside unified pagination metadata, identifies pagination failures by their actual operation, rejects metadata-only statistics, and preserves committed resource evidence when create or upload read-back names differ.
+
+- **Qoder Stream replies** (#1217) — sends Qoder CLI user messages as typed text-content blocks and surfaces `errors[]` from failed stream results, preventing successful DingTalk delivery from degrading into “本地 agent 无文本输出”.
+
+- **Drive and Wiki shortcut verification** — supports workspace-targeted file uploads and strengthens space-type, pagination, node create/copy/move, and imported-name evidence.
+- Workspace uploads now include the final file name and size in the initial credential request so upload-specific authorization can reject the operation before any file bytes are transferred.
+
+
 ## [1.0.61-beta.3] - 2026-08-30
 
 ### Added

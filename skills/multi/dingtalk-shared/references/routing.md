@@ -20,6 +20,7 @@
 | 知识库/钉盘空间、空间节点和成员管理 | [`dingtalk-wiki`](../../dingtalk-wiki/SKILL.md) |
 | 姓名模糊找人、负责人、上下级、工号、手机号语义线索、企业知识和行为记录搜索 | [`dingtalk-aisearch`](../../dingtalk-aisearch/SKILL.md) |
 | 完整手机号精确反查，或已有 userId 后查人员详情、部门和角色 | [`dingtalk-contact`](../../dingtalk-contact/SKILL.md) |
+| 合同台账、起草、审查、归档、项目、相对方或账款管理 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`contract.md`](../../dingtalk-misc/references/contract.md) |
 | Markdown / `.md` 内容读取、创建、覆盖、局部修改或版本差异比较 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`markdown.md`](../../dingtalk-misc/references/markdown.md) |
 | 组织大脑、人才池、员工档案专项、职业历程、绩效、结构化人才搜索 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`hrbrain.md`](../../dingtalk-misc/references/hrbrain.md) |
 | PAT 行为授权、scope 授权、授权浏览器策略 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`pat.md`](../../dingtalk-misc/references/pat.md) |
@@ -29,6 +30,12 @@
 
 选择 `dingtalk-misc` 后，先读取其 `SKILL.md` 产品索引，再只读取命中产品的单个
 reference，不要加载全部长尾产品文档。
+
+## 查询能力选择
+
+- 已知业务对象，或任务依赖结构化条件、连续记录、完整枚举、精确统计时，选择拥有该对象与完整性契约的产品能力。
+- 目标对象未知、需要语义相关性或跨来源发现时，选择 `dingtalk-aisearch`。其结果是候选集合；需要读取、修改或验证原对象时，把真实稳定 ID 传给对象所属产品。
+- 不用多组语义查询模拟完整枚举，也不用产品列表扫描模拟语义召回。能否声称完整只由实际结果中的分页与完整性字段决定。
 
 ## 高频边界
 
@@ -42,6 +49,7 @@ reference，不要加载全部长尾产品文档。
 - `calendar`：日历事件、参会人和会议室；视频会议（conference）当前 CLI 不支持，请在钉钉客户端操作；
   `minutes`：会后听记内容。
 - `report`：钉钉日志系统中的日报/周报；`doc`：普通文档创作；`todo`：个人任务。
+- `contract`：合同台账、起草、审查、归档、项目、相对方和账款；合同审批实例处理走 `oa`，经营合约走 `agoal`，合同文件存储走 `drive`，花名册合同字段走 `contact`。按听记起草时先由 `minutes` 取得真实 `taskUuid`，再调用 `contract draft`。
 - `chat`：发送消息、读取历史消息和主动群操作；独立的 `event`：未来个人 IM/OA/Todo 事件长连接监听；
   `ding`：强提醒，位于 `dingtalk-misc`。
 - `hrbrain` / `markdown` / `pat` / `profile` 均位于 `dingtalk-misc`。
@@ -49,4 +57,4 @@ reference，不要加载全部长尾产品文档。
   拒绝、转交和撤销走 `oa`。两者均位于 `dingtalk-misc`；未来审批任务或实例变化的实时通知走
   独立的 `dingtalk-event`。
 
-边界仍无法判断时，只读取 [intent-guide.md](intent-guide.md) 的对应章节。
+边界仍无法判断时，只读取 [intent-guide.md](intent-guide.md) 的对应章节。只有产品、写入对象、账号组织或不可安全推导的必填参数存在实质歧义时才阻塞澄清；只读任务可安全默认的展示范围不在此处阻塞。

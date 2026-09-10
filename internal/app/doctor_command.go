@@ -23,6 +23,7 @@ import (
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -37,6 +38,7 @@ var (
 	doctorHTTPDo             = (*http.Client).Do
 	doctorFetchLatestRelease = func() (*upgrade.ReleaseInfo, error) { return upgrade.NewClient().FetchLatestRelease() }
 	doctorNeedsUpgrade       = upgrade.NeedsUpgrade
+	doctorRuntimeContext     = runtimecontext.Resolve
 )
 
 // checkStatus represents the outcome of a single doctor check.
@@ -81,13 +83,16 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 	networkTimeout := time.Duration(timeout) * time.Second
 
 	w := cmd.OutOrStdout()
-	checks := make([]checkResult, 0, 4)
+	checks := make([]checkResult, 0, 5)
 
 	authResult := doctorCheckAuth(cmd.Context(), w, jsonOut)
 	checks = append(checks, authResult)
 
 	keychainResult := doctorCheckKeychain(w, jsonOut)
 	checks = append(checks, keychainResult)
+
+	runtimeResult := doctorCheckRuntimeContext(w, jsonOut)
+	checks = append(checks, runtimeResult)
 
 	networkResult := doctorCheckNetwork(cmd.Context(), w, jsonOut, networkTimeout)
 	checks = append(checks, networkResult)
@@ -127,6 +132,29 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("诊断发现 %d 项失败", fail)
 	}
 	return nil
+}
+
+func doctorCheckRuntimeContext(w io.Writer, jsonOut bool) checkResult {
+	if !jsonOut {
+		fmt.Fprint(w, tui.Dim("Checking runtime context... "))
+	}
+	result := doctorRuntimeContext()
+	check := checkResult{
+		Name:   "runtime_context",
+		Detail: result.DiagnosticDetail(),
+	}
+	if result.State == runtimecontext.StateReady {
+		check.Status = statusPass
+		check.Message = "Runtime context ready"
+	} else {
+		check.Status = statusWarn
+		check.Message = "Runtime context unavailable"
+		check.Hint = "Reinstall the matching runtime payload and run dws doctor again."
+	}
+	if !jsonOut {
+		printCheckResult(w, check)
+	}
+	return check
 }
 
 // ── Auth check ──────────────────────────────────────────────────────────

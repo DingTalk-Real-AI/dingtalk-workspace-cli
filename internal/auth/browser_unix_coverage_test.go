@@ -60,4 +60,7 @@ func TestCrossPlatformCoverageUnixBrowserCoverageEdges(t *testing.T) {
 	if err := oldStart("true"); err != nil {
 		t.Fatalf("default browser command hook = %v", err)
 	}
+	if err := oldStart("dws-browser-command-that-should-not-exist"); err == nil {
+		t.Fatal("default browser command hook unexpectedly started a missing command")
+	}
 }

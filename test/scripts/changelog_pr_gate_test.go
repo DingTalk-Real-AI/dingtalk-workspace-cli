@@ -1336,8 +1336,8 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing focused test job boundaries")
 	}
 	focusedJob := admission[focusedStart:focusedEnd]
-	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
-		t.Error("focused test shards must run for every non-doc, non-full-suite revision")
+	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
+		t.Error("focused test shards must run for every non-doc, non-reused, non-full-suite revision")
 	}
 	if !strings.Contains(focusedJob, "timeout-minutes: 20") {
 		t.Error("focused test job must allow the scoped race suite up to 20 minutes")
@@ -1345,19 +1345,17 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	// The focused path fans the impacted set across the same shards as test-race
 	// and runs each shard the way test-race runs it, so no single job carries
 	// internal/app together with its reverse dependencies. internal/app is split
-	// further into one shard per bounded partition, which keeps its package-level
-	// headroom through the process-isolating helper instead of one long -timeout
-	// and is strictly stronger than a single app job: every partition process
-	// releases the framework registries it populated, and the partitions run
-	// concurrently rather than end to end. Each partition shard still selects the
-	// same single internal/app package, so the impacted-package query maps the
-	// shard name back to app. release-scripts is asserted because its dedicated
+	// further into three balanced physical lanes. Every logical partition remains
+	// a fresh process, so it releases the framework registries it populated, while
+	// the workflow consumes six fewer hosted-runner slots. Each lane still selects
+	// the same single internal/app package, so the impacted-package query maps the
+	// lane name back to app. release-scripts is asserted because its dedicated
 	// job only runs at full-suite or release-sensitive scope, so losing it here
 	// would silently stop testing test/scripts changes.
 	for _, want := range []string{
-		`app-*) package_shard=app ;;`,
+		`app-lane-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
-		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"`,
+		`./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"`,
 		`if [ "$TEST_SHARD" = "release-scripts" ]; then`,
 		`go test -v -count=1 -timeout=10m "${packages[@]}"`,
 		"timeout_budget=12m",
@@ -1379,16 +1377,15 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing race test job boundaries")
 	}
 	raceJob := admission[raceStart:raceEnd]
-	// internal/app is carried by one shard per bounded partition, so process-global
-	// command registries are released with each partition process and the Schema
-	// assembly peak no longer sits in front of the other partitions. Each
-	// partition shard resolves back to the same single internal/app package.
+	// internal/app is carried by three balanced lanes. Process-global command
+	// registries are still released with each logical partition process, and each
+	// lane resolves back to the same single internal/app package.
 	// Other full race shards retain the dynamic package timeout: default/floor
 	// 12m, with cli/smoke raised to 15m on slower hosted runners.
 	for _, want := range []string{
-		`app-*) package_shard=app ;;`,
+		`app-lane-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
-		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"`,
+		`./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"`,
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
@@ -1509,10 +1506,22 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if !strings.Contains(integration, "include-hidden-files: true") {
 		t.Error("main integration must upload diagnostics stored below the hidden .tmp-bin directory")
 	}
+	const focusedIntegrationCommand = "bash scripts/dev/test-multi-profile-e2e.sh --skip-go-tests --keep-workdir"
+	if count := strings.Count(integration, focusedIntegrationCommand); count != 2 {
+		t.Errorf("main integration must execute and report the focused E2E command exactly twice, got %d", count)
+	}
 
 	integrationScript := readWorkflow("scripts/dev/test-multi-profile-e2e.sh")
+	for _, want := range []string{
+		"--skip-go-tests)",
+		"RUN_GO_TESTS=0",
+	} {
+		if !strings.Contains(integrationScript, want) {
+			t.Errorf("multi-profile E2E script missing focused-CI boundary %q", want)
+		}
+	}
 	if !strings.Contains(integrationScript, `GO_TEST_TIMEOUT="${MULTI_PROFILE_GO_TEST_TIMEOUT:-10m}"`) {
-		t.Error("multi-profile E2E must allow enough time for the complete internal/app regression suite")
+		t.Error("multi-profile E2E must allow enough time when complete Go regressions are explicitly requested")
 	}
 	if strings.Contains(integrationScript, "go test -timeout 180s") {
 		t.Error("multi-profile E2E must not retain the obsolete three-minute Go test budget")

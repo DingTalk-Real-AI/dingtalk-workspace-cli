@@ -39,7 +39,7 @@ dws wiki +feed-list --workspace <ID> --page-all --format json
 - 达到 `--max-items` 返回部分结果，标记 `autoPageComplete=false`、`autoPageStopReason=max_items`，不能宣称全量。
 - 达到 `--page-limit` 返回 `page_limit_reached` 错误，不返回累计结果或续页游标；需要继续时提高页数上限重新查询。
 - 游标缺失、停滞、循环或后续页失败均不能返回“全部”。
-- `+node-search` 当前保留服务端单页 cursor；需要续页时使用真实 `nextCursor`，不手工猜 token。
+- `+node-search` 默认保留服务端单页 cursor；需要完整命中集时加 `--page-all`，由 Shortcut 沿真实 cursor 自动续页。游标缺失、停滞、循环或后续页失败均不能报告完整结果。
 
 ## 空间创建与删除
 

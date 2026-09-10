@@ -61,6 +61,7 @@ func (devHandler) Command(runner executor.Runner) *cobra.Command {
 			AgentSummary: "管理开放平台应用、权限、机器人、版本发布、本地连接器与 MCP 开发配置",
 			UseWhen: []string{
 				"创建/配置开放平台应用、机器人、权限、事件订阅、MCP 服务工具或发布版本",
+				"把 OpenAPI、Swagger、Postman、curl 或 HTTP 接口转换成 MCP 工具供 Agent 使用",
 			},
 			AvoidWhen: []string{
 				"只查开放平台文档用 devdoc；业务聊天/邮信用 chat/mail",

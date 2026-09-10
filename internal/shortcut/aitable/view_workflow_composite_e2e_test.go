@@ -38,6 +38,20 @@ func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testin
 		}
 	})
 
+	t.Run("normalizes live filter and sort projection", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[]}`},
+			{text: `{"data":{"viewId":"v-live"}}`},
+			{text: `{"views":[{"viewId":"v-live","viewName":"线上形态","viewType":"Grid","filter":{"operator":"and","operands":[]},"sort":[{"fieldId":"f1","direction":"asc"}]}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+			"--base-id", "base", "--table-id", "table", "--name", "线上形态", "--view-type", "Grid",
+			"--config", `{"filter":[],"sort":[{"fieldId":"f1","direction":"asc"}]}`, "--yes")
+		if err != nil || !strings.Contains(out, `"status": "verified"`) || !strings.Contains(out, `"viewId": "v-live"`) {
+			t.Fatalf("live view projection = output:%q err:%v", out, err)
+		}
+	})
+
 	t.Run("projected columns and hidden flags verify visible field config", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"views":[]}`},
@@ -115,7 +129,7 @@ func TestCrossPlatformCoverageViewPresetAmbiguousOrMismatchedIsNotSuccessE2E(t *
 		}
 	})
 
-	t.Run("read-back config mismatch is unknown", func(t *testing.T) {
+	t.Run("read-back config mismatch is partial when create ID is known", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"views":[]}`}, {text: `{"viewId":"v1"}`},
 			{text: `{"views":[{"viewId":"v1","viewName":"X","viewType":"Grid","config":{"visibleFieldIds":["wrong"]}}]}`},
@@ -126,16 +140,54 @@ func TestCrossPlatformCoverageViewPresetAmbiguousOrMismatchedIsNotSuccessE2E(t *
 			t.Fatalf("mismatched view = output:%q err:%v", out, err)
 		}
 		var typed *apperrors.Error
-		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" || typed.Retryable {
+		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_partial_success" || typed.Retryable {
 			t.Fatalf("mismatched view error = %#v", err)
 		}
 	})
 }
 
+func TestCrossPlatformCoverageViewPresetNormalizationHelpers(t *testing.T) {
+	if !presetViewMatches(
+		map[string]any{"viewType": "Grid"},
+		"Grid",
+		map[string]any{"filter": []any{}, "sort": []any{}, "group": []any{}},
+	) {
+		t.Fatal("missing persisted empty filter/sort/group should match requested empties")
+	}
+	normalized := normalizePresetViewConfig(map[string]any{"sort": nil, "group": nil, "other": "value"})
+	if sortItems, ok := normalized["sort"].([]any); !ok || len(sortItems) != 0 {
+		t.Fatalf("normalized nil sort = %#v", normalized["sort"])
+	}
+	if groupItems, ok := normalized["group"].([]any); !ok || len(groupItems) != 0 || normalized["other"] != "value" {
+		t.Fatalf("normalized nil group/default = %#v", normalized)
+	}
+	if filter, ok := normalizePresetViewFilter(nil).(map[string]any); !ok || filter["operator"] != "and" {
+		t.Fatalf("normalized nil filter = %#v", filter)
+	}
+	group := map[string]any{"operator": "and", "operands": []any{map[string]any{"fieldId": "f1"}}}
+	if filter, ok := normalizePresetViewFilter([]any{group}).(map[string]any); !ok || filter["operator"] != "and" {
+		t.Fatalf("normalized single filter group = %#v", filter)
+	}
+	if items, ok := normalizePresetViewFilter([]any{"not-a-group"}).([]any); !ok || len(items) != 1 {
+		t.Fatalf("non-group filter list changed = %#v", items)
+	}
+	if !emptyPresetViewConfigValue("sort", []any{}) || emptyPresetViewConfigValue("sort", "bad") {
+		t.Fatal("sort empty equivalence mismatch")
+	}
+	if !emptyPresetViewConfigValue("filter", map[string]any{"operator": "and", "operands": []any{}}) {
+		t.Fatal("empty filter group was not recognized")
+	}
+	if emptyPresetViewConfigValue("filter", map[string]any{"operator": "or", "operands": []any{}}) ||
+		emptyPresetViewConfigValue("filter", map[string]any{"operator": "and", "operands": "bad"}) ||
+		emptyPresetViewConfigValue("other", nil) {
+		t.Fatal("non-empty preset config was accepted as empty")
+	}
+}
+
 func TestCrossPlatformCoverageWorkflowDeployCreateEnableAndVerifyE2E(t *testing.T) {
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"data":{"valid":true,"flowId":"w1","issues":[]}}`},
-		{text: `{"data":{"flowId":"w1","flowSchema":{"name":"提醒"}}}`},
+		{text: `{"data":{"name":"提醒","flowSchema":{"name":"提醒"}}}`},
 		{text: `{"workflowId":"w1","enabled":true}`},
 		{text: `{"data":{"list":[{"flowId":"w1","name":"提醒","status":"RUNNING"}]}}`},
 	}}
@@ -153,16 +205,74 @@ func TestCrossPlatformCoverageWorkflowDeployCreateEnableAndVerifyE2E(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageWorkflowDeployReportsActualStateWithoutEnableE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"valid":true,"flowId":"w1","issues":[]}}`},
+		{text: `{"data":{"name":"提醒","flowSchema":{}}}`},
+		{text: `{"data":{"list":[{"flowId":"w1","name":"提醒","status":"RUNNING"}]}}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+	if err != nil {
+		t.Fatalf("workflow deploy without enable error = %v", err)
+	}
+	for _, want := range []string{`"enableRequested": false`, `"running": true`, `"workflowStatus": "RUNNING"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("workflow output missing %s: %s", want, out)
+		}
+	}
+	if strings.Contains(out, `"enable": false`) || len(caller.calls) != 3 {
+		t.Fatalf("workflow request intent/status projection = output:%q calls:%#v", out, caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageWorkflowDeployAcceptsEchoedIDWithoutFlowSchemaE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"valid":true,"flowId":"w1","issues":[]}}`},
+		{text: `{"data":{"flowId":"w1","name":"提醒(1)"}}`},
+		{text: `{"data":{"list":[{"flowId":"w1","status":"STOP"}]}}`},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || !strings.Contains(out, `"running": false`) {
+		t.Fatalf("workflow echoed-ID detail = output:%q err:%v", out, err)
+	}
+}
+
+func TestCrossPlatformCoverageWorkflowDeployWithoutEnableToleratesStatusReadFailureE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"data":{"valid":true,"flowId":"w1","issues":[]}}`},
+		{text: `{"data":{"name":"提醒","flowSchema":{}}}`},
+		{err: errors.New("list unavailable")},
+	}}
+	out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--dsl", workflowDSLFixture, "--yes")
+	if err != nil || !strings.Contains(out, "workflow status could not be read from list") || strings.Contains(out, `"running"`) {
+		t.Fatalf("workflow status fallback = output:%q err:%v", out, err)
+	}
+}
+
 func TestCrossPlatformCoverageWorkflowDeployUpdateAndInvalidResponsesE2E(t *testing.T) {
 	t.Run("update preflights and reads back", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"flowId":"w1","flowSchema":{}}`},
+			{text: `{"data":{"name":"旧名称","flowSchema":{}}}`},
 			{text: `{"valid":true,"flowId":"w1"}`},
-			{text: `{"flowId":"w1","flowSchema":{"name":"提醒"}}`},
+			{text: `{"data":{"name":"提醒","flowSchema":{"name":"提醒"}}}`},
+			{text: `{"list":[{"flowId":"w1","status":"RUNNING"}]}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--workflow-id", "w1", "--dsl", workflowDSLFixture, "--yes")
-		if err != nil || !strings.Contains(out, `"action": "update"`) || len(caller.calls) != 3 || caller.calls[1].tool != "update_workflow" {
+		if err != nil || !strings.Contains(out, `"action": "update"`) || !strings.Contains(out, `"running": true`) || len(caller.calls) != 4 || caller.calls[1].tool != "update_workflow" {
 			t.Fatalf("workflow update = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("update accepts echoed ID without flowSchema and normalized name", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"flowId":"w1","name":"旧名称"}}`},
+			{text: `{"valid":true,"flowId":"w1"}`},
+			{text: `{"flowId":"w1","name":"提醒(1)"}`},
+			{text: `{"list":[{"flowId":"w1","status":"RUNNING"}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+workflow-deploy", "--base-id", "base", "--workflow-id", "w1", "--dsl", workflowDSLFixture, "--yes")
+		if err != nil || !strings.Contains(out, `"action": "update"`) || !strings.Contains(out, `"running": true`) {
+			t.Fatalf("workflow update echoed-ID detail = output:%q err:%v calls:%#v", out, err, caller.calls)
 		}
 	})
 
@@ -210,7 +320,7 @@ func TestCrossPlatformCoverageWorkflowDeployUpdateAndInvalidResponsesE2E(t *test
 
 	t.Run("enable reply is not enough when list says STOP", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"valid":true,"flowId":"w1"}`}, {text: `{"flowId":"w1"}`},
+			{text: `{"valid":true,"flowId":"w1"}`}, {text: `{"flowSchema":{}}`},
 			{text: `{"enabled":true,"workflowId":"w1"}`},
 			{text: `{"list":[{"flowId":"w1","status":"STOP"}]}`},
 		}}
