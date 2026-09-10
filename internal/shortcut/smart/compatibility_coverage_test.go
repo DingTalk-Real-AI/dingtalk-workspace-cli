@@ -117,7 +117,26 @@ func (f *platformCoverageCaller) Fields() string { return "" }
 func (f *platformCoverageCaller) JQ() string     { return "" }
 
 func newPlatformCoverageRoot() *cobra.Command {
-	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{
+		Use:           "dws",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, _ := output.WithResultStore(cmd.Context())
+			cmd.SetContext(ctx)
+			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Name() != "+chat-messages" && cmd.Name() != "+search-msg" {
+				return nil
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				return err
+			}
+			unwrapPlatformCoverageResult(cmd.OutOrStdout())
+			return nil
+		},
+	}
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
 	root.SetOut(io.Discard)
@@ -127,6 +146,24 @@ func newPlatformCoverageRoot() *cobra.Command {
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
 	return root
+}
+
+func unwrapPlatformCoverageResult(writer io.Writer) {
+	buffer, ok := writer.(*bytes.Buffer)
+	if !ok || buffer.Len() == 0 {
+		return
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(buffer.Bytes(), &envelope); err != nil {
+		return
+	}
+	data, ok := envelope["data"]
+	if !ok || len(data) == 0 || string(data) == "null" {
+		return
+	}
+	buffer.Reset()
+	buffer.Write(data)
+	buffer.WriteByte('\n')
 }
 
 func TestCrossPlatformCoverageIMObservedCompatibilityAliasesReachCanonicalInvocation(t *testing.T) {

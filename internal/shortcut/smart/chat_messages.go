@@ -24,6 +24,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
@@ -53,11 +55,17 @@ func formatDingTalkMessageBoundary(now time.Time) string {
 //	dws chat +chat-messages --group <openconversation_id> --time "2025-03-01 00:00:00"
 //	dws chat +chat-messages --user <userId> --time "2025-03-01 00:00:00" --limit 50
 var ChatMessages = shortcut.Shortcut{
-	Service:     "chat",
-	Command:     "+chat-messages",
-	Aliases:     []string{"+chat-messages-list"},
-	Product:     "chat",
-	Description: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
+	// This leaf has two executable continuation modes: compatibility mode
+	// advances --time, while range mode advances --start or --end according to
+	// --order. A single truthful Contract.Pagination cursor cannot describe
+	// both. Keep the byte-compatible validation phase until a separately
+	// reviewed public opaque cursor can unify those modes.
+	OutputRollout: output.RolloutDualValidate,
+	Service:       "chat",
+	Command:       "+chat-messages",
+	Aliases:       []string{"+chat-messages-list"},
+	Product:       "chat",
+	Description:   "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
 	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选的姓名、userId 或 openDingTalkId 混合入口：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。--sender-query 只按姓名唯一解析，解析失败会抑制未过滤消息并返回错误。不传发送者条件时原样读取会话且不查询发送者身份。sender 展示名不参与身份比较；" +
 		"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 		"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
@@ -96,6 +104,7 @@ var ChatMessages = shortcut.Shortcut{
 				"dws chat +chat-messages --group <openConversationId> --direction older --jq '.messages[] | {messageId, text}'",
 			},
 		},
+		Result: chatMessageLedgerResult("指定会话的消息正文、范围、完整性账本和安全续读动作"),
 	},
 	Flags: append([]shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称或 openConversationId，与单聊目标互斥"},
@@ -424,16 +433,18 @@ func applyOptionalChatMessagesSenderFilter(
 	}
 	unverifiedSenderInputs := chatMessagesUnverifiedSenderInputs(filter.resolutions)
 	if len(unverifiedSenderInputs) > 0 {
-		failures, _ := payload["failures"].([]map[string]any)
-		failures = append(failures, map[string]any{
-			"stage":  "sender_identity_verification",
-			"inputs": unverifiedSenderInputs,
-			"error":  "通讯录未能确认这些混合发送者参数是姓名还是 userId；已按精确 userId 过滤，但不能据此作完整否定结论",
+		warnings, _ := payload["warnings"].([]map[string]any)
+		warnings = append(warnings, map[string]any{
+			"kind":    "sender_identity_unverified",
+			"inputs":  unverifiedSenderInputs,
+			"message": "通讯录未能确认这些混合发送者参数是姓名还是 userId；已按精确 userId 过滤，但不能据此作完整否定结论",
 		})
-		payload["failures"] = failures
-		payload["failedCount"] = len(failures)
+		payload["warnings"] = warnings
+		payload["warningCount"] = len(warnings)
 		payload["complete"] = false
-		payload["partial"] = len(filtered) > 0
+		if payload["stopReason"] == "source_complete" {
+			payload["stopReason"] = "identity_unverified"
+		}
 	}
 	payload["messages"] = projectChatMessages(filtered, !rt.Bool("no-reactions"))
 	payload["count"] = len(filtered)
@@ -597,19 +608,18 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 	} else {
 		payload, rawItems, err = collectOneChatMessagesPage(rt, request)
 	}
+	attachChatMessageContinuation(payload, "chat +chat-messages")
 	if err != nil && (payload == nil || payload["pagesFetched"] == 0) {
 		// A sender name is only an optional post-read filter. If the primary
 		// message read never produced a page, do not make a misleading and
 		// unnecessary directory request before returning the read failure.
 		if payload != nil {
-			if outputErr := rt.Output(payload); outputErr != nil {
-				return outputErr
-			}
+			return rt.OutputIncomplete(payload, err)
 		}
 		return err
 	}
 	if err == nil && payload != nil {
-		if failures, ok := payload["failures"].([]map[string]any); ok && len(failures) > 0 {
+		if failures, ok := payload["failures"].([]map[string]any); ok && len(failures) > 0 && payload["stopReason"] != "time_filter_error" {
 			err = apperrors.NewAPI("消息查询未完整完成，请检查failures", apperrors.WithReason("incomplete_result"))
 		}
 	}
@@ -645,37 +655,76 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 	}
 
 	if err != nil {
-		// Full-page collection returns its failure ledger together with a
-		// non-zero error. Publish that ledger for diagnosis, but stop before
-		// resource downloads or a requested export can look successful.
-		if payload != nil {
-			if outputErr := rt.Output(payload); outputErr != nil {
-				return outputErr
-			}
-		}
-		return err
+		// Full-page collection attaches its failure ledger to the typed error.
+		// Stop before resource downloads, export, or a contradictory success
+		// result can be published. Legacy and dual-validation callers retain
+		// their established partial payload before receiving the error.
+		return rt.OutputIncomplete(payload, err)
 	}
 	if senderFilter.requested && !senderFilter.applied {
-		if payload != nil {
-			if outputErr := rt.Output(payload); outputErr != nil {
-				return outputErr
-			}
-		}
-		return senderFilter.resolutionErr
+		return rt.OutputIncomplete(payload, senderFilter.resolutionErr)
 	}
 	if senderFilter.scopeErr != nil {
-		if payload != nil {
-			if outputErr := rt.Output(payload); outputErr != nil {
-				return outputErr
-			}
-		}
-		return senderFilter.scopeErr
+		return rt.OutputIncomplete(payload, senderFilter.scopeErr)
+	}
+	// A one-page range projection can retain readable messages while rejecting
+	// malformed timestamps. That is an incomplete terminal result, not a
+	// successful response with a non-empty failure ledger.
+	if failures, _ := payload["failures"].([]map[string]any); len(failures) > 0 && payload["stopReason"] == "time_filter_error" {
+		count, _ := payload["count"].(int)
+		pagesFetched, _ := payload["pagesFetched"].(int)
+		cause := fmt.Errorf("%v", failures[0]["error"])
+		incompleteErr := helpers.NewIncompleteResultError(
+			fmt.Sprintf("消息读取未完成：保留 %d 条消息和 %d 个失败项", count, len(failures)),
+			cause,
+			false,
+			apperrors.WithOperation("chat/"+request.tool),
+			apperrors.WithReason("chat_messages_incomplete"),
+			apperrors.WithOrigin("shortcut"),
+			apperrors.WithFailureStage("time_filter"),
+			apperrors.WithExecutionStarted(pagesFetched > 0),
+			apperrors.WithHint("请保留 details.partialResult 中已读取的消息，并修正无法解析的时间字段后重试"),
+			apperrors.WithDetails(map[string]any{
+				"count":         count,
+				"pagesFetched":  pagesFetched,
+				"failedCount":   len(failures),
+				"stopReason":    payload["stopReason"],
+				"partialResult": payload,
+			}),
+		)
+		return rt.OutputIncomplete(payload, incompleteErr)
 	}
 	if rt.Bool("download-resources") {
+		resourceLedger, resourceCause := chatshortcut.DownloadMessageResourcesWithCause(
+			rt, rawItems, request.fallbackConversationID,
+		)
 		chatshortcut.AttachMessageResourceDownloads(
 			payload,
-			chatshortcut.DownloadMessageResources(rt, rawItems, request.fallbackConversationID),
+			resourceLedger,
 		)
+		failedResources, _ := resourceLedger["failedCount"].(int)
+		if failedResources > 0 {
+			failures, _ := payload["failures"].([]map[string]any)
+			count, _ := payload["count"].(int)
+			pagesFetched, _ := payload["pagesFetched"].(int)
+			incompleteErr := helpers.NewIncompleteResultError(
+				fmt.Sprintf("消息读取已完成，但 %d 个资源处理步骤失败", failedResources),
+				resourceCause,
+				true,
+				apperrors.WithOperation("chat/message_resource_download"),
+				apperrors.WithReason("chat_messages_incomplete"),
+				apperrors.WithOrigin("shortcut"),
+				apperrors.WithFailureStage("resource_download"),
+				apperrors.WithExecutionStarted(pagesFetched > 0),
+				apperrors.WithHint("请保留 details.partialResult 中已读取的消息和已下载文件，仅重试 resource-download 失败项"),
+				apperrors.WithDetails(map[string]any{
+					"count":         count,
+					"failedCount":   len(failures),
+					"partialResult": payload,
+				}),
+			)
+			return rt.OutputIncomplete(payload, incompleteErr)
+		}
 	}
 	if rt.Changed("output") {
 		if rt.DryRun() {
@@ -762,6 +811,7 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	truncatedByPageLimit := false
 	truncatedByResultLimit := false
 	var nextPage map[string]any
+	var terminalCause error
 
 	for pagesFetched < pageLimit {
 		if pagesFetched > 0 {
@@ -769,6 +819,7 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 				failures = append(failures, map[string]any{
 					"page": pagesFetched + 1, "stage": "delay", "error": delayErr.Error(),
 				})
+				terminalCause = delayErr
 				stopReason = "delay_interrupted"
 				break
 			}
@@ -782,11 +833,15 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 		}
 		data, err := rt.CallMCPData("chat", request.tool, request.params)
 		if err != nil {
+			if pagesFetched == 0 {
+				return nil, nil, err
+			}
 			failures = append(failures, map[string]any{
 				"page":  pagesFetched + 1,
 				"stage": "read",
 				"error": err.Error(),
 			})
+			terminalCause = err
 			stopReason = "read_failure"
 			break
 		}
@@ -815,6 +870,7 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 			allItems = append(allItems, item)
 		}
 		if len(rangeFailures) > 0 {
+			terminalCause = fmt.Errorf("%v", rangeFailures[0]["error"])
 			stopReason = "time_filter_error"
 			break
 		}
@@ -835,10 +891,11 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 		pageHasMore, hasMoreKnown := page["hasMore"].(bool)
 		if !hasMoreKnown {
 			paginationKnown = false
+			terminalCause = fmt.Errorf("下层未返回可靠的 hasMore，无法证明全量结果完整")
 			failures = append(failures, map[string]any{
 				"page":  pagesFetched,
 				"stage": "pagination",
-				"error": "下层未返回可靠的 hasMore，无法证明全量结果完整",
+				"error": terminalCause.Error(),
 			})
 			stopReason = "pagination_error"
 			break
@@ -851,16 +908,18 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 				hasMore = true
 				stopReason = "result_limit"
 				if moreEligibleOnPage {
+					terminalCause = fmt.Errorf("达到 --max-results 时当前下层页仍有未返回消息，无法生成不跳项的安全续页游标")
 					failures = append(failures, map[string]any{
 						"page":  pagesFetched,
 						"stage": "pagination",
-						"error": "达到 --max-results 时当前下层页仍有未返回消息，无法生成不跳项的安全续页游标",
+						"error": terminalCause.Error(),
 					})
 					stopReason = "pagination_error"
 					break
 				}
 				cursorKey, boundary, cursorErr := chatMessagesNextCursorBoundary(page["nextCursor"])
 				if cursorErr != nil {
+					terminalCause = cursorErr
 					failures = append(failures, map[string]any{
 						"page":  pagesFetched,
 						"stage": "pagination",
@@ -884,8 +943,19 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 			stopReason = "source_complete"
 			break
 		}
+		if len(rawItems) == 0 {
+			terminalCause = fmt.Errorf("下层返回 hasMore=true 但当前页没有消息")
+			failures = append(failures, map[string]any{
+				"page":  pagesFetched,
+				"stage": "pagination",
+				"error": terminalCause.Error(),
+			})
+			stopReason = "pagination_error"
+			break
+		}
 		cursorKey, boundary, cursorErr := chatMessagesNextCursorBoundary(page["nextCursor"])
 		if cursorErr != nil {
+			terminalCause = cursorErr
 			failures = append(failures, map[string]any{
 				"page":  pagesFetched,
 				"stage": "pagination",
@@ -895,10 +965,11 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 			break
 		}
 		if seenCursors[cursorKey] {
+			terminalCause = fmt.Errorf("hasMore=true 但毫秒 nextCursor 停滞")
 			failures = append(failures, map[string]any{
 				"page":  pagesFetched,
 				"stage": "pagination",
-				"error": "hasMore=true 但毫秒 nextCursor 停滞",
+				"error": terminalCause.Error(),
 			})
 			stopReason = "pagination_error"
 			break
@@ -943,21 +1014,21 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 		} else if stopReason == "time_filter_error" {
 			failureStage = "time_filter"
 		}
-		return payload, allItems, apperrors.NewAPI(
+		return payload, allItems, helpers.NewIncompleteResultError(
 			fmt.Sprintf("全量消息读取未完成：%d 页成功，%d 个页面失败", pagesFetched, len(failures)),
+			terminalCause,
+			stopReason == "read_failure",
 			apperrors.WithOperation("chat/"+request.tool),
 			apperrors.WithReason("chat_messages_incomplete"),
 			apperrors.WithOrigin("mcp_gateway"),
 			apperrors.WithFailureStage(failureStage),
-			apperrors.WithExecutionStarted(true),
-			apperrors.WithRetryable(true),
-			apperrors.WithHint("请根据 failures 和 nextPage 重试；失败 ledger 不会写入 --output 文件"),
+			apperrors.WithExecutionStarted(pagesFetched > 0),
+			apperrors.WithHint("请保留 details.partialResult 中已读取的消息，并根据其中的 failures 和 nextPage 重试；失败 ledger 不会写入 --output 文件"),
 			apperrors.WithDetails(map[string]any{
-				"pagesFetched": pagesFetched,
-				"failedCount":  len(failures),
-				"failures":     failures,
-				"partial":      len(results) > 0,
-				"stopReason":   stopReason,
+				"pagesFetched":  pagesFetched,
+				"failedCount":   len(failures),
+				"stopReason":    stopReason,
+				"partialResult": payload,
 			}),
 		)
 	}

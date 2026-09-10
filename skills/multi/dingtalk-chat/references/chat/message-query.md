@@ -14,12 +14,16 @@ Favorite、Pin 和 reaction。只读任务优先使用 Shortcut；只有 Shortcu
 | <!-- dws-intent: chat.read.reactions -->筛选指定会话中存在 reaction 的消息 | `dws chat +search-msg --group <群名或ID> --has-reactions --page-all` |
 | <!-- dws-intent: chat.search.filtered -->发送者、关键词、@对象或消息类型是主要条件 | `dws chat +search-msg` |
 | <!-- dws-intent: chat.conversation.active-since -->最近 24 小时或指定时间以来哪些会话有新消息，只要会话摘要 | `dws chat +recent-conversations`；可选 `--start/--end` |
+| 跨全部可见会话读取、总结或统计时间范围 | `dws chat message list-all` |
 | 已知消息 IDs 读取详情 | `dws chat +messages-mget` |
 | 查看 @我的消息 | `dws chat +at-me` |
+| 查看未读消息所在会话 | `dws chat +unread-chats` |
 | 查看 Favorite | `dws chat +flag-list` |
 | 已知话题主消息或 thread/topic ID 读取回复 | `dws chat +thread-replies` |
 
 `+chat-messages` 是指定会话的粗粒度读取；`+search-msg` 是目标条件明确的单/跨会话检索。
+`chat message list-all` 是跨全部可见会话按时间范围读取的唯一推荐入口；虽然路径不带 `+`，
+它提供受控翻页、完整性和 Result，不需要先列会话逐群循环。
 不要先读完整会话再补跑搜索，也不要把群名或姓名直接填入只接受稳定 ID 的参数。
 
 旧名 `+active-conversations` 保留为隐藏但可执行的兼容入口；新调用使用 `+recent-conversations`。
@@ -64,8 +68,8 @@ dws chat +recent-conversations --start "2026-09-07T00:00:00+08:00" --format json
 
 ## 指定会话读取
 
-群聊 `--group` 可传群名或 `openConversationId`；也可用 `--chat-query` 显式解析群名、
-用 `--conversation-id` 显式传稳定 ID。单聊使用 `--user` 或 `--open-dingtalk-id`。
+群聊 `--group` 可传群名或 `openConversationId`；也可用 `--chat-query` 显式解析群名。
+单聊使用 `--user` 或 `--open-dingtalk-id`。
 
 ```bash
 dws chat +chat-messages --group <群名或openConversationId> --format json
@@ -144,7 +148,7 @@ dws chat +search-msg --group "项目群" --has-reactions --page-all --format jso
 | Favorite 列表 | `+flag-list`；要求全部时加 `--page-all`，页大小 1–30 |
 | 消息 Pin 列表 | `message list-pin-msg --open-conversation-id <cid>` |
 | 批量 reaction/文字回应 | `message list-emotion-replies --msg-ids <id...>` |
-| 已读/未读状态 | `message read-status --group <cid> --message-id <id>` |
+| 已读/未读状态 | `message read-status --conversation-id <cid> --message-id <id>` |
 
 Favorite、消息 Pin、消息 Top 和会话 Top 是不同对象。写入或取消这些状态读取
 [message-actions.md](message-actions.md)，这里只负责查询。

@@ -14,11 +14,32 @@
 package chat
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
+
+func TestCrossPlatformCoverageChatCategoryAndGroupRoutingBoundary(t *testing.T) {
+	tests := []struct {
+		name string
+		item shortcut.Shortcut
+		want string
+	}{
+		{name: "create real group", item: ChatCreate, want: "不是创建会话分组/分类"},
+		{name: "search real group", item: ChatSearch, want: "不是搜索会话分组/分类"},
+		{name: "list categories", item: CategoryList, want: "不是查看群聊/聊天群列表"},
+		{name: "create category", item: CategoryCreate, want: "不是创建群聊/聊天群"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(tc.item.Intent, tc.want) {
+				t.Fatalf("%s intent = %q, want routing boundary %q", tc.item.Command, tc.item.Intent, tc.want)
+			}
+		})
+	}
+}
 
 func TestCrossPlatformCoverageReviewedChatShortcutContracts(t *testing.T) {
 	base := shortcut.Shortcut{

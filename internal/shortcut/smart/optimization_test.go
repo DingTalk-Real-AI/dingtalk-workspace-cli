@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -46,11 +48,22 @@ func TestCrossPlatformCoverageOptimizationSearchDefaultReactionAndMissingRows(t 
 		var out bytes.Buffer
 		root.SetOut(&out)
 		root.SetArgs([]string{"chat", "+messages-search", "--query", "fixture"})
-		if err := root.Execute(); (err != nil) != missing {
+		err := root.Execute()
+		if (err != nil) != missing {
 			t.Fatalf("missing=%v err=%v", missing, err)
 		}
 		var p map[string]any
-		if e := json.Unmarshal(out.Bytes(), &p); e != nil {
+		if missing {
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != "search_messages_incomplete" {
+				t.Fatalf("missing reaction error = %#v", err)
+			}
+			var ok bool
+			p, ok = typed.Details["partialResult"].(map[string]any)
+			if !ok {
+				t.Fatalf("partial result = %#v", typed.Details["partialResult"])
+			}
+		} else if e := json.Unmarshal(out.Bytes(), &p); e != nil {
 			t.Fatal(e)
 		}
 		if f.reactionCalls != 1 {

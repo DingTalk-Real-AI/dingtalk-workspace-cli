@@ -14,7 +14,9 @@
 package chat
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -23,6 +25,8 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -288,12 +292,16 @@ var ConversationClearAllRedPoint = shortcut.Shortcut{
 
 // ConversationList paginates all conversations (list_all_conversations, im).
 var ConversationList = shortcut.Shortcut{
-	Service:     "chat",
-	Command:     "+conversation-list",
-	Product:     "im",
-	Description: "分页或一键全量获取当前用户的会话列表（单聊+群聊）",
-	Intent:      "当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；默认读取一页，明确要求全部时使用 --page-all，CLI 会按服务端每页上限自动翻页并公开完整性 ledger；可用 --exclude-muted 排除已免打扰会话。",
-	Risk:        shortcut.RiskRead,
+	// This read moved from legacy_only in the current release. Keep the first
+	// rollout step byte-compatible while its declared Result and pagination
+	// shadow are exercised; activation requires a later reviewed release.
+	OutputRollout: output.RolloutDualValidate,
+	Service:       "chat",
+	Command:       "+conversation-list",
+	Product:       "im",
+	Description:   "分页或一键全量获取当前用户的会话列表（单聊+群聊）",
+	Intent:        "当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；默认读取一页，明确要求全部时使用 --page-all，CLI 会按服务端每页上限自动翻页并公开完整性 ledger；可用 --exclude-muted 排除已免打扰会话。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -317,6 +325,14 @@ var ConversationList = shortcut.Shortcut{
 			UseWhen:      []string{"当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；默认读取一页，明确要求全部时使用 --page-all，CLI 会按服务端每页上限自动翻页并公开完整性 ledger；可用 --exclude-muted 排除已免打扰会话。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +conversation-list --limit 50"},
+		},
+		Result: conversationDiscoveryResult(),
+		Pagination: &contract.PaginationSpec{
+			Kind:                  contract.PaginationKindCursor,
+			CursorParameter:       "cursor",
+			MetaPath:              contract.PaginationMetaPath,
+			EndpointExhaustedPath: contract.PaginationExhaustedPath,
+			NextTokenPath:         contract.PaginationNextTokenPath,
 		},
 	},
 	Flags: append([]shortcut.Flag{
@@ -365,12 +381,15 @@ var ConversationList = shortcut.Shortcut{
 		stopReason := "source_complete"
 		truncatedByPageLimit := false
 		truncatedByResultLimit := false
-		unsafeResultContinuation := false
+		unsafeContinuation := false
+		paginationKnown := true
 		failures := make([]map[string]any, 0)
+		var terminalCause error
 		for pagesFetched < pageLimit {
 			if pagesFetched > 0 {
 				if err := shortcut.WaitAutoPageDelay(rt); err != nil {
 					failures = append(failures, map[string]any{"stage": "conversation-page-delay", "cursor": cursor, "error": err.Error()})
+					terminalCause = err
 					stopReason = "delay_interrupted"
 					break
 				}
@@ -388,11 +407,14 @@ var ConversationList = shortcut.Shortcut{
 					return err
 				}
 				failures = append(failures, map[string]any{"stage": "conversation-page", "cursor": cursor, "error": err.Error()})
+				terminalCause = err
+				stopReason = "read_failure"
 				break
 			}
 			pagesFetched++
 			overflowOnPage := false
-			for _, conversation := range conversationListProject(data) {
+			pageConversations, projectionFailures, projectionCause := conversationListProjectChecked(data)
+			for _, conversation := range pageConversations {
 				id := strings.TrimSpace(fmt.Sprint(conversation["openConversationId"]))
 				if id != "" && id != "<nil>" {
 					if seenConversations[id] {
@@ -407,30 +429,81 @@ var ConversationList = shortcut.Shortcut{
 				}
 				convs = append(convs, conversation)
 			}
-			page := chatmsg.Pagination(data)
+			if len(projectionFailures) > 0 {
+				failures = append(failures, projectionFailures...)
+				unsafeContinuation = true
+			}
+			page, paginationErr := chatListPagination(data)
+			if paginationErr != nil {
+				paginationKnown = false
+				unsafeContinuation = true
+				nextCursor = 0
+				terminalCause = paginationErr
+				failures = append(failures, map[string]any{
+					"stage": "conversation-pagination",
+					"error": paginationErr.Error(),
+				})
+				stopReason = "pagination_error"
+				break
+			}
 			hasMoreValue, known := page["hasMore"].(bool)
+			candidateCursor, cursorErr := conversationPaginationCursor(page["nextCursor"])
 			hasMore = hasMoreValue
 			if !known {
-				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层未返回 hasMore，无法证明结果完整"})
+				paginationKnown = false
+				paginationFailure := fmt.Errorf("下层未返回 hasMore，无法证明结果完整")
+				if !unsafeContinuation && cursorErr == nil && candidateCursor > 0 && !seenCursors[candidateCursor] {
+					hasMore = true
+					nextCursor = candidateCursor
+				} else {
+					unsafeContinuation = true
+					nextCursor = 0
+				}
+				failures = append(failures, map[string]any{
+					"stage": "conversation-pagination",
+					"error": paginationFailure.Error(),
+				})
+				terminalCause = paginationFailure
+				stopReason = "pagination_error"
+				break
+			}
+			if len(projectionFailures) > 0 {
+				complete = false
+				unsafeContinuation = true
+				nextCursor = 0
+				terminalCause = projectionCause
+				stopReason = "projection_error"
 				break
 			}
 			if overflowOnPage {
+				paginationFailure := fmt.Errorf("下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标")
 				hasMore = true
 				nextCursor = 0
-				unsafeResultContinuation = true
-				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标"})
+				unsafeContinuation = true
+				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": paginationFailure.Error()})
+				terminalCause = paginationFailure
 				stopReason = "pagination_error"
 				break
 			}
 			if !hasMore {
 				complete = true
+				nextCursor = 0
+				stopReason = "source_complete"
 				break
 			}
-			nextCursor, err = conversationPaginationCursor(page["nextCursor"])
-			if err != nil || nextCursor == 0 || seenCursors[nextCursor] {
-				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "hasMore=true 但 nextCursor 缺失、无效或未前进"})
+			if cursorErr != nil || candidateCursor <= 0 || seenCursors[candidateCursor] {
+				paginationFailure := cursorErr
+				if paginationFailure == nil {
+					paginationFailure = fmt.Errorf("hasMore=true 但 nextCursor 缺失、无效或未前进")
+				}
+				unsafeContinuation = true
+				nextCursor = 0
+				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": paginationFailure.Error()})
+				terminalCause = paginationFailure
+				stopReason = "pagination_error"
 				break
 			}
+			nextCursor = candidateCursor
 			if !rt.Bool("page-all") {
 				stopReason = "single_page"
 				break
@@ -443,7 +516,7 @@ var ConversationList = shortcut.Shortcut{
 			seenCursors[nextCursor] = true
 			cursor = nextCursor
 		}
-		if rt.Bool("page-all") && hasMore && pagesFetched == pageLimit && !truncatedByResultLimit {
+		if rt.Bool("page-all") && hasMore && pagesFetched == pageLimit && !truncatedByResultLimit && len(failures) == 0 {
 			truncatedByPageLimit = true
 			stopReason = "page_limit"
 		}
@@ -454,68 +527,158 @@ var ConversationList = shortcut.Shortcut{
 			"complete":               complete,
 			"hasMore":                hasMore,
 			"nextCursor":             nextCursor,
-			"paginationKnown":        len(failures) == 0 || hasMore,
+			"paginationKnown":        paginationKnown,
 			"stopReason":             stopReason,
 			"truncatedByPageLimit":   truncatedByPageLimit,
 			"truncatedByResultLimit": truncatedByResultLimit,
 			"failedCount":            len(failures),
 			"failures":               failures,
-			"partial":                len(failures) > 0,
+			"partial":                len(failures) > 0 && len(convs) > 0,
+			"discoveryOnly":          true,
 		}
+		payload["nextActions"] = conversationDiscoveryNextActions(
+			convs, hasMore, nextCursor, unsafeContinuation, rt.Int("limit"), rt.Bool("exclude-muted"),
+		)
 		chatmsg.ApplyTruncation(payload)
-		if err := rt.Output(payload); err != nil {
-			return err
-		}
-		if stopReason == "delay_interrupted" && rt.Command().Context().Err() != nil {
-			return rt.Command().Context().Err()
-		}
-		if unsafeResultContinuation {
-			return apperrors.NewAPI(
+		if len(failures) > 0 {
+			failureStage := "pagination"
+			retryable := nextCursor > 0 && !unsafeContinuation
+			if stopReason == "read_failure" {
+				failureStage = "read"
+			} else if stopReason == "delay_interrupted" {
+				failureStage = "pagination_delay"
+			} else if stopReason == "projection_error" {
+				failureStage = "projection"
+			}
+			origin := "shortcut"
+			if stopReason == "read_failure" {
+				origin = "mcp_gateway"
+			} else if stopReason == "delay_interrupted" {
+				origin = "client"
+			}
+			incompleteErr := helpers.NewIncompleteResultError(
 				fmt.Sprintf("会话列表分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+				terminalCause,
+				retryable,
 				apperrors.WithOperation("im/list_all_conversations"),
 				apperrors.WithReason("conversation_list_incomplete"),
-				apperrors.WithOrigin("mcp_gateway"),
-				apperrors.WithFailureStage("pagination"),
+				apperrors.WithOrigin(origin),
+				apperrors.WithFailureStage(failureStage),
 				apperrors.WithExecutionStarted(true),
-				apperrors.WithRetryable(true),
-				apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+				apperrors.WithHint("请保留 details.partialResult 中已发现的会话，并根据其中的 failures 和 nextCursor 重试"),
+				apperrors.WithDetails(map[string]any{
+					"count":         len(convs),
+					"failedCount":   len(failures),
+					"stopReason":    stopReason,
+					"nextCursor":    nextCursor,
+					"partialResult": payload,
+				}),
+			)
+			return rt.OutputIncomplete(payload, incompleteErr)
+		}
+		nextToken := ""
+		if nextCursor > 0 {
+			nextToken = strconv.FormatInt(nextCursor, 10)
+		}
+		pagination, paginationErr := newConversationResultPagination(paginationKnown && !hasMore, nextToken)
+		if paginationErr != nil {
+			return apperrors.NewInternal(
+				"会话列表生成了不可发布的分页元数据",
+				apperrors.WithOperation("im/list_all_conversations"),
+				apperrors.WithReason("invalid_result_pagination"),
+				apperrors.WithOrigin("shortcut"),
+				apperrors.WithFailureStage("result_projection"),
+				apperrors.WithExecutionStarted(pagesFetched > 0),
+				apperrors.WithRetryable(false),
+				apperrors.WithCause(paginationErr),
 			)
 		}
-		return nil
+		pagination.Pages = pagesFetched
+		pagination.Items = len(convs)
+		return rt.OutputWithMeta(payload, &output.Meta{
+			Count: output.NewCount(len(convs)), Pagination: pagination,
+		})
 	},
 }
 
+var newConversationResultPagination = output.NewPagination
+
 func conversationPaginationCursor(value any) (int64, error) {
 	switch typed := value.(type) {
+	case nil:
+		return 0, nil
 	case int:
+		if typed < 0 {
+			return 0, fmt.Errorf("cursor must be non-negative")
+		}
 		return int64(typed), nil
 	case int64:
+		if typed < 0 {
+			return 0, fmt.Errorf("cursor must be non-negative")
+		}
 		return typed, nil
 	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed < 0 || math.Trunc(typed) != typed || typed >= float64(math.MaxInt64) {
+			return 0, fmt.Errorf("cursor must be a non-negative integer")
+		}
 		return int64(typed), nil
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil || parsed < 0 {
+			return 0, fmt.Errorf("cursor must be a non-negative integer")
+		}
+		return parsed, nil
 	case string:
-		return strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return 0, nil
+		}
+		parsed, err := strconv.ParseInt(text, 10, 64)
+		if err != nil || parsed < 0 {
+			return 0, fmt.Errorf("cursor must be a non-negative integer")
+		}
+		return parsed, nil
 	default:
 		return 0, fmt.Errorf("unsupported cursor type %T", value)
 	}
 }
 
 // conversationListProject reshapes the raw list_all_conversations response into a
-// clean conversation list — clean output projection. Both the list
-// container and the per-item field names are probed defensively across candidate
-// keys, so an unknown/empty shape yields an empty list rather than a crash or
-// fabricated data.
+// clean conversation list — clean output projection. The execution path uses
+// conversationListProjectChecked so an unknown shape cannot be mistaken for a
+// proven-empty complete result.
 func conversationListProject(data map[string]any) []map[string]any {
-	raw := conversationListResolveList(data)
+	rows, _, _ := conversationListProjectChecked(data)
+	return rows
+}
+
+func conversationListProjectChecked(data map[string]any) ([]map[string]any, []map[string]any, error) {
+	raw, listKnown := conversationListResolveListKnown(data)
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	failures := make([]map[string]any, 0)
+	if !listKnown {
+		err := fmt.Errorf("下层未返回可识别的会话列表字段")
+		return out, []map[string]any{{"stage": "conversation-projection", "error": err.Error()}}, err
+	}
+	var firstCause error
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
+			err := fmt.Errorf("会话列表第 %d 项不是对象", index+1)
+			if firstCause == nil {
+				firstCause = err
+			}
+			failures = append(failures, map[string]any{
+				"stage": "conversation-projection", "index": index, "error": err.Error(),
+			})
 			continue
 		}
 		row := map[string]any{}
 		if v, ok := conversationListFirst(m, "openConversationId", "conversationId", "id"); ok {
-			row["openConversationId"] = v
+			id := strings.TrimSpace(fmt.Sprint(v))
+			if id != "" && id != "<nil>" {
+				row["openConversationId"] = v
+			}
 		}
 		if v, ok := conversationListFirst(m, "conversationName", "name", "title"); ok {
 			row["conversationName"] = v
@@ -523,33 +686,46 @@ func conversationListProject(data map[string]any) []map[string]any {
 		if v, ok := conversationListFirst(m, "conversationType", "type"); ok {
 			row["conversationType"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if _, ok := row["openConversationId"]; !ok {
+			err := fmt.Errorf("会话列表第 %d 项缺少 openConversationId", index+1)
+			if firstCause == nil {
+				firstCause = err
+			}
+			failures = append(failures, map[string]any{
+				"stage": "conversation-projection", "index": index, "error": err.Error(),
+			})
+			continue
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, failures, firstCause
 }
 
 // conversationListResolveList locates the conversation array inside the response,
 // tolerating a bare top-level list or nesting one level under a common envelope.
 func conversationListResolveList(data map[string]any) []any {
+	rows, _ := conversationListResolveListKnown(data)
+	return rows
+}
+
+func conversationListResolveListKnown(data map[string]any) ([]any, bool) {
 	for _, key := range []string{"conversationList", "conversations", "result", "data", "list", "items"} {
 		v, ok := data[key]
 		if !ok {
 			continue
 		}
 		if arr, ok := v.([]any); ok {
-			return unwrapConversationTuple(arr)
+			return unwrapConversationTuple(arr), true
 		}
 		if inner, ok := v.(map[string]any); ok {
 			for _, ik := range []string{"conversationList", "conversations", "list", "items", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
-					return unwrapConversationTuple(arr)
+					return unwrapConversationTuple(arr), true
 				}
 			}
 		}
 	}
-	return []any{}
+	return []any{}, false
 }
 
 // unwrapConversationTuple handles gateway responses shaped as
@@ -853,7 +1029,7 @@ var CategoryList = shortcut.Shortcut{
 	Aliases:     []string{"+feed-group-list"},
 	Product:     "im",
 	Description: "获取用户自定义会话分组",
-	Intent:      "当你想查看当前用户自建了哪些会话分组（如'工作群''项目群'）时使用；只读返回分组列表及其 categoryId，供后续按分组拉会话或增删。",
+	Intent:      "当你想查看当前用户的会话分组/分类容器时使用；不是查看群聊/聊天群列表。只读返回分组及 categoryId，供后续按分类拉取或增删会话。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -876,7 +1052,7 @@ var CategoryList = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "获取用户自定义会话分组",
-			UseWhen:      []string{"当你想查看当前用户自建了哪些会话分组（如'工作群''项目群'）时使用；只读返回分组列表及其 categoryId，供后续按分组拉会话或增删。"},
+			UseWhen:      []string{"当你想查看当前用户的会话分组/分类容器时使用；不是查看群聊/聊天群列表。只读返回分组及 categoryId，供后续按分类拉取或增删会话。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +category-list"},
 		},
@@ -1287,7 +1463,7 @@ var CategoryCreate = shortcut.Shortcut{
 	Command:     "+category-create",
 	Product:     "im",
 	Description: "创建用户自定义会话分组",
-	Intent:      "当你想新建一个会话分组来归类会话时使用；会实际创建分组并返回其 ID，需传最多 15 个字符的分组名称 --title。",
+	Intent:      "当你想新建会话分组/分类容器来归类已有会话时使用；不是创建群聊/聊天群。会实际创建分类并返回 ID，需传最多 15 个字符的名称 --title。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -1309,7 +1485,7 @@ var CategoryCreate = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "创建用户自定义会话分组",
-			UseWhen:      []string{"当你想新建一个会话分组来归类会话时使用；会实际创建分组并返回其 ID，需传最多 15 个字符的分组名称 --title。"},
+			UseWhen:      []string{"当你想新建会话分组/分类容器来归类已有会话时使用；不是创建群聊/聊天群。会实际创建分类并返回 ID，需传最多 15 个字符的名称 --title。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +category-create --title \"工作群\""},
 		},
