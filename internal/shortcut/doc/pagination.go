@@ -12,6 +12,7 @@ import (
 )
 
 type docPageOptions struct {
+	Product       string
 	PageAll       bool
 	PageSize      int
 	MaxPages      int
@@ -52,6 +53,9 @@ func collectDocPages(
 	project func(map[string]any) []map[string]any,
 	options docPageOptions,
 ) (map[string]any, error) {
+	if options.Product == "" {
+		options.Product = productDoc
+	}
 	if options.PageSize <= 0 {
 		options.PageSize = 30
 	}
@@ -97,7 +101,7 @@ func collectDocPages(
 		if cursor != "" {
 			params[options.CursorParam] = cursor
 		}
-		data, err := rt.CallMCPData(productDoc, tool, params)
+		data, err := rt.CallMCPData(options.Product, tool, params)
 		if err != nil {
 			return nil, docPaginationError(tool, "page_read_failed", err, page, items, cursor)
 		}
@@ -231,7 +235,7 @@ func cloneMap(source map[string]any) map[string]any {
 }
 
 func pageItemKey(item map[string]any) string {
-	for _, key := range []string{"nodeId", "templateId", "id", "url"} {
+	for _, key := range []string{"commentKey", "nodeId", "templateId", "id", "url"} {
 		if value, ok := item[key].(string); ok && strings.TrimSpace(value) != "" {
 			return key + ":" + strings.TrimSpace(value)
 		}
@@ -254,7 +258,7 @@ func docPageState(data map[string]any) (bool, bool, string) {
 			}
 		}
 		if next == "" {
-			if value, ok := docFirst(value, "nextPageToken", "nextCursor", "next_page_token"); ok {
+			if value, ok := docFirst(value, "nextPageToken", "nextCursor", "next_page_token", "nextToken"); ok {
 				next, _ = value.(string)
 			}
 		}

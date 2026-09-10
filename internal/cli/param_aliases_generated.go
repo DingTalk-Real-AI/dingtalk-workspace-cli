@@ -6260,7 +6260,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"wiki-workspace-id": "workspace",
 			"workspace-id":      "workspace",
 		},
-		Blocked: []string{"content-file", "dentry-id", "dingdrive-space-id", "drive-space-id", "export-format", "mime-type", "node", "node-id", "parent-id", "storage-space-id", "title"},
+		Blocked: []string{"content-file", "dentry-id", "dingdrive-space-id", "drive-space-id", "export-format", "mime-type", "node", "node-id", "parent-id", "storage-space-id"},
 	},
 	{
 		CLIPath: "doc +create-from-template",
@@ -6338,7 +6338,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +fetch",
 		Aliases: map[string]string{
 			"dentry-uuid": "node",
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"end-block":   "end-block-id",
@@ -6390,7 +6389,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +history-list",
 		Aliases: map[string]string{
 			"dentry-uuid": "node",
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"file-id":     "node",
@@ -6403,7 +6401,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +history-revert",
 		Aliases: map[string]string{
 			"dentry-uuid":    "node",
-			"doc":            "node",
 			"doc-id":         "node",
 			"document-id":    "node",
 			"file-id":        "node",
@@ -6489,7 +6486,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +media-download",
 		Aliases: map[string]string{
 			"destination-path": "output",
-			"doc":              "node",
 			"doc-id":           "node",
 			"document-id":      "node",
 			"node-id":          "node",
@@ -6502,7 +6498,6 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc +media-insert",
 		Aliases: map[string]string{
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"node-id":     "node",
@@ -6523,7 +6518,6 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc +media-preview",
 		Aliases: map[string]string{
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"node-id":     "node",
@@ -6555,7 +6549,6 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc +resource-delete",
 		Aliases: map[string]string{
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"node-id":     "node",
@@ -6566,7 +6559,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +resource-download",
 		Aliases: map[string]string{
 			"destination-path": "output",
-			"doc":              "node",
 			"doc-id":           "node",
 			"document-id":      "node",
 			"node-id":          "node",
@@ -6579,12 +6571,11 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc +resource-update",
 		Aliases: map[string]string{
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"node-id":     "node",
 		},
-		Ambiguous: []string{"file-id", "url"},
+		Ambiguous: []string{"file-id"},
 	},
 	{
 		CLIPath: "doc +review",
@@ -6606,8 +6597,6 @@ var generatedParamAliases = []ParamAliasEntry{
 			"create-time-from":    "created-from",
 			"create-time-start":   "created-from",
 			"create-time-to":      "created-to",
-			"created-after":       "created-from",
-			"created-before":      "created-to",
 			"created-by-user-ids": "creator-uids",
 			"created-time-end":    "created-to",
 			"created-time-start":  "created-from",
@@ -6620,8 +6609,6 @@ var generatedParamAliases = []ParamAliasEntry{
 			"next-cursor":         "cursor",
 			"next-page-token":     "cursor",
 			"next-token":          "cursor",
-			"page-size":           "limit",
-			"page-token":          "cursor",
 			"per-page":            "limit",
 			"q":                   "query",
 			"search-word":         "query",
@@ -6629,7 +6616,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"take":                "limit",
 			"top":                 "limit",
 		},
-		Blocked: []string{"count", "end", "from", "modified-from", "modified-to", "modifier-uids", "name", "offset", "owner-id", "page", "start", "subject", "text", "title", "to", "user", "user-id", "user-ids", "users"},
+		Blocked: []string{"count", "modifier-uids", "name", "offset", "owner-id", "page", "subject", "text", "title", "user", "user-id", "user-ids", "users"},
 	},
 	{
 		CLIPath: "doc +share",
@@ -6696,7 +6683,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +version-list",
 		Aliases: map[string]string{
 			"dentry-uuid": "node",
-			"doc":         "node",
 			"doc-id":      "node",
 			"document-id": "node",
 			"file-id":     "node",
@@ -6710,7 +6696,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "doc +version-revert",
 		Aliases: map[string]string{
 			"dentry-uuid":    "node",
-			"doc":            "node",
 			"doc-id":         "node",
 			"document-id":    "node",
 			"file-id":        "node",

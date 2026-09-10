@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 442
+	publicShortcutCount = 444
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 499
+	schemaPublishedShortcutCount = 501
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 442
+	publiclyDeliveredShortcutCount = 444
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {

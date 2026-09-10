@@ -1289,8 +1289,8 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 	if !strings.Contains(blockIDDesc, "逗号分隔") || !strings.Contains(blockIDDesc, "最多 50 个") {
 		t.Fatalf("--block-id description must document batch deletion: %q", blockIDDesc)
 	}
-	if len(Update.Constraints) != 1 || Update.Constraints[0].Kind != shortcut.ConstraintCustom ||
-		!strings.Contains(Update.Constraints[0].Description, "依 command 校验") {
+	if len(Update.Constraints) != 2 || Update.Constraints[1].Kind != shortcut.ConstraintCustom ||
+		!strings.Contains(Update.Constraints[1].Description, "依 command 校验") || !strings.Contains(Update.Constraints[0].Description, "仅block_copy_insert_after") {
 		t.Fatalf("update custom constraint = %#v", Update.Constraints)
 	}
 	cmd := corecmd.New(shortcut.FromShortcut(Update))
@@ -1770,29 +1770,16 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 	}
 }
 
-func TestCrossPlatformCoverageDocDownloadsHaveNoOverwriteEscape(t *testing.T) {
-	for _, item := range []struct {
-		decl shortcut.Shortcut
-		args []string
-	}{
-		{Export, []string{"--node", "n", "--output", "out.docx"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
-		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
-	} {
-		t.Run(item.decl.Command, func(t *testing.T) {
-			for _, flag := range item.decl.Flags {
-				if flag.Name == "overwrite" {
-					t.Fatal("download shortcut still declares --overwrite")
-				}
-			}
-			caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
-			err := runDocCoverage(t, item.decl, caller, append(item.args, "--overwrite")...)
-			if err == nil {
-				t.Fatal("--overwrite unexpectedly accepted")
-			}
-			if caller.calls != 0 {
-				t.Fatalf("rejected --overwrite performed %d MCP calls", caller.calls)
-			}
-		})
+func TestCrossPlatformCoverageDocDownloadOverwriteIsExplicit(t *testing.T) {
+	for _, decl := range []shortcut.Shortcut{MediaDownload, ResourceDownload, MediaPreview} {
+		cmd := corecmd.New(shortcut.FromShortcut(decl))
+		flag := cmd.Flags().Lookup("overwrite")
+		if flag == nil || flag.DefValue != "false" {
+			t.Fatalf("%s must default to no-clobber", decl.Command)
+		}
+	}
+	caller := &docCoverageCaller{}
+	if err := runDocCoverage(t, Export, caller, "--node", "n", "--output", "out.docx", "--overwrite"); err == nil || caller.calls != 0 {
+		t.Fatalf("unextended export must reject overwrite before RPC: %v", err)
 	}
 }

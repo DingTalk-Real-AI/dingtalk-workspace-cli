@@ -73,8 +73,14 @@ var Search = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
+		{Name: "folder", Type: shortcut.FlagString, Desc: "只保留指定文件夹的直接子项（不递归）；要求page-all读取完整候选与目录"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词；不传仍兼容返回默认结果页，最近访问/编辑应使用 drive +recent"},
 		{Name: "extensions", Type: shortcut.FlagStringSlice, Desc: "按文件扩展名过滤 (如 adoc,axls,pdf)"},
+		{Name: "created-after", Type: shortcut.FlagString, Desc: "创建起点：RFC3339带时区或YYYY-MM-DD（UTC）；与created-from互斥"},
+		{Name: "created-before", Type: shortcut.FlagString, Desc: "创建终点：RFC3339带时区或YYYY-MM-DD（UTC）；与created-to互斥"},
+		{Name: "visited-after", Type: shortcut.FlagString, Desc: "访问起点：RFC3339带时区或YYYY-MM-DD（UTC）；与visited-from互斥"},
+		{Name: "visited-before", Type: shortcut.FlagString, Desc: "访问终点：RFC3339带时区或YYYY-MM-DD（UTC）；与visited-to互斥"},
+		{Name: "with-metadata", Type: shortcut.FlagBool, Desc: "在每条结果metadata中保留下游原始字段；不改变默认精简结果"},
 		{Name: "created-from", Type: shortcut.FlagInt, Desc: "创建时间起始 (毫秒时间戳)"},
 		{Name: "created-to", Type: shortcut.FlagInt, Desc: "创建时间截止 (毫秒时间戳)"},
 		{Name: "visited-from", Type: shortcut.FlagInt, Desc: "访问时间起始 (毫秒时间戳)"},
@@ -91,7 +97,7 @@ var Search = shortcut.Shortcut{
 	},
 	Constraints: docAutoPaginationConstraints(),
 	Tips:        []string{`dws doc +search --query "会议纪要" --page-all --max-pages 20`, `dws doc +search --query "周报" --limit 10`},
-	Validate:    validateDocAutoPagination,
+	Validate:    validateDocSearch,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
 		if v := rt.Str("query"); v != "" {
@@ -124,15 +130,25 @@ var Search = shortcut.Shortcut{
 		if rt.Changed("workspace-ids") {
 			params["workspaceIds"] = rt.StrSlice("workspace-ids")
 		}
+		project := searchDocsProject
+		if rt.Bool("with-metadata") {
+			project = searchDocsProjectWithMetadata
+		}
 		pageSize := rt.Int("limit")
 		if pageSize == 0 {
 			pageSize = 10
 		}
-		result, err := collectDocPages(rt, "search_documents", "documents", params, searchDocsProject, docPageOptions{
+		result, err := collectDocPages(rt, "search_documents", "documents", params, project, docPageOptions{
 			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
 			return err
+		}
+		if rt.Changed("folder") {
+			result, err = filterDocSearchFolder(rt, result)
+			if err != nil {
+				return err
+			}
 		}
 		return rt.Output(result)
 	},
@@ -1048,7 +1064,7 @@ func init() {
 	CommentCreateInline.Contract = corecmd.ContractDecl{}
 	TemplateApply.Contract = corecmd.ContractDecl{}
 	canonicalizeHistoryShortcuts()
-	shortcut.Register(
+	registerDocShortcuts(
 		Search,
 		List,
 		Copy,
