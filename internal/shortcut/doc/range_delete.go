@@ -75,6 +75,10 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 	if err != nil {
 		return err
 	}
+	operation := "doc.multi_copy"
+	if len(ids) == 1 {
+		operation = "doc.update"
+	}
 	data, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": node, "format": "jsonml"})
 	if err != nil {
 		return err
@@ -105,12 +109,13 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 		sources = append(sources, b)
 	}
 	completed := []map[string]any{}
+	var lastStep map[string]any
 	for i, source := range sources {
 		expected := canonicalBlockContent(source, "jsonml")
 		stripBlockIDs(source)
 		// source was decoded from JSON and only had identity keys removed.
 		encoded, _ := json.Marshal(source)
-		step, err := runVerifiedDocMutation(rt, "doc.multi_copy", "insert_document_block", map[string]any{"nodeId": node, "referenceBlockId": ref, "where": "after", "format": "jsonml", "jsonml": string(encoded)}, node, "list_document_blocks", map[string]any{"nodeId": node, "format": "jsonml", "__allBlocks": true}, func(result, read map[string]any) bool {
+		step, err := runVerifiedDocMutation(rt, operation, "insert_document_block", map[string]any{"nodeId": node, "referenceBlockId": ref, "where": "after", "format": "jsonml", "jsonml": string(encoded)}, node, "list_document_blocks", map[string]any{"nodeId": node, "format": "jsonml", "__allBlocks": true}, func(result, read map[string]any) bool {
 			return verifyInsertedCanonicalBlock(result, read, ref, "after", expected, "jsonml", 0)
 		})
 		if err != nil {
@@ -118,16 +123,20 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 			if step != nil {
 				progress["lastStep"] = step
 			}
-			return docPartialWriteError("doc.multi_copy", "doc_multi_copy_partial", "copy", fmt.Sprintf("第%d个源块复制未确认；不要重试整个序列", i+1), err, progress, nil, map[string]any{"available": false, "reason": "inspect completed/new IDs before retrying remaining sources"})
+			return docPartialWriteError(operation, "doc_multi_copy_partial", "copy", fmt.Sprintf("第%d个源块复制未确认；不要重试整个序列", i+1), err, progress, nil, map[string]any{"available": false, "reason": "inspect completed/new IDs before retrying remaining sources"})
 		}
 		newID := nestedString(step, "blockId", "elementId")
 		if newID == "" {
-			return docPartialWriteError("doc.multi_copy", "doc_multi_copy_missing_id", "resolve_inserted_id", "已写入但响应缺少新块ID，停止后续复制", nil, map[string]any{"completed": completed, "lastStep": step}, nil, nil)
+			return docPartialWriteError(operation, "doc_multi_copy_missing_id", "resolve_inserted_id", "已写入但响应缺少新块ID，停止后续复制", nil, map[string]any{"completed": completed, "lastStep": step}, nil, nil)
 		}
 		completed = append(completed, map[string]any{"sourceBlockId": ids[i], "newBlockId": newID})
 		ref = newID
+		lastStep = step
 	}
-	return rt.Output(docEnvelope("doc.multi_copy", map[string]any{"nodeId": node, "atomic": false, "verified": true, "copies": completed}))
+	if len(ids) == 1 {
+		return rt.Output(lastStep)
+	}
+	return rt.Output(docEnvelope(operation, map[string]any{"nodeId": node, "atomic": false, "verified": true, "copies": completed}))
 }
 
 func docCopyIDs(raw string) ([]string, error) {

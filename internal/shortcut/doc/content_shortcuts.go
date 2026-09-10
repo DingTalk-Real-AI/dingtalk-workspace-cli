@@ -868,26 +868,7 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 }
 
 func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
-	data, err := readAllDocumentBlocks(rt, map[string]any{"nodeId": nodeID, "format": "element"})
-	if err != nil {
-		return err
-	}
-	block := findBlock(data, rt.Str("block-id"))
-	if block == nil {
-		return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要复制的 block")
-	}
-	if containsResourceReference(block) {
-		return apperrors.NewValidation("UNSUPPORTED_RESOURCE_TYPE: 含资源引用的 block 暂不支持复制")
-	}
-	expectedContent := canonicalBlockContent(block, "markdown")
-	stripBlockIDs(block)
-	referenceBlockID := rt.Str("after-block-id")
-	return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block",
-		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": "after", "element": block}, nodeID,
-		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
-		func(result, data map[string]any) bool {
-			return verifyInsertedCanonicalBlockContent(result, data, referenceBlockID, expectedContent, "markdown")
-		})
+	return executeDocMultiCopy(rt, nodeID)
 }
 
 func executeVerifiedDocMutation(

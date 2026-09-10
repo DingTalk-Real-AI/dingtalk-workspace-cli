@@ -541,11 +541,12 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 		{
 			name: "block copy",
 			args: []string{"--doc", "alias-node", "--command", "block_copy_insert_after", "--block-id", "block-1", "--after-block-id", "after", "--yes"},
-			responses: map[string][]map[string]any{"list_document_blocks": {
-				{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha"}}}}},
-				{"blocks": []any{map[string]any{"element": map[string]any{"id": "id-1", "paragraph": map[string]any{"text": "alpha"}}}}},
-			}},
-			wantTools: []string{"list_document_blocks", "insert_document_block", "list_document_blocks"},
+			responses: map[string][]map[string]any{
+				"get_document_content":  {{"jsonml": `["root",{},["p",{"uuid":"block-1"},"alpha"],["p",{"uuid":"after"},"anchor"]]`}},
+				"insert_document_block": {{"blockId": "id-1"}},
+				"list_document_blocks":  {{"blocks": []any{[]any{"p", map[string]any{"uuid": "block-1"}, "alpha"}, []any{"p", map[string]any{"uuid": "after"}, "anchor"}, []any{"p", map[string]any{"uuid": "id-1"}, "alpha"}}, "hasMore": false}},
+			},
+			wantTools: []string{"get_document_content", "insert_document_block", "list_document_blocks"},
 		},
 	}
 	for _, tc := range tests {
@@ -1238,10 +1239,9 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 					{"items": []any{map[string]any{"id": "block-1", "text": "gamma beta"}}},
 				}
 			case "update copy":
-				caller.responses["list_document_blocks"] = []map[string]any{
-					{"items": []any{map[string]any{"id": "block-1", "text": "alpha beta"}}},
-					{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "text": "alpha beta"}}},
-				}
+				caller.responses["get_document_content"] = []map[string]any{parityFullJSONML([]string{"block-1", "b"}, []string{"alpha beta", "reference"})}
+				caller.responses["insert_document_block"] = []map[string]any{{"blockId": "id-1"}}
+				caller.responses["list_document_blocks"] = []map[string]any{parityBlockRead([]string{"block-1", "b", "id-1"}, []string{"alpha beta", "reference", "alpha beta"})}
 			case "checkpoint success":
 				caller.responses["get_document_content"] = []map[string]any{{"markdown": "existing\nx"}}
 			}

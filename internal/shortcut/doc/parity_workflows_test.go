@@ -367,3 +367,19 @@ func TestCrossPlatformCoverageDocCopyAnchorSecondRowAndWrongPosition(t *testing.
 		t.Fatalf("partial copy lost its known receipt: %s", encoded)
 	}
 }
+
+func TestCrossPlatformCoverageDocSingleCopyPreservesLegacySuccessEnvelope(t *testing.T) {
+	c := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content":  {parityFullJSONML([]string{"source", "ref"}, []string{"A", "R"})},
+		"insert_document_block": {{"blockId": "new"}},
+		"list_document_blocks":  {parityBlockRead([]string{"source", "ref", "new"}, []string{"A", "R", "A"})},
+	}}
+	result := runDocCoverageEnvelope(t, Update, c, "--node", "n", "--command", "block_copy_insert_after", "--block-id", "source", "--after-block-id", "ref", "--yes")
+	if result["operation"] != "doc.update" {
+		t.Fatal("legacy operation changed", result)
+	}
+	data := result["data"].(map[string]any)
+	if data["verified"] != true || data["result"] == nil || data["verification"] == nil || data["copies"] != nil {
+		t.Fatal("legacy success shape changed", data)
+	}
+}
