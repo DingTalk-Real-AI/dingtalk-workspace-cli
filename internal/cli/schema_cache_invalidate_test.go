@@ -37,11 +37,8 @@ func TestCrossPlatformCoverageInvalidateSchemaCacheIdentitiesScopedToDWSSchema(t
 		}
 	}
 
-	oldGOOS, oldUser := schemaCacheRuntimeGOOS, schemaCacheUserCacheDir
-	schemaCacheUserCacheDir = func() (string, error) { return root, nil }
-	t.Cleanup(func() {
-		schemaCacheRuntimeGOOS, schemaCacheUserCacheDir = oldGOOS, oldUser
-	})
+	testseam.Swap(t, &schemaCacheUserCacheDir, func() (string, error) { return root, nil })
+	testseam.Protect(t, &schemaCacheRuntimeGOOS)
 	t.Setenv("DWS_SCHEMA_CACHE_DIR", root)
 	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
 	t.Setenv("ProgramData", filepath.Join(root, "ProgramData"))
