@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly protoc_bin="${PROTOC:-$(command -v protoc || true)}"
 readonly protoc_version="libprotoc 35.1"
-readonly plugin_version="v1.33.0"
+readonly plugin_version="v1.36.12"
 readonly go_toolchain="${SCHEMA_CACHE_GO_TOOLCHAIN:-go1.25.9}"
 readonly root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly proto_dir="${root}/internal/cli/schemacachepb"
