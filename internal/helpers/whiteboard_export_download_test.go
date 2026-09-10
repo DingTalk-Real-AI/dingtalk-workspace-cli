@@ -38,7 +38,7 @@ func TestCrossPlatformCoverageWhiteboardDownloadTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ip := range []string{"0.0.0.0", "224.0.0.1", "240.0.0.1", "2002:7f00:1::", "64:ff9b::7f00:1", "2001::1"} {
-		if whiteboardPublicIP(netip.MustParseAddr(ip)) {
+		if IsPublicTransferIP(netip.MustParseAddr(ip)) {
 			t.Errorf("accepted %s", ip)
 		}
 	}
@@ -151,23 +151,23 @@ func TestCrossPlatformCoverageWhiteboardSpecialAddressPolicy(t *testing.T) {
 		"3fff:fff:ffff::1", "5f00::1", "fdff::1", "febf::1",
 	} {
 		ip := netip.MustParseAddr(raw)
-		if whiteboardPublicIP(ip) {
+		if IsPublicTransferIP(ip) {
 			t.Errorf("accepted special address %s", ip)
 		}
-		if ip.Is4() && whiteboardPublicIP(netip.MustParseAddr("::ffff:"+raw)) {
+		if ip.Is4() && IsPublicTransferIP(netip.MustParseAddr("::ffff:"+raw)) {
 			t.Errorf("accepted mapped special address %s", raw)
 		}
 	}
 	for _, raw := range []string{"::", "::1", "::192.0.2.1", "fec0::1", "4000::1", "2001:4860::1%en0"} {
-		if whiteboardPublicIP(netip.MustParseAddr(raw)) {
+		if IsPublicTransferIP(netip.MustParseAddr(raw)) {
 			t.Errorf("accepted %s", raw)
 		}
 	}
-	if whiteboardPublicIP(netip.Addr{}) {
+	if IsPublicTransferIP(netip.Addr{}) {
 		t.Fatal("accepted invalid address")
 	}
 	for _, raw := range []string{"8.8.8.8", "1.1.1.1", "::ffff:8.8.8.8", "2001:4860:4860::8888", "2606:4700:4700::1111"} {
-		if !whiteboardPublicIP(netip.MustParseAddr(raw)) {
+		if !IsPublicTransferIP(netip.MustParseAddr(raw)) {
 			t.Errorf("rejected public address %s", raw)
 		}
 	}

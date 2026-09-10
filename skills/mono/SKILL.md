@@ -48,7 +48,7 @@ metadata:
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 100 | `dingtalk-aitable` |
+| `aitable` | 101 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 99 | `dingtalk-chat` |
