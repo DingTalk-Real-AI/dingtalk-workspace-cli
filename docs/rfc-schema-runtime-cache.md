@@ -10,11 +10,8 @@
 
 本文是 PR #1296 的**唯一规范性文档**。设计、实施阶段、性能数字、编译期交付讨论与进展均收束于此。下列路径仅为指向本文的短指针，不再维护独立正文：
 
-- [性能附件指针](rfc-schema-runtime-cache-performance.md)
-- [编译期 Schema 交付指针](rfc-compiled-schema-delivery.md)
 - [CLI 性能专项计划指针](plan-cli-performance-parity.md)
 - [CLI 性能专项技术方案指针](design-cli-performance-parity.md)
-- [完整命令树专项计划指针](plan-command-framework-performance.md)
 - [性能优化进展指针](performance-optimization-progress.md)
 
 **当前产品事实：**
