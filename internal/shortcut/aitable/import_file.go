@@ -9,27 +9,26 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-// These are the Notable OSS endpoints configured for mainland China and
-// Singapore. Keep this list explicit: uploadUrl is an MCP response, so it
-// must not turn +import-file into a general local-file HTTP client.
-var trustedImportUploadEndpoints = []string{
-	"cn-zhangjiakou.oss.aliyuncs.com",
-	"oss-cn-zhangjiakou.aliyuncs.com",
-	"ap-southeast-1.oss.aliyuncs.com",
-	"oss-ap-southeast-1.aliyuncs.com",
-}
+// ImportApiServiceImpl signs only this object-key shape, using virtual-hosted
+// bucket URLs. Never accept an endpoint root with a bucket in the path.
+// See docs/aitable-import-upload-security.md for the service configuration.
+var importUploadObjectPath = regexp.MustCompile(`^/notable/mcp_import_temp/[0-9a-f]{32}/[^/]+$`)
 
 const importUploadRequestTimeout = 10 * time.Minute
 
@@ -406,21 +405,21 @@ func openImportFile(path string) (*os.File, os.FileInfo, error) {
 func validateImportUploadURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Scheme != "https" || parsed.Port() != "" && parsed.Port() != "443" ||
-		!isTrustedImportUploadHost(parsed.Hostname()) {
+		!isTrustedImportUploadHost(parsed.Hostname()) || parsed.Fragment != "" ||
+		!importUploadObjectPath.MatchString(parsed.Path) || path.Base(parsed.Path) == "." || path.Base(parsed.Path) == ".." {
 		return fmt.Errorf("prepare_import_upload returned an invalid uploadUrl")
 	}
 	return nil
 }
 
 func isTrustedImportUploadHost(host string) bool {
-	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
-	if host == "" || net.ParseIP(host) != nil {
-		return false
-	}
-	for _, endpoint := range trustedImportUploadEndpoints {
-		if host == endpoint || strings.HasSuffix(host, "."+endpoint) {
-			return true
-		}
+	// Exact bucket hosts from the service's production/staging, Singapore and
+	// local-test profiles. A region suffix proves nothing about bucket ownership.
+	switch strings.ToLower(host) {
+	case "alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com",
+		"alidocs-notable-sg.ap-southeast-1.oss.aliyuncs.com",
+		"alidocs-notable-test.cn-zhangjiakou.oss.aliyuncs.com":
+		return true
 	}
 	return false
 }
@@ -451,7 +450,8 @@ func dialTrustedImportUpload(ctx context.Context, network, address string) (net.
 }
 
 func isPublicImportUploadIP(ip net.IP) bool {
-	return ip != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
+	address, ok := netip.AddrFromSlice(ip)
+	return ok && helpers.IsPublicTransferIP(address)
 }
 
 func sanitizeImportOutput(value any, key string) any {

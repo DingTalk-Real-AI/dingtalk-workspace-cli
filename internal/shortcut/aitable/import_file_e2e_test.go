@@ -277,7 +277,7 @@ func TestCrossPlatformCoverageImportFileHTTPAndTerminalFailureStages(t *testing.
 		importHTTPDo = original
 		importNewRequestWithContext = originalRequest
 	})
-	prepare := upsertByKeyStep{text: `{"uploadUrl":"https://alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com/put","importId":"imp"}`}
+	prepare := upsertByKeyStep{text: `{"uploadUrl":"https://alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com/notable/mcp_import_temp/0123456789abcdef0123456789abcdef/data.xlsx","importId":"imp"}`}
 
 	t.Run("transport error", func(t *testing.T) {
 		importHTTPDo = func(*http.Request) (*http.Response, error) { return nil, errors.New("signed URL secret") }
@@ -398,8 +398,8 @@ func TestCrossPlatformCoverageImportFilePureValidationBranches(t *testing.T) {
 	file.Close()
 
 	for _, raw := range []string{
-		"https://alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com/upload",
-		"https://alidocs-notable-sg.ap-southeast-1.oss.aliyuncs.com/upload",
+		"https://alidocs-notable.cn-zhangjiakou.oss.aliyuncs.com" + importUploadTestObjectPath,
+		"https://alidocs-notable-sg.ap-southeast-1.oss.aliyuncs.com" + importUploadTestObjectPath,
 	} {
 		if err := validateImportUploadURL(raw); err != nil {
 			t.Fatalf("validateImportUploadURL(%q): %v", raw, err)
