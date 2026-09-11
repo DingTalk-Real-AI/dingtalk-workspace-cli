@@ -975,6 +975,12 @@ func TestCrossPlatformCoverageConstraintHelp(t *testing.T) {
 			t.Fatalf("help missing %q:\n%s", want, help)
 		}
 	}
+
+	shortOnly := &cobra.Command{Use: "short-only", Short: "保留的命令描述"}
+	AppendConstraintHelp(shortOnly, []Constraint{{Kind: AtLeastOne, Flags: []string{"a", "b"}}})
+	if !strings.HasPrefix(shortOnly.Long, "保留的命令描述\n\n参数约束：") {
+		t.Fatalf("Short fallback was not preserved: %q", shortOnly.Long)
+	}
 }
 
 // ── unified builder ────────────────────────────────────────────────

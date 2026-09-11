@@ -456,7 +456,7 @@ func TestDevAppFamilyValidationErrorsKeepEnvelopeOff(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
-		{"get requires locator", []string{"dev", "app", "get"}, "请传入 --unified-app-id 或 --app-key"},
+		{"get requires locator", []string{"dev", "app", "get"}, "请至少指定 --unified-app-id、--app-key 之一"},
 		{"event subscribe requires codes", []string{"dev", "app", "event", "subscribe", "--unified-app-id", "u-1", "--dry-run"}, "--event-codes 为必填"},
 		{"member add requires users", []string{"dev", "app", "member", "add", "--unified-app-id", "u-1", "--member-type", "DEVELOPER", "--dry-run"}, "--user-ids 为必填"},
 		{"update requires one field", []string{"dev", "app", "update", "--unified-app-id", "u-1", "--dry-run"}, "至少提供一项待更新字段"},

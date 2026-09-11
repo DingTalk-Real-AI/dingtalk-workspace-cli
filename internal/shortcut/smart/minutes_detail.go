@@ -100,7 +100,8 @@ var MinutesDetail = shortcut.Shortcut{
 		{Name: "output-dir", Type: shortcut.FlagString, Default: "minutes-transcripts", Desc: "file/both 模式下的安全相对输出目录"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"id", "ids"}, Description: "--id 与 --ids 只能选择一种，去重后 taskUuid 必须为 1..50 个"},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"id", "ids"}, Description: "--id 与 --ids 必须且只能选择一种"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"ids"}, Description: "--ids 去重后 taskUuid 最多为 50 个"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-limit"}, Description: "--page-limit 必须大于 0"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"transcript-output", "output-dir"}, Description: "file/both 输出目录必须是安全相对路径"},
 	},

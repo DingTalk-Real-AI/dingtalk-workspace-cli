@@ -81,6 +81,10 @@ func newChatCryptoDecryptCommand() *cobra.Command {
 	cmd.Flags().String("layer", "full", "解密层: full|safechat|ding")
 	DeclareLeafMetadata(cmd, LeafSpec{
 		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
+		Constraints: []LeafConstraint{{
+			Kind:  LeafExactlyOne,
+			Flags: []string{"text", "file"},
+		}},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "chat",

@@ -241,7 +241,7 @@ func TestChatEmotionFavoriteRejectsMissingRequiredOrUnpairedSource(t *testing.T)
 		{
 			name:    "missing media",
 			args:    []string{"emotion", "favorite", "--name", "赞"},
-			wantErr: "one of --media-id or --file-path is required",
+			wantErr: "请指定 --media-id、--file-path 之一",
 		},
 		{
 			name:    "source conversation only",
