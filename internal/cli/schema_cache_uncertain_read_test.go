@@ -161,3 +161,34 @@ func TestCrossPlatformCoverageUncertainRuntimeNeverPublishes(t *testing.T) {
 		t.Fatalf("uncertain query wrote cache state: %v", statErr)
 	}
 }
+
+// TestCrossPlatformCoverageReadableRuntimeNilGuards covers every nil-return
+// branch of readableSchemaCacheRuntime so the platform coverage gate counts
+// them: no registration, disabled registration, and ineligible runtime.
+func TestCrossPlatformCoverageReadableRuntimeNilGuards(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+
+	if r := readableSchemaCacheRuntime(); r != nil {
+		t.Fatal("readable runtime should be nil with no registration")
+	}
+
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if r := readableSchemaCacheRuntime(); r != nil {
+		t.Fatal("readable runtime should be nil when disabled")
+	}
+
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return false },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if r := readableSchemaCacheRuntime(); r != nil {
+		t.Fatal("readable runtime should be nil when ineligible")
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+}
