@@ -217,31 +217,29 @@ func deliverySchemaAllPayload() (map[string]any, error) {
 		if payload, err := runtime.loadAllPayload(); err == nil {
 			return payload, nil
 		}
-		if activeSchemaCacheRuntime() == nil {
-			if err := deliverySchemaCatalogError(); err != nil {
+		// Repair publishes, so it requires a certain runtime; while the surface
+		// is plugin-uncertain the tail below serves live assembly instead.
+		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+			value, loaded, err := repairSchemaCache(repairable, func() (any, error) {
+				meta, metaErr := repairable.readMeta()
+				if metaErr != nil {
+					return nil, metaErr
+				}
+				repairable.seedMeta(meta)
+				payload, payloadErr := repairable.readAllPayload(meta, false)
+				if payloadErr == nil {
+					repairable.seedAll(payload)
+				}
+				return payload, payloadErr
+			})
+			if err != nil {
 				return nil, err
 			}
-			return schemaAllPayloadFromLoaded(deliverySchemaCatalog())
-		}
-		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
-			meta, metaErr := runtime.readMeta()
-			if metaErr != nil {
-				return nil, metaErr
+			if value != nil {
+				return value.(map[string]any), nil
 			}
-			runtime.seedMeta(meta)
-			payload, payloadErr := runtime.readAllPayload(meta, false)
-			if payloadErr == nil {
-				runtime.seedAll(payload)
-			}
-			return payload, payloadErr
-		})
-		if err != nil {
-			return nil, err
+			return schemaAllPayloadFromLoaded(loaded)
 		}
-		if value != nil {
-			return value.(map[string]any), nil
-		}
-		return schemaAllPayloadFromLoaded(loaded)
 	}
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
@@ -258,27 +256,23 @@ func deliverySchemaOverviewPayload() (map[string]any, error) {
 		if payload, err := runtime.loadOverviewPayload(); err == nil {
 			return payload, nil
 		}
-		if activeSchemaCacheRuntime() == nil {
-			if err := deliverySchemaCatalogError(); err != nil {
+		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+			value, loaded, err := repairSchemaCache(repairable, func() (any, error) {
+				meta, metaErr := repairable.readMeta()
+				if metaErr != nil {
+					return nil, metaErr
+				}
+				repairable.seedMeta(meta)
+				return repairable.overviewPayload(meta)
+			})
+			if err != nil {
 				return nil, err
 			}
-			return schemaOverviewPayloadFromLoaded(deliverySchemaCatalog())
-		}
-		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
-			meta, metaErr := runtime.readMeta()
-			if metaErr != nil {
-				return nil, metaErr
+			if value != nil {
+				return value.(map[string]any), nil
 			}
-			runtime.seedMeta(meta)
-			return runtime.overviewPayload(meta)
-		})
-		if err != nil {
-			return nil, err
+			return schemaOverviewPayloadFromLoaded(loaded)
 		}
-		if value != nil {
-			return value.(map[string]any), nil
-		}
-		return schemaOverviewPayloadFromLoaded(loaded)
 	}
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
@@ -339,22 +333,18 @@ func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
 		if payload, err := runtime.loadQueryPayload(raw); err == nil {
 			return payload, nil
 		}
-		if activeSchemaCacheRuntime() == nil {
-			if err := deliverySchemaCatalogError(); err != nil {
+		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+			value, loaded, err := repairSchemaCache(repairable, func() (any, error) {
+				return repairable.readQueryPayload(raw)
+			})
+			if err != nil {
 				return nil, err
 			}
-			return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
+			if value != nil {
+				return value.(map[string]any), nil
+			}
+			return schemaPayloadFromLoadedCatalog(loaded, args)
 		}
-		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
-			return runtime.readQueryPayload(raw)
-		})
-		if err != nil {
-			return nil, err
-		}
-		if value != nil {
-			return value.(map[string]any), nil
-		}
-		return schemaPayloadFromLoadedCatalog(loaded, args)
 	}
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
