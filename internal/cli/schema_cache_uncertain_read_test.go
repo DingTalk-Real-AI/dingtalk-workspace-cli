@@ -159,18 +159,8 @@ func TestCrossPlatformCoverageUncertainRuntimeNeverPublishes(t *testing.T) {
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
 
-	// Every delivery path must fall through to live assembly on a cold cache
-	// while uncertain, and none of them may create cache state.
 	if _, err := DeliverySchemaQueryPayloadForTest("definitely-not-a-schema-path"); err == nil {
 		t.Fatal("unknown path unexpectedly resolved")
-	}
-	// The registered source root keeps live assembly authoritative, so both
-	// aggregate paths must answer from it rather than failing on the cold cache.
-	if payload, err := DeliverySchemaAllPayloadForTest(); err != nil || len(payload) == 0 {
-		t.Fatalf("cold uncertain --all query = %v, %v", payload != nil, err)
-	}
-	if payload, err := DeliverySchemaOverviewPayloadForTest(); err != nil || len(payload) == 0 {
-		t.Fatalf("cold uncertain overview query = %v, %v", payload != nil, err)
 	}
 	marker := filepath.Join(home, "dws")
 	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
@@ -207,13 +197,71 @@ func TestCrossPlatformCoverageReadableRuntimeNilGuards(t *testing.T) {
 		t.Fatal("readable runtime should be nil when ineligible")
 	}
 
-	// A directly-stored disabled registration must not serve reads either; the
-	// public disabled path stores an empty registration, so this state only
-	// arises through the registration seam.
+	// A disabled registration seeded through the seam must not serve reads
+	// either; the fail-closed guard covers that state for both accessors.
 	disabled := newSchemaCacheRuntime(SchemaCacheOptions{})
 	schemaCacheRegistrationValue.Store(&schemaCacheRegistration{runtime: disabled})
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	if r := readableSchemaCacheRuntime(); r != nil {
 		t.Fatal("readable runtime must reject a disabled registration")
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+}
+
+// TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks covers the
+// fallback legs of the complete-registry and overview loaders while the
+// process surface is plugin-uncertain and the per-user cache is cold: both
+// must still answer from live assembly, and a failing assembly must surface
+// its error instead of a silent empty payload.
+func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	coverageSchemaCacheHome(t)
+	schemacache.UseUserCacheDirForTest(t, realHomeCacheDir(t, ".dws-uncertain-all-"))
+
+	goos, goarch := coverageCacheGOOSARCH()
+	register := func() {
+		if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register()
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+
+	// Cold cache: both loaders fall through to live assembly. Overview runs
+	// first because the first successful assembly publishes the live catalog,
+	// after which the loaders answer from it at the top and never reach their
+	// cache-fallback branch.
+	if _, err := DeliverySchemaOverviewPayloadForTest(); err != nil {
+		t.Fatalf("uncertain cold-cache overview payload: %v", err)
+	}
+	resetDeliverySchemaCatalogStateForTest()
+	if _, err := DeliverySchemaAllPayloadForTest(); err != nil {
+		t.Fatalf("uncertain cold-cache all payload: %v", err)
+	}
+
+	// A failing assembly must surface instead of degrading silently. The
+	// source-root registration resets cache options, so re-register them and
+	// keep the uncertainty marker to stay on the read-only fallback path.
+	RegisterSchemaSourceRoot(nil)
+	register()
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+	if _, err := DeliverySchemaAllPayloadForTest(); err == nil {
+		t.Fatal("uncertain all payload ignored a failing assembly")
+	}
+	if _, err := DeliverySchemaOverviewPayloadForTest(); err == nil {
+		t.Fatal("uncertain overview payload ignored a failing assembly")
+	}
+	resetDeliverySchemaCatalogStateForTest()
+	if _, err := DeliverySchemaQueryPayloadForTest("calendar"); err == nil {
+		t.Fatal("uncertain query ignored a failing assembly")
 	}
 }

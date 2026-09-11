@@ -160,9 +160,13 @@ func readableSchemaCacheRuntime() *schemaCacheRuntime {
 	if registration == nil || registration.runtime == nil {
 		return nil
 	}
-	// A stored runtime always carries Enabled: RegisterSchemaCacheOptions only
-	// builds one for enabled options, so no separate Enabled check is needed.
 	opts := registration.runtime.optionsSnapshot()
+	// Fail closed on a disabled registration. The public path stores an empty
+	// registration instead, but the registration seam can seed this state, so
+	// the check stays as the invariant guard it has always been.
+	if !opts.Enabled {
+		return nil
+	}
 	if eligible := opts.RuntimeEligible; eligible != nil && !eligible() {
 		return nil
 	}
@@ -174,9 +178,13 @@ func activeSchemaCacheRuntime() *schemaCacheRuntime {
 	if registration == nil || registration.runtime == nil || schemaCacheRuntimeUncertain.Load() {
 		return nil
 	}
-	// A stored runtime always carries Enabled: RegisterSchemaCacheOptions only
-	// builds one for enabled options, so no separate Enabled check is needed.
 	opts := registration.runtime.optionsSnapshot()
+	// Fail closed on a disabled registration. The public path stores an empty
+	// registration instead, but the registration seam can seed this state, so
+	// the check stays as the invariant guard it has always been.
+	if !opts.Enabled {
+		return nil
+	}
 	if eligible := opts.RuntimeEligible; eligible != nil && !eligible() {
 		return nil
 	}
