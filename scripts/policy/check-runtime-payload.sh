@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-PAYLOAD="$ROOT/third_party/runtimepayload/20260908"
+PAYLOAD="$ROOT/third_party/runtimepayload/20260909"
 ALLOW_UNSUPPORTED_TOOLS=0
 
 if [ "${1:-}" = "--allow-unsupported-tools" ]; then
@@ -81,28 +81,20 @@ check_pe_arch() {
   printf 'Skipping %s library architecture inspection: compatible tooling is unavailable.\n' "$pe_label"
 }
 
-check_hash darwin/universal/x7k2m9p4q1w8.dylib a6f92e7ea30eadb68ff6e5f425166d7644842003abc72a27ec8186145f36b1f9
+check_hash darwin/universal/x7k2m9p4q1w8.dylib bc9c5b94b710f043a448e1e89f12de7723a7d2468450f127c1de2efdc6b90742
 check_hash linux/amd64/libx7k2m9p4q1w8.so 174b59ba2e46195e81dbcbe3aac83dedbf5baaceec41d02a684e623ddaace481
 check_hash linux/arm64/libx7k2m9p4q1w8.so aa81cd1c19493ead17e54a61b1845acd0e2f28fb61a3a7914e5e6a669bcaa83d
 check_hash windows/amd64/x7k2m9p4q1w864.dll 7b8b06f1776eb02f7101c0999e53eec04984cc51334ca2795b3bfdb44a4f449b
 check_hash windows/arm64/x7k2m9p4q1w864.dll 057854bb037509659b1daab239de16e28a88e327cf302cd3312c8c72c5d05dfb
 
 checksum_count="$(wc -l < "$PAYLOAD/SHA256SUMS" | tr -d ' ')"
-[ "$checksum_count" = 128 ] || fail "expected 128 SHA-256 entries, found $checksum_count"
+[ "$checksum_count" = 5 ] || fail "expected 5 SHA-256 entries, found $checksum_count"
 while read -r expected relative; do
   [ -n "$expected" ] || continue
   check_hash "$relative" "$expected"
 done < "$PAYLOAD/SHA256SUMS"
 
-ps_count="$(find "$PAYLOAD/ps" -type f | wc -l | tr -d ' ')"
-[ "$ps_count" = 123 ] || fail "expected 123 ps files, found $ps_count"
-
-ps_digest="$({
-  find "$PAYLOAD/ps" -type f | LC_ALL=C sort | while IFS= read -r path; do
-    printf '%s  ps/%s\n' "$(hash_file "$path")" "$(basename "$path")"
-  done
-} | if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}')"
-[ "$ps_digest" = 45ae147697c1f8683df3f232d0ba792b807179bbe22fdac8225a0cf25fc33e7e ] || fail "ps manifest checksum mismatch"
+[ ! -e "$PAYLOAD/ps" ] && [ ! -L "$PAYLOAD/ps" ] || fail "retired ps directory must not be distributed"
 
 darwin_exports="$(nm -gU "$PAYLOAD/darwin/universal/x7k2m9p4q1w8.dylib" 2>/dev/null || true)"
 if [ -z "$darwin_exports" ] && command -v llvm-nm >/dev/null 2>&1; then
@@ -165,7 +157,7 @@ file "$PAYLOAD/linux/arm64/libx7k2m9p4q1w8.so" | grep -Eiq 'ELF 64-bit.*(ARM aar
 check_pe_arch windows/amd64/x7k2m9p4q1w864.dll 'x86[_-]64' 'PE32\+.*x86-64' 'Windows amd64'
 check_pe_arch windows/arm64/x7k2m9p4q1w864.dll 'aarch64|arm64' 'PE32\+.*Aarch64' 'Windows arm64'
 
-printf 'Runtime payload verified: 5 libraries, 6 targets, 123 ps files.\n'
+printf 'Runtime payload verified: 5 libraries, 6 targets, no auxiliary data files.\n'
 if [ "$ALLOW_UNSUPPORTED_TOOLS" -eq 0 ]; then
   "$ROOT/scripts/build/generate-runtime-payload-assets.sh" --check
 fi

@@ -1,220 +1,173 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"os"
-	"slices"
-	"sort"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/telemetry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
-	"gitlab.alibaba-inc.com/aes/aem-go-sdk/clitrack"
 )
 
-func TestCrossPlatformCoverageMainRunsThroughCLITracker(t *testing.T) {
-	for _, wantCode := range []int{0, 1, 3, 5} {
-		t.Run(fmt.Sprintf("exit_%d", wantCode), func(t *testing.T) {
+func TestCrossPlatformCoverageMainPreservesExecution(t *testing.T) {
+	for _, code := range []int{0, 1, 3, 5} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
 			t.Setenv("DO_NOT_TRACK", "")
-			wantError := ""
-			if wantCode != 0 {
-				wantError = "synthetic failure"
+			testseam.Swap(t, &os.Args, []string{"dws", "sheet", "read", "--access-token", "must-not-leak"})
+			testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity { return app.TelemetryIdentity{} })
+			calls := 0
+			message := ""
+			if code != 0 {
+				message = "sanitized failure"
 			}
-			testseam.Swap(t, &os.Args, []string{"dws", "sheet", "read", "--profile", "corp-a"})
-			testseam.Swap(t, &resolveTelemetryIdentity, func(args []string) app.TelemetryIdentity {
-				if strings.Join(args, " ") != "sheet read --profile corp-a" {
-					t.Fatalf("telemetry identity args = %#v", args)
-				}
-				return app.TelemetryIdentity{UserID: "user-1", UserName: "Alice", CorpID: "corp-1"}
-			})
-			testseam.Swap(t, &appExecute, func() (int, string, string) { return wantCode, "sheet read", wantError })
-			called := false
-			testseam.Swap(t, &trackRun, func(cfg clitrack.Config, execute func() error, exitCode func(error) int) {
-				called = true
-				if cfg.PID != "wcCRwZ" || cfg.App != "dws" {
-					t.Fatalf("tracker identity = PID %q App %q", cfg.PID, cfg.App)
-				}
-				if cfg.Version != app.RawVersion() {
-					t.Fatalf("tracker Version = %q, want %q", cfg.Version, app.RawVersion())
-				}
-				if !cfg.NoCommandLine || !cfg.NoCwd || !cfg.NoAutomaticDimensions || cfg.CaptureOutput {
-					t.Fatalf("tracker privacy config = NoCommandLine %v NoCwd %v NoAutomaticDimensions %v CaptureOutput %v", cfg.NoCommandLine, cfg.NoCwd, cfg.NoAutomaticDimensions, cfg.CaptureOutput)
-				}
-				if cfg.Env != "" || cfg.EventID != "" || cfg.Endpoint != "" || cfg.FlushTimeout != 0 || cfg.OutputMaxLen != 0 {
-					t.Fatalf("tracker SDK defaults were overridden: %#v", cfg)
-				}
-				if cfg.UID != "user-1" || cfg.Username != "Alice" || cfg.UserType != "" {
-					t.Fatalf("tracker user identity = UID %q Username %q UserType %q", cfg.UID, cfg.Username, cfg.UserType)
-				}
-
-				err := execute()
-				if wantCode == 0 && err != nil {
-					t.Fatalf("successful tracked execute error = %v", err)
-				}
-				if wantCode != 0 && (err == nil || err.Error() != "") {
-					t.Fatalf("failed tracked execute error = %#v, want empty sentinel", err)
-				}
-				if gotCode := exitCode(err); gotCode != wantCode {
-					t.Fatalf("tracked exit code = %d, want %d", gotCode, wantCode)
-				}
-				fields := cfg.ExtraFields()
-				if fields["c9"] != "sheet read" || fields["c10"] != "corp-1" || fields["c5"] != wantError {
-					t.Fatalf("tracker extra fields = %#v, want command path, corp ID, and error %q", fields, wantError)
-				}
-				if (wantError == "" && len(fields) != 2) || (wantError != "" && len(fields) != 3) {
-					t.Fatalf("tracker extra field count = %d for error %q", len(fields), wantError)
-				}
-			})
-
-			main()
-			if !called {
-				t.Fatalf("trackRun was not called for exit code %d", wantCode)
+			testseam.Swap(t, &appExecute, func() (int, string, string) { calls++; return code, "sheet read", message })
+			var got []telemetry.Event
+			testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) { got = append(got, event) })
+			before := time.Now().UnixMilli()
+			if actual := run(); actual != code {
+				t.Fatalf("exit=%d want %d", actual, code)
+			}
+			if calls != 1 || len(got) != 1 {
+				t.Fatalf("execute=%d reports=%d", calls, len(got))
+			}
+			event := got[0]
+			if event.Command != "dws" || event.Path != "sheet read" || event.ExitCode != code || event.ErrorSummary != message || event.Version != app.RawVersion() {
+				t.Fatalf("event=%+v", event)
+			}
+			if event.DurationMillis < 0 || event.CompletedAtMillis < before || event.CompletedAtMillis > time.Now().UnixMilli() {
+				t.Fatalf("incorrect original timing: %+v", event)
+			}
+			if strings.Contains(fmt.Sprint(event), "must-not-leak") {
+				t.Fatal("arguments entered event")
 			}
 		})
 	}
 }
 
-func TestCrossPlatformCoverageTrackerConfigOmitsEmptyOrganization(t *testing.T) {
-	commandPath := "version"
-	errorMessage := ""
-	cfg := trackerConfig(app.TelemetryIdentity{}, &commandPath, &errorMessage)
-	if cfg.UID != "" {
-		t.Fatalf("empty identity UID = %q", cfg.UID)
-	}
-	if cfg.Username != "" {
-		t.Fatalf("empty identity Username = %q", cfg.Username)
-	}
-	if fields := cfg.ExtraFields(); len(fields) != 1 || fields["c9"] != "version" {
-		t.Fatalf("empty organization fields = %#v", fields)
-	}
-}
-
-func TestCrossPlatformCoverageDefaultTrackRunNoopTracker(t *testing.T) {
-	called := false
-	trackRun(clitrack.Config{}, func() error {
-		called = true
-		return nil
-	}, nil)
-	if !called {
-		t.Fatal("default tracker did not execute callback")
+func TestCrossPlatformCoverageMainOptOutSkipsAllTelemetry(t *testing.T) {
+	for _, value := range []string{"1", "0", " true "} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("DO_NOT_TRACK", value)
+			testseam.Swap(t, &os.Args, []string{"dws", "version"})
+			testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity { panic("must not read identity") })
+			testseam.Swap(t, &submitTelemetry, func(telemetry.Event) { t.Fatal("must not report") })
+			calls := 0
+			testseam.Swap(t, &appExecute, func() (int, string, string) { calls++; return 0, "version", "" })
+			main()
+			if calls != 1 {
+				t.Fatalf("execute=%d", calls)
+			}
+		})
 	}
 }
 
-func TestCrossPlatformCoverageMainRespectsDoNotTrack(t *testing.T) {
-	t.Setenv("DO_NOT_TRACK", "1")
+func TestCrossPlatformCoverageMainDoesNotWaitForIdentity(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "")
 	testseam.Swap(t, &os.Args, []string{"dws", "version"})
+	started, release, returned := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	testseam.Swap(t, &resolveTelemetryIdentity, func([]string) app.TelemetryIdentity {
-		t.Fatal("DO_NOT_TRACK must skip telemetry identity reads")
-		return app.TelemetryIdentity{}
+		close(started)
+		defer close(returned)
+		<-release
+		return app.TelemetryIdentity{UserID: "late-user"}
 	})
-	testseam.Swap(t, &appExecute, func() (int, string, string) { return 0, "version", "" })
-	testseam.Swap(t, &trackRun, func(cfg clitrack.Config, execute func() error, exitCode func(error) int) {
-		if cfg.PID != "" || cfg.UID != "" || cfg.Username != "" {
-			t.Fatalf("opted-out tracker config = %#v", cfg)
-		}
-		if err := execute(); err != nil {
-			t.Fatalf("opted-out execution failed: %v", err)
-		}
-		if code := exitCode(nil); code != 0 {
-			t.Fatalf("opted-out exit code = %d, want 0", code)
+	defer func() { close(release); <-returned }()
+	testseam.Swap(t, &appExecute, func() (int, string, string) { <-started; return 0, "version", "" })
+	testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) {
+		if event.Identity != (telemetry.Identity{}) {
+			t.Fatalf("late identity=%+v", event.Identity)
 		}
 	})
-
-	main()
-}
-
-func TestCrossPlatformCoverageTrackerPayloadUsesReviewedFieldWhitelist(t *testing.T) {
-	testseam.Protect(t, &os.Args)
-	os.Args = []string{"dws", "sheet", "read", "--access-token", "must-not-leak"}
-	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("TERM_SESSION_ID", "stable-session")
-	t.Setenv("TMUX_PANE", "%42")
-	t.Setenv("LANG", "zh_CN.UTF-8")
-	t.Setenv("LC_ALL", "zh_CN.UTF-8")
-	t.Chdir(t.TempDir())
-
-	requestBody := make(chan []byte, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		body, _ := io.ReadAll(req.Body)
-		requestBody <- body
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-
-	commandPath := "sheet read"
-	errorMessage := ""
-	cfg := trackerConfig(app.TelemetryIdentity{UserID: "user-1", UserName: "Alice", CorpID: "corp-1"}, &commandPath, &errorMessage)
-	cfg.Endpoint = server.URL
-	cfg.FlushTimeout = time.Second
-	clitrack.New(cfg).Run(func() error { return nil }, nil)
-
-	var body []byte
+	done := make(chan int, 1)
+	go func() { done <- run() }()
 	select {
-	case body = <-requestBody:
+	case code := <-done:
+		if code != 0 {
+			t.Fatal(code)
+		}
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for telemetry request")
-	}
-	var envelope map[string]string
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		t.Fatalf("decode telemetry request %q: %v", body, err)
-	}
-	decoded, err := url.QueryUnescape(envelope["gokey"])
-	if err != nil {
-		t.Fatalf("decode gokey: %v", err)
-	}
-	globalFields, err := url.ParseQuery(decoded)
-	if err != nil {
-		t.Fatalf("parse global telemetry fields: %v", err)
-	}
-	eventFields, err := url.ParseQuery(globalFields.Get("msg"))
-	if err != nil {
-		t.Fatalf("parse event telemetry fields: %v", err)
-	}
-
-	assertTelemetryKeys(t, globalFields, []string{"app_name", "app_version", "env", "msg", "pid", "platform", "uid", "username", "version"})
-	assertTelemetryKeys(t, eventFields, []string{"c1", "c10", "c3", "c4", "c9", "p1", "p4", "ts", "type"})
-	for key, want := range map[string]string{
-		"app_name": "dws", "app_version": app.RawVersion(), "env": "prod", "pid": "wcCRwZ",
-		"platform": "cli", "uid": "user-1", "username": "Alice", "version": app.RawVersion(),
-	} {
-		if got := globalFields.Get(key); got != want {
-			t.Fatalf("global telemetry field %s = %q, want %q", key, got, want)
-		}
-	}
-	for key, want := range map[string]string{
-		"type": "event", "p1": "cli.exec", "p4": "SYS", "c1": "dws", "c3": "0", "c9": "sheet read", "c10": "corp-1",
-	} {
-		if got := eventFields.Get(key); got != want {
-			t.Fatalf("event telemetry field %s = %q, want %q", key, got, want)
-		}
-	}
-	for _, key := range []string{"device_id", "ext", "os", "os_version", "pv_id", "sdk_version", "sid", "timezone_offset"} {
-		if globalFields.Has(key) {
-			t.Fatalf("global telemetry leaked %s: %q", key, decoded)
-		}
-	}
-	for _, key := range []string{"c2", "c5", "c6", "c7", "c8"} {
-		if eventFields.Has(key) {
-			t.Fatalf("event telemetry leaked %s: %q", key, globalFields.Get("msg"))
-		}
+		t.Fatal("command waited for identity")
 	}
 }
 
-func assertTelemetryKeys(t *testing.T, fields url.Values, want []string) {
-	t.Helper()
-	got := make([]string, 0, len(fields))
-	for key := range fields {
-		got = append(got, key)
+func TestCrossPlatformCoverageIdentitySnapshotOwnsArgumentsAndRecovers(t *testing.T) {
+	for _, panics := range []bool{false, true} {
+		t.Run(fmt.Sprint(panics), func(t *testing.T) {
+			args := []string{"version", "--profile=corp-a"}
+			read := make(chan struct{})
+			expected := app.TelemetryIdentity{UserID: "user-1", UserName: "Alice", CorpID: "corp-a"}
+			testseam.Swap(t, &resolveTelemetryIdentity, func(got []string) app.TelemetryIdentity {
+				<-read
+				if !reflect.DeepEqual(got, []string{"version", "--profile=corp-a"}) {
+					panic("arguments mutated")
+				}
+				if panics {
+					panic("private error")
+				}
+				return expected
+			})
+			result := startTelemetryIdentity(args)
+			args[0] = "mutated"
+			close(read)
+			select {
+			case got := <-result:
+				if panics {
+					expected = app.TelemetryIdentity{}
+				}
+				if got != expected {
+					t.Fatalf("identity=%+v want %+v", got, expected)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("identity did not finish")
+			}
+		})
 	}
-	sort.Strings(got)
-	if !slices.Equal(got, want) {
-		t.Fatalf("telemetry keys = %v, want %v", got, want)
+}
+
+func TestCrossPlatformCoveragePrivateWorkerBypassesApp(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	testseam.Swap(t, &os.Args, []string{"dws", "--_dws-telemetry-worker=1"})
+	testseam.Swap(t, &appExecute, func() (int, string, string) { t.Fatal("worker entered app"); return 0, "", "" })
+	if code := run(); code != 0 {
+		t.Fatal(code)
+	}
+}
+
+func TestCrossPlatformCoverageReadyIdentityAndProcessExit(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "")
+	testseam.Swap(t, &os.Args, []string{"dws", "version"})
+	testseam.Swap(t, &snapshotTelemetryIdentity, func([]string) <-chan app.TelemetryIdentity {
+		ready := make(chan app.TelemetryIdentity, 1)
+		ready <- app.TelemetryIdentity{UserID: "user-1", UserName: "Alice", CorpID: "corp-1"}
+		return ready
+	})
+	testseam.Swap(t, &appExecute, func() (int, string, string) { return 3, "version", "sanitized failure" })
+	testseam.Swap(t, &submitTelemetry, func(event telemetry.Event) {
+		if event.Identity != (telemetry.Identity{UserID: "user-1", UserName: "Alice", CorpID: "corp-1"}) {
+			t.Fatalf("identity=%+v", event.Identity)
+		}
+	})
+	exit := -1
+	testseam.Swap(t, &exitProcess, func(code int) { exit = code })
+	main()
+	if exit != 3 {
+		t.Fatalf("process exit=%d", exit)
 	}
 }
