@@ -2,13 +2,15 @@ package helpers
 
 import (
 	"context"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing.T) {
@@ -37,9 +39,14 @@ func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("exported file: %v", err)
 	}
-	rendered := output.String()
-	if !strings.Contains(rendered, "方案白板.pdf") {
-		t.Fatalf("output %q does not contain exported file name", rendered)
+	var result struct {
+		OutputPath string `json:"outputPath"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode export output: %v", err)
+	}
+	if result.OutputPath != filepath.Clean(path) {
+		t.Fatalf("output path = %q, want %q", result.OutputPath, path)
 	}
 	wantTools := []string{"export_whiteboard", "query_export_job"}
 	gotTools := make([]string, 0, len(caller.calls))

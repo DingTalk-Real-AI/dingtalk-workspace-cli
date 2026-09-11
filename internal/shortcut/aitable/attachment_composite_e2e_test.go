@@ -162,7 +162,7 @@ func TestCrossPlatformCoverageAttachmentRemoveClearAndSelectiveE2E(t *testing.T)
 				map[string]any{"fileToken": "keep-token", "filename": "keep.pdf"},
 			})},
 			{text: `{"updatedCount":1}`},
-			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"filename": "keep.pdf", "size": 10}})},
+			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"fileToken": "keep-token", "filename": "keep.pdf", "size": 10}})},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+attachment-remove",
 			"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--remove-name", "remove.pdf", "--yes")
@@ -183,7 +183,7 @@ func TestCrossPlatformCoverageAttachmentRemoveExplainsTokenBoundaryE2E(t *testin
 	})}}}
 	out, err := runAITableCompositeCLI(t, caller, "+attachment-remove",
 		"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--remove-name", "remove.pdf", "--yes")
-	if err == nil || out != "" || len(caller.calls) != 1 || !strings.Contains(err.Error(), "fileToken") || !strings.Contains(err.Error(), "增量删除") {
+	if err == nil || out != "" || len(caller.calls) != 1 || !strings.Contains(err.Error(), "fileToken") || !strings.Contains(err.Error(), "resourceId") || strings.Contains(err.Error(), "服务端当前不支持") {
 		t.Fatalf("token boundary = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 }
