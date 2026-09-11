@@ -15,6 +15,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -30,6 +31,10 @@ type employeeServerOperation struct {
 }
 
 var employeeServerWrite = writeEmployeeJSON
+
+func employeeServerUnknown(message string) error {
+	return apperrors.NewInternal("server_binding_unknown："+message, apperrors.WithReason("server_binding_unknown"), apperrors.WithRetryable(false))
+}
 
 func employeeServerFlags() []LeafFlag {
 	return []LeafFlag{
@@ -150,7 +155,7 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 				return old.RuntimeBindingID, nil
 			}
 			if action != "unbind" {
-				return "", fmt.Errorf("server_binding_unknown：上次绑定请求结果未知，请联系服务端核对；禁止自动重试或启动新 Agent")
+				return "", employeeServerUnknown("上次绑定请求结果未知，请联系服务端核对；禁止自动重试或启动新 Agent")
 			}
 		}
 	} else if !os.IsNotExist(err) {
@@ -162,7 +167,7 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 	// identity 由网关根据主管 Token 注入；CLI 不允许覆盖身份，也不 dump 原始响应。
 	result, err := caller.CallToolWithToken(cmd.Context(), token.AccessToken, deapAgentServerID, "de_local_agent_"+action, map[string]any{wrapper: request})
 	if err != nil || result == nil {
-		return "", fmt.Errorf("server_binding_unknown：服务端请求结果未知；保留旧绑定，不启动新 Agent")
+		return "", employeeServerUnknown("服务端请求结果未知；保留旧绑定，不启动新 Agent")
 	}
 	var response struct {
 		Success *bool           `json:"success"`
@@ -176,36 +181,36 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		texts++
 		decoder := json.NewDecoder(strings.NewReader(block.Text))
 		if decoder.Decode(&response) != nil || decoder.Decode(new(any)) != io.EOF {
-			return "", fmt.Errorf("server_binding_unknown：服务端返回无效 JSON")
+			return "", employeeServerUnknown("服务端返回无效 JSON")
 		}
 	}
 	if texts != 1 || response.Success == nil {
-		return "", fmt.Errorf("server_binding_unknown：缺少唯一明确的服务端结果")
+		return "", employeeServerUnknown("缺少唯一明确的服务端结果")
 	}
 	if !*response.Success {
 		op.Phase = "rejected"
 		if err := employeeServerWrite(path, op); err != nil {
 			return "", err
 		}
-		return "", fmt.Errorf("server_binding_rejected：服务端拒绝操作；可能存在其他设备绑定、旧 ID 已失效、权限不足或在途/待恢复任务；旧 ID 保留，请核对后重试")
+		return "", apperrors.NewAPI("server_binding_rejected：服务端拒绝操作；可能存在其他设备绑定、旧 ID 已失效、权限不足或在途/待恢复任务；旧 ID 保留，请核对后重试", apperrors.WithReason("server_binding_rejected"), apperrors.WithRetryable(false))
 	}
 	if action == "unbind" {
 		var released bool
 		if json.Unmarshal(response.Data, &released) != nil || !released {
-			return "", fmt.Errorf("server_binding_unknown：解绑未返回 true")
+			return "", employeeServerUnknown("解绑未返回 true")
 		}
 		op.RuntimeBindingID = b.RuntimeBindingID
 	} else {
 		if json.Unmarshal(response.Data, &op.RuntimeBindingID) != nil || !validMachineString(op.RuntimeBindingID) {
-			return "", fmt.Errorf("server_binding_unknown：绑定未返回有效 ID")
+			return "", employeeServerUnknown("绑定未返回有效 ID")
 		}
 		if action == "rebind" && op.RuntimeBindingID == b.RuntimeBindingID {
-			return "", fmt.Errorf("server_binding_unknown：换绑未返回新 ID")
+			return "", employeeServerUnknown("换绑未返回新 ID")
 		}
 	}
 	op.Phase = "confirmed"
 	if err := employeeServerWrite(path, op); err != nil {
-		return "", fmt.Errorf("server_binding_unknown：服务端已成功但回执保存失败；请核对服务端结果")
+		return "", employeeServerUnknown("服务端已成功但回执保存失败；请核对服务端结果")
 	}
 	return op.RuntimeBindingID, nil
 }
@@ -220,7 +225,13 @@ func consumeEmployeeServerOperation(profile string) error {
 		return err
 	}
 	var op employeeServerOperation
-	if json.Unmarshal(raw, &op) != nil || op.Phase != "confirmed" {
+	if json.Unmarshal(raw, &op) != nil {
+		return fmt.Errorf("服务端操作回执损坏")
+	}
+	if op.Phase == "consumed" || op.Phase == "rejected" {
+		return nil
+	}
+	if op.Phase != "confirmed" {
 		return fmt.Errorf("服务端操作尚未确认")
 	}
 	op.Phase = "consumed"
@@ -246,17 +257,17 @@ func checkEmployeeServerOperation(b digitalEmployeeBinding) error {
 		return nil
 	case "confirmed":
 		if op.RuntimeBindingID == b.RuntimeBindingID && validMachineString(b.RuntimeBindingID) && ((op.Action == "unbind") == (employeeBindingState(b) == "unbound")) {
-			return consumeEmployeeServerOperation(b.DWSProfile)
+			return nil
 		}
 	}
-	return fmt.Errorf("server_binding_unknown：服务端绑定操作未完成，请恢复原操作；禁止启动新 Agent")
+	return employeeServerUnknown("服务端绑定操作未完成，请恢复原操作；禁止启动新 Agent")
 }
 
 func newEmployeeServerBindCommand() *cobra.Command {
 	flags := append([]LeafFlag{{Name: "agent-uuid", Required: true, Usage: "已有本地连接的数字员工 ID"}}, employeeServerFlags()...)
 	params := append([]contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}}, employeeServerParams()...)
 	return NewLeafCommand(LeafSpec{Use: "bind", Short: "为已有本地连接补登记服务端设备绑定", PostMount: deapAgentNoArgs, Flags: flags, OutputRollout: output.RolloutUnifiedActive,
-		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
+		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_bind", CanonicalPath: "dingtalk-tag.connect_bind", CLIPath: "dingtalk-tag connect bind", PrimaryCLIPath: "dingtalk-tag connect bind", Group: "connect"}, Description: "以主管身份为已有本机连接补登记设备绑定；不启动 Agent，不判断在线。其他设备已绑定时使用 rebind。", Parameters: params, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "本地设备标识与服务端绑定回执"}, Selection: contract.SelectionSpec{AgentSummary: "为已有本地 Agent 补登记服务端绑定", UseWhen: []string{"旧版连接尚未登记服务端设备绑定"}, AvoidWhen: []string{"首次接入使用 connect；换绑使用 connect rebind；绑定不代表在线"}, Examples: []string{"dws dingtalk-tag connect bind --agent-uuid <agentUuid>"}}},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if commandDryRun(cmd) {

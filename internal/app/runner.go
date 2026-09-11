@@ -178,6 +178,14 @@ func (r *runtimeRunner) RunWithToken(ctx context.Context, invocation executor.In
 	}
 	clone := *r
 	clone.transport = r.transport.WithAuth(r.transport.AuthToken, r.transport.ExtraHeaders)
+	// 设备绑定写请求的结果可能在响应丢失时已提交；由 connect 的持久回执
+	// 决定是否恢复，不能让 HTTP 层在一次调用内自动重放。
+	if invocation.CanonicalProduct == "deap-dev" {
+		switch invocation.Tool {
+		case "de_local_agent_bind", "de_local_agent_unbind", "de_local_agent_rebind":
+			clone.transport = clone.transport.WithMaxRetries(0).WithRedirectsDisabled()
+		}
+	}
 	ctx = context.WithValue(ctx, scopedAuthTokenKey, strings.TrimSpace(token))
 	return clone.runSingle(ctx, invocation, false)
 }

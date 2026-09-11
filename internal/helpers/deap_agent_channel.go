@@ -82,7 +82,7 @@ func newDeapConnectCommand() *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Use:           "connect",
 		Short:         "为已发布数字员工落盘 Profile 并接入本地 Agent 或 DSH",
-		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--profile-only 仅落盘；--channel dsh 注册并请求当前宿主启动该员工，宿主不可用时提示升级或启动宿主；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。运行及绑定管理使用 dingtalk-tag connect status/list/stop/restart/unbind/rebind。",
+		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--profile-only 仅落盘；--channel dsh 注册并请求当前宿主启动该员工，宿主不可用时提示升级或启动宿主；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。接入 Agent 前登记服务端设备绑定并保存 runtimeBindingId；绑定不代表在线。旧版连接使用 connect bind 补登记。运行及绑定管理使用 dingtalk-tag connect status/list/stop/restart/unbind/rebind。",
 		Flags: append([]LeafFlag{
 			{Name: "agent-uuid", Usage: "已存在且已发布的数字员工 ID", Required: true, Trim: true},
 			{Name: "channel", Usage: "本地 Agent 类型；省略或 auto 时自动探测；profile-only 时省略", Trim: true, Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
@@ -92,6 +92,9 @@ func newDeapConnectCommand() *cobra.Command {
 		Constraints: []LeafConstraint{{
 			Kind: "custom", Flags: []string{"channel", "profile-only"},
 			Description: "--channel 与 --profile-only 不能同时使用；省略模式时自动探测本地 Agent",
+		}, {
+			Kind: "custom", Flags: []string{"profile-only", "device-id", "local-agent-name", "extensions"},
+			Description: "--profile-only 不接受 device-id、local-agent-name 或 extensions；仅保存 Profile 不进行服务端绑定",
 		}},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent",
@@ -121,7 +124,7 @@ func newDeapConnectCommand() *cobra.Command {
 				ProductID: dingtalkTagProductID, Name: "connect",
 				CanonicalPath: "dingtalk-tag.connect", CLIPath: "dingtalk-tag connect", PrimaryCLIPath: "dingtalk-tag connect",
 			},
-			Description: "为一个已发布的 local_agent 数字员工保存独立 Profile，并接入普通本地 Agent 或注册 DSH。",
+			Description: "为一个已发布的 local_agent 数字员工保存独立 Profile，登记服务端设备绑定后接入普通本地 Agent 或注册 DSH；绑定不代表在线。",
 			DryRun:      deapAgentDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "DEAP 授权与 DWS managed exchange 的受控编排；可选本地 DSH 注册"},
 			Selection: contract.SelectionSpec{
@@ -302,17 +305,17 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	binding.RuntimeBindingID, binding.DeviceID = id, device
 	cfg.Binding = binding
-	if err := deapConnectSaveBinding(configDir, binding); err != nil {
-		return fmt.Errorf("数字员工 Profile 已保存为 %s，但本地 operator 绑定保存失败；请重新运行同一条 connect 命令恢复: %w", digitalProfile, err)
-	}
-	if err := consumeEmployeeServerOperation(digitalProfile); err != nil {
-		return err
-	}
 	adapter, err := digitalEmployeeAdapterFor(channel)
 	if err != nil {
 		return err
 	}
 	if err := writeEmployeeJSON(filepath.Join(digitalEmployeeRuntimeDir(digitalProfile), "adapter.json"), cfg); err != nil {
+		return err
+	}
+	if err := deapConnectSaveBinding(configDir, binding); err != nil {
+		return fmt.Errorf("数字员工 Profile 已保存为 %s，但本地 operator 绑定保存失败；请重新运行同一条 connect 命令恢复: %w", digitalProfile, err)
+	}
+	if err := consumeEmployeeServerOperation(digitalProfile); err != nil {
 		return err
 	}
 	// 前台 worker 不得把注册事务锁占用整个运行生命周期。

@@ -45,6 +45,9 @@ func runEmployeeLease(cmd *cobra.Command) error {
 	if err != nil || b.AgentUUID != devAppStringFlag(cmd, "agent-uuid") || b.BindingRevision != revision || bindingChannel(b) != "dsh" || employeeBindingState(b) != "bound" || employeeDesiredState(b) != "running" {
 		return fmt.Errorf("employee lease binding not authorized")
 	}
+	if err := checkEmployeeServerOperation(b); err != nil {
+		return err
+	}
 	// 锁进程异常退出后仍保留隔离标记；文件锁消失不是旧宿主已释放的证明。
 	guard := employeeLeaseGuard{AgentUUID: b.AgentUUID, Revision: revision, InstanceID: instance}
 	if err := writeEmployeeJSON(employeeLeaseGuardPath(profile), guard); err != nil {

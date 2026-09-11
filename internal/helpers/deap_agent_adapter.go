@@ -301,6 +301,9 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err != nil || !sameEmployeeBinding(b, cfg.Binding) || b.DWSProfile != profile || bindingChannel(b) == "dsh" || employeeBindingState(b) != "bound" || employeeDesiredState(b) != "running" {
 		return cfg, fmt.Errorf("adapter configuration does not match employee binding")
 	}
+	if err := checkEmployeeServerOperation(b); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -331,5 +332,132 @@ func TestCrossPlatformCoverageEmployeeUnbindOldIDCannotTargetSuccessor(t *testin
 	}
 	if len(caller.tokenCalls) != 0 {
 		t.Fatal("completed unbind targeted successor")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerPendingBlocksWorkerAndLease(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	if err := writeEmployeeJSON(employeeServerOperationPath(b.DWSProfile), employeeServerOperation{Key: "pending-request", Action: "bind", Phase: "pending"}); err != nil {
+		t.Fatal(err)
+	}
+	auth.SetRuntimeProfile(b.DWSProfile)
+	lease := newDeapConnectCommand()
+	lease.SetContext(context.Background())
+	for name, value := range map[string]string{"agent-uuid": b.AgentUUID, "channel": "dsh", "binding-revision": "7", "runtime-instance-id": "00000000-0000-4000-8000-000000000001"} {
+		_ = lease.Flags().Set(name, value)
+	}
+	if err := runEmployeeLease(lease); err == nil || !strings.Contains(err.Error(), "server_binding_unknown") {
+		t.Fatalf("lease accepted pending: %v", err)
+	}
+	b.Channel = "custom"
+	if err := updateEmployeeBinding(b); err != nil {
+		t.Fatal(err)
+	}
+	cfg := digitalEmployeeAdapterConfig{Binding: b, SelfOpenDingTalkID: "employee-open-id"}
+	if err := writeEmployeeJSON(filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "adapter.json"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadDigitalEmployeeConfig(b.DWSProfile); err == nil {
+		t.Fatal("worker accepted pending server operation")
+	}
+	if state := employeeLifecycleStatus(context.Background(), b); state["serverBindingState"] != "unknown" {
+		t.Fatalf("state: %+v", state)
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeDeviceConcurrentCreation(t *testing.T) {
+	dir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
+	var wg sync.WaitGroup
+	ids := make([]string, 8)
+	errs := make([]error, 8)
+	for i := range ids {
+		wg.Add(1)
+		go func(i int) { defer wg.Done(); ids[i], errs[i] = employeeDeviceID(context.Background(), "") }(i)
+	}
+	wg.Wait()
+	for i := range ids {
+		if errs[i] != nil || ids[i] == "" || ids[i] != ids[0] {
+			t.Fatalf("device generation race: %v", errs)
+		}
+	}
+	b := digitalEmployeeBinding{DeviceID: "explicit-saved-device"}
+	if id, err := employeeBindingDeviceID(context.Background(), b, ""); err != nil || id != b.DeviceID {
+		t.Fatal("explicit device ID not reused")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeBindingDryRunDoesNotRepairReceipts(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	b.BindingState = "unbound"
+	if err := updateEmployeeBinding(b); err != nil {
+		t.Fatal(err)
+	}
+	op := employeeServerOperation{Key: "completed", Action: "unbind", Phase: "confirmed", RuntimeBindingID: b.RuntimeBindingID}
+	path := employeeServerOperationPath(b.DWSProfile)
+	if err := writeEmployeeJSON(path, op); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	for _, action := range []string{"unbind", "rebind"} {
+		cmd := lifecycleCmd(t, action, b.AgentUUID)
+		_ = cmd.Flags().Set("dry-run", "true")
+		if action == "rebind" {
+			_ = cmd.Flags().Set("channel", "dsh")
+			_ = cmd.Flags().Set("device-id", "new-device")
+		}
+		if err := mutateEmployeeBinding(cmd, action); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, _ := os.ReadFile(path)
+	if string(before) != string(after) {
+		t.Fatal("dry-run repaired receipt")
+	}
+	if _, err := os.Stat(filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "operation.json")); !os.IsNotExist(err) {
+		t.Fatal("dry-run persisted operation")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeConnectReplaysReceiptAfterLocalCommitFailure(t *testing.T) {
+	caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
+	for key, values := range caller.responses {
+		if key != "deap-dev/de_local_agent_bind" {
+			caller.responses[key] = append(append([]string{}, values...), values...)
+		}
+	}
+	InitDepsForTest(t, caller)
+	setupSuccessfulConnectSeams(t)
+	attempts := 0
+	testseam.Swap(t, &deapConnectSaveBinding, func(dir string, b digitalEmployeeBinding) error {
+		attempts++
+		if attempts == 1 {
+			return fmt.Errorf("injected local commit failure")
+		}
+		return saveDigitalEmployeeBinding(dir, b)
+	})
+	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
+		return employeeDSHState{}, fmt.Errorf("host unavailable")
+	})
+	first := newConnectTestCommand(t, false)
+	if err := first.RunE(first, nil); err == nil {
+		t.Fatal("missing local failure")
+	}
+	cmd := newConnectTestCommand(t, false)
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	for _, call := range caller.tokenCalls {
+		if call.toolName == "de_local_agent_bind" {
+			calls++
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("recovery called bind %d times", calls)
+	}
+	b, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), "employee-corp:employee-user")
+	if err != nil || b.RuntimeBindingID != "binding-created" {
+		t.Fatalf("missing committed receipt: %+v %v", b, err)
 	}
 }
