@@ -1681,10 +1681,6 @@ build_shared_schema_cache() {
   # declarations. identity.json is the only success marker.
   find "$schema_tree" -name 'identity.json' -type f -delete 2>/dev/null || true
   find "$schema_tree" -name 'identity.*.json' -type f -delete 2>/dev/null || true
-  # Snapshot existing edition trees before warm-up: when dws/schema itself
-  # pre-exists under a custom root, only editions this run generates may be
-  # broadened; caller-owned pre-existing edition trees keep their modes.
-  editions_before="$(find "$schema_tree" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)"
   # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
   # and populate it. Any schema command triggers generate + publish.
   if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
@@ -1693,9 +1689,11 @@ build_shared_schema_cache() {
     # locally generated identity plus shard digests, not on file ownership.
     # Never chmod a+rX a pre-existing custom SHARED_DIR root, nor pre-existing
     # caller-owned dws/ / dws/schema/ levels (repro: 0700 → 0755 exposing
-    # unrelated children). Only levels this run created may be broadened; under
-    # a pre-existing dws/schema that means only newly generated edition trees,
-    # so fresh umask-0700 artifacts never hide behind a shared success message.
+    # unrelated children). Within the DWS-owned schema tree, re-share every
+    # edition this warm-up just wrote: the sidecar cleanup above removed every
+    # identity.json, so only the freshly (re)generated current edition holds
+    # one — including an upgrade replacing artifacts inside an existing edition,
+    # whose atomic staging files and identity.json land as 0600.
     if [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
       # Pre-existing custom ancestor: chmod only the levels this run created;
       # every caller-owned level must already be traversable as-is or we fall
@@ -1707,14 +1705,14 @@ build_shared_schema_cache() {
       if [ "$schema_tree_preexisted" -eq 0 ]; then
         chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
       else
-        for edition_dir in $(find "$schema_tree" -mindepth 1 -maxdepth 1 -type d 2>/dev/null); do
-          if ! printf '%s\n' "$editions_before" | grep -Fxq "$edition_dir"; then
-            chmod -R a+rX "$edition_dir" 2>/dev/null || shared_chmod_ok=0
-          fi
+        for identity_file in $(find "$schema_tree" -name identity.json -type f 2>/dev/null); do
+          edition_dir="$(dirname "$(dirname "$identity_file")")"
+          chmod -R a+rX "$edition_dir" 2>/dev/null || shared_chmod_ok=0
         done
       fi
       if [ "$shared_chmod_ok" -eq 1 ] &&
-        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
+        shared_schema_artifacts_readable "$schema_tree"; then
         say "✅ Shared schema cache built: ${shared_dir}"
       else
         say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
@@ -1725,7 +1723,8 @@ build_shared_schema_cache() {
       # schema tree is 0755 — other users could not reach the cache.
       if chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null &&
         chmod -R a+rX "$schema_tree" 2>/dev/null &&
-        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
+        shared_schema_artifacts_readable "$schema_tree"; then
         say "✅ Shared schema cache built: ${shared_dir}"
       else
         say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
@@ -1744,6 +1743,23 @@ shared_schema_ancestors_traversable() {
     # find -perm -005: other has read+execute (portable across GNU/BSD find).
     [ "$(find "$_sc_anc" -maxdepth 0 -perm -005 2>/dev/null)" = "$_sc_anc" ] || return 1
   done
+  return 0
+}
+
+# True when every current-generation artifact (each edition holding an
+# identity.json sidecar) is readable and traversable by other users, so the
+# advertised shared cache is actually consumable by them. Stale caller-owned
+# trees without a sidecar are not part of the advertised generation.
+shared_schema_artifacts_readable() {
+  [ -d "$1" ] || return 1
+  found_identity=0
+  for identity_file in $(find "$1" -name identity.json -type f 2>/dev/null); do
+    found_identity=1
+    edition_dir="$(dirname "$(dirname "$identity_file")")"
+    [ -z "$(find "$edition_dir" -type f ! -perm -004 -print -quit 2>/dev/null)" ] || return 1
+    [ -z "$(find "$edition_dir" -type d ! -perm -005 -print -quit 2>/dev/null)" ] || return 1
+  done
+  [ "$found_identity" -eq 1 ] || return 1
   return 0
 }
 

@@ -90,22 +90,41 @@ func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool)
 
 func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error) {
 	identityPath := filepath.Join(directory, LocalSchemaCacheIdentityFileName())
-	payload, err := os.ReadFile(identityPath)
+	record, identity, err := readLocalSchemaCacheIdentityRecord(directory)
 	if err != nil {
 		return SchemaCacheIdentity{}, err
 	}
-	var record localSchemaCacheIdentityRecord
-	if err := json.Unmarshal(payload, &record); err != nil {
-		return SchemaCacheIdentity{}, err
-	}
-	if record.Version != localSchemaCacheIdentityVersion {
-		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity sidecar version %d is unsupported", record.Version)
-	}
-	running := schemaCacheBinaryDigest()
-	if !binaryBuildIDMatches(record.BinaryBuildID, running) {
+	if !binaryBuildIDMatches(record.BinaryBuildID, schemaCacheBinaryDigest()) {
 		// Old binary's sidecar must not authenticate as the current process.
 		_ = os.Remove(identityPath)
 		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity binary build id mismatch")
+	}
+	return identity, nil
+}
+
+// peekLocalSchemaCacheIdentity loads a sidecar that matches the running
+// binary digest without any side effect: a foreign generation's sidecar is
+// left in place so a concurrent publisher's commit is never destroyed by a
+// reader that does not hold the rebuild lock.
+func peekLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, bool) {
+	record, identity, err := readLocalSchemaCacheIdentityRecord(directory)
+	if err != nil || !binaryBuildIDMatches(record.BinaryBuildID, schemaCacheBinaryDigest()) {
+		return SchemaCacheIdentity{}, false
+	}
+	return identity, true
+}
+
+func readLocalSchemaCacheIdentityRecord(directory string) (localSchemaCacheIdentityRecord, SchemaCacheIdentity, error) {
+	payload, err := os.ReadFile(filepath.Join(directory, LocalSchemaCacheIdentityFileName()))
+	if err != nil {
+		return localSchemaCacheIdentityRecord{}, SchemaCacheIdentity{}, err
+	}
+	var record localSchemaCacheIdentityRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		return localSchemaCacheIdentityRecord{}, SchemaCacheIdentity{}, err
+	}
+	if record.Version != localSchemaCacheIdentityVersion {
+		return localSchemaCacheIdentityRecord{}, SchemaCacheIdentity{}, fmt.Errorf("schema cache identity sidecar version %d is unsupported", record.Version)
 	}
 	identity, err := schemareader.ParseIdentity(schemareader.RawIdentity{
 		Edition:            record.Edition,
@@ -122,9 +141,9 @@ func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error)
 		PayloadIndexSHA256: record.PayloadIndexSHA256,
 	})
 	if err != nil {
-		return SchemaCacheIdentity{}, err
+		return localSchemaCacheIdentityRecord{}, SchemaCacheIdentity{}, err
 	}
-	return identity, nil
+	return record, identity, nil
 }
 
 func binaryBuildIDMatches(stored string, running [sha256.Size]byte) bool {

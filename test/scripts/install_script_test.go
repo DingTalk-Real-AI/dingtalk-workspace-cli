@@ -1033,6 +1033,63 @@ build_shared_schema_cache
 		}
 	})
 
+	t.Run("upgraded current edition artifacts are re-shared", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// The current edition already exists from a previous install; its old
+		// artifacts are private, and the warm-up below atomically replaces
+		// them with fresh 0600 staging files under umask 077.
+		currentEdition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(currentEdition, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"meta.cache", "identity.json"} {
+			mustWriteFile(t, filepath.Join(currentEdition, name), []byte("old\n"), 0o600)
+		}
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-upgrade-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("upgraded edition harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("upgraded current edition did not claim success:\n%s", text)
+		}
+		for _, name := range []string{"identity.json", "meta.cache"} {
+			info, statErr := os.Stat(filepath.Join(currentEdition, name))
+			if statErr != nil {
+				t.Fatal(statErr)
+			}
+			if info.Mode().Perm()&0o004 != 0o004 {
+				t.Fatalf("regenerated %s mode %04o missing other read behind shared success", name, info.Mode().Perm())
+			}
+		}
+		for _, dir := range []string{filepath.Join(shared, "dws", "schema", "open"), currentEdition} {
+			di, statErr := os.Stat(dir)
+			if statErr != nil {
+				t.Fatal(statErr)
+			}
+			if di.Mode().Perm()&0o005 != 0o005 {
+				t.Fatalf("%s mode %04o missing other r+x", dir, di.Mode().Perm())
+			}
+		}
+	})
+
 	t.Run("pre-existing traversable dws/schema widens only new editions", func(t *testing.T) {
 		root := t.TempDir()
 		binDir := filepath.Join(root, "bin")

@@ -25,6 +25,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func realHomeCacheDir(t *testing.T, pattern string) string {
@@ -321,4 +322,107 @@ func TestCrossPlatformCoverageRepairFallbackSurfacesAssemblyError(t *testing.T) 
 	if repaired, readErr := os.ReadFile(filepath.Join(sharedV1, "meta.cache")); readErr != nil || string(repaired) != "corrupt" {
 		t.Fatalf("shared cache must stay untouched: err=%v content=%q", readErr, repaired)
 	}
+}
+
+// TestCrossPlatformCoverageRepairFallbackSerializesConcurrentPublishers pins
+// the per-user fallback's lock discipline: an upgrade's old and new binaries
+// can fall back to the same per-user edition concurrently. The lock holder
+// publishes exactly one complete generation; the second publisher stays
+// live-only instead of interleaving Registry/Payloads/Meta writes, and its
+// switch must not destroy the committed sidecar.
+func TestCrossPlatformCoverageRepairFallbackSerializesConcurrentPublishers(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+
+	edition := "open"
+	digest := sha256.Sum256([]byte(edition))
+	editionHex := hex.EncodeToString(digest[:])
+
+	sharedBase := realHomeCacheDir(t, ".dws-shared-twopub-")
+	sharedV1 := seedCorruptSharedCache(t, sharedBase, editionHex)
+	denySharedV1Writes(t, sharedV1)
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", sharedBase)
+
+	userBase := realHomeCacheDir(t, ".dws-user-twopub-")
+	schemacache.UseUserCacheDirForTest(t, userBase)
+
+	goos, goarch := coverageCacheGOOSARCH()
+	options := SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: edition, GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+		LockTimeout: 150 * time.Millisecond,
+	}
+	if err := RegisterSchemaCacheOptions(options); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	runtimeDeliveryLiveCatalog.Store(nil)
+	t.Cleanup(func() { runtimeDeliveryLiveCatalog.Store(nil) })
+
+	// Publisher A (old binary) commits a complete generation under the lock.
+	stampA := sha256.Sum256([]byte("publisher-A"))
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [32]byte { return stampA })
+	first := newSchemaCacheRuntime(options)
+	value, _, err := repairSchemaCache(first, func() (any, error) {
+		return nil, errors.New("corrupt shared artifacts")
+	})
+	if err != nil || value != nil {
+		t.Fatalf("publisher A repair: value=%v err=%v", value, err)
+	}
+	userV1 := filepath.Join(userBase, "dws", "schema", editionHex, "v1")
+	identityPath := filepath.Join(userV1, LocalSchemaCacheIdentityFileName())
+	record, identity, loadErr := readLocalSchemaCacheIdentityRecord(userV1)
+	if loadErr != nil {
+		t.Fatalf("generation A sidecar missing: %v", loadErr)
+	}
+	if record.BinaryBuildID != hex.EncodeToString(stampA[:]) {
+		t.Fatalf("generation A sidecar bound to %q", record.BinaryBuildID)
+	}
+
+	// Publisher B (new binary) falls back while another handle holds the
+	// per-user rebuild lock: it must stay live-only, never interleave a mixed
+	// generation, and never delete A's committed sidecar.
+	stampB := sha256.Sum256([]byte("publisher-B"))
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [32]byte { return stampB })
+	holder, err := schemacache.Open(edition, schemacache.WithUserOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = holder.Close() })
+	holderLock, err := holder.AcquireLock(context.Background(), time.Minute)
+	if err != nil {
+		t.Fatalf("hold per-user lock: %v", err)
+	}
+	runtimeDeliveryLiveCatalog.Store(nil)
+	second := newSchemaCacheRuntime(options)
+	value, _, err = repairSchemaCache(second, func() (any, error) {
+		return nil, errors.New("corrupt shared artifacts")
+	})
+	if err != nil || value != nil {
+		t.Fatalf("publisher B repair must stay live-only: value=%v err=%v", value, err)
+	}
+	if _, statErr := os.Stat(identityPath); statErr != nil {
+		t.Fatalf("publisher B destroyed generation A sidecar: %v", statErr)
+	}
+
+	// With the lock free again, the cache validates as exactly generation A.
+	_ = holderLock.Release()
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [32]byte { return stampA })
+	runtimeDeliveryLiveCatalog.Store(nil)
+	third := newSchemaCacheRuntime(options)
+	value, _, err = repairSchemaCache(third, func() (any, error) {
+		meta, metaErr := third.readMeta()
+		if metaErr != nil {
+			return nil, metaErr
+		}
+		return meta, nil
+	})
+	if err != nil {
+		t.Fatalf("post-contention repair: %v", err)
+	}
+	meta, ok := value.(schemaruntime.DecodedSchemaMeta)
+	if !ok || len(meta.LocatorProductByPath) == 0 {
+		t.Fatalf("cache does not validate as one complete generation: %#v", value)
+	}
+	_ = identity
 }

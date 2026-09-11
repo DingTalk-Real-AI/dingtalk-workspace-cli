@@ -789,7 +789,7 @@ func (r *schemaCacheRuntime) switchToUserCache() bool {
 	// Handles opened against the shared backend reference replaced inodes and
 	// must not serve later reads; drop them so reads reopen via opened().
 	r.resetPayloadsHandle()
-	if identity, err := loadLocalSchemaCacheIdentity(cache.Directory()); err == nil {
+	if identity, ok := peekLocalSchemaCacheIdentity(cache.Directory()); ok {
 		updated := r.optionsSnapshot()
 		updated.Identity = identity
 		updated.AllowGenerate = false
@@ -828,15 +828,26 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 		// per-user cache — reuse a repair an earlier process persisted there,
 		// or persist this one for the processes after us.
 		if !errors.Is(lockErr, schemacache.ErrLockTimeout) && r.switchToUserCache() {
-			if value, err := recheck(); err == nil {
-				return value, loadedSchemaCatalog{}, nil
+			// Publish the per-user generation under that cache's rebuild lock:
+			// two binaries (an upgrade's old and new versions) can fall back
+			// concurrently, and unsynchronized Registry/Payloads/Meta writes
+			// would interleave into a mixed generation neither can validate.
+			userCache := r.userCacheBackend()
+			userLock, userLockErr := userCache.AcquireLock(context.Background(), r.optionsSnapshot().LockTimeout)
+			if userLockErr == nil {
+				defer userLock.Release()
+				r.resetPayloadsHandle()
+				if value, err := recheck(); err == nil {
+					return value, loadedSchemaCatalog{}, nil
+				}
+				loaded := deliverySchemaCatalog()
+				if runtimeDeliverySchemaCatalogErr != nil {
+					return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
+				}
+				r.publishGeneratedOrMatching(userCache, loaded)
+				return nil, loaded, nil
 			}
-			loaded := deliverySchemaCatalog()
-			if runtimeDeliverySchemaCatalogErr != nil {
-				return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
-			}
-			r.publishGeneratedOrMatching(r.userCacheBackend(), loaded)
-			return nil, loaded, nil
+			// Another process owns the per-user repair; stay live-only.
 		}
 		// Remaining lock failures preserve authoritative availability and skip
 		// publication. No cache error may override a successful live result.
