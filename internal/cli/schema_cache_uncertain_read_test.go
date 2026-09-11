@@ -225,12 +225,16 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 	resetDeliverySchemaCatalogStateForTest()
 	resetMetaByCLIPathStateForTest()
 
-	// Cold cache: both loaders fall through to live assembly.
-	if _, err := DeliverySchemaAllPayloadForTest(); err != nil {
-		t.Fatalf("uncertain cold-cache all payload: %v", err)
-	}
+	// Cold cache: both loaders fall through to live assembly. Overview runs
+	// first because the first successful assembly publishes the live catalog,
+	// after which the loaders answer from it at the top and never reach their
+	// cache-fallback branch.
 	if _, err := DeliverySchemaOverviewPayloadForTest(); err != nil {
 		t.Fatalf("uncertain cold-cache overview payload: %v", err)
+	}
+	resetDeliverySchemaCatalogStateForTest()
+	if _, err := DeliverySchemaAllPayloadForTest(); err != nil {
+		t.Fatalf("uncertain cold-cache all payload: %v", err)
 	}
 
 	// A failing assembly must surface instead of degrading silently. The
@@ -246,5 +250,9 @@ func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
 	}
 	if _, err := DeliverySchemaOverviewPayloadForTest(); err == nil {
 		t.Fatal("uncertain overview payload ignored a failing assembly")
+	}
+	resetDeliverySchemaCatalogStateForTest()
+	if _, err := DeliverySchemaQueryPayloadForTest("calendar"); err == nil {
+		t.Fatal("uncertain query ignored a failing assembly")
 	}
 }
