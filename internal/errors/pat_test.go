@@ -196,6 +196,19 @@ func TestIsBusinessError_SuccessTrue(t *testing.T) {
 	}
 }
 
+func TestIsBusinessError_NotFoundStatus(t *testing.T) {
+	t.Parallel()
+	if !isBusinessError(map[string]any{"success": true, "status": "not_found"}) {
+		t.Fatal("expected true when status=not_found")
+	}
+	if !isBusinessError(map[string]any{
+		"success": true,
+		"data":    map[string]any{"status": "not_found", "top_risks": nil},
+	}) {
+		t.Fatal("expected true when data.status=not_found")
+	}
+}
+
 func TestIsBusinessError_EmptyBody(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{"data": "hello"}

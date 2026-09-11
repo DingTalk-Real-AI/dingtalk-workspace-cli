@@ -4,13 +4,13 @@
 
 ## 能力范围与边界
 
-Use when：用户要查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同，或管理合同项目、相对方与收付款账款。
+Use when：用户要查询或创建合同台账、批量导入合同、按听记起草合同、归档合同，或管理合同项目、相对方与收付款账款。
 
 Avoid when：
 
 - 查询、同意、拒绝、转交或撤销已有合同 OA 审批实例走 `dws oa`，不要与合同审批模板 `process-templates` 混淆。
 - 经营合约、目标、计分卡和 OKR 跟进走 `dws agoal`。
-- 合同文件的搜索、上传、下载及钉盘元数据走 `dws drive`；合同台账、审查和归档仍走 `dws contract`。
+- 合同文件的搜索、上传、下载及钉盘元数据走 `dws drive`；合同台账和归档仍走 `dws contract`。
 - AI 听记内容查询走 `dws minutes`；取得真实 `taskUuid` 后再调用 `dws contract draft`。
 - 花名册中的劳动合同等员工基础字段走 `dws contact`。
 
@@ -22,7 +22,6 @@ Avoid when：
 | 从钉盘模板批量导入合同、查导入结果 | `dws contract import ...` |
 | 查审批模板或台账分类 | `dws contract process-templates` / `dws contract file-directories` |
 | 根据 AI 听记和模板起草合同 | `dws contract draft` |
-| 解析合同、创建审查任务、查审查结果或权益 | `dws contract review ...` |
 | 管理合同项目、导入导出项目 | `dws contract project ...` |
 | 管理相对方、工商信息、风险、导入导出 | `dws contract subject ...` |
 | 管理合同收付款账款 | `dws contract account ...` |
@@ -52,13 +51,6 @@ Avoid when：
 2. 按本文构造 JSON 文件，向用户确认提交对象与关键字段。
 3. 创建使用 `record create`；归档使用 `archive`。执行后根据返回的真实 ID 回读或报告状态。
 
-### 合同审查
-
-1. 可先执行 `review benefit` 确认权益。
-2. 不确定审查类型或推荐模型时，先用 `review analysis` 解析文件。
-3. 用 `review create` 创建任务，保存真实 `taskId` 和 `reviewType`。
-4. 用 `review result` 查询结果；未完成不得宣称审查已完成。
-
 ### 批量导入
 
 1. 从模板命令或已有钉盘文件取得真实 `fileId` / `spaceId`。
@@ -71,7 +63,6 @@ Avoid when：
 - [批量导入](#批量导入)
 - [基础资料](#基础资料)
 - [合同起草](#合同起草)
-- [合同审查](#合同审查)
 - [项目管理](#项目管理)
 - [相对方管理](#相对方管理)
 - [账款管理](#账款管理)
@@ -153,38 +144,6 @@ dws contract import batch-result --task-id <TASK_ID> --format json
 
 ```bash
 dws contract draft --task-uuids <TASK_UUIDS> --template-url <TEMPLATE_URL> --format json
-```
-
-## 合同审查
-
-| 命令 | 必填参数 | 用途 |
-|---|---|---|
-| `dws contract review benefit` | 无 | 查询组织的合同审查权益 |
-| `dws contract review analysis` | `--file` | 解析合同文件并返回摘要及推荐模型 |
-| `dws contract review create` | `--file` | 创建合同审查任务 |
-| `dws contract review result` | `--task-id`, `--review-type` | 查询审查结果 |
-
-### analysis 请求
-
-JSON 可包含 `fileInfo` 对象，常用字段为 `fileId`、`spaceId`、`fileName`、`fileSize`、`fileType`；可选 `source`。文件 ID 必须来自钉盘真实返回。
-
-### create 请求
-
-`IntelligentContractReviewClientRequest` 常用字段：
-
-- `source`
-- `fileInfo`：`fileId`、`spaceId`、`fileName`、`fileSize`、`fileType`
-- `reviewType`
-- `companyList[].reviewPosition`
-- `reviewPosition`
-- `reviewResultType`
-- `customReviewRules`
-
-```bash
-dws contract review benefit --format json
-dws contract review analysis --file ./analysis_request.json --format json
-dws contract review create --file ./review_request.json --format json
-dws contract review result --task-id <TASK_ID> --review-type <REVIEW_TYPE> --format json
 ```
 
 ## 项目管理
@@ -325,7 +284,6 @@ dws contract archive --file ./archive_request.json --format json
 | `record list` / `get` / `quantity-by-type` / `create` | `queryContracts` / `queryContractDetails` / `queryContractQuantityByType` / `createContract` |
 | `import batch` / `batch-result` | `batchImportContractAsync` / `getBatchImportContractResult` |
 | `process-templates` / `file-directories` / `draft` | `queryContractProcessContent` / `getAllFileDirectory` / `draft_contract_by_minutes` |
-| `review benefit` / `create` / `analysis` / `result` | `queryContractReviewBenefit` / `createContractReviewTask` / `contractAnalysis` / `queryContractReviewResult` |
 | `project ...` | `addProject`, `deleteProject`, `updateProject`, `setProjectStatus`, `queryProjects`, `queryProjectDigests`, `queryProjectDetail`, `exportProject`, `getImportProjectTemplate`, `importProject`, `getImportProjectResult` |
 | `subject ...` | `addSubject`, `querySubjects`, `querySubjectDetail`, `updateSubject`, `deleteSubject`, `batchDeleteSubject`, `sortSubjects`, `detectSubjectRisk`, `querySubjectBaseInfo`, `autoFillSubjectInfo`, `exportSubject`, `getImportSubjectTemplate`, `importSubject`, `getImportSubjectResult` |
 | `account ...` / `archive` | `createAccountInfo`, `updateAccountInfo`, `getAccountEntryInfo`, `listAccountInfo`, `deleteAccountEntryInfo`, `contractOpenArchive` |

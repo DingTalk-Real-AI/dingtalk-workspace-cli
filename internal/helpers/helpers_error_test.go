@@ -15,6 +15,8 @@ func TestCrossPlatformCoverageIsBusinessErrorRecognizesRealErrorEnvelopes(t *tes
 		{"success": true, "error": []any{"failed"}},
 		{"success": true, "error": true},
 		{"success": false},
+		{"status": "not_found"},
+		{"success": true, "data": map[string]any{"status": "not_found", "top_risks": nil}},
 	}
 	for _, tc := range cases {
 		if !isBusinessError(tc) {
