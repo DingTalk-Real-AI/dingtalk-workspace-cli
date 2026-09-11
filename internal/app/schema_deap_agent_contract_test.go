@@ -43,6 +43,9 @@ func TestCrossPlatformCoverageEmployeeServerBindingFinalSchema(t *testing.T) {
 	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.connect_bind", "dingtalk-tag.connect_unbind", "dingtalk-tag.connect_rebind")
 	for action, params := range wants {
 		tool := payload.Tools["dingtalk-tag.connect_"+action]
+		if schemaContractString(tool["interface_mode"]) != "composite" {
+			t.Errorf("%s must declare server-side effects", action)
+		}
 		if schemaContractString(tool["confirmation"]) != "user_required" || schemaContractString(tool["effect"]) != "write" || tool["result"] == nil {
 			t.Fatalf("incomplete %s contract", action)
 		}
