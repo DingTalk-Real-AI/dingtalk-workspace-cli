@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,7 @@ import (
 
 const ownershipName = ".dws-runtime-manifest.json"
 
-// A pending record reserves only the fixed library and ps names. It is written
+// A pending record reserves only the fixed library name. It is written
 // before the first rename, so another process can recover after interruption.
 // A ready record is committed last, after validation of the published files.
 type ownership struct {
@@ -33,7 +32,6 @@ type ownership struct {
 var (
 	renameAdjacent = os.Rename
 	lstatAdjacent  = os.Lstat
-	walkAdjacent   = filepath.WalkDir
 )
 
 // MaterializeAdjacent publishes only DWS-owned resources next to a resolved
@@ -72,8 +70,9 @@ func MaterializeAdjacent(container []byte, root, targetOS, targetArch string) (s
 	if err != nil {
 		return fail()
 	}
-	// Never follow links, including links introduced inside a previously owned ps.
-	for _, entry := range []string{name, "ps"} {
+	// The retired ps directory is no longer owned or traversed by this version.
+	// Never follow a link in place of the library, even with an ownership record.
+	for _, entry := range []string{name} {
 		path := filepath.Join(root, entry)
 		info, err := lstatAdjacent(path)
 		if os.IsNotExist(err) {
@@ -82,18 +81,7 @@ func MaterializeAdjacent(container []byte, root, targetOS, targetArch string) (s
 		if err != nil || !owned {
 			return fail()
 		}
-		if (entry == "ps" && !info.IsDir()) || (entry != "ps" && !info.Mode().IsRegular()) {
-			return fail()
-		}
-		if err := walkAdjacent(path, func(_ string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.Type()&os.ModeSymlink != 0 || (!d.IsDir() && !d.Type().IsRegular()) {
-				return errors.New("unsafe runtime resource")
-			}
-			return nil
-		}); err != nil {
+		if !info.Mode().IsRegular() {
 			return fail()
 		}
 	}
@@ -129,7 +117,7 @@ func MaterializeAdjacent(container []byte, root, targetOS, targetArch string) (s
 	if err := writeOwnership(root, stage, next); err != nil {
 		return fail()
 	}
-	for _, entry := range []string{name, "ps"} {
+	for _, entry := range []string{name} {
 		target := filepath.Join(root, entry)
 		if _, err := lstatAdjacent(target); err == nil {
 			// Move owned old data out of the way. A failed rename (e.g. a loaded DLL)
@@ -213,10 +201,26 @@ func readOwnership(root, targetOS, targetArch string) (ownership, bool, error) {
 	}
 	name, _ := LibraryName(targetOS, targetArch)
 	m := value.Manifest
-	if value.Owner != "dws.runtimepayload" || (value.State != "ready" && value.State != "pending") || m.FormatVersion != 1 || m.Library != name || m.Target != targetOS+"/"+targetArch || m.PSFileCount != 123 || len(m.PayloadVersion) != 8 || strings.Trim(m.PayloadVersion, "0123456789") != "" {
+	if value.Owner != "dws.runtimepayload" || (value.State != "ready" && value.State != "pending") || m.Library != name || m.Target != targetOS+"/"+targetArch || len(m.PayloadVersion) != 8 || strings.Trim(m.PayloadVersion, "0123456789") != "" {
 		return ownership{}, false, invalid
 	}
-	for _, digest := range []string{value.PayloadSHA256, m.LibrarySHA256, m.PSManifestSHA256} {
+	digests := []string{value.PayloadSHA256, m.LibrarySHA256}
+	switch m.FormatVersion {
+	case 1:
+		// Recognize old ownership only to replace its library. Old data files
+		// and caches are left untouched, and old payloads are never loaded.
+		if (m.PayloadVersion != "20260825" && m.PayloadVersion != "20260908") || m.PSFileCount != 123 {
+			return ownership{}, false, invalid
+		}
+		digests = append(digests, m.PSManifestSHA256)
+	case manifestVersion:
+		if m.PSFileCount != 0 || m.PSManifestSHA256 != "" {
+			return ownership{}, false, invalid
+		}
+	default:
+		return ownership{}, false, invalid
+	}
+	for _, digest := range digests {
 		raw, err := hex.DecodeString(digest)
 		if err != nil || len(raw) != 32 {
 			return ownership{}, false, invalid
