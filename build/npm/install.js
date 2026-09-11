@@ -1853,6 +1853,12 @@ function main() {
   }
 
   extractArchive(archivePath, vendorDir);
+
+  if ((process.env.DWS_NO_SKILLS || "").trim() === "1") {
+    console.log("[dws] DWS_NO_SKILLS=1; skipping skill installation.");
+    return;
+  }
+
   extractSkills(skillsPath, skillsStaging);
 
   // For backward compatibility, the zip root carries a copy of mono content
