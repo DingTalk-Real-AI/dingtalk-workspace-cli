@@ -94,6 +94,17 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 
 ### 明细与核心字段
 
+`valueKind=table_rows_json_string` 表示 **JSON 序列化的二维 name/value 数组字符串**：每行是子控件对象数组，`name` 使用子控件 label，`value` 为按控件格式编码的字符串。下面示例展示两行明细：
+
+```json
+{
+  "name": "采购明细",
+  "value": "[[{\"name\":\"商品名\",\"value\":\"笔记本\"},{\"name\":\"数量\",\"value\":\"2\"}],[{\"name\":\"商品名\",\"value\":\"钢笔\"},{\"name\":\"数量\",\"value\":\"1\"}]]"
+}
+```
+
+简单模式把上述 `value` 字符串放入 `--form-values` 的“采购明细”键；高级模式把上述控件对象放入 `--request` 的 `formComponentValues` 列表。**两种入口均不自动转换以 label 为 key 的行对象数组**，应使用 JSON 序列化器构造正确结构。不要把明细 `value` 内的二维数组与 `forecast-process` 外层 `formComponentValues` 的额外包装混淆。格式依据：[官方创建审批实例文档](https://open.dingtalk.com/document/orgapp/create-an-approval-instance.md)。
+
 `TableField` 的每一行必须包含用户要求的核心子字段。创建前逐项对照原始需求，特别检查物品名称、数量、金额、日期、费用类型和备注；不能因为接口接受 payload 就认为业务字段完整。
 
 若用户需求落在 `TableField` 中，父明细控件和相应子字段整体都是核心内容。即使父控件或子控件的 `required` 为 `false`，也不得为绕过服务端错误而删除、拆成顶层字段或提交空行。
