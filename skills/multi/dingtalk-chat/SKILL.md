@@ -94,7 +94,7 @@ metadata:
 | 消息 | [查询](references/chat/message-query.md) / [动作](references/chat/message-actions.md) / [资源](references/chat/message-media.md) |
 | 群 | [读取](references/chat/group-discovery.md) / [治理](references/chat/group-admin.md) |
 | 会话/Bot | [会话](references/chat/chat-conversation.md) / [Bot](references/chat/chat-bot.md) |
-| 组合/话题/表情/卡片 | [组合](references/01-messaging.md) / [话题](references/chat/thread.md) / [表情](references/chat-emoji-list.md) / [卡片](references/card/create.md) |
+| 组合/话题/表情/卡片 | [组合](references/01-messaging.md) / [话题](references/chat/thread.md) / [表情](references/chat-emoji-list.md) / [卡片/A2UI](references/card/schema.md) |
 | 结果/其他原子能力 | [contracts](references/contracts.md) / [chat](references/chat.md) |
 
 ## 错误最短路径

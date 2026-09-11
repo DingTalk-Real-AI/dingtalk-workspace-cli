@@ -25,6 +25,8 @@ metadata:
 - 认证/权限/profile/confirmation/未知错误只读 `dingtalk-shared` 对应 reference，禁连续猜替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
+下方自动清单的“唯一”仅指单页匹配；`+resolve-space/+wiki-new-doc` 不承担写入前的权威唯一解析，按 Golden Route 解析后使用真实 workspaceId。
+
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
@@ -32,8 +34,8 @@ metadata:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws wiki +resolve-space` | read | 按名称搜索知识空间并解析出唯一 spaceId（只读） |
-| `dws wiki +wiki-new-doc` | write | 在指定名称的知识库下新建一个文档节点（自动按空间名解析 workspaceId） |
+| `dws wiki +resolve-space` | read | 按名称搜索知识空间并解析单次结果中的唯一 spaceId（只读） |
+| `dws wiki +wiki-new-doc` | write | 在指定名称的知识库下新建一个文档节点（按单次名称搜索解析 workspaceId） |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## Golden Route
@@ -51,17 +53,18 @@ metadata:
 | 只有知识库名称时新建空文档 | 先按全量 `+space-list` 唯一解析，再 `+node-create --workspace <ID> --name <标题> --type adoc` | 不用单页 `+wiki-new-doc` 猜空间；正文另走 Doc |
 | 用本地文件在新知识库建文档后移到“我的文档” | `+space-create` → `doc +import --file <相对路径> --workspace <新workspaceId>` → `+move-to-drive --workspace <新workspaceId> --node <导入nodeId>` | 必须先把文档真实导入新知识库再移出；禁止先查 `mySpace`、禁止 `doc +create` 在个人域创建后用 `drive +move` 冒充该流程 |
 | 复制、移入知识库或将 Wiki 在线节点移出到“我的文档” | `+node-copy` / `+move` / `+move-to-drive` | “Wiki 节点 → 我的文档”固定使用 `+move-to-drive`，已知来源 workspace 时可传 `--workspace` 作写前归属断言；不可改用 mySpace/rootFolderId + `drive +move` |
+| 知识库首页放独立普通附件 | `dws drive upload --file <本地文件> --workspace <ID> --format json` | 不加 `--convert`；子目录加 `--folder <目录nodeId>`。正文内附件切 Doc 媒体，转换在线文档切 Doc 导入 |
 | 删除库内节点 | `+node-delete --workspace <ID> --node <ID>` | 删除前核对归属并确认 |
-| 列出或修改知识库成员 | `+member-list` / `+member-add` / `+member-update` / `+member-remove` | userId 1-30 个；角色必须显式 |
-| 查看知识库动态 | `+feed-list --workspace <ID>` | 要全部动态加 `--page-all`，否则只是一页 |
+| 列出、添加、修改或移除知识库成员 | `member list` / `+member-add` / `+member-update` / `+member-remove` | 写入 users 为 1-30 个；添加/修改须指定角色，移除不传角色；多类型、逐成员角色或通知用原生 member |
+| 查看知识库动态 | `+feed-list --workspace <ID> [--exclude-file]` | 全部动态加 `--page-all`；仅用户明确要求核对过滤效果时比较两组结果，未过滤结果须实际包含该文件事件 |
 
 ## 当前最短路径
 
-- 已知 workspaceId：直接执行 space/node/member/feed 目标命令，不再 resolve。
-- 只有知识库名称：先明确组织/个人范围，用 `+space-list --limit 50 --page-all` 取完该范围后按完整名称唯一匹配；未知范围先消歧，不同时扫描两个范围并猜测。
+- 已知 workspaceId（含本轮创建回执）：直接执行 space/node/member/feed 目标命令，不再 resolve，也不把名称传给 `--workspace`。用户另要求“按名称查找”时仍完成该查找步骤；已有 ID 不等于可以省略明确要求。
+- 只有知识库名称：先明确组织/个人范围，按 Golden Route 对应分支核对完整名称；未知范围先消歧，不同时扫描两个范围并猜测。
 - `+space-search` 只用于快速浏览候选；当前 `+resolve-space/+wiki-new-doc` 不暴露名称搜索的分页完成证据，不作为权威唯一解析或写入 Golden Route。
 - 已知 nodeId/URL：元数据直接 `+node-get`；正文直接切 Doc，不先 list/search。
-- 创建节点后返回的 nodeId 直接传给 Doc；不通过同名搜索重新定位。
+- 创建节点后返回的 nodeId 直接传给 Doc；不通过同名搜索重新定位。创建文件夹的 `nodeId` 才是后续 `--folder`，回执 `folderId` 是它的父目录；`+node-copy/+move` 的“本库首页”使用当前 workspace 并省略 `--folder`，移出另用 `+move-to-drive`。
 - “本地文件 → 新知识库 → 我的文档”是有序跨产品流程：创建空间返回 workspaceId 后，必须 `doc +import --workspace` 取得库内 nodeId，再 `wiki +move-to-drive --workspace`；任何一步都不得在个人域提前创建或用 Drive 根目录移动替代。
 - move/copy/delete 已含预检或读回时，不由 Agent 重复拼装原子命令。
 - 普通“文档空间/我的文档”的文件操作按存储意图走 Drive；但源对象已确定是 Wiki workspace 中的在线节点、目标是移出到“我的文档”时是明确例外，直接用 `wiki +move-to-drive`，不查询 `mySpace`、不调用 `drive +move`。仅普通 Drive 节点缺少 spaceId/rootFolderId 时才用 managed `wiki space list --type orgSpace|mySpace` 发现空间。
@@ -72,7 +75,7 @@ metadata:
 - `+space-list` 顶层 `requestedType` 是本次服务端查询的类型范围；条目级 `spaceType` 只在服务端真实返回时出现，不能用请求值伪造。用列表缺席证明空间不存在前，必须同时满足范围正确和 `autoPageComplete=true`。
 - `+space-create` 只有返回 `spaceTypeVerified=true` 时才能使用 `spaceType`；类型验证失败会保留已创建的 workspaceId，禁止重试创建或按名称猜类型。
 - `+space-search/+node-search` 缺少业务数组不是零命中；只有显式空数组才可报告空结果。
-- 名称解析只有在 scoped `+space-list` 返回 `autoPageComplete=true` 且全量中恰好一个精确同名项时才成立；0 条、多条或分页未完成都停止。
+- 组织名称解析须列表取完且唯一精确同名；个人名称解析须原生成功回执中恰好一条且精确同名，不要求自动分页字段。空/畸形响应、0 条、多条、名称不符或组织分页未完成都停止。
 - `+space-search`、`+resolve-space` 的单页结果不能证明全局唯一；不得把首页唯一候选直接用于写入。
 - `+node-list/+node-search/+node-get` 会保留服务端 `extension/type/hasChildren` 并规范化 `parentFolderId`；字段缺席表示服务端未提供，不能靠名称推断类型或层级。
 - 创建节点必须验证新 ID、workspace、名称、类型和显式父文件夹；复制必须先读源节点，再证明新 ID 与源 ID 不同且副本进入目标 workspace/folder。
@@ -84,7 +87,7 @@ metadata:
 
 - workspaceId、nodeId、folderId、userId 不互相替代；名称不能当 ID。
 - 写操作只按精确 leaf Runtime 判定确认；已明确授权具体空间/节点/成员、动作与影响时，首次正式执行直接带 `--yes`，否则先确认。参数变化重新确认；禁止用缺少 `--yes` 的失败探测。
-- `+member-list --limit` 为 1-50；成员写 `--users` 为 1-30 个，角色仅 `MANAGER|EDITOR|DOWNLOADER|READER`。
+- `wiki member list --limit` 默认为 30，范围 1-50；不使用成员 `--page-all` 或提高上限。成员写 `--users` 为 1-30 个，角色仅 `MANAGER|EDITOR|DOWNLOADER|READER`。
 - `+node-create --type` 决定内容产品；建好后 adoc→Doc、axls→Sheet、able→AITable。
 - Profile/组织在空间解析、节点操作和验证期间保持一致。
 

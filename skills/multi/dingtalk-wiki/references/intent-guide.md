@@ -6,7 +6,9 @@
 |---|---|---|---|---|
 | "帮我看看知识库里的文件" | 知识库节点列表 | `dws wiki +node-list --workspace <ID>` | `dws drive +list` | 明确“知识库”上下文，使用 Wiki 层级 |
 | "浏览已知钉盘/文档空间目录" | 普通存储目录 | `dws drive +list` | `dws wiki +node-list` | 已有 space/folder 目标，文件层级属于 Drive |
-| "列出/发现钉盘企业空间或我的文件空间" | Drive 存储空间发现 | `dws wiki space list --type orgSpace|mySpace`，取 spaceId/rootFolderId 后回 Drive | `dws wiki +space-list --type orgWikiSpace|myWikiSpace` | managed Wiki leaf 兼容存储空间发现；Drive ID 不能当 workspaceId |
+| "列出/发现钉盘企业空间或我的文件空间" | Drive 存储空间发现 | `dws wiki space list --type orgSpace\|mySpace`，取 spaceId/rootFolderId 后回 Drive | `dws wiki +space-list --type orgWikiSpace\|myWikiSpace` | managed Wiki leaf 兼容存储空间发现；Drive ID 不能当 workspaceId |
+| "列出个人知识库/个人知识空间入口" | 个人知识库容器 | `dws wiki space list --type myWikiSpace --format json` | `wiki space list --type mySpace` | workspaceId 与钉盘 spaceId 不是同一目标域 |
+| "我的文档入口"且上下文不明 | 入口含义待确认 | 先确认个人知识库入口还是钉盘我的文件入口 | 同时扫描两域后默认选一项 | 普通文件读写仍走 Drive，不因文字相似扩大 Wiki 扫描 |
 | "列出组织知识库" | 列出组织知识库容器 | `dws wiki +space-list --type orgWikiSpace --page-all` | `dws drive +list` | 明确知识库容器，使用当前 Wiki 类型枚举 |
 | "在知识库里搜方案" | 空间内搜索 | `dws wiki +node-search --workspace <ID> --query <词>` | `dws drive +search` | 指定知识库上下文，使用 Wiki 节点搜索 |
 | "搜一下有没有叫XX的文件" | 全局搜索 | `dws drive +search --query <词>` | `dws wiki +node-search` | 未指定知识库，使用 Drive 全局聚合搜索 |

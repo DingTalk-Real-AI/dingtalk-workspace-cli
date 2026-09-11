@@ -71,6 +71,19 @@ func parseA2UIMessages(raw string) ([]string, error) {
 	return messages, nil
 }
 
+func parseA2UIAnnotations(raw string) ([]map[string]json.RawMessage, error) {
+	var annotations []map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &annotations); err != nil || annotations == nil {
+		return nil, fmt.Errorf("--a2ui-annotations must be a JSON object array")
+	}
+	for _, annotation := range annotations {
+		if annotation == nil {
+			return nil, fmt.Errorf("--a2ui-annotations must contain only JSON objects")
+		}
+	}
+	return annotations, nil
+}
+
 func normalizeChatGroupCreateResponse(resp map[string]any) {
 	result, ok := resp["result"].(map[string]any)
 	if !ok {
@@ -7332,17 +7345,30 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if groupID != "" && receiver != "" {
 				return fmt.Errorf("--conversation-id and --open-dingtalk-id are mutually exclusive")
 			}
+			var annotations []map[string]json.RawMessage
+			if cmd.Flags().Changed("a2ui-annotations") {
+				var err error
+				annotations, err = parseA2UIAnnotations(mustGetFlag(cmd, "a2ui-annotations"))
+				if err != nil {
+					return err
+				}
+			}
 			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
 			if err != nil {
 				return err
 			}
+			supportForward, _ := cmd.Flags().GetBool("support-forward")
 			toolArgs := map[string]any{
 				"requestId":       uuid.NewString(),
 				"bizCardId":       uuid.NewString(),
 				"protocolVersion": "1.0",
+				"supportForward":  supportForward,
 				"flowStatus":      defaultA2UIFlowStatus,
 				"a2uiMessages":    messages,
 				"summary":         strings.Join(messages, "\n"),
+			}
+			if cmd.Flags().Changed("a2ui-annotations") {
+				toolArgs["a2uiAnnotations"] = annotations
 			}
 			if groupID != "" {
 				toolArgs["openConversationId"] = groupID
@@ -7383,6 +7409,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "a2ui-annotations", Property: "a2uiAnnotations", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "support-forward", Property: "supportForward", Required: boolPtr(false), InterfaceType: "boolean"},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId", Required: boolPtr(false)},
 			},
@@ -7390,6 +7418,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	})
 	chatMessageSendA2UICardCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时必填，与 --open-dingtalk-id 互斥）")
 	chatMessageSendA2UICardCmd.Flags().String("open-dingtalk-id", "", "单聊接收者 openDingTalkId（单聊时必填，与 --conversation-id 互斥）")
+	chatMessageSendA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
+	chatMessageSendA2UICardCmd.Flags().Bool("support-forward", false, "允许转发 A2UI 卡片（默认不允许）")
 	chatMessageSendA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
 	_ = chatMessageSendA2UICardCmd.MarkFlagRequired("content")
 	cli.AnnotateRuntimeConstraints(chatMessageSendA2UICardCmd, cli.RuntimeSchemaConstraints{
@@ -7515,6 +7545,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err != nil {
 				return err
 			}
+			var annotations []map[string]json.RawMessage
+			if cmd.Flags().Changed("a2ui-annotations") {
+				var err error
+				annotations, err = parseA2UIAnnotations(mustGetFlag(cmd, "a2ui-annotations"))
+				if err != nil {
+					return err
+				}
+			}
 			messages, err := parseA2UIMessages(mustGetFlag(cmd, "content"))
 			if err != nil {
 				return err
@@ -7525,6 +7563,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				"flowStatus":      flowStatus,
 				"a2uiMessages":    messages,
 				"a2uiAnnotations": []any{},
+			}
+			if cmd.Flags().Changed("a2ui-annotations") {
+				params["a2uiAnnotations"] = annotations
 			}
 			return callMCPToolOnServer("im", "update_a2ui_card", params)
 		},
@@ -7557,12 +7598,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			Parameters: []contract.ParamDecl{
 				{Name: "biz-id", Property: "bizId", Required: boolPtr(true)},
 				{Name: "content", Property: "a2uiMessages", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "a2ui-annotations", Property: "a2uiAnnotations", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "flow-status", Property: "flowStatus", Required: boolPtr(true), InterfaceType: "string", Enum: []string{"PROCESSING", "INPUTTING", "FINISH", "EXECUTING", "ERROR", "ABORTED", "TIMEOUT", "CONFIRMING", "CONFIRMED", "1", "2", "3", "4", "5", "6", "7", "8", "9"}},
 			},
 		},
 	})
 	chatMessageUpdateA2UICardCmd.Flags().String("biz-id", "", "卡片业务 ID (必填)")
 	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("biz-id")
+	chatMessageUpdateA2UICardCmd.Flags().String("a2ui-annotations", "", "A2UI 组件注解 JSON 对象数组（可选，支持空数组 []）")
 	chatMessageUpdateA2UICardCmd.Flags().String("content", "", "A2UI 卡片消息 JSON 字符串数组 (必填)")
 	_ = chatMessageUpdateA2UICardCmd.MarkFlagRequired("content")
 	chatMessageUpdateA2UICardCmd.Flags().String("flow-status", "", "A2UI 状态枚举或兼容数字 1-9 (必填)")

@@ -6,12 +6,14 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -26,11 +28,15 @@ type aitableWorkflowCaller struct {
 	calls    []aitableWorkflowCall
 	response string
 	err      error
+	errs     []error
 	dryRun   bool
 }
 
 func (c *aitableWorkflowCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, aitableWorkflowCall{productID: productID, toolName: toolName, args: args})
+	if index := len(c.calls) - 1; index < len(c.errs) && c.errs[index] != nil {
+		return nil, c.errs[index]
+	}
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -75,6 +81,30 @@ func runAitableWorkflowCommandWithCaller(t *testing.T, caller *aitableWorkflowCa
 	}
 	cmd.SetIn(stdin)
 	return cmd.Execute()
+}
+
+func TestCrossPlatformCoverageAitableWorkflowDisableRequiresConfirmation(t *testing.T) {
+	caller := &aitableWorkflowCaller{response: `{"workflowId":"flow-1","disabled":true}`}
+	err := runAitableWorkflowCommandWithCaller(t, caller, nil,
+		"disable", "--base-id", "base-1", "--workflow-id", "flow-1")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "confirmation_required" {
+		t.Fatalf("unconfirmed disable error = %#v, want confirmation_required", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("unconfirmed disable reached MCP: %#v", caller.calls)
+	}
+
+	caller = &aitableWorkflowCaller{response: `{"workflowId":"flow-1","disabled":true}`}
+	if err := runAitableWorkflowCommandWithCaller(t, caller, nil,
+		"disable", "--base-id", "base-1", "--workflow-id", "flow-1", "--yes"); err != nil {
+		t.Fatalf("confirmed disable error = %v", err)
+	}
+	wantArgs := map[string]any{"baseId": "base-1", "workflowId": "flow-1"}
+	if len(caller.calls) != 1 || caller.calls[0].productID != "aitable-helper" ||
+		caller.calls[0].toolName != "disable_workflow" || !reflect.DeepEqual(caller.calls[0].args, wantArgs) {
+		t.Fatalf("confirmed disable call = %#v, want aitable-helper/disable_workflow %#v", caller.calls, wantArgs)
+	}
 }
 
 func TestCrossPlatformCoverageAitableWorkflowCreateMapsDSLWithoutRetry(t *testing.T) {
@@ -167,7 +197,7 @@ func TestCrossPlatformCoverageAitableWorkflowPublishRejectsFalseSuccess(t *testi
 	}
 }
 
-func TestAitableWorkflowEditExampleMapsEmptyArguments(t *testing.T) {
+func TestCrossPlatformCoverageAitableWorkflowEditExampleMapsEmptyArguments(t *testing.T) {
 	caller, err := runAitableWorkflowCommand(t, nil, "edit-example")
 	if err != nil {
 		t.Fatalf("workflow edit-example returned error: %v", err)
@@ -176,15 +206,28 @@ func TestAitableWorkflowEditExampleMapsEmptyArguments(t *testing.T) {
 		t.Fatalf("tool call count = %d, want 1", len(caller.calls))
 	}
 	call := caller.calls[0]
-	if call.productID != "aitable" || call.toolName != "edit_workflow_example" {
-		t.Fatalf("tool call = %s/%s, want aitable/edit_workflow_example", call.productID, call.toolName)
+	if call.productID != "aitable" || call.toolName != "get_workflow_dsl_docs" {
+		t.Fatalf("tool call = %s/%s, want aitable/get_workflow_dsl_docs", call.productID, call.toolName)
 	}
 	if len(call.args) != 0 {
 		t.Fatalf("tool args = %#v, want empty arguments", call.args)
 	}
 }
 
-func TestAitableWorkflowUpdateReadsDSLFile(t *testing.T) {
+func TestCrossPlatformCoverageAitableWorkflowEditExampleFallsBackForMissingPreferredTool(t *testing.T) {
+	caller := &aitableWorkflowCaller{errs: []error{
+		apperrors.NewAPI("tool call failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "TOOL_NOT_FOUND"})),
+	}}
+	err := runAitableWorkflowCommandWithCaller(t, caller, nil, "edit-example")
+	if err != nil {
+		t.Fatalf("workflow edit-example fallback returned error: %v", err)
+	}
+	if len(caller.calls) != 2 || caller.calls[0].toolName != "get_workflow_dsl_docs" || caller.calls[1].toolName != "edit_workflow_example" {
+		t.Fatalf("fallback calls = %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAitableWorkflowUpdateReadsDSLFile(t *testing.T) {
 	path := t.TempDir() + "/workflow.json"
 	if err := os.WriteFile(path, []byte(`{"version":"workflow-dsl/v1","name":"updated"}`), 0o600); err != nil {
 		t.Fatalf("write workflow fixture: %v", err)
@@ -220,7 +263,7 @@ func TestAitableWorkflowUpdateReadsDSLFile(t *testing.T) {
 	}
 }
 
-func TestAitableWorkflowWriteReportsStdinReadError(t *testing.T) {
+func TestCrossPlatformCoverageAitableWorkflowWriteReportsStdinReadError(t *testing.T) {
 	caller, err := runAitableWorkflowCommand(t, coverageFailingReader{},
 		"create", "--base-id", "base-stdin", "--dsl", "-",
 	)
@@ -232,7 +275,7 @@ func TestAitableWorkflowWriteReportsStdinReadError(t *testing.T) {
 	}
 }
 
-func TestAitableWorkflowCreateReadsDSLFromStdin(t *testing.T) {
+func TestCrossPlatformCoverageAitableWorkflowCreateReadsDSLFromStdin(t *testing.T) {
 	caller, err := runAitableWorkflowCommand(t,
 		strings.NewReader(`{"version":"workflow-dsl/v1","name":"stdin"}`),
 		"create", "--base-id", "base-stdin", "--dsl", "-",
@@ -245,7 +288,7 @@ func TestAitableWorkflowCreateReadsDSLFromStdin(t *testing.T) {
 	}
 }
 
-func TestAitableWorkflowWriteRejectsInvalidInput(t *testing.T) {
+func TestCrossPlatformCoverageAitableWorkflowWriteRejectsInvalidInput(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
