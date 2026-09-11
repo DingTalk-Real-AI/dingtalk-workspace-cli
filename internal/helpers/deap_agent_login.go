@@ -59,7 +59,7 @@ func runDeapAgentLogin(cmd *cobra.Command, _ []string) error {
 // 授权码换票、在线身份核验和精确 Profile 落盘，不包含 local_agent、DSH 或
 // Bridge 逻辑，并始终保留发起操作的主管 Profile 为当前 Profile。
 func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedClientID string, published map[string]any) (*digitalEmployeeLoginSession, error) {
-	supervisorSelector, supervisor, err := currentSupervisorProfile(configDir)
+	supervisorSelector, supervisor, err := currentSupervisorProfile(ctx, configDir)
 	if err != nil {
 		return nil, err
 	}

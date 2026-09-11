@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -96,7 +98,8 @@ func employeeServerOperationPath(profile string) string {
 // 调用者持有员工 operation 锁。先写 pending，再发送一次；confirmed 回执允许
 // 本地提交失败后的重放。pending 不能自动重放非幂等换绑，且不记录请求扩展信息。
 func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, action string, deviceID string) (string, error) {
-	selector, token, err := currentSupervisorProfile(deapConnectConfigDir())
+	configDir := deapConnectConfigDir()
+	selector, token, err := currentSupervisorProfile(cmd.Context(), configDir)
 	if err != nil {
 		return "", err
 	}
@@ -165,8 +168,18 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		return "", err
 	}
 	// identity 由网关根据主管 Token 注入；CLI 不允许覆盖身份，也不 dump 原始响应。
-	result, err := caller.CallToolWithToken(cmd.Context(), token.AccessToken, deapAgentServerID, "de_local_agent_"+action, map[string]any{wrapper: request})
-	if err != nil || result == nil {
+	result, err := callEmployeeServerBinding(cmd.Context(), caller, configDir, selector, token.AccessToken, action, wrapper, request)
+	if err != nil {
+		if employeeServerDefinitiveRejection(err) {
+			op.Phase = "rejected"
+			if writeErr := employeeServerWrite(path, op); writeErr != nil {
+				return "", writeErr
+			}
+			return "", err
+		}
+		return "", employeeServerUnknown("服务端请求结果未知；保留旧绑定，不启动新 Agent")
+	}
+	if result == nil {
 		return "", employeeServerUnknown("服务端请求结果未知；保留旧绑定，不启动新 Agent")
 	}
 	var response struct {
@@ -213,6 +226,85 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		return "", employeeServerUnknown("服务端已成功但回执保存失败；请核对服务端结果")
 	}
 	return op.RuntimeBindingID, nil
+}
+
+func callEmployeeServerBinding(
+	ctx context.Context,
+	caller managedIdentityTokenCaller,
+	configDir, selector, accessToken, action, wrapper string,
+	request map[string]any,
+) (*edition.ToolResult, error) {
+	call := func(token string) (*edition.ToolResult, error) {
+		return caller.CallToolWithToken(ctx, token, deapAgentServerID, "de_local_agent_"+action, map[string]any{wrapper: request})
+	}
+	result, err := call(accessToken)
+	if !employeeServerAccessTokenRejected(err) {
+		return result, err
+	}
+
+	refreshed, refreshErr := deapConnectForceRefreshSupervisorToken(ctx, configDir, accessToken)
+	if refreshErr != nil || strings.TrimSpace(refreshed) == "" {
+		return nil, err
+	}
+	// ForceRefreshRejectedToken 以活动 Profile 为刷新槽。再次读取并核对精确
+	// 主管身份，防止并发切换 current profile 后把其他账号 Token 用于绑定。
+	verified, loadErr := deapConnectLoadToken(configDir, selector)
+	if loadErr != nil || verified == nil || strings.TrimSpace(verified.AccessToken) != strings.TrimSpace(refreshed) ||
+		auth.ProfileSelector(auth.Profile{CorpID: verified.CorpID, UserID: verified.UserID}) != selector {
+		return nil, err
+	}
+	return call(strings.TrimSpace(refreshed))
+}
+
+func employeeServerAccessTokenRejected(err error) bool {
+	if err == nil {
+		return false
+	}
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) && cliErr.Code == CodeAuthTokenExpired {
+		return true
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr == nil {
+		return false
+	}
+	if appErr.Category == apperrors.CategoryAuth {
+		switch strings.ToLower(strings.TrimSpace(appErr.Reason)) {
+		case "access_token_rejected", "gateway_auth_expired", "http_401":
+			return true
+		}
+	}
+	return dwsGatewayErrors[strings.ToUpper(strings.TrimSpace(appErr.ServerDiag.ServerErrorCode))]
+}
+
+func employeeServerDefinitiveRejection(err error) bool {
+	if employeeServerAccessTokenRejected(err) {
+		return true
+	}
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) {
+		switch cliErr.Code {
+		case CodeAuthPermission, CodeMCPToolError, CodeResourceNotFound,
+			CodeTableNotFound, CodeSheetNotFound, CodeFieldNotFound, CodeRecordNotFound:
+			return true
+		}
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr == nil {
+		return false
+	}
+	if appErr.Category == apperrors.CategoryAuth {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(appErr.ServerDiag.ServerErrorCode), "TOOL_NOT_FOUND") {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(appErr.Reason)) {
+	case "business_error", "mcp_tool_error", "invalid_request":
+		return true
+	default:
+		return false
+	}
 }
 
 func consumeEmployeeServerOperation(profile string) error {

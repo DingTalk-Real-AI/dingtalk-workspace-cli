@@ -49,9 +49,15 @@ type digitalEmployeePublishedIdentity struct {
 }
 
 var (
-	deapConnectConfigDir       = config.DefaultConfigDir
-	deapConnectLoadProfiles    = auth.LoadProfiles
-	deapConnectLoadToken       = auth.LoadTokenDataForProfile
+	deapConnectConfigDir           = config.DefaultConfigDir
+	deapConnectLoadProfiles        = auth.LoadProfiles
+	deapConnectLoadToken           = auth.LoadTokenDataForProfile
+	deapConnectLoadSupervisorToken = func(ctx context.Context, configDir string) (*auth.TokenData, error) {
+		return auth.NewOAuthProvider(configDir, nil).GetTokenSnapshot(ctx)
+	}
+	deapConnectForceRefreshSupervisorToken = func(ctx context.Context, configDir, rejectedAccessToken string) (string, error) {
+		return auth.NewOAuthProvider(configDir, nil).ForceRefreshRejectedToken(ctx, rejectedAccessToken)
+	}
 	deapConnectManagedExchange = auth.ExchangeManagedAuthCode
 	deapConnectRegisterDSH     = runDigitalEmployeeDSHRegister
 	deapConnectSaveBinding     = saveDigitalEmployeeBinding
@@ -325,7 +331,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	return adapter.Connect(cmd, cfg)
 }
 
-func currentSupervisorProfile(configDir string) (string, *auth.TokenData, error) {
+func currentSupervisorProfile(ctx context.Context, configDir string) (string, *auth.TokenData, error) {
 	selector := strings.TrimSpace(auth.RuntimeProfile())
 	if selector == "" {
 		profiles, err := deapConnectLoadProfiles(configDir)
@@ -337,14 +343,22 @@ func currentSupervisorProfile(configDir string) (string, *auth.TokenData, error)
 	if selector == "" {
 		return "", nil, apperrors.NewValidation("当前没有可确定的主管 Profile；请先登录或用 --profile 精确选择主管账号")
 	}
-	token, err := deapConnectLoadToken(configDir, selector)
+	selected, err := deapConnectLoadToken(configDir, selector)
 	if err != nil {
 		return "", nil, fmt.Errorf("load supervisor profile: %w", err)
 	}
-	if token == nil || strings.TrimSpace(token.CorpID) == "" || strings.TrimSpace(token.UserID) == "" {
+	if selected == nil || strings.TrimSpace(selected.CorpID) == "" || strings.TrimSpace(selected.UserID) == "" {
 		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全登录数字员工")
 	}
-	exact := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
+	exact := auth.ProfileSelector(auth.Profile{CorpID: selected.CorpID, UserID: selected.UserID})
+	token, err := deapConnectLoadSupervisorToken(ctx, configDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve supervisor access token: %w", err)
+	}
+	if token == nil || strings.TrimSpace(token.AccessToken) == "" ||
+		auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID}) != exact {
+		return "", nil, apperrors.NewValidation("主管 Profile 刷新后的身份与操作发起人不一致，已停止数字员工操作")
+	}
 	return exact, token, nil
 }
 

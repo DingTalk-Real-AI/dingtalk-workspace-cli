@@ -743,6 +743,9 @@ func setupConnectSupervisorSeams(t *testing.T) {
 	testseam.Swap(t, &deapConnectLoadToken, func(string, string) (*auth.TokenData, error) {
 		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
 	})
+	testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
+	})
 }
 
 func setupSuccessfulConnectSeams(t *testing.T) {
@@ -825,6 +828,9 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		if selector != "supervisor-corp:supervisor-user" {
 			t.Fatalf("supervisor selector = %q", selector)
 		}
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
+	})
+	testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
 		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
 	})
 	var exchange auth.ManagedExchangeRequest
