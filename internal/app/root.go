@@ -40,6 +40,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -79,6 +80,7 @@ var (
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
+	rootPluginResolveIdentity       = profilemetadata.ResolveReadOnly
 	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
 	rootEmitResult                  = output.EmitResult
 	rootInstallProcessSignalContext = installProcessSignalContext
@@ -1887,15 +1889,20 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// precedence (InjectPluginConfigEnv skips already-set keys).
 	rootPluginInjectConfigEnv(pluginLoader)
 
-	// Load TokenData once; reused for stdio injection below.
-	tokenData, _ := rootAuthLoadTokenData(defaultConfigDir())
+	// Resolve the plugin user identity from the profile metadata file only.
+	// Plugin stdio servers need UserID/CorpID as environment identity — never
+	// the access token — and both live in profiles.json, so the keychain-
+	// encrypted token (a ~300ms synchronous security-CLI spawn per
+	// invocation on macOS) is not read during command-tree construction.
+	// The same file-only read is already the telemetry identity pattern.
 	var userCtx *plugin.UserContext
-	if tokenData != nil {
-		// Inject user context if either UserID or CorpID is present.
-		if tokenData.UserID != "" || tokenData.CorpID != "" {
+	if profile, err := rootPluginResolveIdentity(defaultConfigDir(), ""); err == nil && profile != nil {
+		userID := strings.TrimSpace(profile.UserID)
+		corpID := strings.TrimSpace(profile.CorpID)
+		if userID != "" || corpID != "" {
 			userCtx = &plugin.UserContext{
-				UserID: tokenData.UserID,
-				CorpID: tokenData.CorpID,
+				UserID: userID,
+				CorpID: corpID,
 			}
 		}
 	}

@@ -84,7 +84,7 @@ func TestCollectPluginServerCandidatesSortsAndSkipsInvalidStdio(t *testing.T) {
 		return mcptypes.ServerDescriptor{Key: stdio.Key}, true
 	}
 
-	candidates := collectPluginServerCandidates([]*plugin.Plugin{first, second}, wantContext)
+	candidates := collectPluginServerCandidates([]*plugin.Plugin{first, second}, func() *plugin.UserContext { return wantContext })
 	if len(candidates) != 5 {
 		t.Fatalf("candidate count = %d, want 5", len(candidates))
 	}
