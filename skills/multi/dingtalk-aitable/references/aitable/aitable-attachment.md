@@ -2,7 +2,7 @@
 
 > **STOP — 不要使用钉盘 (drive) 上传！** 钉盘 fileId 无法写入 attachment 字段。必须使用以下流程。
 >
-> **STOP — 严禁在 record create/update 的 cells 里直接传图片 URL！** 直传 `{"url":"https://..."}` 会导致服务端同步下载图片，批量写入时触发 TIMEOUT_ERROR。正确做法：先 `attachment upload` 获取 `fileToken`，再用 `{"fileToken":"ft_xxx"}` 写入。
+> 本地文件用 `+attachment-put`（上传并写入已有记录）或以下上传流程；已有可直接下载的在线 URL，可在原子 `record create/update` 的附件字段直接传 `[{"url":"https://..."}]`。URL 转存为 best-effort 异步操作，成功回执只表示已受理，需独立回读并确认附件可用。
 
 ## 准备附件上传
 
@@ -47,3 +47,20 @@ curl -X PUT "<uploadUrl>" -H "Content-Type: application/pdf" --data-binary @repo
 dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \
   --records '[{"recordId":"recXXX","cells":{"fldAttachId":[{"fileToken":"ft_xxx"}]}}]' --format json
 ```
+
+## 在线 URL 写入
+
+```bash
+dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \
+  --records '[{"recordId":"<RECORD_ID>","cells":{"<FIELD_ID>":[{"url":"https://example.com/report.pdf"}]}}]' --format json
+```
+
+附件写入会整体覆盖原列表；传 `[]` 或 `null` 表示清空。同一批 `update_records` 不能混合附件清空与新增/替换，应分开请求。不要将临时下载链接当作持久资源身份，也不要仅凭转存受理回执宣称文件已可下载。
+
+## 移除附件
+
+- 清空字段：`dws aitable +attachment-remove --base-id <B> --table-id <T> --record-id <R> --field-id <F> --clear-all`。
+- 按文件名移除：同一命令改用 `--remove-name <文件名>`，从回读结果解析真实 resourceId 后删除并验证；目标缺 resourceId 时仅在剩余项都有 fileToken 的情况下使用替换路径，否则停止。
+- 已知 resourceId：`dws aitable attachment remove --base-id <B> --table-id <T> --record-id <R> --field-id <F> --resource-ids <RESOURCE_IDS>`，随后独立回读。
+
+按 Runtime 要求确认删除范围后执行。服务端删除仍有并发覆盖窗口，避免同时修改同一附件字段。

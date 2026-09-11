@@ -13,7 +13,10 @@
 
 package errors
 
-import "strings"
+import (
+	stderrors "errors"
+	"strings"
+)
 
 // ServerDiagnostics holds server-side diagnostic fields extracted from
 // MCP response bodies or HTTP response headers. Fields are populated
@@ -60,4 +63,42 @@ func WithTraceID(id string) Option {
 	return func(e *Error) {
 		e.ServerDiag.TraceID = id
 	}
+}
+
+// IsMCPToolNotFound reports whether an MCP call failed because the selected
+// server does not expose that tool name. Callers may use it to fall back
+// between reviewed read-only aliases, never to replay a write.
+func IsMCPToolNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	parts := []string{err.Error()}
+	var typed *Error
+	if stderrors.As(err, &typed) && typed != nil {
+		parts = append(parts,
+			typed.Reason,
+			typed.ServerDiag.ServerErrorCode,
+			typed.ServerDiag.TechnicalDetail,
+			typed.Hint,
+		)
+	}
+	message := strings.ToLower(strings.Join(parts, " "))
+	for _, marker := range []string{
+		"tool_not_found",
+		"mcp_tool_not_found",
+		"tool not found",
+		"tool not registered",
+		"tool not exist",
+		"tool does not exist",
+		"unknown tool",
+		"no such tool",
+		"未找到指定工具",
+		"未找到工具",
+		"工具不存在",
+	} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }
