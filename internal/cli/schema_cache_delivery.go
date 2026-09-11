@@ -795,16 +795,18 @@ func (r *schemaCacheRuntime) publishGeneratedOrMatching(cache *schemacache.Cache
 	if err != nil {
 		return
 	}
-	// Re-derive the identity from these live artifacts before any adoption
-	// decision: the registered identity may carry stale payload index pins or a
-	// BuildID from another binary, and republishing it verbatim would persist
-	// an identity that fails verification in every later process.
-	generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
-	if genErr != nil {
-		return
-	}
+	// The registered identity is kept only when it pins these exact artifacts
+	// (digests, lengths, and payload index region); otherwise the freshly
+	// derived identity is adopted, which also repairs a stale BuildID. A
+	// repersisted identity whose index pins do not describe the published
+	// payload would fail ReadPayloadIndex in every later process and force
+	// each one back into repair.
 	identity := r.optionsSnapshot().Identity
-	if !schemaCacheIdentityReady(identity) || !artifacts.match(identity) || generated.BuildID != identity.BuildID {
+	if !schemaCacheIdentityReady(identity) || !artifacts.match(identity) {
+		generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
+		if genErr != nil {
+			return
+		}
 		identity = generated
 		r.adoptGeneratedIdentity(identity)
 	}
