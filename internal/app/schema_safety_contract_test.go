@@ -46,6 +46,30 @@ func TestReviewedMutationSafetyReachesFinalSchema(t *testing.T) {
 	assertFinalSchemaSafety(t, wants)
 }
 
+func TestDrivePublishGetSafetyReachesFinalSchema(t *testing.T) {
+	assertFinalSchemaSafety(t, []finalSchemaSafetyWant{{
+		canonical: "drive.publish_get", effect: "read", risk: "low",
+		confirmation: "not_required", idempotency: "idempotent",
+	}})
+}
+
+func TestDriveUploadSafetyReachesFinalSchema(t *testing.T) {
+	assertFinalSchemaSafety(t, []finalSchemaSafetyWant{{
+		canonical: "drive.upload", effect: "write", risk: "medium",
+		confirmation: "not_required", idempotency: "unknown",
+	}})
+}
+
+func TestDrivePublishSetLeavesAreUnavailableToAgents(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(),
+		"drive.publish_set", "drive.shortcut_publish_set")
+	for _, canonical := range []string{"drive.publish_set", "drive.shortcut_publish_set"} {
+		if got := payload.Tools[canonical]["availability"]; got != "unavailable" {
+			t.Errorf("%s availability = %#v, want unavailable", canonical, got)
+		}
+	}
+}
+
 func TestMinutesP0ConfirmationPolicyReachesFinalSchema(t *testing.T) {
 	wants := []finalSchemaSafetyWant{
 		{canonical: "minutes.update_minutes_title", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},

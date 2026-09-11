@@ -52,9 +52,13 @@ func TestResolveSpaceItemsWikiSpaces(t *testing.T) {
 type stubMailboxCaller struct {
 	byTool  map[string]string
 	errTool string // tool name that should return a transport error
+	onCall  func(string)
 }
 
 func (f *stubMailboxCaller) CallTool(_ context.Context, _, tool string, _ map[string]any) (*edition.ToolResult, error) {
+	if f.onCall != nil {
+		f.onCall(tool)
+	}
 	if tool == f.errTool {
 		return nil, errStubTool
 	}
