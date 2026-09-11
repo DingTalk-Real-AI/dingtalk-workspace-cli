@@ -198,3 +198,53 @@ func TestCrossPlatformCoverageReadableRuntimeNilGuards(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 }
+
+// TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks covers the
+// fallback legs of the complete-registry and overview loaders while the
+// process surface is plugin-uncertain and the per-user cache is cold: both
+// must still answer from live assembly, and a failing assembly must surface
+// its error instead of a silent empty payload.
+func TestCrossPlatformCoverageUncertainAllAndOverviewFallbacks(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	coverageSchemaCacheHome(t)
+	schemacache.UseUserCacheDirForTest(t, realHomeCacheDir(t, ".dws-uncertain-all-"))
+
+	goos, goarch := coverageCacheGOOSARCH()
+	register := func() {
+		if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true }, Counters: &schemacache.Counters{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register()
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+
+	// Cold cache: both loaders fall through to live assembly.
+	if _, err := DeliverySchemaAllPayloadForTest(); err != nil {
+		t.Fatalf("uncertain cold-cache all payload: %v", err)
+	}
+	if _, err := DeliverySchemaOverviewPayloadForTest(); err != nil {
+		t.Fatalf("uncertain cold-cache overview payload: %v", err)
+	}
+
+	// A failing assembly must surface instead of degrading silently. The
+	// source-root registration resets cache options, so re-register them and
+	// keep the uncertainty marker to stay on the read-only fallback path.
+	RegisterSchemaSourceRoot(nil)
+	register()
+	MarkSchemaCacheRuntimeUncertain()
+	resetDeliverySchemaCatalogStateForTest()
+	resetMetaByCLIPathStateForTest()
+	if _, err := DeliverySchemaAllPayloadForTest(); err == nil {
+		t.Fatal("uncertain all payload ignored a failing assembly")
+	}
+	if _, err := DeliverySchemaOverviewPayloadForTest(); err == nil {
+		t.Fatal("uncertain overview payload ignored a failing assembly")
+	}
+}
