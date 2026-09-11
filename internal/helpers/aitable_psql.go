@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	aitablePsqlAgentSummary      = "使用 PostgreSQL 语法进行多表关联和分析查询。"
-	aitablePsqlUseWhen           = "多表关联、跨表分析、SQL 聚合、分组或窗口计算时使用。"
-	aitablePsqlAvoidRecordQuery  = "单表按 recordId、关键词或字段条件读取记录时使用 record query。"
-	aitablePsqlAvoidWriteOrDDL   = "新增、更新、删除记录或执行 DDL 时不可使用。"
-	aitablePsqlAvoidMixedResults = "禁止静默降级为 record query 模拟 JOIN 或 SQL 聚合，也不得混用两者的结果模型。"
+	aitablePsqlAgentSummary     = "使用 PostgreSQL 在服务端完成 AI 表格复杂分析。"
+	aitablePsqlUseWhen          = "同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口计算等原生记录接口无法直接表达的分析。"
+	aitablePsqlAvoidRecordQuery = "需要 recordId、cells 或 cursor，或仅对原始记录筛选、排序、取 Top N、逐条后续操作时，使用 record query。"
+	aitablePsqlAvoidStats       = "单表直接标量、分组或去重统计时，使用 record stats 或 record group-stats。"
+	aitablePsqlAvoidExport      = "交付完整原始数据文件时，使用 export data。"
+	aitablePsqlAvoidWriteOrDDL  = "新增、更新、删除记录或执行 DDL 时不可使用。"
 )
 
 func newAitablePsqlCommand() *cobra.Command {
@@ -63,8 +64,9 @@ func newAitablePsqlCommand() *cobra.Command {
 				UseWhen:      []string{aitablePsqlUseWhen},
 				AvoidWhen: []string{
 					aitablePsqlAvoidRecordQuery,
+					aitablePsqlAvoidStats,
+					aitablePsqlAvoidExport,
 					aitablePsqlAvoidWriteOrDDL,
-					aitablePsqlAvoidMixedResults,
 				},
 				Examples: []string{"dws aitable psql -d <BASE_ID> -l", "dws aitable psql -d <BASE_ID> -c 'SELECT * FROM 表名'"},
 			},

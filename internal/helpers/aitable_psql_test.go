@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -92,6 +93,22 @@ func TestAitablePsqlWarnsWhenResultIsTruncated(t *testing.T) {
 				t.Fatalf("missing truncation warning: %s", out)
 			}
 		})
+	}
+}
+
+func TestAitablePsqlFinalSelectionRoutesComplexAnalysis(t *testing.T) {
+	final, ok := contractfinal.RuntimeContractFinal(newAitablePsqlCommand())
+	if !ok || final.Selection == nil {
+		t.Fatalf("psql ContractFinal selection = %#v, ok = %v", final.Selection, ok)
+	}
+
+	useWhen := strings.Join(final.Selection.UseWhen, "\n")
+	avoidWhen := strings.Join(final.Selection.AvoidWhen, "\n")
+	if !strings.Contains(useWhen, "同 Base JOIN") || !strings.Contains(useWhen, "聚合后派生") || strings.Contains(useWhen, "原始记录筛选") {
+		t.Fatalf("psql use_when = %q, want only complex analysis", useWhen)
+	}
+	if !strings.Contains(avoidWhen, "原始记录筛选、排序、取 Top N") || !strings.Contains(avoidWhen, "单表直接标量") || !strings.Contains(avoidWhen, "完整原始数据文件") {
+		t.Fatalf("psql avoid_when = %q, want record query, stats, and export routing", avoidWhen)
 	}
 }
 
