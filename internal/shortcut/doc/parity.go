@@ -26,7 +26,7 @@ func registerDocShortcuts(values ...shortcut.Shortcut) {
 
 func withDocParityAliases(s shortcut.Shortcut) shortcut.Shortcut {
 	switch s.Command {
-	case "+create", "+fetch", "+search", "+version-list", "+history-list", "+version-revert", "+history-revert", "+media-insert", "+media-upload", "+media-preview", "+media-download", "+resource-update", "+resource-download", "+resource-delete", "+script":
+	case "+create", createWithMediaCommand, "+fetch", "+search", "+version-list", "+history-list", "+version-revert", "+history-revert", "+media-insert", "+media-upload", "+media-preview", "+media-download", "+resource-update", "+resource-download", "+resource-delete", "+script":
 	default:
 		return s
 	}
@@ -39,7 +39,7 @@ func withDocParityAliases(s shortcut.Shortcut) shortcut.Shortcut {
 		case "node":
 			name = "doc"
 		case "name":
-			if s.Command == "+create" {
+			if s.Command == "+create" || s.Command == createWithMediaCommand {
 				name = "title"
 			}
 		case "image":

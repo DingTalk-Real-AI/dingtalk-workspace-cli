@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 446
+	publicShortcutCount = 447
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 503
+	schemaPublishedShortcutCount = 504
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 446
+	publiclyDeliveredShortcutCount = 447
 )
 
 func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *testing.T) {
@@ -40,6 +40,20 @@ func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *test
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageDocCreateMediaSafetyIsSeparateFromPlainCreate(t *testing.T) {
+	plain := executeShortcutSchemaQuery(t, "--cli-path", "doc +create")
+	if plain["confirmation"] != "not_required" || schemaContractMap(plain["parameters"])["media-files"] != nil {
+		t.Fatalf("plain create must keep its published contract without media upload: %#v", plain)
+	}
+	media := executeShortcutSchemaQuery(t, "--cli-path", "doc +create-with-media")
+	if media["confirmation"] != "user_required" || media["effect"] != "write" || media["result"] == nil {
+		t.Fatalf("media creation safety/result missing: %#v", media)
+	}
+	if schemaContractMap(media["parameters"])["media-files"]["required"] != true {
+		t.Fatal("media selection must be required")
 	}
 }
 

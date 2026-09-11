@@ -158,12 +158,12 @@ func TestCrossPlatformCoverageDocCreateMediaPreflightAndLocalDraft(t *testing.T)
 	}
 	for _, file := range []string{"missing", "empty.txt", "ok.txt,ok.txt", "../escape"} {
 		c := &docCoverageCaller{}
-		if err := runDocCoverage(t, Create, c, "--content", "body", "--media-files", file); err == nil || c.calls != 0 {
+		if err := runDocCoverage(t, CreateWithMedia, c, "--yes", "--content", "body", "--media-files", file); err == nil || c.calls != 0 {
 			t.Fatalf("preflight %s err=%v calls=%d", file, err, c.calls)
 		}
 	}
 	c := &docCoverageCaller{dryRun: true}
-	if err := runDocCoverage(t, Create, c, "--content", "body", "--media-files", "ok.txt", "--dry-run"); err != nil || c.calls != 0 {
+	if err := runDocCoverage(t, CreateWithMedia, c, "--content", "body", "--media-files", "ok.txt", "--dry-run"); err != nil || c.calls != 0 {
 		t.Fatal(err, c.calls)
 	}
 	for _, format := range []string{"markdown", "jsonml"} {

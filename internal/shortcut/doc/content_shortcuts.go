@@ -76,7 +76,6 @@ var Create = shortcut.Shortcut{
 		contract.ParamDecl{Name: "workspace", Property: "workspaceId"},
 	),
 	Flags: []shortcut.Flag{
-		{Name: "media-files", Type: shortcut.FlagStringSlice, Desc: "创建后按输入顺序追加本地图片/附件，最多20个；所有路径先校验，不改写正文内相对链接"},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称；省略时从Markdown首个一级标题提取，否则使用未命名文档"},
 		{Name: "content", Type: shortcut.FlagString, Desc: docContentInputDescription},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
@@ -131,7 +130,7 @@ var Create = shortcut.Shortcut{
 				// will become three tables" before anything is written.
 				preview["chunkPlan"] = chunkPlan.Summary()
 			}
-			return rt.Output(withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
+			return outputCreatedDoc(rt, withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
 		}
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
 		if err != nil {
@@ -209,7 +208,7 @@ var Create = shortcut.Shortcut{
 			data["mediaPlacement"] = "append_in_order"
 		}
 		annotateMentionVerificationScope(data, steps, content)
-		return rt.Output(withDocWarnings(docEnvelope("doc.create", data, steps...),
+		return outputCreatedDoc(rt, withDocWarnings(docEnvelope("doc.create", data, steps...),
 			withMentionTargetWarning(chunkPlan.Warnings(), content)))
 	},
 }

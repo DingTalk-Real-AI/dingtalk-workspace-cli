@@ -235,7 +235,7 @@ func TestCrossPlatformCoverageDocCreateWithMediaAndPartialProgress(t *testing.T)
 			"insert_document_block":          {{"blockId": "media"}},
 			"list_document_blocks":           {{"blocks": []any{map[string]any{"blockId": "media", "jsonml": `["card",{"uuid":"media","resourceId":"12345678-1234-1234-1234-123456789012"}]`}}, "hasMore": false}},
 		}}
-		err := runDocCoverage(t, Create, c, "--content", "body", "--media-files", "asset.txt", "--yes")
+		err := runDocCoverage(t, CreateWithMedia, c, "--content", "body", "--media-files", "asset.txt", "--yes")
 		if (err == nil) != (fail == 0) {
 			for cause := err; cause != nil; cause = errors.Unwrap(cause) {
 				t.Logf("cause: %v", cause)
@@ -243,7 +243,7 @@ func TestCrossPlatformCoverageDocCreateWithMediaAndPartialProgress(t *testing.T)
 			t.Fatalf("history: %#v", c.history)
 		}
 	}
-	if err := runDocCoverage(t, Create, &docCoverageCaller{}, "--content", "body", "--media-files", strings.Repeat("x,", 21)); err == nil {
+	if err := runDocCoverage(t, CreateWithMedia, &docCoverageCaller{}, "--yes", "--content", "body", "--media-files", strings.Repeat("x,", 21)); err == nil {
 		t.Fatal("media bound")
 	}
 	testseam.Swap(t, &docRel, func(base, path string) (string, error) {
@@ -252,7 +252,7 @@ func TestCrossPlatformCoverageDocCreateWithMediaAndPartialProgress(t *testing.T)
 		return rel, err
 	})
 	c := &docCoverageCaller{}
-	if err := runDocCoverage(t, Create, c, "--content", "body", "--media-files", "asset.txt"); err == nil || c.calls != 0 {
+	if err := runDocCoverage(t, CreateWithMedia, c, "--yes", "--content", "body", "--media-files", "asset.txt"); err == nil || c.calls != 0 {
 		t.Fatal("source vanished before creation", err)
 	}
 }

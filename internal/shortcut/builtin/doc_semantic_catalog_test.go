@@ -30,8 +30,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 			registered[item.Command] = item
 		}
 	}
-	if len(registered) != 50 || len(source.Shortcuts) != 50 {
-		t.Fatalf("registered/catalog = %d/%d, want 50/50", len(registered), len(source.Shortcuts))
+	if len(registered) != 51 || len(source.Shortcuts) != 51 {
+		t.Fatalf("registered/catalog = %d/%d, want 51/51", len(registered), len(source.Shortcuts))
 	}
 	var missing, stale []string
 	public, hidden := 0, 0
@@ -66,8 +66,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 	if len(missing) > 0 || len(stale) > 0 {
 		t.Fatalf("catalog mismatch: missing=%v stale=%v", missing, stale)
 	}
-	if public != 48 || hidden != 2 {
-		t.Fatalf("public/hidden = %d/%d, want 48/2", public, hidden)
+	if public != 49 || hidden != 2 {
+		t.Fatalf("public/hidden = %d/%d, want 49/2", public, hidden)
 	}
 
 	wantPrimaries := map[string]string{

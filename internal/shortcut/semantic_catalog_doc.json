@@ -6,6 +6,7 @@
     "+media-upload": {"disposition":"primary_smart","semantic_delta":"复用上传流水线，独立下载校验同文档资源SHA256，不插正文。","risk":"write","public":true,"reviewed":true},
     "+script": {"disposition":"primary_smart","semantic_delta":"本地草稿初始化、Markdown/JSONML结构统计与字数/必需块检查，不上传文档。","risk":"write","public":true,"reviewed":true},
     "+search": {"disposition":"semantic_adapter","semantic_delta":"统一关键词、最近访问、过滤、分页和稳定精简投影，作为文档定位的 canonical 入口。","risk":"read","public":true,"reviewed":true},
+    "+create-with-media": {"disposition":"primary_smart","semantic_delta":"确认后创建文档、按序上传本地媒体并核对正文块；保留普通创建的原安全契约。","risk":"write","public":true,"reviewed":true},
     "+create": {"disposition":"semantic_adapter","semantic_delta":"统一 Markdown/JSONML 内容输入、目标位置与创建后保真写入。","risk":"write","public":true,"reviewed":true},
     "+fetch": {"disposition":"semantic_adapter","semantic_delta":"统一 simple/with-ids/full 细节层级与 full/outline/range/section/keyword/tags 局部读取。","risk":"read","public":true,"reviewed":true},
     "+inspect": {"disposition":"primary_smart","semantic_delta":"聚合文档元信息，并按需读取样式、权限、历史、媒体和评论。","risk":"read","public":true,"reviewed":true},
