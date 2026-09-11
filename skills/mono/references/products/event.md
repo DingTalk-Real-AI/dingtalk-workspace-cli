@@ -1,6 +1,6 @@
-# dws event — 个人 IM、OA 审批、VoIP 与待办事件
+# dws event — 个人 IM、OA 审批、VoIP、待办与互动卡片事件
 
-通过个人 Stream 长连接监听当前用户的钉钉消息接收、已读、撤回、表情回应、群生命周期、审批任务/实例、VoIP 通话邀请，以及待办创建/更新/删除事件，NDJSON 输出到 stdout，用于驱动事件触发的 Agent。普通 IM 监听默认使用 `dws event +listen-im`；OA 审批、VoIP、Todo、群生命周期、显式 EventKey、Filter DSL、subscribe_id 复用或原始 envelope 使用 `dws event consume`。不要写脚本轮询消息历史、审批列表、通话记录或待办列表。
+通过个人 Stream 长连接监听当前用户的钉钉消息接收、已读、撤回、表情回应、群生命周期、审批任务/实例、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调事件，NDJSON 输出到 stdout，用于驱动事件触发的 Agent。普通 IM 监听默认使用 `dws event +listen-im`；OA 审批、VoIP、Todo、互动卡片、群生命周期、显式 EventKey、Filter DSL、subscribe_id 复用或原始 envelope 使用 `dws event consume`。不要写脚本轮询消息历史、审批列表、通话记录或待办列表。
 
 ## 运行方式
 
@@ -17,6 +17,7 @@
 | `dws event list --category oa` | 查看当前公开的 OA 个人事件目录 |
 | `dws event list --category voip` | 查看当前公开的 VoIP 个人事件目录 |
 | `dws event list --category todo` | 查看当前公开的 Todo 个人事件目录 |
+| `dws event list --category card` | 查看当前公开的互动卡片个人事件目录 |
 | `dws event schema <event_key> --flatten` | 查看 Agent 使用的顶层业务字段 schema |
 | `dws event consume <event_key> [event_key...] --flatten [flags]` | 高级入口：阻塞消费显式 EventKey，事件写到 stdout，用 `-f ndjson` |
 | `dws event status --event <event_key>` | 查看个人订阅、bus、本地 consume |
@@ -56,8 +57,9 @@
 | `user_todo_task_create` | 当前用户相关的待办被创建 | `--role-types` 可选，默认全部角色 |
 | `user_todo_task_update` | 当前用户相关的待办被更新 | `--role-types` 可选，默认全部角色 |
 | `user_todo_task_delete` | 当前用户相关的待办被删除 | `--role-types` 可选，默认全部角色 |
+| `user_card_action_triggered` | 当前用户收到互动卡片业务回调 | 无 |
 
-只承认上表 27 个事件码。默认身份就是当前用户，使用当前用户 OAuth 登录态，不要额外加身份切换 flag。七个 OA 事件与一个 VoIP 事件均使用 `all` 规则和空 `filterRule`，不需要目标参数。三个 Todo 事件用 `--role-types creator,executor,participant` 控制当前用户作为创建者、执行者或参与者的范围；省略时默认三种角色，并下发为 `filterRule.roleTypes`。
+只承认上表 28 个事件码。默认身份就是当前用户，使用当前用户 OAuth 登录态，不要额外加身份切换 flag。七个 OA 事件、一个 VoIP 事件和互动卡片事件均使用 `all` 规则和 `{}` `filterRule`，不需要目标参数。三个 Todo 事件用 `--role-types creator,executor,participant` 控制当前用户作为创建者、执行者或参与者的范围；省略时默认三种角色，并下发为 `filterRule.roleTypes`。
 
 ## Intent mapping
 
@@ -89,6 +91,8 @@
 | "同时监听全部已公开 OA 事件" | 一个 consume 放入七个 OA event key，不加目标或消息过滤参数 |
 | "收到语音通话邀请时通知我" / "监听 VoIP 来电" | `dws event consume user_voip_call_receive_invite --flatten -f ndjson` |
 | "查看 VoIP 事件目录" | `dws event list --category voip` |
+| "互动卡片发生操作时通知我" / "监听卡片回调" | `dws event consume user_card_action_triggered --flatten -f ndjson` |
+| "查看互动卡片事件目录" | `dws event list --category card` |
 | "监听指派给我的待办创建/更新/删除" | 对应 `user_todo_task_create/update/delete`，使用 `--role-types executor --flatten -f ndjson` |
 | "监听我创建的待办变化" | 对应 Todo EventKey，使用 `--role-types creator --flatten -f ndjson` |
 | "监听所有与我相关的待办变化" | 一个 consume 放入三个 Todo EventKey，省略 `--role-types` 以使用三种角色并集 |
@@ -182,6 +186,7 @@ dws event consume user_voip_call_receive_invite --flatten -f ndjson
 dws event consume user_todo_task_create --role-types executor --flatten -f ndjson
 dws event consume user_todo_task_update --role-types executor --flatten -f ndjson
 dws event consume user_todo_task_delete --role-types executor --flatten -f ndjson
+dws event consume user_card_action_triggered --flatten -f ndjson
 ```
 
 同一目标、同一过滤条件的兼容事件优先使用一个多事件命令：
@@ -223,7 +228,7 @@ dws event consume \
   -f ndjson
 ```
 
-用户类事件共享 `--user` 或 `--open-dingtalk-id`，群类事件共享 `--group`，无目标 IM 事件可加入任一组合。用户类与群类、不同目标或不同过滤条件要拆成多个进程。七个 OA 事件与 VoIP 事件可以同进程消费；三个 Todo 事件可以共享一个 `--role-types` 范围；每个事件仍建立独立订阅并共享 personal bus。多事件共享 `--query` / `--filter-json` 时，所选事件必须全部是 IM 消息接收事件；OA、VoIP 和 Todo 事件禁止使用消息过滤参数。
+用户类事件共享 `--user` 或 `--open-dingtalk-id`，群类事件共享 `--group`，无目标 IM 事件可加入任一组合。用户类与群类、不同目标或不同过滤条件要拆成多个进程。七个 OA 事件、VoIP 与互动卡片事件可以同进程消费；三个 Todo 事件可以共享一个 `--role-types` 范围；每个事件仍建立独立订阅并共享 personal bus。多事件共享 `--query` / `--filter-json` 时，所选事件必须全部是 IM 消息接收事件；OA、VoIP、Todo 和互动卡片事件禁止使用消息过滤参数。
 
 上述所有 `*_o2o` 命令和 `user_im_message_receive_user` 都可将 `--user <userId>` 替换为 `--open-dingtalk-id <openDingtalkId>`，但两个参数不能同时使用。
 
@@ -248,7 +253,7 @@ dws event stop --all --yes
 
 ## 订阅创建失败与重试预算
 
-以下约束适用于上表全部 27 个公开个人事件（16 个 IM + 7 个 OA + 1 个 VoIP + 3 个 Todo）以及多事件命令中的每一项，只治理 `[event] ready` 之前的订阅创建；ready 之后的 Stream 断线由长连接重连机制处理。
+以下约束适用于上表全部 28 个公开个人事件（16 个 IM + 7 个 OA + 1 个 VoIP + 3 个 Todo + 1 个互动卡片）以及多事件命令中的每一项，只治理 `[event] ready` 之前的订阅创建；ready 之后的 Stream 断线由长连接重连机制处理。
 
 - `0/2/1` 是 **Agent/host 编排约束**，不是 CLI 持久化硬总次数上限。每次 `dws event consume` 调用对每个逻辑订阅最多发送一次订阅创建 HTTP 请求，进程内不会自动重试。CLI 本地状态只持久化 `in_flight`、`cooldown`、`terminal_hold` 三种保护状态，不持久化或计算跨调用的 Agent/host 尝试次数。
 - 解析人名或群名、执行 `event consume` 以及后续 `event status/stop` 必须使用同一个 `--profile`。不得把其它 profile 下解析出的 userId、openDingtalkId 或 openConversationId 直接带入当前 profile 的订阅。
@@ -281,6 +286,7 @@ dws event stop --all --yes
 - OA 事件读取顶层 `process_instance_id/process_code/title/status/create_time/event_time`；任务事件另有 `task_id`，完成、转交或终止事件按对应 schema 提供 `finish_time`，任务完成、任务转交和实例完成还提供 `result`。`status/result` 保留服务端实际值，不推断完整枚举；缺少稳定 ID 或 payload 非法时 stderr 会输出 warning，stdout 回退为原始 transport envelope。
 - VoIP 事件读取顶层 `biz_id/corp_id/org_id/target_uid/call_id/caller_uid/callee_uid/call_type/room_id/create_time/event_time`。`caller_uid/callee_uid` 是字符串标识，保留前导 `0`、连字符等原始内容，不转换为数字；`biz_id` 是重试稳定的业务去重 ID。敏感入会码不进入 `--flatten` 输出，默认非扁平 transport envelope 的 `.data` 也会移除 `roomCode`；只有显式 `--debug-raw-events` 才输出原始值，且不得记录或转发。
 - Todo 事件读取顶层 `task_id/subject/creator_id/create_time`；创建和更新事件还提供角色列表、优先级、状态阶段、计划/实际时间、来源与场景字段，更新额外提供 `old_status_stage/update_time`，删除提供 `delete_time`。空的可选时间和 `parent_id` 省略；缺少 `task_id` 或 payload 非法时回退为原始 transport envelope。
+- 互动卡片事件保持顶层 `type/event_id/timestamp/subscribe_id/payload`，结构化上下文优先读取 `payload.body.actionData.context`。通过 `questions[].id` 关联 `answers[question_id]`，`selected` 中的选项 ID 再按同一问题的 `options[].id` 转换为标签；空数组是合法未选择状态，`custom` 独立保留。操作者使用整数 `operatorDTO.uid`，`createUid/orgId` 保持字符串；`bizInfoDTO.bizId`、`sourceTurnId`、`spaceId`、`conversationContextDTO.cid` 均按不透明 ID 关联。`timestamp/event_time/triggerTimestamp` 分别保留且不假设相等；字符串化的 `body.context` 和 `extension` 只作兼容或诊断回退。各层继续保留未知字段；注册时传递 `filterRule={}`，且不接受用户、群、角色或消息 Filter 参数。
 - 图片、文件等媒体消息的 `content` 可能是可读描述；合并转发媒体的下载定位信息位于对应 `forward_messages[].content`。需要实际媒体文件时调用 `dws chat message download-media`。
 - 普通 IM/OA 动作事件输出不含内部 `payload/uid/corpid/clientId/filterSubId/bizid`；VoIP 按已评审协议将所需字段映射为 `target_uid/corp_id/biz_id`。VoIP 原始排查必须显式使用 `--debug-raw-events`，`-f raw` 也必须和该开关一起使用。
 - 自己发的消息不作为事件回来（`isSelfLoop` 过滤）；自发验证会看到 0 事件，测试投递使用别人或机器人发消息。

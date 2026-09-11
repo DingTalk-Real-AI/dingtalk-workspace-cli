@@ -19,9 +19,9 @@ func TestCrossPlatformCoverageEventAgentSelectionBoundaries(t *testing.T) {
 		t.Fatal("event ProductDecl is not registered")
 	}
 	assertSelectionContains(t, "event product", eventProduct.Selection.AgentSummary,
-		[]string{"IM", "OA"})
+		[]string{"IM", "OA", "互动卡片"})
 	assertSelectionContains(t, "event product use_when", strings.Join(eventProduct.Selection.UseWhen, "\n"),
-		[]string{"消息", "群生命周期", "OA"})
+		[]string{"消息", "群生命周期", "OA", "user_card_action_triggered"})
 	assertSelectionContains(t, "event product avoid_when", strings.Join(eventProduct.Selection.AvoidWhen, "\n"),
 		[]string{"chat", "oa", "dev app event"})
 
