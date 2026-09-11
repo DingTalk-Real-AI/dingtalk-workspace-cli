@@ -3792,8 +3792,8 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	}
 	DeclareLeafMetadata(permissionUpdateCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{

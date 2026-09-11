@@ -383,6 +383,181 @@ func TestSheetBatchUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
 	}
 }
 
+// ── Issue #1096: 6 commands tightened to user_required ──────────────────
+
+func TestCalendarEventDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"event", "delete", "--id", "event-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"event", "delete", "--id", "event-1", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed event delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "delete_calendar_event",
+		args:      map[string]any{"eventId": "event-1"},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestCalendarAttendeeDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"attendee", "delete", "--event", "event-1", "--attendees", "user-1,user-2")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"attendee", "delete", "--event", "event-1", "--attendees", "user-1,user-2", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed attendee delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "remove_calendar_participant",
+		args: map[string]any{
+			"eventId":           "event-1",
+			"attendeesToRemove": []string{"user-1", "user-2"},
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestCalendarRoomDeleteRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"room", "delete", "--event", "event-1", "--rooms", "room-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newCalendarCommand,
+		"room", "delete", "--event", "event-1", "--rooms", "room-1", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed room delete returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "delete_meeting_room",
+		args: map[string]any{
+			"eventId": "event-1",
+			"roomIds": []string{"room-1"},
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestChatGroupMembersRemoveRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"group", "members", "remove", "--id", "conv-1", "--users", "user-1")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newChatCommand,
+		"group", "members", "remove", "--id", "conv-1", "--users", "user-1", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed group members remove returned error: %v", err)
+	}
+	// The guard (guardGroupOwnerRemoval) may issue a get_group_members call
+	// before the actual remove; verify the final call is remove_group_member.
+	if len(caller.calls) == 0 {
+		t.Fatal("expected at least 1 MCP call after confirmation")
+	}
+	last := caller.calls[len(caller.calls)-1]
+	wantLast := guardedMutationCall{
+		productID: "",
+		toolName:  "remove_group_member",
+		args: map[string]any{
+			"openConversationId": "conv-1",
+			"userIdList":         []string{"user-1"},
+		},
+	}
+	if !reflect.DeepEqual(last, wantLast) {
+		t.Fatalf("last tool call = %#v, want %#v", last, wantLast)
+	}
+}
+
+func TestMinutesReplaceTextRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newMinutesCommand,
+		"replace-text", "--id", "task-1", "--search", "old", "--replace", "new")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newMinutesCommand,
+		"replace-text", "--id", "task-1", "--search", "old", "--replace", "new", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed replace-text returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "replace_minutes_text",
+		args: map[string]any{
+			"taskUuid":     "task-1",
+			"originalText": "old",
+			"replacedText": "new",
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
+func TestDocPermissionUpdateRequiresConfirmationBeforeToolCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newDocCommand,
+		"permission", "update", "--node", "node-1", "--users", "user-1", "--role", "EDITOR")
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	caller = &guardedMutationCaller{}
+	err = executeGuardedMutationCommand(t, caller, newDocCommand,
+		"permission", "update", "--node", "node-1", "--users", "user-1", "--role", "EDITOR", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed permission update returned error: %v", err)
+	}
+	want := guardedMutationCall{
+		productID: "",
+		toolName:  "update_permission",
+		args: map[string]any{
+			"nodeId":  "node-1",
+			"roleId":  "EDITOR",
+			"userIds": []string{"user-1"},
+		},
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0], want) {
+		t.Fatalf("tool calls = %#v, want %#v", caller.calls, want)
+	}
+}
+
 func TestSheetConfirmationGuardCoversEveryProtectedLeaf(t *testing.T) {
 	tests := []struct {
 		path string

@@ -626,25 +626,33 @@ func TestCrossPlatformCoverageNullToolResponseRendersEmptyObject(t *testing.T) {
 
 func TestCrossPlatformCoveragePermissionUpdateWithMembers(t *testing.T) {
 	type updateCase struct {
-		name   string
-		root   func() *cobra.Command
-		path   []string
-		target []string
-		tool   string
+		name    string
+		root    func() *cobra.Command
+		path    []string
+		target  []string
+		tool    string
+		confirm bool
 	}
 	cases := []updateCase{
-		{"drive", newDriveCommand, []string{"permission", "update"}, []string{"--node", "n1"}, "update_permission"},
-		{"doc", newDocCommand, []string{"permission", "update"}, []string{"--node", "n1"}, "update_permission"},
-		{"wiki", newWikiCommand, []string{"member", "update"}, []string{"--workspace", "ws1"}, "update_member"},
+		{"drive", newDriveCommand, []string{"permission", "update"}, []string{"--node", "n1"}, "update_permission", false},
+		{"doc", newDocCommand, []string{"permission", "update"}, []string{"--node", "n1"}, "update_permission", true},
+		{"wiki", newWikiCommand, []string{"member", "update"}, []string{"--workspace", "ws1"}, "update_member", false},
 	}
 	const members = `[{"type":"USER","id":"u1","roleId":"READER","corpId":"c1"}]`
 	for _, uc := range cases {
 		t.Run(uc.name+" passes members and notify", func(t *testing.T) {
 			caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[]}`}}}
 			installScriptedCaller(t, caller)
+			root := uc.root()
 			args := append(append([]string{}, uc.path...), uc.target...)
 			args = append(args, "--members", members, "--notify")
-			if err := executePR868Command(t, uc.root(), args...); err != nil {
+			if uc.confirm {
+				if root.PersistentFlags().Lookup("yes") == nil {
+					root.PersistentFlags().Bool("yes", false, "confirm high-risk operation")
+				}
+				args = append(args, "--yes")
+			}
+			if err := executePR868Command(t, root, args...); err != nil {
 				t.Fatalf("update --members: %v", err)
 			}
 			if caller.tool != uc.tool {
