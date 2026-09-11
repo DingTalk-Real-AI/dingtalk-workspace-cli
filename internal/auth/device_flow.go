@@ -291,12 +291,16 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("请求设备授权码失败"), err)
 	}
-	dfPrintDeviceCodeBox(p.output(), authResp)
+	// Display the same snapshot used for browser authorization, including when
+	// browser launch is disabled. Keep the server response intact for polling.
+	snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
+	displayAuth := *authResp
+	displayAuth.VerificationURI, _ = snapshot.AttachToURL(authResp.VerificationURI)
+	displayAuth.VerificationURIComplete, _ = snapshot.AttachToURL(authResp.VerificationURIComplete)
+	dfPrintDeviceAuthorization(p.output(), &displayAuth)
 
-	if authResp.VerificationURIComplete != "" && !p.NoBrowser {
-		snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
-		browserURL, _ := snapshot.AttachToURL(authResp.VerificationURIComplete)
-		if bErr := deviceOpenBrowser(browserURL); bErr != nil && p.logger != nil {
+	if displayAuth.VerificationURIComplete != "" && !p.NoBrowser {
+		if bErr := deviceOpenBrowser(displayAuth.VerificationURIComplete); bErr != nil && p.logger != nil {
 			p.logger.Debug("could not open browser", "error_category", "browser_open_failed")
 		}
 	}
@@ -681,7 +685,6 @@ var (
 	dfGreen  = tui.Success
 	dfYellow = tui.Warning
 	dfRed    = tui.Danger
-	dfCyan   = tui.Cyan
 	dfDim    = tui.Dim
 )
 
@@ -694,24 +697,23 @@ func dfPrintStep(w io.Writer, step int, message string, attempt int) {
 	_, _ = fmt.Fprintf(w, "%s %s: %s\n", tui.StateMark("ok"), dfBold(label), message)
 }
 
-func dfPrintDeviceCodeBox(w io.Writer, auth *DeviceAuthResponse) {
-	lines := []string{
-		i18n.T("请在浏览器中打开以下链接，并输入授权码："),
-		"",
-		fmt.Sprintf(i18n.T("  链接: %s"), dfBold(auth.VerificationURI)),
-		fmt.Sprintf(i18n.T("  授权码: %s"), dfBold(dfYellow(auth.UserCode))),
-		"",
-	}
+func dfPrintDeviceAuthorization(w io.Writer, auth *DeviceAuthResponse) {
+	_, _ = fmt.Fprintln(w, fmt.Sprintf(i18n.T("  授权码: %s"), dfBold(dfYellow(auth.UserCode))))
+	_, _ = fmt.Fprintln(w, "  "+dfDim(fmt.Sprintf(i18n.T("授权码将在 %d 秒后过期。"), auth.ExpiresIn)))
+	_, _ = fmt.Fprintln(w)
+
+	// Keep each URL on its own unstyled logical line. Terminal soft wrapping
+	// must not introduce borders, indentation, or hard breaks into copied links.
 	if auth.VerificationURIComplete != "" {
-		lines = append(lines,
-			i18n.T("或者直接打开以下链接："),
-			fmt.Sprintf("  %s", dfCyan(auth.VerificationURIComplete)),
-			"",
-		)
+		_, _ = fmt.Fprintln(w, "  "+i18n.T("授权链接（已填入授权码）："))
+		_, _ = fmt.Fprintln(w, auth.VerificationURIComplete)
+		_, _ = fmt.Fprintln(w)
 	}
-	lines = append(lines, dfDim(fmt.Sprintf(i18n.T("授权码将在 %d 秒后过期。"), auth.ExpiresIn)))
-	dfPrintBox(w, lines)
-	_, _ = fmt.Fprintln(w, "")
+	if auth.VerificationURI != "" {
+		_, _ = fmt.Fprintln(w, "  "+i18n.T("手动输入授权码的链接："))
+		_, _ = fmt.Fprintln(w, auth.VerificationURI)
+		_, _ = fmt.Fprintln(w)
+	}
 }
 
 func dfPrintBox(w io.Writer, lines []string) {

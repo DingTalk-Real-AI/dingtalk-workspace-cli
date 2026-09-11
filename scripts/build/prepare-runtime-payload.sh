@@ -5,7 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 GOOS="${1:-}"
 GOARCH="${2:-}"
 DEST_ROOT="${3:-}"
-VERSION=20260908
+VERSION=20260909
 SOURCE="$ROOT/third_party/runtimepayload/$VERSION"
 
 [ -n "$GOOS" ] && [ -n "$GOARCH" ] && [ -n "$DEST_ROOT" ] || {
@@ -51,20 +51,17 @@ hash_file() {
 
 TARGET="$DEST_ROOT/.dws-runtime/$VERSION"
 rm -rf "$TARGET"
-mkdir -p "$TARGET/ps"
+mkdir -p "$TARGET"
 cp "$SOURCE/$RELATIVE_LIBRARY" "$TARGET/$LIBRARY_NAME"
-cp -R "$SOURCE/ps/." "$TARGET/ps/"
 
 LIBRARY_SHA="$(hash_file "$TARGET/$LIBRARY_NAME")"
 cat > "$TARGET/manifest.json" <<EOF
 {
-  "format_version": 1,
+  "format_version": 2,
   "payload_version": "$VERSION",
   "target": "$GOOS/$GOARCH",
   "library": "$LIBRARY_NAME",
-  "library_sha256": "$LIBRARY_SHA",
-  "ps_file_count": 123,
-  "ps_manifest_sha256": "45ae147697c1f8683df3f232d0ba792b807179bbe22fdac8225a0cf25fc33e7e"
+  "library_sha256": "$LIBRARY_SHA"
 }
 EOF
 
