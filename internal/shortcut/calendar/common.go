@@ -192,6 +192,20 @@ func calendarOnlyEnvelopeFields(candidate map[string]any) bool {
 }
 
 func requireCalendarCollection(data map[string]any, operation string, keys ...string) ([]any, map[string]any, error) {
+	return requireCalendarCollectionMode(data, operation, false, keys...)
+}
+
+// requireCalendarCollectionStrict is the fail-closed variant used for responses
+// where a malformed item must not be silently projected to an empty result.
+// Busy/free status is the current example: returning "free: true" for a
+// malformed response could lead the user to schedule a conflicting meeting,
+// so every item must be a non-empty object and downstream fields (scheduleItems,
+// start/end) are validated by the caller.
+func requireCalendarCollectionStrict(data map[string]any, operation string, keys ...string) ([]any, map[string]any, error) {
+	return requireCalendarCollectionMode(data, operation, true, keys...)
+}
+
+func requireCalendarCollectionMode(data map[string]any, operation string, strict bool, keys ...string) ([]any, map[string]any, error) {
 	data, err := requireCalendarResponse(data, operation)
 	if err != nil {
 		return nil, nil, err
@@ -209,8 +223,12 @@ func requireCalendarCollection(data map[string]any, operation string, keys ...st
 			if key == "events" {
 				items, _ = calendarcompat.NormalizeTerminalEmptyEvents(items, container)
 			}
-			if err := validateCalendarCollectionItems(items, operation, key); err != nil {
-				return nil, nil, err
+			if strict {
+				if err := validateCalendarCollectionItems(items, operation, key); err != nil {
+					return nil, nil, err
+				}
+			} else {
+				items = filterCalendarCollectionItems(items)
 			}
 			return items, container, nil
 		}
@@ -218,8 +236,12 @@ func requireCalendarCollection(data map[string]any, operation string, keys ...st
 	for _, wrapper := range []string{"result", "data"} {
 		if value, present := data[wrapper]; present {
 			if items, ok := value.([]any); ok {
-				if err := validateCalendarCollectionItems(items, operation, wrapper); err != nil {
-					return nil, nil, err
+				if strict {
+					if err := validateCalendarCollectionItems(items, operation, wrapper); err != nil {
+						return nil, nil, err
+					}
+				} else {
+					items = filterCalendarCollectionItems(items)
 				}
 				return items, data, nil
 			}
@@ -238,9 +260,32 @@ func validateCalendarCollectionItems(items []any, operation, key string) error {
 	return nil
 }
 
+// filterCalendarCollectionItems drops non-object and empty-object entries from
+// a declared business array, mirroring the atomic commands' defensive filtering
+// (callSortedCalendarEvents / callFilteredBusyStatus in internal/helpers).
+// Shape-level protocol drift — a missing array or a non-array field — still
+// fails closed in requireCalendarCollection; only item-level placeholders
+// (e.g. the service's terminal empty-page sentinel) are silently filtered so a
+// legitimately empty range projects to an empty collection instead of an error.
+func filterCalendarCollectionItems(items []any) []any {
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		if object, ok := item.(map[string]any); ok && len(object) > 0 {
+			filtered = append(filtered, object)
+		}
+	}
+	return filtered
+}
+
+// projectCalendarRows projects each item through the alias table. Rows without
+// any recognizable identity field (requiredAny) are dropped instead of failing
+// the whole read, mirroring the atomic command's filtering in
+// callSortedCalendarEvents: a terminal empty-page placeholder must project to
+// an empty list, not a response_validation error. Structure-level drift is
+// still rejected upstream in requireCalendarCollection.
 func projectCalendarRows(items []any, operation string, aliases map[string][]string, requiredAny ...string) ([]map[string]any, error) {
 	rows := make([]map[string]any, 0, len(items))
-	for index, item := range items {
+	for _, item := range items {
 		source := item.(map[string]any)
 		row := make(map[string]any)
 		for canonical, candidates := range aliases {
@@ -259,7 +304,7 @@ func projectCalendarRows(items []any, operation string, aliases map[string][]str
 			}
 		}
 		if !valid {
-			return nil, calendarResponseError(operation, "malformed_collection_item", fmt.Sprintf("业务数组第 %d 项缺少可识别的标识或时间字段", index))
+			continue
 		}
 		rows = append(rows, row)
 	}

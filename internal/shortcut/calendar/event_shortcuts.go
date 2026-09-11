@@ -439,12 +439,17 @@ var Suggestion = calendarReadShortcut(
 		if err != nil {
 			return err
 		}
-		for index, suggestion := range suggestions {
+		usable := make([]map[string]any, 0, len(suggestions))
+		for _, suggestion := range suggestions {
 			if calendarEmptyValue(suggestion["end"]) {
-				return calendarResponseError("calendar/list_suggested_event_times", "malformed_collection_item", fmt.Sprintf("建议时段第 %d 项缺少结束时间", index))
+				// A suggestion without an end time cannot be booked; drop it instead
+				// of failing the whole read, matching the item-level filtering used
+				// by the other read shortcuts.
+				continue
 			}
+			usable = append(usable, suggestion)
 		}
-		return rt.Output(map[string]any{"count": len(suggestions), "suggestions": suggestions, "complete": true})
+		return rt.Output(map[string]any{"count": len(usable), "suggestions": usable, "complete": true})
 	},
 )
 

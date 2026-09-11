@@ -81,15 +81,20 @@ func TestCrossPlatformCoverageCalendarCommonBranches(t *testing.T) {
 	if _, _, err := requireCalendarCollection(map[string]any{"success": false}, "calendar/test", "items"); err == nil {
 		t.Fatal("failed response accepted as collection")
 	}
-	if _, _, err := requireCalendarCollection(map[string]any{"success": true, "result": []any{"bad"}}, "calendar/test", "items"); err == nil {
-		t.Fatal("bad wrapper array accepted")
+	// The result/data wrapper fallback filters item-level placeholders like the
+	// named-key path; a non-array wrapper still fails closed below via missing
+	// collection when no declared key matches.
+	if items, _, err := requireCalendarCollection(map[string]any{"success": true, "result": []any{"bad"}}, "calendar/test", "items"); err != nil || len(items) != 0 {
+		t.Fatalf("bad wrapper array not filtered: %#v %v", items, err)
 	}
 	items, _, err := requireCalendarCollection(map[string]any{"success": true, "result": []any{map[string]any{"id": "x"}}}, "calendar/test", "items")
 	if err != nil || len(items) != 1 {
 		t.Fatalf("wrapper array rejected: %#v %v", items, err)
 	}
-	if _, err := projectCalendarRows([]any{map[string]any{"ignored": "x"}}, "calendar/test", map[string][]string{"id": {"id"}}, "id"); err == nil {
-		t.Fatal("unidentifiable projected row accepted")
+	// Rows without any recognizable identity field are dropped instead of
+	// failing the whole projection, matching the atomic command's filtering.
+	if rows, err := projectCalendarRows([]any{map[string]any{"ignored": "x"}}, "calendar/test", map[string][]string{"id": {"id"}}, "id"); err != nil || len(rows) != 0 {
+		t.Fatalf("unidentifiable projected row not dropped: %#v %v", rows, err)
 	}
 	if !calendarEmptyValue(nil) || !calendarEmptyValue(" ") || calendarEmptyValue(1) {
 		t.Fatal("calendarEmptyValue classification drift")
@@ -253,7 +258,6 @@ func TestCrossPlatformCoverageCalendarEventGetSearchAndSuggestion(t *testing.T) 
 	for name, response := range map[string]string{
 		"call":           "__ERROR__",
 		"collection":     `{"success":true,"result":{"hasMore":false}}`,
-		"item":           `{"success":true,"result":{"events":[{"summary":"x"}],"hasMore":false}}`,
 		"pagination-bad": `{"success":true,"result":{"events":[],"hasMore":"bad"}}`,
 		"pagination":     `{"success":true,"result":{"events":[]}}`,
 	} {
@@ -263,6 +267,12 @@ func TestCrossPlatformCoverageCalendarEventGetSearchAndSuggestion(t *testing.T) 
 				t.Fatal("bad search response accepted")
 			}
 		})
+	}
+	// Items without a recognizable identity are filtered instead of failing the
+	// search; the matched count simply drops to zero.
+	searchPlaceholder := &calendarCoverageCaller{responses: map[string][]string{"list_calendar_events": {`{"success":true,"result":{"events":[{"summary":"x"}],"hasMore":false}}`}}}
+	if err := runCalendarCoverage(t, EventSearch, searchPlaceholder, "--query", "x"); err != nil {
+		t.Fatalf("search placeholder item not filtered: %v", err)
 	}
 
 	suggestion := &calendarCoverageCaller{responses: map[string][]string{"list_suggested_event_times": {`{"success":true,"result":{"recommendEventTimes":[{"startTime":"2026-08-17T09:00:00+08:00","endTime":"2026-08-17T10:00:00+08:00"}]}}`}}}
@@ -290,15 +300,26 @@ func TestCrossPlatformCoverageCalendarEventGetSearchAndSuggestion(t *testing.T) 
 		t.Fatal("empty suggestion users accepted")
 	}
 	for name, response := range map[string]string{
-		"call":        "__ERROR__",
-		"collection":  `{"success":true,"result":{}}`,
-		"projection":  `{"success":true,"result":{"recommendEventTimes":[{"endTime":"x"}]}}`,
-		"missing-end": `{"success":true,"result":{"recommendEventTimes":[{"startTime":"x"}]}}`,
+		"call":       "__ERROR__",
+		"collection": `{"success":true,"result":{}}`,
 	} {
 		t.Run("suggestion-response-"+name, func(t *testing.T) {
 			caller := &calendarCoverageCaller{responses: map[string][]string{"list_suggested_event_times": {response}}}
 			if err := runCalendarCoverage(t, Suggestion, caller, "--users", "u"); err == nil {
 				t.Fatal("bad suggestion response accepted")
+			}
+		})
+	}
+	// Suggestion rows missing start or end are unusable and dropped instead of
+	// failing the whole read, matching the other read shortcuts.
+	for name, response := range map[string]string{
+		"projection":  `{"success":true,"result":{"recommendEventTimes":[{"endTime":"x"}]}}`,
+		"missing-end": `{"success":true,"result":{"recommendEventTimes":[{"startTime":"x"}]}}`,
+	} {
+		t.Run("suggestion-response-"+name, func(t *testing.T) {
+			caller := &calendarCoverageCaller{responses: map[string][]string{"list_suggested_event_times": {response}}}
+			if err := runCalendarCoverage(t, Suggestion, caller, "--users", "u"); err != nil {
+				t.Fatalf("unusable suggestion not filtered: %v", err)
 			}
 		})
 	}
@@ -504,27 +525,44 @@ func TestCrossPlatformCoverageCalendarLegacyStrictBranches(t *testing.T) {
 	if err := runCalendarCoverage(t, RoomFind, room, "--group-id", "g", "--room-name", " room ", "--available"); err != nil {
 		t.Fatal(err)
 	}
-	for _, response := range []string{`{"success":true,"result":{}}`, `{"success":true,"result":{"rooms":[{"name":"missing id"}]}}`} {
-		caller := &calendarCoverageCaller{responses: map[string][]string{"query_available_meeting_room": {response}}}
-		if err := runCalendarCoverage(t, RoomFind, caller); err == nil {
-			t.Fatal("malformed room response accepted")
-		}
+	if err := runCalendarCoverage(t, RoomFind, &calendarCoverageCaller{responses: map[string][]string{"query_available_meeting_room": {`{"success":true,"result":{}}`}}}); err == nil {
+		t.Fatal("room response without collection accepted")
 	}
+	// Rooms without a recognizable roomId are filtered instead of failing the
+	// whole read, matching the atomic commands.
+	roomPlaceholder := &calendarCoverageCaller{responses: map[string][]string{"query_available_meeting_room": {`{"success":true,"result":{"rooms":[{"name":"missing id"}],"hasMore":false}}`}}}
+	if err := runCalendarCoverage(t, RoomFind, roomPlaceholder); err != nil {
+		t.Fatalf("room placeholder item not filtered: %v", err)
+	}
+	// Agenda items without a recognizable eventId are filtered as well.
 	agendaProjection := &calendarCoverageCaller{responses: map[string][]string{"list_calendar_events": {`{"success":true,"result":{"events":[{"summary":"missing id"}],"hasMore":false}}`}}}
-	if err := runCalendarCoverage(t, EventList, agendaProjection); err == nil {
-		t.Fatal("agenda item without id accepted")
+	if err := runCalendarCoverage(t, EventList, agendaProjection); err != nil {
+		t.Fatalf("agenda placeholder item not filtered: %v", err)
 	}
 
 	for name, response := range map[string]string{
-		"missing":  `{"success":true,"result":{"busy":[{}]}}`,
 		"bad-list": `{"success":true,"result":{"busy":[{"scheduleItems":{}}]}}`,
+	} {
+		t.Run("busy-"+name, func(t *testing.T) {
+			caller := &calendarCoverageCaller{responses: map[string][]string{"query_busy_status": {response}}}
+			if err := runCalendarCoverage(t, BusySearch, caller, "--users", "u", "--rooms", "r", "--start", calendarCoverageStart, "--end", calendarCoverageEnd); err == nil {
+				t.Fatal("bad busy response accepted")
+			}
+		})
+	}
+	// Busy/free status is a decision signal: malformed evidence must fail closed
+	// rather than be projected to "free: true". callFilteredBusyStatus only
+	// filters individual scheduleItems that lack a usable status; it never treats
+	// a missing scheduleItems array or a missing start/end as an empty/free slot.
+	for name, response := range map[string]string{
+		"missing":  `{"success":true,"result":{"busy":[{}]}}`,
 		"bad-item": `{"success":true,"result":{"busy":[{"scheduleItems":["bad"]}]}}`,
 		"bad-time": `{"success":true,"result":{"busy":[{"scheduleItems":[{"start":{"date":"2026-08-17"}}]}]}}`,
 	} {
 		t.Run("busy-"+name, func(t *testing.T) {
 			caller := &calendarCoverageCaller{responses: map[string][]string{"query_busy_status": {response}}}
 			if err := runCalendarCoverage(t, BusySearch, caller, "--users", "u", "--rooms", "r", "--start", calendarCoverageStart, "--end", calendarCoverageEnd); err == nil {
-				t.Fatal("bad busy response accepted")
+				t.Fatal("malformed busy response accepted")
 			}
 		})
 	}
