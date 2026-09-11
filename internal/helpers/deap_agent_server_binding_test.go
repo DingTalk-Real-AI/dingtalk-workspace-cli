@@ -6,6 +6,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,9 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func setupServerBindingSupervisor(t *testing.T) {
@@ -27,11 +30,155 @@ func setupServerBindingSupervisor(t *testing.T) {
 	testseam.Swap(t, &deapConnectLoadToken, func(string, string) (*auth.TokenData, error) {
 		return &auth.TokenData{CorpID: "corp", UserID: "supervisor", AccessToken: "supervisor-test-token"}, nil
 	})
+	testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+		return &auth.TokenData{CorpID: "corp", UserID: "supervisor", AccessToken: "supervisor-test-token"}, nil
+	})
+}
+
+type employeeServerErrorCaller struct {
+	digitalEmployeeProtocolCaller
+	errors []error
+}
+
+func (c *employeeServerErrorCaller) CallToolWithToken(ctx context.Context, token, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	if len(c.errors) > 0 {
+		c.tokenCalls = append(c.tokenCalls, deapAgentCall{productID: productID, toolName: toolName, args: args})
+		c.tokens = append(c.tokens, token)
+		err := c.errors[0]
+		c.errors = c.errors[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
+	return c.digitalEmployeeProtocolCaller.CallToolWithToken(ctx, token, productID, toolName, args)
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingUsesUnifiedTokenSnapshot(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	called := 0
+	testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+		called++
+		return &auth.TokenData{CorpID: "corp", UserID: "supervisor", AccessToken: "refreshed-supervisor-token"}, nil
+	})
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`},
+	}}
+	InitDepsForTest(t, caller)
+	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new"); err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 || len(caller.tokens) != 1 || caller.tokens[0] != "refreshed-supervisor-token" {
+		t.Fatalf("snapshot calls=%d tokens=%v", called, caller.tokens)
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingRefreshesRejectedTokenOnce(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	refreshed := false
+	testseam.Swap(t, &deapConnectLoadToken, func(string, string) (*auth.TokenData, error) {
+		token := "supervisor-test-token"
+		if refreshed {
+			token = "fresh-supervisor-token"
+		}
+		return &auth.TokenData{CorpID: "corp", UserID: "supervisor", AccessToken: token}, nil
+	})
+	testseam.Swap(t, &deapConnectForceRefreshSupervisorToken, func(_ context.Context, _ string, rejected string) (string, error) {
+		if rejected != "supervisor-test-token" {
+			t.Fatalf("rejected token mismatch")
+		}
+		refreshed = true
+		return "fresh-supervisor-token", nil
+	})
+	caller := &employeeServerErrorCaller{
+		digitalEmployeeProtocolCaller: digitalEmployeeProtocolCaller{responses: map[string][]string{
+			"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`},
+		}},
+		errors: []error{&CLIError{Code: CodeAuthTokenExpired, Message: "token rejected"}},
+	}
+	InitDepsForTest(t, caller)
+	id, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new")
+	if err != nil || id != "binding-new" {
+		t.Fatalf("binding = %q, %v", id, err)
+	}
+	if !refreshed || len(caller.tokens) != 2 || strings.Join(caller.tokens, ",") != "supervisor-test-token,fresh-supervisor-token" {
+		t.Fatalf("refreshed=%t tokens=%v", refreshed, caller.tokens)
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingRecordsGatewayRejection(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	rejection := apperrors.NewAPI(
+		"requested tool is unavailable",
+		apperrors.WithReason("mcp_tool_error"),
+		apperrors.WithServerDiag(apperrors.ServerDiagnostics{TraceID: "trace-tool-not-found", ServerErrorCode: "TOOL_NOT_FOUND"}),
+	)
+	caller := &employeeServerErrorCaller{
+		digitalEmployeeProtocolCaller: digitalEmployeeProtocolCaller{responses: map[string][]string{
+			"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`},
+		}},
+		errors: []error{rejection},
+	}
+	InitDepsForTest(t, caller)
+	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
+	if _, err := mutateEmployeeServerBinding(cmd, b, "rebind", "device-new"); !errors.Is(err, rejection) {
+		t.Fatalf("gateway rejection = %v", err)
+	}
+	var receipt employeeServerOperation
+	raw, err := os.ReadFile(employeeServerOperationPath(b.DWSProfile))
+	if err != nil || json.Unmarshal(raw, &receipt) != nil || receipt.Phase != "rejected" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if id, err := mutateEmployeeServerBinding(cmd, b, "rebind", "device-new"); err != nil || id != "binding-new" {
+		t.Fatalf("corrected retry = %q, %v", id, err)
+	}
+	if len(caller.tokens) != 2 {
+		t.Fatalf("calls=%d", len(caller.tokens))
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingRefreshFailureIsRejected(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	rejection := &CLIError{Code: CodeAuthTokenExpired, Message: "token rejected"}
+	testseam.Swap(t, &deapConnectForceRefreshSupervisorToken, func(context.Context, string, string) (string, error) {
+		return "", errors.New("refresh unavailable")
+	})
+	caller := &employeeServerErrorCaller{errors: []error{rejection}}
+	InitDepsForTest(t, caller)
+	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new"); !errors.Is(err, rejection) {
+		t.Fatalf("auth rejection = %v", err)
+	}
+	var receipt employeeServerOperation
+	raw, err := os.ReadFile(employeeServerOperationPath(b.DWSProfile))
+	if err != nil || json.Unmarshal(raw, &receipt) != nil || receipt.Phase != "rejected" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if len(caller.tokens) != 1 {
+		t.Fatalf("calls=%d", len(caller.tokens))
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingDoesNotRefreshPermissionRejection(t *testing.T) {
+	_, b := lifecycleFixture(t)
+	rejection := apperrors.NewAuth("permission denied", apperrors.WithReason("http_403"))
+	testseam.Swap(t, &deapConnectForceRefreshSupervisorToken, func(context.Context, string, string) (string, error) {
+		t.Fatal("permission rejection must not refresh the access token")
+		return "", nil
+	})
+	caller := &employeeServerErrorCaller{errors: []error{rejection}}
+	InitDepsForTest(t, caller)
+	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new"); !errors.Is(err, rejection) {
+		t.Fatalf("permission rejection = %v", err)
+	}
+	var receipt employeeServerOperation
+	raw, err := os.ReadFile(employeeServerOperationPath(b.DWSProfile))
+	if err != nil || json.Unmarshal(raw, &receipt) != nil || receipt.Phase != "rejected" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
 }
 
 func TestCrossPlatformCoverageEmployeeServerReceiptReplayAndIdentity(t *testing.T) {
 	_, b := lifecycleFixture(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/de_local_agent_rebind": {`{"success":true,"data":"binding-new"}`}}}
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`}}}
 	InitDepsForTest(t, caller)
 	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
 	_ = cmd.Flags().Set("local-agent-name", "办公室 Agent")
@@ -92,7 +239,7 @@ func TestCrossPlatformCoverageEmployeeServerFailureClassification(t *testing.T) 
 			_, b := lifecycleFixture(t)
 			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 			if tc.response != "" {
-				caller.responses["deap-dev/de_local_agent_rebind"] = []string{tc.response, `{"success":true,"data":"recovered"}`}
+				caller.responses["deap-dev/rebind_local_agent"] = []string{tc.response, `{"success":true,"data":"recovered"}`}
 			}
 			InitDepsForTest(t, caller)
 			cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
@@ -126,7 +273,7 @@ func TestCrossPlatformCoverageEmployeeServerUnbindRetriesExactID(t *testing.T) {
 	if _, err := mutateEmployeeServerBinding(cmd, b, "unbind", ""); err == nil {
 		t.Fatal("missing failure")
 	}
-	caller.responses["deap-dev/de_local_agent_unbind"] = []string{`{"success":true,"data":true}`}
+	caller.responses["deap-dev/unbind_local_agent"] = []string{`{"success":true,"data":true}`}
 	if id, err := mutateEmployeeServerBinding(cmd, b, "unbind", ""); err != nil || id != b.RuntimeBindingID {
 		t.Fatalf("unbind retry %q %v", id, err)
 	}
@@ -173,7 +320,7 @@ func TestCrossPlatformCoverageEmployeeServerDurableBeforeNetworkAndBeforeCommit(
 	for _, phase := range []string{"pending", "confirmed"} {
 		t.Run(phase, func(t *testing.T) {
 			_, b := lifecycleFixture(t)
-			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/de_local_agent_bind": {`{"success":true,"data":"bound-id"}`}}}
+			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/bind_local_agent": {`{"success":true,"data":"bound-id"}`}}}
 			InitDepsForTest(t, caller)
 			testseam.Swap(t, &employeeServerWrite, func(path string, value any) error {
 				if op, ok := value.(employeeServerOperation); ok && op.Phase == phase {
@@ -201,7 +348,7 @@ func TestCrossPlatformCoverageEmployeeServerBindMigrationAndDryRun(t *testing.T)
 	if err := updateEmployeeBinding(b); err != nil {
 		t.Fatal(err)
 	}
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/de_local_agent_bind": {`{"success":true,"data":"migrated-id"}`}}}
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/bind_local_agent": {`{"success":true,"data":"migrated-id"}`}}}
 	InitDepsForTest(t, caller)
 	cmd := newEmployeeServerBindCommand()
 	cmd.SetContext(context.Background())
@@ -233,7 +380,7 @@ func TestCrossPlatformCoverageEmployeeServerBindMigrationAndDryRun(t *testing.T)
 
 func TestCrossPlatformCoverageEmployeeServerBusyKeepsOldIDAndBlocksNewHost(t *testing.T) {
 	_, b := lifecycleFixture(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/de_local_agent_rebind": {`{"success":false}`, `{"success":true,"data":"new-id"}`}}}
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/rebind_local_agent": {`{"success":false}`, `{"success":true,"data":"new-id"}`}}}
 	InitDepsForTest(t, caller)
 	started := false
 	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) { started = true; return "created", nil })
@@ -266,7 +413,7 @@ func TestCrossPlatformCoverageEmployeeServerBusyKeepsOldIDAndBlocksNewHost(t *te
 
 func TestCrossPlatformCoverageEmployeeServerNewDeviceRebindUsesOldID(t *testing.T) {
 	caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
-	caller.responses["deap-dev/de_local_agent_rebind"] = []string{`{"success":true,"data":"new-device-binding"}`}
+	caller.responses["deap-dev/rebind_local_agent"] = []string{`{"success":true,"data":"new-device-binding"}`}
 	InitDepsForTest(t, caller)
 	setupSuccessfulConnectSeams(t)
 	var saved digitalEmployeeBinding
@@ -285,7 +432,7 @@ func TestCrossPlatformCoverageEmployeeServerNewDeviceRebindUsesOldID(t *testing.
 		t.Fatalf("wrong new device: %+v", saved)
 	}
 	for _, call := range caller.tokenCalls {
-		if call.toolName == "de_local_agent_bind" {
+		if call.toolName == "bind_local_agent" {
 			t.Fatal("new device used bind instead of atomic rebind")
 		}
 	}
@@ -297,7 +444,7 @@ func TestCrossPlatformCoverageEmployeeServerNewDeviceRebindUsesOldID(t *testing.
 
 func TestCrossPlatformCoverageEmployeeConnectServerRejectionDoesNotStartAdapter(t *testing.T) {
 	caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
-	caller.responses["deap-dev/de_local_agent_bind"] = []string{`{"success":false}`}
+	caller.responses["deap-dev/bind_local_agent"] = []string{`{"success":false}`}
 	InitDepsForTest(t, caller)
 	setupSuccessfulConnectSeams(t)
 	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error { t.Fatal("rejected bind persisted as bound"); return nil })
@@ -422,7 +569,7 @@ func TestCrossPlatformCoverageEmployeeBindingDryRunDoesNotRepairReceipts(t *test
 func TestCrossPlatformCoverageEmployeeConnectReplaysReceiptAfterLocalCommitFailure(t *testing.T) {
 	caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
 	for key, values := range caller.responses {
-		if key != "deap-dev/de_local_agent_bind" {
+		if key != "deap-dev/bind_local_agent" {
 			caller.responses[key] = append(append([]string{}, values...), values...)
 		}
 	}
@@ -449,7 +596,7 @@ func TestCrossPlatformCoverageEmployeeConnectReplaysReceiptAfterLocalCommitFailu
 	}
 	calls := 0
 	for _, call := range caller.tokenCalls {
-		if call.toolName == "de_local_agent_bind" {
+		if call.toolName == "bind_local_agent" {
 			calls++
 		}
 	}

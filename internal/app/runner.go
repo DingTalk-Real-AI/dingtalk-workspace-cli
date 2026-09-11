@@ -182,7 +182,7 @@ func (r *runtimeRunner) RunWithToken(ctx context.Context, invocation executor.In
 	// 决定是否恢复，不能让 HTTP 层在一次调用内自动重放。
 	if invocation.CanonicalProduct == "deap-dev" {
 		switch invocation.Tool {
-		case "de_local_agent_bind", "de_local_agent_unbind", "de_local_agent_rebind":
+		case "bind_local_agent", "unbind_local_agent", "rebind_local_agent":
 			clone.transport = clone.transport.WithMaxRetries(0).WithRedirectsDisabled()
 		}
 	}

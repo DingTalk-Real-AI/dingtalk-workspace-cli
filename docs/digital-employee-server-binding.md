@@ -36,9 +36,9 @@
 
 | MCP | 包装对象 | 业务字段 | 成功 data |
 |---|---|---|---|
-| `de_local_agent_bind` | `BindLocalAgentRequest` | agentUuid、deviceId；可选 localAgentName、extensions | 非空绑定 ID 字符串 |
-| `de_local_agent_unbind` | `UnbindLocalAgentRequest` | agentUuid、runtimeBindingId | true |
-| `de_local_agent_rebind` | `RebindLocalAgentRequest` | agentUuid、runtimeBindingId、deviceId；可选 localAgentName、extensions | 新绑定 ID 字符串 |
+| `bind_local_agent` | `BindLocalAgentRequest` | agentUuid、deviceId；可选 localAgentName、extensions | 非空绑定 ID 字符串 |
+| `unbind_local_agent` | `UnbindLocalAgentRequest` | agentUuid、runtimeBindingId | true |
+| `rebind_local_agent` | `RebindLocalAgentRequest` | agentUuid、runtimeBindingId、deviceId；可选 localAgentName、extensions | 新绑定 ID 字符串 |
 
 `identity` 由网关根据主管登录态注入，CLI 不暴露或传入 userId/orgId/identity。请求使用明确主管 Profile 的进程内 Token，不使用刚换取的员工 Token，不改变当前 Profile。服务端负责权限、旧绑定版本和在途/待恢复任务校验。
 
