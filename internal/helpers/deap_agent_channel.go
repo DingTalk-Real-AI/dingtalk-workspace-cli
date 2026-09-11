@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -530,6 +531,9 @@ func digitalEmployeeDeliveryResult(result map[string]any, conversationID, idempo
 }
 
 func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]any, conversationID, idempotencyKey string) (map[string]any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	delivery := digitalEmployeeDeliveryResult(sendResult, conversationID, idempotencyKey)
 	if strings.TrimSpace(jsonScalar(delivery["openMessageId"])) != "" {
 		return delivery, nil
@@ -539,12 +543,18 @@ func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]a
 		return nil, apperrors.NewInternal("数字员工发送响应缺少 openMessageId 和 openTaskId，无法确认投递结果")
 	}
 	for attempt := 0; attempt < digitalEmployeeReceiptAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if attempt > 0 {
 			if err := deapChannelReceiptWait(ctx, digitalEmployeeReceiptInterval); err != nil {
 				return nil, err
 			}
 		}
 		status, err := callMachineMCPJSON(ctx, "im", "query_message_send_status", map[string]any{"openTaskId": taskID})
+		if errors.Is(err, errEmployeeReceiptNotVisible) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("query digital employee message status: %w", err)
 		}
@@ -553,7 +563,9 @@ func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]a
 			return delivery, nil
 		}
 	}
-	return nil, apperrors.NewInternal("数字员工发送任务未在有限等待时间内返回 openMessageId，无法确认投递结果")
+	return nil, apperrors.NewInternal("数字员工发送任务未在有限等待时间内返回 openMessageId，投递状态未知，请勿重新发送",
+		apperrors.WithReason("delivery_unknown"), apperrors.WithRetryable(false),
+		apperrors.WithHint("消息可能已经送达，请先核对原会话；不要重跑发送或 Agent 任务。"))
 }
 
 func waitForDigitalEmployeeReceipt(ctx context.Context, delay time.Duration) error {
@@ -599,6 +611,10 @@ func callPrivateMCPJSON(ctx context.Context, server, tool string, args map[strin
 		return nil, apperrors.NewInternal("MCP caller is not initialized")
 	}
 	result, err := deps.Caller.CallTool(ctx, server, tool, args)
+	if server == "im" && tool == "query_message_send_status" && isEmployeeReceiptNotVisible(err) {
+		// 只保留可重查回执的安全分类，不携带原始诊断、正文或凭据。
+		return nil, errEmployeeReceiptNotVisible
+	}
 	if err != nil || result == nil {
 		return nil, fmt.Errorf("private MCP operation %s/%s failed", server, tool)
 	}
