@@ -98,6 +98,8 @@ func submit(event Event, budget time.Duration, launch func(context.Context, []by
 
 func validEvent(e Event) bool {
 	// Reject oversized profile metadata before JSON encoding on the exit path.
+	// The reporting protocol accepts the CLI's portable 0..255 exit codes;
+	// larger native Windows exit codes are intentionally discarded.
 	return e.Protocol == protocolVersion && e.Command != "" && e.Path != "" &&
 		e.DurationMillis >= 0 && e.DurationMillis <= int64((1<<63-1)/time.Millisecond) &&
 		e.CompletedAtMillis > 0 && e.ExitCode >= 0 && e.ExitCode <= 255 &&
@@ -133,6 +135,8 @@ func launchDetached(ctx context.Context, payload []byte) error {
 	go func() { _ = cmd.Wait() }()
 	stopCancel := context.AfterFunc(ctx, func() {
 		_ = writeEnd.Close()
+		// Cancellation may race with a completed handoff. Killing the sender
+		// can lose that event; retaining the bounded, best-effort lifecycle wins.
 		_ = cmd.Process.Kill()
 	})
 	defer stopCancel()

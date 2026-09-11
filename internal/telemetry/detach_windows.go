@@ -23,5 +23,6 @@ import (
 func detach(cmd *exec.Cmd) {
 	// Detached console process, separate Ctrl+C group, and no console window.
 	// Standard handles are explicitly supplied by os/exec (stdin pipe / NUL).
+	// DETACHED_PROCESS prevents console creation; HideWindow is redundant here.
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000008 | 0x00000200, HideWindow: true}
 }
