@@ -1010,6 +1010,23 @@ func TestDeliveryCatalogAitableParamDeclsMatchMergeBaseContract(t *testing.T) {
 	if shortcutRecordIDs["type"] != "array" {
 		t.Fatalf("aitable +record-query --record-ids type = %#v, want array (shortcut StringSlice)", shortcutRecordIDs["type"])
 	}
+	shortcutAvoidWhen, ok := shortcutLeaf["avoid_when"].([]string)
+	if !ok {
+		t.Fatalf("aitable +record-query avoid_when = %#v, want []string", shortcutLeaf["avoid_when"])
+	}
+	avoidText := strings.Join(shortcutAvoidWhen, "\n")
+	for _, required := range []string{
+		"完整逐行明细或逐条业务处理全表数据，且不做汇总、统计、分析或文件交付",
+		"单表直接标量、分组或去重统计时，使用 dws aitable record stats 或 record group-stats",
+		"交付完整原始数据文件时，使用 dws aitable export data",
+	} {
+		if !strings.Contains(avoidText, required) {
+			t.Fatalf("aitable +record-query final avoid_when = %q, missing %q", avoidText, required)
+		}
+	}
+	if strings.Contains(avoidText, "需要全部、完整、汇总、统计、导出或逐条处理全表数据") {
+		t.Fatalf("aitable +record-query final avoid_when routes summary, statistics, or export to record query --all: %q", avoidText)
+	}
 
 	for _, path := range []string{
 		"aitable view update aggregate",

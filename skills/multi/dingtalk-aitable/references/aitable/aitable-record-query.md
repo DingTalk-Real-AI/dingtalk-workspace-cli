@@ -45,7 +45,7 @@ Flags:
 - `--all` 仅用于用户已明确许可的完整逐行明细或逐条业务操作；它不是数据分析接口。未经明确许可，禁止 `record query --all`、无限制分页、整表导出或拉取大量字段。
 - 原始记录过滤、排序和 Top N 直接使用 `record query` 的服务端 filters/sort/limit；单表直接标量、分组或去重统计使用 `record stats` / `record group-stats`；JOIN、字段间算术、聚合后派生、分档、日期运算、窗口计算和汇总结果排名使用 `dws aitable psql`。禁止因任一服务端能力报错、超时或查询编写困难而全量拉取记录后在 Agent、本地脚本或电子表格中计算。
 - 用户需要导出完整数据时，优先使用 `dws aitable export data`；导出的文件不得被拉回 Agent 上下文用于等价分析。
-- 只有确认 `psql -l`、`psql -t` 和最小查询均成功，已定位具体 psql 限制并尝试等价或拆分 SQL，向用户说明字段、范围、预计记录数和体积且获得明确许可后，才可使用 `--all`。即使获准也必须服务端过滤、仅取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--page-limit 0` 时必须再次确认。
+- 已获明确许可的非分析完整逐行明细或逐条业务操作可直接使用 `--all`，不需要也不触发 `psql -l`、`psql -t` 或最小查询探测；它也不能作为 psql 失败时的降级。使用前必须说明字段、范围、预计记录数和体积；即使获准也必须服务端过滤、仅取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--page-limit 0` 时必须再次确认。
 - CLI 首次请求不传 cursor，后续原样使用上一页 `data.nextCursor`，并检测 cursor 循环；页间间隔 200ms。
 - 同一分页会话的 `base-id/table-id/filters/sort/query/field-ids/limit` 必须保持不变，禁止重发第一页、复用旧会话 cursor、修改排序或自行构造 cursor。
 - 只有自动分页输出 `complete=true`，或手动分页时 `data.nextCursor` 为空，才表示完整结束。普通扫描某页恰好返回 `limit` 条时，服务端可能返回 `nextCursor`；用它续页后若调用成功、`records=[]` 且 `nextCursor` 为空，这是正常的末页探测，应正常完成，不能报错、重试或判定漏查。
