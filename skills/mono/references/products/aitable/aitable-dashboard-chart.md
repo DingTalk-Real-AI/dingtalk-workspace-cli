@@ -45,7 +45,7 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 | `chart share get` | 获取图表分享配置 | `--base-id` `--dashboard-id` `--chart-id` |
 | `chart share update` | 更新图表分享配置（`--enabled true/false`，开启配 `--share-type`，用 `ORG`；部分组织禁用了 `PUBLIC` 公开分享；报 `Illegal argument` 时改用 `ORG`） | `--base-id` `--dashboard-id` `--chart-id` `--enabled` |
 
-> `chart create` 的 `--layout` 是**必填**（12 列网格布局，如 `{"x":0,"y":0,"w":6,"h":4}`）；不传本地校验直接拒。`chart update` 的 `--config` 也**必填**——即便只想改 layout，也要带完整 config，否则服务端拒绝。
+> `chart create` 的 `--layout` 是**必填**；它和携带 layout 的 `chart update` 都会在写前自动调用 `get_dashboard` 并强制校验根布局。已确认应用模式时传本地只读参数 `--is-app-mode=true`，使用 48 列；否则只有 `schemaVersionTypeVerified=true` 时才按原始类型判断，JSON number `2` 为 48 列，其他已验证值为 12 列。证据缺失、布局越界或使用非根容器 `parentId` 时停止且不调用 Chart 写工具；`parentId` 省略、为空或 `root-responsive-layout` 均属于根布局。`schemaVersion` 与 `isAppMode` 不能写入或透传到 Dashboard/Chart payload。`chart update` 的 `--config` 也**必填**——即便只想改 layout，也要带完整 config，否则服务端拒绝。
 
 ## 配置获取流程
 

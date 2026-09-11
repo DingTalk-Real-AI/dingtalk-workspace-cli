@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +17,26 @@ import (
 
 type tokenManagerSnapshotProvider struct {
 	load func() (*authpkg.TokenData, error)
+}
+
+type tokenManagerProfileSnapshotProvider struct {
+	load func(string) (*authpkg.TokenData, error)
+}
+
+func (p tokenManagerProfileSnapshotProvider) GetAccessToken(context.Context) (string, error) {
+	data, err := p.load("")
+	if err != nil || data == nil {
+		return "", err
+	}
+	return data.AccessToken, nil
+}
+
+func (p tokenManagerProfileSnapshotProvider) GetTokenSnapshot(context.Context) (*authpkg.TokenData, error) {
+	return p.load("")
+}
+
+func (p tokenManagerProfileSnapshotProvider) GetTokenSnapshotForProfile(_ context.Context, profile string) (*authpkg.TokenData, error) {
+	return p.load(profile)
 }
 
 func (p tokenManagerSnapshotProvider) GetAccessToken(context.Context) (string, error) {
@@ -89,6 +110,58 @@ func TestCrossPlatformCoverageTokenManagerCachesUntilMarkerRevisionChanges(t *te
 	rotated, err := manager.Get(context.Background(), configDir, "")
 	if err != nil || rotated.AccessToken != "token-b" || calls.Load() != 2 {
 		t.Fatalf("rotated token = %#v, %v, calls=%d", rotated, err, calls.Load())
+	}
+}
+
+func TestCrossPlatformCoverageTokenManagerUsesExplicitProfileCacheKeys(t *testing.T) {
+	configDir := t.TempDir()
+	if err := authpkg.WriteTokenMarker(configDir); err != nil {
+		t.Fatal(err)
+	}
+	oldProvider, oldLegacy := newAccessTokenProvider, newLegacyTokenManager
+	oldEdition := edition.Get()
+	edition.Override(&edition.Hooks{})
+	loads := make(map[string]int)
+	newAccessTokenProvider = func(string) accessTokenGetter {
+		return tokenManagerProfileSnapshotProvider{load: func(profile string) (*authpkg.TokenData, error) {
+			loads[profile]++
+			return &authpkg.TokenData{
+				AccessToken: "token-for-" + profile,
+				ExpiresAt:   time.Now().Add(time.Hour),
+			}, nil
+		}}
+	}
+	newLegacyTokenManager = func(string) legacyTokenGetter {
+		return tokenManagerLegacyGetter{err: authpkg.ErrTokenDataNotFound}
+	}
+	t.Cleanup(func() {
+		newAccessTokenProvider, newLegacyTokenManager = oldProvider, oldLegacy
+		edition.Override(oldEdition)
+	})
+
+	manager := NewTokenManager()
+	for _, profile := range []string{"corp-a:user-a", "corp-b:user-b"} {
+		for range 2 {
+			snapshot, err := manager.GetForProfile(context.Background(), configDir, "", profile)
+			if err != nil || snapshot.AccessToken != "token-for-"+profile {
+				t.Fatalf("GetForProfile(%q) = %#v, %v", profile, snapshot, err)
+			}
+		}
+		if loads[profile] != 1 {
+			t.Fatalf("profile %q loads = %d, want 1", profile, loads[profile])
+		}
+	}
+}
+
+func TestCrossPlatformCoverageTokenManagerRejectsExplicitProfileForLegacyProvider(t *testing.T) {
+	configDir := t.TempDir()
+	installTokenManagerFakes(t, func() (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{AccessToken: "legacy-provider-token"}, nil
+	})
+
+	_, err := NewTokenManager().GetForProfile(context.Background(), configDir, "", "corp-a:user-a")
+	if err == nil || !strings.Contains(err.Error(), "profile selection is not supported") {
+		t.Fatalf("GetForProfile() error = %v", err)
 	}
 }
 
