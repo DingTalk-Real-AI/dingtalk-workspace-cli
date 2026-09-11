@@ -1226,6 +1226,7 @@ var aitableReadRetryTools = map[string]struct{}{
 	"get_view_lock_status":          {},
 	"get_workflow":                  {},
 	"list_bases":                    {},
+	"list_comments":                 {},
 	"list_form_fields":              {},
 	"list_form_views":               {},
 	"list_roles":                    {},
@@ -2106,9 +2107,9 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+			AgentSummary: "管理 AI 表格 Base、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
 			UseWhen: []string{
-				"需要读取或管理 AI 表格中的结构、数据、应用模式、视图、权限、导入导出或工作流时",
+				"需要读取或管理 AI 表格中的结构、数据、记录评论、应用模式、视图、权限、导入导出或工作流时",
 			},
 			AvoidWhen: []string{
 				"目标是在线电子表格单元格读写时用 sheet；普通文档用 doc",
@@ -2118,7 +2119,7 @@ func newAitableCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
-		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
+		Long: `管理钉钉 AI 表格：Base 管理、应用模式、数据表、字段、记录、记录评论、视图、表单、仪表盘、图表、导入导出。
 
 命令结构:
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
@@ -2126,6 +2127,7 @@ func newAitableCommand() *cobra.Command {
   dws aitable table      [get|create|update|delete]                                     数据表管理
   dws aitable field      [get|create|update|delete|search-options|run-ai]               字段管理
   dws aitable record     [query|ids|stats|group-stats|create|create-sub|update|delete]  记录管理
+  dws aitable comment    [list|create|reply|update|delete]                              记录评论管理
   dws aitable view       [get|create|update|delete]                                     视图管理
   dws aitable entity     search                                                         人员、部门与群组候选搜索
   dws aitable form       [list|delete|update|submit]                                    表单管理
@@ -10162,7 +10164,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	// 组装 aitable 命令树
 	root.AddCommand(
 		baseCmd, newAitableAppCommand(), tableCmd, fieldCmd,
-		recordCmd, viewCmd, newAitableEntityCommand(), formCmd,
+		recordCmd, newAitableCommentCommand(), viewCmd, newAitableEntityCommand(), formCmd,
 		workflowCmd,
 		dashboardCmd, chartCmd,
 		exportCmd, importCmd,

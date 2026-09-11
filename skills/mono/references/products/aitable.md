@@ -93,6 +93,16 @@
 | `record primary-doc-get` | 查询记录的主键文档 nodeId | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 无文档时返回 `no record` 错误 |
 | `record primary-doc-create` | 为记录创建主键文档 | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 幂等；`--field-id` 须 primaryDoc 类型 |
 
+### comment (记录评论) → 详见 [aitable-comment.md](./aitable/aitable-comment.md)
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `comment list` | 分页查询记录评论与回复 | `--base-id --table-id --record-id` | 空 comments 不代表结束；按 hasMore/nextToken 续页 |
+| `comment create` | 创建评论话题 | 定位参数 + `--content` 或 `--rich-content` | 非幂等；未知状态先 list 对账 |
+| `comment reply` | 回复已有评论 | 定位参数 + `--topic-id --comment-key` + 正文 | 标识必须来自同一记录真实返回；非幂等 |
+| `comment update` | 完整替换本人评论正文 | 定位参数 + `--topic-id --comment-key` + 正文 | 仅纯文本会移除旧 @和图片；无 CAS |
+| `comment delete` | 删除本人评论 | 定位参数 + `--topic-id --comment-key --yes` | 不可恢复；关联回复处理由服务端决定 |
+
 ### view (视图管理)
 
 | 命令 | 用途 | 必填参数 | 路由提醒 |
