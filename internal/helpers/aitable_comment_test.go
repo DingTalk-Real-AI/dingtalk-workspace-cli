@@ -164,6 +164,66 @@ func TestCrossPlatformCoverageAitableCommentRichContentLimits(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitableCommentContentEdgeCases(t *testing.T) {
+	if _, err := aitableCommentTextContent(" \n "); err == nil || !strings.Contains(err.Error(), "不能为空") {
+		t.Fatalf("blank text error = %v", err)
+	}
+	if _, err := aitableCommentTextContent(strings.Repeat("😀", 5001)); err == nil || !strings.Contains(err.Error(), "10000") {
+		t.Fatalf("long text error = %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "invalid json", raw: `{`, wantErr: "有效的 JSON 对象数组"},
+		{name: "empty nodes", raw: `[]`, wantErr: "节点数必须在 1-100"},
+		{name: "missing type", raw: `[{"text":"x"}]`, wantErr: ".type 必须是非空字符串"},
+		{name: "non-string type", raw: `[{"type":1}]`, wantErr: ".type 必须是非空字符串"},
+		{name: "text value is not a string", raw: `[{"type":"text","text":1}]`, wantErr: "必须包含字符串 text"},
+		{name: "mention rejects text", raw: `[{"type":"mention","userId":"u","text":"x"}]`, wantErr: "mention 节点不能包含 text"},
+		{name: "mention requires user id", raw: `[{"type":"mention"}]`, wantErr: "必须包含非空外部 userId"},
+		{name: "mention rejects invalid corp id", raw: `[{"type":"mention","userId":"u","corpId":1}]`, wantErr: ".corpId 必须是非空字符串"},
+		{name: "image rejects text", raw: `[{"type":"image","url":"/core/api/resources/r/detail","text":"x"}]`, wantErr: "image 节点不能包含 text"},
+		{name: "image requires string url", raw: `[{"type":"image","url":1}]`, wantErr: ".url 必须匹配"},
+		{name: "image dimension requires number", raw: `[{"type":"image","url":"/core/api/resources/r/detail","height":"1"}]`, wantErr: "必须是 1-20000 的整数"},
+		{name: "image dimension must be positive", raw: `[{"type":"image","url":"/core/api/resources/r/detail","height":0}]`, wantErr: "必须是 1-20000 的整数"},
+		{name: "image dimension must not overflow", raw: `[{"type":"image","url":"/core/api/resources/r/detail","height":9223372036854775808}]`, wantErr: "必须是 1-20000 的整数"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parseAitableCommentRichContent(test.raw)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %v, want containing %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableCommentImageURLBoundaries(t *testing.T) {
+	longID := strings.Repeat("a", 129)
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "valid", value: "/core/api/resources/aZ09_-/detail", want: true},
+		{name: "wrong prefix", value: "core/api/resources/r/detail"},
+		{name: "wrong suffix", value: "/core/api/resources/r"},
+		{name: "empty resource", value: "/core/api/resources//detail"},
+		{name: "long resource", value: "/core/api/resources/" + longID + "/detail"},
+		{name: "invalid resource character", value: "/core/api/resources/a.b/detail"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := validAitableCommentImageURL(test.value); got != test.want {
+				t.Fatalf("validAitableCommentImageURL(%q) = %v, want %v", test.value, got, test.want)
+			}
+		})
+	}
+}
+
 func repeatedAitableCommentNodes(node string, count int) string {
 	return "[" + strings.TrimSuffix(strings.Repeat(node+",", count), ",") + "]"
 }
