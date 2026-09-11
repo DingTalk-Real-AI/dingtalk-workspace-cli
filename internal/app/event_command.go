@@ -368,7 +368,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 	f.StringVar(&personalOpts.OpenDingTalkID, "open-dingtalk-id", "",
 		"单聊对端或指定发送人的 openDingtalkId（与 --user 二选一）")
 	f.StringVar(&personalOpts.GroupID, "group", "",
-		"group 规则：openConversationId")
+		"group 规则：仅接受单个 openConversationId，不支持逗号分隔；多群请分别启动 consume")
 	f.StringSliceVar(&personalOpts.RoleTypes, "role-types", nil,
 		"待办事件角色范围：creator,executor,participant；省略时订阅全部三种角色")
 	f.StringVar(&personalOpts.ControlBaseURL, "personal-event-base-url", "",

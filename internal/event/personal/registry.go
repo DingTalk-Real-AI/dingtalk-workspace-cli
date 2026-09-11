@@ -581,6 +581,9 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 		if groupID == "" {
 			return "", nil, fmt.Errorf("--group is required for %s", eventKey)
 		}
+		if strings.Contains(groupID, ",") {
+			return "", nil, fmt.Errorf("--group accepts exactly one openConversationId; start a separate event consume command for each group")
+		}
 		return def.RuleType, map[string]any{
 			"openConversationId": groupID,
 		}, nil
