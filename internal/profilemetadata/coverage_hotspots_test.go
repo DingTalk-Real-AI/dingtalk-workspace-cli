@@ -18,6 +18,18 @@ func TestCrossPlatformCoverageSelectorAndIndexEdges(t *testing.T) {
 	if _, _, ok := ParseIdentitySelector(":user"); ok {
 		t.Fatal("empty corp accepted")
 	}
+	if _, _, ok := ParseIdentitySelector("corp:"); ok {
+		t.Fatal("empty user accepted")
+	}
+	if _, _, ok := ParseIdentitySelector(":"); ok {
+		t.Fatal("empty corp and user accepted")
+	}
+	if _, _, ok := ParseIdentitySelector("no-colon-selector"); ok {
+		t.Fatal("selector without colon accepted")
+	}
+	if _, _, ok := ParseIdentitySelector(""); ok {
+		t.Fatal("empty selector accepted")
+	}
 	cfg := &ProfilesConfig{Profiles: []Profile{{Name: "n", CorpID: "c1", UserID: "u1"}}}
 	if got := ExactProfileSelectorForCorp(cfg, "c1", "c1:missing"); got != "" {
 		t.Fatalf("missing exact selector = %q", got)

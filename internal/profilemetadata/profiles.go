@@ -40,13 +40,21 @@ type Profile struct {
 	UpdatedAt         string   `json:"updatedAt,omitempty"`
 }
 
+// ParseIdentitySelector splits corpId:userId composite selectors. Both
+// trimmed segments must be non-empty: a missing colon or either empty
+// segment is not a composite selector.
 func ParseIdentitySelector(selector string) (corpID, userID string, ok bool) {
 	selector = strings.TrimSpace(selector)
 	idx := strings.Index(selector, ":")
-	if idx <= 0 || idx >= len(selector)-1 {
+	if idx < 0 {
 		return "", "", false
 	}
-	return strings.TrimSpace(selector[:idx]), strings.TrimSpace(selector[idx+1:]), true
+	corpID = strings.TrimSpace(selector[:idx])
+	userID = strings.TrimSpace(selector[idx+1:])
+	if corpID == "" || userID == "" {
+		return "", "", false
+	}
+	return corpID, userID, true
 }
 
 func ProfileSelector(profile Profile) string {
