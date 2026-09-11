@@ -58,6 +58,7 @@ type lockBackend interface{ release() error }
 type openOptions struct {
 	counters *Counters
 	noCreate bool
+	userOnly bool
 }
 
 type Option func(*openOptions)
@@ -70,6 +71,14 @@ func WithCounters(c *Counters) Option {
 // creating it. Speculative readers must never mutate the filesystem.
 func WithNoCreate() Option {
 	return func(o *openOptions) { o.noCreate = true }
+}
+
+// WithUserOnly bypasses the DWS_SCHEMA_CACHE_DIR / shared / system bases and
+// opens the per-user cache directly. The repair path uses it to persist and
+// reuse a repair when the preferred shared cache exists but cannot be locked
+// (typically root-owned read-only with corrupted artifacts).
+func WithUserOnly() Option {
+	return func(o *openOptions) { o.userOnly = true }
 }
 
 // Cache is a securely opened edition-specific cache directory.
@@ -94,7 +103,7 @@ func Open(edition string, options ...Option) (*Cache, error) {
 	if opts.counters == nil {
 		opts.counters = &Counters{}
 	}
-	b, err := openPlatformImpl(edition, opts.counters, opts.noCreate)
+	b, err := openPlatformImpl(edition, opts.counters, opts.noCreate, opts.userOnly)
 	if err != nil {
 		return nil, err
 	}

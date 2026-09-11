@@ -190,9 +190,20 @@ func systemSchemaCacheBase() string {
 	return filepath.Join(base, "dws")
 }
 
-func openPlatform(edition string, counters *Counters, noCreate bool) (backend, error) {
+func openPlatform(edition string, counters *Counters, noCreate, userOnly bool) (backend, error) {
 	digest := sha256.Sum256([]byte(edition))
 	editionHex := hex.EncodeToString(digest[:])
+	if userOnly {
+		base, err := userCacheDir()
+		if err != nil {
+			return nil, fmt.Errorf("%w: user cache directory: %v", ErrDisabled, err)
+		}
+		path, err := openCacheDirectory(base, editionHex, counters, platformIO, noCreate, false)
+		if err != nil {
+			return nil, err
+		}
+		return &windowsCache{path: path, edition: digest, counters: counters, ops: platformIO, shared: false}, nil
+	}
 	if override := os.Getenv("DWS_SCHEMA_CACHE_DIR"); override != "" {
 		path, err := openCacheDirectory(override, editionHex, counters, platformIO, noCreate, true)
 		if err != nil {

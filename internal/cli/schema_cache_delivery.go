@@ -191,11 +191,16 @@ type schemaCacheRuntime struct {
 	products        map[string]*schemaCacheProductLoad
 	payloadMu       sync.Mutex
 	payloads        map[string]*schemaCachePayloadLoad
-	allOnce         sync.Once
-	all             loadedSchemaCatalog
-	allErr          error
-	allMu           sync.RWMutex
-	freshAll        map[string]any
+	// userCache holds the per-user fallback backend adopted by the repair
+	// path when the preferred shared cache cannot be locked (typically
+	// root-owned read-only). Once set, opened() serves reads from it.
+	userCacheMu sync.Mutex
+	userCache   *schemacache.Cache
+	allOnce     sync.Once
+	all         loadedSchemaCatalog
+	allErr      error
+	allMu       sync.RWMutex
+	freshAll    map[string]any
 }
 
 func newSchemaCacheRuntime(options SchemaCacheOptions) *schemaCacheRuntime {
@@ -315,6 +320,9 @@ func (r *schemaCacheRuntime) settledPrewarm() *schemaCachePrewarm {
 }
 
 func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
+	if cache := r.userCacheBackend(); cache != nil {
+		return cache, nil
+	}
 	if pw := r.settledPrewarm(); pw != nil && pw.cache != nil {
 		return pw.cache, nil
 	}
@@ -753,6 +761,43 @@ func (r *schemaCacheRuntime) storeProduct(productID string, product schemaruntim
 	r.productMu.Unlock()
 }
 
+func (r *schemaCacheRuntime) userCacheBackend() *schemacache.Cache {
+	r.userCacheMu.Lock()
+	defer r.userCacheMu.Unlock()
+	return r.userCache
+}
+
+// switchToUserCache re-homes the runtime onto the per-user cache after the
+// preferred shared backend could not be locked for repair — typically a
+// root-owned read-only shared cache holding corrupted artifacts. A repair an
+// earlier process persisted there becomes loadable (and this process's own
+// repair is persisted for later ones), so each new process stops re-paying
+// live assembly. Returns false when no per-user cache is available.
+func (r *schemaCacheRuntime) switchToUserCache() bool {
+	opts := r.optionsSnapshot()
+	options := []schemacache.Option{schemacache.WithUserOnly()}
+	if opts.Counters != nil {
+		options = append(options, schemacache.WithCounters(opts.Counters))
+	}
+	cache, err := schemacache.Open(opts.cacheEdition(), options...)
+	if err != nil {
+		return false
+	}
+	r.userCacheMu.Lock()
+	r.userCache = cache
+	r.userCacheMu.Unlock()
+	// Handles opened against the shared backend reference replaced inodes and
+	// must not serve later reads; drop them so reads reopen via opened().
+	r.resetPayloadsHandle()
+	if identity, err := loadLocalSchemaCacheIdentity(cache.Directory()); err == nil {
+		updated := r.optionsSnapshot()
+		updated.Identity = identity
+		updated.AllowGenerate = false
+		r.storeOptions(updated)
+	}
+	return true
+}
+
 // repairSchemaCache is the sole miss/corruption coordinator. The lock-holder
 // rechecks with low-level readers before touching the process-wide live Once.
 func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any, loadedSchemaCatalog, error) {
@@ -777,8 +822,24 @@ func repairSchemaCache(r *schemaCacheRuntime, recheck func() (any, error)) (any,
 			r.publishGeneratedOrMatching(cache, loaded)
 			return nil, loaded, nil
 		}
-		// Timeout and lock failures both preserve authoritative availability and
-		// skip publication. No cache error may override a successful live result.
+		// A lock timeout means another process is repairing the shared cache
+		// right now: stay live-only and let it finish. Any other lock failure
+		// (typically a root-owned read-only shared cache) falls back to the
+		// per-user cache — reuse a repair an earlier process persisted there,
+		// or persist this one for the processes after us.
+		if !errors.Is(lockErr, schemacache.ErrLockTimeout) && r.switchToUserCache() {
+			if value, err := recheck(); err == nil {
+				return value, loadedSchemaCatalog{}, nil
+			}
+			loaded := deliverySchemaCatalog()
+			if runtimeDeliverySchemaCatalogErr != nil {
+				return nil, loadedSchemaCatalog{}, runtimeDeliverySchemaCatalogErr
+			}
+			r.publishGeneratedOrMatching(r.userCacheBackend(), loaded)
+			return nil, loaded, nil
+		}
+		// Remaining lock failures preserve authoritative availability and skip
+		// publication. No cache error may override a successful live result.
 	}
 	loaded := deliverySchemaCatalog()
 	if runtimeDeliverySchemaCatalogErr != nil {

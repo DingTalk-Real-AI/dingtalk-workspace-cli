@@ -21,7 +21,7 @@ func UseMemoryOpenForTest(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
 	previous := openPlatformImpl
-	openPlatformImpl = func(edition string, counters *Counters, noCreate bool) (backend, error) {
+	openPlatformImpl = func(edition string, counters *Counters, noCreate, userOnly bool) (backend, error) {
 		return openPortableBackend(root, edition, counters, noCreate)
 	}
 	t.Cleanup(func() { openPlatformImpl = previous })

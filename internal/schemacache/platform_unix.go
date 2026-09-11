@@ -117,13 +117,24 @@ func systemSchemaCacheBase() string {
 	}
 }
 
-func openPlatform(edition string, counters *Counters, noCreate bool) (backend, error) {
+func openPlatform(edition string, counters *Counters, noCreate, userOnly bool) (backend, error) {
 	digest := sha256.Sum256([]byte(edition))
 	editionHex := hex.EncodeToString(digest[:])
 	// DWS_SCHEMA_CACHE_DIR is the installer/test override. Production never
 	// embeds compile-time identity; this directory is created when the
 	// caller is allowed to write (install or explicit override), not by the
 	// default runtime walk of /var/cache/dws or /Library/Caches/dws.
+	if userOnly {
+		base, err := userCacheDir()
+		if err != nil {
+			return nil, fmt.Errorf("%w: user cache directory: %v", ErrDisabled, err)
+		}
+		dirfd, path, err := openCacheDirectory(base, editionHex, counters, platformIO, noCreate, false)
+		if err != nil {
+			return nil, err
+		}
+		return &unixCache{dirfd: dirfd, path: path, edition: digest, counters: counters, ops: platformIO, shared: false}, nil
+	}
 	if override := os.Getenv("DWS_SCHEMA_CACHE_DIR"); override != "" {
 		dirfd, path, err := openCacheDirectory(override, editionHex, counters, platformIO, noCreate, true)
 		if err != nil {
