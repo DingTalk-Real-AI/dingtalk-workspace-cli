@@ -103,7 +103,7 @@ dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --so
 - `--sort` 用 `"order":"desc"` → 必须用 `"direction":"desc"`
 - 不加 `--field-ids` 拉全字段 → 大表响应体积过大
 - 只读取第一页或以 `records=[]` 判定结束 → 必须检查 `nextCursor`，完整任务优先 `--all --page-limit 0`
-- 全量拉取后在 context、本地脚本、Python、jq、JavaScript 或电子表格中手动分析 → 必须停止；凡可由 SQL 表达的过滤、JOIN、聚合、排序、分档、日期处理、窗口计算和派生指标都改用 `aitable psql` 在服务端完成。psql 失败先修复并重试，禁止以 `record query --all` 降级。
+- 全量拉取后在 context、本地脚本、Python、jq、JavaScript 或电子表格中手动分析 → 必须停止；原始记录过滤、排序和 Top N 仍使用 `record query` 的服务端能力；仅同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果排序或排名、窗口计算等复杂分析改用 `aitable psql` 在服务端完成。psql 失败先修复并重试，禁止以 `record query --all` 降级。
 
 ## record query-empty — 找空行
 

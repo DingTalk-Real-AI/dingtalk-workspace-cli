@@ -2,7 +2,7 @@
 
 ## 适用场景
 
-用户明确要求 SQL / PostgreSQL / `SELECT`，或需求包含以下任一复杂服务端分析时，使用 `dws aitable psql`：
+仅当用户明确要求 SQL / PostgreSQL / `SELECT` 且目标需要以下任一 psql 专属能力，或需求本身包含以下任一复杂服务端分析时，使用 `dws aitable psql`：
 
 - 查看 PostgreSQL 逻辑表清单或逻辑列类型
 - 最多 8 张同 Base 数据表的 `INNER`、`LEFT`、`RIGHT`、`FULL OUTER JOIN`；`CROSS JOIN` 仅支持两张表
@@ -86,7 +86,7 @@ dws aitable psql -d <BASE_ID> \
 |---|---|
 | “这个 AI 表格里有哪些可查询的数据表” | `psql -d <baseId> -l` |
 | “数据表1有哪些 SQL 字段和类型” | 先 `-l` 解析真实 `tableId`，再 `psql -d <baseId> -t <tableId>` |
-| “查询数据表1前 10 条”且上下文明确要求 SQL | 先核对逻辑表结构，再执行 `SELECT * ... LIMIT 10` |
+| “查询数据表1前 10 条”，即使上下文明确要求 SQL | `record query --limit 10`；这是原始记录读取，SQL 表述不改变结果模型路由 |
 | “把数据表1、数据表2和数据表3关联起来”或“分析不同表之间的关系” | 优先使用 psql：先列出表并查看每张表的结构，再生成一条多表 JOIN SQL；表由 SQL 自动解析 |
 | “按业务状态统计数量” | `record group-stats`，单表直接分组统计不需要 SQL |
 | 明确要求 SQL 聚合，或统计后还需派生、排名或窗口计算 | 优先使用 psql：先查看逻辑结构，再生成对应 SQL |
