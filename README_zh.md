@@ -492,7 +492,7 @@ multi setup 或 upgrade 后，DWS 会把官方 bundle 快照和统一所有权�
 <details>
 <summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期、七个 OA 审批任务/实例事件，以及三个待办生命周期事件。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前 28 个公开事件覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期、七个 OA 审批任务/实例事件、一个 VoIP 通话邀请事件、三个待办生命周期事件，以及互动卡片回调事件。
 
 默认 `ndjson`、`json`、`pretty` 输出保留兼容 transport envelope（`type`、`event_type`、字符串 `data`、`headers`），`compact` 继续沿用原 processor。Agent 或新脚本显式加 `--flatten` 后，输出稳定的顶层业务字段。`--format` 控制 JSON 序列化，`--flatten` 控制数据结构，且不能与 `-f raw` 或 `--debug-raw-events` 同时使用。
 
@@ -513,6 +513,8 @@ dws event list
 dws event schema user_im_message_receive_o2o --flatten
 dws event list --category oa
 dws event schema user_oa_approval_task_created --flatten
+dws event list --category card
+dws event schema user_card_action_triggered --flatten
 dws event list --category todo
 dws event schema user_todo_task_create --flatten
 
@@ -561,10 +563,15 @@ dws event consume \
   --role-types executor \
   --flatten -f ndjson
 
+# 监听互动卡片回调；Schema 描述已评审字段并保留未知扩展
+dws event consume user_card_action_triggered --flatten -f ndjson
+
 # 查看本地 consume，并取消指定订阅
 dws event status
 dws event stop <subscribe_id>
 ```
+
+互动卡片的结构化操作上下文位于 `payload.body.actionData.context`。通过 `questions[].id` 关联 `answers[question_id]`，再按同一问题的 `options[].id` 解析 `selected` 中的选项 ID；空 `selected` 是合法未选择状态。`body.context` 中的 JSON 字符串仅作兼容回退，所有 payload 层级仍保留未知字段。
 
 单聊和指定发送人事件必须且只能选择一种目标身份：企业内部 `userId` 使用 `--user`，`openDingtalkId` 使用 `--open-dingtalk-id`。CLI 不会自动猜测或转换身份类型。
 
