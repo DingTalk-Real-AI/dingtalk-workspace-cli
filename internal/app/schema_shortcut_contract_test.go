@@ -26,6 +26,19 @@ const (
 	publiclyDeliveredShortcutCount = 444
 )
 
+func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *testing.T) {
+	for _, name := range []string{"+media-download", "+media-preview", "+resource-download"} {
+		t.Run(name, func(t *testing.T) {
+			tool := executeShortcutSchemaQuery(t, "--cli-path", "doc "+name)
+			for field, want := range map[string]string{"effect": "write", "risk": "medium", "confirmation": "user_required"} {
+				if got := schemaContractString(tool[field]); got != want {
+					t.Fatalf("%s final %s = %q, want %q", name, field, got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
 	public := make([]shortcut.Shortcut, 0, publicShortcutCount)
