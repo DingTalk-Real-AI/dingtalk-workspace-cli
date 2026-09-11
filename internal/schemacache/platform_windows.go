@@ -254,6 +254,7 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 	if err := validateAncestryPath(current, counters, ops, false, shared); err != nil {
 		return "", err
 	}
+	baseCreated := false
 	for i, part := range parts {
 		next := filepath.Join(current, part)
 		counters.rootOpenOps.Add(1)
@@ -263,11 +264,14 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 				return "", fmt.Errorf("%w: cache ancestry %s", ErrNotFound, part)
 			}
 			if err := validateAncestryPath(current, counters, ops, false, shared); err != nil {
-				return "", fmt.Errorf("%w: missing cache ancestry requires a safe parent", ErrUnsafePath)
+				return "", fmt.Errorf("%w: missing cache ancestry requires a safe parent", ErrUnsafePath, err)
 			}
 			counters.mkdirOps.Add(1)
 			if mkdirErr := ops.mkdir(next); mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
 				return "", fmt.Errorf("%w: create cache ancestry: %v", ErrUnsafePath, mkdirErr)
+			}
+			if i == len(parts)-1 {
+				baseCreated = true
 			}
 			// Harden only the shared-root leaf (final base component), not ProgramData.
 			if shared && i == len(parts)-1 {
@@ -287,8 +291,10 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 	}
 	if shared {
 		// Shared root (e.g. %ProgramData%\dws or DWS_SCHEMA_CACHE_DIR): require a
-		// trusted owner and no ordinary-user write. Creating paths may harden first.
-		if !noCreate {
+		// trusted owner and no ordinary-user write. Harden only a base this call
+		// created — a pre-existing caller-owned root keeps its DACL/owner and is
+		// accepted by the trust check below, mirroring install.ps1.
+		if !noCreate && baseCreated {
 			_ = ops.restrictACL(current, true)
 		}
 		if err := validateDirectorySecurity(current, counters, ops, true); err != nil {

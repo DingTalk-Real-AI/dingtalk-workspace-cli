@@ -2861,6 +2861,10 @@ jobs:
         run: |
           set -eu
           curl -fsSL -o /tmp/protoc-35.1.zip https://github.com/protocolbuffers/protobuf/releases/download/v35.1/protoc-35.1-linux-x86_64.zip
+          # Verify the archive digest before elevating: the zip is unpacked as
+          # root into /usr/local, so a tampered download must stop here. Value
+          # pinned to the official v35.1 release asset.
+          echo "6930ebf62bd4ea607b98fff052596c6ee564b9835b4ce172c75a3f53ae9d91b7  /tmp/protoc-35.1.zip" | sha256sum -c -
           sudo unzip -o /tmp/protoc-35.1.zip -d /usr/local
           test "$(protoc --version)" = "libprotoc 35.1"
 

@@ -1032,6 +1032,72 @@ build_shared_schema_cache
 			t.Fatalf("caller child under dws/schema mode = %04o unexpectedly group/other accessible", secretInfo.Mode().Perm())
 		}
 	})
+
+	t.Run("pre-existing traversable dws/schema widens only new editions", func(t *testing.T) {
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		ownedEdition := filepath.Join(shared, "dws", "schema", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		if err := os.MkdirAll(ownedEdition, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		ownedFile := filepath.Join(ownedEdition, "meta.cache")
+		mustWriteFile(t, ownedFile, []byte("old\n"), 0o600)
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "custom-newedition-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("pre-existing schema warmup harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("traversable pre-existing dws/schema did not claim success:\n%s", text)
+		}
+		newEdition := filepath.Join(shared, "dws", "schema", "open")
+		for _, p := range []string{newEdition, filepath.Join(newEdition, "v1")} {
+			di, err := os.Stat(p)
+			if err != nil {
+				t.Fatalf("stat %s: %v", p, err)
+			}
+			if di.Mode().Perm()&0o005 != 0o005 {
+				t.Fatalf("%s mode %04o missing other r+x (new edition must be shared-readable)", p, di.Mode().Perm())
+			}
+		}
+		shard, err := os.Stat(filepath.Join(newEdition, "v1", "meta.cache"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shard.Mode().Perm()&0o004 != 0o004 {
+			t.Fatalf("new shard mode %04o missing other read", shard.Mode().Perm())
+		}
+		ownedInfo, err := os.Stat(ownedEdition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ownedInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller-owned pre-existing edition mode = %04o unexpectedly broadened", ownedInfo.Mode().Perm())
+		}
+		ownedFileInfo, err := os.Stat(ownedFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ownedFileInfo.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("caller-owned pre-existing edition file mode = %04o unexpectedly broadened", ownedFileInfo.Mode().Perm())
+		}
+	})
 }
 
 func lookPowerShellForScriptsOptional() (string, error) {

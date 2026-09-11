@@ -1622,6 +1622,7 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 		payload.Parameters = append([]contract.ParamDecl(nil), decl.Parameters...)
 		for index := range payload.Parameters {
 			payload.Parameters[index].Enum = append([]string(nil), decl.Parameters[index].Enum...)
+			payload.Parameters[index].AnyOf = append([]contract.FormatAlternative(nil), decl.Parameters[index].AnyOf...)
 			if decl.Parameters[index].Required != nil {
 				required := *decl.Parameters[index].Required
 				payload.Parameters[index].Required = &required

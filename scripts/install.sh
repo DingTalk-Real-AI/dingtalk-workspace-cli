@@ -1681,6 +1681,10 @@ build_shared_schema_cache() {
   # declarations. identity.json is the only success marker.
   find "$schema_tree" -name 'identity.json' -type f -delete 2>/dev/null || true
   find "$schema_tree" -name 'identity.*.json' -type f -delete 2>/dev/null || true
+  # Snapshot existing edition trees before warm-up: when dws/schema itself
+  # pre-exists under a custom root, only editions this run generates may be
+  # broadened; caller-owned pre-existing edition trees keep their modes.
+  editions_before="$(find "$schema_tree" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)"
   # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
   # and populate it. Any schema command triggers generate + publish.
   if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
@@ -1689,7 +1693,9 @@ build_shared_schema_cache() {
     # locally generated identity plus shard digests, not on file ownership.
     # Never chmod a+rX a pre-existing custom SHARED_DIR root, nor pre-existing
     # caller-owned dws/ / dws/schema/ levels (repro: 0700 → 0755 exposing
-    # unrelated children). Only levels this run created may be broadened.
+    # unrelated children). Only levels this run created may be broadened; under
+    # a pre-existing dws/schema that means only newly generated edition trees,
+    # so fresh umask-0700 artifacts never hide behind a shared success message.
     if [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
       # Pre-existing custom ancestor: chmod only the levels this run created;
       # every caller-owned level must already be traversable as-is or we fall
@@ -1700,6 +1706,12 @@ build_shared_schema_cache() {
       fi
       if [ "$schema_tree_preexisted" -eq 0 ]; then
         chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
+      else
+        for edition_dir in $(find "$schema_tree" -mindepth 1 -maxdepth 1 -type d 2>/dev/null); do
+          if ! printf '%s\n' "$editions_before" | grep -Fxq "$edition_dir"; then
+            chmod -R a+rX "$edition_dir" 2>/dev/null || shared_chmod_ok=0
+          fi
+        done
       fi
       if [ "$shared_chmod_ok" -eq 1 ] &&
         shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree"; then

@@ -795,16 +795,18 @@ func (r *schemaCacheRuntime) publishGeneratedOrMatching(cache *schemacache.Cache
 	if err != nil {
 		return
 	}
+	// Re-derive the identity from these live artifacts before any adoption
+	// decision: the registered identity may carry stale payload index pins or a
+	// BuildID from another binary, and republishing it verbatim would persist
+	// an identity that fails verification in every later process.
+	generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
+	if genErr != nil {
+		return
+	}
 	identity := r.optionsSnapshot().Identity
-	if !artifacts.match(identity) {
-		generated, genErr := IdentityFromArtifacts(r.cacheEdition(), artifacts)
-		if genErr != nil {
-			return
-		}
+	if !schemaCacheIdentityReady(identity) || !artifacts.match(identity) || generated.BuildID != identity.BuildID {
 		identity = generated
 		r.adoptGeneratedIdentity(identity)
-	} else if !schemaCacheIdentityReady(identity) {
-		return
 	}
 	// Publish is Registry/Payloads then Meta-last. Persist identity.json only
 	// after that commit so readers never observe a new sidecar pointing at a
@@ -1105,12 +1107,19 @@ func schemaCacheHashes(sourceHash, surfaceHash string) (schemaruntime.CacheHashe
 }
 
 func (a SchemaCacheArtifacts) match(identity SchemaCacheIdentity) bool {
-	return a.Version == int(identity.CatalogSnapshotVersion) &&
-		"sha256:"+hex.EncodeToString(identity.SourceSHA256[:]) == a.SourceHash &&
-		"sha256:"+hex.EncodeToString(identity.SurfaceSHA256[:]) == a.SurfaceHash &&
-		uint64(len(a.Meta)) == identity.Meta.EncodedLength && a.MetaSHA256 == identity.Meta.EncodedSHA256 &&
-		uint64(len(a.Registry)) == identity.Registry.EncodedLength && a.RegistrySHA256 == identity.Registry.EncodedSHA256 &&
-		uint64(len(a.Payload)) == identity.Payload.EncodedLength && a.PayloadSHA256 == identity.Payload.EncodedSHA256
+	if a.Version != int(identity.CatalogSnapshotVersion) ||
+		"sha256:"+hex.EncodeToString(identity.SourceSHA256[:]) != a.SourceHash ||
+		"sha256:"+hex.EncodeToString(identity.SurfaceSHA256[:]) != a.SurfaceHash ||
+		uint64(len(a.Meta)) != identity.Meta.EncodedLength || a.MetaSHA256 != identity.Meta.EncodedSHA256 ||
+		uint64(len(a.Registry)) != identity.Registry.EncodedLength || a.RegistrySHA256 != identity.Registry.EncodedSHA256 ||
+		uint64(len(a.Payload)) != identity.Payload.EncodedLength || a.PayloadSHA256 != identity.Payload.EncodedSHA256 {
+		return false
+	}
+	// The payload index pins must describe these exact artifacts: a mismatched
+	// sidecar pin would make every later process fail ReadPayloadIndex and
+	// re-enter repair, republishing the same wrong identity forever.
+	indexLength, indexDigest, err := a.PayloadIndexPins()
+	return err == nil && indexLength == identity.PayloadIndexLength && indexDigest == identity.PayloadIndexSHA256
 }
 
 // PayloadIndexPins derives the pinned payload index region identity from the

@@ -38,8 +38,8 @@ surface still disable persistent I/O. Tests may also inject identity via
 `RegisterSchemaCacheOptions`.
 See `docs/rfc-schema-runtime-cache.md` for the single RFC covering the
 local-identity shipping model, complete-tree performance contract, cache
-delivery, and telemetry no-wait exit (`NoFlushWait`); the earlier sibling
-plan/design/performance pages were removed in favor of that RFC.
+delivery, and telemetry no-wait exit (`NoFlushWait`); no sibling
+plan/design/performance pages are kept.
 There is no
 `cmd_schema_catalog` `//go:generate` delivery step. `dws schema -f json` remains
 the wire projection. `cmd_schema_catalog` produces CI/local dumps only;

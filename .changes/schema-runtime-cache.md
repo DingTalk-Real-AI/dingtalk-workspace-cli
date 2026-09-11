@@ -6,4 +6,4 @@ category: Changed
 - Keep one complete Cobra tree for every public invocation. Compact typed metadata and shared builders reduce complete-tree allocations; process argv does not select a product factory or a utility-only tree.
 - Telemetry exit no longer waits for delivery: the CLI default enables `NoFlushWait`, so the process returns right after the completion event is enqueued and the last event is expected to be lost. `FlushTimeout` (SDK default ~300ms) remains an SDK option for callers that accept a bounded wait; reliable non-blocking delivery needs the durable outbox follow-up. Business cleanup, signals, and exit codes remain synchronous.
 - Reduce temporary allocations during Schema validation and command initialization.
-- Normative notes live in `docs/rfc-schema-runtime-cache.md` only; the six sibling plan/design/performance pointer pages were removed so their content lives only in that RFC.
+- Normative notes live in `docs/rfc-schema-runtime-cache.md` only; no sibling plan/design/performance pages are kept.

@@ -2213,7 +2213,8 @@ func TestCrossPlatformCoverageAttachContractOverwritesLegacySelectionSources(t *
 func TestCrossPlatformCoverageAttachContractOwnsNestedParameterData(t *testing.T) {
 	required := true
 	enum := []string{"safe"}
-	parameters := []contract.ParamDecl{{Name: "mode", Required: &required, Enum: enum}}
+	anyOf := []contract.FormatAlternative{{Format: "json"}}
+	parameters := []contract.ParamDecl{{Name: "mode", Required: &required, Enum: enum, AnyOf: anyOf}}
 	cmd := newTestCommand()
 	AttachContract(cmd, testWriteSafety(), ContractDecl{
 		Description: "description",
@@ -2231,6 +2232,7 @@ func TestCrossPlatformCoverageAttachContractOwnsNestedParameterData(t *testing.T
 
 	required = false
 	enum[0] = "mutated"
+	anyOf[0].Format = "mutated"
 	parameters[0].Name = "changed"
 
 	got, ok := contractfinal.RuntimeContractFinal(cmd)
@@ -2241,6 +2243,9 @@ func TestCrossPlatformCoverageAttachContractOwnsNestedParameterData(t *testing.T
 	if parameter.Name != "mode" || len(parameter.Enum) != 1 || parameter.Enum[0] != "safe" ||
 		parameter.Required == nil || !*parameter.Required {
 		t.Fatalf("caller mutation reached owned contract payload: %#v", parameter)
+	}
+	if len(parameter.AnyOf) != 1 || parameter.AnyOf[0].Format != "json" {
+		t.Fatalf("caller AnyOf mutation reached owned contract payload: %#v", parameter.AnyOf)
 	}
 }
 
