@@ -6,6 +6,7 @@ package minutesdata
 import (
 	"encoding/json"
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -291,11 +292,11 @@ func TestCrossPlatformCoverageMinutesWorkflowCompletion(t *testing.T) {
 			t.Fatalf("invalid speaker result accepted: %#v", data)
 		}
 	}
-	if value, err := SpeakerSummaryResult(map[string]any{"result": []any{}}); err != nil || value == nil {
-		t.Fatalf("empty speaker list = %#v, %v", value, err)
+	if _, err := SpeakerSummaryResult(map[string]any{"result": []any{}}); err == nil {
+		t.Fatal("empty speaker list accepted")
 	}
-	if value, err := SpeakerSummaryResult(map[string]any{"result": map[string]any{"summary": "ok"}}); err != nil || value == nil {
-		t.Fatalf("speaker map = %#v, %v", value, err)
+	if _, err := SpeakerSummaryResult(map[string]any{"result": map[string]any{"summary": "ok"}}); err == nil {
+		t.Fatal("unreviewed speaker map accepted")
 	}
 	for _, data := range []map[string]any{{}, {"result": "bad"}, {"result": map[string]any{}}, {"result": map[string]any{"hotWordList": "bad"}}, {"result": map[string]any{"hotWordList": []any{true}}}} {
 		if _, err := HotWords(data); err == nil {
@@ -313,5 +314,191 @@ func TestCrossPlatformCoverageMinutesWorkflowCompletion(t *testing.T) {
 	}
 	if _, err := intValue(int64(1)); err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("unsupported int64 result = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageMinutesTodosMalformedResultAndTypeDiagnostics(t *testing.T) {
+	for _, result := range []any{nil, "wrong", []any{}} {
+		fact := InspectTodos("u1", map[string]any{"success": true, "result": result})
+		if fact.State != ArtifactUnsupportedShape || fact.Successful() || fact.Err() == nil {
+			t.Fatalf("unexpected result fact: %#v", fact)
+		}
+	}
+	for _, tc := range []struct {
+		value any
+		want  string
+	}{{nil, "null"}, {true, "boolean"}, {float32(1), "number"}, {struct{}{}, "struct {}"}} {
+		if got := jsonType(tc.value); got != tc.want {
+			t.Fatalf("type(%#v)=%q want %q", tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageMinutesTodosTruthStates(t *testing.T) {
+	tests := []struct {
+		name       string
+		data       map[string]any
+		wantState  ArtifactState
+		wantSource string
+		wantCount  int
+	}{
+		{
+			name: "ready prefers structured todos",
+			data: map[string]any{"success": true, "result": map[string]any{
+				"actions":          []any{"legacy"},
+				"dingtalkTodoList": []any{map[string]any{"minutesTodoId": "t1"}},
+			}},
+			wantState: ArtifactReady, wantSource: "dingtalkTodoList", wantCount: 1,
+		},
+		{
+			name: "ready actions fallback",
+			data: map[string]any{"success": true, "result": map[string]any{
+				"actions": []any{"one", "two"},
+			}},
+			wantState: ArtifactReady, wantSource: "actions", wantCount: 2,
+		},
+		{
+			name: "known empty",
+			data: map[string]any{"success": true, "result": map[string]any{
+				"actions": []any{},
+			}},
+			wantState: ArtifactKnownEmpty, wantSource: "actions", wantCount: 0,
+		},
+		{
+			name: "unknown shape",
+			data: map[string]any{"success": true, "result": map[string]any{
+				"secret": "must-not-copy",
+			}},
+			wantState: ArtifactUnsupportedShape,
+		},
+		{
+			name: "wrong collection types",
+			data: map[string]any{"success": true, "result": map[string]any{
+				"actions": "bad", "dingtalkTodoList": map[string]any{},
+			}},
+			wantState: ArtifactUnsupportedShape,
+		},
+		{
+			name:      "backend failure",
+			data:      map[string]any{"success": false, "errorMsg": "denied"},
+			wantState: ArtifactFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fact := InspectTodos("u1", test.data)
+			if fact.State != test.wantState || fact.SourceField != test.wantSource || len(fact.Items) != test.wantCount {
+				t.Fatalf("fact=%#v", fact)
+			}
+			payload := fact.Payload()
+			if payload["state"] != string(test.wantState) || payload["taskUuid"] != "u1" || payload["itemCount"] != test.wantCount {
+				t.Fatalf("payload=%#v", payload)
+			}
+			if fact.Successful() != (test.wantState == ArtifactReady || test.wantState == ArtifactKnownEmpty) {
+				t.Fatalf("successful=%v state=%s", fact.Successful(), fact.State)
+			}
+			if test.wantState == ArtifactUnsupportedShape && payload["secret"] != nil {
+				t.Fatalf("unsupported payload leaked raw value: %#v", payload)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMinutesTodosTruthDiagnostics(t *testing.T) {
+	fact := InspectTodos("u1", map[string]any{
+		"result": map[string]any{"actions": "bad", "dingtalkTodoList": map[string]any{}},
+	})
+	if fact.Err() == nil || fact.Successful() {
+		t.Fatalf("unsupported fact accepted: %#v", fact)
+	}
+	ledger := fact.Ledger()
+	fields := ledger["observedFields"].([]string)
+	types := ledger["observedTypes"].(map[string]string)
+	if len(fields) != 2 || fields[0] != "actions" || fields[1] != "dingtalkTodoList" || types["actions"] != "string" || types["dingtalkTodoList"] != "object" {
+		t.Fatalf("ledger=%#v", ledger)
+	}
+	if ledger["complete"] != false || ledger["retryable"] != false {
+		t.Fatalf("failure flags=%#v", ledger)
+	}
+
+	failed := FailedTodos("u2", nil)
+	if failed.State != ArtifactFailed || failed.Err() == nil || failed.Payload()["taskUuid"] != "u2" {
+		t.Fatalf("failed=%#v", failed)
+	}
+}
+
+func TestCrossPlatformCoverageMinutesListDisplayProjection(t *testing.T) {
+	page := Page{Items: []map[string]any{{"taskUuid": "u1", "creator": "declared creator", "orgName": "source org", "flashUserInfo": map[string]any{"name": "display user", "uid": "must-not-copy", "extra": "must-not-copy"}}}}
+	rows, err := ProjectList(page)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%v err=%v", rows, err)
+	}
+	if rows[0]["creator"] != "declared creator" || rows[0]["orgName"] != "source org" || !reflect.DeepEqual(rows[0]["flashUserInfo"], map[string]any{"name": "display user"}) {
+		t.Fatalf("projection=%#v", rows[0])
+	}
+	rows[0]["flashUserInfo"].(map[string]any)["name"] = "changed"
+	if page.Items[0]["flashUserInfo"].(map[string]any)["name"] != "display user" {
+		t.Fatal("projection aliases input object")
+	}
+	for _, values := range []map[string]any{
+		{}, {"orgName": "", "flashUserInfo": map[string]any{"name": ""}},
+		{"orgName": 7, "flashUserInfo": "wrong"}, {"flashUserInfo": map[string]any{"name": 9}},
+	} {
+		values["taskUuid"] = "u2"
+		got, err := ProjectList(Page{Items: []map[string]any{values}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := got[0]["orgName"]; ok {
+			t.Fatal("invented orgName")
+		}
+		if _, ok := got[0]["flashUserInfo"]; ok {
+			t.Fatal("invented flashUserInfo")
+		}
+		if _, ok := got[0]["creator"]; ok {
+			t.Fatal("invented creator")
+		}
+	}
+}
+
+func TestCrossPlatformCoverageSpeakerSummaryEvidence(t *testing.T) {
+	if p := ParseSpeakerSummary(map[string]any{"result": map[string]any{"status": "processing", "taskId": "job"}}); p.State != SpeakerPending {
+		t.Fatalf("pending = %#v", p)
+	}
+	ready := map[string]any{"status": "completed", "innerStatus": "Finished", "success": true, "content": "summary", "errorMsg": "", "taskId": "job"}
+	if _, err := SpeakerSummaryResult(map[string]any{"result": ready}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		key   string
+		value any
+	}{
+		{"status", "processing"}, {"status", "unknown"}, {"innerStatus", "Running"}, {"content", " "}, {"content", 12}, {"errorMsg", "failed"}, {"success", false}, {"success", "true"}, {"taskId", ""},
+	} {
+		r := map[string]any{}
+		for k, v := range ready {
+			r[k] = v
+		}
+		r[tc.key] = tc.value
+		if p := ParseSpeakerSummary(map[string]any{"result": r}); p.State == SpeakerReady {
+			t.Fatalf("accepted %s=%v", tc.key, tc.value)
+		}
+	}
+	for key := range ready {
+		r := map[string]any{}
+		for k, v := range ready {
+			if k != key {
+				r[k] = v
+			}
+		}
+		if p := ParseSpeakerSummary(map[string]any{"result": r}); p.State == SpeakerReady {
+			t.Fatalf("accepted missing %s", key)
+		}
+	}
+	for _, data := range []map[string]any{{}, {"result": []any{}}, {"result": map[string]any{"summary": "text"}}, {"success": "true", "result": ready}, {"success": false, "result": ready}} {
+		if p := ParseSpeakerSummary(data); p.State != SpeakerUnsupported {
+			t.Fatalf("accepted %#v as %s", data, p.State)
+		}
 	}
 }

@@ -14,13 +14,19 @@ import (
 )
 
 type datasourceCoverageCaller struct {
-	err    error
-	resp   string
-	argLog []map[string]any
+	err       error
+	resp      string
+	argLog    []map[string]any
+	toolLog   []string
+	serverLog []string
+	respond   func(context.Context, string) (string, error)
+	dryRun    bool
 }
 
-func (c *datasourceCoverageCaller) CallTool(_ context.Context, _, _ string, args map[string]any) (*edition.ToolResult, error) {
+func (c *datasourceCoverageCaller) CallTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
 	c.argLog = append(c.argLog, args)
+	c.toolLog = append(c.toolLog, tool)
+	c.serverLog = append(c.serverLog, server)
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -28,20 +34,35 @@ func (c *datasourceCoverageCaller) CallTool(_ context.Context, _, _ string, args
 	if text == "" {
 		text = `{"status":"success","data":{}}`
 	}
+	if c.respond != nil {
+		var err error
+		text, err = c.respond(ctx, tool)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
 func (c *datasourceCoverageCaller) Format() string { return "json" }
-func (c *datasourceCoverageCaller) DryRun() bool   { return false }
+func (c *datasourceCoverageCaller) DryRun() bool   { return c.dryRun }
 func (c *datasourceCoverageCaller) Fields() string { return "" }
 func (c *datasourceCoverageCaller) JQ() string     { return "" }
 
 func runDatasourceShortcutCLI(t *testing.T, caller *datasourceCoverageCaller, args ...string) error {
+	return runDatasourceShortcutCLIContext(t, context.Background(), caller, args...)
+}
+
+func (c *datasourceCoverageCaller) CallReadTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return c.CallTool(ctx, server, tool, args)
+}
+
+func runDatasourceShortcutCLIContext(t *testing.T, ctx context.Context, caller *datasourceCoverageCaller, args ...string) error {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs(append([]string{"aitable"}, args...))
-	return root.Execute()
+	return root.ExecuteContext(ctx)
 }
 
 // ── DatasourceCreate error paths ─────────────────────────────────────────────
@@ -116,21 +137,11 @@ func TestCrossPlatformCoverageDatasourceCreateRejectsEmptyAutoSyncSetting(t *tes
 	}
 }
 
-func TestCrossPlatformCoverageDatasourceCreatePassesFieldIDsThrough(t *testing.T) {
+func TestCrossPlatformCoverageDatasourceCreateRejectsSelectiveSync(t *testing.T) {
 	caller := &datasourceCoverageCaller{}
-	err := runDatasourceShortcutCLI(t, caller,
-		"+datasource-create", "--base-id", "BASE1", "--datasource-type", "OA",
-		"--source-config", `{"processCode":"P","name":"N","dataType":"recent_time","iconUrl":"u","url":"v"}`,
-		"--field-ids", "fld1,fld2")
-	if err != nil {
-		t.Fatalf("create with valid --field-ids should succeed: %v", err)
-	}
-	if len(caller.argLog) != 1 {
-		t.Fatalf("expected exactly 1 MCP call, got %d", len(caller.argLog))
-	}
-	got, _ := caller.argLog[0]["fieldIds"].([]string)
-	if len(got) != 2 || got[0] != "fld1" || got[1] != "fld2" {
-		t.Fatalf("fieldIds = %#v, want [fld1 fld2]", got)
+	err := runDatasourceShortcutCLI(t, caller, "+datasource-create", "--base-id", "b", "--datasource-type", "OA", "--source-config", `{}`, "--field-ids", "f1,f2")
+	if err == nil || !strings.Contains(err.Error(), "全量同步") || len(caller.argLog) != 0 {
+		t.Fatalf("err=%v calls=%v", err, caller.argLog)
 	}
 }
 
@@ -147,7 +158,7 @@ func TestCrossPlatformCoverageDatasourceUpdateRejectsInvalidSourceConfig(t *test
 
 func TestCrossPlatformCoverageDatasourceUpdateRejectsInvalidAutoSyncSetting(t *testing.T) {
 	err := runDatasourceShortcutCLI(t, &datasourceCoverageCaller{},
-		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1",
+		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1", "--source-config", `{}`,
 		"--auto-sync-setting", "not-json")
 	if err == nil || !strings.Contains(err.Error(), "auto-sync-setting") {
 		t.Fatalf("error = %v, want auto-sync-setting parse error", err)
@@ -157,14 +168,14 @@ func TestCrossPlatformCoverageDatasourceUpdateRejectsInvalidAutoSyncSetting(t *t
 func TestCrossPlatformCoverageDatasourceUpdateRejectsNoChanges(t *testing.T) {
 	err := runDatasourceShortcutCLI(t, &datasourceCoverageCaller{},
 		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1")
-	if err == nil || !strings.Contains(err.Error(), "至少需要一个配置变更") {
+	if err == nil || !strings.Contains(err.Error(), "source-config") {
 		t.Fatalf("error = %v, want no-changes error", err)
 	}
 }
 
 func TestCrossPlatformCoverageDatasourceUpdatePropagatesCallMCPError(t *testing.T) {
 	err := runDatasourceShortcutCLI(t, &datasourceCoverageCaller{err: errors.New("mcp-error")},
-		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1", "--auto")
+		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1", "--source-config", `{}`, "--auto")
 	if err == nil || !strings.Contains(err.Error(), "mcp-error") {
 		t.Fatalf("error = %v, want mcp-error", err)
 	}
@@ -173,7 +184,7 @@ func TestCrossPlatformCoverageDatasourceUpdatePropagatesCallMCPError(t *testing.
 func TestCrossPlatformCoverageDatasourceUpdateRejectsEmptyFieldIDs(t *testing.T) {
 	caller := &datasourceCoverageCaller{}
 	err := runDatasourceShortcutCLI(t, caller,
-		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1",
+		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1", "--source-config", `{}`,
 		"--field-ids", "")
 	if err == nil || !strings.Contains(err.Error(), "field-ids") {
 		t.Fatalf("error = %v, want field-ids empty error", err)
@@ -186,7 +197,7 @@ func TestCrossPlatformCoverageDatasourceUpdateRejectsEmptyFieldIDs(t *testing.T)
 func TestCrossPlatformCoverageDatasourceUpdateRejectsWhitespaceOnlyFieldIDs(t *testing.T) {
 	caller := &datasourceCoverageCaller{}
 	err := runDatasourceShortcutCLI(t, caller,
-		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1",
+		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1", "--source-config", `{}`,
 		"--field-ids", " , ")
 	if err == nil || !strings.Contains(err.Error(), "field-ids") {
 		t.Fatalf("error = %v, want field-ids empty error", err)
@@ -199,7 +210,7 @@ func TestCrossPlatformCoverageDatasourceUpdateRejectsWhitespaceOnlyFieldIDs(t *t
 func TestCrossPlatformCoverageDatasourceUpdateRejectsEmptyAutoSyncSetting(t *testing.T) {
 	caller := &datasourceCoverageCaller{}
 	err := runDatasourceShortcutCLI(t, caller,
-		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1",
+		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1", "--source-config", `{}`,
 		"--auto-sync-setting", "")
 	if err == nil || !strings.Contains(err.Error(), "auto-sync-setting") {
 		t.Fatalf("error = %v, want auto-sync-setting empty error", err)
@@ -209,20 +220,11 @@ func TestCrossPlatformCoverageDatasourceUpdateRejectsEmptyAutoSyncSetting(t *tes
 	}
 }
 
-func TestCrossPlatformCoverageDatasourceUpdatePassesFieldIDsThrough(t *testing.T) {
+func TestCrossPlatformCoverageDatasourceUpdateRejectsSelectiveSync(t *testing.T) {
 	caller := &datasourceCoverageCaller{}
-	err := runDatasourceShortcutCLI(t, caller,
-		"+datasource-update", "--base-id", "BASE1", "--table-id", "TBL1",
-		"--field-ids", "fldA,fldB,fldC")
-	if err != nil {
-		t.Fatalf("update with valid --field-ids should succeed: %v", err)
-	}
-	if len(caller.argLog) != 1 {
-		t.Fatalf("expected exactly 1 MCP call, got %d", len(caller.argLog))
-	}
-	got, _ := caller.argLog[0]["fieldIds"].([]string)
-	if len(got) != 3 || got[0] != "fldA" || got[1] != "fldB" || got[2] != "fldC" {
-		t.Fatalf("fieldIds = %#v, want [fldA fldB fldC]", got)
+	err := runDatasourceShortcutCLI(t, caller, "+datasource-update", "--base-id", "b", "--table-id", "t", "--source-config", `{}`, "--field-ids", "f1,f2")
+	if err == nil || !strings.Contains(err.Error(), "全量同步") || len(caller.argLog) != 0 {
+		t.Fatalf("err=%v calls=%v", err, caller.argLog)
 	}
 }
 
