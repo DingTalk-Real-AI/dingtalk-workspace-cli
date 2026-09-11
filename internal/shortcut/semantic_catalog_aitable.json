@@ -9,7 +9,7 @@
     "+base-get-primary-doc-id": {"disposition":"schema_leaf","semantic_delta":"已知 base/table/record 时读取主键文档 dentryUuid 的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+base-update": {"disposition":"schema_leaf","semantic_delta":"更新 Base 名称和备注的一对一写入，复用统一确认门。","risk":"write","public":true,"reviewed":true},
     "+base-delete": {"disposition":"schema_leaf","semantic_delta":"不可逆删除整个 Base 的兼容入口，显式发布高风险确认事实。","risk":"high-risk-write","public":true,"reviewed":true},
-    "+base-copy": {"disposition":"semantic_adapter","semantic_delta":"统一完整复制与仅结构复制意图，并把目标目录映射为可执行参数。","risk":"write","public":true,"reviewed":true},
+    "+base-copy": {"disposition":"semantic_adapter","semantic_delta":"统一完整复制与仅结构复制意图；目标目录可省略，也可将节点或文件夹 URL 原样交给 MCP 解析。","risk":"write","public":true,"reviewed":true},
     "+base-schema-snapshot": {"disposition":"primary_smart","semantic_delta":"完整读取 Base、tables、fields、views，逐层区分合法空集合与缺失响应契约。","risk":"read","public":true,"reviewed":true},
     "+base-bootstrap": {"disposition":"primary_smart","semantic_delta":"声明式创建 Base、表和字段，字段自动分片，逐层读回验证并报告部分副作用。","risk":"write","public":true,"reviewed":true},
     "+url-resolve": {"disposition":"primary_smart","semantic_delta":"严格解析 alidocs AI 表格 URL 的 base/table/view/record ID，并可通过最深层只读接口验证目标存在。","risk":"read","public":true,"reviewed":true},
@@ -61,7 +61,7 @@
     "+form-field-update": {"disposition":"semantic_adapter","semantic_delta":"统一更新表单字段必填状态与描述。","risk":"write","public":true,"reviewed":true},
     "+form-field-hide": {"disposition":"semantic_adapter","semantic_delta":"用隐藏/显示布尔语义切换表单字段可见性。","risk":"write","public":true,"reviewed":true},
     "+form-share-get": {"disposition":"schema_leaf","semantic_delta":"读取当前视图分享表单配置的一对一入口。","risk":"read","public":true,"reviewed":true},
-    "+form-share-update": {"disposition":"semantic_adapter","semantic_delta":"统一开启或关闭指定视图的分享表单。","risk":"write","public":true,"reviewed":true},
+    "+form-share-update": {"disposition":"semantic_adapter","semantic_delta":"将分享开关、授权范围、有效期、提交限制和通知配置转换为类型正确的部分更新。","risk":"write","public":true,"reviewed":true},
 
     "+workflow-enable": {"disposition":"schema_leaf","semantic_delta":"启用指定自动化工作流的一对一入口。","risk":"write","public":true,"reviewed":true},
     "+workflow-disable": {"disposition":"schema_leaf","semantic_delta":"禁用工作流会影响业务自动化，显式发布高风险确认事实。","risk":"high-risk-write","public":true,"reviewed":true},
@@ -85,6 +85,7 @@
     "+chart-share-update": {"disposition":"semantic_adapter","semantic_delta":"统一开启、关闭和设置图表分享类型。","risk":"write","public":true,"reviewed":true},
 
     "+export-data": {"disposition":"primary_smart","semantic_delta":"统一创建导出任务与按 taskId 续等，直到得到可下载的导出结果或明确失败。","risk":"read","public":true,"reviewed":true},
+    "+import-file": {"disposition":"primary_smart","semantic_delta":"在 DWS 内完成本地文件上传准备、签名 URL 直传和同一 importId 导入或续等闭环；不向调用方暴露签名 URL。","risk":"write","public":true,"reviewed":true},
     "+import-upload": {"disposition":"schema_leaf","semantic_delta":"申请导入 OSS 直传地址和 importId；只负责上传准备，不伪造导入完成。","risk":"write","public":true,"reviewed":true},
     "+import-data": {"disposition":"semantic_adapter","semantic_delta":"统一将已上传文件导入新表或追加到已有表的目标语义。","risk":"write","public":true,"reviewed":true},
 
@@ -113,7 +114,7 @@
     "+datasource-create": {"disposition":"schema_leaf","semantic_delta":"为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。","risk":"write","public":true,"reviewed":true},
     "+datasource-update": {"disposition":"schema_leaf","semantic_delta":"更新已有数据源表的同步配置并触发一次同步；不改配置可只切换 auto 开关或 field-ids。","risk":"write","public":true,"reviewed":true},
     "+datasource-sync": {"disposition":"schema_leaf","semantic_delta":"对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。","risk":"write","public":true,"reviewed":true},
-    "+datasource-sync-status": {"disposition":"schema_leaf","semantic_delta":"批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。","risk":"read","public":true,"reviewed":true},
+    "+datasource-sync-status": {"disposition":"schema_leaf","semantic_delta":"批量查询数据源同步任务状态；仅 RUNNING 继续轮询，并逐项处理失败、未找到和未知状态。","risk":"read","public":true,"reviewed":true},
     "+datasource-get-config": {"disposition":"schema_leaf","semantic_delta":"读取已有数据源表的同步配置详情（源配置、字段选择、自动同步状态）的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+datasource-list-sources": {"disposition":"schema_leaf","semantic_delta":"列出指定 Base 下可用的数据源条目（OA 审批模板等），提取 processCode/name/iconUrl/url 用于 sourceConfig。","risk":"read","public":true,"reviewed":true},
     "+datasource-get-fields": {"disposition":"schema_leaf","semantic_delta":"获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键），用于决定 field-ids。","risk":"read","public":true,"reviewed":true}

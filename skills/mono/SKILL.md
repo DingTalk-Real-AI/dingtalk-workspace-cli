@@ -2,6 +2,8 @@
 name: dws
 description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请或待办事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请，以及待办创建/更新/删除时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.61"
+metadata:
+  internal: true
 ---
 
 # 钉钉全产品 Skill
@@ -40,13 +42,13 @@ cli_version: ">=1.0.61"
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
 ## Shortcut 总览
 
-下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知高频意图加载完整产品 Catalog。
+下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图先按产品 Skill、意图表或任务 reference 选唯一命令；参数/约束/安全不明时读一次 leaf 窄 Schema。Schema 不可用时才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次；`unknown command` 不查 Help，先用错误的明确 suggestion，否则用已加载 Skill/reference 的明确兼容入口，仍无则报告漂移，不枚举全 Catalog。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知意图加载完整产品 Catalog 或 root/parent Help。
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 100 | `dingtalk-aitable` |
+| `aitable` | 101 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 99 | `dingtalk-chat` |

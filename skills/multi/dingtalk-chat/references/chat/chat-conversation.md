@@ -15,8 +15,8 @@
 
 ## 必读约束
 
-- 会话状态类命令通常需要 `openConversationId`。群聊只用 `+chat-search --query` 获取唯一候选，单聊可由 `chat conversation-info --user/--open-dingtalk-id` 获取。
-- `set-top` 是会话置顶；`message set-top-msg` 是会话内消息置顶，二者不能混用。
+- 会话状态类命令通常需要 `openConversationId`。群聊只用 `+chat-search --query` 获取唯一候选；单聊默认用 `+conversation-info --open-dingtalk-id`，仅 Shortcut 缺少的 `--user` 解析才用原子命令。
+- `+conversation-set-top` 是会话置顶；`+messages-set-top` 是会话内消息置顶，二者不能混用。
 - `clear-messages` 只清空当前用户视角的消息，不影响其他成员。
 - 智能分组规则中的成员使用 openDingTalkId；如果用户只给姓名，先用 `aisearch person --dimension name` 获取。
 
@@ -25,12 +25,13 @@
 ### 会话基础信息
 
 ```bash
-dws chat conversation-info --group <openConversationId> --format json
-dws chat conversation-info --user <userId> --format json
-dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json
+dws chat +conversation-info --group <openConversationId> --format json
+dws chat +conversation-info --open-dingtalk-id <openDingTalkId> --format json
 ```
 
-`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不依赖调用方预先读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
+`--group`、`--open-dingtalk-id` 互斥且必须指定一个。只有需要 Shortcut 未公开的 `--user`
+解析或底层原始响应时才使用原子 `conversation-info`。文件/音视频发送不依赖调用方预先读取
+spaceId；直接用 `message send --msg-type file|audio|video --file`。
 
 ### 只上传到会话文件空间
 
@@ -52,9 +53,9 @@ dws chat conversation-file upload --open-dingtalk-id <openDingTalkId> --file ./r
 | `+chat-list-all` | 获取当前用户加入的全部群 | 要求全部时加 `--page-all`；沿数字 `nextCursor` 去重聚合 |
 | `+my-groups` | 获取并投影当前用户加入的群 | 要求全部时加 `--page-all`；读完后再应用 `--type` 本地过滤 |
 | `+conversation-list-top` | 获取置顶会话列表 | 可选 `--limit` `--cursor` `--exclude-muted`；使用稳定 `conversations[]` |
-| `message list-unread-conversations` | 获取未读会话列表 | 可选 `--count` `--exclude-muted` |
-| `clear-red-point` | 清除指定会话红点 | `--conversation-id`，别名 `--id` / `--chat` |
-| `clear-all-red-point` | 清除所有会话红点，一键全部已读 | 无参数 |
+| `+unread-chats` | 获取未读会话列表 | 可选 `--count` `--exclude-muted` |
+| `+conversation-clear-red-point` | 清除指定会话红点 | `--conversation-id` |
+| `+conversation-clear-all-red-point` | 清除所有会话红点，一键全部已读 | 无参数 |
 
 翻页时，`hasMore=true` 用返回的 `nextCursor` 作为下次 `--cursor`。Shortcut 全量读取应检查
 `complete`、`stopReason` 和 `failures`；达到 `--page-limit` 时会保留可继续的 `nextCursor`。
@@ -63,9 +64,9 @@ dws chat conversation-file upload --open-dingtalk-id <openDingTalkId> --file ./r
 
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
-| `set-top` | 设置/取消会话置顶 | `--conversation-id`；默认置顶，`--off` 取消 |
-| `mute` | 开启/关闭会话免打扰 | `--conversation-id`；默认开启，`--off` 关闭 |
-| `hide` | 隐藏会话 | `--conversation-id` |
+| `+conversation-set-top` | 设置/取消会话置顶 | `--conversation-id` 或 `--conversation-ids`；`--off` 取消 |
+| `+conversation-mute` | 开启/关闭会话免打扰 | `--conversation-id`；默认开启，`--off` 关闭 |
+| `+conversation-hide` | 隐藏会话 | `--conversation-id` |
 | `mute-at-all` | 关闭/恢复 @所有人通知 | `--conversation-id`；默认关闭，`--off` 恢复；必须先开启会话总免打扰 |
 | `mute-red-envelope` | 关闭/恢复红包通知 | `--conversation-id`；默认关闭，`--off` 恢复；必须先开启会话总免打扰 |
 
@@ -73,30 +74,34 @@ dws chat conversation-file upload --open-dingtalk-id <openDingTalkId> --file ./r
 总免打扰状态，此时要先重新开启总免打扰，再操作红包通知。
 
 ```bash
-dws chat set-top --conversation-id <openConversationId>
-dws chat set-top --conversation-id <openConversationId> --off
-dws chat mute --conversation-id <openConversationId>
-dws chat mute --conversation-id <openConversationId> --off
-dws chat hide --conversation-id <openConversationId>
+dws chat +conversation-set-top --conversation-id <openConversationId>
+dws chat +conversation-set-top --conversation-id <openConversationId> --off
+dws chat +conversation-mute --conversation-id <openConversationId>
+dws chat +conversation-mute --conversation-id <openConversationId> --off
+dws chat +conversation-hide --conversation-id <openConversationId>
 ```
 
 ### 已读未读与清理
 
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
-| `mark-unread` | 标记指定会话为未读 | `--conversation-id` |
-| `mark-read` | 将指定消息及之前消息标记为已读 | `--conversation-id` `--message-id` |
-| `clear-messages` | 清空当前用户指定会话的消息 | `--conversation-id` |
+| `+conversation-mark-unread` | 标记指定会话为未读 | `--conversation-id` |
+| `+conversation-mark-read` | 将指定消息及之前消息标记为已读 | `--conversation-id` `--message-id` |
+| `+conversation-clear-messages` | 清空当前用户指定会话的消息 | `--conversation-id` |
 
 ```bash
-dws chat mark-unread --conversation-id <openConversationId>
-dws chat mark-read --conversation-id <openConversationId> --message-id <openMessageId>
-dws chat clear-messages --conversation-id <openConversationId>
+dws chat +conversation-mark-unread --conversation-id <openConversationId>
+dws chat +conversation-mark-read --conversation-id <openConversationId> --message-id <openMessageId>
+dws chat +conversation-clear-messages --conversation-id <openConversationId>
 ```
+
+原子 `set-top`、`mute`、`hide`、`mark-unread`、`mark-read`、`clear-red-point`、
+`clear-all-red-point`、`clear-messages` 保持可执行，但只在需要对应 Shortcut 未公开的底层参数、
+原始响应或不同执行语义时使用，不作为普通会话状态请求的候选入口。
 
 ### 会话分组
 
-会话分组是当前用户的分类容器，不是聊天群。删除分类不会删除其中的真实会话。高频生命周期统一使用 Shortcut：
+会话分组/分类是当前用户的分类容器，统一走 `category`；群聊/聊天群是真实会话对象，统一走 `chat group`。即使分类名含“群”，也不能按聊天群处理。删除分类不会删除其中的真实会话。高频生命周期统一使用 Shortcut：
 
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
@@ -130,8 +135,8 @@ Runtime gate 完成确认；上述示例不代表可以绕过确认。
 
 ```bash
 dws aisearch person --query "张三" --dimension name --format json
-dws chat conversation-info --user <userId> --format json
-dws chat set-top --conversation-id <openConversationId> --format json
+dws chat +conversation-info --open-dingtalk-id <openDingTalkId> --format json
+dws chat +conversation-set-top --conversation-id <openConversationId> --format json
 ```
 
 ### 查看置顶会话并拉消息
@@ -163,8 +168,8 @@ dws chat category create-smart --name "重点群" --keywords "重点" --members 
 
 ## 常见错误与回退
 
-- 用户说“置顶消息”：用 `message set-top-msg`，不是 `chat set-top`。
-- 用户说“置顶会话”：设置/取消用 `chat set-top`，查看列表用 `+conversation-list-top`。
-- 单聊没有会话 ID：先 `conversation-info --user` 或 `--open-dingtalk-id`。
+- 用户说“置顶消息”：用 `+messages-set-top`，不是 `+conversation-set-top`。
+- 用户说“置顶会话”：设置/取消用 `+conversation-set-top`，查看列表用 `+conversation-list-top`。
+- 单聊没有会话 ID：默认用 `+conversation-info --open-dingtalk-id`；只有 userId 时才用原子 `conversation-info --user`。
 - 清空聊天记录前必须确认目标会话；该操作只影响当前用户视角。
 - 智能分组没有匹配条件：至少确认分组名称；关键词和成员规则不明确时先向用户确认，不要自行猜成员。

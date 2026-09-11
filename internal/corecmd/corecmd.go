@@ -189,6 +189,9 @@ const (
 type Constraint struct {
 	Kind  ConstraintKind
 	Flags []string
+	// PresenceOnly counts explicitly supplied flags, including empty strings
+	// used to clear values in a partial update. Defaults remain unchanged.
+	PresenceOnly bool
 	// Description, when non-empty, replaces the constraint's default help text.
 	Description string
 }
@@ -1180,7 +1183,11 @@ func ValidateConstraints(cmd *cobra.Command, flags []FlagSpec, constraints []Con
 	for _, constraint := range constraints {
 		var set []string
 		for _, name := range constraint.Flags {
-			if constraintProvided(cmd, flagsByName[name]) {
+			provided := constraintProvided(cmd, flagsByName[name])
+			if constraint.PresenceOnly {
+				provided = flagNameProvided(cmd, flagsByName[name])
+			}
+			if provided {
 				set = append(set, name)
 			}
 		}
@@ -1561,14 +1568,16 @@ func flagKindSchemaType(kind FlagKind) string {
 	}
 }
 
-// AnnotateConstraints projects the relationship constraints into the Agent
-// Runtime Schema: exactly_one decomposes into require_one_of + mutually_exclusive
+// AnnotateConstraints records executable relationship constraints for Schema
+// assembly: exactly_one decomposes into require_one_of + mutually_exclusive
 // (matching the handwritten commands' use of AnnotateRuntimeConstraints).
 //
 // When a group still has hidden siblings, the full declared flag list is
-// projected (not collapsed to a single visible "required"). ValidateConstraints
-// accepts any member of the declared group — including hidden — so marking the
-// sole visible flag required would falsely claim declare ≡ execute.
+// retained here (not collapsed to a single visible "required").
+// ValidateConstraints accepts any member of the declared group — including
+// hidden — so marking the sole visible flag required would falsely claim
+// declare ≡ execute. Final Schema assembly separately canonicalizes reviewed
+// aliases and projects this executable contract onto published inputs.
 func AnnotateConstraints(cmd *cobra.Command, constraints []Constraint) {
 	var projected runtimeannotate.RuntimeSchemaConstraints
 	var required []string

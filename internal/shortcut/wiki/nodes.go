@@ -12,6 +12,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
+const wikiCopySourceIDRequirement = "--node 必须是稳定节点 ID；不接受 http(s) URL，请先通过 +node-get 取得真实 nodeId"
+
 var NodeList = readShortcut("+node-list", "严格分页列出知识库节点", "浏览知识库根目录或指定文件夹；只有显式 nodes:[] 才表示空目录，并完整保留 nextCursor/hasMore。", "nodes", "dws wiki +node-list --workspace <workspaceId> --format json", []shortcut.Flag{
 	{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "父节点 ID"}, {Name: "limit", Type: shortcut.FlagInt, Default: "50", Desc: "每页数量 1-50"}, {Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}, AliasesVisible: true},
 }, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "folder", Property: "folderId"}, {Name: "limit", Property: "pageSize"}, {Name: "cursor", Property: "pageToken"}}, func(rt *shortcut.RuntimeContext) error {
@@ -192,30 +194,18 @@ var NodeCreate = writeShortcut("+node-create", "创建知识库节点并严格�
 	if err != nil {
 		return err
 	}
-	written, err = requireWikiWrite(written, "doc/create_file")
-	if err != nil {
-		return err
-	}
-	id := nestedWikiString(written, "nodeId", "fileId", "id")
-	if id == "" {
-		return wikiResponseError("doc/create_file", "missing_created_id", "创建响应没有 nodeId；远端效果未知")
-	}
-	verified, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": id})
-	if err != nil {
-		return err
-	}
-	verified, err = requireWikiObject(verified, "doc/get_document_info")
+	id, verified, err := verifyWikiNodeWrite(rt, written, "doc/create_file", "")
 	if err != nil {
 		return err
 	}
 	if err := requireWikiCreatedNode(verified, "doc/create_file", id, rt.Str("workspace"), rt.Str("folder"), rt.Str("name"), rt.Str("type")); err != nil {
-		return err
+		return wikiNodeWriteError(rt, id, "", err)
 	}
 	verified = projectWikiNode(verified)
 	return rt.Output(map[string]any{"success": true, "nodeId": id, "workspaceId": rt.Str("workspace"), "requestedType": rt.Str("type"), "node": verified})
 })
 
-var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并验证独立副本", "复制现有在线节点到目标知识库/文件夹；先读源节点，再要求新 nodeId 与源 ID 不同，并验证副本 workspace、folder 和类型。", "dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --format json", shortcut.RiskHighWrite, contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"}, []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "源节点 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error {
+var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并验证独立副本", "复制现有在线节点到目标知识库/文件夹；先读源节点，再要求新 nodeId 与源 ID 不同，并验证副本 workspace、folder 和类型。", "dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --format json", shortcut.RiskHighWrite, contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "non_idempotent"}, []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: wikiCopySourceIDRequirement}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error {
 	params := map[string]any{"workspaceId": rt.Str("workspace"), "nodeId": rt.Str("node")}
 	if rt.Changed("folder") {
 		params["targetFolderId"] = rt.Str("folder")
@@ -241,34 +231,13 @@ var NodeCopy = writeShortcut("+node-copy", "复制知识库节点并验证独立
 	if err != nil {
 		return err
 	}
-	written, err = requireWikiWrite(written, "doc/copy_document")
+	id, verified, err := verifyWikiNodeWrite(rt, written, "doc/copy_document", rt.Str("node"))
 	if err != nil {
-		return err
-	}
-	id := nestedWikiString(written, "nodeId", "fileId", "id")
-	if id == "" {
-		return wikiResponseError("doc/copy_document", "missing_created_id", "复制响应没有新 nodeId；远端效果未知")
-	}
-	if id == rt.Str("node") {
-		return wikiResponseError("doc/copy_document", "copy_reused_source_id", "复制响应复用了源 nodeId，无法证明生成了独立副本")
-	}
-	verified, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": id})
-	if err != nil {
-		return err
-	}
-	verified, err = requireWikiObject(verified, "doc/get_document_info")
-	if err != nil {
-		return err
-	}
-	if err := requireWikiNodeIdentity(verified, "doc/copy_document", id); err != nil {
-		return err
-	}
-	if err := requireWikiNodeTarget(verified, "doc/copy_document", rt.Str("workspace"), rt.Str("folder")); err != nil {
 		return err
 	}
 	sourceType, copyType := wikiNodeType(source), wikiNodeType(verified)
 	if sourceType != "" && copyType != "" && sourceType != copyType {
-		return wikiResponseError("doc/copy_document", "copy_type_mismatch", "副本类型与源节点不一致")
+		return wikiNodeWriteError(rt, id, rt.Str("node"), wikiResponseError("doc/copy_document", "copy_type_mismatch", "副本类型与源节点不一致"))
 	}
 	source = projectWikiNode(source)
 	verified = projectWikiNode(verified)
@@ -387,7 +356,21 @@ var NodeDelete = writeShortcut("+node-delete", "删除知识库节点", "明确�
 	if err != nil {
 		return err
 	}
-	if workspace := firstWikiString(preflight, "workspaceId", "spaceId"); workspace != "" && workspace != rt.Str("workspace") {
+	if _, err = requireWikiResponse(preflight, "doc/get_document_info"); err != nil {
+		return err
+	}
+	nodeID := firstWikiString(preflight, "nodeId", "id", "fileId")
+	if nodeID == "" {
+		return wikiResponseError("doc/delete_document", "missing_preflight_node_id", "删除预检缺少节点 ID，未发送删除请求")
+	}
+	if nodeID != rt.Str("node") {
+		return wikiResponseError("doc/delete_document", "node_preflight_mismatch", "删除预检返回的节点与请求不一致，未发送删除请求")
+	}
+	workspaceID := firstWikiString(preflight, "workspaceId", "spaceId")
+	if workspaceID == "" {
+		return wikiResponseError("doc/delete_document", "missing_preflight_workspace", "删除预检缺少知识库归属，未发送删除请求")
+	}
+	if workspaceID != rt.Str("workspace") {
 		return wikiResponseError("doc/delete_document", "workspace_preflight_mismatch", "节点不属于请求确认的知识库")
 	}
 	if rt.DryRun() {
@@ -424,6 +407,8 @@ var FeedList = readShortcut("+feed-list", "严格分页列出知识库动态", "
 })
 
 func init() {
+	NodeCopy.Validate = validateWikiCopySourceID
+	NodeCopy.Constraints = []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"node"}, Description: wikiCopySourceIDRequirement}}
 	Move.Aliases = []string{"+node-move"}
 	for _, item := range []*shortcut.Shortcut{&NodeList, &NodeSearch, &FeedList} {
 		enableWikiAutoPage(item)

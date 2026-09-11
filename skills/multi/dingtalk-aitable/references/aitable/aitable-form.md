@@ -13,7 +13,7 @@
 | `form field update` | 更新字段必填/描述 |
 | `form field hide` | 在表单中隐藏/显示字段（不影响底层数据表字段） |
 | `form share get` | 获取分享配置 |
-| `form share update` | 开启/关闭分享 |
+| `form share update` | 部分更新分享开关、授权、有效期和通知等配置 |
 | `form questions create` | 添加题目（等价于 `field create`，命令位置上的别名） |
 | `form questions delete` | 删除题目（等价于 `field delete`，命令位置上的别名） |
 
@@ -88,7 +88,7 @@ dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
 | `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回 enabled/status/shareFormUuid |
-| `form share update` | 开启/关闭分享 | `--base-id` `--table-id` `--view-id` `--enabled` | `--enabled true` 开启 / `--enabled false` 关闭。注意：UI 上"发布并分享"按钮是另一概念，本命令只切换内部 enabled 标志，开启后需在 UI 刷新页面才会看到分享面板 |
+| `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 开关用 `--enabled`；访问范围用 `--auth-type-code/--auth-data`；还可更新提交次数、有效期、名称描述、匿名提交、回填和通知配置；未传字段保持原值 |
 
 ## 完整工作流示例
 
@@ -125,6 +125,12 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 
 ## 返回结构补充
 
-- `form list` 返回 `data.formViews[]`，**每条仅含** `viewId/name/title/createdAt`；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
-- `form get` 返回结构与 `form list` 完全一致（`data.formViews[]`），仅含一条记录（与请求 viewId 一致）。Agent 提取时仍走 `data.formViews[0]`。
+- `form list` 返回 `data.formViews[]`，**每条含** `viewId/name`（以及服务端当前可用的 `title/createdAt`）；`shareFormUuid` 不在此返回，请用 `form share get` 单独获取。
+- `form get` 的 `data` 是客户端按 `viewId` 精确筛出的单个表单对象，不是 `formViews` 数组。Agent 直接读取 `data.viewId` / `data.name`；不存在的 `viewId` 会明确失败。
 - `form field list` 仅返回**未隐藏**的字段；`hidden=true` 的字段不在此返回，如需查看全部字段请用 `field get`。
+
+## MCP 交互注意事项
+
+- `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
+- 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`，再通过 `form share get` 回读确认。
+- 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。

@@ -30,32 +30,33 @@
 - 子消息使用自己的 `messageId`；只在缺会话 ID 时继承父消息 `conversationId`。
 - Bot 撤回使用 `processQueryKey`，不使用本文件的 `openMessageId` 路线。
 
-刚由用户身份发送的消息如果只得到 `openTaskId`，先查询发送状态：
+刚由用户身份发送的消息如果只得到 `openTaskId`，用 `+messages-query-send-status` 查询；
+只有需要 Shortcut 未公开字段或原始响应时才用原子 `message query-send-status`：
 
 ```text
-+messages-send 或 message send
++messages-send
 → openTaskId
-→ message query-send-status
+→ +messages-query-send-status
 → openMessageId + openConversationId
 → 编辑或撤回
 ```
 
 ## 撤回与编辑
 
-`+messages-recall` 可只传 `--msg-id`；省略会话 ID 时 CLI 会通过只读消息详情补齐。
-兼容单值 `--message-ids`，但不要把 `processQueryKey` 当消息 ID。
+`+messages-recall` 可只传公开主参数 `--msg-id`；省略会话 ID 时 CLI 会通过只读消息详情补齐。
+不要把 `processQueryKey` 当消息 ID。
 
 ```bash
 dws chat +messages-recall --msg-id <openMessageId> --format json
 dws chat +messages-recall --conversation-id <openConversationId> --msg-id <openMessageId> --format json
 ```
 
-编辑使用 `message edit --conversation-id <cid> --msg-id <id>`，并在 `--text` 与 `--content`
+编辑使用 `message edit --conversation-id <cid> --message-id <id>`，并在 `--text` 与 `--content`
 中二选一。`--text` 由 CLI 生成 Markdown content；`--content` 必须是完整 content JSON。
 
 ```bash
-dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
-dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'
+dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --text "更新后的内容"
+dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'
 ```
 
 群聊 @所有人使用 `--at-all`；指定人员使用 `--at-open-dingtalk-ids`。正文中的占位符以

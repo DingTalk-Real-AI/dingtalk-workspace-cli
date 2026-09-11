@@ -63,7 +63,7 @@ insert 返回 `whiteboardId` 后直接使用；若为 null，只 fetch 一次并
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "whiteboard +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws whiteboard <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service whiteboard --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "whiteboard +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service whiteboard --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -97,7 +97,19 @@ dws whiteboard +update --node <WHITEBOARD_NODE_ID> \
 # 使用 OpenNodes V1 初始内容创建独立白板
 dws whiteboard create-with-content --name "<白板名称>" \
   --source ./whiteboard.json --request-id <STABLE_REQUEST_ID> --format json
+
+# 导出独立白板；--output 是目录，文件名自动使用白板名称
+dws whiteboard export --node <WHITEBOARD_NODE_ID> \
+  --export-format png --output ./exports --format json
+
+# 轮询中断后用已有 jobId 恢复查询和下载
+dws whiteboard export-get --job-id <JOB_ID> \
+  --export-format png --output ./exports --format json
 ```
+
+导出下载仅接受 HTTPS/443 公网地址，每次重定向及实际连接都会校验目标地址；最大文件大小为 512 MiB，超限下载会清理临时文件。
+
+导出支持 `--dry-run`，只预览请求，不轮询或写文件。`--output` 必须是目录；同名文件已存在时不会覆盖，请改用其他目录或先处理已有文件。下载内容会在临时文件中检查 PNG/PDF 文件头，通过后再落到最终路径；无效下载不会占用目标文件名。恢复 PDF 任务时须传 `--export-format pdf`；任务后续出错时会保留 jobId，并给出包含格式及目录的恢复命令（POSIX shell）。
 
 `create-with-content --source` 本质是 OpenNodes JSON String 参数。较短内容可直接传
 `'{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[...]}'`；内容较长时可传

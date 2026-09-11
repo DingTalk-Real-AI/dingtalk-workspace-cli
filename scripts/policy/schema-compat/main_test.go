@@ -415,6 +415,55 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDriveWikiReviewedContractCorrections(t *testing.T) {
+	base := toolSchema{
+		PrimaryCLIPath: "fixture", InterfaceMode: "local", Availability: "available",
+		Parameters: map[string]parameterSchema{}, Effect: "write", Risk: "medium",
+		Confirmation: "not_required", Idempotency: "unknown",
+	}
+	for _, path := range []string{"drive/drive.publish_get", "drive/drive.publish_set", "drive/drive.shortcut_publish_set", "drive/drive.upload", "wiki/wiki.shortcut_member_remove"} {
+		t.Run(path, func(t *testing.T) {
+			current := base
+			switch path {
+			case "drive/drive.publish_get":
+				current.Effect, current.Risk, current.Idempotency = "read", "low", "idempotent"
+			case "drive/drive.publish_set", "drive/drive.shortcut_publish_set":
+				current.Availability = "unavailable"
+			default:
+				current.Confirmation = "user_required"
+			}
+			if failures := checkToolCompatibility(path, base, current); len(failures) != 0 {
+				t.Fatalf("reviewed correction rejected: %v", failures)
+			}
+			if failures := checkToolCompatibility("other/other.command", base, current); len(failures) == 0 {
+				t.Fatal("correction leaked to an unrelated tool")
+			}
+			if failures := checkToolCompatibility(path, current, base); len(failures) == 0 {
+				t.Fatal("reverse transition was accepted")
+			}
+			current.PrimaryCLIPath = "changed"
+			if failures := checkToolCompatibility(path, base, current); len(failures) == 0 {
+				t.Fatal("unrelated path drift was accepted")
+			}
+		})
+	}
+	for mask := 1; mask < 7; mask++ {
+		current := base
+		if mask&1 != 0 {
+			current.Effect = "read"
+		}
+		if mask&2 != 0 {
+			current.Risk = "low"
+		}
+		if mask&4 != 0 {
+			current.Idempotency = "idempotent"
+		}
+		if failures := checkToolCompatibility("drive/drive.publish_get", base, current); len(failures) == 0 {
+			t.Fatalf("partial correction mask %d was accepted", mask)
+		}
+	}
+}
+
 func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testing.T) {
 	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
 	newTool := oldTool

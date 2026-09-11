@@ -46,7 +46,7 @@ class ChatCompatibilityCountsTest(unittest.TestCase):
         self.assertEqual(after["compatibility_visible"], before["compatibility_visible"])
         self.assertEqual(after["hidden"], before["hidden"] + 1)
 
-    def test_render_distinguishes_all_three_visibility_classes(self):
+    def test_compact_chat_section_omits_compatibility_inventory(self):
         source = {"shortcuts": {
             "+public": {"disposition": "alias_internal", "public": True},
             "+hidden": {"disposition": "alias_internal"},
@@ -56,9 +56,10 @@ class ChatCompatibilityCountsTest(unittest.TestCase):
         fake_path.read_text.return_value = json.dumps(source)
         with mock.patch.object(generator, "CHAT_SEMANTIC_CATALOG", fake_path):
             text = generator.product_section("chat", [])
-        self.assertIn("1 条 public 兼容入口", text)
-        self.assertIn("1 条兼容入口仅 CLI 可见、不在 public Catalog", text)
-        self.assertIn("1 条隐藏兼容入口仍可执行", text)
+        self.assertIn("按 Golden Route/reference", text)
+        self.assertNotIn("1 条 public 兼容入口", text)
+        self.assertNotIn("1 条兼容入口仅 CLI 可见、不在 public Catalog", text)
+        self.assertNotIn("1 条隐藏兼容入口仍可执行", text)
         self.assertNotIn("3 条 public", text)
 
     def test_committed_chat_discovery_matches_generation(self):

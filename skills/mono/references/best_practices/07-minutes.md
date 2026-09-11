@@ -1,5 +1,9 @@
 # 听记与会后
 
+发言人总结使用 `+speaker-insights`：仅 `state=ready/complete=true` 且有校验后的正文才完成，`createStatus` 不代表当前状态。pending/超时不算成功，可能只是结果暂不可读；保留句柄，沿用同一 profile 和确认门禁，通过 `--resume --task-id <taskId>` 继续读，不重复创建。未知结构停止；用户指定等待时间传入 `--timeout`。
+
+导出听记用 `+export-pack` 时，已识别签名链接会在全部文本产物中替换为 `[signed-url-removed]`，并在发布前扫描；失败不发布。交付需说明 `sanitized/redactionCount/sanitizationScope`。当前 `offlineImagesComplete=false`，不可把归档成功当作图片离线可用；二进制媒体不属于文本扫描范围，文件 hash/内容读回仍未提供。
+
 > lite（`list-minutes`、`get-minutes-summary`、`get-minutes-transcription`）见 [SKILL.md](../../SKILL.md)。full recipe 见下表。  
 > 日程、订会议室、`schedule-meeting` 见 [03-meeting.md](./03-meeting.md)。产品命令见 [minutes.md](../products/minutes.md)。
 

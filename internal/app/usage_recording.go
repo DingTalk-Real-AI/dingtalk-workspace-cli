@@ -52,6 +52,17 @@ func (r recordingToolCaller) CallReadTool(ctx context.Context, product, tool str
 	return res, err
 }
 
+func (r recordingToolCaller) ResolveToolProduct(ctx context.Context, products []string, tool string) (string, error) {
+	inner, ok := r.inner.(toolProductResolver)
+	if !ok {
+		if len(products) == 0 {
+			return "", fmt.Errorf("no MCP product candidates for tool %q", tool)
+		}
+		return products[0], nil
+	}
+	return inner.ResolveToolProduct(ctx, products, tool)
+}
+
 func (r recordingToolCaller) CallToolWithToken(
 	ctx context.Context,
 	token, product, tool string,

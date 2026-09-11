@@ -96,6 +96,27 @@ func TestCrossPlatformCoverageDriveUploadValidationAndDryRunCoverage(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageDriveNewUploadDoesNotRequireConfirmation(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "fixture.txt")
+	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, workspace := range []string{"", "workspace-1"} {
+		t.Run("workspace="+workspace, func(t *testing.T) {
+			cause := errors.New("credential request reached")
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: cause}}}
+			args := []string{"upload", "--file", file}
+			if workspace != "" {
+				args = append(args, "--workspace", workspace)
+			}
+			err := executeDriveEdge(t, caller, args...)
+			if !errors.Is(err, cause) || caller.calls != 1 {
+				t.Fatalf("new upload must reach credentials without confirmation: err=%v calls=%d", err, caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDriveUploadTransportCoverage(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "fixture.txt")
 	if err := os.WriteFile(file, []byte("fixture"), 0o600); err != nil {
@@ -473,7 +494,7 @@ func TestCrossPlatformCoverageUploadToDocSpaceStep1Args(t *testing.T) {
 		old := httpPutFile
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 		t.Cleanup(func() { httpPutFile = old })
-		if err := executeDriveEdge(t, caller, "upload", "--file", file, "--workspace", "ws-1", "--folder", "f1"); err != nil {
+		if err := executeDriveEdge(t, caller, "upload", "--file", file, "--workspace", "ws-1", "--folder", "f1", "--yes"); err != nil {
 			t.Fatal(err)
 		}
 		if len(caller.argsLog) < 2 {
