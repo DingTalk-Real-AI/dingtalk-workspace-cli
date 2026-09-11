@@ -133,7 +133,7 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 | `workflow list` | 列出 Base 下所有工作流 | `--base-id` | 支持 `--limit [1,100]` / `--offset >=0`；list 出参字段叫 `flowId` |
 | `workflow get` | 获取单个工作流详情（含 flowSchema） | `--base-id` `--workflow-id` | `--workflow-id` 接受 list 里的 `flowId`（同值） |
 | `workflow enable` | 启用工作流 | `--base-id` `--workflow-id` | 返回 `{enabled: true}` 是动作确认；要确认真启用看 list 的 `status` |
-| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` `--yes` | 影响业务自动化，建议二次确认；status 变 STOP |
+| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` | 影响业务自动化，必须先取得用户明确确认；status 变 STOP |
 
 > 创建/更新的 `--dsl` 使用钉钉 AI 表格 `workflow-dsl/v1`；完整格式和最小 Demo 见 [aitable-workflow.md](./aitable/aitable-workflow.md)。删除工作流暂未开放。
 
@@ -395,7 +395,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 - 看 Base 里有哪些流程 / 哪些在跑 → `workflow list`（看 `recordCount` / `runningCount`）
 - 看某个流程具体配置（触发条件、动作步骤） → `workflow get`
 - 启用流程 → `workflow enable`
-- 临时停掉流程（调试 / 数据迁移）→ `workflow disable --yes`
+- 临时停掉流程（调试 / 数据迁移）→ `workflow disable`（必须先取得用户明确确认）
 - 删除流程：当前不支持，引导用户到 AI 表格 Web 端 → 数据表 → 自动化 面板手动完成
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)

@@ -54,12 +54,24 @@ DWS 对任何外部实现的持续兼容义务。后续设计以 DWS 自身约�
 
 | 模式 | Agent 目录布局 | 选择方式 |
 |---|---|---|
-| multi（默认） | canonical `~/.agents/skills/dingtalk-*/`；非 universal Agent 使用链接或复制兼容层 | 默认；`dws skill setup --mode multi` |
+| multi（默认） | canonical `~/.agents/skills/dingtalk-*/`；非 universal Agent 使用链接或复制兼容层 | 默认；`dws skill setup --mode multi`；公共 `npx skills add` |
 | mono（兼容） | canonical `~/.agents/skills/dws/`；非 universal Agent 使用链接或复制兼容层 | `dws skill setup --mode mono` 或安装器的 mono opt-in |
 
 模式切换通过重新执行 setup 完成。安装 multi 前备份并移除 mono 的 `dws/`；安装
 mono 前只备份并移除能够证明由 DWS 管理的 multi 目录。两个方向都不提供隐式、
 不可恢复的删除。
+
+### 4.1 公共 Agent Skills CLI（互补发现路径，不是第二套安装器）
+
+`npx skills add DingTalk-Real-AI/dingtalk-workspace-cli` 读取仓库 `skills/`
+树（vercel-labs/skills，容器内最多三层）。默认只安装
+`skills/multi/dingtalk-*`。`skills/mono` 通过 `metadata.internal: true` 对默认
+发现隐藏；`dws skill setup --mode mono`、curl 安装器和 zip 仍安装它。
+
+该入口不写入 `~/.dws/skills-state.json`，不负责 Gitee 回退、升级刷新或
+mono↔multi 互斥清理。那些合同仍由 `dws skill setup` / 平台安装脚本承担。
+用户级缓存 `~/.dws/skills/{mono,multi}` 与 zip `<root>/{mono,multi}` 布局不变；
+旧 `install.sh` / 旧 zip 仍按这两棵缓存树解析。
 
 ## 5. 官方集合与升级策略
 

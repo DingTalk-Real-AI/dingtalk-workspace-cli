@@ -23,8 +23,10 @@ package aitable
 import (
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -76,7 +78,7 @@ var DatasourceCreate = shortcut.Shortcut{
 		{Name: "datasource-type", Type: shortcut.FlagString, Desc: "数据源类型，目前支持审批（OA）", Required: true},
 		{Name: "source-config", Type: shortcut.FlagString, Desc: "源配置 JSON 字符串。字段分为两类：须从 +datasource-list-sources 结果原样透传的字段（必填）：processCode（审批流程编码）、name（展示名称）、iconUrl（图标 URL）、url（跳转链接）；调用方自行设置的字段：dataType（必填，time_range/start_time/recent_time）、recentDays（dataType=recent_time 时有效，7d/30d/1y，默认 30d）、startDate（dataType=time_range/start_time 时有效，yyyy-MM-dd，默认 30 天前）、endDate（dataType=time_range 时有效，yyyy-MM-dd，默认当天）、keepRemovedFields（是否保留已删除字段，默认 false）。约定：syncAll 固定为 true；splitParentTableField 与 enableDataSyncOaDetailList 为下游内部字段，无需传入", Required: true},
 		{Name: "auto", Type: shortcut.FlagBool, Desc: "是否开启自动同步，默认 false；创建新数据源表时该字段始终下发给下游"},
-		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "需要同步的字段 ID 列表，不传时保持现有配置（创建时默认为全部字段）"},
+		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "不受支持：当前仅支持全量同步，请勿传入"},
 		{Name: "auto-sync-setting", Type: shortcut.FlagString, Desc: "自动同步频率配置 JSON 字符串，仅在 --auto=true 时生效。字段：syncType（必填，hourly=按小时间隔，scheduled=定时触发）、hourlyInterval（syncType=hourly 时必填，正整数小时）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（syncType=scheduled 时必填，HH:mm）、selectedMonthDays（scheduleType=monthly 时必填，每月几号触发，1-31）、selectedWeekdays（scheduleType=weekly 时必填，每周哪几天触发，1=周一…7=周日）、skipNonWorkingDay（可选，默认 false）。不传时使用下游默认自动同步策略"},
 	},
 	Tips: []string{
@@ -94,12 +96,7 @@ var DatasourceCreate = shortcut.Shortcut{
 		}
 		params["auto"] = rt.Bool("auto")
 		if rt.Changed("field-ids") {
-			raw := rt.StrSlice("field-ids")
-			cleaned := trimNonEmpty(raw)
-			if len(cleaned) == 0 {
-				return fmt.Errorf("--field-ids 显式提供时不能为空，如需保持默认请勿传入")
-			}
-			params["fieldIds"] = cleaned
+			return apperrors.NewValidation("--field-ids 不受支持：当前数据源仅支持全量同步，请移除此参数")
 		}
 		if rt.Changed("auto-sync-setting") {
 			v := rt.Str("auto-sync-setting")
@@ -124,8 +121,8 @@ var DatasourceUpdate = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+datasource-update",
 	Product:     serverMain,
-	Description: "更新指定 AI 表格中已有数据源表的同步配置，支持更新源配置、自动同步开关和同步字段选择。更新后触发一次同步。仅适用于数据源表。",
-	Intent:      "当用户需要修改已有数据源表的配置（如更换审批模板、调整同步字段、开关自动同步）时使用。",
+	Description: "更新已有数据源表的完整源配置或自动同步设置，并触发一次全量同步。仅适用于数据源表，当前不支持选择同步字段。",
+	Intent:      "当用户需要更换审批模板、调整同步时间范围或开关自动同步时使用；source-config 可省略，此时先读取当前配置并原样提交，当前仅支持全量同步。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -139,15 +136,15 @@ var DatasourceUpdate = shortcut.Shortcut{
 			CLIPath:        "aitable +datasource-update",
 			PrimaryCLIPath: "aitable +datasource-update",
 		},
-		Description: "更新指定 AI 表格中已有数据源表的同步配置，支持更新源配置、自动同步开关和同步字段选择。更新后触发一次同步。仅适用于数据源表。",
+		Description: "更新已有数据源表的完整源配置或自动同步设置，并触发一次全量同步。仅适用于数据源表，当前不支持选择同步字段。",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
-			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+			Reason:       "The CLI reads aitable/get_datasource_config when --source-config is omitted, preserves its complete sourceConfig, and then calls aitable/update_datasource_config; no single direct MCP interface represents this compatibility adapter.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "更新指定 AI 表格中已有数据源表的同步配置，支持更新源配置、自动同步开关和同步字段选择。更新后触发一次同步。仅适用于数据源表。",
-			UseWhen:      []string{"当用户需要修改已有数据源表的配置（如更换审批模板、调整同步字段、开关自动同步）时使用。"},
+			AgentSummary: "更新已有数据源表的完整源配置或自动同步设置，并触发一次全量同步。仅适用于数据源表，当前不支持选择同步字段。",
+			UseWhen:      []string{"当用户需要更换审批模板、调整同步时间范围或开关自动同步时使用；source-config 可省略，此时先读取当前配置并原样提交，当前仅支持全量同步。"},
 			AvoidWhen: []string{
 				"需要创建新数据源表时（改用 +datasource-create）",
 				"仅需触发同步不改配置时（改用 +datasource-sync）",
@@ -161,9 +158,9 @@ var DatasourceUpdate = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "已存在的数据源表 ID（通过 +base-get / +table-list 获取，仅允许传入 sync=true 的数据源表）", Required: true},
-		{Name: "source-config", Type: shortcut.FlagString, Desc: "可选。新的源配置 JSON 字符串。不传时保持原有配置不变；传入时整体覆盖。字段分为两类：须从 +datasource-list-sources 结果原样透传的字段（必填）：processCode（审批流程编码）、name（展示名称）、iconUrl（图标 URL）、url（跳转链接）；调用方自行设置的字段：dataType（必填，time_range/start_time/recent_time）、recentDays（dataType=recent_time 时有效，7d/30d/1y，默认 30d）、startDate（dataType=time_range/start_time 时有效，yyyy-MM-dd，默认 30 天前）、endDate（dataType=time_range 时有效，yyyy-MM-dd，默认当天）、keepRemovedFields（默认 false）。约定：syncAll 固定为 true；splitParentTableField 与 enableDataSyncOaDetailList 为下游内部字段，无需传入"},
+		{Name: "source-config", Type: shortcut.FlagString, Desc: "可选。省略时先读取当前 sourceConfig 并原样提交，读取失败则不更新；显式传入时整体覆盖。字段分为两类：须从 +datasource-list-sources 结果原样透传的字段（必填）：processCode（审批流程编码）、name（展示名称）、iconUrl（图标 URL）、url（跳转链接）；调用方自行设置的字段：dataType（必填，time_range/start_time/recent_time）、recentDays（dataType=recent_time 时有效，7d/30d/1y，默认 30d）、startDate（dataType=time_range/start_time 时有效，yyyy-MM-dd，默认 30 天前）、endDate（dataType=time_range 时有效，yyyy-MM-dd，默认当天）、keepRemovedFields（默认 false）。约定：syncAll 固定为 true；splitParentTableField 与 enableDataSyncOaDetailList 为下游内部字段，无需传入"},
 		{Name: "auto", Type: shortcut.FlagBool, Desc: "可选。是否开启自动同步；仅显式设置时下发给下游，省略时保持原有自动同步开关不变"},
-		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "需要同步的字段 ID 列表，不传时保持现有配置（创建时默认为全部字段）"},
+		{Name: "field-ids", Type: shortcut.FlagStringSlice, Desc: "不受支持：当前仅支持全量同步，请勿传入"},
 		{Name: "auto-sync-setting", Type: shortcut.FlagString, Desc: "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly=按小时间隔，scheduled=定时触发）、hourlyInterval（syncType=hourly 时必填，正整数小时）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（syncType=scheduled 时必填，HH:mm）、selectedMonthDays（scheduleType=monthly 时必填，每月几号触发，1-31）、selectedWeekdays（scheduleType=weekly 时必填，每周哪几天触发，1=周一…7=周日）、skipNonWorkingDay（可选，默认 false）"},
 	},
 	Tips: []string{
@@ -185,12 +182,7 @@ var DatasourceUpdate = shortcut.Shortcut{
 			params["auto"] = rt.Bool("auto")
 		}
 		if rt.Changed("field-ids") {
-			raw := rt.StrSlice("field-ids")
-			cleaned := trimNonEmpty(raw)
-			if len(cleaned) == 0 {
-				return fmt.Errorf("--field-ids 显式提供时不能为空，如需保持默认请勿传入")
-			}
-			params["fieldIds"] = cleaned
+			return apperrors.NewValidation("--field-ids 不受支持：当前数据源仅支持全量同步，请移除此参数")
 		}
 		if rt.Changed("auto-sync-setting") {
 			v := rt.Str("auto-sync-setting")
@@ -202,10 +194,32 @@ var DatasourceUpdate = shortcut.Shortcut{
 			}
 			params["autoSyncSetting"] = v
 		}
-		if !rt.Changed("source-config") && !rt.Changed("auto") && !rt.Changed("field-ids") && !rt.Changed("auto-sync-setting") {
-			return fmt.Errorf("至少需要一个配置变更：--source-config、--auto、--field-ids 或 --auto-sync-setting；仅触发同步请使用 +datasource-sync")
+
+		if !rt.Changed("source-config") {
+			if !rt.Changed("auto") && !rt.Changed("auto-sync-setting") {
+				return apperrors.NewValidation("至少需要一个配置变更：--source-config、--auto 或 --auto-sync-setting；仅触发同步请使用 +datasource-sync")
+			}
+			current, err := rt.CallMCPReadData(serverMain, "get_datasource_config", map[string]any{
+				"baseId": rt.Str("base-id"), "tableId": rt.Str("table-id"),
+			})
+			if err != nil {
+				return err
+			}
+			config, err := aitableprotocol.DatasourceSourceConfig(current)
+			if err != nil {
+				return apperrors.NewAPI(err.Error()+"；未执行数据源更新，请显式提供完整 --source-config",
+					apperrors.WithOperation("aitable/get_datasource_config"),
+					apperrors.WithReason("datasource_config_unavailable"),
+					apperrors.WithFailureStage("response_validation"),
+					apperrors.WithExecutionStarted(false),
+					apperrors.WithRetryable(false))
+			}
+			params["sourceConfig"] = config
 		}
-		data, err := rt.CallMCPData(serverMain, "update_datasource_config", params)
+		if err := rt.Command().Context().Err(); err != nil {
+			return err
+		}
+		data, err := rt.CallMCPWriteData(serverMain, "update_datasource_config", params)
 		if err != nil {
 			return err
 		}
@@ -283,7 +297,7 @@ var DatasourceSyncStatus = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+datasource-sync-status",
 	Product:     serverMain,
-	Description: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用：这些指令触发同步后返回 taskId，本指令通过 taskId 查询最终结果。支持批量查询（单次最多 5 个 taskId），整体仍返回 success；需遍历 tasks 数组按单条 status 判断真实结果。任务状态包括：RUNNING（同步进行中）、FINISHED（同步完成）、FAILED（同步失败）。失败时会返回 errorCode 和 errorMessage 供排查。",
+	Description: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用，单次最多 5 个 taskId。仅 RUNNING 需要继续轮询；FINISHED、FAILED、NOT_FOUND 为终态；UNKNOWN 表示状态不可断言，也不应继续轮询。批量查询整体 success 时仍需逐项检查 tasks[].status 和 errorCode。",
 	Intent:      "当用户触发同步后需要按 taskId 查询同步是否完成、成功或失败时使用。支持批量查询（单次最多 5 个任务 ID）。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
@@ -298,14 +312,14 @@ var DatasourceSyncStatus = shortcut.Shortcut{
 			CLIPath:        "aitable +datasource-sync-status",
 			PrimaryCLIPath: "aitable +datasource-sync-status",
 		},
-		Description: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用：这些指令触发同步后返回 taskId，本指令通过 taskId 查询最终结果。支持批量查询（单次最多 5 个 taskId），整体仍返回 success；需遍历 tasks 数组按单条 status 判断真实结果。任务状态包括：RUNNING（同步进行中）、FINISHED（同步完成）、FAILED（同步失败）。失败时会返回 errorCode 和 errorMessage 供排查。",
+		Description: "按任务 ID 查询数据源同步状态。仅 RUNNING 继续轮询；FINISHED、FAILED、NOT_FOUND 为终态；UNKNOWN 不可断言且不继续轮询。整体 success 时仍需逐项检查 tasks[]。",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用：这些指令触发同步后返回 taskId，本指令通过 taskId 查询最终结果。支持批量查询（单次最多 5 个 taskId），整体仍返回 success；需遍历 tasks 数组按单条 status 判断真实结果。任务状态包括：RUNNING（同步进行中）、FINISHED（同步完成）、FAILED（同步失败）。失败时会返回 errorCode 和 errorMessage 供排查。",
+			AgentSummary: "按任务 ID 查询指定数据源表的同步任务状态。与 +datasource-sync / +datasource-create / +datasource-update 配对使用，单次最多 5 个 taskId。仅 RUNNING 需要继续轮询；FINISHED、FAILED、NOT_FOUND 为终态；UNKNOWN 表示状态不可断言，也不应继续轮询。批量查询整体 success 时仍需逐项检查 tasks[].status 和 errorCode。",
 			UseWhen:      []string{"当用户触发同步后需要按 taskId 查询同步是否完成、成功或失败时使用。支持批量查询（单次最多 5 个任务 ID）。"},
 			AvoidWhen: []string{
 				"需要触发同步时（改用 +datasource-sync）",
@@ -348,7 +362,7 @@ var DatasourceGetConfig = shortcut.Shortcut{
 	Command:     "+datasource-get-config",
 	Product:     serverMain,
 	Description: "获取指定数据源表的同步配置信息，包括源配置、是否全量同步、是否自动同步、同步状态等。仅适用于数据源表（sync=true），普通表会返回错误。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。返回的 sourceConfig 包含数据源连接信息（如审批模板 ID、源表 ID 等）。",
-	Intent:      "当用户需要查看已有数据源表的配置详情（如确认当前同步的审批模板、字段选择、自动同步状态）时使用。",
+	Intent:      "当用户需要查看已有数据源表的配置详情（如确认当前同步的审批模板、字段结构、自动同步状态）时使用。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -370,7 +384,7 @@ var DatasourceGetConfig = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "获取指定数据源表的同步配置信息，包括源配置、是否全量同步、是否自动同步、同步状态等。仅适用于数据源表（sync=true），普通表会返回错误。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。返回的 sourceConfig 包含数据源连接信息（如审批模板 ID、源表 ID 等）。",
-			UseWhen:      []string{"当用户需要查看已有数据源表的配置详情（如确认当前同步的审批模板、字段选择、自动同步状态）时使用。"},
+			UseWhen:      []string{"当用户需要查看已有数据源表的配置详情（如确认当前同步的审批模板、字段结构、自动同步状态）时使用。"},
 			AvoidWhen: []string{
 				"需要更新配置时（改用 +datasource-update）",
 				"需要查询同步任务状态时（改用 +datasource-sync-status）",
@@ -463,8 +477,8 @@ var DatasourceGetFields = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+datasource-get-fields",
 	Product:     serverMain,
-	Description: "获取指定数据源下可供同步的字段列表，用于在 +datasource-create / +datasource-update 中决定同步哪些字段。传入从 +datasource-list-sources 获取的 sourceConfig。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。",
-	Intent:      "当用户需要查看某数据源来源有哪些可同步字段、以便在创建或更新数据源时指定 field-ids 时使用。",
+	Description: "获取指定数据源下可供同步的字段列表，用于了解来源字段结构；当前仅支持全量同步。传入从 +datasource-list-sources 获取的 sourceConfig。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。",
+	Intent:      "当用户需要查看某数据源来源有哪些可同步字段、以便了解创建或更新数据源时的字段结构时使用。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -478,15 +492,15 @@ var DatasourceGetFields = shortcut.Shortcut{
 			CLIPath:        "aitable +datasource-get-fields",
 			PrimaryCLIPath: "aitable +datasource-get-fields",
 		},
-		Description: "获取指定数据源下可供同步的字段列表，用于在 +datasource-create / +datasource-update 中决定同步哪些字段。传入从 +datasource-list-sources 获取的 sourceConfig。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。",
+		Description: "获取指定数据源下可供同步的字段列表，用于了解来源字段结构；当前仅支持全量同步。传入从 +datasource-list-sources 获取的 sourceConfig。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "获取指定数据源下可供同步的字段列表，用于在 +datasource-create / +datasource-update 中决定同步哪些字段。传入从 +datasource-list-sources 获取的 sourceConfig。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。",
-			UseWhen:      []string{"当用户需要查看某数据源来源有哪些可同步字段、以便在创建或更新数据源时指定 field-ids 时使用。"},
+			AgentSummary: "获取指定数据源下可供同步的字段列表，用于了解来源字段结构；当前仅支持全量同步。传入从 +datasource-list-sources 获取的 sourceConfig。仅支持 OA 审批数据源（datasourceType=OA），其他数据源类型暂不支持，待后续开放。",
+			UseWhen:      []string{"当用户需要查看某数据源来源有哪些可同步字段、以便了解创建或更新数据源时的字段结构时使用。"},
 			AvoidWhen: []string{
 				"需要列出可用来源时（改用 +datasource-list-sources）",
 				"需要创建数据源表时（改用 +datasource-create）",
