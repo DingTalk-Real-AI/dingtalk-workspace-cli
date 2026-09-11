@@ -1052,8 +1052,9 @@ jobs:
     # across three physical app lanes. The lane names and their exact partition
     # union are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper.
     # This preserves memory release between Go test processes while reducing
-    # hosted-runner fan-out by six jobs per focused run.
-    timeout-minutes: 20
+    # hosted-runner fan-out by six jobs per focused run. Job wall time is 45m
+    # so the cli/smoke package timeout of 35m still has setup headroom.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -1176,10 +1177,15 @@ jobs:
           fi
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # internal/cli under -race exceeded 15m (CI run 34334461549 timed
+          # out after 990s with no DATA RACE), then 25m after a main merge
+          # (run 34513601170: green run 34507346541 needed 23m15s, and the
+          # merged head tipped the 25m alarm with no DATA RACE); 35m is the
+          # intentional budget.
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=35m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
@@ -1193,7 +1199,7 @@ jobs:
     # are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper. This
     # preserves registry release while reducing hosted-runner fan-out by six
     # jobs. cli/smoke retain extra timeout headroom for setup + assembly.
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -1203,9 +1209,7 @@ jobs:
           - app-lane-3
           - generators
           - helpers
-          - cli-lane-1
-          - cli-lane-2
-          - cli-lane-3
+          - cli
           - smoke
           - remaining
     steps:
@@ -1234,7 +1238,6 @@ jobs:
           package_shard="$TEST_SHARD"
           case "$TEST_SHARD" in
             app-lane-*) package_shard=app ;;
-            cli-lane-*) package_shard=cli ;;
           esac
           package_output="$(./scripts/ci/test-packages.sh list "$package_shard")"
           test -n "$package_output"
@@ -1250,44 +1253,17 @@ jobs:
               ./scripts/ci/run-app-race-tests.sh run-lane "${packages[0]}" "${TEST_SHARD#app-}"
               exit 0
               ;;
-            cli-lane-*)
-              # internal/cli carries this branch's cross-platform coverage
-              # suite (~26-28m under -race). Split its tests into three
-              # deterministic, disjoint lanes — a sorted enumeration cut into
-              # contiguous thirds — so each fits the shared 15m budget instead
-              # of raising shared timeouts. The shard's small sibling packages
-              # race unfiltered in lane 1.
-              lane="${TEST_SHARD#cli-lane-}"
-              test "${packages[0]}" = "${packages[0]%internal/cli*}internal/cli"
-              mapfile -t lane_tests < <(go test -list '.*' "${packages[0]}" | grep '^Test' | sort)
-              total="${#lane_tests[@]}"
-              test "$total" -gt 0
-              third=$(( (total + 2) / 3 ))
-              case "$lane" in
-                1) start=0; count="$third" ;;
-                2) start="$third"; count="$third" ;;
-                3) start=$(( third * 2 )); count=$(( total - start )) ;;
-              esac
-              lane_regex="^("
-              sep=""
-              for (( i = start; i < start + count; i++ )); do
-                lane_regex+="$sep${lane_tests[i]}"
-                sep="|"
-              done
-              lane_regex+=")$"
-              if [ "$lane" = 1 ] && [ "${#packages[@]}" -gt 1 ]; then
-                go test -v -race -count=1 -timeout=12m "${packages[@]:1}"
-              fi
-              go test -v -race -count=1 -timeout=15m -run "$lane_regex" "${packages[0]}"
-              exit 0
-              ;;
           esac
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # Match the focused-job budget: 15m then 25m each timed out
+          # internal/cli under -race without a data race (latest: run
+          # 34513601170 hit the 25m alarm after the main merge; green run
+          # 34507346541 already needed 23m15s).
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=35m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 

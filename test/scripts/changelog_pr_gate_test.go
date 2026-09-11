@@ -1345,8 +1345,8 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
 		t.Error("focused test shards must run for every non-doc, non-reused, non-full-suite revision")
 	}
-	if !strings.Contains(focusedJob, "timeout-minutes: 20") {
-		t.Error("focused test job must allow the scoped race suite up to 20 minutes")
+	if !strings.Contains(focusedJob, "timeout-minutes: 45") {
+		t.Error("focused test job must allow the scoped race suite up to 45 minutes")
 	}
 	// The focused path fans the impacted set across the same shards as test-race
 	// and runs each shard the way test-race runs it, so no single job carries
@@ -1367,7 +1367,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
-		"timeout_budget=15m",
+		"timeout_budget=35m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
 		"- smoke",
 		"- release-scripts",
@@ -1387,7 +1387,10 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	// registries are still released with each logical partition process, and each
 	// lane resolves back to the same single internal/app package.
 	// Other full race shards retain the dynamic package timeout: default/floor
-	// 12m, with cli/smoke raised to 15m on slower hosted runners.
+	// 12m, with cli/smoke raised to 35m on slower hosted runners so Schema
+	// cache assembly under -race can finish (15m then 25m timed out
+	// internal/cli; latest: run 34513601170 hit the 25m alarm after a main
+	// merge, with green run 34507346541 already needing 23m15s).
 	for _, want := range []string{
 		`app-lane-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
@@ -1395,19 +1398,9 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
-		"timeout_budget=15m",
+		"timeout_budget=35m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
 		"- smoke",
-		// The cli race shard is split into three deterministic lanes (sorted
-		// enumeration, contiguous thirds) so internal/cli fits the shared 15m
-		// budget instead of raising shared timeouts; lane 1 also races the
-		// shard's small sibling packages.
-		`cli-lane-*) package_shard=cli ;;`,
-		"- cli-lane-1",
-		"- cli-lane-2",
-		"- cli-lane-3",
-		`lane="${TEST_SHARD#cli-lane-}"`,
-		`-timeout=15m -run "$lane_regex" "${packages[0]}"`,
 	} {
 		if !strings.Contains(raceJob, want) {
 			t.Errorf("full race shards must retain dynamic timeout budget contract %q", want)
