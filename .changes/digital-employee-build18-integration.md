@@ -1,3 +1,7 @@
+---
+category: Added
+---
+
 ## 数字员工登录与本地生命周期整合
 
 - 保留外部安全换票与 `manage login`，同时支持 `connect --profile-only`、本地 Agent 与 DSH 员工级生命周期。
