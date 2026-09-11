@@ -281,20 +281,20 @@ func TestCrossPlatformCoverageDocRangeReplaceWaitsForWholeSelectedEffect(t *test
 func TestCrossPlatformCoverageDocMediaPreviewPersistentOutputAndValidation(t *testing.T) {
 	t.Chdir(t.TempDir())
 	c := &docCoverageCaller{}
-	if err := runDocCoverage(t, MediaPreview, c, "--yes", "--node", "n", "--resource-id", "bad"); err == nil || c.calls != 0 {
+	if err := runDocCoverage(t, MediaPreview, c, "--node", "n", "--resource-id", "bad"); err == nil || c.calls != 0 {
 		t.Fatal("invalid resource ID")
 	}
-	if err := runDocCoverage(t, MediaPreview, c, "--yes", "--node", "n", "--resource-id", "12345678-1234-1234-1234-123456789012", "--output", "../bad"); err == nil || c.calls != 0 {
+	if err := runDocCoverage(t, MediaPreview, c, "--node", "n", "--resource-id", "12345678-1234-1234-1234-123456789012", "--output", "../bad"); err == nil || c.calls != 0 {
 		t.Fatal("escaping output")
 	}
 	c = &docCoverageCaller{responses: map[string][]map[string]any{"download_doc_attachment": {{"downloadUrl": "https://example.com/file.txt"}}}}
 	testseam.Swap(t, &docDownload, func(_ context.Context, _ string, opts localio.DownloadOptions) (localio.DownloadResult, error) {
-		if !opts.Overwrite {
-			t.Fatal("explicit overwrite not delivered")
+		if opts.Overwrite {
+			t.Fatal("legacy preview must not overwrite")
 		}
 		return localio.DownloadResult{AbsolutePath: filepath.Join(opts.BaseDir, "output.txt"), RelativePath: "output.txt", SizeBytes: 4}, nil
 	})
-	if err := runDocCoverage(t, MediaPreview, c, "--yes", "--node", "n", "--resource-id", "12345678-1234-1234-1234-123456789012", "--output", "output.txt", "--overwrite"); err != nil {
+	if err := runDocCoverage(t, MediaPreview, c, "--node", "n", "--resource-id", "12345678-1234-1234-1234-123456789012", "--output", "output.txt"); err != nil {
 		t.Fatal(err)
 	}
 }

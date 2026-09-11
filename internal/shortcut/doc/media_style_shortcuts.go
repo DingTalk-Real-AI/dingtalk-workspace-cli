@@ -66,17 +66,16 @@ var MediaInsert = shortcut.Shortcut{
 var MediaDownload = shortcut.Shortcut{
 	Service: "doc", Command: "+media-download", Product: productDoc,
 	Description: "安全下载文档正文附件到工作目录",
-	Intent:      "当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖；下载写入本地前需要用户确认，--overwrite 允许替换已有文件。",
-	Risk:        shortcut.RiskWrite,
-	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"},
+	Intent:      "当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖；覆盖已有文件用 +download-overwrite。",
+	Risk:        shortcut.RiskRead,
+	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+media-download", "安全下载文档正文附件到工作目录",
-		"当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖；下载写入本地前需要用户确认，--overwrite 允许替换已有文件。",
+		"当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖；覆盖已有文件用 +download-overwrite。",
 		[]string{`dws doc +media-download --node <DOC_ID> --resource-id <RESOURCE_ID> --output ./downloads/`}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "附件 resourceId；--resource-id 必须是附件回执返回的 UUID", Required: true},
 		{Name: "output", Type: shortcut.FlagString, Default: ".", Desc: "工作目录内相对路径（文件或目录）"},
-		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "显式允许原子覆盖已有普通文件；失败保留原文件"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if err := validateDocResourceID(rt.Str("resource-id")); err != nil {
@@ -95,15 +94,14 @@ var MediaDownload = shortcut.Shortcut{
 var MediaPreview = shortcut.Shortcut{
 	Service: "doc", Command: "+media-preview", Product: productDoc,
 	Description: "下载正文媒体到受控临时目录并返回预览路径",
-	Intent:      "当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径；写入本地前需要用户确认，指定 --output --overwrite 可替换已有文件。",
-	Risk:        shortcut.RiskWrite,
-	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"},
+	Intent:      "当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
+	Risk:        shortcut.RiskRead,
+	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+media-preview", "下载正文媒体到受控临时目录并返回预览路径",
-		"当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径；写入本地前需要用户确认，指定 --output --overwrite 可替换已有文件。",
+		"当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
 		[]string{`dws doc +media-preview --node <DOC_ID> --resource-id <RESOURCE_ID>`}),
 	Flags: []shortcut.Flag{
 		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "可选：持久保存到工作目录内相对路径；不传使用临时目录"},
-		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "仅指定output时可覆盖已有普通文件"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "附件 resourceId；--resource-id 必须是附件回执返回的 UUID", Required: true},
 	},
@@ -113,9 +111,6 @@ var MediaPreview = shortcut.Shortcut{
 		}
 		if rt.Changed("output") {
 			return localio.ValidateOutput(rt.Str("output"))
-		}
-		if rt.Bool("overwrite") {
-			return apperrors.NewValidation("--overwrite 需要 --output")
 		}
 		return nil
 	},
@@ -179,16 +174,15 @@ var ResourceUpdate = shortcut.Shortcut{
 var ResourceDownload = shortcut.Shortcut{
 	Service: "doc", Command: "+resource-download", Product: productDoc,
 	Description: "读取并安全下载当前文档封面",
-	Intent:      "当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存；写入本地前需要用户确认，--overwrite 允许替换已有文件。",
-	Risk:        shortcut.RiskWrite,
-	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"},
+	Intent:      "当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
+	Risk:        shortcut.RiskRead,
+	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+resource-download", "读取并安全下载当前文档封面",
-		"当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存；写入本地前需要用户确认，--overwrite 允许替换已有文件。",
+		"当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
 		[]string{`dws doc +resource-download --node <DOC_ID> --output ./cover.png`}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "output", Type: shortcut.FlagString, Default: ".", Desc: "工作目录内相对路径（文件或目录）"},
-		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "显式允许原子覆盖已有普通文件；失败保留原文件"},
 	},
 	Validate:    func(rt *shortcut.RuntimeContext) error { return localio.ValidateOutput(rt.Str("output")) },
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"output"}, Description: "--output 必须是工作目录内相对路径；默认 no-clobber"}},
@@ -284,7 +278,7 @@ func executeMediaDownload(rt *shortcut.RuntimeContext) error {
 	if result.SizeBytes <= 0 {
 		return docMediaRecoveryError("doc_media_empty_download", "verify", rt.Str("node"), rt.Str("resource-id"), fmt.Errorf("下载结果为空"))
 	}
-	return rt.Output(docEnvelope("doc.media_download", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "localPath": result.RelativePath, "sizeBytes": result.SizeBytes, "verified": true}))
+	return outputDocDownload(rt, "doc.media_download", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "localPath": result.RelativePath, "sizeBytes": result.SizeBytes, "verified": true})
 }
 
 func docMediaRecoveryError(reason, stage, nodeID, resourceID string, cause error) error {
@@ -340,7 +334,7 @@ func executeResourceDownload(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	return rt.Output(docEnvelope("doc.resource_download", map[string]any{"localPath": result.RelativePath, "sizeBytes": result.SizeBytes}))
+	return outputDocDownload(rt, "doc.resource_download", map[string]any{"localPath": result.RelativePath, "sizeBytes": result.SizeBytes})
 }
 
 func downloadResolvedResource(rt *shortcut.RuntimeContext, data map[string]any, baseDir, output string) (localio.DownloadResult, error) {
@@ -358,7 +352,7 @@ func downloadResolvedResource(rt *shortcut.RuntimeContext, data map[string]any, 
 			}
 		}
 	}
-	return docDownload(rt.Command().Context(), resourceURL, localio.DownloadOptions{BaseDir: baseDir, Output: output, PreferredName: nestedStringDeep(data, "fileName", "name"), Headers: headers, Overwrite: rt.Bool("overwrite")})
+	return docDownload(rt.Command().Context(), resourceURL, localio.DownloadOptions{BaseDir: baseDir, Output: output, PreferredName: nestedStringDeep(data, "fileName", "name"), Headers: headers, Overwrite: rt.Command().Name() == downloadOverwriteCommand})
 }
 
 func collectMediaItems(value any) []map[string]any {

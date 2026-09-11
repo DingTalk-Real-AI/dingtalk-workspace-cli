@@ -24,6 +24,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -148,6 +149,18 @@ func runDocCoverageWriter(t *testing.T, declaration shortcut.Shortcut, caller *d
 	root.SetIn(input)
 	if caller.ctx != nil {
 		root.SetContext(caller.ctx)
+	}
+	if declaration.OutputRollout == output.RolloutUnifiedActive {
+		ctx := root.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ctx, _ = output.WithResultStore(ctx)
+		root.SetContext(ctx)
+		root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+			_, _, err := output.EmitStoredResult(cmd)
+			return err
+		}
 	}
 	root.SetArgs(append([]string{"doc", commandPath}, args...))
 	return root.Execute()
@@ -422,7 +435,7 @@ func TestCrossPlatformCoverageMediaFailuresKeepStableIDsAndForbidPathEscape(t *t
 	}
 
 	resolveFailure := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
-	err := runDocCoverage(t, MediaDownload, resolveFailure, "--yes", "--node", "node-1", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "media.bin")
+	err := runDocCoverage(t, MediaDownload, resolveFailure, "--node", "node-1", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "media.bin")
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || typed.Reason != "doc_media_resolve_failed" || typed.Details["nodeId"] != "node-1" || typed.Details["resourceId"] != "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e" {
 		t.Fatalf("media recovery error = %#v", err)
@@ -1348,7 +1361,7 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 		args []string
 	}{
 		{Create, []string{"--name", "n", "--content", "@"}},
-		{Create, []string{"--name", "n", "--content", "@/absolute"}},
+		{Create, []string{"--name", "n", "--content", "@" + filepath.Join(t.TempDir(), "absolute.txt")}},
 		{Create, []string{"--name", "n", "--content", "not-json", "--doc-format", "jsonml"}},
 		{Create, []string{"--name", "n", "--content", `{}`, "--doc-format", "jsonml"}},
 		{Create, []string{"--name", "n", "--content", `[]`, "--doc-format", "jsonml"}},
@@ -1368,7 +1381,7 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 			t.Errorf("%s %#v unexpectedly succeeded", tc.cmd.Command, tc.args)
 		}
 	}
-	absoluteInputErr := runDocCoverage(t, Create, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--name", "n", "--content", "@/absolute")
+	absoluteInputErr := runDocCoverage(t, Create, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--name", "n", "--content", "@"+filepath.Join(t.TempDir(), "absolute.txt"))
 	if absoluteInputErr == nil || !strings.Contains(absoluteInputErr.Error(), "暂存到工作目录") || !strings.Contains(absoluteInputErr.Error(), "stdin") {
 		t.Fatalf("absolute @file guidance = %v", absoluteInputErr)
 	}
@@ -1547,12 +1560,12 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 		{CommentCreate, []string{"--node", "n", "--content", "x", "--block-id", "block-1", "--start", "0", "--end", "1", "--selected-text", "a", "--mention", "u", "--yes"}},
 		{CommentCreate, []string{"--node", "n", "--content", "x", "--selection", "alpha", "--yes"}},
 		{MediaList, []string{"--node", "n"}},
-		{MediaPreview, []string{"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e"}},
-		{MediaPreview, []string{"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--dry-run"}},
-		{MediaDownload, []string{"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin"}},
-		{MediaDownload, []string{"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin", "--dry-run"}},
-		{ResourceDownload, []string{"--yes", "--node", "n", "--output", "cover.png"}},
-		{ResourceDownload, []string{"--yes", "--node", "n", "--output", "cover.png", "--dry-run"}},
+		{MediaPreview, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e"}},
+		{MediaPreview, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--dry-run"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin", "--dry-run"}},
+		{ResourceDownload, []string{"--node", "n", "--output", "cover.png"}},
+		{ResourceDownload, []string{"--node", "n", "--output", "cover.png", "--dry-run"}},
 		{ResourceDelete, []string{"--node", "n", "--dry-run", "--yes"}},
 		{BackgroundUpdate, []string{"--node", "n", "--color", "#ABCDEF"}},
 		{BackgroundDelete, []string{"--node", "n", "--dry-run", "--yes"}},
@@ -1572,8 +1585,8 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 			"+create-from-template": {"--query", "q"},
 			"+review":               {"--node", "n"},
 			"+media-list":           {"--node", "n"},
-			"+media-download":       {"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin"},
-			"+resource-download":    {"--yes", "--node", "n", "--output", "cover.png"},
+			"+media-download":       {"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin"},
+			"+resource-download":    {"--node", "n", "--output", "cover.png"},
 		}[declaration.Command]
 		for failAt := 1; failAt <= 4; failAt++ {
 			_ = runDocCoverage(t, declaration, &docCoverageCaller{failAt: failAt, responses: map[string][]map[string]any{}}, args...)
@@ -1666,18 +1679,18 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 	}
 
 	resourceOnly := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_style": {{"resourceId": "r"}}}}
-	_ = runDocCoverage(t, ResourceDownload, resourceOnly, "--yes", "--node", "n", "--output", "cover.png")
+	_ = runDocCoverage(t, ResourceDownload, resourceOnly, "--node", "n", "--output", "cover.png")
 	emptyStyle := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_style": {{"ok": true}}}}
-	_ = runDocCoverage(t, ResourceDownload, emptyStyle, "--yes", "--node", "n", "--output", "cover.png")
-	_ = runDocCoverage(t, ResourceDownload, &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{"get_document_style": {{"resourceId": "r"}}}}, "--yes", "--node", "n", "--output", "cover.png")
+	_ = runDocCoverage(t, ResourceDownload, emptyStyle, "--node", "n", "--output", "cover.png")
+	_ = runDocCoverage(t, ResourceDownload, &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{"get_document_style": {{"resourceId": "r"}}}}, "--node", "n", "--output", "cover.png")
 	_, _ = downloadResolvedResource(nil, map[string]any{}, ".", "x")
-	_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}, "--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
+	_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 	_ = runDocCoverage(t, BackgroundUpdate, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--color", "bad")
 	_ = runDocCoverage(t, BackgroundUpdate, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--color", "#ABCDEG")
 
 	t.Run("preview mkdir failure", func(t *testing.T) {
 		testseam.Swap(t, &docMkdirTemp, func(string, string) (string, error) { return "", errors.New("mkdir") })
-		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
+		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 	})
 	t.Run("preview download cleanup", func(t *testing.T) {
 		removed := false
@@ -1685,7 +1698,7 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 			return localio.DownloadResult{}, errors.New("download")
 		})
 		testseam.Swap(t, &docRemoveAll, func(string) error { removed = true; return nil })
-		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
+		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 		if !removed {
 			t.Fatal("preview failure did not clean temporary directory")
 		}
@@ -1749,8 +1762,8 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 		args []string
 	}{
 		{Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
-		{MediaDownload, []string{"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
-		{ResourceDownload, []string{"--yes", "--node", "n", "--output", "out.png"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
+		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {
 		if err := runDocCoverage(t, item.decl, &docCoverageCaller{responses: map[string][]map[string]any{}}, item.args...); err == nil {
 			t.Errorf("%s download error was ignored", item.decl.Command)
@@ -1763,8 +1776,8 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 		args []string
 	}{
 		{Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
-		{MediaDownload, []string{"--yes", "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
-		{ResourceDownload, []string{"--yes", "--node", "n", "--output", "out.png"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
+		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {
 		_ = runDocCoverage(t, item.decl, &docCoverageCaller{responses: map[string][]map[string]any{}}, item.args...)
 	}
@@ -1774,8 +1787,8 @@ func TestCrossPlatformCoverageDocDownloadOverwriteIsExplicit(t *testing.T) {
 	for _, decl := range []shortcut.Shortcut{MediaDownload, ResourceDownload, MediaPreview} {
 		cmd := corecmd.New(shortcut.FromShortcut(decl))
 		flag := cmd.Flags().Lookup("overwrite")
-		if flag == nil || flag.DefValue != "false" {
-			t.Fatalf("%s must default to no-clobber", decl.Command)
+		if flag != nil {
+			t.Fatalf("%s must not expose overwrite", decl.Command)
 		}
 	}
 	caller := &docCoverageCaller{}

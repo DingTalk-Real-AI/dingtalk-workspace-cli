@@ -19,14 +19,15 @@ import (
 )
 
 func TestCrossPlatformCoverageDocDownloadConfirmationBeforeResolveAndPublish(t *testing.T) {
-	for _, decl := range []shortcut.Shortcut{MediaDownload, MediaPreview, ResourceDownload} {
-		t.Run(decl.Command, func(t *testing.T) {
+	for _, source := range []string{"media", "cover"} {
+		decl := DownloadOverwrite
+		t.Run(source, func(t *testing.T) {
 			t.Chdir(t.TempDir())
 			if err := os.WriteFile("existing.bin", []byte("original"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			args := []string{"--node", "node-1", "--output", "existing.bin", "--overwrite"}
-			if decl.Command != ResourceDownload.Command {
+			args := []string{"--node", "node-1", "--output", "existing.bin", "--source", source}
+			if source == "media" {
 				args = append(args, "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 			}
 			caller := &docCoverageCaller{responses: map[string][]map[string]any{
@@ -71,5 +72,35 @@ func TestCrossPlatformCoverageDocPreviewOutputShorthandRemainsExecutable(t *test
 	encoded, err := json.Marshal(got)
 	if err != nil || caller.calls != 0 || !strings.Contains(string(encoded), "preview.bin") {
 		t.Fatalf("-o preview did not preserve output without RPC: %#v, %v", got, err)
+	}
+}
+
+func TestCrossPlatformCoverageDocOverwritePreviewAndInputBoundaries(t *testing.T) {
+	for _, args := range [][]string{
+		{"--source", "media"},
+		{"--source", "media", "--resource-id", "bad"},
+		{"--source", "cover", "--resource-id="},
+		{"--source", "other"},
+		{"--source", "cover", "--output", "../escape"},
+	} {
+		caller := &docCoverageCaller{}
+		err := runDocCoverage(t, DownloadOverwrite, caller, append([]string{"--node", "n", "--output", "out.bin"}, args...)...)
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason == "confirmation_required" || caller.calls != 0 {
+			t.Fatalf("invalid input must fail validation before confirmation/RPC: %v", err)
+		}
+	}
+	caller := &docCoverageCaller{}
+	got := runDocCoverageEnvelope(t, DownloadOverwrite, caller, "--node", "n", "--source", "cover", "-o", "out.bin", "--dry-run")
+	data, ok := got["data"].(map[string]any)
+	if !ok || data["executed"] != false || data["preview_kind"] != "plan" || data["localPath"] != "out.bin" || caller.calls != 0 {
+		t.Fatalf("dry-run must return a local plan only: %#v", got)
+	}
+	for _, decl := range []shortcut.Shortcut{MediaDownload, MediaPreview, ResourceDownload} {
+		caller := &docCoverageCaller{}
+		err := runDocCoverage(t, decl, caller, "--node", "n", "--overwrite")
+		if err == nil || !strings.Contains(err.Error(), "unknown flag") || caller.calls != 0 {
+			t.Fatalf("legacy command must reject overwrite before RPC: %s %v", decl.Command, err)
+		}
 	}
 }

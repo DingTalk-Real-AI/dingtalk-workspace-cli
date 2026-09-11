@@ -18,19 +18,23 @@ import (
 )
 
 const (
-	publicShortcutCount = 445
+	publicShortcutCount = 446
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 502
+	schemaPublishedShortcutCount = 503
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 445
+	publiclyDeliveredShortcutCount = 446
 )
 
 func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *testing.T) {
-	for _, name := range []string{"+media-download", "+media-preview", "+resource-download"} {
+	for _, name := range []string{"+media-download", "+media-preview", "+resource-download", "+download-overwrite"} {
 		t.Run(name, func(t *testing.T) {
 			tool := executeShortcutSchemaQuery(t, "--cli-path", "doc "+name)
-			for field, want := range map[string]string{"effect": "write", "risk": "medium", "confirmation": "user_required"} {
+			wantSafety := map[string]string{"effect": "read", "risk": "low", "confirmation": "not_required"}
+			if name == "+download-overwrite" {
+				wantSafety = map[string]string{"effect": "write", "risk": "medium", "confirmation": "user_required"}
+			}
+			for field, want := range wantSafety {
 				if got := schemaContractString(tool[field]); got != want {
 					t.Fatalf("%s final %s = %q, want %q", name, field, got, want)
 				}
