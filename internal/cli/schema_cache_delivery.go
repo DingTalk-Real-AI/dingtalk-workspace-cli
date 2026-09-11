@@ -148,6 +148,28 @@ func validateSchemaCacheOptions(options SchemaCacheOptions) error {
 	return options.Identity.Validate()
 }
 
+// readableSchemaCacheRuntime is the read-path counterpart of
+// activeSchemaCacheRuntime: it ignores schemaCacheRuntimeUncertain. Plugin
+// commands mount on the Cobra tree and never enter the reviewed Schema
+// surface (neither cached nor live-assembled), so while uncertain the cached
+// payload is byte-identical to what live assembly would produce. Reads are
+// therefore safe; every publish/repair/prewarm/fast-path decision keeps using
+// activeSchemaCacheRuntime and stays disabled while uncertain.
+func readableSchemaCacheRuntime() *schemaCacheRuntime {
+	registration := schemaCacheRegistrationValue.Load()
+	if registration == nil || registration.runtime == nil {
+		return nil
+	}
+	opts := registration.runtime.optionsSnapshot()
+	if !opts.Enabled {
+		return nil
+	}
+	if eligible := opts.RuntimeEligible; eligible != nil && !eligible() {
+		return nil
+	}
+	return registration.runtime
+}
+
 func activeSchemaCacheRuntime() *schemaCacheRuntime {
 	registration := schemaCacheRegistrationValue.Load()
 	if registration == nil || registration.runtime == nil || schemaCacheRuntimeUncertain.Load() {
@@ -331,6 +353,13 @@ func (r *schemaCacheRuntime) opened() (*schemacache.Cache, error) {
 		options := []schemacache.Option{}
 		if opts.Counters != nil {
 			options = append(options, schemacache.WithCounters(opts.Counters))
+		}
+		// While the surface is plugin-uncertain this runtime serves
+		// speculative reads only; a missing cache must not be materialized by
+		// a read (repair/publication stays disabled via
+		// activeSchemaCacheRuntime).
+		if schemaCacheRuntimeUncertain.Load() {
+			options = append(options, schemacache.WithNoCreate())
 		}
 		r.cache, r.openErr = schemacache.Open(opts.cacheEdition(), options...)
 	})

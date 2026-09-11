@@ -213,9 +213,15 @@ func deliverySchemaAllPayload() (map[string]any, error) {
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		return schemaAllPayloadFromLoaded(*loaded)
 	}
-	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+	if runtime := readableSchemaCacheRuntime(); runtime != nil {
 		if payload, err := runtime.loadAllPayload(); err == nil {
 			return payload, nil
+		}
+		if activeSchemaCacheRuntime() == nil {
+			if err := deliverySchemaCatalogError(); err != nil {
+				return nil, err
+			}
+			return schemaAllPayloadFromLoaded(deliverySchemaCatalog())
 		}
 		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
 			meta, metaErr := runtime.readMeta()
@@ -248,9 +254,15 @@ func deliverySchemaOverviewPayload() (map[string]any, error) {
 	if loaded := runtimeDeliveryLiveCatalog.Load(); loaded != nil {
 		return schemaOverviewPayloadFromLoaded(*loaded)
 	}
-	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+	if runtime := readableSchemaCacheRuntime(); runtime != nil {
 		if payload, err := runtime.loadOverviewPayload(); err == nil {
 			return payload, nil
+		}
+		if activeSchemaCacheRuntime() == nil {
+			if err := deliverySchemaCatalogError(); err != nil {
+				return nil, err
+			}
+			return schemaOverviewPayloadFromLoaded(deliverySchemaCatalog())
 		}
 		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
 			meta, metaErr := runtime.readMeta()
@@ -322,10 +334,16 @@ func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
 		}
 		return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
 	}
-	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+	if runtime := readableSchemaCacheRuntime(); runtime != nil {
 		raw := strings.TrimSpace(args[0])
 		if payload, err := runtime.loadQueryPayload(raw); err == nil {
 			return payload, nil
+		}
+		if activeSchemaCacheRuntime() == nil {
+			if err := deliverySchemaCatalogError(); err != nil {
+				return nil, err
+			}
+			return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
 		}
 		value, loaded, err := repairSchemaCache(runtime, func() (any, error) {
 			return runtime.readQueryPayload(raw)

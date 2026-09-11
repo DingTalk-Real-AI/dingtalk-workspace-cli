@@ -33,7 +33,12 @@ func RenderHelpAffordances(cmd *cobra.Command) {
 
 	cliPath := commandCLIPath(cmd)
 	productID := ""
-	if SchemaSourceRootRegistered() {
+	// Pure group pages (subcommands, no own Run) are never tool paths, so
+	// ResolveMeta can only miss for them — and under a plugin-uncertain
+	// runtime that miss costs a full live catalog assembly the rendered
+	// output never consumes. Leaves and hybrid commands keep the lookup.
+	isPureGroup := cmd.HasSubCommands() && cmd.Run == nil && cmd.RunE == nil
+	if !isPureGroup && SchemaSourceRootRegistered() {
 		if meta, ok := ResolveMeta(cliPath); ok {
 			renderSelectionGuidance(cmd, meta.Selection)
 			if meta.Safety.ShouldRender() {

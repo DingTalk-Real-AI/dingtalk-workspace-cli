@@ -156,17 +156,21 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 		m, ok := metaByCLIPath[cliPath]
 		return m, ok
 	}
-	if runtime := activeSchemaCacheRuntime(); runtime != nil {
+	if runtime := readableSchemaCacheRuntime(); runtime != nil {
 		m, ok, err := runtime.resolveCommandMetaFromPayload(cliPath)
 		if err == nil {
 			return m, ok
 		}
-		value, _, repairErr := repairSchemaCache(runtime, func() (any, error) {
-			return runtime.readCommandMetaFromPayloadFresh(cliPath)
-		})
-		if repairErr == nil && value != nil {
-			result := value.(resolvedMeta)
-			return result.Meta, result.OK
+		// Repair acquires locks and publishes; it stays disabled while the
+		// process surface is plugin-uncertain (see readableSchemaCacheRuntime).
+		if repairable := activeSchemaCacheRuntime(); repairable != nil {
+			value, _, repairErr := repairSchemaCache(repairable, func() (any, error) {
+				return repairable.readCommandMetaFromPayloadFresh(cliPath)
+			})
+			if repairErr == nil && value != nil {
+				result := value.(resolvedMeta)
+				return result.Meta, result.OK
+			}
 		}
 	}
 	_ = deliverySchemaCatalog()

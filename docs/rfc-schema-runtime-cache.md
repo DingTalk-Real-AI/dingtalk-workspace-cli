@@ -118,7 +118,7 @@ Meta 和按产品分片的 Registry 使用 deterministic protobuf。**编译期 
 | 测试注入完整 identity，cache 认证通过 | handler 读取所需 Meta 或产品 shard |
 | 用户 cache 截断、摘要不符或 protobuf 非法 | 丢弃结果并从 declarations 自愈，不输出部分结果 |
 | live build 失败 | 返回原有分类错误，不发布新 cache |
-| 插件等改变命令面 | 本进程禁用持久 cache I/O |
+| 插件等改变命令面 | 本进程禁用 cache 发布/修复/预热；不变的审阅面继续只读服务（插件命令本就不进 Schema 面） |
 
 不发明新的未认证加密方案。每个 edition cache 目录只写一份稳定 sidecar `identity.json`；**不以二进制 fingerprint 作为缓存维度**（不再使用 `identity.<fingerprint>.json` 作为主键或查找键）。Sidecar 内的 source/surface/build_id 与 shard 摘要即代际身份。升级失效靠：安装器在预热前清除旧 sidecar、Publish 的 ExpectedIdentity digest/auth，以及 live declarations 与 sidecar 哈希不一致时重新生成。遗留的 `identity.*.json` 只忽略或清理，不参与查找。macOS `/Library/Caches` 的 sticky 祖先目录被接受；装不上共享 cache 时回退到用户 cache，安装器不得在未写出文件时宣称共享 cache 成功。运行时不得创建系统共享 cache 目录。
 

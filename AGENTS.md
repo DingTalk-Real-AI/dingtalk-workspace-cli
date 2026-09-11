@@ -34,7 +34,9 @@ identity from this binary's live declarations, writes authenticated disk
 shards, and later processes load that local identity then verify digests
 before reading protobuf. A missing sidecar generates then uses the cache;
 it is not a permanent live-only mode. Plugins that change the command
-surface still disable persistent I/O. Tests may also inject identity via
+surface still disable cache publication, repair, and prewarm; read-only
+serving of the unchanged reviewed surface continues (plugin commands never
+enter the Schema surface, cached or live). Tests may also inject identity via
 `RegisterSchemaCacheOptions`.
 See `docs/rfc-schema-runtime-cache.md` for the single RFC covering the
 local-identity shipping model, complete-tree performance contract, cache
