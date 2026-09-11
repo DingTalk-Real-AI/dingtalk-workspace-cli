@@ -88,7 +88,7 @@ cli_version: ">=1.0.61"
 | `contract`        | 法务智能合同：台账、批量导入、听记起草、合同审查、归档、项目、相对方与账款管理 | [contract.md](./references/products/contract.md)               |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
-| `dingtalk-tag`    | DingTalk Tag 数字员工：管理生命周期、Skill/MCP、执行状态与 trace，以及已有员工落盘 Profile 或接入 DSH | [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md) |
+| `dingtalk-tag`    | DingTalk Tag 数字员工：管理生命周期、Skill/MCP、执行状态与 trace，以及员工 Profile、普通本地 Agent 或 DSH 接入与运行管理 | [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md) |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
@@ -120,7 +120,7 @@ cli_version: ">=1.0.61"
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"未封装 OpenAPI/llms.txt/dws api/Raw API/API 逃生舱" → `dws api`（先查现有产品命令，再读官方 llms.txt）
 用户提到"DING/紧急消息/电话提醒" → `ding`
-用户提到"DingTalk Tag/DEAP 数字员工/创建发布数字员工/修改数字员工人设/响应模式/获取数字员工临时 DWS 授权码/给数字员工挂 Skill 或 MCP/数字员工运行状态或 trace/落盘本地 Profile/接入 DSH" → `dingtalk-tag`，先读 [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md)
+用户提到"DingTalk Tag/DEAP 数字员工/创建发布数字员工/修改数字员工人设/响应模式/为 A2A 等场景安全登录数字员工 DWS/给数字员工挂 Skill 或 MCP/数字员工运行状态或 trace/落盘本地 Profile/接入 DSH" → `dingtalk-tag`，先读 [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md)
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
 用户提到"云盘/文件存储/文件上传下载/文件夹/互联网公开/分享链接密码/公开有效期" → `drive`
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）

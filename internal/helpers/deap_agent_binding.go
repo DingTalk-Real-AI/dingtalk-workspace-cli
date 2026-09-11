@@ -5,12 +5,16 @@ package helpers
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/spf13/cobra"
 )
 
 // digitalEmployeeBindingPath 使用 Profile 摘要隔离多员工配置；文件内容仍保留
@@ -21,6 +25,14 @@ func digitalEmployeeBindingPath(configDir, profile string) string {
 }
 
 func saveDigitalEmployeeBinding(configDir string, binding digitalEmployeeBinding) error {
+	lock, err := auth.AcquireDualLock(context.Background(), filepath.Join(configDir, "digital-employees", digitalEmployeeScope(binding.DWSProfile), "binding-lock"))
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+	if err := checkDigitalEmployeeBinding(configDir, binding.DWSProfile, binding.AgentUUID, bindingChannel(binding)); err != nil {
+		return err
+	}
 	if binding.SchemaVersion != 1 || !validMachineString(binding.AgentUUID) || !validMachineString(binding.DWSProfile) ||
 		!validMachineString(binding.OperatorOpenDingTalkID) {
 		return fmt.Errorf("invalid digital employee binding")
@@ -30,6 +42,18 @@ func saveDigitalEmployeeBinding(configDir string, binding digitalEmployeeBinding
 		return fmt.Errorf("encode digital employee binding: %w", err)
 	}
 	return AtomicWriteJSON(digitalEmployeeBindingPath(configDir, binding.DWSProfile), append(data, '\n'))
+}
+
+func validateEmployeeMachineBinding(cmd *cobra.Command, agentUUID string) error {
+	profile := strings.TrimSpace(auth.RuntimeProfile())
+	if profile == "" {
+		return fmt.Errorf("channel requires an explicit digital employee --profile")
+	}
+	b, err := deapChannelLoadBinding(deapConnectConfigDir(), profile)
+	if err != nil || b.DWSProfile != profile || b.AgentUUID != agentUUID || bindingChannel(b) != devAppStringFlag(cmd, "channel") {
+		return fmt.Errorf("channel does not match digital employee binding")
+	}
+	return nil
 }
 
 func loadDigitalEmployeeBinding(configDir, profile string) (digitalEmployeeBinding, error) {

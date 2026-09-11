@@ -697,11 +697,12 @@ func TestDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
 	root := deapHandler{}.Command(&captureRunner{})
 
 	wantGroups := map[string][]string{
-		"manage": {"create", "detail", "list", "get-dws-auth-code", "save-draft", "publish", "delete"},
-		"run":    {"run-status", "trace"},
+		"connect": {"status", "list", "stop", "restart", "unbind", "rebind"},
+		"manage":  {"create", "detail", "list", "login", "save-draft", "publish", "delete"},
+		"run":     {"run-status", "trace"},
 	}
-	if got := len(root.Commands()); got != len(wantGroups)+3 {
-		t.Fatalf("dingtalk-tag direct child count = %d, want %d", got, len(wantGroups)+3)
+	if got := len(root.Commands()); got != len(wantGroups)+2 {
+		t.Fatalf("dingtalk-tag direct child count = %d, want %d", got, len(wantGroups)+2)
 	}
 	for groupName, wantLeaves := range wantGroups {
 		group, remaining, err := root.Find([]string{groupName})
@@ -815,16 +816,6 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 			wantArgs: map[string]any{
 				"keyword": "值班", "mainProgramType": "local_agent", "page": 2, "pageSize": 101,
 			},
-		},
-		{
-			leaf: "get-dws-auth-code", tool: "get_dws_auth_code",
-			flags:    map[string]string{"agent-uuid": "agent-1"},
-			wantArgs: map[string]any{"agentUuid": "agent-1"},
-		},
-		{
-			leaf: "get-dws-auth-code", tool: "get_dws_auth_code",
-			flags:    map[string]string{"agent-uuid": "agent-1", "client-id": "client-1"},
-			wantArgs: map[string]any{"agentUuid": "agent-1", "clientId": "client-1"},
 		},
 		{
 			leaf: "save-draft", tool: "update_digital_employee_draft", confirmed: true,
@@ -972,7 +963,7 @@ func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 		{leaf: "list", flags: map[string]string{"page-size": "0"}, wantErr: "--page-size 不能小于 1"},
 		{leaf: "list", flags: map[string]string{"main-program-type": "a2a"}, wantErr: "--main-program-type"},
 		{leaf: "detail", flags: map[string]string{"agent-uuid": "agent-1", "type": "merged"}, wantErr: "--type"},
-		{leaf: "get-dws-auth-code", flags: map[string]string{}, wantErr: "agent-uuid"},
+		{leaf: "login", flags: map[string]string{}, wantErr: "agent-uuid"},
 		{leaf: "create", flags: map[string]string{
 			"name": "值班助手", "description": "处理值班问题", "dept-id": "dept-1", "dept-name": "值班组",
 			"profile-json": `{"tag":"forbidden"}`,
@@ -1114,11 +1105,14 @@ func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 func TestDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
-	authCode := deapFindLeaf(t, root, "get-dws-auth-code")
-	for _, field := range []string{"dwsClientId", "uid", "dwsAuthCode", "staffId", "orgId"} {
-		if !strings.Contains(authCode.Long, field) {
-			t.Fatalf("get-dws-auth-code help is missing response field %s: %q", field, authCode.Long)
+	login := deapFindLeaf(t, root, "login")
+	for _, scenario := range []string{"A2A", "dws dingtalk-tag connect", "dws --profile", "dws profile use", "不会输出 AuthCode 或 Token"} {
+		if !strings.Contains(login.Long, scenario) {
+			t.Fatalf("login help is missing scenario guidance %q: %q", scenario, login.Long)
 		}
+	}
+	if strings.Contains(login.Long, "原样输出") {
+		t.Fatalf("login help still describes raw credential output: %q", login.Long)
 	}
 
 	publish := deapFindLeaf(t, root, "publish")

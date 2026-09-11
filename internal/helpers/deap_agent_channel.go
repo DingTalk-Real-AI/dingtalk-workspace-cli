@@ -7,14 +7,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -36,9 +40,10 @@ type digitalEmployeeConnectResult struct {
 }
 
 type digitalEmployeePublishedIdentity struct {
-	CorpID   string
-	RobotUID string
-	StaffID  string
+	CorpID         string
+	RobotUID       string
+	StaffID        string
+	OpenDingTalkID string
 }
 
 var (
@@ -58,26 +63,31 @@ const (
 )
 
 type digitalEmployeeBinding struct {
+	BindingRevision        uint64 `json:"bindingRevision,omitempty"`
+	BindingState           string `json:"bindingState,omitempty"`
+	DesiredState           string `json:"desiredState,omitempty"`
 	SchemaVersion          int    `json:"schemaVersion"`
 	AgentUUID              string `json:"agentUuid"`
 	DWSProfile             string `json:"dwsProfile"`
 	OperatorOpenDingTalkID string `json:"operatorOpenDingTalkId"`
+	Channel                string `json:"channel,omitempty"`
 }
 
 func newDeapConnectCommand() *cobra.Command {
-	return NewLeafCommand(LeafSpec{
-		Use:   "connect",
-		Short: "为已发布的本地数字员工落盘 Profile 或接入 DSH",
-		Long:  "校验已发布数字员工的 mainProgramType=local_agent，以当前主管身份获取一次性授权信息，并使用响应中的 dwsClientId 换票和保存独立 Profile。指定 --profile-only 时到此结束；指定 --channel dsh 时继续解析 operator、保存本地 binding，并通过 stdin 幂等注册到 DSH。connect 不创建、修改或发布数字员工，也不会切换当前主管 Profile；DSH 注册后由用户或宿主重启 DSH。",
-		Flags: []LeafFlag{
+	cmd := NewLeafCommand(LeafSpec{
+		OutputRollout: output.RolloutUnifiedActive,
+		Use:           "connect",
+		Short:         "为已发布数字员工落盘 Profile 并接入本地 Agent 或 DSH",
+		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--profile-only 仅落盘；--channel dsh 注册并请求当前宿主启动该员工，宿主不可用时提示升级或启动宿主；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。运行及绑定管理使用 dingtalk-tag connect status/list/stop/restart/unbind/rebind。",
+		Flags: append([]LeafFlag{
 			{Name: "agent-uuid", Usage: "已存在且已发布的数字员工 ID", Required: true, Trim: true},
-			{Name: "channel", Usage: "本地 Agent 渠道；DSH 接入模式必填，--profile-only 时省略；第一期固定为 dsh", Trim: true, Enum: []string{"dsh"}, RequiredWhen: "未指定 --profile-only 时必填"},
+			{Name: "channel", Usage: "本地 Agent 类型；省略或 auto 时自动探测；profile-only 时省略", Trim: true, Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
 			{Name: "profile-only", Kind: LeafBool, Usage: "仅完成授权换票与数字员工 Profile 落盘；不解析 operator、不保存 DSH binding、不注册 DSH"},
 			{Name: "client-id", Usage: "传给 DEAP 的选应用提示；最终换票始终使用授权响应中的 dwsClientId", Trim: true, OmitEmpty: true},
-		},
+		}, digitalEmployeeAgentFlags()...),
 		Constraints: []LeafConstraint{{
 			Kind: "custom", Flags: []string{"channel", "profile-only"},
-			Description: "必须选择 --channel dsh 或 --profile-only；两种模式不能同时使用",
+			Description: "--channel 与 --profile-only 不能同时使用；省略模式时自动探测本地 Agent",
 		}},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent",
@@ -88,8 +98,9 @@ func newDeapConnectCommand() *cobra.Command {
 			switch {
 			case profileOnly && channel != "":
 				return apperrors.NewValidation("--profile-only 与 --channel 不能同时使用")
-			case !profileOnly && channel == "":
-				return apperrors.NewValidation("必须指定 --channel dsh 或 --profile-only")
+			}
+			if err := validateDigitalEmployeeAdapter(cmd); err != nil {
+				return err
 			}
 			if commandDryRun(cmd) {
 				return nil
@@ -101,45 +112,79 @@ func newDeapConnectCommand() *cobra.Command {
 		},
 		RunE: runDeapConnect,
 		Contract: LeafContract{
+			Result: digitalEmployeeResultSpec(),
 			Identity: contract.ToolIdentitySpec{
 				ProductID: dingtalkTagProductID, Name: "connect",
 				CanonicalPath: "dingtalk-tag.connect", CLIPath: "dingtalk-tag connect", PrimaryCLIPath: "dingtalk-tag connect",
 			},
-			Description: "为一个已发布的 local_agent 数字员工安全保存独立 Profile，并可继续完成 DSH 注册。",
+			Description: "为一个已发布的 local_agent 数字员工保存独立 Profile，并接入普通本地 Agent 或注册 DSH。",
 			DryRun:      deapAgentDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "DEAP 授权与 DWS managed exchange 的受控编排；可选本地 DSH 注册"},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "为已有且已发布的 local_agent 数字员工保存本地 Profile，或继续接入 DSH",
-				UseWhen:      []string{"用户只要把数字员工授权转换成本地 Profile，或要把已有数字员工接入 DSH"},
+				AgentSummary: "为已有已发布数字员工保存 Profile，并可接入本地 Agent 或 DSH",
+				UseWhen:      []string{"用户要把已发布数字员工转换为本地 Profile，或接入本机 Codex、Qoder 等 Agent 或 DSH"},
 				AvoidWhen:    []string{"只创建、修改或发布数字员工时使用 manage；connect 本身不会更改数字员工配置"},
 				Examples: []string{
 					"dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only --dry-run --format json",
-					"dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --dry-run --format json",
+					"dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --daemon --alwayson --dry-run --format json",
 				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "agent-uuid", Property: "agentUuid"},
-				{Name: "channel", Property: "channel", Enum: []string{"dsh"}},
+				{Name: "channel", Property: "channel", Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
 				{Name: "profile-only", Property: "profileOnly"},
 				{Name: "client-id", Property: "clientId"},
+				{Name: "agent-cmd", Property: "agentCommand"},
+				{Name: "agent-model", Property: "agentModel"},
+				{Name: "agent-workdir", Property: "agentWorkdir"},
+				{Name: "agent-memory", Property: "agentMemory"},
+				{Name: "agent-timeout", Property: "agentTimeout"},
+				{Name: "agent-permission-mode", Property: "agentPermissionMode"},
+				{Name: "agent-approval-mode", Property: "agentApprovalMode"},
+				{Name: "yolo", Property: "yolo"},
+				{Name: "allowed-users", Property: "allowedUsers"},
+				{Name: "allowed-groups", Property: "allowedGroups"},
+				{Name: "daemon", Property: "daemon"},
+				{Name: "alwayson", Property: "alwayson"},
 			},
 		},
 	})
+	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeUnbindCommand(), newEmployeeRebindCommand())
+	corecmd.ApplyGroupPolicy(cmd, corecmd.GroupPolicy{Mode: corecmd.GroupHybrid, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling})
+	return cmd
 }
 
 func runDeapConnect(cmd *cobra.Command, _ []string) error {
+	if commandBoolFlag(cmd, "local-lease") {
+		return runEmployeeLease(cmd)
+	}
 	agentUUID := strings.TrimSpace(MustGetStringFlag(cmd, "agent-uuid"))
 	channel := strings.TrimSpace(MustGetStringFlag(cmd, "channel"))
 	profileOnly := commandBoolFlag(cmd, "profile-only")
 	requestedClientID := strings.TrimSpace(MustGetStringFlag(cmd, "client-id"))
+	if commandBoolFlag(cmd, "local-worker") || commandBoolFlag(cmd, "local-supervise") {
+		return runDigitalEmployeeSaved(cmd)
+	}
+	if !profileOnly {
+		var err error
+		channel, err = resolveDigitalEmployeeChannel(cmd)
+		if err != nil {
+			return err
+		}
+	}
 	if commandDryRun(cmd) {
 		steps := []string{"validate_draft", "validate_published", "request_auth_code", "managed_exchange", "persist_profile"}
 		if !profileOnly {
-			steps = append(steps, "resolve_operator", "register_dsh")
+			steps = append(steps, "resolve_operator")
+			if channel == "dsh" {
+				steps = append(steps, "register_dsh")
+			} else {
+				steps = append(steps, "save_adapter", "start_event_consumer", "start_agent")
+			}
 		}
 		plan := map[string]any{
 			"status": "planned", "agentUuid": agentUUID, "profileOnly": profileOnly,
-			"protocolVersion": digitalEmployeeProtocolVersion, "restartRequired": !profileOnly,
+			"protocolVersion": digitalEmployeeProtocolVersion, "restartRequired": channel == "dsh",
 			"steps": steps,
 		}
 		if channel != "" {
@@ -149,10 +194,6 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 
 	configDir := deapConnectConfigDir()
-	supervisorSelector, supervisor, err := currentSupervisorProfile(configDir)
-	if err != nil {
-		return err
-	}
 	draft, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "type": "draft"}, false)
 	if err != nil {
 		return fmt.Errorf("query digital employee draft: %w", err)
@@ -169,76 +210,83 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	if !ok {
 		return apperrors.NewInternal("数字员工发布详情缺少 profile.corpId、profile.robotUid 或 profile.staffId，无法校验身份")
 	}
+	var releaseRegistration func()
+	if !profileOnly {
+		profile := auth.ProfileSelector(auth.Profile{CorpID: publishedIdentity.CorpID, UserID: publishedIdentity.StaffID})
+		// 同一员工的检查、换票、binding 和 Adapter 提交必须在同一注册事务内。
+		lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(digitalEmployeeRuntimeDir(profile), "operation"))
+		if err != nil {
+			return err
+		}
+		defer lock.Release()
+		releaseRegistration = lock.Release
+		if err := checkDigitalEmployeeBinding(configDir, profile, agentUUID, channel); err != nil {
+			return err
+		}
+		if channel != "dsh" {
+			if state, _ := readDigitalEmployeeState(digitalEmployeeRuntimeDir(profile)); employeeStateAlive(state) {
+				return fmt.Errorf("数字员工连接已运行，请先停止后重新 connect")
+			}
+		} else if previous, e := loadDigitalEmployeeBinding(configDir, profile); e == nil && employeeBindingState(previous) != "unbound" {
+			r, e := employeeDSHControl(cmd.Context(), previous, "status")
+			if e != nil || !r.Released {
+				return fmt.Errorf("已有 DSH 绑定尚未确认停止；只刷新 Profile 请使用 --profile-only，换绑请使用 connect rebind")
+			}
+		}
+	}
 
-	authArgs := map[string]any{"agentUuid": agentUUID}
-	if requestedClientID != "" {
-		authArgs["clientId"] = requestedClientID
-	}
-	authorization, err := callDeapJSON(cmd.Context(), deapAgentAuthCodeTool, authArgs, true)
-	if err != nil {
-		return fmt.Errorf("request digital employee authorization: %w", err)
-	}
-	authData := businessDataMap(authorization)
-	dwsClientID := requiredJSONScalar(authData, "dwsClientId")
-	authorizedRobotUID := requiredJSONScalar(authData, "uid")
-	authorizedStaffID := requiredJSONScalar(authData, "staffId")
-	dwsAuthCode := requiredJSONScalar(authData, "dwsAuthCode")
-	authorizationOrgID := requiredJSONScalar(authData, "orgId")
-	if dwsClientID == "" || authorizedRobotUID == "" || authorizedStaffID == "" || dwsAuthCode == "" || authorizationOrgID == "" {
-		return apperrors.NewInternal("数字员工授权响应缺少 dwsClientId、uid、staffId、dwsAuthCode 或 orgId")
-	}
-	if authorizedRobotUID != publishedIdentity.RobotUID {
-		return apperrors.NewInternal("数字员工授权响应 uid 与发布详情 profile.robotUid 不一致")
-	}
-	if authorizedStaffID != publishedIdentity.StaffID {
-		return apperrors.NewInternal("数字员工授权响应 staffId 与发布详情 profile.staffId 不一致")
-	}
-	token, err := deapConnectManagedExchange(cmd.Context(), configDir, auth.ManagedExchangeRequest{
-		ClientID: dwsClientID, AuthCode: dwsAuthCode, ExpectedUserID: authorizedStaffID, ExpectedCorpID: publishedIdentity.CorpID, PreserveProfile: supervisorSelector,
-		ResolveIdentity: resolveDigitalEmployeeManagedIdentity,
-	})
-	// 尽早清空本地变量，后续所有错误和输出都不再接触授权码。
-	dwsAuthCode = ""
+	session, err := loginDigitalEmployee(cmd.Context(), configDir, agentUUID, requestedClientID, published)
 	if err != nil {
 		return err
 	}
-	digitalProfile := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
-	if digitalProfile == "" || token.UserID != authorizedStaffID || token.CorpID != publishedIdentity.CorpID {
-		return apperrors.NewInternal("数字员工 Profile 身份校验失败")
-	}
+	digitalProfile, token := session.DigitalProfile, session.DigitalToken
 	if profileOnly {
 		return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{
 			Status: "profile_saved", AgentUUID: agentUUID, DWSProfile: digitalProfile, ProfileOnly: true,
 			ProtocolVersion: digitalEmployeeProtocolVersion, RestartRequired: false,
 		})
 	}
-	operatorID, err := resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, supervisor.UserID)
+	operatorID, err := resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, session.SupervisorToken.UserID)
 	if err != nil {
 		return err
 	}
-	if err := deapConnectSaveBinding(configDir, digitalEmployeeBinding{
-		SchemaVersion: 1, AgentUUID: agentUUID, DWSProfile: digitalProfile, OperatorOpenDingTalkID: operatorID,
-	}); err != nil {
+	binding := digitalEmployeeBinding{
+		SchemaVersion: 1, AgentUUID: agentUUID, DWSProfile: digitalProfile, OperatorOpenDingTalkID: operatorID, Channel: channel,
+		BindingRevision: 1, BindingState: "bound", DesiredState: "running",
+	}
+	if previous, e := loadDigitalEmployeeBinding(configDir, digitalProfile); e == nil {
+		binding.BindingRevision = previous.BindingRevision
+		if employeeBindingState(previous) == "unbound" {
+			binding.BindingRevision++
+		}
+	}
+	cfg := digitalEmployeeAdapterConfig{Binding: binding, Name: findJSONScalar(draft, "name"), AlwaysOn: commandBoolFlag(cmd, "alwayson")}
+	cfg.SelfOpenDingTalkID = publishedIdentity.OpenDingTalkID
+	if channel != "dsh" {
+		cfg.SelfOpenDingTalkID = publishedIdentity.OpenDingTalkID
+		if !validMachineString(cfg.SelfOpenDingTalkID) {
+			return fmt.Errorf("数字员工发布详情缺少自身 openDingTalkId，无法安全过滤自发消息")
+		}
+		cfg.Options, err = prepareDigitalEmployeeLocal(cmd, binding, token.AccessToken)
+		if err != nil {
+			return err
+		}
+	}
+	if err := deapConnectSaveBinding(configDir, binding); err != nil {
 		return fmt.Errorf("数字员工 Profile 已保存为 %s，但本地 operator 绑定保存失败；请重新运行同一条 connect 命令恢复: %w", digitalProfile, err)
 	}
-	registration := map[string]any{
-		"schemaVersion":          digitalEmployeeProtocolVersion,
-		"agentUuid":              agentUUID,
-		"dwsProfile":             digitalProfile,
-		"operatorOpenDingTalkId": operatorID,
-		"protocolVersion":        digitalEmployeeProtocolVersion,
-	}
-	if name := findJSONScalar(draft, "name"); name != "" {
-		registration["name"] = name
-	}
-	status, err := deapConnectRegisterDSH(cmd.Context(), registration)
+	adapter, err := digitalEmployeeAdapterFor(channel)
 	if err != nil {
-		return fmt.Errorf("数字员工 Profile 已保存为 %s，但 DSH 注册失败；请重新运行同一条 connect 命令以获取新授权码并幂等重试注册: %w", digitalProfile, err)
+		return err
 	}
-	return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{
-		Status: status, AgentUUID: agentUUID, Channel: channel, DWSProfile: digitalProfile,
-		OperatorOpenDingTalkID: operatorID, ProtocolVersion: digitalEmployeeProtocolVersion, RestartRequired: true,
-	})
+	if err := writeEmployeeJSON(filepath.Join(digitalEmployeeRuntimeDir(digitalProfile), "adapter.json"), cfg); err != nil {
+		return err
+	}
+	// 前台 worker 不得把注册事务锁占用整个运行生命周期。
+	if releaseRegistration != nil && channel != "dsh" {
+		releaseRegistration()
+	}
+	return adapter.Connect(cmd, cfg)
 }
 
 func currentSupervisorProfile(configDir string) (string, *auth.TokenData, error) {
@@ -258,7 +306,7 @@ func currentSupervisorProfile(configDir string) (string, *auth.TokenData, error)
 		return "", nil, fmt.Errorf("load supervisor profile: %w", err)
 	}
 	if token == nil || strings.TrimSpace(token.CorpID) == "" || strings.TrimSpace(token.UserID) == "" {
-		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全接入数字员工")
+		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全登录数字员工")
 	}
 	exact := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
 	return exact, token, nil
@@ -270,18 +318,19 @@ func newDeapChannelCommand() *cobra.Command {
 		TraverseChildren: true, DisableAutoGenTag: true, RunE: groupRunE,
 	}
 	newGroupCommand(cmd)
-	cmd.AddCommand(newDeapChannelCapabilitiesCommand(), newDeapChannelReplyCommand(), newDeapChannelOperatorPrivateCommand())
+	cmd.AddCommand(newDeapChannelCapabilitiesCommand(), newDeapChannelReplyCommand(), newDeapChannelOperatorPrivateCommand(), newEmployeeBindingCommand())
 	return cmd
 }
 
 func newDeapChannelCapabilitiesCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "capabilities", Short: "查询 DSH Channel 协议能力",
-		Flags:  []LeafFlag{{Name: "channel", Usage: "Channel 名称；第一期固定为 dsh", Required: true, Trim: true, Enum: []string{"dsh"}}},
+		OutputRollout: output.RolloutUnifiedActive,
+		Use:           "capabilities", Short: "查询 DSH Channel 协议能力",
+		Flags:  []LeafFlag{{Name: "channel", Usage: "已支持的数字员工 Adapter", Required: true, Trim: true, Enum: digitalEmployeeChannels()}},
 		Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return writeDWSMachineEnvelope(cmd, map[string]any{
-				"schemaVersion": 1, "protocolVersion": 1, "channel": "dsh", "auditMode": "local_required",
+				"schemaVersion": 1, "protocolVersion": 1, "channel": devAppStringFlag(cmd, "channel"), "auditMode": "local_required",
 				"capabilities": map[string]any{"eventConsume": true, "replyStdin": true, "operatorPrivateStdin": true},
 			})
 		},
@@ -291,9 +340,10 @@ func newDeapChannelCapabilitiesCommand() *cobra.Command {
 
 func newDeapChannelReplyCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "reply", Short: "通过 stdin 引用回复数字员工消息",
+		OutputRollout: output.RolloutUnifiedActive,
+		Use:           "reply", Short: "通过 stdin 引用回复数字员工消息",
 		Flags: []LeafFlag{
-			{Name: "channel", Usage: "Channel 名称；第一期固定为 dsh", Required: true, Trim: true, Enum: []string{"dsh"}},
+			{Name: "channel", Usage: "已绑定的数字员工 Adapter", Required: true, Trim: true, Enum: digitalEmployeeChannels()},
 			{Name: "stdin", Usage: "从 stdin 读取受限 JSON；正文不得进入 argv", Kind: LeafBool, Required: true},
 		},
 		Safety:   contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
@@ -304,9 +354,10 @@ func newDeapChannelReplyCommand() *cobra.Command {
 
 func newDeapChannelOperatorPrivateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "operator-private", Short: "通过 stdin 向固定 operator 发单聊",
+		OutputRollout: output.RolloutUnifiedActive,
+		Use:           "operator-private", Short: "通过 stdin 向固定 operator 发单聊",
 		Flags: []LeafFlag{
-			{Name: "channel", Usage: "Channel 名称；第一期固定为 dsh", Required: true, Trim: true, Enum: []string{"dsh"}},
+			{Name: "channel", Usage: "已绑定的数字员工 Adapter", Required: true, Trim: true, Enum: digitalEmployeeChannels()},
 			{Name: "stdin", Usage: "从 stdin 读取受限 JSON；正文不得进入 argv", Kind: LeafBool, Required: true},
 		},
 		Safety:   contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
@@ -317,12 +368,13 @@ func newDeapChannelOperatorPrivateCommand() *cobra.Command {
 
 func digitalEmployeeChannelContract(name, leaf, description, useWhen string) LeafContract {
 	example := "dws dingtalk-tag channel " + leaf + " --channel dsh --format json"
-	parameters := []contract.ParamDecl{{Name: "channel", Property: "channel", Enum: []string{"dsh"}}}
+	parameters := []contract.ParamDecl{{Name: "channel", Property: "channel", Enum: digitalEmployeeChannels()}}
 	if leaf != "capabilities" {
 		example = "dws dingtalk-tag channel " + leaf + " --channel dsh --stdin --format json"
 		parameters = append(parameters, contract.ParamDecl{Name: "stdin", Property: "stdin", InterfaceType: "boolean"})
 	}
 	return LeafContract{
+		Result: digitalEmployeeMachineResultSpec(leaf == "capabilities"),
 		Identity: contract.ToolIdentitySpec{
 			ProductID: dingtalkTagProductID, Name: name, CanonicalPath: "dingtalk-tag." + name,
 			CLIPath: "dingtalk-tag channel " + leaf, PrimaryCLIPath: "dingtalk-tag channel " + leaf, Group: "channel",
@@ -331,7 +383,7 @@ func digitalEmployeeChannelContract(name, leaf, description, useWhen string) Lea
 		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "受限 stdin、本地协议校验与现有 DWS 消息 MCP 能力组合"},
 		Selection: contract.SelectionSpec{
 			AgentSummary: description, UseWhen: []string{useWhen},
-			AvoidWhen: []string{"面向终端用户的普通消息发送使用 chat；本命令只供 DSH 机器协议调用"},
+			AvoidWhen: []string{"面向终端用户的普通消息发送使用 chat；本命令只供已绑定 Adapter 的机器协议调用"},
 			Examples:  []string{example},
 		},
 		Parameters: parameters,
@@ -339,6 +391,7 @@ func digitalEmployeeChannelContract(name, leaf, description, useWhen string) Lea
 }
 
 type digitalEmployeeReplyInput struct {
+	BindingRevision    uint64 `json:"bindingRevision,omitempty"`
 	SchemaVersion      int    `json:"schemaVersion"`
 	ProtocolVersion    int    `json:"protocolVersion"`
 	AgentUUID          string `json:"agentUuid"`
@@ -351,6 +404,7 @@ type digitalEmployeeReplyInput struct {
 }
 
 type digitalEmployeeOperatorInput struct {
+	BindingRevision        uint64 `json:"bindingRevision,omitempty"`
 	SchemaVersion          int    `json:"schemaVersion"`
 	ProtocolVersion        int    `json:"protocolVersion"`
 	AgentUUID              string `json:"agentUuid"`
@@ -368,6 +422,9 @@ func runDeapChannelReply(cmd *cobra.Command, _ []string) error {
 		!validMachineString(input.EventID) || !validMachineString(input.ConversationID) ||
 		!validMachineString(input.ReferenceMessageID) || !validMachineString(input.IdempotencyKey) || strings.TrimSpace(input.Text) == "" {
 		return apperrors.NewValidation("invalid digital employee reply payload")
+	}
+	if err := validateEmployeeMachineRevision(cmd, input.AgentUUID, input.BindingRevision); err != nil {
+		return err
 	}
 	lookup, err := callMachineMCPJSON(cmd.Context(), "im", "list_messages_by_ids", map[string]any{"openMsgIds": []string{input.ReferenceMessageID}})
 	if err != nil {
@@ -405,6 +462,9 @@ func runDeapChannelOperatorPrivate(cmd *cobra.Command, _ []string) error {
 	if input.SchemaVersion != 1 || input.ProtocolVersion != 1 || !validMachineString(input.AgentUUID) ||
 		!validMachineString(input.OperatorOpenDingTalkID) || !validMachineString(input.IdempotencyKey) || strings.TrimSpace(input.Text) == "" {
 		return apperrors.NewValidation("invalid digital employee operator-private payload")
+	}
+	if err := validateEmployeeMachineRevision(cmd, input.AgentUUID, input.BindingRevision); err != nil {
+		return err
 	}
 	profile := strings.TrimSpace(auth.RuntimeProfile())
 	if profile == "" {
@@ -471,6 +531,9 @@ func digitalEmployeeDeliveryResult(result map[string]any, conversationID, idempo
 }
 
 func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]any, conversationID, idempotencyKey string) (map[string]any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	delivery := digitalEmployeeDeliveryResult(sendResult, conversationID, idempotencyKey)
 	if strings.TrimSpace(jsonScalar(delivery["openMessageId"])) != "" {
 		return delivery, nil
@@ -480,12 +543,18 @@ func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]a
 		return nil, apperrors.NewInternal("数字员工发送响应缺少 openMessageId 和 openTaskId，无法确认投递结果")
 	}
 	for attempt := 0; attempt < digitalEmployeeReceiptAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if attempt > 0 {
 			if err := deapChannelReceiptWait(ctx, digitalEmployeeReceiptInterval); err != nil {
 				return nil, err
 			}
 		}
 		status, err := callMachineMCPJSON(ctx, "im", "query_message_send_status", map[string]any{"openTaskId": taskID})
+		if errors.Is(err, errEmployeeReceiptNotVisible) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("query digital employee message status: %w", err)
 		}
@@ -494,7 +563,9 @@ func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]a
 			return delivery, nil
 		}
 	}
-	return nil, apperrors.NewInternal("数字员工发送任务未在有限等待时间内返回 openMessageId，无法确认投递结果")
+	return nil, apperrors.NewInternal("数字员工发送任务未在有限等待时间内返回 openMessageId，投递状态未知，请勿重新发送",
+		apperrors.WithReason("delivery_unknown"), apperrors.WithRetryable(false),
+		apperrors.WithHint("消息可能已经送达，请先核对原会话；不要重跑发送或 Agent 任务。"))
 }
 
 func waitForDigitalEmployeeReceipt(ctx context.Context, delay time.Duration) error {
@@ -509,7 +580,13 @@ func waitForDigitalEmployeeReceipt(ctx context.Context, delay time.Duration) err
 }
 
 func writeDWSMachineEnvelope(cmd *cobra.Command, data any) error {
-	return writeCommandPayload(cmd, map[string]any{"ok": true, "outcome": "success", "data": data, "meta": map[string]any{}})
+	ctx, _ := output.WithResultStore(cmd.Context())
+	cmd.SetContext(ctx)
+	if err := output.StoreResult(ctx, output.Success(data)); err != nil {
+		return err
+	}
+	_, _, err := output.EmitStoredResult(cmd)
+	return err
 }
 
 // callDeapJSON 的 private=true 分支专用于授权响应：直接从 ToolResult 读取，
@@ -534,6 +611,10 @@ func callPrivateMCPJSON(ctx context.Context, server, tool string, args map[strin
 		return nil, apperrors.NewInternal("MCP caller is not initialized")
 	}
 	result, err := deps.Caller.CallTool(ctx, server, tool, args)
+	if server == "im" && tool == "query_message_send_status" && isEmployeeReceiptNotVisible(err) {
+		// 只保留可重查回执的安全分类，不携带原始诊断、正文或凭据。
+		return nil, errEmployeeReceiptNotVisible
+	}
 	if err != nil || result == nil {
 		return nil, fmt.Errorf("private MCP operation %s/%s failed", server, tool)
 	}
@@ -579,9 +660,10 @@ func publishedDigitalEmployeeIdentity(value map[string]any) (digitalEmployeePubl
 		return digitalEmployeePublishedIdentity{}, false
 	}
 	identity := digitalEmployeePublishedIdentity{
-		CorpID:   jsonScalar(profile["corpId"]),
-		RobotUID: jsonScalar(profile["robotUid"]),
-		StaffID:  jsonScalar(profile["staffId"]),
+		CorpID:         jsonScalar(profile["corpId"]),
+		RobotUID:       jsonScalar(profile["robotUid"]),
+		StaffID:        jsonScalar(profile["staffId"]),
+		OpenDingTalkID: jsonScalar(profile["openDingTalkId"]),
 	}
 	return identity, identity.CorpID != "" && identity.RobotUID != "" && identity.StaffID != ""
 }

@@ -16,6 +16,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -1430,15 +1431,15 @@ func TestCrossPlatformCoverageAuthCoveragePortableExchangeAndReset(t *testing.T)
 		t.Fatal("missing code should fail")
 	}
 	_ = exchange.Flags().Set("code", "code")
-	authOAuthExchange = func(*authpkg.OAuthProvider, context.Context, string, string) (*authpkg.TokenData, error) {
+	testseam.Swap(t, &authExternalExchange, func(context.Context, string, authpkg.ExternalExchangeRequest) (*authpkg.TokenData, error) {
 		return nil, errors.New("exchange")
-	}
+	})
 	if err := exchange.RunE(exchange, nil); err == nil {
 		t.Fatal("exchange error should propagate")
 	}
-	authOAuthExchange = func(*authpkg.OAuthProvider, context.Context, string, string) (*authpkg.TokenData, error) {
-		return &authpkg.TokenData{CorpID: "ding", ExpiresAt: time.Now().Add(time.Hour)}, nil
-	}
+	testseam.Swap(t, &authExternalExchange, func(context.Context, string, authpkg.ExternalExchangeRequest) (*authpkg.TokenData, error) {
+		return &authpkg.TokenData{CorpID: "ding", UserID: "user", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	})
 	_ = exchange.Flags().Set("uid", " user ")
 	if err := exchange.RunE(exchange, nil); err != nil || !strings.Contains(out.String(), "ding") {
 		t.Fatalf("exchange = %q, %v", out.String(), err)

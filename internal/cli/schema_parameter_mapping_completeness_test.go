@@ -69,14 +69,19 @@ func TestDeliveryCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) 
 
 func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
-		"audit.export":       "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
-		"audit.tail":         "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
-		"audit.verify":       "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
-		"dev.connect_status": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
-		"dev.connect_stop":   "命令仅操作本地进程或策略文件，不调用 MCP 接口",
-		"event.list":         "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
-		"event.schema":       "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
-		"pat.browser_policy": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+		"dingtalk-tag.connect_unbind":  "本机绑定事务及宿主控制",
+		"dingtalk-tag.connect_status":  "读取本地绑定并管理所属进程",
+		"dingtalk-tag.connect_list":    "读取本地绑定并管理所属进程",
+		"dingtalk-tag.connect_stop":    "读取本地绑定并管理所属进程",
+		"dingtalk-tag.connect_restart": "读取本地绑定并管理所属进程",
+		"audit.export":                 "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+		"audit.tail":                   "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+		"audit.verify":                 "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
+		"dev.connect_status":           "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+		"dev.connect_stop":             "命令仅操作本地进程或策略文件，不调用 MCP 接口",
+		"event.list":                   "命令读取 CLI 内置的个人事件目录，不绑定 pinned MCP RPC",
+		"event.schema":                 "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+		"pat.browser_policy":           "命令仅操作本地进程或策略文件，不调用 MCP 接口",
 	}
 	loaded := mustDeliverySchemaCatalogMaps(t)
 	if !deliverySchemaCatalogAvailable() {

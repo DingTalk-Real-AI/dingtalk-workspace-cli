@@ -199,6 +199,7 @@ func TestDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelope(t *testing.T) {
 }
 
 func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
+	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
 		"chat/send_personal_message": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
@@ -273,6 +274,7 @@ func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *
 }
 
 func TestDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
+	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
 		"chat/send_personal_message": {`{"result":{"openTaskId":"task-1"}}`},
@@ -498,7 +500,7 @@ func TestDingTalkTagConnectRequiresOneExplicitMode(t *testing.T) {
 		profileOnly bool
 		want        string
 	}{
-		{name: "missing mode", want: "--channel dsh 或 --profile-only"},
+		{name: "missing mode", want: "无法选择受支持的数字员工 Agent"},
 		{name: "conflicting modes", channel: "dsh", profileOnly: true, want: "不能同时使用"},
 	}
 	for _, tc := range tests {
@@ -665,7 +667,7 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 		})
 		leaf := newConnectTestCommand(t, false)
 		err := leaf.RunE(leaf, nil)
-		if err == nil || !strings.Contains(err.Error(), "employee-corp:employee-user") || !strings.Contains(err.Error(), "幂等重试") {
+		if err == nil || !strings.Contains(err.Error(), "employee-corp:employee-user") || !strings.Contains(err.Error(), "connect restart --agent-uuid agent-1") {
 			t.Fatalf("DSH retry error = %v", err)
 		}
 		if !saved {
@@ -732,7 +734,8 @@ func setupConnectSupervisorSeams(t *testing.T) {
 	t.Helper()
 	auth.SetRuntimeProfile("")
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapConnectConfigDir, func() string { return "/test/config" })
+	configDir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return configDir })
 	testseam.Swap(t, &deapConnectLoadProfiles, func(string) (*auth.ProfilesConfig, error) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})
@@ -793,6 +796,9 @@ func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string, pr
 }
 
 func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *testing.T) {
+	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
+		return employeeDSHState{}, fmt.Errorf("host unavailable")
+	})
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
@@ -808,7 +814,8 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	t.Setenv("DWS_DUMP_RAW", "1")
 	auth.SetRuntimeProfile("")
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapConnectConfigDir, func() string { return "/test/config" })
+	configDir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return configDir })
 	testseam.Swap(t, &deapConnectLoadProfiles, func(string) (*auth.ProfilesConfig, error) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})
@@ -829,6 +836,9 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		}
 		if request.ResolveIdentity == nil {
 			return nil, errors.New("managed identity resolver is missing")
+		}
+		if request.ExpectedCorpID != "employee-corp" || request.ExpectedUserID != "employee-user" {
+			return nil, errors.New("managed exchange received wrong published identity")
 		}
 		identity, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedCorpID)
 		if err != nil {

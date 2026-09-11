@@ -14,9 +14,59 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
+
+func TestPersistManagedExchangeTokenCreatesAndRefreshesExactProfileWithoutSwitchingSupervisor(t *testing.T) {
+	configDir := t.TempDir()
+	supervisor := &TokenData{
+		AccessToken: "supervisor-access", RefreshToken: "supervisor-refresh",
+		CorpID: "managed-login-supervisor-corp", UserID: "managed-login-supervisor-user",
+		ExpiresAt: time.Now().Add(time.Hour), RefreshExpAt: time.Now().Add(24 * time.Hour),
+	}
+	SetRuntimeProfile("")
+	t.Cleanup(func() { SetRuntimeProfile("") })
+	if err := SaveTokenData(configDir, supervisor); err != nil {
+		t.Fatalf("save supervisor profile: %v", err)
+	}
+	preserve := ProfileSelector(Profile{CorpID: supervisor.CorpID, UserID: supervisor.UserID})
+	employeeSelector := "managed-login-employee-corp:managed-login-employee-user"
+
+	first := &TokenData{
+		AccessToken: "employee-access-v1", RefreshToken: "employee-refresh-v1",
+		CorpID: "managed-login-employee-corp", UserID: "managed-login-employee-user",
+		ClientID: "employee-client", ExpiresAt: time.Now().Add(time.Hour), RefreshExpAt: time.Now().Add(24 * time.Hour),
+		FreshAuthorization: true,
+	}
+	if err := persistManagedExchangeToken(configDir, preserve, first); err != nil {
+		t.Fatalf("persist first employee login: %v", err)
+	}
+
+	refreshed := *first
+	refreshed.AccessToken = "employee-access-v2"
+	refreshed.RefreshToken = "employee-refresh-v2"
+	refreshed.ExpiresAt = time.Now().Add(2 * time.Hour)
+	if err := persistManagedExchangeToken(configDir, preserve, &refreshed); err != nil {
+		t.Fatalf("refresh employee login: %v", err)
+	}
+
+	cfg, err := LoadProfiles(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CurrentProfile != preserve {
+		t.Fatalf("current profile = %q, want preserved supervisor %q", cfg.CurrentProfile, preserve)
+	}
+	loaded, err := LoadTokenDataForProfile(configDir, employeeSelector)
+	if err != nil {
+		t.Fatalf("load refreshed employee profile: %v", err)
+	}
+	if loaded.AccessToken != "employee-access-v2" || loaded.RefreshToken != "employee-refresh-v2" || loaded.ClientID != "employee-client" {
+		t.Fatalf("refreshed employee token = %#v", loaded)
+	}
+}
 
 func TestExchangeManagedAuthCodeUsesExplicitClientAndPreservesRuntimeState(t *testing.T) {
 	var requestBody map[string]string
