@@ -81,3 +81,36 @@ func TestCrossPlatformCoverageDocPlainCreateCannotUploadMedia(t *testing.T) {
 		t.Fatalf("empty media selection: %v", err)
 	}
 }
+
+type docMediaRemovingConfirmation struct {
+	path   string
+	answer *strings.Reader
+}
+
+func (r *docMediaRemovingConfirmation) Read(p []byte) (int, error) {
+	if r.path != "" {
+		if err := os.Remove(r.path); err != nil {
+			return 0, err
+		}
+		r.path = ""
+	}
+	return r.answer.Read(p)
+}
+
+func TestCrossPlatformCoverageDocMediaDisappearingAfterConfirmationDoesNotCreate(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("asset.txt", []byte("body"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	caller := &docCoverageCaller{}
+	answer := &docMediaRemovingConfirmation{path: "asset.txt", answer: strings.NewReader("yes\n")}
+	uploads := 0
+	helpers.SwapHTTPPutFileForTest(t, func(context.Context, string, map[string]string, string, int64) error {
+		uploads++
+		return errors.New("unexpected upload after source removal")
+	})
+	err := runDocCoverageInput(t, CreateWithMedia, caller, answer, "--media-files", "asset.txt")
+	if err == nil || answer.path != "" || caller.calls != 0 || uploads != 0 || !strings.Contains(err.Error(), "asset.txt") {
+		t.Fatalf("source removed after preflight must fail before creation: err=%v remaining=%q calls=%d", err, answer.path, caller.calls)
+	}
+}
