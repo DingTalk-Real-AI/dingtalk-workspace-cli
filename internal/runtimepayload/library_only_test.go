@@ -116,6 +116,103 @@ func TestCrossPlatformCoverageLibraryOnlyLegacyUpgrade(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageLibraryOnlySameVersionRefresh(t *testing.T) {
+	for _, arch := range []string{"amd64", "arm64"} {
+		t.Run(arch, func(t *testing.T) {
+			source := writePayloadFixture(t, "darwin", arch)
+			previous, err := BuildContainer(source, 1<<20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			adjacent, cache := t.TempDir(), t.TempDir()
+			previousAdjacent, err := MaterializeAdjacent(previous, adjacent, "darwin", arch)
+			if err != nil {
+				t.Fatal(err)
+			}
+			previousCache, err := Materialize(previous, cache, "darwin", arch)
+			if err != nil {
+				t.Fatal(err)
+			}
+			previousOwnership, owned, err := readOwnership(adjacent, "darwin", arch)
+			if err != nil || !owned {
+				t.Fatalf("previous ownership = %v, %v", owned, err)
+			}
+
+			content := []byte("refreshed-library-darwin-" + arch)
+			digest := sha256.Sum256(content)
+			if err := os.WriteFile(filepath.Join(source, previousOwnership.Manifest.Library), content, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			rewritePayloadManifest(t, source, func(value *manifest) {
+				value.LibrarySHA256 = hex.EncodeToString(digest[:])
+			})
+			refreshed, err := BuildContainer(source, 1<<20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected, err := readManifest(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor, err := Inspect(refreshed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if expected.PayloadVersion != previousOwnership.Manifest.PayloadVersion {
+				t.Fatal("fixture changed the collection version")
+			}
+			if hex.EncodeToString(descriptor.SHA256[:]) == previousOwnership.PayloadSHA256 {
+				t.Fatal("fixture did not change the payload digest")
+			}
+
+			updatedAdjacent, err := MaterializeAdjacent(refreshed, adjacent, "darwin", arch)
+			if err != nil || updatedAdjacent != previousAdjacent {
+				t.Fatalf("adjacent refresh = %q, %v", updatedAdjacent, err)
+			}
+			current, owned, err := readOwnership(adjacent, "darwin", arch)
+			if err != nil || !owned || current.State != "ready" || current.Manifest != expected || current.PayloadSHA256 != hex.EncodeToString(descriptor.SHA256[:]) {
+				t.Fatalf("refreshed ownership = %#v, %v", current, err)
+			}
+			updatedCache, err := Materialize(refreshed, cache, "darwin", arch)
+			if err != nil || filepath.Dir(updatedCache) == filepath.Dir(previousCache) {
+				t.Fatalf("cache did not isolate the refreshed payload: %q, %v", updatedCache, err)
+			}
+			if old, err := os.ReadFile(previousCache); err != nil || string(old) != "library-darwin-"+arch {
+				t.Fatalf("previous cache was modified: %q, %v", old, err)
+			}
+
+			for _, location := range []struct {
+				name  string
+				path  string
+				reuse func() (string, error)
+			}{
+				{"adjacent", updatedAdjacent, func() (string, error) { return MaterializeAdjacent(refreshed, adjacent, "darwin", arch) }},
+				{"cache", updatedCache, func() (string, error) { return Materialize(refreshed, cache, "darwin", arch) }},
+			} {
+				t.Run(location.name, func(t *testing.T) {
+					if data, err := os.ReadFile(location.path); err != nil || !bytes.Equal(data, content) {
+						t.Fatalf("refresh returned old library: %q, %v", data, err)
+					}
+					if err := validateRootManifest(filepath.Dir(location.path), expected, "darwin", arch); err != nil {
+						t.Fatal(err)
+					}
+					before, err := os.Stat(location.path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if reused, err := location.reuse(); err != nil || reused != location.path {
+						t.Fatalf("refreshed reuse = %q, %v", reused, err)
+					}
+					after, err := os.Stat(location.path)
+					if err != nil || !os.SameFile(before, after) {
+						t.Fatalf("valid refreshed library was replaced: %v", err)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageLibraryOnlyIgnoresUnownedPS(t *testing.T) {
 	container, err := BuildContainer(writePayloadFixture(t, "linux", "amd64"), 1<<20)
 	if err != nil {

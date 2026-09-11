@@ -6,6 +6,13 @@ library. Each target contains only its library and a format-2 manifest. The
 retired `ps/` directory and Win32 DLL are not distributed. Payload slots reserve
 1 MiB on macOS/Linux and 4 MiB on Windows, including room for signed libraries.
 
+The macOS library was refreshed on 2026-09-11 from the provider-supplied
+`x7k2m9p4q1w8_Dynamic.zip`; its source and library checksums are recorded in the
+[payload notice](../third_party/runtimepayload/20260909/NOTICE.md).
+The collection version stays `20260909`. A changed payload digest upgrades an
+owned adjacent library and selects a separate cache directory even when the
+version is unchanged. Linux and Windows retain their existing payloads.
+
 ## Materialization and recovery
 
 The loader resolves the executable's symbolic links before choosing its parent
@@ -55,7 +62,7 @@ without blocking login or business requests.
 flowchart TD
     A[20260909 library and format-2 manifest, no ps] --> B[Resolve executable symlinks]
     B --> C[Lock and verify existing adjacent resources]
-    C --> L{Ready library matches embedded manifest?}
+    C --> L{Ready payload digest and library match embedded bundle?}
     L -- Yes --> F[Load verified library]
     L -- No --> M[Stage, verify and publish owned resources]
     M --> D{Publication succeeds?}
