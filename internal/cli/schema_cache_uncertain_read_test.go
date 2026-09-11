@@ -14,6 +14,7 @@
 package cli
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,11 @@ func uncertainGroupHelpRoot(t *testing.T) *cobra.Command {
 	group := &cobra.Command{Use: "calendar"}
 	leaf := &cobra.Command{Use: "list", Run: func(*cobra.Command, []string) {}}
 	group.AddCommand(leaf)
+	// Mirror production group commands: ApplyGroupPolicy owns the
+	// navigation-only marker and installs the group RunE.
+	corecmd.ApplyGroupPolicy(group, corecmd.GroupPolicy{
+		Mode: corecmd.GroupNavigationOnly, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling,
+	})
 	root.AddCommand(group)
 	return group
 }
