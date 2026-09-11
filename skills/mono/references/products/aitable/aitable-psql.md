@@ -2,42 +2,42 @@
 
 ## 适用场景
 
-用户明确表达以下任一意图时，使用 `dws aitable psql`：
+用户明确要求 SQL / PostgreSQL / `SELECT`，或需求包含以下任一复杂服务端分析时，使用 `dws aitable psql`：
 
-- 使用 SQL / PostgreSQL / `SELECT` 查询 AI 表格
 - 查看 PostgreSQL 逻辑表清单或逻辑列类型
-- 单表投影、过滤、聚合、分组、排序和分页
 - 最多 8 张同 Base 数据表的 `INNER`、`LEFT`、`RIGHT`、`FULL OUTER JOIN`；`CROSS JOIN` 仅支持两张表
-- `COUNT`、`SUM`、`AVG`、`MIN`、`MAX` 聚合，以及 `ROW_NUMBER`、`RANK`、`DENSE_RANK` 窗口函数
+- 字段间算术、`CASE`、聚合后派生指标、汇总结果 Top N 或排名
+- `ROW_NUMBER`、`RANK`、`DENSE_RANK` 等窗口函数，或必须依赖 PostgreSQL 类型语义的计算
 
-普通的“查几条记录”“按字段筛选记录”仍使用 `record query`。读取字段配置、选项、公式配置时仍使用 `field get`；只有用户关心 SQL 可查询列及 PostgreSQL 类型时才使用 `psql -t`。
+原始记录筛选、排序和 Top N 使用 `record query`；单表直接标量、分组或去重统计使用 `record stats` / `record group-stats`。读取字段配置、选项、公式配置时仍使用 `field get`；只有用户关心 SQL 可查询列及 PostgreSQL 类型时才使用 `psql -t`。
 
 ## 查询路由与降级
 
 | 查询需求 | 首选接口 | 原因 |
 |---|---|---|
-| 一张表内按 recordId、关键词或已解析字段条件读取少量非聚合明细，并需要字段投影或 cursor 分页 | `record query` | 直接返回记录模型，保留字段类型解析和分页语义。 |
+| 按 recordId、关键词或字段条件读取原始记录，或对原始记录筛选、排序、取 Top N | `record query` | 直接返回 `recordId`、`cells` 和 cursor 等记录模型。 |
+| 单表直接标量、分组或去重统计 | `record stats` / `record group-stats` | 由原生统计接口完成，不需要 SQL。 |
 | 已获用户明确许可的完整逐行明细或逐条业务操作（不做分析） | `dws aitable record query --all --page-limit 0` | 由 CLI 统一处理完整扫描；必须服务端过滤、只取必要字段并先取小样本。 |
 | 完整数据导出 | `dws aitable export data` | 导出是文件交付，不得把记录拉到 Agent 上下文做分析。 |
-| 关联两张或以上表、跨表分析 | `psql` | 先核对表和列，再用一条 `SELECT ... JOIN ...` 获取关联结果，禁止拆成多次 `record query` 后由 Agent 自行拼接。 |
-| 过滤、聚合、分组、窗口函数、复杂排序、分档、日期处理、派生指标或需要 PostgreSQL 类型语义 | `psql` | 使用数据库侧计算，禁止在 Agent 或本地工具侧推导。 |
+| 同 Base 多表关联、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口函数 | `psql` | 先核对表和列，再用 SQL 在服务端完成原生接口无法直接表达的分析。 |
 
-只要需求包含分析、关联或可由 SQL 表达的计算，即使用户没有明确说 SQL，也必须使用 `psql`。`psql` 因技术或服务错误无法执行时，先保留真实错误并修复；不得静默降级，不得用 `record query` 拆分或模拟 JOIN、SQL 聚合、分组、窗口计算或本地分析。
+当需求需要 `psql` 的复杂分析能力时，即使用户没有明确说 SQL，也必须使用 `psql`。`psql` 因技术或服务错误无法执行时，先保留真实错误并修复；不得用 `record query` 拆分或模拟 JOIN、聚合后派生、汇总排名、窗口计算或本地分析。
 
 ### 正反边界案例
 
 | 用户请求或结果需求 | 应选 | 不应选 / 原因 |
 |---|---|---|
-| “把近半年订单按区域、月份、状态统计后给我”“找 Top 100 客户” | `psql` | 不要 `record query --all` 后在 Agent 或本地计算。 |
-| “把两张表关联，找未匹配记录”“按日期/金额/状态批量筛选后取结果” | `psql` | 不要分多次 `record query` 后拼接；大量读取也先用 SQL 过滤、投影和 `LIMIT` 控制结果。 |
-| “读取很多记录供分析/后续计算” | `psql` | `psql` 单次最多返回 1,000 行；先在服务端聚合或缩小范围，不能以 `record query --all` 规避此上限。 |
+| “金额最高的 10 条记录”“按日期筛选原始记录” | `record query --sort ... --limit 10` | 排序对象是原始记录，不因 SQL 也支持 `ORDER BY` 改走 psql。 |
+| “本月订单总金额”“各状态分别多少条”“唯一门店数” | `record stats` / `record group-stats` | 单表直接标量、分组或去重统计，不需要 SQL。 |
+| “把两张表关联，找未匹配记录”“各门店销售额占总额比例” | `psql` | 需要 JOIN 或聚合后派生，不能分多次 `record query` 后拼接。 |
+| “销售额最高的 10 个门店并排名” | `psql` | 排序对象是聚合结果，需要汇总后排序或窗口排名。 |
 | “下载/交付完整原始数据文件” | `export data` | `psql` 不承担无界文件导出，`record query --all` 也不替代导出。 |
 | “读取这几个 recordId 的 cells”“按字段条件查看一页记录”“需要 cursor、recordId 或原始字段类型” | `record query` | 这是结构化记录读取，不应为了少量详情改写成 SQL。 |
-| “按条件找出记录后逐条更新/删除/分享” | `record query` | 仅用它定位有限的业务记录；筛选逻辑若包含聚合、关联或派生计算，先用 `psql` 确定范围。 |
+| “按条件找出记录后逐条更新/删除/分享” | `record query` | 仅用它定位有限的业务记录；范围依赖聚合后派生或关联时，先用 `psql` 确定范围。 |
 
 ## 服务端分析强制规则
 
-- 凡是 `psql` 能完成的过滤、JOIN、聚合、排序、分档、日期处理、窗口计算和派生指标，都必须在服务端 SQL 中完成。禁止拉取明细后使用 Python、jq、JavaScript、电子表格或其他本地工具做等价加工。
+- 已选用 `psql` 的 JOIN、字段间算术、CASE、聚合后派生、汇总排名和窗口计算，必须在服务端 SQL 中完成。禁止拉取明细后使用 Python、jq、JavaScript、电子表格或其他本地工具做等价加工。
 - 全程固定使用一个已验证可执行的 DWS 二进制或包装脚本，不得混用内置 shim、本地版或其他版本。依次执行 `psql -l`、每张目标表的 `psql -t`、使用真实 `Name` 的 `LIMIT 3` 最小查询；最小查询成功后才执行正式 SQL。
 - 按业务主题拆分 SQL；同一事实粒度、同一关联链的过滤、JOIN、聚合和派生指标应合并到一条 SQL。关键结论必须用独立 SQL 在服务端复核。
 - 出现 `pending-post-tool-use`、`host-side execution`、`PostToolUse hook did not activate` 或 `real result was not produced`，属于客户端或宿主执行失败：切换到正确的同一 DWS 入口后重试原 psql 命令，禁止降级。网络、认证或权限失败先修复后重试；SQL 失败先缩减为最小查询，再逐步加入 WHERE、JOIN、GROUP BY 和窗口计算；语法或函数不支持时先改写或拆成多条服务端 SQL。
@@ -88,7 +88,8 @@ dws aitable psql -d <BASE_ID> \
 | “数据表1有哪些 SQL 字段和类型” | 先 `-l` 解析真实 `tableId`，再 `psql -d <baseId> -t <tableId>` |
 | “查询数据表1前 10 条”且上下文明确要求 SQL | 先核对逻辑表结构，再执行 `SELECT * ... LIMIT 10` |
 | “把数据表1、数据表2和数据表3关联起来”或“分析不同表之间的关系” | 优先使用 psql：先列出表并查看每张表的结构，再生成一条多表 JOIN SQL；表由 SQL 自动解析 |
-| “按业务状态统计数量”或明确要求 SQL 聚合 | 优先使用 psql：先查看逻辑结构，再生成使用 `COUNT/SUM/AVG/MIN/MAX` 的分组或聚合 SQL |
+| “按业务状态统计数量” | `record group-stats`，单表直接分组统计不需要 SQL |
+| 明确要求 SQL 聚合，或统计后还需派生、排名或窗口计算 | 优先使用 psql：先查看逻辑结构，再生成对应 SQL |
 | “按分组排名/生成行号” | 先查看逻辑结构，再生成使用 `ROW_NUMBER/RANK/DENSE_RANK ... OVER (...)` 的 SQL |
 
 用户只给表名时，必须先用 `psql -l` 获取真实 `tableId`；零命中或重名时要求用户消歧，禁止猜测。编写 SQL 前必须用 `psql -t` 核对实际逻辑列名和 PostgreSQL 类型。

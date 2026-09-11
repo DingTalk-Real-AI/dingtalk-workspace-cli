@@ -95,12 +95,12 @@ func TestAitablePsqlWarnsWhenResultIsTruncated(t *testing.T) {
 	}
 }
 
-func TestAitablePsqlSelectionForbidsLocalAnalysis(t *testing.T) {
-	if !strings.Contains(aitablePsqlAgentSummary, "服务端") || !strings.Contains(aitablePsqlUseWhen, "派生指标") {
-		t.Fatalf("selection does not describe server-side analysis: %q / %q", aitablePsqlAgentSummary, aitablePsqlUseWhen)
+func TestAitablePsqlSelectionRoutesComplexAnalysis(t *testing.T) {
+	if !strings.Contains(aitablePsqlAgentSummary, "服务端") || !strings.Contains(aitablePsqlUseWhen, "同 Base JOIN") || !strings.Contains(aitablePsqlUseWhen, "聚合后派生") {
+		t.Fatalf("selection does not describe complex server-side analysis: %q / %q", aitablePsqlAgentSummary, aitablePsqlUseWhen)
 	}
-	if !strings.Contains(aitablePsqlAvoidLocalAnalysis, "record query --all") || !strings.Contains(aitablePsqlAvoidLocalAnalysis, "本地工具") || !strings.Contains(aitablePsqlAvoidFallbackOnFailure, "明确许可") {
-		t.Fatalf("selection rules do not guard record-query fallback: %q / %q", aitablePsqlAvoidLocalAnalysis, aitablePsqlAvoidFallbackOnFailure)
+	if !strings.Contains(aitablePsqlAvoidRecordQuery, "原始记录") || !strings.Contains(aitablePsqlAvoidStats, "单表直接标量") || !strings.Contains(aitablePsqlAvoidExport, "完整原始数据文件") {
+		t.Fatalf("selection does not route simpler result models: %q / %q / %q", aitablePsqlAvoidRecordQuery, aitablePsqlAvoidStats, aitablePsqlAvoidExport)
 	}
 }
 

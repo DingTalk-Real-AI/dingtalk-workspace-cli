@@ -39,7 +39,7 @@ metadata:
 
 已由当前 AITable 调用返回且类型已确认的 ID 直接使用；名称先唯一解析为稳定 ID。用户直接提供的 `/i/nodes/` URL 或来源未验证的 nodeId 先执行 `dws drive info`；若为 `extension=dlink`，将返回的 `result.fileId` 保存为快捷方式入口 ID 并传给 `dws doc info`，再逐跳读取目标 `linkSourceInfo`，最终确认 `extension=able` 后将目标 `linkSourceInfo.nodeId` 作为 baseId。解析失败、字段缺失、ID 重复或最终类型不是 able 时停止；只有明确移动、改名或删除快捷方式入口本身时才保留最初的 `result.fileId` 并切到 Drive。零命中或多候选时也停止，不默认选第一项。
 
-数据分析，以及 PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询，先读 [aitable-psql.md](references/aitable/aitable-psql.md)。凡可由 SQL 完成的过滤、聚合、排序、分档、日期处理、窗口计算和派生指标必须使用 `psql` 在服务端完成；禁止拉取原始记录后本地计算。固定同一 DWS 入口，先用 `dws aitable psql -d <baseId> -l` 发现逻辑表，再用 `-t <tableId>` 查看列类型，使用返回的 `Name` 执行 `LIMIT 3` 最小查询，成功后才以 `-c <SQL>` 执行正式只读查询；`psql` 输出 PostgreSQL 表格文本，不添加 `--format json`。
+数据分析，以及 PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询，先读 [aitable-psql.md](references/aitable/aitable-psql.md)。原始记录筛选、排序和 Top N 使用 `record query`；单表直接标量、分组或去重统计使用 `record stats` / `record group-stats`；仅同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口计算等复杂分析使用 `psql`。选用 `psql` 时固定同一 DWS 入口，先用 `dws aitable psql -d <baseId> -l` 发现逻辑表，再用 `-t <tableId>` 查看列类型，使用返回的 `Name` 执行 `LIMIT 3` 最小查询，成功后才以 `-c <SQL>` 执行正式只读查询；`psql` 输出 PostgreSQL 表格文本，不添加 `--format json`。禁止拉取原始记录后在本地进行等价分析。
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
@@ -51,7 +51,7 @@ metadata:
 | 复制 Base 到文档目录 | `dws aitable +base-copy --base-id <B> --target-folder-id <FOLDER_NODE_ID> [--only-struct] [--new-name <名称>]`；只有 URL 时先用 `dws doc info --node <URL> --format json` 解析 `nodeId`，然后仍传 `--target-folder-id <NODE_ID>` | `target-folder-id` 必须是文件夹 `nodeId`，不接受 URL、路径、纯数字 dentryId 或 rootFolderId；若 Runtime 返回 `target_not_supported/retryable=false`，立即报告，不查 Help、不换 ID、不建测试文件夹，也不手工降级复制 |
 | 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>'` | 字段使用 `fieldName/type/config`；自动按 15 个字段分片并读回验证 |
 | 读取字段目录或完整配置 | `dws aitable field list --base-id <B> --table-id <T>` / `dws aitable +field-get --base-id <B> --table-id <T>` | 只需 fieldId/name/type 用 `field list`；需要 config 用 `+field-get`；不存在 `+field-list` 或 `+list-fields` |
-| 查询少量非聚合记录、记录筛选/排序或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；大量读取供分析或后续计算先走 psql。只有用户明确许可且满足 `aitable-psql.md` 的降级门禁，才能用原子 `record query --all --page-limit <N>` 获取非分析明细。 |
+| 查询原始记录、记录筛选/排序、原始记录 Top N 或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；单表直接标量、分组或去重统计改走 `record stats` / `record group-stats`，复杂服务端分析改走 psql。只有用户明确许可且满足 `aitable-psql.md` 的降级门禁，才能用原子 `record query --all --page-limit <N>` 获取非分析明细。 |
 | 新增单条或批量记录 | `dws aitable record create --base-id <ID> --table-id <ID> --records <JSON>` | 当前无 `+record-create`；写前取字段定义，写后按新 ID 回读 |
 | 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON>` | 自动分片并读回；只传需修改字段 |
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
