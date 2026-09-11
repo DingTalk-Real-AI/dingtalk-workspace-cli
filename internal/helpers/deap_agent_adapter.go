@@ -63,7 +63,7 @@ func (digitalEmployeeDSHAdapter) Connect(cmd *cobra.Command, cfg digitalEmployee
 	if runtime, e := employeeDSHControl(cmd.Context(), b, "start"); e == nil && runtime.RuntimeState == "running" && runtime.TransportReady && runtime.ExecutorReady {
 		return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
 	}
-	return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{Status: status, AgentUUID: b.AgentUUID, Channel: "dsh", DWSProfile: b.DWSProfile, OperatorOpenDingTalkID: b.OperatorOpenDingTalkID, ProtocolVersion: 1, RestartRequired: true})
+	return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{RuntimeBindingID: b.RuntimeBindingID, DeviceID: b.DeviceID, Status: status, AgentUUID: b.AgentUUID, Channel: "dsh", DWSProfile: b.DWSProfile, OperatorOpenDingTalkID: b.OperatorOpenDingTalkID, ProtocolVersion: 1, RestartRequired: true})
 }
 
 func registerEmployeeDSH(ctx context.Context, cfg digitalEmployeeAdapterConfig) (string, error) {
@@ -143,6 +143,11 @@ func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 		return nil
 	}
 	if commandBoolFlag(cmd, "profile-only") {
+		for _, flag := range employeeServerFlags() {
+			if cmd.Flags().Changed(flag.Name) {
+				return fmt.Errorf("--profile-only 不接受 --%s", flag.Name)
+			}
+		}
 		for _, name := range digitalEmployeeAdapterFlagNames() {
 			if cmd.Flags().Changed(name) {
 				return fmt.Errorf("--profile-only 不接受 --%s", name)
@@ -296,11 +301,14 @@ func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, er
 	if err != nil || !sameEmployeeBinding(b, cfg.Binding) || b.DWSProfile != profile || bindingChannel(b) == "dsh" || employeeBindingState(b) != "bound" || employeeDesiredState(b) != "running" {
 		return cfg, fmt.Errorf("adapter configuration does not match employee binding")
 	}
+	if err := checkEmployeeServerOperation(b); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
 func digitalEmployeeResultSpec() *contract.ResultSpec {
-	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","description":"连接状态"},"agentUuid":{"type":"string","description":"数字员工 ID"},"channel":{"type":"string","description":"Adapter 类型"},"dwsProfile":{"type":"string","description":"员工精确 Profile"},"pid":{"type":"integer","description":"本地运行进程"},"logPath":{"type":"string","description":"无正文运行日志"},"restartRequired":{"type":"boolean","description":"是否需要外部宿主重启"},"items":{"type":"array","description":"连接列表","items":{"type":"object"}},"bindingState":{"type":"string","description":"本机绑定状态"},"desiredState":{"type":"string","description":"期望运行状态"},"runtimeState":{"type":"string","description":"实际运行状态或 unknown"},"bindingRevision":{"type":"integer","description":"绑定版本"},"runtimeInstanceId":{"type":"string","description":"运行实例标识"},"transportReady":{"type":"boolean","description":"事件传输就绪"},"executorReady":{"type":"boolean","description":"Agent 初始化就绪"},"observedAt":{"type":"string","description":"状态观察时间"},"operationId":{"type":"string","description":"解绑或换绑操作 ID"},"reasonCode":{"type":"string","description":"稳定阻塞原因"},"nextAction":{"type":"string","description":"安全恢复建议"}}}`)}
+	return &contract.ResultSpec{Outcomes: []contract.ResultOutcome{"success"}, DataSchema: json.RawMessage(`{"type":"object","properties":{"deviceId":{"type":"string","description":"稳定设备标识"},"runtimeBindingId":{"type":"string","description":"最后确认的服务端绑定 ID；解绑后保留历史 ID"},"serverBindingState":{"type":"string","description":"本地服务端回执状态，不代表在线；bound/unbound/unregistered/unknown/commit_pending"},"status":{"type":"string","description":"连接状态"},"agentUuid":{"type":"string","description":"数字员工 ID"},"channel":{"type":"string","description":"Adapter 类型"},"dwsProfile":{"type":"string","description":"员工精确 Profile"},"pid":{"type":"integer","description":"本地运行进程"},"logPath":{"type":"string","description":"无正文运行日志"},"restartRequired":{"type":"boolean","description":"是否需要外部宿主重启"},"items":{"type":"array","description":"连接列表","items":{"type":"object"}},"bindingState":{"type":"string","description":"本机绑定状态"},"desiredState":{"type":"string","description":"期望运行状态"},"runtimeState":{"type":"string","description":"实际运行状态或 unknown"},"bindingRevision":{"type":"integer","description":"绑定版本"},"runtimeInstanceId":{"type":"string","description":"运行实例标识"},"transportReady":{"type":"boolean","description":"事件传输就绪"},"executorReady":{"type":"boolean","description":"Agent 初始化就绪"},"observedAt":{"type":"string","description":"状态观察时间"},"operationId":{"type":"string","description":"解绑或换绑操作 ID"},"reasonCode":{"type":"string","description":"稳定阻塞原因"},"nextAction":{"type":"string","description":"安全恢复建议"}}}`)}
 }
 
 func digitalEmployeeMachineResultSpec(capabilities bool) *contract.ResultSpec {

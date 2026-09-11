@@ -11,7 +11,7 @@ import (
 func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	root := NewRootCommand()
 	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
-	for _, action := range []string{"status", "list", "stop", "restart"} {
+	for _, action := range []string{"status", "list", "stop", "restart", "bind", "unbind", "rebind"} {
 		wants["dingtalk-tag.connect_"+action] = "dingtalk-tag connect " + action
 	}
 	var names []string
@@ -30,6 +30,36 @@ func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	}
 	if cmd.Flags().Lookup("agent-uuid") != nil {
 		t.Fatal("list must not inherit connect's required employee flag")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingFinalSchema(t *testing.T) {
+	wants := map[string]map[string]string{
+		"bind":   {"agent-uuid": "agentUuid", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions"},
+		"unbind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId"},
+		"rebind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions", "client-id": "clientId"},
+	}
+	root := NewRootCommand()
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.connect_bind", "dingtalk-tag.connect_unbind", "dingtalk-tag.connect_rebind")
+	for action, params := range wants {
+		tool := payload.Tools["dingtalk-tag.connect_"+action]
+		if schemaContractString(tool["interface_mode"]) != "composite" {
+			t.Errorf("%s must declare server-side effects", action)
+		}
+		if schemaContractString(tool["confirmation"]) != "user_required" || schemaContractString(tool["effect"]) != "write" || tool["result"] == nil {
+			t.Fatalf("incomplete %s contract", action)
+		}
+		got := schemaContractMap(tool["parameters"])
+		for name, property := range params {
+			if schemaContractString(got[name]["property"]) != property {
+				t.Errorf("%s missing mapping %s", action, name)
+			}
+		}
+		for _, name := range []string{"identity", "user-id", "org-id", "profile-only"} {
+			if _, ok := got[name]; ok {
+				t.Errorf("%s exposes %s", action, name)
+			}
+		}
 	}
 }
 
@@ -255,11 +285,12 @@ func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 16 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 16: %#v", len(parameters), parameters)
+	if len(parameters) != 19 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
 	}
 	for name, property := range map[string]string{
 		"agent-uuid": "agentUuid", "channel": "channel", "profile-only": "profileOnly", "client-id": "clientId",
+		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
 	} {
 		parameter := parameters[name]
 		if parameter == nil {

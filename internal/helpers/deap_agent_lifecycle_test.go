@@ -62,6 +62,13 @@ func lifecycleFixture(t *testing.T) (string, digitalEmployeeBinding) {
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	b := digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "employee-test", DWSProfile: "corp:employee", Channel: "dsh", OperatorOpenDingTalkID: "operator", BindingRevision: 7, BindingState: "bound", DesiredState: "running"}
+	device, err := employeeDeviceID(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.DeviceID, b.RuntimeBindingID = device, "binding-old"
+	setupServerBindingSupervisor(t)
+	InitDepsForTest(t, &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/de_local_agent_unbind": {`{"success":true,"data":true}`}}})
 	if err := saveDigitalEmployeeBinding(dir, b); err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +158,7 @@ func lifecycleCmd(t *testing.T, action, id string) *cobra.Command {
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.Flags().Bool("dry-run", false, "")
+	cmd.Flags().Bool("yes", true, "test confirmation")
 	if err := cmd.Flags().Set("agent-uuid", id); err != nil {
 		t.Fatal(err)
 	}
