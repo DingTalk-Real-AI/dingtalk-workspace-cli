@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -203,10 +204,6 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 
 	configDir := deapConnectConfigDir()
-	supervisorSelector, supervisor, err := currentSupervisorProfile(configDir)
-	if err != nil {
-		return err
-	}
 	draft, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "type": "draft"}, false)
 	if err != nil {
 		return fmt.Errorf("query digital employee draft: %w", err)
@@ -248,49 +245,18 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	authArgs := map[string]any{"agentUuid": agentUUID}
-	if requestedClientID != "" {
-		authArgs["clientId"] = requestedClientID
-	}
-	authorization, err := callDeapJSON(cmd.Context(), deapAgentAuthCodeTool, authArgs, true)
-	if err != nil {
-		return fmt.Errorf("request digital employee authorization: %w", err)
-	}
-	authData := businessDataMap(authorization)
-	dwsClientID := requiredJSONScalar(authData, "dwsClientId")
-	authorizedRobotUID := requiredJSONScalar(authData, "uid")
-	authorizedStaffID := requiredJSONScalar(authData, "staffId")
-	dwsAuthCode := requiredJSONScalar(authData, "dwsAuthCode")
-	authorizationOrgID := requiredJSONScalar(authData, "orgId")
-	if dwsClientID == "" || authorizedRobotUID == "" || authorizedStaffID == "" || dwsAuthCode == "" || authorizationOrgID == "" {
-		return apperrors.NewInternal("数字员工授权响应缺少 dwsClientId、uid、staffId、dwsAuthCode 或 orgId")
-	}
-	if authorizedRobotUID != publishedIdentity.RobotUID {
-		return apperrors.NewInternal("数字员工授权响应 uid 与发布详情 profile.robotUid 不一致")
-	}
-	if authorizedStaffID != publishedIdentity.StaffID {
-		return apperrors.NewInternal("数字员工授权响应 staffId 与发布详情 profile.staffId 不一致")
-	}
-	token, err := deapConnectManagedExchange(cmd.Context(), configDir, auth.ManagedExchangeRequest{
-		ClientID: dwsClientID, AuthCode: dwsAuthCode, ExpectedUserID: authorizedStaffID, ExpectedCorpID: publishedIdentity.CorpID, PreserveProfile: supervisorSelector,
-		ResolveIdentity: resolveDigitalEmployeeManagedIdentity,
-	})
-	// 尽早清空本地变量，后续所有错误和输出都不再接触授权码。
-	dwsAuthCode = ""
+	session, err := loginDigitalEmployee(cmd.Context(), configDir, agentUUID, requestedClientID, published)
 	if err != nil {
 		return err
 	}
-	digitalProfile := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
-	if digitalProfile == "" || token.UserID != authorizedStaffID || token.CorpID != publishedIdentity.CorpID {
-		return apperrors.NewInternal("数字员工 Profile 身份校验失败")
-	}
+	digitalProfile, token := session.DigitalProfile, session.DigitalToken
 	if profileOnly {
 		return writeDWSMachineEnvelope(cmd, digitalEmployeeConnectResult{
 			Status: "profile_saved", AgentUUID: agentUUID, DWSProfile: digitalProfile, ProfileOnly: true,
 			ProtocolVersion: digitalEmployeeProtocolVersion, RestartRequired: false,
 		})
 	}
-	operatorID, err := resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, supervisor.UserID)
+	operatorID, err := resolveExactOperatorOpenDingTalkID(cmd.Context(), token.AccessToken, session.SupervisorToken.UserID)
 	if err != nil {
 		return err
 	}
@@ -373,7 +339,7 @@ func currentSupervisorProfile(configDir string) (string, *auth.TokenData, error)
 		return "", nil, fmt.Errorf("load supervisor profile: %w", err)
 	}
 	if token == nil || strings.TrimSpace(token.CorpID) == "" || strings.TrimSpace(token.UserID) == "" {
-		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全接入数字员工")
+		return "", nil, apperrors.NewValidation("主管 Profile 缺少精确 corpId:userId 身份，无法安全登录数字员工")
 	}
 	exact := auth.ProfileSelector(auth.Profile{CorpID: token.CorpID, UserID: token.UserID})
 	return exact, token, nil
@@ -598,6 +564,9 @@ func digitalEmployeeDeliveryResult(result map[string]any, conversationID, idempo
 }
 
 func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]any, conversationID, idempotencyKey string) (map[string]any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	delivery := digitalEmployeeDeliveryResult(sendResult, conversationID, idempotencyKey)
 	if strings.TrimSpace(jsonScalar(delivery["openMessageId"])) != "" {
 		return delivery, nil
@@ -607,12 +576,18 @@ func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]a
 		return nil, apperrors.NewInternal("数字员工发送响应缺少 openMessageId 和 openTaskId，无法确认投递结果")
 	}
 	for attempt := 0; attempt < digitalEmployeeReceiptAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if attempt > 0 {
 			if err := deapChannelReceiptWait(ctx, digitalEmployeeReceiptInterval); err != nil {
 				return nil, err
 			}
 		}
 		status, err := callMachineMCPJSON(ctx, "im", "query_message_send_status", map[string]any{"openTaskId": taskID})
+		if errors.Is(err, errEmployeeReceiptNotVisible) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("query digital employee message status: %w", err)
 		}
@@ -621,7 +596,9 @@ func resolveDigitalEmployeeDelivery(ctx context.Context, sendResult map[string]a
 			return delivery, nil
 		}
 	}
-	return nil, apperrors.NewInternal("数字员工发送任务未在有限等待时间内返回 openMessageId，无法确认投递结果")
+	return nil, apperrors.NewInternal("数字员工发送任务未在有限等待时间内返回 openMessageId，投递状态未知，请勿重新发送",
+		apperrors.WithReason("delivery_unknown"), apperrors.WithRetryable(false),
+		apperrors.WithHint("消息可能已经送达，请先核对原会话；不要重跑发送或 Agent 任务。"))
 }
 
 func waitForDigitalEmployeeReceipt(ctx context.Context, delay time.Duration) error {
@@ -667,6 +644,10 @@ func callPrivateMCPJSON(ctx context.Context, server, tool string, args map[strin
 		return nil, apperrors.NewInternal("MCP caller is not initialized")
 	}
 	result, err := deps.Caller.CallTool(ctx, server, tool, args)
+	if server == "im" && tool == "query_message_send_status" && isEmployeeReceiptNotVisible(err) {
+		// 只保留可重查回执的安全分类，不携带原始诊断、正文或凭据。
+		return nil, errEmployeeReceiptNotVisible
+	}
 	if err != nil || result == nil {
 		return nil, fmt.Errorf("private MCP operation %s/%s failed", server, tool)
 	}

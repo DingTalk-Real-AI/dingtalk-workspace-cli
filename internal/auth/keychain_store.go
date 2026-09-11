@@ -656,6 +656,15 @@ func legacyClientSecretAccountKey(clientID string) string {
 // SaveClientSecret stores the client secret for a specific client ID.
 // This is called during login to snapshot the credentials used.
 func SaveClientSecret(clientID, clientSecret string) error {
+	return saveClientSecret(clientID, clientSecret, false)
+}
+
+// 换票事务由调用方持有快照并回滚，旧槽清理失败不能降级为成功。
+func saveClientSecretTransactional(clientID, clientSecret string) error {
+	return saveClientSecret(clientID, clientSecret, true)
+}
+
+func saveClientSecret(clientID, clientSecret string, strictCleanup bool) error {
 	clientID = strings.TrimSpace(clientID)
 	clientSecret = strings.TrimSpace(clientSecret)
 	if clientID == "" || clientSecret == "" {
@@ -666,6 +675,9 @@ func SaveClientSecret(clientID, clientSecret string) error {
 		return fmt.Errorf("save client secret: %w", err)
 	}
 	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
+		if strictCleanup {
+			return fmt.Errorf("remove legacy client secret: %w", err)
+		}
 		slog.Warn("auth: failed to remove legacy Client Secret slot after save", "client_id", clientID, "error", err)
 	}
 	return nil

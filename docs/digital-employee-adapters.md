@@ -4,7 +4,7 @@
 
 ## 目标与边界
 
-本改造基于 haoxiao 测试分支 build 15.1（`a36bc7885f20c58426d80cc9dcb70feecdb4828f`），不改动公开 auth exchange、DEAP manage/run/capability 或机器人 Stream 收发协议。
+本改造起于 haoxiao 测试分支 build 15.1（`a36bc7885f20c58426d80cc9dcb70feecdb4828f`），并整合 build 18.1（`b78ec43912fec74df38d25d5af0b9e0842434f0f`）的外部 `auth exchange` 和主管 `manage login`。本地接入复用受管登录，不改变 DEAP 创建/管理/执行的 MCP 协议或机器人 Stream 收发协议。
 
 - 创建/管理数字员工与本地接入独立；connect 不创建、修改或发布数字员工。
 - 支持 Qoder、QoderWork、WorkBuddy、Claude Code、CodeBuddy、Codex、Gemini、OpenCode、custom 和 DSH。

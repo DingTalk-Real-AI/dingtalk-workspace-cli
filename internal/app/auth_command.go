@@ -953,66 +953,6 @@ func newAuthImportCommandWithSupport(supportError func() error) *cobra.Command {
 	return cmd
 }
 
-func newAuthExchangeCommand(caller edition.ToolCaller) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:               "exchange",
-		Short:             "Exchange an authorization code for credentials",
-		Hidden:            true,
-		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			code, err := cmd.Flags().GetString("code")
-			if err != nil {
-				return apperrors.NewInternal("failed to read --code")
-			}
-			code = strings.TrimSpace(code)
-			if code == "" {
-				return apperrors.NewValidation("--code is required")
-			}
-			uid, err := cmd.Flags().GetString("uid")
-			if err != nil {
-				return apperrors.NewInternal("failed to read --uid")
-			}
-
-			configDir := defaultConfigDir()
-			provider := authpkg.NewOAuthProvider(configDir, nil)
-			provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
-				return enrichAuthLoginProfileFromContact(ctx, configDir, caller, data)
-			}
-			configureOAuthProviderCompatibility(provider, configDir)
-			exchangeCtx, cancel := context.WithTimeout(cmd.Context(), time.Minute)
-			defer cancel()
-			tokenData, err := authOAuthExchange(provider, exchangeCtx, code, strings.TrimSpace(uid))
-			if err != nil {
-				return apperrors.NewAuth(fmt.Sprintf("failed to exchange authorization code: %v", err))
-			}
-			ResetRuntimeTokenCache()
-			clearCompatCache()
-
-			w := cmd.OutOrStdout()
-			fmt.Fprintln(w, "[OK] 授权码兑换成功！")
-			if strings.TrimSpace(uid) != "" {
-				fmt.Fprintf(w, "%-16s%s\n", "用户:", strings.TrimSpace(uid))
-			}
-			if strings.TrimSpace(tokenData.CorpID) != "" {
-				fmt.Fprintf(w, "%-16s%s\n", "企业 ID:", tokenData.CorpID)
-			}
-			if !tokenData.ExpiresAt.IsZero() {
-				fmt.Fprintf(w, "%-16s%s\n", "有效期:", authLoginFormatExpiry(tokenData.ExpiresAt))
-			}
-			return nil
-		},
-	}
-	cmd.Flags().String("code", "", "Authorization code")
-	cmd.Flags().String("uid", "", "Optional user identifier for compatibility")
-	cmd.Flags().String("client-id", "", "Compatibility flag")
-	cmd.Flags().String("authorize-url", "", "Compatibility flag")
-	cmd.Flags().String("token-url", "", "Compatibility flag")
-	cmd.Flags().String("refresh-url", "", "Compatibility flag")
-	cmd.Flags().String("redirect-url", "", "Compatibility flag")
-	cmd.Flags().String("scopes", "", "Compatibility flag")
-	return cmd
-}
-
 func newAuthResetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "reset",

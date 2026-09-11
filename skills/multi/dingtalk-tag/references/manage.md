@@ -44,34 +44,24 @@ Example:
 
 `detail` 的 `--type` 默认为 `draft`；需要核对已发布配置时显式传 `--type published`。所有数字员工 ID 统一使用 `agentUuid` / `--agent-uuid`，不要混用其它旧 ID 命名。
 
-## get-dws-auth-code — 获取临时 DWS 授权码
+## login — 登录数字员工 DWS
 
 ```
 Usage:
-  dws dingtalk-tag manage get-dws-auth-code --agent-uuid <agentUuid> [--client-id <appId>]
+  dws dingtalk-tag manage login --agent-uuid <agentUuid> [--client-id <appId>]
 Flags:
   --agent-uuid   必填，数字员工 ID
   --client-id    可选，用于授权的应用 ID；不传时由服务端选择默认应用
 ```
 
-固定调用 MCP 工具 `get_dws_auth_code`。服务端响应结构为：
+`login` 用于 A2A 或其他需要登录数字员工 DWS 的场景。企业接入本地 Agent/DSH 应使用 `dws dingtalk-tag connect`，不要使用 `manage login`。该命令会在内部完成以下步骤：
 
-```json
-{
-  "data": {
-    "dwsClientId": "<clientId>",
-    "uid": 123456789,
-    "dwsAuthCode": "<sensitive-short-lived-auth-code>",
-    "staffId": "<staffId>",
-    "orgId": 123456789
-  },
-  "success": true,
-  "errorCode": null,
-  "errorMsg": null
-}
-```
+1. 查询已发布详情，取得可信的 `profile.corpId`、`profile.robotUid`、`profile.staffId`。
+2. 申请临时 AuthCode，并使用同次响应的 `dwsClientId` 换票。
+3. 使用新 Token 在线查询并核验员工身份：授权 `uid` 对应 `robotUid`，`staffId` 对应 Profile `userId`；授权 `orgId` 不作为 `corpId`。
+4. 保存或刷新精确 `corpId:userId` Profile，同时保留发起操作的主管 Profile 为当前 Profile。
 
-`data.dwsAuthCode` 是数字员工的临时 DWS 授权码，`dwsClientId` 是配套应用 ID，`uid`、`staffId`、`orgId` 是授权身份上下文。CLI 原样输出服务端 envelope，不解析、不缓存这些字段。`dwsAuthCode` 是高敏感短期凭证，只在当前受控调用链内使用；不得写入文档、日志、命令历史、缓存或代码库，调用时不要设置会输出原始 MCP 响应的 `DWS_DUMP_RAW`。
+成功输出只包含保存后的 `dwsProfile` 和使用提示，不包含 AuthCode、Access Token 或 Refresh Token。单次以员工身份执行命令：`dws --profile <corpId:userId> <command>`；需要切换默认账号时：`dws profile use <corpId:userId>`。不要再手动执行 `dws auth exchange`。
 
 ## save-draft — 全量覆写草稿
 

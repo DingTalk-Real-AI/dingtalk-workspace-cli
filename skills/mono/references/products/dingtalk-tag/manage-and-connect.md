@@ -81,6 +81,8 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only --yes --format 
 
 ## 接入已有数字员工到 DSH
 
+本节只适用于企业把 `local_agent` 数字员工接入本地 Agent/DSH。A2A 或其他需要登录数字员工 DWS 的场景使用 `dws dingtalk-tag manage login --agent-uuid <agentUuid>`，不要使用 `connect`。
+
 ```bash
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --dry-run --format json
 # 用户确认后
