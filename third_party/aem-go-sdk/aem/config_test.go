@@ -1,54 +1,216 @@
 package aem
 
 import (
-	"slices"
-	"sort"
+	"strings"
 	"testing"
 )
 
-func TestBuildSendConfigPublishesCLIIdentityAndVersion(t *testing.T) {
-	got := buildSendConfig(Config{
-		"pid":      "pid-1",
-		"app_name": "dws",
-		"version":  "v1.2.3",
-		"uid":      "user-1",
+func TestApplyDefaults_FillsAllOptionals(t *testing.T) {
+	c := applyDefaults(Config{"pid": "test"})
+
+	if c["app_name"] != "unknown" {
+		t.Errorf("app_name = %q, want %q", c["app_name"], "unknown")
+	}
+	if c["env"] != "prod" {
+		t.Errorf("env = %q, want %q", c["env"], "prod")
+	}
+	if c["endpoint"] != "gm.mmstat.com" {
+		t.Errorf("endpoint = %q, want %q", c["endpoint"], "gm.mmstat.com")
+	}
+	if c["version"] != "unknown" {
+		t.Errorf("version = %q, want %q", c["version"], "unknown")
+	}
+	if c["async"] != true {
+		t.Errorf("async = %v, want true", c["async"])
+	}
+	if c["queue_size"] != 1000 {
+		t.Errorf("queue_size = %v, want 1000", c["queue_size"])
+	}
+}
+
+func TestApplyDefaults_DoesNotOverrideUserValues(t *testing.T) {
+	c := applyDefaults(Config{
+		"pid": "test", "app_name": "my-app", "env": "dev",
+		"endpoint": "custom.example.com", "version": "1.2.3",
+		"async": false, "queue_size": 10,
 	})
 
-	for key, want := range map[string]string{
-		"version":     "v1.2.3",
-		"app_version": "v1.2.3",
-		"uid":         "user-1",
-	} {
-		if got[key] != want {
-			t.Fatalf("send config %s = %q, want %q", key, got[key], want)
+	if c["app_name"] != "my-app" || c["env"] != "dev" || c["endpoint"] != "custom.example.com" ||
+		c["version"] != "1.2.3" || c["async"] != false || c["queue_size"] != 10 {
+		t.Errorf("user values were overridden: %+v", c)
+	}
+}
+
+func TestApplyDefaults_DoesNotMutateOriginal(t *testing.T) {
+	original := Config{"pid": "test"}
+	got := applyDefaults(original)
+
+	if _, ok := original["app_name"]; ok {
+		t.Fatal("applyDefaults mutated original config")
+	}
+	if got["app_name"] != "unknown" {
+		t.Errorf("app_name = %q, want unknown", got["app_name"])
+	}
+}
+
+func TestBuildSendConfig_RequiredKeys(t *testing.T) {
+	c := Config{"pid": "Hp8rK6", "app_name": "test", "env": "dev", "version": "1.0.0"}
+	m := buildSendConfig(c)
+
+	required := []string{
+		"pid", "sdk_version", "platform", "device_id",
+		"os", "os_version", "app_name", "app_version",
+		"pv_id", "timezone_offset",
+	}
+	for _, k := range required {
+		if _, ok := m[k]; !ok {
+			t.Errorf("missing required key %q", k)
+		}
+	}
+
+	if m["pid"] != "Hp8rK6" {
+		t.Errorf("pid = %q, want %q", m["pid"], "Hp8rK6")
+	}
+	if m["sdk_version"] != "3.3.18" {
+		t.Errorf("sdk_version = %q, want %q (协议固定不可改)", m["sdk_version"], "3.3.18")
+	}
+	if m["platform"] != "go" {
+		t.Errorf("platform = %q, want %q", m["platform"], "go")
+	}
+	// app_version should equal user-set version ("1.0.0"), not runtime.Version()
+	if m["app_version"] != "1.0.0" {
+		t.Errorf("app_version = %q, want %q", m["app_version"], "1.0.0")
+	}
+}
+
+func TestBuildSendConfig_OmitsEmptyOptionals(t *testing.T) {
+	c := Config{"pid": "test", "app_name": "x", "env": "dev", "version": "1.0", "uid": "", "username": ""}
+	m := buildSendConfig(c)
+
+	for _, k := range []string{"uid", "username"} {
+		if _, ok := m[k]; ok {
+			t.Errorf("optional key %q should be absent when not set", k)
 		}
 	}
 }
 
-func TestBuildSendConfigCanDisableAutomaticDimensions(t *testing.T) {
-	got := buildSendConfig(Config{
-		"pid":                       "pid-1",
-		"app_name":                  "dws",
-		"env":                       "prod",
-		"version":                   "v1.2.3",
-		"platform":                  "cli",
-		"uid":                       "user-1",
-		"username":                  "Alice",
-		configDisableAutoDimensions: true,
-	})
+func TestBuildSendConfig_PassesThroughPublicDimensions(t *testing.T) {
+	c := Config{
+		"pid":       "test",
+		"user_type": "14",
+		"uid":       "123",
+		"username":  "alice",
+		"sid":       "session-1",
+		"bucket_id": "exp-a",
+		"dim1":      "group-a",
+		"dim10":     "group-z",
+		"ext": map[string]interface{}{
+			"source": "go",
+		},
+		"endpoint": "example.com",
+	}
+	m := buildSendConfig(c)
 
-	gotKeys := make([]string, 0, len(got))
-	for key := range got {
-		gotKeys = append(gotKeys, key)
+	if m["user_type"] != "14" || m["uid"] != "123" || m["username"] != "alice" ||
+		m["sid"] != "session-1" || m["bucket_id"] != "exp-a" ||
+		m["dim1"] != "group-a" || m["dim10"] != "group-z" ||
+		m["ext"] != `{"source":"go"}` {
+		t.Errorf("public dimensions not passed through: %+v", m)
 	}
-	sort.Strings(gotKeys)
-	wantKeys := []string{"app_name", "app_version", "env", "pid", "platform", "uid", "username", "version"}
-	if !slices.Equal(gotKeys, wantKeys) {
-		t.Fatalf("privacy send config keys = %v, want %v", gotKeys, wantKeys)
+	if _, ok := m["endpoint"]; ok {
+		t.Error("endpoint should not be sent as public dimension")
 	}
-	for _, key := range []string{"device_id", "ext", "os", "os_version", "pv_id", "sdk_version", "sid", "timezone_offset"} {
-		if _, ok := got[key]; ok {
-			t.Fatalf("privacy send config contains automatic dimension %q: %#v", key, got)
+}
+
+func TestBuildSendConfig_IgnoresUnsupportedBrowserDimensions(t *testing.T) {
+	c := Config{
+		"pid":             "test",
+		"page_id":         "home",
+		"utm_source":      "search",
+		"utm_medium":      "cpc",
+		"xreplay_id":      "app,recording",
+		"user_agent_data": "ua",
+		"device_id":       "custom-device",
+		"async":           false,
+		"queue_size":      100,
+		"unknown":         "value",
+	}
+	m := buildSendConfig(c)
+
+	for _, key := range []string{"page_id", "utm_source", "utm_medium", "xreplay_id", "user_agent_data", "async", "queue_size", "unknown"} {
+		if _, ok := m[key]; ok {
+			t.Errorf("unsupported browser dimension %q should not be sent", key)
 		}
+	}
+	if m["device_id"] == "custom-device" {
+		t.Error("device_id should be generated by Go SDK, not taken from config")
+	}
+}
+
+func TestBuildSendConfig_PVIDIsRandom(t *testing.T) {
+	c := Config{"pid": "test"}
+	m1 := buildSendConfig(c)
+	m2 := buildSendConfig(c)
+	if m1["pv_id"] == m2["pv_id"] {
+		t.Errorf("pv_id should be random, got duplicate %q", m1["pv_id"])
+	}
+}
+
+func TestGenerateUUID_LengthAndCharset(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		uuid := generateUUID()
+		if len(uuid) != uuidLength {
+			t.Errorf("uuid length = %d, want %d", len(uuid), uuidLength)
+		}
+		for _, ch := range uuid {
+			if !strings.ContainsRune(uuidCharset, ch) {
+				t.Errorf("uuid contains invalid char %q (uuid=%q)", ch, uuid)
+				break
+			}
+		}
+	}
+}
+
+func TestCapitalizeOS_FirstLetterUpper(t *testing.T) {
+	got := capitalizeOS()
+	if got == "" {
+		t.Fatal("capitalizeOS returned empty")
+	}
+	if got[0] < 'A' || got[0] > 'Z' {
+		t.Errorf("capitalizeOS first char = %q, want uppercase", got[0])
+	}
+}
+
+func TestStringValue(t *testing.T) {
+	c := Config{"pid": "abc", "n": 12}
+	if got := stringValue(c, "pid"); got != "abc" {
+		t.Errorf("stringValue(pid) = %q, want abc", got)
+	}
+	if got := stringValue(c, "n"); got != "12" {
+		t.Errorf("stringValue(n) = %q, want 12", got)
+	}
+}
+
+func TestBoolValue(t *testing.T) {
+	if !boolValue(Config{"async": true}, "async") {
+		t.Error("bool async should be true")
+	}
+	if !boolValue(Config{"async": "true"}, "async") {
+		t.Error("string async should be true")
+	}
+	if boolValue(Config{"async": "nope"}, "async") {
+		t.Error("invalid string async should be false")
+	}
+}
+
+func TestIntValue(t *testing.T) {
+	if got := intValue(Config{"queue_size": 12}, "queue_size"); got != 12 {
+		t.Errorf("intValue(queue_size) = %d, want 12", got)
+	}
+	if got := intValue(Config{"queue_size": "20"}, "queue_size"); got != 20 {
+		t.Errorf("intValue(queue_size string) = %d, want 20", got)
+	}
+	if got := intValue(Config{"queue_size": "bad"}, "queue_size"); got != 0 {
+		t.Errorf("invalid intValue = %d, want 0", got)
 	}
 }

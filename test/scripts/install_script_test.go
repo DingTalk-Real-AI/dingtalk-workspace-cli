@@ -228,9 +228,9 @@ func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(scriptData)
-	for _, forbidden := range []string{"Publish-RuntimePayload", `Join-Path $InstallDir ".dws-runtime"`} {
+	for _, forbidden := range []string{"Publish-RuntimePayload", `Join-Path $InstallDir ".dws-runtime"`, "$psSource", "ps_file_count", "ps_manifest_sha256"} {
 		if strings.Contains(text, forbidden) {
-			t.Fatalf("PowerShell installer retains sidecar behavior %q", forbidden)
+			t.Fatalf("PowerShell installer retains retired payload behavior %q", forbidden)
 		}
 	}
 }
