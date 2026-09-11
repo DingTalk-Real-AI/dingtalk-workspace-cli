@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/schemacache"
 )
@@ -136,4 +138,156 @@ func TestCrossPlatformCoverageRepairFallsBackToUserCacheWhenSharedUnwritable(t *
 	if !ok || len(meta.LocatorProductByPath) == 0 {
 		t.Fatalf("second process did not hit the per-user repair: %#v", value)
 	}
+}
+
+// TestCrossPlatformCoverageRepairFallbackErrorPaths closes out the remaining
+// fallback branches: counters wiring on the per-user open, a per-user cache
+// that cannot be opened at all, and a failing live catalog inside the
+// per-user fallback arm (no cache error may mask it).
+func TestCrossPlatformCoverageRepairFallbackErrorPaths(t *testing.T) {
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	runtimeDeliveryLiveCatalog.Store(nil)
+	t.Cleanup(func() { runtimeDeliveryLiveCatalog.Store(nil) })
+
+	edition := "open"
+	goos, goarch := coverageCacheGOOSARCH()
+	realHomeDir := func(pattern string) string {
+		t.Helper()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir, err := os.MkdirTemp(home, pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+
+	t.Run("switch wires counters into the per-user open", func(t *testing.T) {
+		userBase := realHomeDir(".dws-user-counters-")
+		schemacache.UseUserCacheDirForTest(t, userBase)
+		options := SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: edition, GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true },
+			Counters:        &schemacache.Counters{},
+		}
+		if err := RegisterSchemaCacheOptions(options); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+		if !newSchemaCacheRuntime(options).switchToUserCache() {
+			t.Fatal("switch to an openable per-user cache must succeed")
+		}
+	})
+
+	t.Run("per-user cache unavailable keeps shared handling live-only", func(t *testing.T) {
+		// The real os.UserCacheDir seam must fail: neither XDG_CACHE_HOME nor
+		// HOME may resolve a base, so the user-only open errors and the
+		// switch reports false instead of adopting a broken backend.
+		t.Setenv("XDG_CACHE_HOME", "")
+		t.Setenv("HOME", "")
+		options := SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: edition, GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true },
+		}
+		if err := RegisterSchemaCacheOptions(options); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+		r := newSchemaCacheRuntime(options)
+		if r.switchToUserCache() {
+			t.Fatal("switch must fail when no per-user cache directory resolves")
+		}
+		if r.userCacheBackend() != nil {
+			t.Fatal("failed switch must not adopt a backend")
+		}
+	})
+
+	t.Run("unusable per-user base fails the open", func(t *testing.T) {
+		// A base that is not a directory must fail inside the user-only
+		// openCacheDirectory walk, not be silently adopted.
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		notADir := filepath.Join(home, ".dws-user-not-a-dir-")
+		if err := os.WriteFile(notADir, []byte("file"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(notADir) })
+		schemacache.UseUserCacheDirForTest(t, notADir)
+		options := SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: edition, GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true },
+		}
+		if err := RegisterSchemaCacheOptions(options); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+		r := newSchemaCacheRuntime(options)
+		if r.switchToUserCache() {
+			t.Fatal("switch must fail when the per-user base is not a directory")
+		}
+		if r.userCacheBackend() != nil {
+			t.Fatal("failed switch must not adopt a backend")
+		}
+	})
+
+	t.Run("failing live catalog surfaces from the fallback arm", func(t *testing.T) {
+		digest := sha256.Sum256([]byte(edition))
+		editionHex := hex.EncodeToString(digest[:])
+		sharedBase := realHomeDir(".dws-shared-liveerr-")
+		sharedV1 := filepath.Join(sharedBase, "dws", "schema", editionHex, "v1")
+		if err := os.MkdirAll(sharedV1, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.json"} {
+			if err := os.WriteFile(filepath.Join(sharedV1, name), []byte("corrupt"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Chmod(sharedV1, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(sharedV1, 0o700) })
+		t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", sharedBase)
+		userBase := realHomeDir(".dws-user-liveerr-")
+		schemacache.UseUserCacheDirForTest(t, userBase)
+
+		options := SchemaCacheOptions{
+			Enabled: true, AllowGenerate: true, Edition: edition, GOOS: goos, GOARCH: goarch,
+			RuntimeEligible: func() bool { return true },
+		}
+		if err := RegisterSchemaCacheOptions(options); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+
+		liveErr := errors.New("forced live catalog err")
+		previousAssemble := assembleDeliverySchemaCatalogFn
+		assembleDeliverySchemaCatalogFn = func(*cobra.Command) (loadedSchemaCatalog, error) {
+			return loadedSchemaCatalog{}, liveErr
+		}
+		t.Cleanup(func() { assembleDeliverySchemaCatalogFn = previousAssemble })
+		resetDeliverySchemaCatalogStateForTest()
+		t.Cleanup(resetDeliverySchemaCatalogStateForTest)
+		runtimeDeliveryLiveCatalog.Store(nil)
+
+		r := activeSchemaCacheRuntime()
+		if r == nil {
+			t.Fatal("registered runtime missing")
+		}
+		value, _, err := repairSchemaCache(r, func() (any, error) {
+			return nil, errors.New("corrupt shared artifacts")
+		})
+		if !errors.Is(err, liveErr) {
+			t.Fatalf("fallback arm must surface the live catalog error, got %v", err)
+		}
+		if value != nil {
+			t.Fatalf("failing live catalog must not return a value: %#v", value)
+		}
+	})
 }
