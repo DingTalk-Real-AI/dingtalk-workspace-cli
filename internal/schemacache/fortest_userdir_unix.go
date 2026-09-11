@@ -3,6 +3,7 @@
 package schemacache
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -15,3 +16,14 @@ func UseUserCacheDirForTest(t *testing.T, dir string) {
 	userCacheDir = func() (string, error) { return filepath.Clean(dir), nil }
 	t.Cleanup(func() { userCacheDir = previous })
 }
+
+// UseUserCacheDirErrorForTest makes the per-user cache base lookup fail for
+// the test (covers the fallback's user-cache-unavailable error leg).
+func UseUserCacheDirErrorForTest(t *testing.T) {
+	t.Helper()
+	previous := userCacheDir
+	userCacheDir = func() (string, error) { return "", errUserCacheDirForTest }
+	t.Cleanup(func() { userCacheDir = previous })
+}
+
+var errUserCacheDirForTest = fmt.Errorf("user cache dir unavailable (test)")
