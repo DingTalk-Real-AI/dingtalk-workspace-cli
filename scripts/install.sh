@@ -1705,10 +1705,16 @@ build_shared_schema_cache() {
       if [ "$schema_tree_preexisted" -eq 0 ]; then
         chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
       else
-        for identity_file in $(find "$schema_tree" -name identity.json -type f 2>/dev/null); do
-          edition_dir="$(dirname "$(dirname "$identity_file")")"
-          chmod -R a+rX "$edition_dir" 2>/dev/null || shared_chmod_ok=0
-        done
+        # Re-share every current-generation edition (identity.json marks it).
+        # Sidecar paths travel as find arguments, never through word
+        # splitting: a custom SHARED_DIR containing spaces must still
+        # resolve, chmod, and verify each edition.
+        if ! find "$schema_tree" -name identity.json -type f -exec sh -c '
+            for f do
+              chmod -R a+rX "$(dirname "$(dirname "$f")")" 2>/dev/null || exit 1
+            done' sh {} + 2>/dev/null; then
+          shared_chmod_ok=0
+        fi
       fi
       if [ "$shared_chmod_ok" -eq 1 ] &&
         shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
@@ -1752,15 +1758,17 @@ shared_schema_ancestors_traversable() {
 # trees without a sidecar are not part of the advertised generation.
 shared_schema_artifacts_readable() {
   [ -d "$1" ] || return 1
-  found_identity=0
-  for identity_file in $(find "$1" -name identity.json -type f 2>/dev/null); do
-    found_identity=1
-    edition_dir="$(dirname "$(dirname "$identity_file")")"
-    [ -z "$(find "$edition_dir" -type f ! -perm -004 -print -quit 2>/dev/null)" ] || return 1
-    [ -z "$(find "$edition_dir" -type d ! -perm -005 -print -quit 2>/dev/null)" ] || return 1
-  done
-  [ "$found_identity" -eq 1 ] || return 1
-  return 0
+  # At least one current-generation sidecar must exist, and every file and
+  # directory under each sidecar's edition must be other-readable and
+  # traversable. Sidecar paths travel as find arguments so spaces in a custom
+  # SHARED_DIR cannot split entries and hollow out the guard.
+  [ -n "$(find "$1" -name identity.json -type f -print -quit 2>/dev/null)" ] || return 1
+  find "$1" -name identity.json -type f -exec sh -c '
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        [ -z "$(find "$edition_dir" -type f ! -perm -004 -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type d ! -perm -005 -print -quit 2>/dev/null)" ] || exit 1
+      done' sh {} + 2>/dev/null
 }
 
 schema_cache_artifacts_present() {
