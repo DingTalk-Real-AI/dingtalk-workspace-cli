@@ -133,3 +133,35 @@ func TestAITableWorkflowDisableGoldenRoutesDoNotBypassConfirmation(t *testing.T)
 		t.Fatal(err)
 	}
 }
+
+func TestAITableCommentDeleteGoldenRoutesDoNotBypassConfirmation(t *testing.T) {
+	for _, path := range []string{
+		"multi/dingtalk-aitable/references/aitable.md",
+		"multi/dingtalk-aitable/references/aitable/aitable-comment.md",
+		"mono/references/products/aitable.md",
+		"mono/references/products/aitable/aitable-comment.md",
+	} {
+		t.Run(path, func(t *testing.T) {
+			data, err := FS.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for lineNumber, line := range strings.Split(string(data), "\n") {
+				if !strings.Contains(line, "comment delete") {
+					continue
+				}
+				found = true
+				if strings.Contains(line, "--comment-key --yes") {
+					t.Fatalf("%s:%d pre-populates --yes in required parameters: %s", path, lineNumber+1, line)
+				}
+				if !strings.Contains(line, "确认后再追加 `--yes`") {
+					t.Fatalf("%s:%d must explain the post-confirmation --yes step: %s", path, lineNumber+1, line)
+				}
+			}
+			if !found {
+				t.Fatalf("%s missing comment delete guidance", path)
+			}
+		})
+	}
+}
