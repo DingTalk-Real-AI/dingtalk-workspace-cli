@@ -278,3 +278,22 @@ func TestCrossPlatformCoverageAitableCommentContracts(t *testing.T) {
 		}
 	}
 }
+
+func TestCrossPlatformCoverageAitableCommentDeleteExamplesRequireConfirmation(t *testing.T) {
+	leaf := findCLIPath(newAitableCommand(), "aitable comment delete")
+	if leaf == nil {
+		t.Fatal("missing aitable comment delete command")
+	}
+	if strings.Contains(leaf.Example, "--yes") {
+		t.Fatalf("Cobra example must not pre-populate --yes: %q", leaf.Example)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(leaf)
+	if !ok || final.Selection == nil {
+		t.Fatal("aitable comment delete missing selection contract")
+	}
+	for _, example := range final.Selection.Examples {
+		if strings.Contains(example, "--yes") {
+			t.Fatalf("Schema selection example must not pre-populate --yes: %q", example)
+		}
+	}
+}

@@ -91,7 +91,7 @@ Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、Vie
 | `comment create` | 创建评论话题 | 定位参数 + `--content` 或 `--rich-content` | 非幂等；未知状态先 list 对账 |
 | `comment reply` | 回复已有评论 | 定位参数 + `--topic-id --comment-key` + 正文 | 标识必须来自同一记录真实返回；非幂等 |
 | `comment update` | 完整替换本人评论正文 | 定位参数 + `--topic-id --comment-key` + 正文 | 仅纯文本会移除旧 @和图片；无 CAS |
-| `comment delete` | 删除本人评论 | 定位参数 + `--topic-id --comment-key --yes` | 不可恢复；关联回复处理由服务端决定 |
+| `comment delete` | 删除本人评论 | 定位参数 + `--topic-id --comment-key` | 不可恢复；确认后再追加 `--yes`，关联回复处理由服务端决定 |
 
 ### view (视图管理)
 

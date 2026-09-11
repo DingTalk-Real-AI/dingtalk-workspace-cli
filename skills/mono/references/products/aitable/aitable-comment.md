@@ -10,7 +10,7 @@
 | 创建评论话题 | `comment create` | 定位参数 + `--content <文本>` 或 `--rich-content <JSON>` |
 | 回复已有评论 | `comment reply` | 定位参数 + `--topic-id --comment-key` + 正文 |
 | 完整替换本人评论正文 | `comment update` | 定位参数 + `--topic-id --comment-key` + 正文 |
-| 删除本人评论 | `comment delete` | 定位参数 + `--topic-id --comment-key --yes` |
+| 删除本人评论 | `comment delete` | 定位参数 + `--topic-id --comment-key`；确认后再追加 `--yes` |
 
 `--content` 是纯文本便捷入口，CLI 会转换成单个 text 节点。`--rich-content` 是 1～100 个有序节点组成的 JSON 数组：
 

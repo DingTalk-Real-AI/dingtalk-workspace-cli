@@ -188,7 +188,7 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 		Use:     "delete",
 		Short:   "删除记录评论",
 		Long:    "删除当前用户创建的指定 AI 表格记录评论。该操作不可恢复；关联回复如何处理由评论服务决定。",
-		Example: "  dws aitable comment delete --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID> --topic-id <TOPIC_ID> --comment-key <COMMENT_KEY> --yes --format json",
+		Example: "  dws aitable comment delete --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID> --topic-id <TOPIC_ID> --comment-key <COMMENT_KEY> --format json",
 		Tool:    "delete_comment",
 		Flags: []LeafFlag{
 			aitableCommentBaseIDFlag(),
