@@ -827,7 +827,7 @@ ORG 类型授权不会出现在查询结果中。`,
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息",
-				UseWhen:      []string{"查看知识库成员名单与角色时"},
+				UseWhen:      []string{"查看、翻页或核对知识库成员及角色时"},
 				AvoidWhen: []string{
 					"返回无 userId：要 update/remove 需另用 contact user search 反查",
 					"增删改成员用 add/update/remove",
