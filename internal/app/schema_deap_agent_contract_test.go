@@ -11,7 +11,7 @@ import (
 func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	root := NewRootCommand()
 	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
-	for _, action := range []string{"status", "list", "stop", "restart"} {
+	for _, action := range []string{"status", "list", "stop", "restart", "bind", "unbind", "rebind"} {
 		wants["dingtalk-tag.connect_"+action] = "dingtalk-tag connect " + action
 	}
 	var names []string

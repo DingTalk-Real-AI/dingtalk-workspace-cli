@@ -28,6 +28,8 @@ const (
 )
 
 type digitalEmployeeConnectResult struct {
+	RuntimeBindingID       string `json:"runtimeBindingId,omitempty"`
+	DeviceID               string `json:"deviceId,omitempty"`
 	Status                 string `json:"status"`
 	AgentUUID              string `json:"agentUuid"`
 	Channel                string `json:"channel,omitempty"`
@@ -62,6 +64,8 @@ const (
 )
 
 type digitalEmployeeBinding struct {
+	RuntimeBindingID       string `json:"runtimeBindingId,omitempty"`
+	DeviceID               string `json:"deviceId,omitempty"`
 	BindingRevision        uint64 `json:"bindingRevision,omitempty"`
 	BindingState           string `json:"bindingState,omitempty"`
 	DesiredState           string `json:"desiredState,omitempty"`
@@ -83,7 +87,7 @@ func newDeapConnectCommand() *cobra.Command {
 			{Name: "channel", Usage: "本地 Agent 类型；省略或 auto 时自动探测；profile-only 时省略", Trim: true, Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
 			{Name: "profile-only", Kind: LeafBool, Usage: "仅完成授权换票与数字员工 Profile 落盘；不解析 operator、不保存 DSH binding、不注册 DSH"},
 			{Name: "client-id", Usage: "传给 DEAP 的选应用提示；最终换票始终使用授权响应中的 dwsClientId", Trim: true, OmitEmpty: true},
-		}, digitalEmployeeAgentFlags()...),
+		}, append(digitalEmployeeAgentFlags(), employeeServerFlags()...)...),
 		Constraints: []LeafConstraint{{
 			Kind: "custom", Flags: []string{"channel", "profile-only"},
 			Description: "--channel 与 --profile-only 不能同时使用；省略模式时自动探测本地 Agent",
@@ -129,6 +133,9 @@ func newDeapConnectCommand() *cobra.Command {
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "device-id", Property: "deviceId"},
+				{Name: "local-agent-name", Property: "localAgentName"},
+				{Name: "extensions", Property: "extensions"},
 				{Name: "agent-uuid", Property: "agentUuid"},
 				{Name: "channel", Property: "channel", Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
 				{Name: "profile-only", Property: "profileOnly"},
@@ -148,7 +155,7 @@ func newDeapConnectCommand() *cobra.Command {
 			},
 		},
 	})
-	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeUnbindCommand(), newEmployeeRebindCommand())
+	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeServerBindCommand(), newEmployeeUnbindCommand(), newEmployeeRebindCommand())
 	corecmd.ApplyGroupPolicy(cmd, corecmd.GroupPolicy{Mode: corecmd.GroupHybrid, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling})
 	return cmd
 }
@@ -174,7 +181,10 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	if commandDryRun(cmd) {
 		steps := []string{"validate_draft", "validate_published", "request_auth_code", "managed_exchange", "persist_profile"}
 		if !profileOnly {
-			steps = append(steps, "resolve_operator")
+			steps = append(steps, "resolve_operator", "server_bind", "save_binding_receipt")
+			if devAppStringFlag(cmd, "runtime-binding-id") != "" {
+				steps[len(steps)-2] = "server_rebind"
+			}
 			if channel == "dsh" {
 				steps = append(steps, "register_dsh")
 			} else {
@@ -289,9 +299,12 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 		BindingRevision: 1, BindingState: "bound", DesiredState: "running",
 	}
 	if previous, e := loadDigitalEmployeeBinding(configDir, digitalProfile); e == nil {
+		binding.RuntimeBindingID = previous.RuntimeBindingID
+		binding.DeviceID = previous.DeviceID
 		binding.BindingRevision = previous.BindingRevision
 		if employeeBindingState(previous) == "unbound" {
 			binding.BindingRevision++
+			binding.RuntimeBindingID, binding.DeviceID = "", ""
 		}
 	}
 	cfg := digitalEmployeeAdapterConfig{Binding: binding, Name: findJSONScalar(draft, "name"), AlwaysOn: commandBoolFlag(cmd, "alwayson")}
@@ -306,8 +319,28 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
+	device, err := employeeBindingDeviceID(cmd.Context(), binding, devAppStringFlag(cmd, "device-id"))
+	if err != nil {
+		return err
+	}
+	serverAction := "bind"
+	if oldID := devAppStringFlag(cmd, "runtime-binding-id"); oldID != "" {
+		serverAction, binding.RuntimeBindingID = "rebind", oldID
+	}
+	if binding.DeviceID != "" && binding.DeviceID != device && serverAction != "rebind" {
+		return fmt.Errorf("本地设备 ID 与绑定记录不一致，请显式使用 connect rebind")
+	}
+	id, err := mutateEmployeeServerBinding(cmd, binding, serverAction, device)
+	if err != nil {
+		return err
+	}
+	binding.RuntimeBindingID, binding.DeviceID = id, device
+	cfg.Binding = binding
 	if err := deapConnectSaveBinding(configDir, binding); err != nil {
 		return fmt.Errorf("数字员工 Profile 已保存为 %s，但本地 operator 绑定保存失败；请重新运行同一条 connect 命令恢复: %w", digitalProfile, err)
+	}
+	if err := consumeEmployeeServerOperation(digitalProfile); err != nil {
+		return err
 	}
 	adapter, err := digitalEmployeeAdapterFor(channel)
 	if err != nil {

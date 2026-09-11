@@ -717,6 +717,7 @@ func TestDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t 
 
 func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEmployeeProtocolCaller {
 	return &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"deap-dev/de_local_agent_bind": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
@@ -740,7 +741,7 @@ func setupConnectSupervisorSeams(t *testing.T) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})
 	testseam.Swap(t, &deapConnectLoadToken, func(string, string) (*auth.TokenData, error) {
-		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user"}, nil
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
 	})
 }
 
@@ -800,6 +801,7 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		return employeeDSHState{}, fmt.Errorf("host unavailable")
 	})
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"deap-dev/de_local_agent_bind": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
@@ -823,7 +825,7 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		if selector != "supervisor-corp:supervisor-user" {
 			t.Fatalf("supervisor selector = %q", selector)
 		}
-		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user"}, nil
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
 	})
 	var exchange auth.ManagedExchangeRequest
 	testseam.Swap(t, &deapConnectManagedExchange, func(ctx context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
@@ -886,7 +888,7 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
 		t.Fatalf("managed exchange = %#v", exchange)
 	}
-	if len(caller.tokenCalls) != 2 || len(caller.tokens) != 2 ||
+	if len(caller.tokenCalls) != 3 || len(caller.tokens) != 3 || caller.tokens[2] != "supervisor-test-token" || caller.tokenCalls[2].toolName != "de_local_agent_bind" ||
 		caller.tokens[0] != "managed-access-secret" || caller.tokens[1] != "managed-access-secret" ||
 		caller.tokenCalls[0].productID != "contact" || caller.tokenCalls[0].toolName != "get_current_user_profile" ||
 		caller.tokenCalls[1].productID != "contact" || caller.tokenCalls[1].toolName != "search_contact_by_key_word" ||

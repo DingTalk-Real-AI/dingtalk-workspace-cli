@@ -1,5 +1,17 @@
 # 数字员工生命周期与 DSH 接入
 
+## 服务端设备绑定
+
+connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。旧版连接用 `dws dingtalk-tag connect bind --agent-uuid <agentUuid> --dry-run --format json` 预览补登记；确认后去掉 dry-run 并加 --yes。补登记不启动 Agent。
+
+设备 ID 缺省随机生成并在当前配置目录长期保存，也可显式传 `--device-id`；不要复制设备配置到另一台机器。`--local-agent-name` 可选，`--extensions` 传字符串。主管身份由网关注入，不传 identity/userId/orgId。
+
+换机器前先在旧机 stop 并确认释放，从 status 取得 runtimeBindingId。新机器执行 `dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --runtime-binding-id <oldBindingId> --channel codex --dry-run --format json`；确认后再执行写操作。这会调用原子 rebind，不是先解绑再绑定，成功必须保存新 ID。CLI 不提供远程停机或在线判断。
+
+同设备只换 Agent 类型保留服务端 ID；更换设备标识时才调用 rebind。unbind 携带保存的 ID，成功后保留历史回执，重复解绑不解除后继绑定。有在途或待恢复任务时服务端拒绝；保留旧 ID，不启动新 Agent。status/list 新增的 serverBindingState 仅是本地回执，不证明服务端当前绑定或在线。
+
+结果未知的 bind/rebind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先 bind 补登记再 unbind/rebind；profile-only 不创建设备或绑定，也不接受绑定参数。
+
 ## 接入普通本地 Agent
 
 ```bash
