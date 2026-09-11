@@ -1921,7 +1921,7 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// 3. Resolve every descriptor once, then choose identity winners before
 	// mutating endpoint, auth, or stdio-client registries. This keeps the
 	// visible command and its transport owned by the same plugin.
-	candidates := collectPluginServerCandidates(allPlugins, userCtx)
+	candidates := collectPluginServerCandidates(allPlugins, func() *plugin.UserContext { return userCtx })
 	accepted := selectPluginServerCandidates(root, candidates)
 	for _, candidate := range accepted {
 		if candidate.stdioClient != nil {
@@ -1986,7 +1986,7 @@ func sortPluginsForRegistration(plugins []*plugin.Plugin) {
 
 func collectPluginServerCandidates(
 	plugins []*plugin.Plugin,
-	userCtx *plugin.UserContext,
+	userCtxFn func() *plugin.UserContext,
 ) []pluginServerCandidate {
 	var candidates []pluginServerCandidate
 	for order, owner := range plugins {
@@ -1997,7 +1997,8 @@ func collectPluginServerCandidates(
 				descriptor: descriptor,
 			})
 		}
-		for _, stdioClient := range rootPluginStdioClients(owner, userCtx) {
+		stdioUserCtx := userCtxFn()
+		for _, stdioClient := range rootPluginStdioClients(owner, stdioUserCtx) {
 			descriptor, ok := rootPluginStdioDescriptor(owner, stdioClient)
 			if !ok {
 				continue
