@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -319,7 +320,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("unsupported arch installer: %v\n%s", err, output)
@@ -348,7 +349,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("empty cache installer: %v\n%s", err, output)
@@ -385,7 +386,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("populated cache installer: %v\n%s", err, output)
@@ -419,7 +420,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("legacy fingerprint installer: %v\n%s", err, output)
@@ -793,7 +794,7 @@ build_shared_schema_cache
 	harnessPath := filepath.Join(root, "umask-harness.sh")
 	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 	cmd := exec.Command("sh", harnessPath)
-	cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+	cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("umask harness: %v\n%s", err, output)
@@ -885,7 +886,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "custom-private-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("private custom root harness: %v\n%s", err, output)
@@ -939,7 +940,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "custom-open-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("open custom root harness: %v\n%s", err, output)
@@ -996,7 +997,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "custom-dws-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("private dws harness: %v\n%s", err, output)
@@ -1051,7 +1052,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "custom-schema-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("private schema harness: %v\n%s", err, output)
@@ -1107,7 +1108,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "custom-upgrade-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("upgraded edition harness: %v\n%s", err, output)
@@ -1160,7 +1161,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "custom-newedition-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("pre-existing schema warmup harness: %v\n%s", err, output)
@@ -1222,7 +1223,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "spaced-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("spaced custom root harness: %v\n%s", err, output)
@@ -1269,7 +1270,7 @@ build_shared_schema_cache
 		harnessPath := filepath.Join(root, "private-parent-harness.sh")
 		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
 		cmd := exec.Command("sh", harnessPath)
-		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("private parent harness: %v\n%s", err, output)
@@ -1342,6 +1343,102 @@ func lookPowerShellForScriptsOptional() (string, error) {
 		}
 	}
 	return "", errors.New("PowerShell is not available")
+}
+
+// sharedSchemaCacheOwnerEnv declares the owner uid the installer requires for
+// a cross-user shared cache. Production defaults to root (uid 0) and these
+// tests run as the invoking user, so the harness names that uid to exercise the
+// shared-success path; the foreign-owner regression names an unrelated uid.
+func sharedSchemaCacheOwnerEnv() string {
+	return "DWS_SCHEMA_CACHE_SHARED_OWNER_UID=" + strconv.Itoa(os.Getuid())
+}
+
+// TestInstallScriptSharedSchemaCacheRejectsForeignOwner pins the accuracy of
+// the shared-cache claim: the runtime only accepts a shared cache whose paths
+// are owned by root or by the reading user, so a warm-up whose artifacts carry
+// another uid's ownership must not be advertised as shared. Such a cache stays
+// usable by the installing user, so the artifacts remain in place.
+func TestInstallScriptSharedSchemaCacheRejectsForeignOwner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	// The shared root must sit behind other-traversable ancestors (/tmp is
+	// 1777 sticky); the per-user $TMPDIR chain is 0700 and would fail the
+	// reachability guard before ownership is even considered.
+	root, rootErr := os.MkdirTemp("/tmp", ".dws-foreign-owner-")
+	if rootErr != nil {
+		t.Fatal(rootErr)
+	}
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	binDir := filepath.Join(root, "bin")
+	shared := filepath.Join(root, "shared")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+	if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+	harnessPath := filepath.Join(root, "foreign-owner-harness.sh")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command("sh", harnessPath)
+	// A required owner uid no artifact carries models the real cross-user read:
+	// the tree is readable and traversable, yet the runtime rejects it for every
+	// user except its owner.
+	cmd.Env = append(os.Environ(),
+		"DWS_SCHEMA_CACHE_SHARED_DIR="+shared,
+		"DWS_SCHEMA_CACHE_SHARED_OWNER_UID=99999")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("foreign owner harness: %v\n%s", err, output)
+	}
+	text := string(output)
+	if strings.Contains(text, "Shared schema cache built") {
+		t.Fatalf("artifacts owned by another uid must not claim a shared cache:\n%s", text)
+	}
+	if !strings.Contains(text, "built for the installing user only") {
+		t.Fatalf("missing the per-installer accuracy message:\n%s", text)
+	}
+	newEdition := filepath.Join(shared, "dws", "schema", "open", "v1")
+	di, err := os.Stat(newEdition)
+	if err != nil {
+		t.Fatalf("per-installer cache missing: %v", err)
+	}
+	if di.Mode().Perm()&0o005 != 0o005 {
+		t.Fatalf("per-installer edition mode %04o missing other r+x", di.Mode().Perm())
+	}
 }
 
 func TestInstallPowerShellUsesSingleBinaryRuntimePayload(t *testing.T) {

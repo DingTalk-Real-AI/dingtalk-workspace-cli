@@ -1633,6 +1633,31 @@ install_binary() {
 # macOS /Library/Caches is accepted by the runtime; if the shared base is not
 # writable the installer leaves per-user cache generation to the first schema
 # command.
+# Owner uid a shared cache must carry to be consumable by users other than the
+# installer. The runtime accepts a shared cache only when every path it walks
+# is owned by root or by the reading user (internal/schemacache/platform_unix.go
+# validateOwnedDirectory/validateCacheFile), so a warm-up run by an ordinary
+# user under a writable custom SHARED_DIR produces a cache that user alone can
+# consume. Root ownership is therefore the requirement; installer tests
+# override the value to exercise both decisions without a second account.
+shared_schema_owner_uid="${DWS_SCHEMA_CACHE_SHARED_OWNER_UID:-0}"
+
+# True when every current-generation artifact (each edition holding an
+# identity.json sidecar) carries the owner uid that makes the cache consumable
+# across users.
+shared_schema_artifacts_shared_owner() {
+  [ -d "$1" ] || return 1
+  [ -n "$shared_schema_owner_uid" ] || return 1
+  [ -n "$(find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -print -quit 2>/dev/null)" ] || return 1
+  find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
+      owner="$1"
+      shift
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        [ -z "$(find "$edition_dir" ! -uid "$owner" -print -quit 2>/dev/null)" ] || exit 1
+      done' sh "$shared_schema_owner_uid" {} + 2>/dev/null
+}
+
 build_shared_schema_cache() {
   os="$(detect_os)"
   arch="$(detect_arch)"
@@ -1694,11 +1719,11 @@ build_shared_schema_cache() {
     # identity.json, so only the freshly (re)generated current edition holds
     # one — including an upgrade replacing artifacts inside an existing edition,
     # whose atomic staging files and identity.json land as 0600.
+    shared_chmod_ok=1
     if [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
       # Pre-existing custom ancestor: chmod only the levels this run created;
       # every caller-owned level must already be traversable as-is or we fall
       # back to the per-user cache instead of broadening it.
-      shared_chmod_ok=1
       if [ "$dws_tree_preexisted" -eq 0 ]; then
         chmod a+rX "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
       fi
@@ -1716,27 +1741,29 @@ build_shared_schema_cache() {
           shared_chmod_ok=0
         fi
       fi
-      if [ "$shared_chmod_ok" -eq 1 ] &&
-        shared_schema_root_reachable "$shared_dir" &&
-        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
-        shared_schema_artifacts_readable "$schema_tree"; then
-        say "✅ Shared schema cache built: ${shared_dir}"
-      else
-        say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
-      fi
     else
       # Installer-created dedicated root (or default system base): umask 077 would
       # otherwise leave $shared_dir and $shared_dir/dws at 0700 while only the
       # schema tree is 0755 — other users could not reach the cache.
-      if chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null &&
-        chmod -R a+rX "$schema_tree" 2>/dev/null &&
-        shared_schema_root_reachable "$shared_dir" &&
-        shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
-        shared_schema_artifacts_readable "$schema_tree"; then
+      chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
+      chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] &&
+      shared_schema_root_reachable "$shared_dir" &&
+      shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
+      shared_schema_artifacts_readable "$schema_tree"; then
+      if shared_schema_artifacts_shared_owner "$schema_tree"; then
         say "✅ Shared schema cache built: ${shared_dir}"
       else
-        say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
+        # The runtime accepts a shared cache only when every artifact is owned
+        # by root or by the reading user, so a warm-up run by an ordinary user
+        # under a writable custom root yields a cache its own user consumes and
+        # every other user rejects. Report that instead of advertising a
+        # shared cache.
+        say "⚠️  Schema cache built for the installing user only (owner uid ${shared_schema_owner_uid} required for cross-user reads); other users fall back to a per-user cache."
       fi
+    else
+      say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
     fi
   else
     say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."
