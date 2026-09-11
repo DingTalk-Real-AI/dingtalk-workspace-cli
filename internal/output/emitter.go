@@ -457,6 +457,7 @@ const (
 	exitCodeInternal   = 5
 	exitCodeDiscovery  = 6
 	exitCodePartial    = 7 // partial_failure 专用（契约 §4；规划 WS2 第4项；B142 将在 errors 侧补同源常量）
+	exitCodeWait       = 8 // wait 终态失败专用（--wait 观察到失败终态；与 partial 同为"仅新增专用码"）
 )
 
 // subtypeConfirmationRequired 是门禁拦截的 failure 子类标记（契约规范 §2.4），
@@ -513,6 +514,8 @@ func exitCodeForErrorInfo(info *ErrorInfo) int {
 		return exitCodePermission
 	case "discovery":
 		return exitCodeDiscovery
+	case "wait":
+		return exitCodeWait
 	default:
 		return exitCodeInternal
 	}

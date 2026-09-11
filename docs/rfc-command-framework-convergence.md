@@ -379,6 +379,7 @@ Definition（仅声明；不可编译）
 | | `idempotency` | 评审源（或未来 Contract） | reviewed metadata | 今日非框架声明；不得推断 |
 | | `effect_source` / provenance | 组装派生物 | resolver 写入 `FieldProvenance` | 派生，不手写 |
 | **DryRun** | `preview_kind`, `remote_reads` | 评审源 | `schema_dry_run_capabilities`（正能力声明） | 否；无条目 ≠ 推断「不支持」之外的假能力 |
+| **Wait** | `mode`（`poll`/`event`/`auto`）, `poll_command`, `status_query`, `terminal`（状态→success/failure）, `pending_values`, `event_key`/`match_field`/`resource_query`（event/auto）, `default_timeout_secs` | **声明**（`ContractDecl.Wait` 正能力声明，且必须搭配 ResultInvoke dispatcher + 按模式的 hook：poll↔`WaitPoll`、event↔`WaitEvents`、auto↔两者，构造期配对校验，多余 hook 同样拒绝） | 声明后注册 `--wait`/`--wait-timeout`（框架 flag，不进 toolArgs）；Schema 投影 `wait` 键；auto = 事件优先、流终止/订阅失败回退轮询，一个 deadline 覆盖两阶段并传入 `WaitPoll`/`WaitEvents`（及 `Command().Context()`）；仅 pending 初始结果进入等待，success/failure/partial 原样返回 | 否；未声明命令传 `--wait` = unknown flag。终态失败经统一信封 `error.type: "wait"`（rc=8），超时保持 pending + `meta.operation.timed_out`（rc=0）；轮询间/轮询中/事件消费中超时一律按 pending 关闭 |
 | **Interface** | `interface_mode`, `interface_ref`, `availability`, `reason` | 评审源 | MCP meta + agent metadata 解析 | 否；与 CLI Identity 分离 |
 | **Selection** | `agent_summary`, `use_when`, `avoid_when`, `examples`, `prerequisites`, `tips`, `workflow_refs`, … | 声明（`ContractDecl.Selection` / `ProductDecl`） | `ContractDecl` / `ProductDecl`（`schema_hints/` 已退役） | 可声明；声明载荷**不得携带** `Reviewed`（旧路径专用），携带即组装报错 |
 | **FieldProvenance** | 各字段 winner / candidates | 组装派生物 | Schema 组装器 | 派生；须与 delivered value 一致 |

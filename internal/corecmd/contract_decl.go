@@ -42,6 +42,7 @@ type ContractDecl struct {
 	Positionals []contract.RuntimeSchemaPositional
 	Parameters  []contract.ParamDecl
 	DryRun      *contract.DryRunSpec
+	Wait        *contract.WaitSpec
 	Result      *contract.ResultSpec
 	Pagination  *contract.PaginationSpec
 	Interface   *contract.InterfaceSpec
@@ -144,6 +145,9 @@ func (s ContractDecl) empty() bool {
 		return false
 	}
 	if s.DryRun != nil && strings.TrimSpace(s.DryRun.PreviewKind) != "" {
+		return false
+	}
+	if s.Wait != nil && strings.TrimSpace(s.Wait.Mode) != "" {
 		return false
 	}
 	if s.Result != nil {

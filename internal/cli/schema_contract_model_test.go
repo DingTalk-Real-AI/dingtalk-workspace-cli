@@ -974,3 +974,57 @@ func TestFinalProvenanceCoverageDoesNotInventOptionalInterfaceReason(t *testing.
 		t.Fatalf("optional local interface_reason should not require invented provenance: %v", err)
 	}
 }
+
+func TestToolSpecWaitCapabilityIsPositiveOnly(t *testing.T) {
+	base := RuntimeToolSpecInput{Identity: contract.ToolIdentitySpec{
+		ProductID: "sample",
+		Name:      "waitrun",
+		CLIName:   "waitrun",
+		CLIPath:   "sample waitrun",
+	}}
+
+	withoutCapability, err := ToolSpecFromRuntime(base)
+	if err != nil {
+		t.Fatalf("ToolSpecFromRuntime() error = %v", err)
+	}
+	payload, err := withoutCapability.ToPayload()
+	if err != nil {
+		t.Fatalf("ToPayload() error = %v", err)
+	}
+	if _, ok := payload["wait"]; ok {
+		t.Fatalf("nil capability unexpectedly emitted wait: %#v", payload["wait"])
+	}
+
+	base.Wait = &contract.WaitSpec{Mode: "webhook"}
+	if _, err := ToolSpecFromRuntime(base); err == nil || !strings.Contains(err.Error(), "unknown mode") {
+		t.Fatalf("invalid mode error = %v", err)
+	}
+	base.Wait = &contract.WaitSpec{Mode: contract.WaitModeEvent, StatusQuery: "status", Terminal: map[string]contract.ResultOutcome{"DONE": contract.ResultOutcomeSuccess}}
+	if _, err := ToolSpecFromRuntime(base); err == nil || !strings.Contains(err.Error(), "requires event_key") {
+		t.Fatalf("event mode body error = %v", err)
+	}
+
+	base.Wait = &contract.WaitSpec{
+		Mode:               contract.WaitModePoll,
+		PollCommand:        "sample status get",
+		StatusQuery:        "result.status",
+		Terminal:           map[string]contract.ResultOutcome{"COMPLETED": contract.ResultOutcomeSuccess},
+		PendingValues:      []string{"NEW"},
+		DefaultTimeoutSecs: 120,
+	}
+	withCapability, err := ToolSpecFromRuntime(base)
+	if err != nil {
+		t.Fatalf("ToolSpecFromRuntime(valid wait) error = %v", err)
+	}
+	if withCapability.Wait == nil || withCapability.Wait.Mode != contract.WaitModePoll {
+		t.Fatalf("wait capability lost through normalization: %#v", withCapability.Wait)
+	}
+	payload, err = withCapability.ToPayload()
+	if err != nil {
+		t.Fatalf("ToPayload(valid wait) error = %v", err)
+	}
+	wait := payload["wait"].(map[string]any)
+	if wait["mode"] != contract.WaitModePoll || wait["poll_command"] != "sample status get" {
+		t.Fatalf("wait payload=%#v", wait)
+	}
+}
