@@ -43,6 +43,15 @@ func TestCrossPlatformCoverageAitableCommentDispatch(t *testing.T) {
 		},
 		{
 			name: "reply maps reply key",
+			args: []string{"comment", "reply", "--base-id", "base-1", "--table-id", "table-1", "--record-id", "record-1", "--topic-id", "topic-1", "--comment-key", "comment-1", "--content", "已确认"},
+			tool: "reply_comment",
+			wantArgs: map[string]any{
+				"baseId": "base-1", "tableId": "table-1", "recordId": "record-1", "topicId": "topic-1", "replyCommentKey": "comment-1",
+				"richContent": []any{map[string]any{"type": "text", "text": "已确认"}},
+			},
+		},
+		{
+			name: "reply keeps scoped compatibility alias",
 			args: []string{"comment", "reply", "--base-id", "base-1", "--table-id", "table-1", "--record-id", "record-1", "--topic-id", "topic-1", "--reply-comment-key", "comment-1", "--content", "已确认"},
 			tool: "reply_comment",
 			wantArgs: map[string]any{
