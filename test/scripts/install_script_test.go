@@ -281,6 +281,21 @@ func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
 		t.Fatal(`install.sh must chmod a+rX "$shared_dir" only on the installer-created/dedicated-root branch`)
 	}
 
+	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
+	// 1777, so a root under it is other-traversable all the way up.
+	traversableRoot := func(t *testing.T, pattern string) string {
+		t.Helper()
+		dir, err := os.MkdirTemp("/tmp", pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+
 	writeFakeBinary := func(t *testing.T, binDir, name, body string) {
 		t.Helper()
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -348,7 +363,7 @@ build_shared_schema_cache
 	})
 
 	t.Run("success requires artifacts", func(t *testing.T) {
-		root := t.TempDir()
+		root := traversableRoot(t, ".dws-messaging-success-")
 		binDir := filepath.Join(root, "bin")
 		shared := filepath.Join(root, "shared")
 		writeFakeBinary(t, binDir, "dws-test", `#!/bin/sh
@@ -723,6 +738,21 @@ Write-Output "APPLY_THEN_VALIDATE_OK"
 }
 
 func TestInstallScriptSharedSchemaCacheUmaskAncestorsTraversable(t *testing.T) {
+	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
+	// 1777, so a root under it is other-traversable all the way up.
+	traversableRoot := func(t *testing.T, pattern string) string {
+		t.Helper()
+		dir, err := os.MkdirTemp("/tmp", pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
+	}
+
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell semantics are unavailable")
 	}
@@ -738,7 +768,7 @@ func TestInstallScriptSharedSchemaCacheUmaskAncestorsTraversable(t *testing.T) {
 	if cut < 0 {
 		t.Fatal("install.sh main section not found")
 	}
-	root := t.TempDir()
+	root := traversableRoot(t, ".dws-umask-ancestors-")
 	binDir := filepath.Join(root, "bin")
 	shared := filepath.Join(root, "shared")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -798,6 +828,22 @@ func TestInstallScriptSharedSchemaCachePreservesPreexistingCustomRootMode(t *tes
 	cut := strings.LastIndex(string(scriptData), "# ── Main")
 	if cut < 0 {
 		t.Fatal("install.sh main section not found")
+	}
+
+	// realInstallRoot creates the test root under /tmp (1777, sticky): a
+	// shared root must sit behind other-traversable ancestors, and neither
+	// the per-user $TMPDIR chain (0700 T/) nor a 0750 $HOME models that.
+	realInstallRoot := func(t *testing.T, pattern string) string {
+		t.Helper()
+		dir, err := os.MkdirTemp("/tmp", pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		return dir
 	}
 
 	writeFake := func(t *testing.T, binDir string) {
@@ -868,7 +914,7 @@ build_shared_schema_cache
 	})
 
 	t.Run("already-traversable custom root succeeds without root chmod", func(t *testing.T) {
-		root := t.TempDir()
+		root := realInstallRoot(t, ".dws-install-shared-")
 		binDir := filepath.Join(root, "bin")
 		shared := filepath.Join(root, "shared")
 		if err := os.MkdirAll(shared, 0o755); err != nil {
@@ -1034,7 +1080,7 @@ build_shared_schema_cache
 	})
 
 	t.Run("upgraded current edition artifacts are re-shared", func(t *testing.T) {
-		root := t.TempDir()
+		root := realInstallRoot(t, ".dws-install-shared-")
 		binDir := filepath.Join(root, "bin")
 		shared := filepath.Join(root, "shared")
 		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
@@ -1091,7 +1137,7 @@ build_shared_schema_cache
 	})
 
 	t.Run("pre-existing traversable dws/schema widens only new editions", func(t *testing.T) {
-		root := t.TempDir()
+		root := realInstallRoot(t, ".dws-install-shared-")
 		binDir := filepath.Join(root, "bin")
 		shared := filepath.Join(root, "shared")
 		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
@@ -1153,6 +1199,138 @@ build_shared_schema_cache
 		}
 		if ownedFileInfo.Mode().Perm()&0o077 != 0 {
 			t.Fatalf("caller-owned pre-existing edition file mode = %04o unexpectedly broadened", ownedFileInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("spaced custom root re-shares and verifies the fresh edition", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		binDir := filepath.Join(root, "bin")
+		// A space inside the custom shared root is the regression condition:
+		// the re-share and readability checks must not word-split these paths.
+		shared := filepath.Join(root, "My Shared Cache")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFake(t, binDir)
+		harness := "umask 077\n" + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "spaced-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("spaced custom root harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "Shared schema cache built: "+shared) {
+			t.Fatalf("spaced custom root did not claim success:\n%s", text)
+		}
+		if strings.Contains(text, "not shared") {
+			t.Fatalf("spaced custom root must not fall back:\n%s", text)
+		}
+		newEdition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		di, err := os.Stat(newEdition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if di.Mode().Perm()&0o005 != 0o005 {
+			t.Fatalf("spaced root edition mode %04o missing other r+x", di.Mode().Perm())
+		}
+		shard, err := os.Stat(filepath.Join(newEdition, "meta.cache"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shard.Mode().Perm()&0o004 != 0o004 {
+			t.Fatalf("spaced root shard mode %04o missing other read", shard.Mode().Perm())
+		}
+	})
+
+	t.Run("traversable root behind a private parent is not shared", func(t *testing.T) {
+		root := t.TempDir()
+		// root itself stays 0700: the shared root below is traversable, but no
+		// other user can reach it through the private parent. Success must be
+		// downgraded and the parent must never be widened.
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(root, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		binDir := filepath.Join(root, "bin")
+		writeFake(t, binDir)
+		harness := string(scriptData[:cut]) + "\ndetect_os() { printf '%s\\n' linux; }\ndetect_arch() { printf '%s\\n' amd64; }\nINSTALL_DIR=\"" + binDir + "\"\nINSTALL_NAME=dws-test\nbuild_shared_schema_cache\n"
+		harnessPath := filepath.Join(root, "private-parent-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("private parent harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("unreachable parent must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("private parent missing fallback warning:\n%s", text)
+		}
+		rootInfo, err := os.Stat(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rootInfo.Mode().Perm() != 0o700 {
+			t.Fatalf("private parent mode = %04o; want unchanged 0700", rootInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("readability guard still fires under spaced paths", func(t *testing.T) {
+		root := t.TempDir()
+		schemaTree := filepath.Join(root, "Another Shared Root", "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(schemaTree, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"meta.cache", "registry.shards.cache", "payloads.shards.cache", "identity.json"} {
+			mustWriteFile(t, filepath.Join(schemaTree, name), []byte("x"), 0o644)
+		}
+		harness := func(extra string) string {
+			return string(scriptData[:cut]) + `
+tree="` + filepath.Join(root, "Another Shared Root", "dws", "schema") + `"
+` + extra + `
+if shared_schema_artifacts_readable "$tree"; then
+  printf 'READABLE_OK\n'
+else
+  printf 'READABLE_FAIL\n'
+fi
+`
+		}
+		runHarness := func(body string) string {
+			h := harness(body)
+			path := filepath.Join(root, "guard-harness.sh")
+			mustWriteFile(t, path, []byte(h), 0o755)
+			out, err := exec.Command("sh", path).CombinedOutput()
+			if err != nil {
+				t.Fatalf("guard harness: %v\n%s", err, out)
+			}
+			return string(out)
+		}
+		if got := runHarness(""); !strings.Contains(got, "READABLE_OK") {
+			t.Fatalf("readable spaced tree must pass: %s", got)
+		}
+		// One unreadable shard under the identity-bearing edition must fail
+		// the guard even though every path contains a space.
+		if err := os.Chmod(filepath.Join(schemaTree, "meta.cache"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(filepath.Join(schemaTree, "meta.cache"), 0o644) })
+		if got := runHarness(""); !strings.Contains(got, "READABLE_FAIL") {
+			t.Fatalf("unreadable spaced artifact must fail the guard: %s", got)
 		}
 	})
 }
