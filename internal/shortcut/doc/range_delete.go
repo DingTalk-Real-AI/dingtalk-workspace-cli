@@ -93,6 +93,13 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 		b := value.([]any)
 		byID[jsonMLBlockIdentity(b)] = b
 	}
+	// The released single-block path accepts nested source and anchor IDs.
+	// Only multi-source copies are restricted to top-level blocks.
+	if len(ids) == 1 {
+		for _, b := range orderedJSONMLBlocks(top) {
+			byID[jsonMLBlockIdentity(b)] = b
+		}
+	}
 	if byID[ref] == nil {
 		return apperrors.NewValidation("复制目标锚点不存在")
 	}
@@ -116,7 +123,7 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 		// source was decoded from JSON and only had identity keys removed.
 		encoded, _ := json.Marshal(source)
 		step, err := runVerifiedDocMutation(rt, operation, "insert_document_block", map[string]any{"nodeId": node, "referenceBlockId": ref, "where": "after", "format": "jsonml", "jsonml": string(encoded)}, node, "list_document_blocks", map[string]any{"nodeId": node, "format": "jsonml", "__allBlocks": true}, func(result, read map[string]any) bool {
-			return verifyInsertedCanonicalBlock(result, read, ref, "after", expected, "jsonml", 0)
+			return verifyDocCopySibling(result, read, ref, expected)
 		})
 		if err != nil {
 			progress := map[string]any{"nodeId": node, "completed": completed, "failedSourceId": ids[i]}
@@ -137,6 +144,59 @@ func executeDocMultiCopy(rt *shortcut.RuntimeContext, node string) error {
 		return rt.Output(lastStep)
 	}
 	return rt.Output(docEnvelope(operation, map[string]any{"nodeId": node, "atomic": false, "verified": true, "copies": completed}))
+}
+
+// Compare siblings rather than a flattened preorder: an anchor may itself
+// contain children, which must not be mistaken for its following sibling.
+func verifyDocCopySibling(result, read map[string]any, ref, expected string) bool {
+	insertedID := nestedString(result, "blockId", "elementId", "id")
+	if insertedID == ref {
+		return false
+	}
+	var adjacent func(any) bool
+	adjacent = func(value any) bool {
+		switch children := value.(type) {
+		case map[string]any:
+			for key, child := range children {
+				if encoded, ok := child.(string); ok && isJSONMLPayloadKey(key) {
+					var decoded any
+					if json.Unmarshal([]byte(encoded), &decoded) == nil && adjacent(decoded) {
+						return true
+					}
+				} else if adjacent(child) {
+					return true
+				}
+			}
+		case []any:
+			for i, child := range children {
+				if jsonMLBlockIdentity(docCopyReadBlock(child)) == ref && i+1 < len(children) {
+					inserted := docCopyReadBlock(children[i+1])
+					if (insertedID == "" || canonicalBlockIdentity(inserted, "jsonml") == insertedID) && canonicalBlockContent(inserted, "jsonml") == expected {
+						return true
+					}
+				}
+				if adjacent(child) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return adjacent(read)
+}
+
+// list_document_blocks wraps each sibling in a record with encoded JSONML.
+func docCopyReadBlock(value any) []any {
+	if record, ok := value.(map[string]any); ok {
+		if raw, ok := record["jsonml"].(string); ok {
+			var block []any
+			if json.Unmarshal([]byte(raw), &block) == nil {
+				return block
+			}
+		}
+	}
+	block, _ := value.([]any)
+	return block
 }
 
 func docCopyIDs(raw string) ([]string, error) {
