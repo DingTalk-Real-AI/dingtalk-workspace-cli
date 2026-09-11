@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build check-safechat test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema check-schema-cache-proto fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build check-safechat test-aem test-safechat rebuild test test-plan test-auth-legacy-compat shortcut-public-e2e-proof lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema check-schema-cache-proto fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -59,6 +59,10 @@ check-safechat:
 	@CGO_ENABLED=1 $(GO) build ./cmd ./internal/msgcrypto/...
 	@CGO_ENABLED=1 $(GO) vet ./internal/msgcrypto/...
 
+test-aem:
+	@mkdir -p "$(POLICY_GOTMPDIR)"
+	@$(POLICY_ENV) $(GO) -C third_party/aem-go-sdk test -count=1 -timeout=2m ./...
+
 test-safechat:
 	@CGO_ENABLED=1 $(GO) test -count=1 ./internal/msgcrypto/...
 
@@ -97,7 +101,7 @@ fmt:
 	$(GO_SOURCE_LIST) > "$$go_files"; \
 	xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -w -- "$$@"; fi' sh < "$$go_files"
 
-policy: test-auth-legacy-compat shortcut-public-e2e-proof
+policy: test-aem test-auth-legacy-compat shortcut-public-e2e-proof
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@$(POLICY_ENV) ./scripts/policy/check-runtime-payload.sh --allow-unsupported-tools
 	@$(POLICY_ENV) ./scripts/build/generate-runtime-payload-assets.sh --check
