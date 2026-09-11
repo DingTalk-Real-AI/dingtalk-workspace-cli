@@ -164,6 +164,51 @@ func TestEventSkillDocumentsReviewedCardCallbackContract(t *testing.T) {
 	}
 }
 
+func TestChatCardCallbackRoutesPersonalEventsToEventSkill(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "card", "callback.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "card", "schema.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "contracts.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"dingtalk-event",
+			"dws event consume user_card_action_triggered --flatten -f ndjson",
+			"callback URL",
+			"验签",
+			"回复",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing card callback boundary %q", path, required)
+			}
+		}
+	}
+
+	callbackPath := paths[0]
+	content, err := os.ReadFile(callbackPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", callbackPath, err)
+	}
+	for _, forbidden := range []string{
+		"不把 `dws event consume` 当作卡片 callback 的替代",
+		"用户必须使用按钮交互时，停止并说明当前不支持",
+	} {
+		if strings.Contains(string(content), forbidden) {
+			t.Errorf("%s still rejects the supported personal-event route %q", callbackPath, forbidden)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageEventSkillPinsSubscriptionRetryOrchestrationContract(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {

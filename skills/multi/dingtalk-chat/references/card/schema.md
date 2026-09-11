@@ -13,7 +13,9 @@ streaming 不是任意组件 Schema：
 - content：streaming text；
 - lifecycle：create 可选串联 update，后续按 `bizId` update；
 - flowStatus：1–5；
-- callback：不支持。
+- server callback：卡片命令不提供 callback URL 注册、验签或回复；监听当前用户的互动卡片
+  操作事件走 [`dingtalk-event`](../../../dingtalk-event/SKILL.md)：
+  `dws event consume user_card_action_triggered --flatten -f ndjson`。
 
 `update-card --flow-status` 的 CLI 类型为 string，但仍只接受兼容数字 1–5
 （包括历史 pflag int 支持的 base-0 写法），并向 streaming RPC 发送 integer。
