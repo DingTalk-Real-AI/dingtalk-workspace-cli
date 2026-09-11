@@ -58,7 +58,7 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeFieldInventory(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheDescriptorContract(t *testing.T) {
-	const expectedProtoSHA256 = "84dc8887c600817b6b916e184ba6d6ba75c8e83c41dd970399e5ff2c372d6447"
+	const expectedProtoSHA256 = "c6eb56ba5e25e40c2b3a9d9d07bc8b91a2fcb747f37fb21c99c601949343a54c"
 	source, err := os.ReadFile("../schemacachepb/schema_cache.proto")
 	if err != nil {
 		t.Fatal(err)

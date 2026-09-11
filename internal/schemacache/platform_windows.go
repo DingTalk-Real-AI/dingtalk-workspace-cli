@@ -264,7 +264,7 @@ func openCacheDirectory(base, editionHex string, counters *Counters, ops windows
 				return "", fmt.Errorf("%w: cache ancestry %s", ErrNotFound, part)
 			}
 			if err := validateAncestryPath(current, counters, ops, false, shared); err != nil {
-				return "", fmt.Errorf("%w: missing cache ancestry requires a safe parent", ErrUnsafePath, err)
+				return "", fmt.Errorf("%w: missing cache ancestry requires a safe parent: %v", ErrUnsafePath, err)
 			}
 			counters.mkdirOps.Add(1)
 			if mkdirErr := ops.mkdir(next); mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {

@@ -259,6 +259,10 @@ message ParameterSpec {
   string interface_description = 13;
   string interface_type = 14;
   ProvenanceList field_provenance = 15;
+  // Multiple accepted value formats (e.g. date and date-time). Replaces the
+  // single-format lane for parameters that accept alternatives; Format stays
+  // for single-format parameters.
+  StringList any_of = 16;
 }
 
 message ToolIdentity {

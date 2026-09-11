@@ -2390,8 +2390,12 @@ type ParameterSpec struct {
 	InterfaceDescription string                 `protobuf:"bytes,13,opt,name=interface_description,json=interfaceDescription,proto3" json:"interface_description,omitempty"`
 	InterfaceType        string                 `protobuf:"bytes,14,opt,name=interface_type,json=interfaceType,proto3" json:"interface_type,omitempty"`
 	FieldProvenance      *ProvenanceList        `protobuf:"bytes,15,opt,name=field_provenance,json=fieldProvenance,proto3" json:"field_provenance,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Multiple accepted value formats (e.g. date and date-time). Replaces the
+	// single-format lane for parameters that accept alternatives; Format stays
+	// for single-format parameters.
+	AnyOf         *StringList `protobuf:"bytes,16,opt,name=any_of,json=anyOf,proto3" json:"any_of,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ParameterSpec) Reset() {
@@ -2525,6 +2529,13 @@ func (x *ParameterSpec) GetInterfaceType() string {
 func (x *ParameterSpec) GetFieldProvenance() *ProvenanceList {
 	if x != nil {
 		return x.FieldProvenance
+	}
+	return nil
+}
+
+func (x *ParameterSpec) GetAnyOf() *StringList {
+	if x != nil {
+		return x.AnyOf
 	}
 	return nil
 }
@@ -4030,7 +4041,7 @@ const file_schema_cache_proto_rawDesc = "" +
 	"\tselection\x18\x0e \x01(\v2\x1d.dws.schemacache.v2.SelectionR\tselection\x12M\n" +
 	"\x10field_provenance\x18\x0f \x01(\v2\".dws.schemacache.v2.ProvenanceListR\x0ffieldProvenance\"H\n" +
 	"\rParameterList\x127\n" +
-	"\x05items\x18\x01 \x03(\v2!.dws.schemacache.v2.ParameterSpecR\x05items\"\x9c\x05\n" +
+	"\x05items\x18\x01 \x03(\v2!.dws.schemacache.v2.ParameterSpecR\x05items\"\xd3\x05\n" +
 	"\rParameterSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12 \n" +
@@ -4047,7 +4058,8 @@ const file_schema_cache_proto_rawDesc = "" +
 	"\x04enum\x18\f \x01(\v2\x1e.dws.schemacache.v2.StringListR\x04enum\x123\n" +
 	"\x15interface_description\x18\r \x01(\tR\x14interfaceDescription\x12%\n" +
 	"\x0einterface_type\x18\x0e \x01(\tR\rinterfaceType\x12M\n" +
-	"\x10field_provenance\x18\x0f \x01(\v2\".dws.schemacache.v2.ProvenanceListR\x0ffieldProvenance\"\x8b\x03\n" +
+	"\x10field_provenance\x18\x0f \x01(\v2\".dws.schemacache.v2.ProvenanceListR\x0ffieldProvenance\x125\n" +
+	"\x06any_of\x18\x10 \x01(\v2\x1e.dws.schemacache.v2.StringListR\x05anyOf\"\x8b\x03\n" +
 	"\fToolIdentity\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12*\n" +
@@ -4322,42 +4334,43 @@ var file_schema_cache_proto_depIdxs = []int32{
 	6,  // 49: dws.schemacache.v2.ParameterSpec.example:type_name -> dws.schemacache.v2.BytesValue
 	5,  // 50: dws.schemacache.v2.ParameterSpec.enum:type_name -> dws.schemacache.v2.StringList
 	52, // 51: dws.schemacache.v2.ParameterSpec.field_provenance:type_name -> dws.schemacache.v2.ProvenanceList
-	5,  // 52: dws.schemacache.v2.ToolIdentity.aliases:type_name -> dws.schemacache.v2.StringList
-	9,  // 53: dws.schemacache.v2.Constraints.mutually_exclusive:type_name -> dws.schemacache.v2.StringListList
-	9,  // 54: dws.schemacache.v2.Constraints.require_one_of:type_name -> dws.schemacache.v2.StringListList
-	9,  // 55: dws.schemacache.v2.Constraints.require_together:type_name -> dws.schemacache.v2.StringListList
-	41, // 56: dws.schemacache.v2.PositionalList.items:type_name -> dws.schemacache.v2.Positional
-	44, // 57: dws.schemacache.v2.Result.outcomes:type_name -> dws.schemacache.v2.ResultOutcomeList
-	6,  // 58: dws.schemacache.v2.Result.data_schema:type_name -> dws.schemacache.v2.BytesValue
-	5,  // 59: dws.schemacache.v2.Result.sensitive_paths:type_name -> dws.schemacache.v2.StringList
-	2,  // 60: dws.schemacache.v2.ResultOutcomeList.items:type_name -> dws.schemacache.v2.ResultOutcome
-	48, // 61: dws.schemacache.v2.Interface.ref:type_name -> dws.schemacache.v2.InterfaceRef
-	5,  // 62: dws.schemacache.v2.Selection.use_when:type_name -> dws.schemacache.v2.StringList
-	5,  // 63: dws.schemacache.v2.Selection.avoid_when:type_name -> dws.schemacache.v2.StringList
-	5,  // 64: dws.schemacache.v2.Selection.prerequisites:type_name -> dws.schemacache.v2.StringList
-	5,  // 65: dws.schemacache.v2.Selection.tips:type_name -> dws.schemacache.v2.StringList
-	5,  // 66: dws.schemacache.v2.Selection.workflow_refs:type_name -> dws.schemacache.v2.StringList
-	5,  // 67: dws.schemacache.v2.Selection.examples:type_name -> dws.schemacache.v2.StringList
-	50, // 68: dws.schemacache.v2.Selection.example_dispositions:type_name -> dws.schemacache.v2.ExampleDispositionList
-	7,  // 69: dws.schemacache.v2.Selection.reviewed:type_name -> dws.schemacache.v2.BoolValue
-	5,  // 70: dws.schemacache.v2.Selection.source_refs:type_name -> dws.schemacache.v2.StringList
-	51, // 71: dws.schemacache.v2.ExampleDispositionList.items:type_name -> dws.schemacache.v2.ExampleDisposition
-	8,  // 72: dws.schemacache.v2.ExampleDisposition.index:type_name -> dws.schemacache.v2.IntValue
-	3,  // 73: dws.schemacache.v2.ExampleDisposition.mode:type_name -> dws.schemacache.v2.ExampleDispositionMode
-	4,  // 74: dws.schemacache.v2.ExampleDisposition.reason_code:type_name -> dws.schemacache.v2.ExampleDispositionReasonCode
-	53, // 75: dws.schemacache.v2.ProvenanceList.items:type_name -> dws.schemacache.v2.ProvenanceEntry
-	54, // 76: dws.schemacache.v2.ProvenanceEntry.value:type_name -> dws.schemacache.v2.FieldProvenance
-	6,  // 77: dws.schemacache.v2.FieldProvenance.value:type_name -> dws.schemacache.v2.BytesValue
-	55, // 78: dws.schemacache.v2.FieldProvenance.candidates:type_name -> dws.schemacache.v2.CandidateList
-	55, // 79: dws.schemacache.v2.FieldProvenance.overridden_candidates:type_name -> dws.schemacache.v2.CandidateList
-	56, // 80: dws.schemacache.v2.CandidateList.items:type_name -> dws.schemacache.v2.FieldCandidate
-	6,  // 81: dws.schemacache.v2.FieldCandidate.value:type_name -> dws.schemacache.v2.BytesValue
-	7,  // 82: dws.schemacache.v2.FieldCandidate.selected:type_name -> dws.schemacache.v2.BoolValue
-	83, // [83:83] is the sub-list for method output_type
-	83, // [83:83] is the sub-list for method input_type
-	83, // [83:83] is the sub-list for extension type_name
-	83, // [83:83] is the sub-list for extension extendee
-	0,  // [0:83] is the sub-list for field type_name
+	5,  // 52: dws.schemacache.v2.ParameterSpec.any_of:type_name -> dws.schemacache.v2.StringList
+	5,  // 53: dws.schemacache.v2.ToolIdentity.aliases:type_name -> dws.schemacache.v2.StringList
+	9,  // 54: dws.schemacache.v2.Constraints.mutually_exclusive:type_name -> dws.schemacache.v2.StringListList
+	9,  // 55: dws.schemacache.v2.Constraints.require_one_of:type_name -> dws.schemacache.v2.StringListList
+	9,  // 56: dws.schemacache.v2.Constraints.require_together:type_name -> dws.schemacache.v2.StringListList
+	41, // 57: dws.schemacache.v2.PositionalList.items:type_name -> dws.schemacache.v2.Positional
+	44, // 58: dws.schemacache.v2.Result.outcomes:type_name -> dws.schemacache.v2.ResultOutcomeList
+	6,  // 59: dws.schemacache.v2.Result.data_schema:type_name -> dws.schemacache.v2.BytesValue
+	5,  // 60: dws.schemacache.v2.Result.sensitive_paths:type_name -> dws.schemacache.v2.StringList
+	2,  // 61: dws.schemacache.v2.ResultOutcomeList.items:type_name -> dws.schemacache.v2.ResultOutcome
+	48, // 62: dws.schemacache.v2.Interface.ref:type_name -> dws.schemacache.v2.InterfaceRef
+	5,  // 63: dws.schemacache.v2.Selection.use_when:type_name -> dws.schemacache.v2.StringList
+	5,  // 64: dws.schemacache.v2.Selection.avoid_when:type_name -> dws.schemacache.v2.StringList
+	5,  // 65: dws.schemacache.v2.Selection.prerequisites:type_name -> dws.schemacache.v2.StringList
+	5,  // 66: dws.schemacache.v2.Selection.tips:type_name -> dws.schemacache.v2.StringList
+	5,  // 67: dws.schemacache.v2.Selection.workflow_refs:type_name -> dws.schemacache.v2.StringList
+	5,  // 68: dws.schemacache.v2.Selection.examples:type_name -> dws.schemacache.v2.StringList
+	50, // 69: dws.schemacache.v2.Selection.example_dispositions:type_name -> dws.schemacache.v2.ExampleDispositionList
+	7,  // 70: dws.schemacache.v2.Selection.reviewed:type_name -> dws.schemacache.v2.BoolValue
+	5,  // 71: dws.schemacache.v2.Selection.source_refs:type_name -> dws.schemacache.v2.StringList
+	51, // 72: dws.schemacache.v2.ExampleDispositionList.items:type_name -> dws.schemacache.v2.ExampleDisposition
+	8,  // 73: dws.schemacache.v2.ExampleDisposition.index:type_name -> dws.schemacache.v2.IntValue
+	3,  // 74: dws.schemacache.v2.ExampleDisposition.mode:type_name -> dws.schemacache.v2.ExampleDispositionMode
+	4,  // 75: dws.schemacache.v2.ExampleDisposition.reason_code:type_name -> dws.schemacache.v2.ExampleDispositionReasonCode
+	53, // 76: dws.schemacache.v2.ProvenanceList.items:type_name -> dws.schemacache.v2.ProvenanceEntry
+	54, // 77: dws.schemacache.v2.ProvenanceEntry.value:type_name -> dws.schemacache.v2.FieldProvenance
+	6,  // 78: dws.schemacache.v2.FieldProvenance.value:type_name -> dws.schemacache.v2.BytesValue
+	55, // 79: dws.schemacache.v2.FieldProvenance.candidates:type_name -> dws.schemacache.v2.CandidateList
+	55, // 80: dws.schemacache.v2.FieldProvenance.overridden_candidates:type_name -> dws.schemacache.v2.CandidateList
+	56, // 81: dws.schemacache.v2.CandidateList.items:type_name -> dws.schemacache.v2.FieldCandidate
+	6,  // 82: dws.schemacache.v2.FieldCandidate.value:type_name -> dws.schemacache.v2.BytesValue
+	7,  // 83: dws.schemacache.v2.FieldCandidate.selected:type_name -> dws.schemacache.v2.BoolValue
+	84, // [84:84] is the sub-list for method output_type
+	84, // [84:84] is the sub-list for method input_type
+	84, // [84:84] is the sub-list for extension type_name
+	84, // [84:84] is the sub-list for extension extendee
+	0,  // [0:84] is the sub-list for field type_name
 }
 
 func init() { file_schema_cache_proto_init() }

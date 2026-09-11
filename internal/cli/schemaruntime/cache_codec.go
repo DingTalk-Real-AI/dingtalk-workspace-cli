@@ -1203,7 +1203,7 @@ func rejectUnknownFieldsAndEnums(message proto.Message) error {
 			}
 		}
 	case *schemacachepb.ParameterSpec:
-		return check(value.DefaultValue, value.InterfaceDefault, value.Example, value.Enum, value.FieldProvenance)
+		return check(value.DefaultValue, value.InterfaceDefault, value.Example, value.Enum, value.AnyOf, value.FieldProvenance)
 	case *schemacachepb.ToolIdentity:
 		return check(value.Aliases)
 	case *schemacachepb.Constraints:

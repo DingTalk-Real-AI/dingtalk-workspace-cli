@@ -352,6 +352,7 @@ func parametersToProto(in []ParameterSpec) *schemacachepb.ParameterList {
 			DefaultValue: bytesToProto(parameter.Default), InterfaceDefault: bytesToProto(parameter.InterfaceDefault), Example: bytesToProto(parameter.Example),
 			Format: parameter.Format, Enum: stringsToProto(parameter.Enum), InterfaceDescription: parameter.InterfaceDescription,
 			InterfaceType: parameter.InterfaceType, FieldProvenance: provenanceToProto(parameter.FieldProvenance),
+			AnyOf: formatAlternativesToProto(parameter.AnyOf),
 		}
 	}
 	return out
@@ -369,7 +370,30 @@ func parametersFromProto(in *schemacachepb.ParameterList) []ParameterSpec {
 			Default: bytesFromProto(parameter.GetDefaultValue()), InterfaceDefault: bytesFromProto(parameter.GetInterfaceDefault()), Example: bytesFromProto(parameter.GetExample()),
 			Format: parameter.GetFormat(), Enum: stringsFromProto(parameter.GetEnum()), InterfaceDescription: parameter.GetInterfaceDescription(),
 			InterfaceType: parameter.GetInterfaceType(), FieldProvenance: provenanceFromProto(parameter.GetFieldProvenance()),
+			AnyOf: formatAlternativesFromProto(parameter.GetAnyOf()),
 		}
+	}
+	return out
+}
+
+func formatAlternativesToProto(in []contract.FormatAlternative) *schemacachepb.StringList {
+	if len(in) == 0 {
+		return nil
+	}
+	values := make([]string, len(in))
+	for i, alternative := range in {
+		values[i] = alternative.Format
+	}
+	return &schemacachepb.StringList{Items: values}
+}
+
+func formatAlternativesFromProto(in *schemacachepb.StringList) []contract.FormatAlternative {
+	if in == nil || len(in.Items) == 0 {
+		return nil
+	}
+	out := make([]contract.FormatAlternative, len(in.Items))
+	for i, value := range in.Items {
+		out[i] = contract.FormatAlternative{Format: value}
 	}
 	return out
 }
