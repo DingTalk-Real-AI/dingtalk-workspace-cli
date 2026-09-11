@@ -717,7 +717,7 @@ func TestDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t 
 
 func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEmployeeProtocolCaller {
 	return &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"deap-dev/de_local_agent_bind": {`{"success":true,"data":"binding-created"}`},
+		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
@@ -804,7 +804,7 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		return employeeDSHState{}, fmt.Errorf("host unavailable")
 	})
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"deap-dev/de_local_agent_bind": {`{"success":true,"data":"binding-created"}`},
+		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
@@ -897,7 +897,7 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
 		t.Fatalf("managed exchange = %#v", exchange)
 	}
-	if len(caller.tokenCalls) != 3 || len(caller.tokens) != 3 || caller.tokens[2] != "supervisor-test-token" || caller.tokenCalls[2].toolName != "de_local_agent_bind" ||
+	if len(caller.tokenCalls) != 3 || len(caller.tokens) != 3 || caller.tokens[2] != "supervisor-test-token" || caller.tokenCalls[2].toolName != "bind_local_agent" ||
 		caller.tokens[0] != "managed-access-secret" || caller.tokens[1] != "managed-access-secret" ||
 		caller.tokenCalls[0].productID != "contact" || caller.tokenCalls[0].toolName != "get_current_user_profile" ||
 		caller.tokenCalls[1].productID != "contact" || caller.tokenCalls[1].toolName != "search_contact_by_key_word" ||

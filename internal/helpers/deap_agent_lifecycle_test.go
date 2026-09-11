@@ -68,7 +68,7 @@ func lifecycleFixture(t *testing.T) (string, digitalEmployeeBinding) {
 	}
 	b.DeviceID, b.RuntimeBindingID = device, "binding-old"
 	setupServerBindingSupervisor(t)
-	InitDepsForTest(t, &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/de_local_agent_unbind": {`{"success":true,"data":true}`}}})
+	InitDepsForTest(t, &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/unbind_local_agent": {`{"success":true,"data":true}`}}})
 	if err := saveDigitalEmployeeBinding(dir, b); err != nil {
 		t.Fatal(err)
 	}

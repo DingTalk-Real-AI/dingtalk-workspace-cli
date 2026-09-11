@@ -235,7 +235,7 @@ func callEmployeeServerBinding(
 	request map[string]any,
 ) (*edition.ToolResult, error) {
 	call := func(token string) (*edition.ToolResult, error) {
-		return caller.CallToolWithToken(ctx, token, deapAgentServerID, "de_local_agent_"+action, map[string]any{wrapper: request})
+		return caller.CallToolWithToken(ctx, token, deapAgentServerID, action+"_local_agent", map[string]any{wrapper: request})
 	}
 	result, err := call(accessToken)
 	if !employeeServerAccessTokenRejected(err) {

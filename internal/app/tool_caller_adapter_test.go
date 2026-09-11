@@ -107,7 +107,7 @@ type employeeBindingRoundTripper func(*http.Request) (*http.Response, error)
 func (f employeeBindingRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestCrossPlatformCoverageEmployeeBindingTransportDoesNotRetry(t *testing.T) {
-	for _, tool := range []string{"de_local_agent_bind", "de_local_agent_unbind", "de_local_agent_rebind", "get_digital_employee_detail"} {
+	for _, tool := range []string{"bind_local_agent", "unbind_local_agent", "rebind_local_agent", "get_digital_employee_detail"} {
 		t.Run(tool, func(t *testing.T) {
 			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 			t.Setenv("DINGTALK_DEAP_DEV_MCP_URL", "https://binding.example.test")
