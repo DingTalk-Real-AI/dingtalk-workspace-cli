@@ -6,6 +6,82 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.8] - 2026-09-11
+
+### Added
+
+- **OA approval template management** (#1346) — add
+  `dws oa approval template list` and `detail --template-code <code>` for
+  querying manageable approval templates, form schemas, and process
+  configuration.
+
+- **Interactive card callback events** ([Aone 86136546](https://project.aone.alibaba-inc.com/v2/project/2125919/req/86136546)) — `dws event consume user_card_action_triggered` reuses the personal-event subscription lifecycle with the same empty-object filter rule as IM/OA. Its flattened schema describes typed answers and questions under `payload.body.actionData.context`, business/conversation/operator fields under `payload.body`, and millisecond timestamps while preserving unknown fields for forward compatibility.
+
+- **AI 表格记录评论** — 新增评论的分页查询、创建、回复、完整更新和删除命令，支持纯文本、@人员及已上传图片。
+
+- **Calendar event options** — adds `--is-all-day` and `--add-online-meeting` to `calendar event create` and `update`, with omission-preserving boolean updates. Explicit all-day state changes require both start and end values, validated as dates or timezone-bearing date-times for the selected state.
+
+- **A2UI card options** — adds optional `--a2ui-annotations` JSON object arrays to card creation and updates, and `--support-forward` to creation (defaults to false).
+
+- **Public Agent Skills CLI** — `npx skills add DingTalk-Real-AI/dingtalk-workspace-cli -g` installs the per-product `dingtalk-*` skills after confirming the skills, target directories, and existing same-named content handling. The all-in-one mono `dws` skill is marked `metadata.internal: true` so it is not a default installable skill. `dws skill setup` remains the China / upgrade / ownership path.
+
+- **Schema 时间格式声明** — 支持字符串参数以 `anyOf` 声明多个格式，并为日历创建/更新的 `date-time` 到 `date`/`date-time` 扩展及全天状态条件必填提供精确、基线持有的迁移校验；其他格式和条件必填变更仍被拦截。
+
+- **Standalone whiteboard export** — adds `whiteboard export` and `whiteboard export-get`
+  to download PNG/PDF exports. Both commands support request-only dry-run previews.
+  Signed URL query strings do not affect filenames; downloads validate their file
+  signatures before atomic publication and never overwrite existing files. Failed
+  tasks retain recovery instructions with the job ID, format, and output directory.
+  Downloads enforce HTTPS/443 public network targets on redirects and actual
+  connections, with a 512 MiB limit for both declared and streamed response sizes.
+
+### Changed
+
+- **AI Table CLI safety and compatibility** — adds safe entity resolution for view filters, strengthens dashboard, workflow, import, record, and table validation, supports the latest Base copy and share-form protocols, and aligns Runtime Schema and Skill guidance with observable MCP behavior.
+
+- Update the embedded CLI telemetry SDK to v0.4.0 and send completed command events from a bounded background process, preserving existing telemetry fields and keeping network waits out of command execution.
+
+- Update the embedded runtime SDK to 20260909 and remove auxiliary ps files from builds and runtime extraction, reducing single-binary package size.
+- Refresh the macOS universal runtime library while retaining the 1 MiB payload slot and using the payload digest to upgrade existing installations of the same resource version.
+
+### Fixed
+
+- **Direct-runtime MCP endpoint resolution** (#1331) — restore the
+  environment-aware `mcpdev` endpoint so `dws dev mcp` commands reach the
+  backend instead of failing locally with `endpoint_not_resolved`.
+
+- Automatic pagination now preserves cancellation when the page-delay timer and
+  context cancellation become ready together, rather than randomly continuing.
+
+- **OA approval list response types** (#1351) — normalize `success` to a
+  boolean and numeric error codes to `errorCode` for pending, submitted, and
+  copied approval lists while preserving business data and diagnostics.
+
+- Preserve optional `--source-config` for AI Table datasource updates: read and reuse the complete existing configuration when omitted, and stop before updating if the read cannot provide a valid configuration.
+
+- **AI Table capability routing** — isolates concurrent multi-profile discovery so each `tools/list` request uses the selected account without changing the process-wide profile.
+
+- Include the available runtime context in manual OAuth and device authorization links, including `--no-browser`, so copied links match browser authorization. Display device links outside a frame to keep long URLs copyable on narrow terminals.
+- Stop adding the CLI locale as a `lang` query parameter to browser, manual, and reauthorization login links.
+
+- **Chat read completeness contracts** — makes conversation and message reads distinguish normal bounded truncation from terminal pagination, projection, enrichment, and resource-download failures. Incomplete reads retain their canonical partial result and typed retry diagnostics, while newly declared Result and pagination contracts remain in byte-compatible dual validation before activation.
+- **Chat routing and bounded discovery** — distinguishes conversation categories from real chat groups, aligns reviewed Shortcut owners with runtime selection and references, and steers agents toward narrow leaf Schema before a single exact Help fallback.
+- **Public Schema constraint closure** — normalizes reviewed hidden aliases to their public parameters and rejects constraints that cannot be represented without exposing hidden runtime inputs.
+
+- **Drive and Wiki agent workflows** — align pagination, confirmation, target verification, recovery receipts, and Reference routing with runtime behavior.
+
+- Stop implicit HTTP retries of MCP tool invocations after gateway or connection failures, preventing duplicate datasource updates and other remote writes. Discovery and explicit read/reconciliation retry policies retain their existing behavior.
+
+- **Minutes artifact evidence** — distinguish empty action items, unsupported responses and speaker-task terminal states; preserve list display metadata and complete upload/permission preview options.
+- **Minutes export and delivery** — remove signed credentials from exported text, keep partial results explicit, and align time conversion, pagination, permissions and cross-product report guidance with verified runtime behavior.
+
+- Fix the Windows whiteboard export test to compare decoded JSON paths, and run platform app coverage tests in fresh batches while retaining the full test selection, cross-package instrumentation, and coverage gate.
+
+### Security
+
+- **AI 表格文件导入** (#1349) — 将上传白名单收紧为服务配置的精确 OSS Bucket 主机与导入对象路径，拒绝同区域其他 Bucket、区域根域和路径式 Bucket URL；复用公网传输 IP 策略，在上传前阻止共享地址段、保留地址及特殊 IPv6 目标。
+
+
 ## [1.0.62-beta.7] - 2026-09-09
 
 ### Added
