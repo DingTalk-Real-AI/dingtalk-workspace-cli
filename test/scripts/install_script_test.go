@@ -1291,6 +1291,177 @@ build_shared_schema_cache
 		}
 	})
 
+	// runSharedCacheHarness executes build_shared_schema_cache against the
+	// fake binary with the caller's shared root; preHook carries shell lines
+	// (umask, fixtures) placed ahead of the script body. It returns the
+	// combined output for claim assertions.
+	runSharedCacheHarness := func(t *testing.T, root, shared, preHook string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		writeFake(t, binDir)
+		harness := preHook + string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "runtime-safe-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("runtime-safe harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("group-writable caller-owned dws level is not advertised as shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		// The caller-owned dws level keeps its group-write bit: chmod a+rX only
+		// adds bits, and the reading runtime rejects any shared level with a
+		// group/other write bit (validateOwnedDirectory mode&0022 != 0). The
+		// installer must downgrade instead of claiming success.
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o775); err != nil {
+			t.Fatal(err)
+		}
+		// MkdirAll's mode is filtered by the process umask; the group-write
+		// bit is the fixture, so set it explicitly.
+		if err := os.Chmod(filepath.Join(shared, "dws"), 0o775); err != nil {
+			t.Fatal(err)
+		}
+		text := runSharedCacheHarness(t, root, shared, "umask 077\n")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("group-writable dws level must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("group-writable dws level missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(filepath.Join(shared, "dws"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o775 {
+			t.Fatalf("caller-owned dws mode = %04o; want unchanged 0775", info.Mode().Perm())
+		}
+	})
+
+	t.Run("world-writable non-sticky custom root is not advertised as shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// 0777 without the sticky bit is rejected by validateAncestryDirectory
+		// for every reader: group/other write bits need a sticky ancestor.
+		if err := os.Chmod(shared, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		text := runSharedCacheHarness(t, root, shared, "umask 077\n")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("world-writable non-sticky root must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("world-writable non-sticky root missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(shared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o777 {
+			t.Fatalf("custom root mode = %04o; want unchanged 0777", info.Mode().Perm())
+		}
+	})
+
+	t.Run("stale group-writable shard is not advertised as shared", func(t *testing.T) {
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		stale := filepath.Join(shared, "dws", "schema", "open", "v1", "meta.cache")
+		if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, stale, []byte("stale"), 0o662)
+		// WriteFile's mode is filtered by the process umask; the group-write
+		// bit is the fixture, so set it explicitly.
+		if err := os.Chmod(stale, 0o662); err != nil {
+			t.Fatal(err)
+		}
+		// The fake warm-up truncates the existing shard in place, which keeps
+		// its mode; chmod a+rX adds bits without clearing the group write bit,
+		// and validateCacheFile (mode&0022 != 0) makes every reader reject the
+		// edition. The installer must downgrade instead of claiming success.
+		text := runSharedCacheHarness(t, root, shared, "")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("group-writable stale shard must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("group-writable stale shard missing fallback warning:\n%s", text)
+		}
+		info, err := os.Stat(stale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm()&0o022 == 0 {
+			t.Fatalf("stale shard mode = %04o; want group/other write preserved", info.Mode().Perm())
+		}
+	})
+
+	t.Run("runtime ancestry predicate requires sticky on writable levels", func(t *testing.T) {
+		root := t.TempDir()
+		harness := string(scriptData[:cut]) + `
+dir="` + filepath.Join(root, "level") + `"
+mkdir -p "$dir"
+chmod 0777 "$dir"
+if shared_schema_ancestry_level_safe "$dir" 0 "$(id -u)"; then
+  printf 'UNSAFE_ACCEPTED\n'
+fi
+chmod +t "$dir"
+if shared_schema_ancestry_level_safe "$dir" 0 "$(id -u)"; then
+  printf 'STICKY_ACCEPTED\n'
+fi
+`
+		harnessPath := filepath.Join(root, "ancestry-predicate-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		output, err := exec.Command("sh", harnessPath).CombinedOutput()
+		if err != nil {
+			t.Fatalf("ancestry predicate harness: %v\n%s", err, output)
+		}
+		text := string(output)
+		if strings.Contains(text, "UNSAFE_ACCEPTED") {
+			t.Fatalf("world-writable non-sticky level must fail the runtime ancestry rule:\n%s", text)
+		}
+		if !strings.Contains(text, "STICKY_ACCEPTED") {
+			t.Fatalf("sticky world-writable level must pass the runtime ancestry rule (mirrors /tmp):\n%s", text)
+		}
+	})
+
+	t.Run("foreign-owned ancestor under a root warm-up is not advertised as shared", func(t *testing.T) {
+		if os.Geteuid() != 0 {
+			t.Skip("root-only scenario: chown to another account requires root; the runtime rejects ancestry owned by neither root nor the reader")
+		}
+		root := realInstallRoot(t, ".dws-install-shared-")
+		shared := filepath.Join(root, "shared")
+		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec.Command("chown", "nobody", shared).Run(); err != nil {
+			t.Skipf("cannot chown the shared root to nobody: %v", err)
+		}
+		// Warm-up runs as root (artifacts root-owned), but the custom root is
+		// owned by nobody: validateAncestryDirectory rejects levels owned by
+		// neither root nor the reader for every account, so advertising
+		// success would misreport a cache every reader falls back from.
+		text := runSharedCacheHarness(t, root, shared, "")
+		if strings.Contains(text, "Shared schema cache built") {
+			t.Fatalf("foreign-owned ancestor must not claim shared success:\n%s", text)
+		}
+		if !strings.Contains(text, "Shared schema cache not shared") {
+			t.Fatalf("foreign-owned ancestor missing fallback warning:\n%s", text)
+		}
+	})
+
 	t.Run("readability guard still fires under spaced paths", func(t *testing.T) {
 		root := t.TempDir()
 		schemaTree := filepath.Join(root, "Another Shared Root", "dws", "schema", "open", "v1")

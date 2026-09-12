@@ -1658,6 +1658,47 @@ shared_schema_artifacts_shared_owner() {
       done' sh "$shared_schema_owner_uid" {} + 2>/dev/null
 }
 
+# Mirror of the runtime's per-level ancestry rule
+# (internal/schemacache/platform_unix.go validateAncestryDirectory): a shared
+# cache ancestor must be a directory owned by root or by one of the reader
+# uids, and any group/other write bit requires the sticky bit (root-owned
+# sticky ancestors such as /tmp and /Library/Caches are the platform
+# convention). A level violating this makes every reader's runtime reject the
+# cache with ErrUnsafePath even though the files are other-readable, so the
+# installer must not advertise cross-user success over such ancestry.
+shared_schema_ancestry_level_safe() {
+  [ -d "$1" ] || return 1
+  [ -z "$(find "$1" -maxdepth 0 ! \( -uid "$2" -o -uid "$3" \) -print 2>/dev/null)" ] || return 1
+  if [ -n "$(find "$1" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) -print 2>/dev/null)" ]; then
+    [ -n "$(find "$1" -maxdepth 0 -perm -01000 -print 2>/dev/null)" ] || return 1
+  fi
+  return 0
+}
+
+# Mirror of the runtime's entry rules (validateOwnedDirectory /
+# validateCacheFile) for every current-generation edition (identity.json marks
+# it): no symlinks (secure openat rejects them), every entry owned by root or
+# one of the reader uids, directories without group/other write bits, and
+# single-link regular files without group/other write bits. chmod a+rX only
+# adds bits and never clears write bits, so a stale group-writable shard must
+# downgrade the advertised claim instead of claiming success.
+shared_schema_editions_runtime_safe() {
+  [ -d "$1" ] || return 1
+  [ -n "$(find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -print -quit 2>/dev/null)" ] || return 1
+  find "$1" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
+      uid_a="$1"
+      uid_b="$2"
+      shift 2
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        [ -z "$(find "$edition_dir" -type l -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" ! \( -uid "$uid_a" -o -uid "$uid_b" \) -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type d \( -perm -0020 -o -perm -0002 \) -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type f ! -links 1 -print -quit 2>/dev/null)" ] || exit 1
+        [ -z "$(find "$edition_dir" -type f \( -perm -0020 -o -perm -0002 \) -print -quit 2>/dev/null)" ] || exit 1
+      done' sh "$2" "$3" {} + 2>/dev/null
+}
+
 build_shared_schema_cache() {
   os="$(detect_os)"
   arch="$(detect_arch)"
@@ -1748,20 +1789,34 @@ build_shared_schema_cache() {
       chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
       chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
     fi
+    # Three claims, mirroring exactly what the reading runtime accepts
+    # (internal/schemacache/platform_unix.go): cross-user success requires
+    # every walked level to be owned by root or the expected reader uid and
+    # satisfy the runtime's mode rules; installer-only requires the same with
+    # the installer's own uid; anything else — a group/world-writable level
+    # without sticky, a foreign-owned ancestor, a writable shard — is a cache
+    # no runtime accepts, so the per-user fallback is reported instead.
+    _sc_reader_a=0
+    _sc_reader_b="$shared_schema_owner_uid"
+    _sc_installer_uid="$(id -u)"
     if [ "$shared_chmod_ok" -eq 1 ] &&
-      shared_schema_root_reachable "$shared_dir" &&
-      shared_schema_ancestors_traversable "$shared_dir" "$dws_intermediate" "$schema_tree" &&
-      shared_schema_artifacts_readable "$schema_tree"; then
-      if shared_schema_artifacts_shared_owner "$schema_tree"; then
-        say "✅ Shared schema cache built: ${shared_dir}"
-      else
-        # The runtime accepts a shared cache only when every artifact is owned
-        # by root or by the reading user, so a warm-up run by an ordinary user
-        # under a writable custom root yields a cache its own user consumes and
-        # every other user rejects. Report that instead of advertising a
-        # shared cache.
-        say "⚠️  Schema cache built for the installing user only (owner uid ${shared_schema_owner_uid} required for cross-user reads); other users fall back to a per-user cache."
-      fi
+      shared_schema_root_reachable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir" &&
+      shared_schema_ancestors_traversable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir" "$dws_intermediate" "$schema_tree" &&
+      shared_schema_artifacts_readable "$schema_tree" &&
+      shared_schema_editions_runtime_safe "$schema_tree" "$_sc_reader_a" "$_sc_reader_b" &&
+      shared_schema_artifacts_shared_owner "$schema_tree"; then
+      say "✅ Shared schema cache built: ${shared_dir}"
+    elif [ "$shared_chmod_ok" -eq 1 ] &&
+      shared_schema_root_reachable "$_sc_reader_a" "$_sc_installer_uid" "$shared_dir" &&
+      shared_schema_ancestors_traversable "$_sc_reader_a" "$_sc_installer_uid" "$shared_dir" "$dws_intermediate" "$schema_tree" &&
+      shared_schema_artifacts_readable "$schema_tree" &&
+      shared_schema_editions_runtime_safe "$schema_tree" "$_sc_reader_a" "$_sc_installer_uid"; then
+      # The runtime accepts a shared cache only when every artifact is owned
+      # by root or by the reading user, so a warm-up run by an ordinary user
+      # under a writable custom root yields a cache its own user consumes and
+      # every other user rejects. Report that instead of advertising a
+      # shared cache.
+      say "⚠️  Schema cache built for the installing user only (owner uid ${shared_schema_owner_uid} required for cross-user reads); other users fall back to a per-user cache."
     else
       say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
     fi
@@ -1771,26 +1826,36 @@ build_shared_schema_cache() {
 }
 
 # True when every ancestor of the given directory up to the filesystem root
-# is other-readable and other-executable, so a non-owner user can actually
-# reach the shared cache. Check-only: caller-owned ancestors are never widened;
-# an unreachable parent must downgrade to the per-user fallback instead of
-# advertising a shared cache nobody else can open.
+# is other-readable and other-executable and satisfies the runtime ancestry
+# rule (shared_schema_ancestry_level_safe) for the given reader uid pair, so a
+# non-owner user can actually reach and accept the shared cache. Check-only:
+# caller-owned ancestors are never widened; an unreachable or unsafe parent
+# must downgrade to the per-user fallback instead of advertising a shared
+# cache nobody else can open.
 shared_schema_root_reachable() {
-  _sc_anc="$(dirname -- "$1")"
+  _sc_uid_a="$1"
+  _sc_uid_b="$2"
+  _sc_anc="$(dirname -- "$3")"
   while [ "$_sc_anc" != "/" ]; do
     [ "$(find "$_sc_anc" -maxdepth 0 -perm -005 2>/dev/null)" = "$_sc_anc" ] || return 1
+    shared_schema_ancestry_level_safe "$_sc_anc" "$_sc_uid_a" "$_sc_uid_b" || return 1
     _sc_anc="$(dirname -- "$_sc_anc")"
   done
   return 0
 }
 
-# True when each listed directory is other-readable and other-executable so
+# True when each listed directory is other-readable and other-executable and
+# satisfies the runtime ancestry rule for the given reader uid pair, so
 # non-owner users can traverse into the shared schema cache.
 shared_schema_ancestors_traversable() {
+  _sc_uid_a="$1"
+  _sc_uid_b="$2"
+  shift 2
   for _sc_anc in "$@"; do
     [ -d "$_sc_anc" ] || return 1
     # find -perm -005: other has read+execute (portable across GNU/BSD find).
     [ "$(find "$_sc_anc" -maxdepth 0 -perm -005 2>/dev/null)" = "$_sc_anc" ] || return 1
+    shared_schema_ancestry_level_safe "$_sc_anc" "$_sc_uid_a" "$_sc_uid_b" || return 1
   done
   return 0
 }
