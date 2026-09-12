@@ -469,6 +469,119 @@ func TestDeclareLeafMetadataInstallsConfirmSafetyForUserRequired(t *testing.T) {
 	}
 }
 
+func TestDeclareLeafMetadataSelectionHelpPastedOnce(t *testing.T) {
+	base := &cobra.Command{Use: "x", Short: "x", Long: "base", RunE: func(*cobra.Command, []string) error { return nil }}
+	spec := LeafSpec{
+		Contract: LeafContract{
+			Description: "desc",
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "dev",
+				Name:           "x",
+				CanonicalPath:  "dev.x",
+				CLIPath:        "dev x",
+				PrimaryCLIPath: "dev x",
+			},
+			Interface: &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "x"}},
+			Selection: contract.SelectionSpec{
+				AgentSummary:  "summary",
+				AvoidWhen:     []string{"仅在此场景下禁用"},
+				Prerequisites: []string{"先完成 prerequisite"},
+				Tips:          []string{"后续建议"},
+				UseWhen:       []string{"u"},
+				Examples:      []string{"dws x"},
+			},
+		},
+	}
+	DeclareLeafMetadata(base, spec)
+	want := "base" + corecmd.SelectionHelp(spec.Contract.Selection)
+	if base.Long != want {
+		t.Fatalf("unexpected base long: %q, want %q", base.Long, want)
+	}
+	if got := strings.Count(base.Long, "Avoid when:"); got != 1 {
+		t.Fatalf("Avoid when rendered %d times", got)
+	}
+
+	DeclareLeafMetadata(base, spec)
+	if base.Long != want {
+		t.Fatalf("selection rendered multiple times or rewritten: %q, want %q", base.Long, want)
+	}
+	if got := strings.Count(base.Long, "Avoid when:"); got != 1 {
+		t.Fatalf("Avoid when rendered %d times after second attach", got)
+	}
+}
+
+// Re-declaring metadata with updated guidance must replace the previously
+// rendered block: AttachContract overwrites the prior ContractFinal, so --help
+// may not keep publishing the stale version alongside the new one.
+func TestDeclareLeafMetadataSelectionHelpReplacedOnUpdate(t *testing.T) {
+	base := &cobra.Command{Use: "x", Short: "x", Long: "base", RunE: func(*cobra.Command, []string) error { return nil }}
+	specFor := func(avoid string) LeafSpec {
+		return LeafSpec{
+			Contract: LeafContract{
+				Description: "desc",
+				Identity: contract.ToolIdentitySpec{
+					ProductID:      "dev",
+					Name:           "x",
+					CanonicalPath:  "dev.x",
+					CLIPath:        "dev x",
+					PrimaryCLIPath: "dev x",
+				},
+				Interface: &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "x"}},
+				Selection: contract.SelectionSpec{
+					AgentSummary: "summary",
+					UseWhen:      []string{"u"},
+					AvoidWhen:    []string{avoid},
+					Examples:     []string{"dws x"},
+				},
+			},
+		}
+	}
+	DeclareLeafMetadata(base, specFor("旧指引"))
+	updated := specFor("新指引")
+	DeclareLeafMetadata(base, updated)
+	want := "base" + corecmd.SelectionHelp(updated.Contract.Selection)
+	if base.Long != want {
+		t.Fatalf("updated long = %q, want %q", base.Long, want)
+	}
+	if strings.Contains(base.Long, "旧指引") {
+		t.Fatalf("stale guidance survived the update:\n%s", base.Long)
+	}
+	if got := strings.Count(base.Long, "Avoid when:"); got != 1 {
+		t.Fatalf("Avoid when rendered %d times after update", got)
+	}
+}
+
+// Without authored intent prose the guidance sections must not become the
+// whole Long: catalog assembly prefers Cobra Long for the delivered
+// description, so an empty Long has to stay empty and keep the declared
+// Contract.Description as the description winner.
+func TestDeclareLeafMetadataSelectionHelpSkippedWithoutIntentProse(t *testing.T) {
+	base := &cobra.Command{Use: "x", Short: "x", RunE: func(*cobra.Command, []string) error { return nil }}
+	spec := LeafSpec{
+		Contract: LeafContract{
+			Description: "desc",
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "dev",
+				Name:           "x",
+				CanonicalPath:  "dev.x",
+				CLIPath:        "dev x",
+				PrimaryCLIPath: "dev x",
+			},
+			Interface: &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "x"}},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "summary",
+				UseWhen:      []string{"u"},
+				AvoidWhen:    []string{"仅在此场景下禁用"},
+				Examples:     []string{"dws x"},
+			},
+		},
+	}
+	DeclareLeafMetadata(base, spec)
+	if base.Long != "" {
+		t.Fatalf("empty long rewritten to %q, want empty so the declared description keeps winning", base.Long)
+	}
+}
+
 func TestDeclareLeafMetadataDefersConfirmUntilCallTool(t *testing.T) {
 	// Without Validate: RunE-local checks run before ConfirmSafety; the gate
 	// fires on the first MCP CallTool.
