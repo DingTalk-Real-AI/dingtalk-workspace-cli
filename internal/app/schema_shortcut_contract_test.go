@@ -18,13 +18,44 @@ import (
 )
 
 const (
-	publicShortcutCount = 443
+	publicShortcutCount = 447
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 500
+	schemaPublishedShortcutCount = 504
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 443
+	publiclyDeliveredShortcutCount = 447
 )
+
+func TestCrossPlatformCoverageDocDownloadFinalSchemaRequiresConfirmation(t *testing.T) {
+	for _, name := range []string{"+media-download", "+media-preview", "+resource-download", "+download-overwrite"} {
+		t.Run(name, func(t *testing.T) {
+			tool := executeShortcutSchemaQuery(t, "--cli-path", "doc "+name)
+			wantSafety := map[string]string{"effect": "read", "risk": "low", "confirmation": "not_required"}
+			if name == "+download-overwrite" {
+				wantSafety = map[string]string{"effect": "write", "risk": "medium", "confirmation": "user_required"}
+			}
+			for field, want := range wantSafety {
+				if got := schemaContractString(tool[field]); got != want {
+					t.Fatalf("%s final %s = %q, want %q", name, field, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocCreateMediaSafetyIsSeparateFromPlainCreate(t *testing.T) {
+	plain := executeShortcutSchemaQuery(t, "--cli-path", "doc +create")
+	if plain["confirmation"] != "not_required" || schemaContractMap(plain["parameters"])["media-files"] != nil {
+		t.Fatalf("plain create must keep its published contract without media upload: %#v", plain)
+	}
+	media := executeShortcutSchemaQuery(t, "--cli-path", "doc +create-with-media")
+	if media["confirmation"] != "user_required" || media["effect"] != "write" || media["result"] == nil {
+		t.Fatalf("media creation safety/result missing: %#v", media)
+	}
+	if schemaContractMap(media["parameters"])["media-files"]["required"] != true {
+		t.Fatal("media selection must be required")
+	}
+}
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
@@ -523,7 +554,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 13; got != want {
+	if got, want := len(parameters), 16; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
@@ -535,7 +566,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	wantProperties := map[string]string{
 		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
 		"block-id": "blockId", "after-block-id": "afterBlockId", "before-block-id": "beforeBlockId", "heading-level": "headingLevel", "old": "old", "new": "new",
-		"expected-revision": "expectedRevision",
+		"expected-revision": "expectedRevision", "start-block-id": "startBlockId", "end-block-id": "endBlockId", "src-block-ids": "srcBlockIds",
 	}
 	for name, want := range wantProperties {
 		if got := schemaContractString(parameters[name]["property"]); got != want {

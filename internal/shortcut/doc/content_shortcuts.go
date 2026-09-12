@@ -76,7 +76,7 @@ var Create = shortcut.Shortcut{
 		contract.ParamDecl{Name: "workspace", Property: "workspaceId"},
 	),
 	Flags: []shortcut.Flag{
-		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称", Required: true},
+		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称；省略时从Markdown首个一级标题提取，否则使用未命名文档"},
 		{Name: "content", Type: shortcut.FlagString, Desc: docContentInputDescription},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文档文件夹 ID"},
@@ -84,6 +84,10 @@ var Create = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +create --name "项目周报" --content "# 本周进展"`, `dws doc +create --name "模板" --content @body.json --doc-format jsonml`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		mediaFiles, err := validateDocCreateMedia(rt)
+		if err != nil {
+			return err
+		}
 		content, err := readShortcutContent(rt, "content")
 		if err != nil {
 			return err
@@ -95,7 +99,11 @@ var Create = shortcut.Shortcut{
 				return err
 			}
 		}
-		params := map[string]any{"name": rt.Str("name")}
+		name := rt.Str("name")
+		if name == "" {
+			name = docDefaultTitle(content, format)
+		}
+		params := map[string]any{"name": name}
 		if rt.Str("folder") != "" {
 			params["folderId"] = rt.Str("folder")
 		}
@@ -116,13 +124,13 @@ var Create = shortcut.Shortcut{
 			params["markdown"] = contentChunks[0]
 		}
 		if rt.DryRun() {
-			preview := map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content)}
+			preview := map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content), "mediaFiles": mediaFiles, "mediaPlacement": "append_in_order"}
 			if len(contentChunks) > 1 {
 				// Surfacing the plan in --dry-run lets a caller see "your table
 				// will become three tables" before anything is written.
 				preview["chunkPlan"] = chunkPlan.Summary()
 			}
-			return rt.Output(withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
+			return outputCreatedDoc(rt, withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
 		}
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
 		if err != nil {
@@ -191,8 +199,16 @@ var Create = shortcut.Shortcut{
 		if len(contentChunks) > 1 {
 			data["chunkPlan"] = chunkPlan.Summary()
 		}
+		if len(mediaFiles) > 0 {
+			receipts, mediaErr := insertCreatedDocMedia(rt, nodeID, mediaFiles)
+			if mediaErr != nil {
+				return mediaErr
+			}
+			data["media"] = receipts
+			data["mediaPlacement"] = "append_in_order"
+		}
 		annotateMentionVerificationScope(data, steps, content)
-		return rt.Output(withDocWarnings(docEnvelope("doc.create", data, steps...),
+		return outputCreatedDoc(rt, withDocWarnings(docEnvelope("doc.create", data, steps...),
 			withMentionTargetWarning(chunkPlan.Warnings(), content)))
 	},
 }
@@ -217,10 +233,13 @@ var Fetch = shortcut.Shortcut{
 		contract.ParamDecl{Name: "version", Property: "historyVersion"},
 	),
 	Flags: []shortcut.Flag{
+		{Name: "include-comments", Type: shortcut.FlagBool, Desc: "同时读取全文评论，自动翻页；评论范围始终是整篇文档，最多1000条，超限报不完整"},
+		{Name: "context-unit", Type: shortcut.FlagString, Default: "characters", Enum: []string{"characters", "blocks"}, Desc: "关键词上下文单位；默认保留字符模式，blocks按相邻顶层块"},
+		{Name: "regex", Type: shortcut.FlagBool, Desc: "keyword+blocks模式使用RE2正则；非法正则在请求前拒绝"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL；" + fetchTargetConstraint},
 		{Name: "query", Type: shortcut.FlagString, Desc: "文档标题或关键词；跨页唯一解析后读取；" + fetchTargetConstraint},
 		{Name: "detail", Type: shortcut.FlagString, Default: "simple", Desc: "输出细节", Enum: []string{"simple", "with-ids", "full"}},
-		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；keyword 时 --keyword 不能为空", Enum: []string{"full", "outline", "range", "section", "keyword", "tags"}},
+		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；keyword 时 --keyword 不能为空", Enum: []string{"full", "outline", "range", "section", "keyword", "tags", "chapter"}},
 		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "range/section 起始块 ID"},
 		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "range 结束块 ID"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "keyword 范围搜索词，不能为空，支持 foo|bar"},
@@ -234,11 +253,17 @@ var Fetch = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +fetch --node <DOC_ID>`, `dws doc +fetch --query "项目周报" --scope keyword --keyword "结论"`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := validateDocSelection(rt); err != nil {
+			return err
+		}
 		if rt.Changed("revision") {
 			return apperrors.NewValidation("--revision 不支持：revision 是文档编辑版本号（doc read --content-format jsonml 响应返回，供 doc +update --expected-revision 条件写使用），不是历史版本号；读历史版本请用 --version")
 		}
 		if rt.Changed("version") && rt.Int("version") < 0 {
 			return apperrors.NewValidation("--version 必须为非负整数历史版本号（0 表示初始版本，从 doc +version-list 获取）")
+		}
+		if rt.Str("scope") == "tags" && len(stringSliceNonEmpty(rt.StrSlice("tags"))) == 0 {
+			return apperrors.NewValidation("--scope tags 时必须提供非空 --tags")
 		}
 		if rt.Str("scope") == "keyword" && rt.Str("keyword") == "" {
 			return apperrors.NewValidation("--scope keyword 时必须提供 --keyword")
@@ -260,17 +285,21 @@ var Fetch = shortcut.Shortcut{
 		}
 		params := map[string]any{"nodeId": target.Selected.CanonicalID, "format": format}
 		scope := rt.Str("scope")
-		if scope != "keyword" && scope != "full" {
+		if scope != "keyword" && scope != "full" && scope != "chapter" {
 			params["scope"] = scope
 		}
-		if value := rt.Str("start-block-id"); value != "" {
-			params["startBlockId"] = value
-		}
-		if value := rt.Str("end-block-id"); value != "" {
-			params["endBlockId"] = value
-		}
-		if rt.Changed("tags") {
-			params["tags"] = rt.StrSlice("tags")
+		// Chapter boundaries and context are selected locally from the full tree.
+		// Do not let remote range or tag filters truncate that input.
+		if scope != "chapter" {
+			if value := rt.Str("start-block-id"); value != "" {
+				params["startBlockId"] = value
+			}
+			if value := rt.Str("end-block-id"); value != "" {
+				params["endBlockId"] = value
+			}
+			if rt.Changed("tags") {
+				params["tags"] = strings.Join(stringSliceNonEmpty(rt.StrSlice("tags")), ",")
+			}
 		}
 		if rt.Changed("max-depth") {
 			params["maxDepth"] = rt.Int("max-depth")
@@ -286,16 +315,34 @@ var Fetch = shortcut.Shortcut{
 			return err
 		}
 		content := any(data)
-		if scope == "keyword" {
-			content = projectKeywordMatches(data, rt.Str("keyword"), rt.Int("context-before"), rt.Int("context-after"))
+		if scope == "chapter" {
+			content, err = selectDocChapter(data, rt.Str("start-block-id"), rt.Int("context-before"), rt.Int("context-after"))
+			if err != nil {
+				return err
+			}
+		} else if scope == "keyword" {
+			if rt.Str("context-unit") == "blocks" {
+				content, err = projectKeywordBlocks(data, rt.Str("keyword"), rt.Bool("regex"), rt.Int("context-before"), rt.Int("context-after"))
+				if err != nil {
+					return err
+				}
+			} else {
+				content = projectKeywordMatches(data, rt.Str("keyword"), rt.Int("context-before"), rt.Int("context-after"))
+			}
 		}
-		return rt.Output(map[string]any{
-			"contractVersion": "doc.content.v1",
-			"status":          "success",
-			"complete":        true,
-			"target":          target.Selected,
-			"content":         content,
-		})
+		result := map[string]any{"contractVersion": "doc.content.v1", "status": "success", "complete": true, "target": target.Selected, "content": content}
+		if rt.Bool("include-comments") {
+			comments, err := readCompleteDocComments(rt, target.Selected.CanonicalID)
+			if err != nil {
+				return err
+			}
+			if comments["complete"] != true {
+				return apperrors.NewAPI("评论读取未完整，不能报告全部读取成功", apperrors.WithDetails(map[string]any{"body": result, "comments": comments}))
+			}
+			result["comments"] = comments
+			result["commentScope"] = "document"
+		}
+		return rt.Output(result)
 	},
 }
 
@@ -396,14 +443,20 @@ var Update = shortcut.Shortcut{
 		contract.ParamDecl{Name: "old", Property: "old"},
 		contract.ParamDecl{Name: "new", Property: "new"},
 		contract.ParamDecl{Name: "expected-revision", Property: "expectedRevision"},
+		contract.ParamDecl{Name: "start-block-id", Property: "startBlockId"},
+		contract.ParamDecl{Name: "end-block-id", Property: "endBlockId"},
+		contract.ParamDecl{Name: "src-block-ids", Property: "srcBlockIds"},
 		contract.ParamDecl{Name: "doc", Property: "node"},
 		contract.ParamDecl{Name: "text", Property: "content"}),
 	Flags: []shortcut.Flag{
+		{Name: "src-block-ids", Type: shortcut.FlagString, Desc: "仅block_copy_insert_after可用的逗号分隔源ID；与block-id同时提供须相同"},
+		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围起点；与end-block-id成对，0表示第一块"},
+		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "block_delete/block_replace顶层范围终点（含），-1表示最后块；最多50块"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}, AliasesVisible: true},
 		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Enum: []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
 		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, Aliases: []string{"text"}, AliasesVisible: true},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
-		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空；block_delete 支持逗号分隔批量 ID，单次最多 50 个"},
+		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空；block_delete 支持逗号分隔批量 ID，单次最多 50 个；block_copy_insert_after支持同文档顶层有序多源ID，最多20个，不支持含资源引用的块"},
 		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "插入位置参考 block ID；相关动作要求时不能为空"},
 		{Name: "before-block-id", Type: shortcut.FlagString, Desc: "向前插入时的位置参考 block ID；block_insert_before 要求不能为空"},
 		{Name: "heading-level", Type: shortcut.FlagInt, Desc: "将插入内容写为指定级别标题（1-6）；仅支持 Markdown block_insert_before/block_insert_after"},
@@ -413,6 +466,20 @@ var Update = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_insert_before --before-block-id <BLOCK_ID> --content "发布说明" --heading-level 1`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("src-block-ids") {
+			if rt.Str("command") != "block_copy_insert_after" || strings.TrimSpace(rt.Str("src-block-ids")) == "" {
+				return apperrors.NewValidation("src-block-ids仅用于block_copy_insert_after且不能为空")
+			}
+			if rt.Changed("block-id") && rt.Str("block-id") != rt.Str("src-block-ids") {
+				return apperrors.NewValidation("src-block-ids与block-id冲突")
+			}
+			if err := rt.Command().Flags().Set("block-id", rt.Str("src-block-ids")); err != nil {
+				return err
+			}
+		}
+		if err := validateDocBlockRange(rt); err != nil {
+			return err
+		}
 		command := rt.Str("command")
 		if rt.StrFirst("node", "doc") == "" {
 			return apperrors.NewValidation("缺少 --node")
@@ -428,7 +495,7 @@ var Update = shortcut.Shortcut{
 		}
 		switch command {
 		case "block_replace", "block_delete", "block_copy_insert_after":
-			if rt.Str("block-id") == "" {
+			if rt.Str("block-id") == "" && !((command == "block_delete" || command == "block_replace") && rt.Str("start-block-id") != "") {
 				return apperrors.NewValidation("该 block 操作必须提供 --block-id")
 			}
 		}
@@ -464,7 +531,7 @@ var Update = shortcut.Shortcut{
 		}
 		return nil
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "after-block-id", "before-block-id", "old", "new"}, Description: "依 command 校验，所需文本或 block 参数不能为空"}},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"src-block-ids"}, Description: "仅block_copy_insert_after可用的逗号分隔源ID；与block-id同时提供须相同"}, {Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "after-block-id", "before-block-id", "old", "new"}, Description: "依 command 校验，所需文本或 block 参数不能为空"}},
 	Execute:     executeUpdate,
 }
 
@@ -626,6 +693,12 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 	}
 	nodeID := rt.StrFirst("node", "doc")
+	if command == "block_replace" && rt.Str("start-block-id") != "" {
+		return executeDocRangeReplace(rt, nodeID, content)
+	}
+	if command == "block_delete" && rt.Str("start-block-id") != "" {
+		return executeDocRangeDelete(rt, nodeID)
+	}
 	plan := map[string]any{"nodeId": nodeID, "command": command, "blockId": rt.Str("block-id"), "afterBlockId": rt.Str("after-block-id"), "contentBytes": len(content)}
 	if beforeBlockID := rt.Str("before-block-id"); beforeBlockID != "" {
 		plan["beforeBlockId"] = beforeBlockID
@@ -712,6 +785,9 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
 	case "block_copy_insert_after":
+		if strings.Contains(rt.Str("block-id"), ",") {
+			return executeDocMultiCopy(rt, node)
+		}
 		return executeBlockCopy(rt, node)
 	default:
 		return apperrors.NewValidation(fmt.Sprintf("不支持的 update command %q", command))
@@ -795,26 +871,7 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 }
 
 func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
-	data, err := readAllDocumentBlocks(rt, map[string]any{"nodeId": nodeID, "format": "element"})
-	if err != nil {
-		return err
-	}
-	block := findBlock(data, rt.Str("block-id"))
-	if block == nil {
-		return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要复制的 block")
-	}
-	if containsResourceReference(block) {
-		return apperrors.NewValidation("UNSUPPORTED_RESOURCE_TYPE: 含资源引用的 block 暂不支持复制")
-	}
-	expectedContent := canonicalBlockContent(block, "markdown")
-	stripBlockIDs(block)
-	referenceBlockID := rt.Str("after-block-id")
-	return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block",
-		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": "after", "element": block}, nodeID,
-		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
-		func(result, data map[string]any) bool {
-			return verifyInsertedCanonicalBlockContent(result, data, referenceBlockID, expectedContent, "markdown")
-		})
+	return executeDocMultiCopy(rt, nodeID)
 }
 
 func executeVerifiedDocMutation(
@@ -825,29 +882,44 @@ func executeVerifiedDocMutation(
 	verifyParams map[string]any,
 	verify func(map[string]any, map[string]any) bool,
 ) error {
+	result, err := runVerifiedDocMutation(rt, operation, tool, params, nodeID, verifyTool, verifyParams, verify)
+	if err != nil {
+		return err
+	}
+	return rt.Output(result)
+}
+
+func runVerifiedDocMutation(
+	rt *shortcut.RuntimeContext,
+	operation, tool string,
+	params map[string]any,
+	nodeID, verifyTool string,
+	verifyParams map[string]any,
+	verify func(map[string]any, map[string]any) bool,
+) (map[string]any, error) {
 	steps := []map[string]any{{"name": tool, "status": "started"}}
 	result, err := rt.CallMCPWriteData(productDoc, tool, params)
 	if err != nil {
-		return docUnknownWriteError(operation, tool, nodeID, err)
+		return nil, docUnknownWriteError(operation, tool, nodeID, err)
 	}
 	steps[0]["status"] = "success"
 	verification, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
 		return verify == nil || verify(result, data)
 	})
 	if err != nil {
-		return docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	if verify != nil && !verify(result, verification) {
-		return docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		return map[string]any{"nodeId": nodeID, "verified": false, "status": "unverified", "result": result, "steps": steps}, docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
 	verificationSummary := compactDocVerification(verification, "", "", "", params)
-	return rt.Output(docEnvelope(operation, map[string]any{
+	return docEnvelope(operation, map[string]any{
 		"nodeId":       nodeID,
 		"verified":     true,
 		"result":       result,
 		"verification": verificationSummary,
-	}, steps...))
+	}, steps...), nil
 }
 
 func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams map[string]any, nodeID, content, mode, format string) error {
@@ -1811,6 +1883,11 @@ func jsonMLBlockIdentity(element []any) string {
 	if len(element) < 2 {
 		return ""
 	}
+	// A blocks array whose second entry happens to contain blockId is not a
+	// JSONML element. Accept only [tag, attributes, ...] before reading identity.
+	if tag, ok := element[0].(string); !ok || strings.TrimSpace(tag) == "" {
+		return ""
+	}
 	attributes, ok := element[1].(map[string]any)
 	if !ok {
 		return ""
@@ -2371,5 +2448,5 @@ func stripBlockIDs(value any) {
 func init() {
 	_ = json.Valid
 	_ = filepath.Separator
-	shortcut.Register(Create, Fetch, Inspect, Update, CheckpointUpdate, Export, Import)
+	registerDocShortcuts(Create, Fetch, Inspect, Update, CheckpointUpdate, Export, Import)
 }

@@ -24,6 +24,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -148,6 +149,18 @@ func runDocCoverageWriter(t *testing.T, declaration shortcut.Shortcut, caller *d
 	root.SetIn(input)
 	if caller.ctx != nil {
 		root.SetContext(caller.ctx)
+	}
+	if declaration.OutputRollout == output.RolloutUnifiedActive {
+		ctx := root.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ctx, _ = output.WithResultStore(ctx)
+		root.SetContext(ctx)
+		root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+			_, _, err := output.EmitStoredResult(cmd)
+			return err
+		}
 	}
 	root.SetArgs(append([]string{"doc", commandPath}, args...))
 	return root.Execute()
@@ -541,11 +554,12 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 		{
 			name: "block copy",
 			args: []string{"--doc", "alias-node", "--command", "block_copy_insert_after", "--block-id", "block-1", "--after-block-id", "after", "--yes"},
-			responses: map[string][]map[string]any{"list_document_blocks": {
-				{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha"}}}}},
-				{"blocks": []any{map[string]any{"element": map[string]any{"id": "id-1", "paragraph": map[string]any{"text": "alpha"}}}}},
-			}},
-			wantTools: []string{"list_document_blocks", "insert_document_block", "list_document_blocks"},
+			responses: map[string][]map[string]any{
+				"get_document_content":  {{"jsonml": `["root",{},["p",{"uuid":"block-1"},"alpha"],["p",{"uuid":"after"},"anchor"]]`}},
+				"insert_document_block": {{"blockId": "id-1"}},
+				"list_document_blocks":  {{"blocks": []any{[]any{"p", map[string]any{"uuid": "block-1"}, "alpha"}, []any{"p", map[string]any{"uuid": "after"}, "anchor"}, []any{"p", map[string]any{"uuid": "id-1"}, "alpha"}}, "hasMore": false}},
+			},
+			wantTools: []string{"get_document_content", "insert_document_block", "list_document_blocks"},
 		},
 	}
 	for _, tc := range tests {
@@ -1238,10 +1252,9 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 					{"items": []any{map[string]any{"id": "block-1", "text": "gamma beta"}}},
 				}
 			case "update copy":
-				caller.responses["list_document_blocks"] = []map[string]any{
-					{"items": []any{map[string]any{"id": "block-1", "text": "alpha beta"}}},
-					{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "text": "alpha beta"}}},
-				}
+				caller.responses["get_document_content"] = []map[string]any{parityFullJSONML([]string{"block-1", "b"}, []string{"alpha beta", "reference"})}
+				caller.responses["insert_document_block"] = []map[string]any{{"blockId": "id-1"}}
+				caller.responses["list_document_blocks"] = []map[string]any{parityBlockRead([]string{"block-1", "b", "id-1"}, []string{"alpha beta", "reference", "alpha beta"})}
 			case "checkpoint success":
 				caller.responses["get_document_content"] = []map[string]any{{"markdown": "existing\nx"}}
 			}
@@ -1289,8 +1302,8 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 	if !strings.Contains(blockIDDesc, "逗号分隔") || !strings.Contains(blockIDDesc, "最多 50 个") {
 		t.Fatalf("--block-id description must document batch deletion: %q", blockIDDesc)
 	}
-	if len(Update.Constraints) != 1 || Update.Constraints[0].Kind != shortcut.ConstraintCustom ||
-		!strings.Contains(Update.Constraints[0].Description, "依 command 校验") {
+	if len(Update.Constraints) != 2 || Update.Constraints[1].Kind != shortcut.ConstraintCustom ||
+		!strings.Contains(Update.Constraints[1].Description, "依 command 校验") || !strings.Contains(Update.Constraints[0].Description, "仅block_copy_insert_after") {
 		t.Fatalf("update custom constraint = %#v", Update.Constraints)
 	}
 	cmd := corecmd.New(shortcut.FromShortcut(Update))
@@ -1348,7 +1361,7 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 		args []string
 	}{
 		{Create, []string{"--name", "n", "--content", "@"}},
-		{Create, []string{"--name", "n", "--content", "@/absolute"}},
+		{Create, []string{"--name", "n", "--content", "@" + filepath.Join(t.TempDir(), "absolute.txt")}},
 		{Create, []string{"--name", "n", "--content", "not-json", "--doc-format", "jsonml"}},
 		{Create, []string{"--name", "n", "--content", `{}`, "--doc-format", "jsonml"}},
 		{Create, []string{"--name", "n", "--content", `[]`, "--doc-format", "jsonml"}},
@@ -1368,7 +1381,7 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 			t.Errorf("%s %#v unexpectedly succeeded", tc.cmd.Command, tc.args)
 		}
 	}
-	absoluteInputErr := runDocCoverage(t, Create, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--name", "n", "--content", "@/absolute")
+	absoluteInputErr := runDocCoverage(t, Create, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--name", "n", "--content", "@"+filepath.Join(t.TempDir(), "absolute.txt"))
 	if absoluteInputErr == nil || !strings.Contains(absoluteInputErr.Error(), "暂存到工作目录") || !strings.Contains(absoluteInputErr.Error(), "stdin") {
 		t.Fatalf("absolute @file guidance = %v", absoluteInputErr)
 	}
@@ -1770,29 +1783,16 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 	}
 }
 
-func TestCrossPlatformCoverageDocDownloadsHaveNoOverwriteEscape(t *testing.T) {
-	for _, item := range []struct {
-		decl shortcut.Shortcut
-		args []string
-	}{
-		{Export, []string{"--node", "n", "--output", "out.docx"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
-		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
-	} {
-		t.Run(item.decl.Command, func(t *testing.T) {
-			for _, flag := range item.decl.Flags {
-				if flag.Name == "overwrite" {
-					t.Fatal("download shortcut still declares --overwrite")
-				}
-			}
-			caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
-			err := runDocCoverage(t, item.decl, caller, append(item.args, "--overwrite")...)
-			if err == nil {
-				t.Fatal("--overwrite unexpectedly accepted")
-			}
-			if caller.calls != 0 {
-				t.Fatalf("rejected --overwrite performed %d MCP calls", caller.calls)
-			}
-		})
+func TestCrossPlatformCoverageDocDownloadOverwriteIsExplicit(t *testing.T) {
+	for _, decl := range []shortcut.Shortcut{MediaDownload, ResourceDownload, MediaPreview} {
+		cmd := corecmd.New(shortcut.FromShortcut(decl))
+		flag := cmd.Flags().Lookup("overwrite")
+		if flag != nil {
+			t.Fatalf("%s must not expose overwrite", decl.Command)
+		}
+	}
+	caller := &docCoverageCaller{}
+	if err := runDocCoverage(t, Export, caller, "--node", "n", "--output", "out.docx", "--overwrite"); err == nil || caller.calls != 0 {
+		t.Fatalf("unextended export must reject overwrite before RPC: %v", err)
 	}
 }

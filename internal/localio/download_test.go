@@ -731,3 +731,93 @@ func mustURL(t *testing.T, raw string) *url.URL {
 	}
 	return parsed
 }
+
+func TestCrossPlatformCoverageDownloadExplicitOverwritePreservesOldOnFailure(t *testing.T) {
+	base := t.TempDir()
+	dest := filepath.Join(base, "result.txt")
+	if err := os.WriteFile(dest, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fail := true
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		if fail {
+			return nil, errors.New("offline")
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("new"))}, nil
+	})}
+	opts := DownloadOptions{BaseDir: base, Output: "result.txt", Overwrite: true}
+	if _, err := downloadWithClient(context.Background(), "https://alidocs.oss-cn-zhangjiakou.aliyuncs.com/res/file.txt", opts, client); err == nil {
+		t.Fatal("expected failure")
+	}
+	b, _ := os.ReadFile(dest)
+	if string(b) != "old" {
+		t.Fatal("failure modified destination")
+	}
+	fail = false
+	if _, err := downloadWithClient(context.Background(), "https://alidocs.oss-cn-zhangjiakou.aliyuncs.com/res/file.txt", opts, client); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(dest)
+	if string(b) != "new" {
+		t.Fatal("not replaced")
+	}
+	if err := os.Symlink(dest, filepath.Join(base, "link.txt")); err != nil {
+		t.Skip(err)
+	}
+	opts.Output = "link.txt"
+	if _, err := downloadWithClient(context.Background(), "https://alidocs.oss-cn-zhangjiakou.aliyuncs.com/res/file.txt", opts, client); err == nil {
+		t.Fatal("symlink allowed")
+	}
+}
+
+func TestCrossPlatformCoverageDownloadOverwriteRejectsNonregularAndFailedPublish(t *testing.T) {
+	dir := t.TempDir()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if err := os.Mkdir(filepath.Join(dir, "target"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceDownloadFile(root, "missing", "target"); err == nil {
+		t.Fatal("directory overwritten")
+	}
+	if err := replaceDownloadFile(root, "missing", "absent"); err == nil {
+		t.Fatal("missing temporary file published")
+	}
+	if err := root.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceDownloadFile(root, "missing", "absent"); err == nil {
+		t.Fatal("closed root ignored")
+	}
+	dir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "name.txt"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openDownloadTargetMode(dir, "./", "https://example.com/name.txt", "name.txt", true); err == nil {
+		t.Fatal("nonregular destination accepted")
+	}
+}
+
+type downloadNamedPipeInfo struct{ os.FileInfo }
+
+func (downloadNamedPipeInfo) Mode() os.FileMode { return os.ModeNamedPipe | 0600 }
+func TestCrossPlatformCoverageDownloadOverwriteRejectsPipeTarget(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pipe"), []byte("existing"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	original := downloadRootLstat
+	testseam.Swap(t, &downloadRootLstat, func(root *os.Root, name string) (os.FileInfo, error) {
+		info, err := original(root, name)
+		if err == nil && name == "pipe" {
+			return downloadNamedPipeInfo{info}, nil
+		}
+		return info, err
+	})
+	if _, err := openDownloadTargetMode(dir, "pipe", "https://example.com/file.txt", "", true); err == nil || !strings.Contains(err.Error(), "普通文件") {
+		t.Fatal("nonregular target not rejected", err)
+	}
+}
