@@ -288,14 +288,18 @@ var Fetch = shortcut.Shortcut{
 		if scope != "keyword" && scope != "full" && scope != "chapter" {
 			params["scope"] = scope
 		}
-		if value := rt.Str("start-block-id"); value != "" {
-			params["startBlockId"] = value
-		}
-		if value := rt.Str("end-block-id"); value != "" {
-			params["endBlockId"] = value
-		}
-		if rt.Changed("tags") {
-			params["tags"] = strings.Join(stringSliceNonEmpty(rt.StrSlice("tags")), ",")
+		// Chapter boundaries and context are selected locally from the full tree.
+		// Do not let remote range or tag filters truncate that input.
+		if scope != "chapter" {
+			if value := rt.Str("start-block-id"); value != "" {
+				params["startBlockId"] = value
+			}
+			if value := rt.Str("end-block-id"); value != "" {
+				params["endBlockId"] = value
+			}
+			if rt.Changed("tags") {
+				params["tags"] = strings.Join(stringSliceNonEmpty(rt.StrSlice("tags")), ",")
+			}
 		}
 		if rt.Changed("max-depth") {
 			params["maxDepth"] = rt.Int("max-depth")
