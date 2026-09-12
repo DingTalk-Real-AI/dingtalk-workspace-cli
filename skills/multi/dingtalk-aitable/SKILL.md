@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -62,6 +62,7 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 | 新增单条或批量记录 | `dws aitable record create --base-id <ID> --table-id <ID> --records <JSON>` | 当前无 `+record-create`；写前取字段定义，写后按新 ID 回读 |
 | 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON>` | 自动分片并读回；只传需修改字段 |
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
+| 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回，空评论页按 hasMore/nextToken 续页，写入未知状态先 list 对账 |
 | 按业务键同步或按条件批改 | 唯一键用 `dws aitable +record-upsert-by-key ...`；有界批改用 `dws aitable +record-bulk-patch ... --max-matches <N>` | upsert 仅允许 0 条创建、1 条更新；批改必须有 query/filters/record-ids 边界。普通 update/upsert 直接执行；只有历史、分享、删除恢复、空行或特殊字段值才读 [record-ops](references/aitable-record-ops.md)；明确 AND/OR、日期或比较操作符只读 [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 生成记录分享链接并发送给联系人 | `dws aitable +record-share-links --base <B> --table <T> --record-ids <IDs>` → `dws chat +dm --to <姓名> --text <完整链接文本>` | AITable 只生成链接；用户要求“发送”时还必须完成真实发送，不能停在联系人解析 |
 | 创建或复制视图 | 创建用 `dws aitable view create --base-id <B> --table-id <T> --view-type <Grid|FormDesigner|Gantt|Calendar|Kanban|Gallery> [--name <名称>]`；复制用 `dws aitable +view-duplicate --base-id <B> --table-id <T> --view-id <V> [--new-name <名称>]` | 创建和复制直接执行；需要配置时按下方“按需加载”选择一个 View Reference |
@@ -126,6 +127,7 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 ## 安全边界
 
 - 删除不可逆，按 Runtime confirmation 核对真实目标；`base list` 只是最近访问。字段零/多候选、类型不明时停止；多批写保留已完成批次和续跑位置。
+- 评论 create/reply 非幂等，评论写操作未知状态时先 `comment list` 对账，不自动重放；delete 只删除本人评论且不可恢复，关联回复处理不作保证。
 - `app get` / `app page list` 在 App 不存在时会初始化默认 App，属于幂等条件写；`app page/widget create` 非幂等且不自动重试。删除 Page 会级联删除全部 Widget，删除 Widget 会同步清理布局，均需独立确认。
 - 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步；执行前确认目标 Base 和 sourceConfig。`+datasource-sync` 单次最多 5 张表。
 
@@ -138,6 +140,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | `+record-query`、upsert、bulk patch 的记录 filters/sort/date/AND/OR/比较操作符 | [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 记录历史、分享、删除恢复、空行或特殊字段值 | [record-ops](references/aitable-record-ops.md) |
 | 记录统计、分组聚合或去重率 | [record-stats](references/aitable/aitable-record-stats.md) |
+| 记录评论查询、创建、回复、更新或删除 | [comment](references/aitable/aitable-comment.md) |
 | 查询记录的主键文档，或为记录创建主键文档 | 首次建表前读取 [primary-doc](references/aitable/aitable-primary-doc.md)；普通 Base/Table/字段/记录创建与导入不读取 |
 | AI 字段、关联字段、lookup/filterUp 或其他复杂 config | [field](references/aitable/aitable-field.md) |
 | formula 字段或公式语法 | [formula-guide](references/aitable/aitable-formula-guide.md) |

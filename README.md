@@ -499,7 +499,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, seven OA approval task/instance events, and three Todo task lifecycle events.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The 28-event public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, seven OA approval task/instance events, one VoIP invitation event, three Todo task lifecycle events, and the interactive-card callback event.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -520,6 +520,8 @@ dws event list
 dws event schema user_im_message_receive_o2o --flatten
 dws event list --category oa
 dws event schema user_oa_approval_task_created --flatten
+dws event list --category card
+dws event schema user_card_action_triggered --flatten
 dws event list --category todo
 dws event schema user_todo_task_create --flatten
 
@@ -568,10 +570,15 @@ dws event consume \
   --role-types executor \
   --flatten -f ndjson
 
+# Listen for interactive-card callbacks; the schema documents reviewed fields while preserving extensions
+dws event consume user_card_action_triggered --flatten -f ndjson
+
 # Inspect local consumers and cancel a subscription
 dws event status
 dws event stop <subscribe_id>
 ```
+
+The structured interactive-card context is at `payload.body.actionData.context`. Join `questions[].id` to `answers[question_id]`, then resolve IDs in `selected` through the same question's `options[].id`; an empty `selected` is a valid no-selection state. JSON strings in `body.context` are compatibility fallbacks, and every payload level continues to preserve unknown fields.
 
 For one-to-one and specified-sender events, use exactly one target identity: `--user` for an internal `userId`, or `--open-dingtalk-id` for an `openDingtalkId`. The CLI does not infer or convert between these identity types.
 

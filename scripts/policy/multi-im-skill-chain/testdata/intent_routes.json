@@ -222,6 +222,17 @@
         "skills/multi/dingtalk-event/SKILL.md",
         "skills/multi/dingtalk-event/references/event-todo.md"
       ]
+    },
+    {
+      "id": "event.listen.card",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-card.md"
+      ]
     }
   ]
 }

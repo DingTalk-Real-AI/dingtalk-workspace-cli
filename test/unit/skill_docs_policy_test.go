@@ -118,14 +118,93 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 				t.Errorf("%s missing event contract %q", path, required)
 			}
 		}
+		retiredEventText := strings.ReplaceAll(text, "payload.body.actionData.context", "")
 		for _, retired := range []string{
 			"payload.body.",
 			"尚无稳定业务样本",
 			"暂无稳定 payload schema",
 		} {
-			if strings.Contains(text, retired) {
+			if strings.Contains(retiredEventText, retired) {
 				t.Errorf("%s still documents retired event path %q", path, retired)
 			}
+		}
+	}
+}
+
+func TestEventSkillDocumentsReviewedCardCallbackContract(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-card.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"user_card_action_triggered",
+			"payload.body.actionData.context",
+			"questions[].id",
+			"answers[question_id]",
+			"selected",
+			"operatorDTO.uid",
+			"triggerTimestamp",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing interactive-card contract %q", path, required)
+			}
+		}
+	}
+}
+
+func TestChatCardCallbackRoutesPersonalEventsToEventSkill(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "card", "callback.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "card", "schema.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-chat", "references", "contracts.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"dingtalk-event",
+			"dws event consume user_card_action_triggered --flatten -f ndjson",
+			"callback URL",
+			"验签",
+			"回复",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing card callback boundary %q", path, required)
+			}
+		}
+	}
+
+	callbackPath := paths[0]
+	content, err := os.ReadFile(callbackPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", callbackPath, err)
+	}
+	for _, forbidden := range []string{
+		"不把 `dws event consume` 当作卡片 callback 的替代",
+		"用户必须使用按钮交互时，停止并说明当前不支持",
+	} {
+		if strings.Contains(string(content), forbidden) {
+			t.Errorf("%s still rejects the supported personal-event route %q", callbackPath, forbidden)
 		}
 	}
 }
@@ -283,6 +362,7 @@ func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 			"审批实例发起/抄送/终止/完成",
 			"VoIP 通话邀请",
 			"待办创建/更新/删除",
+			"互动卡片回调",
 		} {
 			if !strings.Contains(frontmatter, required) {
 				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
@@ -308,8 +388,9 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"<!-- dws-intent: event.listen.im -->",
 		"<!-- dws-intent: event.listen.oa -->",
 		"<!-- dws-intent: event.listen.todo -->",
+		"<!-- dws-intent: event.listen.card -->",
 		"16 个 EventKey",
-		"27 个公开个人 EventKey",
+		"28 个公开个人 EventKey",
 	} {
 		if !strings.Contains(string(skillContent), required) {
 			t.Errorf("%s missing standalone event contract %q", skillPath, required)
@@ -325,6 +406,7 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"event-oa.md",
 		"event-voip.md",
 		"event-todo.md",
+		"event-card.md",
 	}
 	var combined strings.Builder
 	combined.Write(skillContent)
@@ -372,6 +454,7 @@ func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
 		"user_todo_task_create",
 		"user_todo_task_update",
 		"user_todo_task_delete",
+		"user_card_action_triggered",
 	}
 	for _, eventKey := range allEventKeys {
 		if !strings.Contains(combined.String(), eventKey) {
