@@ -49,16 +49,35 @@ func AIMessageTagFlag() Flag {
 // accessors below).
 func (rt *RuntimeContext) Command() *cobra.Command { return rt.cmd }
 
-// Str returns the trimmed string value of a flag, or "" if unset.
+// Str returns the trimmed string value of a flag, or "" if unset. A value
+// loaded from @file / stdin (FlagSpec.Input) is returned verbatim instead:
+// trimming a payload would corrupt byte-exact content such as a trailing
+// newline covered by a checksum. Inline values keep the historical trim.
 func (rt *RuntimeContext) Str(name string) string {
 	v, _ := rt.cmd.Flags().GetString(name)
+	if corecmd.InputResolvedFromSource(rt.cmd, name) {
+		return v
+	}
 	return strings.TrimSpace(v)
 }
 
+// InputResolvedFromSource reports whether the flag's value was loaded from
+// @file or stdin rather than typed inline. A guard applying shape heuristics to
+// inline values ("this looks like a path — did you forget the @?") must skip
+// resolved values, whose content may legitimately look like anything.
+func (rt *RuntimeContext) InputResolvedFromSource(name string) bool {
+	return corecmd.InputResolvedFromSource(rt.cmd, name)
+}
+
 // StrFirst returns the first non-empty string value across a primary flag and
-// its aliases.
+// its aliases. A source-loaded payload wins immediately even when empty: the
+// user pointed at that source explicitly, so falling through to an alias would
+// ship a value they did not ask for.
 func (rt *RuntimeContext) StrFirst(names ...string) string {
 	for _, name := range names {
+		if rt.InputResolvedFromSource(name) {
+			return rt.Str(name)
+		}
 		if v := rt.Str(name); v != "" {
 			return v
 		}
