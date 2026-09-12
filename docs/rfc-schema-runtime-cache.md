@@ -14,17 +14,17 @@
 
 - 编译期 / 发布期**不**生产、不嵌入 Schema identity（无 compile-time identity seal）。
 - 受支持端在安装或首次 `dws schema` 从本机 live declarations **生成本机 identity**，写入认证磁盘 cache；miss/损坏则 live assembly 并修复发布。
-- CLI 默认启用 `NoFlushWait`，退出不等待遥测投递。
+- 退出不等待遥测投递：命令进程不初始化遥测 SDK，完成事件经 10ms 有界管道交接给同二进制派生的分离 sender 进程；交接未完成即丢弃，末条事件可丢失。
 
 ## 1. 设计决策
 
-### 1.1 一个二进制、一个进程、一棵完整树
+### 1.1 一个二进制、一个命令进程、一棵完整树
 
 正式产品只有一个 `dws`。所有通过制品完整性预检的公开调用，包括 root help、version、Schema、utility、业务命令和 completion，都构造同一棵完整 Cobra 树，再由 Cobra 解析和分派。
 
 ```mermaid
 flowchart LR
-    W[可选 npm wrapper] --> D[单一 dws 进程]
+    W[可选 npm wrapper] --> D[dws 命令进程]
     D --> I[metadata preflight]
     I --> T[构造完整 Cobra runtime tree]
     T --> C[Cobra parse / Find]
@@ -34,10 +34,12 @@ flowchart LR
     H -->|utility / business| B[既有 handler / transport]
     S --> O[统一 output / cleanup]
     B --> O
-    O --> Q[telemetry enqueue，NoFlushWait 立即退出]
+    O --> Q[telemetry 10ms 有界交接后立即退出]
 ```
 
 root help 直接遍历刚构造完成的公开树 `T`。Schema cache 命中改变的是 `schema` handler 读取 typed catalog 的来源，不改变命令解析和执行路径。
+
+唯一的进程派生例外是遥测 sender：命令进程不初始化遥测 SDK，事件经 10ms 有界管道交给同一 `dws` 二进制以私有 argv `--_dws-telemetry-worker=1` 重新启动的分离短命 sender 进程（生命周期 6s、并发槽位 ≤8）。sender 在 Cobra 装配前处理且仅接受这一私有调用（单参数 + 具名管道 stdin 校验，见 `internal/telemetry.RunWorker`），不可能成为业务命令，因此不构成第二套公开运行时，也不属于按 argv 的产品树选择。
 
 明确禁止：
 
@@ -75,9 +77,9 @@ Schema 的唯一语义源是 declarations，经 `ResolveSchemaBuild` 生成 type
 - root help/version 不创建 Schema cache 文件；
 - 缓存命中和 live assembly 的 wire output 必须逐字节等价。
 
-### 1.4 Telemetry 退出等待：`NoFlushWait`（零等待）
+### 1.4 Telemetry 退出不等待：有界管道交接 + 分离 sender
 
-命令完成事件仍进入官方 SDK 的异步队列。CLI 默认设置 `NoFlushWait=true`，主进程在事件入队后立即返回，不等待 flush；末条事件在进程退出时基本会丢失。这是把命令退出延迟置于遥测投递之上的明确取舍。`FlushTimeout` 仍保留在 SDK `Config` 上（未设置时默认约 300ms），供接受有界 best-effort 等待的接入使用；本 CLI 默认路径不设置。可靠且不阻塞的投递需要另立持久 outbox RFC。
+命令进程完全不初始化遥测 SDK。完成事件 JSON（≤4096 字节，不含参数/stdout/cwd/凭据）经具名管道交接给同一 `dws` 二进制以私有 argv `--_dws-telemetry-worker=1` 启动的分离 sender 进程；交接预算 10ms（`handoffTimeout`），超时即关闭管道并终止 sender，事件丢弃。sender 侧硬生命周期 6s、并发槽位 ≤8（用户缓存目录文件锁），由官方 SDK 异步投递。末条事件因此可丢失（交接超时或 sender 崩溃均不重试）。这是把命令退出延迟置于遥测投递之上的明确取舍。`FlushTimeout` 仍保留在 SDK `Config` 上（未设置时默认约 300ms），供接受有界 best-effort 等待的接入使用；本 CLI 默认路径不触碰 SDK。可靠且不阻塞的投递需要另立持久 outbox RFC。
 
 本 RFC 不承诺 at-least-once。统一结果提交、output sink 关闭、stdio child 停止、audit drain、signal handler 卸载和 timing report 仍同步完成。
 
@@ -403,7 +405,7 @@ Windows（amd64/arm64）使用同一套 envelope / Publish / OpenRegistry / Open
 
 - 用户 cache：`os.UserCacheDir()`，即 `%LOCALAPPDATA%\dws\schema\<edition-sha256>\v1`。
 - 可选共享 cache：`%ProgramData%\dws`（再拼 `dws\schema\<edition-sha256>\v1`），仅安装器创建；运行时只读探测，缺失或不安全（不可信 owner / 普通用户可写 DACL）则回退用户 cache。
-- 安装器/测试可用 `DWS_SCHEMA_CACHE_DIR` 覆盖基目录（按共享 cache 语义打开）。
+- 环境变量同时选择路径与信任级别：`DWS_SCHEMA_CACHE_DIR`（安装器/测试覆盖）按共享 cache 语义打开、允许创建、打开失败直接报错不回退；`DWS_SCHEMA_CACHE_SHARED_DIR`（安装期自定义共享根）运行时只读探测（noCreate），失败静默回退到默认共享基目录，再回退用户 cache。两者打开成功后 cache 均标记为 shared，适用共享路径校验规则。
 - 安全近似：拒绝意外 reparse point；在打开的句柄上核验 owner+DACL（共享根、edition 目录、sidecar/shards/lock）。共享 ACL 允许 Builtin Users 读+遍历，Admins/SYSTEM（及安装者）保留写；个人 cache 仍为 owner+SYSTEM 的保护 DACL（`restrictOwnerWrite`）。安装器不得对不安全的 `%ProgramData%\dws` 盲目 `New-Item -Force`，应硬化或拒绝并回退 per-user cache。temp+rename 原子发布；读取仍用 ExpectedIdentity 与 SHA-256 pin 认证，篡改即 digest 失败。
 
 其他 os/arch 仍按 build tag 编译掉，保持 live-only。
@@ -514,7 +516,7 @@ Windows（amd64/arm64）使用同一套 envelope / Publish / OpenRegistry / Open
 | Schema | 发运不嵌入 compile-time identity；安装/首次 schema 在本机生成 identity 并写 cache；后续命中走认证 shards。cache-hit 数字可作本机参考，不是发布门禁 |
 | 业务命令 | dry-run、mock/get、config 的 p50/p95 相对固定 main 不回退 |
 | 正确性 | help bytes、flags、aliases、validation、Safety、Schema wire、输出和错误分类不变 |
-| 清理 | telemetry 退出零等待（CLI 默认 `NoFlushWait`，末条事件尽力而为）；业务 cleanup、signal 和退出码测试通过 |
+| 清理 | telemetry 退出不等待（命令进程 10ms 有界交接 + 分离 sender，末条事件可丢失）；业务 cleanup、signal 和退出码测试通过 |
 
 旧的 `launcher ≤ core +5%`、calendar ≤ full-tree 70%、config ≤ full-tree 10% 和 full/selective equivalence gate 全部废止，不得与本口径并存。旧 head 中 calendar 0.85 ms、config 0.36 ms、root help 比 Lxxx 软件慢 2.5% 等数字描述的是已删除的 selective tree / projection 结构，全部标记为历史结果，不能用于当前 Ready 结论。
 
@@ -571,7 +573,7 @@ root help 与 version 现在都构造完整 tree。帮助直接从同一 runtime
 | Linux/amd64 | 44.05 / 45.99 ms | 47.11 / 48.88 ms | 47.68 / 49.88 MiB | 42.85 / 43.35 MiB | wall 快 6.5%；RSS 高 11.3%，产品预算通过 |
 | Darwin/arm64 | 37.26 / 51.45 ms | 45.06 / 53.49 ms | 41.91 / 42.17 MiB | 44.43 / 44.91 MiB | wall 快 17.3%；RSS 低 5.7%，通过 |
 
-default tracker 相对固定 main 的 help/version p50/p95 gate 在两平台全部通过；`DO_NOT_TRACK` 与 default 的结果也证明退出不再等待约 300 ms 的网络 flush（该对比采集于有界 flush 默认时期；现行 `NoFlushWait` 零等待默认只会进一步降低退出等待，不改变 gate 结论）。help stdout 为 4,760 bytes，SHA-256 `590ebfc7d090cdfa81e63cfcf6f47727ad1f4ac5f0fc5451445e855ebcf497d0`，与父实现逐字节一致。
+default tracker 相对固定 main 的 help/version p50/p95 gate 在两平台全部通过；`DO_NOT_TRACK` 与 default 的结果也证明退出不再等待约 300 ms 的网络 flush（该对比采集于有界 flush 默认时期；现行的有界交接 + 分离 sender 默认只会进一步降低退出等待，不改变 gate 结论）。help stdout 为 4,760 bytes，SHA-256 `590ebfc7d090cdfa81e63cfcf6f47727ad1f4ac5f0fc5451445e855ebcf497d0`，与父实现逐字节一致。
 
 端到端业务/utility 的 native p50（wall / RSS）：
 
@@ -681,7 +683,7 @@ A 若将来采纳，必须先修订 AGENTS.md 与本 RFC，并新增生成物漂
 - [x] ContractFinal ownership transfer、build-only closure 清理、lazy Safety scanner 和低分配 string-slice builder 落地。
 - [x] 测试钉住 process invocation 总是包含完整产品面。
 - [x] 撤回 compile-time Schema identity 生产与发布封印；各端在安装/首次 schema 生成本机 identity 并写 cache。
-- [x] telemetry 默认启用 `NoFlushWait`，退出零等待、末条事件可丢失；`FlushTimeout` 仅作为 SDK 可选字段保留。
+- [x] telemetry 退出零等待：命令进程不初始化 SDK，事件经 10ms 有界交接给分离 sender，末条事件可丢失；`FlushTimeout` 仅作为 SDK 可选字段保留。
 - [x] 完整树 B/op 和 allocs/op 达到本地父提交门槛（−22.8% / −9.8%）。
 - [x] 两平台完整测试与 race 通过（head `a8376f92`，run `34080469082`）。
 - [x] 两平台固定 main 性能矩阵通过；root help p50/p95 均低于 50/55 MiB，且相对 main 降低。
@@ -691,4 +693,4 @@ A 若将来采纳，必须先修订 AGENTS.md 与本 RFC，并新增生成物漂
 
 ## 10. 回滚
 
-完整树优化按独立提交回滚，不改变 Schema/Safety 的权威源。生产不依赖 compile-time identity；本机生成的 identity 只命中同一二进制指纹下的 cache。telemetry 默认启用 `NoFlushWait`，退出零等待、末条事件基本会丢失；若需有界 best-effort 等待，可改用 SDK `FlushTimeout`（未设置时默认约 300ms）。可靠且不阻塞的投递需要另立持久 outbox RFC。
+完整树优化按独立提交回滚，不改变 Schema/Safety 的权威源。生产不依赖 compile-time identity；本机生成的 identity 只命中同一二进制指纹下的 cache。telemetry 退出零等待：命令进程不初始化 SDK，事件经 10ms 有界交接给分离 sender，末条事件基本会丢失；若需有界 best-effort 等待，可改用 SDK `FlushTimeout`（未设置时默认约 300ms）。可靠且不阻塞的投递需要另立持久 outbox RFC。
