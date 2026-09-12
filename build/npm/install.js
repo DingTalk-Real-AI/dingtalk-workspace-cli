@@ -28,7 +28,7 @@ const UPSTREAM_AGENTS = [
   ["cortex", false, ".snowflake/cortex/skills"], ["crush", false, ".config/crush/skills"],
   ["cursor", true, ".cursor/skills"], ["deepagents", true, ".deepagents/agent/skills"],
   ["devin", false, ".config/devin/skills"], ["dexto", true, ".agents/skills"],
-  ["droid", false, ".factory/skills"], ["eve", false, null],
+  ["dsh", false, ".dsh/skills"], ["droid", false, ".factory/skills"], ["eve", false, null],
   ["firebender", true, ".firebender/skills"], ["forgecode", false, ".forge/skills"],
   ["gemini-cli", true, ".gemini/skills"], ["github-copilot", true, ".copilot/skills"],
   ["goose", false, ".config/goose/skills"], ["grok", false, ".grok/skills"],

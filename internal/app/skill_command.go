@@ -156,6 +156,7 @@ var agentSkillPaths = map[string]string{
 	"cortex":         ".snowflake/cortex/skills",
 	"crush":          filepath.Join(".config", "crush", "skills"),
 	"devin":          filepath.Join(".config", "devin", "skills"),
+	"dsh":            ".dsh/skills",
 	"droid":          ".factory/skills",
 	"forgecode":      ".forge/skills",
 	"goose":          filepath.Join(".config", "goose", "skills"),

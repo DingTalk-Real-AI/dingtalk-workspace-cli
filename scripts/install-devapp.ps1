@@ -33,7 +33,7 @@ $AgentRegistryRows = @(
     "codemaker|0|.codemaker\skills", "codestudio|0|.codestudio\skills", "codex|1|.codex\skills",
     "command-code|0|.commandcode\skills", "continue|0|.continue\skills", "cortex|0|.snowflake\cortex\skills",
     "crush|0|.config\crush\skills", "cursor|1|.cursor\skills", "deepagents|1|.deepagents\agent\skills",
-    "devin|0|.config\devin\skills", "dexto|1|.agents\skills", "droid|0|.factory\skills", "eve|0|-",
+    "devin|0|.config\devin\skills", "dexto|1|.agents\skills", "dsh|0|.dsh\skills", "droid|0|.factory\skills", "eve|0|-",
     "firebender|1|.firebender\skills", "forgecode|0|.forge\skills", "gemini-cli|1|.gemini\skills",
     "github-copilot|1|.copilot\skills", "goose|0|.config\goose\skills", "grok|0|.grok\skills",
     "hermes-agent|0|.hermes\skills", "inference-sh|0|.inferencesh\skills", "jazz|0|.jazz\skills",
