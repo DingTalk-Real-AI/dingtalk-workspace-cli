@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-func TestTimingCollector_Basic(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorBasic(t *testing.T) {
 	tc := NewTimingCollector()
 	if tc == nil {
 		t.Fatal("NewTimingCollector returned nil")
@@ -48,7 +48,7 @@ func TestTimingCollector_Basic(t *testing.T) {
 	}
 }
 
-func TestTimingCollector_StartTimer(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorStartTimer(t *testing.T) {
 	tc := NewTimingCollector()
 
 	stop := tc.StartTimer("timed_op")
@@ -67,7 +67,7 @@ func TestTimingCollector_StartTimer(t *testing.T) {
 	}
 }
 
-func TestTimingCollector_NilSafe(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorNilSafe(t *testing.T) {
 	var tc *TimingCollector
 
 	// Should not panic on nil collector
@@ -80,7 +80,7 @@ func TestTimingCollector_NilSafe(t *testing.T) {
 	tc.PrintIfEnabled()
 }
 
-func TestTimingCollector_Print(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorPrint(t *testing.T) {
 	tc := NewTimingCollector()
 	tc.Record("auth_token", 44*time.Millisecond)
 	tc.Record("mcp_call", 150*time.Millisecond)
@@ -103,7 +103,7 @@ func TestTimingCollector_Print(t *testing.T) {
 	}
 }
 
-func TestTimingCollector_PrintIfEnabled(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorPrintIfEnabled(t *testing.T) {
 	// Set environment variable
 	os.Setenv(PerfDebugEnv, "1")
 	defer os.Unsetenv(PerfDebugEnv)
@@ -115,7 +115,7 @@ func TestTimingCollector_PrintIfEnabled(t *testing.T) {
 	tc.PrintIfEnabled()
 }
 
-func TestTimingCollector_ContextIntegration(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorContextIntegration(t *testing.T) {
 	tc := NewTimingCollector()
 	ctx := WithTimingCollector(context.Background(), tc)
 
@@ -137,7 +137,7 @@ func TestTimingCollector_ContextIntegration(t *testing.T) {
 	}
 }
 
-func TestTimingCollectorFromContext_NilContext(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorFromContextNilContext(t *testing.T) {
 	//lint:ignore SA1012 Testing explicit nil-context guard in TimingCollectorFromContext.
 	tc := TimingCollectorFromContext(nil)
 	if tc != nil {
@@ -145,21 +145,21 @@ func TestTimingCollectorFromContext_NilContext(t *testing.T) {
 	}
 }
 
-func TestTimingCollectorFromContext_NoCollector(t *testing.T) {
+func TestCrossPlatformCoverageTimingCollectorFromContextNoCollector(t *testing.T) {
 	tc := TimingCollectorFromContext(context.Background())
 	if tc != nil {
 		t.Error("TimingCollectorFromContext with no collector should return nil")
 	}
 }
 
-func TestStartTiming_NoCollector(t *testing.T) {
+func TestCrossPlatformCoverageStartTimingNoCollector(t *testing.T) {
 	ctx := context.Background()
 	stop := StartTiming(ctx, "no_collector")
 	// Should not panic
 	stop()
 }
 
-func TestIsPerfDebugEnabled(t *testing.T) {
+func TestCrossPlatformCoverageIsPerfDebugEnabled(t *testing.T) {
 	// Clear the env var first
 	os.Unsetenv(PerfDebugEnv)
 
@@ -177,7 +177,7 @@ func TestIsPerfDebugEnabled(t *testing.T) {
 
 // ── PerfReport tests ────────────────────────────────────────────────────
 
-func TestBuildReport(t *testing.T) {
+func TestCrossPlatformCoverageBuildReport(t *testing.T) {
 	tc := NewTimingCollector()
 	tc.Record("cmd_init", 45*time.Millisecond)
 	tc.Record("auth_keychain", 72*time.Millisecond)
@@ -214,7 +214,24 @@ func TestBuildReport(t *testing.T) {
 	}
 }
 
-func TestBuildReportEmpty(t *testing.T) {
+func TestCrossPlatformCoverageBuildReportDoesNotDoubleCountNestedPhases(t *testing.T) {
+	tc := NewTimingCollector()
+	tc.Record("cmd_init", 40*time.Millisecond)
+	tc.RecordNested("product_assemble", 25*time.Millisecond)
+	// Make Total deterministic enough for this accounting assertion without
+	// depending on wall-clock sleeps.
+	tc.start = time.Now().Add(-100 * time.Millisecond)
+
+	report := tc.BuildReport("dev", "dws calendar book list")
+	if len(report.Phases) != 2 || !report.Phases[1].Nested {
+		t.Fatalf("nested phase was not preserved: %+v", report.Phases)
+	}
+	if report.OverheadMs < 55 || report.OverheadMs > report.TotalMs {
+		t.Fatalf("overhead_ms = %d, want nested duration excluded from the total", report.OverheadMs)
+	}
+}
+
+func TestCrossPlatformCoverageBuildReportEmpty(t *testing.T) {
 	tc := NewTimingCollector()
 	report := tc.BuildReport("dev", "dws version")
 
@@ -226,7 +243,7 @@ func TestBuildReportEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildReportJSON(t *testing.T) {
+func TestCrossPlatformCoverageBuildReportJSON(t *testing.T) {
 	tc := NewTimingCollector()
 	tc.Record("cmd_init", 10*time.Millisecond)
 
@@ -249,7 +266,7 @@ func TestBuildReportJSON(t *testing.T) {
 	}
 }
 
-func TestWriteReportIfEnabled(t *testing.T) {
+func TestCrossPlatformCoverageWriteReportIfEnabled(t *testing.T) {
 	dir := t.TempDir()
 	reportPath := filepath.Join(dir, "report.json")
 
@@ -278,7 +295,7 @@ func TestWriteReportIfEnabled(t *testing.T) {
 	}
 }
 
-func TestWriteReportIfEnabled_Auto(t *testing.T) {
+func TestCrossPlatformCoverageWriteReportIfEnabledAuto(t *testing.T) {
 	tmpHome := t.TempDir()
 	expected := filepath.Join(tmpHome, ".dws", "perf", "latest.json")
 
@@ -296,7 +313,7 @@ func TestWriteReportIfEnabled_Auto(t *testing.T) {
 	}
 }
 
-func TestWriteReportIfEnabled_Disabled(t *testing.T) {
+func TestCrossPlatformCoverageWriteReportIfEnabledDisabled(t *testing.T) {
 	t.Setenv(PerfReportEnv, "")
 
 	tc := NewTimingCollector()
@@ -305,13 +322,13 @@ func TestWriteReportIfEnabled_Disabled(t *testing.T) {
 	// No file should be written; no error expected
 }
 
-func TestWriteReportIfEnabled_NilCollector(t *testing.T) {
+func TestCrossPlatformCoverageWriteReportIfEnabledNilCollector(t *testing.T) {
 	t.Setenv(PerfReportEnv, "/tmp/should-not-exist.json")
 	var tc *TimingCollector
 	tc.WriteReportIfEnabled("v1.0.0", "dws version")
 }
 
-func TestLoadLatestReport(t *testing.T) {
+func TestCrossPlatformCoverageLoadLatestReport(t *testing.T) {
 	tmpHome := t.TempDir()
 	originalHome := timingUserHomeDir
 	timingUserHomeDir = func() (string, error) { return tmpHome, nil }
@@ -349,7 +366,7 @@ func TestLoadLatestReport(t *testing.T) {
 	}
 }
 
-func TestLoadLatestReport_NotFound(t *testing.T) {
+func TestCrossPlatformCoverageLoadLatestReportNotFound(t *testing.T) {
 	tmpHome := t.TempDir()
 	originalHome := timingUserHomeDir
 	timingUserHomeDir = func() (string, error) { return tmpHome, nil }
@@ -361,7 +378,7 @@ func TestLoadLatestReport_NotFound(t *testing.T) {
 	}
 }
 
-func TestSanitizeCommand(t *testing.T) {
+func TestCrossPlatformCoverageSanitizeCommand(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -409,7 +426,7 @@ func TestSanitizeCommand(t *testing.T) {
 	}
 }
 
-func TestResolvePerfReportPath_Auto(t *testing.T) {
+func TestCrossPlatformCoverageResolvePerfReportPathAuto(t *testing.T) {
 	p := resolvePerfReportPath("auto")
 	if p == "" {
 		t.Skip("HOME not available")
@@ -419,14 +436,14 @@ func TestResolvePerfReportPath_Auto(t *testing.T) {
 	}
 }
 
-func TestResolvePerfReportPath_Custom(t *testing.T) {
+func TestCrossPlatformCoverageResolvePerfReportPathCustom(t *testing.T) {
 	p := resolvePerfReportPath("/tmp/my-report.json")
 	if p != "/tmp/my-report.json" {
 		t.Errorf("expected '/tmp/my-report.json', got %q", p)
 	}
 }
 
-func TestPrintPerfReportSummary(t *testing.T) {
+func TestCrossPlatformCoveragePrintPerfReportSummary(t *testing.T) {
 	report := &PerfReport{
 		Command:    "dws version",
 		Timestamp:  time.Now(),

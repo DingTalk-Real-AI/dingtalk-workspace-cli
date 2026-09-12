@@ -40,6 +40,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -55,7 +56,7 @@ type outputFileContextKey struct{}
 var (
 	rootNormalizeProcessProfileArgs = normalizeProcessProfileArgs
 	rootExecuteCommand              = (*cobra.Command).ExecuteC
-	rootNewRootCommandWithEngine    = NewRootCommandWithEngine
+	rootNewRootCommandWithEngine    = newProcessRootCommandWithEngine
 	rootRunPreParse                 = pipeline.RunPreParse
 	rootStopAllStdioClients         = StopAllStdioClients
 	rootLoadPlugins                 = loadPlugins
@@ -79,6 +80,7 @@ var (
 	rootPluginLoadHooks             = (*plugin.Plugin).LoadHooks
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
+	rootPluginResolveIdentity       = profilemetadata.ResolveReadOnly
 	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
 	rootEmitResult                  = output.EmitResult
 	rootInstallProcessSignalContext = installProcessSignalContext
@@ -148,7 +150,6 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			}
 		}
 	}()
-
 	restoreArgs := rootNormalizeProcessProfileArgs()
 	defer restoreArgs()
 
@@ -166,9 +167,11 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 
 	timing := NewTimingCollector()
 	defer func() {
+		cleanupStart := time.Now()
 		rootStopAllStdioClients() // Ensure child processes are terminated on exit
 		CloseAuditSink()          // Drain async audit forwards on all exit paths,
 		// including command errors where Cobra skips PersistentPostRunE.
+		timing.Record("business_cleanup", time.Since(cleanupStart))
 		timing.PrintIfEnabled()
 		timing.WriteReportIfEnabled(RawVersion(), SanitizeCommand(os.Args))
 	}()
@@ -191,9 +194,12 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	// Run PreParse handlers on raw argv before Cobra parses flags.
 	// This corrects model-generated errors like --userId → --user-id
 	// and --limit100 → --limit 100.
-	if err := rootRunPreParse(root, engine); err != nil {
+	preParseStart := time.Now()
+	preParseErr := rootRunPreParse(root, engine)
+	timing.Record("preparse", time.Since(preParseStart))
+	if err := preParseErr; err != nil {
 		err = newPreParseValidationError(err)
-		if interrupted, _ := signalState.outcome(); interrupted != nil {
+		if interrupted, _ := signalState.Outcome(); interrupted != nil {
 			err = interrupted
 		}
 		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
@@ -213,7 +219,9 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 	commandPath = telemetryCommandPathForArgs(root, os.Args[1:])
 
 	var err error
+	executeStart := time.Now()
 	executed, err = rootExecuteCommand(root)
+	timing.Record("command_execute", time.Since(executeStart))
 	if executed != nil {
 		commandPath = telemetryCommandPath(executed)
 	}
@@ -230,7 +238,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 			fmt.Fprintf(executed.ErrOrStderr(), "Warning: abort output sink after command failure: %v\n", abortErr)
 		}
 	}
-	interrupted, primaryCompletedBeforeSignal := signalState.outcome()
+	interrupted, primaryCompletedBeforeSignal := signalState.Outcome()
 	if interrupted != nil && !primaryCompletedBeforeSignal {
 		if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 			var publicationErr *outputPublicationError
@@ -255,7 +263,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 		}
 		var publicationErr *outputPublicationError
 		if err == nil || !stderrors.As(err, &publicationErr) {
-			err = interrupted.withCancellationDetail(err)
+			err = interrupted.WithCancellationDetail(err)
 		}
 	}
 	if err != nil {
@@ -779,8 +787,9 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 // used as the Schema assembly source root (RegisterSchemaSourceRoot →
 // ResolveSchemaBuild) and by command-surface policy. Installed plugins and
 // user-defined shortcuts must not change the reviewed Schema surface.
-// declarationOnly skips injectStaticServers / helpers.InitDeps so Schema
-// assembly cannot clobber a live process's ToolCaller or plugin endpoints.
+// declarationOnly skips runtime profile selection, injectStaticServers and
+// helpers.InitDeps so Schema assembly cannot clobber a live process's profile,
+// ToolCaller or plugin endpoints.
 func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
 	var rootCtx context.Context
 	if len(ctx) > 0 && ctx[0] != nil {
@@ -796,6 +805,12 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 	registerSchemaRuntimeDelivery()
 	rootCtx, _ = output.WithResultStore(rootCtx)
 	return newRootCommandWithEngine(rootCtx, engine, true, false)
+}
+
+func newProcessRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
+	registerSchemaRuntimeDelivery()
+	rootCtx, _ = output.WithResultStore(rootCtx)
+	return newRootCommandWithMode(rootCtx, engine, true, false, false)
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
@@ -938,7 +953,9 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		rootCtx = context.Background()
 	}
 	flags := &GlobalFlags{}
-	authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
+	if !declarationOnly {
+		authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
+	}
 	runner := rootNewCommandRunnerWithFlags(flags)
 	if snapshot, ok := agentMetadataSnapshotFromContext(rootCtx); ok {
 		if runtime, ok := runner.(*runtimeRunner); ok {
@@ -1099,7 +1116,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	}
 
 	bindPersistentFlags(root, flags)
-
 	schemaCmd := cli.NewSchemaCommand()
 	mcpCmd := cli.NewMCPCommand()
 	// Wrap the caller so every MCP tool call's shape is recorded to the local
@@ -1173,8 +1189,11 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// Resolve plugins only after the complete distribution command tree is
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
+		pluginStart := time.Now()
 		pluginCmds := rootLoadPlugins(root, engine, runner)
+		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
 		if len(pluginCmds) > 0 {
+			cli.MarkSchemaCacheRuntimeUncertain()
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}
@@ -1870,15 +1889,20 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// precedence (InjectPluginConfigEnv skips already-set keys).
 	rootPluginInjectConfigEnv(pluginLoader)
 
-	// Load TokenData once; reused for stdio injection below.
-	tokenData, _ := rootAuthLoadTokenData(defaultConfigDir())
+	// Resolve the plugin user identity from the profile metadata file only.
+	// Plugin stdio servers need UserID/CorpID as environment identity — never
+	// the access token — and both live in profiles.json, so the keychain-
+	// encrypted token (a ~300ms synchronous security-CLI spawn per
+	// invocation on macOS) is not read during command-tree construction.
+	// The same file-only read is already the telemetry identity pattern.
 	var userCtx *plugin.UserContext
-	if tokenData != nil {
-		// Inject user context if either UserID or CorpID is present.
-		if tokenData.UserID != "" || tokenData.CorpID != "" {
+	if profile, err := rootPluginResolveIdentity(defaultConfigDir(), ""); err == nil && profile != nil {
+		userID := strings.TrimSpace(profile.UserID)
+		corpID := strings.TrimSpace(profile.CorpID)
+		if userID != "" || corpID != "" {
 			userCtx = &plugin.UserContext{
-				UserID: tokenData.UserID,
-				CorpID: tokenData.CorpID,
+				UserID: userID,
+				CorpID: corpID,
 			}
 		}
 	}
@@ -1897,7 +1921,7 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// 3. Resolve every descriptor once, then choose identity winners before
 	// mutating endpoint, auth, or stdio-client registries. This keeps the
 	// visible command and its transport owned by the same plugin.
-	candidates := collectPluginServerCandidates(allPlugins, userCtx)
+	candidates := collectPluginServerCandidates(allPlugins, func() *plugin.UserContext { return userCtx })
 	accepted := selectPluginServerCandidates(root, candidates)
 	for _, candidate := range accepted {
 		if candidate.stdioClient != nil {
@@ -1962,7 +1986,7 @@ func sortPluginsForRegistration(plugins []*plugin.Plugin) {
 
 func collectPluginServerCandidates(
 	plugins []*plugin.Plugin,
-	userCtx *plugin.UserContext,
+	userCtxFn func() *plugin.UserContext,
 ) []pluginServerCandidate {
 	var candidates []pluginServerCandidate
 	for order, owner := range plugins {
@@ -1973,7 +1997,8 @@ func collectPluginServerCandidates(
 				descriptor: descriptor,
 			})
 		}
-		for _, stdioClient := range rootPluginStdioClients(owner, userCtx) {
+		stdioUserCtx := userCtxFn()
+		for _, stdioClient := range rootPluginStdioClients(owner, stdioUserCtx) {
 			descriptor, ok := rootPluginStdioDescriptor(owner, stdioClient)
 			if !ok {
 				continue

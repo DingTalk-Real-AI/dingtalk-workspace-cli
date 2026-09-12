@@ -477,7 +477,11 @@ func shortcutCommandResult(payload any, options ...output.ResultOption) output.C
 // path. FromShortcut expands the legacy Risk only when Safety is absent; when
 // Safety is explicit the same value drives both ConfirmSafety and ContractFinal.
 func mount(s Shortcut) *cobra.Command {
-	cmd := corecmd.New(FromShortcut(s))
+	return mountRegistered(&s)
+}
+
+func mountRegistered(s *Shortcut) *cobra.Command {
+	cmd := corecmd.New(fromShortcut(s))
 	// Preserve the historical Shortcut help surface: Tips, rather than Agent
 	// selection examples, own cobra's Example block. The Schema declaration still
 	// carries its reviewed examples in ContractFinal.

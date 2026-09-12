@@ -294,9 +294,10 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	// Display the same snapshot used for browser authorization, including when
 	// browser launch is disabled. Keep the server response intact for polling.
 	snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
+	trustedHosts := TrustedLoginHostsForRegion(p.LoginRegion)
 	displayAuth := *authResp
-	displayAuth.VerificationURI, _ = snapshot.AttachToURL(authResp.VerificationURI)
-	displayAuth.VerificationURIComplete, _ = snapshot.AttachToURL(authResp.VerificationURIComplete)
+	displayAuth.VerificationURI, _ = snapshot.AttachToURL(authResp.VerificationURI, trustedHosts)
+	displayAuth.VerificationURIComplete, _ = snapshot.AttachToURL(authResp.VerificationURIComplete, trustedHosts)
 	dfPrintDeviceAuthorization(p.output(), &displayAuth)
 
 	if displayAuth.VerificationURIComplete != "" && !p.NoBrowser {

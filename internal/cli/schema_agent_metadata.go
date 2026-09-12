@@ -159,36 +159,6 @@ func emptyAgentMetadata() agentMetadata {
 	}
 }
 
-func cloneFieldProvenance(source map[string]contract.FieldProvenance) map[string]contract.FieldProvenance {
-	if len(source) == 0 {
-		return nil
-	}
-	out := make(map[string]contract.FieldProvenance, len(source))
-	for field, provenance := range source {
-		provenance.Value = append(json.RawMessage(nil), provenance.Value...)
-		provenance.Candidates = cloneFieldCandidates(provenance.Candidates)
-		provenance.OverriddenCandidates = cloneFieldCandidates(provenance.OverriddenCandidates)
-		out[field] = provenance
-	}
-	return out
-}
-
-func cloneFieldCandidates(source []contract.FieldCandidateProvenance) []contract.FieldCandidateProvenance {
-	if len(source) == 0 {
-		return nil
-	}
-	out := make([]contract.FieldCandidateProvenance, len(source))
-	for index, candidate := range source {
-		candidate.Value = append(json.RawMessage(nil), candidate.Value...)
-		if candidate.Selected != nil {
-			value := *candidate.Selected
-			candidate.Selected = &value
-		}
-		out[index] = candidate
-	}
-	return out
-}
-
 // agentMetadataSummaryFromProducts publishes Catalog-level Agent coverage from
 // the assembled Schema surface (ContractFinal / ProductDecl). This keeps
 // runtime delivery and CI dumps hash-aligned without requiring build-time

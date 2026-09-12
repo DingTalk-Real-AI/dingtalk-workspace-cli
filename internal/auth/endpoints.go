@@ -14,6 +14,7 @@
 package auth
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,6 +135,33 @@ const (
 
 func (r LoginRegion) IsInternational() bool {
 	return r == LoginRegionInternational
+}
+
+// TrustedLoginHostsForRegion returns the HTTPS hostnames that may receive the
+// private runtime login query for this region. The list is derived from the
+// same Authorize and device-login bases the region already uses, including a
+// process-local LoginBaseURLOverride when set.
+func TrustedLoginHostsForRegion(region LoginRegion) []string {
+	seen := make(map[string]struct{}, 2)
+	var hosts []string
+	add := func(raw string) {
+		parsed, err := url.Parse(raw)
+		if err != nil || !strings.EqualFold(parsed.Scheme, "https") {
+			return
+		}
+		host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+		if host == "" {
+			return
+		}
+		if _, ok := seen[host]; ok {
+			return
+		}
+		seen[host] = struct{}{}
+		hosts = append(hosts, host)
+	}
+	add(AuthorizeURLForLoginRegion(region))
+	add(DeviceBaseURLForLoginRegion(region))
+	return hosts
 }
 
 func AuthorizeURLForLoginRegion(region LoginRegion) string {

@@ -134,8 +134,8 @@ func TestCrossPlatformCoverageDeviceRuntimeURLRetrySnapshot(t *testing.T) {
 						}
 						return nil, errors.New("invalid_grant")
 					})
-					manualURL, _ := snapshot.AttachToURL(links.base)
-					completeURL, attached := snapshot.AttachToURL(links.complete)
+					var manualURL, completeURL string
+					var attached bool
 					opens := 0
 					testseam.Swap(t, &deviceOpenBrowser, func(got string) error {
 						opens++
@@ -161,6 +161,9 @@ func TestCrossPlatformCoverageDeviceRuntimeURLRetrySnapshot(t *testing.T) {
 					p := NewDeviceFlowProvider(t.TempDir(), slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 					p.Output = &output
 					p.NoBrowser = noBrowser
+					trusted := TrustedLoginHostsForRegion(p.LoginRegion)
+					manualURL, _ = snapshot.AttachToURL(links.base, trusted)
+					completeURL, attached = snapshot.AttachToURL(links.complete, trusted)
 					if _, err := p.Login(context.Background()); err == nil || !isInvalidGrantError(err) {
 						t.Fatal("unexpected retry outcome")
 					}
@@ -193,5 +196,111 @@ func assertAuthRuntimeValueAbsent(t *testing.T, text, secret string) {
 	t.Helper()
 	if strings.Contains(text, secret) || strings.Contains(text, url.QueryEscape(secret)) || strings.Contains(text, "callerUmt") {
 		t.Fatal("runtime value escaped the authorized manual links")
+	}
+}
+
+func TestCrossPlatformCoverageDeviceRuntimeURLUntrustedHostKeepsOriginal(t *testing.T) {
+	for _, state := range []runtimecontext.State{runtimecontext.StateReady, runtimecontext.StateTimeout, runtimecontext.StateError} {
+		t.Run(string(state), func(t *testing.T) {
+			isolateOAuthPersistence(t)
+			SetClientID("")
+			SetClientSecret("")
+			resetClientIDFromMCP()
+			t.Cleanup(func() { SetClientID(""); SetClientSecret(""); resetClientIDFromMCP() })
+			secret := "private-device+context/&="
+			snapshot := runtimecontext.Result{State: state}
+			if state == runtimecontext.StateReady {
+				snapshot = runtimecontext.ReadyResultForTest(secret)
+			}
+			resolutions := 0
+			testseam.Swap(t, &resolveAuthRuntimeContext, func() runtimecontext.Result { resolutions++; return snapshot })
+			testseam.Swap(t, &deviceFetchClientID, func(context.Context) (string, error) { return "client", nil })
+			raw := "https://example.test/verify?user_code=ABCD#section"
+			response := &DeviceAuthResponse{VerificationURIComplete: raw, VerificationURI: "https://example.test/verify", UserCode: "ABCD", Interval: 1}
+			testseam.Swap(t, &deviceRequestCode, func(*DeviceFlowProvider, context.Context) (*DeviceAuthResponse, error) { return response, nil })
+			testseam.Swap(t, &deviceWaitAuth, func(_ *DeviceFlowProvider, _ context.Context, got *DeviceAuthResponse) (*DeviceTokenResponse, error) {
+				if got.VerificationURIComplete != raw {
+					t.Fatal("server response mutated")
+				}
+				return nil, errors.New("invalid_grant")
+			})
+			opens := 0
+			testseam.Swap(t, &deviceOpenBrowser, func(got string) error {
+				opens++
+				parsed, err := url.Parse(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				q := parsed.Query()
+				if q.Get("user_code") != "ABCD" || parsed.Fragment != "section" {
+					t.Fatal("verification URL changed")
+				}
+				if got != raw || q.Has("callerUmt") || q.Has("caller") {
+					t.Fatal("untrusted verification host must keep the original URL")
+				}
+				return errors.New(got)
+			})
+			var output bytes.Buffer
+			p := NewDeviceFlowProvider(t.TempDir(), slog.New(slog.NewTextHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			p.Output = &output
+			if _, err := p.Login(context.Background()); err == nil || !isInvalidGrantError(err) {
+				t.Fatal("unexpected retry outcome")
+			}
+			if opens != 3 || resolutions != 1 {
+				t.Fatalf("opens=%d resolutions=%d", opens, resolutions)
+			}
+			if strings.Contains(output.String(), secret) || strings.Contains(output.String(), url.QueryEscape(secret)) || strings.Contains(output.String(), "callerUmt") {
+				t.Fatal("device value leaked")
+			}
+			if !strings.Contains(output.String(), raw) {
+				t.Fatal("original manual URL missing")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDeviceRuntimeURLAttachesOnTrustedHost(t *testing.T) {
+	isolateOAuthPersistence(t)
+	SetClientID("")
+	SetClientSecret("")
+	resetClientIDFromMCP()
+	t.Cleanup(func() { SetClientID(""); SetClientSecret(""); resetClientIDFromMCP() })
+	secret := "private-device+trusted/&="
+	snapshot := runtimecontext.ReadyResultForTest(secret)
+	testseam.Swap(t, &resolveAuthRuntimeContext, func() runtimecontext.Result { return snapshot })
+	testseam.Swap(t, &deviceFetchClientID, func(context.Context) (string, error) { return "client", nil })
+	raw := "https://login.dingtalk.com/oauth2/device/verify?user_code=ABCD#section"
+	response := &DeviceAuthResponse{VerificationURIComplete: raw, VerificationURI: "https://login.dingtalk.com/oauth2/device/verify", UserCode: "ABCD", Interval: 1}
+	testseam.Swap(t, &deviceRequestCode, func(*DeviceFlowProvider, context.Context) (*DeviceAuthResponse, error) { return response, nil })
+	testseam.Swap(t, &deviceWaitAuth, func(*DeviceFlowProvider, context.Context, *DeviceAuthResponse) (*DeviceTokenResponse, error) {
+		return nil, errors.New("invalid_grant")
+	})
+	opens := 0
+	testseam.Swap(t, &deviceOpenBrowser, func(got string) error {
+		opens++
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := parsed.Query()
+		if q.Get("user_code") != "ABCD" || parsed.Fragment != "section" || q.Get("callerUmt") != secret || q.Get("caller") != "dws" {
+			t.Fatalf("trusted host did not attach runtime context: %s", got)
+		}
+		return errors.New(got)
+	})
+	var output, logs bytes.Buffer
+	p := NewDeviceFlowProvider(t.TempDir(), slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	p.Output = &output
+	if _, err := p.Login(context.Background()); err == nil || !isInvalidGrantError(err) {
+		t.Fatal("unexpected retry outcome")
+	}
+	if opens != 3 {
+		t.Fatalf("opens=%d", opens)
+	}
+	if !strings.Contains(output.String(), "callerUmt="+url.QueryEscape(secret)) {
+		t.Fatal("trusted manual device URL missing attached runtime context")
+	}
+	if strings.Contains(logs.String(), secret) || strings.Contains(logs.String(), url.QueryEscape(secret)) {
+		t.Fatal("device value leaked into logs")
 	}
 }

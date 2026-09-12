@@ -555,6 +555,22 @@ func TestCrossPlatformCoverageLoginRegionEndpointDefaults(t *testing.T) {
 	if got := DeviceBaseURLForLoginRegion(LoginRegionInternational); got != InternationalDeviceBaseURL {
 		t.Fatalf("international device base URL = %q, want %q", got, InternationalDeviceBaseURL)
 	}
+	if hosts := TrustedLoginHostsForRegion(LoginRegionDefault); len(hosts) != 1 || hosts[0] != "login.dingtalk.com" {
+		t.Fatalf("default trusted login hosts = %v", hosts)
+	}
+	restoreHTTP := PushLoginBaseURLOverride("http://login.example.test/")
+	if hosts := TrustedLoginHostsForRegion(LoginRegionDefault); len(hosts) != 0 {
+		t.Fatalf("non-https override hosts = %v", hosts)
+	}
+	restoreHTTP()
+	restoreEmpty := PushLoginBaseURLOverride("https://")
+	if hosts := TrustedLoginHostsForRegion(LoginRegionDefault); len(hosts) != 0 {
+		t.Fatalf("empty-host override hosts = %v", hosts)
+	}
+	restoreEmpty()
+	if hosts := TrustedLoginHostsForRegion(LoginRegionInternational); len(hosts) != 1 || hosts[0] != "login.dingtalk.io" {
+		t.Fatalf("international trusted login hosts = %v", hosts)
+	}
 }
 
 func TestCrossPlatformCoverageOAuthProviderLoginRegionHelpers(t *testing.T) {
@@ -601,6 +617,15 @@ func TestCrossPlatformCoverageLoginBaseURLOverrideAffectsInternationalRegion(t *
 	}
 	if got := UserAccessTokenURLForLoginRegion(LoginRegionInternational); got != "https://pre-login.dingtalk.io/v1.0/oauth2/userAccessToken" {
 		t.Fatalf("international user access token URL = %q, want override", got)
+	}
+	if hosts := TrustedLoginHostsForRegion(LoginRegionInternational); len(hosts) != 1 || hosts[0] != "pre-login.dingtalk.io" {
+		t.Fatalf("international override trusted login hosts = %v", hosts)
+	}
+}
+
+func TestCrossPlatformCoverageProfileIdentityKey(t *testing.T) {
+	if got := profileIdentityKey("corp", "user"); got == "" {
+		t.Fatal("empty identity key")
 	}
 }
 

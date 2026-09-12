@@ -54,7 +54,7 @@ func ValidateSchemaDeliveryInvariants(source SchemaRegistry, snapshot SchemaCata
 // typed comparison below is still required because it catches a serializer
 // that consistently omits the same field from every raw view.
 func schemaSourceSnapshotInvariantErrors(source SchemaRegistry, snapshot SchemaCatalogSnapshot) []string {
-	expected, err := source.ToSnapshotPayload()
+	expected, err := schemaSnapshotPayload(source)
 	if err != nil {
 		return []string{fmt.Sprintf("render source SchemaRegistry snapshot: %v", err)}
 	}

@@ -48,7 +48,7 @@ func TestCrossPlatformCoverageSchemaFormatAlternatives(t *testing.T) {
 	if !reflect.DeepEqual(wire.AnyOf, p.AnyOf) {
 		t.Fatalf("wire lost anyOf: %s", raw)
 	}
-	cloned := p.normalized()
+	cloned := normalizeParameterSpec(p)
 	cloned.AnyOf[0].Format = "uri"
 	if p.AnyOf[0].Format != "date" {
 		t.Fatal("normalization aliases format alternatives")
@@ -129,7 +129,7 @@ func TestCrossPlatformCoverageSchemaFormatAlternativesPayloadAndProvenance(t *te
 		}
 	}
 	p := ParameterSpec{Name: "time", Type: "string", Property: "startDateTime", AnyOf: union}
-	value, ok := p.provenanceValue("anyOf")
+	value, ok := parameterProvenanceValue(p, "anyOf")
 	if !ok || !reflect.DeepEqual(value, union) {
 		t.Fatalf("provenance value: %v, %v", value, ok)
 	}

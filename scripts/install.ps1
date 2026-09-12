@@ -20,6 +20,12 @@
 #   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else multi)
 #   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
 #                       Gitee API instead of GitHub (China mirror)
+#   DWS_SCHEMA_CACHE_SHARED_DIR — optional shared schema-cache base (default:
+#                       %ProgramData%\dws). Installer initializes a created root
+#                       and protects only the dws\schema subtree (Admins/SYSTEM
+#                       write, Users read); falls back to %LOCALAPPDATA% when the
+#                       shared root is untrusted. Runtime selection honors the
+#                       same variable when set.
 #
 # Agent skills paths follow build/npm/install.js AGENT_DIRS (order and entries must match).
 
@@ -1831,6 +1837,328 @@ function Install-Skills {
     }
 }
 
+# ── Build schema cache ───────────────────────────────────────────────────────
+# Persistent backends are compiled in for windows amd64/arm64. Identity is
+# generated on this machine from the installed binary (no compile-time seal).
+# Prefer a hardened shared location (%ProgramData%\dws) with Admins/SYSTEM write
+# and Builtin Users read+traverse; otherwise warm the per-user cache under
+# %LOCALAPPDATA%. Never claim success without artifacts.
+
+function Get-SchemaCacheTree {
+    param([string]$Base)
+    if (-not $Base) { return $null }
+    return (Join-Path $Base "dws\schema")
+}
+
+function Test-SchemaCacheArtifactsPresent {
+    param([string]$Dir)
+    # Require the precise DWS schema tree (...\dws\schema), never a wide base
+    # such as %LOCALAPPDATA% or an arbitrary SHARED_DIR root.
+    if (-not $Dir -or -not (Test-Path -LiteralPath $Dir)) {
+        return $false
+    }
+    $leaf = Split-Path -Leaf $Dir
+    $parentLeaf = Split-Path -Leaf (Split-Path -Parent $Dir)
+    if ($leaf -ne 'schema' -or $parentLeaf -ne 'dws') {
+        return $false
+    }
+    $meta = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "meta.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $registry = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "registry.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $payloads = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "payloads.shards.cache" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $identity = Get-ChildItem -LiteralPath $Dir -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    return (
+        $null -ne $meta -and $meta.Length -gt 0 -and
+        $null -ne $registry -and $registry.Length -gt 0 -and
+        $null -ne $payloads -and $payloads.Length -gt 0 -and
+        $null -ne $identity -and $identity.Length -gt 0
+    )
+}
+
+function Test-IsWindowsHost {
+    if ($PSVersionTable.PSEdition -eq 'Desktop') { return $true }
+    if ($null -ne (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) -and $IsWindows) { return $true }
+    return ($env:OS -eq 'Windows_NT')
+}
+
+function Test-SharedSchemaCachePathTrusted {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        try {
+            $probe = Join-Path $Path ".dws-schema-cache-trust-probe"
+            [System.IO.File]::WriteAllText($probe, "ok")
+            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            return $true
+        } catch {
+            return $false
+        }
+    }
+    try {
+        $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+        $owner = $acl.Owner
+        $trustedOwners = @(
+            'BUILTIN\Administrators',
+            'NT AUTHORITY\SYSTEM',
+            ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
+        )
+        $ownerTrusted = $false
+        foreach ($candidate in $trustedOwners) {
+            if ($owner -and ($owner -ieq $candidate)) {
+                $ownerTrusted = $true
+                break
+            }
+        }
+        # Account for localized BUILTIN\Administrators via SID when possible.
+        if (-not $ownerTrusted) {
+            try {
+                $ownerSid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+                if ($ownerSid -eq 'S-1-5-32-544' -or $ownerSid -eq 'S-1-5-18') {
+                    $ownerTrusted = $true
+                }
+            } catch {
+                $ownerTrusted = $false
+            }
+        }
+        if (-not $ownerTrusted) {
+            return $false
+        }
+
+        $usersSid = 'S-1-5-32-545'
+        $worldSid = 'S-1-1-0'
+        $authenticatedSid = 'S-1-5-11'
+        foreach ($rule in $acl.Access) {
+            if ($rule.AccessControlType -ne 'Allow') {
+                continue
+            }
+            $sid = $null
+            try {
+                $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+            } catch {
+                continue
+            }
+            $isOrdinary = ($sid -eq $usersSid -or $sid -eq $worldSid -or $sid -eq $authenticatedSid)
+            if (-not $isOrdinary) {
+                continue
+            }
+            # Check only real write/delete/ACL-owner bits. Do NOT OR Modify or
+            # FullControl — those composites include ReadAndExecute, so the
+            # Builtin Users ReadAndExecute ACE we grant would always look writable.
+            $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
+                [System.Security.AccessControl.FileSystemRights]::Delete -bor `
+                [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor `
+                [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor `
+                [System.Security.AccessControl.FileSystemRights]::TakeOwnership
+            if (($rule.FileSystemRights -band $writeRights) -ne 0) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Set-SharedSchemaCacheItemAcl {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        throw "shared schema cache path missing: $Path"
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return
+    }
+    $isContainer = (Get-Item -LiteralPath $Path -Force).PSIsContainer
+    if ($isContainer) {
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor `
+            [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+        $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    } else {
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]::None
+        $propagation = [System.Security.AccessControl.PropagationFlags]::None
+    }
+    $acl.SetAccessRuleProtection($true, $false)
+    $full = [System.Security.AccessControl.FileSystemRights]::FullControl
+    $readExec = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute -bor `
+        [System.Security.AccessControl.FileSystemRights]::Synchronize
+    $allow = [System.Security.AccessControl.AccessControlType]::Allow
+    $admins = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+    $system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+    $users = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-545')
+    # Writable only by identities every reader trusts (Admins/SYSTEM). Do not
+    # grant the installer/current user GENERIC_ALL — a later reader trusts only
+    # its own SID + Admins + SYSTEM and would reject a foreign write ACE.
+    foreach ($sid in @($admins, $system)) {
+        if ($isContainer) {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $inheritance, $propagation, $allow)))
+        } else {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $allow)))
+        }
+    }
+    if ($isContainer) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $inheritance, $propagation, $allow)))
+    } else {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $allow)))
+    }
+    try {
+        $acl.SetOwner($admins)
+    } catch {
+        # Non-elevated hosts may lack SeTakeOwnershipPrivilege; DACL alone still
+        # omits the creator write ACE. Owner trust is re-checked by the runtime.
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
+}
+
+function Set-SharedSchemaCacheAcl {
+    param([string]$Path)
+    Set-SharedSchemaCacheItemAcl -Path $Path
+}
+
+function Protect-SharedSchemaCacheTree {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        throw "shared schema cache tree missing: $Path"
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return
+    }
+    Set-SharedSchemaCacheItemAcl -Path $Path
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Set-SharedSchemaCacheItemAcl -Path $_.FullName
+    }
+}
+
+function Initialize-SharedSchemaCacheRoot {
+    param([string]$Path)
+    if (-not $Path) {
+        throw "shared schema cache path is empty"
+    }
+    if (Test-Path -LiteralPath $Path) {
+        if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
+            throw "shared schema cache root is untrusted (owner/DACL): $Path"
+        }
+        # Pre-existing base (including custom DWS_SCHEMA_CACHE_SHARED_DIR): trust
+        # check only. Do not replace DACL/owner on a caller-owned tree that may
+        # hold unrelated files; recursive harden is limited to dws\schema.
+        return $Path
+    }
+    $parent = Split-Path -Parent $Path
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
+    }
+    New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
+    # Harden only the dedicated root this installer just created.
+    Set-SharedSchemaCacheAcl -Path $Path
+    if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
+        throw "shared schema cache root remained untrusted after initialize: $Path"
+    }
+    return $Path
+}
+
+function Build-SharedSchemaCache {
+    $arch = Get-Arch
+    if ($arch -ne "amd64" -and $arch -ne "arm64") {
+        return
+    }
+
+    $sharedDir = $env:DWS_SCHEMA_CACHE_SHARED_DIR
+    if (-not $sharedDir) {
+        if ($env:ProgramData) {
+            $sharedDir = Join-Path $env:ProgramData "dws"
+        }
+    }
+
+    $cacheDir = $null
+    $shared = $false
+    if ($sharedDir) {
+        try {
+            Initialize-SharedSchemaCacheRoot -Path $sharedDir | Out-Null
+            $cacheDir = $sharedDir
+            $shared = $true
+        } catch {
+            Write-Say "⚠️  Shared schema cache root unsafe or unusable ($sharedDir); falling back to per-user cache."
+            $cacheDir = $null
+        }
+    }
+
+    $userCacheBase = $null
+    if (-not $cacheDir) {
+        $userCacheBase = [Environment]::GetFolderPath("LocalApplicationData")
+        if (-not $userCacheBase) { $userCacheBase = $env:LOCALAPPDATA }
+        if ($userCacheBase) {
+            try {
+                New-Item -ItemType Directory -Path $userCacheBase -Force -ErrorAction Stop | Out-Null
+                $cacheDir = $userCacheBase
+            } catch {
+                $cacheDir = $null
+            }
+        }
+    }
+
+    if (-not $cacheDir) {
+        Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+        return
+    }
+
+    Write-Say "🔧 Building schema cache (local identity)..."
+    # Runtime layout under any base is dws\schema\<edition>\v1. Only clear
+    # sidecars inside that tree — never recurse %LOCALAPPDATA% or a wide
+    # DWS_SCHEMA_CACHE_SHARED_DIR root (could delete other apps' identity.json).
+    $schemaTree = Get-SchemaCacheTree -Base $cacheDir
+    if ($schemaTree) {
+        New-Item -ItemType Directory -Path $schemaTree -Force -ErrorAction SilentlyContinue | Out-Null
+        if (Test-Path -LiteralPath $schemaTree) {
+            Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $exe = Join-Path $InstallDir "$BinName.exe"
+    $previous = $env:DWS_SCHEMA_CACHE_DIR
+    if ($shared) {
+        $env:DWS_SCHEMA_CACHE_DIR = $cacheDir
+    } else {
+        $env:DWS_SCHEMA_CACHE_DIR = $null
+    }
+    $ok = $false
+    try {
+        if (Test-Path -LiteralPath $exe) {
+            & $exe schema --all --format json | Out-Null
+            if ($LASTEXITCODE -eq 0 -and (Test-SchemaCacheArtifactsPresent -Dir $schemaTree)) {
+                $ok = $true
+            }
+        }
+    } catch {
+        $ok = $false
+    } finally {
+        if ($null -ne $previous) {
+            $env:DWS_SCHEMA_CACHE_DIR = $previous
+        } else {
+            Remove-Item Env:DWS_SCHEMA_CACHE_DIR -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($ok) {
+        if ($shared) {
+            try {
+                # Recursively protect only the DWS-owned dws\schema subtree —
+                # never the wide shared base (custom SHARED_DIR may hold other apps).
+                Protect-SharedSchemaCacheTree -Path $schemaTree
+            } catch {
+                Write-Say "⚠️  Shared schema cache built but ACL protect failed; falling back warning."
+                Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                return
+            }
+            Write-Say "✅ Shared schema cache built: $cacheDir"
+        } else {
+            Write-Say "✅ Schema cache built: $cacheDir"
+        }
+    } else {
+        Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+    }
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 $SourceRoot = Resolve-SourceRoot
@@ -1850,13 +2178,16 @@ if ($SourceRoot -and !$SkillsOnly -and ($Version -eq "latest")) {
     if (!$NoSkills) {
         Install-SkillsLocal -Root $SourceRoot
     }
+    Build-SharedSchemaCache
 } elseif ($SkillsOnly) {
     Install-Skills
 } elseif ($NoSkills) {
     Install-Binary
+    Build-SharedSchemaCache
 } else {
     Install-Binary
     Install-Skills
+    Build-SharedSchemaCache
 }
 
 Write-Host ""

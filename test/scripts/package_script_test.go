@@ -2483,6 +2483,36 @@ func TestReleaseWorkflowPublicationBypassesSkippedDispatchButStopsOnCancellation
 			}
 		})
 	}
+	release := releaseWorkflowSection(t, workflow, "  release:\n", "\n  verify-darwin-signatures:\n")
+	for _, required := range []string{
+		"needs: [release-contract]",
+		"DWS_REQUIRE_DEVELOPER_ID_SIGNING: ${{ github.repository_owner == 'DingTalk-Real-AI' }}",
+	} {
+		if !strings.Contains(release, required) {
+			t.Errorf("build is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"schema-release-native-proof",
+		"compare-schema-release-proofs",
+		"schema-release-identity",
+		"DWS_SCHEMA_IDENTITY_PROOF",
+		"generate-schema-cache-identity",
+	} {
+		if strings.Contains(release, forbidden) {
+			t.Errorf("build must not produce compile-time Schema identity via %q", forbidden)
+		}
+	}
+	for _, forbidden := range []string{
+		"schema-release-native-proof",
+		"compare-schema-release-proofs",
+		"generate-schema-cache-identity",
+		"DWS_SCHEMA_IDENTITY_PROOF",
+	} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("release workflow must not generate Schema identity before shipping: %q", forbidden)
+		}
+	}
 }
 
 func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
@@ -2665,6 +2695,34 @@ func TestPostGoreleaserSupportsDeveloperIDSigning(t *testing.T) {
 	}
 	if strings.Contains(script, `rcodesign verify "$bin"`) {
 		t.Fatal("rcodesign verify must not be treated as authoritative Apple signature validation")
+	}
+}
+
+func TestPostGoreleaserDoesNotEmbedSchemaIdentity(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	for _, forbidden := range []string{
+		"SCHEMA_IDENTITY_PROOF",
+		"DWS_SCHEMA_IDENTITY_PROOF",
+		"seal_schema_binary",
+		"schema_package_contract.py",
+		"schemaCacheEdition",
+		"dws-core",
+		"internal/launcher",
+		"package-manifest.json",
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Errorf("post-goreleaser.sh must not produce compile-time Schema identity via %q", forbidden)
+		}
 	}
 }
 
@@ -3399,6 +3457,14 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 	if strings.Contains(goreleaser, "CGO_ENABLED=0") {
 		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
 	}
+	postGoreleaser := read("scripts/release/post-goreleaser.sh")
+	if strings.Contains(postGoreleaser, "CGO_ENABLED=0") {
+		t.Fatal("post-goreleaser must not produce CGO-disabled stub binaries")
+	}
+	crossWrapper := read("scripts/release/run-goreleaser-cross.sh")
+	if !strings.Contains(crossWrapper, `[ "${1:-}" = "--exec" ]`) {
+		t.Fatal("cross-release wrapper must accept --exec so CGO rebuilds can reuse pinned toolchains")
+	}
 
 	windowsCompat := read("third_party/safechat-go-sdk/msvcrt_compat_windows.c")
 	for _, required := range []string{
@@ -3430,7 +3496,9 @@ func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
 		"goreleaser_Linux_${archive_arch}.tar.gz",
 		"archive checksum mismatch",
 		`--platform "linux/$docker_arch"`,
-		"--entrypoint /usr/local/bin/goreleaser",
+		"entrypoint=/usr/local/bin/goreleaser",
+		"entrypoint=/usr/bin/env",
+		`--entrypoint "$entrypoint"`,
 	} {
 		if !strings.Contains(wrapper, required) {
 			t.Errorf("pinned cross-release wrapper is missing %q", required)

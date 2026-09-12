@@ -48,7 +48,7 @@ func init() {
 	}
 	for _, p := range products {
 		p := p
-		RegisterPublic(func() Handler {
+		RegisterPublicNamed(p.name, func() Handler {
 			return wukongHandler{name: p.name, buildFn: p.fn}
 		})
 	}

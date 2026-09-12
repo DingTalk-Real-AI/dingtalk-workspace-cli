@@ -204,10 +204,31 @@ for entry in "${compiler_env[@]}"; do
   env_args+=(--env "$entry")
 done
 
+# Default: goreleaser inside the pinned cross image.
+# --exec: run the remaining argv (typically `go build`) with the same CGO
+# toolchains so Schema seal rebuilds keep the SafeChat backend.
+entrypoint=/usr/local/bin/goreleaser
+if [ "${1:-}" = "--exec" ]; then
+  shift
+  if [ "$#" -eq 0 ]; then
+    printf 'run-goreleaser-cross.sh --exec requires a command\n' >&2
+    exit 1
+  fi
+  entrypoint=/usr/bin/env
+  for name in \
+    CGO_ENABLED GOOS GOARCH CC CXX \
+    GOTOOLCHAIN GOFLAGS GOEXPERIMENT GOWORK GOAMD64 GOARM64
+  do
+    if [ "${!name+x}" = x ]; then
+      env_args+=(--env "$name")
+    fi
+  done
+fi
+
 docker run --rm \
   --platform "linux/$docker_arch" \
   --user "$(id -u):$(id -g)" \
-  --entrypoint /usr/local/bin/goreleaser \
+  --entrypoint "$entrypoint" \
   --env HOME=/tmp \
   "${env_args[@]}" \
   "${mounts[@]}" \

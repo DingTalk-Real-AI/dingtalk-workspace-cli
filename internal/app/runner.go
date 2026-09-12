@@ -759,7 +759,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	// Only callers with a reviewed read/reconciliation policy may replay it;
 	// keep discovery and the shared transport's retry budget unchanged.
 	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
-	RecordTiming(ctx, "mcp_call", time.Since(callStart))
+	RecordNestedTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
 		if isRefreshableTransportAuthError(err) {
 			if fn := edition.Get().OnAuthError; fn != nil {
@@ -1014,7 +1014,7 @@ func resolveRuntimeAuthSnapshot(ctx context.Context, explicitToken string) (Acce
 // cache itself lives exclusively in TokenManager.
 func getCachedRuntimeToken(ctx context.Context) (string, error) {
 	loadStart := time.Now()
-	defer func() { RecordTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
+	defer func() { RecordNestedTiming(ctx, "auth_keychain", time.Since(loadStart)) }()
 	return resolveRuntimeAuthToken(ctx, "")
 }
 
@@ -1058,7 +1058,24 @@ func newRuntimeContentScanner() safety.Scanner {
 	if !runtimeFlagEnabled(os.Getenv(runtimeContentScanEnv), true) {
 		return nil
 	}
-	return safety.NewContentScanner()
+	return &lazyRuntimeContentScanner{}
+}
+
+// lazyRuntimeContentScanner keeps regex compilation out of command-tree
+// assembly. Help, version, dry-run and local utilities never scan a backend
+// response; the first real response initializes the same safety scanner before
+// inspecting any content.
+type lazyRuntimeContentScanner struct {
+	once    sync.Once
+	scanner *safety.ContentScanner
+}
+
+func (s *lazyRuntimeContentScanner) ScanPayload(payload any) safety.Report {
+	if s == nil {
+		return safety.Report{Scanned: false}
+	}
+	s.once.Do(func() { s.scanner = safety.NewContentScanner() })
+	return s.scanner.ScanPayload(payload)
 }
 
 func (r *runtimeRunner) scanContent(content map[string]any) (safety.Report, error) {

@@ -53,6 +53,10 @@ type Config struct {
 
 	// FlushTimeout 是退出前等待上报完成的最长时间,默认 300ms。
 	FlushTimeout time.Duration
+	// NoFlushWait 在事件入队后异步关闭 Tracker，不等待最后一条事件发送完成。
+	// 该模式适合把命令退出延迟置于遥测完整性之上、并明确接受进程退出时
+	// 最后一条事件可能丢失的 CLI。它不改变事件字段或命令执行生命周期。
+	NoFlushWait bool
 
 	// —— 字段级隐私开关(给接入开发者的编译期选项,默认采集)——
 	NoCommandLine bool // 不采 c2 完整命令行(命令行常带敏感参数时设 true)
@@ -84,6 +88,7 @@ type Tracker struct {
 	captureOutput         bool
 	outputMaxLen          int
 	flushTimeout          time.Duration
+	noFlushWait           bool
 	noCommandLine         bool
 	noCwd                 bool
 	extraFields           func() map[string]string
@@ -201,6 +206,7 @@ func New(cfg Config) *Tracker {
 		captureOutput:         cfg.CaptureOutput,
 		outputMaxLen:          outputMaxLen,
 		flushTimeout:          flushTimeout,
+		noFlushWait:           cfg.NoFlushWait,
 		noCommandLine:         cfg.NoCommandLine,
 		noCwd:                 cfg.NoCwd,
 		extraFields:           cfg.ExtraFields,
@@ -353,6 +359,9 @@ func (t *Tracker) close() {
 		_ = t.inner.Close()
 		close(done)
 	}()
+	if t.noFlushWait {
+		return
+	}
 	select {
 	case <-done:
 	case <-time.After(t.flushTimeout):

@@ -490,10 +490,22 @@ func TestCrossPlatformCoverageExecuteDeterministicInterruptionBranches(t *testin
 		})
 	}
 	interrupted := func(primaryCompleted bool) *processSignalState {
-		return &processSignalState{
-			interruption:             &processInterruption{signal: os.Interrupt},
-			primaryCompletedAtSignal: primaryCompleted,
+		state := &processSignalState{}
+		ctx, store := output.WithResultStore(context.Background())
+		if primaryCompleted {
+			cmd := &cobra.Command{Use: "dws"}
+			cmd.SetContext(ctx)
+			cmd.SetOut(io.Discard)
+			output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+			if err := output.StoreResult(ctx, output.Success(nil)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
 		}
+		state.Record(os.Interrupt, processResultCompleted(store))
+		return state
 	}
 
 	t.Run("preparse interruption emits unified failure", func(t *testing.T) {

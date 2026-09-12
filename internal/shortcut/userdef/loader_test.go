@@ -139,14 +139,88 @@ func TestCrossPlatformCoverageFilePathRejectsTraversal(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageLoadSkipsConflictAndParses(t *testing.T) {
+func TestCrossPlatformCoverageLoadEmptyAndCompileRemainders(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	n, errs := Load()
+	if n != 0 || len(errs) != 0 {
+		t.Fatalf("empty load registered=%d errs=%v", n, errs)
+	}
+
 	dir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", dir)
 	scDir := filepath.Join(dir, "shortcuts")
 	if err := os.MkdirAll(scDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A valid, non-conflicting user shortcut.
+	if err := os.WriteFile(filepath.Join(scDir, "bad.yaml"), []byte(":\n:"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scDir, "segment.yaml"), []byte("service: bad name\ncommand: \"+x\"\nexecute:\n  tool: t\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if all := shortcut.All(); len(all) > 0 {
+		s := all[0]
+		body := "service: " + s.Service + "\ncommand: \"" + s.Command + "\"\nexecute:\n  tool: t\n"
+		if err := os.WriteFile(filepath.Join(scDir, "conflict.yaml"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, loadErrs := Load()
+	if len(loadErrs) == 0 {
+		t.Fatal("expected parse/conflict errors")
+	}
+
+	compiled := Compile(Spec{
+		Service: "remain", Command: "+run", Product: "chat",
+		Exec: ExecSpec{Tool: "send_message", Bind: map[string]string{
+			"const": "fixed",
+			"flag":  "${flag}",
+			"skip":  "${skip}",
+		}},
+		Flags: []FlagSpec{
+			{Name: "flag", Type: "", Default: "d"},
+			{Name: "on", Type: "bool"},
+			{Name: "tags", Type: "string-slice"},
+			{Name: "skip", Type: "string"},
+		},
+	})
+	if compiled.Execute == nil {
+		t.Fatal("execute missing")
+	}
+	helpers.InitDepsForTest(t, &captureCaller{})
+	cmd := &cobra.Command{Use: "+run"}
+	cmd.Flags().String("flag", "d", "")
+	cmd.Flags().Bool("on", false, "")
+	cmd.Flags().StringSlice("tags", nil, "")
+	cmd.Flags().String("skip", "", "")
+	_ = cmd.Flags().Set("flag", "set")
+	_ = cmd.Flags().Set("on", "true")
+	_ = cmd.Flags().Set("tags", "a")
+	if err := compiled.Execute(shortcut.RuntimeContextForTest(cmd, compiled)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCrossPlatformCoverageReadFlagKinds(t *testing.T) {
+	cmd := &cobra.Command{Use: "x"}
+	cmd.Flags().Bool("on", true, "")
+	cmd.Flags().Int("n", 2, "")
+	cmd.Flags().StringSlice("tags", []string{"a"}, "")
+	cmd.Flags().String("name", "v", "")
+	rt := shortcut.RuntimeContextForTest(cmd, shortcut.Shortcut{Service: "s", Command: "+x"})
+	_ = readFlag(rt, "on", shortcut.FlagBool)
+	_ = readFlag(rt, "n", shortcut.FlagInt)
+	_ = readFlag(rt, "tags", shortcut.FlagStringSlice)
+	_ = readFlag(rt, "name", shortcut.FlagString)
+}
+
+func TestCrossPlatformCoverageLoadValidAndMalformed(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+	scDir := filepath.Join(dir, "shortcuts")
+	if err := os.MkdirAll(scDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	yamlOK := `version: 1
 service: myteam
 command: "+notify"
@@ -163,7 +237,6 @@ flags:
 	if err := os.WriteFile(filepath.Join(scDir, "myteam.notify.yaml"), []byte(yamlOK), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A malformed one (no tool) — must be reported, not registered.
 	if err := os.WriteFile(filepath.Join(scDir, "bad.yaml"), []byte("service: x\ncommand: \"+y\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

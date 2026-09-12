@@ -411,3 +411,37 @@ func TestRunReportsQoderCLIEndToEnd(t *testing.T) {
 		t.Errorf("归因不应影响既有字段, c1 = %q", fields["c1"])
 	}
 }
+
+func TestNoFlushWaitReturnsBeforeBlockedSend(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		started <- struct{}{}
+		<-release
+	}))
+	defer server.Close()
+
+	tracker := New(Config{
+		PID: "test", Endpoint: server.URL, NoAutomaticDimensions: true,
+		NoFlushWait: true, FlushTimeout: 2 * time.Second,
+	})
+	returned := make(chan struct{})
+	go func() {
+		tracker.Run(func() error { return nil }, nil)
+		close(returned)
+	}()
+
+	select {
+	case <-returned:
+	case <-time.After(500 * time.Millisecond):
+		close(release)
+		t.Fatal("NoFlushWait blocked command exit on telemetry delivery")
+	}
+	select {
+	case <-started:
+		close(release)
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("queued telemetry was never attempted")
+	}
+}

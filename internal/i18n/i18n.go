@@ -37,6 +37,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localename"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"golang.org/x/text/language"
 )
@@ -89,14 +90,12 @@ func SetLang(tag string) {
 }
 
 func setLangFromRaw(raw string) {
-	raw = strings.ToLower(strings.TrimSpace(raw))
-	switch {
-	case strings.HasPrefix(raw, "zh"):
+	langStr = localename.Resolve(raw)
+	switch langStr {
+	case "zh":
 		lang = language.Chinese
-		langStr = "zh"
 	default:
 		lang = language.English
-		langStr = "en"
 	}
 }
 

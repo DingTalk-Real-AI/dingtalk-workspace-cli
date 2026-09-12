@@ -1052,8 +1052,9 @@ jobs:
     # across three physical app lanes. The lane names and their exact partition
     # union are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper.
     # This preserves memory release between Go test processes while reducing
-    # hosted-runner fan-out by six jobs per focused run.
-    timeout-minutes: 20
+    # hosted-runner fan-out by six jobs per focused run. Job wall time is 45m
+    # so the cli/smoke package timeout of 35m still has setup headroom.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -1176,10 +1177,15 @@ jobs:
           fi
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # internal/cli under -race exceeded 15m (CI run 34334461549 timed
+          # out after 990s with no DATA RACE), then 25m after a main merge
+          # (run 34513601170: green run 34507346541 needed 23m15s, and the
+          # merged head tipped the 25m alarm with no DATA RACE); 35m is the
+          # intentional budget.
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=35m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
@@ -1193,7 +1199,7 @@ jobs:
     # are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper. This
     # preserves registry release while reducing hosted-runner fan-out by six
     # jobs. cli/smoke retain extra timeout headroom for setup + assembly.
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -1250,10 +1256,14 @@ jobs:
           esac
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # Match the focused-job budget: 15m then 25m each timed out
+          # internal/cli under -race without a data race (latest: run
+          # 34513601170 hit the 25m alarm after the main merge; green run
+          # 34507346541 already needed 23m15s).
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=35m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
@@ -2846,8 +2856,22 @@ jobs:
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: make build
 
+      - name: Install pinned protoc for schema-cache drift
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
+        run: |
+          set -eu
+          curl -fsSL -o /tmp/protoc-35.1.zip https://github.com/protocolbuffers/protobuf/releases/download/v35.1/protoc-35.1-linux-x86_64.zip
+          # Verify the archive digest before elevating: the zip is unpacked as
+          # root into /usr/local, so a tampered download must stop here. Value
+          # pinned to the official v35.1 release asset.
+          echo "6930ebf62bd4ea607b98fff052596c6ee564b9835b4ce172c75a3f53ae9d91b7  /tmp/protoc-35.1.zip" | sha256sum -c -
+          sudo unzip -o /tmp/protoc-35.1.zip -d /usr/local
+          test "$(protoc --version)" = "libprotoc 35.1"
+
       - name: Policy
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
+        env:
+          SCHEMA_CACHE_PROTO_CHECK: "1"
         run: make policy
 
   interface-integrity:

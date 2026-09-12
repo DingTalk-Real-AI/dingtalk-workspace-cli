@@ -303,7 +303,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 
 	runtimeSnapshot := resolveAuthRuntimeContext()
 	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
-	browserURL, _ := runtimeSnapshot.AttachToURL(authURL)
+	browserURL, _ := runtimeSnapshot.AttachToURL(authURL, TrustedLoginHostsForRegion(p.LoginRegion))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(CallbackPath, func(w http.ResponseWriter, r *http.Request) {

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilemetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -277,7 +277,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	oldStdioRegister := rootRegisterResolvedStdioServer
 	oldHooks := rootPluginLoadHooks
 	oldSync := rootPluginSyncSkills
-	oldToken := rootAuthLoadTokenData
+	oldIdentity := rootPluginResolveIdentity
 	t.Cleanup(func() {
 		rootPluginInjectConfigEnv = oldInject
 		rootPluginLoadUser = oldUser
@@ -289,7 +289,7 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 		rootRegisterResolvedStdioServer = oldStdioRegister
 		rootPluginLoadHooks = oldHooks
 		rootPluginSyncSkills = oldSync
-		rootAuthLoadTokenData = oldToken
+		rootPluginResolveIdentity = oldIdentity
 	})
 
 	p1 := &plugin.Plugin{Manifest: plugin.Manifest{Name: "one"}}
@@ -298,8 +298,8 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	rootPluginInjectConfigEnv = func(*plugin.Loader) {}
 	rootPluginLoadUser = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p1, p2} }
 	rootPluginLoadDev = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p3} }
-	rootAuthLoadTokenData = func(string) (*authpkg.TokenData, error) {
-		return &authpkg.TokenData{UserID: "user", CorpID: "corp"}, nil
+	rootPluginResolveIdentity = func(string, string) (*profilemetadata.ProfileMetadata, error) {
+		return &profilemetadata.ProfileMetadata{UserID: "user", CorpID: "corp"}, nil
 	}
 	rootPluginDescriptors = func(p *plugin.Plugin) []mcptypes.ServerDescriptor {
 		if p == p1 {
