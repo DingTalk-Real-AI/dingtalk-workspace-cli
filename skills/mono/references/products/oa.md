@@ -432,6 +432,7 @@ Flags:
 - 如果用户提供的是人员信息，先用 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId 后再写入对应控件。
 - 单选/多选控件提交的是选项文本（option value），该值从 `form-schema` 返回的选项定义中取得。
 - `InnerContactField`、`DepartmentField`、`TableField`、`DDDateRangeField`、`DDAttachment` 等控件的 `value` 结构各不相同，必须按下方格式表单独组装，不要套用文本控件的写法。
+- `TableField` 的 `value` 必须序列化为二维数组字符串，每行是子控件 `name/value` 对象数组；不是以子控件 label 为 key 的行对象数组。`--form-values` 只转换顶层字段映射，和 `--request` 一样原样传递该字符串，不转换明细内部结构。完整示例见 [TableField 控件说明](oa/oa-form-components.md#tablefield明细控件)。
 - `TextNote`（文字说明）不收集数据，**不要**出现在 `formComponentValues` 中。
 
 #### 表单控件值格式速查
@@ -458,7 +459,7 @@ Flags:
 | 附件控件 | `DDAttachment` | JSON 数组转义字符串 | `"[{\"spaceId\":\"xxx\",\"fileName\":\"a.pdf\",\"fileSize\":\"333\",\"fileType\":\"pdf\",\"fileId\":\"xxx\"}]"` | **支持通过 CLI 提交**：先用 `dws oa approval attachment upload --file <path>` 获取 fileId/spaceId/fileName/fileSize/fileType，再组装为 DDAttachment value 提交 |
 | 评分控件 | `StarRatingField` | 数字字符串 | `"4"` | limit 控制最大星数（默认 5）                                    |
 | 关联审批单 | `RelateField` | 审批实例 ID | `"q-xxx"` | 须为当前组织下已存在的实例                                         |
-| 明细控件 | `TableField` | JSON 数组字符串 | `'[{"子控件名":"值1"},{"子控件名":"值2"}]'` | 不可嵌套 TableField；不可含 DDMultiSelectField/DDPhotoField；最大 100 行 |
+| 明细控件 | `TableField` | 二维 name/value 数组的 JSON 字符串 | `'[[{"name":"子控件名","value":"值1"}],[{"name":"子控件名","value":"值2"}]]'` | 不可嵌套 TableField；不可含 DDMultiSelectField/DDPhotoField；最大 100 行 |
 | 身份证控件 | `IdCardField` | 身份证号 | `"330102199001011234"` | 内置格式校验                                                |
 | 文字说明 | `TextNote` | — | — | **不收集数据**，不会出现在 formComponentValues 中                 |
 
