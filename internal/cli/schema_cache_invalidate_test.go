@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/buildversion"
@@ -143,7 +144,7 @@ func TestCrossPlatformCoverageUpgradeInvalidationClearsPersistedIdentityForABReg
 	_ = identity
 }
 
-func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t *testing.T) {
+func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesWithoutInvalidatingSidecar(t *testing.T) {
 	dir := t.TempDir()
 
 	stampA := sha256.Sum256([]byte("binary-stamp-A"))
@@ -175,8 +176,11 @@ func TestCrossPlatformCoverageBinaryBuildIDMismatchMissesAndInvalidatesSidecar(t
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("binary B must not load binary A's identity sidecar")
 	}
-	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
-		t.Fatalf("mismatched identity.json should be invalidated: %v", err)
+	// The lock-free load must not delete the sidecar: a concurrent publisher's
+	// rename-over commit could be destroyed. Cleanup belongs to repair/publish
+	// or InvalidatePersistedSchemaCacheIdentities.
+	if _, err := os.Stat(identityPath); err != nil {
+		t.Fatalf("mismatched identity.json must survive a lock-free miss: %v", err)
 	}
 
 	// Binary B regenerates a sidecar bound to its own stamp (not A's schema seal).
@@ -249,8 +253,8 @@ func TestCrossPlatformCoverageUnstampedExeMaterialABMissWithoutInvalidate(t *tes
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("binary B must not load binary A's identity sidecar")
 	}
-	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
-		t.Fatalf("mismatched identity.json should be removed on load: %v", err)
+	if _, err := os.Stat(identityPath); err != nil {
+		t.Fatalf("mismatched identity.json must survive a lock-free miss: %v", err)
 	}
 
 	identityB := coverageSchemaCacheIdentity()
@@ -307,8 +311,8 @@ func TestCrossPlatformCoverageLegacyBinaryBuildIDRejected(t *testing.T) {
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("legacy sidecar without binary_build_id must be rejected")
 	}
-	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy identity.json should be removed on load: %v", err)
+	if _, err := os.Stat(identityPath); err != nil {
+		t.Fatalf("legacy identity.json must survive a lock-free miss: %v", err)
 	}
 
 	// Explicit mismatch without going through persist (tampered stamp).
@@ -324,7 +328,76 @@ func TestCrossPlatformCoverageLegacyBinaryBuildIDRejected(t *testing.T) {
 	if _, err := loadLocalSchemaCacheIdentity(dir); err == nil {
 		t.Fatal("mismatched binary_build_id must be rejected")
 	}
-	if _, err := os.Stat(identityPath); !os.IsNotExist(err) {
-		t.Fatalf("mismatched identity.json should be removed on load: %v", err)
+	if _, err := os.Stat(identityPath); err != nil {
+		t.Fatalf("mismatched identity.json must survive a lock-free miss: %v", err)
+	}
+}
+
+func TestConcurrentBinaryBuildIDReadersDoNotDestroyPublishedSidecar(t *testing.T) {
+	dir := t.TempDir()
+
+	stampA := sha256.Sum256([]byte("concurrent-stamp-A"))
+	stampB := sha256.Sum256([]byte("concurrent-stamp-B"))
+	// All seam swaps complete before the goroutines start so the test stays
+	// race-clean under -race.
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [sha256.Size]byte { return stampA })
+	identityA := coverageSchemaCacheIdentity()
+	if err := persistLocalSchemaCacheIdentity(dir, identityA); err != nil {
+		t.Fatal(err)
+	}
+	testseam.Swap(t, &schemaCacheBinaryDigest, func() [sha256.Size]byte { return stampB })
+	identityB := coverageSchemaCacheIdentity()
+	identityB.BuildID = sha256.Sum256([]byte("concurrent-binary-B-build"))
+
+	identityPath := filepath.Join(dir, LocalSchemaCacheIdentityFileName())
+
+	const readers = 4
+	const publisherRounds = 25
+	var wg sync.WaitGroup
+	for i := 0; i < readers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < publisherRounds*2; j++ {
+				// Mismatch (A on disk) is a miss and must not delete; once a
+				// publisher's rename-over lands it must load cleanly.
+				_, _ = loadLocalSchemaCacheIdentity(dir)
+			}
+		}()
+	}
+	for p := 0; p < 2; p++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < publisherRounds; j++ {
+				if err := persistLocalSchemaCacheIdentity(dir, identityB); err != nil {
+					t.Errorf("publish: %v", err)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	if _, err := os.Stat(identityPath); err != nil {
+		t.Fatalf("published sidecar was destroyed by concurrent lock-free readers: %v", err)
+	}
+	loaded, err := loadLocalSchemaCacheIdentity(dir)
+	if err != nil {
+		t.Fatalf("published sidecar must load after the race: %v", err)
+	}
+	if loaded.BuildID != identityB.BuildID {
+		t.Fatalf("loaded build %x want %x", loaded.BuildID, identityB.BuildID)
+	}
+	payload, err := os.ReadFile(identityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record localSchemaCacheIdentityRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.BinaryBuildID != hex.EncodeToString(stampB[:]) {
+		t.Fatalf("final binary_build_id = %q want stamp B", record.BinaryBuildID)
 	}
 }

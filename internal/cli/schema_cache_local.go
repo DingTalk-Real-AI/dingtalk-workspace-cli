@@ -71,6 +71,9 @@ func LocalSchemaCacheIdentityFileName() string {
 // TryLoadLocalSchemaCacheIdentity reads the per-edition identity sidecar from
 // the edition cache directory. Missing files are a miss, not an error. Leftover
 // fingerprint-suffixed sidecars are ignored and never used as a lookup key.
+// A sidecar whose binary_build_id does not match the running binary is a miss
+// with no side effect: it is left in place for lock-holding repair/publish or
+// explicit upgrade invalidation.
 func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool) {
 	edition = strings.TrimSpace(edition)
 	if edition == "" {
@@ -89,14 +92,17 @@ func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool)
 }
 
 func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error) {
-	identityPath := filepath.Join(directory, LocalSchemaCacheIdentityFileName())
 	record, identity, err := readLocalSchemaCacheIdentityRecord(directory)
 	if err != nil {
 		return SchemaCacheIdentity{}, err
 	}
 	if !binaryBuildIDMatches(record.BinaryBuildID, schemaCacheBinaryDigest()) {
-		// Old binary's sidecar must not authenticate as the current process.
-		_ = os.Remove(identityPath)
+		// A foreign generation's sidecar must not authenticate as the current
+		// process, but this lock-free reader must not delete it either: the
+		// removal could land after a concurrent publisher's rename-over commit
+		// and destroy the freshly published sidecar. Cleanup belongs to the
+		// rebuild-lock-holding repair/publish flow or
+		// InvalidatePersistedSchemaCacheIdentities.
 		return SchemaCacheIdentity{}, fmt.Errorf("schema cache identity binary build id mismatch")
 	}
 	return identity, nil
