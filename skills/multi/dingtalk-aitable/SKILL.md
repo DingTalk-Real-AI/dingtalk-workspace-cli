@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -19,8 +19,14 @@ metadata:
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；本轮用户已明确要求执行、目标与影响无歧义的非破坏性写操作时，该明确指令就是本次确认，首次调用直接携带 Runtime 所需的 `--yes`，不先制造 `confirmation_required`。删除、停用自动化等破坏性或高风险动作仍须先说明对象、动作与影响并取得独立确认。
+- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；本轮用户已明确要求执行、目标与影响无歧义的非破坏性写操作时，该明确指令就是本次确认，首次调用直接携带 Runtime 所需的 `--yes`，不先制造 `confirmation_required`。文件导入是非幂等操作，仍按 Golden Route 先触发 Runtime 确认门禁，确认后再追加 `--yes`。删除、停用自动化等破坏性或高风险动作仍须先说明对象、动作与影响并取得独立确认。
 - 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
+- Runtime Schema 是当前能力与安全语义的权威来源；同一 leaf 任务内只读一次并复用。只有 Schema 缺字段、含义不清或与真实执行冲突时才读 leaf Help；版本、profile 变化或出现契约错误时立即作废缓存。
+- mutation 返回、HTTP 200 和退出码 0 都只是调用回执，不是最终对象状态。写后必须清除受影响的读取缓存，用返回的真实 ID/唯一键发起独立读回，不复用写前结果。
+- 同一 Base 的写入默认串行；只有不同 Base、无数据/ID/顺序依赖且失败可独立回读时，才允许受控并发写。无依赖只读调用默认最多 4 路并发。
+- 写调用超时、连接中断或返回结果未知时，禁止原样自动重放；先查真实状态。只读调用可对瞬态错误做有上限重试。
+- 结构化结果可能是统一 `ok/outcome`、旧 `status` 或 boolean `success` 信封；不固定假设 `data` 层级。`partial_failure` 可以在 stdout 中并返回退出码 7，必须先解析信封再判断执行结果。
+- 文件上传返回的 `uploadUrl`、token、authorization、signature 等是凭据；不输出、不写日志，结构化错误也要递归脱敏。
 - 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
 - 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
@@ -30,7 +36,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`aitable` 当前有 100 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知 leaf 直接执行。只有参数不确定时，最多读取一次 `dws schema --cli-path "aitable <leaf>" --compact --format json`；仅当该 compact leaf Schema 与 Cobra 实际不一致时，才读取同一 leaf 的 `dws aitable <leaf> --help`。禁止用父级 Help、产品 Help 或完整 Catalog 探索命令；一个 Case 一旦读取 Reference，就不再读取 Help 或第二个 Reference。
+`aitable` 当前有 101 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知 leaf 直接执行。参数只查 `dws schema --cli-path "aitable <leaf>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 outcomes/pagination，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；低频 reference 不默认 Help；同一任务只读一个 Reference。
 
 仅当根路由、精确 task reference 和 `references/aitable.md` 的低频原子索引都无法定位能力时，才执行 `dws shortcut list --service aitable --format json` 做最终回退；不要为已知意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -47,21 +53,23 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 | 按名称唯一定位并操作 Base/Table | `dws aitable +resolve-base --name <名称>` → `dws aitable +resolve-table --base <ID> --name <表名>` | 默认精确匹配；只有用户明确接受模糊匹配时才加 `--fuzzy` |
 | 搜索 Base 候选或检查是否存在 | `dws aitable +base-search --query <关键词>` | 用户说“搜索/找一下/候选/如果没有就创建”时直接走本入口，不先调用 `+resolve-base`；返回 `hasMore/nextCursor`，仅 `hasMore=true` 时续页；AITable Base 名称不得路由到 `dws aisearch person` |
 | 浏览 Base 下的数据表 | `dws aitable +list-tables --base <ID>` | 只返回 tableId/tableName，不加载字段 |
-| 新建 Base 与整套表字段 | `dws aitable +base-bootstrap --name <名称> --tables '[{"name":"<表名>","fields":[{"fieldName":"<字段名>","type":"text"}]}]'` | 表对象键必须是 `name`，不是 `tableName`；字段使用 `fieldName/type/config`；参数已足够时直接执行 |
-| 复制 Base 到文档目录 | `dws aitable +base-copy --base-id <B> --target-folder-id <FOLDER_NODE_ID> [--only-struct] [--new-name <名称>]`；只有 URL 时先用 `dws doc info --node <URL> --format json` 解析 `nodeId`，然后仍传 `--target-folder-id <NODE_ID>` | `target-folder-id` 必须是文件夹 `nodeId`，不接受 URL、路径、纯数字 dentryId 或 rootFolderId；若 Runtime 返回 `target_not_supported/retryable=false`，立即报告，不查 Help、不换 ID、不建测试文件夹，也不手工降级复制 |
-| 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>'` | 字段使用 `fieldName/type/config`；自动按 15 个字段分片并读回验证 |
+| 新建 Base 与整套表字段 | `dws aitable +base-bootstrap --name <名称> --tables '[{"name":"<表名>","fields":[{"fieldName":"<字段名>","type":"text"}]}]'` | 表对象键必须是 `name`，不是 `tableName`；字段使用 `fieldName/type/config`，可选 `description`；参数已足够时直接执行 |
+| 复制 Base | `dws aitable +base-copy --base-id <B_OR_URL> [--target-folder-id <FOLDER_ID_OR_URL>] [--only-struct] [--new-name <名称>]` | `base-id` 可传 Base ID 或标准节点 URL；`target-folder-id` 可传 dentryUuid、标准节点 URL 或 Drive 文件夹 URL，省略时复制到源 Base 所在工作区根目录；参数解析与目标验证由 AITable MCP 负责 |
+| 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>'` | 字段使用 `fieldName/type/config`，可选 `description`；自动按 15 个字段分片并读回验证 |
 | 读取字段目录或完整配置 | `dws aitable field list --base-id <B> --table-id <T>` / `dws aitable +field-get --base-id <B> --table-id <T>` | 只需 fieldId/name/type 用 `field list`；需要 config 用 `+field-get`；不存在 `+field-list` 或 `+list-fields` |
+| 按名称解析人员、部门或群组实体 | `dws aitable entity search --entity-type PERSON\|DEPARTMENT\|GROUP --keyword <名称>` | 返回候选和可用于筛选的稳定身份；零命中、重名、模糊命中或分页不完整时停止，不默认选择第一项 |
 | 查询记录、记录筛选/排序或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；明确要求全量时改用原子 `record query --all --page-limit <N>` |
 | 新增单条或批量记录 | `dws aitable record create --base-id <ID> --table-id <ID> --records <JSON>` | 当前无 `+record-create`；写前取字段定义，写后按新 ID 回读 |
 | 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON>` | 自动分片并读回；只传需修改字段 |
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
+| 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回，空评论页按 hasMore/nextToken 续页，写入未知状态先 list 对账 |
 | 按业务键同步或按条件批改 | 唯一键用 `dws aitable +record-upsert-by-key ...`；有界批改用 `dws aitable +record-bulk-patch ... --max-matches <N>` | upsert 仅允许 0 条创建、1 条更新；批改必须有 query/filters/record-ids 边界。普通 update/upsert 直接执行；只有历史、分享、删除恢复、空行或特殊字段值才读 [record-ops](references/aitable-record-ops.md)；明确 AND/OR、日期或比较操作符只读 [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 生成记录分享链接并发送给联系人 | `dws aitable +record-share-links --base <B> --table <T> --record-ids <IDs>` → `dws chat +dm --to <姓名> --text <完整链接文本>` | AITable 只生成链接；用户要求“发送”时还必须完成真实发送，不能停在联系人解析 |
 | 创建或复制视图 | 创建用 `dws aitable view create --base-id <B> --table-id <T> --view-type <Grid|FormDesigner|Gantt|Calendar|Kanban|Gallery> [--name <名称>]`；复制用 `dws aitable +view-duplicate --base-id <B> --table-id <T> --view-id <V> [--new-name <名称>]` | 创建和复制直接执行；需要配置时按下方“按需加载”选择一个 View Reference |
 | 创建并验证 Dashboard，按需创建 Chart | `dws aitable dashboard create --base-id <B> --name <名称>` → `dws aitable +dashboard-get --base-id <B> --dashboard-id <D>`；需要 Chart 时按下方“按需加载”处理 | 只使用创建返回的真实 dashboardId；失败时不要猜同义命令或更换 dashboardId |
 | 管理 AI 表格应用模式 | `dws aitable app get --base-id <B>` → `dws aitable app page list --base-id <B>` → 按需 `app page create/update/move/delete` 或 `app widget create/get/list/update/delete` | 一个 Base 只有一个面向用户的 App；页面 `pageId` 同时是对应 Dashboard ID。Widget 的 `config`/`layout` 是完整对象，更新前先读回；创建操作未知状态时不得自动重放 |
 | Base 内创建 Section 并移动节点 | `dws aitable +section-create --base-id <B> --name <名称>` → `dws aitable +section-move-node --base-id <B> --node-id <N> --new-parent-section-id <S>` → `dws aitable +section-list-nodes --base-id <B>` | Table、Dashboard、Section 都是 AITable 的 nsheet 节点；禁止改走 Wiki/Drive 文件夹或移动命令 |
-| 将本地 CSV/XLSX/XLS 导入新表 | `python scripts/aitable_import_via_task.py <BASE_ID> <FILE_PATH>` | 首选本 Skill 自带脚本，一次完成申请凭证、空 Content-Type PUT 和 `import data`；不要猜 `+import-csv` 或给 `import upload` 传 `--file` |
+| 将本地 CSV/XLSX/XLS 导入新表 | `dws aitable +import-file --base-id <BASE_ID> --file <FILE_PATH>` | 存储示例不预置 `--yes`；首次调用先触发 Runtime 确认门禁，取得明确确认后由执行方追加。DWS 在进程内完成申请凭证、空 Content-Type PUT 和 `import data`，且不暴露签名 URL；不要猜 `+import-csv` 或给 `import upload` 传 `--file` |
 | 接入外部数据源（审批等） | `dws aitable +datasource-list-sources --base-id <ID> --datasource-type OA` → 解析 result 构造 sourceConfig → `dws aitable +datasource-create --base-id <ID> --datasource-type OA --source-config '<JSON>'` | 当前仅支持 OA 审批；processCode/name/iconUrl/url 从 list-sources 原样透传，创建后用 `+datasource-sync-status` 查同步结果 |
 
 ### 简单 leaf
@@ -88,6 +96,13 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 
 ## 执行约束
 
+- 已有 ID 直接使用；URL 只解析一次；“唯一定位并操作”用 `+resolve-base` / `+resolve-table`，“搜索候选/存在性检查”直接用 `+base-search`。人员、部门或群组只有显示名称时用 `entity search` 取得稳定身份；这些路径不要串行探测。filters/sort 缺 fieldId 时才读取字段目录。
+- Golden Route 已给出准确命令和参数时直接执行；不预读或默认读取通用 `references/aitable.md`。只有操作参数、JSON 结构或恢复语义确实缺失时，才读取下方一个精确操作 Reference。
+- Shortcut 已含分片或验证时不重复拆步；已有 Base 新建完整表结构直接用 `+table-bootstrap`。
+- 单产品线性任务直接执行，不创建 TodoWrite；只有跨产品或多个独立分支的长任务才建计划，并且只在阶段切换时更新，不在每条 CLI 后刷新状态。
+- 用户要求资源名带当前时间戳时只取一次并在 Base、Table、Dashboard 等名称中复用同一值；不要为每个资源分别取时间。
+- JSON 已返回所需字段时立即复用；不得为寻找同一字段改用 `--verbose`、`raw`、`pretty` 重复请求。
+
 - 记录 filter/sort 缺 fieldId 时才读取字段目录。
 - record filter/sort 与 view filter/sort/group 的协议和 Reference 互斥。普通 record query/create/update/upsert 直达；只有历史、分享、删除恢复、空行或特殊字段值读 `record-ops`。
 - 普通字段 type 使用 `text/number/date/singleSelect/currency`；`singleSelect` 的 config 为 `{"options":[{"name":"<选项>"}]}`，人民币 `currency` 为 `{"currencyType":"CNY","formatter":"FLOAT_2"}`。
@@ -112,6 +127,7 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 ## 安全边界
 
 - 删除不可逆，按 Runtime confirmation 核对真实目标；`base list` 只是最近访问。字段零/多候选、类型不明时停止；多批写保留已完成批次和续跑位置。
+- 评论 create/reply 非幂等，评论写操作未知状态时先 `comment list` 对账，不自动重放；delete 只删除本人评论且不可恢复，关联回复处理不作保证。
 - `app get` / `app page list` 在 App 不存在时会初始化默认 App，属于幂等条件写；`app page/widget create` 非幂等且不自动重试。删除 Page 会级联删除全部 Widget，删除 Widget 会同步清理布局，均需独立确认。
 - 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步；执行前确认目标 Base 和 sourceConfig。`+datasource-sync` 单次最多 5 张表。
 
@@ -124,6 +140,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | `+record-query`、upsert、bulk patch 的记录 filters/sort/date/AND/OR/比较操作符 | [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 记录历史、分享、删除恢复、空行或特殊字段值 | [record-ops](references/aitable-record-ops.md) |
 | 记录统计、分组聚合或去重率 | [record-stats](references/aitable/aitable-record-stats.md) |
+| 记录评论查询、创建、回复、更新或删除 | [comment](references/aitable/aitable-comment.md) |
 | 查询记录的主键文档，或为记录创建主键文档 | 首次建表前读取 [primary-doc](references/aitable/aitable-primary-doc.md)；普通 Base/Table/字段/记录创建与导入不读取 |
 | AI 字段、关联字段、lookup/filterUp 或其他复杂 config | [field](references/aitable/aitable-field.md) |
 | formula 字段或公式语法 | [formula-guide](references/aitable/aitable-formula-guide.md) |

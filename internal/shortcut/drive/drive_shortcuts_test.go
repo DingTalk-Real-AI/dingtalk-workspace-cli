@@ -764,12 +764,13 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 		committedID string
 		readback    string
 		want        string
+		wantReceipt bool
 	}{
-		{"missing remote id", "uploaded-2", `{"success":true,"result":{"name":"input.bin","fileSize":18}}`, "缺少文件 ID"},
-		{"mismatched remote id", "uploaded-3", `{"success":true,"result":{"fileId":"other","name":"input.bin","fileSize":18}}`, "与提交 ID"},
-		{"prefix-only remote name", "uploaded-4", `{"success":true,"result":{"fileId":"uploaded-4","name":"input.bin-old","fileSize":18}}`, "读回名称"},
-		{"missing remote size", "uploaded-5", `{"success":true,"result":{"fileId":"uploaded-5","name":"input.bin"}}`, "缺少有效文件大小"},
-		{"mismatched remote size", "uploaded-6", `{"success":true,"result":{"fileId":"uploaded-6","name":"input.bin","fileSize":17}}`, "与本地文件大小 18 不一致"},
+		{"missing remote id", "uploaded-2", `{"success":true,"result":{"name":"input.bin","fileSize":18}}`, "缺少文件 ID", false},
+		{"mismatched remote id", "uploaded-3", `{"success":true,"result":{"fileId":"other","name":"input.bin","fileSize":18}}`, "与提交 ID", false},
+		{"prefix-only remote name", "uploaded-4", `{"success":true,"result":{"fileId":"uploaded-4","name":"input.bin-old","fileSize":18}}`, "读回名称", true},
+		{"missing remote size", "uploaded-5", `{"success":true,"result":{"fileId":"uploaded-5","name":"input.bin"}}`, "缺少有效文件大小", false},
+		{"mismatched remote size", "uploaded-6", `{"success":true,"result":{"fileId":"uploaded-6","name":"input.bin","fileSize":17}}`, "与本地文件大小 18 不一致", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testseam.Swap(t, &uploadDriveFile, func(context.Context, helpers.DriveUploadRequest) (map[string]any, error) {
@@ -780,7 +781,7 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
 			}
-			if tc.name == "prefix-only remote name" {
+			if tc.wantReceipt {
 				var typed *apperrors.Error
 				if !errors.As(err, &typed) || typed.ExecutionStarted == nil || !*typed.ExecutionStarted || typed.Retryable {
 					t.Fatalf("upload mismatch metadata = %#v", err)
@@ -788,8 +789,12 @@ func TestCrossPlatformCoverageDriveDownloadAndUploadRequireArtifactsAndReadback(
 				if typed.Operation != "drive/commit_upload" || typed.FailureStage != "readback_verification" {
 					t.Fatalf("drive upload mismatch operation/stage = %q/%q", typed.Operation, typed.FailureStage)
 				}
-				if typed.Details["nodeId"] != "uploaded-4" || typed.Details["requestedName"] != "input.bin" {
+				if typed.Details["nodeId"] != tc.committedID || typed.Details["requestedName"] != "input.bin" {
 					t.Fatalf("upload mismatch details = %#v", typed.Details)
+				}
+				resource, _ := typed.Details["resource"].(map[string]any)
+				if resource["nodeId"] != tc.committedID || resource["ownership"] != "owned" {
+					t.Fatalf("resource receipt = %#v", resource)
 				}
 			}
 		})
@@ -1274,8 +1279,17 @@ func TestCrossPlatformCoverageDriveCreateRestoreCopyMoveRename(t *testing.T) {
 		"restore_recycle_item": {`{"success":true}`},
 		"search_files":         {`{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`, `{"success":true,"items":[]}`},
 	}}
-	if err := runDriveCoverage(t, RecycleRestore, missingRestore, "--id", "recycle-1", "--yes"); err == nil {
+	err := runDriveCoverage(t, RecycleRestore, missingRestore, "--id", "recycle-1", "--yes")
+	if err == nil {
 		t.Fatal("restore without read-back evidence accepted")
+	}
+	var restoreErr *apperrors.Error
+	if !errors.As(err, &restoreErr) {
+		t.Fatalf("restore error = %T, want structured error", err)
+	}
+	resource, _ := restoreErr.Details["resource"].(map[string]any)
+	if resource["recycleItemId"] != "recycle-1" || resource["accepted"] != true || resource["readbackComplete"] != false {
+		t.Fatalf("restore receipt = %#v", resource)
 	}
 
 	copyCaller := &driveCoverageCaller{responses: map[string][]string{

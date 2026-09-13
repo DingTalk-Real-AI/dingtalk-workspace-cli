@@ -21,7 +21,7 @@
 | `base list` | 列出最近访问的 Base | — | 仅返回最近访问过的，优先用 `base search` |
 | `base search` | 按名称搜索 Base（别名 `aitable search`） | — | `--query` help 标必填但实际可省略：不传时返回最近访问的 Base 列表。`--keyword` 是 `--query` 的隐藏别名，同义 |
 | `base get` | 获取 Base 信息（含 tables 列表） | `--base-id` | 用户给 URL 时提取末尾 ID |
-| `base copy` | 复制整个 Base 到目标文件夹 | `--base-id` `--target-folder-id` | 默认全量复制；`--only-struct` 仅复制结构不含数据 |
+| `base copy` | 复制整个 Base | `--base-id` | `--target-folder-id` 可传文件夹 ID 或 URL，省略时使用源 Base 工作区根目录；`--only-struct` 仅复制结构 |
 | `base get-primary-doc-id` | 获取某记录的主键文档 ID | `--base-id` `--table-id` `--record-id` | 等价 `record primary-doc-get` 的取 ID 视角 |
 | `base create` | 创建 Base | `--name` | 创建后直接用返回的 baseId |
 | `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
@@ -81,7 +81,7 @@
 | `record list` | 获取记录（`record query` 的别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 与 `record query` 等价 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
-| `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 小写；group 为 JSON 数组字符串；最多 1000 个分组 |
+| `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；group/sort 为 JSON 数组字符串；最多 1000 个分组 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
@@ -92,6 +92,16 @@
 | `record history-list` | 查询单条记录的变更历史 | [aitable-record-history.md](./aitable/aitable-record-history.md) | `--record-id` 单条；`--offset`/`--limit`（≤50） |
 | `record primary-doc-get` | 查询记录的主键文档 nodeId | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 无文档时返回 `no record` 错误 |
 | `record primary-doc-create` | 为记录创建主键文档 | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 幂等；`--field-id` 须 primaryDoc 类型 |
+
+### comment (记录评论) → 详见 [aitable-comment.md](./aitable/aitable-comment.md)
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `comment list` | 分页查询记录评论与回复 | `--base-id --table-id --record-id` | 空 comments 不代表结束；按 hasMore/nextToken 续页 |
+| `comment create` | 创建评论话题 | 定位参数 + `--content` 或 `--rich-content` | 非幂等；未知状态先 list 对账 |
+| `comment reply` | 回复已有评论 | 定位参数 + `--topic-id --comment-key` + 正文 | 标识必须来自同一记录真实返回；非幂等 |
+| `comment update` | 完整替换本人评论正文 | 定位参数 + `--topic-id --comment-key` + 正文 | 仅纯文本会移除旧 @和图片；无 CAS |
+| `comment delete` | 删除本人评论 | 定位参数 + `--topic-id --comment-key` | 不可恢复；确认后再追加 `--yes`，关联回复处理由服务端决定 |
 
 ### view (视图管理)
 
@@ -138,7 +148,7 @@
 | `workflow list` | 列出 Base 下所有工作流 | `--base-id` | 支持 `--limit [1,100]` / `--offset >=0`；list 出参字段叫 `flowId` |
 | `workflow get` | 获取单个工作流详情（含 flowSchema） | `--base-id` `--workflow-id` | `--workflow-id` 接受 list 里的 `flowId`（同值） |
 | `workflow enable` | 启用工作流 | `--base-id` `--workflow-id` | 返回 `{enabled: true}` 是动作确认；要确认真启用看 list 的 `status` |
-| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` `--yes` | 影响业务自动化，建议二次确认；status 变 STOP |
+| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` | 影响业务自动化，必须先取得用户明确确认；status 变 STOP |
 | `workflow run` | 立即执行工作流（需确认） | `--base-id` `--workflow-id`；记录触发另需 `--table-id` `--record-ids` | 返回 `executionId`；不确定时先用 history 核对，避免重复执行 |
 | `workflow history` | 查询工作流执行历史 | `--base-id` `--workflow-id` | 支持 status、Unix 毫秒时间范围和 page/size；`instanceId` 对应 run 的 `executionId` |
 

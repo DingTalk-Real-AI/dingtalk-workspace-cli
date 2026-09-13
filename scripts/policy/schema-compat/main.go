@@ -91,6 +91,27 @@ type reviewedCompatibilityException struct {
 // confirmation drift into a compatible change. Each tool may have multiple
 // field transitions (e.g. confirmation + risk + effect tightened together).
 var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
+	// PR #1357: align the published Drive/Wiki contract with verified runtime
+	// behavior. Publish status is read-only; unsupported publish enablement is
+	// unavailable to Agents; upload and member removal cross existing runtime
+	// confirmation gates. Each transition is pinned independently.
+	"drive/drive.publish_get": {
+		{Field: "effect", Old: "write", New: "read"},
+		{Field: "risk", Old: "medium", New: "low"},
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"drive/drive.publish_set": {
+		{Field: "availability", Old: "available", New: "unavailable"},
+	},
+	"drive/drive.shortcut_publish_set": {
+		{Field: "availability", Old: "available", New: "unavailable"},
+	},
+	"drive/drive.upload": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	"wiki/wiki.shortcut_member_remove": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
 	// PR #1085: batch permission/member remove is destructive at container
 	// scope — one call can revoke access for up to 30 USER / DEPT /
 	// CONVERSATION / TAG members, and departments, chats, and role groups

@@ -40,12 +40,14 @@ func TestCrossPlatformCoverageWhiteboardExportDownloadsUsingBoardName(t *testing
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("exported file: %v", err)
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
-		t.Fatalf("output = %q: %v", output.String(), err)
+	var result struct {
+		OutputPath string `json:"outputPath"`
 	}
-	if payload["outputPath"] != filepath.Clean(path) {
-		t.Fatalf("outputPath = %q, want %q", payload["outputPath"], path)
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode export output: %v", err)
+	}
+	if result.OutputPath != filepath.Clean(path) {
+		t.Fatalf("output path = %q, want %q", result.OutputPath, path)
 	}
 	wantTools := []string{"export_whiteboard", "query_export_job"}
 	gotTools := make([]string, 0, len(caller.calls))

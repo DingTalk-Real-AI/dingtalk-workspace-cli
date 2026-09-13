@@ -57,9 +57,118 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventTodoTaskCreated,
 		EventTodoTaskUpdated,
 		EventTodoTaskDeleted,
+		EventCardAction,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
+	}
+}
+
+func TestCardActionEventCatalogDefinitionAndSchema(t *testing.T) {
+	items := Catalog("card", true, false)
+	if len(items) != 1 {
+		t.Fatalf("Catalog(card) = %#v, want one event", items)
+	}
+	item := items[0]
+	if item.EventKey != EventCardAction || item.Category != "card" || item.RuleType != "all" || item.Status != StatusEnabled || !item.Public {
+		t.Fatalf("Catalog(card)[0] = %#v, want public enabled card/all event", item)
+	}
+	if len(item.RequiredParams) != 0 || item.Constraints != nil || item.Auth["identity"] != "user" {
+		t.Fatalf("Catalog(card)[0] parameters/auth = %#v/%#v/%#v", item.RequiredParams, item.Constraints, item.Auth)
+	}
+
+	doc := BuildSchemaDocumentForMode(item, true)
+	if doc.JQRootPath != "." {
+		t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+	}
+	properties, ok := doc.Schema["properties"].(map[string]any)
+	if !ok || len(properties) != 5 {
+		t.Fatalf("schema.properties = %#v, want five stable top-level fields", doc.Schema["properties"])
+	}
+	for _, name := range []string{"type", "event_id", "timestamp", "subscribe_id", "payload"} {
+		if _, ok := properties[name].(map[string]any); !ok {
+			t.Fatalf("schema.properties.%s = %#v, want object", name, properties[name])
+		}
+	}
+	payload := properties["payload"].(map[string]any)
+	if payload["type"] != "object" || payload["additionalProperties"] != true {
+		t.Fatalf("schema.properties.payload = %#v, want open object", payload)
+	}
+	payloadProperties := payload["properties"].(map[string]any)
+	eventTime := payloadProperties["event_time"].(map[string]any)
+	if eventTime["type"] != "integer" || eventTime["format"] != "timestamp_ms" {
+		t.Fatalf("schema payload.event_time = %#v", eventTime)
+	}
+	body := payloadProperties["body"].(map[string]any)
+	if body["additionalProperties"] != true {
+		t.Fatalf("schema payload.body = %#v, want open object", body)
+	}
+	bodyProperties := body["properties"].(map[string]any)
+	for _, name := range []string{
+		"actionData", "bizInfoDTO", "context", "conversationContextDTO", "extension",
+		"operatorDTO", "spaceId", "spaceType", "triggerTimestamp",
+	} {
+		if _, ok := bodyProperties[name].(map[string]any); !ok {
+			t.Fatalf("schema payload.body.%s = %#v, want object", name, bodyProperties[name])
+		}
+	}
+
+	actionData := bodyProperties["actionData"].(map[string]any)
+	context := actionData["properties"].(map[string]any)["context"].(map[string]any)
+	if actionData["additionalProperties"] != true || context["additionalProperties"] != true {
+		t.Fatalf("schema actionData/context must remain open: %#v/%#v", actionData, context)
+	}
+	contextProperties := context["properties"].(map[string]any)
+	for _, name := range []string{"answers", "createUid", "orgId", "outcome", "questions", "sourceProjectionVersion", "sourceTurnId"} {
+		if _, ok := contextProperties[name].(map[string]any); !ok {
+			t.Fatalf("schema actionData.context.%s = %#v, want object", name, contextProperties[name])
+		}
+	}
+	if contextProperties["createUid"].(map[string]any)["type"] != "string" || contextProperties["orgId"].(map[string]any)["type"] != "string" {
+		t.Fatalf("schema context UID/org types = %#v/%#v", contextProperties["createUid"], contextProperties["orgId"])
+	}
+	answers := contextProperties["answers"].(map[string]any)
+	answerSchema, ok := answers["additionalProperties"].(map[string]any)
+	if !ok || answerSchema["type"] != "object" || answerSchema["additionalProperties"] != true {
+		t.Fatalf("schema context.answers = %#v, want typed dynamic values", answers)
+	}
+	answerProperties := answerSchema["properties"].(map[string]any)
+	selected := answerProperties["selected"].(map[string]any)
+	if selected["type"] != "array" || selected["items"].(map[string]any)["type"] != "string" {
+		t.Fatalf("schema answers.*.selected = %#v", selected)
+	}
+	questions := contextProperties["questions"].(map[string]any)
+	questionSchema := questions["items"].(map[string]any)
+	if questionSchema["additionalProperties"] != true {
+		t.Fatalf("schema questions[] = %#v, want open object", questionSchema)
+	}
+	questionProperties := questionSchema["properties"].(map[string]any)
+	for _, name := range []string{"allowCustom", "header", "id", "inputKind", "options", "prompt", "selection"} {
+		if _, ok := questionProperties[name].(map[string]any); !ok {
+			t.Fatalf("schema questions[].%s = %#v, want object", name, questionProperties[name])
+		}
+	}
+	optionSchema := questionProperties["options"].(map[string]any)["items"].(map[string]any)
+	if optionSchema["additionalProperties"] != true {
+		t.Fatalf("schema questions[].options[] = %#v, want open object", optionSchema)
+	}
+	optionProperties := optionSchema["properties"].(map[string]any)
+	for _, name := range []string{"description", "id", "label"} {
+		if optionProperties[name].(map[string]any)["type"] != "string" {
+			t.Fatalf("schema questions[].options[].%s = %#v, want string", name, optionProperties[name])
+		}
+	}
+	legacyContext := bodyProperties["context"].(map[string]any)["properties"].(map[string]any)
+	if legacyContext["answers"].(map[string]any)["type"] != "string" || legacyContext["questions"].(map[string]any)["type"] != "string" {
+		t.Fatalf("schema string context answers/questions = %#v/%#v", legacyContext["answers"], legacyContext["questions"])
+	}
+	extension := bodyProperties["extension"].(map[string]any)
+	if extension["additionalProperties"].(map[string]any)["type"] != "string" {
+		t.Fatalf("schema extension = %#v, want string values", extension)
+	}
+	operatorProperties := bodyProperties["operatorDTO"].(map[string]any)["properties"].(map[string]any)
+	if operatorProperties["uid"].(map[string]any)["type"] != "integer" {
+		t.Fatalf("schema operatorDTO.uid = %#v, want integer", operatorProperties["uid"])
 	}
 }
 
@@ -165,6 +274,7 @@ func TestEventFromUserIsPublic(t *testing.T) {
 
 func TestLegacyEventKeysAreUnknown(t *testing.T) {
 	legacyKeys := []string{
+		"user_card_action_event",
 		"im_message_receive_at",
 		"im_message_receive_o2o",
 		"im_message_receive_group",
@@ -232,6 +342,7 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 		EventTodoTaskCreated,
 		EventTodoTaskUpdated,
 		EventTodoTaskDeleted,
+		EventCardAction,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
@@ -781,6 +892,26 @@ func TestBuildRuleParamAllEvents(t *testing.T) {
 	}
 }
 
+func TestBuildRuleParamCardActionEventUsesEmptyObject(t *testing.T) {
+	rule, param, err := BuildRuleParam(EventCardAction, RuleOptions{})
+	if err != nil {
+		t.Fatalf("BuildRuleParam() error = %v", err)
+	}
+	if rule != "all" || param == nil || len(param) != 0 {
+		t.Fatalf("rule = %q, param = %#v; want all and empty map", rule, param)
+	}
+	for name, opts := range map[string]RuleOptions{
+		"user":             {UserID: "staff-1"},
+		"open-dingtalk-id": {OpenDingTalkID: "open-user-1"},
+		"group":            {GroupID: "cid-1"},
+		"role-types":       {RoleTypes: []string{"executor"}},
+	} {
+		if _, _, err := BuildRuleParam(EventCardAction, opts); err == nil || !strings.Contains(err.Error(), "--"+name+" is not supported") {
+			t.Fatalf("%s error = %v, want unsupported flag", name, err)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageBuildRuleParamTodoEvents(t *testing.T) {
 	for _, eventKey := range []string{EventTodoTaskCreated, EventTodoTaskUpdated, EventTodoTaskDeleted} {
 		t.Run(eventKey+"/default", func(t *testing.T) {
@@ -1025,6 +1156,7 @@ func TestSupportsMessageFilter(t *testing.T) {
 		EventTodoTaskCreated,
 		EventTodoTaskUpdated,
 		EventTodoTaskDeleted,
+		EventCardAction,
 		"unknown_event",
 	} {
 		if SupportsMessageFilter(eventKey) {

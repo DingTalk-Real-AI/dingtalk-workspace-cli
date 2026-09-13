@@ -130,6 +130,18 @@ func TestCrossPlatformCoverageMinutesLatestAndActionItemsBranchesE2E(t *testing.
 			if (err != nil) != test.wantError {
 				t.Fatalf("payload=%#v err=%v", payload, err)
 			}
+			if !test.wantError {
+				if payload["state"] != "known_empty" || payload["complete"] != true || payload["itemCount"] != float64(0) || payload["taskUuid"] != "u1" {
+					t.Fatalf("typed action payload=%#v", payload)
+				}
+			}
+			if test.name == "todo parse" {
+				errorPayload := payload["error"].(map[string]any)
+				details := errorPayload["details"].(map[string]any)
+				if details["state"] != "unsupported_shape" || details["complete"] != false {
+					t.Fatalf("unsupported action payload=%#v", payload)
+				}
+			}
 		})
 	}
 	actionOutput := &smartCoverageCaller{responses: map[string][]string{todoKey: {`{"success":true,"result":{"actions":[]}}`}}}
@@ -211,6 +223,11 @@ func TestCrossPlatformCoverageMinutesDetailRemainingBranchesE2E(t *testing.T) {
 	if err != nil || payload["complete"] != true {
 		t.Fatalf("detail all payload=%#v err=%v", payload, err)
 	}
+	todosEnvelope := payload["todos"].(map[string]any)
+	todosResult := todosEnvelope["result"].(map[string]any)
+	if todosResult["state"] != "known_empty" || todosResult["itemCount"] != float64(0) || todosResult["complete"] != true {
+		t.Fatalf("detail todos truth=%#v", todosResult)
+	}
 	if err := runMinutesCLIWithWriter(t, all, smartMinutesFailWriter{}, "minutes", "+detail", "--id", "u1", "--artifacts", "basic"); err == nil {
 		t.Fatal("detail single output failure accepted")
 	}
@@ -230,6 +247,12 @@ func TestCrossPlatformCoverageMinutesDetailRemainingBranchesE2E(t *testing.T) {
 		payload, output, err = runMinutesCLI(t, caller, "minutes", "+detail", "--id", "u1", "--artifacts", artifact)
 		if err == nil || output == "" || payload["complete"] != false {
 			t.Fatalf("detail parse %s payload=%#v err=%v", artifact, payload, err)
+		}
+		if artifact == "todos" {
+			todos := payload["todos"].(map[string]any)
+			if todos["state"] != "unsupported_shape" || todos["complete"] != false {
+				t.Fatalf("detail todos unsupported=%#v", todos)
+			}
 		}
 	}
 

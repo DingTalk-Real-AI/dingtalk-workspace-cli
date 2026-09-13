@@ -49,6 +49,7 @@ var (
 	oauthPollInterval         = 5 * time.Second
 	oauthSuccessPause         = 2 * time.Second
 	oauthLoadToken            = LoadTokenData
+	oauthLoadTokenForProfile  = LoadTokenDataForProfile
 	oauthLoadTokenLocked      = loadTokenDataForProfileLocked
 	oauthAcquireLock          = AcquireDualLock
 	oauthMarkProfile          = MarkProfileStatus
@@ -653,7 +654,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	_, _ = fmt.Fprintln(p.output(), i18n.T("🔐 登录钉钉"))
 	_, _ = fmt.Fprintln(p.output(), "")
 	_, _ = fmt.Fprintln(p.output(), i18n.T("请在浏览器中完成扫码授权。"))
-	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), authURL)
+	_, _ = fmt.Fprintf(p.output(), i18n.T("如果浏览器未自动打开，请手动访问:\n  %s\n\n"), browserURL)
 	_, _ = fmt.Fprintln(p.output(), i18n.T("⏳ 等待授权中..."))
 
 	timeout := time.NewTimer(oauthLoginTimeout)
@@ -805,7 +806,21 @@ func oauthExchangeDisplayError(err error) string {
 // Storage and refresh failures retain their original cause; only a confirmed
 // missing credential is reported as ErrTokenDataNotFound.
 func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error) {
-	data, err := oauthLoadToken(p.configDir)
+	return p.getTokenSnapshotForProfile(ctx, RuntimeProfile(), func() (*TokenData, error) {
+		return oauthLoadToken(p.configDir)
+	})
+}
+
+// GetTokenSnapshotForProfile returns a valid token for one explicit profile
+// without consulting or mutating the process-wide runtime profile.
+func (p *OAuthProvider) GetTokenSnapshotForProfile(ctx context.Context, profile string) (*TokenData, error) {
+	return p.getTokenSnapshotForProfile(ctx, profile, func() (*TokenData, error) {
+		return oauthLoadTokenForProfile(p.configDir, profile)
+	})
+}
+
+func (p *OAuthProvider) getTokenSnapshotForProfile(ctx context.Context, profile string, load func() (*TokenData, error)) (*TokenData, error) {
+	data, err := load()
 	if err != nil {
 		if errors.Is(err, ErrTokenDataNotFound) || os.IsNotExist(err) {
 			return nil, fmt.Errorf("%s: %w", i18n.T("未登录，请运行 dws auth login"), ErrTokenDataNotFound)
@@ -821,7 +836,7 @@ func (p *OAuthProvider) GetTokenSnapshot(ctx context.Context) (*TokenData, error
 
 	// Slow path: token expired — try locked refresh.
 	if data.IsRefreshTokenValid() {
-		refreshed, rErr := p.lockedRefresh(ctx)
+		refreshed, rErr := p.lockedRefreshForProfile(ctx, profile)
 		if rErr == nil {
 			return refreshed, nil
 		}
@@ -894,6 +909,10 @@ func (p *OAuthProvider) GetAccessToken(ctx context.Context) (string, error) {
 //	classic race where two callers both see an expired token and both call the
 //	refresh API, invalidating each other's refresh_token.
 func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
+	return p.lockedRefreshForProfile(ctx, RuntimeProfile())
+}
+
+func (p *OAuthProvider) lockedRefreshForProfile(ctx context.Context, profile string) (*TokenData, error) {
 	// Acquire dual-layer lock (process-level + file-level)
 	lock, err := oauthAcquireLock(ctx, p.configDir)
 	if err != nil {
@@ -903,7 +922,7 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 
 	// Double-check: re-load from disk — another goroutine/process may have refreshed
 	// while we were waiting for the lock.
-	data, err := loadOAuthTokenUnderHeldLock(p.configDir, RuntimeProfile())
+	data, err := loadOAuthTokenUnderHeldLock(p.configDir, profile)
 	if err != nil {
 		return nil, err
 	}

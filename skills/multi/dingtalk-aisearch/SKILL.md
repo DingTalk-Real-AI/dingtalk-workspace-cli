@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aisearch
-description: AI搜问：人员语义搜索、跨源内容发现与当前用户行为轨迹。Use when 按姓名/工号/部门/职责/上下级找人，跨文档/消息/邮件/待办/听记等来源按主题发现记录，或查询当前用户参与的发送、接收及创建、编辑、分享行为。若资源只限 IM、答案必须是逐条消息且带结构化消息谓词，走 dingtalk-chat；完整手机号反查走 dingtalk-contact，稳定 ID 后的读写走对应产品。命令前缀：dws aisearch。
+description: AI搜问：人员语义搜索、跨源内容定位与行为回溯。Use when 按姓名/工号/部门/职责/上下级找人，或在目标对象未知时按主题、语义、来源或行为发现相关内容。搜索结果用于候选定位；命中后需要读取、修改或验证原对象时切换到对象所属产品。完整手机号精确反查走 dingtalk-contact。命令前缀：dws aisearch。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -16,8 +16,8 @@ metadata:
 
 - 只通过 `dws` CLI 操作钉钉；每条命令带 `--format json`，只按真实结构化返回下结论。
 - 本页已覆盖 `person`、`enterprise`、`behavior` 的常用参数，直接执行；不要预读 shared、Reference、Schema、Help 或下游产品 Skill。
-- 不猜命令、字段、ID、profile 或时间。多候选不默认取第一项，不把不同 ID 域互相替代。
-- 合法空结果是终态；接口失败、分页不完整或来源未核实不能表述为“没有”。
+- 不猜命令、字段、ID、profile 或业务事实；可选时间缺失则省略并说明范围，不阻塞；多候选不取首项，ID 域不混用。
+- 合法空结果是终态；失败、分页不全或来源未核实不能说“没有”；搜索命中是候选，无完整性证据不得声称完整枚举或精确总数。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
 ## Golden Route
@@ -91,7 +91,8 @@ dws aisearch behavior --queries "<主题>" --types <类型CSV> --behavior-type <
 1. `retryable=true`：原命令、原参数最多重试一次；仍失败则报告该分类接口失败。
 2. `retryable=false`、合法空结果或精确目标缺失：立即停止该分支，不换产品、不换近义词。
 3. 真实 `unknown flag`：只查看一次当前 leaf Help；已知命令不读 Help，API/权限/空结果错误也不读 Help。
-4. 搜索结果只保留完成任务需要的姓名/标题、来源、链接、稳定 ID 和必要状态；最终按用户要求分组，避免复述长 snippet。
+4. 只追加用户明确的独立条件或已确认的槽位修正；禁自行扩展近义词。空结果结束当前分支，不跳过其他明确分支。
+5. 上下文只留标题、来源、链接、稳定 ID、数量、范围、完整性和失败；长 snippet 外置或省略，不删 `complete/hasMore/nextCursor/stopReason`。
 
 ## 按需 Reference
 

@@ -99,6 +99,8 @@
   "授权失败：未收到授权码": "Authorization failed: no authorization code received",
   "授权成功!": "Authorization successful!",
   "授权码将在 %d 秒后过期。": "Authorization code will expire in %d seconds.",
+  "授权链接（已填入授权码）：": "Authorization link (code included):",
+  "手动输入授权码的链接：": "Link for entering the code manually:",
   "授权码已过期，正在重新发起设备授权流程...": "Authorization code expired, restarting device authorization flow...",
   "授权超时（5分钟），请重试": "Authorization timeout (5 minutes), please retry",
   "插件管理": "Manage plugins",

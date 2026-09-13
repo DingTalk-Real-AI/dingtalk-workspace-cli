@@ -69,6 +69,11 @@ Bot 图片使用 `--image-url`；本地文件只接受单个群或单个 `--user
 `supported=false` 是执行门禁，不是待猜测字段。只有 lower interface、Runtime、测试、Schema 和
 此页同时升级后，才能改变对外承诺。
 
+其中 `card-action-callback=false` 只约束 `dingtalk-chat` 的服务端 callback URL、验签和回复
+接口；当前用户的互动卡片操作可通过 [`dingtalk-event`](../../dingtalk-event/SKILL.md) 监听：
+`dws event consume user_card_action_triggered --flatten -f ndjson`。个人事件监听不改变上述 chat
+lower interface 门禁。
+
 话题圈会话仍禁止引用消息回复；向 Thread 追加回复使用 `chat thread reply --conversation-id <openConvThreadId>`。
 
 命名对齐的 alias 与固定置顶动作、个人编辑以及开发后的完整边界，见仓库 `docs/chat-parity/development-report.md`；下游需求见 `docs/chat-parity/im-team-requirements.md`。旧普通和专用入口保留。
