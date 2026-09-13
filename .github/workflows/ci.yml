@@ -1048,8 +1048,9 @@ jobs:
     # across three physical app lanes. The lane names and their exact partition
     # union are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper.
     # This preserves memory release between Go test processes while reducing
-    # hosted-runner fan-out by six jobs per focused run.
-    timeout-minutes: 20
+    # hosted-runner fan-out by six jobs per focused run. Job wall time is 45m
+    # so the cli/smoke package timeout of 35m still has setup headroom.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -1172,10 +1173,15 @@ jobs:
           fi
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # internal/cli under -race exceeded 15m (CI run 34334461549 timed
+          # out after 990s with no DATA RACE), then 25m after a main merge
+          # (run 34513601170: green run 34507346541 needed 23m15s, and the
+          # merged head tipped the 25m alarm with no DATA RACE); 35m is the
+          # intentional budget.
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=35m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
@@ -1189,7 +1195,7 @@ jobs:
     # are pinned to the helper by TestCIAppRaceLaneMatrixMatchesHelper. This
     # preserves registry release while reducing hosted-runner fan-out by six
     # jobs. cli/smoke retain extra timeout headroom for setup + assembly.
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -1246,10 +1252,15 @@ jobs:
           esac
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
+          # internal/cli under -race exceeded 15m (CI run 34334461549 timed
+          # out after 990s with no DATA RACE), then 25m after a main merge
+          # (run 34513601170: green run 34507346541 needed 23m15s, and the
+          # merged head tipped the 25m alarm with no DATA RACE); 35m is the
+          # intentional budget.
           timeout_budget=12m
           if [ "$TEST_SHARD" = "cli" ] ||
              [ "$TEST_SHARD" = "smoke" ]; then
-            timeout_budget=15m
+            timeout_budget=35m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 

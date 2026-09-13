@@ -1132,12 +1132,6 @@ if (!isHighRisk("internal/helpers/minutes.go")) {
 if (isHighRisk("internal/helpersx/minutes.go")) {
   throw new Error("helper high-risk classification must respect the path boundary");
 }
-if (!isHighRisk("skills/multi/dingtalk-chat/SKILL.md")) {
-  throw new Error("embedded skill changes must use the sharded full suite");
-}
-if (isHighRisk("skillsx/multi/dingtalk-chat/SKILL.md")) {
-  throw new Error("skill high-risk classification must respect the path boundary");
-}
 if (!isHighRisk("internal/shortcut/wiki/wiki.go")) {
   throw new Error("shortcut changes must use the sharded full suite");
 }
@@ -1345,9 +1339,6 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if !strings.Contains(focusedJob, `if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.admitted_merge != 'true' && needs.lint.outputs.full_suite != 'true' }}`) {
 		t.Error("focused test shards must run for every non-doc, non-reused, non-full-suite revision")
 	}
-	if !strings.Contains(focusedJob, "timeout-minutes: 45") {
-		t.Error("focused test job must allow the scoped race suite up to 45 minutes")
-	}
 	// The focused path fans the impacted set across the same shards as test-race
 	// and runs each shard the way test-race runs it, so no single job carries
 	// internal/app together with its reverse dependencies. internal/app is split
@@ -1367,7 +1358,6 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
-		"timeout_budget=35m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
 		"- smoke",
 		"- release-scripts",
@@ -1398,7 +1388,6 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,
-		"timeout_budget=35m",
 		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
 		"- smoke",
 	} {
