@@ -1,7 +1,9 @@
 ---
 name: dws
-description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请或待办事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请，以及待办创建/更新/删除时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
+description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.61"
+metadata:
+  internal: true
 ---
 
 # 钉钉全产品 Skill
@@ -18,11 +20,12 @@ cli_version: ">=1.0.61"
 
 ## 严格要求 (MUST DO)
 - 所有命令必须加 `--format json` 以获取可解析输出
+- 用户明确要登录钉钉国际版、海外版或 `.io` 区域时，必须执行 `dws auth login --intl`（无头环境再加 `--device`），不得回退到国内 `.com`；`--intl` 只用于登录，后续业务命令按所选 profile 自动路由
 - 危险操作必须先向用户确认，用户同意后才加 `--yes` 执行
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
 - **脚本只用于明确覆盖的复合任务**：[scripts/](./scripts/) 下的脚本可封装 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等流程；当公开 `+` Shortcut 已提供目标唯一解析、分页/部分失败 ledger 和确认语义时，优先 Shortcut。Chat 历史导出与机器人广播已完全下沉 Runtime，不再发布兼容脚本
-- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、VoIP 通话邀请、Todo、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史、审批列表、通话记录或待办列表
+- **实时个人事件例外**：普通 IM 消息、reaction、已读和撤回默认走 `dws event +listen-im ...`；OA 审批、VoIP 通话邀请、Todo、互动卡片回调、群生命周期、明确的原始 EventKey、Filter DSL、subscribe_id 或原始 envelope 使用 `dws event consume ... --flatten`。不要写脚本轮询消息历史、审批列表、通话记录或待办列表
 
 ## Shortcut 与原子命令的使用原则
 
@@ -39,16 +42,16 @@ cli_version: ">=1.0.61"
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
 ## Shortcut 总览
 
-下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知高频意图加载完整产品 Catalog。
+下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图先按产品 Skill、意图表或任务 reference 选唯一命令；参数/约束/安全不明时读一次 leaf 窄 Schema。Schema 不可用时才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次；`unknown command` 不查 Help，先用错误的明确 suggestion，否则用已加载 Skill/reference 的明确兼容入口，仍无则报告漂移，不枚举全 Catalog。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知意图加载完整产品 Catalog 或 root/parent Help。
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 100 | `dingtalk-aitable` |
+| `aitable` | 101 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
-| `chat` | 98 | `dingtalk-chat` |
+| `chat` | 99 | `dingtalk-chat` |
 | `contact` | 13 | `dingtalk-contact` |
 | `devapp` | 25 | `dingtalk-misc` |
 | `ding` | 1 | `dingtalk-misc` |
@@ -79,7 +82,7 @@ cli_version: ">=1.0.61"
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
 | `agoal`           | 目标管理：战略解码、经营合约、计分卡、目标规则周期、个人目标、目标模板、周月报规则提交统计与跟催 | [agoal.md](./references/products/agoal.md)                       |
 | `aisearch`        | AI搜问（通用找人首选）：按姓名/部门/职位/职责/上级/下级/手机号/工号维度找人，"谁负责 XX/XX 的负责人/某事项/某项目的人"统一走本产品；不含人才池/绩效/职业历程等专项 HR 场景（那些去 `hrbrain`） | [aisearch.md](./references/products/aisearch.md)               |
-| `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索            | [aitable.md](./references/products/aitable.md)                 |
+| `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索/PostgreSQL 只读查询与 JOIN | [aitable.md](./references/products/aitable.md)                 |
 | `api`             | OpenAPI 逃生舱：官方 llms.txt 分层发现，仅执行企业内部应用 App Token 服务端 API | [openapi-explorer.md](./references/products/openapi-explorer.md) |
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
@@ -101,9 +104,9 @@ cli_version: ">=1.0.61"
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
-| `whiteboard`      | 文档内嵌白板：读取 OpenNodes、追加节点、整页重建                           | [whiteboard.md](./references/products/whiteboard.md)           |
+| `whiteboard`      | 独立与文档内嵌白板：带内容创建、读取 OpenNodes、追加节点、整页重建             | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
-| `event`           | 个人 IM/OA/VoIP/Todo 事件：监听消息、群生命周期、审批任务/实例、通话邀请与待办变化，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
+| `event`           | 个人 IM/OA/VoIP/Todo/互动卡片事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化与卡片回调，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
 
@@ -111,7 +114,7 @@ cli_version: ">=1.0.61"
 用户提到"目标管理/Agoal/战略解码/经营合约或字段配置/计分卡/目标规则周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催" → `agoal`；只填写、提交或查询日报周报月报正文时才走 `report`
 用户提到"法务/智能合同/合同台账/合同审查/合同归档/合同项目/相对方/合同账款/按听记起草合同" → `contract`（合同审批实例的查询或处理走 `oa`；合同文件存储操作走 `drive`）
 用户提到"找人/搜人/谁负责 XX/某事项的负责人/某项目的人/团队成员/上级/下级/按工号找人/按手机号找人" → `aisearch`（通用语义找人；若明确涉及人才池/绩效/职业历程/结构化高级条件，去 `hrbrain`）
-用户提到"表格/多维表/AI表格/记录/数据/视图/图表/仪表盘" → `aitable`
+用户提到"表格/多维表/AI表格/记录/数据/视图/图表/仪表盘/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询" → `aitable`
 用户提到"考勤/打卡/排班" → `attendance`
 用户提到"日程/日历/会议室/约会/时间建议" → `calendar`
 用户提到"群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知" → `chat`
@@ -132,12 +135,13 @@ cli_version: ">=1.0.61"
 用户提到"在线电子表格/钉钉表格/axls/工作表/单元格读写/合并单元格/筛选视图/导出 xlsx" → `sheet`
 用户提到"待办/TODO/任务提醒/循环待办" → `todo`
 用户提到"创建知识库/知识库列表/搜索知识库空间/wiki/团队空间/知识库成员管理/我的文档个人空间" → `wiki`
-用户提到"文档内嵌白板/画布/OpenNodes/白板节点/连接线/整页重建白板" → `whiteboard`；创建空白板卡片先走 `doc whiteboard insert`
+用户提到"白板/独立白板/文档内嵌白板/画布/OpenNodes/白板节点/连接线/整页重建白板" → `whiteboard`；没有文档内 `partId` 的目标默认按独立白板处理，创建文档内空白板卡片先走 `doc whiteboard insert`
 用户提到"招聘/职位/JD/在招职位/创建职位/职位详情" → `recruit`
 用户提到"监听有人@我/监听单聊或群消息/监听所有单聊或群消息/监听某人发送的消息/监听消息已读/监听消息撤回/监听消息贴表情或表情回应/订阅个人 IM 事件/实时接收钉钉事件/监听并自动回复消息/驱动 Agent 处理消息" → `event +listen-im`；群成员加入/退出、群改名/解散或明确原始 EventKey/Filter DSL → `event consume`
 用户提到"监听待我审批的任务/监听审批任务创建、完成或转交/监听审批单发起或终止/监听我发起的审批完成/监听审批实例完成/订阅 OA 事件/event consume user_oa_approval_*" → `event consume`
 用户提到"收到语音通话邀请时通知我/监听 VoIP 来电/订阅 user_voip_call_receive_invite" → `event consume`
 用户提到"监听待办创建/更新/删除/监听指派给我的待办/订阅 Todo 事件/event consume user_todo_task_*" → `event consume`，按角色使用 `--role-types`
+用户提到"互动卡片回调/监听卡片操作/订阅 user_card_action_triggered" → `event consume user_card_action_triggered --flatten -f ndjson`
 
 普通消息、reaction、已读、撤回监听优先由一个 `dws event +listen-im` 进程表达目标；不同用户、不同群或不同过滤条件拆成独立进程。只有高级事件控制才生成 `dws event consume <event_key> [event_key...] --flatten`。
 

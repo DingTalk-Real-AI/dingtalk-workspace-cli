@@ -80,7 +80,43 @@ func TestCrossPlatformCoverageChatMessageSendValidationErrorsAreTyped(t *testing
 	}
 }
 
-func TestCrossPlatformCoverageEvaluationRegressionChatSearchSpellingsAndNaturalBotTarget(t *testing.T) {
+func TestCrossPlatformCoverageChatPublicTargetAliasesRejectConflictsBeforeBusinessCalls(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "conversation info",
+			args: []string{"conversation-info", "--conversation-id=cid-new", "--group=cid-old"},
+		},
+		{
+			name: "message list single page",
+			args: []string{"message", "list", "--conversation-id=cid-new", "--group=cid-old"},
+		},
+		{
+			name: "message list all pages",
+			args: []string{"message", "list", "--conversation-id=cid-new", "--group=cid-old", "--page-all"},
+		},
+		{
+			name: "message send",
+			args: []string{"message", "send", "--conversation-id=cid-new", "--group=cid-old", "--content=hello"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), "conflicts") {
+				t.Fatalf("error = %v, want alias conflict", err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("business calls = %d, want 0", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatSearchSpellingsAndNaturalBotTarget(t *testing.T) {
 	if got, err := resolveNativeChatTarget("  cid123456789  "); err != nil || got != "cid123456789" {
 		t.Fatalf("stable native chat target = %q, %v", got, err)
 	}
@@ -269,7 +305,7 @@ func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.
 	}
 }
 
-func TestChatGroupRoleSetUserAcceptsSingleRoleIDAndLegacyRoleIDs(t *testing.T) {
+func TestCrossPlatformCoverageChatGroupRoleSetUserAcceptsNonEmptySingleRoleIDAndLegacyRoleIDs(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}
 	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
@@ -289,11 +325,6 @@ func TestChatGroupRoleSetUserAcceptsSingleRoleIDAndLegacyRoleIDs(t *testing.T) {
 			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids=r1,r2"},
 			want: []string{"r1", "r2"},
 		},
-		{
-			name: "hidden legacy empty role ids",
-			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids="},
-			want: nil,
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -308,6 +339,29 @@ func TestChatGroupRoleSetUserAcceptsSingleRoleIDAndLegacyRoleIDs(t *testing.T) {
 				t.Fatalf("openRoleIds = %#v, want %#v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupRoleWritesRejectEmptyRoleListsBeforeBusinessCall(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	for _, args := range [][]string{
+		{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids="},
+		{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids=r1,,r2"},
+		{"group-role", "set-user", "--group=cid", "--user=D1", `--role-ids=' '`},
+		{"group-role", "remove-user", "--group=cid", "--user=D1", "--role-ids="},
+		{"group-role", "remove-user", "--group=cid", "--user=D1", "--role-ids=r1, ,r2"},
+	} {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller, args...)
+		if err == nil || !strings.Contains(err.Error(), "role-ids") {
+			t.Fatalf("args=%v error=%v, want role-ids validation", args, err)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("args=%v tool calls=%d, want 0", args, caller.calls)
+		}
 	}
 }
 

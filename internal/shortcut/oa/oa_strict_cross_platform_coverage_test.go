@@ -483,7 +483,7 @@ func TestCrossPlatformCoverageOAReadShortcutBranches(t *testing.T) {
 		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":null}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending pagination failure", func(t *testing.T) {
-		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[]}}`}}, legacyPendingRange...)
+		expectError(t, ListPending, map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[{"processInstanceId":"i"}]}}`}}, legacyPendingRange...)
 	})
 	t.Run("list-pending full params", func(t *testing.T) {
 		caller := expectSuccess(t, ListPending, map[string][]string{"get_todo_tasks": {validPage}},
@@ -601,7 +601,7 @@ func TestCrossPlatformCoverageOACompatibilityReadBranches(t *testing.T) {
 			expectError(t, declaration, map[string][]string{tool: {`{"success":true,"result":null}`}})
 		})
 		t.Run(declaration.Command+" pagination failure", func(t *testing.T) {
-			expectError(t, declaration, map[string][]string{tool: {`{"success":true,"result":{"values":[]}}`}})
+			expectError(t, declaration, map[string][]string{tool: {`{"success":true,"result":{"values":[{"processInstanceId":"i"}]}}`}})
 		})
 		t.Run(declaration.Command+" refuses incomplete first page", func(t *testing.T) {
 			expectError(t, declaration, map[string][]string{tool: {`{"success":true,"result":{"hasMore":true,"values":[]}}`}})
@@ -635,7 +635,7 @@ func TestCrossPlatformCoverageOACompatibilityReadBranches(t *testing.T) {
 		expectError(t, MyInitiated, map[string][]string{"get_submitted_instances": {`{"success":true,"result":null}`}})
 	})
 	t.Run("my-initiated pagination failure", func(t *testing.T) {
-		expectError(t, MyInitiated, map[string][]string{"get_submitted_instances": {`{"success":true,"result":{"values":[]}}`}})
+		expectError(t, MyInitiated, map[string][]string{"get_submitted_instances": {`{"success":true,"result":{"values":[{"processInstanceId":"i"}]}}`}})
 	})
 	t.Run("my-initiated query and continuation", func(t *testing.T) {
 		caller := expectSuccess(t, MyInitiated, map[string][]string{"get_submitted_instances": {`{"success":true,"result":{"hasMore":true,"values":[]}}`}}, "--query", "fixture", "--page", "2", "--limit", "3")
@@ -689,7 +689,7 @@ func TestCrossPlatformCoverageOAApproveFailureLedger(t *testing.T) {
 		{name: "pending call failure", responses: map[string][]string{"get_todo_tasks": {"__ERROR__"}}},
 		{name: "pending projection failure", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"hasMore":false}}`}}},
 		{name: "pending null result", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":null}`}}},
-		{name: "pending pagination failure", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[]}}`}}},
+		{name: "pending pagination failure", responses: map[string][]string{"get_todo_tasks": {`{"success":true,"result":{"values":[{"processInstanceId":"i"}]}}`}}},
 		{name: "pending is incomplete", responses: map[string][]string{"get_todo_tasks": {pending(`[{"processInstanceId":"instance-1","title":"fixture"}]`, true)}}},
 		{name: "zero matches", responses: map[string][]string{"get_todo_tasks": {pending(`[{"processInstanceId":"instance-1","title":"other"}]`, false)}}},
 		{name: "task call failure", responses: map[string][]string{"get_todo_tasks": {validPending}, "list_pending_tasks": {"__ERROR__"}}},

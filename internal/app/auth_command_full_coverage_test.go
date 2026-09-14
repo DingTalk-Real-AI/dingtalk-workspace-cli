@@ -14,6 +14,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -252,8 +253,11 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 		t.Fatal("token save should fail")
 	}
 	authSaveTokenData = func(string, *authpkg.TokenData) error { return nil }
-	if out, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": " token "}); err != nil || !strings.Contains(out, "登录成功") {
-		t.Fatalf("token login = %q, %v", out, err)
+	if out, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": " token "}); err != nil ||
+		!strings.Contains(out, i18n.T("登录成功！")) ||
+		!strings.Contains(out, i18n.T("有效期")) ||
+		!strings.Contains(out, i18n.T("Token 将自动刷新，无需重复登录")) {
+		t.Fatalf("localized token login = %q, %v", out, err)
 	}
 	if out, _, err := authCoverageRunLogin(t, nil, "json", true, map[string]string{"token": "token"}); err != nil || !strings.Contains(out, `"token_valid": true`) {
 		t.Fatalf("json token login = %q, %v", out, err)
@@ -363,7 +367,8 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	authPlanLoginRecommend = func(context.Context, edition.ToolCaller) (*pat.LoginRecommendPlan, error) {
 		return &pat.LoginRecommendPlan{AllGranted: true}, nil
 	}
-	if _, stderr, err := authCoverageRunLogin(t, nil, "table", false, map[string]string{"token": "x"}); err != nil || !strings.Contains(stderr, "全部授权") {
+	if _, stderr, err := authCoverageRunLogin(t, nil, "table", false, map[string]string{"token": "x"}); err != nil ||
+		!strings.Contains(stderr, i18n.T("推荐权限已全部授权或没有可授权项")) {
 		t.Fatalf("all-granted plan = %q, %v", stderr, err)
 	}
 	authPlanLoginRecommend = func(context.Context, edition.ToolCaller) (*pat.LoginRecommendPlan, error) {

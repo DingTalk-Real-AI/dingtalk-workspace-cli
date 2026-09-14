@@ -1,6 +1,6 @@
 ---
 name: dingtalk-misc
-description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/法务智能合同/考勤/直播/DING紧急消息/开放平台应用与MCP开发/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/原生HTML/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查询/创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/MCP服务或工具/发布或调试MCP/获取或调用已发布MCP/把OpenAPI、Swagger、Postman、curl或HTTP接口做成MCP或给Agent使用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/原生.html文件/新建HTML页面/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
+description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/法务智能合同/考勤/直播/DING紧急消息/开放平台应用与MCP开发/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索与OpenAPI逃生舱/独立及文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/原生HTML/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，尤其是 Agoal/目标管理/战略解码/经营合约及字段配置/计分卡/OKR/目标规则与周期/个人目标/目标模板/周月报规则提交统计/按时/迟交/未提交/跟催，或查询/创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款，或查待审批/同意拒绝转交撤销审批/打卡/排班/日报周报内容填报/独立白板带内容创建/白板节点读写/单元格读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/企业内部应用/查应用状态或能否删除/应用管理成员及角色汇总/应用版本历史/企业内部应用机器人配置、消息模式或在线状态/本机机器人连接器/Stream连接/MCP服务或工具/发布或调试MCP/获取或调用已发布MCP/把OpenAPI、Swagger、Postman、curl或HTTP接口做成MCP或给Agent使用/未封装OpenAPI/llms.txt/dws api/人才池/员工档案/职业历程/绩效/原生.md文件/Markdown版本比较/本地草稿diff/Markdown评论/原生.html文件/新建HTML页面/PAT授权/切换组织/跨组织/profile 等相关操作。周报/月报内容填报属于 report；规则级按时、迟交、未提交统计与人员跟催属于 Agoal；带审批人、抄送人或审批流的日报、周报、简报提交属于 OA 审批。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
 metadata:
   cli_version: ">=1.0.61"
   category: product
@@ -34,7 +34,7 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 | 电子表格 / 工作表 / 单元格读写 / 公式 / 超链接 / 浮动图片 | 电子表格创建/读写/公式/超链接/浮动图片/导出 | `dws sheet` | [sheet.md](references/sheet.md) |
 | 开放平台文档 / API文档 / 接口文档 / 接口报错 | 开放平台开发文档搜索 | `dws devdoc` | [devdoc.md](references/devdoc.md) |
 | 未封装 OpenAPI / llms.txt / dws api / Raw API / API 逃生舱 | 官方 llms.txt 分层发现，仅对企业内部应用 App Token 服务端 API 生成并确认 Raw 调用 | `dws api` | [openapi-explorer.md](references/openapi-explorer.md) |
-| 白板 / 画布 / OpenNodes / 白板节点 | 读取和更新钉钉文档中的内嵌白板 | `dws whiteboard` | [whiteboard.md](references/whiteboard.md) |
+| 白板 / 独立白板 / 文档内嵌白板 / 画布 / OpenNodes / 白板节点 | 带内容创建、读取和更新独立或文档内嵌白板；没有 `partId` 时默认独立白板 | `dws whiteboard` | [whiteboard.md](references/whiteboard.md) |
 | 招聘 / 职位 / JD / 在招职位 / 创建职位 / 职位详情 | 钉钉招聘职位的查询、详情与创建 | `dws recruit` | [recruit.md](references/recruit.md) |
 | 搜索技能 / 找技能 / 安装技能 / 技能市场 / 安装 DWS mono 或 multi skill | DWS 技能市场搜索、下载、安装与内置技能部署 | `dws skill` | [skill.md](references/skill.md) |
 | 人才池 / 储备干部池 / 员工档案 / 职业历程 / 绩效记录 / 员工标签 / 组织大脑 / 人才搜索 | 组织大脑：人才池、员工档案专项模块与结构化人才搜索 | `dws hrbrain` | [hrbrain.md](references/hrbrain.md) |

@@ -101,6 +101,19 @@ dws oa approval list-initiated --process-code <processCode> --start "<ISO-8601>"
 
 `list-initiated` 的 `--start/--end` 保持 ISO-8601，时间跨度不得超过 120 天。
 
+### 查询可管理的审批模板及详情
+
+```bash
+dws oa approval template list --format json
+dws oa approval template detail --process-code PROC-EXAMPLE --format json
+```
+
+- `template list` 无业务参数，调用 `oa/list_manage_templates`，查询当前用户在当前组织可管理的模板。
+- `template detail` 只接收一个必填的 `--process-code`，调用 `oa/get_template_detail` 时转换为单元素 `processCodes` 数组。
+- 两个命令通过统一输出的 `data.templates` 返回模板数组；详情中的 `schemaContent` 和 `processConfig` 保留为服务端 JSON 字符串，其余模板字段原样保留。
+- 管理权限列表与 `list-forms` 的可发起模板列表语义不同。查看审批实例使用 `oa approval detail`；读取发起审批所需字段定义使用 `form-schema`。
+- 服务端 `success=false`（例如 `dingOpenErrcode=830001`）会使命令失败。
+
 ### 管理员模板实例
 
 ```bash
@@ -159,7 +172,7 @@ dws oa approval list-by-admin --process-code <processCode> --start "<ISO-8601>" 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "oa +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws oa <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service oa --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "oa +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service oa --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

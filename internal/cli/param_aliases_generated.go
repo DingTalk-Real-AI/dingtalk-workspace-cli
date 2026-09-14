@@ -3588,7 +3588,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"take":        "limit",
 			"top":         "limit",
 		},
-		Blocked:   []string{"count", "next-token", "offset", "page", "page-token"},
+		Blocked:   []string{"count", "next-token", "offset", "page"},
 		Ambiguous: []string{"conversation-type"},
 	},
 	{
@@ -3829,10 +3829,9 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "chat +messages-mget",
 		Aliases: map[string]string{
-			"message-ids":      "msg-ids",
 			"open-message-ids": "msg-ids",
 		},
-		Blocked: []string{"message-id", "msg-id", "open-message-id", "ref-msg-id", "src-msg-id"},
+		Blocked: []string{"msg-id", "open-message-id", "ref-msg-id", "src-msg-id"},
 	},
 	{
 		CLIPath:   "chat +messages-query-send-status",
@@ -3940,7 +3939,6 @@ var generatedParamAliases = []ParamAliasEntry{
 			"staff-id":                   "user",
 			"to-open-dingtalk-id":        "open-dingtalk-id",
 			"uid":                        "user",
-			"user-id":                    "user",
 			"user-ids":                   "users",
 			"userid":                     "user",
 		},

@@ -334,11 +334,38 @@ func (rt *RuntimeContext) commandContext() context.Context {
 // composed result instead of the raw MCP response — the output-projection
 // output-formatting capability.
 func (rt *RuntimeContext) Output(payload any) error {
+	return rt.outputPayload(payload)
+}
+
+// OutputWithMeta publishes the same business payload as Output while attaching
+// framework-owned metadata to the unified result (or to the dual-validation
+// shadow). Legacy and dual-validation renderers still write the established
+// business payload bytes, so adding pagination evidence here does not change
+// their public output contract.
+func (rt *RuntimeContext) OutputWithMeta(payload any, meta *output.Meta) error {
+	return rt.outputPayload(payload, output.WithMeta(meta))
+}
+
+// OutputIncomplete preserves the established partial-result bytes for legacy
+// and dual-validation commands before returning the terminal structured error.
+// Unified commands carry the partial result in the error envelope instead and
+// must not also publish a success-shaped payload.
+func (rt *RuntimeContext) OutputIncomplete(payload any, terminalErr error) error {
+	return helpers.ReturnIncompleteResult(
+		rt.cmd,
+		rt.resultForPayload("", payload),
+		terminalErr,
+		terminalErr,
+		func() error { return output.WriteCommandPayload(rt.cmd, payload, output.FormatJSON) },
+	)
+}
+
+func (rt *RuntimeContext) outputPayload(payload any, options ...output.ResultOption) error {
 	if output.UsesUnifiedResult(rt.cmd) {
-		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload))
+		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload, options...))
 	}
 	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
-		if err := validateShadowResult(rt.resultForPayload("", payload)); err != nil {
+		if err := validateShadowResult(rt.resultForPayload("", payload, options...)); err != nil {
 			return err
 		}
 	}
@@ -366,11 +393,11 @@ func (rt *RuntimeContext) storePayload(tool string, payload any) error {
 	return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
 }
 
-func (rt *RuntimeContext) resultForPayload(tool string, payload any) output.CommandResult {
+func (rt *RuntimeContext) resultForPayload(tool string, payload any, additionalOptions ...output.ResultOption) output.CommandResult {
 	if rt.shortcut.product() == "devapp" {
 		return helpers.DevAppCommandResultFromPayload(tool, payload, rt.DryRun())
 	}
-	options := []output.ResultOption{}
+	options := append([]output.ResultOption(nil), additionalOptions...)
 	if rt.DryRun() {
 		options = append(options, output.WithDryRun())
 	}

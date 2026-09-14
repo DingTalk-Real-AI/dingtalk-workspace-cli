@@ -835,6 +835,56 @@ func TestResolveSkillSetupSourceMultiFinds(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageResolveSkillSetupSourceAcceptsReleaseBundleRoot(t *testing.T) {
+	if candidates := skillSourceOverrideCandidates("  ", skillSetupModeMulti); candidates != nil {
+		t.Fatalf("blank source override candidates = %v, want nil", candidates)
+	}
+	bundleRoot := t.TempDir()
+	writeSkill := func(dir, name string) {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "---\nname: " + name + "\ndescription: test\n---\n"
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Mirror the exact public dws-skills.zip shape: backward-compatible mono
+	// content at root, an explicit mono tree, and installable skills in multi.
+	writeSkill(bundleRoot, "dws")
+	monoDir := filepath.Join(bundleRoot, skillSetupModeMono)
+	writeSkill(monoDir, "dws")
+	multiDir := filepath.Join(bundleRoot, skillSetupModeMulti)
+	for _, name := range []string{"dingtalk-doc", "dingtalk-misc"} {
+		writeSkill(filepath.Join(multiDir, name), name)
+	}
+
+	t.Setenv("DWS_SKILL_SOURCE", "")
+	if got, err := resolveSkillSetupSource(bundleRoot, skillSetupModeMulti); err != nil || got != multiDir {
+		t.Fatalf("release root multi source = %q, %v; want %q", got, err, multiDir)
+	}
+	if got, err := resolveSkillSetupSource(bundleRoot, skillSetupModeMono); err != nil || got != monoDir {
+		t.Fatalf("release root mono source = %q, %v; want %q", got, err, monoDir)
+	}
+	if got, err := resolveSkillSetupSource(multiDir, skillSetupModeMulti); err != nil || got != multiDir {
+		t.Fatalf("direct multi source = %q, %v; want %q", got, err, multiDir)
+	}
+
+	t.Setenv("DWS_SKILL_SOURCE", bundleRoot)
+	if got, err := resolveSkillSetupSource("", skillSetupModeMulti); err != nil || got != multiDir {
+		t.Fatalf("environment release root multi source = %q, %v; want %q", got, err, multiDir)
+	}
+
+	if names, err := listMultiSkillNames(bundleRoot); err != nil || len(names) != 0 {
+		t.Fatalf("release root must not expose container dirs as MultiSkills: names=%v err=%v", names, err)
+	}
+	if isSkillSourceRoot(bundleRoot, skillSetupModeMulti) {
+		t.Fatal("release root must resolve through its multi child, not qualify as a raw MultiSkill source")
+	}
+}
+
 // TestCrossPlatformCoverageSkillSetupMultiFullInstallCleansStale verifies that a full (unfiltered)
 // multi install removes stale dingtalk-* / dws-shared directories that are no
 // longer part of the bundle, matching install.sh / install.js / upgrade paths.

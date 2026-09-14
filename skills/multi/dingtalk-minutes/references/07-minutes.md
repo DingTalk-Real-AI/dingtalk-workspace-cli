@@ -17,6 +17,8 @@
 
 用户说“先核对识别词/词表”时，默认指当前 ASR 热词配置，必须实际执行 `hot-word list`，不能只展示命令。如果用户明确要核对某个音频最终识别出的文字，则必须真实上传并等待转写；upload dry-run 做不到这一点。用户同时要求“不实际创建听记”时，以不写入为最高边界，如实说明两项要求不能同时满足，不能通过真实 create 后 cancel 来伪造预览。
 
+服务端拒绝目标热词的字面形式时，保留原词及失败事实，不静默删除或替换字符后重试；说明原因并请用户提供可接受词面。不要从个别失败样本推导完整字符白名单。录音依赖词表准备成功时，未准备完成就停止后续创建。
+
 ## 2. 上传、通知与恢复
 
 ### 2.1 直接上传
@@ -37,8 +39,8 @@ dws minutes +list-mine --page-all --format json
 ```
 
 - 热词查询、上传计划和前后列表是三份不同证据；命令示例不能代替真实查询结果。
-- dry-run 只证明请求计划与 `executed=false`，不会创建 session、听记或 ASR 结果。前后列表按 `taskUuid` 集合比较；不能只比较数量或第一页。
-- 没有真实文件、文件字节数或 sessionId 时，停止在相应前置门禁；不得调用 create/complete。用户要求确认“没有生成新听记”时，仍需用真实列表证据回答，不能仅由“我没有调用上传”推断列表事实。
+- dry-run 展示实际设置的语言、模板、卡片和上传确认预算，不会创建 session、听记或 ASR 结果。前后列表按 `taskUuid` 集合比较；不能只比较数量或第一页。
+- 没有真实文件或文件字节数时不 create；没有真实 sessionId 时不 complete。本次 dry-run 的零写入回执证明没有由本次操作创建听记；用户另要求比较列表时，用前后完整列表并说明读取时间，不把仅后验列表说成全局没有变化。
 
 如果已有 `taskUuid`，并且只需要读取当前已经生成的摘要与逐字稿，直接使用只读入口：
 
@@ -68,6 +70,8 @@ dws minutes +upload-and-analyze --resume-id <taskUuid> --artifacts summary,trans
 
 上传状态未知时先根据真实 session/taskUuid 读回；不能重新 create 来“试一次”。预签名 URL 属于敏感临时数据，不写入日志、报告或长期 manifest。
 
+`+export-pack` 对全部文本产物做递归签名凭据清理和发布前扫描，检查 `sanitized/redactionCount/sanitizationScope`。已识别签名链接目标替换为 `[signed-url-removed]`；不能将归档 `complete=true` 解释为图片离线完整，当前 `offlineImagesComplete=false`。二进制媒体不属于文本扫描范围，文件 hash/内容读回未实施。
+
 ## 3. 异步生成与录音收尾
 
 ### 3.1 思维导图
@@ -90,6 +94,8 @@ dws minutes +speaker-insights --id <taskUuid>
 - 首次执行保存 create 返回的异步 `taskId`。
 - 真实执行遵循 `user_required`；`--resume` 沿用同一命令级门禁。
 - 超时后使用 `--resume [--task-id <taskId>]` 继续轮询。
+- 只有 `state=ready/complete=true` 且有经过校验的总结正文才算完成；`createStatus` 只是创建时状态。`state=pending` 表示尚未取到可交付结果，可能是 processing 或暂不可读，并不证明后台仍在运行。超时非零，保留 `taskUuid/taskId/attempts/retryable/recovery`；`retryable` 只允许继续读，不能重新 create。
+- 恢复使用返回的 `recovery.nextCommand` argv，沿用原 profile 并完成确认；例如 `dws minutes +speaker-insights --id <taskUuid> --resume --task-id <taskId> --timeout 180 --interval 3`。用户指定等待时间时原样传 `--timeout`。
 - `taskId` 缺失、状态未知或结果不可解析时保留恢复信息并停止，不再次创建任务。
 
 ### 3.3 结束录音并等待产物
@@ -147,4 +153,6 @@ dws minutes +unshare --ids <uuid1,uuid2> --member-uids <uid> --failure-policy co
 
 ### 4.4 dry-run
 
-这些权限 Shortcut 的 dry-run 只展示目标组合与将执行的动作，不调用远端，也不证明听记、成员或当前权限状态。真实执行后也只能声明“写调用已确认接收”，不能声明“已读回最终权限”。
+这些权限 Shortcut 的 dry-run 展示目标组合、动作和失败处理策略；分享还展示权限、覆盖及子资源设置。不调用远端，也不证明听记、成员或当前权限状态。真实执行后也只能声明“写调用已确认接收”，不能声明“已读回最终权限”。
+
+用户允许仅预览时，完成真实目标与成员解析、dry-run 和计划交付，不停在准备步骤。原权限基线未知时，不能临时授权后撤权并称为恢复原状；用户未允许预览替代且要求验证恢复时，说明能力缺口并确认是否接受仅写回执的执行方式。
