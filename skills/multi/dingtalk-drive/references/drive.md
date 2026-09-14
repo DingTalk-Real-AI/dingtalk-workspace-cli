@@ -51,7 +51,13 @@ dws drive +recycle-list --limit 20
 dws drive +recycle-restore --id <recycleItemId>
 ```
 
-删除前核对名称、类型和 ID；恢复从列表真实返回取 `id`。恢复后使用返回的新 nodeId，不沿用旧 ID。
+删除前核对名称、类型和 ID；恢复从回收站列表真实返回取 `id`，不要使用删除前的 nodeId 发起恢复。
+
+- `+delete` 将节点移入回收站，不是永久删除；本节提供回收项列表与恢复入口，当前没有已验证的回收项永久删除入口。用户要求彻底删除时，如实说明能力限制和已知资源状态，不将软删除报告为彻底删除，也不猜测替代写命令。
+- 已知列表或恢复任务直接使用上方入口；仅当现有路由无法定位其他低频能力时，才执行一次 `dws shortcut list --service drive --format json`。命令发现入口在顶层 `shortcut`，不是 `drive shortcut`；不要为上述已明确的能力限制反复查 Help 或清单。
+- 恢复成功并读回确认后，使用返回的新 nodeId，不沿用旧 ID。
+- 若错误回执表明 `accepted=true`、`readbackComplete=false`，表示恢复已受理但尚未确认完成，不得宣称恢复成功，也不得重复执行 restore。
+- 保留回执中的回收项 ID、原路径及其他定位信息；有确切父目录 ID 时，可在原位置有界列表核对。不得仅凭同名结果认定恢复节点；无法确认身份或达到读取预算时，报告“恢复已受理，尚未确认完成”，并保留回执供后续核查。
 
 ## 普通文件历史版本
 
@@ -121,6 +127,6 @@ dws drive +publish-unset --node <dentryUuid>
 3. 写入超时或响应丢失先按 nodeId、名称、路径和大小回读，不能盲目重放。
 4. 在线文档误入普通下载/覆盖时切 Doc、Sheet 或 AITable；不要用 Drive 重试改变内容。
 
-## 辅助脚本
+## 目录树入口
 
-- [drive_tree_list.py](../scripts/drive_tree_list.py)：递归列出钉盘目录树；普通浏览仍优先使用 `dws drive +list`。
+递归目录列表与过滤见[高级目录列表](#高级目录列表)；普通浏览仍优先使用 `dws drive +list`。结果含 `truncated=true` 或目录读取错误时，不得声称已完整列出。

@@ -436,18 +436,28 @@ func TestCrossPlatformCoverageBuildAuthURLForInternationalRegion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse auth URL: %v", err)
 	}
-	if got := parsed.Query().Get("lang"); got != oauthLoginLanguage() {
-		t.Fatalf("auth URL lang = %q, want %q", got, oauthLoginLanguage())
+	if parsed.Query().Has("lang") {
+		t.Fatal("auth URL must not override the login page language")
 	}
 }
 
-func TestCrossPlatformCoverageOAuthLoginLanguageUsesChineseLocale(t *testing.T) {
+func TestCrossPlatformCoverageOAuthLoginURLDoesNotOverrideLanguage(t *testing.T) {
 	previous := i18n.Lang()
-	i18n.SetLang("zh")
 	t.Cleanup(func() { i18n.SetLang(previous) })
-
-	if got := oauthLoginLanguage(); got != "zh-CN" {
-		t.Fatalf("OAuth login language = %q, want zh-CN", got)
+	for _, lang := range []string{"en", "zh"} {
+		for _, region := range []LoginRegion{LoginRegionDefault, LoginRegionInternational} {
+			t.Run(lang+"/"+string(region), func(t *testing.T) {
+				i18n.SetLang(lang)
+				parsed, err := url.Parse(buildAuthURLForRegion("client-id", "http://127.0.0.1:1234/callback", "ding-target", region))
+				if err != nil {
+					t.Fatal(err)
+				}
+				q := parsed.Query()
+				if q.Has("lang") || q.Get("client_id") != "client-id" || q.Get("corpId") != "ding-target" || q.Get("redirect_uri") != "http://127.0.0.1:1234/callback" {
+					t.Fatal("unexpected login URL parameters")
+				}
+			})
+		}
 	}
 }
 

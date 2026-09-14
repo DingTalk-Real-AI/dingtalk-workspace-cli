@@ -1132,6 +1132,12 @@ if (!isHighRisk("internal/helpers/minutes.go")) {
 if (isHighRisk("internal/helpersx/minutes.go")) {
   throw new Error("helper high-risk classification must respect the path boundary");
 }
+if (!isHighRisk("skills/multi/dingtalk-chat/SKILL.md")) {
+  throw new Error("embedded skill changes must use the sharded full suite");
+}
+if (isHighRisk("skillsx/multi/dingtalk-chat/SKILL.md")) {
+  throw new Error("skill high-risk classification must respect the path boundary");
+}
 if (!isHighRisk("internal/shortcut/wiki/wiki.go")) {
   throw new Error("shortcut changes must use the sharded full suite");
 }

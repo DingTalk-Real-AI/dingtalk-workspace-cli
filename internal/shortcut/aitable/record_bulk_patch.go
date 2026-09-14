@@ -5,6 +5,7 @@ package aitable
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -123,14 +124,54 @@ func executeRecordBulkPatch(rt *shortcut.RuntimeContext) error {
 }
 
 func parseBulkPatchFilters(raw string) (map[string]any, error) {
+	return parseRecordQueryFilters(raw)
+}
+
+func parseRecordQueryFilters(raw string) (map[string]any, error) {
 	filters, err := parseJSONObject("filters", raw)
 	if err != nil {
 		return nil, err
 	}
 	if !bulkPatchFilterConstrictsScope(filters, true) {
-		return nil, apperrors.NewValidation("--filters 必须是包含非空筛选条件的 JSON 对象，根 operator 必须为 and/or")
+		return nil, apperrors.NewValidation("--filters 必须是包含非空 record query 筛选条件的 JSON 对象，根 operator 必须为 and/or；View 的 from_now/relative/exact 日期 Scheme 不能用于记录查询")
+	}
+	if err := validateRecordQueryDateFilterValues(filters); err != nil {
+		return nil, apperrors.NewValidation(err.Error())
 	}
 	return filters, nil
+}
+
+func validateRecordQueryDateFilterValues(filter map[string]any) error {
+	operator, _ := filter["operator"].(string)
+	operator = strings.ToLower(strings.TrimSpace(operator))
+	operands, _ := filter["operands"].([]any)
+	if operator == "and" || operator == "or" {
+		for index, raw := range operands {
+			child, _ := raw.(map[string]any)
+			if err := validateRecordQueryDateFilterValues(child); err != nil {
+				return fmt.Errorf("filters operand %d: %w", index, err)
+			}
+		}
+		return nil
+	}
+	switch operator {
+	case "date_eq", "before", "after", "not_before", "not_after":
+		if len(operands) != 2 {
+			return nil
+		}
+		switch value := operands[1].(type) {
+		case string:
+			if strings.TrimSpace(value) != "" {
+				return nil
+			}
+		case float64:
+			if !math.IsNaN(value) && !math.IsInf(value, 0) && value == math.Trunc(value) {
+				return nil
+			}
+		}
+		return fmt.Errorf("record query operator %s requires a date/RFC3339 string or Unix-millisecond JSON number; relative/exact objects belong to view update filter", operator)
+	}
+	return nil
 }
 
 func bulkPatchFilterConstrictsScope(value any, root bool) bool {

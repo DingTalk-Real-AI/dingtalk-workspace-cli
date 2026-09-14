@@ -189,6 +189,9 @@ const (
 type Constraint struct {
 	Kind  ConstraintKind
 	Flags []string
+	// PresenceOnly counts explicitly supplied flags, including empty strings
+	// used to clear values in a partial update. Defaults remain unchanged.
+	PresenceOnly bool
 	// Description, when non-empty, replaces the constraint's default help text.
 	Description string
 }
@@ -1180,7 +1183,11 @@ func ValidateConstraints(cmd *cobra.Command, flags []FlagSpec, constraints []Con
 	for _, constraint := range constraints {
 		var set []string
 		for _, name := range constraint.Flags {
-			if constraintProvided(cmd, flagsByName[name]) {
+			provided := constraintProvided(cmd, flagsByName[name])
+			if constraint.PresenceOnly {
+				provided = flagNameProvided(cmd, flagsByName[name])
+			}
+			if provided {
 				set = append(set, name)
 			}
 		}

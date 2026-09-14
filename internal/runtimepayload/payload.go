@@ -24,13 +24,14 @@ import (
 )
 
 const (
-	PayloadVersion    = "20260908"
+	PayloadVersion    = "20260909"
+	manifestVersion   = 2
 	containerHeader   = 64
 	formatVersion     = uint32(1)
 	maxContainerBytes = 32 << 20
 	maxBundleBytes    = int64(24 << 20)
 	maxFileBytes      = int64(16 << 20)
-	maxFiles          = 128
+	maxFiles          = 2 // One target library and its manifest; no auxiliary files.
 )
 
 var (
@@ -77,13 +78,14 @@ type Descriptor struct {
 }
 
 type manifest struct {
-	FormatVersion    int    `json:"format_version"`
-	PayloadVersion   string `json:"payload_version"`
-	Target           string `json:"target"`
-	Library          string `json:"library"`
-	LibrarySHA256    string `json:"library_sha256"`
-	PSFileCount      int    `json:"ps_file_count"`
-	PSManifestSHA256 string `json:"ps_manifest_sha256"`
+	FormatVersion  int    `json:"format_version"`
+	PayloadVersion string `json:"payload_version"`
+	Target         string `json:"target"`
+	Library        string `json:"library"`
+	LibrarySHA256  string `json:"library_sha256"`
+	// Only decoded to recognize ownership records from the retired format 1.
+	PSFileCount      int    `json:"ps_file_count,omitempty"`
+	PSManifestSHA256 string `json:"ps_manifest_sha256,omitempty"`
 }
 
 // Embedded returns the target-specific payload compiled into dws.
@@ -203,10 +205,26 @@ func Materialize(container []byte, userCacheDir, targetOS, targetArch string) (s
 	if err != nil {
 		return "", err
 	}
+	archive := container[containerHeader : containerHeader+descriptor.Size]
+	expected, err := readArchiveManifest(bytes.NewReader(archive))
+	if err != nil {
+		return "", err
+	}
+	validate := func(path string) error {
+		if err := validatePayloadRoot(path, targetOS, targetArch); err != nil {
+			return err
+		}
+		// A cached manifest cannot authorize its own replacement checksums.
+		actual, err := readManifest(path)
+		if err != nil || actual != expected {
+			return errors.New("runtime payload manifest does not match embedded bundle")
+		}
+		return nil
+	}
 	digest := hex.EncodeToString(descriptor.SHA256[:])
 	parent := filepath.Join(userCacheDir, "dws", "runtime-context", PayloadVersion)
 	root := filepath.Join(parent, digest)
-	if err := validatePayloadRoot(root, targetOS, targetArch); err == nil {
+	if err := validate(root); err == nil {
 		return filepath.Join(root, name), nil
 	}
 	if err := makeCacheDirectory(parent, 0o700); err != nil {
@@ -217,17 +235,16 @@ func Materialize(container []byte, userCacheDir, targetOS, targetArch string) (s
 		return "", fmt.Errorf("stage runtime payload: %w", err)
 	}
 	defer os.RemoveAll(temporary)
-	archive := container[containerHeader : containerHeader+descriptor.Size]
 	if err := extractPayload(bytes.NewReader(archive), temporary); err != nil {
 		return "", err
 	}
-	if err := validatePayloadRoot(temporary, targetOS, targetArch); err != nil {
+	if err := validate(temporary); err != nil {
 		return "", fmt.Errorf("validate extracted runtime payload: %w", err)
 	}
 	if err := publishPayload(temporary, root, targetOS, targetArch); err != nil {
 		return "", fmt.Errorf("publish runtime payload cache: %w", err)
 	}
-	if err := validatePayloadRoot(root, targetOS, targetArch); err != nil {
+	if err := validate(root); err != nil {
 		return "", fmt.Errorf("validate runtime payload cache: %w", err)
 	}
 	return filepath.Join(root, name), nil
@@ -281,15 +298,6 @@ func writeArchive(output io.Writer, root string) error {
 	gzipWriter.Header.OS = 255
 	tarWriter := tar.NewWriter(gzipWriter)
 	paths := []string{"manifest.json", metadata.Library}
-	entries, err := readPayloadDirectory(filepath.Join(root, "ps"))
-	if err != nil {
-		return fmt.Errorf("read runtime payload files: %w", err)
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			paths = append(paths, filepath.ToSlash(filepath.Join("ps", entry.Name())))
-		}
-	}
 	sort.Strings(paths)
 	for _, relative := range paths {
 		path := filepath.Join(root, filepath.FromSlash(relative))
@@ -336,15 +344,15 @@ func extractArchive(input io.Reader, root string) error {
 	seen := make(map[string]struct{})
 	var total int64
 	for count := 0; ; count++ {
-		if count >= maxFiles {
-			return errors.New("embedded runtime payload contains too many entries")
-		}
 		header, err := nextPayloadEntry(tarReader)
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return fmt.Errorf("read embedded runtime payload: %w", err)
+		}
+		if count >= maxFiles {
+			return errors.New("embedded runtime payload contains too many entries")
 		}
 		if header.Typeflag != tar.TypeReg || !validArchivePath(header.Name) {
 			return fmt.Errorf("invalid embedded runtime payload entry %q", header.Name)
@@ -382,24 +390,24 @@ func extractArchive(input io.Reader, root string) error {
 }
 
 func validArchivePath(name string) bool {
-	if name == "manifest.json" || name == "x7k2m9p4q1w8.dylib" || name == "libx7k2m9p4q1w8.so" || name == "x7k2m9p4q1w864.dll" {
-		return true
-	}
-	if !strings.HasPrefix(name, "ps/") || strings.Count(name, "/") != 1 {
-		return false
-	}
-	base := strings.TrimPrefix(name, "ps/")
-	if len(base) != 32 {
-		return false
-	}
-	_, err := hex.DecodeString(base)
-	return err == nil
+	return name == "manifest.json" || name == "x7k2m9p4q1w8.dylib" || name == "libx7k2m9p4q1w8.so" || name == "x7k2m9p4q1w864.dll"
 }
 
 func validateRoot(root, targetOS, targetArch string) error {
 	metadata, err := readManifest(root)
 	if err != nil {
 		return err
+	}
+	// Build sources and private caches are dedicated bundle roots. Adjacent
+	// publication validates only its owned library, leaving unrelated files alone.
+	entries, err := readPayloadDirectory(root)
+	if err != nil || len(entries) != maxFiles {
+		return errors.New("runtime payload must contain only its library and manifest")
+	}
+	for _, entry := range entries {
+		if entry.Name() != metadata.Library && entry.Name() != "manifest.json" {
+			return errors.New("runtime payload contains an unexpected file")
+		}
 	}
 	return validateRootManifest(root, metadata, targetOS, targetArch)
 }
@@ -409,11 +417,11 @@ func validateRootManifest(root string, metadata manifest, targetOS, targetArch s
 	if err != nil {
 		return err
 	}
-	if metadata.FormatVersion != 1 || metadata.PayloadVersion != PayloadVersion || metadata.Target != targetOS+"/"+targetArch || metadata.Library != name {
+	if metadata.FormatVersion != manifestVersion || metadata.PayloadVersion != PayloadVersion || metadata.Target != targetOS+"/"+targetArch || metadata.Library != name {
 		return errors.New("runtime payload manifest does not match target")
 	}
-	if metadata.PSFileCount != 123 {
-		return errors.New("runtime payload manifest has invalid file count")
+	if metadata.PSFileCount != 0 || metadata.PSManifestSHA256 != "" {
+		return errors.New("runtime payload manifest contains retired data files")
 	}
 	libraryPath := filepath.Join(root, name)
 	if !regularPayloadFile(libraryPath) {
@@ -422,34 +430,6 @@ func validateRootManifest(root string, metadata manifest, targetOS, targetArch s
 	libraryDigest, err := hashFile(libraryPath)
 	if err != nil || hex.EncodeToString(libraryDigest[:]) != metadata.LibrarySHA256 {
 		return errors.New("runtime payload library checksum mismatch")
-	}
-	psPath := filepath.Join(root, "ps")
-	psInfo, err := os.Lstat(psPath)
-	if err != nil || !psInfo.IsDir() || psInfo.Mode()&os.ModeSymlink != 0 {
-		return errors.New("runtime payload directory is unavailable")
-	}
-	entries, err := os.ReadDir(psPath)
-	if err != nil || len(entries) != metadata.PSFileCount {
-		return errors.New("runtime payload files are incomplete")
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	digest := sha256.New()
-	for _, entry := range entries {
-		if entry.IsDir() || !validArchivePath("ps/"+entry.Name()) {
-			return errors.New("runtime payload contains an invalid file")
-		}
-		path := filepath.Join(psPath, entry.Name())
-		if !regularPayloadFile(path) {
-			return errors.New("runtime payload contains a non-regular file")
-		}
-		fileDigest, err := hashFile(path)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(digest, "%s  ps/%s\n", hex.EncodeToString(fileDigest[:]), entry.Name())
-	}
-	if hex.EncodeToString(digest.Sum(nil)) != metadata.PSManifestSHA256 {
-		return errors.New("runtime payload file checksum mismatch")
 	}
 	return nil
 }
@@ -501,7 +481,11 @@ func publishDirectory(temporary, target, targetOS, targetArch string) error {
 	if err := renamePayloadDirectory(temporary, target); err == nil {
 		return nil
 	}
-	if err := validateRoot(target, targetOS, targetArch); err == nil {
+	// Only another publisher of this exact bundle may win the race. A cache
+	// manifest with replacement checksums must be repaired, even if self-consistent.
+	expected, sourceErr := readManifest(temporary)
+	actual, targetErr := readManifest(target)
+	if sourceErr == nil && targetErr == nil && actual == expected && validateRoot(target, targetOS, targetArch) == nil {
 		return nil
 	}
 	if info, err := lstatPayloadTarget(target); err == nil {

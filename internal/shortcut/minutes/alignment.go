@@ -106,13 +106,13 @@ var Download = shortcut.Shortcut{
 var Upload = shortcut.Shortcut{
 	Service: "minutes", Command: "+upload", Product: "minutes",
 	Description: "把本地音视频完整上传并创建听记，不发送额外消息",
-	Intent:      "需要从本地音视频直接创建听记时使用；完成 create、预签名 PUT、complete 和最终详情读回，不需要中转 Drive，也不会推送闪记卡片。",
+	Intent:      "需要从本地音视频直接创建听记时使用；完成 create、预签名 PUT、complete 和最终详情读回，不需要中转 Drive，也不会推送闪记卡片。 预览包含显式语言、模板、卡片选项和上传确认预算，不调用远端。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(minutesContract("+upload", "把本地音视频完整上传并创建听记，不发送额外消息",
+	Contract: withMinutesUploadResult(withMinutesDryRun(minutesContract("+upload", "把本地音视频完整上传并创建听记，不发送额外消息",
 		"用户有本地音视频，希望直接上传生成听记并取得可读回的 taskUuid，且不需要额外消息通知时使用",
 		[]string{"需要推送闪记卡片时使用 +upload-and-notify", "只需要管理已有 upload session 时使用原子 upload create/complete/cancel", "文件为空、过大或不希望创建远端听记时不要执行"},
-		[]string{`dws minutes +upload --file ./meeting.mp3 --title "项目周会"`, `dws minutes +upload --file ./meeting.mp4 --input-language zh`}), contract.DryRunPreviewPlan, false),
+		[]string{`dws minutes +upload --file ./meeting.mp3 --title "项目周会"`, `dws minutes +upload --file ./meeting.mp4 --input-language zh`}), contract.DryRunPreviewPlan, false)),
 	Flags:       minutesUploadFlags(true),
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"complete-timeout", "poll-interval"}, Description: "--complete-timeout 和 --poll-interval 必须大于 0"}},
 	Tips:        []string{`dws minutes +upload --file ./meeting.mp3 --title "项目周会"`, `dws minutes +upload --file ./meeting.mp4 --input-language zh`},
@@ -128,13 +128,13 @@ var Upload = shortcut.Shortcut{
 var UploadAndNotify = shortcut.Shortcut{
 	Service: "minutes", Command: "+upload-and-notify", Product: "minutes",
 	Description: "上传本地音视频创建听记，并在生成后推送闪记卡片",
-	Intent:      "用户明确要求从本地媒体创建听记且额外收到闪记卡片通知时使用；通知副作用与普通上传分开确认。",
+	Intent:      "用户明确要求从本地媒体创建听记且额外收到闪记卡片通知时使用；通知副作用与普通上传分开确认。 预览包含显式语言、模板、卡片选项和上传确认预算，不调用远端。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: withMinutesDryRun(minutesContract("+upload-and-notify", "上传本地音视频创建听记，并在生成后推送闪记卡片",
+	Contract: withMinutesUploadResult(withMinutesDryRun(minutesContract("+upload-and-notify", "上传本地音视频创建听记，并在生成后推送闪记卡片",
 		"用户明确要求上传音视频创建听记，并希望额外收到闪记卡片通知时使用",
 		[]string{"不需要消息通知时使用 +upload", "只需要管理已有 upload session 时使用原子 upload create-and-notify/complete/cancel"},
-		[]string{`dws minutes +upload-and-notify --file ./meeting.mp3 --title "项目周会"`}), contract.DryRunPreviewPlan, false),
+		[]string{`dws minutes +upload-and-notify --file ./meeting.mp3 --title "项目周会"`}), contract.DryRunPreviewPlan, false)),
 	Flags:       minutesUploadFlags(false),
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"complete-timeout", "poll-interval"}, Description: "--complete-timeout 和 --poll-interval 必须大于 0"}},
 	Tips:        []string{`dws minutes +upload-and-notify --file ./meeting.mp3 --title "项目周会"`},
@@ -219,7 +219,7 @@ var Summary = shortcut.Shortcut{
 var SpeakerReplace = shortcut.Shortcut{
 	Service: "minutes", Command: "+speaker-replace", Product: "minutes",
 	Description: "预检逐字稿中的发言人昵称，替换后重新读回验证",
-	Intent:      "需要把听记中的一个发言人昵称替换为目标昵称/UID 时使用；这是昵称替换，不是 Lark speaker_id 身份重绑。",
+	Intent:      "需要替换听记发言人昵称时使用；可传目标 UID，但当前只验证昵称数量，不证明 UID 关联。验证失败停止，不改走原子命令重写；不是 speaker_id 身份重绑。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"},
 	Contract: withMinutesDryRun(minutesContract("+speaker-replace", "预检逐字稿中的发言人昵称，替换后重新读回验证",
@@ -377,10 +377,7 @@ func performMinutesUpload(rt *shortcut.RuntimeContext, enableMessageCard bool) (
 	}
 	messageCardSet := enableMessageCard || rt.Changed("enable-message-card")
 	messageCardValue := enableMessageCard || rt.Bool("enable-message-card")
-	plan := map[string]any{"operation": "minutes.upload", "fileName": info.Name(), "sizeBytes": info.Size(), "title": rt.Str("title"), "messageCard": messageCardValue}
-	if rt.DryRun() {
-		return minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes.upload", plan), nil
-	}
+	plan := map[string]any{"operation": "minutes.upload", "fileName": info.Name(), "sizeBytes": info.Size(), "title": strings.TrimSpace(rt.Str("title")), "messageCard": messageCardValue}
 	params := map[string]any{"fileName": info.Name(), "fileSize": info.Size()}
 	if value := strings.TrimSpace(rt.Str("title")); value != "" {
 		params["title"] = value
@@ -397,6 +394,12 @@ func performMinutesUpload(rt *shortcut.RuntimeContext, enableMessageCard bool) (
 	}
 	if len(option) > 0 {
 		params["minutesOption"] = option
+	}
+	if rt.DryRun() {
+		plan["options"] = option
+		plan["completeTimeoutSeconds"] = rt.Int("complete-timeout")
+		plan["pollIntervalSeconds"] = rt.Int("poll-interval")
+		return minutesDryRunPayload(contract.DryRunPreviewPlan, "minutes.upload", plan), nil
 	}
 	created, err := rt.CallMCPWriteDataStrict("minutes", "create_upload_session", params)
 	if err != nil {

@@ -161,7 +161,7 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 	}
 }
 
-func TestFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
+func TestCrossPlatformCoverageFrameworkShortcutUnifiedOutputAndProjectionEdges(t *testing.T) {
 	oldCaller := helpers.GetCaller()
 	t.Cleanup(func() { helpers.InitDeps(oldCaller) })
 	ctx, _ := output.WithResultStore(context.Background())

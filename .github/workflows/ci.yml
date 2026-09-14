@@ -190,6 +190,10 @@ jobs:
                 filename === '.github/actionlint.yaml' ||
                 filename.startsWith('scripts/') ||
                 filename.startsWith('verify/') ||
+                // Skills are embedded into the shipped binary. Their reverse
+                // dependencies must use the bounded full-suite shards rather
+                // than one focused coverage runner.
+                filename.startsWith('skills/') ||
                 filename.startsWith('internal/helpers/') ||
                 // Shortcut declarations feed the live command tree and Schema
                 // assembly. Their reverse dependencies include the expensive

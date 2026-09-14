@@ -447,7 +447,6 @@ func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
 func buildAuthURLForRegion(clientID, redirectURI, targetCorpID string, region LoginRegion) string {
 	params := url.Values{
 		"client_id":     {clientID},
-		"lang":          {oauthLoginLanguage()},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
 		"scope":         {DefaultScopes},
@@ -457,13 +456,6 @@ func buildAuthURLForRegion(clientID, redirectURI, targetCorpID string, region Lo
 		params.Set("corpId", targetCorpID)
 	}
 	return AuthorizeURLForLoginRegion(region) + "?" + params.Encode()
-}
-
-func oauthLoginLanguage() string {
-	if i18n.Lang() == "zh" {
-		return "zh-CN"
-	}
-	return "en-US"
 }
 
 const successHTMLTemplate = `<!doctype html>

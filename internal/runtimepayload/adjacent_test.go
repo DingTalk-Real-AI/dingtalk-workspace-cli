@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,16 +42,11 @@ func TestCrossPlatformCoverageAdjacentReuseRepairAndUpgrade(t *testing.T) {
 	if !os.SameFile(before, after) {
 		t.Fatal("valid resource was replaced")
 	}
-	for _, scenario := range []string{"library", "ps", "version", "pending"} {
+	for _, scenario := range []string{"library", "version", "pending"} {
 		t.Run(scenario, func(t *testing.T) {
 			switch scenario {
 			case "library":
 				if err := os.WriteFile(path, []byte("damaged"), 0600); err != nil {
-					t.Fatal(err)
-				}
-			case "ps":
-				entries, _ := os.ReadDir(filepath.Join(root, "ps"))
-				if err := os.Remove(filepath.Join(root, "ps", entries[0].Name())); err != nil {
 					t.Fatal(err)
 				}
 			default:
@@ -86,16 +80,10 @@ func TestCrossPlatformCoverageAdjacentProtectsUnknownResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range []string{"libx7k2m9p4q1w8.so", "ps", ownershipName, ".dws-runtime.lock"} {
+	for _, entry := range []string{"libx7k2m9p4q1w8.so", ownershipName, ".dws-runtime.lock"} {
 		t.Run(entry, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, entry)
-			if entry == "ps" {
-				if err := os.Mkdir(path, 0700); err != nil {
-					t.Fatal(err)
-				}
-				path = filepath.Join(path, "user-file")
-			}
 			if entry == ".dws-runtime.lock" {
 				if err := os.Mkdir(path, 0700); err != nil {
 					t.Fatal(err)
@@ -147,6 +135,13 @@ func TestCrossPlatformCoverageAdjacentInterruptedPublication(t *testing.T) {
 	for failAt := 1; failAt <= 4; failAt++ {
 		t.Run(string(rune('0'+failAt)), func(t *testing.T) {
 			root := t.TempDir()
+			library, err := MaterializeAdjacent(container, root, "linux", "amd64")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(library, []byte("damaged"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			t.Run("interrupt", func(t *testing.T) {
 				calls := 0
 				testseam.Swap(t, &renameAdjacent, func(from, to string) error {
@@ -234,10 +229,10 @@ func TestCrossPlatformCoverageAdjacentFailureBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	failure := errors.New("private failure")
-	for _, scenario := range []string{"root", "lock stat", "walk", "temp", "extract", "stage target", "old rename", "target stat", "final validation", "nested symlink"} {
+	for _, scenario := range []string{"root", "lock stat", "temp", "extract", "stage target", "old rename", "target stat", "final validation"} {
 		t.Run(scenario, func(t *testing.T) {
 			root := t.TempDir()
-			if scenario == "walk" || scenario == "old rename" || scenario == "nested symlink" {
+			if scenario == "old rename" {
 				if _, err := MaterializeAdjacent(container, root, "linux", "amd64"); err != nil {
 					t.Fatal(err)
 				}
@@ -256,8 +251,6 @@ func TestCrossPlatformCoverageAdjacentFailureBoundaries(t *testing.T) {
 					}
 					return os.Lstat(path)
 				})
-			case "walk":
-				testseam.Swap(t, &walkAdjacent, func(path string, fn fs.WalkDirFunc) error { return fn(path, nil, failure) })
 			case "temp":
 				testseam.Swap(t, &makeCacheTemporary, func(string, string) (string, error) { return "", failure })
 			case "extract":
@@ -285,20 +278,12 @@ func TestCrossPlatformCoverageAdjacentFailureBoundaries(t *testing.T) {
 					if err := os.Rename(from, to); err != nil {
 						return err
 					}
-					if to == filepath.Join(root, "ps") {
+					if to == filepath.Join(root, "libx7k2m9p4q1w8.so") {
 						return os.WriteFile(filepath.Join(root, "libx7k2m9p4q1w8.so"), []byte("damaged"), 0600)
 					}
 					return nil
 				})
-			case "nested symlink":
-				entries, _ := os.ReadDir(filepath.Join(root, "ps"))
-				path := filepath.Join(root, "ps", entries[0].Name())
-				if err := os.Remove(path); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(filepath.Join(root, "libx7k2m9p4q1w8.so"), path); err != nil {
-					t.Skip("symlink unavailable")
-				}
+
 			}
 			if _, err := MaterializeAdjacent(container, root, goos, goarch); err == nil || strings.Contains(err.Error(), "private") {
 				t.Fatal("failure must stay unavailable and redacted")

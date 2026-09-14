@@ -132,6 +132,34 @@ func TestCrossPlatformCoverageOAuthProviderTokenSnapshotReturnsExpiryMetadata(t 
 	}
 }
 
+func TestCrossPlatformCoverageOAuthProviderTokenSnapshotUsesExplicitProfile(t *testing.T) {
+	oldLoad := oauthLoadTokenForProfile
+	previousProfile := RuntimeProfile()
+	SetRuntimeProfile("process-profile-must-not-change")
+	t.Cleanup(func() {
+		oauthLoadTokenForProfile = oldLoad
+		SetRuntimeProfile(previousProfile)
+	})
+
+	var loadedProfile string
+	expiresAt := time.Now().Add(time.Hour)
+	oauthLoadTokenForProfile = func(_ string, profile string) (*TokenData, error) {
+		loadedProfile = profile
+		return &TokenData{AccessToken: "profile-token", ExpiresAt: expiresAt}, nil
+	}
+
+	snapshot, err := NewOAuthProvider(t.TempDir(), nil).GetTokenSnapshotForProfile(context.Background(), "corp-a:user-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedProfile != "corp-a:user-a" || snapshot.AccessToken != "profile-token" {
+		t.Fatalf("profile/snapshot = %q/%#v", loadedProfile, snapshot)
+	}
+	if got := RuntimeProfile(); got != "process-profile-must-not-change" {
+		t.Fatalf("runtime profile after explicit snapshot = %q", got)
+	}
+}
+
 func TestCrossPlatformCoverageTokenMarkerRevisionChangesOnEveryPublication(t *testing.T) {
 	configDir := t.TempDir()
 	if err := WriteTokenMarker(configDir); err != nil {

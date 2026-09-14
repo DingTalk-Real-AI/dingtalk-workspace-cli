@@ -350,7 +350,13 @@ dws todo task list --dry-run                       # 预览操作但不执行
 
 ## 在 Agent 中使用
 
-dws 是为 AI Agent 设计的 CLI 工具。请先完成[安装](#安装)和[开始使用](#开始使用)，然后配置 Agent 环境：
+dws 是为 AI Agent 设计的 CLI 工具。请先完成[安装](#安装)和[开始使用](#开始使用)，然后安装 Agent Skills：
+
+```bash
+npx skills add DingTalk-Real-AI/dingtalk-workspace-cli -g
+```
+
+安装器会先展示计划——安装哪些 skill、写入哪些目标目录、如何处理已存在的同名 skill——并在写入前请求确认。`dws skill setup` 仍是进阶用户 / 国内 / 升级路径。详见 [Agent Skills](#agent-skills)。
 
 ### Agent 调用模式
 
@@ -390,25 +396,30 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 
 ### Agent Skills
 
-仓库内置完整的 Agent Skill 体系（`skills/` 目录），分为两套布局：
+```bash
+npx skills add DingTalk-Real-AI/dingtalk-workspace-cli -g
+```
 
-- `skills/mono/` — 单 skill 布局（一个 `SKILL.md` + `references/products/`），legacy。
-- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ...），每个 skill 自带 `SKILL.md`。默认布局。
+该命令发现 `skills/multi/dingtalk-*/SKILL.md`（`skills/` 下三层的目录布局，正是 `npx skills add` 已支持的扫描深度），并把 `dingtalk-calendar`、`dingtalk-chat` 等安装到 [vercel-labs/skills](https://github.com/vercel-labs/skills) 已识别的 Agent 目录：默认是项目 `.agents/skills/`，加 `-g` 则装到用户全局 `.agents/skills`，并链接到 `~/.cursor/skills`、`~/.claude/skills` 等已登记的 Agent home。
+
+不带 `-y` 时，安装器会先列出要安装的 skill、目标目录以及对已存在同名内容的处理方式，经确认后才写入。交互式安装和首次全局安装请保留该确认。`-y` 仅用于自动化场景：只有在用户明确确认了安装目标与覆盖行为之后才应加上——该路径不维护 `dws skill setup` 的所有权、备份与 mono↔multi 互斥清理状态，跳过确认可能在未经用户同意的情况下替换用户文件。
+
+一体式 mono skill（`skills/mono`，frontmatter 名为 `dws`）标了 `metadata.internal: true`，**不是**默认可安装 skill，因此 Agent 不会在 `dws` 与各产品 skill 之间双重路由。
+
+`dws skill setup` 仍是进阶用户 / 国内 / 升级路径：负责 Gitee 回退、升级时刷新 skill、`~/.dws/skills-state.json` 所有权，以及 mono↔multi 互斥清理。
+
+仓库仍保留两棵源树：
+
+- `skills/multi/` — 每个产品一个独立 skill（`dingtalk-aitable/` / `dingtalk-calendar/` / `dingtalk-chat/` ...），每个 skill 自带 `SKILL.md`。`npx skills add` 与 `dws skill setup` 的默认源。
+- `skills/mono/` — 单 skill 布局（一个 `SKILL.md` + `references/products/`），legacy。对 `npx skills add` 隐藏；`dws skill setup --mode mono` 以及 curl / zip 安装器仍会安装它。
 
 Schema 生成的叶子 safety/参数/选型文案由 Go 中的 ProductDecl / ContractFinal 声明驱动。原 `internal/cli/schema_hints/` HintFile 目录已完全退役，不得重新引入。
 
-安装之后，Claude Code / Cursor 等 AI 工具就能通过自然语言直接操作钉钉：
+安装之后，Claude Code / Cursor 等 AI 工具就能通过自然语言直接操作钉钉。
 
-```bash
-# 安装 skills 到当前项目（默认 multi；DWS_SKILL_MODE=mono 可切回）
-curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
-```
+> 国内用户：`npx skills add` 从 GitHub clone。请优先用 `dws skill setup`，或给 `install-skills.sh` 加上 `DWS_GITEE_REPO`，见 [国内加速安装](#国内加速安装)。
 
-> 安装器优先使用检测到的具体 Agent 根目录（如 `$HOME/.codex/skills/`）；仅在未检测到具体 Agent 时回退到 `.agents/skills/`。multi 为按产品平铺，mono 为 `dws/` 子目录。
->
-> 国内用户加 `DWS_GITEE_REPO` 走 Gitee 镜像，见 [国内加速安装](#国内加速安装)。
-
-**用 `dws skill setup` 切换或重装：**
+**进阶用户 / 国内 / 升级：`dws skill setup`**
 
 ```bash
 # 交互式：提示选模式 + 目标 Agent
@@ -481,7 +492,7 @@ multi setup 或 upgrade 后，DWS 会把官方 bundle 快照和统一所有权�
 <details>
 <summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期、七个 OA 审批任务/实例事件，以及三个待办生命周期事件。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前 28 个公开事件覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期、七个 OA 审批任务/实例事件、一个 VoIP 通话邀请事件、三个待办生命周期事件，以及互动卡片回调事件。
 
 默认 `ndjson`、`json`、`pretty` 输出保留兼容 transport envelope（`type`、`event_type`、字符串 `data`、`headers`），`compact` 继续沿用原 processor。Agent 或新脚本显式加 `--flatten` 后，输出稳定的顶层业务字段。`--format` 控制 JSON 序列化，`--flatten` 控制数据结构，且不能与 `-f raw` 或 `--debug-raw-events` 同时使用。
 
@@ -502,6 +513,8 @@ dws event list
 dws event schema user_im_message_receive_o2o --flatten
 dws event list --category oa
 dws event schema user_oa_approval_task_created --flatten
+dws event list --category card
+dws event schema user_card_action_triggered --flatten
 dws event list --category todo
 dws event schema user_todo_task_create --flatten
 
@@ -550,10 +563,15 @@ dws event consume \
   --role-types executor \
   --flatten -f ndjson
 
+# 监听互动卡片回调；Schema 描述已评审字段并保留未知扩展
+dws event consume user_card_action_triggered --flatten -f ndjson
+
 # 查看本地 consume，并取消指定订阅
 dws event status
 dws event stop <subscribe_id>
 ```
+
+互动卡片的结构化操作上下文位于 `payload.body.actionData.context`。通过 `questions[].id` 关联 `answers[question_id]`，再按同一问题的 `options[].id` 解析 `selected` 中的选项 ID；空 `selected` 是合法未选择状态。`body.context` 中的 JSON 字符串仅作兼容回退，所有 payload 层级仍保留未知字段。
 
 单聊和指定发送人事件必须且只能选择一种目标身份：企业内部 `userId` 使用 `--user`，`openDingtalkId` 使用 `--open-dingtalk-id`。CLI 不会自动猜测或转换身份类型。
 

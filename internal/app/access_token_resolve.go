@@ -38,6 +38,10 @@ type accessTokenSnapshotGetter interface {
 	GetTokenSnapshot(context.Context) (*authpkg.TokenData, error)
 }
 
+type profileAccessTokenSnapshotGetter interface {
+	GetTokenSnapshotForProfile(context.Context, string) (*authpkg.TokenData, error)
+}
+
 // AccessTokenSnapshot is the minimal bearer view needed by the process cache.
 // Refresh-token material never leaves the auth package.
 type AccessTokenSnapshot struct {
@@ -90,6 +94,12 @@ var (
 
 // Get resolves an access token for the active runtime profile.
 func (m *TokenManager) Get(ctx context.Context, configDir, explicitToken string) (AccessTokenSnapshot, error) {
+	return m.GetForProfile(ctx, configDir, explicitToken, authpkg.RuntimeProfile())
+}
+
+// GetForProfile resolves an access token for one explicit profile without
+// reading or mutating the process-wide runtime profile.
+func (m *TokenManager) GetForProfile(ctx context.Context, configDir, explicitToken, profile string) (AccessTokenSnapshot, error) {
 	if token := strings.TrimSpace(explicitToken); token != "" {
 		return AccessTokenSnapshot{AccessToken: token, Source: "explicit"}, nil
 	}
@@ -98,7 +108,7 @@ func (m *TokenManager) Get(ctx context.Context, configDir, explicitToken string)
 	}
 	key := tokenManagerKey{
 		configDir: canonicalTokenConfigDir(configDir),
-		profile:   strings.TrimSpace(authpkg.RuntimeProfile()),
+		profile:   strings.TrimSpace(profile),
 	}
 	entry := m.entry(key)
 	entry.mu.Lock()
@@ -222,7 +232,17 @@ func resolveTokenSnapshotWithEdition(ctx context.Context, configDir, profile str
 func resolveAccessTokenSnapshotFromDir(ctx context.Context, configDir, profile string) (AccessTokenSnapshot, error) {
 	provider := newAccessTokenProvider(configDir)
 	if snapshotProvider, ok := provider.(accessTokenSnapshotGetter); ok {
-		data, err := snapshotProvider.GetTokenSnapshot(ctx)
+		var data *authpkg.TokenData
+		var err error
+		if strings.TrimSpace(profile) != "" {
+			profileProvider, supportsProfile := provider.(profileAccessTokenSnapshotGetter)
+			if !supportsProfile {
+				return AccessTokenSnapshot{}, fmt.Errorf("profile selection is not supported by the current auth provider")
+			}
+			data, err = profileProvider.GetTokenSnapshotForProfile(ctx, profile)
+		} else {
+			data, err = snapshotProvider.GetTokenSnapshot(ctx)
+		}
 		if err == nil && data != nil && strings.TrimSpace(data.AccessToken) != "" {
 			return AccessTokenSnapshot{
 				AccessToken:      strings.TrimSpace(data.AccessToken),
