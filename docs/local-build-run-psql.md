@@ -12,7 +12,7 @@
 4. Agent 是否可以执行远程命令由当前会话的授权范围决定；未获得明确授权时，Agent 只提供完整命令，由操作者执行后回传结果。
 5. 选用 psql 的 JOIN、字段间算术、CASE、聚合后派生、汇总结果排名和窗口计算，必须在服务端 SQL 完成；原始记录筛选、排序和 Top N 使用 `record query`，单表直接标量、分组或去重统计使用 `record stats` / `record group-stats`；禁止拉取明细后用 Python、jq、JavaScript、电子表格或其他本地工具做等价加工。
 6. `-c` 传入的 SQL 末尾不得包含分号（`;`）；服务会将 SQL 封装为子查询，尾部分号会导致 PostgreSQL 语法错误。
-7. 未获用户明确许可，禁止 `record query --all`、无限制分页、整表导出或拉取大量字段作为分析降级；psql 失败必须先分类、修复并重试。
+7. 未获用户明确许可，禁止 `record query --all`、无限制分页、整表导出或拉取大量字段作为分析降级；psql 失败必须先分类。客户端、网络、认证或权限失败先修复并重试；SQL 或能力失败仅当原始意图完全属于单表原始记录或单表直接统计时，才可丢弃 psql 未完成结果并重新发起对应原生接口，复杂分析必须修复并重试。
 8. 避免在回复、文档或提交记录中暴露 token、密码和敏感业务数据。
 
 ## 2. 目标 AITable MCP 配置
@@ -173,8 +173,8 @@ SQL 是否可执行还取决于 PostgreSQL 语法、AI 表格逻辑列类型、�
 | 返回现象 | Agent 的下一步 |
 | --- | --- |
 | `pending-post-tool-use`、`host-side execution`、`PostToolUse hook did not activate` 或 `real result was not produced` | 这是客户端或宿主执行失败；切换到正确的固定 DWS 入口后重试原 psql 命令，禁止降级。 |
-| `Function is not allowed: <函数>` | 记录完整错误并核对当前服务版本；先尝试等价 SQL 改写或拆成多条服务端 SQL，不得改为本地计算。 |
-| `Invalid PostgreSQL query` | 回退到最小查询；先核对 `-l` 和 `-t` 的真实表、列与类型，再逐步恢复 WHERE、JOIN、GROUP BY 和窗口计算。 |
+| `Function is not allowed: <函数>` | 记录完整错误并核对当前服务版本；先尝试等价 SQL 改写或拆成多条服务端 SQL，不得改为本地计算。仅当原始意图完全是单表原始记录或单表直接统计时，才可丢弃 psql 未完成结果并重发对应原生接口。 |
+| `Invalid PostgreSQL query` | 回退到最小查询；先核对 `-l` 和 `-t` 的真实表、列与类型，再逐步恢复 WHERE、JOIN、GROUP BY 和窗口计算。仅当原始意图完全是单表原始记录或单表直接统计时，才可丢弃 psql 未完成结果并重发对应原生接口。 |
 | 未知表/表名歧义 | 让用户重新执行 `-l`；SQL 中使用真实逻辑表名并加双引号。 |
 | 未知列 | 让用户重新执行 `-t <TABLE_ID> --all-properties`；禁止用猜测的英文名或 Field ID。 |
 | 网络、认证或权限失败 | 先修复连接、认证或权限后重试 psql；不要用全量记录接口绕过。 |

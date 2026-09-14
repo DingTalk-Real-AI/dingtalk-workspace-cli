@@ -178,8 +178,40 @@ func TestAitablePsqlFinalSelectionRoutesComplexAnalysis(t *testing.T) {
 	if !strings.Contains(useWhen, "同 Base JOIN") || !strings.Contains(useWhen, "聚合后派生") || strings.Contains(useWhen, "原始记录筛选") {
 		t.Fatalf("psql use_when = %q, want only complex analysis", useWhen)
 	}
-	if !strings.Contains(avoidWhen, "原始记录筛选、排序、取 Top N") || !strings.Contains(avoidWhen, "单表直接标量") || !strings.Contains(avoidWhen, "完整原始数据文件") {
-		t.Fatalf("psql avoid_when = %q, want record query, stats, and export routing", avoidWhen)
+	for _, required := range []string{
+		"单表原始记录筛选、排序、取 Top N",
+		"psql 执行失败后仅当原始意图完全属于这些场景时，才可重新发起 record query",
+		"即使明确要求 SQL，单表直接标量",
+		"psql 执行失败后仅当原始意图完全属于这些场景时，才可重新发起对应统计",
+		"完整原始数据文件",
+	} {
+		if !strings.Contains(avoidWhen, required) {
+			t.Fatalf("psql avoid_when = %q, missing %q", avoidWhen, required)
+		}
+	}
+}
+
+func TestAitablePsqlAndGroupStatsFinalSelectionSeparateAggregateRanking(t *testing.T) {
+	psqlFinal, ok := contractfinal.RuntimeContractFinal(newAitablePsqlCommand())
+	if !ok || psqlFinal.Selection == nil {
+		t.Fatalf("psql ContractFinal selection = %#v, ok = %v", psqlFinal.Selection, ok)
+	}
+	psqlUseWhen := strings.Join(psqlFinal.Selection.UseWhen, "\n")
+	if !strings.Contains(psqlUseWhen, "聚合后派生、汇总结果 Top N 或排名") {
+		t.Fatalf("psql use_when = %q, want aggregate Top N and ranking", psqlUseWhen)
+	}
+
+	groupStats := findCLIPath(newAitableCommand(), "aitable record group-stats")
+	if groupStats == nil {
+		t.Fatal("missing aitable record group-stats")
+	}
+	groupFinal, ok := contractfinal.RuntimeContractFinal(groupStats)
+	if !ok || groupFinal.Selection == nil {
+		t.Fatalf("group-stats ContractFinal selection = %#v, ok = %v", groupFinal.Selection, ok)
+	}
+	groupAvoidWhen := strings.Join(groupFinal.Selection.AvoidWhen, "\n")
+	if !strings.Contains(groupAvoidWhen, "需要对聚合结果排序、取 Top N 或排名时用 psql") {
+		t.Fatalf("group-stats avoid_when = %q, want aggregate Top N and ranking routed to psql", groupAvoidWhen)
 	}
 }
 

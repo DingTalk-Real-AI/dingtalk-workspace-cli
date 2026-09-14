@@ -36,7 +36,7 @@ Flags:
 | “各门店销售额占总额比例”“销售额最高的 10 个门店并排名” | `psql` | 需要先聚合，再计算占比、排序或排名；不能依赖 group-stats 的 limit 产生 Top N。 |
 | “跨表匹配、关联、派生指标或窗口计算” | `psql` | record query 不支持 SQL JOIN 或 PostgreSQL 类型语义，不能靠多次读取后拼接。 |
 | “交付完整原始数据文件” | `export data` | record query 不是导出接口；psql 也不承担无界文件导出。 |
-| 原生统计和 `psql` 均已验证无法表达的有限单表记录读取 | `record query` | 先说明具体限制和读取范围；不要把临时错误、超时或查询编写困难当作回退理由。 |
+| psql 已失败，且回看原始意图后完全是有限单表记录读取、筛选、排序、Top N 或逐条操作 | `record query` | 丢弃 psql 未完成结果，说明切换原因并重新以记录模型查询；不得复用 psql 输出或借此模拟复杂分析。 |
 
 大量拉取数据用于分析或后续计算时，先判断能否由 `record stats` / `record group-stats` 直接完成；涉及 JOIN、字段间算术、聚合后派生、CASE、Top N 或排名时使用 `psql`。只有用户明确需要完整逐行明细时才用 `record query --all`，需要完整原始文件时使用 `export data`。
 
@@ -45,7 +45,7 @@ Flags:
 - `--all` 仅用于用户已明确许可的完整逐行明细或逐条业务操作；它不是数据分析接口。未经明确许可，禁止 `record query --all`、无限制分页、整表导出或拉取大量字段。
 - 原始记录过滤、排序和 Top N 直接使用 `record query` 的服务端 filters/sort/limit；单表直接标量、分组或去重统计使用 `record stats` / `record group-stats`；JOIN、字段间算术、聚合后派生、分档、日期运算、窗口计算和汇总结果排名使用 `dws aitable psql`。禁止因任一服务端能力报错、超时或查询编写困难而全量拉取记录后在 Agent、本地脚本或电子表格中计算。
 - 用户需要导出完整数据时，优先使用 `dws aitable export data`；导出的文件不得被拉回 Agent 上下文用于等价分析。
-- 已获明确许可的非分析完整逐行明细或逐条业务操作可直接使用 `--all`，不需要也不触发 `psql -l`、`psql -t` 或最小查询探测；它也不能作为 psql 失败时的降级。使用前必须说明字段、范围、预计记录数和体积；即使获准也必须服务端过滤、仅取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--page-limit 0` 时必须再次确认。
+- 已获明确许可的非分析完整逐行明细或逐条业务操作可直接使用 `--all`，不需要也不触发 `psql -l`、`psql -t` 或最小查询探测。psql 失败后，只有回看原始意图确认其完全属于该非分析明细场景时，才可丢弃 psql 未完成结果并重新以 `--all` 查询；它不能作为复杂 psql 分析的降级。使用前必须说明字段、范围、预计记录数和体积；即使获准也必须服务端过滤、仅取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--page-limit 0` 时必须再次确认。
 - CLI 首次请求不传 cursor，后续原样使用上一页 `data.nextCursor`，并检测 cursor 循环；页间间隔 200ms。
 - 同一分页会话的 `base-id/table-id/filters/sort/query/field-ids/limit` 必须保持不变，禁止重发第一页、复用旧会话 cursor、修改排序或自行构造 cursor。
 - 只有自动分页输出 `complete=true`，或手动分页时 `data.nextCursor` 为空，才表示完整结束。普通扫描某页恰好返回 `limit` 条时，服务端可能返回 `nextCursor`；用它续页后若调用成功、`records=[]` 且 `nextCursor` 为空，这是正常的末页探测，应正常完成，不能报错、重试或判定漏查。
@@ -103,7 +103,7 @@ dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --so
 - `--sort` 用 `"order":"desc"` → 必须用 `"direction":"desc"`
 - 不加 `--field-ids` 拉全字段 → 大表响应体积过大
 - 只读取第一页或以 `records=[]` 判定结束 → 必须检查 `nextCursor`，完整任务优先 `--all --page-limit 0`
-- 全量拉取后在 context、本地脚本、Python、jq、JavaScript 或电子表格中手动分析 → 必须停止；原始记录过滤、排序和 Top N 仍使用 `record query` 的服务端能力；仅同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果排序或排名、窗口计算等复杂分析改用 `aitable psql` 在服务端完成。psql 失败先修复并重试，禁止以 `record query --all` 降级。
+- 全量拉取后在 context、本地脚本、Python、jq、JavaScript 或电子表格中手动分析 → 必须停止；原始记录过滤、排序和 Top N 仍使用 `record query` 的服务端能力；仅同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果排序或排名、窗口计算等复杂分析改用 `aitable psql` 在服务端完成。psql 失败后，只有原始意图完全属于单表原始记录或单表直接统计时才可重新发起对应原生接口；复杂分析必须修复并重试，禁止以 `record query --all` 降级。
 
 ## record query-empty — 找空行
 

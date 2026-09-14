@@ -17,8 +17,8 @@ import (
 const (
 	aitablePsqlAgentSummary     = "使用 PostgreSQL 在服务端完成 AI 表格复杂分析。"
 	aitablePsqlUseWhen          = "同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口计算等原生记录接口无法直接表达的分析。"
-	aitablePsqlAvoidRecordQuery = "需要 recordId、cells 或 cursor，或仅对原始记录筛选、排序、取 Top N、逐条后续操作时，使用 record query。"
-	aitablePsqlAvoidStats       = "单表直接标量、分组或去重统计时，使用 record stats 或 record group-stats。"
+	aitablePsqlAvoidRecordQuery = "需要 recordId、cells 或 cursor，或仅对单表原始记录筛选、排序、取 Top N、逐条后续操作时，使用 record query；psql 执行失败后仅当原始意图完全属于这些场景时，才可重新发起 record query。"
+	aitablePsqlAvoidStats       = "即使明确要求 SQL，单表直接标量、分组或去重统计仍使用 record stats 或 record group-stats；psql 执行失败后仅当原始意图完全属于这些场景时，才可重新发起对应统计。统计后还需派生、聚合结果 Top N 或排名、窗口计算时仍使用 psql。"
 	aitablePsqlAvoidExport      = "交付完整原始数据文件时，使用 export data。"
 	aitablePsqlAvoidWriteOrDDL  = "新增、更新、删除记录或执行 DDL 时不可使用。"
 )

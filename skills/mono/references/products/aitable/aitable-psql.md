@@ -21,7 +21,7 @@
 | 完整数据导出 | `dws aitable export data` | 导出是文件交付，不得把记录拉到 Agent 上下文做分析。 |
 | 同 Base 多表关联、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口函数 | `psql` | 先核对表和列，再用 SQL 在服务端完成原生接口无法直接表达的分析。 |
 
-当需求需要 `psql` 的复杂分析能力时，即使用户没有明确说 SQL，也必须使用 `psql`。`psql` 因技术或服务错误无法执行时，先保留真实错误并修复；不得用 `record query` 拆分或模拟 JOIN、聚合后派生、汇总排名、窗口计算或本地分析。
+当需求需要 `psql` 的复杂分析能力时，即使用户没有明确说 SQL，也必须使用 `psql`。`psql` 执行失败后，先保留真实错误并从原始用户意图重新判定：仅当需求完全是单表原始记录筛选、排序、Top N 或逐条操作时，才可重新发起 `record query`；仅当需求完全是单表直接标量、分组或去重统计时，才可重新发起 `record stats` / `record group-stats`。切换时必须说明原因、丢弃 psql 的未完成结果，且不合并两类结果；不得用这些接口拆分或模拟 JOIN、字段计算、CASE、聚合后派生、汇总排名、窗口计算或本地分析。
 
 ### 正反边界案例
 
@@ -40,8 +40,8 @@
 - 已选用 `psql` 的 JOIN、字段间算术、CASE、聚合后派生、汇总排名和窗口计算，必须在服务端 SQL 中完成。禁止拉取明细后使用 Python、jq、JavaScript、电子表格或其他本地工具做等价加工。
 - 全程固定使用一个已验证可执行的 DWS 二进制或包装脚本，不得混用内置 shim、本地版或其他版本。依次执行 `psql -l`、每张目标表的 `psql -t`、使用真实 `Name` 的 `LIMIT 3` 最小查询；最小查询成功后才执行正式 SQL。
 - 按业务主题拆分 SQL；同一事实粒度、同一关联链的过滤、JOIN、聚合和派生指标应合并到一条 SQL。关键结论必须用独立 SQL 在服务端复核。
-- 出现 `pending-post-tool-use`、`host-side execution`、`PostToolUse hook did not activate` 或 `real result was not produced`，属于客户端或宿主执行失败：切换到正确的同一 DWS 入口后重试原 psql 命令，禁止降级。网络、认证或权限失败先修复后重试；SQL 失败先缩减为最小查询，再逐步加入 WHERE、JOIN、GROUP BY 和窗口计算；语法或函数不支持时先改写或拆成多条服务端 SQL。
-- 只有已确认客户端、网络、认证和权限正常，且 `psql -l`、`psql -t`、最小查询均成功，已定位具体 psql 能力限制并尝试等价或拆分 SQL，向用户说明字段、范围、预计记录数和体积并获得明确许可后，才可读取非聚合明细。即使获准，也必须服务端过滤、只取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--all` 时，必须再次确认。
+- 出现 `pending-post-tool-use`、`host-side execution`、`PostToolUse hook did not activate` 或 `real result was not produced`，属于客户端或宿主执行失败：切换到正确的同一 DWS 入口后重试原 psql 命令。网络、认证或权限失败也必须先修复后重试；这些故障不得以其他查询接口绕过。
+- SQL 或 psql 能力失败时，先缩减为最小查询，再逐步加入 WHERE、JOIN、GROUP BY 和窗口计算；语法或函数不支持时先在服务端改写或拆成多条 SQL。仅当回看原始意图后完全符合单表原始记录，或单表直接统计时，才允许丢弃 psql 未完成结果并重新发起 `record query`，或 `record stats` / `record group-stats`；必须说明切换原因，禁止合并结果或本地补算。对 JOIN、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口计算，始终先修复或在服务端等价改写，禁止降级。已获用户明确许可的非分析完整逐行明细不依赖也不触发此 psql 门禁，按 `record query --all` 的规则执行；即使获准，也必须服务端过滤、只取必要字段、先取小样本；预计超过 5,000 条、20 个字段、20MB 或需要 `--all` 时，必须再次确认。
 
 ## 命令模式
 
@@ -89,7 +89,7 @@ dws aitable psql -d <BASE_ID> \
 | “查询数据表1前 10 条”，即使上下文明确要求 SQL | `record query --limit 10`；这是原始记录读取，SQL 表述不改变结果模型路由 |
 | “把数据表1、数据表2和数据表3关联起来”或“分析不同表之间的关系” | 优先使用 psql：先列出表并查看每张表的结构，再生成一条多表 JOIN SQL；表由 SQL 自动解析 |
 | “按业务状态统计数量” | `record group-stats`，单表直接分组统计不需要 SQL |
-| 明确要求 SQL 聚合，或统计后还需派生、排名或窗口计算 | 优先使用 psql：先查看逻辑结构，再生成对应 SQL |
+| 明确要求 SQL，且统计后还需派生、聚合结果 Top N 或排名、窗口计算 | 优先使用 psql：先查看逻辑结构，再生成对应 SQL；仅明确要求 SQL 的单表直接标量、分组或去重统计仍使用 `record stats` / `record group-stats`。 |
 | “按分组排名/生成行号” | 先查看逻辑结构，再生成使用 `ROW_NUMBER/RANK/DENSE_RANK ... OVER (...)` 的 SQL |
 
 用户只给表名时，必须先用 `psql -l` 获取真实 `tableId`；零命中或重名时要求用户消歧，禁止猜测。编写 SQL 前必须用 `psql -t` 核对实际逻辑列名和 PostgreSQL 类型。
@@ -131,7 +131,7 @@ dws aitable psql \
 1. 固定一个已验证可执行的 DWS 二进制或包装脚本；从用户提供且已确认是 AI 表格的 URL 提取 `baseId`，没有 URL 或 ID 时按现有 Base 搜索流程定位。
 2. 执行 `psql -d <baseId> -l`，获取真实表名与 `tableId`；SQL 的 `FROM`/`JOIN` 只能使用返回的 `Name`。
 3. 对 SQL 涉及的每张表执行 `psql -d <baseId> -t <tableId>`，默认仅查看与页面一致的基础字段；仅当用户显式要求查看全部扩展属性时增加 `--all-properties`。
-4. 先执行 `LIMIT 3` 的最小 PostgreSQL 只读查询；失败时按服务端分析强制规则分类并缩减 SQL，禁止切换到 record query 做分析。
+4. 先执行 `LIMIT 3` 的最小 PostgreSQL 只读查询；失败时按服务端分析强制规则分类并缩减 SQL。仅当从原始意图重新判定为单表原始记录或单表直接统计时，才可丢弃未完成的 psql 结果并重新发起对应原生接口；复杂分析禁止降级。
 5. 最小查询成功后，根据用户自然语言生成正式 SQL；用户没有明确限制条数时必须添加 `LIMIT 200`，遇到重名或语义不明确先询问；同一事实粒度和关联链尽量合并为一条 SQL。
 6. 执行 `psql -d ... -c ...`，由 SQL 中的 `FROM` / `JOIN` 确定目标表；关键结果使用独立 SQL 在服务端复核，并将原始 psql 表格结果返回用户。
 7. 查询结果展示完成后，追加高级权限温馨提示，提醒用户开启高级权限后字段和数据均会受权限影响。
