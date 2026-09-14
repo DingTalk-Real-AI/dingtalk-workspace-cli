@@ -189,6 +189,11 @@ func TestAitablePsqlFinalSelectionRoutesComplexAnalysis(t *testing.T) {
 			t.Fatalf("psql avoid_when = %q, missing %q", avoidWhen, required)
 		}
 	}
+	for _, forbidden := range []string{"仍使用 psql", "聚合结果 Top N 或排名", "窗口计算"} {
+		if strings.Contains(avoidWhen, forbidden) {
+			t.Fatalf("psql avoid_when = %q, must not contain positive psql guidance %q", avoidWhen, forbidden)
+		}
+	}
 }
 
 func TestAitablePsqlAndGroupStatsFinalSelectionSeparateAggregateRanking(t *testing.T) {
