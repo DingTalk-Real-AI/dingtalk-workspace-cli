@@ -35,7 +35,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: v0.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
         run: |
-          gh release create "$RELEASE_TAG" dist/* \
+          # GoReleaser also leaves build directories and metadata in dist/.
+          # Publish only the distributable archives and their checksum file.
+          gh release create "$RELEASE_TAG" dist/dws-*.tar.gz dist/dws-*.zip dist/checksums.txt \
             --target "$GITHUB_SHA" \
             --title "DWS build #${{ github.run_number }}.${{ github.run_attempt }}" \
             --notes "Built from $GITHUB_REPOSITORY@$GITHUB_SHA by the manual Build and publish Release workflow." \
