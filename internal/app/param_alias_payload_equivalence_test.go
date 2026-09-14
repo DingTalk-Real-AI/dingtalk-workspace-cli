@@ -1647,6 +1647,15 @@ func paramAliasExpectedCaptureBoundaryError(command string, err error) bool {
 	if err == nil {
 		return false
 	}
+	var appErr *apperrors.Error
+	if errors.As(err, &appErr) {
+		switch command {
+		case "chat +search-msg":
+			return appErr.Reason == "search_messages_incomplete"
+		case "chat +chat-role-remove-user":
+			return appErr.Reason == "chat_role_assignment_unverified"
+		}
+	}
 	switch command {
 	case "chat +messages-resource-download":
 		return strings.Contains(err.Error(), "资源下载接口未返回合法的 HTTPS 下载地址")

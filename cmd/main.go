@@ -15,76 +15,65 @@ package main
 
 import (
 	"os"
-	"strings"
+	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
-	"gitlab.alibaba-inc.com/aes/aem-go-sdk/clitrack"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/telemetry"
 )
 
 var (
-	appExecute               = app.ExecuteWithTelemetry
-	resolveTelemetryIdentity = app.ResolveTelemetryIdentity
-	trackRun                 = func(cfg clitrack.Config, execute func() error, exitCode func(error) int) {
-		clitrack.New(cfg).Run(execute, exitCode)
-	}
+	appExecute                = app.ExecuteWithTelemetry
+	resolveTelemetryIdentity  = app.ResolveTelemetryIdentity
+	submitTelemetry           = telemetry.Submit
+	snapshotTelemetryIdentity = startTelemetryIdentity
+	exitProcess               = os.Exit
 )
 
-// trackedExitError tells clitrack that the command failed without asking it to
-// print the error a second time. The already-rendered message is published via
-// ExtraFields c5, while app.Execute remains the sole owner of presentation.
-type trackedExitError struct{}
-
-func (trackedExitError) Error() string { return "" }
-
-func trackerConfig(identity app.TelemetryIdentity, commandPath, errorMessage *string) clitrack.Config {
-	return clitrack.Config{
-		PID:                   "wcCRwZ",
-		App:                   "dws",
-		Version:               app.RawVersion(),
-		UID:                   identity.UserID,
-		Username:              identity.UserName,
-		NoCommandLine:         true,
-		NoCwd:                 true,
-		NoAutomaticDimensions: true,
-		ExtraFields: func() map[string]string {
-			fields := map[string]string{"c9": *commandPath}
-			if identity.CorpID != "" {
-				fields["c10"] = identity.CorpID
-			}
-			if *errorMessage != "" {
-				fields["c5"] = *errorMessage
-			}
-			return fields
-		},
-	}
-}
-
-func telemetryOptedOut() bool {
-	return strings.TrimSpace(os.Getenv("DO_NOT_TRACK")) != ""
-}
-
 func main() {
-	optedOut := telemetryOptedOut()
-	identity := app.TelemetryIdentity{}
+	if code := run(); code != 0 {
+		exitProcess(code)
+	}
+}
+
+func run() int {
+	if telemetry.RunWorker(os.Args[1:], os.Stdin) {
+		return 0
+	}
+	optedOut := telemetry.OptedOut()
+	var identity <-chan app.TelemetryIdentity
 	if !optedOut {
-		identity = resolveTelemetryIdentity(os.Args[1:])
+		identity = snapshotTelemetryIdentity(os.Args[1:])
 	}
-	exitCode := 0
-	commandPath := "dws"
-	errorMessage := ""
-	cfg := trackerConfig(identity, &commandPath, &errorMessage)
-	if optedOut {
-		cfg.PID = ""
+	command := filepath.Base(os.Args[0])
+	start := time.Now()
+	code, path, message := appExecute()
+	finished := time.Now()
+	if !optedOut {
+		event := telemetry.Event{
+			Version: app.RawVersion(), Command: command, Path: path, ExitCode: code,
+			DurationMillis: finished.Sub(start).Milliseconds(), CompletedAtMillis: finished.UnixMilli(),
+			ErrorSummary: message,
+		}
+		select {
+		case value := <-identity:
+			event.Identity = telemetry.Identity{UserID: value.UserID, UserName: value.UserName, CorpID: value.CorpID}
+		default:
+		}
+		submitTelemetry(event)
 	}
-	trackRun(
-		cfg,
-		func() error {
-			exitCode, commandPath, errorMessage = appExecute()
-			if exitCode != 0 {
-				return trackedExitError{}
-			}
-			return nil
-		},
-		func(error) int { return exitCode },
-	)
+	return code
+}
+
+func startTelemetryIdentity(args []string) <-chan app.TelemetryIdentity {
+	result := make(chan app.TelemetryIdentity, 1)
+	args = slices.Clone(args)
+	resolve := resolveTelemetryIdentity
+	go func() {
+		var identity app.TelemetryIdentity
+		defer func() { _ = recover(); result <- identity }()
+		identity = resolve(args)
+	}()
+	return result
 }

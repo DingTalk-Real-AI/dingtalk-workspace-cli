@@ -7,6 +7,8 @@
 
 ### 4.1 请求
 
+内嵌白板（显式 partId，保持原有调用）：
+
 ```bash
 dws whiteboard query \
   --node <DOC_NODE_ID> \
@@ -14,9 +16,18 @@ dws whiteboard query \
   --format json
 ```
 
-`query` 不接收请求体或 `pageId`。`--node` 和 `--part-id` 的发现规则见
-[白板命令参考](../../whiteboard.md)。CLI 会把服务返回的 `resultJson` JSON
-字符串解析成对象。
+独立白板（完全省略 partId）：
+
+```bash
+dws whiteboard query --node <WHITEBOARD_NODE_ID> --view summary --format json
+dws whiteboard query --node <WHITEBOARD_NODE_ID> --view page \
+  --page-id <PAGE_ID> --format json
+dws whiteboard query --node <WHITEBOARD_NODE_ID> --view all --format json
+```
+
+内嵌分支不接收请求体、`--view` 或 `--page-id`；CLI 会把原接口返回的
+`resultJson` JSON 字符串解析成对象。独立分支的 `view=page` 必须带 pageId，其他
+view 禁止 pageId。`--part-id` 显式空值报错；服务错误不得跨类型重试。
 
 ### 4.2 返回结构
 
@@ -33,8 +44,9 @@ interface OpenPage {
 }
 ```
 
-DWS 当前只支持单页白板，因此 `pages` 固定包含一个页面。调用方仍应从返回值读取
-页面 `id`，但不能把它作为 `pageId` 传给 DWS 命令。
+内嵌分支固定返回一个页面，调用方仍应从返回值读取页面 `id`，但不能把它作为
+pageId 传给内嵌调用。独立分支的 `view=page/all` 可返回页面内容，`view=summary`
+仅用于取得白板元信息和当前 revision；应从实际响应读取页面 ID 和 revision。
 
 母版节点不会作为独立页面返回，而会合并到引用它的页面 `nodes` 中，并带有：
 

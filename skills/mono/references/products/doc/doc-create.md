@@ -88,6 +88,10 @@ dws doc create --name "<文档名>" --content-file /tmp/<name>.json --content-fo
 dws doc create --name "<文档名>" --content-file /tmp/<name>.json --content-format jsonml --folder <DOC_FOLDER_NODE_ID>
 ```
 
+## @人（markdown mention）
+
+初始 markdown 里可写 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)`，服务端会改写为该用户的 dingtalk 主页链接；`openDingTalkId` 取自 `dws aisearch +search-person` 的 `openDingTalkId`。仅 markdown 生效，`--content-format jsonml` 不改写。完整说明见 doc-update.md 的「@人」小节。
+
 ## 参考
 
 - [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）

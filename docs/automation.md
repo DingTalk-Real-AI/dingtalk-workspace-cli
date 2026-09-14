@@ -167,24 +167,22 @@ ruleset with one latest-head approval and exactly one repository-owned
 `never` on both and on every other non-writer ruleset. Every required context
 must be bound to the GitHub Actions App (`integration_id=15368`); a missing,
 different, or duplicate context/source entry fails closed together with
-deletion or weakening of either gate. A final PR state that is explicitly
-`behind`, the exact transient pair `mergeable=null` and
-`mergeable_state=unknown`, any state GitHub reports as `blocked`, `dirty`, or
-`draft`, or any response that does not explicitly prove `mergeable=true`,
-remains open for the next event without calling the merge endpoint. Unknown or
-incomplete mergeability never grants merge eligibility; it only defers the
-attempt until GitHub finishes computing the state.
+deletion or weakening of either gate.
+
+最终状态为 `behind`、`dirty`、`draft`，或未明确返回 `mergeable=true` 时，
+协调流程保留 PR，等待下一次事件，不调用合并接口；`null + unknown` 同样延后。
+`mergeable=true + blocked` 则继续同步合并尝试：`blocked` 可能来自主干写入限制，
+不能据此认定审批或 CI 未通过。App 仍须通过权限边界、当前 head/base 和合并意图校验，
+GitHub 在同步接口中强制执行 App 无权绕过的审批与九项必需检查。
+
 HTTP 405 means the PR is not ready, while 409 means its revision changed; both
-remain retriable. GitHub can also return HTTP 403 with
-`Resource not accessible by integration` for this protected, behind-main merge
-denial. That response is retriable only when a same-token read proves the PR is
-still open at the exact expected head and repository-owned `main` base and the
-same preflight still classifies it as `behind`, or reports an explicit
-`mergeable=false`, `blocked`, `dirty`, or `draft` not-ready state. A missing or
-otherwise unproven mergeability field cannot hide an App authorization failure.
-This also closes the race where a PR becomes blocked or conflicting after the
-final read but before the merge call. Every other 403 and all other failures
-make reconciliation red. A concurrent native merge is accepted only after the
+remain retriable.
+对于精确的 HTTP 403 `Resource not accessible by integration`，仍须用同一 App
+读取并证明 PR 保持打开、head 未变且目标为本仓库的 `main`。只有明确的 `behind`、
+`mergeable=true + blocked`，或原有显式不可合并状态才计为可重试；其他 403、
+身份变化及未命中上述状态的响应仍使协调失败。这样，检查或审批尚未通过的 PR
+会在 GitHub 拒绝后等待下一次事件，而不会拖红整批，也不会被当作已合并。
+A concurrent native merge is accepted only after the
 final PR state proves the exact head, App identity, and non-empty merge SHA.
 A staggered twice-hourly schedule provides eventual recovery if a webhook or
 workflow completion is delayed, and `workflow_dispatch` remains the on-demand

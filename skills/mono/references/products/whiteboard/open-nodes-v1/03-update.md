@@ -28,7 +28,9 @@ interface OpenNodesUpdateRequest {
 | `source.nodes` | 是 | 本次创建的节点数组。append 至少一个；overwrite 允许空数组。 |
 
 `source` 不能直接使用 query 返回的 `OpenNodesDocument`，也不接受 `pages`。
-DWS 不接受 `pageId`；传入会在 CLI 本地校验阶段失败。
+内嵌白板不接受 `--page-id`、`--expected-revision` 或 `--request-id`。独立白板
+必须提供 `--expected-revision` 与稳定 `--request-id`；append 可选 pageId，
+overwrite 必须用 `--page-id` 指定替换页面。上述约束在远端调用前校验。
 
 V1 没有“按真实节点 ID patch 既有节点”的语义。`source.nodes` 中的每一项都会
 创建一个新节点，`id` 仅是本次请求内建立父子关系和连接线引用的临时 ID：
@@ -69,7 +71,7 @@ overwrite 只替换当前页面节点，不会重建页面，也不会修改主�
 ### 5.3 成功结果
 
 ```ts
-interface DWSWhiteboardUpdateResponse {
+interface DWSWhiteboardEmbeddedUpdateResponse {
   success: true;
   nodeId: string;
   partId: string;
@@ -95,6 +97,11 @@ interface DWSWhiteboardUpdateResponse {
 | `resultJson.message` | 供人阅读的结果摘要，不应作为机器判断依据。 |
 
 响应可能增加其他可选字段；Agent 不应依赖本节未声明的字段。
+
+独立白板成功回执使用 `nodeId/pageId/previousRevision/committedRevision/requestId`
+标识 CAS 写入终态。`+update` 会随后调用独立白板详情接口读回同一 page，并要求
+读回 revision 与 committedRevision 一致；不得因冲突、超时或读回失败转去调用
+内嵌接口，也不得用新 requestId 盲目重放。
 
 示例：
 

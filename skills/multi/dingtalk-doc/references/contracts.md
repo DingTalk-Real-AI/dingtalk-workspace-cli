@@ -11,7 +11,7 @@
 | status | 含义 | 后续动作 |
 |---|---|---|
 | `success` | 所有计划步骤完成，且需要验证的内容已经回读 | 可以向用户报告完成 |
-| `partial_success` | 已发生部分副作用，后续步骤失败 | 检查 `steps` 与 `compensation`，不得重放成功步骤 |
+| `partial_success` | 已发生部分副作用，后续步骤失败 | 检查 `steps` 与 `compensation`，不得重放成功步骤；创建后验证失败用返回 nodeId 只读恢复，核对所需章节，不能只凭 fetch 成功或截断正文宣称完整 |
 | `unknown` | 请求已发出但无法确定服务端是否提交 | 先回读目标；创建和追加禁止自动重试 |
 | `retryable` | 服务端明确业务执行尚未开始，且允许重试 | 遵循 `retry_after_seconds`，最多有界重试一次 |
 | `failed` | 已确认没有完成目标动作 | 根据 `retryable`、`actions` 和 details 决定是否重试 |

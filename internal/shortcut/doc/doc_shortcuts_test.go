@@ -4,6 +4,7 @@
 package doc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -112,6 +113,26 @@ func runDocCoverageInput(t *testing.T, declaration shortcut.Shortcut, caller *do
 }
 
 func runDocCoveragePath(t *testing.T, declaration shortcut.Shortcut, caller *docCoverageCaller, input io.Reader, commandPath string, args ...string) error {
+	return runDocCoverageWriter(t, declaration, caller, input, commandPath, io.Discard, args...)
+}
+
+// runDocCoverageEnvelope returns the JSON envelope the command actually
+// published, so a test can assert on delivered fields instead of only on
+// whether execution failed.
+func runDocCoverageEnvelope(t *testing.T, declaration shortcut.Shortcut, caller *docCoverageCaller, args ...string) map[string]any {
+	t.Helper()
+	var captured bytes.Buffer
+	if err := runDocCoverageWriter(t, declaration, caller, strings.NewReader(""), declaration.Command, &captured, args...); err != nil {
+		t.Fatalf("%s must succeed: %v", declaration.Command, err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(captured.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode %s envelope: %v (raw %q)", declaration.Command, err, captured.String())
+	}
+	return envelope
+}
+
+func runDocCoverageWriter(t *testing.T, declaration shortcut.Shortcut, caller *docCoverageCaller, input io.Reader, commandPath string, out io.Writer, args ...string) error {
 	t.Helper()
 	testseam.Swap(t, &docVerifyWait, func(context.Context, time.Duration) error { return nil })
 	helpers.InitDeps(caller)
@@ -122,7 +143,7 @@ func runDocCoveragePath(t *testing.T, declaration shortcut.Shortcut, caller *doc
 	service := &cobra.Command{Use: "doc"}
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
 	root.AddCommand(service)
-	root.SetOut(io.Discard)
+	root.SetOut(out)
 	root.SetErr(io.Discard)
 	root.SetIn(input)
 	if caller.ctx != nil {
@@ -1263,6 +1284,10 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 		if got := flags[name].RequiredWhen; got != "" {
 			t.Errorf("--%s RequiredWhen = %q, want compatibility-safe custom constraint", name, got)
 		}
+	}
+	blockIDDesc := flags["block-id"].Desc
+	if !strings.Contains(blockIDDesc, "逗号分隔") || !strings.Contains(blockIDDesc, "最多 50 个") {
+		t.Fatalf("--block-id description must document batch deletion: %q", blockIDDesc)
 	}
 	if len(Update.Constraints) != 1 || Update.Constraints[0].Kind != shortcut.ConstraintCustom ||
 		!strings.Contains(Update.Constraints[0].Description, "依 command 校验") {

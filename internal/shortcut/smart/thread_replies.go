@@ -52,6 +52,7 @@ const (
 var ThreadReplies = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+thread-replies",
+	Aliases:     []string{"+threads-messages-list"},
 	Product:     "chat",
 	Description: "按主消息 ID 或 thread/topic ID 分页读取话题回复，支持完整排序与有界自动翻页",
 	Intent: "当你已经拿到某个群里一条「话题消息」的主消息 ID 或 threadId/topicId、想快速看这条话题下的回复（谁在什么时间回复了什么），" +
@@ -71,6 +72,7 @@ var ThreadReplies = shortcut.Shortcut{
 			CanonicalPath:  "chat.shortcut_thread_replies",
 			CLIPath:        "chat +thread-replies",
 			PrimaryCLIPath: "chat +thread-replies",
+			Aliases:        []string{"chat +threads-messages-list"},
 		},
 		Description: "按主消息 ID 或 thread/topic ID 分页读取话题回复，支持完整排序与有界自动翻页",
 		Interface: &contract.InterfaceSpec{
@@ -85,7 +87,7 @@ var ThreadReplies = shortcut.Shortcut{
 				"可选 --time 指定手工续页边界、--limit/--page-size 指定每页条数；--page-all 沿下层毫秒级 nextCursor 自动续页，--page-limit 保持有界；--order/--sort 支持 desc，asc 需与 --page-all 一起使用，" +
 				"结果用 complete、hasMore、nextPage、stopReason 和 failures 明确证明是否完整，再在本地投影出每条回复的发言人、文本和回复时间。" +
 				"默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。"},
-			AvoidWhen: []string{"要回复 Thread 或发送新回复时不要使用此读取入口；当前没有经过验证的 thread writer Shortcut"},
+			AvoidWhen: []string{"要回复 Thread 或发送新回复时不要使用此读取入口；请使用 +messages-reply --reply-in-thread"},
 			Examples: []string{
 				"dws chat +thread-replies --message-id <rootOpenMessageId> --page-all --order asc",
 				"dws chat +thread-replies --group <openConversationId> --thread-id <threadId>",
@@ -95,11 +97,13 @@ var ThreadReplies = shortcut.Shortcut{
 	Flags: append([]shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群会话 ID；--thread-id/--topic-id 必须同时提供 --group；--group 与 --message-id 解析出的 conversationId 必须匹配"},
 		{Name: "message-id", Type: shortcut.FlagString, Desc: "话题主消息 openMessageId；自动只读解析 conversationId 和 threadId；--group 与 --message-id 解析出的 conversationId 必须匹配"},
-		{Name: "thread-id", Type: shortcut.FlagString, Desc: "话题/线程 ID（可直接使用消息列表返回的 threadId）；--thread-id/--topic-id 必须同时提供 --group"},
+		{Name: "thread-id", Type: shortcut.FlagString, Aliases: []string{"thread"}, Desc: "话题/线程 ID（可直接使用消息列表返回的 threadId）；--thread-id/--topic-id 必须同时提供 --group"},
 		{Name: "topic-id", Type: shortcut.FlagString, Desc: "--thread-id 的兼容别名；--thread-id/--topic-id 必须同时提供 --group"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"；--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD（可选）"},
+		{Name: "page-token", Type: shortcut.FlagString, Desc: "服务端毫秒 nextCursor，用于恢复 Thread 续页；与 --time 互斥"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页拉取的回复条数；--limit 必须大于 0"},
 		{Name: "page-size", Type: shortcut.FlagInt, Desc: "--limit 的公开兼容别名；必须大于 0"},
+		{Name: "page-delay", Type: shortcut.FlagInt, Default: "0", Desc: "后续页间隔毫秒，0–60000"},
 		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿下层毫秒级 nextCursor 自动读取后续页；--page-limit 仅与 --page-all 一起使用且范围 1-500；asc 必须与 --page-all 一起使用"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Name: "order", Type: shortcut.FlagString, Enum: []string{"asc", "desc"}, Desc: "回复输出顺序 asc/desc（可选，默认 desc；asc 必须与 --page-all 一起使用）"},
@@ -117,6 +121,7 @@ var ThreadReplies = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"group", "thread-id", "topic-id"}, Description: "--thread-id/--topic-id 必须同时提供 --group"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"group", "message-id"}, Description: "--group 与 --message-id 解析出的 conversationId 必须匹配"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"time"}, Description: "--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "page-token"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit", "page-size"}, Description: "显式页大小必须大于 0"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"order", "sort", "page-all"}, Description: "asc 必须与 --page-all 一起使用"},
@@ -132,6 +137,9 @@ var ThreadReplies = shortcut.Shortcut{
 }
 
 func validateThreadReplies(rt *shortcut.RuntimeContext) error {
+	if rt.Int("page-delay") < 0 || rt.Int("page-delay") > 60000 {
+		return apperrors.NewValidation("--page-delay 必须在0–60000之间")
+	}
 	if err := chatshortcut.ValidateMessageResourceDownload(rt); err != nil {
 		return err
 	}
@@ -142,6 +150,9 @@ func validateThreadReplies(rt *shortcut.RuntimeContext) error {
 	}
 	if value := strings.TrimSpace(rt.Str("time")); value != "" && !validChatTime(value) {
 		return localChatOptionError("invalid_time_boundary", "+thread-replies 的 --time 格式无效", "--time")
+	}
+	if value := strings.TrimSpace(rt.Str("page-token")); value != "" && !validThreadCursor(value) {
+		return localChatOptionError("invalid_page_token", "+thread-replies 的 --page-token 必须是服务端毫秒 nextCursor", "--page-token")
 	}
 	if strings.TrimSpace(rt.Str("message-id")) == "" && strings.TrimSpace(rt.Str("group")) == "" {
 		return apperrors.NewValidation("--thread-id/--topic-id 必须同时提供 --group")
@@ -170,8 +181,13 @@ func executeThreadReplies(rt *shortcut.RuntimeContext) error {
 		"topicId":            target.threadID,
 		"forward":            false,
 	}
-	if value := strings.TrimSpace(rt.Str("time")); value != "" {
-		params["startTime"] = value
+	if value := strings.TrimSpace(rt.StrFirst("time", "page-token")); value != "" {
+		if validThreadCursor(value) {
+			_, boundary, _ := threadRepliesNextCursorBoundary(value)
+			params["startTime"] = boundary
+		} else {
+			params["startTime"] = value
+		}
 	}
 	if pageSize := rt.IntFirst("limit", "page-size"); pageSize > 0 {
 		params["pageSize"] = pageSize
@@ -184,6 +200,16 @@ func executeThreadReplies(rt *shortcut.RuntimeContext) error {
 		payload, items, err = collectAllThreadReplies(rt, params)
 	} else {
 		payload, items, err = collectOneThreadRepliesPage(rt, params)
+	}
+	if err == nil && !rt.Bool("no-reactions") {
+		_, _, failures := chatshortcut.EnrichMessageReactions(rt, items)
+		if len(failures) > 0 {
+			payload["complete"] = false
+			payload["failures"] = failures
+			payload["failedCount"] = len(failures)
+			err = apperrors.NewAPI("Thread Reaction补查未完成")
+		}
+		payload["replies"] = projectChatMessages(items, !rt.Bool("no-reactions"))
 	}
 	applyThreadRepliesResultContract(payload, items, target, threadRepliesOrder(rt))
 	if err != nil {
@@ -214,7 +240,7 @@ func resolveThreadRepliesTarget(rt *shortcut.RuntimeContext) (threadRepliesTarge
 	if messageID == "" {
 		return threadRepliesTarget{
 			conversationID: strings.TrimSpace(rt.Str("group")),
-			threadID:       strings.TrimSpace(rt.StrFirst("thread-id", "topic-id")),
+			threadID:       strings.TrimSpace(rt.StrFirst("thread-id", "thread", "topic-id")),
 		}, nil
 	}
 
@@ -377,6 +403,13 @@ func collectAllThreadReplies(rt *shortcut.RuntimeContext, params map[string]any)
 	var nextPage map[string]any
 
 	for pagesFetched < pageLimit {
+		if pagesFetched > 0 {
+			if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+				failures = append(failures, map[string]any{"stage": "delay", "error": err.Error()})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
 		data, err := rt.CallMCPData("chat", "list_topic_replies", params)
 		if err != nil {
 			failures = append(failures, map[string]any{
@@ -584,4 +617,9 @@ func threadReplyItems(data map[string]any) []map[string]any {
 
 func init() {
 	shortcut.Register(ThreadReplies)
+}
+
+func validThreadCursor(value string) bool {
+	_, _, err := threadRepliesNextCursorBoundary(value)
+	return err == nil
 }

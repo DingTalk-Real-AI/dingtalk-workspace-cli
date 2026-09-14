@@ -29,6 +29,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	eventtransport "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
@@ -381,7 +382,7 @@ func TestCrossPlatformCoverageDirectRuntimeCoverage(t *testing.T) {
 	if normalizeDirectRuntimeProductID("alias") != "one" || normalizeDirectRuntimeProductID("tb") != "teambition" || normalizeDirectRuntimeProductID("plain") != "plain" {
 		t.Fatal("direct runtime alias mismatch")
 	}
-	if ids := DirectRuntimeProductIDs(); !ids["one"] || !ids[defaultPATProductID] || !ids[devappProductID] || !ids[recruitProductID] {
+	if ids := DirectRuntimeProductIDs(); !ids["one"] || !ids[defaultPATProductID] || !ids[devappProductID] || !ids[mcpdevProductID] || !ids[recruitProductID] {
 		t.Fatalf("direct runtime IDs = %#v", ids)
 	}
 
@@ -935,6 +936,19 @@ func TestCrossPlatformCoverageAuthCommandPureCoverage(t *testing.T) {
 		t.Fatal("manual credential prompt error succeeded")
 	}
 
+}
+
+func TestCrossPlatformCoverageAuthLoginFormatExpirySingularUnits(t *testing.T) {
+	previous := i18n.Lang()
+	i18n.SetLang("en")
+	t.Cleanup(func() { i18n.SetLang(previous) })
+
+	if got := authLoginFormatExpiry(time.Now().Add(25 * time.Hour)); got != "in 1 day" {
+		t.Fatalf("25-hour expiry = %q, want %q", got, "in 1 day")
+	}
+	if got := authLoginFormatExpiry(time.Now().Add(61 * time.Minute)); got != "in 1 hour" {
+		t.Fatalf("61-minute expiry = %q, want %q", got, "in 1 hour")
+	}
 }
 
 func TestCrossPlatformCoverageAuthLoginTokenCommandCoverage(t *testing.T) {
