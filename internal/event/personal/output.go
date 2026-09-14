@@ -603,7 +603,7 @@ func ProjectTransportOutputWithOptions(ev transport.Event, options ProjectionOpt
 		return ev, nil
 	}
 
-	sanitizedPayload, err := redactVoIPRoomCode(data.Payload)
+	sanitizedPayload, err := redactVoIPSensitiveFields(data.Payload, options.IncludeVoIPSDKToken)
 	if err != nil {
 		return baseEventOutput{
 			Type:        firstNonEmptyOutput(ev.EventType, data.EventKey),
@@ -654,7 +654,7 @@ func headerValueEqualFold(headers map[string]string, name string) string {
 	return ""
 }
 
-func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
+func redactVoIPSensitiveFields(raw json.RawMessage, includeSDKToken bool) (json.RawMessage, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, fmt.Errorf("payload is missing")
@@ -668,11 +668,11 @@ func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
 		}
 		for key, value := range object {
 			normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
-			if normalized == "roomcode" {
+			if normalized == "roomcode" || (normalized == "sdktoken" && !includeSDKToken) {
 				delete(object, key)
 				continue
 			}
-			redacted, err := redactVoIPRoomCode(value)
+			redacted, err := redactVoIPSensitiveFields(value, includeSDKToken)
 			if err != nil {
 				return nil, err
 			}
@@ -685,7 +685,7 @@ func redactVoIPRoomCode(raw json.RawMessage) (json.RawMessage, error) {
 			return nil, err
 		}
 		for i, value := range values {
-			redacted, err := redactVoIPRoomCode(value)
+			redacted, err := redactVoIPSensitiveFields(value, includeSDKToken)
 			if err != nil {
 				return nil, err
 			}
@@ -839,6 +839,7 @@ type personalVoIPCallReceiveInviteBody struct {
 type personalVoIPSDKAuth struct {
 	AppID      string `json:"appId"`
 	ExpireTime int64  `json:"expireTime"`
+	SDKToken   string `json:"sdkToken"`
 }
 
 // voIPUserIdentifier preserves the String contract introduced by the VoIP
@@ -1124,7 +1125,10 @@ func projectVoIPCallReceiveInviteEvent(base baseEventOutput, raw json.RawMessage
 		EventTime:     payload.EventTime,
 	}
 	if options.IncludeVoIPSDKToken {
-		output.SDKToken = headerValueEqualFold(headers, VoIPSDKTokenHeader)
+		output.SDKToken = payload.Body.SDKAuth.SDKToken
+		if strings.TrimSpace(output.SDKToken) == "" {
+			output.SDKToken = headerValueEqualFold(headers, VoIPSDKTokenHeader)
+		}
 	}
 	return output, nil
 }

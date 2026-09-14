@@ -71,11 +71,11 @@ dws event consume user_voip_call_receive_invite \
 - `target_uid` 是订阅并接收邀请的用户；正常情况下与 `callee_uid` 指向同一被叫用户。
 - `caller_uid` 读取服务端 `body.callerUserId`；滚动发布期间仍兼容旧的 `body.callerUid`。它与 `callee_uid` 均以字符串输出，必须保留前导 `0`、连字符等原始内容，不要转换为数字。
 - `sdk_app_id` 与 `sdk_expire_time` 来自非敏感的 `body.sdkAuth`；`sdk_expire_time` 是 Unix 秒。
-- 完整 `sdkToken` 来自消息属性 `X-Mozi-Agent-Sdk-Token`。默认输出会删除该 header，`--flatten` 也不输出 `sdk_token`；只有显式 `--include-voip-sdk-token` 才会提供它。数字员工使用 `sdk_app_id + sdk_token` 登录 MeetingSDK，并应在 `sdk_expire_time` 前完成使用。
+- 完整 `sdkToken` 来自 `body.sdkAuth.sdkToken`；滚动发布期间兼容旧消息属性 `X-Mozi-Agent-Sdk-Token`，新 body 字段优先。默认输出会删除 body 与 header 中的 token，`--flatten` 也不输出 `sdk_token`；只有显式 `--include-voip-sdk-token` 才会提供它。数字员工使用 `sdk_app_id + sdk_token` 登录 MeetingSDK，并应在 `sdk_expire_time` 前完成使用。
 - `--flatten` 默认不输出敏感入会码 `room_code`，避免终端记录、`tee` 文件或 Agent 上下文意外泄露。
 - `create_time` 与 `event_time` 都是毫秒时间戳；前者是通话邀请创建时间，后者是业务事件时间。
 - payload 缺失、body 缺失、`bizid` 为空或无法解析时，consume 会在 stderr 输出 warning，并只把不含业务 payload 的基础事件字段写到 stdout，避免敏感值从异常回退路径泄露。
-- 不传 `--flatten` 时仍保持 transport envelope，但 DWS 会从 `.data` 中移除敏感 `roomCode`，并从 `.headers` 中移除 MeetingSDK token。显式 `--include-voip-sdk-token` 会保留 token header；只有服务端联调确需检查全部原始事件时才使用 `--debug-raw-events`，不要持久化或传播凭证。
+- 不传 `--flatten` 时仍保持 transport envelope，但 DWS 会从 `.data` 中移除敏感 `roomCode` 和 `body.sdkAuth.sdkToken`，并从 `.headers` 中移除旧版 MeetingSDK token。显式 `--include-voip-sdk-token` 会保留 body/header token；只有服务端联调确需检查全部原始事件时才使用 `--debug-raw-events`，不要持久化或传播凭证。
 - VoIP 事件的 `-f raw` 同样必须和 `--debug-raw-events` 一起使用，避免绕过默认脱敏。
 
 ## Boundary

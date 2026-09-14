@@ -90,7 +90,7 @@ func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testin
 		EventType:     personal.EventVoIPCallReceiveInvite,
 		SubscribeID:   "sub-1",
 		Headers:       map[string]string{"X-Mozi-Agent-Sdk-Token": "dynamic-sdk-token", "keep": "value"},
-		Data:          `{"eventId":"business-event-1","eventKey":"user_voip_call_receive_invite","occurredAtMs":1787903566579,"subId":"sub-1","payload":{"bizid":"VOIP-1","body":{"callId":"call-1","roomCode":"7286913750"}}}`,
+		Data:          `{"eventId":"business-event-1","eventKey":"user_voip_call_receive_invite","occurredAtMs":1787903566579,"subId":"sub-1","payload":{"bizid":"VOIP-1","body":{"callId":"call-1","roomCode":"7286913750","sdkAuth":{"appId":"meeting-app","sdkToken":"body-sdk-token"}}}}`,
 	}
 	formatter, err := consume.NewFormatter(consume.FormatNDJSON,
 		consume.WithProjector(personalEventProjector(false, false)),
@@ -102,7 +102,7 @@ func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(rendered, []byte("7286913750")) || bytes.Contains(rendered, []byte("roomCode")) || bytes.Contains(rendered, []byte("dynamic-sdk-token")) {
+	if bytes.Contains(rendered, []byte("7286913750")) || bytes.Contains(rendered, []byte("roomCode")) || bytes.Contains(rendered, []byte("dynamic-sdk-token")) || bytes.Contains(rendered, []byte("body-sdk-token")) || bytes.Contains(rendered, []byte("sdkToken")) {
 		t.Fatalf("default VoIP output leaked sensitive credentials: %s", rendered)
 	}
 	var envelope transport.Event
@@ -117,6 +117,23 @@ func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testin
 	}
 	if envelope.Headers["keep"] != "value" {
 		t.Fatalf("default VoIP output dropped non-sensitive header: %#v", envelope.Headers)
+	}
+
+	credentialFormatter, err := consume.NewFormatter(consume.FormatNDJSON,
+		consume.WithProjector(personalEventProjectorWithOptions(false, true, true)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentialOutput, err := credentialFormatter.Render(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(credentialOutput, []byte(`"sdk_token":"body-sdk-token"`)) {
+		t.Fatalf("explicit VoIP credential output omitted body sdkToken: %s", credentialOutput)
+	}
+	if bytes.Contains(credentialOutput, []byte("7286913750")) || bytes.Contains(credentialOutput, []byte("roomCode")) {
+		t.Fatalf("explicit VoIP credential output leaked room code: %s", credentialOutput)
 	}
 }
 

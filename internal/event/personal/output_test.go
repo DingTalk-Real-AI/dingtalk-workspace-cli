@@ -230,7 +230,7 @@ func personalVoIPData() string {
 				"callType":"conference",
 				"roomId":"room-1",
 				"roomCode":"sensitive-code",
-				"sdkAuth":{"appId":"meeting-sdk-app","expireTime":1780634079},
+				"sdkAuth":{"appId":"meeting-sdk-app","expireTime":1780634079,"sdkToken":"body-sdk-token"},
 				"createTime":1780630479000
 			}
 		}
@@ -258,6 +258,7 @@ func TestCrossPlatformCoverageProjectTransportOutput(t *testing.T) {
 				"body":{
 					"callId":"call-1",
 					"roomCode":"body-secret",
+					"sdkAuth":{"appId":"meeting-sdk-app","sdkToken":"body-sdk-token"},
 					"items":[{"room_code":"nested-secret","keep":true},"text",7]
 				}
 			}
@@ -275,8 +276,8 @@ func TestCrossPlatformCoverageProjectTransportOutput(t *testing.T) {
 	if safe.Type != voip.Type || safe.EventID != voip.EventID || safe.EventBornTime != voip.EventBornTime || safe.SubscribeID != voip.SubscribeID {
 		t.Fatalf("ProjectTransportOutput(VoIP) envelope = %#v, want transport identity from %#v", safe, voip)
 	}
-	if strings.Contains(strings.ToLower(safe.Data), "roomcode") || strings.Contains(safe.Data, "room_code") || strings.Contains(safe.Data, "room-code") || strings.Contains(safe.Data, "secret") {
-		t.Fatalf("ProjectTransportOutput(VoIP) leaked a room code: %s", safe.Data)
+	if strings.Contains(strings.ToLower(safe.Data), "roomcode") || strings.Contains(safe.Data, "room_code") || strings.Contains(safe.Data, "room-code") || strings.Contains(safe.Data, "secret") || strings.Contains(safe.Data, "sdkToken") {
+		t.Fatalf("ProjectTransportOutput(VoIP) leaked sensitive credentials: %s", safe.Data)
 	}
 	if !strings.Contains(safe.Data, `"callId":"call-1"`) || !strings.Contains(safe.Data, `"keep":true`) {
 		t.Fatalf("ProjectTransportOutput(VoIP) dropped non-sensitive payload: %s", safe.Data)
@@ -295,6 +296,9 @@ func TestCrossPlatformCoverageProjectTransportOutput(t *testing.T) {
 	credentialEnvelope, ok := withCredentials.(transport.Event)
 	if !ok || credentialEnvelope.Headers["X-Mozi-Agent-Sdk-Token"] != "sensitive-sdk-token" {
 		t.Fatalf("ProjectTransportOutputWithOptions(VoIP) headers = %#v, want explicit sdkToken", withCredentials)
+	}
+	if !strings.Contains(credentialEnvelope.Data, `"sdkToken":"body-sdk-token"`) {
+		t.Fatalf("ProjectTransportOutputWithOptions(VoIP) data = %s, want explicit body sdkToken", credentialEnvelope.Data)
 	}
 
 	dataKeyOnly := voip
@@ -369,7 +373,7 @@ func TestCrossPlatformCoverageProjectTransportOutputMarshalFailure(t *testing.T)
 	}
 }
 
-func TestCrossPlatformCoverageRedactVoIPRoomCode(t *testing.T) {
+func TestCrossPlatformCoverageRedactVoIPSensitiveFields(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -383,30 +387,38 @@ func TestCrossPlatformCoverageRedactVoIPRoomCode(t *testing.T) {
 		{name: "array containing null", input: `[null]`, wantErr: true},
 		{name: "invalid primitive", input: `tru`, wantErr: true},
 		{name: "primitive", input: `"text"`},
-		{name: "object", input: `{"roomCode":"secret","keep":{"room_code":"nested","value":true}}`},
+		{name: "object", input: `{"roomCode":"secret","keep":{"room_code":"nested","sdkToken":"body-token","value":true}}`},
 		{name: "array", input: `[{"room-code":"secret","value":1},"keep"]`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := redactVoIPRoomCode(json.RawMessage(tt.input))
+			got, err := redactVoIPSensitiveFields(json.RawMessage(tt.input), false)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("redactVoIPRoomCode(%q) error = nil", tt.input)
+					t.Fatalf("redactVoIPSensitiveFields(%q) error = nil", tt.input)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("redactVoIPRoomCode(%q) error = %v", tt.input, err)
+				t.Fatalf("redactVoIPSensitiveFields(%q) error = %v", tt.input, err)
 			}
 			if !json.Valid(got) {
-				t.Fatalf("redactVoIPRoomCode(%q) returned invalid JSON: %s", tt.input, got)
+				t.Fatalf("redactVoIPSensitiveFields(%q) returned invalid JSON: %s", tt.input, got)
 			}
 			lower := strings.ToLower(string(got))
-			if strings.Contains(lower, "roomcode") || strings.Contains(lower, "room_code") || strings.Contains(lower, "room-code") || strings.Contains(lower, "secret") || strings.Contains(lower, "nested") {
-				t.Fatalf("redactVoIPRoomCode(%q) leaked a room code: %s", tt.input, got)
+			if strings.Contains(lower, "roomcode") || strings.Contains(lower, "room_code") || strings.Contains(lower, "room-code") || strings.Contains(lower, "sdktoken") || strings.Contains(lower, "body-token") || strings.Contains(lower, "secret") || strings.Contains(lower, "nested") {
+				t.Fatalf("redactVoIPSensitiveFields(%q) leaked credentials: %s", tt.input, got)
 			}
 		})
+	}
+
+	withToken, err := redactVoIPSensitiveFields(json.RawMessage(`{"roomCode":"room-secret","sdkAuth":{"sdkToken":"body-token","appId":"app"}}`), true)
+	if err != nil {
+		t.Fatalf("redactVoIPSensitiveFields(include token) error = %v", err)
+	}
+	if strings.Contains(string(withToken), "room-secret") || !strings.Contains(string(withToken), `"sdkToken":"body-token"`) {
+		t.Fatalf("redactVoIPSensitiveFields(include token) = %s, want token without room code", withToken)
 	}
 }
 
@@ -850,14 +862,28 @@ func TestCrossPlatformCoverageProjectOutputVoIPCallReceiveInvite(t *testing.T) {
 	withToken, err := ProjectOutputWithOptions(transport.Event{
 		EventType: EventVoIPCallReceiveInvite,
 		Data:      personalVoIPData(),
-		Headers:   map[string]string{"x-mozi-agent-sdk-token": "dynamic-sdk-token"},
+		Headers:   map[string]string{"x-mozi-agent-sdk-token": "legacy-header-token"},
 	}, ProjectionOptions{IncludeVoIPSDKToken: true})
 	if err != nil {
 		t.Fatalf("ProjectOutputWithOptions() error = %v", err)
 	}
 	withTokenOutput, ok := withToken.(VoIPCallReceiveInviteOutput)
-	if !ok || withTokenOutput.SDKToken != "dynamic-sdk-token" {
-		t.Fatalf("ProjectOutputWithOptions() = %#v, want explicit sdkToken", withToken)
+	if !ok || withTokenOutput.SDKToken != "body-sdk-token" {
+		t.Fatalf("ProjectOutputWithOptions() = %#v, want body sdkToken to take precedence", withToken)
+	}
+
+	legacyHeaderData := strings.Replace(personalVoIPData(), `,"sdkToken":"body-sdk-token"`, "", 1)
+	legacyHeaderToken, err := ProjectOutputWithOptions(transport.Event{
+		EventType: EventVoIPCallReceiveInvite,
+		Data:      legacyHeaderData,
+		Headers:   map[string]string{"x-mozi-agent-sdk-token": "legacy-header-token"},
+	}, ProjectionOptions{IncludeVoIPSDKToken: true})
+	if err != nil {
+		t.Fatalf("ProjectOutputWithOptions(legacy header) error = %v", err)
+	}
+	legacyHeaderOutput, ok := legacyHeaderToken.(VoIPCallReceiveInviteOutput)
+	if !ok || legacyHeaderOutput.SDKToken != "legacy-header-token" {
+		t.Fatalf("ProjectOutputWithOptions(legacy header) = %#v, want legacy sdkToken fallback", legacyHeaderToken)
 	}
 }
 
