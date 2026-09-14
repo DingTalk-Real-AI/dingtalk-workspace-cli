@@ -1675,6 +1675,28 @@ shared_schema_ancestry_level_safe() {
   return 0
 }
 
+# Existing cache paths must be real directories before any cleanup or chmod.
+# Missing paths are allowed because this installer creates them below.
+shared_schema_layout_safe() {
+  for path do
+    [ ! -L "$path" ] || return 1
+    if [ -e "$path" ] && [ ! -d "$path" ]; then
+      return 1
+    fi
+  done
+}
+
+# Cleanup and permission changes only operate on regular files and directories
+# that have one link. Rejecting other objects before walking the tree prevents
+# a symlink, FIFO, or hardlink from redirecting or widening the operation.
+shared_schema_tree_objects_safe() {
+  tree="$1"
+  [ -d "$tree" ] && [ ! -L "$tree" ] || return 1
+  [ -z "$(find "$tree" -type l -print -quit 2>/dev/null)" ] || return 1
+  [ -z "$(find "$tree" ! \( -type f -o -type d \) -print -quit 2>/dev/null)" ] || return 1
+  [ -z "$(find "$tree" -type f ! -links 1 -print -quit 2>/dev/null)" ] || return 1
+}
+
 # Mirror of the runtime's entry rules (validateOwnedDirectory /
 # validateCacheFile) for every current-generation edition (identity.json marks
 # it): no symlinks (secure openat rejects them), every entry owned by root or
@@ -1697,6 +1719,18 @@ shared_schema_editions_runtime_safe() {
         [ -z "$(find "$edition_dir" -type f ! -links 1 -print -quit 2>/dev/null)" ] || exit 1
         [ -z "$(find "$edition_dir" -type f \( -perm -0020 -o -perm -0002 \) -print -quit 2>/dev/null)" ] || exit 1
       done' sh "$2" "$3" {} + 2>/dev/null
+}
+
+# Share only the current editions after the warm-up has passed the same object
+# checks used before cleanup. Never recurse through an unverified path.
+shared_schema_make_artifacts_readable() {
+  tree="$1"
+  find "$tree" -mindepth 3 -maxdepth 3 -name identity.json -type f -links 1 -exec sh -c '
+      for f do
+        edition_dir="$(dirname "$(dirname "$f")")"
+        find "$edition_dir" -type d -exec chmod a+rX {} + || exit 1
+        find "$edition_dir" -type f -links 1 -exec chmod a+r {} + || exit 1
+      done' sh {} + 2>/dev/null
 }
 
 build_shared_schema_cache() {
@@ -1741,12 +1775,22 @@ build_shared_schema_cache() {
   [ -d "$dws_intermediate" ] && dws_tree_preexisted=1
   schema_tree_preexisted=0
   [ -d "$schema_tree" ] && schema_tree_preexisted=1
+  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache path."
+    return 0
+  fi
   mkdir -p "$schema_tree" 2>/dev/null || true
+  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_tree_objects_safe "$schema_tree"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache contents."
+    return 0
+  fi
   # Drop the previous per-edition sidecar and leftover fingerprint-suffixed
   # files so upgrade always generate-then-use from this binary's live
-  # declarations. identity.json is the only success marker.
-  find "$schema_tree" -name 'identity.json' -type f -delete 2>/dev/null || true
-  find "$schema_tree" -name 'identity.*.json' -type f -delete 2>/dev/null || true
+  # declarations. identity.json is the only success marker. Only single-link
+  # regular files in the verified tree may be removed.
+  find "$schema_tree" -name 'identity.json' -type f -links 1 -delete 2>/dev/null || true
+  find "$schema_tree" -name 'identity.*.json' -type f -links 1 -delete 2>/dev/null || true
   # DWS_SCHEMA_CACHE_DIR makes the runtime treat the location as a shared cache
   # and populate it. Any schema command triggers generate + publish.
   if DWS_SCHEMA_CACHE_DIR="$shared_dir" "$INSTALL_DIR/$INSTALL_NAME" schema --all --format json >/dev/null 2>&1 &&
@@ -1761,33 +1805,30 @@ build_shared_schema_cache() {
     # one — including an upgrade replacing artifacts inside an existing edition,
     # whose atomic staging files and identity.json land as 0600.
     shared_chmod_ok=1
-    if [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
+    if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+      ! shared_schema_tree_objects_safe "$schema_tree"; then
+      shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] && [ "$custom_shared_root" -eq 1 ] && [ "$shared_dir_preexisted" -eq 1 ]; then
       # Pre-existing custom ancestor: chmod only the levels this run created;
       # every caller-owned level must already be traversable as-is or we fall
       # back to the per-user cache instead of broadening it.
       if [ "$dws_tree_preexisted" -eq 0 ]; then
         chmod a+rX "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
       fi
-      if [ "$schema_tree_preexisted" -eq 0 ]; then
-        chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
-      else
-        # Re-share every current-generation edition (identity.json marks it).
-        # Sidecar paths travel as find arguments, never through word
-        # splitting: a custom SHARED_DIR containing spaces must still
-        # resolve, chmod, and verify each edition.
-        if ! find "$schema_tree" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
-            for f do
-              chmod -R a+rX "$(dirname "$(dirname "$f")")" 2>/dev/null || exit 1
-            done' sh {} + 2>/dev/null; then
-          shared_chmod_ok=0
-        fi
-      fi
-    else
+    elif [ "$shared_chmod_ok" -eq 1 ]; then
       # Installer-created dedicated root (or default system base): umask 077 would
       # otherwise leave $shared_dir and $shared_dir/dws at 0700 while only the
       # schema tree is 0755 — other users could not reach the cache.
       chmod a+rX "$shared_dir" "$dws_intermediate" 2>/dev/null || shared_chmod_ok=0
-      chmod -R a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] &&
+      { [ "$custom_shared_root" -eq 0 ] || [ "$schema_tree_preexisted" -eq 0 ]; }; then
+      chmod a+rX "$schema_tree" 2>/dev/null || shared_chmod_ok=0
+    fi
+    if [ "$shared_chmod_ok" -eq 1 ] &&
+      ! shared_schema_make_artifacts_readable "$schema_tree"; then
+      shared_chmod_ok=0
     fi
     # Three claims, mirroring exactly what the reading runtime accepts
     # (internal/schemacache/platform_unix.go): cross-user success requires

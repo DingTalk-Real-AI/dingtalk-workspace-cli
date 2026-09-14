@@ -347,6 +347,9 @@ func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
 	configureSchemaCacheTestHome(t)
+	// A prior test's live render populates the live catalog, which disables
+	// the persistent fast path; reset so this test is order-independent.
+	cli.RestorePackageCLISchemaDeliveryForTest()
 	_, artifacts := loadSharedRealSchemaCacheArtifacts(t)
 	identity := testSchemaCacheIdentity(t, artifacts)
 	cache, err := schemacache.Open(identity.Edition)

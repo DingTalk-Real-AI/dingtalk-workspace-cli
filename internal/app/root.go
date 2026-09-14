@@ -953,8 +953,10 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		rootCtx = context.Background()
 	}
 	flags := &GlobalFlags{}
+	profileSelector := ""
 	if !declarationOnly {
-		authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
+		profileSelector = preparseProfileFlag(os.Args[1:])
+		authpkg.SetRuntimeProfile(profileSelector)
 	}
 	runner := rootNewCommandRunnerWithFlags(flags)
 	if snapshot, ok := agentMetadataSnapshotFromContext(rootCtx); ok {
@@ -1190,7 +1192,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		// present, so endpoint and Cobra conflict checks see PAT and edition
 		// commands as well as the open-source base.
 		pluginStart := time.Now()
-		pluginCmds := rootLoadPlugins(root, engine, runner)
+		pluginCmds := rootLoadPlugins(root, engine, runner, profileSelector)
 		RecordNestedTiming(rootCtx, "plugin_discovery", time.Since(pluginStart))
 		if len(pluginCmds) > 0 {
 			cli.MarkSchemaCacheRuntimeUncertain()
@@ -1880,7 +1882,7 @@ type pluginIdentityOwner struct {
 	shareable bool
 }
 
-func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.Runner) []*cobra.Command {
+func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.Runner, profileSelector string) []*cobra.Command {
 	pluginLoader := plugin.NewLoader(RawVersion())
 
 	// 0a. Inject plugin config values from settings.json as environment
@@ -1896,7 +1898,7 @@ func loadPlugins(root *cobra.Command, engine *pipeline.Engine, runner executor.R
 	// invocation on macOS) is not read during command-tree construction.
 	// The same file-only read is already the telemetry identity pattern.
 	var userCtx *plugin.UserContext
-	if profile, err := rootPluginResolveIdentity(defaultConfigDir(), ""); err == nil && profile != nil {
+	if profile, err := rootPluginResolveIdentity(defaultConfigDir(), profileSelector); err == nil && profile != nil {
 		userID := strings.TrimSpace(profile.UserID)
 		corpID := strings.TrimSpace(profile.CorpID)
 		if userID != "" || corpID != "" {

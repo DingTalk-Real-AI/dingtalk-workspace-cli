@@ -102,15 +102,20 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 	oldLoadPlugins := rootLoadPlugins
 	oldEdition := edition.Get()
 	oldVersion, oldBuild, oldCommit := version, buildTime, gitCommit
+	oldArgs := os.Args
 	t.Cleanup(func() {
 		rootLoadPlugins = oldLoadPlugins
 		edition.Override(oldEdition)
 		version, buildTime, gitCommit = oldVersion, oldBuild, oldCommit
+		os.Args = oldArgs
 	})
 
-	rootLoadPlugins = func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	var pluginProfileSelectors []string
+	rootLoadPlugins = func(_ *cobra.Command, _ *pipeline.Engine, _ executor.Runner, selector string) []*cobra.Command {
+		pluginProfileSelectors = append(pluginProfileSelectors, selector)
 		return []*cobra.Command{{Use: "plugin-added", Run: func(*cobra.Command, []string) {}}}
 	}
+	os.Args = []string{"dws", "--profile=explicit-profile"}
 	preRunCalled := false
 	edition.Override(&edition.Hooks{
 		AfterPersistentPreRun: func(*cobra.Command, []string) error { preRunCalled = true; return nil },
@@ -119,6 +124,9 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		},
 	})
 	root := NewRootCommandWithEngine(context.Background(), pipeline.NewEngine())
+	if len(pluginProfileSelectors) != 1 || pluginProfileSelectors[0] != "explicit-profile" {
+		t.Fatalf("plugin profile selector = %#v, want explicit-profile", pluginProfileSelectors)
+	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"version", "--client-id", "client", "--client-secret", "secret", "--debug"})
@@ -126,7 +134,11 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		t.Fatalf("root version execution = %v preRun=%v", err, preRunCalled)
 	}
 
+	os.Args = []string{"dws", "--profile", "separate-profile"}
 	root = NewRootCommandWithEngine(context.Background(), nil)
+	if len(pluginProfileSelectors) != 2 || pluginProfileSelectors[1] != "separate-profile" {
+		t.Fatalf("space-separated plugin profile selector = %#v, want separate-profile", pluginProfileSelectors)
+	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(nil)
@@ -144,7 +156,11 @@ func TestCrossPlatformCoverageRootConstructionHooksAndVersionCoverage(t *testing
 		t.Fatalf("JSON version = %v", err)
 	}
 
+	os.Args = []string{"dws"}
 	root = NewRootCommandWithEngine(context.Background(), nil)
+	if len(pluginProfileSelectors) != 3 || pluginProfileSelectors[2] != "" {
+		t.Fatalf("empty plugin profile selector = %#v, want empty selector", pluginProfileSelectors)
+	}
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"version", "--output", "bad\x00path"})
@@ -298,7 +314,9 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	rootPluginInjectConfigEnv = func(*plugin.Loader) {}
 	rootPluginLoadUser = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p1, p2} }
 	rootPluginLoadDev = func(*plugin.Loader) []*plugin.Plugin { return []*plugin.Plugin{p3} }
-	rootPluginResolveIdentity = func(string, string) (*profilemetadata.ProfileMetadata, error) {
+	resolvedProfileSelector := "unset"
+	rootPluginResolveIdentity = func(_ string, selector string) (*profilemetadata.ProfileMetadata, error) {
+		resolvedProfileSelector = selector
 		return &profilemetadata.ProfileMetadata{UserID: "user", CorpID: "corp"}, nil
 	}
 	rootPluginDescriptors = func(p *plugin.Plugin) []mcptypes.ServerDescriptor {
@@ -355,7 +373,10 @@ func TestCrossPlatformCoverageRootLoadPluginsRemainingCoverage(t *testing.T) {
 	}
 	synced := false
 	rootPluginSyncSkills = func([]*plugin.Plugin) { synced = true }
-	got := loadPlugins(nil, pipeline.NewEngine(), runnerCoverageFallback{})
+	got := loadPlugins(nil, pipeline.NewEngine(), runnerCoverageFallback{}, "explicit-profile")
+	if resolvedProfileSelector != "explicit-profile" {
+		t.Fatalf("plugin identity profile selector = %q, want explicit-profile", resolvedProfileSelector)
+	}
 	if len(got) != 2 || got[0].Name() != "one-http" || got[1].Name() != "one-stdio" {
 		t.Fatalf("loaded plugin commands = %#v", got)
 	}

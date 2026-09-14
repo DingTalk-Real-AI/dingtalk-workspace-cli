@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillprovenance"
@@ -281,6 +282,19 @@ func TestInstallScriptSharedSchemaCacheMessaging(t *testing.T) {
 	if strings.Count(scriptText, `chmod a+rX "$shared_dir"`) != 1 {
 		t.Fatal(`install.sh must chmod a+rX "$shared_dir" only on the installer-created/dedicated-root branch`)
 	}
+	layoutIdx := strings.Index(scriptText, "shared_schema_layout_safe")
+	cleanupIdx := strings.Index(scriptText, `find "$schema_tree" -name 'identity.json'`)
+	chmodIdx := strings.Index(scriptText, "! shared_schema_make_artifacts_readable")
+	artifactIdx := strings.Index(scriptText, `schema_cache_artifacts_present "$schema_tree"`)
+	if layoutIdx < 0 || cleanupIdx < 0 || layoutIdx > cleanupIdx {
+		t.Fatal("install.sh must validate cache paths before sidecar cleanup")
+	}
+	if chmodIdx < 0 || artifactIdx < 0 || chmodIdx < artifactIdx {
+		t.Fatal("install.sh must validate and warm artifacts before changing permissions")
+	}
+	if strings.Contains(scriptText, `chmod -R a+rX "$schema_tree"`) || strings.Contains(scriptText, "chmod -R a+rX \"$(dirname") {
+		t.Fatal("install.sh must not recursively chmod schema cache contents")
+	}
 
 	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
 	// 1777, so a root under it is other-traversable all the way up.
@@ -431,6 +445,140 @@ build_shared_schema_cache
 		}
 		if !strings.Contains(text, "Shared schema cache not written") {
 			t.Fatalf("legacy fingerprint sidecar missing skip warning:\n%s", text)
+		}
+	})
+}
+
+func TestInstallScriptSharedSchemaCacheRejectsUnsafeExistingObjects(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	run := func(t *testing.T, root, shared string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+printf x >"$dir/registry.shards.cache"
+printf x >"$dir/payloads.shards.cache"
+printf '{}' >"$dir/identity.json"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+	detect_os() { printf '%s\n' linux; }
+	detect_arch() { printf '%s\n' amd64; }
+	INSTALL_DIR="` + binDir + `"
+	INSTALL_NAME=dws-test
+	build_shared_schema_cache
+	`
+		harnessPath := filepath.Join(root, "unsafe-cache-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("unsafe cache harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("schema symlink does not escape cleanup", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		if err := os.Symlink(outside, filepath.Join(shared, "dws", "schema")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+
+	t.Run("dws symlink does not escape cleanup", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		if err := os.Symlink(outside, filepath.Join(shared, "dws")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+
+	t.Run("hardlink is not chmodded", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outside := filepath.Join(root, "outside-identity.json")
+		mustWriteFile(t, outside, []byte("keep"), 0o600)
+		if err := os.Link(outside, filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		info, err := os.Stat(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("outside hardlink mode = %04o, want 0600", info.Mode().Perm())
+		}
+	})
+
+	t.Run("non-regular object is rejected", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(edition, "identity.json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		if _, err := os.Stat(filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatalf("FIFO was removed: %v", err)
 		}
 	})
 }

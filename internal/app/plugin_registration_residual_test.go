@@ -29,7 +29,7 @@ type schemaSourceContextKey struct{}
 
 func TestSchemaSourceRootPropagatesContextWithoutLoadingPlugins(t *testing.T) {
 	pluginLoads := 0
-	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner, string) []*cobra.Command {
 		pluginLoads++
 		return nil
 	})

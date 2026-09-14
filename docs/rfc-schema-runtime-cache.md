@@ -190,12 +190,12 @@ Agent 会话:
      dws schema --all  ← 获取完整 Schema（一次性）
        ├─ 构建 Cobra 树: 150ms
        └─ 生成 Schema: 200ms (无 cache) / <1ms (有 cache)
-  
+
   2. 用户对话: "帮我创建会议"
      Agent 内部: 搜索 Schema → 找到 "calendar create"
-  
+
   3. 工具调用:
-     dws calendar create --title "..." 
+     dws calendar create --title "..."
        ├─ 新进程启动
        ├─ 构建 Cobra 树: 150ms  ← Cache 无法优化（架构约束）
        └─ 执行命令: 10ms
