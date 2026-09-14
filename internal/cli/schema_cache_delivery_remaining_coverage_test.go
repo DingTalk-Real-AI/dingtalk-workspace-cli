@@ -332,6 +332,9 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing
 }
 
 func TestCrossPlatformCoverageSchemaCacheArtifactsRemainingFailures(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	loaded := deliverySchemaCatalog()
 	artifacts, err := buildSchemaCacheArtifactsFromLoaded(loaded)

@@ -1722,14 +1722,14 @@ shared_schema_editions_runtime_safe() {
 }
 
 # Share only the current editions after the warm-up has passed the same object
-# checks used before cleanup. Never recurse through an unverified path.
+# checks used before cleanup (no symlinks, hardlinks, or non-regular files),
+# so the recursion can never widen anything outside the verified tree.
 shared_schema_make_artifacts_readable() {
   tree="$1"
-  find "$tree" -mindepth 3 -maxdepth 3 -name identity.json -type f -links 1 -exec sh -c '
+  find "$tree" -mindepth 3 -maxdepth 3 -name identity.json -type f -exec sh -c '
       for f do
         edition_dir="$(dirname "$(dirname "$f")")"
-        find "$edition_dir" -type d -exec chmod a+rX {} + || exit 1
-        find "$edition_dir" -type f -links 1 -exec chmod a+r {} + || exit 1
+        chmod -R a+rX "$edition_dir" 2>/dev/null || exit 1
       done' sh {} + 2>/dev/null
 }
 
@@ -1836,16 +1836,27 @@ build_shared_schema_cache() {
     # satisfy the runtime's mode rules; installer-only requires the same with
     # the installer's own uid; anything else — a group/world-writable level
     # without sticky, a foreign-owned ancestor, a writable shard — is a cache
-    # no runtime accepts, so the per-user fallback is reported instead.
+    # no runtime accepts, so the per-user fallback is reported instead. The
+    # first failing cross-user gate travels with the fallback message so a
+    # rejected warm-up is diagnosable from installer output alone.
     _sc_reader_a=0
     _sc_reader_b="$shared_schema_owner_uid"
     _sc_installer_uid="$(id -u)"
-    if [ "$shared_chmod_ok" -eq 1 ] &&
-      shared_schema_root_reachable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir" &&
-      shared_schema_ancestors_traversable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir" "$dws_intermediate" "$schema_tree" &&
-      shared_schema_artifacts_readable "$schema_tree" &&
-      shared_schema_editions_runtime_safe "$schema_tree" "$_sc_reader_a" "$_sc_reader_b" &&
-      shared_schema_artifacts_shared_owner "$schema_tree"; then
+    _sc_cross_gate=""
+    if [ "$shared_chmod_ok" -ne 1 ]; then
+      _sc_cross_gate="re-share"
+    elif ! shared_schema_root_reachable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir"; then
+      _sc_cross_gate="root-reachable"
+    elif ! shared_schema_ancestors_traversable "$_sc_reader_a" "$_sc_reader_b" "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+      _sc_cross_gate="ancestors-traversable"
+    elif ! shared_schema_artifacts_readable "$schema_tree"; then
+      _sc_cross_gate="artifacts-readable"
+    elif ! shared_schema_editions_runtime_safe "$schema_tree" "$_sc_reader_a" "$_sc_reader_b"; then
+      _sc_cross_gate="editions-runtime"
+    elif ! shared_schema_artifacts_shared_owner "$schema_tree"; then
+      _sc_cross_gate="shared-owner"
+    fi
+    if [ -z "$_sc_cross_gate" ]; then
       say "✅ Shared schema cache built: ${shared_dir}"
     elif [ "$shared_chmod_ok" -eq 1 ] &&
       shared_schema_root_reachable "$_sc_reader_a" "$_sc_installer_uid" "$shared_dir" &&
@@ -1859,7 +1870,7 @@ build_shared_schema_cache() {
       # shared cache.
       say "⚠️  Schema cache built for the installing user only (owner uid ${shared_schema_owner_uid} required for cross-user reads); other users fall back to a per-user cache."
     else
-      say "⚠️  Shared schema cache not shared; other users fall back to a per-user cache."
+      say "⚠️  Shared schema cache not shared (cross-user gate: ${_sc_cross_gate}); other users fall back to a per-user cache."
     fi
   else
     say "⚠️  Shared schema cache not written; first schema command will build a per-user cache."

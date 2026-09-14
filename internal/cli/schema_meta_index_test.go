@@ -41,6 +41,9 @@ func TestAssembledSchemaMetaIndexMatchesCatalog(t *testing.T) {
 }
 
 func TestResolveMetaLazilyAssemblesRegisteredSourceRoot(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips child-process lazy assembly to stay inside the shard budget")
+	}
 	if os.Getenv(schemaLazyMetaIndexChildEnv) == "1" {
 		// Child process starts fresh; TestMain installs assembled delivery.
 		// MCP/parameter embeds may load from unrelated package init — only
@@ -100,6 +103,9 @@ func TestResolveMetaFailsClosedWithoutSourceRoot(t *testing.T) {
 }
 
 func TestResolveMetaLoadsOnlyOnce(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips child-process once-assembly to stay inside the shard budget")
+	}
 	const childEnv = "DWS_SCHEMA_LAZY_META_INDEX_ONCE_CHILD"
 	if os.Getenv(childEnv) == "1" {
 		var wait sync.WaitGroup

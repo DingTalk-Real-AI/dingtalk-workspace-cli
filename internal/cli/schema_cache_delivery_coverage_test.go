@@ -159,6 +159,9 @@ func TestCrossPlatformCoverageSchemaCacheRuntimeOpenedFailures(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheHashesMatchAndRoundTrip(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	if _, err := schemaCacheHashes("nope", "sha256:"+hex.EncodeToString(make([]byte, 32))); err == nil {
 		t.Fatal("bad source hash accepted")
 	}

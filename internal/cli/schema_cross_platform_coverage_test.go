@@ -717,6 +717,9 @@ func TestCrossPlatformCoverageParamAliasRealFlagsByMorph(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCatalogSnapshotLoadRoundTrip(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	loaded := mustDeliverySchemaCatalogMaps(t)
 	snapshot := loaded.Snapshot
 	snapshot.SourceHash = schemaCatalogSnapshotHash(snapshot)
@@ -822,6 +825,9 @@ func TestCrossPlatformCoverageSchemaMetaIndexCommandMetaEqualBranches(t *testing
 }
 
 func TestCrossPlatformCoverageLoadTypedSchemaCatalogSuccess(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	loaded := mustDeliverySchemaCatalogMaps(t)
 	if len(loaded.Registry.Products) == 0 {
 		t.Fatal("loaded delivery catalog is empty")

@@ -64,6 +64,9 @@ func TestRuntimeSchemaMetadataLoadsOnlyOnDemand(t *testing.T) {
 // fail-closed decode must both be attempted exactly once under concurrent first
 // use.
 func TestDeliverySchemaCatalogProductionDecodeLoadsOnlyOnce(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips child-process once-decode to stay inside the shard budget")
+	}
 	if os.Getenv(schemaLazyCatalogChildEnv) == "1" {
 		if got := RuntimeSchemaMetadataLoadCounts().Catalog; got != 0 {
 			t.Fatalf("Catalog loaded during package init: %d", got)

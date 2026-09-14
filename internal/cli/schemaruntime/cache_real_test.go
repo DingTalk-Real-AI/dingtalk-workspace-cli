@@ -26,6 +26,9 @@ func realSchemaToolCount(registry schemaruntime.SchemaRegistry) int {
 }
 
 func TestCrossPlatformCoverageRealAssembledSchemaCacheRoundTripAllTools(t *testing.T) {
+	if schemaCacheRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	registry := assembleRealRegistry(t)
 	wantTools := realSchemaToolCount(registry)
 	built, meta := buildRealCache(t, registry)

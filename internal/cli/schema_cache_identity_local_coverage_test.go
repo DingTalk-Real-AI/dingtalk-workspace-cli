@@ -302,6 +302,9 @@ func osCreateLocalIdentityTemp(dir, pattern string) (localIdentityTempFile, erro
 }
 
 func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()

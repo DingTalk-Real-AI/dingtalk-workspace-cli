@@ -29,6 +29,9 @@ func TestSchemaRuntimeParentKeepsPositionalListCompatibility(t *testing.T) {
 }
 
 func TestSchemaRuntimeChildQueryParityAllAssembledLocators(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	loaded := deliverySchemaCatalog()
 	if err := deliverySchemaCatalogError(); err != nil {
 		t.Fatalf("delivery Schema Catalog error = %v", err)

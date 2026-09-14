@@ -16,6 +16,9 @@ import (
 )
 
 func TestCrossPlatformCoverageSchemaCacheDeliveryRemainder(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	runtimeCache, identity, _ := publishCoverageSchemaRuntime(t)
 	goos, goarch := coverageCacheGOOSARCH()
 	counters := &schemacache.Counters{}
@@ -233,6 +236,9 @@ func TestCrossPlatformCoverageSchemaCacheDeliveryRemainder(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheRepairLiveFallbacks(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips live schema assembly coverage to stay inside the shard budget")
+	}
 	_, identity, _ := publishCoverageSchemaRuntime(t)
 	goos, goarch := coverageCacheGOOSARCH()
 	register := func() *schemaCacheRuntime {
