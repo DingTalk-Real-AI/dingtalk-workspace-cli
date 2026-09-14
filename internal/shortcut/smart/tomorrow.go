@@ -81,14 +81,16 @@ var Tomorrow = shortcut.Shortcut{
 		}
 
 		// Same {title,start,end,location,eventId} projection as +today/+week.
-		data, err := rt.CallMCPData("calendar", "list_calendar_events", toolArgs)
+		events, err := calendarSmartListAll(rt, toolArgs)
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"events": calendarProjectEvents(data)})
+		projected := calendarProjectEvents(events)
+		return rt.Output(map[string]any{"count": len(projected), "events": projected, "complete": true})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Tomorrow, "完整翻页并严格校验的明日日程")
 	shortcut.Register(Tomorrow)
 }

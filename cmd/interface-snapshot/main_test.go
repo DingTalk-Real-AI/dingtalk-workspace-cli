@@ -166,6 +166,102 @@ func TestCrossPlatformCoverageRunCompareRequiresBothFlagMigrationInputs(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageRunCompareCommandMigrationInputs(t *testing.T) {
+	dir := t.TempDir()
+	snapshotPath := writeSnapshot(t, dir, "snapshot.json", commandSnapshot("dws"))
+	emptyFlag := writeManifest(t, dir, "empty-flags.json", `{"version":1,"migrations":[]}`)
+	emptyCommand := writeManifest(t, dir, "empty-commands.json", `{"version":1,"migrations":[]}`)
+	invalid := writeManifest(t, dir, "invalid-commands.json", `{`)
+
+	var stdout, stderr bytes.Buffer
+	args := []string{
+		"compare",
+		"--current", snapshotPath,
+		"--base", snapshotPath,
+		"--stable", snapshotPath,
+		"--approved-flag-migrations", emptyFlag,
+		"--candidate-flag-migrations", emptyFlag,
+		"--approved-command-migrations", emptyCommand,
+		"--candidate-command-migrations", emptyCommand,
+	}
+	if exitCode := run(args, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("combined migration compare exit=%d stderr=%s", exitCode, stderr.String())
+	}
+	for _, test := range []struct {
+		name      string
+		approved  string
+		candidate string
+		want      string
+	}{
+		{"approved flag", invalid, emptyFlag, "read approved flag migrations"},
+		{"candidate flag", emptyFlag, invalid, "read candidate flag migrations"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+			testArgs := []string{
+				"compare", "--current", snapshotPath, "--base", snapshotPath, "--stable", snapshotPath,
+				"--approved-flag-migrations", test.approved,
+				"--candidate-flag-migrations", test.candidate,
+				"--approved-command-migrations", emptyCommand,
+				"--candidate-command-migrations", emptyCommand,
+			}
+			if exitCode := run(testArgs, &stdout, &stderr); exitCode != 2 || !strings.Contains(stderr.String(), test.want) {
+				t.Fatalf("combined flag error exit=%d stderr=%s", exitCode, stderr.String())
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name      string
+		approved  string
+		candidate string
+		want      string
+	}{
+		{"approved", invalid, emptyCommand, "read approved command migrations"},
+		{"candidate", emptyCommand, invalid, "read candidate command migrations"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+			testArgs := []string{
+				"compare", "--current", snapshotPath, "--base", snapshotPath, "--stable", snapshotPath,
+				"--approved-command-migrations", test.approved,
+				"--candidate-command-migrations", test.candidate,
+			}
+			if exitCode := run(testArgs, &stdout, &stderr); exitCode != 2 || !strings.Contains(stderr.String(), test.want) {
+				t.Fatalf("command manifest error exit=%d stderr=%s", exitCode, stderr.String())
+			}
+		})
+	}
+
+	stderr.Reset()
+	if exitCode := run([]string{
+		"compare", "--current", snapshotPath, "--base", snapshotPath,
+		"--approved-command-migrations", emptyCommand,
+	}, &stdout, &stderr); exitCode != 2 || !strings.Contains(stderr.String(), "provided together") {
+		t.Fatalf("one-sided command manifest exit=%d stderr=%s", exitCode, stderr.String())
+	}
+
+	if _, err := readCommandMigrationManifest(filepath.Join(dir, "missing.json")); err == nil {
+		t.Fatal("missing command migration manifest unexpectedly read")
+	}
+	if _, err := readCommandMigrationManifest(invalid); err == nil {
+		t.Fatal("invalid command migration manifest unexpectedly read")
+	}
+
+	pending := writeManifest(t, dir, "pending-command.json", commandMigrationManifestJSON("pending"))
+	consumed := writeManifest(t, dir, "consumed-command.json", commandMigrationManifestJSON("consumed"))
+	stderr.Reset()
+	if exitCode := run([]string{
+		"compare", "--current", snapshotPath, "--base", snapshotPath, "--stable", snapshotPath,
+		"--approved-command-migrations", pending,
+		"--candidate-command-migrations", consumed,
+	}, &stdout, &stderr); exitCode != 2 || !strings.Contains(stderr.String(), "validate interface migration lifecycle") {
+		t.Fatalf("command lifecycle error exit=%d stderr=%s", exitCode, stderr.String())
+	}
+}
+
 func TestCrossPlatformCoverageRunCompareRequiresBothReferencesForFlagMigrations(t *testing.T) {
 	dir := t.TempDir()
 	currentPath := writeSnapshot(t, dir, "current.json", commandSnapshot("dws"))
@@ -563,6 +659,33 @@ func flagMigrationManifestJSON(state string) string {
     },
     "state": "STATE",
     "reason": "reviewed exact migration"
+  }]
+}`, "STATE", state, 1)
+}
+
+func commandMigrationManifestJSON(state string) string {
+	return strings.Replace(`{
+  "version": 1,
+  "migrations": [{
+    "kind": "command_move",
+    "legacy": {
+      "command": "dws chat message old",
+      "before": {"present": true, "runnable": true},
+      "after": {"present": true, "runnable": true, "hidden": true}
+    },
+    "replacement": {
+      "command": "dws chat topic new",
+      "before": {"present": false},
+      "after": {"present": true, "runnable": true}
+    },
+    "schema": {
+      "product_id": "chat",
+      "source_tool_id": "chat.move",
+      "replacement_tool_id": "chat.move",
+      "parameters": []
+    },
+    "state": "STATE",
+    "reason": "reviewed command migration"
   }]
 }`, "STATE", state, 1)
 }

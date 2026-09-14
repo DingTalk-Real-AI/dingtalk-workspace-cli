@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/runtimecontext"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
@@ -74,9 +75,25 @@ var (
 	}
 )
 
+func deviceFetchClientIDForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
+	if region.IsInternational() {
+		return FetchClientIDFromMCPForLoginRegion(ctx, region)
+	}
+	return deviceFetchClientID(ctx)
+}
+
+func deviceGetAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
+	if region.IsInternational() {
+		return GetSuperAdminsForLoginRegion(ctx, accessToken, region)
+	}
+	return deviceGetAdmins(ctx, accessToken)
+}
+
 type DeviceFlowProvider struct {
 	configDir        string
 	clientID         string
+	credentials      *AppCredentialPair
+	credentialErr    error
 	scope            string
 	baseURL          string
 	terminalBaseURL  string
@@ -85,12 +102,14 @@ type DeviceFlowProvider struct {
 	httpClient       *http.Client
 	NoBrowser        bool
 	IdentityEnricher func(context.Context, *TokenData) error
+	LoginRegion      LoginRegion
 }
 
 func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowProvider {
-	return &DeviceFlowProvider{
+	pair, err := resolveOAuthCredentialPair(configDir)
+	p := &DeviceFlowProvider{
 		configDir:       configDir,
-		clientID:        ClientID(),
+		credentialErr:   err,
 		scope:           DefaultScopes,
 		baseURL:         DefaultDeviceBaseURL,
 		terminalBaseURL: GetMCPBaseURL(),
@@ -98,10 +117,24 @@ func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowPro
 		Output:          os.Stderr,
 		httpClient:      &http.Client{Timeout: 30 * time.Second},
 	}
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	} else {
+		p.clientID = ClientID()
+	}
+	return p
 }
 
 func (p *DeviceFlowProvider) SetBaseURL(baseURL string) {
 	p.baseURL = strings.TrimRight(baseURL, "/")
+}
+
+func (p *DeviceFlowProvider) SetLoginRegion(region LoginRegion) {
+	p.LoginRegion = region
+	p.baseURL = DeviceBaseURLForLoginRegion(region)
+	p.terminalBaseURL = MCPBaseURLForLoginRegion(region)
 }
 
 // SetTerminalBaseURL sets the terminal API base URL for device flow polling.
@@ -189,21 +222,29 @@ type serviceResult struct {
 // overrides intentionally skip this reset.
 func (p *DeviceFlowProvider) resetCredentialState() {
 	p.clientID = ""
-	clientMu.Lock()
-	clientIDFromMCP = false
-	clientMu.Unlock()
+	p.credentials = nil
+	clearRuntimeCredentials()
 }
 
 func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
+	pair, pairErr := resolveOAuthCredentialPair(p.configDir)
+	p.credentials = nil
+	p.credentialErr = pairErr
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	}
+	if p.credentialErr != nil {
+		return nil, fmt.Errorf("应用凭证配置无效: %w", p.credentialErr)
+	}
 	if err := prepareLoginPersistence(p.configDir); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 
-	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
-		p.clientID = runtimeClientID
-		clientMu.Lock()
-		clientIDFromMCP = false
-		clientMu.Unlock()
+	if p.credentials != nil {
+		p.clientID = p.credentials.ClientID
+		clearMCPRuntimeCredentials()
 	} else {
 		// Defensive reset: clear any stale credential state from previous login
 		// methods (OAuth scan, PAT, etc.) so we can re-fetch from MCP. This
@@ -213,7 +254,7 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 		if p.logger != nil {
 			p.logger.Debug("fetching client ID from MCP server (device flow always re-fetches)")
 		}
-		mcpClientID, mcpErr := deviceFetchClientID(ctx)
+		mcpClientID, mcpErr := deviceFetchClientIDForLoginRegion(ctx, p.LoginRegion)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
@@ -224,6 +265,7 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 		}
 	}
 
+	ctx = context.WithValue(ctx, loginRuntimeContextKey{}, resolveAuthRuntimeContext())
 	const maxAttempts = 3
 	for attempt := 1; ; attempt++ {
 		tokenData, err := deviceLoginOnce(p, ctx, attempt)
@@ -239,6 +281,8 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 	}
 }
 
+type loginRuntimeContextKey struct{}
+
 func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*TokenData, error) {
 	dfPrintStep(p.output(), 1, i18n.T("请求设备授权码..."), attempt)
 	_, _ = fmt.Fprintln(p.output(), "")
@@ -247,11 +291,17 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("请求设备授权码失败"), err)
 	}
-	dfPrintDeviceCodeBox(p.output(), authResp)
+	// Display the same snapshot used for browser authorization, including when
+	// browser launch is disabled. Keep the server response intact for polling.
+	snapshot, _ := ctx.Value(loginRuntimeContextKey{}).(runtimecontext.Result)
+	displayAuth := *authResp
+	displayAuth.VerificationURI, _ = snapshot.AttachToURL(authResp.VerificationURI)
+	displayAuth.VerificationURIComplete, _ = snapshot.AttachToURL(authResp.VerificationURIComplete)
+	dfPrintDeviceAuthorization(p.output(), &displayAuth)
 
-	if authResp.VerificationURIComplete != "" && !p.NoBrowser {
-		if bErr := deviceOpenBrowser(authResp.VerificationURIComplete); bErr != nil && p.logger != nil {
-			p.logger.Debug("could not open browser", "error", bErr)
+	if displayAuth.VerificationURIComplete != "" && !p.NoBrowser {
+		if bErr := deviceOpenBrowser(displayAuth.VerificationURIComplete); bErr != nil && p.logger != nil {
+			p.logger.Debug("could not open browser", "error_category", "browser_open_failed")
 		}
 	}
 
@@ -270,8 +320,10 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	oauthProvider := &OAuthProvider{
 		configDir:        p.configDir,
 		clientID:         p.clientID,
+		credentials:      p.credentials,
 		logger:           p.logger,
 		IdentityEnricher: p.IdentityEnricher,
+		LoginRegion:      p.LoginRegion,
 	}
 	tokenData, err := deviceExchangeCode(oauthProvider, ctx, tokenResult.AuthCode)
 	if err != nil {
@@ -292,15 +344,10 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if denialReason != "" {
 		_, _ = fmt.Fprintln(p.output(), "")
 		switch denialReason {
-		case "user_forbidden":
-			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织已禁止所有成员使用 CLI")))
+		case "user_forbidden", "user_not_allowed":
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织尚未开启CLI数据访问权限")))
 			_, _ = fmt.Fprintln(p.output(), "")
-			return nil, errors.New(i18n.T("该组织已禁止所有成员使用 CLI"))
-		case "user_not_allowed":
-			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  您不在该组织的 CLI 授权人员范围内")))
-			_, _ = fmt.Fprintln(p.output(), i18n.T("   请联系组织管理员将您加入 CLI 授权人员名单。"))
-			_, _ = fmt.Fprintln(p.output(), "")
-			return nil, errors.New(i18n.T("您不在该组织的 CLI 授权人员范围内，请联系组织管理员"))
+			return nil, errors.New(i18n.T("该组织尚未开启CLI数据访问权限"))
 		case "channel_not_allowed":
 			ch := os.Getenv("DWS_CHANNEL")
 			_, _ = fmt.Fprintf(p.output(), dfRed(i18n.T("⚠️  当前渠道 %s 未获得该组织授权"))+"\n", ch)
@@ -327,11 +374,11 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			return nil, errors.New(i18n.T("认证已失效，请执行 dws auth 重新登录"))
 		default:
 			// cli_not_enabled or unknown — show existing admin-apply flow
-			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  该组织尚未开启 CLI 数据访问权限")))
-			_, _ = fmt.Fprintln(p.output(), i18n.T("   你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。"))
+			_, _ = fmt.Fprintln(p.output(), dfRed(i18n.T("⚠️  您暂无 CLI 数据访问权限")))
+			_, _ = fmt.Fprintln(p.output(), i18n.T("   当前组织未授权您通过 CLI 访问个人数据。"))
 			_, _ = fmt.Fprintln(p.output(), "")
 
-			admins, adminErr := deviceGetAdmins(ctx, tokenData.AccessToken)
+			admins, adminErr := deviceGetAdminsForLoginRegion(ctx, tokenData.AccessToken, p.LoginRegion)
 			if adminErr == nil && admins.Success && len(admins.Result) > 0 {
 				maxAdmins := 3
 				if len(admins.Result) < maxAdmins {
@@ -348,7 +395,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			_, _ = fmt.Fprintln(p.output(), "")
 			_, _ = fmt.Fprintf(p.output(), "   %s%s\n", i18n.T("管理员操作入口："), config.GetDeveloperSettingsURL())
 			_, _ = fmt.Fprintln(p.output(), "")
-			return nil, errors.New(i18n.T("该组织尚未开启 CLI 数据访问权限，请联系管理员开启"))
+			return nil, errors.New(i18n.T("您暂无 CLI 数据访问权限，请联系管理员开启"))
 		}
 	}
 
@@ -357,6 +404,9 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err := oauthProvider.prepareLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
@@ -364,18 +414,8 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 
-	// Persist app credentials (with secret) if using custom client credentials.
-	// MUST run BEFORE os.Setenv below to avoid env-matching short circuit.
+	// Persist the exact pair snapshotted before authorization began.
 	oauthProvider.persistAppConfigIfNeeded()
-
-	// Always persist clientId to app.json so future process startups
-	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
-	if p.clientID != "" {
-		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		if !deviceHasAppConfig(p.configDir) {
-			_ = deviceSaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
-		}
-	}
 
 	return tokenData, nil
 }
@@ -645,7 +685,6 @@ var (
 	dfGreen  = tui.Success
 	dfYellow = tui.Warning
 	dfRed    = tui.Danger
-	dfCyan   = tui.Cyan
 	dfDim    = tui.Dim
 )
 
@@ -658,24 +697,23 @@ func dfPrintStep(w io.Writer, step int, message string, attempt int) {
 	_, _ = fmt.Fprintf(w, "%s %s: %s\n", tui.StateMark("ok"), dfBold(label), message)
 }
 
-func dfPrintDeviceCodeBox(w io.Writer, auth *DeviceAuthResponse) {
-	lines := []string{
-		i18n.T("请在浏览器中打开以下链接，并输入授权码："),
-		"",
-		fmt.Sprintf(i18n.T("  链接: %s"), dfBold(auth.VerificationURI)),
-		fmt.Sprintf(i18n.T("  授权码: %s"), dfBold(dfYellow(auth.UserCode))),
-		"",
-	}
+func dfPrintDeviceAuthorization(w io.Writer, auth *DeviceAuthResponse) {
+	_, _ = fmt.Fprintln(w, fmt.Sprintf(i18n.T("  授权码: %s"), dfBold(dfYellow(auth.UserCode))))
+	_, _ = fmt.Fprintln(w, "  "+dfDim(fmt.Sprintf(i18n.T("授权码将在 %d 秒后过期。"), auth.ExpiresIn)))
+	_, _ = fmt.Fprintln(w)
+
+	// Keep each URL on its own unstyled logical line. Terminal soft wrapping
+	// must not introduce borders, indentation, or hard breaks into copied links.
 	if auth.VerificationURIComplete != "" {
-		lines = append(lines,
-			i18n.T("或者直接打开以下链接："),
-			fmt.Sprintf("  %s", dfCyan(auth.VerificationURIComplete)),
-			"",
-		)
+		_, _ = fmt.Fprintln(w, "  "+i18n.T("授权链接（已填入授权码）："))
+		_, _ = fmt.Fprintln(w, auth.VerificationURIComplete)
+		_, _ = fmt.Fprintln(w)
 	}
-	lines = append(lines, dfDim(fmt.Sprintf(i18n.T("授权码将在 %d 秒后过期。"), auth.ExpiresIn)))
-	dfPrintBox(w, lines)
-	_, _ = fmt.Fprintln(w, "")
+	if auth.VerificationURI != "" {
+		_, _ = fmt.Fprintln(w, "  "+i18n.T("手动输入授权码的链接："))
+		_, _ = fmt.Fprintln(w, auth.VerificationURI)
+		_, _ = fmt.Fprintln(w)
+	}
 }
 
 func dfPrintBox(w io.Writer, lines []string) {

@@ -3,6 +3,8 @@
 > 对照基准：`skills/mono`（单 skill）。被测主体：`skills/multi`。  
 > 机读合同：`skills/content-qa/mono-multi-coverage.yaml`。  
 > 执行：`make skill-mono-multi-content`（独立门禁；默认 `make policy` 按设计不包含该检查）。
+> 安装、升级与模式迁移见
+> [DWS 预制 Skill 安装、升级与模式迁移 RFC](rfc-skill-installation-and-upgrade.md)。
 
 ## 1. 质检矩阵
 
@@ -11,7 +13,7 @@
 | **G1 形状** | 结构 | `skills/multi/*` | 仅 `dingtalk-*`（含必选 `dingtalk-shared`）；每目录有 `SKILL.md` |
 | **G2 结构** | 结构 | 各 `SKILL.md` frontmatter | `name`==目录名；非空 `description`；`category`∈{product,shared}；`requires.bins` 含 `dws` |
 | **G3 覆盖** | 覆盖 | mono `references/products/*` 顶层 stem | 每 stem ∈ `coverage` 或 `omit_coverage`；coverage 目标 skill/refs 存在 |
-| **G4 漂移** | 漂移 | scripts、成对文件、全局协议 | orphan 脚本 ∈ allowlist；paired 内容一致（允许合同声明的布局链接替换）；全局协议存在或 ∈ `omit_global` |
+| **G4 漂移** | 漂移 | scripts、成对文件、全局协议 | orphan 生产脚本（不含 `test_*.py` / `*_test.py`）∈ allowlist；retired 脚本路径不得重新出现；paired 内容一致（允许合同声明的布局链接替换）；全局协议存在或 ∈ `omit_global` |
 | **G5 链接** | 可达性 | 合同覆盖的 paired Markdown | 内联相对链接目标文件或目录存在且不逃出仓库；外链、纯锚点和锚点内容不在检查范围 |
 
 已有门禁（继续复用，不替代本矩阵）：`check-skill-commands`、`check-skill-context-budget`、`check-multi-im-skill-chain`、`skill_docs_policy`、whiteboard 成对测试。
@@ -38,6 +40,10 @@ orphan_scripts_allowlist:
   - path: dingtalk-misc/scripts/report_received_today.py
     disposition: defer
     reason: "pending report.md reference"
+
+retired_scripts:
+  - path: skills/multi/dingtalk-minutes/scripts/minutes_extract_todos.py
+    reason: "replaced by reviewed shortcuts"
 
 paired_files:
   - mono: references/products/sheet.md
@@ -70,7 +76,3 @@ paired_files:
 | X6 | SAFETY_PREAMBLE_INJECT 无注入器 | **done** | 标记已移除 |
 
 产品面覆盖：见 YAML `coverage`——mono products 均有 multi 承接（misc 聚合 attendance/oa/sheet/…）。
-
-## 4. 与悟空
-
-借鉴 frontmatter / 断链 / requires 等**检查维度**；不运行悟空 bundle zip 校验脚本。覆盖权威始终是 DWS mono。

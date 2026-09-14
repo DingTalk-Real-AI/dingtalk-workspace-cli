@@ -61,7 +61,7 @@ Flags:
 3. 使用新 Token 在线查询并核验员工身份：授权 `uid` 对应 `robotUid`，`staffId` 对应 Profile `userId`；授权 `orgId` 不作为 `corpId`。
 4. 保存或刷新精确 `corpId:userId` Profile，同时保留发起操作的主管 Profile 为当前 Profile。
 
-成功输出只包含保存后的 `dwsProfile` 和使用提示，不包含 AuthCode、Access Token 或 Refresh Token。单次以员工身份执行命令：`dws --profile <corpId:userId> <command>`；需要切换默认账号时：`dws profile use <corpId:userId>`。不要再手动执行 `dws auth exchange`。
+成功输出只包含保存后的 `dwsProfile` 和使用提示，不包含 AuthCode、Access Token 或 Refresh Token。单次以员工身份执行时，在目标命令的全局参数中传 `--profile <corpId:userId>`；需要切换默认账号时：`dws profile use <corpId:userId>`。不要再手动执行 `dws auth exchange`。
 
 ## save-draft — 全量覆写草稿
 

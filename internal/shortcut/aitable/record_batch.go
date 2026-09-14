@@ -4,11 +4,16 @@
 package aitable
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -16,6 +21,41 @@ const (
 	recordBatchSize       = 100
 	maxCompositeRecordRun = 10000
 )
+
+var recordUpsertReadbackDelays = []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
+
+var recordReadbackWait = func(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// recordReadbackPendingError marks a verification difference that can be
+// explained by eventual consistency. It allows +record-upsert to retry only
+// the read side while keeping permanent write-response contract failures fast.
+type recordReadbackPendingError struct {
+	cause error
+}
+
+func (e *recordReadbackPendingError) Error() string { return e.cause.Error() }
+func (e *recordReadbackPendingError) Unwrap() error { return e.cause }
+
+func pendingRecordReadback(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return &recordReadbackPendingError{cause: cause}
+}
+
+func isPendingRecordReadback(err error) bool {
+	var pending *recordReadbackPendingError
+	return errors.As(err, &pending)
+}
 
 func parseRecordObjects(raw string, requireRecordID bool) ([]map[string]any, error) {
 	value, err := parseJSONAny("records", raw)
@@ -84,11 +124,45 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 		return rt.Output(result)
 	}
 
-	for offset := 0; offset < len(ids); offset += recordBatchSize {
-		end := minInt(offset+recordBatchSize, len(ids))
-		batch := ids[offset:end]
+	existingIDs, err := queryExistingRecordIDs(rt, baseID, tableID, ids)
+	if err != nil {
+		return err
+	}
+	existingSet := make(map[string]bool, len(existingIDs))
+	for _, id := range existingIDs {
+		existingSet[id] = true
+	}
+	missingIDs := make([]string, 0, len(ids)-len(existingIDs))
+	for _, id := range ids {
+		if !existingSet[id] {
+			missingIDs = append(missingIDs, id)
+		}
+	}
+	result.Resolved = map[string]any{
+		"existingRecordIds": existingIDs,
+		"missingRecordIds":  missingIDs,
+	}
+	result.Plan = nil
+	for offset := 0; offset < len(existingIDs); offset += recordBatchSize {
+		end := minInt(offset+recordBatchSize, len(existingIDs))
+		result.Plan = append(result.Plan, compositeStep{
+			Index: len(result.Plan) + 1, Name: "delete existing record batch", Tool: "delete_records",
+			Status: "planned", Offset: offset, Count: end - offset,
+		})
+	}
+	if len(existingIDs) == 0 {
+		result.Status = "unchanged"
+		result.Executed = false
+		result.Verification = map[string]any{"status": "verified_absent_before_write", "missingCount": len(missingIDs)}
+		result.Result = map[string]any{"deletedCount": 0, "missingCount": len(missingIDs), "batchCount": 0}
+		return rt.Output(result)
+	}
+
+	for offset := 0; offset < len(existingIDs); offset += recordBatchSize {
+		end := minInt(offset+recordBatchSize, len(existingIDs))
+		batch := existingIDs[offset:end]
 		writeData, writeErr := rt.CallMCPWriteDataStrict(serverMain, "delete_records", map[string]any{
-			"baseId": baseID, "tableId": tableID, "recordIds": batch,
+			"baseId": baseID, "tableId": tableID, "recordIds": batch, "confirm": true,
 		})
 		step := compositeStep{
 			Index: len(result.CompletedSteps) + 1, Name: "delete record batch", Tool: "delete_records",
@@ -98,7 +172,7 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 			step.Status = "unknown"
 			step.Error = writeErr.Error()
 		}
-		remaining, verifyErr := queryRecordsByIDs(rt, baseID, tableID, batch)
+		remaining, verifyErr := queryDeletedRecordsByIDs(rt, baseID, tableID, batch)
 		if verifyErr == nil && len(remaining) > 0 {
 			verifyErr = fmt.Errorf("read-back still contains deleted record IDs: %s", strings.Join(recordIDs(remaining), ","))
 		}
@@ -109,7 +183,7 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 			step.Status = "unknown"
 			result.CompletedSteps = append(result.CompletedSteps, step)
 			result.CompletedCount = offset
-			result.FailedCount = len(ids) - offset
+			result.FailedCount = len(existingIDs) - offset
 			result.Status = "unknown"
 			if offset > 0 {
 				result.Status = "partial_success"
@@ -130,9 +204,72 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 		result.CompletedCount = end
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "delete_records", "offset": offset, "recordIds": batch})
 	}
-	result.Verification = map[string]any{"status": "verified_absent", "verifiedCount": len(ids)}
-	result.Result = map[string]any{"deletedCount": len(ids), "batchCount": len(result.CompletedSteps)}
+	result.Verification = map[string]any{
+		"status": "verified_absent", "verifiedCount": len(existingIDs),
+		"missingBeforeWriteCount": len(missingIDs),
+	}
+	result.Result = map[string]any{
+		"deletedCount": len(existingIDs), "missingCount": len(missingIDs),
+		"batchCount": len(result.CompletedSteps),
+	}
 	return rt.Output(result)
+}
+
+// Only trust an explicit MCP input error with retryable=false. Transport errors
+// and system failures can occur after a write, so they still need verification.
+func isRecordWriteInputRejection(err error) bool {
+	var cliErr *helpers.CLIError
+	var appErr *apperrors.Error
+	var raw string
+	if errors.As(err, &cliErr) && cliErr.Code == helpers.CodeMCPToolError {
+		raw = cliErr.Message
+	} else if errors.As(err, &appErr) && appErr.Reason == "business_error" {
+		raw = appErr.Message
+	} else {
+		return false
+	}
+	var body struct {
+		Status string `json:"status"`
+		Error  struct {
+			Type      string `json:"type"`
+			Retryable *bool  `json:"retryable"`
+		} `json:"error"`
+	}
+	return json.Unmarshal([]byte(raw), &body) == nil && body.Status == "error" &&
+		(body.Error.Type == "INPUT_ERROR" || body.Error.Type == "USER_ERROR") &&
+		body.Error.Retryable != nil && !*body.Error.Retryable
+}
+
+func queryExistingRecordIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]string, error) {
+	records, err := queryDeletedRecordsByIDs(rt, baseID, tableID, ids)
+	if err != nil {
+		return nil, err
+	}
+	wanted := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	present := make(map[string]bool, len(records))
+	for index, record := range records {
+		id := recordID(record)
+		if id == "" {
+			return nil, fmt.Errorf("delete preflight record %d is missing recordId", index)
+		}
+		if !wanted[id] {
+			return nil, fmt.Errorf("delete preflight returned unexpected recordId %q", id)
+		}
+		if present[id] {
+			return nil, fmt.Errorf("delete preflight returned duplicate recordId %q", id)
+		}
+		present[id] = true
+	}
+	existing := make([]string, 0, len(present))
+	for _, id := range ids {
+		if present[id] {
+			existing = append(existing, id)
+		}
+	}
+	return existing, nil
 }
 
 func parseRecordIDs(values []string) ([]string, error) {
@@ -201,7 +338,21 @@ func executeRecordBatches(
 			step.Status = "unknown"
 			step.Error = writeErr.Error()
 		}
-		verification, verifyErr := verify(rt, baseID, tableID, batch, writeData)
+		// A structured input rejection proves this batch was not accepted. Do
+		// not replace it with an unrelated read-back mismatch or suggest retry.
+		if isRecordWriteInputRejection(writeErr) {
+			step.Status = "failed"
+			result.CompletedSteps = append(result.CompletedSteps, step)
+			result.CompletedCount = offset
+			result.FailedCount = len(records) - offset
+			result.Status = "failed"
+			if offset > 0 {
+				result.Status = "partial_success"
+			}
+			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize}
+			return compositeError(result, writeErr, false)
+		}
+		verification, verifyErr := verifyRecordBatchEventually(rt, tool, baseID, tableID, batch, writeData, verify)
 		if verifyErr != nil {
 			step.Status = "unknown"
 			if step.Error == "" {
@@ -214,12 +365,32 @@ func executeRecordBatches(
 			if offset > 0 {
 				result.Status = "partial_success"
 			}
-			result.Verification = map[string]any{"status": "failed", "error": verifyErr.Error(), "batchOffset": offset}
+			verificationStatus := "failed"
+			if isPendingRecordReadback(verifyErr) {
+				verificationStatus = "pending"
+				ids := append(recordIDs(batch), createdRecordIDs(writeData)...)
+				ids = uniqueStrings(ids)
+				if len(ids) > 0 {
+					result.NextCommand = aitableRecoveryCommand(
+						"dws", "aitable", "+record-query",
+						"--base-id", baseID,
+						"--table-id", tableID,
+						"--record-ids", strings.Join(ids, ","),
+					)
+				}
+				if writeErr == nil {
+					result.KnownEffects = append(result.KnownEffects, map[string]any{
+						"tool": tool, "offset": offset, "count": len(batch),
+						"status": "write_acknowledged_verification_pending",
+					})
+				}
+			}
+			result.Verification = map[string]any{"status": verificationStatus, "error": verifyErr.Error(), "batchOffset": offset}
 			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize}
 			if writeErr != nil {
 				result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 			}
-			retryable := true
+			retryable := !isPendingRecordReadback(verifyErr)
 			if tool == "record_upsert" {
 				for _, record := range batch {
 					if recordID(record) == "" {
@@ -244,7 +415,38 @@ func executeRecordBatches(
 	return rt.Output(result)
 }
 
+func verifyRecordBatchEventually(
+	rt *shortcut.RuntimeContext,
+	tool, baseID, tableID string,
+	batch []map[string]any,
+	writeData map[string]any,
+	verify recordBatchVerifier,
+) (map[string]any, error) {
+	verification, err := verify(rt, baseID, tableID, batch, writeData)
+	if tool != "record_upsert" || !isPendingRecordReadback(err) {
+		return verification, err
+	}
+	ctx := context.Background()
+	if rt != nil && rt.Command() != nil && rt.Command().Context() != nil {
+		ctx = rt.Command().Context()
+	}
+	for _, delay := range recordUpsertReadbackDelays {
+		if waitErr := recordReadbackWait(ctx, delay); waitErr != nil {
+			return nil, pendingRecordReadback(waitErr)
+		}
+		verification, err = verify(rt, baseID, tableID, batch, writeData)
+		if err == nil || !isPendingRecordReadback(err) {
+			return verification, err
+		}
+	}
+	return verification, err
+}
+
 func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, _ map[string]any) (map[string]any, error) {
+	return verifyUpdateBatchState(rt, baseID, tableID, batch, newRecordFieldTypeResolver(rt, baseID, tableID), false)
+}
+
+func verifyUpdateBatchState(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, resolver *recordFieldTypeResolver, pendingMismatch bool) (map[string]any, error) {
 	ids := recordIDs(batch)
 	actual, err := queryRecordsByIDs(rt, baseID, tableID, ids)
 	if err != nil {
@@ -258,9 +460,16 @@ func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 		id := recordID(expected)
 		got := byID[id]
 		if got == nil {
-			return nil, fmt.Errorf("read-back is missing updated record %s", id)
+			err := fmt.Errorf("read-back is missing updated record %s", id)
+			if pendingMismatch {
+				return nil, pendingRecordReadback(err)
+			}
+			return nil, err
 		}
-		if err := verifyRecordCells(got, expected["cells"].(map[string]any)); err != nil {
+		if err := resolver.verify(got, expected["cells"].(map[string]any)); err != nil {
+			if pendingMismatch {
+				return nil, pendingRecordReadback(err)
+			}
 			return nil, err
 		}
 	}
@@ -268,6 +477,7 @@ func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 }
 
 func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, writeData map[string]any) (map[string]any, error) {
+	resolver := newRecordFieldTypeResolver(rt, baseID, tableID)
 	updates := make([]map[string]any, 0)
 	creates := make([]map[string]any, 0)
 	for _, record := range batch {
@@ -279,7 +489,7 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 	}
 	verifiedIDs := make([]string, 0, len(batch))
 	if len(updates) > 0 {
-		verified, err := verifyUpdateBatch(rt, baseID, tableID, updates, writeData)
+		verified, err := verifyUpdateBatchState(rt, baseID, tableID, updates, resolver, true)
 		if err != nil {
 			return nil, err
 		}
@@ -294,8 +504,8 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 		if err != nil {
 			return nil, err
 		}
-		if err := matchCreatedCells(creates, actual); err != nil {
-			return nil, err
+		if err := matchCreatedCells(creates, actual, resolver); err != nil {
+			return nil, pendingRecordReadback(err)
 		}
 		verifiedIDs = append(verifiedIDs, createdIDs...)
 	}
@@ -303,20 +513,33 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 }
 
 func queryRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {
-	data, err := rt.CallMCPData(serverMain, "query_records", map[string]any{
-		"baseId": baseID, "tableId": tableID, "recordIds": ids, "limit": len(ids),
-	})
+	window, err := queryRecordWindow(rt, map[string]any{
+		"baseId": baseID, "tableId": tableID, "recordIds": ids,
+	}, len(ids))
 	if err != nil {
 		return nil, err
 	}
-	records, found := findRecords(data)
-	if !found {
-		return nil, fmt.Errorf("query_records read-back is missing records")
+	// Exact-ID verification below compares every requested ID with the returned
+	// records. The service can publish a continuation even after all requested
+	// IDs are present, so hasMore is not evidence that this bounded read-back is
+	// incomplete.
+	return window.Records, nil
+}
+
+func queryDeletedRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {
+	remaining := make([]map[string]any, 0)
+	for offset := 0; offset < len(ids); offset += recordQueryServicePageSize {
+		end := minInt(offset+recordQueryServicePageSize, len(ids))
+		chunk := ids[offset:end]
+		window, err := queryRecordWindow(rt, map[string]any{
+			"baseId": baseID, "tableId": tableID, "recordIds": chunk,
+		}, len(chunk))
+		if err != nil {
+			return nil, err
+		}
+		remaining = append(remaining, window.Records...)
 	}
-	if responseHasMore(data) {
-		return nil, fmt.Errorf("query_records read-back is incomplete")
-	}
-	return records, nil
+	return remaining, nil
 }
 
 func recordIDs(records []map[string]any) []string {
@@ -328,6 +551,20 @@ func recordIDs(records []map[string]any) []string {
 			seen[id] = true
 			out = append(out, id)
 		}
+	}
+	return out
+}
+
+func uniqueStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
 	}
 	return out
 }
@@ -347,7 +584,7 @@ func createdRecordIDs(data map[string]any) []string {
 			}
 			for key, child := range typed {
 				lower := strings.ToLower(key)
-				nextContext := createdContext || strings.Contains(lower, "created")
+				nextContext := createdContext || strings.Contains(lower, "created") || lower == "newrecordids"
 				walk(child, nextContext)
 			}
 		case []any:
@@ -370,7 +607,7 @@ func createdRecordIDs(data map[string]any) []string {
 	return out
 }
 
-func matchCreatedCells(expected, actual []map[string]any) error {
+func matchCreatedCells(expected, actual []map[string]any, resolver *recordFieldTypeResolver) error {
 	if len(actual) != len(expected) {
 		return fmt.Errorf("read-back returned %d created records, want %d", len(actual), len(expected))
 	}
@@ -379,7 +616,16 @@ func matchCreatedCells(expected, actual []map[string]any) error {
 		wantCells := wantRecord["cells"].(map[string]any)
 		matched := false
 		for index, gotRecord := range actual {
-			if used[index] || verifyRecordCells(gotRecord, wantCells) != nil {
+			if used[index] {
+				continue
+			}
+			var verifyErr error
+			if resolver == nil {
+				verifyErr = verifyRecordCells(gotRecord, wantCells, nil)
+			} else {
+				verifyErr = resolver.verify(gotRecord, wantCells)
+			}
+			if verifyErr != nil {
 				continue
 			}
 			used[index] = true

@@ -112,8 +112,9 @@ func Discover(cfg DiscoverConfig) (net.Conn, error) {
 		return nil, fmt.Errorf("busctl: mkdir workdir: %w", err)
 	}
 	_, spawnErr := cfg.Spawn(SpawnConfig{
-		ClientID:  cfg.ClientID,
-		ExtraArgs: cfg.SpawnExtraArgs,
+		ClientID:    cfg.ClientID,
+		IPCEndpoint: cfg.IPCEndpoint,
+		ExtraArgs:   cfg.SpawnExtraArgs,
 	})
 	if spawnErr != nil && !errors.Is(spawnErr, ErrSpawnFailed) {
 		// Hard error (couldn't even exec the child). Stop here — no bus

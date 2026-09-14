@@ -15,7 +15,7 @@ var agoalLoadLocation = time.LoadLocation
 // ──────────────────────────────────────────────────────────
 
 func newAgoalCommand() *cobra.Command {
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "agoal",
 		Short: "Agoal 管理",
 		Long: `管理钉钉 Agoal：战略解码、经营合约、计分卡、用户目标、周月报。
@@ -31,6 +31,7 @@ func newAgoalCommand() *cobra.Command {
   dws agoal scorecard detail              获取计分卡详情
   dws agoal scorecard entity-detail       获取计分卡实体详情
   dws agoal scorecard update              更新计分卡
+  dws agoal scorecard search-entities     搜索计分卡指标与关键事项
   dws agoal user rules                    获取用户规则
   dws agoal user objectives               查询用户目标列表
   dws agoal report list-statistics        获取周月报数据跟催列表
@@ -38,11 +39,11 @@ func newAgoalCommand() *cobra.Command {
   dws agoal obj-template list             获取目标模板列表
   dws agoal obj-template create-or-update 新增或更新目标模板`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── strategy: 战略解码管理 ──────────────────────────────────
 
-	strategyCmd := &cobra.Command{Use: "strategy", Short: "战略解码管理", RunE: groupRunE}
+	strategyCmd := newGroupCommand(&cobra.Command{Use: "strategy", Short: "战略解码管理", RunE: groupRunE})
 
 	strategyListCmd := &cobra.Command{
 		Use:   "list",
@@ -138,7 +139,7 @@ scopeType 支持:
 
 	// ── contract: 经营合约管理 ──────────────────────────────────
 
-	contractCmd := &cobra.Command{Use: "contract", Short: "经营合约管理", RunE: groupRunE}
+	contractCmd := newGroupCommand(&cobra.Command{Use: "contract", Short: "经营合约管理", RunE: groupRunE})
 
 	contractListCmd := &cobra.Command{
 		Use:   "list",
@@ -257,7 +258,7 @@ scopeType 支持:
 
 	// ── scorecard: 计分卡管理 ───────────────────────────────────
 
-	scorecardCmd := &cobra.Command{Use: "scorecard", Short: "计分卡管理", RunE: groupRunE}
+	scorecardCmd := newGroupCommand(&cobra.Command{Use: "scorecard", Short: "计分卡管理", RunE: groupRunE})
 
 	scorecardDetailCmd := &cobra.Command{
 		Use:   "detail",
@@ -359,11 +360,41 @@ scopeType 支持:
 	scorecardUpdateCmd.Flags().String("content", "", "内容 JSON 数组 (必填)")
 	scorecardUpdateCmd.Flags().String("request-id", "", "requestId (可选)")
 
-	scorecardCmd.AddCommand(scorecardDetailCmd, scorecardEntityDetailCmd, scorecardUpdateCmd)
+	scorecardSearchContentCmd := &cobra.Command{
+		Use:   "search-entities",
+		Short: "搜索计分卡指标与关键事项",
+		Long:  `根据关键词模糊搜索计分卡中的指标和关键事项标题，返回匹配的计分卡实体信息（计分卡ID、实体ID、实体类型、标题、所属团队等）。`,
+		Example: `  dws agoal scorecard search-entities --keyword "业绩"
+  dws agoal scorecard search-entities --keyword "业绩" --page 1 --page-size 20`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "keyword"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"keyword": mustGetFlag(cmd, "keyword"),
+			}
+			if v, _ := cmd.Flags().GetString("request-id"); v != "" {
+				toolArgs["requestId"] = v
+			}
+			if v, _ := cmd.Flags().GetInt("page"); v != 0 {
+				toolArgs["page"] = v
+			}
+			if v, _ := cmd.Flags().GetInt("page-size"); v != 0 {
+				toolArgs["pageSize"] = v
+			}
+			return callMCPTool("search_score_card_entities", toolArgs)
+		},
+	}
+	scorecardSearchContentCmd.Flags().String("keyword", "", "搜索关键词，标题模糊匹配 (必填)")
+	scorecardSearchContentCmd.Flags().String("request-id", "", "requestId (可选)")
+	scorecardSearchContentCmd.Flags().Int("page", 0, "页码，默认 1 (可选)")
+	scorecardSearchContentCmd.Flags().Int("page-size", 0, "每页数量，最大 100 (可选)")
+
+	scorecardCmd.AddCommand(scorecardDetailCmd, scorecardEntityDetailCmd, scorecardUpdateCmd, scorecardSearchContentCmd)
 
 	// ── user: 用户目标管理 ──────────────────────────────────────
 
-	userCmd := &cobra.Command{Use: "user", Short: "用户目标管理", RunE: groupRunE}
+	userCmd := newGroupCommand(&cobra.Command{Use: "user", Short: "用户目标管理", RunE: groupRunE})
 
 	userRulesCmd := &cobra.Command{
 		Use:   "rules",
@@ -414,7 +445,7 @@ scopeType 支持:
 
 	// ── report: 周月报管理 ──────────────────────────────────────
 
-	reportCmd := &cobra.Command{Use: "report", Short: "周月报管理", RunE: groupRunE}
+	reportCmd := newGroupCommand(&cobra.Command{Use: "report", Short: "周月报管理", RunE: groupRunE})
 
 	reportListStatisticsCmd := &cobra.Command{
 		Use:   "list-statistics",
@@ -489,7 +520,7 @@ scopeType 支持:
 
 	// ── template: 目标模板管理 ──────────────────────────────────
 
-	objTemplateCmd := &cobra.Command{Use: "obj-template", Short: "目标模板管理", RunE: groupRunE}
+	objTemplateCmd := newGroupCommand(&cobra.Command{Use: "obj-template", Short: "目标模板管理", RunE: groupRunE})
 
 	objTemplateListCmd := &cobra.Command{
 		Use:   "list",

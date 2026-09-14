@@ -33,7 +33,7 @@ import (
 // group NAMES) — NOT `search_common_groups`, which searches by member nicknames
 // and cannot locate a group by its title.
 //
-//	dws chat +send-to-group --group 项目冲刺 --text "今天 5 点前提交进度"
+//	dws chat +send-to-group --group 项目冲刺 --content "今天 5 点前提交进度"
 var SendToGroup = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+send-to-group",
@@ -63,18 +63,19 @@ var SendToGroup = shortcut.Shortcut{
 			AgentSummary: "按群名或 openConversationId 直接给群发消息",
 			UseWhen:      []string{"当你有群名或 openConversationId、想直接往该群发送简单文本或 Markdown 时使用；稳定 ID 不进入搜索，群名则必须唯一解析，零命中或多候选都会在发送前停止。会真实发出群消息。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws chat +send-to-group --group 项目冲刺 --text \"今天 5 点前提交进度\""},
+			Examples:     []string{"dws chat +send-to-group --group 项目冲刺 --content \"今天 5 点前提交进度\""},
 		},
+		Parameters: []contract.ParamDecl{renamedRequiredParam("content", "text")},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称或 openConversationId", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true, Aliases: []string{"text"}},
 		shortcut.AIMessageTagFlag(),
 	},
-	Tips: []string{`dws chat +send-to-group --group 项目冲刺 --text "今天 5 点前提交进度"`},
+	Tips: []string{`dws chat +send-to-group --group 项目冲刺 --content "今天 5 点前提交进度"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		groupName := rt.Str("group")
-		text := rt.Str("text")
+		text := rt.StrFirst("text", "content")
 
 		resolved, err := targetresolver.ResolveChatTarget(rt, groupName, "")
 		if err != nil {

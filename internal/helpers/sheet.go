@@ -25,11 +25,18 @@ func newSheetCommand() *cobra.Command {
 	// products.sheet). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "sheet",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("电子表格深度指南", "dingtalk-misc", "references/sheet.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+			AgentSummary: "导入本地 Excel，或创建、读取、编辑、导出和审计钉钉在线电子表格（axls），并管理工作表、区域、历史 revision、筛选、图表、图片与格式。",
 			UseWhen: []string{
 				"用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
 				"用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时",
+				"用户要查询工作簿当前 revision 或复核两个 revision 之间的 changeset 时",
 			},
 			AvoidWhen: []string{
 				"目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
@@ -37,7 +44,7 @@ func newSheetCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newDeepGroupCommand(&cobra.Command{
 		Use:   "sheet",
 		Short: "钉钉表格管理",
 		Long: `管理钉钉在线电子表格：创建表格、工作表管理、数据读写、单元格搜索、查找替换、单元格合并与取消合并、行列插入删除移动追加与属性更新、附件上传、浮动图片管理、筛选视图管理、下拉列表管理。
@@ -110,13 +117,16 @@ func newSheetCommand() *cobra.Command {
   dws sheet chart create                         创建浮动图表
   dws sheet chart update                         更新浮动图表
   dws sheet chart delete                         删除浮动图表
+  dws sheet revision-get                         获取工作簿当前 revision
+  dws sheet changeset-get                        获取工作簿 revision 区间内的 changeset
   dws sheet export                              导出表格为 xlsx（异步任务一站式：提交→轮询→可选下载）
   dws sheet export-csv                          导出单个工作表为纯 CSV（同步，可落盘）
   dws sheet import                              导入 xlsx/xls 为在线电子表格
   dws sheet template list                       获取表格模板列表
   dws sheet template search                     搜索表格模板
   dws sheet template apply                      应用表格模板创建新表格文档`,
-	}
+	})
+	installDocDelegationAuth(root)
 
 	// ── Build commands via factory functions ──────────────────────────
 	workbookCmds := newWorkbookCmds()
@@ -169,6 +179,7 @@ func newSheetCommand() *cobra.Command {
 	templateCmd := newSheetTemplateCmd()
 	tableCmds := newTableCmds()
 	pivotTableCmd := newPivotTableCmd()
+	revisionCmds := newSheetRevisionCmds()
 
 	batchUpdateCmd := newBatchUpdateCmd()
 	DeclareLeafMetadata(batchUpdateCmd, LeafSpec{
@@ -244,6 +255,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
 	standaloneCmds = append(standaloneCmds, tableCmds...)
+	standaloneCmds = append(standaloneCmds, revisionCmds...)
 	standaloneCmds = append(standaloneCmds, exportCmd, exportCsvCmd, importCmd, batchUpdateCmd, createWithDataCmd)
 
 	// Register cross-product aliases
@@ -291,15 +303,6 @@ func newSheetCommand() *cobra.Command {
 		attachSheetConfirmationGuard(root, guard.path, guard.operation, guard.targetHint)
 	}
 
-	// Guards for grouped parent commands
-	attachUnknownSubcommandGuard(root)
-	attachUnknownSubcommandGuard(rangeCmd)
-	attachUnknownSubcommandGuard(filterCmd)
-	attachUnknownSubcommandGuard(filterViewCmd)
-	attachUnknownSubcommandGuard(condFormatCmd)
-	attachUnknownSubcommandGuard(chartCmd)
-	attachUnknownSubcommandGuard(pivotTableCmd)
-
 	return root
 }
 
@@ -309,74 +312,4 @@ func attachSheetConfirmationGuard(root *cobra.Command, path, operation, targetHi
 		panic(fmt.Sprintf("attach Sheet confirmation guard %q: command not found (remaining=%v, err=%v)", path, remaining, err))
 	}
 	protectSheetMutationCommand(command, operation, targetHint)
-}
-
-// attachUnknownSubcommandGuard 为分组型命令挂上拼错子命令时的 did-you-mean 提示。
-//
-// 背景：cobra 对父命令的 Args 校验发生在 ParseFlags 之后，而 pflag 默认把未知 flag
-// 当作硬错误抛出。于是 `dws sheet read --sheet-id X` 会先报 `unknown flag: --sheet-id`，
-// 真正的根因（read 不是 sheet 的直接子命令）被彻底掩盖；同时 `dws sheet reead` 会被
-// 当成位置参数静默吞掉、打印 help 后 exit=0，AI Agent 无法察觉命令执行失败。
-//
-// 本函数通过三件套让分组命令在"没匹配到子命令"时给出明确的错误与建议：
-//  1. FParseErrWhitelist.UnknownFlags=true —— pflag 不再因未知 flag 中断，
-//     未知 flag 连同其值一起被静默消化；
-//  2. Args=ArbitraryArgs —— 允许把剩余位置参数交给 RunE 处理；
-//  3. RunE —— 取 args[0] 作为拼错的子命令名，先在后代命令里查找完全同名的叶子
-//     （能把 `sheet read` 精准引导到 `sheet range read`），找不到再退回 cobra
-//     自带的同级编辑距离建议；最终返回 error 以保证 exit!=0。
-//
-// 仅挂在分组型父命令（sheet/range/filter-view）上，不会影响已在 cobra Find 阶段
-// 精确匹配到的合法叶子命令。
-func attachUnknownSubcommandGuard(cmd *cobra.Command) {
-	cmd.Args = cobra.ArbitraryArgs
-	cmd.FParseErrWhitelist = cobra.FParseErrWhitelist{UnknownFlags: true}
-	cmd.SilenceUsage = true
-	// cobra 仅在 root 自动把 SuggestionsMinimumDistance 兑成 2，子命令默认为 0，
-	// 会导致 `sheet range reead` 这样的同级近似拼写无法触发内置建议。
-	if cmd.SuggestionsMinimumDistance <= 0 {
-		cmd.SuggestionsMinimumDistance = 2
-	}
-	cmd.RunE = func(c *cobra.Command, args []string) error {
-		if len(args) == 0 {
-			return c.Help()
-		}
-		name := args[0]
-		var buf strings.Builder
-		fmt.Fprintf(&buf, "unknown command %q for %q", name, c.CommandPath())
-		suggestions := deepSuggestSubcommand(c, name)
-		if len(suggestions) == 0 {
-			suggestions = c.SuggestionsFor(name)
-		}
-		if len(suggestions) > 0 {
-			buf.WriteString("\n\nDid you mean this?")
-			for _, s := range suggestions {
-				fmt.Fprintf(&buf, "\n\t%s %s", c.CommandPath(), s)
-			}
-		}
-		fmt.Fprintf(&buf, "\n\nRun '%s --help' for usage.", c.CommandPath())
-		return fmt.Errorf("%s", buf.String())
-	}
-}
-
-// deepSuggestSubcommand 在所有后代命令里查找与 name 完全同名的可用子命令，
-// 返回从 parent 出发的相对路径列表。用于把 `sheet read` 这样的平铺习惯引导到
-// 真实的深路径 `sheet range read`。
-func deepSuggestSubcommand(parent *cobra.Command, name string) []string {
-	var out []string
-	var walk func(c *cobra.Command, rel []string)
-	walk = func(c *cobra.Command, rel []string) {
-		for _, sub := range c.Commands() {
-			if !sub.IsAvailableCommand() {
-				continue
-			}
-			next := append(append([]string{}, rel...), sub.Name())
-			if sub.Name() == name {
-				out = append(out, strings.Join(next, " "))
-			}
-			walk(sub, next)
-		}
-	}
-	walk(parent, nil)
-	return out
 }

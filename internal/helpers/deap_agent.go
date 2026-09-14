@@ -12,7 +12,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -107,7 +106,7 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(root)
+	newGroupCommand(root)
 	root.AddCommand(
 		newDeapManageCommand(),
 		newDeapRunCommand(),
@@ -129,7 +128,7 @@ func newDeapManageCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(
 		newDeapAgentCreateCommand(),
 		newDeapAgentDetailCommand(),
@@ -202,7 +201,7 @@ func newDeapRunCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(
 		newDeapAgentRunStatusCommand(),
 		newDeapAgentTraceCommand(),

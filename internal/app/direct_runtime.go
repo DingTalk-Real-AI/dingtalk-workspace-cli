@@ -48,6 +48,9 @@ const (
 	devappServerPath      = "/server/op-app"
 	deapDevProductID      = "deap-dev"
 	deapDevServerPath     = "/server/68e7e41374caa1336dc642bc3dd220de6f1e7077356dc0d4fc128f62d52d7d9b"
+	mcpdevProductID       = "mcpdev"
+	mcpdevServerPath      = "/server/62445d67b5b7971653fbd0f7c8092ee3b9ca59ce51a15ad0a1e0c0d7aac4ede5"
+	recruitProductID      = "recruit"
 )
 
 // devappMCPEndpoint resolves the open-platform app-management MCP endpoint
@@ -61,6 +64,13 @@ func devappMCPEndpoint() string {
 // configured gateway base URL used by other built-in direct-runtime products.
 func deapDevMCPEndpoint() string {
 	return defaultPATGatewayBaseURL() + deapDevServerPath
+}
+
+// mcpdevMCPEndpoint resolves the MCP development scaffold endpoint. It follows
+// the configured gateway base URL rather than pinning one environment, matching
+// devapp; the server path is the same registration on both gateways.
+func mcpdevMCPEndpoint() string {
+	return defaultPATGatewayBaseURL() + mcpdevServerPath
 }
 
 func defaultPATServerDescriptor() mcptypes.ServerDescriptor {
@@ -82,6 +92,20 @@ func defaultPATMCPEndpoint() string {
 
 func defaultPATGatewayBaseURL() string {
 	raw := strings.TrimSpace(authpkg.GetMCPBaseURL())
+	return mcpGatewayBaseURL(raw)
+}
+
+func defaultPATGatewayBaseURLForLoginRegion(region authpkg.LoginRegion) string {
+	raw := strings.TrimSpace(authpkg.GetMCPBaseURL())
+	if override := authpkg.MCPBaseURLOverride(); override != "" {
+		raw = override
+	} else {
+		raw = mcpBaseURLForLoginRegion(raw, region)
+	}
+	return mcpGatewayBaseURL(raw)
+}
+
+func mcpGatewayBaseURL(raw string) string {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return strings.TrimRight(raw, "/")
@@ -106,6 +130,33 @@ func defaultPATGatewayBaseURL() string {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return strings.TrimRight(parsed.String(), "/")
+}
+
+func mcpBaseURLForLoginRegion(raw string, region authpkg.LoginRegion) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return raw
+	}
+	host := strings.ToLower(parsed.Hostname())
+	fromSuffix, toSuffix := ".dingtalk.io", ".dingtalk.com"
+	if region.IsInternational() {
+		fromSuffix, toSuffix = toSuffix, fromSuffix
+	}
+	bareFrom := strings.TrimPrefix(fromSuffix, ".")
+	if host != bareFrom && !strings.HasSuffix(host, fromSuffix) {
+		return raw
+	}
+	if host == bareFrom {
+		host = strings.TrimPrefix(toSuffix, ".")
+	} else {
+		host = strings.TrimSuffix(host, fromSuffix) + toSuffix
+	}
+	if port := parsed.Port(); port != "" {
+		parsed.Host = net.JoinHostPort(host, port)
+	} else {
+		parsed.Host = host
+	}
+	return parsed.String()
 }
 
 // SetDynamicServers injects server data discovered from servers.json.
@@ -139,7 +190,7 @@ func registerDynamicServer(server mcptypes.ServerDescriptor, endpoints map[strin
 		return
 	}
 	id := strings.TrimSpace(server.CLI.ID)
-	endpoint := strings.TrimSpace(server.Endpoint)
+	endpoint := activeDingTalkGatewayEndpoint(server.Endpoint)
 	if id != "" && endpoint != "" {
 		endpoints[id] = endpoint
 		products[id] = true
@@ -215,14 +266,16 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 		}
 	}
 
-	// Hardcoded built-ins are pinned to their product-owned MCP server paths in
-	// source (NOT service discovery) while following the active MCP environment.
+	// Hardcoded built-ins are helper-only products pinned to
+	// their MCP servers in source (NOT service discovery), per product decision.
 	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
 		switch candidate {
 		case devappProductID:
 			return devappMCPEndpoint(), true
 		case deapDevProductID:
 			return deapDevMCPEndpoint(), true
+		case mcpdevProductID:
+			return mcpdevMCPEndpoint(), true
 		}
 	}
 
@@ -273,6 +326,19 @@ func directRuntimeEndpoint(productID, toolName string) (string, bool) {
 	return "", false
 }
 
+func hasDirectRuntimeEndpointOverride(productID string) bool {
+	normalized := normalizeDirectRuntimeProductID(productID)
+	for _, candidate := range []string{strings.TrimSpace(productID), normalized} {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := productEndpointOverride(candidate); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func editionServerEndpoint(productID string) (string, bool) {
 	productID = strings.TrimSpace(productID)
 	if productID == "" {
@@ -293,7 +359,7 @@ func endpointFromEditionServers(productID string, fn func() []edition.ServerInfo
 		return "", false
 	}
 	for _, server := range fn() {
-		endpoint := strings.TrimSpace(server.Endpoint)
+		endpoint := activeDingTalkGatewayEndpoint(server.Endpoint)
 		if endpoint == "" {
 			continue
 		}
@@ -309,19 +375,60 @@ func endpointFromEditionServers(productID string, fn func() []edition.ServerInfo
 	return "", false
 }
 
+func activeDingTalkGatewayEndpoint(endpoint string) string {
+	return activeDingTalkGatewayEndpointWithBase(endpoint, defaultPATGatewayBaseURL())
+}
+
+func activeDingTalkGatewayEndpointForLoginRegion(endpoint string, region authpkg.LoginRegion) string {
+	return activeDingTalkGatewayEndpointWithBase(endpoint, defaultPATGatewayBaseURLForLoginRegion(region))
+}
+
+func activeDingTalkGatewayEndpointWithBase(endpoint, gatewayBaseURL string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return endpoint
+	}
+	if !isDingTalkMCPGatewayHost(parsed.Hostname()) {
+		return endpoint
+	}
+	base, err := url.Parse(gatewayBaseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return endpoint
+	}
+	parsed.Scheme = base.Scheme
+	parsed.Host = base.Host
+	return strings.TrimRight(parsed.String(), "/")
+}
+
+func isDingTalkMCPGatewayHost(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com", "mcp-gw.dingtalk.io", "pre-mcp-gw.dingtalk.io":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDingTalkMCPGatewayEndpoint(endpoint string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(endpoint))
+	return err == nil && isDingTalkMCPGatewayHost(parsed.Hostname())
+}
+
 // DirectRuntimeProductIDs returns product IDs that should stay visible for
 // direct runtime execution. Dynamic products come from MCP discovery/plugin
-// registration; built-in helper products such as devapp and deap-dev resolve
-// their endpoint from the active MCP environment instead of requiring
-// discovery. DINGTALK_<PRODUCT>_MCP_URL remains an explicit debug override.
+// registration; built-in helper products such as devapp resolve their endpoint
+// through DINGTALK_<PRODUCT>_MCP_URL instead of requiring discovery.
 func DirectRuntimeProductIDs() map[string]bool {
 	dynamicMu.RLock()
 	defer dynamicMu.RUnlock()
 
-	ids := make(map[string]bool, len(dynamicProducts)+3)
+	ids := make(map[string]bool, len(dynamicProducts)+5)
 	ids[defaultPATProductID] = true
 	ids[devappProductID] = true
 	ids[deapDevProductID] = true
+	ids[mcpdevProductID] = true
+	ids[recruitProductID] = true
 	for key := range dynamicProducts {
 		ids[key] = true
 	}

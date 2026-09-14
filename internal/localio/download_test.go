@@ -60,10 +60,20 @@ func (f *coverageTempFile) Close() error {
 	return err
 }
 
-func TestCrossPlatformCoverageDownloadURLAndPublicIPPolicy(t *testing.T) {
+func TestCrossPlatformCoverageDownloadURLPolicy(t *testing.T) {
 	valid := []string{
 		"https://alidocs.dingtalk.com/file.docx",
 		"https://alidocs.oss-cn-zhangjiakou.aliyuncs.com/res/file.md",
+		// 域名白名单、IP 直连拦截与拨号层公网 IP 校验均已移除：
+		// 任意 HTTPS 主机（含 IP 字面量）在 URL 校验层放行，对齐
+		// GUI 客户端（无客户端侧 SSRF 拦截）。
+		"https://ddoss.ijingbo.chambroad.com/file.doc",
+		// 专属部署存储域可服务在非默认端口；端口不是信任信号。
+		"https://ddoss.ijingbo.chambroad.com:8443/file.doc",
+		"https://evil.example/file.docx",
+		"https://oss-cn-hangzhou-internal.aliyuncs.com/file.docx",
+		"https://127.0.0.1/file.docx",
+		"https://[::1]/file.docx",
 	}
 	for _, raw := range valid {
 		if _, err := ValidateDownloadURL(raw); err != nil {
@@ -72,26 +82,13 @@ func TestCrossPlatformCoverageDownloadURLAndPublicIPPolicy(t *testing.T) {
 	}
 	invalid := []string{
 		"http://alidocs.dingtalk.com/file.docx",
-		"https://127.0.0.1/file.docx",
-		"https://evil.example/file.docx",
-		"https://oss-cn-hangzhou-internal.aliyuncs.com/file.docx",
 		"https://user@alidocs.dingtalk.com/file.docx",
-		"https://alidocs.dingtalk.com:8443/file.docx",
+		"http://alidocs.dingtalk.com:8443/file.docx",
+		"https://alidocs.dingtalk.com:NOTAPORT/file.docx",
 	}
 	for _, raw := range invalid {
 		if _, err := ValidateDownloadURL(raw); err == nil {
 			t.Errorf("ValidateDownloadURL(%q) unexpectedly succeeded", raw)
-		}
-	}
-
-	for _, raw := range []string{"127.0.0.1", "10.0.0.1", "100.64.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1", "224.0.0.1", "2001:db8::1"} {
-		if publicIP(net.ParseIP(raw)) {
-			t.Errorf("publicIP(%s) = true", raw)
-		}
-	}
-	for _, raw := range []string{"8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"} {
-		if !publicIP(net.ParseIP(raw)) {
-			t.Errorf("publicIP(%s) = false", raw)
 		}
 	}
 }
@@ -363,7 +360,7 @@ func TestCrossPlatformCoverageSecureHTTPClientAndFilesystemEdges(t *testing.T) {
 	if err := client.CheckRedirect(&http.Request{URL: mustURL(t, "https://download.dingtalk.com/x")}, make([]*http.Request, 5)); err == nil {
 		t.Fatal("redirect limit accepted")
 	}
-	if err := client.CheckRedirect(&http.Request{URL: mustURL(t, "https://evil.example/x")}, nil); err == nil {
+	if err := client.CheckRedirect(&http.Request{URL: mustURL(t, "http://evil.example/x")}, nil); err == nil {
 		t.Fatal("unsafe redirect accepted")
 	}
 	if err := client.CheckRedirect(&http.Request{URL: mustURL(t, "https://download.dingtalk.com/x")}, nil); err != nil {
@@ -373,47 +370,20 @@ func TestCrossPlatformCoverageSecureHTTPClientAndFilesystemEdges(t *testing.T) {
 		t.Fatal("bad address dial succeeded")
 	}
 
-	t.Run("lookup error", func(t *testing.T) {
-		testseam.Swap(t, &lookupDownloadIPs, func(context.Context, string) ([]net.IPAddr, error) { return nil, errors.New("lookup") })
+	t.Run("dial seam failure propagates", func(t *testing.T) {
+		testseam.Swap(t, &secureDialContext, func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("dial") })
 		if _, err := transport.DialContext(context.Background(), "tcp", "download.dingtalk.com:443"); err == nil {
-			t.Fatal("lookup error ignored")
+			t.Fatal("dial failure ignored")
 		}
 	})
-	t.Run("private answer", func(t *testing.T) {
-		testseam.Swap(t, &lookupDownloadIPs, func(context.Context, string) ([]net.IPAddr, error) {
-			return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
-		})
-		if _, err := transport.DialContext(context.Background(), "tcp", "download.dingtalk.com:443"); err == nil {
-			t.Fatal("private DNS answer accepted")
-		}
-	})
-	t.Run("public dial fallback and success", func(t *testing.T) {
-		testseam.Swap(t, &lookupDownloadIPs, func(context.Context, string) ([]net.IPAddr, error) {
-			return []net.IPAddr{{IP: net.ParseIP("8.8.8.8")}, {IP: net.ParseIP("1.1.1.1")}}, nil
-		})
+	t.Run("dial seam success", func(t *testing.T) {
 		left, right := net.Pipe()
 		t.Cleanup(func() { _ = left.Close(); _ = right.Close() })
-		calls := 0
-		testseam.Swap(t, &dialDownloadIP, func(context.Context, string, string) (net.Conn, error) {
-			calls++
-			if calls == 1 {
-				return nil, errors.New("first")
-			}
-			return left, nil
-		})
+		testseam.Swap(t, &secureDialContext, func(context.Context, string, string) (net.Conn, error) { return left, nil })
 		if conn, err := transport.DialContext(context.Background(), "tcp", "download.dingtalk.com:443"); err != nil {
 			t.Fatal(err)
 		} else {
 			_ = conn.Close()
-		}
-	})
-	t.Run("all public dials fail", func(t *testing.T) {
-		testseam.Swap(t, &lookupDownloadIPs, func(context.Context, string) ([]net.IPAddr, error) {
-			return []net.IPAddr{{IP: net.ParseIP("8.8.8.8")}}, nil
-		})
-		testseam.Swap(t, &dialDownloadIP, func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("dial") })
-		if _, err := transport.DialContext(context.Background(), "tcp", "download.dingtalk.com:443"); err == nil {
-			t.Fatal("dial failure ignored")
 		}
 	})
 
@@ -504,15 +474,41 @@ func TestCrossPlatformCoverageSecureHTTPClientAndFilesystemEdges(t *testing.T) {
 	_ = SafeFilename("", "https://download.dingtalk.com/path/fallback.txt")
 	_ = SafeFilename("", "https://download.dingtalk.com/%zz")
 	_ = SafeFilename("", "://bad")
-	_ = publicIP(net.IP{1, 2, 3})
 }
 
 func TestCrossPlatformCoverageSecureHTTPClientDisablesEnvironmentProxy(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
-	transport := secureHTTPClient().Transport.(*http.Transport)
+	transport := SecureHTTPClient().Transport.(*http.Transport)
 	if transport.Proxy != nil {
 		t.Fatal("secure download client accepted an environment proxy")
 	}
+}
+
+func TestCrossPlatformCoverageSetSecureDownloadDialTargetForTest(t *testing.T) {
+	prevDial := secureDialContext
+	t.Cleanup(func() { secureDialContext = prevDial })
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	accepted := make(chan struct{})
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			_ = conn.Close()
+		}
+		close(accepted)
+	}()
+
+	SetSecureDownloadDialTargetForTest(listener.Addr().String())
+	conn, err := secureDialContext(context.Background(), "tcp", "download.dingtalk.com:443")
+	if err != nil {
+		t.Fatalf("overridden dial did not reach the fixture listener: %v", err)
+	}
+	_ = conn.Close()
+	<-accepted
 }
 
 func TestCrossPlatformCoverageSecureHTTPClientStripsCrossOriginHeaders(t *testing.T) {
@@ -534,6 +530,17 @@ func TestCrossPlatformCoverageSecureHTTPClientStripsCrossOriginHeaders(t *testin
 	}
 	if sameOrigin.Header.Get("X-Oss-Security-Token") == "" {
 		t.Fatal("same-origin redirect unexpectedly stripped request headers")
+	}
+
+	sameHostNonDefaultPort := &http.Request{
+		URL:    mustURL(t, "https://download.dingtalk.com:8443/next"),
+		Header: original.Header.Clone(),
+	}
+	if err := client.CheckRedirect(sameHostNonDefaultPort, []*http.Request{original}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sameHostNonDefaultPort.Header) != 0 {
+		t.Fatal("port change is a cross-origin redirect; headers must be stripped")
 	}
 
 	crossOrigin := &http.Request{

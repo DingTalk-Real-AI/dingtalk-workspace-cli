@@ -46,6 +46,63 @@ func TestReviewedMutationSafetyReachesFinalSchema(t *testing.T) {
 	assertFinalSchemaSafety(t, wants)
 }
 
+func TestDrivePublishGetSafetyReachesFinalSchema(t *testing.T) {
+	assertFinalSchemaSafety(t, []finalSchemaSafetyWant{{
+		canonical: "drive.publish_get", effect: "read", risk: "low",
+		confirmation: "not_required", idempotency: "idempotent",
+	}})
+}
+
+func TestDriveUploadSafetyReachesFinalSchema(t *testing.T) {
+	assertFinalSchemaSafety(t, []finalSchemaSafetyWant{{
+		canonical: "drive.upload", effect: "write", risk: "medium",
+		confirmation: "not_required", idempotency: "unknown",
+	}})
+}
+
+func TestDrivePublishSetLeavesAreUnavailableToAgents(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(),
+		"drive.publish_set", "drive.shortcut_publish_set")
+	for _, canonical := range []string{"drive.publish_set", "drive.shortcut_publish_set"} {
+		if got := payload.Tools[canonical]["availability"]; got != "unavailable" {
+			t.Errorf("%s availability = %#v, want unavailable", canonical, got)
+		}
+	}
+}
+
+func TestMinutesP0ConfirmationPolicyReachesFinalSchema(t *testing.T) {
+	wants := []finalSchemaSafetyWant{
+		{canonical: "minutes.update_minutes_title", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.record_start", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.record_pause", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.record_resume", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.record_stop", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.update_minutes_summary", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.replace_speaker", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.delete_personal_hotword", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.replace_minutes_text", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.add_member_permission", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.remove_member_permission", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.apply_minutes_permission", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.create_mind_graph", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.create_speaker_summary", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.add_personal_hot_word", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.create_upload_session", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.create_upload_session_and_notify", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+		{canonical: "minutes.complete_upload_session", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.cancel_upload_session", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown"},
+		{canonical: "minutes.shortcut_upload", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+		{canonical: "minutes.shortcut_upload_and_notify", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+		{canonical: "minutes.shortcut_upload_and_analyze", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+		{canonical: "minutes.shortcut_mindmap", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+		{canonical: "minutes.shortcut_speaker_insights", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+		{canonical: "minutes.shortcut_prepare_asr", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "idempotent"},
+		{canonical: "minutes.shortcut_sync_asr", effect: "destructive", risk: "high", confirmation: "user_required", idempotency: "idempotent"},
+		{canonical: "minutes.shortcut_unshare", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown"},
+	}
+	assertFinalSchemaSafety(t, wants)
+}
+
 func TestDevAppWriteGuardRequiresFinalSchemaConfirmation(t *testing.T) {
 	// devapp 全树已声明化：provenance 为 contract_final；effect/risk 逐字
 	// 保持 merge-base 评审值（写操作一律 high，publish 为 write/high），

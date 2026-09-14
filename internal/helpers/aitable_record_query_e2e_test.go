@@ -97,6 +97,25 @@ func TestCrossPlatformCoverageRecordQueryCLICompleteE2E(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRecordQueryCLICompletesOnSuccessfulEmptyTrailingPage(t *testing.T) {
+	caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{
+		recordQueryTextStep(`{"data":{"records":[{"id":"r1"},{"id":"r2"}],"nextCursor":"after-full-page","totalCount":2}}`),
+		recordQueryTextStep(`{"data":{"records":[],"nextCursor":"","totalCount":2}}`),
+	}}
+	out, err := runRecordQueryCLI(t, caller, "--page-limit", "0")
+	if err != nil {
+		t.Fatalf("record query CLI treated successful empty trailing page as error: %v", err)
+	}
+	for _, want := range []string{`"complete": true`, `"fetchedCount": 2`, `"pages": 2`, `"totalCount": 2`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("record query CLI output missing %s:\n%s", want, out)
+		}
+	}
+	if len(caller.calls) != 2 || caller.calls[1].args["cursor"] != "after-full-page" {
+		t.Fatalf("record query CLI calls = %#v, want one continuation request", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageRecordQueryCLIFailsClosedE2E(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -109,6 +128,7 @@ func TestCrossPlatformCoverageRecordQueryCLIFailsClosedE2E(t *testing.T) {
 		{name: "invalid json", steps: []recordQueryE2EStep{recordQueryTextStep("{")}},
 		{name: "null payload", steps: []recordQueryE2EStep{recordQueryTextStep("null")}},
 		{name: "missing records", steps: []recordQueryE2EStep{recordQueryTextStep(`{"data":{"nextCursor":"c"}}`)}},
+		{name: "missing records with has more", steps: []recordQueryE2EStep{recordQueryTextStep(`{"data":{"hasMore":true}}`)}},
 		{name: "records wrong type", steps: []recordQueryE2EStep{recordQueryTextStep(`{"records":{}}`)}},
 		{name: "records null", steps: []recordQueryE2EStep{recordQueryTextStep(`{"records":null}`)}},
 		{name: "record item wrong type", steps: []recordQueryE2EStep{recordQueryTextStep(`{"records":["bad"]}`)}},

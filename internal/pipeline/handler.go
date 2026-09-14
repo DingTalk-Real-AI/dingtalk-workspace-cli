@@ -35,3 +35,12 @@ type Handler interface {
 	// the chain, or nil to continue.
 	Handle(ctx *Context) error
 }
+
+// FlagProtectionResolver exposes reviewed blocked/ambiguous flag names to
+// command traversal. A PreParse handler that owns those decisions implements
+// this optional interface so traversal and the handler chain use one semantic
+// source instead of independently guessing whether an unknown flag may carry a
+// value.
+type FlagProtectionResolver interface {
+	ResolveFlagProtection(rawCommandPath, morphedFlag string) (FlagProtection, bool)
+}

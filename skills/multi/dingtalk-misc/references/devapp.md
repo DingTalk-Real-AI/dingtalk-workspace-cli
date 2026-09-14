@@ -9,7 +9,7 @@
 1. `--help` 看命令树（一个组下有哪些子命令、flag），例 `dws dev app --help`
 2. `--help` 看叶子命令参数（flag、默认值、示例），按当前二进制输出构造；不要再依赖已下线的动态 schema
 3. 全部命令带 `--format json`
-4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](./dev/connect.md)）
+4. 写操作：`--dry-run` 看 `invocation.params` 确认无误，再换 `--yes`（`dev connect` 例外见 [connect.md](./dev/connect.md)；MCP 见 [mcp.md](./dev/mcp.md)）
 5. 写完回读确认（`get` / `robot get` / `version status`）
 6. `clientSecret/appSecret` 不写进回答（脱敏）
 7. `robot result` 只要出现 `completionState=BLOCKED_BY_VERSION_PUBLISH` 或 `mustContinue=true`，必须继续执行 blocking `nextSteps`，不得停在 `dev connect`
@@ -20,24 +20,30 @@
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "devapp +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws devapp <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service devapp --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。按本 skill/recipe 路由，命中时 Shortcut 优先于原子命令。参数只查 `dws schema --cli-path "devapp +<shortcut>" --compact --jq '{cli_path,parameters,constraints,confirmation}' -f json`；仅需且已发布 `result` 时查 `--jq '{cli_path,outcomes:.result.outcomes,pagination}'`，字段级再查 `data_schema`；缺失不以 Help/样例推断。Schema 不可用才读一次已知 leaf Help；`unknown flag` 用同 leaf Help 修正一次。`unknown command` 禁 Help：错误 suggestion → 已加载 Skill/reference 明确入口；均无则报漂移。禁全 Catalog/root/parent/product Help；仅映射、接口或 provenance 审计省略 `--compact`。现有路由和 reference 均无法定位低频能力时，才用 `dws shortcut list --service devapp --format json` 发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
 | `dws devapp +create` | write | 创建开放平台企业内部应用 |
+| `dws devapp +credentials-get` | read | 读取开放平台应用凭证 |
 | `dws devapp +delete` | high-risk-write | 删除开放平台企业内部应用（不可逆） |
 | `dws devapp +disable` | high-risk-write | 停用开放平台企业内部应用 |
 | `dws devapp +enable` | write | 启用开放平台企业内部应用 |
-| `dws devapp +event-list` | read | 查询应用已订阅的事件列表 |
+| `dws devapp +event-list` | read | 查询应用可用事件目录与订阅状态 |
+| `dws devapp +event-subscribe` | write | 订阅应用事件回调 |
 | `dws devapp +get` | read | 查询开放平台企业内部应用详情 |
 | `dws devapp +list` | read | 查询开放平台企业内部应用列表 |
 | `dws devapp +member-add` | write | 添加开放平台应用成员 |
 | `dws devapp +member-list` | read | 查询开放平台应用成员 |
 | `dws devapp +member-remove` | high-risk-write | 移除开放平台应用成员 |
 | `dws devapp +permission-list` | read | 查询开放平台应用权限列表 |
+| `dws devapp +robot-config` | write | 创建或更新现有应用的机器人配置（upsert） |
+| `dws devapp +robot-disable` | high-risk-write | 停用现有应用的机器人能力 |
+| `dws devapp +robot-enable` | write | 启用现有应用机器人能力（纯启用，无需配置字段） |
 | `dws devapp +robot-get` | read | 查询现有应用的机器人配置 |
 | `dws devapp +update` | write | 修改开放平台企业内部应用基础信息 |
 | `dws devapp +version-check-approval` | read | 预检版本发布是否需要审批（不实际发布） |
+| `dws devapp +version-create` | write | 基于当前配置创建应用新版本 |
 | `dws devapp +version-get` | read | 查询指定版本详情 |
 | `dws devapp +version-list` | read | 分页查询应用版本列表 |
 | `dws devapp +version-status` | read | 查询版本发布/审批状态 |
@@ -134,6 +140,7 @@
 | 本地建联 | [connect.md](./dev/connect.md) | dev connect（渠道预检 / agent 模型工作目录 / 会话记忆 / AI 卡片） |
 | 版本发布 | [version.md](./dev/version.md) | version create / list / get / check-approval / publish / status |
 | 事件订阅 | [event.md](./dev/event.md) | event list / subscribe / unsubscribe（事件定位走搜索优先） |
+| MCP 开发 | [mcp.md](./dev/mcp.md) | mcp service / tool / auth / credential / member / hsf |
 | 索引 | [dev-index.md](./dev/dev-index.md) | 主题速查表 |
 
 ## Gotchas

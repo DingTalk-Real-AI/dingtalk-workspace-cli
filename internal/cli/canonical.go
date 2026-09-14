@@ -36,10 +36,18 @@ func NewMCPCommand() *cobra.Command {
 	// products.mcp). Schema assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "mcp",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc", "dingtalk-shared"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("MCP 开发与动态调用指南", "dingtalk-misc", "references/dev/mcp.md"),
+				contract.SkillDocumentation("Schema 与 MCP 使用指南", "dingtalk-shared", "references/schema-usage.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "解析和管理当前身份可用的 MCP 服务连接信息",
+			AgentSummary: "解析当前身份可用的 MCP 服务连接信息，并动态发现、校验或调用已发布工具",
 			UseWhen: []string{
 				"需要把钉钉 MCP 市场中的服务连接到支持 Streamable HTTP 的 Agent 或客户端",
+				"已知 mcpId，需要查看或调用当前身份可用的已发布 MCP 工具",
 			},
 			AvoidWhen: []string{
 				"查询普通钉钉业务数据时使用对应产品命令，不要使用 mcp",
@@ -50,8 +58,8 @@ func NewMCPCommand() *cobra.Command {
 	// reviewed static MCP helpers as subcommands of this command.
 	cmd := &cobra.Command{
 		Use:               "mcp",
-		Short:             "管理 MCP 服务连接信息",
-		Long:              "管理经过审核并纳入 Schema 的 MCP 服务连接辅助能力。",
+		Short:             "管理和调用已发布 MCP 服务",
+		Long:              "管理经过审核并纳入 Schema 的 MCP 服务连接辅助能力，并通过静态 published 子命令查看或调用已发布工具。",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,7 +79,7 @@ func NewSchemaCommand() *cobra.Command {
 		Short: "渐进查看命令 Schema (产品 / 分组 / 工具参数)",
 		Long: `查看当前可运行命令的 Schema 元数据。
 
-不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。普通 Agent 查询应使用 --compact：它按稳定字段白名单输出选参、约束和安全语义。省略 --compact 的 full leaf 保留参数映射、接口绑定和 provenance，仅用于定向审计；--all 输出全部工具的完整 leaf Schema，用于审计/CI。helper、MCP 与本地 Cobra 命令均须通过 ContractFinal.Identity 声明进入收集的身份集，并从同一声明装配的 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
+不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。普通 Agent 查询应使用 --compact：它按稳定字段白名单输出选参、约束、安全语义和已评审的返回契约。省略 --compact 的 full leaf 保留参数映射、接口绑定和 provenance，仅用于定向审计；--all 输出全部工具的完整 leaf Schema，用于审计/CI。helper、MCP 与本地 Cobra 命令均须通过 ContractFinal.Identity 声明进入收集的身份集，并从同一声明装配的 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,7 +121,7 @@ func NewSchemaCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("all", false, "输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）")
-	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束和安全语义")
+	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束、安全语义和返回契约")
 	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询")
 	return cmd
 }

@@ -224,7 +224,7 @@ dws attendance group search --query "<考勤组名称>" --type TURN --format jso
 
 **场景 A — 指定员工姓名**：
 ```bash
-dws aisearch person --keyword "<员工姓名>" --dimension name --format json
+dws aisearch person --query "<员工姓名>" --dimension name --format json
 ```
 
 **场景 B — 按部门查询**：
@@ -450,7 +450,7 @@ dws attendance group get --group-id <groupId> --format json
 # ⚠️ 禁止用 class search 全局搜索班次
 
 # 2. 获取员工 userId
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 
 # 3. 回显确认（Agent 向用户展示排班表格）
 # ... 用户确认 ...
@@ -473,7 +473,7 @@ dws attendance group get --group-id <groupId> --format json
 # → 确认是排班制（TURN）
 
 # 2. 获取员工 userId
-dws aisearch person --keyword "李四" --dimension name --format json
+dws aisearch person --query "李四" --dimension name --format json
 
 # 3. 回显确认 → 用户确认 → 执行
 python scripts/attendance_schedule_import.py \
@@ -579,8 +579,8 @@ python scripts/attendance_schedule_export.py \
 
 ```bash
 # 1. 获取 userId
-dws aisearch person --keyword "张三" --dimension name --format json
-dws aisearch person --keyword "李四" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
+dws aisearch person --query "李四" --dimension name --format json
 
 # 2. 调用脚本导出
 python scripts/attendance_schedule_export.py \

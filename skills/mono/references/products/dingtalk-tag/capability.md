@@ -28,4 +28,4 @@ dws dingtalk-tag capability mcp query --mcp-id <mcpId> --format json
 
 ## 关联到数字员工
 
-资源创建成功后，使用 `dws dingtalk-tag manage save-draft --skills-file/--mcps-file` 保存关联配置。基础与档案字段仍是全量覆写，执行前必须先查完整 draft 并保留所有仍需配置的字段；`skills-file` / `mcps-file` 自身不传时保持原关联，显式 `[]` 才清空。
+资源创建成功后，使用 `dws dingtalk-tag manage save-draft`，并按资源类型传 `--skills-file` 或 `--mcps-file` 保存关联配置。基础与档案字段仍是全量覆写，执行前必须先查完整 draft 并保留所有仍需配置的字段；`skills-file` / `mcps-file` 自身不传时保持原关联，显式 `[]` 才清空。

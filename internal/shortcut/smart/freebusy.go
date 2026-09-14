@@ -102,7 +102,10 @@ var FreeBusy = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		busy := freebusySlots(data)
+		busy, err := calendarSmartBusySlots(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{
 			"who":    user.name,
 			"userId": user.userID,
@@ -110,31 +113,6 @@ var FreeBusy = shortcut.Shortcut{
 			"free":   len(busy) == 0,
 		})
 	},
-}
-
-// freebusySlots flattens a query_busy_status response (result[] → scheduleItems[]
-// → {start,end}.dateTime) into a flat list of {start,end} busy slots.
-func freebusySlots(data map[string]any) []map[string]any {
-	out := []map[string]any{}
-	entries, _ := data["result"].([]any)
-	for _, e := range entries {
-		em, ok := e.(map[string]any)
-		if !ok {
-			continue
-		}
-		items, _ := em["scheduleItems"].([]any)
-		for _, it := range items {
-			im, ok := it.(map[string]any)
-			if !ok {
-				continue
-			}
-			out = append(out, map[string]any{
-				"start": freebusyDateTime(im["start"]),
-				"end":   freebusyDateTime(im["end"]),
-			})
-		}
-	}
-	return out
 }
 
 // freebusyDateTime pulls the readable timestamp out of a {date,dateTime,timeZone}
@@ -163,5 +141,6 @@ func freebusyParseMillis(flag, value string) (int64, error) {
 }
 
 func init() {
+	finalizeCalendarSmart(&FreeBusy, "严格校验的指定用户忙闲时段")
 	shortcut.Register(FreeBusy)
 }

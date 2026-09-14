@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "service": "whiteboard",
+  "default_availability": "available",
+  "shortcuts": {
+    "+query": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按 --part-id 是否显式提供确定性分流到内嵌或独立白板；严格投影校验 OpenNodes V1、稳定节点身份、独立白板 revision 及服务端完整性摘要，失败后不跨类型回退。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+update": {
+      "disposition": "primary_smart",
+      "semantic_delta": "首次远端调用前完成分支参数、OpenNodes V1 与用户确认校验；内嵌分支保持旧接口，独立分支使用 revision/requestId 写入，两者均校验终态回执、节点映射并只从同类接口精确读回。",
+      "risk": "high-risk-write",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    }
+  }
+}

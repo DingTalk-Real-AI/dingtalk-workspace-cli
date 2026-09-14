@@ -33,6 +33,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/publishedmcp"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
@@ -123,21 +124,11 @@ func logHostOwnedPATDecisionOnce() {
 }
 
 func newCommandRunnerWithFlags(flags *GlobalFlags) executor.Runner {
-	// Ensure DWS_CLIENT_ID env is populated from persisted config before
-	// resolveIdentityHeaders reads it.  This covers fresh-process cold starts
-	// where no env var has been inherited from a parent process.
-	if os.Getenv("DWS_CLIENT_ID") == "" {
-		if cid := authpkg.ClientID(); cid != "" {
-			_ = os.Setenv("DWS_CLIENT_ID", cid)
-		}
-	}
-
 	var httpClient *http.Client
 	if flags != nil && flags.Timeout > 0 {
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}
 	}
 	transportClient := transport.NewClient(httpClient)
-	transportClient.ExtraHeaders = resolveIdentityHeaders()
 	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
 		transport:          transportClient,
@@ -156,6 +147,7 @@ type runtimeRunner struct {
 	enforceContentScan bool
 	includeScanReport  bool
 	auditSink          audit.Sink
+	agentMetadata      *agentMetadataSnapshot
 }
 
 type scopedAuthTokenKeyType struct{}
@@ -172,8 +164,7 @@ func scopedAuthToken(ctx context.Context) (string, bool) {
 }
 
 // RunWithToken executes one helper invocation with an in-memory access token.
-// It deliberately bypasses Run's process-wide Profile selection and clones the
-// transport before applying per-request execution state.
+// It bypasses process-wide Profile selection and never persists the token.
 func (r *runtimeRunner) RunWithToken(ctx context.Context, invocation executor.Invocation, token string) (executor.Result, error) {
 	if r == nil || strings.TrimSpace(token) == "" {
 		return executor.Result{}, fmt.Errorf("request-scoped token runner is not configured")
@@ -191,10 +182,111 @@ func (r *runtimeRunner) RunWithToken(ctx context.Context, invocation executor.In
 	return clone.runSingle(ctx, invocation, false)
 }
 
+var runnerListProductTools = (*runtimeRunner).listProductTools
+
+// ResolveToolProduct discovers the exact tool before dispatch and returns the
+// first compatible product in caller-supplied preference order. Discovery is
+// read-only; callers must execute the subsequent tools/call only once.
+func (r *runtimeRunner) ResolveToolProduct(ctx context.Context, productIDs []string, toolName string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return "", apperrors.NewValidation("MCP tool name is required for capability routing")
+	}
+	if r != nil && r.globalFlags != nil && r.globalFlags.Mock {
+		if len(productIDs) == 0 {
+			return "", apperrors.NewDiscovery(fmt.Sprintf("no MCP product candidates for tool %q", toolName))
+		}
+		return productIDs[0], nil
+	}
+	// Tool capabilities are server-scoped, not account-scoped. For a
+	// multi-profile invocation, discover once with the first resolved profile;
+	// the subsequent runner still executes exactly once per selected profile.
+	rawProfile := authpkg.RuntimeProfile()
+	selections, multi, err := runnerResolveMultiProfileSelections(defaultConfigDir(), rawProfile)
+	if err != nil {
+		return "", apperrors.NewValidation(err.Error())
+	}
+	discoveryProfile := rawProfile
+	if multi {
+		if len(selections) == 0 {
+			return "", apperrors.NewValidation("multi-profile capability routing has no resolved profile")
+		}
+		discoveryProfile = profileRuntimeSelector(selections[0].Profile, selections[0].Selector)
+	}
+	checked := make([]string, 0, len(productIDs))
+	discoveryFailures := make([]string, 0, len(productIDs))
+	for _, productID := range productIDs {
+		productID = strings.TrimSpace(productID)
+		if productID == "" {
+			continue
+		}
+		checked = append(checked, productID)
+		tools, err := runnerListProductTools(r, ctx, productID, toolName, discoveryProfile)
+		if err != nil {
+			var typed *apperrors.Error
+			if errors.As(err, &typed) && typed.Reason == "endpoint_not_resolved" {
+				continue
+			}
+			discoveryFailures = append(discoveryFailures, fmt.Sprintf("%s: %v", productID, err))
+			continue
+		}
+		for _, tool := range tools {
+			if tool.Name == toolName {
+				return productID, nil
+			}
+		}
+	}
+	if len(discoveryFailures) > 0 {
+		return "", apperrors.NewDiscovery(
+			fmt.Sprintf("cannot establish a compatible route for tool %q after tools/list failures: %s", toolName, strings.Join(discoveryFailures, "; ")),
+			apperrors.WithOperation("tools/list"),
+			apperrors.WithReason("mcp_tool_discovery_failed"),
+		)
+	}
+	return "", apperrors.NewDiscovery(
+		fmt.Sprintf("tool %q is not exposed by compatible MCP products %v", toolName, checked),
+		apperrors.WithOperation("tools/list"),
+		apperrors.WithReason("mcp_tool_not_found"),
+	)
+}
+
+func (r *runtimeRunner) listProductTools(ctx context.Context, productID, toolName, profile string) ([]transport.ToolDescriptor, error) {
+	if r == nil || r.transport == nil {
+		return nil, fmt.Errorf("runtime transport is not configured")
+	}
+	// Resolve by product only. Tool-level fallback would make a missing helper
+	// product appear to own a tool merely because another product registered it.
+	endpoint, ok := directRuntimeEndpoint(productID, "")
+	if !ok {
+		return nil, endpointNotResolvedError(productID, toolName, "capability discovery endpoint is unavailable")
+	}
+	snapshot, err := runnerResolveAuthSnapshotForProfile(r, ctx, profile)
+	if err != nil {
+		return nil, tokenResolutionError(err)
+	}
+	if !hasDirectRuntimeEndpointOverride(productID) && isDingTalkMCPGatewayEndpoint(endpoint) &&
+		(snapshot.LoginRegionKnown || authpkg.MCPBaseURLOverride() != "") {
+		endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, snapshot.LoginRegion)
+	}
+	invocation := executor.NewHelperInvocation("overlay."+productID+".tools-list", productID, toolName, nil)
+	headers := resolveMCPRequestHeadersForInvocation(invocation)
+	client := publishedmcp.New(r.transport, snapshot.AccessToken, headers)
+	tools, err := client.Tools(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return tools.Tools, nil
+}
+
 var (
 	runnerResolveMultiProfileSelections = resolveMultiProfileSelections
 	runnerResolveProfile                = authpkg.ResolveProfile
 	runnerGetCachedRuntimeToken         = getCachedRuntimeToken
+	runnerResolveAuthSnapshot           = (*runtimeRunner).resolveAuthSnapshot
+	runnerResolveAuthSnapshotForProfile = (*runtimeRunner).resolveAuthSnapshotForProfile
 	runnerPreflightDocDownload          = (*runtimeRunner).preflightDocDownload
 	runnerCallTool                      = (*transport.Client).CallTool
 	runnerStdioEnsureInitialized        = (*transport.StdioClient).EnsureInitialized
@@ -270,7 +362,6 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 	if r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
-	r.transport.ExtraHeaders = resolveIdentityHeaders()
 
 	// Mock mode: skip endpoint resolution, use a placeholder endpoint.
 	if r.globalFlags != nil && r.globalFlags.Mock {
@@ -461,8 +552,8 @@ func multiProfileErrorPayload(err error) map[string]any {
 		if typed.Hint != "" {
 			payload["hint"] = typed.Hint
 		}
-		if len(typed.Actions) > 0 {
-			payload["actions"] = append([]string(nil), typed.Actions...)
+		if actions := apperrors.RecoveryActions(err); len(actions) > 0 {
+			payload["actions"] = actions
 		}
 		if len(typed.Details) > 0 {
 			payload["details"] = typed.Details
@@ -573,12 +664,12 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		logging.LogCommandEnd(fl, execID,
 			invocation.CanonicalProduct, invocation.Tool,
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
-		emitAudit(auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
+		emitAudit(ctx, auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
 
-	// Check if this product has plugin-level auth credentials registered.
-	// If so, use the plugin's token instead of the default DingTalk OAuth token.
-	// This allows third-party MCP servers (e.g. Bailian) to use their own API keys.
+	// Check whether this product belongs to an HTTP plugin. Every accepted
+	// plugin has an ownership record; credentials within that record are
+	// optional. Plugin requests never fall back to the default DingTalk OAuth.
 	pluginAuth, hasPluginAuth := LookupPluginAuth(invocation.CanonicalProduct)
 	requestToken, hasRequestToken := scopedAuthToken(ctx)
 	nonRefreshableAuth := hasPluginAuth || hasRequestToken
@@ -589,10 +680,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	} else if hasPluginAuth {
 		authToken = pluginAuth.Token
 	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {
-		var tokenErr error
-		authToken, tokenErr = r.resolveAuthToken(ctx)
+		snapshot, tokenErr := runnerResolveAuthSnapshot(r, ctx)
 		if tokenErr != nil {
 			return executor.Result{}, tokenResolutionError(tokenErr)
+		}
+		authToken = snapshot.AccessToken
+		if !hasDirectRuntimeEndpointOverride(invocation.CanonicalProduct) &&
+			isDingTalkMCPGatewayEndpoint(endpoint) &&
+			(snapshot.LoginRegionKnown || authpkg.MCPBaseURLOverride() != "") {
+			endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, snapshot.LoginRegion)
 		}
 	}
 
@@ -640,9 +736,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		}, nil
 	}
 
-	// Fail-fast: reject unauthenticated requests before making network calls.
-	// This provides a clear error message instead of cryptic HTTP 400 from MCP.
-	if strings.TrimSpace(authToken) == "" {
+	// Preserve a final execution-boundary guard even though the built-in token
+	// resolver normally returns either a non-empty token or an error. HTTP
+	// plugins are ownership-scoped separately and may intentionally be anonymous.
+	if !nonRefreshableAuth && strings.TrimSpace(authToken) == "" {
 		return executor.Result{}, apperrors.NewAuth(
 			"未登录，请先执行 dws auth login",
 			apperrors.WithReason("not_authenticated"),
@@ -653,12 +750,20 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	var tc *transport.Client
 	if hasPluginAuth && !hasRequestToken {
-		// Use plugin-level auth: inject the plugin's token and trust its domains.
-		tc = r.transport.WithAuth(authToken, pluginAuth.ExtraHeaders)
+		// Plugin ownership is authoritative even when the plugin is anonymous.
+		// Copy and sanitize manifest headers so plugins cannot opt themselves into
+		// DWS-owned Agent metadata by declaring the reserved names directly.
+		tc = r.transport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
 		tc.TrustedDomains = pluginAuth.TrustedDomains
 	} else {
-		// Default path: use DingTalk OAuth token with identity headers.
-		tc = r.transport.WithAuth(authToken, resolveIdentityHeaders())
+		// Default path: use DingTalk OAuth token with identity headers. Agent
+		// metadata is resolved exactly once per invocation and is excluded from
+		// helper-only service-discovery requests.
+		if r.agentMetadata != nil {
+			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
+		} else {
+			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
+		}
 	}
 
 	callCtx := ctx
@@ -689,7 +794,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	}
 
 	callStart := time.Now()
-	callResult, err := runnerCallTool(tc, callCtx, endpoint, invocation.Tool, invocation.Params)
+	// tools/call can mutate remote state even when the gateway returns an error.
+	// Only callers with a reviewed read/reconciliation policy may replay it;
+	// keep discovery and the shared transport's retry budget unchanged.
+	callResult, err := runnerCallTool(tc.WithMaxRetries(0), callCtx, endpoint, invocation.Tool, invocation.Params)
 	RecordTiming(ctx, "mcp_call", time.Since(callStart))
 	if err != nil {
 		if !hasRequestToken && isRefreshableTransportAuthError(err) {
@@ -775,6 +883,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			"mcp_tool_error",
 			"MCP tool returned a business error; check tool parameters and refer to skill documentation.",
 			invocation.CanonicalProduct,
+			invocation.Tool,
 			diag,
 		)
 		logBusinessError(r.transport.FileLogger, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
@@ -803,6 +912,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			"business_error",
 			"The API returned a business-level error. Check required parameters and values.",
 			invocation.CanonicalProduct,
+			invocation.Tool,
 			diag,
 		)
 		logBusinessError(r.transport.FileLogger, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
@@ -920,19 +1030,35 @@ func (r *runtimeRunner) executeStdioInvocationAtEndpoint(
 }
 
 func (r *runtimeRunner) resolveAuthToken(ctx context.Context) (string, error) {
-	explicitToken := ""
-	if r != nil && r.globalFlags != nil {
-		explicitToken = r.globalFlags.Token
-	}
-	return resolveRuntimeAuthToken(ctx, explicitToken)
-}
-
-func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
-	snapshot, err := runtimeTokenManager.Get(ctx, defaultConfigDir(), explicitToken)
+	snapshot, err := r.resolveAuthSnapshot(ctx)
 	if err != nil {
 		return "", err
 	}
 	return snapshot.AccessToken, nil
+}
+
+func (r *runtimeRunner) resolveAuthSnapshot(ctx context.Context) (AccessTokenSnapshot, error) {
+	return r.resolveAuthSnapshotForProfile(ctx, authpkg.RuntimeProfile())
+}
+
+func (r *runtimeRunner) resolveAuthSnapshotForProfile(ctx context.Context, profile string) (AccessTokenSnapshot, error) {
+	explicitToken := ""
+	if r != nil && r.globalFlags != nil {
+		explicitToken = r.globalFlags.Token
+	}
+	return runtimeTokenManager.GetForProfile(ctx, defaultConfigDir(), explicitToken, profile)
+}
+
+func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
+	snapshot, err := resolveRuntimeAuthSnapshot(ctx, explicitToken)
+	if err != nil {
+		return "", err
+	}
+	return snapshot.AccessToken, nil
+}
+
+func resolveRuntimeAuthSnapshot(ctx context.Context, explicitToken string) (AccessTokenSnapshot, error) {
+	return runtimeTokenManager.Get(ctx, defaultConfigDir(), explicitToken)
 }
 
 // getCachedRuntimeToken is kept as the prefetch seam used by runner tests. The
@@ -1121,6 +1247,10 @@ func resolveIdentityHeaders() map[string]string {
 	} else {
 		delete(headers, agentproduct.HeaderName)
 	}
+	// Agent version and extension are intentionally MCP-request-only. Remove
+	// every case variant potentially supplied by an edition or credential hook
+	// so shared consumers such as A2A cannot inherit them.
+	removeAgentMetadataHeaders(headers)
 	return headers
 }
 

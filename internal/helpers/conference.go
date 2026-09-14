@@ -39,8 +39,9 @@ func newConferenceCommand() *cobra.Command {
 直接发起会议、邀请入会、会中控制请在钉钉客户端操作；如需预约日程，请改用 dws calendar event create。`,
 		RunE: runUnavailable,
 	}
+	newHybridGroupCommand(root)
 
-	meetingCmd := &cobra.Command{Use: "meeting", Short: "会议管理（已下线）", RunE: groupRunE}
+	meetingCmd := newGroupCommand(&cobra.Command{Use: "meeting", Short: "会议管理（已下线）", RunE: groupRunE})
 
 	meetingCreateCmd := &cobra.Command{
 		Use:     "reserve",
@@ -59,7 +60,7 @@ func newConferenceCommand() *cobra.Command {
 	root.AddCommand(meetingCmd)
 
 	// member 子命令组 — 成员管理
-	memberCmd := &cobra.Command{Use: "member", Short: "成员管理（已下线）", RunE: groupRunE}
+	memberCmd := newGroupCommand(&cobra.Command{Use: "member", Short: "成员管理（已下线）", RunE: groupRunE})
 
 	memberInviteCmd := &cobra.Command{
 		Use:   "invite",

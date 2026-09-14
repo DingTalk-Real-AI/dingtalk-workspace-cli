@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "service": "ding",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+list": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、result.dingMessages、稳定 openDingId 与 hasMore/nextCursor；exact Shortcut 已完成已知非空与保证零项证明，但真实续页返回停滞 cursor，严格实现拒绝虚假分页并保持不可用。",
+      "risk": "read",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+receiver-status": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按稳定 openDingId 精确查询，严格拒绝缺集合、错型、空集合、坏元素与身份不匹配；current HEAD exact Shortcut 与 owning atomic/raw 的请求身份、1 项结果和完整接收行集合一致。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+send-personal": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "历史 CLI 兼容入口在用户确认后保持可执行，并修正 app/sms/call 到 APP/SMS/PHONE 的下游枚举映射；因接收项没有稳定接收人身份且撤回无可查询终态，不进入 Agent 公共发现。",
+      "risk": "write",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+send-by-message": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "覆盖基于消息的应用内、短信和电话 DING并映射 lark-cli 三种 urgent 任务；隔离 APP fixture 已证明源消息、稳定 DING 回执和目标 DING 读回，但接收人身份与撤回终态仍不可验证，保持不可用。",
+      "risk": "write",
+      "public": false,
+      "reviewed": true
+    },
+    "+recall-personal": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "历史 CLI 兼容入口在用户确认后保持可执行；个人 DING 撤回只返回布尔成功且不回显终态，不能作为 Agent 可验证写能力，因此不进入公共发现。",
+      "risk": "high-risk-write",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    }
+  }
+}

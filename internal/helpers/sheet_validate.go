@@ -239,22 +239,48 @@ func validateDataValidation(dvRaw any, path string) error {
 	}
 	switch dvType {
 	case "dropdown":
-		optionsRaw, ok := dv["options"]
-		if !ok {
-			return fmt.Errorf("%s: type=dropdown 必须包含 options 数组", path)
+		optionsRaw, hasOptions := dv["options"]
+		sourceRangeRaw, hasSourceRange := dv["sourceRange"]
+		hasOptions = hasOptions && optionsRaw != nil
+		hasSourceRange = hasSourceRange && sourceRangeRaw != nil
+		if hasOptions == hasSourceRange {
+			return fmt.Errorf("%s: type=dropdown 的 options 与 sourceRange 必须且只能包含一个", path)
 		}
-		options, ok := optionsRaw.([]any)
-		if !ok || len(options) == 0 {
-			return fmt.Errorf("%s.options 必须为非空数组", path)
-		}
-		for i, opt := range options {
-			optMap, ok := opt.(map[string]any)
-			if !ok {
-				return fmt.Errorf("%s.options[%d] 必须为 object（如 {\"value\":\"选项\"}）", path, i)
+		if hasOptions {
+			options, ok := optionsRaw.([]any)
+			if !ok || len(options) == 0 {
+				return fmt.Errorf("%s.options 必须为非空数组", path)
 			}
-			val, ok := optMap["value"].(string)
-			if !ok || val == "" {
-				return fmt.Errorf("%s.options[%d].value 必须为非空字符串", path, i)
+			for i, opt := range options {
+				optMap, ok := opt.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%s.options[%d] 必须为 object（如 {\"value\":\"选项\"}）", path, i)
+				}
+				val, ok := optMap["value"].(string)
+				if !ok || val == "" {
+					return fmt.Errorf("%s.options[%d].value 必须为非空字符串", path, i)
+				}
+			}
+		} else {
+			sourceRange, ok := sourceRangeRaw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s.sourceRange 必须为 object", path)
+			}
+			if _, exists := sourceRange["colors"]; exists {
+				return fmt.Errorf("%s.sourceRange.colors 暂不支持", path)
+			}
+			sheetID, ok := sourceRange["sheetId"].(string)
+			if !ok || strings.TrimSpace(sheetID) == "" {
+				return fmt.Errorf("%s.sourceRange.sheetId 必须为非空字符串", path)
+			}
+			a1Notation, ok := sourceRange["a1Notation"].(string)
+			if !ok || strings.TrimSpace(a1Notation) == "" {
+				return fmt.Errorf("%s.sourceRange.a1Notation 必须为非空字符串", path)
+			}
+		}
+		if multi, exists := dv["enableMultiSelect"]; exists {
+			if _, ok := multi.(bool); !ok {
+				return fmt.Errorf("%s.enableMultiSelect 必须为 boolean", path)
 			}
 		}
 	case "checkbox":

@@ -18,6 +18,12 @@ func newHrbrainCommand() *cobra.Command {
 	// products.hrbrain). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "hrbrain",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("组织大脑深度指南", "dingtalk-misc", "references/hrbrain.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
 			UseWhen: []string{
@@ -29,7 +35,7 @@ func newHrbrainCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "hrbrain",
 		Short: "组织大脑：人才池、员工档案与人才搜索",
 		Long: `钉钉组织大脑（hrbrain）能力：人才池管理、员工档案查询、人才搜索与标签管理。
@@ -38,6 +44,8 @@ func newHrbrainCommand() *cobra.Command {
   dws hrbrain talent-pool list              人才池列表
   dws hrbrain talent-pool detail            获取人才池详情
   dws hrbrain talent-pool employees         人才池人员列表
+  dws hrbrain talent-pool save              创建或更新人才池
+  dws hrbrain talent-pool move-members      人才池人员出入池
   dws hrbrain profile metadata              查询员工档案元数据结构
   dws hrbrain profile query                 按模块批量查询员工档案数据
   dws hrbrain profile labels                获取员工标签
@@ -47,11 +55,11 @@ func newHrbrainCommand() *cobra.Command {
   dws hrbrain search employees-structured   使用高级条件搜索人员
   dws hrbrain search fields                 获取高级搜索字段列表`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── talent-pool: 人才池管理 ────────────────────────────────
 
-	talentPoolCmd := &cobra.Command{Use: "talent-pool", Short: "人才池管理", RunE: groupRunE}
+	talentPoolCmd := newGroupCommand(&cobra.Command{Use: "talent-pool", Short: "人才池管理", RunE: groupRunE})
 
 	talentPoolListCmd := &cobra.Command{
 		Use:   "list",
@@ -232,11 +240,177 @@ func newHrbrainCommand() *cobra.Command {
 	talentPoolEmployeesCmd.Flags().Int("page", 1, "当前页码 (默认 1)")
 	talentPoolEmployeesCmd.Flags().Int("page-size", 20, "每页条数 (默认 20)")
 
-	talentPoolCmd.AddCommand(talentPoolListCmd, talentPoolDetailCmd, talentPoolEmployeesCmd)
+	talentPoolSaveCmd := &cobra.Command{
+		Use:   "save",
+		Short: "创建或更新人才池",
+		Long: `创建或更新人才池。不传 --pool-code 为新建，传 --pool-code 为更新指定人才池。
+--rule-json 为自动出入池规则 JSON 对象字符串 (可选)。
+--pool-tags 为人才池标识 JSON 数组 (可选)，每项含 label 与 setting{color,backgroundColor}。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws hrbrain talent-pool save --pool-name "储备干部池"
+  dws hrbrain talent-pool save --pool-code POOL_CODE --pool-name "储备干部池" --pool-desc "描述"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "pool-name"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"poolName": mustGetFlag(cmd, "pool-name"),
+			}
+			if v, _ := cmd.Flags().GetString("pool-code"); v != "" {
+				toolArgs["poolCode"] = v
+			}
+			if v, _ := cmd.Flags().GetString("pool-desc"); v != "" {
+				toolArgs["poolDesc"] = v
+			}
+			if v, _ := cmd.Flags().GetString("rule-json"); v != "" {
+				var rule map[string]any
+				if err := json.Unmarshal([]byte(v), &rule); err != nil {
+					return fmt.Errorf("--rule-json must be a valid JSON object: %w", err)
+				}
+				toolArgs["ruleJson"] = v
+			}
+			if v, _ := cmd.Flags().GetString("pool-tags"); v != "" {
+				var tags []any
+				if err := json.Unmarshal([]byte(v), &tags); err != nil {
+					return fmt.Errorf("--pool-tags must be a valid JSON array: %w", err)
+				}
+				if len(tags) == 0 {
+					return fmt.Errorf("--pool-tags must be a non-empty JSON array")
+				}
+				toolArgs["poolTags"] = tags
+			}
+			return callMCPTool("create_or_update_pool", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(talentPoolSaveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "hrbrain",
+				Name:           "create_or_update_pool",
+				CanonicalPath:  "hrbrain.create_or_update_pool",
+				CLIPath:        "hrbrain talent-pool save",
+				PrimaryCLIPath: "hrbrain talent-pool save",
+			},
+			Description: "创建或更新人才池：不传 --pool-code 为新建，传 --pool-code 为更新",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool create_or_update_pool, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建新人才池或更新已有人才池的名称、描述、自动出入池规则与标识",
+				UseWhen:      []string{"用户明确要新建人才池（不传 --pool-code），或修改已有人才池（传 --pool-code）的名称/描述/规则/标识时"},
+				AvoidWhen: []string{
+					"只是查看人才池列表或详情时改用 dws hrbrain talent-pool list / talent-pool detail",
+					"只是把人员移入/移出人才池时改用 dws hrbrain talent-pool move-members",
+				},
+				Examples: []string{
+					"dws hrbrain talent-pool save --pool-name \"储备干部池\"",
+					"dws hrbrain talent-pool save --pool-code POOL_CODE --pool-name \"储备干部池\" --pool-desc \"描述\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "pool-code", Property: "poolCode", Required: boolPtr(false), Description: "人才池编码；新建时留空，更新时必传"},
+				{Name: "pool-desc", Property: "poolDesc", Required: boolPtr(false)},
+				{Name: "pool-name", Property: "poolName", Required: boolPtr(true)},
+				{Name: "pool-tags", Property: "poolTags", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "rule-json", Property: "ruleJson", Required: boolPtr(false)},
+			},
+		},
+	})
+	talentPoolSaveCmd.Flags().String("pool-name", "", "人才池名称 (必填)")
+	talentPoolSaveCmd.Flags().String("pool-code", "", "人才池编码；更新时传入，新建时留空 (可选)")
+	talentPoolSaveCmd.Flags().String("pool-desc", "", "人才池描述 (可选)")
+	talentPoolSaveCmd.Flags().String("rule-json", "", "自动出入池规则 JSON 对象字符串 (可选)")
+	talentPoolSaveCmd.Flags().String("pool-tags", "", "人才池标识 JSON 数组 (可选)")
+
+	talentPoolMoveMembersCmd := &cobra.Command{
+		Use:   "move-members",
+		Short: "人才池人员出入池",
+		Long: `将人员批量移入或移出指定人才池。
+--opt-type ENTERING 入池，LEAVING 出池。
+--staff-ids 为逗号分隔的人员工号列表。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type ENTERING --staff-ids WORK_NO1,WORK_NO2
+  dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type LEAVING --staff-ids WORK_NO1 --remark "转岗"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "pool-code", "opt-type", "staff-ids"); err != nil {
+				return err
+			}
+			optType := mustGetFlag(cmd, "opt-type")
+			switch optType {
+			case "ENTERING", "LEAVING":
+			default:
+				return fmt.Errorf("--opt-type 仅支持 ENTERING（入池）或 LEAVING（出池），当前值 %q", optType)
+			}
+			staffIDs := parseCSVValues(mustGetFlag(cmd, "staff-ids"))
+			if len(staffIDs) == 0 {
+				return fmt.Errorf("--staff-ids 至少需要一个人员工号")
+			}
+			toolArgs := map[string]any{
+				"poolCode": mustGetFlag(cmd, "pool-code"),
+				"optType":  optType,
+				"staffIds": staffIDs,
+			}
+			if v, _ := cmd.Flags().GetString("remark"); v != "" {
+				toolArgs["remark"] = v
+			}
+			return callMCPTool("entering_or_leaving_pool", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(talentPoolMoveMembersCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "hrbrain",
+				Name:           "entering_or_leaving_pool",
+				CanonicalPath:  "hrbrain.entering_or_leaving_pool",
+				CLIPath:        "hrbrain talent-pool move-members",
+				PrimaryCLIPath: "hrbrain talent-pool move-members",
+			},
+			Description: "将人员批量移入（ENTERING）或移出（LEAVING）指定人才池",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls the hrbrain MCP tool entering_or_leaving_pool, which is absent from the pinned MCP metadata snapshot; no single pinned interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "将一批人员批量移入或移出指定人才池",
+				UseWhen:      []string{"已知 poolCode 与人员工号，需要把他们批量入池（ENTERING）或出池（LEAVING）时"},
+				AvoidWhen: []string{
+					"尚未取得 poolCode 时先用 dws hrbrain talent-pool list 查找",
+					"只是查看人才池内人员名单时改用 dws hrbrain talent-pool employees",
+				},
+				Examples: []string{
+					"dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type ENTERING --staff-ids WORK_NO1,WORK_NO2",
+					"dws hrbrain talent-pool move-members --pool-code POOL_CODE --opt-type LEAVING --staff-ids WORK_NO1",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "opt-type", Property: "optType", Required: boolPtr(true), Enum: []string{"ENTERING", "LEAVING"}, Description: "操作类型：ENTERING 入池，LEAVING 出池"},
+				{Name: "pool-code", Property: "poolCode", Required: boolPtr(true)},
+				{Name: "remark", Property: "remark", Required: boolPtr(false)},
+				{Name: "staff-ids", Property: "staffIds", Required: boolPtr(true), InterfaceType: "array"},
+			},
+		},
+	})
+	talentPoolMoveMembersCmd.Flags().String("pool-code", "", "人才池编码 (必填)")
+	talentPoolMoveMembersCmd.Flags().String("opt-type", "", "操作类型：ENTERING 入池 / LEAVING 出池 (必填)")
+	talentPoolMoveMembersCmd.Flags().String("staff-ids", "", "出入池人员工号列表，逗号分隔 (必填)")
+	talentPoolMoveMembersCmd.Flags().String("remark", "", "操作备注 (可选)")
+
+	talentPoolCmd.AddCommand(talentPoolListCmd, talentPoolDetailCmd, talentPoolEmployeesCmd, talentPoolSaveCmd, talentPoolMoveMembersCmd)
 
 	// ── profile: 员工档案管理 ──────────────────────────────────
 
-	profileCmd := &cobra.Command{Use: "profile", Short: "员工档案管理", RunE: groupRunE}
+	profileCmd := newGroupCommand(&cobra.Command{Use: "profile", Short: "员工档案管理", RunE: groupRunE})
 
 	profileMetadataCmd := &cobra.Command{
 		Use:     "metadata",
@@ -493,7 +667,7 @@ func newHrbrainCommand() *cobra.Command {
 
 	// ── search: 人才搜索 ─────────────────────────────────────
 
-	searchCmd := &cobra.Command{Use: "search", Short: "人才搜索", RunE: groupRunE}
+	searchCmd := newGroupCommand(&cobra.Command{Use: "search", Short: "人才搜索", RunE: groupRunE})
 
 	employeeSearchCmd := &cobra.Command{
 		Use:   "employees",

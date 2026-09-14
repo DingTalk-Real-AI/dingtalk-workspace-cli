@@ -31,19 +31,19 @@ func SearchItems(data map[string]any) []map[string]any {
 		if root == nil {
 			continue
 		}
-		if groups, ok := root["conversationMessagesList"].([]any); ok {
+		if groups := searchMapSlice(root["conversationMessagesList"]); groups != nil {
 			return flattenSearchGroups(groups)
 		}
 	}
 	keys := []string{"list", "messages", "messageList", "items", "data", "records", "result"}
 	for _, key := range keys {
-		if arr, ok := data[key].([]any); ok {
-			return searchMaps(arr)
+		if items := searchMapSlice(data[key]); items != nil {
+			return items
 		}
 		if inner, ok := data[key].(map[string]any); ok {
 			for _, innerKey := range []string{"list", "messages", "messageList", "items", "data", "records"} {
-				if arr, ok := inner[innerKey].([]any); ok {
-					return searchMaps(arr)
+				if items := searchMapSlice(inner[innerKey]); items != nil {
+					return items
 				}
 			}
 		}
@@ -58,25 +58,17 @@ func childMap(data map[string]any, key string) map[string]any {
 	return nil
 }
 
-func flattenSearchGroups(groups []any) []map[string]any {
+func flattenSearchGroups(groups []map[string]any) []map[string]any {
 	out := make([]map[string]any, 0)
-	for _, rawGroup := range groups {
-		group, ok := rawGroup.(map[string]any)
-		if !ok {
-			continue
-		}
-		messages, ok := group["messages"].([]any)
-		if !ok {
+	for _, group := range groups {
+		messages := searchMapSlice(group["messages"])
+		if messages == nil {
 			continue
 		}
 		conversationID := cleanSearchScalar(group["openConversationId"])
 		conversationTitle := cleanSearchScalar(group["title"])
 		singleChat, hasSingleChat := group["singleChat"]
-		for _, rawMessage := range messages {
-			message, ok := rawMessage.(map[string]any)
-			if !ok {
-				continue
-			}
+		for _, message := range messages {
 			item := make(map[string]any, len(message)+3)
 			for key, value := range message {
 				item[key] = value
@@ -94,6 +86,17 @@ func flattenSearchGroups(groups []any) []map[string]any {
 		}
 	}
 	return out
+}
+
+func searchMapSlice(value any) []map[string]any {
+	switch items := value.(type) {
+	case []map[string]any:
+		return items
+	case []any:
+		return searchMaps(items)
+	default:
+		return nil
+	}
 }
 
 func searchMaps(items []any) []map[string]any {

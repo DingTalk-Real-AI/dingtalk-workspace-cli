@@ -19,8 +19,10 @@ repeat the entire CI suite locally only to fill this checklist: CI expands the
 selected tier from documentation checks, through affected-package tests, to
 the complete high-risk suite.
 
-- [ ] Exact in-place `CHANGELOG.md`-only check (otherwise `N/A`):
-  `./scripts/policy/check-changelog-pr.sh --fast-path "$(git merge-base HEAD origin/main)" HEAD`
+- [ ] Release fragment added for a user-visible behavior/interface change (otherwise `N/A`):
+  `.changes/<unique-name>.md`; ordinary PRs must not edit `CHANGELOG.md`.
+- [ ] Release-seal validation (otherwise `N/A`):
+  `./scripts/policy/check-changelog-pr.sh --content-only "$(git merge-base HEAD origin/main)" HEAD`
 - [ ] Targeted test/check commands and results:
 - [ ] Behavior evidence (test name, CLI output shape, or before/after result):
 - [ ] Documentation links/content/rendering checked (documentation-only, otherwise

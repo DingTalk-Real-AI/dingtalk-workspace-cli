@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -53,8 +54,12 @@ type importFlowConfig struct {
 	folderFlags          []string
 	workspaceFlags       []string
 	requireTarget        bool
+	exclusiveTarget      bool
+	defaultTargetSource  string
+	resolveDefaultTarget func(context.Context) (importTarget, error)
 	serverID             string
 	includeNodeID        bool
+	verifyPlacement      bool
 	timeoutAsResult      bool
 	nextCommand          string
 	poll                 importPollPolicy
@@ -66,12 +71,19 @@ type importFlowConfig struct {
 }
 
 type preparedImportFile struct {
-	path      string
-	name      string
-	extension string
-	size      int64
+	path         string
+	name         string
+	extension    string
+	size         int64
+	folder       string
+	workspace    string
+	targetSource string
+}
+
+type importTarget struct {
 	folder    string
 	workspace string
+	source    string
 }
 
 func defaultImportPollPolicy() importPollPolicy {
@@ -101,6 +113,11 @@ func docImportFlowConfig() importFlowConfig {
 		supportedFormatsText: "docx, doc, xlsx, xls, md, txt, xmind, mark",
 		folderFlags:          []string{"folder", "folder-id"},
 		workspaceFlags:       []string{"workspace", "workspace-id"},
+		exclusiveTarget:      true,
+		defaultTargetSource:  "default_org_root",
+		resolveDefaultTarget: resolveDefaultDocImportTarget,
+		includeNodeID:        true,
+		verifyPlacement:      true,
 		nextCommand:          "dws doc import get --task-id %s",
 		poll:                 defaultImportPollPolicy(),
 		// 白名单外的格式改走文档空间的文件上传链路
@@ -108,6 +125,82 @@ func docImportFlowConfig() importFlowConfig {
 		// 目标 flags（--folder/--workspace）与 import 同构，链路不中断。
 		uploadFallback: true,
 	}
+}
+
+func importTargetValidationError(message string, cause error) error {
+	options := []apperrors.Option{
+		apperrors.WithOperation("doc.import.resolve_target"),
+		apperrors.WithReason("import_target_unresolved"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("显式提供 --folder <目标文件夹ID> 或 --workspace <目标知识库ID> 后重新执行"),
+	}
+	if cause != nil {
+		options = append(options, apperrors.WithCause(cause))
+	}
+	return apperrors.NewValidation(message, options...)
+}
+
+func parseDefaultDocImportTarget(text string) (importTarget, error) {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		return importTarget{}, importTargetValidationError("无法解析当前组织的默认文档根目录；请显式提供 --folder 或 --workspace", err)
+	}
+	if nextToken, exists := payload["nextToken"]; exists && nextToken != nil {
+		token, ok := nextToken.(string)
+		if !ok || strings.TrimSpace(token) != "" {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	if hasMore, exists := payload["hasMore"]; exists && hasMore != nil {
+		more, ok := hasMore.(bool)
+		if !ok || more {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	if result, ok := payload["result"].(map[string]any); ok {
+		payload = result
+	}
+	if nextToken, exists := payload["nextToken"]; exists && nextToken != nil {
+		token, ok := nextToken.(string)
+		if !ok || strings.TrimSpace(token) != "" {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	if hasMore, exists := payload["hasMore"]; exists && hasMore != nil {
+		more, ok := hasMore.(bool)
+		if !ok || more {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	items, ok := payload["items"].([]any)
+	if !ok {
+		return importTarget{}, importTargetValidationError("当前组织空间响应缺少 items，无法确定默认导入位置；请显式提供 --folder 或 --workspace", nil)
+	}
+	if len(items) != 1 {
+		return importTarget{}, importTargetValidationError(fmt.Sprintf("当前组织返回 %d 个 orgSpace，无法唯一确定默认导入位置；请显式提供 --folder 或 --workspace", len(items)), nil)
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		return importTarget{}, importTargetValidationError("当前组织唯一 orgSpace 的返回结构无效；请显式提供 --folder 或 --workspace", nil)
+	}
+	if spaceType, _ := item["spaceType"].(string); spaceType != "" && spaceType != "orgSpace" {
+		return importTarget{}, importTargetValidationError(fmt.Sprintf("默认空间类型为 %q，不是 orgSpace；请显式提供 --folder 或 --workspace", spaceType), nil)
+	}
+	rootFolderID, _ := item["rootFolderId"].(string)
+	rootFolderID = strings.TrimSpace(rootFolderID)
+	if rootFolderID == "" {
+		return importTarget{}, importTargetValidationError("当前组织唯一 orgSpace 未返回 rootFolderId；请显式提供 --folder 或 --workspace", nil)
+	}
+	return importTarget{folder: rootFolderID, source: "default_org_root"}, nil
+}
+
+func resolveDefaultDocImportTarget(ctx context.Context) (importTarget, error) {
+	text, err := callMCPToolReturnTextOnServer(ctx, "drive", "list_spaces", map[string]any{"spaceType": "orgSpace"})
+	if err != nil {
+		return importTarget{}, importTargetValidationError("无法读取当前组织的默认文档根目录；请显式提供 --folder 或 --workspace", err)
+	}
+	return parseDefaultDocImportTarget(text)
 }
 
 func sheetImportFlowConfig() importFlowConfig {
@@ -189,18 +282,198 @@ func prepareImportFile(cmd *cobra.Command, args []string, cfg importFlowConfig) 
 	}
 	folder := importFlagValue(cmd, cfg.folderFlags...)
 	workspace := importFlagValue(cmd, cfg.workspaceFlags...)
+	if cfg.exclusiveTarget && folder != "" && workspace != "" {
+		return preparedImportFile{}, importTargetValidationError("--folder 与 --workspace 不能同时提供；请选择一个明确的导入目标", nil)
+	}
 	if cfg.requireTarget && folder == "" && workspace == "" {
 		return preparedImportFile{}, fmt.Errorf("--folder-token 与 --workspace 至少需要提供一个（导入目标位置）")
 	}
+	targetSource := ""
+	if folder != "" {
+		targetSource = "explicit_folder"
+	} else if workspace != "" {
+		targetSource = "explicit_workspace"
+	}
 
 	return preparedImportFile{
-		path:      filePath,
-		name:      name,
-		extension: extension,
-		size:      fileInfo.Size(),
-		folder:    folder,
-		workspace: workspace,
+		path:         filePath,
+		name:         name,
+		extension:    extension,
+		size:         fileInfo.Size(),
+		folder:       folder,
+		workspace:    workspace,
+		targetSource: targetSource,
 	}, nil
+}
+
+func addImportTargetReceipt(result map[string]any, file preparedImportFile, deferredSource string) {
+	if file.folder != "" {
+		result["targetFolderId"] = file.folder
+	}
+	if file.workspace != "" {
+		result["workspaceId"] = file.workspace
+	}
+	if file.targetSource != "" {
+		result["targetSource"] = file.targetSource
+		return
+	}
+	if deferredSource != "" {
+		result["targetSource"] = deferredSource
+		result["targetResolution"] = "deferred"
+	}
+}
+
+func importString(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text, ok := value[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func parseImportedDocumentInfo(text string) (map[string]any, error) {
+	var root any
+	if err := json.Unmarshal([]byte(text), &root); err != nil {
+		return nil, fmt.Errorf("解析文档元信息响应失败: %w", err)
+	}
+	if info, ok := findImportedDocumentInfo(root); ok {
+		return info, nil
+	}
+	return nil, fmt.Errorf("文档元信息响应缺少 nodeId/folderId/workspaceId")
+}
+
+func findImportedDocumentInfo(value any) (map[string]any, bool) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	if importString(object, "nodeId", "fileId", "dentryUuid", "folderId", "workspaceId") != "" {
+		return object, true
+	}
+	for _, key := range []string{"result", "data", "documentInfo", "document", "doc", "file"} {
+		if nested, exists := object[key]; exists {
+			if info, ok := findImportedDocumentInfo(nested); ok {
+				return info, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func canonicalImportTargetID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme == "" && parsed.Host == "") {
+		return raw
+	}
+	for _, key := range []string{"workspaceId", "spaceId", "folderId", "nodeId"} {
+		if value := strings.TrimSpace(parsed.Query().Get(key)); value != "" {
+			return value
+		}
+	}
+	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for index, segment := range segments {
+		if index+1 >= len(segments) {
+			break
+		}
+		switch segment {
+		case "nodes", "spaces", "folders":
+			if value := strings.TrimSpace(segments[index+1]); value != "" {
+				return value
+			}
+		}
+	}
+	return raw
+}
+
+func verifyImportedDocumentPlacement(ctx context.Context, file preparedImportFile, taskID, documentURL string) (string, map[string]any, error) {
+	nodeID := extractNodeIDFromDocURL(documentURL)
+	if nodeID == "" {
+		return "", nil, docImportPlacementError(file, taskID, "", nil, fmt.Errorf("导入结果缺少可解析的 documentUrl"))
+	}
+	return verifyImportedNodePlacement(ctx, file, taskID, nodeID)
+}
+
+func verifyImportedNodePlacement(ctx context.Context, file preparedImportFile, taskID, nodeID string) (string, map[string]any, error) {
+	text, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_document_info", map[string]any{"nodeId": nodeID})
+	if err != nil {
+		return nodeID, nil, docImportPlacementError(file, taskID, nodeID, nil, err)
+	}
+	info, err := parseImportedDocumentInfo(text)
+	if err != nil {
+		return nodeID, nil, docImportPlacementError(file, taskID, nodeID, nil, err)
+	}
+
+	observedNodeID := importString(info, "nodeId", "fileId", "dentryUuid", "id")
+	if observedNodeID != "" && observedNodeID != nodeID {
+		return nodeID, info, docImportPlacementError(file, taskID, nodeID, info,
+			fmt.Errorf("回读 nodeId=%s，与导入结果 nodeId=%s 不一致", observedNodeID, nodeID))
+	}
+	if file.folder != "" {
+		expected := canonicalImportTargetID(file.folder)
+		observed := importString(info, "folderId")
+		if observed == "" || observed != expected {
+			return nodeID, info, docImportPlacementError(file, taskID, nodeID, info,
+				fmt.Errorf("目标文件夹验证失败：expected=%s observed=%s", expected, observed))
+		}
+	}
+	if file.workspace != "" {
+		expected := canonicalImportTargetID(file.workspace)
+		observed := importString(info, "workspaceId")
+		if observed == "" || observed != expected {
+			return nodeID, info, docImportPlacementError(file, taskID, nodeID, info,
+				fmt.Errorf("目标知识库验证失败：expected=%s observed=%s", expected, observed))
+		}
+	}
+	return nodeID, compactImportedDocumentInfo(info, nodeID), nil
+}
+
+func compactImportedDocumentInfo(info map[string]any, nodeID string) map[string]any {
+	result := map[string]any{"nodeId": nodeID}
+	for _, key := range []string{"folderId", "workspaceId", "name", "contentType"} {
+		if value := importString(info, key); value != "" {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func importTargetSummary(file preparedImportFile) map[string]any {
+	result := map[string]any{"source": file.targetSource}
+	if file.folder != "" {
+		result["folderId"] = canonicalImportTargetID(file.folder)
+	}
+	if file.workspace != "" {
+		result["workspaceId"] = canonicalImportTargetID(file.workspace)
+	}
+	return result
+}
+
+func docImportPlacementError(file preparedImportFile, taskID, nodeID string, observed map[string]any, cause error) error {
+	details := map[string]any{
+		"status":   "partial_success",
+		"nodeId":   nodeID,
+		"target":   importTargetSummary(file),
+		"verified": false,
+	}
+	if taskID != "" {
+		details["taskId"] = taskID
+	}
+	if observed != nil {
+		details["observed"] = compactImportedDocumentInfo(observed, nodeID)
+	}
+	return apperrors.NewAPI(
+		"导入或上传已经完成，但目标落点回读验证失败；为避免重复创建，请先按 nodeId 检查文档",
+		apperrors.WithOperation("doc.import"),
+		apperrors.WithReason("doc_import_placement_unverified"),
+		apperrors.WithFailureStage("verify_placement"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("按 nodeId 检查文档当前位置", "确认导入结果前不要重复执行"),
+		apperrors.WithDetails(details),
+		apperrors.WithCause(cause),
+	)
 }
 
 func (cfg importFlowConfig) callTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
@@ -221,9 +494,6 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 	if label == "" {
 		label = "无扩展名"
 	}
-	deps.Out.PrintWarning(fmt.Sprintf(
-		"%s 文件不支持转换为在线文档（支持: %s），已自动改走文件上传链路，以原文件形式存入 --folder/--workspace 指定的目标位置；如需在线文档，请先将内容转换为 md 后重新执行 doc import；上传到钉盘请用 dws drive upload",
-		label, cfg.supportedFormatsText))
 
 	// prepareImportFile 的 name 去掉了扩展名；上传保留原始文件名形态
 	uploadName := file.name
@@ -232,9 +502,26 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 	}
 	jsonMode := deps.Caller.Format() == "json"
 
+	// 回退上传真实执行的首个调用是 doc.get_file_upload_info；dry-run 在渲染任何
+	// warning/preview 前与之一致地先做委托预检，避免带 --principal-user-id 时
+	// dry-run 宣称可执行、而真实执行在首个 get_file_upload_info 即被拒的偏差。被拒
+	// 即 return（不输出预览）。真实执行无需在此预检：get_file_upload_info 调用本身
+	// 会被委托装饰器把关；未设 --principal-user-id 或非 dry-run caller 时该预检为
+	// no-op。预检参数复用 docFileUploadInfoArgs，与真实首个调用参数一致。
+	if deps.Caller.DryRun() {
+		precheckArgs := docFileUploadInfoArgs(uploadName, file.size, file.folder, file.workspace, "")
+		if err := markdownDryRunDelegationPrecheck(cmd, cfg.importServerID(), "get_file_upload_info", precheckArgs); err != nil {
+			return err
+		}
+	}
+
+	deps.Out.PrintWarning(fmt.Sprintf(
+		"%s 文件不支持转换为在线文档（支持: %s），已自动改走文件上传链路，以原文件形式存入解析出的文档目标位置；如需在线文档，请先将内容转换为 md 后重新执行 doc import；上传到钉盘请用 dws drive upload",
+		label, cfg.supportedFormatsText))
+
 	if deps.Caller.DryRun() {
 		if jsonMode {
-			return deps.Out.PrintJSON(map[string]any{
+			result := map[string]any{
 				"dry_run":             true,
 				"executed":            false,
 				"preview_kind":        "plan",
@@ -246,7 +533,9 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 				"name":                uploadName,
 				"format":              file.extension,
 				"size":                file.size,
-			})
+			}
+			addImportTargetReceipt(result, file, cfg.defaultTargetSource)
+			return deps.Out.PrintJSON(result)
 		}
 		deps.Out.PrintKeyValue("操作", "上传文件到钉钉文档（doc import 回退）")
 		deps.Out.PrintKeyValue("文件", file.path)
@@ -276,7 +565,14 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 	if err != nil {
 		return err
 	}
-	return deps.Out.PrintJSON(map[string]any{
+	var verification map[string]any
+	if cfg.verifyPlacement {
+		_, verification, err = verifyImportedNodePlacement(ctx, file, "", dentryID)
+		if err != nil {
+			return err
+		}
+	}
+	result := map[string]any{
 		"success":             true,
 		"operation":           "上传文件到钉钉文档",
 		"requested_operation": cfg.operation,
@@ -286,7 +582,14 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 		"format":              file.extension,
 		"dentry_id":           dentryID,
 		"result":              commit,
-	})
+	}
+	addImportTargetReceipt(result, file, "")
+	if cfg.verifyPlacement {
+		result["verified"] = true
+		result["target"] = importTargetSummary(file)
+		result["verification"] = verification
+	}
+	return deps.Out.PrintJSON(result)
 }
 
 // uploadCommitIDKeys 是 commit_uploaded_file 响应中可作为文件标识的字段，
@@ -317,20 +620,62 @@ func parseUploadCommitResult(text string) (map[string]any, string, error) {
 	return nil, "", fmt.Errorf("上传入库响应缺少文件标识（%s 均为空），无法确认文件已入库；原始响应: %s", strings.Join(uploadCommitIDKeys, "/"), trimmed)
 }
 
+// importSessionArgs 构造 create_import_session 的入参，执行路径与 dry-run 委托
+// 预检共用，保证委托鉴权预检覆盖的就是执行时发起的首个业务调用（参数一致，
+// 避免两处手写漂移）。
+func importSessionArgs(file preparedImportFile) map[string]any {
+	args := map[string]any{
+		"fileName": file.name,
+		"suffix":   file.extension,
+		"fileSize": file.size,
+	}
+	if file.folder != "" {
+		args["targetFolderId"] = file.folder
+	}
+	if file.workspace != "" {
+		args["workspaceId"] = file.workspace
+	}
+	return args
+}
+
+// importServerID 返回 create_import_session 实际路由到的 server：cfg.serverID
+// 显式指定时用它（sheet import → "doc"），否则回退 "doc"（doc import 经产品
+// 推断落到 doc server）。委托装饰器按 serverID 命中 docBusinessServers 白名单，
+// 故 dry-run 预检必须传入具体 server 而非空串（空串不在白名单会被直接放行）。
+func (cfg importFlowConfig) importServerID() string {
+	if cfg.serverID != "" {
+		return cfg.serverID
+	}
+	return "doc"
+}
+
 func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) error {
 	file, err := prepareImportFile(cmd, args, cfg)
 	if err != nil {
 		return err
 	}
-	// 非回退配置的白名单外文件已在 prepareImportFile 中按基线顺序拒绝
-	if cfg.uploadFallback && !cfg.supportedFormats[file.extension] {
-		return runImportUploadFallback(cmd, cfg, file)
-	}
+	uploadFallback := cfg.uploadFallback && !cfg.supportedFormats[file.extension]
 	jsonMode := deps.Caller.Format() == "json"
 
 	if deps.Caller.DryRun() {
+		if uploadFallback {
+			return runImportUploadFallback(cmd, cfg, file)
+		}
+		// 二期：dry-run 也与执行路径一致地触发 create_import_session 委托预检，
+		// 使 --principal-user-id 场景下会被拒绝的导入在预览渲染前即被拦截。
+		// 无显式 --folder/--workspace 时 sessionArgs 不含节点标识，委托装饰器
+		// 返回 NOT_SUPPORTED——这与真实执行在委托下的结果一致（faithful parity）
+		// 而非仅 dry-run 的收紧：真实执行解析默认目标走 resolveDefaultDocImportTarget
+		// →drive.list_spaces，该调用同样无节点标识，在委托装饰器处先于 import
+		// 被判 NOT_SUPPORTED。因此 dry-run 不做远程默认目标解析：一则 dry-run 下
+		// list_spaces 经普通 CallTool 只回 echo 无法解析，二则若为放行而豁免无节点
+		// 的 list_spaces，将重新打开独立无节点调用的委托旁路（与续调有条件豁免的
+		// 安全约束冲突）。委托场景需显式提供 --folder/--workspace。
+		if err := markdownDryRunDelegationPrecheck(cmd, cfg.importServerID(), "create_import_session", importSessionArgs(file)); err != nil {
+			return err
+		}
 		if jsonMode {
-			return deps.Out.PrintJSON(map[string]any{
+			result := map[string]any{
 				"dry_run":      true,
 				"executed":     false,
 				"preview_kind": "plan",
@@ -339,7 +684,9 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 				"name":         file.name,
 				"format":       file.extension,
 				"size":         file.size,
-			})
+			}
+			addImportTargetReceipt(result, file, cfg.defaultTargetSource)
+			return deps.Out.PrintJSON(result)
 		}
 		deps.Out.PrintKeyValue("操作", cfg.operation)
 		deps.Out.PrintKeyValue("文件", file.path)
@@ -353,21 +700,29 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if file.folder == "" && file.workspace == "" && cfg.resolveDefaultTarget != nil {
+		target, err := cfg.resolveDefaultTarget(ctx)
+		if err != nil {
+			return err
+		}
+		if target.folder == "" && target.workspace == "" {
+			return importTargetValidationError("默认导入目标解析结果为空；请显式提供 --folder 或 --workspace", nil)
+		}
+		file.folder = target.folder
+		file.workspace = target.workspace
+		file.targetSource = target.source
+	}
+	// 非回退配置的白名单外文件已在 prepareImportFile 中按基线顺序拒绝。
+	// 回退上传与在线转换共享同一目标解析，避免仅因扩展名不同而绕过
+	// 默认 orgSpace 唯一性校验或落入服务端隐式位置。
+	if uploadFallback {
+		return runImportUploadFallback(cmd, cfg, file)
+	}
 
 	if !jsonMode {
 		deps.Out.PrintInfo("[1/4] 创建导入会话...")
 	}
-	sessionArgs := map[string]any{
-		"fileName": file.name,
-		"suffix":   file.extension,
-		"fileSize": file.size,
-	}
-	if file.folder != "" {
-		sessionArgs["targetFolderId"] = file.folder
-	}
-	if file.workspace != "" {
-		sessionArgs["workspaceId"] = file.workspace
-	}
+	sessionArgs := importSessionArgs(file)
 
 	sessionText, err := cfg.callTool(ctx, "create_import_session", sessionArgs)
 	if err != nil {
@@ -428,7 +783,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if err != nil {
 		var timeoutErr *importPollTimeoutError
 		if !errors.As(err, &timeoutErr) {
-			return err
+			return fmt.Errorf("%w；任务已经提交，可使用 %s 继续查询", err, importRecoveryCommand(cfg, taskID, file))
 		}
 		if cfg.timeoutAsResult {
 			if !jsonMode {
@@ -439,15 +794,24 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 				"timed_out":    true,
 				"taskId":       taskID,
 				"status":       "processing",
-				"next_command": fmt.Sprintf(cfg.nextCommand, taskID),
+				"next_command": importRecoveryCommand(cfg, taskID, file),
 			})
 		}
-		return fmt.Errorf("%s，请稍后使用 %s 手动查询", timeoutErr.Error(), fmt.Sprintf(cfg.nextCommand, taskID))
+		return fmt.Errorf("%s，请稍后使用 %s 手动查询", timeoutErr.Error(), importRecoveryCommand(cfg, taskID, file))
 	}
 
 	documentURL, _ := result["documentUrl"].(string)
 	documentName, _ := result["documentName"].(string)
 	documentType, _ := result["documentType"].(string)
+	nodeID := extractNodeIDFromDocURL(documentURL)
+	var verification map[string]any
+	if cfg.verifyPlacement {
+		var err error
+		nodeID, verification, err = verifyImportedDocumentPlacement(ctx, file, taskID, documentURL)
+		if err != nil {
+			return err
+		}
+	}
 	finalResult := map[string]any{
 		"success":      true,
 		"taskId":       taskID,
@@ -455,8 +819,14 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		"documentName": documentName,
 		"documentType": documentType,
 	}
+	addImportTargetReceipt(finalResult, file, "")
 	if cfg.includeNodeID {
-		finalResult["nodeId"] = extractNodeIDFromDocURL(documentURL)
+		finalResult["nodeId"] = nodeID
+	}
+	if cfg.verifyPlacement {
+		finalResult["verified"] = true
+		finalResult["target"] = importTargetSummary(file)
+		finalResult["verification"] = verification
 	}
 	if !jsonMode {
 		deps.Out.PrintInfo(fmt.Sprintf("导入完成: %s", documentURL))
@@ -464,20 +834,47 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	return deps.Out.PrintJSON(finalResult)
 }
 
+func importRecoveryCommand(cfg importFlowConfig, taskID string, file preparedImportFile) string {
+	command := fmt.Sprintf(cfg.nextCommand, ShellQuoteArg(taskID))
+	if !cfg.verifyPlacement {
+		return command
+	}
+	if file.folder != "" {
+		command += " --folder " + ShellQuoteArg(file.folder)
+	}
+	if file.workspace != "" {
+		command += " --workspace " + ShellQuoteArg(file.workspace)
+	}
+	return command
+}
+
 func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 	taskID := mustGetFlag(cmd, "task-id")
 	if taskID == "" {
 		return fmt.Errorf("flag --task-id is required")
 	}
+	target := preparedImportFile{
+		folder:    importFlagValue(cmd, cfg.folderFlags...),
+		workspace: importFlagValue(cmd, cfg.workspaceFlags...),
+	}
+	if target.folder != "" {
+		target.targetSource = "explicit_folder"
+	} else if target.workspace != "" {
+		target.targetSource = "explicit_workspace"
+	}
 	if deps.Caller.DryRun() {
 		if deps.Caller.Format() == "json" {
-			return deps.Out.PrintJSON(map[string]any{
+			preview := map[string]any{
 				"dry_run":      true,
 				"executed":     false,
 				"preview_kind": "plan",
 				"operation":    cfg.queryOperation,
 				"taskId":       taskID,
-			})
+			}
+			if cfg.verifyPlacement {
+				preview["target"] = importTargetSummary(target)
+			}
+			return deps.Out.PrintJSON(preview)
 		}
 		deps.Out.PrintKeyValue("操作", cfg.queryOperation)
 		deps.Out.PrintKeyValue("任务ID", taskID)
@@ -495,15 +892,29 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 
 	var result map[string]any
 	if err := json.Unmarshal([]byte(text), &result); err != nil {
-		deps.Out.PrintRaw(text)
-		return nil
+		return fmt.Errorf("解析导入任务响应失败 (taskId=%s)，请重试 %s: %w", taskID, importRecoveryCommand(cfg, taskID, target), err)
 	}
 	status, _ := result["status"].(string)
 	message, _ := result["message"].(string)
 	if strings.EqualFold(status, "completed") {
+		documentURL, _ := result["documentUrl"].(string)
+		nodeID := extractNodeIDFromDocURL(documentURL)
+		if cfg.verifyPlacement {
+			if target.folder == "" && target.workspace == "" {
+				result["verified"] = false
+			} else {
+				var verification map[string]any
+				nodeID, verification, err = verifyImportedDocumentPlacement(ctx, target, taskID, documentURL)
+				if err != nil {
+					return err
+				}
+				result["verified"] = true
+				result["target"] = importTargetSummary(target)
+				result["verification"] = verification
+			}
+		}
 		if cfg.includeNodeID {
-			documentURL, _ := result["documentUrl"].(string)
-			result["nodeId"] = extractNodeIDFromDocURL(documentURL)
+			result["nodeId"] = nodeID
 		}
 		return deps.Out.PrintJSON(result)
 	}

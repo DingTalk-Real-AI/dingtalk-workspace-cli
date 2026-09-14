@@ -90,6 +90,17 @@ func TestRequestDeviceCodeSuccess(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDeviceFlowSetLoginRegionUsesInternationalBaseURL(t *testing.T) {
+	provider := NewDeviceFlowProvider(t.TempDir(), newDeviceFlowTestLogger())
+	provider.SetLoginRegion(LoginRegionInternational)
+	if provider.baseURL != InternationalDeviceBaseURL {
+		t.Fatalf("baseURL = %q, want %q", provider.baseURL, InternationalDeviceBaseURL)
+	}
+	if provider.terminalBaseURL != InternationalMCPBaseURL {
+		t.Fatalf("terminalBaseURL = %q, want %q", provider.terminalBaseURL, InternationalMCPBaseURL)
+	}
+}
+
 func TestWaitForAuthorizationSucceedsAfterPending(t *testing.T) {
 	t.Parallel()
 

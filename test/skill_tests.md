@@ -39,7 +39,7 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 | 产品 | Skill 参考文档 | 命令数 | 用例数 |
 |------|---------------|--------|--------|
-| `aitable` | `references/products/aitable.md` | 16 | 41 |
+| `aitable` | `references/products/aitable.md` | 16 | 49 |
 | `attendance` | `references/products/attendance.md` | 4 | 16 |
 | `calendar` | `references/products/calendar.md` | 13 | 30 |
 | `chat` | `references/products/chat.md` | 13 | 31 |
@@ -57,7 +57,7 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 ## 测试用例
 
-### aitable（41 条）
+### aitable（49 条）
 
 #### `dws aitable base create`
 
@@ -234,8 +234,8 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **aitable_aitable_record_query_005**
 - Prompt: 查询 base123 的 table456 中的记录，按字段 fld1 降序排列
-- Expected: `dws aitable record query --base-id base123 --table-id table456 --sort '[{"fieldId":"fld1","order":"desc"}]' --format json`
-- Flags: `--base-id` = `base123`, `--sort` = `[{"fieldId":"fld1","order":"desc"}]`, `--table-id` = `table456`
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --sort '[{"fieldId":"fld1","direction":"desc"}]' --format json`
+- Flags: `--base-id` = `base123`, `--sort` = `[{"fieldId":"fld1","direction":"desc"}]`, `--table-id` = `table456`
 
 **aitable_aitable_record_query_006**
 - Prompt: 查询 base123 的 table456 中状态为进行中的记录
@@ -246,6 +246,47 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 - Prompt: 在 base123 的 table456 中搜索关键词 项目评审，只返回字段 fld1,fld2，每页10条
 - Expected: `dws aitable record query --base-id base123 --table-id table456 --keyword 项目评审 --limit 10 --field-ids fld1,fld2 --format json`
 - Flags: `--base-id` = `base123`, `--field-ids` = `fld1,fld2`, `--keyword` = `项目评审`, `--limit` = `10`, `--table-id` = `table456`
+
+**aitable_aitable_record_query_008**
+- Prompt: 完整拉取 base123 的 table456 所有记录用于汇总
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --all --page-limit 0 --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--all` = `true`, `--page-limit` = `0`
+
+**aitable_aitable_record_query_009**
+- Prompt: 上一页返回 records 为空但 nextCursor 为 cur2，继续查 base123/table456
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --cursor cur2 --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--cursor` = `cur2`
+
+**aitable_aitable_record_query_010**
+- Prompt: record query --all 由于 page-limit 截断，错误详情里 cursor 是 cur_resume，继续完整拉取
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --all --page-limit 0 --cursor cur_resume --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--all` = `true`, `--page-limit` = `0`, `--cursor` = `cur_resume`
+
+**aitable_aitable_record_query_011**
+- Prompt: 查询 base123/table456 状态为进行中，字段已解析为 fldStatus，选项 ID 为 optDoing
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","optDoing"]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","optDoing"]}]}`
+
+**aitable_aitable_record_query_012**
+- Prompt: 查询负责人是张三的记录，张三已通过 aisearch 唯一解析为 userId staff123
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldOwner",[{"userId":"staff123"}]]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldOwner",[{"userId":"staff123"}]]}]}`
+
+**aitable_aitable_record_query_013**
+- Prompt: 查询部门是研发部的记录，研发部已通过 contact +resolve-dept 唯一解析为 deptId 987
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldDept",[{"departmentId":"987"}]]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldDept",[{"departmentId":"987"}]]}]}`
+
+**aitable_aitable_record_query_014**
+- Prompt: 查询关联客户为阿里巴巴的记录，客户记录已唯一解析为 recCustomer1
+- Expected: `dws aitable record query --base-id base123 --table-id table456 --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldCustomer","recCustomer1"]}]}' --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`, `--filters` = `{"operator":"and","operands":[{"operator":"eq","operands":["fldCustomer","recCustomer1"]}]}`
+
+**aitable_aitable_record_query_015**
+- Prompt: 查询 base123 的 table456 中优先级为高的记录，还不知道表里有哪些字段
+- Expected: `dws aitable field get --base-id base123 --table-id table456 --format json`
+- Flags: `--base-id` = `base123`, `--table-id` = `table456`
+- 说明: 查询指定数据前必须先完整读一遍表头，确定"优先级"对应的 fieldId 与类型后，再解析"高"并组装 filters
 
 #### `dws aitable table create`
 
@@ -270,6 +311,28 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 - Prompt: 删除 base123 中的数据表 table456，说明原因是该表已废弃
 - Expected: `dws aitable table delete --base-id base123 --table-id table456 --reason 该表已废弃 --format json`
 - Flags: `--base-id` = `base123`, `--reason` = `该表已废弃`, `--table-id` = `table456`
+
+#### `dws aitable psql`
+
+**aitable_aitable_psql_001**
+- Prompt: 查看 AI 表格 base123 里有哪些可以用 PostgreSQL 查询的数据表
+- Expected: `dws aitable psql --database base123 --list`
+- Flags: `--database` = `base123`, `--list` = `true`
+
+**aitable_aitable_psql_002**
+- Prompt: 查看 AI 表格 base123 中数据表 table456 的 SQL 字段结构和类型
+- Expected: `dws aitable psql --database base123 --table table456`
+- Flags: `--database` = `base123`, `--table` = `table456`
+
+**aitable_aitable_psql_003**
+- Prompt: 用 PostgreSQL 查询 AI 表格 base123 的数据表1前10条
+- Expected: `dws aitable psql --database base123 --command 'SELECT * FROM "数据表1" LIMIT 10'`
+- Flags: `--database` = `base123`, `--command` = `SELECT * FROM "数据表1" LIMIT 10`
+
+**aitable_aitable_psql_004**
+- Prompt: 用 LEFT JOIN 查询 AI 表格 base123，数据表1的业务名称等于数据表2的文本
+- Expected: `dws aitable psql --database base123 --command 'SELECT * FROM "数据表1" LEFT JOIN "数据表2" ON "数据表1"."业务名称" = "数据表2"."文本"'`
+- Flags: `--database` = `base123`, `--command` = `SELECT * FROM "数据表1" LEFT JOIN "数据表2" ON "数据表1"."业务名称" = "数据表2"."文本"`
 
 #### `dws aitable table get`
 
@@ -683,8 +746,8 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **chat_chat_message_send_001**
 - Prompt: 在群 openConvABC 发一条消息：大家好
-- Expected: `dws chat message send --group openConvABC "大家好" --format json`
-- Flags: `--group` = `openConvABC`
+- Expected: `dws chat message send --conversation-id openConvABC "大家好" --format json`
+- Flags: `--conversation-id` = `openConvABC`
 
 **chat_chat_message_send_002**
 - Prompt: 给userId123发一条私聊消息，标题是提醒，内容是请查收报告
@@ -693,42 +756,42 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **chat_chat_message_send_003**
 - Prompt: 在群 groupId456 发一条带标题的通知：周报提醒，请大家本周五前提交周报
-- Expected: `dws chat message send --group groupId456 --title "周报提醒" "请大家本周五前提交周报" --format json`
-- Flags: `--group` = `groupId456`, `--title` = `周报提醒`
+- Expected: `dws chat message send --conversation-id groupId456 --title "周报提醒" "请大家本周五前提交周报" --format json`
+- Flags: `--conversation-id` = `groupId456`, `--title` = `周报提醒`
 
 #### `dws chat message send-by-bot`
 
 **chat_chat_message_send_by_bot_001**
 - Prompt: 机器人发送群聊消息，text 为 ## 今日完成..., title 为 日报
 - Expected: `dws chat message send-by-bot --group <openconversation_id> --robot-code <robot-code> --text "## 今日完成..." --title 日报 --format json`
-- Flags: `--group` = `<openconversation_id>`, `--robot-code` = `<robot-code>`, `--text` = `## 今日完成...`, `--title` = `日报`
+- Flags: `--text` = `## 今日完成...`, `--group` = `<openconversation_id>`, `--robot-code` = `<robot-code>`, `--title` = `日报`
 
 **chat_chat_message_send_by_bot_002**
 - Prompt: 用机器人myBot给userId1和userId2发私聊消息，标题是通知，内容是请查收周报
 - Expected: `dws chat message send-by-bot --robot-code myBot --users userId1,userId2 --title "通知" --text "请查收周报" --format json`
-- Flags: `--robot-code` = `myBot`, `--text` = `请查收周报`, `--title` = `通知`, `--users` = `userId1,userId2`
+- Flags: `--text` = `请查收周报`, `--robot-code` = `myBot`, `--title` = `通知`, `--users` = `userId1,userId2`
 
 #### `dws chat message send-by-webhook`
 
 **chat_chat_message_send_by_webhook_001**
 - Prompt: 通过 Webhook token1 发一条告警消息：CPU 超 90%
-- Expected: `dws chat message send-by-webhook --text "CPU 超 90%" --title 告警 --token token1 --format json`
-- Flags: `--text` = `CPU 超 90%`, `--title` = `告警`, `--token` = `token1`
+- Expected: `dws chat message send-by-webhook --content "CPU 超 90%" --title 告警 --token token1 --format json`
+- Flags: `--content` = `CPU 超 90%`, `--title` = `告警`, `--token` = `token1`
 
 **chat_chat_message_send_by_webhook_002**
 - Prompt: 通过webhook发群消息，token是tokenABC，标题告警，内容CPU使用率超过90%，@所有人
-- Expected: `dws chat message send-by-webhook --token tokenABC --title "告警" --text "CPU使用率超过90%" --at-all --format json`
-- Flags: `--at-all`, `--text` = `CPU使用率超过90%`, `--title` = `告警`, `--token` = `tokenABC`
+- Expected: `dws chat message send-by-webhook --token tokenABC --title "告警" --content "CPU使用率超过90%" --at-all --format json`
+- Flags: `--at-all`, `--content` = `CPU使用率超过90%`, `--title` = `告警`, `--token` = `tokenABC`
 
 **chat_chat_message_send_by_webhook_003**
 - Prompt: 用 Webhook tokenXYZ 发消息，标题是「审批提醒」，内容是「请及时审批」，并@用户 user001 和 user002
-- Expected: `dws chat message send-by-webhook --token tokenXYZ --title "审批提醒" --text "@user001 @user002 请及时审批" --at-users user001,user002 --format json`
-- Flags: `--at-users` = `user001,user002`, `--text` = `@user001 @user002 请及时审批`, `--title` = `审批提醒`, `--token` = `tokenXYZ`
+- Expected: `dws chat message send-by-webhook --token tokenXYZ --title "审批提醒" --content "@user001 @user002 请及时审批" --at-users user001,user002 --format json`
+- Flags: `--at-users` = `user001,user002`, `--content` = `@user001 @user002 请及时审批`, `--title` = `审批提醒`, `--token` = `tokenXYZ`
 
 **chat_chat_message_send_by_webhook_004**
 - Prompt: 用 Webhook tokenDEF 发通知，标题是「会议通知」，内容是「请参加今日下午的会议」，并@手机号 13800138000 和 13900139000
-- Expected: `dws chat message send-by-webhook --token tokenDEF --title "会议通知" --text "@13800138000 @13900139000 请参加今日下午的会议" --at-mobiles 13800138000,13900139000 --format json`
-- Flags: `--at-mobiles` = `13800138000,13900139000`, `--text` = `@13800138000 @13900139000 请参加今日下午的会议`, `--title` = `会议通知`, `--token` = `tokenDEF`
+- Expected: `dws chat message send-by-webhook --token tokenDEF --title "会议通知" --content "@13800138000 @13900139000 请参加今日下午的会议" --at-mobiles 13800138000,13900139000 --format json`
+- Flags: `--at-mobiles` = `13800138000,13900139000`, `--content` = `@13800138000 @13900139000 请参加今日下午的会议`, `--title` = `会议通知`, `--token` = `tokenDEF`
 
 #### `dws chat search`
 
@@ -1190,6 +1253,10 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 - Prompt: 有和我相关的审批实例发起时实时通知我
 - Expected: `dws event consume user_oa_approval_instance_started --flatten -f ndjson`
 
+**event_event_consume_oa_instance_cc_001**
+- Prompt: 有审批实例抄送给我时实时通知我
+- Expected: `dws event consume user_oa_approval_instance_cc --flatten -f ndjson`
+
 **event_event_consume_oa_instance_terminated_001**
 - Prompt: 和我相关的审批实例终止时实时通知我
 - Expected: `dws event consume user_oa_approval_instance_terminated --flatten -f ndjson`
@@ -1236,8 +1303,8 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **event_negative_oa_crud_001**
 - Prompt: 查询 8 月第一周待我处理的审批单
-- Expected: `dws oa approval list-pending --start "2026-08-01T00:00:00+08:00" --end "2026-08-08T00:00:00+08:00" --format json`
-- Flags: `--end` = `2026-08-08T00:00:00+08:00`, `--start` = `2026-08-01T00:00:00+08:00`
+- Expected: `dws oa approval list-pending --create-time-from 2026-08-01 --create-time-to 2026-08-07 --format json`
+- Flags: `--create-time-from` = `2026-08-01`, `--create-time-to` = `2026-08-07`
 
 #### `dws dev app event list`
 

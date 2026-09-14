@@ -27,20 +27,30 @@ Flags:
 
 ## 自动翻页（--all + --page-limit）
 
-- 传入 `--all` 启用自动翻页，CLI 自动循环获取并合并所有记录后统一输出
-- `--page-limit` 控制最大翻页次数，默认 50 页（5000 条），设为 0 表示无限制
-- 页间间隔 200ms，中途网络错误会 graceful stop 并输出已获取的数据
-- **被截断时**（达到 page-limit 但仍有数据）：输出中包含 `"hasMore": true` 和 `"cursor": "..."` 字段，可通过 `--cursor` 从断点继续拉取
-- 适用于需要一次性获取全量数据的场景（如导出、统计、批量处理）
+- 用户要求“完整逐行明细”或需要“逐条处理”时，必须传 `--all`，由 CLI 循环获取并合并记录；不要让 Agent 手写分页循环。
+- 用户需要汇总、统计、分组、同 Base JOIN、派生指标或排名时，优先使用 `dws aitable psql` 在服务端计算；不要因为出现“汇总/统计”就自动全量拉取记录。
+- 用户需要导出完整数据时，优先使用 `dws aitable export data`。
+- 确需完整逐行结果时使用 `--page-limit 0`；默认值 50 只适用于允许最多读取约 5000 条的有界场景。
+- CLI 首次请求不传 cursor，后续原样使用上一页 `data.nextCursor`，并检测 cursor 循环；页间间隔 200ms。
+- 同一分页会话的 `base-id/table-id/filters/sort/query/field-ids/limit` 必须保持不变，禁止重发第一页、复用旧会话 cursor、修改排序或自行构造 cursor。
+- 只有自动分页输出 `complete=true`，或手动分页时 `data.nextCursor` 为空，才表示完整结束。普通扫描某页恰好返回 `limit` 条时，服务端可能返回 `nextCursor`；用它续页后若调用成功、`records=[]` 且 `nextCursor` 为空，这是正常的末页探测，应正常完成，不能报错、重试或判定漏查。
+- 成功页的 `records=[]` 本身既不是错误也不是结束条件：`nextCursor` 非空就继续，`nextCursor` 为空就正常结束。
+- 达到 page-limit、网络错误、缺少 `records` 的空响应、非法响应或 cursor 循环时，命令返回非零结构化错误；错误详情保留已取记录和续传 cursor。必须标记结果不完整，禁止把 partial 当 success 或据此给出全量结论。
 
 ```bash
-# 默认（最多 50 页 = 5000 条）
-dws aitable record query --base-id X --table-id Y --all
-# 无限制（拉完为止）
-dws aitable record query --base-id X --table-id Y --all --page-limit 0
-# 从上次断点继续
-dws aitable record query --base-id X --table-id Y --all --cursor "上次返回的cursor"
+# 完整拉取：自动翻页直到 nextCursor 为空
+dws aitable record query --base-id X --table-id Y --all --page-limit 0 --format json
+
+# 从结构化错误 details.incomplete_result.cursor 断点续传；其余查询条件必须与原请求完全一致
+dws aitable record query --base-id X --table-id Y --filters '<原 filters>' --sort '<原 sort>' --all --page-limit 0 --cursor '<原样 cursor>' --format json
 ```
+
+## 手动分页状态机
+
+1. 第一页不传 `--cursor`，读取 `data.records` 和 `data.nextCursor`。
+2. `nextCursor` 非空时，将其原样作为下一次 `--cursor`；不得使用当前请求 cursor，也不得自行拼接或复用更早页 cursor。
+3. 每一页保持全部查询条件不变并累计记录；如需防御性校验，以 `recordId` 检测重复，但重复 cursor 必须按异常停止，不能静默继续。
+4. `nextCursor` 为空才结束。成功返回的空页是合法结果：若 `records=[]` 且 `nextCursor` 为空，则正常完成；若 `records=[]` 但 `nextCursor` 非空，则继续查询，不能把空页当作异常或自行重试当前 cursor。
 
 ## 排序参数规范
 
@@ -55,12 +65,16 @@ dws aitable record query --base-id X --table-id Y --all --cursor "上次返回�
 
 详细语法见 [aitable-filter-sort.md](./aitable-filter-sort.md)。
 
+> **查询指定数据前先读表头**：先用 `dws aitable field get --base-id <BASE_ID> --table-id <TABLE_ID> --format json`（不加 `--field-ids`）完整读一遍表头，拿到所有字段的 `fieldId`/`name`/`type`/`config`；从表头中确定用户条件对应哪个字段，再按该字段类型解析值并传入 filters/sort，禁止跳过读表头凭猜测选字段。
+
 快速模板：
 ```json
 {"operator":"and","operands":[{"operator":"eq","operands":["<fieldId>","<value>"]}]}
 ```
 
-> **singleSelect/multipleSelect 过滤**：filters 中可传 option id 或 option name，但建议优先用 **option id**（通过 `field get` 获取），更可靠。
+> **singleSelect/multipleSelect 过滤**：先通过 `field get` 或 `field search-options` 将用户输入唯一解析到现有选项，filter 优先传稳定 option ID；当条件涉及 multipleSelect 或其他数组型字段时，第二个 operand 必须是 option ID/稳定 ID 数组（如 `"operands":["fldMulti",["optA"]]`），不能传裸字符串；`record create/update` 仍传 option name。不要把模糊名称或未确认的原始文本直接透传。
+>
+> **人员/部门/群组过滤**：禁止把姓名、部门名或群名直接放入 filters。必须先调用 `dws aisearch person --keyword "<姓名>" --dimension name`、`dws contact +resolve-dept --name "<部门名>"`、`dws chat +chat-search --query "<群名>" --page-all`，唯一取得 `userId`、`deptId`、`openConversationId`，再分别传 `[{"userId":"..."}]`、`[{"departmentId":"..."}]`、`[{"cid":"..."}]`。零命中或多命中必须停止并消歧。
 
 ## 减少响应体积
 
@@ -68,10 +82,13 @@ dws aitable record query --base-id X --table-id Y --all --cursor "上次返回�
 
 ## 常见错误
 
+- 不先读表头就组装条件 → 必须先 `field get` 完整读一遍表头，确定用户条件对应的字段后再传值，禁止凭字段名猜 fieldId 或猜类型
+- 直接把字段中文名、人员姓名、部门名、群名或关联记录标题放进 filters → 必须先解析为 fieldId 和对应稳定 ID；人员/部门/群组还必须传结构化 ID 数组，不能传裸字符串、标量 ID 或单个对象
 - `--filters` 根节点直接用 `"operator":"eq"` → API 静默忽略，返回全表
 - `--sort` 用 `"order":"desc"` → 必须用 `"direction":"desc"`
 - 不加 `--field-ids` 拉全字段 → 大表响应体积过大
-- 全量拉取后在 context 里手动统计 → 应优先用 `--filters` 服务端过滤
+- 只读取第一页或以 `records=[]` 判定结束 → 必须检查 `nextCursor`，完整任务优先 `--all --page-limit 0`
+- 全量拉取后在 context 里手动统计 → 聚合、分组、同 Base JOIN、派生指标和排名应优先用 `aitable psql`；原始记录筛选再使用 `--filters`
 
 ## record query-empty — 找空行
 

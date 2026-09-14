@@ -59,19 +59,21 @@ func TestCrossPlatformCoverageProjectMessageV1PublishesSharedIdentityAndContext(
 			"openDingTalkId": "D1",
 			"senderType":     "user",
 		},
-		"msgType":    "text",
-		"content":    "你好",
-		"createTime": "2026-08-03 10:00:00",
+		"msgType":           "text",
+		"messageAiSendFlag": "DWS",
+		"content":           "你好",
+		"createTime":        "2026-08-03 10:00:00",
 	}, true)
 	for key, want := range map[string]any{
-		"messageId":      "msg-1",
-		"conversationId": "cid-1",
-		"threadId":       "thread-1",
-		"sender":         "张三",
-		"senderId":       "D1",
-		"senderType":     "user",
-		"messageType":    "text",
-		"text":           "你好",
+		"messageId":         "msg-1",
+		"conversationId":    "cid-1",
+		"threadId":          "thread-1",
+		"sender":            "张三",
+		"senderId":          "D1",
+		"senderType":        "user",
+		"messageType":       "text",
+		"messageAiSendFlag": "DWS",
+		"text":              "你好",
 	} {
 		if row[key] != want {
 			t.Errorf("%s = %#v, want %#v; row=%#v", key, row[key], want, row)
@@ -208,6 +210,16 @@ func TestCrossPlatformCoverageMessageLedgerNilAndCursorOnlyBoundaries(t *testing
 	if second.MessageFields[0] == "mutated" || second.EnvelopeFields[0] == "mutated" {
 		t.Fatal("message result contract leaked mutable storage")
 	}
+	foundAISendFlag := false
+	for _, field := range second.MessageFields {
+		if field == "messageAiSendFlag" {
+			foundAISendFlag = true
+			break
+		}
+	}
+	if !foundAISendFlag {
+		t.Fatalf("message result contract omits messageAiSendFlag: %#v", second.MessageFields)
+	}
 	payload := NewMessageListPayload(nil)
 	if payload["count"] != 0 || payload["messages"] == nil {
 		t.Fatalf("nil message ledger = %#v", payload)
@@ -256,7 +268,7 @@ func TestCrossPlatformCoverageMessagePaginationCursorTypeEdges(t *testing.T) {
 	ApplyMessagePagination(payload, map[string]any{
 		"result": map[string]any{"hasMore": true, "nextCursor": int64(1)},
 	}, nil, "older")
-	if payload["failedCount"] != 1 || payload["complete"] != false {
+	if payload["failedCount"] != 0 || payload["complete"] != false || payload["nextPage"] == nil {
 		t.Fatalf("empty continuing page = %#v", payload)
 	}
 }
@@ -270,6 +282,7 @@ func TestCrossPlatformCoverageQuotedMessageIsBoundedAndSemantic(t *testing.T) {
 			"sender":             "Alice",
 			"content":            "原消息",
 			"createTime":         "2026-07-28 10:00:00",
+			"messageAiSendFlag":  "DWS",
 			"quotedMessage":      map[string]any{"openMessageId": "nested-must-not-expand"},
 		},
 	})
@@ -278,6 +291,9 @@ func TestCrossPlatformCoverageQuotedMessageIsBoundedAndSemantic(t *testing.T) {
 	}
 	if got["threadId"] != "thread-1" {
 		t.Fatalf("quoted thread identity = %#v", got)
+	}
+	if got["messageAiSendFlag"] != "DWS" {
+		t.Fatalf("quoted AI send flag = %#v", got)
 	}
 	if _, recursive := got["quotedMessage"]; recursive {
 		t.Fatalf("quoted message expanded recursively: %#v", got)
@@ -441,6 +457,7 @@ func TestCrossPlatformCoverageReactionsNormalizesEmotionReplyList(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageApplyPaginationReadsNestedEnvelope(t *testing.T) {
+	ApplyTruncation(nil)
 	payload := map[string]any{"count": 98}
 	ApplyPagination(payload, map[string]any{
 		"result": map[string]any{
@@ -615,5 +632,73 @@ func TestCrossPlatformCoverageForwarded(t *testing.T) {
 	nested, ok := fwd[1]["forwarded"].([]map[string]any)
 	if !ok || len(nested) != 1 || nested[0]["text"] != "nested" {
 		t.Errorf("nested forwarded = %#v", fwd[1]["forwarded"])
+	}
+}
+
+func TestCrossPlatformCoverageListMessageItemsUnwrapsCommonEnvelope(t *testing.T) {
+	if ListMessageItems(nil) != nil {
+		t.Fatal("nil list envelope returned messages")
+	}
+	items := ListMessageItems(map[string]any{
+		"result": map[string]any{
+			"messages": []any{
+				map[string]any{"openMessageId": "msg-1"},
+				"invalid",
+			},
+		},
+	})
+	if len(items) != 1 || items[0]["openMessageId"] != "msg-1" {
+		t.Fatalf("items = %#v", items)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *testing.T) {
+	if SearchMessageItems(nil) != nil {
+		t.Fatal("nil search envelope returned messages")
+	}
+	items := SearchMessageItems(map[string]any{
+		"result": map[string]any{
+			"conversationMessagesList": []any{
+				map[string]any{
+					"openConversationId": "cid-1",
+					"title":              "项目群",
+					"singleChat":         false,
+					"messages": []any{
+						map[string]any{"openMessageId": "msg-1"},
+					},
+				},
+			},
+		},
+	})
+	if len(items) != 1 || items[0]["openConversationId"] != "cid-1" ||
+		items[0]["conversationTitle"] != "项目群" || items[0]["singleChat"] != false {
+		t.Fatalf("items = %#v", items)
+	}
+	if SearchMessageItems(map[string]any{"result": "invalid"}) != nil {
+		t.Fatal("non-map result was accepted")
+	}
+}
+
+func TestCrossPlatformCoverageResourcesKeepContentAndIdentifierTypesSeparate(t *testing.T) {
+	message := map[string]any{
+		"openMessageId": "parent", "openConversationId": "cid-parent",
+		"attachments": []any{
+			map[string]any{"mediaId": "image-a", "resourceId": "image-a", "resourceType": "image"},
+			map[string]any{"fileId": "file-a", "resourceId": "file-a", "resourceType": "file"},
+		},
+		"quotedMessage": map[string]any{"openMessageId": "child", "resourceId": "image-a", "resourceType": "video"},
+	}
+	resources := Resources(message)
+	if len(resources) != 2 {
+		t.Fatalf("resources=%#v", resources)
+	}
+	for _, r := range resources {
+		wantIDType, wantContentType := "mediaId", "image"
+		if r["resourceId"] == "file-a" {
+			wantIDType, wantContentType = "fileId", "file"
+		}
+		if r["resourceIdType"] != wantIDType || r["contentType"] != wantContentType {
+			t.Fatalf("resource types crossed resource/message ownership: %#v", r)
+		}
 	}
 }

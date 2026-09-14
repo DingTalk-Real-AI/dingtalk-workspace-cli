@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "marker_roots": [
+    "skills/multi/dingtalk-doc"
+  ],
+  "protected_reference_roots": [
+    "skills/multi/dingtalk-doc/references/doc/format",
+    "skills/multi/dingtalk-doc/references/doc/style"
+  ],
+  "protected_reference_sha256": {
+    "skills/multi/dingtalk-doc/references/doc/format/doc-jsonml-cookbook.md": "74242b129373ce39d68530de136f896c64f97cb9d5761d089e8d67b8fa53b8ed",
+    "skills/multi/dingtalk-doc/references/doc/format/doc-jsonml-schema.json": "7255957d8cdc31bbf37c8b9f1107c5c909901c3dd0abf9a22249bd9762016ada",
+    "skills/multi/dingtalk-doc/references/doc/format/doc-jsonml-schema.md": "0970a3204dcd12a12110567fabb78eb77ff1f7363d14c7f1525e5508cc08b5ee",
+    "skills/multi/dingtalk-doc/references/doc/style/doc-create-workflow.md": "1aefb1398e8080c6fb8266f9593e0c9efb97661d526141c3bb884e3701237b30",
+    "skills/multi/dingtalk-doc/references/doc/style/doc-style-guideline.md": "58b6351783d7334226d5ec9d40e56fa28476f3d6a090d502fa03d3c971f06c43",
+    "skills/multi/dingtalk-doc/references/doc/style/doc-update-workflow.md": "9372d589d7919d6ebf9505bc190bb48e80073c8fb81d4f5d74a8a47d479c2f00"
+  },
+  "intents": [
+    {
+      "id": "doc.search.by_title",
+      "preferred_tool": "doc.shortcut_search",
+      "forbidden_default_tools": [
+        "doc.search_documents"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.content.read",
+      "preferred_tool": "doc.shortcut_fetch",
+      "forbidden_default_tools": [
+        "doc.get_document_content"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.content.update",
+      "preferred_tool": "doc.shortcut_update",
+      "forbidden_default_tools": [
+        "doc.update_document",
+        "doc.shortcut_doc_append"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.export.format",
+      "preferred_tool": "doc.shortcut_export",
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.import.local_file",
+      "preferred_tool": "doc.shortcut_import",
+      "forbidden_default_tools": [
+        "doc.upload"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.access.grant",
+      "preferred_tool": "doc.shortcut_access_grant",
+      "forbidden_default_tools": [
+        "doc.add_permission"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.share.link_only",
+      "preferred_tool": "doc.shortcut_share",
+      "forbidden_default_tools": [
+        "doc.shortcut_grant_and_share"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    },
+    {
+      "id": "doc.media.insert",
+      "preferred_tool": "doc.shortcut_media_insert",
+      "forbidden_default_tools": [
+        "doc.media_insert"
+      ],
+      "references": [
+        "skills/multi/dingtalk-doc/SKILL.md"
+      ]
+    }
+  ]
+}

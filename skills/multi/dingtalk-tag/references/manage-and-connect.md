@@ -16,7 +16,7 @@ create 只创建草稿并返回 `agentUuid`。发布还需要头像、部门、�
 
 ```bash
 dws dingtalk-tag manage detail --agent-uuid <agentUuid> --type draft --format json
-dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> <完整保留字段和修改字段> --dry-run --format json
+dws dingtalk-tag manage save-draft --agent-uuid <agentUuid> --dry-run --format json
 ```
 
 `save-draft` 不是 patch。必须回填所有仍需保留的字段，包括 `digitalTagEmployeeProfile.mainProgramType`、`skills` 和 `mcps`。不要把临时签名的 `iconUrl` 当长期 `icon` 回填。

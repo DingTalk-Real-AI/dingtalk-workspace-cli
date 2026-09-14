@@ -15,8 +15,9 @@ package cli
 
 import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 
-// MCPIdentityHeaders returns HTTP headers aligned with MCP tool calls
-// (identity + edition merge). Overlays may pass this to auxiliary clients.
+// MCPIdentityHeaders returns the shared identity and edition headers that
+// overlays may pass to auxiliary clients. MCP-request-only metadata such as
+// DWS_AGENT_VER and DWS_AGENT_EXT is intentionally excluded.
 func MCPIdentityHeaders() map[string]string {
 	return app.MCPIdentityHeaders()
 }

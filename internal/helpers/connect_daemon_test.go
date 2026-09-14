@@ -269,6 +269,10 @@ func TestDaemonStatusJSON(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
 	}
+	// --json is a published supervisor API: health fields remain at top level.
+	if strings.Contains(buf.String(), `"outcome"`) || strings.Contains(buf.String(), `"data"`) {
+		t.Fatalf("status compatibility JSON was enveloped: %s", buf.String())
+	}
 	if report.State != healthHealthy {
 		t.Errorf("state = %q, want %q", report.State, healthHealthy)
 	}
@@ -281,7 +285,7 @@ func TestDaemonStopNotRunning(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()
 	t.Cleanup(func() { connectDaemonDirOverride = "" })
 	var buf bytes.Buffer
-	if err := daemonStop(&buf, "ghost"); err != nil {
+	if _, err := daemonStopResult(&buf, "ghost"); err != nil {
 		t.Fatalf("daemonStop: %v", err)
 	}
 	if !strings.Contains(buf.String(), "not running") {
@@ -295,7 +299,7 @@ func TestDaemonStopStaleCleansPidFile(t *testing.T) {
 	dir, _ := connectDaemonDir("stalestop")
 	writeDaemonState(dir, daemonState{Pid: deadPid(t), StartUnix: time.Now().Unix(), DirKey: "stalestop"})
 	var buf bytes.Buffer
-	if err := daemonStop(&buf, "stalestop"); err != nil {
+	if _, err := daemonStopResult(&buf, "stalestop"); err != nil {
 		t.Fatalf("daemonStop: %v", err)
 	}
 	if _, err := os.Stat(daemonPidPath(dir)); !os.IsNotExist(err) {

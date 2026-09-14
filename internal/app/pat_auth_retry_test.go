@@ -30,6 +30,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 )
 
@@ -218,8 +219,16 @@ func TestPatScopeError_Error(t *testing.T) {
 // /cli/oauth/device/poll?flowId=<fid> with the given status sequence.
 // It also writes the server URL into a temp DWS_CONFIG_DIR/mcp_url so that
 // GetMCPBaseURL() returns the test server address.
+func stubPATPollAccessToken(t *testing.T) {
+	t.Helper()
+	testseam.Swap(t, &patResolveAccessToken, func(context.Context, string, string) (string, error) {
+		return "", authpkg.ErrTokenDataNotFound
+	})
+}
+
 func setupPollServer(t *testing.T, statuses []authpkg.DevicePollResponse) (*httptest.Server, string) {
 	t.Helper()
+	stubPATPollAccessToken(t)
 	var callCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +390,7 @@ func TestPollPatDeviceFlow_ServerErrorFallback(t *testing.T) {
 }
 
 func TestPollPatDeviceFlow_RedirectSkipped(t *testing.T) {
+	stubPATPollAccessToken(t)
 	// When server returns 302 (SSO redirect), poll should continue until real response.
 	var callCount int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -540,6 +550,7 @@ func (m *mockRunner) Run(ctx context.Context, inv executor.Invocation) (executor
 // It responds to device poll requests with the given status after the first poll.
 func setupHandlePATServer(t *testing.T, terminalStatus string, authCode string) (*httptest.Server, string) {
 	t.Helper()
+	stubPATPollAccessToken(t)
 	var pollCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -21,7 +21,7 @@ var messageIdentityCapabilities = []MessageIdentityCapability{
 	{
 		Identity:        "user",
 		Targets:         []string{"group", "direct-user", "direct-open-dingtalk-id"},
-		ContentTypes:    []string{"text", "markdown", "image-media-id", "file", "audio-as-file", "video-as-file"},
+		ContentTypes:    []string{"text", "markdown", "image-media-id", "file", "audio-as-file", "video-as-file", "profile", "share-chat", "a2ui"},
 		NaturalTargets:  []string{"chat-query", "user-query"},
 		MentionTargets:  []string{"open-dingtalk-id", "all"},
 		IdempotencyKeys: true,
@@ -30,7 +30,7 @@ var messageIdentityCapabilities = []MessageIdentityCapability{
 	{
 		Identity:        "bot",
 		Targets:         []string{"group", "groups", "direct-users", "direct-open-dingtalk-ids"},
-		ContentTypes:    []string{"text", "markdown"},
+		ContentTypes:    []string{"text", "markdown", "image-url", "file"},
 		NaturalTargets:  []string{},
 		MentionTargets:  []string{"user-id", "open-dingtalk-id", "all"},
 		IdempotencyKeys: false,
@@ -65,6 +65,9 @@ func messageIdentitySupportsContent(identity, contentType string) bool {
 		contentType += "-as-file"
 	} else if contentType == "image" {
 		contentType = "image-media-id"
+		if identity == "bot" {
+			contentType = "image-url"
+		}
 	}
 	for _, capability := range messageIdentityCapabilities {
 		if capability.Identity != identity {

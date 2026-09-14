@@ -19,7 +19,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -385,7 +384,7 @@ func newDeapCapabilityCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapAgentSkillCommand(), newDeapAgentMCPCommand())
 	return cmd
 }
@@ -400,7 +399,7 @@ func newDeapAgentSkillCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapAgentSkillCreateCommand(), newDeapAgentSkillListCommand(), newDeapAgentSkillQueryCommand())
 	return cmd
 }
@@ -415,7 +414,7 @@ func newDeapAgentMCPCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapAgentMCPCreateCommand(), newDeapAgentMCPListCommand(), newDeapAgentMCPQueryCommand())
 	return cmd
 }

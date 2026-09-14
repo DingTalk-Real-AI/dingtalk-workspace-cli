@@ -14,6 +14,10 @@
 package app
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -54,8 +58,8 @@ func TestApplyPersonalConsumeFiltersDefault(t *testing.T) {
 }
 
 func TestPersonalEventProjectorSelectsExplicitModes(t *testing.T) {
-	if personalEventProjector(false, false) != nil {
-		t.Fatal("default personal consume should preserve transport envelope")
+	if personalEventProjector(false, false) == nil {
+		t.Fatal("default personal consume safe transport projector = nil")
 	}
 	if personalEventProjector(false, true) == nil {
 		t.Fatal("flatten personal consume projector = nil")
@@ -78,6 +82,60 @@ func TestPersonalEventProjectorSelectsExplicitModes(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePersonalVoIPDefaultOutputRedactsRoomCode(t *testing.T) {
+	ev := transport.Event{
+		EventID:       "transport-event-1",
+		EventBornTime: 1787903566711,
+		EventType:     personal.EventVoIPCallReceiveInvite,
+		SubscribeID:   "sub-1",
+		Data:          `{"eventId":"business-event-1","eventKey":"user_voip_call_receive_invite","occurredAtMs":1787903566579,"subId":"sub-1","payload":{"bizid":"VOIP-1","body":{"callId":"call-1","roomCode":"7286913750"}}}`,
+	}
+	formatter, err := consume.NewFormatter(consume.FormatNDJSON,
+		consume.WithProjector(personalEventProjector(false, false)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := formatter.Render(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(rendered, []byte("7286913750")) || bytes.Contains(rendered, []byte("roomCode")) {
+		t.Fatalf("default VoIP output leaked room code: %s", rendered)
+	}
+	var envelope transport.Event
+	if err := json.Unmarshal(bytes.TrimSpace(rendered), &envelope); err != nil {
+		t.Fatalf("default VoIP output no longer preserves transport envelope: %v\n%s", err, rendered)
+	}
+	if envelope.EventID != ev.EventID || envelope.EventType != ev.EventType || envelope.SubscribeID != ev.SubscribeID {
+		t.Fatalf("default VoIP transport identity changed: %#v", envelope)
+	}
+	if !strings.Contains(envelope.Data, `"callId":"call-1"`) {
+		t.Fatalf("default VoIP output dropped non-sensitive payload: %s", envelope.Data)
+	}
+}
+
+func TestCrossPlatformCoveragePersonalVoIPDebugRawOutputRequiresExplicitOptIn(t *testing.T) {
+	ev := transport.Event{
+		EventID:   "transport-event-1",
+		EventType: personal.EventVoIPCallReceiveInvite,
+		Data:      `{"payload":{"body":{"roomCode":"7286913750"}}}`,
+	}
+	formatter, err := consume.NewFormatter(consume.FormatNDJSON,
+		consume.WithProjector(personalEventProjector(true, false)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := formatter.Render(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(rendered, []byte("7286913750")) || !bytes.Contains(rendered, []byte("roomCode")) {
+		t.Fatalf("explicit debug raw output did not preserve original payload: %s", rendered)
+	}
+}
+
 func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -93,6 +151,11 @@ func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T
 			name: "raw debug",
 			args: []string{personal.EventMention, "--flatten", "--debug-raw-events"},
 			want: "--flatten and --debug-raw-events are mutually exclusive",
+		},
+		{
+			name: "VoIP raw format without explicit debug opt-in",
+			args: []string{personal.EventVoIPCallReceiveInvite, "--format", "raw"},
+			want: "--format raw for VoIP events requires explicit --debug-raw-events",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,11 +175,86 @@ func TestEventConsumeFlattenRejectsRawModesBeforeIdentityResolution(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoveragePersonalVoIPReusedSubscriptionRawRequiresDebugOptIn(t *testing.T) {
+	oldIdentity := personalResolveEventIdentity
+	oldGet := personalGetSubscription
+	oldUpsert := personalUpsertRunState
+	oldConsume := personalConsumeRun
+	t.Cleanup(func() {
+		personalResolveEventIdentity = oldIdentity
+		personalGetSubscription = oldGet
+		personalUpsertRunState = oldUpsert
+		personalConsumeRun = oldConsume
+	})
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+
+	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		return personal.Identity{
+			AccessToken:  "token",
+			LocalSubject: "subject",
+			ClientID:     "client",
+			SourceID:     "open",
+		}, nil
+	}
+	personalGetSubscription = func(_ *personal.Client, _ context.Context, subscribeID string) (*personal.Subscription, error) {
+		return &personal.Subscription{
+			SubscribeID: subscribeID,
+			EventKey:    personal.EventVoIPCallReceiveInvite,
+			RuleType:    "all",
+		}, nil
+	}
+	personalUpsertRunState = func(string, personal.RunState) error { return nil }
+	var consumeDryRuns []bool
+	personalConsumeRun = func(_ context.Context, cfg consume.Config) error {
+		consumeDryRuns = append(consumeDryRuns, cfg.DryRun)
+		if cfg.EventKey != personal.EventVoIPCallReceiveInvite || cfg.Format != consume.FormatRaw {
+			t.Fatalf("resolved reused VoIP consume config = %#v", cfg)
+		}
+		return nil
+	}
+
+	for _, dryRun := range []bool{true, false} {
+		mode := "live"
+		if dryRun {
+			mode = "dry-run"
+		}
+		t.Run(mode, func(t *testing.T) {
+			baseArgs := []string{"--subscribe-id", "voip-sub", "--format", "raw"}
+			if dryRun {
+				baseArgs = append(baseArgs, "--dry-run")
+			}
+
+			cmd := newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			cmd.SetArgs(baseArgs)
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "--format raw for VoIP events requires explicit --debug-raw-events") {
+				t.Fatalf("reused VoIP raw without debug error = %v", err)
+			}
+
+			cmd = newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			cmd.SetArgs(append(append([]string(nil), baseArgs...), "--debug-raw-events"))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("reused VoIP raw with explicit debug error = %v", err)
+			}
+		})
+	}
+	if !reflect.DeepEqual(consumeDryRuns, []bool{true, false}) {
+		t.Fatalf("reused VoIP consume dry-run sequence = %#v, want [true false]", consumeDryRuns)
+	}
+}
+
 func TestValidatePersonalEventOutputModeAllowsFlattenStructuredFormats(t *testing.T) {
 	for _, format := range []consume.Format{consume.FormatNDJSON, consume.FormatJSON, consume.FormatPretty, consume.FormatCompact} {
-		if err := validatePersonalEventOutputMode(true, false, format); err != nil {
-			t.Fatalf("validatePersonalEventOutputMode(true, false, %q) error = %v", format, err)
+		if err := validatePersonalEventOutputMode([]string{personal.EventVoIPCallReceiveInvite}, true, false, format); err != nil {
+			t.Fatalf("validatePersonalEventOutputMode(VoIP, true, false, %q) error = %v", format, err)
 		}
+	}
+	if err := validatePersonalEventOutputMode([]string{personal.EventVoIPCallReceiveInvite}, false, true, consume.FormatRaw); err != nil {
+		t.Fatalf("explicit VoIP raw debug mode error = %v", err)
 	}
 }
 

@@ -222,7 +222,7 @@ func toGeneric(payload any) any {
 		return payload
 	}
 	var generic any
-	if err := unmarshalJSON(data, &generic); err != nil {
+	if err := unmarshalJSONUseNumber(data, &generic); err != nil {
 		return payload
 	}
 	return generic

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/gorilla/websocket"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/payload"
 )
@@ -313,6 +314,46 @@ func TestCrossPlatformCoveragePersonalFetchTicket401RefreshFailureStaysFatal(t *
 	}
 	if isRetryablePersonalError(err) {
 		t.Fatalf("failed refresh should stay fatal, got retryable %v", err)
+	}
+}
+
+func TestCrossPlatformCoveragePersonalRuntimeTokenAtoBSecond401IsTyped(t *testing.T) {
+	broker := runtimecred.New(runtimecred.Config{})
+	if _, err := broker.Update(0, "runtime-a"); err != nil {
+		t.Fatal(err)
+	}
+	var attemptTokens []string
+	src, err := NewPersonal(PersonalConfig{
+		AccessTokenProvider: broker.Resolve,
+		ForceRefreshToken:   broker.RefreshRejected,
+		ClassifyRetryReject: broker.ClassifyRejectedAfterRetry,
+		ClientID:            "client",
+		SourceID:            "source",
+		TicketURL:           "https://ticket.test",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			token := req.Header.Get("x-user-access-token")
+			attemptTokens = append(attemptTokens, token)
+			if token == "runtime-a" {
+				if _, err := broker.Update(1, "runtime-b"); err != nil {
+					t.Fatalf("rotate runtime credential: %v", err)
+				}
+			}
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Body:       io.NopCloser(strings.NewReader("must-not-surface")),
+				Header:     make(http.Header),
+			}, nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = src.fetchTicket(context.Background())
+	if !errors.Is(err, runtimecred.ErrRuntimeTokenRejected) {
+		t.Fatalf("fetchTicket() error = %v", err)
+	}
+	if len(attemptTokens) != 2 || attemptTokens[0] != "runtime-a" || attemptTokens[1] != "runtime-b" {
+		t.Fatalf("attempt tokens = %v", attemptTokens)
 	}
 }
 

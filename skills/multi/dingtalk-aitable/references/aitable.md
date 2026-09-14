@@ -1,83 +1,76 @@
-# AI表格 (aitable) 命令参考
+# AITable 低频原子能力索引
 
-> **渐进式文档**：本文件为路由层（索引 + 意图判断），各命令的详细参数、示例和踩坑说明在 [aitable/](./aitable/) 目录下按需加载。
+> 返回入口：[DingTalk AITable Skill](../SKILL.md)
 
-## 文档地址 (URI)
+本文件只用于根 Skill 和精确操作 Reference 都未覆盖的低频底层能力。Base/Table 创建、应用模式、记录 CRUD、筛选排序、视图、导入导出和 Dashboard 等已覆盖能力必须返回根 Skill；本文件不直接导航到其他 AITable Reference。
 
-| 资源 | URI 格式 |
-|------|----------|
-| Base 文档 | `https://alidocs.dingtalk.com/i/nodes/{baseId}` |
-| 指定数据表 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}` |
-| 指定数据表+视图 | `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}%26viewId%3D{viewId}` |
-| 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
+## 使用边界
 
-> **操作后请返回文档 URI**：返回链接时必须带上当前操作的数据表 tableId，让用户点击后直接看到目标数据表，而不是落在空白的默认表。
-> - 已知 tableId + viewId 时（view create 返回、view get 中提取）：拼接 `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}%26viewId%3D{viewId}`
-> - 已知 tableId 时（table create 返回、base get 中提取、record 操作所用的 tableId）：拼接 `https://alidocs.dingtalk.com/i/nodes/{baseId}?iframeQuery=sheetId%3D{tableId}`
-> - 仅有 baseId、无明确 tableId 时（如 base list/search）：拼接 `https://alidocs.dingtalk.com/i/nodes/{baseId}`
->
-> 补充：如果 URL 不是来自 `aitable` 命令返回，而是用户直接贴的原始 `alidocs` URL，先按 [链接规范](url-patterns.md#alidocs-url-类型探测流程) probe，确认是 `able` 后再按 AI 表格处理。
+1. 只有任务确实需要 Shortcut 未发布的底层字段、原始响应或运维控制时才读取本文件；
+2. 若任务已由根 Skill 或某个精确 Reference 覆盖，立即返回根 Skill 重新选路，不在本文件继续导航到另一个 Reference；
+3. 已知命令且参数完整时直接执行；只有 leaf 参数或安全语义不确定时才读精确 Schema，只有 Cobra flag 不确定时才读该 leaf Help；
+4. 名称或 URL 目标仍必须解析为当前 profile 下的唯一稳定 ID，禁止选择第一个候选；
+5. 原子写 leaf 的 confirmation 与对应 Golden Shortcut 不一致时停止，以 Runtime gate 和精确 leaf Schema 为准；
+6. 完成后保留稳定 ID、验证证据、partial failure、checkpoint 和真实错误。
 
-## 命令索引表
+## 返回规则
 
-### base (Base 管理)
+Base、Table、应用模式 App/Page/Widget、普通 Field、普通 Record、View、Dashboard、筛选排序、导入导出等已覆盖能力全部返回根 Skill；本索引不重复维护高频路由，也不作为 Reference 之间的中转站。
 
-| 命令 | 用途 | 必填参数 | 路由提醒 |
+## 低频底层命令族
+
+下表只是最后回退的导航，不是可预加载的命令目录。命中后若参数或安全语义仍不确定，才读取精确 leaf Schema。
+
+| 原子命令或命令族 | 仅用于 |
+|---|---|
+| `base get-primary-doc-id` | 统一 Base/Record 路由未投影所需底层主文档 ID 时 |
+| `record get` | 必须获取单条记录原始响应，且 `+record-query --record-ids` 不能交付所需字段时 |
+| `field search-options` | 只需在已知选项字段中搜索选项，不需要完整字段配置时 |
+
+## 低频批处理脚本
+
+只有根 Skill 已定位到对应低频任务、且原生命令需要重复编排时才使用；脚本参数以 `--help` 和脚本内校验为准，不因脚本存在而跳过目标解析、确认或结果验证。
+
+| 脚本 | 仅用于 |
+|---|---|
+| `python scripts/aitable_export_via_task.py <baseId> --scope all` | 已由根 Skill 选中导出任务，需要轮询 `taskId` 并下载结果时；表或视图范围使用稳定 `tableId` / `viewId` |
+| `python scripts/bulk_add_fields.py <baseId> <tableId> fields.json` | 已完成字段类型与配置校验后批量创建大量字段；少量普通字段走根 Skill 次级直达 |
+
+## 稳定 ID 传递
+
+| 来源 | 只可用于 |
+|---|---|
+| `+url-resolve` / `+resolve-base` / `+base-search` 唯一结果 | 当前 profile 下的 `baseId` |
+| `+resolve-table` / `+list-tables` | 当前 Base 下的 `tableId` |
+| `field list` / `+field-get` | 当前 Table 下的 `fieldId` |
+| `record create` / `+record-query` | 当前 Table 下的 `recordId` |
+| `view create` / `+view-get` | 当前 Table 下的 `viewId` |
+| Dashboard 或 Chart 创建结果 | 当前 Base 下的 `dashboardId` / `chartId` |
+| `app get` / `app page list` / `app widget list` | 当前 Base 下的 `appId` / `pageId` / `widgetId`；应用页面 `pageId` 同时是对应 Dashboard ID |
+
+`baseId` / `tableId` / `fieldId` / `recordId` / `viewId` / `appId` / `pageId` / `widgetId` 是不同类型，不得轮流代入试错；唯一例外是应用页面 `pageId` 与其对应 Dashboard ID 同值。Base 复制目标按根 Skill 的 Golden Route 解析。
+
+> **写 record 时**：`record create / update` 对 singleSelect/multipleSelect 传 option **name**。**做 filter 时**：先用本命令或 `field get` 将用户输入唯一解析到现有选项，优先传稳定 option **id**；不要直接透传模糊名称。
+
+### psql (PostgreSQL 只读查询) → 详见 [aitable-psql.md](./aitable/aitable-psql.md)
+
+| 命令模式 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
-| `base list` | 列出最近访问的 Base | — | 仅返回最近访问过的，优先用 `base search` |
-| `base search` | 按名称搜索 Base | `--query` | 关键词 ≥2 字符 |
-| `base get` | 获取 Base 信息（含 tables 列表） | `--base-id` | 用户给 URL 时提取末尾 ID |
-| `base create` | 创建 Base | `--name` | 创建后直接用返回的 baseId；**默认新建的 base 自带一个空白「数据表」（含 3 行空记录）和一个空白仪表盘**，如需干净的空 base，传 `--template-id 1743` |
-| `base update` | 更新 Base 名称 | `--base-id` `--name` | — |
-| `base delete` | 删除 Base | `--base-id` | 不可逆 |
+| `psql -l` | 列出可查询的 PostgreSQL 逻辑表 | `-d <baseId>` | 数据查询前的表发现；输出为 psql 文本，不加 `--format json` |
+| `psql -t` | 查看逻辑列名和 PostgreSQL 类型 | `-d <baseId>` `-t <tableId>` | SQL 前核对列；全部属性列加 `--all-properties` |
+| `psql -c` | 执行一条只读 PostgreSQL SELECT | `-d <baseId>` `-c <SQL>` | SQL 的 `FROM` / `JOIN` 自动确定主表；支持单表及同 Base 多表 JOIN；只读；输出为 psql 文本 |
 
-### table (数据表管理)
+## 故障处理
 
-| 命令 | 用途 | 必填参数 | 路由提醒 |
-|------|------|----------|----------|
-| `table get` | 获取数据表/视图目录 | `--base-id` | 不传 `--table-ids` 枚举全部表，但不返回字段；字段目录使用 `field get` |
-| `table create` | 创建数据表 | `--base-id` `--name` `--fields` | fields 为 JSON 数组，至少 1 个 |
-| `table update` | 修改表名 / 备注 / 行命名规则 | `--base-id` `--table-id` + 三选一(`--name` / `--description` / `--record-name-key`) | `--record-name-key` 是固定枚举（如 task/project/event/customer/ji_lu 等），非字段 ID |
-| `table delete` | 删除表 | `--base-id` `--table-id` | 不可逆 |
-
-### field (字段管理) → 详见 [aitable-field.md](./aitable/aitable-field.md)、[field-properties](./aitable/aitable-field-properties.md)
-
-| 命令 | 用途 | 必填参数 | 路由提醒 |
-|------|------|----------|----------|
-| `field get` | 获取字段完整配置 | `--base-id` `--table-id` | 按需展开少量字段 |
-| `field create` | 创建字段 | `--base-id` `--table-id` + (`--name --type` 或 `--fields`) | 单字段/批量两种模式严格互斥；单字段配置传 `--config`，批量配置写入 `--fields` 每个元素的 `config` |
-| `field update` | 更新字段名/配置 | `--base-id` `--table-id` `--field-id` | 不可变更字段类型 |
-| `field delete` | 删除字段 | `--base-id` `--table-id` `--field-id` | 不可逆 |
-
-#### 搜索字段选项
-```
-Usage:
-  dws aitable field search-options [flags]
-Example:
-  dws aitable field search-options --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID>
-  dws aitable field search-options --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> --keyword 已完成
-  dws aitable field search-options --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> --limit 100
-Flags:
-      --base-id string    Base ID (必填)
-      --field-id string   目标字段 ID，必须是 singleSelect / multipleSelect 类型 (必填)
-      --keyword string    模糊搜索关键词，大小写不敏感、contains 匹配 option name；不传返回全部
-      --limit int         返回的最大 option 数量，默认 3000（全量），最大 3000
-      --table-id string   Table ID (必填)
-```
-
-仅适用于 **singleSelect / multipleSelect** 字段。其他类型（text/number/date/...）调用会返回错误。
-
-适用场景：
-- options 较多，只想要含某关键词的子集（避免 `field get` 拉取整个字段配置带回所有 options）。
-- 写入 record 前预览选项 id ↔ name 的映射，确认要使用的选项确实存在。
-
-> **写 record 时**：`record create / update` 对 singleSelect/multipleSelect 可直接传 option **name**，不需要用本命令。本命令主要用于 **filter** 写法（filters 优先用 option **id**）或选项较多需要精确定位时。
-
-### record (记录管理)
-
+- `unknown command` / `unknown flag`：读取精确 leaf Help，最多做一次有证据的修正；
+- confirmation 或参数约束不清：读取精确 leaf Schema，以 Runtime gate 为准；
+- `partial_success`：保留已完成项和 checkpoint，只执行结果给出的继续或恢复命令；
+- 写入结果为 `unknown`：先按稳定 ID 或业务唯一键回读，未确认前不重试非幂等写；
+- `retryable=false` 或 ID 类型错误：停止，不换同义原子命令或其他 ID 类型试错；
+- 部分成功：保留 completed/failed/unknown 明细，不表述为完整成功。
 | 命令 | 用途 | 必读 reference | 路由提醒 |
 |------|------|----------------|----------|
-| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference |
+| `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId 与类型；完整结果必须用 `--all --page-limit 0` 自动翻页；filters 中的实体展示名须先解析为稳定 ID/结构化值 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
 | `record update` | 更新记录（每条独立 cells） | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
@@ -89,6 +82,16 @@ Flags:
 | `record upsert` | 批量创建或更新（按 recordId 是否存在自动拆分） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | --records 同 record update 格式；带 recordId 走 update，不带走 create；单次最多 100 |
 | `record primary-doc-get` | 查询记录的主键文档 nodeId | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | 返回的 nodeId 可直接用于 `dws doc read/update --node` |
 | `record primary-doc-create` | 为记录创建主键文档（幂等） | [aitable-primary-doc.md](./aitable/aitable-primary-doc.md) | fieldId 必须是 primaryDoc 类型；已存在则返回已有 nodeId |
+
+### comment (记录评论) → 详见 [aitable-comment.md](./aitable/aitable-comment.md)
+
+| 命令 | 用途 | 必填参数 | 路由提醒 |
+|------|------|----------|----------|
+| `comment list` | 分页查询记录评论与回复 | `--base-id --table-id --record-id` | 空 comments 不代表结束；按 hasMore/nextToken 续页 |
+| `comment create` | 创建评论话题 | 定位参数 + `--content` 或 `--rich-content` | 非幂等；未知状态先 list 对账 |
+| `comment reply` | 回复已有评论 | 定位参数 + `--topic-id --comment-key` + 正文 | 标识必须来自同一记录真实返回；非幂等 |
+| `comment update` | 完整替换本人评论正文 | 定位参数 + `--topic-id --comment-key` + 正文 | 仅纯文本会移除旧 @和图片；无 CAS |
+| `comment delete` | 删除本人评论 | 定位参数 + `--topic-id --comment-key` | 不可恢复；确认后再追加 `--yes`，关联回复处理由服务端决定 |
 
 ### view (视图管理)
 
@@ -140,9 +143,7 @@ Flags:
 | `workflow list` | 列出 Base 下所有工作流 | `--base-id` | 支持 `--limit [1,100]` / `--offset >=0`；list 出参字段叫 `flowId` |
 | `workflow get` | 获取单个工作流详情（含 flowSchema） | `--base-id` `--workflow-id` | `--workflow-id` 接受 list 里的 `flowId`（同值） |
 | `workflow enable` | 启用工作流 | `--base-id` `--workflow-id` | 返回 `{enabled: true}` 是动作确认；要确认真启用看 list 的 `status` |
-| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` `--yes` | 影响业务自动化，建议二次确认；status 变 STOP |
-| `workflow run` | 立即执行工作流（需确认） | `--base-id` `--workflow-id`；记录触发另需 `--table-id` `--record-ids` | 返回 `executionId`；不确定时先用 history 核对，避免重复执行 |
-| `workflow history` | 查询工作流执行历史 | `--base-id` `--workflow-id` | 支持 status、Unix 毫秒时间范围和 page/size；`instanceId` 对应 run 的 `executionId` |
+| `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` | 影响业务自动化，必须先取得用户明确确认；status 变 STOP |
 
 > 创建/更新的 `--dsl` 使用钉钉 AI 表格 `workflow-dsl/v1`；完整格式和最小 Demo 见 [aitable-workflow.md](./aitable/aitable-workflow.md)。删除工作流暂未开放。
 
@@ -386,6 +387,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"复制视图/duplicate view" → `view duplicate --view-id ... [--new-name ...]`，详见 [aitable-view-extras.md](./aitable/aitable-view-extras.md)
 
+用户说"查看可查询表/SQL 表结构/SQL 字段类型/查询前 N 条/按列查询/SQL/PostgreSQL/SELECT/JOIN/两表关联" → 读 [aitable-psql.md](./aitable/aitable-psql.md)。数据查询前的表清单和逻辑列发现走 `psql`；普通按记录 ID、关键词或 filters 查行仍走 `record query`；两表关联不得误路由为 LOOKUP/FILTER_UP 公式配置。
+
 用户说"筛选/过滤/filter" → 读 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md)
 
 用户说"统计/分析/聚合/TOP N/全量" → 读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)
@@ -402,7 +405,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 - 看 Base 里有哪些流程 / 哪些在跑 → `workflow list`（看 `recordCount` / `runningCount`）
 - 看某个流程具体配置（触发条件、动作步骤） → `workflow get`
 - 启用流程 → `workflow enable`
-- 临时停掉流程（调试 / 数据迁移）→ `workflow disable --yes`
+- 临时停掉流程（调试 / 数据迁移）→ `workflow disable`（必须先取得用户明确确认）
 - 删除流程：当前不支持，引导用户到 AI 表格 Web 端 → 数据表 → 自动化 面板手动完成
 
 用户说"仪表盘/图表/chart" → 读 [aitable-dashboard-chart.md](./aitable/aitable-dashboard-chart.md)
@@ -472,7 +475,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 ## 注意事项
 
-- 所有操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称
+- 所有管理和记录写入操作使用 ID（baseId/tableId/fieldId/recordId），不使用名称；`psql` 的用户 SQL 使用 `psql -l/-t` 返回的真实逻辑表名和列名
+- `aitable psql` 输出 PostgreSQL 表格文本，不支持也不添加 `--format json`；其他结构化读取仍按全局规则使用 `--format json`
 - records 的 cells key 是 fieldId，不是字段名称
 - cells 写入/读取格式见 [aitable-cell-value.md](./aitable/aitable-cell-value.md)
 - 最佳实践见 [aitable-best-practices.md](./aitable/aitable-best-practices.md)

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "products": [
+    {
+      "service": "devdoc",
+      "source_total": 1,
+      "public": 0,
+      "unavailable": 1
+    },
+    {
+      "service": "hrbrain",
+      "source_total": 11,
+      "public": 0,
+      "unavailable": 11
+    },
+    {
+      "service": "pat",
+      "source_total": 2,
+      "public": 1,
+      "unavailable": 1
+    }
+  ],
+  "public_shortcuts": [
+    {
+      "service": "pat",
+      "command": "+browser-policy",
+      "owning_atomic": "pat browser-policy",
+      "proof_class": "write",
+      "proof_case": "pat_browser_policy_default",
+      "stable_target": "default-policy",
+      "pass_labels": [
+        "PAT-BROWSER-POLICY-PRECONFIRM-ZERO-CALL-PASS",
+        "PAT-BROWSER-POLICY-DRY-RUN-ZERO-WRITE-PASS",
+        "PAT-BROWSER-POLICY-EXACT-TERMINAL-RECEIPT-PASS",
+        "PAT-BROWSER-POLICY-RAW-TERMINAL-RECEIPT-PASS",
+        "PAT-BROWSER-POLICY-EXACT-READBACK-PASS",
+        "PAT-BROWSER-POLICY-RAW-READBACK-PASS",
+        "PAT-BROWSER-POLICY-CLEANUP-ABSENCE-PASS"
+      ]
+    }
+  ]
+}

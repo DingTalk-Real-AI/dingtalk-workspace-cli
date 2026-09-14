@@ -11,12 +11,12 @@
 
 <!-- DWS_MESSAGE_RESULT_CONTRACT_START -->
 - `version`: `im.message-list.v1`
-- `message_fields`: `messageId`, `conversationId`, `threadId`, `sender`, `senderId`, `senderType`, `messageType`, `text`, `createTime`, `updateTime`, `reactions`, `quotedMessage`, `forwarded`, `resourceRefs`
-- `envelope_fields`: `contractVersion`, `messages`, `count`, `resolvedFilters`, `queryRange`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `scope`, `resourceDownloads`
+- `message_fields`: `messageId`, `conversationId`, `threadId`, `sender`, `senderId`, `senderType`, `messageType`, `messageAiSendFlag`, `text`, `createTime`, `updateTime`, `reactions`, `quotedMessage`, `forwarded`, `resourceRefs`
+- `envelope_fields`: `contractVersion`, `messages`, `count`, `resolvedFilters`, `queryRange`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncated`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `scope`, `resourceDownloads`
 <!-- DWS_MESSAGE_RESULT_CONTRACT_END -->
 
 当 `complete=false` 时不能称为全量成功。`nextPage` 只能来自真实 lower boundary；
-`failedCount/failures`、`partial` 和两个 truncated 字段必须原样保留。
+`failedCount/failures`、`partial`、总 `truncated` 和两个原因字段必须原样保留。
 当 Runtime 解析并应用自然发送者条件时，`resolvedFilters.senders[]` 保留原查询及选中的
 `userId/openDingTalkId`。消息展示名可以与通讯录姓名不同；只能用稳定 `senderId` 与解析结果关联，
 不得重新做姓名字符串比较。
@@ -29,14 +29,16 @@
 <!-- DWS_IDENTITY_CAPABILITY_CONTRACT_START -->
 | identity | targets | content types | natural targets | mention targets | idempotency keys | batch ledger |
 |---|---|---|---|---|---:|---:|
-| `user` | `group`<br>`direct-user`<br>`direct-open-dingtalk-id` | `text`<br>`markdown`<br>`image-media-id`<br>`file`<br>`audio-as-file`<br>`video-as-file` | `chat-query`<br>`user-query` | `open-dingtalk-id`<br>`all` | `true` | `false` |
-| `bot` | `group`<br>`groups`<br>`direct-users`<br>`direct-open-dingtalk-ids` | `text`<br>`markdown` | — | `user-id`<br>`open-dingtalk-id`<br>`all` | `false` | `true` |
+| `user` | `group`<br>`direct-user`<br>`direct-open-dingtalk-id` | `text`<br>`markdown`<br>`image-media-id`<br>`file`<br>`audio-as-file`<br>`video-as-file`<br>`profile`<br>`share-chat`<br>`a2ui` | `chat-query`<br>`user-query` | `open-dingtalk-id`<br>`all` | `true` | `false` |
+| `bot` | `group`<br>`groups`<br>`direct-users`<br>`direct-open-dingtalk-ids` | `text`<br>`markdown`<br>`image-url`<br>`file` | — | `user-id`<br>`open-dingtalk-id`<br>`all` | `false` | `true` |
 | `webhook` | `token-owned-group` | `text`<br>`markdown` | — | `user-id`<br>`mobile`<br>`all` | `false` | `false` |
 <!-- DWS_IDENTITY_CAPABILITY_CONTRACT_END -->
 
 Bot 多群用 `--groups` 或 `--groups-file`，Runtime 去重后输出
 `im.batch-write.v1` 逐目标 ledger。Bot/Webhook 不支持的内容类型会在写前失败，不能降级为
 另一身份或偷偷改成纯文本。
+
+Bot 图片使用 `--image-url`；本地文件只接受单个群或单个 `--users` 接收者，媒体不接受 @。旧文本路线的 openDingTalkIds 支持不扩展到尚未声明该字段的媒体路线。个人名片使用 `--contact-id`，群邀请使用 `--share-chat-id`；A2UI 使用 `--a2ui-messages`，requestId 是链路追踪，不能使用 uuid/idempotency-key 冒充幂等。
 
 ## 流式卡片
 
@@ -56,8 +58,8 @@ Bot 多群用 `--groups` 或 `--groups-file`，Runtime 去重后输出
 <!-- DWS_CAPABILITY_BOUNDARY_CONTRACT_START -->
 | capability | supported | current route / boundary |
 |---|---:|---|
-| `thread-write` | `false` | quote reply with +messages-reply; thread reading with +thread-replies |
-| `bot-rich-media` | `false` | bot text/markdown, or current-user file/image send |
+| `thread-write` | `true` | personal +messages-reply --reply-in-thread; original chat thread reply remains available; Bot Thread write unsupported |
+| `bot-rich-media` | `true` | bot image-url and single-target local file via +messages-send; native audio/video and arbitrary interactive cards unsupported |
 | `card-action-callback` | `false` | streaming text card create/update only |
 | `resource-resume` | `false` | atomic whole-file download with explicit retry |
 | `group-member-full-pagination` | `true` | +chat-members-list or +group-members |
@@ -66,3 +68,12 @@ Bot 多群用 `--groups` 或 `--groups-file`，Runtime 去重后输出
 
 `supported=false` 是执行门禁，不是待猜测字段。只有 lower interface、Runtime、测试、Schema 和
 此页同时升级后，才能改变对外承诺。
+
+其中 `card-action-callback=false` 只约束 `dingtalk-chat` 的服务端 callback URL、验签和回复
+接口；当前用户的互动卡片操作可通过 [`dingtalk-event`](../../dingtalk-event/SKILL.md) 监听：
+`dws event consume user_card_action_triggered --flatten -f ndjson`。个人事件监听不改变上述 chat
+lower interface 门禁。
+
+话题圈会话仍禁止引用消息回复；向 Thread 追加回复使用 `chat thread reply --conversation-id <openConvThreadId>`。
+
+命名对齐的 alias 与固定置顶动作、个人编辑以及开发后的完整边界，见仓库 `docs/chat-parity/development-report.md`；下游需求见 `docs/chat-parity/im-team-requirements.md`。旧普通和专用入口保留。

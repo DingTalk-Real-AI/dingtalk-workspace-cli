@@ -106,6 +106,22 @@ func (e *Engine) HasHandlers(phase Phase) bool {
 	return len(e.handlers[phase]) > 0
 }
 
+func (e *Engine) resolveFlagProtection(rawCommandPath, morphedFlag string) (FlagProtection, bool) {
+	if e == nil || rawCommandPath == "" || morphedFlag == "" {
+		return "", false
+	}
+	for _, handler := range e.handlers[PreParse] {
+		resolver, ok := handler.(FlagProtectionResolver)
+		if !ok {
+			continue
+		}
+		if protection, protected := resolver.ResolveFlagProtection(rawCommandPath, morphedFlag); protected {
+			return protection, true
+		}
+	}
+	return "", false
+}
+
 // RunPhase executes all handlers registered for the given phase in
 // chain order. If any handler returns an error, execution stops
 // immediately and the error is returned with the handler name as

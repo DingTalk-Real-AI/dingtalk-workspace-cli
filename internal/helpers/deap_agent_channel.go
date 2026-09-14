@@ -14,7 +14,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -184,7 +183,7 @@ func newDeapChannelCommand() *cobra.Command {
 		Use: "channel", Short: "数字员工本地 Channel 机器协议", Args: cobra.NoArgs,
 		TraverseChildren: true, DisableAutoGenTag: true, RunE: groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapChannelCapabilitiesCommand(), newDeapChannelReplyCommand(), newDeapChannelOperatorPrivateCommand())
 	return cmd
 }

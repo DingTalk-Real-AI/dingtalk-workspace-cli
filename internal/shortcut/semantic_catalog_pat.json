@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "service": "pat",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+browser-policy": {
+      "disposition": "primary_smart",
+      "semantic_delta": "在隔离本地策略文件上提供显式确认、无写入请求预览、同目标磁盘读回和不暴露 agent identity 的统一结果；exact 写入与清理已通过。",
+      "risk": "write",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+authorize": {
+      "disposition": "alias_internal",
+      "semantic_delta": "classified=routed；pat chmod 已持有 plan、fallback、pending、逐 scope ledger、身份校验与确认链，+authorize 不复制执行语义；真实授权写仍因 blocked_fixture 未获证明。",
+      "risk": "high-risk-write",
+      "primary": "pat chmod",
+      "public": false,
+      "reviewed": true
+    }
+  }
+}

@@ -105,6 +105,9 @@ func TestCrossPlatformCoverageBrowserPolicyInjectedEdges(t *testing.T) {
 	if _, err := LoadBrowserPolicy("x"); !errors.Is(err, failure) {
 		t.Fatalf("read error = %v", err)
 	}
+	if _, err := ReadStoredBrowserPolicy("x", ""); !errors.Is(err, failure) {
+		t.Fatalf("readback error = %v", err)
+	}
 	patPolicyReadFile = func(string) ([]byte, error) { return []byte(`{`), nil }
 	if _, err := LoadBrowserPolicy("x"); err == nil {
 		t.Fatal("invalid policy decoded")
@@ -176,6 +179,53 @@ func TestCrossPlatformCoverageBrowserPolicyCommandSetError(t *testing.T) {
 	cmd.SetArgs([]string{"--enabled=true"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("policy command ignored load error")
+	}
+}
+
+func TestCrossPlatformCoverageBrowserPolicyReadbackAndSelectionEdges(t *testing.T) {
+	configDir := t.TempDir()
+	if got := BrowserPolicyConfigDir(); strings.TrimSpace(got) == "" {
+		t.Fatal("browser policy config directory is empty")
+	}
+	if _, err := ReadStoredBrowserPolicy(configDir, "bad code"); err == nil {
+		t.Fatal("invalid readback agent code succeeded")
+	}
+	if _, err := ReadStoredBrowserPolicy(configDir, "missing"); err == nil {
+		t.Fatal("missing agent readback succeeded")
+	}
+	if _, err := ReadStoredBrowserPolicy(configDir, ""); err == nil {
+		t.Fatal("missing default readback succeeded")
+	}
+	if _, err := SetBrowserPolicy(configDir, "agent", false); err != nil {
+		t.Fatal(err)
+	}
+	agent, err := ReadStoredBrowserPolicy(configDir, "agent")
+	if err != nil || agent.Scope != "agent" || agent.AgentCode != "agent" || agent.OpenBrowser {
+		t.Fatalf("agent readback = %#v, %v", agent, err)
+	}
+	resolvedAgent, err := ResolveBrowserPolicy(configDir, "agent")
+	if err != nil || resolvedAgent.Source != "agent" || resolvedAgent.OpenBrowser {
+		t.Fatalf("agent selection = %#v, %v", resolvedAgent, err)
+	}
+	if _, err := SetBrowserPolicy(configDir, "", true); err != nil {
+		t.Fatal(err)
+	}
+	defaultPolicy, err := ReadStoredBrowserPolicy(configDir, "")
+	if err != nil || defaultPolicy.Scope != "default" || !defaultPolicy.OpenBrowser {
+		t.Fatalf("default readback = %#v, %v", defaultPolicy, err)
+	}
+	resolvedDefault, err := ResolveBrowserPolicy(configDir, "unknown")
+	if err != nil || resolvedDefault.Source != "default" || !resolvedDefault.OpenBrowser {
+		t.Fatalf("default selection = %#v, %v", resolvedDefault, err)
+	}
+	empty, err := ResolveBrowserPolicy(t.TempDir(), "")
+	if err != nil || empty.Source == "" || !empty.OpenBrowser {
+		t.Fatalf("built-in selection = %#v, %v", empty, err)
+	}
+
+	cmd := newBrowserPolicyCommand()
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("browser policy command accepted missing --enabled")
 	}
 }
 

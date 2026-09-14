@@ -24,6 +24,11 @@ import (
 func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
 	cmd := &cobra.Command{Use: "x"}
 	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
+	result := &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema:     []byte(`{"type":"object"}`),
+		SensitivePaths: []string{"token"},
+	}
 
 	RegisterRuntimeContractFinal(cmd, contract.ContractFinalPayload{
 		Title: "T",
@@ -32,7 +37,11 @@ func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
 		},
 		Selection: &contract.SelectionSpec{AgentSummary: "sum", UseWhen: []string{"u"}},
 		Identity:  &contract.ToolIdentitySpec{ProductID: "p", Name: "n"},
+		Result:    result,
 	})
+	result.Outcomes[0] = contract.ResultOutcomeFailure
+	result.DataSchema[0] = '['
+	result.SensitivePaths[0] = "changed"
 	if cmd.Annotations != nil {
 		if _, ok := cmd.Annotations["dws.schema.final"]; ok {
 			t.Fatal("must not write JSON annotation dws.schema.final")
@@ -44,6 +53,14 @@ func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
 	}
 	if got.Selection == nil || got.Selection.Reviewed != nil {
 		t.Fatalf("selection must not carry reviewed fields: %#v", got.Selection)
+	}
+	if got.Result == nil || got.Result.Outcomes[0] != contract.ResultOutcomeSuccess || got.Result.DataSchema[0] != '{' || got.Result.SensitivePaths[0] != "token" {
+		t.Fatalf("stored result aliases registration input: %#v", got.Result)
+	}
+	got.Result.Outcomes[0] = contract.ResultOutcomeFailure
+	again, _ := RuntimeContractFinal(cmd)
+	if again.Result.Outcomes[0] != contract.ResultOutcomeSuccess {
+		t.Fatal("RuntimeContractFinal result aliases stored payload")
 	}
 }
 
@@ -135,5 +152,98 @@ func TestCrossPlatformCoverageRuntimeContractFinalRejectsForeignStoredValue(t *t
 	StoreRuntimeContractFinalRawForTest(cmd, (*contract.ContractFinalPayload)(nil))
 	if _, ok := RuntimeContractFinal(cmd); ok {
 		t.Fatal("typed nil payload must not decode as contract.ContractFinalPayload")
+	}
+}
+
+func TestResolveRuntimeSafetyUsesCanonicalOrCLIIdentityAndRejectsUnavailable(t *testing.T) {
+	read := &cobra.Command{Use: "read"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(read) })
+	RegisterRuntimeContractFinal(read, contract.ContractFinalPayload{
+		Identity: &contract.ToolIdentitySpec{CanonicalPath: "sample.read", PrimaryCLIPath: "sample get"},
+		Safety:   &contract.SafetySpec{Effect: " read ", Idempotency: " idempotent "},
+	})
+
+	for _, lookup := range []struct {
+		canonical string
+		cli       string
+	}{
+		{canonical: "sample.read"},
+		{canonical: "different.rpc", cli: "dws sample get"},
+	} {
+		safety, declared, ok := ResolveRuntimeSafety(lookup.canonical, lookup.cli)
+		if !declared || !ok || safety.Effect != "read" || safety.Idempotency != "idempotent" {
+			t.Fatalf("ResolveRuntimeSafety(%q, %q) = %#v, %v, %v", lookup.canonical, lookup.cli, safety, declared, ok)
+		}
+	}
+
+	missingSafety := &cobra.Command{Use: "write"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(missingSafety) })
+	RegisterRuntimeContractFinal(missingSafety, contract.ContractFinalPayload{
+		Identity: &contract.ToolIdentitySpec{CanonicalPath: "sample.write"},
+	})
+	if _, declared, ok := ResolveRuntimeSafety("sample.write", ""); !declared || ok {
+		t.Fatalf("missing safety = declared %v ok %v, want true false", declared, ok)
+	}
+	if _, declared, ok := ResolveRuntimeSafety("legacy.call", "legacy call"); declared || ok {
+		t.Fatalf("legacy lookup = declared %v ok %v, want false false", declared, ok)
+	}
+}
+
+func boolPointer(value bool) *bool { return &value }
+func intPointer(value int) *int    { return &value }
+
+func TestFrameworkContractFinalDeepCopyAndSafetyConflicts(t *testing.T) {
+	cmd := &cobra.Command{Use: "all"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
+	payload := contract.ContractFinalPayload{
+		Positionals: []contract.RuntimeSchemaPositional{{Name: "id"}},
+		Parameters:  []contract.ParamDecl{{Name: "mode", Enum: []string{"a"}, Required: boolPointer(true)}},
+		Safety:      &contract.SafetySpec{Effect: " read ", EffectSource: " source ", Risk: " low ", Confirmation: " not_required ", Idempotency: " idempotent "},
+		DryRun:      &contract.DryRunSpec{PreviewKind: "plan"},
+		Result: &contract.ResultSpec{
+			Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+			DataSchema: []byte(`{"type":"object"}`), SensitivePaths: []string{"token"},
+		},
+		Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"},
+		Interface:  &contract.InterfaceSpec{Ref: &contract.InterfaceRefSpec{}},
+		Selection: &contract.SelectionSpec{
+			UseWhen: []string{"use"}, AvoidWhen: []string{"avoid"}, Prerequisites: []string{"pre"}, Tips: []string{"tip"},
+			WorkflowRefs: []string{"flow"}, Examples: []string{"example"}, SourceRefs: []string{"source"},
+			ExampleDispositions: []contract.ExampleDisposition{{Index: intPointer(1)}}, Reviewed: boolPointer(true),
+		},
+		Identity: &contract.ToolIdentitySpec{CanonicalPath: "sample.all", Aliases: []string{"alias"}},
+	}
+	RegisterRuntimeContractFinal(cmd, payload)
+	got, ok := RuntimeContractFinal(cmd)
+	if !ok || got.Result == payload.Result || got.Pagination == payload.Pagination || got.Interface == payload.Interface || got.Selection == payload.Selection || got.Identity == payload.Identity {
+		t.Fatalf("payload not deeply cloned: %#v", got)
+	}
+	payload.Parameters[0].Enum[0] = "changed"
+	*payload.Parameters[0].Required = false
+	*payload.Selection.ExampleDispositions[0].Index = 9
+	*payload.Selection.Reviewed = false
+	again, _ := RuntimeContractFinal(cmd)
+	if again.Parameters[0].Enum[0] != "a" || !*again.Parameters[0].Required || *again.Selection.ExampleDispositions[0].Index != 1 || !*again.Selection.Reviewed {
+		t.Fatalf("stored payload aliased input: %#v", again)
+	}
+
+	matching := &cobra.Command{Use: "matching"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(matching) })
+	RegisterRuntimeContractFinal(matching, contract.ContractFinalPayload{Identity: &contract.ToolIdentitySpec{Path: "sample.all", CLIPath: "sample all"}, Safety: &contract.SafetySpec{Effect: "read", EffectSource: "source", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}})
+	if _, declared, valid := ResolveRuntimeSafety("sample.all", ""); !declared || !valid {
+		t.Fatalf("equivalent duplicate=(declared=%v valid=%v)", declared, valid)
+	}
+
+	conflict := &cobra.Command{Use: "conflict"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(conflict) })
+	RegisterRuntimeContractFinal(conflict, contract.ContractFinalPayload{Identity: &contract.ToolIdentitySpec{CanonicalPath: "sample.all"}, Safety: &contract.SafetySpec{Effect: "write"}})
+	if _, declared, valid := ResolveRuntimeSafety("sample.all", ""); !declared || valid {
+		t.Fatalf("conflict=(declared=%v valid=%v)", declared, valid)
+	}
+	if runtimeIdentityMatches(contract.ToolIdentitySpec{}, "", "") {
+		t.Fatal("empty identity matched")
+	}
+	if got := cloneSlice[string](nil); got != nil {
+		t.Fatalf("cloneSlice(nil)=%v", got)
 	}
 }

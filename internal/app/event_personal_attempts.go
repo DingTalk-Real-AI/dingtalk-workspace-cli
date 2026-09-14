@@ -28,6 +28,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -182,6 +183,25 @@ func (r *personalSubscriptionAttemptReservation) completeSuccess() error {
 		return personalSubscriptionGuardError(err)
 	}
 	return nil
+}
+
+// releaseRuntimeTokenFailure releases the in-flight claim without recording a
+// cross-invocation hold. A host may supply a fresh token on the very next
+// command, which must be allowed to retry immediately.
+func (r *personalSubscriptionAttemptReservation) releaseRuntimeTokenFailure() error {
+	if r == nil {
+		return runtimecred.ErrRuntimeTokenRejected
+	}
+	if r.store == nil || r.claim == nil {
+		return personalSubscriptionGuardError(errors.Join(
+			runtimecred.ErrRuntimeTokenRejected,
+			errors.New("personal event: subscription attempt reservation is incomplete"),
+		))
+	}
+	if err := r.store.Release(r.claim); err != nil {
+		return personalSubscriptionGuardError(errors.Join(runtimecred.ErrRuntimeTokenRejected, err))
+	}
+	return runtimecred.ErrRuntimeTokenRejected
 }
 
 func (r *personalSubscriptionAttemptReservation) completeFailure(

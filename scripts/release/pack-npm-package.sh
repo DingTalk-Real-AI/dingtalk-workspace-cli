@@ -21,6 +21,11 @@ output_name="$(basename -- "$OUTPUT")"
 rm -f "$output_dir/$output_name"
 
 pack_json="$(
+  # The legacy npm audit endpoint is being retired by the registry; its
+  # deprecation notices (and the call latency behind them) are diagnostic
+  # noise for a deterministic, pinned-npm pack. Disable audit/fund banners
+  # so neither can reach this pipeline.
+  NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false \
   npx --yes --package "npm@$NPM_PACK_VERSION" -- \
     npm pack "$PACKAGE_DIR" --pack-destination "$output_dir" --json --ignore-scripts
 )"

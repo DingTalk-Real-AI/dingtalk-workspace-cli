@@ -272,7 +272,7 @@ func ImportPortableAuthBundle(configDir string, r io.Reader) (PortableImportRepo
 
 func portableConfigFiles(configDir string) ([]string, error) {
 	var files []string
-	patterns := []string{"app*.json", profilesJSONFile, "mcp_url", "terminal_url"}
+	patterns := []string{"app*.json", profilesJSONFile, "mcp_url", config.ManagedMCPURLRegionFileName, "terminal_url"}
 	for _, pattern := range patterns {
 		matches, err := portableGlob(filepath.Join(configDir, pattern))
 		if err != nil {

@@ -15,9 +15,14 @@ package errors
 
 import (
 	stderrors "errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 func TestCrossPlatformCoverageExitCodeByCategory(t *testing.T) {
@@ -341,6 +346,18 @@ func TestCrossPlatformCoveragePrintHumanIncludesServerGuidance(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageServerGuidanceAdapter(t *testing.T) {
+	t.Parallel()
+
+	hint, action := ServerGuidance(ServerDiagnostics{
+		FriendlyHint: "follow the recovery action",
+		ActionURL:    "https://example.test/recover",
+	})
+	if hint != "follow the recovery action" || action != "https://example.test/recover" {
+		t.Fatalf("ServerGuidance() = (%q, %q)", hint, action)
+	}
+}
+
 func TestCrossPlatformCoverageServerGuidanceSuppressesUnsafeActionURL(t *testing.T) {
 	t.Parallel()
 	for _, actionURL := range []string{
@@ -367,6 +384,27 @@ func TestCrossPlatformCoverageServerGuidanceSuppressesUnsafeActionURL(t *testing
 		if strings.Contains(jsonOutput.String(), `"action_url"`) {
 			t.Fatalf("unsafe action URL %q leaked to JSON output: %q", actionURL, jsonOutput.String())
 		}
+	}
+}
+
+func TestCrossPlatformCoveragePrintJSONCLIOrgNotAuthorizedUsesInternationalActionURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte("https://mcp.dingtalk.io\n"), config.FilePerm); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+
+	var b strings.Builder
+	if err := PrintJSON(&b, NewAPI(
+		"business error",
+		WithServerDiag(ServerDiagnostics{ServerErrorCode: "CLI_ORG_NOT_AUTHORIZED"}),
+	)); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
+
+	want := `"action_url": "https://open-dev.dingtalk.io/fe/old#/developerSettings"`
+	if got := b.String(); !strings.Contains(got, want) {
+		t.Fatalf("expected international action_url %q, got %q", want, got)
 	}
 }
 
@@ -425,5 +463,36 @@ func TestCrossPlatformCoveragePrintHumanHidesRPCCode_Normal(t *testing.T) {
 	got := b.String()
 	if strings.Contains(got, "RPC Code:") {
 		t.Fatalf("normal mode should not show RPC Code, got %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageIsConfirmationRequired(t *testing.T) {
+	t.Parallel()
+
+	if IsConfirmationRequired(nil) {
+		t.Fatal("nil error must not report confirmation_required")
+	}
+	if IsConfirmationRequired(NewValidation("missing required flag")) {
+		t.Fatal("plain validation error must not report confirmation_required")
+	}
+	plain := stderrors.New("需要用户确认")
+	if IsConfirmationRequired(plain) {
+		t.Fatal("message text alone must not report confirmation_required")
+	}
+	confirmation := NewValidation(
+		"blocked",
+		WithReason("confirmation_required"),
+	)
+	if !IsConfirmationRequired(confirmation) {
+		t.Fatal("typed confirmation error must report confirmation_required")
+	}
+	// 包装链（fmt.Errorf %w）必须能穿透到 typed 原因。
+	wrapped := fmt.Errorf("call tool: %w", confirmation)
+	if !IsConfirmationRequired(wrapped) {
+		t.Fatal("wrapped confirmation error must report confirmation_required")
+	}
+	otherReason := NewValidation("rate limited", WithReason("rate_limit"))
+	if IsConfirmationRequired(otherReason) {
+		t.Fatal("other reasons must not report confirmation_required")
 	}
 }

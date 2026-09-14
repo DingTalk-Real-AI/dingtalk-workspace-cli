@@ -78,7 +78,9 @@ var schemaCatalogToolOptionalKeys = []string{
 	"interface_reason",
 	"interface_ref",
 	"metadata_source",
+	"pagination",
 	"positionals",
+	"result",
 }
 
 var schemaCatalogToolEnums = map[string][]string{
@@ -99,6 +101,7 @@ var schemaCatalogParamRequiredKeys = []string{
 
 // schemaCatalogParamOptionalKeys is the parameter optional whitelist.
 var schemaCatalogParamOptionalKeys = []string{
+	"anyOf",
 	"cli_required",
 	"default",
 	"enum",
@@ -237,6 +240,37 @@ func validateCatalogToolEntry(toolID string, entry map[string]any, violations *[
 	}
 
 	validateCatalogInterface(toolID, entry, violations)
+	if result, exists := entry["result"]; exists {
+		if _, ok := result.(map[string]any); !ok {
+			report("field %q must be an object", "result")
+		}
+	}
+	if rawPagination, exists := entry["pagination"]; exists {
+		pagination, ok := rawPagination.(map[string]any)
+		if !ok {
+			report("field %q must be an object", "pagination")
+		} else {
+			want := map[string]string{
+				"kind":                    contract.PaginationKindCursor,
+				"meta_path":               contract.PaginationMetaPath,
+				"endpoint_exhausted_path": contract.PaginationExhaustedPath,
+				"next_token_path":         contract.PaginationNextTokenPath,
+			}
+			for field, expected := range want {
+				if value, _ := pagination[field].(string); value != expected {
+					report("field %q.%s = %q, want %q", "pagination", field, value, expected)
+				}
+			}
+			cursor, _ := pagination["cursor_parameter"].(string)
+			if strings.TrimSpace(cursor) == "" {
+				report("field %q.cursor_parameter must be a non-empty string", "pagination")
+			} else if paramsOK {
+				if _, exists := parameters[cursor]; !exists {
+					report("field %q.cursor_parameter references missing parameter %q", "pagination", cursor)
+				}
+			}
+		}
+	}
 	for paramName, raw := range parameters {
 		param, ok := raw.(map[string]any)
 		if !ok {
@@ -331,6 +365,25 @@ func validateCatalogParam(toolID, paramName string, param map[string]any, violat
 	if raw, present := param["cli_required"]; present {
 		if _, ok := raw.(bool); !ok {
 			report("parameter %q: cli_required must be a boolean", paramName)
+		}
+	}
+	if raw, present := param["anyOf"]; present {
+		if _, hasFormat := param["format"]; hasFormat || typ != "string" {
+			report("parameter %q: anyOf requires string type and no top-level format", paramName)
+		}
+		branches, ok := raw.([]any)
+		if !ok || len(branches) < 2 {
+			report("parameter %q: anyOf must contain at least two format branches", paramName)
+		} else {
+			seen := map[string]bool{}
+			for i, rawBranch := range branches {
+				branch, ok := rawBranch.(map[string]any)
+				format, valid := branch["format"].(string)
+				if !ok || len(branch) != 1 || !valid || format == "" || strings.TrimSpace(format) != format || seen[format] {
+					report("parameter %q: anyOf[%d] must contain only a unique, non-empty format string", paramName, i)
+				}
+				seen[format] = true
+			}
 		}
 	}
 	if raw, present := param["enum"]; present {

@@ -95,12 +95,15 @@ var ResolveDept = shortcut.Shortcut{
 		}
 
 		// Project candidates to {deptId, name}, defensively unwrapping the list.
-		items := resolveDeptItems(data)
+		items, err := strictDeptCandidates(data, "contact/search_dept_by_keyword")
+		if err != nil {
+			return err
+		}
 		candidates := make([]map[string]any, 0, len(items))
 		for _, d := range items {
 			candidates = append(candidates, map[string]any{
-				"deptId": resolveDeptID(d),
-				"name":   resolveDeptName(d),
+				"deptId": strconv.FormatInt(d.id, 10),
+				"name":   d.name,
 			})
 		}
 
@@ -197,5 +200,6 @@ func stripHighlightTags(s string) string {
 }
 
 func init() {
+	finalizeContactSmart(&ResolveDept)
 	shortcut.Register(ResolveDept)
 }

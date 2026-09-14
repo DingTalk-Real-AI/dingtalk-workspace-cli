@@ -14,9 +14,12 @@
 package smart
 
 import (
+	"encoding/json"
 	"time"
 
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -45,16 +48,32 @@ import (
 //
 //	dws todo +due-today
 var DueToday = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+due-today",
-	Product:     "todo",
-	Description: "列出我今天到期的待办",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+due-today",
+	Product:       "todo",
+	Description:   "列出我今天到期的待办",
 	Intent: "当你想快速看清自己今天（planFinishDate 落在今天 00:00 到次日 00:00 之间）到期的待办、方便安排一天的工作时使用；" +
 		"内部按今天的本地时间窗，把 planFinishDateStart=今天0点、planFinishDateEnd=次日0点（毫秒时间戳）传给 get_user_todos_in_current_org 做服务端过滤，" +
 		"默认拉取你作为执行人(executor)的待办，可用 --role-types 覆盖角色范围，最后只打印这些今天到期待办的标题、状态、优先级、创建人、到期时间和任务 ID。" +
 		"这与 +overdue（已过期）不同：+overdue 看的是已经过了截止时间的待办，本命令看的是今天当天到期的待办。" +
 		"这是纯只读操作，只做列表与投影，不会修改或完成任何待办；若今天没有到期的待办则返回错误提示。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity:    contract.ToolIdentitySpec{ProductID: "todo", Name: "shortcut_due_today", CanonicalPath: "todo.shortcut_due_today", CLIPath: "todo +due-today", PrimaryCLIPath: "todo +due-today"},
+		Description: "列出我今天到期的待办",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "Reviewed Todo composite: local-day window construction, strict full pagination and projection are owned by the executable shortcut."},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出我今天到期的待办",
+			UseWhen:      []string{"需要查看本地日历日今天到期的待办时"},
+			AvoidWhen:    []string{"查看已经逾期的任务时使用 todo +overdue"},
+			Examples:     []string{"dws todo +due-today"},
+		},
+		Result: &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"今天到期的待办","properties":{"count":{"type":"integer","description":"任务数量"},"tasks":{"type":"array","description":"今天到期的任务","items":{"type":"object","description":"待办条目","additionalProperties":true}}},"required":["count","tasks"],"additionalProperties":false}`)},
+	},
 	Flags: []shortcut.Flag{
 		{
 			Name: "role-types",
@@ -108,17 +127,15 @@ var DueToday = shortcut.Shortcut{
 		// leaks outside [startMs, endMs).
 		results := make([]map[string]any, 0, len(cards))
 		for _, m := range cards {
-			if due, ok := shortcutOverdueDueTime(m); ok { // reused from overdue.go
-				if due < startMs || due >= endMs {
-					continue
-				}
+			due, ok := shortcutOverdueDueTime(m)
+			if !ok {
+				return shortcutTodoResponseError("malformed_due_time", "今天到期结果缺少可解析的 dueTime")
+			}
+			if due < startMs || due >= endMs {
+				continue
 			}
 			taskID := shortcutRelatedTaskID(m)                           // reused from related_tasks.go
 			results = append(results, shortcutRelatedProject(m, taskID)) // reused from related_tasks.go
-		}
-
-		if len(results) == 0 {
-			return apperrors.NewValidation("今天没有到期的待办")
 		}
 
 		// Step 4 — print the projected list.
@@ -127,5 +144,7 @@ var DueToday = shortcut.Shortcut{
 }
 
 func init() {
+	DueToday.Contract.Selection.AgentSummary = DueToday.Description
+	DueToday.Contract.Selection.UseWhen = []string{DueToday.Intent}
 	shortcut.Register(DueToday)
 }

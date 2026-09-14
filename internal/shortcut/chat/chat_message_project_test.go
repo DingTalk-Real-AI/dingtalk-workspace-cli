@@ -16,6 +16,9 @@ package chat
 import (
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 const testCipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
@@ -27,6 +30,7 @@ func TestCrossPlatformCoverageListMessageProjectOne(t *testing.T) {
 		"openMessageId":        "mid",
 		"senderOpenDingTalkId": "DXYZ",
 		"msgType":              "text",
+		"messageAiSendFlag":    "DWS",
 		"createTime":           "2026-07-19 13:37:03",
 		"updateTime":           "2026-07-19 14:00:00",
 		"content":              testCipher,
@@ -34,12 +38,15 @@ func TestCrossPlatformCoverageListMessageProjectOne(t *testing.T) {
 			map[string]any{"emoji": "赞", "replyUsers": []any{"D1", "D2"}},
 		},
 		"forwardMessages": []any{
-			map[string]any{"openMessageId": "c1", "senderOpenDingTalkId": "DA", "content": "子消息", "createTime": "t"},
+			map[string]any{"openMessageId": "c1", "senderOpenDingTalkId": "DA", "content": "子消息", "createTime": "t", "messageAiSendFlag": "DWS"},
 		},
 	})
 
 	if row["messageId"] != "mid" || row["senderId"] != "DXYZ" || row["msgType"] != "text" {
 		t.Fatalf("field mapping = %#v", row)
+	}
+	if row["messageAiSendFlag"] != "DWS" {
+		t.Fatalf("AI send flag = %#v", row)
 	}
 	if row["createTime"] != "2026-07-19 13:37:03" {
 		t.Errorf("createTime = %v", row["createTime"])
@@ -54,7 +61,7 @@ func TestCrossPlatformCoverageListMessageProjectOne(t *testing.T) {
 		t.Errorf("encrypted text = %v, want marker", row["text"])
 	}
 	fwd, ok := row["forwarded"].([]map[string]any)
-	if !ok || len(fwd) != 1 || fwd[0]["messageId"] != "c1" || fwd[0]["text"] != "子消息" {
+	if !ok || len(fwd) != 1 || fwd[0]["messageId"] != "c1" || fwd[0]["text"] != "子消息" || fwd[0]["messageAiSendFlag"] != "DWS" {
 		t.Errorf("forwarded = %#v", row["forwarded"])
 	}
 
@@ -103,6 +110,38 @@ func TestCrossPlatformCoverageAttachMessageResourceDownloadsPreservesMessagesAnd
 	}
 }
 
+func TestCrossPlatformCoverageMessageResourceFailureLedgerBoundaries(t *testing.T) {
+	var ledger map[string]any
+	var cause error
+	shortcut.Register(shortcut.Shortcut{
+		Service: "+coverage-chat",
+		Command: "+resource-ledger",
+		Flags:   MessageResourceDownloadFlags(),
+		Execute: func(rt *shortcut.RuntimeContext) error {
+			ledger, cause = DownloadMessageResourcesWithCause(rt, []map[string]any{{
+				"content": `{"mediaId":"@resource"}`,
+			}}, "")
+			return nil
+		},
+	})
+	helpers.InitDeps(&larkAlignmentCaller{})
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{"+coverage-chat", "+resource-ledger", "--download-resources", "--output-dir", "./downloads"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if cause == nil || ledger["failedCount"] != 1 {
+		t.Fatalf("ledger = %#v, cause = %v", ledger, cause)
+	}
+
+	payload := map[string]any{"complete": true, "failures": []map[string]any{}}
+	AttachMessageResourceDownloads(payload, map[string]any{"failedCount": 2})
+	failures, _ := payload["failures"].([]map[string]any)
+	if len(failures) != 1 || failures[0]["affectedCount"] != 2 || payload["complete"] != false {
+		t.Fatalf("fallback failure ledger = %#v", payload)
+	}
+}
+
 func TestCrossPlatformCoverageListPinProjectPreservesThreadIdentity(t *testing.T) {
 	got := listPinProject(map[string]any{
 		"result": map[string]any{
@@ -111,6 +150,7 @@ func TestCrossPlatformCoverageListPinProjectPreservesThreadIdentity(t *testing.T
 					"openMessageId":      "msg-1",
 					"openConversationId": "cid-1",
 					"openConvThreadId":   "thread-1",
+					"messageAiSendFlag":  "DWS",
 				},
 			},
 		},
@@ -118,7 +158,7 @@ func TestCrossPlatformCoverageListPinProjectPreservesThreadIdentity(t *testing.T
 	if len(got) != 1 {
 		t.Fatalf("pins = %#v", got)
 	}
-	if got[0]["messageId"] != "msg-1" || got[0]["threadId"] != "thread-1" {
+	if got[0]["messageId"] != "msg-1" || got[0]["threadId"] != "thread-1" || got[0]["messageAiSendFlag"] != "DWS" {
 		t.Fatalf("pin identity = %#v", got[0])
 	}
 }
