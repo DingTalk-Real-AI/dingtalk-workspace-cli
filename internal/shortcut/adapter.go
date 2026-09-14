@@ -257,9 +257,10 @@ func fromShortcutConstraints(constraints []Constraint) []corecmd.Constraint {
 			panic(fmt.Sprintf("unknown shortcut constraint kind %q", c.Kind))
 		}
 		out = append(out, corecmd.Constraint{
-			Kind:        kind,
-			Flags:       append([]string(nil), c.Flags...),
-			Description: c.Description,
+			Kind:         kind,
+			Flags:        append([]string(nil), c.Flags...),
+			Description:  c.Description,
+			PresenceOnly: c.PresenceOnly,
 		})
 	}
 	return out

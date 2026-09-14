@@ -59,6 +59,39 @@ func TestCrossPlatformCoverageFetchAllMultiPage(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageFetchAllCompletesOnSuccessfulEmptyTrailingPage(t *testing.T) {
+	s := &stubFetcher{
+		pages: []Page{
+			{Records: []any{1, 2}, NextCursor: "after-full-page"},
+			{Records: []any{}, NextCursor: ""},
+		},
+	}
+	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: time.Millisecond})
+	if got.HasMore || !got.Complete || got.Partial || got.StopReason != StopComplete {
+		t.Fatalf("successful empty trailing page completion: got=%+v", got)
+	}
+	if got.Pages != 2 || got.Attempts != 2 || len(got.Records) != 2 || s.calls != 2 {
+		t.Fatalf("successful empty trailing page progress: got=%+v calls=%d", got, s.calls)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllContinuesPastSuccessfulEmptyPageWithCursor(t *testing.T) {
+	s := &stubFetcher{
+		pages: []Page{
+			{Records: []any{1}, NextCursor: "c1"},
+			{Records: []any{}, NextCursor: "c2"},
+			{Records: []any{2}, NextCursor: ""},
+		},
+	}
+	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: time.Millisecond})
+	if got.HasMore || !got.Complete || got.Partial || got.StopReason != StopComplete {
+		t.Fatalf("successful empty middle page completion: got=%+v", got)
+	}
+	if got.Pages != 3 || got.Attempts != 3 || len(got.Records) != 2 || s.calls != 3 {
+		t.Fatalf("successful empty middle page progress: got=%+v calls=%d", got, s.calls)
+	}
+}
+
 func TestCrossPlatformCoverageFetchAllPageLimit(t *testing.T) {
 	s := &stubFetcher{
 		pages: []Page{

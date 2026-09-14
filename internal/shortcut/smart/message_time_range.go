@@ -29,7 +29,7 @@ type chatMessageTimeRange struct {
 func resolveChatMessageTimeRange(rt *shortcut.RuntimeContext, now time.Time) (chatMessageTimeRange, error) {
 	startValue := strings.TrimSpace(rt.StrFirst("start", "start-time"))
 	endValue := strings.TrimSpace(rt.StrFirst("end", "end-time"))
-	order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
+	order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort-order", "sort")))
 	configured := startValue != "" || endValue != "" || order != ""
 	if order == "" {
 		order = "desc"
@@ -55,9 +55,7 @@ func resolveChatMessageTimeRange(rt *shortcut.RuntimeContext, now time.Time) (ch
 	if result.start != nil && result.end != nil && !result.end.After(*result.start) {
 		return chatMessageTimeRange{}, apperrors.NewValidation("--end/--end-time 必须晚于 --start/--start-time")
 	}
-	if order == "asc" && result.start == nil {
-		return chatMessageTimeRange{}, apperrors.NewValidation("升序读取必须指定 --start/--start-time，避免把最近一页倒序后误报为最早消息")
-	}
+
 	if result.start != nil && result.end == nil {
 		effectiveEnd := now
 		result.end = &effectiveEnd
@@ -70,10 +68,10 @@ func (r chatMessageTimeRange) initialBoundary(now time.Time) string {
 		return formatDingTalkMessageBoundary(now.Truncate(time.Second))
 	}
 	if r.order == "asc" && r.start != nil {
-		return formatDingTalkMessageBoundary(*r.start)
+		return r.start.UTC().Format(time.RFC3339Nano)
 	}
 	if r.end != nil {
-		return formatDingTalkMessageBoundary(*r.end)
+		return r.end.UTC().Format(time.RFC3339Nano)
 	}
 	return formatDingTalkMessageBoundary(now)
 }

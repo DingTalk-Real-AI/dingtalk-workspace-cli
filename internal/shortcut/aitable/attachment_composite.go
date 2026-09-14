@@ -66,17 +66,17 @@ var AttachmentRemove = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+attachment-remove",
 	Product:     serverMain,
-	Description: "从 attachment 字段清空全部或按文件名移除，写前确保剩余项具有可重写 fileToken，并读回验证",
-	Intent:      "当你要清空附件字段，或按精确文件名移除且安全保留其他附件时使用；读回若不给剩余项 fileToken 会在写前停止并说明服务边界。",
+	Description: "清空 attachment 字段或按文件名解析 resourceId 删除，并读回验证",
+	Intent:      "清空附件或按精确文件名移除时使用；优先按真实 resourceId 删除，回读验证目标移除与其余附件保留，存在服务端并发覆盖窗口。",
 	Risk:        shortcut.RiskHighWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent",
 	},
 	Contract: aitableCompositeContract(
 		"+attachment-remove",
-		"从 attachment 字段清空全部或按文件名移除，写前确保剩余项具有可重写 fileToken，并读回验证",
-		"当你要清空附件字段，或按精确文件名移除且安全保留其他附件时使用；读回若不给剩余项 fileToken 会在写前停止并说明服务边界。",
-		"读回仅有下载 URL 而没有剩余附件 fileToken 时，DWS 无法在覆盖式写接口上安全对齐逐项删除；此时只能 --clear-all 或停止",
+		"清空 attachment 字段或按文件名解析 resourceId 删除，并读回验证",
+		"清空附件或按精确文件名移除时使用；优先按真实 resourceId 删除，回读验证目标移除与其余附件保留，存在服务端并发覆盖窗口。",
+		"已知 resourceId 时可直接用 attachment remove；目标缺 resourceId 时仅在剩余项都有 fileToken 的情况下使用替换路径，否则停止",
 		`dws aitable +attachment-remove --base-id B --table-id T --record-id R --field-id F --clear-all`,
 	),
 	Flags: []shortcut.Flag{
@@ -200,24 +200,11 @@ func executeAttachmentRemove(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	desired := make([]any, 0, len(existing))
-	removed := 0
-	if clearAll {
-		removed = len(existing)
-	} else {
-		for index, item := range existing {
-			if attachmentName(item) == removeName {
-				removed++
-				continue
-			}
-			token := attachmentToken(item)
-			if token == "" {
-				return apperrors.NewValidation(fmt.Sprintf("剩余附件[%d]读回缺少 fileToken，覆盖式写接口无法安全保留后删除；服务端当前不支持按附件增量删除", index),
-					apperrors.WithReason("attachment_tokens_unavailable"), apperrors.WithExecutionStarted(false))
-			}
-			desired = append(desired, map[string]any{"fileToken": token})
-		}
+	plan, err := planAttachmentRemoval(existing, removeName, clearAll)
+	if err != nil {
+		return err
 	}
+	removed := plan.removed
 	result := newCompositeResult("attachment_remove")
 	result.RequestedCount = removed
 	result.Resolved = map[string]any{"baseId": baseID, "tableId": tableID, "recordId": recordIDValue, "fieldId": fieldID, "removeName": removeName, "clearAll": clearAll}
@@ -227,27 +214,29 @@ func executeAttachmentRemove(rt *shortcut.RuntimeContext) error {
 		result.Verification = map[string]any{"status": "verified", "attachmentCount": len(existing), "removedCount": 0}
 		return rt.Output(result)
 	}
-	result.Plan = []compositeStep{{Index: 1, Name: "replace attachment cell without selected items", Tool: "update_records", Status: "planned", Count: removed}}
+	arguments := map[string]any{"baseId": baseID, "tableId": tableID, "recordId": recordIDValue, "fieldId": fieldID}
+	if plan.tool == "remove_attachments" {
+		if !clearAll {
+			arguments["resourceIds"] = plan.resourceIDs
+		}
+	} else {
+		arguments = map[string]any{"baseId": baseID, "tableId": tableID,
+			"records": []any{map[string]any{"recordId": recordIDValue, "cells": map[string]any{fieldID: plan.replacement}}}}
+	}
+	result.Plan = []compositeStep{{Index: 1, Name: "remove selected attachments", Tool: plan.tool, Status: "planned", Count: removed}}
 	if rt.DryRun() {
 		result.Status = "planned"
 		result.Executed = false
 		return rt.Output(result)
 	}
-	_, writeErr := rt.CallMCPWriteDataStrict(serverMain, "update_records", map[string]any{
-		"baseId": baseID, "tableId": tableID,
-		"records": []any{map[string]any{"recordId": recordIDValue, "cells": map[string]any{fieldID: desired}}},
-	})
-	_, readBack, verifyErr := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
-	if verifyErr == nil && len(readBack) != len(desired) {
-		verifyErr = fmt.Errorf("attachment read-back count is %d, want %d", len(readBack), len(desired))
+	_, writeErr := rt.CallMCPWriteDataStrict(serverMain, plan.tool, arguments)
+	if isRecordWriteInputRejection(writeErr) {
+		result.Status = "failed"
+		return compositeError(result, writeErr, false)
 	}
-	if verifyErr == nil && removeName != "" {
-		for _, item := range readBack {
-			if attachmentName(item) == removeName {
-				verifyErr = fmt.Errorf("attachment %q is still present after removal", removeName)
-				break
-			}
-		}
+	_, readBack, verifyErr := readAttachmentCell(rt, baseID, tableID, recordIDValue, fieldID)
+	if verifyErr == nil {
+		verifyErr = verifyAttachmentRemoval(readBack, plan, removeName)
 	}
 	if verifyErr != nil {
 		result.Status = "unknown"

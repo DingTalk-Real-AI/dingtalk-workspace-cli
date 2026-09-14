@@ -8,13 +8,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"math"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -141,6 +144,200 @@ func validWhiteboardUpdateResponse(mode string, requestIDs, realIDs []string, de
 		panic(err)
 	}
 	return string(envelope)
+}
+
+func validStandaloneWhiteboardQueryResponse(nodeID, view string, revision int, nodes string) string {
+	var decoded []any
+	if err := json.Unmarshal([]byte(nodes), &decoded); err != nil {
+		panic(err)
+	}
+	result, err := json.Marshal(map[string]any{
+		"schemaVersion": "1.0", "catalogVersion": "dml-v1",
+		"pages": []any{map[string]any{"id": "page-1", "nodes": decoded}},
+	})
+	if err != nil {
+		panic(err)
+	}
+	envelope, err := json.Marshal(map[string]any{
+		"success": true, "nodeId": nodeID, "revision": revision, "view": view,
+		"resultJson": string(result),
+		"resultSummary": map[string]any{
+			"nodeCount": len(decoded), "pageCount": 1, "readOnlyNodeCount": 0,
+			"unknownNodeCount": 0, "resultBytes": len(result), "resultSha256": "0123456789abcdef",
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(envelope)
+}
+
+func validStandaloneWhiteboardUpdateResponse(nodeID, mode string, previous, committed int, requestIDs, realIDs []string, deleted int) string {
+	idMap := make(map[string]any, len(requestIDs))
+	created := make([]any, len(realIDs))
+	for index := range requestIDs {
+		idMap[requestIDs[index]] = realIDs[index]
+		created[index] = realIDs[index]
+	}
+	envelope, err := json.Marshal(map[string]any{
+		"success": true, "nodeId": nodeID, "mode": mode, "pageId": "page-1",
+		"previousRevision": previous, "committedRevision": committed,
+		"createdNodeIds": created, "idMap": idMap, "deletedNodeCount": deleted,
+		"idempotentReplay": false, "message": "completed",
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(envelope)
+}
+
+func TestCrossPlatformCoverageWhiteboardStandaloneReceiptRequestIDCompatibility(t *testing.T) {
+	expected, err := parseWhiteboardSource(`{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := map[string]any{
+		"nodeId": "wb", "mode": "append", "expectedRevision": 12, "requestId": "req-1",
+	}
+	baseReceipt := func() map[string]any {
+		return map[string]any{
+			"success": true, "nodeId": "wb", "mode": "append", "pageId": "page-1",
+			"previousRevision": 12, "committedRevision": 13,
+			"createdNodeIds": []any{"real-1"}, "idMap": map[string]any{"n1": "real-1"},
+			"deletedNodeCount": 0, "idempotentReplay": false, "message": "completed",
+		}
+	}
+
+	withoutEcho, err := requireStandaloneWhiteboardUpdateReceipt(baseReceipt(), request, expected)
+	if err != nil {
+		t.Fatalf("response without requestId echo was rejected: %v", err)
+	}
+	if withoutEcho.RequestID != "req-1" {
+		t.Fatalf("requestId fallback=%q, want req-1", withoutEcho.RequestID)
+	}
+
+	matching := baseReceipt()
+	matching["requestId"] = "req-1"
+	withEcho, err := requireStandaloneWhiteboardUpdateReceipt(matching, request, expected)
+	if err != nil || withEcho.RequestID != "req-1" {
+		t.Fatalf("matching requestId echo receipt=%#v err=%v", withEcho, err)
+	}
+
+	mismatched := baseReceipt()
+	mismatched["requestId"] = "req-other"
+	if _, err := requireStandaloneWhiteboardUpdateReceipt(mismatched, request, expected); !hasWhiteboardErrorReason(err, "receipt_request_mismatch") {
+		t.Fatalf("mismatched requestId error=%v", err)
+	}
+
+	for name, value := range map[string]any{"null": nil, "blank": " ", "wrong type": 1} {
+		t.Run(name, func(t *testing.T) {
+			malformed := baseReceipt()
+			malformed["requestId"] = value
+			if _, err := requireStandaloneWhiteboardUpdateReceipt(malformed, request, expected); !hasWhiteboardErrorReason(err, "malformed_receipt_request_id") {
+				t.Fatalf("malformed requestId error=%v", err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardStandaloneReceiptIDMapCompatibility(t *testing.T) {
+	expected, err := parseWhiteboardSource(`{"overwrite":true,"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"},{"id":"n2","type":"shape"}]}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := map[string]any{
+		"nodeId": "wb", "mode": "overwrite", "pageId": "page",
+		"expectedRevision": 2, "requestId": "req-1",
+	}
+	baseReceipt := func() map[string]any {
+		return map[string]any{
+			"success": true, "nodeId": "wb", "mode": "overwrite", "pageId": "page",
+			"previousRevision": 2, "committedRevision": 3,
+			"createdNodeIds": []any{"real-1", "real-2"}, "deletedNodeCount": 57,
+			"idempotentReplay": false, "message": "done",
+		}
+	}
+
+	for _, value := range []any{"missing", nil} {
+		t.Run(fmt.Sprint(value), func(t *testing.T) {
+			receipt := baseReceipt()
+			if value == nil {
+				receipt["idMap"] = nil
+			}
+			got, err := requireStandaloneWhiteboardUpdateReceipt(receipt, request, expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]string{"n1": "real-1", "n2": "real-2"}
+			if !reflect.DeepEqual(got.IDMap, want) {
+				t.Fatalf("derived idMap = %#v, want %#v", got.IDMap, want)
+			}
+		})
+	}
+
+	malformed := baseReceipt()
+	malformed["idMap"] = []any{}
+	if _, err := requireStandaloneWhiteboardUpdateReceipt(malformed, request, expected); !hasWhiteboardErrorReason(err, "malformed_id_map") {
+		t.Fatalf("malformed idMap error=%v", err)
+	}
+}
+
+func hasWhiteboardErrorReason(err error, reason string) bool {
+	var structured *apperrors.Error
+	return errors.As(err, &structured) && structured.Reason == reason
+}
+
+func TestCrossPlatformCoverageWhiteboardStandaloneStrictRoutingAndReadback(t *testing.T) {
+	queryCaller := &whiteboardCoverageCaller{responses: map[string][]string{
+		toolQueryStandalone: {validStandaloneWhiteboardQueryResponse("wb", "all", 12, `[{"id":"real-1","type":"text"}]`)},
+	}}
+	if err := runWhiteboardCoverage(t, Query, queryCaller, "", "--node", "wb", "--view", "all"); err != nil {
+		t.Fatal(err)
+	}
+	if len(queryCaller.calls) != 1 || queryCaller.calls[0].tool != toolQueryStandalone || queryCaller.calls[0].args["partId"] != nil {
+		t.Fatalf("query calls = %#v", queryCaller.calls)
+	}
+
+	validSource := `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`
+	updateCaller := &whiteboardCoverageCaller{responses: map[string][]string{
+		toolUpdateStandalone: {validStandaloneWhiteboardUpdateResponse("wb", "append", 12, 13, []string{"n1"}, []string{"real-1"}, 0)},
+		toolQueryStandalone:  {validStandaloneWhiteboardQueryResponse("wb", "page", 13, `[{"id":"real-1","type":"text"}]`)},
+	}}
+	if err := runWhiteboardCoverage(t, Update, updateCaller, "",
+		"--node", "wb", "--expected-revision", "12", "--request-id", "req-1", "--source", validSource, "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if len(updateCaller.calls) != 2 || updateCaller.calls[0].tool != toolUpdateStandalone || updateCaller.calls[1].tool != toolQueryStandalone {
+		t.Fatalf("update calls = %#v", updateCaller.calls)
+	}
+	wantWrite := map[string]any{
+		"nodeId": "wb", "mode": "append", "nodes": `[{"id":"n1","type":"text"}]`,
+		"expectedRevision": 12, "requestId": "req-1",
+	}
+	if !reflect.DeepEqual(updateCaller.calls[0].args, wantWrite) {
+		t.Fatalf("write args = %#v, want %#v", updateCaller.calls[0].args, wantWrite)
+	}
+	if got := updateCaller.calls[1].args; got["nodeId"] != "wb" || got["view"] != "page" || got["pageId"] != "page-1" {
+		t.Fatalf("readback args = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardRoutingNeverFallsBackAcrossKinds(t *testing.T) {
+	caller := &whiteboardCoverageCaller{responses: map[string][]string{}}
+	if err := runWhiteboardCoverage(t, Query, caller, "", "--node", "wb"); err == nil {
+		t.Fatal("missing standalone response unexpectedly succeeded")
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != toolQueryStandalone {
+		t.Fatalf("query fell back across kinds: %#v", caller.calls)
+	}
+
+	caller = &whiteboardCoverageCaller{responses: map[string][]string{}}
+	if err := runWhiteboardCoverage(t, Query, caller, "", "--node", "doc", "--part-id", ""); err == nil {
+		t.Fatal("explicit empty part unexpectedly succeeded")
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("explicit empty part reached remote call: %#v", caller.calls)
+	}
 }
 
 func TestCrossPlatformCoverageWhiteboardQueryRejectsFalseSuccessAndMalformedNodes(t *testing.T) {
@@ -593,6 +790,10 @@ func TestCrossPlatformCoverageWhiteboardUpdateReceiptSchemaAndRuntimeBranches(t 
 }
 
 func TestCrossPlatformCoverageWhiteboardExecutorErrorsAndExactCallOrder(t *testing.T) {
+	invalidQuery := directWhiteboardRuntime(t, Query, &whiteboardCoverageCaller{responses: map[string][]string{}}, "--node", "")
+	if err := Query.Execute(invalidQuery); err == nil {
+		t.Fatal("direct query accepted an invalid route")
+	}
 	queryCallError := &whiteboardCoverageCaller{responses: map[string][]string{}}
 	if err := runWhiteboardCoverage(t, Query, queryCallError, "", "--node", "doc", "--part-id", "part"); err == nil || len(queryCallError.calls) != 1 {
 		t.Fatalf("query call error=%v calls=%#v", err, queryCallError.calls)
@@ -620,6 +821,11 @@ func TestCrossPlatformCoverageWhiteboardExecutorErrorsAndExactCallOrder(t *testi
 	}
 
 	appendSource := `{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`
+	invalidUpdate := directWhiteboardRuntime(t, Update, &whiteboardCoverageCaller{responses: map[string][]string{}},
+		"--node", "wb", "--source", appendSource)
+	if err := Update.Execute(invalidUpdate); err == nil {
+		t.Fatal("direct update accepted an invalid standalone route")
+	}
 	writeCallError := &whiteboardCoverageCaller{responses: map[string][]string{}}
 	if err := runWhiteboardCoverage(t, Update, writeCallError, "", "--node", "doc", "--part-id", "part", "--source", appendSource, "--yes"); err == nil || len(writeCallError.calls) != 1 || writeCallError.calls[0].tool != toolUpdate {
 		t.Fatalf("write call error=%v calls=%#v", err, writeCallError.calls)
@@ -657,6 +863,31 @@ func TestCrossPlatformCoverageWhiteboardExecutorErrorsAndExactCallOrder(t *testi
 	}
 	if len(overwriteVerified.calls) != 2 || overwriteVerified.calls[0].args["mode"] != "overwrite" || overwriteVerified.calls[1].tool != toolQuery {
 		t.Fatalf("overwrite call order=%#v", overwriteVerified.calls)
+	}
+
+	standaloneArgs := []string{"--node", "wb", "--expected-revision", "12", "--request-id", "req-1", "--source", appendSource, "--yes"}
+	standaloneReceipt := validStandaloneWhiteboardUpdateResponse("wb", "append", 12, 13, []string{"n1"}, []string{"real-1"}, 0)
+	for _, tc := range []struct {
+		name      string
+		responses map[string][]string
+	}{
+		{name: "read call", responses: map[string][]string{toolUpdateStandalone: {standaloneReceipt}}},
+		{name: "read projection", responses: map[string][]string{
+			toolUpdateStandalone: {standaloneReceipt}, toolQueryStandalone: {`{"success":true}`},
+		}},
+		{name: "revision mismatch", responses: map[string][]string{
+			toolUpdateStandalone: {standaloneReceipt}, toolQueryStandalone: {validStandaloneWhiteboardQueryResponse("wb", "page", 14, `[{"id":"real-1","type":"text"}]`)},
+		}},
+		{name: "content mismatch", responses: map[string][]string{
+			toolUpdateStandalone: {standaloneReceipt}, toolQueryStandalone: {validStandaloneWhiteboardQueryResponse("wb", "page", 13, `[{"id":"real-1","type":"shape"}]`)},
+		}},
+	} {
+		t.Run("standalone "+tc.name, func(t *testing.T) {
+			caller := &whiteboardCoverageCaller{responses: tc.responses}
+			if err := runWhiteboardCoverage(t, Update, caller, "", standaloneArgs...); err == nil || len(caller.calls) != 2 {
+				t.Fatalf("error=%v calls=%#v", err, caller.calls)
+			}
+		})
 	}
 }
 
@@ -712,6 +943,125 @@ func TestCrossPlatformCoverageWhiteboardQueryEnvelopeSummaryAndMessageMatrix(t *
 	projected, err := projectWhiteboardQuery(valid, " doc ", " part ")
 	if err != nil || projected["nodeId"] != "doc" || projected["partId"] != "part" || projected["message"] != "ok" {
 		t.Fatalf("valid message projection=%#v err=%v", projected, err)
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardStandaloneQueryEnvelopeMatrix(t *testing.T) {
+	request := map[string]any{"nodeId": "wb", "view": "all"}
+	validSource := map[string]any{
+		"schemaVersion": "1.0", "catalogVersion": "dml-v1",
+		"pages": []any{map[string]any{"id": "page", "nodes": []any{map[string]any{"id": "node", "type": "text"}}}},
+	}
+	validSummary := map[string]any{
+		"nodeCount": 1, "pageCount": 1, "readOnlyNodeCount": 0,
+		"unknownNodeCount": 0, "resultBytes": 1, "resultSha256": "hash",
+	}
+	base := func() map[string]any {
+		return map[string]any{
+			"success": true, "nodeId": "wb", "revision": 2, "view": "all",
+			"resultJson": validSource, "resultSummary": validSummary,
+		}
+	}
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{"business failure", func(v map[string]any) { v["success"] = false }},
+		{"target mismatch", func(v map[string]any) { v["nodeId"] = "other" }},
+		{"invalid revision", func(v map[string]any) { v["revision"] = -1 }},
+		{"view mismatch", func(v map[string]any) { v["view"] = "page" }},
+		{"malformed summary", func(v map[string]any) { v["resultSummary"] = map[string]any{} }},
+		{"invalid result JSON", func(v map[string]any) { v["resultJson"] = "{" }},
+		{"wrong schema", func(v map[string]any) {
+			v["resultJson"] = map[string]any{"schemaVersion": "2.0", "catalogVersion": "dml-v1", "pages": []any{}}
+		}},
+		{"wrong catalog", func(v map[string]any) {
+			v["resultJson"] = map[string]any{"schemaVersion": "1.0", "catalogVersion": "v2", "pages": []any{}}
+		}},
+		{"missing pages", func(v map[string]any) {
+			v["resultJson"] = map[string]any{"schemaVersion": "1.0", "catalogVersion": "dml-v1"}
+		}},
+		{"invalid pages", func(v map[string]any) {
+			v["resultJson"] = map[string]any{"schemaVersion": "1.0", "catalogVersion": "dml-v1", "pages": "bad"}
+		}},
+		{"summary mismatch", func(v map[string]any) { v["resultSummary"] = map[string]any{"nodeCount": 2} }},
+		{"malformed download URL", func(v map[string]any) { delete(v, "resultJson"); v["resultDownloadUrl"] = " " }},
+		{"conflicting payload", func(v map[string]any) { v["resultDownloadUrl"] = "https://example.test/result" }},
+		{"missing payload", func(v map[string]any) { delete(v, "resultJson") }},
+		{"malformed message", func(v map[string]any) { v["message"] = 1 }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			value := base()
+			test.mutate(value)
+			if result, err := projectStandaloneWhiteboardQuery(value, request); err == nil {
+				t.Fatalf("unexpected success: %#v", result)
+			}
+		})
+	}
+
+	download := base()
+	delete(download, "resultJson")
+	download["resultDownloadUrl"] = "https://example.test/result"
+	download["message"] = "ready"
+	result, err := projectStandaloneWhiteboardQuery(download, request)
+	if err != nil || result["resultDownloadUrl"] == nil || result["message"] != "ready" {
+		t.Fatalf("download projection=%#v err=%v", result, err)
+	}
+	summary := base()
+	summary["view"] = "summary"
+	delete(summary, "resultJson")
+	result, err = projectStandaloneWhiteboardQuery(summary, map[string]any{"nodeId": "wb", "view": "summary"})
+	if err != nil || result["source"] != nil {
+		t.Fatalf("summary projection=%#v err=%v", result, err)
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardStandaloneReceiptValidationMatrix(t *testing.T) {
+	expected, err := parseWhiteboardSource(`{"source":{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"n1","type":"text"}]}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := map[string]any{"nodeId": "wb", "mode": "append", "expectedRevision": 2, "requestId": "req"}
+	base := func() map[string]any {
+		return map[string]any{
+			"success": true, "nodeId": "wb", "mode": "append", "pageId": "page",
+			"previousRevision": 2, "committedRevision": 3,
+			"createdNodeIds": []any{"real"}, "idMap": map[string]any{"n1": "real"},
+			"deletedNodeCount": 0, "idempotentReplay": false, "message": "done",
+		}
+	}
+	tests := []struct {
+		name   string
+		mutate func(map[string]any, map[string]any)
+	}{
+		{"business failure", func(v, _ map[string]any) { v["success"] = false }},
+		{"target mismatch", func(v, _ map[string]any) { v["nodeId"] = "other" }},
+		{"mode mismatch", func(v, _ map[string]any) { v["mode"] = "overwrite" }},
+		{"missing page", func(v, _ map[string]any) { delete(v, "pageId") }},
+		{"page mismatch", func(v, r map[string]any) { r["pageId"] = "other" }},
+		{"invalid request state", func(_ map[string]any, r map[string]any) { r["requestId"] = " " }},
+		{"revision mismatch", func(v, _ map[string]any) { v["previousRevision"] = 1 }},
+		{"committed revision", func(v, _ map[string]any) { v["committedRevision"] = 1 }},
+		{"malformed created IDs", func(v, _ map[string]any) { v["createdNodeIds"] = []any{" "} }},
+		{"created count", func(v, _ map[string]any) { v["createdNodeIds"] = []any{} }},
+		{"malformed id map", func(v, _ map[string]any) { v["idMap"] = []any{} }},
+		{"empty id map entry", func(v, _ map[string]any) { v["idMap"] = map[string]any{" ": "real"} }},
+		{"id map count", func(v, _ map[string]any) { v["idMap"] = map[string]any{} }},
+		{"id map order", func(v, _ map[string]any) { v["idMap"] = map[string]any{"n1": "other"} }},
+		{"deleted count", func(v, _ map[string]any) { v["deletedNodeCount"] = 1 }},
+		{"replay type", func(v, _ map[string]any) { v["idempotentReplay"] = "false" }},
+		{"missing message", func(v, _ map[string]any) { v["message"] = " " }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			value := base()
+			requestCopy := maps.Clone(request)
+			test.mutate(value, requestCopy)
+			if receipt, err := requireStandaloneWhiteboardUpdateReceipt(value, requestCopy, expected); err == nil {
+				t.Fatalf("unexpected receipt: %#v", receipt)
+			}
+		})
 	}
 }
 

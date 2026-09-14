@@ -498,7 +498,8 @@ func aitableAppJSONObjectFlag(name, bind, usage string, required bool, validate 
 			}
 			if validate != nil {
 				if err := validate(value); err != nil {
-					return nil, err
+					// These validators inspect user-supplied JSON fields before MCP execution.
+					return nil, apperrors.NewValidation(err.Error())
 				}
 			}
 			return value, nil

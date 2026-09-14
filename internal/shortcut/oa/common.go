@@ -360,6 +360,22 @@ func oaCursorPage(result map[string]any, operation string, current int) (oaPageE
 func oaHasMorePage(result map[string]any, operation string, currentPage int) (oaPageEvidence, error) {
 	raw, present := result["hasMore"]
 	if !present {
+		// These three OA endpoints omit hasMore for an empty terminal page.
+		// Callers validate business success and result.values before reaching
+		// this adapter. Inspect the raw array, never a locally filtered list,
+		// and do not extend this encoding to other OA or cursor endpoints.
+		switch operation {
+		case "oa/get_todo_tasks", "oa/get_done_tasks", "oa/get_submitted_instances":
+			values, validArray := result["values"].([]any)
+			if validArray && values != nil && len(values) == 0 && currentPage > 0 {
+				next := result["nextCursor"]
+				nextText, textCursor := next.(string)
+				if next != nil && (!textCursor || strings.TrimSpace(nextText) != "") {
+					return oaPageEvidence{}, oaResponseError(operation, "conflicting_pagination", "空页省略 hasMore，但仍包含非空或无效 nextCursor，无法证明已经到达终页")
+				}
+				return oaPageEvidence{Known: true, HasMore: false}, nil
+			}
+		}
 		return oaPageEvidence{}, oaResponseError(operation, "missing_pagination", "审批列表缺少 hasMore，无法证明结果完整或提供续页凭据")
 	}
 	hasMore, ok := raw.(bool)

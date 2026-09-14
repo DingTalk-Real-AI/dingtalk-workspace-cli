@@ -1148,7 +1148,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		schemaCmd,
 		navigationGroup(mcpCmd),
 	}
-	utilityCommands = appendOptionalCommand(utilityCommands, newSafeChatCommand())
 	root.AddCommand(utilityCommands...)
 
 	if declarationOnly {
@@ -1190,13 +1189,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	root.SetContext(rootCtx)
 
 	return root
-}
-
-func appendOptionalCommand(commands []*cobra.Command, cmd *cobra.Command) []*cobra.Command {
-	if cmd == nil {
-		return commands
-	}
-	return append(commands, cmd)
 }
 
 // installReviewedFlagProtectionHandlers makes reviewed blocked/ambiguous

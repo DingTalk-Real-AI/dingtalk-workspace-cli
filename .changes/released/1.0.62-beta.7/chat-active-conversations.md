@@ -1,0 +1,5 @@
+---
+category: Added
+---
+
+- **Chat active conversations** — adds `dws chat +active-conversations --start <time>` to auto-page cross-conversation messages and return deduplicated conversation summaries with stable name fields, latest-message time, and completeness metadata. Query boundaries use whole seconds: explicit nonzero fractional seconds are rejected, and the default end is rounded down to exclude the current unfinished second. The effective end must be later than the start and remains fixed across pages, results, and continuation; latest-message timestamps retain millisecond precision. Returned messages are filtered to the fixed `[start,end)` window before aggregation; pages with no matching messages still follow server pagination. Pagination waits 200ms between pages by default; later-page failures preserve completed summaries and a continuation cursor as `partial_failure` (exit 7). Resume with the original time window, page size, and profile, then merge batches by conversation ID.

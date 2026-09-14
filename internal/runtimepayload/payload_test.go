@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -49,8 +48,8 @@ func TestCrossPlatformCoverageAppendInspectAndMaterialize(t *testing.T) {
 	if content, err := os.ReadFile(library); err != nil || string(content) != "library-linux-amd64" {
 		t.Fatalf("library = %q, %v", content, err)
 	}
-	if entries, err := os.ReadDir(filepath.Join(filepath.Dir(library), "ps")); err != nil || len(entries) != 123 {
-		t.Fatalf("payload entries = %d, %v", len(entries), err)
+	if _, err := os.Lstat(filepath.Join(filepath.Dir(library), "ps")); !os.IsNotExist(err) {
+		t.Fatalf("retired ps directory materialized: %v", err)
 	}
 
 	if err := InjectFile(binaryPath, root); err != nil {
@@ -104,11 +103,7 @@ func TestCrossPlatformCoverageMaterializeConcurrentAndRepairsCache(t *testing.T)
 			t.Fatalf("cache paths differ: %q != %q", path, expected)
 		}
 	}
-	psEntries, err := os.ReadDir(filepath.Join(filepath.Dir(expected), "ps"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	corrupt := filepath.Join(filepath.Dir(expected), "ps", psEntries[0].Name())
+	corrupt := expected
 	if err := os.WriteFile(corrupt, []byte("corrupt"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +140,7 @@ func TestCrossPlatformCoverageRejectsInvalidBundleAndArchive(t *testing.T) {
 	if err := extractArchive(bytes.NewReader(archive), t.TempDir()); err == nil || !strings.Contains(err.Error(), "invalid embedded") {
 		t.Fatalf("traversal archive error = %v", err)
 	}
-	archive = maliciousArchive(t, "ps/00000000000000000000000000000000", "ps/00000000000000000000000000000000")
+	archive = maliciousArchive(t, "manifest.json", "manifest.json")
 	if err := extractArchive(bytes.NewReader(archive), t.TempDir()); err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("duplicate archive error = %v", err)
 	}
@@ -342,24 +337,13 @@ func TestCrossPlatformCoverageArchiveFailureSeams(t *testing.T) {
 	if err := writeArchive(io.Discard, root); err != nil {
 		t.Fatal(err)
 	}
-	t.Run("ignored directory", func(t *testing.T) {
-		entries, err := os.ReadDir(filepath.Join(root, "ps"))
-		if err != nil {
+	t.Run("unexpected directory", func(t *testing.T) {
+		source := writePayloadFixture(t, "linux", "amd64")
+		if err := os.Mkdir(filepath.Join(source, "ps"), 0700); err != nil {
 			t.Fatal(err)
 		}
-		extraRoot := t.TempDir()
-		if err := os.Mkdir(filepath.Join(extraRoot, "ignored"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		extra, err := os.ReadDir(extraRoot)
-		if err != nil {
-			t.Fatal(err)
-		}
-		testseam.Swap(t, &readPayloadDirectory, func(string) ([]os.DirEntry, error) {
-			return append(entries, extra[0]), nil
-		})
-		if err := writeArchive(io.Discard, root); err != nil {
-			t.Fatal(err)
+		if err := writeArchive(io.Discard, source); err == nil {
+			t.Fatal("retired data directory accepted")
 		}
 	})
 
@@ -468,10 +452,7 @@ func TestCrossPlatformCoverageExtractionFailureSeams(t *testing.T) {
 		})
 	}
 
-	tooMany := make([]string, maxFiles)
-	for index := range tooMany {
-		tooMany[index] = fmt.Sprintf("ps/%032x", index)
-	}
+	tooMany := []string{"manifest.json", "libx7k2m9p4q1w8.so", "x7k2m9p4q1w8.dylib"}
 	if err := extractArchive(bytes.NewReader(maliciousArchive(t, tooMany...)), t.TempDir()); err == nil || !strings.Contains(err.Error(), "too many") {
 		t.Fatalf("entry limit error = %v", err)
 	}
@@ -498,7 +479,7 @@ func TestCrossPlatformCoverageExtractionFailureSeams(t *testing.T) {
 func TestCrossPlatformCoverageValidationFailures(t *testing.T) {
 	if !validArchivePath("manifest.json") || !validArchivePath("x7k2m9p4q1w8.dylib") ||
 		validArchivePath("other") || validArchivePath("ps/a/b") || validArchivePath("ps/short") ||
-		validArchivePath("ps/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz") || !validArchivePath("ps/00000000000000000000000000000000") {
+		validArchivePath("ps/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz") || validArchivePath("ps/00000000000000000000000000000000") {
 		t.Fatal("archive path validation drifted")
 	}
 
@@ -519,23 +500,21 @@ func TestCrossPlatformCoverageValidationFailures(t *testing.T) {
 		{"library checksum", "linux", func(t *testing.T, root string) {
 			os.WriteFile(filepath.Join(root, "libx7k2m9p4q1w8.so"), []byte("bad"), 0o700)
 		}},
-		{"missing directory", "linux", func(t *testing.T, root string) { os.Rename(filepath.Join(root, "ps"), filepath.Join(root, "gone")) }},
-		{"incomplete files", "linux", func(t *testing.T, root string) {
-			entries, _ := os.ReadDir(filepath.Join(root, "ps"))
-			os.Remove(filepath.Join(root, "ps", entries[0].Name()))
+		{"retired manifest format", "linux", func(t *testing.T, root string) {
+			rewritePayloadManifest(t, root, func(value *manifest) { value.FormatVersion = 1 })
 		}},
-		{"invalid file", "linux", func(t *testing.T, root string) {
-			entries, _ := os.ReadDir(filepath.Join(root, "ps"))
-			os.Rename(filepath.Join(root, "ps", entries[0].Name()), filepath.Join(root, "ps", "invalid"))
+		{"retired ps checksum", "linux", func(t *testing.T, root string) {
+			rewritePayloadManifest(t, root, func(value *manifest) { value.PSManifestSHA256 = strings.Repeat("a", 64) })
 		}},
-		{"non regular file", "linux", func(t *testing.T, root string) {
-			testseam.Swap(t, &regularPayloadFile, func(path string) bool {
-				return !strings.Contains(path, string(filepath.Separator)+"ps"+string(filepath.Separator)) && isRegularFile(path)
-			})
+		{"unexpected directory", "linux", func(t *testing.T, root string) { os.Mkdir(filepath.Join(root, "ps"), 0700) }},
+		{"unexpected file", "linux", func(t *testing.T, root string) { os.WriteFile(filepath.Join(root, "extra"), []byte("unowned"), 0600) }},
+		{"unexpected replacement", "linux", func(t *testing.T, root string) {
+			os.Rename(filepath.Join(root, "libx7k2m9p4q1w8.so"), filepath.Join(root, "other"))
 		}},
-		{"payload checksum", "linux", func(t *testing.T, root string) {
-			entries, _ := os.ReadDir(filepath.Join(root, "ps"))
-			os.WriteFile(filepath.Join(root, "ps", entries[0].Name()), []byte("bad"), 0o600)
+		{"non regular library", "linux", func(t *testing.T, root string) {
+			path := filepath.Join(root, "libx7k2m9p4q1w8.so")
+			os.Remove(path)
+			os.Mkdir(path, 0700)
 		}},
 	}
 	for _, test := range tests {
@@ -572,7 +551,7 @@ func TestCrossPlatformCoverageValidationFailures(t *testing.T) {
 	t.Run("validation hash", func(t *testing.T) {
 		root := writePayloadFixture(t, "linux", "amd64")
 		testseam.Swap(t, &openHashInput, func(path string) (io.ReadCloser, error) {
-			if strings.Contains(path, string(filepath.Separator)+"ps"+string(filepath.Separator)) {
+			if filepath.Base(path) == "libx7k2m9p4q1w8.so" {
 				return nil, errors.New("open")
 			}
 			return os.Open(path)
@@ -697,9 +676,6 @@ func archiveWithHeader(t *testing.T, header *tar.Header) []byte {
 func writePayloadFixture(t *testing.T, goos, goarch string) string {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "ps"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	library, err := LibraryName(goos, goarch)
 	if err != nil {
 		t.Fatal(err)
@@ -708,21 +684,10 @@ func writePayloadFixture(t *testing.T, goos, goarch string) string {
 	if err := os.WriteFile(filepath.Join(root, library), libraryContent, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	psHasher := sha256.New()
-	for index := range 123 {
-		name := fmt.Sprintf("%032x", index)
-		content := []byte(fmt.Sprintf("payload-%03d", index))
-		if err := os.WriteFile(filepath.Join(root, "ps", name), content, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		digest := sha256.Sum256(content)
-		fmt.Fprintf(psHasher, "%s  ps/%s\n", hex.EncodeToString(digest[:]), name)
-	}
 	libraryDigest := sha256.Sum256(libraryContent)
 	metadata := manifest{
-		FormatVersion: 1, PayloadVersion: PayloadVersion, Target: goos + "/" + goarch,
+		FormatVersion: manifestVersion, PayloadVersion: PayloadVersion, Target: goos + "/" + goarch,
 		Library: library, LibrarySHA256: hex.EncodeToString(libraryDigest[:]),
-		PSFileCount: 123, PSManifestSHA256: hex.EncodeToString(psHasher.Sum(nil)),
 	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {

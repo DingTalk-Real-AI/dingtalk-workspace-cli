@@ -191,7 +191,9 @@ var Create = shortcut.Shortcut{
 		if len(contentChunks) > 1 {
 			data["chunkPlan"] = chunkPlan.Summary()
 		}
-		return rt.Output(withDocWarnings(docEnvelope("doc.create", data, steps...), chunkPlan.Warnings()))
+		annotateMentionVerificationScope(data, steps, content)
+		return rt.Output(withDocWarnings(docEnvelope("doc.create", data, steps...),
+			withMentionTargetWarning(chunkPlan.Warnings(), content)))
 	},
 }
 
@@ -543,7 +545,9 @@ var CheckpointUpdate = shortcut.Shortcut{
 			data["chunksWritten"] = len(chunks)
 			data["chunkPlan"] = chunkPlan.Summary()
 		}
-		return rt.Output(withDocWarnings(docEnvelope("doc.checkpoint_update", data, steps...), chunkPlan.Warnings()))
+		annotateMentionVerificationScope(data, steps, content)
+		return rt.Output(withDocWarnings(docEnvelope("doc.checkpoint_update", data, steps...),
+			withMentionTargetWarning(chunkPlan.Warnings(), content)))
 	},
 }
 
@@ -903,7 +907,9 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 	if len(chunks) > 1 {
 		data["chunkPlan"] = chunkPlan.Summary()
 	}
-	return rt.Output(withDocWarnings(docEnvelope("doc.update", data, steps...), chunkPlan.Warnings()))
+	annotateMentionVerificationScope(data, steps, content)
+	return rt.Output(withDocWarnings(docEnvelope("doc.update", data, steps...),
+		withMentionTargetWarning(chunkPlan.Warnings(), content)))
 }
 
 const docVerificationExcerptRunes = 160
@@ -918,6 +924,14 @@ func compactDocVerification(value map[string]any, expected, mode, format string,
 		summary["format"] = format
 		summary["mode"] = mode
 		summary["expectedBytes"] = len(expected)
+		if docContentHasMentionLink(expected) {
+			// Readback proves the mention link sits at the authored position with the
+			// authored label, but not which user it resolved to: the service rewrites
+			// openDingTalkId into a profile link and the two identifiers have no local
+			// mapping. The summary says so, and the envelope drops "verified" to false.
+			summary["verified"] = false
+			summary["mentionTargetsVerified"] = false
+		}
 		candidate := matchingDocumentContent(value, expected, mode, format)
 		if candidate != "" {
 			normalized := normalizeDocumentContentForVerification(candidate, format)
@@ -1198,6 +1212,143 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 	return false
 }
 
+// The document service rewrites the private mention protocol into a DingTalk
+// profile link while committing markdown, so the authored destination never
+// survives a readback.
+//
+// Pairing is positional, not shape-based: only a position where the author wrote
+// the mention protocol may hold a profile link on readback. Every other link —
+// including an ordinary profile link the author wrote themselves — keeps its
+// full destination and must match exactly.
+//
+// Known limit: two mentions carrying the same label whose targets are swapped
+// cannot be told apart locally, because openDingTalkId and the rewritten
+// staffId are different values and neither is derivable from the other without
+// another request. Detecting that would require the service to report what it
+// rewrote.
+const (
+	docMentionLinkPrefix = "alidocs-mcp://doc/mention"
+	docProfileLinkPrefix = "dingtalk://dingtalkclient/page/profile"
+
+	docFingerprintLinkTokenPrefix = "open\x00link:"
+)
+
+func docContentHasMentionLink(source string) bool {
+	return strings.Contains(source, docMentionLinkPrefix)
+}
+
+// docMentionTargetUnverifiedWarning states two facts and nothing more: which part
+// the caller has to check itself, and that everything else was verified.
+const docMentionTargetUnverifiedWarning = "@人链接指向的具体人员需用户自行核对；正文其余部分（含该链接的位置与显示文本）均已通过回读校验。"
+
+const (
+	docVerificationScopePartial = "partial"
+	docUnverifiedMentionTargets = "mention_targets"
+	// docStepStatusPartial keeps a consumer that only switches on
+	// steps[].status from reading an unverifiable mention target as a fully
+	// verified readback. Such a consumer does not know the sibling scope
+	// marker, so the status itself has to stop saying "success".
+	docStepStatusPartial = "partial"
+)
+
+// annotateMentionVerificationScope qualifies the claim at the level it is made.
+// "verified" stays a boolean so existing consumers keep working, but a sibling
+// scope marker plus an explicit gap list mean the top level no longer reads as
+// "everything was verified".
+func annotateMentionVerificationScope(data map[string]any, steps []map[string]any, expected string) {
+	if !docContentHasMentionLink(expected) {
+		return
+	}
+	// Readback cannot establish which user a mention resolved to, so this write is
+	// not fully verified and must not say it is. "verified" therefore drops to
+	// false while the operation itself still reports success: the content was
+	// written, only one property of it is unverifiable here.
+	data["verified"] = false
+	data["verificationScope"] = docVerificationScopePartial
+	data["unverified"] = []string{docUnverifiedMentionTargets}
+	// The gap is not "not yet checked" but "not checkable from a readback", so
+	// say so next to the flag. A caller that re-reads the document learns nothing
+	// new about the target.
+	data["unverifiableLocally"] = []string{docUnverifiedMentionTargets}
+	for _, step := range steps {
+		if step["name"] == "verify" {
+			step["status"] = docStepStatusPartial
+			step["scope"] = docVerificationScopePartial
+		}
+	}
+}
+
+func withMentionTargetWarning(warnings []string, expected string) []string {
+	if !docContentHasMentionLink(expected) {
+		return warnings
+	}
+	// Copy rather than append in place: the caller's slice may share a backing
+	// array with the chunk plan's own warnings.
+	combined := make([]string, 0, len(warnings)+1)
+	combined = append(combined, warnings...)
+	return append(combined, docMentionTargetUnverifiedWarning)
+}
+
+func isMentionProtocolLinkToken(token string) bool {
+	return strings.HasPrefix(token, docFingerprintLinkTokenPrefix+docMentionLinkPrefix)
+}
+
+func isProfileLinkToken(token string) bool {
+	return strings.HasPrefix(token, docFingerprintLinkTokenPrefix+docProfileLinkPrefix)
+}
+
+// docFingerprintLinkDestination extracts the link destination from a fingerprint
+// token shaped "open\x00link:<destination>\x00<title>".
+func docFingerprintLinkDestination(token string) string {
+	rest := strings.TrimPrefix(token, docFingerprintLinkTokenPrefix)
+	if idx := strings.IndexByte(rest, 0); idx >= 0 {
+		return rest[:idx]
+	}
+	return rest
+}
+
+// markdownMentionAwareTokensEqual compares two fingerprint token sequences,
+// tolerating exactly one kind of difference: an authored mention protocol link
+// may appear as a profile link in the readback.
+//
+// Pairs are additionally required to form a consistent bijection: one
+// openDingTalkId must resolve to one profile target throughout the document, and
+// two different openDingTalkIds must not resolve to the same target. Both checks
+// are decidable locally and catch a service that mixed identities up.
+//
+// What remains undetectable is a permutation of two *distinct* targets: the
+// authored side never carries the resolved staffId, so (A→X, B→Y) and
+// (A→Y, B→X) are indistinguishable here. That is missing information, not a
+// weaker implementation — closing it needs the service to report what it
+// rewrote, or a reverse openDingTalkId lookup that the CLI surface does not
+// expose.
+func markdownMentionAwareTokensEqual(actual, expected []string) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	resolved := map[string]string{}
+	claimed := map[string]string{}
+	for index := range expected {
+		if actual[index] == expected[index] {
+			continue
+		}
+		if !isMentionProtocolLinkToken(expected[index]) || !isProfileLinkToken(actual[index]) {
+			return false
+		}
+		mention := docFingerprintLinkDestination(expected[index])
+		target := docFingerprintLinkDestination(actual[index])
+		if previous, seen := resolved[mention]; seen && previous != target {
+			return false
+		}
+		if previous, seen := claimed[target]; seen && previous != mention {
+			return false
+		}
+		resolved[mention] = target
+		claimed[target] = mention
+	}
+	return true
+}
+
 func markdownSemanticallyEquivalent(left, right string) bool {
 	leftFingerprint, leftOK := markdownSemanticFingerprint(left)
 	rightFingerprint, rightOK := markdownSemanticFingerprint(right)
@@ -1206,7 +1357,18 @@ func markdownSemanticallyEquivalent(left, right string) bool {
 	}
 	leftFingerprint, leftOK = markdownServiceSemanticFingerprint(left)
 	rightFingerprint, rightOK = markdownServiceSemanticFingerprint(right)
-	return leftOK && rightOK && leftFingerprint == rightFingerprint
+	if leftOK && rightOK && leftFingerprint == rightFingerprint {
+		return true
+	}
+	// Cheap short-circuit: with no authored mention there is nothing to pair, so
+	// the token comparison could only repeat the verdict above.
+	if !docContentHasMentionLink(right) {
+		return false
+	}
+	leftTokens, leftTokensOK := markdownServiceSemanticTokens(left)
+	rightTokens, rightTokensOK := markdownServiceSemanticTokens(right)
+	return leftTokensOK && rightTokensOK &&
+		markdownMentionAwareTokensEqual(leftTokens, rightTokens)
 }
 
 func markdownSemanticallyEndsWith(content, suffix string) bool {
@@ -1217,7 +1379,19 @@ func markdownSemanticallyEndsWith(content, suffix string) bool {
 	}
 	contentFingerprint, contentOK = markdownServiceSemanticFingerprint(content)
 	suffixFingerprint, suffixOK = markdownServiceSemanticFingerprint(suffix)
-	return contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint)
+	if contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint) {
+		return true
+	}
+	if !docContentHasMentionLink(suffix) {
+		return false
+	}
+	contentTokens, contentTokensOK := markdownServiceSemanticTokens(content)
+	suffixTokens, suffixTokensOK := markdownServiceSemanticTokens(suffix)
+	if !contentTokensOK || !suffixTokensOK || len(contentTokens) < len(suffixTokens) {
+		return false
+	}
+	return markdownMentionAwareTokensEqual(
+		contentTokens[len(contentTokens)-len(suffixTokens):], suffixTokens)
 }
 
 func markdownSemanticFingerprint(source string) (string, bool) {
@@ -1236,8 +1410,22 @@ func markdownSemanticFingerprint(source string) (string, bool) {
 // service, such as hard/soft line breaks, list tightness, and insignificant
 // whitespace. Exact rendered HTML remains the first comparison path above.
 func markdownServiceSemanticFingerprint(source string) (string, bool) {
+	value, _, ok := markdownStructuralFingerprint(source)
+	return value, ok
+}
+
+// markdownServiceSemanticTokens exposes the same walk as an ordered token
+// sequence. Positional comparison is what lets mention pairing stay exact: the
+// fingerprint keeps every authored destination, and only the comparison decides
+// which single position may legitimately differ.
+func markdownServiceSemanticTokens(source string) ([]string, bool) {
+	_, tokens, ok := markdownStructuralFingerprint(source)
+	return tokens, ok
+}
+
+func markdownStructuralFingerprint(source string) (string, []string, bool) {
 	if len(source) > docMarkdownVerifyMax {
-		return "", false
+		return "", nil, false
 	}
 	sourceBytes := []byte(normalizeDocInputLineEndings(source))
 	document := docMarkdown.Parser().Parse(goldmarktext.NewReader(sourceBytes))
@@ -1317,11 +1505,12 @@ func markdownServiceSemanticFingerprint(source string) (string, bool) {
 		return goldmarkast.WalkContinue, nil
 	})
 	builder.flushText()
-	return builder.value.String(), true
+	return builder.value.String(), builder.tokens, true
 }
 
 type markdownFingerprintBuilder struct {
 	value       strings.Builder
+	tokens      []string
 	pendingText strings.Builder
 }
 
@@ -1340,6 +1529,7 @@ func (builder *markdownFingerprintBuilder) text(value string) {
 func (builder *markdownFingerprintBuilder) token(kind, value string) {
 	builder.flushText()
 	fmt.Fprintf(&builder.value, "%s:%d:%s;", kind, len(value), value)
+	builder.tokens = append(builder.tokens, kind+"\x00"+value)
 }
 
 func (builder *markdownFingerprintBuilder) flushText() {
@@ -1348,6 +1538,7 @@ func (builder *markdownFingerprintBuilder) flushText() {
 	}
 	value := builder.pendingText.String()
 	fmt.Fprintf(&builder.value, "text:%d:%s;", len(value), value)
+	builder.tokens = append(builder.tokens, "text\x00"+value)
 	builder.pendingText.Reset()
 }
 

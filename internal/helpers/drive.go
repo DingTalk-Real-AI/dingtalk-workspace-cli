@@ -1638,12 +1638,14 @@ result.fileId。`,
 
 如果需要在某个知识库内搜索，请使用 dws wiki node search --workspace <workspaceId>。
 
+默认/all 仅支持首页聚合；续页请分别使用 drive search --target file 和 doc search，并传入各自返回的游标。
+
 结果中 source 字段区分来源：drive / doc。
 提示：结果按相关性排序，首页未命中时优先调整关键词 / 过滤条件，而非反复翻页。`,
 		Example: `  dws drive search --query "季度汇报"
   dws drive search --query "合同" --target file --extensions pdf,docx
   dws drive search --query "项目" --target space
-  dws drive search --query "报告" --limit 30 --cursor <pageToken>`,
+  dws drive search --query "报告" --target file --limit 30 --cursor <pageToken>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			keyword := flagOrFallback(cmd, "query", "keyword")
 			if keyword == "" {
@@ -1653,6 +1655,10 @@ result.fileId。`,
 			target, _ := cmd.Flags().GetString("target")
 
 			// 构建钉盘搜索参数
+			cursor := flagOrFallback(cmd, "cursor", "page-token")
+			if cursor != "" && (target == "" || target == "all") {
+				return fmt.Errorf("聚合搜索不支持续页；请分别使用 drive search --target file 和 doc search，并传入各自返回的游标")
+			}
 			argsMap := map[string]any{"keyword": keyword}
 			if target != "" && target != "all" {
 				argsMap["searchTarget"] = target
@@ -1695,8 +1701,8 @@ result.fileId。`,
 			if pageSize > 0 {
 				argsMap["pageSize"] = float64(pageSize)
 			}
-			if v := flagOrFallback(cmd, "cursor", "page-token"); v != "" {
-				argsMap["pageToken"] = v
+			if cursor != "" {
+				argsMap["pageToken"] = cursor
 			}
 
 			// --target file/space: 仅搜钉盘
@@ -1760,14 +1766,14 @@ result.fileId。`,
 				CLIPath:        "drive search",
 				PrimaryCLIPath: "drive search",
 			},
-			Description: "全局搜索文件，默认同时搜索钉盘和文档空间，合并返回结果",
+			Description: "全局搜索文件，默认同时搜索钉盘和文档空间，仅支持首页聚合；续页需分开查询并使用各自游标",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "search_files"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "全局搜索文件，默认同时搜索钉盘和文档空间，合并返回结果",
+				AgentSummary: "全局搜索文件，默认聚合钉盘和文档空间首页；续页需分开查询并使用各自游标",
 				UseWhen: []string{
 					"用户要在钉盘/我的文件里按关键词找文件、文件夹或团队空间，且不知道具体路径时",
 					"需要按扩展名/文件类型/创建者/时间缩小范围的全局搜索（默认 target=all 聚合钉盘+文档空间）",
@@ -1777,6 +1783,7 @@ result.fileId。`,
 					"已明确知识库 workspaceId、只在该库内搜时改用 dws wiki node search --workspace <id>",
 					"已知目录、只需浏览子项时改用 dws drive list，不要用搜索代替目录遍历",
 					"首页未命中时优先改关键词/过滤条件，而不是反复翻页",
+					"需要聚合续页时，分别使用 drive search --target file 和 doc search，并传入各自返回的游标",
 				},
 				Examples: []string{
 					"dws drive search --query \"季度汇报\" --format json",
@@ -1810,7 +1817,7 @@ result.fileId。`,
 	driveSearchCmd.Flags().Int("limit", 0, "每页返回数量（默认 10，最大 30）")
 	driveSearchCmd.Flags().Int("page-size", 0, "--limit 的别名（向后兼容）")
 	_ = driveSearchCmd.Flags().MarkHidden("page-size")
-	driveSearchCmd.Flags().String("cursor", "", "分页游标，从上次返回的 nextCursor 获取 (可选)")
+	driveSearchCmd.Flags().String("cursor", "", "分页游标，仅适用于 --target file/space；使用对应搜索返回的游标 (可选)")
 	driveSearchCmd.Flags().String("page-token", "", "--cursor 的别名（向后兼容）")
 	_ = driveSearchCmd.Flags().MarkHidden("page-token")
 
@@ -3550,8 +3557,8 @@ result.fileId。`,
 			Description: "开启文件的互联网公开发布",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
-				Availability: "available",
-				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+				Availability: "unavailable",
+				Reason:       "Current ordinary-file and online-document fixtures return operation.notSupported; keep CLI compatibility but exclude Agent selection until a reviewed eligible-node set→get→unset canary passes.",
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "开启文件的互联网公开发布",
@@ -3647,8 +3654,8 @@ result.fileId。`,
 	}
 	DeclareLeafMetadata(drivePublishGetCmd, LeafSpec{
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{

@@ -726,6 +726,26 @@ func TestCrossPlatformCoverageValidateConstraints(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageConstraintPresenceOnlyIsOptIn(t *testing.T) {
+	flags := []FlagSpec{{Name: "desc", Usage: "Description", Aliases: []string{"description"}}, {Name: "name", Usage: "Name", Default: "default"}}
+	for _, flag := range []string{"", "desc", "description"} {
+		for _, presenceOnly := range []bool{false, true} {
+			cmd := newTestCommand()
+			RegisterFlags(cmd, flags)
+			if flag != "" {
+				if err := cmd.Flags().Set(flag, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := ValidateConstraints(cmd, flags, []Constraint{{Kind: AtLeastOne, Flags: []string{"desc", "name"}, PresenceOnly: presenceOnly}})
+			wantValid := presenceOnly && flag != ""
+			if (err == nil) != wantValid {
+				t.Fatalf("flag=%q presenceOnly=%v err=%v", flag, presenceOnly, err)
+			}
+		}
+	}
+}
+
 // ── safety confirmation ────────────────────────────────────────────
 
 func TestCrossPlatformCoverageConfirmSafety(t *testing.T) {
