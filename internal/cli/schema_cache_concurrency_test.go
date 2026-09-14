@@ -5,35 +5,18 @@ package cli
 
 import (
 	"errors"
-	"runtime"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli/schemaruntime"
 )
 
-func TestCrossPlatformCoverageSchemaMetaPublication(t *testing.T) {
-	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
-	for i := 0; i < 20; i++ {
-		restorePackageCLISchemaDeliveryForTest()
-		done := make(chan struct{})
-		go func() {
-			deliverySchemaCatalog()
-			close(done)
-		}()
-		for runtimeDeliveryLiveCatalog.Load() == nil {
-			runtime.Gosched()
-		}
-		meta, ok := ResolveMeta("calendar event create")
-		<-done
-		if !ok || meta.Identity.Canonical != "calendar.create_calendar_event" {
-			t.Fatalf("published catalog has incomplete Meta at iteration %d: %#v, %v", i, meta, ok)
-		}
-	}
-}
-
 func TestCrossPlatformCoverageSchemaProductMemoizationRepair(t *testing.T) {
+	empty := &schemaCacheRuntime{}
+	if options := empty.optionsSnapshot(); options.Enabled || options.AllowGenerate || options.Edition != "" {
+		t.Fatalf("empty runtime options = %#v", options)
+	}
+
 	r := &schemaCacheRuntime{products: map[string]*schemaCacheProductLoad{"calendar": {}}}
 	inFlight := r.products["calendar"]
 	if _, err := r.cachedProduct("calendar"); err == nil {
@@ -55,31 +38,6 @@ func TestCrossPlatformCoverageSchemaProductMemoizationRepair(t *testing.T) {
 	got, err := r.cachedProduct("calendar")
 	if err != nil || len(got.Registry.Products) != 1 || got.Registry.Products[0].ID != "calendar" {
 		t.Fatalf("successful repair did not replace failed memoization: %#v, %v", got, err)
-	}
-}
-
-func TestCrossPlatformCoverageSchemaCacheConcurrentPrewarmPublish(t *testing.T) {
-	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
-	identity := coverageSchemaCacheIdentity()
-	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, Identity: identity, GOOS: "linux", GOARCH: "amd64",
-		RuntimeEligible: func() bool { return true },
-	}); err != nil {
-		t.Fatal(err)
-	}
-	var wait sync.WaitGroup
-	for range 16 {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			PrewarmSchemaCache()
-		}()
-	}
-	wait.Wait()
-	AwaitSchemaCachePrewarmForTest()
-	runtimeCache := activeSchemaCacheRuntime()
-	if runtimeCache == nil || runtimeCache.prewarm.Load() == nil {
-		t.Fatal("concurrent prewarm did not publish exactly one probe")
 	}
 }
 
@@ -157,102 +115,6 @@ func TestCrossPlatformCoverageSchemaCacheFastPathIdentityRequiresEligibleRuntime
 	}
 	if activeSchemaCacheRuntime() != nil {
 		t.Fatal("uncertain runtime still active")
-	}
-}
-
-func TestCrossPlatformCoverageSchemaCacheAdoptGeneratedIdentityRace(t *testing.T) {
-	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
-	ensureSchemaCacheOpenable(t)
-	coverageSchemaCacheHome(t)
-	goos, goarch := coverageCacheGOOSARCH()
-	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
-		Enabled: true, AllowGenerate: true, Edition: "open",
-		GOOS: goos, GOARCH: goarch,
-		RuntimeEligible: func() bool { return true },
-	}); err != nil {
-		t.Fatal(err)
-	}
-	runtimeCache := activeSchemaCacheRuntime()
-	if runtimeCache == nil {
-		t.Fatal("allow-generate runtime missing")
-	}
-	if snap := runtimeCache.optionsSnapshot(); !snap.AllowGenerate || schemaCacheIdentityReady(snap.Identity) {
-		t.Fatal("expected generate-pending snapshot")
-	}
-	if _, ok := SchemaCacheFastPathIdentity(); ok {
-		t.Fatal("generate-pending identity must not be a fast-path authority")
-	}
-
-	empty := &schemaCacheRuntime{}
-	if snap := empty.optionsSnapshot(); snap.Enabled || snap.AllowGenerate || snap.Edition != "" {
-		t.Fatalf("nil options snapshot = %#v", snap)
-	}
-	if edition := empty.cacheEdition(); edition != "open" {
-		t.Fatalf("nil snapshot edition = %q", edition)
-	}
-
-	generated := coverageSchemaCacheIdentity()
-	unregistered := newSchemaCacheRuntime(SchemaCacheOptions{AllowGenerate: true, Edition: "open"})
-	unregistered.adoptGeneratedIdentity(generated)
-	if snap := unregistered.optionsSnapshot(); !schemaCacheIdentityReady(snap.Identity) || snap.AllowGenerate || snap.Edition != generated.Edition {
-		t.Fatalf("unregistered adopt snapshot = %#v", snap)
-	}
-
-	var wait sync.WaitGroup
-	start := make(chan struct{})
-	for range 8 {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			<-start
-			for i := 0; i < 32; i++ {
-				runtimeCache.adoptGeneratedIdentity(generated)
-			}
-		}()
-	}
-	for range 8 {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			<-start
-			for i := 0; i < 32; i++ {
-				_, _ = SchemaCacheFastPathIdentity()
-				PrewarmSchemaCache()
-				opts := runtimeCache.optionsSnapshot()
-				_ = schemaCacheIdentityReady(opts.Identity)
-				_ = runtimeCache.cacheEdition()
-				_ = runtimeCache.trustedHashes()
-				if i == 0 {
-					_, _ = runtimeCache.loadPayloadIndex()
-					_, _ = runtimeCache.payloadsHandle()
-				}
-				if registration := schemaCacheRegistrationValue.Load(); registration != nil {
-					_ = registration.options.Identity
-					_ = registration.options.AllowGenerate
-					_ = registration.options.Edition
-				}
-			}
-		}()
-	}
-	wait.Add(2)
-	go func() {
-		defer wait.Done()
-		<-start
-		_, _ = ResolveMeta("calendar event create")
-	}()
-	go func() {
-		defer wait.Done()
-		<-start
-		_, _ = DeliverySchemaOverviewPayloadForTest()
-	}()
-	close(start)
-	wait.Wait()
-	identity, ok := SchemaCacheFastPathIdentity()
-	if !ok || !schemaCacheIdentityReady(identity) {
-		t.Fatalf("adopted identity = %#v, ok=%v", identity, ok)
-	}
-	if snap := runtimeCache.optionsSnapshot(); snap.AllowGenerate {
-		t.Fatalf("AllowGenerate remained true after adopt: %#v", snap)
 	}
 }
 

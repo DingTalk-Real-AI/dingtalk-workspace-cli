@@ -47,6 +47,7 @@ func TestCrossPlatformCoverageGeneratedSchemaCacheAccessors(t *testing.T) {
 	_, _ = ExampleDispositionReasonCode_EXAMPLE_DISPOSITION_REASON_CODE_UNSPECIFIED.EnumDescriptor()
 	_ = File_schema_cache_proto.Path()
 	_ = file_schema_cache_proto_rawDescGZIP()
+	file_schema_cache_proto_init()
 
 	for _, msg := range []proto.Message{
 		&StringList{Items: []string{"a"}},

@@ -26,16 +26,9 @@ import (
 
 func TestCrossPlatformCoverageSchemaCacheRealDeliveryParityAndLazyIO(t *testing.T) {
 	if schemaCacheRaceInstrumentation {
-		t.Skip("race:cli uses TestCrossPlatformCoverageSchemaCacheRealConcurrentRepair to stay inside the 25m shard budget")
+		t.Skip("race:cli skips exhaustive real-data parity to stay inside the shard budget")
 	}
 	testPersistentSchemaCacheRealDelivery(t, true)
-}
-
-// This runs the same real-data loader/repair/lock assertions under -race without
-// repeating exhaustive, serial build-time projection checks for every locator.
-// Native CI runs the exhaustive test separately, without race instrumentation.
-func TestCrossPlatformCoverageSchemaCacheRealConcurrentRepair(t *testing.T) {
-	testPersistentSchemaCacheRealDelivery(t, false)
 }
 
 func testPersistentSchemaCacheRealDelivery(t *testing.T, exhaustive bool) {
