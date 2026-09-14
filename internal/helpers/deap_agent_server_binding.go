@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -114,9 +115,9 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		return "", fmt.Errorf("主管身份的 MCP 调用不可用")
 	}
 	request := map[string]any{"agentUuid": b.AgentUUID}
-	wrappers := map[string]string{"bind": "BindLocalAgentRequest", "unbind": "UnbindLocalAgentRequest", "rebind": "RebindLocalAgentRequest"}
-	wrapper, ok := wrappers[action]
-	if !ok {
+	switch action {
+	case "bind", "unbind", "rebind":
+	default:
 		return "", fmt.Errorf("无效绑定操作")
 	}
 	if action != "bind" {
@@ -168,7 +169,7 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		return "", err
 	}
 	// identity 由网关根据主管 Token 注入；CLI 不允许覆盖身份，也不 dump 原始响应。
-	result, err := callEmployeeServerBinding(cmd.Context(), caller, configDir, selector, token.AccessToken, action, wrapper, request)
+	result, err := callEmployeeServerBinding(cmd.Context(), caller, configDir, selector, token.AccessToken, action, request)
 	if err != nil {
 		if employeeServerDefinitiveRejection(err) {
 			op.Phase = "rejected"
@@ -183,8 +184,9 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		return "", employeeServerUnknown("服务端请求结果未知；保留旧绑定，不启动新 Agent")
 	}
 	var response struct {
-		Success *bool           `json:"success"`
-		Data    json.RawMessage `json:"data"`
+		Success          *bool           `json:"success"`
+		Data             json.RawMessage `json:"data"`
+		RuntimeBindingID *string         `json:"runtimeBindingId"`
 	}
 	texts := 0
 	for _, block := range result.Content {
@@ -214,7 +216,33 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		}
 		op.RuntimeBindingID = b.RuntimeBindingID
 	} else {
-		if json.Unmarshal(response.Data, &op.RuntimeBindingID) != nil || !validMachineString(op.RuntimeBindingID) {
+		// 正式契约从 data 对象读取 runtimeBindingId；兼容旧版 data 字符串
+		// 和顶层映射。只读取明确字段，不递归猜测，也不使用 runtimeId。
+		data := bytes.TrimSpace(response.Data)
+		if len(data) > 0 && !bytes.Equal(data, []byte("null")) {
+			if data[0] == '{' {
+				var binding struct {
+					RuntimeBindingID string `json:"runtimeBindingId"`
+				}
+				if json.Unmarshal(data, &binding) != nil {
+					return "", employeeServerUnknown("绑定未返回有效 ID")
+				}
+				op.RuntimeBindingID = binding.RuntimeBindingID
+			} else if json.Unmarshal(data, &op.RuntimeBindingID) != nil {
+				return "", employeeServerUnknown("绑定未返回有效 ID")
+			}
+			// data 一旦提供就必须有效，不能用顶层兼容字段掩盖损坏结果。
+			if !validMachineString(op.RuntimeBindingID) {
+				return "", employeeServerUnknown("绑定未返回有效 ID")
+			}
+		}
+		if response.RuntimeBindingID != nil {
+			if op.RuntimeBindingID != "" && op.RuntimeBindingID != *response.RuntimeBindingID {
+				return "", employeeServerUnknown("服务端返回的绑定 ID 冲突")
+			}
+			op.RuntimeBindingID = *response.RuntimeBindingID
+		}
+		if !validMachineString(op.RuntimeBindingID) {
 			return "", employeeServerUnknown("绑定未返回有效 ID")
 		}
 		if action == "rebind" && op.RuntimeBindingID == b.RuntimeBindingID {
@@ -231,11 +259,11 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 func callEmployeeServerBinding(
 	ctx context.Context,
 	caller managedIdentityTokenCaller,
-	configDir, selector, accessToken, action, wrapper string,
+	configDir, selector, accessToken, action string,
 	request map[string]any,
 ) (*edition.ToolResult, error) {
 	call := func(token string) (*edition.ToolResult, error) {
-		return caller.CallToolWithToken(ctx, token, deapAgentServerID, action+"_local_agent", map[string]any{wrapper: request})
+		return caller.CallToolWithToken(ctx, token, deapAgentServerID, action+"_local_agent", request)
 	}
 	result, err := call(accessToken)
 	if !employeeServerAccessTokenRejected(err) {

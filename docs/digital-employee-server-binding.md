@@ -32,17 +32,32 @@
 
 ## MCP 契约
 
-固定使用 `deap-dev`，按平台 Schema 保留请求包装对象：
+固定使用 `deap-dev`，按平台 Schema 将业务字段直接放在 MCP `tools/call.arguments` 顶层，不增加 DTO 名称包装：
 
-| MCP | 包装对象 | 业务字段 | 成功 data |
-|---|---|---|---|
-| `bind_local_agent` | `BindLocalAgentRequest` | agentUuid、deviceId；可选 localAgentName、extensions | 非空绑定 ID 字符串 |
-| `unbind_local_agent` | `UnbindLocalAgentRequest` | agentUuid、runtimeBindingId | true |
-| `rebind_local_agent` | `RebindLocalAgentRequest` | agentUuid、runtimeBindingId、deviceId；可选 localAgentName、extensions | 新绑定 ID 字符串 |
+| MCP | 顶层业务字段 | success=true 时的返回值 |
+|---|---|---|
+| `bind_local_agent` | agentUuid、deviceId；可选 localAgentName、extensions | data 为绑定对象，读取 data.runtimeBindingId 非空字符串 |
+| `unbind_local_agent` | agentUuid、runtimeBindingId | data 为布尔值 true |
+| `rebind_local_agent` | agentUuid、runtimeBindingId、deviceId；localAgentName 见下文配置差异，可选 extensions | data 为绑定对象，读取 data.runtimeBindingId 新绑定 ID |
 
 `identity` 由网关根据主管登录态注入，CLI 不暴露或传入 userId/orgId/identity。请求使用明确主管 Profile 的进程内 Token，不使用刚换取的员工 Token，不改变当前 Profile。服务端负责权限、旧绑定版本和在途/待恢复任务校验。
 
-`--extensions` 按 Schema 传字符串，不自动展开为对象。回执只保存请求摘要和绑定结果，不保存扩展字符串或 Token；本模块不转储服务端原始响应或错误正文。响应必须有唯一 JSON 文本、明确 `success` 和正确类型的 `data`，不递归猜测 ID。
+`--extensions` 应传 JSON 对象序列化后的字符串，例如 `"{}"`；不自动展开为对象，空字符串、数组或任意非 JSON 文本不符合服务端约定。省略时服务端使用 `"{}"`，rebind 不自动保留旧扩展信息。CLI 将非空值原样传入，格式合法性由服务端校验；不在本地扩展或合并旧元数据。
+
+回执只保存请求摘要和绑定结果，不保存扩展字符串或 Token；本模块不转储服务端原始响应或错误正文。响应必须有唯一 JSON 文本和明确 `success`。bind/rebind 的正式成功业务响应为：
+
+```json
+{"success":true,"data":{"runtimeBindingId":"binding-new","runtimeId":"runtime-other","status":"ACTIVE"}}
+```
+
+从 `data.runtimeBindingId` 读取绑定 ID；`data` 是对象，不能把整个对象解析为字符串。保留旧版 `data` 字符串和顶层 `runtimeBindingId` 映射兼容；同时提供的 ID 必须一致，否则结果未知。已提供但缺少有效绑定 ID 的 data 对象/字符串不能被顶层字段覆盖。`runtimeId` 不能代替绑定 ID，`status=ACTIVE` 也不代表设备在线。unbind 要求 `success=true` 且 `data=true`，无论成功提示 `message` 是否存在、文案是什么，都不放宽为接受对象或字符串。业务失败读取 `errorCode`/`errorMsg`，不是根据 `message` 或 `data=false` 推断；明确拒绝记录为 rejected。
+
+上述示例只描述业务 JSON。MCP 外层可能使用 text 或 structuredContent，实际工具输出由平台映射决定；不能把业务示例当作真实请求的绑定回执。
+
+### 待平台确认的配置差异
+
+- rebind 的 `localAgentName` 在所提供的平台配置中为必填，但描述及服务端定义为可选。CLI 暂不更改其可选性；新的联调请求应显式传入名称，并由平台统一必填声明。现有 pending 请求不能通过补参数绕过原请求对账。
+- unbind 的服务端成功返回 `data=true`，所提供的平台配置却将 data 声明为 object。若原样透传，应将平台出参改为 boolean；客户端不会为适配错误配置而把任意对象当作解绑成功。
 
 ## 失败与恢复
 
@@ -65,6 +80,6 @@ pending → 单次 MCP 调用 → confirmed → 本地绑定提交 → consumed
 
 ## 验证边界与回滚
 
-自动化测试使用隔离配置、模拟 MCP 和模拟 DSH 控制，不更改真实绑定。上线前仍需联调三个 MCP 的包装对象、返回值、忙拒绝和身份注入，以及跨设备旧 ID 保护。
+自动化测试使用隔离配置、模拟 MCP 和模拟 DSH 控制，不更改真实绑定。上线前仍需联调三个 MCP 的顶层业务字段、返回值、忙拒绝和身份注入，以及跨设备旧 ID 保护。
 
 本变更不自动迁移存量连接，也不合并依赖 PR 或发布版本。回滚代码不会撤销已经发生的服务端绑定。新增字段可能被旧版严格 JSON 解码器拒绝；不要直接降级或删除回执。应先使用当前版本确认解绑并停止实例，由维护者保留备份后处理旧格式兼容。
