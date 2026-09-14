@@ -413,13 +413,24 @@ func TestCrossPlatformCoverageAITableNativeEntityReaderAndCommandSuccess(t *test
 	}
 }
 
-func TestAITableEntitySearchDryRunDoesNotReadMCP(t *testing.T) {
+func TestCrossPlatformCoverageAITableEntitySearchDryRunDoesNotReadMCP(t *testing.T) {
 	caller := &aitableTestCaller{dryRun: true}
 	if err := runAitableCoverageCommand(t, caller, "entity", "search", "--entity-type=DEPARTMENT", "--keyword=研发"); err != nil {
 		t.Fatalf("entity search dry-run: %v", err)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("entity search dry-run called MCP: %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAITableEntitySearchRejectsOversizedKeyword(t *testing.T) {
+	caller := &aitableTestCaller{}
+	err := runAitableCoverageCommand(t, caller, "entity", "search", "--entity-type=DEPARTMENT", "--keyword="+strings.Repeat("研", 101))
+	if err == nil || !strings.Contains(err.Error(), "不能超过 100") {
+		t.Fatalf("oversized keyword error = %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("oversized keyword called MCP: %#v", caller.calls)
 	}
 }
 

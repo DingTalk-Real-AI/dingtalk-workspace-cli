@@ -225,6 +225,29 @@ func TestCallAitablePsqlToolValidatesMCPResponses(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitablePsqlUnifiedBoundaryBranches(t *testing.T) {
+	dryCaller := &recordQueryE2ECaller{dryRun: true}
+	if _, err := runPsqlCLI(t, dryCaller, "-d", "base1", "-l"); err != nil {
+		t.Fatalf("psql dry-run: %v", err)
+	}
+	if len(dryCaller.calls) != 0 {
+		t.Fatalf("psql dry-run called MCP: %#v", dryCaller.calls)
+	}
+
+	testseam.Protect(t, &deps)
+	InitDeps(&recordQueryE2ECaller{steps: []recordQueryE2EStep{{result: textToolResult(`{"status":"success","data":[]}`)}}})
+	//lint:ignore SA1012 This regression test verifies nil-context normalization.
+	if _, err := callAitablePsqlTool(nil, "demo", map[string]any{}); err != nil {
+		t.Fatalf("nil context: %v", err)
+	}
+
+	if err := renderPgSchema(&bytes.Buffer{}, map[string]any{
+		"tableId": "t", "tableName": "n", "columns": []any{map[string]any{"columnName": "", "pgType": "text"}},
+	}); err == nil || !strings.Contains(err.Error(), "columnName and pgType") {
+		t.Fatalf("empty schema identity error = %v", err)
+	}
+}
+
 func TestAitablePsqlRenderValidationAndValues(t *testing.T) {
 	for _, test := range []struct {
 		name string

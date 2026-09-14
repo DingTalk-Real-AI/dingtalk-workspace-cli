@@ -173,6 +173,17 @@ func TestTablePresentationKeepsOneResultAcrossHumanAndJSONFormats(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageOptionalTablePresentationBoundaries(t *testing.T) {
+	if commandPresentationFlagChanged(nil, "format") {
+		t.Fatal("nil command reported a changed presentation flag")
+	}
+	result := Success(map[string]any{"id": "a"}, WithTablePresentation(nil))
+	envelope, err := EnvelopeFromResult(result)
+	if err != nil || envelope.Data.(map[string]any)["id"] != "a" {
+		t.Fatalf("nil table renderer result=%#v err=%v", envelope, err)
+	}
+}
+
 func TestTablePresentationRendererIsBufferFirst(t *testing.T) {
 	cmd := &cobra.Command{Use: "sample"}
 	stdout := new(bytes.Buffer)

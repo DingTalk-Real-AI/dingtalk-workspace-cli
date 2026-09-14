@@ -151,6 +151,64 @@ func TestAitableCommentListRejectsMalformedPagination(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitableCommentUnifiedResponseBoundaries(t *testing.T) {
+	listCases := []struct {
+		name string
+		data any
+	}{
+		{name: "non-object page", data: []any{}},
+		{name: "invalid comment", data: map[string]any{"comments": []any{map[string]any{}}, "hasMore": false}},
+		{name: "invalid hasMore", data: map[string]any{"comments": []any{}, "hasMore": "false"}},
+		{name: "invalid nextToken", data: map[string]any{"comments": []any{}, "hasMore": true, "nextToken": true}},
+	}
+	for _, test := range listCases {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, err := normalizeAitableCommentListResult(test.data, nil); err == nil {
+				t.Fatalf("accepted malformed list payload: %#v", test.data)
+			}
+		})
+	}
+
+	validIdentity := func(extra map[string]any) map[string]any {
+		item := map[string]any{"topicId": "topic-1", "commentKey": "comment-1"}
+		for key, value := range extra {
+			item[key] = value
+		}
+		return item
+	}
+	itemCases := []struct {
+		name string
+		data any
+	}{
+		{name: "non-object item", data: []any{}},
+		{name: "optional string type", data: validIdentity(map[string]any{"content": true})},
+		{name: "rich content type", data: validIdentity(map[string]any{"richContent": "text"})},
+		{name: "rich content node", data: validIdentity(map[string]any{"richContent": []any{"text"}})},
+		{name: "timestamp type", data: validIdentity(map[string]any{"createTime": 1.5})},
+	}
+	for _, test := range itemCases {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := normalizeAitableCommentItem("create_comment", test.data); err == nil {
+				t.Fatalf("accepted malformed comment item: %#v", test.data)
+			}
+		})
+	}
+	if _, err := normalizeAitableCommentItem("create_comment", validIdentity(map[string]any{
+		"replyCommentKey": "reply-1", "content": "ok", "creatorUserId": "u", "creatorCorpId": "c",
+		"richContent": []any{map[string]any{"type": "text"}}, "createTime": json.Number("1"), "updateTime": uint64(2),
+	})); err != nil {
+		t.Fatalf("valid complete comment item: %v", err)
+	}
+
+	dryCaller := &aitableTestCaller{dryRun: true}
+	installAitableDeps(t, dryCaller)
+	cmd := newAitableCommentCommand()
+	result, err := callAitableCommentResult(cmd, "create_comment", map[string]any{"baseId": "b"})
+	if err != nil || result == nil || len(dryCaller.calls) != 0 {
+		t.Fatalf("comment dry-run result=%#v err=%v calls=%#v", result, err, dryCaller.calls)
+	}
+}
+
 func TestAitableUnifiedDryRunPreservesPlan(t *testing.T) {
 	caller := &aitableTestCaller{dryRun: true}
 	installAitableDeps(t, caller)

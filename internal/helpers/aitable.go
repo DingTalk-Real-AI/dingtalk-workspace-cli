@@ -1234,10 +1234,9 @@ func normalizeAitableRecordIDsResult(data any, args map[string]any) (map[string]
 	if current, _ := args["cursor"].(string); nextCursor != "" && strings.TrimSpace(current) == nextCursor {
 		return nil, nil, apperrors.NewInternal("aitable/query_record_ids 返回了未前进的 nextCursor")
 	}
-	pagination, err := output.NewPagination(nextCursor == "", nextCursor)
-	if err != nil {
-		return nil, nil, apperrors.NewInternal("aitable/query_record_ids 返回了无效分页状态: " + err.Error())
-	}
+	// nextCursor 在上面已校验为字符串；空值表示终页，非空值表示仍有后续页，
+	// 因而可以直接构造同一份已验证状态，不保留不可达的错误分支。
+	pagination := &output.Pagination{EndpointExhausted: nextCursor == "", NextToken: nextCursor}
 	pagination.Pages = 1
 	pagination.Items = len(recordIDs)
 	payload := make(map[string]any, len(page)-1)

@@ -11,7 +11,7 @@ import (
 
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 	cause := errors.New("root cause")
-	err := &CLIError{Code: CodeInvalidParam, Message: "bad input", Suggestion: "fix it", Operation: "doc/read", Cause: cause}
+	err := &CLIError{Code: CodeInvalidParam, Message: "bad input", Suggestion: "fix it", Operation: "doc/read", ServerCode: "server.bad", Details: map[string]any{"stage": "read"}, Cause: cause}
 	if got := err.Error(); !strings.Contains(got, "doc/read") || !strings.Contains(got, "fix it") {
 		t.Fatalf("Error() = %q", got)
 	}
@@ -19,7 +19,7 @@ func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 		t.Fatalf("Unwrap/ExitCode = %v/%d", err.Unwrap(), err.ExitCode())
 	}
 	encoded := err.ToJSON()["error"].(map[string]any)
-	for _, key := range []string{"code", "message", "exit_code", "operation", "suggestion", "cause"} {
+	for _, key := range []string{"code", "message", "exit_code", "operation", "server_error_code", "details", "suggestion", "cause"} {
 		if _, ok := encoded[key]; !ok {
 			t.Errorf("ToJSON() missing %q: %#v", key, encoded)
 		}
@@ -51,6 +51,27 @@ func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
 	pat := &PATError{RawJSON: `{"code":"PAT_NO_PERMISSION"}`}
 	if pat.Error() != pat.RawJSON || pat.RawStderr() != pat.RawJSON || pat.ExitCode() != ExitPermission {
 		t.Fatalf("PATError methods changed: %#v", pat)
+	}
+}
+
+func TestCrossPlatformCoverageBusinessErrorProjectionBoundaries(t *testing.T) {
+	if got := suggestForBusinessError(map[string]any{"error": map[string]any{"code": "COMMENT_RECORD_UNAVAILABLE"}}); !strings.Contains(got, "打开该 Base") {
+		t.Fatalf("comment unavailable suggestion = %q", got)
+	}
+	if got := businessErrorMetaSuggestion(map[string]any{"meta": map[string]any{"suggestions": "bad"}}); got != "" {
+		t.Fatalf("malformed suggestions = %q", got)
+	}
+	if got := businessErrorMetaSuggestion(map[string]any{"meta": map[string]any{"suggestions": []any{"bad", map[string]any{"reason": "  "}}}}); got != "" {
+		t.Fatalf("invalid suggestion items = %q", got)
+	}
+	if got := businessErrorDetails(map[string]any{"error": map[string]any{"details": "bad"}}); got != nil {
+		t.Fatalf("malformed details = %#v", got)
+	}
+	if got := businessErrorDetails(map[string]any{"error": map[string]any{"details": map[string]any{"capability": " ", "stage": 1}}}); got != nil {
+		t.Fatalf("empty projected details = %#v", got)
+	}
+	if got := businessErrorMessage(map[string]any{"summary": " summary "}); got != " summary " {
+		t.Fatalf("summary fallback = %q", got)
 	}
 }
 

@@ -2,9 +2,11 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -129,6 +131,43 @@ func TestAitableRecordIDsRejectsMalformedResult(t *testing.T) {
 				t.Fatalf("accepted malformed page: %#v", page)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableUnifiedResultBoundaryBranches(t *testing.T) {
+	caller := &aitableTestCaller{responses: []string{`[]`}}
+	installAitableDeps(t, caller)
+	if _, err := callAitableUnifiedDataContext(context.Background(), "create_comment", map[string]any{}); err == nil || !strings.Contains(err.Error(), "不是 JSON 对象") {
+		t.Fatalf("non-object envelope error = %v", err)
+	}
+
+	for name, value := range map[string]any{
+		"int": int(1), "int8": int8(1), "int16": int16(1), "int32": int32(1), "int64": int64(1),
+		"uint": uint(1), "uint8": uint8(1), "uint16": uint16(1), "uint32": uint32(1), "uint64": uint64(1),
+		"float": float64(1), "number": json.Number("1"),
+	} {
+		if !aitableJSONInteger(value) {
+			t.Errorf("aitableJSONInteger(%s=%T) = false", name, value)
+		}
+	}
+	for name, value := range map[string]any{
+		"fraction": 1.5, "nan": math.NaN(), "positive infinity": math.Inf(1),
+		"invalid number": json.Number("1.5"), "string": "1",
+	} {
+		if aitableJSONInteger(value) {
+			t.Errorf("aitableJSONInteger(%s=%v) = true", name, value)
+		}
+	}
+
+	if _, _, err := normalizeAitableRecordIDsResult(nil, nil); err == nil || !strings.Contains(err.Error(), "不是 JSON 对象") {
+		t.Fatalf("nil record-id page error = %v", err)
+	}
+	dryCaller := &aitableTestCaller{dryRun: true}
+	if err := runAitableCoverageCommand(t, dryCaller, "record", "ids", "--base-id=b", "--table-id=t"); err != nil {
+		t.Fatalf("record ids dry-run: %v", err)
+	}
+	if len(dryCaller.calls) != 0 {
+		t.Fatalf("record ids dry-run called MCP: %#v", dryCaller.calls)
 	}
 }
 
