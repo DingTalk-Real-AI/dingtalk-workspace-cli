@@ -2,6 +2,11 @@ name: Build and publish Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_notes:
+        description: '本次变更说明（功能、修复及已知限制；支持 Markdown）'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -34,11 +39,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: v0.0.0-build.${{ github.run_number }}.${{ github.run_attempt }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
+          if [[ -z "${RELEASE_NOTES//[[:space:]]/}" ]]; then
+            echo "请填写本次变更说明。" >&2
+            exit 1
+          fi
+          notes_file="$RUNNER_TEMP/dws-release-notes.md"
+          printf '## 本次变更\n\n%s\n\n' "$RELEASE_NOTES" > "$notes_file"
+          cat docs/release-install-notes.md >> "$notes_file"
+          printf '\n## 构建来源\n\n- 分支：`%s`\n- 提交：`%s`\n- 构建：[Actions #%s](https://github.com/%s/actions/runs/%s)\n' \
+            "$GITHUB_REF_NAME" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$notes_file"
           # GoReleaser also leaves build directories and metadata in dist/.
           # Publish only the distributable archives and their checksum file.
           gh release create "$RELEASE_TAG" dist/dws-*.tar.gz dist/dws-*.zip dist/checksums.txt \
             --target "$GITHUB_SHA" \
             --title "DWS build #${{ github.run_number }}.${{ github.run_attempt }}" \
-            --notes "Built from $GITHUB_REPOSITORY@$GITHUB_SHA by the manual Build and publish Release workflow." \
+            --notes-file "$notes_file" \
             --prerelease
