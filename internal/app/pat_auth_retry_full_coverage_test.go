@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -79,13 +80,15 @@ func TestCrossPlatformCoveragePATRetryRemainingPureAndWaitCoverage(t *testing.T)
 	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok {
 		t.Fatalf("timed out authorization = %v, %v", ok, err)
 	}
-	patAuthorizationTimeout = 5 * time.Millisecond
+	patAuthorizationTimeout = time.Second
 	patAuthorizationPollInterval = time.Millisecond
+	pollCtx, pollCancel := context.WithCancel(context.Background())
 	patResolveAccessToken = func(context.Context, string, string) (string, error) {
+		pollCancel()
 		return "", authpkg.ErrTokenDataNotFound
 	}
 	out.Reset()
-	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok || !strings.Contains(out.String(), "等待授权中") {
+	if ok, err := WaitForPatAuthorization(pollCtx, "", &out); ok || !errors.Is(err, context.Canceled) || !strings.Contains(out.String(), "等待授权中") {
 		t.Fatalf("invalid-token polling = %v, %v, output %q", ok, err, out.String())
 	}
 }
@@ -279,5 +282,18 @@ func TestCrossPlatformCoveragePATRetryRemainingPollAndBrowserCoverage(t *testing
 	patBrowserOpenCommand = func(string, string) *exec.Cmd { return exec.Command("definitely-not-a-real-dws-command") }
 	if err := tryOpenBrowser("https://example.test"); err == nil {
 		t.Fatal("missing browser command started")
+	}
+	patBrowserOpenCommand = func(string, string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^TestCrossPlatformCoveragePATBrowserHelperProcess$")
+	}
+	if err := tryOpenBrowser("https://example.test"); err != nil {
+		t.Fatalf("helper browser start = %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestCrossPlatformCoveragePATBrowserHelperProcess(t *testing.T) {
+	if os.Getenv("DWS_PAT_BROWSER_HELPER") == "1" {
+		return
 	}
 }

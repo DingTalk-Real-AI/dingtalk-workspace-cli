@@ -5,6 +5,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -73,9 +74,113 @@ func TestCrossPlatformCoverageFlagListPageTokenAndPageLimit(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload["complete"] != false || payload["nextCursor"] != float64(9) || payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" {
+	if payload["complete"] != false || payload["nextCursor"] != float64(9) || payload["truncated"] != true || payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" {
 		t.Fatalf("payload = %#v", payload)
 	}
+}
+
+func TestCrossPlatformCoverageFlagListMaxItemsPublishesStableTruncation(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"msg-1"}],"hasMore":true,"nextCursor":9}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["truncated"] != true ||
+		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].args["size"] != "1" || payload["nextCursor"] != float64(9) {
+		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
+	}
+}
+
+func TestCrossPlatformCoverageFlagListLegacyFullRemainingPageFailsClosed(t *testing.T) {
+	fake := &larkAlignmentCaller{sequenceResponses: map[string][]string{
+		"im/list_message_favorites": {
+			`{"result":{"items":[{"openMessageId":"m1"},{"openMessageId":"m2"}],"hasMore":true,"nextCursor":7}}`,
+			`{"result":{"items":[{"openMessageId":"m3"}]}}`,
+		},
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+flag-list", "--page-size", "2", "--page-all", "--max-items", "3"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("full remaining-budget legacy page unexpectedly declared a complete result")
+	}
+	if len(fake.calls) != 2 || fake.calls[0].args["size"] != "2" || fake.calls[1].args["size"] != "1" {
+		t.Fatalf("request sizes = %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(3) || payload["complete"] != false ||
+		payload["paginationKnown"] != false || payload["stopReason"] != "pagination_error" ||
+		payload["failedCount"] != float64(1) || payload["nextCursor"] != float64(0) {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageFlagListFailsClosedOnOversizeAndCanceledDelay(t *testing.T) {
+	t.Run("oversized lower page", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"m1"},{"openMessageId":"m2"}],"hasMore":true,"nextCursor":9}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--max-items", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("oversized lower page unexpectedly published a continuation")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stopReason"] != "pagination_error" || payload["failedCount"] != float64(1) || payload["nextCursor"] != float64(0) {
+			t.Fatalf("payload = %#v", payload)
+		}
+		if len(fake.calls) != 1 || fake.calls[0].args["size"] != "1" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+	})
+
+	t.Run("canceled delay", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"m1"}],"hasMore":true,"nextCursor":9}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		root.SetContext(ctx)
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--page-delay", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("canceled delay unexpectedly succeeded")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
+			t.Fatalf("payload = %#v", payload)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageFlagListFailureModes(t *testing.T) {
@@ -137,7 +242,11 @@ func TestCrossPlatformCoverageFlagListPaginationValidation(t *testing.T) {
 		{"--size", "31"},
 		{"--page-token", "not-a-number"},
 		{"--page-limit", "2"},
+		{"--max-items", "1"},
+		{"--page-delay", "1"},
 		{"--page-all", "--page-limit", "0"},
+		{"--page-all", "--max-items", "-1"},
+		{"--page-all", "--page-delay", "-1"},
 		{"--page-all", "--page-limit", "501"},
 		{"--cursor", "1", "--page-token", "2"},
 	} {

@@ -28,6 +28,7 @@ func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 		"content":            "普通消息",
 		"openMessageId":      "msg-1",
 		"msgType":            "text",
+		"messageAiSendFlag":  "DWS",
 		"conversationTitle":  "群A",
 		"openConversationId": "cid1",
 		"emotionReplyList": []any{
@@ -39,6 +40,9 @@ func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 	}
 	if row["messageId"] != "msg-1" || row["conversationId"] != "cid1" || row["messageType"] != "text" {
 		t.Errorf("atMeProject stable identity = %#v", row)
+	}
+	if row["messageAiSendFlag"] != "DWS" {
+		t.Errorf("atMeProject AI send flag = %#v", row)
 	}
 	if reactions, ok := row["reactions"].(map[string]any); !ok || len(reactions) == 0 {
 		t.Errorf("atMeProject reactions = %#v", row["reactions"])
@@ -90,13 +94,27 @@ func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 	// nested sender + plain text + messageId
 	row := searchMsgProject(map[string]any{
-		"sender":     map[string]any{"nick": "千启"},
-		"createTime": "2026-07-19 13:37:03",
-		"content":    "命中关键词的消息",
-		"msgId":      "mid1",
+		"sender":            map[string]any{"nick": "千启"},
+		"createTime":        "2026-07-19 13:37:03",
+		"content":           "命中关键词的消息",
+		"msgId":             "mid1",
+		"messageAiSendFlag": "DWS",
 	})
 	if row["sender"] != "千启" || row["text"] != "命中关键词的消息" {
 		t.Fatalf("searchMsgProject = %#v", row)
+	}
+	if row["messageAiSendFlag"] != "DWS" {
+		t.Fatalf("searchMsgProject AI send flag = %#v", row)
+	}
+
+	// Canonical ID precedence and rich-text extraction must match typed search.
+	row = searchMsgProject(map[string]any{
+		"openMessageId": "open-id",
+		"messageId":     "legacy-conflict",
+		"content":       map[string]any{"richText": "富文本消息"},
+	})
+	if row["messageId"] != "open-id" || row["text"] != "富文本消息" {
+		t.Fatalf("searchMsgProject canonical fields = %#v", row)
 	}
 
 	// encrypted → marker; id-only sender; forwarded "null" sender nulled.
@@ -115,7 +133,7 @@ func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 		t.Errorf("searchMsgProject encrypted text = %v, want marker", row["text"])
 	}
 	fwd, ok := row["forwarded"].([]map[string]any)
-	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil {
+	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil || fwd[0]["time"] != "t" {
 		t.Errorf("searchMsgProject forwarded = %#v", row["forwarded"])
 	}
 

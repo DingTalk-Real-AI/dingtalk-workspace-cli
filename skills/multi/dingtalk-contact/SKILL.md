@@ -29,7 +29,6 @@ metadata:
 | `dws contact +list-dept-members` | read | 查看部门成员（仅本部门，不含下级） |
 | `dws contact +list-followings` | read | 获取当前用户的特别关注列表 |
 | `dws contact +list-role-members` | read | 查询角色下的成员列表 |
-| `dws contact +list-roles` | read | 获取企业所有角色（标签）列表 |
 | `dws contact +list-sub-depts` | read | 查看指定部门的子部门 |
 | `dws contact +lookup` | read | 按姓名查询某人的完整资料（自动解析 userId 后取详情） |
 | `dws contact +me` | read | 查看我自己的通讯录资料（姓名/userId/手机/部门/组织，干净投影） |
@@ -62,7 +61,7 @@ metadata:
 
 **触发**：按姓名/工号/部门/职责/上下级找人，或用手机号线索做语义搜索。
 
-1. **切 aisearch（必须）**：`dws aisearch person --keyword "<关键词>" --dimension <维度> --format json`（姓名→`name`、工号→`jobNumber`、手机号语义线索→`phone`、负责人→`duty`、部门→`department`、上下级→`supervisor`/`subordinate`）。
+1. **切 aisearch（必须）**：`dws aisearch person --query "<关键词>" --dimension <维度> --format json`（姓名→`name`、工号→`jobNumber`、手机号语义线索→`phone`、负责人→`duty`、部门→`department`、上下级→`supervisor`/`subordinate`）。
 2. **解析（必须）**：从结果取 `userId`、`title`；**多人同名禁止默认选第一个**，必须批量 `dws contact user get --ids <id1,id2,...> --format json` 拿部门/职位后让用户确认。
 3. **补详情（必须）**：要完整部门/职位/邮箱/主管时 `dws contact user get --ids <userId> --format json`。
 
@@ -81,7 +80,7 @@ metadata:
 
 **触发**：已有 userId 要查完整详情，或要拿 userId 给下游（发消息/建待办/约日程）。
 
-1. **拿 userId（必须）**：`dws aisearch person --keyword "<姓名>" --dimension name --format json` → `userId`；多命中必须列候选请用户确认。
+1. **拿 userId（必须）**：`dws aisearch person --query "<姓名>" --dimension name --format json` → `userId`；多命中必须列候选请用户确认。
 2. **查详情（必须）**：`dws contact user get --ids <userId> --format json`，按返回字段（`orgEmployeeModel` 下部门/职位/邮箱）答复。
 
 **禁止**：用模糊关键词直接调 `contact user search` 凑数、编造未返回字段。
@@ -108,7 +107,7 @@ metadata:
 - 通讯录问题必须调用 `dws contact` 或 `dws aisearch` 获取实时结果；严禁只读 `USER.md`、环境身份或静态上下文后直接回答。
 - 查自己用 `dws contact user get-self --format json`，不要把 `me/self/current` 当作 `userId` 传给 `user get`。
 - 姓名模糊搜索、工号反查、职责或上下级搜索走 `dws aisearch person`；完整手机号精确反查走 `dws contact user search-mobile --mobile "<手机号>" --format json`。拿到 `userId` 后按需 `dws contact user get --ids <userId> --format json` 补部门/职位/邮箱。
-- 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --keyword "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
+- 查询直属主管/上下级时，如果 `contact user get` 没返回明确主管字段，必须继续 `dws aisearch person --query "<完整姓名或工号>" --dimension supervisor --format json`，不要停在"可能需要进一步查询"。
 - 多个同名候选时，批量 `contact user get --ids id1,id2,... --format json` 获取部门/职位后再消歧；不要默认取第一个。
 - 用户查询企业角色、角色ID、角色成员，或“管理员/财务/HR/主管”等角色类型人员时，走 `contact label list/get/list-members`；不要用 `dept list-members` 筛字段替代。
 

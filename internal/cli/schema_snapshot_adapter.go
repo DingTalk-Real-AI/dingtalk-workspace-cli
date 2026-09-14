@@ -65,6 +65,8 @@ type schemaToolWire struct {
 	Constraints         RuntimeSchemaConstraints            `json:"constraints"`
 	Positionals         []contract.RuntimeSchemaPositional  `json:"positionals"`
 	DryRun              *contract.DryRunSpec                `json:"dry_run"`
+	Result              *contract.ResultSpec                `json:"result"`
+	Pagination          *contract.PaginationSpec            `json:"pagination"`
 	Effect              string                              `json:"effect"`
 	EffectSource        string                              `json:"effect_source"`
 	Risk                string                              `json:"risk"`
@@ -267,6 +269,8 @@ func schemaToolSpecFromWire(wire schemaToolWire) (ToolSpec, error) {
 		Constraints:    wire.Constraints,
 		Positionals:    wire.Positionals,
 		DryRun:         wire.DryRun,
+		Result:         wire.Result,
+		Pagination:     wire.Pagination,
 		Safety: contract.SafetySpec{
 			Effect:       wire.Effect,
 			EffectSource: wire.EffectSource,

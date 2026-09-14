@@ -53,6 +53,19 @@ func ExchangeManagedAuthCode(ctx context.Context, configDir string, request Mana
 	if clientID == "" || authCode == "" || expectedUserID == "" || expectedCorpID == "" || preserveProfile == "" || request.ResolveIdentity == nil {
 		return nil, fmt.Errorf("managed exchange requires clientId, authCode, expected userId, expected corpId, supervisor profile and identity resolver")
 	}
+	return exchangeVerifiedAuthCode(ctx, configDir, request, "", func(data *TokenData) error {
+		return managedExchangePersistToken(configDir, preserveProfile, data)
+	})
+}
+
+// exchangeVerifiedAuthCode shares online identity verification between supervisor
+// login and external-code login. Only the supervisor entry requires target facts
+// from the published employee; external assertions are optional, never identity data.
+func exchangeVerifiedAuthCode(ctx context.Context, configDir string, request ManagedExchangeRequest, clientSecret string, persist func(*TokenData) error) (*TokenData, error) {
+	clientID := strings.TrimSpace(request.ClientID)
+	authCode := strings.TrimSpace(request.AuthCode)
+	expectedUserID := strings.TrimSpace(request.ExpectedUserID)
+	expectedCorpID := strings.TrimSpace(request.ExpectedCorpID)
 	if err := managedExchangePreparePersistence(configDir); err != nil {
 		return nil, fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
@@ -63,7 +76,13 @@ func ExchangeManagedAuthCode(ctx context.Context, configDir string, request Mana
 		Output:     io.Discard,
 		httpClient: oauthHTTPClient,
 	}
-	data, err := provider.exchangeCodeViaMCPClientID(ctx, authCode, clientID)
+	var data *TokenData
+	var err error
+	if clientSecret == "" {
+		data, err = provider.exchangeCodeViaMCPClientID(ctx, authCode, clientID)
+	} else {
+		data, err = provider.exchangeCodeWithClient(ctx, authCode, clientID, clientSecret)
+	}
 	if err != nil {
 		// 授权码、Token 和服务端原始正文都不得进入错误链或调试输出。
 		return nil, fmt.Errorf("managed token exchange failed")
@@ -72,19 +91,19 @@ func ExchangeManagedAuthCode(ctx context.Context, configDir string, request Mana
 		return nil, fmt.Errorf("managed token exchange returned no token data")
 	}
 	returnedCorpID := strings.TrimSpace(data.CorpID)
-	if returnedCorpID == "" || returnedCorpID != expectedCorpID {
+	if returnedCorpID == "" || (expectedCorpID != "" && returnedCorpID != expectedCorpID) {
 		return nil, fmt.Errorf("managed token organization does not match the published digital employee")
 	}
-	identity, err := request.ResolveIdentity(ctx, data.AccessToken, expectedCorpID)
+	identity, err := request.ResolveIdentity(ctx, data.AccessToken, returnedCorpID)
 	if err != nil {
 		return nil, fmt.Errorf("managed token identity lookup failed")
 	}
 	resolvedUID := strings.TrimSpace(identity.UserID)
-	if resolvedUID == "" || resolvedUID != expectedUserID {
+	if resolvedUID == "" || (expectedUserID != "" && resolvedUID != expectedUserID) {
 		return nil, fmt.Errorf("managed token identity does not match the authorized digital employee")
 	}
 	resolvedCorpID := strings.TrimSpace(identity.CorpID)
-	if resolvedCorpID == "" || resolvedCorpID != expectedCorpID || resolvedCorpID != returnedCorpID {
+	if resolvedCorpID == "" || resolvedCorpID != returnedCorpID {
 		return nil, fmt.Errorf("managed identity organization does not match the published digital employee")
 	}
 	if tokenUID := strings.TrimSpace(data.UserID); tokenUID != "" && tokenUID != resolvedUID {
@@ -97,9 +116,8 @@ func ExchangeManagedAuthCode(ctx context.Context, configDir string, request Mana
 		data.CorpName = corpName
 	}
 	data.ClientID = clientID
-	data.Source = "mcp"
 	data.FreshAuthorization = true
-	if err := managedExchangePersistToken(configDir, preserveProfile, data); err != nil {
+	if err := persist(data); err != nil {
 		return nil, fmt.Errorf("save managed digital employee profile: %w", err)
 	}
 	return data, nil

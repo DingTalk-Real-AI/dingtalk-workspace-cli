@@ -384,12 +384,10 @@ func TestExchangeCodeForTokenPreparesBeforeRemoteAndMarksFresh(t *testing.T) {
 	writeFutureProfilesForLoginPreflight(t, configDir)
 
 	oldClient := oauthHTTPClient
-	oldSaveSecret := oauthSaveClientSecret
 	oldGet := authKeychainGet
 	oldValidate := authValidateEntries
 	t.Cleanup(func() {
 		oauthHTTPClient = oldClient
-		oauthSaveClientSecret = oldSaveSecret
 		authKeychainGet = oldGet
 		authValidateEntries = oldValidate
 	})
@@ -407,7 +405,6 @@ func TestExchangeCodeForTokenPreparesBeforeRemoteAndMarksFresh(t *testing.T) {
 			)),
 		}, nil
 	})}
-	oauthSaveClientSecret = func(string, string) error { return nil }
 	authKeychainGet = func(string, string) (string, error) {
 		localReads.Add(1)
 		return "", errors.New("unrelated local token is unreadable")

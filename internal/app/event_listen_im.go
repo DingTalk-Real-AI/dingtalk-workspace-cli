@@ -65,7 +65,7 @@ func (eventTargetReader) CallMCPData(product, tool string, params map[string]any
 
 var eventListenIMReader = func() targetresolver.Reader { return eventTargetReader{} }
 
-func newEventListenIMCommand() *cobra.Command {
+func newEventListenIMCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var opts listenIMOptions
 	cmd := &cobra.Command{
 		Use:   "+listen-im",
@@ -91,6 +91,8 @@ func newEventListenIMCommand() *cobra.Command {
 				StreamTicketMode: opts.StreamTicketMode,
 				StreamTicketURL:  opts.StreamTicketURL,
 				StreamSourceID:   opts.StreamSourceID,
+				ExplicitToken:    eventExplicitToken(globalFlags),
+				ClientIDOverride: eventExplicitClientID(globalFlags),
 				Common: commonConsumeOptions{
 					FormatRaw: "ndjson",
 					MaxEvents: opts.MaxEvents,

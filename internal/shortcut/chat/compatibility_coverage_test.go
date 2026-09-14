@@ -26,6 +26,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	fixtureCurrentDOpenID  = "DAAAAAAAAAAAiE"
+	fixtureCurrentDOpenID2 = "DAQEBAQEBAQEiE"
+)
+
 type platformCoverageCaller struct {
 	product string
 	tool    string
@@ -53,7 +58,7 @@ func (f *muteMemberResolutionCaller) CallTool(_ context.Context, product, tool s
 	case "contact/get_user_info_by_user_ids":
 		text = `{"result":[{"orgEmployeeModel":{"orgUserId":"user-2","orgUserName":"测试成员"}}]}`
 	case "chat/get_group_members":
-		text = `{"result":{"hasMore":false,"list":[{"memberEmpName":"测试成员","openDingtalkId":"D-open-2"}]}}`
+		text = `{"result":{"hasMore":false,"list":[{"memberEmpName":"测试成员","openDingtalkId":"` + fixtureCurrentDOpenID2 + `"}]}}`
 	case "im/set_group_member_mute_list":
 		text = `{"success":true}`
 	default:
@@ -235,8 +240,10 @@ func TestCrossPlatformCoverageChatIDHelpers(t *testing.T) {
 			value string
 			want  bool
 		}{
-			{value: "DingTalk-open-id", want: true},
-			{value: " dingtalk-open-id ", want: true},
+			{value: "DAAAAAAAAAAAiE", want: true},
+			{value: " DAAAAAAAAAAAiE ", want: true},
+			{value: "D-prefix-fixture-user", want: false},
+			{value: "d-prefix-fixture-user", want: false},
 			{value: "user-id", want: false},
 			{value: "   ", want: false},
 		}
@@ -248,11 +255,11 @@ func TestCrossPlatformCoverageChatIDHelpers(t *testing.T) {
 	})
 
 	t.Run("split mixed IDs", func(t *testing.T) {
-		userIDs, openIDs := splitIDs([]string{" user-1 ", "", "D-open-1", "d-open-2", "user-2"})
-		if want := []string{"user-1", "user-2"}; !reflect.DeepEqual(userIDs, want) {
+		userIDs, openIDs := splitIDs([]string{" user-1 ", "", "DAAAAAAAAAAAiE", "d-open-2", "D-prefix-fixture-user", "user-2"})
+		if want := []string{"user-1", "d-open-2", "D-prefix-fixture-user", "user-2"}; !reflect.DeepEqual(userIDs, want) {
 			t.Fatalf("user IDs = %#v, want %#v", userIDs, want)
 		}
-		if want := []string{"D-open-1", "d-open-2"}; !reflect.DeepEqual(openIDs, want) {
+		if want := []string{"DAAAAAAAAAAAiE"}; !reflect.DeepEqual(openIDs, want) {
 			t.Fatalf("open IDs = %#v, want %#v", openIDs, want)
 		}
 	})
@@ -281,7 +288,7 @@ func TestCrossPlatformCoverageChatMuteMemberResolvesUserIDToOpenDingTalkID(t *te
 	root.SetArgs([]string{
 		"chat", "+chat-mute-member",
 		"--group", "cid-1",
-		"--users", "user-2,D-open-2",
+		"--users", "user-2," + fixtureCurrentDOpenID2,
 		"--mute-time", "300000",
 		"--yes",
 	})
@@ -298,7 +305,7 @@ func TestCrossPlatformCoverageChatMuteMemberResolvesUserIDToOpenDingTalkID(t *te
 	if _, ok := final.args["uids"]; ok {
 		t.Fatalf("known-broken uids argument leaked into final call: %#v", final.args)
 	}
-	if got, want := final.args["openDingTalkIds"], []string{"D-open-2"}; !reflect.DeepEqual(got, want) {
+	if got, want := final.args["openDingTalkIds"], []string{fixtureCurrentDOpenID2}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("openDingTalkIds = %#v, want %#v", got, want)
 	}
 }

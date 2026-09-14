@@ -14,6 +14,7 @@
 package shortcut
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -26,6 +27,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+var validateShadowResult = output.ValidateResult
 
 // RuntimeContext is handed to a Shortcut's Validate and Execute hooks. It wraps
 // the cobra command and exposes typed flag accessors plus a single CallMCP entry
@@ -129,7 +132,59 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 	if params == nil {
 		params = map[string]any{}
 	}
-	return helpers.CallMCPToolOnServer(rt.shortcut.product(), tool, params)
+	if output.UsesUnifiedResult(rt.cmd) {
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"dry_run":   true,
+				"executed":  false,
+				"tool":      tool,
+				"arguments": params,
+			})
+		}
+		data, err := helpers.CallMCPToolDataOnServer(rt.cmd.Context(), rt.shortcut.product(), tool, params)
+		if err != nil {
+			return err
+		}
+		return rt.storePayload(tool, data)
+	}
+	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
+		preview := any(map[string]any{
+			"dry_run":   true,
+			"executed":  false,
+			"tool":      tool,
+			"arguments": params,
+		})
+		if rt.DryRun() {
+			if err := validateShadowResult(rt.resultForPayload(tool, preview)); err != nil {
+				return err
+			}
+			// The legacy caller owns dry-run presentation (including its human
+			// preview for non-JSON formats) and does not cross the business-call
+			// boundary. Keep using it so dual validation changes no bytes.
+			return helpers.CallMCPToolOnServerContext(rt.commandContext(), rt.shortcut.product(), tool, params)
+		}
+		text, err := helpers.CallMCPToolTextOnServerContext(rt.commandContext(), rt.shortcut.product(), tool, params)
+		if err != nil {
+			return err
+		}
+		data := legacyMCPPayload(text)
+		if err := validateShadowResult(rt.resultForPayload(tool, data)); err != nil {
+			return err
+		}
+		// dual_validate changes no external bytes: it renders the once-fetched
+		// payload through the established legacy projection after validating the
+		// shadow unified result.
+		return helpers.RenderLegacyMCPText(tool, text)
+	}
+	return helpers.CallMCPToolOnServerContext(rt.commandContext(), rt.shortcut.product(), tool, params)
+}
+
+func legacyMCPPayload(text string) any {
+	var data any
+	if err := json.Unmarshal([]byte(text), &data); err == nil {
+		return data
+	}
+	return text
 }
 
 // CallMCPData dispatches a read-only tool call to an explicit MCP product and
@@ -202,7 +257,7 @@ func (rt *RuntimeContext) callMCPData(product, tool string, params map[string]an
 	if params == nil {
 		params = map[string]any{}
 	}
-	text, err := helpers.CallMCPToolTextOnServer(product, tool, params)
+	text, err := helpers.CallMCPToolTextOnServerContext(rt.commandContext(), product, tool, params)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +275,7 @@ func (rt *RuntimeContext) callMCPReadData(product, tool string, params map[strin
 	if params == nil {
 		params = map[string]any{}
 	}
-	text, err := helpers.CallMCPReadToolTextOnServer(product, tool, params)
+	text, err := helpers.CallMCPReadToolTextOnServerContext(rt.commandContext(), product, tool, params)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +293,7 @@ func (rt *RuntimeContext) callMCPWriteData(product, tool string, params map[stri
 	if params == nil {
 		params = map[string]any{}
 	}
-	text, err := helpers.CallMCPToolTextOnServer(product, tool, params)
+	text, err := helpers.CallMCPToolTextOnServerContext(rt.commandContext(), product, tool, params)
 	if err != nil {
 		return nil, err
 	}
@@ -247,15 +302,31 @@ func (rt *RuntimeContext) callMCPWriteData(product, tool string, params map[stri
 			apperrors.WithOperation(product+"/"+tool),
 			apperrors.WithOrigin("mcp"),
 			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithExecutionStarted(true),
 			apperrors.WithRetryable(false),
 			apperrors.WithReason("empty_tool_response"),
 		)
 	}
 	var out map[string]any
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", tool, err))
+		return nil, apperrors.NewAPI(fmt.Sprintf("解析 %s 写响应失败；远端效果未知", tool),
+			apperrors.WithOperation(product+"/"+tool),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+			apperrors.WithReason("malformed_tool_response"),
+			apperrors.WithCause(err),
+		)
 	}
 	return out, nil
+}
+
+func (rt *RuntimeContext) commandContext() context.Context {
+	if rt != nil && rt.cmd != nil && rt.cmd.Context() != nil {
+		return rt.cmd.Context()
+	}
+	return context.Background()
 }
 
 // Output prints a (typically reshaped/projected) payload honouring the root
@@ -263,7 +334,116 @@ func (rt *RuntimeContext) callMCPWriteData(product, tool string, params map[stri
 // composed result instead of the raw MCP response — the output-projection
 // output-formatting capability.
 func (rt *RuntimeContext) Output(payload any) error {
+	if output.UsesUnifiedResult(rt.cmd) {
+		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload))
+	}
+	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
+		if err := validateShadowResult(rt.resultForPayload("", payload)); err != nil {
+			return err
+		}
+	}
 	return output.WriteCommandPayload(rt.cmd, payload, output.FormatJSON)
+}
+
+// OutputForTool stores a once-fetched MCP payload while retaining the tool name
+// for product-specific outcome normalization. It is intended for composite
+// shortcuts that must validate stable identity or collection shape before the
+// shared renderer sees the response; callers must not use it to issue a second
+// business request.
+func (rt *RuntimeContext) OutputForTool(tool string, payload any) error {
+	if output.UsesUnifiedResult(rt.cmd) {
+		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
+	}
+	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
+		if err := validateShadowResult(rt.resultForPayload(tool, payload)); err != nil {
+			return err
+		}
+	}
+	return output.WriteCommandPayload(rt.cmd, payload, output.FormatJSON)
+}
+
+func (rt *RuntimeContext) storePayload(tool string, payload any) error {
+	return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
+}
+
+func (rt *RuntimeContext) resultForPayload(tool string, payload any) output.CommandResult {
+	if rt.shortcut.product() == "devapp" {
+		return helpers.DevAppCommandResultFromPayload(tool, payload, rt.DryRun())
+	}
+	options := []output.ResultOption{}
+	if rt.DryRun() {
+		options = append(options, output.WithDryRun())
+	}
+	result := shortcutCommandResult(payload, options...)
+	if tool != "" && !rt.DryRun() && rt.isWriteShortcut() &&
+		result.Outcome() == output.OutcomeSuccess && !hasExplicitShortcutSuccess(payload) {
+		started := true
+		return output.Failure(&output.ErrorInfo{
+			Type:             "api",
+			Subtype:          "projection_unknown",
+			Message:          "write shortcut response has no reviewed terminal success evidence",
+			Hint:             "核查目标资源状态后再决定是否重试；为该命令使用专属结果投影表达成功证据。",
+			Operation:        rt.shortcut.product() + "/" + tool,
+			Origin:           "mcp_gateway",
+			Stage:            "response_projection",
+			ExecutionStarted: &started,
+		})
+	}
+	return result
+}
+
+func (rt *RuntimeContext) isWriteShortcut() bool {
+	effect := strings.TrimSpace(rt.shortcut.Safety.Effect)
+	if effect == "write" || effect == "destructive" {
+		return true
+	}
+	return rt.shortcut.Risk == RiskWrite || rt.shortcut.Risk == RiskHighWrite
+}
+
+func hasExplicitShortcutSuccess(payload any) bool {
+	object, ok := payload.(map[string]any)
+	if !ok {
+		return false
+	}
+	status := object
+	if content, ok := object["content"].(map[string]any); ok {
+		status = content
+	}
+	success, present := status["success"].(bool)
+	return present && success
+}
+
+func shortcutCommandResult(payload any, options ...output.ResultOption) output.CommandResult {
+	if object, ok := payload.(map[string]any); ok {
+		status := object
+		if content, ok := object["content"].(map[string]any); ok {
+			status = content
+		}
+		if rawSuccess, present := status["success"]; present {
+			success, isBool := rawSuccess.(bool)
+			if !isBool {
+				return output.Failure(&output.ErrorInfo{
+					Type:      "api",
+					Subtype:   "invalid_success_type",
+					Message:   "shortcut response success field must be a JSON boolean",
+					Hint:      "写操作先核查目标状态；读取操作保留脱敏响应证据后排查上游。",
+					Operation: "shortcut.response_projection",
+				}, options...)
+			}
+			if success {
+				return output.Success(payload, options...)
+			}
+			message := "shortcut operation failed"
+			for _, key := range []string{"errorMsg", "errorMessage", "message"} {
+				if value, ok := status[key].(string); ok && strings.TrimSpace(value) != "" {
+					message = strings.TrimSpace(value)
+					break
+				}
+			}
+			return output.Failure(&output.ErrorInfo{Type: "api", Message: message}, options...)
+		}
+	}
+	return output.Success(payload, options...)
 }
 
 // mount compiles a Shortcut into a cobra command through the unified command

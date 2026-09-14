@@ -1,5 +1,40 @@
 # 数字员工生命周期与 DSH 接入
 
+## 服务端设备绑定
+
+connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。旧版连接用 `dws dingtalk-tag connect bind --agent-uuid <agentUuid> --dry-run --format json` 预览补登记；确认后去掉 dry-run 并加 --yes。补登记不启动 Agent。
+
+设备 ID 缺省随机生成并在当前配置目录长期保存，也可显式传 `--device-id`；不要复制设备配置到另一台机器。`--local-agent-name` 可选，`--extensions` 传字符串。主管身份由网关注入，不传 identity/userId/orgId。
+
+换机器前先在旧机 stop 并确认释放，从 status 取得 runtimeBindingId。新机器执行 `dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --runtime-binding-id <oldBindingId> --channel codex --dry-run --format json`；确认后再执行写操作。这会调用原子 rebind，不是先解绑再绑定，成功必须保存新 ID。CLI 不提供远程停机或在线判断。
+
+同设备只换 Agent 类型保留服务端 ID；更换设备标识时才调用 rebind。unbind 携带保存的 ID，成功后保留历史回执，重复解绑不解除后继绑定。有在途或待恢复任务时服务端拒绝；保留旧 ID，不启动新 Agent。status/list 新增的 serverBindingState 仅是本地回执，不证明服务端当前绑定或在线。
+
+结果未知的 bind/rebind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先 bind 补登记再 unbind/rebind；profile-only 不创建设备或绑定，也不接受绑定参数。
+
+## 接入普通本地 Agent
+
+```bash
+dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --agent-workdir <directory> --daemon --alwayson --dry-run --format json
+dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --agent-workdir <directory> --daemon --alwayson --yes --format json
+dws dingtalk-tag connect status --agent-uuid <agentUuid> --format json
+dws dingtalk-tag connect stop --agent-uuid <agentUuid> --format json
+dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
+```
+
+连接使用数字员工 Profile 启动 Event Consumer，调用与 dev connect 共用的 Agent 协议，最终以员工身份引用回复文本。后台结果只有在 ready 后才返回运行成功；不支持的 Agent 或缺失的依赖必须明确报错。
+
+支持 `qoder/qoderwork/workbuddy/claudecode/codebuddy/codex/gemini/opencode/custom`；custom 使用 `--agent-cmd`，问题作为最后一个参数、stdout 作为答案。模型、工作目录、会话和权限参数沿用 dev connect，模型推理是否远端执行由 Agent 自身决定。
+
+默认仅主管可用；`--allowed-users` 接收精确 userId 并在员工上下文解析，`--allowed-groups` 接收该上下文的群会话 ID，群消息仍需满足用户白名单。不要把机器人 staffId 直接当作员工事件开放 ID。
+
+DSH 注册后由正在运行的宿主员工级启动；宿主不可用时返回 `restartRequired=true`。不接受普通 Agent 的 `--daemon/--alwayson` 参数。旧 DSH binding 向后兼容，不自动迁移到其他 Adapter。
+
+暂停使用 `connect stop`；解绑使用 `connect unbind --agent-uuid <agentUuid>`（不删除员工、Profile、Token 或审计）；换绑使用 `connect rebind --agent-uuid <agentUuid> --channel qoder`，自然语言要求后台接入时加 `--daemon --alwayson`。解绑/换绑先 dry-run，用户确认后再执行。旧实例必须停止并确认释放；unknown 或超时不能通过删配置强行绕过。新 binding 已提交后的启动失败用 restart 恢复，不能再次 create。
+
+本地状态、会话、去重记录和无正文审计按员工隔离。未知回复结果或进程中断的任务需要核实，不自动重新执行 Agent；后台重启保留订阅重试预算。远端 ack/replay/cursor 尚未提供，不承诺 exactly-once 或断线不丢消息。
+
+
 ## 创建草稿
 
 ```bash
@@ -32,7 +67,19 @@ dws dingtalk-tag manage delete --agent-uuid <agentUuid> --dry-run --format json
 
 当前版本没有独立下线命令。用户要求下线时应明确说明该限制，不得把不可逆的 `delete` 当作下线，也不要猜测未公开的 DEAP 工具。删除不可逆，先确认目标和影响。
 
-## 接入已有数字员工
+## 只保存已有数字员工的本地 Profile
+
+```bash
+dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only --dry-run --format json
+# 用户确认后
+dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only --yes --format json
+```
+
+前置条件：draft 的 `mainProgramType` 必须是 `local_agent`，且 published 详情存在。该模式只获取一次性授权信息、执行受管换票并保存数字员工独立 Profile；它保持主管 Profile 当前激活，不查询 operator、不保存 DSH binding、不调用或重启 DSH。成功结果的 `status` 为 `profile_saved`、`profileOnly` 为 `true`、`restartRequired` 为 `false`。
+
+`--profile-only` 与 `--channel` 不能同时使用。后续需要接入 DSH 时，单独执行下面的 DSH 模式；它会重新获取一次性授权信息并幂等注册。
+
+## 接入已有数字员工到 DSH
 
 本节只适用于企业把 `local_agent` 数字员工接入本地 Agent/DSH。A2A 或其他需要登录数字员工 DWS 的场景使用 `dws dingtalk-tag manage login --agent-uuid <agentUuid>`，不要使用 `connect`。
 
@@ -42,9 +89,9 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --dry-run --form
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --yes --format json
 ```
 
-前置条件：draft 的 `mainProgramType` 必须是 `local_agent`，且 published 详情存在。connect 会保存数字员工独立 Profile、保持主管 Profile 当前激活，并幂等注册 DSH；它不会修改或发布员工，也不会自动重启 DSH。
+前置条件同上。该模式会保存数字员工独立 Profile、保持主管 Profile 当前激活，并继续解析 operator、保存 DSH binding 和幂等注册 DSH；它不会修改或发布员工，也不会自动重启 DSH。
 
-成功结果在 DWS envelope 的 `data` 中返回 `status`、`agentUuid`、`dwsProfile`、`operatorOpenDingTalkId`、`protocolVersion` 和 `restartRequired`。若 Profile 已落盘但 DSH 注册失败，重新执行同一 connect 获取新授权码并幂等重试，不要重新创建员工。
+成功结果在 DWS envelope 的 `data` 中返回身份与运行结果。宿主确认启动时返回实际运行状态和 readiness；仅注册时返回 `restartRequired=true`，不能视为已在线。若 Profile 和绑定已落盘但 DSH 注册失败，使用 `connect restart --agent-uuid <agentUuid>` 幂等补注册并启动，无需换票，也不要重新创建员工。
 
 ## 创建并接入的一次请求
 

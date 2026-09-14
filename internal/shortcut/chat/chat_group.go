@@ -409,6 +409,9 @@ var ChatMembersGet = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +chat-members-get --id <openConversationId> --users odid1,odid2`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateExplicitOpenIDs("--users", rt.StrSlice("users")); err != nil {
+			return err
+		}
 		return rt.CallMCP("list_group_member_by_ids", map[string]any{
 			"openConversationId":    rt.Str("id"),
 			"cid":                   rt.Str("id"),
@@ -878,16 +881,16 @@ var ChatListAll = shortcut.Shortcut{
 			Examples:     []string{"dws chat +chat-list-all --limit 50"},
 		},
 	},
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页返回数量；--limit 必须在 1-200 之间"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传 nextCursor"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部已加入群；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部已加入群；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items/--page-delay 仅与 --page-all 一起使用；值必须大于等于 0"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
-	Constraints: []shortcut.Constraint{
+	}, shortcut.AutoPageControlFlags()...),
+	Constraints: append([]shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-200 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
+	}, shortcut.AutoPageControlConstraints()...),
 	Tips: []string{
 		`dws chat +chat-list-all --limit 50`,
 		`dws chat +chat-list-all --limit 200 --page-all --page-limit 50`,
@@ -907,6 +910,9 @@ func validateChatListAll(rt *shortcut.RuntimeContext) error {
 		if limit := rt.Int("page-limit"); limit < 1 || limit > chatListAllHardPageLimit {
 			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
+	}
+	if err := shortcut.ValidateAutoPageControls(rt); err != nil {
+		return apperrors.NewValidation(err.Error())
 	}
 	return nil
 }
@@ -958,10 +964,21 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 	hasMore := false
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
+	truncatedByResultLimit := false
 	var nextCursor any
 
 	for pagesFetched < pageLimit {
-		params := map[string]any{"limit": baseParams["limit"]}
+		if pagesFetched > 0 {
+			if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+				failures = append(failures, map[string]any{
+					"page": pagesFetched + 1, "stage": "delay", "cursor": cursorKey, "error": err.Error(),
+				})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
+		pageSize, _ := baseParams["limit"].(int)
+		params := map[string]any{"limit": shortcut.AutoPageRequestSize(rt, pageSize, len(allGroups))}
 		if cursorKey != "0" {
 			params["cursor"] = cursorValue
 		}
@@ -978,6 +995,7 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 		}
 		pagesFetched++
 		pageGroups := chatListAllProject(data)
+		overflowOnPage := false
 		for _, group := range pageGroups {
 			id := strings.TrimSpace(fmt.Sprint(group["openConversationId"]))
 			if id == "<nil>" {
@@ -988,6 +1006,11 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 			}
 			if id != "" {
 				seenGroups[id] = true
+			}
+			if maxItems := rt.Int("max-items"); maxItems > 0 && len(allGroups) >= maxItems {
+				truncatedByResultLimit = true
+				overflowOnPage = true
+				continue
 			}
 			allGroups = append(allGroups, group)
 		}
@@ -1003,6 +1026,16 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 			break
 		}
 		hasMore = pageHasMore
+		if overflowOnPage {
+			hasMore = true
+			nextCursor = nil
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "已加入群列表下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标",
+			})
+			stopReason = "pagination_error"
+			break
+		}
 		if !hasMore {
 			complete = true
 			nextCursor = nil
@@ -1022,8 +1055,13 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 		seenCursors[nextKey] = true
 		cursorKey = nextKey
 		cursorValue = nextCursor
+		if maxItems := rt.Int("max-items"); maxItems > 0 && len(allGroups) >= maxItems {
+			truncatedByResultLimit = true
+			stopReason = "result_limit"
+			break
+		}
 	}
-	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit && !truncatedByResultLimit {
 		truncatedByPageLimit = true
 		stopReason = "page_limit"
 	}
@@ -1033,9 +1071,11 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 		"pagesFetched": pagesFetched, "paginationKnown": true,
 		"complete": complete && len(failures) == 0, "hasMore": hasMore,
 		"stopReason": stopReason, "truncatedByPageLimit": truncatedByPageLimit,
-		"failedCount": len(failures), "failures": failures,
+		"truncatedByResultLimit": truncatedByResultLimit,
+		"failedCount":            len(failures), "failures": failures,
 		"partial": len(failures) > 0 && len(allGroups) > 0,
 	}
+	chatmsg.ApplyTruncation(payload)
 	if hasMore && nextCursor != nil {
 		payload["nextCursor"] = nextCursor
 	}
@@ -1312,9 +1352,9 @@ var ChatBots = shortcut.Shortcut{
 	},
 }
 
-// resolveStableOrNamedChat gives read-only group shortcuts one safe target
-// contract. Stable cid values bypass search; natural names always go through
-// the shared exact-match, full-pagination and ambiguity rules.
+// resolveStableOrNamedChat gives group shortcuts one safe target contract.
+// Stable cid values bypass search; natural names always go through the shared
+// exact-match, full-pagination and ambiguity rules before any business call.
 func resolveStableOrNamedChat(rt *shortcut.RuntimeContext) (string, error) {
 	resolved, err := targetresolver.ResolveChatTarget(
 		rt,
@@ -1653,7 +1693,7 @@ var ChatRoleList = shortcut.Shortcut{
 	Command:     "+chat-role-list",
 	Product:     "im",
 	Description: "拉取会话的群身份列表",
-	Intent:      "当你想查看某群自定义的群身份（如'班长''值日'）都有哪些时使用；需传群 openConversationId，只读返回群身份列表及 openRoleId。",
+	Intent:      "当你想查看某群自定义的群身份（如'班长''值日'）都有哪些时使用；--group 可传群名或 openConversationId，多命中会安全停止，只读返回群身份列表及 openRoleId。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1675,17 +1715,21 @@ var ChatRoleList = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "拉取会话的群身份列表",
-			UseWhen:      []string{"当你想查看某群自定义的群身份（如'班长''值日'）都有哪些时使用；需传群 openConversationId，只读返回群身份列表及 openRoleId。"},
+			UseWhen:      []string{"当你想查看某群自定义的群身份（如'班长''值日'）都有哪些时使用；--group 可传群名或 openConversationId，多命中会安全停止，只读返回群身份列表及 openRoleId。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +chat-role-list --group <openConversationId>"},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 	},
 	Tips: []string{`dws chat +chat-role-list --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		data, err := rt.CallMCPData("im", "list_custom_group_roles", map[string]any{"openConversationId": rt.Str("group")})
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
+		data, err := rt.CallMCPData("im", "list_custom_group_roles", map[string]any{"openConversationId": groupID})
 		if err != nil {
 			return err
 		}
@@ -1727,7 +1771,7 @@ var ChatRoleAdd = shortcut.Shortcut{
 	Command:     "+chat-role-add",
 	Product:     "im",
 	Description: "添加群身份",
-	Intent:      "当你想在群里新增一个自定义群身份/头衔时使用；会实际创建群身份，需传群 openConversationId 和身份名称。",
+	Intent:      "当你想在群里新增一个自定义群身份/头衔时使用；会实际创建群身份，--group 可传群名或 openConversationId，多命中时在写入前停止。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -1749,19 +1793,23 @@ var ChatRoleAdd = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "添加群身份",
-			UseWhen:      []string{"当你想在群里新增一个自定义群身份/头衔时使用；会实际创建群身份，需传群 openConversationId 和身份名称。"},
+			UseWhen:      []string{"当你想在群里新增一个自定义群身份/头衔时使用；会实际创建群身份，--group 可传群名或 openConversationId，多命中时在写入前停止。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +chat-role-add --group <openConversationId> --name \"管理员\""},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "群身份名称", Required: true},
 	},
 	Tips: []string{`dws chat +chat-role-add --group <openConversationId> --name "管理员"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
 		return rt.CallMCP("add_custom_group_role", map[string]any{
-			"openConversationId": rt.Str("group"),
+			"openConversationId": groupID,
 			"name":               rt.Str("name"),
 		})
 	},
@@ -1773,7 +1821,7 @@ var ChatRoleUpdate = shortcut.Shortcut{
 	Command:     "+chat-role-update",
 	Product:     "im",
 	Description: "更新群身份名称",
-	Intent:      "当你想重命名已有的群身份时使用；会实际更新身份名称，需传群 openConversationId、身份 openRoleId 和新名称。",
+	Intent:      "当你想重命名已有的群身份时使用；会实际更新身份名称，--group 可传群名或 openConversationId，并需身份 openRoleId 和新名称。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -1795,20 +1843,24 @@ var ChatRoleUpdate = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "更新群身份名称",
-			UseWhen:      []string{"当你想重命名已有的群身份时使用；会实际更新身份名称，需传群 openConversationId、身份 openRoleId 和新名称。"},
+			UseWhen:      []string{"当你想重命名已有的群身份时使用；会实际更新身份名称，--group 可传群名或 openConversationId，并需身份 openRoleId 和新名称。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +chat-role-update --group <openConversationId> --role-id <openRoleId> --name \"新名称\""},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "role-id", Type: shortcut.FlagString, Desc: "群身份 openRoleId", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "群身份新名称", Required: true},
 	},
 	Tips: []string{`dws chat +chat-role-update --group <openConversationId> --role-id <openRoleId> --name "新名称"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
 		return rt.CallMCP("update_custom_group_role", map[string]any{
-			"openConversationId": rt.Str("group"),
+			"openConversationId": groupID,
 			"openRoleId":         rt.Str("role-id"),
 			"name":               rt.Str("name"),
 		})
@@ -1821,19 +1873,43 @@ var ChatRoleRemove = shortcut.Shortcut{
 	Command:     "+chat-role-remove",
 	Product:     "im",
 	Description: "删除群身份",
-	Intent:      "当你想删除某个自定义群身份时使用；会实际删除群身份，不可逆，需传群 openConversationId 和身份 openRoleId。",
+	Intent:      "当你想删除某个自定义群身份时使用；会实际删除群身份且不可逆，--group 可传群名或 openConversationId，并需身份 openRoleId。",
 	Risk:        shortcut.RiskHighWrite,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "role-id", Type: shortcut.FlagString, Desc: "群身份 openRoleId", Required: true},
 	},
 	Tips: []string{`dws chat +chat-role-remove --group <openConversationId> --role-id <openRoleId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
 		return rt.CallMCP("remove_custom_group_role", map[string]any{
-			"openConversationId": rt.Str("group"),
+			"openConversationId": groupID,
 			"openRoleId":         rt.Str("role-id"),
 		})
 	},
+}
+
+func validateChatRoleIDs(values []string) error {
+	if len(values) == 0 {
+		return apperrors.NewValidation("--role-ids 必须包含至少一个非空的群身份 openRoleId")
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return apperrors.NewValidation("--role-ids 不能包含空值或仅含空白的群身份 openRoleId")
+		}
+	}
+	return nil
+}
+
+func normalizeChatRoleIDs(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized = append(normalized, strings.TrimSpace(value))
+	}
+	return normalized
 }
 
 // ChatRoleSetUser overwrites a user's group roles (set_custom_user_roles, im).
@@ -1842,7 +1918,7 @@ var ChatRoleSetUser = shortcut.Shortcut{
 	Command:     "+chat-role-set-user",
 	Product:     "im",
 	Description: "设置用户的群身份（覆盖该用户的全部群身份）",
-	Intent:      "当你想为某成员整体设定其在群内的身份时使用；会实际改写该用户的群身份集合（覆盖其原有全部身份），需传群、用户和 openRoleId 列表（传空则清除全部）。",
+	Intent:      "当你想为某成员整体设定其在群内的身份时使用；--group 可传群名或 openConversationId；会实际覆盖该用户的全部群身份，必须传至少一个 openRoleId；只撤销指定身份时使用 +chat-role-remove-user。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -1864,22 +1940,33 @@ var ChatRoleSetUser = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "设置用户的群身份（覆盖该用户的全部群身份）",
-			UseWhen:      []string{"当你想为某成员整体设定其在群内的身份时使用；会实际改写该用户的群身份集合（覆盖其原有全部身份），需传群、用户和 openRoleId 列表（传空则清除全部）。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			UseWhen:      []string{"当你想为某成员整体设定其在群内的身份时使用；--group 可传群名或 openConversationId；会实际覆盖该用户的全部群身份，必须传至少一个 openRoleId；只撤销指定身份时使用 +chat-role-remove-user。"},
+			AvoidWhen:    []string{"只撤销成员的指定群身份时使用 +chat-role-remove-user；需要未公开的底层参数或不同执行语义时才用对应原子命令。"},
 			Examples:     []string{"dws chat +chat-role-set-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2"},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "用户 userId 或 openDingTalkId", Required: true},
-		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "群身份 openRoleId 列表（空则清除全部）", Required: true},
+		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要整体设置的群身份 openRoleId 列表；必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"role-ids"}, Description: "必须包含至少一个非空 openRoleId，且不能包含空值或仅含空白的元素"},
 	},
 	Tips: []string{`dws chat +chat-role-set-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateChatRoleIDs(rt.StrSlice("role-ids"))
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		roleIDs := normalizeChatRoleIDs(rt.StrSlice("role-ids"))
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
 		user := rt.Str("user")
 		params := map[string]any{
-			"openConversationId": rt.Str("group"),
-			"openRoleIds":        rt.StrSlice("role-ids"),
+			"openConversationId": groupID,
+			"openRoleIds":        roleIDs,
 		}
 		if isOpenID(user) {
 			params["openDingTalkId"] = user
@@ -1896,18 +1983,22 @@ var ChatRoleRemoveUser = shortcut.Shortcut{
 	Command:     "+chat-role-remove-user",
 	Product:     "im",
 	Description: "移除用户的指定群身份",
-	Intent:      "当你只想撤销某成员的部分群身份、保留其余时使用；会实际移除指定的群身份，需传群、用户和要移除的 openRoleId 列表。",
+	Intent:      "当你只想撤销某成员的部分群身份、保留其余时使用；--group 可传群名或 openConversationId；会实际移除指定的群身份，需传用户和 openRoleId 列表。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "用户 userId 或 openDingTalkId", Required: true},
 		{Name: "role-ids", Type: shortcut.FlagStringSlice, Desc: "要移除的群身份 openRoleId 列表", Required: true},
 	},
 	Tips: []string{`dws chat +chat-role-remove-user --group <openConversationId> --user <userId> --role-ids roleId1`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
 		user := rt.Str("user")
 		params := map[string]any{
-			"openConversationId": rt.Str("group"),
+			"openConversationId": groupID,
 			"openRoleIds":        rt.StrSlice("role-ids"),
 		}
 		if isOpenID(user) {
@@ -1925,7 +2016,7 @@ var ChatRoleQueryUser = shortcut.Shortcut{
 	Command:     "+chat-role-query-user",
 	Product:     "im",
 	Description: "查询群成员的群身份",
-	Intent:      "当你想查看某个群成员当前拥有哪些群身份时使用；只读，需传群 openConversationId 和用户 userId 或 openDingTalkId。",
+	Intent:      "当你想查看某个群成员当前拥有哪些群身份时使用；只读，--group 可传群名或 openConversationId，用户可传 userId 或 openDingTalkId。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1947,19 +2038,23 @@ var ChatRoleQueryUser = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询群成员的群身份",
-			UseWhen:      []string{"当你想查看某个群成员当前拥有哪些群身份时使用；只读，需传群 openConversationId 和用户 userId 或 openDingTalkId。"},
+			UseWhen:      []string{"当你想查看某个群成员当前拥有哪些群身份时使用；只读，--group 可传群名或 openConversationId，用户可传 userId 或 openDingTalkId。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +chat-role-query-user --group <openConversationId> --user <userId>"},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名或 openConversationId；群名必须唯一匹配", Required: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "用户 userId 或 openDingTalkId", Required: true},
 	},
 	Tips: []string{`dws chat +chat-role-query-user --group <openConversationId> --user <userId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		groupID, err := resolveStableOrNamedChat(rt)
+		if err != nil {
+			return err
+		}
 		user := rt.Str("user")
-		params := map[string]any{"openConversationId": rt.Str("group")}
+		params := map[string]any{"openConversationId": groupID}
 		if isOpenID(user) {
 			params["openDingTalkId"] = user
 		} else {

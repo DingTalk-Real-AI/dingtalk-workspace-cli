@@ -41,9 +41,11 @@ type accessTokenSnapshotGetter interface {
 // AccessTokenSnapshot is the minimal bearer view needed by the process cache.
 // Refresh-token material never leaves the auth package.
 type AccessTokenSnapshot struct {
-	AccessToken string
-	ExpiresAt   time.Time
-	Source      string
+	AccessToken      string
+	ExpiresAt        time.Time
+	Source           string
+	LoginRegion      authpkg.LoginRegion
+	LoginRegionKnown bool
 }
 
 type tokenManagerKey struct {
@@ -223,9 +225,11 @@ func resolveAccessTokenSnapshotFromDir(ctx context.Context, configDir, profile s
 		data, err := snapshotProvider.GetTokenSnapshot(ctx)
 		if err == nil && data != nil && strings.TrimSpace(data.AccessToken) != "" {
 			return AccessTokenSnapshot{
-				AccessToken: strings.TrimSpace(data.AccessToken),
-				ExpiresAt:   data.ExpiresAt,
-				Source:      "oauth",
+				AccessToken:      strings.TrimSpace(data.AccessToken),
+				ExpiresAt:        data.ExpiresAt,
+				Source:           "oauth",
+				LoginRegion:      authpkg.LoginRegion(strings.TrimSpace(data.LoginRegion)),
+				LoginRegionKnown: true,
 			}, nil
 		}
 		if err != nil && !errors.Is(err, authpkg.ErrTokenDataNotFound) {

@@ -62,6 +62,34 @@ func TestSemanticAliasHandlerNameAndPhase(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageSemanticAliasHandlerResolvesReviewedProtection(t *testing.T) {
+	h := newSemanticHandler()
+	if protection, ok := (SemanticAliasHandler{}).ResolveFlagProtection("dws demo cmd", "count"); ok || protection != "" {
+		t.Fatalf("nil lookup protection = %q, %t", protection, ok)
+	}
+	for _, test := range []struct {
+		name      string
+		command   string
+		flag      string
+		want      pipeline.FlagProtection
+		protected bool
+	}{
+		{name: "empty command", flag: "count"},
+		{name: "empty flag", command: "dws demo cmd"},
+		{name: "blocked", command: "dws demo cmd", flag: "count", want: pipeline.FlagProtectionBlocked, protected: true},
+		{name: "ambiguous", command: "dws demo cmd", flag: "user-id", want: pipeline.FlagProtectionAmbiguous, protected: true},
+		{name: "unreviewed", command: "dws demo cmd", flag: "missing"},
+		{name: "other command", command: "dws other", flag: "count"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := h.ResolveFlagProtection(test.command, test.flag)
+			if got != test.want || ok != test.protected {
+				t.Fatalf("ResolveFlagProtection(%q, %q) = %q, %t; want %q, %t", test.command, test.flag, got, ok, test.want, test.protected)
+			}
+		})
+	}
+}
+
 func TestSemanticAliasHandlerPreservesEqualsValueSyntax(t *testing.T) {
 	ctx := &pipeline.Context{Command: "dws demo cmd", Args: []string{"--pageSize=50"}}
 	if err := newSemanticHandler().Handle(ctx); err != nil {

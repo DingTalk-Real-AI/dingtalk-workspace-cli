@@ -1059,6 +1059,7 @@ var schemaCompactPayloadKeys = map[string]bool{
 	"effect": true, "risk": true, "confirmation": true, "idempotency": true,
 	"interface_mode": true, "availability": true, "interface_reason": true,
 	"parameters": true, "constraints": true, "positionals": true, "dry_run": true,
+	"result": true, "pagination": true,
 	"examples": true, "use_when": true, "avoid_when": true,
 }
 
@@ -1074,8 +1075,8 @@ var schemaCompactParamKeys = map[string]bool{
 
 // stripSchemaPayloadCompact projects a full Schema payload onto the reviewed
 // Agent-view allowlist. Structural product/tool children are projected
-// recursively; constraint, positional and dry-run values are already typed
-// contract data and are retained verbatim.
+// recursively; result, constraint, positional and dry-run values are already
+// typed contract data and are retained verbatim.
 func stripSchemaPayloadCompact(payload map[string]any) map[string]any {
 	if payload == nil {
 		return nil

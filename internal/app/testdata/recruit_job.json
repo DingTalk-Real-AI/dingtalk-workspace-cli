@@ -1,0 +1,21 @@
+{
+  "name": "Fixture Java Engineer",
+  "description": "Fixture backend development role",
+  "jobNature": "FULL-TIME",
+  "requiredEdu": 6,
+  "minSalary": 20000,
+  "maxSalary": 35000,
+  "creatorUserId": "creator-user-id",
+  "ownerUserIds": [
+    "owner-user-id-1",
+    "owner-user-id-2"
+  ],
+  "extData": {
+    "headCount": 1,
+    "fullTimeExtData": {
+      "salaryMonth": 12,
+      "minJobExperience": 1,
+      "maxJobExperience": 3
+    }
+  }
+}

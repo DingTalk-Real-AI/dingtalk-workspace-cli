@@ -4,11 +4,14 @@
 
 普通追加、覆盖和 block 编辑统一使用 `+update`：
 
+`--command` 只接受下列枚举值，不接受 JSON、自然语言或拼接子命令；动作参数必须分别传给 `--content/--old/--new/--block-id/--before-block-id/--after-block-id`。
+
 ```bash
 dws doc +update --node <DOC_ID> --command append --content "补充说明" --format json
 dws doc +update --node <DOC_ID> --command append --content @append.md --format json
 dws doc +update --node <DOC_ID> --command overwrite --content @full.md --format json
 dws doc +update --node <DOC_ID> --command overwrite --doc-format jsonml --content @full.json --expected-revision <REVISION> --format json
+dws doc +update --node <DOC_ID> --command block_insert_before --before-block-id <BLOCK_ID> --content "发布说明" --heading-level 1 --format json
 dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容" --format json
 ```
 
@@ -26,7 +29,8 @@ dws doc +checkpoint-update --node <DOC_ID> --mode overwrite --content @full.md -
 |---|---|---|
 | `append` | 末尾追加 | `--content` |
 | `overwrite` | 整篇覆盖 | `--content`；JSONML 可加 `--expected-revision` 做服务端原子条件写 |
-| `block_insert_after` | 在指定 block 后插入 | `--after-block-id --content` |
+| `block_insert_before` | 在指定 block 前插入段落或标题 | `--before-block-id --content`；标题加 `--heading-level 1..6` |
+| `block_insert_after` | 在指定 block 后插入段落或标题 | `--after-block-id --content`；标题加 `--heading-level 1..6` |
 | `block_replace` | 替换指定 block | `--block-id --content` |
 | `block_delete` | 删除指定 block | `--block-id` |
 | `str_replace` | 唯一普通文本替换 | `--old --new` |
@@ -38,9 +42,42 @@ block ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表，禁止
 
 `--expected-revision` 只允许 `--command overwrite --doc-format jsonml`。Markdown、append 和 block 接口没有服务端原子 revision 契约，禁止用写前读取模拟乐观锁。
 
+## 新增结构化标题
+
+“新增/插入标题”与“修改现有块文字”不是同一动作。`+update block_replace --content "# 标题"` 会替换原块并可能落成普通 paragraph，不能用它冒充 heading。
+
+需要在已有首块前新增标题时，先用 `+fetch --detail with-ids` 取得真实首块 ID，再走结构化插入：
+
+```bash
+dws doc block insert --node <DOC_ID> --heading "发布说明 v1.0" --level 1 --ref-block <FIRST_BLOCK_ID> --where before --format json
+```
+
+插入回执有新 block ID 时定点 `block list --block-id`；只有插入 index 时执行一次完整 `block list --content-format jsonml` 并按 index 验证 `blockType=heading`、回读投影 `heading.level="heading-1"` 和文字。`block list` 没有 `--limit`，禁止通过 Help 猜参数；CLI 写入仍用 `--level 1`。只核对可见文字不算结构验收。已有标题改级别或改文字时使用结构化 `doc block update --heading/--level`；更多块边界见 [`doc-block.md`](doc-block.md)。
+
+## 最小改写决策
+
+| 已知条件 | 推荐路径 | 成本与成功率理由 |
+|---|---|---|
+| 用户明确要求在末尾追加 | 直接 `append` | 不为找末尾先拉全文；需要语气衔接时只读末节 |
+| 已知唯一旧文本与新文本 | 直接 `str_replace --old --new` | 省掉 block 解析；旧文本不唯一时 Runtime 必须失败，不放宽匹配 |
+| 指定章节但没有 block ID | `+fetch outline` → `+fetch section --detail with-ids` → block 动作 | 两个小读取换取稳定锚点，避免全文 token 和误改相邻章节 |
+| 已知真实 block ID | 直接 `block_replace/delete/insert_before/insert_after` | 最小副作用；不改无关 block |
+| 多个待删除 block ID 已全部取得 | 在同一个 fail-fast 工具轮中按顺序执行全部 `block_delete` | 中间不重读 Reference、不重复 fetch；任一失败立即停止并保留未执行清单 |
+| 多处富结构保真修改 | `+fetch --detail full` 后定点 JSONML 更新 | 保留图片、附件、引用、表格和样式；不要从 Markdown 有损重建 |
+| 整篇重要覆盖 | `+checkpoint-update --mode overwrite` | 自动保存恢复点、执行并回读；普通 overwrite 只用于明确不需恢复点的场景 |
+
+同一篇文档的正文由一个主上下文串行维护：Plan（确定最小变更）→ Execute（一次写）→ Observe（先消费回执）→ Iterate（只修未达标部分）。不要按章节并行写同一文档，也不要每次迭代都重新读取全文或 Schema。
+
+## Block ID 生命周期与保真
+
+- `block_replace` 成功后 Runtime 使用同一 `blockId` 回读验证，该 ID 可继续作为锚点；验证失败时先局部 `+fetch` 核对现状。`block_delete` 成功后旧 ID 失效，不得继续复用。
+- `block_insert_before` / `block_insert_after` / `block_copy_insert_after` 后，原锚点通常仍可识别，但新 block 的 ID 必须来自真实返回或局部回读，禁止按顺序猜测。
+- `str_replace` 的简单行内替换通常不要求重新取 ID；若后续依赖块结构，仍以局部回读为准。
+- 从 Markdown 读取后覆盖整篇可能丢失图片、附件、@人/@文档、评论锚点、表格样式和嵌套块。只改局部时使用 block 手术；确需整篇保真改写时使用 `full` JSONML，并以 `--expected-revision` 防止覆盖并发修改。
+
 ## 确认与验证
 
-- 执行前从精确 leaf Schema 消费 `confirmation`；需要确认时先 `--dry-run`/询问，用户确认同一参数后追加 `--yes`，禁止先失败探测门禁。
+- `+update` 与 `+checkpoint-update` 当前都要求用户确认。目标、动作、内容范围或参数变化后必须重新确认；只有发现本地文档与 live leaf 漂移时才查一次精确 Schema，禁止每次写入都重复发现。
 - `+update` 已负责回读验证。除非结果为 `unknown` 或任务需要额外结构验收，不要再做一次全篇读取。
 - `doc_write_verification_failed` 表示写入已经发生，必须先读取现状；禁止直接重复写入。
 - `partial_success` 只恢复未完成步骤，不能重放成功步骤。

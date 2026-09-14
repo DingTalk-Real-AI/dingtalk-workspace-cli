@@ -19,7 +19,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/apiclient"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -68,6 +67,7 @@ type deapAgentOpenAPISkillUploader struct {
 	baseURL           string
 	httpClient        *http.Client
 	resolveCredential func(context.Context, string) (string, error)
+	validateTarget    func(string) error
 }
 
 type deapAgentOpenAPISkillDetail struct {
@@ -135,6 +135,9 @@ func (u deapAgentOpenAPISkillUploader) Upload(ctx context.Context, agentUUID, fi
 	client := apiclient.NewClient(credential, baseURL)
 	if u.httpClient != nil {
 		client.HTTPClient = u.httpClient
+	}
+	if u.validateTarget != nil {
+		client.TargetValidator = u.validateTarget
 	}
 	response, err := client.UploadMultipart(ctx, apiclient.MultipartUploadRequest{
 		Path:       deapAgentSkillUploadPath,
@@ -385,7 +388,7 @@ func newDeapCapabilityCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapAgentSkillCommand(), newDeapAgentMCPCommand())
 	return cmd
 }
@@ -400,7 +403,7 @@ func newDeapAgentSkillCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapAgentSkillCreateCommand(), newDeapAgentSkillListCommand(), newDeapAgentSkillQueryCommand())
 	return cmd
 }
@@ -415,7 +418,7 @@ func newDeapAgentMCPCommand() *cobra.Command {
 		DisableAutoGenTag: true,
 		RunE:              groupRunE,
 	}
-	cmdutil.MarkGroup(cmd)
+	newGroupCommand(cmd)
 	cmd.AddCommand(newDeapAgentMCPCreateCommand(), newDeapAgentMCPListCommand(), newDeapAgentMCPQueryCommand())
 	return cmd
 }

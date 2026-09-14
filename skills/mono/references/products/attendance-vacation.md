@@ -63,7 +63,7 @@ Agent 只负责解析人员范围并获取 userId 列表；假期规则查询、
 ### 阶段 0：参数解析
 
 1. 识别人员范围：
-   - 指定员工姓名：用 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 获取 userId
+   - 指定员工姓名：用 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取 userId
    - 指定部门：用 `dws contact dept search --query "<部门名>" --format json`，再用 `dws contact dept list-members --ids <deptId> --format json` 获取成员
    - 已提供 userId：直接使用
 2. 识别假期列范围：
@@ -74,7 +74,7 @@ Agent 只负责解析人员范围并获取 userId 列表；假期规则查询、
 
 **场景 A — 指定员工姓名**:
 ```bash
-dws aisearch person --keyword "<员工姓名>" --dimension name --format json
+dws aisearch person --query "<员工姓名>" --dimension name --format json
 ```
 
 **场景 B — 按部门查询**:

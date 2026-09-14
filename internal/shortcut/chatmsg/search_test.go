@@ -72,6 +72,13 @@ func TestGroupSearchMessagesPreservesFirstSeenOrder(t *testing.T) {
 	if len(groupMessages) != 2 || groupMessages[1]["openMessageId"] != "m3" {
 		t.Fatalf("group messages = %#v", groupMessages)
 	}
+
+	items := SearchItems(map[string]any{
+		"result": map[string]any{"conversationMessagesList": groups},
+	})
+	if len(items) != 3 || items[0]["openConversationId"] != "cid-b" || items[1]["openMessageId"] != "m3" {
+		t.Fatalf("in-memory grouped items = %#v", items)
+	}
 }
 
 func TestCrossPlatformCoverageSearchProjectionEdgeBranches(t *testing.T) {

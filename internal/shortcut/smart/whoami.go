@@ -70,7 +70,11 @@ var Whoami = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(whoamiProject(data))
+		profile, err := strictWhoami(data)
+		if err != nil {
+			return err
+		}
+		return rt.Output(profile)
 	},
 }
 
@@ -159,5 +163,6 @@ func whoamiStr(m map[string]any, keys ...string) string {
 }
 
 func init() {
+	finalizeContactSmart(&Whoami)
 	shortcut.Register(Whoami)
 }

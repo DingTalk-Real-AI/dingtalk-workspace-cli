@@ -13,6 +13,7 @@
 | 重要更新与恢复点 | `dws doc +checkpoint-update` | [doc-update.md](doc/doc-update.md) |
 | 导出本地文件 | `dws doc +export` | [doc-export.md](doc/doc-export.md) |
 | 导入为在线对象 | `dws doc +import` | [doc-import.md](doc/doc-import.md) |
+| 列出文档空间/文件夹下的文档 | `dws doc +list --workspace <WS_ID>` | 知识库层级管理切 `dingtalk-wiki` |
 | 评论聚合与操作 | `dws doc +review/+comment-*` | [doc-comment.md](doc/doc-comment.md) |
 | 媒体插入、列表、下载 | `dws doc +media-*` | [doc-media.md](doc/doc-media.md) |
 
@@ -26,9 +27,13 @@
 dws doc +template-search --query "周报" --source PUBLIC --format json
 ```
 
+来源按用户原话守门：“我的模板/我这边”只查 `MY`，明确“公开/钉钉模板库”才查 `PUBLIC`；不得为了凑结果跨来源扩展。未指定来源时保持默认 `MY`。
+
 - `selection.status=resolved`：取唯一候选的 `templateId`。
-- `selection.status=not_found`：报告零命中后停止。
+- `selection.status=not_found`：报告零命中后停止；不得改用语义不相干的热门模板，更不得擅自创建文档。
 - `selection.status=selection_required`：展示候选并要求用户选择，禁止默认第一项。
+
+若返回 `hasMore=true`，沿原 query/source 使用 cursor 继续搜索；只有服务端返回完整结果后才能判断零命中或完整候选集。
 
 选定后只创建一次：
 
@@ -47,6 +52,8 @@ dws doc +version-revert --node <DOC_ID> --version <N> --format json
 ```
 
 `+version-save/list/revert` 分别用于快照、浏览和恢复，命中后直接执行，不预读 Help。`+history-*` 仅兼容已有调用，不用于新的 Agent 选路。重要内容更新优先使用 `+checkpoint-update`，不要手工编排保存、写入和回读。回滚必须确认，以 leaf Schema 与 Runtime gate 为准。
+
+只读某个历史版本的内容时，用 `dws doc +fetch --node <DOC_ID> --version <N>`（版本号同样来自 `+version-list`，`0` 表示初始版本，需要文档编辑权限）；整体恢复到历史版本才用 `+version-revert`（危险操作，需确认）。互联网公开文档（含密码保护）的读取见 [doc-read.md](doc/doc-read.md) 的 `--password`。
 
 ## 权限与分享
 

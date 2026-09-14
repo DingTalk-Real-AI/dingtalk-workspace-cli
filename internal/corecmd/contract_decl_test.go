@@ -42,6 +42,11 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 			Description: "Create Desc",
 			Positionals: []contract.RuntimeSchemaPositional{{Name: "id", Required: true, Index: 0}},
 			DryRun:      &contract.DryRunSpec{PreviewKind: "invocation", RemoteReads: true},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+				DataSchema: []byte(`{"type":"object"}`),
+			},
+			Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
@@ -79,6 +84,12 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 	if final.DryRun == nil || final.DryRun.PreviewKind != "invocation" || !final.DryRun.RemoteReads {
 		t.Fatalf("dry_run = %#v", final.DryRun)
 	}
+	if final.Result == nil || len(final.Result.Outcomes) != 1 {
+		t.Fatalf("result = %#v", final.Result)
+	}
+	if final.Pagination == nil || final.Pagination.CursorParameter != "cursor" || final.Pagination.MetaPath != contract.PaginationMetaPath {
+		t.Fatalf("pagination = %#v", final.Pagination)
+	}
 	if final.Interface == nil || final.Interface.Mode != "mcp" || final.Interface.Ref == nil || final.Interface.Ref.RPCName != "create_thing" {
 		t.Fatalf("interface = %#v", final.Interface)
 	}
@@ -108,6 +119,54 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 	if got := flag.Annotations["x-cli-enum"]; len(got) != 2 {
 		t.Fatalf("enum = %#v", flag.Annotations["x-cli-enum"])
 	}
+}
+
+func TestFrameworkContractDeclResultMarksNonEmptyAndRejectsInvalidSchema(t *testing.T) {
+	if (ContractDecl{Result: &contract.ResultSpec{}}).Empty() {
+		t.Fatal("Result declaration was treated as empty")
+	}
+	defer func() {
+		if recovered := recover(); recovered == nil || !strings.Contains(recovered.(string), "invalid Contract.Result") {
+			t.Fatalf("panic=%v", recovered)
+		}
+	}()
+	New(Spec{
+		Use:    "bad-result",
+		Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract: ContractDecl{
+			Title: "Bad", Description: "bad result",
+			Result:    &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}},
+			Interface: &contract.InterfaceSpec{Mode: "local", Availability: "available"},
+			Selection: contract.SelectionSpec{AgentSummary: "bad", UseWhen: []string{"bad"}, AvoidWhen: []string{"good"}, Examples: []string{"dws bad-result"}},
+			Identity:  contract.ToolIdentitySpec{ProductID: "sample", Name: "bad", CanonicalPath: "sample.bad", CLIPath: "bad-result", PrimaryCLIPath: "bad-result"},
+		},
+		Invoke: func(*Ctx, map[string]any) error { return nil },
+	})
+}
+
+func TestFrameworkContractDeclPaginationMarksNonEmptyAndRejectsInvalidSpec(t *testing.T) {
+	if (ContractDecl{Pagination: &contract.PaginationSpec{}}).Empty() {
+		t.Fatal("Pagination declaration was treated as empty")
+	}
+	defer func() {
+		recovered := recover()
+		if recovered == nil || !strings.Contains(recovered.(string), "invalid Contract.Pagination") {
+			t.Fatalf("panic=%v", recovered)
+		}
+	}()
+	New(Spec{
+		Use:    "bad-pagination",
+		Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract: ContractDecl{
+			Title:       "Bad pagination",
+			Description: "bad pagination",
+			Pagination:  &contract.PaginationSpec{Kind: "offset", CursorParameter: "cursor"},
+			Interface:   &contract.InterfaceSpec{Mode: "local", Availability: "available"},
+			Selection:   contract.SelectionSpec{AgentSummary: "bad", UseWhen: []string{"bad"}, AvoidWhen: []string{"good"}, Examples: []string{"dws bad-pagination"}},
+			Identity:    contract.ToolIdentitySpec{ProductID: "sample", Name: "bad_pagination", CanonicalPath: "sample.bad_pagination", CLIPath: "bad-pagination", PrimaryCLIPath: "bad-pagination"},
+		},
+		Invoke: func(*Ctx, map[string]any) error { return nil },
+	})
 }
 
 func TestNewCommandFallsBackToDeclaredDescriptionWithoutLong(t *testing.T) {

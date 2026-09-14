@@ -738,6 +738,20 @@ func ResolveProfileWithScope(configDir, selector string) (*Profile, bool, error)
 	return result, exact, err
 }
 
+// ResolveProfileMetadata applies the public profile-selector grammar to an
+// already-loaded, non-sensitive profiles registry. It performs no migration,
+// keychain access, token loading, or persistence, making it suitable for
+// callers that carry an externally managed bearer credential and need only
+// corp/user/client identity metadata.
+func ResolveProfileMetadata(cfg *ProfilesConfig, selector string) (*Profile, error) {
+	profile, _, err := resolveProfileSelection("", cfg, selector)
+	if err != nil || profile == nil {
+		return nil, err
+	}
+	copy := *profile
+	return &copy, nil
+}
+
 func resolveProfileWithScopeLocked(configDir, selector string) (*Profile, bool, error) {
 	if err := profilesEnsureMigration(configDir); err != nil {
 		return nil, false, err

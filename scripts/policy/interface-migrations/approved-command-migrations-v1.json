@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "kind": "flag_extraction",
+      "legacy": {
+        "command": "dws chat group create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true}
+      },
+      "replacement": {
+        "command": "dws chat thread create-group",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "legacy_flag": {
+        "name": "thread",
+        "before": {"present": true, "type": "bool", "no_opt": "true", "scope": "local"},
+        "after": {"present": true, "type": "bool", "hidden": true, "no_opt": "true", "scope": "local"}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.create_group_conversation",
+        "replacement_tool_id": "chat.create_thread_group",
+        "parameters": [
+          {"from": "name", "to": "name"},
+          {"from": "type", "to": "type"},
+          {"from": "users", "to": "users"},
+          {
+            "from": "thread",
+            "replacement_constant": {
+              "property": "convThreadEnabled",
+              "value": true
+            }
+          }
+        ]
+      },
+      "state": "consumed",
+      "reason": "Move Thread-group creation to the dedicated chat thread command while retaining the legacy --thread execution path."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat message list-topic-replies",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat thread list-replies",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.list_topic_replies",
+        "replacement_tool_id": "chat.list_topic_replies",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Move Thread reply listing from chat message to the dedicated chat thread command while preserving the legacy executable command."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat message forward-topic",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat thread forward",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.forward_topic",
+        "replacement_tool_id": "chat.forward_topic",
+        "parameters": []
+      },
+      "state": "consumed",
+      "reason": "Move Thread forwarding from chat message to the dedicated chat thread command while preserving the legacy executable command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +event-list",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_event_list",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until event-list proves authoritative terminal pagination for both non-empty and zero-result live fixtures."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +member-add",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_member_add",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until a safe second-member fixture proves exact role readback and rollback for member addition."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +member-remove",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_member_remove",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until a safe second-member fixture proves exact removal readback and restoration."
+    }
+  ]
+}

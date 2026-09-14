@@ -14,7 +14,10 @@
 package contract
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 )
@@ -57,6 +60,242 @@ type RuntimeSchemaPositional struct {
 type DryRunSpec struct {
 	PreviewKind string `json:"preview_kind"`
 	RemoteReads bool   `json:"remote_reads,omitempty"`
+}
+
+// ResultOutcome is one closed unified-output envelope outcome.
+type ResultOutcome string
+
+const (
+	ResultOutcomeSuccess        ResultOutcome = "success"
+	ResultOutcomePending        ResultOutcome = "pending"
+	ResultOutcomePartialFailure ResultOutcome = "partial_failure"
+	ResultOutcomeFailure        ResultOutcome = "failure"
+)
+
+var canonicalResultOutcomes = [...]ResultOutcome{
+	ResultOutcomeSuccess,
+	ResultOutcomePending,
+	ResultOutcomePartialFailure,
+	ResultOutcomeFailure,
+}
+
+const (
+	PaginationKindCursor    = "cursor"
+	PaginationMetaPath      = "meta.pagination"
+	PaginationExhaustedPath = "meta.pagination.endpoint_exhausted"
+	PaginationNextTokenPath = "meta.pagination.next_token"
+)
+
+// PaginationSpec is a command-level declaration for framework pagination
+// metadata. It is deliberately separate from ResultSpec because pagination is
+// emitted under envelope meta, not inside the business response data.
+type PaginationSpec struct {
+	Kind                  string `json:"kind"`
+	CursorParameter       string `json:"cursor_parameter"`
+	MetaPath              string `json:"meta_path"`
+	EndpointExhaustedPath string `json:"endpoint_exhausted_path"`
+	NextTokenPath         string `json:"next_token_path"`
+}
+
+// ResultSpec is the reviewed return-value contract for one command and is
+// projected unchanged into both full-leaf and compact-leaf Schema. Outcomes
+// and DataSchema are required; Pagination and SensitivePaths are omitted when
+// absent. DataSchema is a canonical recursive JSON Schema object; every path
+// is relative to the unified-output envelope data value.
+type ResultSpec struct {
+	Outcomes       []ResultOutcome `json:"outcomes"`
+	DataSchema     json.RawMessage `json:"data_schema"`
+	SensitivePaths []string        `json:"sensitive_paths,omitempty"`
+}
+
+// NormalizeResultSpec returns a validated, canonical, defensively copied
+// result contract. It is shared by declaration, ToolSpec, and snapshot paths.
+func NormalizeResultSpec(in *ResultSpec, canonical string) (*ResultSpec, error) {
+	if in == nil {
+		return nil, nil
+	}
+	canonical = defaultString(strings.TrimSpace(canonical), "<unknown>")
+	out := &ResultSpec{}
+	seenOutcomes := make(map[ResultOutcome]bool, len(in.Outcomes))
+	for _, outcome := range in.Outcomes {
+		outcome = ResultOutcome(strings.TrimSpace(string(outcome)))
+		valid := false
+		for _, allowed := range canonicalResultOutcomes {
+			if outcome == allowed {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return nil, fmt.Errorf("schema tool %s result has unknown outcome %q", canonical, outcome)
+		}
+		if seenOutcomes[outcome] {
+			return nil, fmt.Errorf("schema tool %s result has duplicate outcome %q", canonical, outcome)
+		}
+		seenOutcomes[outcome] = true
+	}
+	if len(seenOutcomes) == 0 {
+		return nil, fmt.Errorf("schema tool %s result has no outcomes", canonical)
+	}
+	for _, outcome := range canonicalResultOutcomes {
+		if seenOutcomes[outcome] {
+			out.Outcomes = append(out.Outcomes, outcome)
+		}
+	}
+	var err error
+	out.DataSchema, err = canonicalJSONObject(in.DataSchema)
+	if err != nil {
+		return nil, fmt.Errorf("schema tool %s result data_schema: %w", canonical, err)
+	}
+	if err := validateResultSchemaDescriptions(out.DataSchema, "data_schema"); err != nil {
+		return nil, fmt.Errorf("schema tool %s result %w", canonical, err)
+	}
+	seenPaths := make(map[string]bool, len(in.SensitivePaths))
+	for _, path := range in.SensitivePaths {
+		path = strings.TrimSpace(path)
+		if err := validateResultPath(path); err != nil {
+			return nil, fmt.Errorf("schema tool %s result sensitive path: %w", canonical, err)
+		}
+		if seenPaths[path] {
+			return nil, fmt.Errorf("schema tool %s result has duplicate sensitive path %q", canonical, path)
+		}
+		seenPaths[path] = true
+		out.SensitivePaths = append(out.SensitivePaths, path)
+	}
+	sort.Strings(out.SensitivePaths)
+	if len(out.SensitivePaths) == 0 {
+		out.SensitivePaths = nil
+	}
+	return out, nil
+}
+
+// NormalizePaginationSpec validates the command-specific input parameter and
+// fills the framework-owned public meta paths.
+func NormalizePaginationSpec(in *PaginationSpec, canonical string) (*PaginationSpec, error) {
+	if in == nil {
+		return nil, nil
+	}
+	canonical = defaultString(strings.TrimSpace(canonical), "<unknown>")
+	kind := strings.TrimSpace(in.Kind)
+	if kind != PaginationKindCursor {
+		return nil, fmt.Errorf("schema tool %s pagination has unsupported kind %q", canonical, kind)
+	}
+	cursorParameter := strings.TrimSpace(strings.TrimPrefix(in.CursorParameter, "--"))
+	if cursorParameter == "" || strings.Contains(cursorParameter, ".") {
+		return nil, fmt.Errorf("schema tool %s pagination cursor_parameter must name one CLI flag", canonical)
+	}
+	provided := []struct{ name, got, want string }{
+		{"meta_path", strings.TrimSpace(in.MetaPath), PaginationMetaPath},
+		{"endpoint_exhausted_path", strings.TrimSpace(in.EndpointExhaustedPath), PaginationExhaustedPath},
+		{"next_token_path", strings.TrimSpace(in.NextTokenPath), PaginationNextTokenPath},
+	}
+	for _, field := range provided {
+		if field.got != "" && field.got != field.want {
+			return nil, fmt.Errorf("schema tool %s pagination %s is framework-owned and must be %q", canonical, field.name, field.want)
+		}
+	}
+	return &PaginationSpec{
+		Kind:                  kind,
+		CursorParameter:       cursorParameter,
+		MetaPath:              PaginationMetaPath,
+		EndpointExhaustedPath: PaginationExhaustedPath,
+		NextTokenPath:         PaginationNextTokenPath,
+	}, nil
+}
+
+func canonicalJSONObject(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("must be one JSON object")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var object map[string]json.RawMessage
+	if err := decoder.Decode(&object); err != nil || object == nil {
+		return nil, fmt.Errorf("must be one JSON object")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("must be one JSON object")
+	}
+	canonical, _ := json.Marshal(object) // decoded RawMessages are always marshalable
+	return json.RawMessage(canonical), nil
+}
+
+// validateResultSchemaDescriptions keeps the Agent-facing return contract
+// self-explanatory. Every named property needs a description; nested object
+// properties and array items are checked recursively. The root schema and
+// anonymous composition branches do not need descriptions because they are
+// not field names an Agent must interpret.
+func validateResultSchemaDescriptions(raw json.RawMessage, location string) error {
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return fmt.Errorf("%s must be one JSON Schema object", location)
+	}
+	return validateResultSchemaNode(schema, location)
+}
+
+func validateResultSchemaNode(schema map[string]any, location string) error {
+	if rawProperties, exists := schema["properties"]; exists {
+		properties, ok := rawProperties.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s.properties must be an object", location)
+		}
+		for name, rawProperty := range properties {
+			property, ok := rawProperty.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s.properties.%s must be a JSON Schema object", location, name)
+			}
+			description, _ := property["description"].(string)
+			if strings.TrimSpace(description) == "" {
+				return fmt.Errorf("%s.properties.%s requires description", location, name)
+			}
+			if err := validateResultSchemaNode(property, location+".properties."+name); err != nil {
+				return err
+			}
+		}
+	}
+	if rawItems, exists := schema["items"]; exists {
+		items, ok := rawItems.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s.items must be a JSON Schema object", location)
+		}
+		if err := validateResultSchemaNode(items, location+".items"); err != nil {
+			return err
+		}
+	}
+	for _, keyword := range []string{"allOf", "anyOf", "oneOf"} {
+		rawBranches, exists := schema[keyword]
+		if !exists {
+			continue
+		}
+		branches, ok := rawBranches.([]any)
+		if !ok {
+			return fmt.Errorf("%s.%s must be an array", location, keyword)
+		}
+		for index, rawBranch := range branches {
+			branch, ok := rawBranch.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s.%s[%d] must be a JSON Schema object", location, keyword, index)
+			}
+			if err := validateResultSchemaNode(branch, fmt.Sprintf("%s.%s[%d]", location, keyword, index)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateResultPath(path string) error {
+	if path == "" || strings.HasPrefix(path, ".") || strings.HasSuffix(path, ".") || strings.Contains(path, "..") {
+		return fmt.Errorf("path %q is not a relative data path", path)
+	}
+	for _, segment := range strings.Split(path, ".") {
+		for i, r := range segment {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && (r == '-' || (r >= '0' && r <= '9')))) {
+				return fmt.Errorf("path %q contains unsafe segment %q", path, segment)
+			}
+		}
+	}
+	return nil
 }
 
 const (

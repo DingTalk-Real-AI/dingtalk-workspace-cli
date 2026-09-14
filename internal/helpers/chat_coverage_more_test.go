@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	helperCurrentDOpenID  = "DAAAAAAAAAAAiE"
+	helperCurrentDOpenID2 = "DAQEBAQEBAQEiE"
+)
+
 func newChatFlagTestCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "chat"}
 	cmd.Flags().String("forward", "", "")
@@ -35,6 +40,22 @@ func newChatFlagTestCommand() *cobra.Command {
 	cmd.Flags().Bool("all", false, "")
 	cmd.Flags().StringArray("permParam", nil, "")
 	return cmd
+}
+
+func TestNativeChatIDSplitUsesCurrentDFormat(t *testing.T) {
+	userIDs, openIDs := splitChatIDValues([]string{
+		helperCurrentDOpenID,
+		"D-prefix-fixture-user",
+		"d-prefix-fixture-user",
+		"D-invalid",
+		"fixture-user-id",
+	})
+	if len(openIDs) != 1 || openIDs[0] != helperCurrentDOpenID {
+		t.Fatalf("open IDs=%#v", openIDs)
+	}
+	if got := strings.Join(userIDs, ","); got != "D-prefix-fixture-user,d-prefix-fixture-user,D-invalid,fixture-user-id" {
+		t.Fatalf("user IDs=%#v", userIDs)
+	}
 }
 
 func TestCrossPlatformCoverageChatDirectionAndScalarCoverage(t *testing.T) {
@@ -151,18 +172,18 @@ func TestCrossPlatformCoverageChatContactMappingCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageResolveOpenDingTalkIDsCoverage(t *testing.T) {
-	if id, err := resolveOpenDingTalkID(context.Background(), "D-direct"); err != nil || id != "D-direct" {
+	if id, err := resolveOpenDingTalkID(context.Background(), helperCurrentDOpenID); err != nil || id != helperCurrentDOpenID {
 		t.Fatalf("direct ID = %q, %v", id, err)
 	}
 	if _, err := resolveOpenDingTalkID(context.Background(), ""); err == nil {
 		t.Fatal("empty ID unexpectedly resolved")
 	}
-	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{" D1 ", ""}); err != nil || ids[0] != "D1" {
+	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{" " + helperCurrentDOpenID + " ", ""}); err != nil || ids[0] != helperCurrentDOpenID {
 		t.Fatalf("direct IDs = %#v, %v", ids, err)
 	}
-	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}}}
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"` + helperCurrentDOpenID2 + `"}]}`}}}
 	installScriptedCaller(t, caller)
-	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{"u1", "u1"}); err != nil || ids[1] != "D1" {
+	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{"u1", "u1"}); err != nil || ids[1] != helperCurrentDOpenID2 {
 		t.Fatalf("resolved IDs = %#v, %v", ids, err)
 	}
 	caller.steps = []scriptedToolStep{{text: `{}`}, {text: `{}`}}
@@ -425,6 +446,106 @@ func TestCrossPlatformCoverageChatBotRichMediaCoverage(t *testing.T) {
 		if caller.tool != "batch_send_robot_msg_to_users" || caller.args["msgType"] != "sampleMarkdownDX" {
 			t.Fatalf("direct markdown call = %s %#v", caller.tool, caller.args)
 		}
+		if _, exists := caller.args["referenceOpenMessageId"]; exists {
+			t.Fatalf("ordinary direct message unexpectedly contains reply fields: %#v", caller.args)
+		}
+	})
+
+	t.Run("group Markdown reference reply", func(t *testing.T) {
+		const senderOpenDingTalkID = "DAAAAAAAAAAAiE"
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"openMessageId":"message-id","openConversationId":"group"}]}`},
+			{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"group","convThreadEnabled":false}}}`},
+			{text: `{}`},
+		}}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+			"--reply", "message-id", "--ref-sender", senderOpenDingTalkID,
+			"--text", "received",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if caller.tool != "send_robot_group_message" ||
+			caller.args["referenceOpenMessageId"] != "message-id" ||
+			caller.args["srcMsgSendOpenDingTalkId"] != senderOpenDingTalkID ||
+			caller.args["title"] != "received" {
+			t.Fatalf("group reference reply call = %s %#v", caller.tool, caller.args)
+		}
+	})
+
+	t.Run("group reference reply resolves sender user ID", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"openMessageId":"message-id","openConversationId":"group"}]}`},
+			{text: `{"success":true,"result":{"conversationInfo":{"openConversationId":"group","convThreadEnabled":false}}}`},
+			{text: `{"result":[{"userId":"sender-user","openDingTalkId":"D-sender"}]}`},
+			{text: `{}`},
+		}}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+			"--reply", "message-id", "--ref-sender", "sender-user",
+			"--title", "reply", "--text", "received",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if caller.tool != "send_robot_group_message" || caller.args["srcMsgSendOpenDingTalkId"] != "D-sender" {
+			t.Fatalf("resolved group reference reply = %s %#v", caller.tool, caller.args)
+		}
+	})
+
+	t.Run("direct RunE enforces paired reply flags", func(t *testing.T) {
+		err := runChatCoverageDirect(t, []string{"message", "send-by-bot"}, map[string]string{
+			"robot-code":      "robot",
+			"conversation-id": "group",
+			"reply":           "message-id",
+			"title":           "reply",
+			"text":            "received",
+		})
+		if err == nil || !strings.Contains(err.Error(), "must be specified together") {
+			t.Fatalf("direct RunE paired reply flags error = %v", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "reply requires sender", args: []string{"--reply", "message-id"}, want: "ref-sender"},
+		{name: "sender requires reply", args: []string{"--ref-sender", "D-sender"}, want: "reply"},
+		{name: "paired reply flags reject empty values", args: []string{"--reply=", "--ref-sender="}, want: "specified together"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+				"--title", "reply", "--text", "received",
+			}
+			err := runChatCoverageCommand(t, &scriptedToolCaller{}, append(args, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("paired reply flags error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+
+	t.Run("reference reply is group only", func(t *testing.T) {
+		err := runChatCoverageCommand(t, &scriptedToolCaller{},
+			"message", "send-by-bot", "--robot-code", "robot", "--users", "user",
+			"--reply", "message-id", "--ref-sender", "D-sender",
+			"--title", "reply", "--text", "received",
+		)
+		if err == nil || !strings.Contains(err.Error(), "only supported with --conversation-id") {
+			t.Fatalf("direct reference reply error = %v", err)
+		}
+	})
+
+	t.Run("reference reply rejects rich media", func(t *testing.T) {
+		err := runChatCoverageCommand(t, &scriptedToolCaller{},
+			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+			"--reply", "message-id", "--ref-sender", "D-sender",
+			"--msg-type", "image", "--image-url", "https://example.test/image.png",
+		)
+		if err == nil || !strings.Contains(err.Error(), "only support Markdown") {
+			t.Fatalf("rich-media reference reply error = %v", err)
+		}
 	})
 
 	t.Run("direct image", func(t *testing.T) {
@@ -504,8 +625,8 @@ func TestCrossPlatformCoverageGuardGroupOwnerRemovalCoverage(t *testing.T) {
 		remove []string
 		steps  []scriptedToolStep
 	}{
-		{"owner-open", []string{"D-owner"}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"D-owner"}]}}`}}},
-		{"other-open", []string{"D-other"}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"D-owner"}]}}`}}},
+		{"owner-open", []string{helperCurrentDOpenID}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + helperCurrentDOpenID + `"}]}}`}}},
+		{"other-open", []string{helperCurrentDOpenID2}, []scriptedToolStep{{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + helperCurrentDOpenID + `"}]}}`}}},
 		{"owner-user", []string{"u1"}, []scriptedToolStep{
 			{text: `{"result":{"hasMore":true,"nextCursor":"next","list":[]}}`},
 			{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"D-owner"}]}}`},
@@ -525,4 +646,55 @@ func TestCrossPlatformCoverageGuardGroupOwnerRemovalCoverage(t *testing.T) {
 	if owner, err := groupOwnerOpenDingTalkID(context.Background(), "group"); err != nil || owner != "" {
 		t.Fatalf("missing owner = %q, %v", owner, err)
 	}
+}
+
+func TestCrossPlatformCoverageChatCommandFinalBranches(t *testing.T) {
+	t.Run("chmod requires explicit confirmation", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		installScriptedCaller(t, caller)
+		root := newChatCommand()
+		installExampleGlobalFlags(root)
+		root.SilenceErrors = true
+		root.SilenceUsage = true
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"chmod", "chat.message:send", "--conversation-id", "cid"})
+		if err := root.ExecuteContext(context.Background()); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+			t.Fatalf("chmod without yes error = %v", err)
+		}
+	})
+
+	t.Run("cross org data auth validates target", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		installScriptedCaller(t, caller)
+		cmd := newChatFlagTestCommand()
+		if err := runChatCrossOrgDataAuth(cmd); err == nil {
+			t.Fatal("cross-org RunE without target should fail")
+		}
+	})
+
+	t.Run("remove members stops owner removal", func(t *testing.T) {
+		oldArgs := os.Args
+		os.Args = []string{"dws", "chat"}
+		t.Cleanup(func() { os.Args = oldArgs })
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":{"list":[{"memberRoleType":1,"openDingtalkId":"` + helperCurrentDOpenID + `"}]}}`},
+		}}
+		installScriptedCaller(t, caller)
+		root := newChatCommand()
+		cmd, _, err := root.Find([]string{"group", "members", "remove"})
+		if err != nil || cmd == nil || cmd.RunE == nil {
+			t.Fatalf("find remove command = %#v, %v", cmd, err)
+		}
+		if err := cmd.Flags().Set("id", "group"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Flags().Set("users", helperCurrentDOpenID); err != nil {
+			t.Fatal(err)
+		}
+		err = cmd.RunE(cmd, nil)
+		if err == nil || !strings.Contains(err.Error(), "refusing to remove the group owner") {
+			t.Fatalf("remove owner error = %v", err)
+		}
+	})
 }

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -121,6 +122,23 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 		}
 	})
 
+	t.Run("group name to role list", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/search_groups":           `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+			"im/list_custom_group_roles": `{"result":{"roles":[]}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-role-list", "--group", "项目群"})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.calls) != 2 || fake.calls[1].tool != "list_custom_group_roles" ||
+			fake.calls[1].args["openConversationId"] != "cid-project" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+	})
+
 	t.Run("group query to invite url", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
@@ -162,6 +180,164 @@ func TestCrossPlatformCoverageEvaluationRegressionNaturalGroupTargetsAndRecallIn
 			t.Fatalf("calls = %#v", fake.calls)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageChatRoleSetUserRejectsEmptyRolesBeforeAnyCall(t *testing.T) {
+	if err := validateChatRoleIDs(nil); err == nil {
+		t.Fatal("zero-length role IDs unexpectedly accepted")
+	}
+
+	tests := []struct {
+		name    string
+		roleIDs string
+		yes     bool
+	}{
+		{name: "before confirmation", roleIDs: ""},
+		{name: "after confirmation", roleIDs: "", yes: true},
+		{name: "blank element after confirmation", roleIDs: "role-1, ", yes: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			args := []string{
+				"chat", "+chat-role-set-user",
+				"--group", "项目群",
+				"--user", "user-1",
+				"--role-ids", tt.roleIDs,
+			}
+			if tt.yes {
+				args = append(args, "--yes")
+			}
+			root.SetArgs(args)
+			if err := root.Execute(); err == nil {
+				t.Fatal("empty role IDs unexpectedly accepted")
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("empty role IDs reached group resolution or write: %#v", fake.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleSetUserConfirmedPassesExactParams(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+chat-role-set-user",
+		"--group", "项目群",
+		"--user", "user-1",
+		"--role-ids", " role-1 ,role-2 ",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != "set_custom_user_roles" {
+		t.Fatalf("calls = %#v", fake.calls)
+	}
+	want := map[string]any{
+		"openConversationId": "cid-project",
+		"openRoleIds":        []string{"role-1", "role-2"},
+		"userId":             "user-1",
+	}
+	if !reflect.DeepEqual(fake.calls[1].args, want) {
+		t.Fatalf("write args = %#v, want %#v", fake.calls[1].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleCommandsResolveNamesToExactBusinessCalls(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		tool string
+		want map[string]any
+	}{
+		{
+			name: "add",
+			args: []string{"chat", "+chat-role-add", "--group", "项目群", "--name", "管理员", "--yes"},
+			tool: "add_custom_group_role",
+			want: map[string]any{"openConversationId": "cid-project", "name": "管理员"},
+		},
+		{
+			name: "update",
+			args: []string{"chat", "+chat-role-update", "--group", "项目群", "--role-id", "role-1", "--name", "新名称", "--yes"},
+			tool: "update_custom_group_role",
+			want: map[string]any{"openConversationId": "cid-project", "openRoleId": "role-1", "name": "新名称"},
+		},
+		{
+			name: "remove",
+			args: []string{"chat", "+chat-role-remove", "--group", "项目群", "--role-id", "role-1", "--yes"},
+			tool: "remove_custom_group_role",
+			want: map[string]any{"openConversationId": "cid-project", "openRoleId": "role-1"},
+		},
+		{
+			name: "remove user roles",
+			args: []string{"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1,role-2", "--yes"},
+			tool: "remove_custom_user_roles",
+			want: map[string]any{"openConversationId": "cid-project", "openRoleIds": []string{"role-1", "role-2"}, "userId": "user-1"},
+		},
+		{
+			name: "query user roles",
+			args: []string{"chat", "+chat-role-query-user", "--group", "项目群", "--user", "user-1"},
+			tool: "query_custom_user_roles",
+			want: map[string]any{"openConversationId": "cid-project", "userId": "user-1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{responses: map[string]string{
+				"im/search_groups": `{"result":[{"openConversationId":"cid-project","title":"项目群"}],"hasMore":false}`,
+			}}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tt.args)
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.calls) != 2 || fake.calls[0].tool != "search_groups" || fake.calls[1].tool != tt.tool {
+				t.Fatalf("calls = %#v", fake.calls)
+			}
+			if !reflect.DeepEqual(fake.calls[1].args, tt.want) {
+				t.Fatalf("business args = %#v, want %#v", fake.calls[1].args, tt.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatRoleCommandsStopAmbiguousNamesBeforeBusinessCalls(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "list", args: []string{"chat", "+chat-role-list", "--group", "项目群"}},
+		{name: "add", args: []string{"chat", "+chat-role-add", "--group", "项目群", "--name", "管理员", "--yes"}},
+		{name: "update", args: []string{"chat", "+chat-role-update", "--group", "项目群", "--role-id", "role-1", "--name", "新名称", "--yes"}},
+		{name: "remove", args: []string{"chat", "+chat-role-remove", "--group", "项目群", "--role-id", "role-1", "--yes"}},
+		{name: "set user roles", args: []string{"chat", "+chat-role-set-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--yes"}},
+		{name: "remove user roles", args: []string{"chat", "+chat-role-remove-user", "--group", "项目群", "--user", "user-1", "--role-ids", "role-1", "--yes"}},
+		{name: "query user roles", args: []string{"chat", "+chat-role-query-user", "--group", "项目群", "--user", "user-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{responses: map[string]string{
+				"im/search_groups": `{"result":[{"openConversationId":"cid-a","title":"项目群"},{"openConversationId":"cid-b","title":"项目群"}],"hasMore":false}`,
+			}}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tt.args)
+			if err := root.Execute(); err == nil {
+				t.Fatal("ambiguous group name unexpectedly reached a role operation")
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != "search_groups" {
+				t.Fatalf("ambiguous group reached a business call: %#v", fake.calls)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageChatCreateAddsCurrentUserAndNormalizesResult(t *testing.T) {
@@ -289,12 +465,12 @@ func TestCrossPlatformCoverageMessagesSendRoutesIdentitySpecificTransports(t *te
 	}{
 		{
 			name:    "user",
-			args:    []string{"chat", "+messages-send", "--as", "user", "--chat-id", "cid", "--markdown", "hello @D1", "--at-open-dingtalk-ids", "D1", "--at-all", "--idempotency-key", "u1", "--yes"},
+			args:    []string{"chat", "+messages-send", "--as", "user", "--chat-id", "cid", "--markdown", "hello @" + fixtureCurrentDOpenID, "--at-open-dingtalk-ids", fixtureCurrentDOpenID, "--at-all", "--idempotency-key", "u1", "--yes"},
 			product: "chat",
 			tool:    "send_personal_message",
 			want:    map[string]any{"openConversationId": "cid", "msgType": "markdown", "uuid": "u1"},
 			bodyKey: "content",
-			body:    "<@all> hello <@D1>",
+			body:    "<@all> hello <@" + fixtureCurrentDOpenID + ">",
 		},
 		{
 			name:    "bot",
@@ -337,8 +513,15 @@ func TestCrossPlatformCoverageMessagesSendRoutesIdentitySpecificTransports(t *te
 				}
 			}
 			if tt.bodyKey == "content" {
+				rawContent := call.args[tt.bodyKey].(string)
+				if strings.Contains(rawContent, `\u003c`) || strings.Contains(rawContent, `\u003e`) {
+					t.Errorf("content = %q; current-user mention tokens must remain literal", rawContent)
+				}
+				if !strings.Contains(rawContent, "<@"+fixtureCurrentDOpenID+">") {
+					t.Errorf("content = %q; missing literal current-user mention token", rawContent)
+				}
 				var content map[string]string
-				if err := json.Unmarshal([]byte(call.args[tt.bodyKey].(string)), &content); err != nil {
+				if err := json.Unmarshal([]byte(rawContent), &content); err != nil {
 					t.Fatal(err)
 				}
 				if content["text"] != tt.body {
@@ -471,7 +654,7 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 		"chat", "+messages-reply",
 		"--conversation-id", "cid",
 		"--message-id", "msg",
-		"--ref-sender", "D-sender",
+		"--ref-sender", fixtureCurrentDOpenID,
 		"--text", "收到",
 		"--idempotency-key", "reply-uuid",
 		"--yes",
@@ -494,7 +677,7 @@ func TestCrossPlatformCoverageMessagesReplyPublishesPlainTextBoundary(t *testing
 		t.Fatal(err)
 	}
 	if content["referenceOpenMessageId"] != "msg" ||
-		content["srcMsgSendOpenDingTalkId"] != "D-sender" ||
+		content["srcMsgSendOpenDingTalkId"] != fixtureCurrentDOpenID ||
 		content["replyMsgType"] != "text" ||
 		content["content"] != "收到" {
 		t.Fatalf("reply content = %#v", content)
@@ -525,7 +708,7 @@ func TestCrossPlatformCoverageMessagesReplyDryRunStopsBeforeWrite(t *testing.T) 
 		"chat", "+messages-reply",
 		"--conversation-id", "cid",
 		"--message-id", "msg",
-		"--ref-sender", "D-sender",
+		"--ref-sender", fixtureCurrentDOpenID,
 		"--text", "收到",
 		"--dry-run",
 		"--yes",

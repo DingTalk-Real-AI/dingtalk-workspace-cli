@@ -17,7 +17,9 @@ Script groups:
 
 - Root installers: `./scripts/install.sh`, `./scripts/install.ps1`, `./scripts/install-skills.sh`
 - Product convenience installers: `./scripts/install-devapp.sh`, `./scripts/install-devapp.ps1`, `./scripts/install-event.sh`
-- CI package plan: `./scripts/ci/test-packages.sh`
+- CI package and coverage plan: `./scripts/ci/test-packages.sh`,
+  `./scripts/ci/run-coverage-shard.sh`, `./scripts/ci/run-full-coverage.sh`,
+  `./scripts/ci/merge-coverage-profiles.sh`
 - Dev helpers: `./scripts/dev/build.sh`, `./scripts/dev/lint.sh`, `./scripts/dev/ci-local.sh`, `./scripts/dev/run-mock-e2e.sh`, `./scripts/dev/coverage.sh`
 - Policy checks: `./scripts/policy/check-generated-drift.sh`, `./scripts/policy/check-command-surface.sh`, `./scripts/policy/check-command-compatibility.sh --base-ref <main-ref> --stable-ref <latest-GA-tag> --candidate-ref <candidate-sha>`, `./scripts/policy/check-schema-catalog.sh`, `./scripts/policy/check-schema-binary.sh`, `./scripts/policy/check-open-source-assets.sh`
 - Policy runtime files: set `DWS_POLICY_TMPDIR` to override the default `.worktrees/policy-tmp` workspace

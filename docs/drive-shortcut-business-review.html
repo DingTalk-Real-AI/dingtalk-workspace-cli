@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="DWS Drive Shortcut 与 lark-cli 的业务能力、真实数据 E2E 证据和平台边界分析。">
+  <title>Drive Shortcut 能力全景｜业务评审版</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f4f6f2; --surface: #fffefa; --ink: #17251f; --muted: #66746d;
+      --line: #dce2dc; --forest: #154f3d; --green: #17765a; --mint: #dff4e8;
+      --blue: #265f86; --blue-soft: #e7f1f7; --amber: #8c5a09; --amber-soft: #fff2cf;
+      --red: #a43b32; --red-soft: #fde9e5; --shadow: 0 14px 40px rgba(28, 48, 38, .08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    a { color: inherit; text-decoration: none; }
+    code { padding: .12rem .38rem; border: 1px solid #d6e0da; border-radius: 6px; color: #174f3e; background: #f1f7f3; font: 600 .88em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+    .wrap { width: min(1180px, calc(100% - 40px)); margin: auto; }
+    .hero { position: relative; overflow: hidden; padding: 64px 0 52px; color: #f7fff9; background: linear-gradient(125deg, #102b22 0%, #154c3c 57%, #1c6b54 100%); }
+    .hero::after { position: absolute; inset: -180px -100px auto auto; width: 540px; height: 540px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: 0 0 0 76px rgba(255,255,255,.035), 0 0 0 152px rgba(255,255,255,.025); content: ""; }
+    .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); gap: 32px; align-items: end; }
+    .eyebrow, .section-kicker { margin: 0 0 9px; color: #9fd6bd; font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(40px, 6vw, 68px); line-height: 1.03; letter-spacing: -.045em; }
+    .subtitle { max-width: 760px; margin: 19px 0 0; color: #d3e9de; font-size: 17px; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 21px; }
+    .meta-pill { padding: 6px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; color: #d5e9df; background: rgba(255,255,255,.07); font-size: 11px; font-weight: 750; }
+    .meta-pill.good { color: #bff2d5; border-color: rgba(139,232,179,.38); }
+    .hero-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .hero-stat { padding: 17px 16px; border: 1px solid rgba(255,255,255,.17); border-radius: 15px; background: rgba(255,255,255,.075); backdrop-filter: blur(8px); }
+    .hero-stat strong { display: block; font-size: 30px; line-height: 1; }
+    .hero-stat span { display: block; margin-top: 7px; color: #cce2d7; font-size: 11px; }
+    .nav { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: rgba(255,254,250,.94); backdrop-filter: blur(12px); }
+    .nav .wrap { display: flex; overflow-x: auto; }
+    .nav a { flex: 0 0 auto; padding: 14px 15px; color: #5b6c64; font-size: 12px; font-weight: 800; }
+    .nav a:hover { color: var(--forest); background: #eaf3ee; }
+    main { padding: 38px 0 74px; }
+    section { margin-top: 50px; scroll-margin-top: 72px; }
+    section:first-child { margin-top: 0; }
+    .section-head { display: flex; justify-content: space-between; gap: 28px; align-items: end; margin-bottom: 19px; }
+    h2 { margin: 0; font-size: clamp(25px, 3.2vw, 36px); line-height: 1.16; letter-spacing: -.025em; }
+    h3 { margin: 0 0 7px; font-size: 18px; }
+    .section-desc { max-width: 660px; margin: 0; color: var(--muted); font-size: 13px; }
+    .callout { padding: 19px 21px; border: 1px solid #bdd8cb; border-left: 4px solid var(--green); border-radius: 13px; background: #ecf7f1; box-shadow: 0 6px 20px rgba(28,48,38,.04); }
+    .callout strong { color: #13513d; }
+    .callout.warn { border-color: #ead29a; border-left-color: #b67508; background: #fff8e7; }
+    .callout.warn strong { color: #784b00; }
+    .callout.danger { border-color: #e9b7b1; border-left-color: var(--red); background: var(--red-soft); }
+    .score-grid, .domain-grid, .evidence-grid, .review-grid { display: grid; gap: 13px; }
+    .score-grid { grid-template-columns: repeat(4, 1fr); margin-top: 16px; }
+    .score, .domain-card, .evidence-card, .review-card { border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+    .score { padding: 19px; }
+    .score strong { display: block; color: var(--forest); font-size: 29px; line-height: 1; }
+    .score span { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
+    .domain-grid { grid-template-columns: repeat(4, 1fr); }
+    .domain-card { position: relative; padding: 21px; overflow: hidden; }
+    .domain-card .number { position: absolute; top: 12px; right: 17px; color: #d5e8de; font: 800 42px/1 ui-monospace, monospace; }
+    .domain-card p { min-height: 64px; margin: 8px 0 12px; color: var(--muted); font-size: 13px; }
+    .domain-card small { color: var(--green); font-weight: 800; }
+    .compare { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+    .compare-top { display: grid; grid-template-columns: repeat(3, 1fr); }
+    .compare-column { padding: 21px; border-right: 1px solid var(--line); }
+    .compare-column:last-child { border-right: 0; }
+    .compare-column p, .compare-column li { color: var(--muted); font-size: 13px; }
+    .compare-column ul { margin: 9px 0 0; padding-left: 18px; }
+    .compare-column.covered { border-top: 5px solid var(--green); }
+    .compare-column.partial { border-top: 5px solid #c78b22; }
+    .compare-column.gap { border-top: 5px solid var(--red); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #617069; background: #f7f8f5; font-size: 11px; font-weight: 900; letter-spacing: .03em; }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #f8fbf8; }
+    .verdict, .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 900; white-space: nowrap; }
+    .v-covered, .badge.read { color: #116045; background: var(--mint); }
+    .v-ahead, .badge.smart { color: #20577c; background: var(--blue-soft); }
+    .v-partial, .badge.write { color: #7b510a; background: var(--amber-soft); }
+    .v-gap, .badge.high { color: #8f3028; background: var(--red-soft); }
+    .truth-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 14px; }
+    .truth-card { padding: 22px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow); }
+    .truth-step { display: grid; grid-template-columns: 30px 1fr; gap: 11px; margin-top: 13px; }
+    .truth-step b { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; color: #fff; background: var(--forest); font-size: 12px; }
+    .truth-step strong, .truth-step span { display: block; }
+    .truth-step span { color: var(--muted); font-size: 12px; }
+    .toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) 180px 180px auto; gap: 10px; align-items: center; margin: 18px 0; padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    input, select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #ccd7d0; border-radius: 9px; color: var(--ink); background: #fff; font: inherit; }
+    input:focus, select:focus { outline: 3px solid rgba(23,118,90,.13); border-color: var(--green); }
+    .result-count { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+    .catalog { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+    .shortcut-row { display: grid; grid-template-columns: 215px minmax(0, 1fr) 200px; gap: 16px; align-items: center; padding: 14px 17px; border-bottom: 1px solid var(--line); }
+    .shortcut-row:last-child { border-bottom: 0; }
+    .shortcut-row:hover { background: #f8fbf8; }
+    .command code { font-size: 12px; }
+    .row-main p { margin: 0; font-size: 13px; }
+    .row-main small { color: var(--muted); }
+    .badges { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
+    .hidden-row { display: none; }
+    .evidence-grid { grid-template-columns: repeat(4, 1fr); }
+    .evidence-card { padding: 19px; }
+    .evidence-card strong { display: block; color: var(--forest); font-size: 23px; }
+    .evidence-card p { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
+    .timeline { margin-top: 15px; border-left: 2px solid #bdd7ca; }
+    .event { position: relative; padding: 0 0 17px 22px; }
+    .event::before { position: absolute; left: -7px; top: 5px; width: 12px; height: 12px; border: 3px solid var(--paper); border-radius: 50%; background: var(--green); content: ""; }
+    .event b { display: block; }
+    .event span { color: var(--muted); font-size: 12px; }
+    .review-grid { grid-template-columns: repeat(3, 1fr); }
+    .review-card { position: relative; padding: 20px; }
+    .review-card .review-num { color: #b8d1c4; font: 800 12px/1 ui-monospace, monospace; letter-spacing: .1em; }
+    .review-card p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    footer { margin-top: 52px; padding: 23px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    @media (max-width: 900px) { .hero-grid, .truth-grid { grid-template-columns: 1fr; } .score-grid, .domain-grid, .evidence-grid { grid-template-columns: repeat(2, 1fr); } .review-grid { grid-template-columns: 1fr 1fr; } .shortcut-row { grid-template-columns: 180px 1fr; } .badges { grid-column: 1 / -1; justify-content: flex-start; } }
+    @media (max-width: 620px) { .wrap { width: min(100% - 24px, 1180px); } .hero { padding: 44px 0 38px; } .hero-stats, .score-grid, .domain-grid, .evidence-grid, .review-grid, .compare-top { grid-template-columns: 1fr; } .compare-column { border-right: 0; border-bottom: 1px solid var(--line); } .toolbar { grid-template-columns: 1fr; } .result-count { text-align: left; } .shortcut-row { grid-template-columns: 1fr; } }
+    @media print { body { background: #fff; } .hero { color: var(--ink); background: #fff; border-bottom: 2px solid var(--ink); } .subtitle, .meta-pill, .hero-stat span { color: #425249; } .hero-stat { border-color: #aebbb3; } .nav, .toolbar { display: none; } .score, .domain-card, .compare, .truth-card, .catalog, .evidence-card, .review-card { box-shadow: none; break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">Business Review · Drive</p>
+        <h1>Drive Shortcut<br>能力全景</h1>
+        <p class="subtitle">从 lark-cli 对齐出发，但不止于命令名：逐项审查输入、校验、多步编排、失败语义、真实字节和平台边界。</p>
+        <div class="meta-row">
+          <span class="meta-pill good">真实账号 E2E 已执行</span>
+          <span class="meta-pill">28 个公开入口</span>
+          <span class="meta-pill">统一 Result / Pagination</span>
+          <span class="meta-pill">报告已移除 PII / 凭证 / 业务正文</span>
+        </div>
+      </div>
+      <div class="hero-stats" aria-label="关键统计">
+        <div class="hero-stat"><strong>38</strong><span>lark-cli Drive 逐项审查</span></div>
+        <div class="hero-stat"><strong>26</strong><span>已覆盖或跨产品路由</span></div>
+        <div class="hero-stat"><strong>7</strong><span>部分对齐，边界已公开</span></div>
+        <div class="hero-stat"><strong>5</strong><span>客观不可对齐能力</span></div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="nav"><div class="wrap"><a href="#overview">全景</a><a href="#compare">Lark 对齐</a><a href="#ahead">超越项</a><a href="#truth">真实语义</a><a href="#catalog">完整目录</a><a href="#e2e">E2E</a><a href="#review">评审</a></div></nav>
+
+  <main class="wrap">
+    <section id="overview">
+      <div class="section-head"><div><p class="section-kicker">Executive summary</p><h2>28 个公开入口，覆盖文件完整生命周期</h2></div><p class="section-desc">另有 <code>+publish-set</code> 已实现契约和读回逻辑，但真实普通文件与在线文档均被服务端拒绝，因此保持 unavailable，不进入 Agent 公开目录。</p></div>
+      <div class="callout"><strong>结论：</strong>Drive 已从 9 个偏原子入口扩展为 28 个可发现 Shortcut。它不仅补齐 Lark 的核心文件、版本和状态任务，还通过严格响应合同、真实落盘、写后读回、回收恢复和个人收藏形成更可审计的钉盘工作流。</div>
+      <div class="score-grid">
+        <article class="score"><strong>29</strong><span>已审查注册项（含 1 unavailable）</span></article>
+        <article class="score"><strong>25</strong><span>公开主能力 / 语义适配</span></article>
+        <article class="score"><strong>3</strong><span>公开兼容入口</span></article>
+        <article class="score"><strong>3</strong><span>高风险写入口，均需确认</span></article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head"><div><p class="section-kicker">Capability map</p><h2>四个业务域</h2></div><p class="section-desc">目录按用户任务组织；兼容命令不重复计为新增能力。</p></div>
+      <div class="domain-grid">
+        <article class="domain-card"><span class="number">09</span><h3>发现与检查</h3><p>严格目录分页、搜索、最近访问，以及元数据、统计和封面聚合检查。</p><small>+list · +search · +recent · +inspect</small></article>
+        <article class="domain-card"><span class="number">09</span><h3>文件生命周期</h3><p>创建目录、上传下载、快捷方式、在线对象复制、移动重命名、删除与恢复。</p><small>+upload · +download · +rename · +recycle-restore</small></article>
+        <article class="domain-card"><span class="number">06</span><h3>个人与公开状态</h3><p>回收站清单、收藏闭环和互联网公开状态的独立安全域。</p><small>+star-list · +star-add · +publish-get</small></article>
+        <article class="domain-card"><span class="number">04</span><h3>历史版本</h3><p>版本列表、精确定位、真实字节下载与高风险回滚读回。</p><small>+version-history · +version-download · +version-revert</small></article>
+      </div>
+    </section>
+
+    <section id="compare">
+      <div class="section-head"><div><p class="section-kicker">Lark alignment</p><h2>对齐业务语义，不追求同名率</h2></div><p class="section-desc">38 项逐项核对。评论、导入导出和成员权限在 DWS 由更成熟的 Doc 或原子权限入口承接，不在 Drive 再复制一套。</p></div>
+      <div class="compare">
+        <div class="compare-top">
+          <article class="compare-column covered"><h3>26 · 已覆盖 / 路由</h3><p>上传下载、目录与快捷方式、版本、移动删除、状态、搜索、评论、导入导出和成员任务均有真实入口。</p></article>
+          <article class="compare-column partial"><h3>7 · 部分对齐</h3><p>预览、resolve/reaction、push/pull、权限申请与 setting 受对象模型或接口粒度约束，明确保留有限语义。</p></article>
+          <article class="compare-column gap"><h3>5 · 客观缺口</h3><p>删除评论恢复、普通文件版本删除、安全标签读写、可靠双向目录同步缺少必要下层接口。</p></article>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Lark 任务组</th><th>DWS 主路径</th><th>结论</th><th>关键差异与交付决定</th></tr></thead><tbody>
+          <tr><td>upload / folder / shortcut / download</td><td><code>drive +upload</code> 等</td><td><span class="verdict v-ahead">增强</span></td><td>工作目录边界、OSS PUT、严格 commit、no-clobber、原子落盘、非零字节和读回验证。</td></tr>
+          <tr><td>preview / cover</td><td><code>drive +cover</code></td><td><span class="verdict v-partial">部分</span></td><td>封面/缩略图可读；没有等价的服务端多格式预览转换，不扩大宣称。</td></tr>
+          <tr><td>comments / replies</td><td><code>doc +comment-*</code> / <code>doc +review</code></td><td><span class="verdict v-covered">路由</span></td><td>评论归在线文档协作域；独立 resolve、reaction identity 与删除后恢复仍受接口限制。</td></tr>
+          <tr><td>export / import / task result</td><td><code>doc +export</code> / <code>doc +import</code></td><td><span class="verdict v-ahead">增强</span></td><td>提交、轮询、恢复、安全下载形成类型化闭环，不保留泛化下划线命令。</td></tr>
+          <tr><td>version history / get / revert</td><td><code>drive +version-*</code></td><td><span class="verdict v-ahead">增强</span></td><td>严格分页、精确版本、历史字节落盘、回滚前预检与终态读回；历史版本删除无接口。</td></tr>
+          <tr><td>status / inspect</td><td><code>drive +inspect</code></td><td><span class="verdict v-ahead">超越</span></td><td>元数据为必达结果，统计、公开状态和封面按需 fan-out；可选失败为 partial_success。</td></tr>
+          <tr><td>push / pull / sync</td><td><code>+upload</code> / <code>+download</code> 单文件</td><td><span class="verdict v-partial">部分</span></td><td>不在缺少稳定 hash、rename/delete journal 和冲突向量时制造危险目录同步。</td></tr>
+          <tr><td>member / permission</td><td><code>doc +access-*</code> / <code>drive permission</code></td><td><span class="verdict v-covered">路由</span></td><td>协作者权限与互联网公开是两个安全域；申请权限需真实上下文，未伪装为通用 Shortcut。</td></tr>
+          <tr><td>secure labels</td><td>无等价</td><td><span class="verdict v-gap">缺口</span></td><td>当前 DWS/钉钉下层没有 Drive 安全标签目录和写入接口，不能用普通权限代替。</td></tr>
+          <tr><td>search</td><td><code>drive +search</code> / <code>doc +search</code></td><td><span class="verdict v-ahead">增强</span></td><td>文件与在线文档按域路由；文件搜索严格验证数组、过滤和分页。</td></tr>
+        </tbody></table></div>
+      </div>
+      <div class="callout warn" style="margin-top:14px"><strong>普通文件 copy 边界：</strong>钉钉现有复制接口对普通文件产生 <code>.dlink</code>，不是字节独立副本。因此 <code>+copy</code> 只接受在线对象；普通文件快捷入口用 <code>+create-shortcut</code>，独立副本使用 <code>+download</code> 后 <code>+upload</code>。</div>
+    </section>
+
+    <section id="ahead">
+      <div class="section-head"><div><p class="section-kicker">Beyond parity</p><h2>DWS 可主推的八个差异化点</h2></div><p class="section-desc">价值来自正确性与完整闭环，而不是额外注册同义命令。</p></div>
+      <div class="domain-grid">
+        <article class="domain-card"><h3>严格目录语义</h3><p><code>+list</code> / <code>+recent</code> 只有服务端明确返回数组时才接受空集合。</p><small>缺字段 ≠ 空目录</small></article>
+        <article class="domain-card"><h3>聚合检查</h3><p><code>+inspect</code> 一次汇总身份、统计、公开状态和封面，并保留局部失败。</p><small>partial_success 可审计</small></article>
+        <article class="domain-card"><h3>真实文件传输</h3><p>上传执行完整事务；下载验证受控路径、覆盖策略、原子发布和字节。</p><small>不是只返回临时 URL</small></article>
+        <article class="domain-card"><h3>回收恢复闭环</h3><p>从 <code>recycleItemId</code> 恢复后读取真实节点，证明资源确实回到可访问状态。</p><small>恢复后读回</small></article>
+        <article class="domain-card"><h3>个人收藏闭环</h3><p>收藏、列表、取消收藏覆盖完整用户偏好过程，并保留分页。</p><small>add → list → remove</small></article>
+        <article class="domain-card"><h3>版本真实字节</h3><p>除元数据外可下载任意已知历史版本，并用本地字节核验回滚结果。</p><small>version-download</small></article>
+        <article class="domain-card"><h3>重命名终态</h3><p>处理服务端扩展名规则，再读取节点确认最终名称，避免重复扩展名。</p><small>write → read-back</small></article>
+        <article class="domain-card"><h3>公开域诚实降级</h3><p>查询和关闭可验证；开启在 eligible 节点闭环完成前保持 unavailable。</p><small>不把 notSupported 当成功</small></article>
+      </div>
+    </section>
+
+    <section id="truth">
+      <div class="section-head"><div><p class="section-kicker">Truthful execution</p><h2>空数组不再是“看起来成功”</h2></div><p class="section-desc">合法业务空集合可以成功，但必须先证明响应结构、元素类型和分页语义成立。内部错误、缺字段与坏投影必须失败。</p></div>
+      <div class="truth-grid">
+        <article class="truth-card"><h3>四层成功证据</h3>
+          <div class="truth-step"><b>1</b><div><strong>传输成功</strong><span>进程成功，MCP / HTTP 没有显式错误。</span></div></div>
+          <div class="truth-step"><b>2</b><div><strong>响应合同</strong><span>对象、数组、success 标志和元素类型与命令声明一致。</span></div></div>
+          <div class="truth-step"><b>3</b><div><strong>业务终态</strong><span>写命令必须获得新 ID、终态证据或后续元数据读回。</span></div></div>
+          <div class="truth-step"><b>4</b><div><strong>产物校验</strong><span>下载必须落盘、非零字节；关键链路比较大小和 SHA-256。</span></div></div>
+        </article>
+        <article class="truth-card"><h3>明确失败的情况</h3>
+          <ul><li>空响应、缺少预期集合字段或集合类型错误。</li><li>集合存在坏元素，不能投影时静默丢弃。</li><li><code>success=false</code>、写响应没有 ID 或读回不一致。</li><li>inspect 的可选分支失败却返回整体 success。</li><li>下载得到空文件、越界路径或覆盖既有文件。</li><li>普通文件 copy 返回快捷链接却声称独立副本。</li></ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="catalog">
+      <div class="section-head"><div><p class="section-kicker">Full catalog</p><h2>28 个公开 Shortcut 完整目录</h2></div><p class="section-desc">16 个只读、9 个普通写、3 个高风险写；3 个历史入口保留兼容但不作为新 Agent 主路径。</p></div>
+      <div class="toolbar"><input id="q" type="search" placeholder="搜索命令或用途，例如 版本、回收、+inspect…" aria-label="搜索 Shortcut"><select id="domain"><option value="all">全部业务域</option><option value="discover">发现与检查</option><option value="lifecycle">文件生命周期</option><option value="personal">个人与公开</option><option value="version">历史版本</option></select><select id="risk"><option value="all">全部风险</option><option value="read">只读</option><option value="write">普通写</option><option value="high">高风险写</option></select><span id="result-count" class="result-count">显示 28 / 28</span></div>
+      <div class="catalog">
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +list</code></div><div class="row-main"><p>严格分页列出目录，保留游标，区分显式空目录和畸形响应。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +inspect</code></div><div class="row-main"><p>聚合元数据与可选统计、公开状态、封面；局部失败如实报告。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +info</code></div><div class="row-main"><p>历史元数据兼容入口；新场景优先使用 +inspect。</p><small>兼容入口</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +search</code></div><div class="row-main"><p>按关键词、类型、扩展名、创建人、时间和分页搜索钉盘文件。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +find-file</code></div><div class="row-main"><p>历史文件搜索兼容入口；新场景优先使用 +search。</p><small>兼容入口</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +search-docs</code></div><div class="row-main"><p>历史跨域搜索入口；新的在线文档搜索路由 doc +search。</p><small>兼容入口</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +recent</code></div><div class="row-main"><p>读取最近访问或编辑列表，支持创建人筛选并保留分页。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +stats</code></div><div class="row-main"><p>读取访问、编辑、评论、点赞、预览和下载统计。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +cover</code></div><div class="row-main"><p>读取封面或缩略图；不宣称服务端多格式预览。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +upload</code></div><div class="row-main"><p>上传凭证、OSS PUT、严格提交和远端元数据读回的一体化事务。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="read"><div class="command"><code>dws drive +download</code></div><div class="row-main"><p>安全落盘、no-clobber、原子发布并验证非零字节。</p><small>文件生命周期</small></div><div class="badges"><span class="badge read">READ</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +create-folder</code></div><div class="row-main"><p>创建文件夹后要求新 ID，并读回名称验证。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +create-shortcut</code></div><div class="row-main"><p>创建快捷方式并读回，明确区别于独立副本。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +copy</code></div><div class="row-main"><p>复制在线对象；普通文件预检拒绝，避免把 .dlink 当副本。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +move</code></div><div class="row-main"><p>移动到指定文件夹或知识库位置，语义与 copy/shortcut 消歧。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +rename</code></div><div class="row-main"><p>重命名后读取真实节点，验证最终名称和扩展名。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="high"><div class="command"><code>dws drive +delete</code></div><div class="row-main"><p>将确认过的节点移入回收站，要求 success=true 终态证据。</p><small>文件生命周期</small></div><div class="badges"><span class="badge high">HIGH · CONFIRM</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +recycle-restore</code></div><div class="row-main"><p>按回收项 ID 恢复，并读回恢复后的节点。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+
+        <article class="shortcut-row" data-tool data-domain="personal" data-risk="read"><div class="command"><code>dws drive +recycle-list</code></div><div class="row-main"><p>严格分页列出回收项并稳定投影 recycleItemId。</p><small>个人与公开</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="personal" data-risk="read"><div class="command"><code>dws drive +star-list</code></div><div class="row-main"><p>严格分页列出当前用户收藏并保留游标。</p><small>个人与公开</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="personal" data-risk="write"><div class="command"><code>dws drive +star-add</code></div><div class="row-main"><p>以幂等用户偏好语义收藏指定节点。</p><small>个人与公开</small></div><div class="badges"><span class="badge write">WRITE</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="personal" data-risk="write"><div class="command"><code>dws drive +star-remove</code></div><div class="row-main"><p>以幂等用户偏好语义取消收藏指定节点。</p><small>个人与公开</small></div><div class="badges"><span class="badge write">WRITE</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="personal" data-risk="read"><div class="command"><code>dws drive +publish-get</code></div><div class="row-main"><p>只读查询互联网公开状态，不沿用错误的写风险标签。</p><small>个人与公开</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="personal" data-risk="high"><div class="command"><code>dws drive +publish-unset</code></div><div class="row-main"><p>关闭互联网公开并读回验证外链状态。</p><small>个人与公开</small></div><div class="badges"><span class="badge high">HIGH · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+
+        <article class="shortcut-row" data-tool data-domain="version" data-risk="read"><div class="command"><code>dws drive +version-history</code></div><div class="row-main"><p>严格分页列出普通文件历史版本。</p><small>历史版本</small></div><div class="badges"><span class="badge read">READ</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="version" data-risk="read"><div class="command"><code>dws drive +version-get</code></div><div class="row-main"><p>按正整数版本号精确匹配，零命中显式失败。</p><small>历史版本</small></div><div class="badges"><span class="badge read">READ</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="version" data-risk="read"><div class="command"><code>dws drive +version-download</code></div><div class="row-main"><p>预检版本后安全下载历史字节，要求非零产物。</p><small>历史版本</small></div><div class="badges"><span class="badge read">READ</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="version" data-risk="high"><div class="command"><code>dws drive +version-revert</code></div><div class="row-main"><p>验证版本存在后回滚，并读取当前节点终态。</p><small>历史版本</small></div><div class="badges"><span class="badge high">HIGH · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+      </div>
+      <div class="callout warn" style="margin-top:14px"><strong>未公开入口：</strong><code>+publish-set</code> 的安全契约和 set→get 读回代码已存在，但真实后端返回 <code>operation.notSupported</code>。在找到 eligible 节点并完成 set→get→unset 闭环前，不进入公开 Agent catalog。</div>
+    </section>
+
+    <section id="e2e">
+      <div class="section-head"><div><p class="section-kicker">Real-data E2E</p><h2>真实数据验证，不用空结果证明成功</h2></div><p class="section-desc">测试在隔离目录创建临时资源，覆盖读取、写入、下载、版本、收藏、回收和清理。资源 ID、账号、URL、上传凭证、绝对路径和业务正文均未进入报告。</p></div>
+      <div class="evidence-grid">
+        <article class="evidence-card"><strong>39,838 B</strong><p>真实文件上传后下载字节数；与源文件 SHA-256 完全一致。</p></article>
+        <article class="evidence-card"><strong>2 versions</strong><p>覆盖写入生成两个版本；精确查询、历史下载和回滚全部读回。</p></article>
+        <article class="evidence-card"><strong>4 / 5</strong><p>隔离夹具中搜索命中 4 项、最近列表命中 5 项，证明非空投影链路。</p></article>
+        <article class="evidence-card"><strong>0 remain</strong><p>测试结束后隔离根目录无残留；临时资源进入回收站并完成本地清理。</p></article>
+      </div>
+      <div class="timeline">
+        <div class="event"><b>创建与发现</b><span>创建两个隔离目录并读回；+list 命中真实节点，由此发现并修复 dentryId 与 32 字符 fileId 混用。</span></div>
+        <div class="event"><b>上传与下载</b><span>真实 OSS 上传、远端元数据读回、下载、no-clobber 二次路径、大小与 SHA-256 一致性全部通过。</span></div>
+        <div class="event"><b>检查与个人状态</b><span>+inspect（含 stats / publish / cover）、+stats、+cover、收藏 add→list→remove 通过。</span></div>
+        <div class="event"><b>版本闭环</b><span>覆盖文件产生两个版本；history/get/download/revert 通过，回滚后最新字节与原始内容一致。</span></div>
+        <div class="event"><b>复制、移动与命名</b><span>在线文档 copy 通过；普通文件 .dlink 被修正为预检拒绝；move 往返、rename 扩展名规范化通过。</span></div>
+        <div class="event"><b>删除与恢复</b><span>delete→recycle-list→recycle-restore 通过，真实回收响应字段已按后端形态修正。</span></div>
+        <div class="event"><b>平台负向证据</b><span>publish-set 对普通文件和在线文档均明确返回不支持，因此保持 unavailable；没有把失败改写成空对象成功。</span></div>
+        <div class="event"><b>清理</b><span>隔离目录进入回收站，根目录残留计数为零；本地下载产物删除。</span></div>
+      </div>
+    </section>
+
+    <section id="review">
+      <div class="section-head"><div><p class="section-kicker">Review prompts</p><h2>建议业务评审重点确认</h2></div><p class="section-desc">这些是需要接受的产品边界，不是被空结果遮蔽的实现问题。</p></div>
+      <div class="review-grid">
+        <article class="review-card"><span class="review-num">01</span><h3>是否接受 26 / 7 / 5 结论？</h3><p>按用户任务计覆盖、部分与缺口，不用同名命令数量代替语义保真。</p></article>
+        <article class="review-card"><span class="review-num">02</span><h3>普通文件 copy 是否足够清晰？</h3><p>服务端无法提供原子独立副本；快捷方式与下载后上传两条替代路径已明确。</p></article>
+        <article class="review-card"><span class="review-num">03</span><h3>是否拒绝不可靠目录 sync？</h3><p>缺稳定 hash、删除/重命名日志和冲突向量时，不发布可能覆盖数据的双向同步。</p></article>
+        <article class="review-card"><span class="review-num">04</span><h3>跨产品路由是否合理？</h3><p>评论、导入导出和协作者权限优先复用 Doc 成熟入口，不在 Drive 制造同义表面。</p></article>
+        <article class="review-card"><span class="review-num">05</span><h3>publish-set 是否继续 unavailable？</h3><p>建议维持，直到真实 eligible 节点完成开启、查询、关闭的可恢复闭环。</p></article>
+        <article class="review-card"><span class="review-num">06</span><h3>下一批后端解锁优先级？</h3><p>建议依次评估普通文件原子 copy、同步所需版本信号、安全标签和评论恢复接口。</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="wrap">依据：DWS 最终 Shortcut catalog / Schema、Drive 实现与测试、真实账号 E2E、lark-cli Drive registrations 与实现。范围仅含 Drive Shortcut 及必要跨产品路由；不包含原子命令总表。所有业务标识、凭证、签名 URL、用户信息和正文均已脱敏。</div></footer>
+  <script>
+    const q = document.querySelector('#q');
+    const domain = document.querySelector('#domain');
+    const risk = document.querySelector('#risk');
+    const rows = [...document.querySelectorAll('[data-tool]')];
+    const count = document.querySelector('#result-count');
+    function filterTools() {
+      const needle = q.value.trim().toLocaleLowerCase('zh-CN');
+      let visible = 0;
+      rows.forEach((row) => {
+        const show = (!needle || row.textContent.toLocaleLowerCase('zh-CN').includes(needle)) && (domain.value === 'all' || row.dataset.domain === domain.value) && (risk.value === 'all' || row.dataset.risk === risk.value);
+        row.classList.toggle('hidden-row', !show);
+        if (show) visible += 1;
+      });
+      count.textContent = `显示 ${visible} / ${rows.length}`;
+    }
+    [q, domain, risk].forEach((control) => control.addEventListener('input', filterTools));
+  </script>
+</body>
+</html>

@@ -22,49 +22,13 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 type errorReader struct{}
 
 func (errorReader) Read([]byte) (int, error) { return 0, errors.New("read") }
-
-type duplicateFailAfterWriter struct {
-	remaining int
-}
-
-func (w *duplicateFailAfterWriter) Write(p []byte) (int, error) {
-	if w.remaining <= 0 {
-		return 0, errors.New("write")
-	}
-	if len(p) > w.remaining {
-		n := w.remaining
-		w.remaining = 0
-		return n, errors.New("write")
-	}
-	w.remaining -= len(p)
-	return len(p), nil
-}
-
-type duplicateFakePortableTemp struct {
-	name      string
-	writeErr  error
-	chmodErr  error
-	syncErr   error
-	closeErr  error
-	closeCall int
-}
-
-func (f *duplicateFakePortableTemp) Write(p []byte) (int, error) {
-	if f.writeErr != nil {
-		return 0, f.writeErr
-	}
-	return len(p), nil
-}
-func (f *duplicateFakePortableTemp) Name() string            { return f.name }
-func (f *duplicateFakePortableTemp) Chmod(os.FileMode) error { return f.chmodErr }
-func (f *duplicateFakePortableTemp) Sync() error             { return f.syncErr }
-func (f *duplicateFakePortableTemp) Close() error            { f.closeCall++; return f.closeErr }
 
 type fakeSecureTemp struct {
 	name     string
@@ -1211,7 +1175,13 @@ func TestCrossPlatformCoveragePortableAuthBundleCoverageEdges(t *testing.T) {
 		if err := os.Symlink(filepath.Join(keyDir, "dek"), filepath.Join(keyDir, "link")); err != nil {
 			t.Fatal(err)
 		}
-		for name, value := range map[string]string{"app.json": "{}", profilesJSONFile: "{}", "mcp_url": "https://mcp.test", "terminal_url": "https://terminal.test"} {
+		for name, value := range map[string]string{
+			"app.json":                         "{}",
+			profilesJSONFile:                   "{}",
+			"mcp_url":                          "https://mcp.test",
+			config.ManagedMCPURLRegionFileName: "https://mcp.test",
+			"terminal_url":                     "https://terminal.test",
+		} {
 			if err := os.WriteFile(filepath.Join(configDir, name), []byte(value), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -1233,6 +1203,9 @@ func TestCrossPlatformCoveragePortableAuthBundleCoverageEdges(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(importDir, "app.json")); err != nil {
 			t.Fatal("config file was not imported")
+		}
+		if _, err := os.Stat(filepath.Join(importDir, config.ManagedMCPURLRegionFileName)); err != nil {
+			t.Fatal("managed MCP region marker was not imported")
 		}
 		if _, err := os.Stat(filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")); err != nil {
 			t.Fatal("encrypted token was not imported")
@@ -2897,8 +2870,8 @@ func TestCrossPlatformCoverageDeviceFlowHighLevelCoverageEdges(t *testing.T) {
 	deviceHasAppConfig = func(string) bool { return false }
 	appSaved := false
 	deviceSaveAppConfig = func(string, *AppConfig) error { appSaved = true; return fail }
-	if _, err := p.loginOnce(context.Background(), 1); err != nil || !appSaved {
-		t.Fatalf("successful device login = %v appSaved=%v", err, appSaved)
+	if _, err := p.loginOnce(context.Background(), 1); err != nil || appSaved {
+		t.Fatalf("managed device login = %v appSaved=%v; must not persist an ID-only app config", err, appSaved)
 	}
 
 	deviceFlowAfter = func(time.Duration) <-chan time.Time {

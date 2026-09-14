@@ -35,7 +35,7 @@ import (
 // search hits through list_messages_by_ids in chunks of 50. A later-page or
 // enrichment failure never turns a partial result into a false success: the
 // output carries an explicit failure ledger and complete=false.
-const searchMsgIntent = "当你要按关键词、发送者、@对象、消息类型、机器人来源或会话范围组合搜索 IM 消息时使用；可搜索单个、多个或全部会话，会话与发送者过滤使用稳定 ID。默认查询近 7 天，也可指定精确起止时间和输出顺序。" +
+const searchMsgIntent = "当你要按关键词、发送者、@对象、消息类型、机器人来源或会话范围组合搜索 IM 消息时使用；可搜索单个、多个或全部会话。--group/--groups 接受群名或 openConversationId，--sender/--senders 接受姓名、userId 或 openDingTalkId：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 执行并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。默认查询近 7 天，也可指定精确起止时间和输出顺序。" +
 	"显式指定会话时会先验证 CID，再执行有界全局扫描并在本地精确过滤，避免下层忽略非法 CID 或群聊 CID。" +
 	"--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。" +
 	"--download-resources 使用安全本地路径、默认不覆盖和原子落盘。"
@@ -70,8 +70,8 @@ var SearchMsg = shortcut.Shortcut{
 			UseWhen:      []string{searchMsgIntent},
 			AvoidWhen:    []string{"只想查看或导出一个指定会话的消息记录、且没有发送者、关键词、@对象或消息类型等主要筛选条件时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"},
 			Examples: []string{
+				"dws chat +search-msg --group \"项目群\" --sender \"测试用户甲\" --page-all",
 				"dws chat +search-msg --query \"周报\" --senders <openDingTalkId> --days 3 --page-all",
-				"dws chat +search-msg --group <openConversationId> --message-type file --download-resources --output-dir ./downloads",
 			},
 		},
 	},
@@ -80,15 +80,15 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "--query 的兼容别名", Hidden: true},
 		{Name: "text-query", Type: shortcut.FlagString, Desc: "--query 的兼容别名", Hidden: true},
-		{Name: "group", Type: shortcut.FlagString, Desc: "单个会话 openConversationId"},
+		{Name: "group", Type: shortcut.FlagString, Desc: "单个群名或 openConversationId；自动唯一解析并校验"},
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
 		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
-		{Name: "groups", Type: shortcut.FlagStringSlice, Desc: "多个会话 openConversationId"},
-		{Name: "chat-id", Type: shortcut.FlagStringSlice, Desc: "--groups 的 lark-cli 对齐别名"},
-		{Name: "chat-query", Type: shortcut.FlagStringSlice, Desc: "按群名唯一解析会话过滤条件（可选，可重复或逗号分隔）"},
-		{Name: "senders", Type: shortcut.FlagStringSlice, Desc: "发送者 userId/openDingTalkId 列表"},
-		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "--senders 的 lark-cli 对齐别名"},
-		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "按姓名唯一解析发送者过滤条件（可选，可重复或逗号分隔）"},
+		{Name: "groups", Type: shortcut.FlagStringSlice, Desc: "多个群名或 openConversationId；可混合输入并逐项唯一解析"},
+		{Name: "chat-id", Type: shortcut.FlagStringSlice, Desc: "--groups 的 lark-cli 对齐别名；只接受 openConversationId"},
+		{Name: "chat-query", Type: shortcut.FlagStringSlice, Desc: "显式按群名唯一解析的兼容入口（可选，可重复或逗号分隔）"},
+		{Name: "senders", Type: shortcut.FlagStringSlice, Desc: "多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录无法分类时按原值 userId 查询并保留身份未验证状态"},
+		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；--senders 的兼容别名，保留同样的三态解析与安全降级语义"},
+		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析的兼容入口（可选，可重复或逗号分隔）"},
 		{Name: "at-me", Type: shortcut.FlagBool, Desc: "只搜索 @我 的消息"},
 		{Name: "is-at-me", Type: shortcut.FlagBool, Desc: "--at-me 的 lark-cli 对齐别名"},
 		{Name: "at-ids", Type: shortcut.FlagStringSlice, Desc: "@对象 userId/openDingTalkId 列表"},
@@ -140,8 +140,10 @@ var SearchMsg = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"cursor", "page-token"}},
 	}, chatshortcut.MessageResourceDownloadConstraints()...),
 	Tips: []string{
+		`dws chat +search-msg --group "项目群" --sender "测试用户甲" --page-all`,
 		`dws chat +search-msg --group <openConversationId> --query "changefree"`,
 		`dws chat +search-msg --senders <openDingTalkId> --at-me --days 3 --page-all`,
+		`dws chat +search-msg --group <openConversationId> --query "changefree" --jq '.messages[] | {messageId, text}'`,
 	},
 	Validate: validateSearchMsgWithResources,
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -269,6 +271,22 @@ var SearchMsg = shortcut.Shortcut{
 			}
 			messages = validatedMessages
 		}
+		if len(resolvedFilters.Senders) > 0 {
+			var unverifiableMessageIDs []string
+			messages, unverifiableMessageIDs = filterSearchSenderScope(messages, resolvedFilters.Senders)
+			if len(unverifiableMessageIDs) > 0 {
+				return searchSenderScopeUnverifiedError(resolvedFilters.Senders, unverifiableMessageIDs)
+			}
+		}
+		unverifiedSenderInputs := searchUnverifiedSenderInputs(resolvedFilters.Senders)
+		if len(unverifiedSenderInputs) > 0 {
+			failures = append(failures, map[string]any{
+				"stage":  "sender_identity_verification",
+				"inputs": unverifiedSenderInputs,
+				"error":  "通讯录未能确认这些混合发送者参数是姓名还是 userId；已按精确 userId 执行，但不能据此作完整否定结论",
+			})
+			complete = false
+		}
 
 		order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
 		if order == "" {
@@ -292,9 +310,23 @@ var SearchMsg = shortcut.Shortcut{
 			"failedCount":     len(failures),
 			"failures":        failures,
 			"queryRange":      searchMessageQueryRange(params, order),
+			"timeCoverage":    searchMessageTimeCoverage(rt),
+			"conclusionGuard": searchMessageConclusionGuard(rt, complete, len(results)),
+		}
+		if len(resolvedFilters.Chats) > 0 || len(resolvedFilters.Senders) > 0 {
+			payload["resolvedFilters"] = resolvedFilters
 		}
 		if len(resolvedFilters.Senders) > 0 {
-			payload["resolvedFilters"] = resolvedFilters
+			payload["senderScope"] = map[string]any{
+				"targetsResolved":    len(unverifiedSenderInputs) == 0,
+				"filterApplied":      true,
+				"filterMode":         "server_and_client",
+				"resultsWithinScope": true,
+			}
+			if len(unverifiedSenderInputs) > 0 {
+				payload["senderScope"].(map[string]any)["status"] = "identity_unverified"
+				payload["senderScope"].(map[string]any)["unverifiedInputs"] = unverifiedSenderInputs
+			}
 		}
 		if scopedSearch {
 			payload["scope"] = searchScopePayload(requestedConversationIDs, paginationKnown && !hasMore)
@@ -310,6 +342,39 @@ var SearchMsg = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+func searchMessageTimeCoverage(rt *shortcut.RuntimeContext) map[string]any {
+	source := "implicit_default"
+	if rt.Changed("start") || rt.Changed("start-time") || rt.Changed("end") || rt.Changed("end-time") {
+		source = "explicit_range"
+	} else if rt.Changed("days") {
+		source = "explicit_days"
+	}
+
+	coverage := map[string]any{
+		"source":     source,
+		"allHistory": false,
+	}
+	if source != "explicit_range" {
+		coverage["days"] = rt.Int("days")
+	}
+	return coverage
+}
+
+func searchMessageConclusionGuard(rt *shortcut.RuntimeContext, complete bool, resultCount int) map[string]any {
+	coverage := searchMessageTimeCoverage(rt)
+	guard := map[string]any{
+		"absenceWithinQueryRangeAllowed": complete,
+		"absenceAcrossAllHistoryAllowed": false,
+		"allHistoryCountAllowed":         false,
+		"requiredActionForAllHistory":    "widen_time_range_or_reuse_complete_message_ledger",
+	}
+	if coverage["source"] == "implicit_default" && resultCount == 0 {
+		guard["requiredAction"] = "widen_time_range_or_reuse_complete_message_ledger"
+		guard["hint"] = "当前只证明默认 7 天时间窗内没有命中，不能据此判断全部历史没有。若已有完整会话消息，请解析稳定身份后复用现有消息；否则扩大时间范围。"
+	}
+	return guard
 }
 
 func validateSearchMsgWithResources(rt *shortcut.RuntimeContext) error {
@@ -349,6 +414,39 @@ func validateSearchMsg(rt *shortcut.RuntimeContext) error {
 	if pageLimit := rt.Int("page-limit"); pageLimit < 1 || pageLimit > 40 {
 		return apperrors.NewValidation("--page-limit 必须在 1-40 之间")
 	}
+	if err := validateSearchMsgStrictConversationAliases(rt); err != nil {
+		return err
+	}
+	return nil
+}
+
+// The conventional --group/--groups flags are intentionally dual-form. Only
+// the explicit ID aliases remain strict so scripts that select them retain a
+// deterministic contract.
+func validateSearchMsgStrictConversationAliases(rt *shortcut.RuntimeContext) error {
+	values := append([]string{}, rt.StrSlice("chat-id")...)
+	if value := rt.StrFirst("conversation-id", "id"); value != "" {
+		values = append(values, value)
+	}
+	for _, value := range uniqueSearchStrings(values) {
+		if strings.HasPrefix(strings.ToLower(value), "cid") {
+			continue
+		}
+		return apperrors.NewValidation(
+			fmt.Sprintf("显式会话 ID 参数收到非 openConversationId 值 %q；已停止消息搜索", value),
+			apperrors.WithReason("target_type_mismatch"),
+			apperrors.WithOrigin("client"),
+			apperrors.WithFailureStage("request_validation"),
+			apperrors.WithExecutionStarted(false),
+			apperrors.WithRetryable(false),
+			apperrors.WithHint(fmt.Sprintf("--chat-id/--conversation-id/--id 只接受 cid 开头的 openConversationId；群名请使用 --group %q 或 --groups %q。", value, value)),
+			apperrors.WithDetails(map[string]any{
+				"flags":         []string{"chat-id", "conversation-id", "id"},
+				"expectedType":  "openConversationId",
+				"providedValue": value,
+			}),
+		)
+	}
 	return nil
 }
 
@@ -357,6 +455,7 @@ func validateSearchMsg(rt *shortcut.RuntimeContext) error {
 // the directory name, so consumers must join the selected stable identity to
 // each projected message's senderId instead of comparing those two names.
 type searchResolvedFilters struct {
+	Chats   []targetresolver.ChatResolution `json:"chats,omitempty"`
 	Senders []targetresolver.UserResolution `json:"senders,omitempty"`
 }
 
@@ -366,10 +465,25 @@ func searchMsgParams(rt *shortcut.RuntimeContext) (map[string]any, searchResolve
 	if value := rt.StrFirst("query", "keyword", "text", "text-query"); value != "" {
 		params["keyword"] = value
 	}
-	conversationIDs := append([]string{}, rt.StrSlice("groups")...)
-	conversationIDs = append(conversationIDs, rt.StrSlice("chat-id")...)
-	if value := rt.StrFirst("group", "conversation-id", "id"); value != "" {
+	conversationIDs := append([]string{}, rt.StrSlice("chat-id")...)
+	if value := rt.StrFirst("conversation-id", "id"); value != "" {
 		conversationIDs = append(conversationIDs, value)
+	}
+	groupTargets := append([]string{}, rt.StrSlice("groups")...)
+	if value := rt.Str("group"); value != "" {
+		groupTargets = append(groupTargets, value)
+	}
+	for _, target := range uniqueSearchStrings(groupTargets) {
+		if strings.HasPrefix(strings.ToLower(target), "cid") {
+			conversationIDs = append(conversationIDs, target)
+			continue
+		}
+		resolved, err := targetresolver.ResolveChatTarget(rt, target, "")
+		if err != nil {
+			return nil, searchResolvedFilters{}, err
+		}
+		resolvedFilters.Chats = append(resolvedFilters.Chats, resolved)
+		conversationIDs = append(conversationIDs, resolved.Selected.OpenConversationID)
 	}
 	if queries := rt.StrSlice("chat-query"); len(queries) > 0 {
 		for _, query := range queries {
@@ -377,30 +491,32 @@ func searchMsgParams(rt *shortcut.RuntimeContext) (map[string]any, searchResolve
 			if err != nil {
 				return nil, searchResolvedFilters{}, err
 			}
+			resolvedFilters.Chats = append(resolvedFilters.Chats, resolved)
 			conversationIDs = append(conversationIDs, resolved.Selected.OpenConversationID)
 		}
 	}
 	if values := uniqueSearchStrings(conversationIDs); len(values) > 0 {
 		params["openConversationIds"] = values
 	}
-	senders := append([]string{}, rt.StrSlice("senders")...)
-	senders = append(senders, rt.StrSlice("sender")...)
+	senderTargets := append([]string{}, rt.StrSlice("senders")...)
+	senderTargets = append(senderTargets, rt.StrSlice("sender")...)
+	for _, target := range uniqueSearchStrings(senderTargets) {
+		resolved, err := targetresolver.ResolveSenderTarget(rt, target, targetresolver.IdentityAny)
+		if err != nil {
+			return nil, searchResolvedFilters{}, err
+		}
+		resolvedFilters.Senders = append(resolvedFilters.Senders, resolved)
+	}
 	if queries := rt.StrSlice("sender-query"); len(queries) > 0 {
 		resolvedUsers, err := targetresolver.ResolveUsers(rt, queries, targetresolver.IdentityAny)
 		if err != nil {
 			return nil, searchResolvedFilters{}, err
 		}
 		resolvedFilters.Senders = append(resolvedFilters.Senders, resolvedUsers...)
-		for _, resolved := range resolvedUsers {
-			identity := resolved.Selected.OpenDingTalkID
-			if identity == "" {
-				identity = resolved.Selected.UserID
-			}
-			senders = append(senders, identity)
-		}
 	}
-	appendSearchActorIDs(params, senders, "senderUserIds", "senderOpenDingTakIds")
-	appendSearchActorIDs(params, rt.StrSlice("at-ids"), "atUserIds", "atOpenDingTakIds")
+	appendResolvedSearchActorIDs(params, resolvedFilters.Senders, "senderUserIds", "senderOpenDingTakIds")
+	atUsers := resolveSearchStableActorTargets(rt, rt.StrSlice("at-ids"))
+	appendResolvedSearchActorIDs(params, atUsers, "atUserIds", "atOpenDingTakIds")
 	if rt.Bool("at-me") || rt.Bool("is-at-me") {
 		params["atMe"] = true
 	}
@@ -438,15 +554,40 @@ func searchMsgParams(rt *shortcut.RuntimeContext) (map[string]any, searchResolve
 	return params, resolvedFilters, nil
 }
 
-func appendSearchActorIDs(params map[string]any, values []string, userKey, openIDKey string) {
-	var userIDs, openIDs []string
+func resolveSearchStableActorTargets(
+	rt *shortcut.RuntimeContext,
+	values []string,
+) []targetresolver.UserResolution {
+	resolvedUsers := make([]targetresolver.UserResolution, 0, len(values))
 	for _, value := range uniqueSearchStrings(values) {
-		if len(value) > 0 && (value[0] == 'D' || value[0] == 'd') {
-			openIDs = append(openIDs, value)
-		} else {
-			userIDs = append(userIDs, value)
+		// IdentityAny accepts every non-empty value as exactly one stable ID
+		// family, and uniqueSearchStrings has already removed empty values.
+		resolved, _ := targetresolver.ResolveStableUserTarget(rt, value, targetresolver.IdentityAny)
+		resolvedUsers = append(resolvedUsers, resolved)
+	}
+	return resolvedUsers
+}
+
+// appendResolvedSearchActorIDs prefers openDingTalkId whenever directory
+// resolution supplies it because the current message-search backend reliably
+// applies the open-ID field but may ignore senderUserIds.
+func appendResolvedSearchActorIDs(
+	params map[string]any,
+	resolutions []targetresolver.UserResolution,
+	userKey, openIDKey string,
+) {
+	var userIDs, openIDs []string
+	for _, resolved := range resolutions {
+		openID := strings.TrimSpace(resolved.Selected.OpenDingTalkID)
+		userID := strings.TrimSpace(resolved.Selected.UserID)
+		if openID != "" {
+			openIDs = append(openIDs, openID)
+		} else if userID != "" {
+			userIDs = append(userIDs, userID)
 		}
 	}
+	userIDs = uniqueSearchStrings(userIDs)
+	openIDs = uniqueSearchStrings(openIDs)
 	if len(userIDs) > 0 {
 		params[userKey] = userIDs
 	}
@@ -526,6 +667,71 @@ func searchScopePayload(conversationIDs []string, sourceComplete bool) map[strin
 	}
 }
 
+func filterSearchSenderScope(
+	messages []map[string]any,
+	resolutions []targetresolver.UserResolution,
+) ([]map[string]any, []string) {
+	allowed := map[string]bool{}
+	for _, resolution := range resolutions {
+		if value := strings.TrimSpace(resolution.Selected.UserID); value != "" {
+			allowed[value] = true
+		}
+		if value := strings.TrimSpace(resolution.Selected.OpenDingTalkID); value != "" {
+			allowed[value] = true
+		}
+	}
+
+	filtered := make([]map[string]any, 0, len(messages))
+	unverifiable := make([]string, 0)
+	for _, message := range messages {
+		senderID := strings.TrimSpace(fmt.Sprint(chatmsg.SenderID(message)))
+		if senderID == "" || senderID == "<nil>" {
+			messageID := strings.TrimSpace(fmt.Sprint(searchMsgMessageID(message)))
+			if messageID == "" || messageID == "<nil>" {
+				messageID = "<unknown>"
+			}
+			unverifiable = append(unverifiable, messageID)
+			continue
+		}
+		if allowed[senderID] {
+			filtered = append(filtered, message)
+		}
+	}
+	return filtered, uniqueSearchStrings(unverifiable)
+}
+
+func searchUnverifiedSenderInputs(
+	resolutions []targetresolver.UserResolution,
+) []string {
+	values := make([]string, 0)
+	for _, resolution := range resolutions {
+		if targetresolver.IsUnverifiedUserIDResolution(resolution) {
+			values = append(values, resolution.Query)
+		}
+	}
+	return uniqueSearchStrings(values)
+}
+
+func searchSenderScopeUnverifiedError(
+	resolutions []targetresolver.UserResolution,
+	messageIDs []string,
+) error {
+	queries := make([]string, 0, len(resolutions))
+	for _, resolution := range resolutions {
+		queries = append(queries, resolution.Query)
+	}
+	return apperrors.NewAPI(
+		"搜索结果缺少 senderId，无法证明发送者过滤范围；已停止输出",
+		apperrors.WithReason("search_sender_scope_unverified"),
+		apperrors.WithDetails(map[string]any{
+			"requestedSenders":       uniqueSearchStrings(queries),
+			"unverifiableMessageIds": messageIDs,
+		}),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("请保留 trace_id 并检查 IM 搜索服务是否返回稳定 senderId"),
+	)
+}
+
 func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any) ([]map[string]any, int, []map[string]any) {
 	detailsByID := map[string]map[string]any{}
 	failures := make([]map[string]any, 0)
@@ -602,43 +808,24 @@ func searchMsgItems(data map[string]any) []map[string]any {
 	return chatmsg.SearchItems(data)
 }
 
-func searchMsgChildMap(data map[string]any, key string) map[string]any {
-	if value, ok := data[key].(map[string]any); ok {
-		return value
-	}
-	return nil
-}
-
-// searchMsgProject reshapes one matched message into {sender, time, text,
-// messageId}, running text through the shared chatmsg cleaning (card/auto-reply
-// JSON → readable, ciphertext → marker) and recursively expanding any forwarded
-// chat record under "forwarded".
+// searchMsgProject adds search-only sender/time aliases and forwarded-message
+// expansion to the shared message projection.
 func searchMsgProject(m map[string]any) map[string]any {
 	return searchMsgProjectWithReactions(m, true)
 }
 
 func searchMsgProjectWithReactions(m map[string]any, includeReactions bool) map[string]any {
 	row := chatmsg.ProjectMessageV1(m, includeReactions)
-	// Preserve the established search aliases while also publishing the V1
-	// canonical fields used by other message readers.
+	// Keep search-only aliases while messageId/text stay owned by the shared
+	// projection used by typed message search.
 	row["sender"] = searchMsgSender(m)
 	row["time"] = searchMsgTime(m)
-	row["text"] = searchMsgCleanText(m)
-	row["messageId"] = searchMsgMessageID(m)
 	if forwarded := chatmsg.Forwarded(m, func(item map[string]any) map[string]any {
 		return searchMsgProjectWithReactions(item, includeReactions)
 	}); len(forwarded) > 0 {
 		row["forwarded"] = forwarded
 	}
 	return row
-}
-
-// searchMsgCleanText runs searchMsgText's extraction through chatmsg.CleanText.
-func searchMsgCleanText(m map[string]any) any {
-	if s, ok := searchMsgText(m).(string); ok {
-		return chatmsg.CleanText(s)
-	}
-	return searchMsgText(m)
 }
 
 // searchMsgSender reads a message's sender display name/id, tolerating the
@@ -659,8 +846,8 @@ func searchMsgSender(m map[string]any) any {
 	}
 	for _, key := range []string{"sender", "from", "senderUser"} {
 		if nested, ok := m[key].(map[string]any); ok {
-			for _, k2 := range []string{"name", "nick", "userName", "staffName", "displayName"} {
-				if v := norm(nested[k2]); v != "" {
+			for _, nestedKey := range []string{"name", "nick", "userName", "staffName", "displayName"} {
+				if v := norm(nested[nestedKey]); v != "" {
 					return v
 				}
 			}
@@ -688,39 +875,12 @@ func searchMsgTime(m map[string]any) any {
 	return nil
 }
 
-// searchMsgText reads a message's textual content, tolerating flat text keys and
-// a nested content/text object.
-func searchMsgText(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body"} {
-		if v := searchMsgString(m[key]); v != "" {
-			return v
-		}
-	}
-	for _, key := range []string{"content", "text", "msg"} {
-		if nested, ok := m[key].(map[string]any); ok {
-			for _, k2 := range []string{"text", "content", "richText", "title"} {
-				if v := searchMsgString(nested[k2]); v != "" {
-					return v
-				}
-			}
-		}
-	}
-	return nil
-}
-
 // searchMsgMessageID reads a message's identifier, tolerating the common id keys
 // the gateway may use.
 func searchMsgMessageID(m map[string]any) any {
-	for _, key := range []string{"messageId", "message_id", "msgId", "msg_id", "openMessageId", "id"} {
-		if v := searchMsgString(m[key]); v != "" {
-			return v
-		}
-	}
-	return nil
+	return chatmsg.MessageID(m)
 }
 
-// searchMsgString coerces a scalar JSON value to a trimmed string, returning ""
-// for nil / non-scalar / empty values.
 func searchMsgString(v any) string {
 	switch typed := v.(type) {
 	case string:

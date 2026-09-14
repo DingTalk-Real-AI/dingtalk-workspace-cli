@@ -31,7 +31,7 @@ import (
 // a single-chat message via openDingTalkId. Replaces `contact +search-user`
 // (copy openDingTalkId) → `chat +messages-send --open-dingtalk-id <id>`.
 //
-//	dws chat +dm --to 张三 --text "周报发我一下"
+//	dws chat +dm --to 张三 --content "周报发我一下"
 var DM = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+dm",
@@ -62,17 +62,18 @@ var DM = shortcut.Shortcut{
 			AgentSummary: "按姓名直接给某人发单聊消息（自动解析唯一 openDingTalkId）",
 			UseWhen:      []string{"当你只知道对方姓名、想直接发一条单聊消息而不想先查 userId 时使用；内部先按姓名搜通讯录解析出唯一用户，并用其 openDingTalkId 发送，姓名匹配到多人时会列出候选让你区分。会真实发出消息。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws chat +dm --to 张三 --text \"周报发我一下\""},
+			Examples:     []string{"dws chat +dm --to 张三 --content \"周报发我一下\""},
 		},
+		Parameters: []contract.ParamDecl{renamedRequiredParam("content", "text")},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true, Aliases: []string{"text"}},
 		shortcut.AIMessageTagFlag(),
 	},
-	Tips: []string{`dws chat +dm --to 张三 --text "周报发我一下"`},
+	Tips: []string{`dws chat +dm --to 张三 --content "周报发我一下"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		text := rt.Str("text")
+		text := rt.StrFirst("text", "content")
 
 		resolved, err := targetresolver.ResolveUser(
 			rt,

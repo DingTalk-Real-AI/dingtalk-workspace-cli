@@ -84,6 +84,7 @@ var Invite = shortcut.Shortcut{
 		// Resolve every participant name to a unique userId first, so an
 		// unknown/ambiguous name fails before we touch the event.
 		var userIDs []string
+		var userNames []string
 		for _, name := range strings.Split(rt.Str("with"), ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
@@ -94,20 +95,65 @@ var Invite = shortcut.Shortcut{
 				return err
 			}
 			userIDs = append(userIDs, user.userID)
+			userNames = append(userNames, user.name)
 		}
 		if len(userIDs) == 0 {
 			return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
 		}
 
-		// Batch-add all participants. eventId + attendeesToAdd copied verbatim
-		// from the helper's `attendee add` call site (add_calendar_participant).
-		return rt.CallMCP("add_calendar_participant", map[string]any{
+		preflight, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		if _, err := calendarSmartRequireEvent(preflight, "calendar/get_calendar_detail", eventID); err != nil {
+			return err
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"success":      true,
+				"dryRun":       true,
+				"executed":     false,
+				"eventId":      eventID,
+				"inviteeCount": len(userIDs),
+			})
+		}
+
+		// Batch-add all participants and require explicit success.
+		written, err := rt.CallMCPWriteDataStrict("calendar", "add_calendar_participant", map[string]any{
 			"eventId":        eventID,
 			"attendeesToAdd": userIDs,
+		})
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartWriteReceipt(written, "calendar/add_calendar_participant"); err != nil {
+			return err
+		}
+		participants, err := rt.CallMCPData("calendar", "get_calendar_participants", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		present, err := calendarSmartAttendees(participants)
+		if err != nil {
+			return err
+		}
+		currentUserID, err := calendarSmartCurrentUserID(rt, present)
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartVerifyAttendees(present, userIDs, userNames, currentUserID); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{
+			"success":      true,
+			"eventId":      eventID,
+			"invitedCount": len(userIDs),
+			"verified":     true,
 		})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Invite, "已添加并通过参会人读回验证的邀请")
 	shortcut.Register(Invite)
 }

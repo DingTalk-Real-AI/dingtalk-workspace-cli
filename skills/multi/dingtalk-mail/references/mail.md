@@ -139,7 +139,7 @@ Flags:
 
 ```bash
 # 主路径：aisearch + contact user get
-dws aisearch person --keyword "姓名" --dimension name --format json
+dws aisearch person --query "姓名" --dimension name --format json
 # → 取 userId，再执行：
 dws contact user get --ids <userId> --format json
 # → 提取 orgAuthEmail 字段
@@ -1725,7 +1725,7 @@ Flags:
 用户说"看邮件/打开邮件/邮件内容" → 先 `message search` 获取 messageId，再 `message get`
 用户说"发邮件/写邮件" → 先 `mailbox list` 获取发件地址，再 `message send`
 用户说“给(某人名字)发邮件” / “查询某人发给我的邮件” / “查询发给某人的邮件” / 任何涉及按人名查找邮箱的场景 →
-  **第一步**：`aisearch person --keyword <姓名> --dimension name` → `contact user get --ids <userId>`，提取 `orgAuthEmail`；为空时再用 `mail user search --email <当前邮箱> --keyword <姓名>` 补查。仍无有效邮箱则 ask_human 请用户提供，禁止臆测。
+  **第一步**：`aisearch person --query <姓名> --dimension name` → `contact user get --ids <userId>`，提取 `orgAuthEmail`；为空时再用 `mail user search --email <当前邮箱> --keyword <姓名>` 补查。仍无有效邮箱则 ask_human 请用户提供，禁止臆测。
   **第二步**：用获得的目标邮箱拼入 KQL（如 `from:<email>` 或 `to:<email>`）执行 `message search`，或用于 `message send`
 用户说"发带附件的邮件/发邮件附件" → 先 `mailbox list` 获取发件地址，再 `message send --attachment <文件路径>`
 用户说"给(某人名字)发邮件" → 先 `aisearch person` 获取 userId，再 `contact user get` 获取收件人邮箱，再 `message send`
@@ -1880,7 +1880,7 @@ dws mail thread get --email user@company.com --id <conversationId> --format json
 - `message search` 返回邮件 ID 和元信息（不含正文），需 `message get` 获取完整内容
 - KQL 查询支持 AND/OR/NOT 组合，字段值含空格时需用双引号
 - `--cc` 抄送人支持多人，逗号分隔
-- 收件人邮箱获取：用户只知道同事名字时，先 `dws aisearch person --keyword "名字" --dimension name` 取得 userId，再 `dws contact user get --ids <userId>` 提取 `orgAuthEmail`。该字段为空时，可用 `dws mail user search --email <发件人邮箱> --keyword "名字"` 补查（仅企业邮箱账号可调用；若已知工号，可改用 `--employee-no <工号>`）。仍无有效邮箱时必须 ask_human，严禁臆测和假设
+- 收件人邮箱获取：用户只知道同事名字时，先 `dws aisearch person --query "名字" --dimension name` 取得 userId，再 `dws contact user get --ids <userId>` 提取 `orgAuthEmail`。该字段为空时，可用 `dws mail user search --email <发件人邮箱> --keyword "名字"` 补查（仅企业邮箱账号可调用；若已知工号，可改用 `--employee-no <工号>`）。仍无有效邮箱时必须 ask_human，严禁臆测和假设
 - `thread list --folder` 的值必须是文件夹 ID，不是文件夹显示名称；不知道文件夹 ID 时，先调用 `folder list` 查 `folders[].id`
 - `thread get/update/trash/batch-update/batch-trash` 使用的是会话 ID（conversationId），不是邮件 ID；会话 ID 可来自 `thread list` 的 `conversations[].id`，也可来自 `message search` 或 `message get` 返回的 `conversationId`
 - `thread update` / `thread batch-update` 仅支持 `markRead`、`markUnread`、`addTags`、`removeTags`；标签操作必须传 `--tag-ids`

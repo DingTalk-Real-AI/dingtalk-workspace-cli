@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 357
+	publicShortcutCount = 438
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
-	// including hidden leaves such as minutes.shortcut_minutes_search.
-	schemaPublishedShortcutCount = 358
+	// including reviewed hidden compatibility and unavailable contracts.
+	schemaPublishedShortcutCount = 495
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 357
+	publiclyDeliveredShortcutCount = 438
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -84,6 +84,24 @@ func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *tes
 	}
 }
 
+func TestDeliveryTodoReminderPreservesHistoricalConstraintBoundary(t *testing.T) {
+	tool := executeShortcutSchemaQuery(t, "--cli-path", "todo +reminder")
+	want := map[string][][]string{
+		"require_one_of":     {{"clear", "base-time"}},
+		"mutually_exclusive": {{"clear", "base-time"}},
+	}
+	if got := tool["constraints"]; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("todo +reminder constraints = %s, want %s", mustShortcutJSON(got), mustShortcutJSON(want))
+	}
+	parameters := schemaContractMap(tool["parameters"])
+	for _, name := range []string{"base-time", "due-date-offset", "at"} {
+		description := schemaContractString(parameters[name]["description"])
+		if !strings.Contains(description, "无关时间参数兼容忽略") {
+			t.Fatalf("todo +reminder --%s compatibility boundary missing from final Schema: %q", name, description)
+		}
+	}
+}
+
 func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "chat +messages-read-status")
 	if got, want := schemaContractString(leaf["canonical_path"]), "chat.shortcut_messages_read_status"; got != want {
@@ -114,18 +132,387 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 
 	product := executeShortcutSchemaQuery(t, "chat")
 	productPayload, _ := product["product"].(map[string]any)
-	if got, want := int(product["count"].(float64)), 187; got != want {
+	if got, want := int(product["count"].(float64)), 236; got != want {
 		t.Fatalf("schema chat count = %d, want %d", got, want)
 	}
 	summaries := schemaContractObjectSlice(productPayload["tools"])
 	shortcutCount := 0
+	summaryByCLIPath := make(map[string]map[string]any, len(summaries))
 	for _, summary := range summaries {
+		summaryByCLIPath[schemaContractString(summary["cli_path"])] = summary
 		if strings.HasPrefix(schemaContractString(summary["canonical_path"]), "chat.shortcut_") {
 			shortcutCount++
 		}
 	}
 	if shortcutCount != 98 {
 		t.Fatalf("schema chat shortcut summaries = %d, want 98", shortcutCount)
+	}
+	for _, cliPath := range missingChatCatalogCoveragePaths() {
+		if summaryByCLIPath[cliPath] == nil {
+			t.Fatalf("schema chat missing expected catalog tool %q", cliPath)
+		}
+	}
+	assertSchemaSummarySafety(t, summaryByCLIPath, "chat clear-messages", "destructive", "high", "user_required")
+	assertSchemaSummarySafety(t, summaryByCLIPath, "chat data-auth cross-org", "write", "high", "user_required")
+	assertSchemaSummarySafety(t, summaryByCLIPath, "chat group share-invite", "write", "medium", "user_required")
+	assertChatCatalogCompleteLeafContracts(t)
+}
+
+func TestChatPersonalEmotionSchemaDeclaresUnpinnedIMAdapter(t *testing.T) {
+	for _, tc := range []struct {
+		cliPath string
+		params  map[string]string
+	}{
+		{
+			cliPath: "chat emotion list",
+		},
+		{
+			cliPath: "chat emotion send",
+			params: map[string]string{
+				"media-id":         "mediaId",
+				"emotion-id":       "emotionId",
+				"group":            "openConversationId",
+				"open-dingtalk-id": "receiverOpenDingTalkId",
+				"idempotency-key":  "uuid",
+			},
+		},
+		{
+			cliPath: "chat emotion favorite",
+			params: map[string]string{
+				"media-id":               "mediaId",
+				"file-path":              "",
+				"name":                   "name",
+				"source-conversation-id": "sourceConversationId",
+				"source-message-id":      "sourceMessageId",
+			},
+		},
+	} {
+		t.Run(tc.cliPath, func(t *testing.T) {
+			leaf := executeShortcutSchemaQuery(t, "--cli-path", tc.cliPath)
+			if got := schemaContractString(leaf["interface_mode"]); got != "composite" {
+				t.Fatalf("%s interface_mode = %q, want composite", tc.cliPath, got)
+			}
+			reason := schemaContractString(leaf["interface_reason"])
+			if !strings.Contains(reason, "Reviewed unpinned remote adapter") {
+				t.Fatalf("%s interface_reason = %q", tc.cliPath, reason)
+			}
+			parameters := schemaContractMap(leaf["parameters"])
+			for name, want := range tc.params {
+				parameter := parameters[name]
+				if parameter == nil {
+					t.Fatalf("%s missing --%s parameter: %#v", tc.cliPath, name, parameters)
+				}
+				if got := schemaContractString(parameter["property"]); got != want {
+					t.Fatalf("%s --%s property = %q, want %q", tc.cliPath, name, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAITableTableBootstrapPublishesResultContract(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "aitable +table-bootstrap")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("aitable +table-bootstrap outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	status := properties["status"]
+	if got, want := schemaContractStringSlice(status["enum"]), []string{"success", "planned", "partial_success", "unknown"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("aitable +table-bootstrap status enum = %#v, want %#v", got, want)
+	}
+	for _, property := range []string{"contractVersion", "operation", "executed", "retryable", "plan", "completedSteps", "verification", "checkpoint", "knownSideEffects", "result"} {
+		if properties[property] == nil {
+			t.Errorf("aitable +table-bootstrap final Result data_schema is missing %q", property)
+		}
+	}
+}
+
+func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-search")
+	if got := schemaContractString(leaf["interface_mode"]); got != "composite" {
+		t.Fatalf("wiki +space-search interface_mode = %q, want composite", got)
+	}
+	reason := schemaContractString(leaf["interface_reason"])
+	for _, fragment := range []string{"query/limit", "search_wikiSpaces.keyword/pageSize", "versioned Schema migration"} {
+		if !strings.Contains(reason, fragment) {
+			t.Fatalf("wiki +space-search interface_reason = %q, want fragment %q", reason, fragment)
+		}
+	}
+	parameters := schemaContractMap(leaf["parameters"])
+	for name, want := range map[string]string{"query": "query", "limit": "limit"} {
+		parameter := parameters[name]
+		if parameter == nil {
+			t.Fatalf("wiki +space-search missing --%s parameter: %#v", name, parameters)
+		}
+		if got := schemaContractString(parameter["property"]); got != want {
+			t.Fatalf("wiki +space-search --%s property = %q, want compatibility value %q", name, got, want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiSpaceCreatePublishesVerifiedTypeResult(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-create")
+	result, _ := leaf["result"].(map[string]any)
+	if got, want := schemaContractStringSlice(result["outcomes"]), []string{"success", "partial_failure"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create outcomes = %#v, want %#v", got, want)
+	}
+	dataSchema, _ := result["data_schema"].(map[string]any)
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, property := range []string{"success", "workspaceId", "space", "spaceType", "spaceTypeVerified", "spaceTypeEvidence"} {
+		if properties[property] == nil {
+			t.Errorf("wiki +space-create Result data_schema is missing %q", property)
+		}
+	}
+	if got, want := schemaContractStringSlice(properties["spaceType"]["enum"]), []string{"orgWikiSpace", "myWikiSpace"}; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("wiki +space-create spaceType enum = %#v, want %#v", got, want)
+	}
+}
+
+func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	checked := 0
+	for _, declared := range shortcut.All() {
+		if declared.Service != "wiki" || declared.UserDefined || !shortcut.InPublicCatalog(declared.Service, declared.Command) {
+			continue
+		}
+		checked++
+		canonical := shortcutSchemaCanonical(declared)
+		tool := tools[canonical]
+		if tool == nil {
+			t.Fatalf("delivery schema --all is missing %s", canonical)
+		}
+		examples := schemaContractStringSlice(tool["examples"])
+		if len(examples) == 0 {
+			t.Fatalf("%s has no delivered examples", canonical)
+		}
+		for _, example := range examples {
+			argv, err := cli.ParseAgentExampleArgv(example)
+			if err != nil {
+				t.Fatalf("%s example %q is not valid argv: %v", canonical, example, err)
+			}
+			for _, flag := range declared.Flags {
+				if !flag.Required {
+					continue
+				}
+				names := append([]string{flag.Name}, flag.Aliases...)
+				if !schemaExampleHasLongFlag(argv, names...) {
+					t.Errorf("%s example %q is missing required --%s", canonical, example, flag.Name)
+				}
+			}
+		}
+	}
+	if checked != 20 {
+		t.Fatalf("checked Wiki shortcut examples = %d, want 20", checked)
+	}
+}
+
+func TestAllShortcutsAITableDatasourceExamplesSourceConfigHasRequiredMembers(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	requiredSourceConfigMembers := []string{"processCode", "name", "iconUrl", "url"}
+	checked := 0
+	for _, declared := range shortcut.All() {
+		if declared.Service != "aitable" || declared.UserDefined || !shortcut.InPublicCatalog(declared.Service, declared.Command) {
+			continue
+		}
+		if !strings.HasPrefix(declared.Command, "+datasource-") {
+			continue
+		}
+		if declared.Command != "+datasource-create" && declared.Command != "+datasource-update" && declared.Command != "+datasource-get-fields" {
+			continue
+		}
+		checked++
+		canonical := shortcutSchemaCanonical(declared)
+		tool := tools[canonical]
+		if tool == nil {
+			t.Fatalf("delivery schema --all is missing %s", canonical)
+		}
+		examples := schemaContractStringSlice(tool["examples"])
+		if len(examples) == 0 {
+			t.Fatalf("%s has no delivered examples", canonical)
+		}
+		for _, example := range examples {
+			if !strings.Contains(example, "--source-config") {
+				continue
+			}
+			argv, err := cli.ParseAgentExampleArgv(example)
+			if err != nil {
+				t.Fatalf("%s example %q is not valid argv: %v", canonical, example, err)
+			}
+			sourceConfig := schemaExampleFlagValue(argv, "source-config")
+			if sourceConfig == "" {
+				t.Errorf("%s example %q contains --source-config but has no value", canonical, example)
+				continue
+			}
+			var cfg map[string]any
+			if err := json.Unmarshal([]byte(sourceConfig), &cfg); err != nil {
+				t.Errorf("%s example %q has invalid source-config JSON: %v", canonical, example, err)
+				continue
+			}
+			for _, member := range requiredSourceConfigMembers {
+				if _, ok := cfg[member]; !ok {
+					t.Errorf("%s example %q source-config is missing required member %q", canonical, example, member)
+				}
+			}
+		}
+	}
+	if checked != 3 {
+		t.Fatalf("checked aitable datasource source-config examples = %d, want 3", checked)
+	}
+}
+
+func schemaExampleHasLongFlag(argv []string, names ...string) bool {
+	for _, argument := range argv {
+		for _, name := range names {
+			if argument == "--"+name || strings.HasPrefix(argument, "--"+name+"=") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func schemaExampleFlagValue(argv []string, name string) string {
+	prefix := "--" + name + "="
+	for _, argument := range argv {
+		if argument == "--"+name {
+			continue
+		}
+		if strings.HasPrefix(argument, prefix) {
+			return strings.TrimPrefix(argument, prefix)
+		}
+	}
+	// Value may be in the next argv entry: `--flag value` form.
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == "--"+name {
+			return argv[i+1]
+		}
+	}
+	return ""
+}
+
+func assertSchemaSummarySafety(
+	t testing.TB,
+	summaries map[string]map[string]any,
+	cliPath string,
+	effect string,
+	risk string,
+	confirmation string,
+) {
+	t.Helper()
+	summary := summaries[cliPath]
+	if summary == nil {
+		t.Fatalf("schema chat missing expected catalog tool %q", cliPath)
+	}
+	if got := schemaContractString(summary["effect"]); got != effect {
+		t.Fatalf("%s effect = %q, want %q", cliPath, got, effect)
+	}
+	if got := schemaContractString(summary["risk"]); got != risk {
+		t.Fatalf("%s risk = %q, want %q", cliPath, got, risk)
+	}
+	if got := schemaContractString(summary["confirmation"]); got != confirmation {
+		t.Fatalf("%s confirmation = %q, want %q", cliPath, got, confirmation)
+	}
+}
+
+func assertChatCatalogCompleteLeafContracts(t testing.TB) {
+	t.Helper()
+	for _, cliPath := range []string{
+		"chat clear-messages",
+		"chat clear-red-point",
+		"chat hide",
+		"chat mark-read",
+		"chat mark-unread",
+		"chat mute-at-all",
+		"chat mute-red-envelope",
+	} {
+		leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
+		assertSchemaLeafParameterRequired(t, leaf, cliPath, "conversation-id", false)
+		assertSchemaLeafConstraints(t, leaf, cliPath, map[string]any{
+			"require_one_of":     [][]string{{"conversation-id", "id", "chat"}},
+			"mutually_exclusive": [][]string{{"conversation-id", "id", "chat"}},
+		})
+	}
+
+	markRead := executeShortcutSchemaQuery(t, "--cli-path", "chat mark-read")
+	assertSchemaLeafParameterRequired(t, markRead, "chat mark-read", "message-id", true)
+
+	chmod := executeShortcutSchemaQuery(t, "--cli-path", "chat chmod")
+	assertSchemaLeafConstraints(t, chmod, "chat chmod", map[string]any{
+		"require_one_of":     [][]string{{"conversation-id", "open-dingtalk-id", "user", "permParam"}},
+		"mutually_exclusive": [][]string{{"conversation-id", "open-dingtalk-id", "user"}},
+	})
+	assertChatGrantParameterFacts(t, chmod, "chat chmod")
+
+	crossOrg := executeShortcutSchemaQuery(t, "--cli-path", "chat data-auth cross-org")
+	assertSchemaLeafConstraints(t, crossOrg, "chat data-auth cross-org", map[string]any{
+		"require_one_of":     [][]string{{"target-org-id", "all"}},
+		"mutually_exclusive": [][]string{{"target-org-id", "all"}},
+	})
+	assertChatGrantParameterFacts(t, crossOrg, "chat data-auth cross-org")
+
+	shareInvite := executeShortcutSchemaQuery(t, "--cli-path", "chat group share-invite")
+	assertSchemaLeafConstraints(t, shareInvite, "chat group share-invite", map[string]any{
+		"require_one_of":     [][]string{{"target", "receiver"}},
+		"mutually_exclusive": [][]string{{"target", "receiver"}},
+	})
+
+	auditJoin := executeShortcutSchemaQuery(t, "--cli-path", "chat group audit-join-validation")
+	assertSchemaLeafParameterRequired(t, auditJoin, "chat group audit-join-validation", "conversation-id", true)
+	assertSchemaLeafParameterEnum(t, auditJoin, "chat group audit-join-validation", "status", []string{"AuditApprove", "AuditDelete"})
+	if parameters := schemaContractMap(auditJoin["parameters"]); parameters["group"] != nil {
+		t.Fatalf("chat group audit-join-validation publishes hidden --group alias: %#v", parameters["group"])
+	}
+}
+
+func assertSchemaLeafParameterRequired(t testing.TB, leaf map[string]any, cliPath, name string, want bool) {
+	t.Helper()
+	parameters := schemaContractMap(leaf["parameters"])
+	parameter := parameters[name]
+	if parameter == nil {
+		t.Fatalf("%s missing --%s parameter: %#v", cliPath, name, parameters)
+	}
+	if got, _ := parameter["required"].(bool); got != want {
+		t.Fatalf("%s --%s required = %#v, want %v", cliPath, name, parameter["required"], want)
+	}
+}
+
+func assertSchemaLeafParameterEnum(t testing.TB, leaf map[string]any, cliPath, name string, want []string) {
+	t.Helper()
+	parameters := schemaContractMap(leaf["parameters"])
+	parameter := parameters[name]
+	if parameter == nil {
+		t.Fatalf("%s missing --%s parameter: %#v", cliPath, name, parameters)
+	}
+	if got := schemaContractStringSlice(parameter["enum"]); !schemaContractJSONEqual(got, want) {
+		t.Fatalf("%s --%s enum = %#v, want %#v", cliPath, name, got, want)
+	}
+}
+
+func assertSchemaLeafConstraints(t testing.TB, leaf map[string]any, cliPath string, want map[string]any) {
+	t.Helper()
+	if got := leaf["constraints"]; !schemaContractJSONEqual(got, want) {
+		t.Fatalf("%s constraints = %#v, want %#v", cliPath, got, want)
+	}
+}
+
+func assertChatGrantParameterFacts(t testing.TB, leaf map[string]any, cliPath string) {
+	t.Helper()
+	parameters := schemaContractMap(leaf["parameters"])
+	grantType := parameters["grant-type"]
+	if grantType == nil {
+		t.Fatalf("%s missing --grant-type parameter: %#v", cliPath, parameters)
+	}
+	wantEnum := []string{"once", "session", "timed", "permanent"}
+	if got := schemaContractStringSlice(grantType["enum"]); !schemaContractJSONEqual(got, wantEnum) {
+		t.Fatalf("%s --grant-type enum = %#v, want %#v", cliPath, got, wantEnum)
+	}
+	if got := schemaContractString(parameters["session-id"]["required_when"]); got != "grant-type is session" {
+		t.Fatalf("%s --session-id required_when = %q, want grant-type is session", cliPath, got)
+	}
+	if got := schemaContractString(parameters["ttl"]["required_when"]); got != "grant-type is timed" {
+		t.Fatalf("%s --ttl required_when = %q, want grant-type is timed", cliPath, got)
 	}
 }
 
@@ -135,7 +522,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 11; got != want {
+	if got, want := len(parameters), 13; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
@@ -146,7 +533,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	}
 	wantProperties := map[string]string{
 		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
-		"block-id": "blockId", "after-block-id": "afterBlockId", "old": "old", "new": "new",
+		"block-id": "blockId", "after-block-id": "afterBlockId", "before-block-id": "beforeBlockId", "heading-level": "headingLevel", "old": "old", "new": "new",
 		"expected-revision": "expectedRevision",
 	}
 	for name, want := range wantProperties {
@@ -154,7 +541,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 			t.Errorf("--%s property = %q, want %q", name, got, want)
 		}
 	}
-	for _, name := range []string{"content", "block-id", "after-block-id", "old", "new"} {
+	for _, name := range []string{"content", "block-id", "after-block-id", "before-block-id", "heading-level", "old", "new"} {
 		parameter := parameters[name]
 		if required, _ := parameter["required"].(bool); required {
 			t.Errorf("--%s required = true, want runtime custom validation", name)
@@ -162,6 +549,9 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		if got := schemaContractString(parameter["required_when"]); got != "" {
 			t.Errorf("--%s required_when = %q, want compatibility-safe custom validation", name, got)
 		}
+	}
+	if got, want := schemaContractStringSlice(parameters["command"]["enum"]), []string{"append", "overwrite", "block_insert_before", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}; !schemaContractJSONEqual(got, want) {
+		t.Errorf("--command enum = %#v, want %#v", got, want)
 	}
 	if constraints, exists := leaf["constraints"]; exists && constraints != nil {
 		t.Fatalf("enum-discriminated requirements must not be mispublished as relationship constraints: %#v", constraints)

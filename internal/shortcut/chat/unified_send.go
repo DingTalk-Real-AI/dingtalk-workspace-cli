@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -18,6 +19,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
@@ -142,6 +144,17 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 	atOpenIDs := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids"))
 	atUserIDs := uniqueShortcutStrings(rt.StrSlice("at-user-ids"))
 	atMobiles := uniqueShortcutStrings(rt.StrSlice("at-mobiles"))
+	if openID != "" {
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openID); err != nil {
+			return err
+		}
+	}
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", openIDs); err != nil {
+		return err
+	}
+	if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", atOpenIDs); err != nil {
+		return err
+	}
 	contentType, err := messagesSendContentType(rt)
 	if err != nil {
 		return err
@@ -169,6 +182,12 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		}
 		if contentType != "text" && contentType != "markdown" && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user image/file/audio/video 当前不接受 @ 参数")
+		}
+		if (group != "" || chatQuery != "") && (contentType == "text" || contentType == "markdown") {
+			if err := validateCurrentUserMentionConsistency(
+				messagesSendBody(rt), atOpenIDs, rt.Bool("at-all")); err != nil {
+				return err
+			}
 		}
 	case "bot":
 		if chatQuery != "" || userQuery != "" {
@@ -221,6 +240,89 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		}
 	}
 	return nil
+}
+
+func validateCurrentUserMentionConsistency(body string, atOpenIDs []string, atAll bool) error {
+	declared := make(map[string]struct{}, len(atOpenIDs))
+	for _, id := range atOpenIDs {
+		declared[id] = struct{}{}
+	}
+
+	missingPlaceholders := make([]string, 0)
+	for _, id := range atOpenIDs {
+		if !containsCurrentUserMentionToken(body, id) {
+			missingPlaceholders = append(missingPlaceholders, id)
+		}
+	}
+	if len(missingPlaceholders) > 0 {
+		return apperrors.NewValidation(fmt.Sprintf(
+			"--at-open-dingtalk-ids 中的成员必须在正文中使用对应 <@openDingTalkId> 占位符；缺少: %s",
+			strings.Join(missingPlaceholders, ","),
+		))
+	}
+
+	undeclared := make([]string, 0)
+	for _, id := range currentUserMentionBodyIDs(body) {
+		if _, ok := declared[id]; !ok {
+			undeclared = append(undeclared, id)
+		}
+	}
+	if len(undeclared) > 0 {
+		return apperrors.NewValidation(fmt.Sprintf(
+			"正文中的成员 <@openDingTalkId> 占位符必须同时通过 --at-open-dingtalk-ids 声明；未声明: %s",
+			strings.Join(undeclared, ","),
+		))
+	}
+	if !atAll && containsCurrentUserMentionToken(body, "all") {
+		return apperrors.NewValidation("正文中的 <@all> 占位符必须同时指定 --at-all")
+	}
+	return nil
+}
+
+func containsCurrentUserMentionToken(body, id string) bool {
+	placeholder := "@" + id
+	for searchFrom := 0; ; {
+		offset := strings.Index(body[searchFrom:], placeholder)
+		if offset < 0 {
+			return false
+		}
+		end := searchFrom + offset + len(placeholder)
+		if end == len(body) {
+			return true
+		}
+		next, _ := utf8.DecodeRuneInString(body[end:])
+		if !unicode.IsLetter(next) && !unicode.IsDigit(next) && next != '_' && next != '-' {
+			return true
+		}
+		searchFrom = end
+	}
+}
+
+func currentUserMentionBodyIDs(body string) []string {
+	ids := make([]string, 0)
+	for searchFrom := 0; ; {
+		offset := strings.IndexByte(body[searchFrom:], '@')
+		if offset < 0 {
+			break
+		}
+		start := searchFrom + offset + 1
+		end := start
+		for end < len(body) {
+			current := body[end]
+			if (current < 'a' || current > 'z') &&
+				(current < 'A' || current > 'Z') &&
+				(current < '0' || current > '9') {
+				break
+			}
+			end++
+		}
+		id := body[start:end]
+		if targetresolver.LooksLikeCurrentDOpenDingTalkID(id) {
+			ids = appendUniqueShortcutString(ids, id)
+		}
+		searchFrom = end
+	}
+	return ids
 }
 
 func executeMessagesSend(rt *shortcut.RuntimeContext) error {
@@ -488,7 +590,7 @@ func resolvedUserMarkdownParams(
 	if target.GroupID != "" {
 		body = helpers.NormalizeMessageMentions(body, atOpenIDs, atAll, true)
 	}
-	content, _ := json.Marshal(map[string]string{"title": title, "text": body})
+	content, _ := jsonutil.Marshal(map[string]string{"title": title, "text": body})
 	params := rt.AddAIMessageTag(map[string]any{
 		"msgType": "markdown",
 		"content": string(content),
@@ -562,8 +664,10 @@ func executeMessagesSendUserFile(
 	if err != nil {
 		return err
 	}
-	targetArgs := map[string]any{}
-	addMessagesSendUserTarget(targetArgs, group, openID)
+	uploadTargetArgs := map[string]any{}
+	addMessagesSendUserUploadTarget(uploadTargetArgs, group, openID)
+	sendTargetArgs := map[string]any{}
+	addMessagesSendUserTarget(sendTargetArgs, group, openID)
 	idempotencyKey := messagesSendIdempotencyKey(rt)
 	if rt.DryRun() {
 		return rt.Output(map[string]any{
@@ -576,6 +680,7 @@ func executeMessagesSendUserFile(
 				{
 					"identity": "user",
 					"tool":     "init/commit_conversation_file_upload",
+					"target":   uploadTargetArgs,
 					"file": map[string]any{
 						"path":      rawPath,
 						"name":      meta.FileName,
@@ -587,7 +692,7 @@ func executeMessagesSendUserFile(
 					"tool":                 "send_personal_message",
 					"requestedMessageType": requestedType,
 					"effectiveMessageType": "file",
-					"target":               targetArgs,
+					"target":               sendTargetArgs,
 				},
 			},
 		})
@@ -596,7 +701,7 @@ func executeMessagesSendUserFile(
 		rt.Command().Context(), messagesSendFileUploadTimeout)
 	defer cancelUpload()
 	commitText, err := helpers.UploadConversationLocalFile(
-		uploadContext, targetArgs, meta, idempotencyKey)
+		uploadContext, uploadTargetArgs, meta, idempotencyKey)
 	if err != nil {
 		return err
 	}
@@ -640,6 +745,14 @@ func addMessagesSendUserTarget(params map[string]any, group, openID string) {
 		return
 	}
 	params["receiverOpenDingTalkId"] = openID
+}
+
+func addMessagesSendUserUploadTarget(params map[string]any, group, openID string) {
+	if group != "" {
+		params["openConversationId"] = group
+		return
+	}
+	params["openDingTalkId"] = openID
 }
 
 func nonEmptyStringCount(values ...string) int {

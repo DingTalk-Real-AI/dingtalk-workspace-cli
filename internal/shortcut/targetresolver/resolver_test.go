@@ -686,3 +686,347 @@ func TestCrossPlatformCoverageResolverCompletionBranches(t *testing.T) {
 		}
 	})
 }
+
+func TestCrossPlatformCoverageLooksLikeCurrentDOpenDingTalkID(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "canonical current D ciphertext", value: "DAAAAAAAAAAAiE", want: true},
+		{name: "synthetic current D ciphertext with escaped plus", value: "DiPiPiPiPiPiPiPiPiPiP8iE", want: true},
+		{name: "synthetic current D ciphertext with escaped literal i", value: "DYmJiiYmJiiYmIiE", want: true},
+		{name: "surrounding whitespace", value: "  DAAAAAAAAAAAiE  ", want: true},
+		{name: "empty", value: "", want: false},
+		{name: "prefix only", value: "D", want: false},
+		{name: "lowercase prefix", value: "dAAAAAAAAAAAiE", want: false},
+		{name: "natural uppercase D fixture", value: "D-prefix-fixture-user", want: false},
+		{name: "natural lowercase d fixture", value: "d-prefix-fixture-user", want: false},
+		{name: "invalid escape", value: "DAAAAAiDAAAAAiE", want: false},
+		{name: "non alphanumeric body", value: "DAAAAA/AAAAAiE", want: false},
+		{name: "invalid base64", value: "Dabc", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := LooksLikeCurrentDOpenDingTalkID(tc.value); got != tc.want {
+				t.Fatalf("LooksLikeCurrentDOpenDingTalkID(%q) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageResolveUserTargetUsesFormatClassificationWithoutIDPreflight(t *testing.T) {
+	const openID = "DAAAAAAAAAAAiE"
+	calls := 0
+	resolved, err := ResolveUserTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		calls++
+		return nil, stderrors.New("unexpected remote call")
+	}), openID, IdentityAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 || resolved.MatchType != "stable_id" || resolved.Selected.OpenDingTalkID != openID {
+		t.Fatalf("calls=%d resolved=%#v", calls, resolved)
+	}
+}
+
+func TestCrossPlatformCoverageResolveSenderTargetScopesStableIDPreferenceToSenderInputs(t *testing.T) {
+	calls := 0
+	reader := resolverReaderFunc(func(product, tool string, params map[string]any) (map[string]any, error) {
+		calls++
+		if product != "contact" || tool != "search_contact_by_key_word" {
+			t.Fatalf("unexpected tool %s/%s", product, tool)
+		}
+		query := fmt.Sprint(params["keyword"])
+		switch query {
+		case "D-prefix-fixture-user":
+			return map[string]any{"result": []any{map[string]any{
+				"userId": "fixture-user-d-upper", "openDingTalkId": "D-directory-value", "name": "D-prefix-fixture-user",
+			}}}, nil
+		case "d-prefix-fixture-user":
+			return map[string]any{"result": []any{map[string]any{
+				"userId": "fixture-user-d-lower", "openDingTalkId": "D-directory-value-2", "name": "d-prefix-fixture-user",
+			}}}, nil
+		case "fixture-user-id":
+			return map[string]any{"result": []any{
+				map[string]any{"userId": "other", "name": "相似候选"},
+				map[string]any{"userId": "fixture-user-id", "openDingTalkId": "D-directory-value-3", "name": "测试目标用户"},
+			}}, nil
+		default:
+			t.Fatalf("unexpected query %q", query)
+			return nil, nil
+		}
+	})
+
+	for _, query := range []string{"D-prefix-fixture-user", "d-prefix-fixture-user"} {
+		_, err := ResolveSenderTarget(reader, query, IdentityAny)
+		if err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+	}
+
+	_, err := ResolveUser(reader, "fixture-user-id", IdentityAny)
+	var ambiguous *apperrors.Error
+	if !stderrors.As(err, &ambiguous) || ambiguous.Reason != "resolution_ambiguous" {
+		t.Fatalf("shared name resolver error = %#v, want resolution_ambiguous", err)
+	}
+
+	resolved, err := ResolveSenderTarget(reader, "fixture-user-id", IdentityAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.MatchType != "stable_id" || resolved.Selected.UserID != "fixture-user-id" {
+		t.Fatalf("exact sender userId resolution = %#v", resolved)
+	}
+	if calls != 4 {
+		t.Fatalf("calls=%d", calls)
+	}
+}
+
+func TestCrossPlatformCoverageResolveSenderTargetRoutesCurrentDWithoutDirectoryLookup(t *testing.T) {
+	const openID = "DAAAAAAAAAAAiE"
+	calls := 0
+	resolved, err := ResolveSenderTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		calls++
+		return nil, stderrors.New("unexpected directory call")
+	}), openID, IdentityAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 || resolved.MatchType != "stable_id" || resolved.Selected.OpenDingTalkID != openID {
+		t.Fatalf("calls=%d resolved=%#v", calls, resolved)
+	}
+}
+
+func TestCrossPlatformCoverageResolveSenderTargetNeverSubstitutesUnrelatedUniqueDirectoryCandidate(t *testing.T) {
+	resolved, err := ResolveSenderTarget(resolverReaderFunc(func(product, tool string, params map[string]any) (map[string]any, error) {
+		if product != "contact" || tool != "search_contact_by_key_word" || params["keyword"] != "fixture-user-id" {
+			t.Fatalf("unexpected call %s/%s %#v", product, tool, params)
+		}
+		return map[string]any{
+			"result": []any{map[string]any{
+				"userId": "other-user",
+				"name":   "其他用户",
+			}},
+			"hasMore": false,
+		}, nil
+	}), "fixture-user-id", IdentityAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !IsUnverifiedUserIDResolution(resolved) || resolved.Selected.UserID != "fixture-user-id" {
+		t.Fatalf("resolution=%#v", resolved)
+	}
+}
+
+func TestCrossPlatformCoverageResolveSenderTargetOpenIDFailureEdges(t *testing.T) {
+	t.Run("directory failure", func(t *testing.T) {
+		wantErr := stderrors.New("directory unavailable")
+		_, err := ResolveSenderTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+			return nil, wantErr
+		}), "fixture-sender", IdentityOpenDingTalkID)
+		if !stderrors.Is(err, wantErr) {
+			t.Fatalf("error=%#v, want directory error", err)
+		}
+	})
+
+	t.Run("incomplete directory result", func(t *testing.T) {
+		_, err := ResolveSenderTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+			return map[string]any{
+				"result": []any{map[string]any{
+					"openDingTalkId": "fixture-open-id-1",
+					"name":           "测试候选用户",
+				}},
+				"hasMore": true,
+			}, nil
+		}), "fixture-sender", IdentityOpenDingTalkID)
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) || typed.Reason != "resolution_incomplete" {
+			t.Fatalf("error=%#v, want resolution_incomplete", err)
+		}
+	})
+
+	t.Run("multiple exact names remain ambiguous", func(t *testing.T) {
+		_, err := ResolveSenderTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+			return map[string]any{
+				"result": []any{
+					map[string]any{"openDingTalkId": "fixture-open-id-1", "name": "测试同名用户"},
+					map[string]any{"openDingTalkId": "fixture-open-id-2", "name": "测试同名用户"},
+				},
+				"hasMore": false,
+			}, nil
+		}), "测试同名用户", IdentityOpenDingTalkID)
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) || typed.Reason != "resolution_ambiguous" {
+			t.Fatalf("error=%#v, want resolution_ambiguous", err)
+		}
+	})
+
+	t.Run("no exact open id or name match", func(t *testing.T) {
+		_, err := ResolveSenderTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+			return map[string]any{
+				"result": []any{map[string]any{
+					"openDingTalkId": "fixture-open-id-1",
+					"name":           "其他测试用户",
+				}},
+				"hasMore": false,
+			}, nil
+		}), "fixture-sender", IdentityOpenDingTalkID)
+		var typed *apperrors.Error
+		if !stderrors.As(err, &typed) || typed.Reason != "resolution_not_found" {
+			t.Fatalf("error=%#v, want resolution_not_found", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageValidateExplicitOpenDingTalkIDNeverFallsBack(t *testing.T) {
+	if err := ValidateExplicitOpenDingTalkID("--open-dingtalk-id", "DAAAAAAAAAAAiE"); err != nil {
+		t.Fatalf("valid format: %v", err)
+	}
+	err := ValidateExplicitOpenDingTalkID("--open-dingtalk-id", "D-prefix-fixture-user")
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) || typed.Reason != "target_type_mismatch" {
+		t.Fatalf("error=%#v", err)
+	}
+	err = ValidateExplicitOpenDingTalkID("--open-dingtalk-id", "  DAAAAAAAAAAAiE  ")
+	if !stderrors.As(err, &typed) || typed.Reason != "target_type_mismatch" {
+		t.Fatalf("whitespace-wrapped explicit ID error=%#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageResolveStableUserTargetPassesExplicitUserIDWithoutDirectory(t *testing.T) {
+	calls := 0
+	reader := resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		calls++
+		return nil, stderrors.New("directory unavailable")
+	})
+
+	resolved, err := ResolveStableUserTarget(reader, "fixture-user-id", IdentityAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 || resolved.MatchType != "stable_id" || resolved.Selected.UserID != "fixture-user-id" {
+		t.Fatalf("exact userId resolution = %#v", resolved)
+	}
+}
+
+func TestCrossPlatformCoverageResolveStableUserTargetRoutesCurrentDWithoutDirectoryLookup(t *testing.T) {
+	const openID = "DAAAAAAAAAAAiE"
+	calls := 0
+	resolved, err := ResolveStableUserTarget(resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		calls++
+		return nil, stderrors.New("unexpected remote call")
+	}), openID, IdentityAny)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 || resolved.Selected.OpenDingTalkID != openID {
+		t.Fatalf("calls=%d resolved=%#v", calls, resolved)
+	}
+}
+
+func TestStableIdentityExactMatchWinsEvenWhenDirectoryPageIsIncomplete(t *testing.T) {
+	reader := resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"result": []any{
+				map[string]any{"userId": "fixture-user-id", "openDingTalkId": "DAAAAAAAAAAAiE", "name": "测试目标用户"},
+				map[string]any{"userId": "other", "name": "其他候选"},
+			},
+			"hasMore": true,
+		}, nil
+	})
+	for _, resolve := range []struct {
+		name string
+		fn   func(Reader, string, IdentityRequirement) (UserResolution, error)
+	}{
+		{name: "sender", fn: ResolveSenderTarget},
+		{name: "stable-only", fn: ResolveStableUserTarget},
+	} {
+		t.Run(resolve.name, func(t *testing.T) {
+			resolved, err := resolve.fn(reader, "fixture-user-id", IdentityAny)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.MatchType != "stable_id" || resolved.Selected.UserID != "fixture-user-id" {
+				t.Fatalf("resolved=%#v", resolved)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMixedIdentityResolutionFailureEdges(t *testing.T) {
+	unexpectedReader := resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		return nil, stderrors.New("directory unavailable")
+	})
+
+	for _, tc := range []struct {
+		name        string
+		resolve     func(Reader, string, IdentityRequirement) (UserResolution, error)
+		value       string
+		requirement IdentityRequirement
+		wantReason  string
+	}{
+		{name: "mixed empty", resolve: ResolveUserTarget, wantReason: "missing_target"},
+		{name: "mixed open id requires user id", resolve: ResolveUserTarget, value: "DAAAAAAAAAAAiE", requirement: IdentityUserID, wantReason: "target_type_mismatch"},
+		{name: "stable empty", resolve: ResolveStableUserTarget, wantReason: "missing_target"},
+		{name: "stable open id requires user id", resolve: ResolveStableUserTarget, value: "DAAAAAAAAAAAiE", requirement: IdentityUserID, wantReason: "target_type_mismatch"},
+		{name: "stable user id requires open id", resolve: ResolveStableUserTarget, value: "ordinary-user", requirement: IdentityOpenDingTalkID, wantReason: "target_type_mismatch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.resolve(unexpectedReader, tc.value, tc.requirement)
+			var typed *apperrors.Error
+			if !stderrors.As(err, &typed) || typed.Reason != tc.wantReason {
+				t.Fatalf("error=%#v, want reason %q", err, tc.wantReason)
+			}
+		})
+	}
+
+	if _, err := ResolveUserTarget(unexpectedReader, "ordinary-user", IdentityAny); err == nil || err.Error() != "directory unavailable" {
+		t.Fatalf("mixed directory error=%v", err)
+	}
+	resolved, err := ResolveSenderTarget(unexpectedReader, "ordinary-user", IdentityAny)
+	if err != nil || !IsUnverifiedUserIDResolution(resolved) || resolved.Selected.UserID != "ordinary-user" {
+		t.Fatalf("sender fallback resolution=%#v error=%v", resolved, err)
+	}
+	resolved, err = ResolveStableUserTarget(unexpectedReader, "ordinary-user", IdentityAny)
+	if err != nil || resolved.MatchType != "stable_id" || resolved.Selected.UserID != "ordinary-user" {
+		t.Fatalf("stable passthrough resolution=%#v error=%v", resolved, err)
+	}
+}
+
+func TestCrossPlatformCoverageStableIdentityAmbiguousAndIncompleteEdges(t *testing.T) {
+	duplicateReader := resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		return map[string]any{"result": []any{
+			map[string]any{"userId": "duplicate", "openDingTalkId": "D-one", "name": "甲"},
+			map[string]any{"userId": "other", "openDingTalkId": "duplicate", "name": "乙"},
+		}}, nil
+	})
+	_, err := ResolveSenderTarget(duplicateReader, "duplicate", IdentityAny)
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) || typed.Reason != "resolution_ambiguous" {
+		t.Fatalf("ambiguous sender error=%#v", err)
+	}
+
+	incompleteReader := resolverReaderFunc(func(string, string, map[string]any) (map[string]any, error) {
+		return map[string]any{
+			"result":  []any{map[string]any{"userId": "other", "name": "其他"}},
+			"hasMore": true,
+		}, nil
+	})
+	resolved, err := ResolveSenderTarget(incompleteReader, "missing", IdentityAny)
+	if err != nil || !IsUnverifiedUserIDResolution(resolved) || resolved.Selected.UserID != "missing" {
+		t.Fatalf("incomplete sender fallback=%#v error=%v", resolved, err)
+	}
+}
+
+func TestCrossPlatformCoverageCurrentDCodecEdges(t *testing.T) {
+	if _, ok := unescapeCurrentDOpenDingTalkID("abcdi"); ok {
+		t.Fatal("dangling escape unexpectedly accepted")
+	}
+	if decoded, ok := unescapeCurrentDOpenDingTalkID("iS"); !ok || decoded != "/" {
+		t.Fatalf("slash escape decoded=%q ok=%v", decoded, ok)
+	}
+	if got := escapeCurrentDOpenDingTalkID("i+/="); got != "iiiPiSiE" {
+		t.Fatalf("escaped=%q", got)
+	}
+}

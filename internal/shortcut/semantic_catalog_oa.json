@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "service": "oa",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+list-executed": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、result.values、稳定 processInstanceId 与 hasMore；known-nonempty exact/raw 的 7 个稳定身份一致，但 guaranteed-zero-query 的 raw 响应缺少 hasMore，收紧后拒绝，因此不进入 Agent 公开发现。",
+      "risk": "read",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+list-submitted": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格返回已发起审批实例及页完整性；known-nonempty exact/raw 的 14 个稳定身份一致，但 guaranteed-zero-query 的 raw 响应缺少 hasMore，不能把空数组推断为终页，因此不进入 Agent 公开发现。",
+      "risk": "read",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+my-initiated": {
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史 initiated 字段且不回退原始响应；known-nonempty exact/raw 的 14 个稳定身份一致，但复用的 guaranteed-zero raw 响应缺少 hasMore，故与主列表一并保持非公开。",
+      "risk": "read",
+      "availability": "available",
+      "primary": "+list-submitted",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+search-forms": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按关键字搜索可发起审批定义，严格要求显式 result 数组和稳定 processCode；已完成已知非空与保证零命中证明。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+done-approvals": {
+      "disposition": "alias_internal",
+      "semantic_delta": "保留旧的首屏已处理审批摘要；已验证严格非空结果，但不提供页码，新的 Agent 路由统一使用 +list-executed。",
+      "risk": "read",
+      "availability": "available",
+      "primary": "+list-executed",
+      "public": false,
+      "reviewed": true
+    },
+    "+list-forms": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "真实非空页不返回 continuation，且 cursor 0/1 的集合高度重叠；严格实现拒绝缺失、畸形、停滞或倒退游标，下游修复前不进入 Agent 公开发现。",
+      "risk": "read",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+list-pending": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格待办投影与分页已实现；exact Shortcut 与同参数 atomic/raw 均隔离到 success=true 但 result.values=null，错型集合被拒绝，且当前没有安全非空待审批 fixture，因此不进入 Agent 公开发现。",
+      "risk": "read",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+pending": {
+      "disposition": "alias_internal",
+      "semantic_delta": "历史首屏待办入口路由到 +list-pending；同一真实响应的 result.values 为 null 而不是合法空数组，且当前没有已知非空安全 fixture，因此别名与主入口均保持非公开。",
+      "risk": "read",
+      "availability": "available",
+      "primary": "+list-pending",
+      "public": false,
+      "reviewed": true
+    },
+    "+list-cc": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格抄送列表与分页校验已实现；exact Shortcut 和同参数 atomic/raw 隔离到错型业务状态与 null 集合，不能把响应解释为空页，且当前没有安全非空抄送 fixture，因此不进入 Agent 公开发现。",
+      "risk": "read",
+      "availability": "available",
+      "public": false,
+      "compatibility_visible": true,
+      "reviewed": true
+    },
+    "+approve-by": {
+      "disposition": "primary_smart",
+      "semantic_delta": "唯一定位实例和任务、确认后写入、精确任务读回的严格编排已实现；缺少可撤销的待办审批 fixture 和可靠清理路径，因此不进入 Agent 公开发现。",
+      "risk": "high-risk-write",
+      "availability": "available",
+      "public": false,
+      "reviewed": true
+    }
+  }
+}

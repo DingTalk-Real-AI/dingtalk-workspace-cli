@@ -77,7 +77,7 @@ func TestCrossPlatformCoverageDocReadScopeFlagsAndValidation(t *testing.T) {
 	if err != nil || len(remaining) != 0 {
 		t.Fatalf("find read: remaining=%v err=%v", remaining, err)
 	}
-	for _, name := range []string{"scope", "tags", "max-depth", "start-block-id", "end-block-id"} {
+	for _, name := range []string{"scope", "tags", "max-depth", "start-block-id", "end-block-id", "password", "version"} {
 		if read.Flags().Lookup(name) == nil {
 			t.Fatalf("doc read missing --%s", name)
 		}
@@ -249,7 +249,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := installDocReadScopeCaller(t, tt.caller)
-			err := runDocReadScope("doc-1", "", "", 0, false, "", "ignored", tt.output)
+			err := runDocReadScope("doc-1", "", "", 0, false, "", "ignored", tt.output, "", 0, false)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %v, want %q", err, tt.wantErr)
@@ -277,7 +277,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 		caller := &docReadScopeCaller{text: `{"jsonml":"[\"fragment\",{}]"}`}
 		stdout := installDocReadScopeCaller(t, caller)
 		outputPath := filepath.Join(t.TempDir(), "fragment.json")
-		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath); err != nil {
+		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath, "", 0, false); err != nil {
 			t.Fatalf("runDocReadScope: %v", err)
 		}
 		var receipt map[string]any
@@ -292,7 +292,7 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 	t.Run("human output reports missing fragment", func(t *testing.T) {
 		caller := &docReadScopeCaller{text: `{}`, format: "raw"}
 		stdout := installDocReadScopeCaller(t, caller)
-		if err := runDocReadScope("doc-1", "", "", 0, false, "", "", ""); err != nil {
+		if err := runDocReadScope("doc-1", "", "", 0, false, "", "", "", "", 0, false); err != nil {
 			t.Fatalf("runDocReadScope: %v", err)
 		}
 		if !strings.Contains(stdout.String(), "未匹配到节点") {
@@ -304,11 +304,101 @@ func TestCrossPlatformCoverageRunDocReadScopeResponseBranches(t *testing.T) {
 		caller := &docReadScopeCaller{text: `{"jsonml":"[\"fragment\",{}]"}`, format: "raw"}
 		stdout := installDocReadScopeCaller(t, caller)
 		outputPath := filepath.Join(t.TempDir(), "fragment.json")
-		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath); err != nil {
+		if err := runDocReadScope("doc-1", "outline", "", 0, false, "", "", outputPath, "", 0, false); err != nil {
 			t.Fatalf("runDocReadScope: %v", err)
 		}
 		if !strings.Contains(stdout.String(), "JSONML fragment 已写入 "+outputPath) {
 			t.Fatalf("human receipt output = %q", stdout.String())
+		}
+	})
+}
+
+// TestCrossPlatformCoverageDocReadAccessParamsForwarding 验证 doc read 三条读取路径
+// 都把 --password / --version 透传到 get_document_content，且非法版本号在
+// 本地校验阶段被拒绝、不产生远端调用。
+func TestCrossPlatformCoverageDocReadAccessParamsForwarding(t *testing.T) {
+	t.Run("markdown path forwards password and history version", func(t *testing.T) {
+		caller := &docReadScopeCaller{text: `{"markdown":"body"}`}
+		if err := executeDocReadScopeCommand(t, caller, "read", "--node", "doc-1", "--password", "pw", "--version", "7"); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if len(caller.calls) != 1 {
+			t.Fatalf("calls = %d, want 1", len(caller.calls))
+		}
+		want := map[string]any{"nodeId": "doc-1", "password": "pw", "historyVersion": 7}
+		if caller.calls[0].tool != "get_document_content" || !reflect.DeepEqual(caller.calls[0].args, want) {
+			t.Fatalf("call = %#v, want get_document_content %#v", caller.calls[0], want)
+		}
+	})
+
+	t.Run("jsonml path forwards password and history version", func(t *testing.T) {
+		caller := &docReadScopeCaller{text: `{"jsonml":"[\"root\",{}]","revision":7}`}
+		if err := executeDocReadScopeCommand(t, caller, "read", "--node", "doc-1", "--content-format", "jsonml", "--password", "pw", "--version", "7"); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if len(caller.calls) != 1 {
+			t.Fatalf("calls = %d, want 1", len(caller.calls))
+		}
+		want := map[string]any{"nodeId": "doc-1", "format": "jsonml", "password": "pw", "historyVersion": 7}
+		if caller.calls[0].tool != "get_document_content" || !reflect.DeepEqual(caller.calls[0].args, want) {
+			t.Fatalf("call = %#v, want get_document_content %#v", caller.calls[0], want)
+		}
+	})
+
+	t.Run("scope path forwards password and history version", func(t *testing.T) {
+		caller := &docReadScopeCaller{text: `{"jsonml":"[\"fragment\",{},[\"h1\",{},\"t\"]]"}`}
+		if err := executeDocReadScopeCommand(t, caller,
+			"read", "--node", "doc-1", "--content-format", "jsonml", "--scope", "outline",
+			"--password", "pw", "--version", "7"); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if len(caller.calls) != 1 {
+			t.Fatalf("calls = %d, want 1", len(caller.calls))
+		}
+		want := map[string]any{"nodeId": "doc-1", "format": "jsonml", "scope": "outline", "password": "pw", "historyVersion": 7}
+		if caller.calls[0].tool != "get_document_content" || !reflect.DeepEqual(caller.calls[0].args, want) {
+			t.Fatalf("call = %#v, want get_document_content %#v", caller.calls[0], want)
+		}
+	})
+
+	t.Run("negative history version is rejected locally", func(t *testing.T) {
+		for _, raw := range []string{"-1", "-3"} {
+			caller := &docReadScopeCaller{}
+			err := executeDocReadScopeCommand(t, caller, "read", "--node", "doc-1", "--version", raw)
+			if err == nil || !strings.Contains(err.Error(), "--version 必须为非负整数") {
+				t.Fatalf("--version %s error = %v, want invalid --version", raw, err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("--version %s produced %d remote calls, want 0", raw, len(caller.calls))
+			}
+		}
+	})
+
+	t.Run("explicit zero history version forwards initial version", func(t *testing.T) {
+		caller := &docReadScopeCaller{text: `{"markdown":"body"}`}
+		if err := executeDocReadScopeCommand(t, caller, "read", "--node", "doc-1", "--version", "0"); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if len(caller.calls) != 1 {
+			t.Fatalf("calls = %d, want 1", len(caller.calls))
+		}
+		want := map[string]any{"nodeId": "doc-1", "historyVersion": 0}
+		if caller.calls[0].tool != "get_document_content" || !reflect.DeepEqual(caller.calls[0].args, want) {
+			t.Fatalf("call = %#v, want get_document_content %#v", caller.calls[0], want)
+		}
+	})
+
+	t.Run("unset history version is not forwarded", func(t *testing.T) {
+		caller := &docReadScopeCaller{text: `{"markdown":"body"}`}
+		if err := executeDocReadScopeCommand(t, caller, "read", "--node", "doc-1"); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if len(caller.calls) != 1 {
+			t.Fatalf("calls = %d, want 1", len(caller.calls))
+		}
+		want := map[string]any{"nodeId": "doc-1"}
+		if caller.calls[0].tool != "get_document_content" || !reflect.DeepEqual(caller.calls[0].args, want) {
+			t.Fatalf("call = %#v, want get_document_content %#v", caller.calls[0], want)
 		}
 	})
 }

@@ -417,8 +417,8 @@ func TestCrossPlatformCoverageChatCreateExplicitOwnerSkipsCurrentProfileAndDedup
 	root := newPlatformCoverageRoot()
 	root.SetOut(&bytes.Buffer{})
 	root.SetArgs([]string{
-		"chat", "+chat-create", "--name", "测试群", "--users", "D-owner,user-1",
-		"--owner-open-dingtalk-id", "D-owner", "--yes",
+		"chat", "+chat-create", "--name", "测试群", "--users", fixtureCurrentDOpenID + ",user-1",
+		"--owner-open-dingtalk-id", fixtureCurrentDOpenID, "--yes",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -427,24 +427,24 @@ func TestCrossPlatformCoverageChatCreateExplicitOwnerSkipsCurrentProfileAndDedup
 		t.Fatalf("explicit owner calls = %#v", fake.calls)
 	}
 	create := fake.calls[0].args
-	if create["ownerOpenDingTalkId"] != "D-owner" {
+	if create["ownerOpenDingTalkId"] != fixtureCurrentDOpenID {
 		t.Fatalf("ownerOpenDingTalkId = %#v", create["ownerOpenDingTalkId"])
 	}
-	if got, want := create["groupMembers"], []string{"D-owner", "user-1"}; !reflect.DeepEqual(got, want) {
+	if got, want := create["groupMembers"], []string{fixtureCurrentDOpenID, "user-1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("groupMembers = %#v, want %#v", got, want)
 	}
 }
 
 func TestCrossPlatformCoverageChatCreateOwnerQueryResolvesBeforeSingleCreate(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"contact/search_contact_by_key_word": `{"result":[{"name":"张三","userId":"owner-user","openDingTalkId":"D-owner"}]}`,
+		"contact/search_contact_by_key_word": `{"result":[{"name":"测试用户甲","userId":"owner-user","openDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`,
 	}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetOut(&bytes.Buffer{})
 	root.SetArgs([]string{
 		"chat", "+chat-create", "--name", "测试群", "--users", "user-1",
-		"--owner-query", "张三", "--yes",
+		"--owner-query", "测试用户甲", "--yes",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -454,10 +454,10 @@ func TestCrossPlatformCoverageChatCreateOwnerQueryResolvesBeforeSingleCreate(t *
 		t.Fatalf("owner query calls = %#v", fake.calls)
 	}
 	create := fake.calls[1].args
-	if create["ownerOpenDingTalkId"] != "D-owner" {
+	if create["ownerOpenDingTalkId"] != fixtureCurrentDOpenID {
 		t.Fatalf("ownerOpenDingTalkId = %#v", create["ownerOpenDingTalkId"])
 	}
-	if got, want := create["groupMembers"], []string{"D-owner", "user-1"}; !reflect.DeepEqual(got, want) {
+	if got, want := create["groupMembers"], []string{fixtureCurrentDOpenID, "user-1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("groupMembers = %#v, want %#v", got, want)
 	}
 }
@@ -585,6 +585,119 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileFlow(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageMessagesSendCurrentUserDirectLocalFileUsesTransportSpecificTargets(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("direct.bin", []byte("direct-file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uploadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("upload method = %s", r.Method)
+		}
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Error(err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(uploadServer.Close)
+
+	tests := []struct {
+		name            string
+		targetArgs      []string
+		requestedType   string
+		wantOpenID      string
+		wantUserResolve bool
+	}{
+		{
+			name:          "explicit open id file",
+			targetArgs:    []string{"--open-dingtalk-id", fixtureCurrentDOpenID},
+			requestedType: "file",
+			wantOpenID:    fixtureCurrentDOpenID,
+		},
+		{
+			name:            "resolved user audio",
+			targetArgs:      []string{"--user", "user-id"},
+			requestedType:   "audio",
+			wantOpenID:      "D-resolved",
+			wantUserResolve: true,
+		},
+		{
+			name:          "explicit open id video",
+			targetArgs:    []string{"--open-dingtalk-id", fixtureCurrentDOpenID2},
+			requestedType: "video",
+			wantOpenID:    fixtureCurrentDOpenID2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{responses: map[string]string{
+				"im/init_conversation_file_upload":   `{"resourceUrl":"` + uploadServer.URL + `","uploadKey":"upload-key"}`,
+				"im/commit_conversation_file_upload": `{"result":{"dentryId":31,"spaceId":41}}`,
+				"chat/send_personal_message":         `{"result":{"openMessageId":"sent-direct-file"}}`,
+			}}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			var output bytes.Buffer
+			root.SetOut(&output)
+			args := []string{
+				"chat", "+messages-send", "--identity", "user",
+				"--msg-type", tt.requestedType,
+				"--file", "./direct.bin",
+				"--idempotency-key", "direct-" + tt.requestedType,
+				"--yes",
+			}
+			args = append(args, tt.targetArgs...)
+			root.SetArgs(args)
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+
+			callOffset := 0
+			if tt.wantUserResolve {
+				if len(fake.calls) == 0 || fake.calls[0].product != "contact" ||
+					fake.calls[0].tool != "search_contact_by_key_word" {
+					t.Fatalf("resolution call = %#v", fake.calls)
+				}
+				callOffset = 1
+			}
+			if len(fake.calls) != callOffset+3 {
+				t.Fatalf("calls = %#v, want resolution plus init, commit, send", fake.calls)
+			}
+			initCall := fake.calls[callOffset]
+			commitCall := fake.calls[callOffset+1]
+			sendCall := fake.calls[callOffset+2]
+			for _, call := range []larkAlignmentCall{initCall, commitCall} {
+				if call.product != "im" || call.args["openDingTalkId"] != tt.wantOpenID {
+					t.Fatalf("upload call = %#v, want openDingTalkId %q", call, tt.wantOpenID)
+				}
+				if _, exists := call.args["receiverOpenDingTalkId"]; exists {
+					t.Fatalf("send-only receiver field leaked into upload call: %#v", call.args)
+				}
+			}
+			if initCall.tool != "init_conversation_file_upload" ||
+				commitCall.tool != "commit_conversation_file_upload" {
+				t.Fatalf("upload calls = %#v, %#v", initCall, commitCall)
+			}
+			if sendCall.product != "chat" || sendCall.tool != "send_personal_message" ||
+				sendCall.args["receiverOpenDingTalkId"] != tt.wantOpenID {
+				t.Fatalf("send call = %#v, want receiverOpenDingTalkId %q", sendCall, tt.wantOpenID)
+			}
+			if _, exists := sendCall.args["openDingTalkId"]; exists {
+				t.Fatalf("upload-only target field leaked into send call: %#v", sendCall.args)
+			}
+
+			var payload map[string]any
+			if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["requestedMessageType"] != tt.requestedType ||
+				payload["effectiveMessageType"] != "file" {
+				t.Fatalf("output = %#v", payload)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.WriteFile("fixture.bin", []byte("x"), 0o600); err != nil {
@@ -601,7 +714,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 	root.SetOut(&output)
 	root.SetArgs([]string{
 		"chat", "+messages-send",
-		"--open-dingtalk-id", "D-target",
+		"--open-dingtalk-id", fixtureCurrentDOpenID,
 		"--file", "./fixture.bin",
 		"--dry-run",
 		"--yes",
@@ -773,7 +886,7 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
 		"--group", "cid",
-		"--at-open-dingtalk-ids", "D-one,D-two,D-one",
+		"--at-open-dingtalk-ids", fixtureCurrentDOpenID + "," + fixtureCurrentDOpenID2 + "," + fixtureCurrentDOpenID,
 		"--at-all",
 		"--content", "完成",
 		"--flow-status", "3",
@@ -786,7 +899,7 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 		fake.calls[1].tool != "update_streaming_card" {
 		t.Fatalf("card calls = %#v", fake.calls)
 	}
-	if got, want := fake.calls[0].args["atOpenDingTalkIds"], []string{"D-one", "D-two"}; !reflect.DeepEqual(got, want) {
+	if got, want := fake.calls[0].args["atOpenDingTalkIds"], []string{fixtureCurrentDOpenID, fixtureCurrentDOpenID2}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("card create atOpenDingTalkIds = %#v, want %#v", got, want)
 	}
 	if fake.calls[0].args["atAll"] != true {
@@ -842,7 +955,7 @@ func TestCrossPlatformCoverageMessagesSendCardRejectsMissingRequestedAtTag(t *te
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
 		"--group", "cid",
-		"--at-open-dingtalk-ids", "D-mentioned",
+		"--at-open-dingtalk-ids", fixtureCurrentDOpenID,
 		"--content", "正文",
 		"--yes",
 	})
@@ -891,7 +1004,7 @@ func TestCrossPlatformCoverageMessagesSendCardUsesExplicitOpenReceiver(t *testin
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
-		"--receiver-open-dingtalk-id", "D-direct",
+		"--receiver-open-dingtalk-id", fixtureCurrentDOpenID2,
 		"--yes",
 	})
 	if err := root.Execute(); err != nil {
@@ -902,7 +1015,7 @@ func TestCrossPlatformCoverageMessagesSendCardUsesExplicitOpenReceiver(t *testin
 		fake.calls[0].tool != "create_and_send_card" {
 		t.Fatalf("card open receiver calls = %#v", fake.calls)
 	}
-	if got := fake.calls[0].args["receiverOpenDingTalkId"]; got != "D-direct" {
+	if got := fake.calls[0].args["receiverOpenDingTalkId"]; got != fixtureCurrentDOpenID2 {
 		t.Fatalf("receiverOpenDingTalkId = %#v, want D-direct", got)
 	}
 }
@@ -969,7 +1082,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		root.SetArgs([]string{
 			"chat", "+messages-send-card",
 			"--group", "cid",
-			"--at-open-dingtalk-ids", "D-mentioned",
+			"--at-open-dingtalk-ids", fixtureCurrentDOpenID,
 			"--at-all",
 			"--content", "处理中",
 			"--dry-run",
@@ -990,7 +1103,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		createArguments, _ := create["arguments"].(map[string]any)
 		update, _ := actions[1].(map[string]any)
 		updateArguments, _ := update["arguments"].(map[string]any)
-		if !reflect.DeepEqual(createArguments["atOpenDingTalkIds"], []any{"D-mentioned"}) || createArguments["atAll"] != true {
+		if !reflect.DeepEqual(createArguments["atOpenDingTalkIds"], []any{fixtureCurrentDOpenID}) || createArguments["atAll"] != true {
 			t.Fatalf("card create dry-run mentions = %#v", createArguments)
 		}
 		if _, exists := updateArguments["atOpenDingTalkIds"]; exists {
@@ -1053,7 +1166,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			name: "unverified update preserves id",
 			fake: &larkAlignmentCaller{responses: map[string]string{
 				"im/create_and_send_card":  `{"bizId":"biz-unverified"}`,
-				"im/update_streaming_card": `{"success":true,"errorCode":null}`,
+				"im/update_streaming_card": `{"result":{"updated":false}}`,
 			}},
 			wantError: "biz-unverified",
 		},
@@ -1074,13 +1187,43 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		})
 	}
 
+	t.Run("success acknowledgement completes composite update", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/create_and_send_card":  `{"bizId":"biz-acknowledged"}`,
+			"im/update_streaming_card": `{"success":true,"errorCode":null}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{
+			"chat", "+messages-send-card",
+			"--group", "cid",
+			"--content", "完成",
+			"--yes",
+		})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.calls) != 2 || fake.calls[1].tool != "update_streaming_card" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["updateAccepted"] != true || payload["updateVerified"] != false || payload["updateWarning"] == "" {
+			t.Fatalf("card payload = %#v", payload)
+		}
+	})
+
 	for _, args := range [][]string{
 		{"--group", "cid", "--content", "x", "--flow-status", "6"},
 		{"--group", "cid", "--flow-status", "2"},
-		{"--group", "cid", "--receiver-open-dingtalk-id", "D-direct"},
-		{"--receiver", "user-id", "--receiver-open-dingtalk-id", "D-direct"},
-		{"--receiver", "user-id", "--at-open-dingtalk-ids", "D-mentioned"},
-		{"--receiver-open-dingtalk-id", "D-direct", "--at-all"},
+		{"--group", "cid", "--receiver-open-dingtalk-id", fixtureCurrentDOpenID2},
+		{"--receiver", "user-id", "--receiver-open-dingtalk-id", fixtureCurrentDOpenID2},
+		{"--receiver", "user-id", "--at-open-dingtalk-ids", fixtureCurrentDOpenID},
+		{"--receiver-open-dingtalk-id", fixtureCurrentDOpenID2, "--at-all"},
 	} {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
@@ -1091,7 +1234,36 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 	}
 }
 
-func TestCrossPlatformCoverageMessagesUpdateCardRejectsFalseSuccess(t *testing.T) {
+func TestCrossPlatformCoverageExplicitOpenIDValidationEdges(t *testing.T) {
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", []string{" ", fixtureCurrentDOpenID}); err != nil {
+		t.Fatalf("blank and valid IDs: %v", err)
+	}
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", []string{fixtureCurrentDOpenID, "not-an-open-id"}); err == nil {
+		t.Fatal("invalid explicit open ID unexpectedly accepted")
+	}
+
+	for _, args := range [][]string{
+		{"chat", "+messages-send", "--open-dingtalk-id", "not-an-open-id", "--text", "x", "--yes"},
+		{"chat", "+messages-send", "--open-dingtalk-ids", "not-an-open-id", "--text", "x", "--yes"},
+		{"chat", "+messages-send", "--group", "cid", "--at-open-dingtalk-ids", "not-an-open-id", "--text", "x", "--yes"},
+		{"chat", "+messages-send-card", "--receiver-open-dingtalk-id", "not-an-open-id", "--yes"},
+		{"chat", "+messages-send-card", "--group", "cid", "--at-open-dingtalk-ids", "not-an-open-id", "--yes"},
+		{"chat", "+conversation-info", "--open-dingtalk-id", "not-an-open-id"},
+		{"chat", "+chat-members-get", "--id", "cid", "--users", "not-an-open-id"},
+		{"chat", "+messages-send-by-bot", "--robot-code", "robot", "--group", "cid", "--title", "title", "--text", "text", "--at-open-dingtalk-ids", "not-an-open-id", "--yes"},
+		{"chat", "+messages-batch-send-by-bot", "--robot-code", "robot", "--title", "title", "--text", "text", "--open-dingtalk-ids", "not-an-open-id", "--yes"},
+		{"chat", "+messages-list-direct", "--open-dingtalk-id", "not-an-open-id", "--time", "2026-01-01 00:00:00"},
+		{"chat", "+chat-create", "--name", "fixture", "--users", "user-1", "--owner-open-dingtalk-id", "not-an-open-id", "--yes"},
+	} {
+		root := newPlatformCoverageRoot()
+		root.SetArgs(args)
+		if err := root.Execute(); err == nil {
+			t.Fatalf("invalid explicit open ID unexpectedly accepted: %v", args)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 	t.Run("agent shortcut owns confirmation boundary", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/update_streaming_card": `{"result":{"bizId":"biz-confirm","updated":true}}`,
@@ -1115,12 +1287,14 @@ func TestCrossPlatformCoverageMessagesUpdateCardRejectsFalseSuccess(t *testing.T
 		}
 	})
 
-	t.Run("generic success is unverified", func(t *testing.T) {
+	t.Run("success acknowledgement is accepted but unverified", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/update_streaming_card": `{"success":true,"errorCode":null}`,
 		}}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
 		root.SetArgs([]string{
 			"chat", "+messages-update-card",
 			"--biz-id", "中文乱串",
@@ -1128,13 +1302,18 @@ func TestCrossPlatformCoverageMessagesUpdateCardRejectsFalseSuccess(t *testing.T
 			"--flow-status", "3",
 			"--yes",
 		})
-		err := root.Execute()
-		var typed *apperrors.Error
-		if !errors.As(err, &typed) || typed.Reason != "streaming_card_update_unverified" {
-			t.Fatalf("error = %#v, want streaming_card_update_unverified", err)
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "update_streaming_card" {
 			t.Fatalf("calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["accepted"] != true || payload["verified"] != false || payload["warning"] == "" {
+			t.Fatalf("payload = %#v", payload)
 		}
 	})
 

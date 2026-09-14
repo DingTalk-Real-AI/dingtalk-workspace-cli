@@ -87,3 +87,16 @@ func ClassifyRefreshFailure(err error) RefreshFailureClass {
 	}
 	return RefreshFailureUnknown
 }
+
+// isRefreshTokenRejected reports whether the server returned a reviewed
+// business code that definitively rejects the presented refresh_token.
+// Only the reviewed MCP business code enables the organization-slot
+// fallback; direct-mode terminal HTTP rejections (400/401/403) carry no
+// reviewed business code and deliberately do not trigger the fallback.
+func isRefreshTokenRejected(err error) bool {
+	if err == nil {
+		return false
+	}
+	var exchangeErr *MCPTokenExchangeError
+	return errors.As(err, &exchangeErr) && exchangeErr != nil && exchangeErr.requiresReauthorization()
+}

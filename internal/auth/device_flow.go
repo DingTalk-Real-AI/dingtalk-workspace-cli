@@ -74,9 +74,25 @@ var (
 	}
 )
 
+func deviceFetchClientIDForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
+	if region.IsInternational() {
+		return FetchClientIDFromMCPForLoginRegion(ctx, region)
+	}
+	return deviceFetchClientID(ctx)
+}
+
+func deviceGetAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
+	if region.IsInternational() {
+		return GetSuperAdminsForLoginRegion(ctx, accessToken, region)
+	}
+	return deviceGetAdmins(ctx, accessToken)
+}
+
 type DeviceFlowProvider struct {
 	configDir        string
 	clientID         string
+	credentials      *AppCredentialPair
+	credentialErr    error
 	scope            string
 	baseURL          string
 	terminalBaseURL  string
@@ -85,12 +101,14 @@ type DeviceFlowProvider struct {
 	httpClient       *http.Client
 	NoBrowser        bool
 	IdentityEnricher func(context.Context, *TokenData) error
+	LoginRegion      LoginRegion
 }
 
 func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowProvider {
-	return &DeviceFlowProvider{
+	pair, err := resolveOAuthCredentialPair(configDir)
+	p := &DeviceFlowProvider{
 		configDir:       configDir,
-		clientID:        ClientID(),
+		credentialErr:   err,
 		scope:           DefaultScopes,
 		baseURL:         DefaultDeviceBaseURL,
 		terminalBaseURL: GetMCPBaseURL(),
@@ -98,10 +116,24 @@ func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowPro
 		Output:          os.Stderr,
 		httpClient:      &http.Client{Timeout: 30 * time.Second},
 	}
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	} else {
+		p.clientID = ClientID()
+	}
+	return p
 }
 
 func (p *DeviceFlowProvider) SetBaseURL(baseURL string) {
 	p.baseURL = strings.TrimRight(baseURL, "/")
+}
+
+func (p *DeviceFlowProvider) SetLoginRegion(region LoginRegion) {
+	p.LoginRegion = region
+	p.baseURL = DeviceBaseURLForLoginRegion(region)
+	p.terminalBaseURL = MCPBaseURLForLoginRegion(region)
 }
 
 // SetTerminalBaseURL sets the terminal API base URL for device flow polling.
@@ -189,21 +221,29 @@ type serviceResult struct {
 // overrides intentionally skip this reset.
 func (p *DeviceFlowProvider) resetCredentialState() {
 	p.clientID = ""
-	clientMu.Lock()
-	clientIDFromMCP = false
-	clientMu.Unlock()
+	p.credentials = nil
+	clearRuntimeCredentials()
 }
 
 func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
+	pair, pairErr := resolveOAuthCredentialPair(p.configDir)
+	p.credentials = nil
+	p.credentialErr = pairErr
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	}
+	if p.credentialErr != nil {
+		return nil, fmt.Errorf("应用凭证配置无效: %w", p.credentialErr)
+	}
 	if err := prepareLoginPersistence(p.configDir); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 
-	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
-		p.clientID = runtimeClientID
-		clientMu.Lock()
-		clientIDFromMCP = false
-		clientMu.Unlock()
+	if p.credentials != nil {
+		p.clientID = p.credentials.ClientID
+		clearMCPRuntimeCredentials()
 	} else {
 		// Defensive reset: clear any stale credential state from previous login
 		// methods (OAuth scan, PAT, etc.) so we can re-fetch from MCP. This
@@ -213,7 +253,7 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 		if p.logger != nil {
 			p.logger.Debug("fetching client ID from MCP server (device flow always re-fetches)")
 		}
-		mcpClientID, mcpErr := deviceFetchClientID(ctx)
+		mcpClientID, mcpErr := deviceFetchClientIDForLoginRegion(ctx, p.LoginRegion)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
@@ -270,8 +310,10 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	oauthProvider := &OAuthProvider{
 		configDir:        p.configDir,
 		clientID:         p.clientID,
+		credentials:      p.credentials,
 		logger:           p.logger,
 		IdentityEnricher: p.IdentityEnricher,
+		LoginRegion:      p.LoginRegion,
 	}
 	tokenData, err := deviceExchangeCode(oauthProvider, ctx, tokenResult.AuthCode)
 	if err != nil {
@@ -331,7 +373,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			_, _ = fmt.Fprintln(p.output(), i18n.T("   你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。"))
 			_, _ = fmt.Fprintln(p.output(), "")
 
-			admins, adminErr := deviceGetAdmins(ctx, tokenData.AccessToken)
+			admins, adminErr := deviceGetAdminsForLoginRegion(ctx, tokenData.AccessToken, p.LoginRegion)
 			if adminErr == nil && admins.Success && len(admins.Result) > 0 {
 				maxAdmins := 3
 				if len(admins.Result) < maxAdmins {
@@ -357,6 +399,9 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	if err := oauthProvider.prepareLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
@@ -364,18 +409,8 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
 
-	// Persist app credentials (with secret) if using custom client credentials.
-	// MUST run BEFORE os.Setenv below to avoid env-matching short circuit.
+	// Persist the exact pair snapshotted before authorization began.
 	oauthProvider.persistAppConfigIfNeeded()
-
-	// Always persist clientId to app.json so future process startups
-	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
-	if p.clientID != "" {
-		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		if !deviceHasAppConfig(p.configDir) {
-			_ = deviceSaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
-		}
-	}
 
 	return tokenData, nil
 }

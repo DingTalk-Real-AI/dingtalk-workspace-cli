@@ -70,15 +70,17 @@ The installer ships skills in one of two layouts. CLI commands (`dws aitable ...
 
 | Mode | What gets installed | Best for |
 |------|----------------------|----------|
-| **mono** (stable, default) | One `dws` skill covering all products | Cross-product workflows; single entry point |
-| **multi** | Per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+| **multi** (default) | Per-product skills (`dingtalk-aitable`, `dingtalk-calendar`, `dingtalk-chat`, ...) | Single-product tasks; smaller context per call |
+| **mono** (legacy) | One `dws` skill covering all products | Cross-product workflows; single entry point |
+
+> Installs and upgrades default to `multi`. `mono` remains available via `DWS_SKILL_MODE=mono` or `dws skill setup --mode mono`. File issues if you hit problems.
 
 How to pick:
 
-- **Quick install** (one-liner above): non-interactive, installs `mono`.
-- **TTY install** (download then run): `curl -O .../install.sh && bash install.sh` — prompts `1) mono  2) multi` (default 1).
-- **Override via env**: `DWS_SKILL_MODE=multi curl -fsSL ... | sh`.
-- **Switch later**: `dws skill setup --mode multi` (or `--mode mono`) — re-run any time.
+- **Quick install** (one-liner above): non-interactive, installs `multi`.
+- **TTY install** (download then run): `curl -O .../install.sh && bash install.sh` — prompts `1) multi  2) mono` (default 1).
+- **Override via env**: `DWS_SKILL_MODE=mono curl -fsSL ... | sh`.
+- **Switch later**: `dws skill setup --mode mono` (or `--mode multi`) — review the listed paths and confirm interactively.
 
 </details>
 
@@ -208,7 +210,7 @@ The verifier uses isolated directories and does not replace the `dws` on the cur
 The upgrade process follows a two-phase atomic flow to ensure consistency:
 
 1. **Prepare** — downloads the platform-specific binary and skill packages to a temporary directory, verifies SHA256 checksums, and extracts/validates all files. If any step fails, the upgrade aborts without modifying the existing installation.
-2. **Apply** — only after all preparations succeed, the binary is replaced and skill packages are installed to all detected agent directories (`~/.agents/skills/dws`, `~/.claude/skills/dws`, `~/.cursor/skills/dws`, etc.).
+2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into the canonical `~/.agents/skills` root. Agents classified by the pinned compatibility registry as supporting the universal root read it directly; other detected Agents receive links to the canonical copy, with a direct-copy fallback when links are unavailable. Older DWS-managed agent-specific copies are backed up and retired so the same Skill is not discovered twice.
 
 A backup of the current version is automatically created before each upgrade. Use `dws upgrade --rollback` to restore the previous version if needed.
 
@@ -391,19 +393,19 @@ dws aitable record query --base-id BASE_ID --table-id TABLE_ID --limit 10
 
 The repo ships a complete Agent Skill system under `skills/`, organized into two layouts:
 
-- `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), recommended default.
-- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ...), each with its own `SKILL.md`.
+- `skills/mono/` — single-skill layout (one `SKILL.md` + `references/products/`), legacy.
+- `skills/multi/` — per-product skills (`dingtalk-aitable/`, `dingtalk-calendar/`, `dingtalk-chat/`, ...), each with its own `SKILL.md`. Default layout.
 
 Leaf safety/parameters/selection prose for Schema generation come from ProductDecl / ContractFinal declarations in Go. The former `internal/cli/schema_hints/` HintFile tree is fully retired and must not reappear.
 
 After installing, AI tools like Claude Code / Cursor can operate DingTalk directly through natural language:
 
 ```bash
-# Install skills into current project (defaults to mono)
+# Install skills into current project (defaults to multi; DWS_SKILL_MODE=mono switches back)
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
-> `install.sh` installs to `$HOME/.agents/skills/dws` (global); `install-skills.sh` installs to `./.agents/skills/dws` (current project).
+> Installers use `$HOME/.agents/skills/` as the canonical global store, following the universal `.agents/skills` convention. Agents classified by the pinned compatibility registry as universal read that root directly; detected non-universal Agents receive links to it (or copies when links are unavailable). Multi layout is per-product siblings, while mono uses the `dws/` subdirectory.
 >
 > China users: prefix `DWS_GITEE_REPO` to use the Gitee mirror — see [China mirror](#china-mirror).
 
@@ -413,22 +415,31 @@ curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace
 # Interactive: prompts for mode + target agents
 dws skill setup
 
-# Install mono skill to every detected agent home (claude / cursor / codex / opencode / qoder)
-dws skill setup --mode mono --target all --yes
+# Preview the exact directories that mono setup would back up and replace
+dws skill setup --mode mono --target all --dry-run
 
-# Install multi skills to a single agent home
-dws skill setup --mode multi --target cursor --yes
+# Run interactively and confirm the listed directories
+dws skill setup --mode mono --target all
 
-# Point at a local source tree (e.g. a fork or work-in-progress)
+# Preview, then install multi skills to a single agent home with interactive confirmation
+dws skill setup --mode multi --target cursor --dry-run
+dws skill setup --mode multi --target cursor
+
+# Point at a local source tree (e.g. a fork or work-in-progress), preview first
+DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi --dry-run
 DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 ```
 
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--mode` | `mono` \| `multi` | Skill layout; defaults to interactive prompt |
-| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home, including ZCode at `~/.zcode/skills` |
 | `--source` | path | Local source directory (overrides bundled skills) |
-| `--yes` | — | Skip confirmation prompts |
+| `--yes` | — | Scripting-only: skip the confirmation prompt. Removals are still backed up to `~/.dws/skill-backups/` first |
+
+> The setup command can remove the opposite-mode layout (`dws/` for multi, DWS-managed multi Skills for mono) and stale managed Skills not in the bundle. DWS records ownership, installer version, source, and content digest centrally in `~/.dws/skills-state.json` (or `$DWS_CONFIG_DIR/skills-state.json`). Exact official names shipped before the centralized state remain a frozen migration list. A `dingtalk-*` prefix alone never authorizes cleanup, so other same-prefix market/user Skills are preserved. Every removal is previewed before confirmation and preserved under `~/.dws/skill-backups/<timestamp>/`; a directory that cannot be backed up is never removed. In a non-interactive shell, first run `--dry-run` and inspect its output; only then may the caller explicitly choose the scripting-only confirmation bypass.
+
+After a multi setup or upgrade, DWS stores the official bundle snapshot and centralized ownership metadata in `~/.dws/skills-state.json` (or `$DWS_CONFIG_DIR/skills-state.json`). Every upgrade installs and overwrites the complete bundled Skill set from that release. Deleting or excluding a bundled Skill is not sticky: the next upgrade restores it. `dws upgrade --force` additionally allows reinstalling the current CLI version when no newer version is available.
 
 Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.ps1`), `DWS_SKILL_SOURCE=<path>`.
 
@@ -471,7 +482,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, and six OA approval task/instance events.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, seven OA approval task/instance events, and three Todo task lifecycle events.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -492,6 +503,8 @@ dws event list
 dws event schema user_im_message_receive_o2o --flatten
 dws event list --category oa
 dws event schema user_oa_approval_task_created --flatten
+dws event list --category todo
+dws event schema user_todo_task_create --flatten
 
 # Listen for messages that mention the current user
 dws event +listen-im --kind at-me -f ndjson
@@ -519,14 +532,23 @@ dws event consume user_im_group_disbanded --group <openConversationId> --flatten
 dws event +listen-im --kind sender --user <userId> \
   --events message,read,recall -f ndjson
 
-# Listen for all six public OA approval events in one process
+# Listen for all seven public OA approval events in one process
 dws event consume \
   user_oa_approval_task_created \
   user_oa_approval_task_finished \
   user_oa_approval_task_redirected \
   user_oa_approval_instance_started \
+  user_oa_approval_instance_cc \
   user_oa_approval_instance_terminated \
   user_oa_approval_instance_finished \
+  --flatten -f ndjson
+
+# Listen for Todo create/update/delete events where the current user is an executor
+dws event consume \
+  user_todo_task_create \
+  user_todo_task_update \
+  user_todo_task_delete \
+  --role-types executor \
   --flatten -f ndjson
 
 # Inspect local consumers and cancel a subscription
@@ -551,15 +573,23 @@ See `skills/multi/dingtalk-event/SKILL.md` for the Agent workflow and supported 
 </details>
 
 <details>
-<summary><strong>Raw API Access</strong> — call any DingTalk OpenAPI directly</summary>
+<summary><strong>Raw API Access</strong> — call App Token-capable server-side DingTalk OpenAPIs directly</summary>
 
-`dws api` lets you call any DingTalk OpenAPI without an SDK. Tokens are automatically acquired and refreshed.
+`dws api` lets you call server-side DingTalk OpenAPIs that support an internal-app App Token, without an SDK. Tokens are automatically acquired and refreshed.
 
-> **Prerequisite**: Must login with your own app credentials (see [Custom App mode](#getting-started)). Encrypted tokens from MCP default-credential login are not supported for raw API calls.
+> **Prerequisite**: Provide one complete custom-app Client ID/Client Secret pair through one-shot flags, environment variables, or app config saved by a successful login (see [Custom App mode](#getting-started)). MCP default-credential login alone does not support Raw API calls.
+
+Client ID and Client Secret are resolved only as one complete pair, in this order: complete `--client-id/--client-secret` > complete `DWS_CLIENT_ID/DWS_CLIENT_SECRET` > complete app config. A half-configured source fails explicitly and is never combined with another source. Flags/env used directly by `dws api` are one-shot and do not persist the App Secret; flags/env used by a successful `dws auth login` are persisted as that exact pair for OAuth refresh and later Raw API calls. The acquired App Token is cached under `app-token:<clientID>`; the hidden `--token` accepts a temporary caller-supplied App Token and neither persists nor refreshes it.
+
+Client Secrets use the canonical Keychain slot `appsecret:<clientID>`, distinct from OAuth User Tokens and App Tokens. Existing plaintext app config and historical `client-secret:<clientID>` entries are migrated automatically. If the old and new slots disagree, DWS fails closed and asks for a new login instead of guessing.
 
 ```bash
 # Login (first time only)
 dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>
+
+# Or use one environment pair; a complete env pair overrides app config atomically
+export DWS_CLIENT_ID=<APP_KEY>
+export DWS_CLIENT_SECRET=<APP_SECRET>
 
 # === api.dingtalk.com ===
 
@@ -582,9 +612,16 @@ dws api POST https://oapi.dingtalk.com/topapi/v2/user/get \
   --data '{"userid":"<USER_ID>"}'
 
 # === General ===
-dws api GET /v1.0/microApp/allApps --page-all   # auto-paginate
-dws api GET /v1.0/microApp/allApps --dry-run     # preview request
-dws api GET /v1.0/microApp/allApps --jq '.agentId'  # jq filtering
+dws api GET /v1.0/microApp/allApps --dry-run             # preview request
+dws api GET /v1.0/microApp/allApps --jq '.appList | length'  # jq filtering
+
+# Read a JSON body from a file (--params also accepts @file; use - for stdin)
+dws api POST https://oapi.dingtalk.com/topapi/v2/department/listsubid \
+  --data @department-request.json --dry-run
+
+# Stream one multipart file; top-level --data fields become text form fields; review a dry-run first
+dws api POST https://oapi.dingtalk.com/media/upload \
+  --data '{"type":"image"}' --file media=./demo.png --dry-run
 ```
 
 | Feature | Details |
@@ -593,6 +630,10 @@ dws api GET /v1.0/microApp/allApps --jq '.agentId'  # jq filtering
 | Automatic token management | App-level accessToken is fetched on first call, cached while valid, auto-refreshed on expiry |
 | Domain allowlist | Only `api.dingtalk.com` and `oapi.dingtalk.com` permitted — prevents token leakage |
 | Auto-pagination | `--page-all` iterates all pages. `--page-limit` caps the maximum (default 10, set to 0 for unlimited, hard cap at 500 to prevent infinite loops) |
+| Secure transport | HTTPS/443 and same-origin HTTPS redirects only; bounded JSON/error reads and streamed atomic binary downloads |
+| Agent discovery | When product commands do not cover an API, the bundled misc/mono Skill follows `https://open.dingtalk.com/llms.txt` to the official endpoint docs; raw `api` remains excluded from Agent Schema |
+
+`dws api` automatically uses only an internal-app App Token. It does not read OAuth User Tokens and does not expose `--as user` / `--user`. Prefer an existing DWS product command; use this escape hatch only for an uncovered internal-app server OpenAPI. Review a dry-run and confirm before create, update, delete, revoke, or send operations.
 
 </details>
 
@@ -716,7 +757,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 | DevDoc | `devdoc` | Search the Open Platform docs and diagnose API errors |
 | AI Search | `aisearch` | Enterprise people search by name / dept / role / duty / supervisor / phone / job-number |
 | Live | `live` | List my live streams |
-| Raw API | `api` | Call any DingTalk OpenAPI directly, with managed app-level token |
+| Raw API | `api` | Call App Token-capable server-side DingTalk OpenAPIs directly, with managed app-level token |
 
 > Full command listing with usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for any service's subcommands.
 
@@ -726,7 +767,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 <summary>Coming soon</summary>
 
 - `conference` (video meetings)
-- Multi-skill mode (experimental) — per-product skills under `skills/multi/`; opt in via `dws skill setup --mode multi`
+- Multi-skill mode (default) — per-product skills under `skills/multi/`; installs and upgrades default to it, `dws skill setup --mode mono` switches back after interactive confirmation
 
 </details>
 
@@ -775,6 +816,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 
 ## Reference & Docs
 
+- [International DingTalk (`.io`) guide](./docs/international-region-guide.md) — international login, domestic/international profile switching, isolated testing, and troubleshooting
 - [Command Index](./docs/command-index.md) — every runtime command with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
 - [Architecture](./docs/architecture.md) — static endpoint pipeline, command surface, transport layer

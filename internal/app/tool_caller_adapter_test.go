@@ -16,7 +16,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
@@ -95,6 +99,39 @@ func TestRuntimeRunnerRequestScopedTokenBypassesStoredProfile(t *testing.T) {
 	}
 	if baseTransport.ExecutionId != "" || len(baseTransport.ExtraHeaders) != 0 {
 		t.Fatalf("base transport received request state: %#v", baseTransport)
+	}
+}
+
+type employeeBindingRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f employeeBindingRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestCrossPlatformCoverageEmployeeBindingTransportDoesNotRetry(t *testing.T) {
+	for _, tool := range []string{"bind_local_agent", "unbind_local_agent", "rebind_local_agent", "get_digital_employee_detail"} {
+		t.Run(tool, func(t *testing.T) {
+			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+			t.Setenv("DINGTALK_DEAP_DEV_MCP_URL", "https://binding.example.test")
+			attempts := 0
+			client := transport.NewClient(&http.Client{Transport: employeeBindingRoundTripper(func(r *http.Request) (*http.Response, error) {
+				attempts++
+				return &http.Response{StatusCode: 500, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("unavailable")), Request: r}, nil
+			})})
+			client.MaxRetries = 2
+			client.RetryDelay = time.Nanosecond
+			client.RetryMaxDelay = time.Nanosecond
+			runner := &runtimeRunner{transport: client, globalFlags: &GlobalFlags{}, auditSink: audit.NopSink{}}
+			testseam.Swap(t, &runnerPreflightDocDownload, func(*runtimeRunner, context.Context, *transport.Client, string, executor.Invocation) error {
+				return nil
+			})
+			_, err := runner.RunWithToken(context.Background(), executor.NewHelperInvocation("overlay.deap-dev."+tool, "deap-dev", tool, map[string]any{"agentUuid": "test-employee"}), "supervisor-test-token")
+			want := 1
+			if tool == "get_digital_employee_detail" {
+				want = 3
+			}
+			if err == nil || attempts != want || client.MaxRetries != 2 {
+				t.Fatalf("retry contract: attempts=%d want=%d base=%d err=%v", attempts, want, client.MaxRetries, err)
+			}
+		})
 	}
 }
 

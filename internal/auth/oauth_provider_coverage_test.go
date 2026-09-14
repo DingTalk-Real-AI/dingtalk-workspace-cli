@@ -732,9 +732,24 @@ func TestCrossPlatformCoverageOAuthRefreshAndParsingEdges(t *testing.T) {
 	if err := SaveClientSecret("direct", "secret"); err != nil {
 		t.Fatal(err)
 	}
+	// A stale explicit app.json value for the same client ID must not replace
+	// the secret snapshotted for the token being refreshed.
+	writeCredentialConfig(t, dir, "direct", PlainSecret("stale-app-config-secret"))
+	var refreshClientSecret string
+	p.httpClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var body map[string]string
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		refreshClientSecret = body["clientSecret"]
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(responseBody)), Header: make(http.Header)}, nil
+	})}
 	updated, err := p.refreshWithRefreshToken(context.Background(), original)
 	if err != nil || updated.CorpID != "corp" || updated.PersistentCode != "pc" || updated.CorpName != "Original" {
 		t.Fatalf("direct refresh = %#v, %v", updated, err)
+	}
+	if refreshClientSecret != "secret" {
+		t.Fatalf("refresh Client Secret = %q, want token snapshot secret", refreshClientSecret)
 	}
 	missing := &TokenData{ClientID: "missing-client", RefreshToken: "refresh"}
 	SetClientID("")
@@ -773,7 +788,6 @@ func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 	oldExchange := oauthExchange
 	oldSave := oauthSaveToken
 	oldRefresh := oauthRefreshToken
-	oldSaveSecret := oauthSaveClientSecret
 	oldSaveLocked := oauthSaveTokenLocked
 	t.Cleanup(func() {
 		oauthLoadToken = oldLoad
@@ -784,7 +798,6 @@ func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 		oauthExchange = oldExchange
 		oauthSaveToken = oldSave
 		oauthRefreshToken = oldRefresh
-		oauthSaveClientSecret = oldSaveSecret
 		oauthSaveTokenLocked = oldSaveLocked
 		SetClientID("")
 		SetClientSecret("")
@@ -879,7 +892,6 @@ func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 		t.Fatalf("external exchange save error = %v", err)
 	}
 
-	oauthSaveClientSecret = func(string, string) error { return fail }
 	SetClientID("direct")
 	SetClientSecret("secret")
 	p.httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -887,9 +899,10 @@ func TestCrossPlatformCoverageOAuthProviderHighLevelEdges(t *testing.T) {
 	})}
 	var warnings bytes.Buffer
 	p.Output = &warnings
-	if _, err := p.exchangeCode(context.Background(), "code"); err != nil || !strings.Contains(warnings.String(), "Warning") {
-		t.Fatalf("direct exchange secret warning = %v %q", err, warnings.String())
+	if _, err := p.exchangeCode(context.Background(), "code"); err != nil || warnings.Len() != 0 {
+		t.Fatalf("direct exchange = %v %q; credentials must persist only after the login succeeds", err, warnings.String())
 	}
+	p.persistAppConfigIfNeeded()
 	oauthSaveTokenLocked = func(string, *TokenData) error { return fail }
 	if _, err := p.refreshWithRefreshToken(context.Background(), &TokenData{ClientID: "direct", RefreshToken: "refresh"}); !errors.Is(err, fail) {
 		t.Fatalf("direct refresh save error = %v", err)

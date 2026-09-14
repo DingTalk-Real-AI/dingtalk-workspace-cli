@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
 
@@ -155,8 +157,15 @@ func TestFinalSchemaToolsHaveExecutableBaseCommands(t *testing.T) {
 
 func assertRunnableSchemaBaseCommand(t *testing.T, command *cobra.Command, path string) {
 	t.Helper()
-	if command == nil || !command.Runnable() || command.HasSubCommands() {
+	if command == nil || !command.Runnable() {
 		t.Fatalf("Schema path %q does not bind a runnable Cobra leaf", path)
+	}
+	if command.HasSubCommands() {
+		policy, declared, err := corecmd.GroupPolicyFor(command)
+		final, hasContract := contractfinal.RuntimeContractFinal(command)
+		if err != nil || !declared || policy.Mode != corecmd.GroupHybrid || !hasContract || final.Identity == nil {
+			t.Fatalf("Schema parent %q must explicitly declare hybrid execution and tool identity", path)
+		}
 	}
 }
 

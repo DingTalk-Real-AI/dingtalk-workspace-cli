@@ -24,15 +24,13 @@ metadata:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws mail +contact-list` | read | 列出指定邮箱的所有邮件联系人 |
 | `dws mail +find-mail-user` | read | 按关键词搜索邮箱联系人并投影列表（姓名/昵称/邮箱/工号等） |
 | `dws mail +folder-list` | read | 列出顶层文件夹或指定父文件夹下的子文件夹 |
-| `dws mail +recent-mail` | read | 列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId） |
+| `dws mail +message` | read | 读取一封邮件的完整正文与附件元数据 |
+| `dws mail +messages` | read | 按请求顺序读取多封邮件并逐封验证身份 |
 | `dws mail +search-mail` | read | 按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId） |
-| `dws mail +tag-list` | read | 列出指定邮箱下的所有邮件标签 |
-| `dws mail +template-list` | read | 列出指定邮箱的所有邮件模板 |
-| `dws mail +thread-list` | read | 列出指定邮箱文件夹下的邮件会话（thread） |
-| `dws mail +unread-mail` | read | 列出未读邮件并投影列表（主题/发件人/时间/messageId） |
+| `dws mail +thread` | read | 读取完整邮件会话并精确验证 conversationId |
+| `dws mail +triage` | read | 列出或筛选邮件摘要，自动解析邮箱与收件箱 |
 | `dws mail +user-search` | read | 按关键词或工号搜索邮箱用户（仅企业邮箱） |
 <!-- VISIBLE_SHORTCUTS_END -->
 
@@ -94,6 +92,17 @@ metadata:
 - 附件链路固定三步：`message search` → `attachment list --email <邮箱> --id <messageId>` → `attachment download --email <邮箱> --message-id <messageId> --attachment-id <attachmentId> --name <文件名>`；不存在批量下载命令。
 - 写入类操作（发送、回复、转发、删除、批量移动）按安全策略确认；只读查看、搜索、附件列表、下载不需要确认。
 - 所有 `dws mail` 命令加 `--format json`，并复用同一封邮件的 `messageId`，不要重新搜索导致目标漂移。
+
+## 轨迹高频直达规则
+
+- 已被本页或 `09-mail.md` 精确覆盖的命令，直接执行；不要先探测 `contact`、`api`、`auth`、`profile`、Help 或 Schema。仅在命令真实报参数错误后，读取该命令的 leaf Help 一次。
+- 多条件 KQL 必须用显式 `AND`，例如收件箱附件邮件：`hasAttachments:true AND folderId:2`；不要把相邻条件当作隐式 AND。
+- 用户只要首个或任一单附件时，初始搜索后按相关性最多检查 3 个候选的 `attachment list`，下载命中附件并做一次本地存在性/大小检查后停止；若均未命中，只能说明已检查范围并询问是否继续翻页，不能断言不存在。用户要求全部/批量附件时，遍历全部匹配页和邮件，再逐个下载每个附件。
+- “创建邮箱联系人”属于邮箱个人通讯录，固定走 `dws mail contact create/list`，不要切到 `dingtalk-contact`。只有“按人名解析邮件收件地址”才走下方跨产品协作。
+- 用户要求用当前时间生成唯一标题且未指定显示格式时，使用紧凑格式 `date +%H%M%S`；只有用户明确要求 `HH:mm:ss` 等格式时才原样保留。
+- 批量删除邮件或将整会话移入已删除前，先展示精确目标和不含确认参数的命令预览并停止；用户明确确认后，执行流程仅对同一组参数追加 `--yes`。操作成功后只做一次针对原 ID 或唯一主题的回读，结果符合预期即停止。
+- 创建类返回了 `messageId`、`contactId` 或 `internetMessageId` 时，后续直接复用返回 ID；不要为了重新定位目标而做宽泛 list/search。
+- 一次精确回读已经证明目标状态后结束任务；若回读冲突，报告冲突和已执行命令，不扩大到低层 API 或其他产品继续试探。
 
 ## 跨产品协作
 

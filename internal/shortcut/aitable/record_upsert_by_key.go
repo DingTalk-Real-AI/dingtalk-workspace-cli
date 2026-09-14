@@ -140,7 +140,7 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 
 	verified, verifyErr := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
 	if verifyErr == nil && verified != nil {
-		verifyErr = verifyRecordCells(verified, cells)
+		verifyErr = newRecordFieldTypeResolver(rt, baseID, tableID).verify(verified, cells)
 	}
 	if verifyErr != nil || verified == nil {
 		result.Status = "unknown"
@@ -312,18 +312,185 @@ func recordID(record map[string]any) string {
 	return ""
 }
 
-func verifyRecordCells(record map[string]any, expected map[string]any) error {
+func verifyRecordCells(record map[string]any, expected map[string]any, fieldTypes map[string]string) error {
 	actual, ok := record["cells"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("read-back record %q is missing cells", recordID(record))
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if !exists || !reflect.DeepEqual(got, want) {
+		if !exists || !recordCellValueEqual(got, want, fieldTypes[fieldID]) {
 			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
 		}
 	}
 	return nil
+}
+
+// recordCellValueEqual accepts typed projections only for fields proven to be
+// selects. Comparison is intentionally asymmetric: a scalar write may read
+// back as {id,name}, but an object write must never be verified by a scalar
+// response that dropped the requested ID or other identity fields.
+func recordCellValueEqual(got, want any, fieldType string) bool {
+	if reflect.DeepEqual(got, want) {
+		return true
+	}
+	if strings.EqualFold(fieldType, "singleSelect") {
+		return selectionObjectMatchesScalar(got, want)
+	}
+	if !strings.EqualFold(fieldType, "multipleSelect") && !strings.EqualFold(fieldType, "multiSelect") {
+		return false
+	}
+	gotList, gotOK := got.([]any)
+	wantList, wantOK := want.([]any)
+	if !gotOK || !wantOK || len(gotList) != len(wantList) || !selectionLikeList(gotList) || !selectionLikeList(wantList) {
+		return false
+	}
+	used := make([]bool, len(gotList))
+	for _, wantItem := range wantList {
+		matched := false
+		for index, gotItem := range gotList {
+			if used[index] || (!reflect.DeepEqual(gotItem, wantItem) && !selectionObjectMatchesScalar(gotItem, wantItem)) {
+				continue
+			}
+			used[index] = true
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func recordCellsMayNeedSelectionTypes(record map[string]any, expected map[string]any) bool {
+	actual, ok := record["cells"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for fieldID, want := range expected {
+		got, exists := actual[fieldID]
+		if exists && !reflect.DeepEqual(got, want) && selectionProjectionShapes(got, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func selectionProjectionShapes(got, want any) bool {
+	if _, gotObject := got.(map[string]any); gotObject {
+		_, wantScalar := want.(string)
+		return wantScalar
+	}
+	if _, wantObject := want.(map[string]any); wantObject {
+		_, gotScalar := got.(string)
+		return gotScalar
+	}
+	gotList, gotOK := got.([]any)
+	wantList, wantOK := want.([]any)
+	return gotOK && wantOK && selectionLikeList(gotList) && selectionLikeList(wantList)
+}
+
+type recordFieldTypeResolver struct {
+	rt               *shortcut.RuntimeContext
+	baseID, tableID  string
+	loaded           bool
+	fieldTypes       map[string]string
+	fieldTypeLoadErr error
+}
+
+func newRecordFieldTypeResolver(rt *shortcut.RuntimeContext, baseID, tableID string) *recordFieldTypeResolver {
+	return &recordFieldTypeResolver{rt: rt, baseID: baseID, tableID: tableID}
+}
+
+func resolvedRecordFieldTypeResolver(fields []map[string]any) *recordFieldTypeResolver {
+	return &recordFieldTypeResolver{loaded: true, fieldTypes: recordFieldTypesFromFields(fields)}
+}
+
+func (r *recordFieldTypeResolver) verify(record map[string]any, expected map[string]any) error {
+	exactErr := verifyRecordCells(record, expected, nil)
+	if exactErr == nil || !recordCellsMayNeedSelectionTypes(record, expected) {
+		return exactErr
+	}
+	fieldTypes, err := r.resolve()
+	if err != nil {
+		return fmt.Errorf("%v; cannot load field types for select verification: %w", exactErr, err)
+	}
+	return verifyRecordCells(record, expected, fieldTypes)
+}
+
+func (r *recordFieldTypeResolver) resolve() (map[string]string, error) {
+	if !r.loaded {
+		r.loaded = true
+		r.fieldTypes, r.fieldTypeLoadErr = loadRecordFieldTypes(r.rt, r.baseID, r.tableID)
+	}
+	return r.fieldTypes, r.fieldTypeLoadErr
+}
+
+func loadRecordFieldTypes(rt *shortcut.RuntimeContext, baseID, tableID string) (map[string]string, error) {
+	data, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return nil, err
+	}
+	fields, found := findNamedObjectList(data, "fields", "fieldList")
+	if !found {
+		return nil, fmt.Errorf("get_fields response is missing the fields collection")
+	}
+	fieldTypes := recordFieldTypesFromFields(fields)
+	if len(fieldTypes) == 0 {
+		return nil, fmt.Errorf("get_fields response has no fields with both fieldId and type")
+	}
+	return fieldTypes, nil
+}
+
+func recordFieldTypesFromFields(fields []map[string]any) map[string]string {
+	fieldTypes := make(map[string]string, len(fields))
+	for _, field := range fields {
+		fieldID := strings.TrimSpace(stringValue(field, "fieldId", "id"))
+		fieldType := strings.TrimSpace(stringValue(field, "type", "fieldType"))
+		if fieldID != "" && fieldType != "" {
+			fieldTypes[fieldID] = fieldType
+		}
+	}
+	return fieldTypes
+}
+
+func selectionObjectMatchesScalar(objectValue, scalarValue any) bool {
+	object, ok := objectValue.(map[string]any)
+	if !ok {
+		return false
+	}
+	scalar, ok := scalarValue.(string)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"id", "name", "optionId", "optionName"} {
+		if value, exists := object[key].(string); exists && value == scalar {
+			return true
+		}
+	}
+	return false
+}
+
+func selectionLikeList(values []any) bool {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+		case map[string]any:
+			if _, hasID := typed["id"]; !hasID {
+				if _, hasName := typed["name"]; !hasName {
+					if _, hasOptionID := typed["optionId"]; !hasOptionID {
+						if _, hasOptionName := typed["optionName"]; !hasOptionName {
+							return false
+						}
+					}
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func sortedMapKeys(values map[string]any) []string {

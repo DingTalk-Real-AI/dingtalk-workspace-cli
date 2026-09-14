@@ -8,12 +8,12 @@ import (
 )
 
 func newSheetVersionCmd() *cobra.Command {
-	versionCmd := &cobra.Command{
+	versionCmd := newGroupCommand(&cobra.Command{
 		Use:   "version",
 		Short: "表格历史版本管理",
 		Long:  `管理钉钉在线电子表格的历史版本：手动保存、查看版本列表、回滚到指定版本。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	versionSaveCmd := &cobra.Command{
 		Use:     "save",
@@ -111,9 +111,14 @@ func newSheetVersionCmd() *cobra.Command {
 	versionListCmd.Flags().String("cursor", "", "分页游标")
 
 	versionRevertCmd := &cobra.Command{
-		Use:     "revert",
-		Short:   "[危险] 回滚表格到指定版本",
-		Example: `  dws sheet version revert --node SHEET_ID --version 3 --yes`,
+		Use:   "revert",
+		Short: "[危险] 回滚表格到指定历史版本或 revision",
+		Long: `将在线表格恢复到指定历史版本或精确 revision。
+
+通常应从 version list 选择已保存的历史版本。用户明确要求恢复到某个精确 revision 时，
+也可传入已从同一工作簿真实查询结果确认的 revision，即使它不在版本列表中。未列入
+版本列表的 revision 只有在服务端仍可恢复时才能成功；禁止猜测 revision。`,
+		Example: `  dws sheet version revert --node SHEET_ID --version 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -142,22 +147,22 @@ func newSheetVersionCmd() *cobra.Command {
 				CLIPath:        "sheet version revert",
 				PrimaryCLIPath: "sheet version revert",
 			},
-			Description: "回滚表格到指定历史版本",
+			Description: "回滚表格到指定历史版本或已确认的精确 revision",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
 				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "回滚表格到指定历史版本",
-				UseWhen:      []string{"用户说 回滚到某个版本/恢复到之前的表格"},
-				AvoidWhen:    []string{"普通文件回滚用 drive revert；在线文档用 doc version revert"},
+				AgentSummary: "回滚表格到指定历史版本或已确认的精确 revision",
+				UseWhen:      []string{"用户说 回滚到某个版本/恢复到之前的表格，或明确要求恢复到同一工作簿中已确认的 revision"},
+				AvoidWhen:    []string{"普通文件回滚用 drive revert；在线文档用 doc version revert；目标 revision 未经同一工作簿的真实查询结果确认时不要猜测"},
 				Examples:     []string{"dws sheet version revert --node <SHEET_ID> --version 3 --format json"},
 			},
 		},
 	})
 	versionRevertCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
-	versionRevertCmd.Flags().Int("version", 0, "目标版本号 (必填，从 list 获取)")
+	versionRevertCmd.Flags().Int("version", 0, "目标历史版本或已确认 revision (必填，通常从 version list 获取)")
 
 	for _, c := range []*cobra.Command{versionSaveCmd, versionListCmd, versionRevertCmd} {
 		c.Flags().String("url", "", "")

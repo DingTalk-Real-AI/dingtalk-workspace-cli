@@ -38,20 +38,28 @@ func init() {
 	registerRequireTogether("calendar.update_calendar_event", "recurrence-type", "recurrence-interval", "recurrence-range-type")
 	registerExclusiveOneOf("chat.search_messages_by_sender", "sender-user-id", "sender-open-dingtalk-id")
 	registerExclusiveOneOf("chat.create_and_send_card", "group", "receiver")
-	registerRequireOneOf("chat.add_emoji_reaction", "conversation-id", "group", "id", "chat")
-	registerRequireOneOf("chat.add_text_emotion", "conversation-id", "group", "id", "chat")
-	registerRequireOneOf("chat.update_text_emotion", "conversation-id", "group", "id", "chat")
+	RegisterRuntimeSchemaConstraints("chat.chat_permission_grant", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"conversation-id", "open-dingtalk-id", "user"}},
+		RequireOneOf:      [][]string{{"conversation-id", "open-dingtalk-id", "user", "permParam"}},
+	})
+	registerExclusiveOneOf("chat.chat_permission_grant_cross_org_data", "target-org-id", "all")
+	registerExclusiveOneOf("chat.clear_conversation_messages", "conversation-id", "id", "chat")
+	registerExclusiveOneOf("chat.clear_conversation_red_point", "conversation-id", "id", "chat")
 	registerExclusiveOneOf("chat.get_conversation_info", "group", "user", "open-dingtalk-id")
+	registerExclusiveOneOf("chat.hide_conversation", "conversation-id", "id", "chat")
 	registerExclusiveOneOf("chat.list_conversation_message_v2", "group", "user", "open-dingtalk-id")
 	registerExclusiveOneOf("chat.list_individual_chat_message", "user", "open-dingtalk-id")
-	registerRequireOneOf("chat.remove_emoji_reaction", "conversation-id", "group", "id", "chat")
-	registerRequireOneOf("chat.remove_text_emotion", "conversation-id", "group", "id", "chat")
+	registerExclusiveOneOf("chat.mark_conversation_unread", "conversation-id", "id", "chat")
+	registerExclusiveOneOf("chat.mark_message_read", "conversation-id", "id", "chat")
 	registerRequireOneOf("chat.send_personal_message", "text", "content", "msg-type")
 	registerExclusiveOneOf("chat.send_robot_message", "group", "users")
 	registerRequireOneOf("chat.set_group_member_mute_list", "users", "user")
+	registerExclusiveOneOf("chat.share_group_invite_url", "target", "receiver")
 	registerExclusiveOneOf("chat.transfer_group_owner", "new-owner", "user")
 	registerRequireOneOf("chat.update_conv_member_roles", "users", "user")
+	registerExclusiveOneOf("chat.update_at_all_notification_off", "conversation-id", "id", "chat")
 	registerRequireOneOf("chat.update_notification_off", "conversation-id", "id", "chat")
+	registerExclusiveOneOf("chat.update_red_env_notification_off", "conversation-id", "id", "chat")
 	registerRequireTogether("contact.query_dismission_employee_list", "start", "end")
 	registerRequireOneOf("dev.connect_status", "robot-client-id", "unified-app-id")
 	registerRequireOneOf("dev.connect_stop", "robot-client-id", "unified-app-id")
@@ -60,9 +68,9 @@ func init() {
 	registerRequireOneOf("devdoc.search_open_platform_docs_rag", "query", "keyword")
 	registerRequireOneOf("event.consume", "event_key", "subscribe-id")
 	registerExclusiveOneOf("event.stop", "all", "subscribe_id")
-	registerRequireOneOf("doc.insert_document_block", "text", "heading", "element")
+	registerRequireOneOf("doc.insert_document_block", "content", "heading", "element")
 	registerExclusiveOneOf("doc.update_document", "content", "content-file")
-	registerRequireOneOf("doc.update_document_block", "text", "heading", "element")
+	registerRequireOneOf("doc.update_document_block", "content", "heading", "element")
 	registerRequireOneOf("pat.batch_grant", "scope", "product", "products", "domain", "domains", "recommend")
 	registerRequireOneOf("mail.search_mail_users", "keyword", "employee-no")
 	// --body is a hidden compatibility alias for the public --content flag.
@@ -88,7 +96,14 @@ func init() {
 	registerRequireOneOf("sheet.update_cond_format", "ranges", "condition", "cell-style", "data-bar-style")
 	registerRequireOneOf("sheet.update_dimension", "hidden", "pixel-size")
 	registerRequireOneOf("sheet.update_filter_view", "name", "range", "criteria")
-	registerRequireOneOf("sheet.update_float_image", "src", "range", "width", "height", "offset-x", "offset-y")
+	RegisterRuntimeSchemaConstraints("sheet.create_float_image", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"file", "src"}},
+		RequireOneOf:      [][]string{{"file", "src"}},
+	})
+	RegisterRuntimeSchemaConstraints("sheet.update_float_image", RuntimeSchemaConstraints{
+		MutuallyExclusive: [][]string{{"file", "src"}},
+		RequireOneOf:      [][]string{{"file", "src", "range", "width", "height", "offset-x", "offset-y"}},
+	})
 	registerRequireOneOf("sheet.update_sheet", "name", "index", "hidden", "frozen-row-count", "frozen-column-count", "tab-color")
 	registerRequireOneOf("sheet.import", "folder-token", "workspace")
 	registerRequireOneOf("wiki.search_wikiSpaces", "query", "type")

@@ -274,6 +274,7 @@ Definition（仅声明；不可编译）
 | 层 | 含义 | 今日落点 |
 |---|---|---|
 | **声明（declare）** | `corecmd.Spec` / `LeafSpec` / `ContractDecl` **数据字段**（声明证据；交付见下） | `Flags`/`Constraints`/`Risk`/`ConstParams`/`Contract`；类型真身在 `corecmd/contract`（DTO：`SafetySpec`/`ParamDecl`/`ProductDecl`/`ContractFinalPayload`；**无** Cobra store） |
+| **非叶声明（group declare）** | owning Cobra 命令上的完整 `corecmd.GroupPolicy`；不是 leaf `Spec` 字段 | `Mode` / `Positionals` / `Recovery` 经 `corecmd.ApplyGroupPolicy` 一次编译为 Cobra 行为与私有框架元数据 |
 | **框架转换** | 类型转换并注册（**禁止** JSON 注解桥） | `embedContractDecl` → `corecmd/contractfinal.RegisterRuntimeContractFinal`（annotate + store；全部调用方直调，`corecmd.New` 内部注册） |
 | **注解 seam** | Cobra `dws.schema.*` 写入 | `internal/corecmd/runtimeannotate.AnnotateRuntime*`（框架侧；`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/runtimeannotate` 垫片包已删，一律直引 corecmd） |
 | **Schema 透传** / 交付 | 组装读取注册表，原样投影为 `ToolSpec`；`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`（`ResolveMeta` 自同一组装投影）；go:embed 仅限 reviewed 输入（MCP meta / `param_concepts` 等；reviewed `schema_command_registry/` 已退役，identity 由 collector 收集），映射排除走 Go ledger（`schema_parameter_mapping_ledger.go`），不得 embed Catalog | `internal/cli` 根（交付边界）；ContractFinal store 在 `corecmd/contractfinal`（`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/contractfinal` 垫片包已删） |
@@ -292,7 +293,7 @@ Definition（仅声明；不可编译）
 
 下列字段**是**框架声明面（经 `corecmd.New` 生效并嵌入 `dws.schema.*`）：
 
-- `Flags`（含 Name/Kind/Default/Required/MarkRequired/Usage 等注册面）
+- `Flags`（含 Name/Kind/Default/Required/MarkRequired/Usage 等注册面；`Input` 是取值来源声明，经 `corecmd.New` 生效但**不**嵌入 `dws.schema.*`，能力靠 `Usage` 文案声明，见 §5.3）
 - `Constraints`
 - **非空** `Risk`（空值 = 运行时当只读确认，且**不**嵌入 `dws.schema.risk`）
 - `ConstParams`（载荷声明；不上用户 flag 表）
@@ -310,7 +311,25 @@ Definition（仅声明；不可编译）
 3. 写副作用：新 Leaf 声明完整 `SafetySpec`（框架 `ConfirmSafety` + Schema Final）；未迁移旧路径显式标注 `runtime_gate`；二者皆无则不合格；
 4. Schema `ToolSpec` 全字段组均落在 §5.0.4 表中某一权威格，禁止无主字段。
 
-#### 5.0.2a 三档声明路径（Tier1 / Tier2 / Tier3）
+#### 5.0.2a 非叶命令契约（`corecmd.GroupPolicy`）
+
+`corecmd.Spec` / `LeafSpec` 继续只定义叶命令。每个拥有子命令的 owning Cobra 命令必须在构造处通过 `corecmd.ApplyGroupPolicy` 声明一份完整 `GroupPolicy`：
+
+| 轴 | 允许值 | 语义 |
+|---|---|---|
+| `Mode` | `navigation_only` / `hybrid` | 仅导航并展示帮助，或同时保留本命令业务执行 |
+| `Positionals` | `reject` / `allow` | 未匹配 token 进入命令恢复，或由本命令业务位置参数消费 |
+| `Recovery` | `sibling` / `deep` / `disabled` | 只建议直接子命令、显式允许后代路径恢复，或完全关闭恢复 |
+
+硬规则：
+
+1. 三个字段必须同时声明；全零值只表示 leaf，不能应用到命令。`navigation_only` 必须 `Positionals=reject`；`Positionals=allow` 必须 `Recovery=disabled`，避免业务 argv 与命令恢复争抢同一 token。
+2. `ApplyGroupPolicy` 是唯一编译入口：navigation 安装统一 help/错误 handler；hybrid 保留 owning `RunE`，仅在声明拒绝 positionals 且开启恢复时包裹 unknown-command 分支。恢复统一投影为有界 `CommandResolution`（最多 3 个建议 + 当前 parent `--help`）；只有 `Recovery=deep` 才可建议完整后代路径。
+3. `GroupPolicy` **不推导** `TraverseChildren`。该 Cobra 字段会改变父级 local flag 是否向子命令传播，必须由原 owning command 显式保留，不能因迁移到 typo guidance 而扩大参数表面。
+4. 最终装配树门禁检查「有 children 必须有 GroupPolicy、leaf 不得残留 GroupPolicy、navigation/hybrid handler 与声明结构一致」。门禁不执行任意 `Args` 函数；`ApplyGroupPolicy` 对 `cobra.NoArgs` / `cobra.ArbitraryArgs` 的编译由 corecmd 单测覆盖。
+5. 命令树合并时，两侧非空 group 都必须先声明 policy；冲突声明、group 与 runnable/parse-bearing leaf 合并、或带 children 的未声明节点均 fail closed。纯 metadata 空壳可采用 typed source policy，不能借此吞掉 flags、hooks 或执行体。
+
+#### 5.0.2b 三档叶声明路径（Tier1 / Tier2 / Tier3）
 
 当前生产允许的三档路径（同一 `ContractFinal` 语义；不是互相否定）：
 
@@ -672,6 +691,52 @@ func (k Key[T]) Declare(opts ...FlagOption[T]) FlagSpec
 - 路径解析复用现有的本地文件 effect 边界（§5.5.2）；它不是新的临时文件 API。
 - 构造时拒绝 `InputSourceInvalid`。
 - 当前没有任何 Shortcut 或 Leaf 声明 `Input`，因此 M1 增加能力且零上线表面变化。让现有命令采用它属于 §9 下的用户可见变更。
+
+`Input` 的框架能力今日已在 `corecmd` 落地（声明即执行的过渡形态，语义与上文目标一致），使用指南：
+
+**今日声明形态**：`FlagSpec.Input []string`，源常量 `corecmd.InputFile`（`"file"`）/ `corecmd.InputStdin`（`"stdin"`）。`helpers.LeafFlag` 是 `corecmd.FlagSpec` 别名，直接可用；`shortcut.Flag.Input` 同形声明，经 `FromShortcut` 映射到 `FlagSpec`。
+
+```go
+// LeafSpec / helpers
+Flags: []helpers.LeafFlag{
+    {
+        Name:  "content",
+        Usage: "文档内容（支持 @文件路径 或 - 读 stdin）",
+        Bind:  "content",
+        Input: []string{corecmd.InputFile, corecmd.InputStdin},
+    },
+}
+
+// shortcut
+Flags: []shortcut.Flag{
+    {Name: "markdown", Desc: "Markdown 内容（支持 @文件路径 或 -）",
+     Input: []string{"file", "stdin"}},
+}
+```
+
+**运行时语义**（`resolveInputFlags`，在 `runDeclaredPreflight` 内、required/enum/约束/Validate 之前执行，原地改写 cobra flag 值）：
+
+- `--flag @path`：文件内容替换取值；`--flag -`：stdin 内容替换取值。
+- `--flag @@value`：转义为字面 `@value`，不做来源解析。
+- 只解析显式 CLI token（主名或别名）；EnvVar 回落与注册默认值透传不解析。
+- 内容前置剥离 UTF-8 BOM；`Trim` 等既有语义照常作用于解析后的值。
+- 读取失败、源不支持、`@` 后空路径都是类型化校验错误（退出码 3）；同时声明两种源而文件读取失败时附 stdin 引导 hint。
+
+**作者守则**：
+
+- 声明即全部能力：required/enum/约束/Validate 校验的已是解析后的真实内容，`Execute`/`Invoke` 无需任何额外代码。
+- `Usage`/`Desc` 必须写明支持 `@路径`/`-`；框架不自动改写 help 文案，今日也不向 Schema 投影（新增投影字段须先过 homology 评审，避免 catalog drift）。
+- `user_required` 确认的写命令若声明 `InputStdin`：stdin 在校验阶段被消费，交互确认将 fail-closed 为 `confirmation_required`，此类调用必须显式 `--yes`（或 `--dry-run`）。
+- **声明前先确认取值空间不会被前缀吃掉**：声明 `InputFile` 后，任何以 `@` 开头的合法值都会被当成文件路径（本产品尤其常见的是 at 提及类取值，如 `--at-user @zhangsan` 会报读取文件失败），用户只能改用 `@@` 转义；声明 `InputStdin` 后字面值 `-` 不可达（与 curl 等约定一致）。若该 flag 的正常取值可能命中这两种形态，就不要声明对应来源。
+- 声明在构造期校验（fail-closed panic）：仅限 `KindString`；源值必须是 `file`/`stdin` 且不重复。
+
+**今日实现与目标形态的差异**（迁移到本节目标 `FlagSpec` 时收敛）：
+
+| 维度 | 今日 | 目标 |
+|---|---|---|
+| 源类型 | `[]string` 常量 | 类型化 `InputSource` |
+| 路径边界 | 直接本地文件 IO | 复用 §5.5.2 本地文件 effect 边界 |
+| Schema 投影 | 无（靠作者在 Usage 声明） | 声明即最终源，随 Catalog 透传 |
 
 核心 FlagSpec 故意没有：
 

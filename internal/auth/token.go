@@ -97,6 +97,7 @@ type TokenData struct {
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
 	UpdatedAt      string    `json:"updated_at,omitempty"`
 	Source         string    `json:"source,omitempty"`
+	LoginRegion    string    `json:"login_region,omitempty"`
 	// LegacyOrgScopedProfile is an in-memory destination for an explicitly
 	// matched historical profile whose userId was never resolved. It is never
 	// persisted as token material.
@@ -106,6 +107,13 @@ type TokenData struct {
 	// transient marker to reject ambiguous UID-less logins without breaking
 	// legitimate refreshes of unresolved accounts.
 	FreshAuthorization bool `json:"-"`
+	// RepairOrganizationMirror marks a fallback refresh that consumed the
+	// organization mirror's refresh_token. The regular write plan can skip the
+	// organization slot under an explicit runtime selector (for example when an
+	// unresolved sibling profile still owns it), which would strand a
+	// refresh_token the server has already rotated; the marker forces the
+	// rotated credential back into that slot.
+	RepairOrganizationMirror bool `json:"-"`
 }
 
 // tokenPersistenceWritePlan is the single source of truth for deciding which
@@ -126,6 +134,7 @@ type tokenPersistenceWritePlan struct {
 	ExistingIdentity               bool
 	UpgradesLegacyProfile          bool
 	PreserveUnresolvedOrganization bool
+	RepairOrganizationMirror       bool
 	WriteIdentity                  bool
 	WriteOrganization              bool
 	WriteGlobal                    bool
@@ -166,6 +175,11 @@ func planTokenPersistenceWrites(
 	plan.PreserveUnresolvedOrganization = plan.UserID != "" &&
 		unresolvedProfileForCorp(cfg, plan.CorpID) != nil &&
 		!plan.UpgradesLegacyProfile
+	// A fallback refresh consumed the organization mirror's refresh_token;
+	// the rotated credential must go back into that slot even when the
+	// selector-driven plan would skip it (for example an explicit --profile
+	// that preserves an unresolved sibling profile's slot).
+	plan.RepairOrganizationMirror = data.RepairOrganizationMirror
 	plan.WriteIdentity = plan.UserID != ""
 	orgCurrentSelector := ""
 	if cfg != nil {
@@ -176,7 +190,8 @@ func planTokenPersistenceWrites(
 	// reauthorization. Its organization slot must move with the newly exact
 	// identity even when an explicit runtime selector keeps it from becoming
 	// process-global current.
-	plan.WriteOrganization = plan.UserID == "" ||
+	plan.WriteOrganization = plan.RepairOrganizationMirror ||
+		plan.UserID == "" ||
 		plan.UpgradesLegacyProfile ||
 		(!plan.PreserveUnresolvedOrganization &&
 			(plan.MakeCurrent ||
@@ -324,10 +339,13 @@ func SaveLoginTokenData(configDir string, data *TokenData) error {
 	if data == nil {
 		return fmt.Errorf("token data is empty")
 	}
+	data.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(configDir, data); err != nil {
+		return fmt.Errorf("local login state cannot be safely updated: %w", err)
+	}
 	if err := prepareLoginPersistence(configDir); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
-	data.FreshAuthorization = true
 	if err := preflightTokenWritePersistence(configDir, data); err != nil {
 		return fmt.Errorf("local login state cannot be safely updated: %w", err)
 	}
@@ -346,7 +364,20 @@ func saveTokenDataLocked(configDir string, data *TokenData) error {
 // saveTokenDataLockedForSelector 在已持有 auth 锁时按显式主管选择器计算写计划。
 // 受管数字员工因此可以写入自己的精确 identity slot，同时不成为当前 Profile。
 func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSelector string) error {
+	return saveTokenDataLockedForSelectorAndSecret(configDir, data, runtimeSelector, "")
+}
+
+// Caller holds the auth lock. The direct-login secret participates in the same
+// snapshot and rollback as the profile and token slots, never a separate write.
+func saveTokenDataLockedForSelectorAndSecret(configDir string, data *TokenData, runtimeSelector, clientSecret string) error {
+	if clientSecret != "" && (data == nil || data.ClientID == "" || data.CorpID == "" || data.UserID == "") {
+		return fmt.Errorf("direct login persistence requires a complete identity and application")
+	}
+
 	if h := edition.Get(); h.SaveToken != nil {
+		if clientSecret != "" {
+			return fmt.Errorf("edition token hook does not support transactional client credentials")
+		}
 		return saveTokenViaHook(h, configDir, data)
 	}
 	if data != nil && strings.TrimSpace(data.CorpID) != "" {
@@ -392,6 +423,7 @@ func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSe
 			"persistence_profile", plan.PersistenceSelector,
 			"write_identity_slot", plan.WriteIdentity,
 			"write_org_mirror", plan.WriteOrganization,
+			"repair_org_mirror", plan.RepairOrganizationMirror,
 			"write_global_mirror", plan.WriteGlobal,
 			"publish_incoming_global", plan.MakeCurrent,
 		)
@@ -405,6 +437,14 @@ func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSe
 		if err != nil {
 			return err
 		}
+		if clientSecret != "" {
+			previous, legacy, err := snapshotExchangeClientSecret(data.ClientID)
+			if err != nil {
+				return fmt.Errorf("cannot snapshot application credentials")
+			}
+			snapshot.clientID, snapshot.clientSecret = data.ClientID, previous
+			snapshot.legacyClientSecret = legacy
+		}
 		preserveManualDefault := !plan.MakeCurrent &&
 			snapshot.marker.known &&
 			snapshot.marker.exists &&
@@ -414,6 +454,11 @@ func saveTokenDataLockedForSelector(configDir string, data *TokenData, runtimeSe
 				return errors.Join(operationErr, fmt.Errorf("rollback token persistence: %w", rollbackErr))
 			}
 			return operationErr
+		}
+		if clientSecret != "" {
+			if err := oauthSaveClientSecret(data.ClientID, clientSecret); err != nil {
+				return rollback(fmt.Errorf("save application credentials failed"))
+			}
 		}
 		if plan.WriteIdentity {
 			if err := tokenSaveKeychainForIdentity(corpID, userID, data); err != nil {
@@ -917,13 +962,16 @@ type tokenMarkerSnapshot struct {
 }
 
 type tokenPersistenceSnapshot struct {
-	profiles *ProfilesConfig
-	corpID   string
-	userID   string
-	identity tokenSlotSnapshot
-	org      tokenSlotSnapshot
-	legacy   tokenSlotSnapshot
-	marker   tokenMarkerSnapshot
+	clientID           string
+	clientSecret       string
+	legacyClientSecret string
+	profiles           *ProfilesConfig
+	corpID             string
+	userID             string
+	identity           tokenSlotSnapshot
+	org                tokenSlotSnapshot
+	legacy             tokenSlotSnapshot
+	marker             tokenMarkerSnapshot
 }
 
 func cloneProfilesConfig(cfg *ProfilesConfig) *ProfilesConfig {
@@ -1114,6 +1162,23 @@ func snapshotTokenPersistence(
 
 func restoreTokenPersistence(configDir string, snapshot tokenPersistenceSnapshot) error {
 	var rollbackErr error
+	if snapshot.clientID != "" {
+		for _, slot := range []struct{ account, value string }{
+			{secretAccountKey(snapshot.clientID), snapshot.clientSecret},
+			{legacyClientSecretAccountKey(snapshot.clientID), snapshot.legacyClientSecret},
+		} {
+			var err error
+			if slot.value == "" {
+				err = authKeychainRemove(keychain.Service, slot.account)
+			} else {
+				err = authKeychainSet(keychain.Service, slot.account, slot.value)
+			}
+			if err != nil {
+				rollbackErr = errors.Join(rollbackErr, fmt.Errorf("restore application credentials failed"))
+			}
+		}
+	}
+
 	if err := tokenSaveProfiles(configDir, cloneProfilesConfig(snapshot.profiles)); err != nil {
 		rollbackErr = errors.Join(rollbackErr, err)
 	}

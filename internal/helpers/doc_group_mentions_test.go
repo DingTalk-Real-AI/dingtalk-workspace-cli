@@ -219,7 +219,7 @@ func TestCrossPlatformCoverageDocCommentGroupMentionValidationAndCompatibility(t
 		err := executeDocGroupMentionCommand(
 			t,
 			caller,
-			"comment", "reply", "--node", "doc-1", "--comment-key", "comment-1", "--content", "like",
+			"comment", "reply", "--node", "doc-1", "--comment-key", "comment-1", "--content", "赞",
 			"--emoji", "--mentioned-open-conversation-id", "oc-1",
 		)
 		if err == nil || !strings.Contains(err.Error(), "emoji replies do not support group mentions") {
@@ -235,7 +235,7 @@ func TestCrossPlatformCoverageDocCommentGroupMentionValidationAndCompatibility(t
 		err := executeDocGroupMentionCommand(
 			t,
 			caller,
-			"comment", "reply", "--node", "doc-1", "--comment-key", "comment-1", "--content", "like",
+			"comment", "reply", "--node", "doc-1", "--comment-key", "comment-1", "--content", "赞",
 			"--emoji", "--mentioned-open-conversation-id", " ",
 		)
 		if err == nil || !strings.Contains(err.Error(), "must not be empty") {
@@ -251,7 +251,7 @@ func TestCrossPlatformCoverageDocCommentGroupMentionValidationAndCompatibility(t
 		err := executeDocGroupMentionCommand(
 			t,
 			caller,
-			"comment", "reply", "--node", "doc-1", "--comment-key", "comment-1", "--content", "like",
+			"comment", "reply", "--node", "doc-1", "--comment-key", "comment-1", "--content", "赞",
 			"--emoji",
 		)
 		if err != nil {

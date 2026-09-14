@@ -72,7 +72,8 @@ func buildCommands(factories []Factory, runner executor.Runner) []*cobra.Command
 	out := make([]*cobra.Command, 0, len(factories))
 	for _, factory := range factories {
 		handler := factory()
-		out = append(out, handler.Command(runner))
+		command := handler.Command(runner)
+		out = append(out, command)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Use < out[j].Use

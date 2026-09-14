@@ -2,16 +2,25 @@ package app
 
 import (
 	"fmt"
+	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+// feedbackFormURL points at the DingTalk Notable form collecting dws CLI
+// user-experience feedback. The source parameter tags submissions that
+// originated from the CLI help output so they can be told apart from
+// responses arriving through other channels.
+const feedbackFormURL = "https://alidocs.dingtalk.com/notable/share/form/v01eLbnj1bw1ELb0laN_dv19yqvsgs3oebp3pcjys_1qX0QQ0?source=dws-cli"
 
 func configureRootHelp(root *cobra.Command) {
 	if root == nil {
@@ -41,12 +50,133 @@ func configureRootHelp(root *cobra.Command) {
 	defaultHelpFunc := root.HelpFunc()
 	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if cmd != root {
+			if isChatProductRoot(cmd, root) {
+				renderChatShortcutFirstHelp(cmd)
+				cli.RenderHelpAffordances(cmd)
+				return
+			}
 			defaultHelpFunc(cmd, args)
-			cli.RenderSafetyAnnotation(cmd)
+			renderPreferredShortcutAffordance(cmd)
+			cli.RenderHelpAffordances(cmd)
 			return
 		}
 		renderRootHelp(root)
 	})
+}
+
+func isChatProductRoot(cmd, root *cobra.Command) bool {
+	return cmd != nil && root != nil && cmd.Parent() == root && cmd.Name() == "chat"
+}
+
+func renderChatShortcutFirstHelp(cmd *cobra.Command) {
+	w := cmd.OutOrStdout()
+	if long := strings.TrimSpace(cmd.Long); long != "" {
+		_, _ = fmt.Fprintln(w, long)
+		_, _ = fmt.Fprintln(w)
+	}
+	_, _ = fmt.Fprintln(w, "选择顺序：")
+	_, _ = fmt.Fprintln(w, "  1. 优先使用 +shortcut 完成用户任务。")
+	_, _ = fmt.Fprintln(w, "  2. 本页只展示高频 Featured Shortcuts；其他正式 Shortcut 仍可通过 Catalog 和精确 Help 发现。")
+	_, _ = fmt.Fprintln(w, "  3. 只有 Shortcut 不支持所需底层参数或原始响应时，才使用 Atomic API Resources。")
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Usage:")
+	_, _ = fmt.Fprintf(w, "  %s [flags]\n", cmd.CommandPath())
+	_, _ = fmt.Fprintf(w, "  %s [command]\n", cmd.CommandPath())
+	if len(cmd.Aliases) > 0 {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Aliases:")
+		_, _ = fmt.Fprintf(w, "  %s, %s\n", cmd.Name(), strings.Join(cmd.Aliases, ", "))
+	}
+
+	featured, catalog, atomic := chatHelpCommands(cmd)
+	renderChatHelpCommandSection(w, "Featured Shortcuts:", featured)
+	renderChatHelpCommandSection(w, "Atomic API Resources:", atomic)
+
+	_, _ = fmt.Fprintln(w, "More Chat Shortcuts:")
+	_, _ = fmt.Fprintf(w, "  当前有 %d 个 canonical Shortcut；本页展示 %d 个高频入口，另有 %d 个低频正式入口。\n",
+		len(featured)+len(catalog), len(featured), len(catalog))
+	_, _ = fmt.Fprintln(w, "  完整列表：dws shortcut list --service chat --format json")
+	_, _ = fmt.Fprintln(w, "  精确帮助：dws chat +<command> --help")
+	_, _ = fmt.Fprintln(w, "  机器契约：dws schema --cli-path \"chat +<command>\" --compact -f json")
+
+	renderCommandFlagSections(w, cmd)
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Use \"%s [command] --help\" for exact command help.\n", cmd.CommandPath())
+}
+
+func chatHelpCommands(cmd *cobra.Command) (featured, catalog, atomic []*cobra.Command) {
+	for _, child := range cmd.Commands() {
+		if child == nil || child.Hidden || child.Deprecated != "" || child.Name() == "help" {
+			continue
+		}
+		if !strings.HasPrefix(child.Name(), "+") {
+			if child.Annotations != nil && child.Annotations[preferredShortcutCLIPathAnnotation] != "" {
+				continue
+			}
+			atomic = append(atomic, child)
+			continue
+		}
+		tier := ""
+		if child.Annotations != nil {
+			tier = child.Annotations[shortcut.HelpTierAnnotation]
+		}
+		switch shortcut.HelpTier(tier) {
+		case shortcut.HelpTierCatalog:
+			catalog = append(catalog, child)
+		case shortcut.HelpTierCompatibility, shortcut.HelpTierUnavailable:
+			continue
+		default:
+			// User-defined Shortcuts and pre-tier declarations remain visible so
+			// the product Help never silently drops an explicitly installed entry.
+			featured = append(featured, child)
+		}
+	}
+	for _, commands := range [][]*cobra.Command{featured, catalog, atomic} {
+		sort.Slice(commands, func(i, j int) bool { return commands[i].Name() < commands[j].Name() })
+	}
+	return featured, catalog, atomic
+}
+
+func renderPreferredShortcutAffordance(cmd *cobra.Command) {
+	if cmd == nil || cmd.Annotations == nil {
+		return
+	}
+	owner := strings.TrimSpace(cmd.Annotations[preferredShortcutCLIPathAnnotation])
+	if owner == "" {
+		return
+	}
+	w := cmd.OutOrStdout()
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Preferred Shortcut:")
+	_, _ = fmt.Fprintf(w, "  dws %s\n", owner)
+	_, _ = fmt.Fprintln(w, "  默认使用 Shortcut；只有需要 Shortcut 未公开的底层参数或原始响应时才直接调用本 atomic 命令。")
+}
+
+func renderChatHelpCommandSection(w io.Writer, title string, commands []*cobra.Command) {
+	if len(commands) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, title)
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, command := range commands {
+		_, _ = fmt.Fprintf(tw, "  %s\t%s\n", command.Name(), strings.TrimSpace(command.Short))
+	}
+	_ = tw.Flush()
+}
+
+func renderCommandFlagSections(w io.Writer, cmd *cobra.Command) {
+	cmd.InitDefaultHelpFlag()
+	if flags := strings.TrimRight(cmd.LocalNonPersistentFlags().FlagUsages(), "\n"); strings.TrimSpace(flags) != "" {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Flags:")
+		_, _ = fmt.Fprintln(w, flags)
+	}
+	if flags := strings.TrimRight(cmd.InheritedFlags().FlagUsages(), "\n"); strings.TrimSpace(flags) != "" {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Global Flags:")
+		_, _ = fmt.Fprintln(w, flags)
+	}
 }
 
 func renderRootHelp(root *cobra.Command) {
@@ -90,6 +220,8 @@ func renderRootHelp(root *cobra.Command) {
 		_, _ = fmt.Fprintln(w)
 	}
 	renderRootGlobalFlags(root)
+	renderAgentQuickstart(w)
+	renderSafetyModel(w)
 	_, _ = fmt.Fprintf(w, "%s %s\n", tui.Key("Next"), `Use "dws <service> --help" for more information about a discovered MCP service or "dws <command> --help" for utility commands.`)
 
 	// Render root.Long after the command list so agents see the upgrade
@@ -101,6 +233,48 @@ func renderRootHelp(root *cobra.Command) {
 		_, _ = fmt.Fprintln(w)
 		_, _ = fmt.Fprintln(w, tui.Dim(long))
 	}
+
+	// Keep the feedback entry last: everything above it is operational guidance
+	// an agent acts on, while the survey is addressed to human readers who
+	// scroll to the end.
+	_, _ = fmt.Fprintln(w)
+	renderRootFeedback(w)
+}
+
+func renderAgentQuickstart(w io.Writer) {
+	_, _ = fmt.Fprintln(w, tui.Section("Agent Quickstart:"))
+	_, _ = fmt.Fprintln(w, "  1. Browse a product: dws <service> --help")
+	_, _ = fmt.Fprintln(w, "  2. Inspect leaf parameters and semantics: dws <path> --help")
+	_, _ = fmt.Fprintln(w, `  3. Read the machine contract: dws schema --cli-path "<path>" --compact -f json`)
+	_, _ = fmt.Fprintln(w, "  4. Prefer structured output. Use dry-run only when the leaf explicitly supports it.")
+	_, _ = fmt.Fprintln(w, "  5. Never add --yes without explicit user confirmation.")
+	_, _ = fmt.Fprintln(w)
+}
+
+func renderSafetyModel(w io.Writer) {
+	_, _ = fmt.Fprintln(w, tui.Section("Safety model:"))
+	_, _ = fmt.Fprintln(w, "  effect=read|write|destructive — whether the command reads, changes, or irreversibly removes state")
+	_, _ = fmt.Fprintln(w, "  risk=low|medium|high — expected impact if the command is used incorrectly")
+	_, _ = fmt.Fprintln(w, "  confirmation=not_required|user_required — whether explicit user approval is required")
+	_, _ = fmt.Fprintln(w, "  idempotency=idempotent|retryable|non_idempotent|unknown — whether repeating the command is safe")
+	_, _ = fmt.Fprintln(w)
+}
+
+// renderRootFeedback prints the user-experience survey entry. The URL occupies
+// its own line and is never wrapped or padded through a tabwriter: it is longer
+// than the help rule width, and breaking it would stop terminals from
+// recognizing it as a clickable hyperlink. Soft wrapping performed by the
+// terminal itself keeps the link intact.
+//
+// The label is intentionally not routed through i18n. Everything surrounding it
+// in this listing — service descriptions, utility descriptions, global flag
+// usage — is hardcoded Chinese, so translating this one line would render it in
+// English on any host whose LANG is not zh_*, leaving a single English line
+// inside an otherwise Chinese screen.
+func renderRootFeedback(w io.Writer) {
+	_, _ = fmt.Fprintln(w, tui.Section("Feedback:"))
+	_, _ = fmt.Fprintf(w, "  %s %s\n", tui.Bullet(), tui.Dim("使用体验反馈问卷（1 分钟）"))
+	_, _ = fmt.Fprintf(w, "    %s\n", tui.Cyan(feedbackFormURL))
 }
 
 func renderRootGlobalFlags(root *cobra.Command) {

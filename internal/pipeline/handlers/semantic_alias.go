@@ -41,6 +41,31 @@ type SemanticAliasHandler struct {
 func (SemanticAliasHandler) Name() string          { return "semantic-alias" }
 func (SemanticAliasHandler) Phase() pipeline.Phase { return pipeline.PreParse }
 
+// ResolveFlagProtection lets command traversal consult the same reviewed
+// blocked/ambiguous table used by Handle. This is intentionally a read-only
+// projection: the handler remains responsible for recording the decision on
+// the final Context.
+func (h SemanticAliasHandler) ResolveFlagProtection(rawCommandPath, morphedFlag string) (pipeline.FlagProtection, bool) {
+	if h.Lookup == nil || rawCommandPath == "" || morphedFlag == "" {
+		return "", false
+	}
+	_, blocked, ambiguous, ok := h.Lookup(rawCommandPath)
+	if !ok {
+		return "", false
+	}
+	for _, name := range ambiguous {
+		if name == morphedFlag {
+			return pipeline.FlagProtectionAmbiguous, true
+		}
+	}
+	for _, name := range blocked {
+		if name == morphedFlag {
+			return pipeline.FlagProtectionBlocked, true
+		}
+	}
+	return "", false
+}
+
 func (h SemanticAliasHandler) Handle(ctx *pipeline.Context) error {
 	if h.Lookup == nil || ctx.Command == "" || len(ctx.Args) == 0 {
 		return nil

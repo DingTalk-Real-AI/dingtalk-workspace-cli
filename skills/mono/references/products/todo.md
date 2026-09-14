@@ -201,9 +201,9 @@ Flags:
 Usage:
   dws todo task add-attachment [flags]
 Example:
-  dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf
+  dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf
 Flags:
-      --file-path string   本地文件路径 (必填)
+      --file string        本地文件路径 (必填)
       --task-id string     待办任务 ID (必填)
 ```
 
@@ -433,7 +433,7 @@ dws todo task reset-reminder --task-id <taskId> --format json
 dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules>' --format json
 
 # 18. 上传附件（真实上传，先确认待办存在）— 从返回 result.attachmentIds 取 attachmentId
-dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
+dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf --format json
 # 19. 查询附件列表 — 从返回 attachments[].attachmentId 取 ID
 dws todo task list-attachment --task-id <taskId> --format json
 # 20. 删除附件（用户确认后加 --yes；删完可 list-attachment 复查为空）
@@ -488,5 +488,7 @@ dws todo task list-sub --task-id <taskId> --format json
 | 脚本 | 场景 | 用法 |
 |------|------|------|
 | [todo_daily_summary.py](../../scripts/todo_daily_summary.py) | 查看今天/明天/本周未完成待办汇总 | `python todo_daily_summary.py today` |
-| [todo_batch_create.py](../../scripts/todo_batch_create.py) | 从 JSON 文件批量创建待办 | `python todo_batch_create.py todos.json` |
+| [todo_batch_create.py](../../scripts/todo_batch_create.py) | 从 JSON 文件批量创建待办 | `python todo_batch_create.py todos.json --dry-run` |
 | [todo_overdue_check.py](../../scripts/todo_overdue_check.py) | 扫描逾期待办输出逾期清单 | `python todo_overdue_check.py` |
+
+批量创建必须先预览精确批次和 `planDigest`；用户明确确认该摘要后，执行时同时提交 `--confirm-digest <PLAN_DIGEST>` 与 `--yes`。脚本会重新规范化输入并核对摘要，内容变化会在首次 `dws` 调用前拒绝。

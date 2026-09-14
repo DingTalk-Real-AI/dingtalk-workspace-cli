@@ -2,7 +2,8 @@
 
 > 本分支权威合同：`skills/mono` / `skills/multi` 的**内容组织**与 zip 内容树形状。  
 > 不做安装/升级行为约定。质检见 [skill-mono-multi-qa.md](skill-mono-multi-qa.md)。  
-> 对齐调研：[skill-wukong-align-plan.md](skill-wukong-align-plan.md)。
+> 安装、升级与模式迁移见
+> [DWS 预制 Skill 安装、升级与模式迁移 RFC](rfc-skill-installation-and-upgrade.md)。
 
 ## 1. 两棵内容树
 
@@ -87,18 +88,7 @@ skills/mono/
 
 质检可断言源树形状；**不**断言安装器默认解压哪棵。
 
-## 6. 与悟空 `dingtalk-skills/` 对照（组织概念 only）
-
-| 维度 | DWS `skills/multi` | 悟空 `dingtalk-skills/`（develop） |
-|---|---|---|
-| 布局 | flat `dingtalk-*` + `dingtalk-shared` | 同构 flat |
-| 集合 | 产品 skill + shared（含 event/profile/…；dev/skill 等长尾落在 misc） | 更小产品集（如 attendance/report 独立目录） |
-| 质检权威 | **mono 单 skill 树** | 不作为 DWS 覆盖基准 |
-| 不移植 | `_install.sh` / bundle / dual / Qwen overlay | — |
-
-悟空独有命名（如 `dingtalk-attendance`）在 DWS 中由 `dingtalk-misc` 承接对应 mono `attendance*` / `report` / `oa` / `sheet` / `dev` 等面——见覆盖表。
-
-## 7. 变更流程
+## 6. 变更流程
 
 1. 改 / 增内容 → 更新 `skills/content-qa/mono-multi-coverage.yaml`（coverage 或 omit）  
 2. 跑 `make skill-mono-multi-content`（该独立门禁不包含在默认 `make policy` 中）

@@ -57,39 +57,118 @@ var (
 	oauthCheckStatus = func(p *OAuthProvider, ctx context.Context, token string) (*CLIAuthStatus, error) {
 		return p.CheckCLIAuthEnabled(ctx, token)
 	}
-	oauthGetAdmins     = GetSuperAdmins
-	oauthSendApply     = SendCliAuthApply
-	oauthSaveToken     = SaveTokenData
-	oauthHasAppConfig  = HasAppConfig
-	oauthSaveAppConfig = SaveAppConfig
-	oauthRefreshToken  = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
+	oauthGetAdmins    = GetSuperAdmins
+	oauthSendApply    = SendCliAuthApply
+	oauthSaveToken    = SaveTokenData
+	oauthRefreshToken = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
 		return p.refreshWithRefreshToken(ctx, data)
 	}
 	oauthSleep = time.Sleep
 )
 
+func oauthFetchClientIDForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
+	if region.IsInternational() {
+		return FetchClientIDFromMCPForLoginRegion(ctx, region)
+	}
+	return oauthFetchClientID(ctx)
+}
+
+func oauthGetAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
+	if region.IsInternational() {
+		return GetSuperAdminsForLoginRegion(ctx, accessToken, region)
+	}
+	return oauthGetAdmins(ctx, accessToken)
+}
+
+func oauthSendApplyForLoginRegion(ctx context.Context, accessToken, adminStaffID string, region LoginRegion) (*SendApplyResponse, error) {
+	if region.IsInternational() {
+		return SendCliAuthApplyForLoginRegion(ctx, accessToken, adminStaffID, region)
+	}
+	return oauthSendApply(ctx, accessToken, adminStaffID)
+}
+
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
-	configDir    string
-	clientID     string
-	logger       *slog.Logger
-	Output       io.Writer
-	httpClient   *http.Client
-	NoBrowser    bool
-	TargetCorpID string
+	configDir     string
+	clientID      string
+	credentials   *AppCredentialPair
+	credentialErr error
+	logger        *slog.Logger
+	Output        io.Writer
+	httpClient    *http.Client
+	NoBrowser     bool
+	TargetCorpID  string
 	// IdentityEnricher resolves userId/userName/corpName while the freshly
 	// exchanged access token is still only in memory.
 	IdentityEnricher func(context.Context, *TokenData) error
+	LoginRegion      LoginRegion
 }
 
 // NewOAuthProvider creates a new OAuth provider.
 func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
-	return &OAuthProvider{
-		configDir:  configDir,
-		clientID:   ClientID(),
-		logger:     logger,
-		Output:     os.Stderr,
-		httpClient: oauthHTTPClient,
+	pair, err := resolveOAuthCredentialPair(configDir)
+	p := &OAuthProvider{
+		configDir:     configDir,
+		credentialErr: err,
+		logger:        logger,
+		Output:        os.Stderr,
+		httpClient:    oauthHTTPClient,
+	}
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	} else {
+		// Keep the legacy observable constructor value for callers that only
+		// inspect the provider. Login always resets this before managed MCP use.
+		p.clientID = ClientID()
+	}
+	return p
+}
+
+func resolveOAuthCredentialPair(configDir string) (*AppCredentialPair, error) {
+	if pair, selected, err := credentialPairFromValues(runtimeCredentialValues()); selected || err != nil {
+		if err != nil {
+			return nil, ErrFlagCredentialPairIncomplete
+		}
+		return &pair, nil
+	}
+	if pair, selected, err := credentialPairFromValues(os.Getenv(EnvClientID), os.Getenv(EnvClientSecret), string(CredentialSourceEnv), ErrEnvCredentialPairIncomplete); selected || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		clearMCPRuntimeCredentials()
+		return &pair, nil
+	}
+	pair, err := ResolveAppConfigCredentialPair(configDir)
+	if err == nil {
+		clearMCPRuntimeCredentials()
+		return &pair, nil
+	}
+	if errors.Is(err, ErrAppConfigMissing) || errors.Is(err, ErrClientIDEmpty) || errors.Is(err, ErrClientSecretEmpty) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func runtimeCredentialValues() (string, string, string, error) {
+	clientMu.RLock()
+	id, secret, fromMCP := runtimeClientID, runtimeClientSecret, clientIDFromMCP
+	clientMu.RUnlock()
+	if fromMCP {
+		return "", "", string(CredentialSourceFlag), ErrFlagCredentialPairIncomplete
+	}
+	return id, secret, string(CredentialSourceFlag), ErrFlagCredentialPairIncomplete
+}
+
+func (p *OAuthProvider) snapshotCredentialPair() {
+	pair, err := resolveOAuthCredentialPair(p.configDir)
+	p.credentials = nil
+	p.credentialErr = err
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
 	}
 }
 
@@ -98,9 +177,8 @@ func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
 // credentials. Complete runtime AppKey/AppSecret overrides skip this reset.
 func (p *OAuthProvider) resetCredentialState() {
 	p.clientID = ""
-	clientMu.Lock()
-	clientIDFromMCP = false
-	clientMu.Unlock()
+	p.credentials = nil
+	clearRuntimeCredentials()
 }
 
 func (p *OAuthProvider) output() io.Writer {
@@ -114,6 +192,10 @@ func (p *OAuthProvider) output() io.Writer {
 // 1. If force=false, try silent token refresh first (refresh_token)
 // 2. If all silent methods fail (or force=true), fall back to browser OAuth flow
 func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, error) {
+	p.snapshotCredentialPair()
+	if p.credentialErr != nil {
+		return nil, fmt.Errorf("应用凭证配置无效: %w", p.credentialErr)
+	}
 	// Smart degradation: try silent refresh before opening browser.
 	if !force {
 		data, err := oauthLoadToken(p.configDir)
@@ -132,10 +214,6 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				if p.logger != nil {
 					p.logger.Debug("access_token still valid, skipping login")
 				}
-				// Even on early return, persist custom app credentials if provided
-				// via --client-id/--client-secret flags. Without this, the flags
-				// are only in runtime globals and lost when the process exits.
-				p.persistAppConfigIfNeeded()
 				return data, nil
 			}
 			// Case 2: refresh using refresh_token (with lock to prevent concurrent refresh).
@@ -145,7 +223,6 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				}
 				refreshed, rErr := p.lockedRefresh(ctx)
 				if rErr == nil {
-					p.persistAppConfigIfNeeded()
 					return refreshed, nil
 				}
 				if p.logger != nil {
@@ -159,11 +236,9 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Fall through: full browser OAuth flow.
-	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
-		p.clientID = runtimeClientID
-		clientMu.Lock()
-		clientIDFromMCP = false
-		clientMu.Unlock()
+	if p.credentials != nil {
+		p.clientID = p.credentials.ClientID
+		clearMCPRuntimeCredentials()
 	} else {
 		// Defensive reset: clear any stale credential state from previous login
 		// methods so we can re-fetch clientID from MCP. This ensures --force
@@ -173,7 +248,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		if p.logger != nil {
 			p.logger.Debug("fetching client ID from MCP server (OAuth flow always re-fetches)")
 		}
-		mcpClientID, mcpErr := oauthFetchClientID(ctx)
+		mcpClientID, mcpErr := oauthFetchClientIDForLoginRegion(ctx, p.LoginRegion)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
@@ -401,7 +476,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := oauthGetAdmins(ctx, token.AccessToken)
+		result, err := oauthGetAdminsForLoginRegion(ctx, token.AccessToken, p.LoginRegion)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -425,7 +500,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := oauthSendApply(ctx, token.AccessToken, adminStaffID)
+		result, err := oauthSendApplyForLoginRegion(ctx, token.AccessToken, adminStaffID, p.LoginRegion)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -448,7 +523,13 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		applySent := callbackApplySent
 		selectedAdminId := callbackSelectedAdminId
 		callbackTokenMu.Unlock()
-		_, _ = fmt.Fprintf(w, `{"clientId":"%s","applySent":%t,"selectedAdminId":"%s"}`, p.clientID, applySent, selectedAdminId)
+		data, _ := json.Marshal(map[string]any{
+			"clientId":        p.clientID,
+			"authorizeUrl":    AuthorizeURLForLoginRegion(p.LoginRegion),
+			"applySent":       applySent,
+			"selectedAdminId": selectedAdminId,
+		})
+		_, _ = w.Write(data)
 	})
 
 	// API endpoint: check CLI auth enabled status
@@ -491,7 +572,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURL(p.clientID, redirectURI, p.TargetCorpID)
+	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}
@@ -631,18 +712,8 @@ continueLogin:
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
 
-	// Persist app credentials (with secret) if using custom client credentials.
-	// MUST run BEFORE os.Setenv below to avoid env-matching short circuit.
+	// Persist the exact pair snapshotted before authorization began.
 	p.persistAppConfigIfNeeded()
-
-	// Always persist clientId to app.json so future process startups
-	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
-	if p.clientID != "" {
-		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		if !oauthHasAppConfig(p.configDir) {
-			_ = oauthSaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
-		}
-	}
 
 	return tokenData, nil
 }
@@ -783,7 +854,207 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	if p.logger != nil {
 		p.logger.Debug("refreshing token (dual-locked)")
 	}
-	return oauthRefreshToken(p, ctx, data)
+	refreshed, rErr := oauthRefreshToken(p, ctx, data)
+	if rErr == nil || !isRefreshTokenRejected(rErr) {
+		return refreshed, rErr
+	}
+	// A stale identity slot can survive an older organization-only refresh.
+	// Retry once with the same-corp organization mirror while holding the
+	// existing dual lock; the fallback marks the publication so the rotated
+	// credential is written back into the mirror slot it consumed.
+	logging.AuthDebug(
+		"auth.refresh.fallback.triggered",
+		"corp_id", strings.TrimSpace(data.CorpID),
+		"user_id", strings.TrimSpace(data.UserID),
+		"error", rErr,
+	)
+	fallback, fErr := p.refreshFromOrgSlot(ctx, data)
+	if fErr != nil {
+		logging.AuthDebug("auth.refresh.fallback.unavailable", "error", fErr)
+		// The organization mirror may be absent for long-lived local logins
+		// that predate mirror publication. Recover from the legacy global
+		// slot before giving up.
+		if recovered, recoverErr := p.recoverRefreshFromLegacyGlobalSlot(ctx, data, rErr); recoverErr == nil {
+			return recovered, nil
+		}
+		return nil, rErr
+	}
+	if p.logger != nil {
+		p.logger.Warn(i18n.T("当前身份的 refresh_token 已失效，已从组织镜像 token 恢复登录态"))
+	}
+	return fallback, nil
+}
+
+// refreshFromOrgSlot retries a rejected refresh with the token mirrored in
+// the organization slot. The mirror must match the current corp, be valid,
+// and differ from the rejected token. When both slots carry user identities,
+// they must agree; legacy mirrors with an empty UserID are backfilled from the
+// current identity before refresh.
+func (p *OAuthProvider) refreshFromOrgSlot(ctx context.Context, current *TokenData) (*TokenData, error) {
+	if current == nil {
+		return nil, fmt.Errorf("no current token data")
+	}
+	corpID := strings.TrimSpace(current.CorpID)
+	if corpID == "" {
+		return nil, fmt.Errorf("current token has no corpId")
+	}
+	orgData, err := tokenLoadKeychainForCorpID(corpID)
+	if err != nil {
+		return nil, err
+	}
+	if orgData == nil {
+		return nil, ErrTokenDataNotFound
+	}
+	if strings.TrimSpace(orgData.CorpID) != corpID {
+		return nil, fmt.Errorf("organization token mirror for corpId %q contains token for corpId %q; refusing refresh fallback", corpID, orgData.CorpID)
+	}
+	if !orgData.IsRefreshTokenValid() {
+		return nil, fmt.Errorf("organization mirror refresh_token 已过期")
+	}
+	if orgData.RefreshToken == current.RefreshToken {
+		return nil, fmt.Errorf("organization mirror holds the same rejected refresh_token")
+	}
+	currentUserID := strings.TrimSpace(current.UserID)
+	orgUserID := strings.TrimSpace(orgData.UserID)
+	if currentUserID != "" && orgUserID != "" && orgUserID != currentUserID {
+		return nil, fmt.Errorf("organization token mirror for corpId %q belongs to userId %q; refusing refresh fallback for userId %q", corpID, orgData.UserID, current.UserID)
+	}
+	if orgUserID == "" {
+		orgData.UserID = current.UserID
+		orgData.UserName = current.UserName
+	}
+	// The refresh below consumes the mirror's refresh_token. Mark the
+	// publication so persistence writes the rotated credential back into the
+	// organization slot even under an explicit runtime selector whose plan
+	// would otherwise skip it (for example a preserved unresolved sibling).
+	orgData.RepairOrganizationMirror = true
+	refreshed, err := oauthRefreshToken(p, ctx, orgData)
+	if err != nil {
+		return nil, err
+	}
+	logging.AuthDebug(
+		"auth.refresh.fallback.success",
+		"corp_id", corpID,
+		"new_at_expires_at", refreshed.ExpiresAt.Format(time.RFC3339),
+	)
+	return refreshed, nil
+}
+
+func (p *OAuthProvider) recoverRefreshFromLegacyGlobalSlot(ctx context.Context, selected *TokenData, refreshErr error) (*TokenData, error) {
+	var exchangeErr *MCPTokenExchangeError
+	if !errors.As(refreshErr, &exchangeErr) || !exchangeErr.requiresReauthorization() {
+		return nil, refreshErr
+	}
+	if selected == nil {
+		return nil, refreshErr
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.triggered",
+		"corp_id", strings.TrimSpace(selected.CorpID),
+		"user_id", strings.TrimSpace(selected.UserID),
+		"refresh_error_code", exchangeErr.Code,
+	)
+	legacy, loadErr := tokenLoadKeychain()
+	if loadErr != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "load_legacy", "error", loadErr)
+		return nil, refreshErr
+	}
+	if legacy == nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "load_legacy", "reason", "empty_legacy")
+		return nil, refreshErr
+	}
+	if !legacyGlobalRefreshCandidateMatches(p.configDir, selected, legacy) {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed",
+			"step", "candidate_mismatch",
+			"legacy_corp_id", strings.TrimSpace(legacy.CorpID),
+			"legacy_user_id", strings.TrimSpace(legacy.UserID),
+		)
+		return nil, refreshErr
+	}
+	recovered := *legacy
+	if strings.TrimSpace(recovered.UserID) == "" {
+		recovered.UserID = strings.TrimSpace(selected.UserID)
+	}
+	if strings.TrimSpace(recovered.UserName) == "" {
+		recovered.UserName = strings.TrimSpace(selected.UserName)
+	}
+	if recovered.IsAccessTokenValid() {
+		if err := oauthSaveTokenLocked(p.configDir, &recovered); err != nil {
+			logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "save", "error", err)
+			return nil, refreshErr
+		}
+		logging.AuthDebug("auth.refresh.legacy_recovery.success", "via", "valid_access_token")
+		return &recovered, nil
+	}
+	if !recovered.IsRefreshTokenValid() {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "refresh_expired")
+		return nil, refreshErr
+	}
+	if strings.TrimSpace(recovered.RefreshToken) == strings.TrimSpace(selected.RefreshToken) {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "same_refresh_token")
+		return nil, refreshErr
+	}
+	if err := preflightTokenRefreshPersistence(p.configDir, &recovered); err != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "preflight", "error", err)
+		return nil, refreshErr
+	}
+	refreshed, recoverErr := oauthRefreshToken(p, ctx, &recovered)
+	if recoverErr != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "refresh", "error", recoverErr)
+		return nil, refreshErr
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.success", "via", "refresh")
+	return refreshed, nil
+}
+
+func legacyGlobalRefreshCandidateMatches(configDir string, selected, legacy *TokenData) bool {
+	if selected == nil || legacy == nil {
+		return false
+	}
+	selectedCorpID := strings.TrimSpace(selected.CorpID)
+	legacyCorpID := strings.TrimSpace(legacy.CorpID)
+	if selectedCorpID == "" || legacyCorpID != selectedCorpID {
+		return false
+	}
+	selectedUserID := strings.TrimSpace(selected.UserID)
+	legacyUserID := strings.TrimSpace(legacy.UserID)
+	if legacyUserID != "" {
+		return legacyUserID == selectedUserID
+	}
+	return legacyGlobalBlankUserIDMatchesSingleProfile(configDir, selectedCorpID, selectedUserID)
+}
+
+func legacyGlobalBlankUserIDMatchesSingleProfile(configDir, corpID, userID string) bool {
+	if strings.TrimSpace(corpID) == "" {
+		return false
+	}
+	cfg, err := tokenLoadProfiles(configDir)
+	if err != nil || cfg == nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected", "reason", "profiles_error", "error", err)
+		return false
+	}
+	profiles := profilesForCorpID(cfg, corpID)
+	if len(profiles) != 1 {
+		logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected",
+			"reason", "multi_profile",
+			"corp_id", strings.TrimSpace(corpID),
+			"profile_count", len(profiles),
+		)
+		return false
+	}
+	profile := profiles[0]
+	if profile != nil && sameProfileIdentity(profile.CorpID, profile.UserID, corpID, userID) {
+		return true
+	}
+	profileUserID := ""
+	if profile != nil {
+		profileUserID = strings.TrimSpace(profile.UserID)
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected",
+		"reason", "identity_mismatch",
+		"selected_user_id", strings.TrimSpace(userID),
+		"profile_user_id", profileUserID,
+	)
+	return false
 }
 
 // ExchangeAuthCode takes an AuthCode and an optional UserID provided by an
@@ -801,11 +1072,13 @@ func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid stri
 		if err := p.persistKnownLoginToken(tokenData); err != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 		}
+		p.persistAppConfigIfNeeded()
 		return tokenData, nil
 	}
 	if err := p.persistLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+	p.persistAppConfigIfNeeded()
 	return tokenData, nil
 }
 
@@ -831,6 +1104,9 @@ func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenD
 		"user_id", strings.TrimSpace(tokenData.UserID),
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
@@ -866,6 +1142,10 @@ func (p *OAuthProvider) persistKnownLoginToken(tokenData *TokenData) error {
 	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
 		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
 	}
+	tokenData.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
@@ -885,11 +1165,17 @@ func (p *OAuthProvider) Status() (*TokenData, error) {
 // persistAppConfigIfNeeded saves app credentials if custom ones were used.
 // This ensures the client secret is available for future token refreshes.
 func (p *OAuthProvider) persistAppConfigIfNeeded() {
-	// Check if custom credentials were provided via runtime flags
-	clientID, clientSecret := getRuntimeCredentials()
-	if clientID == "" || clientSecret == "" {
+	if p == nil {
 		return
 	}
+	if p.credentials == nil {
+		p.snapshotCredentialPair()
+	}
+	if p.credentialErr != nil || p.credentials == nil {
+		return
+	}
+	clientID := p.credentials.ClientID
+	clientSecret := p.credentials.ClientSecret
 
 	// Skip if using default placeholder credentials
 	if clientID == DefaultClientID {

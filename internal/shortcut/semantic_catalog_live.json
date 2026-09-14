@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "service": "live",
+  "default_availability": "available",
+  "shortcuts": {
+    "+list-my-lives": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格校验 success、result 对象、total、hasFinish、liveDetailModelList、坏元素、稳定且不重复的直播 ID；live MCP 元数据没有筛选或分页参数，有界 exact raw 仍出现 total>0、hasFinish=true 与空数组冲突，保持不可用。",
+      "risk": "read",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    }
+  }
+}

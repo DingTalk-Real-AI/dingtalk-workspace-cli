@@ -43,6 +43,7 @@ type PagedMCPCommandConfig struct {
 	AggregationMode PagedAggregationMode
 	BuildArgs       func(*cobra.Command) (map[string]any, error)
 	Fallback        func(map[string]any) error
+	ProjectResult   func(map[string]any) map[string]any
 }
 
 type pagedCommandOptions struct {
@@ -314,6 +315,9 @@ func writePagedCommandResult(envelope map[string]any, cfg PagedMCPCommandConfig,
 		paging["resumeCursorReliable"] = false
 	}
 	envelope["paging"] = paging
+	if cfg.ProjectResult != nil {
+		envelope = cfg.ProjectResult(envelope)
+	}
 	return deps.Out.PrintJSON(envelope)
 }
 

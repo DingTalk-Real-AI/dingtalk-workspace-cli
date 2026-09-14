@@ -10,7 +10,7 @@
 | 模板预览 | `https://docs.dingtalk.com/table/template/{templateId}` |
 
 > **操作后请返回文档 URI**：每次执行 base list/search/create/get 操作后，从返回数据中提取 `baseId`，拼接为 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 返回给用户。
-> 补充：如果 URL 不是来自 `aitable` 命令返回，而是用户直接贴的原始 `alidocs` URL，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe，确认是 `able` 后再按 AI 表格处理。
+> 补充：如果 URL/节点 ID 不是来自当前 `aitable` 调用的已验证返回，而是用户直接提供，先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe；`extension=dlink` 时逐跳消费目标 `linkSourceInfo`，确认最终目标为 `able` 后再按 AI 表格处理。
 
 ## 命令索引表
 
@@ -55,6 +55,8 @@
 | `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `table get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference；`--query`（隐藏别名 `--keyword`）全文搜索 |
 | `record list` | 获取记录（`record query` 的别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 与 `record query` 等价 |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
+| `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
+| `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 小写；group 为 JSON 数组字符串；最多 1000 个分组 |
 | `record query-empty` | 查询完全没填用户字段的空行 | — | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]，`--cursor` 翻页 |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；只传需改字段；**没有** `--record-id` `--cells` flag |
@@ -327,6 +329,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"记录/行/数据/row":
 - 查看/搜索 → `record query`（读 [aitable-record-query.md](./aitable/aitable-record-query.md)）
+- 总数/求和/平均值/中位数/完整率等标量统计 → `record stats`（读 [aitable-record-stats.md](./aitable/aitable-record-stats.md)）
+- 分组统计/唯一实体计数/去重率 → `record group-stats`（读 [aitable-record-stats.md](./aitable/aitable-record-stats.md)）
 - 已知 recordId 反查字段值 → `record get`（按 ID 取专用，等价 `record query --record-ids`）
 - 添加/写入 → `record create`（读 [aitable-record-create.md](./aitable/aitable-record-create.md)）
 - 修改/更新 → `record update`（读 [aitable-record-update.md](./aitable/aitable-record-update.md)）
@@ -334,7 +338,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"筛选/过滤/filter" → 读 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md)
 
-用户说"统计/分析/聚合/TOP N/全量" → 读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)
+用户说"统计/分析/聚合/TOP N/全量" → 先读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)，聚合参数见 [aitable-record-stats.md](./aitable/aitable-record-stats.md)
 
 用户说"公式/formula/计算字段/派生指标" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)
 
@@ -383,15 +387,16 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 | `record query` | `recordId` | record update/delete；按 ID 反查字段值用 `record get` |
 | `template search` | `templateId` | base create --template-id，拼接模板预览 URI |
 
-## URL → baseId 提取
+## URL/节点 ID → baseId 规范化
 
-用户提供 `https://alidocs.dingtalk.com/i/nodes/{baseId}` 链接时：
-1. 提取 `/nodes/` 后的路径段作为 `baseId`
-2. 去掉尾部的查询参数（`?` 及其后内容）
-3. 传入 `--base-id` 参数
+用户提供 `https://alidocs.dingtalk.com/i/nodes/{id}` 或来源未验证的 nodeId 时：
+1. 先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) 执行 `dws drive info`
+2. 若为 `extension=dlink`，执行 `dws doc info` 并逐跳消费目标 `linkSourceInfo`；记录已访问 ID，失败、字段缺失或 ID 重复即停
+3. 只有最终目标 `extension=able` 时，才将最终目标 nodeId 作为 `baseId`
+4. 已确认的 AITable URL 如含 table/view 参数，再解析并复用这些稳定 ID
 
 > 如果该 URL 来自 `dws aitable` 返回或已在当前链路 probe 过，可直接复用；
-> 如果是用户直接提供的原始 `alidocs` URL，则先按 [链接规范](../url-patterns.md#alidocs-url-类型探测流程) probe，确认 `extension=able` 后再继续。
+> 禁止直接把 dlink 快捷方式入口的路径段当作 baseId。明确移动、重命名或删除快捷方式入口本身时才保留顶层 nodeId，并改走对应的 Drive 入口管理命令。
 
 ## 注意事项
 

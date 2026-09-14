@@ -25,6 +25,7 @@ import (
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -34,6 +35,16 @@ type chatMessageSearchCall struct {
 	productID string
 	toolName  string
 	args      map[string]any
+}
+
+func chatCallsByTool(calls []chatMessageSearchCall, toolName string) []chatMessageSearchCall {
+	filtered := make([]chatMessageSearchCall, 0, 1)
+	for _, call := range calls {
+		if call.toolName == toolName {
+			filtered = append(filtered, call)
+		}
+	}
+	return filtered
 }
 
 type chatMessageSearchCaller struct {
@@ -56,7 +67,7 @@ func (c *chatMessageSearchCaller) CallTool(_ context.Context, productID, toolNam
 		if c.failPreflight {
 			return nil, errors.New("conversation not found")
 		}
-		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `"}}`
+		text = `{"success":true,"result":{"conversationInfo":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}}`
 	}
 	if toolName == "search_messages_by_keyword" || toolName == "search_messages" {
 		if c.searchError != nil {
@@ -683,6 +694,13 @@ type chatChangedContractCaller struct {
 func (c *chatChangedContractCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
 	text := `{}`
+	if toolName == "list_messages_by_ids" {
+		messageID := args["openMsgIds"].([]string)[0]
+		text = `{"result":[{"openMessageId":"` + messageID + `","openConversationId":"cid"}]}`
+	}
+	if toolName == "get_conversation_info" {
+		text = `{"success":true,"result":{"conversationInfo":{"openConversationId":"` + args["openConversationId"].(string) + `","convThreadEnabled":false}}}`
+	}
 	if c.resolveUsers && toolName == "get_user_info_by_user_ids" {
 		text = `{"result":[{"userId":"123","openDingTalkId":"open-123"}]}`
 	}
@@ -701,13 +719,17 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	cmd := newChatCommand()
-	if cmd.PersistentFlags().Lookup("yes") == nil {
-		cmd.PersistentFlags().Bool("yes", false, "skip confirmation")
-	}
+	installExampleGlobalFlags(cmd)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(append(append([]string(nil), args...), "--yes"))
-	return cmd.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := cmd.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
 }
 
 func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.T) {
@@ -723,6 +745,99 @@ func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.
 	want := map[string]any{"openconversation_id": "cid-1", "time": "2026-07-15 09:00:00", "forward": true, "limit": 50}
 	if !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDefaultTimeUsesShanghaiLocation(t *testing.T) {
+	previousLocal := time.Local
+	t.Cleanup(func() { time.Local = previousLocal })
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantTool   string
+		wantTarget map[string]any
+	}{
+		{
+			name:       "group",
+			args:       []string{"message", "list", "--group", "cid-1", "--limit", "50"},
+			wantTool:   "list_conversation_message_v2",
+			wantTarget: map[string]any{"openconversation_id": "cid-1"},
+		},
+		{
+			name:       "user",
+			args:       []string{"message", "list", "--user", "user-1", "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"userId": "user-1"},
+		},
+		{
+			name:       "user open DingTalk ID fallback",
+			args:       []string{"message", "list", "--user", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+		{
+			name:       "open DingTalk ID",
+			args:       []string{"message", "list", "--open-dingtalk-id", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+		{
+			name:       "direct user",
+			args:       []string{"message", "list-direct", "--user", "user-1", "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"userId": "user-1"},
+		},
+		{
+			name:       "direct open DingTalk ID",
+			args:       []string{"message", "list-direct", "--open-dingtalk-id", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+	}
+
+	for _, loc := range []*time.Location{time.UTC, time.FixedZone("EST", -5*3600)} {
+		t.Run(loc.String(), func(t *testing.T) {
+			time.Local = loc
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					caller := &chatChangedContractCaller{}
+					before := time.Now()
+					err := executeChatChangedContract(t, caller, tt.args...)
+					after := time.Now()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(caller.calls) != 1 {
+						t.Fatalf("calls = %#v, want one MCP call", caller.calls)
+					}
+					if caller.calls[0].toolName != tt.wantTool {
+						t.Fatalf("tool = %q, want %q", caller.calls[0].toolName, tt.wantTool)
+					}
+					for key, want := range tt.wantTarget {
+						if got := caller.calls[0].args[key]; got != want {
+							t.Fatalf("arg %s = %#v, want %#v", key, got, want)
+						}
+					}
+					raw, ok := caller.calls[0].args["time"].(string)
+					if !ok || raw == "" {
+						t.Fatalf("time arg = %#v, want non-empty string", caller.calls[0].args["time"])
+					}
+					gotMs, err := parseISOTimeToMillis("time", raw)
+					if err != nil {
+						t.Fatalf("time arg = %q, parse err = %v", raw, err)
+					}
+					wantMin := before.Add(-time.Second).UnixMilli()
+					wantMax := after.Add(time.Second).UnixMilli()
+					if gotMs < wantMin || gotMs > wantMax {
+						t.Fatalf("time arg = %q (%d), want between %d and %d", raw, gotMs, wantMin, wantMax)
+					}
+					if caller.calls[0].args["forward"] != false {
+						t.Fatalf("forward = %#v, want false when --time is omitted", caller.calls[0].args["forward"])
+					}
+				})
+			}
+		})
 	}
 }
 
@@ -743,6 +858,22 @@ func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+	}
+}
+
+func TestCrossPlatformCoverageChatAuditRejectsUnsupportedStatus(t *testing.T) {
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller,
+		"group", "audit-join-validation",
+		"--group", "cid-1", "--record-id", "123", "--applicant", "user-a", "--inviter", "user-b", "--status", "AuditRefuse")
+	if err == nil {
+		t.Fatal("expected unsupported audit status error")
+	}
+	if !strings.Contains(err.Error(), `unsupported audit status "AuditRefuse"`) {
+		t.Fatalf("error = %v, want unsupported status", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("unsupported status must not call MCP: %#v", caller.calls)
 	}
 }
 
@@ -772,11 +903,11 @@ func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 	}{
 		{
 			name: "send",
-			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello"},
+			args: []string{"message", "send", "--open-dingtalk-id", helperCurrentDOpenID, "--text", "hello"},
 		},
 		{
 			name: "reply",
-			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello"},
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", helperCurrentDOpenID, "--text", "hello"},
 		},
 	}
 
@@ -786,10 +917,11 @@ func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			if got := caller.calls[0].args["clawType"]; got != "qwenwork" {
+			if got := sendCalls[0].args["clawType"]; got != "qwenwork" {
 				t.Fatalf("clawType = %#v, want qwenwork", got)
 			}
 		})
@@ -805,11 +937,11 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 	}{
 		{
 			name: "send",
-			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello", "--ai-tag=false"},
+			args: []string{"message", "send", "--open-dingtalk-id", helperCurrentDOpenID, "--text", "hello", "--ai-tag=false"},
 		},
 		{
 			name: "reply",
-			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello", "--ai-tag=false"},
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", helperCurrentDOpenID, "--text", "hello", "--ai-tag=false"},
 		},
 	}
 
@@ -819,10 +951,11 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			got, present := caller.calls[0].args["clawType"]
+			got, present := sendCalls[0].args["clawType"]
 			if !present || got != "" {
 				t.Fatalf("clawType = %#v, present = %v; want present empty string", got, present)
 			}
@@ -843,25 +976,25 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 			name: "send",
 			args: []string{
 				"message", "send", "--group", "cid",
-				"--text", "收到 @D-target 和 <@D-second>",
-				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--text", "收到 @" + helperCurrentDOpenID + " 和 <@" + helperCurrentDOpenID2 + ">",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2,
 				"--at-all",
 			},
 			contentField: "text",
-			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantContent:  "<@all> 收到 <@" + helperCurrentDOpenID + "> 和 <@" + helperCurrentDOpenID2 + ">",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target", "D-second"},
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2},
 		},
 		{
 			name: "send keeps missing member placeholders unchanged",
 			args: []string{
 				"message", "send", "--group", "cid",
 				"--text", "DWS 发消息自测",
-				"--at-open-dingtalk-ids", "D-target",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID,
 			},
 			contentField: "text",
 			wantContent:  "DWS 发消息自测",
-			wantOpenIDs:  []string{"D-target"},
+			wantOpenIDs:  []string{helperCurrentDOpenID},
 		},
 		{
 			name: "reply",
@@ -869,15 +1002,15 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
-				"--text", "收到 @D-target 和 <@D-second>",
-				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--ref-sender", helperCurrentDOpenID,
+				"--text", "收到 @" + helperCurrentDOpenID + " 和 <@" + helperCurrentDOpenID2 + ">",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2,
 				"--at-all",
 			},
 			contentField: "content",
-			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantContent:  "<@all> 收到 <@" + helperCurrentDOpenID + "> 和 <@" + helperCurrentDOpenID2 + ">",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target", "D-second"},
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2},
 		},
 		{
 			name: "reply adds missing member placeholders",
@@ -885,13 +1018,13 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
-				"--text", "DWS 回复艾特前津（非主用）自测",
-				"--at-open-dingtalk-ids", "D-target,D-second,D-target",
+				"--ref-sender", helperCurrentDOpenID,
+				"--text", "DWS synthetic reply mention test",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2 + "," + helperCurrentDOpenID,
 			},
 			contentField: "content",
-			wantContent:  "<@D-target> <@D-second> DWS 回复艾特前津（非主用）自测",
-			wantOpenIDs:  []string{"D-target", "D-second", "D-target"},
+			wantContent:  "<@" + helperCurrentDOpenID + "> <@" + helperCurrentDOpenID2 + "> DWS synthetic reply mention test",
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2, helperCurrentDOpenID},
 		},
 		{
 			name: "reply adds missing member placeholders after at-all",
@@ -899,15 +1032,15 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "请大家确认",
-				"--at-open-dingtalk-ids", "D-target",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID,
 				"--at-all",
 			},
 			contentField: "content",
-			wantContent:  "<@all> <@D-target> 请大家确认",
+			wantContent:  "<@all> <@" + helperCurrentDOpenID + "> 请大家确认",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target"},
+			wantOpenIDs:  []string{helperCurrentDOpenID},
 		},
 		{
 			name: "reply at-all preserves alliance word",
@@ -915,7 +1048,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "联系 @alliance",
 				"--at-all",
 			},
@@ -929,7 +1062,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "联系 @alliance",
 			},
 			contentField: "content",
@@ -943,10 +1076,11 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+			sendCalls := chatCallsByTool(caller.calls, "send_personal_message")
+			if len(sendCalls) != 1 {
 				t.Fatalf("calls = %#v", caller.calls)
 			}
-			args := caller.calls[0].args
+			args := sendCalls[0].args
 			gotAtAll, hasAtAll := args["atAll"]
 			if tc.wantAtAll {
 				if !hasAtAll || gotAtAll != true {

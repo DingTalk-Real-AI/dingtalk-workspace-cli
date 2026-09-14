@@ -6,8 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func executeTodoEdge(t *testing.T, caller *scriptedToolCaller, args ...string) error {
@@ -44,9 +47,11 @@ func TestCrossPlatformCoverageTodoCreateAndListCommandEdges(t *testing.T) {
 	errorCases := [][]string{
 		{"task", "create", "--title", "x", "--executors", "u", "--remind-at", validDate},
 		{"task", "create", "--title", "x", "--executors", "u", "--due", "bad"},
+		{"task", "create", "--title", "x", "--executors", "u", "--priority", "bad"},
 		{"task", "create-sub", "--title", "x", "--executors", "u", "--parent-id", "abc"},
 		{"task", "create-sub", "--title", "x", "--executors", "u", "--parent-id", "1", "--remind-at", validDate},
 		{"task", "create-sub", "--title", "x", "--executors", "u", "--parent-id", "1", "--due", "bad"},
+		{"task", "create-sub", "--title", "x", "--executors", "u", "--parent-id", "1", "--priority", "bad"},
 		{"task", "list", "--role-types", "invalid"},
 		{"task", "list", "--plan-finish-date-start", "bad"},
 		{"task", "list", "--plan-finish-date-end", "bad"},
@@ -59,9 +64,8 @@ func TestCrossPlatformCoverageTodoCreateAndListCommandEdges(t *testing.T) {
 
 	validCases := [][]string{
 		{"task", "create", "--title", "x", "--executors", "u1,u2", "--due", validDate, "--priority", "40", "--recurrence", "daily"},
-		{"task", "create", "--subject", "x", "--executors", "u", "--priority", "bad"},
+		{"task", "create", "--subject", "x", "--executors", "u", "--priority", "20"},
 		{"task", "create-sub", "--content", "x", "--executors", "u", "--parent-id", "1", "--due", validDate, "--priority", "40", "--recurrence", "daily"},
-		{"task", "create-sub", "--title", "x", "--executors", "u", "--parent-id", "1", "--priority", "bad"},
 		{"task", "list", "--size", "bad"},
 		{"task", "list", "--status", "true", "--priority", "40,bad", "--role-types", "creator,executor", "--plan-finish-date-start", validDate, "--plan-finish-date-end", validDate},
 	}
@@ -73,6 +77,63 @@ func TestCrossPlatformCoverageTodoCreateAndListCommandEdges(t *testing.T) {
 	if err := executeTodoEdge(t, &scriptedToolCaller{dry: true}, "task", "list", "--size", "21"); err != nil {
 		t.Fatalf("dry auto-page: %v", err)
 	}
+}
+
+func TestCrossPlatformCoverageTodoRejectsEmptyExecutorCSVAndNonNumericPriorityBeforeCall(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+		args   []string
+	}{
+		{name: "create empty executors", reason: "invalid_executors", args: []string{"task", "create", "--title", "x", "--executors", ",,,"}},
+		{name: "create-sub empty executors", reason: "invalid_executors", args: []string{"task", "create-sub", "--parent-id", "1", "--title", "x", "--executors", " , , "}},
+		{name: "add empty executors", reason: "invalid_executors", args: []string{"task", "add-executor", "--task-id", "1", "--executors", ",,,"}},
+		{name: "remove empty executors", reason: "invalid_executors", args: []string{"task", "remove-executor", "--task-id", "1", "--executors", ",,,"}},
+		{name: "create nonnumeric priority", reason: "invalid_priority", args: []string{"task", "create", "--title", "x", "--executors", "u", "--priority", "normal"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := executeTodoEdge(t, caller, test.args...)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != test.reason {
+				t.Fatalf("error = %T %v, want reason %q", err, err, test.reason)
+			}
+			if typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+				t.Fatalf("execution_started = %v, want false", typed.ExecutionStarted)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("invalid input made %d MCP call(s)", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageTodoCreateAcceptsNumericPriority(t *testing.T) {
+	for _, priority := range []string{"20", "25"} {
+		t.Run(priority, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			if err := executeTodoEdge(t, caller, "task", "create", "--title", "x", "--executors", "u", "--priority", priority); err != nil {
+				t.Fatalf("create priority %s: %v", priority, err)
+			}
+			if caller.calls != 1 || caller.tool != "create_personal_todo" {
+				t.Fatalf("calls = %d tool = %q", caller.calls, caller.tool)
+			}
+			request, ok := caller.args["PersonalTodoCreateVO"].(map[string]any)
+			if !ok || request["priority"] != mustTodoAtoi(t, priority) {
+				t.Fatalf("request = %#v, want priority %s", caller.args, priority)
+			}
+		})
+	}
+}
+
+func mustTodoAtoi(t *testing.T, value string) int {
+	t.Helper()
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		t.Fatalf("parse %q: %v", value, err)
+	}
+	return parsed
 }
 
 func TestCrossPlatformCoverageTodoSimpleCommandValidationAndSuccessEdges(t *testing.T) {
@@ -143,6 +204,7 @@ func TestCrossPlatformCoverageTodoUpdateReminderAndDetailEdges(t *testing.T) {
 	errorCases := [][]string{
 		{"task", "update", "--task-id", "1", "--remind-at", validDate},
 		{"task", "update", "--task-id", "1", "--due", "bad"},
+		{"task", "update", "--task-id", "1", "--priority", "bad"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "customTime", "--reminder-time-stamp", "bad"},
 		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[{"baseTime":"customTime","reminderTimeStamp":"bad"}]`},
 		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `not-json`},
@@ -155,7 +217,6 @@ func TestCrossPlatformCoverageTodoUpdateReminderAndDetailEdges(t *testing.T) {
 	}
 	validCases := [][]string{
 		{"task", "update", "--task-id", "1", "--title", "new", "--due", validDate, "--priority", "40", "--done", "true"},
-		{"task", "update", "--task-id", "1", "--priority", "bad"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "dueTime", "--due-date-offset", "-10"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "customTime", "--reminder-time-stamp", validDate},
 	}

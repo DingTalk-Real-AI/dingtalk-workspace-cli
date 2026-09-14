@@ -23,8 +23,8 @@ const (
 	reportDingtalkOpenLinkDescription = "点击后打开钉钉客户端的日志详情页，可查看或修改刚创建的日志。"
 	reportContentsMaxBytes            = 10 * 1024 * 1024
 	reportDispatchTemplateSuccessHint = "dws report template get --name <模板名> --format json"
-	reportDispatchTemplateDetailHint  = "dws report entry submit --template-id <templateId> --contents-file <tmp.json> --format json"
-	reportDispatchCreateHint          = "dws report template list --format json\n  dws report template get --name <模板名> --format json\n  dws report entry submit --template-id <templateId> --contents-file <tmp.json> --format json"
+	reportDispatchTemplateDetailHint  = "dws report entry submit --template-id <templateId> --contents-file <tmp.json> --to-user-ids <userId1>,<userId2> --format json"
+	reportDispatchCreateHint          = "dws report template list --format json\n  dws report template get --name <模板名> --format json\n  dws report entry submit --template-id <templateId> --contents-file <tmp.json> --to-user-ids <userId1>,<userId2> --format json"
 	reportDispatchDetailHint          = "dws report outbox list --cursor 0 --size 20 --format json\n  dws report entry get --report-id <reportId> --format json"
 	reportDispatchStatsHint           = "dws report outbox list --cursor 0 --size 20 --format json\n  dws report entry stats --report-id <reportId> --format json"
 	reportDispatchListHint            = "dws report inbox list --start \"YYYY-MM-DDT00:00:00+08:00\" --end \"YYYY-MM-DDT23:59:59+08:00\" --cursor 0 --size 20 --format json"
@@ -54,6 +54,12 @@ func newReportCommand() *cobra.Command {
 	// products.report). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "report",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("日志与日报深度指南", "dingtalk-misc", "references/report.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询日志模板、收发日志、日志正文与统计，并按模板提交日志",
 			UseWhen: []string{
@@ -64,7 +70,7 @@ func newReportCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:     "report",
 		Aliases: []string{"log"},
 		Short:   "钉钉日志（OA 周报应用 / 日志模版填报）",
@@ -84,10 +90,10 @@ func newReportCommand() *cobra.Command {
 
 别名：dws log 等价 dws report（注意：此处 log 特指 OA 周报应用，不是通用日志/记录）。`,
 		RunE: groupRunE,
-	}
+	})
 
 	// === template subtree（template list 不变；新增 template get；template detail 转 deprecated alias）===
-	templateCmd := &cobra.Command{Use: "template", Short: "日志模版", RunE: groupRunE}
+	templateCmd := newGroupCommand(&cobra.Command{Use: "template", Short: "日志模版", RunE: groupRunE})
 
 	templateListCmd := &cobra.Command{
 		Use:     "list",
@@ -179,7 +185,7 @@ func newReportCommand() *cobra.Command {
 	templateCmd.AddCommand(templateListCmd, templateGetCmd, templateDetailCmd)
 
 	// === entry subtree（单条日报操作 — get / stats / submit）===
-	entryCmd := &cobra.Command{Use: "entry", Short: "日志条目（单条日报操作 — get / stats / submit）", RunE: groupRunE}
+	entryCmd := newGroupCommand(&cobra.Command{Use: "entry", Short: "日志条目（单条日报操作 — get / stats / submit）", RunE: groupRunE})
 
 	entryGetCmd := &cobra.Command{
 		Use:   "get",
@@ -279,14 +285,15 @@ func newReportCommand() *cobra.Command {
 		Long: `按模版提交一份日报。--contents 为 JSON 数组，每项需含 key、sort、content、contentType、type，
 与远程 create_report 一致；可先通过 report template list / template get 取得 templateId 与控件定义。
 
+--to-user-ids 必填：无接收人的提交服务端仍会返回成功，但日志实际对任何人都不可见，因此 dws 侧强制要求接收人。
 长内容（含中文换行 / Markdown）建议走 --contents-file 避免 shell 引号问题；
 也可用 --contents - 从 stdin 读取。
 提交成功后会自动反查详情，并在返回中追加 dingtalkOpenUrl / dingtalkOpenMarkdownLink 跳转链接字段。`,
-		Example: `  dws report entry submit --template-id TPL_ID --contents '[{"content":"完成开发","sort":"0","key":"今日完成","contentType":"markdown","type":"1"}]'
+		Example: `  dws report entry submit --template-id TPL_ID --contents '[{"content":"完成开发","sort":"0","key":"今日完成","contentType":"markdown","type":"1"}]' --to-user-ids userId1
   # 推荐：长内容走文件
-  dws report entry submit --template-id TPL_ID --contents-file ./report.json
+  dws report entry submit --template-id TPL_ID --contents-file ./report.json --to-user-ids userId1,userId2
   # 或 stdin
-  cat report.json | dws report entry submit --template-id TPL_ID --contents -
+  cat report.json | dws report entry submit --template-id TPL_ID --contents - --to-user-ids userId1
   dws report entry submit --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2`,
 		RunE: runReportCreate,
 	}
@@ -312,14 +319,17 @@ func newReportCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按模版提交一份新日报",
-				UseWhen:      []string{"已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"},
+				UseWhen: []string{
+					"已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时",
+					"提交时必须通过 --to-user-ids 指定至少一个接收人；无接收人的日志提交后对任何人都不可见",
+				},
 				AvoidWhen: []string{
 					"尚未读取模板字段时先用 dws report template list / template get",
 					"只需查看已有日志正文时改用 dws report entry get",
 				},
 				Examples: []string{
-					"dws report entry submit --template-id <templateId> --contents-file ./report.json --format json",
-					"dws report entry submit --template-id <templateId> --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json",
+					"dws report entry submit --template-id <templateId> --contents-file ./report.json --to-user-ids <userId1>,<userId2> --format json",
+					"dws report entry submit --template-id <templateId> --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --to-user-ids <userId1> --format json",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -386,9 +396,10 @@ func newReportCommand() *cobra.Command {
 	addReportListFlags(inboxListCmd)
 
 	inboxCmd.AddCommand(inboxListCmd)
+	newHybridGroupCommand(inboxCmd)
 
 	// === outbox subtree（我发出的日报）===
-	outboxCmd := &cobra.Command{Use: "outbox", Short: "发件箱（我发出的日报）", RunE: groupRunE}
+	outboxCmd := newGroupCommand(&cobra.Command{Use: "outbox", Short: "发件箱（我发出的日报）", RunE: groupRunE})
 
 	outboxListCmd := &cobra.Command{
 		Use:   "list",
@@ -447,7 +458,7 @@ func newReportCommand() *cobra.Command {
 	createCmd := &cobra.Command{
 		Use:     "create",
 		Short:   "[deprecated] 已废弃，请改用 `dws report entry submit`",
-		Example: `  dws report create --template-id TPL_ID --contents-file ./report.json`,
+		Example: `  dws report create --template-id TPL_ID --contents-file ./report.json --to-user-ids userId1,userId2`,
 		RunE:    withReportDeprecationWarning("create", "entry submit", runReportCreate),
 	}
 	addReportCreateFlags(createCmd)
@@ -595,14 +606,24 @@ func runReportCreate(cmd *cobra.Command, args []string) error {
 		ddFrom = "dws"
 	}
 	toChat, _ := cmd.Flags().GetBool("to-chat")
+	// Cobra required 只拦截 flag 未传，不拦截空值；create_report 对无接收人的
+	// 提交仍返回成功，但日志对任何接收人都不可见，因此这里对解析后的空接收人
+	// 列表同样 fail-closed。
+	toUserIDs := parseReportUserIDs(mustGetFlag(cmd, "to-user-ids"))
+	if len(toUserIDs) == 0 {
+		return &CLIError{
+			Code:       CodeMissingParam,
+			Message:    "to-user-ids is required",
+			Suggestion: "通过 --to-user-ids userId1,userId2 指定至少一个日志接收人；无接收人的提交服务端仍返回成功，但日志对任何人都不可见",
+			Operation:  "report.create",
+		}
+	}
 	toolArgs := map[string]any{
 		"templateId": tplID,
 		"contents":   contents,
 		"ddFrom":     ddFrom,
 		"toChat":     toChat,
-	}
-	if v, _ := cmd.Flags().GetString("to-user-ids"); v != "" {
-		toolArgs["toUserIds"] = parseReportUserIDs(v)
+		"toUserIds":  toUserIDs,
 	}
 	return callReportCreateWithDetailURL(toolArgs)
 }
@@ -764,7 +785,11 @@ func addReportCreateFlags(cmd *cobra.Command) {
 	cmd.Flags().String("contents-file", "", "从文件读取 contents JSON（推荐用于含中文/换行/Markdown 的长内容，避免 shell 引号转义；优先级：--contents-file > --contents - (stdin) > --contents '<json>'）")
 	cmd.Flags().String("dd-from", "dws", "创建来源标识")
 	cmd.Flags().Bool("to-chat", false, "是否发送到日志接收人单聊")
-	cmd.Flags().String("to-user-ids", "", "接收人 userId，逗号分隔 (可选)")
+	// 无接收人的 create_report 服务端仍返回成功但日志不可见；openAPI 历史参数
+	// 保持可选，dws 侧强制必填（dws report entry submit 与废弃别名 report create
+	// 共用本函数，两侧 required 标记保持一致）。
+	cmd.Flags().String("to-user-ids", "", "接收人 userId，逗号分隔 (必填)；无接收人的日志提交后对任何人都不可见")
+	_ = cmd.MarkFlagRequired("to-user-ids")
 }
 
 // withReportDeprecationWarning 包装旧命令的 RunE：调用时往 stderr 打废弃提醒，

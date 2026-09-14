@@ -27,6 +27,11 @@ type scriptedToolCaller struct {
 	server string
 	tool   string
 	args   map[string]any
+	// Per-call logs so multi-step flows (e.g. OA attachment upload's init+commit)
+	// can assert each invocation instead of only the last one captured above.
+	serverLog []string
+	toolLog   []string
+	argsLog   []map[string]any
 }
 
 func (c *scriptedToolCaller) CallTool(_ context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -34,6 +39,9 @@ func (c *scriptedToolCaller) CallTool(_ context.Context, serverID, toolName stri
 	c.server = serverID
 	c.tool = toolName
 	c.args = args
+	c.serverLog = append(c.serverLog, serverID)
+	c.toolLog = append(c.toolLog, toolName)
+	c.argsLog = append(c.argsLog, args)
 	if len(c.steps) == 0 {
 		return &edition.ToolResult{}, nil
 	}
@@ -169,6 +177,17 @@ func TestCrossPlatformCoverageChunkedWriteCoverage(t *testing.T) {
 	os.Args = []string{"dws", "doc"}
 	t.Cleanup(func() { os.Args = oldArgs })
 
+	// Every fixture below scripts a fixed number of MCP calls, so it silently
+	// depends on the splitter producing exactly two chunks. Assert that up front:
+	// otherwise a chunk-count change surfaces as a script-exhaustion panic deep
+	// inside a subtest rather than as a clear failure here.
+	if got := len(SplitMarkdownForAppend("abcdef", 3).Chunks); got != 2 {
+		t.Fatalf("fixtures assume 2 chunks for \"abcdef\" at limit 3, got %d", got)
+	}
+	if got := len(SplitMarkdownForAppend(strings.Repeat("x", 12000), 6000).Chunks); got != 2 {
+		t.Fatalf("fixtures assume 2 chunks for 12000 runes at limit 6000, got %d", got)
+	}
+
 	cases := []struct {
 		name      string
 		tool      string
@@ -197,7 +216,7 @@ func TestCrossPlatformCoverageChunkedWriteCoverage(t *testing.T) {
 				cancel()
 				ctx = cancelled
 			}
-			_, _, _, _ = chunkedWrite(ctx, tc.tool, tc.args, tc.markdown, "test", tc.chunkSize)
+			_, _ = chunkedWrite(ctx, tc.tool, tc.args, tc.markdown, "test", tc.chunkSize)
 		})
 	}
 }

@@ -66,6 +66,32 @@ func TestPreparseProfileFlagUsesNormalizedProfileArgs(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePreparseProfileFlagUsesLastOccurrence(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		want  string
+		valid bool
+	}{
+		{name: "space then equals", args: []string{"--profile", "corp-a", "version", "--profile=corp-b"}, want: "corp-b", valid: true},
+		{name: "equals then space", args: []string{"--profile=corp-a", "version", "--profile", "corp-b"}, want: "corp-b", valid: true},
+		{name: "last multi", args: []string{"--profile=corp-a", "--profile", "corp-b,", "corp-c", "version"}, want: "corp-b,corp-c", valid: true},
+		{name: "empty equals clears earlier", args: []string{"--profile=corp-a", "version", "--profile="}},
+		{name: "missing value clears earlier", args: []string{"--profile=corp-a", "version", "--profile"}},
+		{name: "next flag is not profile value", args: []string{"--profile=corp-a", "--profile", "--debug", "version"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := preparseProfileFlag(tc.args); got != tc.want {
+				t.Fatalf("preparseProfileFlag(%#v) = %q, want %q", tc.args, got, tc.want)
+			}
+			_, specified, valid := preparseProfileSelection(tc.args)
+			if !specified || valid != tc.valid {
+				t.Fatalf("preparseProfileSelection(%#v) = specified %v valid %v, want true/%v", tc.args, specified, valid, tc.valid)
+			}
+		})
+	}
+}
+
 func TestNormalizeProcessProfileArgsRestoresOriginalArgv(t *testing.T) {
 	oldArgs := os.Args
 	t.Cleanup(func() { os.Args = oldArgs })

@@ -66,6 +66,7 @@ var messageResultContractV1 = MessageResultContract{
 		"senderId",
 		"senderType",
 		"messageType",
+		"messageAiSendFlag",
 		"text",
 		"createTime",
 		"updateTime",
@@ -86,6 +87,7 @@ var messageResultContractV1 = MessageResultContract{
 		"hasMore",
 		"nextPage",
 		"stopReason",
+		"truncated",
 		"truncatedByPageLimit",
 		"truncatedByResultLimit",
 		"failedCount",
@@ -122,7 +124,58 @@ func NewMessageListPayload(messages []map[string]any) map[string]any {
 		"failedCount":     0,
 		"failures":        []map[string]any{},
 		"partial":         false,
+		"truncated":       false,
 	}
+}
+
+// ApplyTruncation publishes the stable aggregate bit while preserving the
+// established reason-specific fields for compatibility and diagnosis.
+func ApplyTruncation(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	byPage, _ := payload["truncatedByPageLimit"].(bool)
+	byItems, _ := payload["truncatedByResultLimit"].(bool)
+	payload["truncated"] = byPage || byItems
+}
+
+// ListMessageItems returns message rows from the common list response envelopes.
+func ListMessageItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	scopes := []map[string]any{data}
+	for _, wrapper := range []string{"result", "data"} {
+		if inner, ok := data[wrapper].(map[string]any); ok {
+			scopes = append(scopes, inner)
+		}
+	}
+	for _, scope := range scopes {
+		for _, key := range []string{"messages", "list", "items", "records", "data", "result"} {
+			if rows, ok := scope[key].([]any); ok {
+				items := messageMaps(rows)
+				if len(items) > 0 {
+					return items
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// SearchMessageItems flattens grouped search results into stable message rows.
+func SearchMessageItems(data map[string]any) []map[string]any {
+	return SearchItems(data)
+}
+
+func messageMaps(rows []any) []map[string]any {
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		if item, ok := row.(map[string]any); ok {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 // StableMessageID returns the normalized message identity used for
@@ -185,7 +238,7 @@ func senderDisplayName(m map[string]any) string {
 // Text reads a message's textual content (tolerating common text keys and one
 // level of nesting) and runs it through CleanText.
 func Text(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body", "plainText"} {
+	for _, key := range []string{"text", "content", "msgContent", "message", "msg", "body", "plainText"} {
 		v, ok := m[key]
 		if !ok || v == nil {
 			continue
@@ -196,7 +249,7 @@ func Text(m map[string]any) any {
 				return CleanText(t)
 			}
 		case map[string]any:
-			for _, inner := range []string{"text", "content", "value"} {
+			for _, inner := range []string{"text", "content", "richText", "title", "value"} {
 				if s, ok := t[inner].(string); ok && s != "" {
 					return CleanText(s)
 				}
@@ -246,6 +299,14 @@ func ThreadID(m map[string]any) any {
 // MessageType preserves the lower message type when present.
 func MessageType(m map[string]any) any {
 	return firstMessageValue(m, "msgType", "messageType", "message_type", "type")
+}
+
+// MessageAISendFlag preserves the lower IM marker that identifies a message
+// sent through an AI client. The service currently publishes the exact
+// messageAiSendFlag field (for example "DWS"); readers must not infer it from
+// sender type, robot status, clawType request metadata, or message content.
+func MessageAISendFlag(m map[string]any) any {
+	return firstMessageValue(m, "messageAiSendFlag")
 }
 
 // SenderID preserves the stable sender identity without replacing the legacy
@@ -308,6 +369,9 @@ func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
 	if value := MessageType(m); value != nil {
 		row["messageType"] = value
 	}
+	if value := MessageAISendFlag(m); value != nil {
+		row["messageAiSendFlag"] = value
+	}
 	if value := UpdateTime(m); value != nil {
 		row["updateTime"] = value
 	}
@@ -368,6 +432,9 @@ func QuotedMessage(m map[string]any) map[string]any {
 	}
 	if value := MessageType(quoted); value != nil {
 		out["messageType"] = value
+	}
+	if value := MessageAISendFlag(quoted); value != nil {
+		out["messageAiSendFlag"] = value
 	}
 	if len(resources) > 0 {
 		out["resourceRefs"] = resources
@@ -1031,6 +1098,12 @@ func messagePaginationCursorBoundary(value any) (string, string, error) {
 			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
 		}
 		millis = int64(typed)
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
 	case string:
 		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
 		if err != nil {
@@ -1087,6 +1160,9 @@ func paginationValuePresent(value any) bool {
 	switch typed := value.(type) {
 	case nil:
 		return false
+	case json.Number:
+		number, err := typed.Float64()
+		return err != nil || number != 0
 	case string:
 		return strings.TrimSpace(typed) != "" && strings.TrimSpace(typed) != "0"
 	case int:

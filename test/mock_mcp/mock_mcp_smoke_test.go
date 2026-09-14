@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,11 +27,17 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 )
 
 const (
-	mockMCPSmokeHelperEnv = "DWS_MOCK_MCP_SMOKE_HELPER"
-	mockMCPSmokeCAEnv     = "DWS_MOCK_MCP_SMOKE_CA_FILE"
+	mockMCPSmokeHelperEnv       = "DWS_MOCK_MCP_SMOKE_HELPER"
+	mockMCPSmokeCAEnv           = "DWS_MOCK_MCP_SMOKE_CA_FILE"
+	mockMCPSmokeDownloadDialEnv = "DWS_MOCK_MCP_SMOKE_DOWNLOAD_DIAL"
+	mockCurrentDOpenID          = "DAAAAAAAAAAAiE"
+	// helper 会启动第二个启用 race 的测试进程。保持有界，同时为 remaining
+	// shard 与其他 CI race 包并行时的调度抖动预留空间。
+	mockMCPCLIExecutionTimeout = 30 * time.Second
 )
 
 type recordedToolCall struct {
@@ -65,6 +70,9 @@ func TestCLIHelperProcess(t *testing.T) {
 		}
 		_ = os.Setenv("GODEBUG", "x509usefallbackroots=1")
 		x509.SetFallbackRoots(pool)
+	}
+	if dialAddr := strings.TrimSpace(os.Getenv(mockMCPSmokeDownloadDialEnv)); dialAddr != "" {
+		localio.SetSecureDownloadDialTargetForTest(dialAddr)
 	}
 
 	marker := -1
@@ -266,15 +274,14 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 	defer server.Close()
 
 	env := isolatedCLIEnv(t, map[string]string{
-		"DINGTALK_CONTACT_MCP_URL": server.URL + "/mcp/contact",
-		"DINGTALK_CHAT_MCP_URL":    server.URL + "/mcp/chat",
-		"DINGTALK_IM_MCP_URL":      server.URL + "/mcp/im",
-		"HTTPS_PROXY":              download.ProxyURL,
-		"https_proxy":              download.ProxyURL,
-		"SSL_CERT_FILE":            download.CAFile,
-		mockMCPSmokeCAEnv:          download.CAFile,
-		"DWS_CONFIG_DIR":           authConfigDir,
-		"DWS_KEYCHAIN_DIR":         authKeychainDir,
+		"DINGTALK_CONTACT_MCP_URL":  server.URL + "/mcp/contact",
+		"DINGTALK_CHAT_MCP_URL":     server.URL + "/mcp/chat",
+		"DINGTALK_IM_MCP_URL":       server.URL + "/mcp/im",
+		mockMCPSmokeDownloadDialEnv: download.DialAddr,
+		"SSL_CERT_FILE":             download.CAFile,
+		mockMCPSmokeCAEnv:           download.CAFile,
+		"DWS_CONFIG_DIR":            authConfigDir,
+		"DWS_KEYCHAIN_DIR":          authKeychainDir,
 	})
 	reset := func() {
 		requestsMu.Lock()
@@ -293,7 +300,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		stdout, stderr, err := runCLI(t, env,
 			"--token", "ci-smoke-token", "--format", "json",
 			"chat", "+messages-send", "--as", "user",
-			"--user-query", "张三", "--text", "你好", "--yes",
+			"--user-query", "测试用户甲", "--text", "你好", "--yes",
 		)
 		if err != nil {
 			t.Fatalf("natural send failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
@@ -302,7 +309,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		if len(calls) != 2 || calls[0].tool != "search_contact_by_key_word" || calls[1].tool != "send_personal_message" {
 			t.Fatalf("calls = %#v, want resolve + one send", calls)
 		}
-		if calls[1].arguments["receiverOpenDingTalkId"] != "D-user-1" {
+		if calls[1].arguments["receiverOpenDingTalkId"] != mockCurrentDOpenID {
 			t.Fatalf("send target = %#v", calls[1].arguments)
 		}
 		assertMultiIMCallsAreLocalAndAuthorized(t, calls)
@@ -473,7 +480,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("messages = %#v", payload["messages"])
 		}
 		message, _ := messages[0].(map[string]any)
-		if message["messageId"] != "msg-1" || message["senderId"] != "D-sender" || message["senderType"] != "user" {
+		if message["messageId"] != "msg-1" || message["senderId"] != mockCurrentDOpenID || message["senderType"] != "user" {
 			t.Fatalf("projected message = %#v", message)
 		}
 	})
@@ -483,7 +490,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 		stdout, stderr, err := runCLI(t, env,
 			"--token", "ci-smoke-token", "--format", "json",
 			"chat", "+chat-create", "--name", "新群",
-			"--member-query", "张三", "--dry-run", "--yes",
+			"--member-query", "测试用户甲", "--dry-run", "--yes",
 		)
 		if err != nil {
 			t.Fatalf("chat-create dry-run failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
@@ -505,7 +512,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			"--token", "ci-smoke-token", "--format", "json",
 			"chat", "+messages-reply",
 			"--conversation-id", "cid-1", "--message-id", "msg-1",
-			"--ref-sender", "D-sender", "--text", "收到",
+			"--ref-sender", mockCurrentDOpenID, "--text", "收到",
 			"--idempotency-key", "reply-key", "--yes",
 		)
 		if err != nil {
@@ -532,7 +539,7 @@ func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, reso
 		if arguments["keyword"] == "同名用户" {
 			return `{"result":[{"name":"同名用户","userId":"u1","openDingTalkId":"D1"},{"name":"同名用户","userId":"u2","openDingTalkId":"D2"}]}`
 		}
-		return `{"result":[{"name":"张三","userId":"user-1","openDingTalkId":"D-user-1"}]}`
+		return `{"result":[{"name":"测试用户甲","userId":"user-1","openDingTalkId":"` + mockCurrentDOpenID + `"}]}`
 	case "search_groups":
 		if arguments["keyword"] == "资源群" {
 			return `{"result":[{"title":"资源群","openConversationId":"cid-resources"}]}`
@@ -540,9 +547,9 @@ func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, reso
 		return `{"result":[{"title":"项目群","openConversationId":"cid-1"}]}`
 	case "list_conversation_message_v2":
 		if arguments["openconversation_id"] == "cid-resources" {
-			return `{"result":{"hasMore":false,"messages":[{"openMessageId":"msg-resource","openConversationId":"cid-resources","sender":{"name":"张三","openDingTalkId":"D-sender","senderType":"user"},"msgType":"file","content":"{\"mediaId\":\"@media-1\"}","createTime":"2026-08-03 10:00:00"}]}}`
+			return `{"result":{"hasMore":false,"messages":[{"openMessageId":"msg-resource","openConversationId":"cid-resources","sender":{"name":"测试用户甲","openDingTalkId":"` + mockCurrentDOpenID + `","senderType":"user"},"msgType":"file","content":"{\"mediaId\":\"@media-1\"}","createTime":"2026-08-03 10:00:00"}]}}`
 		}
-		return `{"result":{"hasMore":false,"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","sender":{"name":"张三","openDingTalkId":"D-sender","senderType":"user"},"msgType":"text","content":"进度正常","createTime":"2026-08-03 10:00:00"}]}}`
+		return `{"result":{"hasMore":false,"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","sender":{"name":"测试用户甲","openDingTalkId":"` + mockCurrentDOpenID + `","senderType":"user"},"msgType":"text","content":"进度正常","createTime":"2026-08-03 10:00:00"}]}}`
 	case "get_resource_download_url":
 		body, _ := json.Marshal(map[string]any{"result": map[string]any{
 			"resourceUrl": resourceURL,
@@ -561,7 +568,7 @@ func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, reso
 		if arguments["keyword"] == "分页失败" && fmt.Sprint(arguments["cursor"]) == "c2" {
 			return `{"success":false,"code":"MOCK_PAGE_FAILURE","message":"simulated second page failure"}`
 		}
-		return `{"result":{"messages":[{"openMessageId":"search-msg-1","openConversationId":"cid-1","senderOpenDingTalkId":"D-sender","content":"first page"}],"hasMore":true,"nextCursor":"c2"}}`
+		return `{"result":{"messages":[{"openMessageId":"search-msg-1","openConversationId":"cid-1","senderOpenDingTalkId":"` + mockCurrentDOpenID + `","content":"first page"}],"hasMore":true,"nextCursor":"c2"}}`
 	case "get_current_user_profile":
 		return `{"result":[{"orgEmployeeModel":{"userId":"self-user"}}]}`
 	case "create_group_conversation":
@@ -583,7 +590,7 @@ func recordedToolNames(calls []recordedToolCall) []string {
 
 type trustedDownloadFixture struct {
 	URL      string
-	ProxyURL string
+	DialAddr string
 	CAFile   string
 }
 
@@ -644,38 +651,6 @@ func newTrustedDownloadFixture(t *testing.T, body []byte) trustedDownloadFixture
 	downloadServer.StartTLS()
 	t.Cleanup(downloadServer.Close)
 
-	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodConnect {
-			http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
-			return
-		}
-		upstream, err := net.DialTimeout("tcp", downloadServer.Listener.Addr().String(), 2*time.Second)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			_ = upstream.Close()
-			http.Error(w, "hijacking unsupported", http.StatusInternalServerError)
-			return
-		}
-		client, buffered, err := hijacker.Hijack()
-		if err != nil {
-			_ = upstream.Close()
-			return
-		}
-		_, _ = fmt.Fprint(buffered, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		_ = buffered.Flush()
-		go func() {
-			_, _ = io.Copy(upstream, client)
-			_ = upstream.Close()
-		}()
-		_, _ = io.Copy(client, upstream)
-		_ = client.Close()
-	}))
-	t.Cleanup(proxyServer.Close)
-
 	caFile := filepath.Join(t.TempDir(), "download-ca.pem")
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 	if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
@@ -683,7 +658,7 @@ func newTrustedDownloadFixture(t *testing.T, body []byte) trustedDownloadFixture
 	}
 	return trustedDownloadFixture{
 		URL:      "https://download.dingtalk.com/artifact.bin",
-		ProxyURL: proxyServer.URL,
+		DialAddr: downloadServer.Listener.Addr().String(),
 		CAFile:   caFile,
 	}
 }
@@ -934,7 +909,7 @@ func runCLI(t *testing.T, env []string, args ...string) (string, string, error) 
 func runCLIInDir(t *testing.T, env []string, dir string, args ...string) (string, string, error) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), mockMCPCLIExecutionTimeout)
 	defer cancel()
 	processArgs := append([]string{"-test.run=^TestCLIHelperProcess$", "--"}, args...)
 	cmd := exec.CommandContext(ctx, os.Args[0], processArgs...)

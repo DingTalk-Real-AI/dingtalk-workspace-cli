@@ -9,15 +9,45 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-func resolveExactOperatorOpenDingTalkID(ctx context.Context, userID string) (string, error) {
-	response, err := callPrivateMCPJSON(ctx, "contact", "get_user_info_by_user_ids", map[string]any{"user_id_list": []string{userID}})
-	if err != nil {
-		return "", fmt.Errorf("resolve supervisor operator identity: %w", err)
+func resolveExactOperatorOpenDingTalkID(ctx context.Context, accessToken, userID string) (string, error) {
+	// get_user_info_by_user_ids 的真实响应只包含组织资料，不提供 openDingTalkId。
+	// openDingTalkId 取决于调用 Token 对应的应用/身份上下文，因此必须使用
+	// 数字员工 Access Token 查询主管，才能与该员工收到的事件发送者 ID 保持一致。
+	accessToken = strings.TrimSpace(accessToken)
+	userID = strings.TrimSpace(userID)
+	if accessToken == "" || userID == "" || deps == nil || deps.Caller == nil {
+		return "", fmt.Errorf("resolve supervisor operator identity is unavailable")
+	}
+	caller, ok := deps.Caller.(managedIdentityTokenCaller)
+	if !ok {
+		return "", fmt.Errorf("resolve supervisor operator identity is unavailable")
+	}
+	result, err := caller.CallToolWithToken(ctx, accessToken, "contact", "search_contact_by_key_word", map[string]any{"keyword": userID})
+	if err != nil || result == nil {
+		return "", fmt.Errorf("resolve supervisor operator identity failed")
+	}
+	var response map[string]any
+	for _, content := range result.Content {
+		if content.Type != "text" || strings.TrimSpace(content.Text) == "" {
+			continue
+		}
+		response, err = decodeMCPJSON(content.Text)
+		if err != nil {
+			return "", fmt.Errorf("resolve supervisor operator identity returned invalid JSON")
+		}
+		if success, exists := response["success"].(bool); exists && !success {
+			return "", fmt.Errorf("resolve supervisor operator identity was rejected")
+		}
+		break
+	}
+	if response == nil {
+		return "", fmt.Errorf("resolve supervisor operator identity returned no JSON")
 	}
 	candidates := map[string]struct{}{}
 	collectExactOpenDingTalkIDs(response, userID, candidates)

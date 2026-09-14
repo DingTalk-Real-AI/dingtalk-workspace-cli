@@ -269,6 +269,9 @@ func TestDeapAgentOpenAPISkillUploaderStreamsMultipartAndReturnsFileURL(t *testi
 	uploader := deapAgentOpenAPISkillUploader{
 		baseURL:    server.URL,
 		httpClient: server.Client(),
+		validateTarget: func(string) error {
+			return nil
+		},
 		resolveCredential: func(_ context.Context, agentUUID string) (string, error) {
 			if agentUUID != "agent-1" {
 				t.Fatalf("credential resolver agentUuid = %q", agentUUID)
@@ -694,11 +697,12 @@ func TestDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
 	root := deapHandler{}.Command(&captureRunner{})
 
 	wantGroups := map[string][]string{
-		"manage": {"create", "detail", "list", "login", "save-draft", "publish", "delete"},
-		"run":    {"run-status", "trace"},
+		"connect": {"status", "list", "stop", "restart", "bind", "unbind", "rebind"},
+		"manage":  {"create", "detail", "list", "login", "save-draft", "publish", "delete"},
+		"run":     {"run-status", "trace"},
 	}
-	if got := len(root.Commands()); got != len(wantGroups)+3 {
-		t.Fatalf("dingtalk-tag direct child count = %d, want %d", got, len(wantGroups)+3)
+	if got := len(root.Commands()); got != len(wantGroups)+2 {
+		t.Fatalf("dingtalk-tag direct child count = %d, want %d", got, len(wantGroups)+2)
 	}
 	for groupName, wantLeaves := range wantGroups {
 		group, remaining, err := root.Find([]string{groupName})

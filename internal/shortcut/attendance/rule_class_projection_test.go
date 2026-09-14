@@ -18,12 +18,12 @@ import (
 	"testing"
 )
 
-// TestSearchClassProjectShiftVOShape guards against projection-data-loss:
+// TestCrossPlatformCoverageSearchClassProjectShiftVOShape guards against projection-data-loss:
 // get_class_list nests the list under result.items and wraps each shift's
 // identity under shiftVO. The projection must unwrap shiftVO or +search-class
 // silently returns empty despite the backend returning shifts.
-func TestSearchClassProjectShiftVOShape(t *testing.T) {
-	const raw = `{"result":{"items":[
+func TestCrossPlatformCoverageSearchClassProjectShiftVOShape(t *testing.T) {
+	const raw = `{"success":true,"result":{"items":[
 		{"shiftVO":{"id":957395083,"name":"default shift"}},
 		{"shiftVO":{"id":957395084,"name":"morning shift"}}
 	]}}`
@@ -31,7 +31,10 @@ func TestSearchClassProjectShiftVOShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	got := searchClassProject(data)
+	got, err := searchClassProject(data)
+	if err != nil {
+		t.Fatalf("project class response: %v", err)
+	}
 	if len(got) != 2 {
 		t.Fatalf("lower/upper mismatch: 2 shifts in backend, projection returned %d (%v)", len(got), got)
 	}
@@ -40,18 +43,18 @@ func TestSearchClassProjectShiftVOShape(t *testing.T) {
 	}
 }
 
-// TestSearchRuleProjectEntityVOShape guards get_overtime_rule (result.atRuleList)
+// TestCrossPlatformCoverageSearchRuleProjectEntityVOShape guards get_overtime_rule (result.atRuleList)
 // and get_adjustment_rule (result.adjustmentList), both wrapping the rule under
 // entityVO. The resolver must probe those keys and unwrap entityVO or
 // +search-overtime-rule / +search-adjustment-rule silently return empty.
-func TestSearchRuleProjectEntityVOShape(t *testing.T) {
+func TestCrossPlatformCoverageSearchRuleProjectEntityVOShape(t *testing.T) {
 	for _, tc := range []struct {
 		name, key string
 	}{
 		{"overtime", "atRuleList"},
 		{"adjustment", "adjustmentList"},
 	} {
-		raw := `{"result":{"` + tc.key + `":[
+		raw := `{"success":true,"result":{"` + tc.key + `":[
 			{"entityVO":{"id":11,"name":"weekday overtime"},"permissionVO":{}},
 			{"entityVO":{"id":12,"name":"holiday overtime"},"permissionVO":{}}
 		]}}`
@@ -59,7 +62,10 @@ func TestSearchRuleProjectEntityVOShape(t *testing.T) {
 		if err := json.Unmarshal([]byte(raw), &data); err != nil {
 			t.Fatalf("[%s] unmarshal fixture: %v", tc.name, err)
 		}
-		got := searchRuleProject(data)
+		got, err := searchRuleProject(data, "attendance-wukong/test", "result."+tc.key)
+		if err != nil {
+			t.Fatalf("[%s] project rule response: %v", tc.name, err)
+		}
 		if len(got) != 2 {
 			t.Fatalf("[%s] lower/upper mismatch: result.%s has 2 entries, projection returned %d", tc.name, tc.key, len(got))
 		}

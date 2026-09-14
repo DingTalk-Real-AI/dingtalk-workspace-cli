@@ -8,6 +8,61 @@ import (
 	"testing"
 )
 
+func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
+	root := NewRootCommand()
+	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
+	for _, action := range []string{"status", "list", "stop", "restart", "bind", "unbind", "rebind"} {
+		wants["dingtalk-tag.connect_"+action] = "dingtalk-tag connect " + action
+	}
+	var names []string
+	for name := range wants {
+		names = append(names, name)
+	}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, names...)
+	for name, path := range wants {
+		if got := schemaContractString(payload.Tools[name]["primary_cli_path"]); got != path {
+			t.Errorf("%s path = %q, want %q", name, got, path)
+		}
+	}
+	cmd, args, err := root.Find([]string{"dingtalk-tag", "connect", "list"})
+	if err != nil || len(args) != 0 || cmd.Name() != "list" {
+		t.Fatalf("list resolution: %v %v", args, err)
+	}
+	if cmd.Flags().Lookup("agent-uuid") != nil {
+		t.Fatal("list must not inherit connect's required employee flag")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeServerBindingFinalSchema(t *testing.T) {
+	wants := map[string]map[string]string{
+		"bind":   {"agent-uuid": "agentUuid", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions"},
+		"unbind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId"},
+		"rebind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions", "client-id": "clientId"},
+	}
+	root := NewRootCommand()
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.connect_bind", "dingtalk-tag.connect_unbind", "dingtalk-tag.connect_rebind")
+	for action, params := range wants {
+		tool := payload.Tools["dingtalk-tag.connect_"+action]
+		if schemaContractString(tool["interface_mode"]) != "composite" {
+			t.Errorf("%s must declare server-side effects", action)
+		}
+		if schemaContractString(tool["confirmation"]) != "user_required" || schemaContractString(tool["effect"]) != "write" || tool["result"] == nil {
+			t.Fatalf("incomplete %s contract", action)
+		}
+		got := schemaContractMap(tool["parameters"])
+		for name, property := range params {
+			if schemaContractString(got[name]["property"]) != property {
+				t.Errorf("%s missing mapping %s", action, name)
+			}
+		}
+		for _, name := range []string{"identity", "user-id", "org-id", "profile-only"} {
+			if _, ok := got[name]; ok {
+				t.Errorf("%s exposes %s", action, name)
+			}
+		}
+	}
+}
+
 func TestDeapAgentLeavesReachFinalSchema(t *testing.T) {
 	wants := map[string]struct {
 		cliPath      string
@@ -212,5 +267,49 @@ func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 				t.Errorf("%s parameter %s property = %q, want %q", canonical, flagName, got, property)
 			}
 		}
+	}
+}
+
+func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
+	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.connect")
+	tool := payload.Tools["dingtalk-tag.connect"]
+	for field, want := range map[string]string{
+		"primary_cli_path": "dingtalk-tag connect",
+		"effect":           "write",
+		"risk":             "high",
+		"confirmation":     "user_required",
+		"interface_mode":   "composite",
+	} {
+		if got := schemaContractString(tool[field]); got != want {
+			t.Errorf("dingtalk-tag.connect %s = %q, want %q", field, got, want)
+		}
+	}
+	parameters := schemaContractMap(tool["parameters"])
+	if len(parameters) != 19 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
+	}
+	for name, property := range map[string]string{
+		"agent-uuid": "agentUuid", "channel": "channel", "profile-only": "profileOnly", "client-id": "clientId",
+		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
+	} {
+		parameter := parameters[name]
+		if parameter == nil {
+			t.Errorf("dingtalk-tag.connect missing parameter %s", name)
+			continue
+		}
+		if got := schemaContractString(parameter["property"]); got != property {
+			t.Errorf("dingtalk-tag.connect parameter %s property = %q, want %q", name, got, property)
+		}
+	}
+	channel := parameters["channel"]
+	if got := schemaContractString(channel["required_when"]); got != "" {
+		t.Errorf("dingtalk-tag.connect channel required_when = %q", got)
+	}
+	if required, _ := channel["required"].(bool); required {
+		t.Error("dingtalk-tag.connect channel must not be unconditionally required")
+	}
+	profileOnly := parameters["profile-only"]
+	if got := schemaContractString(profileOnly["type"]); got != "boolean" {
+		t.Errorf("dingtalk-tag.connect profile-only type = %q, want boolean", got)
 	}
 }

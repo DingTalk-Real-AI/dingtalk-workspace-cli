@@ -3,18 +3,21 @@ package helpers
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // boolPtr returns a pointer to v, for ParamDecl.Required declarations.
 func boolPtr(v bool) *bool { return &v }
 
-// aisearchKeywordAliases 是 --keyword flag 的同义瞎猜兜底列表。
-// 模型可能写 --name / --q / --query / --text，这些都被识别为 keyword。
-var aisearchKeywordAliases = []string{"name", "q", "query", "text"}
+// 这些是原有的宽松兜底名，不属于本次 Primary 迁移；保持原生 hidden
+// 注册，不给它们新增 alias_of/origin 元数据。
+var aisearchPersonGuessFlags = []string{"name", "q", "text"}
+
+// 历史解析优先级必须独立于新旧 Primary：双传时旧 --keyword 始终获胜。
+var aisearchQueryResolutionOrder = []string{"keyword", "name", "q", "query", "text"}
 
 // flagValue 安全地读取 flag 值：先查 local，再查自身 PersistentFlags，
 // 再查 parents 的 PersistentFlags。比 cmd.Flags().GetString 更鲁棒，
@@ -58,14 +61,11 @@ func aisearchFlagOrDefault(cmd *cobra.Command, primary, def string, aliases ...s
 	return def
 }
 
-// resolveAisearchKeyword 从命令的 flag 中解析 keyword：优先 --keyword，
-// 否则 fallback 到 aisearchKeywordAliases 中的任一同义 flag。
+// resolveAisearchKeyword 按历史顺序解析人员搜索词。虽然公开 Primary 已改为
+// --query，但兼容期内显式旧 --keyword 的值仍优先。
 func resolveAisearchKeyword(cmd *cobra.Command) string {
-	if v := flagValue(cmd, "keyword"); v != "" {
-		return v
-	}
-	for _, alias := range aisearchKeywordAliases {
-		if v := flagValue(cmd, alias); v != "" {
+	for _, name := range aisearchQueryResolutionOrder {
+		if v := flagValue(cmd, name); v != "" {
 			return v
 		}
 	}
@@ -73,9 +73,23 @@ func resolveAisearchKeyword(cmd *cobra.Command) string {
 }
 
 func addAisearchPersonFlags(cmd *cobra.Command) {
-	cmd.Flags().StringP("keyword", "w", "", "搜索关键词 (必填，如人名、技能关键词等)")
+	// Alias evidence must be emitted by corecmd.FlagSpec.Aliases. Build the pair
+	// on a temporary declaration command so the legacy alias can retain its
+	// historical -w shorthand without extending the global alias mechanism or
+	// assigning that shorthand to the new --query Primary.
+	declaration := &cobra.Command{Use: "aisearch-query-flags"}
+	corecmd.RegisterFlags(declaration, []corecmd.FlagSpec{{
+		Name:    "query",
+		Usage:   "搜索关键词 (必填，如人名、技能关键词等)",
+		Aliases: []string{"keyword"},
+	}})
+	queryFlag := declaration.Flags().Lookup("query")
+	keywordFlag := declaration.Flags().Lookup("keyword")
+	keywordFlag.Shorthand = "w"
+	cmd.Flags().AddFlag(queryFlag)
+	cmd.Flags().AddFlag(keywordFlag)
 	cmd.Flags().StringP("dimension", "d", "all", "查询维度: all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，多个用逗号分隔")
-	for _, alias := range aisearchKeywordAliases {
+	for _, alias := range aisearchPersonGuessFlags {
 		cmd.Flags().String(alias, "", "")
 		_ = cmd.Flags().MarkHidden(alias)
 	}
@@ -98,8 +112,7 @@ func runAisearchPerson(cmd *cobra.Command, _ []string) error {
 	}
 	keyword := resolveAisearchKeyword(cmd)
 	if keyword == "" {
-		// 复用原有报错文案（"keyword is required"）
-		return validateRequiredFlags(cmd, "keyword")
+		return validateRequiredFlags(cmd, "query")
 	}
 	dimensions := parseDimensions(flagValue(cmd, "dimension"))
 	return callMCPTool("enterprise_person_search", map[string]any{
@@ -174,6 +187,12 @@ func newAisearchCommand() *cobra.Command {
 	// products.aisearch). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "aisearch",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-aisearch"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI 搜问深度指南", "dingtalk-aisearch", "references/aisearch.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "企业内智能搜人、搜知识内容与搜行为记录",
 			UseWhen: []string{
@@ -188,8 +207,8 @@ func newAisearchCommand() *cobra.Command {
 		Use:   "aisearch",
 		Short: "AI 搜问",
 		Long:  `AI 搜问：搜索企业人员信息、企业内部知识内容与企业内部行为记录。`,
-		// 智能 root：模型常漏 person 子命令直接 dws aisearch --keyword xxx，
-		// 检测到 keyword 就自动等价于 person；否则退回 group help。
+		// 智能 root：模型常漏 person 子命令直接 dws aisearch --query xxx，
+		// 检测到 query 就自动等价于 person；否则退回 group help。
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if resolveAisearchKeyword(cmd) != "" {
 				return runAisearchPerson(cmd, args)
@@ -197,11 +216,12 @@ func newAisearchCommand() *cobra.Command {
 			return groupRunE(cmd, args)
 		},
 	}
+	newHybridGroupCommand(root)
 
 	// root 和 person 各自定义同一组本地 flag，这样：
-	//   - dws aisearch --keyword xxx           ← root 自己能解析
-	//   - dws aisearch person --keyword xxx    ← person 本地 flag
-	//   - dws aisearch search --keyword xxx    ← search 是 person 的 alias
+	//   - dws aisearch --query xxx           ← root 自己能解析
+	//   - dws aisearch person --query xxx    ← person 本地 flag
+	//   - dws aisearch search --query xxx    ← search 是 person 的 alias
 	// 不能放在 product PersistentFlags：否则 enterprise/behavior 会公开接受
 	// 它们不拥有的 person-only dimension，破坏 Help ↔ Schema 完整性。
 	addAisearchPersonFlags(root)
@@ -219,7 +239,7 @@ func newAisearchCommand() *cobra.Command {
 			"query", "people", "ask", "find", "lookup",
 			"contact",
 		},
-		// 显式声明允许任意位置参数：模型可能写 dws aisearch person search --keyword xxx，
+		// 显式声明允许任意位置参数：模型可能写 dws aisearch person search --query xxx，
 		// 此时 "search" 会作为 positional arg 被忽略，不报错。
 		Args:  cobra.ArbitraryArgs,
 		Short: "搜索企业人员",
@@ -237,13 +257,13 @@ func newAisearchCommand() *cobra.Command {
   jobNumber    工号
 
 多个维度用逗号分隔。`,
-		Example: `  dws aisearch person --keyword "张三" --dimension department
-  dws aisearch person --keyword "产品部" --dimension department
-  dws aisearch person --keyword "五道" --dimension supervisor
-  dws aisearch person --keyword "AI搜问" --dimension duty
-  dws aisearch person --keyword "李四" --dimension name,department
-  dws aisearch person --keyword "13800138000" --dimension phone
-  dws aisearch person --keyword "W12345" --dimension jobNumber`,
+		Example: `  dws aisearch person --query "张三" --dimension department
+  dws aisearch person --query "产品部" --dimension department
+  dws aisearch person --query "五道" --dimension supervisor
+  dws aisearch person --query "AI搜问" --dimension duty
+  dws aisearch person --query "李四" --dimension name,department
+  dws aisearch person --query "13800138000" --dimension phone
+  dws aisearch person --query "W12345" --dimension jobNumber`,
 		RunE: runAisearchPerson,
 	}
 	DeclareLeafMetadata(personCmd, LeafSpec{
@@ -277,9 +297,12 @@ func newAisearchCommand() *cobra.Command {
 					"搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior",
 				},
 				Examples: []string{
-					"dws aisearch person --keyword \"张三\" --dimension name --format json",
-					"dws aisearch person --keyword \"五道\" --dimension supervisor --format json",
+					"dws aisearch person --query \"张三\" --dimension name --format json",
+					"dws aisearch person --query \"五道\" --dimension supervisor --format json",
 				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "query", Property: "keyword", Required: boolPtr(true)},
 			},
 		},
 	})

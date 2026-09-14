@@ -1,8 +1,10 @@
 package helpers
 
 import (
+	"errors"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -33,9 +35,9 @@ func executeOACommand(t *testing.T, caller *scriptedToolCaller, args ...string) 
 func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {
 	installScriptedCaller(t, &scriptedToolCaller{dry: true})
 	for _, args := range [][]string{
-		{"approval", "list-pending", "--start", "bad", "--end", "2030-01-01T10:00:00+08:00"},
-		{"approval", "list-pending", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
-		{"approval", "list-pending", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
+		{"approval", "list-pending", "--create-time-from", "bad"},
+		{"approval", "list-pending", "--create-time-from", "2030-01-02", "--create-time-to", "2030-01-01"},
+		{"approval", "list-pending", "--finish-time-to", "bad"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "bad", "--end", "2030-01-01T10:00:00+08:00"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "2030-01-01T09:00:00+08:00", "--end", "bad"},
 		{"approval", "list-initiated", "--process-code", "code", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
@@ -47,7 +49,7 @@ func TestCrossPlatformCoverageOARemainingTimeAndRevertBranches(t *testing.T) {
 
 	if err := executeFilterCoverage(t, newOaCommand(),
 		"approval", "list-pending",
-		"--start", "2030-01-01T09:00:00+08:00", "--end", "2030-01-01T10:00:00+08:00",
+		"--create-time-from", "2030-01-01", "--create-time-to", "2030-01-02",
 		"--page", "2", "--size", "20", "--query", "travel",
 	); err != nil {
 		t.Fatalf("pending options: %v", err)
@@ -131,6 +133,51 @@ func TestCrossPlatformCoverageOAApprovalCreateInstanceRequiresExplicitYes(t *tes
 	}
 }
 
+func TestCrossPlatformCoverageOAApprovalListByAdminMapsSimpleOptions(t *testing.T) {
+	caller := &scriptedToolCaller{}
+	err := executeOACommand(t, caller,
+		"approval", "list-by-admin",
+		"--process-code", "PROC",
+		"--start", "2030-01-01T09:00:00+08:00",
+		"--end", "2030-01-01T10:00:00+08:00",
+		"--cursor", "5",
+		"--limit", "20",
+		"--user-ids", "user-1,user-2",
+		"--statuses", "RUNNING,COMPLETED",
+	)
+	if err != nil {
+		t.Fatalf("list by admin: %v", err)
+	}
+	if caller.server != "oa" || caller.tool != "get_process_instances_by_admin" {
+		t.Fatalf("called %s/%s, want oa/get_process_instances_by_admin", caller.server, caller.tool)
+	}
+	request, ok := caller.args["ProcessInstanceListQueryRequest"].(map[string]any)
+	if !ok {
+		t.Fatalf("request payload = %#v", caller.args)
+	}
+	if got := request["processCode"]; got != "PROC" {
+		t.Fatalf("processCode = %#v", got)
+	}
+	if got := request["cursor"]; got != float64(5) {
+		t.Fatalf("cursor = %#v", got)
+	}
+	if got := request["pageSize"]; got != float64(20) {
+		t.Fatalf("pageSize = %#v", got)
+	}
+	if got := request["startTime"]; got != "2030-01-01 09:00:00" {
+		t.Fatalf("startTime = %#v", got)
+	}
+	if got := request["endTime"]; got != "2030-01-01 10:00:00" {
+		t.Fatalf("endTime = %#v", got)
+	}
+	if got := request["userIds"]; len(got.([]string)) != 2 || got.([]string)[0] != "user-1" || got.([]string)[1] != "user-2" {
+		t.Fatalf("userIds = %#v", got)
+	}
+	if got := request["statuses"]; len(got.([]string)) != 2 || got.([]string)[0] != "RUNNING" || got.([]string)[1] != "COMPLETED" {
+		t.Fatalf("statuses = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *testing.T) {
 	validCases := []struct {
 		name string
@@ -156,6 +203,26 @@ func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *t
 			name: "create request mode",
 			args: []string{"approval", "create-instance", "--request", `{"processCode":"PROC"}`, "--yes"},
 			tool: "start_process_instance",
+		},
+		{
+			name: "list-by-admin simple mode",
+			args: []string{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00"},
+			tool: "get_process_instances_by_admin",
+		},
+		{
+			name: "list-by-admin request mode",
+			args: []string{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+			tool: "get_process_instances_by_admin",
+		},
+		{
+			name: "list-by-admin request mode without pageSize",
+			args: []string{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0}`},
+			tool: "get_process_instances_by_admin",
+		},
+		{
+			name: "list-by-admin request mode with endTime",
+			args: []string{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":"2030-01-01 23:59:59","cursor":0,"pageSize":20}`},
+			tool: "get_process_instances_by_admin",
 		},
 	}
 	for _, tc := range validCases {
@@ -188,6 +255,31 @@ func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *t
 		{"approval", "create-instance", "--process-code", "PROC", "--form-values", `{}`, "--dept-id", "bad", "--yes"},
 		{"approval", "create-instance", "--process-code", "PROC", "--form-values", `{}`, "--approvers", "u", "--approvers-action-type", "bad", "--yes"},
 		{"approval", "create-instance", "--process-code", "PROC", "--form-values", `{}`, "--cc-list", "u", "--cc-position", "bad", "--yes"},
+		{"approval", "list-by-admin"},
+		{"approval", "list-by-admin", "--process-code", "PROC"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T10:00:00+08:00", "--end", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--cursor", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "21"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "0"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", ""},
+		{"approval", "list-by-admin", "--request", "{"},
+		{"approval", "list-by-admin", "--request", "null"},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC"}`, "--process-code", "PROC"},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":21}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":"20"}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":1893459600000,"cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 10:00:00","endTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":1893463200000,"cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","endTime":"NOT-A-TIME","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":"2030-01-01","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":123,"startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
 	}
 	for _, args := range invalidCases {
 		caller := &scriptedToolCaller{}
@@ -197,5 +289,109 @@ func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *t
 		if caller.calls != 0 {
 			t.Fatalf("invalid args %v made %d MCP calls", args, caller.calls)
 		}
+	}
+}
+
+func TestCreateInstanceDenialMessage(t *testing.T) {
+	if msg := createInstanceDenialMessage(nil); msg != "" {
+		t.Fatalf("nil error → %q, want empty", msg)
+	}
+	if msg := createInstanceDenialMessage(errors.New("其他服务端错误")); msg != "" {
+		t.Fatalf("unmatched error → %q, want empty", msg)
+	}
+	denial := &CLIError{
+		Code:    CodeUnclassified,
+		Message: "the supply check point has already been bound to an approval. Please do not submit again",
+	}
+	const want = "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	if msg := createInstanceDenialMessage(denial); msg != want {
+		t.Fatalf("matched error → %q, want %q", msg, want)
+	}
+}
+
+func TestCrossPlatformCoverageOAApprovalCreateInstanceTranslatesSupplyPointDenial(t *testing.T) {
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{
+		err: &CLIError{
+			Code:    CodeUnclassified,
+			Message: "the supply check point has already been bound to an approval. Please do not submit again",
+		},
+	}}}
+	err := executeOACommand(t, caller,
+		"approval", "create-instance",
+		"--process-code", "PROC",
+		"--form-values", `{"事由":"测试"}`,
+		"--yes",
+	)
+	if err == nil {
+		t.Fatalf("create-instance should fail with the denial error")
+	}
+	const want = "该卡点已补卡完成或有正在进行中的审批流程，请勿重复提交"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+	if caller.calls != 1 {
+		t.Fatalf("calls = %d, want 1", caller.calls)
+	}
+}
+
+// U-gate: create-instance 未确认（无 --yes）时拒绝执行且不发起 MCP 调用；
+// 用户确认后（--yes）才产生唯一的 start_process_instance 精确调用。
+func TestCrossPlatformCoverageOAApprovalCreateInstanceConfirmationGate(t *testing.T) {
+	args := []string{
+		"approval", "create-instance",
+		"--process-code", "PROC-1",
+		"--dept-id", "123",
+		"--form-values", `{"事由":"客户拜访"}`,
+		"--originator-user-id", "originator-1",
+		"--approvers", "approver-1,approver-2",
+		"--approvers-action-type", "AND",
+		"--cc-list", "cc-1,cc-2",
+		"--cc-position", "START_FINISH",
+	}
+
+	unconfirmed := &scriptedToolCaller{}
+	err := executeOACommand(t, unconfirmed, args...)
+	if err == nil {
+		t.Fatal("create-instance without --yes returned nil")
+	}
+	const wantConfirmation = "发起审批实例会创建真实业务数据；请先核对参数，然后添加 --yes 确认执行"
+	if err.Error() != wantConfirmation {
+		t.Fatalf("error = %q, want %q", err.Error(), wantConfirmation)
+	}
+	if unconfirmed.calls != 0 {
+		t.Fatalf("unconfirmed create-instance made %d MCP calls", unconfirmed.calls)
+	}
+
+	confirmed := &scriptedToolCaller{}
+	confirmedArgs := append(append([]string(nil), args...), "--yes")
+	if err := executeOACommand(t, confirmed, confirmedArgs...); err != nil {
+		t.Fatalf("confirmed create-instance: %v", err)
+	}
+	if confirmed.server != "oa" || confirmed.tool != "start_process_instance" {
+		t.Fatalf("called %s/%s, want oa/start_process_instance", confirmed.server, confirmed.tool)
+	}
+	if confirmed.calls != 1 {
+		t.Fatalf("calls = %d, want exactly one confirmed call", confirmed.calls)
+	}
+	if len(confirmed.args) != 1 {
+		t.Fatalf("args = %#v, want only ProcessInstanceCreationPopRequest", confirmed.args)
+	}
+	wantRequest := map[string]any{
+		"processCode": "PROC-1",
+		"deptId":      int64(123),
+		"formComponentValues": []map[string]string{
+			{"name": "事由", "value": "客户拜访"},
+		},
+		"originatorUserId": "originator-1",
+		"approvers": []map[string]any{{
+			"actionType": "AND",
+			"userIds":    []string{"approver-1", "approver-2"},
+		}},
+		"ccList":     []string{"cc-1", "cc-2"},
+		"ccPosition": "START_FINISH",
+	}
+	wantArgs := map[string]any{"ProcessInstanceCreationPopRequest": wantRequest}
+	if !reflect.DeepEqual(confirmed.args, wantArgs) {
+		t.Fatalf("confirmed args = %#v, want %#v", confirmed.args, wantArgs)
 	}
 }

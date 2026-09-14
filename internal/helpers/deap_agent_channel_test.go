@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
@@ -16,10 +18,11 @@ import (
 )
 
 type digitalEmployeeProtocolCaller struct {
-	responses  map[string][]string
-	calls      []deapAgentCall
-	tokenCalls []deapAgentCall
-	tokens     []string
+	responses      map[string][]string
+	tokenResponses map[string][]string
+	calls          []deapAgentCall
+	tokenCalls     []deapAgentCall
+	tokens         []string
 }
 
 func (c *digitalEmployeeProtocolCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -42,11 +45,19 @@ func (c *digitalEmployeeProtocolCaller) CallToolWithToken(_ context.Context, tok
 	c.tokenCalls = append(c.tokenCalls, deapAgentCall{productID: productID, toolName: toolName, args: args})
 	c.tokens = append(c.tokens, token)
 	key := productID + "/" + toolName
-	queue := c.responses[key]
+	queue := c.tokenResponses[key]
+	tokenScopedResponse := len(queue) > 0
+	if !tokenScopedResponse {
+		queue = c.responses[key]
+	}
 	if len(queue) == 0 {
 		return nil, errors.New("unexpected token-scoped MCP call")
 	}
-	c.responses[key] = queue[1:]
+	if tokenScopedResponse {
+		c.tokenResponses[key] = queue[1:]
+	} else {
+		c.responses[key] = queue[1:]
+	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: queue[0]}}}, nil
 }
 
@@ -126,7 +137,7 @@ func TestDingTalkTagExposesIndependentConnectAndChannelProtocols(t *testing.T) {
 	if !connect.Runnable() {
 		t.Fatal("dingtalk-tag connect must be runnable")
 	}
-	for _, flag := range []string{"agent-uuid", "channel", "client-id", "dry-run", "yes"} {
+	for _, flag := range []string{"agent-uuid", "channel", "profile-only", "client-id", "dry-run", "yes"} {
 		if connect.Flags().Lookup(flag) == nil && connect.InheritedFlags().Lookup(flag) == nil {
 			t.Errorf("dingtalk-tag connect missing --%s", flag)
 		}
@@ -188,6 +199,7 @@ func TestDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelope(t *testing.T) {
 }
 
 func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
+	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
 		"chat/send_personal_message": {`{"result":{"openMessageId":"reply-1","sendStatus":"SUCCESS"}}`},
@@ -261,6 +273,77 @@ func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *
 	}
 }
 
+func TestDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
+	installEmployeeReplyBinding(t)
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
+		"chat/send_personal_message": {`{"result":{"openTaskId":"task-1"}}`},
+		"im/query_message_send_status": {
+			`{"result":{"openTaskId":"task-1","status":"PROCESSING"}}`,
+			`{"result":{"openTaskId":"task-1","openMessageId":"reply-1","openConversationId":"conversation-1","status":"SUCCESS"}}`,
+		},
+	}}
+	InitDepsForTest(t, caller)
+	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { return nil })
+	root := deapHandler{}.Command(&captureRunner{})
+	leaf, _, err := root.Find([]string{"channel", "reply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"channel": "dsh", "stdin": "true"} {
+		if err := leaf.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	leaf.SetIn(strings.NewReader(`{"schemaVersion":1,"protocolVersion":1,"agentUuid":"agent-1","eventId":"event-1","sessionId":"session-1","conversationId":"conversation-1","referenceMessageId":"message-1","text":"异步回执正文","idempotencyKey":"idem-1"}`))
+	var output bytes.Buffer
+	leaf.SetOut(&output)
+	if err := leaf.RunE(leaf, nil); err != nil {
+		t.Fatalf("reply RunE() error = %v", err)
+	}
+	if len(caller.calls) != 4 || caller.calls[3].productID != "im" || caller.calls[3].toolName != "query_message_send_status" || caller.calls[3].args["openTaskId"] != "task-1" {
+		t.Fatalf("async receipt calls = %#v", caller.calls)
+	}
+	var envelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			OpenMessageID  string `json:"openMessageId"`
+			ConversationID string `json:"conversationId"`
+			DeliveryStatus string `json:"deliveryStatus"`
+			IdempotencyKey string `json:"idempotencyKey"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.OpenMessageID != "reply-1" || envelope.Data.ConversationID != "conversation-1" ||
+		envelope.Data.DeliveryStatus != "delivered" || envelope.Data.IdempotencyKey != "idem-1" {
+		t.Fatalf("async reply envelope = %#v", envelope)
+	}
+}
+
+func TestDigitalEmployeeDeliveryRejectsMissingMessageIDAfterBoundedPolling(t *testing.T) {
+	statuses := make([]string, digitalEmployeeReceiptAttempts)
+	for i := range statuses {
+		statuses[i] = `{"result":{"openTaskId":"task-1","status":"PROCESSING"}}`
+	}
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"im/query_message_send_status": statuses,
+	}}
+	InitDepsForTest(t, caller)
+	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { return nil })
+
+	_, err := resolveDigitalEmployeeDelivery(context.Background(), map[string]any{
+		"result": map[string]any{"openTaskId": "task-1"},
+	}, "conversation-1", "idem-1")
+	if err == nil || !strings.Contains(err.Error(), "openMessageId") {
+		t.Fatalf("missing message id error = %v", err)
+	}
+	if len(caller.calls) != digitalEmployeeReceiptAttempts {
+		t.Fatalf("status query count = %d, want %d", len(caller.calls), digitalEmployeeReceiptAttempts)
+	}
+}
+
 func TestDingTalkTagConnectDryRunHasNoExternalEffects(t *testing.T) {
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
@@ -298,6 +381,143 @@ func TestDingTalkTagConnectDryRunHasNoExternalEffects(t *testing.T) {
 	}
 }
 
+func TestDingTalkTagConnectProfileOnlyDryRunStopsAtProfilePersistence(t *testing.T) {
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
+	InitDepsForTest(t, caller)
+	testseam.Swap(t, &deapConnectManagedExchange, func(context.Context, string, auth.ManagedExchangeRequest) (*auth.TokenData, error) {
+		t.Fatal("profile-only dry-run exchanged an authorization code")
+		return nil, nil
+	})
+	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error {
+		t.Fatal("profile-only dry-run persisted a DSH binding")
+		return nil
+	})
+	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) {
+		t.Fatal("profile-only dry-run registered DSH")
+		return "", nil
+	})
+
+	leaf := newProfileOnlyConnectTestCommand(t, true)
+	var output bytes.Buffer
+	leaf.SetOut(&output)
+	if err := leaf.RunE(leaf, nil); err != nil {
+		t.Fatalf("profile-only dry-run error = %v", err)
+	}
+	var envelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			ProfileOnly     bool     `json:"profileOnly"`
+			RestartRequired bool     `json:"restartRequired"`
+			Steps           []string `json:"steps"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || !envelope.Data.ProfileOnly || envelope.Data.RestartRequired ||
+		strings.Join(envelope.Data.Steps, ",") != "validate_draft,validate_published,request_auth_code,managed_exchange,persist_profile" ||
+		strings.Contains(output.String(), `"channel"`) || strings.Contains(output.String(), "register_dsh") {
+		t.Fatalf("profile-only dry-run envelope = %s", output.String())
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("profile-only dry-run made MCP calls: %#v", caller.calls)
+	}
+}
+
+func TestDingTalkTagConnectProfileOnlyPersistsProfileWithoutDSHEffects(t *testing.T) {
+	caller := newSuccessfulConnectCaller(successfulAuthResponse(), "")
+	caller.responses["contact/get_current_user_profile"] = []string{
+		`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`,
+	}
+	InitDepsForTest(t, caller)
+	setupConnectSupervisorSeams(t)
+
+	var exchange auth.ManagedExchangeRequest
+	testseam.Swap(t, &deapConnectManagedExchange, func(ctx context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
+		exchange = request
+		identity, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedCorpID)
+		if err != nil {
+			return nil, err
+		}
+		return &auth.TokenData{
+			CorpID: identity.CorpID, UserID: identity.UserID,
+			ClientID: request.ClientID, Source: "mcp",
+		}, nil
+	})
+	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error {
+		t.Fatal("profile-only persisted a DSH binding")
+		return nil
+	})
+	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) {
+		t.Fatal("profile-only registered DSH")
+		return "", nil
+	})
+
+	leaf := newProfileOnlyConnectTestCommand(t, false)
+	var output bytes.Buffer
+	leaf.SetOut(&output)
+	if err := leaf.RunE(leaf, nil); err != nil {
+		t.Fatalf("profile-only RunE() error = %v", err)
+	}
+	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
+		t.Fatalf("managed exchange = %#v", exchange)
+	}
+	if len(caller.calls) != 3 {
+		t.Fatalf("profile-only ordinary MCP calls = %#v, want draft, published, auth only", caller.calls)
+	}
+	if len(caller.tokenCalls) != 1 || caller.tokenCalls[0].toolName != "get_current_user_profile" {
+		t.Fatalf("profile-only token-scoped calls = %#v", caller.tokenCalls)
+	}
+	if auth.RuntimeProfile() != "" {
+		t.Fatalf("profile-only changed runtime profile to %q", auth.RuntimeProfile())
+	}
+	var envelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Status                 string `json:"status"`
+			AgentUUID              string `json:"agentUuid"`
+			Channel                string `json:"channel"`
+			DWSProfile             string `json:"dwsProfile"`
+			OperatorOpenDingTalkID string `json:"operatorOpenDingTalkId"`
+			ProfileOnly            bool   `json:"profileOnly"`
+			RestartRequired        bool   `json:"restartRequired"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.Status != "profile_saved" || envelope.Data.AgentUUID != "agent-1" ||
+		envelope.Data.DWSProfile != "employee-corp:employee-user" || !envelope.Data.ProfileOnly ||
+		envelope.Data.Channel != "" || envelope.Data.OperatorOpenDingTalkID != "" || envelope.Data.RestartRequired {
+		t.Fatalf("profile-only envelope = %#v", envelope)
+	}
+}
+
+func TestDingTalkTagConnectRequiresOneExplicitMode(t *testing.T) {
+	tests := []struct {
+		name        string
+		channel     string
+		profileOnly bool
+		want        string
+	}{
+		{name: "missing mode", want: "无法选择受支持的数字员工 Agent"},
+		{name: "conflicting modes", channel: "dsh", profileOnly: true, want: "不能同时使用"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
+			InitDepsForTest(t, caller)
+			leaf := newConnectTestCommandWithMode(t, true, tc.channel, tc.profileOnly)
+			if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("mode validation error = %v, want %q", err, tc.want)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid mode made MCP calls: %#v", caller.calls)
+			}
+		})
+	}
+}
+
 func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -324,6 +544,14 @@ func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.
 				`{"success":false,"errorMsg":"permission denied"}`,
 			},
 			want: "尚未发布",
+		},
+		{
+			name: "published profile missing corp id",
+			responses: []string{
+				`{"success":true,"data":{"digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
+				`{"success":true,"data":{"status":"online"}}`,
+			},
+			want: "缺少 profile.corpId",
 		},
 	}
 	for _, tc := range tests {
@@ -413,6 +641,17 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 		}
 	})
 
+	t.Run("operator search result must match exact supervisor user id", func(t *testing.T) {
+		caller := newSuccessfulConnectCaller(successfulAuthResponse(),
+			`{"result":[{"userId":"different-user","openDingTalkId":"operator-open"}]}`)
+		InitDepsForTest(t, caller)
+		setupSuccessfulConnectSeams(t)
+		leaf := newConnectTestCommand(t, false)
+		if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), "唯一 operatorOpenDingTalkId") {
+			t.Fatalf("operator exact-match error = %v", err)
+		}
+	})
+
 	t.Run("DSH registration failure is safely retryable", func(t *testing.T) {
 		caller := newSuccessfulConnectCaller(successfulAuthResponse(),
 			`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
@@ -428,7 +667,7 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 		})
 		leaf := newConnectTestCommand(t, false)
 		err := leaf.RunE(leaf, nil)
-		if err == nil || !strings.Contains(err.Error(), "employee-corp:employee-user") || !strings.Contains(err.Error(), "幂等重试") {
+		if err == nil || !strings.Contains(err.Error(), "employee-corp:employee-user") || !strings.Contains(err.Error(), "connect restart --agent-uuid agent-1") {
 			t.Fatalf("DSH retry error = %v", err)
 		}
 		if !saved {
@@ -437,14 +676,54 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 	})
 }
 
+func TestDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t *testing.T) {
+	tests := []struct {
+		name          string
+		authorization string
+		want          string
+	}{
+		{
+			name:          "robot uid mismatch",
+			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"other-robot","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
+			want:          "uid 与发布详情 profile.robotUid 不一致",
+		},
+		{
+			name:          "staff id mismatch",
+			authorization: `{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"other-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`,
+			want:          "staffId 与发布详情 profile.staffId 不一致",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := newSuccessfulConnectCaller(tc.authorization,
+				`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
+			InitDepsForTest(t, caller)
+			setupConnectSupervisorSeams(t)
+			exchanged := false
+			testseam.Swap(t, &deapConnectManagedExchange, func(context.Context, string, auth.ManagedExchangeRequest) (*auth.TokenData, error) {
+				exchanged = true
+				return nil, errors.New("unexpected exchange")
+			})
+			leaf := newConnectTestCommand(t, false)
+			if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("connect error = %v, want %q", err, tc.want)
+			}
+			if exchanged {
+				t.Fatal("authorization identity mismatch reached managed exchange")
+			}
+		})
+	}
+}
+
 func newSuccessfulConnectCaller(authResponse, contactResponse string) *digitalEmployeeProtocolCaller {
 	return &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
 		},
-		"deap-dev/get_dws_auth_code":        {authResponse},
-		"contact/get_user_info_by_user_ids": {contactResponse},
+		"deap-dev/get_dws_auth_code":         {authResponse},
+		"contact/search_contact_by_key_word": {contactResponse},
 	}}
 }
 
@@ -456,12 +735,16 @@ func setupConnectSupervisorSeams(t *testing.T) {
 	t.Helper()
 	auth.SetRuntimeProfile("")
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapConnectConfigDir, func() string { return "/test/config" })
+	configDir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return configDir })
 	testseam.Swap(t, &deapConnectLoadProfiles, func(string) (*auth.ProfilesConfig, error) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})
 	testseam.Swap(t, &deapConnectLoadToken, func(string, string) (*auth.TokenData, error) {
-		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user"}, nil
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
+	})
+	testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
 	})
 }
 
@@ -469,13 +752,21 @@ func setupSuccessfulConnectSeams(t *testing.T) {
 	t.Helper()
 	setupConnectSupervisorSeams(t)
 	testseam.Swap(t, &deapConnectManagedExchange, func(_ context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
-		return &auth.TokenData{CorpID: request.ExpectedCorpID, UserID: request.ExpectedUserID, ClientID: request.ClientID, Source: "mcp"}, nil
+		return &auth.TokenData{AccessToken: "managed-access-secret", CorpID: request.ExpectedCorpID, UserID: request.ExpectedUserID, ClientID: request.ClientID, Source: "mcp"}, nil
 	})
 	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error { return nil })
 	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) { return "created", nil })
 }
 
 func newConnectTestCommand(t *testing.T, dryRun bool) *cobra.Command {
+	return newConnectTestCommandWithMode(t, dryRun, "dsh", false)
+}
+
+func newProfileOnlyConnectTestCommand(t *testing.T, dryRun bool) *cobra.Command {
+	return newConnectTestCommandWithMode(t, dryRun, "", true)
+}
+
+func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string, profileOnly bool) *cobra.Command {
 	t.Helper()
 	root := deapHandler{}.Command(&captureRunner{})
 	root.PersistentFlags().Bool("yes", false, "test confirmation")
@@ -484,7 +775,14 @@ func newConnectTestCommand(t *testing.T, dryRun bool) *cobra.Command {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, value := range map[string]string{"agent-uuid": "agent-1", "channel": "dsh", "yes": "true"} {
+	values := map[string]string{"agent-uuid": "agent-1", "yes": "true"}
+	if channel != "" {
+		values["channel"] = channel
+	}
+	if profileOnly {
+		values["profile-only"] = "true"
+	}
+	for name, value := range values {
 		flags := leaf.Flags()
 		if flags.Lookup(name) == nil {
 			flags = leaf.InheritedFlags()
@@ -502,20 +800,27 @@ func newConnectTestCommand(t *testing.T, dryRun bool) *cobra.Command {
 }
 
 func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *testing.T) {
+	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
+		return employeeDSHState{}, fmt.Errorf("host unavailable")
+	})
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
+		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-created"}`},
 		"deap-dev/get_digital_employee_detail": {
 			`{"success":true,"data":{"name":"本地员工","digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 			`{"success":true,"data":{"status":"online","profile":{"corpId":"employee-corp","robotUid":"robot-uid","staffId":"employee-user"}}}`,
 		},
-		"deap-dev/get_dws_auth_code":        {`{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`},
-		"contact/get_current_user_profile":  {`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`},
-		"contact/get_user_info_by_user_ids": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`},
+		"deap-dev/get_dws_auth_code":         {`{"success":true,"data":{"dwsClientId":"returned-client","uid":"robot-uid","staffId":"employee-user","dwsAuthCode":"one-time-secret","orgId":"439446171"}}`},
+		"contact/search_contact_by_key_word": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-supervisor-scope"}]}`},
+	}, tokenResponses: map[string][]string{
+		"contact/get_current_user_profile":   {`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`},
+		"contact/search_contact_by_key_word": {`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-employee-scope"}]}`},
 	}}
 	InitDepsForTest(t, caller)
 	t.Setenv("DWS_DUMP_RAW", "1")
 	auth.SetRuntimeProfile("")
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
-	testseam.Swap(t, &deapConnectConfigDir, func() string { return "/test/config" })
+	configDir := t.TempDir()
+	testseam.Swap(t, &deapConnectConfigDir, func() string { return configDir })
 	testseam.Swap(t, &deapConnectLoadProfiles, func(string) (*auth.ProfilesConfig, error) {
 		return &auth.ProfilesConfig{CurrentProfile: "supervisor-corp:supervisor-user"}, nil
 	})
@@ -523,11 +828,20 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 		if selector != "supervisor-corp:supervisor-user" {
 			t.Fatalf("supervisor selector = %q", selector)
 		}
-		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user"}, nil
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
+	})
+	testseam.Swap(t, &deapConnectLoadSupervisorToken, func(context.Context, string) (*auth.TokenData, error) {
+		return &auth.TokenData{CorpID: "supervisor-corp", UserID: "supervisor-user", AccessToken: "supervisor-test-token"}, nil
 	})
 	var exchange auth.ManagedExchangeRequest
 	testseam.Swap(t, &deapConnectManagedExchange, func(ctx context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
 		exchange = request
+		if request.ExpectedCorpID != "employee-corp" {
+			return nil, fmt.Errorf("managed exchange expected organization = %q, want published corpId", request.ExpectedCorpID)
+		}
+		if request.ExpectedUserID != "employee-user" {
+			return nil, fmt.Errorf("managed exchange expected user = %q, want authorization staffId", request.ExpectedUserID)
+		}
 		if request.ResolveIdentity == nil {
 			return nil, errors.New("managed identity resolver is missing")
 		}
@@ -539,14 +853,15 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 			return nil, err
 		}
 		return &auth.TokenData{
-			CorpID: identity.CorpID, CorpName: identity.CorpName,
+			AccessToken: "managed-access-secret",
+			CorpID:      identity.CorpID, CorpName: identity.CorpName,
 			UserID: identity.UserID, UserName: identity.UserName,
 			ClientID: request.ClientID, Source: "mcp",
 		}, nil
 	})
 	var registration map[string]any
 	testseam.Swap(t, &deapConnectSaveBinding, func(_ string, binding digitalEmployeeBinding) error {
-		if binding.DWSProfile != "employee-corp:employee-user" || binding.OperatorOpenDingTalkID != "operator-open" {
+		if binding.DWSProfile != "employee-corp:employee-user" || binding.OperatorOpenDingTalkID != "operator-employee-scope" {
 			t.Fatalf("binding = %#v", binding)
 		}
 		return nil
@@ -582,14 +897,22 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
 		t.Fatalf("managed exchange = %#v", exchange)
 	}
-	if len(caller.tokenCalls) != 1 || len(caller.tokens) != 1 || caller.tokens[0] != "managed-access-secret" ||
-		caller.tokenCalls[0].productID != "contact" || caller.tokenCalls[0].toolName != "get_current_user_profile" {
+	if len(caller.tokenCalls) != 3 || len(caller.tokens) != 3 || caller.tokens[2] != "supervisor-test-token" || caller.tokenCalls[2].toolName != "bind_local_agent" ||
+		caller.tokens[0] != "managed-access-secret" || caller.tokens[1] != "managed-access-secret" ||
+		caller.tokenCalls[0].productID != "contact" || caller.tokenCalls[0].toolName != "get_current_user_profile" ||
+		caller.tokenCalls[1].productID != "contact" || caller.tokenCalls[1].toolName != "search_contact_by_key_word" ||
+		caller.tokenCalls[1].args["keyword"] != "supervisor-user" {
 		t.Fatalf("managed identity lookup calls=%#v tokens=%#v", caller.tokenCalls, caller.tokens)
+	}
+	for _, call := range caller.calls {
+		if call.productID == "contact" && call.toolName == "search_contact_by_key_word" {
+			t.Fatalf("operator lookup used supervisor-profile MCP caller: %#v", call)
+		}
 	}
 	if auth.RuntimeProfile() != "" {
 		t.Fatalf("connect changed runtime profile to %q", auth.RuntimeProfile())
 	}
-	if registration["dwsProfile"] != "employee-corp:employee-user" || registration["operatorOpenDingTalkId"] != "operator-open" {
+	if registration["dwsProfile"] != "employee-corp:employee-user" || registration["operatorOpenDingTalkId"] != "operator-employee-scope" {
 		t.Fatalf("DSH registration = %#v", registration)
 	}
 	combined := output.String() + stderr.String()

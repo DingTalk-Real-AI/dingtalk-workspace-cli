@@ -13,12 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type digitalEmployeePublishedIdentity struct {
-	CorpID   string
-	RobotUID string
-	StaffID  string
-}
-
 type digitalEmployeeLoginSession struct {
 	DigitalProfile    string
 	DigitalToken      *auth.TokenData
@@ -65,7 +59,7 @@ func runDeapAgentLogin(cmd *cobra.Command, _ []string) error {
 // 授权码换票、在线身份核验和精确 Profile 落盘，不包含 local_agent、DSH 或
 // Bridge 逻辑，并始终保留发起操作的主管 Profile 为当前 Profile。
 func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedClientID string, published map[string]any) (*digitalEmployeeLoginSession, error) {
-	supervisorSelector, supervisor, err := currentSupervisorProfile(configDir)
+	supervisorSelector, supervisor, err := currentSupervisorProfile(ctx, configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -116,16 +110,4 @@ func loginDigitalEmployee(ctx context.Context, configDir, agentUUID, requestedCl
 		DigitalProfile: digitalProfile, DigitalToken: token,
 		SupervisorProfile: supervisorSelector, SupervisorToken: supervisor,
 	}, nil
-}
-
-func publishedDigitalEmployeeIdentity(value map[string]any) (digitalEmployeePublishedIdentity, bool) {
-	data := businessDataMap(value)
-	profile, ok := data["profile"].(map[string]any)
-	if !ok {
-		return digitalEmployeePublishedIdentity{}, false
-	}
-	identity := digitalEmployeePublishedIdentity{
-		CorpID: jsonScalar(profile["corpId"]), RobotUID: jsonScalar(profile["robotUid"]), StaffID: jsonScalar(profile["staffId"]),
-	}
-	return identity, identity.CorpID != "" && identity.RobotUID != "" && identity.StaffID != ""
 }

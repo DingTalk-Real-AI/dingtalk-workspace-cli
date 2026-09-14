@@ -14,6 +14,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,11 +28,15 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
+	messagecrypto "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto/message"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
 const directMessagesHardPageLimit = 500
+const messageDecryptFailedOriginalContentKey = "_contentDecryptFailedOriginal"
 
 // MessagesSend sends a text/markdown message as the current user
 // (send_personal_message, chat server). Media/file variants are not covered.
@@ -48,18 +53,21 @@ var MessagesSendByBot = shortcut.Shortcut{
 		{Name: "robot-code", Type: shortcut.FlagString, Desc: "机器人 Code", Required: true},
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true, Aliases: []string{"text"}},
 		{Name: "at-user-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId 列表"},
 		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "@ 的 openDingTalkId 列表"},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@ 所有人"},
 	},
-	Tips: []string{`dws chat +messages-send-by-bot --robot-code <robotCode> --group <openConversationId> --title "日报" --text "## 今日完成"`},
+	Tips: []string{`dws chat +messages-send-by-bot --robot-code <robotCode> --group <openConversationId> --title "日报" --content "## 今日完成"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", rt.StrSlice("at-open-dingtalk-ids")); err != nil {
+			return err
+		}
 		params := map[string]any{
 			"robotCode":          rt.Str("robot-code"),
 			"openConversationId": rt.Str("group"),
 			"title":              rt.Str("title"),
-			"markdown":           rt.Str("text"),
+			"markdown":           rt.StrFirst("text", "content"),
 		}
 		if v := rt.StrSlice("at-user-ids"); len(v) > 0 {
 			params["atUserIds"] = v
@@ -86,17 +94,20 @@ var MessagesBatchSendByBot = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "robot-code", Type: shortcut.FlagString, Desc: "机器人 Code", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "Markdown 正文", Required: true, Aliases: []string{"text"}},
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "接收人 userId 列表"},
 		{Name: "open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "接收人 openDingTalkId 列表"},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@ 所有人"},
 	},
-	Tips: []string{`dws chat +messages-batch-send-by-bot --robot-code <robotCode> --users userId1,userId2 --title "提醒" --text "请提交周报"`},
+	Tips: []string{`dws chat +messages-batch-send-by-bot --robot-code <robotCode> --users userId1,userId2 --title "提醒" --content "请提交周报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateExplicitOpenIDs("--open-dingtalk-ids", rt.StrSlice("open-dingtalk-ids")); err != nil {
+			return err
+		}
 		params := map[string]any{
 			"robotCode": rt.Str("robot-code"),
 			"title":     rt.Str("title"),
-			"markdown":  rt.Str("text"),
+			"markdown":  rt.StrFirst("text", "content"),
 		}
 		if v := rt.StrSlice("users"); len(v) > 0 {
 			params["userIds"] = v
@@ -141,23 +152,23 @@ var MessagesSendByWebhook = shortcut.Shortcut{
 			AgentSummary: "兼容旧入口的自定义机器人 Webhook 群消息发送",
 			UseWhen:      []string{"只有既有自动化明确依赖 +messages-send-by-webhook 兼容路径、暂时不能迁移统一身份入口时使用"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws chat +messages-send-by-webhook --token <token> --title \"告警\" --text \"CPU 超 90%\" --at-all"},
+			Examples:     []string{"dws chat +messages-send-by-webhook --token <token> --title \"告警\" --content \"CPU 超 90%\" --at-all"},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "token", Type: shortcut.FlagString, Desc: "Webhook token", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
-		{Name: "text", Type: shortcut.FlagString, Desc: "消息正文", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: "消息正文", Required: true, Aliases: []string{"text"}},
 		{Name: "at-all", Type: shortcut.FlagBool, Desc: "@ 所有人"},
 		{Name: "at-mobiles", Type: shortcut.FlagStringSlice, Desc: "@ 的手机号列表"},
 		{Name: "at-users", Type: shortcut.FlagStringSlice, Desc: "@ 的 userId 列表"},
 	},
-	Tips: []string{`dws chat +messages-send-by-webhook --token <token> --title "告警" --text "CPU 超 90%" --at-all`},
+	Tips: []string{`dws chat +messages-send-by-webhook --token <token> --title "告警" --content "CPU 超 90%" --at-all`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"robotToken": rt.Str("token"),
 			"title":      rt.Str("title"),
-			"text":       rt.Str("text"),
+			"text":       rt.StrFirst("text", "content"),
 		}
 		if rt.Bool("at-all") {
 			params["isAtAll"] = true
@@ -311,8 +322,11 @@ var MessagesList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		rawMessages := listMessagesResolveMaps(data)
+		decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 		payload := map[string]any{"count": len(messages), "messages": messages}
+		applyMessageDecryptLedger(payload, decryptLedger)
 		direction := "older"
 		if rt.Bool("forward") {
 			direction = "newer"
@@ -351,6 +365,16 @@ func listMessagesProjectWithReactions(data map[string]any, includeReactions bool
 	return out
 }
 
+func projectMessageMapsWithReactions(raw []map[string]any, includeReactions bool) []map[string]any {
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if row := listMessageProjectOneWithReactions(item, includeReactions); len(row) > 0 {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // listMessageProjectOne projects a single message into the native
 // {messageId, senderId, msgType, createTime, text(, forwarded)} shape, reused
 // recursively for forwarded chat records.
@@ -360,6 +384,9 @@ func listMessageProjectOne(m map[string]any) map[string]any {
 
 func listMessageProjectOneWithReactions(m map[string]any, includeReactions bool) map[string]any {
 	row := chatmsg.ProjectMessageV1(m, includeReactions)
+	if original, ok := m[messageDecryptFailedOriginalContentKey].(string); ok && strings.TrimSpace(original) != "" {
+		row["text"] = original
+	}
 	// The established mget/list projection omits absent scalar fields; keep
 	// that wire behavior even though the shared chat/search view retains them.
 	for _, key := range []string{"sender", "text", "createTime"} {
@@ -411,6 +438,247 @@ func listMessagesResolveMaps(data map[string]any) []map[string]any {
 		}
 	}
 	return out
+}
+
+type messageDecryptLedger struct {
+	candidateCount int
+	decryptedCount int
+	failures       []map[string]any
+}
+
+var messageReadCryptoClient = newMessageReadCryptoClient()
+
+var (
+	messageReadCurrentIdentity = msgcrypto.CurrentIdentity
+	messageReadOpenSession     = msgcrypto.OpenSession
+	messageReadAvailable       = msgcrypto.Available
+)
+
+func newMessageReadCryptoClient() *messagecrypto.Client {
+	return &messagecrypto.Client{
+		Identity: func(ctx context.Context, configDir string) (messagecrypto.Identity, error) {
+			identity, err := messageReadCurrentIdentity(ctx, configDir)
+			return messagecrypto.Identity{CorpID: identity.CorpID, StaffID: identity.StaffID}, err
+		},
+		OpenSession: func(ctx context.Context, opts messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			session, err := messageReadOpenSession(ctx, msgcrypto.SessionOptions{
+				ConfigDir:           opts.ConfigDir,
+				CLIVersion:          opts.CLIVersion,
+				KeyServer:           firstNonEmptyShortcutString(opts.KeyServer, msgcrypto.DefaultSafeChatKeyServer),
+				AllowedRedirectHost: firstNonEmptyShortcutString(opts.AllowedRedirectHost, msgcrypto.DefaultSafeChatRedirectHost),
+				KeystoreDir:         opts.KeystoreDir,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &messagecrypto.Session{
+				Cipher:  session.Cipher,
+				CorpID:  session.CorpID,
+				StaffID: session.StaffID,
+				Close:   session.Close,
+			}, nil
+		},
+		BackendReady: messageReadAvailable,
+		PolicyCache:  messagecrypto.NewPolicyCache(time.Now),
+	}
+}
+
+func decryptMessageItemsIfRequested(rt *shortcut.RuntimeContext, messages []map[string]any) messageDecryptLedger {
+	if rt.DryRun() {
+		return messageDecryptLedger{}
+	}
+	items := collectEncryptedMessageItems(messages)
+	if len(items) == 0 {
+		return messageDecryptLedger{}
+	}
+	filtered, ledger := filterMessageDecryptItemsByPolicy(rt, items)
+	if len(filtered) == 0 {
+		markMessageDecryptFailures(messages, ledger.failures)
+		return ledger
+	}
+	result, err := messageReadCryptoClient.BatchDecryptInbound(rt.Command().Context(), rt, messagecrypto.Options{}, filtered)
+	if err != nil {
+		for _, item := range filtered {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+		}
+		markMessageDecryptFailures(messages, ledger.failures)
+		return ledger
+	}
+	index := indexMessageMapsByID(messages)
+	for _, item := range result.Items {
+		if item.Status != "" && item.Status != "success" {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+			continue
+		}
+		if strings.TrimSpace(item.PlaintextContent) == "" {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
+			continue
+		}
+		for _, message := range index[item.MessageID] {
+			message["content"] = item.PlaintextContent
+			message["contentDecrypted"] = true
+			message["cryptoLayer"] = "ding+safechat"
+			if item.KeyVersion > 0 {
+				message["dingKeyVersion"] = item.KeyVersion
+			}
+		}
+		ledger.decryptedCount++
+	}
+	for _, item := range result.Failures {
+		ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, item.Reason))
+	}
+	markMessageDecryptFailures(messages, ledger.failures)
+	return ledger
+}
+
+func filterMessageDecryptItemsByPolicy(
+	rt *shortcut.RuntimeContext,
+	items []messagecrypto.BatchDecryptItem,
+) ([]messagecrypto.BatchDecryptItem, messageDecryptLedger) {
+	filtered := make([]messagecrypto.BatchDecryptItem, 0, len(items))
+	ledger := messageDecryptLedger{candidateCount: len(items)}
+	for _, item := range items {
+		decision, err := messageReadCryptoClient.PolicyDecision(rt.Command().Context(), rt, messagecrypto.Options{
+			Identity:           "user",
+			MsgType:            "text",
+			OpenConversationID: item.ConversationID,
+		})
+		if err != nil {
+			ledger.failures = append(ledger.failures, messageDecryptFailure(item.MessageID, item.ConversationID, err.Error()))
+			continue
+		}
+		if decision.Enabled {
+			filtered = append(filtered, item)
+		}
+	}
+	ledger.candidateCount = len(filtered)
+	return filtered, ledger
+}
+
+func collectEncryptedMessageItems(messages []map[string]any) []messagecrypto.BatchDecryptItem {
+	items := make([]messagecrypto.BatchDecryptItem, 0)
+	var walk func(map[string]any)
+	walk = func(message map[string]any) {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message)))
+		if messageID == "" || messageID == "<nil>" {
+			messageID = strings.TrimSpace(fmt.Sprint(firstMessageDecryptValue(message, "openMessageId", "messageId", "msgId")))
+		}
+		conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
+		if conversationID == "<nil>" {
+			conversationID = ""
+		}
+		content := firstMessageDecryptString(message, "content", "text")
+		if messageID != "" && chatmsg.IsEncrypted(content) {
+			items = append(items, messagecrypto.BatchDecryptItem{
+				MessageID:      messageID,
+				ConversationID: conversationID,
+				Ciphertext:     content,
+			})
+		}
+		if forwarded, ok := message["forwardMessages"].([]any); ok {
+			for _, item := range forwarded {
+				if child, ok := item.(map[string]any); ok {
+					walk(child)
+				}
+			}
+		}
+	}
+	for _, message := range messages {
+		walk(message)
+	}
+	return items
+}
+
+func indexMessageMapsByID(messages []map[string]any) map[string][]map[string]any {
+	index := map[string][]map[string]any{}
+	var walk func(map[string]any)
+	walk = func(message map[string]any) {
+		messageID := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message)))
+		if messageID != "" && messageID != "<nil>" {
+			index[messageID] = append(index[messageID], message)
+		}
+		if forwarded, ok := message["forwardMessages"].([]any); ok {
+			for _, item := range forwarded {
+				if child, ok := item.(map[string]any); ok {
+					walk(child)
+				}
+			}
+		}
+	}
+	for _, message := range messages {
+		walk(message)
+	}
+	return index
+}
+
+func markMessageDecryptFailures(messages []map[string]any, failures []map[string]any) {
+	if len(failures) == 0 {
+		return
+	}
+	index := indexMessageMapsByID(messages)
+	for _, failure := range failures {
+		messageID := strings.TrimSpace(fmt.Sprint(failure["messageId"]))
+		if messageID == "" {
+			continue
+		}
+		for _, message := range index[messageID] {
+			content := firstMessageDecryptString(message, "content", "text")
+			if chatmsg.IsEncrypted(content) {
+				message[messageDecryptFailedOriginalContentKey] = content
+			}
+		}
+	}
+}
+
+func applyMessageDecryptLedger(payload map[string]any, ledger messageDecryptLedger) {
+	if ledger.candidateCount == 0 && ledger.decryptedCount == 0 && len(ledger.failures) == 0 {
+		return
+	}
+	payload["decryptCandidateCount"] = ledger.candidateCount
+	payload["decryptedCount"] = ledger.decryptedCount
+	payload["decryptFailedCount"] = len(ledger.failures)
+	if len(ledger.failures) > 0 {
+		payload["decryptFailures"] = ledger.failures
+		payload["partial"] = true
+	}
+}
+
+func messageDecryptFailure(messageID, conversationID, reason string) map[string]any {
+	failure := map[string]any{
+		"stage":     "message-decrypt",
+		"messageId": messageID,
+		"reason":    firstNonEmptyShortcutString(reason, "decrypt_failed"),
+	}
+	if strings.TrimSpace(conversationID) != "" {
+		failure["conversationId"] = strings.TrimSpace(conversationID)
+	}
+	return failure
+}
+
+func firstNonEmptyShortcutString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func firstMessageDecryptString(message map[string]any, keys ...string) string {
+	value := firstMessageDecryptValue(message, keys...)
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func firstMessageDecryptValue(message map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := message[key]; ok {
+			return value
+		}
+	}
+	return nil
 }
 
 // MessagesListDirect pulls messages of a single chat (list_individual_chat_message, chat server).
@@ -493,6 +761,9 @@ func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
 	}
 	switch {
 	case rt.Str("open-dingtalk-id") != "":
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", rt.Str("open-dingtalk-id")); err != nil {
+			return err
+		}
 		params["openDingTalkId"] = rt.Str("open-dingtalk-id")
 	case rt.Str("user") != "":
 		params["userId"] = rt.Str("user")
@@ -513,8 +784,11 @@ func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+	rawMessages := listMessagesResolveMaps(data)
+	decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+	messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 	payload := map[string]any{"count": len(messages), "messages": messages}
+	applyMessageDecryptLedger(payload, decryptLedger)
 	direction := "older"
 	if rt.Bool("forward") {
 		direction = "newer"
@@ -623,17 +897,17 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 		stopReason = "page_limit"
 	}
 
-	messages := make([]map[string]any, 0, len(allItems))
-	for _, item := range allItems {
-		messages = append(messages, listMessageProjectOneWithReactions(item, !rt.Bool("no-reactions")))
-	}
+	decryptLedger := decryptMessageItemsIfRequested(rt, allItems)
+	messages := projectMessageMapsWithReactions(allItems, !rt.Bool("no-reactions"))
 	payload := chatmsg.NewMessageListPayload(messages)
+	applyMessageDecryptLedger(payload, decryptLedger)
 	payload["pagesFetched"] = pagesFetched
 	payload["paginationKnown"] = true
 	payload["complete"] = complete && len(failures) == 0
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason
 	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	chatmsg.ApplyTruncation(payload)
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
 	payload["partial"] = len(failures) > 0 && len(messages) > 0
@@ -874,7 +1148,8 @@ var MessagesMget = shortcut.Shortcut{
 			return err
 		}
 		rawMessages := listMessagesResolveMaps(data)
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		decryptLedger := decryptMessageItemsIfRequested(rt, rawMessages)
+		messages := projectMessageMapsWithReactions(rawMessages, !rt.Bool("no-reactions"))
 		found := map[string]bool{}
 		for _, message := range rawMessages {
 			if id := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message))); id != "" && id != "<nil>" {
@@ -909,6 +1184,7 @@ var MessagesMget = shortcut.Shortcut{
 			"failedCount":        len(failures),
 			"failures":           failures,
 		}
+		applyMessageDecryptLedger(payload, decryptLedger)
 		if rt.Bool("download-resources") {
 			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, rawMessages, ""))
 		}
@@ -1514,6 +1790,14 @@ var MessagesSendCard = shortcut.Shortcut{
 		`dws chat +messages-send-card --group <openConversationId> --at-open-dingtalk-ids <openDingTalkId> --content "任务已完成"`,
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if receiverOpenID := rt.Str("receiver-open-dingtalk-id"); receiverOpenID != "" {
+			if err := targetresolver.ValidateExplicitOpenDingTalkID("--receiver-open-dingtalk-id", receiverOpenID); err != nil {
+				return err
+			}
+		}
+		if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", rt.StrSlice("at-open-dingtalk-ids")); err != nil {
+			return err
+		}
 		if status := rt.Int("flow-status"); !validCardFlowStatus(status) {
 			return fmt.Errorf("--flow-status 必须在 1-5 之间")
 		}
@@ -1625,13 +1909,20 @@ var MessagesSendCard = shortcut.Shortcut{
 		if err != nil {
 			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新失败: %w", bizID, err)
 		}
-		if _, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated); err != nil {
+		verification, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		if err != nil {
 			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新结果不可信: %w", bizID, cardUpdateVerificationError(bizID, err))
 		}
 		payload := chatmsg.ProjectStreamingCardReceipt(created, bizID)
 		payload["bizId"] = bizID
 		payload["flowStatus"] = status
 		payload["updated"] = updated
+		payload["updateAccepted"] = verification.Accepted
+		payload["updateVerified"] = verification.Verified
+		payload["updateVerificationEvidence"] = verification.Evidence
+		if verification.Accepted && !verification.Verified {
+			payload["updateWarning"] = "服务端已接受卡片更新请求，但未返回可独立证明可见内容已更新的字段；不要重复执行相同更新"
+		}
 		return rt.Output(payload)
 	},
 }
@@ -1774,11 +2065,11 @@ var MessagesUpdateCard = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		proof, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		verification, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
 		if err != nil {
 			return cardUpdateVerificationError(bizID, err)
 		}
-		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, proof))
+		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, verification))
 	},
 }
 
@@ -2074,6 +2365,9 @@ func listPinProject(data map[string]any) []map[string]any {
 		}
 		if threadID := chatmsg.ThreadID(m); threadID != nil {
 			row["threadId"] = threadID
+		}
+		if aiSendFlag := chatmsg.MessageAISendFlag(m); aiSendFlag != nil {
+			row["messageAiSendFlag"] = aiSendFlag
 		}
 		if len(row) > 0 {
 			out = append(out, row)

@@ -57,10 +57,10 @@ var ChatMessages = shortcut.Shortcut{
 	Command:     "+chat-messages",
 	Product:     "chat",
 	Description: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
-	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；可附带发送者姓名解析，无稳定身份时保留全部消息，唯一解析出稳定身份后按 senderId 筛选同一次读取结果；" +
+	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选的姓名、userId 或 openDingTalkId 混合入口：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。--sender-query 只按姓名唯一解析，解析失败会抑制未过滤消息并返回错误。不传发送者条件时原样读取会话且不查询发送者身份。sender 展示名不参与身份比较；" +
 		"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 		"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
-		"全量读取用 --page-all，并由 --page-limit/--max-results 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
+		"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
 		"默认只读；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘。",
 	Risk: shortcut.RiskRead,
 	Safety: contract.SafetySpec{
@@ -83,15 +83,15 @@ var ChatMessages = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
-			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；可附带发送者姓名解析，无稳定身份时保留全部消息，唯一解析出稳定身份后按 senderId 筛选同一次读取结果；" +
+			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选的姓名、userId 或 openDingTalkId 混合入口：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。--sender-query 只按姓名唯一解析，解析失败会抑制未过滤消息并返回错误。不传发送者条件时原样读取会话且不查询发送者身份。sender 展示名不参与身份比较；" +
 				"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 				"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
-				"全量读取用 --page-all，并由 --page-limit/--max-results 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
+				"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
 				"默认只读；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘。"},
 			AvoidWhen: []string{"以发送者、关键词、@对象或消息类型为主的直接条件检索优先使用 +search-msg；已有一批精确消息 ID 时使用 +messages-mget。已选择会话读取时可在同一次调用附带发送者姓名，不需要再搜索消息"},
 			Examples: []string{
 				"dws chat +chat-messages --group <openConversationId> --direction older",
-				"dws chat +chat-messages --open-dingtalk-id <openDingTalkId> --download-resources --output-dir ./downloads",
+				"dws chat +chat-messages --group <openConversationId> --direction older --jq '.messages[] | {messageId, text}'",
 			},
 		},
 	},
@@ -104,7 +104,8 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊对方的 userId，与 --group 互斥"},
 		{Name: "user-query", Type: shortcut.FlagString, Desc: "按姓名解析唯一 openDingTalkId 的兼容入口", Hidden: true},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方的 openDingTalkId，与 --group/--user 互斥"},
-		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "按姓名唯一解析发送者并筛选同一次会话读取结果（可选，可重复或逗号分隔）"},
+		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录无法分类时按原值 userId 筛选并保留身份未验证状态"},
+		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析发送者的兼容入口；解析失败时抑制未过滤消息并返回错误（可选，可重复或逗号分隔）"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "时间边界，如 \"2025-03-01 00:00:00\"；--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD；省略时从当前时间向前读取最近消息"},
 		{Name: "start", Type: shortcut.FlagString, Desc: "范围开始时间（可选、包含），支持 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD"},
 		{Name: "start-time", Type: shortcut.FlagString, Desc: "--start 的 lark-cli 对齐别名（可选、包含）"},
@@ -117,9 +118,11 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "page-size", Type: shortcut.FlagInt, Desc: "--limit 的兼容别名", Hidden: true},
 		{Name: "direction", Type: shortcut.FlagString, Enum: []string{"newer", "older"}, Desc: "时间方向 newer/older；省略时为 older，从时间边界向前读取"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 typed nextPage.time 自动读取后续页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 typed nextPage.time 自动读取后续页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items 仅与 --page-all 一起使用且不能为负数；--max-results 仅与 --page-all 一起使用且不能为负数；--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-		{Name: "max-results", Type: shortcut.FlagInt, Desc: "--max-results 仅与 --page-all 一起使用且不能为负数；0 表示仅受页数上限约束"},
+		{Name: "max-items", Type: shortcut.FlagInt, Desc: "自动翻页最多返回条数（默认 0 表示不限制）；--max-items 仅与 --page-all 一起使用且不能为负数"},
+		{Name: "max-results", Type: shortcut.FlagInt, Desc: "--max-items 的公开兼容别名；--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Name: "page-delay", Type: shortcut.FlagInt, Desc: "自动翻页每页之间等待毫秒数（默认 0 表示不等待）；--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "把完整结构化 ledger 原子写入工作目录内的相对 JSON 文件"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
@@ -131,6 +134,7 @@ var ChatMessages = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "start", "start-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "end", "end-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "order", "sort"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"sender", "sender-query"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "start", "start-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "end", "end-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "order", "sort"}},
@@ -138,7 +142,10 @@ var ChatMessages = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"order", "sort"}, Description: "asc 必须指定 --start/--start-time"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式页大小必须大于 0"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-items"}, Description: "--max-items 仅与 --page-all 一起使用且不能为负数"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-results"}, Description: "--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"max-items", "max-results"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-delay"}, Description: "--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{
 			Kind:        shortcut.ConstraintCustom,
 			Flags:       []string{"output", "overwrite"},
@@ -150,6 +157,7 @@ var ChatMessages = shortcut.Shortcut{
 		`dws chat +chat-messages --group <openconversation_id> --start "2025-03-01T00:00:00+08:00" --end "2025-03-02T00:00:00+08:00" --order asc --page-all`,
 		`dws chat +chat-messages --user <userId> --time "2025-03-01 00:00:00" --page-all --page-limit 50`,
 		`dws chat +chat-messages --group <openconversation_id> --direction older --page-all --output ./exports/messages.json`,
+		`dws chat +chat-messages --group <openconversation_id> --direction older --jq '.messages[] | {messageId, text}'`,
 	},
 	Validate: validateChatMessages,
 	Execute:  executeChatMessages,
@@ -178,16 +186,25 @@ func validateChatMessages(rt *shortcut.RuntimeContext) error {
 			return localChatOptionError("invalid_page_size", "+chat-messages 的 --"+name+" 必须大于 0", "--"+name)
 		}
 	}
-	if !rt.Bool("page-all") && (rt.Changed("page-limit") || rt.Changed("max-results")) {
-		return apperrors.NewValidation("--page-limit/--max-results 仅与 --page-all 一起使用")
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if !rt.Bool("page-all") && rt.Changed("max-results") {
+		return apperrors.NewValidation("--max-results 仅与 --page-all 一起使用")
 	}
 	if rt.Bool("page-all") {
 		if pageLimit := rt.Int("page-limit"); pageLimit < 1 || pageLimit > chatMessagesHardPageLimit {
 			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
-		if rt.Int("max-results") < 0 {
-			return apperrors.NewValidation("--max-results 不能小于 0")
-		}
+	}
+	if err := shortcut.ValidateAutoPageControls(rt); err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
+	if rt.Int("max-results") < 0 {
+		return apperrors.NewValidation("--max-results 不能小于 0")
+	}
+	if rt.Changed("max-items") && rt.Changed("max-results") {
+		return apperrors.NewValidation("--max-items 与 --max-results 不能同时使用")
 	}
 	if rt.Changed("output") {
 		if err := chatshortcut.ValidateMessageExportOutput(rt.Str("output")); err != nil {
@@ -208,103 +225,276 @@ type chatMessagesRequest struct {
 }
 
 type chatMessagesSenderFilter struct {
-	requested   bool
-	applied     bool
-	stableIDs   map[string]bool
-	resolutions []targetresolver.UserResolution
-	failure     map[string]any
+	requested         bool
+	applied           bool
+	inputs            []string
+	inputMode         string
+	stableIDs         map[string]bool
+	resolutions       []targetresolver.UserResolution
+	resolutionFailure map[string]any
+	resolutionErr     error
+	scopeErr          error
 }
 
-// resolveOptionalChatMessagesSenderFilter is deliberately local to
-// +chat-messages. Sender resolution is an optional post-read filter here: an
-// unresolved name must not suppress the command's primary conversation-list
-// result. +search-msg keeps its stricter semantics because sender identity is
-// part of the lower search request there.
+// resolveOptionalChatMessagesSenderFilter accepts the same mixed user target
+// as +search-msg while retaining --sender-query as a compatibility entry. It
+// resolves only explicitly requested senders; it never enumerates every member
+// or tries to infer a person from message display names.
 func resolveOptionalChatMessagesSenderFilter(rt *shortcut.RuntimeContext) chatMessagesSenderFilter {
-	queries := rt.StrSlice("sender-query")
+	direct := uniqueChatMessageTargets(rt.StrSlice("sender"))
+	queries := uniqueChatMessageTargets(rt.StrSlice("sender-query"))
+	inputs := direct
+	inputMode := "sender"
+	if len(inputs) == 0 {
+		inputs = queries
+		inputMode = "sender-query"
+	}
 	filter := chatMessagesSenderFilter{
-		requested: len(queries) > 0,
+		requested: len(inputs) > 0,
+		inputs:    inputs,
+		inputMode: inputMode,
 		stableIDs: map[string]bool{},
 	}
 	if !filter.requested {
 		return filter
 	}
 
-	resolutions, err := targetresolver.ResolveUsers(rt, queries, targetresolver.IdentityAny)
+	var resolutions []targetresolver.UserResolution
+	var err error
+	if len(direct) > 0 {
+		for _, value := range direct {
+			var resolved targetresolver.UserResolution
+			resolved, err = targetresolver.ResolveSenderTarget(rt, value, targetresolver.IdentityAny)
+			if err != nil {
+				break
+			}
+			resolutions = append(resolutions, resolved)
+		}
+	} else {
+		resolutions, err = targetresolver.ResolveUsers(rt, queries, targetresolver.IdentityAny)
+	}
 	if err != nil {
 		failure := map[string]any{
-			"stage":   "sender_resolution",
-			"queries": queries,
-			"error":   err.Error(),
+			"stage":  "sender_resolution",
+			"inputs": inputs,
+			"mode":   inputMode,
+			"error":  err.Error(),
 		}
 		var typed *apperrors.Error
 		if errors.As(err, &typed) {
 			if typed.Reason != "" {
 				failure["reason"] = typed.Reason
 			}
+			if typed.Hint != "" {
+				failure["hint"] = typed.Hint
+			}
 			if len(typed.Details) > 0 {
 				failure["details"] = typed.Details
 			}
 		}
-		filter.failure = failure
+		filter.resolutionFailure = failure
+		filter.resolutionErr = err
 		return filter
 	}
 
 	filter.resolutions = resolutions
-	for _, resolution := range resolutions {
-		for _, identity := range []string{
-			resolution.Selected.UserID,
-			resolution.Selected.OpenDingTalkID,
-		} {
-			if identity = strings.TrimSpace(identity); identity != "" {
-				filter.stableIDs[identity] = true
-			}
-		}
-	}
-	// ResolveUsers(IdentityAny) only returns users extracted with at least one
-	// stable userId/openDingTalkId and fails when no resolvable user remains.
+	addChatMessagesResolvedSenderIDs(filter.stableIDs, resolutions)
 	filter.applied = true
 	return filter
 }
 
-// applyOptionalChatMessagesSenderFilter preserves the unfiltered message list
-// when optional resolution fails. Successful resolution filters both the
+func uniqueChatMessageTargets(values []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
+}
+
+func addChatMessagesResolvedSenderIDs(ids map[string]bool, resolutions []targetresolver.UserResolution) {
+	for _, resolution := range resolutions {
+		if identity := strings.TrimSpace(resolution.Selected.UserID); identity != "" {
+			ids[identity] = true
+		}
+		if identity := strings.TrimSpace(resolution.Selected.OpenDingTalkID); identity != "" {
+			ids[identity] = true
+		}
+	}
+}
+
+// applyOptionalChatMessagesSenderFilter fails closed when an explicitly
+// requested sender cannot be resolved. Successful resolution filters both the
 // public projection and raw rows so exports and resource downloads cannot
 // accidentally include messages outside the requested sender set.
 func applyOptionalChatMessagesSenderFilter(
 	rt *shortcut.RuntimeContext,
 	payload map[string]any,
 	rawItems []map[string]any,
-	filter chatMessagesSenderFilter,
+	filter *chatMessagesSenderFilter,
 ) []map[string]any {
-	if !filter.requested || payload == nil {
+	if filter == nil || !filter.requested || payload == nil {
 		return rawItems
 	}
 	if !filter.applied {
 		failures, _ := payload["failures"].([]map[string]any)
 		priorFailures := len(failures)
-		failures = append(failures, filter.failure)
+		failure := filter.resolutionFailure
+		if failure == nil {
+			failure = map[string]any{
+				"stage":  "sender_resolution",
+				"inputs": filter.inputs,
+				"mode":   filter.inputMode,
+				"error":  "无法把发送者目标唯一解析为稳定身份",
+			}
+		}
+		failures = append(failures, failure)
 		payload["failures"] = failures
 		payload["failedCount"] = len(failures)
 		payload["complete"] = false
-		payload["partial"] = len(rawItems) > 0
+		payload["partial"] = false
+		payload["messages"] = []map[string]any{}
+		payload["count"] = 0
+		payload["senderFilter"] = map[string]any{
+			"requested":       true,
+			"inputs":          filter.inputs,
+			"mode":            filter.inputMode,
+			"applied":         false,
+			"status":          "resolution_failed",
+			"suppressedCount": len(rawItems),
+		}
+		payload["identityResult"] = map[string]any{
+			"status":                "resolution_failed",
+			"nameComparisonAllowed": false,
+			"stableIdField":         "senderId",
+			"hint":                  "当前发送者尚未解析为稳定身份，不能根据 sender 展示名判断该人员是否发过消息。请先完成人员解析。",
+		}
 		if priorFailures == 0 {
 			payload["stopReason"] = "sender_resolution_failed"
 		}
-		return rawItems
+		return nil
 	}
 
 	filtered := make([]map[string]any, 0, len(rawItems))
+	unverifiableMessageIDs := make([]string, 0)
 	for _, item := range rawItems {
 		identity := strings.TrimSpace(fmt.Sprint(chatmsg.SenderID(item)))
-		if identity != "" && identity != "<nil>" && filter.stableIDs[identity] {
+		if identity == "" || identity == "<nil>" {
+			messageID := chatmsg.StableMessageID(item)
+			if messageID == "" {
+				messageID = "<unknown>"
+			}
+			unverifiableMessageIDs = append(unverifiableMessageIDs, messageID)
+			continue
+		}
+		if filter.stableIDs[identity] {
 			filtered = append(filtered, item)
 		}
+	}
+	if len(unverifiableMessageIDs) > 0 {
+		filter.scopeErr = apperrors.NewAPI(
+			"部分消息缺少 senderId，无法证明发送者过滤范围；已阻止完整成功与导出",
+			apperrors.WithReason("chat_messages_sender_scope_unverified"),
+			apperrors.WithRetryable(false),
+			apperrors.WithHint("请保留 trace_id 并检查消息读取服务是否返回稳定 senderId"),
+			apperrors.WithDetails(map[string]any{
+				"requestedSenders":       filter.inputs,
+				"unverifiableMessageIds": uniqueChatMessageTargets(unverifiableMessageIDs),
+			}),
+		)
+		failures, _ := payload["failures"].([]map[string]any)
+		failures = append(failures, map[string]any{
+			"stage":                  "sender_scope_verification",
+			"error":                  filter.scopeErr.Error(),
+			"unverifiableMessageIds": uniqueChatMessageTargets(unverifiableMessageIDs),
+		})
+		payload["failures"] = failures
+		payload["failedCount"] = len(failures)
+		payload["complete"] = false
+		payload["partial"] = len(filtered) > 0
+	}
+	unverifiedSenderInputs := chatMessagesUnverifiedSenderInputs(filter.resolutions)
+	if len(unverifiedSenderInputs) > 0 {
+		failures, _ := payload["failures"].([]map[string]any)
+		failures = append(failures, map[string]any{
+			"stage":  "sender_identity_verification",
+			"inputs": unverifiedSenderInputs,
+			"error":  "通讯录未能确认这些混合发送者参数是姓名还是 userId；已按精确 userId 过滤，但不能据此作完整否定结论",
+		})
+		payload["failures"] = failures
+		payload["failedCount"] = len(failures)
+		payload["complete"] = false
+		payload["partial"] = len(filtered) > 0
 	}
 	payload["messages"] = projectChatMessages(filtered, !rt.Bool("no-reactions"))
 	payload["count"] = len(filtered)
 	payload["resolvedFilters"] = map[string]any{"senders": filter.resolutions}
+	filterStatus := "applied"
+	if filter.scopeErr != nil {
+		filterStatus = "scope_unverified"
+	} else if len(unverifiedSenderInputs) > 0 {
+		filterStatus = "identity_unverified"
+	}
+	payload["senderFilter"] = map[string]any{
+		"requested": true,
+		"inputs":    filter.inputs,
+		"mode":      filter.inputMode,
+		"applied":   true,
+		"status":    filterStatus,
+	}
+	if len(unverifiedSenderInputs) > 0 {
+		payload["senderFilter"].(map[string]any)["unverifiedInputs"] = unverifiedSenderInputs
+	}
+	identityResult := map[string]any{
+		"status":                    "evaluated",
+		"nameComparisonAllowed":     false,
+		"negativeConclusionAllowed": true,
+		"stableIdField":             "senderId",
+	}
+	if filter.scopeErr != nil {
+		identityResult["status"] = "scope_unverified"
+		identityResult["negativeConclusionAllowed"] = false
+		identityResult["hint"] = "部分消息缺少稳定 senderId，当前结果不能用于断言该人员没有发过消息。"
+	} else if len(unverifiedSenderInputs) > 0 {
+		identityResult["status"] = "identity_unverified"
+		identityResult["negativeConclusionAllowed"] = false
+		identityResult["hint"] = "当前混合发送者参数未能经通讯录确认；已按原值 userId 精确比较，若无命中仍不能断言该人员没有发过消息。"
+	}
+	payload["identityResult"] = identityResult
 	return filtered
+}
+
+func chatMessagesUnverifiedSenderInputs(
+	resolutions []targetresolver.UserResolution,
+) []string {
+	values := make([]string, 0)
+	for _, resolution := range resolutions {
+		if targetresolver.IsUnverifiedUserIDResolution(resolution) {
+			values = append(values, resolution.Query)
+		}
+	}
+	return uniqueChatMessageTargets(values)
+}
+
+func attachUnfilteredSenderIdentitySemantics(payload map[string]any, filter chatMessagesSenderFilter) {
+	if payload == nil || filter.requested {
+		return
+	}
+	payload["senderFilter"] = map[string]any{
+		"requested": false,
+		"applied":   false,
+		"status":    "not_requested",
+	}
+	payload["identityResult"] = map[string]any{
+		"status":                    "requires_query_check",
+		"negativeConclusionAllowed": false,
+		"hint":                      "若原始任务包含自然人发送者条件，请先将目标人解析为唯一 userId/openDingTalkId，再与 messages[].senderId 比较；禁止直接比较 messages[].sender 展示名。",
+	}
 }
 
 func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesRequest, error) {
@@ -315,6 +505,11 @@ func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesReques
 		return chatMessagesRequest{}, apperrors.NewValidation(
 			"--open-dingtalk-id 收到的是群 openConversationId；群聊请改用 --group（兼容别名 --chat）",
 		)
+	}
+	if openID != "" {
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openID); err != nil {
+			return chatMessagesRequest{}, err
+		}
 	}
 	if groupID == "" && (rt.Str("group") != "" || rt.Str("chat-query") != "") {
 		resolved, err := targetresolver.ResolveChatTarget(rt, rt.Str("group"), rt.Str("chat-query"))
@@ -393,7 +588,8 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 		return err
 	}
 	senderFilter := resolveOptionalChatMessagesSenderFilter(rt)
-	rawItems = applyOptionalChatMessagesSenderFilter(rt, payload, rawItems, senderFilter)
+	rawItems = applyOptionalChatMessagesSenderFilter(rt, payload, rawItems, &senderFilter)
+	attachUnfilteredSenderIdentitySemantics(payload, senderFilter)
 	if err != nil {
 		// Full-page collection returns its failure ledger together with a
 		// non-zero error. Publish that ledger for diagnosis, but stop before
@@ -404,6 +600,22 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 			}
 		}
 		return err
+	}
+	if senderFilter.requested && !senderFilter.applied {
+		if payload != nil {
+			if outputErr := rt.Output(payload); outputErr != nil {
+				return outputErr
+			}
+		}
+		return senderFilter.resolutionErr
+	}
+	if senderFilter.scopeErr != nil {
+		if payload != nil {
+			if outputErr := rt.Output(payload); outputErr != nil {
+				return outputErr
+			}
+		}
+		return senderFilter.scopeErr
 	}
 	if rt.Bool("download-resources") {
 		chatshortcut.AttachMessageResourceDownloads(
@@ -476,7 +688,7 @@ func collectOneChatMessagesPage(rt *shortcut.RuntimeContext, request chatMessage
 
 func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesRequest) (map[string]any, []map[string]any, error) {
 	pageLimit := defaultChatPageLimit(rt.Int("page-limit"), chatMessagesDefaultPageLimit)
-	maxResults := rt.Int("max-results")
+	maxResults := rt.IntFirst("max-items", "max-results")
 	basePageSize, _ := request.params["limit"].(int)
 	if basePageSize <= 0 {
 		basePageSize = chatMessagesAllPageSize
@@ -495,6 +707,15 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	var nextPage map[string]any
 
 	for pagesFetched < pageLimit {
+		if pagesFetched > 0 {
+			if delayErr := shortcut.WaitAutoPageDelay(rt); delayErr != nil {
+				failures = append(failures, map[string]any{
+					"page": pagesFetched + 1, "stage": "delay", "error": delayErr.Error(),
+				})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
 		request.params["limit"] = basePageSize
 		if maxResults > 0 {
 			remaining := maxResults - len(allItems)
@@ -655,6 +876,7 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	payload["stopReason"] = stopReason
 	payload["truncatedByPageLimit"] = truncatedByPageLimit
 	payload["truncatedByResultLimit"] = truncatedByResultLimit
+	chatmsg.ApplyTruncation(payload)
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
 	payload["partial"] = len(failures) > 0 && len(results) > 0
@@ -743,31 +965,7 @@ func chatMessagesNextCursorBoundary(value any) (string, string, error) {
 // tolerating the common container keys and one level of nesting under a
 // "result"/"data" wrapper.
 func chatMessageItems(data map[string]any) []map[string]any {
-	if data == nil {
-		return nil
-	}
-	scopes := []map[string]any{data}
-	for _, wrap := range []string{"result", "data"} {
-		if inner, ok := data[wrap].(map[string]any); ok {
-			scopes = append(scopes, inner)
-		}
-	}
-	for _, scope := range scopes {
-		for _, key := range []string{"messages", "list", "items", "records", "data", "result"} {
-			if raw, ok := scope[key].([]any); ok {
-				out := make([]map[string]any, 0, len(raw))
-				for _, e := range raw {
-					if m, ok := e.(map[string]any); ok {
-						out = append(out, m)
-					}
-				}
-				if len(out) > 0 {
-					return out
-				}
-			}
-		}
-	}
-	return nil
+	return chatmsg.ListMessageItems(data)
 }
 
 // projectChatMessage reshapes one raw message into the clean

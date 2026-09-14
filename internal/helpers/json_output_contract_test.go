@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +96,86 @@ func TestCrossPlatformCoverageJSONOutputContractForCompletedFileTransfers(t *tes
 		}
 	})
 
+	t.Run("drive latest download with default output directory", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		stdout, _, err := executeJSONOutputContractCommand(t,
+			&scriptedToolCaller{format: "json", steps: []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/latest.txt","fileName":"inferred-latest.txt","fileSize":7,"version":9}`}}},
+			newDriveCommand,
+			"download", "--node", "node-default-output")
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload := assertJSONOutputPayload(t, stdout)
+		savedPath, _ := payload["savedPath"].(string)
+		if filepath.Base(savedPath) != "inferred-latest.txt" {
+			t.Fatalf("expected inferred filename in savedPath, got %#v", payload)
+		}
+		if _, statErr := os.Stat(savedPath); statErr != nil {
+			t.Fatalf("expected downloaded file at %q: %v", savedPath, statErr)
+		}
+	})
+
+	t.Run("drive historical download with default output directory", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		stdout, _, err := executeJSONOutputContractCommand(t,
+			&scriptedToolCaller{format: "json", steps: []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/versioned.txt","fileName":"inferred-versioned.txt","fileSize":7}`}}},
+			newDriveCommand,
+			"download", "--node", "node-versioned-default", "--version", "4")
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload := assertJSONOutputPayload(t, stdout)
+		savedPath, _ := payload["savedPath"].(string)
+		if filepath.Base(savedPath) != "inferred-versioned.txt" {
+			t.Fatalf("expected inferred filename in savedPath, got %#v", payload)
+		}
+		if _, statErr := os.Stat(savedPath); statErr != nil {
+			t.Fatalf("expected downloaded file at %q: %v", savedPath, statErr)
+		}
+	})
+
+	t.Run("drive download rejects existing target without --overwrite", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		caller := &scriptedToolCaller{format: "json", steps: []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/latest.txt","fileName":"conflict.txt","fileSize":7}`}}}
+		if _, _, err := executeJSONOutputContractCommand(t, caller, newDriveCommand, "download", "--node", "node-conflict"); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := executeJSONOutputContractCommand(t, caller, newDriveCommand, "download", "--node", "node-conflict")
+		if err == nil {
+			t.Fatal("expected conflict rejection on second identical download")
+		}
+		var cliErr *CLIError
+		if !errors.As(err, &cliErr) || cliErr.Code != CodeFileAlreadyExists || cliErr.Operation != "drive download" {
+			t.Fatalf("expected INPUT_FILE_ALREADY_EXISTS CLIError for drive download, got %v", err)
+		}
+		_, stderr, err := executeJSONOutputContractCommand(t, caller, newDriveCommand, "download", "--node", "node-conflict", "--overwrite")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stderr, "将覆盖") {
+			t.Fatalf("expected overwrite warning on stderr, got %q", stderr)
+		}
+	})
+
+	t.Run("drive download-version rejects existing target without --overwrite", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		caller := &scriptedToolCaller{format: "json", steps: []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/versioned.txt","fileName":"conflict-versioned.txt","fileSize":7}`}}}
+		if _, _, err := executeJSONOutputContractCommand(t, caller, newDriveCommand, "download", "--node", "node-conflict-v", "--version", "4"); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := executeJSONOutputContractCommand(t, caller, newDriveCommand, "download", "--node", "node-conflict-v", "--version", "4")
+		if err == nil {
+			t.Fatal("expected conflict rejection on second identical versioned download")
+		}
+		var cliErr *CLIError
+		if !errors.As(err, &cliErr) || cliErr.Code != CodeFileAlreadyExists || cliErr.Operation != "drive download-version" {
+			t.Fatalf("expected INPUT_FILE_ALREADY_EXISTS CLIError for drive download-version, got %v", err)
+		}
+		if _, _, err := executeJSONOutputContractCommand(t, caller, newDriveCommand, "download", "--node", "node-conflict-v", "--version", "4", "--overwrite"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("doc export", func(t *testing.T) {
 		testseam.Swap(t, &helperAfter, func(time.Duration) <-chan time.Time {
 			ch := make(chan time.Time, 1)
@@ -135,6 +216,19 @@ func TestCrossPlatformCoverageJSONOutputContractDryRunIsMachineReadable(t *testi
 		t.Fatalf("payload = %#v", payload)
 	}
 
+	t.Run("text mode default output annotation", func(t *testing.T) {
+		stdout, _, err := executeJSONOutputContractCommand(t,
+			&scriptedToolCaller{format: "text", dry: true},
+			newDriveCommand,
+			"download", "--node", "node-dry-run-default", "--dry-run")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stdout, "当前目录（自动推断文件名）") {
+			t.Fatalf("expected default-output annotation in text preview, got %q", stdout)
+		}
+	})
+
 	stdout, _, err = executeJSONOutputContractCommand(t,
 		&scriptedToolCaller{format: "json", dry: true},
 		newDocCommand,
@@ -149,7 +243,11 @@ func TestCrossPlatformCoverageJSONOutputContractDryRunIsMachineReadable(t *testi
 }
 
 func TestCrossPlatformCoverageJSONOutputContractReportsMissingLocalArtifact(t *testing.T) {
-	testseam.Swap(t, &httpGetFile, func(context.Context, string, map[string]string, string) error {
+	testseam.Swap(t, &httpGetFile, func(_ context.Context, _ string, _ map[string]string, destPath string) error {
+		// 模拟“下载引擎成功返回但本地产物缺失”：drive download 的临时文件
+		// 由 downloadViaTemp 预创建，移除后原子发布点 fail closed；doc export
+		// 从未写入产物，在读取产物时 fail closed。两个路径都必须失败。
+		_ = os.Remove(destPath)
 		return nil
 	})
 	testseam.Swap(t, &helperAfter, func(time.Duration) <-chan time.Time {
@@ -158,28 +256,34 @@ func TestCrossPlatformCoverageJSONOutputContractReportsMissingLocalArtifact(t *t
 		return ch
 	})
 
+	// wantErr 为空表示任意非空错误（fail-closed）：drive 下载引擎先写临时文件
+	// 再原子发布，stub 移除临时文件时在发布点失败；doc export 在读取产物时失败。
 	tests := []struct {
-		name  string
-		build func() *cobra.Command
-		args  []string
-		steps []scriptedToolStep
+		name    string
+		wantErr string
+		build   func() *cobra.Command
+		args    []string
+		steps   []scriptedToolStep
 	}{
 		{
-			name:  "latest drive download",
-			build: newDriveCommand,
-			args:  []string{"download", "--node", "node-latest", "--output", filepath.Join(t.TempDir(), "latest.txt")},
-			steps: []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/latest.txt","fileSize":7,"version":9}`}},
+			name:    "latest drive download",
+			wantErr: "",
+			build:   newDriveCommand,
+			args:    []string{"download", "--node", "node-latest", "--output", filepath.Join(t.TempDir(), "latest.txt")},
+			steps:   []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/latest.txt","fileSize":7,"version":9}`}},
 		},
 		{
-			name:  "versioned drive download",
-			build: newDriveCommand,
-			args:  []string{"download", "--node", "node-versioned", "--version", "4", "--output", filepath.Join(t.TempDir(), "versioned.txt")},
-			steps: []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/versioned.txt","fileSize":7}`}},
+			name:    "versioned drive download",
+			wantErr: "",
+			build:   newDriveCommand,
+			args:    []string{"download", "--node", "node-versioned", "--version", "4", "--output", filepath.Join(t.TempDir(), "versioned.txt")},
+			steps:   []scriptedToolStep{{text: `{"downloadUrl":"https://example.test/versioned.txt","fileSize":7}`}},
 		},
 		{
-			name:  "doc export",
-			build: newDocCommand,
-			args:  []string{"export", "--node", "doc-node", "--export-format", "markdown", "--output", filepath.Join(t.TempDir(), "export.md")},
+			name:    "doc export",
+			wantErr: "读取",
+			build:   newDocCommand,
+			args:    []string{"export", "--node", "doc-node", "--export-format", "markdown", "--output", filepath.Join(t.TempDir(), "export.md")},
 			steps: []scriptedToolStep{
 				{text: `{"jobId":"export-job-1"}`},
 				{text: `{"status":"SUCCESS","downloadUrl":"https://example.test/export.md"}`},
@@ -190,8 +294,11 @@ func TestCrossPlatformCoverageJSONOutputContractReportsMissingLocalArtifact(t *t
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, _, err := executeJSONOutputContractCommand(t, &scriptedToolCaller{format: "json", steps: tt.steps}, tt.build, tt.args...)
-			if err == nil || !strings.Contains(err.Error(), "读取") {
-				t.Fatalf("expected missing local artifact error, got %v", err)
+			if err == nil {
+				t.Fatal("expected missing local artifact to fail closed")
+			}
+			if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
 			}
 		})
 	}

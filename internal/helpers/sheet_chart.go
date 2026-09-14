@@ -120,7 +120,7 @@ func validateChartProperties(props map[string]any) error {
 // ─── Chart subcommands ──────────────────────────────────────────────────────
 
 func newChartCmd() *cobra.Command {
-	chartCmd := &cobra.Command{Use: "chart", Short: "浮动图表管理"}
+	chartCmd := newDeepGroupCommand(&cobra.Command{Use: "chart", Short: "浮动图表管理"})
 
 	// ── chart list ──────────────────────────────────────────────────────
 	chartListCmd := &cobra.Command{
@@ -377,12 +377,14 @@ position.col 使用列字母表示法（如 "A"、"AA"），不支持数字形�
 chart-id 可通过 chart list 获取。`,
 		Example: `  dws sheet chart delete --node NODE_ID --sheet-id SHEET_ID --chart-id CHART_ID --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			chartID := mustGetFlag(cmd, "chart-id")
-			return callMCPTool("delete_float_chart", map[string]any{
-				"nodeId":       mustGetFlag(cmd, "node"),
-				"sheetId":      mustGetFlag(cmd, "sheet-id"),
-				"floatChartId": chartID,
+			toolArgs, err := BuildBatchDeleteFloatChartArgs(map[string]any{
+				"sheet-id": mustGetFlag(cmd, "sheet-id"), "chart-id": mustGetFlag(cmd, "chart-id"),
 			})
+			if err != nil {
+				return err
+			}
+			toolArgs["nodeId"] = mustGetFlag(cmd, "node")
+			return callMCPTool("delete_float_chart", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(chartDeleteCmd, LeafSpec{

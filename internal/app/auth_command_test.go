@@ -33,6 +33,8 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -1033,8 +1035,12 @@ func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
 	login := &cobra.Command{Use: "login"}
 	login.Flags().String("token", "", "")
 	login.Flags().Bool("device", false, "")
+	login.Flags().Bool("intl", false, "")
+	login.Flags().Bool("international", false, "")
 	login.Flags().Bool("force", false, "")
 	login.Flags().Bool("recommend", false, "")
+	login.Flags().String("pre-url", "", "")
+	login.Flags().String("mcp-url", "", "")
 	root.AddCommand(login)
 
 	if err := root.PersistentFlags().Set("yes", "true"); err != nil {
@@ -1058,6 +1064,560 @@ func TestResolveAuthLoginConfigReadsInheritedYes(t *testing.T) {
 		!strings.Contains(got, `"profile_selector":""`) ||
 		!strings.Contains(got, `"target_corp_id":""`) {
 		t.Fatalf("login request diagnostic log missing selector resolution:\n%s", got)
+	}
+}
+
+func TestCrossPlatformCoverageResolveAuthLoginConfigReadsInternationalAliases(t *testing.T) {
+	for _, flag := range []string{"intl", "international"} {
+		t.Run(flag, func(t *testing.T) {
+			root := &cobra.Command{Use: "dws"}
+			root.PersistentFlags().Bool("yes", false, "")
+			login := &cobra.Command{Use: "login"}
+			login.Flags().String("token", "", "")
+			login.Flags().Bool("device", false, "")
+			login.Flags().Bool("intl", false, "")
+			login.Flags().Bool("international", false, "")
+			login.Flags().Bool("force", false, "")
+			login.Flags().Bool("recommend", false, "")
+			login.Flags().String("pre-url", "", "")
+			login.Flags().String("mcp-url", "", "")
+			root.AddCommand(login)
+
+			if err := login.Flags().Set(flag, "true"); err != nil {
+				t.Fatalf("set %s: %v", flag, err)
+			}
+
+			cfg, err := resolveAuthLoginConfig(login)
+			if err != nil {
+				t.Fatalf("resolveAuthLoginConfig error = %v", err)
+			}
+			if !cfg.International {
+				t.Fatalf("International = false for --%s, want true", flag)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name  string
+		setup func(*cobra.Command)
+	}{
+		{
+			name: "missing intl",
+			setup: func(cmd *cobra.Command) {
+				cmd.Flags().String("token", "", "")
+				cmd.Flags().Bool("device", false, "")
+			},
+		},
+		{
+			name: "missing international",
+			setup: func(cmd *cobra.Command) {
+				cmd.Flags().String("token", "", "")
+				cmd.Flags().Bool("device", false, "")
+				cmd.Flags().Bool("intl", false, "")
+			},
+		},
+		{
+			name: "missing pre url",
+			setup: func(cmd *cobra.Command) {
+				cmd.Flags().String("token", "", "")
+				cmd.Flags().Bool("device", false, "")
+				cmd.Flags().Bool("intl", false, "")
+				cmd.Flags().Bool("international", false, "")
+				cmd.Flags().Bool("force", false, "")
+				cmd.Flags().Bool("recommend", false, "")
+			},
+		},
+		{
+			name: "missing mcp url",
+			setup: func(cmd *cobra.Command) {
+				cmd.Flags().String("token", "", "")
+				cmd.Flags().Bool("device", false, "")
+				cmd.Flags().Bool("intl", false, "")
+				cmd.Flags().Bool("international", false, "")
+				cmd.Flags().Bool("force", false, "")
+				cmd.Flags().Bool("recommend", false, "")
+				cmd.Flags().String("pre-url", "", "")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "login"}
+			tc.setup(cmd)
+			if _, err := resolveAuthLoginConfig(cmd); err == nil {
+				t.Fatal("resolveAuthLoginConfig succeeded with an incomplete flag set")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageResolveAuthLoginConfigReadsMCPURL(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("yes", false, "")
+	login := &cobra.Command{Use: "login"}
+	login.Flags().String("token", "", "")
+	login.Flags().Bool("device", false, "")
+	login.Flags().Bool("intl", false, "")
+	login.Flags().Bool("international", false, "")
+	login.Flags().Bool("force", false, "")
+	login.Flags().Bool("recommend", false, "")
+	login.Flags().String("pre-url", "", "")
+	login.Flags().String("mcp-url", "", "")
+	root.AddCommand(login)
+
+	if err := login.Flags().Set("mcp-url", " https://pre-mcp.dingtalk.io/ "); err != nil {
+		t.Fatalf("set mcp-url: %v", err)
+	}
+
+	cfg, err := resolveAuthLoginConfig(login)
+	if err != nil {
+		t.Fatalf("resolveAuthLoginConfig error = %v", err)
+	}
+	if cfg.MCPURL != "https://pre-mcp.dingtalk.io/" {
+		t.Fatalf("MCPURL = %q, want trimmed flag value", cfg.MCPURL)
+	}
+}
+
+func TestCrossPlatformCoverageResolveAuthLoginConfigReadsPreURL(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	root.PersistentFlags().Bool("yes", false, "")
+	login := &cobra.Command{Use: "login"}
+	login.Flags().String("token", "", "")
+	login.Flags().Bool("device", false, "")
+	login.Flags().Bool("intl", false, "")
+	login.Flags().Bool("international", false, "")
+	login.Flags().Bool("force", false, "")
+	login.Flags().Bool("recommend", false, "")
+	login.Flags().String("pre-url", "", "")
+	login.Flags().String("mcp-url", "", "")
+	root.AddCommand(login)
+
+	if err := login.Flags().Set("pre-url", " pre-login.dingtalk.io "); err != nil {
+		t.Fatalf("set pre-url: %v", err)
+	}
+
+	cfg, err := resolveAuthLoginConfig(login)
+	if err != nil {
+		t.Fatalf("resolveAuthLoginConfig error = %v", err)
+	}
+	if cfg.PreURL != "pre-login.dingtalk.io" {
+		t.Fatalf("PreURL = %q, want trimmed flag value", cfg.PreURL)
+	}
+}
+
+func TestCrossPlatformCoverageAuthLoginEndpointOverridesForPreURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		raw       string
+		wantLogin string
+		wantMCP   string
+	}{
+		{
+			name:      "pre login",
+			raw:       "https://pre-login.dingtalk.io/",
+			wantLogin: "https://pre-login.dingtalk.io",
+			wantMCP:   "https://pre-mcp.dingtalk.io",
+		},
+		{
+			name:      "pre mcp",
+			raw:       "pre-mcp.dingtalk.io",
+			wantLogin: "https://pre-login.dingtalk.io",
+			wantMCP:   "https://pre-mcp.dingtalk.io",
+		},
+		{
+			name:      "pre login with port",
+			raw:       "https://pre-login.dingtalk.io:8443/path/",
+			wantLogin: "https://pre-login.dingtalk.io:8443/path",
+			wantMCP:   "https://pre-mcp.dingtalk.io:8443/path",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := authLoginEndpointOverridesForPreURL(tc.raw)
+			if err != nil {
+				t.Fatalf("authLoginEndpointOverridesForPreURL error = %v", err)
+			}
+			if got.LoginURL != tc.wantLogin || got.MCPURL != tc.wantMCP {
+				t.Fatalf("overrides = %#v, want login %q mcp %q", got, tc.wantLogin, tc.wantMCP)
+			}
+		})
+	}
+
+	for _, raw := range []string{"https://example.com", "http://pre-login.example.com"} {
+		if _, err := authLoginEndpointOverridesForPreURL(raw); err == nil {
+			t.Fatalf("authLoginEndpointOverridesForPreURL(%q) succeeded", raw)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageAuthLoginMCPBaseURLForConfig(t *testing.T) {
+	tests := []struct {
+		name            string
+		cfg             authLoginConfig
+		preOverride     authLoginEndpointOverrides
+		wantURL         string
+		wantPersistence authLoginMCPPersistence
+	}{
+		{
+			name:            "default center login uses com and resets only managed region",
+			cfg:             authLoginConfig{},
+			wantURL:         authpkg.DefaultMCPBaseURL,
+			wantPersistence: authLoginMCPUseDefault,
+		},
+		{
+			name:            "international login persists managed io",
+			cfg:             authLoginConfig{International: true},
+			wantURL:         authpkg.InternationalMCPBaseURL,
+			wantPersistence: authLoginMCPUseManagedRegion,
+		},
+		{
+			name: "pre login persists mapped pre mcp",
+			cfg:  authLoginConfig{PreURL: "pre-login.dingtalk.io"},
+			preOverride: authLoginEndpointOverrides{
+				LoginURL: "https://pre-login.dingtalk.io",
+				MCPURL:   "https://pre-mcp.dingtalk.io",
+			},
+			wantURL:         "https://pre-mcp.dingtalk.io",
+			wantPersistence: authLoginMCPUseExplicitOverride,
+		},
+		{
+			name: "explicit mcp url wins over pre url",
+			cfg: authLoginConfig{
+				PreURL: "pre-login.dingtalk.io",
+				MCPURL: " https://custom-mcp.example.com/ ",
+			},
+			preOverride: authLoginEndpointOverrides{
+				LoginURL: "https://pre-login.dingtalk.io",
+				MCPURL:   "https://pre-mcp.dingtalk.io",
+			},
+			wantURL:         "https://custom-mcp.example.com",
+			wantPersistence: authLoginMCPUseExplicitOverride,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotURL, gotPersistence, err := authLoginMCPBaseURLForConfig(tc.cfg, tc.preOverride)
+			if err != nil {
+				t.Fatalf("authLoginMCPBaseURLForConfig error = %v", err)
+			}
+			if gotURL != tc.wantURL || gotPersistence != tc.wantPersistence {
+				t.Fatalf("got url=%q persistence=%v, want url=%q persistence=%v", gotURL, gotPersistence, tc.wantURL, tc.wantPersistence)
+			}
+		})
+	}
+
+	for _, cfg := range []authLoginConfig{
+		{MCPURL: "http://remote.example.com"},
+		{PreURL: "https://example.com"},
+	} {
+		if _, _, err := authLoginMCPBaseURLForConfig(cfg, authLoginEndpointOverrides{}); err == nil {
+			t.Fatalf("authLoginMCPBaseURLForConfig(%#v) succeeded", cfg)
+		}
+	}
+}
+
+func TestCrossPlatformCoveragePersistAuthLoginMCPBaseURL(t *testing.T) {
+	t.Run("persists selected io mcp url", func(t *testing.T) {
+		configDir := t.TempDir()
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); err != nil {
+			t.Fatalf("persistAuthLoginMCPBaseURL error = %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(configDir, "mcp_url"))
+		if err != nil {
+			t.Fatalf("ReadFile(mcp_url) error = %v", err)
+		}
+		if string(data) != authpkg.InternationalMCPBaseURL {
+			t.Fatalf("mcp_url = %q, want %q", string(data), authpkg.InternationalMCPBaseURL)
+		}
+		managed, err := os.ReadFile(filepath.Join(configDir, config.ManagedMCPURLRegionFileName))
+		if err != nil || string(managed) != authpkg.InternationalMCPBaseURL {
+			t.Fatalf("managed MCP region = %q, %v", string(managed), err)
+		}
+	})
+
+	t.Run("center login preserves previous persisted override", func(t *testing.T) {
+		configDir := t.TempDir()
+		mcpURLPath := filepath.Join(configDir, "mcp_url")
+		const customURL = "https://custom-mcp.example.com"
+		if err := os.WriteFile(mcpURLPath, []byte(customURL), 0o600); err != nil {
+			t.Fatalf("WriteFile(mcp_url) error = %v", err)
+		}
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); err != nil {
+			t.Fatalf("persistAuthLoginMCPBaseURL error = %v", err)
+		}
+		data, err := os.ReadFile(mcpURLPath)
+		if err != nil {
+			t.Fatalf("ReadFile(mcp_url) error = %v", err)
+		}
+		if string(data) != customURL {
+			t.Fatalf("mcp_url = %q, want preserved override %q", string(data), customURL)
+		}
+	})
+
+	t.Run("international login preserves an unmanaged explicit override", func(t *testing.T) {
+		configDir := t.TempDir()
+		mcpURLPath := filepath.Join(configDir, "mcp_url")
+		const customURL = "https://private-mcp.example.com"
+		if err := os.WriteFile(mcpURLPath, []byte(customURL), config.FilePerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(mcpURLPath)
+		if err != nil || string(data) != customURL {
+			t.Fatalf("explicit mcp_url = %q, %v; want preserved custom URL", string(data), err)
+		}
+		if _, err := os.Stat(filepath.Join(configDir, config.ManagedMCPURLRegionFileName)); !os.IsNotExist(err) {
+			t.Fatalf("unmanaged override acquired a managed marker: %v", err)
+		}
+	})
+
+	t.Run("center login resets a managed international URL", func(t *testing.T) {
+		configDir := t.TempDir()
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); err != nil {
+			t.Fatal(err)
+		}
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(configDir, "mcp_url"))
+		if err != nil || string(data) != authpkg.DefaultMCPBaseURL {
+			t.Fatalf("mcp_url = %q, %v; want domestic default", string(data), err)
+		}
+		if _, err := os.Stat(filepath.Join(configDir, config.ManagedMCPURLRegionFileName)); !os.IsNotExist(err) {
+			t.Fatalf("managed region marker remains after domestic login: %v", err)
+		}
+	})
+
+	t.Run("explicit override clears region ownership", func(t *testing.T) {
+		configDir := t.TempDir()
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); err != nil {
+			t.Fatal(err)
+		}
+		const customURL = "https://custom-mcp.example.com"
+		if err := persistAuthLoginMCPBaseURL(configDir, customURL, authLoginMCPUseExplicitOverride); err != nil {
+			t.Fatal(err)
+		}
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(configDir, "mcp_url"))
+		if err != nil || string(data) != customURL {
+			t.Fatalf("explicit mcp_url = %q, %v; want preserved custom URL", string(data), err)
+		}
+	})
+
+	t.Run("stale marker never deletes a different custom URL", func(t *testing.T) {
+		configDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://custom.example.com"), config.FilePerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(configDir, config.ManagedMCPURLRegionFileName), []byte(authpkg.InternationalMCPBaseURL), config.FilePerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(configDir, "mcp_url"))
+		if err != nil || string(data) != "https://custom.example.com" {
+			t.Fatalf("custom mcp_url = %q, %v", string(data), err)
+		}
+	})
+
+	t.Run("international login clears a stale marker without changing a custom URL", func(t *testing.T) {
+		configDir := t.TempDir()
+		mcpURLPath := filepath.Join(configDir, "mcp_url")
+		managedRegionPath := filepath.Join(configDir, config.ManagedMCPURLRegionFileName)
+		const customURL = "https://private-mcp.example.com"
+		if err := os.WriteFile(mcpURLPath, []byte(customURL), config.FilePerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(managedRegionPath, []byte(authpkg.DefaultMCPBaseURL), config.FilePerm); err != nil {
+			t.Fatal(err)
+		}
+		if err := persistAuthLoginMCPBaseURL(configDir, authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(mcpURLPath)
+		if err != nil || string(data) != customURL {
+			t.Fatalf("custom mcp_url = %q, %v", string(data), err)
+		}
+		if _, err := os.Stat(managedRegionPath); !os.IsNotExist(err) {
+			t.Fatalf("stale managed marker remains: %v", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoveragePersistAuthLoginMCPBaseURLErrors(t *testing.T) {
+	fail := errors.New("persist failure")
+
+	t.Run("explicit marker cleanup", func(t *testing.T) {
+		testseam.Swap(t, &authRemove, func(string) error { return fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), "https://custom.example.com", authLoginMCPUseExplicitOverride); !errors.Is(err, fail) {
+			t.Fatalf("explicit marker cleanup error = %v", err)
+		}
+	})
+
+	t.Run("explicit URL write", func(t *testing.T) {
+		testseam.Swap(t, &authAtomicWrite, func(string, []byte, os.FileMode) error { return fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), "https://custom.example.com", authLoginMCPUseExplicitOverride); !errors.Is(err, fail) {
+			t.Fatalf("explicit URL write error = %v", err)
+		}
+	})
+
+	t.Run("managed marker write", func(t *testing.T) {
+		testseam.Swap(t, &authAtomicWrite, func(string, []byte, os.FileMode) error { return fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); !errors.Is(err, fail) {
+			t.Fatalf("managed marker write error = %v", err)
+		}
+	})
+
+	t.Run("managed marker read", func(t *testing.T) {
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) { return nil, fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); !errors.Is(err, fail) {
+			t.Fatalf("managed marker read error = %v", err)
+		}
+	})
+
+	t.Run("managed MCP URL read", func(t *testing.T) {
+		reads := 0
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) {
+			reads++
+			if reads == 1 {
+				return nil, os.ErrNotExist
+			}
+			return nil, fail
+		})
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); !errors.Is(err, fail) {
+			t.Fatalf("managed MCP URL read error = %v", err)
+		}
+	})
+
+	t.Run("managed stale marker cleanup", func(t *testing.T) {
+		reads := 0
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) {
+			reads++
+			if reads == 1 {
+				return []byte(authpkg.DefaultMCPBaseURL), nil
+			}
+			return []byte("https://private-mcp.example.com"), nil
+		})
+		testseam.Swap(t, &authRemove, func(string) error { return fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); !errors.Is(err, fail) {
+			t.Fatalf("managed stale marker cleanup error = %v", err)
+		}
+	})
+
+	t.Run("managed URL write cleans marker", func(t *testing.T) {
+		writes := 0
+		removed := false
+		testseam.Swap(t, &authAtomicWrite, func(string, []byte, os.FileMode) error {
+			writes++
+			if writes == 2 {
+				return fail
+			}
+			return nil
+		})
+		testseam.Swap(t, &authRemove, func(string) error { removed = true; return nil })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion); !errors.Is(err, fail) || !removed {
+			t.Fatalf("managed URL write error = %v, marker removed=%v", err, removed)
+		}
+	})
+
+	t.Run("default managed marker read", func(t *testing.T) {
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) { return nil, fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); !errors.Is(err, fail) {
+			t.Fatalf("managed marker read error = %v", err)
+		}
+	})
+
+	t.Run("missing MCP URL cleans marker", func(t *testing.T) {
+		reads := 0
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) {
+			reads++
+			if reads == 1 {
+				return []byte(authpkg.InternationalMCPBaseURL), nil
+			}
+			return nil, os.ErrNotExist
+		})
+		testseam.Swap(t, &authRemove, func(string) error { return nil })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); err != nil {
+			t.Fatalf("missing MCP URL cleanup error = %v", err)
+		}
+	})
+
+	t.Run("MCP URL read", func(t *testing.T) {
+		reads := 0
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) {
+			reads++
+			if reads == 1 {
+				return []byte(authpkg.InternationalMCPBaseURL), nil
+			}
+			return nil, fail
+		})
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); !errors.Is(err, fail) {
+			t.Fatalf("MCP URL read error = %v", err)
+		}
+	})
+
+	t.Run("default URL write", func(t *testing.T) {
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) { return []byte(authpkg.InternationalMCPBaseURL), nil })
+		testseam.Swap(t, &authAtomicWrite, func(string, []byte, os.FileMode) error { return fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); !errors.Is(err, fail) {
+			t.Fatalf("default URL write error = %v", err)
+		}
+	})
+
+	t.Run("final marker cleanup", func(t *testing.T) {
+		testseam.Swap(t, &authReadFile, func(string) ([]byte, error) { return []byte(authpkg.InternationalMCPBaseURL), nil })
+		testseam.Swap(t, &authAtomicWrite, func(string, []byte, os.FileMode) error { return nil })
+		testseam.Swap(t, &authRemove, func(string) error { return fail })
+		if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault); !errors.Is(err, fail) {
+			t.Fatalf("final marker cleanup error = %v", err)
+		}
+	})
+
+	if err := persistAuthLoginMCPBaseURL(t.TempDir(), authpkg.DefaultMCPBaseURL, authLoginMCPPersistence(255)); err == nil {
+		t.Fatal("unsupported MCP persistence mode succeeded")
+	}
+}
+
+func TestCrossPlatformCoverageNormalizeAuthLoginBaseURLTransportSecurity(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantURL string
+		wantErr string
+	}{
+		{name: "https remote", raw: "https://pre-mcp.example.com/path/?secret=drop#fragment", wantURL: "https://pre-mcp.example.com/path"},
+		{name: "http localhost", raw: "http://localhost:8080/", wantURL: "http://localhost:8080"},
+		{name: "http IPv4 loopback", raw: "http://127.0.0.1:8080", wantURL: "http://127.0.0.1:8080"},
+		{name: "http IPv6 loopback", raw: "http://[::1]:8080", wantURL: "http://[::1]:8080"},
+		{name: "http remote", raw: "http://pre-mcp.example.com", wantErr: "must use HTTPS"},
+		{name: "empty", raw: " ", wantErr: "cannot be empty"},
+		{name: "invalid URL", raw: "https://%", wantErr: "invalid --mcp-url"},
+		{name: "invalid scheme", raw: "ftp://pre-mcp.example.com", wantErr: "must use http or https"},
+		{name: "missing host", raw: "https:///path", wantErr: "must include a host"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, got, err := normalizeAuthLoginBaseURL(tc.raw, "--mcp-url")
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("normalizeAuthLoginBaseURL error = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("normalizeAuthLoginBaseURL error = %v", err)
+			}
+			if got != tc.wantURL {
+				t.Fatalf("normalized URL = %q, want %q", got, tc.wantURL)
+			}
+		})
 	}
 }
 

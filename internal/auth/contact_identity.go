@@ -105,11 +105,11 @@ func ContactProfileIdentityFromJSON(data []byte, expectedCorpIDs ...string) (Con
 }
 
 // ManagedIdentityFromToolResult 对 Managed Exchange 做严格解析：只接受
-// expectedOrgID 下恰好一条、且包含 userId/userid 的身份。orgUserId 属于
-// 另一个标识域，不能用来证明授权响应中的数字员工 UID。
-func ManagedIdentityFromToolResult(result *edition.ToolResult, expectedOrgID string) (ManagedIdentity, error) {
-	expectedOrgID = strings.TrimSpace(expectedOrgID)
-	if result == nil || expectedOrgID == "" {
+// expectedCorpID 下恰好一条、且包含 userId/userid 的身份。orgUserId 属于
+// 另一个标识域，不能用来证明数字员工 Profile 的 userId。
+func ManagedIdentityFromToolResult(result *edition.ToolResult, expectedCorpID string) (ManagedIdentity, error) {
+	expectedCorpID = strings.TrimSpace(expectedCorpID)
+	if result == nil || expectedCorpID == "" {
 		return ManagedIdentity{}, fmt.Errorf("current-user identity is missing or ambiguous")
 	}
 	matches := make([]contactIdentityRecord, 0, 1)
@@ -122,7 +122,7 @@ func ManagedIdentityFromToolResult(result *edition.ToolResult, expectedOrgID str
 			continue
 		}
 		for _, record := range records {
-			if strings.TrimSpace(record.CorpID) == expectedOrgID {
+			if strings.TrimSpace(record.CorpID) == expectedCorpID {
 				matches = append(matches, record)
 			}
 		}
@@ -145,7 +145,7 @@ func ManagedIdentityFromToolResult(result *edition.ToolResult, expectedOrgID str
 		userID = value
 	}
 	return ManagedIdentity{
-		CorpID:   expectedOrgID,
+		CorpID:   expectedCorpID,
 		CorpName: strings.TrimSpace(record.OrgName),
 		UserID:   userID,
 		UserName: firstContactIdentityValue(record.OrgUserName, record.Name),

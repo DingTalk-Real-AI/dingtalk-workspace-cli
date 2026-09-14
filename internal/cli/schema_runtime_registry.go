@@ -11,6 +11,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -334,6 +335,15 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 
 	provenance := contractFinalProvenance(identity, title, description, titleProv, descriptionProv, safety, interfaceSpec, selection, final.DryRun)
 
+	result, pagination := final.Result, final.Pagination
+	if !output.UsesUnifiedResult(entry.Command) {
+		// ResultSpec describes the unified envelope data value and PaginationSpec
+		// describes meta.pagination. Keep both declarations internal while a
+		// command still emits legacy bytes or only shadow-validates the new
+		// contract; publishing them early makes Schema disagree with runtime.
+		result, pagination = nil, nil
+	}
+
 	return ToolSpecFromRuntime(RuntimeToolSpecInput{
 		Identity:        identity,
 		Display:         entry.ProductName,
@@ -344,6 +354,8 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		Constraints:     constraints,
 		Positionals:     positionals,
 		DryRun:          final.DryRun,
+		Result:          result,
+		Pagination:      pagination,
 		Safety:          safety,
 		Interface:       interfaceSpec,
 		Selection:       selection,

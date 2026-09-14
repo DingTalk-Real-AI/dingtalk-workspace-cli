@@ -49,10 +49,11 @@ func driveLatestExclusiveError(flag string, latest int) error {
 	}
 }
 
-func applyDriveListLatest(items []map[string]any, latest int) []map[string]any {
+// foldersOnly=true 时对目录取 Top-N（--type folder --latest 组合），否则对文件取 Top-N。
+func applyDriveListLatest(items []map[string]any, latest int, foldersOnly bool) []map[string]any {
 	files := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		if isDriveDepthFolder(item) || isDocDepthFolder(item) {
+		if (isDriveDepthFolder(item) || isDocDepthFolder(item)) != foldersOnly {
 			continue
 		}
 		files = append(files, item)

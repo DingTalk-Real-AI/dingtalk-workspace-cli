@@ -22,12 +22,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // FlagAliasOfAnnotation records a framework-originated reviewed relationship
 // between a retained compatibility flag and an exact canonical Cobra flag.
@@ -66,13 +67,14 @@ type Snapshot struct {
 // Command contains compatibility-relevant command metadata. Path always
 // includes the root command name (for example, "dws chat message send").
 type Command struct {
-	Path           string   `json:"path"`
-	Runnable       bool     `json:"runnable"`
-	Hidden         bool     `json:"hidden"`
-	Deprecated     string   `json:"deprecated,omitempty"`
-	Aliases        []string `json:"aliases"`
-	LocalFlags     []Flag   `json:"local_flags"`
-	InheritedFlags []Flag   `json:"inherited_flags"`
+	Path            string          `json:"path"`
+	Runnable        bool            `json:"runnable"`
+	Hidden          bool            `json:"hidden"`
+	Deprecated      string          `json:"deprecated,omitempty"`
+	Aliases         []string        `json:"aliases"`
+	LocalFlags      []Flag          `json:"local_flags"`
+	InheritedFlags  []Flag          `json:"inherited_flags"`
+	BoolConstParams map[string]bool `json:"bool_const_params,omitempty"`
 }
 
 // Flag contains the stable pflag contract visible at a command node.
@@ -126,14 +128,16 @@ func Capture(root *cobra.Command) Snapshot {
 		}
 		aliases = compactSorted(aliases)
 
+		boolConstParams := corecmd.InterfaceBoolConstParams(cmd)
 		snapshot.Commands = append(snapshot.Commands, Command{
-			Path:           path,
-			Runnable:       cmd.Runnable(),
-			Hidden:         cmd.Hidden,
-			Deprecated:     strings.TrimSpace(cmd.Deprecated),
-			Aliases:        aliases,
-			LocalFlags:     captureFlags(cmd.LocalFlags()),
-			InheritedFlags: captureFlags(cmd.InheritedFlags()),
+			Path:            path,
+			Runnable:        cmd.Runnable(),
+			Hidden:          cmd.Hidden,
+			Deprecated:      strings.TrimSpace(cmd.Deprecated),
+			Aliases:         aliases,
+			LocalFlags:      captureFlags(cmd.LocalFlags()),
+			InheritedFlags:  captureFlags(cmd.InheritedFlags()),
+			BoolConstParams: boolConstParams,
 		})
 
 		children := append([]*cobra.Command(nil), cmd.Commands()...)
@@ -198,6 +202,9 @@ func (s Snapshot) Validate() error {
 			return fmt.Errorf("interface snapshot contains duplicate command path %q", command.Path)
 		}
 		seenCommands[command.Path] = true
+		if command.BoolConstParams != nil && len(command.BoolConstParams) == 0 {
+			return fmt.Errorf("command %q must omit empty bool_const_params", command.Path)
+		}
 		if err := validateFlags(command.Path, "local", command.LocalFlags); err != nil {
 			return err
 		}

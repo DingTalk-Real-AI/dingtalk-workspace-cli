@@ -36,8 +36,8 @@ func TestCrossPlatformCoverageAITableSemanticCatalogExactlyCoversRegisteredSurfa
 		}
 		registered[item.Command] = item
 	}
-	if len(registered) != 92 || len(source.Shortcuts) != 92 {
-		t.Fatalf("registered/catalog = %d/%d, want 92/92", len(registered), len(source.Shortcuts))
+	if len(registered) != 100 || len(source.Shortcuts) != 100 {
+		t.Fatalf("registered/catalog = %d/%d, want 100/100", len(registered), len(source.Shortcuts))
 	}
 
 	var missing, stale []string

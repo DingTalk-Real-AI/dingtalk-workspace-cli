@@ -32,11 +32,18 @@ func TestCrossPlatformCoverageProjectStreamingCardReceipt(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageProjectStreamingCardUpdate(t *testing.T) {
-	payload := ProjectStreamingCardUpdate(map[string]any{"result": map[string]any{"updated": true}}, "biz-1", "updated=true")
+	payload := ProjectStreamingCardUpdate(map[string]any{"result": map[string]any{"updated": true}}, "biz-1", CardUpdateVerification{Accepted: true, Verified: true, Evidence: "updated=true"})
 	if payload["contractVersion"] != StreamingCardContractVersion || payload["verified"] != true || payload["verificationEvidence"] != "updated=true" {
 		t.Fatalf("payload = %#v", payload)
 	}
 	if _, exists := payload["result"]; !exists {
 		t.Fatal("lower response was not preserved")
+	}
+}
+
+func TestCrossPlatformCoverageProjectAcceptedUnverifiedStreamingCardUpdate(t *testing.T) {
+	payload := ProjectStreamingCardUpdate(map[string]any{"success": true}, "biz-1", CardUpdateVerification{Accepted: true, Verified: false, Evidence: "success=true"})
+	if payload["accepted"] != true || payload["verified"] != false || payload["warning"] == "" {
+		t.Fatalf("payload = %#v", payload)
 	}
 }
