@@ -6569,8 +6569,9 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Use:   "update",
 		Short: "更新分享表单配置",
 		Long: `部分更新指定视图的分享表单配置，未传入的配置保持原值。
+新建表单首次开启分享且已知表单标题时，应在同一次调用中通过 --form-name 传入标题，避免分享内容缺少名称。
 除 --base-id、--table-id 和 --view-id 外，至少显式传入一个可更新参数。`,
-		Example: `  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true
+		Example: `  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "活动报名"
 	  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name "活动报名" --anonymous-submit true`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
@@ -6656,9 +6657,9 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			Interface:   aitableCompositeInterface("Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "部分更新表单分享开关、访问范围、有效期和通知等配置。",
-				UseWhen:      []string{"开启、关闭或调整表单分享配置时"},
+				UseWhen:      []string{"开启、关闭或调整表单分享配置时；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name"},
 				AvoidWhen:    []string{"只查询用 share get"},
-				Examples:     []string{"dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true", "dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name '活动报名' --anonymous-submit true"},
+				Examples:     []string{"dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name '活动报名'", "dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name '活动报名' --anonymous-submit true"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
@@ -9553,7 +9554,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	formShareUpdateCmd.Flags().Int("submit-times-user-limit", 0, "单用户提交限制 code：0 不限制，1 仅一次，2 每天一次，3 每周期一次")
 	formShareUpdateCmd.Flags().Int64("form-start-time", 0, "表单生效时间，毫秒时间戳")
 	formShareUpdateCmd.Flags().Int64("form-end-time", 0, "表单失效时间，毫秒时间戳")
-	formShareUpdateCmd.Flags().String("form-name", "", "分享表单名称")
+	formShareUpdateCmd.Flags().String("form-name", "", "分享表单名称；新建表单首次开启分享时传入已知标题")
 	formShareUpdateCmd.Flags().String("form-desc", "", "分享表单描述")
 	formShareUpdateCmd.Flags().String("anonymous-submit", "", "是否允许匿名提交：true 或 false")
 	formShareUpdateCmd.Flags().String("load-last-submit", "", "重新打开时是否加载上次提交：true 或 false")

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"unicode/utf16"
 
@@ -346,7 +347,7 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 		}
 		switch typeName {
 		case "text":
-			if err := rejectAitableCommentNodeFields(index, node, "userId", "corpId", "url", "width", "height"); err != nil {
+			if err := validateAitableCommentNodeFields(index, node, "type", "text"); err != nil {
 				return nil, err
 			}
 			text, ok := node["text"].(string)
@@ -356,7 +357,7 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 			textUnits += len(utf16.Encode([]rune(text)))
 			hasContent = hasContent || strings.TrimSpace(text) != ""
 		case "mention":
-			if err := rejectAitableCommentNodeFields(index, node, "text", "url", "width", "height"); err != nil {
+			if err := validateAitableCommentNodeFields(index, node, "type", "userId", "corpId"); err != nil {
 				return nil, err
 			}
 			userID, ok := node["userId"].(string)
@@ -372,7 +373,7 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 			mentions++
 			hasContent = true
 		case "image":
-			if err := rejectAitableCommentNodeFields(index, node, "text", "userId", "corpId"); err != nil {
+			if err := validateAitableCommentNodeFields(index, node, "type", "url", "width", "height"); err != nil {
 				return nil, err
 			}
 			url, ok := node["url"].(string)
@@ -409,11 +410,20 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 	return nodes, nil
 }
 
-func rejectAitableCommentNodeFields(index int, node map[string]any, fields ...string) error {
-	for _, field := range fields {
-		if _, exists := node[field]; exists {
-			return fmt.Errorf("--rich-content[%d] %s 节点不能包含 %s", index, node["type"], field)
+func validateAitableCommentNodeFields(index int, node map[string]any, allowedFields ...string) error {
+	allowed := make(map[string]struct{}, len(allowedFields))
+	for _, field := range allowedFields {
+		allowed[field] = struct{}{}
+	}
+	unknownFields := make([]string, 0)
+	for field := range node {
+		if _, ok := allowed[field]; !ok {
+			unknownFields = append(unknownFields, field)
 		}
+	}
+	if len(unknownFields) > 0 {
+		sort.Strings(unknownFields)
+		return fmt.Errorf("--rich-content[%d] %s 节点包含未声明字段 %s", index, node["type"], unknownFields[0])
 	}
 	return nil
 }

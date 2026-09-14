@@ -37,7 +37,7 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 
 ```bash
 dws aitable form create --base-id BASE_ID --table-id TABLE_ID --name "表单名" --format json
-dws aitable +form-share-update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --format json
+dws aitable +form-share-update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "表单名" --format json
 dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 ```
 
@@ -118,9 +118,9 @@ dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 dws aitable form field hide --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
   --field-id FIELD_ID --hidden true --format json
 
-# 6) 开启分享（注意：开启后需 UI 刷新页面才会看到分享面板）
+# 6) 开启分享；把已知表单标题同时传给分享配置
 dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
-  --enabled true --format json
+  --enabled true --form-name "员工信息收集" --format json
 ```
 
 ## 返回结构补充
@@ -132,5 +132,6 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 ## MCP 交互注意事项
 
 - `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
+- 新建表单首次开启分享时，复用 `form create`/`form update` 中已知的标题，通过 `--form-name` 与 `--enabled true` 同时传入；不要为取标题额外调用 `form get`。已有分享仅调整其他配置时，不覆盖原名称。
 - 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`，再通过 `form share get` 回读确认。
 - 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。
