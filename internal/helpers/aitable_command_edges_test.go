@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -57,6 +59,12 @@ func (c *aitableCommandCoverageCaller) CallTool(_ context.Context, _, tool strin
 		response = `{"data":[{"viewId":"view","title":"Form"}]}`
 	case "query_records":
 		response = `{"data":{"records":[],"hasMore":false,"nextCursor":""}}`
+	case "query_record_ids":
+		response = `{"data":{"recordIds":[],"nextCursor":null}}`
+	case "list_comments":
+		response = `{"data":{"comments":[],"hasMore":false,"nextToken":null}}`
+	case "create_comment", "reply_comment", "update_comment", "delete_comment":
+		response = `{"data":{"topicId":"topic-1","commentKey":"comment-1"}}`
 	default:
 		response = `{"success":true,"data":{}}`
 	}
@@ -80,7 +88,65 @@ func runAitableCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
+}
+
+func TestAitableRecordIDsProjectsUnifiedPagination(t *testing.T) {
+	payload, meta, err := normalizeAitableRecordIDsResult(map[string]any{
+		"recordIds":  []any{"record-1", "record-2"},
+		"nextCursor": "next-2",
+	}, map[string]any{"cursor": "next-1"})
+	if err != nil {
+		t.Fatalf("normalize record ids: %v", err)
+	}
+	if _, exists := payload["nextCursor"]; exists {
+		t.Fatalf("payload leaked nextCursor: %#v", payload)
+	}
+	if len(payload["recordIds"].([]any)) != 2 || meta == nil || meta.Count == nil || *meta.Count != 2 {
+		t.Fatalf("payload/meta count = %#v / %#v", payload, meta)
+	}
+	if meta.Pagination == nil || meta.Pagination.EndpointExhausted || meta.Pagination.NextToken != "next-2" || meta.Pagination.Pages != 1 || meta.Pagination.Items != 2 {
+		t.Fatalf("pagination = %#v", meta.Pagination)
+	}
+}
+
+func TestAitableRecordIDsRejectsMalformedResult(t *testing.T) {
+	for name, page := range map[string]map[string]any{
+		"missing ids":    {"nextCursor": nil},
+		"invalid id":     {"recordIds": []any{""}},
+		"invalid cursor": {"recordIds": []any{}, "nextCursor": true},
+		"stalled cursor": {"recordIds": []any{}, "nextCursor": "same"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := normalizeAitableRecordIDsResult(page, map[string]any{"cursor": "same"})
+			if err == nil {
+				t.Fatalf("accepted malformed page: %#v", page)
+			}
+		})
+	}
+}
+
+func TestAitableRecordIDsDeclaresUnifiedPagination(t *testing.T) {
+	leaf := findCLIPath(newAitableCommand(), "aitable record ids")
+	if leaf == nil {
+		t.Fatal("missing aitable record ids")
+	}
+	final, ok := contractfinal.RuntimeContractFinal(leaf)
+	if !ok || final.Result == nil || final.Pagination == nil || final.Pagination.CursorParameter != "cursor" {
+		t.Fatalf("record ids result/pagination contract = %#v", final)
+	}
+	if strings.Contains(string(final.Result.DataSchema), "nextCursor") || strings.Contains(string(final.Result.DataSchema), `"data"`) {
+		t.Fatalf("record ids data schema duplicates envelope/pagination: %s", final.Result.DataSchema)
+	}
+	if output.CommandRollout(leaf) != output.RolloutUnifiedActive {
+		t.Fatalf("record ids rollout = %q", output.CommandRollout(leaf))
+	}
 }
 
 func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T) {

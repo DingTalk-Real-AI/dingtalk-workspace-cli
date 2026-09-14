@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -139,6 +140,49 @@ func TestEmitResultUnknownFormatDegradesToJSONWithWarning(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "[WARN]") || !strings.Contains(stderr.String(), "bogus") {
 		t.Fatalf("fallback warning missing: %q", stderr.String())
+	}
+}
+
+func TestTablePresentationKeepsOneResultAcrossHumanAndJSONFormats(t *testing.T) {
+	render := func(out io.Writer, data any) error {
+		_, err := fmt.Fprintf(out, "custom:%v\n", data.(map[string]any)["id"])
+		return err
+	}
+	result := Success(map[string]any{"id": "a"}, WithTablePresentation(render))
+
+	defaultCmd := &cobra.Command{Use: "sample"}
+	defaultOut := new(bytes.Buffer)
+	defaultCmd.SetOut(defaultOut)
+	if _, err := EmitResult(defaultCmd, result); err != nil || defaultOut.String() != "custom:a\n" {
+		t.Fatalf("default table output = %q, err = %v", defaultOut.String(), err)
+	}
+
+	jsonCmd := &cobra.Command{Use: "sample"}
+	jsonOut := new(bytes.Buffer)
+	jsonCmd.SetOut(jsonOut)
+	jsonCmd.Flags().String("format", "json", "")
+	if err := jsonCmd.Flags().Set("format", "json"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EmitResult(jsonCmd, result); err != nil {
+		t.Fatalf("explicit json: %v", err)
+	}
+	var envelope Envelope
+	if err := json.Unmarshal(jsonOut.Bytes(), &envelope); err != nil || envelope.Outcome != OutcomeSuccess {
+		t.Fatalf("explicit json output = %q, err = %v", jsonOut.String(), err)
+	}
+}
+
+func TestTablePresentationRendererIsBufferFirst(t *testing.T) {
+	cmd := &cobra.Command{Use: "sample"}
+	stdout := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	result := Success(map[string]any{"id": "a"}, WithTablePresentation(func(out io.Writer, _ any) error {
+		_, _ = io.WriteString(out, "partial")
+		return errors.New("render failed")
+	}))
+	if _, err := EmitResult(cmd, result); err == nil || stdout.Len() != 0 {
+		t.Fatalf("renderer error = %v, leaked output = %q", err, stdout.String())
 	}
 }
 

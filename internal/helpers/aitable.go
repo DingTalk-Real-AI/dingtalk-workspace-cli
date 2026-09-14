@@ -17,6 +17,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging"
 	"github.com/spf13/cobra"
 
@@ -1135,6 +1136,117 @@ func callAitableToolContext(ctx context.Context, toolName string, args map[strin
 		return struct{}{}, callMCPToolContext(callCtx, toolName, args)
 	})
 	return err
+}
+
+// callAitableUnifiedDataContext executes an AI Table tool through the same
+// retry policy as the legacy output path, then unwraps the MCP envelope's data.
+// Unified callers declare concrete result schemas, so a missing data member is
+// an invalid upstream response rather than an acknowledgement-only success.
+func callAitableUnifiedDataContext(ctx context.Context, toolName string, args map[string]any) (any, error) {
+	call := func(callCtx context.Context) (any, error) {
+		return CallMCPToolDataOnServer(callCtx, "aitable", toolName, args)
+	}
+	var (
+		raw any
+		err error
+	)
+	if isAitableReadRetryTool(toolName) {
+		raw, err = callAitableReadWithRetry(ctx, toolName, call)
+	} else {
+		raw, err = call(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	envelope, ok := raw.(map[string]any)
+	if !ok || envelope == nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("aitable/%s 返回值不是 JSON 对象", toolName))
+	}
+	data, ok := envelope["data"]
+	if !ok || data == nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("aitable/%s 返回值缺少非空 data", toolName))
+	}
+	return data, nil
+}
+
+func aitableUnifiedDryRunResult(toolName string, args map[string]any) (output.CommandResult, bool) {
+	if deps == nil || deps.Caller == nil || !deps.Caller.DryRun() {
+		return nil, false
+	}
+	return output.Success(map[string]any{
+		"tool": toolName, "arguments": args, "executed": false,
+	}, output.WithDryRun()), true
+}
+
+func aitableJSONInteger(value any) bool {
+	switch typed := value.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return true
+	case float64:
+		return !math.IsNaN(typed) && !math.IsInf(typed, 0) && math.Trunc(typed) == typed
+	case json.Number:
+		_, err := typed.Int64()
+		return err == nil
+	default:
+		return false
+	}
+}
+
+func callAitableRecordIDsResult(cmd *cobra.Command, args map[string]any) (output.CommandResult, error) {
+	if result, ok := aitableUnifiedDryRunResult("query_record_ids", args); ok {
+		return result, nil
+	}
+	data, err := callAitableUnifiedDataContext(cmd.Context(), "query_record_ids", args)
+	if err != nil {
+		return nil, err
+	}
+	payload, meta, err := normalizeAitableRecordIDsResult(data, args)
+	if err != nil {
+		return nil, err
+	}
+	return output.Success(payload, output.WithMeta(meta)), nil
+}
+
+func normalizeAitableRecordIDsResult(data any, args map[string]any) (map[string]any, *output.Meta, error) {
+	page, ok := data.(map[string]any)
+	if !ok || page == nil {
+		return nil, nil, apperrors.NewInternal(fmt.Sprintf("aitable/query_record_ids 的 data 不是 JSON 对象，而是 %T", data))
+	}
+	recordIDs, ok := page["recordIds"].([]any)
+	if !ok {
+		return nil, nil, apperrors.NewInternal("aitable/query_record_ids 的 data.recordIds 不是数组")
+	}
+	for index, value := range recordIDs {
+		recordID, ok := value.(string)
+		if !ok || strings.TrimSpace(recordID) == "" {
+			return nil, nil, apperrors.NewInternal(fmt.Sprintf("aitable/query_record_ids 的 data.recordIds[%d] 不是非空字符串", index))
+		}
+	}
+	nextCursor := ""
+	if raw, exists := page["nextCursor"]; exists && raw != nil {
+		var valid bool
+		nextCursor, valid = raw.(string)
+		if !valid {
+			return nil, nil, apperrors.NewInternal("aitable/query_record_ids 的 data.nextCursor 不是字符串或 null")
+		}
+	}
+	nextCursor = strings.TrimSpace(nextCursor)
+	if current, _ := args["cursor"].(string); nextCursor != "" && strings.TrimSpace(current) == nextCursor {
+		return nil, nil, apperrors.NewInternal("aitable/query_record_ids 返回了未前进的 nextCursor")
+	}
+	pagination, err := output.NewPagination(nextCursor == "", nextCursor)
+	if err != nil {
+		return nil, nil, apperrors.NewInternal("aitable/query_record_ids 返回了无效分页状态: " + err.Error())
+	}
+	pagination.Pages = 1
+	pagination.Items = len(recordIDs)
+	payload := make(map[string]any, len(page)-1)
+	for key, value := range page {
+		if key != "nextCursor" {
+			payload[key] = value
+		}
+	}
+	return payload, &output.Meta{Count: output.NewCount(len(recordIDs)), Pagination: pagination}, nil
 }
 
 // callAitableCompatibleReadToolContext falls back only when the preferred
@@ -3381,7 +3493,7 @@ newFieldName、config、aiConfig 至少传入一项。
 		Use:   "ids",
 		Short: "分页获取记录 ID",
 		Long: `按表内顺序分页返回记录 ID，不读取 cells 明细。单页默认 100 条、最多 100 条。
-返回 nextCursor 非空时，将其通过 --cursor 原样传回继续翻页。`,
+续页状态位于统一结果的 meta.pagination：endpoint_exhausted=false 时，将 next_token 通过 --cursor 传回继续翻页。`,
 		Example: `  dws aitable record ids --base-id BASE_ID --table-id TABLE_ID
   dws aitable record ids --base-id BASE_ID --table-id TABLE_ID --cursor NEXT_CURSOR --limit 100`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3395,26 +3507,33 @@ newFieldName、config、aiConfig 至少传入一项。
 			toolArgs := map[string]any{"baseId": baseID, "tableId": mustGetFlag(cmd, "table-id")}
 			if limit, _ := cmd.Flags().GetInt("limit"); cmd.Flags().Changed("limit") {
 				if limit < 1 || limit > 100 {
-					return fmt.Errorf("--limit 必须在 1～100 之间，got %d", limit)
+					return apperrors.NewValidation(fmt.Sprintf("--limit 必须在 1～100 之间，got %d", limit))
 				}
 				toolArgs["limit"] = limit
 			}
 			if cursor, _ := cmd.Flags().GetString("cursor"); cursor != "" {
 				toolArgs["cursor"] = cursor
 			}
-			return callAitableTool("query_record_ids", toolArgs)
+			result, err := callAitableRecordIDsResult(cmd, toolArgs)
+			if err != nil {
+				return err
+			}
+			return output.StoreResult(cmd.Context(), result)
 		},
 	}
 	DeclareLeafMetadata(recordIDsCmd, LeafSpec{
-		Safety: aitableSafetyRead(),
+		Safety:        aitableSafetyRead(),
+		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID: "aitable", Name: "record_ids", CanonicalPath: "aitable.record_ids",
 				CLIPath: "aitable record ids", PrimaryCLIPath: "aitable record ids",
 			},
 			Description: "轻量分页枚举记录 ID，不读取 cells。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Interface:   aitableMCPInterface("query_record_ids"),
 			Result:      aitableRecordIDsResultSpec(),
+			Pagination:  &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "轻量分页枚举记录 ID，不读取 cells。",
 				UseWhen:      []string{"需要遍历全表 recordId 再交给批量工具时"},

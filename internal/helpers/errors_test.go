@@ -274,6 +274,26 @@ func TestCrossPlatformCoverageBusinessSuggestionsAndResponseClassification(t *te
 	}
 }
 
+func TestAITableCommentVisibilityErrorKeepsActionableMCPGuidance(t *testing.T) {
+	text := `{"status":"error","error":{"type":"SYSTEM_ERROR","code":"COMMENT_RECORD_UNAVAILABLE","message":"Record visibility could not be verified","retryable":false,"details":{"capability":"record_comment","stage":"record_visibility","operationExecuted":false}},"summary":"评论操作尚未执行","meta":{"suggestions":[{"action":"open_base","reason":"Open the Base in DingTalk, then retry.","priority":"high"},{"action":"copy_base","reason":"Copy it to a new Base if the issue persists.","priority":"medium"}]}}`
+	err := ClassifyMCPResponseText(text)
+	cli, ok := err.(*CLIError)
+	if !ok {
+		t.Fatalf("error = %#v, want CLIError", err)
+	}
+	if cli.Code != CodeMCPToolError || !strings.Contains(cli.Message, "Record visibility could not be verified") ||
+		!strings.Contains(cli.Message, "COMMENT_RECORD_UNAVAILABLE") {
+		t.Fatalf("message = %q, code = %q", cli.Message, cli.Code)
+	}
+	if cli.ServerCode != "COMMENT_RECORD_UNAVAILABLE" || cli.Details["capability"] != "record_comment" ||
+		cli.Details["stage"] != "record_visibility" || cli.Details["operation_executed"] != false {
+		t.Fatalf("server code/details = %q / %#v", cli.ServerCode, cli.Details)
+	}
+	if !strings.Contains(cli.Suggestion, "Open the Base") || !strings.Contains(cli.Suggestion, "Copy it") {
+		t.Fatalf("suggestion = %q, want both server recovery actions", cli.Suggestion)
+	}
+}
+
 func TestCrossPlatformCoveragePATCleanupAndMatchingHelpers(t *testing.T) {
 	cleaned := cleanPATJSON(map[string]any{
 		"code": "PAT_NO_PERMISSION",

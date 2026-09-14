@@ -13,7 +13,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/profilectx"
 )
 
-const entitySearchPageSize = 50
+const EntitySearchPageSize = 50
 
 var simpleHighlightTag = regexp.MustCompile(`(?i)</?(?:em|b|strong|mark)(?:\s[^>]*)?>`)
 
@@ -96,7 +96,7 @@ func SearchEntities(reader Reader, entityType EntityType, keyword string) (Entit
 		params := map[string]any{
 			"entityType": string(entityType),
 			"keyword":    query,
-			"limit":      entitySearchPageSize,
+			"limit":      EntitySearchPageSize,
 		}
 		if cursor != "" {
 			params["cursor"] = cursor

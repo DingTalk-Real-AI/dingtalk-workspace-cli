@@ -12,6 +12,8 @@ import (
 	"unicode/utf16"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -38,18 +40,17 @@ var aitableCommentItemResultSchema = json.RawMessage(`{
     "creatorUserId":{"type":["string","null"],"description":"可解析的评论作者外部 userId"},
     "creatorCorpId":{"type":["string","null"],"description":"评论作者 userId 所属企业"}
   },
+  "required":["topicId","commentKey"],
   "additionalProperties":true
 }`)
 
 var aitableCommentListResultSchema = json.RawMessage(`{
   "type":"object",
-  "description":"指定 AI 表格记录的一页评论；空 comments 不代表分页完成",
+  "description":"指定 AI 表格记录的一页评论；续页状态位于 meta.pagination",
   "properties":{
-    "comments":{"type":"array","description":"当前页中属于目标记录的评论及回复","items":{"type":"object","additionalProperties":true}},
-    "hasMore":{"type":"boolean","description":"底层文档评论是否仍有下一页"},
-    "nextToken":{"type":["string","null"],"description":"不透明续页令牌；末页为空"}
+    "comments":{"type":"array","description":"当前页中属于目标记录的评论及回复","items":{"type":"object","additionalProperties":true}}
   },
-  "required":["comments","hasMore"],
+  "required":["comments"],
   "additionalProperties":true
 }`)
 
@@ -66,8 +67,8 @@ func newAitableCommentCommand() *cobra.Command {
 		Short: "分页查询记录评论",
 		Long: `分页查询指定记录的评论和回复。
 
-comments 为空不代表已经结束；只有 hasMore=false 才表示遍历完成。
-hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextToken 原样传给下一次 --cursor。`,
+comments 为空不代表已经结束；只有 meta.pagination.endpoint_exhausted=true 才表示遍历完成。
+endpoint_exhausted=false 时必须保持 baseId、tableId、recordId 不变，并把 meta.pagination.next_token 原样传给下一次 --cursor。`,
 		Example: "  dws aitable comment list --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID> --limit 50 --format json",
 		Tool:    "list_comments",
 		Flags: []LeafFlag{
@@ -75,13 +76,14 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 			aitableCommentTableIDFlag(),
 			aitableCommentRecordIDFlag(),
 			{Name: "limit", Kind: LeafInt, Default: "50", Bind: "pageSize", Usage: "每次检查的底层评论数量，范围 1-100，默认 50"},
-			{Name: "cursor", Bind: "nextToken", Trim: true, OmitEmpty: true, Usage: "上一次相同 Base、数据表和记录查询返回的 nextToken"},
+			{Name: "cursor", Bind: "nextToken", Trim: true, OmitEmpty: true, Usage: "上一次相同 Base、数据表和记录查询返回的 meta.pagination.next_token"},
 		},
 		Constraints: []LeafConstraint{{Kind: "custom", Flags: []string{"limit"}, Description: "--limit 必须在 1-100 之间"}},
 		Safety:      aitableSafetyRead(),
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "list_comments", CanonicalPath: "aitable.list_comments", CLIPath: "aitable comment list", PrimaryCLIPath: "aitable comment list"},
-			Description: "分页查询指定 AI 表格记录的评论和回复；空页仍按 hasMore/nextToken 判断是否续页。",
+			Description: "分页查询指定 AI 表格记录的评论和回复；空页仍按 meta.pagination 判断是否续页。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Result: &contract.ResultSpec{
 				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 				DataSchema: aitableCommentListResultSchema,
@@ -91,13 +93,14 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 			Selection: contract.SelectionSpec{
 				AgentSummary: "分页查询一条 AI 表格记录的评论和回复。",
 				UseWhen:      []string{"用户要查看某条 AI 表格记录的评论、回复或继续读取评论下一页时"},
-				AvoidWhen:    []string{"在线电子表格单元格批注使用 sheet comment list；comments 为空但 hasMore=true 时不要停止"},
+				AvoidWhen:    []string{"在线电子表格单元格批注使用 sheet comment list；comments 为空但 meta.pagination.endpoint_exhausted=false 时不要停止"},
 				Examples:     []string{"dws aitable comment list --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID> --format json"},
 			},
 			Parameters: aitableCommentListParameters(),
 		},
-		Validate: validateAitableCommentList,
-		Call:     callAitableCommentTool,
+		Validate:      validateAitableCommentList,
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callAitableCommentResult,
 	})
 
 	createCmd := NewLeafCommand(LeafSpec{
@@ -116,6 +119,7 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "create_comment", CanonicalPath: "aitable.create_comment", CLIPath: "aitable comment create", PrimaryCLIPath: "aitable comment create"},
 			Description: "在指定 AI 表格记录上创建评论话题，支持纯文本或有序富文本节点。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Result:      aitableCommentItemResultSpec(),
 			Interface:   aitableMCPInterface("create_comment"),
 			Selection: contract.SelectionSpec{
@@ -126,7 +130,8 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 			},
 			Parameters: aitableCommentWriteParameters(""),
 		},
-		Call: callAitableCommentTool,
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callAitableCommentResult,
 	})
 
 	replyCmd := NewLeafCommand(LeafSpec{
@@ -144,6 +149,7 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "reply_comment", CanonicalPath: "aitable.reply_comment", CLIPath: "aitable comment reply", PrimaryCLIPath: "aitable comment reply"},
 			Description: "回复指定 AI 表格记录评论，保留原话题和回复关系。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Result:      aitableCommentItemResultSpec(),
 			Interface:   aitableMCPInterface("reply_comment"),
 			Selection: contract.SelectionSpec{
@@ -154,7 +160,8 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 			},
 			Parameters: aitableCommentWriteParameters("replyCommentKey"),
 		},
-		Call: callAitableCommentTool,
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callAitableCommentResult,
 	})
 
 	updateCmd := NewLeafCommand(LeafSpec{
@@ -172,6 +179,7 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "update_comment", CanonicalPath: "aitable.update_comment", CLIPath: "aitable comment update", PrimaryCLIPath: "aitable comment update"},
 			Description: "完整替换当前用户创建的指定 AI 表格记录评论正文。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Result:      aitableCommentItemResultSpec(),
 			Interface:   aitableMCPInterface("update_comment"),
 			Selection: contract.SelectionSpec{
@@ -182,7 +190,8 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 			},
 			Parameters: aitableCommentWriteParameters("commentKey"),
 		},
-		Call: callAitableCommentTool,
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callAitableCommentResult,
 	})
 
 	deleteCmd := NewLeafCommand(LeafSpec{
@@ -202,6 +211,7 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "aitable", Name: "delete_comment", CanonicalPath: "aitable.delete_comment", CLIPath: "aitable comment delete", PrimaryCLIPath: "aitable comment delete"},
 			Description: "永久删除当前用户创建的指定 AI 表格记录评论。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 			Result:      aitableCommentItemResultSpec(),
 			Interface:   aitableMCPInterface("delete_comment"),
 			Selection: contract.SelectionSpec{
@@ -218,7 +228,8 @@ hasMore=true 时必须保持 baseId、tableId、recordId 不变，并把 nextTok
 				{Name: "comment-key", Property: "commentKey", Required: boolPtr(true)},
 			},
 		},
-		Call: callAitableCommentTool,
+		OutputRollout: output.RolloutUnifiedActive,
+		ResultCall:    callAitableCommentResult,
 	})
 
 	commentCmd.AddCommand(listCmd, createCmd, replyCmd, updateCmd, deleteCmd)
@@ -307,20 +318,128 @@ func callAitableCommentTool(cmd *cobra.Command, tool string, args map[string]any
 	return callAitableToolContext(cmd.Context(), tool, args)
 }
 
+func callAitableCommentResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
+	if result, ok := aitableUnifiedDryRunResult(tool, args); ok {
+		return result, nil
+	}
+	data, err := callAitableUnifiedDataContext(cmd.Context(), tool, args)
+	if err != nil {
+		return nil, err
+	}
+	if tool == "list_comments" {
+		payload, meta, err := normalizeAitableCommentListResult(data, args)
+		if err != nil {
+			return nil, err
+		}
+		return output.Success(payload, output.WithMeta(meta)), nil
+	}
+	comment, err := normalizeAitableCommentItem(tool, data)
+	if err != nil {
+		return nil, err
+	}
+	return output.Success(comment), nil
+}
+
+func normalizeAitableCommentListResult(data any, args map[string]any) (map[string]any, *output.Meta, error) {
+	page, ok := data.(map[string]any)
+	if !ok || page == nil {
+		return nil, nil, aitableCommentResponseError("list_comments", fmt.Sprintf("data 不是 JSON 对象，而是 %T", data))
+	}
+	comments, ok := page["comments"].([]any)
+	if !ok {
+		return nil, nil, aitableCommentResponseError("list_comments", "data.comments 不是数组")
+	}
+	for index, item := range comments {
+		if _, err := normalizeAitableCommentItem("list_comments", item); err != nil {
+			return nil, nil, aitableCommentResponseError("list_comments", fmt.Sprintf("data.comments[%d] 无效: %v", index, err))
+		}
+	}
+	hasMore, ok := page["hasMore"].(bool)
+	if !ok {
+		return nil, nil, aitableCommentResponseError("list_comments", "data.hasMore 不是布尔值")
+	}
+	nextToken := ""
+	if raw, exists := page["nextToken"]; exists && raw != nil {
+		var valid bool
+		nextToken, valid = raw.(string)
+		if !valid {
+			return nil, nil, aitableCommentResponseError("list_comments", "data.nextToken 不是字符串或 null")
+		}
+	}
+	nextToken = strings.TrimSpace(nextToken)
+	if current, _ := args["nextToken"].(string); hasMore && strings.TrimSpace(current) == nextToken {
+		return nil, nil, aitableCommentResponseError("list_comments", "data.nextToken 未前进")
+	}
+	pagination, err := output.NewPagination(!hasMore, nextToken)
+	if err != nil {
+		return nil, nil, aitableCommentResponseError("list_comments", "分页状态无效: "+err.Error())
+	}
+	pagination.Pages = 1
+	pagination.Items = len(comments)
+	payload := make(map[string]any, len(page)-2)
+	for key, value := range page {
+		if key != "hasMore" && key != "nextToken" {
+			payload[key] = value
+		}
+	}
+	return payload, &output.Meta{Count: output.NewCount(len(comments)), Pagination: pagination}, nil
+}
+
+func normalizeAitableCommentItem(tool string, data any) (map[string]any, error) {
+	comment, ok := data.(map[string]any)
+	if !ok || comment == nil {
+		return nil, aitableCommentResponseError(tool, fmt.Sprintf("data 不是 JSON 对象，而是 %T", data))
+	}
+	for _, key := range []string{"topicId", "commentKey"} {
+		value, ok := comment[key].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, aitableCommentResponseError(tool, "data."+key+" 不是非空字符串")
+		}
+	}
+	for _, key := range []string{"replyCommentKey", "content", "creatorUserId", "creatorCorpId"} {
+		if value, exists := comment[key]; exists && value != nil {
+			if _, ok := value.(string); !ok {
+				return nil, aitableCommentResponseError(tool, "data."+key+" 不是字符串或 null")
+			}
+		}
+	}
+	if richContent, exists := comment["richContent"]; exists && richContent != nil {
+		nodes, ok := richContent.([]any)
+		if !ok {
+			return nil, aitableCommentResponseError(tool, "data.richContent 不是数组或 null")
+		}
+		for index, node := range nodes {
+			if _, ok := node.(map[string]any); !ok {
+				return nil, aitableCommentResponseError(tool, fmt.Sprintf("data.richContent[%d] 不是 JSON 对象", index))
+			}
+		}
+	}
+	for _, key := range []string{"createTime", "updateTime"} {
+		if value, exists := comment[key]; exists && value != nil && !aitableJSONInteger(value) {
+			return nil, aitableCommentResponseError(tool, "data."+key+" 不是整数或 null")
+		}
+	}
+	return comment, nil
+}
+
+func aitableCommentResponseError(tool, detail string) error {
+	return apperrors.NewInternal(fmt.Sprintf("aitable/%s 返回无效评论结果: %s", tool, detail))
+}
+
 func validateAitableCommentList(cmd *cobra.Command, _ []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	if limit < 1 || limit > aitableCommentMaxPageSize {
-		return fmt.Errorf("--limit 必须在 1-%d 之间", aitableCommentMaxPageSize)
+		return aitableCommentValidationf("--limit 必须在 1-%d 之间", aitableCommentMaxPageSize)
 	}
 	return nil
 }
 
 func aitableCommentTextContent(raw string) (any, error) {
 	if strings.TrimSpace(raw) == "" {
-		return nil, fmt.Errorf("--content 不能为空")
+		return nil, aitableCommentValidationf("--content 不能为空")
 	}
 	if len(utf16.Encode([]rune(raw))) > aitableCommentMaxTextUnits {
-		return nil, fmt.Errorf("--content 文本长度不能超过 %d 个 UTF-16 字符", aitableCommentMaxTextUnits)
+		return nil, aitableCommentValidationf("--content 文本长度不能超过 %d 个 UTF-16 字符", aitableCommentMaxTextUnits)
 	}
 	return []any{map[string]any{"type": "text", "text": raw}}, nil
 }
@@ -330,20 +449,23 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 	decoder.UseNumber()
 	var nodes []map[string]any
 	if err := decoder.Decode(&nodes); err != nil {
-		return nil, fmt.Errorf("--rich-content 必须是有效的 JSON 对象数组: %w", err)
+		return nil, apperrors.NewValidation(
+			fmt.Sprintf("--rich-content 必须是有效的 JSON 对象数组: %v", err),
+			apperrors.WithCause(err),
+		)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return nil, fmt.Errorf("--rich-content 只能包含一个 JSON 数组")
+		return nil, aitableCommentValidationf("--rich-content 只能包含一个 JSON 数组")
 	}
 	if len(nodes) == 0 || len(nodes) > aitableCommentMaxNodes {
-		return nil, fmt.Errorf("--rich-content 节点数必须在 1-%d 之间", aitableCommentMaxNodes)
+		return nil, aitableCommentValidationf("--rich-content 节点数必须在 1-%d 之间", aitableCommentMaxNodes)
 	}
 	textUnits, mentions, images := 0, 0, 0
 	hasContent := false
 	for index, node := range nodes {
 		typeName, ok := node["type"].(string)
 		if !ok || strings.TrimSpace(typeName) == "" {
-			return nil, fmt.Errorf("--rich-content[%d].type 必须是非空字符串", index)
+			return nil, aitableCommentValidationf("--rich-content[%d].type 必须是非空字符串", index)
 		}
 		switch typeName {
 		case "text":
@@ -352,7 +474,7 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 			}
 			text, ok := node["text"].(string)
 			if !ok {
-				return nil, fmt.Errorf("--rich-content[%d] text 节点必须包含字符串 text", index)
+				return nil, aitableCommentValidationf("--rich-content[%d] text 节点必须包含字符串 text", index)
 			}
 			textUnits += len(utf16.Encode([]rune(text)))
 			hasContent = hasContent || strings.TrimSpace(text) != ""
@@ -362,12 +484,12 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 			}
 			userID, ok := node["userId"].(string)
 			if !ok || strings.TrimSpace(userID) == "" {
-				return nil, fmt.Errorf("--rich-content[%d] mention 节点必须包含非空外部 userId", index)
+				return nil, aitableCommentValidationf("--rich-content[%d] mention 节点必须包含非空外部 userId", index)
 			}
 			if corpID, exists := node["corpId"]; exists {
 				value, valid := corpID.(string)
 				if !valid || strings.TrimSpace(value) == "" {
-					return nil, fmt.Errorf("--rich-content[%d].corpId 必须是非空字符串", index)
+					return nil, aitableCommentValidationf("--rich-content[%d].corpId 必须是非空字符串", index)
 				}
 			}
 			mentions++
@@ -378,7 +500,7 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 			}
 			url, ok := node["url"].(string)
 			if !ok || !validAitableCommentImageURL(url) {
-				return nil, fmt.Errorf("--rich-content[%d].url 必须匹配 /core/api/resources/<resourceId>/detail", index)
+				return nil, aitableCommentValidationf("--rich-content[%d].url 必须匹配 /core/api/resources/<resourceId>/detail", index)
 			}
 			for _, field := range []string{"width", "height"} {
 				if value, exists := node[field]; exists {
@@ -390,22 +512,22 @@ func parseAitableCommentRichContent(raw string) (any, error) {
 			images++
 			hasContent = true
 		default:
-			return nil, fmt.Errorf("--rich-content[%d].type 只允许 text、mention 或 image", index)
+			return nil, aitableCommentValidationf("--rich-content[%d].type 只允许 text、mention 或 image", index)
 		}
 	}
 	// MCP 允许空 text 节点参与包含 mention/image 的合法正文，但整段正文
 	// 不能只由空白 text 构成。这里保持相同的组合语义，避免 CLI 与服务端漂移。
 	if !hasContent {
-		return nil, fmt.Errorf("--rich-content 必须包含非空文本、mention 或 image")
+		return nil, aitableCommentValidationf("--rich-content 必须包含非空文本、mention 或 image")
 	}
 	if textUnits > aitableCommentMaxTextUnits {
-		return nil, fmt.Errorf("--rich-content 文本总长度不能超过 %d 个 UTF-16 字符", aitableCommentMaxTextUnits)
+		return nil, aitableCommentValidationf("--rich-content 文本总长度不能超过 %d 个 UTF-16 字符", aitableCommentMaxTextUnits)
 	}
 	if mentions > aitableCommentMaxMentions {
-		return nil, fmt.Errorf("--rich-content mention 节点不能超过 %d 个", aitableCommentMaxMentions)
+		return nil, aitableCommentValidationf("--rich-content mention 节点不能超过 %d 个", aitableCommentMaxMentions)
 	}
 	if images > aitableCommentMaxImages {
-		return nil, fmt.Errorf("--rich-content image 节点不能超过 %d 个", aitableCommentMaxImages)
+		return nil, aitableCommentValidationf("--rich-content image 节点不能超过 %d 个", aitableCommentMaxImages)
 	}
 	return nodes, nil
 }
@@ -423,7 +545,7 @@ func validateAitableCommentNodeFields(index int, node map[string]any, allowedFie
 	}
 	if len(unknownFields) > 0 {
 		sort.Strings(unknownFields)
-		return fmt.Errorf("--rich-content[%d] %s 节点包含未声明字段 %s", index, node["type"], unknownFields[0])
+		return aitableCommentValidationf("--rich-content[%d] %s 节点包含未声明字段 %s", index, node["type"], unknownFields[0])
 	}
 	return nil
 }
@@ -449,11 +571,15 @@ func validAitableCommentImageURL(value string) bool {
 func validateAitableCommentImageSize(index int, field string, value any) error {
 	number, ok := value.(json.Number)
 	if !ok {
-		return fmt.Errorf("--rich-content[%d].%s 必须是 1-%d 的整数", index, field, aitableCommentMaxImageSize)
+		return aitableCommentValidationf("--rich-content[%d].%s 必须是 1-%d 的整数", index, field, aitableCommentMaxImageSize)
 	}
 	parsed, err := number.Int64()
 	if err != nil || parsed < 1 || parsed > aitableCommentMaxImageSize {
-		return fmt.Errorf("--rich-content[%d].%s 必须是 1-%d 的整数", index, field, aitableCommentMaxImageSize)
+		return aitableCommentValidationf("--rich-content[%d].%s 必须是 1-%d 的整数", index, field, aitableCommentMaxImageSize)
 	}
 	return nil
+}
+
+func aitableCommentValidationf(format string, args ...any) error {
+	return apperrors.NewValidation(fmt.Sprintf(format, args...))
 }

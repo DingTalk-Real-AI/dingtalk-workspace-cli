@@ -2,11 +2,15 @@ package helpers
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -19,13 +23,81 @@ func runPsqlCLI(t *testing.T, caller *recordQueryE2ECaller, args ...string) (str
 	InitDeps(caller)
 	out := &bytes.Buffer{}
 	cmd := newAitablePsqlCommand()
+	cmd.PersistentFlags().String("format", "json", "test output format")
+	cmd.PersistentFlags().String("jq", "", "test jq expression")
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs(args)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
-	returnValue := cmd.Execute()
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, returnValue := cmd.ExecuteContextC(ctx)
+	if returnValue == nil {
+		_, _, returnValue = output.EmitStoredResult(executed)
+	}
 	return out.String(), returnValue
+}
+
+func TestAitablePsqlExplicitJSONUsesUnifiedEnvelope(t *testing.T) {
+	caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{{result: textToolResult(
+		`{"status":"success","data":[{"tableId":"tbl1","tableName":"项目表"}]}`)}}}
+	out, err := runPsqlCLI(t, caller, "-d", "base1", "-l", "--format", "json")
+	if err != nil {
+		t.Fatalf("psql json failed: %v", err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatalf("psql json output is invalid: %v\n%s", err, out)
+	}
+	if envelope["ok"] != true || envelope["outcome"] != "success" {
+		t.Fatalf("unexpected envelope: %#v", envelope)
+	}
+	data, ok := envelope["data"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected envelope data: %#v", envelope["data"])
+	}
+}
+
+func TestAitablePsqlDeclaresUnifiedResultContract(t *testing.T) {
+	cmd := newAitablePsqlCommand()
+	if output.CommandRollout(cmd) != output.RolloutUnifiedActive {
+		t.Fatalf("rollout = %q", output.CommandRollout(cmd))
+	}
+	final, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || final.Result == nil || len(final.Result.DataSchema) == 0 {
+		t.Fatalf("missing reviewed result contract: %#v", final)
+	}
+	if final.DryRun == nil || final.DryRun.PreviewKind != "request" || final.DryRun.RemoteReads {
+		t.Fatalf("dry-run contract = %#v", final.DryRun)
+	}
+}
+
+func TestAitablePsqlJQEvaluatesUnifiedEnvelope(t *testing.T) {
+	caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{{result: textToolResult(
+		`{"status":"success","data":{"columns":[{"columnName":"number"},{"columnName":"flag"},{"columnName":"empty"}],"rows":[[1,true,null]],"rowCount":1,"truncated":false}}`)}}}
+	out, err := runPsqlCLI(t, caller, "-d", "base1", "-c", "SELECT 1", "--jq", ".data.rows")
+	if err != nil {
+		t.Fatalf("psql jq failed: %v", err)
+	}
+	var rows []any
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("psql jq output is invalid: %v\n%s", err, out)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("unexpected jq rows: %#v", rows)
+	}
+}
+
+func TestAitablePsqlStructuredOutputRejectsMalformedBusinessData(t *testing.T) {
+	caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{{result: textToolResult(
+		`{"status":"success","data":{"columns":[]}}`)}}}
+	out, err := runPsqlCLI(t, caller, "-d", "base1", "-c", "SELECT 1", "--format", "json")
+	if err == nil || !strings.Contains(err.Error(), "missing rows") {
+		t.Fatalf("error = %v, output = %q", err, out)
+	}
+	if out != "" {
+		t.Fatalf("malformed result leaked output: %q", out)
+	}
 }
 
 func TestAitablePsqlListTables(t *testing.T) {
@@ -137,13 +209,15 @@ func TestCallAitablePsqlToolValidatesMCPResponses(t *testing.T) {
 		{name: "nil result", step: recordQueryE2EStep{}, want: "nil result"},
 		{name: "no text", step: recordQueryE2EStep{result: &edition.ToolResult{Content: []edition.ContentBlock{{Type: "image", Text: "ignored"}}}}, want: "no text content"},
 		{name: "invalid json", step: recordQueryE2EStep{result: textToolResult("{")}, want: "invalid JSON"},
+		{name: "multiple json values", step: recordQueryE2EStep{result: textToolResult(`{"data":{}} {"data":{}}`)}, want: "multiple JSON values"},
 		{name: "generic mcp error", step: recordQueryE2EStep{result: textToolResult(`{"status":"error"}`)}, want: "MCP tool returned an error"},
 		{name: "detailed mcp error", step: recordQueryE2EStep{result: textToolResult(`{"status":"ERROR","error":{"message":"denied"}}`)}, want: "denied"},
+		{name: "missing data", step: recordQueryE2EStep{result: textToolResult(`{"status":"success"}`)}, want: "returned no data"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			testseam.Protect(t, &deps)
 			InitDeps(&recordQueryE2ECaller{steps: []recordQueryE2EStep{test.step}})
-			_, err := callAitablePsqlTool("demo", map[string]any{})
+			_, err := callAitablePsqlTool(context.Background(), "demo", map[string]any{})
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}
@@ -159,18 +233,36 @@ func TestAitablePsqlRenderValidationAndValues(t *testing.T) {
 	}{
 		{name: "tables root", run: func(out *bytes.Buffer) error { return renderPgTables(out, map[string]any{}) }, want: "must be an array"},
 		{name: "tables item", run: func(out *bytes.Buffer) error { return renderPgTables(out, []any{"bad"}) }, want: "table 0 must be an object"},
+		{name: "tables identity", run: func(out *bytes.Buffer) error { return renderPgTables(out, []any{map[string]any{}}) }, want: "tableName and tableId"},
 		{name: "schema root", run: func(out *bytes.Buffer) error { return renderPgSchema(out, []any{}) }, want: "must be an object"},
-		{name: "schema columns", run: func(out *bytes.Buffer) error { return renderPgSchema(out, map[string]any{}) }, want: "missing columns"},
-		{name: "schema item", run: func(out *bytes.Buffer) error { return renderPgSchema(out, map[string]any{"columns": []any{"bad"}}) }, want: "column 0 must be an object"},
+		{name: "schema identity", run: func(out *bytes.Buffer) error { return renderPgSchema(out, map[string]any{}) }, want: "missing tableId or tableName"},
+		{name: "schema columns", run: func(out *bytes.Buffer) error {
+			return renderPgSchema(out, map[string]any{"tableId": "t", "tableName": "n"})
+		}, want: "missing columns"},
+		{name: "schema item", run: func(out *bytes.Buffer) error {
+			return renderPgSchema(out, map[string]any{"tableId": "t", "tableName": "n", "columns": []any{"bad"}})
+		}, want: "column 0 must be an object"},
 		{name: "query root", run: func(out *bytes.Buffer) error { return renderPgQuery(out, []any{}, false) }, want: "must be an object"},
 		{name: "query columns", run: func(out *bytes.Buffer) error { return renderPgQuery(out, map[string]any{}, false) }, want: "missing columns"},
 		{name: "query column", run: func(out *bytes.Buffer) error {
 			return renderPgQuery(out, map[string]any{"columns": []any{"bad"}}, false)
 		}, want: "query column 0 must be an object"},
+		{name: "query column name", run: func(out *bytes.Buffer) error {
+			return renderPgQuery(out, map[string]any{"columns": []any{map[string]any{}}}, false)
+		}, want: "non-empty columnName"},
 		{name: "query rows", run: func(out *bytes.Buffer) error { return renderPgQuery(out, map[string]any{"columns": []any{}}, false) }, want: "missing rows"},
 		{name: "query row", run: func(out *bytes.Buffer) error {
 			return renderPgQuery(out, map[string]any{"columns": []any{}, "rows": []any{"bad"}}, false)
 		}, want: "query row 0 must be an array"},
+		{name: "query row width", run: func(out *bytes.Buffer) error {
+			return renderPgQuery(out, map[string]any{"columns": []any{map[string]any{"columnName": "a"}}, "rows": []any{[]any{}}}, false)
+		}, want: "values for 1 columns"},
+		{name: "query row count", run: func(out *bytes.Buffer) error {
+			return renderPgQuery(out, map[string]any{"columns": []any{}, "rows": []any{}}, false)
+		}, want: "rowCount must be an integer"},
+		{name: "query truncated", run: func(out *bytes.Buffer) error {
+			return renderPgQuery(out, map[string]any{"columns": []any{}, "rows": []any{}, "rowCount": json.Number("0")}, false)
+		}, want: "truncated must be a boolean"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			out := &bytes.Buffer{}
@@ -180,7 +272,7 @@ func TestAitablePsqlRenderValidationAndValues(t *testing.T) {
 		})
 	}
 
-	if err := renderPgQuery(psqlFailingWriter{}, map[string]any{"columns": []any{}, "rows": []any{}}, false); err == nil || !strings.Contains(err.Error(), "write failed") {
+	if err := renderPgQuery(psqlFailingWriter{}, map[string]any{"columns": []any{}, "rows": []any{}, "rowCount": json.Number("0"), "truncated": false}, false); err == nil || !strings.Contains(err.Error(), "write failed") {
 		t.Fatalf("renderPgQuery write error = %v", err)
 	}
 	if err := printPgTable(psqlFailingWriter{}, []string{"header"}, nil); err == nil || !strings.Contains(err.Error(), "write failed") {

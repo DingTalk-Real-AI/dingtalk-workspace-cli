@@ -9,6 +9,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -20,10 +22,47 @@ const (
 	aitablePsqlAvoidMixedResults = "禁止静默降级为 record query 模拟 JOIN 或 SQL 聚合，也不得混用两者的结果模型。"
 )
 
+var aitablePsqlResultSchema = json.RawMessage(`{
+  "description":"PSQL 表清单、表结构或只读查询的业务结果；具体形态由 -l、-t 或 -c 模式决定",
+  "oneOf":[
+    {
+      "type":"array",
+      "items":{"type":"object","properties":{
+        "tableId":{"type":"string","description":"逻辑表对应的数据表 ID"},
+        "tableName":{"type":"string","description":"可在 SQL 中引用的逻辑表名称"},
+        "description":{"type":["string","null"],"description":"逻辑表说明"}
+      },"required":["tableId","tableName"],"additionalProperties":true}
+    },
+    {
+      "type":"object",
+      "properties":{
+        "tableId":{"type":"string","description":"数据表 ID"},
+        "tableName":{"type":"string","description":"逻辑表名称"},
+        "description":{"type":["string","null"],"description":"逻辑表说明"},
+        "columns":{"type":"array","description":"字段及其 PostgreSQL 投影列","items":{"type":"object","additionalProperties":true}}
+      },
+      "required":["tableId","tableName","columns"],
+      "additionalProperties":true
+    },
+    {
+      "type":"object",
+      "properties":{
+        "columns":{"type":"array","description":"查询结果列定义","items":{"type":"object","additionalProperties":true}},
+        "rows":{"type":"array","description":"与 columns 顺序对应的查询结果行","items":{"type":"array"}},
+        "rowCount":{"type":"integer","description":"本次返回的行数"},
+        "truncated":{"type":"boolean","description":"结果是否因 limit 被截断"}
+      },
+      "required":["columns","rows","rowCount","truncated"],
+      "additionalProperties":true
+    }
+  ]
+}`)
+
 func newAitablePsqlCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "psql",
 		Short: "以 PostgreSQL 逻辑表方式查询 AI 表格",
+		Long:  "以 PostgreSQL 逻辑表方式查询 AI 表格。默认保留 psql 风格表格展示；显式传 --format json 可获得统一结果信封，--jq 对该信封求值。-x 只影响默认表格展示。",
 		Example: strings.Join([]string{
 			"  dws aitable psql -d BASE_ID -l",
 			"  dws aitable psql -d BASE_ID -t TABLE_ID --all-properties",
@@ -43,7 +82,8 @@ func newAitablePsqlCommand() *cobra.Command {
 	cmd.Flags().Int("timeout", 30, "查询超时秒数，范围 1-60")
 
 	DeclareLeafMetadata(cmd, LeafSpec{
-		Safety: aitableSafetyRead(),
+		Safety:        aitableSafetyRead(),
+		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -53,6 +93,11 @@ func newAitablePsqlCommand() *cobra.Command {
 				PrimaryCLIPath: "aitable psql",
 			},
 			Description: "使用 PostgreSQL 语法查看 AI 表格逻辑表结构并执行只读 SELECT。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: aitablePsqlResultSchema,
+			},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
@@ -87,7 +132,7 @@ func runAitablePsql(cmd *cobra.Command, _ []string) error {
 	tableID = strings.TrimSpace(tableID)
 	sql = strings.TrimSpace(sql)
 	if baseID == "" {
-		return fmt.Errorf("missing required flag: --database")
+		return apperrors.NewValidation("missing required flag: --database")
 	}
 	modes := 0
 	if list {
@@ -100,49 +145,62 @@ func runAitablePsql(cmd *cobra.Command, _ []string) error {
 		modes++
 	}
 	if modes != 1 {
-		return fmt.Errorf("exactly one mode is required: -l, -t TABLE_ID, or -c SQL")
+		return apperrors.NewValidation("exactly one mode is required: -l, -t TABLE_ID, or -c SQL")
 	}
 	if limit < 1 || limit > 1000 {
-		return fmt.Errorf("--limit must be between 1 and 1000")
+		return apperrors.NewValidation("--limit must be between 1 and 1000")
 	}
 	if timeout < 1 || timeout > 60 {
-		return fmt.Errorf("--timeout must be between 1 and 60")
+		return apperrors.NewValidation("--timeout must be between 1 and 60")
 	}
 
+	var (
+		toolName string
+		toolArgs map[string]any
+		render   func(io.Writer, any) error
+	)
 	switch {
 	case list:
-		data, err := callAitablePsqlTool("otable_pg_list_tables", map[string]any{"baseId": baseID})
-		if err != nil {
-			return err
-		}
-		return renderPgTables(cmd.OutOrStdout(), data)
+		toolName = "otable_pg_list_tables"
+		toolArgs = map[string]any{"baseId": baseID}
+		render = renderPgTables
 	case sql == "":
-		data, err := callAitablePsqlTool("otable_pg_describe_table", map[string]any{
+		toolName = "otable_pg_describe_table"
+		toolArgs = map[string]any{
 			"baseId": baseID, "tableId": tableID, "allProperties": allProperties,
-		})
-		if err != nil {
-			return err
 		}
-		return renderPgSchema(cmd.OutOrStdout(), data)
+		render = renderPgSchema
 	default:
-		data, err := callAitablePsqlTool("otable_pg_execute", map[string]any{
+		toolName = "otable_pg_execute"
+		toolArgs = map[string]any{
 			"baseId": baseID, "sql": sql,
 			"limit": limit, "timeoutSeconds": timeout,
-		})
-		if err != nil {
-			return err
 		}
-		return renderPgQuery(cmd.OutOrStdout(), data, expanded)
+		render = func(out io.Writer, data any) error { return renderPgQuery(out, data, expanded) }
 	}
+	if result, ok := aitableUnifiedDryRunResult(toolName, toolArgs); ok {
+		return output.StoreResult(cmd.Context(), result)
+	}
+	data, err := callAitablePsqlTool(cmd.Context(), toolName, toolArgs)
+	if err != nil {
+		return err
+	}
+	if err := render(io.Discard, data); err != nil {
+		return apperrors.NewInternal(fmt.Sprintf("%s returned invalid data: %v", toolName, err), apperrors.WithCause(err))
+	}
+	return output.StoreResult(cmd.Context(), output.Success(data, output.WithTablePresentation(render)))
 }
 
-func callAitablePsqlTool(toolName string, args map[string]any) (any, error) {
-	result, err := deps.Caller.CallTool(context.Background(), "aitable", toolName, args)
+func callAitablePsqlTool(ctx context.Context, toolName string, args map[string]any) (any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := deps.Caller.CallTool(ctx, "aitable", toolName, args)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil {
-		return nil, fmt.Errorf("%s returned a nil result", toolName)
+		return nil, apperrors.NewInternal(fmt.Sprintf("%s returned a nil result", toolName))
 	}
 	for _, content := range result.Content {
 		if content.Type != "text" || strings.TrimSpace(content.Text) == "" {
@@ -152,7 +210,13 @@ func callAitablePsqlTool(toolName string, args map[string]any) (any, error) {
 		decoder := json.NewDecoder(strings.NewReader(content.Text))
 		decoder.UseNumber()
 		if err := decoder.Decode(&envelope); err != nil {
-			return nil, fmt.Errorf("%s returned invalid JSON: %w", toolName, err)
+			return nil, apperrors.NewInternal(fmt.Sprintf("%s returned invalid JSON: %v", toolName, err), apperrors.WithCause(err))
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			if err == nil {
+				err = fmt.Errorf("multiple JSON values")
+			}
+			return nil, apperrors.NewInternal(fmt.Sprintf("%s returned invalid JSON: %v", toolName, err), apperrors.WithCause(err))
 		}
 		if status, _ := envelope["status"].(string); strings.EqualFold(status, "error") {
 			message := "MCP tool returned an error"
@@ -161,11 +225,15 @@ func callAitablePsqlTool(toolName string, args map[string]any) (any, error) {
 					message = value
 				}
 			}
-			return nil, fmt.Errorf("%s: %s", toolName, message)
+			return nil, apperrors.NewAPI(fmt.Sprintf("%s: %s", toolName, message))
 		}
-		return envelope["data"], nil
+		data, ok := envelope["data"]
+		if !ok || data == nil {
+			return nil, apperrors.NewInternal(toolName + " returned no data")
+		}
+		return data, nil
 	}
-	return nil, fmt.Errorf("%s returned no text content", toolName)
+	return nil, apperrors.NewInternal(fmt.Sprintf("%s returned no text content", toolName))
 }
 
 func renderPgTables(out io.Writer, data any) error {
@@ -179,8 +247,12 @@ func renderPgTables(out io.Writer, data any) error {
 		if !ok {
 			return fmt.Errorf("table %d must be an object", index)
 		}
+		tableName, tableID := stringValue(table["tableName"]), stringValue(table["tableId"])
+		if strings.TrimSpace(tableName) == "" || strings.TrimSpace(tableID) == "" {
+			return fmt.Errorf("table %d must contain non-empty tableName and tableId", index)
+		}
 		rows = append(rows, []string{
-			stringValue(table["tableName"]), stringValue(table["tableId"]),
+			tableName, tableID,
 			stringValue(table["description"]),
 		})
 	}
@@ -192,6 +264,9 @@ func renderPgSchema(out io.Writer, data any) error {
 	if !ok {
 		return fmt.Errorf("describe table response must be an object, got %T", data)
 	}
+	if strings.TrimSpace(stringValue(schema["tableId"])) == "" || strings.TrimSpace(stringValue(schema["tableName"])) == "" {
+		return fmt.Errorf("describe table response is missing tableId or tableName")
+	}
 	columns, ok := schema["columns"].([]any)
 	if !ok {
 		return fmt.Errorf("describe table response is missing columns")
@@ -201,6 +276,9 @@ func renderPgSchema(out io.Writer, data any) error {
 		column, ok := item.(map[string]any)
 		if !ok {
 			return fmt.Errorf("column %d must be an object", index)
+		}
+		if strings.TrimSpace(stringValue(column["columnName"])) == "" || strings.TrimSpace(stringValue(column["pgType"])) == "" {
+			return fmt.Errorf("column %d must contain non-empty columnName and pgType", index)
 		}
 		rows = append(rows, []string{
 			stringValue(column["columnName"]), stringValue(column["pgType"]),
@@ -228,7 +306,11 @@ func renderPgQuery(out io.Writer, data any, expanded bool) error {
 		if !ok {
 			return fmt.Errorf("query column %d must be an object", index)
 		}
-		headers = append(headers, stringValue(column["columnName"]))
+		columnName := stringValue(column["columnName"])
+		if strings.TrimSpace(columnName) == "" {
+			return fmt.Errorf("query column %d must contain a non-empty columnName", index)
+		}
+		headers = append(headers, columnName)
 	}
 	rowsRaw, ok := result["rows"].([]any)
 	if !ok {
@@ -240,11 +322,21 @@ func renderPgQuery(out io.Writer, data any, expanded bool) error {
 		if !ok {
 			return fmt.Errorf("query row %d must be an array", index)
 		}
+		if len(values) != len(headers) {
+			return fmt.Errorf("query row %d has %d values for %d columns", index, len(values), len(headers))
+		}
 		row := make([]string, len(values))
 		for i, value := range values {
 			row[i] = pgValue(value)
 		}
 		rows = append(rows, row)
+	}
+	rowCount, exists := result["rowCount"]
+	if !exists || !aitableJSONInteger(rowCount) {
+		return fmt.Errorf("query response rowCount must be an integer")
+	}
+	if _, ok := result["truncated"].(bool); !ok {
+		return fmt.Errorf("query response truncated must be a boolean")
 	}
 	if expanded {
 		for index, row := range rows {

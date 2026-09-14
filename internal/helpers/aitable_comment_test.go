@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
 func TestCrossPlatformCoverageAitableCommentDispatch(t *testing.T) {
@@ -109,23 +112,91 @@ func TestCrossPlatformCoverageAitableCommentDispatch(t *testing.T) {
 	}
 }
 
+func TestAitableCommentListProjectsUnifiedPagination(t *testing.T) {
+	payload, meta, err := normalizeAitableCommentListResult(map[string]any{
+		"comments":  []any{map[string]any{"topicId": "topic-1", "commentKey": "comment-1"}},
+		"hasMore":   true,
+		"nextToken": "next-2",
+	}, map[string]any{"nextToken": "next-1"})
+	if err != nil {
+		t.Fatalf("normalize comment list: %v", err)
+	}
+	if _, exists := payload["hasMore"]; exists {
+		t.Fatalf("payload leaked hasMore: %#v", payload)
+	}
+	if _, exists := payload["nextToken"]; exists {
+		t.Fatalf("payload leaked nextToken: %#v", payload)
+	}
+	if len(payload["comments"].([]any)) != 1 || meta == nil || meta.Count == nil || *meta.Count != 1 {
+		t.Fatalf("payload/meta count = %#v / %#v", payload, meta)
+	}
+	if meta.Pagination == nil || meta.Pagination.EndpointExhausted || meta.Pagination.NextToken != "next-2" || meta.Pagination.Pages != 1 || meta.Pagination.Items != 1 {
+		t.Fatalf("pagination = %#v", meta.Pagination)
+	}
+}
+
+func TestAitableCommentListRejectsMalformedPagination(t *testing.T) {
+	for name, page := range map[string]map[string]any{
+		"missing comments": {"hasMore": false},
+		"missing cursor":   {"comments": []any{}, "hasMore": true},
+		"terminal cursor":  {"comments": []any{}, "hasMore": false, "nextToken": "unexpected"},
+		"stalled cursor":   {"comments": []any{}, "hasMore": true, "nextToken": "same"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := normalizeAitableCommentListResult(page, map[string]any{"nextToken": "same"})
+			if err == nil {
+				t.Fatalf("accepted malformed page: %#v", page)
+			}
+		})
+	}
+}
+
+func TestAitableUnifiedDryRunPreservesPlan(t *testing.T) {
+	caller := &aitableTestCaller{dryRun: true}
+	installAitableDeps(t, caller)
+	result, ok := aitableUnifiedDryRunResult("create_comment", map[string]any{"baseId": "base-1"})
+	if !ok {
+		t.Fatal("dry-run result was not selected")
+	}
+	envelope, err := output.EnvelopeFromResult(result)
+	if err != nil {
+		t.Fatalf("dry-run envelope: %v", err)
+	}
+	data, ok := envelope.Data.(map[string]any)
+	if !ok || !envelope.DryRun || data["executed"] != false || data["tool"] != "create_comment" {
+		t.Fatalf("dry-run envelope = %#v", envelope)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("dry-run invoked MCP: %#v", caller.calls)
+	}
+}
+
+func TestAitableUnifiedDataRequiresDeclaredData(t *testing.T) {
+	caller := &aitableTestCaller{responses: []string{`{"success":true}`}}
+	installAitableDeps(t, caller)
+	if _, err := callAitableUnifiedDataContext(context.Background(), "create_comment", map[string]any{}); err == nil || !strings.Contains(err.Error(), "缺少非空 data") {
+		t.Fatalf("missing data error = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageAitableCommentValidation(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		wantErr string
+		name           string
+		args           []string
+		wantErr        string
+		wantValidation bool
 	}{
 		{name: "missing content", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r"}, wantErr: "请指定 --content、--rich-content 之一"},
 		{name: "two content forms", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--content", "x", "--rich-content", `[{"type":"text","text":"y"}]`}, wantErr: "只能指定其一"},
 		{name: "blank content", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--content", "  "}, wantErr: "请指定 --content、--rich-content 之一"},
-		{name: "bad page size", args: []string{"comment", "list", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--limit", "101"}, wantErr: "1-100"},
+		{name: "bad page size", args: []string{"comment", "list", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--limit", "101"}, wantErr: "1-100", wantValidation: true},
 		{name: "unknown node", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"link","url":"https://example.com"}]`}, wantErr: "只允许 text、mention 或 image"},
-		{name: "external image URL", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"image","url":"https://example.com/a.png"}]`}, wantErr: "/core/api/resources/"},
+		{name: "external image URL", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"image","url":"https://example.com/a.png"}]`}, wantErr: "/core/api/resources/", wantValidation: true},
 		{name: "whitespace only rich content", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"text","text":"  \n"}]`}, wantErr: "必须包含非空文本、mention 或 image"},
 		{name: "fractional image dimension", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"image","url":"/core/api/resources/image-1/detail","width":1.5}]`}, wantErr: "必须是 1-20000 的整数"},
-		{name: "text rejects undeclared field", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"text","text":"x","foo":true}]`}, wantErr: "text 节点包含未声明字段 foo"},
-		{name: "mention rejects undeclared field", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"mention","userId":"u","label":"某人"}]`}, wantErr: "mention 节点包含未声明字段 label"},
-		{name: "image rejects undeclared field", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"image","url":"/core/api/resources/r/detail","alt":"图片"}]`}, wantErr: "image 节点包含未声明字段 alt"},
+		{name: "text rejects undeclared field", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"text","text":"x","foo":true}]`}, wantErr: "text 节点包含未声明字段 foo", wantValidation: true},
+		{name: "mention rejects undeclared field", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"mention","userId":"u","label":"某人"}]`}, wantErr: "mention 节点包含未声明字段 label", wantValidation: true},
+		{name: "image rejects undeclared field", args: []string{"comment", "create", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--rich-content", `[{"type":"image","url":"/core/api/resources/r/detail","alt":"图片"}]`}, wantErr: "image 节点包含未声明字段 alt", wantValidation: true},
 		{name: "reply alias is scoped", args: []string{"comment", "update", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--topic-id", "p", "--reply-comment-key", "c", "--content", "x"}, wantErr: "unknown flag: --reply-comment-key"},
 		{name: "delete confirmation", args: []string{"comment", "delete", "--base-id", "b", "--table-id", "t", "--record-id", "r", "--topic-id", "p", "--comment-key", "c"}, wantErr: "--yes"},
 	}
@@ -136,6 +207,18 @@ func TestCrossPlatformCoverageAitableCommentValidation(t *testing.T) {
 			err := runAitableCoverageCommand(t, caller, test.args...)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("error = %v, want containing %q", err, test.wantErr)
+			}
+			if test.wantValidation {
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) {
+					t.Fatalf("error type = %T, want *errors.Error", err)
+				}
+				if typed.Category != apperrors.CategoryValidation {
+					t.Fatalf("error category = %q, want %q", typed.Category, apperrors.CategoryValidation)
+				}
+				if code := apperrors.ExitCode(err); code != apperrors.ExitCodeValidation {
+					t.Fatalf("exit code = %d, want %d", code, apperrors.ExitCodeValidation)
+				}
 			}
 			if len(caller.calls) != 0 {
 				t.Fatalf("tool calls = %d, want 0", len(caller.calls))
@@ -277,6 +360,18 @@ func TestCrossPlatformCoverageAitableCommentContracts(t *testing.T) {
 		}
 		if final.Result == nil || len(final.Result.DataSchema) == 0 {
 			t.Fatalf("%s missing result schema", test.path)
+		}
+		if output.CommandRollout(leaf) != output.RolloutUnifiedActive {
+			t.Fatalf("%s rollout = %q", test.path, output.CommandRollout(leaf))
+		}
+		if final.DryRun == nil || final.DryRun.PreviewKind != "request" || final.DryRun.RemoteReads {
+			t.Fatalf("%s dry-run contract = %#v", test.path, final.DryRun)
+		}
+		if test.rpc == "list_comments" && (final.Pagination == nil || final.Pagination.CursorParameter != "cursor") {
+			t.Fatalf("%s pagination contract = %#v", test.path, final.Pagination)
+		}
+		if test.rpc == "list_comments" && (strings.Contains(string(final.Result.DataSchema), "hasMore") || strings.Contains(string(final.Result.DataSchema), "nextToken")) {
+			t.Fatalf("%s data schema leaked pagination controls: %s", test.path, final.Result.DataSchema)
 		}
 	}
 }

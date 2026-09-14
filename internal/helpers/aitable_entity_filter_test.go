@@ -413,6 +413,16 @@ func TestCrossPlatformCoverageAITableNativeEntityReaderAndCommandSuccess(t *test
 	}
 }
 
+func TestAITableEntitySearchDryRunDoesNotReadMCP(t *testing.T) {
+	caller := &aitableTestCaller{dryRun: true}
+	if err := runAitableCoverageCommand(t, caller, "entity", "search", "--entity-type=DEPARTMENT", "--keyword=研发"); err != nil {
+		t.Fatalf("entity search dry-run: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("entity search dry-run called MCP: %#v", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageAITableEntityResolutionAndLegacyProjectionBranches(t *testing.T) {
 	reader := &aitableEntityReaderStub{steps: []aitableEntityReaderStep{{err: errors.New("search failed")}}}
 	if _, _, err := normalizeAitableEntityFilterValue(

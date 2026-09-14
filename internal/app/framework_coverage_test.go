@@ -46,6 +46,16 @@ func TestFrameworkErrorProjectionPreservesRecoveryMetadata(t *testing.T) {
 		t.Fatalf("recovery metadata=%+v", info)
 	}
 
+	comment := &helpers.CLIError{
+		Code:       helpers.CodeMCPToolError,
+		ServerCode: "COMMENT_RECORD_UNAVAILABLE",
+		Details:    map[string]any{"operation_executed": false},
+	}
+	commentInfo := errorInfoFromExecutionError(comment)
+	if commentInfo.UpstreamCode != "COMMENT_RECORD_UNAVAILABLE" || commentInfo.Details["operation_executed"] != false {
+		t.Fatalf("comment recovery metadata=%+v", commentInfo)
+	}
+
 	innerOperation := &helpers.CLIError{Operation: "create"}
 	outerWithoutOperation := &apperrors.Error{
 		Category: apperrors.CategoryAPI,
