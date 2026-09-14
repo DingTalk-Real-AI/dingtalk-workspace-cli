@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -414,9 +415,11 @@ func TestEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	t.Setenv("DWS_EMPLOYEE_FIXTURE", "reply")
+	consumerArgs := make(chan []string, 1)
 	testseam.Swap(t, &employeeExecCommand, func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 		argv := []string{"-test.run=^TestEmployeeSubprocessFixture$"}
 		if strings.Contains(strings.Join(args, " "), "event consume") {
+			consumerArgs <- append([]string(nil), args...)
 			argv = append(argv, "--", "employee-consume-fixture")
 		}
 		return exec.CommandContext(ctx, os.Args[0], argv...)
@@ -436,6 +439,7 @@ func TestEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	ready := false
+	var gotConsumerArgs []string
 	for {
 		select {
 		case err := <-done:
@@ -443,6 +447,12 @@ func TestEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
 		case <-timer.C:
 			t.Fatal("consumer did not deliver")
 		case <-ticker.C:
+			if gotConsumerArgs == nil {
+				select {
+				case gotConsumerArgs = <-consumerArgs:
+				default:
+				}
+			}
 			s, err := readDigitalEmployeeState(digitalEmployeeRuntimeDir(cfg.Binding.DWSProfile))
 			if err == nil && s.Status == "running" {
 				ready = true
@@ -462,6 +472,10 @@ func TestEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
 					}
 					if !ready || fwd.calls != 1 {
 						t.Fatalf("ready=%v calls=%d", ready, fwd.calls)
+					}
+					sourceIndex := slices.Index(gotConsumerArgs, "--stream-source-id")
+					if sourceIndex < 0 || sourceIndex+1 >= len(gotConsumerArgs) || gotConsumerArgs[sourceIndex+1] != "digital_employee" {
+						t.Fatalf("event consumer args = %v", gotConsumerArgs)
 					}
 					return
 				}

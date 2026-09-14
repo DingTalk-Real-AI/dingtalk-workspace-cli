@@ -390,7 +390,7 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	if len(cfg.Options.AllowedGroups) > 0 {
 		args = append(args, "user_im_message_receive_group_all")
 	}
-	args = append(args, "--flatten", "--format", "ndjson")
+	args = append(args, "--stream-source-id", "digital_employee", "--flatten", "--format", "ndjson")
 	proc, err := employeeCommand(ctx, cfg.Binding.DWSProfile, args...)
 	if err != nil {
 		return employeeTerminal("consumer_unavailable")
