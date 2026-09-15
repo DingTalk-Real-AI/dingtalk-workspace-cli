@@ -683,7 +683,7 @@ var FieldDelete = shortcut.Shortcut{
 
 const (
 	recordQueryDescription = "查询单表记录，支持准确 ID、视图、条件、全量分页与 NDJSON 文件"
-	recordQueryIntent      = "字段和值必须先按字段类型解析。读取单表明细；默认返回一页及续页信息，--all 在 max-records 上限内完整读取，--output 输出 NDJSON 及行数、哈希、列信息。view-id 的筛选/排序可由显式 filters/sort 覆盖；复杂视图条件无法转换时明确失败。"
+	recordQueryIntent      = "字段和值必须先按字段类型解析。读取单表明细；默认返回一页及续页信息，--all 在 max-records 上限内完整读取，--export-output 输出 NDJSON 及行数、哈希、列信息。view-id 的筛选/排序可由显式 filters/sort 覆盖；复杂视图条件无法转换时明确失败。"
 	recordQueryAvoidPsql   = "多表关联、跨表分析或 SQL 聚合/窗口计算时使用 psql。"
 	recordQueryAvoidAll    = "数据量超过 10000 行时，本入口不会截断冒充完整；需要更大规模读取请使用有明确范围的原子 record query。"
 	recordQueryAvoidStats  = "只需要标量或分组统计时使用 +data-query 或 record stats/group-stats，不拉明细做汇总。"
@@ -736,7 +736,7 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 时作为每个请求的页大小，上限 20（可选）"},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "准确视图 ID；读取其筛选/排序，显式 filters/sort 覆盖；与 record-ids 互斥"},
-		{Name: "output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件"},
+		{Name: "export-output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件；全局 --output/-o 仍用于保存命令返回值"},
 		{Name: "all", Type: shortcut.FlagBool, Desc: "有界读取全部匹配记录"},
 		{Name: "max-records", Type: shortcut.FlagInt, Default: "10000", Desc: "--all 最多返回的记录数量，1-10000，超限明确失败"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造"},

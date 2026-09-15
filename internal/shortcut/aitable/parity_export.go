@@ -15,7 +15,7 @@ import (
 const maxRecordArtifactBytes = 64 << 20
 
 func outputRecordQuery(rt *shortcut.RuntimeContext, records []map[string]any, payload map[string]any) error {
-	if !rt.Changed("output") {
+	if !rt.Changed("export-output") {
 		return rt.Output(payload)
 	}
 	var buffer bytes.Buffer
@@ -65,7 +65,7 @@ func outputRecordQuery(rt *shortcut.RuntimeContext, records []map[string]any, pa
 	if err != nil {
 		return err
 	}
-	file, err := localio.PublishBytes(buffer.Bytes(), localio.PublishBytesOptions{BaseDir: cwd, Output: rt.Str("output"), PreferredName: "records.ndjson", MaxBytes: maxRecordArtifactBytes})
+	file, err := localio.PublishBytes(buffer.Bytes(), localio.PublishBytesOptions{BaseDir: cwd, Output: rt.Str("export-output"), PreferredName: "records.ndjson", MaxBytes: maxRecordArtifactBytes})
 	if err != nil {
 		return err
 	}

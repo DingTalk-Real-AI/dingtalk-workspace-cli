@@ -1003,7 +1003,7 @@ func TestDeliveryCatalogAitableParamDeclsMatchMergeBaseContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"all", "max-records", "output", "view-id"} {
+	for _, name := range []string{"all", "max-records", "export-output", "view-id"} {
 		if _, exists := schemaMap(shortcutLeaf["parameters"])[name]; !exists {
 			t.Fatalf("record-query capability --%s is missing from delivered Schema", name)
 		}

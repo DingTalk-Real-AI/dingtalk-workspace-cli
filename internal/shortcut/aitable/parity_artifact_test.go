@@ -66,7 +66,7 @@ func TestCrossPlatformCoverageParityRecordExportNonemptyAndNoClobber(t *testing.
 	t.Chdir(dir)
 	steps := []upsertByKeyStep{parityStep(map[string]any{"records": []any{map[string]any{"recordId": "r", "cells": map[string]any{"f": "value"}}}, "hasMore": false}), parityStep(map[string]any{"fields": []any{map[string]any{"fieldId": "f", "fieldName": "Title", "type": "text"}, map[string]any{"fieldId": "other", "fieldName": "Other", "type": "text"}}})}
 	c := &upsertByKeyCaller{steps: steps}
-	out, err := runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--output", "rows.ndjson", "--field-ids", "f")
+	out, err := runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--export-output", "rows.ndjson", "--field-ids", "f")
 	if err != nil {
 		t.Fatal(out, err)
 	}
@@ -84,7 +84,7 @@ func TestCrossPlatformCoverageParityRecordExportNonemptyAndNoClobber(t *testing.
 		t.Fatal(string(b), e)
 	}
 	c = &upsertByKeyCaller{steps: steps}
-	if _, e = runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--output", "rows.ndjson"); e == nil {
+	if _, e = runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--export-output", "rows.ndjson"); e == nil {
 		t.Fatal("overwrote file")
 	}
 	after, _ := os.ReadFile(filepath.Join(dir, "rows.ndjson"))
@@ -93,7 +93,7 @@ func TestCrossPlatformCoverageParityRecordExportNonemptyAndNoClobber(t *testing.
 	}
 	for _, fields := range []string{`{}`, `{"fields":[{"fieldId":"f"}]}`, `{"fields":[{"fieldId":"other","fieldName":"Other","type":"text"}]}`} {
 		c = &upsertByKeyCaller{steps: []upsertByKeyStep{steps[0], {text: fields}}}
-		out, e := runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--output", "bad.ndjson", "--field-ids", "f")
+		out, e := runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--export-output", "bad.ndjson", "--field-ids", "f")
 		if e == nil || out != "" {
 			t.Fatal("invalid manifest published", out, e)
 		}
@@ -127,7 +127,7 @@ func TestCrossPlatformCoverageParityArtifactsFailWithoutWorkingDirectory(t *test
 		command string
 		args    []string
 	}{
-		{"+record-query", []string{"--base-id", "b", "--table-id", "t", "--all", "--output", "rows.ndjson"}},
+		{"+record-query", []string{"--base-id", "b", "--table-id", "t", "--all", "--export-output", "rows.ndjson"}},
 		{"+record-download-attachment", []string{"--base-id", "b", "--table-id", "t", "--record-id", "r", "--field-id", "f", "--resource-id", "a", "--output", "file.bin"}},
 	} {
 		c := &upsertByKeyCaller{}
@@ -149,7 +149,7 @@ func TestCrossPlatformCoverageParityArtifactRaceRetainsConcurrentFile(t *testing
 		}
 		return `{"fields":[]}`, nil
 	}}
-	out, err := runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--output", "rows.ndjson")
+	out, err := runAITableCompositeCLI(t, c, "+record-query", "--base-id", "b", "--table-id", "t", "--all", "--export-output", "rows.ndjson")
 	if err == nil || out != "" {
 		t.Fatal(out, err)
 	}
@@ -179,8 +179,8 @@ func TestCrossPlatformCoverageParityExportPrepublicationFailures(t *testing.T) {
 			}
 			helpers.InitDepsForTest(t, c)
 			cmd := &cobra.Command{Use: "export"}
-			cmd.Flags().String("output", "", "")
-			_ = cmd.Flags().Set("output", "rows.ndjson")
+			cmd.Flags().String("export-output", "", "")
+			_ = cmd.Flags().Set("export-output", "rows.ndjson")
 			if tc.failDirectory {
 				testseam.Swap(t, &aitableWorkingDirectory, func() (string, error) { return "", fmt.Errorf("directory removed") })
 			}

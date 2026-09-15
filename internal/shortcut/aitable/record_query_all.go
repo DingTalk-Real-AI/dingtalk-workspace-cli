@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"path/filepath"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -140,16 +141,32 @@ func executeRecordQuery(rt *shortcut.RuntimeContext, params map[string]any) erro
 	if rt.Bool("all") && rt.Changed("cursor") {
 		return fmt.Errorf("--all 必须从第一页开始，不能与 --cursor 同用")
 	}
-	if rt.Changed("output") {
+	if rt.Changed("export-output") {
 		if !rt.Bool("all") {
-			return fmt.Errorf("--output requires --all; incomplete pages are not exported")
+			return fmt.Errorf("--export-output requires --all; incomplete pages are not exported")
 		}
 		cwd, err := aitableWorkingDirectory()
 		if err != nil {
 			return err
 		}
-		if _, _, err = localio.ResolveOutputPath(cwd, rt.Str("output"), "", "records.ndjson"); err != nil {
+		artifact, _, err := localio.ResolveOutputPath(cwd, rt.Str("export-output"), "", "records.ndjson")
+		if err != nil {
 			return err
+		}
+		// The root publishes its output sink after this shortcut returns. Do
+		// not let that publication replace the NDJSON with its own manifest.
+		if rt.Changed("output") && rt.Str("output") != "" {
+			destination := rt.Str("output")
+			if !filepath.IsAbs(destination) {
+				destination = filepath.Join(cwd, destination)
+			}
+			parent, err := filepath.EvalSymlinks(filepath.Dir(destination))
+			if err != nil {
+				return err
+			}
+			if strings.EqualFold(filepath.Join(parent, filepath.Base(destination)), artifact) {
+				return fmt.Errorf("--output and --export-output must target different files")
+			}
 		}
 	}
 	if rt.Changed("max-records") && !rt.Bool("all") {

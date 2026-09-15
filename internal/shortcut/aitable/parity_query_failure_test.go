@@ -13,7 +13,7 @@ import (
 )
 
 func TestCrossPlatformCoverageParityQueryBoundariesAndViewRouting(t *testing.T) {
-	for _, args := range [][]string{{"--output", "rows.ndjson"}, {"--max-records", "2"}, {"--all", "--max-records", "0"}} {
+	for _, args := range [][]string{{"--export-output", "rows.ndjson"}, {"--max-records", "2"}, {"--all", "--max-records", "0"}} {
 		c := &upsertByKeyCaller{}
 		if _, err := runAITableCompositeCLI(t, c, "+record-query", append([]string{"--base-id", "b", "--table-id", "t"}, args...)...); err == nil || len(c.calls) != 0 {
 			t.Fatal(args, err)
