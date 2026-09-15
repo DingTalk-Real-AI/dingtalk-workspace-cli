@@ -525,12 +525,9 @@ func parseDaclACEs(dacl *windows.ACL) ([]securityACE, error) {
 			return nil, err
 		}
 		grants, known := aceGrantsAccess(ace.Header.AceType)
-		if !known {
-			return nil, fmt.Errorf("unrecognized ACE type %d in DACL", ace.Header.AceType)
-		}
 		offset, err := aceSIDOffset(ace.Header.AceType, ace)
-		if err != nil {
-			return nil, err
+		if !known || err != nil {
+			return nil, fmt.Errorf("unrecognized ACE type %d in DACL", ace.Header.AceType)
 		}
 		aceSize := uintptr(ace.Header.AceSize)
 		if offset+8 > aceSize {
