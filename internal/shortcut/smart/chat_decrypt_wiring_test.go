@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -83,7 +82,6 @@ type chatDecryptWireRun struct {
 func runChatDecryptWireShortcut(t *testing.T, declaration shortcut.Shortcut, caller *chatDecryptWireCaller, stringFlags map[string]string, boolFlags ...string) chatDecryptWireRun {
 	t.Helper()
 	helpers.InitDepsForTest(t, caller)
-	declaration.OutputRollout = output.RolloutLegacyOnly
 	cmd := &cobra.Command{Use: declaration.Command}
 	raw := &bytes.Buffer{}
 	cmd.SetOut(raw)
