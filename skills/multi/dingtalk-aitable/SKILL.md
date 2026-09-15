@@ -50,6 +50,8 @@ dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-i
 请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
 
+实际执行 `form share update` 或 `+form-share-update` 后，成功结果必须同时检查 `shareFormUuid`、`status`、`formCover`、`cpSynced`；只有 `cpSynced=true` 才能向用户确认分享闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。DWS 不自行调用第二个 View 更新命令补偿 CP。`formCover` 在旧服务端发布窗口内可能为空，应如实说明，不能由 DWS 拼装封面 URL。
+
 > 命令参考：[aitable.md](references/aitable.md)；PostgreSQL 只读查询：[aitable-psql.md](references/aitable/aitable-psql.md)；复杂命令按需加载 `references/aitable/*.md`；剧本：[06-data-analytics.md](references/06-data-analytics.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->

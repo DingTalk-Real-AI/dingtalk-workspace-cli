@@ -38,6 +38,63 @@ func parseBoolFlag(cmd *cobra.Command, name string) (bool, error) {
 	return v, nil
 }
 
+const aitableFormShareGetResultSchema = `{
+  "type":"object",
+  "description":"表单分享配置的服务端真实状态",
+  "properties":{
+    "baseId":{"type":"string","description":"Base ID"},
+    "tableId":{"type":"string","description":"数据表 ID"},
+    "viewId":{"type":"string","description":"表单视图 ID"},
+    "enabled":{"type":"boolean","description":"分享是否开启"},
+    "status":{"type":"integer","description":"服务端分享状态 code"},
+		"shareFormUuid":{"type":["string","null"],"description":"服务端生成的分享表单 UUID；未创建时为空"},
+    "formCover":{"type":["string","null"],"description":"当前生效的分享卡片封面；旧服务端可能为空"},
+    "formName":{"type":["string","null"],"description":"当前分享表单名称"},
+    "formDesc":{"type":["string","null"],"description":"当前分享表单描述"}
+  },
+  "required":["baseId","tableId","viewId","enabled","status"],
+  "additionalProperties":true
+}`
+
+// AitableFormShareGetResultSpec is shared by the atomic command and its Shortcut alias.
+func AitableFormShareGetResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(aitableFormShareGetResultSchema),
+	}
+}
+
+// AitableFormShareUpdateResultSpec is shared by the atomic command and its Shortcut alias.
+func AitableFormShareUpdateResultSpec() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomePartialFailure,
+			contract.ResultOutcomeFailure,
+		},
+		DataSchema: json.RawMessage(aitableFormShareUpdateResultSchema),
+	}
+}
+
+const aitableFormShareUpdateResultSchema = `{
+  "type":"object",
+  "description":"已完成服务端回读与 CP 投影校验的表单分享终态",
+  "properties":{
+    "baseId":{"type":"string","description":"Base ID"},
+    "tableId":{"type":"string","description":"数据表 ID"},
+    "viewId":{"type":"string","description":"表单视图 ID"},
+    "enabled":{"type":"boolean","description":"服务端真实分享开关状态"},
+    "status":{"type":"integer","description":"服务端真实分享状态 code"},
+    "shareFormUuid":{"type":["string","null"],"description":"服务端生成的分享表单 UUID；关闭分享时仍保留已有值"},
+    "formCover":{"type":["string","null"],"description":"当前生效的分享卡片封面；旧服务端发布窗口内可能为空"},
+    "cpSynced":{"type":"boolean","description":"服务端终态是否已同步到表单视图 CP；成功结果恒为 true"},
+    "formName":{"type":["string","null"],"description":"服务端最终生效的分享表单名称"},
+    "formDesc":{"type":["string","null"],"description":"服务端最终生效的分享表单描述"}
+  },
+  "required":["baseId","tableId","viewId","enabled","status","cpSynced"],
+  "additionalProperties":true
+}`
+
 func parseAitableJSONObjectFlag(name, raw string, requireNonEmpty bool) (map[string]any, error) {
 	var value map[string]any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil || value == nil {
@@ -1170,8 +1227,12 @@ func callAitableToolContext(ctx context.Context, toolName string, args map[strin
 // Unified callers declare concrete result schemas, so a missing data member is
 // an invalid upstream response rather than an acknowledgement-only success.
 func callAitableUnifiedDataContext(ctx context.Context, toolName string, args map[string]any) (any, error) {
+	return callAitableUnifiedDataOnServerContext(ctx, "aitable", toolName, args)
+}
+
+func callAitableUnifiedDataOnServerContext(ctx context.Context, serverID, toolName string, args map[string]any) (any, error) {
 	call := func(callCtx context.Context) (any, error) {
-		return CallMCPToolDataOnServer(callCtx, "aitable", toolName, args)
+		return CallMCPToolDataOnServer(callCtx, serverID, toolName, args)
 	}
 	var (
 		raw any
@@ -1187,11 +1248,11 @@ func callAitableUnifiedDataContext(ctx context.Context, toolName string, args ma
 	}
 	envelope, ok := raw.(map[string]any)
 	if !ok || envelope == nil {
-		return nil, apperrors.NewInternal(fmt.Sprintf("aitable/%s 返回值不是 JSON 对象", toolName))
+		return nil, apperrors.NewInternal(fmt.Sprintf("%s/%s 返回值不是 JSON 对象", serverID, toolName))
 	}
 	data, ok := envelope["data"]
 	if !ok || data == nil {
-		return nil, apperrors.NewInternal(fmt.Sprintf("aitable/%s 返回值缺少非空 data", toolName))
+		return nil, apperrors.NewInternal(fmt.Sprintf("%s/%s 返回值缺少非空 data", serverID, toolName))
 	}
 	return data, nil
 }
@@ -1356,6 +1417,17 @@ func callAitableHelperTool(toolName string, args map[string]any) error {
 		return struct{}{}, callMCPToolOnServer(server, toolName, args)
 	})
 	return err
+}
+
+func callAitableHelperResult(cmd *cobra.Command, toolName string, args map[string]any) (output.CommandResult, error) {
+	if result, ok := aitableUnifiedDryRunResult(toolName, args); ok {
+		return result, nil
+	}
+	data, err := callAitableUnifiedDataOnServerContext(cmd.Context(), "aitable-helper", toolName, args)
+	if err != nil {
+		return nil, err
+	}
+	return output.Success(data), nil
 }
 
 // 显式白名单避免以名称前缀推断工具副作用，新增工具在审阅前默认不重试。
@@ -6702,8 +6774,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 	formShareGetCmd := &cobra.Command{
 		Use:   "get",
 		Short: "获取表单分享配置",
-		Long: `读取指定视图当前的分享表单配置。
-返回 enabled（是否开启）、status、shareFormUuid、formName 等信息。
+		Long: `读取指定视图当前的分享表单配置；该命令只诊断，不修改 CP。
+返回 enabled、status、shareFormUuid、formCover、formName 等服务端真实信息。
 若该视图尚未开启分享表单，enabled=false、status=0。`,
 		Example: `  dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -6714,15 +6786,20 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_share_form_config", map[string]any{
+			result, err := callAitableHelperResult(cmd, "get_share_form_config", map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"viewId":  mustGetFlag(cmd, "view-id"),
 			})
+			if err != nil {
+				return err
+			}
+			return output.StoreResult(cmd.Context(), result)
 		},
 	}
 	DeclareLeafMetadata(formShareGetCmd, LeafSpec{
-		Safety: aitableSafetyRead(),
+		Safety:        aitableSafetyRead(),
+		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -6731,14 +6808,15 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				CLIPath:        "aitable form share get",
 				PrimaryCLIPath: "aitable form share get",
 			},
-			Description: "获取表单分享配置。",
+			Description: "获取表单分享配置及服务端真实 UUID、状态和封面。",
 			Interface:   aitableCompositeInterface("Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "获取表单分享配置。",
-				UseWhen:      []string{"查看表单是否已分享及分享类型时"},
+				AgentSummary: "获取表单分享配置及服务端真实 UUID、状态和封面。",
+				UseWhen:      []string{"查看表单是否已分享，或诊断 shareFormUuid、status、formCover 时"},
 				AvoidWhen:    []string{"更新分享用 form share update"},
 				Examples:     []string{"dws aitable form share get --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID>"},
 			},
+			Result: AitableFormShareGetResultSpec(),
 		},
 	})
 
@@ -6750,6 +6828,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行说明需要替换的占位符。只读 help/schema 查询是唯一允许的命令。
 部分更新指定视图的分享表单配置，未传入的配置保持原值。
 新建表单首次开启分享且已知表单标题时，应在同一次调用中通过 --form-name 传入标题，避免分享内容缺少名称。
+成功结果来自服务端写后回读，并已校验 CP 投影；读取 shareFormUuid、status、formCover 和 cpSynced，其中 cpSynced=true 才表示分享闭环完成。
+服务端已更新但回读或 CP 同步失败时返回可重试的部分失败，不得当作整体成功；DWS 不自行调用第二个 View 更新命令补偿 CP。
 除 --base-id、--table-id 和 --view-id 外，至少显式传入一个可更新参数。`,
 		Example: `  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "活动报名"
 	  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name "活动报名" --anonymous-submit true`,
@@ -6820,11 +6900,16 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 					toolArgs[property] = mustGetFlag(cmd, name)
 				}
 			}
-			return callAitableHelperTool("update_share_form", toolArgs)
+			result, err := callAitableHelperResult(cmd, "update_share_form", toolArgs)
+			if err != nil {
+				return err
+			}
+			return output.StoreResult(cmd.Context(), result)
 		},
 	}
 	DeclareLeafMetadata(formShareUpdateCmd, LeafSpec{
-		Safety: aitableSafetyWrite(),
+		Safety:        aitableSafetyWrite(),
+		OutputRollout: output.RolloutUnifiedActive,
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "aitable",
@@ -6833,11 +6918,11 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				CLIPath:        "aitable form share update",
 				PrimaryCLIPath: "aitable form share update",
 			},
-			Description: "部分更新表单分享开关、访问范围、有效期和通知等配置。",
+			Description: "部分更新表单分享配置，并返回经服务端回读和 CP 投影校验的真实终态。",
 			Interface:   aitableCompositeInterface("Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "部分更新表单分享开关、访问范围、有效期和通知等配置。",
-				UseWhen:      []string{"开启、关闭或调整表单分享配置时；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name"},
+				AgentSummary: "部分更新表单分享配置，并返回真实 UUID、状态、封面及 CP 同步结果。",
+				UseWhen:      []string{"开启、关闭或调整表单分享配置时；成功后检查 shareFormUuid、status、formCover、cpSynced，新建表单已知标题时同一次调用传入 --form-name"},
 				AvoidWhen:    []string{"只查询用 share get"},
 				Examples:     []string{"dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name '活动报名'", "dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name '活动报名' --anonymous-submit true"},
 			},
@@ -6860,6 +6945,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				{Name: "reply-notice", Property: "replyNotice", InterfaceType: "boolean"},
 				{Name: "share-uid-list", Property: "shareUidList"},
 			},
+			Result: AitableFormShareUpdateResultSpec(),
 		},
 	})
 

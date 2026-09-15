@@ -90,8 +90,8 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
-| `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回 enabled/status/shareFormUuid |
-| `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 开关用 `--enabled`；访问范围用 `--auth-type-code/--auth-data`；还可更新提交次数、有效期、名称描述、匿名提交、回填和通知配置；未传字段保持原值 |
+| `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回服务端真实的 enabled/status/shareFormUuid/formCover；只读，不修复 CP |
+| `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 成功返回真实 shareFormUuid/status/formCover/cpSynced；只有 cpSynced=true 才完成闭环；未传字段保持原值 |
 
 ## 完整工作流示例
 
@@ -121,7 +121,7 @@ dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 dws aitable form field hide --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
   --field-id FIELD_ID --hidden true --format json
 
-# 6) 开启分享；把已知表单标题同时传给分享配置
+# 6) 开启分享；把已知表单标题同时传给分享配置，并检查返回的 shareFormUuid/status/formCover/cpSynced
 dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
   --enabled true --form-name "员工信息收集" --format json
 ```
@@ -136,5 +136,6 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 
 - `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
 - 新建表单首次开启分享时，复用 `form create`/`form update` 中已知的标题，通过 `--form-name` 与 `--enabled true` 同时传入；不要为取标题额外调用 `form get`。已有分享仅调整其他配置时，不覆盖原名称。
-- 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`，再通过 `form share get` 回读确认。
-- 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。
+- `form share update` 的成功结果已经来自服务端回读并完成 CP 投影校验；必须检查 `shareFormUuid/status/formCover/cpSynced`，只有 `cpSynced=true` 才能确认闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。
+- DWS 不自行调用第二个 View 更新命令补偿 CP，也不拼装封面 URL。旧服务端发布窗口内 `formCover` 可能为空，应如实说明；稍后诊断当前配置时可用 `form share get`。
+- “已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`。写超时时先查询真实状态，不原样重放 mutation。

@@ -27,6 +27,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/aitableprotocol"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -1946,12 +1947,13 @@ var FormFieldHide = shortcut.Shortcut{
 
 // FormShareGet 获取表单分享配置（get_share_form_config，server: aitable）。
 var FormShareGet = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+form-share-get",
-	Product:     serverHelper,
-	Description: "读取视图当前的分享表单配置",
-	Intent:      "当你要查看某视图的表单分享是否已开启及其分享配置时使用；返回当前的分享表单配置。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+form-share-get",
+	Product:       serverHelper,
+	Description:   "读取表单分享配置及服务端真实 UUID、状态和封面",
+	Intent:        "当你要查看某视图是否已分享，或诊断 shareFormUuid、status、formCover 时使用；该命令只读，不修改 CP。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -1964,18 +1966,19 @@ var FormShareGet = shortcut.Shortcut{
 			CLIPath:        "aitable +form-share-get",
 			PrimaryCLIPath: "aitable +form-share-get",
 		},
-		Description: "读取视图当前的分享表单配置",
+		Description: "读取表单分享配置及服务端真实 UUID、状态和封面",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "读取视图当前的分享表单配置",
-			UseWhen:      []string{"当你要查看某视图的表单分享是否已开启及其分享配置时使用；返回当前的分享表单配置。"},
+			AgentSummary: "读取表单分享配置及服务端真实 UUID、状态和封面",
+			UseWhen:      []string{"当你要查看某视图是否已分享，或诊断 shareFormUuid、status、formCover 时使用；该命令只读，不修改 CP。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +form-share-get --base-id B --table-id T --view-id V"},
 		},
+		Result: helpers.AitableFormShareGetResultSpec(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -1984,22 +1987,49 @@ var FormShareGet = shortcut.Shortcut{
 	},
 	Tips: []string{`dws aitable +form-share-get --base-id B --table-id T --view-id V`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_share_form_config", map[string]any{
+		return executeFormShareMCP(rt, "get_share_form_config", map[string]any{
 			"baseId":  rt.Str("base-id"),
 			"tableId": rt.Str("table-id"),
 			"viewId":  rt.Str("view-id"),
-		})
+		}, false)
 	},
 }
 
 // FormShareUpdate 更新分享表单配置（update_share_form，server: aitable）。
 var FormShareUpdate = shortcut.Shortcut{
-	Service:     "aitable",
-	Command:     "+form-share-update",
-	Product:     serverHelper,
-	Description: "部分更新分享表单的开关、访问范围、有效期和通知等配置",
-	Intent:      "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行说明需要替换的占位符。只读 help/schema 查询是唯一允许的命令。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。",
-	Risk:        shortcut.RiskWrite,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "aitable",
+	Command:       "+form-share-update",
+	Product:       serverHelper,
+	Description:   "部分更新分享表单配置，并返回经服务端回读和 CP 投影校验的真实终态",
+	Intent:        "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行说明需要替换的占位符。只读 help/schema 查询是唯一允许的命令。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。成功后检查 shareFormUuid、status、formCover、cpSynced，只有 cpSynced=true 才表示闭环完成；部分失败不得当作成功；DWS 不自行调用第二个 View 更新命令补偿 CP。",
+	Risk:          shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_form_share_update",
+			CanonicalPath:  "aitable.shortcut_form_share_update",
+			CLIPath:        "aitable +form-share-update",
+			PrimaryCLIPath: "aitable +form-share-update",
+		},
+		Description: "部分更新分享表单配置，并返回经服务端回读和 CP 投影校验的真实终态",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "部分更新表单分享配置，并返回真实 UUID、状态、封面及 CP 同步结果",
+			UseWhen:      []string{"需要通过内置 +form-share-update Shortcut 开启、关闭或调整表单分享配置时；成功后检查 shareFormUuid、status、formCover、cpSynced，新建表单已知标题时同一次调用传入 --form-name"},
+			AvoidWhen:    []string{"只查询用 +form-share-get；DWS 不自行调用第二个 View 更新命令补偿 CP"},
+			Examples:     []string{`dws aitable +form-share-update --base-id B --table-id T --view-id V --enabled true --form-name "活动报名" --format json`},
+		},
+		Result: helpers.AitableFormShareUpdateResultSpec(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -2064,8 +2094,31 @@ var FormShareUpdate = shortcut.Shortcut{
 				params[property] = rt.Str(name)
 			}
 		}
-		return rt.CallMCP("update_share_form", params)
+		return executeFormShareMCP(rt, "update_share_form", params, true)
 	},
+}
+
+func executeFormShareMCP(rt *shortcut.RuntimeContext, tool string, params map[string]any, write bool) error {
+	if rt.DryRun() {
+		return rt.CallMCP(tool, params)
+	}
+	var (
+		envelope map[string]any
+		err      error
+	)
+	if write {
+		envelope, err = rt.CallMCPWriteDataStrict(serverHelper, tool, params)
+	} else {
+		envelope, err = rt.CallMCPData(serverHelper, tool, params)
+	}
+	if err != nil {
+		return err
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok || data == nil {
+		return apperrors.NewInternal(fmt.Sprintf("%s/%s 返回值缺少 JSON 对象 data", serverHelper, tool))
+	}
+	return rt.Output(data)
 }
 
 // ─────────────────────────────────────────────────────────────
