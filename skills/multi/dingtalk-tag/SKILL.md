@@ -23,7 +23,6 @@ metadata:
 | 把已有、已发布的本地数字员工接入 DSH | `dws dingtalk-tag connect --agent-uuid ... --channel dsh` |
 | 把数字员工接入当前本地 Agent | `dws dingtalk-tag connect --agent-uuid ... --channel auto --daemon --alwayson` |
 | 查询、停止或重启数字员工本地连接 | `dws dingtalk-tag connect list/status/stop/restart` |
-| 为旧版连接补登记服务端设备绑定 | 先停止旧连接，再 `dws dingtalk-tag connect --agent-uuid ... --channel ...` |
 | 在新机器接管（先在旧机器完成解绑） | 旧机器 `connect unbind` 成功后，新机器 `dws dingtalk-tag connect --agent-uuid ... --channel ...` |
 | 解除本机连接，但保留员工和 Profile | `dws dingtalk-tag connect unbind --agent-uuid ...` |
 | 将已有连接换为其他本地 Agent 或 DSH | 先 `connect unbind --agent-uuid ...`，再 `connect --agent-uuid ... --channel ...` |
@@ -43,8 +42,8 @@ metadata:
 - 普通本地 Agent 接入使用 Event Consume，默认仅主管可触发；白名单中的用户必须先在员工身份下精确解析。支持 Codex、Qoder/QoderWork、Claude Code、CodeBuddy/WorkBuddy、Gemini、OpenCode 和 custom。OpenClaw/Hermes 暂未适配，不要回退到机器人创建流程。
 - 自然语言“创建发布并接入本机”在发布后显式使用 `--daemon --alwayson`；命令行默认前台。DSH 不加这两个参数，由运行中的宿主员工级启动；宿主不可用时按 restartRequired 提示启动宿主。connect 不提供开机自启，也不能在电脑休眠期间处理消息。
 - connect 失败后保留员工 ID 和已落盘 Profile，检查 `connect status` 再恢复；不要重复 create、不要清除事件重试预算、不要隐式覆盖另一个 Adapter 的绑定。
-- 服务端 identity 由主管登录态注入，禁止传入 userId/orgId；deviceId 是稳定设备标识，runtimeBindingId 是服务端绑定 ID，与本地 bindingRevision/runtimeInstanceId 不同。绑定回执不代表在线；响应未知的 bind 不得自动重试或通过删配置绕过。旧版连接先停止，再 connect 补齐绑定；只保存 Profile 使用 `manage login`。
-- “暂停”使用 stop（保留绑定）；“解绑”使用 unbind（保留 Profile）；“换成本地另一个 Agent”先 unbind，成功后再 connect；两步先 dry-run 并汇总确认。换绑先确认旧实例释放，unknown 或超时不得手动删绑定来绕过。新绑定已提交但启动失败使用 restart；旧绑定仍在 unbinding 时重试原 unbind；历史换绑回执未完成时先核对服务端结果。
+- 服务端 identity 由主管登录态注入，禁止传入 userId/orgId；deviceId 是稳定设备标识，runtimeBindingId 是服务端绑定 ID，与本地 bindingRevision/runtimeInstanceId 不同。绑定回执不代表在线；响应未知的 bind 不得自动重试或通过删配置绕过。只保存 Profile 使用 `manage login`。
+- “暂停”使用 stop（保留绑定）；“解绑”使用 unbind（保留 Profile）；“换成本地另一个 Agent”先 unbind，成功后再 connect；两步先 dry-run 并汇总确认。换绑先确认旧实例释放，unknown 或超时不得手动删绑定来绕过。新绑定已提交但启动失败使用 restart；旧绑定仍在 unbinding 时重试原 unbind。
 
 ## 安全
 

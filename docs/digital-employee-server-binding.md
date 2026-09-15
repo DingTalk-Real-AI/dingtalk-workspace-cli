@@ -7,7 +7,6 @@
 | 场景 | 指令 | 服务端动作 |
 |---|---|---|
 | 首次接入 | `dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex` | 本地预检和换票后 bind，保存回执后接入 |
-| 旧版连接补登记 | 停止旧实例后，`dws dingtalk-tag connect --agent-uuid <agentUuid> --channel <原Agent>` | 换票并 bind，保存回执后接入 |
 | 同设备换 Agent | 先 `connect unbind --agent-uuid <agentUuid>`，成功后 `connect --agent-uuid <agentUuid> --channel qoder` | 解除旧绑定，再创建新绑定 |
 | 更换设备标识 | 先 unbind，成功后 `connect --agent-uuid <agentUuid> --channel qoder --device-id <newDeviceId>` | 解除旧绑定，再用新设备标识绑定 |
 | 新机器接管 | 在旧机器完成 unbind，再在新机器执行 `connect --agent-uuid <agentUuid> --channel codex` | 旧实例释放并解绑后，新机器换票、绑定并接入 |
@@ -73,11 +72,10 @@ pending → 单次 MCP 调用 → confirmed → 本地绑定提交 → consumed
 - unbind 的未知结果：仅允许携带同一旧 ID 重试；利用服务端约定的幂等和“不解除后继绑定”语义。
 - 服务端 confirmed、本地尚未提交：重试同参数的原命令。回执摘要包含主管 Profile、员工 ID、本地代数、操作和请求字段；参数变化会阻断恢复。
 - 本地已提交，但新 Adapter 启动失败：使用 `connect restart`，无需再次解绑和连接。回执未完成时禁止 restart 启动新实例。
-- 旧版本本地连接无服务端 ID：先 `connect stop`，再使用 `connect` 补齐绑定并接入；之后可执行 unbind。旧连接的 stop/restart 不新增绑定副作用。
 - 只保存数字员工 Profile 使用 `dws dingtalk-tag manage login`；该命令不生成设备 ID、不调用绑定 MCP、不保存绑定。
 
 ## 验证边界与回滚
 
 自动化测试使用隔离配置、模拟 MCP 和模拟 DSH 控制，不更改真实绑定。上线前仍需联调两个 MCP 的顶层业务字段、返回值、忙拒绝和身份注入，以及跨设备旧 ID 保护。
 
-本变更不自动迁移存量连接，也不合并依赖 PR 或发布版本。回滚代码不会撤销已经发生的服务端绑定。新增字段可能被旧版严格 JSON 解码器拒绝；不要直接降级或删除回执。应先使用当前版本确认解绑并停止实例，由维护者保留备份后处理旧格式兼容。
+回滚代码不会撤销已经发生的服务端绑定。回滚前应确认解绑并停止实例，保留操作回执；缺少 runtimeBindingId 时先核对服务端绑定记录。

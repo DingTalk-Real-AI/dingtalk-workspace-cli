@@ -39,9 +39,9 @@ func runDeapAgentLogin(cmd *cobra.Command, _ []string) error {
 		})
 	}
 
-	published, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": agentUUID, "type": "published"}, false)
-	if err != nil || !hasBusinessData(published) {
-		return apperrors.NewValidation("数字员工尚未发布；请先发布当前草稿后再 login")
+	published, err := queryPublishedDigitalEmployee(cmd.Context(), agentUUID)
+	if err != nil {
+		return err
 	}
 	session, err := loginDigitalEmployee(cmd.Context(), deapConnectConfigDir(), agentUUID, requestedClientID, published)
 	if err != nil {

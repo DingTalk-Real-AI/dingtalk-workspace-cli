@@ -418,7 +418,7 @@ func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.
 				`{"success":true,"data":{"digitalTagEmployeeProfile":{"mainProgramType":"local_agent"}}}`,
 				`{"success":false,"errorMsg":"permission denied"}`,
 			},
-			want: "尚未发布",
+			want: "permission denied",
 		},
 		{
 			name: "published profile missing corp id",
