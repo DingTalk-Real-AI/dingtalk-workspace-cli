@@ -648,22 +648,25 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	if !strings.Contains(trustFn, "FileSystemRights]::Write -bor") || !strings.Contains(trustFn, "FileSystemRights]::Delete -bor") {
 		t.Fatal("Test-SharedSchemaCachePathTrusted must probe real Write/Delete bits")
 	}
-	// Every granting ACE is adjudicated: no ordinary-SID allowlist may skip
-	// foreign SIDs holding write bits, and inherit-only ACEs (no grant on the
-	// object itself) must not trip the rejection.
+	// Every granting ACE is adjudicated, inheritable ones included: the
+	// installer creates dws\schema below the accepted root, so an
+	// inherit-only write ACE becomes effective on those children and must
+	// reject the root instead of being skipped.
 	if strings.Contains(trustFn, "$isOrdinary") {
 		t.Fatal("Test-SharedSchemaCachePathTrusted must check every Allow ACE, not only ordinary SIDs")
 	}
 	if !strings.Contains(trustFn, "$trustedSids") || !strings.Contains(trustFn, "-notcontains $sid") {
 		t.Fatal("Test-SharedSchemaCachePathTrusted must attribute write ACEs to a trusted-SID set")
 	}
-	if !strings.Contains(trustFn, "PropagationFlags]::InheritOnly") {
-		t.Fatal("Test-SharedSchemaCachePathTrusted must skip inherit-only ACEs")
+	if strings.Contains(trustFn, "PropagationFlags]::InheritOnly") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must not skip inherit-only write ACEs; they become effective on the children created below the root")
 	}
 	for _, helper := range []string{
 		"function Test-SharedSchemaCacheLayoutSafe",
 		"function Test-SharedSchemaCacheTreeObjectsSafe",
+		"function Test-SharedSchemaCacheTreeTrusted",
 		"function Test-SharedSchemaCacheFileSingleLink",
+		"function Clear-SharedSchemaCacheIdentitySidecars",
 	} {
 		if !strings.Contains(text, helper) {
 			t.Fatalf("install.ps1 missing schema-cache safety helper %q", helper)
@@ -679,10 +682,35 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	if strings.Contains(buildFn, "New-Item -ItemType Directory -Path $sharedDir -Force") {
 		t.Fatal("Build-SharedSchemaCache must not blindly New-Item -Force the shared root")
 	}
+	// A pre-existing dws\schema subtree may carry explicit untrusted write
+	// ACEs the shared-root DACL check never sees; descendant security must be
+	// established before the privileged cleanup or ACL recursion touches it.
+	if !strings.Contains(buildFn, "$schemaTreePreExisting") || !strings.Contains(buildFn, "Test-SharedSchemaCacheTreeTrusted -Tree $schemaTree") {
+		t.Fatal("Build-SharedSchemaCache must gate a pre-existing schema tree on descendant DACL trust")
+	}
+	// Identity cleanup must not be a separate -Recurse scan: validation is
+	// fused into the walk so a substituted entry aborts before any deletion.
+	if strings.Contains(buildFn, "Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter") {
+		t.Fatal("identity cleanup must not use a separate -Recurse scan; validation must be fused into the walk")
+	}
+	clearFn := extractPowerShellFunction(t, text, "Clear-SharedSchemaCacheIdentitySidecars")
+	if !strings.Contains(clearFn, "Remove-Item -LiteralPath") {
+		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must delete validated entries by literal path")
+	}
+	if strings.Contains(clearFn, "-Recurse") {
+		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must walk manually, never -Recurse")
+	}
+	protectFn := extractPowerShellFunction(t, text, "Protect-SharedSchemaCacheTree")
+	if strings.Contains(protectFn, "-Recurse") {
+		t.Fatal("Protect-SharedSchemaCacheTree must walk manually, never -Recurse")
+	}
+	if !strings.Contains(protectFn, "Get-Item -LiteralPath") || !strings.Contains(protectFn, "Test-SharedSchemaCacheFileSingleLink") {
+		t.Fatal("Protect-SharedSchemaCacheTree must re-establish object identity per entry before the ACL rewrite")
+	}
 	// Object checks gate both the identity cleanup and the recursive ACL
-	// rewrite: the tree is verified before Remove-Item and again before
-	// Protect-SharedSchemaCacheTree (the warm-up just rewrote it).
-	cleanupIdx := strings.Index(buildFn, "Remove-Item -Force")
+	// rewrite: the tree is verified before the fused cleanup walk and again
+	// before Protect-SharedSchemaCacheTree (the warm-up just rewrote it).
+	cleanupIdx := strings.Index(buildFn, "Clear-SharedSchemaCacheIdentitySidecars")
 	treeCheckIdx := strings.Index(buildFn, "Test-SharedSchemaCacheTreeObjectsSafe")
 	if cleanupIdx < 0 || treeCheckIdx < 0 || treeCheckIdx > cleanupIdx {
 		t.Fatal("Test-SharedSchemaCacheTreeObjectsSafe must run before identity cleanup")
@@ -1055,6 +1083,180 @@ Write-Output "WINDOWS_UNSAFE_OBJECTS_OK"
 	}
 	if !strings.Contains(string(output), "WINDOWS_UNSAFE_OBJECTS_OK") {
 		t.Fatalf("unsafe tree objects output:\n%s", output)
+	}
+}
+
+// TestInstallPowerShellClearIdentitySidecarsFusedWalk pins the fused
+// validate-and-delete walk: only plain identity*.json files under nested
+// directories are removed, sentinel neighbours survive, and a reparse entry
+// aborts the whole cleanup before any deletion.
+func TestInstallPowerShellClearIdentitySidecarsFusedWalk(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX symlink shapes are exercised without Windows reparse semantics")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := string(scriptData[:cut])
+
+	runClear := func(t *testing.T, harnessEpilogue string) string {
+		t.Helper()
+		root := t.TempDir()
+		harness := prefix + harnessEpilogue
+		harnessPath := filepath.Join(root, "clear-sidecars-harness.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("clear-sidecars harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("removes only identity sidecars across nested dirs", func(t *testing.T) {
+		root := t.TempDir()
+		tree := filepath.Join(root, "schema")
+		edition := filepath.Join(tree, "open", "v1")
+		nested := filepath.Join(edition, "nested")
+		if err := os.MkdirAll(nested, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(edition, "identity.0.0.1.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(edition, "meta.cache"), []byte("keep"), 0o600)
+		mustWriteFile(t, filepath.Join(nested, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(nested, "payloads.shards.cache"), []byte("keep"), 0o600)
+		out := runClear(t, `
+$tree = "`+tree+`"
+Clear-SharedSchemaCacheIdentitySidecars -Tree $tree
+$edition = Join-Path $tree "open/v1"
+$nested = Join-Path $edition "nested"
+if (Test-Path -LiteralPath (Join-Path $edition "identity.json")) { Write-Output "IDENTITY_LEFT"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path $edition "identity.0.0.1.json")) { Write-Output "OLD_IDENTITY_LEFT"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path $nested "identity.json")) { Write-Output "NESTED_IDENTITY_LEFT"; exit 1 }
+if (-not (Test-Path -LiteralPath (Join-Path $edition "meta.cache"))) { Write-Output "SENTINEL_GONE"; exit 1 }
+if (-not (Test-Path -LiteralPath (Join-Path $nested "payloads.shards.cache"))) { Write-Output "NESTED_SENTINEL_GONE"; exit 1 }
+Write-Output "CLEAR_SIDECARS_OK"
+`)
+		if !strings.Contains(out, "CLEAR_SIDECARS_OK") {
+			t.Fatalf("clear-sidecars output:\n%s", out)
+		}
+	})
+
+	t.Run("reparse entry aborts before deletion", func(t *testing.T) {
+		root := t.TempDir()
+		tree := filepath.Join(root, "schema")
+		edition := filepath.Join(tree, "open", "v1")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outsideSentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, outsideSentinel, []byte("keep"), 0o600)
+		// "0-outside-link" sorts before "identity.json" so the abort is
+		// deterministic regardless of provider enumeration order.
+		if err := os.Symlink(outside, filepath.Join(edition, "0-outside-link")); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+		mustWriteFile(t, filepath.Join(edition, "meta.cache"), []byte("keep"), 0o600)
+		out := runClear(t, `
+$tree = "`+tree+`"
+try {
+  Clear-SharedSchemaCacheIdentitySidecars -Tree $tree
+  Write-Output "NO_ABORT"; exit 1
+} catch {
+  Write-Output "ABORTED"
+}
+$edition = Join-Path $tree "open/v1"
+if (-not (Test-Path -LiteralPath (Join-Path $edition "identity.json"))) { Write-Output "IDENTITY_DELETED_BEFORE_ABORT"; exit 1 }
+if (-not (Test-Path -LiteralPath (Join-Path $edition "meta.cache"))) { Write-Output "SENTINEL_GONE"; exit 1 }
+Write-Output "CLEAR_ABORT_OK"
+`)
+		if !strings.Contains(out, "ABORTED") || !strings.Contains(out, "CLEAR_ABORT_OK") {
+			t.Fatalf("clear-abort output:\n%s", out)
+		}
+		got, err := os.ReadFile(outsideSentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+}
+
+// TestInstallPowerShellSharedSchemaCacheInheritableWriteWindows pins the
+// inheritable/descendant write rejection: a shared root carrying an
+// inherit-only write ACE for an untrusted principal must fail the root trust
+// check, and a pre-existing schema tree entry with an explicit untrusted
+// write ACE must fail the descendant trust gate, before any privileged
+// recursion runs.
+func TestInstallPowerShellSharedSchemaCacheInheritableWriteWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("DACL inheritance semantics require a Windows host")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	root := t.TempDir()
+	ioRoot := filepath.Join(root, "io-root")
+	tree := filepath.Join(root, "shared", "dws", "schema")
+	edition := filepath.Join(tree, "open", "v1")
+	for _, dir := range []string{ioRoot, edition} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+	harness := string(scriptData[:cut]) + `
+$ioRoot = "` + ioRoot + `"
+$tree = "` + tree + `"
+$edition = "` + edition + `"
+& icacls.exe $ioRoot /grant "*S-1-5-32-545:(OI)(CI)(IO)(WD)" | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Output "ICACLS_IO_FAIL"; exit 1 }
+if (Test-SharedSchemaCachePathTrusted -Path $ioRoot) { Write-Output "IO_ROOT_TRUE"; exit 1 }
+if (-not (Test-SharedSchemaCacheTreeTrusted -Tree $tree)) { Write-Output "CLEAN_TREE_FALSE"; exit 1 }
+& icacls.exe $edition /grant "*S-1-5-32-545:(WD)" | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Output "ICACLS_DESC_FAIL"; exit 1 }
+if (Test-SharedSchemaCacheTreeTrusted -Tree $tree) { Write-Output "DESC_WRITE_TREE_TRUE"; exit 1 }
+Write-Output "INHERITABLE_WRITE_OK"
+`
+	harnessPath := filepath.Join(root, "inheritable-write.ps1")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("inheritable-write harness: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "INHERITABLE_WRITE_OK") {
+		t.Fatalf("inheritable-write output:\n%s", output)
 	}
 }
 

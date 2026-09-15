@@ -1933,7 +1933,12 @@ function Test-SharedSchemaCachePathTrusted {
         # Check only real write/delete/ACL-owner bits — do NOT OR Modify or
         # FullControl, those composites include ReadAndExecute, so the Builtin
         # Users ReadAndExecute ACE we grant would always look writable.
-        # Inherit-only ACEs grant nothing on this object itself.
+        # Inherit-only ACEs grant nothing on this object itself, but this
+        # installer creates dws\schema below the accepted root and such ACEs
+        # become effective on those children — an untrusted inheritable write
+        # ACE (e.g. ProgramData's Users (IO)(CI)(WD,AD) or CREATOR OWNER
+        # (IO)(CI)(F)) therefore rejects the root; the shared warm-up falls
+        # back to the per-user cache instead of mutating under it.
         $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
             [System.Security.AccessControl.FileSystemRights]::Delete -bor `
             [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor `
@@ -1952,9 +1957,6 @@ function Test-SharedSchemaCachePathTrusted {
             if ($rule.AccessControlType -ne 'Allow') {
                 continue
             }
-            if (($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) {
-                continue
-            }
             if (($rule.FileSystemRights -band $writeRights) -eq 0) {
                 continue
             }
@@ -1965,6 +1967,40 @@ function Test-SharedSchemaCachePathTrusted {
                 return $false
             }
             if ($trustedSids -notcontains $sid) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# The shared root's DACL says nothing about a pre-existing dws\schema subtree:
+# descendant directories may carry explicit (non-inherited) write ACEs granted
+# to untrusted principals. Before any privileged recursion over a tree that
+# already existed, every existing entry — the tree itself included — must pass
+# the same per-path trust rule. Windows-only semantics: DACL inheritance has
+# no POSIX counterpart (install.sh enforces the POSIX gates with owner/sticky
+# rules), and the Unix write-probe inside Test-SharedSchemaCachePathTrusted
+# cannot adjudicate a file path, so non-Windows hosts report nothing to check.
+function Test-SharedSchemaCacheTreeTrusted {
+    param([string]$Tree)
+    if (-not $Tree) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        return $true
+    }
+    if (-not (Test-Path -LiteralPath $Tree)) {
+        return $false
+    }
+    if (-not (Test-SharedSchemaCachePathTrusted -Path $Tree)) {
+        return $false
+    }
+    try {
+        foreach ($entry in (Get-ChildItem -LiteralPath $Tree -Recurse -Force -ErrorAction Stop)) {
+            if (-not (Test-SharedSchemaCachePathTrusted -Path $entry.FullName)) {
                 return $false
             }
         }
@@ -2089,6 +2125,46 @@ function Test-SharedSchemaCacheTreeObjectsSafe {
     }
 }
 
+# Delete pre-existing identity sidecars with validation fused into the walk
+# itself: every entry is adjudicated at enumeration time — a reparse point or
+# (on Windows) a multi-link file aborts the whole cleanup — so the mutation
+# never follows an object substituted after a prior path scan. No -Recurse
+# anywhere: the manual stack walk only descends into directories it has just
+# validated, entry by entry.
+function Clear-SharedSchemaCacheIdentitySidecars {
+    param([string]$Tree)
+    if (-not $Tree) {
+        throw "schema cache tree path is empty"
+    }
+    if (-not (Test-Path -LiteralPath $Tree)) {
+        return
+    }
+    $windowsHost = Test-IsWindowsHost
+    $stack = [System.Collections.Generic.Stack[string]]::new()
+    $stack.Push($Tree)
+    while ($stack.Count -gt 0) {
+        $dir = $stack.Pop()
+        foreach ($child in (Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
+            if ($child.LinkType) {
+                throw "unsafe schema cache entry (reparse): $($child.FullName)"
+            }
+            if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "unsafe schema cache entry (reparse): $($child.FullName)"
+            }
+            if ($child.PSIsContainer) {
+                $stack.Push($child.FullName)
+                continue
+            }
+            if ($windowsHost -and -not (Test-SharedSchemaCacheFileSingleLink -Path $child.FullName)) {
+                throw "unsafe schema cache entry (multi-link): $($child.FullName)"
+            }
+            if ($child.Name -eq 'identity.json' -or $child.Name -like 'identity.*.json') {
+                Remove-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
+            }
+        }
+    }
+}
+
 function Set-SharedSchemaCacheItemAcl {
     param([string]$Path)
     if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
@@ -2153,9 +2229,35 @@ function Protect-SharedSchemaCacheTree {
     if (-not (Test-IsWindowsHost)) {
         return
     }
+    # Object identity is re-established on every entry at mutation time: a
+    # fresh Get-Item replaces the enumeration's attributes immediately before
+    # the ACL rewrite, so an entry substituted between validation and this
+    # walk aborts the recursion instead of widening Set-Acl outside the tree.
+    # No recursive enumeration: the manual stack walk only descends into
+    # directories whose entries were each validated and protected on the spot.
     Set-SharedSchemaCacheItemAcl -Path $Path
-    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
-        Set-SharedSchemaCacheItemAcl -Path $_.FullName
+    $stack = [System.Collections.Generic.Stack[string]]::new()
+    $stack.Push($Path)
+    while ($stack.Count -gt 0) {
+        $dir = $stack.Pop()
+        foreach ($child in (Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
+            $entry = Get-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
+            if ($entry.LinkType) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
+            }
+            if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
+            }
+            if ($entry.PSIsContainer) {
+                Set-SharedSchemaCacheItemAcl -Path $entry.FullName
+                $stack.Push($entry.FullName)
+                continue
+            }
+            if (-not (Test-SharedSchemaCacheFileSingleLink -Path $entry.FullName)) {
+                throw "unsafe schema cache entry (multi-link): $($entry.FullName)"
+            }
+            Set-SharedSchemaCacheItemAcl -Path $entry.FullName
+        }
     }
 }
 
@@ -2249,15 +2351,25 @@ function Build-SharedSchemaCache {
             Write-Say "⚠️  Schema cache skipped: unsafe cache path."
             return
         }
+        $schemaTreePreExisting = Test-Path -LiteralPath $schemaTree
         New-Item -ItemType Directory -Path $schemaTree -Force -ErrorAction SilentlyContinue | Out-Null
-        if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree)) -or
-            -not (Test-SharedSchemaCacheTreeObjectsSafe -Tree $schemaTree)) {
+        $contentsUnsafe = -not (Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree)) -or
+            -not (Test-SharedSchemaCacheTreeObjectsSafe -Tree $schemaTree)
+        if (-not $contentsUnsafe -and $schemaTreePreExisting) {
+            # A pre-existing subtree may carry explicit untrusted write ACEs the
+            # shared-root DACL check never sees; descendant security must be
+            # established before any privileged recursion over it.
+            $contentsUnsafe = -not (Test-SharedSchemaCacheTreeTrusted -Tree $schemaTree)
+        }
+        if ($contentsUnsafe) {
             Write-Say "⚠️  Schema cache skipped: unsafe cache contents."
             return
         }
-        if (Test-Path -LiteralPath $schemaTree) {
-            Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-            Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        try {
+            Clear-SharedSchemaCacheIdentitySidecars -Tree $schemaTree
+        } catch {
+            Write-Say "⚠️  Schema cache skipped: unsafe cache contents."
+            return
         }
     }
     $exe = Join-Path $InstallDir "$BinName.exe"
