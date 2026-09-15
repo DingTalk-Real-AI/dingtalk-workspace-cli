@@ -165,3 +165,72 @@ func TestAITableCommentDeleteGoldenRoutesDoNotBypassConfirmation(t *testing.T) {
 		})
 	}
 }
+
+func TestAITableCommentPaginationGuidanceUsesUnifiedEnvelope(t *testing.T) {
+	tests := []struct {
+		path     string
+		required []string
+	}{
+		{
+			path: "multi/dingtalk-aitable/SKILL.md",
+			required: []string{
+				"空评论页仍读取 `meta.pagination`",
+				"仅 `meta.pagination.endpoint_exhausted=true` 时停止",
+				"将 `meta.pagination.next_token` 原样传给下一次 `--cursor`",
+			},
+		},
+		{
+			path: "multi/dingtalk-aitable/references/aitable/aitable-comment.md",
+			required: []string{
+				"`data.comments=[]` 不代表结束",
+				"只有 `meta.pagination.endpoint_exhausted=true` 才能停止",
+				"将 `meta.pagination.next_token` 原样作为下一次 `--cursor`",
+				"不要从业务 `data` 读取已移除的 `hasMore` 或 `nextToken`",
+			},
+		},
+		{
+			path: "mono/references/products/aitable/aitable-comment.md",
+			required: []string{
+				"`data.comments=[]` 不代表结束",
+				"只有 `meta.pagination.endpoint_exhausted=true` 才能停止",
+				"将 `meta.pagination.next_token` 原样作为下一次 `--cursor`",
+				"不要从业务 `data` 读取已移除的 `hasMore` 或 `nextToken`",
+			},
+		},
+		{
+			path: "multi/dingtalk-aitable/references/aitable.md",
+			required: []string{
+				"空 `data.comments` 不代表结束",
+				"仅 `meta.pagination.endpoint_exhausted=true` 时停止",
+				"按 `meta.pagination.next_token` 续页",
+			},
+		},
+		{
+			path: "mono/references/products/aitable.md",
+			required: []string{
+				"空 `data.comments` 不代表结束",
+				"仅 `meta.pagination.endpoint_exhausted=true` 时停止",
+				"按 `meta.pagination.next_token` 续页",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			data, err := FS.ReadFile(tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			content := string(data)
+			for _, required := range tt.required {
+				if !strings.Contains(content, required) {
+					t.Errorf("%s missing %q", tt.path, required)
+				}
+			}
+			if strings.Contains(content, "按 hasMore/nextToken 续页") ||
+				strings.Contains(content, "只有 `hasMore=false` 才能停止") {
+				t.Errorf("%s retains legacy comment pagination guidance", tt.path)
+			}
+		})
+	}
+}
