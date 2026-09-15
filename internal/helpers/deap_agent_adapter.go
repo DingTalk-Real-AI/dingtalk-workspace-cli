@@ -107,7 +107,7 @@ func checkDigitalEmployeeBinding(dir, profile, uuid, channel string) error {
 		return nil
 	}
 	if b.AgentUUID != uuid || bindingChannel(b) != channel {
-		return fmt.Errorf("数字员工已有 %s binding；不能覆盖不同员工或 Adapter 的绑定", bindingChannel(b))
+		return fmt.Errorf("数字员工已有 %s binding；不能覆盖不同员工或 Adapter 的绑定，请先 connect unbind，再 connect", bindingChannel(b))
 	}
 	return nil
 }

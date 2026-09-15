@@ -699,7 +699,7 @@ func TestDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
 	root := deapHandler{}.Command(&captureRunner{})
 
 	wantGroups := map[string][]string{
-		"connect": {"status", "list", "stop", "restart", "bind", "unbind", "rebind"},
+		"connect": {"status", "list", "stop", "restart", "unbind"},
 		"manage":  {"create", "detail", "list", "login", "save-draft", "publish", "delete"},
 		"run":     {"run-status", "trace"},
 	}

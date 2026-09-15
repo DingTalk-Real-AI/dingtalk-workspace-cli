@@ -2,15 +2,15 @@
 
 ## 服务端设备绑定
 
-connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。旧版连接用 `dws dingtalk-tag connect bind --agent-uuid <agentUuid> --dry-run --format json` 预览补登记；确认后去掉 dry-run 并加 --yes。补登记不启动 Agent。
+connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。旧版连接先停止，再用 `dws dingtalk-tag connect --agent-uuid <agentUuid> --channel <原Agent> --dry-run --format json` 预览；确认后去掉 dry-run 并加 --yes，补齐绑定并接入。
 
 设备 ID 缺省随机生成并在当前配置目录长期保存，也可显式传 `--device-id`；不要复制设备配置到另一台机器。`--local-agent-name` 可选，`--extensions` 传字符串。主管身份由网关注入，不传 identity/userId/orgId。
 
-换机器前先在旧机 stop 并确认释放，从 status 取得 runtimeBindingId。新机器执行 `dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --runtime-binding-id <oldBindingId> --channel codex --dry-run --format json`；确认后再执行写操作。这会调用原子 rebind，不是先解绑再绑定，成功必须保存新 ID。CLI 不提供远程停机或在线判断。
+换机器前先在旧机器执行 `dws dingtalk-tag connect unbind --agent-uuid <agentUuid> --dry-run --format json` 并确认执行，等待旧实例释放且解绑成功。再在新机器执行 `dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --dry-run --format json`，确认后连接并保存新绑定 ID。两步之间员工未绑定；CLI 不提供远程停机或在线判断。
 
-同设备只换 Agent 类型保留服务端 ID；更换设备标识时才调用 rebind。unbind 携带保存的 ID，成功后保留历史回执，重复解绑不解除后继绑定。有在途或待恢复任务时服务端拒绝；保留旧 ID，不启动新 Agent。status/list 新增的 serverBindingState 仅是本地回执，不证明服务端当前绑定或在线。
+换 Agent 或设备均先解绑，再 connect 并保存新的服务端 ID。unbind 携带保存的 ID，成功后保留历史回执，重复解绑不解除后继绑定。有在途或待恢复任务时服务端拒绝；保留旧 ID，不启动新 Agent。status/list 新增的 serverBindingState 仅是本地回执，不证明服务端当前绑定或在线。
 
-结果未知的 bind/rebind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先 bind 补登记再 unbind/rebind；只保存 Profile 使用 `manage login`。
+结果未知的 bind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先停止，再 connect 补齐绑定；之后可 unbind；只保存 Profile 使用 `manage login`。
 
 ## 接入普通本地 Agent
 
@@ -30,7 +30,7 @@ dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
 
 DSH 注册后由正在运行的宿主员工级启动；宿主不可用时返回 `restartRequired=true`。不接受普通 Agent 的 `--daemon/--alwayson` 参数。旧 DSH binding 向后兼容，不自动迁移到其他 Adapter。
 
-暂停使用 `connect stop`；解绑使用 `connect unbind --agent-uuid <agentUuid>`（不删除员工、Profile、Token 或审计）；换绑使用 `connect rebind --agent-uuid <agentUuid> --channel qoder`，自然语言要求后台接入时加 `--daemon --alwayson`。解绑/换绑先 dry-run，用户确认后再执行。旧实例必须停止并确认释放；unknown 或超时不能通过删配置强行绕过。新 binding 已提交后的启动失败用 restart 恢复，不能再次 create。
+暂停使用 `connect stop`；解绑使用 `connect unbind --agent-uuid <agentUuid>`（不删除员工、Profile、Token 或审计）；换绑先完成 unbind，再使用 `connect --agent-uuid <agentUuid> --channel qoder`。自然语言要求后台接入时加 `--daemon --alwayson`。两步写操作均先 dry-run，用户确认后执行。旧实例必须停止并确认释放；unknown 或超时不能通过删配置强行绕过。新 binding 已提交后的启动失败用 restart 恢复。
 
 本地状态、会话、去重记录和无正文审计按员工隔离。未知回复结果或进程中断的任务需要核实，不自动重新执行 Agent；后台重启保留订阅重试预算。远端 ack/replay/cursor 尚未提供，不承诺 exactly-once 或断线不丢消息。
 

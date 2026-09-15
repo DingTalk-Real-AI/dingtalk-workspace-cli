@@ -6,12 +6,14 @@ package app
 import (
 	"reflect"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
 func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 	root := NewRootCommand()
 	wants := map[string]string{"dingtalk-tag.connect": "dingtalk-tag connect"}
-	for _, action := range []string{"status", "list", "stop", "restart", "bind", "unbind", "rebind"} {
+	for _, action := range []string{"status", "list", "stop", "restart", "unbind"} {
 		wants["dingtalk-tag.connect_"+action] = "dingtalk-tag connect " + action
 	}
 	var names []string
@@ -35,14 +37,13 @@ func TestDigitalEmployeeConnectLifecycleSchema(t *testing.T) {
 
 func TestCrossPlatformCoverageEmployeeServerBindingFinalSchema(t *testing.T) {
 	wants := map[string]map[string]string{
-		"bind":   {"agent-uuid": "agentUuid", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions"},
-		"unbind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId"},
-		"rebind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions", "client-id": "clientId"},
+		"dingtalk-tag.connect":        {"agent-uuid": "agentUuid", "device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions", "client-id": "clientId"},
+		"dingtalk-tag.connect_unbind": {"agent-uuid": "agentUuid", "runtime-binding-id": "runtimeBindingId"},
 	}
 	root := NewRootCommand()
-	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.connect_bind", "dingtalk-tag.connect_unbind", "dingtalk-tag.connect_rebind")
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.connect", "dingtalk-tag.connect_unbind")
 	for action, params := range wants {
-		tool := payload.Tools["dingtalk-tag.connect_"+action]
+		tool := payload.Tools[action]
 		if schemaContractString(tool["interface_mode"]) != "composite" {
 			t.Errorf("%s must declare server-side effects", action)
 		}
@@ -310,5 +311,19 @@ func TestDingTalkTagConnectReachesFinalSchema(t *testing.T) {
 	}
 	if _, ok := parameters["profile-only"]; ok {
 		t.Error("dingtalk-tag.connect still exposes profile-only")
+	}
+}
+
+func TestCrossPlatformCoverageEmployeeRemovedBindingCommandsAbsentFromSchema(t *testing.T) {
+	NewRootCommand()
+	for _, action := range []string{"bind", "rebind"} {
+		if _, ok := cli.ResolveMeta("dingtalk-tag connect " + action); ok {
+			t.Errorf("已删除命令仍出现在 Schema: %s", action)
+		}
+	}
+	for _, path := range []string{"dingtalk-tag connect", "dingtalk-tag connect unbind"} {
+		if _, ok := cli.ResolveMeta(path); !ok {
+			t.Errorf("保留命令未交付到 Schema: %s", path)
+		}
 	}
 }

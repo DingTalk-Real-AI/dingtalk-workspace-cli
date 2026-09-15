@@ -173,7 +173,7 @@ func employeeLifecycleStatus(ctx context.Context, b digitalEmployeeBinding) map[
 		state["operationId"] = op.ID
 		if op.ReasonCode != "" {
 			state["reasonCode"] = op.ReasonCode
-			state["nextAction"] = "重试原解绑或换绑操作；若新绑定已提交则使用 connect restart"
+			state["nextAction"] = "重试原 connect unbind 或 connect；若新绑定已提交则使用 connect restart"
 		}
 	}
 	if employeeBindingState(b) == "unbound" {
@@ -274,27 +274,8 @@ func newEmployeeUnbindCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{Use: "unbind", Short: "解绑数字员工并保留本地身份", PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{{Name: "agent-uuid", Required: true, Usage: "本地已绑定员工 ID"}, {Name: "runtime-binding-id", Usage: "明确指定服务端绑定 ID；必须与本地记录一致"}}, OutputRollout: output.RolloutUnifiedActive,
 		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
-		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_unbind", CanonicalPath: "dingtalk-tag.connect_unbind", CLIPath: "dingtalk-tag connect unbind", PrimaryCLIPath: "dingtalk-tag connect unbind", Group: "connect"}, Description: "停止并确认员工实例释放后调用服务端解绑；保留 Profile、凭据、审计和去重记录。未知实例不强行解绑。", Parameters: []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}, {Name: "runtime-binding-id", Property: "runtimeBindingId"}}, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "服务端解绑回执、本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全解除已有数字员工的本机 Adapter 绑定", UseWhen: []string{"解绑数字员工并保留 Profile"}, AvoidWhen: []string{"仅暂停使用 connect stop；换绑使用 connect rebind；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect unbind --agent-uuid <agentUuid>"}}},
-		RunE:     func(cmd *cobra.Command, _ []string) error { return mutateEmployeeBinding(cmd, "unbind") },
-	})
-}
-
-func newEmployeeRebindCommand() *cobra.Command {
-	flags := append([]LeafFlag{{Name: "agent-uuid", Required: true, Usage: "待换绑员工 ID"}, {Name: "runtime-binding-id", Usage: "服务端旧绑定 ID；新机器首次换绑时必填", Trim: true}, {Name: "client-id", Usage: "新机器换票时的选应用提示", Trim: true}}, employeeServerFlags()...)
-	params := append([]contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}, {Name: "runtime-binding-id", Property: "runtimeBindingId"}, {Name: "client-id", Property: "clientId"}}, employeeServerParams()...)
-	flags = append(flags, LeafFlag{Name: "channel", Required: true, Enum: digitalEmployeeChannels(), Usage: "目标 Adapter"})
-	for _, flag := range digitalEmployeeAgentFlags() {
-		if !flag.Hidden {
-			flags = append(flags, flag)
-		}
-	}
-	params = append(params, []contract.ParamDecl{
-		{Name: "channel", Property: "channel"}, {Name: "agent-cmd", Property: "agentCommand"}, {Name: "agent-model", Property: "agentModel"}, {Name: "agent-workdir", Property: "agentWorkdir"}, {Name: "agent-memory", Property: "agentMemory"}, {Name: "agent-timeout", Property: "agentTimeout"}, {Name: "agent-permission-mode", Property: "agentPermissionMode"}, {Name: "agent-approval-mode", Property: "agentApprovalMode"}, {Name: "yolo", Property: "yolo"}, {Name: "allowed-users", Property: "allowedUsers"}, {Name: "allowed-groups", Property: "allowedGroups"}, {Name: "daemon", Property: "daemon"}, {Name: "alwayson", Property: "alwayson"},
-	}...)
-	return NewLeafCommand(LeafSpec{Use: "rebind", Short: "更换数字员工设备绑定或本机 Adapter", PostMount: deapAgentNoArgs, Flags: flags, OutputRollout: output.RolloutUnifiedActive,
-		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
-		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_rebind", CanonicalPath: "dingtalk-tag.connect_rebind", CLIPath: "dingtalk-tag connect rebind", PrimaryCLIPath: "dingtalk-tag connect rebind", Group: "connect"}, Description: "同机预检并释放旧实例后切换 Adapter；设备变化时原子换绑并保存新服务端 ID。新机器接管需先在旧机器确认停止，再提供旧 runtime-binding-id；保留 Profile、凭据、审计和去重记录。失败保留可恢复状态，不强行覆盖未知实例。", Parameters: params, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "员工身份与目标预检、本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全将已有数字员工换绑到另一个 Adapter", UseWhen: []string{"将已有员工从当前 Adapter 换绑到另一个本地 Agent 或 DSH"}, AvoidWhen: []string{"首次接入使用 connect；仅暂停使用 connect stop；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --channel qoder"}}},
-		RunE:     func(cmd *cobra.Command, _ []string) error { return mutateEmployeeBinding(cmd, "rebind") },
+		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_unbind", CanonicalPath: "dingtalk-tag.connect_unbind", CLIPath: "dingtalk-tag connect unbind", PrimaryCLIPath: "dingtalk-tag connect unbind", Group: "connect"}, Description: "停止并确认员工实例释放后调用服务端解绑；保留 Profile、凭据、审计和去重记录。未知实例不强行解绑。", Parameters: []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}, {Name: "runtime-binding-id", Property: "runtimeBindingId"}}, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "服务端解绑回执、本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全解除已有数字员工的本机 Adapter 绑定", UseWhen: []string{"解绑数字员工并保留 Profile", "更换 Agent 或设备时先解绑，成功后再 connect"}, AvoidWhen: []string{"仅暂停使用 connect stop；首次接入使用 connect；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect unbind --agent-uuid <agentUuid>"}}},
+		RunE:     func(cmd *cobra.Command, _ []string) error { return runEmployeeUnbind(cmd) },
 	})
 }
 
@@ -306,18 +287,12 @@ type employeeBindingOperation struct {
 	ReasonCode   string `json:"reasonCode,omitempty"`
 }
 
-func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
+func runEmployeeUnbind(cmd *cobra.Command) (runErr error) {
 	bindings, err := employeeFindBindings(devAppStringFlag(cmd, "agent-uuid"))
 	if err != nil {
 		return err
 	}
 	if len(bindings) != 1 {
-		if len(bindings) == 0 && action == "rebind" && devAppStringFlag(cmd, "runtime-binding-id") != "" {
-			if err := validateDigitalEmployeeAdapter(cmd); err != nil {
-				return err
-			}
-			return runDeapConnect(cmd, nil)
-		}
 		return fmt.Errorf("员工必须对应唯一的本地绑定")
 	}
 	b := bindings[0]
@@ -325,16 +300,6 @@ func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
 	if commandDryRun(cmd) {
 		steps := []string{"stop_old", "confirm_released", "server_unbind", "unbind_keep_profile"}
 		channel := bindingChannel(b)
-		if action == "rebind" {
-			if err := validateDigitalEmployeeAdapter(cmd); err != nil {
-				return err
-			}
-			channel, err = resolveDigitalEmployeeChannel(cmd)
-			if err != nil {
-				return err
-			}
-			steps = []string{"preflight", "stop_old", "confirm_released", "server_rebind_if_device_changed", "save_binding_receipt", "commit_binding", "start_target"}
-		}
 		return writeDWSMachineEnvelope(cmd, map[string]any{"status": "planned", "agentUuid": b.AgentUUID, "channel": channel, "steps": steps})
 	}
 	dir := digitalEmployeeRuntimeDir(b.DWSProfile)
@@ -351,54 +316,21 @@ func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
 		return fmt.Errorf("runtime-binding-id 与本地记录不一致；禁止操作其他绑定")
 	}
 	if employeeBindingState(b) == "unbound" {
-		if action == "unbind" {
-			if err := checkEmployeeServerOperation(b); err != nil {
-				return err
-			}
-			if err := consumeEmployeeServerOperation(b.DWSProfile); err != nil {
-				return err
-			}
-			return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
+		if err := checkEmployeeServerOperation(b); err != nil {
+			return err
 		}
-		return fmt.Errorf("员工已解绑，首次接入请使用 connect")
+		if err := consumeEmployeeServerOperation(b.DWSProfile); err != nil {
+			return err
+		}
+		return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
 	}
-	var next digitalEmployeeAdapterConfig
-	device := b.DeviceID
 	if b.RuntimeBindingID == "" {
-		return fmt.Errorf("旧版连接缺少 runtimeBindingId，请先 connect bind 补登记")
+		return fmt.Errorf("旧版连接缺少 runtimeBindingId，请先 connect stop，再用 connect 补齐绑定后解绑")
 	}
-	if action == "rebind" {
-		if err := validateDigitalEmployeeAdapter(cmd); err != nil {
-			return err
-		}
-		channel, err := resolveDigitalEmployeeChannel(cmd)
-		if err != nil {
-			return err
-		}
-		device, err = employeeBindingDeviceID(cmd.Context(), b, devAppStringFlag(cmd, "device-id"))
-		if err != nil {
-			return err
-		}
-		if channel == bindingChannel(b) && device == b.DeviceID && employeeBindingState(b) == "bound" {
-			return fmt.Errorf("已经绑定该 Adapter；恢复运行请使用 connect restart")
-		}
-		if device == b.DeviceID && (devAppStringFlag(cmd, "local-agent-name") != "" || devAppStringFlag(cmd, "extensions") != "") {
-			return fmt.Errorf("同设备更换 Adapter 不修改服务端绑定元数据；请移除 --local-agent-name/--extensions")
-		}
-		next.Binding = b
-		next.Binding.Channel = channel
-		next.Binding.BindingRevision++
-		next.Binding.BindingState = "bound"
-		next.Binding.DesiredState = "running"
-		next, err = prepareEmployeeRebind(cmd, b, next)
-		if err != nil {
-			return err
-		}
-	}
-	op := employeeBindingOperation{ID: uuid.NewString(), Action: action, FromRevision: b.BindingRevision, Target: next.Binding.Channel}
+	op := employeeBindingOperation{ID: uuid.NewString(), Action: "unbind", FromRevision: b.BindingRevision}
 	if previous, err := os.ReadFile(filepath.Join(dir, "operation.json")); err == nil {
 		var old employeeBindingOperation
-		if json.Unmarshal(previous, &old) == nil && old.Action == action && old.FromRevision == b.BindingRevision && old.Target == op.Target {
+		if json.Unmarshal(previous, &old) == nil && old.Action == "unbind" && old.FromRevision == b.BindingRevision && old.Target == op.Target {
 			op.ID = old.ID
 		}
 	}
@@ -411,10 +343,7 @@ func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
 			_ = writeEmployeeJSON(filepath.Join(dir, "operation.json"), op)
 		}
 	}()
-	b.BindingState = action + "ing"
-	if action == "rebind" {
-		b.BindingState = "rebinding"
-	}
+	b.BindingState = "unbinding"
 	b.DesiredState = "stopped"
 	if err := updateEmployeeBinding(b); err != nil {
 		return err
@@ -434,103 +363,16 @@ func mutateEmployeeBinding(cmd *cobra.Command, action string) (runErr error) {
 	if err := writeEmployeeJSON(filepath.Join(dir, fmt.Sprintf("binding-%d.json", b.BindingRevision)), b); err != nil {
 		return err
 	}
-	serverChanged := action == "unbind" || device != b.DeviceID
-	if !serverChanged {
-		if err := checkEmployeeServerOperation(b); err != nil {
-			return err
-		}
-	}
-	if serverChanged {
-		id, err := mutateEmployeeServerBinding(cmd, b, action, device)
-		if err != nil {
-			return err
-		}
-		if action == "rebind" {
-			next.Binding.RuntimeBindingID, next.Binding.DeviceID = id, device
-		}
-	}
-	if action == "unbind" {
-		b.BindingState = "unbound"
-		b.BindingRevision++
-		if err := updateEmployeeBinding(b); err != nil {
-			return err
-		}
-		if err := consumeEmployeeServerOperation(b.DWSProfile); err != nil {
-			return err
-		}
-		return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
-	}
-	if err := writeEmployeeJSON(filepath.Join(dir, "adapter.json"), next); err != nil {
+	if _, err := mutateEmployeeServerBinding(cmd, b, "unbind", b.DeviceID); err != nil {
 		return err
 	}
-	if err := updateEmployeeBinding(next.Binding); err != nil {
+	b.BindingState = "unbound"
+	b.BindingRevision++
+	if err := updateEmployeeBinding(b); err != nil {
 		return err
 	}
-	if serverChanged {
-		if err := consumeEmployeeServerOperation(b.DWSProfile); err != nil {
-			return err
-		}
-	}
-	if next.Binding.Channel != "dsh" {
-		lock.Release()
-	}
-	adapter, err := digitalEmployeeAdapterFor(next.Binding.Channel)
-	if err != nil {
+	if err := consumeEmployeeServerOperation(b.DWSProfile); err != nil {
 		return err
 	}
-	return adapter.Connect(cmd, next)
-}
-
-func prepareEmployeeRebind(cmd *cobra.Command, old digitalEmployeeBinding, next digitalEmployeeAdapterConfig) (digitalEmployeeAdapterConfig, error) {
-	if data, err := os.ReadFile(filepath.Join(digitalEmployeeRuntimeDir(old.DWSProfile), "adapter.json")); err == nil {
-		var saved digitalEmployeeAdapterConfig
-		if json.Unmarshal(data, &saved) == nil && sameEmployeeBinding(saved.Binding, old) {
-			next.SelfOpenDingTalkID = saved.SelfOpenDingTalkID
-			next.Name = saved.Name
-		}
-	}
-	if next.Binding.Channel == "dsh" {
-		r, err := employeeDSHControl(cmd.Context(), next.Binding, "prepare")
-		if err != nil {
-			return next, err
-		}
-		if !r.Prepared {
-			return next, fmt.Errorf("DSH executor 未就绪")
-		}
-		return next, nil
-	}
-	if !validMachineString(next.SelfOpenDingTalkID) {
-		published, err := callDeapJSON(cmd.Context(), deapAgentDetailTool, map[string]any{"agentUuid": old.AgentUUID, "type": "published"}, false)
-		if err != nil {
-			return next, err
-		}
-		id, ok := publishedDigitalEmployeeIdentity(published)
-		if !ok || auth.ProfileSelector(auth.Profile{CorpID: id.CorpID, UserID: id.StaffID}) != old.DWSProfile || !validMachineString(id.OpenDingTalkID) {
-			return next, fmt.Errorf("无法验证员工自身开放身份；旧绑定保持不变")
-		}
-		next.SelfOpenDingTalkID = id.OpenDingTalkID
-	}
-	token, err := deapConnectLoadToken(deapConnectConfigDir(), old.DWSProfile)
-	if err != nil {
-		return next, err
-	}
-	if token == nil {
-		return next, fmt.Errorf("员工 Profile 缺失")
-	}
-	next.Options, err = prepareDigitalEmployeeLocal(cmd, next.Binding, token.AccessToken)
-	if err != nil {
-		return next, err
-	}
-	next.AlwaysOn = commandBoolFlag(cmd, "alwayson")
-	fwd, err := digitalEmployeeNewForwarder(cmd.Context(), next)
-	if err != nil {
-		return next, err
-	}
-	if closer, ok := fwd.(forwarderCloser); ok {
-		defer closer.close()
-	}
-	if err := prepareEmployeeForwarder(cmd.Context(), fwd); err != nil {
-		return next, err
-	}
-	return next, nil
+	return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
 }

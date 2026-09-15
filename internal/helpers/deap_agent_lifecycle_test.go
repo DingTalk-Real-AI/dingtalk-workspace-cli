@@ -97,62 +97,11 @@ func TestEmployeeLostLeaseIsQuarantinedUntilExactHostRelease(t *testing.T) {
 	}
 }
 
-func TestEmployeeRebindToDSHAndRestartRepairsFailedRegistration(t *testing.T) {
-	_, b := lifecycleFixture(t)
-	b.Channel = "custom"
-	if err := updateEmployeeBinding(b); err != nil {
-		t.Fatal(err)
-	}
-	registered := false
-	failRegistration := true
-	testseam.Swap(t, &deapConnectRegisterDSH, func(_ context.Context, payload map[string]any) (string, error) {
-		if payload["bindingRevision"] != uint64(8) {
-			t.Fatal("registration must use new revision")
-		}
-		if failRegistration {
-			return "", fmt.Errorf("injected registration failure")
-		}
-		registered = true
-		return "created", nil
-	})
-	testseam.Swap(t, &employeeDSHControl, func(_ context.Context, got digitalEmployeeBinding, action string) (employeeDSHState, error) {
-		if action == "prepare" {
-			return employeeDSHState{Prepared: true}, nil
-		}
-		if action == "start" && !registered {
-			t.Fatal("restart must register before start")
-		}
-		if action == "stop" {
-			return employeeDSHState{Released: true, RuntimeState: "stopped"}, nil
-		}
-		return employeeDSHState{RuntimeState: "running", TransportReady: true, ExecutorReady: true}, nil
-	})
-	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
-	_ = cmd.Flags().Set("channel", "dsh")
-	if err := mutateEmployeeBinding(cmd, "rebind"); err == nil {
-		t.Fatal("expected registration failure")
-	}
-	current, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-	if err != nil || current.Channel != "dsh" || current.BindingRevision != 8 || employeeBindingState(current) != "bound" {
-		t.Fatalf("committed binding lost: %+v %v", current, err)
-	}
-	failRegistration = false
-	restart := newDigitalEmployeeRestartCommand()
-	restart.SetContext(context.Background())
-	restart.SetOut(io.Discard)
-	_ = restart.Flags().Set("agent-uuid", b.AgentUUID)
-	if err := runDigitalEmployeeLifecycle(restart, "restart"); err != nil {
-		t.Fatal(err)
-	}
-	if !registered {
-		t.Fatal("registration not recovered")
-	}
-}
 func lifecycleCmd(t *testing.T, action, id string) *cobra.Command {
 	t.Helper()
 	cmd := newEmployeeUnbindCommand()
-	if action == "rebind" {
-		cmd = newEmployeeRebindCommand()
+	if action == "bind" {
+		cmd = newDeapConnectCommand()
 	}
 	cmd.SetContext(context.Background())
 	cmd.SetOut(&bytes.Buffer{})
@@ -183,7 +132,7 @@ func TestEmployeeUnbindRequiresReleaseAndKeepsProfile(t *testing.T) {
 		}
 		return employeeDSHState{Released: true, RuntimeState: "stopped"}, nil
 	})
-	if err := mutateEmployeeBinding(lifecycleCmd(t, "unbind", b.AgentUUID), "unbind"); err != nil {
+	if err := runEmployeeUnbind(lifecycleCmd(t, "unbind", b.AgentUUID)); err != nil {
 		t.Fatal(err)
 	}
 	current, err := loadDigitalEmployeeBinding(dir, b.DWSProfile)
@@ -197,7 +146,7 @@ func TestEmployeeUnbindRequiresReleaseAndKeepsProfile(t *testing.T) {
 		t.Fatal("profile changed")
 	}
 	calls = nil
-	if err := mutateEmployeeBinding(lifecycleCmd(t, "unbind", b.AgentUUID), "unbind"); err != nil || len(calls) != 0 {
+	if err := runEmployeeUnbind(lifecycleCmd(t, "unbind", b.AgentUUID)); err != nil || len(calls) != 0 {
 		t.Fatal("unbind must be idempotent", err)
 	}
 }
@@ -207,7 +156,7 @@ func TestEmployeeUnbindUnknownRuntimePreservesOldBinding(t *testing.T) {
 	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
 		return employeeDSHState{}, fmt.Errorf("host lost")
 	})
-	if err := mutateEmployeeBinding(lifecycleCmd(t, "unbind", b.AgentUUID), "unbind"); err == nil {
+	if err := runEmployeeUnbind(lifecycleCmd(t, "unbind", b.AgentUUID)); err == nil {
 		t.Fatal("unknown release accepted")
 	}
 	current, _ := loadDigitalEmployeeBinding(dir, b.DWSProfile)
@@ -217,29 +166,6 @@ func TestEmployeeUnbindUnknownRuntimePreservesOldBinding(t *testing.T) {
 	status := employeeLifecycleStatus(context.Background(), current)
 	if status["runtimeState"] != "unknown" || status["operationId"] == nil {
 		t.Fatal(status)
-	}
-}
-
-func TestEmployeeRebindPreflightFailsWithoutStoppingOld(t *testing.T) {
-	dir, b := lifecycleFixture(t)
-	b.Channel = "custom"
-	if err := updateEmployeeBinding(b); err != nil {
-		t.Fatal(err)
-	}
-	testseam.Swap(t, &employeeDSHControl, func(_ context.Context, _ digitalEmployeeBinding, action string) (employeeDSHState, error) {
-		if action != "prepare" {
-			t.Fatal("stopped before preflight")
-		}
-		return employeeDSHState{}, fmt.Errorf("no host")
-	})
-	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
-	_ = cmd.Flags().Set("channel", "dsh")
-	if err := mutateEmployeeBinding(cmd, "rebind"); err == nil {
-		t.Fatal("preflight passed")
-	}
-	current, _ := loadDigitalEmployeeBinding(dir, b.DWSProfile)
-	if current != b {
-		t.Fatal("preflight changed binding")
 	}
 }
 

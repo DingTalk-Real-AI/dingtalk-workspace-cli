@@ -87,7 +87,7 @@ func newDeapConnectCommand() *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Use:           "connect",
 		Short:         "将已发布数字员工接入本地 Agent 或 DSH",
-		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--channel dsh 注册并请求当前宿主启动该员工，宿主不可用时提示升级或启动宿主；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。只保存数字员工 Profile 请使用 dingtalk-tag manage login。接入 Agent 前登记服务端设备绑定并保存 runtimeBindingId；绑定不代表在线。旧版连接使用 connect bind 补登记。运行及绑定管理使用 dingtalk-tag connect status/list/stop/restart/unbind/rebind。",
+		Long:          "校验已发布 local_agent，以主管身份换票并保存独立 Profile，不切换主管 Current。--channel dsh 注册并请求当前宿主启动该员工，宿主不可用时提示升级或启动宿主；其他 Agent 通过 Event 收消息并以员工 Profile 回复，默认前台，--daemon --alwayson 后台常驻。只保存数字员工 Profile 请使用 dingtalk-tag manage login。接入 Agent 前登记服务端设备绑定并保存 runtimeBindingId；绑定不代表在线。旧版连接先停止，再使用 connect 补齐绑定并接入。更换 Agent 或设备时先 connect unbind，再 connect。运行及绑定管理使用 dingtalk-tag connect status/list/stop/restart/unbind。",
 		Flags: append([]LeafFlag{
 			{Name: "agent-uuid", Usage: "已存在且已发布的数字员工 ID", Required: true, Trim: true},
 			{Name: "channel", Usage: "本地 Agent 类型；省略或 auto 时自动探测", Trim: true, Enum: append([]string{"auto"}, digitalEmployeeChannels()...)},
@@ -148,7 +148,7 @@ func newDeapConnectCommand() *cobra.Command {
 			},
 		},
 	})
-	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeServerBindCommand(), newEmployeeUnbindCommand(), newEmployeeRebindCommand())
+	cmd.AddCommand(newDigitalEmployeeStatusCommand(), newDigitalEmployeeListCommand(), newDigitalEmployeeStopCommand(), newDigitalEmployeeRestartCommand(), newEmployeeUnbindCommand())
 	corecmd.ApplyGroupPolicy(cmd, corecmd.GroupPolicy{Mode: corecmd.GroupHybrid, Positionals: corecmd.PositionalsReject, Recovery: corecmd.RecoverySibling})
 	return cmd
 }
@@ -170,9 +170,6 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	}
 	if commandDryRun(cmd) {
 		steps := []string{"validate_draft", "validate_published", "request_auth_code", "managed_exchange", "persist_profile", "resolve_operator", "server_bind", "save_binding_receipt"}
-		if devAppStringFlag(cmd, "runtime-binding-id") != "" {
-			steps[len(steps)-2] = "server_rebind"
-		}
 		if channel == "dsh" {
 			steps = append(steps, "register_dsh")
 		} else {
@@ -224,7 +221,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	} else if previous, e := loadDigitalEmployeeBinding(configDir, profile); e == nil && employeeBindingState(previous) != "unbound" {
 		r, e := employeeDSHControl(cmd.Context(), previous, "status")
 		if e != nil || !r.Released {
-			return fmt.Errorf("已有 DSH 绑定尚未确认停止；只刷新 Profile 请使用 dingtalk-tag manage login，换绑请使用 connect rebind")
+			return fmt.Errorf("已有 DSH 绑定尚未确认停止；只刷新 Profile 请使用 dingtalk-tag manage login，换绑请先 connect unbind，再 connect")
 		}
 	}
 
@@ -266,14 +263,10 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	serverAction := "bind"
-	if oldID := devAppStringFlag(cmd, "runtime-binding-id"); oldID != "" {
-		serverAction, binding.RuntimeBindingID = "rebind", oldID
+	if binding.DeviceID != "" && binding.DeviceID != device {
+		return fmt.Errorf("本地设备 ID 与绑定记录不一致，请先 connect unbind，再 connect")
 	}
-	if binding.DeviceID != "" && binding.DeviceID != device && serverAction != "rebind" {
-		return fmt.Errorf("本地设备 ID 与绑定记录不一致，请显式使用 connect rebind")
-	}
-	id, err := mutateEmployeeServerBinding(cmd, binding, serverAction, device)
+	id, err := mutateEmployeeServerBinding(cmd, binding, "bind", device)
 	if err != nil {
 		return err
 	}
