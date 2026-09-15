@@ -161,7 +161,7 @@ func TestPrimaryParamMigrationPreservesDeliverySchemaSignatures(t *testing.T) {
 		{path: "chat +messages-batch-send-by-bot", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "chat +messages-send-by-webhook", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "chat +messages-reply", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
-		{path: "chat +messages-reply", primary: "group", legacy: "conversation-id", required: true, property: "conversationId", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
+		{path: "chat +messages-reply", primary: "group", legacy: "conversation-id", required: false, property: "conversationId", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "doc +doc-append", primary: "content", legacy: "text", required: true, property: "text", propertyFrom: "native_annotation", requiredWhenFrom: "default"},
 		{path: "doc block insert", primary: "content", legacy: "text", propertyFrom: "reviewed_mapping_exclusion", requiredWhenFrom: "default"},
 		{path: "doc block update", primary: "content", legacy: "text", propertyFrom: "reviewed_mapping_exclusion", requiredWhenFrom: "default"},

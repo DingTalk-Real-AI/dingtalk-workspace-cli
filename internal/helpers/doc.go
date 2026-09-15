@@ -2399,21 +2399,29 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	})
 
 	blockDeleteCmd := &cobra.Command{
-		Use:     "delete",
-		Short:   "删除块元素",
-		Example: `  dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>`,
+		Use:   "delete",
+		Short: "删除块元素",
+		Long: `删除文档中的块元素。
+
+--block-id 支持逗号分隔一次删除多个块，如 --block-id a,b,c，单次最多 50 个。
+`,
+		Example: `  dws doc block delete --node DOC_ID --block-id BLOCK_ID --yes    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>
+  dws doc block delete --node DOC_ID --block-id BLOCK_A,BLOCK_B,BLOCK_C --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "block-id"); err != nil {
 				return err
 			}
-			blockID := mustGetFlag(cmd, "block-id")
+			blockIDs, err := NormalizeBlockIDs(mustGetFlag(cmd, "block-id"))
+			if err != nil {
+				return err
+			}
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
 			return callMCPTool("delete_document_block", map[string]any{
 				"nodeId":  nodeID,
-				"blockId": blockID,
+				"blockId": strings.Join(blockIDs, ","),
 			})
 		},
 	}
@@ -2430,20 +2438,27 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				CLIPath:        "doc block delete",
 				PrimaryCLIPath: "doc block delete",
 			},
-			Description: "删除块元素（不可逆）",
+			Description: "删除块元素（不可逆），--block-id 支持逗号分隔一次删多个",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "delete_document_block"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "删除块元素（不可逆）",
-				UseWhen:      []string{"用户确认后删除文档中指定块元素时"},
+				AgentSummary: "删除块元素（不可逆），支持逗号分隔一次删除多个块",
+				UseWhen: []string{
+					"用户确认后删除文档中指定块元素时",
+					"需要删除多个块时用逗号分隔一次传入，不要循环调用",
+				},
 				AvoidWhen: []string{
 					"未确认或 blockId 不明时不要删；先 block list",
 					"删整篇文档用 doc/drive delete",
+					"单次超过 50 个块时拆成多次调用",
 				},
-				Examples: []string{"dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json"},
+				Examples: []string{
+					"dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --format json",
+					"dws doc block delete --node <DOC_ID> --block-id <BLOCK_A>,<BLOCK_B> --format json",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId"},
@@ -2822,7 +2837,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 
 	// block delete
 	blockDeleteCmd.Flags().String("node", "", "文档 ID 或 URL (必填)")
-	blockDeleteCmd.Flags().String("block-id", "", "目标块 ID (必填)")
+	blockDeleteCmd.Flags().String("block-id", "", "目标块 ID (必填); 支持逗号分隔一次删除多个, 如 a,b,c, 单次最多 50 个")
 
 	blockCmd.AddCommand(blockListCmd, blockInsertCmd, blockUpdateCmd, blockDeleteCmd)
 

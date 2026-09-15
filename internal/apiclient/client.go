@@ -13,7 +13,7 @@
 
 // Package apiclient provides a lightweight HTTP client for calling DingTalk
 // OpenAPI (https://api.dingtalk.com) directly, bypassing the MCP JSON-RPC
-// transport. It is shared by `dws api` and narrow streaming upload commands.
+// transport. It is used exclusively by the `dws api` command.
 package apiclient
 
 import (
@@ -87,17 +87,8 @@ type FileUpload struct {
 	Reader    io.Reader
 }
 
-// RawAPIResponse encapsulates the raw HTTP response.
-type RawAPIResponse struct {
-	StatusCode int
-	Header     http.Header
-	// Body remains available for tests and package callers that construct a
-	// response in memory. Live requests use BodyReader and are consumed once.
-	Body       []byte
-	BodyReader io.ReadCloser
-}
-
-// MultipartUploadRequest describes one streaming multipart upload.
+// MultipartUploadRequest describes a streaming multipart upload used by
+// narrow helper commands that already own an open file reader.
 type MultipartUploadRequest struct {
 	Path      string
 	FieldName string
@@ -107,6 +98,16 @@ type MultipartUploadRequest struct {
 	// BearerAuth sends Token through Authorization: Bearer instead of the
 	// DingTalk OAuth header. It is reserved for scoped upload credentials.
 	BearerAuth bool
+}
+
+// RawAPIResponse encapsulates the raw HTTP response.
+type RawAPIResponse struct {
+	StatusCode int
+	Header     http.Header
+	// Body remains available for tests and package callers that construct a
+	// response in memory. Live requests use BodyReader and are consumed once.
+	Body       []byte
+	BodyReader io.ReadCloser
 }
 
 // APIClient wraps an HTTP client for DingTalk OpenAPI calls.
@@ -224,7 +225,9 @@ func (c *APIClient) Do(ctx context.Context, req RawAPIRequest) (*RawAPIResponse,
 	}, nil
 }
 
-// UploadMultipart streams a file and form fields to a DingTalk OpenAPI endpoint.
+// UploadMultipart streams a file and string form fields to an OpenAPI
+// endpoint. This compatibility surface is used by the dingtalk-tag scoped
+// Skill upload flow, whose credential must be sent as a Bearer token.
 func (c *APIClient) UploadMultipart(ctx context.Context, req MultipartUploadRequest) (*RawAPIResponse, error) {
 	if c == nil || c.HTTPClient == nil {
 		return nil, fmt.Errorf("OpenAPI HTTP client is not configured")

@@ -626,7 +626,7 @@ func TestReviewerRouterWorkflowContract(t *testing.T) {
 		"pullRequest.mergeable === null",
 		"pullRequest.mergeable_state === 'unknown'",
 		"pullRequest.mergeable !== true",
-		"['blocked', 'dirty', 'draft'].includes(pullRequest.mergeable_state)",
+		"['dirty', 'draft'].includes(pullRequest.mergeable_state)",
 		"const mergePreflight = classifyMergePreflight(finalPull)",
 		"is behind main at final synchronous merge preflight",
 		"has unknown mergeability at final synchronous merge preflight",

@@ -27,7 +27,7 @@ import (
 )
 
 func TestAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/v1.0/assistant/skills/upload" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
 		}
@@ -55,12 +55,14 @@ func TestAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
 		_, _ = io.WriteString(w, `{"fileUrl":"https://signed.example/temp"}`)
 	}))
 	defer server.Close()
-	AllowedHosts["127.0.0.1"] = true
-	t.Cleanup(func() { delete(AllowedHosts, "127.0.0.1") })
-
-	client := NewClient("access-token", server.URL)
-	client.HTTPClient = server.Client()
-	client.TargetValidator = func(string) error { return nil }
+	client := NewClient("access-token", "https://api-deap.dingtalk.com")
+	testTransport := server.Client().Transport
+	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		clone := req.Clone(req.Context())
+		clone.URL.Scheme = "https"
+		clone.URL.Host = strings.TrimPrefix(server.URL, "https://")
+		return testTransport.RoundTrip(clone)
+	})
 	response, err := client.UploadMultipart(context.Background(), MultipartUploadRequest{
 		Path:      "/v1.0/assistant/skills/upload",
 		FieldName: "file",
@@ -76,7 +78,7 @@ func TestAPIClientUploadMultipartStreamsFileAndUsesAuthHeader(t *testing.T) {
 }
 
 func TestAPIClientUploadMultipartSupportsScopedBearerCredential(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer sk-upload" {
 			t.Errorf("Authorization = %q", got)
 		}
@@ -87,12 +89,14 @@ func TestAPIClientUploadMultipartSupportsScopedBearerCredential(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	AllowedHosts["127.0.0.1"] = true
-	t.Cleanup(func() { delete(AllowedHosts, "127.0.0.1") })
-
-	client := NewClient("sk-upload", server.URL)
-	client.HTTPClient = server.Client()
-	client.TargetValidator = func(string) error { return nil }
+	client := NewClient("sk-upload", "https://api-deap.dingtalk.com")
+	testTransport := server.Client().Transport
+	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		clone := req.Clone(req.Context())
+		clone.URL.Scheme = "https"
+		clone.URL.Host = strings.TrimPrefix(server.URL, "https://")
+		return testTransport.RoundTrip(clone)
+	})
 	_, err := client.UploadMultipart(context.Background(), MultipartUploadRequest{
 		Path:       "/v1.0/assistant/skills/upload",
 		FileName:   "skill.zip",

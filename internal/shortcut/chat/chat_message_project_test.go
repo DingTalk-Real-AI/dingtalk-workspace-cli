@@ -16,6 +16,9 @@ package chat
 import (
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 const testCipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
@@ -104,6 +107,38 @@ func TestCrossPlatformCoverageAttachMessageResourceDownloadsPreservesMessagesAnd
 	failures, _ := payload["failures"].([]map[string]any)
 	if len(failures) != 1 || failures[0]["stage"] != "resource-download" {
 		t.Fatalf("resource failures = %#v", failures)
+	}
+}
+
+func TestCrossPlatformCoverageMessageResourceFailureLedgerBoundaries(t *testing.T) {
+	var ledger map[string]any
+	var cause error
+	shortcut.Register(shortcut.Shortcut{
+		Service: "+coverage-chat",
+		Command: "+resource-ledger",
+		Flags:   MessageResourceDownloadFlags(),
+		Execute: func(rt *shortcut.RuntimeContext) error {
+			ledger, cause = DownloadMessageResourcesWithCause(rt, []map[string]any{{
+				"content": `{"mediaId":"@resource"}`,
+			}}, "")
+			return nil
+		},
+	})
+	helpers.InitDeps(&larkAlignmentCaller{})
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{"+coverage-chat", "+resource-ledger", "--download-resources", "--output-dir", "./downloads"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if cause == nil || ledger["failedCount"] != 1 {
+		t.Fatalf("ledger = %#v, cause = %v", ledger, cause)
+	}
+
+	payload := map[string]any{"complete": true, "failures": []map[string]any{}}
+	AttachMessageResourceDownloads(payload, map[string]any{"failedCount": 2})
+	failures, _ := payload["failures"].([]map[string]any)
+	if len(failures) != 1 || failures[0]["affectedCount"] != 2 || payload["complete"] != false {
+		t.Fatalf("fallback failure ledger = %#v", payload)
 	}
 }
 

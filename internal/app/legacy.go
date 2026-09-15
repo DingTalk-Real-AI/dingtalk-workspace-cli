@@ -73,6 +73,7 @@ func mountLegacyPublicCommands(runner executor.Runner, loadUserShortcuts bool) [
 	}
 	merged := mergeTopLevelCommands(commands)
 	annotatePreferredShortcutOwners(merged)
+	annotateChatRecentConversationsCompatibility(merged)
 	return merged
 }
 

@@ -20,7 +20,7 @@ func minutesListResult() *contract.ResultSpec {
 			contract.ResultOutcomeSuccess,
 			contract.ResultOutcomeFailure,
 		},
-		DataSchema: json.RawMessage(`{"type":"object","description":"带范围与完整性证据的听记列表","properties":{"scope":{"type":"string","description":"本次列表的产品范围"},"count":{"type":"integer","description":"本次返回的去重听记数量"},"scannedCount":{"type":"integer","description":"标题过滤前扫描到的去重听记数量"},"minutes":{"type":"array","description":"稳定投影后的听记条目","items":{"type":"object","description":"包含稳定 taskUuid 的听记条目","additionalProperties":true}},"pages":{"type":"integer","description":"本次实际读取的页数"},"complete":{"type":"boolean","description":"是否已证明目标产品范围完整"},"nextAction":{"type":"string","description":"当前结果不完整时的安全继续方式"},"scopeLedger":{"type":"array","description":"accessible 聚合时各范围的完整性台账","items":{"type":"object","description":"一个底层范围的分页与结果状态","additionalProperties":true}}},"required":["scope","count","minutes","pages","complete"],"additionalProperties":true}`),
+		DataSchema: json.RawMessage(`{"type":"object","description":"带范围与完整性证据的听记列表","properties":{"scope":{"type":"string","description":"本次列表的产品范围"},"count":{"type":"integer","description":"本次返回的去重听记数量"},"scannedCount":{"type":"integer","description":"标题过滤前扫描到的去重听记数量"},"minutes":{"type":"array","description":"稳定投影后的听记条目","items":{"type":"object","description":"包含稳定 taskUuid 的听记条目","additionalProperties":true,"properties":{"orgName":{"type":"string","description":"列表原样提供的组织显示名，不证明资源所有权或当前执行组织"},"flashUserInfo":{"type":"object","description":"服务端闪记用户显示信息，不等同已验证创建者或所有者","properties":{"name":{"type":"string","description":"原始 flashUserInfo.name 显示名"}},"additionalProperties":false}}}},"pages":{"type":"integer","description":"本次实际读取的页数"},"complete":{"type":"boolean","description":"是否已证明目标产品范围完整"},"nextAction":{"type":"string","description":"当前结果不完整时的安全继续方式"},"scopeLedger":{"type":"array","description":"accessible 聚合时各范围的完整性台账","items":{"type":"object","description":"一个底层范围的分页与结果状态","additionalProperties":true}}},"required":["scope","count","minutes","pages","complete"],"additionalProperties":true}`),
 	}
 }
 
@@ -71,6 +71,22 @@ func minutesContract(command, description, useWhen string, avoidWhen []string, e
 
 func withMinutesDryRun(decl corecmd.ContractDecl, kind string, remoteReads bool) corecmd.ContractDecl {
 	decl.DryRun = &contract.DryRunSpec{PreviewKind: kind, RemoteReads: remoteReads}
+	return decl
+}
+
+func withMinutesExportResult(decl corecmd.ContractDecl) corecmd.ContractDecl {
+	decl.Result = &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{"type":"object","description":"听记文本归档发布与签名清理回执；不证明图片离线可用或文件哈希读回","properties":{"operation":{"type":"string","description":"执行操作"},"taskUuid":{"type":"string","description":"源听记标识"},"complete":{"type":"boolean","description":"所选产物收集和当前发布步骤是否完成"},"published":{"type":"boolean","description":"是否已发布归档目录"},"path":{"type":"string","description":"已发布相对目录"},"manifest":{"type":"string","description":"清理台账相对路径"},"sanitized":{"type":"boolean","description":"文本产物是否已清理并通过发布前凭据扫描"},"sanitizationScope":{"type":"string","description":"扫描范围 text_artifacts，不含二进制媒体内容"},"redactionCount":{"type":"integer","description":"全部文本产物中替换的链接或凭据字段次数"},"redactionKinds":{"type":"array","description":"实际发生的清理类型","items":{"type":"string"}},"offlineImagesComplete":{"type":"boolean","description":"是否证明摘要图片离线完整；当前始终为 false"},"files":{"type":"object","description":"逐文件路径、大小、完整性以及文本清理状态和次数","additionalProperties":true}},"additionalProperties":true}`),
+	}
+	return decl
+}
+
+func withMinutesSpeakerResult(decl corecmd.ContractDecl) corecmd.ContractDecl {
+	decl.Result = &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomePending, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{"type":"object","description":"发言人总结的有界读取结果，创建回执不等于完成","properties":{"operation":{"type":"string","description":"执行操作"},"state":{"type":"string","enum":["pending","ready","failed","unsupported_shape"],"description":"读取状态；pending 也可能表示结果暂不可读取，不保证任务仍在运行"},"complete":{"type":"boolean","description":"只有已确认终态且存在总结正文时为 true"},"taskUuid":{"type":"string","description":"听记稳定标识"},"taskId":{"type":"string","description":"创建或查询实际返回的恢复句柄，未知时为空"},"createStatus":{"type":"string","description":"创建时状态或 resume，不表示当前终态"},"status":{"type":"string","description":"当前查询明确返回的任务状态"},"attempts":{"type":"integer","description":"实际查询次数"},"stage":{"type":"string","description":"停止所在 create 或 poll 阶段"},"reason":{"type":"string","description":"当前状态的判定原因"},"retryable":{"type":"boolean","description":"是否可有界继续读取；永不授权重新 create"},"result":{"type":"object","description":"仅 ready 时返回校验后的总结正文和终态证据","additionalProperties":true},"recovery":{"type":"object","description":"未完成时保留稳定标识和只读恢复方式","properties":{"taskUuid":{"type":"string","description":"原听记标识"},"taskId":{"type":"string","description":"已知恢复句柄"},"nextCommand":{"type":"array","description":"需沿用同一 profile 并完成确认的 resume argv，不含 --yes","items":{"type":"string"}},"nextAction":{"type":"string","description":"恢复限制与确认提示"}},"additionalProperties":false}},"additionalProperties":true}`),
+	}
 	return decl
 }
 
@@ -217,4 +233,270 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func withMinutesPermissionResult(decl corecmd.ContractDecl) corecmd.ContractDecl {
+	decl.Result = &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type": "object",
+  "description": "权限预览与逐成员写回执；不提供成员ACL读回",
+  "additionalProperties": true,
+  "properties": {
+    "operation": {
+      "type": "string",
+      "description": "业务操作名称"
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "是否为本地预览"
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "兼容的本地预览标记"
+    },
+    "executed": {
+      "type": "boolean",
+      "description": "预览为 false，不执行远端操作"
+    },
+    "preview_kind": {
+      "type": "string",
+      "description": "预览类型，不证明远端状态"
+    },
+    "taskUuids": {
+      "type": "array",
+      "description": "本次听记集合，与成员集合共同表示计划范围",
+      "items": {
+        "type": "string"
+      }
+    },
+    "memberCount": {
+      "type": "integer",
+      "description": "去重成员数"
+    },
+    "members": {
+      "type": "array",
+      "description": "本次真实成员标识集合；由 member-uids 或 member-staff-ids 指定类型",
+      "items": {
+        "type": "string"
+      }
+    },
+    "failurePolicy": {
+      "type": "string",
+      "description": "预览中的成员失败处理策略",
+      "enum": [
+        "stop",
+        "continue"
+      ]
+    },
+    "permission": {
+      "type": "string",
+      "description": "仅分享预览的权限选择",
+      "enum": [
+        "view",
+        "download",
+        "edit"
+      ]
+    },
+    "options": {
+      "type": "object",
+      "description": "仅分享预览，与真实请求同源；未设置的可选值省略",
+      "additionalProperties": true,
+      "properties": {
+        "policyId": {
+          "type": "number",
+          "description": "实际权限策略view=4、download=3、edit=2",
+          "enum": [
+            2,
+            3,
+            4
+          ]
+        },
+        "coverPermission": {
+          "type": "string",
+          "description": "显式覆盖选项按接口编码",
+          "enum": [
+            "true",
+            "false"
+          ]
+        },
+        "roleSubResourceIds": {
+          "type": "array",
+          "description": "显式子资源范围",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "本次写调用没有已知失败，不证明成员权限读回"
+    },
+    "succeeded": {
+      "type": "integer",
+      "description": "写调用成功成员数"
+    },
+    "failed": {
+      "type": "integer",
+      "description": "写调用失败成员数"
+    },
+    "unattempted": {
+      "type": "array",
+      "description": "首错停止后未尝试成员",
+      "items": {
+        "type": "string"
+      }
+    },
+    "results": {
+      "type": "array",
+      "description": "已确认写回执的成员，不是ACL验证",
+      "items": {
+        "type": "object",
+        "description": "成员写回执",
+        "additionalProperties": true,
+        "properties": {
+          "memberUid": {
+            "type": "string",
+            "description": "使用 member-uids 时的成员UID"
+          },
+          "memberStaffId": {
+            "type": "string",
+            "description": "使用 member-staff-ids 时的组织staffId，保留前导零"
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "本成员写调用已确认"
+          }
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "description": "失败成员及原因",
+      "items": {
+        "type": "object",
+        "description": "失败明细",
+        "additionalProperties": true,
+        "properties": {
+          "memberUid": {
+            "type": "string",
+            "description": "使用 member-uids 时的成员UID"
+          },
+          "memberStaffId": {
+            "type": "string",
+            "description": "使用 member-staff-ids 时的组织staffId，保留前导零"
+          },
+          "error": {
+            "type": "string",
+            "description": "调用错误"
+          }
+        }
+      }
+    }
+  }
+}`),
+	}
+	return decl
+}
+
+func withMinutesUploadResult(decl corecmd.ContractDecl) corecmd.ContractDecl {
+	decl.Result = &contract.ResultSpec{
+		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{
+  "type": "object",
+  "description": "本地上传预览与上传完成回执",
+  "additionalProperties": true,
+  "properties": {
+    "operation": {
+      "type": "string",
+      "description": "业务操作名称"
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "是否为本地预览"
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "兼容的本地预览标记"
+    },
+    "executed": {
+      "type": "boolean",
+      "description": "预览为 false，不执行远端操作"
+    },
+    "preview_kind": {
+      "type": "string",
+      "description": "预览类型，不证明远端状态"
+    },
+    "fileName": {
+      "type": "string",
+      "description": "本地媒体文件名"
+    },
+    "sizeBytes": {
+      "type": "integer",
+      "description": "媒体字节数"
+    },
+    "title": {
+      "type": "string",
+      "description": "与实际请求一致的去首尾空白标题"
+    },
+    "messageCard": {
+      "type": "boolean",
+      "description": "计划卡片开关"
+    },
+    "options": {
+      "type": "object",
+      "description": "与实际 minutesOption 同源；缺失值不推断服务端默认",
+      "additionalProperties": true,
+      "properties": {
+        "inputLanguage": {
+          "type": "string",
+          "description": "显式识别语言"
+        },
+        "templateId": {
+          "type": "string",
+          "description": "显式模板ID"
+        },
+        "enableMessageCard": {
+          "type": "boolean",
+          "description": "显式或通知入口要求的卡片选项"
+        }
+      }
+    },
+    "completeTimeoutSeconds": {
+      "type": "integer",
+      "description": "上传complete阶段等待预算，秒"
+    },
+    "pollIntervalSeconds": {
+      "type": "integer",
+      "description": "上传complete查询间隔，秒"
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "上传与基础详情验证是否完成，不代表全部分析产物就绪"
+    },
+    "sessionId": {
+      "type": "string",
+      "description": "本次上传会话句柄"
+    },
+    "taskUuid": {
+      "type": "string",
+      "description": "本次上传完成返回的稳定听记ID"
+    },
+    "uploadAttempts": {
+      "type": "integer",
+      "description": "媒体传输尝试数"
+    },
+    "completeAttempts": {
+      "type": "integer",
+      "description": "上传完成查询次数"
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "已读取并校验基础信息，不代表所有分析产物已生成"
+    }
+  }
+}`),
+	}
+	return decl
 }

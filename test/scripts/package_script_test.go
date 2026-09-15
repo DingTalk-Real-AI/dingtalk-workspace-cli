@@ -13,12 +13,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 var expectedPackagedSkillTargets = []string{
@@ -3176,6 +3179,455 @@ func TestReleaseStaysDraftUntilFinalizedAssetDigestsMatch(t *testing.T) {
 	publish := strings.Index(finalize, "gh release edit")
 	if upload == -1 || digestFailure == -1 || publish == -1 || !(upload < digestFailure && digestFailure < publish) {
 		t.Fatal("Draft publication must happen after finalized asset upload and digest verification")
+	}
+}
+
+func TestLocalBuildHonorsCGOEnabled(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell executable shims require a Unix host")
+	}
+
+	source, err := os.ReadFile(filepath.Join("..", "..", "scripts", "dev", "build.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		env  []string
+		want string
+	}{
+		{name: "default", want: "1"},
+		{name: "empty", env: []string{"CGO_ENABLED="}, want: "1"},
+		{name: "stub", env: []string{"CGO_ENABLED=0"}, want: "0"},
+		{name: "native", env: []string{"CGO_ENABLED=1"}, want: "1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			mustWriteFile(t, filepath.Join(root, "scripts", "dev", "build.sh"), source, 0o755)
+			for _, helper := range []string{"policy/check-runtime-payload.sh", "build/attach-runtime-payload.sh"} {
+				mustWriteFile(t, filepath.Join(root, "scripts", filepath.FromSlash(helper)), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+			}
+			binDir := filepath.Join(root, "bin")
+			mustWriteFile(t, filepath.Join(binDir, "go"), []byte("#!/bin/sh\nprintf '%s\\n' \"$CGO_ENABLED\"\n"), 0o755)
+			cmd := exec.Command("sh", filepath.Join(root, "scripts", "dev", "build.sh"))
+			cmd.Dir = root
+			for _, value := range os.Environ() {
+				if !strings.HasPrefix(value, "CGO_ENABLED=") && !strings.HasPrefix(value, "PATH=") {
+					cmd.Env = append(cmd.Env, value)
+				}
+			}
+			cmd.Env = append(cmd.Env, "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			cmd.Env = append(cmd.Env, tc.env...)
+			output, err := cmd.CombinedOutput()
+			if err != nil || strings.TrimSpace(string(output)) != tc.want {
+				t.Fatalf("build CGO_ENABLED = %q, err = %v; want %s", output, err, tc.want)
+			}
+		})
+	}
+}
+
+// pinnedArchiveDigests reads the archive checksums the wrapper pins for the
+// host architecture. The arch case lists amd64 first, then arm64.
+func pinnedArchiveDigests(t *testing.T, script string) (goreleaser, zig string) {
+	t.Helper()
+	digest := regexp.MustCompile(`^[0-9a-f]{64}$`)
+	collect := func(prefix string) []string {
+		var values []string
+		for _, line := range strings.Split(script, "\n") {
+			value, ok := strings.CutPrefix(strings.TrimSpace(line), prefix)
+			if !ok {
+				continue
+			}
+			value = strings.TrimSuffix(value, "\"")
+			if !digest.MatchString(value) {
+				t.Fatalf("pinned digest %q for %s is not a sha256 hex value", value, prefix)
+			}
+			values = append(values, value)
+		}
+		return values
+	}
+	archiveShas := collect("archive_sha=\"")
+	zigShas := collect("zig_sha=\"")
+	if len(archiveShas) < 2 || len(zigShas) < 2 {
+		t.Fatalf("wrapper does not pin both architectures: %v %v", archiveShas, zigShas)
+	}
+	index := 0
+	if runtime.GOARCH == "arm64" {
+		index = 1
+	}
+	return archiveShas[index], zigShas[index]
+}
+
+// seedVerifiedTool writes an executable plus the marker the wrapper records
+// after a successful pinned install, reproducing a legitimately cached tool.
+func seedVerifiedTool(t *testing.T, dir, exe, archiveSha string) {
+	t.Helper()
+	body := []byte("#!/bin/sh\nexit 0\n")
+	mustWriteFile(t, filepath.Join(dir, exe), body, 0o755)
+	sum := sha256.Sum256(body)
+	marker := fmt.Sprintf("archive_sha256=%s\nexe_sha256=%x\n", archiveSha, sum)
+	mustWriteFile(t, filepath.Join(dir, ".dws-verified"), []byte(marker), 0o644)
+}
+
+func TestCrossReleaseWrapperVerifiesZigBeforeStartingDocker(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+		t.Skip("requires a supported Unix release host")
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "run-goreleaser-cross.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", scriptPath, err)
+	}
+	goreleaserSha, zigSha := pinnedArchiveDigests(t, string(scriptData))
+
+	root := t.TempDir()
+	cache := filepath.Join(root, "tools")
+	archiveArch := runtime.GOARCH
+	if archiveArch == "amd64" {
+		archiveArch = "x86_64"
+	}
+	goreleaserDir := filepath.Join(cache, "goreleaser-2.16.0-linux-"+archiveArch)
+	zigDir := filepath.Join(cache, "zig-0.15.2-linux-"+runtime.GOARCH)
+
+	binDir := filepath.Join(root, "bin")
+	curlLog := filepath.Join(root, "curl.log")
+	mustWriteFile(t, filepath.Join(binDir, "curl"), []byte(
+		"#!/bin/sh\nfor arg do target=\"$arg\"; done\nprintf 'call\\n' >> \"$DWS_TEST_CURL_LOG\"\nprintf invalid-archive > \"$target\"\n"), 0o755)
+	mustWriteFile(t, filepath.Join(binDir, "docker"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$DWS_TEST_DOCKER_LOG\"\n"), 0o755)
+	logPath := filepath.Join(root, "docker.log")
+	run := func() ([]byte, error) {
+		cmd := exec.Command("bash", scriptPath, "build", "--snapshot")
+		cmd.Env = append(os.Environ(),
+			"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"DWS_RELEASE_TOOL_CACHE="+cache,
+			"DWS_TEST_CURL_LOG="+curlLog,
+			"DWS_TEST_DOCKER_LOG="+logPath,
+			"DWS_PACKAGE_VERSION=0.0.0-test",
+		)
+		return cmd.CombinedOutput()
+	}
+	downloads := func() int {
+		data, readErr := os.ReadFile(curlLog)
+		if readErr != nil {
+			return 0
+		}
+		return strings.Count(string(data), "call")
+	}
+	assertBlocked := func(output []byte, runErr error, want string) {
+		t.Helper()
+		if runErr == nil || !strings.Contains(string(output), want) {
+			t.Fatalf("wrapper did not fail with %q: %v, %s", want, runErr, output)
+		}
+		if _, statErr := os.Stat(logPath); !os.IsNotExist(statErr) {
+			t.Fatalf("Docker must not start after a checksum failure: %v", statErr)
+		}
+	}
+
+	// A bare executable proves nothing: without the marker the wrapper must
+	// download and verify again instead of reusing whatever is on disk.
+	mustWriteFile(t, filepath.Join(goreleaserDir, "goreleaser"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	output, err := run()
+	assertBlocked(output, err, "GoReleaser archive checksum mismatch")
+
+	seedVerifiedTool(t, goreleaserDir, "goreleaser", goreleaserSha)
+	output, err = run()
+	assertBlocked(output, err, "Zig archive checksum mismatch")
+
+	// A present marker is not enough either: the executable digest must still
+	// match, so a replaced or truncated tool is rejected on a cache hit.
+	seedVerifiedTool(t, zigDir, "zig", zigSha)
+	mustWriteFile(t, filepath.Join(zigDir, "zig"), []byte("#!/bin/sh\necho tampered\n"), 0o755)
+	output, err = run()
+	assertBlocked(output, err, "Zig archive checksum mismatch")
+
+	seedVerifiedTool(t, zigDir, "zig", zigSha)
+	before := downloads()
+	output, err = run()
+	if err != nil {
+		t.Fatalf("cached compiler invocation failed: %v, %s", err, output)
+	}
+	if after := downloads(); after != before {
+		t.Fatalf("verified cache downloaded %d more archives, want a pure cache hit", after-before)
+	}
+	args, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{zigDir + ":/opt/dws-zig:ro", "linux/" + runtime.GOARCH, "build\n--snapshot\n"} {
+		if !strings.Contains(string(args), want) {
+			t.Fatalf("Docker arguments missing %q: %s", want, args)
+		}
+	}
+}
+
+func TestReleaseBuildsSafeChatBackendByDefaultForEveryPlatform(t *testing.T) {
+	t.Parallel()
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repository root) error = %v", err)
+	}
+	read := func(relative string) string {
+		t.Helper()
+		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if readErr != nil {
+			t.Fatalf("ReadFile(%s) error = %v", relative, readErr)
+		}
+		return string(data)
+	}
+
+	goreleaser := read(".goreleaser.yaml")
+	for _, required := range []string{
+		"CGO_ENABLED=1",
+		"GOTOOLCHAIN=go1.25.9",
+		"CC_darwin_amd64=o64-clang",
+		"CC_darwin_arm64=oa64-clang",
+		"CC_linux_amd64=/opt/dws-zig/zig cc -target x86_64-linux-gnu.2.17",
+		"CC_linux_arm64=/opt/dws-zig/zig cc -target aarch64-linux-gnu.2.17",
+		"CC_windows_amd64=x86_64-w64-mingw32-gcc",
+		"CC_windows_arm64=/llvm-mingw/bin/aarch64-w64-mingw32-gcc",
+	} {
+		if !strings.Contains(goreleaser, required) {
+			t.Errorf("SafeChat release build is missing %q", required)
+		}
+	}
+	if strings.Contains(goreleaser, "CGO_ENABLED=0") {
+		t.Fatal("release configuration must not produce CGO-disabled stub binaries")
+	}
+
+	windowsCompat := read("third_party/safechat-go-sdk/msvcrt_compat_windows.c")
+	for _, required := range []string{
+		`__asm__("_snprintf")`,
+		`__asm__("_vsnprintf")`,
+		`__asm__("__imp__snprintf")`,
+		`__asm__("__imp__vsnprintf")`,
+	} {
+		if !strings.Contains(windowsCompat, required) {
+			t.Errorf("Windows SafeChat CRT compatibility layer is missing %q", required)
+		}
+	}
+
+	defaultBuild := read("scripts/dev/build.sh")
+	if strings.Contains(defaultBuild, "-tags safechat") {
+		t.Fatal("default build must not require a SafeChat build tag")
+	}
+
+	wrapper := read("scripts/release/run-goreleaser-cross.sh")
+	for _, required := range []string{
+		"ghcr.io/goreleaser/goreleaser-cross:v1.26.2@sha256:fadba0d4577866eb2588d46ea6b604c73ef45ee55f044acbc17cc49aa435fd04",
+		`GORELEASER_VERSION="2.16.0"`,
+		`ZIG_VERSION="0.15.2"`,
+		`zig_sha="02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"`,
+		`zig_sha="958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"`,
+		`--volume "$zig_dir:/opt/dws-zig:ro"`,
+		`archive_sha="eaae05b5eba07533bd0f06846b68c808399504784df00c62eb219541fc04e5e2"`,
+		`archive_sha="0102d974373fcdeb77042d1f5897caffa193be36620fdc6c1da43a01ef8e10d3"`,
+		"goreleaser_Linux_${archive_arch}.tar.gz",
+		"archive checksum mismatch",
+		`--platform "linux/$docker_arch"`,
+		"--entrypoint /usr/local/bin/goreleaser",
+	} {
+		if !strings.Contains(wrapper, required) {
+			t.Errorf("pinned cross-release wrapper is missing %q", required)
+		}
+	}
+
+	buildAll := read("scripts/dev/build-all.sh")
+	if !strings.Contains(buildAll, "./scripts/release/run-goreleaser-cross.sh") ||
+		strings.Contains(buildAll, "CGO_ENABLED=0") {
+		t.Fatal("local release packaging must use the pinned CGO cross-release wrapper")
+	}
+	testRelease := read("scripts/dev/test-release.sh")
+	if !strings.Contains(testRelease, `make package VERSION="$VERSION"`) ||
+		strings.Contains(testRelease, "\ngoreleaser release") {
+		t.Fatal("release smoke helper must reuse the pinned package entrypoint")
+	}
+
+	workflow := read(".github/workflows/release.yml")
+	buildSection := releaseWorkflowSection(
+		t,
+		workflow,
+		"      - name: Build release artifacts without publishing\n",
+		"\n      - name: Setup Node.js\n",
+	)
+	if !strings.Contains(buildSection, "./scripts/release/run-goreleaser-cross.sh") {
+		t.Fatal("official release workflow must use the pinned CGO cross-release wrapper")
+	}
+	if strings.Contains(buildSection, "goreleaser/goreleaser-action") {
+		t.Fatal("official release workflow must not bypass the pinned cross toolchain")
+	}
+
+	ciWorkflow := read(".github/workflows/ci.yml")
+	for _, required := range []string{
+		"filename.startsWith('internal/msgcrypto/')",
+		"filename.startsWith('third_party/safechat-go-sdk/')",
+		"- name: Compile SafeChat release matrix",
+		"./scripts/release/run-goreleaser-cross.sh build --snapshot --clean --parallelism=2",
+		"go run ./scripts/build/linux-abi dist/*_linux_*/dws",
+		"ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214",
+		`"C:\mingw64\bin\gcc.exe" --version`,
+	} {
+		if !strings.Contains(ciWorkflow, required) {
+			t.Errorf("CI SafeChat release coverage is missing %q", required)
+		}
+	}
+
+	verifier := read("scripts/release/verify-release-artifacts.sh")
+	for _, required := range []string{
+		`go version -m "$binary"`,
+		"CGO_ENABLED=1",
+		"safechat-go-sdk",
+		`go run ./scripts/build/linux-abi "$binary" "$library"`,
+	} {
+		if !strings.Contains(verifier, required) {
+			t.Errorf("release artifact verifier is missing SafeChat assertion %q", required)
+		}
+	}
+}
+
+// TestReleaseCrossCompilerEnvCoversEveryTarget pins that the CC/CXX templates
+// resolve to a real compiler for every target in the release matrix. They read
+// CC_<os>_<arch> out of the same env list, so a target added without its
+// compiler entries would resolve to an empty CC and silently fall back to the
+// host toolchain under CGO.
+func TestReleaseCrossCompilerEnvCoversEveryTarget(t *testing.T) {
+	t.Parallel()
+
+	configPath, err := filepath.Abs(filepath.Join("..", "..", ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", configPath, err)
+	}
+	var config struct {
+		Builds []struct {
+			Env    []string `yaml:"env"`
+			Goos   []string `yaml:"goos"`
+			Goarch []string `yaml:"goarch"`
+		} `yaml:"builds"`
+	}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("parse .goreleaser.yaml: %v", err)
+	}
+	if len(config.Builds) != 1 {
+		t.Fatalf("expected exactly one build, got %d", len(config.Builds))
+	}
+	build := config.Builds[0]
+
+	for _, want := range []string{
+		`CC={{ index .Env (print "CC_" .Os "_" .Arch) }}`,
+		`CXX={{ index .Env (print "CXX_" .Os "_" .Arch) }}`,
+	} {
+		if !slices.Contains(build.Env, want) {
+			t.Errorf("build env is missing the per-target compiler template %q", want)
+		}
+	}
+
+	declared := make(map[string]bool, len(build.Env))
+	for _, entry := range build.Env {
+		name, _, _ := strings.Cut(entry, "=")
+		declared[name] = true
+	}
+	for _, goos := range build.Goos {
+		for _, goarch := range build.Goarch {
+			for _, prefix := range []string{"CC_", "CXX_"} {
+				if name := prefix + goos + "_" + goarch; !declared[name] {
+					t.Errorf("build env does not declare %s, so %s/%s resolves to an empty compiler", name, goos, goarch)
+				}
+			}
+		}
+	}
+}
+
+// TestReleaseCrossCompilerEnvMatchesWrapper pins that the cross-toolchain wrapper
+// hands the container the same CC_/CXX_ values .goreleaser.yaml declares, for
+// every target in the release matrix. The templates resolve through .Env, so the
+// container process environment is what actually supplies them; comparing the two
+// sources per target means neither can drift into an empty compiler, and a target
+// added to the matrix without a matching wrapper export fails here.
+func TestReleaseCrossCompilerEnvMatchesWrapper(t *testing.T) {
+	t.Parallel()
+
+	read := func(rel string) string {
+		t.Helper()
+		path, err := filepath.Abs(filepath.Join("..", "..", rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", rel, err)
+		}
+		return string(data)
+	}
+
+	var config struct {
+		Builds []struct {
+			Env    []string `yaml:"env"`
+			Goos   []string `yaml:"goos"`
+			Goarch []string `yaml:"goarch"`
+		} `yaml:"builds"`
+	}
+	if err := yaml.Unmarshal([]byte(read(".goreleaser.yaml")), &config); err != nil {
+		t.Fatalf("parse .goreleaser.yaml: %v", err)
+	}
+	if len(config.Builds) != 1 {
+		t.Fatalf("expected exactly one build, got %d", len(config.Builds))
+	}
+	build := config.Builds[0]
+
+	declared := make(map[string]string, len(build.Env))
+	for _, entry := range build.Env {
+		if name, value, found := strings.Cut(entry, "="); found {
+			declared[name] = value
+		}
+	}
+
+	wrapper := read(filepath.Join("scripts", "release", "run-goreleaser-cross.sh"))
+	if !strings.Contains(wrapper, `env_args+=(--env "$entry")`) {
+		t.Error("wrapper does not forward its compiler_env entries to docker run")
+	}
+	exported := make(map[string]string)
+	for _, line := range strings.Split(wrapper, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, `"CC_`) && !strings.HasPrefix(line, `"CXX_`) {
+			continue
+		}
+		entry := strings.Trim(line, `"`)
+		name, value, found := strings.Cut(entry, "=")
+		if !found {
+			t.Errorf("wrapper compiler entry %q carries no value", entry)
+			continue
+		}
+		exported[name] = value
+	}
+
+	for _, goos := range build.Goos {
+		for _, goarch := range build.Goarch {
+			for _, prefix := range []string{"CC_", "CXX_"} {
+				name := prefix + goos + "_" + goarch
+				want, ok := declared[name]
+				if !ok || want == "" {
+					t.Errorf(".goreleaser.yaml declares no %s value for %s/%s", name, goos, goarch)
+					continue
+				}
+				got, ok := exported[name]
+				if !ok {
+					t.Errorf("wrapper does not export %s, so the container environment cannot resolve %s/%s", name, goos, goarch)
+					continue
+				}
+				if got != want {
+					t.Errorf("%s differs between wrapper and config: wrapper=%q config=%q", name, got, want)
+				}
+			}
+		}
 	}
 }
 

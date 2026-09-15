@@ -42,12 +42,12 @@ var sensitiveKeys = map[string]bool{
 	"api_key":                     true,
 	"api-key":                     true,
 	"access_token":                true,
-	"credential":                  true,
 	"dwsauthcode":                 true,
 	"dws_auth_code":               true,
 	"dws-auth-code":               true,
 	"auth_code":                   true,
 	"auth-code":                   true,
+	"credential":                  true,
 	"configstring":                true,
 	"config_string":               true,
 	"config-string":               true,
@@ -59,8 +59,7 @@ var sensitiveKeys = map[string]bool{
 	"uploadurl":                   true,
 	"upload_url":                  true,
 	"upload-url":                  true,
-	// Message bodies may arrive through stdin machine protocols; transport
-	// logs must not retain message or approval content.
+	// 消息正文可能来自 stdin 机器协议；传输日志不得记录正文或审批内容。
 	"content": true,
 	"text":    true,
 }

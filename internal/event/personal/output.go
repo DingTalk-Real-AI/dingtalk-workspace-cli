@@ -122,6 +122,117 @@ type GroupLifecycleEventOutput struct {
 	Payload     map[string]any `json:"payload" description:"群生命周期事件业务数据，字段以服务端实际推送为准" additional_properties:"true"`
 }
 
+// CardActionEventOutput preserves the interactive-card callback payload at
+// runtime so reviewed fields and future business extensions survive unchanged.
+// Its schema is described separately by cardActionSchemaOutput.
+type CardActionEventOutput struct {
+	Type        string         `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string         `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64          `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID string         `json:"subscribe_id" description:"订阅 ID"`
+	Payload     map[string]any `json:"payload" description:"互动卡片回调业务数据，字段以服务端实际推送为准" additional_properties:"true"`
+}
+
+// cardActionSchemaOutput describes the reviewed shape observed in real card
+// callbacks. Runtime projection deliberately continues to use
+// CardActionEventOutput so fields added by the card business are preserved.
+type cardActionSchemaOutput struct {
+	Type        string                  `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID     string                  `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp   int64                   `json:"timestamp" description:"事件中心事件时间戳" format:"timestamp_ms"`
+	SubscribeID string                  `json:"subscribe_id" description:"订阅 ID"`
+	Payload     cardActionPayloadSchema `json:"payload" description:"互动卡片回调业务数据；保留未声明的扩展字段" additional_properties:"true"`
+}
+
+type openCardSchemaObject struct{}
+
+type cardActionPayloadSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	Body             cardActionBodySchema `json:"body" description:"互动卡片操作回调正文" additional_properties:"true"`
+	EventTime        int64                `json:"event_time" description:"卡片回调业务事件时间戳" format:"timestamp_ms"`
+}
+
+type cardActionBodySchema struct {
+	SchemaExtensions       openCardSchemaObject                `json:"-" additional_properties:"true"`
+	ActionData             cardActionDataSchema                `json:"actionData" description:"结构化卡片操作数据" additional_properties:"true"`
+	BizInfoDTO             cardActionBizInfoSchema             `json:"bizInfoDTO" description:"卡片业务标识" additional_properties:"true"`
+	Context                cardActionStringContextSchema       `json:"context" description:"字符串化兼容上下文；结构化读取优先使用 actionData.context" additional_properties:"true"`
+	ConversationContextDTO cardActionConversationContextSchema `json:"conversationContextDTO" description:"卡片所在会话上下文" additional_properties:"true"`
+	Extension              map[string]string                   `json:"extension" description:"卡片扩展字段；值可能是 JSON 字符串，应按需解析"`
+	OperatorDTO            cardActionOperatorSchema            `json:"operatorDTO" description:"触发卡片操作的用户信息" additional_properties:"true"`
+	SpaceID                string                              `json:"spaceId" description:"卡片所在空间标识；保持原值，不拆解"`
+	SpaceType              string                              `json:"spaceType" description:"卡片所在空间类型，例如 im_single"`
+	TriggerTimestamp       int64                               `json:"triggerTimestamp" description:"客户端触发卡片操作的时间戳" format:"timestamp_ms"`
+}
+
+type cardActionDataSchema struct {
+	SchemaExtensions openCardSchemaObject    `json:"-" additional_properties:"true"`
+	Context          cardActionContextSchema `json:"context" description:"首选的结构化卡片业务上下文" additional_properties:"true"`
+}
+
+type cardActionContextSchema struct {
+	SchemaExtensions        openCardSchemaObject              `json:"-" additional_properties:"true"`
+	Answers                 map[string]cardActionAnswerSchema `json:"answers" description:"按问题 ID 索引的回答"`
+	CreateUID               string                            `json:"createUid" description:"上下文创建用户 UID；按服务端原始字符串保留"`
+	OrgID                   string                            `json:"orgId" description:"上下文组织 ID；按服务端原始字符串保留"`
+	Outcome                 string                            `json:"outcome" description:"卡片交互结果，例如 answered；不限定枚举"`
+	Questions               []cardActionQuestionSchema        `json:"questions" description:"卡片问题定义；通过 id 与 answers 的键关联"`
+	SourceProjectionVersion string                            `json:"sourceProjectionVersion" description:"来源投影协议版本"`
+	SourceTurnID            string                            `json:"sourceTurnId" description:"触发该卡片的来源回合 ID"`
+}
+
+type cardActionAnswerSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	Custom           string               `json:"custom,omitempty" description:"用户填写的自定义答案；空字符串表示未填写"`
+	Selected         []string             `json:"selected" description:"用户选择的选项 ID；空数组是合法的未选择状态"`
+}
+
+type cardActionQuestionSchema struct {
+	SchemaExtensions openCardSchemaObject     `json:"-" additional_properties:"true"`
+	AllowCustom      bool                     `json:"allowCustom" description:"是否允许输入自定义答案"`
+	Header           string                   `json:"header" description:"问题标题"`
+	ID               string                   `json:"id" description:"问题 ID；用于索引 answers"`
+	InputKind        string                   `json:"inputKind,omitempty" description:"特殊输入类型，例如 person；不限定枚举"`
+	Options          []cardActionOptionSchema `json:"options" description:"问题选项"`
+	Prompt           string                   `json:"prompt" description:"问题提示文案"`
+	Selection        string                   `json:"selection" description:"选择模式，例如 single 或 multiple；不限定枚举"`
+}
+
+type cardActionOptionSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	Description      string               `json:"description,omitempty" description:"选项说明"`
+	ID               string               `json:"id" description:"选项 ID；与 answers.selected 中的值关联"`
+	Label            string               `json:"label" description:"选项展示文本"`
+}
+
+type cardActionBizInfoSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	AppKey           string               `json:"appKey" description:"产生卡片回调的业务应用标识"`
+	BizID            string               `json:"bizId" description:"卡片业务 ID"`
+}
+
+type cardActionStringContextSchema struct {
+	SchemaExtensions        openCardSchemaObject `json:"-" additional_properties:"true"`
+	Answers                 string               `json:"answers" description:"answers 的 JSON 字符串兼容副本"`
+	CreateUID               string               `json:"createUid" description:"上下文创建用户 UID 字符串"`
+	OrgID                   string               `json:"orgId" description:"上下文组织 ID 字符串"`
+	Outcome                 string               `json:"outcome" description:"卡片交互结果字符串"`
+	Questions               string               `json:"questions" description:"questions 的 JSON 字符串兼容副本"`
+	SourceProjectionVersion string               `json:"sourceProjectionVersion" description:"来源投影协议版本"`
+	SourceTurnID            string               `json:"sourceTurnId" description:"触发该卡片的来源回合 ID"`
+}
+
+type cardActionConversationContextSchema struct {
+	SchemaExtensions openCardSchemaObject `json:"-" additional_properties:"true"`
+	CID              string               `json:"cid" description:"卡片所在会话标识；保持原值，不拆解"`
+}
+
+type cardActionOperatorSchema struct {
+	SchemaExtensions  openCardSchemaObject `json:"-" additional_properties:"true"`
+	OperatorUserAgent string               `json:"operatorUserAgent" description:"触发操作的客户端 User-Agent，仅用于必要诊断"`
+	UID               int64                `json:"uid" description:"触发卡片操作的用户 UID"`
+}
+
 type OAApprovalTaskCreatedOutput struct {
 	Type              string `json:"type" description:"事件类型，固定为当前 event_key"`
 	EventID           string `json:"event_id" description:"事件 ID，可用于去重"`
@@ -656,8 +767,8 @@ func (b *personalGroupMemberBody) UnmarshalJSON(data []byte) error {
 }
 
 // ProjectOutput converts the transport envelope into the stable personal
-// event output. On malformed VoIP data it returns metadata-only output so
-// sensitive invitation fields cannot leak through the projection fallback;
+// event output. On malformed VoIP or card data it returns a safe typed output
+// so sensitive transport fields cannot leak through the projection fallback;
 // legacy event families keep their original-envelope fallback behavior.
 func ProjectOutput(ev transport.Event) (any, error) {
 	data, err := decodePersonalEventData(ev.Data)
@@ -668,6 +779,15 @@ func ProjectOutput(ev transport.Event) (any, error) {
 				EventID:     ev.EventID,
 				Timestamp:   ev.EventBornTime,
 				SubscribeID: ev.SubscribeID,
+			}, fmt.Errorf("decode personal event data: %w", err)
+		}
+		if isCardActionEvent(ev.EventType) {
+			return CardActionEventOutput{
+				Type:        ev.EventType,
+				EventID:     ev.EventID,
+				Timestamp:   ev.EventBornTime,
+				SubscribeID: ev.SubscribeID,
+				Payload:     map[string]any{},
 			}, fmt.Errorf("decode personal event data: %w", err)
 		}
 		return ev, fmt.Errorf("decode personal event data: %w", err)
@@ -736,6 +856,24 @@ func ProjectOutput(ev transport.Event) (any, error) {
 			return ev, fmt.Errorf("decode personal group lifecycle payload: %w", err)
 		}
 		return GroupLifecycleEventOutput{
+			Type:        base.Type,
+			EventID:     base.EventID,
+			Timestamp:   base.Timestamp,
+			SubscribeID: base.SubscribeID,
+			Payload:     payload,
+		}, nil
+	case isCardActionEvent(eventType):
+		payload, err := decodeConservativePayload(data.Payload)
+		if err != nil {
+			return CardActionEventOutput{
+				Type:        base.Type,
+				EventID:     base.EventID,
+				Timestamp:   base.Timestamp,
+				SubscribeID: base.SubscribeID,
+				Payload:     map[string]any{},
+			}, fmt.Errorf("decode personal card action payload: %w", err)
+		}
+		return CardActionEventOutput{
 			Type:        base.Type,
 			EventID:     base.EventID,
 			Timestamp:   base.Timestamp,
@@ -881,7 +1019,9 @@ func decodeConservativePayload(raw json.RawMessage) (map[string]any, error) {
 		return nil, fmt.Errorf("payload is missing")
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(trimmed, &payload); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, err
 	}
 	if len(payload) == 0 {
@@ -1187,10 +1327,14 @@ func schemaForStruct(t reflect.Type) map[string]any {
 		t = t.Elem()
 	}
 	properties := make(map[string]any, t.NumField())
+	additionalProperties := false
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "" || name == "-" {
+			if field.Tag.Get("additional_properties") == "true" {
+				additionalProperties = true
+			}
 			continue
 		}
 		property := schemaForType(field.Type)
@@ -1205,10 +1349,14 @@ func schemaForStruct(t reflect.Type) map[string]any {
 		}
 		properties[name] = property
 	}
-	return map[string]any{
+	schema := map[string]any{
 		"type":       "object",
 		"properties": properties,
 	}
+	if additionalProperties {
+		schema["additionalProperties"] = true
+	}
+	return schema
 }
 
 func schemaForType(t reflect.Type) map[string]any {
@@ -1223,6 +1371,14 @@ func schemaForType(t reflect.Type) map[string]any {
 			"type":  "array",
 			"items": schemaForType(t.Elem()),
 		}
+	case reflect.Map:
+		schema := map[string]any{"type": "object"}
+		if t.Key().Kind() != reflect.String || t.Elem().Kind() == reflect.Interface {
+			schema["additionalProperties"] = true
+		} else {
+			schema["additionalProperties"] = schemaForType(t.Elem())
+		}
+		return schema
 	default:
 		return map[string]any{"type": schemaType(t)}
 	}
@@ -1275,6 +1431,8 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(GroupMemberEventOutput{})
 	case isGroupLifecycleEvent(eventKey):
 		return reflect.TypeOf(GroupLifecycleEventOutput{})
+	case isCardActionEvent(eventKey):
+		return reflect.TypeOf(cardActionSchemaOutput{})
 	case eventKey == EventOAApprovalTaskCreated:
 		return reflect.TypeOf(OAApprovalTaskCreatedOutput{})
 	case eventKey == EventOAApprovalTaskFinished:
@@ -1321,6 +1479,10 @@ func isGroupMemberEvent(eventKey string) bool {
 func isGroupLifecycleEvent(eventKey string) bool {
 	return eventKey == EventGroupUpdated ||
 		eventKey == EventGroupDisbanded
+}
+
+func isCardActionEvent(eventKey string) bool {
+	return eventKey == EventCardAction
 }
 
 func isOAEvent(eventKey string) bool {
