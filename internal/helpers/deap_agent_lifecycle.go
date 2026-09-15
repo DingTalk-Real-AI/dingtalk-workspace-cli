@@ -325,7 +325,7 @@ func runEmployeeUnbind(cmd *cobra.Command) (runErr error) {
 		return writeDWSMachineEnvelope(cmd, employeeLifecycleStatus(cmd.Context(), b))
 	}
 	if b.RuntimeBindingID == "" {
-		return fmt.Errorf("旧版连接缺少 runtimeBindingId，请先 connect stop，再用 connect 补齐绑定后解绑")
+		return fmt.Errorf("绑定记录缺少 runtimeBindingId，无法确认解绑目标；请核对服务端绑定记录")
 	}
 	op := employeeBindingOperation{ID: uuid.NewString(), Action: "unbind", FromRevision: b.BindingRevision}
 	if previous, err := os.ReadFile(filepath.Join(dir, "operation.json")); err == nil {

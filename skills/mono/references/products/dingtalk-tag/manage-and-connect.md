@@ -2,7 +2,7 @@
 
 ## 服务端设备绑定
 
-connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。旧版连接先停止，再用 `dws dingtalk-tag connect --agent-uuid <agentUuid> --channel <原Agent> --dry-run --format json` 预览；确认后去掉 dry-run 并加 --yes，补齐绑定并接入。
+connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。使用 `--dry-run --format json` 预览，确认后去掉 dry-run 并加 --yes。
 
 设备 ID 缺省随机生成并在当前配置目录长期保存，也可显式传 `--device-id`；不要复制设备配置到另一台机器。`--local-agent-name` 可选，`--extensions` 传字符串。主管身份由网关注入，不传 identity/userId/orgId。
 
@@ -10,7 +10,7 @@ connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。�
 
 换 Agent 或设备均先解绑，再 connect 并保存新的服务端 ID。unbind 携带保存的 ID，成功后保留历史回执，重复解绑不解除后继绑定。有在途或待恢复任务时服务端拒绝；保留旧 ID，不启动新 Agent。status/list 新增的 serverBindingState 仅是本地回执，不证明服务端当前绑定或在线。
 
-结果未知的 bind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先停止，再 connect 补齐绑定；之后可 unbind；只保存 Profile 使用 `manage login`。
+结果未知的 bind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。只保存 Profile 使用 `manage login`。
 
 ## 接入普通本地 Agent
 
@@ -99,3 +99,5 @@ dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh --yes --format j
 3. 创建并记录 `agentUuid`。
 4. 补全草稿并发布；任何阶段失败都报告 `agentUuid` 与下一条恢复命令。
 5. 发布成功后单独执行 connect；connect 失败不回滚已发布员工。
+
+connect 的未知子命令只提示查看 `connect --help`，不推荐其他生命周期操作。发布详情查询失败时保留实际网络、权限或服务端错误；只有查询成功且发布数据为空时才提示尚未发布。

@@ -145,36 +145,3 @@ func TestCrossPlatformCoverageEmployeeUnbindThenConnect(t *testing.T) {
 		})
 	}
 }
-
-func TestCrossPlatformCoverageEmployeeConnectMigratesLegacyBinding(t *testing.T) {
-	setupSuccessfulConnectSeams(t)
-	testseam.Swap(t, &deapConnectSaveBinding, saveDigitalEmployeeBinding)
-	b := digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "agent-1", DWSProfile: "employee-corp:employee-user", Channel: "dsh", OperatorOpenDingTalkID: "operator-open", BindingRevision: 7, BindingState: "bound", DesiredState: "stopped"}
-	if err := updateEmployeeBinding(b); err != nil {
-		t.Fatal(err)
-	}
-	caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
-	InitDepsForTest(t, caller)
-	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
-		return employeeDSHState{Released: true, RuntimeState: "stopped"}, nil
-	})
-	cmd := newConnectTestCommand(t, true)
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	if len(caller.tokenCalls) != 0 {
-		t.Fatal("预览调用了服务端")
-	}
-	current, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-	if err != nil || current != b {
-		t.Fatal("预览改写了旧绑定")
-	}
-	cmd = newConnectTestCommand(t, false)
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	current, err = loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-	if err != nil || current.RuntimeBindingID != "binding-created" || current.DeviceID == "" || current.BindingRevision != 7 {
-		t.Fatalf("旧连接补登记失败: %+v %v", current, err)
-	}
-}
