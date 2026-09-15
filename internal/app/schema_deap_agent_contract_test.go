@@ -4,7 +4,9 @@
 package app
 
 import (
+	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -269,6 +271,40 @@ func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 		}
 		if schemaContractMap(tool["parameters"])["agent-uuid"]["required"] != true {
 			t.Errorf("%s agent-uuid must be required in final Schema", canonical)
+		}
+	}
+}
+
+func TestDeapAgentMCPAutoMountHelpAndFinalSchema(t *testing.T) {
+	root := NewRootCommand()
+	cmd, args, err := root.Find([]string{"dingtalk-tag", "capability", "mcp", "create"})
+	if err != nil || len(args) != 0 {
+		t.Fatalf("create resolution: %v %v", args, err)
+	}
+	var help bytes.Buffer
+	cmd.SetOut(&help)
+	if err := cmd.Help(); err != nil {
+		t.Fatalf("render create help: %v", err)
+	}
+	payload := schemaContractPayloadForBoundCanonicals(t, root, "dingtalk-tag.create_mcp")
+	tool := payload.Tools["dingtalk-tag.create_mcp"]
+	for surface, description := range map[string]string{
+		"help": help.String(), "final schema": schemaContractString(tool["description"]),
+	} {
+		for _, want := range []string{"自动追加", "selectedSkills", "保留已有选择", "不克隆", "不自动发布", "stage=query_created_mcp", "stage=mount_draft", "禁止重复 create", "串行", "仅升级 CLI"} {
+			if !strings.Contains(description, want) {
+				t.Errorf("%s missing %q", surface, want)
+			}
+		}
+		if strings.Contains(description, "不自动挂载") {
+			t.Errorf("%s retains stale no-mount guidance", surface)
+		}
+	}
+	for field, want := range map[string]string{
+		"effect": "write", "risk": "high", "confirmation": "user_required", "idempotency": "unknown",
+	} {
+		if got := schemaContractString(tool[field]); got != want {
+			t.Errorf("%s = %q, want %q", field, got, want)
 		}
 	}
 }

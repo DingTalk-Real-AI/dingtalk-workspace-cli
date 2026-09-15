@@ -6,7 +6,7 @@ DingTalk Tag 数字员工的管理、执行查询和能力资源命令，命令�
 |---|---|---|---|
 | 管理态：创建 / 详情 / 列表 / 数字员工 DWS 登录 / 草稿覆写 / 发布 / 删除 | `dws dingtalk-tag manage` | 登录会安全保存独立 Profile；其余含高影响写与不可逆删除 | [`manage.md`](./manage.md) |
 | 执行态：执行状态 / 执行 trace | `dws dingtalk-tag run` | 全部只读；trace 含完整对话内容 | [`run.md`](./run.md) |
-| 能力资源：Skill / MCP 创建与查询 | `dws dingtalk-tag capability` | 创建为高影响写；资源不会自动关联数字员工 | [`capability.md`](./capability.md) |
+| 能力资源：Skill / MCP 创建与查询 | `dws dingtalk-tag capability` | 创建为高影响写；MCP 创建自动挂载草稿、不自动发布 | [`capability.md`](./capability.md) |
 | 本地接入：已有已发布员工接入本地 Agent/DSH | `dws dingtalk-tag connect` | 受管换票、设备绑定与本地 Agent 运行或 DSH 幂等注册 | [`manage-and-connect.md`](./manage-and-connect.md) |
 
 ## 意图路由

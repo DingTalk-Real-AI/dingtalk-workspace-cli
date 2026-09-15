@@ -382,7 +382,7 @@ func newDeapCapabilityCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "capability",
 		Short:             "数字员工能力资源管理",
-		Long:              "创建和查询可配置到数字员工草稿的 Skill/MCP 能力资源。资源创建后不会自动关联数字员工；关联关系由 manage save-draft 的 skills/mcps 配置负责。",
+		Long:              "创建和查询目标数字员工的 Skill/MCP 能力资源。MCP create 成功会自动追加到草稿 selectedSkills，不自动发布；manage save-draft 用于调整已有资源的选择、启用状态和配置。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -397,7 +397,7 @@ func newDeapAgentSkillCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "skill",
 		Short:             "管理数字员工 Skill",
-		Long:              "创建和查询独立 Skill 资源。Skill 与数字员工的关联由 save-draft skills 配置负责。",
+		Long:              "创建和查询目标数字员工域的 Skill 资源及引用。创建后查询 draft 确认回显；save-draft skills 可调整选择和配置，不自动发布。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -412,7 +412,7 @@ func newDeapAgentMCPCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "mcp",
 		Short:             "管理数字员工 MCP",
-		Long:              "创建和查询独立 MCP 资源。敏感配置通过本地 JSON 文件传入；与数字员工的关联由 save-draft mcps 配置负责。",
+		Long:              "创建和查询目标数字员工域的 MCP。create 成功会自动追加原 mcpId 到草稿 selectedSkills，保留已有选择，不克隆、不自动发布。敏感配置通过本地 JSON 文件传入。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -537,8 +537,8 @@ func newDeapAgentSkillQueryCommand() *cobra.Command {
 
 func newDeapAgentMCPCreateCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
-		Use: "create", Short: "创建 MCP 资源",
-		Long: "从本地 JSON 对象文件在目标数字员工资源域创建 MCP，不自动挂载或发布。文件根节点必须包含 name 和 configString；CLI 将配置字段展开到 create_mcp 工具根节点，不包装 config。凭据不会进入 argv。",
+		Use: "create", Short: "创建 MCP 并自动挂载到员工草稿",
+		Long: "从本地 JSON 对象文件在目标数字员工资源域创建 MCP。服务端依次校验、创建、查询，再将原 mcpId 自动追加到草稿 selectedSkills 并回读确认，保留已有选择，不克隆、不自动发布。文件根节点必须包含 name 和 configString；CLI 将配置字段展开到 create_mcp 工具根节点，不包装 config。凭据不会进入 argv。若失败信息含 stage=query_created_mcp 或 stage=mount_draft，保留已创建的 mcpId，先查询资源和 draft，必要时按原 ID save-draft 恢复，禁止重复 create。同一员工的创建、保存和发布应串行执行。此语义依赖已部署自动挂载实现的 OpenAPI 与保留未传字段的 Studio saveDraft；仅升级 CLI 不会改变旧服务端行为。",
 		Tool: deapAgentMCPCreateTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
@@ -548,9 +548,9 @@ func newDeapAgentMCPCreateCommand() *cobra.Command {
 		Call:   deapAgentCallMCPCreateFromFile,
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentMCPCreateTool, CanonicalPath: "dingtalk-tag.create_mcp", CLIPath: "dingtalk-tag capability mcp create", PrimaryCLIPath: "dingtalk-tag capability mcp create", Group: "capability.mcp"},
-			Description: "通过本地 JSON 文件安全传入根节点 name/configString 等字段，在 agentUuid 员工域创建 MCP，不自动挂载。",
+			Description: "通过本地 JSON 文件传入 name/configString，在 agentUuid 员工域创建 MCP 并自动追加到草稿 selectedSkills；保留已有选择，不克隆、不自动发布。失败时按 stage 和已创建 mcpId 查询恢复，禁止重复 create。",
 			DryRun:      deapAgentDryRun, Interface: deapAgentMCPInterface(deapAgentMCPCreateTool),
-			Selection: contract.SelectionSpec{AgentSummary: "从本地配置文件为指定数字员工创建 MCP 资源", UseWhen: []string{"已知 agentUuid，需要注册新的 MCP 定义和鉴权配置并取得 mcpId 时"}, AvoidWhen: []string{"只需查询现有 MCP 时使用 capability mcp list 或 capability mcp query", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --dry-run --format json"}},
+			Selection: contract.SelectionSpec{AgentSummary: "为指定数字员工创建 MCP 并自动挂载草稿，不自动发布", UseWhen: []string{"已知 agentUuid，需要新增 MCP 定义和鉴权配置、取得 mcpId 并加入员工草稿时"}, AvoidWhen: []string{"只需查询现有 MCP 时使用 capability mcp list 或 capability mcp query", "已创建资源但草稿挂载未确认时先查询并按原 mcpId 恢复，不要重复 create", "不要把凭据直接拼进命令行"}, Examples: []string{"dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --dry-run --format json"}},
 			Parameters: []contract.ParamDecl{
 				{Name: "agent-uuid", Property: "agentUuid", InterfaceType: "string"},
 				{Name: "config-file", Description: "本地 JSON 文件，字段展开到工具根节点，不对应单个 config 属性"},
@@ -562,7 +562,7 @@ func newDeapAgentMCPCreateCommand() *cobra.Command {
 func newDeapAgentMCPListCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "list", Short: "查询 MCP 资源列表",
-		Long: "查询目标数字员工 agentUuid 资源域的 MCP 列表和服务端脱敏配置，不是企业公共资源列表。任何凭据都不得出现在响应中。",
+		Long: "查询目标数字员工 agentUuid 资源域的 MCP 列表和服务端脱敏配置，不是企业公共资源列表。资源存在不代表当前仍被选中或已发布；草稿选择和发布结果需分别查询 manage detail --type draft/published。任何凭据都不得出现在响应中。",
 		Tool: deapAgentMCPListTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
@@ -583,7 +583,7 @@ func newDeapAgentMCPListCommand() *cobra.Command {
 func newDeapAgentMCPQueryCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use: "query", Short: "查询 MCP 资源详情",
-		Long: "按 agentUuid 和该员工域的 mcpId 查询 MCP 定义、工具解析结果和服务端脱敏配置，不跨员工或企业资源域回退。响应不得包含密钥、Token 或临时签名地址。",
+		Long: "按 agentUuid 和该员工域的 mcpId 查询 MCP 定义、工具解析结果和服务端脱敏配置，不跨员工或企业资源域回退。资源存在不代表当前仍被选中或已发布；草稿选择和发布结果需分别查询 manage detail --type draft/published。响应不得包含密钥、Token 或临时签名地址。",
 		Tool: deapAgentMCPQueryTool, Server: deapAgentServerID, PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "目标数字员工 UUID（MCP 资源 tenant）", Bind: "agentUuid", Required: true, Trim: true},
