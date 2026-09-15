@@ -494,6 +494,45 @@ func TestCrossPlatformCoverageChatDecryptWiringScopedReactionSingleDecrypt(t *te
 	})
 }
 
+func TestCrossPlatformCoverageChatDecryptWiringScopedIncompleteKeepsDecryptLedger(t *testing.T) {
+	chatmsg.SwapMessageDecryptClientForTest(t, chatDecryptGateClient())
+	freshCreateTime := time.Now().Add(-time.Minute).UnixMilli()
+	caller := &chatDecryptWireCaller{
+		stubs: map[string]string{
+			"list_messages_by_ids": `{"list":[
+				{"openMsgId":"m-enc","openConversationId":"cid-wire","content":"` + chatDecryptGateCiphertext + `","emotionReplyList":[{"emoji":"👍","user":"u1"}]}]}`,
+			"get_message_crypto_policy":   chatDecryptWirePolicy,
+			"batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"m-enc","conversationId":"cid-wire","status":"failed","reason":"bad_key"}]}}`,
+		},
+		listPages: []string{`{"list":[
+			{"openMessageId":"m-enc","openConversationId":"cid-wire","sender":"小明","createTime":` + strconv.FormatInt(freshCreateTime, 10) + `,"msgType":"text","content":"` + chatDecryptGateCiphertext + `"}],
+			"hasMore":true,"nextCursor":"1757900100000"}`},
+		listErr: errors.New("page 2 read failed"),
+	}
+	run := runChatDecryptWireShortcut(t, SearchMsg, caller,
+		map[string]string{
+			"conversation-id": "cid-wire",
+			"start":           time.Now().Add(-time.Hour).Format(time.RFC3339),
+			"end":             time.Now().Format(time.RFC3339),
+		}, "has-reactions", "page-all")
+	if run.err == nil || !strings.Contains(run.err.Error(), "消息搜索未完成") {
+		t.Fatalf("expected the scoped incomplete error, got %v; raw=%s", run.err, run.raw)
+	}
+	// The scoped incomplete exit must still merge the non-empty decrypt
+	// ledger, so the payload reports decrypt failures alongside read failures.
+	chatDecryptWireCounter(t, run, "decryptCandidateCount", 1)
+	chatDecryptWireCounter(t, run, "decryptAllowedCount", 1)
+	chatDecryptWireCounter(t, run, "decryptedCount", 0)
+	chatDecryptWireCounter(t, run, "decryptFailedCount", 1)
+	failure := chatDecryptWireFirstFailure(t, run)
+	if failure["stage"] != "message-decrypt" || failure["messageId"] != "m-enc" || failure["reason"] != "bad_key" {
+		t.Fatalf("decrypt failure shape = %#v", failure)
+	}
+	if partial, _ := run.payload["partial"].(bool); !partial {
+		t.Fatalf("scoped read failure must keep partial=true; raw=%s", run.raw)
+	}
+}
+
 func TestCrossPlatformCoverageChatDecryptWiringAggregationPartialPreserved(t *testing.T) {
 	chatmsg.SwapMessageDecryptClientForTest(t, chatDecryptGateClient())
 	caller := &chatDecryptWireCaller{stubs: map[string]string{
