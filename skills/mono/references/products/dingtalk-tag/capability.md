@@ -17,14 +17,16 @@ Skill ZIP 最大 50 MiB，必须包含 `SKILL.md`。创建会先校验本地 ZIP
 ## MCP
 
 ```text
-dws dingtalk-tag capability mcp create --config-file ./mcp.json --dry-run --format json
+dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --dry-run --format json
 # 用户确认预览后：
-dws dingtalk-tag capability mcp create --config-file ./mcp.json --yes --format json
-dws dingtalk-tag capability mcp list --keywords <关键词> --page 1 --page-size 20 --format json
-dws dingtalk-tag capability mcp query --mcp-id <mcpId> --format json
+dws dingtalk-tag capability mcp create --agent-uuid <agentUuid> --config-file ./mcp.json --yes --format json
+dws dingtalk-tag capability mcp list --agent-uuid <agentUuid> --keywords <关键词> --page 1 --page-size 20 --format json
+dws dingtalk-tag capability mcp query --agent-uuid <agentUuid> --mcp-id <mcpId> --format json
 ```
 
-`mcp.json` 遵循 `McpConfigParam`，可包含 `name`、`description`、`detailIntro`、`userQuestionTips`、`configType`、`configString`、`envs`、`toolsDisabled`；文件最大 1 MiB。MCP 敏感配置必须放在本地 JSON 文件，不要直接拼进命令行或提交代码库。创建命令 `confirmation=user_required`；查询结果只返回脱敏信息。
+`mcp.json` 根节点必填非空字符串 `name`、`configString`，可选 `description`、`detailIntro`、`userQuestionTips`、`configType`、`envs`、`toolsDisabled`；文件最大 1 MiB。`configString` 是配置 JSON 的字符串，不是 JSON 对象；不要再包装一层 `config`。CLI 将这些字段直接展开到 MCP 工具根节点。文件不能放 `agentUuid` 或 `identity`；员工域只由必填的 `--agent-uuid` 指定，调用人身份仍来自所选 Profile。
+
+MCP 敏感配置必须放在本地 JSON 文件，不要直接拼进命令行或提交代码库。创建命令 `confirmation=user_required`；dry-run 不输出配置值，查询结果只返回脱敏信息。create/list/query 均针对同一员工域；创建得到的 mcpId 可直接在该员工下挂载，无需再克隆。资源存在不等于已选中或已发布。
 
 ## 关联到数字员工
 

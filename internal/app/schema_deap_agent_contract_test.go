@@ -213,15 +213,15 @@ func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 		},
 		"dingtalk-tag.create_mcp": {
 			"dingtalk-tag capability mcp create", "create_mcp", "available",
-			map[string]string{"config-file": "config"},
+			map[string]string{"agent-uuid": "agentUuid", "config-file": ""},
 		},
 		"dingtalk-tag.list_mcps": {
 			"dingtalk-tag capability mcp list", "list_mcps", "available",
-			map[string]string{"keywords": "keywords", "page": "page", "page-size": "pageSize"},
+			map[string]string{"agent-uuid": "agentUuid", "keywords": "keywords", "page": "page", "page-size": "pageSize"},
 		},
 		"dingtalk-tag.get_mcp_detail": {
 			"dingtalk-tag capability mcp query", "query_mcp", "available",
-			map[string]string{"mcp-id": "mcpId"},
+			map[string]string{"agent-uuid": "agentUuid", "mcp-id": "mcpId"},
 		},
 	}
 	canonicals := make([]string, 0, len(wants))
@@ -266,6 +266,9 @@ func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 			if got := schemaContractString(parameter["property"]); got != property {
 				t.Errorf("%s parameter %s property = %q, want %q", canonical, flagName, got, property)
 			}
+		}
+		if schemaContractMap(tool["parameters"])["agent-uuid"]["required"] != true {
+			t.Errorf("%s agent-uuid must be required in final Schema", canonical)
 		}
 	}
 }

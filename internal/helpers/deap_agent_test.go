@@ -482,9 +482,9 @@ func TestDevDeapAgentSkillAndMCPCommandsRouteFrozenContracts(t *testing.T) {
 	}{
 		{path: []string{"capability", "skill", "list"}, tool: "list_skills", flags: map[string]string{"agent-uuid": "agent-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "snapshot": "draft"}},
 		{path: []string{"capability", "skill", "query"}, tool: "query_skill", flags: map[string]string{"agent-uuid": "agent-1", "skill-id": "skill-1", "snapshot": "published"}, wantArgs: map[string]any{"agentUuid": "agent-1", "skillId": "skill-1", "snapshot": "published"}},
-		{path: []string{"capability", "mcp", "create"}, tool: "create_mcp", flags: map[string]string{"config-file": "./mcp.json"}, wantArgs: map[string]any{"config": map[string]any{"name": "weather", "description": "查询天气", "detailIntro": "天气 MCP", "userQuestionTips": []any{"请输入城市"}, "configType": "JSON", "configString": `{"url":"https://mcp.example.test","token":"secret"}`, "envs": map[string]any{"API_TOKEN": "env-secret"}, "toolsDisabled": map[string]any{"search": false}}}, confirmed: true},
-		{path: []string{"capability", "mcp", "list"}, tool: "list_mcps", flags: map[string]string{}, wantArgs: map[string]any{"keywords": "", "page": 1, "pageSize": 20}},
-		{path: []string{"capability", "mcp", "query"}, tool: "query_mcp", flags: map[string]string{"mcp-id": "mcp-1"}, wantArgs: map[string]any{"mcpId": "mcp-1"}},
+		{path: []string{"capability", "mcp", "create"}, tool: "create_mcp", flags: map[string]string{"agent-uuid": "agent-1", "config-file": "./mcp.json"}, wantArgs: map[string]any{"agentUuid": "agent-1", "name": "weather", "description": "查询天气", "detailIntro": "天气 MCP", "userQuestionTips": []any{"请输入城市"}, "configType": "JSON", "configString": `{"url":"https://mcp.example.test","token":"secret"}`, "envs": map[string]any{"API_TOKEN": "env-secret"}, "toolsDisabled": map[string]any{"search": false}}, confirmed: true},
+		{path: []string{"capability", "mcp", "list"}, tool: "list_mcps", flags: map[string]string{"agent-uuid": "agent-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "keywords": "", "page": 1, "pageSize": 20}},
+		{path: []string{"capability", "mcp", "query"}, tool: "query_mcp", flags: map[string]string{"agent-uuid": "agent-1", "mcp-id": "mcp-1"}, wantArgs: map[string]any{"agentUuid": "agent-1", "mcpId": "mcp-1"}},
 		{path: []string{"manage", "detail"}, tool: "get_digital_employee_detail", flags: map[string]string{"agent-uuid": "agent-1", "type": "published"}, wantArgs: map[string]any{"agentUuid": "agent-1", "type": "published"}},
 		{path: []string{"manage", "save-draft"}, tool: "update_digital_employee_draft", flags: map[string]string{"agent-uuid": "agent-1", "skills-file": "./skills.json", "mcps-file": "./mcps.json"}, wantArgs: map[string]any{"agentUuid": "agent-1", "skills": []any{map[string]any{"skillId": "skill-1", "enabled": true, "attributes": map[string]any{"configDefinitions": map[string]any{"city": "hangzhou"}}}}, "mcps": []any{map[string]any{"mcpId": "mcp-1", "enabled": true, "config": map[string]any{"credentialRef": "cred-1"}}}}, confirmed: true},
 	}
@@ -567,7 +567,7 @@ func TestDevDeapAgentConfigFilesStayRedactedInDryRun(t *testing.T) {
 		return output.String()
 	}
 
-	mcpOutput := run([]string{"capability", "mcp", "create"}, map[string]string{"config-file": "./mcp.json"})
+	mcpOutput := run([]string{"capability", "mcp", "create"}, map[string]string{"agent-uuid": "agent-1", "config-file": "./mcp.json"})
 	draftOutput := run([]string{"manage", "save-draft"}, map[string]string{"agent-uuid": "agent-1", "skills-file": "./skills.json", "mcps-file": "./mcps.json"})
 	for label, got := range map[string]string{"mcp create": mcpOutput, "save-draft": draftOutput} {
 		for _, secret := range []string{"mcp-secret", "env-secret", "skill-secret", "draft-secret"} {
