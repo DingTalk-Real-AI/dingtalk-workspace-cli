@@ -123,12 +123,12 @@ func resolveDigitalEmployeeChannel(cmd *cobra.Command) (string, error) {
 			return channel, nil
 		}
 	}
-	return "", fmt.Errorf("无法选择受支持的数字员工 Agent，请指定 --channel（%s）或 --profile-only；OpenClaw/Hermes 暂未适配", strings.Join(digitalEmployeeChannels(), "|"))
+	return "", fmt.Errorf("无法选择受支持的数字员工 Agent，请指定 --channel（%s）；只保存 Profile 请使用 dingtalk-tag manage login；OpenClaw/Hermes 暂未适配", strings.Join(digitalEmployeeChannels(), "|"))
 }
 
 func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 	if commandBoolFlag(cmd, "local-lease") {
-		if devAppStringFlag(cmd, "channel") != "dsh" || commandBoolFlag(cmd, "local-worker") || commandBoolFlag(cmd, "local-supervise") || commandBoolFlag(cmd, "profile-only") || commandBoolFlag(cmd, "daemon") || commandDryRun(cmd) {
+		if devAppStringFlag(cmd, "channel") != "dsh" || commandBoolFlag(cmd, "local-worker") || commandBoolFlag(cmd, "local-supervise") || commandBoolFlag(cmd, "daemon") || commandDryRun(cmd) {
 			return fmt.Errorf("invalid lease options")
 		}
 		return nil
@@ -137,21 +137,8 @@ func validateDigitalEmployeeAdapter(cmd *cobra.Command) error {
 		if commandBoolFlag(cmd, "local-worker") && commandBoolFlag(cmd, "local-supervise") {
 			return fmt.Errorf("invalid worker mode")
 		}
-		if commandBoolFlag(cmd, "profile-only") || commandBoolFlag(cmd, "daemon") || commandDryRun(cmd) {
+		if commandBoolFlag(cmd, "daemon") || commandDryRun(cmd) {
 			return fmt.Errorf("invalid internal worker options")
-		}
-		return nil
-	}
-	if commandBoolFlag(cmd, "profile-only") {
-		for _, flag := range employeeServerFlags() {
-			if cmd.Flags().Changed(flag.Name) {
-				return fmt.Errorf("--profile-only 不接受 --%s", flag.Name)
-			}
-		}
-		for _, name := range digitalEmployeeAdapterFlagNames() {
-			if cmd.Flags().Changed(name) {
-				return fmt.Errorf("--profile-only 不接受 --%s", name)
-			}
 		}
 		return nil
 	}

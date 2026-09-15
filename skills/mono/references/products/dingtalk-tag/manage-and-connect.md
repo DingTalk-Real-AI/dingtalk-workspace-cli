@@ -10,7 +10,7 @@ connect 在接入 Agent 前调用服务端 bind，返回 ID 后持久保存。�
 
 同设备只换 Agent 类型保留服务端 ID；更换设备标识时才调用 rebind。unbind 携带保存的 ID，成功后保留历史回执，重复解绑不解除后继绑定。有在途或待恢复任务时服务端拒绝；保留旧 ID，不启动新 Agent。status/list 新增的 serverBindingState 仅是本地回执，不证明服务端当前绑定或在线。
 
-结果未知的 bind/rebind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先 bind 补登记再 unbind/rebind；profile-only 不创建设备或绑定，也不接受绑定参数。
+结果未知的 bind/rebind 必须先由服务端核对，禁止自动重试；confirmed 回执但本地提交失败时重试原参数命令。已提交的新绑定启动失败使用 restart。旧版连接需要先 bind 补登记再 unbind/rebind；只保存 Profile 使用 `manage login`。
 
 ## 接入普通本地 Agent
 
@@ -70,14 +70,13 @@ dws dingtalk-tag manage delete --agent-uuid <agentUuid> --dry-run --format json
 ## 只保存已有数字员工的本地 Profile
 
 ```bash
-dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only --dry-run --format json
-# 用户确认后
-dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only --yes --format json
+dws dingtalk-tag manage login --agent-uuid <agentUuid> --dry-run --format json
+dws dingtalk-tag manage login --agent-uuid <agentUuid> --format json
 ```
 
-前置条件：draft 的 `mainProgramType` 必须是 `local_agent`，且 published 详情存在。该模式只获取一次性授权信息、执行受管换票并保存数字员工独立 Profile；它保持主管 Profile 当前激活，不查询 operator、不保存 DSH binding、不调用或重启 DSH。成功结果的 `status` 为 `profile_saved`、`profileOnly` 为 `true`、`restartRequired` 为 `false`。
+前置条件：published 详情存在。该命令只获取一次性授权信息、执行受管换票并保存数字员工独立 Profile；它保持主管 Profile 当前激活，不查询 operator、不保存 DSH binding、不调用或重启 DSH。
 
-`--profile-only` 与 `--channel` 不能同时使用。后续需要接入 DSH 时，单独执行下面的 DSH 模式；它会重新获取一次性授权信息并幂等注册。
+后续需要接入 DSH 时，单独执行下面的 DSH 模式；它会重新获取一次性授权信息并幂等注册。
 
 ## 接入已有数字员工到 DSH
 

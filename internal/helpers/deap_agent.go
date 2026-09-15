@@ -97,7 +97,7 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 				"A2A 或其他场景需要登录指定数字员工的 DWS",
 				"查数字员工某次执行的状态或完整模型链路",
 				"创建或查询可配置到数字员工草稿的 Skill/MCP 资源",
-				"把已有且已发布的 local_agent 数字员工接入 DSH 或其他支持的本地 Agent，或通过 profile-only 仅保存身份",
+				"把已有且已发布的 local_agent 数字员工接入 DSH 或其他支持的本地 Agent",
 			},
 			AvoidWhen: []string{
 				"开放平台应用、机器人配置与版本发布用 dev；普通企业消息收发用 chat",
@@ -107,7 +107,7 @@ func (deapHandler) Command(executor.Runner) *cobra.Command {
 	root := &cobra.Command{
 		Use:               "dingtalk-tag",
 		Short:             "DEAP 平台",
-		Long:              "钉钉数字员工命令组：manage 负责数字员工生命周期，并通过 login 为 A2A 或其他场景完成数字员工 DWS 登录和独立 Profile 落盘；run 负责执行状态与 trace，capability 负责 Skill/MCP 能力资源。connect 将已有且已发布的 local_agent 数字员工接入 DSH 或其他支持的本地 Agent，profile-only 仅保存身份，status/list/stop/restart/unbind 管理本机绑定；channel 提供受限机器协议。固定调用 MCP product/server deap-dev；identity.corpId/userId 由可信登录态注入且不对 CLI 暴露。端点跟随当前 MCP 环境自动选择规范网关；DINGTALK_DEAP_DEV_MCP_URL 仅用于本地调试覆盖。",
+		Long:              "钉钉数字员工命令组：manage 负责数字员工生命周期，并通过 login 为 A2A、仅保存 Profile 或其他场景完成数字员工 DWS 登录；run 负责执行状态与 trace，capability 负责 Skill/MCP 能力资源。connect 将已有且已发布的 local_agent 数字员工接入 DSH 或其他支持的本地 Agent，status/list/stop/restart/unbind 管理本机绑定；channel 提供受限机器协议。固定调用 MCP product/server deap-dev；identity.corpId/userId 由可信登录态注入且不对 CLI 暴露。端点跟随当前 MCP 环境自动选择规范网关；DINGTALK_DEAP_DEV_MCP_URL 仅用于本地调试覆盖。",
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
@@ -154,7 +154,7 @@ func newDeapAgentLoginCommand() *cobra.Command {
 		OutputRollout: output.RolloutUnifiedActive,
 		Use:           "login",
 		Short:         "登录数字员工的 DWS 并保存独立 Profile",
-		Long:          "按 agentUuid 为已发布数字员工完成一步登录：内部申请临时 AuthCode，使用同次响应中的 dwsClientId 换票，在线核验员工身份，并保存精确 corpId:userId Profile。命令不会输出 AuthCode 或 Token，也不会切换当前主管 Profile。单次使用通过 dws --profile <corpId:userId> <command>；需要切换默认账号时执行 dws profile use <corpId:userId>。适用于 A2A 或其他数字员工 DWS 登录场景，不绑定 local_agent、DSH 或 Bridge；企业接入本地 Agent/DSH 应使用 dws dingtalk-tag connect。",
+		Long:          "按 agentUuid 为已发布数字员工完成一步登录：内部申请临时 AuthCode，使用同次响应中的 dwsClientId 换票，在线核验员工身份，并保存精确 corpId:userId Profile。命令不会输出 AuthCode 或 Token，也不会切换当前主管 Profile。单次使用通过 dws --profile <corpId:userId> <command>；需要切换默认账号时执行 dws profile use <corpId:userId>。适用于 A2A、仅保存数字员工 Profile 或其他 DWS 登录场景，不绑定 local_agent、DSH 或 Bridge；企业接入本地 Agent/DSH 应使用 dws dingtalk-tag connect。",
 		PostMount:     deapAgentNoArgs,
 		Flags: []LeafFlag{
 			{Name: "agent-uuid", Usage: "数字员工 ID", Bind: "agentUuid", Required: true, Trim: true},
@@ -189,8 +189,8 @@ func newDeapAgentLoginCommand() *cobra.Command {
 			DryRun:      deapAgentDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "发布详情、DEAP 授权、DWS managed exchange、在线身份核验与本地 Profile 持久化的受控编排"},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "为 A2A 或其他场景登录指定数字员工的 DWS",
-				UseWhen:      []string{"已知 agentUuid，A2A 或其他场景需要登录该数字员工的 DWS"},
+				AgentSummary: "登录指定数字员工的 DWS 并保存独立 Profile",
+				UseWhen:      []string{"已知 agentUuid，A2A、仅保存 Profile 或其他场景需要登录该数字员工的 DWS"},
 				AvoidWhen:    []string{"企业接入本地 Agent/DSH 应使用 dingtalk-tag connect；普通用户 DWS 登录使用 auth login；只管理数字员工配置时不需要登录"},
 				Examples:     []string{"dws dingtalk-tag manage login --agent-uuid <agentUuid> --format json"},
 			},

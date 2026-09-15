@@ -137,7 +137,7 @@ func TestDingTalkTagExposesIndependentConnectAndChannelProtocols(t *testing.T) {
 	if !connect.Runnable() {
 		t.Fatal("dingtalk-tag connect must be runnable")
 	}
-	for _, flag := range []string{"agent-uuid", "channel", "profile-only", "client-id", "dry-run", "yes"} {
+	for _, flag := range []string{"agent-uuid", "channel", "client-id", "dry-run", "yes"} {
 		if connect.Flags().Lookup(flag) == nil && connect.InheritedFlags().Lookup(flag) == nil {
 			t.Errorf("dingtalk-tag connect missing --%s", flag)
 		}
@@ -381,140 +381,15 @@ func TestDingTalkTagConnectDryRunHasNoExternalEffects(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagConnectProfileOnlyDryRunStopsAtProfilePersistence(t *testing.T) {
+func TestDingTalkTagConnectRejectsMissingMode(t *testing.T) {
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
-	testseam.Swap(t, &deapConnectManagedExchange, func(context.Context, string, auth.ManagedExchangeRequest) (*auth.TokenData, error) {
-		t.Fatal("profile-only dry-run exchanged an authorization code")
-		return nil, nil
-	})
-	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error {
-		t.Fatal("profile-only dry-run persisted a DSH binding")
-		return nil
-	})
-	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) {
-		t.Fatal("profile-only dry-run registered DSH")
-		return "", nil
-	})
-
-	leaf := newProfileOnlyConnectTestCommand(t, true)
-	var output bytes.Buffer
-	leaf.SetOut(&output)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("profile-only dry-run error = %v", err)
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			ProfileOnly     bool     `json:"profileOnly"`
-			RestartRequired bool     `json:"restartRequired"`
-			Steps           []string `json:"steps"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !envelope.OK || !envelope.Data.ProfileOnly || envelope.Data.RestartRequired ||
-		strings.Join(envelope.Data.Steps, ",") != "validate_draft,validate_published,request_auth_code,managed_exchange,persist_profile" ||
-		strings.Contains(output.String(), `"channel"`) || strings.Contains(output.String(), "register_dsh") {
-		t.Fatalf("profile-only dry-run envelope = %s", output.String())
+	leaf := newConnectTestCommandWithMode(t, true, "")
+	if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), "无法选择受支持的数字员工 Agent") {
+		t.Fatalf("mode validation error = %v", err)
 	}
 	if len(caller.calls) != 0 {
-		t.Fatalf("profile-only dry-run made MCP calls: %#v", caller.calls)
-	}
-}
-
-func TestDingTalkTagConnectProfileOnlyPersistsProfileWithoutDSHEffects(t *testing.T) {
-	caller := newSuccessfulConnectCaller(successfulAuthResponse(), "")
-	caller.responses["contact/get_current_user_profile"] = []string{
-		`{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgName":"员工企业","userId":"employee-user","orgUserName":"本地员工"}}]}`,
-	}
-	InitDepsForTest(t, caller)
-	setupConnectSupervisorSeams(t)
-
-	var exchange auth.ManagedExchangeRequest
-	testseam.Swap(t, &deapConnectManagedExchange, func(ctx context.Context, _ string, request auth.ManagedExchangeRequest) (*auth.TokenData, error) {
-		exchange = request
-		identity, err := request.ResolveIdentity(ctx, "managed-access-secret", request.ExpectedCorpID)
-		if err != nil {
-			return nil, err
-		}
-		return &auth.TokenData{
-			CorpID: identity.CorpID, UserID: identity.UserID,
-			ClientID: request.ClientID, Source: "mcp",
-		}, nil
-	})
-	testseam.Swap(t, &deapConnectSaveBinding, func(string, digitalEmployeeBinding) error {
-		t.Fatal("profile-only persisted a DSH binding")
-		return nil
-	})
-	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) {
-		t.Fatal("profile-only registered DSH")
-		return "", nil
-	})
-
-	leaf := newProfileOnlyConnectTestCommand(t, false)
-	var output bytes.Buffer
-	leaf.SetOut(&output)
-	if err := leaf.RunE(leaf, nil); err != nil {
-		t.Fatalf("profile-only RunE() error = %v", err)
-	}
-	if exchange.ClientID != "returned-client" || exchange.AuthCode != "one-time-secret" || exchange.PreserveProfile != "supervisor-corp:supervisor-user" {
-		t.Fatalf("managed exchange = %#v", exchange)
-	}
-	if len(caller.calls) != 3 {
-		t.Fatalf("profile-only ordinary MCP calls = %#v, want draft, published, auth only", caller.calls)
-	}
-	if len(caller.tokenCalls) != 1 || caller.tokenCalls[0].toolName != "get_current_user_profile" {
-		t.Fatalf("profile-only token-scoped calls = %#v", caller.tokenCalls)
-	}
-	if auth.RuntimeProfile() != "" {
-		t.Fatalf("profile-only changed runtime profile to %q", auth.RuntimeProfile())
-	}
-	var envelope struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			Status                 string `json:"status"`
-			AgentUUID              string `json:"agentUuid"`
-			Channel                string `json:"channel"`
-			DWSProfile             string `json:"dwsProfile"`
-			OperatorOpenDingTalkID string `json:"operatorOpenDingTalkId"`
-			ProfileOnly            bool   `json:"profileOnly"`
-			RestartRequired        bool   `json:"restartRequired"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !envelope.OK || envelope.Data.Status != "profile_saved" || envelope.Data.AgentUUID != "agent-1" ||
-		envelope.Data.DWSProfile != "employee-corp:employee-user" || !envelope.Data.ProfileOnly ||
-		envelope.Data.Channel != "" || envelope.Data.OperatorOpenDingTalkID != "" || envelope.Data.RestartRequired {
-		t.Fatalf("profile-only envelope = %#v", envelope)
-	}
-}
-
-func TestDingTalkTagConnectRequiresOneExplicitMode(t *testing.T) {
-	tests := []struct {
-		name        string
-		channel     string
-		profileOnly bool
-		want        string
-	}{
-		{name: "missing mode", want: "无法选择受支持的数字员工 Agent"},
-		{name: "conflicting modes", channel: "dsh", profileOnly: true, want: "不能同时使用"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
-			InitDepsForTest(t, caller)
-			leaf := newConnectTestCommandWithMode(t, true, tc.channel, tc.profileOnly)
-			if err := leaf.RunE(leaf, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("mode validation error = %v, want %q", err, tc.want)
-			}
-			if len(caller.calls) != 0 {
-				t.Fatalf("invalid mode made MCP calls: %#v", caller.calls)
-			}
-		})
+		t.Fatalf("invalid mode made MCP calls: %#v", caller.calls)
 	}
 }
 
@@ -759,14 +634,10 @@ func setupSuccessfulConnectSeams(t *testing.T) {
 }
 
 func newConnectTestCommand(t *testing.T, dryRun bool) *cobra.Command {
-	return newConnectTestCommandWithMode(t, dryRun, "dsh", false)
+	return newConnectTestCommandWithMode(t, dryRun, "dsh")
 }
 
-func newProfileOnlyConnectTestCommand(t *testing.T, dryRun bool) *cobra.Command {
-	return newConnectTestCommandWithMode(t, dryRun, "", true)
-}
-
-func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string, profileOnly bool) *cobra.Command {
+func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string) *cobra.Command {
 	t.Helper()
 	root := deapHandler{}.Command(&captureRunner{})
 	root.PersistentFlags().Bool("yes", false, "test confirmation")
@@ -778,9 +649,6 @@ func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string, pr
 	values := map[string]string{"agent-uuid": "agent-1", "yes": "true"}
 	if channel != "" {
 		values["channel"] = channel
-	}
-	if profileOnly {
-		values["profile-only"] = "true"
 	}
 	for name, value := range values {
 		flags := leaf.Flags()

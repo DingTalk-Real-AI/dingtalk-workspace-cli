@@ -270,7 +270,7 @@ func TestDeapAgentSkillMCPLeavesReachFinalSchema(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
+func TestDingTalkTagConnectReachesFinalSchema(t *testing.T) {
 	payload := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(), "dingtalk-tag.connect")
 	tool := payload.Tools["dingtalk-tag.connect"]
 	for field, want := range map[string]string{
@@ -285,11 +285,11 @@ func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
 		}
 	}
 	parameters := schemaContractMap(tool["parameters"])
-	if len(parameters) != 19 {
-		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 19", len(parameters))
+	if len(parameters) != 18 {
+		t.Fatalf("dingtalk-tag.connect parameter count = %d, want 18", len(parameters))
 	}
 	for name, property := range map[string]string{
-		"agent-uuid": "agentUuid", "channel": "channel", "profile-only": "profileOnly", "client-id": "clientId",
+		"agent-uuid": "agentUuid", "channel": "channel", "client-id": "clientId",
 		"device-id": "deviceId", "local-agent-name": "localAgentName", "extensions": "extensions",
 	} {
 		parameter := parameters[name]
@@ -308,8 +308,7 @@ func TestDingTalkTagConnectProfileOnlyReachesFinalSchema(t *testing.T) {
 	if required, _ := channel["required"].(bool); required {
 		t.Error("dingtalk-tag.connect channel must not be unconditionally required")
 	}
-	profileOnly := parameters["profile-only"]
-	if got := schemaContractString(profileOnly["type"]); got != "boolean" {
-		t.Errorf("dingtalk-tag.connect profile-only type = %q, want boolean", got)
+	if _, ok := parameters["profile-only"]; ok {
+		t.Error("dingtalk-tag.connect still exposes profile-only")
 	}
 }
