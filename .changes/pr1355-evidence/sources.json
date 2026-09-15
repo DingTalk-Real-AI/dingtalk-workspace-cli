@@ -1,0 +1,8 @@
+{
+  "type": "unmodified_browser_screenshot",
+  "source_url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/runs/34915643058/job/104212782659",
+  "reviewed_head": "6252c9e79194af6b78991976f5b0b2af3a2a9927",
+  "screenshot_sha256": "434d4130f1c00872a9bdf884f4680d7aa6146c0d0ff8316058d04d1a365671b0",
+  "scope": "Doc, helpers (fortest injection helpers), localio and Drive native Windows regression. Controlled HTTP transport; real local filesystem; not cloud MCP E2E.",
+  "agent_eval": "Requested separately: https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pull/1355#issuecomment-5673339816; no result available yet."
+}
