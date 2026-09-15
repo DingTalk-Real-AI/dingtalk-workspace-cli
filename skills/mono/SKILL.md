@@ -102,7 +102,7 @@ cli_version: ">=1.0.61"
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
-| `whiteboard`      | 独立与文档内嵌白板：带内容创建、读取 OpenNodes、追加节点、整页重建             | [whiteboard.md](./references/products/whiteboard.md)           |
+| `whiteboard`      | 独立与文档内嵌白板：带内容创建、本地 SVG 预渲染、读取 OpenNodes、写前 diff、追加节点、整页重建 | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
 | `event`           | 个人 IM/OA/VoIP/Todo 事件：监听消息、群生命周期、审批任务/实例、通话邀请与待办变化，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
@@ -345,3 +345,5 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
   - [lite-recipes.md](./references/best_practices/lite-recipes.md) — Lite Recipe 速查（核心流程判定为 lite 后直接执行）
   - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
   - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范
+
+白板创建若生成了 SVG 预览，必须先展示并停止执行，等待用户明确确认当前版本后才能创建；用户修改后重新渲染和确认。最初的创建请求不替代预览确认，不得自行添加 `--yes`。

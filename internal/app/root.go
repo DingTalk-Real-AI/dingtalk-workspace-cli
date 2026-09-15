@@ -426,6 +426,9 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 		info.UpstreamCode = cliErr.Code
 		info.Hint = cliErr.Suggestion
 		info.Operation = cliErr.Operation
+		if cliErr.Cause != nil {
+			info.Cause = cliErr.Cause.Error()
+		}
 	}
 	var callErr *transport.CallError
 	if stderrors.As(err, &callErr) && callErr != nil {

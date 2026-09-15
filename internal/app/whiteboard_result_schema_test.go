@@ -54,6 +54,82 @@ func TestCrossPlatformCoverageWhiteboardReceiptDeliveredInFullAndCompactSchema(t
 	}
 }
 
+func TestCrossPlatformCoverageWhiteboardTemplateLanguageSchema(t *testing.T) {
+	for _, scope := range []string{"personal", "team"} {
+		for _, compact := range []bool{false, true} {
+			args := []string{"--cli-path", "whiteboard template " + scope + " save"}
+			if compact {
+				args = append(args, "--compact")
+			}
+			payload := executeShortcutSchemaQuery(t, args...)
+			params := schemaContractMap(payload["parameters"])
+			workspace, present := params["template-workspace"]
+			if present != (scope == "team") {
+				t.Fatalf("%s compact=%v unexpected destination parameter: %#v", scope, compact, workspace)
+			}
+			if present && workspace["required"] == true {
+				t.Fatal("team save destination must remain optional")
+			}
+			if got := params["language"]["default"]; got != "zh_CN" {
+				t.Fatalf("%s compact=%v language=%#v", scope, compact, params["language"])
+			}
+			if params["language"]["required"] == true {
+				t.Fatal("language must remain optional")
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardDiffContractDeliveredInFullAndCompactSchema(t *testing.T) {
+	want, err := contract.NormalizeResultSpec(whiteboard.Diff.Contract.Result, "whiteboard.shortcut_diff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, compact := range []bool{false, true} {
+		args := []string{"--cli-path", "whiteboard +diff"}
+		if compact {
+			args = append(args, "--compact")
+		}
+		payload := executeShortcutSchemaQuery(t, args...)
+		if got := schemaContractString(payload["canonical_path"]); got != "whiteboard.shortcut_diff" {
+			t.Fatalf("compact=%v canonical_path=%q", compact, got)
+		}
+		params := schemaContractMap(payload["parameters"])
+		if got := schemaContractString(params["page-id"]["required_when"]); got != "操作独立白板时" {
+			t.Fatalf("compact=%v page-id required_when=%q", compact, got)
+		}
+		if got := params["detail-limit"]["default"]; got != float64(100) && got != "100" {
+			t.Fatalf("compact=%v detail-limit default=%#v", compact, got)
+		}
+		encoded, err := json.Marshal(payload["result"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var gotSpec contract.ResultSpec
+		if err := json.Unmarshal(encoded, &gotSpec); err != nil {
+			t.Fatal(err)
+		}
+		got, err := contract.NormalizeResultSpec(&gotSpec, "whiteboard.shortcut_diff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var gotSchema, wantSchema any
+		if err := json.Unmarshal(got.DataSchema, &gotSchema); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(want.DataSchema, &wantSchema); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(gotSchema, wantSchema) || !reflect.DeepEqual(got.Outcomes, want.Outcomes) || !reflect.DeepEqual(got.SensitivePaths, want.SensitivePaths) {
+			t.Fatalf("compact=%v lost diff Result contract", compact)
+		}
+	}
+	update := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard +update")
+	if got := schemaContractString(schemaContractMap(update["parameters"])["expected-source-digest"]["property"]); got != "expectedSourceDigest" {
+		t.Fatalf("+update expected-source-digest property=%q", got)
+	}
+}
+
 func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered(t *testing.T) {
 	query := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard query", "--compact")
 	queryParams := schemaContractMap(query["parameters"])
@@ -94,7 +170,7 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 	}
 	createResult, _ := create["result"].(map[string]any)
 	createDataSchema, _ := createResult["data_schema"].(map[string]any)
-	if got := schemaContractStringSlice(createDataSchema["required"]); !reflect.DeepEqual(got, []string{"requestId", "nodeId", "revision"}) {
+	if got := schemaContractStringSlice(createDataSchema["required"]); !reflect.DeepEqual(got, []string{"requestId", "nodeId", "revision", "sourceDigest"}) {
 		t.Fatalf("whiteboard create result required=%v, want stable pre-release projection", got)
 	}
 	createParams := schemaContractMap(create["parameters"])
@@ -104,6 +180,11 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 		}
 	}
 	fullCreate := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard create-with-content")
+	for _, projection := range []map[string]any{create, fullCreate} {
+		if got := schemaContractString(projection["confirmation"]); got != "user_required" {
+			t.Fatalf("create confirmation=%q, want user_required", got)
+		}
+	}
 	fullParams := schemaContractMap(fullCreate["parameters"])
 	if got := fullParams["source"]["property"]; got != "source" {
 		t.Fatalf("create source property=%v, want source", got)
@@ -111,4 +192,37 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 	if got := fullParams["source"]["type"]; got != "string" {
 		t.Fatalf("create source file flag type=%v, want string", got)
 	}
+	if got := schemaContractString(fullParams["expected-source-digest"]["property"]); got != "expectedSourceDigest" {
+		t.Fatalf("create expected-source-digest property=%q", got)
+	}
+
+	render := executeShortcutSchemaQuery(t, "--cli-path", "whiteboard render", "--compact")
+	if got := schemaContractString(render["canonical_path"]); got != "whiteboard.render" {
+		t.Fatalf("render canonical_path=%q", got)
+	}
+	if got := schemaContractString(render["effect"]); got != "read" {
+		t.Fatalf("render effect=%q", got)
+	}
+	if got := schemaContractString(render["confirmation"]); got != "not_required" {
+		t.Fatalf("render confirmation=%q", got)
+	}
+	renderResult, _ := render["result"].(map[string]any)
+	renderDataSchema, _ := renderResult["data_schema"].(map[string]any)
+	properties, _ := renderDataSchema["properties"].(map[string]any)
+	nextAction, _ := properties["nextAction"].(map[string]any)
+	if nextAction["const"] != "await_user_confirmation" {
+		t.Fatalf("render must deliver wait-for-user action: %#v", nextAction)
+	}
+	if got := schemaContractStringSlice(renderDataSchema["required"]); !containsSchemaContractString(got, "artifactPath") || !containsSchemaContractString(got, "sourceDigest") || !containsSchemaContractString(got, "warnings") {
+		t.Fatalf("render required=%v", got)
+	}
+}
+
+func containsSchemaContractString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }

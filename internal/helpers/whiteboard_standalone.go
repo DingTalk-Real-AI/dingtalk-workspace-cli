@@ -15,6 +15,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	whiteboardcore "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
 )
 
 func newStandaloneWhiteboardCreateCommand() *cobra.Command {
@@ -32,12 +33,17 @@ func newStandaloneWhiteboardCreateCommand() *cobra.Command {
 	文件可使用该结构，也可使用 {"source":{...}} 包装结构。
 	source.nodes 必须是数组，允许 []，表示创建空白独立白板。
 	CLI 校验后统一向 MCP/HSF 传递 source JSON 字符串。
-	--request-id 是稳定幂等键，同一次逻辑创建的网络重试必须复用相同值。`,
+	--request-id 是稳定幂等键，同一次逻辑创建的网络重试必须复用相同值。
+	若已生成预览，必须先展示 SVG 并停止执行，等待用户明确确认当前版本后再创建。
+	最初的创建请求、Agent 自检通过或摘要匹配都不代表用户确认；内容修改后必须重新渲染并再次确认。
+	只有获得确认后才能使用 --yes。将已确认预览的 sourceDigest 传入
+	--expected-source-digest；如 source 已变化，CLI 会在远端调用前停止。`,
 		Example: `  dws whiteboard create-with-content --name "项目方案白板" --source ./whiteboard.json --request-id wb-create-001 --format json
 	  dws whiteboard create-with-content --name "项目方案白板" --source ./whiteboard.json --folder FOLDER_ID --request-id wb-create-002 --format json`,
 		Flags: []LeafFlag{
 			{Name: "name", Usage: "独立白板名称（必填）", Bind: "name", Required: true, MarkRequired: true, Trim: true},
 			{Name: "source", Usage: "OpenNodes V1 JSON String 或 JSON 文件路径（必填）", Bind: "source", Required: true, MarkRequired: true, Trim: true, Transform: loadStandaloneWhiteboardCreateSource},
+			{Name: "expected-source-digest", Usage: "可选的 render sourceDigest；确保提交内容与已确认预览一致", Bind: "expectedSourceDigest", Trim: true, OmitEmpty: true, Transform: validateStandaloneWhiteboardExpectedDigest},
 			{Name: "folder", Usage: "目标文件夹节点 ID/URL", Bind: "folderId", Trim: true, OmitEmpty: true},
 			{Name: "workspace", Usage: "目标知识库 ID/URL", Bind: "workspaceId", Trim: true, OmitEmpty: true},
 			{Name: "request-id", Usage: "1-128 字符稳定幂等请求 ID（必填）", Bind: "requestId", Required: true, MarkRequired: true, Trim: true, Transform: validateStandaloneWhiteboardRequestID},
@@ -45,7 +51,7 @@ func newStandaloneWhiteboardCreateCommand() *cobra.Command {
 		Constraints: []LeafConstraint{{Kind: LeafMutuallyExclusive, Flags: []string{"folder", "workspace"}}},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "idempotent",
+			Confirmation: "user_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -57,10 +63,10 @@ func newStandaloneWhiteboardCreateCommand() *cobra.Command {
 			DryRun:      &contract.DryRunSpec{PreviewKind: "request", RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
 				Mode: "composite", Availability: "available",
-				Reason: "CLI 在调用 create_whiteboard 前解析并校验内联或文件中的 OpenNodes，dry-run 只输出安全摘要，并校验幂等创建结果",
+				Reason: "CLI 在调用 create_whiteboard 前解析并校验内联或文件中的 OpenNodes，可校验 render sourceDigest；dry-run 只输出安全摘要，并校验幂等创建结果",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "使用调用方提供的 OpenNodes V1 初始内容创建独立 .adraw 白板",
+				AgentSummary: "用户确认后使用 OpenNodes V1 创建独立白板；已有 SVG 预览时必须展示并等待用户确认当前版本，修改后重新渲染和确认",
 				UseWhen:      []string{"需要在文件夹、知识库或我的文档中创建一份带 OpenNodes 初始内容的独立白板时"},
 				AvoidWhen:    []string{"创建空白独立白板使用现有文档文件创建能力；在文档中插入白板卡片使用 doc whiteboard insert"},
 				Examples:     []string{"dws whiteboard create-with-content --name \"项目方案白板\" --source ./whiteboard.json --request-id wb-create-001 --format json"},
@@ -75,6 +81,7 @@ func newStandaloneWhiteboardCreateCommand() *cobra.Command {
 			Parameters: []contract.ParamDecl{
 				{Name: "name", Property: "name", Required: boolPtr(true)},
 				{Name: "source", Property: "source", InterfaceType: "string", Required: boolPtr(true)},
+				{Name: "expected-source-digest", Property: "expectedSourceDigest", InterfaceType: "string", Required: boolPtr(false)},
 				{Name: "folder", Property: "folderId", Required: boolPtr(false)},
 				{Name: "workspace", Property: "workspaceId", Required: boolPtr(false)},
 				{Name: "request-id", Property: "requestId", Required: boolPtr(true)},
@@ -158,9 +165,35 @@ func validateStandaloneWhiteboardRequestID(requestID string) (any, error) {
 	return requestID, nil
 }
 
+func validateStandaloneWhiteboardExpectedDigest(value string) (any, error) {
+	value = strings.TrimSpace(value)
+	if !opennodes.ValidDigest(value) {
+		return nil, invalidWhiteboardSourceParam("--expected-source-digest 必须是 sha256:<64位十六进制> 格式")
+	}
+	return strings.ToLower(value), nil
+}
+
 func callStandaloneWhiteboardCreateResult(cmd *cobra.Command, _ string, args map[string]any) (output.CommandResult, error) {
+	sourceJSON, _ := args["source"].(string)
+	source, err := opennodes.Parse([]byte(sourceJSON))
+	if err != nil {
+		return nil, invalidWhiteboardSourceJSON(err)
+	}
+	sourceDigest, err := opennodes.DigestSource(source)
+	if err != nil {
+		return nil, invalidWhiteboardSourceJSON(err)
+	}
+	if expected, ok := args["expectedSourceDigest"].(string); ok {
+		if !opennodes.EqualDigest(expected, sourceDigest) {
+			return nil, &CLIError{
+				Code:       CodeInvalidParam,
+				Message:    "--source 已不同于 whiteboard render 预览时的内容",
+				Suggestion: "重新执行 dws whiteboard render，并让用户确认新的 SVG 后再创建",
+			}
+		}
+	}
+	delete(args, "expectedSourceDigest")
 	if deps.Caller.DryRun() {
-		sourceJSON, _ := args["source"].(string)
 		var source struct {
 			Nodes []json.RawMessage `json:"nodes"`
 		}
@@ -170,7 +203,7 @@ func callStandaloneWhiteboardCreateResult(cmd *cobra.Command, _ string, args map
 		preview := map[string]any{
 			"name": args["name"], "requestId": args["requestId"],
 			"sourceBytes": len(sourceJSON), "nodeCount": len(source.Nodes),
-			"executed": false, "dryRun": true,
+			"sourceDigest": sourceDigest, "executed": false, "dryRun": true,
 		}
 		for _, key := range []string{"folderId", "workspaceId"} {
 			if value, ok := args[key]; ok {
@@ -186,7 +219,9 @@ func callStandaloneWhiteboardCreateResult(cmd *cobra.Command, _ string, args map
 	if err := validateStandaloneWhiteboardCreateResponse(response, whiteboardString(args["requestId"])); err != nil {
 		return nil, err
 	}
-	return output.Success(unwrapWhiteboardResult(response)), nil
+	result := unwrapWhiteboardResult(response)
+	result["sourceDigest"] = sourceDigest
+	return output.Success(result), nil
 }
 
 func validateStandaloneWhiteboardCreateResponse(response map[string]any, expectedRequestID string) error {
@@ -304,11 +339,12 @@ func standaloneWhiteboardCreateResultSpec() *contract.ResultSpec {
 				"revision":{"type":"integer","description":"初始白板 revision"},
 				"requestId":{"type":"string","description":"服务端回显的请求幂等 ID"},
 				"requestedContentApplied":{"type":"boolean","description":"网关投影该字段时表示请求 OpenNodes 初始内容是否已应用"},
+				"sourceDigest":{"type":"string","description":"本次实际提交的规范化 OpenNodes source 摘要"},
 				"idempotentReplay":{"type":"boolean","description":"是否命中幂等重放"},
 				"requestMatched":{"type":"boolean","description":"网关投影该字段时表示历史幂等请求是否与本次参数一致"},
 				"message":{"type":"string","description":"服务端结果说明"}
 			},
-			"required":["requestId","nodeId","revision"],
+			"required":["requestId","nodeId","revision","sourceDigest"],
 			"additionalProperties":true
 		}`),
 		SensitivePaths: []string{"nodeId", "folderId"},

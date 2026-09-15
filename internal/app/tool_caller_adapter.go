@@ -51,6 +51,7 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 	if a != nil && a.DryRun() {
 		inv.DryRun = true
 		result, err := toolCallerDryRun(ctx, inv)
+		traceWhiteboardResponse(inv, "local_dry_run", result.Response, nil, err)
 		if err != nil {
 			return nil, err
 		}
@@ -60,6 +61,7 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 		return nil, fmt.Errorf("ToolCaller runner is not configured")
 	}
 	result, err := a.runner.Run(ctx, inv)
+	traceWhiteboardResponse(inv, "adapter_before_conversion", result.Response, nil, err)
 	if err != nil {
 		return nil, err
 	}

@@ -79,7 +79,7 @@ func queryResultSpec() *contract.ResultSpec {
 				"nodeId":{"type":"string","description":"承载文档或独立白板的稳定节点身份"},
 				"partId":{"type":"string","description":"文档内白板的稳定 part 身份"},
 				"revision":{"type":"integer","minimum":0,"description":"独立白板当前 revision"},
-				"view":{"type":"string","enum":["summary","page","all"],"description":"独立白板实际查询视图"},
+				"view":{"type":"string","enum":["summary","page","all"],"description":"经校验的独立白板查询视图；兼容服务省略 view 回显时，按请求及完整响应内容校验后投影"},
 				"source":{"type":"object","description":"显式 OpenNodes V1 快照，包含 pages 以及每页的 nodes 数组","additionalProperties":true},
 				"resultDownloadUrl":{"type":"string","description":"独立白板大结果下载地址，与 source 互斥"},
 				"summary":{"type":"object","description":"服务端完整性计数、字节数与摘要证据","additionalProperties":true},
@@ -282,6 +282,7 @@ var Update = shortcut.Shortcut{
 			{Name: "node", Property: "nodeId"},
 			{Name: "part-id", Property: "partId"},
 			{Name: "source", Property: "source"},
+			{Name: "expected-source-digest", Property: "expectedSourceDigest"},
 			{Name: "page-id", Property: "pageId", RequiredWhen: "独立白板 overwrite 时"},
 			{Name: "expected-revision", Property: "expectedRevision", RequiredWhen: "操作独立白板时"},
 			{Name: "request-id", Property: "requestId", RequiredWhen: "操作独立白板时"},
@@ -294,6 +295,7 @@ var Update = shortcut.Shortcut{
 		{Name: "node", Type: shortcut.FlagString, Desc: "承载文档或独立白板的节点 ID/URL；--node 去除空白后不能为空", Required: true},
 		{Name: "part-id", Type: shortcut.FlagString, Desc: "文档内白板 part ID；显式提供时选择内嵌分支。显式非空 part-id 选择内嵌分支并禁止 revision/requestId；未提供 part-id 时独立分支要求 expected-revision/request-id，overwrite 还要求 page-id"},
 		{Name: "source", Type: shortcut.FlagString, Desc: "OpenNodes V1 JSON，不能为空；支持字面量、@相对文件或 - 从 stdin 读取", Required: true, Input: []string{"file", "stdin"}},
+		{Name: "expected-source-digest", Type: shortcut.FlagString, Desc: "可选的 +diff sourceDigest；本地校验当前 --source 未变化，失败时不会发起远端调用"},
 		{Name: "page-id", Type: shortcut.FlagString, Desc: "目标页面 ID；独立白板 overwrite 时必填。显式非空 part-id 选择内嵌分支并禁止 revision/requestId；未提供 part-id 时独立分支要求 expected-revision/request-id，overwrite 还要求 page-id", RequiredWhen: "独立白板 overwrite 时"},
 		{Name: "expected-revision", Type: shortcut.FlagInt, Desc: "独立白板最新 revision；必须为非负整数。显式非空 part-id 选择内嵌分支并禁止 revision/requestId；未提供 part-id 时独立分支要求 expected-revision/request-id，overwrite 还要求 page-id", RequiredWhen: "操作独立白板时"},
 		{Name: "request-id", Type: shortcut.FlagString, Desc: "独立白板 1-128 字符稳定幂等请求 ID。显式非空 part-id 选择内嵌分支并禁止 revision/requestId；未提供 part-id 时独立分支要求 expected-revision/request-id，overwrite 还要求 page-id", RequiredWhen: "操作独立白板时"},
@@ -316,12 +318,18 @@ var Update = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		if err := validateExpectedSourceDigest(rt.Str("expected-source-digest"), rt.Changed("expected-source-digest"), parsed); err != nil {
+			return err
+		}
 		_, err = whiteboardUpdateCall(rt, parsed)
 		return err
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		parsed, err := parseWhiteboardSource(rt.Str("source"))
 		if err != nil {
+			return err
+		}
+		if err := validateExpectedSourceDigest(rt.Str("expected-source-digest"), rt.Changed("expected-source-digest"), parsed); err != nil {
 			return err
 		}
 		mode := "append"
@@ -751,9 +759,18 @@ func projectStandaloneWhiteboardQuery(data, request map[string]any) (map[string]
 		return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "invalid_revision", "独立白板响应缺少非负整数 revision")
 	}
 	wantedView, _ := request["view"].(string)
-	view, ok := nonEmptyString(envelope["view"])
-	if !ok || view != strings.TrimSpace(wantedView) {
-		return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "query_view_mismatch", "独立白板响应 view 与请求不一致")
+	view := strings.TrimSpace(wantedView)
+	if view != "summary" && view != "page" && view != "all" {
+		return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "query_view_mismatch", "独立白板请求 view 无效")
+	}
+	// Some deployed gateways omit the optional view echo. A present echo must
+	// still match; absence is accepted only after validating the payload below.
+	_, hasViewEcho := envelope["view"]
+	if hasViewEcho {
+		echo, valid := nonEmptyString(envelope["view"])
+		if !valid || echo != view {
+			return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "query_view_mismatch", "独立白板响应 view 与请求不一致")
+		}
 	}
 	summary, ok := envelope["resultSummary"].(map[string]any)
 	if !ok || len(summary) == 0 {
@@ -784,6 +801,12 @@ func projectStandaloneWhiteboardQuery(data, request map[string]any) (map[string]
 		if validateErr := validateSummary(summary, len(nodes), len(pages)); validateErr != nil {
 			return nil, validateErr
 		}
+		if view == "page" {
+			pageID, _ := nonEmptyString(request["pageId"])
+			if pageID == "" || len(pages) != 1 || pages[0]["id"] != pageID {
+				return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "query_page_mismatch", "独立白板响应必须仅包含请求的页面")
+			}
+		}
 		result["pages"] = mapsToAny(pages)
 		out["source"] = result
 	}
@@ -802,6 +825,23 @@ func projectStandaloneWhiteboardQuery(data, request map[string]any) (map[string]
 		_, hasURL := out["resultDownloadUrl"]
 		if !hasSource && !hasURL {
 			return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "missing_result_payload", "page/all 查询缺少 resultJson 或 resultDownloadUrl")
+		}
+	}
+	if !hasViewEcho {
+		if view == "summary" {
+			// A summary-only response may not claim a different payload shape.
+			_, hasSource := out["source"]
+			_, hasURL := out["resultDownloadUrl"]
+			nodes, nodesOK := nonNegativeInt(summary["nodeCount"])
+			pages, pagesOK := nonNegativeInt(summary["pageCount"])
+			if hasSource || hasURL || !nodesOK || !pagesOK {
+				return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "unverifiable_query_view", "响应缺少 view 且不是完整的 summary 响应")
+			}
+			if err := validateSummary(summary, nodes, pages); err != nil {
+				return nil, err
+			}
+		} else if _, hasSource := out["source"]; !hasSource {
+			return nil, responsecheck.Error(serverWhiteboard+"/"+toolQueryStandalone, "unverifiable_query_view", "响应缺少 view 且没有可校验的完整快照；请修复服务端 view 回显")
 		}
 	}
 	if message, present := envelope["message"]; present {
@@ -1524,5 +1564,5 @@ func mapsToAny(values []map[string]any) []any {
 }
 
 func init() {
-	shortcut.Register(Query, Update)
+	shortcut.Register(Query, Diff, Update)
 }

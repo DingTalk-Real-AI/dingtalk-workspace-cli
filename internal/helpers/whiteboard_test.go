@@ -313,6 +313,7 @@ func TestCrossPlatformCoverageWhiteboardCreateWithContentValidatesAndRedactsDryR
 	ctx, _ := outputpkg.WithResultStore(context.Background())
 	cmd.SetContext(ctx)
 	cmd.SetOut(output)
+	cmd.SetIn(strings.NewReader("yes\n"))
 	cmd.SetArgs([]string{"create-with-content", "--name", "Board", "--source", sourcePath, "--request-id", "create-1"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -396,6 +397,7 @@ func TestCrossPlatformCoverageWhiteboardCreateWithContentValidatesAndRedactsDryR
 	ctx, _ = outputpkg.WithResultStore(context.Background())
 	cmd.SetContext(ctx)
 	cmd.SetOut(output)
+	cmd.SetIn(strings.NewReader("yes\n"))
 	cmd.SetArgs([]string{"create-with-content", "--name", "Board", "--source", sourcePath, "--request-id", "create-1"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -458,6 +460,7 @@ func TestCrossPlatformCoverageWhiteboardCreateEmptySource(t *testing.T) {
 			ctx, _ := outputpkg.WithResultStore(context.Background())
 			cmd.SetContext(ctx)
 			cmd.SetOut(buf)
+			cmd.SetIn(strings.NewReader("yes\n"))
 			cmd.SetArgs([]string{"create-with-content", "--name", "Empty", "--source", path, "--request-id", "empty-1"})
 			if err := cmd.Execute(); err != nil {
 				t.Fatal(err)

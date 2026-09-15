@@ -424,6 +424,7 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"todo\u0000+search":                             {},
 		"todo\u0000+todo-done":                          {},
 		"todo\u0000+update":                             {},
+		"whiteboard\u0000+diff":                         {},
 		"whiteboard\u0000+query":                        {},
 		"whiteboard\u0000+update":                       {},
 		"wiki\u0000+delete-space":                       {},

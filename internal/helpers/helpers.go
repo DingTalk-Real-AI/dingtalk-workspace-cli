@@ -865,6 +865,11 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
+	for _, key := range []string{"errorCode", "error_code", "code"} {
+		if body[key] == "WHITEBOARD_TEMPLATE_IDEMPOTENCY_RESULT_UNKNOWN" {
+			return "模板提交结果未知：保留原 requestId 和 logId，先核实服务端最终落库结果；不要自动重试、换新 requestId 或清除幂等记录。模板列表为空也不能单独证明未提交。"
+		}
+	}
 	return suggestForBusinessErrorText(businessErrorMessage(body))
 }
 
