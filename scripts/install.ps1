@@ -1898,6 +1898,12 @@ function Test-SharedSchemaCachePathTrusted {
     try {
         $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
         $owner = $acl.Owner
+        $ownerSid = $null
+        try {
+            $ownerSid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+        } catch {
+            $ownerSid = $null
+        }
         $trustedOwners = @(
             'BUILTIN\Administrators',
             'NT AUTHORITY\SYSTEM',
@@ -1911,46 +1917,169 @@ function Test-SharedSchemaCachePathTrusted {
             }
         }
         # Account for localized BUILTIN\Administrators via SID when possible.
-        if (-not $ownerTrusted) {
-            try {
-                $ownerSid = (New-Object System.Security.Principal.NTAccount($owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
-                if ($ownerSid -eq 'S-1-5-32-544' -or $ownerSid -eq 'S-1-5-18') {
-                    $ownerTrusted = $true
-                }
-            } catch {
-                $ownerTrusted = $false
+        if (-not $ownerTrusted -and $ownerSid) {
+            if ($ownerSid -eq 'S-1-5-32-544' -or $ownerSid -eq 'S-1-5-18') {
+                $ownerTrusted = $true
             }
         }
         if (-not $ownerTrusted) {
             return $false
         }
 
-        $usersSid = 'S-1-5-32-545'
-        $worldSid = 'S-1-1-0'
-        $authenticatedSid = 'S-1-5-11'
+        # Every granting ACE is checked, not just well-known group SIDs: any
+        # Allow ACE carrying write/delete/ACL-owner bits must belong to an
+        # identity this reader trusts (Administrators, SYSTEM, the current
+        # user, or the owner). A write ACE we cannot attribute fails closed.
+        # Check only real write/delete/ACL-owner bits — do NOT OR Modify or
+        # FullControl, those composites include ReadAndExecute, so the Builtin
+        # Users ReadAndExecute ACE we grant would always look writable.
+        # Inherit-only ACEs grant nothing on this object itself.
+        $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
+            [System.Security.AccessControl.FileSystemRights]::Delete -bor `
+            [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor `
+            [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor `
+            [System.Security.AccessControl.FileSystemRights]::TakeOwnership
+        $trustedSids = @('S-1-5-32-544', 'S-1-5-18')
+        try {
+            $trustedSids = @($trustedSids + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+        } catch {
+            $trustedSids = @($trustedSids)
+        }
+        if ($ownerSid) {
+            $trustedSids = @($trustedSids + $ownerSid)
+        }
         foreach ($rule in $acl.Access) {
             if ($rule.AccessControlType -ne 'Allow') {
+                continue
+            }
+            if (($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) {
+                continue
+            }
+            if (($rule.FileSystemRights -band $writeRights) -eq 0) {
                 continue
             }
             $sid = $null
             try {
                 $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
             } catch {
+                return $false
+            }
+            if ($trustedSids -notcontains $sid) {
+                return $false
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+# Mirror of install.sh shared_schema_layout_safe: every existing level of the
+# cache layout (shared base, dws intermediate, schema tree) must be a real
+# directory, never a reparse point/symlink. Missing levels are allowed because
+# Build-SharedSchemaCache creates them below. An arbitrary-depth ancestor walk
+# would wrongly reject platform conventions such as /var and /tmp on macOS,
+# which the runtime accepts via ownership/sticky rules instead.
+function Test-SharedSchemaCacheLayoutSafe {
+    param([string[]]$Paths)
+    foreach ($path in $Paths) {
+        if (-not $path) {
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $path)) {
+            continue
+        }
+        try {
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+        } catch {
+            return $false
+        }
+        if (-not $item.PSIsContainer) {
+            return $false
+        }
+        if ($item.LinkType) {
+            return $false
+        }
+        if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            return $false
+        }
+    }
+    return $true
+}
+
+# nlink==1 gate for the Windows walk (mirror of find -type f ! -links 1). A
+# hardlinked file would widen the recursive ACL rewrite to an inode shared
+# outside this tree. fsutil unavailable or failing fails closed: the warm-up
+# is abandoned rather than recursing over an unverified inode shape.
+function Test-SharedSchemaCacheFileSingleLink {
+    param([string]$Path)
+    try {
+        $fsutil = Join-Path $env:SystemRoot "System32\fsutil.exe"
+        if (-not (Test-Path -LiteralPath $fsutil)) {
+            return $false
+        }
+        $out = & $fsutil hardlink list $Path 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+        $links = @($out | Where-Object { $_ -and $_.Trim() })
+        return ($links.Count -le 1)
+    } catch {
+        return $false
+    }
+}
+
+# Mirror of install.sh shared_schema_tree_objects_safe: cleanup and ACL
+# recursion only operate on plain directories and single-link regular files.
+# Reparse points (symlinks/junctions) redirect the walk outside the tree;
+# hardlinks widen any permission change to a shared inode. On Unix hosts the
+# same rules are enforced with find(1) exactly like install.sh.
+function Test-SharedSchemaCacheTreeObjectsSafe {
+    param([string]$Tree)
+    if (-not $Tree) {
+        return $false
+    }
+    if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($Tree))) {
+        return $false
+    }
+    if (-not (Test-IsWindowsHost)) {
+        $find = Get-Command find -ErrorAction SilentlyContinue
+        if (-not $find) {
+            return $false
+        }
+        try {
+            $bad = & $find.Source $Tree -type l -print -quit 2>$null
+            if ($LASTEXITCODE -ne 0 -or $bad) {
+                return $false
+            }
+            $bad = & $find.Source $Tree ! -type f ! -type d -print -quit 2>$null
+            if ($LASTEXITCODE -ne 0 -or $bad) {
+                return $false
+            }
+            $bad = & $find.Source $Tree -type f ! -links 1 -print -quit 2>$null
+            if ($LASTEXITCODE -ne 0 -or $bad) {
+                return $false
+            }
+            return $true
+        } catch {
+            return $false
+        }
+    }
+    try {
+        $items = @()
+        $items += Get-Item -LiteralPath $Tree -Force -ErrorAction Stop
+        $items += Get-ChildItem -LiteralPath $Tree -Recurse -Force -ErrorAction Stop
+        foreach ($item in $items) {
+            if ($item.LinkType) {
+                return $false
+            }
+            if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                return $false
+            }
+            if ($item.PSIsContainer) {
                 continue
             }
-            $isOrdinary = ($sid -eq $usersSid -or $sid -eq $worldSid -or $sid -eq $authenticatedSid)
-            if (-not $isOrdinary) {
-                continue
-            }
-            # Check only real write/delete/ACL-owner bits. Do NOT OR Modify or
-            # FullControl — those composites include ReadAndExecute, so the
-            # Builtin Users ReadAndExecute ACE we grant would always look writable.
-            $writeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor `
-                [System.Security.AccessControl.FileSystemRights]::Delete -bor `
-                [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor `
-                [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor `
-                [System.Security.AccessControl.FileSystemRights]::TakeOwnership
-            if (($rule.FileSystemRights -band $writeRights) -ne 0) {
+            if (-not (Test-SharedSchemaCacheFileSingleLink -Path $item.FullName)) {
                 return $false
             }
         }
@@ -2036,6 +2165,9 @@ function Initialize-SharedSchemaCacheRoot {
         throw "shared schema cache path is empty"
     }
     if (Test-Path -LiteralPath $Path) {
+        if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($Path))) {
+            throw "shared schema cache root is not a plain directory: $Path"
+        }
         if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
             throw "shared schema cache root is untrusted (owner/DACL): $Path"
         }
@@ -2107,8 +2239,22 @@ function Build-SharedSchemaCache {
     # sidecars inside that tree — never recurse %LOCALAPPDATA% or a wide
     # DWS_SCHEMA_CACHE_SHARED_DIR root (could delete other apps' identity.json).
     $schemaTree = Get-SchemaCacheTree -Base $cacheDir
+    $dwsIntermediate = $null
     if ($schemaTree) {
+        $dwsIntermediate = Split-Path -Parent $schemaTree
+        # Mirror install.sh: existing levels must be plain directories before
+        # anything is created inside them, and the tree must hold only plain
+        # single-link objects before any cleanup or ACL recursion touches it.
+        if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree))) {
+            Write-Say "⚠️  Schema cache skipped: unsafe cache path."
+            return
+        }
         New-Item -ItemType Directory -Path $schemaTree -Force -ErrorAction SilentlyContinue | Out-Null
+        if (-not (Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree)) -or
+            -not (Test-SharedSchemaCacheTreeObjectsSafe -Tree $schemaTree)) {
+            Write-Say "⚠️  Schema cache skipped: unsafe cache contents."
+            return
+        }
         if (Test-Path -LiteralPath $schemaTree) {
             Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
             Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter "identity.*.json" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -2141,12 +2287,24 @@ function Build-SharedSchemaCache {
 
     if ($ok) {
         if ($shared) {
-            try {
-                # Recursively protect only the DWS-owned dws\schema subtree —
-                # never the wide shared base (custom SHARED_DIR may hold other apps).
-                Protect-SharedSchemaCacheTree -Path $schemaTree
-            } catch {
-                Write-Say "⚠️  Shared schema cache built but ACL protect failed; falling back warning."
+            # Re-verify the same object rules before the recursive ACL rewrite
+            # (mirror of install.sh's second shared_schema_tree_objects_safe):
+            # the warm-up binary just wrote the tree, and the recursion must
+            # never widen permissions over reparse or multi-link objects.
+            $protectSafe = $false
+            if ((Test-SharedSchemaCacheLayoutSafe -Paths @($cacheDir, $dwsIntermediate, $schemaTree)) -and
+                (Test-SharedSchemaCacheTreeObjectsSafe -Tree $schemaTree)) {
+                try {
+                    # Recursively protect only the DWS-owned dws\schema subtree —
+                    # never the wide shared base (custom SHARED_DIR may hold other apps).
+                    Protect-SharedSchemaCacheTree -Path $schemaTree
+                    $protectSafe = $true
+                } catch {
+                    $protectSafe = $false
+                }
+            }
+            if (-not $protectSafe) {
+                Write-Say "⚠️  Shared schema cache built but tree unsafe or ACL protect failed; falling back warning."
                 Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
                 return
             }

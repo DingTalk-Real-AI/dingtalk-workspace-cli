@@ -442,6 +442,114 @@ type securityState struct {
 	aces        []securityACE
 }
 
+// ACE header types from winnt.h. x/sys/windows exports only the plain
+// ACCESS_ALLOWED/ACCESS_DENIED variants, so the object/callback family is
+// defined here.
+const (
+	aceTypeAccessAllowed               = 0
+	aceTypeAccessDenied                = 1
+	aceTypeSystemAudit                 = 2
+	aceTypeSystemAlarm                 = 3
+	aceTypeAccessAllowedObject         = 5
+	aceTypeAccessDeniedObject          = 6
+	aceTypeSystemAuditObject           = 7
+	aceTypeSystemAlarmObject           = 8
+	aceTypeAccessAllowedCallback       = 9
+	aceTypeAccessDeniedCallback        = 10
+	aceTypeAccessAllowedCallbackObject = 11
+	aceTypeAccessDeniedCallbackObject  = 12
+	aceTypeSystemAuditCallback         = 13
+	aceTypeSystemAlarmCallback         = 14
+	aceTypeSystemAuditCallbackObject   = 15
+	aceTypeSystemAlarmCallbackObject   = 16
+)
+
+// Object ACE flags (winnt.h ACE_OBJECT_TYPE_PRESENT / ACE_INHERITED_OBJECT_TYPE_PRESENT).
+const (
+	aceObjectTypePresent          = 0x1
+	aceInheritedObjectTypePresent = 0x2
+)
+
+// aceGrantsAccess reports whether an ACE header type grants access. Deny ACEs
+// revoke, and audit/alarm ACEs belong to a SACL — neither widens access, so
+// validateSecurity skips them. An unrecognized type fails closed instead.
+func aceGrantsAccess(aceType uint8) (grants bool, known bool) {
+	switch aceType {
+	case aceTypeAccessAllowed, aceTypeAccessAllowedObject, aceTypeAccessAllowedCallback, aceTypeAccessAllowedCallbackObject:
+		return true, true
+	case aceTypeAccessDenied, aceTypeAccessDeniedObject, aceTypeAccessDeniedCallback, aceTypeAccessDeniedCallbackObject,
+		aceTypeSystemAudit, aceTypeSystemAlarm, aceTypeSystemAuditObject, aceTypeSystemAlarmObject,
+		aceTypeSystemAuditCallback, aceTypeSystemAlarmCallback, aceTypeSystemAuditCallbackObject, aceTypeSystemAlarmCallbackObject:
+		return false, true
+	}
+	return false, false
+}
+
+// aceSIDOffset returns the byte offset of the SID inside the ACE body. Plain
+// and callback ACEs place the SID right after the mask (SidStart, offset 8;
+// callback data trails the SID). Object ACEs interleave 0-2 GUIDs between the
+// flags word and the SID — their presence is flagged in the object ACE flags,
+// so the offset is 12 + 16 per present GUID, not a fixed constant.
+func aceSIDOffset(aceType uint8, ace *windows.ACCESS_ALLOWED_ACE) (uintptr, error) {
+	switch aceType {
+	case aceTypeAccessAllowed, aceTypeAccessDenied,
+		aceTypeAccessAllowedCallback, aceTypeAccessDeniedCallback,
+		aceTypeSystemAudit, aceTypeSystemAlarm,
+		aceTypeSystemAuditCallback, aceTypeSystemAlarmCallback:
+		return unsafe.Offsetof(ace.SidStart), nil
+	case aceTypeAccessAllowedObject, aceTypeAccessDeniedObject,
+		aceTypeAccessAllowedCallbackObject, aceTypeAccessDeniedCallbackObject,
+		aceTypeSystemAuditObject, aceTypeSystemAlarmObject,
+		aceTypeSystemAuditCallbackObject, aceTypeSystemAlarmCallbackObject:
+		flags := *(*uint32)(unsafe.Add(unsafe.Pointer(ace), 8))
+		offset := uintptr(12)
+		if flags&aceObjectTypePresent != 0 {
+			offset += 16
+		}
+		if flags&aceInheritedObjectTypePresent != 0 {
+			offset += 16
+		}
+		return offset, nil
+	}
+	return 0, fmt.Errorf("unrecognized ACE type %d", aceType)
+}
+
+// parseDaclACEs decodes every DACL ACE, including the object and callback
+// allow variants the previous type-0-only reader silently skipped or
+// misparsed (their SIDs live at different offsets).
+func parseDaclACEs(dacl *windows.ACL) ([]securityACE, error) {
+	aces := make([]securityACE, 0, dacl.AceCount)
+	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windowsGetAce(dacl, i, &ace); err != nil {
+			return nil, err
+		}
+		grants, known := aceGrantsAccess(ace.Header.AceType)
+		if !known {
+			return nil, fmt.Errorf("unrecognized ACE type %d in DACL", ace.Header.AceType)
+		}
+		offset, err := aceSIDOffset(ace.Header.AceType, ace)
+		if err != nil {
+			return nil, err
+		}
+		aceSize := uintptr(ace.Header.AceSize)
+		if offset+8 > aceSize {
+			return nil, fmt.Errorf("ACE type %d SID offset %d exceeds ACE size %d", ace.Header.AceType, offset, aceSize)
+		}
+		sid := (*windows.SID)(unsafe.Add(unsafe.Pointer(ace), offset))
+		sidCopy, err := windowsSIDCopy(sid)
+		if err != nil {
+			return nil, fmt.Errorf("ACE type %d SID: %w", ace.Header.AceType, err)
+		}
+		aces = append(aces, securityACE{
+			allowed: grants,
+			mask:    ace.Mask,
+			sid:     sidCopy,
+		})
+	}
+	return aces, nil
+}
+
 func readHandleSecurity(h windows.Handle) (securityState, error) {
 	sd, err := windowsGetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
@@ -469,22 +577,9 @@ func readHandleSecurity(h windows.Handle) (securityState, error) {
 	if dacl == nil {
 		return securityState{owner: ownerCopy, daclPresent: false}, nil
 	}
-	aces := make([]securityACE, 0, dacl.AceCount)
-	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
-		var ace *windows.ACCESS_ALLOWED_ACE
-		if err := windowsGetAce(dacl, i, &ace); err != nil {
-			return securityState{}, err
-		}
-		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		sidCopy, err := windowsSIDCopy(sid)
-		if err != nil {
-			return securityState{}, err
-		}
-		aces = append(aces, securityACE{
-			allowed: ace.Header.AceType == windows.ACCESS_ALLOWED_ACE_TYPE,
-			mask:    ace.Mask,
-			sid:     sidCopy,
-		})
+	aces, err := parseDaclACEs(dacl)
+	if err != nil {
+		return securityState{}, err
 	}
 	return securityState{owner: ownerCopy, daclPresent: true, aces: aces}, nil
 }

@@ -73,7 +73,10 @@ func LocalSchemaCacheIdentityFileName() string {
 // fingerprint-suffixed sidecars are ignored and never used as a lookup key.
 // A sidecar whose binary_build_id does not match the running binary is a miss
 // with no side effect: it is left in place for lock-holding repair/publish or
-// explicit upgrade invalidation.
+// explicit upgrade invalidation. A sidecar whose recorded edition does not
+// match the requested one is also a miss: identity binds the (directory,
+// record) edition pair, so a sidecar copied from another edition's directory
+// must not substitute that edition's artifacts for the requested one.
 func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool) {
 	edition = strings.TrimSpace(edition)
 	if edition == "" {
@@ -88,7 +91,16 @@ func TryLoadLocalSchemaCacheIdentity(edition string) (SchemaCacheIdentity, bool)
 	if err != nil {
 		return SchemaCacheIdentity{}, false
 	}
+	if !schemaCacheEditionMatches(identity.Edition, edition) {
+		return SchemaCacheIdentity{}, false
+	}
 	return identity, true
+}
+
+// schemaCacheEditionMatches compares cache editions the way the runtime
+// resolves directories: trimmed, case-insensitive.
+func schemaCacheEditionMatches(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 func loadLocalSchemaCacheIdentity(directory string) (SchemaCacheIdentity, error) {

@@ -111,7 +111,8 @@ policy: test-aem test-auth-legacy-compat shortcut-public-e2e-proof
 	@$(POLICY_ENV) ./scripts/policy/check-multi-doc-skill-chain.sh
 	@python3 scripts/run_chat_shortcut_live_audit_test.py
 	@$(POLICY_ENV) ./scripts/policy/check-command-surface.sh --strict
-	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
+	@SCHEMA_CACHE_PROTO_CHECK=1 $(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
+	@$(POLICY_ENV) ./scripts/policy/check-module-tidy.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-concepts.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-alias-cooccurrence.sh
 	@$(POLICY_ENV) $(GO) test -count=1 ./internal/app -run '^(TestParamAlias(FixtureThroughEmbeddedDeliveryPath|ReadCommandFinalPayload|WriteCommandFinalPayload|CanonicalConflictFailsBeforeRunE|BlockedFlagReachesReviewedFinalError)|TestFlagConflictErrorFormattingIsDeterministic)$$'

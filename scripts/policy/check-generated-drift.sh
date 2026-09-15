@@ -118,16 +118,63 @@ fi
 "$ROOT/scripts/policy/check-schema-assembly.sh"
 
 # Schema-cache protobuf must match scripts/generate-schema-cache-proto.sh.
-# Policy CI sets SCHEMA_CACHE_PROTO_CHECK=1 after installing pinned protoc.
-# Do not require the check merely because GITHUB_ACTIONS=true — workflow /
-# release contract jobs invoke this script without protoc installed.
+# SCHEMA_CACHE_PROTO_CHECK=1 (set by `make policy`, which the required CI
+# Policy job runs) makes the check mandatory: when PATH has no libprotoc 35.1,
+# the pinned protoc release is bootstrapped into the policy temp dir and used.
+# Bootstrap or download failures fail the check instead of skipping it. Local
+# runs without the variable and without protoc keep the friendly skip hint.
+schema_cache_bootstrap_protoc() {
+	asset=
+	sha=
+	case "$(uname -s)/$(uname -m)" in
+		Linux/x86_64) asset='protoc-35.1-linux-x86_64.zip'; sha='6930ebf62bd4ea607b98fff052596c6ee564b9835b4ce172c75a3f53ae9d91b7' ;;
+		Linux/aarch64) asset='protoc-35.1-linux-aarch_64.zip'; sha='01bf9d08808c7f96678b63f4bd8efa559bb4f83d5a7a270d5edaf507f9d5d9cf' ;;
+		Darwin/arm64) asset='protoc-35.1-osx-aarch_64.zip'; sha='193289af0470c6a1aada357d4fba0bbf8d78bfaac8b5e42ca30af2ef75583de2' ;;
+		Darwin/x86_64) asset='protoc-35.1-osx-x86_64.zip'; sha='537d73604a344ded6fc94e98e07e529d4fe3e4a0b09e59905353950fafc2a1f7' ;;
+		*)
+			printf '%s\n' "schema cache proto check: cannot bootstrap protoc 35.1 for $(uname -s)/$(uname -m); install libprotoc 35.1 or set PROTOC" >&2
+			return 1
+			;;
+	esac
+	bootstrap_dir="${exec_tmp}/protoc-35.1"
+	mkdir -p "$bootstrap_dir"
+	zip_path="$bootstrap_dir/$asset"
+	curl -fsSL --retry 3 -o "$zip_path" "https://github.com/protocolbuffers/protobuf/releases/download/v35.1/$asset" || {
+		printf '%s\n' "schema cache proto check: failed to download $asset" >&2
+		return 1
+	}
+	checksum_tool=
+	if command -v sha256sum >/dev/null 2>&1; then
+		checksum_tool='sha256sum'
+	elif command -v shasum >/dev/null 2>&1; then
+		checksum_tool='shasum -a 256'
+	else
+		printf '%s\n' 'schema cache proto check: no sha256 tool (sha256sum/shasum) available' >&2
+		return 1
+	fi
+	actual="$($checksum_tool "$zip_path" | awk '{print $1}')"
+	if [ -z "$actual" ] || [ "$actual" != "$sha" ]; then
+		printf '%s\n' "schema cache proto check: $asset sha256 mismatch (want $sha, got ${actual:-unknown})" >&2
+		return 1
+	fi
+	unzip -q -o "$zip_path" -d "$bootstrap_dir" || {
+		printf '%s\n' "schema cache proto check: failed to unpack $asset" >&2
+		return 1
+	}
+	if [ ! -x "$bootstrap_dir/bin/protoc" ]; then
+		printf '%s\n' "schema cache proto check: bootstrapped archive has no bin/protoc" >&2
+		return 1
+	fi
+	PROTOC="$bootstrap_dir/bin/protoc" "$ROOT/scripts/generate-schema-cache-proto.sh" --check
+}
+
 schema_cache_proto_check() {
-	if [ "${SCHEMA_CACHE_PROTO_CHECK:-}" = "1" ]; then
+	if command -v protoc >/dev/null 2>&1 && [ "$(protoc --version 2>/dev/null || true)" = "libprotoc 35.1" ]; then
 		"$ROOT/scripts/generate-schema-cache-proto.sh" --check
 		return
 	fi
-	if command -v protoc >/dev/null 2>&1 && [ "$(protoc --version 2>/dev/null || true)" = "libprotoc 35.1" ]; then
-		"$ROOT/scripts/generate-schema-cache-proto.sh" --check
+	if [ "${SCHEMA_CACHE_PROTO_CHECK:-}" = "1" ]; then
+		schema_cache_bootstrap_protoc
 		return
 	fi
 	printf '%s\n' 'schema cache proto check: skipped (install libprotoc 35.1 or set SCHEMA_CACHE_PROTO_CHECK=1)'

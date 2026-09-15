@@ -6,15 +6,18 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"io"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -2028,5 +2031,165 @@ func TestCrossPlatformCoverageWindowsSharedACLAcceptsDistinctReaderSID(t *testin
 	}
 	if err := validateSecurity(legacyCreatorWritable, true); !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("foreign reader accepted creator write ACE: %v", err)
+	}
+}
+
+// testSIDToBytes renders a SID into its on-disk ACE representation via the
+// canonical S-1-... string: revision 1, sub-authority count, 6-byte
+// big-endian identifier authority, then little-endian sub-authorities.
+func testSIDToBytes(t *testing.T, sid *windows.SID) []byte {
+	t.Helper()
+	parts := strings.Split(sid.String(), "-")
+	if len(parts) < 3 || parts[0] != "S" {
+		t.Fatalf("unexpected SID string %q", sid.String())
+	}
+	authority := new(big.Int)
+	if _, ok := authority.SetString(parts[2], 10); !ok {
+		t.Fatalf("bad authority in %q", sid.String())
+	}
+	authBytes := authority.FillBytes(make([]byte, 6))
+	out := []byte{1, byte(len(parts) - 3)}
+	out = append(out, authBytes...)
+	for _, sub := range parts[3:] {
+		value := new(big.Int)
+		if _, ok := value.SetString(sub, 10); !ok {
+			t.Fatalf("bad sub-authority in %q", sid.String())
+		}
+		var subBytes [4]byte
+		binary.LittleEndian.PutUint32(subBytes[:], uint32(value.Uint64()))
+		out = append(out, subBytes[:]...)
+	}
+	return out
+}
+
+// testACEBytes assembles one raw ACE. body sits between the mask and the SID
+// (the object-ACE flags word plus GUIDs); tail trails the SID (callback data).
+func testACEBytes(aceType byte, mask uint32, body, sid, tail []byte) []byte {
+	size := 4 + 4 + len(body) + len(sid) + len(tail)
+	ace := []byte{aceType, 0, byte(size), byte(size >> 8)}
+	var maskBytes [4]byte
+	binary.LittleEndian.PutUint32(maskBytes[:], mask)
+	ace = append(ace, maskBytes[:]...)
+	ace = append(ace, body...)
+	ace = append(ace, sid...)
+	ace = append(ace, tail...)
+	return ace
+}
+
+func testObjectACEBody(objectTypePresent, inheritedObjectTypePresent bool) []byte {
+	flags := uint32(0)
+	guids := []byte{}
+	if objectTypePresent {
+		flags |= aceObjectTypePresent
+		guids = append(guids, make([]byte, 16)...)
+	}
+	if inheritedObjectTypePresent {
+		flags |= aceInheritedObjectTypePresent
+		guids = append(guids, make([]byte, 16)...)
+	}
+	var flagsBytes [4]byte
+	binary.LittleEndian.PutUint32(flagsBytes[:], flags)
+	return append(flagsBytes[:], guids...)
+}
+
+func testACLFromACEs(aces ...[]byte) *windows.ACL {
+	size := 8
+	for _, ace := range aces {
+		size += len(ace)
+	}
+	buf := make([]byte, size)
+	buf[0] = 4 // ACL_REVISION_DS so object ACEs are well-formed
+	binary.LittleEndian.PutUint16(buf[2:], uint16(size))
+	binary.LittleEndian.PutUint16(buf[4:], uint16(len(aces)))
+	offset := 8
+	for _, ace := range aces {
+		copy(buf[offset:], ace)
+		offset += len(ace)
+	}
+	return (*windows.ACL)(unsafe.Pointer(&buf[0]))
+}
+
+// TestCrossPlatformCoverageWindowsParseDaclACEVariants pins the DACL decoder
+// for every allow-variant ACE layout. The type-0-only reader silently skipped
+// callback ACEs and misread object ACE SIDs (their SIDs sit behind 0-2 GUIDs,
+// not at the plain-ACE offset), so an allow-callback write ACE for an
+// untrusted SID escaped validateSecurity.
+func TestCrossPlatformCoverageWindowsParseDaclACEVariants(t *testing.T) {
+	user, err := currentUserSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users, err := windows.CreateWellKnownSid(windows.WinBuiltinUsersSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guests, err := windows.CreateWellKnownSid(windows.WinBuiltinGuestsSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guestBytes := testSIDToBytes(t, guests)
+
+	for name, aceBytes := range map[string][]byte{
+		"plain allow":     testACEBytes(aceTypeAccessAllowed, windows.GENERIC_WRITE, nil, guestBytes, nil),
+		"callback allow":  testACEBytes(aceTypeAccessAllowedCallback, windows.GENERIC_WRITE, nil, guestBytes, []byte{0xAA, 0xBB}),
+		"object allow":    testACEBytes(aceTypeAccessAllowedObject, windows.GENERIC_WRITE, testObjectACEBody(true, true), guestBytes, nil),
+		"object no guids": testACEBytes(aceTypeAccessAllowedObject, windows.GENERIC_WRITE, testObjectACEBody(false, false), guestBytes, nil),
+		"object one guid": testACEBytes(aceTypeAccessAllowedObject, windows.GENERIC_WRITE, testObjectACEBody(true, false), guestBytes, nil),
+		"callback object": testACEBytes(aceTypeAccessAllowedCallbackObject, windows.GENERIC_WRITE, testObjectACEBody(true, true), guestBytes, []byte{0xCC}),
+	} {
+		aces, err := parseDaclACEs(testACLFromACEs(aceBytes))
+		if err != nil {
+			t.Fatalf("%s: parse: %v", name, err)
+		}
+		if len(aces) != 1 {
+			t.Fatalf("%s: got %d ACEs", name, len(aces))
+		}
+		if !aces[0].allowed {
+			t.Fatalf("%s: allow variant parsed as non-granting", name)
+		}
+		if !aces[0].sid.Equals(guests) {
+			t.Fatalf("%s: SID misparsed for its ACE layout", name)
+		}
+		sec := securityState{owner: admins, daclPresent: true, aces: aces}
+		if err := validateSecurity(sec, true); !errors.Is(err, ErrUnsafePath) {
+			t.Fatalf("%s: untrusted allow-write ACE accepted (%v)", name, err)
+		}
+	}
+
+	// A deny ACE revokes instead of grants: even with write bits it must not
+	// trip the untrusted-write rejection.
+	deny, err := parseDaclACEs(testACLFromACEs(testACEBytes(aceTypeAccessDenied, windows.GENERIC_ALL, nil, guestBytes, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deny[0].allowed {
+		t.Fatal("deny ACE parsed as granting")
+	}
+	if err := validateSecurity(securityState{owner: admins, daclPresent: true, aces: deny}, true); err != nil {
+		t.Fatalf("deny ACE rejected shared cache: %v", err)
+	}
+
+	// Read-only allow for an untrusted group stays acceptable on shared trees.
+	readACE := testACEBytes(aceTypeAccessAllowed, windows.GENERIC_READ|windows.GENERIC_EXECUTE, nil, testSIDToBytes(t, users), nil)
+	readParsed, err := parseDaclACEs(testACLFromACEs(readACE))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateSecurity(securityState{owner: user, daclPresent: true, aces: readParsed}, true); err != nil {
+		t.Fatalf("trusted-owner shared read rejected: %v", err)
+	}
+
+	if _, err := parseDaclACEs(testACLFromACEs(testACEBytes(20, windows.GENERIC_WRITE, nil, guestBytes, nil))); err == nil {
+		t.Fatal("unknown ACE type accepted")
+	}
+	truncated := testACEBytes(aceTypeAccessAllowedObject, windows.GENERIC_WRITE, testObjectACEBody(true, true), nil, nil)
+	truncated[2] = 16
+	truncated[3] = 0
+	if _, err := parseDaclACEs(testACLFromACEs(truncated)); err == nil {
+		t.Fatal("ACE whose declared size cannot hold the SID accepted")
 	}
 }

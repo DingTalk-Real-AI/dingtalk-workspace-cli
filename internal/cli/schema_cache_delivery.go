@@ -62,11 +62,15 @@ type SchemaCacheOptions struct {
 }
 
 func (o SchemaCacheOptions) cacheEdition() string {
-	if o.Identity.Edition != "" {
-		return o.Identity.Edition
-	}
+	// The requested edition binds the cache directory; an identity loaded from
+	// disk never overrides it. Otherwise a sidecar copied from another
+	// edition's directory would substitute that edition's artifacts for the
+	// one this process requested.
 	if strings.TrimSpace(o.Edition) != "" {
 		return strings.TrimSpace(o.Edition)
+	}
+	if o.Identity.Edition != "" {
+		return o.Identity.Edition
 	}
 	return "open"
 }
@@ -824,7 +828,7 @@ func (r *schemaCacheRuntime) switchToUserCache() bool {
 	// Handles opened against the shared backend reference replaced inodes and
 	// must not serve later reads; drop them so reads reopen via opened().
 	r.resetPayloadsHandle()
-	if identity, ok := peekLocalSchemaCacheIdentity(cache.Directory()); ok {
+	if identity, ok := peekLocalSchemaCacheIdentity(cache.Directory()); ok && schemaCacheEditionMatches(identity.Edition, opts.cacheEdition()) {
 		updated := r.optionsSnapshot()
 		updated.Identity = identity
 		updated.AllowGenerate = false

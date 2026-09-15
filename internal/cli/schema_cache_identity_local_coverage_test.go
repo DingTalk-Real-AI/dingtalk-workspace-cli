@@ -430,3 +430,67 @@ func (f failLocalIdentityTemp) Write(p []byte) (int, error) {
 func (f failLocalIdentityTemp) Sync() error  { return f.sync }
 func (f failLocalIdentityTemp) Close() error { return f.close }
 func (f failLocalIdentityTemp) Name() string { return f.name }
+
+// TestCrossPlatformCoverageCacheEditionPrefersRequest pins the requested
+// edition as the cache-directory binding: an identity loaded from disk must
+// never substitute its own edition for the one the process asked for.
+func TestCrossPlatformCoverageCacheEditionPrefersRequest(t *testing.T) {
+	if got := (SchemaCacheOptions{Edition: "open", Identity: SchemaCacheIdentity{Edition: "beta"}}).cacheEdition(); got != "open" {
+		t.Fatalf("sidecar identity overrode requested edition: %q", got)
+	}
+	if got := (SchemaCacheOptions{Identity: SchemaCacheIdentity{Edition: "beta"}}).cacheEdition(); got != "beta" {
+		t.Fatalf("identity edition dropped without a request: %q", got)
+	}
+	if !schemaCacheEditionMatches(" Beta ", "beta") || schemaCacheEditionMatches("beta", "open") {
+		t.Fatal("schemaCacheEditionMatches normalization changed")
+	}
+}
+
+// TestCrossPlatformCoverageLocalIdentityBindsRequestedEdition pins that a
+// well-formed sidecar copied from another edition's directory is a plain
+// miss: identity binds the (directory, record) edition pair, so the foreign
+// edition's artifacts cannot authenticate as the requested edition.
+func TestCrossPlatformCoverageLocalIdentityBindsRequestedEdition(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
+	ensureSchemaCacheOpenable(t)
+	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
+	restorePackageCLISchemaDeliveryForTest()
+	coverageSchemaCacheHome(t)
+	goos, goarch := coverageCacheGOOSARCH()
+	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
+		Enabled: true, AllowGenerate: true, Edition: "open", GOOS: goos, GOARCH: goarch,
+		RuntimeEligible: func() bool { return true },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
+	cache, err := schemacache.Open("open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cache.Close() })
+	activeSchemaCacheRuntime().publishGeneratedOrMatching(cache, deliverySchemaCatalog())
+	identity, err := loadLocalSchemaCacheIdentity(cache.Directory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.Edition != "open" {
+		t.Fatalf("published identity edition = %q, want open", identity.Edition)
+	}
+	foreign := identity
+	foreign.Edition = "beta"
+	if err := persistLocalSchemaCacheIdentity(cache.Directory(), foreign); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, ok := TryLoadLocalSchemaCacheIdentity("open"); ok {
+		t.Fatalf("foreign-edition sidecar loaded as %q", loaded.Edition)
+	}
+	if err := persistLocalSchemaCacheIdentity(cache.Directory(), identity); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, ok := TryLoadLocalSchemaCacheIdentity("open"); !ok || loaded.Edition != "open" {
+		t.Fatalf("matching sidecar rejected: ok=%v edition=%q", ok, loaded.Edition)
+	}
+}

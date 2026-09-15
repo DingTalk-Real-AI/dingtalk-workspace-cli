@@ -648,12 +648,47 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	if !strings.Contains(trustFn, "FileSystemRights]::Write -bor") || !strings.Contains(trustFn, "FileSystemRights]::Delete -bor") {
 		t.Fatal("Test-SharedSchemaCachePathTrusted must probe real Write/Delete bits")
 	}
+	// Every granting ACE is adjudicated: no ordinary-SID allowlist may skip
+	// foreign SIDs holding write bits, and inherit-only ACEs (no grant on the
+	// object itself) must not trip the rejection.
+	if strings.Contains(trustFn, "$isOrdinary") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must check every Allow ACE, not only ordinary SIDs")
+	}
+	if !strings.Contains(trustFn, "$trustedSids") || !strings.Contains(trustFn, "-notcontains $sid") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must attribute write ACEs to a trusted-SID set")
+	}
+	if !strings.Contains(trustFn, "PropagationFlags]::InheritOnly") {
+		t.Fatal("Test-SharedSchemaCachePathTrusted must skip inherit-only ACEs")
+	}
+	for _, helper := range []string{
+		"function Test-SharedSchemaCacheLayoutSafe",
+		"function Test-SharedSchemaCacheTreeObjectsSafe",
+		"function Test-SharedSchemaCacheFileSingleLink",
+	} {
+		if !strings.Contains(text, helper) {
+			t.Fatalf("install.ps1 missing schema-cache safety helper %q", helper)
+		}
+	}
 	initFn := extractPowerShellFunction(t, text, "Initialize-SharedSchemaCacheRoot")
 	if strings.Count(initFn, "Set-SharedSchemaCacheAcl") != 1 {
 		t.Fatal("Initialize-SharedSchemaCacheRoot must ACL-harden only the installer-created root")
 	}
+	if !strings.Contains(initFn, "Test-SharedSchemaCacheLayoutSafe") {
+		t.Fatal("Initialize-SharedSchemaCacheRoot must reject a non-directory or reparse root")
+	}
 	if strings.Contains(buildFn, "New-Item -ItemType Directory -Path $sharedDir -Force") {
 		t.Fatal("Build-SharedSchemaCache must not blindly New-Item -Force the shared root")
+	}
+	// Object checks gate both the identity cleanup and the recursive ACL
+	// rewrite: the tree is verified before Remove-Item and again before
+	// Protect-SharedSchemaCacheTree (the warm-up just rewrote it).
+	cleanupIdx := strings.Index(buildFn, "Remove-Item -Force")
+	treeCheckIdx := strings.Index(buildFn, "Test-SharedSchemaCacheTreeObjectsSafe")
+	if cleanupIdx < 0 || treeCheckIdx < 0 || treeCheckIdx > cleanupIdx {
+		t.Fatal("Test-SharedSchemaCacheTreeObjectsSafe must run before identity cleanup")
+	}
+	if strings.Count(buildFn, "Test-SharedSchemaCacheTreeObjectsSafe") < 2 {
+		t.Fatal("Test-SharedSchemaCacheTreeObjectsSafe must re-run before Protect-SharedSchemaCacheTree")
 	}
 	successIdx := strings.Index(buildFn, "Shared schema cache built")
 	verifyIdx := strings.Index(buildFn, "Test-SchemaCacheArtifactsPresent")
@@ -837,6 +872,190 @@ Write-Output "ARTIFACT_HELPER_OK"
 			t.Fatalf("artifact helper output:\n%s", output)
 		}
 	})
+}
+
+func TestInstallPowerShellSchemaCacheObjectGuards(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX object shapes are exercised without Windows reparse semantics")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := string(scriptData[:cut])
+
+	runHarness := func(t *testing.T, shared string) string {
+		t.Helper()
+		root := t.TempDir()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		harness := prefix + `
+function Get-Arch { return "amd64" }
+$InstallDir = "` + binDir + `"
+$BinName = "dws"
+Build-SharedSchemaCache
+`
+		harnessPath := filepath.Join(root, "schema-object-guard-harness.ps1")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+		cmd.Env = append(os.Environ(),
+			"DWS_SCHEMA_CACHE_SHARED_DIR="+shared,
+			"LOCALAPPDATA="+filepath.Join(root, "local"),
+			"ProgramData="+filepath.Join(root, "programdata-empty"),
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("object-guard harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("schema symlink does not escape cleanup", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(outside, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		if err := os.Symlink(outside, filepath.Join(shared, "dws", "schema")); err != nil {
+			t.Fatal(err)
+		}
+		out := runHarness(t, shared)
+		if !strings.Contains(out, "unsafe cache path") {
+			t.Fatalf("symlinked schema level not rejected:\n%s", out)
+		}
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+
+	t.Run("hardlink is not touched", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outside := filepath.Join(root, "outside-identity.json")
+		mustWriteFile(t, outside, []byte("keep"), 0o600)
+		if err := os.Link(outside, filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatal(err)
+		}
+		out := runHarness(t, shared)
+		if !strings.Contains(out, "unsafe cache contents") {
+			t.Fatalf("hardlinked sidecar not rejected:\n%s", out)
+		}
+		info, err := os.Stat(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("outside hardlink mode = %04o, want 0600", info.Mode().Perm())
+		}
+	})
+
+	t.Run("non-regular object is rejected", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		edition := filepath.Join(shared, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(edition, "identity.json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		out := runHarness(t, shared)
+		if !strings.Contains(out, "unsafe cache contents") {
+			t.Fatalf("FIFO sidecar not rejected:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(edition, "identity.json")); err != nil {
+			t.Fatalf("FIFO was removed: %v", err)
+		}
+	})
+}
+
+// TestInstallPowerShellSharedSchemaCacheUnsafeTreeObjectsWindows pins the
+// Windows-native object guards directly: junctions inside the tree and
+// hardlinked files must fail Test-SharedSchemaCacheTreeObjectsSafe, and a
+// junction component of the shared base must fail the components check, so
+// neither cleanup nor the recursive ACL rewrite can leave the intended root.
+func TestInstallPowerShellSharedSchemaCacheUnsafeTreeObjectsWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("junction and fsutil semantics require a Windows host")
+	}
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	root := t.TempDir()
+	tree := filepath.Join(root, "shared", "dws", "schema")
+	edition := filepath.Join(tree, "open", "v1")
+	outsideDir := filepath.Join(root, "outside-dir")
+	outsideFile := filepath.Join(root, "outside-file.json")
+	for _, dir := range []string{filepath.Join(tree, "open", "v1"), outsideDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWriteFile(t, outsideFile, []byte("keep"), 0o600)
+	mustWriteFile(t, filepath.Join(edition, "identity.json"), []byte("{}"), 0o600)
+	harness := string(scriptData[:cut]) + `
+$tree = "` + tree + `"
+$edition = "` + edition + `"
+$plain = Test-SharedSchemaCacheTreeObjectsSafe -Tree $tree
+if (-not $plain) { Write-Output "PLAIN_TREE_FALSE"; exit 1 }
+New-Item -ItemType Junction -Path (Join-Path $edition "junction") -Target "` + outsideDir + `" | Out-Null
+if (Test-SharedSchemaCacheTreeObjectsSafe -Tree $tree) { Write-Output "JUNCTION_TREE_TRUE"; exit 1 }
+Remove-Item -LiteralPath (Join-Path $edition "junction") -Force
+New-Item -ItemType HardLink -Path (Join-Path $edition "hardlinked.json") -Target "` + outsideFile + `" | Out-Null
+if (Test-SharedSchemaCacheTreeObjectsSafe -Tree $tree) { Write-Output "HARDLINK_TREE_TRUE"; exit 1 }
+Remove-Item -LiteralPath (Join-Path $edition "hardlinked.json") -Force
+New-Item -ItemType Junction -Path (Join-Path (Split-Path -Parent $tree) "schema-junction") -Target "` + outsideDir + `" | Out-Null
+if (Test-SharedSchemaCacheLayoutSafe -Paths @((Join-Path (Split-Path -Parent $tree) "schema-junction"))) { Write-Output "JUNCTION_LEVEL_TRUE"; exit 1 }
+Write-Output "WINDOWS_UNSAFE_OBJECTS_OK"
+`
+	harnessPath := filepath.Join(root, "unsafe-tree-objects.ps1")
+	mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+	cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("unsafe tree objects harness: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "WINDOWS_UNSAFE_OBJECTS_OK") {
+		t.Fatalf("unsafe tree objects output:\n%s", output)
+	}
 }
 
 func TestInstallPowerShellSharedSchemaCacheApplyThenValidateACL(t *testing.T) {
