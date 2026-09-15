@@ -85,12 +85,14 @@ var AttachmentRemove = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "record-id", Type: shortcut.FlagString, Desc: "Record ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "attachment Field ID", Required: true},
-		{Name: "remove-name", Type: shortcut.FlagString, Desc: "移除精确文件名的所有匹配项；与 --clear-all 二选一"},
-		{Name: "resource-ids", Type: shortcut.FlagStringSlice, Desc: "精确 resourceId 列表；与 remove-name/clear-all 互斥"},
-		{Name: "clear-all", Type: shortcut.FlagBool, Desc: "清空该字段全部附件；与 --remove-name 二选一"},
+		{Name: "remove-name", Type: shortcut.FlagString, Desc: "移除精确文件名的所有匹配项；与 --resource-ids 或 --clear-all=true 三选一"},
+		{Name: "resource-ids", Type: shortcut.FlagStringSlice, Desc: "精确 resourceId 列表；与非空 remove-name 或 clear-all=true 互斥"},
+		{Name: "clear-all", Type: shortcut.FlagBool, Desc: "true 时清空该字段全部附件；与 --remove-name 或 --resource-ids 三选一；false 不选择清空"},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"remove-name", "resource-ids", "clear-all"}, Description: "按文件名、资源 ID 或清空三选一"}},
-	Tips:        []string{`dws aitable +attachment-remove --base-id B --table-id T --record-id R --field-id F --clear-all`},
+	// Keep the legacy value-sensitive selector validation in executeAttachmentRemove.
+	// A generic ExactlyOne counts --clear-all=false as selected and rejects
+	// previously valid name-based removals. The resource-ID route is additive.
+	Tips: []string{`dws aitable +attachment-remove --base-id B --table-id T --record-id R --field-id F --clear-all`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return executeAttachmentRemove(rt)
 	},

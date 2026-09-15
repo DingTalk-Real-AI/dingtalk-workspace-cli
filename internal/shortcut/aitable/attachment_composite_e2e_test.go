@@ -535,3 +535,22 @@ func TestCrossPlatformCoverageAttachmentResourceIDRemoval(t *testing.T) {
 		t.Fatal("empty identity deletion")
 	}
 }
+
+func TestCrossPlatformCoverageAttachmentRemoveExplicitFalsePreservesSelection(t *testing.T) {
+	for _, selector := range [][]string{{"--remove-name", "remove.pdf"}, {"--resource-ids", "remove-id"}} {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"resourceId": "remove-id", "filename": "remove.pdf"}, map[string]any{"resourceId": "keep-id", "filename": "keep.pdf"}})},
+			{text: `{"success":true}`},
+			{text: attachmentRecordJSON(t, "field", []any{map[string]any{"resourceId": "keep-id", "filename": "keep.pdf"}})},
+		}}
+		args := []string{"--base-id", "base", "--table-id", "table", "--record-id", "record", "--field-id", "field", "--clear-all=false", "--yes"}
+		args = append(args, selector...)
+		out, err := runAITableCompositeCLI(t, caller, "+attachment-remove", args...)
+		if err != nil || !strings.Contains(out, `"removedCount": 1`) || len(caller.calls) != 3 {
+			t.Fatalf("selector=%v out=%s err=%v calls=%v", selector, out, err, caller.calls)
+		}
+		if caller.calls[1].tool != "remove_attachments" || len(caller.calls[1].args["resourceIds"].([]string)) != 1 || caller.calls[1].args["resourceIds"].([]string)[0] != "remove-id" {
+			t.Fatalf("wrong deletion scope: %v", caller.calls[1])
+		}
+	}
+}
