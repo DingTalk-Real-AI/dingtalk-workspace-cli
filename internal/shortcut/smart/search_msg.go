@@ -360,6 +360,7 @@ var SearchMsg = shortcut.Shortcut{
 		if filterErr != nil {
 			return filterErr
 		}
+		decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, messages)
 		var detailLedger map[string]any
 		var threadViews map[string]map[string]any
 		if rt.Bool("with-threads") {
@@ -465,6 +466,7 @@ var SearchMsg = shortcut.Shortcut{
 		}
 		payload["failedCount"] = len(failures)
 		payload["partial"] = len(failures) > 0 && len(results) > 0
+		chatmsg.MergeDecryptLedger(payload, decryptLedger)
 		if len(failures) > 0 {
 			return searchMsgIncompleteError(rt, payload, failures, terminalCause)
 		}
@@ -562,6 +564,7 @@ func executeScopedConversationReactionSearch(
 			direction:              "older",
 			fallbackConversationID: conversationID,
 			timeRange:              streamRange,
+			deferDecrypt:           true,
 		}
 		pagePayload, pageMessages, readErr := collectAllChatMessages(rt, request)
 		pageCount, _ := pagePayload["pagesFetched"].(int)
@@ -626,6 +629,7 @@ func executeScopedConversationReactionSearch(
 	}
 	reactionSourceCount := len(validatedMessages)
 	validatedMessages = filterSearchMessagesWithReactions(validatedMessages)
+	decryptLedger := chatmsg.DecryptChatMessageItems(rt.Command().Context(), rt, validatedMessages)
 	order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
 	if order == "" {
 		order = "desc"
@@ -692,6 +696,7 @@ func executeScopedConversationReactionSearch(
 		payload["failedCount"] = len(failures)
 		payload["partial"] = len(failures) > 0 && len(results) > 0
 	}
+	chatmsg.MergeDecryptLedger(payload, decryptLedger)
 	if len(failures) > 0 {
 		return searchMsgIncompleteError(rt, payload, failures, terminalCause)
 	}
