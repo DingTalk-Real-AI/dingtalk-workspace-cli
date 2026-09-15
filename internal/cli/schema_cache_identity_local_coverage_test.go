@@ -19,6 +19,9 @@ import (
 )
 
 func TestCrossPlatformCoverageSchemaCacheIdentityAndLocalRemaining(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	if got := (SchemaCacheOptions{}).cacheEdition(); got != "open" {
 		t.Fatalf("empty cacheEdition = %q", got)
 	}
@@ -355,6 +358,9 @@ func TestCrossPlatformCoverageSchemaCachePublishGeneratedRemaining(t *testing.T)
 }
 
 func TestCrossPlatformCoverageLocalIdentityIgnoresFingerprintLeftoversAndRepublishes(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()

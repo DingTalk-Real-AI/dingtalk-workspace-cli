@@ -67,6 +67,9 @@ func seedCorruptSharedCache(t *testing.T, base, editionHex string) string {
 // assembly. The first repair publishes into the per-user cache, and a later
 // process reuses that repair from the per-user cache.
 func TestCrossPlatformCoverageRepairFallsBackToUserCacheWhenSharedUnwritable(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 

@@ -68,6 +68,9 @@ func TestCrossPlatformCoverageGroupHelpSkipsAssemblyUnderUncertainty(t *testing.
 // served read-only even while the process surface is plugin-uncertain, and no
 // live assembly runs.
 func TestCrossPlatformCoverageUncertainRuntimeServesCacheReads(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 	coverageSchemaCacheHome(t)

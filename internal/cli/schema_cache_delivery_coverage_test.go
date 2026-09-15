@@ -42,6 +42,9 @@ func poisonSchemaCacheIdentity(r *schemaCacheRuntime, mutate func(*SchemaCacheId
 }
 
 func TestCrossPlatformCoverageSchemaCacheOptionsAndPrewarmEarlyReturn(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	t.Cleanup(func() {
 		_ = RegisterSchemaCacheOptions(SchemaCacheOptions{})
 		restorePackageCLISchemaDeliveryForTest()
@@ -215,6 +218,9 @@ func TestCrossPlatformCoverageSchemaCacheHashesMatchAndRoundTrip(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheRepairAndDeliveryMiss(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	goos, goarch := coverageCacheGOOSARCH()
@@ -383,6 +389,9 @@ func TestCrossPlatformCoverageSchemaQueryCompactAndNormalize(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageQueryEmptyArgsAndRepairCatalogMiss(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	resetDeliverySchemaCatalogStateForTest()
 	runtimeDeliveryLiveCatalog.Store(nil)
@@ -421,6 +430,9 @@ func TestCrossPlatformCoverageQueryEmptyArgsAndRepairCatalogMiss(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	ensureSchemaCacheOpenable(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	goos, goarch := coverageCacheGOOSARCH()
@@ -639,6 +651,9 @@ func TestCrossPlatformCoverageSchemaCachePublishedRuntimePaths(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheArtifactsAndCanonicalRemaining(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	if _, err := BuildSchemaCacheArtifacts(ResolvedSchemaBuild{}); err == nil {
 		t.Fatal("empty resolved build accepted")
 	}

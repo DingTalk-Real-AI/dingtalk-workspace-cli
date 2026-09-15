@@ -89,6 +89,9 @@ func publishCoverageSchemaRuntime(t *testing.T) (*schemaCacheRuntime, SchemaCach
 }
 
 func TestCrossPlatformCoverageSchemaCachePayloadInnerReadyReturn(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	runtimeCache, _, _ := publishCoverageSchemaRuntime(t)
 	index, err := runtimeCache.readPayloadIndex()
 	if err != nil {
@@ -129,6 +132,9 @@ func TestCrossPlatformCoverageSchemaCachePayloadInnerReadyReturn(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheRuntimeRemainingPayloadPaths(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	runtimeCache, identity, artifacts := publishCoverageSchemaRuntime(t)
 	index, err := runtimeCache.readPayloadIndex()
 	if err != nil {
@@ -417,6 +423,9 @@ func TestCrossPlatformCoverageSchemaCacheArtifactsRemainingFailures(t *testing.T
 }
 
 func TestCrossPlatformCoverageSchemaCatalogRepairRecheckFailures(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	runtimeCache, _, _ := publishCoverageSchemaRuntime(t)
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	runtimeCache.metaOnce.Do(func() { runtimeCache.metaErr = errors.New("poison meta") })
@@ -437,6 +446,9 @@ func TestCrossPlatformCoverageSchemaCatalogRepairRecheckFailures(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaReaderIdentityAndRangeFailures(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	runtimeCache, identity, _ := publishCoverageSchemaRuntime(t)
 	cache, err := runtimeCache.opened()
 	if err != nil {

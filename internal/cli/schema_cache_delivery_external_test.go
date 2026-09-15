@@ -343,6 +343,12 @@ func (e *parityError) Error() string { return "Schema cache parity mismatch for 
 // to the live render, with alias and non-compact queries falling through to the
 // registry-backed path.
 func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
+	if schemaCacheRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
+	if schemaCacheRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
@@ -403,6 +409,12 @@ func TestCrossPlatformCoverageSchemaCacheRenderedLeafFastPath(t *testing.T) {
 // fast path serves identical bytes through the same three authenticated range
 // reads (index during the probe, then shard header and leaf blob).
 func TestCrossPlatformCoverageSchemaCachePrewarm(t *testing.T) {
+	if schemaCacheRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
+	if schemaCacheRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}

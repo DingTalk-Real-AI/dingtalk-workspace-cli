@@ -77,6 +77,9 @@ func TestCrossPlatformCoverageInvalidateSchemaCacheIdentitiesScopedToDWSSchema(t
 }
 
 func TestCrossPlatformCoverageUpgradeInvalidationClearsPersistedIdentityForABRegeneration(t *testing.T) {
+	if schemaRaceInstrumentation {
+		t.Skip("race:cli skips real-cache assembly coverage to stay inside the shard budget")
+	}
 	if !schemacache.PersistentBackendEnabled(runtime.GOOS, runtime.GOARCH) {
 		t.Skip("persistent cache backend is intentionally disabled on this target")
 	}
