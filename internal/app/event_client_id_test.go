@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -206,8 +205,6 @@ func TestCrossPlatformCoveragePersonalEventClientIDTransportFailure(t *testing.T
 		transportErr error
 		wantRetry    bool
 	}{
-		{"reset", syscall.ECONNRESET, true},
-		{"refused", syscall.ECONNREFUSED, true},
 		{"eof", io.EOF, true},
 		{"unclassified", errors.New("secret transport detail"), false},
 		{"dns-temporary", &net.DNSError{Err: "temporary failure", IsTemporary: true}, true},
@@ -236,6 +233,20 @@ func TestCrossPlatformCoveragePersonalEventClientIDTransportFailure(t *testing.T
 				t.Fatal("transport detail leaked")
 			}
 		})
+	}
+}
+
+func checkPersonalClientIDSocketError(t *testing.T, socketErr error) {
+	t.Helper()
+	calls := 0
+	testseam.Swap(t, &http.DefaultTransport, http.RoundTripper(eventRuntimeRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return nil, &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("socket", socketErr)}
+	})))
+	_, err := fetchPersonalEventClientID(context.Background(), "https://mcp.example.test")
+	var structured *apperrors.Error
+	if !errors.As(err, &structured) || !structured.Retryable || calls != 1 {
+		t.Fatalf("socket interruption: error=%#v calls=%d", err, calls)
 	}
 }
 

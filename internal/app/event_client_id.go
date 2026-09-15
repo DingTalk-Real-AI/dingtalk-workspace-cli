@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"syscall"
 	"time"
 	"unicode"
 
@@ -79,7 +78,7 @@ func fetchPersonalEventClientID(ctx context.Context, baseURL string) (string, er
 		var dnsError *net.DNSError
 		retryable := !errors.Is(ctx.Err(), context.Canceled) && (errors.Is(err, context.DeadlineExceeded) ||
 			errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
-			errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) ||
+			personalEventConnectionInterrupted(err) ||
 			(errors.As(err, &networkError) && networkError.Timeout()) ||
 			(errors.As(err, &dnsError) && dnsError.IsTemporary))
 		return "", personalClientIDFetchError("event_client_id_fetch_failed", retryable)
