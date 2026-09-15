@@ -3744,7 +3744,7 @@ MEDIAN、DISTINCT、DISTINCT_RATIO 等服务端统计动作。
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按字段分组，或执行去重等高级聚合统计。",
 				UseWhen:      []string{"需要各分类/实体的分组统计，或对满足条件的门店、客户、商品等执行 DISTINCT 唯一计数时"},
-				AvoidWhen:    []string{"普通不分组 COUNT/SUM/AVG/MAX/MIN 优先用 record stats；原始记录和 Top N 明细用 record query"},
+				AvoidWhen:    []string{"普通不分组 COUNT/SUM/AVG/MAX/MIN 优先用 record stats；原始记录 Top N 明细用 record query；需要对聚合结果排序、取 Top N 或排名时用 psql"},
 				Examples:     []string{`dws aitable record group-stats --base-id <BASE_ID> --table-id <TABLE_ID> --stats '[{"fieldId":"<FIELD_ID>","statsType":"DISTINCT"}]'`},
 			},
 			Parameters: []contract.ParamDecl{
