@@ -21,6 +21,8 @@
 | 常规表单与自选审批节点 | 只使用本文件与 `scripts/oa_create_preflight.py` 的紧凑输出，不再加载控件/节点全集 |
 | 请假审批 | 先用 `dws attendance +get-approve-template --type leave` 定位模板，再按本文件“请假”闭环执行 |
 | 补卡审批 | 先用 `dws attendance +get-approve-template --type repair-check` 定位模板，再按本文件“补卡”闭环执行 |
+| 外出审批 | 先用 `dws attendance +get-approve-template --type travel` 定位模板，再按本文件“外出”闭环执行 |
+| 加班审批 | 先用 `dws attendance +get-approve-template --type overtime` 定位模板，再按本文件“加班”闭环执行 |
 | 紧凑表单输出出现 `needsComponentReference=true` | 只在 [oa-form-components.md](oa/oa-form-components.md) 中定位对应 `componentName` 小节 |
 | 紧凑预测输出出现 `needsNodeReference=true`，或用户明确要求覆盖模板默认流程 | 只读取 [oa-process-nodes.md](oa/oa-process-nodes.md) 的对应节点或参数映射小节 |
 | 表单包含本地附件 | [oa-attachments.md](oa-attachments.md) |
@@ -90,7 +92,7 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 - 必填：停止并说明当前 Skill 无法安全自动提交，请用户改用钉钉客户端或等待能力补齐。
 - 非必填：取得用户同意后才可跳过，并在创建摘要中显式列出。
 
-`DDHolidayField` 和 `DDBizSuite · attendance.supply` 只按下方考勤套件闭环提交，必须走高级 `--request`；不能套用 `DDDateRangeField` 或普通日期控件。其他 `DDBizSuite` 没有 CLI 已公开的稳定容器契约，停止创建；不能把套件子控件当普通顶层字段提交。
+`DDHolidayField` 与 `DDBizSuite · attendance.supply/goout/batchovertime` 只按下方考勤套件闭环提交，必须走高级 `--request`；不能套用 `DDDateRangeField` 或普通日期控件。其他 `DDBizSuite` 没有 CLI 已公开的稳定容器契约，停止创建；不能把套件子控件当普通顶层字段提交。
 
 ### 明细与核心字段
 
@@ -125,6 +127,25 @@ dws oa approval detail --instance-id <processInstanceId> --format json
 6. 用最终 `--request` 重新预测，处理自选节点；展示摘要后停止，得到对当前摘要的明确确认才执行同一条创建调用，并在执行时动态追加确认参数。
 
 请假、补卡任一最终字段、部门或人员发生变化，都必须重新 `forecast-process`。写成功后的验收只读 `detail/tasks/records`，不能再次创建。
+请假与补卡的详细规则（类型澄清、时间格式、班次匹配、payload 组装细则、话术与确认硬约束）见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」与 [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」；本文件浓缩闭环与详细工作流冲突时以详细版为准。
+
+### 外出：DDBizSuite · attendance.goout
+
+1. `dws attendance +get-approve-template --type travel --format json` 获取模板（出差是 `--type out`，注意分流）；多模板时全量展示并让用户选。
+2. `form-schema` 下钻 `DDBizSuite`（`bizType=attendance.goout`）子控件；外出类型 option 的 `extension.unit` 决定有效单位与时长格式。
+3. 有同行人时先经 `dws attendance +check-companion-schedules --approve-type 2` 校验班次（`valid=false` 原样转告并停止）。
+4. `dws attendance +calculate-approve-duration --biz-type 2 --approve-biz-type attendance.goout` 计算服务端权威时长；返回值原样保留，不得本地估算。
+5. 按 [外出套件](oa/oa-form-components.md#ddbizsuite--attendancegoout外出套件) 的展平形态与映射表组装子控件条目（traveler value 用 userId JSON 数组字符串）。
+6. 完整工作流、有效单位判定与组装细则见 [oa/oa-goout.md](oa/oa-goout.md)「发起外出审批」。
+
+### 加班：DDBizSuite · attendance.batchovertime
+
+1. `dws attendance +get-approve-template --type overtime --format json` 获取模板；无 `everyDayDuration` 的旧版模板降级 `submitUrl` 链接引导。
+2. `attendance +get-complex-overtime-setting --users <加班人>` 校验动态单位（`reason` 非空即停止转告）；`interactMode` 决定 `--duration-mode`。
+3. `dws attendance +calculate-approve-duration --biz-type 1 --new-overtime` 计算时长；歧义窗口（班中起始/跨天）按两阶段确认传逐日明细，**时长结果须经用户手动确认后方可组装发起**。
+4. 按 [加班套件](oa/oa-form-components.md#ddbizsuite--attendancebatchovertime加班套件) 的容器包裹形态组装子控件条目（与外出/补卡的展平形态相反）。
+5. 完整工作流、时长计算口径与组装细则见 [oa/oa-overtime.md](oa/oa-overtime.md)「发起加班审批」。
+
 
 ## 流程预测与选人
 

@@ -47,18 +47,18 @@
 |---|---|---|
 | 查已提交的请假/加班/出差外出/补卡记录 | `dws attendance +list-approve` | `--users <ids> --types overtime,trip,leave,patch --start YYYY-MM-DD --end YYYY-MM-DD` |
 | 获取可提交表单入口 | `dws attendance +get-approve-template` | `--type leave\|overtime\|repair-check\|travel\|out`；只返回入口，不代填提交 |
-| 查可用假期类型与余额（请假套件前置） | `dws attendance approve leave-types` | `--user <userId>` 可选；返回 `leaveCode`/`leaveViewUnit`/余额；`bizType` 不可靠，哺乳假等自定义类型按 `leaveName` 识别 |
+| 计算考勤审批时长 | `dws attendance +calculate-approve-duration` | `--biz-type 1..8 --duration-mode 1..5 --start <时间> --end <时间>`；半天模式补 `--half-start/--half-end AM\|PM`；只计算，不提交 |
+| 校验出差/外出同行人班次 | `dws attendance +check-companion-schedules` | `--approve-type 1\|2 --starts <时间列表> --ends <时间列表> --duration-unit DAY\|HOUR`；有同行人时传 `--principal-users`；`valid=false` 是业务拒绝 |
+| 查询员工适用的复杂加班规则 | `dws attendance +get-complex-overtime-setting` | `--users <ids> [--work-date <日期>]`；不传日期时由服务端使用当前时间 |
+| 查可用假期类型与余额（请假套件前置） | `dws attendance approve leave-types` | `--user <userId>` 可选；返回 `leaveCode`/`leaveViewUnit`/余额；哺乳假判定以 `bizType === "breastfeeding_leave_new"` 为准（缺失时回退名称含「哺乳」），判定细则见 [oa-leave.md](oa/oa-leave.md) |
 | 计算请假时长（服务端口径） | `dws attendance approve leave-duration` | `--leave-code --start --end` 必填；时长禁止本地估算 |
 | 请假提交前资格校验 | `dws attendance approve leave-check` | 时长必须取自 leave-duration 输出；`success=false` 非零退出并转告 `errorMsg` 后终止 |
 | 匹配补卡目标异常班次 | `dws attendance approve supply-plans` | `--time "YYYY-MM-DD HH:mm"` 必填；`plans` 空数组属正常结果；多班次须用户选择 |
 | 补卡提交前资格校验 | `dws attendance approve supply-check` | `--timestamp` 必须取自 supply-plans 输出的 `supplyDate`；`qualify=false` 非零退出并转告 `title`/`desc` 后终止 |
-| 计算考勤审批时长 | `dws attendance +calculate-approve-duration` | `--biz-type 1..8 --duration-mode 1..5 --start <时间> --end <时间>`；半天模式补 `--half-start/--half-end AM\|PM`；只计算，不提交 |
-| 校验出差/外出同行人班次 | `dws attendance +check-companion-schedules` | `--approve-type 1\|2 --starts <时间列表> --ends <时间列表> --duration-unit DAY\|HOUR`；有同行人时传 `--principal-users`；`valid=false` 是业务拒绝 |
-| 查询员工适用的复杂加班规则 | `dws attendance +get-complex-overtime-setting` | `--users <ids> [--work-date <日期>]`；不传日期时由服务端使用当前时间 |
 
 查询接口把出差和外出合并为 `trip`；表单入口必须区分外出 `travel` 与出差 `out`。多个模板全部返回，将名称最匹配者置前，并用 `[表单名称](submitUrl)` 展示，禁止裸露 URL 或只返回一个模板。
 
-请假与补卡的**提交**意图路由到 oa 域套件工作流（见 [oa.md](oa.md)「发起请假审批」/「发起补卡审批」章节）；上表 `approve` 命令为其前置只读查询/校验。`+get-approve-template` 的 `submitUrl` 入口用于加班/外出/出差，以及不支持 CLI 发起的请假/补卡模板场景。
+请假、补卡、外出与加班的**提交**意图路由到 oa 域套件工作流（见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」/ [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」/ [oa/oa-goout.md](oa/oa-goout.md)「发起外出审批」/ [oa/oa-overtime.md](oa/oa-overtime.md)「发起加班审批」），各工作流的前置只读查询/校验命令以上表对应行标注为准。`+get-approve-template` 的 `submitUrl` 入口用于出差（无 CLI 发起工作流，链接引导提交），以及各套件中不支持 CLI 发起的模板场景（如加班旧版模板）。
 
 审批时长和同行人班次命令接受 `YYYY-MM-DD` 或 `yyyy-MM-dd HH:mm:ss`，由 DWS 转换为 MCP 所需的 13 位毫秒时间戳。同行人校验只判断所选人员的班次兼容性，不检查重复审批单；没有同行人时无需调用。`+calculate-approve-duration` 返回的 `compressedValue`、明细和提示应完整保留给后续审批流程，不自行拼装或改写。
 
