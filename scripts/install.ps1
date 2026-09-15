@@ -1840,9 +1840,11 @@ function Install-Skills {
 # ── Build schema cache ───────────────────────────────────────────────────────
 # Persistent backends are compiled in for windows amd64/arm64. Identity is
 # generated on this machine from the installed binary (no compile-time seal).
-# Prefer a hardened shared location (%ProgramData%\dws) with Admins/SYSTEM write
-# and Builtin Users read+traverse; otherwise warm the per-user cache under
-# %LOCALAPPDATA%. Never claim success without artifacts.
+# Non-elevated installs prefer a hardened shared location (%ProgramData%\dws) with
+# Admins/SYSTEM write and Builtin Users read+traverse; otherwise warm the per-user
+# cache under %LOCALAPPDATA%. Elevated Windows installs skip all Schema cache
+# mutation because PowerShell path operations cannot bind validation to one object.
+# Never claim success without artifacts.
 
 function Get-SchemaCacheTree {
     param([string]$Base)
@@ -1878,6 +1880,33 @@ function Test-IsWindowsHost {
     if ($PSVersionTable.PSEdition -eq 'Desktop') { return $true }
     if ($null -ne (Get-Variable -Name IsWindows -ErrorAction SilentlyContinue) -and $IsWindows) { return $true }
     return ($env:OS -eq 'Windows_NT')
+}
+
+function Get-WindowsElevationState {
+    if (-not (Test-IsWindowsHost)) {
+        return $false
+    }
+    try {
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        if (-not $identity -or -not $identity.User) {
+            return $null
+        }
+        if ($identity.User.Value -eq 'S-1-5-18') {
+            return $true
+        }
+        $principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
+        return [bool]$principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $null
+    }
+}
+
+function Test-IsWindowsElevated {
+    $state = Get-WindowsElevationState
+    if ($null -eq $state) {
+        return $true
+    }
+    return [bool]$state
 }
 
 function Test-SharedSchemaCachePathTrusted {
@@ -2125,12 +2154,9 @@ function Test-SharedSchemaCacheTreeObjectsSafe {
     }
 }
 
-# Delete pre-existing identity sidecars with validation fused into the walk
-# itself: every entry is adjudicated at enumeration time — a reparse point or
-# (on Windows) a multi-link file aborts the whole cleanup — so the mutation
-# never follows an object substituted after a prior path scan. No -Recurse
-# anywhere: the manual stack walk only descends into directories it has just
-# validated, entry by entry.
+# Delete identity sidecars only on the non-elevated path. The checks below are
+# static/path-based defenses; PowerShell cmdlets cannot bind the deletion to a
+# stable Windows object. Elevated Windows installs return before this helper.
 function Clear-SharedSchemaCacheIdentitySidecars {
     param([string]$Tree)
     if (-not $Tree) {
@@ -2145,9 +2171,9 @@ function Clear-SharedSchemaCacheIdentitySidecars {
     while ($stack.Count -gt 0) {
         $dir = $stack.Pop()
         foreach ($child in (Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
-            # Object identity is re-established on the enumerated entry
-            # immediately before adjudication and deletion, so a substitution
-            # between the enumeration and the mutation aborts the walk.
+            # Recheck the path immediately before mutation. This narrows the
+            # window but is not an object-identity guarantee; elevated Windows
+            # installs never enter this path.
             $entry = Get-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
             if ($entry.LinkType) {
                 throw "unsafe schema cache entry (reparse): $($entry.FullName)"
@@ -2233,12 +2259,11 @@ function Protect-SharedSchemaCacheTree {
     if (-not (Test-IsWindowsHost)) {
         return
     }
-    # Object identity is re-established on every entry at mutation time: a
-    # fresh Get-Item replaces the enumeration's attributes immediately before
-    # the ACL rewrite, so an entry substituted between validation and this
-    # walk aborts the recursion instead of widening Set-Acl outside the tree.
-    # No recursive enumeration: the manual stack walk only descends into
-    # directories whose entries were each validated and protected on the spot.
+    # Recheck each path immediately before mutation. This is a static/path-based
+    # defense, not a stable-object guarantee; elevated Windows installs return
+    # before this helper because Set-Acl resolves paths independently.
+    # No recursive enumeration: the manual stack walk limits the scope of the
+    # non-elevated ACL rewrite to the intended schema subtree.
     Set-SharedSchemaCacheItemAcl -Path $Path
     $stack = [System.Collections.Generic.Stack[string]]::new()
     $stack.Push($Path)
@@ -2296,6 +2321,10 @@ function Initialize-SharedSchemaCacheRoot {
 }
 
 function Build-SharedSchemaCache {
+    if (Test-IsWindowsElevated) {
+        Write-Say "⚠️  Elevated Windows install: shared Schema cache warm-up skipped; the first schema command will build a per-user cache."
+        return
+    }
     $arch = Get-Arch
     if ($arch -ne "amd64" -and $arch -ne "arm64") {
         return

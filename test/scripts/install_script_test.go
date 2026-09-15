@@ -601,6 +601,8 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 		"function Protect-SharedSchemaCacheTree",
 		"function Set-SharedSchemaCacheAcl",
 		"function Test-SharedSchemaCachePathTrusted",
+		"function Get-WindowsElevationState",
+		"function Test-IsWindowsElevated",
 		"DWS_SCHEMA_CACHE_DIR",
 		"schema --all",
 		"identity.json",
@@ -617,6 +619,17 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 		}
 	}
 	buildFn := extractPowerShellFunction(t, text, "Build-SharedSchemaCache")
+	guardEnd := strings.Index(buildFn, "$arch = Get-Arch")
+	if guardEnd < 0 || !strings.Contains(buildFn[:guardEnd], "if (Test-IsWindowsElevated)") {
+		t.Fatal("Build-SharedSchemaCache must check Windows elevation before touching cache paths")
+	}
+	guard := buildFn[:guardEnd]
+	if !strings.Contains(guard, "first schema command will build a per-user cache") || !strings.Contains(guard, "return") {
+		t.Fatal("elevated Windows cache guard must explain the fallback and return")
+	}
+	if !strings.Contains(text, "function Get-WindowsElevationState") || !strings.Contains(text, "return $null") {
+		t.Fatal("Windows elevation detection must fail closed when token state is indeterminate")
+	}
 	if !strings.Contains(buildFn, "Test-SchemaCacheArtifactsPresent") {
 		t.Fatal("Build-SharedSchemaCache must verify artifacts before claiming success")
 	}
@@ -738,6 +751,73 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	}
 	if strings.Count(text, "Build-SharedSchemaCache") < 4 {
 		t.Fatal("install.ps1 must invoke Build-SharedSchemaCache after binary install paths")
+	}
+}
+
+func TestInstallPowerShellElevatedCacheMutationSkipped(t *testing.T) {
+	pwsh, err := lookPowerShellForScriptsOptional()
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(scriptData)
+	cut := strings.LastIndex(text, "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.ps1 main section not found")
+	}
+	prefix := text[:cut]
+
+	for _, tc := range []struct {
+		name  string
+		state string
+	}{
+		{name: "elevated", state: "return $true"},
+		{name: "indeterminate fails closed", state: "return $null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			shared := filepath.Join(root, "shared")
+			local := filepath.Join(root, "local")
+			if err := os.MkdirAll(shared, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(local, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			mustWriteFile(t, filepath.Join(shared, "sentinel"), []byte("shared"), 0o600)
+			mustWriteFile(t, filepath.Join(local, "sentinel"), []byte("local"), 0o600)
+			harness := prefix + `
+function Get-WindowsElevationState { ` + tc.state + ` }
+$env:DWS_SCHEMA_CACHE_SHARED_DIR = "` + shared + `"
+$env:ProgramData = "` + filepath.Join(root, "programdata") + `"
+$env:LOCALAPPDATA = "` + local + `"
+$env:DWS_SCHEMA_CACHE_DIR = "before"
+$InstallDir = "` + filepath.Join(root, "bin") + `"
+$BinName = "dws"
+Build-SharedSchemaCache
+if ($env:DWS_SCHEMA_CACHE_DIR -ne "before") { Write-Output "ENV_CHANGED"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path "` + shared + `" "dws")) { Write-Output "SHARED_MUTATED"; exit 1 }
+if (Test-Path -LiteralPath (Join-Path "` + local + `" "dws")) { Write-Output "LOCAL_MUTATED"; exit 1 }
+Write-Output "ELEVATED_CACHE_SKIP_OK"
+`
+			harnessPath := filepath.Join(root, "elevated-cache-skip.ps1")
+			mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+			cmd := exec.Command(pwsh, "-NoProfile", "-File", harnessPath)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("elevated cache skip harness: %v\n%s", err, output)
+			}
+			if !strings.Contains(string(output), "ELEVATED_CACHE_SKIP_OK") {
+				t.Fatalf("elevated cache skip output:\n%s", output)
+			}
+		})
 	}
 }
 
