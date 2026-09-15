@@ -5,6 +5,7 @@ package aitable
 
 import (
 	"fmt"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"math"
 	"strings"
 
@@ -55,6 +56,9 @@ func executeRecordBulkPatch(rt *shortcut.RuntimeContext) error {
 	if len(patch) == 0 {
 		return apperrors.NewValidation("--patch 必须是非空 JSON 对象")
 	}
+	if rt.Changed("record-ids") && (rt.Changed("filters") || rt.Changed("query") || rt.Changed("view-id")) {
+		return apperrors.NewValidation("按 record-ids 查询会忽略其他服务端筛选；批量写入禁止同时提供 filters/query/view-id")
+	}
 	params := map[string]any{"baseId": rt.Str("base-id"), "tableId": rt.Str("table-id")}
 	selectorCount := 0
 	if rt.Changed("filters") {
@@ -95,7 +99,10 @@ func executeRecordBulkPatch(rt *shortcut.RuntimeContext) error {
 		return apperrors.NewValidation(fmt.Sprintf("--max-matches 必须在 1..%d", maxCompositeRecordRun))
 	}
 	if rt.Changed("view-id") {
-		params["viewId"] = rt.Str("view-id")
+		params, err = helpers.AITableQueryWithView(rt.Command().Context(), params, rt.Str("view-id"), true)
+		if err != nil {
+			return err
+		}
 	}
 	records, err := queryAllRecords(rt, params, maxMatches)
 	if err != nil {
