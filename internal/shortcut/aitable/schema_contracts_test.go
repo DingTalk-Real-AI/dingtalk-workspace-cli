@@ -37,12 +37,7 @@ func TestCrossPlatformCoverageAITableLegacyContractLedgerIsExact(t *testing.T) {
 func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormalization(t *testing.T) {
 	item := RecordQuery
 	for _, required := range []string{
-		"单页行数据",
-		"nextCursor 显式续页",
-		"已获明确许可的非分析完整逐行明细",
-		"--all --page-limit 0",
-		"不是同一结果模型",
-		"禁止相互拼接、转换或混合推导",
+		"默认返回一页", "--all", "--export-output", "max-records", "view-id", "复杂视图条件无法转换时明确失败",
 	} {
 		if !strings.Contains(item.Intent, required) {
 			t.Errorf("RecordQuery intent missing %q", required)
@@ -50,12 +45,7 @@ func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormali
 	}
 	selection := item.Contract.Selection
 	for _, required := range []string{
-		"字段和值必须先按字段类型解析",
-		"完整逐行明细或逐条业务处理全表数据",
-		"不做汇总、统计、分析或文件交付",
-		"单表直接标量、分组或去重统计",
-		"完整原始数据文件",
-		"不要手写 cursor 循环或把当前页当全量",
+		"字段和值必须先按字段类型解析", "不拉明细做汇总", "10000", "CSV/Excel", "NDJSON",
 	} {
 		if !strings.Contains(selection.AgentSummary, required) && !containsAny(selection.UseWhen, required) && !containsAny(selection.AvoidWhen, required) {
 			t.Errorf("RecordQuery selection missing %q", required)
