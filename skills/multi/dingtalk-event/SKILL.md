@@ -74,6 +74,8 @@ OA 七个 EventKey 使用 `ruleType=all`、`filterRule={}`，不接受目标或�
 
 ## 安全与失败处理
 
+开源 normal 获取缺失 AppKey，无需 AppSecret；custom／定制版除外。[排障](references/event-im-operations.md)。
+
 - `event stop` 会取消订阅并影响本地 consumer：先 `--dry-run`，用户确认后再加 `--yes`。
 - 多事件属于一次原始操作；任一订阅启动失败时 Runtime 回滚本次已创建项，不拆成新命令绕过重试预算。
 - 全部 28 个公开个人 EventKey（16 IM + 7 OA + 1 VoIP + 3 Todo + 1 卡片）遵循 Agent/host `0/2/1`：`retryable=false`→`max_additional_attempts=0`，`retryable=true`→`max_additional_attempts=2`，`retryable=unknown`→`max_additional_attempts=1`。它不是 CLI 持久化硬总次数上限；进程内不会自动重试，CLI 不持久化或计算跨调用的 Agent/host 尝试次数。
