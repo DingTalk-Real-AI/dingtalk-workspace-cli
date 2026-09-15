@@ -61,10 +61,10 @@ func TestCrossPlatformCoverageEmployeeServerBindingUsesUnifiedTokenSnapshot(t *t
 		return &auth.TokenData{CorpID: "corp", UserID: "supervisor", AccessToken: "refreshed-supervisor-token"}, nil
 	})
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
-		"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`},
+		"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-new"}`},
 	}}
 	InitDepsForTest(t, caller)
-	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new"); err != nil {
+	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "bind", b.AgentUUID), b, "bind", "device-new"); err != nil {
 		t.Fatal(err)
 	}
 	if called != 1 || len(caller.tokens) != 1 || caller.tokens[0] != "refreshed-supervisor-token" {
@@ -91,12 +91,12 @@ func TestCrossPlatformCoverageEmployeeServerBindingRefreshesRejectedTokenOnce(t 
 	})
 	caller := &employeeServerErrorCaller{
 		digitalEmployeeProtocolCaller: digitalEmployeeProtocolCaller{responses: map[string][]string{
-			"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`},
+			"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-new"}`},
 		}},
 		errors: []error{&CLIError{Code: CodeAuthTokenExpired, Message: "token rejected"}},
 	}
 	InitDepsForTest(t, caller)
-	id, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new")
+	id, err := mutateEmployeeServerBinding(lifecycleCmd(t, "bind", b.AgentUUID), b, "bind", "device-new")
 	if err != nil || id != "binding-new" {
 		t.Fatalf("binding = %q, %v", id, err)
 	}
@@ -114,13 +114,13 @@ func TestCrossPlatformCoverageEmployeeServerBindingRecordsGatewayRejection(t *te
 	)
 	caller := &employeeServerErrorCaller{
 		digitalEmployeeProtocolCaller: digitalEmployeeProtocolCaller{responses: map[string][]string{
-			"deap-dev/rebind_local_agent": {`{"success":true,"data":"binding-new"}`},
+			"deap-dev/bind_local_agent": {`{"success":true,"data":"binding-new"}`},
 		}},
 		errors: []error{rejection},
 	}
 	InitDepsForTest(t, caller)
-	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
-	if _, err := mutateEmployeeServerBinding(cmd, b, "rebind", "device-new"); !errors.Is(err, rejection) {
+	cmd := lifecycleCmd(t, "bind", b.AgentUUID)
+	if _, err := mutateEmployeeServerBinding(cmd, b, "bind", "device-new"); !errors.Is(err, rejection) {
 		t.Fatalf("gateway rejection = %v", err)
 	}
 	var receipt employeeServerOperation
@@ -128,7 +128,7 @@ func TestCrossPlatformCoverageEmployeeServerBindingRecordsGatewayRejection(t *te
 	if err != nil || json.Unmarshal(raw, &receipt) != nil || receipt.Phase != "rejected" {
 		t.Fatalf("receipt=%+v err=%v", receipt, err)
 	}
-	if id, err := mutateEmployeeServerBinding(cmd, b, "rebind", "device-new"); err != nil || id != "binding-new" {
+	if id, err := mutateEmployeeServerBinding(cmd, b, "bind", "device-new"); err != nil || id != "binding-new" {
 		t.Fatalf("corrected retry = %q, %v", id, err)
 	}
 	if len(caller.tokens) != 2 {
@@ -144,7 +144,7 @@ func TestCrossPlatformCoverageEmployeeServerBindingRefreshFailureIsRejected(t *t
 	})
 	caller := &employeeServerErrorCaller{errors: []error{rejection}}
 	InitDepsForTest(t, caller)
-	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new"); !errors.Is(err, rejection) {
+	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "bind", b.AgentUUID), b, "bind", "device-new"); !errors.Is(err, rejection) {
 		t.Fatalf("auth rejection = %v", err)
 	}
 	var receipt employeeServerOperation
@@ -166,7 +166,7 @@ func TestCrossPlatformCoverageEmployeeServerBindingDoesNotRefreshPermissionRejec
 	})
 	caller := &employeeServerErrorCaller{errors: []error{rejection}}
 	InitDepsForTest(t, caller)
-	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "rebind", "device-new"); !errors.Is(err, rejection) {
+	if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "bind", b.AgentUUID), b, "bind", "device-new"); !errors.Is(err, rejection) {
 		t.Fatalf("permission rejection = %v", err)
 	}
 	var receipt employeeServerOperation
@@ -178,13 +178,13 @@ func TestCrossPlatformCoverageEmployeeServerBindingDoesNotRefreshPermissionRejec
 
 func TestCrossPlatformCoverageEmployeeServerReceiptReplayAndIdentity(t *testing.T) {
 	_, b := lifecycleFixture(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/rebind_local_agent": {`{"success":true,"data":{"runtimeBindingId":"binding-new"}}`}}}
+	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/bind_local_agent": {`{"success":true,"data":{"runtimeBindingId":"binding-new"}}`}}}
 	InitDepsForTest(t, caller)
-	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
+	cmd := lifecycleCmd(t, "bind", b.AgentUUID)
 	_ = cmd.Flags().Set("local-agent-name", "办公室 Agent")
 	_ = cmd.Flags().Set("extensions", `{"note":"private-extension-value"}`)
 	for i := 0; i < 2; i++ {
-		id, err := mutateEmployeeServerBinding(cmd, b, "rebind", "device-new")
+		id, err := mutateEmployeeServerBinding(cmd, b, "bind", "device-new")
 		if err != nil || id != "binding-new" {
 			t.Fatalf("receipt: %q %v", id, err)
 		}
@@ -194,7 +194,7 @@ func TestCrossPlatformCoverageEmployeeServerReceiptReplayAndIdentity(t *testing.
 	}
 	args := caller.tokenCalls[0].args
 	request := args
-	if len(request) != 5 || request["agentUuid"] != b.AgentUUID || request["runtimeBindingId"] != "binding-old" || request["deviceId"] != "device-new" || request["localAgentName"] != "办公室 Agent" || request["extensions"] != `{"note":"private-extension-value"}` {
+	if len(request) != 4 || request["agentUuid"] != b.AgentUUID || request["deviceId"] != "device-new" || request["localAgentName"] != "办公室 Agent" || request["extensions"] != `{"note":"private-extension-value"}` {
 		t.Fatalf("payload: %+v", args)
 	}
 	for _, key := range []string{"identity", "userId", "orgId", "corpId"} {
@@ -206,11 +206,11 @@ func TestCrossPlatformCoverageEmployeeServerReceiptReplayAndIdentity(t *testing.
 	if err != nil || strings.Contains(string(raw), "private-extension-value") || strings.Contains(string(raw), "supervisor-test-token") {
 		t.Fatalf("unsafe receipt: %v", err)
 	}
-	if _, err := mutateEmployeeServerBinding(cmd, b, "rebind", "different-device"); err == nil {
+	if _, err := mutateEmployeeServerBinding(cmd, b, "bind", "different-device"); err == nil {
 		t.Fatal("changed request bypassed recovery")
 	}
 	if err := checkEmployeeServerOperation(b); err == nil {
-		t.Fatal("old binding may not start after successful rebind")
+		t.Fatal("old binding may not start after successful bind")
 	}
 	b.RuntimeBindingID = "binding-new"
 	if err := checkEmployeeServerOperation(b); err != nil {
@@ -233,8 +233,6 @@ func TestCrossPlatformCoverageEmployeeServerFailureClassification(t *testing.T) 
 		{"missing_success", `{"data":"id"}`, false},
 		{"missing_id", `{"success":true,"data":null}`, false},
 		{"nested_id", `{"success":true,"data":{"unrelated":{"runtimeBindingId":"id"}}}`, false},
-		{"old_id", `{"success":true,"data":"binding-old"}`, false},
-		{"old_object_id", `{"success":true,"data":{"runtimeBindingId":"binding-old"}}`, false},
 		{"invalid_json", `private-error`, false},
 		{"trailing_json", `{"success":true,"data":"id"}{}`, false},
 		{"transport_lost", "", false},
@@ -243,22 +241,22 @@ func TestCrossPlatformCoverageEmployeeServerFailureClassification(t *testing.T) 
 			_, b := lifecycleFixture(t)
 			caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 			if tc.response != "" {
-				caller.responses["deap-dev/rebind_local_agent"] = []string{tc.response, `{"success":true,"data":"recovered"}`}
+				caller.responses["deap-dev/bind_local_agent"] = []string{tc.response, `{"success":true,"data":"recovered"}`}
 			}
 			InitDepsForTest(t, caller)
-			cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
-			_, err := mutateEmployeeServerBinding(cmd, b, "rebind", "new-device")
+			cmd := lifecycleCmd(t, "bind", b.AgentUUID)
+			_, err := mutateEmployeeServerBinding(cmd, b, "bind", "new-device")
 			if err == nil || strings.Contains(err.Error(), "private-error") {
 				t.Fatalf("failure: %v", err)
 			}
-			_, again := mutateEmployeeServerBinding(cmd, b, "rebind", "new-device")
+			_, again := mutateEmployeeServerBinding(cmd, b, "bind", "new-device")
 			if tc.rejected {
 				if again != nil || len(caller.tokenCalls) != 2 {
 					t.Fatalf("rejected retry: %v", again)
 				}
 			} else {
 				if again == nil || len(caller.tokenCalls) != 1 {
-					t.Fatal("uncertain rebind was retried")
+					t.Fatal("uncertain bind was retried")
 				}
 			}
 			current, e := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
@@ -270,7 +268,7 @@ func TestCrossPlatformCoverageEmployeeServerFailureClassification(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageEmployeeServerBindingResponseContract(t *testing.T) {
-	for _, action := range []string{"bind", "rebind"} {
+	for _, action := range []string{"bind"} {
 		for _, tc := range []struct {
 			name, response string
 			wantID         string
@@ -385,7 +383,7 @@ func TestCrossPlatformCoverageEmployeeServerUnbindRetriesExactID(t *testing.T) {
 	}
 	for _, call := range caller.tokenCalls {
 		request := call.args
-		if len(request) != 2 || request["agentUuid"] != b.AgentUUID || request["runtimeBindingId"] != "binding-old" {
+		if len(request) != 2 || request["agentUuid"] != b.AgentUUID {
 			t.Fatalf("unsafe unbind: %v", request)
 		}
 	}
@@ -434,7 +432,7 @@ func TestCrossPlatformCoverageEmployeeServerDurableBeforeNetworkAndBeforeCommit(
 				}
 				return writeEmployeeJSON(path, value)
 			})
-			if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "rebind", b.AgentUUID), b, "bind", b.DeviceID); err == nil {
+			if _, err := mutateEmployeeServerBinding(lifecycleCmd(t, "bind", b.AgentUUID), b, "bind", b.DeviceID); err == nil {
 				t.Fatal("missing disk error")
 			}
 			want := 0
@@ -445,106 +443,6 @@ func TestCrossPlatformCoverageEmployeeServerDurableBeforeNetworkAndBeforeCommit(
 				t.Fatalf("network count: %d", len(caller.tokenCalls))
 			}
 		})
-	}
-}
-
-func TestCrossPlatformCoverageEmployeeServerBindMigrationAndDryRun(t *testing.T) {
-	_, b := lifecycleFixture(t)
-	b.RuntimeBindingID, b.DeviceID = "", ""
-	if err := updateEmployeeBinding(b); err != nil {
-		t.Fatal(err)
-	}
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/bind_local_agent": {`{"success":true,"data":{"runtimeBindingId":"migrated-id"}}`}}}
-	InitDepsForTest(t, caller)
-	cmd := newEmployeeServerBindCommand()
-	cmd.SetContext(context.Background())
-	cmd.Flags().Bool("dry-run", true, "")
-	cmd.Flags().Bool("yes", true, "test confirmation")
-	_ = cmd.Flags().Set("agent-uuid", b.AgentUUID)
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	if len(caller.tokenCalls) != 0 {
-		t.Fatal("dry-run called server")
-	}
-	cmd = newEmployeeServerBindCommand()
-	cmd.SetContext(context.Background())
-	cmd.Flags().Bool("yes", true, "test confirmation")
-	_ = cmd.Flags().Set("agent-uuid", b.AgentUUID)
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	current, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-	if err != nil || current.RuntimeBindingID != "migrated-id" || current.DeviceID == "" || current.BindingRevision != b.BindingRevision {
-		t.Fatalf("migration: %+v %v", current, err)
-	}
-	request := caller.tokenCalls[0].args
-	if len(request) != 2 || request["agentUuid"] != b.AgentUUID || request["deviceId"] == "" {
-		t.Fatalf("unexpected bind payload: %v", request)
-	}
-}
-
-func TestCrossPlatformCoverageEmployeeServerBusyKeepsOldIDAndBlocksNewHost(t *testing.T) {
-	_, b := lifecycleFixture(t)
-	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{"deap-dev/rebind_local_agent": {`{"success":false}`, `{"success":true,"data":"new-id"}`}}}
-	InitDepsForTest(t, caller)
-	started := false
-	testseam.Swap(t, &deapConnectRegisterDSH, func(context.Context, map[string]any) (string, error) { started = true; return "created", nil })
-	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
-		return employeeDSHState{Prepared: true, Released: true, RuntimeState: "stopped"}, nil
-	})
-	cmd := lifecycleCmd(t, "rebind", b.AgentUUID)
-	_ = cmd.Flags().Set("channel", "dsh")
-	_ = cmd.Flags().Set("device-id", "new-device")
-	if err := cmd.RunE(cmd, nil); err == nil {
-		t.Fatal("busy must fail")
-	}
-	current, err := loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-	if err != nil || current.RuntimeBindingID != b.RuntimeBindingID || current.BindingState != "rebinding" || current.DesiredState != "stopped" || started {
-		t.Fatalf("unsafe busy state: %+v", current)
-	}
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	current, err = loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-	if err != nil || current.RuntimeBindingID != "new-id" || current.DeviceID != "new-device" || !started {
-		t.Fatalf("new binding: %+v", current)
-	}
-	raw, _ := os.ReadFile(filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "adapter.json"))
-	var cfg digitalEmployeeAdapterConfig
-	if json.Unmarshal(raw, &cfg) != nil || cfg.Binding.RuntimeBindingID != "new-id" {
-		t.Fatal("adapter used old server ID")
-	}
-}
-
-func TestCrossPlatformCoverageEmployeeServerNewDeviceRebindUsesOldID(t *testing.T) {
-	caller := newSuccessfulConnectCaller(successfulAuthResponse(), `{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
-	caller.responses["deap-dev/rebind_local_agent"] = []string{`{"success":true,"data":{"runtimeBindingId":"new-device-binding","runtimeId":"runtime-other"}}`}
-	InitDepsForTest(t, caller)
-	setupSuccessfulConnectSeams(t)
-	var saved digitalEmployeeBinding
-	testseam.Swap(t, &deapConnectSaveBinding, func(_ string, b digitalEmployeeBinding) error { saved = b; return nil })
-	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
-		return employeeDSHState{}, fmt.Errorf("no host")
-	})
-	cmd := lifecycleCmd(t, "rebind", "agent-1")
-	_ = cmd.Flags().Set("channel", "dsh")
-	_ = cmd.Flags().Set("runtime-binding-id", "old-machine-binding")
-	_ = cmd.Flags().Set("device-id", "new-machine")
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatal(err)
-	}
-	if saved.RuntimeBindingID != "new-device-binding" || saved.DeviceID != "new-machine" {
-		t.Fatalf("wrong new device: %+v", saved)
-	}
-	for _, call := range caller.tokenCalls {
-		if call.toolName == "bind_local_agent" {
-			t.Fatal("new device used bind instead of atomic rebind")
-		}
-	}
-	request := caller.tokenCalls[len(caller.tokenCalls)-1].args
-	if len(request) != 3 || request["agentUuid"] != "agent-1" || request["runtimeBindingId"] != "old-machine-binding" || request["deviceId"] != "new-machine" {
-		t.Fatal("wrong expected binding")
 	}
 }
 
@@ -570,7 +468,7 @@ func TestCrossPlatformCoverageEmployeeUnbindOldIDCannotTargetSuccessor(t *testin
 	InitDepsForTest(t, caller)
 	cmd := lifecycleCmd(t, "unbind", b.AgentUUID)
 	_ = cmd.Flags().Set("runtime-binding-id", "different-id")
-	if err := mutateEmployeeBinding(cmd, "unbind"); err == nil {
+	if err := runEmployeeUnbind(cmd); err == nil {
 		t.Fatal("foreign ID accepted")
 	}
 	if len(caller.tokenCalls) != 0 {
@@ -580,7 +478,7 @@ func TestCrossPlatformCoverageEmployeeUnbindOldIDCannotTargetSuccessor(t *testin
 	if err := updateEmployeeBinding(b); err != nil {
 		t.Fatal(err)
 	}
-	if err := mutateEmployeeBinding(lifecycleCmd(t, "unbind", b.AgentUUID), "unbind"); err != nil {
+	if err := runEmployeeUnbind(lifecycleCmd(t, "unbind", b.AgentUUID)); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.tokenCalls) != 0 {
@@ -652,14 +550,14 @@ func TestCrossPlatformCoverageEmployeeBindingDryRunDoesNotRepairReceipts(t *test
 		t.Fatal(err)
 	}
 	before, _ := os.ReadFile(path)
-	for _, action := range []string{"unbind", "rebind"} {
+	for _, action := range []string{"unbind", "bind"} {
 		cmd := lifecycleCmd(t, action, b.AgentUUID)
 		_ = cmd.Flags().Set("dry-run", "true")
-		if action == "rebind" {
+		if action == "bind" {
 			_ = cmd.Flags().Set("channel", "dsh")
 			_ = cmd.Flags().Set("device-id", "new-device")
 		}
-		if err := mutateEmployeeBinding(cmd, action); err != nil {
+		if err := cmd.RunE(cmd, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

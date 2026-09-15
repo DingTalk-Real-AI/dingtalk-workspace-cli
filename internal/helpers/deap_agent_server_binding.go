@@ -16,9 +16,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -45,10 +43,6 @@ func employeeServerFlags() []LeafFlag {
 		{Name: "local-agent-name", Usage: "服务端绑定的本地 Agent 名称（可选）", Trim: true},
 		{Name: "extensions", Usage: "服务端绑定扩展信息字符串；不写入回执或输出"},
 	}
-}
-
-func employeeServerParams() []contract.ParamDecl {
-	return []contract.ParamDecl{{Name: "device-id", Property: "deviceId"}, {Name: "local-agent-name", Property: "localAgentName"}, {Name: "extensions", Property: "extensions"}}
 }
 
 func employeeDeviceID(ctx context.Context, explicit string) (string, error) {
@@ -97,7 +91,7 @@ func employeeServerOperationPath(profile string) string {
 }
 
 // 调用者持有员工 operation 锁。先写 pending，再发送一次；confirmed 回执允许
-// 本地提交失败后的重放。pending 不能自动重放非幂等换绑，且不记录请求扩展信息。
+// 本地提交失败后的重放。pending 不能自动重放非幂等绑定，且不记录请求扩展信息。
 func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, action string, deviceID string) (string, error) {
 	configDir := deapConnectConfigDir()
 	selector, token, err := currentSupervisorProfile(cmd.Context(), configDir)
@@ -116,13 +110,13 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 	}
 	request := map[string]any{"agentUuid": b.AgentUUID}
 	switch action {
-	case "bind", "unbind", "rebind":
+	case "bind", "unbind":
 	default:
 		return "", fmt.Errorf("无效绑定操作")
 	}
 	if action != "bind" {
 		if !validMachineString(b.RuntimeBindingID) {
-			return "", fmt.Errorf("缺少 runtimeBindingId；旧版连接先使用 connect bind 补登记，换机时显式提供 --runtime-binding-id")
+			return "", fmt.Errorf("缺少 runtimeBindingId；旧版连接先 connect stop，再用 connect 补齐绑定后解绑")
 		}
 		request["runtimeBindingId"] = b.RuntimeBindingID
 	}
@@ -245,9 +239,6 @@ func mutateEmployeeServerBinding(cmd *cobra.Command, b digitalEmployeeBinding, a
 		if !validMachineString(op.RuntimeBindingID) {
 			return "", employeeServerUnknown("绑定未返回有效 ID")
 		}
-		if action == "rebind" && op.RuntimeBindingID == b.RuntimeBindingID {
-			return "", employeeServerUnknown("换绑未返回新 ID")
-		}
 	}
 	op.Phase = "confirmed"
 	if err := employeeServerWrite(path, op); err != nil {
@@ -359,7 +350,7 @@ func consumeEmployeeServerOperation(profile string) error {
 }
 
 // 仅本地提交与服务端回执完全一致时，允许恢复启动。没有回执的 #9 旧连接
-// 仍可执行既有 stop/restart；登记与解绑迁移由显式 bind 处理。
+// 仍可执行既有 stop/restart；登记由 connect 处理。
 func checkEmployeeServerOperation(b digitalEmployeeBinding) error {
 	raw, err := os.ReadFile(employeeServerOperationPath(b.DWSProfile))
 	if os.IsNotExist(err) {
@@ -381,57 +372,4 @@ func checkEmployeeServerOperation(b digitalEmployeeBinding) error {
 		}
 	}
 	return employeeServerUnknown("服务端绑定操作未完成，请恢复原操作；禁止启动新 Agent")
-}
-
-func newEmployeeServerBindCommand() *cobra.Command {
-	flags := append([]LeafFlag{{Name: "agent-uuid", Required: true, Usage: "已有本地连接的数字员工 ID"}}, employeeServerFlags()...)
-	params := append([]contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}}, employeeServerParams()...)
-	return NewLeafCommand(LeafSpec{Use: "bind", Short: "为已有本地连接补登记服务端设备绑定", PostMount: deapAgentNoArgs, Flags: flags, OutputRollout: output.RolloutUnifiedActive,
-		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
-		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_bind", CanonicalPath: "dingtalk-tag.connect_bind", CLIPath: "dingtalk-tag connect bind", PrimaryCLIPath: "dingtalk-tag connect bind", Group: "connect"}, Description: "以主管身份为已有本机连接补登记设备绑定；不启动 Agent，不判断在线。其他设备已绑定时使用 rebind。", Parameters: params, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "本地设备标识与服务端绑定回执"}, Selection: contract.SelectionSpec{AgentSummary: "为已有本地 Agent 补登记服务端绑定", UseWhen: []string{"旧版连接尚未登记服务端设备绑定"}, AvoidWhen: []string{"首次接入使用 connect；换绑使用 connect rebind；绑定不代表在线"}, Examples: []string{"dws dingtalk-tag connect bind --agent-uuid <agentUuid>"}}},
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if commandDryRun(cmd) {
-				return writeDWSMachineEnvelope(cmd, map[string]any{"status": "planned", "agentUuid": devAppStringFlag(cmd, "agent-uuid"), "steps": []string{"resolve_device", "server_bind", "save_receipt"}})
-			}
-			bindings, err := employeeFindBindings(devAppStringFlag(cmd, "agent-uuid"))
-			if err != nil {
-				return err
-			}
-			if len(bindings) != 1 {
-				return fmt.Errorf("补登记需要唯一已有本地连接；首次接入使用 connect")
-			}
-			b := bindings[0]
-			lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(digitalEmployeeRuntimeDir(b.DWSProfile), "operation"))
-			if err != nil {
-				return err
-			}
-			defer lock.Release()
-			b, err = loadDigitalEmployeeBinding(deapConnectConfigDir(), b.DWSProfile)
-			if err != nil {
-				return err
-			}
-			if employeeBindingState(b) != "bound" {
-				return fmt.Errorf("本地连接不是 bound；请先恢复原生命周期操作")
-			}
-			device, err := employeeBindingDeviceID(cmd.Context(), b, devAppStringFlag(cmd, "device-id"))
-			if err != nil {
-				return err
-			}
-			if b.DeviceID != "" && b.DeviceID != device {
-				return fmt.Errorf("目标设备不同，请使用 connect rebind")
-			}
-			id, err := mutateEmployeeServerBinding(cmd, b, "bind", device)
-			if err != nil {
-				return err
-			}
-			b.DeviceID, b.RuntimeBindingID = device, id
-			if err := updateEmployeeBinding(b); err != nil {
-				return err
-			}
-			if err := consumeEmployeeServerOperation(b.DWSProfile); err != nil {
-				return err
-			}
-			return writeDWSMachineEnvelope(cmd, map[string]any{"status": "bound", "agentUuid": b.AgentUUID, "deviceId": device, "runtimeBindingId": id, "serverBindingState": "bound"})
-		},
-	})
 }

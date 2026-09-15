@@ -23,7 +23,9 @@ dws dingtalk-tag connect list --format json
 dws dingtalk-tag connect stop --agent-uuid <agentUuid> --format json
 dws dingtalk-tag connect restart --agent-uuid <agentUuid> --format json
 dws dingtalk-tag connect unbind --agent-uuid <agentUuid> --dry-run
-dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --channel qoder --daemon --alwayson --dry-run
+dws dingtalk-tag connect unbind --agent-uuid <agentUuid> --dry-run
+# 确认解绑成功后再连接目标 Agent
+dws dingtalk-tag connect --agent-uuid <agentUuid> --channel qoder --daemon --alwayson --dry-run
 ```
 
 真实 connect 需汇总确认；可先用 `--dry-run`。默认前台，daemon 仅在 Event ready 且 Agent 初始化完成后报告运行成功。初始化成功不代表模型授权或真实消息已经验收。
@@ -34,8 +36,8 @@ dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --channel qoder --daemo
 
 - `stop` 保存 stopped 期望，停止该员工，保留 binding 与 Profile；`restart` 复用保存的 Profile，不向主管重新换票。
 - `unbind` 先停止并确认释放，随后写入 unbound 墓碑；保留 Profile、Token、去重记录、会话及审计。
-- `rebind` 先预检目标；旧 binding 标为 rebinding，停旧实例并等待释放；提交新 bindingRevision 后才启动新 Adapter。预检失败不改旧绑定；提交后启动失败用 restart 恢复，不再次创建员工。
-- 状态区分 `bindingState`（bound/unbound/rebinding/unbinding）、`desiredState`（running/stopped）、`runtimeState`，并返回绑定版本、实例、transportReady、executorReady、observedAt 和阻塞原因。旧 `status` 保留兼容。
+- 更换 Agent 或设备时先完成 `connect unbind`，再执行 `connect`；新连接保存新的服务端 ID 和 bindingRevision 后才启动目标 Adapter。解绑失败不得启动新实例；新绑定提交后启动失败用 restart 恢复。
+- 状态区分 `bindingState`（bound/unbound/unbinding；旧版 rebinding 记录仍需核对恢复）、`desiredState`（running/stopped）、`runtimeState`，并返回绑定版本、实例、transportReady、executorReady、observedAt 和阻塞原因。旧 `status` 保留兼容。
 - DSH 通过私有本机 IPC 处理 prepare/start/status/stop/release；宿主失联或停止超时为 unknown/未释放，不强制换绑。
 - DSH 持有与 DWS 原生 worker 相同的 Profile 运行锁，最后才释放。两个宿主或跨 Adapter 并发不能同时取得锁。此保证仅限同机、同配置目录、受管理的运行入口，不是跨机器在线状态服务。
 - 回复带 bindingRevision；旧版本不能在换绑提交后继续调用 Channel 下行。
