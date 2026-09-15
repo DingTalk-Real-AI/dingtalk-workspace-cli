@@ -608,6 +608,10 @@ var CalculateApproveDuration = shortcut.Shortcut{
 			{Name: "new-overtime", Property: "newOvertime"},
 			{Name: "principal-users", Property: "principalUserIds"},
 			{Name: "nature-day", Property: "natureDay"},
+			{Name: "duration-in-hour", Property: "durationInHour"},
+			{Name: "duration-in-day", Property: "durationInDay"},
+			{Name: "detail-list", Property: "detailList"},
+			{Name: "modified-date", Property: "modifiedDate"},
 		},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
@@ -618,7 +622,7 @@ var CalculateApproveDuration = shortcut.Shortcut{
 			AgentSummary: "按排班和考勤规则计算审批时长，不提交审批",
 			UseWhen:      []string{"已知审批业务类型、时长模式和起止时间，需要获取准确审批时长或提交所需压缩值时使用"},
 			AvoidWhen:    []string{"只需查询已提交审批记录时使用 +list-approve；需要实际提交审批时使用对应提交流程"},
-			Examples:     []string{`dws attendance +calculate-approve-duration --biz-type 1 --duration-mode 3 --start "2026-08-31 09:00:00" --end "2026-08-31 18:00:00" --new-overtime`},
+			Examples:     []string{`dws attendance +calculate-approve-duration --biz-type 1 --duration-mode 3 --start "2026-08-31 09:00:00" --end "2026-08-31 18:00:00" --new-overtime`, `dws attendance +calculate-approve-duration --biz-type 1 --duration-mode 3 --start "2026-09-01 19:00:00" --end "2026-09-02 07:00:00" --new-overtime --detail-list '[{"workDate":"2026-09-01 00:00:00","durationInHour":"4"},{"workDate":"2026-09-02 00:00:00","durationInHour":"7"}]'`},
 		},
 		Result: attendanceApproveDurationResult(),
 	},
@@ -635,11 +639,16 @@ var CalculateApproveDuration = shortcut.Shortcut{
 		{Name: "new-overtime", Type: shortcut.FlagBool, Desc: "是否使用新版加班规则；仅明确为新版加班时传"},
 		{Name: "principal-users", Type: shortcut.FlagStringSlice, Desc: "出差、外出等场景的同行人员工 userId，逗号分隔"},
 		{Name: "nature-day", Type: shortcut.FlagBool, Desc: "是否按自然日计算；不传时沿用业务默认规则"},
+		{Name: "duration-in-hour", Type: shortcut.FlagString, Desc: "提议总时长（小时，数字）；歧义窗口（班中起始/跨天）携带，仅 --duration-mode 3"},
+		{Name: "duration-in-day", Type: shortcut.FlagString, Desc: "提议总时长（天，数字）；歧义窗口携带，仅 --duration-mode 1/2"},
+		{Name: "detail-list", Type: shortcut.FlagString, Desc: "多日逐日明细 JSON 数组，如 [{\"workDate\":\"2026-09-01 00:00:00\",\"durationInHour\":\"4\"}]；跨天窗口必传"},
+		{Name: "modified-date", Type: shortcut.FlagString, Desc: "明细修改日，格式 yyyy-MM-dd HH:mm:ss；逐日明细编辑确认时携带"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"biz-type"}, Description: "--biz-type 必须在 1 到 8 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-mode", "half-start", "half-end"}, Description: "--duration-mode 必须在 1 到 5 之间；半天模式必须同时提供 --half-start 和 --half-end"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "起止时间格式必须正确，且 --end 不得早于 --start"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"duration-in-hour", "duration-in-day", "detail-list", "modified-date"}, Description: "--duration-in-hour/--duration-in-day 互斥、必须为数字且与 --duration-mode 单位匹配；--detail-list 必须为 JSON 数组，每项含 workDate（yyyy-MM-dd HH:mm:ss）与 durationInHour 或 durationInDay；--modified-date 格式为 yyyy-MM-dd HH:mm:ss"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Int("biz-type") < 1 || rt.Int("biz-type") > 8 {
@@ -669,7 +678,66 @@ var CalculateApproveDuration = shortcut.Shortcut{
 			return fmt.Errorf("--half-start 和 --half-end 仅适用于 --duration-mode 2")
 		}
 		if users := rt.StrSlice("principal-users"); len(users) > 0 {
-			return attendanceValidateUserIDs(users, 0)
+			if err := attendanceValidateUserIDs(users, 0); err != nil {
+				return err
+			}
+		}
+		durHour := rt.Str("duration-in-hour")
+		durDay := rt.Str("duration-in-day")
+		if durHour != "" && durDay != "" {
+			return fmt.Errorf("--duration-in-hour 与 --duration-in-day 互斥")
+		}
+		if durHour != "" {
+			if _, err := strconv.ParseFloat(durHour, 64); err != nil {
+				return fmt.Errorf("--duration-in-hour 必须为数字")
+			}
+			if mode != 3 {
+				return fmt.Errorf("--duration-in-hour 仅适用于 --duration-mode 3（小时）")
+			}
+		}
+		if durDay != "" {
+			if _, err := strconv.ParseFloat(durDay, 64); err != nil {
+				return fmt.Errorf("--duration-in-day 必须为数字")
+			}
+			if mode != 1 && mode != 2 {
+				return fmt.Errorf("--duration-in-day 仅适用于 --duration-mode 1/2（天/半天）")
+			}
+		}
+		if v := rt.Str("modified-date"); v != "" {
+			if _, err := time.Parse("2006-01-02 15:04:05", v); err != nil {
+				return fmt.Errorf("--modified-date 格式必须为 yyyy-MM-dd HH:mm:ss")
+			}
+		}
+		if v := rt.Str("detail-list"); v != "" {
+			var dl []map[string]any
+			if err := json.Unmarshal([]byte(v), &dl); err != nil {
+				return fmt.Errorf("--detail-list 必须为 JSON 数组，如 [{\"workDate\":\"2026-09-01 00:00:00\",\"durationInHour\":\"4\"}]")
+			}
+			if len(dl) == 0 {
+				return fmt.Errorf("--detail-list 不能为空数组")
+			}
+			for i, item := range dl {
+				switch wd := item["workDate"].(type) {
+				case string:
+					if wd == "" {
+						return fmt.Errorf("--detail-list 第 %d 项缺少 workDate", i+1)
+					}
+					if _, err := time.Parse("2006-01-02 15:04:05", wd); err != nil {
+						return fmt.Errorf("--detail-list 第 %d 项 workDate 格式必须为 yyyy-MM-dd HH:mm:ss", i+1)
+					}
+				case float64:
+					if wd <= 0 {
+						return fmt.Errorf("--detail-list 第 %d 项 workDate 毫秒时间戳必须大于 0", i+1)
+					}
+				default:
+					return fmt.Errorf("--detail-list 第 %d 项 workDate 必须为 yyyy-MM-dd HH:mm:ss 字符串或毫秒时间戳", i+1)
+				}
+				if _, ok := item["durationInHour"]; !ok {
+					if _, ok2 := item["durationInDay"]; !ok2 {
+						return fmt.Errorf("--detail-list 第 %d 项缺少 durationInHour 或 durationInDay", i+1)
+					}
+				}
+			}
 		}
 		return nil
 	},
@@ -709,6 +777,38 @@ var CalculateApproveDuration = shortcut.Shortcut{
 		}
 		if rt.Changed("nature-day") {
 			params["natureDay"] = rt.Bool("nature-day")
+		}
+		// durationInHour/durationInDay/modifiedDate 按字符串形态透传：MCP schema 声明为 number，但预发实证服务端兼容（2026-09-11 复核仍无碍）；
+		// detailList.workDate 例外——服务端仅采信毫秒 number，下方统一转换。
+		if v := rt.Str("duration-in-hour"); v != "" {
+			params["durationInHour"] = v
+		}
+		if v := rt.Str("duration-in-day"); v != "" {
+			params["durationInDay"] = v
+		}
+		if v := rt.Str("modified-date"); v != "" {
+			params["modifiedDate"] = v
+		}
+		if v := rt.Str("detail-list"); v != "" {
+			var dl []any
+			if err := json.Unmarshal([]byte(v), &dl); err != nil {
+				return fmt.Errorf("--detail-list JSON 解析失败: %w", err)
+			}
+			// detailList.workDate 归一化为 13 位毫秒 number：当前服务端（2026-09-11 发版后）仅采信毫秒 number 形态，
+			// 字符串形态会被静默忽略并返回 durationInHour=0 且不报错；CLI 侧仍接受可读字符串以保持易用性，透传前统一转换。
+			// 注意区分：请假/加班提交载荷里 extValue 的 workDate 必须原样透传服务端响应值，禁止转换——那是响应侧规范。
+			for _, item := range dl {
+				m, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if s, ok := m["workDate"].(string); ok && s != "" {
+					if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
+						m["workDate"] = t.UnixMilli()
+					}
+				}
+			}
+			params["detailList"] = dl
 		}
 		return attendanceCallObject(rt, serverWukong, "calculate_approve_duration", params)
 	},

@@ -127,7 +127,7 @@ Flags:
 
 返回每条记录含：用户 ID、审批标签、审批子类型、审批类型、生效时间、时长、时长单位、流程实例 ID。
 
-### 查询补卡/请假/加班/外出/出差审批提交链接 (必须走引导流程)
+### 查询补卡/请假/加班/外出/出差审批提交链接
 ```
 Usage:
   dws attendance approve templates [flags]
@@ -141,7 +141,7 @@ Flags:
       --type string      审批类型：repair-check/patch/补卡、leave/请假、overtime/加班、travel/外出、out/trip/出差，或 REPAIR_CHECK/LEAVE/OVERTIME/TRAVEL/OUT（必填）
 ```
 
-**加班/外出/出差**需要提交时，使用该命令查询考勤审批模板提交链接，并引导用户点击返回的 `submitUrl` 提交。**请假与补卡的提交意图路由到 oa**（发起工作流见 oa.md「发起请假审批」/「发起补卡审批」章节，不在此引导链接）。
+**出差**需要提交时，使用该命令查询考勤审批模板提交链接并引导用户点击返回的 `submitUrl` 提交。**请假/补卡/外出/加班的提交意图路由到 oa**（发起工作流见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」/ [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」/ [oa/oa-goout.md](oa/oa-goout.md)「发起外出审批」/ [oa/oa-overtime.md](oa/oa-overtime.md)「发起加班审批」，均以本命令定位模板后进入工作流，不做链接引导；仅不支持 CLI 发起的模板场景（如加班旧版模板）才需要链接引导）。
 `corpId` 和 `opUserId` 由系统参数自动注入，无需通过命令参数传入。
 审批类型映射：补卡=`REPAIR_CHECK`，请假=`LEAVE`，加班=`OVERTIME`，外出=`TRAVEL`，出差=`OUT`（`trip` / `business_trip` / `business-trip` 亦映射为 `OUT`）。返回结果为列表，每条记录包含 `approveType`、`formName`、`processCode`、`submitUrl`。
 #### 引导用户自主选择合适的表单模板流程
@@ -167,7 +167,7 @@ Flags:
 
 ### 计算请假时长（请假套件发起链路）
 
-> 只读。返回服务端口径的请假时长与每日明细，用于组装请假套件（DDHolidayField）的 extValue。**时长禁止本地估算**。发起工作流见 oa.md「发起请假审批」章节。
+> 只读。返回服务端口径的请假时长与每日明细，用于组装请假套件（DDHolidayField）的 extValue。**时长禁止本地估算**。发起工作流见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」。
 
 ```
 Usage:
@@ -186,7 +186,7 @@ Flags:
 
 ### 提交前校验请假资格（请假套件发起链路）
 
-> 只读。发起请假前校验时间段冲突、可撤销实例与额度。**--duration-day / --duration-hour 必须取自 `leave-duration` 的输出**。发起工作流见 oa.md「发起请假审批」章节。
+> 只读。发起请假前校验时间段冲突、可撤销实例与额度。**--duration-day / --duration-hour 必须取自 `leave-duration` 的输出**。发起工作流见 [oa/oa-leave.md](oa/oa-leave.md)「发起请假审批」。
 
 ```
 Usage:
@@ -216,7 +216,7 @@ Flags:
 
 ### 匹配补卡目标异常班次（补卡套件发起链路）
 
-> 只读。按补卡时间点返回服务端匹配的异常班次列表（planTip/planText/workDate/supplyDate），用于组装补卡套件（DDBizSuite · attendance.supply）子控件的 extValue。**班次匹配禁止本地估算**。发起工作流见 oa.md「发起补卡审批」章节。
+> 只读。按补卡时间点返回服务端匹配的异常班次列表（planTip/planText/workDate/supplyDate），用于组装补卡套件（DDBizSuite · attendance.supply）子控件的 extValue。**班次匹配禁止本地估算**。发起工作流见 [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」。
 
 ```
 Usage:
@@ -233,7 +233,7 @@ Flags:
 
 ### 提交前校验补卡资格（补卡套件发起链路）
 
-> 只读。发起补卡前校验期限/次数/状态资格。**--timestamp 必须取自 `supply-plans` 输出的 supplyDate**（与 supply-plans --time 刻意异名，避免同名异义错传）。发起工作流见 oa.md「发起补卡审批」章节。
+> 只读。发起补卡前校验期限/次数/状态资格。**--timestamp 必须取自 `supply-plans` 输出的 supplyDate**（与 supply-plans --time 刻意异名，避免同名异义错传）。发起工作流见 [oa/oa-supply.md](oa/oa-supply.md)「发起补卡审批」。
 
 ```
 Usage:
@@ -246,6 +246,71 @@ Flags:
 ```
 
 校验通过返回 `qualify=true`；不通过（qualify=false）时命令**非零退出**并原样输出服务端 `title`/`desc`——此时必须转告用户并**终止本次发起**，不得跳过重试。
+
+### 计算考勤审批时长（外出/加班套件发起链路）
+
+> 只读。按排班与考勤规则计算审批时长，返回 durationInDay/durationInHour/detailList/compressedValue 等提交素材；只计算，不提交。外出套件发起工作流见 [oa/oa-goout.md](oa/oa-goout.md)「发起外出审批」；加班套件发起工作流见 [oa/oa-overtime.md](oa/oa-overtime.md)「发起加班审批」；加班时长结果须经用户手动确认后方可组装发起。
+
+```
+Usage:
+  dws attendance +calculate-approve-duration [flags]
+Example:
+  dws attendance +calculate-approve-duration --biz-type 2 --approve-biz-type attendance.goout --duration-mode 2 --start 2026-09-02 --end 2026-09-02 --half-start AM --half-end PM   # 外出半天
+  dws attendance +calculate-approve-duration --biz-type 2 --approve-biz-type attendance.goout --duration-mode 3 --start "2026-09-02 09:00:00" --end "2026-09-02 10:00:00"          # 外出按小时
+Flags:
+      --biz-type int         审批业务类型：1-加班，2-普通审批，3-请假，4-补卡，5-外出，6-换班，7-考勤证明，8-单次外出 (必填)
+      --approve-biz-type string  普通审批场景的原始审批子类型；外出固定 attendance.goout（外出链路必传）
+      --duration-mode int    时长模式：1-天，2-半天，3-小时，4-半小时，5-分钟 (必填)
+      --start string         开始时间，YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss (必填)
+      --end string           结束时间，格式同 --start，且不得早于开始时间 (必填)
+      --half-start string    半天模式开始时段：AM 或 PM（--duration-mode 2 时必填）
+      --half-end string      半天模式结束时段：AM 或 PM（--duration-mode 2 时必填）
+      --principal-users strings  出差、外出等场景的同行人员工 userId，逗号分隔
+      --new-overtime           是否使用新版加班规则；加班链路必传（正文见下）
+      --detail-list string     多日逐日明细 JSON 数组，如 [{"workDate":"2026-09-01 00:00:00","durationInHour":"4"}]；跨天窗口必传
+      --duration-in-hour string  提议总时长（小时，数字）；歧义窗口（班中起始/跨天）携带，仅 --duration-mode 3
+      --duration-in-day string   提议总时长（天，数字）；歧义窗口携带，仅 --duration-mode 1/2
+      --modified-date string   明细修改日，格式 yyyy-MM-dd HH:mm:ss；逐日明细编辑确认时携带
+```
+
+外出固定 `--biz-type 2 --approve-biz-type attendance.goout`（生产实证；--biz-type 5 报业务错误 C0002）；`--duration-mode` 由外出类型 option 的 extension.unit 决定（day→1，halfDay→2，hour→3）。返回的 `compressedValue`、detailList 等应保留给审批提交流程（按 oa-form-components.md 外出套件章节的映射表组装 extValue），不自行拼装或改写。
+
+加班固定 `--biz-type 1 --new-overtime`（新版加班规则）；`--duration-mode` 由 `+get-complex-overtime-setting` 响应 interactMode 决定（day→1，halfDay→2 须同传 --half-start/--half-end，hour→3）；`--principal-users` 不传时服务端默认按发起人计算（本人发起不传），代提交/批量必传全量加班人；响应 `overtimeDurationStatus≠0` 时原样转告 `message` 并终止，`excludePrincipalUserIds` 非空需转告用户确认剔除，`overtimeRedressBy=="manual"` 时补偿方式必选。多天逐日明细经 `--detail-list` 透传组装（跨天/多天两阶段确认流程见 oa-overtime.md 步骤 6）。
+
+### 校验出差/外出同行人班次（外出套件发起链路）
+
+> 只读。提交出差或外出审批前校验同行人班次是否与申请时间段兼容；`valid=false` 是正常业务校验结果（班次冲突），不代表接口异常。外出套件发起工作流见 [oa/oa-goout.md](oa/oa-goout.md)「发起外出审批」。
+
+```
+Usage:
+  dws attendance +check-companion-schedules [flags]
+Example:
+  dws attendance +check-companion-schedules --approve-type 2 --starts "2026-09-02" --ends "2026-09-02" --principal-users userId1,userId2 --duration-unit DAY
+Flags:
+      --approve-type int       审批类型：1-出差，2-外出 (必填)
+      --starts strings         申请时间段开始时间列表，YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss；与 --ends 按位置一一对应 (必填)
+      --ends strings           申请时间段结束时间列表，格式同 --starts (必填)
+      --duration-unit string   审批时长单位：DAY 或 HOUR (必填)
+      --principal-users strings  同行人员工 userId 列表，逗号分隔
+```
+
+外出固定 `--approve-type 2`；`valid=false` 时原样转告 `title`/`alertInfo` 与冲突同行人（`userIds`），请用户剔除后重试；没有同行人时无需调用。
+
+### 查询复杂加班规则（加班套件发起链路）
+
+> 只读。查询一名或多名员工在指定日期适用的加班交互单位与完整规则配置；加班审批发起前必查（动态单位可与模板静态单位不一致）。加班套件发起工作流见 [oa/oa-overtime.md](oa/oa-overtime.md)「发起加班审批」。
+
+```
+Usage:
+  dws attendance +get-complex-overtime-setting [flags]
+Example:
+  dws attendance +get-complex-overtime-setting --users userId1,userId2 --work-date 2026-08-31
+Flags:
+      --users strings       员工 userId 列表，逗号分隔，不能为空、不能重复 (必填)
+      --work-date string    规则生效日期，YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss；不传时使用服务端当前时间
+```
+
+响应 `interactMode` 1=day / 2=halfDay / 3=hour 为**有效单位**（与模板 props.unit 不一致时以本结果为准，起止格式与时长取值字段随之切换）；`reason` 非空 = 该员工组禁止加班，原样转告并终止。
 
 ### 导入排班记录（排班 = 为员工安排工作日期和班次, 写场景接口，必须走二次确认流程）
 ```
