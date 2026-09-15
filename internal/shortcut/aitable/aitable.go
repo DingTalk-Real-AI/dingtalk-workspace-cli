@@ -2146,10 +2146,10 @@ var WorkflowList = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 20，最大 100（可选）"},
-		{Name: "all", Type: shortcut.FlagBool, Desc: "有界遍历全部工作流"},
+		{Name: "all", Type: shortcut.FlagBool, Desc: "从偏移量 0 开始有界遍历全部工作流；不允许非零 --offset"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "全量遍历页数上限，1-1000"},
 		{Name: "status", Type: shortcut.FlagString, Desc: "在完整集合中过滤状态，必须 --all", Enum: []string{"enabled", "disabled"}},
-		{Name: "offset", Type: shortcut.FlagInt, Desc: "分页偏移量，默认 0（可选）"},
+		{Name: "offset", Type: shortcut.FlagInt, Desc: "分页偏移量，默认 0；--all 模式只允许 0（可选）"},
 	},
 	Tips:    []string{`dws aitable +workflow-list --base-id B`},
 	Execute: executeWorkflowList,
