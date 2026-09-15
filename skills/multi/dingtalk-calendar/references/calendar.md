@@ -56,25 +56,6 @@ dws calendar event suggest [flags]
 dws calendar attendee [add|delete|list] [flags]
 ```
 
-### 按姓名邀请参会人快捷指令
-
-```bash
-dws calendar +invite --event EVENT_ID --with 张三,李四
-dws calendar +book --title "项目讨论" --start "2026-10-10T14:00:00+08:00" --end "2026-10-10T15:00:00+08:00" --with 张三,李四
-```
-
-`+invite` 给已有日程添加参会人；`+book --with` 先创建日程再添加参会人。两者先将姓名解析为唯一 userId，并要求添加接口明确返回成功；失败或缺少成功回执仍会报错。
-
-参会人查询接口返回展示名和响应状态，不返回用于添加的 userId，展示名也可能与通讯录姓名不同，因此不作为这两个快捷指令的身份读回校验依据。成功输出位于统一结果的 `data` 中：
-
-| 指令 | 成功结果含义 |
-|---|---|
-| `+invite` | `success=true`、`acknowledged=true`，返回 `eventId` 和 `invitedCount`；`verified=false` 表示未独立读回验证参会人身份 |
-| `+book --with` | `success=true`、`attendeesAcknowledged=true`；`eventVerified=true` 表示日程 ID、标题和时间已读回验证；`verified=false` 表示未验证参会人身份 |
-| `+book` 不带参会人 | `success=true`、`eventVerified=true`、`verified=true` |
-
-成功结果中的 `verified=false` 不表示添加失败，不应据此重新执行邀请或创建日程。查看展示名和响应状态可用 `dws calendar +attendee-list --event EVENT_ID`。
-
 ### room 相关三级子命令
 ```
 # 查询分组
@@ -652,9 +633,7 @@ Flags:
 
 用户说"参会人/与会者":
 - 查看 → `attendee list`
-- 按姓名邀请到已有日程 → `+invite --event <EVENT_ID> --with 姓名`
-- 按姓名创建会议并邀请 → `+book --title 标题 --start 时间 --end 时间 --with 姓名`
-- 按 userId 邀请/添加 → `attendee add --attendees <USER_ID>`（可选参会人加 `--optional`）
+- 邀请/添加 → `attendee add --attendees <USER_ID>`（可选参会人加 `--optional`）
 - 移除 → `attendee delete --attendees <USER_ID>`
 
 用户说"会议室/订会议室":
@@ -753,7 +732,6 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `event create` | `result.id` | attendee/room/attachment 操作的 --event |
-| `+invite` / `+book` | `data.eventId` | `+attendee-list --event` 或其他日程操作 |
 | `event list` | `result.events[].id`, `nextCursor` | event get/update/delete/respond 的 --id；下一页 --cursor |
 | `event suggest` | 推荐的时间段 | event create 的 --start/--end |
 | `event respond` | 响应结果 | — |
@@ -770,7 +748,6 @@ dws calendar event list --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15
 
 ## 注意事项
 
-- `+invite` / `+book` 成功返回的 `data.eventId` 可传给 `+attendee-list --event` 查看参会人；姓名解析得到的 userId 用于写入，不能从参会人展示名反推。
 - 时间格式: `event create/update`、`event list`、`busy search` 和 `event suggest` 用 ISO-8601
 - 时区: `event create/update` 和 `event suggest` 支持 `--timezone` 指定 IANA 时区（如 `Asia/Shanghai`、`America/New_York`），不传默认 `Asia/Shanghai`
 - 创建日程时可通过 `--attendees` 直接指定参会人（最多500人），也可创建后用 `attendee add --attendees ...` 单独添加
