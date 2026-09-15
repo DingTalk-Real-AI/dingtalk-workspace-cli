@@ -37,7 +37,7 @@ func TestCrossPlatformCoverageAITableLegacyContractLedgerIsExact(t *testing.T) {
 func TestCrossPlatformCoverageRecordQueryContractGuidesPaginationAndValueNormalization(t *testing.T) {
 	item := RecordQuery
 	for _, required := range []string{
-		"默认返回一页", "--all", "--output", "max-records", "view-id", "复杂视图条件无法转换时明确失败",
+		"默认返回一页", "--all", "--export-output", "max-records", "view-id", "复杂视图条件无法转换时明确失败",
 	} {
 		if !strings.Contains(item.Intent, required) {
 			t.Errorf("RecordQuery intent missing %q", required)

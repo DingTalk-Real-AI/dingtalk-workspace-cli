@@ -161,3 +161,21 @@ func TestCrossPlatformCoverageParityAliasesRetainOwningValidator(t *testing.T) {
 		t.Fatal(err, called)
 	}
 }
+
+func TestCrossPlatformCoverageParityExportRejectsUnresolvableResultDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+	caller := &upsertByKeyCaller{}
+	helpers.InitDepsForTest(t, caller)
+	cmd := &cobra.Command{Use: "query"}
+	cmd.Flags().Bool("all", false, "")
+	cmd.Flags().String("export-output", "", "")
+	cmd.Flags().String("output", "", "")
+	for name, value := range map[string]string{"all": "true", "export-output": "rows.ndjson", "output": "removed-directory/result.json"} {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := executeRecordQuery(shortcut.RuntimeContextForTest(cmd, RecordQuery), nil); err == nil || len(caller.calls) != 0 {
+		t.Fatalf("unresolvable destination: err=%v calls=%v", err, caller.calls)
+	}
+}
