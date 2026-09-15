@@ -264,10 +264,10 @@ func TestCrossPlatformCoveragePublicCellDocAndViewFilterRoutingE2E(t *testing.T)
 		}
 	})
 
-	t.Run("generic view update rejects filter before MCP", func(t *testing.T) {
+	t.Run("generic view update rejects malformed filter before MCP", func(t *testing.T) {
 		caller := &upsertByKeyCaller{}
 		_, err := runAITableCompositeCLI(t, caller, "+view-update", "--base-id", "base", "--table-id", "table", "--view-id", "view", "--config", `{"filter":"bad"}`, "--yes")
-		if err == nil || !strings.Contains(err.Error(), "view update filter") || len(caller.calls) != 0 {
+		if err == nil || !strings.Contains(err.Error(), "invalid config.filter") || len(caller.calls) != 0 {
 			t.Fatalf("generic filter route = err:%v calls:%#v", err, caller.calls)
 		}
 	})
@@ -584,17 +584,12 @@ func TestCrossPlatformCoverageRecordBulkPatchValidationAndSelectorsE2E(t *testin
 		})
 	}
 
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"records":[]}`}}}
+	caller := &upsertByKeyCaller{}
 	out, err := runAITableCompositeCLI(t, caller, "+record-bulk-patch",
-		"--base-id", "base", "--table-id", "table", "--filters", `{"operator":"and","operands":[{"operator":"or","operands":[{"operator":"eq","operands":["fld","x"]}]}]}`, "--query", "text",
+		"--base-id", "base", "--table-id", "table", "--query", "text",
 		"--record-ids", "r2,r1", "--view-id", "view", "--patch", `{"f":1}`, "--yes")
-	if err != nil || !strings.Contains(out, `"matchedCount": 0`) {
-		t.Fatalf("selectors = output:%q err:%v", out, err)
-	}
-	for _, key := range []string{"filters", "keyword", "recordIds", "viewId"} {
-		if _, ok := caller.calls[0].args[key]; !ok {
-			t.Fatalf("query args missing %s: %#v", key, caller.calls[0].args)
-		}
+	if err == nil || out != "" || len(caller.calls) != 0 {
+		t.Fatalf("mixed ID/view selector must fail before calls: out=%s err=%v calls=%v", out, err, caller.calls)
 	}
 
 	caller = &upsertByKeyCaller{dryRun: true, steps: []upsertByKeyStep{{text: `{"records":[]}`}}}
@@ -639,7 +634,7 @@ func TestCrossPlatformCoverageRecordQueryPageSafetyBoundE2E(t *testing.T) {
 	}}
 	out, err := runAITableCompositeCLI(t, caller, "+record-bulk-patch",
 		"--base-id", "base", "--table-id", "table", "--all", "--patch", `{"f":1}`, "--yes")
-	if err == nil || out != "" || len(caller.calls) != 10000 {
+	if err == nil || out != "" || len(caller.calls) != recordQueryMaxConsecutiveEmptyPages {
 		t.Fatalf("page safety = output:%q err:%v calls:%d", out, err, len(caller.calls))
 	}
 }
