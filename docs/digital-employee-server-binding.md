@@ -76,7 +76,7 @@ pending → 单次 MCP 调用 → confirmed → 本地绑定提交 → consumed
 - 服务端 confirmed、本地尚未提交：重试同参数的原命令。回执摘要包含主管 Profile、员工 ID、本地代数、操作和请求字段；参数变化会阻断恢复。
 - 本地已提交，但新 Adapter 启动失败：使用 `connect restart`，不能再调用 rebind。回执未完成时禁止 restart 启动新实例。
 - 旧版本本地连接无服务端 ID：先 `connect bind` 补登记，再进行 unbind/rebind。旧连接的 stop/restart 不新增绑定副作用。
-- `--profile-only`：不生成设备 ID、不调用绑定 MCP、不保存绑定；绑定参数与此模式互斥。
+- 只保存数字员工 Profile 使用 `dws dingtalk-tag manage login`；该命令不生成设备 ID、不调用绑定 MCP、不保存绑定。
 
 ## 验证边界与回滚
 

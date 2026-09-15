@@ -59,10 +59,6 @@ func TestEmployeeAdapterDetectionAndBoundaries(t *testing.T) {
 	if err := validateDigitalEmployeeAdapter(cmd); err == nil {
 		t.Fatal("alwayson without daemon accepted")
 	}
-	_ = cmd.Flags().Set("profile-only", "true")
-	if err := validateDigitalEmployeeAdapter(cmd); err == nil {
-		t.Fatal("profile only accepted runtime options")
-	}
 }
 
 func TestEmployeeSavedWorkerDoesNotRequireOriginalCustomCommand(t *testing.T) {

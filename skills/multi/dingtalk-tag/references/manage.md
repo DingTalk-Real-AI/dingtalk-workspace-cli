@@ -54,7 +54,7 @@ Flags:
   --client-id    可选，用于授权的应用 ID；不传时由服务端选择默认应用
 ```
 
-`login` 用于 A2A 或其他需要登录数字员工 DWS 的场景。企业接入本地 Agent/DSH 应使用 `dws dingtalk-tag connect`，不要使用 `manage login`。该命令会在内部完成以下步骤：
+`login` 用于 A2A、仅保存 Profile 或其他需要登录数字员工 DWS 的场景。企业真正接入本地 Agent/DSH 时使用 `dws dingtalk-tag connect`。该命令会在内部完成以下步骤：
 
 1. 查询已发布详情，取得可信的 `profile.corpId`、`profile.robotUid`、`profile.staffId`。
 2. 申请临时 AuthCode，并使用同次响应的 `dwsClientId` 换票。

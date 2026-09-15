@@ -15,7 +15,7 @@
 ## 命令
 
 ```bash
-dws dingtalk-tag connect --agent-uuid <agentUuid> --profile-only
+dws dingtalk-tag manage login --agent-uuid <agentUuid>
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel dsh
 dws dingtalk-tag connect --agent-uuid <agentUuid> --channel codex --agent-workdir <directory> --daemon --alwayson
 dws dingtalk-tag connect status --agent-uuid <agentUuid> --format json
@@ -39,7 +39,7 @@ dws dingtalk-tag connect rebind --agent-uuid <agentUuid> --channel qoder --daemo
 - DSH 通过私有本机 IPC 处理 prepare/start/status/stop/release；宿主失联或停止超时为 unknown/未释放，不强制换绑。
 - DSH 持有与 DWS 原生 worker 相同的 Profile 运行锁，最后才释放。两个宿主或跨 Adapter 并发不能同时取得锁。此保证仅限同机、同配置目录、受管理的运行入口，不是跨机器在线状态服务。
 - 回复带 bindingRevision；旧版本不能在换绑提交后继续调用 Channel 下行。
-- `--profile-only` 不创建 binding、不操作 DSH。DSH 首次注册后若宿主尚未运行，返回 restartRequired；宿主已运行则员工级启动，不重启整个宿主。
+- `manage login` 只登录数字员工并保存 Profile，不创建 binding、不操作 DSH。DSH 首次注册后若宿主尚未运行，返回 restartRequired；宿主已运行则员工级启动，不重启整个宿主。
 - 升级旧版 DSH 时先正常停止旧宿主，再启用新版。旧宿主没有释放协议，不能凭心跳或 PID 猜测已停；不提供强制覆盖入口。
 
 ## 身份、状态与恢复
