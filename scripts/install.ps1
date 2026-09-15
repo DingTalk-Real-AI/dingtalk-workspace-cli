@@ -2145,17 +2145,21 @@ function Clear-SharedSchemaCacheIdentitySidecars {
     while ($stack.Count -gt 0) {
         $dir = $stack.Pop()
         foreach ($child in (Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop)) {
-            if ($child.LinkType) {
-                throw "unsafe schema cache entry (reparse): $($child.FullName)"
+            # Object identity is re-established on the enumerated entry
+            # immediately before adjudication and deletion, so a substitution
+            # between the enumeration and the mutation aborts the walk.
+            $entry = Get-Item -LiteralPath $child.FullName -Force -ErrorAction Stop
+            if ($entry.LinkType) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
             }
-            if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
-                throw "unsafe schema cache entry (reparse): $($child.FullName)"
+            if ($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                throw "unsafe schema cache entry (reparse): $($entry.FullName)"
             }
-            if ($child.PSIsContainer) {
-                $stack.Push($child.FullName)
+            if ($entry.PSIsContainer) {
+                $stack.Push($entry.FullName)
                 continue
             }
-            if ($windowsHost -and -not (Test-SharedSchemaCacheFileSingleLink -Path $child.FullName)) {
+            if ($windowsHost -and -not (Test-SharedSchemaCacheFileSingleLink -Path $entry.FullName)) {
                 throw "unsafe schema cache entry (multi-link): $($child.FullName)"
             }
             if ($child.Name -eq 'identity.json' -or $child.Name -like 'identity.*.json') {
@@ -2360,6 +2364,12 @@ function Build-SharedSchemaCache {
             # shared-root DACL check never sees; descendant security must be
             # established before any privileged recursion over it.
             $contentsUnsafe = -not (Test-SharedSchemaCacheTreeTrusted -Tree $schemaTree)
+        }
+        if (-not $contentsUnsafe -and -not $schemaTreePreExisting -and (Test-Path -LiteralPath $dwsIntermediate)) {
+            # When dws exists but schema does not, the freshly created schema
+            # tree inherits DACLs from the dws level; that level's ACEs must
+            # be trusted too or the warm-up falls back to the per-user cache.
+            $contentsUnsafe = -not (Test-SharedSchemaCachePathTrusted -Path $dwsIntermediate)
         }
         if ($contentsUnsafe) {
             Write-Say "⚠️  Schema cache skipped: unsafe cache contents."

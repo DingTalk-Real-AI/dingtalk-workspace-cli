@@ -693,9 +693,18 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	if strings.Contains(buildFn, "Get-ChildItem -LiteralPath $schemaTree -Recurse -Filter") {
 		t.Fatal("identity cleanup must not use a separate -Recurse scan; validation must be fused into the walk")
 	}
+	// When dws exists but schema does not, the freshly created schema tree
+	// inherits the dws level's ACEs; that level must pass the same DACL
+	// trust check the shared root does.
+	if !strings.Contains(buildFn, "Test-SharedSchemaCachePathTrusted -Path $dwsIntermediate") {
+		t.Fatal("Build-SharedSchemaCache must gate a freshly created schema tree on the dws intermediate DACL trust")
+	}
 	clearFn := extractPowerShellFunction(t, text, "Clear-SharedSchemaCacheIdentitySidecars")
 	if !strings.Contains(clearFn, "Remove-Item -LiteralPath") {
 		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must delete validated entries by literal path")
+	}
+	if !strings.Contains(clearFn, "Get-Item -LiteralPath") {
+		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must re-establish object identity per entry before deletion")
 	}
 	if strings.Contains(clearFn, "-Recurse") {
 		t.Fatal("Clear-SharedSchemaCacheIdentitySidecars must walk manually, never -Recurse")
