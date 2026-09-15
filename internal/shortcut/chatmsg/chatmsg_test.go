@@ -702,3 +702,26 @@ func TestCrossPlatformCoverageResourcesKeepContentAndIdentifierTypesSeparate(t *
 		}
 	}
 }
+
+func TestCrossPlatformCoverageCleanTextRichLinks(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{"label and target", `{"contents":[{"text":{"items":[{"type":"link","data":{"text":"详情","url":"https://example.com/a"}}]}}]}`, "详情（https://example.com/a）"},
+		{"target only", `{"items":[{"type":"link","data":{"url":" https://example.com/a "}}]}`, "https://example.com/a"},
+		{"same label", `{"items":[{"type":"link","data":{"text":" https://example.com/a ","url":"https://example.com/a"}}]}`, "https://example.com/a"},
+		{"empty target", `{"items":[{"type":"link","data":{"text":"详情","url":" "}}]}`, "详情"},
+		{"invalid target", `{"items":[{"type":"link","data":{"text":"详情","url":{}}}]}`, "详情"},
+		{"invalid label", `{"items":[{"type":"link","data":{"text":42,"url":"https://example.com/a"}}]}`, "https://example.com/a"},
+		{"mixed image and link", `{"items":[{"type":"text","data":{"text":"前文"}},{"type":"image","data":{"url":"https://example.com/image"}},{"type":"link","data":{"text":"详情","url":"https://example.com/a"}},{"type":"text","data":{"text":"后文"}}]}`, "前文\n详情（https://example.com/a）\n后文"},
+		{"unknown type", `{"items":[{"type":"unknown","data":{"text":"正文","url":"https://example.com/a","href":"https://example.com/b","link":"https://example.com/c"}}]}`, "正文"},
+		{"ordinary json", `{"url":"https://example.com/a","text":"正文"}`, `{"url":"https://example.com/a","text":"正文"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CleanText(tc.body); got != tc.want {
+				t.Errorf("CleanText() = %q, want %q", got, tc.want)
+			}
+			if got := Text(map[string]any{"content": tc.body}); got != tc.want {
+				t.Errorf("Text() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
