@@ -24,6 +24,9 @@ const maximumWhiteboardRenderSourceBytes = 16 * 1024 * 1024
 
 var whiteboardRenderStdin io.Reader = os.Stdin
 
+// Keep path resolution independently testable across supported operating systems.
+var whiteboardRenderAbsPath = filepath.Abs
+
 func newWhiteboardRenderCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{
 		Use:   "render",
@@ -150,7 +153,7 @@ func callWhiteboardRenderResult(_ *cobra.Command, _ string, args map[string]any)
 			Suggestion: "例如 --output ./preview.svg",
 		}
 	}
-	absolutePath, err := filepath.Abs(requestedPath)
+	absolutePath, err := whiteboardRenderAbsPath(requestedPath)
 	if err != nil {
 		return nil, &CLIError{Code: CodeInvalidPath, Message: "无法解析 --output 绝对路径", Cause: err}
 	}

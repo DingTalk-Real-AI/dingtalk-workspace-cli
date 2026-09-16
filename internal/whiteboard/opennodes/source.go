@@ -78,21 +78,9 @@ func Parse(data []byte) (*Source, error) {
 	if raw.CatalogVersion != CatalogVersion {
 		return nil, fmt.Errorf("source.catalogVersion must be %q", CatalogVersion)
 	}
-	if len(raw.Nodes) == 0 || !bytes.HasPrefix(bytes.TrimSpace(raw.Nodes), []byte("[")) {
-		return nil, errors.New("source.nodes must be an array")
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(raw.Nodes))
-	decoder.UseNumber()
-	var values []any
-	if err := decoder.Decode(&values); err != nil {
-		return nil, fmt.Errorf("source.nodes must be an array: %w", err)
-	}
-	if values == nil {
-		return nil, errors.New("source.nodes cannot be null")
-	}
-	if err := requireEOF(decoder); err != nil {
-		return nil, fmt.Errorf("source.nodes must contain one JSON array: %w", err)
+	values, err := decodeNodeArray(raw.Nodes)
+	if err != nil {
+		return nil, err
 	}
 
 	nodes := make([]map[string]any, len(values))
@@ -112,6 +100,24 @@ func Parse(data []byte) (*Source, error) {
 		}
 	}
 	return &Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: nodes}, nil
+}
+
+// Decode the node array at one boundary, retaining exact JSON numbers and
+// rejecting null, non-arrays and trailing values before inspecting nodes.
+func decodeNodeArray(data []byte) ([]any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var values []any
+	if err := decoder.Decode(&values); err != nil {
+		return nil, fmt.Errorf("source.nodes must be an array: %w", err)
+	}
+	if values == nil {
+		return nil, errors.New("source.nodes cannot be null")
+	}
+	if err := requireEOF(decoder); err != nil {
+		return nil, fmt.Errorf("source.nodes must contain one JSON array: %w", err)
+	}
+	return values, nil
 }
 
 // OpenNodesUpdate.validateTextRun represents line boundaries with blocks.

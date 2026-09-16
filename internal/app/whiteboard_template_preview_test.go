@@ -72,3 +72,19 @@ func TestCrossPlatformCoverageWhiteboardTemplatePreviewBoundary(t *testing.T) {
 		t.Fatal("rejected request reached runner")
 	}
 }
+
+func TestCrossPlatformCoverageWhiteboardTemplatePreviewErrorPropagation(t *testing.T) {
+	flags := &GlobalFlags{DryRun: true}
+	adapter := &toolCallerAdapter{flags: flags, runner: &runtimeRunner{globalFlags: flags, fallback: &countingErrorRunner{}}}
+	if _, err := adapter.CallWhiteboardTemplatePreview(context.Background(), whiteboard.PersonalTemplateSaveTool, map[string]any{"dryRun": true}); err == nil {
+		t.Fatal("runner failure lost")
+	}
+	caller := recordingToolCaller{inner: newToolCallerAdapter(&countingErrorRunner{}, flags)}
+	// Hide the optional preview capability behind the ordinary caller interface.
+	caller.inner = &ordinaryWhiteboardCaller{ToolCaller: caller.inner}
+	if _, err := caller.CallWhiteboardTemplatePreview(context.Background(), whiteboard.PersonalTemplateSaveTool, nil); err == nil {
+		t.Fatal("missing preflight capability accepted")
+	}
+}
+
+type ordinaryWhiteboardCaller struct{ edition.ToolCaller }

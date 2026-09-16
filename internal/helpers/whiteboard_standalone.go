@@ -176,13 +176,15 @@ func validateStandaloneWhiteboardExpectedDigest(value string) (any, error) {
 	return strings.ToLower(value), nil
 }
 
+var whiteboardCreateSourceDigest = opennodes.DigestSource
+
 func callStandaloneWhiteboardCreateResult(cmd *cobra.Command, _ string, args map[string]any) (output.CommandResult, error) {
 	sourceJSON, _ := args["source"].(string)
 	source, err := opennodes.Parse([]byte(sourceJSON))
 	if err != nil {
 		return nil, invalidWhiteboardSourceJSON(err)
 	}
-	sourceDigest, err := opennodes.DigestSource(source)
+	sourceDigest, err := whiteboardCreateSourceDigest(source)
 	if err != nil {
 		return nil, invalidWhiteboardSourceJSON(err)
 	}

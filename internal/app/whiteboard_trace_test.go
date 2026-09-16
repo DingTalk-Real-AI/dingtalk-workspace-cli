@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,5 +70,22 @@ func TestCrossPlatformCoverageWhiteboardTrace(t *testing.T) {
 	files, _ = filepath.Glob(filepath.Join(dir, "*.json"))
 	if len(files) != 2 {
 		t.Fatal("logging enabled without opt-in or for other product")
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardTraceWriteFailures(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeWhiteboardTrace(dir, make(chan int)); err == nil {
+		t.Fatal("unencodable trace accepted")
+	}
+	missing := filepath.Join(dir, "missing")
+	if err := writeWhiteboardTrace(missing, nil); err == nil {
+		t.Fatal("missing directory accepted")
+	}
+	t.Setenv("DWS_WHITEBOARD_TRACE_DIR", missing)
+	inv := executor.NewHelperInvocation("test", "whiteboard", "query", nil)
+	traceWhiteboardResponse(inv, "failed", nil, nil, errors.New("upstream failure"))
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Fatal("trace failure created unexpected directory")
 	}
 }
