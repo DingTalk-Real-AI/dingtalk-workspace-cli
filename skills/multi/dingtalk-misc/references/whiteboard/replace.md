@@ -1,14 +1,14 @@
 # 白板整页替换与清空
 
-仅在用户明确要求整页重绘或清空时读取本页。overwrite 会替换整个单页白板，不是
+在整页重绘、清空，或删除部分内容需要重建完整终态时读取本页。overwrite 会替换整个单页白板，不是
 局部节点更新。
 
 ## 执行顺序
 
 1. 对同一稳定目标执行一次 `+query`：内嵌白板使用 `nodeId/partId`，独立白板使用
    `nodeId/pageId` 并保留当前 revision。保留完整当前快照并汇总将被删除的节点。
-2. 向用户说明目标、overwrite 影响和新节点数量，按 Runtime gate 取得确认。
-3. 一次提交完整终态；不要先清空再追加。
+2. 准备完整终态，保留用户未要求删除的内容。必读 [diff.md](./diff.md) 并执行同一目标的 +diff；展示变化、删除重建影响、warnings 和 blockers 后停止，等待用户明确确认当前差异。失败或有 blocker 不得提交。
+3. 确认后通过 +update 携带同一 sourceDigest 一次提交完整终态，独立白板使用 diff 的 target.revision。内容、目标或版本变化须重新 diff 和确认；不要先清空再追加。
 4. `+update` 成功且 `verified=true` 表示已在内部对同一稳定目标完成最终
    读回校验，直接依据验证结果、summary 和 receipt 交付，不再追加 `+query`。
 5. 仅用户明确要求更新后完整快照时，才对同一目标追加一次 `+query`；若此次读取
@@ -17,13 +17,13 @@
 ```bash
 # 文档内嵌白板示例
 dws whiteboard +query --node <DOC_NODE_ID> --part-id <PART_ID> --format json
+dws whiteboard +diff --node <DOC_NODE_ID> --part-id <PART_ID> --source @overwrite.json --format json
+# 展示差异并等待用户确认后才执行更新
 dws whiteboard +update --node <DOC_NODE_ID> --part-id <PART_ID> \
-  --source @overwrite.json --format json
+  --source @overwrite.json --expected-source-digest <DIFF_SOURCE_DIGEST> --format json
 ```
 
-独立白板执行相同的“一次快照、一次写入”顺序：query 完全省略 partId 并使用
-`view=all`；update 完全省略 partId，同时携带快照中的 pageId、revision（作为
-expectedRevision）和本次逻辑写入的稳定 requestId。具体命令见白板入口参考。
+独立白板执行读取、构造、diff、展示确认、写入流程。diff 会读取最新完整页面，不能因已 query 而省略；update 使用 diff 的 target.revision 和 sourceDigest。内嵌白板须披露预览非原子。
 
 清空整页的更新文件：
 

@@ -48,14 +48,14 @@ metadata:
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 101 | `dingtalk-aitable` |
+| `aitable` | 126 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
-| `chat` | 99 | `dingtalk-chat` |
+| `chat` | 102 | `dingtalk-chat` |
 | `contact` | 13 | `dingtalk-contact` |
 | `devapp` | 25 | `dingtalk-misc` |
 | `ding` | 1 | `dingtalk-misc` |
-| `doc` | 45 | `dingtalk-doc` |
+| `doc` | 49 | `dingtalk-doc` |
 | `drive` | 28 | `dingtalk-drive` |
 | `mail` | 8 | `dingtalk-mail` |
 | `minutes` | 29 | `dingtalk-minutes` |
@@ -64,7 +64,7 @@ metadata:
 | `report` | 4 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
 | `todo` | 21 | `dingtalk-todo` |
-| `whiteboard` | 2 | `dingtalk-misc` |
+| `whiteboard` | 3 | `dingtalk-misc` |
 | `wiki` | 20 | `dingtalk-wiki` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 
@@ -104,7 +104,7 @@ metadata:
 | `sheet`           | 在线电子表格(axls)：工作表 CRUD/区域读写/CSV 批量写入/行列增删/合并/查找替换/筛选视图/全局筛选/排序/下拉列表/条件格式/浮动图片/浮动图表/模板/导出 xlsx(单命令一站式) | [sheet.md](./references/products/sheet.md)                     |
 | `todo`            | 待办：创建(含优先级/截止时间/循环)/查询/修改/标记完成/删除                   | [todo.md](./references/products/todo.md)                       |
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
-| `whiteboard`      | 独立与文档内嵌白板：带内容创建、读取 OpenNodes、追加节点、整页重建             | [whiteboard.md](./references/products/whiteboard.md)           |
+| `whiteboard`      | 独立与文档内嵌白板：带内容创建、本地 SVG 预渲染、读取 OpenNodes、写前 diff、追加节点、整页重建 | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
 | `event`           | 个人 IM/OA/VoIP/Todo/互动卡片事件：监听消息、群生命周期、审批任务/实例、通话邀请、待办变化与卡片回调，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
@@ -348,3 +348,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
   - [lite-recipes.md](./references/best_practices/lite-recipes.md) — Lite Recipe 速查（核心流程判定为 lite 后直接执行）
   - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
   - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范
+
+Agent 使用 OpenNodes 带内容创建白板时，必须先执行 `whiteboard render`，展示 SVG 和渲染提示后停止，等待用户明确确认当前版本才能创建；修改后重新渲染和确认。不得跳过预览直接创建，最初的创建请求及创建后回读不能替代预览确认。详见白板入口的创建流程；空白创建、直接套用模板和已有白板更新不由此规则扩展。
+
+Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。
