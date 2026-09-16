@@ -444,7 +444,7 @@ func newDeapAgentSkillCreateCommand() *cobra.Command {
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: deapAgentSkillCreateFileTool, CanonicalPath: "dingtalk-tag.create_skill_from_file", CLIPath: "dingtalk-tag capability skill create", PrimaryCLIPath: "dingtalk-tag capability skill create", Group: "capability.skill"},
 			Description: "校验本地 ZIP，依次调用 OpenAPI upload 与 create_skill_by_url，并只输出安全创建结果。",
-			DryRun:      deapAgentDryRun,
+			DryRun:      deapAgentPlanDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "本地 ZIP 校验后串联 OpenAPI multipart upload 与 create_skill_by_url"},
 			Selection:   contract.SelectionSpec{AgentSummary: "从本地 ZIP 创建 Skill 资源", UseWhen: []string{"已有合法 Skill ZIP，需要为目标数字员工创建并取得 skillId 时"}, AvoidWhen: []string{"只有远程 URL 的纯 MCP 场景使用 create_skill_by_url"}, Examples: []string{"dws dingtalk-tag capability skill create --agent-uuid <agentUuid> --file ./my-skill.zip --dry-run --format json"}},
 			Parameters: []contract.ParamDecl{
@@ -464,11 +464,14 @@ func deapAgentCallSkillCreate(cmd *cobra.Command, _ string, args map[string]any)
 	}
 	if deps.Caller.DryRun() {
 		return deps.Out.PrintJSON(map[string]any{
-			"dryRun":    true,
-			"action":    "upload_then_create_skill",
-			"agentUuid": agentUUID,
-			"fileName":  filepath.Base(pkg.path),
-			"fileSize":  pkg.size,
+			"dryRun":       true,
+			"dry_run":      true,
+			"preview_kind": contract.DryRunPreviewPlan,
+			"executed":     false,
+			"action":       "upload_then_create_skill",
+			"agentUuid":    agentUUID,
+			"fileName":     filepath.Base(pkg.path),
+			"fileSize":     pkg.size,
 		})
 	}
 	fileURL, err := deapAgentSkillUploader.Upload(cmd.Context(), agentUUID, pkg.path)

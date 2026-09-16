@@ -55,6 +55,16 @@ func externalExchangeRoot(t *testing.T, caller edition.ToolCaller) (*cobra.Comma
 	return root, out
 }
 
+func TestCrossPlatformCoverageExternalExchangeKeepsUpstreamFlagsVisible(t *testing.T) {
+	cmd := newAuthExchangeCommand(nil)
+	for _, name := range []string{"uid", "authorize-url", "token-url", "refresh-url", "redirect-url", "scopes"} {
+		flag := cmd.Flags().Lookup(name)
+		if flag == nil || flag.Hidden {
+			t.Errorf("upstream auth exchange flag --%s must remain visible", name)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageExternalExchangeCLIApplicationFlagsAndIdentityReadback(t *testing.T) {
 	for _, tc := range []struct {
 		name      string

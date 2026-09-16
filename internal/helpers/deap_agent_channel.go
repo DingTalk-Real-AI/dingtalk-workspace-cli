@@ -116,7 +116,7 @@ func newDeapConnectCommand() *cobra.Command {
 				CanonicalPath: "dingtalk-tag.connect", CLIPath: "dingtalk-tag connect", PrimaryCLIPath: "dingtalk-tag connect",
 			},
 			Description: "为一个已发布的 local_agent 数字员工保存独立 Profile，登记服务端设备绑定后接入普通本地 Agent 或注册 DSH；只保存 Profile 使用 manage login。",
-			DryRun:      deapAgentDryRun,
+			DryRun:      deapAgentPlanDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "DEAP 授权与 DWS managed exchange 的受控编排；可选本地 DSH 注册"},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "将已有已发布数字员工接入本地 Agent 或 DSH",
@@ -185,7 +185,7 @@ func runDeapConnect(cmd *cobra.Command, _ []string) error {
 		if channel != "" {
 			plan["channel"] = channel
 		}
-		return writeDWSMachineEnvelope(cmd, plan)
+		return writeDWSMachinePlan(cmd, plan)
 	}
 
 	configDir := deapConnectConfigDir()
@@ -593,9 +593,19 @@ func waitForDigitalEmployeeReceipt(ctx context.Context, delay time.Duration) err
 }
 
 func writeDWSMachineEnvelope(cmd *cobra.Command, data any) error {
+	return writeDWSMachineResult(cmd, output.Success(data))
+}
+
+func writeDWSMachinePlan(cmd *cobra.Command, data map[string]any) error {
+	data["preview_kind"] = contract.DryRunPreviewPlan
+	data["executed"] = false
+	return writeDWSMachineResult(cmd, output.Success(data, output.WithDryRun()))
+}
+
+func writeDWSMachineResult(cmd *cobra.Command, result output.CommandResult) error {
 	ctx, _ := output.WithResultStore(cmd.Context())
 	cmd.SetContext(ctx)
-	if err := output.StoreResult(ctx, output.Success(data)); err != nil {
+	if err := output.StoreResult(ctx, result); err != nil {
 		return err
 	}
 	_, _, err := output.EmitStoredResult(cmd)

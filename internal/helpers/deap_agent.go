@@ -52,7 +52,12 @@ var deapAgentMainProgramTypeValues = []string{
 }
 
 var deapAgentDryRun = &contract.DryRunSpec{
-	PreviewKind: contract.DryRunPreviewInvocation,
+	PreviewKind: contract.DryRunPreviewRequest,
+	RemoteReads: false,
+}
+
+var deapAgentPlanDryRun = &contract.DryRunSpec{
+	PreviewKind: contract.DryRunPreviewPlan,
 	RemoteReads: false,
 }
 
@@ -186,7 +191,7 @@ func newDeapAgentLoginCommand() *cobra.Command {
 				Group: "manage",
 			},
 			Description: "按 agentUuid 完成数字员工受管登录、在线身份核验并保存精确 DWS Profile；AuthCode 与 Token 不进入普通输出。",
-			DryRun:      deapAgentDryRun,
+			DryRun:      deapAgentPlanDryRun,
 			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "发布详情、DEAP 授权、DWS managed exchange、在线身份核验与本地 Profile 持久化的受控编排"},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "登录指定数字员工的 DWS 并保存独立 Profile",

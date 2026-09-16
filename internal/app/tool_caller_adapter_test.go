@@ -125,9 +125,8 @@ func TestCrossPlatformCoverageEmployeeBindingTransportDoesNotRetry(t *testing.T)
 			})
 			_, err := runner.RunWithToken(context.Background(), executor.NewHelperInvocation("overlay.deap-dev."+tool, "deap-dev", tool, map[string]any{"agentUuid": "test-employee"}), "supervisor-test-token")
 			want := 1
-			if tool == "get_digital_employee_detail" {
-				want = 3
-			}
+			// All tools/call requests are fail-closed: a read-looking tool name
+			// is not an independently reviewed replay policy.
 			if err == nil || attempts != want || client.MaxRetries != 2 {
 				t.Fatalf("retry contract: attempts=%d want=%d base=%d err=%v", attempts, want, client.MaxRetries, err)
 			}

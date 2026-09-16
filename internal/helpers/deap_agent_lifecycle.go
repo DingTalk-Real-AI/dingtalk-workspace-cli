@@ -274,7 +274,7 @@ func newEmployeeUnbindCommand() *cobra.Command {
 	return NewLeafCommand(LeafSpec{Use: "unbind", Short: "解绑数字员工并保留本地身份", PostMount: deapAgentNoArgs,
 		Flags: []LeafFlag{{Name: "agent-uuid", Required: true, Usage: "本地已绑定员工 ID"}, {Name: "runtime-binding-id", Usage: "明确指定服务端绑定 ID；必须与本地记录一致"}}, OutputRollout: output.RolloutUnifiedActive,
 		Safety:   contract.SafetySpec{Effect: "write", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"},
-		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_unbind", CanonicalPath: "dingtalk-tag.connect_unbind", CLIPath: "dingtalk-tag connect unbind", PrimaryCLIPath: "dingtalk-tag connect unbind", Group: "connect"}, Description: "停止并确认员工实例释放后调用服务端解绑；保留 Profile、凭据、审计和去重记录。未知实例不强行解绑。", Parameters: []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}, {Name: "runtime-binding-id", Property: "runtimeBindingId"}}, Result: digitalEmployeeResultSpec(), DryRun: deapAgentDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "服务端解绑回执、本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全解除已有数字员工的本机 Adapter 绑定", UseWhen: []string{"解绑数字员工并保留 Profile", "更换 Agent 或设备时先解绑，成功后再 connect"}, AvoidWhen: []string{"仅暂停使用 connect stop；首次接入使用 connect；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect unbind --agent-uuid <agentUuid>"}}},
+		Contract: LeafContract{Identity: contract.ToolIdentitySpec{ProductID: dingtalkTagProductID, Name: "connect_unbind", CanonicalPath: "dingtalk-tag.connect_unbind", CLIPath: "dingtalk-tag connect unbind", PrimaryCLIPath: "dingtalk-tag connect unbind", Group: "connect"}, Description: "停止并确认员工实例释放后调用服务端解绑；保留 Profile、凭据、审计和去重记录。未知实例不强行解绑。", Parameters: []contract.ParamDecl{{Name: "agent-uuid", Property: "agentUuid"}, {Name: "runtime-binding-id", Property: "runtimeBindingId"}}, Result: digitalEmployeeResultSpec(), DryRun: deapAgentPlanDryRun, Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "服务端解绑回执、本机绑定事务及宿主控制"}, Selection: contract.SelectionSpec{AgentSummary: "安全解除已有数字员工的本机 Adapter 绑定", UseWhen: []string{"解绑数字员工并保留 Profile", "更换 Agent 或设备时先解绑，成功后再 connect"}, AvoidWhen: []string{"仅暂停使用 connect stop；首次接入使用 connect；机器人使用 dev connect"}, Examples: []string{"dws dingtalk-tag connect unbind --agent-uuid <agentUuid>"}}},
 		RunE:     func(cmd *cobra.Command, _ []string) error { return runEmployeeUnbind(cmd) },
 	})
 }
@@ -300,7 +300,7 @@ func runEmployeeUnbind(cmd *cobra.Command) (runErr error) {
 	if commandDryRun(cmd) {
 		steps := []string{"stop_old", "confirm_released", "server_unbind", "unbind_keep_profile"}
 		channel := bindingChannel(b)
-		return writeDWSMachineEnvelope(cmd, map[string]any{"status": "planned", "agentUuid": b.AgentUUID, "channel": channel, "steps": steps})
+		return writeDWSMachinePlan(cmd, map[string]any{"status": "planned", "agentUuid": b.AgentUUID, "channel": channel, "steps": steps})
 	}
 	dir := digitalEmployeeRuntimeDir(b.DWSProfile)
 	lock, err := auth.AcquireDualLock(cmd.Context(), filepath.Join(dir, "operation"))

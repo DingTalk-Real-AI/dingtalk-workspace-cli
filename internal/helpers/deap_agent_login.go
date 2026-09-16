@@ -33,7 +33,7 @@ func runDeapAgentLogin(cmd *cobra.Command, _ []string) error {
 	agentUUID := strings.TrimSpace(MustGetStringFlag(cmd, "agent-uuid"))
 	requestedClientID := strings.TrimSpace(MustGetStringFlag(cmd, "client-id"))
 	if commandDryRun(cmd) {
-		return writeDWSMachineEnvelope(cmd, map[string]any{
+		return writeDWSMachinePlan(cmd, map[string]any{
 			"status": "planned", "agentUuid": agentUUID,
 			"steps": []string{"validate_published", "request_auth_code", "managed_exchange", "verify_online_identity", "persist_exact_profile"},
 		})

@@ -28,6 +28,17 @@ func externalExchangeTestConfig(t *testing.T) string {
 	t.Setenv("DWS_CLIENT_SECRET", "")
 	t.Setenv(keychain.StorageDirEnv, filepath.Join(dir, "keys"))
 	t.Setenv(keychain.DisableKeychainEnv, "1")
+	// Windows uses DPAPI/Registry rather than StorageDirEnv. Each case must
+	// isolate that backend too, including canonical and legacy secret slots.
+	t.Setenv(keychain.TestNamespaceEnv, dir)
+	t.Cleanup(func() {
+		if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+			t.Errorf("clean exchange test tokens: %v", err)
+		}
+		if err := keychain.RemoveAccountEntriesWithPrefixes(keychain.Service, secretKeyPrefix, clientSecretPrefix, appTokenPrefix); err != nil {
+			t.Errorf("clean exchange test application credentials: %v", err)
+		}
+	})
 	testseam.Swap(t, &runtimeClientID, "")
 	testseam.Swap(t, &runtimeClientSecret, "")
 	testseam.Swap(t, &clientIDFromMCP, false)
@@ -42,6 +53,27 @@ func externalExchangeTestServer(t *testing.T, dir string, handler http.HandlerFu
 	t.Cleanup(server.Close)
 	if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte(server.URL), 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestExternalExchangeFixturesIsolatePlatformCredentials(t *testing.T) {
+	externalExchangeTestConfig(t)
+	account := secretAccountKey("fixture-app")
+	if err := keychain.Set(keychain.Service, account, "parent-test-secret"); err != nil {
+		t.Fatal(err)
+	}
+	parentNamespace := os.Getenv(keychain.TestNamespaceEnv)
+	t.Run("isolated", func(t *testing.T) {
+		externalExchangeTestConfig(t)
+		if os.Getenv(keychain.TestNamespaceEnv) == parentNamespace || keychain.Exists(keychain.Service, account) {
+			t.Fatal("exchange fixture inherited another test's credentials")
+		}
+		if err := keychain.Set(keychain.Service, account, "child-test-secret"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if value, err := keychain.Get(keychain.Service, account); err != nil || value != "parent-test-secret" {
+		t.Fatalf("child cleanup changed parent credentials: %v", err)
 	}
 }
 

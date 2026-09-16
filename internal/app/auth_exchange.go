@@ -131,11 +131,10 @@ func newAuthExchangeCommand(caller edition.ToolCaller) *cobra.Command {
 	cmd.Flags().String("expected-user-id", "", "预期 userId，仅作在线身份一致性校验")
 	cmd.Flags().String("expected-corp-id", "", "预期 corpId，仅作在线身份一致性校验")
 	cmd.Flags().String("uid", "", "预期 userId（同 --expected-user-id，不会覆盖在线身份）")
-	_ = cmd.Flags().MarkHidden("uid")
-	// Other editions may still use these compatibility flags.
+	// Keep the upstream public flag surface visible for existing users and
+	// other editions; adding managed exchange must not hide their options.
 	for _, name := range []string{"authorize-url", "token-url", "refresh-url", "redirect-url", "scopes"} {
 		cmd.Flags().String(name, "", "Compatibility flag")
-		_ = cmd.Flags().MarkHidden(name)
 	}
 	return cmd
 }
