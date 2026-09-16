@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。表单分享用法、结果契约核对、返回值评审和故障解释（含仅解释合成样本）必须先加载本 Skill 并实际查询一次：原子命令用法只用 `dws aitable form share update --help`，Shortcut 用法查该 Shortcut Schema，返回值评审才按原入口查 compact Result Schema；保留用户指定的原子/Shortcut 入口，不互换。这是 CLI 契约发现，不是仓库代码检索，不从源码搜索开始。Use when 用户说 表单分享/form share/+form-share-get/+form-share-update/分享结果契约/CP同步判断/ AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。表单分享用法、结果契约核对、返回值评审和故障解释（含仅解释合成样本）Help/Schema 是离线契约查询，不是线上业务命令；禁止线上业务不禁止本地契约查询。必须先加载本 Skill 并实际查询一次：原子命令用法只用 `dws aitable form share update --help`，Shortcut 用法查该 Shortcut Schema，返回值评审才按原入口查 compact Result Schema；保留用户指定的原子/Shortcut 入口，不互换。这是 CLI 契约发现，不是仓库代码检索，不从源码搜索开始。Use when 用户说 表单分享/form share/+form-share-get/+form-share-update/分享结果契约/CP同步判断/ AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -64,6 +64,8 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 ### 返回值评审专用查询（不适用于命令用法询问）
 
 作答前必须有本次实际执行的目标 compact Schema 查询结果；仅加载 Skill 或看到合成样本不满足此条件。先执行下表命令，再解释，不能直接根据 Skill 回答。
+
+Help/Schema 是离线契约查询，不调用线上业务，也不读写用户的表单。因此“只分析合成返回，不要执行线上业务命令”仍允许且需要下表的本机查询，不能将其误判为线上读取而跳过；只有用户明确禁止任何命令或本机查询时才不执行，并说明本机契约未核对。
 
 仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
 

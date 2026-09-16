@@ -191,11 +191,14 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 				if !strings.Contains(description, "原子命令用法只用 `dws aitable form share update --help`") {
 					t.Fatal("Skill metadata must distinguish atomic usage help from result schema discovery")
 				}
+				if !strings.Contains(description, "Help/Schema 是离线契约查询，不是线上业务命令") {
+					t.Fatal("Skill metadata must distinguish local discovery from forbidden online business calls")
+				}
 				if strings.Index(body, "用法询问与返回值评审不能共用发现路径") > strings.Index(body, "<!-- DWS_RUNTIME_CONTRACT_START -->") {
 					t.Fatal("form-share discovery precedence must precede generic runtime navigation")
 				}
 			}
-			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "（禁止改查 Schema）", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布", "仅加载 Skill 或看到合成样本不满足此条件", "两种入口都必须完整保留用户指定的配置值"} {
+			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "（禁止改查 Schema）", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布", "仅加载 Skill 或看到合成样本不满足此条件", "两种入口都必须完整保留用户指定的配置值", "Help/Schema 是离线契约查询，不调用线上业务", "只有用户明确禁止任何命令或本机查询时才不执行"} {
 				if !strings.Contains(body, rule) {
 					t.Errorf("%s missing discovery/interpretation boundary %q", path, rule)
 				}
