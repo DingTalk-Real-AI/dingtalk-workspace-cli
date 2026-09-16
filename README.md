@@ -341,6 +341,7 @@ values, and the current file-DEK bundle has no safe DPAPI-to-portable conversion
 dws contact user search --query "engineering"      # search contacts
 dws calendar event list                            # list today's calendar events
 dws doc search --query "quarterly"                 # search DingTalk Docs
+dws whiteboard +query --node "<whiteboard-node-id>" --view summary --format json  # inspect a whiteboard
 dws minutes list mine                              # list AI meeting notes I created
 dws drive list                                     # list DingTalk drive files
 dws todo task create --title "Quarterly report" --executors "<your-userId>"   # create a todo (replace <your-userId>)
@@ -348,6 +349,22 @@ dws todo task list --dry-run                       # preview without executing
 ```
 
 > **Full command list**: [`docs/command-index.md`](./docs/command-index.md) — all commands with descriptions and when-to-use guidance.
+
+### Whiteboards
+
+Use `dws whiteboard` for standalone whiteboards and whiteboards embedded in documents: query content, create / update with OpenNodes, preview changes with `+diff`, render local SVG previews, and manage personal / team templates.
+
+```bash
+dws whiteboard --help
+dws whiteboard render --source @whiteboard.json --output ./whiteboard-preview.svg --format json
+dws whiteboard +diff --help
+dws whiteboard template personal list --format json
+dws whiteboard template team list --template-workspace "<workspace-id>" --page-all --format json
+```
+
+`whiteboard.json` is an OpenNodes source file. SVG rendering is a local preview; review its fidelity and warnings, then confirm the current preview before creating the whiteboard. Use `+diff` to inspect the proposed update before `+update`. For template `save` / `create` commands, `--dry-run` performs an optional server-side preflight without saving a template or creating a whiteboard.
+
+See the [whiteboard reference](./skills/mono/references/products/whiteboard.md), [Diff guide](./skills/mono/references/products/whiteboard/diff.md), and [SVG preview guide](./skills/mono/references/products/whiteboard/render.md).
 
 ## Using with Agents
 
@@ -749,6 +766,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 | Report | `report` | Create / submit logs, inbox & outbox, templates, statistics |
 | AI Tables | `aitable` | Bases / tables / records / fields / views, permissions & roles, automation, charts & dashboards, import / export |
 | Doc | `doc` | Search / read / write docs, block-level editing, comments, permissions, media, up / download |
+| Whiteboard | `whiteboard` | Standalone / embedded whiteboards: query, create / update, Diff, local SVG previews, personal / team templates |
 | Drive | `drive` | List / search / download, folders, upload, copy / move / rename, permissions |
 | Minutes | `minutes` | AI meeting notes: list, summary / keywords / transcription / todos, mind map, speakers, tags |
 | Mail | `mail` | Mailboxes, KQL search, read / send, drafts, folders, templates, contacts |
