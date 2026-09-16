@@ -55,15 +55,15 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 		{
 			name:      "chat messages",
 			tool:      "chat/list_conversation_message_v2",
-			response:  `{"result":{"messages":[` + message + `]}}`,
-			args:      []string{"chat", "+chat-messages", "--conversation-id", "cid"},
+			response:  `{"result":{"hasMore":false,"messages":[` + message + `]}}`,
+			args:      []string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid"},
 			resultKey: "messages",
 		},
 		{
 			name:      "search",
 			tool:      "im/search_messages",
 			response:  `{"result":{"messages":[` + message + `],"hasMore":false}}`,
-			args:      []string{"chat", "+search-msg", "--query", "x", "--no-enrich"},
+			args:      []string{"chat", "+search-msg", "--no-reactions", "--query", "x", "--no-enrich"},
 			resultKey: "messages",
 		},
 		{
@@ -76,8 +76,8 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 		{
 			name:      "thread replies",
 			tool:      "chat/list_topic_replies",
-			response:  `{"result":{"messages":[` + message + `]}}`,
-			args:      []string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"},
+			response:  `{"result":{"hasMore":false,"messages":[` + message + `]}}`,
+			args:      []string{"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread"},
 			resultKey: "replies",
 		},
 	}
@@ -124,10 +124,10 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 
 func TestCrossPlatformCoverageMessageReadShortcutResourceOutputValidation(t *testing.T) {
 	for _, args := range [][]string{
-		{"chat", "+chat-messages", "--conversation-id", "cid"},
-		{"chat", "+search-msg", "--query", "x", "--no-enrich"},
+		{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid"},
+		{"chat", "+search-msg", "--no-reactions", "--query", "x", "--no-enrich"},
 		{"chat", "+at-me"},
-		{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"},
+		{"chat", "+thread-replies", "--no-reactions", "--group", "cid", "--thread-id", "thread"},
 	} {
 		helpers.InitDeps(&smartCoverageCaller{})
 		root := newPlatformCoverageRoot()
@@ -143,7 +143,7 @@ func TestCrossPlatformCoverageChatMessagesDefaultsToRecentHistory(t *testing.T) 
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	before := time.Now().Add(-2 * time.Second)
-	root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--limit", "5"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--no-reactions", "--conversation-id", "cid", "--limit", "5"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestCrossPlatformCoverageChatMessagesPreservesExplicitTime(t *testing.T) {
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
-		"chat", "+chat-messages",
+		"chat", "+chat-messages", "--no-reactions",
 		"--conversation-id", "cid",
 		"--time", "2026-07-01 12:34:56",
 		"--yes",

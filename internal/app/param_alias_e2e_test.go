@@ -113,8 +113,6 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return string(encoded)
 	case "get_current_user_profile":
 		return `{"success":true,"result":{"userId":"user-1","name":"Fixture Current User"}}`
-	case "list_conversations_by_category":
-		return `{"success":true,"result":{"list":[],"hasMore":false}}`
 	case "query_records":
 		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
@@ -123,8 +121,18 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
 	case "search_groups":
 		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	case "list_conversation_message_v2", "list_individual_chat_message":
+		return `{"result":{"messages":[],"hasMore":false}}`
+	case "search_messages":
+		return `{"result":{"messages":[],"hasMore":false}}`
+	case "list_message_favorites":
+		return `{"result":{"items":[],"hasMore":false}}`
+	case "get_group_members", "list_group_bots":
+		return `{"result":{"list":[],"hasMore":false}}`
+	case "list_conversations_by_category":
+		return `{"result":{"conversations":[{"openConversationId":"fixture-conversation"}],"hasMore":false}}`
 	case "list_messages_by_ids":
-		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","content":"fixture message"}]}}`
+		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","senderOpenDingTalkId":"` + appFixtureCurrentDOpenID + `","content":"fixture message","resources":[{"resourceId":"resource-1","resourceIdType":"mediaId","resourceType":"image"}]}]}}`
 	case "get_conversation_info":
 		return `{"result":{"openConversationId":"fixture-conversation","convThreadEnabled":false}}`
 	case "search_contact_by_key_word":

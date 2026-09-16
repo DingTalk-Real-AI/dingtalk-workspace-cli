@@ -13,8 +13,8 @@
 | 将普通群中的已有消息升级为 Thread | `dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>` |
 | 浏览话题主消息 | `dws chat thread list --conversation-id <openConversationId>` |
 | 向具体话题直接追加回复 | `dws chat thread reply --conversation-id <openConvThreadId>` |
-| 分页读取一个话题的回复 | `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>` |
-| 转发整条话题 | `dws chat thread forward --src-msg-id <openMessageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>` |
+| 读取一个话题的回复 | `dws chat +thread-replies --group <openConversationId> --thread-id <openConvThreadId>` |
+| 转发整条话题 | `dws chat +messages-forward-topic --src-msg-id <openMessageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>` |
 | 撤回话题中的一条消息 | `dws chat thread recall-message --conversation-id <openConversationId> --message-id <openMessageId>` |
 | 添加或移除 emoji | `dws chat thread add-emoji` / `remove-emoji` |
 | 查询 Thread 消息的表情回复 | `dws chat thread list-emotion-replies --msg-ids <openMessageId,...>` |
@@ -28,15 +28,15 @@
 
 `thread reply` 沿用原发送命令的 `--conversation-id`，但这里传 Thread 子会话的 `openConvThreadId`。它直接追加回复，不使用消息引用回复，也不创建新的顶层 Thread。
 
-已有父会话 `openConversationId` 和 Thread `openConvThreadId` 且只需读取一页时，使用 `thread list-replies --conversation-id ... --topic-id ...`。需要按主消息自动解析、全量翻页、排序或下载资源时，使用 `+thread-replies` Shortcut。
-
-用户需要逐条查看、列出或概括具体回复内容时，使用 `thread list-replies`；只浏览话题主消息时使用 `thread list`。需要自动读取全部页面、排序或下载资源时，使用 `+thread-replies` Shortcut。
+已有父会话 `openConversationId` 和 Thread `openConvThreadId` 时使用 `+thread-replies --group ... --thread-id ...`；只有主消息 ID 时用 `--message-id` 自动解析。按需加 `--page-all`、排序或资源下载。原子 `thread list-replies` 仅用于 Shortcut 未发布的底层字段或原始响应。只浏览话题主消息时使用 `thread list`。
 
 整条 Thread 可转发到普通群；当前不支持从话题圈向另一个话题圈转发整条 Thread。
 
 ## 消息操作
 
-撤回、emoji 和文字表情命令沿用对应 `chat message` 命令的主参数。Runtime 会先读取消息并校验其属于 Thread，再执行操作；批量查询会逐条校验 `--msg-ids`。文字表情的 `emotionId`、`backgroundId`、名称和文字使用 `chat message create-text-emotion` 返回的实际值；移除时使用已添加的值，更新时用 `--old-emotion-id` 传当前值、其余表情参数传新值。
+撤回、emoji 和文字表情命令沿用对应 `chat message` 命令的主参数。Runtime 会先读取消息并校验其属于 Thread，再执行操作；批量查询会逐条校验 `--msg-ids`。文字表情先用 `+messages-create-text-emotion`，添加/移除用 `+messages-add-text-emotion` / `+messages-remove-text-emotion`；其 `emotionId`、`backgroundId`、名称和文字必须来自真实返回。仅更新使用未被 Shortcut 覆盖的 `thread update-text-emotion`。
+
+整条话题默认用 `+messages-forward-topic`；原子 `thread forward` 仅用于未公开字段或原始响应。
 
 ## 完成与错误
 

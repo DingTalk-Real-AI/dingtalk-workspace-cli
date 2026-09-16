@@ -424,10 +424,16 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	var cliErr *helpers.CLIError
 	if stderrors.As(err, &cliErr) && cliErr != nil {
 		info.UpstreamCode = cliErr.Code
+		if cliErr.ServerCode != "" {
+			info.UpstreamCode = cliErr.ServerCode
+		}
 		info.Hint = cliErr.Suggestion
 		info.Operation = cliErr.Operation
 		if cliErr.Cause != nil {
 			info.Cause = cliErr.Cause.Error()
+		}
+		if len(cliErr.Details) > 0 {
+			info.Details = cliErr.Details
 		}
 	}
 	var callErr *transport.CallError
@@ -1151,7 +1157,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		schemaCmd,
 		navigationGroup(mcpCmd),
 	}
-	utilityCommands = appendOptionalCommand(utilityCommands, newSafeChatCommand())
 	root.AddCommand(utilityCommands...)
 
 	if declarationOnly {
@@ -1193,13 +1198,6 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	root.SetContext(rootCtx)
 
 	return root
-}
-
-func appendOptionalCommand(commands []*cobra.Command, cmd *cobra.Command) []*cobra.Command {
-	if cmd == nil {
-		return commands
-	}
-	return append(commands, cmd)
 }
 
 // installReviewedFlagProtectionHandlers makes reviewed blocked/ambiguous

@@ -226,3 +226,38 @@ func containsSchemaContractString(values []string, expected string) bool {
 	}
 	return false
 }
+
+func TestCrossPlatformCoverageWhiteboardExportDryRunContractsDelivered(t *testing.T) {
+	for _, path := range []string{"whiteboard export", "whiteboard export-get"} {
+		full := executeShortcutSchemaQuery(t, "--cli-path", path)
+		compact := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+		if full["dry_run"] == nil {
+			t.Fatalf("%s missing dry-run declaration", path)
+		}
+		// Export still emits legacy bytes; the assembly intentionally withholds
+		// its internal Result declaration until unified output is enabled.
+		if full["result"] != nil || compact["result"] != nil {
+			t.Fatalf("%s publishes unified Result before runtime rollout", path)
+		}
+		dryRun, ok := full["dry_run"].(map[string]any)
+		if !ok || dryRun["preview_kind"] != "request" || dryRun["remote_reads"] == true {
+			t.Fatalf("%s invalid dry-run contract: %#v", path, full["dry_run"])
+		}
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardMergedCapabilities(t *testing.T) {
+	for _, path := range []string{
+		"whiteboard render", "whiteboard +diff", "whiteboard +query", "whiteboard +update",
+		"whiteboard create-with-content", "whiteboard export", "whiteboard export-get",
+		"whiteboard template personal save", "whiteboard template personal list", "whiteboard template personal create",
+		"whiteboard template team save", "whiteboard template team list", "whiteboard template team create",
+	} {
+		t.Run(path, func(t *testing.T) {
+			payload := executeShortcutSchemaQuery(t, "--cli-path", path, "--compact")
+			if payload["cli_path"] != path {
+				t.Fatalf("capability absent from Schema: %#v", payload)
+			}
+		})
+	}
+}

@@ -6,6 +6,179 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.62-beta.8] - 2026-09-11
+
+### Added
+
+- **OA approval template management** (#1346) — add
+  `dws oa approval template list` and `detail --template-code <code>` for
+  querying manageable approval templates, form schemas, and process
+  configuration.
+
+- **Interactive card callback events** ([Aone 86136546](https://project.aone.alibaba-inc.com/v2/project/2125919/req/86136546)) — `dws event consume user_card_action_triggered` reuses the personal-event subscription lifecycle with the same empty-object filter rule as IM/OA. Its flattened schema describes typed answers and questions under `payload.body.actionData.context`, business/conversation/operator fields under `payload.body`, and millisecond timestamps while preserving unknown fields for forward compatibility.
+
+- **AI 表格记录评论** — 新增评论的分页查询、创建、回复、完整更新和删除命令，支持纯文本、@人员及已上传图片。
+
+- **Calendar event options** — adds `--is-all-day` and `--add-online-meeting` to `calendar event create` and `update`, with omission-preserving boolean updates. Explicit all-day state changes require both start and end values, validated as dates or timezone-bearing date-times for the selected state.
+
+- **A2UI card options** — adds optional `--a2ui-annotations` JSON object arrays to card creation and updates, and `--support-forward` to creation (defaults to false).
+
+- **Public Agent Skills CLI** — `npx skills add DingTalk-Real-AI/dingtalk-workspace-cli -g` installs the per-product `dingtalk-*` skills after confirming the skills, target directories, and existing same-named content handling. The all-in-one mono `dws` skill is marked `metadata.internal: true` so it is not a default installable skill. `dws skill setup` remains the China / upgrade / ownership path.
+
+- **Schema 时间格式声明** — 支持字符串参数以 `anyOf` 声明多个格式，并为日历创建/更新的 `date-time` 到 `date`/`date-time` 扩展及全天状态条件必填提供精确、基线持有的迁移校验；其他格式和条件必填变更仍被拦截。
+
+- **Standalone whiteboard export** — adds `whiteboard export` and `whiteboard export-get`
+  to download PNG/PDF exports. Both commands support request-only dry-run previews.
+  Signed URL query strings do not affect filenames; downloads validate their file
+  signatures before atomic publication and never overwrite existing files. Failed
+  tasks retain recovery instructions with the job ID, format, and output directory.
+  Downloads enforce HTTPS/443 public network targets on redirects and actual
+  connections, with a 512 MiB limit for both declared and streamed response sizes.
+
+### Changed
+
+- **AI Table CLI safety and compatibility** — adds safe entity resolution for view filters, strengthens dashboard, workflow, import, record, and table validation, supports the latest Base copy and share-form protocols, and aligns Runtime Schema and Skill guidance with observable MCP behavior.
+
+- Update the embedded CLI telemetry SDK to v0.4.0 and send completed command events from a bounded background process, preserving existing telemetry fields and keeping network waits out of command execution.
+
+- Update the embedded runtime SDK to 20260909 and remove auxiliary ps files from builds and runtime extraction, reducing single-binary package size.
+- Refresh the macOS universal runtime library while retaining the 1 MiB payload slot and using the payload digest to upgrade existing installations of the same resource version.
+
+### Fixed
+
+- **Direct-runtime MCP endpoint resolution** (#1331) — restore the
+  environment-aware `mcpdev` endpoint so `dws dev mcp` commands reach the
+  backend instead of failing locally with `endpoint_not_resolved`.
+
+- Automatic pagination now preserves cancellation when the page-delay timer and
+  context cancellation become ready together, rather than randomly continuing.
+
+- **OA approval list response types** (#1351) — normalize `success` to a
+  boolean and numeric error codes to `errorCode` for pending, submitted, and
+  copied approval lists while preserving business data and diagnostics.
+
+- Preserve optional `--source-config` for AI Table datasource updates: read and reuse the complete existing configuration when omitted, and stop before updating if the read cannot provide a valid configuration.
+
+- **AI Table capability routing** — isolates concurrent multi-profile discovery so each `tools/list` request uses the selected account without changing the process-wide profile.
+
+- Include the available runtime context in manual OAuth and device authorization links, including `--no-browser`, so copied links match browser authorization. Display device links outside a frame to keep long URLs copyable on narrow terminals.
+- Stop adding the CLI locale as a `lang` query parameter to browser, manual, and reauthorization login links.
+
+- **Chat read completeness contracts** — makes conversation and message reads distinguish normal bounded truncation from terminal pagination, projection, enrichment, and resource-download failures. Incomplete reads retain their canonical partial result and typed retry diagnostics, while newly declared Result and pagination contracts remain in byte-compatible dual validation before activation.
+- **Chat routing and bounded discovery** — distinguishes conversation categories from real chat groups, aligns reviewed Shortcut owners with runtime selection and references, and steers agents toward narrow leaf Schema before a single exact Help fallback.
+- **Public Schema constraint closure** — normalizes reviewed hidden aliases to their public parameters and rejects constraints that cannot be represented without exposing hidden runtime inputs.
+
+- **Drive and Wiki agent workflows** — align pagination, confirmation, target verification, recovery receipts, and Reference routing with runtime behavior.
+
+- Stop implicit HTTP retries of MCP tool invocations after gateway or connection failures, preventing duplicate datasource updates and other remote writes. Discovery and explicit read/reconciliation retry policies retain their existing behavior.
+
+- **Minutes artifact evidence** — distinguish empty action items, unsupported responses and speaker-task terminal states; preserve list display metadata and complete upload/permission preview options.
+- **Minutes export and delivery** — remove signed credentials from exported text, keep partial results explicit, and align time conversion, pagination, permissions and cross-product report guidance with verified runtime behavior.
+
+- Fix the Windows whiteboard export test to compare decoded JSON paths, and run platform app coverage tests in fresh batches while retaining the full test selection, cross-package instrumentation, and coverage gate.
+
+### Security
+
+- **AI 表格文件导入** (#1349) — 将上传白名单收紧为服务配置的精确 OSS Bucket 主机与导入对象路径，拒绝同区域其他 Bucket、区域根域和路径式 Bucket URL；复用公网传输 IP 策略，在上传前阻止共享地址段、保留地址及特殊 IPv6 目标。
+
+
+## [1.0.62-beta.7] - 2026-09-09
+
+### Added
+
+- **Chat active conversations** — adds `dws chat +active-conversations --start <time>` to auto-page cross-conversation messages and return deduplicated conversation summaries with stable name fields, latest-message time, and completeness metadata. Query boundaries use whole seconds: explicit nonzero fractional seconds are rejected, and the default end is rounded down to exclude the current unfinished second. The effective end must be later than the start and remains fixed across pages, results, and continuation; latest-message timestamps retain millisecond precision. Returned messages are filtered to the fixed `[start,end)` window before aggregation; pages with no matching messages still follow server pagination. Pagination waits 200ms between pages by default; later-page failures preserve completed summaries and a continuation cursor as `partial_failure` (exit 7). Resume with the original time window, page size, and profile, then merge batches by conversation ID.
+
+- **Chat shortcut 对齐与查询校验** — 补充兼容别名、创建默认值、消息上下文定位、文本与 Thread 回复、筛选排序及分页控制，保留原入口；共享消息富化并严格区分空集合、不完整结果与失败，增加资源分段重试、版本校验和原子落盘。下游尚未支持或未实测的身份、消息类型与权限范围单独列明。
+
+- **Contact invite/apply administration** — adds `dws contact exclusive-account
+  disable|enable` for enterprise-account status, a `dws contact org`
+  invite/apply group (`invite-switch`, `invite-audit`, `invite-info`,
+  `invite-list`, `apply-list`, `apply-approve`, `apply-reject`, `apply-block`,
+  `apply-remove`), and `dws contact dept invite-audit` for department-level
+  join-request auditing.
+
+- **Standalone whiteboards** — adds OpenNodes-based `whiteboard create-with-content` and extends
+  the existing `whiteboard query` / `whiteboard update` entry points to operate
+  on standalone boards when `--part-id` is omitted, while preserving the
+  document-embedded flow when it is explicitly supplied. Standalone reads
+  decode the service `resultJson`, and writes enforce revision and stable
+  request-ID guards with compatible receipt validation and same-type read-back.
+
+### Changed
+
+- **CLI auth apply pending page** (#1285) — the browser apply flow now lands on a
+  dedicated approval-pending page that polls and auto-redirects after approval;
+  duplicate apply requests are idempotent, and all local callback pages and API
+  responses are served with `Cache-Control: no-store` to avoid stale state after
+  a page refresh.
+- **CLI access denial copy** (#1285) — terminal denial reasons are now split by
+  whether the path is applyable. `cli_not_enabled` keeps the apply flow and shows
+  a personal-scope message ("you do not yet have CLI data access") with the
+  approver picker relabeled to "select approver"; the inline success message was
+  replaced by a redirect to the pending page. The non-applyable `user_forbidden`
+  and `user_not_allowed` reasons now share a single consolidated terminal message
+  ("this organization has not enabled CLI data access") across the browser page and
+  both login transports (OAuth browser flow and device flow).
+
+- **Chat recent conversations** — makes `--start` optional for `dws chat +recent-conversations`. Omission selects the 24 hours before the effective `--end`; omitting both boundaries selects the latest 24 hours ending at the current time rounded down to a whole second. Explicit `--start` retains the existing time formats, whole-second validation, and blank-input rejection. Both effective boundaries stay fixed across pagination and are returned in the result. Non-initial `--cursor` requests must explicitly reuse the previous `--start` and `--end` to preserve the original query window.
+
+- **Chat recent conversations** — makes `dws chat +recent-conversations` the preferred entry and retains `+active-conversations` as a hidden executable compatibility entry sharing the same implementation, without deprecation warnings in execution, Help, or Schema. Public Help, Schema primary CLI paths/examples, and Mono/Multi Skills recommend the new name; the stable Schema identity `chat.shortcut_active_conversations` and old CLI-path lookup remain supported. Query windows, pagination, and result semantics are unchanged by this rename.
+
+- **Runtime context** — Refresh the embedded payload to `20260908`, verify and materialize owned resources beside the resolved executable with cache fallback, and attach the process context to browser login URLs while keeping terminal links and diagnostics redacted.
+
+### Removed
+
+- **移除顶层 `dws safechat` 命令（破坏性变更）** — 删除 `dws safechat selftest` 与 `dws safechat decrypt`。这两个命令在 `1.0.62-beta.3` (#1051) 交付，但只在显式 `-tags safechat` 的源码构建中存在：官方 Release 一直是 `CGO_ENABLED=0`，stub 的 `newSafeChatCommand()` 返回 `nil`，因此官方二进制从未包含该命令，受影响的只有自行打 tag 构建并升级的用户。SafeChat 现在是 `internal/msgcrypto` 的内部后端，仅通过聊天消息加解密路径暴露，不再提供独立顶层命令。
+- **迁移方式** — `dws safechat decrypt` 的等价入口是 `dws chat crypto decrypt`，它走同一套 SafeChat 后端并按策略解密。`dws safechat selftest`（真实取码与密钥获取的端到端自检）没有等价命令；需要验证后端可用性时改用 `dws chat crypto decrypt` 对一条真实密文做一次解密。
+
+### Fixed
+
+- **Contact apply-list safety semantics** — `dws contact org apply-list` marks
+  unread join applications as read on the server; its schema safety effect is
+  now declared as `write` (risk stays `low`, confirmation stays
+  `not_required`) and the selection guidance discloses the read-marking side
+  effect so Agents no longer treat it as a pure read.
+
+- **Contact apply-remove safety semantics** — `dws contact org apply-remove`
+  deletes organization join application records irreversibly; its schema safety
+  effect is now declared as `destructive` (risk `high`, confirmation
+  `user_required`) and the selection guidance discloses that the deletion is
+  not recoverable so Agents no longer treat it as an ordinary write.
+
+- **Contact org list pagination contract** — `dws contact org invite-list` and
+  `dws contact org apply-list` now declare the unified cursor Pagination contract
+  (`cursor` parameter, `meta.pagination` metadata) and their result data schemas
+  no longer leak `hasMore`/`nextCursor`. Runtime responses project the server-side
+  cursor fields into `meta.pagination` so Agents can resume paging from the
+  standard contract.
+
+- **Chat recent conversations pagination** — adds a shared `--total-timeout` budget (default 300 seconds, range 1–3600) across all requests, retries and page delays in one invocation. A timeout preserves validated pages in the partial-failure result and returns the failed page's input cursor. Cursor continuation remains caller-managed: reuse the same profile, time window and page size, and merge batches by conversation ID. Progress is not persisted to disk; forcibly terminated queries must be restarted.
+
+- **Chat conversation categories** — treat `im/list_conversations_by_category` as the declared single-response interface when its explicit conversation array contains no pagination signal, while continuing to fail closed on partial or non-resumable pagination metadata. `+category-list-conversations` and `+feed-group-query-item` now publish the resolved pagination mode and source-exhaustion facts instead of rejecting every live response that omits `hasMore`.
+
+- **SafeChat 默认构建与官方产物** — 支持平台的 CGO 构建无需额外 build tag
+  即包含 SafeChat 后端，官方六平台 Release 固定使用可校验的交叉编译工具链并拒绝
+  发布 CGO-disabled stub 二进制。
+- 本地 `make build` / `make rebuild` 默认启用 CGO，并保留显式
+  `CGO_ENABLED=0` 的 stub 构建选择。
+- Linux 官方构建显式使用 glibc 2.17 链接目标，并校验 ELF 符号版本，
+  防止交叉编译镜像升级隐式提高 Linux 系统要求。
+- `install.sh` / `install-event.sh` / `install-devapp.sh` 在下载前识别 musl
+  发行版（如 Alpine）并明确中止。Linux 产物依赖 glibc 动态加载器，此前这类环境
+  会安装成功但连 `dws version` 都无法启动。判定以 `ldd --version` 为准，musl
+  加载器文件只在 `ldd` 不报版本时兜底（Alpine 的 BusyBox `ldd` 仅转发给加载器），
+  因此额外安装了 `musl` / `musl-tools` 的 glibc 发行版不会被误拒。
+- SafeChat cipher 关闭时会等待进行中的加解密结束，不再与 `Close` 并发访问
+  vendor client 的初始化状态（`go test -race` 下可复现的数据竞态）。
+
+- **Schema 向后兼容检查** — 允许删除 `require_one_of` 必填组，以支持具备默认值或可自动解析参数的命令；保留新增约束、互斥、参数类型和身份安全检查，并通过基线拥有的两阶段评审机制交付。
+
+- **Skill setup source resolution** — accepts an extracted `dws-skills.zip`
+  root for `--source` / `DWS_SKILL_SOURCE`, selects its `mono` or `multi`
+  subtree by mode, and no longer mistakes the compatibility `mono` directory
+  for a single MultiSkill.
+
+
 ## [1.0.62-beta.6] - 2026-09-08
 
 ### Added

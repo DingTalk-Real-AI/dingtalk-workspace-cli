@@ -789,6 +789,32 @@ detect_arch() {
   esac
 }
 
+# The Linux release binaries are CGO builds linked against glibc, so they need
+# the glibc dynamic loader. musl cannot load them, and the failure would only
+# surface after install as an opaque loader error, so refuse up front.
+#
+# ldd is the authority on which libc the system actually uses. A glibc
+# distribution that has musl or musl-tools installed also carries
+# /lib/ld-musl-*.so.1 while its default loader stays glibc, so the loader file
+# alone must not decide. It remains the fallback for musl distributions whose
+# ldd reports no version, notably Alpine where BusyBox ldd only forwards to the
+# loader.
+require_glibc_on_linux() {
+  [ "$os" = "linux" ] || return 0
+  if command -v ldd >/dev/null 2>&1; then
+    ldd_version="$(ldd --version 2>&1)"
+    if printf '%s' "$ldd_version" | grep -qi musl; then
+      err "This Linux distribution uses musl libc, but ${BIN_NAME} release binaries are built against glibc and cannot run here. Use a glibc-based distribution."
+    fi
+    if printf '%s' "$ldd_version" | grep -qiE 'gnu libc|glibc'; then
+      return 0
+    fi
+  fi
+  if ls /lib/ld-musl-*.so.1 >/dev/null 2>&1; then
+    err "This Linux distribution uses musl libc, but ${BIN_NAME} release binaries are built against glibc and cannot run here. Use a glibc-based distribution."
+  fi
+}
+
 # Decide the download source. An explicit DWS_GITEE_REPO always wins. Otherwise
 # probe GitHub Releases; if it is unreachable (typical in mainland China), switch
 # GITEE_REPO to the mirror so every subsequent resolve/download uses Gitee.
@@ -1546,6 +1572,7 @@ _copy_skill() {
 install_binary() {
   os="$(detect_os)"
   arch="$(detect_arch)"
+  require_glibc_on_linux
   resolve_version
 
   archive_name="${BIN_NAME}-${os}-${arch}.tar.gz"

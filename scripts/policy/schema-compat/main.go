@@ -75,6 +75,7 @@ type parameterSchema struct {
 	RequiredWhen     string   `json:"required_when,omitempty"`
 	Default          string   `json:"default,omitempty"`
 	InterfaceDefault string   `json:"interface_default,omitempty"`
+	AnyOf            string   `json:"anyOf,omitempty"`
 	Format           string   `json:"format,omitempty"`
 	Enum             []string `json:"enum,omitempty"`
 }
@@ -90,6 +91,27 @@ type reviewedCompatibilityException struct {
 // confirmation drift into a compatible change. Each tool may have multiple
 // field transitions (e.g. confirmation + risk + effect tightened together).
 var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
+	// PR #1357: align the published Drive/Wiki contract with verified runtime
+	// behavior. Publish status is read-only; unsupported publish enablement is
+	// unavailable to Agents; upload and member removal cross existing runtime
+	// confirmation gates. Each transition is pinned independently.
+	"drive/drive.publish_get": {
+		{Field: "effect", Old: "write", New: "read"},
+		{Field: "risk", Old: "medium", New: "low"},
+		{Field: "idempotency", Old: "unknown", New: "idempotent"},
+	},
+	"drive/drive.publish_set": {
+		{Field: "availability", Old: "available", New: "unavailable"},
+	},
+	"drive/drive.shortcut_publish_set": {
+		{Field: "availability", Old: "available", New: "unavailable"},
+	},
+	"drive/drive.upload": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	"wiki/wiki.shortcut_member_remove": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
 	// PR #1085: batch permission/member remove is destructive at container
 	// scope — one call can revoke access for up to 30 USER / DEPT /
 	// CONVERSATION / TAG members, and departments, chats, and role groups
@@ -653,6 +675,7 @@ func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
 		InterfaceType    string          `json:"interface_type"`
 		Default          json.RawMessage `json:"default"`
 		InterfaceDefault json.RawMessage `json:"interface_default"`
+		AnyOf            json.RawMessage `json:"anyOf"`
 		Format           string          `json:"format"`
 		Enum             []string        `json:"enum"`
 		FieldProvenance  struct {
@@ -669,6 +692,9 @@ func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
 	if err := json.Unmarshal(raw, &schema); err != nil {
 		return parameterSchema{}, err
 	}
+	// Both decodes above already validated this RawMessage as JSON.
+	// Canonicalizing that validated fragment cannot fail.
+	anyOf, _ := canonicalRawJSON(parameter.AnyOf)
 	parameterType := schemaType(schema)
 	if parameterType == "unspecified" {
 		return parameterSchema{}, fmt.Errorf("type is missing")
@@ -694,6 +720,7 @@ func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
 		RequiredWhen:     strings.TrimSpace(parameter.RequiredWhen),
 		Default:          defaultValue,
 		InterfaceDefault: interfaceDefault,
+		AnyOf:            anyOf,
 		Format:           strings.TrimSpace(parameter.Format),
 		Enum:             enum,
 	}, nil
@@ -813,6 +840,11 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		if !ok {
 			failures = append(failures, fmt.Sprintf("schema tool %q lost parameter %q", toolPath, parameter))
 			continue
+		}
+		if compatibleReviewedCalendarTimeFormats(toolPath, parameter, oldTool, newTool) {
+			oldParameter.Format = newParameter.Format
+			oldParameter.AnyOf = newParameter.AnyOf
+			oldParameter.RequiredWhen = newParameter.RequiredWhen
 		}
 		failures = append(failures, checkParameterCompatibility(toolPath, parameter, oldParameter, newParameter)...)
 	}
@@ -1565,6 +1597,7 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		{name: "default", old: oldParameter.Default, new: newParameter.Default},
 		{name: "interface_default", old: oldParameter.InterfaceDefault, new: newParameter.InterfaceDefault},
 		{name: "format", old: oldParameter.Format, new: newParameter.Format},
+		{name: "anyOf", old: oldParameter.AnyOf, new: newParameter.AnyOf},
 	} {
 		if field.old != field.new {
 			failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed %s", toolPath, name, field.name))

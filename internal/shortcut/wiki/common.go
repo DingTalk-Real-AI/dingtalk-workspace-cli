@@ -516,5 +516,5 @@ func collectWikiPages(rt *shortcut.RuntimeContext, operation string, pageSize in
 			return nil, nil, err
 		}
 	}
-	return nil, nil, wikiResponseError(operation, "page_limit_reached", "达到 --page-limit 时服务端仍有下一页；提高页数上限或使用返回游标续传")
+	return nil, nil, wikiResponseError(operation, "page_limit_reached", "达到 --page-limit 时服务端仍有下一页；本次未返回累计结果或续页游标，需要继续时提高 --page-limit 后重新查询")
 }

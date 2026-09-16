@@ -19,9 +19,11 @@ const (
 	EmbeddedQueryTool  = "read_whiteboard_content"
 	EmbeddedUpdateTool = "update_whiteboard"
 
-	StandaloneCreateTool = "create_whiteboard"
-	StandaloneQueryTool  = "get_whiteboard_detail"
-	StandaloneUpdateTool = "update_whiteboard_content"
+	StandaloneCreateTool      = "create_whiteboard"
+	StandaloneQueryTool       = "get_whiteboard_detail"
+	StandaloneUpdateTool      = "update_whiteboard_content"
+	StandaloneExportTool      = "export_whiteboard"
+	StandaloneExportQueryTool = "query_export_job"
 )
 
 // Kind identifies the target model selected before the first remote call.

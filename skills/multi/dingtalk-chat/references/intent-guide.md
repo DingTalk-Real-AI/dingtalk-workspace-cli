@@ -43,7 +43,7 @@ Favorite、消息 Pin、消息 Top 和会话 Top 不能互换，即使用户都�
 | 已有成员 IDs 创建群 | `+chat-create` |
 | 查群、查看成员、邀请链接 | [group-discovery.md](chat/group-discovery.md) |
 | 加人、踢人、管理员、群公告、群设置 | [group-admin.md](chat/group-admin.md) |
-| 找可用机器人并取得单聊 ID | `chat bot find`，不是只查自己创建机器人的 `bot search` |
+| 找可用机器人并取得单聊 ID | `+bot-find`，不是只查自己创建机器人的 `+bot-search` |
 | 已知 robotCode 发送 | `+messages-send --as bot` |
 | 机器人入群、移除、批量群发或撤回 | [chat-bot.md](chat/chat-bot.md) |
 
