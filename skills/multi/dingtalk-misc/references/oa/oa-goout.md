@@ -2,7 +2,7 @@
 
 > **触发：** 用户说"外出/公出/提交外出/帮我提外出申请"等外出意图时，走本文档工作流（**不走 search-forms**）；出差仍按 attendance 域 `+get-approve-template` 的提交链接引导（出差 = `--type out`，外出 = `--type travel`，注意分流）；加班走 [oa-overtime.md](oa-overtime.md)「发起加班审批」。
 
-## 工作流（步骤 1-7 外出特有；8-9 复用 [oa.md](../oa.md)「发起审批实例」第 5-7 步）
+## 工作流（步骤 1-7 外出特有；8-9 复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」）
 
 ```
 1.【模板定位】dws attendance +get-approve-template --type travel
@@ -21,7 +21,7 @@
    · 展示全部 options 供用户选择（选项格式：类型名称原文 + 按天/按半天/按小时 中文单位标注；unit 英文枚举不得进入用户话术）；选定后**有效单位 = 该 option 的 extension.unit**
    · 用户中途更换外出类型时：已收集的起止时间与时长全部作废，必须按新有效单位重新收集并重算（对齐客户端切换类型清空行为）
    · type 不可见（options 为空）→ 不收集类型、不组装 type 条目，有效单位 = 套件 props.unit
-4.【收集时间 + 同行人 + 事由】（时间与事由的收集交互见 [oa.md](../oa.md)「交互优化原则」第 4 条）
+4.【收集时间 + 同行人 + 事由】（时间与事由的收集交互见 [oa-create.md](../oa-create.md)「交互优化原则」第 4 条）
    · 起止时间按有效单位收集（day → 日期；halfDay → 日期 + 上午/下午；hour → 日期 + 时刻）
    · traveler 可见时可收集同行人（姓名用 dws aisearch person 解析为 userId，上限固定 30——客户端硬编码覆盖模板 max 配置）；无同行人则跳过步骤 5、不组装 traveler 条目
    · 外出事由等套件外控件按 required 收集
@@ -41,7 +41,7 @@
      —— value 必须是 userId 的 JSON 数组字符串（如 "[\"uid1\",\"uid2\"]"）；生产实证：姓名显示值会触发服务端系统错误
    · 套件外控件条目（如 {"id":"外出事由","name":"外出事由","value":"…"}，控件 id 以当次 form-schema 为准，可能即中文 label）
 8.【流程预演（必选）】forecast-process --request —— 外出模板常见必选自选审批人节点（required=true 时缺 targetSelectActioners 会被服务端拒绝）；自选结果组装字段为 actionerKey（取自本次 forecast 的 workflowActor.actorKey，禁止跨模板/跨流程复用）+ actionerStaffIds（userId）；字段名写成 activityId/actionerUserIds 会创建成功但流转挂起（tasks 返回空 taskIdList）
-9.【选人 + 确认 + 发起】复用 [oa.md](../oa.md)「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）
+9.【选人 + 确认 + 发起】复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」：自选节点选人（targetSelectActioners 并入 payload）
    → 汇总确认（外出类型 + 起止时间 + 时长 + 同行人 + 事由 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
 ```
 
@@ -53,8 +53,8 @@
 | halfDay | yyyy-MM-dd 上午/下午 | --duration-mode 2 --start <日期> --end <日期> --half-start AM\|PM --half-end AM\|PM |
 | hour | yyyy-MM-dd HH:mm | --duration-mode 3 --start "<日期> HH:mm:00" --end "<日期> HH:mm:00" |
 
-> **IMPORTANT：** 时长、detailList、compressedValue 一律以 `+calculate-approve-duration` 服务端计算为准，严禁本地估算或手改（不支持手改时长）；外出套件为 extract=true 展平形态，不构造 DDBizSuite 容器条目；步骤 8/9 必须走 `--request` 高级模式；创建成功后必须 detail 回读验收（子控件 value/extValue 非空保真 + tasks 返回当前 taskId），缺失即判失败。
+> **IMPORTANT：** 时长、detailList、compressedValue 一律以 `+calculate-approve-duration` 服务端计算为准，严禁本地估算或手改（不支持手改时长）；外出套件为 extract=true 展平形态，不构造 DDBizSuite 容器条目；步骤 8/9 必须走 `--request` 高级模式。
 
-模板不支持 CLI 发起时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
+模板不支持 CLI 发起时的 `submitUrl` 兜底与链接展示规范，见 [oa-create.md](../oa-create.md)「考勤审批套件」章节的 submitUrl 引导规范。
 
 字段级规范见 [oa-form-components.md](oa-form-components.md) 的 DDBizSuite · attendance.goout（外出套件）章节。

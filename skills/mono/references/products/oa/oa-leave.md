@@ -34,7 +34,7 @@
    + 其余控件条目（如 {"name":"请假事由","value":"…"}）
    · extendValue = JSON.stringify({...步骤5响应, key: leaveCode, leaveParams: [corpId, leaveCode, T1, T2, staffId]})
    · corpId 取步骤 5 响应回显；本人发起 staffId=null
-9.【流程预演（可选）】forecast-process --request（高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
+9.【流程预演（可选；模板含必选自选审批人节点时必做）】forecast-process --request（required=true 时缺 targetSelectActioners 会被服务端拒绝；高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
 10.【选人 + 确认 + 发起】复用 [oa.md](../oa.md)「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）
     → 汇总确认（表单值 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
 ```
