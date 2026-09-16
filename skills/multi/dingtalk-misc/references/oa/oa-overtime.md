@@ -1,8 +1,8 @@
 # 发起加班审批（加班套件 DDBizSuite · attendance.batchovertime）
 
-> **触发：** 用户说"加班/提交加班/帮我提加班申请/代XX提交加班"等加班意图时。**时长计算**：calculate_approve_duration 支持 durationInHour/durationInDay/detailList/modifiedDate 入参（CLI 暴露 --duration-in-hour/--duration-in-day/--detail-list/--modified-date）——歧义窗口（班中起始/跨天）传 --detail-list 逐日明细可算（服务端按逐日求和、采信提议值不裁决截断），无歧义窗口服务端可自算。**时长结果须经用户手动确认**。验收判据 = create-instance 成功后 detail 回读套件子控件 value/extValue 非空保真 + tasks 返回当前 taskId。
+> **触发：** 用户说"加班/提交加班/帮我提加班申请/代XX提交加班"等加班意图时。**时长计算**：calculate_approve_duration 支持 durationInHour/durationInDay/detailList/modifiedDate 入参（CLI 暴露 --duration-in-hour/--duration-in-day/--detail-list/--modified-date）——歧义窗口（班中起始/跨天）传 --detail-list 逐日明细可算（服务端按逐日求和、采信提议值不裁决截断），无歧义窗口服务端可自算。**时长结果须经用户手动确认**。
 
-## 工作流（时长计算结果须经用户手动确认。步骤 1-8 加班特有，9-10 复用 [oa.md](../oa.md)「发起审批实例」第 5-7 步）
+## 工作流（时长计算结果须经用户手动确认。步骤 1-8 加班特有，9-10 复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」）
 
 ```
 1.【模板定位】dws attendance +get-approve-template --type overtime
@@ -22,7 +22,7 @@
    → interactMode：1=day / 2=halfDay / 3=hour = 有效单位；与模板 props.unit 不一致时以本结果为准（起止格式、时长取值字段随之切换）并告知用户「单位按员工组规则生效」
    · reason 非空 → 该员工组禁止加班，原样转告并终止，不重试
    · workDate 语义=加班日期（初始为当前日 0 点，选定起止后为起始日 0 点）
-5.【收集时间 + 事由】起止时间按有效单位收集（day → 日期；halfDay → 日期 + 上午/下午；hour → 日期 + 时刻；事由收集交互见 [oa.md](../oa.md)「交互优化原则」第 4 条的事由/理由规范）
+5.【收集时间 + 事由】起止时间按有效单位收集（day → 日期；halfDay → 日期 + 上午/下午；hour → 日期 + 时刻；事由收集交互见 [oa-create.md](../oa-create.md)「交互优化原则」第 4 条的事由/理由规范）
    · 支持多日加班：跨度上限 7 天（前端按跨度拦截、服务端按时长 ≤7 天），超出提示拆分；多日逐日时长经步骤 6 两阶段确认收集
 6.【时长计算（两阶段确认）】dws attendance +calculate-approve-duration --biz-type 1 --new-overtime --duration-mode <M> --start <T1> --end <T2> [--half-start AM|PM --half-end AM|PM] [--principal-users <uid,...>]
    · **时长计算口径**：歧义窗口（班中起始/跨天需逐日拆分）必须携带 --detail-list 逐日明细（JSON 数组，逐项 workDate 为毫秒 number——字符串形态会被服务端静默忽略返回 durationInHour=0，CLI 透传前统一归一化）+ durationInHour|durationInDay；服务端按逐日求和为总时长（总时长字段透传但不参与计算），--duration-in-hour（hour）/--duration-in-day（day/halfDay）与 --modified-date 可选携带；**服务端直接采信逐日提议值、不做裁决截断**——逐日值必须来自用户手动确认；无歧义窗口（整段班次外单日）服务端可自算成功（--start/--end 须完整秒级 HH:mm:ss），自算结果同样必须经下方硬约束由用户手动确认
@@ -41,7 +41,7 @@
    · children 按字段规范组装：partner / startTime / finishTime / duration（value=总时长字符串，hour → durationInHour，否则 durationInDay）/ compensation 按步骤 7
    · 套件外控件（如加班原因）按通用规则组装
 9.【流程预演（必选）】forecast-process --request（必选自选审批人节点 required=true 时缺 targetSelectActioners 会被服务端拒绝；组装字段为 actionerKey + actionerStaffIds）
-10.【选人 + 确认 + 发起】复用 [oa.md](../oa.md)「发起审批实例」第 6-7 步 → 汇总确认（加班人 + 起止时间 + 时长 + 补偿方式 + 事由 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
+10.【选人 + 确认 + 发起】复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」 → 汇总确认（加班人 + 起止时间 + 时长 + 补偿方式 + 事由 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
 ```
 
 有效单位与命令参数对照：
@@ -55,8 +55,7 @@
 > **IMPORTANT：**
 > - 加班套件为**容器包裹**形态（schema 无 extract）：容器条目 value=stringify(children)，与补卡/外出的展平形态相反，先例不可跨类型推用。
 > - 时长、detailList、compressedValue 一律以 `+calculate-approve-duration --biz-type 1 --new-overtime` 服务端计算为准，严禁本地估算/手改；**任何来源的时长结果都必须经用户手动确认（步骤 6 硬约束），未确认不得进入组装与发起**；服务端采信逐日提议值、不做裁决截断。
-> - 创建成功后必须 detail 回读验收：套件子控件以**平铺**形式出现在 formValueVOS（不回读 DDBizSuite 容器包裹本身），按 bizAlias 逐项核对 value/extValue 非空保真 + tasks 返回当前 taskId；未填值控件回读 None 属正常，不判丢弃。回读缺失即判失败并 revoke 清理。
 
-模板不支持 CLI 发起时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
+模板不支持 CLI 发起时的 `submitUrl` 兜底与链接展示规范，见 [oa-create.md](../oa-create.md)「考勤审批套件」章节的 submitUrl 引导规范。
 
 字段级规范见 [oa-form-components.md](oa-form-components.md) 的 DDBizSuite · attendance.batchovertime（加班套件）章节。

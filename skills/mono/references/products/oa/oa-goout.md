@@ -53,7 +53,7 @@
 | halfDay | yyyy-MM-dd 上午/下午 | --duration-mode 2 --start <日期> --end <日期> --half-start AM\|PM --half-end AM\|PM |
 | hour | yyyy-MM-dd HH:mm | --duration-mode 3 --start "<日期> HH:mm:00" --end "<日期> HH:mm:00" |
 
-> **IMPORTANT：** 时长、detailList、compressedValue 一律以 `+calculate-approve-duration` 服务端计算为准，严禁本地估算或手改（不支持手改时长）；外出套件为 extract=true 展平形态，不构造 DDBizSuite 容器条目；步骤 8/9 必须走 `--request` 高级模式；创建成功后必须 detail 回读验收（子控件 value/extValue 非空保真 + tasks 返回当前 taskId），缺失即判失败。
+> **IMPORTANT：** 时长、detailList、compressedValue 一律以 `+calculate-approve-duration` 服务端计算为准，严禁本地估算或手改（不支持手改时长）；外出套件为 extract=true 展平形态，不构造 DDBizSuite 容器条目；步骤 8/9 必须走 `--request` 高级模式。
 
 模板不支持 CLI 发起时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
 

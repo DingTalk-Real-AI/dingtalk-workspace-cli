@@ -36,7 +36,7 @@
      （timeZoneInfo 不本地拼接：可选字段，服务端 supply-plans 响应不含时区数据）
    · bizAlias 不组装（MCP 通道无此字段，服务端按 id 匹配）；不构造 repairCheckTime（服务端回填）
    + 理由条目 {"id": 理由控件id, "name": "补卡理由", "value": "<用户输入>"}
-8.【流程预演（可选）】forecast-process --request（高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
+8.【流程预演（可选；模板含必选自选审批人节点时必做）】forecast-process --request（required=true 时缺 targetSelectActioners 会被服务端拒绝；高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
 9.【选人 + 确认 + 发起】复用 [oa.md](../oa.md)「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）
    → 汇总确认（表单值 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
 ```

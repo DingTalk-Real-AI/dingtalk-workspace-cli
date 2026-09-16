@@ -499,7 +499,6 @@ duration extValue 映射（`+calculate-approve-duration` 响应（`data.value`�
 > - 时长、detailList、compressedValue 一律以 `+calculate-approve-duration`（**--biz-type 2 --approve-biz-type attendance.goout**，生产实证；--biz-type 5 报业务错误 C0002）服务端计算为准，**严禁本地估算/手改**（不支持 customDuration）；duration 的 value 提交数字（detail 回读为字符串属服务端归一化）。
 > - 有同行人时必须先经 `+check-companion-schedules --approve-type 2` 校验：`valid=false` → 原样转告 title/alertInfo + 冲突同行人（userIds），剔除后重试。
 > - 外出模板常见必选自选审批人节点：forecast 返回 `workflowActivityRuleVOs[].targetSelect=true` 且 `required=true` 时**必须选人**组装 `targetSelectActioners`（实证：缺失时服务端拒绝创建）；组装字段为 **actionerKey**（= 本次 forecast 的 `workflowActor.actorKey`）+ **actionerStaffIds**（userId）——字段名误写为 activityId/actionerUserIds 会创建成功但流转挂起（tasks 返回空 taskIdList，2026-09-01 实证）；一切以当次 forecast 返回为准。
-> - 创建成功后必须 detail 回读验收（子控件 value/extValue 非空保真 + tasks 返回当前 taskId）。
 
 ### DDBizSuite · attendance.batchovertime（加班套件）
 
@@ -550,7 +549,6 @@ children 条目（位于容器 value 字符串内部，`key`=子控件 props.id�
 | 6 | compensation | 时长计算响应 `overtimeRedressBy=="manual"` → 必选：`{"key":<id>,"label":"加班补偿","value":"转调休\|加班费","bizAlias":"compensation","extendValue":{"key":"vacation\|charge"}}`；否则空条目 `{"key":<id>,"label":"加班补偿","bizAlias":"compensation"}` |
 
 > **IMPORTANT：**
-> - 验收判据 = create-instance 成功后 detail 回读子控件 value/extValue 非空保真 + tasks 返回当前 taskId。
 > - children 内 `bizAlias` 照常携带（容器 value 字符串为同构形态，与展平形态「不组装 bizAlias」相反）；控件 id 必须当次 form-schema 实时取。
 > - 时长、detailList、compressedValue、featureMap 一律以 `+calculate-approve-duration --biz-type 1 --new-overtime` 服务端计算为准，严禁本地估算/手造；compressedValue 为服务端 gzip 签名，禁止解析改写。
 > - 时长计算响应 → duration extendValue 的字段映射参照外出套件章节映射表（同一 calculate_approve_duration 工具）；一阶段判歧义语义以 oa-overtime.md 步骤 6 为准（歧义窗口返回 durationInHour=0 + 逐日骨架）。

@@ -2,7 +2,7 @@
 
 > **触发：** 用户说"补卡/忘打卡/补打卡/帮我补上次的卡"等补卡意图时，走本文档工作流（**不走 search-forms**）；外出走 [oa-goout.md](oa-goout.md)「发起外出审批」；出差仍按 attendance 域 `+get-approve-template` 的提交链接引导；加班走 [oa-overtime.md](oa-overtime.md)「发起加班审批」。
 
-## 工作流（步骤 1-7 补卡特有；8-9 复用 [oa.md](../oa.md)「发起审批实例」第 5-7 步）
+## 工作流（步骤 1-7 补卡特有；8-9 复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」）
 
 ```
 1.【模板定位】dws attendance +get-approve-template --type repair-check
@@ -25,7 +25,7 @@
    · 话术硬约束：面向用户的班次澄清/确认一律只含意图词命中依据与最终补卡时刻（如「意图词（08-20 + 下午→下班）唯一命中；最终补卡时刻 08-20 18:00」），选项标签用 planTip 原文；planId、workDate、checkType、timeResult、freeCheck、timeRange 夹取等技术字段与英文枚举不得进入用户话术（交互组件描述同理）
    · 硬底线：create-instance 前用户至少见过一次选定班次的 planTip——推荐排序只优化问的顺序，选定权始终在用户
    · 选定班次的 supplyDate 越出其 timeRange[0]/[1] 时，夹取到最近边界作为最终补卡时刻，并告知用户修正后的时刻
-5.【收集理由】按 form-schema 的 required 判定：必填则缺失必问，非必填未提供可跳过；收集交互见 [oa.md](../oa.md)「交互优化原则」第 4 条
+5.【收集理由】按 form-schema 的 required 判定：必填则缺失必问，非必填未提供可跳过；收集交互见 [oa-create.md](../oa-create.md)「交互优化原则」第 4 条
 6.【提交前校验】dws attendance approve supply-check --timestamp <最终补卡时刻>
    · 最终补卡时刻 = 选定班次 supplyDate；越出 timeRange 时用步骤 4 的夹取值
    · 多班次须选定后再校验：各候选 supplyDate 由服务端按班次微调、可能不同，校验值依赖选择结果（候选 supplyDate 全相同时校验结果才与选择无关）
@@ -36,13 +36,13 @@
      （timeZoneInfo 不本地拼接：可选字段，服务端 supply-plans 响应不含时区数据）
    · bizAlias 不组装（MCP 通道无此字段，服务端按 id 匹配）；不构造 repairCheckTime（服务端回填）
    + 理由条目 {"id": 理由控件id, "name": "补卡理由", "value": "<用户输入>"}
-8.【流程预演（可选）】forecast-process --request（高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
-9.【选人 + 确认 + 发起】复用 [oa.md](../oa.md)「发起审批实例」第 6-7 步：自选节点选人（targetSelectActioners 并入 payload）
+8.【流程预演（可选；模板含必选自选审批人节点时必做）】forecast-process --request（required=true 时缺 targetSelectActioners 会被服务端拒绝；高级模式：套件条目无法用 --form-values 简单模式承载；--request 下 formComponentValues 与 create-instance 同形态即可，无需手动包二维，实测兼容）
+9.【选人 + 确认 + 发起】复用 [oa-create.md](../oa-create.md) 的「流程预测与选人 → 执行前确认 → 创建与写后验证」：自选节点选人（targetSelectActioners 并入 payload）
    → 汇总确认（表单值 + 流程路径 + 审批人）→ create-instance --request '<组装后的完整 JSON>'
 ```
 
-> **IMPORTANT：** 班次匹配与资格判定一律以服务端（supply-plans / supply-check）为准；value 必须按子控件 `format` 格式化（禁硬编码）；步骤 9 必须走 `--request` 高级模式。流程与选人无补卡特有逻辑，一律按 [oa.md](../oa.md)「发起审批实例」第 5-7 步及其执行摘要执行。
+> **IMPORTANT：** 班次匹配与资格判定一律以服务端（supply-plans / supply-check）为准；value 必须按子控件 `format` 格式化（禁硬编码）；步骤 9 必须走 `--request` 高级模式。流程与选人无补卡特有逻辑，一律按 [oa-create.md](../oa-create.md) 的「创建闭环」与「流程预测与选人 → 执行前确认 → 创建与写后验证」执行。
 
-模板不支持 CLI 发起（含图片控件需上传证据等）时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
+模板不支持 CLI 发起（含图片控件需上传证据等）时的 `submitUrl` 兜底与链接展示规范，见 [oa-create.md](../oa-create.md)「考勤审批套件」章节的 submitUrl 引导规范。
 
 字段级规范见 [oa-form-components.md](oa-form-components.md) 的 DDBizSuite（补卡套件）章节。

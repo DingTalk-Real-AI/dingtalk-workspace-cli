@@ -1,6 +1,6 @@
 # 发起加班审批（加班套件 DDBizSuite · attendance.batchovertime）
 
-> **触发：** 用户说"加班/提交加班/帮我提加班申请/代XX提交加班"等加班意图时。**时长计算**：calculate_approve_duration 支持 durationInHour/durationInDay/detailList/modifiedDate 入参（CLI 暴露 --duration-in-hour/--duration-in-day/--detail-list/--modified-date）——歧义窗口（班中起始/跨天）传 --detail-list 逐日明细可算（服务端按逐日求和、采信提议值不裁决截断），无歧义窗口服务端可自算。**时长结果须经用户手动确认**。验收判据 = create-instance 成功后 detail 回读套件子控件 value/extValue 非空保真 + tasks 返回当前 taskId。
+> **触发：** 用户说"加班/提交加班/帮我提加班申请/代XX提交加班"等加班意图时。**时长计算**：calculate_approve_duration 支持 durationInHour/durationInDay/detailList/modifiedDate 入参（CLI 暴露 --duration-in-hour/--duration-in-day/--detail-list/--modified-date）——歧义窗口（班中起始/跨天）传 --detail-list 逐日明细可算（服务端按逐日求和、采信提议值不裁决截断），无歧义窗口服务端可自算。**时长结果须经用户手动确认**。
 
 ## 工作流（时长计算结果须经用户手动确认。步骤 1-8 加班特有，9-10 复用 [oa.md](../oa.md)「发起审批实例」第 5-7 步）
 
@@ -55,7 +55,6 @@
 > **IMPORTANT：**
 > - 加班套件为**容器包裹**形态（schema 无 extract）：容器条目 value=stringify(children)，与补卡/外出的展平形态相反，先例不可跨类型推用。
 > - 时长、detailList、compressedValue 一律以 `+calculate-approve-duration --biz-type 1 --new-overtime` 服务端计算为准，严禁本地估算/手改；**任何来源的时长结果都必须经用户手动确认（步骤 6 硬约束），未确认不得进入组装与发起**；服务端采信逐日提议值、不做裁决截断。
-> - 创建成功后必须 detail 回读验收：套件子控件以**平铺**形式出现在 formValueVOS（不回读 DDBizSuite 容器包裹本身），按 bizAlias 逐项核对 value/extValue 非空保真 + tasks 返回当前 taskId；未填值控件回读 None 属正常，不判丢弃。回读缺失即判失败并 revoke 清理。
 
 模板不支持 CLI 发起时的 `submitUrl` 兜底与链接展示规范，见 [oa.md](../oa.md)「发起审批实例」章节的「模板不支持 CLI 发起时：submitUrl 链接引导」小节。
 
