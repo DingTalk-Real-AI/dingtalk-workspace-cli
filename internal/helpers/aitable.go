@@ -72,7 +72,7 @@ func AitableFormShareUpdateResultSpec() *contract.ResultSpec {
 			contract.ResultOutcomePartialFailure,
 			contract.ResultOutcomeFailure,
 		},
-		DataSchema: json.RawMessage(aitableFormShareUpdateResultSchema),
+		DataSchema: json.RawMessage(`{"oneOf":[` + aitableFormShareUpdateResultSchema + `,` + aitableFormSharePartialResultSchema + `]}`),
 	}
 }
 
@@ -87,7 +87,7 @@ const aitableFormShareUpdateResultSchema = `{
     "status":{"type":"integer","description":"服务端真实分享状态 code"},
     "shareFormUuid":{"type":["string","null"],"description":"服务端生成的分享表单 UUID；关闭分享时仍保留已有值"},
     "formCover":{"type":["string","null"],"description":"当前生效的分享卡片封面；旧服务端发布窗口内可能为空"},
-    "cpSynced":{"type":"boolean","description":"服务端终态是否已同步到表单视图 CP；成功结果恒为 true"},
+    "cpSynced":{"type":"boolean","const":true,"description":"服务端终态是否已同步到表单视图 CP；成功结果恒为 true"},
     "formName":{"type":["string","null"],"description":"服务端最终生效的分享表单名称"},
     "formDesc":{"type":["string","null"],"description":"服务端最终生效的分享表单描述"}
   },
@@ -1422,6 +1422,14 @@ func callAitableHelperTool(toolName string, args map[string]any) error {
 func callAitableHelperResult(cmd *cobra.Command, toolName string, args map[string]any) (output.CommandResult, error) {
 	if result, ok := aitableUnifiedDryRunResult(toolName, args); ok {
 		return result, nil
+	}
+	if toolName == "update_share_form" {
+		raw, err := CallMCPToolDataOnServer(cmd.Context(), "aitable-helper", toolName, args)
+		if err != nil {
+			return nil, err
+		}
+		envelope, _ := raw.(map[string]any)
+		return AitableFormShareUpdateResult(envelope["data"]), nil
 	}
 	data, err := callAitableUnifiedDataOnServerContext(cmd.Context(), "aitable-helper", toolName, args)
 	if err != nil {
@@ -6825,11 +6833,11 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新分享表单配置",
 		Long: `回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。
 发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。
-第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行说明需要替换的占位符。只读 help/schema 查询是唯一允许的命令。
+只询问写法时，唯一允许的查询为 dws aitable form share update --help；查询过后不再重复 schema/help。最终只输出两行纯文本，无标题或代码围栏。第一行已有的必填值（包括短 ID）必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行只有存在占位符时才说明需要替换的占位符。所有 ID 已知时，第二行必须原样为：未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 部分更新指定视图的分享表单配置，未传入的配置保持原值。
 新建表单首次开启分享且已知表单标题时，应在同一次调用中通过 --form-name 传入标题，避免分享内容缺少名称。
 成功结果来自服务端写后回读，并已校验 CP 投影；读取 shareFormUuid、status、formCover 和 cpSynced，其中 cpSynced=true 才表示分享闭环完成。
-服务端已更新但回读或 CP 同步失败时返回可重试的部分失败，不得当作整体成功；DWS 不自行调用第二个 View 更新命令补偿 CP。
+必需字段缺失、类型异常或 cpSynced=false 时返回 partial_failure（退出码 7）；原始响应保留在 data.succeeded[0].response，该阶段仅表示收到远端回执，失败原因在 data.failed[0].error（execution_started=true）。不得自动重放写操作或当作整体成功；DWS 不自行调用第二个 View 更新命令补偿 CP。get 不能证明 CP 已同步。
 除 --base-id、--table-id 和 --view-id 外，至少显式传入一个可更新参数。`,
 		Example: `  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "活动报名"
 	  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name "活动报名" --anonymous-submit true`,

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。Use when 用户说 表单分享/form share/+form-share-get/+form-share-update/分享结果契约/CP同步判断/ AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -49,6 +49,20 @@ Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写
 dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --enabled true
 请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
+
+已知 ID 与占位符必须区别处理：用户明确给出的短 ID 也按原值使用，不因其长度或看起来像示例就要求替换。所有 ID 已知时，第二行必须原样为“未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。”；只有命令中确实用了占位符时才添加对应替换说明。Shortcut 的命令行必须保留 `--format json`，固定说明中的 `help/schema` 不因本次只查 schema 而改写。
+
+以下是已知 ID 的 Shortcut 用法回答示例（标题按用户输入替换，不能省略）：
+
+```text
+dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id view-789 --enabled true --form-name "报名表" --format json
+未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
+```
+
+仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板。对用户指定的 `form share get/update` 或 `+form-share-get/update`，先实际执行一次 `dws schema --cli-path "aitable <用户指定入口>" --compact --format json`，再简短解释样本。不得用搜索源码或 reference 代替本机契约查询；不得执行任何业务读写。
+
+结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。
+
 
 实际执行 `form share update` 或 `+form-share-update` 后，成功结果必须同时检查 `shareFormUuid`、`status`、`formCover`、`cpSynced`；只有 `cpSynced=true` 才能向用户确认分享闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。DWS 不自行调用第二个 View 更新命令补偿 CP。`formCover` 在旧服务端发布窗口内可能为空，应如实说明，不能由 DWS 拼装封面 URL。
 

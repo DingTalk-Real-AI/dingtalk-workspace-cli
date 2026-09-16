@@ -30,6 +30,20 @@ dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-i
 请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
 
+已知 ID 与占位符必须区别处理：用户明确给出的短 ID 也按原值使用，不因其长度或看起来像示例就要求替换。所有 ID 已知时，第二行必须原样为“未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。”；只有命令中确实用了占位符时才添加对应替换说明。Shortcut 的命令行必须保留 `--format json`，固定说明中的 `help/schema` 不因本次只查 schema 而改写。
+
+以下是已知 ID 的 Shortcut 用法回答示例（标题按用户输入替换，不能省略）：
+
+```text
+dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id view-789 --enabled true --form-name "报名表" --format json
+未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
+```
+
+仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板。对用户指定的 `form share get/update` 或 `+form-share-get/update`，先实际执行一次 `dws schema --cli-path "aitable <用户指定入口>" --compact --format json`，再简短解释样本。不得用搜索源码或 reference 代替本机契约查询；不得执行任何业务读写。
+
+结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。
+
+
 ## 建议操作顺序
 
 ```bash

@@ -73,6 +73,20 @@ func TestCrossPlatformCoverageAITableShareFormResultContracts(t *testing.T) {
 					t.Fatalf("outcomes=%#v", result["outcomes"])
 				}
 				dataSchema := aitableShareSchemaObject(t, result["data_schema"], "result.data_schema")
+				if strings.Contains(path, "update") {
+					variants := dataSchema["oneOf"].([]any)
+					if len(variants) != 2 {
+						t.Fatalf("update must expose success and partial schemas: %#v", dataSchema)
+					}
+					partial := aitableShareSchemaObject(t, variants[1], "partial")
+					if !strings.Contains(partial["description"].(string), "execution_started=true") {
+						t.Fatal("partial schema must explain remote execution")
+					}
+					dataSchema = aitableShareSchemaObject(t, variants[0], "success")
+					if dataSchema["properties"].(map[string]any)["cpSynced"].(map[string]any)["const"] != true {
+						t.Fatal("success requires cpSynced=true")
+					}
+				}
 				if !schemaContractJSONEqual(dataSchema["required"], tc.required) {
 					t.Fatalf("required=%#v", dataSchema["required"])
 				}
@@ -166,6 +180,11 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 				t.Fatal(err)
 			}
 			body := string(raw)
+			for _, rule := range []string{"所有 ID 已知时", "--format json", "不得用搜索源码或 reference 代替本机契约查询", "data.succeeded[0].response", "data.failed[0].error", "get 的成功不证明 CP 同步"} {
+				if !strings.Contains(body, rule) {
+					t.Errorf("%s missing evaluated form-share rule %q", path, rule)
+				}
+			}
 			if !strings.Contains(body, aitableShareUsageAnswerRule) {
 				t.Fatalf("%s missing usage-only answer contract", path)
 			}
