@@ -21,6 +21,8 @@ const (
 	defaultDiffDetailLimit = 100
 	maximumDiffDetailLimit = 1000
 	maximumDiffOutputBytes = 2 * 1024 * 1024
+	diffTargetConstraint   = "显式非空 part-id 选择内嵌分支并禁止 page-id；未提供 part-id 时选择独立分支并要求非空 page-id"
+	diffSourceConstraint   = "source 必须是可由 +update 接受的单一 OpenNodes V1 update 对象"
 )
 
 func diffResultSpec() *contract.ResultSpec {
@@ -100,16 +102,16 @@ var Diff = shortcut.Shortcut{
 	),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "承载文档或独立白板的节点 ID/URL；去除空白后不能为空", Required: true},
-		{Name: "part-id", Type: shortcut.FlagString, Desc: "文档内白板 part ID；显式非空时选择内嵌分支并禁止 page-id"},
-		{Name: "page-id", Type: shortcut.FlagString, Desc: "独立白板页面 ID；未提供 part-id 时必填，内嵌分支禁止提供", RequiredWhen: "操作独立白板时"},
-		{Name: "source", Type: shortcut.FlagString, Desc: "proposed OpenNodes V1 update JSON；支持字面量、@相对文件或 - 从 stdin 读取", Required: true, Input: []string{"file", "stdin"}},
+		{Name: "part-id", Type: shortcut.FlagString, Desc: "文档内白板 part ID；" + diffTargetConstraint},
+		{Name: "page-id", Type: shortcut.FlagString, Desc: "独立白板页面 ID；" + diffTargetConstraint, RequiredWhen: "操作独立白板时"},
+		{Name: "source", Type: shortcut.FlagString, Desc: diffSourceConstraint + "；支持字面量、@相对文件或 - 从 stdin 读取", Required: true, Input: []string{"file", "stdin"}},
 		{Name: "identity-map", Type: shortcut.FlagString, Desc: "可选 version=1 逻辑 ID 到当前真实节点 ID 的显式映射；支持字面量、@相对文件或 - 从 stdin 读取", Input: []string{"file", "stdin"}},
 		{Name: "comparison", Type: shortcut.FlagString, Default: "semantic", Enum: []string{"semantic", "exact"}, Desc: "比较策略；semantic 对 x/y 允许 0.5px 规范化偏差，exact 对所有数字精确比较"},
 		{Name: "detail-limit", Type: shortcut.FlagInt, Default: strconv.Itoa(defaultDiffDetailLimit), Desc: "整个响应的变化明细预算，范围 1..1000；完整摘要不受影响，序列化 data 仍受 2 MiB 硬上限约束"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"part-id", "page-id"}, Description: "显式非空 part-id 选择内嵌分支并禁止 page-id；未提供 part-id 时选择独立分支并要求非空 page-id"},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"source"}, Description: "source 必须是可由 +update 接受的单一 OpenNodes V1 update 对象"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"part-id", "page-id"}, Description: diffTargetConstraint},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"source"}, Description: diffSourceConstraint},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"detail-limit"}, Description: "detail-limit 必须在 1..1000 范围内"},
 	},
 	Tips: []string{

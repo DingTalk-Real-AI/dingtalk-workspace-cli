@@ -48,14 +48,14 @@ metadata:
 |---|---:|---|
 | `agoal` | 5 | `—` |
 | `aisearch` | 1 | `—` |
-| `aitable` | 101 | `dingtalk-aitable` |
+| `aitable` | 126 | `dingtalk-aitable` |
 | `attendance` | 8 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
-| `chat` | 99 | `dingtalk-chat` |
+| `chat` | 102 | `dingtalk-chat` |
 | `contact` | 13 | `dingtalk-contact` |
 | `devapp` | 25 | `dingtalk-misc` |
 | `ding` | 1 | `dingtalk-misc` |
-| `doc` | 45 | `dingtalk-doc` |
+| `doc` | 49 | `dingtalk-doc` |
 | `drive` | 28 | `dingtalk-drive` |
 | `mail` | 8 | `dingtalk-mail` |
 | `minutes` | 29 | `dingtalk-minutes` |
@@ -64,7 +64,7 @@ metadata:
 | `report` | 4 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
 | `todo` | 21 | `dingtalk-todo` |
-| `whiteboard` | 2 | `dingtalk-misc` |
+| `whiteboard` | 3 | `dingtalk-misc` |
 | `wiki` | 20 | `dingtalk-wiki` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 

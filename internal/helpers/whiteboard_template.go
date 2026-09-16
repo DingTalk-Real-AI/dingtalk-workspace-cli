@@ -184,7 +184,7 @@ func newWhiteboardTemplateCreateCommand(scope whiteboardcore.TemplateScope) *cob
 			Interface:   whiteboardTemplateCompositeInterface(tool),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "使用明确的" + whiteboardTemplateScopeLabel(scope) + "模板创建一份新独立白板",
-				UseWhen:      []string{"已有当前 scope 的 templateId，需要在文件夹、知识库或我的文档创建独立白板时"},
+				UseWhen:      []string{"已有" + whiteboardTemplateScopeLabel(scope) + "模板的 templateId，需要在文件夹、知识库或我的文档创建独立白板时"},
 				AvoidWhen:    []string{"还没有 templateId 时先使用同 scope 的 list；创建空白白板使用普通文件创建；不得跨 scope 猜测模板"},
 				Examples:     []string{"dws " + path + whiteboardTemplateWorkspaceExample(scope) + " --template-id <TEMPLATE_ID> --name \"项目复盘\" --request-id wb-tpl-create-001 --format json"},
 			},

@@ -111,8 +111,8 @@ insert 返回 `whiteboardId` 后直接使用；若为 null，只 fetch 一次并
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
+| `dws whiteboard +diff` | read | 读取当前白板并预览 proposed OpenNodes 更新的节点、媒体与风险变化 |
 | `dws whiteboard +query` | read | 严格读取文档内嵌或独立白板的 OpenNodes 快照 |
-| `dws whiteboard +diff` | read | 更新前读取同一页面并预览节点、媒体、删除风险与阻断项 |
 | `dws whiteboard +update` | high-risk-write | 确认后更新文档内嵌或独立白板并精确读回 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
