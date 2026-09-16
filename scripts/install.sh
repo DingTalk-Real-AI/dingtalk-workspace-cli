@@ -1705,6 +1705,54 @@ shared_schema_levels_locked() {
   done
 }
 
+# Create the missing levels of an absolute directory path one component at
+# a time with plain mkdir under umask 077. mkdir without -p is an atomic
+# create-or-EEXIST on the leaf and never resolves a symlink there, so a
+# level an attacker swapped in or pre-planted between validation and
+# creation — the missing-root replacement race — fails mkdir instead of
+# letting the later mktemp probe, warm-up, find, and chmod writes follow
+# the link out of the cache tree; each intermediate missing level becomes
+# the leaf exactly once, so the same guarantee holds for every component.
+# A target that already exists as a symlink is rejected outright, and
+# creation under umask 077 makes every level this run creates owned and
+# writable only by the invoking user — the ownership lock by construction.
+# The anchor (nearest pre-existing level) is not lstat-checked:
+# platform-conventional symlinked ancestors stay legitimate, matching the
+# runtime's ancestry rules; DWS-owned levels above were already gated by
+# shared_schema_layout_safe and shared_schema_levels_locked.
+shared_schema_create_missing_levels() {
+  _scm_target="$1"
+  case "$_scm_target" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  [ ! -L "$_scm_target" ] || return 1
+  _scm_anchor="$_scm_target"
+  _scm_tail=""
+  while [ "$_scm_anchor" != "/" ] && [ ! -e "$_scm_anchor" ]; do
+    _scm_tail="/$(basename "$_scm_anchor")$_scm_tail"
+    _scm_anchor="$(dirname "$_scm_anchor")"
+  done
+  [ -d "$_scm_anchor" ] || return 1
+  [ -n "$_scm_tail" ] || return 0
+  _scm_saved_umask="$(umask)"
+  umask 077
+  _scm_failed=0
+  while [ -n "$_scm_tail" ]; do
+    _scm_head="${_scm_tail#/}"
+    _scm_name="${_scm_head%%/*}"
+    _scm_anchor="$_scm_anchor/$_scm_name"
+    _scm_tail="${_scm_head#*"$_scm_name"}"
+    _scm_tail="${_scm_tail#/}"
+    mkdir "$_scm_anchor" 2>/dev/null || {
+      _scm_failed=1
+      break
+    }
+  done
+  umask "$_scm_saved_umask"
+  [ "$_scm_failed" -eq 0 ]
+}
+
 # Cleanup and permission changes only operate on regular files and directories
 # that have one link. Rejecting other objects before walking the tree prevents
 # a symlink, FIFO, or hardlink from redirecting or widening the operation.
@@ -1784,16 +1832,20 @@ build_shared_schema_cache() {
   [ -d "$dws_intermediate" ] && dws_tree_preexisted=1
   schema_tree_preexisted=0
   [ -d "$schema_tree" ] && schema_tree_preexisted=1
-  # Path safety precedes every mutation: mkdir -p and a touch-based probe both
-  # follow symlinked path entries, so an existing shared_dir/dws/schema level
-  # that is a symlink must be rejected before directory creation or the write
-  # probe can mutate whatever it points at. Arbitrary-depth ancestor rejection
-  # stays out of scope: platform-conventional symlinked ancestors (e.g. /var
-  # on macOS) are legitimate locations and are excluded from the runtime's
-  # ancestry rules for the same reason. The ownership lock additionally binds
-  # every later pathname-based mutation (find -delete, chmod, chmod -R) to
-  # levels no other principal can swap: validation and mutation can no longer
-  # be separated by a replacement race.
+  # Path safety precedes every mutation: a touch-based probe follows symlinked
+  # path entries, so an existing shared_dir/dws/schema level that is a symlink
+  # must be rejected before the write probe can mutate whatever it points at.
+  # Arbitrary-depth ancestor rejection stays out of scope:
+  # platform-conventional symlinked ancestors (e.g. /var on macOS) are
+  # legitimate locations and are excluded from the runtime's ancestry rules
+  # for the same reason. The ownership lock additionally binds every later
+  # pathname-based mutation (find -delete, chmod, chmod -R) to levels no
+  # other principal can swap: validation and mutation can no longer be
+  # separated by a replacement race. Missing levels are created by
+  # shared_schema_create_missing_levels — plain mkdir per level under
+  # umask 077 — so a level replaced between validation and creation fails
+  # creation instead of being written through, and the full gate re-runs
+  # over all three levels before the first write probe.
   if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
     ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate"; then
     say "⚠️  Shared schema cache skipped: unsafe cache path."
@@ -1801,25 +1853,35 @@ build_shared_schema_cache() {
   fi
   # Skip silently when we cannot write to the system location (non-root install
   # or an unusable shared ancestry). The runtime then uses the per-user cache.
+  if ! shared_schema_create_missing_levels "$shared_dir"; then
+    return 0
+  fi
+  if ! shared_schema_create_missing_levels "$schema_tree"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache path."
+    return 0
+  fi
+  # Re-run the whole gate over all three levels after creation and before the
+  # first write: layout (no symlink anywhere in the DWS-owned levels), the
+  # ownership lock (pre-existing levels were gated above; levels this run
+  # created are invoker-owned with no group/world write bits), and the tree
+  # object walk. Every later mutation in this function happens inside the
+  # locked tree.
+  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_tree_objects_safe "$schema_tree"; then
+    say "⚠️  Shared schema cache skipped: unsafe cache contents."
+    return 0
+  fi
   # The write probe uses mktemp (mkstemp: O_CREAT|O_EXCL, unpredictable name)
   # instead of a fixed-name touch: a fixed probe name can be pre-planted as a
   # symlink to an outside victim, and shell noclobber checks are stat-based
   # and would still follow a symlink whose target does not exist. Nothing
   # outside the freshly created probe file is touched.
-  if ! mkdir -p "$shared_dir" 2>/dev/null; then
-    return 0
-  fi
   if ! _probe="$(mktemp "$shared_dir/.dws-schema-cache-write-test.XXXXXX")" 2>/dev/null; then
     return 0
   fi
   rm -f "$_probe"
   say "🔧 Building shared schema cache (local identity, shared across users)..."
-  mkdir -p "$schema_tree" 2>/dev/null || true
-  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
-    ! shared_schema_tree_objects_safe "$schema_tree"; then
-    say "⚠️  Shared schema cache skipped: unsafe cache contents."
-    return 0
-  fi
   # Drop the previous per-edition sidecar and leftover fingerprint-suffixed
   # files so upgrade always generate-then-use from this binary's live
   # declarations. identity.json is the only success marker. Only single-link
@@ -1841,6 +1903,7 @@ build_shared_schema_cache() {
     # whose atomic staging files and identity.json land as 0600.
     shared_chmod_ok=1
     if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+      ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree" ||
       ! shared_schema_tree_objects_safe "$schema_tree"; then
       shared_chmod_ok=0
     fi

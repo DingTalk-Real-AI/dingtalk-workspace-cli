@@ -1509,6 +1509,171 @@ Write-Output "APPLY_THEN_VALIDATE_OK"
 	}
 }
 
+// TestInstallScriptSharedSchemaCachePinnedCreation pins the missing-root
+// creation path of build_shared_schema_cache: levels that do not exist yet
+// are created one component at a time with plain mkdir under umask 077
+// (never mkdir -p, which resolves a symlink swapped in at the leaf between
+// validation and creation), a target pre-planted as a symlink is rejected
+// before the mktemp probe or warm-up can write through it, and the full
+// three-level gate re-runs after creation and before the first write.
+func TestInstallScriptSharedSchemaCachePinnedCreation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	t.Run("static contract", func(t *testing.T) {
+		text := string(scriptData)
+		for _, banned := range []string{`mkdir -p "$shared_dir"`, `mkdir -p "$schema_tree"`} {
+			if strings.Contains(text, banned) {
+				t.Fatalf("cache levels must be created via shared_schema_create_missing_levels, found %q", banned)
+			}
+		}
+		buildStart := strings.Index(text, "build_shared_schema_cache() {")
+		if buildStart < 0 {
+			t.Fatal("build_shared_schema_cache not found")
+		}
+		buildBody := text[buildStart:]
+		for _, want := range []string{
+			`shared_schema_create_missing_levels "$shared_dir"`,
+			`shared_schema_create_missing_levels "$schema_tree"`,
+			`shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree"`,
+			`shared_schema_tree_objects_safe "$schema_tree"`,
+		} {
+			if !strings.Contains(buildBody, want) {
+				t.Fatalf("build_shared_schema_cache missing %q", want)
+			}
+		}
+		// Creation must be pinned before the first write: the mktemp probe and
+		// every later mutation happen only after the levels exist and the full
+		// gate has re-run over all three of them.
+		createAt := strings.Index(buildBody, `shared_schema_create_missing_levels "$schema_tree"`)
+		probeAt := strings.Index(buildBody, `mktemp "$shared_dir/.dws-schema-cache-write-test.XXXXXX"`)
+		relockAt := strings.Index(buildBody, `shared_schema_levels_locked "$shared_dir" "$dws_intermediate" "$schema_tree"`)
+		if createAt < 0 || probeAt < 0 || relockAt < 0 || !(createAt < relockAt && relockAt < probeAt) {
+			t.Fatalf("expected creation < three-level re-check < mktemp probe, got %d/%d/%d", createAt, relockAt, probeAt)
+		}
+		helperAt := strings.Index(text, "shared_schema_create_missing_levels() {")
+		if helperAt < 0 {
+			t.Fatal("shared_schema_create_missing_levels not found")
+		}
+		helperBody := text[helperAt:buildStart]
+		for _, want := range []string{"umask 077", `mkdir "$_scm_anchor"`, `[ ! -L "$_scm_target" ]`} {
+			if !strings.Contains(helperBody, want) {
+				t.Fatalf("shared_schema_create_missing_levels missing %q", want)
+			}
+		}
+	})
+
+	run := func(t *testing.T, root, shared, interpreter string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "pinned-creation-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command(interpreter, harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("pinned creation harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	assertLevelLocked := func(t *testing.T, path string) {
+		t.Helper()
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("level %s missing: %v", path, err)
+		}
+		if info.Mode()&0o022 != 0 {
+			t.Fatalf("level %s carries group/world write bits: %v", path, info.Mode())
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && int(stat.Uid) != os.Getuid() {
+			t.Fatalf("level %s owned by uid %d, want invoking uid %d", path, stat.Uid, os.Getuid())
+		}
+	}
+
+	t.Run("missing custom root is created and warmed", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared-missing")
+		out := run(t, root, shared, "sh")
+		if !strings.Contains(out, "Building shared schema cache") {
+			t.Fatalf("expected shared cache warm-up, output:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(shared, "dws", "schema", "open", "v1", "meta.cache")); err != nil {
+			t.Fatalf("warm-up artifacts missing under created root: %v", err)
+		}
+		assertLevelLocked(t, shared)
+		assertLevelLocked(t, filepath.Join(shared, "dws"))
+		assertLevelLocked(t, filepath.Join(shared, "dws", "schema"))
+	})
+
+	t.Run("missing custom root replaced by symlink is not created through", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared-swap")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(filepath.Join(outside, "dws", "schema"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(outside, "dws"), shared); err != nil {
+			t.Fatal(err)
+		}
+		out := run(t, root, shared, "sh")
+		if strings.Contains(out, "Building shared schema cache") {
+			t.Fatalf("warm-up ran through a symlinked root, output:\n%s", out)
+		}
+		if info, err := os.Lstat(shared); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("planted root symlink was replaced or removed: %v", err)
+		}
+		entries, err := os.ReadDir(filepath.Join(outside, "dws", "schema"))
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("outside tree mutated through the symlink: %v (%d entries)", err, len(entries))
+		}
+	})
+
+	t.Run("created levels stay locked under another shell dialect", func(t *testing.T) {
+		dashPath, err := exec.LookPath("dash")
+		if err != nil {
+			t.Skip("dash unavailable")
+		}
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared-dash")
+		out := run(t, root, shared, dashPath)
+		if !strings.Contains(out, "Building shared schema cache") {
+			t.Fatalf("expected shared cache warm-up under dash, output:\n%s", out)
+		}
+		assertLevelLocked(t, filepath.Join(shared, "dws", "schema"))
+	})
+}
+
 func TestInstallScriptSharedSchemaCacheUmaskAncestorsTraversable(t *testing.T) {
 	// traversableRoot mirrors a reachable install ancestry: /tmp is sticky
 	// 1777, so a root under it is other-traversable all the way up.
