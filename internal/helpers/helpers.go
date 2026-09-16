@@ -914,7 +914,77 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
+	if suggestion := businessErrorMetaSuggestion(body); suggestion != "" {
+		return suggestion
+	}
+	if businessErrorCode(body) == "COMMENT_RECORD_UNAVAILABLE" {
+		return "请先在钉钉中打开该 Base 完成记录存储初始化或升级后重试；若仍失败，可复制为新 Base 后重试"
+	}
 	return suggestForBusinessErrorText(businessErrorMessage(body))
+}
+
+// businessErrorMetaSuggestion 保留 MCP 服务给出的安全恢复建议，使 CLI 不把可行动错误退化为原始 JSON。
+func businessErrorMetaSuggestion(body map[string]any) string {
+	meta, ok := body["meta"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	raw, ok := meta["suggestions"].([]any)
+	if !ok {
+		return ""
+	}
+	reasons := make([]string, 0, len(raw))
+	for _, item := range raw {
+		suggestion, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if reason, ok := suggestion["reason"].(string); ok && strings.TrimSpace(reason) != "" {
+			reasons = append(reasons, strings.TrimSpace(reason))
+		}
+	}
+	return strings.Join(reasons, "\n  - ")
+}
+
+// businessErrorCode 兼容顶层业务码与统一 MCP error.code。
+func businessErrorCode(body map[string]any) string {
+	for _, key := range []string{"errorCode", "error_code", "code"} {
+		if code, ok := body[key].(string); ok && strings.TrimSpace(code) != "" {
+			return strings.TrimSpace(code)
+		}
+	}
+	if nested, ok := body["error"].(map[string]any); ok {
+		if code, ok := nested["code"].(string); ok {
+			return strings.TrimSpace(code)
+		}
+	}
+	return ""
+}
+
+// businessErrorDetails 只投影已经约定为安全、可编程的业务诊断字段。
+func businessErrorDetails(body map[string]any) map[string]any {
+	nested, ok := body["error"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := nested["details"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	details := make(map[string]any, 3)
+	if capability, ok := raw["capability"].(string); ok && strings.TrimSpace(capability) != "" {
+		details["capability"] = strings.TrimSpace(capability)
+	}
+	if stage, ok := raw["stage"].(string); ok && strings.TrimSpace(stage) != "" {
+		details["stage"] = strings.TrimSpace(stage)
+	}
+	if executed, ok := raw["operationExecuted"].(bool); ok {
+		details["operation_executed"] = executed
+	}
+	if len(details) == 0 {
+		return nil
+	}
+	return details
 }
 
 // businessErrorMessage extracts the human-readable message from a parsed error
@@ -924,6 +994,16 @@ func businessErrorMessage(body map[string]any) string {
 		if v, ok := body[k].(string); ok && v != "" {
 			return v
 		}
+	}
+	if nested, ok := body["error"].(map[string]any); ok {
+		for _, key := range []string{"message", "errorMsg", "errorMessage"} {
+			if message, ok := nested[key].(string); ok && strings.TrimSpace(message) != "" {
+				return message
+			}
+		}
+	}
+	if summary, ok := body["summary"].(string); ok && strings.TrimSpace(summary) != "" {
+		return summary
 	}
 	return ""
 }
@@ -937,11 +1017,8 @@ func businessErrorDisplayMessage(body map[string]any, rawText string) string {
 		return rawText
 	}
 	var extras []string
-	for _, k := range []string{"errorCode", "error_code", "code"} {
-		if code, ok := body[k].(string); ok && code != "" && !strings.Contains(msg, code) {
-			extras = append(extras, "code: "+code)
-			break
-		}
+	if code := businessErrorCode(body); code != "" && !strings.Contains(msg, code) {
+		extras = append(extras, "code: "+code)
 	}
 	if logId, ok := body["logId"].(string); ok && logId != "" && !strings.Contains(msg, logId) {
 		extras = append(extras, "logId: "+logId)

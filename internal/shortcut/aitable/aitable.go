@@ -31,7 +31,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // serverMain is the primary aitable MCP server id.
@@ -184,7 +183,7 @@ var BaseList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"count": len(bases), "bases": bases})
+		return outputBasePage(rt, bases, data)
 	},
 }
 
@@ -289,15 +288,7 @@ var BaseSearch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		out := map[string]any{"count": len(bases), "bases": bases}
-		nextCursor, hasMore, hasMoreKnown := aitabletarget.Pagination(data)
-		if hasMoreKnown {
-			out["hasMore"] = hasMore
-		}
-		if nextCursor != "" && (!hasMoreKnown || hasMore) {
-			out["nextCursor"] = nextCursor
-		}
-		return rt.Output(out)
+		return outputBasePage(rt, bases, data)
 	},
 }
 
@@ -615,7 +606,7 @@ var FieldUpdate = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+field-update",
 	Product:     serverMain,
-	Description: "更新字段名称 / 配置 / AI 配置（类型不可改）",
+	Description: "更新字段名称 / 说明 / 配置 / AI 配置（类型不可改）",
 	Intent:      "当你要改字段名，或调整字段配置/AI 配置（注意字段类型本身不可改）时使用；会实际更新指定字段。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
@@ -623,6 +614,7 @@ var FieldUpdate = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "Field ID", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新字段名（可选）"},
+		{Name: "description", Type: shortcut.FlagString, Desc: "字段说明；显式空字符串清除说明，省略保留"},
 		{Name: "config", Type: shortcut.FlagString, Desc: "字段配置 JSON（可选）"},
 		{Name: "ai-config", Type: shortcut.FlagString, Desc: "AI 配置 JSON（可选）"},
 	},
@@ -638,6 +630,9 @@ var FieldUpdate = shortcut.Shortcut{
 				return fmt.Errorf("--name: %w", err)
 			}
 			params["newFieldName"] = rt.Str("name")
+		}
+		if rt.Changed("description") {
+			params["description"], _ = rt.Command().Flags().GetString("description")
 		}
 		if rt.Changed("config") {
 			cfg, err := parseJSONObject("config", rt.Str("config"))
@@ -687,11 +682,12 @@ var FieldDelete = shortcut.Shortcut{
 // ─────────────────────────────────────────────────────────────
 
 const (
-	recordQueryDescription = "查询单表记录（按 ID / 条件 / 关键词，并支持字段投影和分页）"
-	recordQueryIntent      = "用于单张表的单页行数据读取：按 recordId、已归一化字段条件或关键词查询，支持字段投影和 nextCursor 显式续页；filters 中字段和值必须先按字段类型解析。" +
-		"完整读取全表时不要使用本 Shortcut，改用 dws aitable record query --all --page-limit 0。多表关联、跨表分析或 SQL 聚合/窗口计算使用 psql；两者不是同一结果模型，禁止相互拼接、转换或混合推导。"
-	recordQueryAvoidPsql = "多表关联、跨表分析或 SQL 聚合/窗口计算时使用 psql。"
-	recordQueryAvoidAll  = "需要全部、完整、汇总、统计、导出或逐条处理全表数据时，改用 dws aitable record query --all --page-limit 0；不要手写 cursor 循环或把当前页当全量。"
+	recordQueryDescription = "查询单表记录，支持准确 ID、视图、条件、全量分页与 NDJSON 文件"
+	recordQueryIntent      = "字段和值必须先按字段类型解析。读取单表明细；默认返回一页及续页信息，--all 在 max-records 上限内完整读取，--export-output 输出 NDJSON 及行数、哈希、列信息。view-id 的筛选/排序可由显式 filters/sort 覆盖；复杂视图条件无法转换时明确失败。"
+	recordQueryAvoidPsql   = "多表关联、跨表分析或 SQL 聚合/窗口计算时使用 psql。"
+	recordQueryAvoidAll    = "数据量超过 10000 行时，本入口不会截断冒充完整；需要更大规模读取请使用有明确范围的原子 record query。"
+	recordQueryAvoidStats  = "只需要标量或分组统计时使用 +data-query 或 record stats/group-stats，不拉明细做汇总。"
+	recordQueryAvoidExport = "需要 CSV/Excel 原生文件格式时使用 aitable export data；本入口只输出 NDJSON。"
 )
 
 // RecordQuery 获取行记录（query_records）。
@@ -723,7 +719,7 @@ var RecordQuery = shortcut.Shortcut{
 		Selection: contract.SelectionSpec{
 			AgentSummary: recordQueryDescription,
 			UseWhen:      []string{recordQueryIntent},
-			AvoidWhen:    []string{recordQueryAvoidPsql, recordQueryAvoidAll},
+			AvoidWhen:    []string{recordQueryAvoidPsql, recordQueryAvoidAll, recordQueryAvoidStats, recordQueryAvoidExport},
 			Examples: []string{
 				"dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50",
 				"dws aitable +record-query --base-id B --table-id T --record-ids R1,R2 --field-ids F_NAME,F_STATUS",
@@ -738,8 +734,16 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "filters", Type: shortcut.FlagString, Desc: "结构化过滤条件 JSON（可选）；先用 field get 完整读一遍表头，确定用户条件对应的字段和类型后再传值。日期值用日期字符串或毫秒数，不接受 View relative/exact Scheme。人员、部门、群组禁止原值透传，必须分别经 aisearch person、contact +resolve-dept、chat +chat-search 唯一解析为 userId、deptId、openConversationId，再传结构化 ID 数组"},
 		{Name: "sort", Type: shortcut.FlagString, Desc: "排序条件 JSON 数组（可选）；fieldId 必须来自 field get，direction 仅用 asc/desc"},
 		{Name: "query", Type: shortcut.FlagString, Desc: "全文关键词（可选）"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "单次最大记录数，默认 100（可选）"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "默认单次最大记录数 100；--all 时作为每个请求的页大小，上限 20（可选）"},
+		{Name: "view-id", Type: shortcut.FlagString, Desc: "准确视图 ID；读取其筛选/排序，显式 filters/sort 覆盖；与 record-ids 互斥"},
+		{Name: "export-output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件；全局 --output/-o 仍用于保存命令返回值"},
+		{Name: "all", Type: shortcut.FlagBool, Desc: "有界读取全部匹配记录"},
+		{Name: "max-records", Type: shortcut.FlagInt, Default: "10000", Desc: "--all 最多返回的记录数量，1-10000，超限明确失败"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"record-ids", "view-id"}, Description: "按准确 ID 读取与按视图查询互斥"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"all", "cursor"}, Description: "全量查询必须从第一页开始，不能指定续页游标"},
 	},
 	Tips: []string{
 		`dws aitable +record-query --base-id B --table-id T --query "关键词" --limit 50`,
@@ -1320,8 +1324,8 @@ var ViewUpdate = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+view-update",
 	Product:     serverMain,
-	Description: "更新视图名称 / 描述 / 配置（visibleFieldIds、sort、group 等；筛选除外）",
-	Intent:      "当你要调整视图的展示——改可见列、排序、分组或改名时使用；筛选条件必须走 view update filter，以执行字段类型校验和日期/人员协议归一化。",
+	Description: "更新视图名称 / 描述 / 配置（含类型校验后的筛选）",
+	Intent:      "当你要调整视图的展示——改可见列、排序、分组或改名时使用；config.filter 复用原子入口的字段类型校验、日期/人员协议归一化并读回核对。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -1354,7 +1358,7 @@ var ViewUpdate = shortcut.Shortcut{
 				return err
 			}
 			if _, hasFilter := c["filter"]; hasFilter {
-				return fmt.Errorf("--config.filter 不支持通过 +view-update 写入；请使用 dws aitable view update filter --json '<FILTER_JSON>'，以执行字段类型校验和日期/人员协议归一化")
+				return executeFilteredViewUpdate(rt, params, c)
 			}
 			params["config"] = c
 		}
@@ -1994,7 +1998,7 @@ var FormShareUpdate = shortcut.Shortcut{
 	Command:     "+form-share-update",
 	Product:     serverHelper,
 	Description: "部分更新分享表单的开关、访问范围、有效期和通知等配置",
-	Intent:      "当你要开启、关闭或调整表单分享配置时使用；未传入的配置保持原值。",
+	Intent:      "回答契约：用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。第一行已有的必填值必须原样使用，缺少的值保留为 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 等明确占位符；第二行说明需要替换的占位符。只读 help/schema 查询是唯一允许的命令。当你要开启、关闭或调整表单分享配置时使用；新建表单首次开启分享且已知标题时，同一次调用传入 --form-name；未传入的配置保持原值。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
@@ -2008,7 +2012,7 @@ var FormShareUpdate = shortcut.Shortcut{
 		{Name: "submit-times-user-limit", Type: shortcut.FlagInt, Desc: "单用户提交限制 code：0 不限制，1 仅一次，2 每天一次，3 每周期一次"},
 		{Name: "form-start-time", Type: shortcut.FlagInt, Desc: "表单生效时间，毫秒时间戳"},
 		{Name: "form-end-time", Type: shortcut.FlagInt, Desc: "表单失效时间，毫秒时间戳"},
-		{Name: "form-name", Type: shortcut.FlagString, Desc: "分享表单名称"},
+		{Name: "form-name", Type: shortcut.FlagString, Desc: "分享表单名称；新建表单首次开启分享时传入已知标题"},
 		{Name: "form-desc", Type: shortcut.FlagString, Desc: "分享表单描述"},
 		{Name: "anonymous-submit", Type: shortcut.FlagString, Desc: "是否允许匿名提交", Enum: []string{"true", "false"}},
 		{Name: "load-last-submit", Type: shortcut.FlagString, Desc: "重新打开时是否加载上次提交", Enum: []string{"true", "false"}},
@@ -2026,8 +2030,8 @@ var FormShareUpdate = shortcut.Shortcut{
 		},
 	}},
 	Tips: []string{
-		`dws aitable +form-share-update --base-id B --table-id T --view-id V --enabled true`,
-		`dws aitable +form-share-update --base-id B --table-id T --view-id V --form-name "活动报名" --anonymous-submit true`,
+		`dws aitable +form-share-update --base-id B --table-id T --view-id V --enabled true --form-name "活动报名" --format json`,
+		`dws aitable +form-share-update --base-id B --table-id T --view-id V --form-name "活动报名" --anonymous-submit true --format json`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
@@ -2142,27 +2146,13 @@ var WorkflowList = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 20，最大 100（可选）"},
+		{Name: "all", Type: shortcut.FlagBool, Desc: "有界遍历全部工作流"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "全量遍历页数上限，1-1000"},
+		{Name: "status", Type: shortcut.FlagString, Desc: "在完整集合中过滤状态，必须 --all", Enum: []string{"enabled", "disabled"}},
 		{Name: "offset", Type: shortcut.FlagInt, Desc: "分页偏移量，默认 0（可选）"},
 	},
-	Tips: []string{`dws aitable +workflow-list --base-id B`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"baseId": rt.Str("base-id")}
-		if rt.Changed("limit") {
-			params["limit"] = rt.Int("limit")
-		}
-		if rt.Changed("offset") {
-			params["offset"] = rt.Int("offset")
-		}
-		data, err := rt.CallMCPData(serverHelper, "list_workflows", params)
-		if err != nil {
-			return err
-		}
-		workflows, err := workflowListProject(data)
-		if err != nil {
-			return err
-		}
-		return rt.Output(map[string]any{"count": len(workflows), "workflows": workflows})
-	},
+	Tips:    []string{`dws aitable +workflow-list --base-id B`},
+	Execute: executeWorkflowList,
 }
 
 // workflowListProject reshapes the raw list_workflows response into a clean
@@ -3216,9 +3206,14 @@ var SectionListNodes = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
+		{Name: "type", Type: shortcut.FlagString, Desc: "仅返回指定 nodeType；使用目录实际返回的类型值"},
+		{Name: "parent-id", Type: shortcut.FlagString, Desc: "仅返回该父分区直接子项；显式空值筛根目录"},
 	},
 	Tips: []string{`dws aitable +section-list-nodes --base-id B`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("type") || rt.Changed("parent-id") {
+			return outputFilteredBaseNodes(rt)
+		}
 		return rt.CallMCP("list_nsheet_nodes", map[string]any{"baseId": rt.Str("base-id")})
 	},
 }

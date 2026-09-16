@@ -6,7 +6,7 @@
 
 | 意图 | 命令 | 关键参数 |
 |---|---|---|
-| 分页查询评论与回复 | `comment list` | `--base-id --table-id --record-id [--limit 1..100] [--cursor <nextToken>]` |
+| 分页查询评论与回复 | `comment list` | `--base-id --table-id --record-id [--limit 1..100] [--cursor <next_token>]` |
 | 创建评论话题 | `comment create` | 定位参数 + `--content <文本>` 或 `--rich-content <JSON>` |
 | 回复已有评论 | `comment reply` | 定位参数 + `--topic-id --comment-key` + 正文 |
 | 完整替换本人评论正文 | `comment update` | 定位参数 + `--topic-id --comment-key` + 正文 |
@@ -31,7 +31,7 @@
 
 `topicId`、`commentKey` 必须来自同一 `baseId/tableId/recordId` 的 create/list 真实返回。reply 的 CLI 参数仍叫 `--comment-key`，底层会按接口协议发送为 `replyCommentKey`，不要自行猜测或拼接标识。
 
-list 的 `comments=[]` 不代表结束。只有 `hasMore=false` 才能停止；`hasMore=true` 时保持三项定位参数不变，将 `nextToken` 原样作为下一次 `--cursor`。过滤后空页是正常结果。
+list 的 `data.comments=[]` 不代表结束。只有 `meta.pagination.endpoint_exhausted=true` 才能停止；为 false 时保持三项定位参数不变，将 `meta.pagination.next_token` 原样作为下一次 `--cursor`。过滤后空页是正常结果；不要从业务 `data` 读取已移除的 `hasMore` 或 `nextToken`。
 
 ## 权限与失败处理
 

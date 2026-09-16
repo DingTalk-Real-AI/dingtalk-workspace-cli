@@ -760,7 +760,17 @@ func TestCrossPlatformCoverageRecordWriteReadbackUsesStableServicePagesE2E(t *te
 						raw, _ := json.Marshal(payload)
 						return string(raw), nil
 					}
-					response := pagedRecordQueryResponse(t, records, args)
+					wanted := map[string]bool{}
+					for _, id := range args["recordIds"].([]string) {
+						wanted[id] = true
+					}
+					selected := []map[string]any{}
+					for _, r := range records {
+						if wanted[recordID(r)] {
+							selected = append(selected, r)
+						}
+					}
+					response := pagedRecordQueryResponse(t, selected, args)
 					var payload map[string]any
 					if err := json.Unmarshal([]byte(response), &payload); err != nil {
 						t.Fatal(err)
@@ -804,7 +814,11 @@ func TestCrossPlatformCoverageRecordUpdateAutoChunksAndVerifiesE2E(t *testing.T)
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"updatedCount":100}`},
-		{text: recordListJSON(t, records[:100])},
+		{text: recordListJSON(t, records[0:20])},
+		{text: recordListJSON(t, records[20:40])},
+		{text: recordListJSON(t, records[40:60])},
+		{text: recordListJSON(t, records[60:80])},
+		{text: recordListJSON(t, records[80:100])},
 		{text: `{"updatedCount":1}`},
 		{text: recordListJSON(t, records[100:])},
 	}}
@@ -817,11 +831,11 @@ func TestCrossPlatformCoverageRecordUpdateAutoChunksAndVerifiesE2E(t *testing.T)
 			t.Fatalf("batch output missing %s: %s", want, out)
 		}
 	}
-	if len(caller.calls) != 4 || caller.calls[0].tool != "update_records" || caller.calls[1].tool != "query_records" || caller.calls[2].tool != "update_records" {
+	if len(caller.calls) != 8 || caller.calls[0].tool != "update_records" || caller.calls[1].tool != "query_records" || caller.calls[6].tool != "update_records" {
 		t.Fatalf("batch call sequence = %#v", caller.calls)
 	}
 	firstBatch := caller.calls[0].args["records"].([]any)
-	secondBatch := caller.calls[2].args["records"].([]any)
+	secondBatch := caller.calls[6].args["records"].([]any)
 	if len(firstBatch) != 100 || len(secondBatch) != 1 {
 		t.Fatalf("batch sizes = %d/%d", len(firstBatch), len(secondBatch))
 	}
@@ -831,7 +845,11 @@ func TestCrossPlatformCoverageRecordUpdatePartialStopsWithCheckpointE2E(t *testi
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"updatedCount":100}`},
-		{text: recordListJSON(t, records[:100])},
+		{text: recordListJSON(t, records[0:20])},
+		{text: recordListJSON(t, records[20:40])},
+		{text: recordListJSON(t, records[40:60])},
+		{text: recordListJSON(t, records[60:80])},
+		{text: recordListJSON(t, records[80:100])},
 		{err: errors.New("connection reset after send")},
 		{text: `{"records":[]}`},
 	}}

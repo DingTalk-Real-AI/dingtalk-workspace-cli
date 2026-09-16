@@ -37,7 +37,7 @@ var TableBootstrap = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "目标 Base ID", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新数据表名称", Required: true},
-		{Name: "fields", Type: shortcut.FlagString, Desc: "字段结构 JSON 数组；字段对象使用 fieldName/type/config，可选 description", Required: true},
+		{Name: "fields", Type: shortcut.FlagString, Desc: "字段结构 JSON 数组；字段对象使用 fieldName/type/config，可选 description/aiConfig", Required: true},
 	},
 	Tips: []string{
 		`dws aitable +table-bootstrap --base-id BASE_ID --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'`,
@@ -58,6 +58,7 @@ var bootstrapFieldAllowedKeys = map[string]bool{
 	"type":        true,
 	"config":      true,
 	"description": true,
+	"aiConfig":    true,
 }
 
 func validateBootstrapField(raw any, path string) (string, error) {
@@ -73,7 +74,7 @@ func validateBootstrapField(raw any, path string) (string, error) {
 	}
 	if len(unknown) > 0 {
 		sort.Strings(unknown)
-		return "", fmt.Errorf("%s 包含未知属性 %q；只允许 fieldName、type、config、description", path, unknown[0])
+		return "", fmt.Errorf("%s 包含未知属性 %q；只允许 fieldName、type、config、description、aiConfig", path, unknown[0])
 	}
 
 	name, ok := field["fieldName"].(string)
@@ -88,6 +89,38 @@ func validateBootstrapField(raw any, path string) (string, error) {
 	if config, exists := field["config"]; exists {
 		if _, ok := config.(map[string]any); !ok {
 			return "", fmt.Errorf("%s.config 必须是 JSON 对象", path)
+		}
+	}
+	if raw, exists := field["aiConfig"]; exists {
+		cfg, ok := raw.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("%s.aiConfig 需要非空 prompt 与 outputType", path)
+		}
+		prompt, ok := cfg["prompt"].([]any)
+		if !ok || len(prompt) == 0 {
+			return "", fmt.Errorf("%s.aiConfig.prompt 必须是非空片段数组", path)
+		}
+		for _, raw := range prompt {
+			part, ok := raw.(map[string]any)
+			if !ok {
+				return "", fmt.Errorf("%s.aiConfig.prompt 片段必须是对象", path)
+			}
+			switch part["type"] {
+			case "text":
+				if stringValue(part, "value") == "" {
+					return "", fmt.Errorf("prompt text 片段需要 value")
+				}
+			case "fieldRef":
+				if stringValue(part, "fieldId") == "" {
+					return "", fmt.Errorf("prompt fieldRef 片段需要 fieldId")
+				}
+			default:
+				return "", fmt.Errorf("prompt 片段 type 只支持 text/fieldRef")
+			}
+		}
+		expected := map[string]string{"text": "text", "select": "singleSelect", "multiSelect": "multipleSelect", "number": "number", "currency": "currency", "image": "attachment", "video": "attachment"}[stringValue(cfg, "outputType")]
+		if expected == "" || expected != fieldType {
+			return "", fmt.Errorf("%s.aiConfig.outputType 与字段 type 不匹配", path)
 		}
 	}
 	if description, exists := field["description"]; exists {
@@ -126,7 +159,7 @@ func parseBootstrapFields(raw string) ([]any, error) {
 
 func tableBootstrapValidation(message string) error {
 	return apperrors.NewValidation(message,
-		apperrors.WithHint("字段对象使用 fieldName/type/config，可选 description；已知参数时直接执行，不需要先调用 --help"),
+		apperrors.WithHint("字段对象使用 fieldName/type/config，可选 description/aiConfig；已知参数时直接执行，不需要先调用 --help"),
 		apperrors.WithActions(`dws aitable +table-bootstrap --base-id BASE_ID --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'`),
 		apperrors.WithAvailableFlags("base-id", "name", "fields"),
 	)
