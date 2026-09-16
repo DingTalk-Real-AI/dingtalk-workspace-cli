@@ -191,23 +191,33 @@ func employeeLifecycleStatus(ctx context.Context, b digitalEmployeeBinding) map[
 		state["status"] = r.RuntimeState
 		state["runtimeState"] = r.RuntimeState
 		state["runtimeInstanceId"] = r.RuntimeInstanceID
-		state["transportReady"] = r.TransportReady
+		source := employeeDSHTransportStatus(b)
+		state["transportReady"] = r.RuntimeState == "running" && r.TransportReady && source.Observed && (source.State == "connected" || source.State == "idle")
+		state["sourceState"] = source.State
+		if r.TransportReady && state["transportReady"] == false {
+			state["reasonCode"] = "transport_not_verified"
+			state["nextAction"] = "检查同一员工的 event status；旧 Event Bus 需升级并由宿主重启后重新观测"
+		}
 		state["executorReady"] = r.ExecutorReady
 		state["observedAt"] = r.ObservedAt
 	} else {
 		r, err := readDigitalEmployeeState(digitalEmployeeRuntimeDir(b.DWSProfile))
-		if err == nil && r.AgentUUID == b.AgentUUID && r.Profile == b.DWSProfile {
+		if err == nil && r.AgentUUID == b.AgentUUID && r.Profile == b.DWSProfile && r.Channel == bindingChannel(b) {
 			state["runtimeInstanceId"] = r.RunID
 			state["pid"] = r.PID
 			state["logPath"] = r.LogPath
 			if employeeStateAlive(r) || r.Status == "blocked" {
 				state["status"] = r.Status
 				state["runtimeState"] = r.Status
-				state["transportReady"] = r.Status == "running"
-				state["executorReady"] = r.Status == "running"
+				state["transportReady"] = r.Status == "running" && r.TransportReady
+				state["executorReady"] = r.Status == "running" && r.ExecutorReady
+				state["sourceState"] = r.SourceState
 			}
 			if r.Code != "" {
 				state["reasonCode"] = r.Code
+				if r.Code == "event_bus_upgrade_required" {
+					state["nextAction"] = "旧 Event Bus 不支持真实连接状态；升级并停止该员工的旧 Bus 后重试 connect"
+				}
 			}
 		} else if !os.IsNotExist(err) {
 			state["status"] = "unknown"

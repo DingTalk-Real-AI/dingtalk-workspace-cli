@@ -22,21 +22,25 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
 type digitalEmployeeRunState struct {
-	RunID         string    `json:"runId"`
-	Status        string    `json:"status"`
-	PID           int       `json:"pid"`
-	SupervisorPID int       `json:"supervisorPid,omitempty"`
-	AgentUUID     string    `json:"agentUuid"`
-	Profile       string    `json:"dwsProfile"`
-	Channel       string    `json:"channel"`
-	LogPath       string    `json:"logPath,omitempty"`
-	Code          string    `json:"code,omitempty"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	TransportReady bool      `json:"transportReady"`
+	ExecutorReady  bool      `json:"executorReady"`
+	SourceState    string    `json:"sourceState,omitempty"`
+	RunID          string    `json:"runId"`
+	Status         string    `json:"status"`
+	PID            int       `json:"pid"`
+	SupervisorPID  int       `json:"supervisorPid,omitempty"`
+	AgentUUID      string    `json:"agentUuid"`
+	Profile        string    `json:"dwsProfile"`
+	Channel        string    `json:"channel"`
+	LogPath        string    `json:"logPath,omitempty"`
+	Code           string    `json:"code,omitempty"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 type employeeEvent struct {
@@ -361,6 +365,7 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	activation.Release()
 	defer func() {
 		state.Status = "stopped"
+		state.TransportReady, state.ExecutorReady = false, false
 		if runErr != nil {
 			state.Status = "blocked"
 			state.Code = runErr.Error()
@@ -377,6 +382,10 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	}
 	if err := prepareEmployeeForwarder(ctx, fwd); err != nil {
 		return employeeTerminal("agent_initialization_failed")
+	}
+	state.ExecutorReady = true
+	if err := persist(); err != nil {
+		return employeeTerminal("state_unavailable")
 	}
 	r := &employeeRuntime{cfg: cfg, dir: dir, fwd: fwd, queues: map[string]chan employeeEvent{}, fatal: make(chan error, 1), ctx: ctx}
 	if err = r.audit(employeeTaskRecord{Status: "starting", UpdatedAt: time.Now()}); err != nil {
@@ -414,6 +423,7 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 		return employeeTerminal("consumer_unavailable")
 	}
 	ready := make(chan struct{}, 1)
+	transportStates := make(chan transport.StatusSource, 16)
 	lines := make(chan []byte, 128)
 	readErr := make(chan error, 2)
 	var readWG sync.WaitGroup
@@ -432,6 +442,15 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 				select {
 				case ready <- struct{}{}:
 				default:
+				}
+			} else if raw, ok := strings.CutPrefix(line, "[event] transport "); ok {
+				var s transport.StatusSource
+				if json.Unmarshal([]byte(raw), &s) == nil {
+					select {
+					case transportStates <- s:
+					case <-ctx.Done():
+						return
+					}
 				}
 			} else {
 				failureMu.Lock()
@@ -484,24 +503,48 @@ func runEmployeeWorker(parent context.Context, cfg digitalEmployeeAdapterConfig,
 	}()
 	timer := time.NewTimer(digitalEmployeeReadyTimeout)
 	defer timer.Stop()
-	select {
-	case <-ready:
-		state.Status = "running"
+	updateTransport := func(s transport.StatusSource) error {
+		if !s.Observed {
+			return employeeTerminal("event_bus_upgrade_required")
+		}
+		state.SourceState = s.State
+		state.TransportReady = s.Observed && (s.State == "connected" || s.State == "idle")
 		state.UpdatedAt = time.Now()
-		if err = persist(); err != nil {
+		if err := persist(); err != nil {
 			return employeeTerminal("state_unavailable")
 		}
-	case <-timer.C:
-		return &employeeRunError{Code: "ready_timeout"}
-	case <-ctx.Done():
 		return nil
-	case <-done:
-		failureMu.Lock()
-		defer failureMu.Unlock()
-		return failure
+	}
+	ipcReady := false
+	for !ipcReady || !state.TransportReady {
+		select {
+		case <-ready:
+			ipcReady = true
+		case s := <-transportStates:
+			if err := updateTransport(s); err != nil {
+				return err
+			}
+		case <-timer.C:
+			return &employeeRunError{Code: "ready_timeout"}
+		case <-ctx.Done():
+			return nil
+		case <-done:
+			failureMu.Lock()
+			defer failureMu.Unlock()
+			return failure
+		}
+	}
+	state.Status = "running"
+	state.UpdatedAt = time.Now()
+	if err := persist(); err != nil {
+		return employeeTerminal("state_unavailable")
 	}
 	for {
 		select {
+		case s := <-transportStates:
+			if err := updateTransport(s); err != nil {
+				return err
+			}
 		case <-ctx.Done():
 			return nil
 		case err := <-r.fatal:

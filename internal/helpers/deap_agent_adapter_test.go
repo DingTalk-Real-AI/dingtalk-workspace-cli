@@ -287,16 +287,40 @@ func TestEmployeeRuntimeRealNDJSONAndReceiptEnvelope(t *testing.T) {
 func TestEmployeeSubprocessFixture(t *testing.T) {
 	if len(os.Args) > 1 && os.Args[len(os.Args)-1] == "employee-consume-fixture" {
 		switch os.Getenv("DWS_EMPLOYEE_EVENT_FIXTURE") {
+		case "transport-lifecycle":
+			fmt.Fprintln(os.Stderr, "[event] ready event_count=1 bus_pid=123")
+			fmt.Fprintln(os.Stderr, `[event] transport {"state":"connecting","observed":true}`)
+			for _, phase := range []struct{ trigger, state string }{{"connect", "connected"}, {"disconnect", "reconnecting"}, {"recover", "idle"}} {
+				for {
+					data, _ := os.ReadFile(os.Getenv("DWS_EMPLOYEE_PHASE_FILE"))
+					if string(data) == phase.trigger {
+						break
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+				fmt.Fprintf(os.Stderr, "[event] transport {\"state\":%q,\"observed\":true}\n", phase.state)
+			}
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			os.Exit(0)
+		case "ipc-only", "legacy-ready":
+			fmt.Fprintln(os.Stderr, "[event] ready event_count=1 bus_pid=123")
+			if os.Getenv("DWS_EMPLOYEE_EVENT_FIXTURE") == "legacy-ready" {
+				fmt.Fprintln(os.Stderr, `[event] transport {"state":"connected","source":"inferred"}`)
+			}
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			os.Exit(0)
 		case "no-ready":
 			_, _ = io.Copy(io.Discard, os.Stdin)
 			os.Exit(0)
 		case "invalid":
 			fmt.Fprintln(os.Stderr, "[event] ready event_count=1 bus_pid=123")
+			fmt.Fprintln(os.Stderr, `[event] transport {"state":"connected","source":"inferred","observed":true}`)
 			fmt.Println("{invalid}")
 			_, _ = io.Copy(io.Discard, os.Stdin)
 			os.Exit(0)
 		}
 		fmt.Fprintln(os.Stderr, "[event] ready event_count=1 bus_pid=123")
+		fmt.Fprintln(os.Stderr, `[event] transport {"state":"connected","source":"inferred","observed":true}`)
 		line := `{"type":"user_im_message_receive_o2o_all","event_id":"event","message_id":"message","conversation_id":"conversation","sender_open_dingtalk_id":"owner","content":"private-question"}`
 		fmt.Println(line)
 		fmt.Println(line)

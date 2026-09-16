@@ -490,8 +490,9 @@ func TestRunManySourceStateAndBusShutdown(t *testing.T) {
 	<-busB.hello
 	<-busA.acked
 	<-busB.acked
-	busA.send <- transport.SourceState{Type: transport.FrameTypeSourceState, State: "reconnecting", StateSource: "hook", Attempt: 2}
+	busA.send <- transport.SourceState{Type: transport.FrameTypeSourceState, State: "reconnecting", StateSource: "hook", Observed: true, Attempt: 2}
 	waitForBuffer(t, &stderr, "source state: reconnecting")
+	waitForBuffer(t, &stderr, `[event] transport {"observed":true,"state":"reconnecting","source":"hook","reconnect_count":2}`)
 	busB.send <- transport.Heartbeat{Type: transport.FrameTypeHeartbeat}
 	busB.send <- transport.Bye{Type: transport.FrameTypeBye, Reason: "shutdown"}
 	select {
