@@ -115,6 +115,9 @@ func expectedShortcutLong(spec shortcut.Shortcut) string {
 	if long == "" {
 		long = strings.TrimSpace(spec.Description)
 	}
+	if help := expectedSelectionHelp(spec); help != "" {
+		long += help
+	}
 	if len(spec.Constraints) == 0 {
 		return long
 	}
@@ -134,6 +137,48 @@ func expectedShortcutLong(spec shortcut.Shortcut) string {
 		lines = append(lines, "  - "+text)
 	}
 	return long + "\n\n参数约束：\n" + strings.Join(lines, "\n")
+}
+
+// expectedSelectionHelp mirrors corecmd.SelectionHelp for the differential
+// guard: the guidance sections (Avoid when / Prerequisites / Tips) are
+// appended to Long after the intent prose and before "参数约束", matching the
+// runtime help assembly and the schema --compact Agent allowlist. UseWhen is
+// not rendered — declared UseWhen restates the intent prose today; examples
+// stay in the cobra Example block.
+func expectedSelectionHelp(spec shortcut.Shortcut) string {
+	selection := spec.Contract.Selection
+	var sections []string
+	if items := expectedGuidanceItems(selection.AvoidWhen); len(items) > 0 {
+		sections = append(sections, expectedGuidanceSection("Avoid when:", items))
+	}
+	if items := expectedGuidanceItems(selection.Prerequisites); len(items) > 0 {
+		sections = append(sections, expectedGuidanceSection("Prerequisites:", items))
+	}
+	if items := expectedGuidanceItems(selection.Tips); len(items) > 0 {
+		sections = append(sections, expectedGuidanceSection("Tips:", items))
+	}
+	if len(sections) == 0 {
+		return ""
+	}
+	return "\n\n" + strings.Join(sections, "\n\n")
+}
+
+func expectedGuidanceItems(items []string) []string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		if text := strings.TrimSpace(item); text != "" {
+			lines = append(lines, text)
+		}
+	}
+	return lines
+}
+
+func expectedGuidanceSection(title string, items []string) string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, "  - "+item)
+	}
+	return title + "\n" + strings.Join(lines, "\n")
 }
 
 func expectedShortcutExamples(tips []string) string {

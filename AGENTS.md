@@ -286,6 +286,41 @@ Human-authored inputs:
    `Contract.Parameters` / FlagSpec). Do not reintroduce HintFile or
    `RegisterSchemaHints` overlays.
 
+### Selection generation debt (do not propagate)
+
+Most declared `UseWhen`/`AvoidWhen` today is migration scaffolding, not
+authored guidance. Two paths produce it:
+
+- **Generator ledgers**: `chat/schema_contracts.go`
+  (`reviewedChatShortcutContract`, ~50 commands) and
+  `aitable/schema_contracts.go` (`reviewedAITableShortcutContract`, ~53).
+  Ledger commands without a hand-written `Contract` get one at registration;
+  the generator copies `Intent` → `UseWhen` verbatim, `Description` →
+  `AgentSummary`, and fills `AvoidWhen` with a domain-constant template so
+  `validateContractDecl`'s non-empty checks pass.
+- **Inline copies**: remaining domains hand-port the same shape — of ~218
+  inline `UseWhen` blocks, ~157 are verbatim `Intent` copies.
+
+Registry-wide that is 420/463 shortcuts with `UseWhen == Intent` and ~250
+carrying a byte-identical template `AvoidWhen`. Consequences already encoded:
+
+- `corecmd.SelectionHelp` renders Avoid when / Prerequisites / Tips into
+  `--help` but never `use_when`: it would duplicate the Long (Intent) prose.
+  Add the section back only once authored `UseWhen` diverges from the prose.
+- `schema --compact` publishes the full guidance allowlist
+  (`use_when`/`avoid_when`/`prerequisites`/`tips`); the fields exist on both
+  surfaces, the content does not yet.
+- `tools_with_use_when` / `tools_with_avoid_when` in schema agent metadata
+  over-report: copies and templates count as guidance.
+
+**Authoring rule**: when curating a tool, write differentiated `UseWhen` /
+`AvoidWhen` (sibling-command routing, outcome shape — see Goals), and remove
+the command from its generator ledger or replace the inline copy. Do not add
+new commands to a ledger and do not copy `Intent` into `UseWhen` in new
+declarations. Endgame (separate change, alongside content work): make
+`UseWhen` optional in `validateContractDecl` (like Prerequisites/Tips) and
+drop the generator copy so the metadata counts go honest.
+
 ### Authoring
 
 For every curated tool:
