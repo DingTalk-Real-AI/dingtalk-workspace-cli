@@ -113,7 +113,7 @@ func TestPersonalCardEventListSchemaDryRunAndValidation(t *testing.T) {
 
 	oldIdentity := personalResolveEventIdentity
 	t.Cleanup(func() { personalResolveEventIdentity = oldIdentity })
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{AccessToken: "token", LocalSubject: "subject", ClientID: "client", SourceID: "open"}, nil
 	}
 	dryRun := newEventConsumeCommand()
@@ -177,7 +177,7 @@ func TestPersonalCardMultiConsumeCreatesAndCleansSubscriptionsOnSharedBus(t *tes
 	defer func() { personalCreateSubscription = oldCreate }()
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return personal.Identity{AccessToken: "token", LocalSubject: "subject", ClientID: "client", SourceID: "open"}, nil
 	}
 	var requests []personal.CreateSubscriptionRequest

@@ -116,3 +116,37 @@ func verifyAttachmentRemoval(actual []map[string]any, plan attachmentRemovalPlan
 	}
 	return nil
 }
+
+// Exact selectors resolve within the requested record/field, never across
+// sibling cells or by a same-named file. All targets must be accounted for
+// before the first removal call.
+func planAttachmentRemovalIDs(existing []map[string]any, requested []string) (attachmentRemovalPlan, error) {
+	plan := attachmentRemovalPlan{tool: "remove_attachments"}
+	wanted := map[string]bool{}
+	found := map[string]bool{}
+	for _, id := range requested {
+		wanted[id] = true
+	}
+	for _, item := range existing {
+		selector := attachmentResourceID(item)
+		if !wanted[selector] {
+			plan.remaining = append(plan.remaining, item)
+			continue
+		}
+		id := attachmentResourceID(item)
+		if id == "" {
+			return plan, apperrors.NewValidation("选中附件缺少 resourceId，无法精确删除", apperrors.WithReason("attachment_identity_unavailable"))
+		}
+		if found[selector] {
+			return plan, apperrors.NewValidation("单元格附件 ID 重复，无法唯一选择", apperrors.WithReason("attachment_identity_ambiguous"))
+		}
+		found[selector] = true
+		plan.removed++
+		plan.resourceIDs = append(plan.resourceIDs, id)
+	}
+	if len(found) != len(wanted) {
+		return plan, apperrors.NewValidation("部分附件 ID 不属于目标单元格，未执行删除", apperrors.WithReason("attachment_not_found"))
+	}
+
+	return plan, nil
+}

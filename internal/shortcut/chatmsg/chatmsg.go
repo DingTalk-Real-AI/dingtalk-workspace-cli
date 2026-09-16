@@ -1281,7 +1281,7 @@ func isKnownRichDecoration(node any) bool {
 }
 
 // richItemTexts walks a decoded DingTalk rich-content blob and returns the
-// readable text carried by its rich-content items (items[].data.text). It only
+// readable text and links carried by its rich-content items. It only
 // harvests item bodies, so decorative fields (card titles, preview URLs, layout
 // config) contribute nothing and are dropped. An empty result means "not a
 // recognised rich-content block".
@@ -1305,10 +1305,21 @@ func richItemTexts(node any) []string {
 					if !ok {
 						continue
 					}
-					if s, ok := data["text"].(string); ok {
-						if s = strings.TrimSpace(s); s != "" {
-							texts = append(texts, s)
+					text, _ := data["text"].(string)
+					text = strings.TrimSpace(text)
+					// Link and image items both use data.url; only link targets
+					// belong alongside the readable label.
+					if mm["type"] == "link" {
+						url, _ := data["url"].(string)
+						url = strings.TrimSpace(url)
+						if text == "" {
+							text = url
+						} else if url != "" && url != text {
+							text += "（" + url + "）"
 						}
+					}
+					if text != "" {
+						texts = append(texts, text)
 					}
 				}
 			}

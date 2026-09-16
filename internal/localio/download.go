@@ -7,6 +7,8 @@ package localio
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -51,7 +53,8 @@ var downloadTempCounter atomic.Uint64
 
 // DownloadOptions controls safe, atomic publication beneath BaseDir.
 type DownloadOptions struct {
-	Overwrite     bool // Explicit opt-in; defaults retain no-clobber semantics.
+	ExpectedSize  *int64 // When supplied, validate downloaded bytes before publication.
+	Overwrite     bool   // Explicit opt-in; defaults retain no-clobber semantics.
 	BaseDir       string
 	Output        string
 	PreferredName string
@@ -60,6 +63,7 @@ type DownloadOptions struct {
 
 // DownloadResult describes the published local artifact.
 type DownloadResult struct {
+	SHA256       string // Hash of successfully downloaded bytes; empty for local publication.
 	AbsolutePath string
 	RelativePath string
 	SizeBytes    int64
@@ -77,6 +81,9 @@ func downloadWithClient(ctx context.Context, rawURL string, opts DownloadOptions
 }
 
 func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOptions, client *http.Client, maxBytes int64) (DownloadResult, error) {
+	if opts.ExpectedSize != nil && (*opts.ExpectedSize < 0 || *opts.ExpectedSize > maxBytes) {
+		return DownloadResult{}, fmt.Errorf("invalid expected download size")
+	}
 	parsed, err := ValidateDownloadURL(rawURL)
 	if err != nil {
 		return DownloadResult{}, err
@@ -116,7 +123,11 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 		_ = tmp.Close()
 		_ = target.parentRoot.Remove(tmpName)
 	}
-	size, copyErr := io.Copy(tmp, io.LimitReader(resp.Body, maxBytes+1))
+	digest := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(tmp, digest), io.LimitReader(resp.Body, maxBytes+1))
+	if copyErr == nil && opts.ExpectedSize != nil && size != *opts.ExpectedSize {
+		copyErr = fmt.Errorf("download size mismatch: got %d, want %d", size, *opts.ExpectedSize)
+	}
 	if copyErr == nil && size > maxBytes {
 		copyErr = fmt.Errorf("LOCAL_DOWNLOAD_TOO_LARGE: 下载内容超过上限 %d 字节", maxBytes)
 	}
@@ -142,7 +153,7 @@ func downloadWithClientLimit(ctx context.Context, rawURL string, opts DownloadOp
 		cleanup()
 		return DownloadResult{}, err
 	}
-	return DownloadResult{AbsolutePath: target.absolutePath, RelativePath: filepath.ToSlash(target.relativePath), SizeBytes: size}, nil
+	return DownloadResult{AbsolutePath: target.absolutePath, RelativePath: filepath.ToSlash(target.relativePath), SizeBytes: size, SHA256: hex.EncodeToString(digest.Sum(nil))}, nil
 }
 
 // ValidateOutput rejects absolute paths and portable `..` escapes.

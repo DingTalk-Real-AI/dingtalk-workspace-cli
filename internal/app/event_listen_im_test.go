@@ -252,7 +252,7 @@ func TestCrossPlatformCoverageEventListenIME2ELifecycleCleansAndRollsBack(t *tes
 		restore := installPersonalManySeams(t)
 		t.Cleanup(restore)
 		t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-		personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 			return personal.Identity{
 				AccessToken: "token", CorpID: "corp", UserID: "user",
 				ClientID: "client", SourceID: "open",

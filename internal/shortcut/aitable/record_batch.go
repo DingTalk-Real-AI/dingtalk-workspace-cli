@@ -513,17 +513,34 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 }
 
 func queryRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {
-	window, err := queryRecordWindow(rt, map[string]any{
-		"baseId": baseID, "tableId": tableID, "recordIds": ids,
-	}, len(ids))
-	if err != nil {
-		return nil, err
+	return queryRecordsByIDParams(rt, map[string]any{"baseId": baseID, "tableId": tableID}, ids)
+}
+
+func queryRecordsByIDParams(rt *shortcut.RuntimeContext, params map[string]any, ids []string) ([]map[string]any, error) {
+	// The service limits exact-ID responses to one 20-row page and may not
+	// publish continuation for omitted IDs. Partition the IDs themselves;
+	// retrying a cursor with the same 100 IDs cannot prove all rows.
+	result := make([]map[string]any, 0, len(ids))
+	chunkSize := recordQueryServicePageSize
+	if limit, ok := params["limit"].(int); ok && limit > 0 && limit < chunkSize {
+		chunkSize = limit
 	}
-	// Exact-ID verification below compares every requested ID with the returned
-	// records. The service can publish a continuation even after all requested
-	// IDs are present, so hasMore is not evidence that this bounded read-back is
-	// incomplete.
-	return window.Records, nil
+	for offset := 0; offset < len(ids); offset += chunkSize {
+		end := minInt(offset+chunkSize, len(ids))
+		chunk := ids[offset:end]
+		request := cloneAnyMap(params)
+		request["recordIds"] = chunk
+		delete(request, "cursor")
+		window, err := queryRecordWindow(rt, request, len(chunk))
+		if err != nil {
+			return nil, err
+		}
+		if _, err = validateExactRecordQuery(window.Records, chunk); err != nil {
+			return nil, err
+		}
+		result = append(result, window.Records...)
+	}
+	return result, nil
 }
 
 func queryDeletedRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {

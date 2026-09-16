@@ -368,3 +368,47 @@ func errorReason(err error) string {
 	}
 	return ""
 }
+
+func TestCrossPlatformCoverageResolveFieldAndViewExactDirectories(t *testing.T) {
+	for _, kind := range []string{"field", "view"} {
+		collection, idKey, nameKey := "fields", "fieldId", "fieldName"
+		if kind == "view" {
+			collection, idKey, nameKey = "views", "viewId", "viewName"
+		}
+		for _, tc := range []struct {
+			names []string
+			more  bool
+			fail  bool
+		}{{[]string{"other", "target"}, false, false}, {[]string{"target", "target"}, false, true}, {[]string{"other"}, false, true}, {[]string{"target"}, true, true}} {
+			items := []any{}
+			for i, n := range tc.names {
+				items = append(items, map[string]any{idKey: string(rune('a' + i)), nameKey: n})
+			}
+			reader := &resolverReader{steps: []resolverStep{{data: map[string]any{collection: items, "hasMore": tc.more}}}}
+			result, err := ResolveChildName(reader, "base", "table", kind, "target")
+			if (err != nil) != tc.fail {
+				t.Fatal(kind, result, err)
+			}
+			if !tc.fail && result.Selected.ID != "b" {
+				t.Fatal("not exact", result)
+			}
+		}
+	}
+	reader := &resolverReader{}
+	if _, err := ResolveChildName(reader, "base", "table", "unknown", "name"); err == nil || len(reader.calls) != 0 {
+		t.Fatal("invalid kind reached server")
+	}
+}
+
+func TestCrossPlatformCoverageResolveChildRejectsUnknownDirectories(t *testing.T) {
+	r := &resolverReader{}
+	if _, err := ResolveChildName(r, "", "t", "field", "Name"); err == nil || len(r.calls) != 0 {
+		t.Fatal(err)
+	}
+	for _, step := range []resolverStep{{err: errors.New("offline")}, {data: map[string]any{}}, {data: map[string]any{"fields": []any{map[string]any{"fieldId": "f"}}}}, {data: map[string]any{"fields": []any{map[string]any{"fieldId": "f", "fieldName": "N"}, map[string]any{"fieldId": "f", "fieldName": "N"}}}}} {
+		r := &resolverReader{steps: []resolverStep{step}}
+		if _, err := ResolveChildName(r, "b", "t", "field", "N"); err == nil {
+			t.Fatal(step)
+		}
+	}
+}

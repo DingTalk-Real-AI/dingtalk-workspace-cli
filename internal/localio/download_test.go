@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -819,5 +820,35 @@ func TestCrossPlatformCoverageDownloadOverwriteRejectsPipeTarget(t *testing.T) {
 	})
 	if _, err := openDownloadTargetMode(dir, "pipe", "https://example.com/file.txt", "", true); err == nil || !strings.Contains(err.Error(), "普通文件") {
 		t.Fatal("nonregular target not rejected", err)
+	}
+}
+
+func TestCrossPlatformCoverageDownloadExpectedSizeBeforePublish(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("abc")) }))
+	defer server.Close()
+	for _, expected := range []int64{2, 3, 4} {
+		dir := t.TempDir()
+		result, err := downloadWithClient(context.Background(), server.URL, DownloadOptions{BaseDir: dir, Output: "file.bin", ExpectedSize: &expected}, server.Client())
+		if expected == 3 {
+			if err != nil || result.SizeBytes != 3 || result.SHA256 != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+				t.Fatal(result, err)
+			}
+		} else {
+			if err == nil {
+				t.Fatal("published wrong byte size")
+			}
+			files, _ := os.ReadDir(dir)
+			if len(files) != 0 {
+				t.Fatal("published partial file", files)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDownloadRejectsImpossibleExpectedSize(t *testing.T) {
+	for _, size := range []int64{-1, 11} {
+		if _, err := downloadWithClientLimit(context.Background(), "https://example.com/file", DownloadOptions{ExpectedSize: &size}, nil, 10); err == nil {
+			t.Fatal("accepted impossible size", size)
+		}
 	}
 }
