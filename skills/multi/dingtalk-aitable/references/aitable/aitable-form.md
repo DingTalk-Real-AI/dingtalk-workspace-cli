@@ -39,7 +39,16 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
 
-仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板。对用户指定的 `form share get/update` 或 `+form-share-get/update`，先实际执行一次 `dws schema --cli-path "aitable <用户指定入口>" --compact --format json`，再简短解释样本。不得用搜索源码或 reference 代替本机契约查询；不得执行任何业务读写。
+仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
+
+| 用户指定入口 | 唯一契约查询 |
+|---|---|
+| `form share get` | `dws schema --cli-path "aitable form share get" --compact --format json` |
+| `form share update` | `dws schema --cli-path "aitable form share update" --compact --format json` |
+| `+form-share-get` | `dws schema --cli-path "aitable +form-share-get" --compact --format json` |
+| `+form-share-update` | `dws schema --cli-path "aitable +form-share-update" --compact --format json` |
+
+不得用搜索源码或 reference 代替本机契约查询。get 只诊断分享配置，不返回 `cpSynced`；不能建议“通过 get 回读 cpSynced 后确认闭环”。未验证的 CP 应继续标为未确认并交由服务端诊断，不能把 get 的成功或 UUID 非空当作恢复证明。
 
 结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。
 

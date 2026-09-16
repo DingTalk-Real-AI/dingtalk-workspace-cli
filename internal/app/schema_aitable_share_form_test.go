@@ -33,6 +33,9 @@ func aitableShareSchemaObject(t testing.TB, value any, label string) map[string]
 
 func assertAITableShareFinalStateFields(t testing.TB, body, label string) {
 	t.Helper()
+	if !strings.Contains(body, "get 不返回 cpSynced") && !strings.Contains(body, "get 只诊断分享配置，不返回 `cpSynced`") {
+		t.Errorf("%s must not suggest verifying CP via get", label)
+	}
 	for _, field := range aitableShareFinalStateFields {
 		if !strings.Contains(body, field) {
 			t.Errorf("%s missing final-state field %s", label, field)
@@ -186,7 +189,7 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 					t.Fatal("Skill discovery metadata must route result reviews before source exploration")
 				}
 			}
-			for _, rule := range []string{"所有 ID 已知时", "--format json", "不得用搜索源码或 reference 代替本机契约查询", "data.succeeded[0].response", "data.failed[0].error", "get 的成功不证明 CP 同步"} {
+			for _, rule := range []string{"所有 ID 已知时", "--format json", "不得用搜索源码或 reference 代替本机契约查询", "data.succeeded[0].response", "data.failed[0].error", "get 的成功不证明 CP 同步", "原子/Shortcut 入口必须原样保留", "不能建议“通过 get 回读 cpSynced 后确认闭环”"} {
 				if !strings.Contains(body, rule) {
 					t.Errorf("%s missing evaluated form-share rule %q", path, rule)
 				}
