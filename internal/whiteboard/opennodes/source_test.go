@@ -4,9 +4,50 @@
 package opennodes
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestCrossPlatformCoverageOpenNodesRunLineSeparators(t *testing.T) {
+	for _, separator := range []string{"\n", "\r", "\r\n", "\u2028", "\u2029"} {
+		for _, title := range []bool{false, true} {
+			text := map[string]any{"blocks": []any{map[string]any{"type": "paragraph", "runs": []any{
+				map[string]any{"text": "safe"},
+				map[string]any{"text": "上午" + separator + "待安排"},
+			}}}}
+			node := map[string]any{"id": "day0", "type": "frame", "text": text}
+			wantPath := "/source/nodes/0/text/blocks/0/runs/1/text"
+			if title {
+				delete(node, "text")
+				node["title"] = map[string]any{"text": text}
+				wantPath = "/source/nodes/0/title/text/blocks/0/runs/1/text"
+			}
+			raw, err := json.Marshal(Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: []map[string]any{node}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, wrapped := range []bool{false, true} {
+				input := raw
+				if wrapped {
+					input = append(append([]byte("{\"source\":"), raw...), '}')
+				}
+				_, err := Parse(input)
+				if err == nil || !strings.Contains(err.Error(), wantPath) || !strings.Contains(err.Error(), "day0") || !strings.Contains(err.Error(), "paragraph") {
+					t.Fatalf("separator=%q title=%v wrapped=%v: %v", separator, title, wrapped, err)
+				}
+			}
+		}
+	}
+	valid := []byte(`{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"card","text":{"blocks":[{"type":"paragraph","runs":[{"text":"上午","marks":{"bold":true}}]},{"type":"paragraph","runs":[{"text":""}]},{"type":"paragraph","runs":[{"text":"待安排"}]}]}}]}`)
+	source, err := Parse(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(source.Nodes[0]["text"].(map[string]any)["blocks"].([]any)) != 3 {
+		t.Fatal("paragraphs must not be rewritten")
+	}
+}
 
 func TestCrossPlatformCoverageOpenNodesParseCanonicalAndDigest(t *testing.T) {
 	direct := []byte(`{"nodes":[{"type":"shape","id":"n1","x":1.50}],"catalogVersion":"dml-v1","schemaVersion":"1.0"}`)

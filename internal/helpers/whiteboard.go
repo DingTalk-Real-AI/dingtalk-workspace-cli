@@ -16,6 +16,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	whiteboardcore "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
 )
 
 const (
@@ -143,6 +144,8 @@ func newWhiteboardCommand() *cobra.Command {
 		Use:   "update",
 		Short: "追加或整页重建白板内容",
 		Long: `从 JSON 文件读取 OpenNodes V1 更新请求并更新已有白板。
+
+Agent 对已有白板追加、修改、删除或清空内容，必须先执行 whiteboard +diff，展示差异后停止并等待用户确认，再通过 +update 携带 sourceDigest 提交；不得使用本原子入口绕过预览确认。diff 失败或有 blocker 时不得写入。此工作流要求不改变本命令的脚本兼容性。
 
 	更新模式由文件顶层的 overwrite 字段决定。overwrite=false 表示追加，
 	overwrite=true 表示整页重建。显式提供非空 --part-id 时更新文档内嵌白板；未提供时
@@ -359,6 +362,10 @@ func validateWhiteboardNodes(raw json.RawMessage) (string, int, error) {
 }
 
 func invalidWhiteboardSourceJSON(err error) error {
+	var textError *opennodes.TextRunValidationError
+	if errors.As(err, &textError) {
+		return &CLIError{Code: CodeInvalidJSON, Message: textError.Error(), Cause: err}
+	}
 	return &CLIError{
 		Code:       CodeInvalidJSON,
 		Message:    "白板更新文件不是合法的 OpenNodes V1 JSON",

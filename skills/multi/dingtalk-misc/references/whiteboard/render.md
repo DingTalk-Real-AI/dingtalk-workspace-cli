@@ -3,6 +3,14 @@
 `dws whiteboard render` 是纯本地语义预览。它读取与创建相同的 OpenNodes source，写出
 确定性 SVG，不访问任何图片、字体或外链资源，也不调用白板 MCP。
 
+预渲染前校验 run.text 中的非法换行（\n、\r、U+2028、U+2029），包括 Frame 标题。
+报错会指出节点 ID 和字段路径；将多行拆为多个 paragraph block，空行用
+`{"type":"paragraph","runs":[{"text":""}]}`，保留对齐及 marks/link 后重新渲染和确认。
+此校验不是完整服务端 Schema 验证；能生成 SVG 不等于服务端一定接受。
+
+Agent 使用 OpenNodes 带内容创建时必须先走此流程，不能因用户未要求预览而跳过。
+渲染失败、命令不可用或无法展示产物时停止并报告阻塞，不直接创建。
+
 ```bash
 dws whiteboard render --source @whiteboard.json \
   --output ./whiteboard-preview.svg --format json

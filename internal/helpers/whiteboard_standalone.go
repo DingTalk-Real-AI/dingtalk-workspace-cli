@@ -34,10 +34,13 @@ func newStandaloneWhiteboardCreateCommand() *cobra.Command {
 	source.nodes 必须是数组，允许 []，表示创建空白独立白板。
 	CLI 校验后统一向 MCP/HSF 传递 source JSON 字符串。
 	--request-id 是稳定幂等键，同一次逻辑创建的网络重试必须复用相同值。
-	若已生成预览，必须先展示 SVG 并停止执行，等待用户明确确认当前版本后再创建。
+	Agent 带内容创建必须先执行 whiteboard render，展示 SVG、fidelity 和全部 warnings，
+	然后停止执行，等待用户明确确认当前版本后再创建；不能跳过预渲染直接提交。
 	最初的创建请求、Agent 自检通过或摘要匹配都不代表用户确认；内容修改后必须重新渲染并再次确认。
 	只有获得确认后才能使用 --yes。将已确认预览的 sourceDigest 传入
-	--expected-source-digest；如 source 已变化，CLI 会在远端调用前停止。`,
+	--expected-source-digest；如 source 已变化，CLI 会在远端调用前停止。
+	创建后的内容回读不能替代创建前视觉预览。以上是 Agent 工作流要求；
+	CLI 保留不传摘要的脚本兼容性，摘要匹配本身也不证明用户已确认。`,
 		Example: `  dws whiteboard create-with-content --name "项目方案白板" --source ./whiteboard.json --request-id wb-create-001 --format json
 	  dws whiteboard create-with-content --name "项目方案白板" --source ./whiteboard.json --folder FOLDER_ID --request-id wb-create-002 --format json`,
 		Flags: []LeafFlag{
@@ -66,7 +69,7 @@ func newStandaloneWhiteboardCreateCommand() *cobra.Command {
 				Reason: "CLI 在调用 create_whiteboard 前解析并校验内联或文件中的 OpenNodes，可校验 render sourceDigest；dry-run 只输出安全摘要，并校验幂等创建结果",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "用户确认后使用 OpenNodes V1 创建独立白板；已有 SVG 预览时必须展示并等待用户确认当前版本，修改后重新渲染和确认",
+				AgentSummary: "Agent 带内容创建必须先执行 whiteboard render，展示 SVG、fidelity 和全部 warnings 后停止并等待用户明确确认当前版本；确认后使用相同 source 和 sourceDigest 创建，修改后重新渲染和确认，内容回读不能替代预览",
 				UseWhen:      []string{"需要在文件夹、知识库或我的文档中创建一份带 OpenNodes 初始内容的独立白板时"},
 				AvoidWhen:    []string{"创建空白独立白板使用现有文档文件创建能力；在文档中插入白板卡片使用 doc whiteboard insert"},
 				Examples:     []string{"dws whiteboard create-with-content --name \"项目方案白板\" --source ./whiteboard.json --request-id wb-create-001 --format json"},

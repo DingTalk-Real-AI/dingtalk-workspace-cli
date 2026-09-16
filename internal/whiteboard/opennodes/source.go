@@ -25,8 +25,8 @@ const (
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-fA-F]{64}$`)
 
 // Source is the stable source object sent to independent-whiteboard creation.
-// Node fields remain open because OpenNodes is catalog-extensible and the
-// compatibility create surface historically accepts any JSON object here.
+// Node fields remain open for catalog compatibility, except for explicit local
+// guards against known server-invalid content. This is not a full schema validator.
 type Source struct {
 	SchemaVersion  string           `json:"schemaVersion"`
 	CatalogVersion string           `json:"catalogVersion"`
@@ -102,8 +102,44 @@ func Parse(data []byte) (*Source, error) {
 			return nil, fmt.Errorf("source.nodes[%d] must be an object", index)
 		}
 		nodes[index] = node
+		if err := validateTextRuns(node["text"], fmt.Sprintf("/source/nodes/%d/text", index), node["id"]); err != nil {
+			return nil, err
+		}
+		if title, ok := node["title"].(map[string]any); ok {
+			if err := validateTextRuns(title["text"], fmt.Sprintf("/source/nodes/%d/title/text", index), node["id"]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return &Source{SchemaVersion: SchemaVersion, CatalogVersion: CatalogVersion, Nodes: nodes}, nil
+}
+
+// OpenNodesUpdate.validateTextRun represents line boundaries with blocks.
+// Do not normalize here: changing content invalidates an approved preview.
+type TextRunValidationError struct {
+	NodeID any
+	Path   string
+}
+
+func (e *TextRunValidationError) Error() string {
+	return fmt.Sprintf("节点 %v 的 %s 含非法换行符；请拆成独立 paragraph blocks（空行使用空文本段落），保留样式后重新 render 并确认预览", e.NodeID, e.Path)
+}
+
+func validateTextRuns(value any, path string, nodeID any) error {
+	text, _ := value.(map[string]any)
+	blocks, _ := text["blocks"].([]any)
+	for blockIndex, item := range blocks {
+		block, _ := item.(map[string]any)
+		runs, _ := block["runs"].([]any)
+		for runIndex, item := range runs {
+			run, _ := item.(map[string]any)
+			content, _ := run["text"].(string)
+			if strings.ContainsAny(content, "\r\n\u2028\u2029") {
+				return &TextRunValidationError{NodeID: nodeID, Path: fmt.Sprintf("%s/blocks/%d/runs/%d/text", path, blockIndex, runIndex)}
+			}
+		}
+	}
+	return nil
 }
 
 // CanonicalJSON returns the deterministic direct source representation used by

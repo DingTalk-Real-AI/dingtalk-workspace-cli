@@ -19,6 +19,38 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
 )
 
+func TestCrossPlatformCoverageWhiteboardInvalidRunStopsRenderAndCreate(t *testing.T) {
+	source := `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[{"id":"day0-slot0","type":"shape","text":{"blocks":[{"type":"paragraph","runs":[{"text":"上午\n\n待安排"}]}]}}]}`
+	for _, operation := range []string{"render", "create-with-content"} {
+		t.Run(operation, func(t *testing.T) {
+			caller := &whiteboardTestCaller{format: "json"}
+			buf := installWhiteboardTestCaller(t, caller)
+			cmd := newWhiteboardCommand()
+			cmd.PersistentFlags().Bool("yes", false, "")
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			artifact := filepath.Join(t.TempDir(), "preview.svg")
+			args := []string{operation, "--source", source}
+			if operation == "render" {
+				args = append(args, "--output", artifact)
+			} else {
+				args = append(args, "--name", "日历", "--request-id", "invalid-run", "--yes")
+			}
+			cmd.SetArgs(args)
+			err := cmd.Execute()
+			if err == nil || !strings.Contains(err.Error(), "/source/nodes/0/text/blocks/0/runs/0/text") || !strings.Contains(err.Error(), "day0-slot0") {
+				t.Fatalf("missing actionable error: %v", err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid source reached MCP: %#v", caller.calls)
+			}
+			if _, err := os.Stat(artifact); !os.IsNotExist(err) {
+				t.Fatalf("invalid source created artifact: %v", err)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *testing.T) {
 	source := `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[
 		{"id":"card","type":"shape","x":40,"y":30,"width":200,"height":100,"geometry":"dml:roundRect","text":"<确认预览>"},
@@ -169,11 +201,14 @@ func TestCrossPlatformCoverageWhiteboardCreateRequiresUserConfirmation(t *testin
 	for _, tc := range []struct {
 		name, answer                            string
 		yes, dry, mismatch, wantCall, wantError bool
+		omitDigest                              bool
 	}{
 		{name: "no reply", wantError: true},
 		{name: "declined", answer: "no\n", wantError: true},
 		{name: "confirmed current SVG", answer: "yes\n", wantCall: true},
 		{name: "explicit confirmation flag", yes: true, wantCall: true},
+		{name: "legacy script without digest", yes: true, omitDigest: true, wantCall: true},
+		{name: "without digest still needs confirmation", omitDigest: true, wantError: true},
 		{name: "dry run needs no approval", dry: true},
 		{name: "changed after confirmation", yes: true, mismatch: true, wantError: true},
 	} {
@@ -195,6 +230,9 @@ func TestCrossPlatformCoverageWhiteboardCreateRequiresUserConfirmation(t *testin
 				expected = "sha256:" + strings.Repeat("0", 64)
 			}
 			args := []string{"create-with-content", "--name", "课表", "--source", source, "--request-id", "create-1", "--expected-source-digest", expected}
+			if tc.omitDigest {
+				args = args[:len(args)-2]
+			}
 			if tc.yes {
 				args = append(args, "--yes")
 			}

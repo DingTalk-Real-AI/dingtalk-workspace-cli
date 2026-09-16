@@ -33,3 +33,25 @@ func TestCrossPlatformCoverageWhiteboardTemplatePlatformReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCrossPlatformCoverageWhiteboardTemplateCreatePreviewScope(t *testing.T) {
+	for _, tc := range []struct{ tool, scope string }{
+		{whiteboardcore.PersonalTemplateCreateTool, "personal"},
+		{whiteboardcore.TeamTemplateCreateTool, "team"},
+	} {
+		args := map[string]any{"templateWorkspaceId": "ws"}
+		result := map[string]any{"resourceType": 9, "templateScope": tc.scope, "templateWorkspaceId": "ws"}
+		if err := validateWhiteboardTemplateDryRunResult(result, args, tc.tool); err != nil {
+			t.Fatal(err)
+		}
+		delete(result, "templateScope")
+		result["scope"] = tc.scope
+		if err := validateWhiteboardTemplateDryRunResult(result, args, tc.tool); err == nil {
+			t.Fatal("create preview accepted missing templateScope")
+		}
+		result["templateScope"] = "wrong-scope"
+		if err := validateWhiteboardTemplateDryRunResult(result, args, tc.tool); err == nil {
+			t.Fatal("create preview accepted mismatched templateScope")
+		}
+	}
+}

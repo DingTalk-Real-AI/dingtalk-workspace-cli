@@ -265,17 +265,19 @@ var Query = shortcut.Shortcut{
 }
 
 // Update appends or overwrites verified OpenNodes on one stable whiteboard.
+const updateAgentWorkflow = "Agent 更新已有白板（追加、修改、删除、清空）必须先执行 whiteboard +diff，展示新增、修改、删除、媒体变化及 overwrite 影响后停止，等待用户明确确认当前差异再执行 +update。diff 失败或存在 blocker 时不得写入，也不得换原子 update 绕过；目标或 source 变化须重新 diff 和确认。确认后传入同一 sourceDigest，独立白板同时使用 diff 的 target.revision；内嵌白板须披露预览非原子。最初的更新请求、render、dry-run 和写后回读均不能替代差异确认。CLI 保留摘要可选的脚本兼容性；摘要匹配本身不证明用户确认。"
+
 var Update = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "whiteboard",
 	Command:       "+update",
 	Product:       serverWhiteboard,
 	Description:   "确认后更新文档内嵌或独立白板并精确读回",
-	Intent:        "已有合规 OpenNodes V1 内容，用户确认后更新白板；显式 partId 选择内嵌分支，未提供时默认独立分支并要求 revision/requestId",
+	Intent:        updateAgentWorkflow,
 	Risk:          shortcut.RiskHighWrite,
 	Safety:        whiteboardWriteSafety(),
 	Contract: whiteboardContract(
-		"+update", "shortcut_update", "确认后更新文档内嵌或独立白板并精确读回",
+		"+update", "shortcut_update", updateAgentWorkflow,
 		"Reviewed composite adapter selects one write tool before execution, validates OpenNodes locally, requires confirmation, verifies the terminal receipt and request-to-real ID mapping, then reads the same target back exactly without cross-type fallback.",
 		updateResultSpec(), &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
 		[]contract.ParamDecl{

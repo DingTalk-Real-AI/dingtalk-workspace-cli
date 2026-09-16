@@ -18,6 +18,45 @@ leaf Help，契约不确定时读一次 compact leaf Schema。
 读取已有白板或普通定位不需要额外 Reference。每个普通任务最多读取一份操作
 Reference；只有操作页仍缺少具体字段时，才读取一份精确协议章节。
 
+## Agent 带内容创建：先预览，再确认
+
+用户要求新建日历、课表、流程图等需要 Agent 编排 OpenNodes 的白板时，
+预渲染是默认必经步骤，不以用户是否提到“预览”为条件：
+
+1. 准备 OpenNodes source，再执行 `dws whiteboard render`。进入此阶段必读
+   [render.md](./whiteboard/render.md)；即使此前读过 compose 等操作页，也不能因
+   Reference 数量预算省略预览步骤。
+2. 展示实际 SVG、近似渲染提示、fidelity 和全部 warnings，然后停止，等待用户
+   明确确认当前版本。不能在首次创建请求的同一轮直接提交；Agent 自检、摘要匹配、
+   dry-run 或创建后内容回读都不能代替用户看过预览后的确认。
+3. 修改 source 后重新渲染、展示并再次确认。确认后使用同一 source 和
+   `sourceDigest` 调用 `create-with-content --expected-source-digest`，
+   此时才可添加 `--yes`，并按原有结果契约做写后验证。
+4. render 不可用、渲染失败或无法向用户展示预览时，报告阻塞并保留草稿，
+   不自动降级为直接创建或换写入入口绕过。
+
+此规则限定 Agent 使用 OpenNodes 带内容创建；不新增 CLI 运行时强制拦截，
+不改变 MCP 入参回参。空白创建、直接套用模板、已有白板更新仍遵循各自流程。
+
+## Agent 更新：先 diff，再确认
+
+对已有白板追加、修改、删除或清空内容，必须在提交前执行 `+diff`：
+先读取所需当前内容并准备 source，再按 [diff.md](./whiteboard/diff.md) 比较同一目标。
+即使已读 compose、replace 等操作页，也必须读取 diff 指引；文档数量预算不能省略此步骤。
+
+展示新增、修改、删除、媒体变化、warnings、blockers 和 overwrite 的实际影响，
+然后停止，等待用户明确确认当前差异。最初的“删除这些内容”等请求、render、
+dry-run、Agent 自检和写后回读都不替代差异确认。
+
+确认后只提交同一目标和 source，将 `sourceDigest` 传给
+`+update --expected-source-digest`；独立白板另传 diff 的 `target.revision`。
+目标、revision、source 或写入模式变化时重新 diff、展示和确认。
+diff 不可用、失败或存在 blocker 时停止，不换原子 update 绕过。
+内嵌预览是尽力而为，须披露预览与提交间可能漂移，不承诺原子保证。
+
+删除部分内容若需 overwrite，完整终态必须保留其余内容，并说明旧节点删除重建影响。
+此规则是 Agent 工作流要求，不新增 CLI 强制拦截、不改变 MCP 接口。
+
 ## 执行契约
 
 - 同一 profile，目标须有真实身份：独立白板使用 `nodeId`；内嵌白板使用承载文档
@@ -26,7 +65,7 @@ Reference；只有操作页仍缺少具体字段时，才读取一份精确协�
 - `--part-id` 完全未提供时默认独立白板；显式提供空值或纯空白会报错，不能借此
   切换类型。权限、网络、Feature Switch、revision 冲突等失败均不得跨接口回退。
 - Runtime 确认后执行层才添加 `--yes`；存储示例不得预置确认。
-- 写入前优先执行一次 `+diff`。独立白板把 diff 返回的 `target.revision` 传给
+- Agent 更新前必须执行 `+diff` 并等待差异确认。独立白板把 diff 返回的 `target.revision` 传给
   `+update --expected-revision`，两类白板都把 `sourceDigest` 传给
   `+update --expected-source-digest`；任一值或 source 变化都重新 diff 和确认。
 - 成功须同时满足终态 receipt、请求节点映射和同板读回；`verified=false`、partial、

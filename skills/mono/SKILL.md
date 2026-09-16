@@ -349,4 +349,6 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
   - [_common/conventions.md](./references/best_practices/_common/conventions.md) — 批量查询、多源并行采集、字段术语等通用规范
   - [_common/recipe-conventions.md](./references/best_practices/_common/recipe-conventions.md) — recipe 元规范
 
-白板创建若生成了 SVG 预览，必须先展示并停止执行，等待用户明确确认当前版本后才能创建；用户修改后重新渲染和确认。最初的创建请求不替代预览确认，不得自行添加 `--yes`。
+Agent 使用 OpenNodes 带内容创建白板时，必须先执行 `whiteboard render`，展示 SVG 和渲染提示后停止，等待用户明确确认当前版本才能创建；修改后重新渲染和确认。不得跳过预览直接创建，最初的创建请求及创建后回读不能替代预览确认。详见白板入口的创建流程；空白创建、直接套用模板和已有白板更新不由此规则扩展。
+
+Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。

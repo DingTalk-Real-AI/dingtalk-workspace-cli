@@ -294,7 +294,7 @@ func validateWhiteboardTemplateDryRunResult(result map[string]any, args map[stri
 	}
 	wantScope := whiteboardTemplateScopeForTool(tool)
 	gotScope := strings.TrimSpace(whiteboardString(result["scope"]))
-	if strings.Contains(tool, "from_") {
+	if tool == whiteboardcore.PersonalTemplateCreateTool || tool == whiteboardcore.TeamTemplateCreateTool {
 		gotScope = strings.TrimSpace(whiteboardString(result["templateScope"]))
 	}
 	if gotScope != wantScope {

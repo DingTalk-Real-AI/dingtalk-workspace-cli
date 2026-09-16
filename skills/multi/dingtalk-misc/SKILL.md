@@ -63,4 +63,6 @@ Attendance 任务直接按产品索引读取一份最匹配的 `attendance*.md`�
 - 原生 `.md` 与在线富文本 `adoc`、通用文件存储的边界见 [markdown.md](references/markdown.md)；原生 `.html`/`.htm` 文件读写见 [html.md](references/html.md)；跨组织 / profile 规则见 [profile.md](references/profile.md)。
 - PAT 行为授权不是开放平台应用权限；后者见 [dev/permission.md](references/dev/permission.md)。
 
-白板创建若生成了 SVG 预览，必须先展示并停止执行，等待用户明确确认当前版本后才能创建；用户修改后重新渲染和确认。最初的创建请求不替代预览确认，不得自行添加 `--yes`。
+Agent 使用 OpenNodes 带内容创建白板时，必须先执行 `whiteboard render`，展示 SVG 和渲染提示后停止，等待用户明确确认当前版本才能创建；修改后重新渲染和确认。不得跳过预览直接创建，最初的创建请求及创建后回读不能替代预览确认。详见白板入口的创建流程；空白创建、直接套用模板和已有白板更新不由此规则扩展。
+
+Agent 更新已有白板内容（追加、修改、删除、清空）必须先执行 `whiteboard +diff`，展示差异和风险后停止，等待用户明确确认当前差异，再用同一 sourceDigest 执行 `+update`；diff 失败或有 blocker 时不得写入。不得换原子 update 绕过，render、dry-run 和写后回读不能替代 diff。详见白板入口的更新流程。

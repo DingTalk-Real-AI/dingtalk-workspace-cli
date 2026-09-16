@@ -1,10 +1,19 @@
 # 白板写入前 Diff 预览
 
-仅在准备调用 `dws whiteboard +update`、需要向用户展示影响范围时读取本页。
+Agent 对已有白板追加、修改、删除或清空内容时必读本页，不能因用户未要求预览而跳过。
 `+diff` 是 CLI-only 只读 Shortcut：它读取一个完整页面，在本地比较 proposed
 OpenNodes source，不调用任何白板写 Tool。
 
-## 推荐闭环
+## 必经闭环
+
+准备 source 后执行 +diff，展示实际变化和全部风险提示，然后停止等待用户明确确认
+当前差异。确认后才执行 +update 并添加 --yes。最初的更新请求、render、dry-run
+及写后读回不能替代此确认；不得换原子 update 绕过。目标、revision、source 或模式
+变化须重新 diff 和确认。diff 失败或有 blocker 时停止，不提交。
+
+下面的 diff 与 update 示例分属确认前后两个阶段，不得连续自动执行。独立白板
+使用 diff 的 target.revision 和 sourceDigest；内嵌白板只绑定 sourceDigest，
+并披露非原子限制。CLI 参数仍保留脚本兼容性，这里要求的是 Agent 工作流。
 
 独立白板：
 
