@@ -92,8 +92,8 @@ func TestCrossPlatformCoverageWikiLegacyReadbackHintDoesNotReplayWrite(t *testin
 	if strings.Contains(stdout.String(), unsafeHint) || !strings.Contains(schemaContractString(info["hint"]), "禁止直接重试") || !strings.Contains(schemaContractString(info["message"]), `"returnedNodeId":"copy-legacy"`) {
 		t.Errorf("legacy hint encourages replay or loses receipt: %s", stdout.String())
 	}
-	if info["cause"] != cause.Message {
-		t.Errorf("readback diagnostic lost or includes superseded recovery advice: %#v", info["cause"])
+	if info["cause"] != nil {
+		t.Errorf("internal readback cause exposed: %#v", info["cause"])
 	}
 	var legacy *helpers.CLIError
 	if !errors.As(err, &legacy) || legacy == cause || legacy.Code != cause.Code || legacy.Operation != cause.Operation || !errors.Is(err, cause) || cause.Suggestion != unsafeHint {

@@ -429,9 +429,8 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 		}
 		info.Hint = cliErr.Suggestion
 		info.Operation = cliErr.Operation
-		if cliErr.Cause != nil {
-			info.Cause = cliErr.Cause.Error()
-		}
+		// Cause is an internal error chain, not a reviewed public diagnostic.
+		// Publish only explicitly authored message, hint and structured metadata.
 		if len(cliErr.Details) > 0 {
 			info.Details = cliErr.Details
 		}
@@ -494,9 +493,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	}
 	info.TechnicalDetail = typed.ServerDiag.TechnicalDetail
 	info.FriendlyHint, info.ActionURL = apperrors.ServerGuidance(typed.ServerDiag)
-	if typed.Cause != nil {
-		info.Cause = typed.Cause.Error()
-	}
+	// Do not reintroduce internal causes through the typed-error projection.
 	if typed.ServerDiag.ServerErrorCode != "" {
 		info.UpstreamCode = typed.ServerDiag.ServerErrorCode
 	}

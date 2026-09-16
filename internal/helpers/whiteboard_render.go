@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
@@ -34,6 +35,9 @@ func newWhiteboardRenderCommand() *cobra.Command {
 		Long: `把 OpenNodes V1 本地预渲染为确定性 SVG，供 Agent 在创建白板前展示给用户确认。
 
 	生成预览后必须向用户展示 SVG 并停止执行，等待用户明确确认当前版本才能创建。
+	此命令会写入本地 --output 文件，执行前须确认；覆盖已有文件还须显式添加 --force。
+	对本地文件写入的确认不代表用户已确认预览内容，也不授权创建远端白板。
+	不支持 --dry-run；该参数会被拒绝且不会写入文件。
 	用户要求修改时，修改 source、重新渲染并再次等待确认；最初的创建请求和 Agent 自检均不替代此确认。
 	预览不会访问网络，也不会创建或修改远端白板。--source 支持内联 JSON、@文件、
 	裸文件路径或 -（stdin）。图片、Vector、未知节点和无法安全解释的内容会显示为占位框，
@@ -43,10 +47,10 @@ func newWhiteboardRenderCommand() *cobra.Command {
 		Flags: []LeafFlag{
 			{Name: "source", Usage: "OpenNodes V1 JSON、@文件、文件路径或 -（必填）", Bind: "source", Required: true, MarkRequired: true, Trim: true, Transform: loadWhiteboardRenderSource},
 			{Name: "output", Usage: "输出 SVG 文件路径（必填）", Bind: "output", Required: true, MarkRequired: true, Trim: true},
-			{Name: "force", Usage: "允许原子替换已存在的输出文件", Kind: LeafBool, Bind: "force"},
+			{Name: "force", Usage: "允许原子替换指定输出文件，仍须确认本地写入", Kind: LeafBool, Bind: "force"},
 		},
 		Safety: contract.SafetySpec{
-			Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+			Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -59,7 +63,7 @@ func newWhiteboardRenderCommand() *cobra.Command {
 				Reason: "纯本地 OpenNodes SVG renderer，不调用 MCP、不访问外链资源",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "创建白板前预渲染 SVG；展示后必须等待用户确认当前版本，修改后重新渲染并再次确认；sourceDigest 只校验内容一致性",
+				AgentSummary: "确认本地目标文件写入后预渲染 SVG，覆盖另需 --force；展示后必须等待用户确认当前版本，修改后重新渲染并再次确认；本地写入授权和 sourceDigest 均不替代远端创建确认",
 				UseWhen:      []string{"Agent 已生成 OpenNodes，需要在 create-with-content 前向用户展示内容、结构和大致布局时"},
 				AvoidWhen:    []string{"比较已有白板与 proposed 更新使用 whiteboard +diff；读取真实白板使用 whiteboard +query；预览不代表最终像素效果"},
 				Examples:     []string{"dws whiteboard render --source @whiteboard.json --output ./preview.svg --format json"},
@@ -126,7 +130,12 @@ func readWhiteboardRenderSource(raw string) ([]byte, error) {
 	return data, nil
 }
 
-func callWhiteboardRenderResult(_ *cobra.Command, _ string, args map[string]any) (output.CommandResult, error) {
+func callWhiteboardRenderResult(cmd *cobra.Command, _ string, args map[string]any) (output.CommandResult, error) {
+	// The framework bypasses confirmation for dry-run; this local writer must
+	// reject it explicitly because it has no reviewed dry-run implementation.
+	if cmd != nil && corecmd.BoolFlag(cmd, "dry-run") {
+		return nil, &CLIError{Code: CodeInvalidParam, Message: "whiteboard render 不支持 --dry-run；未写入文件", Suggestion: "确认本地输出路径后去掉 --dry-run 执行"}
+	}
 	source, ok := args["source"].(*opennodes.Source)
 	if !ok || source == nil {
 		return nil, invalidWhiteboardRenderSource(fmt.Errorf("normalized source is unavailable"))

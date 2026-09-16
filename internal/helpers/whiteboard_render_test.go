@@ -64,7 +64,8 @@ func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *test
 	ctx, _ := outputpkg.WithResultStore(context.Background())
 	cmd.SetContext(ctx)
 	cmd.SetOut(buffer)
-	cmd.SetArgs([]string{"render", "--source", "@" + sourcePath, "--output", artifactPath})
+	cmd.PersistentFlags().Bool("yes", false, "")
+	cmd.SetArgs([]string{"render", "--source", "@" + sourcePath, "--output", artifactPath, "--yes"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *test
 		t.Fatal(err)
 	}
 	final, ok := contractfinal.RuntimeContractFinal(leaf)
-	if !ok || final.Safety == nil || final.Safety.Effect != "read" || final.Safety.Confirmation != "not_required" {
+	if !ok || final.Safety == nil || final.Safety.Effect != "write" || final.Safety.Confirmation != "user_required" {
 		t.Fatalf("render ContractFinal=%#v", final)
 	}
 	if _, emitted, err := outputpkg.EmitStoredResult(leaf); err != nil || !emitted {
@@ -103,6 +104,103 @@ func TestCrossPlatformCoverageWhiteboardRenderCommandWritesLocalArtifact(t *test
 	}
 	if !opennodes.ValidDigest(data["sourceDigest"].(string)) {
 		t.Fatalf("sourceDigest=%#v", data["sourceDigest"])
+	}
+}
+
+func TestCrossPlatformCoverageWhiteboardRenderWriteConfirmation(t *testing.T) {
+	for _, tc := range []struct {
+		name                          string
+		exists, force, yes, wantWrite bool
+	}{
+		{"new-unconfirmed", false, false, false, false},
+		{"new-force-unconfirmed", false, true, false, false},
+		{"new-confirmed", false, false, true, true},
+		{"overwrite-unconfirmed", true, true, false, false},
+		{"overwrite-without-force", true, false, true, false},
+		{"overwrite-confirmed", true, true, true, true},
+		{"dry-run-new", false, false, false, false},
+		{"dry-run-overwrite", true, true, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &whiteboardTestCaller{format: "json"}
+			buf := installWhiteboardTestCaller(t, caller)
+			dir := t.TempDir()
+			artifact := filepath.Join(dir, "preview.svg")
+			sibling := filepath.Join(dir, "keep.svg")
+			original := []byte("keep-original")
+			if err := os.WriteFile(sibling, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if tc.exists {
+				if err := os.WriteFile(artifact, original, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cmd := newWhiteboardCommand()
+			cmd.PersistentFlags().Bool("yes", false, "")
+			cmd.PersistentFlags().Bool("dry-run", false, "")
+			cmd.SetIn(strings.NewReader(""))
+			cmd.SetOut(buf)
+			cmd.SetErr(buf)
+			ctx, _ := outputpkg.WithResultStore(context.Background())
+			cmd.SetContext(ctx)
+			args := []string{"render", "--source", `{"schemaVersion":"1.0","catalogVersion":"dml-v1","nodes":[]}`, "--output", artifact}
+			if tc.force {
+				args = append(args, "--force")
+			}
+			if tc.yes {
+				args = append(args, "--yes")
+			}
+			if strings.HasPrefix(tc.name, "dry-run-") {
+				args = append(args, "--dry-run")
+			}
+			cmd.SetArgs(args)
+			err := cmd.Execute()
+			if (err == nil) != tc.wantWrite {
+				t.Fatalf("write=%v, err=%v", tc.wantWrite, err)
+			}
+			if !tc.wantWrite {
+				wantError := "需要用户确认"
+				if strings.HasPrefix(tc.name, "dry-run-") {
+					wantError = "不支持 --dry-run"
+				} else if tc.yes {
+					wantError = "输出文件已存在"
+				}
+				if !strings.Contains(err.Error(), wantError) {
+					t.Fatalf("wrong refusal: %v, want %q", err, wantError)
+				}
+			}
+			data, readErr := os.ReadFile(artifact)
+			switch {
+			case tc.wantWrite:
+				if readErr != nil || !bytes.HasPrefix(data, []byte("<svg")) {
+					t.Fatalf("missing SVG: %q, %v", data, readErr)
+				}
+			case tc.exists:
+				if readErr != nil || !bytes.Equal(data, original) {
+					t.Fatalf("unapproved overwrite: %q, %v", data, readErr)
+				}
+			default:
+				if !os.IsNotExist(readErr) {
+					t.Fatalf("unapproved file creation: %v", readErr)
+				}
+			}
+			data, err = os.ReadFile(sibling)
+			if err != nil || !bytes.Equal(data, original) {
+				t.Fatalf("sibling modified: %q, %v", data, err)
+			}
+			entries, err := os.ReadDir(dir)
+			wantEntries := 1
+			if tc.exists || tc.wantWrite {
+				wantEntries++
+			}
+			if err != nil || len(entries) != wantEntries {
+				t.Fatalf("unexpected filesystem effects: %v, %v", entries, err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatal("local rendering called MCP")
+			}
+		})
 	}
 }
 

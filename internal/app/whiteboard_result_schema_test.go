@@ -200,11 +200,14 @@ func TestCrossPlatformCoverageWhiteboardNativeRoutingAndCreateContractsDelivered
 	if got := schemaContractString(render["canonical_path"]); got != "whiteboard.render" {
 		t.Fatalf("render canonical_path=%q", got)
 	}
-	if got := schemaContractString(render["effect"]); got != "read" {
+	if got := schemaContractString(render["effect"]); got != "write" {
 		t.Fatalf("render effect=%q", got)
 	}
-	if got := schemaContractString(render["confirmation"]); got != "not_required" {
+	if got := schemaContractString(render["confirmation"]); got != "user_required" {
 		t.Fatalf("render confirmation=%q", got)
+	}
+	if got := schemaContractString(render["risk"]); got != "medium" {
+		t.Fatalf("render risk=%q", got)
 	}
 	renderResult, _ := render["result"].(map[string]any)
 	renderDataSchema, _ := renderResult["data_schema"].(map[string]any)
