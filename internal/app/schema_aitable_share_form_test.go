@@ -180,6 +180,12 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 				t.Fatal(err)
 			}
 			body := string(raw)
+			if strings.HasSuffix(path, "/SKILL.md") {
+				description := strings.Split(body, "\n")[2]
+				if !strings.Contains(description, "这是 CLI 契约发现，不是仓库代码检索") {
+					t.Fatal("Skill discovery metadata must route result reviews before source exploration")
+				}
+			}
 			for _, rule := range []string{"所有 ID 已知时", "--format json", "不得用搜索源码或 reference 代替本机契约查询", "data.succeeded[0].response", "data.failed[0].error", "get 的成功不证明 CP 同步"} {
 				if !strings.Contains(body, rule) {
 					t.Errorf("%s missing evaluated form-share rule %q", path, rule)
