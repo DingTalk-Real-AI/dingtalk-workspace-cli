@@ -195,7 +195,7 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 					t.Fatal("form-share discovery precedence must precede generic runtime navigation")
 				}
 			}
-			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "（禁止改查 Schema）", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布"} {
+			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "（禁止改查 Schema）", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布", "仅加载 Skill 或看到合成样本不满足此条件", "两种入口都必须完整保留用户指定的配置值"} {
 				if !strings.Contains(body, rule) {
 					t.Errorf("%s missing discovery/interpretation boundary %q", path, rule)
 				}

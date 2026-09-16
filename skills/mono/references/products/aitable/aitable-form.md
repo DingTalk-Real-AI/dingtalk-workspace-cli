@@ -34,7 +34,7 @@ dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-i
 
 已知 ID 与占位符必须区别处理：用户明确给出的短 ID 也按原值使用，不因其长度或看起来像示例就要求替换。所有 ID 已知时，第二行必须原样为“未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。”；只有命令中确实用了占位符时才添加对应替换说明。Shortcut 的命令行必须保留 `--format json`，固定说明中的 `help/schema` 不因本次只查 schema 而改写。
 
-以下是已知 ID 的 Shortcut 用法回答示例（标题按用户输入替换，不能省略）：
+两种入口都必须完整保留用户指定的配置值，尤其是表单名对应的 `--form-name`；不得因精简为两行而只留下 ID 和 `--enabled`。以下是已知 ID 的 Shortcut 用法回答示例（标题按用户输入替换，不能省略）：
 
 ```text
 dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id view-789 --enabled true --form-name "报名表" --format json
@@ -42,6 +42,8 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 ```
 
 ### 返回值评审专用查询（不适用于命令用法询问）
+
+作答前必须有本次实际执行的目标 compact Schema 查询结果；仅加载 Skill 或看到合成样本不满足此条件。先执行下表命令，再解释，不能直接根据 Skill 回答。
 
 仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
 
