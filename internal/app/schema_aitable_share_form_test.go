@@ -188,6 +188,17 @@ func TestCrossPlatformCoverageAITableShareFormUsageAnswerContract(t *testing.T) 
 				if !strings.Contains(description, "这是 CLI 契约发现，不是仓库代码检索") {
 					t.Fatal("Skill discovery metadata must route result reviews before source exploration")
 				}
+				if !strings.Contains(description, "原子命令用法只用 `dws aitable form share update --help`") {
+					t.Fatal("Skill metadata must distinguish atomic usage help from result schema discovery")
+				}
+				if strings.Index(body, "用法询问与返回值评审不能共用发现路径") > strings.Index(body, "<!-- DWS_RUNTIME_CONTRACT_START -->") {
+					t.Fatal("form-share discovery precedence must precede generic runtime navigation")
+				}
+			}
+			for _, rule := range []string{"用法询问与返回值评审不能共用发现路径", "（禁止改查 Schema）", "返回值评审专用查询（不适用于命令用法询问）", "不证明外部用户必定无法访问", "不把 0/1 自行翻译成未发布/已发布"} {
+				if !strings.Contains(body, rule) {
+					t.Errorf("%s missing discovery/interpretation boundary %q", path, rule)
+				}
 			}
 			for _, rule := range []string{"所有 ID 已知时", "--format json", "不得用搜索源码或 reference 代替本机契约查询", "data.succeeded[0].response", "data.failed[0].error", "get 的成功不证明 CP 同步", "原子/Shortcut 入口必须原样保留", "不能建议“通过 get 回读 cpSynced 后确认闭环”"} {
 				if !strings.Contains(body, rule) {

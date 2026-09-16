@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。表单分享用法、结果契约核对、返回值评审和故障解释（含仅解释合成样本）必须先加载本 Skill 并实际查询一次本机 DWS leaf Help/Schema；保留用户指定的原子/Shortcut 入口，不互换。这是 CLI 契约发现，不是仓库代码检索，不从源码搜索开始。Use when 用户说 表单分享/form share/+form-share-get/+form-share-update/分享结果契约/CP同步判断/ AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。表单分享用法、结果契约核对、返回值评审和故障解释（含仅解释合成样本）必须先加载本 Skill 并实际查询一次：原子命令用法只用 `dws aitable form share update --help`，Shortcut 用法查该 Shortcut Schema，返回值评审才按原入口查 compact Result Schema；保留用户指定的原子/Shortcut 入口，不互换。这是 CLI 契约发现，不是仓库代码检索，不从源码搜索开始。Use when 用户说 表单分享/form share/+form-share-get/+form-share-update/分享结果契约/CP同步判断/ AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -10,6 +10,8 @@ metadata:
 ---
 
 # 钉钉 AI 表格 Skill
+
+表单分享先按意图区分查询，专用规则优先于下方通用 Schema 导航：问原子命令写法只执行 `dws aitable form share update --help`（禁止改查 Schema）；问 Shortcut 写法只查该 Shortcut 的 compact Schema；评审已经给出的返回值才查用户指定入口的 compact Result Schema。用法询问与返回值评审不能共用发现路径。
 
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
@@ -33,7 +35,7 @@ metadata:
 
 ## 表单分享用法回答契约
 
-收到仅询问用法的请求后，第一步必须立即实际执行且仅执行下列对应命令：
+收到仅询问用法的请求后，第一步必须立即实际执行且仅执行下列对应命令；即使用户提到“help/schema”，也按入口选择，不能自行替换：
 
 - `form share update`：`dws aitable form share update --help`
 - `+form-share-update`：`dws schema --cli-path "aitable +form-share-update" --compact --format json`
@@ -59,6 +61,8 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
 
+### 返回值评审专用查询（不适用于命令用法询问）
+
 仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
 
 | 用户指定入口 | 唯一契约查询 |
@@ -71,6 +75,8 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 不得用搜索源码或 reference 代替本机契约查询。get 只诊断分享配置，不返回 `cpSynced`；不能建议“通过 get 回读 cpSynced 后确认闭环”。未验证的 CP 应继续标为未确认并交由服务端诊断，不能把 get 的成功或 UUID 非空当作恢复证明。
 
 结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。
+
+解释边界：`status` 未公布枚举含义时保留原始数值，不把 0/1 自行翻译成未发布/已发布；`cpSynced=false` 只支持“CP 终态未确认”，不证明外部用户必定无法访问。UUID/封面空值不能证明此前从未创建，短 ID 不能仅因长度被判为占位符。
 
 
 实际执行 `form share update` 或 `+form-share-update` 后，成功结果必须同时检查 `shareFormUuid`、`status`、`formCover`、`cpSynced`；只有 `cpSynced=true` 才能向用户确认分享闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。DWS 不自行调用第二个 View 更新命令补偿 CP。`formCover` 在旧服务端发布窗口内可能为空，应如实说明，不能由 DWS 拼装封面 URL。

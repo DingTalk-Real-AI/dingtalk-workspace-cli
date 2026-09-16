@@ -19,6 +19,8 @@
 
 ## 仅询问分享更新用法时
 
+用法询问与返回值评审不能共用发现路径：问原子命令写法只执行 `dws aitable form share update --help`（禁止改查 Schema）；本专用规则优先于通用 Schema 导航。
+
 收到仅询问用法的请求后，第一步必须立即实际执行且仅执行对应命令：原子入口用 `dws aitable form share update --help`；Shortcut 入口用 `dws schema --cli-path "aitable +form-share-update" --compact --format json`。Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
 
 发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。上述只读查询是唯一允许的命令。
@@ -39,6 +41,8 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
 
+### 返回值评审专用查询（不适用于命令用法询问）
+
 仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
 
 | 用户指定入口 | 唯一契约查询 |
@@ -51,6 +55,8 @@ dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id
 不得用搜索源码或 reference 代替本机契约查询。get 只诊断分享配置，不返回 `cpSynced`；不能建议“通过 get 回读 cpSynced 后确认闭环”。未验证的 CP 应继续标为未确认并交由服务端诊断，不能把 get 的成功或 UUID 非空当作恢复证明。
 
 结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。
+
+解释边界：`status` 未公布枚举含义时保留原始数值，不把 0/1 自行翻译成未发布/已发布；`cpSynced=false` 只支持“CP 终态未确认”，不证明外部用户必定无法访问。UUID/封面空值不能证明此前从未创建，短 ID 不能仅因长度被判为占位符。
 
 
 ## 建议操作顺序
