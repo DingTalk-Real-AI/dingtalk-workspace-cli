@@ -60,6 +60,12 @@ type ToolCaller interface {
 	JQ() string
 }
 
+// AccessTokenCaller is an optional capability for narrow OpenAPI operations
+// that cannot use MCP JSON-RPC, such as streaming multipart file upload.
+type AccessTokenCaller interface {
+	AccessToken(ctx context.Context) (string, error)
+}
+
 // ReadToolCaller is an optional capability for a narrowly classified read
 // lookup that must still execute while the outer command is rendering a
 // dry-run plan. Implementations must fail closed unless they can bypass the

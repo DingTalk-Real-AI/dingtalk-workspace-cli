@@ -17,9 +17,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 
-	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -29,9 +27,8 @@ import (
 // interface so that private overlays can invoke MCP tools without importing
 // internal packages.
 type toolCallerAdapter struct {
-	runner  executor.Runner
-	flags   *GlobalFlags
-	tokenMu sync.Mutex
+	runner executor.Runner
+	flags  *GlobalFlags
 }
 
 var toolCallerDryRun = func(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
@@ -111,24 +108,40 @@ func (a *toolCallerAdapter) CallReadTool(ctx context.Context, productID, toolNam
 	return convertResult(result), nil
 }
 
-// CallToolWithToken invokes a helper with an in-memory token override. It is
-// used during login before the new token has been persisted to any profile
-// slot.
+type scopedTokenRunner interface {
+	RunWithToken(context.Context, executor.Invocation, string) (executor.Result, error)
+}
+
+// CallToolWithToken invokes a helper with a request-scoped in-memory token. It
+// is used during login before the new token has been persisted to any profile
+// slot. The runner capability is explicit so this path never falls back to
+// mutating the process-wide token flags or RuntimeProfile selector.
 func (a *toolCallerAdapter) CallToolWithToken(ctx context.Context, token, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
-	if a == nil || a.flags == nil {
+	if a == nil || a.runner == nil || token == "" {
 		return nil, fmt.Errorf("ToolCaller token override is not configured")
 	}
-	a.tokenMu.Lock()
-	defer a.tokenMu.Unlock()
-	previousToken := a.flags.Token
-	previousProfile := authpkg.RuntimeProfile()
-	a.flags.Token = token
-	authpkg.SetRuntimeProfile("")
-	defer func() {
-		a.flags.Token = previousToken
-		authpkg.SetRuntimeProfile(previousProfile)
-	}()
-	return a.CallTool(ctx, productID, toolName, args)
+	runner, ok := a.runner.(scopedTokenRunner)
+	if !ok {
+		return nil, fmt.Errorf("ToolCaller runner does not support request-scoped token calls")
+	}
+	inv := executor.NewHelperInvocation("overlay."+productID+"."+toolName, productID, toolName, args)
+	result, err := runner.RunWithToken(ctx, inv, token)
+	if err != nil {
+		return nil, err
+	}
+	return convertResult(result), nil
+}
+
+// AccessToken resolves the same active-profile token used by MCP tool calls.
+func (a *toolCallerAdapter) AccessToken(ctx context.Context) (string, error) {
+	if a == nil {
+		return "", fmt.Errorf("ToolCaller token resolver is not configured")
+	}
+	explicitToken := ""
+	if a.flags != nil {
+		explicitToken = a.flags.Token
+	}
+	return resolveRuntimeAuthToken(ctx, explicitToken)
 }
 
 func (a *toolCallerAdapter) Format() string {

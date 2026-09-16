@@ -122,6 +122,15 @@ func resolveAppConfigCredentialsMode(configDir string, migrate bool) (
 	if err != nil {
 		return "", "", CredentialSourceUnknown, CredentialSourceUnknown, fmt.Errorf("load app config: %w", err)
 	}
+	return resolveAppConfigCredentialsSnapshot(configDir, cfg, migrate)
+}
+
+// 对同一份配置快照解析完整凭据，避免调用方用旧 ClientID 拼接新配置的 Secret。
+func resolveAppConfigCredentialsSnapshot(configDir string, cfg *AppConfig, migrate bool) (
+	clientID, secret string,
+	clientIDSource, secretSource CredentialSource,
+	err error,
+) {
 	if cfg == nil {
 		return "", "", CredentialSourceUnknown, CredentialSourceUnknown, ErrAppConfigMissing
 	}

@@ -23,6 +23,7 @@ package cli
 // that must not deliver a direct interface property (provenance
 // reviewed_mapping_exclusion). Edit only with an exact reviewed reason.
 var reviewedSchemaParameterMappingExclusions = map[string]string{
+	"dingtalk-tag.create_mcp --config-file":                              "Local JSON file expands into create_mcp root fields name, configString and optional MCP settings; neither configFile nor config is a direct RPC property.",
 	"aitable.field_create --ai-config":                                   "Conditional aggregate wrapper: --ai-config is only consumed when --fields is absent and --name/--type select the single-field shorthand; the CLI then builds fields[0].aiConfig, so this flag has no unconditional one-to-one RPC property.",
 	"aitable.field_create --config":                                      "Conditional aggregate wrapper: --config is only consumed when --fields is absent and --name/--type select the single-field shorthand; the CLI then builds fields[0].config (and may merge --options), so this flag has no unconditional one-to-one RPC property.",
 	"aitable.field_create --name":                                        "Conditional aggregate wrapper: --name is ignored when --fields is supplied and otherwise becomes fields[0].fieldName only together with --type; it is not an unconditional direct create_fields parameter.",

@@ -23,8 +23,10 @@ import (
 // AllowedHosts is the set of trusted DingTalk API hosts.
 // Only these hosts may receive access tokens to prevent token leakage.
 var AllowedHosts = map[string]bool{
-	"api.dingtalk.com":  true,
-	"oapi.dingtalk.com": true,
+	"api.dingtalk.com":          true,
+	"oapi.dingtalk.com":         true,
+	"api-deap.dingtalk.com":     true,
+	"pre-api-deap.dingtalk.com": true,
 }
 
 // ValidateTargetHost checks that the resolved request URL targets a trusted
@@ -53,6 +55,7 @@ func ValidateTargetHost(fullURL string) error {
 				"dws api 仅允许向以下域名发起请求:\n"+
 				"  - api.dingtalk.com  (新版 API)\n"+
 				"  - oapi.dingtalk.com (旧版 API)\n"+
+				"  - api-deap.dingtalk.com / pre-api-deap.dingtalk.com (DEAP API)\n"+
 				"请检查 URL 或 --base-url 参数是否正确。",
 			host,
 		)

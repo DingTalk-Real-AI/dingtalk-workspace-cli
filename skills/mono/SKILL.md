@@ -1,6 +1,6 @@
 ---
 name: dws
-description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
+description: 管理钉钉产品能力(Agoal目标管理/AI表格/AI搜问/日历/通讯录/群聊与机器人/数字员工/待办/审批/法务智能合同/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要查询战略解码、经营合约字段、目标规则周期、个人目标、目标模板或周月报规则的按时/迟交/未提交统计与跟催，操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建配置发布 DingTalk Tag 数字员工、挂载 Skill/MCP、查询数字员工执行状态或 trace、为 A2A 等场景登录数字员工 DWS、把已有 local_agent 数字员工接入 DSH、创建待办、提交审批、查询或创建合同台账、批量导入合同、按听记起草合同、发起合同审查、归档合同、管理合同项目/相对方/账款、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM、OA 审批、VoIP 通话邀请、待办或互动卡片回调事件、实时监听群成员加入、群成员退出、群改名和群解散、审批实例发起/抄送/终止/完成、审批任务创建/完成/转交、VoIP 通话邀请、待办创建/更新/删除，以及互动卡片回调时使用。周报/月报正文填报属于日志 Report；规则级提交统计、迟交、未提交和跟催属于 Agoal。
 cli_version: ">=1.0.61"
 metadata:
   internal: true
@@ -91,6 +91,7 @@ metadata:
 | `contract`        | 法务智能合同：台账、批量导入、听记起草、合同审查、归档、项目、相对方与账款管理 | [contract.md](./references/products/contract.md)               |
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
+| `dingtalk-tag`    | DingTalk Tag 数字员工：管理生命周期、Skill/MCP、执行状态与 trace，以及员工 Profile、普通本地 Agent 或 DSH 接入与运行管理 | [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md) |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
 | `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
@@ -122,6 +123,7 @@ metadata:
 用户提到"开发/API/调用错误 文档" → `devdoc`
 用户提到"未封装 OpenAPI/llms.txt/dws api/Raw API/API 逃生舱" → `dws api`（先查现有产品命令，再读官方 llms.txt）
 用户提到"DING/紧急消息/电话提醒" → `ding`
+用户提到"DingTalk Tag/DEAP 数字员工/创建发布数字员工/修改数字员工人设/响应模式/为 A2A 等场景安全登录数字员工 DWS/给数字员工挂 Skill 或 MCP/数字员工运行状态或 trace/落盘本地 Profile/接入 DSH" → `dingtalk-tag`，先读 [dingtalk-tag-index.md](./references/products/dingtalk-tag/dingtalk-tag-index.md)
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
 用户提到"云盘/文件存储/文件上传下载/文件夹/互联网公开/分享链接密码/公开有效期" → `drive`
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）
@@ -178,6 +180,7 @@ metadata:
 | `doc` | `block delete` | 删除文档块（不可恢复）；`--block-id` 支持逗号分隔一次删多个 |
 | `doc` | `permission update` | 修改协作者权限（降权可能影响他人访问） |
 | `ding` | `message recall` | 撤回已发 DING 消息 |
+| `dingtalk-tag` | `manage save-draft` / `manage publish` / `manage delete` / `capability skill create` / `capability mcp create` | 覆写或发布数字员工、删除数字员工、创建能力资源；以 leaf Schema 的 confirmation 为准 |
 | `oa` | `approval revoke` | 撤销自己发起的审批实例 |
 | `oa` | `approval reject` | 拒绝待审批（需加明确理由） |
 | `todo` | `task delete` | 删除待办 |
@@ -323,6 +326,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 ## 详细参考 (按需读取)
 
 - [references/products/](./references/products/) — 各产品命令详细参考（Cobra 接受的 flag 以叶子 `--help` 为准；公开基础命令与内建 shortcut 的 Agent 映射/约束/安全语义以 leaf Schema 为准）
+- [references/products/dingtalk-tag/](./references/products/dingtalk-tag/) — DingTalk Tag 数字员工生命周期、能力资源与执行查询
 - [references/intent-guide.md](./references/intent-guide.md) — 意图路由指南（易混淆场景对照）
 - [references/url-patterns.md](./references/url-patterns.md) — URL 格式规范 + alidocs URL 分流决策与类型探测流程（含钉盘 `document/edit|preview?dentryKey=` 链接）
 - [references/global-reference.md](./references/global-reference.md) — 全局标志、认证、输出格式

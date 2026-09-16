@@ -177,3 +177,23 @@ func TestCrossPlatformCoverageSuggestDescendantSubcommandsExactCanonicalAliasSor
 		t.Fatalf("blank candidate suggestions = %#v", got)
 	}
 }
+
+func TestCrossPlatformCoverageDisableSuggestionsAppliesToSiblingAndDescendantRecovery(t *testing.T) {
+	group := &cobra.Command{Use: "connect"}
+	group.AddCommand(&cobra.Command{Use: "unbind", Run: func(*cobra.Command, []string) {}})
+	nested := &cobra.Command{Use: "nested"}
+	nested.AddCommand(&cobra.Command{Use: "bind", Run: func(*cobra.Command, []string) {}})
+	group.AddCommand(nested)
+	for _, disabled := range []bool{false, true} {
+		group.DisableSuggestions = disabled
+		sibling := SuggestSubcommands(group, "bind")
+		descendant := SuggestDescendantSubcommands(group, "bind")
+		if disabled {
+			if len(sibling) != 0 || len(descendant) != 0 {
+				t.Fatalf("禁用后仍提供纠错: %v %v", sibling, descendant)
+			}
+		} else if !slices.Equal(sibling, []string{"unbind"}) || !slices.Equal(descendant, []string{"nested bind"}) {
+			t.Fatalf("默认纠错受影响: %v %v", sibling, descendant)
+		}
+	}
+}
