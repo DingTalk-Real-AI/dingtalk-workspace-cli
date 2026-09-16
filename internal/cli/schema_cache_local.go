@@ -295,18 +295,23 @@ func clearSchemaTreeIdentities(schemaTree string) {
 	if filepath.Base(schemaTree) != "schema" || filepath.Base(filepath.Dir(schemaTree)) != "dws" {
 		return
 	}
-	// Reject symlinks in every DWS-owned component before any traversal:
-	// os.Stat and filepath.WalkDir resolve intermediate links, so a base
-	// containing dws -> <outside>/dws would redirect the recursive deletion
-	// outside the selected cache base. Traversal is then bound to the
-	// validated directory object with os.Root, which cannot escape through
-	// symlinks or ... components, and only regular files are removed.
-	if !schemaTreeComponentsSafe(schemaTree) {
-		return
-	}
-	if root, err := os.OpenRoot(schemaTree); err == nil {
+	// Pin the cache base directory object before anything else: os.OpenRoot
+	// binds the opened directory itself, so a writable ancestor or DWS-owned
+	// component that is swapped after validation cannot redirect the
+	// recursive cleanup outside the selected cache base — every remaining
+	// lookup is resolved relative to that descriptor and confined by it.
+	// The lstat level checks below stay as defense in depth (they reject the
+	// static symlink case without any race); arbitrary-depth ancestor
+	// rejection is intentionally out of scope because platform-conventional
+	// symlinked ancestors (e.g. /var on macOS) are legitimate cache
+	// locations, matching the runtime's own ancestry rules.
+	base := filepath.Dir(filepath.Dir(schemaTree))
+	if root, err := os.OpenRoot(base); err == nil {
 		defer root.Close()
-		clearIdentityFilesUnderRoot(root, ".")
+		if !schemaTreeComponentsSafe(schemaTree) {
+			return
+		}
+		clearIdentityFilesUnderRoot(root, filepath.Join("dws", "schema"))
 	}
 }
 

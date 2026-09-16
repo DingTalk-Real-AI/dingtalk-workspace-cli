@@ -790,6 +790,21 @@ func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	if !strings.Contains(initFn, "Test-SharedSchemaCacheLayoutSafe") {
 		t.Fatal("Initialize-SharedSchemaCacheRoot must reject a non-directory or reparse root")
 	}
+	// The strict root DACL grants the non-elevated creator no write right, so
+	// applying it at creation time would make the dws\schema population below
+	// it fail. The root must start with the provisional creator right and be
+	// finalized (strict DACL re-applied) only after the warm-up populated it.
+	if !strings.Contains(initFn, "Set-SharedSchemaCacheAcl -Path $Path -Provisional") {
+		t.Fatal("Initialize-SharedSchemaCacheRoot must apply the provisional ACL so a fresh root stays populatable by the creating user")
+	}
+	finalizeIdx := strings.Index(buildFn, "Set-SharedSchemaCacheAcl -Path $cacheDir")
+	if finalizeIdx < 0 || !strings.Contains(buildFn, "$script:SharedSchemaRootCreatedThisRun") {
+		t.Fatal("Build-SharedSchemaCache must finalize a freshly created shared root (strict DACL) before claiming success")
+	}
+	protectTreeIdx := strings.Index(buildFn, "Protect-SharedSchemaCacheTree -Path $schemaTree")
+	if protectTreeIdx < 0 || finalizeIdx < protectTreeIdx {
+		t.Fatal("Build-SharedSchemaCache must finalize the root DACL after the tree protection pass")
+	}
 	if strings.Contains(buildFn, "New-Item -ItemType Directory -Path $sharedDir -Force") {
 		t.Fatal("Build-SharedSchemaCache must not blindly New-Item -Force the shared root")
 	}
@@ -2076,10 +2091,11 @@ build_shared_schema_cache
 	t.Run("group-writable caller-owned dws level is not advertised as shared", func(t *testing.T) {
 		root := realInstallRoot(t, ".dws-install-shared-")
 		shared := filepath.Join(root, "shared")
-		// The caller-owned dws level keeps its group-write bit: chmod a+rX only
-		// adds bits, and the reading runtime rejects any shared level with a
-		// group/other write bit (validateOwnedDirectory mode&0022 != 0). The
-		// installer must downgrade instead of claiming success.
+		// The caller-owned dws level keeps its group-write bit. A mutable
+		// pre-existing level could be swapped between validation and the
+		// pathname-based find/chmod walks, so the ownership lock now refuses
+		// the shared path entirely before any mutation instead of letting the
+		// later cross-user gates downgrade a completed warm-up.
 		if err := os.MkdirAll(filepath.Join(shared, "dws"), 0o775); err != nil {
 			t.Fatal(err)
 		}
@@ -2092,8 +2108,11 @@ build_shared_schema_cache
 		if strings.Contains(text, "Shared schema cache built") {
 			t.Fatalf("group-writable dws level must not claim shared success:\n%s", text)
 		}
-		if !strings.Contains(text, "Shared schema cache not shared") {
-			t.Fatalf("group-writable dws level missing fallback warning:\n%s", text)
+		if !strings.Contains(text, "Shared schema cache skipped: unsafe cache path") {
+			t.Fatalf("group-writable dws level missing skip warning:\n%s", text)
+		}
+		if strings.Contains(text, "Building shared schema cache") {
+			t.Fatalf("group-writable dws level must not reach warm-up:\n%s", text)
 		}
 		info, err := os.Stat(filepath.Join(shared, "dws"))
 		if err != nil {
@@ -2110,8 +2129,9 @@ build_shared_schema_cache
 		if err := os.MkdirAll(filepath.Join(shared, "dws", "schema"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// 0777 without the sticky bit is rejected by validateAncestryDirectory
-		// for every reader: group/other write bits need a sticky ancestor.
+		// 0777 without the sticky bit is a mutable root: the ownership lock
+		// refuses the shared path before any mutation rather than warming a
+		// cache whose ancestor any principal could swap mid-walk.
 		if err := os.Chmod(shared, 0o777); err != nil {
 			t.Fatal(err)
 		}
@@ -2119,8 +2139,11 @@ build_shared_schema_cache
 		if strings.Contains(text, "Shared schema cache built") {
 			t.Fatalf("world-writable non-sticky root must not claim shared success:\n%s", text)
 		}
-		if !strings.Contains(text, "Shared schema cache not shared") {
-			t.Fatalf("world-writable non-sticky root missing fallback warning:\n%s", text)
+		if !strings.Contains(text, "Shared schema cache skipped: unsafe cache path") {
+			t.Fatalf("world-writable non-sticky root missing skip warning:\n%s", text)
+		}
+		if strings.Contains(text, "Building shared schema cache") {
+			t.Fatalf("world-writable non-sticky root must not reach warm-up:\n%s", text)
 		}
 		info, err := os.Stat(shared)
 		if err != nil {

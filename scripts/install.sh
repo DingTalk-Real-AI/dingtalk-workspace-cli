@@ -1686,6 +1686,25 @@ shared_schema_layout_safe() {
   done
 }
 
+# Ownership lock for pre-existing mutated levels. find -delete, chmod, and
+# chmod -R all bind through pathnames, so a level writable by another
+# principal could in principle be swapped between validation and mutation,
+# redirecting the walk outside the verified tree. Requiring every existing
+# ancestor of the mutated tree (shared root and dws) to be owned by root or
+# the invoking user, with no group/world write bits, makes the filesystem
+# itself enforce the stability those checks assume — the swap primitive the
+# race needs no longer exists. Levels missing at gate time are created by
+# this run under umask 077 and are locked by construction; a mutable
+# pre-existing root fails closed to the per-user cache.
+shared_schema_levels_locked() {
+  _sc_invoker="$(id -u)"
+  for level do
+    [ -d "$level" ] || continue
+    [ -n "$(find "$level" -maxdepth 0 \( -uid 0 -o -uid "$_sc_invoker" \) 2>/dev/null)" ] || return 1
+    [ -z "$(find "$level" -maxdepth 0 \( -perm -0020 -o -perm -0002 \) 2>/dev/null)" ] || return 1
+  done
+}
+
 # Cleanup and permission changes only operate on regular files and directories
 # that have one link. Rejecting other objects before walking the tree prevents
 # a symlink, FIFO, or hardlink from redirecting or widening the operation.
@@ -1771,8 +1790,12 @@ build_shared_schema_cache() {
   # probe can mutate whatever it points at. Arbitrary-depth ancestor rejection
   # stays out of scope: platform-conventional symlinked ancestors (e.g. /var
   # on macOS) are legitimate locations and are excluded from the runtime's
-  # ancestry rules for the same reason.
-  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree"; then
+  # ancestry rules for the same reason. The ownership lock additionally binds
+  # every later pathname-based mutation (find -delete, chmod, chmod -R) to
+  # levels no other principal can swap: validation and mutation can no longer
+  # be separated by a replacement race.
+  if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
+    ! shared_schema_levels_locked "$shared_dir" "$dws_intermediate"; then
     say "⚠️  Shared schema cache skipped: unsafe cache path."
     return 0
   fi

@@ -337,9 +337,6 @@ func TestCrossPlatformCoverageLegacyBinaryBuildIDRejected(t *testing.T) {
 }
 
 func TestConcurrentBinaryBuildIDReadersDoNotDestroyPublishedSidecar(t *testing.T) {
-	if schemaRaceInstrumentation {
-		t.Skip("race:cli skips concurrency regression to stay inside the shard budget")
-	}
 	dir := t.TempDir()
 
 	stampA := sha256.Sum256([]byte("concurrent-stamp-A"))

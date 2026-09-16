@@ -134,9 +134,6 @@ func TestCrossPlatformCoverageSchemaSourceRegistrationClearsCache(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageSchemaMetaPublication(t *testing.T) {
-	if schemaRaceInstrumentation {
-		t.Skip("race:cli skips concurrency regression to stay inside the shard budget")
-	}
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	for i := 0; i < 20; i++ {
 		restorePackageCLISchemaDeliveryForTest()
@@ -157,9 +154,6 @@ func TestCrossPlatformCoverageSchemaMetaPublication(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSchemaCacheConcurrentPrewarmPublish(t *testing.T) {
-	if schemaRaceInstrumentation {
-		t.Skip("race:cli skips concurrency regression to stay inside the shard budget")
-	}
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	identity := coverageSchemaCacheIdentity()
 	if err := RegisterSchemaCacheOptions(SchemaCacheOptions{
@@ -185,9 +179,6 @@ func TestCrossPlatformCoverageSchemaCacheConcurrentPrewarmPublish(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageSchemaCacheAdoptGeneratedIdentityRace(t *testing.T) {
-	if schemaRaceInstrumentation {
-		t.Skip("race:cli skips concurrency regression to stay inside the shard budget")
-	}
 	t.Cleanup(func() { _ = RegisterSchemaCacheOptions(SchemaCacheOptions{}) })
 	ensureSchemaCacheOpenable(t)
 	coverageSchemaCacheHome(t)

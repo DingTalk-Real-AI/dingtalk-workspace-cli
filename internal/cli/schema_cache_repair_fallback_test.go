@@ -328,9 +328,6 @@ func TestCrossPlatformCoverageRepairFallbackSurfacesAssemblyError(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageRepairFallbackSerializesConcurrentPublishers(t *testing.T) {
-	if schemaRaceInstrumentation {
-		t.Skip("race:cli skips concurrency regression to stay inside the shard budget")
-	}
 	t.Cleanup(restorePackageCLISchemaDeliveryForTest)
 	restorePackageCLISchemaDeliveryForTest()
 

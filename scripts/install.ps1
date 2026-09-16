@@ -2196,7 +2196,14 @@ function Clear-SharedSchemaCacheIdentitySidecars {
 }
 
 function Set-SharedSchemaCacheItemAcl {
-    param([string]$Path)
+    param(
+        [string]$Path,
+        # Provisional keeps a narrowly scoped creation right for the current
+        # identity so a freshly created shared root can still be populated by
+        # this same non-elevated installer; the strict DACL (without the
+        # creator write ACE) is re-applied after the warm-up completes.
+        [switch]$Provisional
+    )
     if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
         throw "shared schema cache path missing: $Path"
     }
@@ -2232,6 +2239,21 @@ function Set-SharedSchemaCacheItemAcl {
             $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $full, $allow)))
         }
     }
+    if ($Provisional) {
+        # The creator's write right is trusted by every gate in this installer
+        # (Test-SharedSchemaCachePathTrusted includes the current identity),
+        # and it is dropped by the final strict re-apply after populate.
+        try {
+            $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+            if ($isContainer) {
+                $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($currentSid, $full, $inheritance, $propagation, $allow)))
+            } else {
+                $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($currentSid, $full, $allow)))
+            }
+        } catch {
+            throw "failed to resolve current identity for provisional ACL: $Path"
+        }
+    }
     if ($isContainer) {
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($users, $readExec, $inheritance, $propagation, $allow)))
     } else {
@@ -2247,8 +2269,11 @@ function Set-SharedSchemaCacheItemAcl {
 }
 
 function Set-SharedSchemaCacheAcl {
-    param([string]$Path)
-    Set-SharedSchemaCacheItemAcl -Path $Path
+    param(
+        [string]$Path,
+        [switch]$Provisional
+    )
+    Set-SharedSchemaCacheItemAcl -Path $Path -Provisional:$Provisional
 }
 
 function Protect-SharedSchemaCacheTree {
@@ -2312,11 +2337,17 @@ function Initialize-SharedSchemaCacheRoot {
         New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
     }
     New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop | Out-Null
-    # Harden only the dedicated root this installer just created.
-    Set-SharedSchemaCacheAcl -Path $Path
+    # Harden only the dedicated root this installer just created. The strict
+    # DACL grants no creator write right, so applying it now would make the
+    # subsequent dws\schema creation and warm-up fail as the same standard
+    # user; the provisional ACL keeps a current-identity creation right that
+    # every gate here still trusts, and Build-SharedSchemaCache re-applies
+    # the strict DACL after the tree is populated.
+    Set-SharedSchemaCacheAcl -Path $Path -Provisional
     if (-not (Test-SharedSchemaCachePathTrusted -Path $Path)) {
         throw "shared schema cache root remained untrusted after initialize: $Path"
     }
+    $script:SharedSchemaRootCreatedThisRun = $true
     return $Path
 }
 
@@ -2339,6 +2370,7 @@ function Build-SharedSchemaCache {
 
     $cacheDir = $null
     $shared = $false
+    $script:SharedSchemaRootCreatedThisRun = $false
     if ($sharedDir) {
         try {
             Initialize-SharedSchemaCacheRoot -Path $sharedDir | Out-Null
@@ -2459,11 +2491,38 @@ function Build-SharedSchemaCache {
                 Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
                 return
             }
+            if ($script:SharedSchemaRootCreatedThisRun) {
+                # Finalize the fresh root only after population: re-apply the
+                # strict DACL so the creator's provisional write right is
+                # dropped, then re-verify. A failure falls back to per-user.
+                try {
+                    Set-SharedSchemaCacheAcl -Path $cacheDir
+                } catch {
+                    Write-Say "⚠️  Shared schema cache root could not be finalized; falling back to per-user cache."
+                    Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                    return
+                }
+                if (-not (Test-SharedSchemaCachePathTrusted -Path $cacheDir)) {
+                    Write-Say "⚠️  Shared schema cache root could not be finalized; falling back to per-user cache."
+                    Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
+                    return
+                }
+            }
             Write-Say "✅ Shared schema cache built: $cacheDir"
         } else {
             Write-Say "✅ Schema cache built: $cacheDir"
         }
     } else {
+        if ($shared -and $script:SharedSchemaRootCreatedThisRun) {
+            # Populate failed on a fresh root: still drop the provisional
+            # creator write right so nothing is left mutable beyond the
+            # installer identity, Admins, and SYSTEM.
+            try {
+                Set-SharedSchemaCacheAcl -Path $cacheDir
+            } catch {
+                Write-Say "⚠️  Shared schema cache root could not be finalized after a failed warm-up."
+            }
+        }
         Write-Say "⚠️  Schema cache not written; first schema command will build a per-user cache."
     }
 }
