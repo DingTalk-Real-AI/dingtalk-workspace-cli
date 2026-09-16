@@ -14,9 +14,11 @@ import (
 )
 
 const decryptTestCiphertext = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9wcQ==||2||1||196"
+const decryptTestFailingCiphertext = "YTFhMmEzYTRhNWE2YTdhOGFhOWIwYjFiMmIzYjRiNWI2YjdiOGM4YzljOWNkZGVkZg==||2||1||196"
 
 type decryptTestCipher struct {
 	decryptByText map[string]string
+	errByText     map[string]error
 	plain         string
 }
 
@@ -29,6 +31,9 @@ func (c *decryptTestCipher) DecryptMessage(_ context.Context, _, _ string, ciphe
 		if plain, ok := c.decryptByText[string(ciphertext)]; ok {
 			return []byte(plain), nil
 		}
+	}
+	if err, ok := c.errByText[string(ciphertext)]; ok {
+		return nil, err
 	}
 	return []byte(c.plain), nil
 }
@@ -382,5 +387,166 @@ func TestMergeDecryptLedgerShouldAccumulateCountersAndKeepPartial(t *testing.T) 
 	MergeDecryptLedger(untouched, nil)
 	if untouched["decryptedCount"] != 1 || len(untouched) != 1 {
 		t.Fatalf("nil ledger mutated payload: %#v", untouched)
+	}
+}
+
+func TestDecryptChatMessageItemsShouldSkipCandidatesWithoutMessageID(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "plain"}, true))
+	rt := &decryptTestRuntime{}
+	items := []map[string]any{
+		{"content": decryptTestCiphertext},
+		{"openMessageId": nil, "content": decryptTestCiphertext},
+		{"openMessageId": "   ", "content": decryptTestCiphertext},
+	}
+
+	got := DecryptChatMessageItems(context.Background(), rt, items)
+	if got == nil {
+		t.Fatal("ledger = nil")
+	}
+	if got["decryptCandidateCount"] != 0 || got["decryptAllowedCount"] != 0 || got["decryptFailedCount"] != 0 {
+		t.Fatalf("ledger = %#v, want zero candidates", got)
+	}
+	if _, ok := got["partial"]; ok {
+		t.Fatalf("ledger has partial: %#v", got)
+	}
+	for i, item := range items {
+		if item["content"] != decryptTestCiphertext {
+			t.Fatalf("items[%d] rewritten: %#v", i, item)
+		}
+	}
+	if len(rt.reads) != 0 || len(rt.writes) != 0 {
+		t.Fatalf("MCP calls = %d reads/%d writes, want none", len(rt.reads), len(rt.writes))
+	}
+}
+
+func TestDecryptChatMessageItemsShouldNormalizeNilConversationID(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
+	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
+		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "明文"},
+	}}}}
+	item := map[string]any{"openMessageId": "m1", "content": decryptTestCiphertext}
+
+	got := DecryptChatMessageItems(context.Background(), rt, []map[string]any{item})
+	if got == nil || got["decryptedCount"] != 1 {
+		t.Fatalf("ledger = %#v, want decryptedCount 1", got)
+	}
+	wrote, ok := rt.writes[0].params["items"].([]map[string]any)
+	if !ok || len(wrote) != 1 {
+		t.Fatalf("batch items = %#v", rt.writes[0].params["items"])
+	}
+	if wrote[0]["conversationId"] != "" {
+		t.Fatalf("batch conversationId = %#v, want \"\" (nil normalized)", wrote[0]["conversationId"])
+	}
+	if item["content"] != "明文" || item["contentDecrypted"] != true {
+		t.Fatalf("item = %#v", item)
+	}
+}
+
+func TestDecryptChatMessageItemsShouldFallbackToContentKeyWhenLookupMisses(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
+	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
+		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "一"},
+		map[string]any{"messageId": "m2", "status": "success", "plaintextContent": "二"},
+	}}}}
+	// m2 carries a valid messageID but no content/text key, so it enters byID
+	// without becoming a decrypt candidate and misses the contentKeys lookup.
+	items := []map[string]any{
+		{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext},
+		{"openMessageId": "m2", "openConversationId": "cid-1"},
+	}
+
+	got := DecryptChatMessageItems(context.Background(), rt, items)
+	if got == nil || got["decryptedCount"] != 2 {
+		t.Fatalf("ledger = %#v, want decryptedCount 2", got)
+	}
+	if items[0]["content"] != "一" || items[0]["contentDecrypted"] != true {
+		t.Fatalf("candidate item = %#v", items[0])
+	}
+	if items[1]["content"] != "二" || items[1]["contentDecrypted"] != true {
+		t.Fatalf("fallback item = %#v, want rewrite on the content key", items[1])
+	}
+}
+
+func TestDecryptChatMessageItemsShouldRecordCipherFailuresFromBatchResult(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{
+		decryptByText: map[string]string{decryptTestCiphertext: "一"},
+		errByText:     map[string]error{decryptTestFailingCiphertext: context.DeadlineExceeded},
+	}, true))
+	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
+		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "一"},
+	}}}}
+	item1 := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
+	item2 := map[string]any{"openMessageId": "m2", "openConversationId": "cid-1", "content": decryptTestFailingCiphertext}
+
+	got := DecryptChatMessageItems(context.Background(), rt, []map[string]any{item1, item2})
+	if got == nil {
+		t.Fatal("ledger = nil")
+	}
+	if got["decryptedCount"] != 1 || got["decryptFailedCount"] != 1 || got["partial"] != true {
+		t.Fatalf("ledger = %#v", got)
+	}
+	failures, ok := got["decryptFailures"].([]map[string]any)
+	if !ok || len(failures) != 1 {
+		t.Fatalf("decryptFailures = %#v", got["decryptFailures"])
+	}
+	if failures[0]["messageId"] != "m2" || failures[0]["reason"] != "safechat_decrypt_failed" || failures[0]["conversationId"] != "cid-1" {
+		t.Fatalf("failure = %#v", failures[0])
+	}
+	if item2["content"] != decryptTestFailingCiphertext || item2["contentDecrypted"] == true {
+		t.Fatalf("failed item rewritten: %#v", item2)
+	}
+	if item1["content"] != "一" {
+		t.Fatalf("success item not rewritten: %#v", item1)
+	}
+}
+
+func TestDecryptChatMessageItemsShouldSkipItemsWithoutContentOrTextKey(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "plain"}, true))
+	rt := &decryptTestRuntime{}
+
+	got := DecryptChatMessageItems(context.Background(), rt, []map[string]any{
+		{"openMessageId": "m1", "openConversationId": "cid-1"},
+	})
+	if got == nil {
+		t.Fatal("ledger = nil")
+	}
+	if got["decryptCandidateCount"] != 0 || got["decryptAllowedCount"] != 0 || got["decryptFailedCount"] != 0 {
+		t.Fatalf("ledger = %#v, want zero candidates", got)
+	}
+	if _, ok := got["partial"]; ok {
+		t.Fatalf("ledger has partial: %#v", got)
+	}
+	if len(rt.reads) != 0 || len(rt.writes) != 0 {
+		t.Fatalf("MCP calls = %d reads/%d writes, want none", len(rt.reads), len(rt.writes))
+	}
+}
+
+func TestMergeDecryptLedgerShouldSkipNonIntegerCounters(t *testing.T) {
+	payload := map[string]any{"decryptedCount": 1}
+	MergeDecryptLedger(payload, map[string]any{
+		"decryptCandidateCount": "2",
+		"decryptAllowedCount":   int64(5),
+		"decryptedCount":        3,
+	})
+	if _, ok := payload["decryptCandidateCount"]; ok {
+		t.Fatalf("string counter materialized in payload: %#v", payload)
+	}
+	if _, ok := payload["decryptAllowedCount"]; ok {
+		t.Fatalf("int64 counter materialized in payload: %#v", payload)
+	}
+	if payload["decryptedCount"] != 4 {
+		t.Fatalf("decryptedCount = %v, want 4", payload["decryptedCount"])
+	}
+}
+
+// firstNonEmptyDecryptReason is only called from decryptFailure, whose second
+// argument is the non-empty "decrypt_failed" literal, so the all-blank return
+// is defensively unreachable through production inputs; call it directly here.
+func TestFirstNonEmptyDecryptReasonShouldReturnEmptyWhenAllBlank(t *testing.T) {
+	if got := firstNonEmptyDecryptReason("", "   "); got != "" {
+		t.Fatalf("firstNonEmptyDecryptReason = %q, want empty", got)
+	}
+	if got := firstNonEmptyDecryptReason("", "  x ", "y"); got != "x" {
+		t.Fatalf("firstNonEmptyDecryptReason = %q, want x", got)
 	}
 }
