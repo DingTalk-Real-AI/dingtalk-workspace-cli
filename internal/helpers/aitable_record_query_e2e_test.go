@@ -211,3 +211,81 @@ func TestCrossPlatformCoverageRecordQueryCLIPageLimitHelpE2E(t *testing.T) {
 		}
 	}
 }
+
+// 失效游标不能继续暴露为恢复点，也不能把旧页作为新一轮查询的数据。
+func TestCrossPlatformCoverageRecordQueryCLIDiscardsInvalidPagination(t *testing.T) {
+	for _, code := range []string{"INVALID_CURSOR", "CURSOR_SNAPSHOT_CHANGED", "CURSOR_SNAPSHOT_UNAVAILABLE"} {
+		for _, transportError := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/transport=%t", code, transportError), func(t *testing.T) {
+				failed := recordQueryTextStep(fmt.Sprintf(`{"status":"error","error":{"code":%q,"message":"query failed","retryable":false}}`, code))
+				if transportError {
+					failed = recordQueryE2EStep{err: fmt.Errorf("wrapped: %w", apperrors.NewAPI("query failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: code, TraceID: "trace-query"})))}
+				}
+				caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{
+					recordQueryTextStep(`{"records":[{"id":"old-row"}],"nextCursor":"stale-cursor"}`), failed,
+				}}
+				out, err := runRecordQueryCLI(t, caller, "--page-limit", "0")
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.Retryable || out != "" || len(caller.calls) != 2 {
+					t.Fatalf("unsafe recovery: out=%q err=%#v calls=%d", out, err, len(caller.calls))
+				}
+				if typed.Details["discard_previous_results"] != true || typed.ServerDiag.ServerErrorCode != code {
+					t.Fatalf("missing discard policy or code: %#v", typed)
+				}
+				incomplete, ok := typed.Details["incomplete_result"].(map[string]any)
+				if !ok || incomplete["discardedCount"] != 1 || incomplete["cursor"] != nil || incomplete["records"] != nil {
+					t.Fatalf("stale result remains resumable: %#v", incomplete)
+				}
+				if transportError && typed.ServerDiag.TraceID != "trace-query" {
+					t.Fatalf("trace was lost: %#v", typed.ServerDiag)
+				}
+			})
+		}
+	}
+}
+
+// 普通网络错误仍可保留断点，不能把所有分页错误都误判成版本切换。
+func TestCrossPlatformCoverageRecordQueryCLINetworkFailureKeepsRecoveryPoint(t *testing.T) {
+	caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{
+		recordQueryTextStep(`{"records":[{"id":"kept"}],"nextCursor":"resume"}`),
+		{err: errors.New("connection reset")},
+	}}
+	_, err := runRecordQueryCLI(t, caller, "--page-limit", "0")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || !typed.Retryable {
+		t.Fatalf("unexpected network error: %#v", err)
+	}
+	incomplete := typed.Details["incomplete_result"].(map[string]any)
+	if incomplete["cursor"] != "resume" || len(incomplete["records"].([]any)) != 1 {
+		t.Fatalf("network recovery point lost: %#v", incomplete)
+	}
+}
+
+// 普通单页入口也必须停在第一次游标失败，不受只读工具通用重试策略影响。
+func TestCrossPlatformCoverageRecordQueryCLISinglePageRejectsCursorRetry(t *testing.T) {
+	for _, transportError := range []bool{false, true} {
+		failed := recordQueryTextStep(`{"status":"error","error":{"code":"INVALID_CURSOR","message":"cursor failed","retryable":true}}`)
+		if transportError {
+			retryable := true
+			failed = recordQueryE2EStep{err: apperrors.NewAPI("query failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{
+				ServerErrorCode: "INVALID_CURSOR", ServerRetryable: &retryable,
+			}))}
+		}
+		caller := &recordQueryE2ECaller{steps: []recordQueryE2EStep{failed}}
+		out, err := runRecordQueryCLI(t, caller, "--all=false", "--cursor", "legacy")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Retryable || len(caller.calls) != 1 || out != "" {
+			t.Fatalf("single-page query retried invalid cursor: out=%q err=%#v calls=%d", out, err, len(caller.calls))
+		}
+	}
+}
+
+// 只有结构化业务码可以触发丢弃策略；用户文本包含同名字符串不构成证据。
+func TestCrossPlatformCoverageRecordQueryRecoveryOnlyClassifiesKnownCodes(t *testing.T) {
+	for _, err := range []error{nil, errors.New("INVALID_CURSOR"), &CLIError{Message: "CURSOR_SNAPSHOT_CHANGED"},
+		apperrors.NewAPI("failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PERMISSION_DENIED"}))} {
+		if got := RecordQueryRecoveryError(err); got != err {
+			t.Fatalf("unrelated error was replaced: %#v -> %#v", err, got)
+		}
+	}
+}

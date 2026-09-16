@@ -606,6 +606,19 @@ func TestCrossPlatformCoverageAitableShareFormPartialUpdateStaysTyped(t *testing
 	if err := runAitableCoverageCommand(t, withoutUpdate, "form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v"); err == nil || len(withoutUpdate.calls) != 0 {
 		t.Fatalf("missing partial update must fail before MCP call: err=%v calls=%#v", err, withoutUpdate.calls)
 	}
+
+	transportFailure := errors.New("share update transport failed")
+	failing := &aitableTestCaller{errors: []error{transportFailure}}
+	if err := runAitableCoverageCommand(t, failing,
+		"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true"); !errors.Is(err, transportFailure) {
+		t.Fatalf("share update transport error = %v, want %v", err, transportFailure)
+	}
+
+	dryRun := &aitableTestCaller{dryRun: true}
+	if err := runAitableCoverageCommand(t, dryRun,
+		"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true", "--dry-run"); err != nil || len(dryRun.calls) != 0 {
+		t.Fatalf("share update dry-run = err:%v calls:%#v", err, dryRun.calls)
+	}
 }
 
 func TestCrossPlatformCoverageAitableShareFormExplicitEmptyUpdate(t *testing.T) {

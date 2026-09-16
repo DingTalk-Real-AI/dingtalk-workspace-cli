@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/应用模式/App 页面/Widget/建表/查记录/写数据/字段/记录增删改查/记录评论/评论回复/SQL/PostgreSQL/SELECT/JOIN/跨表关联查询/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写或单元格批注（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）业务操作与 CLI 契约评审。只评审 aitable 合成 JSON 回执也必须加载本 Skill；“不要执行线上业务”不等于免除本机离线契约核对，不能按通用 JSON 经验直接作答。评审以用户原文指定的核对入口为准；背景写命令不是额外目标，Agent 自拟的 Skill 参数不得扩大范围。用户给出 aitable 命令、form share 合成回执、dry-run 或询问写入恢复方案时也必须加载本 Skill；这是本机 Help/Schema 契约核对，不是仓库源码审查，不从源码搜索开始。先加载正文确定入口与规则，不能仅凭摘要执行。适用于 Base/Table、字段与记录、评论、筛选排序、公式、SQL/PostgreSQL/JOIN、表单分享与 CP 同步、App 页面/Widget、模板、导入导出、仪表盘/图表、附件及审批等数据源同步。不做电子表格单元格操作（走 dingtalk-misc）或文字文档编辑（走 dingtalk-doc）。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -10,6 +10,24 @@ metadata:
 ---
 
 # 钉钉 AI 表格 Skill
+
+## 先区分操作、用法与契约评审
+
+用户只要求评审返回值或恢复方案时，不执行业务操作，也不按业务任务扩展到上游写入命令。发现目标以用户原始消息为准，Agent 自行摘要或传入 Skill 的参数不是新增请求，不能将“核对该对账命令”改写成“比较对账与原创建命令”。保留用户正在核对的完整原子路径或 `+` Shortcut 名，不做同义替换。背景里提到的原创建命令不是额外发现目标。
+
+只评审一个命令时，先取得一次该入口的 compact Schema，再依据本次结果回答；不要并行或顺序查询背景命令，也不要追加同义入口、完整 Schema 或 Help。未发布 `result` 时说明该结构未公开，不靠重复查询或示例推断字段。用户明确要求比较多个命令时，才分别查询各自契约。Help/Schema 是本机离线查询，“不要执行线上业务”不禁止它；用户明确禁止任何命令时则不查询，并说明契约未核对。
+
+评审中用户要求下一步只读命令时，回答先给出有当前契约依据、使用原 ID/核对键的完整命令，并说明尚未执行；紧接着给出关键判断与禁止动作，再简要解释依据。不先展开工具过程、Schema 字段表或长篇引用，不把下一步埋在分析末尾；无法确定只读入口或参数时说明缺口，不能猜测。没有索要命令时，先用简短结论回答用户的全部安全问题：是否允许重放写入、哪些结果应保留或丢弃、只读恢复有什么前提，再按需解释；不能把关键禁止动作留到分节解释或末尾总结。明确区分本机离线契约核对、用户提供的回执和仍未验证的线上状态：本机 Schema 只能证明命令契约，不能证明业务已经执行或远端状态已经核实。
+
+仅评审失效游标恢复时，读取 [record-query](references/aitable/aitable-record-query.md) 开头的“只评审失效游标恢复”段，集中说明丢弃旧结果、UNAVAILABLE 等待前提和禁止重放写入这三项边界；不转入该 Reference 后面的实际查询流程，也不从新旧结果差异推导补写许可。
+
+以下意图路由优先于下方通用 Schema 导航。表单分享的用法询问与返回值评审不能共用发现路径：
+
+| 请求意图 | 本次唯一契约查询 |
+|---|---|
+| 评审返回值、恢复方案、故障或 dry-run 样本 | 把正在核对的完整入口原样放入 `dws schema --cli-path "aitable <原入口>" --compact --format json`；保留 `+`，不改查 Help，也不切换原子/Shortcut |
+| 仅问原子 `form share update` 的写法 | 只执行 `dws aitable form share update --help`（禁止改查 Schema） |
+| 仅问 Shortcut 的写法 | 只查该 Shortcut 的 compact Schema |
 
 <!-- DWS_RUNTIME_CONTRACT_START -->
 ## 最小 DWS 执行契约
@@ -33,7 +51,7 @@ metadata:
 
 ## 表单分享用法回答契约
 
-收到仅询问用法的请求后，第一步必须立即实际执行且仅执行下列对应命令：
+收到仅询问用法的请求后，第一步必须立即实际执行且仅执行下列对应命令；即使用户提到“help/schema”，也按入口选择，不能自行替换：
 
 - `form share update`：`dws aitable form share update --help`
 - `+form-share-update`：`dws schema --cli-path "aitable +form-share-update" --compact --format json`
@@ -49,6 +67,43 @@ Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写
 dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --enabled true
 请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
+
+已知 ID 与占位符必须区别处理：用户明确给出的短 ID 也按原值使用，不因其长度或看起来像示例就要求替换。所有 ID 已知时，第二行必须原样为“未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。”；只有命令中确实用了占位符时才添加对应替换说明。Shortcut 的命令行必须保留 `--format json`，固定说明中的 `help/schema` 不因本次只查 schema 而改写。
+
+两种入口都必须完整保留用户指定的配置值，尤其是表单名对应的 `--form-name`；不得因精简为两行而只留下 ID 和 `--enabled`。以下是已知 ID 的 Shortcut 用法回答示例（标题按用户输入替换，不能省略）：
+
+```text
+dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id view-789 --enabled true --form-name "报名表" --format json
+未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
+```
+
+## 返回值评审专用查询（不适用于命令用法询问）
+
+作答前必须有本次实际执行的目标 compact Schema 查询结果；仅加载 Skill 或看到合成样本不满足此条件。先执行下表命令，再解释，不能直接根据 Skill 回答。
+
+Help/Schema 是离线契约查询，不调用线上业务，也不读写用户的表单。因此“只分析合成返回，不要执行线上业务命令”仍允许且需要下表的本机查询，不能将其误判为线上读取而跳过；只有用户明确禁止任何命令或本机查询时才不执行，并说明本机契约未核对。
+
+仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
+
+| 用户指定入口 | 唯一契约查询 |
+|---|---|
+| `form share get` | `dws schema --cli-path "aitable form share get" --compact --format json` |
+| `form share update` | `dws schema --cli-path "aitable form share update" --compact --format json` |
+| `+form-share-get` | `dws schema --cli-path "aitable +form-share-get" --compact --format json` |
+| `+form-share-update` | `dws schema --cli-path "aitable +form-share-update" --compact --format json` |
+
+不得用搜索源码或 reference 代替本机契约查询。get 只诊断分享配置，不返回 `cpSynced`；不能建议“通过 get 回读 cpSynced 后确认闭环”。未验证的 CP 应继续标为未确认并交由服务端诊断，不能把 get 的成功或 UUID 非空当作恢复证明。
+
+先选择 Schema 的实际结果分支：`data.executed=false` 的 dry-run 预览只含 `tool/arguments/executed`（Shortcut 还含 `dry_run=true`），不需要服务端状态或 `cpSynced`，`ok=true` 只表示预览成功。不要把真实执行成功分支的必填字段套到预览上。字段是否必填只读所选分支的 `required`；是否允许额外字段只读该对象的 `additionalProperties`，不能从 `arguments` 子对象推断父对象。
+
+真实执行结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。合成样本若不符合该结构，应指出不匹配，不能把 Schema 中的字段补写成样本已有事实。
+
+解释边界：`status` 未公布枚举含义时保留原始数值，不把 0/1 自行翻译成未发布/已发布；`cpSynced=false` 只支持“CP 终态未确认”，不证明外部用户必定无法访问。UUID/封面空值不能证明此前从未创建，短 ID 不能仅因长度被判为占位符。
+
+即使外层仍为 ok=true 或返回结构不符合契约，也不得为再次校验 CP 而执行或建议重发 form share update / +form-share-update（包括稍后传相同配置）；诊断不能新增写入，只保留回执并交由服务端排查。
+
+
+实际执行 `form share update` 或 `+form-share-update` 后，成功结果必须同时检查 `shareFormUuid`、`status`、`formCover`、`cpSynced`；只有 `cpSynced=true` 才能向用户确认分享闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。DWS 不自行调用第二个 View 更新命令补偿 CP。`formCover` 在旧服务端发布窗口内可能为空，应如实说明，不能由 DWS 拼装封面 URL。
 
 > 命令参考：[aitable.md](references/aitable.md)；PostgreSQL 只读查询：[aitable-psql.md](references/aitable/aitable-psql.md)；复杂命令按需加载 `references/aitable/*.md`；剧本：[06-data-analytics.md](references/06-data-analytics.md)。
 
@@ -79,6 +134,7 @@ dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-i
 | 按名称解析人员、部门或群组实体 | `dws aitable entity search --entity-type PERSON\|DEPARTMENT\|GROUP --keyword <名称>` | 返回候选和可用于筛选的稳定身份；零命中、重名、模糊命中或分页不完整时停止，不默认选择第一项 |
 | 查询原始记录、记录筛选/排序、原始记录 Top N 或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；单表直接标量、分组或去重统计改走 `record stats` / `record group-stats`，复杂服务端分析改走 psql。已获用户明确许可的非分析完整逐行明细可直接使用原子 `record query --all --page-limit <N>`，不需要也不触发 psql 降级门禁。 |
 | 新增单条或批量记录 | `dws aitable record create --base-id <ID> --table-id <ID> --records <JSON>` | 当前无 `+record-create`；写前取字段定义，写后按新 ID 回读 |
+| 按原写入 token 核对记录结果 | `dws aitable +record-write-result --base-id <B> --table-id <T> --client-token <原UUID>` | unknown 或 ID 不完整时，停止后续写入，下一步仍按原 Base/Table/token 调用本命令只读对账，不改成全表查询；applied 的 ID 集合不保证整批完整或输入顺序，未返回 ID 的记录仍未核实，不按数量差额或输入位置补写；完整 ID 集合确认后再逐 ID 核对实际值，查询失败不是可以重建的写入终态 |
 | 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON>` | 自动分片并读回；只传需修改字段 |
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
 | 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回；空评论页仍读取 `meta.pagination`，仅 `meta.pagination.endpoint_exhausted=true` 时停止，否则将 `meta.pagination.next_token` 原样传给下一次 `--cursor`；写入未知状态先 list 对账 |
@@ -132,6 +188,7 @@ dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-i
 
 ## 记录稳定约束
 
+- 记录分页报 `INVALID_CURSOR`、`CURSOR_SNAPSHOT_CHANGED` 或 `CURSOR_SNAPSHOT_UNAVAILABLE` 时，必须丢弃全部累计结果与旧 cursor，不存在可续传的新 cursor，也不能保留第一页再去重拼接。前两者核对条件后不传 `--cursor` 从第一页只读重查；UNAVAILABLE 需先等待服务修复。不得重跑含写入的整条命令。仅普通可恢复错误且实际提供有效断点时可续传，详见 [record-query](references/aitable/aitable-record-query.md)。
 - 查询、写入、筛选或排序前，先用 `field get` 获取目标字段的 `fieldId`、`type` 和 `config`；`cells` 的 key 必须使用 `fieldId`，不是字段中文名。
 - select/multipleSelect 写入传选项名称；过滤时先唯一解析 option ID。对 multipleSelect 或其他数组型字段，第二个 operand 必须是 option ID/稳定 ID 数组，不能传裸字符串。
 - 人员、部门、群组和关联记录等条件先解析为稳定的结构化 ID；零命中、多命中或类型不符时停止，不得把展示名称或原值直接透传。
@@ -158,6 +215,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 |---|---|
 | `+record-query`、upsert、bulk patch 的记录 filters/sort/date/AND/OR/比较操作符 | [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 记录历史、分享、删除恢复、空行或特殊字段值 | [record-ops](references/aitable-record-ops.md) |
+| 记录分页错误、失效游标或快照恢复 | [record-query](references/aitable/aitable-record-query.md) |
 | 记录统计、分组聚合或去重率 | [record-stats](references/aitable/aitable-record-stats.md) |
 | 记录评论查询、创建、回复、更新或删除 | [comment](references/aitable/aitable-comment.md) |
 | 查询记录的主键文档，或为记录创建主键文档 | 首次建表前读取 [primary-doc](references/aitable/aitable-primary-doc.md)；普通 Base/Table/字段/记录创建与导入不读取 |
@@ -182,7 +240,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 
 ## 错误最短路径
 
-1. 零/多候选、字段歧义或分页不完整：停止并返回证据；需要后续页时只透传真实 `nextCursor`。
+1. 零/多候选、字段歧义或分页不完整：停止并返回证据；仅有效分页会话可透传真实 `nextCursor`。失效游标先执行上方“记录稳定约束”，不能套用普通断点续传。
 2. 类型错误只复核目标字段，不删字段或丢输入；`partial_success` 从 checkpoint 续跑，未知写入先回读。
 3. 错误提供 `actions` / `available_flags` 时只按其中的 `next_command` 修正一次；`retryable=false` 或目标 ID 类型不符时停止。
 4. 数据源同步 `errorCode=4014` 表示同步运行中重复触发，可稍后重试；非数据源表触发同步前先用 `+base-get` 确认 `sync=true`。
