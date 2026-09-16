@@ -42,6 +42,10 @@ func (c *aitableTestCaller) CallTool(_ context.Context, server, tool string, arg
 		response = `{"success":true,"data":{"topicId":"topic-1","commentKey":"comment-1"}}`
 	case "query_record_ids":
 		response = `{"success":true,"data":{"recordIds":[],"nextCursor":null}}`
+	case "get_share_form_config":
+		response = `{"success":true,"data":{"baseId":"b","tableId":"t","viewId":"v","enabled":true,"status":1,"shareFormUuid":"share-1","formCover":"https://example.test/cover.png"}}`
+	case "update_share_form":
+		response = `{"success":true,"data":{"baseId":"b","tableId":"t","viewId":"v","enabled":true,"status":1,"shareFormUuid":"share-1","formCover":"https://example.test/cover.png","cpSynced":true}}`
 	}
 	if index < len(c.responses) {
 		response = c.responses[index]
