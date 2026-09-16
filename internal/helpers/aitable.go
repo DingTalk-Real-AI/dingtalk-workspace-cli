@@ -304,6 +304,7 @@ func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
 	if pageLimit == 0 {
 		effectivePageLimit = paging.UnlimitedPageLimit
 	}
+	seenRecords := map[string]bool{}
 	result := paging.FetchAll(ctx, func(ctx context.Context, cursor string) (paging.Page, error) {
 		if cursor == "" {
 			delete(requestArgs, "cursor")
@@ -319,7 +320,33 @@ func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
 		}
 		for _, content := range toolResult.Content {
 			if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
-				return parseRecordQueryPage(content.Text)
+				page, err := parseRecordQueryPage(content.Text)
+				if err != nil {
+					return paging.Page{}, err
+				}
+				for _, raw := range page.Records {
+					// parseRecordQueryPage has already validated every object.
+					record := raw.(map[string]any)
+					rawID, present := record["recordId"]
+					if !present {
+						rawID = record["id"]
+					}
+					id := ""
+					switch v := rawID.(type) {
+					case string:
+						id = v
+					case json.Number:
+						id = v.String()
+					}
+					if id == "" {
+						return paging.Page{}, fmt.Errorf("record item is missing recordId")
+					}
+					if seenRecords[id] {
+						return paging.Page{}, fmt.Errorf("record pagination repeated recordId; completeness cannot be established")
+					}
+					seenRecords[id] = true
+				}
+				return page, nil
 			}
 		}
 		return paging.Page{}, fmt.Errorf("query_records returned no non-empty text content")
@@ -3109,8 +3136,8 @@ config 结构参考：
 	fieldUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新字段",
-		Long: `更新指定字段的名称、字段配置或 AI 配置。不可变更字段类型（type 不可修改）。
-newFieldName、config、aiConfig 至少传入一项。
+		Long: `更新指定字段的名称、说明、字段配置或 AI 配置。不可变更字段类型（type 不可修改）。
+newFieldName、description、config、aiConfig 至少传入一项。
 
 注意：更新 singleSelect/multipleSelect 的 options 时，需传入完整列表（含已有选项），
 系统以新列表整体覆盖，不是追加。为避免已有单元格因 option id 变化而丢数据，
@@ -3142,6 +3169,9 @@ newFieldName、config、aiConfig 至少传入一项。
 				}
 				toolArgs["newFieldName"] = v
 			}
+			if cmd.Flags().Changed("description") {
+				toolArgs["description"], _ = cmd.Flags().GetString("description")
+			}
 			if v, _ := cmd.Flags().GetString("config"); v != "" {
 				config, err := parseAitableJSONObjectFlag("config", v, false)
 				if err != nil {
@@ -3156,10 +3186,10 @@ newFieldName、config、aiConfig 至少传入一项。
 				}
 				toolArgs["aiConfig"] = aiConfig
 			}
-			if _, ok := toolArgs["newFieldName"]; !ok {
+			if _, ok := toolArgs["newFieldName"]; !ok && !cmd.Flags().Changed("description") {
 				if _, ok := toolArgs["config"]; !ok {
 					if _, ok := toolArgs["aiConfig"]; !ok {
-						return fmt.Errorf("must specify at least one of --name, --config, --ai-config")
+						return fmt.Errorf("must specify at least one of --name, --description, --config, --ai-config")
 					}
 				}
 			}
@@ -3186,6 +3216,7 @@ newFieldName、config、aiConfig 至少传入一项。
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "name", Property: "newFieldName"},
+				{Name: "description", Property: "description", InterfaceType: "string"},
 			},
 		},
 	})
@@ -3405,9 +3436,7 @@ newFieldName、config、aiConfig 至少传入一项。
 				return err
 			}
 			tableID := mustGetFlag(cmd, "table-id")
-			if v, _ := cmd.Flags().GetString("view-id"); v != "" {
-				fmt.Fprintf(os.Stderr, "warning: --view-id is not supported by record query; records are queried by table, not by view. The --view-id flag has been ignored.\n")
-			}
+
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
 			if err != nil {
 				return err
@@ -3466,6 +3495,16 @@ newFieldName、config、aiConfig 至少传入一项。
 				toolArgs["cursor"] = v
 			}
 
+			if cmd.Flags().Changed("view-id") {
+				viewID, _ := cmd.Flags().GetString("view-id")
+				if deps.Caller.DryRun() {
+					return deps.Out.PrintJSON(map[string]any{"dry_run": true, "executed": false, "viewId": viewID, "plan": []string{"get_views: validate exact identity and compile filter/sort", "query_records: apply compiled view defaults"}, "arguments": toolArgs})
+				}
+				toolArgs, err = AITableQueryWithView(cmd.Context(), toolArgs, viewID, false)
+				if err != nil {
+					return err
+				}
+			}
 			// --all: 自动翻页，合并所有页的 records 后统一输出
 			fetchAll, _ := cmd.Flags().GetBool("all")
 			if !fetchAll {
@@ -3499,6 +3538,7 @@ newFieldName、config、aiConfig 至少传入一项。
 				// query→keyword is also in versioned bindings; keep a leaf-local
 				// ParamDecl so the mapping survives binding/hint churn.
 				{Name: "query", Property: "keyword"},
+				{Name: "view-id", Description: "先读 get_views 并转换为 query_records 筛选/排序；不透传 viewId"},
 				{Name: "record-ids", Property: "recordIds", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
 				{Name: "filters", Property: "filters", InterfaceType: "object"},
@@ -9233,6 +9273,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	fieldUpdateCmd.Flags().String("table-id", "", "Table ID（可通过 base get 获取）(必填)")
 	fieldUpdateCmd.Flags().String("field-id", "", "Field ID（可通过 table get 获取）(必填)")
 	fieldUpdateCmd.Flags().String("name", "", "更新后的字段名称，1～150 个 UTF-16 字符。不修改名称时省略")
+	fieldUpdateCmd.Flags().String("description", "", "字段说明；显式空字符串清除说明，省略保留")
 	fieldUpdateCmd.Flags().String("config", "", "更新后的字段配置 JSON，结构与 field create 的 config 完全一致。不修改配置时省略。更新 singleSelect/multipleSelect 的 options 时需传入完整列表，系统以新列表整体覆盖；已有选项应回传原 id，新增选项无需传 id")
 	fieldUpdateCmd.Flags().String("ai-config", "", "更新后的 AI 配置 JSON，不修改 AI 配置时省略（与 MCP update_field.aiConfig 对齐）")
 	fieldDeleteCmd.Flags().String("base-id", "", "Base ID（通过 base list 获取）(必填)")
@@ -9302,8 +9343,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordQueryCmd.Flags().String("cursor", "", "分页游标，首次查询不传；普通扫描满 limit 后可能出现成功空续页，records 为空不是错误，仍以本页 nextCursor 是否为空判断继续或完成；nextCursor 为空表示已取完全部记录")
 	recordQueryCmd.Flags().Bool("all", false, "自动翻页获取完整记录集；达到 --page-limit 且仍有更多页时返回非零结构化错误，不把不完整结果作为成功输出")
 	recordQueryCmd.Flags().Int("page-limit", 50, "自动翻页最大页数（仅 --all 时生效）。默认 50 页（约 5000 条）；设为 0 表示显式不限页数；超限时错误详情保留已取记录和续传 cursor")
-	recordQueryCmd.Flags().String("view-id", "", "视图 ID（record query 不支持按视图过滤，此参数会被忽略并给出提示）")
-	_ = recordQueryCmd.Flags().MarkHidden("view-id")
+	recordQueryCmd.Flags().String("view-id", "", "准确视图 ID；读取并转换其筛选/排序，显式 filters/sort 覆盖对应视图配置；与 record-ids 互斥")
 	recordIDsCmd.Flags().String("base-id", "", "Base ID（通过 base list / base search 获取）(必填)")
 	recordIDsCmd.Flags().String("table-id", "", "Table ID（通过 base get 获取）(必填)")
 	recordIDsCmd.Flags().Int("limit", 0, "单页记录 ID 数量，范围 1～100；省略时服务端默认 100")
