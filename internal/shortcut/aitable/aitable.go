@@ -2102,9 +2102,6 @@ func executeFormShareMCP(rt *shortcut.RuntimeContext, tool string, params map[st
 	if rt.DryRun() {
 		return rt.CallMCP(tool, params)
 	}
-	baseID, _ := params["baseId"].(string)
-	tableID, _ := params["tableId"].(string)
-	viewID, _ := params["viewId"].(string)
 	var (
 		envelope map[string]any
 		err      error
@@ -2118,7 +2115,7 @@ func executeFormShareMCP(rt *shortcut.RuntimeContext, tool string, params map[st
 		return err
 	}
 	if write {
-		return output.StoreResult(rt.Command().Context(), helpers.AitableFormShareUpdateResult(envelope["data"], baseID, tableID, viewID))
+		return output.StoreResult(rt.Command().Context(), helpers.AitableFormShareUpdateResult(envelope["data"], params))
 	}
 	data, ok := envelope["data"].(map[string]any)
 	if !ok || data == nil {

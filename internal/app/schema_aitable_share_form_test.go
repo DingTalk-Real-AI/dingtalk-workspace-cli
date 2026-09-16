@@ -62,8 +62,8 @@ func TestCrossPlatformCoverageAITableShareFormResultContracts(t *testing.T) {
 		{
 			paths:    []string{"aitable form share update", "aitable +form-share-update"},
 			outcomes: []any{"success", "partial_failure", "failure"},
-			required: []any{"baseId", "tableId", "viewId", "enabled", "status", "cpSynced"},
-			fields:   []string{"enabled", "status", "shareFormUuid", "formCover", "cpSynced"},
+			required: []any{"baseId", "tableId", "viewId", "enabled", "status", "cpSynced", "verified"},
+			fields:   []string{"enabled", "status", "shareFormUuid", "formCover", "cpSynced", "verified", "unverified"},
 		},
 	}
 	for _, tc := range tests {
@@ -92,9 +92,18 @@ func TestCrossPlatformCoverageAITableShareFormResultContracts(t *testing.T) {
 					if !strings.Contains(dataSchema["description"].(string), "baseId/tableId/viewId 必须逐项与本次请求完全一致") {
 						t.Fatal("success schema must bind terminal state to the requested target")
 					}
+					if !strings.Contains(dataSchema["description"].(string), "本次显式请求的 enabled/formName/formDesc 必须与响应回读值一致") {
+						t.Fatal("success schema must bind terminal state to the requested values")
+					}
+					if !strings.Contains(dataSchema["description"].(string), "unverified") {
+						t.Fatal("success schema must explain requested fields the response never echoes")
+					}
 					partial := aitableShareSchemaObject(t, variants[1], "partial")
 					if !strings.Contains(partial["description"].(string), "响应 baseId/tableId/viewId 与本次请求不一致") {
 						t.Fatal("partial schema must explain mismatched response targets")
+					}
+					if !strings.Contains(partial["description"].(string), "本次显式请求的 enabled/formName/formDesc 与响应回读值不一致") {
+						t.Fatal("partial schema must explain mismatched requested values")
 					}
 					if !strings.Contains(partial["description"].(string), "execution_started=true") {
 						t.Fatal("partial schema must explain remote execution")

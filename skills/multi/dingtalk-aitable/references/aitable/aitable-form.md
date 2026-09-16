@@ -184,5 +184,6 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 - `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
 - 新建表单首次开启分享时，复用 `form create`/`form update` 中已知的标题，通过 `--form-name` 与 `--enabled true` 同时传入；不要为取标题额外调用 `form get`。已有分享仅调整其他配置时，不覆盖原名称。
 - `form share update` 的成功结果已经来自服务端回读并完成 CP 投影校验；必须检查 `shareFormUuid/status/formCover/cpSynced`，只有 `cpSynced=true` 才能确认闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。
+- `form share update` 的成功结果还与本次请求逐项比对：响应 `baseId/tableId/viewId` 必须与请求一致，本次显式请求的 `enabled/formName/formDesc` 必须与响应回读值一致，不一致即返回 `partial_failure`。响应不回读的显式请求字段（如 `anonymousSubmit`、`authData`）列在 `data.unverified` 且 `verified=false`；这些字段只能报告“已提交但未验证”，不得声称已生效。
 - DWS 不自行调用第二个 View 更新命令补偿 CP，也不拼装封面 URL。旧服务端发布窗口内 `formCover` 可能为空，应如实说明；稍后诊断当前配置时可用 `form share get`。
 - “已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`。写超时时先查询真实状态，不原样重放 mutation。
