@@ -6838,6 +6838,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 新建表单首次开启分享且已知表单标题时，应在同一次调用中通过 --form-name 传入标题，避免分享内容缺少名称。
 成功结果来自服务端写后回读，并已校验 CP 投影；读取 shareFormUuid、status、formCover 和 cpSynced，其中 cpSynced=true 才表示分享闭环完成。
 必需字段缺失、类型异常或 cpSynced=false 时返回 partial_failure（退出码 7）；原始响应保留在 data.succeeded[0].response，该阶段仅表示收到远端回执，失败原因在 data.failed[0].error（execution_started=true）。不得自动重放写操作或当作整体成功；DWS 不自行调用第二个 View 更新命令补偿 CP。get 不返回 cpSynced，不能用 get 回读该字段或确认 CP 已恢复；只能诊断分享配置，CP 未确认时需服务端诊断。
+即使外层仍为 ok=true 或返回结构不符合契约，也不得为再次校验 CP 而执行或建议重发 form share update / +form-share-update（包括稍后传相同配置）；诊断不能新增写入，只保留回执并交由服务端排查。
 除 --base-id、--table-id 和 --view-id 外，至少显式传入一个可更新参数。`,
 		Example: `  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --form-name "活动报名"
 	  dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --form-name "活动报名" --anonymous-submit true`,

@@ -33,6 +33,9 @@ func aitableShareSchemaObject(t testing.TB, value any, label string) map[string]
 
 func assertAITableShareFinalStateFields(t testing.TB, body, label string) {
 	t.Helper()
+	if !strings.Contains(body, "诊断不能新增写入") {
+		t.Errorf("%s must not suggest repeating form share update to diagnose malformed success", label)
+	}
 	if !strings.Contains(body, "get 不返回 cpSynced") && !strings.Contains(body, "get 只诊断分享配置，不返回 `cpSynced`") {
 		t.Errorf("%s must not suggest verifying CP via get", label)
 	}
