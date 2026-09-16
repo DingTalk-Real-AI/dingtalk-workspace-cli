@@ -1753,16 +1753,6 @@ build_shared_schema_cache() {
   if [ -d "$shared_dir" ]; then
     shared_dir_preexisted=1
   fi
-  # Skip silently when we cannot write to the system location (non-root install
-  # or an unusable shared ancestry). The runtime then uses the per-user cache.
-  if ! mkdir -p "$shared_dir" 2>/dev/null; then
-    return 0
-  fi
-  if ! touch "$shared_dir/.dws-schema-cache-write-test" 2>/dev/null; then
-    return 0
-  fi
-  rm -f "$shared_dir/.dws-schema-cache-write-test"
-  say "🔧 Building shared schema cache (local identity, shared across users)..."
   # Runtime layout under any base is dws/schema/<edition-sha256>/v1. Only clear
   # sidecars inside that DWS tree — never recurse a wide custom SHARED_DIR or
   # other apps' identity.json files.
@@ -1775,10 +1765,32 @@ build_shared_schema_cache() {
   [ -d "$dws_intermediate" ] && dws_tree_preexisted=1
   schema_tree_preexisted=0
   [ -d "$schema_tree" ] && schema_tree_preexisted=1
+  # Path safety precedes every mutation: mkdir -p and a touch-based probe both
+  # follow symlinked path entries, so an existing shared_dir/dws/schema level
+  # that is a symlink must be rejected before directory creation or the write
+  # probe can mutate whatever it points at. Arbitrary-depth ancestor rejection
+  # stays out of scope: platform-conventional symlinked ancestors (e.g. /var
+  # on macOS) are legitimate locations and are excluded from the runtime's
+  # ancestry rules for the same reason.
   if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree"; then
     say "⚠️  Shared schema cache skipped: unsafe cache path."
     return 0
   fi
+  # Skip silently when we cannot write to the system location (non-root install
+  # or an unusable shared ancestry). The runtime then uses the per-user cache.
+  # The write probe uses mktemp (mkstemp: O_CREAT|O_EXCL, unpredictable name)
+  # instead of a fixed-name touch: a fixed probe name can be pre-planted as a
+  # symlink to an outside victim, and shell noclobber checks are stat-based
+  # and would still follow a symlink whose target does not exist. Nothing
+  # outside the freshly created probe file is touched.
+  if ! mkdir -p "$shared_dir" 2>/dev/null; then
+    return 0
+  fi
+  if ! _probe="$(mktemp "$shared_dir/.dws-schema-cache-write-test.XXXXXX")" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$_probe"
+  say "🔧 Building shared schema cache (local identity, shared across users)..."
   mkdir -p "$schema_tree" 2>/dev/null || true
   if ! shared_schema_layout_safe "$shared_dir" "$dws_intermediate" "$schema_tree" ||
     ! shared_schema_tree_objects_safe "$schema_tree"; then

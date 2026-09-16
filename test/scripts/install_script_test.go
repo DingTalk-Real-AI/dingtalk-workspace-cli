@@ -583,6 +583,104 @@ printf '{}' >"$dir/identity.json"
 	})
 }
 
+func TestInstallScriptSharedCachePathSafetyPrecedesMutation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell semantics are unavailable")
+	}
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptData, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.LastIndex(string(scriptData), "# ── Main")
+	if cut < 0 {
+		t.Fatal("install.sh main section not found")
+	}
+
+	run := func(t *testing.T, root, shared string) string {
+		t.Helper()
+		binDir := filepath.Join(root, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, filepath.Join(binDir, "dws-test"), []byte(`#!/bin/sh
+set -eu
+dir="${DWS_SCHEMA_CACHE_DIR:?}/dws/schema/open/v1"
+mkdir -p "$dir"
+printf x >"$dir/meta.cache"
+`), 0o755)
+		harness := string(scriptData[:cut]) + `
+detect_os() { printf '%s\n' linux; }
+detect_arch() { printf '%s\n' amd64; }
+INSTALL_DIR="` + binDir + `"
+INSTALL_NAME=dws-test
+build_shared_schema_cache
+`
+		harnessPath := filepath.Join(root, "cache-path-safety-harness.sh")
+		mustWriteFile(t, harnessPath, []byte(harness), 0o755)
+		cmd := exec.Command("sh", harnessPath)
+		cmd.Env = append(os.Environ(), "DWS_SCHEMA_CACHE_SHARED_DIR="+shared, sharedSchemaCacheOwnerEnv())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("cache path safety harness: %v\n%s", err, output)
+		}
+		return string(output)
+	}
+
+	t.Run("planted probe symlink is not followed", func(t *testing.T) {
+		root := t.TempDir()
+		shared := filepath.Join(root, "shared")
+		outside := filepath.Join(root, "outside")
+		if err := os.MkdirAll(shared, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		victim := filepath.Join(outside, "victim")
+		if err := os.Symlink(victim, filepath.Join(shared, ".dws-schema-cache-write-test")); err != nil {
+			t.Fatal(err)
+		}
+		run(t, root, shared)
+		if _, err := os.Lstat(victim); !os.IsNotExist(err) {
+			t.Fatalf("write probe followed the planted symlink and created %s: %v", victim, err)
+		}
+		if _, err := os.Lstat(filepath.Join(shared, ".dws-schema-cache-write-test")); err != nil {
+			t.Fatalf("planted probe entry was removed: %v", err)
+		}
+	})
+
+	t.Run("symlinked shared root is rejected before mutation", func(t *testing.T) {
+		root := t.TempDir()
+		outside := filepath.Join(root, "outside")
+		edition := filepath.Join(outside, "dws", "schema", "open", "v1")
+		if err := os.MkdirAll(edition, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(edition, "identity.json")
+		mustWriteFile(t, sentinel, []byte("keep"), 0o600)
+		shared := filepath.Join(root, "link")
+		if err := os.Symlink(outside, shared); err != nil {
+			t.Fatal(err)
+		}
+		out := run(t, root, shared)
+		if !strings.Contains(out, "unsafe cache path") {
+			t.Fatalf("symlinked shared root must be reported, output:\n%s", out)
+		}
+		if _, err := os.Stat(sentinel); err != nil {
+			t.Fatalf("outside identity.json was mutated through the symlinked root: %v", err)
+		}
+		got, err := os.ReadFile(sentinel)
+		if err != nil || string(got) != "keep" {
+			t.Fatalf("outside sentinel = %q, %v", got, err)
+		}
+	})
+}
+
 func TestInstallPowerShellSchemaCacheWarmupContract(t *testing.T) {
 	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.ps1"))
 	if err != nil {

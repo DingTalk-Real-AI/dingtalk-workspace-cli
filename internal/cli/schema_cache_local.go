@@ -291,22 +291,73 @@ func schemaCacheInvalidationBases() []string {
 }
 
 func clearSchemaTreeIdentities(schemaTree string) {
-	info, err := os.Stat(schemaTree)
-	if err != nil || !info.IsDir() {
-		return
-	}
 	// Require the precise .../dws/schema leaf pair before deleting anything.
 	if filepath.Base(schemaTree) != "schema" || filepath.Base(filepath.Dir(schemaTree)) != "dws" {
 		return
 	}
-	_ = filepath.WalkDir(schemaTree, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return nil
+	// Reject symlinks in every DWS-owned component before any traversal:
+	// os.Stat and filepath.WalkDir resolve intermediate links, so a base
+	// containing dws -> <outside>/dws would redirect the recursive deletion
+	// outside the selected cache base. Traversal is then bound to the
+	// validated directory object with os.Root, which cannot escape through
+	// symlinks or ... components, and only regular files are removed.
+	if !schemaTreeComponentsSafe(schemaTree) {
+		return
+	}
+	root, err := os.OpenRoot(schemaTree)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	clearIdentityFilesUnderRoot(root, ".")
+}
+
+// schemaTreeComponentsSafe lstats the DWS-owned levels only: the cache base,
+// its dws child, and the schema tree. Arbitrary-depth ancestor rejection is
+// intentionally out of scope — platform-conventional symlinked ancestors
+// (e.g. /var on macOS) are legitimate cache locations and are excluded from
+// the runtime's own ancestry rules for the same reason. A missing level
+// means there is nothing to invalidate.
+func schemaTreeComponentsSafe(schemaTree string) bool {
+	base := filepath.Dir(filepath.Dir(schemaTree))
+	for _, level := range []string{base, filepath.Join(base, "dws"), schemaTree} {
+		info, err := os.Lstat(level)
+		if err != nil {
+			return false
 		}
-		name := d.Name()
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+func clearIdentityFilesUnderRoot(root *os.Root, relative string) {
+	dir, err := root.Open(relative)
+	if err != nil {
+		return
+	}
+	defer dir.Close()
+	entries, err := dir.ReadDir(-1)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		entryPath := entry.Name()
+		if relative != "." {
+			entryPath = relative + "/" + entry.Name()
+		}
+		if entry.IsDir() {
+			clearIdentityFilesUnderRoot(root, entryPath)
+			continue
+		}
+		// Non-regular entries (symlinks, FIFOs) are never removed.
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		name := entry.Name()
 		if name == localSchemaCacheIdentityName || (strings.HasPrefix(name, "identity.") && strings.HasSuffix(name, ".json")) {
-			_ = os.Remove(path)
+			_ = root.Remove(entryPath)
 		}
-		return nil
-	})
+	}
 }

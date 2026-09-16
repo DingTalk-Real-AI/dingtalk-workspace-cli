@@ -407,3 +407,87 @@ func TestConcurrentBinaryBuildIDReadersDoNotDestroyPublishedSidecar(t *testing.T
 		t.Fatalf("final binary_build_id = %q want stamp B", record.BinaryBuildID)
 	}
 }
+
+func TestCrossPlatformCoverageInvalidateRejectsSymlinkedCacheComponents(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(root, "outside")
+	outsideEdition := filepath.Join(outside, "dws", "schema", "abcd", "v1")
+	if err := os.MkdirAll(outsideEdition, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(outsideEdition, "identity.json")
+	if err := os.WriteFile(sentinel, []byte("{\"version\":1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	testseam.Swap(t, &schemaCacheUserCacheDir, func() (string, error) { return root, nil })
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", root)
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
+	t.Setenv("ProgramData", filepath.Join(root, "ProgramData"))
+
+	// An intermediate dws component pointing outside the cache base must not
+	// redirect the recursive identity cleanup.
+	base := filepath.Join(root, "linked-base")
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "dws"), filepath.Join(base, "dws")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", base)
+	InvalidatePersistedSchemaCacheIdentities()
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("outside identity.json was deleted through the dws symlink: %v", err)
+	}
+
+	// A symlinked schema leaf must not redirect cleanup either.
+	leafBase := filepath.Join(root, "leaf-base")
+	if err := os.MkdirAll(filepath.Join(leafBase, "dws"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "dws", "schema"), filepath.Join(leafBase, "dws", "schema")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", leafBase)
+	InvalidatePersistedSchemaCacheIdentities()
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("outside identity.json was deleted through the schema symlink: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageInvalidateSkipsSymlinkedIdentityEntries(t *testing.T) {
+	root := t.TempDir()
+	edition := filepath.Join(root, "dws", "schema", "abcd", "v1")
+	if err := os.MkdirAll(edition, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(root, "outside-identity.json")
+	if err := os.WriteFile(outside, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(edition, "identity.json")); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(edition, "identity.old.json")
+	if err := os.WriteFile(legacy, []byte("drop"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	testseam.Swap(t, &schemaCacheUserCacheDir, func() (string, error) { return filepath.Join(root, "unused"), nil })
+	t.Setenv("DWS_SCHEMA_CACHE_DIR", root)
+	t.Setenv("DWS_SCHEMA_CACHE_SHARED_DIR", "")
+	t.Setenv("ProgramData", filepath.Join(root, "ProgramData"))
+
+	clearSchemaTreeIdentities(filepath.Join(root, "dws", "schema"))
+
+	if _, err := os.Stat(filepath.Join(edition, "identity.json")); err != nil {
+		t.Fatalf("symlinked identity entry was removed: %v", err)
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil || string(got) != "keep" {
+		t.Fatalf("outside target through symlinked identity entry = %q, %v", got, err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy regular identity sidecar remained: %v", err)
+	}
+}
