@@ -45,28 +45,32 @@ var MediaInsert = shortcut.Shortcut{
 		"当用户要把工作目录内的本地图片或附件作为正文 block 插入在线文档时使用；组合本地校验、上传凭证、OSS PUT 和插块，失败后保留稳定 ID，禁止改走手写 HTTP。",
 		[]string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`}), contract.DryRunPreviewPlan, false),
 	Flags: []shortcut.Flag{
+		{Name: "file-view", Type: shortcut.FlagString, Enum: []string{"preview", "summary"}, Desc: "附件展示方式；仅附件有效，图片拒绝；省略沿用原默认"},
+		{Name: "from-clipboard", Type: shortcut.FlagBool, Desc: "读取系统剪贴板PNG，与本地file及image互斥"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在的相对文件路径", Required: true},
+		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在的相对文件路径", Required: false},
 		{Name: "name", Type: shortcut.FlagString, Desc: "显示名称"},
 		{Name: "mime-type", Type: shortcut.FlagString, Desc: "MIME 类型"},
 		{Name: "index", Type: shortcut.FlagInt, Desc: "顶层插入索引"},
 		{Name: "where", Type: shortcut.FlagString, Desc: "相对参考块的位置", Enum: []string{"before", "after"}},
 		{Name: "ref-block", Type: shortcut.FlagString, Desc: "参考 block ID"},
 	},
-	Validate:    func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"}},
+	Validate:    validateDocImageInput,
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"file", "from-clipboard"}, Description: "必须且只能提供file或from-clipboard"}, {Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"}},
 	Tips:        []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
-	Execute:     func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		return withDocClipboard(rt, func() error { return helpers.RunDocMediaInsertShortcut(rt.Command()) })
+	},
 }
 
 var MediaDownload = shortcut.Shortcut{
 	Service: "doc", Command: "+media-download", Product: productDoc,
 	Description: "安全下载文档正文附件到工作目录",
-	Intent:      "当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖。",
+	Intent:      "当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖；覆盖已有文件用 +download-overwrite。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+media-download", "安全下载文档正文附件到工作目录",
-		"当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖。",
+		"当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖；覆盖已有文件用 +download-overwrite。",
 		[]string{`dws doc +media-download --node <DOC_ID> --resource-id <RESOURCE_ID> --output ./downloads/`}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
@@ -90,20 +94,32 @@ var MediaDownload = shortcut.Shortcut{
 var MediaPreview = shortcut.Shortcut{
 	Service: "doc", Command: "+media-preview", Product: productDoc,
 	Description: "下载正文媒体到受控临时目录并返回预览路径",
-	Intent:      "当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径。",
+	Intent:      "当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+media-preview", "下载正文媒体到受控临时目录并返回预览路径",
-		"当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径。",
+		"当用户要临时查看文档附件或图片内容而不指定持久保存路径时使用；下载到独立临时目录并返回 artifact 路径；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
 		[]string{`dws doc +media-preview --node <DOC_ID> --resource-id <RESOURCE_ID>`}),
 	Flags: []shortcut.Flag{
+		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "可选：持久保存到工作目录内相对路径；不传使用临时目录"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "附件 resourceId；--resource-id 必须是附件回执返回的 UUID", Required: true},
 	},
-	Validate:    func(rt *shortcut.RuntimeContext) error { return validateDocResourceID(rt.Str("resource-id")) },
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := validateDocResourceID(rt.Str("resource-id")); err != nil {
+			return err
+		}
+		if rt.Changed("output") {
+			return localio.ValidateOutput(rt.Str("output"))
+		}
+		return nil
+	},
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"resource-id"}, Description: "--resource-id 必须是附件回执返回的 UUID"}},
 	Tips:        []string{`dws doc +media-preview --node <DOC_ID> --resource-id <RESOURCE_ID>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("output") {
+			return executeMediaDownload(rt)
+		}
 		if rt.DryRun() {
 			return rt.Output(docEnvelope("doc.media_preview", map[string]any{"executed": false, "nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "output": "managed_temp_dir"}))
 		}
@@ -138,32 +154,31 @@ var ResourceUpdate = shortcut.Shortcut{
 		"当用户要设置或替换文档顶部封面图时使用；本地图片会先上传，HTTPS URL 由服务端转存。",
 		[]string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`}), contract.DryRunPreviewRequest, false),
 	Flags: []shortcut.Flag{
+		{Name: "from-clipboard", Type: shortcut.FlagBool, Desc: "读取系统剪贴板PNG，与本地file及image互斥"},
+		{Name: "position", Type: shortcut.FlagString, Default: "0.5", Desc: "封面竖直位置[0,1]，0顶部、1底部；沿用原子接口坐标"},
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "image", Type: shortcut.FlagString, Desc: "HTTPS 封面图片 URL"},
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在封面图片的相对路径"},
 	},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if rt.Str("file") == "" {
-			return nil
-		}
-		return validateWorkspaceInputPath("file", rt.Str("file"))
-	},
+	Validate: validateDocImageInput,
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"image", "file"}, Description: "--image 与 --file 必须且只能提供一个"},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"image", "file", "from-clipboard"}, Description: "image/file/from-clipboard 必须且只能提供一个"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "提供 --file 时必须是工作目录内已存在且不通过符号链接逃逸的相对路径"},
 	},
-	Tips:    []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`},
-	Execute: func(rt *shortcut.RuntimeContext) error { return helpers.RunDocResourceUpdateShortcut(rt.Command()) },
+	Tips: []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		return withDocClipboard(rt, func() error { return helpers.RunDocResourceUpdateShortcut(rt.Command()) })
+	},
 }
 
 var ResourceDownload = shortcut.Shortcut{
 	Service: "doc", Command: "+resource-download", Product: productDoc,
 	Description: "读取并安全下载当前文档封面",
-	Intent:      "当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存。",
+	Intent:      "当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+resource-download", "读取并安全下载当前文档封面",
-		"当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存。",
+		"当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存；默认拒绝覆盖，覆盖已有文件用 +download-overwrite。",
 		[]string{`dws doc +resource-download --node <DOC_ID> --output ./cover.png`}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
@@ -263,7 +278,7 @@ func executeMediaDownload(rt *shortcut.RuntimeContext) error {
 	if result.SizeBytes <= 0 {
 		return docMediaRecoveryError("doc_media_empty_download", "verify", rt.Str("node"), rt.Str("resource-id"), fmt.Errorf("下载结果为空"))
 	}
-	return rt.Output(docEnvelope("doc.media_download", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "localPath": result.RelativePath, "sizeBytes": result.SizeBytes, "verified": true}))
+	return outputDocDownload(rt, "doc.media_download", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "localPath": result.RelativePath, "sizeBytes": result.SizeBytes, "verified": true})
 }
 
 func docMediaRecoveryError(reason, stage, nodeID, resourceID string, cause error) error {
@@ -319,7 +334,7 @@ func executeResourceDownload(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	return rt.Output(docEnvelope("doc.resource_download", map[string]any{"localPath": result.RelativePath, "sizeBytes": result.SizeBytes}))
+	return outputDocDownload(rt, "doc.resource_download", map[string]any{"localPath": result.RelativePath, "sizeBytes": result.SizeBytes})
 }
 
 func downloadResolvedResource(rt *shortcut.RuntimeContext, data map[string]any, baseDir, output string) (localio.DownloadResult, error) {
@@ -337,7 +352,7 @@ func downloadResolvedResource(rt *shortcut.RuntimeContext, data map[string]any, 
 			}
 		}
 	}
-	return docDownload(rt.Command().Context(), resourceURL, localio.DownloadOptions{BaseDir: baseDir, Output: output, PreferredName: nestedStringDeep(data, "fileName", "name"), Headers: headers})
+	return docDownload(rt.Command().Context(), resourceURL, localio.DownloadOptions{BaseDir: baseDir, Output: output, PreferredName: nestedStringDeep(data, "fileName", "name"), Headers: headers, Overwrite: rt.Command().Name() == downloadOverwriteCommand})
 }
 
 func collectMediaItems(value any) []map[string]any {
@@ -407,5 +422,5 @@ func nestedStringDeep(value any, keys ...string) string {
 }
 
 func init() {
-	shortcut.Register(MediaList, MediaInsert, MediaDownload, MediaPreview, ResourceUpdate, ResourceDownload, ResourceDelete, BackgroundUpdate, BackgroundDelete)
+	registerDocShortcuts(MediaList, MediaInsert, MediaDownload, MediaPreview, ResourceUpdate, ResourceDownload, ResourceDelete, BackgroundUpdate, BackgroundDelete)
 }

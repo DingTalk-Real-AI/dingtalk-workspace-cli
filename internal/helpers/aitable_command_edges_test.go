@@ -2,16 +2,20 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -57,6 +61,12 @@ func (c *aitableCommandCoverageCaller) CallTool(_ context.Context, _, tool strin
 		response = `{"data":[{"viewId":"view","title":"Form"}]}`
 	case "query_records":
 		response = `{"data":{"records":[],"hasMore":false,"nextCursor":""}}`
+	case "query_record_ids":
+		response = `{"data":{"recordIds":[],"nextCursor":null}}`
+	case "list_comments":
+		response = `{"data":{"comments":[],"hasMore":false,"nextToken":null}}`
+	case "create_comment", "reply_comment", "update_comment", "delete_comment":
+		response = `{"data":{"topicId":"topic-1","commentKey":"comment-1"}}`
 	default:
 		response = `{"success":true,"data":{}}`
 	}
@@ -80,7 +90,220 @@ func runAitableCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.ExecuteContext(context.Background())
+	ctx, _ := output.WithResultStore(context.Background())
+	executed, err := root.ExecuteContextC(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = output.EmitStoredResult(executed)
+	return err
+}
+
+func TestCrossPlatformCoverageAitableRecordIDsProjectsUnifiedPagination(t *testing.T) {
+	payload, meta, err := normalizeAitableRecordIDsResult(map[string]any{
+		"recordIds":  []any{"record-1", "record-2"},
+		"nextCursor": "next-2",
+	}, map[string]any{"cursor": "next-1"})
+	if err != nil {
+		t.Fatalf("normalize record ids: %v", err)
+	}
+	if _, exists := payload["nextCursor"]; exists {
+		t.Fatalf("payload leaked nextCursor: %#v", payload)
+	}
+	if len(payload["recordIds"].([]any)) != 2 || meta == nil || meta.Count == nil || *meta.Count != 2 {
+		t.Fatalf("payload/meta count = %#v / %#v", payload, meta)
+	}
+	if meta.Pagination == nil || meta.Pagination.EndpointExhausted || meta.Pagination.NextToken != "next-2" || meta.Pagination.Pages != 1 || meta.Pagination.Items != 2 {
+		t.Fatalf("pagination = %#v", meta.Pagination)
+	}
+}
+
+func TestCrossPlatformCoverageAitableRecordIDsRejectsMalformedResult(t *testing.T) {
+	for name, page := range map[string]map[string]any{
+		"missing ids":    {"nextCursor": nil},
+		"invalid id":     {"recordIds": []any{""}},
+		"invalid cursor": {"recordIds": []any{}, "nextCursor": true},
+		"stalled cursor": {"recordIds": []any{}, "nextCursor": "same"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := normalizeAitableRecordIDsResult(page, map[string]any{"cursor": "same"})
+			if err == nil {
+				t.Fatalf("accepted malformed page: %#v", page)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAitableUnifiedResultBoundaryBranches(t *testing.T) {
+	caller := &aitableTestCaller{responses: []string{`[]`}}
+	installAitableDeps(t, caller)
+	if _, err := callAitableUnifiedDataContext(context.Background(), "create_comment", map[string]any{}); err == nil || !strings.Contains(err.Error(), "不是 JSON 对象") {
+		t.Fatalf("non-object envelope error = %v", err)
+	}
+
+	for name, value := range map[string]any{
+		"int": int(1), "int8": int8(1), "int16": int16(1), "int32": int32(1), "int64": int64(1),
+		"uint": uint(1), "uint8": uint8(1), "uint16": uint16(1), "uint32": uint32(1), "uint64": uint64(1),
+		"float": float64(1), "number": json.Number("1"),
+	} {
+		if !aitableJSONInteger(value) {
+			t.Errorf("aitableJSONInteger(%s=%T) = false", name, value)
+		}
+	}
+	for name, value := range map[string]any{
+		"fraction": 1.5, "nan": math.NaN(), "positive infinity": math.Inf(1),
+		"invalid number": json.Number("1.5"), "string": "1",
+	} {
+		if aitableJSONInteger(value) {
+			t.Errorf("aitableJSONInteger(%s=%v) = true", name, value)
+		}
+	}
+
+	if _, _, err := normalizeAitableRecordIDsResult(nil, nil); err == nil || !strings.Contains(err.Error(), "不是 JSON 对象") {
+		t.Fatalf("nil record-id page error = %v", err)
+	}
+	dryCaller := &aitableTestCaller{dryRun: true}
+	if err := runAitableCoverageCommand(t, dryCaller, "record", "ids", "--base-id=b", "--table-id=t"); err != nil {
+		t.Fatalf("record ids dry-run: %v", err)
+	}
+	if len(dryCaller.calls) != 0 {
+		t.Fatalf("record ids dry-run called MCP: %#v", dryCaller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageAitableDryRunEmitterDataMatchesFinalResultSchema(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "record ids", path: "aitable record ids", args: []string{"record", "ids", "--base-id=b", "--table-id=t"}},
+		{name: "comment list", path: "aitable comment list", args: []string{"comment", "list", "--base-id=b", "--table-id=t", "--record-id=r"}},
+		{name: "comment create", path: "aitable comment create", args: []string{"comment", "create", "--base-id=b", "--table-id=t", "--record-id=r", "--content=preview"}},
+		{name: "comment reply", path: "aitable comment reply", args: []string{"comment", "reply", "--base-id=b", "--table-id=t", "--record-id=r", "--topic-id=topic", "--comment-key=comment", "--content=preview"}},
+		{name: "comment update", path: "aitable comment update", args: []string{"comment", "update", "--base-id=b", "--table-id=t", "--record-id=r", "--topic-id=topic", "--comment-key=comment", "--content=preview"}},
+		{name: "comment delete", path: "aitable comment delete", args: []string{"comment", "delete", "--base-id=b", "--table-id=t", "--record-id=r", "--topic-id=topic", "--comment-key=comment"}},
+		{name: "psql list", path: "aitable psql", args: []string{"psql", "-d", "b", "-l"}},
+		{name: "psql describe", path: "aitable psql", args: []string{"psql", "-d", "b", "-t", "t"}},
+		{name: "psql query", path: "aitable psql", args: []string{"psql", "-d", "b", "-c", "SELECT 1"}},
+		{name: "entity search", path: "aitable entity search", args: []string{"entity", "search", "--entity-type=PERSON", "--keyword=preview"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &aitableTestCaller{dryRun: true}
+			out := installAitableDeps(t, caller)
+			root := newAitableCommand()
+			installExampleGlobalFlags(root)
+			root.SetOut(out)
+			root.SetErr(out)
+			root.SetArgs(append(append([]string(nil), test.args...), "--dry-run"))
+			root.SilenceErrors = true
+			root.SilenceUsage = true
+			ctx, _ := output.WithResultStore(context.Background())
+			executed, err := root.ExecuteContextC(ctx)
+			if err == nil {
+				_, _, err = output.EmitStoredResult(executed)
+			}
+			if err != nil {
+				t.Fatalf("emit dry-run result: %v\n%s", err, out.String())
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("dry-run invoked MCP: %#v", caller.calls)
+			}
+
+			var envelope map[string]any
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+				t.Fatalf("decode emitted envelope: %v\n%s", err, out.String())
+			}
+			if envelope["dry_run"] != true {
+				t.Fatalf("emitted envelope is not marked dry-run: %#v", envelope)
+			}
+			leaf := findCLIPath(root, test.path)
+			final, ok := contractfinal.RuntimeContractFinal(leaf)
+			if !ok || final.Result == nil {
+				t.Fatalf("%s has no final Result Schema", test.path)
+			}
+			var schema map[string]any
+			if err := json.Unmarshal(final.Result.DataSchema, &schema); err != nil {
+				t.Fatalf("decode final Result Schema: %v", err)
+			}
+			if !aitableTestJSONSchemaMatches(schema, envelope["data"]) {
+				t.Fatalf("emitted data does not match final Result Schema\ndata=%#v\nschema=%s", envelope["data"], final.Result.DataSchema)
+			}
+		})
+	}
+}
+
+func aitableTestJSONSchemaMatches(schema map[string]any, value any) bool {
+	if alternatives, ok := schema["oneOf"].([]any); ok {
+		matches := 0
+		for _, alternative := range alternatives {
+			if candidate, ok := alternative.(map[string]any); ok && aitableTestJSONSchemaMatches(candidate, value) {
+				matches++
+			}
+		}
+		return matches == 1
+	}
+	if constant, ok := schema["const"]; ok && !reflect.DeepEqual(constant, value) {
+		return false
+	}
+	switch schema["type"] {
+	case "object":
+		object, ok := value.(map[string]any)
+		if !ok {
+			return false
+		}
+		required, _ := schema["required"].([]any)
+		for _, raw := range required {
+			if _, exists := object[raw.(string)]; !exists {
+				return false
+			}
+		}
+		properties, _ := schema["properties"].(map[string]any)
+		for name, property := range properties {
+			if child, exists := object[name]; exists && !aitableTestJSONSchemaMatches(property.(map[string]any), child) {
+				return false
+			}
+		}
+		if schema["additionalProperties"] == false {
+			for name := range object {
+				if _, declared := properties[name]; !declared {
+					return false
+				}
+			}
+		}
+	case "array":
+		if _, ok := value.([]any); !ok {
+			return false
+		}
+	case "string":
+		if _, ok := value.(string); !ok {
+			return false
+		}
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func TestCrossPlatformCoverageAitableRecordIDsDeclaresUnifiedPagination(t *testing.T) {
+	leaf := findCLIPath(newAitableCommand(), "aitable record ids")
+	if leaf == nil {
+		t.Fatal("missing aitable record ids")
+	}
+	final, ok := contractfinal.RuntimeContractFinal(leaf)
+	if !ok || final.Result == nil || final.Pagination == nil || final.Pagination.CursorParameter != "cursor" {
+		t.Fatalf("record ids result/pagination contract = %#v", final)
+	}
+	if strings.Contains(string(final.Result.DataSchema), "nextCursor") || strings.Contains(string(final.Result.DataSchema), `"data"`) {
+		t.Fatalf("record ids data schema duplicates envelope/pagination: %s", final.Result.DataSchema)
+	}
+	if output.CommandRollout(leaf) != output.RolloutUnifiedActive {
+		t.Fatalf("record ids rollout = %q", output.CommandRollout(leaf))
+	}
 }
 
 func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T) {

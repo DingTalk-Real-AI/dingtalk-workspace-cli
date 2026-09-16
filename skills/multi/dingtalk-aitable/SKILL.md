@@ -31,6 +31,25 @@ metadata:
 - 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
+## 表单分享用法回答契约
+
+收到仅询问用法的请求后，第一步必须立即实际执行且仅执行下列对应命令：
+
+- `form share update`：`dws aitable form share update --help`
+- `+form-share-update`：`dws schema --cli-path "aitable +form-share-update" --compact --format json`
+
+Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
+
+发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。本规则优先于下方 reference 导航：命中时不读取任何 reference，不执行其他命令。
+用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。上述只读查询是唯一允许的命令。
+
+查询成功后，最终回答只能包含两行纯文本：不要 Markdown 代码围栏、标题、表格、回读命令或其他内容。第一行放用户所问入口的完整命令；已有的必填值必须原样使用，缺少的值必须保留为 `<BASE_ID>`、`<TABLE_ID>`、`<VIEW_ID>` 等明确占位符。第二行先列出需要替换的占位符（没有则省略替换说明），再给出固定的未执行说明，然后立即结束：
+
+```text
+dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --enabled true
+请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
+```
+
 > 命令参考：[aitable.md](references/aitable.md)；PostgreSQL 只读查询：[aitable-psql.md](references/aitable/aitable-psql.md)；复杂命令按需加载 `references/aitable/*.md`；剧本：[06-data-analytics.md](references/06-data-analytics.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
@@ -45,7 +64,7 @@ metadata:
 
 已由当前 AITable 调用返回且类型已确认的 ID 直接使用；名称先唯一解析为稳定 ID。用户直接提供的 `/i/nodes/` URL 或来源未验证的 nodeId 先执行 `dws drive info`；若为 `extension=dlink`，将返回的 `result.fileId` 保存为快捷方式入口 ID 并传给 `dws doc info`，再逐跳读取目标 `linkSourceInfo`，最终确认 `extension=able` 后将目标 `linkSourceInfo.nodeId` 作为 baseId。解析失败、字段缺失、ID 重复或最终类型不是 able 时停止；只有明确移动、改名或删除快捷方式入口本身时才保留最初的 `result.fileId` 并切到 Drive。零命中或多候选时也停止，不默认选第一项。
 
-PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](references/aitable/aitable-psql.md)：先用 `dws aitable psql -d <baseId> -l` 发现逻辑表，再用 `-t <tableId>` 查看列类型，最后以 `-c <SQL>` 执行只读查询；`psql` 输出 PostgreSQL 表格文本，不添加 `--format json`。
+数据分析，以及 PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询，先读 [aitable-psql.md](references/aitable/aitable-psql.md)。原始记录筛选、排序和 Top N 使用 `record query`；单表直接标量、分组或去重统计使用 `record stats` / `record group-stats`；仅同 Base JOIN、字段间算术、CASE、聚合后派生、汇总结果 Top N 或排名、窗口计算等复杂分析使用 `psql`。选用 `psql` 时固定同一 DWS 入口，先用 `dws aitable psql -d <baseId> -l` 发现逻辑表，再用 `-t <tableId>` 查看列类型，使用返回的 `Name` 执行 `LIMIT 3` 最小查询，成功后才以 `-c <SQL>` 执行正式只读查询；`psql` 输出 PostgreSQL 表格文本，不添加 `--format json`。psql 失败后只能从原始意图重新判定：完全属于单表原始记录时重发 `record query`，完全属于单表直接统计时重发 `record stats` / `record group-stats`；必须丢弃 psql 未完成结果并说明切换原因，复杂分析、结果合并和本地等价计算均禁止降级。
 
 | 用户意图 | 唯一推荐入口 | 关键边界 |
 |---|---|---|
@@ -58,11 +77,11 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 | 已有 Base 新建一张表与字段 | `dws aitable +table-bootstrap --base-id <ID> --name <表名> --fields '<JSON数组>'` | 字段使用 `fieldName/type/config`，可选 `description`；自动按 15 个字段分片并读回验证 |
 | 读取字段目录或完整配置 | `dws aitable field list --base-id <B> --table-id <T>` / `dws aitable +field-get --base-id <B> --table-id <T>` | 只需 fieldId/name/type 用 `field list`；需要 config 用 `+field-get`；不存在 `+field-list` 或 `+list-fields` |
 | 按名称解析人员、部门或群组实体 | `dws aitable entity search --entity-type PERSON\|DEPARTMENT\|GROUP --keyword <名称>` | 返回候选和可用于筛选的稳定身份；零命中、重名、模糊命中或分页不完整时停止，不默认选择第一项 |
-| 查询记录、记录筛选/排序或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；明确要求全量时改用原子 `record query --all --page-limit <N>` |
+| 查询原始记录、记录筛选/排序、原始记录 Top N 或字段投影 | `dws aitable +record-query --base-id <ID> --table-id <ID> [--record-ids <IDs>] [--field-ids <IDs>] [--filters <JSON>] [--sort <JSON>] [--query <关键词>]` | 用户要求“只返回/仅查看”指定字段时必须传对应 `--field-ids`，不能只在最终文本删列；单表直接标量、分组或去重统计改走 `record stats` / `record group-stats`，复杂服务端分析改走 psql。已获用户明确许可的非分析完整逐行明细可直接使用原子 `record query --all --page-limit <N>`，不需要也不触发 psql 降级门禁。 |
 | 新增单条或批量记录 | `dws aitable record create --base-id <ID> --table-id <ID> --records <JSON>` | 当前无 `+record-create`；写前取字段定义，写后按新 ID 回读 |
 | 更新已知 recordId | `dws aitable +record-update --base-id <ID> --table-id <ID> --records <JSON>` | 自动分片并读回；只传需修改字段 |
 | 查询一条记录的变更历史 | `dws aitable +record-history-list --base-id <ID> --table-id <ID> --record-id <ID>` | 已知 recordId 时直接执行，不探测 Help、Catalog 或全量 Schema |
-| 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回，空评论页按 hasMore/nextToken 续页，写入未知状态先 list 对账 |
+| 管理一条记录的评论 | 查询用 `dws aitable comment list --base-id <B> --table-id <T> --record-id <R>`；创建、回复、更新和删除按需使用同组 leaf | 先读 [comment](references/aitable/aitable-comment.md)；topicId/commentKey 只复用同一记录真实返回；空评论页仍读取 `meta.pagination`，仅 `meta.pagination.endpoint_exhausted=true` 时停止，否则将 `meta.pagination.next_token` 原样传给下一次 `--cursor`；写入未知状态先 list 对账 |
 | 按业务键同步或按条件批改 | 唯一键用 `dws aitable +record-upsert-by-key ...`；有界批改用 `dws aitable +record-bulk-patch ... --max-matches <N>` | upsert 仅允许 0 条创建、1 条更新；批改必须有 query/filters/record-ids 边界。普通 update/upsert 直接执行；只有历史、分享、删除恢复、空行或特殊字段值才读 [record-ops](references/aitable-record-ops.md)；明确 AND/OR、日期或比较操作符只读 [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 生成记录分享链接并发送给联系人 | `dws aitable +record-share-links --base <B> --table <T> --record-ids <IDs>` → `dws chat +dm --to <姓名> --text <完整链接文本>` | AITable 只生成链接；用户要求“发送”时还必须完成真实发送，不能停在联系人解析 |
 | 创建或复制视图 | 创建用 `dws aitable view create --base-id <B> --table-id <T> --view-type <Grid|FormDesigner|Gantt|Calendar|Kanban|Gallery> [--name <名称>]`；复制用 `dws aitable +view-duplicate --base-id <B> --table-id <T> --view-id <V> [--new-name <名称>]` | 创建和复制直接执行；需要配置时按下方“按需加载”选择一个 View Reference |
@@ -116,7 +135,7 @@ PostgreSQL/SQL/SELECT/JOIN 或跨表关联查询先读 [aitable-psql.md](referen
 - 查询、写入、筛选或排序前，先用 `field get` 获取目标字段的 `fieldId`、`type` 和 `config`；`cells` 的 key 必须使用 `fieldId`，不是字段中文名。
 - select/multipleSelect 写入传选项名称；过滤时先唯一解析 option ID。对 multipleSelect 或其他数组型字段，第二个 operand 必须是 option ID/稳定 ID 数组，不能传裸字符串。
 - 人员、部门、群组和关联记录等条件先解析为稳定的结构化 ID；零命中、多命中或类型不符时停止，不得把展示名称或原值直接透传。
-- 用户要求全量结果时，使用 `record query --all --page-limit 0` 自动翻页，禁止模型手写循环；手动分页必须透传真实 `data.nextCursor`，且查询条件不变。成功空续页 `records=[]` 且 `nextCursor` 为空是正常末页，不得报错、重试或判定漏查。
+- 已获用户明确许可的非分析完整逐行明细可直接使用 `record query --all --page-limit 0`，不需要也不触发 psql 降级门禁；不得用它替代 psql 复杂分析，或在 Agent context、Python、jq、JavaScript、电子表格等本地工具做计算。自动翻页禁止模型手写循环；手动分页必须透传真实 `data.nextCursor`，且查询条件不变。成功空续页 `records=[]` 且 `nextCursor` 为空是正常末页，不得报错、重试或判定漏查。
 - 新增或更新只使用真实返回的 ID 回读；写入效果未知时回读，不重放成功批次。
 - 全量查询检查 `hasMore`，批量写检查最终状态；分页未结束或 `partial_success` 都不得声称完整完成。
 

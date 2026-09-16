@@ -648,12 +648,9 @@ func newEventBusCommand() *cobra.Command {
 					}
 				} else {
 					var err error
-					identity, err = eventResolvePersonal(ctx, configDir, streamOpts.SourceID)
+					identity, err = eventResolvePersonal(ctx, configDir, streamOpts.SourceID, personalIdentityOptions{ClientID: clientIDOverride, TicketMode: streamOpts.Mode})
 					if err != nil {
 						return failEarly(fmt.Errorf("event _bus: %w", err))
-					}
-					if clientIDOverride != "" {
-						identity.ClientID = clientIDOverride
 					}
 					identityHash = dwsevent.IdentityHash(identity.Key())
 				}

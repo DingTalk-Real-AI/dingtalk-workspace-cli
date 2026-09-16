@@ -84,7 +84,6 @@ var Invite = shortcut.Shortcut{
 		// Resolve every participant name to a unique userId first, so an
 		// unknown/ambiguous name fails before we touch the event.
 		var userIDs []string
-		var userNames []string
 		for _, name := range strings.Split(rt.Str("with"), ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
@@ -95,7 +94,6 @@ var Invite = shortcut.Shortcut{
 				return err
 			}
 			userIDs = append(userIDs, user.userID)
-			userNames = append(userNames, user.name)
 		}
 		if len(userIDs) == 0 {
 			return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
@@ -129,31 +127,20 @@ var Invite = shortcut.Shortcut{
 		if err := calendarSmartWriteReceipt(written, "calendar/add_calendar_participant"); err != nil {
 			return err
 		}
-		participants, err := rt.CallMCPData("calendar", "get_calendar_participants", map[string]any{"eventId": eventID})
-		if err != nil {
-			return err
-		}
-		present, err := calendarSmartAttendees(participants)
-		if err != nil {
-			return err
-		}
-		currentUserID, err := calendarSmartCurrentUserID(rt, present)
-		if err != nil {
-			return err
-		}
-		if err := calendarSmartVerifyAttendees(present, userIDs, userNames, currentUserID); err != nil {
-			return err
-		}
+		// Participant readback exposes display names, not the userIds used by
+		// the write. The explicit write receipt confirms the invitation;
+		// display-name equality cannot independently verify its targets.
 		return rt.Output(map[string]any{
 			"success":      true,
 			"eventId":      eventID,
 			"invitedCount": len(userIDs),
-			"verified":     true,
+			"acknowledged": true,
+			"verified":     false,
 		})
 	},
 }
 
 func init() {
-	finalizeCalendarSmart(&Invite, "已添加并通过参会人读回验证的邀请")
+	finalizeCalendarSmart(&Invite, "参会人添加接口已明确返回成功的邀请；acknowledged=true，verified=false 表示未进行参会人身份读回验证")
 	shortcut.Register(Invite)
 }

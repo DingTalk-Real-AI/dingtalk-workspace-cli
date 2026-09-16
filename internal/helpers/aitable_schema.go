@@ -230,14 +230,13 @@ func aitableRunAIFieldResultSpec() *contract.ResultSpec {
 func aitableRecordIDsResultSpec() *contract.ResultSpec {
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-		DataSchema: json.RawMessage(`{
-  "type":"object","description":"query_record_ids 的 MCP 响应",
-  "properties":{"data":{"type":"object","description":"当前页记录 ID 与续传游标","properties":{
-    "recordIds":{"type":"array","description":"按表内顺序返回的记录 ID","items":{"type":"string"}},
-    "nextCursor":{"type":"string","description":"下一页游标；为空表示扫描完成"}
-  },"required":["recordIds"],"additionalProperties":true}},
-  "required":["data"],"additionalProperties":true
-}`),
+		DataSchema: aitableResultSchemaWithDryRun("query_record_ids 的业务结果或 dry-run 请求预览", json.RawMessage(`{
+  "type":"object","description":"query_record_ids 的当前页业务数据；续页状态位于 meta.pagination",
+  "properties":{
+    "recordIds":{"type":"array","description":"按表内顺序返回的记录 ID","items":{"type":"string"}}
+  },
+  "required":["recordIds"],"additionalProperties":true
+}`)),
 	}
 }
 

@@ -424,8 +424,14 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	var cliErr *helpers.CLIError
 	if stderrors.As(err, &cliErr) && cliErr != nil {
 		info.UpstreamCode = cliErr.Code
+		if cliErr.ServerCode != "" {
+			info.UpstreamCode = cliErr.ServerCode
+		}
 		info.Hint = cliErr.Suggestion
 		info.Operation = cliErr.Operation
+		if len(cliErr.Details) > 0 {
+			info.Details = cliErr.Details
+		}
 	}
 	var callErr *transport.CallError
 	if stderrors.As(err, &callErr) && callErr != nil {

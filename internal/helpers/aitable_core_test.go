@@ -35,6 +35,14 @@ func (c *aitableTestCaller) CallTool(_ context.Context, server, tool string, arg
 		return nil, c.errors[index]
 	}
 	response := `{"success":true}`
+	switch tool {
+	case "list_comments":
+		response = `{"success":true,"data":{"comments":[],"hasMore":false,"nextToken":null}}`
+	case "create_comment", "reply_comment", "update_comment", "delete_comment":
+		response = `{"success":true,"data":{"topicId":"topic-1","commentKey":"comment-1"}}`
+	case "query_record_ids":
+		response = `{"success":true,"data":{"recordIds":[],"nextCursor":null}}`
+	}
 	if index < len(c.responses) {
 		response = c.responses[index]
 	}

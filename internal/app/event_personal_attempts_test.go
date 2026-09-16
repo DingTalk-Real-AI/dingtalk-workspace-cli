@@ -615,7 +615,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionBatchClaimFailureMakesZeroCrea
 	identity := personal.Identity{
 		CorpID: "corp", UserID: "self", ClientID: "client", SourceID: "source",
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return identity, nil
 	}
 	personalValidateConsumeConfig = func(consume.Config) error { return nil }
@@ -706,7 +706,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionAttemptGuardBypassesNonCreateP
 	identity := personal.Identity{
 		CorpID: "corp", UserID: "self", ClientID: "client", SourceID: "source",
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return identity, nil
 	}
 	personalEnsureSubscription = ensurePersonalSubscription
@@ -819,7 +819,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionLocalValidationRunsBeforeClaim
 	identity := personal.Identity{
 		CorpID: "corp", UserID: "self", ClientID: "client", SourceID: "source",
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return identity, nil
 	}
 	wantErr := errors.New("invalid local output")
@@ -948,7 +948,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionSingleAttemptCompletionErrors(
 				SourceID:     "open",
 				LocalSubject: "subject",
 			}
-			personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+			personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 				return identity, nil
 			}
 			recording := &personalRecordingAttemptStore{completeErr: test.completeErr}
@@ -1035,7 +1035,7 @@ func TestCrossPlatformCoveragePersonalSubscriptionManyCompletionFailureCleansBat
 		SourceID:     "open",
 		LocalSubject: "subject",
 	}
-	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+	personalResolveEventIdentity = func(context.Context, string, string, ...personalIdentityOptions) (personal.Identity, error) {
 		return identity, nil
 	}
 	recording := &personalRecordingAttemptStore{

@@ -1003,12 +1003,34 @@ func TestDeliveryCatalogAitableParamDeclsMatchMergeBaseContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{"all", "max-records", "export-output", "view-id"} {
+		if _, exists := schemaMap(shortcutLeaf["parameters"])[name]; !exists {
+			t.Fatalf("record-query capability --%s is missing from delivered Schema", name)
+		}
+	}
 	shortcutRecordIDs := schemaMap(shortcutLeaf["parameters"])["record-ids"]
 	if shortcutRecordIDs["required"] != false {
 		t.Fatalf("aitable +record-query --record-ids required = %#v, want false", shortcutRecordIDs["required"])
 	}
 	if shortcutRecordIDs["type"] != "array" {
 		t.Fatalf("aitable +record-query --record-ids type = %#v, want array (shortcut StringSlice)", shortcutRecordIDs["type"])
+	}
+	shortcutAvoidWhen, ok := shortcutLeaf["avoid_when"].([]string)
+	if !ok {
+		t.Fatalf("aitable +record-query avoid_when = %#v, want []string", shortcutLeaf["avoid_when"])
+	}
+	avoidText := strings.Join(shortcutAvoidWhen, "\n")
+	for _, required := range []string{
+		"数据量超过 10000 行时，本入口不会截断冒充完整",
+		"只需要标量或分组统计时使用 +data-query 或 record stats/group-stats",
+		"需要 CSV/Excel 原生文件格式时使用 aitable export data；本入口只输出 NDJSON",
+	} {
+		if !strings.Contains(avoidText, required) {
+			t.Fatalf("aitable +record-query final avoid_when = %q, missing %q", avoidText, required)
+		}
+	}
+	if strings.Contains(avoidText, "需要全部、完整、汇总、统计、导出或逐条处理全表数据") {
+		t.Fatalf("aitable +record-query final avoid_when routes summary, statistics, or export to record query --all: %q", avoidText)
 	}
 
 	for _, path := range []string{
