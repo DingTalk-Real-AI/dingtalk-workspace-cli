@@ -499,13 +499,15 @@ func waitFromProto(in *schemacachepb.WaitSpec) *contract.WaitSpec {
 	}
 	out := &contract.WaitSpec{
 		Mode: in.GetMode(), PollCommand: in.GetPollCommand(), StatusQuery: in.GetStatusQuery(),
-		Terminal:      make(map[string]contract.ResultOutcome, len(in.GetTerminal().GetItems())),
 		PendingValues: in.GetPendingValues(), EventKey: in.GetEventKey(),
 		MatchField: in.GetMatchField(), ResourceQuery: in.GetResourceQuery(),
 		DefaultTimeoutSecs: int(in.GetDefaultTimeoutSecs()),
 	}
-	for _, entry := range in.GetTerminal().GetItems() {
-		out.Terminal[entry.GetStatus()] = resultOutcomeFromProto(entry.GetOutcome())
+	if in.GetTerminal() != nil {
+		out.Terminal = make(map[string]contract.ResultOutcome, len(in.GetTerminal().GetItems()))
+		for _, entry := range in.GetTerminal().GetItems() {
+			out.Terminal[entry.GetStatus()] = resultOutcomeFromProto(entry.GetOutcome())
+		}
 	}
 	return out
 }

@@ -437,6 +437,12 @@ func allFieldsRegistry() SchemaRegistry {
 		},
 		Positionals: []contract.RuntimeSchemaPositional{{Name: "position", Type: "string", Description: "Position", Required: false, Variadic: true, Index: 0}},
 		DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: true},
+		Wait: &contract.WaitSpec{
+			Mode: contract.WaitModePoll, PollCommand: "sample get", StatusQuery: "data.status",
+			Terminal:           map[string]contract.ResultOutcome{"done": contract.ResultOutcomeSuccess, "failed": contract.ResultOutcomeFailure},
+			PendingValues:      []string{"processing"},
+			DefaultTimeoutSecs: 90,
+		},
 		Result: &contract.ResultSpec{
 			Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 			DataSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string","description":"ID"}}}`), SensitivePaths: []string{"credential.secret"},
