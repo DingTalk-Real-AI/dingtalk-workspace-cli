@@ -1,0 +1,6 @@
+Source: 9975d12cba81d448324349443163c2cc8d6917dd + working tree (2026-09-17T09:56:46+08:00)
+$ DWS_PACKAGE_VERSION=0.0.0-test go test -v -count=1 ./test/unit -run '^TestSkillDocsDoNotRecommendRetiredCommands$'
+=== RUN   TestSkillDocsDoNotRecommendRetiredCommands
+--- PASS: TestSkillDocsDoNotRecommendRetiredCommands (0.07s)
+PASS
+ok  	github.com/DingTalk-Real-AI/dingtalk-workspace-cli/test/unit	0.511s
