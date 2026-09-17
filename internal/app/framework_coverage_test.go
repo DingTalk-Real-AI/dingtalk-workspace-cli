@@ -42,7 +42,7 @@ func TestCrossPlatformCoverageFrameworkErrorProjectionPreservesRecoveryMetadata(
 	if info.Type != "api" || info.Subtype != "upstream_failed" || info.HTTPStatus != 503 || info.RPCCode != 92 || info.RequestID != "call-trace" || info.TraceID != "typed-trace" {
 		t.Fatalf("projection=%+v", info)
 	}
-	if info.UpstreamCode != "SERVER_CODE" || info.Operation != "publish" || info.NextRetryAt == "" || info.Cause == "" || info.RPCData == nil || info.ExecutionStarted == nil || !*info.ExecutionStarted {
+	if info.UpstreamCode != "SERVER_CODE" || info.Operation != "publish" || info.NextRetryAt == "" || info.Cause != "" || info.RPCData == nil || info.ExecutionStarted == nil || !*info.ExecutionStarted {
 		t.Fatalf("recovery metadata=%+v", info)
 	}
 

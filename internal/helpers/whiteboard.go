@@ -16,6 +16,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	whiteboardcore "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/whiteboard/opennodes"
 )
 
 const (
@@ -52,8 +53,8 @@ func newWhiteboardCommand() *cobra.Command {
 			},
 		},
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "创建或导出独立白板，或按 partId 是否提供查询和更新独立/文档内嵌白板",
-			UseWhen:      []string{"用户要读取或写入白板/画布中的 OpenNodes，或使用 OpenNodes 初始内容创建独立白板，或将独立白板导出到本地时；没有文档内嵌证据时默认独立白板"},
+			AgentSummary: "创建或导出独立白板，查询、SVG 预渲染、写前 diff 预览和更新独立/文档内嵌白板，以及管理个人/团队白板模板",
+			UseWhen:      []string{"用户要读取、预渲染、预览变更或写入白板/画布中的 OpenNodes，使用 OpenNodes 初始内容创建独立白板，将独立白板导出到本地，或保存、查询和套用个人/团队白板模板时；没有文档内嵌证据时默认独立白板"},
 			AvoidWhen:    []string{"普通文档正文和块使用 doc；只创建或删除文档内白板卡片使用 doc whiteboard insert / doc block delete"},
 		},
 	})
@@ -143,6 +144,8 @@ func newWhiteboardCommand() *cobra.Command {
 		Use:   "update",
 		Short: "追加或整页重建白板内容",
 		Long: `从 JSON 文件读取 OpenNodes V1 更新请求并更新已有白板。
+
+Agent 对已有白板追加、修改、删除或清空内容，必须先执行 whiteboard +diff，展示差异后停止并等待用户确认，再通过 +update 携带 sourceDigest 提交；不得使用本原子入口绕过预览确认。diff 失败或有 blocker 时不得写入。此工作流要求不改变本命令的脚本兼容性。
 
 	更新模式由文件顶层的 overwrite 字段决定。overwrite=false 表示追加，
 	overwrite=true 表示整页重建。显式提供非空 --part-id 时更新文档内嵌白板；未提供时
@@ -248,7 +251,7 @@ func newWhiteboardCommand() *cobra.Command {
 	})
 
 	exportCmd, exportGetCmd := newStandaloneWhiteboardExportCommands()
-	root.AddCommand(queryCmd, updateCmd, newStandaloneWhiteboardCreateCommand(), exportCmd, exportGetCmd)
+	root.AddCommand(queryCmd, updateCmd, newStandaloneWhiteboardCreateCommand(), newWhiteboardRenderCommand(), newWhiteboardTemplateCommand(), exportCmd, exportGetCmd)
 	return root
 }
 
@@ -359,6 +362,10 @@ func validateWhiteboardNodes(raw json.RawMessage) (string, int, error) {
 }
 
 func invalidWhiteboardSourceJSON(err error) error {
+	var textError *opennodes.TextRunValidationError
+	if errors.As(err, &textError) {
+		return &CLIError{Code: CodeInvalidJSON, Message: textError.Error(), Cause: err}
+	}
 	return &CLIError{
 		Code:       CodeInvalidJSON,
 		Message:    "白板更新文件不是合法的 OpenNodes V1 JSON",
@@ -394,6 +401,10 @@ func callWhiteboardToolResult(cmd *cobra.Command, toolName string, args map[stri
 	if err != nil {
 		return nil, err
 	}
+	return decodeWhiteboardToolResult(toolName, text)
+}
+
+func decodeWhiteboardToolResult(toolName, text string) (map[string]any, error) {
 	if text == "" {
 		return nil, nil
 	}

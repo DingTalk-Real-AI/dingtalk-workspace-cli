@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aisearch
-description: AI搜问：人员语义搜索、跨源内容定位与行为回溯。Use when 按姓名/工号/部门/职责/上下级找人，或在目标对象未知时按主题、语义、来源或行为发现相关内容。搜索结果用于候选定位；命中后需要读取、修改或验证原对象时切换到对象所属产品。完整手机号精确反查走 dingtalk-contact。命令前缀：dws aisearch。
+description: AI搜问：人员语义搜索、跨源主题检索与行为回溯。Use when 语义找人，或目标未知时按主题或行为发现内容。原生最近列表走所属产品；完整手机号精确反查走 dingtalk-contact。前缀：dws aisearch。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -15,9 +15,9 @@ metadata:
 ## 最小 DWS 执行契约
 
 - 只通过 `dws` CLI 操作钉钉；每条命令带 `--format json`，只按真实结构化返回下结论。
-- 常用 `person/enterprise/behavior` 按本页直接执行，不预读 shared、Reference、Schema、Help 或下游 Skill。
-- 不猜命令、字段、ID、profile 或事实；可选时间缺失则省略并说明范围；多候选不取首项，ID 不混域。
-- 空结果结束当前搜索，同条件核验见第 5 节；失败或不完整不能说“没有”，候选不等于全量。
+- `person/enterprise/behavior` 按本页直调，不预读 shared、Reference、Schema、Help 或下游 Skill。
+- 不猜命令、字段、ID、profile 或事实；缺失可选时间则省略；多候选不取首项，ID 不混域。
+- 空结果结束搜索，同条件核验见第 5 节；失败或不完整不能说“没有”，候选不等于全量。
 <!-- DWS_RUNTIME_CONTRACT_END -->
 
 ## Golden Route
@@ -28,6 +28,7 @@ metadata:
 | 按主题找文档、消息、邮件、待办、听记等内容 | `dws aisearch enterprise` | `--queries` + `--types` + 可选 `--time-range` |
 | 以我为关系端点的发送/接收，或我创建、编辑、分享过什么 | `dws aisearch behavior` | 上述内容槽位 + `--behavior-type` + 可选 `--direction/--chat-scope` |
 | <!-- dws-intent: chat.search.filtered -->资源只限 IM，答案是逐条消息并带结构化消息谓词 | `dws chat +search-msg` | 发送者、会话、关键词、@、类型、reaction、时间和完整分页由 Chat 负责 |
+| 按时间列最近访问/编辑文档，无主题或行为条件 | `dws drive +recent` | 文档集合排序；其他对象用所属产品 recent/list |
 | 枚举部门成员、完整人员名单 | `dingtalk-contact` | 部门定位 → 成员列表 → 按需详情，不把人员搜索候选当全量 |
 | 完整手机号精确反查 | `dws contact user search-mobile --mobile "<完整手机号>" --format json` | `--mobile` |
 | 已知稳定 ID 后读取/修改原对象 | 对应产品 Skill | 不再用 AISearch 重搜 |
