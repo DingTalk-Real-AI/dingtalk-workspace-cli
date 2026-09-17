@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -45,35 +46,36 @@ type upgradeRollbackManager interface {
 }
 
 var (
-	newUpgradeReleaseClient = func() upgradeReleaseClient { return upgrade.NewClient() }
-	newUpgradeRollback      = func() upgradeRollbackManager { return upgrade.NewRollbackManager() }
-	ensureUpgradeDirs       = upgrade.EnsureUpgradeDirectories
-	cleanupUpgradeStale     = upgrade.CleanupStaleFiles
-	upgradeNeedsUpgrade     = upgrade.NeedsUpgrade
-	findUpgradeBinary       = upgrade.FindBinaryAsset
-	findUpgradeSkills       = upgrade.FindSkillsAsset
-	findUpgradeChecksums    = upgrade.FindChecksumsAsset
-	downloadUpgradeFile     = upgrade.Download
-	downloadUpgradeProgress = upgrade.DownloadWithProgress
-	extractUpgradeZip       = upgrade.ExtractZip
-	findExtractedBinary     = upgrade.FindBinaryInDir
-	locateUpgradeSkill      = upgrade.LocateSkillsRoot
-	replaceUpgradeSelf      = upgrade.ReplaceSelf
-	installUpgradeSkills    = upgrade.UpgradeSkillLocationsWithOptions
-	upgradeMkdirTemp        = os.MkdirTemp
-	upgradeRemoveAll        = os.RemoveAll
-	upgradeReadFile         = os.ReadFile
-	upgradeMkdirAll         = os.MkdirAll
-	verifyUpgradeFile       = strictVerifyFile
-	extractUpgradeTarGz     = extractTarGz
-	validateUpgradeBinary   = validateNewBinary
-	upgradeStat             = os.Stat
-	upgradeChmod            = os.Chmod
-	upgradeTryExecVersion   = tryExecVersion
-	upgradeRepairDarwin     = repairDarwinBinary
-	upgradeRuntimeGOOS      = runtime.GOOS
-	upgradeLookPath         = exec.LookPath
-	upgradeCommandOutput    = func(name string, args ...string) ([]byte, error) {
+	newUpgradeReleaseClient           = func() upgradeReleaseClient { return upgrade.NewClient() }
+	newUpgradeRollback                = func() upgradeRollbackManager { return upgrade.NewRollbackManager() }
+	ensureUpgradeDirs                 = upgrade.EnsureUpgradeDirectories
+	cleanupUpgradeStale               = upgrade.CleanupStaleFiles
+	upgradeNeedsUpgrade               = upgrade.NeedsUpgrade
+	findUpgradeBinary                 = upgrade.FindBinaryAsset
+	findUpgradeSkills                 = upgrade.FindSkillsAsset
+	findUpgradeChecksums              = upgrade.FindChecksumsAsset
+	downloadUpgradeFile               = upgrade.Download
+	downloadUpgradeProgress           = upgrade.DownloadWithProgress
+	extractUpgradeZip                 = upgrade.ExtractZip
+	findExtractedBinary               = upgrade.FindBinaryInDir
+	locateUpgradeSkill                = upgrade.LocateSkillsRoot
+	replaceUpgradeSelf                = upgrade.ReplaceSelf
+	installUpgradeSkills              = upgrade.UpgradeSkillLocationsWithOptions
+	invalidateSchemaCacheAfterUpgrade = cli.InvalidatePersistedSchemaCacheIdentities
+	upgradeMkdirTemp                  = os.MkdirTemp
+	upgradeRemoveAll                  = os.RemoveAll
+	upgradeReadFile                   = os.ReadFile
+	upgradeMkdirAll                   = os.MkdirAll
+	verifyUpgradeFile                 = strictVerifyFile
+	extractUpgradeTarGz               = extractTarGz
+	validateUpgradeBinary             = validateNewBinary
+	upgradeStat                       = os.Stat
+	upgradeChmod                      = os.Chmod
+	upgradeTryExecVersion             = tryExecVersion
+	upgradeRepairDarwin               = repairDarwinBinary
+	upgradeRuntimeGOOS                = runtime.GOOS
+	upgradeLookPath                   = exec.LookPath
+	upgradeCommandOutput              = func(name string, args ...string) ([]byte, error) {
 		return exec.Command(name, args...).CombinedOutput()
 	}
 	upgradeUserHomeDir = os.UserHomeDir
@@ -596,6 +598,9 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		fmt.Printf(" %s\n", ugRed("✗"))
 		return fmt.Errorf("替换二进制失败: %w", err)
 	}
+	// Drop persisted Schema identity so the next process regenerates from the
+	// newly installed binary's live declarations (no compile-time seal).
+	invalidateSchemaCacheAfterUpgrade()
 
 	if hasSkills {
 		result, installErr := installUpgradeSkills(skillSrc, upgrade.SkillUpgradeOptions{
