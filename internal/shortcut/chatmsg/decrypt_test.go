@@ -151,7 +151,7 @@ func TestDecryptChatMessageItemsShouldReturnZeroLedgerWithoutCandidates(t *testi
 func TestDecryptChatMessageItemsShouldRewriteDecryptedItems(t *testing.T) {
 	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
 	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
-		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "秘密内容", "keyVersion": 3},
+		map[string]any{"messageId": "m1", "conversationId": "cid-1", "status": "success", "plaintextContent": "秘密内容", "keyVersion": 3},
 	}}}}
 	item := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
 
@@ -293,8 +293,8 @@ func TestDecryptChatMessageItemsShouldRecordOverallBatchError(t *testing.T) {
 func TestDecryptChatMessageItemsShouldReusePolicyCacheAcrossItems(t *testing.T) {
 	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
 	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
-		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "一"},
-		map[string]any{"messageId": "m2", "status": "success", "plaintextContent": "二"},
+		map[string]any{"messageId": "m1", "conversationId": "cid-1", "status": "success", "plaintextContent": "一"},
+		map[string]any{"messageId": "m2", "conversationId": "cid-1", "status": "success", "plaintextContent": "二"},
 	}}}}
 	items := []map[string]any{
 		{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext},
@@ -319,7 +319,7 @@ func TestDecryptChatMessageItemsShouldReusePolicyCacheAcrossItems(t *testing.T) 
 func TestDecryptChatMessageItemsShouldRewriteTextKeyWhenContentAbsent(t *testing.T) {
 	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
 	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
-		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "明文内容", "keyVersion": 1},
+		map[string]any{"messageId": "m1", "conversationId": "cid-1", "status": "success", "plaintextContent": "明文内容", "keyVersion": 1},
 	}}}}
 	item := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "text": decryptTestCiphertext}
 
@@ -442,28 +442,49 @@ func TestDecryptChatMessageItemsShouldNormalizeNilConversationID(t *testing.T) {
 	}
 }
 
-func TestDecryptChatMessageItemsShouldFallbackToContentKeyWhenLookupMisses(t *testing.T) {
+func TestDecryptChatMessageItemsShouldIgnoreResponsesWithoutDecryptCandidate(t *testing.T) {
 	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
 	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
-		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "一"},
-		map[string]any{"messageId": "m2", "status": "success", "plaintextContent": "二"},
+		map[string]any{"messageId": "m1", "conversationId": "cid-1", "status": "success", "plaintextContent": "一"},
+		map[string]any{"messageId": "m2", "conversationId": "cid-1", "status": "success", "plaintextContent": "二"},
 	}}}}
-	// m2 carries a valid messageID but no content/text key, so it enters byID
-	// without becoming a decrypt candidate and misses the contentKeys lookup.
 	items := []map[string]any{
 		{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext},
 		{"openMessageId": "m2", "openConversationId": "cid-1"},
 	}
 
 	got := DecryptChatMessageItems(context.Background(), rt, items)
-	if got == nil || got["decryptedCount"] != 2 {
-		t.Fatalf("ledger = %#v, want decryptedCount 2", got)
+	if got == nil || got["decryptedCount"] != 1 {
+		t.Fatalf("ledger = %#v, want decryptedCount 1", got)
 	}
 	if items[0]["content"] != "一" || items[0]["contentDecrypted"] != true {
 		t.Fatalf("candidate item = %#v", items[0])
 	}
-	if items[1]["content"] != "二" || items[1]["contentDecrypted"] != true {
-		t.Fatalf("fallback item = %#v, want rewrite on the content key", items[1])
+	if _, ok := items[1]["content"]; ok || items[1]["contentDecrypted"] == true {
+		t.Fatalf("non-candidate item rewritten: %#v", items[1])
+	}
+}
+
+func TestDecryptChatMessageItemsShouldMatchConversationAndMessageIDs(t *testing.T) {
+	swapDecryptTestClient(t, newDecryptTestClient(&decryptTestCipher{plain: "ding-cipher"}, true))
+	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
+		map[string]any{"messageId": "shared", "conversationId": "cid-1", "status": "success", "plaintextContent": "会话一明文"},
+		map[string]any{"messageId": "shared", "conversationId": "cid-2", "status": "success", "plaintextContent": "会话二明文"},
+	}}}}
+	items := []map[string]any{
+		{"openMessageId": "shared", "openConversationId": "cid-1", "content": decryptTestCiphertext},
+		{"openMessageId": "shared", "openConversationId": "cid-2", "text": decryptTestCiphertext},
+	}
+
+	got := DecryptChatMessageItems(context.Background(), rt, items)
+	if got == nil || got["decryptedCount"] != 2 || got["decryptFailedCount"] != 0 {
+		t.Fatalf("ledger = %#v, want two successful decryptions", got)
+	}
+	if items[0]["content"] != "会话一明文" || items[0]["contentDecrypted"] != true {
+		t.Fatalf("first conversation item = %#v", items[0])
+	}
+	if items[1]["text"] != "会话二明文" || items[1]["contentDecrypted"] != true {
+		t.Fatalf("second conversation item = %#v", items[1])
 	}
 }
 
@@ -473,7 +494,7 @@ func TestDecryptChatMessageItemsShouldRecordCipherFailuresFromBatchResult(t *tes
 		errByText:     map[string]error{decryptTestFailingCiphertext: context.DeadlineExceeded},
 	}, true))
 	rt := &decryptTestRuntime{read: decryptTestPolicyRead, write: map[string]any{"result": map[string]any{"items": []any{
-		map[string]any{"messageId": "m1", "status": "success", "plaintextContent": "一"},
+		map[string]any{"messageId": "m1", "conversationId": "cid-1", "status": "success", "plaintextContent": "一"},
 	}}}}
 	item1 := map[string]any{"openMessageId": "m1", "openConversationId": "cid-1", "content": decryptTestCiphertext}
 	item2 := map[string]any{"openMessageId": "m2", "openConversationId": "cid-1", "content": decryptTestFailingCiphertext}

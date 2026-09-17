@@ -37,7 +37,7 @@ func (c *chatDecryptGateCaller) CallTool(_ context.Context, product, tool string
 		return chatDecryptGateResult(`{"result":{"mode":"required","provider":"safechat","keyServer":"https://keys.example.test","allowedRedirectHost":"auth.example.test","staffIdTransform":"raw","ttlSeconds":60,"reason":"admin_enabled"}}`), nil
 	}
 	if tool == "batch_ding_decrypt_messages" {
-		return chatDecryptGateResult(`{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"秘密内容","keyVersion":3}]}}`), nil
+		return chatDecryptGateResult(`{"result":{"items":[{"messageId":"m1","conversationId":"cid-1","status":"success","plaintextContent":"秘密内容","keyVersion":3}]}}`), nil
 	}
 	return chatDecryptGateResult(`{}`), nil
 }

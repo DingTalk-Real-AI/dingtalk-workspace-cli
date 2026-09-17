@@ -16,6 +16,16 @@ import (
 // one crypto client and injects it into both consumers.
 var messageDecryptClient = messagecrypto.DefaultClient()
 
+type decryptItemKey struct {
+	conversationID string
+	messageID      string
+}
+
+type decryptTarget struct {
+	message    map[string]any
+	contentKey string
+}
+
 // SetMessageDecryptClient injects the app-owned SafeChat/Ding crypto client
 // for the smart read shortcuts. nil falls back to the default (backend-less)
 // client.
@@ -39,7 +49,7 @@ func DecryptChatMessageItems(ctx context.Context, rt messagecrypto.Runtime, item
 		return nil
 	}
 	batchItems := make([]messagecrypto.BatchDecryptItem, 0)
-	contentKeys := map[string]string{}
+	targets := map[decryptItemKey][]decryptTarget{}
 	for _, item := range items {
 		messageID := strings.TrimSpace(fmt.Sprint(MessageID(item)))
 		if messageID == "" || messageID == "<nil>" {
@@ -53,7 +63,8 @@ func DecryptChatMessageItems(ctx context.Context, rt messagecrypto.Runtime, item
 		if conversationID == "<nil>" {
 			conversationID = ""
 		}
-		contentKeys[messageID] = contentKey
+		key := newDecryptItemKey(messageID, conversationID)
+		targets[key] = append(targets[key], decryptTarget{message: item, contentKey: contentKey})
 		batchItems = append(batchItems, messagecrypto.BatchDecryptItem{
 			MessageID:      messageID,
 			ConversationID: conversationID,
@@ -84,13 +95,6 @@ func DecryptChatMessageItems(ctx context.Context, rt messagecrypto.Runtime, item
 		ledger["partial"] = true
 		return ledger
 	}
-	byID := map[string][]map[string]any{}
-	for _, item := range items {
-		messageID := strings.TrimSpace(fmt.Sprint(MessageID(item)))
-		if messageID != "" && messageID != "<nil>" {
-			byID[messageID] = append(byID[messageID], item)
-		}
-	}
 	decryptedCount := 0
 	failures := make([]map[string]any, 0)
 	for _, item := range result.Items {
@@ -102,16 +106,16 @@ func DecryptChatMessageItems(ctx context.Context, rt messagecrypto.Runtime, item
 			failures = append(failures, decryptFailure(item.MessageID, item.ConversationID, "empty_plaintext"))
 			continue
 		}
-		for _, message := range byID[item.MessageID] {
-			contentKey := contentKeys[item.MessageID]
-			if contentKey == "" {
-				contentKey = "content"
-			}
-			message[contentKey] = item.PlaintextContent
-			message["contentDecrypted"] = true
-			message["cryptoLayer"] = "ding+safechat"
+		matched := targets[newDecryptItemKey(item.MessageID, item.ConversationID)]
+		if len(matched) == 0 {
+			continue
+		}
+		for _, target := range matched {
+			target.message[target.contentKey] = item.PlaintextContent
+			target.message["contentDecrypted"] = true
+			target.message["cryptoLayer"] = "ding+safechat"
 			if item.KeyVersion > 0 {
-				message["dingKeyVersion"] = item.KeyVersion
+				target.message["dingKeyVersion"] = item.KeyVersion
 			}
 		}
 		decryptedCount++
@@ -127,6 +131,13 @@ func DecryptChatMessageItems(ctx context.Context, rt messagecrypto.Runtime, item
 		ledger["partial"] = true
 	}
 	return ledger
+}
+
+func newDecryptItemKey(messageID, conversationID string) decryptItemKey {
+	return decryptItemKey{
+		conversationID: strings.TrimSpace(conversationID),
+		messageID:      strings.TrimSpace(messageID),
+	}
 }
 
 // MergeDecryptLedger adds the decrypt ledger fields into an output payload.
