@@ -19,6 +19,8 @@
 
 ## 仅询问分享更新用法时
 
+用法询问与返回值评审不能共用发现路径：问原子命令写法只执行 `dws aitable form share update --help`（禁止改查 Schema）；本专用规则优先于通用 Schema 导航。
+
 收到仅询问用法的请求后，第一步必须立即实际执行且仅执行对应命令：原子入口用 `dws aitable form share update --help`；Shortcut 入口用 `dws schema --cli-path "aitable +form-share-update" --compact --format json`。Shortcut 名称开头的 `+` 是命令名不可省略的一部分；不得改写、试探其他拼法或改用 `--help`/`-h`。
 
 发现门禁：即使 Skill 或参考文档已提供完整示例，回答前也必须实际执行一次且仅执行一次目标 leaf 的安全 help/schema 查询；不得仅依据 Skill 或参考文档直接作答。用户仅询问用法时，最终回答必须先给出完整命令；缺少必填 ID 时则给出带明确占位符的完整命令模板，禁止猜测。随后明确说明“未传入的分享配置保持原值”；不得执行目标写操作或声称已经执行。上述只读查询是唯一允许的命令。
@@ -29,6 +31,41 @@
 dws aitable form share update --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --enabled true
 请将 <BASE_ID>、<TABLE_ID>、<VIEW_ID> 替换为真实值；未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
 ```
+
+已知 ID 与占位符必须区别处理：用户明确给出的短 ID 也按原值使用，不因其长度或看起来像示例就要求替换。所有 ID 已知时，第二行必须原样为“未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。”；只有命令中确实用了占位符时才添加对应替换说明。Shortcut 的命令行必须保留 `--format json`，固定说明中的 `help/schema` 不因本次只查 schema 而改写。
+
+两种入口都必须完整保留用户指定的配置值，尤其是表单名对应的 `--form-name`；不得因精简为两行而只留下 ID 和 `--enabled`。以下是已知 ID 的 Shortcut 用法回答示例（标题按用户输入替换，不能省略）：
+
+```text
+dws aitable +form-share-update --base-id base-123 --table-id table-456 --view-id view-789 --enabled true --form-name "报名表" --format json
+未传入的分享配置保持原值。本次仅查询 help/schema，未执行写操作。
+```
+
+## 返回值评审专用查询（不适用于命令用法询问）
+
+作答前必须有本次实际执行的目标 compact Schema 查询结果；仅加载 Skill 或看到合成样本不满足此条件。先执行下表命令，再解释，不能直接根据 Skill 回答。
+
+Help/Schema 是离线契约查询，不调用线上业务，也不读写用户的表单。因此“只分析合成返回，不要执行线上业务命令”仍允许且需要下表的本机查询，不能将其误判为线上读取而跳过；只有用户明确禁止任何命令或本机查询时才不执行，并说明本机契约未核对。
+
+仅评审返回值/故障结果（而非询问写法）时，不套用两行命令模板，也不适用“优先 Shortcut”规则。用户指定的原子/Shortcut 入口必须原样保留，即使它们共用 Result 契约也不能互换；严格按下表查询一次后解释样本，不搜索源码/reference，不执行业务读写。
+
+| 用户指定入口 | 唯一契约查询 |
+|---|---|
+| `form share get` | `dws schema --cli-path "aitable form share get" --compact --format json` |
+| `form share update` | `dws schema --cli-path "aitable form share update" --compact --format json` |
+| `+form-share-get` | `dws schema --cli-path "aitable +form-share-get" --compact --format json` |
+| `+form-share-update` | `dws schema --cli-path "aitable +form-share-update" --compact --format json` |
+
+不得用搜索源码或 reference 代替本机契约查询。get 只诊断分享配置，不返回 `cpSynced`；不能建议“通过 get 回读 cpSynced 后确认闭环”。未验证的 CP 应继续标为未确认并交由服务端诊断，不能把 get 的成功或 UUID 非空当作恢复证明。
+
+先选择 Schema 的实际结果分支：`data.executed=false` 的 dry-run 预览只含 `tool/arguments/executed`（Shortcut 还含 `dry_run=true`），不需要服务端状态或 `cpSynced`，`ok=true` 只表示预览成功。不要把真实执行成功分支的必填字段套到预览上。字段是否必填只读所选分支的 `required`；是否允许额外字段只读该对象的 `additionalProperties`，不能从 `arguments` 子对象推断父对象。
+
+真实执行结果判断：分享开关依据 `enabled`，保留 UUID 不代表开启；UUID/封面为空就如实报告，不能推测唯一成因或拼装封面 URL。get 的成功不证明 CP 同步。update 仅在必需字段完整且类型正确、`cpSynced=true` 时成功；缺失/false/类型异常均不能确认闭环。统一部分失败无顶层 error：原始响应在 `data.succeeded[0].response`，该阶段仅表示收到回执；失败原因在 `data.failed[0].error`，含 `execution_started=true`。不要自行重放写入或补偿 CP。合成样本若不符合该结构，应指出不匹配，不能把 Schema 中的字段补写成样本已有事实。
+
+解释边界：`status` 未公布枚举含义时保留原始数值，不把 0/1 自行翻译成未发布/已发布；`cpSynced=false` 只支持“CP 终态未确认”，不证明外部用户必定无法访问。UUID/封面空值不能证明此前从未创建，短 ID 不能仅因长度被判为占位符。
+
+即使外层仍为 ok=true 或返回结构不符合契约，也不得为再次校验 CP 而执行或建议重发 form share update / +form-share-update（包括稍后传相同配置）；诊断不能新增写入，只保留回执并交由服务端排查。
+
 
 ## 建议操作顺序
 
@@ -90,8 +127,8 @@ dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_
 
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
-| `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回 enabled/status/shareFormUuid |
-| `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 开关用 `--enabled`；访问范围用 `--auth-type-code/--auth-data`；还可更新提交次数、有效期、名称描述、匿名提交、回填和通知配置；未传字段保持原值 |
+| `form share get` | 获取分享配置 | `--base-id` `--table-id` `--view-id` | 返回服务端真实的 enabled/status/shareFormUuid/formCover；只读，不修复 CP |
+| `form share update` | 部分更新分享配置 | `--base-id` `--table-id` `--view-id` + 至少一个配置参数 | 成功返回真实 shareFormUuid/status/formCover/cpSynced；只有 cpSynced=true 才完成闭环；未传字段保持原值 |
 
 ## 完整工作流示例
 
@@ -121,7 +158,7 @@ dws aitable form field update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 dws aitable form field hide --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
   --field-id FIELD_ID --hidden true --format json
 
-# 6) 开启分享；把已知表单标题同时传给分享配置
+# 6) 开启分享；把已知表单标题同时传给分享配置，并检查返回的 shareFormUuid/status/formCover/cpSynced
 dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID \
   --enabled true --form-name "员工信息收集" --format json
 ```
@@ -136,5 +173,7 @@ dws aitable form share update --base-id BASE_ID --table-id TABLE_ID --view-id VI
 
 - `form field hide` 当前每次只接收一个 `fieldId`。多字段必须在同一 Base 写队列中逐个串行设置，全部完成后统一回读一次；不传数组，不并发写。
 - 新建表单首次开启分享时，复用 `form create`/`form update` 中已知的标题，通过 `--form-name` 与 `--enabled true` 同时传入；不要为取标题额外调用 `form get`。已有分享仅调整其他配置时，不覆盖原名称。
-- 分享开启后回读 `enabled/status/shareFormUuid`。“已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`，再通过 `form share get` 回读确认。
-- 分享和字段 mutation 回执不是最终状态；必须独立读回，写超时时不原样重放。
+- `form share update` 的成功结果已经来自服务端回读并完成 CP 投影校验；必须检查 `shareFormUuid/status/formCover/cpSynced`，只有 `cpSynced=true` 才能确认闭环完成。部分失败或 `cpSynced=false` 不得描述为成功。
+- `form share update` 的成功结果还与本次请求逐项比对：响应 `baseId/tableId/viewId` 必须与请求一致，本次显式请求的 `enabled/formName/formDesc` 必须与响应回读值一致，不一致即返回 `partial_failure`。响应不回读的显式请求字段（如 `anonymousSubmit`、`authData`）列在 `data.unverified` 且 `verified=false`；这些字段只能报告“已提交但未验证”，不得声称已生效。
+- DWS 不自行调用第二个 View 更新命令补偿 CP，也不拼装封面 URL。旧服务端发布窗口内 `formCover` 可能为空，应如实说明；稍后诊断当前配置时可用 `form share get`。
+- “已开启分享”不等于“已允许匿名/免登录/组织外提交”；需按用户意图显式传入 `--anonymous-submit` 和 `--auth-type-code/--auth-data`。写超时时先查询真实状态，不原样重放 mutation。

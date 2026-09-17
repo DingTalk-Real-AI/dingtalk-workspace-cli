@@ -601,6 +601,19 @@ func TestCrossPlatformCoverageAitableShareFormPartialUpdateStaysTyped(t *testing
 	if err := runAitableCoverageCommand(t, withoutUpdate, "form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v"); err == nil || len(withoutUpdate.calls) != 0 {
 		t.Fatalf("missing partial update must fail before MCP call: err=%v calls=%#v", err, withoutUpdate.calls)
 	}
+
+	transportFailure := errors.New("share update transport failed")
+	failing := &aitableTestCaller{errors: []error{transportFailure}}
+	if err := runAitableCoverageCommand(t, failing,
+		"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true"); !errors.Is(err, transportFailure) {
+		t.Fatalf("share update transport error = %v, want %v", err, transportFailure)
+	}
+
+	dryRun := &aitableTestCaller{dryRun: true}
+	if err := runAitableCoverageCommand(t, dryRun,
+		"form", "share", "update", "--base-id=b", "--table-id=t", "--view-id=v", "--enabled=true", "--dry-run"); err != nil || len(dryRun.calls) != 0 {
+		t.Fatalf("share update dry-run = err:%v calls:%#v", err, dryRun.calls)
+	}
 }
 
 func TestCrossPlatformCoverageAitableShareFormExplicitEmptyUpdate(t *testing.T) {
@@ -1372,6 +1385,34 @@ func TestCrossPlatformCoverageAitableSnapshotThinCommands(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "base create workspace id", tool: "create_base",
+			args: []string{"base", "create", "--name=proj", "--workspace-id=ws-1"},
+			check: func(t *testing.T, args map[string]any) {
+				if args["baseName"] != "proj" || args["workspaceId"] != "ws-1" {
+					t.Fatalf("create_base args = %#v", args)
+				}
+			},
+		},
+		{
+			name: "table create description", tool: "create_table",
+			args: []string{"table", "create", "--base-id=b", "--name=tbl", "--fields=[]", "--description=备注说明"},
+			check: func(t *testing.T, args map[string]any) {
+				if args["tableName"] != "tbl" || args["description"] != "备注说明" {
+					t.Fatalf("create_table args = %#v", args)
+				}
+			},
+		},
+		{
+			name: "import upload table names", tool: "prepare_import_upload",
+			args: []string{"import", "upload", "--base-id=b", "--file-name=data.xlsx", "--file-size=1024", "--table-names=Sheet1,Sheet2"},
+			check: func(t *testing.T, args map[string]any) {
+				names, ok := args["tableNames"].([]string)
+				if !ok || len(names) != 2 || names[0] != "Sheet1" || names[1] != "Sheet2" {
+					t.Fatalf("prepare_import_upload tableNames = %#v", args["tableNames"])
+				}
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1385,6 +1426,70 @@ func TestCrossPlatformCoverageAitableSnapshotThinCommands(t *testing.T) {
 			call := caller.calls[0]
 			if call.server == "aitable-helper" || call.tool != tc.tool {
 				t.Fatalf("call = %#v, want public aitable/%s", call, tc.tool)
+			}
+			tc.check(t, call.args)
+		})
+	}
+}
+
+func TestCrossPlatformCoverageAnnotateViewUpdateError(t *testing.T) {
+	if got := AnnotateViewUpdateError(nil); got != nil {
+		t.Fatalf("nil input must stay nil, got %#v", got)
+	}
+	unrelated := apperrors.NewAPI("boom", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "PERMISSION_DENIED"}))
+	if got := AnnotateViewUpdateError(unrelated); got != error(unrelated) {
+		t.Fatalf("unrelated error must pass through unchanged, got %#v", got)
+	}
+	matched := apperrors.NewAPI("update rejected", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "INVALID_UPDATE_VIEW_REQUEST"}))
+	var cli *CLIError
+	if !errors.As(AnnotateViewUpdateError(matched), &cli) {
+		t.Fatalf("matched error was not annotated: %#v", matched)
+	}
+	if cli.ServerCode != "INVALID_UPDATE_VIEW_REQUEST" || strings.TrimSpace(cli.Suggestion) == "" {
+		t.Fatalf("annotated error missing code/suggestion: %#v", cli)
+	}
+}
+
+func TestCrossPlatformCoverageAitableHelperOptionalPassthroughs(t *testing.T) {
+	testseam.Swap(t, &deps, nil)
+	const token = "123e4567-e89b-42d3-a456-426614174000"
+	tests := []struct {
+		name  string
+		tool  string
+		args  []string
+		check func(*testing.T, map[string]any)
+	}{
+		{
+			name: "record upsert client token", tool: "record_upsert",
+			args: []string{"record", "upsert", "--base-id=b", "--table-id=t", `--records=[{"cells":{"f":"v"}}]`, "--client-token=" + token},
+			check: func(t *testing.T, args map[string]any) {
+				if args["clientToken"] != token {
+					t.Fatalf("record_upsert clientToken = %#v", args["clientToken"])
+				}
+			},
+		},
+		{
+			name: "dashboard arrange is app mode", tool: "align_dashboard",
+			args: []string{"dashboard", "arrange", "--base-id=b", "--dashboard-id=d", "--is-app-mode=true"},
+			check: func(t *testing.T, args map[string]any) {
+				if args["isAppMode"] != true {
+					t.Fatalf("align_dashboard isAppMode = %#v", args["isAppMode"])
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			if err := runAitableCoverageCommand(t, caller, tc.args...); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			call := caller.calls[0]
+			if call.server != "aitable-helper" || call.tool != tc.tool {
+				t.Fatalf("call = %#v, want aitable-helper/%s", call, tc.tool)
 			}
 			tc.check(t, call.args)
 		})
