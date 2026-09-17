@@ -5,6 +5,7 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,6 +14,42 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
+
+func TestCrossPlatformCoverageEmployeeStopAcknowledgement(t *testing.T) {
+	cfg := employeeBoundaryConfig(t)
+	b := cfg.Binding
+	dir := digitalEmployeeRuntimeDir(b.DWSProfile)
+	state := digitalEmployeeRunState{PID: os.Getpid(), Profile: b.DWSProfile, AgentUUID: b.AgentUUID, RunID: "stop-ack-run", Status: "running"}
+	if err := writeEmployeeJSON(filepath.Join(dir, "state.json"), state); err != nil {
+		t.Fatal(err)
+	}
+	acknowledged := false
+	testseam.Swap(t, &atomicRename, func(src, dst string) error {
+		if err := os.Rename(src, dst); err != nil {
+			return err
+		}
+		if filepath.Base(dst) == "stop.json" {
+			raw, err := os.ReadFile(dst)
+			var request map[string]string
+			if err != nil || json.Unmarshal(raw, &request) != nil || request["runId"] != state.RunID {
+				return errors.New("stop request does not target the running instance")
+			}
+			state.Status = "stopped"
+			state.PID = 0
+			acknowledged = true
+			return writeEmployeeJSON(filepath.Join(dir, "state.json"), state)
+		}
+		return nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := stopEmployeeRuntime(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	if !acknowledged {
+		t.Fatal("stop returned without the matching stopped acknowledgement")
+	}
+}
 
 func TestCrossPlatformCoverageEmployeeStopFailureBoundaries(t *testing.T) {
 	for _, scenario := range []string{"dsh-error", "dsh-unreleased", "missing", "corrupt", "identity", "dead", "unknown-instance", "stop-write", "cancelled-wait"} {
