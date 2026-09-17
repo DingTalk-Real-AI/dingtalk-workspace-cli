@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -110,7 +111,7 @@ func TestCrossPlatformCoverageImportUploadRequiresPositiveFileSize(t *testing.T)
 				args = append(args, "--file-size", test.fileSize)
 			}
 			root.SetArgs(args)
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 
 			if test.wantErr {
 				if err == nil {

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -27,7 +28,7 @@ func TestCrossPlatformCoverageChatListAllPageAllUsesNumericCursorAndDeduplicates
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list-all", "--limit", "1", "--page-all", "--page-limit", "5"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if len(fake.calls) != 2 || fake.calls[1].args["cursor"] != float64(88) {
@@ -60,7 +61,7 @@ func TestCrossPlatformCoverageDirectMessagesPageAllUsesMillisecondCursor(t *test
 		"--time", "2026-08-05 16:49:00", "--forward=false", "--limit", "1",
 		"--page-all", "--page-limit", "5",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
@@ -89,7 +90,7 @@ func TestCrossPlatformCoverageDirectMessagesPageLimitPublishesExecutableContinua
 		"chat", "+messages-list-direct", "--user", "u1", "--time", "2026-08-05 16:49:00",
 		"--page-all", "--page-limit", "1",
 	})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -111,7 +112,7 @@ func TestCrossPlatformCoverageChatListAllMaxItemsPublishesStableTruncation(t *te
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--max-items", "1", "--page-delay", "0"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -137,7 +138,7 @@ func TestCrossPlatformCoverageChatListAllFailsClosedOnOversizeAndCanceledDelay(t
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--max-items", "1"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("oversized lower page unexpectedly published a continuation")
 		}
 		var payload map[string]any
@@ -164,7 +165,7 @@ func TestCrossPlatformCoverageChatListAllFailsClosedOnOversizeAndCanceledDelay(t
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--page-delay", "1"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("canceled delay unexpectedly succeeded")
 		}
 		var payload map[string]any
@@ -188,7 +189,7 @@ func TestCrossPlatformCoverageDirectMessagesPageAllFailsClosedWithoutMillisecond
 	root.SetArgs([]string{
 		"chat", "+messages-list-direct", "--user", "u1", "--time", "2026-08-05 16:49:00", "--page-all",
 	})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("missing direct-message cursor unexpectedly succeeded")
 	}
 	var payload map[string]any
@@ -212,7 +213,7 @@ func TestCrossPlatformCoverageChatListAllLaterReadFailureKeepsPartialLedger(t *t
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{"chat", "+chat-list-all", "--page-all"})
-	if err := root.Execute(); err == nil {
+	if err := corecmd.ExecuteForTest(root); err == nil {
 		t.Fatal("later group-list failure unexpectedly succeeded")
 	}
 	var payload map[string]any
@@ -236,7 +237,7 @@ func TestCrossPlatformCoverageChatRemainingPaginationValidation(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
 	}
@@ -261,7 +262,7 @@ func TestCrossPlatformCoverageChatListAllAdditionalEdges(t *testing.T) {
 		var output bytes.Buffer
 		root.SetOut(&output)
 		root.SetArgs(append([]string{"chat", "+chat-list-all"}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -327,7 +328,7 @@ func TestCrossPlatformCoverageChatListAllAdditionalEdges(t *testing.T) {
 			root := newPlatformCoverageRoot()
 			root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
 			root.SetArgs(append([]string{"chat", "+chat-list-all"}, args...))
-			if err := root.Execute(); err == nil {
+			if err := corecmd.ExecuteForTest(root); err == nil {
 				t.Fatalf("output error swallowed for args %v", args)
 			}
 		}
@@ -356,7 +357,7 @@ func TestCrossPlatformCoverageDirectMessagesAdditionalEdges(t *testing.T) {
 		root.SetArgs(append([]string{
 			"chat", "+messages-list-direct", "--user", "u1", "--time", "2026-08-05 16:49:00",
 		}, args...))
-		err := root.Execute()
+		err := corecmd.ExecuteForTest(root)
 		if output.Len() == 0 {
 			return nil, err
 		}
@@ -375,7 +376,7 @@ func TestCrossPlatformCoverageDirectMessagesAdditionalEdges(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(args)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatalf("invalid args succeeded: %v", args)
 		}
 	}
@@ -447,7 +448,7 @@ func TestCrossPlatformCoverageDirectMessagesAdditionalEdges(t *testing.T) {
 		root := newPlatformCoverageRoot()
 		root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
 		root.SetArgs([]string{"chat", "+messages-list-direct", "--user", "u1", "--time", "2026-01-01", "--page-all"})
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("output error was swallowed")
 		}
 	})

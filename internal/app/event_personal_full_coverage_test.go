@@ -11,6 +11,7 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
@@ -32,7 +33,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingSchemaAndSubscriptionCoverag
 		cmd.SetOut(io.Discard)
 		cmd.SetErr(io.Discard)
 		cmd.SetArgs(args)
-		if err := cmd.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(cmd); err == nil {
 			t.Fatalf("schema args %#v succeeded", args)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 )
 
@@ -65,7 +66,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append(append([]string{}, baseArgs...), "--dry-run"))
-		if err := root.Execute(); err != nil {
+		if err := corecmd.ExecuteForTest(root); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -73,7 +74,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		helpers.InitDeps(&larkAlignmentCaller{failProductTool: "im/get_resource_download_url"})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("lower error was swallowed")
 		}
 	})
@@ -83,7 +84,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("missing URL was accepted")
 		}
 	})
@@ -95,7 +96,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("getwd error was swallowed")
 		}
 	})
@@ -107,7 +108,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 		}})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(baseArgs)
-		if err := root.Execute(); err == nil {
+		if err := corecmd.ExecuteForTest(root); err == nil {
 			t.Fatal("path error was swallowed")
 		}
 	})
@@ -141,7 +142,7 @@ func TestCrossPlatformCoverageResourceDownloadCommandOutcomes(t *testing.T) {
 			// The absolute path is intentionally rejected by the public command,
 			// so use a relative path while running from the repository cwd.
 			root.SetArgs(append(append([]string{}, baseArgs...), "--output", "coverage-resource.bin", "--overwrite"))
-			err := root.Execute()
+			err := corecmd.ExecuteForTest(root)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error = %v, wantError=%v", err, tc.wantError)
 			}

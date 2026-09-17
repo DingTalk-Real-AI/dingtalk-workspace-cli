@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 )
 
@@ -29,7 +30,7 @@ func TestCrossPlatformCoveragePersonalVoIPEventListSchemaAndValidation(t *testin
 	var listOut bytes.Buffer
 	list.SetOut(&listOut)
 	list.SetArgs([]string{"--category", "voip"})
-	if err := list.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(list); err != nil {
 		t.Fatalf("event list --category voip error = %v", err)
 	}
 	if !strings.Contains(listOut.String(), personal.EventVoIPCallReceiveInvite) {
@@ -45,7 +46,7 @@ func TestCrossPlatformCoveragePersonalVoIPEventListSchemaAndValidation(t *testin
 	var schemaOut bytes.Buffer
 	schema.SetOut(&schemaOut)
 	schema.SetArgs([]string{personal.EventVoIPCallReceiveInvite, "--flatten"})
-	if err := schema.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(schema); err != nil {
 		t.Fatalf("event schema %s --flatten error = %v", personal.EventVoIPCallReceiveInvite, err)
 	}
 	var doc map[string]any

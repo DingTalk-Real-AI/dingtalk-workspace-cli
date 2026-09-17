@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -73,7 +74,7 @@ func runCalendarSmartCLI(t *testing.T, caller edition.ToolCaller, args ...string
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	executed, err := root.ExecuteC()
+	executed, err := corecmd.ExecuteCForTest(root)
 	if err == nil {
 		if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
 			err = emitErr

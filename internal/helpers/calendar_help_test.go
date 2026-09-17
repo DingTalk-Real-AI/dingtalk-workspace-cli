@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 )
 
 func TestCrossPlatformCoverageCalendarEventCreateHelpKeepsRoomsStringMetavar(t *testing.T) {
@@ -25,7 +27,7 @@ func TestCrossPlatformCoverageCalendarEventCreateHelpKeepsRoomsStringMetavar(t *
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"event", "create", "--help"})
-	if err := cmd.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(cmd); err != nil {
 		t.Fatalf("calendar event create --help: %v\n%s", err, out.String())
 	}
 
