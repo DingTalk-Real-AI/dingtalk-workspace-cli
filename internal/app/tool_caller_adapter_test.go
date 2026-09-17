@@ -29,7 +29,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 )
 
-func TestToolCallerTokenOverrideDoesNotMutateRuntimeState(t *testing.T) {
+func TestCrossPlatformCoverageToolCallerTokenOverrideDoesNotMutateRuntimeState(t *testing.T) {
 	authpkg.SetRuntimeProfile("corp_not_persisted")
 	t.Cleanup(func() { authpkg.SetRuntimeProfile("") })
 
@@ -57,7 +57,7 @@ func TestToolCallerTokenOverrideDoesNotMutateRuntimeState(t *testing.T) {
 	}
 }
 
-func TestRuntimeRunnerRequestScopedTokenBypassesStoredProfile(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRunnerRequestScopedTokenBypassesStoredProfile(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv("DINGTALK_CONTACT_MCP_URL", "https://contact.example.test")
 	authpkg.SetRuntimeProfile("profile-that-must-not-be-resolved")
