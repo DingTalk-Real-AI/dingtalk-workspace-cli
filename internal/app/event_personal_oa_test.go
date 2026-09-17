@@ -36,14 +36,14 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalTaskCreated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "staff_id", "title", "status", "create_time", "event_time",
+				"staff_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalTaskFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -51,7 +51,7 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalTaskRedirected,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -59,28 +59,28 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			eventKey: personal.EventOAApprovalInstanceStarted,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceCC,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "finish_time", "event_time",
+				"staff_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
 			},
 		},
 		{
 			eventKey: personal.EventOAApprovalInstanceFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "result", "create_time", "finish_time",
+				"staff_id", "process_code", "title", "status", "result", "create_time", "finish_time",
 				"event_time",
 			},
 		},
@@ -120,11 +120,9 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 				t.Fatalf("schema property %s for %s = %#v", name, eventKey, properties[name])
 			}
 		}
-		if eventKey == personal.EventOAApprovalTaskCreated {
-			staff := properties["staff_id"].(map[string]any)
-			if staff["type"] != "string" || !strings.Contains(staff["description"].(string), "payload.body.staffId") {
-				t.Fatalf("staff_id schema = %#v, want string sourced from payload.body.staffId", staff)
-			}
+		staff := properties["staff_id"].(map[string]any)
+		if staff["type"] != "string" || !strings.Contains(staff["description"].(string), "payload.body.staffId") {
+			t.Fatalf("staff_id schema for %s = %#v, want string sourced from payload.body.staffId", eventKey, staff)
 		}
 		if _, ok := properties["payload"]; ok {
 			t.Fatalf("schema for %s exposed generic payload: %#v", eventKey, properties)
@@ -135,61 +133,71 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoveragePersonalOATaskCreatedStaffIDOutput(t *testing.T) {
+func TestCrossPlatformCoveragePersonalOAStaffIDOutput(t *testing.T) {
 	// Match the reported wire nesting, using synthetic identifiers only.
-	const data = `{"eventKey":"user_oa_approval_task_created","eventId":"oa-event",
+	const data = `{"eventKey":"EVENT_KEY","eventId":"oa-event",
 		"payload":{"uid":100001,"staffId":"outer-staff-must-not-be-used","body":{
 			"processInstanceId":"instance-1","taskId":"task-1","title":"测试审批",
 			"status":"RUNNING",STAFF_FIELD"createTime":1789616921000},"event_time":1789616921000}}`
-	for _, tt := range []struct {
-		name  string
-		field string
-		want  string
-	}{
-		{name: "present", field: `"staffId":"0053684626",`, want: "0053684626"},
-		{name: "missing"},
-		{name: "empty", field: `"staffId":"",`},
-		{name: "null", field: `"staffId":null,`},
+	for _, eventKey := range []string{
+		personal.EventOAApprovalTaskCreated,
+		personal.EventOAApprovalTaskFinished,
+		personal.EventOAApprovalTaskRedirected,
+		personal.EventOAApprovalInstanceStarted,
+		personal.EventOAApprovalInstanceCC,
+		personal.EventOAApprovalInstanceTerminated,
+		personal.EventOAApprovalInstanceFinished,
 	} {
-		t.Run(tt.name, func(t *testing.T) {
-			ev := transport.Event{
-				Type:      transport.FrameTypeEvent,
-				EventType: personal.EventOAApprovalTaskCreated,
-				Data:      strings.Replace(data, "STAFF_FIELD", tt.field, 1),
-			}
-			for _, flatten := range []bool{true, false} {
-				var out bytes.Buffer
-				pipeline, err := consume.BuildPipeline(consume.FormatNDJSON, "", nil, &out,
-					consume.WithProjector(personalEventProjector(false, flatten)))
-				if err != nil {
-					t.Fatal(err)
+		for _, tt := range []struct {
+			name  string
+			field string
+			want  string
+		}{
+			{name: "present", field: `"staffId":"00012345",`, want: "00012345"},
+			{name: "missing"},
+			{name: "empty", field: `"staffId":"",`},
+			{name: "null", field: `"staffId":null,`},
+		} {
+			t.Run(eventKey+"/"+tt.name, func(t *testing.T) {
+				ev := transport.Event{
+					Type:      transport.FrameTypeEvent,
+					EventType: eventKey,
+					Data:      strings.NewReplacer("EVENT_KEY", eventKey, "STAFF_FIELD", tt.field).Replace(data),
 				}
-				t.Cleanup(func() { _ = pipeline.Close() })
-				if err := pipeline.Deliver(ev); err != nil {
-					t.Fatal(err)
-				}
-				if bytes.Count(out.Bytes(), []byte("\n")) != 1 {
-					t.Fatalf("expected one NDJSON line, got %q", out.String())
-				}
-				var got map[string]any
-				if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-					t.Fatal(err)
-				}
-				if !flatten {
-					if got["data"] != ev.Data {
-						t.Fatalf("non-flatten output changed original data: %#v", got)
+				for _, flatten := range []bool{true, false} {
+					var out bytes.Buffer
+					pipeline, err := consume.BuildPipeline(consume.FormatNDJSON, "", nil, &out,
+						consume.WithProjector(personalEventProjector(false, flatten)))
+					if err != nil {
+						t.Fatal(err)
 					}
-					continue
+					t.Cleanup(func() { _ = pipeline.Close() })
+					if err := pipeline.Deliver(ev); err != nil {
+						t.Fatal(err)
+					}
+					if bytes.Count(out.Bytes(), []byte("\n")) != 1 {
+						t.Fatalf("expected one NDJSON line, got %q", out.String())
+					}
+					var got map[string]any
+					if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+						t.Fatal(err)
+					}
+					if !flatten {
+						if got["data"] != ev.Data {
+							t.Fatalf("non-flatten output changed original data: %#v", got)
+						}
+						continue
+					}
+					staff, exists := got["staff_id"]
+					if tt.want == "" && exists || tt.want != "" && staff != tt.want {
+						t.Fatalf("staff_id = %#v (present=%v), want %q (omitted when empty)", staff, exists, tt.want)
+					}
+					if got["type"] != eventKey || got["process_instance_id"] != "instance-1" || got["title"] != "测试审批" {
+						t.Fatalf("flattened business fields changed: %#v", got)
+					}
 				}
-				staff, exists := got["staff_id"]
-				if tt.want == "" && exists || tt.want != "" && staff != tt.want {
-					t.Fatalf("staff_id = %#v (present=%v), want %q (omitted when empty)", staff, exists, tt.want)
-				}
-				if got["task_id"] != "task-1" || got["process_instance_id"] != "instance-1" || got["title"] != "测试审批" {
-					t.Fatalf("flattened business fields changed: %#v", got)
-				}
-			}
-		})
+			})
+		}
 	}
 }
 

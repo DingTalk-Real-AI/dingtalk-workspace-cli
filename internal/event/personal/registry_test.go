@@ -486,14 +486,14 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			eventKey: EventOAApprovalTaskCreated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "staff_id", "title", "status", "create_time", "event_time",
+				"staff_id", "process_code", "task_id", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalTaskFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -501,7 +501,7 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			eventKey: EventOAApprovalTaskRedirected,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "task_id", "title", "status", "result", "create_time",
+				"staff_id", "process_code", "task_id", "title", "status", "result", "create_time",
 				"finish_time", "event_time",
 			},
 		},
@@ -509,28 +509,28 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			eventKey: EventOAApprovalInstanceStarted,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalInstanceCC,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "event_time",
+				"staff_id", "process_code", "title", "status", "create_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "create_time", "finish_time", "event_time",
+				"staff_id", "process_code", "title", "status", "create_time", "finish_time", "event_time",
 			},
 		},
 		{
 			eventKey: EventOAApprovalInstanceFinished,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
-				"process_code", "title", "status", "result", "create_time", "finish_time",
+				"staff_id", "process_code", "title", "status", "result", "create_time", "finish_time",
 				"event_time",
 			},
 		},
