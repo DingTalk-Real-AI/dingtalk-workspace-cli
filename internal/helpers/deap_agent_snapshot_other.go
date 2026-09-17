@@ -5,8 +5,6 @@
 
 package helpers
 
-import "os"
-
-func openEmployeeSnapshot(path string) (*os.File, error) {
-	return os.Open(path)
+func platformEmployeeRenameBusy(error) bool {
+	return false
 }

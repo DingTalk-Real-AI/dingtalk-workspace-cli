@@ -19,7 +19,7 @@ import (
 
 // Filesystem boundaries shared by employee lifecycle operations. Tests inject
 // failures here instead of depending on Unix permissions or filesystem races.
-var employeeReadFile = readEmployeeSnapshot
+var employeeReadFile = os.ReadFile
 var employeeStat = os.Stat
 var employeeReadDir = os.ReadDir
 var employeeOpenFile = os.OpenFile

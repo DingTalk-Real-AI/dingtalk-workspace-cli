@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/atomicfile"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
@@ -271,7 +272,13 @@ func writeEmployeeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return AtomicWriteJSON(path, data)
+	return atomicfile.WriteWithOps(path, 0600, atomicfile.Ops{
+		MkdirAll: atomicMkdirAll, CreateTemp: atomicCreateTemp,
+		Remove: atomicRemove, Rename: renameEmployeeSnapshot,
+	}, func(file atomicfile.TempFile) error {
+		_, err := file.Write(data)
+		return err
+	})
 }
 
 func loadDigitalEmployeeConfig(profile string) (digitalEmployeeAdapterConfig, error) {
