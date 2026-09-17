@@ -340,6 +340,7 @@ dws auth status   # 确认 Refresh Token: 有效
 dws contact user search --query "悟空"             # 搜索联系人
 dws calendar event list                            # 查看今天的日程
 dws doc search --query "季度"                      # 搜索钉钉文档
+dws whiteboard +query --node "<白板节点ID>" --view summary --format json  # 查询白板概况
 dws minutes list mine                              # 列出我创建的 AI 听记
 dws drive list                                     # 列出钉盘文件
 dws todo task create --title "季度汇报" --executors "<your-userId>"   # 创建待办（请替换为真实 userId）
@@ -347,6 +348,23 @@ dws todo task list --dry-run                       # 预览操作但不执行
 ```
 
 > **完整命令列表**：[`docs/command-index.md`](./docs/command-index.md) — 全部命令，带描述和使用场景。
+
+
+### 白板
+
+使用 `dws whiteboard` 操作独立白板和文档内嵌白板：查询内容、通过 OpenNodes 创建／更新、使用 `+diff` 预览变更、生成本地 SVG 预览，以及管理个人／团队模板。
+
+```bash
+dws whiteboard --help
+dws whiteboard render --source @whiteboard.json --output ./whiteboard-preview.svg --format json
+dws whiteboard +diff --help
+dws whiteboard template personal list --format json
+dws whiteboard template team list --template-workspace "<团队空间ID>" --page-all --format json
+```
+
+`whiteboard.json` 为 OpenNodes 源文件。SVG 是本地预览，需要查看还原程度和警告，并确认当前预览后再创建白板；更新前使用 `+diff` 检查拟写入内容，再执行 `+update`。模板 `save`／`create` 命令的 `--dry-run` 是可选的服务端预检，不实际保存模板或创建白板。
+
+详见[白板参考](./skills/mono/references/products/whiteboard.md)、[Diff 指南](./skills/mono/references/products/whiteboard/diff.md)和 [SVG 预渲染指南](./skills/mono/references/products/whiteboard/render.md)。
 
 ## 在 Agent 中使用
 
@@ -761,6 +779,7 @@ dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <sec
 | 日志 | `report` | 创建 / 提交日志，收发件箱，模版，统计 |
 | AI 表格 | `aitable` | Base / 数据表 / 记录 / 字段 / 视图，权限与角色，自动化，图表与仪表盘，导入导出 |
 | 文档 | `doc` | 搜索 / 读写文档，块级编辑，评论，权限，媒体，上传 / 下载 |
+| 白板 | `whiteboard` | 独立／内嵌白板：查询、创建／更新、Diff、本地 SVG 预渲染、个人／团队模板 |
 | 钉盘 | `drive` | 列表 / 搜索 / 下载，文件夹，上传，复制 / 移动 / 重命名，权限 |
 | AI 听记 | `minutes` | 听记列表、摘要 / 关键词 / 转写 / 待办、思维导图、发言人、标签 |
 | 邮箱 | `mail` | 邮箱、KQL 搜索、读 / 发、草稿、文件夹、模版、联系人 |

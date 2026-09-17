@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层，覆盖钉盘与文档空间）。Use when 用户说 钉盘/文档空间/我的文档中的普通文件或文件夹、查找/上传/下载/复制/移动/重命名/删除/回收站/权限/评论/元信息，或本地与钉盘文件夹比较、拉取、推送、双向同步；也承接在线文档节点的存储管理。文档正文编辑与导出走 dingtalk-doc；明确的知识库空间及空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层，覆盖钉盘与文档空间）。Use when 用户说 钉盘/文档空间/我的文档中的普通文件或文件夹、查找/最近访问或编辑文档列表/上传/下载/复制/移动/重命名/删除/回收站/权限/评论/元信息，或本地与钉盘文件夹比较、拉取、推送、双向同步；也承接在线文档节点的存储管理。文档正文编辑与导出走 dingtalk-doc；明确的知识库空间及空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -40,7 +40,7 @@ metadata:
 | 全局按名称或关键词找文件 | `dws drive +search --query <关键词> --page-all --max-pages 20 --max-items 500` | 需要完整搜索时自动翻页；只需首批结果时可不加 `--page-all`；多候选停止；在线文档正文搜索走 `doc +search` |
 | 浏览根目录或已知文件夹 | `dws drive +list [--folder <dentryUuid>] --page-all --max-pages 20 --max-items 500` | 需要完整浏览时自动翻页；只需首批结果时可不加 `--page-all` |
 | 发现钉盘企业空间或“我的文件”空间 | `dws wiki space list --type <orgSpace\|mySpace> --format json` | Drive 只读前置；orgSpace 按 nextToken 续页，取 spaceId/rootFolderId 后回到 Drive |
-| 查看最近访问/编辑 | `dws drive +recent [--operate-type 1] --limit <N>` | 1=最近编辑；默认最近访问 |
+| <!-- dws-intent: drive.recent.documents -->查看最近访问/编辑文档列表 | `dws drive +recent [--operate-type 1] --limit <N>` | 1=最近编辑；默认最近访问；无主题、人物、方向或动作条件时直接使用 |
 | 查看节点类型和元数据 | `dws drive +inspect --node <dentryUuid>` | 按需加 stats/publish/cover，不为普通列表强制调用 |
 | 下载普通文件 | `dws drive +download --node <dentryUuid> --output <相对路径>` | 当前 shortcut 接受 ID；在线文档用 `doc +export` |
 | 只要临时下载地址不落盘 | `dws drive download --node <dentryUuid> --url-only --format json` | Agent 沙箱/外部系统自行下载时用；与 `--output/--overwrite` 等落盘参数互斥 |
