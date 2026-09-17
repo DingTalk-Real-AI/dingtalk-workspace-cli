@@ -83,7 +83,7 @@
 | `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
 | `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；group/sort 为 JSON 数组字符串；最多 1000 个分组 |
 | `record query-empty` | 查询完全没填用户字段的空行 | [aitable-record-query.md](./aitable/aitable-record-query.md) | `--base-id` `--table-id`；`--limit` 扫描预算 [1,100]；扫完前需用 `--cursor` 翻页（nextCursor 为空才表扫完，成功空页属正常） |
-| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
+| `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条；传 `--parent-record-id` 创建层级子记录 |
 | `record update` | 更新记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
 | `record batch-update` | 把同一份 cells 批量应用到多条记录 | [aitable-record-update.md](./aitable/aitable-record-update.md) | `--record-ids`（≤100）+ `--cells` 共享 patch |
 | `record upsert` | 批量创建或更新（有 recordId 走更新，无则创建） | [aitable-record-upsert.md](./aitable/aitable-record-upsert.md) | `--records`/`--records-file`；单次最多 100 条 |

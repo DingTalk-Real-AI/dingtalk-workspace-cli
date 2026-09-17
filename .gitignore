@@ -86,3 +86,8 @@ coverage-*.txt
 
 # stray compiled generator binary (source lives in internal/generator/cmd_param_aliases/)
 /cmd_param_aliases
+
+# Local scratch workspace (integration test sandboxes, probes, build artifacts).
+# Integration cases written here are delivered to the OSS auto-test repository,
+# not committed to this one.
+/.sandbox/
