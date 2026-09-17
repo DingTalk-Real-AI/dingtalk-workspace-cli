@@ -40,6 +40,8 @@
 | `dws mail thread trash` | 将单个邮件会话移动到已删除文件夹（不会永久删除） |
 | `dws mail thread batch-trash` | 将多个邮件会话批量移动到已删除文件夹（单次最多 100 个，不会永久删除） |
 | `dws mail user search` | 搜索通讯录用户（**按姓名或工号查他人邮箱**，不是搜邮件） |
+| `dws mail user get` | 按完整企业邮箱精确查询当前组织内员工的 uid、staffId 和姓名 |
+| `dws mail user batch-get` | 按 1 至 100 个完整企业邮箱批量查询员工，返回匹配员工和未匹配邮箱 |
 | `dws mail template create` | 创建邮件模板 |
 | `dws mail template list` | 列举邮件模板 |
 | `dws mail template get` | 获取邮件模板详情 |
@@ -1134,6 +1136,46 @@ Flags:
 ```
 
 将草稿箱中已有的草稿发送出去。草稿 ID 来自 `draft create` 或 `message search`（`folderId:5`）的返回结果。
+
+### 按企业邮箱精确查询员工
+
+```bash
+dws mail user get --org-email zhangsan@example.com --format json
+dws schema mail.get_user_by_org_email --compact
+```
+
+只传目标员工的完整企业邮箱；操作人 `uid` 和组织 `orgId` 由平台注入。
+不得猜测或补全域名，也不转换邮箱别名；保留输入的大小写和 `+` 后缀。
+结果位于统一输出的 `data`：`success=true` 且 `result.uid` 非空表示找到员工；
+`result` 为 null、缺失或 `uid` 为空表示未找到有效员工。
+`result.staffId` 即组织内 `userId`，不是工号；`result.uid` 是钉钉全局 UID。
+只知道姓名或工号时使用 `mail user search`，查询邮箱容量与别名使用 `mail mailbox profile`。
+
+### 批量按企业邮箱查询员工
+
+```bash
+dws mail user batch-get --org-emails alice@example.com,bob@example.com --format json
+dws schema mail.batch_get_users_by_org_emails --compact
+```
+
+`--org-emails` 可用逗号分隔或重复传入，映射为 MCP 的 `orgEmails` 字符串数组。
+每批 1 至 100 个邮箱，上限按去重前数量计算；更多邮箱需要分批调用。
+空元素按原始下标单独记录失败，其他邮箱继续查询；全空输入直接报参数错误。
+平台注入操作人和组织身份。服务端去首尾空格后忽略大小写去重，保留首次出现的地址和顺序，不解析邮箱别名。
+`data.result.users` 返回匹配员工，字段与单个查询相同；`data.result.notFoundOrgEmails` 返回未匹配邮箱。
+两个列表都按去重后的请求顺序排列；没有匹配员工时 `users=[]`，全部找到时 `notFoundOrgEmails=[]`。
+未匹配项不表示调用失败。后端明确因单个非法邮箱拒绝整批时，CLI 自动用单查接口逐项查询，保留可用结果。
+正常批量仅请求一次；上述兜底最多追加 100 次单查，邮箱忽略大小写去重。鉴权、权限、连接和其他整批故障不会触发兜底。
+
+部分失败时返回 `outcome=partial_failure`，退出码为 **7**，结果仍在 stdout：
+
+- `data.total`：去重后的邮箱与空元素总数。
+- `data.succeeded`：已确认查询，每项包含请求邮箱 `id`、`orgEmail` 和 `found`；找到时还有 `user` 员工信息，`found=false` 表示确认未匹配。
+- `data.failed`：明确失败项的 `id` 和 `error`；空元素使用 `org-emails[原始零起始下标]` 标识。
+- `data.unknown`：返回缺失或异常、无法确认的邮箱及原因；不得归为“未找到”，可针对这些邮箱重试。
+
+坏记录不会丢弃其他有效结果；返回缺少某个数组时，仍保留另一数组中可确认的项。全部查询均无法确认或均失败时返回 `failure`。
+解析方应先检查 `outcome`：完全成功仍使用 `data.result.users` / `notFoundOrgEmails`；部分成功使用上述逐项通道。
 
 ### 搜索邮箱用户（通讯录）
 ```
