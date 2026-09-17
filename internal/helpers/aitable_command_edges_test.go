@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -90,13 +91,7 @@ func runAitableCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	ctx, _ := output.WithResultStore(context.Background())
-	executed, err := root.ExecuteContextC(ctx)
-	if err != nil {
-		return err
-	}
-	_, _, err = output.EmitStoredResult(executed)
-	return err
+	return corecmd.ExecuteContextForTest(root, context.Background())
 }
 
 func TestCrossPlatformCoverageAitableRecordIDsProjectsUnifiedPagination(t *testing.T) {
@@ -397,7 +392,7 @@ func TestCrossPlatformCoverageAitableFieldListPreservesCommandContext(t *testing
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"field", "list", "--base-id=b", "--table-id=t"})
 	ctx := context.WithValue(context.Background(), aitableCommandContextKey{}, "field-list-context")
-	if err := root.ExecuteContext(ctx); err == nil {
+	if err := corecmd.ExecuteContextForTest(root, ctx); err == nil {
 		t.Fatal("field list context probe unexpectedly succeeded")
 	}
 	if caller.value != "field-list-context" {

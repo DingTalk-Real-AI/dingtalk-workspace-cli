@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -163,11 +164,11 @@ func TestCrossPlatformCoverageRootHelpRemainingCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	root.SetArgs([]string{"help", "missing"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	root.SetArgs([]string{"help", "utility"})
-	if err := root.Execute(); err != nil {
+	if err := corecmd.ExecuteForTest(root); err != nil {
 		t.Fatal(err)
 	}
 	if got := formatRootFlag(root.PersistentFlags().Lookup("value")); !strings.Contains(got, "-x") {

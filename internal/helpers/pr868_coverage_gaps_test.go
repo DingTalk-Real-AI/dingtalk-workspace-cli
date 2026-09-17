@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +32,7 @@ func executeMarkdownDiff(t *testing.T, args ...string) error {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageMarkdownDiffCommand(t *testing.T) {
@@ -573,7 +574,7 @@ func executeMailShare(t *testing.T, in io.Reader, args ...string) error {
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)
-	return root.Execute()
+	return corecmd.ExecuteForTest(root)
 }
 
 func TestCrossPlatformCoverageDiffEngineEdges(t *testing.T) {
