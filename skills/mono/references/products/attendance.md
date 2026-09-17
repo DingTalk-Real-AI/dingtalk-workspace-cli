@@ -273,7 +273,7 @@ Flags:
       --modified-date string   明细修改日，格式 yyyy-MM-dd HH:mm:ss；逐日明细编辑确认时携带
 ```
 
-外出固定 `--biz-type 2 --approve-biz-type attendance.goout`（生产实证；--biz-type 5 报业务错误 C0002）；`--duration-mode` 由外出类型 option 的 extension.unit 决定（day→1，halfDay→2，hour→3）。返回的 `compressedValue`、detailList 等应保留给审批提交流程（按 oa-form-components.md 外出套件章节的映射表组装 extValue），不自行拼装或改写。
+外出固定 `--biz-type 2 --approve-biz-type attendance.goout`（--biz-type 5 报业务错误 C0002）；`--duration-mode` 由外出类型 option 的 extension.unit 决定（day→1，halfDay→2，hour→3）。返回的 `compressedValue`、detailList 等应保留给审批提交流程（按 oa-form-components.md 外出套件章节的映射表组装 extValue），不自行拼装或改写。
 
 加班固定 `--biz-type 1 --new-overtime`（新版加班规则）；`--duration-mode` 由 `+get-complex-overtime-setting` 响应 interactMode 决定（day→1，halfDay→2 须同传 --half-start/--half-end，hour→3）；`--principal-users` 不传时服务端默认按发起人计算（本人发起不传），代提交/批量必传全量加班人；响应 `overtimeDurationStatus≠0` 时原样转告 `message` 并终止，`excludePrincipalUserIds` 非空需转告用户确认剔除，`overtimeRedressBy=="manual"` 时补偿方式必选。多天逐日明细经 `--detail-list` 透传组装（跨天/多天两阶段确认流程见 oa-overtime.md 步骤 6）。
 
