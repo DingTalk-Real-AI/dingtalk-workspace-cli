@@ -10,7 +10,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
-func TestExternalExchangeIntegrationRejectsMismatchedSecretReference(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeIntegrationRejectsMismatchedSecretReference(t *testing.T) {
 	dir := externalExchangeTestConfig(t)
 	if err := authKeychainSet(keychain.Service, secretAccountKey("other-app"), "other-secret"); err != nil {
 		t.Fatal(err)
@@ -21,7 +21,7 @@ func TestExternalExchangeIntegrationRejectsMismatchedSecretReference(t *testing.
 	}
 }
 
-func TestExternalExchangeIntegrationConfigurationSnapshotIsPaired(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeIntegrationConfigurationSnapshotIsPaired(t *testing.T) {
 	dir := externalExchangeTestConfig(t)
 	writeCredentialConfig(t, dir, "first-app", PlainSecret("first-secret"))
 	snapshot, err := LoadAppConfig(dir)
@@ -35,7 +35,7 @@ func TestExternalExchangeIntegrationConfigurationSnapshotIsPaired(t *testing.T) 
 	}
 }
 
-func TestExternalExchangeIntegrationDerivedSecretDoesNotMigrate(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeIntegrationDerivedSecretDoesNotMigrate(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
 		t.Run(fmt.Sprint(legacy), func(t *testing.T) {
 			dir := externalExchangeTestConfig(t)
@@ -57,7 +57,7 @@ func TestExternalExchangeIntegrationDerivedSecretDoesNotMigrate(t *testing.T) {
 	}
 }
 
-func TestExternalExchangeIntegrationLegacyCleanupFailureRollsBack(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeIntegrationLegacyCleanupFailureRollsBack(t *testing.T) {
 	dir := externalExchangeTestConfig(t)
 	old := &TokenData{CorpID: "corp", UserID: "user", ClientID: "app", Source: "flag", AccessToken: "old-token", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := SaveTokenData(dir, old); err != nil {
@@ -89,7 +89,7 @@ func TestExternalExchangeIntegrationLegacyCleanupFailureRollsBack(t *testing.T) 
 	}
 }
 
-func TestExternalExchangeIntegrationRollbackPreservesBothSecretSlots(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeIntegrationRollbackPreservesBothSecretSlots(t *testing.T) {
 	for _, values := range [][2]string{{"canonical", ""}, {"", "legacy"}, {"same", "same"}, {"canonical", "legacy"}} {
 		t.Run(fmt.Sprintf("canonical=%t/legacy=%t/equal=%t", values[0] != "", values[1] != "", values[0] == values[1]), func(t *testing.T) {
 			dir := externalExchangeTestConfig(t)

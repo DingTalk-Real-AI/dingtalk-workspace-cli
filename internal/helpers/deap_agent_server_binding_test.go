@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -409,7 +410,13 @@ func TestCrossPlatformCoverageEmployeeDeviceIdentityStableAndPrivate(t *testing.
 	}
 	path := filepath.Join(dir, "digital-employee-device", "identity.json")
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0600 {
+	if err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("device identity file missing or not regular: %v", err)
+	}
+	// Windows FileMode does not expose POSIX owner/group permission bits.
+	// Keep the persistence/corruption checks on every OS, and assert 0600
+	// only where the filesystem reports that permission model.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatal("device identity not private")
 	}
 	if err := writeEmployeeJSON(path, map[string]string{"deviceId": ""}); err != nil {

@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func TestEmployeeLeaseHoldsTheSameProfileLockUntilStdinCloses(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeLeaseHoldsTheSameProfileLockUntilStdinCloses(t *testing.T) {
 	_, b := lifecycleFixture(t)
 	auth.SetRuntimeProfile(b.DWSProfile)
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })
@@ -75,7 +75,7 @@ func lifecycleFixture(t *testing.T) (string, digitalEmployeeBinding) {
 	return dir, b
 }
 
-func TestEmployeeLostLeaseIsQuarantinedUntilExactHostRelease(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeLostLeaseIsQuarantinedUntilExactHostRelease(t *testing.T) {
 	_, b := lifecycleFixture(t)
 	guard := employeeLeaseGuard{AgentUUID: b.AgentUUID, Revision: b.BindingRevision, InstanceID: "old-host-instance"}
 	if err := writeEmployeeJSON(employeeLeaseGuardPath(b.DWSProfile), guard); err != nil {
@@ -114,7 +114,7 @@ func lifecycleCmd(t *testing.T, action, id string) *cobra.Command {
 	return cmd
 }
 
-func TestEmployeeUnbindRequiresReleaseAndKeepsProfile(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeUnbindRequiresReleaseAndKeepsProfile(t *testing.T) {
 	dir, b := lifecycleFixture(t)
 	tokenFile := filepath.Join(dir, "profile-kept.json")
 	if err := os.WriteFile(tokenFile, []byte("test-private-profile"), 0600); err != nil {
@@ -151,7 +151,7 @@ func TestEmployeeUnbindRequiresReleaseAndKeepsProfile(t *testing.T) {
 	}
 }
 
-func TestEmployeeUnbindUnknownRuntimePreservesOldBinding(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeUnbindUnknownRuntimePreservesOldBinding(t *testing.T) {
 	dir, b := lifecycleFixture(t)
 	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
 		return employeeDSHState{}, fmt.Errorf("host lost")
@@ -169,7 +169,7 @@ func TestEmployeeUnbindUnknownRuntimePreservesOldBinding(t *testing.T) {
 	}
 }
 
-func TestEmployeeBindingRevisionFencesOldReplies(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeBindingRevisionFencesOldReplies(t *testing.T) {
 	_, b := lifecycleFixture(t)
 	auth.SetRuntimeProfile(b.DWSProfile)
 	t.Cleanup(func() { auth.SetRuntimeProfile("") })

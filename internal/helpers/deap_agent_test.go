@@ -38,7 +38,7 @@ func (s *deapAgentSkillUploaderStub) Upload(_ context.Context, agentUUID, filePa
 	return s.fileURL, s.err
 }
 
-func TestDevDeapAgentSkillCreateUsesUploadFacadeAndSafeOutput(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentSkillCreateUsesUploadFacadeAndSafeOutput(t *testing.T) {
 	caller, output := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
@@ -115,7 +115,7 @@ func TestDevDeapAgentSkillCreateUsesUploadFacadeAndSafeOutput(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentSkillCreateLabelsStagesAndRedactsURLs(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentSkillCreateLabelsStagesAndRedactsURLs(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
@@ -210,7 +210,7 @@ func TestDevDeapAgentSkillCreateLabelsStagesAndRedactsURLs(t *testing.T) {
 	}
 }
 
-func TestDeapAgentOpenAPISkillUploaderStreamsMultipartAndReturnsFileURL(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentOpenAPISkillUploaderStreamsMultipartAndReturnsFileURL(t *testing.T) {
 	tempDir := t.TempDir()
 	filePath := tempDir + "/skill.zip"
 	file, err := os.Create(filePath)
@@ -290,7 +290,7 @@ func TestDeapAgentOpenAPISkillUploaderStreamsMultipartAndReturnsFileURL(t *testi
 	}
 }
 
-func TestDeapAgentParseSkillUploadCredential(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentParseSkillUploadCredential(t *testing.T) {
 	for _, raw := range []string{
 		`{"temporaryApiKey":"sk-top","expireAt":1}`,
 		`{"success":true,"data":{"temporaryApiKey":"sk-data","expireAt":2}}`,
@@ -315,7 +315,7 @@ func TestDeapAgentParseSkillUploadCredential(t *testing.T) {
 	}
 }
 
-func TestDeapAgentTemporaryCredentialUsesPublishedToolName(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentTemporaryCredentialUsesPublishedToolName(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	caller.resultText = `{"success":true,"data":{"temporaryApiKey":"sk-upload","expireAt":2}}`
 
@@ -339,7 +339,7 @@ func TestDeapAgentTemporaryCredentialUsesPublishedToolName(t *testing.T) {
 	}
 }
 
-func TestDeapAgentSkillUploadBaseURLFollowsMCPEnvironment(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentSkillUploadBaseURLFollowsMCPEnvironment(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		mcpURL  string
@@ -371,7 +371,7 @@ func TestDeapAgentSkillUploadBaseURLFollowsMCPEnvironment(t *testing.T) {
 	}
 }
 
-func TestDeapAgentSkillPackageValidation(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentSkillPackageValidation(t *testing.T) {
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
 	if err != nil {
@@ -452,7 +452,7 @@ type deapAgentCall struct {
 	args      map[string]any
 }
 
-func TestDevDeapAgentSkillAndMCPCommandsRouteFrozenContracts(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentSkillAndMCPCommandsRouteFrozenContracts(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
@@ -524,7 +524,7 @@ func TestDevDeapAgentSkillAndMCPCommandsRouteFrozenContracts(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentConfigFilesStayRedactedInDryRun(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentConfigFilesStayRedactedInDryRun(t *testing.T) {
 	caller, output := newDeapAgentTestTree(t, true)
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
@@ -584,7 +584,7 @@ func TestDevDeapAgentConfigFilesStayRedactedInDryRun(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentSaveDraftDistinguishesAbsentAndExplicitEmptyConfigs(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentSaveDraftDistinguishesAbsentAndExplicitEmptyConfigs(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	tempDir := t.TempDir()
 	oldDir, err := os.Getwd()
@@ -694,7 +694,7 @@ func deapFindLeaf(t *testing.T, root *cobra.Command, leaf string) *cobra.Command
 //
 // 为何钉归类而不只钉叶子集合：管理态含不可逆写操作，观测态全是只读；两者混放会
 // 让调用方（含 Agent）失去“这一类命令安全属性相同”这个判断依据。
-func TestDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
+func TestCrossPlatformCoverageDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 
@@ -749,7 +749,7 @@ func TestDeapCommandTreeUsesManageRunAndCapability(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagReplacesDeapTopLevelCommand(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagReplacesDeapTopLevelCommand(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	handler := deapHandler{}
 	if got := handler.Name(); got != "dingtalk-tag" {
@@ -764,7 +764,7 @@ func TestDingTalkTagReplacesDeapTopLevelCommand(t *testing.T) {
 	}
 }
 
-func TestDeapHelpDescribesBuiltInEndpointResolution(t *testing.T) {
+func TestCrossPlatformCoverageDeapHelpDescribesBuiltInEndpointResolution(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	if !strings.Contains(root.Long, "跟随当前 MCP 环境") {
@@ -775,7 +775,7 @@ func TestDeapHelpDescribesBuiltInEndpointResolution(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	cases := []struct {
 		leaf      string
@@ -893,7 +893,7 @@ func TestDevDeapAgentAvailableLeavesRouteExactMCPTools(t *testing.T) {
 	}
 }
 
-func TestDeapDetailDefaultsToDraft(t *testing.T) {
+func TestCrossPlatformCoverageDeapDetailDefaultsToDraft(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	detail := deapFindLeaf(t, root, "detail")
@@ -911,7 +911,7 @@ func TestDeapDetailDefaultsToDraft(t *testing.T) {
 	}
 }
 
-func TestDeapAgentResponseModeNormalization(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentResponseModeNormalization(t *testing.T) {
 	tests := []struct {
 		name    string
 		raw     string
@@ -948,7 +948,7 @@ func TestDeapAgentResponseModeNormalization(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	cases := []struct {
 		leaf    string
@@ -1033,7 +1033,7 @@ func TestDevDeapAgentConstraintsFailBeforeMCP(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	create := deapFindLeaf(t, root, "create")
@@ -1104,7 +1104,7 @@ func TestDevDeapAgentRemovesRetiredFlagsAndKeepsIdentityHidden(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	login := deapFindLeaf(t, root, "login")
@@ -1151,7 +1151,7 @@ func TestDevDeapAgentHelpMatchesCurrentMCPInputs(t *testing.T) {
 	}
 }
 
-func TestDevDeapAgentHelpExplainsFullReplacementAndTraceAuthorization(t *testing.T) {
+func TestCrossPlatformCoverageDevDeapAgentHelpExplainsFullReplacementAndTraceAuthorization(t *testing.T) {
 	caller, _ := newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	save := deapFindLeaf(t, root, "save-draft")

@@ -29,7 +29,7 @@ func installEmployeeReplyBinding(t *testing.T) {
 	})
 }
 
-func TestEmployeeAdapterDetectionAndBoundaries(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeAdapterDetectionAndBoundaries(t *testing.T) {
 	for _, name := range digitalEmployeeChannels() {
 		t.Run(name, func(t *testing.T) {
 			cmd := newDeapConnectCommand()
@@ -61,7 +61,7 @@ func TestEmployeeAdapterDetectionAndBoundaries(t *testing.T) {
 	}
 }
 
-func TestEmployeeSavedWorkerDoesNotRequireOriginalCustomCommand(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeSavedWorkerDoesNotRequireOriginalCustomCommand(t *testing.T) {
 	cmd := newDeapConnectCommand()
 	_ = cmd.Flags().Set("channel", "custom")
 	_ = cmd.Flags().Set("local-worker", "true")
@@ -70,7 +70,7 @@ func TestEmployeeSavedWorkerDoesNotRequireOriginalCustomCommand(t *testing.T) {
 	}
 }
 
-func TestEmployeeRuntimeScopeAndBindingCompatibility(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeRuntimeScopeAndBindingCompatibility(t *testing.T) {
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	b := digitalEmployeeBinding{SchemaVersion: 1, AgentUUID: "agent-1", DWSProfile: "corp:employee", OperatorOpenDingTalkID: "operator"}
@@ -91,7 +91,7 @@ func TestEmployeeRuntimeScopeAndBindingCompatibility(t *testing.T) {
 	}
 }
 
-func TestEmployeeCommonAgentOptionsMatchDevConnect(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeCommonAgentOptionsMatchDevConnect(t *testing.T) {
 	cmd := newDeapConnectCommand()
 	for k, v := range map[string]string{"channel": "codex", "agent-model": "model-test", "agent-workdir": t.TempDir(), "agent-memory": "false", "agent-timeout": "9", "agent-permission-mode": "ask"} {
 		_ = cmd.Flags().Set(k, v)
@@ -109,7 +109,7 @@ func TestEmployeeCommonAgentOptionsMatchDevConnect(t *testing.T) {
 	}
 }
 
-func TestEmployeeRetryBudgetPersistsAcrossRestarts(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeRetryBudgetPersistsAcrossRestarts(t *testing.T) {
 	yes, no := true, false
 	for _, tc := range []struct {
 		name    string
@@ -138,7 +138,7 @@ func TestEmployeeRetryBudgetPersistsAcrossRestarts(t *testing.T) {
 	}
 }
 
-func TestEmployeeRuntimeOwnerAndGroupACL(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeRuntimeOwnerAndGroupACL(t *testing.T) {
 	r := employeeRuntime{cfg: digitalEmployeeAdapterConfig{Options: connectAgentOptions{AllowedUsers: []string{"owner"}, AllowedGroups: []string{"allowed-group"}}}}
 	e := employeeEvent{Type: "user_im_message_receive_o2o_all", EventID: "e", MessageID: "m", ConversationID: "dm", SenderID: "owner", Content: "hello"}
 	if !r.accept(e) {
@@ -165,7 +165,7 @@ func TestEmployeeRuntimeOwnerAndGroupACL(t *testing.T) {
 	}
 }
 
-func TestEmployeePrivateDiagnosticsReachOpenCode(t *testing.T) {
+func TestCrossPlatformCoverageEmployeePrivateDiagnosticsReachOpenCode(t *testing.T) {
 	fwd := newOpencodeForwarder("opencode", nil, time.Second, connectAgentOptions{WorkDir: t.TempDir(), PrivateDiagnostics: true}, "isolated")
 	if !fwd.(*opencodeForwarder).server.privateDiagnostics {
 		t.Fatal("OpenCode diagnostics bypass private boundary")
@@ -176,7 +176,7 @@ func TestEmployeePrivateDiagnosticsReachOpenCode(t *testing.T) {
 	}
 }
 
-func TestEmployeeStopWaitsForSupervisorExit(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeStopWaitsForSupervisorExit(t *testing.T) {
 	state := digitalEmployeeRunState{Status: "stopped"}
 	if employeeStopComplete(state, os.Getpid()) {
 		t.Fatal("reported stop before supervisor exited")
@@ -186,7 +186,7 @@ func TestEmployeeStopWaitsForSupervisorExit(t *testing.T) {
 	}
 }
 
-func TestEmployeeConnectRegistrationLockPrecedesAuthorizationAndBinding(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeConnectRegistrationLockPrecedesAuthorizationAndBinding(t *testing.T) {
 	caller := newSuccessfulConnectCaller(successfulAuthResponse(), "")
 	InitDepsForTest(t, caller)
 	setupConnectSupervisorSeams(t)
@@ -213,7 +213,7 @@ func TestEmployeeConnectRegistrationLockPrecedesAuthorizationAndBinding(t *testi
 	}
 }
 
-func TestEmployeeMachineCommandProfileAndPrivateInput(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeMachineCommandProfileAndPrivateInput(t *testing.T) {
 	t.Setenv("DWS_CLIENT_SECRET", "must-not-leak")
 	t.Setenv("DWS_DUMP_RAW", "1")
 	cmd, err := employeeCommand(context.Background(), "corp:employee", "dingtalk-tag", "channel", "reply", "--stdin")
@@ -243,7 +243,7 @@ func (f *employeeTestForwarder) forward(context.Context, string, string) (string
 	return "answer-not-in-audit", nil
 }
 
-func TestEmployeeRuntimeRealNDJSONAndReceiptEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeRuntimeRealNDJSONAndReceiptEnvelope(t *testing.T) {
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	t.Setenv("DWS_EMPLOYEE_FIXTURE", "reply")
@@ -338,7 +338,7 @@ func TestEmployeeSubprocessFixture(t *testing.T) {
 	os.Exit(0)
 }
 
-func TestEmployeeConsumerFaultsFailClosed(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeConsumerFaultsFailClosed(t *testing.T) {
 	for _, tc := range []struct{ mode, code string }{{"no-ready", "ready_timeout"}, {"invalid", "invalid_event"}, {"audit", "audit_unavailable"}} {
 		t.Run(tc.mode, func(t *testing.T) {
 			dir := t.TempDir()
@@ -381,7 +381,7 @@ func TestEmployeeConsumerFaultsFailClosed(t *testing.T) {
 	}
 }
 
-func TestEmployeeRetryHintTerminalDominatesAndKeepsLongestDelay(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeRetryHintTerminalDominatesAndKeepsLongestDelay(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		err := &employeeRunError{}
 		employeeReadRetryHint(`{"retryable":true,"state":"terminal_hold","retry_after_seconds":30,"child":{"retryable":true,"retry_after_seconds":1}}`, err)
@@ -391,7 +391,7 @@ func TestEmployeeRetryHintTerminalDominatesAndKeepsLongestDelay(t *testing.T) {
 	}
 }
 
-func TestEmployeeSupervisorCanStopDuringCooldown(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeSupervisorCanStopDuringCooldown(t *testing.T) {
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	cfg := digitalEmployeeAdapterConfig{Binding: digitalEmployeeBinding{AgentUUID: "agent", DWSProfile: "corp:employee", Channel: "custom"}, AlwaysOn: true}
@@ -431,7 +431,7 @@ func TestEmployeeSupervisorCanStopDuringCooldown(t *testing.T) {
 	}
 }
 
-func TestEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeEventConsumerReadyDedupeAndGracefulStop(t *testing.T) {
 	dir := t.TempDir()
 	testseam.Swap(t, &deapConnectConfigDir, func() string { return dir })
 	t.Setenv("DWS_EMPLOYEE_FIXTURE", "reply")

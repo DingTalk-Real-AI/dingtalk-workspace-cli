@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestDingTalkTagManageLoginPersistsExactProfileWithoutDSHEffects(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagManageLoginPersistsExactProfileWithoutDSHEffects(t *testing.T) {
 	caller := newSuccessfulLoginCaller(1)
 	InitDepsForTest(t, caller)
 	setupConnectSupervisorSeams(t)
@@ -80,7 +80,7 @@ func TestDingTalkTagManageLoginPersistsExactProfileWithoutDSHEffects(t *testing.
 	}
 }
 
-func TestDingTalkTagManageLoginRejectsMissingOrWrongIdentityBeforePersistence(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagManageLoginRejectsMissingOrWrongIdentityBeforePersistence(t *testing.T) {
 	tests := []struct {
 		name       string
 		published  string
@@ -129,7 +129,7 @@ func TestDingTalkTagManageLoginRejectsMissingOrWrongIdentityBeforePersistence(t 
 	}
 }
 
-func TestDingTalkTagManageLoginRefreshesSameProfileAndPreservesSupervisor(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagManageLoginRefreshesSameProfileAndPreservesSupervisor(t *testing.T) {
 	caller := newSuccessfulLoginCaller(2)
 	InitDepsForTest(t, caller)
 	setupConnectSupervisorSeams(t)
@@ -156,7 +156,7 @@ func TestDingTalkTagManageLoginRefreshesSameProfileAndPreservesSupervisor(t *tes
 	}
 }
 
-func TestDingTalkTagManageLoginDryRunHasNoExternalEffects(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagManageLoginDryRunHasNoExternalEffects(t *testing.T) {
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
 	testseam.Swap(t, &deapConnectManagedExchange, func(context.Context, string, auth.ManagedExchangeRequest) (*auth.TokenData, error) {

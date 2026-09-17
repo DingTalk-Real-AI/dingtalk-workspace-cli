@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestDeapAgentMCPRequiresEmployeeForEveryResourceCommand(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentMCPRequiresEmployeeForEveryResourceCommand(t *testing.T) {
 	for _, operation := range []string{"create", "list", "query"} {
 		t.Run(operation, func(t *testing.T) {
 			caller, _ := newDeapAgentTestTree(t, false)
@@ -30,7 +30,7 @@ func TestDeapAgentMCPRequiresEmployeeForEveryResourceCommand(t *testing.T) {
 	}
 }
 
-func TestDeapAgentMCPInvalidConfigNeverCallsRemoteOrLeaksValues(t *testing.T) {
+func TestCrossPlatformCoverageDeapAgentMCPInvalidConfigNeverCallsRemoteOrLeaksValues(t *testing.T) {
 	for name, body := range map[string]string{
 		"wrapped HSF shape":    `{"config":{"name":"example","configString":"secret-marker"}}`,
 		"missing configString": `{"name":"example"}`,

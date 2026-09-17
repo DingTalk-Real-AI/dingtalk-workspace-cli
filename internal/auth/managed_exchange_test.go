@@ -19,7 +19,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
-func TestPersistManagedExchangeTokenCreatesAndRefreshesExactProfileWithoutSwitchingSupervisor(t *testing.T) {
+func TestCrossPlatformCoveragePersistManagedExchangeTokenCreatesAndRefreshesExactProfileWithoutSwitchingSupervisor(t *testing.T) {
 	configDir := t.TempDir()
 	supervisor := &TokenData{
 		AccessToken: "supervisor-access", RefreshToken: "supervisor-refresh",
@@ -68,7 +68,7 @@ func TestPersistManagedExchangeTokenCreatesAndRefreshesExactProfileWithoutSwitch
 	}
 }
 
-func TestExchangeManagedAuthCodeUsesExplicitClientAndPreservesRuntimeState(t *testing.T) {
+func TestCrossPlatformCoverageExchangeManagedAuthCodeUsesExplicitClientAndPreservesRuntimeState(t *testing.T) {
 	var requestBody map[string]string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -150,7 +150,7 @@ func TestExchangeManagedAuthCodeUsesExplicitClientAndPreservesRuntimeState(t *te
 	}
 }
 
-func TestExchangeManagedAuthCodeRejectsIdentityMismatchBeforePersistence(t *testing.T) {
+func TestCrossPlatformCoverageExchangeManagedAuthCodeRejectsIdentityMismatchBeforePersistence(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"accessToken":"access","refreshToken":"refresh","corpId":"expected-corp","userId":"wrong-user"}`)
 	}))
@@ -189,7 +189,7 @@ func TestExchangeManagedAuthCodeRejectsIdentityMismatchBeforePersistence(t *test
 	}
 }
 
-func TestExchangeManagedAuthCodeRejectsMissingTokenIdentityBeforePersistence(t *testing.T) {
+func TestCrossPlatformCoverageExchangeManagedAuthCodeRejectsMissingTokenIdentityBeforePersistence(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"accessToken":"access","refreshToken":"refresh","corpId":"expected-corp"}`)
 	}))
@@ -225,7 +225,7 @@ func TestExchangeManagedAuthCodeRejectsMissingTokenIdentityBeforePersistence(t *
 	}
 }
 
-func TestExchangeManagedAuthCodeRejectsResolvedIdentityMismatchBeforePersistence(t *testing.T) {
+func TestCrossPlatformCoverageExchangeManagedAuthCodeRejectsResolvedIdentityMismatchBeforePersistence(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"accessToken":"access","refreshToken":"refresh","corpId":"expected-corp"}`)
 	}))
@@ -261,7 +261,7 @@ func TestExchangeManagedAuthCodeRejectsResolvedIdentityMismatchBeforePersistence
 	}
 }
 
-func TestExchangeManagedAuthCodeRejectsResolvedOrganizationMismatchBeforePersistence(t *testing.T) {
+func TestCrossPlatformCoverageExchangeManagedAuthCodeRejectsResolvedOrganizationMismatchBeforePersistence(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"accessToken":"access","refreshToken":"refresh","corpId":"expected-corp"}`)
 	}))
@@ -297,7 +297,7 @@ func TestExchangeManagedAuthCodeRejectsResolvedOrganizationMismatchBeforePersist
 	}
 }
 
-func TestExchangeManagedAuthCodeSanitizesIdentityLookupFailure(t *testing.T) {
+func TestCrossPlatformCoverageExchangeManagedAuthCodeSanitizesIdentityLookupFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"accessToken":"access-secret","refreshToken":"refresh-secret","corpId":"expected-corp"}`)
 	}))

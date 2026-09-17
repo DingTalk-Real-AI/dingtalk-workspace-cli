@@ -23,7 +23,7 @@ type employeeReceiptCaller struct {
 	receiptErrors []error
 }
 
-func TestEmployeeReceiptRetryBoundaryAndPrivacy(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeReceiptRetryBoundaryAndPrivacy(t *testing.T) {
 	for _, tc := range []struct {
 		name, server, tool string
 		err                error
@@ -69,7 +69,7 @@ func (c *receiptErrorOnlyCaller) CallTool(context.Context, string, string, map[s
 	return nil, c.err
 }
 
-func TestEmployeeReceiptNotVisibleExhaustionIsUnknownAndNeverResends(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeReceiptNotVisibleExhaustionIsUnknownAndNeverResends(t *testing.T) {
 	caller := &employeeReceiptCaller{digitalEmployeeProtocolCaller: &digitalEmployeeProtocolCaller{}}
 	for i := 0; i < digitalEmployeeReceiptAttempts; i++ {
 		caller.receiptErrors = append(caller.receiptErrors, receiptNotVisibleError())
@@ -92,7 +92,7 @@ func TestEmployeeReceiptNotVisibleExhaustionIsUnknownAndNeverResends(t *testing.
 	}
 }
 
-func TestEmployeeReceiptPermanentFailureStopsPolling(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeReceiptPermanentFailureStopsPolling(t *testing.T) {
 	caller := &employeeReceiptCaller{digitalEmployeeProtocolCaller: &digitalEmployeeProtocolCaller{}, receiptErrors: []error{errors.New("private-error")}}
 	InitDepsForTest(t, caller)
 	testseam.Swap(t, &deapChannelReceiptWait, func(context.Context, time.Duration) error { t.Fatal("permanent failure retried"); return nil })
@@ -102,7 +102,7 @@ func TestEmployeeReceiptPermanentFailureStopsPolling(t *testing.T) {
 	}
 }
 
-func TestEmployeeReceiptCancellationStopsQueries(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeReceiptCancellationStopsQueries(t *testing.T) {
 	for _, beforeFirst := range []bool{true, false} {
 		t.Run(fmt.Sprint(beforeFirst), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -147,7 +147,7 @@ func receiptNotVisibleError() error {
 	}))
 }
 
-func TestDingTalkTagChannelReplyRetriesNotVisibleReceiptWithoutResending(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagChannelReplyRetriesNotVisibleReceiptWithoutResending(t *testing.T) {
 	installEmployeeReplyBinding(t)
 	t.Setenv("DWS_DUMP_RAW", "1")
 	caller := &employeeReceiptCaller{

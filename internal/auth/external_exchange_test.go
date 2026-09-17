@@ -56,7 +56,7 @@ func externalExchangeTestServer(t *testing.T, dir string, handler http.HandlerFu
 	}
 }
 
-func TestExternalExchangeFixturesIsolatePlatformCredentials(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeFixturesIsolatePlatformCredentials(t *testing.T) {
 	externalExchangeTestConfig(t)
 	account := secretAccountKey("fixture-app")
 	if err := keychain.Set(keychain.Service, account, "parent-test-secret"); err != nil {
@@ -77,7 +77,7 @@ func TestExternalExchangeFixturesIsolatePlatformCredentials(t *testing.T) {
 	}
 }
 
-func TestExternalExchangeEmptySandboxPersistsIdentityAndRefreshesWithOriginalClient(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeEmptySandboxPersistsIdentityAndRefreshesWithOriginalClient(t *testing.T) {
 	for _, selection := range []string{"", "default", "custom-app"} {
 		t.Run("client="+selection, func(t *testing.T) {
 			dir := externalExchangeTestConfig(t)
@@ -152,7 +152,7 @@ func TestExternalExchangeEmptySandboxPersistsIdentityAndRefreshesWithOriginalCli
 	}
 }
 
-func TestExternalExchangePreservesExistingDefaultAndUpdatesExactSlot(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangePreservesExistingDefaultAndUpdatesExactSlot(t *testing.T) {
 	dir := externalExchangeTestConfig(t)
 	oldProfile := RuntimeProfile()
 	SetRuntimeProfile("")
@@ -186,7 +186,7 @@ func TestExternalExchangePreservesExistingDefaultAndUpdatesExactSlot(t *testing.
 	}
 }
 
-func TestExternalExchangeRejectsInvalidIdentityAndNeverTriesAnotherApplication(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeRejectsInvalidIdentityAndNeverTriesAnotherApplication(t *testing.T) {
 	for _, kind := range []string{"lookup-error", "missing-user", "wrong-corp", "expected-user", "expected-corp", "server-error", "missing-token-corp"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := externalExchangeTestConfig(t)
@@ -243,7 +243,7 @@ func TestExternalExchangeRejectsInvalidIdentityAndNeverTriesAnotherApplication(t
 	}
 }
 
-func TestExternalExchangeApplicationSelectionKeepsMatchedDirectCredentials(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeApplicationSelectionKeepsMatchedDirectCredentials(t *testing.T) {
 	dir := externalExchangeTestConfig(t)
 	SetClientID("configured-app")
 	SetClientSecret("configured-secret")
@@ -272,7 +272,7 @@ func TestExternalExchangeApplicationSelectionKeepsMatchedDirectCredentials(t *te
 	}
 }
 
-func TestExternalExchangeDirectCredentialsAreSavedOnlyAfterIdentityVerification(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeDirectCredentialsAreSavedOnlyAfterIdentityVerification(t *testing.T) {
 	for _, valid := range []bool{false, true} {
 		t.Run(fmt.Sprint(valid), func(t *testing.T) {
 			dir := externalExchangeTestConfig(t)

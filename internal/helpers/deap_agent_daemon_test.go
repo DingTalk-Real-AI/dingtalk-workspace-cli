@@ -62,7 +62,7 @@ func TestEmployeeDaemonSubprocessFixture(t *testing.T) {
 	os.Exit(0)
 }
 
-func TestEmployeeDaemonLifecycleUsesSavedProfileAndStopsOnlyOwnProcess(t *testing.T) {
+func TestCrossPlatformCoverageEmployeeDaemonLifecycleUsesSavedProfileAndStopsOnlyOwnProcess(t *testing.T) {
 	if !daemonDetachSupported {
 		t.Skip("平台不支持后台")
 	}

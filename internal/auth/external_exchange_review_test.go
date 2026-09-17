@@ -18,7 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
-func TestExternalExchangeReviewConfigDirectoryAndSource(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeReviewConfigDirectoryAndSource(t *testing.T) {
 	defaultDir := externalExchangeTestConfig(t)
 	writeApp := func(dir, id, secret string) {
 		t.Helper()
@@ -54,7 +54,7 @@ func TestExternalExchangeReviewConfigDirectoryAndSource(t *testing.T) {
 	}
 }
 
-func TestExternalExchangeReviewDirectProvenanceSurvivesPersistence(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeReviewDirectProvenanceSurvivesPersistence(t *testing.T) {
 	for _, source := range []string{"app", "env", "default", "flag"} {
 		t.Run(source, func(t *testing.T) {
 			externalExchangeTestConfig(t)
@@ -93,7 +93,7 @@ func TestExternalExchangeReviewDirectProvenanceSurvivesPersistence(t *testing.T)
 	}
 }
 
-func TestExternalExchangeReviewPersistenceRollbackIncludesSecret(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeReviewPersistenceRollbackIncludesSecret(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		for _, failure := range []string{"secret-write", "identity-write", "profile-write", "marker-write", "none"} {
 			t.Run(fmt.Sprintf("existing=%v/%s", existing, failure), func(t *testing.T) {
@@ -178,7 +178,7 @@ func TestExternalExchangeReviewPersistenceRollbackIncludesSecret(t *testing.T) {
 	}
 }
 
-func TestExternalExchangeReviewSecretSnapshotFailureDoesNotOverwrite(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeReviewSecretSnapshotFailureDoesNotOverwrite(t *testing.T) {
 	dir := externalExchangeTestConfig(t)
 	original := authKeychainGet
 	testseam.Swap(t, &authKeychainGet, func(service, account string) (string, error) {
@@ -198,7 +198,7 @@ func TestExternalExchangeReviewSecretSnapshotFailureDoesNotOverwrite(t *testing.
 	}
 }
 
-func TestExternalExchangeReviewPreflightDoesNotConsumeCode(t *testing.T) {
+func TestCrossPlatformCoverageExternalExchangeReviewPreflightDoesNotConsumeCode(t *testing.T) {
 	for _, kind := range []string{"invalid-config", "unreadable-secret", "unsupported-hook"} {
 		t.Run(kind, func(t *testing.T) {
 			externalExchangeTestConfig(t)

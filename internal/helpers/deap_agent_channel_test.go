@@ -76,7 +76,7 @@ func (*digitalEmployeeIdentityBlocksCaller) DryRun() bool   { return false }
 func (*digitalEmployeeIdentityBlocksCaller) Fields() string { return "" }
 func (*digitalEmployeeIdentityBlocksCaller) JQ() string     { return "" }
 
-func TestDigitalEmployeeManagedIdentityRequiresOneExactUserIDAcrossAllBlocks(t *testing.T) {
+func TestCrossPlatformCoverageDigitalEmployeeManagedIdentityRequiresOneExactUserIDAcrossAllBlocks(t *testing.T) {
 	t.Run("orgUserId is not a userId proof", func(t *testing.T) {
 		InitDepsForTest(t, &digitalEmployeeIdentityBlocksCaller{blocks: []edition.ContentBlock{{
 			Type: "text", Text: `{"result":[{"orgEmployeeModel":{"corpId":"employee-corp","orgUserId":"employee-user"}}]}`,
@@ -124,7 +124,7 @@ func TestDigitalEmployeeManagedIdentityRequiresOneExactUserIDAcrossAllBlocks(t *
 	})
 }
 
-func TestDingTalkTagExposesIndependentConnectAndChannelProtocols(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagExposesIndependentConnectAndChannelProtocols(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	root.PersistentFlags().Bool("dry-run", false, "test dry-run")
@@ -161,7 +161,7 @@ func TestDingTalkTagExposesIndependentConnectAndChannelProtocols(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelope(t *testing.T) {
 	newDeapAgentTestTree(t, false)
 	root := deapHandler{}.Command(&captureRunner{})
 	leaf, _, err := root.Find([]string{"channel", "capabilities"})
@@ -198,7 +198,7 @@ func TestDingTalkTagChannelCapabilitiesUsesDWSMachineEnvelope(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *testing.T) {
 	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
@@ -273,7 +273,7 @@ func TestDingTalkTagChannelReplyReadsBoundedStrictStdinAndNormalizesEnvelope(t *
 	}
 }
 
-func TestDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
 	installEmployeeReplyBinding(t)
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{
 		"im/list_messages_by_ids":    {`{"result":[{"openMessageId":"message-1","senderOpenDingTalkId":"operator-open"}]}`},
@@ -322,7 +322,7 @@ func TestDingTalkTagChannelReplyResolvesAsyncSendReceipt(t *testing.T) {
 	}
 }
 
-func TestDigitalEmployeeDeliveryRejectsMissingMessageIDAfterBoundedPolling(t *testing.T) {
+func TestCrossPlatformCoverageDigitalEmployeeDeliveryRejectsMissingMessageIDAfterBoundedPolling(t *testing.T) {
 	statuses := make([]string, digitalEmployeeReceiptAttempts)
 	for i := range statuses {
 		statuses[i] = `{"result":{"openTaskId":"task-1","status":"PROCESSING"}}`
@@ -344,7 +344,7 @@ func TestDigitalEmployeeDeliveryRejectsMissingMessageIDAfterBoundedPolling(t *te
 	}
 }
 
-func TestDingTalkTagConnectDryRunHasNoExternalEffects(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectDryRunHasNoExternalEffects(t *testing.T) {
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
 	testseam.Swap(t, &deapConnectManagedExchange, func(context.Context, string, auth.ManagedExchangeRequest) (*auth.TokenData, error) {
@@ -381,7 +381,7 @@ func TestDingTalkTagConnectDryRunHasNoExternalEffects(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagConnectRejectsMissingMode(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectRejectsMissingMode(t *testing.T) {
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
 	leaf := newConnectTestCommandWithMode(t, true, "")
@@ -393,7 +393,7 @@ func TestDingTalkTagConnectRejectsMissingMode(t *testing.T) {
 	}
 }
 
-func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.T) {
 	tests := []struct {
 		name      string
 		responses []string
@@ -452,7 +452,7 @@ func TestDingTalkTagConnectRejectsInvalidPrerequisitesBeforeExchange(t *testing.
 	}
 }
 
-func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectFailureBoundaries(t *testing.T) {
 	t.Run("authorization missing fields", func(t *testing.T) {
 		caller := newSuccessfulConnectCaller(`{"success":true,"data":{"uid":"employee-user","dwsAuthCode":"secret","orgId":"employee-corp"}}`,
 			`{"result":[{"userId":"supervisor-user","openDingTalkId":"operator-open"}]}`)
@@ -551,7 +551,7 @@ func TestDingTalkTagConnectFailureBoundaries(t *testing.T) {
 	})
 }
 
-func TestDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectRejectsAuthorizationIdentityMismatchBeforeExchange(t *testing.T) {
 	tests := []struct {
 		name          string
 		authorization string
@@ -667,7 +667,7 @@ func newConnectTestCommandWithMode(t *testing.T, dryRun bool, channel string) *c
 	return leaf
 }
 
-func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *testing.T) {
 	testseam.Swap(t, &employeeDSHControl, func(context.Context, digitalEmployeeBinding, string) (employeeDSHState, error) {
 		return employeeDSHState{}, fmt.Errorf("host unavailable")
 	})
@@ -801,7 +801,7 @@ func TestDingTalkTagConnectKeepsSupervisorCurrentAndUsesReturnedClientID(t *test
 	}
 }
 
-func TestDingTalkTagOperatorPrivateRejectsTargetDifferentFromConnectBinding(t *testing.T) {
+func TestCrossPlatformCoverageDingTalkTagOperatorPrivateRejectsTargetDifferentFromConnectBinding(t *testing.T) {
 	caller := &digitalEmployeeProtocolCaller{responses: map[string][]string{}}
 	InitDepsForTest(t, caller)
 	auth.SetRuntimeProfile("employee-corp:employee-user")
