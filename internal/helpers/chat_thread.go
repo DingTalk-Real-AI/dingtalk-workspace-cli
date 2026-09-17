@@ -1235,6 +1235,10 @@ func inspectTopicContainerState(value any, openConversationID string) topicConta
 	if sawFalse {
 		return topicContainerInspection{state: topicContainerNonTopic}
 	}
+	// Direct conversations may omit group-only topic fields.
+	if singleChat, ok := conversation["singleChat"].(bool); ok && singleChat {
+		return topicContainerInspection{state: topicContainerNonTopic}
+	}
 	title, ok := conversation["title"].(string)
 	title = strings.TrimSpace(title)
 	if !ok || title == "" {

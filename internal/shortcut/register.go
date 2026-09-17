@@ -15,6 +15,7 @@ package shortcut
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/spf13/cobra"
@@ -23,11 +24,16 @@ import (
 // allShortcuts is the registry of built-in shortcuts. Service packages append to
 // it via Register from their init(), keeping this package free of import cycles
 // on the concrete command definitions.
-var allShortcuts []Shortcut
+var (
+	shortcutRegistryMu sync.RWMutex
+	allShortcuts       []Shortcut
+)
 
 // Register adds one or more shortcuts to the built-in registry. Call from a
 // service package's init().
 func Register(shortcuts ...Shortcut) {
+	shortcutRegistryMu.Lock()
+	defer shortcutRegistryMu.Unlock()
 	for i := range shortcuts {
 		shortcuts[i] = applyPublicCatalog(shortcuts[i])
 	}
@@ -38,11 +44,15 @@ func Register(shortcuts ...Shortcut) {
 // commands, one per service, each carrying its `+command` leaves. The result is
 // merged into the root command tree by the host application.
 func Commands() []*cobra.Command {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
 	return build(allShortcuts)
 }
 
 // BuiltInCommands compiles only distribution-owned shortcuts.
 func BuiltInCommands() []*cobra.Command {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
 	builtins := make([]Shortcut, 0, len(allShortcuts))
 	for _, registered := range allShortcuts {
 		if !registered.UserDefined {
@@ -55,6 +65,8 @@ func BuiltInCommands() []*cobra.Command {
 // All returns the registered shortcuts. Primarily for coverage tests that need
 // each shortcut's declared flags (types/enums/required) to synthesize inputs.
 func All() []Shortcut {
+	shortcutRegistryMu.RLock()
+	defer shortcutRegistryMu.RUnlock()
 	out := make([]Shortcut, len(allShortcuts))
 	copy(out, allShortcuts)
 	return out
@@ -66,14 +78,15 @@ func build(shortcuts []Shortcut) []*cobra.Command {
 	byService := make(map[string]*cobra.Command)
 	var order []string
 
-	for _, s := range shortcuts {
+	for i := range shortcuts {
+		s := &shortcuts[i]
 		parent, ok := byService[s.Service]
 		if !ok {
 			parent = cobracmd.NewGroupCommand(s.Service, s.Service+" shortcuts")
 			byService[s.Service] = parent
 			order = append(order, s.Service)
 		}
-		parent.AddCommand(mount(s))
+		parent.AddCommand(mountRegistered(s))
 	}
 
 	sort.Strings(order)

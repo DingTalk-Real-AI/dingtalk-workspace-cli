@@ -42,7 +42,7 @@ func TestCrossPlatformCoverageFrameworkErrorProjectionPreservesRecoveryMetadata(
 	if info.Type != "api" || info.Subtype != "upstream_failed" || info.HTTPStatus != 503 || info.RPCCode != 92 || info.RequestID != "call-trace" || info.TraceID != "typed-trace" {
 		t.Fatalf("projection=%+v", info)
 	}
-	if info.UpstreamCode != "SERVER_CODE" || info.Operation != "publish" || info.NextRetryAt == "" || info.Cause == "" || info.RPCData == nil || info.ExecutionStarted == nil || !*info.ExecutionStarted {
+	if info.UpstreamCode != "SERVER_CODE" || info.Operation != "publish" || info.NextRetryAt == "" || info.Cause != "" || info.RPCData == nil || info.ExecutionStarted == nil || !*info.ExecutionStarted {
 		t.Fatalf("recovery metadata=%+v", info)
 	}
 
@@ -500,10 +500,22 @@ func TestCrossPlatformCoverageExecuteDeterministicInterruptionBranches(t *testin
 		})
 	}
 	interrupted := func(primaryCompleted bool) *processSignalState {
-		return &processSignalState{
-			interruption:             &processInterruption{signal: os.Interrupt},
-			primaryCompletedAtSignal: primaryCompleted,
+		state := &processSignalState{}
+		ctx, store := output.WithResultStore(context.Background())
+		if primaryCompleted {
+			cmd := &cobra.Command{Use: "dws"}
+			cmd.SetContext(ctx)
+			cmd.SetOut(io.Discard)
+			output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
+			if err := output.StoreResult(ctx, output.Success(nil)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := output.EmitStoredResult(cmd); err != nil {
+				t.Fatal(err)
+			}
 		}
+		state.Record(os.Interrupt, processResultCompleted(store))
+		return state
 	}
 
 	t.Run("preparse interruption emits unified failure", func(t *testing.T) {
