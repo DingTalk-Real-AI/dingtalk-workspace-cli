@@ -740,7 +740,7 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "export-output", Type: shortcut.FlagString, Desc: "将完整结果写成 NDJSON 文件并返回哈希、行数和列信息；必须 --all，路径限工作目录内，不覆盖已有文件；全局 --output/-o 仍用于保存命令返回值"},
 		{Name: "all", Type: shortcut.FlagBool, Desc: "有界读取全部匹配记录"},
 		{Name: "max-records", Type: shortcut.FlagInt, Default: "10000", Desc: "--all 最多返回的记录数量，1-10000，超限明确失败"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造。INVALID_CURSOR/CURSOR_SNAPSHOT_CHANGED 必须丢弃累计结果与旧游标，不传 --cursor 从第一页只读重查；CURSOR_SNAPSHOT_UNAVAILABLE 先等待服务修复。失效快照不提供续传 cursor，不按 recordId 去重拼接新旧页，也不重跑含写入的整条命令"},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）；首次不传，后续只能原样使用上一页 data.nextCursor，并保持全部查询条件不变；普通扫描满 limit 后成功返回空续页属于正常情况，records 为空时仍以 nextCursor 是否为空判断继续或完成；不得复用旧 cursor 或自行构造。INVALID_CURSOR/CURSOR_SNAPSHOT_CHANGED 必须丢弃累计结果与旧游标，不传 --cursor 从第一页只读重查；CURSOR_SNAPSHOT_UNAVAILABLE 先等待服务修复；CURSOR_OFFSET_LIMIT 表示排序 offset 已达上限（100000），须先收窄 --filters（或改用 --record-ids/分段条件）再从第一页重查，直接重查会再次触顶。失效快照不提供续传 cursor，不按 recordId 去重拼接新旧页，也不重跑含写入的整条命令"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"record-ids", "view-id"}, Description: "按准确 ID 读取与按视图查询互斥"},
@@ -1363,7 +1363,7 @@ var ViewUpdate = shortcut.Shortcut{
 			}
 			params["config"] = c
 		}
-		return rt.CallMCP("update_view", params)
+		return helpers.AnnotateViewUpdateError(rt.CallMCP("update_view", params))
 	},
 }
 

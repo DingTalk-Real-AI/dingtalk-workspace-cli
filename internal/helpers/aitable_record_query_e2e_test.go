@@ -289,3 +289,54 @@ func TestCrossPlatformCoverageRecordQueryRecoveryOnlyClassifiesKnownCodes(t *tes
 		}
 	}
 }
+
+// offset 超限有独立恢复语义：丢弃累计结果但不能直接从头重查，必须先收窄条件。
+func TestCrossPlatformCoverageRecordQueryOffsetLimitRequiresNarrowing(t *testing.T) {
+	src := apperrors.NewAPI("query failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "CURSOR_OFFSET_LIMIT"}))
+	var typed *apperrors.Error
+	if !errors.As(RecordQueryRecoveryError(src), &typed) {
+		t.Fatalf("offset limit error was not classified: %#v", src)
+	}
+	if typed.Retryable || typed.Reason != "pagination_offset_limit_exceeded" {
+		t.Fatalf("offset limit reason/retryable = %#v", typed)
+	}
+	if typed.Details["discard_previous_results"] != true ||
+		typed.Details["restart_from_first_page"] != false ||
+		typed.Details["narrow_filters_required"] != true {
+		t.Fatalf("offset limit details = %#v", typed.Details)
+	}
+	if typed.ServerDiag.ServerErrorCode != "CURSOR_OFFSET_LIMIT" {
+		t.Fatalf("offset limit code lost: %#v", typed.ServerDiag)
+	}
+}
+
+// 快照缺版本信息走独立文案分支，但仍要求从第一页重查。
+func TestCrossPlatformCoverageRecordQuerySnapshotUnavailableReason(t *testing.T) {
+	src := apperrors.NewAPI("query failed", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "CURSOR_SNAPSHOT_UNAVAILABLE"}))
+	var typed *apperrors.Error
+	if !errors.As(RecordQueryRecoveryError(src), &typed) {
+		t.Fatalf("snapshot-unavailable error was not classified: %#v", src)
+	}
+	if typed.Reason != "pagination_snapshot_unavailable" || typed.Details["restart_from_first_page"] != true {
+		t.Fatalf("snapshot-unavailable semantics = %#v", typed)
+	}
+}
+
+// aitableServerDiag 需覆盖统一诊断、旧 CLIError.ServerCode 与保留的业务 JSON 三种来源，以及 nil 输入。
+func TestCrossPlatformCoverageAitableServerDiagSources(t *testing.T) {
+	if code := aitableServerDiag(nil).ServerErrorCode; code != "" {
+		t.Fatalf("nil error must yield empty diagnostics, got %q", code)
+	}
+	typed := apperrors.NewAPI("boom", apperrors.WithServerDiag(apperrors.ServerDiagnostics{ServerErrorCode: "INVALID_CURSOR"}))
+	if got := aitableServerDiag(typed).ServerErrorCode; got != "INVALID_CURSOR" {
+		t.Fatalf("typed diag = %q", got)
+	}
+	legacy := &CLIError{Message: "human message", ServerCode: "CURSOR_SNAPSHOT_CHANGED"}
+	if got := aitableServerDiag(legacy).ServerErrorCode; got != "CURSOR_SNAPSHOT_CHANGED" {
+		t.Fatalf("legacy diag = %q", got)
+	}
+	businessJSON := errors.New(`{"error":{"code":"CURSOR_OFFSET_LIMIT"}}`)
+	if got := aitableServerDiag(businessJSON).ServerErrorCode; got != "CURSOR_OFFSET_LIMIT" {
+		t.Fatalf("business JSON diag = %q", got)
+	}
+}

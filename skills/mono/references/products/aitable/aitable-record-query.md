@@ -5,7 +5,7 @@
 用户仅要求核对 Schema、评审分页失败的恢复边界时，沿用用户指定的原子或 Shortcut 入口，只查询一次其 compact Schema，不执行业务读写。回答先用下列三点短结论覆盖全部安全边界，不按单个错误展开长篇推导后才补充另一错误；用户未要求原理或操作细节时，到此结束，不套用下方实际查询流程：
 
 1. `INVALID_CURSOR` / `CURSOR_SNAPSHOT_CHANGED`：丢弃全部累计读取结果（包括此前第一页）和旧 cursor，不原样重试、不拼接或去重合并新旧页；核对原查询条件后，不传 `--cursor` 从第一页只读重查。
-2. `CURSOR_SNAPSHOT_UNAVAILABLE`：同样丢弃累计结果与旧 cursor，但必须先等待服务端版本信息恢复、服务修复或版本稳定，再不传 `--cursor` 从第一页只读重查，不能立即重试。
+2. `CURSOR_SNAPSHOT_UNAVAILABLE`：同样丢弃累计结果与旧 cursor，但必须先等待服务端版本信息恢复、服务修复或版本稳定，再不传 `--cursor` 从第一页只读重查，不能立即重试。`CURSOR_OFFSET_LIMIT` 则是 offset 已达上限，须先收窄 `--filters`（或改用 `--record-ids`/分段条件）缩小结果集再从第一页重查，直接重查会再次触顶。
 3. 含建表或记录写入的工作流（如 `+table-copy`）不能整条重放；保留已知目标表、recordId、原 token 和回执，仅独立只读核对恢复范围。未知或不完整写入尚未核清前，不根据新旧查询差异推导缺失记录，不建议改发 `record create`、按数量差额补写或删除重建；查询恢复不是写入恢复许可。
 
 ## 命令格式
@@ -66,6 +66,7 @@ Flags:
 
 - `INVALID_CURSOR` / `CURSOR_SNAPSHOT_CHANGED`：核对原查询条件后，不传 `--cursor` 从第一页发起新的只读查询。禁止保留第一页后用去重方式拼接新快照。
 - `CURSOR_SNAPSHOT_UNAVAILABLE`：服务端缺少排序分页所需版本信息；先等待服务修复或版本稳定，再不传 `--cursor` 从第一页查询。不能原样重试或猜测已生成可续传的新快照。
+- `CURSOR_OFFSET_LIMIT`：排序游标 offset 已达上限（100000）。该码返回 `retryable=false`、`discard_previous_results=true`，但 `restart_from_first_page=false`，另带 `narrow_filters_required=true`。丢弃累计结果与旧游标后，必须先收窄 `--filters`（或改用 `--record-ids`/分段条件）缩小结果集，再从第一页重查；不收窄直接重查会再次触顶。
 - 不重跑含写入步骤的整条命令（如 `+table-copy`、bulk patch）；保留已知写入供独立核对，重新查询不代表允许再次建表、补写或删除重建。
 
 ```bash

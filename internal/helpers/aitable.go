@@ -1574,6 +1574,24 @@ func requireViewType(actual, attr string, expected []string) error {
 	}
 }
 
+// AnnotateViewUpdateError 仅在服务端返回 INVALID_UPDATE_VIEW_REQUEST（视图类型与所传配置块
+// 不匹配）时，补充与本地 requireViewType 一致口径的排错建议，避免出现两套说法；其余错误原样
+// 返回，不重试、不改控制流。
+func AnnotateViewUpdateError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if aitableServerDiag(err).ServerErrorCode != "INVALID_UPDATE_VIEW_REQUEST" {
+		return err
+	}
+	return &CLIError{
+		Code:       CodeMCPToolError,
+		Message:    err.Error(),
+		ServerCode: "INVALID_UPDATE_VIEW_REQUEST",
+		Suggestion: "视图类型与所传配置块不匹配（kanbanCard / ganttTimebar / galleryCard 仅适用于对应视图类型）；请用 view get 查看完整视图配置，改用与该视图类型匹配的配置块后重试",
+	}
+}
+
 // dispatchCardKey 把 "card" 子命令分发到 kanbanCard / galleryCard 服务端字段名。
 // 仅 Kanban、Gallery 两类视图支持 card；其他视图返回 CLIError。
 func dispatchCardKey(viewType string) (string, error) {
@@ -2611,6 +2629,9 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			if v, _ := cmd.Flags().GetString("folder-id"); v != "" {
 				toolArgs["folderId"] = v
 			}
+			if v, _ := cmd.Flags().GetString("workspace-id"); v != "" {
+				toolArgs["workspaceId"] = v
+			}
 			if v, _ := cmd.Flags().GetString("template-id"); v != "" {
 				toolArgs["templateId"] = v
 			}
@@ -2637,6 +2658,7 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "name", Property: "baseName"},
+				{Name: "workspace-id", Property: "workspaceId"},
 			},
 		},
 	})
@@ -2908,11 +2930,15 @@ config 结构参考：
 				return err
 			}
 			baseID, _ := mustFlagOrFallback(cmd, "base-id", "base")
-			return callMCPTool("create_table", map[string]any{
+			toolArgs := map[string]any{
 				"baseId":    baseID,
 				"tableName": flagOrFallback(cmd, "name", "table-name"),
 				"fields":    fields,
-			})
+			}
+			if v, _ := cmd.Flags().GetString("description"); v != "" {
+				toolArgs["description"] = v
+			}
+			return callMCPTool("create_table", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(tableCreateCmd, LeafSpec{
@@ -2935,6 +2961,7 @@ config 结构参考：
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "name", Property: "tableName"},
+				{Name: "description", Property: "description"},
 			},
 		},
 	})
@@ -3534,7 +3561,7 @@ newFieldName、description、config、aiConfig 至少传入一项。
         范围用 not_before+not_after 组合。不要传 view update filter 使用的 relative/exact 日期 Scheme。
 
 分页说明：普通扫描某页恰好返回 limit 条时可能带 nextCursor；用它续页后若查询成功且 records=[]、nextCursor 为空，这是正常末页，不是异常或漏查。成功空页若 nextCursor 非空则继续，nextCursor 为空则正常完成。
-若返回 INVALID_CURSOR 或 CURSOR_SNAPSHOT_CHANGED，必须丢弃旧累计结果和游标，不传 --cursor 从第一页重查；CURSOR_SNAPSHOT_UNAVAILABLE 需先等待服务修复。不会自动重跑整条命令或其中的写入步骤。
+若返回 INVALID_CURSOR 或 CURSOR_SNAPSHOT_CHANGED，必须丢弃旧累计结果和游标，不传 --cursor 从第一页重查；CURSOR_SNAPSHOT_UNAVAILABLE 需先等待服务修复；CURSOR_OFFSET_LIMIT 表示排序 offset 已达上限（100000），须先收窄 --filters（或改用 --record-ids/分段条件）再从第一页重查，直接重查会再次触顶。不会自动重跑整条命令或其中的写入步骤。
 
 --sort 结构：[{"fieldId":"<fieldId>","direction":"asc|desc"}]
   示例：[{"fieldId":"fldPriorityId","direction":"asc"},{"fieldId":"fldDueDateId","direction":"desc"}]
@@ -4541,11 +4568,20 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("record_upsert", map[string]any{
+			clientToken, _ := cmd.Flags().GetString("client-token")
+			clientToken = strings.TrimSpace(clientToken)
+			if err := aitableprotocol.ValidateClientToken(clientToken); err != nil {
+				return fmt.Errorf("--client-token: %w", err)
+			}
+			toolArgs := map[string]any{
 				"baseId":  baseID,
 				"tableId": mustGetFlag(cmd, "table-id"),
 				"records": records,
-			})
+			}
+			if clientToken != "" {
+				toolArgs["clientToken"] = clientToken
+			}
+			return callAitableHelperTool("record_upsert", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(recordUpsertCmd, LeafSpec{
@@ -4568,6 +4604,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "records", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "client-token", Property: "clientToken"},
 			},
 		},
 	})
@@ -7866,10 +7903,15 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("align_dashboard", map[string]any{
+			toolArgs := map[string]any{
 				"baseId":      baseID,
 				"dashboardId": mustGetFlag(cmd, "dashboard-id"),
-			})
+			}
+			if cmd.Flags().Changed("is-app-mode") {
+				v, _ := cmd.Flags().GetBool("is-app-mode")
+				toolArgs["isAppMode"] = v
+			}
+			return callAitableHelperTool("align_dashboard", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(dashboardArrangeCmd, LeafSpec{
@@ -7889,6 +7931,9 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 				UseWhen:      []string{"需要重排仪表盘内组件位置时"},
 				AvoidWhen:    []string{"改仪表盘元数据用 update"},
 				Examples:     []string{"dws aitable dashboard arrange --base-id <base-id> --dashboard-id <dashboard-id>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "is-app-mode", Property: "isAppMode", InterfaceType: "boolean"},
 			},
 		},
 	})
@@ -8870,6 +8915,9 @@ role-get 自行 merge）。
 				"fileName": mustGetFlag(cmd, "file-name"),
 				"fileSize": fileSize,
 			}
+			if names, _ := cmd.Flags().GetStringSlice("table-names"); len(names) > 0 {
+				toolArgs["tableNames"] = names
+			}
 			return callAitableTool("prepare_import_upload", toolArgs)
 		},
 	}
@@ -8890,6 +8938,9 @@ role-get 自行 merge）。
 				UseWhen:      []string{"导入前需要上传文件凭证时"},
 				AvoidWhen:    []string{"触发导入用 import data；附件字段上传用 attachment upload"},
 				Examples:     []string{"dws aitable import upload --base-id BASE_ID --file-name data.xlsx --file-size 204800"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "table-names", Property: "tableNames", InterfaceType: "array"},
 			},
 		},
 	})
@@ -9311,6 +9362,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	baseGetCmd.Flags().String("base-id", "", "Base 唯一标识。优先使用 base search / base list 返回值 (必填)")
 	baseCreateCmd.Flags().String("name", "", "Base 名称，1-50 字符；会去除首尾空格后校验 (必填)")
 	baseCreateCmd.Flags().String("folder-id", "", "目标父节点的 dentryUuid (知识库节点 ID)，也可传入标准节点 URL，MCP 会在创建前解析出实际生效的节点 ID")
+	baseCreateCmd.Flags().String("workspace-id", "", "目标知识库 ID；与 --folder-id 同时传入时以 folder-id 为准")
 	baseCreateCmd.Flags().String("template-id", "", "创建 Base 模板 ID，默认创建一个空 Base。可通过 template search 获取模板")
 	baseUpdateCmd.Flags().String("base-id", "", "目标 Base ID (必填)")
 	baseUpdateCmd.Flags().String("name", "", "新名称，1-50 字符 (必填)")
@@ -9337,6 +9389,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	tableCreateCmd.Flags().String("table-name", "", "--name 的别名")
 	_ = tableCreateCmd.Flags().MarkHidden("table-name")
 	tableCreateCmd.Flags().String("fields", "[]", "建表时随附创建的初始字段 JSON 数组，至少 1 个，单次最多 15 个。若传空数组 []，系统会自动补一个名为'标题'的 primaryDoc 首列")
+	tableCreateCmd.Flags().String("description", "", "数据表的备注说明，可选")
 	tableUpdateCmd.Flags().String("base-id", "", "所属 Base ID（用于定位目标表）(必填)")
 	tableUpdateCmd.Flags().String("table-id", "", "目标 Table ID（通过 base get 获取）(必填)")
 	tableUpdateCmd.Flags().String("name", "", "新表名。不能包含 / \\ ? * [ ] : 等特殊字符；与 --description / --record-name-key 三选一")
@@ -9555,6 +9608,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordUpsertCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordUpsertCmd.Flags().String("records", "", "待 upsert 的记录内容列表 JSON 数组，单次最多 100 条；带 recordId 的走更新，不带的走创建 (必填，可改用 --records-file)")
 	recordUpsertCmd.Flags().String("records-file", "", "从文件读取 records JSON（避免命令行长度限制）；与 --records 互斥，优先级更高")
+	recordUpsertCmd.Flags().String("client-token", "", "可选 UUID v4 幂等键，仅作用于不带 recordId 的创建分组；超时重试时须复用同一值")
 	recordUpsertCmd.Flags().String("fields", "", "--records 的别名 (兼容旧用法)")
 	_ = recordUpsertCmd.Flags().MarkHidden("fields")
 
@@ -9937,6 +9991,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	dashboardDeleteCmd.Flags().String("reason", "", "删除原因")
 	dashboardArrangeCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	dashboardArrangeCmd.Flags().String("dashboard-id", "", "目标 Dashboard ID (必填)")
+	dashboardArrangeCmd.Flags().Bool("is-app-mode", false, "可选，只读的应用模式上下文；仅在确认目标属于应用模式时传 true，强制按 V2 48 列对齐；不传时按已验证的 schemaVersion 选择列数")
 	dashboardShareGetCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	dashboardShareGetCmd.Flags().String("dashboard-id", "", "目标 Dashboard ID (必填)")
 	dashboardShareUpdateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
@@ -10001,6 +10056,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	importUploadCmd.Flags().String("base-id", "", "Base ID (必填)")
 	importUploadCmd.Flags().String("file-name", "", "文件名，须带扩展名，如 data.xlsx (必填)")
 	importUploadCmd.Flags().Int64("file-size", 0, "文件大小（字节数）(必填)")
+	importUploadCmd.Flags().StringSlice("table-names", nil, "可选，指定要导入的 Sheet 名称列表（逗号分隔）；不传则导入文件内所有 Sheet")
 	importDataCmd.Flags().String("import-id", "", "prepare_import_upload 返回的 importId (必填)")
 	importDataCmd.Flags().String("table-id", "", "目标数据表 ID。传入后数据将作为新行追加到该表中；不传则默认新建表导入")
 	importDataCmd.Flags().Int("timeout", 0, "最长等待时间（秒），默认且推荐使用最大值 30")
@@ -10368,6 +10424,10 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	datasourceSyncCmd := &cobra.Command{
 		Use:     "sync",
 		Short:   "触发数据源表手动同步",
+		Long: `对已有数据源表触发一次手动同步（单次最多 5 张），仅触发任务即返回，不等待同步完成。
+每张表独立提交，单表失败不影响其他表，整体仍返回 success；调用方需遍历 tasks[] 按单条 status 判断。
+同步运行中的表返回 failed 状态（errorCode=SYNC_RUNNING），属幂等冲突，应视为稍后重试而非最终失败。
+非数据源表（sync=false）不能用此工具触发同步，会以参数错误返回。`,
 		Example: `  dws aitable datasource sync --base-id BASE_ID --table-ids TBL1,TBL2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-ids"); err != nil {
@@ -10602,12 +10662,14 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "name", Property: "baseName"},
+				{Name: "workspace-id", Property: "workspaceId"},
 			},
 		},
 	})
 	// 独立注册 flags（不能用 copyFlags 共享指针，cobra 不支持同一 flag 绑多个命令）
 	createAliasCmd.Flags().String("name", "", "Base 名称，1-50 字符；会去除首尾空格后校验 (必填)")
 	createAliasCmd.Flags().String("folder-id", "", "目标父节点的 dentryUuid (知识库节点 ID)，也可传入标准节点 URL，MCP 会在创建前解析出实际生效的节点 ID")
+	createAliasCmd.Flags().String("workspace-id", "", "目标知识库 ID；与 --folder-id 同时传入时以 folder-id 为准")
 	createAliasCmd.Flags().String("template-id", "", "创建 Base 模板 ID，默认创建一个空 Base。可通过 template search 获取模板")
 	root.AddCommand(createAliasCmd)
 

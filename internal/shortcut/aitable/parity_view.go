@@ -22,7 +22,7 @@ func executeFilteredViewUpdate(rt *shortcut.RuntimeContext, params map[string]an
 	}
 	write, err := rt.CallMCPWriteDataStrict(serverMain, "update_view", params)
 	if err != nil {
-		return err
+		return helpers.AnnotateViewUpdateError(err)
 	}
 	actual, err := readExactParityView(rt, id)
 	if err != nil {
